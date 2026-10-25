@@ -10,7 +10,6 @@ import { api } from '@/lib/api';
 import { liveSession, signInForTest } from './auth-fixtures';
 import { deviceList, garmin, upload, uploadPage, wahoo, UPLOAD_ID } from './devices-fixtures';
 import { createQueryWrapper } from './query-wrapper';
-import SettingsLayout from '../app/settings/_layout';
 import DevicesScreen from '../app/settings/devices';
 
 jest.mock('@/lib/api');
@@ -96,7 +95,7 @@ afterEach(() => {
 
 async function openDevices() {
   return renderRouter(
-    { 'settings/_layout': SettingsLayout, 'settings/devices': DevicesScreen },
+    { 'settings/devices': DevicesScreen },
     { initialUrl: '/settings/devices', wrapper: createQueryWrapper() },
   );
 }

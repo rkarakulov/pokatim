@@ -15,7 +15,6 @@ import RidesScreen from '../app/(tabs)/rides';
 import RoutesScreen from '../app/(tabs)/routes';
 import ResetPasswordScreen from '../app/auth/reset/[token]';
 import DeviceReturnScreen from '../app/devices/return';
-import SettingsLayout from '../app/settings/_layout';
 import DevicesScreen from '../app/settings/devices';
 import VerifyEmailScreen from '../app/auth/verify/[token]';
 import RootLayout from '../app/_layout';
@@ -48,7 +47,6 @@ export const appRoutes = {
   '(setup)/survey': SurveyScreen,
   '(setup)/location': LocationScreen,
   '(setup)/devices': DevicesStepScreen,
-  'settings/_layout': SettingsLayout,
   'settings/devices': DevicesScreen,
   'devices/return': DeviceReturnScreen,
   'auth/verify/[token]': VerifyEmailScreen,

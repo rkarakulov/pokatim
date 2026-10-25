@@ -16,6 +16,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DocumentTitle } from '@/components/document-title';
+import { useSettingsShell } from '@/features/devices/settings-shell';
 import { DeviceRow } from '@/features/devices/device-row';
 import { useDevices, useTrackUploads } from '@/features/devices/queries';
 import { TrackUploadBlock } from '@/features/devices/track-upload-block';
@@ -41,6 +42,11 @@ function RowsSkeleton() {
  * (`focusManager`); опрос — только пока есть незавершённые загрузки.
  */
 export default function DevicesScreen() {
+  const shell = useSettingsShell();
+  return shell ?? <DevicesContent />;
+}
+
+function DevicesContent() {
   const theme = useTheme();
   const router = useRouter();
   const devices = useDevices();
