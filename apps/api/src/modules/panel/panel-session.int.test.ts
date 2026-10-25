@@ -91,7 +91,17 @@ describe('POST /v1/admin/session/sign-in (AC2)', () => {
       state: 'signedIn',
       me: {
         user: { id: userId, displayName: 'Сотрудник admin', email: ADMIN, role: 'admin' },
-        permissions: ['members.read', 'members.manage', 'audit.read'],
+        // admin — все права контракта (admin-02 добавил races.*, seasons.manage, calendar.manage)
+        permissions: [
+          'members.read',
+          'members.manage',
+          'audit.read',
+          'races.read',
+          'races.manage',
+          'races.manage_any',
+          'seasons.manage',
+          'calendar.manage',
+        ],
       },
     });
     const cookie = panelSetCookie(res) ?? '';

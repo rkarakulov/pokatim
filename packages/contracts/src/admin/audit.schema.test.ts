@@ -12,6 +12,17 @@ describe('AuditAction', () => {
       'panel.role_revoked',
       'panel.signed_in',
       'panel.signed_out',
+      'season.created',
+      'season.updated',
+      'race.created',
+      'race.updated',
+      'race.published',
+      'race.cancelled',
+      'race.discarded',
+      'calendar.created',
+      'calendar.updated',
+      'calendar.unpublished',
+      'calendar.republished',
     ]);
     expect(AuditAction.safeParse('panel.deleted').success).toBe(false);
   });
@@ -33,6 +44,8 @@ describe('AuditQuery', () => {
     expect(AuditQuery.safeParse({ limit: '101' }).success).toBe(false);
     expect(AuditQuery.safeParse({ action: 'panel.x' }).success).toBe(false);
     expect(AuditQuery.safeParse({ actorUserId: 'me' }).success).toBe(false);
+    expect(AuditQuery.safeParse({ subjectId: 'me' }).success).toBe(false);
+    expect(AuditQuery.parse({ subjectId: ID })).toEqual({ limit: 20, subjectId: ID });
   });
 
   it('лишний параметр (в том числе `action[$ne]`) и объект вместо строки — ошибка', () => {
@@ -52,6 +65,7 @@ describe('AuditPage', () => {
           actor: { kind: 'cli' },
           target: { userId: ID, displayName: 'Ольга' },
           reason: null,
+          subject: null,
           details: { roleTo: 'admin' },
         },
         {
@@ -61,7 +75,28 @@ describe('AuditPage', () => {
           actor: { kind: 'user', userId: ID, displayName: 'Ольга' },
           target: null,
           reason: null,
+          subject: null,
           details: null,
+        },
+        {
+          id: ID,
+          at: '2026-10-25T10:00:00.000Z',
+          action: 'race.cancelled',
+          actor: { kind: 'user', userId: ID, displayName: 'Ольга' },
+          target: null,
+          reason: null,
+          subject: { kind: 'race', id: ID, label: 'Минское кольцо' },
+          details: { cancelReason: 'weather' },
+        },
+        {
+          id: ID,
+          at: '2026-10-25T10:00:00.000Z',
+          action: 'season.updated',
+          actor: { kind: 'user', userId: ID, displayName: 'Ольга' },
+          target: null,
+          reason: null,
+          subject: { kind: 'season', id: ID, label: 'Сезон 2026' },
+          details: { changedFields: ['name', 'endsOn'] },
         },
       ],
       nextCursor: null,
@@ -70,6 +105,32 @@ describe('AuditPage', () => {
     expect(
       AuditPage.safeParse({ ...page, items: [{ ...page.items[0], actor: { kind: 'robot' } }] })
         .success,
+    ).toBe(false);
+  });
+});
+
+describe('AuditEntry — объект и детали', () => {
+  it('неизвестный вид объекта и причина отмены не из шаблона — ошибка', () => {
+    const base = {
+      id: ID,
+      at: '2026-10-25T10:00:00.000Z',
+      action: 'race.cancelled',
+      actor: { kind: 'cli' },
+      target: null,
+      reason: null,
+      details: null,
+    };
+    expect(
+      AuditPage.safeParse({
+        items: [{ ...base, subject: { kind: 'route', id: ID, label: 'x' } }],
+        nextCursor: null,
+      }).success,
+    ).toBe(false);
+    expect(
+      AuditPage.safeParse({
+        items: [{ ...base, subject: null, details: { cancelReason: 'дождь' } }],
+        nextCursor: null,
+      }).success,
     ).toBe(false);
   });
 });

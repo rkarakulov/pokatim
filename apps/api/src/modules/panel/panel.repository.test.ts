@@ -31,12 +31,14 @@ describe('panel_audit — append-only', () => {
     const users = sources(SRC)
       .filter((file) => {
         const code = readFileSync(file, 'utf8');
-        return /panel_audit|PANEL_COLLECTIONS\.audit|panelCollections\(/.test(code);
+        // имя коллекции — строкой в кавычках (имя файла миграции `0006_panel_audit_subject` — не обращение)
+        return /['"`]panel_audit['"`]|PANEL_COLLECTIONS\.audit|panelCollections\(/.test(code);
       })
       .map((file) => relative(SRC, file))
       .sort();
     expect(users).toEqual([
       'db/migrations/0005_panel.ts',
+      'db/migrations/0006_panel_audit_subject.ts',
       'modules/panel/panel.collection.ts',
       'modules/panel/panel.repository.ts',
     ]);

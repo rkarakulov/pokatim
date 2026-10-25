@@ -12,10 +12,12 @@ import { MongoModule, MongoOutboxModule } from '@rkarakulov/api-kit/mongo';
 
 import { env } from './config/env';
 import { PROJECT_ERROR_MESSAGES } from './error-messages';
+import { CalendarModule } from './modules/calendar';
 import { HealthModule } from './modules/health';
 import { IdentityModule } from './modules/identity';
 import { PanelModule } from './modules/panel';
 import { ProfileModule } from './modules/profile';
+import { RacesModule } from './modules/races';
 import { TracksModule } from './modules/tracks';
 
 @Module({
@@ -32,6 +34,8 @@ import { TracksModule } from './modules/tracks';
     IdentityModule,
     ProfileModule,
     PanelModule,
+    RacesModule,
+    CalendarModule,
   ],
   // единый формат ошибок ApiError для всех модулей; тексты кодов проекта — рядом с фильтром
   providers: [

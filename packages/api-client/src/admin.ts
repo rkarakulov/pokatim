@@ -1,6 +1,25 @@
 import {
   ApiError,
   AuditPage,
+  type CalendarStartInput,
+  type CancelRaceRequest,
+  type DiscardRaceRequest,
+  PanelCalendarPage,
+  type PanelCalendarQuery,
+  PanelCalendarStart,
+  PanelRace,
+  PanelRacePage,
+  type PanelRaceQuery,
+  PanelSeason,
+  PanelSeasonList,
+  type PublishRaceRequest,
+  type RaceInput,
+  type RepublishCalendarStartRequest,
+  type SeasonInput,
+  type UnpublishCalendarStartRequest,
+  type UpdateCalendarStartRequest,
+  type UpdateRaceRequest,
+  type UpdateSeasonRequest,
   type AuditQuery,
   type ChangeRoleRequest,
   type GrantRoleRequest,
@@ -26,10 +45,20 @@ export interface AdminApiClientOptions {
 /** Параметры журнала до схемы: `limit` — число, остальные — строки; пустые не уходят в query. */
 export type AuditListParams = Partial<z.input<typeof AuditQuery>>;
 
-function queryString(params: AuditListParams): string {
+/** Параметры списка гонок панели до схемы. */
+export type PanelRaceListParams = Partial<
+  Omit<PanelRaceQuery, 'limit' | 'mine'> & { limit: number; mine: boolean }
+>;
+/** Параметры списка календаря панели до схемы. */
+export type PanelCalendarListParams = Partial<PanelCalendarQuery>;
+
+/** Query-строка: пустые значения не уходят, массив — повтором ключа (`k=a&k=b`). */
+export function queryString(params: object): string {
   const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== '') search.set(key, String(value));
+  for (const [key, value] of Object.entries(params) as [string, unknown][]) {
+    if (value === undefined || value === '') continue;
+    if (Array.isArray(value)) for (const item of value) search.append(key, String(item));
+    else search.set(key, String(value));
   }
   const text = search.toString();
   return text ? `?${text}` : '';
@@ -51,6 +80,9 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       credentials: 'same-origin',
     });
   const member = (userId: string) => `/v1/admin/members/${encodeURIComponent(userId)}`;
+  const season = (id: string) => `/v1/admin/seasons/${encodeURIComponent(id)}`;
+  const race = (id: string) => `/v1/admin/races/${encodeURIComponent(id)}`;
+  const calendar = (id: string) => `/v1/admin/calendar/${encodeURIComponent(id)}`;
 
   return {
     /** Статус API (экран «Обзор»). */
@@ -73,6 +105,38 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       post(`${member(userId)}/revoke`, PanelMember, body),
     listAudit: (params: AuditListParams = {}) =>
       get(`/v1/admin/audit${queryString(params)}`, AuditPage),
+
+    // --- сезоны (чтение — races.read, изменение — seasons.manage) ---
+    listSeasons: () => get('/v1/admin/seasons', PanelSeasonList),
+    createSeason: (body: SeasonInput) => post('/v1/admin/seasons', PanelSeason, body),
+    updateSeason: (id: string, body: UpdateSeasonRequest) => post(season(id), PanelSeason, body),
+
+    // --- гонки (races.read / races.manage; чужие — races.manage_any, иначе 404) ---
+    listRaces: (params: PanelRaceListParams = {}) =>
+      get(`/v1/admin/races${queryString(params)}`, PanelRacePage),
+    getRace: (id: string) => get(race(id), PanelRace),
+    createRace: (body: RaceInput) => post('/v1/admin/races', PanelRace, body),
+    updateRace: (id: string, body: UpdateRaceRequest) => post(race(id), PanelRace, body),
+    publishRace: (id: string, body: PublishRaceRequest) =>
+      post(`${race(id)}/publish`, PanelRace, body),
+    cancelRace: (id: string, body: CancelRaceRequest) =>
+      post(`${race(id)}/cancel`, PanelRace, body),
+    /** Удаление черновика: 204. */
+    discardRace: (id: string, body: DiscardRaceRequest) =>
+      post(`${race(id)}/discard`, z.undefined(), body),
+
+    // --- календарь стартов (calendar.manage) ---
+    listCalendar: (params: PanelCalendarListParams = {}) =>
+      get(`/v1/admin/calendar${queryString(params)}`, PanelCalendarPage),
+    getCalendarStart: (id: string) => get(calendar(id), PanelCalendarStart),
+    createCalendarStart: (body: CalendarStartInput) =>
+      post('/v1/admin/calendar', PanelCalendarStart, body),
+    updateCalendarStart: (id: string, body: UpdateCalendarStartRequest) =>
+      post(calendar(id), PanelCalendarStart, body),
+    unpublishCalendarStart: (id: string, body: UnpublishCalendarStartRequest) =>
+      post(`${calendar(id)}/unpublish`, PanelCalendarStart, body),
+    republishCalendarStart: (id: string, body: RepublishCalendarStartRequest) =>
+      post(`${calendar(id)}/republish`, PanelCalendarStart, body),
   };
 }
 

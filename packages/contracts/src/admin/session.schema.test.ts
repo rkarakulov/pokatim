@@ -68,7 +68,7 @@ describe('PanelSignInResponse', () => {
 
 describe('PanelMe', () => {
   it('неизвестная роль или право — ошибка; лишние поля сервера отбрасываются', () => {
-    expect(PanelMe.safeParse({ ...me, permissions: ['races.manage'] }).success).toBe(false);
+    expect(PanelMe.safeParse({ ...me, permissions: ['routes.manage'] }).success).toBe(false);
     expect(PanelMe.safeParse({ ...me, user: { ...me.user, role: 'owner' } }).success).toBe(false);
     expect(PanelMe.parse({ ...me, user: { ...me.user, version: 3 } })).toEqual(me);
   });

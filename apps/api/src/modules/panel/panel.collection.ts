@@ -1,4 +1,10 @@
-import type { AuditAction, MemberStatus, PanelRole } from '@pokatim/contracts';
+import type {
+  AuditAction,
+  AuditSubjectKind,
+  MemberStatus,
+  PanelRole,
+  RaceCancelReason,
+} from '@pokatim/contracts';
 import type { Collection, Db } from 'mongodb';
 
 /**
@@ -57,6 +63,21 @@ export interface PanelSessionDoc {
 
 export type AuditActor = { kind: 'user'; userId: string } | { kind: 'cli' };
 
+/** Объект действия доменного модуля: `label` — название на момент действия (снимок, R7 admin-02). */
+export interface AuditSubjectDoc {
+  kind: AuditSubjectKind;
+  id: string;
+  label: string;
+}
+
+/** Детали записи: смена роли (admin-01), имена изменённых полей и шаблон причины отмены (admin-02) — без значений. */
+export interface AuditDetailsDoc {
+  roleFrom?: PanelRole;
+  roleTo?: PanelRole;
+  changedFields?: string[];
+  cancelReason?: RaceCancelReason;
+}
+
 /**
  * Журнал действий панели — append-only (только `insertOne`, `AGENTS.md` §4.10): кто, что, когда, над кем, причина.
  * Без e-mail, IP, UA и имён (имя — из `panel_members` при показе).
@@ -68,7 +89,9 @@ export interface PanelAuditDoc {
   actor: AuditActor;
   targetUserId: string | null;
   reason: string | null;
-  details: { roleFrom?: PanelRole; roleTo?: PanelRole } | null;
+  /** Нет у записей admin-01 — при чтении `null`. */
+  subject?: AuditSubjectDoc | null;
+  details: AuditDetailsDoc | null;
 }
 
 /**

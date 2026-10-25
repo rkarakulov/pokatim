@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
 import { fieldError } from '../common.ts';
+import { minskToday } from '../time.ts';
 import { AnySession, SessionTransport } from './session.schema.ts';
 import { OpaqueToken } from './verification.schema.ts';
+
+/** «Сегодня» по Минску для возраста — функция времени платформы (`time.ts`). */
+export { minskToday };
 
 export const MIN_AGE_YEARS = 18;
 export const MIN_BIRTH_DATE = '1900-01-01';
@@ -13,19 +17,6 @@ export const EMAIL_MAX_LENGTH = 254;
 /** Сравниваем адреса без учёта регистра: так их пишет и ищет сервер. */
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
-}
-
-/** Сегодняшняя календарная дата `YYYY-MM-DD` в Europe/Minsk — по ней считается возраст. */
-export function minskToday(now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Minsk',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now);
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((p) => p.type === type)?.value ?? '';
-  return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
 /** Полных лет на дату `today`; обе даты — календарные `YYYY-MM-DD`, без часового пояса. */

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { PageQuery, Uuid } from '../common.ts';
+import { RaceCancelReason } from '../races/race.schema.ts';
 import { PanelRole } from './permissions.schema.ts';
 
 /** Действия журнала панели (append-only). Значения только добавляются в конец (R6). */
@@ -10,6 +11,18 @@ export const AUDIT_ACTIONS = [
   'panel.role_revoked',
   'panel.signed_in',
   'panel.signed_out',
+  // admin-02: сезоны, гонки, календарь стартов
+  'season.created',
+  'season.updated',
+  'race.created',
+  'race.updated',
+  'race.published',
+  'race.cancelled',
+  'race.discarded',
+  'calendar.created',
+  'calendar.updated',
+  'calendar.unpublished',
+  'calendar.republished',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -24,8 +37,18 @@ export const AuditQuery = z.strictObject({
   action: AuditAction.optional(),
   actorUserId: Uuid.optional(),
   targetUserId: Uuid.optional(),
+  subjectId: Uuid.optional(),
 });
 export type AuditQuery = z.infer<typeof AuditQuery>;
+
+/** Вид объекта записи журнала (доменные модули панели); только в конец. */
+export const AUDIT_SUBJECT_KINDS = ['season', 'race', 'calendar_start'] as const;
+export const AuditSubjectKind = z.enum(AUDIT_SUBJECT_KINDS);
+export type AuditSubjectKind = z.infer<typeof AuditSubjectKind>;
+
+/** Объект действия: `label` — название на момент действия (снимок, R7). Старые записи — `null`. */
+export const AuditSubject = z.object({ kind: AuditSubjectKind, id: Uuid, label: z.string() });
+export type AuditSubject = z.infer<typeof AuditSubject>;
 
 /** Запись журнала: кто (сотрудник или CLI), что, когда, над кем, причина. Без e-mail, IP и UA. */
 export const AuditEntry = z.object({
@@ -38,7 +61,16 @@ export const AuditEntry = z.object({
   ]),
   target: z.object({ userId: Uuid, displayName: z.string() }).nullable(),
   reason: z.string().nullable(),
-  details: z.object({ roleFrom: PanelRole.optional(), roleTo: PanelRole.optional() }).nullable(),
+  subject: AuditSubject.nullable(),
+  details: z
+    .object({
+      roleFrom: PanelRole.optional(),
+      roleTo: PanelRole.optional(),
+      /** Имена изменённых полей (без значений). */
+      changedFields: z.array(z.string()).optional(),
+      cancelReason: RaceCancelReason.optional(),
+    })
+    .nullable(),
 });
 export type AuditEntry = z.infer<typeof AuditEntry>;
 

@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { AuditAction, AuditEntry, AuditPage, AuditQuery, PanelRole } from '@pokatim/contracts';
+import type { AuditAction, AuditEntry, AuditPage, AuditQuery } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import type { DbSession } from '../../db';
-import type { AuditActor } from './panel.collection';
+import type { AuditActor, AuditDetailsDoc, AuditSubjectDoc } from './panel.collection';
 import { DELETED_MEMBER } from './panel.policy';
 import { PanelRepository } from './panel.repository';
 
@@ -13,7 +13,9 @@ export interface AuditRecord {
   actor: AuditActor;
   targetUserId?: string | null;
   reason?: string | null;
-  details?: { roleFrom?: PanelRole; roleTo?: PanelRole } | null;
+  /** Объект доменного модуля (сезон, гонка, старт календаря) со снимком названия. */
+  subject?: AuditSubjectDoc | null;
+  details?: AuditDetailsDoc | null;
 }
 
 /**
@@ -36,6 +38,7 @@ export class PanelAudit {
       actor: record.actor,
       targetUserId: record.targetUserId ?? null,
       reason: record.reason ?? null,
+      subject: record.subject ?? null,
       details: record.details ?? null,
     });
   }
@@ -56,6 +59,7 @@ export class PanelAuditReader {
         action: query.action,
         actorUserId: query.actorUserId,
         targetUserId: query.targetUserId,
+        subjectId: query.subjectId,
       },
       query.limit + 1,
     );
@@ -80,6 +84,7 @@ export class PanelAuditReader {
           ? { userId: doc.targetUserId, displayName: nameOf(doc.targetUserId) }
           : null,
         reason: doc.reason,
+        subject: doc.subject ?? null,
         details: doc.details,
       })),
       nextCursor: docs.length > query.limit ? (page.at(-1)?._id ?? null) : null,

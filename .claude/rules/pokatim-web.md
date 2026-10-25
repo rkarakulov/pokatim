@@ -35,6 +35,12 @@ paths:
   базе, — `src/panel-tokens.ts` (`--panel-*`, временно до токенов базы, Q17).
 - Время — `src/format.ts` (`Intl` ru-RU, Europe/Minsk); тесты admin — `TZ=Europe/Minsk` (`vite.config.ts`).
 - CSP панели — `infra/docker/admin-nginx.conf`: inline-скриптов нет, inline — только `<style>` дизайн-системы.
+- Ввод даты и времени — `DateTimeField`/`DateField` (`src/ui`): значение — настенное время Europe/Minsk, в запрос —
+  `minskWallTimeToUtc` контрактов (не `new Date(value)`); показ — `src/format.ts`.
+- Что можно менять в записи — `editable` сервера (`PanelRace.editable`): зафиксированные поля — с замком, причина
+  недоступности — `DisabledReason` под кнопкой (`aria-disabled` + `aria-describedby`). Правила (48 ч, «только позже»,
+  пересечение сезонов) в UI — только подсказка.
+- 409 `CONFLICT` правки по устаревшей версии — `ConflictBanner` «Запись изменили — обновите страницу» с «Обновить».
 
 ## Проверка
 

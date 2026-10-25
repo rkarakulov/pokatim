@@ -5,10 +5,15 @@ import { createHarness, type Harness } from '../../../test/harness';
 import { IDENTITY_COLLECTIONS } from '../../modules/identity/identity.collection';
 import { PANEL_COLLECTIONS } from '../../modules/panel/panel.collection';
 import { PROFILE_COLLECTIONS } from '../../modules/profile/profile.collection';
+import { RACES_COLLECTIONS } from '../../modules/races/races.collection';
+import { CALENDAR_COLLECTIONS } from '../../modules/calendar/calendar.collection';
 import { IDENTITY_INDEXES } from './0002_identity';
 import { IDENTITY_TTL_SECONDS } from './0003_identity_ttl';
 import { profile } from './0004_profile';
 import { panel, PANEL_SESSION_TTL_SECONDS } from './0005_panel';
+import { panelAuditSubject } from './0006_panel_audit_subject';
+import { races } from './0007_races';
+import { calendar } from './0008_calendar';
 import { migrations } from './index';
 
 let h: Harness;
@@ -38,7 +43,7 @@ async function indexesOf(collection: string) {
 }
 
 describe('миграции MongoDB на чистой *_test (AC5)', () => {
-  it('применены по порядку: 0001_outbox … 0005_panel', async () => {
+  it('применены по порядку: 0001_outbox … последняя', async () => {
     const applied = await h.db
       .collection<{ _id: string }>(MIGRATIONS_COLLECTION)
       .find()
@@ -50,6 +55,9 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0003_identity_ttl',
       '0004_profile',
       '0005_panel',
+      '0006_panel_audit_subject',
+      '0007_races',
+      '0008_calendar',
     ]);
   });
 
@@ -72,7 +80,11 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       panel_audit_action_idx: plain({ action: 1, _id: -1 }),
       panel_audit_actor_idx: plain({ 'actor.userId': 1, _id: -1 }),
       panel_audit_target_idx: plain({ targetUserId: 1, _id: -1 }),
+      // 0006_panel_audit_subject (admin-02)
+      panel_audit_subject_idx: plain({ 'subject.id': 1, _id: -1 }),
     });
+    await panelAuditSubject.up(h.db);
+    await panelAuditSubject.up(h.db);
     // документ-замок: создаётся up; повторный up не сбрасывает версию (другие файлы тестов чистят коллекции)
     const meta = h.db.collection<{ _id: string; version: number }>(PANEL_COLLECTIONS.meta);
     await meta.deleteMany({});
@@ -83,6 +95,51 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await panel.up(h.db);
     await panel.up(h.db);
     expect(await meta.find().toArray()).toEqual([{ _id: 'admins', version: 1 }]);
+  });
+
+  it('0007_races: коллекции, индексы, документ race_meta.schedule; повторный up не сбрасывает версию (AC14)', async () => {
+    const plain = (key: Record<string, number>) => ({
+      key,
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+    expect(await indexesOf(RACES_COLLECTIONS.seasons)).toEqual({
+      seasons_starts_at_idx: plain({ startsAt: 1 }),
+    });
+    expect(await indexesOf(RACES_COLLECTIONS.races)).toEqual({
+      races_public_current_idx: plain({ status: 1, windowStartsAt: 1, _id: 1 }),
+      races_public_past_idx: plain({ status: 1, windowEndsAt: -1, _id: -1 }),
+      races_season_idx: plain({ seasonId: 1, windowEndsAt: 1 }),
+      races_owner_idx: plain({ ownerUserId: 1, windowStartsAt: -1, _id: -1 }),
+      races_panel_idx: plain({ windowStartsAt: -1, _id: -1 }),
+    });
+    const meta = h.db.collection<{ _id: string; version: number }>(RACES_COLLECTIONS.meta);
+    await meta.deleteMany({});
+    await races.up(h.db);
+    expect(await meta.find().toArray()).toEqual([{ _id: 'schedule', version: 0 }]);
+    await meta.updateOne({ _id: 'schedule' }, { $inc: { version: 1 } });
+    await races.up(h.db);
+    await races.up(h.db);
+    expect(await meta.find().toArray()).toEqual([{ _id: 'schedule', version: 1 }]);
+  });
+
+  it('0008_calendar: коллекция и индексы; повторный up — без ошибки (AC14)', async () => {
+    const plain = (key: Record<string, number>) => ({
+      key,
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+    const expected = {
+      calendar_starts_public_idx: plain({ status: 1, startsOn: 1, _id: 1 }),
+      calendar_starts_city_idx: plain({ status: 1, cityKey: 1, startsOn: 1 }),
+      calendar_starts_panel_idx: plain({ startsOn: -1, _id: -1 }),
+    };
+    expect(await indexesOf(CALENDAR_COLLECTIONS.starts)).toEqual(expected);
+    await calendar.up(h.db);
+    await calendar.up(h.db);
+    expect(await indexesOf(CALENDAR_COLLECTIONS.starts)).toEqual(expected);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

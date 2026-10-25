@@ -1,5 +1,5 @@
 import { AUDIT_ACTIONS, type AuditAction, type AuditEntry } from '@pokatim/contracts';
-import { t } from '@pokatim/i18n';
+import { type MessageKey, messages, t } from '@pokatim/i18n';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { createColumnHelper } from '@tanstack/react-table';
 import { useState } from 'react';
@@ -15,6 +15,19 @@ const ALL = 'all';
 const column = createColumnHelper<AuditEntry>();
 const actionLabel = (action: AuditAction) => t(`admin.audit.action.${action}`);
 
+/** Префикс подписи поля формы по виду объекта журнала. */
+const FIELD_LABEL_PREFIX: Record<string, string> = {
+  race: 'admin.races.field.',
+  season: 'admin.seasons.',
+  calendar_start: 'admin.calendar.field.',
+};
+
+/** Подпись изменённого поля (не техническое имя); незнакомое — нейтральная подпись. */
+function fieldLabel(kind: string | undefined, field: string): string {
+  const key = `${FIELD_LABEL_PREFIX[kind ?? ''] ?? ''}${field}`;
+  return key in messages ? t(key as MessageKey) : t('admin.audit.field.unknown');
+}
+
 function details(entry: AuditEntry): string {
   const from = entry.details?.roleFrom;
   const to = entry.details?.roleTo;
@@ -25,7 +38,15 @@ function details(entry: AuditEntry): string {
     });
   }
   const role = to ?? from;
-  return role ? t(`admin.role.${role}`) : '';
+  if (role) return t(`admin.role.${role}`);
+  // admin-02: шаблон причины отмены; имена изменённых полей — без значений
+  const cancelReason = entry.details?.cancelReason;
+  if (cancelReason) return t(`domain.raceCancelReason.${cancelReason}`);
+  return (
+    entry.details?.changedFields
+      ?.map((field) => fieldLabel(entry.subject?.kind, field))
+      .join(', ') ?? ''
+  );
 }
 
 const columns = [
@@ -47,6 +68,12 @@ const columns = [
       const extra = details(info.row.original);
       return extra ? `${actionLabel(info.getValue())}: ${extra}` : actionLabel(info.getValue());
     },
+    enableSorting: false,
+  }),
+  // объект доменного модуля (сезон, гонка, старт) — название на момент действия
+  column.accessor((entry) => entry.subject?.label ?? '—', {
+    id: 'subject',
+    header: t('admin.audit.column.subject'),
     enableSorting: false,
   }),
   column.accessor((entry) => entry.target?.displayName ?? '—', {

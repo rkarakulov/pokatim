@@ -409,6 +409,10 @@ done
 - `0005_panel` (панель «Протокол», admin-01) — коллекции `panel_members`, `panel_sessions` (TTL-уборка 30 дней после
   абсолютного срока), `panel_audit`, `panel_meta` с документом-замком `admins`; expand-only, идемпотентна. Тем же
   шагом `migrate`.
+- `0006_panel_audit_subject`, `0007_races`, `0008_calendar` (admin-02) — индекс журнала по объекту действия
+  (`panel_audit_subject_idx`; старые записи не меняются), коллекции `seasons`, `races`, `race_meta` (документ-замок
+  `schedule`), `calendar_starts` с индексами публичных списков и панели; expand-only, без переноса данных,
+  идемпотентны (повторный прогон — «новых миграций нет»). Тем же шагом `migrate`.
 
 ## Панель «Протокол»: первый администратор
 
