@@ -6,12 +6,14 @@ import { IDENTITY_COLLECTIONS } from '../../modules/identity/identity.collection
 import { PANEL_COLLECTIONS } from '../../modules/panel/panel.collection';
 import { PROFILE_COLLECTIONS } from '../../modules/profile/profile.collection';
 import { RACES_COLLECTIONS } from '../../modules/races/races.collection';
+import { CALENDAR_COLLECTIONS } from '../../modules/calendar/calendar.collection';
 import { IDENTITY_INDEXES } from './0002_identity';
 import { IDENTITY_TTL_SECONDS } from './0003_identity_ttl';
 import { profile } from './0004_profile';
 import { panel, PANEL_SESSION_TTL_SECONDS } from './0005_panel';
 import { panelAuditSubject } from './0006_panel_audit_subject';
 import { races } from './0007_races';
+import { calendar } from './0008_calendar';
 import { migrations } from './index';
 
 let h: Harness;
@@ -55,6 +57,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0005_panel',
       '0006_panel_audit_subject',
       '0007_races',
+      '0008_calendar',
     ]);
   });
 
@@ -119,6 +122,24 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await races.up(h.db);
     await races.up(h.db);
     expect(await meta.find().toArray()).toEqual([{ _id: 'schedule', version: 1 }]);
+  });
+
+  it('0008_calendar: коллекция и индексы; повторный up — без ошибки (AC14)', async () => {
+    const plain = (key: Record<string, number>) => ({
+      key,
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+    const expected = {
+      calendar_starts_public_idx: plain({ status: 1, startsOn: 1, _id: 1 }),
+      calendar_starts_city_idx: plain({ status: 1, cityKey: 1, startsOn: 1 }),
+      calendar_starts_panel_idx: plain({ startsOn: -1, _id: -1 }),
+    };
+    expect(await indexesOf(CALENDAR_COLLECTIONS.starts)).toEqual(expected);
+    await calendar.up(h.db);
+    await calendar.up(h.db);
+    expect(await indexesOf(CALENDAR_COLLECTIONS.starts)).toEqual(expected);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {
