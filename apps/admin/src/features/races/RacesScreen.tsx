@@ -16,6 +16,7 @@ import { formatDateTimeLong } from '../../format';
 import { useCan } from '../../session/can';
 import { isForbidden } from '../../session/errors';
 import {
+  Banner,
   Button,
   DataTable,
   EmptyState,
@@ -151,6 +152,18 @@ export function RacesScreen({
         }
       />
       <div className="page-body">
+        {seasons.data && seasons.isError ? (
+          <Banner
+            tone="error"
+            role="alert"
+            title={t('admin.races.seasonsRefreshFailed')}
+            actions={
+              <Button size="sm" onClick={() => void seasons.refetch()}>
+                {t('admin.races.seasonsRetry')}
+              </Button>
+            }
+          />
+        ) : null}
         <DataTable
           caption={t('admin.races.title')}
           columns={columns}
@@ -160,18 +173,34 @@ export function RacesScreen({
           renderError={(error) => (isForbidden(error) ? <NoAccessScreen /> : undefined)}
           toolbar={
             <>
-              <SelectField
-                label={t('admin.races.filter.season')}
-                value={search.seasonId ?? ALL}
-                onChange={(event) => set({ seasonId: select(event.target.value) })}
-                options={[
-                  { value: ALL, label: t('admin.filter.all') },
-                  ...(seasons.data ?? []).map((season) => ({
-                    value: season.id,
-                    label: season.name,
-                  })),
-                ]}
-              />
+              {seasons.data ? (
+                <SelectField
+                  label={t('admin.races.filter.season')}
+                  value={search.seasonId ?? ALL}
+                  onChange={(event) => set({ seasonId: select(event.target.value) })}
+                  options={[
+                    { value: ALL, label: t('admin.filter.all') },
+                    ...seasons.data.map((season) => ({ value: season.id, label: season.name })),
+                  ]}
+                />
+              ) : (
+                // варианты фильтра сезона — отдельный запрос: загрузка — скелетон, ошибка — с повтором (§4.12)
+                <div className="field">
+                  <div className="field__label t-label">{t('admin.races.filter.season')}</div>
+                  {seasons.isError ? (
+                    <span className="t-meta">
+                      {t('admin.races.seasonsFailed')}{' '}
+                      <Button size="sm" onClick={() => void seasons.refetch()}>
+                        {t('admin.races.seasonsRetry')}
+                      </Button>
+                    </span>
+                  ) : (
+                    <span className="skeleton field__control" data-testid="skeleton-season-filter">
+                      {' '}
+                    </span>
+                  )}
+                </div>
+              )}
               <SelectField
                 label={t('admin.races.filter.status')}
                 value={search.status ?? ALL}

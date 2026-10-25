@@ -182,6 +182,9 @@ describe('GET /v1/races (AC8)', () => {
       'limit=51',
       'scope=all',
       'month=2026-13',
+      // годы вне 1900–9998 — 400, не 500 (Codex pass 2)
+      'month=0099-01',
+      'month=9999-12',
       'bikeClass=road&bikeClass=tt&bikeClass=gravel&bikeClass=mtb&bikeClass=road',
     ]) {
       expect((await get(`/v1/races?${query}`)).status, query).toBe(400);

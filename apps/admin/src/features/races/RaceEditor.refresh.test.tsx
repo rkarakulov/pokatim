@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { RACE_FIELDS, type PanelRace, type PanelSeason } from '@pokatim/contracts';
-import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
@@ -167,5 +167,85 @@ describe('редактор гонки: состояния списка сезо�
     await waitFor(() =>
       expect(seasonOutput().textContent).toBe('Конец окна не попадает ни в один сезон'),
     );
+  });
+});
+
+describe('редактор гонки: свежие вычисляемые поля при прежней версии (Codex pass 2)', () => {
+  it('появился сезон — «Опубликовать» доступна без смены версии, введённое сохраняется', async () => {
+    const draft = (overrides: Partial<PanelRace>) =>
+      race({
+        status: 'draft',
+        phase: 'draft',
+        season: null,
+        editable: {
+          fields: [...RACE_FIELDS],
+          canPublish: false,
+          canCancel: false,
+          canDiscard: true,
+          reasons: ['outside_season'],
+        },
+        ...overrides,
+      });
+    mocked.getRace.mockResolvedValue(draft({}));
+    mocked.publishRace.mockResolvedValue(race({ version: 4 }));
+    const { queryClient } = await openRace();
+    expect(screen.getByRole('button', { name: 'Опубликовать' }).getAttribute('aria-disabled')).toBe(
+      'true',
+    );
+    fireEvent.change(input(/^Описание/), { target: { value: 'Моя правка' } });
+
+    mocked.getRace.mockResolvedValue(
+      draft({
+        season: { id: SEASON_ID, name: 'Сезон 2026', preview: true },
+        editable: {
+          fields: [...RACE_FIELDS],
+          canPublish: true,
+          canCancel: false,
+          canDiscard: true,
+          reasons: [],
+        },
+      }),
+    );
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ['admin', 'races', 'item', RACE_ID] });
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Опубликовать' }).getAttribute('aria-disabled'),
+      ).toBeNull(),
+    );
+    expect(screen.queryByText('Запись изменили — обновите страницу')).toBeNull();
+    expect(input(/^Описание/).value).toBe('Моя правка');
+    fireEvent.click(screen.getByRole('button', { name: 'Опубликовать' }));
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Опубликовать' }),
+    );
+    await waitFor(() => expect(mocked.publishRace).toHaveBeenCalledWith(RACE_ID, { version: 3 }));
+  });
+
+  it('окно открылось (та же версия) — начало окна зафиксировано, причина видна', async () => {
+    const { queryClient } = await openRace();
+    expect(input(/^Окно: начало/).disabled).toBe(false);
+
+    mocked.getRace.mockResolvedValue(
+      race({
+        phase: 'open',
+        editable: {
+          fields: RACE_FIELDS.filter((field) => field !== 'windowStartsAt'),
+          canPublish: false,
+          canCancel: true,
+          canDiscard: false,
+          reasons: ['window_open'],
+        },
+      }),
+    );
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ['admin', 'races', 'item', RACE_ID] });
+    });
+
+    await waitFor(() => expect(input(/^Окно: начало/).disabled).toBe(true));
+    expect(screen.getByText('Окно открыто: начало окна зафиксировано.')).toBeTruthy();
+    expect(screen.getByText(/^Окно открыто · протокол по плану/)).toBeTruthy();
   });
 });

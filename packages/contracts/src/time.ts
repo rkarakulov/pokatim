@@ -7,23 +7,40 @@ import { z } from 'zod';
  */
 export const PLATFORM_TIME_ZONE = 'Europe/Minsk' as const;
 
-/** Календарная дата `YYYY-MM-DD` (валидная: `2026-02-30` — ошибка). */
-export const LocalDate = z.iso.date({ error: 'INVALID_DATE' });
+/**
+ * Поддерживаемые годы платформы — 1900–9998: годы 0000–0099 `Date.UTC` толкует как 1900–1999 (перевод падал бы
+ * `RangeError` → 500), а граница «день после конца» 31.12.9999 — уже пятизначный год. Даты вне диапазона — ошибка
+ * схемы (400).
+ */
+export const PLATFORM_MIN_YEAR = 1900;
+export const PLATFORM_MAX_YEAR = 9998;
+const supportedYear = (value: string) => {
+  const year = Number(value.slice(0, 4));
+  return year >= PLATFORM_MIN_YEAR && year <= PLATFORM_MAX_YEAR;
+};
+
+/** Календарная дата `YYYY-MM-DD` (валидная: `2026-02-30` — ошибка), годы 1900–9998. */
+export const LocalDate = z.iso
+  .date({ error: 'INVALID_DATE', abort: true })
+  .refine(supportedYear, { error: 'INVALID_DATE' });
 export type LocalDate = z.infer<typeof LocalDate>;
 
 /** Время суток `HH:mm` (00:00–23:59). */
 export const LocalTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, { error: 'INVALID' });
 export type LocalTime = z.infer<typeof LocalTime>;
 
-/** Месяц `YYYY-MM`. */
-export const YearMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, { error: 'INVALID' });
+/** Месяц `YYYY-MM`, годы 1900–9998. */
+export const YearMonth = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, { error: 'INVALID', abort: true })
+  .refine(supportedYear, { error: 'INVALID' });
 export type YearMonth = z.infer<typeof YearMonth>;
 
 /** Момент UTC с точностью до минуты: ISO только с `Z` (без смещения), секунды и миллисекунды — 0. */
 export const UtcMinute = z.iso.datetime({ error: 'INVALID_DATE', abort: true }).refine(
   (value) => {
     const date = new Date(value);
-    return date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0;
+    return supportedYear(value) && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0;
   },
   { error: 'INVALID_DATE' },
 );

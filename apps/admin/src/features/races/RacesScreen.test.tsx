@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { RACE_FIELDS, type PanelRace, type PanelSeason } from '@pokatim/contracts';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
@@ -121,6 +121,36 @@ describe('«Гонки» — список (AC11)', () => {
       ),
     );
     expect(screen.getByRole('button', { name: 'Мои' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('фильтр сезона: загрузка — скелетон на месте вариантов (гонки уже видны)', async () => {
+    mocked.listSeasons.mockReturnValue(new Promise(() => undefined));
+    await renderApp('/races');
+    await screen.findByRole('link', { name: 'Осенний коридор Заславль' });
+    expect(screen.getByTestId('skeleton-season-filter')).toBeTruthy();
+    expect(screen.queryByLabelText('Сезон')).toBeNull();
+  });
+
+  it('отказ listSeasons при успешном listRaces — ошибка с повтором; повтор — варианты сезонов', async () => {
+    mocked.listSeasons.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
+    await renderApp('/races');
+    await screen.findByRole('link', { name: 'Осенний коридор Заславль' });
+    expect(await screen.findByText('Не удалось загрузить сезоны')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить загрузку сезонов' }));
+    const select = await screen.findByLabelText('Сезон');
+    expect(within(select).getByRole('option', { name: 'Сезон 2026' })).toBeTruthy();
+  });
+
+  it('ошибка обновления сезонов при загруженных вариантах — варианты остаются, баннер с повтором', async () => {
+    const { queryClient } = await renderApp('/races');
+    await screen.findByRole('link', { name: 'Осенний коридор Заславль' });
+    await screen.findByRole('option', { name: 'Сезон 2026' });
+    mocked.listSeasons.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ['admin', 'seasons'] }).catch(() => undefined);
+    });
+    expect(await screen.findByText('Не удалось обновить список сезонов')).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Сезон 2026' })).toBeTruthy();
   });
 
   it('модератор — без «Новая гонка»', async () => {

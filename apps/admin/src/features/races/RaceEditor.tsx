@@ -157,6 +157,11 @@ export function RaceEditor({
    */
   const [race, setBase] = useState(latest);
   const stale = latest !== undefined && race !== undefined && latest.version > race.version;
+  /**
+   * Вычисляемые сервером поля (фаза, сезон, `editable`) меняются без смены версии (часы, новый сезон): при той же
+   * версии берутся из свежего ответа; значения формы и версия — из снимка.
+   */
+  const view = latest && race && latest.version === race.version ? latest : race;
   const seasonsState = useQuery(seasonsQuery);
   const seasons = seasonsState.data;
   const submitReasonId = useId();
@@ -174,7 +179,7 @@ export function RaceEditor({
     name: ['windowEndsAt', 'protocolPlannedAt'],
   });
 
-  const editable = race?.editable;
+  const editable = view?.editable;
   const locked = (field: RaceField) => (editable ? !editable.fields.includes(field) : false);
   const lockMark = (field: RaceField) =>
     locked(field) ? <LockMark label={t('admin.locked')} /> : undefined;
@@ -186,7 +191,8 @@ export function RaceEditor({
   const tooEarly =
     earliest !== undefined && protocolMs !== undefined && protocolMs < Date.parse(earliest);
   const onlyLater =
-    race?.phase === 'closed' &&
+    race !== undefined &&
+    view?.phase === 'closed' &&
     protocolMs !== undefined &&
     protocolMs < Date.parse(race.protocolPlannedAt);
   const season =
@@ -239,7 +245,10 @@ export function RaceEditor({
     mutationFn: async (values: RaceFormOutput) => {
       const input = raceInputOf(values);
       if (!race) return api.createRace(input);
-      return api.updateRace(race.id, { version: race.version, ...raceChanges(race, input) });
+      return api.updateRace(race.id, {
+        version: race.version,
+        ...raceChanges({ ...race, editable: view?.editable ?? race.editable }, input),
+      });
     },
     onSuccess: async (saved) => {
       await afterChange();
@@ -270,9 +279,9 @@ export function RaceEditor({
     return fieldErrorText(code);
   };
   const protocolHelp = earliest
-    ? race?.phase === 'closed'
+    ? race && view?.phase === 'closed'
       ? t('admin.races.protocolClosedHint', { date: formatDateTimeLong(race.protocolPlannedAt) })
-      : race?.phase === 'open'
+      : view?.phase === 'open'
         ? t('admin.races.protocolOpenHint', { date: formatDateTimeLong(earliest) })
         : t('admin.races.protocolHint', { date: formatDateTimeLong(earliest) })
     : undefined;
@@ -342,9 +351,9 @@ export function RaceEditor({
         meta={
           race
             ? `${t('admin.races.headline', {
-                phase: t(`domain.racePhase.${race.phase}`),
+                phase: t(`domain.racePhase.${(view ?? race).phase}`),
                 protocol: formatDateTimeLong(race.protocolPlannedAt),
-              })}${race.season ? ` · ${race.season.name}` : ''}`
+              })}${view?.season ? ` · ${view.season.name}` : ''}`
             : t('admin.races.zoneLead')
         }
         actions={actions}

@@ -137,6 +137,8 @@ describe('создание сезона (AC2)', () => {
     for (const body of [
       seasonBody({ name: { $ne: null } }),
       seasonBody({ startsOn: '2026-02-30' }),
+      seasonBody({ startsOn: '0099-01-01', endsOn: '0099-12-31' }),
+      seasonBody({ endsOn: '9999-12-31' }),
       { ...seasonBody(), version: 3 },
       { ...seasonBody(), startsAt: '2026-01-01T00:00:00Z' },
     ]) {
