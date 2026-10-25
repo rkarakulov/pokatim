@@ -45,14 +45,16 @@ export function useRaceFeed(filters: RaceFilters) {
   const pastEnabled = current.isSuccess && !current.hasNextPage;
   const past = useRacePages('past', filters, pastEnabled);
 
+  // идёт обновление (pull-to-refresh, фокус) — не догружаем: fetchNextPage по умолчанию отменил бы refetch и
+  // обновлённые страницы потерялись бы (ревью pass 1 блока 04)
   const loadMore = () => {
     if (current.hasNextPage) {
-      if (!current.isFetchingNextPage && !current.isFetchNextPageError)
-        void current.fetchNextPage();
+      if (!current.isFetching && !current.isFetchNextPageError)
+        void current.fetchNextPage({ cancelRefetch: false });
       return;
     }
-    if (pastEnabled && past.hasNextPage && !past.isFetchingNextPage && !past.isFetchNextPageError) {
-      void past.fetchNextPage();
+    if (pastEnabled && past.hasNextPage && !past.isFetching && !past.isFetchNextPageError) {
+      void past.fetchNextPage({ cancelRefetch: false });
     }
   };
 

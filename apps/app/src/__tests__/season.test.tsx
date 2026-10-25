@@ -148,6 +148,41 @@ describe('экран сезона (AC7)', () => {
     expect(listSeasonRaces).toHaveBeenLastCalledWith(ID, { limit: 20, cursor: 'c2' });
   });
 
+  it('конец списка во время refetch не отменяет его: обновлённая первая страница сохраняется (ревью pass 1 блока 04)', async () => {
+    listSeasonRaces.mockImplementation((_id, params = {}) =>
+      Promise.resolve(
+        params.cursor
+          ? { items: [race(3)], nextCursor: null }
+          : { items: [race(1)], nextCursor: 'c2' },
+      ),
+    );
+    await renderRouter(routes, { initialUrl: `/seasons/${ID}`, wrapper: createQueryWrapper() });
+    await screen.findByText('Гонка сезона 1');
+
+    let release: (value: { items: RaceCard[]; nextCursor: string | null }) => void = () =>
+      undefined;
+    listSeasonRaces.mockImplementation((_id, params = {}) =>
+      params.cursor
+        ? Promise.resolve({ items: [race(3)], nextCursor: null })
+        : new Promise((resolve) => {
+            release = resolve;
+          }),
+    );
+    const list = () => screen.getByTestId('season-detail');
+    await act(async () => {
+      (list().props.refreshControl as ReactElement<RefreshControlProps>).props.onRefresh?.();
+    });
+    await act(async () => {
+      list().props.onEndReached?.({ distanceFromEnd: 0 });
+    });
+    expect(listSeasonRaces).not.toHaveBeenCalledWith(ID, expect.objectContaining({ cursor: 'c2' }));
+
+    await act(async () => {
+      release({ items: [race(1), race(2)], nextCursor: 'c2' });
+    });
+    expect(await screen.findByText('Гонка сезона 2')).toBeOnTheScreen();
+  });
+
   it('пусто — «В сезоне пока нет гонок»', async () => {
     listSeasonRaces.mockResolvedValue({ items: [], nextCursor: null });
     await renderRouter(routes, { initialUrl: `/seasons/${ID}`, wrapper: createQueryWrapper() });

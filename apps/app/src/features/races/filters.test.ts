@@ -1,12 +1,5 @@
 /// <reference types="jest" />
-import {
-  hasFilters,
-  monthChipLabel,
-  monthChips,
-  NO_FILTERS,
-  noMatchMessage,
-  toggle,
-} from './filters';
+import { hasFilters, monthChips, NO_FILTERS, noMatchMessage } from './filters';
 
 describe.each(['UTC', 'America/New_York', 'Asia/Tokyo'])('фильтры вкладки в TZ=%s', (tz) => {
   const original = process.env.TZ;
@@ -28,23 +21,9 @@ describe.each(['UTC', 'America/New_York', 'Asia/Tokyo'])('фильтры вкл�
     expect(monthChips(new Date('2026-10-31T20:59:00Z'))[0]).toBe('2026-10');
     expect(monthChips(new Date('2026-10-31T21:00:00Z'))[0]).toBe('2026-11');
   });
-
-  it('подпись месяца: именительный падеж, год — только не текущего', () => {
-    const now = new Date('2026-11-30T12:00:00Z');
-    expect(monthChipLabel('2026-11', now)).toBe('Ноябрь');
-    expect(monthChipLabel('2027-01', now)).toBe('Январь 2027');
-    // 31 декабря 22:00 UTC — в Минске уже 2027
-    expect(monthChipLabel('2027-01', new Date('2026-12-31T22:00:00Z'))).toBe('Январь');
-  });
 });
 
 describe('состояние фильтров', () => {
-  it('toggle добавляет и снимает, результат отсортирован', () => {
-    expect(toggle(['road'], 'gravel')).toEqual(['gravel', 'road']);
-    expect(toggle(['gravel', 'road'], 'gravel')).toEqual(['road']);
-    expect(toggle(['2026-12'], '2026-11')).toEqual(['2026-11', '2026-12']);
-  });
-
   it('активен хоть один чип', () => {
     expect(hasFilters(NO_FILTERS)).toBe(false);
     expect(hasFilters({ bikeClass: [], month: ['2026-11'] })).toBe(true);

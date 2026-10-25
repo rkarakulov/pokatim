@@ -53,6 +53,7 @@ const start: CalendarStartCard = {
   city: 'Минск',
   distancesKm: [80, 120],
   registrationUrl: 'https://example.by/registration',
+  phase: 'upcoming',
 };
 
 const racePage = (...items: RaceCard[]): RacePage => ({ items, nextCursor: null });
@@ -208,6 +209,17 @@ describe('Главная: разделы (S4)', () => {
     expect(screen.getByText('80 и 120 км · Шоссе · Минск')).toBeOnTheScreen();
     expect(screen.getByText('До старта 256 дней.')).toBeOnTheScreen();
     expect(screen.getByText('Регистрация у организатора.')).toBeOnTheScreen();
+  });
+
+  it('герой старта — ссылка в карточку /calendar/<id> (блок 04)', async () => {
+    const router = await renderRouter(
+      { ...tabRoutes, 'calendar/[id]': () => null },
+      { initialUrl: '/', wrapper: createQueryWrapper() },
+    );
+    await fireEvent.press(
+      await screen.findByRole('link', { name: 'Ближайший старт. Минская сотка. 14 июня 2027' }),
+    );
+    expect(router.getPathname()).toBe(`/calendar/${start.id}`);
   });
 
   it('многодневный старт без ссылки регистрации — диапазон, строки регистрации нет', async () => {

@@ -179,7 +179,7 @@ worker: очередь identity-email ─► письмо «Пароль изм�
   `lockSchedule`; фаза и `editable` — сервер по `CLOCK`; организатор — только свои гонки (чужая — 404); каждое
   изменение — `PanelAudit.append` с `subject` в транзакции действия; имена сотрудников — порт `PanelDirectory`.
 - **Публичное чтение** (`/v1/races`, `/v1/races/:id`, `/v1/seasons`, `/v1/seasons/current`, `/v1/seasons/:id`,
-  `/v1/seasons/:id/races`, `/v1/calendar`): без входа, только опубликованное и отменённое (сезоны — все),
+  `/v1/seasons/:id/races`, `/v1/calendar`, `/v1/calendar/cities`, `/v1/calendar/months`, `/v1/calendar/:id`): без входа, только опубликованное и отменённое (сезоны — все),
   курсор — base64url `{ k, id }` через zod (`src/page-cursor.ts`), `Cache-Control: public, max-age=60`, IP-лимит
   `public-read` (`src/public-read.guard.ts`). Enum-ы ответов — `tolerantEnum` (`'unknown'` у старых сборок).
 - **`apps/admin`:** «Гонки» (фильтры в URL, форма одной колонкой с метками Europe/Minsk и вычисляемым сезоном,
@@ -219,6 +219,24 @@ worker: очередь identity-email ─► письмо «Пароль изм�
   `found` / `notFound` (404 — мета с `noindex`) / `unavailable` (сбой — нейтральная мета без `robots`, не 500), кэш
   процесса по пути 60 с (найденное ≤ 500, 404 — отдельный пул ≤ 100) — один запрос на `loader` + `generateMetadata`. Все
   гости делят IP-лимит `public-read` web-сервера; доверенный IP клиента от web-сервера — follow-up (R5в).
+
+### Календарь стартов в приложении (блок 04)
+
+```
+вкладка «Календарь» ─► GET /v1/calendar?discipline&city&month&cursor ─► герой + «Все старты» по месяцам
+                    ─► GET /v1/calendar/months, GET /v1/calendar/cities ─► чипы «Дата», «Город»
+/calendar/<id>      ─► GET /v1/calendar/:id      (SSR: loader + generateMetadata через public-ssr.ts)
+```
+
+- Ответы старта несут `phase` (`upcoming | ongoing | finished`) — сервер по `CLOCK` и датам Минска
+  (`calendar.policy.ts`, `calendarPhase`); «Старт прошёл» / «Идёт сейчас» на карточке — только по ней (SSR = гидрация).
+  `GET /v1/calendar/months` — агрегация `CalendarRepository.months` (тот же `$match`, что `cities`; ≤ 24); `months` и
+  `cities` объявлены до `:id`.
+- Ключи: `['calendar','list',{…},'pages']` (префикс общий с Главной), `['calendar','months']`,
+  `['calendar','cities']`, `['calendar','detail',id]`. `/calendar/:id` — корневой маршрут вне гардов; вкладка
+  `/calendar` — под гардом.
+- Внешняя ссылка организатора — только `src/lib/open-external-url(.web).ts` после `RegistrationUrl.safeParse`:
+  native — `Linking.openURL` (системный браузер), web — `window.open(url, '_blank', 'noopener,noreferrer')`.
 
 ### Треки и устройства (модули `tracks`, `devices`, ADR-0011)
 

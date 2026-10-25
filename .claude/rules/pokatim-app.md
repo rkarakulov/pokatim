@@ -127,6 +127,21 @@ paths:
   (`useMinskClockAfterMount`). Во вкладке (без SSR) — как Главная. Фаза — только с сервера; выбор сезона для кнопки —
   чистая `pickSeason` по фазам сервера.
 
+## Календарь стартов (блок 04, `docs/product/races-and-seasons.md`)
+
+- Вкладка «Календарь» — `features/calendar/calendar-feed.tsx` (`FlatList`): одна выдача, ключ
+  `['calendar','list',{ discipline, city, month, limit },'pages']` (`useInfiniteQuery`, фильтры отсортированы); чипы
+  «Дата» и «Город» — из `GET /v1/calendar/months` / `cities` (`['calendar','months']`, `['calendar','cities']`):
+  до ответа — `FilterGroupSkeleton`, ошибка или пусто — группа скрыта, исчезнувшее значение снимается
+  (`withinAvailable`). Подписи групп — месяц начала с годом (`groupByMonth`, `monthGroupLabel`).
+- Публичная карточка `calendar/[id]` — в корневом `Stack` вне `Stack.Protected` (как `races/[id]`); «Старт прошёл» /
+  «Идёт сейчас» — только по `phase` сервера; даты — всегда с годом (`now = null`).
+- Внешние ссылки — только `src/lib/open-external-url(.web).ts` (native — `Linking.openURL`, web — `window.open` с
+  `noopener,noreferrer` синхронно в обработчике нажатия) и только после `RegistrationUrl.safeParse`
+  (`features/calendar/registration.ts`); адрес не логируется; `Linking` / `window.open` в экранах — нет.
+- Общие чипы фильтров вкладок (`toggle`, `monthChipLabel`) — `src/lib/filter-chips.ts`; подписи календаря и герой
+  старта (Главная и вкладка) — `features/calendar/{format.ts,calendar-hero.tsx}`.
+
 ## Проверка
 
 `pnpm --filter @pokatim/app typecheck` и тесты; сборку EAS (`build:*`) агент не запускает. Ручная проверка на

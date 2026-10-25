@@ -1,5 +1,5 @@
 import { size, space } from '@pokatim/design-tokens';
-import { Chip, textStyle, useTheme } from '@rkarakulov/ui';
+import { Chip, Skeleton, SkeletonGroup, textStyle, useTheme } from '@rkarakulov/ui';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export interface FilterOption<T extends string> {
@@ -53,7 +53,37 @@ export function FilterGroup<T extends string>({
   );
 }
 
+const SKELETON_CHIPS = ['22%', '30%', '26%'] as const;
+
+/**
+ * Группа фильтров до ответа API (чипы из данных — «Дата», «Город»): подпись видна сразу, на месте ряда — скелетон
+ * чипов (§4.12). Для скринридера — «Загрузка».
+ */
+export function FilterGroupSkeleton({ label }: { label: string }) {
+  const theme = useTheme();
+  return (
+    <View style={styles.group}>
+      <Text style={[textStyle('label'), styles.label, { color: theme.text.secondary }]}>
+        {label}
+      </Text>
+      <View style={[styles.scroll, styles.chips, styles.skeletonRow]}>
+        <SkeletonGroup>
+          <View style={styles.skeletonChips}>
+            {SKELETON_CHIPS.map((width) => (
+              <View key={width} style={{ width }}>
+                <Skeleton height={size.chipHeight} />
+              </View>
+            ))}
+          </View>
+        </SkeletonGroup>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  skeletonRow: { overflow: 'hidden' },
+  skeletonChips: { flexDirection: 'row', gap: space.s2 },
   group: { flexDirection: 'row', alignItems: 'center', minHeight: size.touchMin },
   label: { width: '28%' },
   // ряд уходит за правый край экрана (поле гаттера — тоже зона прокрутки)

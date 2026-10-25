@@ -1,6 +1,7 @@
 import { Controller, Get, Header, Param, Query, UseGuards } from '@nestjs/common';
 import {
   type CalendarCities,
+  type CalendarMonths,
   type CalendarPage,
   CalendarQuery,
   type CalendarStartDetail,
@@ -31,6 +32,13 @@ export class CalendarPublicController {
   @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
   cities(): Promise<CalendarCities> {
     return this.calendar.cities();
+  }
+
+  // до `:id`, как `cities`
+  @Get('months')
+  @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
+  months(): Promise<CalendarMonths> {
+    return this.calendar.months();
   }
 
   @Get(':id')

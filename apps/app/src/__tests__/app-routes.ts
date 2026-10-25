@@ -18,6 +18,7 @@ import DeviceReturnScreen from '../app/devices/return';
 import DevicesScreen from '../app/settings/devices';
 import VerifyEmailScreen from '../app/auth/verify/[token]';
 import RootLayout from '../app/_layout';
+import CalendarStartRoute from '../app/calendar/[id]';
 import RaceRoute from '../app/races/[id]';
 import SeasonRoute from '../app/seasons/[id]';
 import StatusScreen from '../app/status';
@@ -57,4 +58,5 @@ export const appRoutes = {
   status: StatusScreen,
   'races/[id]': RaceRoute,
   'seasons/[id]': SeasonRoute,
+  'calendar/[id]': CalendarStartRoute,
 };

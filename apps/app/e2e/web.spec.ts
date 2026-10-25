@@ -4,10 +4,11 @@ import type { APIRequestContext, Page } from '@playwright/test';
 
 import { expect, test } from './fixtures';
 import { latestMailText, passwordResetLink, verificationLink } from './mailpit';
-import { REFRESH_URL, SIGN_IN_URL, UNKNOWN_RACE_ID } from './project';
+import { REFRESH_URL, SIGN_IN_URL, UNKNOWN_RACE_ID, UNKNOWN_START_ID } from './project';
 import {
   HOME_FIXTURE_PASSWORD,
   HOME_FIXTURE_YEAR,
+  publishCalendarData,
   publishHomeData,
   publishRaceData,
   registerHomeRider,
@@ -22,7 +23,9 @@ import { API_URL, BASE_URL, DEV_URL, WITH_API } from './urls';
 // геопозиции — шаг геопозиции пропущен. Главная (блок 02): порядок разделов по опросу, герои по публичному API;
 // гонка и старт, опубликованные через API панели (`schedule-fixture.ts`), — герои с названиями. Гонки и сезон (блок 03):
 // публичные карточка гонки и сезон по ссылке без входа (SSR + OG без ПДн, отменённая — баннер), вкладка «Гонки» после
-// входа — герой, группы, чип класса, переход в карточку и в сезон.
+// входа — герой, группы, чип класса, переход в карточку и в сезон. Календарь (блок 04): публичная карточка старта по
+// ссылке без входа (SSR + OG без ПДн), «Регистрация у организатора» — новая вкладка без opener, вкладка «Календарь»
+// после входа — чип месяца, подпись группы, переход в карточку и назад.
 // Ошибки страницы (исключения, рассинхрон гидрации, неожиданные отказы загрузки) проверяет фикстура (fixtures.ts);
 // ожидаемый 401 восстановления сессии анонима — в e2e/project.ts.
 
@@ -226,6 +229,28 @@ test('публичная карточка неизвестной гонки: HTM
   }
   // публичный экран вне гардов: гостя не уводит на регистрацию
   await expect(page).toHaveURL(`${BASE_URL}/races/${UNKNOWN_RACE_ID}`);
+});
+
+test('публичная карточка неизвестного старта: HTML 200 (с API — noindex), после гидрации — «Старт не найден» (без API — «Нет соединения»)', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get(`/calendar/${UNKNOWN_START_ID}`);
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(html).toMatch(/<meta property="og:title" content="Старт календаря"/);
+  if (WITH_API) expect(html).toMatch(/<meta name="robots" content="noindex"/);
+  else expect(html).not.toContain('name="robots"');
+  expect(html).not.toContain('og:url');
+
+  await page.goto(`/calendar/${UNKNOWN_START_ID}`);
+  if (WITH_API) {
+    await expect(page.getByText('Старт не найден', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Все старты' })).toBeVisible();
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+  await expect(page).toHaveURL(`${BASE_URL}/calendar/${UNKNOWN_START_ID}`);
 });
 
 test('витрина /ui-kit: в production — Главная гостя', async ({ page }) => {
@@ -609,6 +634,82 @@ test.describe('с API', () => {
       await seasonButton.click();
       await expect(page).toHaveURL(new RegExp(`^${BASE_URL}/seasons/`));
       await expect(page.getByRole('heading', { name: 'Гонки сезона' })).toBeVisible();
+    } finally {
+      await withdraw();
+    }
+  });
+
+  test('Календарь (блок 04): карточка старта по ссылке без входа (SSR, OG без ПДн), регистрация — новая вкладка, вкладка «Календарь» после входа', async ({
+    page,
+    request,
+    context,
+  }) => {
+    const { start, multiDay, withdraw } = await publishCalendarData(request);
+    try {
+      // SSR карточки: название и OG до JS, og:url — из WEB_ORIGIN, без e-mail и служебных полей
+      const html = await (await request.get(`/calendar/${start.id}`)).text();
+      expect(html).toContain(`<meta property="og:title" content="${start.title}"`);
+      expect(html).toContain(
+        `<meta property="og:description" content="20 июня ${HOME_FIXTURE_YEAR} · Шоссе · Смоук · 100 и 60 км"`,
+      );
+      expect(html).toContain(`<meta property="og:url" content="${BASE_URL}/calendar/${start.id}"`);
+      expect(html).not.toMatch(/@pokatim\.test|createdByUserId|cityKey|noindex/);
+
+      // гость: поля карточки, «Регистрация у организатора» — новая вкладка без window.opener
+      await context.route('https://example.com/**', (route) =>
+        route.fulfill({ status: 200, contentType: 'text/html', body: '<p>организатор</p>' }),
+      );
+      await page.goto(`/calendar/${start.id}`);
+      await expect(page.getByText(start.title, { exact: true }).first()).toBeVisible();
+      await expect(page.getByText('Старт в 8:00 · Смоук, Площадь смоука')).toBeVisible();
+      await expect(page).toHaveTitle(`${start.title} — Покатим`);
+      const popup = context.waitForEvent('page');
+      await page.getByRole('button', { name: 'Регистрация у организатора' }).click();
+      const organizer = await popup;
+      await organizer.waitForLoadState();
+      expect(organizer.url()).toBe('https://example.com/registration');
+      expect(await organizer.evaluate(() => window.opener)).toBeNull();
+      await organizer.close();
+
+      // многодневный без ссылки — кнопки нет
+      await page.goto(`/calendar/${multiDay.id}`);
+      await expect(page.getByText(multiDay.title, { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Регистрация у организатора' })).toHaveCount(0);
+
+      // вкладка «Календарь» после входа: чип месяца года смоука → строки под подписью группы
+      const rider = await registerHomeRider(request);
+      await page.goto('/sign-in');
+      await page.getByRole('textbox', { name: 'E-mail' }).fill(rider);
+      await page.getByRole('textbox', { name: 'Пароль' }).fill(HOME_FIXTURE_PASSWORD);
+      await page.getByRole('button', { name: 'Войти' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/survey`);
+      await page.getByRole('checkbox', { name: 'Календарь стартов' }).click();
+      await page.getByRole('button', { name: 'Продолжить' }).click();
+      await page.getByRole('button', { name: 'Не сейчас' }).click();
+      await page.getByRole('button', { name: 'Позже' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/`);
+      await page.getByRole('tab', { name: 'Календарь' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/calendar`);
+      await expect(page.getByRole('heading', { name: 'Календарь стартов' })).toBeVisible();
+
+      const monthChip = `Июнь ${HOME_FIXTURE_YEAR}`;
+      const filtered = page.waitForRequest(
+        (req) =>
+          req.url().startsWith(`${API_URL}/v1/calendar?`) &&
+          req.url().includes(`month=${HOME_FIXTURE_YEAR}-06`),
+      );
+      await page.getByRole('button', { name: monthChip, exact: true }).click();
+      await filtered;
+      await expect(
+        page.getByRole('link', { name: new RegExp(`^Ближайший по фильтрам\\. ${start.title}\\.`) }),
+      ).toBeVisible();
+      await expect(page.getByRole('heading', { name: monthChip, exact: true })).toBeVisible();
+
+      // строка → карточка; «Назад» — во вкладку
+      await page.getByRole('link', { name: new RegExp(`^${multiDay.title}\\. `) }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/calendar/${multiDay.id}`);
+      await page.getByRole('button', { name: 'Назад' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/calendar`);
     } finally {
       await withdraw();
     }

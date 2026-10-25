@@ -1,11 +1,9 @@
-import type { CalendarStartCard, RaceCard } from '@pokatim/contracts';
+import type { RaceCard } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 
 import { SectionHero } from '@/components/section-hero';
 
 import { formatRaceWindow, raceHeroLine, raceMeta } from '@/features/races/format';
-
-import { calendarMeta, calendarStatusLine, formatCalendarStartDate } from './format';
 
 const present = (lines: (string | null)[]) => lines.filter((line): line is string => !!line);
 
@@ -30,22 +28,6 @@ export function RaceHero({
       title={race.title}
       meta={present([raceMeta(race), raceHeroLine(race, now)])}
       onPress={onPress}
-    />
-  );
-}
-
-/** «Регистрация у организатора» — только текстом, без перехода (Q6). */
-export function CalendarStartHero({ start, now }: { start: CalendarStartCard; now: Date }) {
-  return (
-    <SectionHero
-      kicker={t('home.calendar.heroKicker')}
-      date={formatCalendarStartDate(start, now)}
-      title={start.title}
-      meta={present([
-        calendarMeta(start),
-        calendarStatusLine(start, now),
-        start.registrationUrl ? t('home.calendar.registration') : null,
-      ])}
     />
   );
 }

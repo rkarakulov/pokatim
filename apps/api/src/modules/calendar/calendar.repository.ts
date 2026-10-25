@@ -134,4 +134,36 @@ export class CalendarRepository {
       .toArray();
     return rows.map((row) => row.city);
   }
+
+  /**
+   * Месяцы будущих опубликованных стартов (`YYYY-MM`, возр., ≤ `cap`): многодневный даёт месяц начала и месяц
+   * конца; месяцы раньше месяца `from` (идущий многодневный, начавшийся в прошлом месяце) не попадают.
+   */
+  async months(from: string, cap: number): Promise<string[]> {
+    const rows = await this.starts
+      .aggregate<{ _id: string }>([
+        {
+          $match: {
+            status: 'published',
+            $or: [{ endsOn: { $gte: from } }, { endsOn: null, startsOn: { $gte: from } }],
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            m: [
+              { $substrBytes: ['$startsOn', 0, 7] },
+              { $substrBytes: [{ $ifNull: ['$endsOn', '$startsOn'] }, 0, 7] },
+            ],
+          },
+        },
+        { $unwind: '$m' },
+        { $match: { m: { $gte: from.slice(0, 7) } } },
+        { $group: { _id: '$m' } },
+        { $sort: { _id: 1 } },
+        { $limit: cap },
+      ])
+      .toArray();
+    return rows.map((row) => row._id);
+  }
 }
