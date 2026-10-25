@@ -5,6 +5,9 @@ import {
   type RaceDetail,
   RaceListQuery,
   type RacePage,
+  type SeasonCard,
+  type SeasonList,
+  SeasonRaceListQuery,
   Uuid,
 } from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
@@ -35,9 +38,33 @@ export class RacesPublicController {
     return this.races.get(id);
   }
 
+  @Get('seasons')
+  @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
+  seasons(): Promise<SeasonList> {
+    return this.races.listSeasons();
+  }
+
+  /** Объявлен до `seasons/:id`: иначе `current` уйдёт в pipe `Uuid` и получит 400. */
   @Get('seasons/current')
   @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
   currentSeason(): Promise<CurrentSeasonResponse> {
     return this.races.currentSeason();
+  }
+
+  @Get('seasons/:id')
+  @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
+  season(
+    @Param('id', new ZodValidationPipe(Uuid, FieldErrorCode)) id: string,
+  ): Promise<SeasonCard> {
+    return this.races.getSeason(id);
+  }
+
+  @Get('seasons/:id/races')
+  @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
+  seasonRaces(
+    @Param('id', new ZodValidationPipe(Uuid, FieldErrorCode)) id: string,
+    @Query(new ZodValidationPipe(SeasonRaceListQuery, FieldErrorCode)) query: SeasonRaceListQuery,
+  ): Promise<RacePage> {
+    return this.races.listSeasonRaces(id, query);
   }
 }

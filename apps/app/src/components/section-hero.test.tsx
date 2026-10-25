@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 import { size, themes } from '@pokatim/design-tokens';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { SectionHero } from './section-hero';
 
@@ -45,5 +45,16 @@ describe('SectionHero (типографский герой раздела)', () 
     const title = 'Очень длинное название гонки, которое не помещается в одну строку героя';
     await render(<SectionHero kicker="Окно гонки" date={{ value: '1' }} title={title} />);
     expect(screen.getByText(title)).not.toHaveProp('numberOfLines');
+  });
+
+  it('с onPress — ссылка с той же меткой, нажатие вызывает переход (блок 03)', async () => {
+    const onPress = jest.fn();
+    await render(
+      <SectionHero kicker="Окно гонки" date={{ value: '1' }} title="Гонка" onPress={onPress} />,
+    );
+
+    const link = screen.getByRole('link', { name: 'Окно гонки. Гонка. 1' });
+    await fireEvent.press(link);
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 });

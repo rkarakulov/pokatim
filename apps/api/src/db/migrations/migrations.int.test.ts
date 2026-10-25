@@ -14,6 +14,7 @@ import { panel, PANEL_SESSION_TTL_SECONDS } from './0005_panel';
 import { panelAuditSubject } from './0006_panel_audit_subject';
 import { races } from './0007_races';
 import { calendar } from './0008_calendar';
+import { racesSeasonPublicIdx } from './0009_races_season_public_idx';
 import { tracks } from './0010_tracks';
 import { devices } from './0011_devices';
 import { TRACKS_COLLECTIONS } from '../../modules/tracks/tracks.collection';
@@ -62,6 +63,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0006_panel_audit_subject',
       '0007_races',
       '0008_calendar',
+      '0009_races_season_public_idx',
       '0010_tracks',
       '0011_devices',
     ]);
@@ -119,6 +121,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       races_season_idx: plain({ seasonId: 1, windowEndsAt: 1 }),
       races_owner_idx: plain({ ownerUserId: 1, windowStartsAt: -1, _id: -1 }),
       races_panel_idx: plain({ windowStartsAt: -1, _id: -1 }),
+      // 0009_races_season_public_idx (app-03): старый races_season_idx остаётся
+      races_season_public_idx: plain({ seasonId: 1, windowEndsAt: 1, _id: 1 }),
     });
     const meta = h.db.collection<{ _id: string; version: number }>(RACES_COLLECTIONS.meta);
     await meta.deleteMany({});
@@ -128,6 +132,14 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await races.up(h.db);
     await races.up(h.db);
     expect(await meta.find().toArray()).toEqual([{ _id: 'schedule', version: 1 }]);
+  });
+
+  it('0009_races_season_public_idx: повторный up — без ошибки, индексы те же (R3)', async () => {
+    const before = await indexesOf(RACES_COLLECTIONS.races);
+    expect(before).toHaveProperty('races_season_public_idx');
+    await racesSeasonPublicIdx.up(h.db);
+    await racesSeasonPublicIdx.up(h.db);
+    expect(await indexesOf(RACES_COLLECTIONS.races)).toEqual(before);
   });
 
   it('0008_calendar: коллекция и индексы; повторный up — без ошибки (AC14)', async () => {

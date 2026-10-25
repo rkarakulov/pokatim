@@ -8,6 +8,7 @@ import { panel } from './0005_panel';
 import { panelAuditSubject } from './0006_panel_audit_subject';
 import { races } from './0007_races';
 import { calendar } from './0008_calendar';
+import { racesSeasonPublicIdx } from './0009_races_season_public_idx';
 import { tracks } from './0010_tracks';
 import { devices } from './0011_devices';
 
@@ -24,7 +25,7 @@ export const migrations: readonly MongoMigration[] = [
   panelAuditSubject,
   races,
   calendar,
-  // 0009 — блок app-03 (параллельная ветка); при слиянии — по порядку id
+  racesSeasonPublicIdx,
   tracks,
   devices,
 ];

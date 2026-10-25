@@ -3,14 +3,15 @@ import { resolve } from 'node:path';
 import type { APIRequestContext, Page } from '@playwright/test';
 
 import { expect, test } from './fixtures';
+import { latestMailText, passwordResetLink, verificationLink } from './mailpit';
+import { REFRESH_URL, SIGN_IN_URL, UNKNOWN_RACE_ID } from './project';
 import {
   HOME_FIXTURE_PASSWORD,
   HOME_FIXTURE_YEAR,
   publishHomeData,
+  publishRaceData,
   registerHomeRider,
-} from './home-fixture';
-import { latestMailText, passwordResetLink, verificationLink } from './mailpit';
-import { REFRESH_URL, SIGN_IN_URL } from './project';
+} from './schedule-fixture';
 import { API_URL, BASE_URL, DEV_URL, WITH_API } from './urls';
 
 // Смоук web-версии pokatim: SSR → гидрация → гард сессии, публичные экраны с OG, витрина (dev), PWA;
@@ -19,7 +20,9 @@ import { API_URL, BASE_URL, DEV_URL, WITH_API } from './urls';
 // выход → вход по паролю (неверный пароль — баннер) → перезагрузка → выход → «Забыли пароль?» → письмо → новый пароль
 // → старый пароль не подходит → вход новым → письмо «Пароль изменён»; вход в браузере с выданным разрешением
 // геопозиции — шаг геопозиции пропущен. Главная (блок 02): порядок разделов по опросу, герои по публичному API;
-// гонка и старт, опубликованные через API панели (`home-fixture.ts`), — герои с названиями.
+// гонка и старт, опубликованные через API панели (`schedule-fixture.ts`), — герои с названиями. Гонки и сезон (блок 03):
+// публичные карточка гонки и сезон по ссылке без входа (SSR + OG без ПДн, отменённая — баннер), вкладка «Гонки» после
+// входа — герой, группы, чип класса, переход в карточку и в сезон.
 // Ошибки страницы (исключения, рассинхрон гидрации, неожиданные отказы загрузки) проверяет фикстура (fixtures.ts);
 // ожидаемый 401 восстановления сессии анонима — в e2e/project.ts.
 
@@ -199,6 +202,30 @@ test('публичный экран /status: заголовок и OG в HTML д
     'Статус сервиса',
   );
   await expect(page).toHaveTitle(/^Статус сервиса — /);
+});
+
+test('публичная карточка неизвестной гонки: HTML 200 (с API — noindex), после гидрации — «Гонка не найдена» (без API — «Нет соединения»)', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get(`/races/${UNKNOWN_RACE_ID}`);
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(html).toMatch(/<meta property="og:title" content="Гонка"/);
+  // noindex — только когда API ответил 404; API недоступен — нейтральная мета без robots
+  if (WITH_API) expect(html).toMatch(/<meta name="robots" content="noindex"/);
+  else expect(html).not.toContain('name="robots"');
+  expect(html).not.toContain('og:url');
+
+  await page.goto(`/races/${UNKNOWN_RACE_ID}`);
+  if (WITH_API) {
+    await expect(page.getByText('Гонка не найдена', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Все гонки' })).toBeVisible();
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+  // публичный экран вне гардов: гостя не уводит на регистрацию
+  await expect(page).toHaveURL(`${BASE_URL}/races/${UNKNOWN_RACE_ID}`);
 });
 
 test('витрина /ui-kit: в production — Главная гостя', async ({ page }) => {
@@ -491,5 +518,99 @@ test.describe('с API', () => {
       timeout: 30_000,
     });
     await expect(page.getByText('Готово', { exact: true }).first()).toBeVisible();
+  });
+
+  test('Гонки и сезон (блок 03): карточка и сезон по ссылке без входа (SSR, OG без ПДн), вкладка «Гонки» после входа', async ({
+    page,
+    request,
+  }) => {
+    const { seasonId, race, cancelled, withdraw } = await publishRaceData(request);
+    try {
+      // SSR карточки: название и OG до JS, og:url — из WEB_ORIGIN, без e-mail и служебных полей
+      const html = await (await request.get(`/races/${race.id}`)).text();
+      expect(html).toContain(`<meta property="og:title" content="${race.title}"`);
+      expect(html).toContain(
+        `<meta property="og:description" content="1–3 июля ${HOME_FIXTURE_YEAR} · Гравий · 62 км"`,
+      );
+      expect(html).toContain(`<meta property="og:url" content="${BASE_URL}/races/${race.id}"`);
+      expect(html).not.toMatch(/@pokatim\.test|ownerUserId|noindex/);
+      const season = (await (await request.get(`${API_URL}/v1/seasons/${seasonId}`)).json()) as {
+        name: string;
+      };
+      const seasonHtml = await (await request.get(`/seasons/${seasonId}`)).text();
+      expect(seasonHtml).toContain(`<meta property="og:title" content="${season.name}"`);
+      expect(seasonHtml).toContain(
+        `<meta property="og:description" content="1 января–31 декабря ${HOME_FIXTURE_YEAR}"`,
+      );
+
+      // гость открывает карточку: поля, ссылка сезона → экран сезона (вне гардов)
+      await page.goto(`/races/${race.id}`);
+      await expect(page.getByText(race.title, { exact: true }).first()).toBeVisible();
+      await expect(page.getByText(`1–3 июля ${HOME_FIXTURE_YEAR}, до 15:00`)).toBeVisible();
+      await expect(page).toHaveTitle(`${race.title} — Покатим`);
+      await page.getByRole('button', { name: season.name }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/seasons/${seasonId}`);
+      await expect(page.getByRole('heading', { name: season.name })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Гонки сезона' })).toBeVisible();
+      await expect(page.getByText('Таблица сезона')).toHaveCount(0);
+
+      // отменённая — баннер с причиной, без строк окна
+      await page.goto(`/races/${cancelled.id}`);
+      await expect(
+        page.getByText('Гонка отменена. Причина: Неблагоприятные погодные условия.'),
+      ).toBeVisible();
+      await expect(page.getByText('Протокол', { exact: true })).toHaveCount(0);
+
+      // вкладка «Гонки» после входа: герой — первая current-гонка публичного API
+      const rider = await registerHomeRider(request);
+      await page.goto('/sign-in');
+      await page.getByRole('textbox', { name: 'E-mail' }).fill(rider);
+      await page.getByRole('textbox', { name: 'Пароль' }).fill(HOME_FIXTURE_PASSWORD);
+      await page.getByRole('button', { name: 'Войти' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/survey`);
+      await page.getByRole('checkbox', { name: 'Гонки и результаты' }).click();
+      await page.getByRole('button', { name: 'Продолжить' }).click();
+      await page.getByRole('button', { name: 'Не сейчас' }).click();
+      await page.getByRole('button', { name: 'Позже' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/`);
+      await page.getByRole('tab', { name: 'Гонки' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/races`);
+
+      const current = (await (
+        await request.get(`${API_URL}/v1/races`, { params: { scope: 'current', limit: 20 } })
+      ).json()) as { items: { id: string; title: string }[]; nextCursor: string | null };
+      const first = current.items[0];
+      expect(first, 'опубликованная гонка прогона — в current').toBeDefined();
+      const hero = page.getByRole('link', { name: new RegExp(`^Ближайшая гонка\\. `) });
+      await expect(hero).toContainText(first!.title);
+      if (current.nextCursor === null) {
+        await expect(page.getByText('Завершённые', { exact: true })).toBeVisible();
+      }
+
+      // чип класса — запрос с bikeClass; «Сбросить фильтры» снимает
+      const filtered = page.waitForRequest(
+        (req) =>
+          req.url().startsWith(`${API_URL}/v1/races?`) && req.url().includes('bikeClass=mtb'),
+      );
+      await page.getByRole('button', { name: 'МТБ', exact: true }).click();
+      await filtered;
+      await page.getByText('Сбросить фильтры', { exact: true }).first().click();
+      await expect(page.getByRole('button', { name: 'МТБ', exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+
+      // герой → карточка; «Назад» — во вкладку; кнопка сезона → экран сезона
+      await page.getByRole('link', { name: new RegExp(`^Ближайшая гонка\\. `) }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/races/${first!.id}`);
+      await page.getByRole('button', { name: 'Назад' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/races`);
+      const seasonButton = page.getByRole('button', { name: /Сезон/ }).first();
+      await seasonButton.click();
+      await expect(page).toHaveURL(new RegExp(`^${BASE_URL}/seasons/`));
+      await expect(page.getByRole('heading', { name: 'Гонки сезона' })).toBeVisible();
+    } finally {
+      await withdraw();
+    }
   });
 });

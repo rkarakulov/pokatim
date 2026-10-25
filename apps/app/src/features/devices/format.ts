@@ -16,11 +16,11 @@ import type { PillTone } from '@rkarakulov/ui';
 export function formatMinskDateTime(iso: string, now: Date): string {
   const wall = utcToMinskWallTime(iso);
   const [year, month, day] = wall.slice(0, 10).split('-').map(Number) as [number, number, number];
-  const dayMonth = t('home.dayMonth', { day, month: t(`date.month.${month}` as MessageKey) });
+  const dayMonth = t('format.dayMonth', { day, month: t(`date.month.${month}` as MessageKey) });
   const date =
     year === Number(minskToday(now).slice(0, 4))
       ? dayMonth
-      : t('home.dateWithYear', { date: dayMonth, year });
+      : t('format.dateWithYear', { date: dayMonth, year });
   return t('tracks.dateTime', { date, time: wall.slice(11, 16) });
 }
 
@@ -95,7 +95,7 @@ export function uploadTitle(upload: Pick<TrackUpload, 'fileName' | 'source'>): s
 export function uploadMeta(upload: Pick<TrackUpload, 'activity'>, now: Date): string | null {
   const activity = upload.activity;
   if (!activity) return null;
-  return t('home.metaJoin', {
+  return t('format.metaJoin', {
     head: formatMinskDateTime(activity.startedAt, now),
     next: formatKm(activity.distanceM),
   });

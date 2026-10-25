@@ -21,8 +21,8 @@ import { DeviceRow } from '@/features/devices/device-row';
 import { useDevices, useTrackUploads } from '@/features/devices/queries';
 import { TrackUploadBlock } from '@/features/devices/track-upload-block';
 import { UploadRow } from '@/features/devices/upload-row';
-import { useHomeClock } from '@/features/home/use-home-clock';
-import { usePullToRefresh } from '@/features/home/use-pull-to-refresh';
+import { useMinskClock } from '@/lib/use-minsk-clock';
+import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 const DOCUMENT_TITLE = `${t('devices.title')} — ${t('app.name')}`;
 
@@ -57,7 +57,7 @@ function DevicesContent() {
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   // «сейчас» подписей дат (год — только не текущий): с новыми данными, фокусом и в полночь по Минску
-  const now = useHomeClock([devices.dataUpdatedAt, uploads.dataUpdatedAt]);
+  const now = useMinskClock([devices.dataUpdatedAt, uploads.dataUpdatedAt]);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/'));
 

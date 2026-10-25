@@ -3,14 +3,9 @@ import { t } from '@pokatim/i18n';
 
 import { SectionHero } from '@/components/section-hero';
 
-import {
-  calendarMeta,
-  calendarStatusLine,
-  formatCalendarStartDate,
-  formatRaceWindow,
-  raceLifecycleLine,
-  raceMeta,
-} from './format';
+import { formatRaceWindow, raceHeroLine, raceMeta } from '@/features/races/format';
+
+import { calendarMeta, calendarStatusLine, formatCalendarStartDate } from './format';
 
 const present = (lines: (string | null)[]) => lines.filter((line): line is string => !!line);
 
@@ -18,13 +13,23 @@ const present = (lines: (string | null)[]) => lines.filter((line): line is strin
  * Герои разделов Главной. «Сейчас» — на клиенте: Главная без SSR-данных (R6), подписи «сегодня / через N дней»
  * рендерятся только после монтирования.
  */
-export function RaceHero({ race, now }: { race: RaceCard; now: Date }) {
+export function RaceHero({
+  race,
+  now,
+  onPress,
+}: {
+  race: RaceCard;
+  now: Date;
+  /** Герой ведёт в карточку гонки (Q12 блока 03). */
+  onPress: () => void;
+}) {
   return (
     <SectionHero
       kicker={t('home.races.heroKicker')}
       date={formatRaceWindow(race.windowStartsAt, race.windowEndsAt, now)}
       title={race.title}
-      meta={present([raceMeta(race), raceLifecycleLine(race, now)])}
+      meta={present([raceMeta(race), raceHeroLine(race, now)])}
+      onPress={onPress}
     />
   );
 }

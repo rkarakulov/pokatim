@@ -97,3 +97,6 @@ paths:
 - Черновик гонки — без `seasonId` (сезон фиксируется при публикации); фаза не хранится — считается по `CLOCK`.
 - Сезон хранит даты Минска (`startsOn`, `endsOn`) и границы-моменты (`startsAt`, `endsBefore`) — запросы только по
   моментам. `calendar_starts.cityKey` — город в нижнем регистре (фильтр и список городов), без регулярных выражений.
+- Публичные гонки сезона (`GET /v1/seasons/:id/races`) — индекс `races_season_public_idx { seasonId, windowEndsAt,
+  _id }` (`0009`, курсор без `SORT`, int-тест по `system.profile`); старый `races_season_idx` остаётся (снятие — с
+  человеком).

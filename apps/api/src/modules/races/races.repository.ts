@@ -234,6 +234,28 @@ export class RacesRepository {
     return doc ?? undefined;
   }
 
+  /**
+   * Публичные гонки сезона (опубликованные и отменённые) по концу окна, возрастание `(windowEndsAt, _id)` — индекс
+   * `races_season_public_idx`. У черновика `seasonId: null`; условие по статусу — защита.
+   */
+  listSeasonRacesPublic(
+    seasonId: string,
+    after: CursorPosition<Date> | null,
+    limit: number,
+  ): Promise<RaceDoc[]> {
+    const query: Filter<RaceDoc> = {
+      seasonId,
+      status: { $in: ['published', 'cancelled'] },
+    };
+    if (after) {
+      query.$or = [
+        { windowEndsAt: { $gt: after.k } },
+        { windowEndsAt: after.k, _id: { $gt: after.id } },
+      ];
+    }
+    return this.c.races.find(query).sort({ windowEndsAt: 1, _id: 1 }).limit(limit).toArray();
+  }
+
   /** Страница панели: новые окна сверху (`windowStartsAt desc, _id desc`), `limit + 1` — признак продолжения. */
   listPanel(
     filter: PanelRaceFilter,

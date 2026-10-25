@@ -1,12 +1,13 @@
 import { size, space } from '@pokatim/design-tokens';
 import { t, type MessageKey } from '@pokatim/i18n';
-import { Banner, EmptyState, TextAction, useTheme } from '@rkarakulov/ui';
+import { EmptyState, TextAction, useTheme } from '@rkarakulov/ui';
 import { useRouter, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DocumentTitle } from '@/components/document-title';
+import { OfflineBanner } from '@/components/offline-banner';
 import { TopBar } from '@/components/top-bar';
 import { useSignOut } from '@/features/auth/use-sign-out';
 import { HomeSection } from '@/features/home/home-section';
@@ -17,8 +18,8 @@ import {
   orderHomeSections,
   type AvailableHomeSectionId,
 } from '@/features/home/sections';
-import { useHomeClock, useIsOnline } from '@/features/home/use-home-clock';
-import { usePullToRefresh } from '@/features/home/use-pull-to-refresh';
+import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
+import { useMinskClock } from '@/lib/use-minsk-clock';
 
 /** Шапка раздела и вкладка «Все …». */
 const SECTION_COPY: Record<
@@ -56,10 +57,9 @@ export default function HomeScreen() {
   const calendar = useNextCalendarStart();
   const sections = orderHomeSections(AVAILABLE_HOME_SECTIONS, profile.reasons);
   // «сейчас» подписей — на клиенте (Главная без SSR-данных, R6): новые данные, фокус, полночь по Минску
-  const now = useHomeClock([races.dataUpdatedAt, calendar.dataUpdatedAt]);
+  const now = useMinskClock([races.dataUpdatedAt, calendar.dataUpdatedAt]);
   // без сети при показанных данных — баннер (§4.12); без данных «Нет соединения» показывает слот раздела
-  const online = useIsOnline();
-  const offlineWithData = !online && (races.data !== undefined || calendar.data !== undefined);
+  const hasData = races.data !== undefined || calendar.data !== undefined;
   const refetchers = useMemo(
     () => [races.refetch, calendar.refetch, profile.refetch],
     [races.refetch, calendar.refetch, profile.refetch],
@@ -91,15 +91,7 @@ export default function HomeScreen() {
           />
         }
       >
-        {offlineWithData ? (
-          <View style={styles.banner}>
-            <Banner
-              tone="warning"
-              title={t('state.errorTitle')}
-              message={t('home.offlineMessage')}
-            />
-          </View>
-        ) : null}
+        <OfflineBanner hasData={hasData} style={styles.banner} />
         {sections.map(({ id, chosen }, index) => {
           const copy = SECTION_COPY[id];
           const frame = {
@@ -127,7 +119,16 @@ export default function HomeScreen() {
                 ),
               }}
             >
-              {(page) => (page.items[0] ? <RaceHero race={page.items[0]} now={now} /> : null)}
+              {(page) => {
+                const race = page.items[0];
+                return race ? (
+                  <RaceHero
+                    race={race}
+                    now={now}
+                    onPress={() => router.push(`/races/${race.id}`)}
+                  />
+                ) : null;
+              }}
             </HomeSection>
           ) : (
             <HomeSection
