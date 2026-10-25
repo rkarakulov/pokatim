@@ -19,6 +19,7 @@ import { FilterGroup } from '@/components/filter-group';
 import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
 import { SectionHero } from '@/components/section-hero';
+import { monthChipLabel, toggle } from '@/lib/filter-chips';
 import { domainLabel } from '@/lib/minsk-format';
 import { useMinskClock } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
@@ -26,11 +27,9 @@ import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 import {
   CLASS_CHIPS,
   hasFilters,
-  monthChipLabel,
   monthChips,
   NO_FILTERS,
   noMatchMessage,
-  toggle,
   type RaceFilters,
 } from './filters';
 import { formatRaceWindow, raceHeroLine, raceHeroMeta } from './format';
