@@ -7,6 +7,11 @@ import { CALENDAR_CITY_MAX_LENGTH, Discipline, DISCIPLINES } from './calendar.sc
 
 export const CALENDAR_LIST_MAX_LIMIT = 50;
 export const CALENDAR_CITIES_CAP = 200;
+export const CALENDAR_MONTHS_CAP = 24;
+
+/** Фаза старта по датам Минска и `CLOCK` сервера (ADR-0010 п. 6); только в конец — `tolerantEnum`. */
+export const CALENDAR_PHASES = ['upcoming', 'ongoing', 'finished'] as const;
+export type CalendarPhase = (typeof CALENDAR_PHASES)[number];
 
 /**
  * `GET /v1/calendar?from&discipline&city&month&cursor&limit` → `CalendarPage` (публично, только опубликованные).
@@ -23,7 +28,10 @@ export const CalendarQuery = z.strictObject({
 });
 export type CalendarQuery = z.infer<typeof CalendarQuery>;
 
-/** Старт в списке приложения; `registrationUrl` нет — кнопки регистрации нет. */
+/**
+ * Старт в списке приложения. `registrationUrl` формат не гарантирует — клиент проверяет `RegistrationUrl` перед
+ * кнопкой регистрации. `phase` — сервер; старые сборки поле отбрасывают (`z.object` без `strict`).
+ */
 export const CalendarStartCard = z.object({
   id: Uuid,
   title: z.string(),
@@ -34,6 +42,7 @@ export const CalendarStartCard = z.object({
   city: z.string(),
   distancesKm: z.array(z.number()),
   registrationUrl: z.string().nullable(),
+  phase: tolerantEnum(CALENDAR_PHASES),
 });
 export type CalendarStartCard = z.infer<typeof CalendarStartCard>;
 
@@ -53,3 +62,7 @@ export type CalendarPage = z.infer<typeof CalendarPage>;
 /** `GET /v1/calendar/cities` — города будущих опубликованных стартов, по алфавиту, ≤ 200. */
 export const CalendarCities = z.object({ cities: z.array(z.string()) });
 export type CalendarCities = z.infer<typeof CalendarCities>;
+
+/** `GET /v1/calendar/months` — месяцы будущих опубликованных стартов (многодневный — все задетые), возр., ≤ 24. */
+export const CalendarMonths = z.object({ months: z.array(YearMonth) });
+export type CalendarMonths = z.infer<typeof CalendarMonths>;

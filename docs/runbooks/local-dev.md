@@ -60,6 +60,15 @@ Expo Go не открывает схему `pokatim://`. Для проверки
   Android: `adb shell am start -a android.intent.action.VIEW -d …`); dev/preview-сборка — `pokatim://races/<id>`.
   Universal/app links (https) — слайс 5 онбординга.
 
+## Календарь стартов с данными (блок 04)
+
+- Данные — панель «Протокол» → «Календарь» → новый старт (публикуется сразу; на dev-стенде — 7 стартов 2027) или
+  смоук с API (`publishCalendarData` в `e2e/schedule-fixture.ts`, июнь 9001, город «Смоук»). Вкладка «Календарь» —
+  после входа; карточка старта `/calendar/<id>` открывается и без входа (web: `curl -s
+  http://127.0.0.1:8080/calendar/<id> | grep og:` — мета с сервера, нужен `API_INTERNAL_URL`).
+- Deep link в dev: Expo Go — `exp://127.0.0.1:8081/--/calendar/<id>`; dev/preview-сборка — `pokatim://calendar/<id>`.
+  «Регистрация у организатора» открывает системный браузер (на симуляторе — Safari / Chrome эмулятора).
+
 ## Web
 
 Приложение одно для iOS, Android и браузера: `web.output: 'server'` — HTML каждой страницы рендерится на сервере

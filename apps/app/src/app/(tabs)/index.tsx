@@ -11,7 +11,8 @@ import { OfflineBanner } from '@/components/offline-banner';
 import { TopBar } from '@/components/top-bar';
 import { useSignOut } from '@/features/auth/use-sign-out';
 import { HomeSection } from '@/features/home/home-section';
-import { CalendarStartHero, RaceHero } from '@/features/home/heroes';
+import { CalendarStartHero } from '@/features/calendar/calendar-hero';
+import { RaceHero } from '@/features/home/heroes';
 import { useNextCalendarStart, useNextRace, useRideReasons } from '@/features/home/queries';
 import {
   AVAILABLE_HOME_SECTIONS,
@@ -137,12 +138,19 @@ export default function HomeScreen() {
               query={calendar}
               empty={{
                 when: (page) => page.items.length === 0,
-                render: () => <EmptyState title={t('home.calendar.empty')} />,
+                render: () => <EmptyState title={t('calendar.empty')} />,
               }}
             >
-              {(page) =>
-                page.items[0] ? <CalendarStartHero start={page.items[0]} now={now} /> : null
-              }
+              {(page) => {
+                const start = page.items[0];
+                return start ? (
+                  <CalendarStartHero
+                    start={start}
+                    now={now}
+                    onPress={() => router.push(`/calendar/${start.id}`)}
+                  />
+                ) : null;
+              }}
             </HomeSection>
           );
         })}

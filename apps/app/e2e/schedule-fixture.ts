@@ -274,3 +274,71 @@ export async function publishRaceData(request: APIRequestContext): Promise<Publi
     },
   };
 }
+
+export interface PublishedCalendarData {
+  /** Однодневный со ссылкой регистрации `https://example.com/registration`. */
+  start: { id: string; title: string };
+  /** Многодневный без ссылки регистрации. */
+  multiDay: { id: string; title: string };
+  /** Снять оба старта прогона с публикации. */
+  withdraw: () => Promise<void>;
+}
+
+/**
+ * Данные блока 04 (Календарь стартов): в июне года смоука — однодневный старт со ссылкой регистрации и
+ * многодневный без неё; город «Смоук» — чипы реальных городов не засоряются. После проверки оба снимаются.
+ */
+export async function publishCalendarData(
+  request: APIRequestContext,
+): Promise<PublishedCalendarData> {
+  const run = Date.now();
+  const year = HOME_FIXTURE_YEAR;
+  const panel = await panelSession(request);
+  const create = async (body: Record<string, unknown>) =>
+    (await panel.post(
+      '/v1/admin/calendar',
+      {
+        endsOn: null,
+        startTime: null,
+        place: '',
+        registrationUrl: null,
+        description: '',
+        city: 'Смоук',
+        ...body,
+      },
+      201,
+    )) as Versioned;
+
+  const title = `Старт календаря ${run}`;
+  const start = await create({
+    title,
+    startsOn: `${year}-06-20`,
+    startTime: '08:00',
+    discipline: 'road',
+    place: 'Площадь смоука',
+    distancesKm: [100, 60],
+    registrationUrl: 'https://example.com/registration',
+    description: 'Смоук календаря.',
+  });
+  const multiTitle = `Многодневка календаря ${run}`;
+  const multiDay = await create({
+    title: multiTitle,
+    startsOn: `${year}-06-27`,
+    endsOn: `${year}-06-28`,
+    discipline: 'gravel',
+    distancesKm: [120],
+  });
+
+  return {
+    start: { id: start.id, title },
+    multiDay: { id: multiDay.id, title: multiTitle },
+    withdraw: async () => {
+      for (const item of [start, multiDay]) {
+        await panel.post(`/v1/admin/calendar/${item.id}/unpublish`, {
+          version: item.version,
+          reason: 'Смоук календаря: данные прогона снимаются после проверки.',
+        });
+      }
+    },
+  };
+}

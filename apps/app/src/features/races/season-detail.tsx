@@ -249,8 +249,9 @@ export function SeasonDetailScreen({ id, seed }: { id: string; seed: SeasonCard 
         ListHeaderComponent={header}
         ListFooterComponent={footer}
         onEndReached={() => {
-          if (races.hasNextPage && !races.isFetchingNextPage && !races.isFetchNextPageError) {
-            void races.fetchNextPage();
+          // идёт обновление — не догружаем: иначе fetchNextPage отменил бы refetch (ревью pass 1 блока 04)
+          if (races.hasNextPage && !races.isFetching && !races.isFetchNextPageError) {
+            void races.fetchNextPage({ cancelRefetch: false });
           }
         }}
         onEndReachedThreshold={0.5}

@@ -4,6 +4,10 @@ import { generateMetadata as registerMetadata } from '../app/(onboarding)/regist
 import { generateMetadata as signInMetadata } from '../app/(onboarding)/sign-in';
 import { generateMetadata as resetMetadata } from '../app/auth/reset/[token]';
 import { generateMetadata as verifyMetadata } from '../app/auth/verify/[token]';
+import {
+  generateMetadata as calendarMetadata,
+  loader as calendarLoader,
+} from '../app/calendar/[id]';
 import { generateMetadata as raceMetadata, loader as raceLoader } from '../app/races/[id]';
 import { generateMetadata as seasonMetadata, loader as seasonLoader } from '../app/seasons/[id]';
 import { resetPublicSsrCache } from '@/lib/public-ssr';
@@ -269,5 +273,91 @@ describe('мета публичного экрана сезона (SSR)', () => 
     const meta = await seasonMetadata(undefined, { id: ID });
     expect(meta).toMatchObject({ title: 'Сезон — Покатим' });
     expect(meta).not.toHaveProperty('robots');
+  });
+});
+
+describe('мета публичной карточки старта (SSR, блок 04)', () => {
+  const ID = '0190a6f4-0000-7000-8000-000000000041';
+  const start = {
+    id: ID,
+    title: 'Минская сотка',
+    startsOn: '2027-06-14',
+    endsOn: null,
+    startTime: '08:00',
+    discipline: 'road',
+    city: 'Минск',
+    distancesKm: [100],
+    registrationUrl: 'https://example.by/registration',
+    phase: 'upcoming',
+    place: 'площадь Независимости',
+    description: 'Описание',
+  };
+  const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
+  const respond = (status: number, body: unknown) =>
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(body), { status })),
+    );
+  const neutral = {
+    title: 'Старт календаря — Покатим',
+    description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
+    openGraph: {
+      title: 'Старт календаря',
+      description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
+      type: 'website',
+      siteName: 'Покатим',
+    },
+  };
+
+  beforeEach(() => {
+    resetPublicSsrCache();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    process.env.API_INTERNAL_URL = 'http://api.internal:3000';
+  });
+  afterEach(() => {
+    fetchMock.mockReset();
+    delete process.env.API_INTERNAL_URL;
+  });
+
+  it('поля старта (дата с годом, дисциплина, город, дистанции); og:url — WEB_ORIGIN + /calendar/<id>', async () => {
+    respond(200, start);
+    process.env.WEB_ORIGIN = ORIGIN;
+
+    expect(await calendarLoader(undefined, { id: ID })).toMatchObject({
+      id: ID,
+      phase: 'upcoming',
+    });
+    expect(await calendarMetadata(undefined, { id: ID })).toEqual({
+      title: 'Минская сотка — Покатим',
+      description: '14 июня 2027 · Шоссе · Минск · 100 км',
+      openGraph: {
+        title: 'Минская сотка',
+        description: '14 июня 2027 · Шоссе · Минск · 100 км',
+        type: 'website',
+        siteName: 'Покатим',
+        url: `${ORIGIN}/calendar/${ID}`,
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://api.internal:3000/v1/calendar/${ID}`);
+  });
+
+  it('404 — нейтральная мета и noindex; невалидный id — без запроса', async () => {
+    respond(404, { code: 'NOT_FOUND', message: 'x' });
+    expect(await calendarMetadata(undefined, { id: ID })).toEqual({
+      ...neutral,
+      robots: 'noindex',
+    });
+    expect(await calendarLoader(undefined, { id: ID })).toBeNull();
+    fetchMock.mockClear();
+    expect(await calendarMetadata(undefined, { id: 'months' })).toMatchObject({
+      robots: 'noindex',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('API недоступен — нейтральная мета без robots', async () => {
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+    expect(await calendarMetadata(undefined, { id: ID })).toEqual(neutral);
+    expect(await calendarLoader(undefined, { id: ID })).toBeNull();
   });
 });

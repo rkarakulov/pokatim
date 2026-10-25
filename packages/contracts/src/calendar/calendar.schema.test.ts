@@ -8,7 +8,15 @@ import {
   UnpublishCalendarStartRequest,
   UpdateCalendarStartRequest,
 } from './calendar.schema.ts';
-import { CalendarCities, CalendarQuery, CalendarStartCard } from './calendar-public.schema.ts';
+import {
+  CALENDAR_MONTHS_CAP,
+  CALENDAR_PHASES,
+  CalendarCities,
+  CalendarMonths,
+  CalendarQuery,
+  CalendarStartCard,
+  CalendarStartDetail,
+} from './calendar-public.schema.ts';
 
 const ID = '01890a5d-ac96-774b-bcce-b302099a8057';
 
@@ -128,10 +136,55 @@ describe('ответы приложения', () => {
       city: 'Минск',
       distancesKm: [100],
       registrationUrl: null,
+      phase: 'upcoming',
     };
     expect(CalendarStartCard.parse(card).discipline).toBe('unknown');
     expect(CalendarCities.parse({ cities: ['Брест', 'Минск'] })).toEqual({
       cities: ['Брест', 'Минск'],
     });
+  });
+});
+
+describe('фаза и месяцы календаря', () => {
+  const card = {
+    id: ID,
+    title: 'Гран-при',
+    startsOn: '2027-06-14',
+    endsOn: null,
+    startTime: null,
+    discipline: 'road',
+    city: 'Минск',
+    distancesKm: [100],
+    registrationUrl: null,
+  };
+
+  it('phase — три значения, незнакомое — unknown, поле обязательно', () => {
+    expect(CALENDAR_PHASES).toEqual(['upcoming', 'ongoing', 'finished']);
+    for (const phase of CALENDAR_PHASES) {
+      expect(CalendarStartCard.parse({ ...card, phase }).phase).toBe(phase);
+    }
+    expect(CalendarStartCard.parse({ ...card, phase: 'postponed' }).phase).toBe('unknown');
+    expect(CalendarStartCard.safeParse(card).success).toBe(false);
+    const detail = CalendarStartDetail.parse({
+      ...card,
+      phase: 'finished',
+      place: null,
+      description: null,
+    });
+    expect(detail.phase).toBe('finished');
+  });
+
+  it('старая сборка: незнакомые поля отбрасываются', () => {
+    const parsed = CalendarStartCard.parse({ ...card, phase: 'ongoing', coverUrl: 'x' });
+    expect(parsed).not.toHaveProperty('coverUrl');
+  });
+
+  it('CalendarMonths — YearMonth, мусорный месяц — ошибка', () => {
+    expect(CALENDAR_MONTHS_CAP).toBe(24);
+    expect(CalendarMonths.parse({ months: ['2027-06', '2027-07'] })).toEqual({
+      months: ['2027-06', '2027-07'],
+    });
+    expect(CalendarMonths.safeParse({ months: ['2027-13'] }).success).toBe(false);
+    expect(CalendarMonths.safeParse({ months: ['2027-6'] }).success).toBe(false);
   });
 });

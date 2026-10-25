@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { FilterGroup } from './filter-group';
+import { FilterGroup, FilterGroupSkeleton } from './filter-group';
 
 const options = [
   { value: 'road', label: 'Шоссе' },
@@ -33,5 +33,14 @@ describe('FilterGroup', () => {
       />,
     );
     expect(screen.getByTestId('filter-date')).toHaveProp('horizontal', true);
+  });
+});
+
+describe('FilterGroupSkeleton', () => {
+  it('подпись сразу, на месте чипов — «Загрузка», чипов нет', async () => {
+    await render(<FilterGroupSkeleton label="Город" />);
+    expect(screen.getByText('Город')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Загрузка')).toBeOnTheScreen();
+    expect(screen.queryByRole('button')).toBeNull();
   });
 });

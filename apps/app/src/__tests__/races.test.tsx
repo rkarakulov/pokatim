@@ -251,6 +251,45 @@ describe('вкладка «Гонки» (AC3)', () => {
   });
 });
 
+describe('вкладка «Гонки»: догрузка во время обновления (ревью pass 1 блока 04)', () => {
+  it('конец списка во время refetch current не отменяет его: обновлённая первая страница сохраняется', async () => {
+    listRaces.mockImplementation((params = {}) =>
+      Promise.resolve(
+        params.scope === 'past'
+          ? page([])
+          : params.cursor
+            ? page([closed])
+            : page([hero, soon], 'c2'),
+      ),
+    );
+    await openRaces();
+    await screen.findByText('Шоссейная петля');
+
+    let release: (value: RacePage) => void = () => undefined;
+    const updated = race({ title: 'Обновлённая гонка' });
+    listRaces.mockImplementation((params = {}) =>
+      params.cursor || params.scope === 'past'
+        ? Promise.resolve(page([closed]))
+        : new Promise<RacePage>((resolve) => {
+            release = resolve;
+          }),
+    );
+    const control = () => feed().props.refreshControl as ReactElement<RefreshControlProps>;
+    await act(async () => {
+      control().props.onRefresh?.();
+    });
+    await act(async () => {
+      feed().props.onEndReached?.({ distanceFromEnd: 0 });
+    });
+    expect(listRaces).not.toHaveBeenCalledWith(expect.objectContaining({ cursor: 'c2' }));
+
+    await act(async () => {
+      release(page([hero, soon, updated], 'c2'));
+    });
+    expect(await screen.findByText('Обновлённая гонка')).toBeOnTheScreen();
+  });
+});
+
 describe('вкладка «Гонки»: состояния (AC8)', () => {
   it('ошибка сервера без данных — «Не удалось загрузить» + «Повторить», чипы на месте', async () => {
     listRaces.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
