@@ -35,4 +35,13 @@ export class ProfileRepository {
     const doc = await this.profiles.findOne({ _id: userId }, { projection: { _id: 1 } });
     return doc !== null;
   }
+
+  /** Ответы опроса пользователя; `null` — документа нет (опрос не пройден). */
+  async findReasons(userId: string): Promise<RideReason[] | null> {
+    const doc = await this.profiles.findOne(
+      { _id: userId },
+      { projection: { _id: 0, rideReasons: 1 } },
+    );
+    return doc?.rideReasons ?? null;
+  }
 }
