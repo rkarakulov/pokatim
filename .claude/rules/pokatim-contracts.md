@@ -20,3 +20,7 @@ paths:
   `utcToMinskWallTime`, `minskDayStartUtc`, `minskToday`, `addLocalDays`. Перевод «по месту» (`+3 ч`,
   `new Date(local)`) — нет.
 - Массив фильтра в query — `queryArray(item, max)` (одна строка → массив, длина ограничена).
+- Треки и устройства (ADR-0011): `src/tracks/track-upload.schema.ts`, `src/devices/device.schema.ts` — статусы,
+  причины, источники, провайдеры, проблемы подключения в ответах — `tolerantEnum`; путь `:provider` и запросы —
+  строгие; формат `stream` — только сервер. Ответы без идентификаторов агрегатора, ключей хранилища, координат и
+  биометрии.

@@ -115,7 +115,8 @@ describe('analyzeTrack', () => {
     expect(failureCode(() => analyzeTrack(new TextEncoder().encode(gpx), 'gpx', NOW))).toBe(
       'too_many_points',
     );
-  });
+    // разбор 200 001 точки XML — секунды; под параллельной нагрузкой `pnpm check` — больше 5 с по умолчанию
+  }, 60_000);
 
   it('бег: разбирается, спорт other (фильтр не-вело — за worker/API)', () => {
     expect(analyzeTrack(fixture('watch-run.fit'), 'fit', NOW).sport).toBe('other');
