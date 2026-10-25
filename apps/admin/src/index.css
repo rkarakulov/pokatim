@@ -140,6 +140,14 @@ p {
   font: inherit;
 }
 
+/* однострочные поля — ровно высота контрола (как кнопки рядом), без зависимости от метрик шрифта: Chrome меряет
+   <select> до загрузки веб-шрифта и не пересчитывает, из-за чего список был ниже поля ввода в той же строке */
+input.field__control,
+select.field__control {
+  height: var(--density-control-height);
+  padding-block: 0;
+}
+
 textarea.field__control {
   min-height: var(--size-text-area-height);
   resize: vertical;
@@ -152,6 +160,61 @@ textarea.field__control {
 .field__control:disabled {
   background: var(--color-surface-disabled);
   border-color: var(--color-surface-disabled);
+  color: var(--color-text-disabled);
+}
+
+/* выпадающий список: коробка поля ввода, своя стрелка вместо системной (цвет — currentColor обёртки) */
+.field__select {
+  position: relative;
+  display: block;
+  color: var(--color-text-secondary);
+}
+
+.field__select::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: var(--inset-caption);
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+  transform: translateY(-50%);
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 6l5 5 5-5' fill='none' stroke='black' stroke-width='1.75'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  pointer-events: none;
+}
+
+.field__select:has(select:hover:enabled) {
+  color: var(--color-text-primary);
+}
+
+.field__select:has(select:disabled) {
+  color: var(--color-text-disabled);
+}
+
+select.field__control {
+  appearance: none;
+  padding-right: calc(var(--inset-caption) * 2 + var(--size-icon-sm));
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+select.field__control:hover:enabled:not([aria-invalid='true']) {
+  border-color: var(--color-border-focus);
+}
+
+select.field__control:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+/* список вариантов — цвета темы, а не системные */
+select.field__control option {
+  background: var(--color-surface-default);
+  color: var(--color-text-primary);
+}
+
+select.field__control option:disabled {
   color: var(--color-text-disabled);
 }
 
