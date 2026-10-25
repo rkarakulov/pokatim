@@ -16,6 +16,8 @@ type WebServer = Extract<
 export const REFRESH_URL = `${API_URL}/v1/auth/session/refresh`;
 /** pokatim: вход по паролю (слайс 2); неверный пароль — 401 INVALID_CREDENTIALS, шаг смоука его проверяет. */
 export const SIGN_IN_URL = `${API_URL}/v1/auth/session/sign-in`;
+/** pokatim (блок 03): неизвестная гонка — карточка «Гонка не найдена», запрос из браузера получает 404. */
+export const UNKNOWN_RACE_ID = '0190a6f4-0000-7000-8000-00000000dead';
 
 // pokatim, E2E_API=1: API и worker из apps/api/dist (`pnpm --filter @pokatim/api build`), остальное окружение —
 // apps/api/.env локально или переменные CI. Ссылки писем ведут на production-сборку смоука, её origin-ы —
@@ -26,7 +28,7 @@ const api = {
   CORS_ORIGINS: `${BASE_URL},${DEV_URL}`,
 };
 
-/** Окружение процесса API — для CLI панели (`grant-admin`) из смоука Главной (`home-fixture.ts`). */
+/** Окружение процесса API — для CLI панели (`grant-admin`) из смоука с данными (`schedule-fixture.ts`). */
 export const apiProcessEnv: NodeJS.ProcessEnv = { ...process.env, ...api };
 
 /** Серверы проекта, которые Playwright поднимает до web-серверов смоука. */
@@ -55,9 +57,11 @@ export const webServerEnv: Record<string, string> = WITH_API ? { API_INTERNAL_UR
 
 /**
  * Ожидаемые отказы загрузки ресурсов в console.error production-сборки: 401 на восстановление сессии анонима
- * (task.md F5b §8.2) и 401 входа с неверным паролем (шаг смоука слайса 2). Всё остальное — падение.
+ * (task.md F5b §8.2), 401 входа с неверным паролем (шаг смоука слайса 2) и 404 неизвестной гонки (шаг блока 03).
+ * Всё остальное — падение.
  */
 export const expectedResourceErrors: ExpectedResourceError[] = [
   { url: REFRESH_URL, status: 401 },
   { url: SIGN_IN_URL, status: 401 },
+  { url: `${API_URL}/v1/races/${UNKNOWN_RACE_ID}`, status: 404 },
 ];

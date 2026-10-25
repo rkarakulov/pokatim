@@ -168,12 +168,14 @@ worker: очередь identity-email ─► письмо «Пароль изм�
 
 - **Данные:** `seasons` (даты Минска + границы-моменты `startsAt`/`endsBefore`), `races` (статус, окно и протокол —
   моменты UTC, `seasonId` только у опубликованной), `race_meta.schedule` (замок расписания), `calendar_starts`
-  (`cityKey` для фильтра и списка городов). Миграции `0006_panel_audit_subject`, `0007_races`, `0008_calendar`.
+  (`cityKey` для фильтра и списка городов). Миграции `0006_panel_audit_subject`, `0007_races`, `0008_calendar`,
+  `0009_races_season_public_idx` (гонки сезона публично).
 - **Панель** (`/v1/admin/{seasons,races,calendar}` под `PanelGuard` + права): правки по ожидаемой `version`
   (устарело — 409); создание и изменение дат сезона, публикация гонки и смена конца окна опубликованной — под
   `lockSchedule`; фаза и `editable` — сервер по `CLOCK`; организатор — только свои гонки (чужая — 404); каждое
   изменение — `PanelAudit.append` с `subject` в транзакции действия; имена сотрудников — порт `PanelDirectory`.
-- **Публичное чтение** (`/v1/races`, `/v1/seasons/current`, `/v1/calendar`): без входа, только опубликованное,
+- **Публичное чтение** (`/v1/races`, `/v1/races/:id`, `/v1/seasons`, `/v1/seasons/current`, `/v1/seasons/:id`,
+  `/v1/seasons/:id/races`, `/v1/calendar`): без входа, только опубликованное и отменённое (сезоны — все),
   курсор — base64url `{ k, id }` через zod (`src/page-cursor.ts`), `Cache-Control: public, max-age=60`, IP-лимит
   `public-read` (`src/public-read.guard.ts`). Enum-ы ответов — `tolerantEnum` (`'unknown'` у старых сборок).
 - **`apps/admin`:** «Гонки» (фильтры в URL, форма одной колонкой с метками Europe/Minsk и вычисляемым сезоном,
@@ -195,6 +197,23 @@ worker: очередь identity-email ─► письмо «Пароль изм�
   отбрасывает (`ProfileView`). После ответа на опрос `['profile']` инвалидируется.
 - Обновление: pull-to-refresh (native) перезапрашивает разделы и профиль; `refetchOnWindowFocus` + `staleTime` 60 с,
   на native — `focusManager` ↔ `AppState` (`src/lib/focus-manager(.web).ts`). Polling нет.
+
+### Гонки и сезон в приложении (блок 03)
+
+```
+вкладка «Гонки» ─► GET /v1/races?scope=current&bikeClass&month&cursor  ─► герой + «Скоро»
+                ─► GET /v1/races?scope=past…   (после исчерпания current) ─► «Завершённые»
+                ─► GET /v1/seasons/current, GET /v1/seasons             ─► кнопка сезона (pickSeason)
+/races/<id>     ─► GET /v1/races/:id            (SSR: loader + generateMetadata через public-ssr.ts)
+/seasons/<id>   ─► GET /v1/seasons/:id, /v1/seasons/:id/races, /v1/seasons
+```
+
+- Ключи: `['races','list',{…},'pages']` (`useInfiniteQuery`; префикс общий с Главной), `['races','detail',id]`,
+  `['seasons','detail'|'races'|'list'|'current',…]`.
+- `/races/:id` и `/seasons/:id` — корневые маршруты вне гардов (гость и вошедший); вкладка `/races` — под гардом.
+- SSR-данные публичных экранов — только `src/lib/public-ssr.ts`: `Uuid` до запроса, таймаут 2 с, любая ошибка —
+  `null` (не 500), кэш процесса по пути 60 с (≤ 500 записей) — один запрос на `loader` + `generateMetadata`. Все
+  гости делят IP-лимит `public-read` web-сервера; доверенный IP клиента от web-сервера — follow-up (R5в).
 
 ### Web (SSR, PWA)
 

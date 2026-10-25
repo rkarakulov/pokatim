@@ -98,10 +98,26 @@ paths:
 - Данные раздела — публичный list-эндпоинт домена (`limit: 1`), ключ с префиксом вкладки (`['races', 'list', …]`);
   своего агрегата/BFF и своих DTO нет. Состояния — `HomeSection` (шапка сразу, скелетон и ошибки — в слоте героя).
 - Время и даты — только `contracts/src/time.ts` (`utcToMinskWallTime`, `minskToday`, `addLocalDays`) + месяцы
-  `date.month.*` (`features/home/format.ts`, тесты в TZ ≠ Минск). Фаза — с сервера; `'unknown'` в фазе, покрытии,
+  `date.month.*`; общие подписи дат, дистанций и меты — `src/lib/minsk-format.ts`, подписи гонки —
+  `features/races/format.ts`, «сейчас» — `src/lib/use-minsk-clock.ts` (тесты в TZ ≠ Минск). Фаза — с сервера; `'unknown'` в фазе, покрытии,
   дисциплине — нейтрально: без строки и подписи.
 - Обновление: pull-to-refresh (`usePullToRefresh`, индикатор только на время жеста) и `focusManager` — native
   `src/lib/focus-manager.ts` (`AppState`), web — встроенный `visibilitychange`. Polling — нет.
+
+## Гонки и сезон (блок 03, `docs/product/races-and-seasons.md`)
+
+- Вкладка «Гонки» — `features/races/race-feed.tsx` (`FlatList`, не `ScrollView` + `map`): `useRaceFeed` — страницы
+  `current`, затем `past` (только после исчерпания `current`); ключи `['races','list',{ scope, bikeClass, month,
+  limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы). Фильтры — состояние экрана (R7), смена — скелетон на
+  месте данных. Ошибка догрузки страницы — баннер в подвале (не «Данные могли устареть» над героем).
+- Публичные экраны `races/[id]`, `seasons/[id]` — в корневом `Stack` вне `Stack.Protected` (гость и вошедший; на
+  native поверх вкладок). «Назад» — `DetailHeader`: история есть — назад, нет — вошедшему вкладка, гостю `/`.
+- SSR-данные (`loader`, `generateMetadata`) — только `src/lib/public-ssr.ts` (`publicPath` — `Uuid` до запроса,
+  `fetchPublicForSsr` — таймаут, `null` при любой ошибке, кэш процесса публичных данных 60 с); свой `fetch` в экранах
+  нет. Не найдено — нейтральная мета и `robots: noindex` (HTML 200).
+- Даты на публичных экранах — всегда с годом (`now = null` в `minsk-format`); «сегодня / завтра» — после монтирования
+  (`useMinskClockAfterMount`). Во вкладке (без SSR) — как Главная. Фаза — только с сервера; выбор сезона для кнопки —
+  чистая `pickSeason` по фазам сервера.
 
 ## Проверка
 

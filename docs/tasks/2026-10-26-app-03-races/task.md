@@ -344,6 +344,32 @@ Q3 (вход в сезон), Q8 (карточка вне вкладок).** Ос
 Q14 — OG только текстом. R2(а), R3(а), R5(а) — общий IP-лимит SSR смягчён кэшем 60 с и отказом в `null`;
 доверенный IP web-сервера (R5в) — follow-up. R6–R10 — по рекомендациям.
 
+**Реализация (coder, S1–S7).**
+- Шапка вкладки — заголовок «Гонки» (`displayTitle`, роль header) без кикера, как `h1` прототипа: у `SectionHeader`
+  кикер обязателен, а второго текста для него в Q11 нет; справа — `Button` secondary с названием сезона (у
+  `SectionHeader` нет слота действия). Кандидат в базу — слот действия `SectionHeader` (вместе с `FilterGroup`).
+- `useMinskClock` (бывш. `useHomeClock`) возвращает `Date` с первого рендера — поведение Главной без изменений; для
+  публичных экранов — `useMinskClockAfterMount` (`null` на SSR и при гидрации через `useSyncExternalStore`).
+- `minsk-format`: `now: Date | null` — `null` даёт даты всегда с годом; `raceCardLine(race, now, datesWithYear)` —
+  публичные экраны: «сегодня / завтра» после монтирования, даты при этом с годом. `usePullToRefresh` перенесён в
+  `src/lib/` (общий для Главной и Гонок, R8) — в §5.1 не назван.
+- Строка «Сбросить фильтры» над героем остаётся и при «Ничего не найдено» (там же — действие `EmptyState`).
+- Покрытия: в карточке списка — строчными («покрытие: гравий · асфальт», прототип), в карточке гонки — подписями
+  справочника («Гравий · Асфальт»). Шапка `DetailHeader` сезона без названия (заголовок экрана ниже, без дубля
+  header для скринридера).
+- Ошибка догрузки страницы (`isFetchNextPageError`) — баннер «Не удалось загрузить» + «Повторить» в подвале; общая
+  ошибка обновления при данных — баннер `AsyncContent` над героем. Ошибка `current`/`past` фона на «Завершённых» —
+  тот же подвал.
+- `public-ssr.ts`: кэшируются успех и `404` (`null`), сбои (сеть, таймаут, 429, 5xx, битый ответ) — нет. Путь —
+  `publicPath(prefix, id)` (`Uuid.safeParse`, `encodeURIComponent`).
+- `GET /v1/seasons/:id/races`: порядок проверок — сначала сезон (неизвестный — 404 и с мусорным курсором), затем
+  курсор (400). Тест индекса — по `system.profile` реального запроса (`planSummary` = `IXSCAN { seasonId: 1,
+  windowEndsAt: 1, _id: 1 }`, `hasSortStage` нет); отрицательное доказательство — без миграции `0009` план уходит на
+  `races_public_past_idx` и тест краснеет.
+- E2E: `home-fixture.ts` → `schedule-fixture.ts` (`publishRaceData`: гонка и вторая, сразу отменённая, в сезоне 9001;
+  в конце своя гонка отменяется). Ожидаемый 404 неизвестной гонки — `e2e/project.ts` (`UNKNOWN_RACE_ID`). Подгрузку
+  прокруткой в браузере смоук не проверяет (на e2e-БД меньше 20 гонок) — покрыта jest (`onEndReached`).
+
 # 8.3 Security checklist
 
 Затронуто: **публичные ссылки** (карточка гонки, сезон — SSR без входа), новые публичные эндпоинты API, SSR-запросы
@@ -547,7 +573,40 @@ web-сервера для лимита (R5в).
 
 # 12. Outcome
 
-_Не начато. Заполняется по слайсам: что сделано, проверки (`pnpm check`, e2e) с выводом или `NOT VERIFIED` + причина._
+**S1–S7 выполнены** (ветка `feature/app-03-races`).
+
+- **S1** контракты `SeasonList`, `SeasonRaceListQuery` (+ тесты); api-client `listSeasons`, `getSeason`,
+  `listSeasonRaces` без Bearer (+ тест).
+- **S2** API: `GET /v1/seasons`, `/v1/seasons/:id`, `/v1/seasons/:id/races` (`current` объявлен до `:id`), репозиторий
+  `listSeasonRacesPublic`, миграция `0009_races_season_public_idx`; int-тесты AC2 (фазы на 00:00 Минска, черновик и
+  чужой сезон, курсор на равных `windowEndsAt`, 404/400, `Cache-Control`, 429, `IXSCAN` без `SORT`).
+- **S3** перенос без смены поведения: `src/lib/{minsk-format,use-minsk-clock,use-pull-to-refresh}.ts`,
+  `features/races/format.ts`, ключи `format.*`, `races.window.*`; `SectionHero.onPress`; `RaceListCard`,
+  `FilterGroup`, `DetailHeader` (+ тесты). `home.test.tsx` — без правок, зелёный.
+- **S4** вкладка «Гонки» (`filters.ts`, `queries.ts`, `season-pick.ts`, `race-feed.tsx`) — `races.test.tsx`.
+- **S5** `/races/[id]` вне гардов, `public-ssr.ts`, `loader`/`generateMetadata`, 404, герой Главной → карточка —
+  `race-detail.test.tsx`, `public-metadata.test.ts`.
+- **S6** `/seasons/[id]`, кнопка сезона во вкладке — `season.test.tsx`.
+- **S7** e2e (`schedule-fixture.ts`, шаги блока 03), документация §10.
+
+**Проверки (2026-10-25, MongoDB RS 127.0.0.1:27117, Redis :6479).**
+- `pnpm check` (с `MONGO_URL_TEST`/`REDIS_URL_TEST`) — EXIT 0: `13 successful, 13 total`; app 63 suites / 444 tests,
+  api 52 files / 393 tests, contracts 15 files, api-client 6 files.
+- Миграции на чистой `pokatim_e2e_app03` дважды: 1-й — `миграции применены: 0001_outbox … 0009_races_season_public_idx`,
+  2-й — `новых миграций нет`.
+- `pnpm build:web` — маршруты `/races/[id]`, `/seasons/[id]` собраны. `curl` production-сервера с API:
+  `/races/<id>` — 200, `<title>` и `og:title` — название, `og:description` «1–3 июля 9001 · Гравий · 62 км»,
+  `og:url` = `WEB_ORIGIN/races/<id>`, без e-mail и `ownerUserId`; `/seasons/<id>` — `og:title` сезона, описание
+  «1 января–31 декабря 9001»; `/races/not-a-uuid` — 200 + `noindex`; API остановлен — `/races/<id>` 200, скелетон
+  («Загрузка»), нейтральная мета + `noindex`.
+- `E2E_API=1 playwright test` (API :3213, свой Mailpit, БД `pokatim_e2e_app03`) — `15 passed (49.0s)`; без API —
+  `12 passed, 3 skipped`. `pageerror`/`console.error` — пусто (фикстура).
+- `expo export -p android` — бандл собран (`entry-….hbc`, 4.4MB).
+
+**NOT VERIFIED** (ручной смоук человека): iOS/Android preview — подгрузка прокруткой, `pokatim://races/<id>` из
+холодного старта и из фона (гость и вошедший), «назад» без истории на устройстве, пояс устройства ≠ Минск, крупный
+шрифт, тёмная тема; Safari iOS — превью ссылки в мессенджере; подгрузка прокруткой в браузере (e2e-БД < 20 гонок).
+Независимое ревью — не проводилось (шаг оркестратора).
 
 ---
 
