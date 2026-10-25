@@ -16,6 +16,12 @@ export const PROJECT_ERROR_MESSAGES = {
   PANEL_LAST_ADMIN: 'Нельзя оставить панель без администратора',
   PANEL_SELF_ACTION: 'Нельзя менять свою роль',
   RACE_INVALID_STATE: 'Действие недоступно в текущем статусе гонки',
+  TRACK_FORMAT_UNSUPPORTED: 'Поддерживаются файлы FIT и GPX',
+  TRACK_TOO_LARGE: 'Файл больше 16 МБ',
+  TRACK_STORAGE_FULL: 'Хранилище файлов заполнено, попробуйте позже',
+  DEVICE_PROVIDER_UNAVAILABLE: 'Подключение временно недоступно',
+  DEVICE_LINK_INVALID: 'Ссылка подключения недействительна',
+  DEVICE_PROVIDER_ERROR: 'Сервис подключения устройств не ответил',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

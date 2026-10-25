@@ -9,6 +9,9 @@ import { panelAuditSubject } from './0006_panel_audit_subject';
 import { races } from './0007_races';
 import { calendar } from './0008_calendar';
 import { racesSeasonPublicIdx } from './0009_races_season_public_idx';
+import { tracks } from './0010_tracks';
+import { devices } from './0011_devices';
+import { trackSourceRefs } from './0012_track_source_refs';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -24,4 +27,7 @@ export const migrations: readonly MongoMigration[] = [
   races,
   calendar,
   racesSeasonPublicIdx,
+  tracks,
+  devices,
+  trackSourceRefs,
 ];

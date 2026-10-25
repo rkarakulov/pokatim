@@ -7,7 +7,7 @@ import { onboardingStep, useOnboardingStore } from '@/features/onboarding/onboar
 import { useShellFailure } from '@/features/onboarding/use-shell-failure';
 
 /**
- * Шаги онбординга после входа (опрос → геопозиция) — только с сессией и незавершённым шагом (гард корневого
+ * Шаги онбординга после входа (опрос → геопозиция → устройства) — только с сессией и незавершённым шагом (гард корневого
  * layout). Пока сессия или шаг неизвестны (SSR, запуск) — скелетон оболочки, после гидрации гард ведёт на шаг или
  * прочь. Экраны не публичные: без `generateMetadata` и `loader`. Каждый экран открыт только на своём шаге.
  */
@@ -31,6 +31,9 @@ export default function SetupLayout() {
       </Stack.Protected>
       <Stack.Protected guard={step === 'location'}>
         <Stack.Screen name="location" />
+      </Stack.Protected>
+      <Stack.Protected guard={step === 'devices'}>
+        <Stack.Screen name="devices" />
       </Stack.Protected>
     </Stack>
   );

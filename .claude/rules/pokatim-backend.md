@@ -16,7 +16,14 @@ paths:
   `AuthGuard` через `modules/identity/index.ts`, коллекции identity не читает), `panel` (доступ к панели «Протокол»:
   члены команды и роли, сессии панели, журнал; identity — только порт `PanelCredentials`/`IdentityAccounts`),
   `races` (сезоны и гонки по коридору — одна граница, ADR-0010: определение сезона живёт здесь, отдельного модуля
-  `seasons` нет), `calendar` (календарь стартов, с гонками не связан).
+  `seasons` нет), `calendar` (календарь стартов, с гонками не связан), `tracks` (загрузки, разбор, активности —
+  ADR-0011) и `devices` (Garmin/Wahoo через агрегатор Open Wearables).
+- `tracks` об агрегаторе не знает (источник — enum + непрозрачный `sourceRef`, поле `via`); `devices` пишет в
+  `tracks` только через порт `TrackIngest` (`modules/tracks/index.ts`). Разбор FIT/GPX/потока — только
+  `@pokatim/tracks/parse` в worker (`worker_threads` с лимитами), в HTTP-обработчике — только сигнатура формата.
+- REST агрегатора — только адаптер за портом `WearablesAggregator` (`open-wearables.aggregator.ts`): адрес и ключ —
+  env, без редиректов, таймаут и лимит байт, zod-ответы. Pull — основной путь, вебхук OW — только сигнал (данные из
+  тела не используются); импорт — только для `active` подключений. Ключ OW и секрет вебхука — только env.
 - Доменный модуль панели пишет журнал `PanelAudit.append(tx, { action, subject: { kind, id, label }, details })` —
   `label` — название на момент действия; имена сотрудников — порт `PanelDirectory` (не `panel_members`).
 - Публичное чтение (`/v1/races`, `/v1/seasons` — список, `current`, `:id`, `:id/races`; `/v1/calendar`) — отдельные

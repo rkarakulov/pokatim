@@ -9,6 +9,9 @@ export default defineConfig({
     resolve: { conditions: ['@pokatim/source', 'module', 'node', 'development|production'] },
   },
   test: {
+    // потоки разбора трека (`worker_threads`, tracks-devices) наследуют execArgv: `@pokatim/tracks/parse` — из
+    // исходников пакета, как у vite (условие `@pokatim/source`)
+    execArgv: ['--conditions=@pokatim/source'],
     projects: [
       {
         extends: true,

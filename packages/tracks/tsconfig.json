@@ -1,6 +1,10 @@
 {
   "extends": "@rkarakulov/config/tsconfig.library.json",
   // исходники workspace-пакетов (@pokatim/*) — без сборки dist
-  "compilerOptions": { "customConditions": ["@pokatim/source"] },
-  "include": ["src"]
+  "compilerOptions": {
+    "customConditions": ["@pokatim/source"],
+    // тесты, скрипт фикстур и вход `parse` (worker) — Node; лёгкий вход `index` глобалов Node не использует
+    "types": ["node"]
+  },
+  "include": ["src", "scripts"]
 }

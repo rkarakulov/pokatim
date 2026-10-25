@@ -13,6 +13,7 @@ import { MongoModule, MongoOutboxModule } from '@rkarakulov/api-kit/mongo';
 import { env } from './config/env';
 import { PROJECT_ERROR_MESSAGES } from './error-messages';
 import { CalendarModule } from './modules/calendar';
+import { DevicesModule } from './modules/devices';
 import { HealthModule } from './modules/health';
 import { IdentityModule } from './modules/identity';
 import { PanelModule } from './modules/panel';
@@ -36,6 +37,7 @@ import { TracksModule } from './modules/tracks';
     PanelModule,
     RacesModule,
     CalendarModule,
+    DevicesModule,
   ],
   // единый формат ошибок ApiError для всех модулей; тексты кодов проекта — рядом с фильтром
   providers: [

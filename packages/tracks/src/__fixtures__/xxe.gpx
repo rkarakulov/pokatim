@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE gpx [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>&xxe;</name><trkseg>
+    <trkpt lat="53.9006" lon="27.559"><time>2026-06-14T06:00:00Z</time></trkpt>
+    <trkpt lat="53.9106" lon="27.569"><time>2026-06-14T06:10:00Z</time></trkpt>
+  </trkseg></trk>
+</gpx>

@@ -97,8 +97,12 @@ describe('web-сервер', () => {
     expectSecurityHeaders(response);
   });
 
-  it.each(['/auth/reset/x', '/auth/verify/x'])(
-    'путь с токеном из письма (%s) — Referrer-Policy: no-referrer, остальные заголовки те же',
+  it.each([
+    '/auth/reset/x',
+    '/auth/verify/x',
+    '/devices/return?provider=garmin&result=pending&t=x',
+  ])(
+    'путь с токеном (%s) — Referrer-Policy: no-referrer, остальные заголовки те же',
     async (path) => {
       const { headers } = await get(path);
       expect(headers['referrer-policy']).toBe('no-referrer');
@@ -106,7 +110,7 @@ describe('web-сервер', () => {
     },
   );
 
-  it.each(['/', '/sign-in', '/authx'])(
+  it.each(['/', '/sign-in', '/authx', '/devices', '/devices/returnx', '/settings/devices'])(
     'прочие пути (%s) — прежний Referrer-Policy',
     async (path) => {
       const { headers } = await get(path);

@@ -132,6 +132,10 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
   деплоя (переменная окружения `dev` и тег).
 - `CORS_ORIGINS` пусто (web и API — один origin за nginx), `TRUST_PROXY=1` (один прокси — nginx хоста; он
   перезаписывает `X-Forwarded-For` адресом клиента).
+- Треки и устройства (ADR-0011, раздел «Треки и устройства»): `TRACK_STORAGE_MAX_BYTES` (2 GiB),
+  `TRACK_STORAGE_MIN_FREE_BYTES` (1 GiB), `DEVICES_ENABLED=false`, `OW_API_URL`, `OW_API_KEY`, `OW_WEBHOOK_SECRET`,
+  `OW_SHARED_INSTANCE=true`, `OW_DOCKER_NETWORK` — пустые ключи OW дописывает шаблон, значения вписывает владелец
+  руками (как `MAIL_RELAY_*`).
 
 Потеря `.env` при живом томе `mongodata`: новый `MONGO_ROOT_PASSWORD` не совпадёт с root в базе — `mongo-init.js`
 упадёт с сообщением «MONGO_ROOT_PASSWORD из .env не подходит к root в томе mongodata».
@@ -400,6 +404,50 @@ done
 
 Удаление пакета необратимо (теги и версии пропадают); пакеты `pokatim-*` не трогать.
 
+## Треки и устройства
+
+ADR-0011, `docs/product/tracks-and-devices.md`.
+
+**Память worker** — 512m (разбор трека в потоке: 160 МБ старого + 32 МБ молодого поколения).
+
+**Хранилище исходников.** Том `trackfiles` (`/data/trackfiles` в api и worker): файлы FIT/GPX и потоки агрегатора
+(`<2 символа>/<ключ>.<fit|gpx|stream.json.gz>`). Квота — `TRACK_STORAGE_MAX_BYTES` (сумма хранимых, 2 GiB), запас
+диска — `TRACK_STORAGE_MIN_FREE_BYTES` (1 GiB): при нехватке загрузка — `503 TRACK_STORAGE_FULL`, импорт откладывается.
+Уборка (worker, ежечасно): исходники отбракованных загрузок старше 7 дней и файлы без документа старше 1 ч. Бэкап —
+вместе с MongoDB (`docker run --rm -v pokatim-dev_trackfiles:/data -v "$PWD":/out busybox tar czf /out/trackfiles.tgz
+-C /data .`); без тома заезды остаются в БД, но исходник для будущих гонок и споров теряется. Размер:
+`docker system df -v | grep trackfiles`. S3 — до прода.
+
+**Устройства (Open Wearables).** На dev — общий инстанс OW соседнего сервиса (`OW_SHARED_INSTANCE=true`; в prod —
+запрещено, сервис не стартует). Включение (владелец, агенту ключи не передаются):
+
+1. API key OW для pokatim (dev-портал OW) → `~/pokatim/.env`: `OW_API_KEY`, `OW_API_URL=http://<сервис OW>:8000`.
+2. Сеть: `OW_DOCKER_NETWORK=<сеть стека OW>` — деплой подключает api и worker к этой внешней сети
+   (`docker-compose.ow.yml`); проверить: `docker network inspect <сеть> | grep pokatim-dev`. Пусто — файл не
+   подключается.
+3. `DEVICES_ENABLED=true`, деплой. Проверка: `GET /v1/devices` под входом — Garmin/Wahoo `available: true`;
+   OW недоступен — `available: false`, ручная загрузка работает.
+4. `redirect_uri` — `https://<хост>/v1/devices/callback?t=…`: в OW 0.9 allowlist `redirect_uri` нет (исходники OW),
+   у провайдеров ничего не меняется (их redirect URI ведут в OW).
+5. Push (необязательно): исходящие вебхуки OW — настройка всего инстанса (согласовать с соседним сервисом);
+   эндпоинт `https://<хост>/v1/devices/webhook`, типы `workout.created`, `connection.*` (тело ≤ 64 КБ —
+   timeseries-события не подписывать), секрет `whsec_…` → `OW_WEBHOOK_SECRET`. Без секрета маршрут отвечает 404,
+   работает pull каждые 15 мин.
+6. Тестеры — аккаунты Garmin/Wahoo, **не подключённые к соседнему сервису** (один consumer на инстанс OW: подключение
+   или отключение в одном проекте затрагивает регистрацию у провайдера для другого).
+
+**Expo Go:** подключение устройств проверяется только в dev build (`pokatim://devices/return`); `exp://` в
+`DEVICE_RETURN_URLS` — только локально (в production запрещён проверкой env).
+
+**Версия OW** — пин на коммит `0.9.0-140` (`git describe` развёрнутого образа: `0.9.0-140-g25edd80c`); адаптер сверен с
+исходниками OW этой версии. Обновление OW — предупредить pokatim и прогнать ручной смоук «Устройств».
+
+**Откат:** `DEVICES_ENABLED=false` + деплой — экран показывает только ручную загрузку; подключения и заезды в БД
+остаются. Отключить сеть OW — очистить `OW_DOCKER_NETWORK` и задеплоить.
+
+**Переход на свой OW (prod):** свой инстанс (пин версии), свои приложения Garmin/Wahoo, `OW_SHARED_INSTANCE=false`;
+подключения dev не переносятся.
+
 ## Диск
 
 Порог деплоя — 1,5 ГБ свободно (`MIN_FREE_MB`), иначе `::error::` без изменений на сервере. Освобождать только своё:
@@ -417,6 +465,11 @@ done
   (`panel_audit_subject_idx`; старые записи не меняются), коллекции `seasons`, `races`, `race_meta` (документ-замок
   `schedule`), `calendar_starts` с индексами публичных списков и панели; expand-only, без переноса данных,
   идемпотентны (повторный прогон — «новых миграций нет»). Тем же шагом `migrate`.
+- `0010_tracks`, `0011_devices` (tracks-devices, ADR-0011) — коллекции `track_uploads`, `activities`
+  (`2dsphere` точки старта), `activity_tracks` (`2dsphere` линии), `activity_meta`; `device_accounts`,
+  `device_connections` (частичный уникальный по живым статусам), `device_link_tickets` (TTL), `device_imports`,
+  `device_audit`; expand-only, идемпотентны. `0012_track_source_refs` — маркеры удалённых объектов источника
+  (удалённый заезд агрегатора не воскресает); expand-only.
 
 ## Панель «Протокол»: первый администратор
 

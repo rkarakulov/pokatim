@@ -12,6 +12,7 @@ import type { Env } from './config/env';
  *   сессии); пусто — CORS выключен (прод: web и API за одним origin);
  * - CSRF — Fetch Metadata (`Sec-Fetch-Site`) с fallback `Origin`/`Host` глобально: небезопасный запрос
  *   с чужого сайта → 403, native без этих заголовков проходит. Доверены только те же `CORS_ORIGINS`.
+ * - `application/octet-stream` — сырой поток для загрузки заездов (лимит — в обработчике).
  * Вне production пустой `CORS_ORIGINS` — предупреждение в лог: web в dev (другой порт) без него не ходит в API.
  */
 export function configureHttp(
@@ -33,5 +34,13 @@ export function configureHttp(
     );
   }
   app.enableCsrfProtection({ trustedOrigins: env.CORS_ORIGINS });
+  // загрузка заезда (tracks-devices, R3): `application/octet-stream` — сырой поток без чтения и без общего
+  // `bodyLimit` 64 КБ; обработчик читает его сам после гарда, с обрывом на лимите файла (`track-uploads.controller`)
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addContentTypeParser('application/octet-stream', (_request, payload, done) => {
+      done(null, payload);
+    });
   return app;
 }

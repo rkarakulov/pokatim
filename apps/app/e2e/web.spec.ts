@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import type { APIRequestContext, Page } from '@playwright/test';
 
 import { expect, test } from './fixtures';
@@ -31,6 +33,10 @@ import { API_URL, BASE_URL, DEV_URL, WITH_API } from './urls';
 const SESSION_COOKIE = { name: '__Secure-pokatim_rt', path: '/v1/auth/session' };
 /** Ответ опроса онбординга (слайс 4) — первый эндпоинт под AuthGuard. */
 const SURVEY_URL = `${API_URL}/v1/profile/onboarding/survey`;
+/** Шаг «Подключите устройство» (tracks-devices): флаг аккаунта на сервере. */
+const DEVICES_STEP_URL = `${API_URL}/v1/profile/onboarding/devices`;
+/** GPX-фикстура пакета треков (синтетический заезд, без персональных данных). */
+const GPX_FIXTURE = resolve(__dirname, '../../../packages/tracks/src/__fixtures__/komoot.gpx');
 
 /**
  * Герои разделов Главной (блок 02) — по публичному API: первая гонка `scope=current` и первый старт календаря (их же
@@ -339,10 +345,21 @@ test.describe('с API', () => {
     const saved = await surveySaved;
     expect(saved.status()).toBe(200);
     expect(saved.request().headers().authorization).toMatch(/^Bearer [\w-]+\.[\w-]+\.[\w-]+$/);
-    expect(await saved.json()).toEqual({ surveyCompleted: true });
+    expect(await saved.json()).toEqual({ surveyCompleted: true, devicesStepCompleted: false });
     await expect(page).toHaveURL(`${BASE_URL}/location`);
     await expect(page.getByRole('heading', { name: 'Покажем, что рядом' })).toBeVisible();
     await page.getByRole('button', { name: 'Не сейчас' }).click();
+    // шаг «Подключите устройство» (tracks-devices): «Позже» — флаг аккаунта на сервере → Главная
+    await expect(page).toHaveURL(`${BASE_URL}/devices`);
+    await expect(page.getByRole('heading', { name: 'Подключите устройство' })).toBeVisible();
+    const devicesStep = page.waitForResponse(
+      (response) => response.url() === DEVICES_STEP_URL && response.request().method() === 'PUT',
+    );
+    await page.getByRole('button', { name: 'Позже' }).click();
+    expect(await (await devicesStep).json()).toEqual({
+      surveyCompleted: true,
+      devicesStepCompleted: true,
+    });
     await expect(page).toHaveURL(`${BASE_URL}/`);
     await expect(page.getByRole('heading', { name: 'Покатим' })).toBeVisible();
 
@@ -483,6 +500,7 @@ test.describe('с API', () => {
       await page.getByRole('checkbox', { name: 'Гонки и результаты' }).click();
       await page.getByRole('button', { name: 'Продолжить' }).click();
       await page.getByRole('button', { name: 'Не сейчас' }).click();
+      await page.getByRole('button', { name: 'Позже' }).click();
       await expect(page).toHaveURL(`${BASE_URL}/`);
 
       await expect(homeSections(page)).toHaveText(['Ближайшие гонки', 'Ближайшие старты']);
@@ -494,6 +512,37 @@ test.describe('с API', () => {
     } finally {
       await withdraw();
     }
+  });
+
+  test('«Устройства»: загрузка GPX-файла → «Обрабатываем…» → «Готово» (tracks-devices, AC15)', async ({
+    page,
+    request,
+  }) => {
+    const rider = await registerHomeRider(request);
+    await page.goto('/sign-in');
+    await page.getByRole('textbox', { name: 'E-mail' }).fill(rider);
+    await page.getByRole('textbox', { name: 'Пароль' }).fill(HOME_FIXTURE_PASSWORD);
+    await page.getByRole('button', { name: 'Войти' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/survey`);
+    await page.getByRole('checkbox', { name: 'Пока просто смотрю' }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Не сейчас' }).click();
+    await page.getByRole('button', { name: 'Позже' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+
+    // вход — иконка верхней панели; устройства на стенде смоука выключены — только ручная загрузка
+    await page.getByRole('button', { name: 'Устройства' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/settings/devices`);
+    await expect(page.getByRole('heading', { name: 'Устройства' })).toBeVisible();
+
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Загрузить файл' }).click();
+    await (await chooser).setFiles(GPX_FIXTURE);
+    // разбор — worker (outbox → BullMQ → worker_threads); экран опрашивает статус, пока загрузка не завершена
+    await expect(page.getByText('komoot.gpx: Готово', { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByText('Готово', { exact: true }).first()).toBeVisible();
   });
 
   test('Гонки и сезон (блок 03): карточка и сезон по ссылке без входа (SSR, OG без ПДн), вкладка «Гонки» после входа', async ({
@@ -547,6 +596,7 @@ test.describe('с API', () => {
       await page.getByRole('checkbox', { name: 'Гонки и результаты' }).click();
       await page.getByRole('button', { name: 'Продолжить' }).click();
       await page.getByRole('button', { name: 'Не сейчас' }).click();
+      await page.getByRole('button', { name: 'Позже' }).click();
       await expect(page).toHaveURL(`${BASE_URL}/`);
       await page.getByRole('tab', { name: 'Гонки' }).click();
       await expect(page).toHaveURL(`${BASE_URL}/races`);
@@ -636,6 +686,7 @@ test.describe('с API', () => {
       await page.getByRole('checkbox', { name: 'Календарь стартов' }).click();
       await page.getByRole('button', { name: 'Продолжить' }).click();
       await page.getByRole('button', { name: 'Не сейчас' }).click();
+      await page.getByRole('button', { name: 'Позже' }).click();
       await expect(page).toHaveURL(`${BASE_URL}/`);
       await page.getByRole('tab', { name: 'Календарь' }).click();
       await expect(page).toHaveURL(`${BASE_URL}/calendar`);

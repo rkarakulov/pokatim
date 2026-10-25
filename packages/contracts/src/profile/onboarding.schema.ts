@@ -24,5 +24,18 @@ export type SubmitOnboardingSurveyRequest = z.infer<typeof SubmitOnboardingSurve
  * Ответ `GET /v1/profile/onboarding` и `PUT …/survey` (под `AuthGuard`, `no-store`). Сами ответы опроса наружу
  * не отдаются: новые коды enum не ломают разбор старыми клиентами.
  */
-export const OnboardingStatus = z.object({ surveyCompleted: z.boolean() });
+export const OnboardingStatus = z.object({
+  surveyCompleted: z.boolean(),
+  /**
+   * Шаг «Подключите устройство» пройден (флаг аккаунта, R12). Необязательно: старый API поля не знает — приложение
+   * шаг не показывает.
+   */
+  devicesStepCompleted: z.boolean().optional(),
+});
 export type OnboardingStatus = z.infer<typeof OnboardingStatus>;
+
+/** `PUT /v1/profile/onboarding/devices` → `OnboardingStatus`: любой исход шага отмечает его пройденным. */
+export const CompleteDevicesStepRequest = z.strictObject({
+  outcome: z.enum(['connected', 'later']),
+});
+export type CompleteDevicesStepRequest = z.infer<typeof CompleteDevicesStepRequest>;

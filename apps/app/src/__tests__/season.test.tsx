@@ -72,7 +72,7 @@ const race = (n: number, overrides: Partial<RaceCard> = {}): RaceDetail => ({
 
 const signedIn = () => {
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
-  useOnboardingStore.setState({ survey: 'completed', location: 'done' });
+  useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
 };
 const routes = { ...tabRoutes, 'races/[id]': RaceRoute, 'seasons/[id]': SeasonRoute };
 

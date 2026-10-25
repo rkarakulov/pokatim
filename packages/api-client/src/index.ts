@@ -37,6 +37,15 @@ import {
   type SignInRequest,
   type SignOutRequest,
   type SubmitOnboardingSurveyRequest,
+  TrackUpload,
+  TrackUploadPage,
+  ConnectDeviceResponse,
+  DeviceList,
+  type CompleteDeviceRequest,
+  type CompleteDevicesStepRequest,
+  type ConnectDeviceRequest,
+  type DeviceProvider,
+  type DisconnectDeviceRequest,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -130,9 +139,28 @@ export function createApiClient({
     ...init,
     headers: { authorization: `Bearer ${accessToken}` },
   });
+  const postAuthorized = <S extends z.ZodType>(
+    accessToken: string,
+    path: string,
+    schema: S,
+    body: unknown,
+  ) =>
+    request(
+      path,
+      schema,
+      authorized(accessToken, { method: 'POST', body: JSON.stringify(body), ...withCredentials }),
+    );
   /** Транспорт сессии платформы — в тело запросов, которые выдают сессию. */
   const withTransport = <B extends object>(body: B) =>
     sessionTransport ? { sessionTransport, ...body } : body;
+
+  /** Путь загрузки заезда: `?name=` — исходное имя файла только для показа. */
+  const trackUploadPath = (name?: string) =>
+    `/v1/tracks/uploads${name ? queryString({ name }) : ''}`;
+  const octetStream = (accessToken: string) => ({
+    authorization: `Bearer ${accessToken}`,
+    'content-type': 'application/octet-stream',
+  });
 
   return {
     health: () => get('/v1/health', HealthResponse),
@@ -208,6 +236,77 @@ export function createApiClient({
     listCalendarCities: () => getPublic('/v1/calendar/cities', CalendarCities),
     /** Месяцы будущих опубликованных стартов — чипы «Дата». */
     listCalendarMonths: () => getPublic('/v1/calendar/months', CalendarMonths),
+
+    // --- заезды: ручная загрузка FIT/GPX (вход обязателен, tracks-devices) ---
+    /**
+     * Загрузка файла заезда сырыми байтами (`application/octet-stream`): `202` — новая, `200` — тот же файл уже есть.
+     * Формат сервер определяет по содержимому.
+     */
+    uploadTrack: (accessToken: string, body: Blob | Uint8Array, name?: string) =>
+      request(trackUploadPath(name), TrackUpload, {
+        method: 'POST',
+        body: body as BodyInit,
+        headers: octetStream(accessToken),
+        ...withCredentials,
+      }),
+    /**
+     * Тот же запрос для платформенной отправки с прогрессом (XHR в web, upload task в native): ответ разбирается
+     * `TrackUpload`, ошибка — `ApiHttpError`.
+     */
+    trackUploadRequest: (accessToken: string, name?: string) => ({
+      url: `${baseUrl}${trackUploadPath(name)}`,
+      method: 'POST' as const,
+      headers: octetStream(accessToken),
+    }),
+    getTrackUpload: (accessToken: string, id: string) =>
+      request(
+        `/v1/tracks/uploads/${encodeURIComponent(id)}`,
+        TrackUpload,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Свои загрузки, новые сверху. */
+    listTrackUploads: (accessToken: string, params: { limit?: number; cursor?: string } = {}) =>
+      request(
+        `/v1/tracks/uploads${queryString(params)}`,
+        TrackUploadPage,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Удаление своей загрузки вместе с заездом; ответ 204. */
+    deleteTrackUpload: (accessToken: string, id: string) =>
+      request(
+        `/v1/tracks/uploads/${encodeURIComponent(id)}/delete`,
+        z.undefined(),
+        authorized(accessToken, { method: 'POST', body: '{}', ...withCredentials }),
+      ),
+
+    // --- устройства через агрегатор (вход обязателен, tracks-devices) ---
+    listDevices: (accessToken: string) =>
+      request(
+        '/v1/devices',
+        DeviceList,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Ссылка авторизации агрегатора; `returnUrl` — из allowlist сервера. */
+    connectDevice: (accessToken: string, provider: DeviceProvider, body: ConnectDeviceRequest) =>
+      postAuthorized(accessToken, `/v1/devices/${provider}/connect`, ConnectDeviceResponse, body),
+    /** Активация подключения тикетом из возврата авторизации. */
+    completeDevice: (accessToken: string, provider: DeviceProvider, body: CompleteDeviceRequest) =>
+      postAuthorized(accessToken, `/v1/devices/${provider}/complete`, DeviceList, body),
+    /** «Синхронизировать сейчас» (не чаще раза в 10 минут — иначе 429). */
+    syncDevice: (accessToken: string, provider: DeviceProvider) =>
+      postAuthorized(accessToken, `/v1/devices/${provider}/sync`, DeviceList, {}),
+    disconnectDevice: (
+      accessToken: string,
+      provider: DeviceProvider,
+      body: DisconnectDeviceRequest,
+    ) => postAuthorized(accessToken, `/v1/devices/${provider}/disconnect`, DeviceList, body),
+    /** Шаг онбординга «Подключите устройство» пройден (любой исход). */
+    completeDevicesStep: (accessToken: string, body: CompleteDevicesStepRequest) =>
+      request(
+        '/v1/profile/onboarding/devices',
+        OnboardingStatus,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
   };
 }
 

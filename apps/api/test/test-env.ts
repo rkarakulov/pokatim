@@ -1,12 +1,13 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { env, type Env } from '../src/config/env';
+import { MONGO_URL_TEST, REDIS_URL_TEST } from './test-urls';
 
-// тестовая база — `<имя dev-БД>_test` в replica set из infra/docker-compose.dev.yml
-const DB = 'pokatim';
+export { MONGO_URL_TEST, REDIS_URL_TEST };
 
-// тестовые адреса задаются только переменными *_TEST — dev-базу тесты не трогают
-export const MONGO_URL_TEST =
-  process.env.MONGO_URL_TEST ?? `mongodb://127.0.0.1:27017/${DB}_test?directConnection=true`;
-export const REDIS_URL_TEST = process.env.REDIS_URL_TEST ?? 'redis://127.0.0.1:6379/1';
+/** Хранилище исходников заездов тестов — временный каталог процесса (файлы тестов чистят сами). */
+export const TRACK_STORAGE_DIR_TEST = join(tmpdir(), `pokatim-test-trackfiles-${process.pid}`);
 
 /** Окружение API для тестов: несекретные фиктивные значения, SMTP не используется (fake MAILER). */
 export function testEnv(overrides: Partial<Record<keyof Env, string>> = {}): Env {
@@ -22,6 +23,8 @@ export function testEnv(overrides: Partial<Record<keyof Env, string>> = {}): Env
     APP_LINK_BASE: 'pokatim://',
     AGREEMENT_VERSION: 'test-agreement',
     TRUST_PROXY: '0',
+    TRACK_STORAGE_DIR: TRACK_STORAGE_DIR_TEST,
+    TRACK_STORAGE_MIN_FREE_BYTES: '0',
     ...overrides,
   });
 }

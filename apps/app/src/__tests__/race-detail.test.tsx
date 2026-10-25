@@ -43,7 +43,7 @@ const race: RaceDetail = {
 
 const signedIn = () => {
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
-  useOnboardingStore.setState({ survey: 'completed', location: 'done' });
+  useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
 };
 
 /** Вкладки и карточка без корневого layout (вошедший). */

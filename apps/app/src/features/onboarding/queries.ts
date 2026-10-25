@@ -1,4 +1,4 @@
-import type { SubmitOnboardingSurveyRequest } from '@pokatim/contracts';
+import type { CompleteDevicesStepRequest, SubmitOnboardingSurveyRequest } from '@pokatim/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { withAccessToken } from '@/features/auth/authorized';
@@ -28,5 +28,22 @@ export function useSubmitSurvey() {
     },
     // Главная не смонтирована: инвалидация помечает профиль устаревшим, запрос — при её открытии
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: PROFILE_QUERY_KEY }),
+  });
+}
+
+/**
+ * Шаг «Подключите устройство» пройден (любой исход: подключили или «Позже»): флаг аккаунта на сервере, офлайн —
+ * сразу ошибка с повтором (`networkMode: 'always'`). Успех — шаг пройден: гард ведёт на Главную.
+ */
+export function useCompleteDevicesStep() {
+  return useMutation({
+    ...AUTH_MUTATION,
+    mutationFn: async (outcome: CompleteDevicesStepRequest['outcome']) => {
+      // шаг принадлежит аккаунту, от имени которого ушёл запрос: сессия сменилась — не засчитывается
+      const owner = sessionOwner(useSessionStore.getState().session);
+      const status = await withAccessToken((token) => api.completeDevicesStep(token, { outcome }));
+      await useOnboardingStore.getState().completeDevicesStep(owner);
+      return status;
+    },
   });
 }

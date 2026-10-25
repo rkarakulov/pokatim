@@ -79,7 +79,7 @@ export default function HomeScreen() {
       style={[styles.safeArea, { backgroundColor: theme.surface.default }]}
     >
       <DocumentTitle title={DOCUMENT_TITLE} />
-      <TopBar />
+      <TopBar onOpenDevices={() => router.push('/settings/devices')} />
       <ScrollView
         testID="home-feed"
         refreshControl={

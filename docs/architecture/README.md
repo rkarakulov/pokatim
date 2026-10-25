@@ -8,6 +8,8 @@
 app (Expo)    ─┐
 admin (Vite)  ─┼─ HTTPS ─ Caddy ─ api (NestJS) ─┬─ MongoDB 8.0 (replica set, ADR-0007)
 web (app, SSR)─┘                                ├─ Redis (BullMQ, rate-limit)
+                                                ├─ том trackfiles (исходники заездов на dev; S3 — до прода)
+                                                ├─ Open Wearables (агрегатор устройств, ADR-0011)
                                                 └─ S3 (треки, фото, карточки, бэкапы)
                          worker (NestJS, BullMQ) ─ те же MongoDB / Redis / S3; ffmpeg, Skia
 ```
@@ -20,13 +22,15 @@ identity · profile · panel · routes · rides · calendar · races · results 
 gamification · sharing · notifications · moderation · media
 
 Есть: `identity`, `profile`, `panel` (доступ к панели «Протокол», ADR-0009), `races` (сезоны и гонки по коридору,
-ADR-0010), `calendar` (календарь стартов). CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js grant-admin`).
+ADR-0010), `calendar` (календарь стартов), `tracks` (загрузки и активности, разбор в worker) и `devices` (Garmin/Wahoo
+через агрегатор Open Wearables) — ADR-0011. CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js grant-admin`).
 
 Межмодульные вызовы — через `index.ts` модуля; события — outbox → BullMQ.
 
 ## Ключевые потоки
 
-- **Заезд:** файл (resumable upload) → S3 → задача разбора трека → проверка коридора (`packages/tracks` в worker;
+- **Заезд:** файл (v1 — одна попытка с прогрессом, ADR-0011) или поток агрегатора → хранилище исходников (порт;
+  том на dev, S3 — до прода) → задача разбора трека → проверка коридора (`packages/tracks` в worker;
   «рядом»/bbox — `2dsphere` MongoDB, ADR-0007) →
   результат, кластер, флаги правдоподобия → пересчёт мест → уведомление in-app.
 - **Протокол:** чек-лист публикации → публикация → финальные результаты → пересчёт сезона.
@@ -233,6 +237,27 @@ worker: очередь identity-email ─► письмо «Пароль изм�
   `/calendar` — под гардом.
 - Внешняя ссылка организатора — только `src/lib/open-external-url(.web).ts` после `RegistrationUrl.safeParse`:
   native — `Linking.openURL` (системный браузер), web — `window.open(url, '_blank', 'noopener,noreferrer')`.
+
+### Треки и устройства (модули `tracks`, `devices`, ADR-0011)
+
+- **Ручная загрузка:** `POST /v1/tracks/uploads` (`AuthGuard`, `application/octet-stream` — сырой поток, читается
+  после гарда с обрывом на 16 МиБ) → формат по сигнатуре (`@pokatim/tracks` `detectTrackFormat`) → sha256 → тот же
+  файл — `200` с прежней загрузкой → квота → файл (`TrackFileStore`, временное имя → `rename`) → транзакция
+  { `track_uploads` `queued` + outbox `tracks.upload-received` } → `202`. Приложение опрашивает
+  `GET …/uploads/:id` (3 с), пока статус не финальный.
+- **Разбор (`track-processing`, worker, параллелизм 1):** захват по статусу → исходник → `analyzeTrack`
+  (`@pokatim/tracks/parse`) в `worker_threads` (160 МБ, 30 с, `terminate`) → транзакция { `lockUserActivities` →
+  `activities` + `activity_tracks` (упрощённая `LineString`, `2dsphere`) → группа дублей (±180 с, ±5 %, основная —
+  мощность > пульс > файл > Garmin > Wahoo > раньше) → `ready`/`duplicate` } или `failed: <код>`.
+- **Устройства:** порт `WearablesAggregator`, адаптер `OpenWearablesAggregator` — единственное место REST OW (ключ —
+  env). `connect` → пользователь OW `pokatim:<userId>` (Redis-замок) → тикет (sha256 в БД, 30 мин) → ссылка OW →
+  провайдер → callback OW → `GET /v1/devices/callback?t=` (без входа, только 302) → приложение `POST …/complete`
+  под входом: владелец тикета → подключение `active`; чужой → отзыв в OW. Pull каждые 15 мин и «Синхронизировать
+  сейчас» → велотренировки провайдера → `/timeseries` без децимации → `TrackIngest.ingestProviderStream` (поток
+  `pokatim.stream.v1` — тот же разбор). Вебхук Svix — только сигнал «забрать», без секрета — 404.
+- **Очереди:** `track-processing`, `tracks-maintenance` (уборка ежечасно), `devices-sync` (pull, история, отзыв,
+  надгробия импортов удалённых загрузок по `tracks.upload-deleted`), `devices-maintenance` (расписание pull, уборка
+  неподтверждённых, сверка).
 
 ### Web (SSR, PWA)
 

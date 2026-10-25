@@ -19,21 +19,59 @@ export class ProfileRepository {
   }
 
   /**
-   * Ответ опроса: upsert по `_id`. `surveyCompletedAt` — только при вставке (первый ответ), `updatedAt` — всегда.
-   * Два первых upsert одновременно могут оба не найти документ: проигравший получает duplicate key на `_id_`
-   * (повтор — у сервиса).
+   * Ответ опроса: upsert по `_id` (pipeline, значения — `$literal`). `surveyCompletedAt` — при первом ответе
+   * (документ мог создать шаг устройств — тогда там `null`), `updatedAt` — всегда. Два первых upsert одновременно
+   * могут оба не найти документ: проигравший получает duplicate key на `_id_` (повтор — у сервиса).
    */
   async upsertSurvey(userId: string, reasons: RideReason[], now: Date): Promise<void> {
     await this.profiles.updateOne(
       { _id: userId },
-      { $set: { rideReasons: reasons, updatedAt: now }, $setOnInsert: { surveyCompletedAt: now } },
+      [
+        {
+          $set: {
+            rideReasons: { $literal: reasons },
+            updatedAt: { $literal: now },
+            surveyCompletedAt: { $ifNull: ['$surveyCompletedAt', { $literal: now }] },
+          },
+        },
+      ],
       { upsert: true },
     );
   }
 
-  async hasSurvey(userId: string): Promise<boolean> {
-    const doc = await this.profiles.findOne({ _id: userId }, { projection: { _id: 1 } });
-    return doc !== null;
+  /**
+   * Шаг «Подключите устройство» пройден: время первого прохождения сохраняется, повтор идемпотентен. Документа нет
+   * (порядок шагов сервер не навязывает) — создаётся без ответа опроса.
+   */
+  async markDevicesStep(userId: string, now: Date): Promise<void> {
+    await this.profiles.updateOne(
+      { _id: userId },
+      [
+        {
+          $set: {
+            devicesStepCompletedAt: { $ifNull: ['$devicesStepCompletedAt', { $literal: now }] },
+            rideReasons: { $ifNull: ['$rideReasons', { $literal: [] }] },
+            surveyCompletedAt: { $ifNull: ['$surveyCompletedAt', null] },
+            updatedAt: { $literal: now },
+          },
+        },
+      ],
+      { upsert: true },
+    );
+  }
+
+  /** Статус онбординга по документу профиля (нет документа — ничего не пройдено). */
+  async onboardingFlags(
+    userId: string,
+  ): Promise<{ surveyCompleted: boolean; devicesStepCompleted: boolean }> {
+    const doc = await this.profiles.findOne(
+      { _id: userId },
+      { projection: { surveyCompletedAt: 1, devicesStepCompletedAt: 1 } },
+    );
+    return {
+      surveyCompleted: (doc?.surveyCompletedAt ?? null) !== null,
+      devicesStepCompleted: (doc?.devicesStepCompletedAt ?? null) !== null,
+    };
   }
 
   /** Ответы опроса пользователя; `null` — документа нет (опрос не пройден). */
@@ -42,6 +80,7 @@ export class ProfileRepository {
       { _id: userId },
       { projection: { _id: 0, rideReasons: 1 } },
     );
-    return doc?.rideReasons ?? null;
+    // документ шага устройств без опроса — опрос не пройден
+    return doc?.rideReasons?.length ? doc.rideReasons : null;
   }
 }

@@ -6,6 +6,8 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 *.log
+# локальное хранилище исходников заездов API (TRACK_STORAGE_DIR, tracks-devices)
+apps/api/var/
 
 # env и секреты — никогда в git
 .env

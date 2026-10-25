@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 
-import { defineCoreEnv, mailEnvShape } from '@rkarakulov/api-kit/core';
+import { DEVICE_PROVIDERS } from '@pokatim/contracts';
+import { defineCoreEnv, type EnvDefinition, mailEnvShape } from '@rkarakulov/api-kit/core';
 import { mongoEnvShape } from '@rkarakulov/api-kit/mongo';
 import { z } from 'zod';
 
@@ -28,11 +29,83 @@ const corsOrigins = z
     ),
   );
 
+/** Список через запятую (пробелы вокруг элементов отбрасываются, пустые — тоже). */
+const commaList = (fallback = '') =>
+  z
+    .string()
+    .default(fallback)
+    .transform((value) =>
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    );
+const flag = (fallback: boolean) => z.stringbool().default(fallback);
+/** Необязательная переменная: пустое значение в `.env` (`OW_API_KEY=`) — как не заданная. */
+const optional = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => (value === '' ? undefined : value), schema.optional());
+const GiB = 1024 ** 3;
+
 /**
- * Окружение проекта: основа базы (процесс, Redis, TRUST_PROXY) + MongoDB (`MONGO_URL` с именем БД) + почта;
- * свои переменные — сюда.
+ * Треки и устройства (tracks-devices, ADR-0011): хранилище исходников заездов и агрегатор устройств Open Wearables.
+ * Ключи OW — только env (R13); провайдеры выключены по умолчанию (`DEVICES_ENABLED=false`) — стенд стартует без них.
  */
-export const env = defineCoreEnv({
+const tracksDevicesEnvShape = {
+  /** Каталог исходников заездов (том `trackfiles` на dev; S3 — до прода). */
+  TRACK_STORAGE_DIR: z.string().min(1).default('var/trackfiles'),
+  /** Квота: сумма размеров хранимых исходников (Q10). */
+  TRACK_STORAGE_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(2 * GiB),
+  /** Минимум свободного места тома: меньше — новые файлы не принимаются (общий диск dev). */
+  TRACK_STORAGE_MIN_FREE_BYTES: z.coerce.number().int().nonnegative().default(GiB),
+  DEVICES_ENABLED: flag(false),
+  DEVICES_AGGREGATOR: z.enum(['open_wearables']).default('open_wearables'),
+  /** Провайдеры экрана — пересечение с живым списком агрегатора. */
+  DEVICE_PROVIDERS_ALLOWLIST: commaList('garmin,wahoo').pipe(z.array(z.enum(DEVICE_PROVIDERS))),
+  /**
+   * Куда разрешено вернуть пользователя после авторизации (точный префикс `returnUrl`): web
+   * `https://<хост>/devices/return`, сборки `pokatim://devices/return`, Expo Go `exp://…` — только вне production.
+   */
+  DEVICE_RETURN_URLS: commaList().pipe(
+    z.array(z.string().regex(/^(https?|pokatim|exp):\/\/\S+$/, 'DEVICE_RETURN_URLS: URL возврата')),
+  ),
+  /** Публичный origin API для `redirect_uri` агрегатора (`<origin>/v1/devices/callback`). */
+  PUBLIC_API_ORIGIN: optional(
+    z.url().refine((origin) => new URL(origin).origin === origin, {
+      message: 'PUBLIC_API_ORIGIN: только origin, без пути',
+    }),
+  ),
+  DEVICES_SYNC_INTERVAL_MIN: z.coerce
+    .number()
+    .int()
+    .min(5)
+    .max(24 * 60)
+    .default(15),
+  DEVICES_HISTORY_DAYS: z.coerce.number().int().min(0).max(90).default(30),
+  OW_API_URL: optional(z.url({ protocol: /^https?$/ })),
+  OW_API_KEY: optional(z.string().min(16)),
+  /** Секрет Svix (`whsec_…`): не задан — вебхук отвечает 404, работает только pull (N1). */
+  OW_WEBHOOK_SECRET: optional(
+    z.string().regex(/^whsec_[A-Za-z0-9+/=]{16,}$/, 'OW_WEBHOOK_SECRET: whsec_<base64>'),
+  ),
+  OW_EXTERNAL_ID_PREFIX: z
+    .string()
+    .regex(/^[a-z0-9_-]{1,20}:$/)
+    .default('pokatim:'),
+  /** Общий инстанс OW с соседним сервисом (dev): в production запрещён. */
+  OW_SHARED_INSTANCE: flag(false),
+  /**
+   * Стенд: dev-сервер тоже работает с `NODE_ENV=production` (сборка, производительность), поэтому запреты «только не в
+   * проде» (общий OW, `exp://`) проверяются по паре `NODE_ENV=production` и `DEPLOY_STAGE=prod`. Умолчание — `prod`:
+   * dev-стенд объявляет себя явно (compose).
+   */
+  DEPLOY_STAGE: z.enum(['dev', 'prod']).default('prod'),
+};
+
+const baseEnv = defineCoreEnv({
   ...mongoEnvShape,
   ...mailEnvShape,
   /** Подпись access JWT (HS256). */
@@ -46,8 +119,50 @@ export const env = defineCoreEnv({
   /** Версия соглашения и согласия на обработку данных, которую принимает пользователь при регистрации. */
   AGREEMENT_VERSION: z.string().min(1),
   CORS_ORIGINS: corsOrigins,
+  ...tracksDevicesEnvShape,
 });
-export type Env = ReturnType<typeof env.load>;
+type BaseEnv = ReturnType<typeof baseEnv.load>;
+
+/**
+ * Зависимости переменных (проверка на старте, §8.3 п. 5): включённые устройства без адреса и ключа OW, без
+ * `PUBLIC_API_ORIGIN` и `DEVICE_RETURN_URLS`; общий инстанс OW или `exp://` в production (не dev-стенд) — отказ
+ * запуска.
+ */
+export function envDependencyErrors(value: BaseEnv): string[] {
+  const errors: string[] = [];
+  const production = value.NODE_ENV === 'production' && value.DEPLOY_STAGE === 'prod';
+  if (value.DEVICES_ENABLED) {
+    if (!value.OW_API_URL || !value.OW_API_KEY) {
+      errors.push('DEVICES_ENABLED=true: нужны OW_API_URL и OW_API_KEY');
+    }
+    if (!value.PUBLIC_API_ORIGIN) errors.push('DEVICES_ENABLED=true: нужен PUBLIC_API_ORIGIN');
+    if (value.DEVICE_RETURN_URLS.length === 0) {
+      errors.push('DEVICES_ENABLED=true: нужен DEVICE_RETURN_URLS');
+    }
+  }
+  if (production && value.OW_SHARED_INSTANCE) {
+    errors.push('OW_SHARED_INSTANCE=true запрещён в production (ADR-0011)');
+  }
+  if (production && value.DEVICE_RETURN_URLS.some((url) => url.startsWith('exp://'))) {
+    errors.push('DEVICE_RETURN_URLS: exp:// запрещён в production');
+  }
+  return errors;
+}
+
+/**
+ * Окружение проекта: основа базы (процесс, Redis, TRUST_PROXY) + MongoDB (`MONGO_URL` с именем БД) + почта + треки и
+ * устройства; свои переменные — сюда. Зависимости переменных — `envDependencyErrors` поверх схемы.
+ */
+export const env: EnvDefinition<BaseEnv> = {
+  schema: baseEnv.schema,
+  load(source?: NodeJS.ProcessEnv) {
+    const value = baseEnv.load(source);
+    const errors = envDependencyErrors(value);
+    if (errors.length > 0) throw new Error(`Окружение невалидно: ${errors.join('; ')}`);
+    return value;
+  },
+};
+export type Env = BaseEnv;
 
 /**
  * Падаем на старте, если окружение невалидно — лучше, чем в рантайме.

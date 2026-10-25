@@ -11,8 +11,8 @@
     "start:worker": "node dist/worker.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:migrate": "tsx src/db/migrate.ts",
-    "panel": "tsx src/cli/panel.ts"
+    "db:migrate": "tsx --conditions=@pokatim/source src/db/migrate.ts",
+    "panel": "tsx --conditions=@pokatim/source src/cli/panel.ts"
   },
   "dependencies": {
     "@pokatim/contracts": "workspace:*",

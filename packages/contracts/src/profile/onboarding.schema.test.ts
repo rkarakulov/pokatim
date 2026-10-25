@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CompleteDevicesStepRequest,
   OnboardingStatus,
   RIDE_REASONS,
   RideReason,
@@ -55,5 +56,27 @@ describe('OnboardingStatus', () => {
     expect(OnboardingStatus.parse({ surveyCompleted: true })).toEqual({ surveyCompleted: true });
     expect(OnboardingStatus.safeParse({ surveyCompleted: 'yes' }).success).toBe(false);
     expect(OnboardingStatus.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('шаг «Подключите устройство»', () => {
+  it('devicesStepCompleted — необязательное поле ответа (старый API)', () => {
+    expect(OnboardingStatus.parse({ surveyCompleted: true })).toEqual({ surveyCompleted: true });
+    expect(OnboardingStatus.parse({ surveyCompleted: true, devicesStepCompleted: false })).toEqual({
+      surveyCompleted: true,
+      devicesStepCompleted: false,
+    });
+    expect(
+      OnboardingStatus.safeParse({ surveyCompleted: true, devicesStepCompleted: 'no' }).success,
+    ).toBe(false);
+  });
+
+  it('исход шага — connected | later, строго', () => {
+    expect(CompleteDevicesStepRequest.parse({ outcome: 'later' })).toEqual({ outcome: 'later' });
+    expect(CompleteDevicesStepRequest.safeParse({ outcome: 'skip' }).success).toBe(false);
+    expect(CompleteDevicesStepRequest.safeParse({}).success).toBe(false);
+    expect(
+      CompleteDevicesStepRequest.safeParse({ outcome: 'later', completed: true }).success,
+    ).toBe(false);
   });
 });

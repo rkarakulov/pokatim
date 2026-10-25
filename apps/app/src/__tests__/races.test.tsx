@@ -78,7 +78,7 @@ function serve(current: RaceCard[], past: RaceCard[]) {
 beforeEach(() => {
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
-  useOnboardingStore.setState({ survey: 'completed', location: 'done' });
+  useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
   getCurrentSeason.mockResolvedValue({ season: null });
   listSeasons.mockResolvedValue({ items: [] });
   serve([hero, soon], [closed, cancelled]);

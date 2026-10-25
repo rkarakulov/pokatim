@@ -63,7 +63,7 @@ const heroLabel = 'Ближайший старт. Минская сотка. 14 
 beforeEach(() => {
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
-  useOnboardingStore.setState({ survey: 'completed', location: 'done' });
+  useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
   listCalendar.mockResolvedValue(page([hero, nov, multi]));
   listCalendarMonths.mockResolvedValue({ months: ['2026-10', '2026-11', '2027-06'] });
   listCalendarCities.mockResolvedValue({ cities: ['Минск', 'Нарочь'] });

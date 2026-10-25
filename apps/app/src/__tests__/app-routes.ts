@@ -5,6 +5,7 @@ import RegisterScreen from '../app/(onboarding)/register';
 import SetupLayout from '../app/(setup)/_layout';
 import SurveyScreen from '../app/(setup)/survey';
 import LocationScreen from '../app/(setup)/location';
+import DevicesStepScreen from '../app/(setup)/devices';
 import SignInScreen from '../app/(onboarding)/sign-in';
 import CalendarScreen from '../app/(tabs)/calendar';
 import HomeScreen from '../app/(tabs)/index';
@@ -13,6 +14,8 @@ import RacesScreen from '../app/(tabs)/races';
 import RidesScreen from '../app/(tabs)/rides';
 import RoutesScreen from '../app/(tabs)/routes';
 import ResetPasswordScreen from '../app/auth/reset/[token]';
+import DeviceReturnScreen from '../app/devices/return';
+import DevicesScreen from '../app/settings/devices';
 import VerifyEmailScreen from '../app/auth/verify/[token]';
 import RootLayout from '../app/_layout';
 import CalendarStartRoute from '../app/calendar/[id]';
@@ -31,7 +34,10 @@ export const tabRoutes = {
   '(tabs)/calendar': CalendarScreen,
 };
 
-/** Всё приложение: корневой layout с гардом, вкладки, регистрация, шаги онбординга, ссылка из письма, витрина, `/status`. */
+/**
+ * Всё приложение: корневой layout с гардом, вкладки, «Устройства», регистрация, шаги онбординга, ссылка из письма,
+ * возврат из авторизации устройства, витрина, `/status`.
+ */
 export const appRoutes = {
   _layout: RootLayout,
   ...tabRoutes,
@@ -43,6 +49,9 @@ export const appRoutes = {
   '(setup)/_layout': SetupLayout,
   '(setup)/survey': SurveyScreen,
   '(setup)/location': LocationScreen,
+  '(setup)/devices': DevicesStepScreen,
+  'settings/devices': DevicesScreen,
+  'devices/return': DeviceReturnScreen,
   'auth/verify/[token]': VerifyEmailScreen,
   'auth/reset/[token]': ResetPasswordScreen,
   'ui-kit': UiKitScreen,
