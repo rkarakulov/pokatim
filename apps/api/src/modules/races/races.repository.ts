@@ -136,6 +136,11 @@ export class RacesRepository {
     return new Map(rows.map((row) => [row._id, row.count]));
   }
 
+  /** Гонки одного сезона (ответ после изменения сезона). */
+  countSeasonRaces(seasonId: string): Promise<number> {
+    return this.c.races.countDocuments({ seasonId });
+  }
+
   // --- гонки ---
 
   async findRace(id: string, session?: DbSession): Promise<RaceDoc | undefined> {
