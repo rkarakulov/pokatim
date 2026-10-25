@@ -66,7 +66,9 @@ paths:
   документам. Без замка — **HIGH** в ревью (отрицательное доказательство — `track-uploads.int.test.ts`).
 - Уникальности дедупа: `(userId, sha256)` — тот же файл, `(source, sourceRef)` — тот же объект провайдера,
   `device_imports (provider, aggWorkoutId)` — та же тренировка агрегатора; удалённая загрузка провайдера оставляет
-  надгробие `device_imports.status = 'deleted'` (следующий pull её не вернёт).
+  надгробие `device_imports.status = 'deleted'` (следующий pull её не вернёт) и маркер `track_source_refs`
+  (`deleted`) в транзакции удаления — приём того же `(source, sourceRef)` пишет тот же документ (`live`) и получает
+  `TrackSourceDeletedError`.
 - Биометрия не хранится: ряды пульса/мощности — только в исходнике, в `activities` — флаги `hasHeartRate`/`hasPower`
   (приоритет дублей), наружу не выходят. Исходник — `TrackFileStore` (ключ `randomToken`), не GridFS.
 - `device_audit` — append-only (только `insertOne`, тест-сторож), без идентификаторов агрегатора.

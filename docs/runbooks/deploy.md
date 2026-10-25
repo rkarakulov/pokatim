@@ -404,6 +404,8 @@ done
 
 ADR-0011, `docs/product/tracks-and-devices.md`.
 
+**Память worker** — 512m (разбор трека в потоке: 160 МБ старого + 32 МБ молодого поколения).
+
 **Хранилище исходников.** Том `trackfiles` (`/data/trackfiles` в api и worker): файлы FIT/GPX и потоки агрегатора
 (`<2 символа>/<ключ>.<fit|gpx|stream.json.gz>`). Квота — `TRACK_STORAGE_MAX_BYTES` (сумма хранимых, 2 GiB), запас
 диска — `TRACK_STORAGE_MIN_FREE_BYTES` (1 GiB): при нехватке загрузка — `503 TRACK_STORAGE_FULL`, импорт откладывается.
@@ -429,6 +431,9 @@ ADR-0011, `docs/product/tracks-and-devices.md`.
    работает pull каждые 15 мин.
 6. Тестеры — аккаунты Garmin/Wahoo, **не подключённые к соседнему сервису** (один consumer на инстанс OW: подключение
    или отключение в одном проекте затрагивает регистрацию у провайдера для другого).
+
+**Expo Go:** подключение устройств проверяется только в dev build (`pokatim://devices/return`); `exp://` в
+`DEVICE_RETURN_URLS` — только локально (в production запрещён проверкой env).
 
 **Версия OW** — пин на коммит `0.9.0-140` (`git describe` развёрнутого образа: `0.9.0-140-g25edd80c`); адаптер сверен с
 исходниками OW этой версии. Обновление OW — предупредить pokatim и прогнать ручной смоук «Устройств».
@@ -459,7 +464,8 @@ ADR-0011, `docs/product/tracks-and-devices.md`.
 - `0010_tracks`, `0011_devices` (tracks-devices, ADR-0011) — коллекции `track_uploads`, `activities`
   (`2dsphere` точки старта), `activity_tracks` (`2dsphere` линии), `activity_meta`; `device_accounts`,
   `device_connections` (частичный уникальный по живым статусам), `device_link_tickets` (TTL), `device_imports`,
-  `device_audit`; expand-only, идемпотентны. Номер `0009` — у параллельного блока app-03 (порядок списка — по id).
+  `device_audit`; expand-only, идемпотентны. `0012_track_source_refs` — маркеры удалённых объектов источника
+  (удалённый заезд агрегатора не воскресает); expand-only.
 
 ## Панель «Протокол»: первый администратор
 
