@@ -136,3 +136,9 @@ export function createApiClient({
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;
+export {
+  createAdminApiClient,
+  type AdminApiClient,
+  type AdminApiClientOptions,
+  type AuditListParams,
+} from './admin.ts';

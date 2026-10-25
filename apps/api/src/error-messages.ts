@@ -10,6 +10,11 @@ export const PROJECT_ERROR_MESSAGES = {
   EMAIL_UNAVAILABLE: 'E-mail недоступен для регистрации',
   LINK_EXPIRED: 'Ссылка устарела',
   INVALID_CREDENTIALS: 'Неверный e-mail или пароль',
+  PANEL_ACCESS_DENIED: 'Аккаунт не входит в команду платформы',
+  PANEL_USER_UNVERIFIED: 'E-mail пользователя не подтверждён',
+  PANEL_ALREADY_MEMBER: 'Пользователь уже в команде платформы',
+  PANEL_LAST_ADMIN: 'Нельзя оставить панель без администратора',
+  PANEL_SELF_ACTION: 'Нельзя менять свою роль',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */
