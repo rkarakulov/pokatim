@@ -19,6 +19,9 @@ const saveErrorMessage = (error: unknown) =>
 
 type ConnectableDevice = DeviceView & { provider: DeviceProvider };
 
+const connectedDevice = (items: readonly DeviceView[]) =>
+  items.find((device) => device.status === 'active' && device.issue === null);
+
 const isConnectable = (device: DeviceView): device is ConnectableDevice =>
   device.provider !== 'unknown' &&
   device.available &&
@@ -36,18 +39,17 @@ const connectLabel = (device: DeviceView) =>
  * «Позже». После подключения (native — по возврату из браузера; web — `devices/return` ведёт обратно сюда) —
  * «Garmin подключён» и «Продолжить». Подключать нечего (все `available: false`, сервер без агрегатора) — подсказка
  * про загрузку файлом. Состояния `GET /v1/devices` — `AsyncContent` («Нет соединения» / «Не удалось загрузить» с
- * повтором; ошибка обновления — баннер поверх провайдеров); «Позже» доступна всегда. `pending` (подтверждение не
- * пришло) — «Подключить Garmin снова». Любой исход — флаг шага на сервере (ошибка — баннер, повтор той же кнопкой) → Главная.
+ * повтором; ошибка обновления — баннер с повтором поверх провайдеров или «Garmin подключён»); «Позже» — во всех
+ * состояниях, кроме подключённого. `pending` (подтверждение не пришло) — «Подключить Garmin снова». Любой исход —
+ * флаг шага на сервере (ошибка — баннер, повтор той же кнопкой) → Главная.
  */
 export default function DevicesStepScreen() {
   const devices = useDevices();
   const connect = useConnectDevice('onboarding');
   const finish = useCompleteDevicesStep();
 
-  const items = devices.data?.items ?? [];
-  const connected = items.find((device) => device.status === 'active' && device.issue === null);
-
-  const later = (
+  // «Позже» — во всех состояниях запроса, кроме подключённого устройства (там «Продолжить»)
+  const later = connectedDevice(devices.data?.items ?? []) ? null : (
     <TextAction
       label={t('devices.step.later')}
       onPress={() => finish.mutate('later')}
@@ -55,54 +57,52 @@ export default function DevicesStepScreen() {
     />
   );
 
-  const content = () => {
-    if (connected) {
-      return (
-        <>
-          <AuthText>{t('devices.connected', { name: connected.name })}</AuthText>
-          <Button
-            label={t('devices.step.continue')}
-            onPress={() => finish.mutate('connected')}
-            loading={finish.isPending}
-          />
-        </>
-      );
-    }
-    // состояния запроса — `AsyncContent`: скелетон, «Нет соединения» / «Не удалось загрузить» с повтором, ошибка
-    // обновления — баннер поверх провайдеров; подключать нечего (успешный ответ) — подсказка про загрузку файлом
-    return (
-      <>
-        <AsyncContent
-          query={devices}
-          skeleton={
-            <AuthStack>
-              <Skeleton height={size.buttonHeight} />
-              <Skeleton height={size.buttonHeight} />
-            </AuthStack>
-          }
-          empty={{
-            when: (list) => !list.items.some(isConnectable),
-            render: () => <AuthText tone="secondary">{t('devices.step.fileHint')}</AuthText>,
-          }}
-        >
-          {(list) => (
-            <AuthStack>
-              {list.items.filter(isConnectable).map((device) => (
-                <Button
-                  key={device.provider}
-                  label={connectLabel(device)}
-                  onPress={() => connect.mutate(device.provider)}
-                  loading={connect.isPending && connect.variables === device.provider}
-                  disabled={connect.isPending || finish.isPending}
-                />
-              ))}
-            </AuthStack>
-          )}
-        </AsyncContent>
-        {later}
-      </>
-    );
-  };
+  // состояния запроса — `AsyncContent`: скелетон, «Нет соединения» / «Не удалось загрузить» с повтором, ошибка
+  // обновления — баннер с повтором поверх данных (и над «Garmin подключён»); подключать нечего — подсказка про файл
+  const content = (
+    <AsyncContent
+      query={devices}
+      skeleton={
+        <AuthStack>
+          <Skeleton height={size.buttonHeight} />
+          <Skeleton height={size.buttonHeight} />
+        </AuthStack>
+      }
+      empty={{
+        when: (list) => !connectedDevice(list.items) && !list.items.some(isConnectable),
+        render: () => <AuthText tone="secondary">{t('devices.step.fileHint')}</AuthText>,
+      }}
+    >
+      {(list) => {
+        const connected = connectedDevice(list.items);
+        if (connected) {
+          return (
+            <>
+              <AuthText>{t('devices.connected', { name: connected.name })}</AuthText>
+              <Button
+                label={t('devices.step.continue')}
+                onPress={() => finish.mutate('connected')}
+                loading={finish.isPending}
+              />
+            </>
+          );
+        }
+        return (
+          <AuthStack>
+            {list.items.filter(isConnectable).map((device) => (
+              <Button
+                key={device.provider}
+                label={connectLabel(device)}
+                onPress={() => connect.mutate(device.provider)}
+                loading={connect.isPending && connect.variables === device.provider}
+                disabled={connect.isPending || finish.isPending}
+              />
+            ))}
+          </AuthStack>
+        );
+      }}
+    </AsyncContent>
+  );
 
   return (
     <AuthScreen
@@ -116,7 +116,8 @@ export default function DevicesStepScreen() {
           <Banner tone="error" message={deviceActionErrorMessage(connect.error)} />
         ) : null}
         {finish.isError ? <Banner tone="error" message={saveErrorMessage(finish.error)} /> : null}
-        {content()}
+        {content}
+        {later}
       </AuthActions>
     </AuthScreen>
   );

@@ -1,4 +1,9 @@
+import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import { trackLengthMeters } from '@pokatim/tracks';
+import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
+import { type Db, MongoServerError } from 'mongodb';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -21,7 +26,8 @@ import {
 } from '../../../test/devices';
 import { type FakeOw, type FakeOwWorkout, startFakeOw } from '../../../test/fake-ow';
 import { DAY, type Harness, HOUR } from '../../../test/harness';
-import { call, gate } from '../../../test/identity';
+import { call, gate, outboxEvents } from '../../../test/identity';
+import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
 import {
   TRACK_INGEST,
   type TrackIngest,
@@ -31,6 +37,7 @@ import {
 import { DevicesLocks } from './devices-jobs';
 import { DevicesMaintenanceProcessor } from './devices-maintenance.processor';
 import { PullRetryError } from './devices-sync.service';
+import { devicesCollections } from './devices.collection';
 import { DevicesRepository } from './devices.repository';
 import {
   TrackTooLongError,
@@ -75,6 +82,13 @@ function ride(start: Date, overrides: Partial<FakeOwWorkout> = {}) {
   ow.addTrack(alice.aggUserId, workout.source.provider, points);
   return { workout, points };
 }
+
+/** Файлы хранилища треков (рекурсивно; каталога ещё нет — пусто). */
+const storedFiles = async (): Promise<string[]> =>
+  (await readdir(TRACK_STORAGE_DIR_TEST, { recursive: true, withFileTypes: true }).catch(() => []))
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
+    .sort();
 
 const imports = () => devices(h).imports.find().sort({ firstSeenAt: 1, _id: 1 }).toArray();
 
@@ -450,8 +464,14 @@ describe('отзыв с удалением ↔ pull: заезд не возвр�
   }
 
   it('H3: lease истёк, отзыв с удалением завершён до приёма — барьер эпохи в транзакции, загрузок 0', async () => {
+    const filesBefore = await storedFiles();
     expect(await leaseExpiredRace(true)).toBe('inactive');
     expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(0);
+    // отказ предусловия: файл, записанный до транзакции, удалён; события приёма в outbox нет
+    expect(await storedFiles()).toEqual(filesBefore);
+    expect((await outboxEvents(h)).map((event) => event.type)).not.toContain(
+      'tracks.upload-received',
+    );
     expect((await imports())[0]).toMatchObject({ status: 'failed', reason: 'connection_inactive' });
     expect(await devices(h).connections.findOne({ _id: alice.connectionId })).toMatchObject({
       status: 'revoked',
@@ -460,6 +480,100 @@ describe('отзыв с удалением ↔ pull: заезд не возвр�
 
   it('H3, отрицательное доказательство: без барьера в транзакции приёма — загрузка после отзыва', async () => {
     await leaseExpiredRace(false);
+    expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(1);
+    expect(await devices(h).connections.findOne({ _id: alice.connectionId })).toMatchObject({
+      status: 'revoked',
+    });
+  });
+
+  /**
+   * Ревью pass 3: write-write конфликт барьера. Транзакция приёма удерживается ПОСЛЕ записи барьера
+   * (`touchActiveEpoch`, `$inc ingestSeq`), пользователь отключает с удалением. Транзакция отключения пишет тот же
+   * документ подключения — конфликт записи, повтор до коммита приёма; отзыв идёт после и удаляет загрузку.
+   * `barrier: 'read'` — барьер только читает подключение: конфликта нет, отключение и отзыв завершаются, пока приём
+   * удерживается, — загрузка появляется после отзыва.
+   */
+  async function barrierConflictRace(barrier: 'write' | 'read') {
+    ride(hoursAgo(30));
+    const worker = h.worker.get(DevicesRepository);
+    const api = h.app.get(DevicesRepository, { strict: false });
+    const touch = worker.touchActiveEpoch.bind(worker);
+    const workerConnections = devicesCollections(
+      h.worker.get<Db>(MONGO_DB, { strict: false }),
+    ).connections;
+    const held = gate();
+    let barrierHeld = false;
+    vi.spyOn(worker, 'touchActiveEpoch').mockImplementation(async (session, id, connectedAt) => {
+      const active =
+        barrier === 'write'
+          ? await touch(session, id, connectedAt)
+          : // то же условие чтением в той же транзакции (сессия — клиента worker, не тестового)
+            (await workerConnections.countDocuments(
+              { _id: id, status: 'active', connectedAt },
+              { session },
+            )) === 1;
+      // только первая попытка транзакции приёма удерживается после барьера; повторы драйвера — без ожидания
+      if (!barrierHeld) {
+        barrierHeld = true;
+        await held.wait();
+      }
+      return active;
+    });
+    const conflicts: unknown[] = [];
+    const requestDisconnect = api.requestDisconnect.bind(api);
+    vi.spyOn(api, 'requestDisconnect').mockImplementation(async (...args) => {
+      try {
+        return await requestDisconnect(...args);
+      } catch (error) {
+        conflicts.push(error);
+        throw error;
+      }
+    });
+
+    const pulling = pull();
+    await held.reached;
+    let disconnected = false;
+    const disconnecting = disconnect(h, alice, 'garmin', true).finally(() => (disconnected = true));
+    await vi.waitFor(() => {
+      if (conflicts.length === 0 && !disconnected) throw new Error('отключение не дошло до записи');
+    });
+    if (disconnected) {
+      // конфликта нет: отключение закоммичено, пока приём удерживается; lease замка pull истёк — отзыв целиком
+      await h.redis.del(`devices:pull:${alice.connectionId}`);
+      expect(await runOutbox(h, 'devices.revoke-requested')).toEqual(['revoked']);
+      held.open();
+      await pulling;
+      return { conflicts, status: (await disconnecting).status, uploadsBeforeRevoke: 0 };
+    }
+    held.open();
+    const [, response] = await Promise.all([pulling, disconnecting]);
+    // приём закоммичен раньше отключения (оно ждало конфликтом); отзыв после — удаляет загрузку
+    const uploadsBeforeRevoke = await trackUploads(h).countDocuments({ source: 'garmin' });
+    expect(await runOutbox(h, 'devices.revoke-requested')).toEqual(['revoked']);
+    return { conflicts, status: response.status, uploadsBeforeRevoke };
+  }
+
+  it('pass 3: приём удерживается после записи барьера — отключение получает конфликт записи и повторяется, после отзыва загрузок 0', async () => {
+    const { conflicts, status, uploadsBeforeRevoke } = await barrierConflictRace('write');
+    expect(conflicts.length).toBeGreaterThan(0);
+    expect(
+      conflicts.every(
+        (error) =>
+          error instanceof MongoServerError && error.hasErrorLabel('TransientTransactionError'),
+      ),
+    ).toBe(true);
+    expect(status).toBe(200);
+    expect(uploadsBeforeRevoke).toBe(1);
+    expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(0);
+    expect(await devices(h).connections.findOne({ _id: alice.connectionId })).toMatchObject({
+      status: 'revoked',
+    });
+  });
+
+  it('pass 3, отрицательное доказательство: барьер только читает — конфликта нет, загрузка после отзыва', async () => {
+    const { conflicts, status } = await barrierConflictRace('read');
+    expect(conflicts).toEqual([]);
+    expect(status).toBe(200);
     expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(1);
     expect(await devices(h).connections.findOne({ _id: alice.connectionId })).toMatchObject({
       status: 'revoked',

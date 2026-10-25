@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { OnboardingStatus } from '@pokatim/contracts';
-import { onlineManager } from '@tanstack/react-query';
+import { focusManager, onlineManager } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { openAuthSessionAsync } from 'expo-web-browser';
@@ -218,6 +218,37 @@ describe('экран «Подключите устройство» (AC11)', () =
     expect(screen.getByRole('button', { name: 'Подключить Garmin' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Подключить Wahoo' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Позже' })).toBeEnabled();
+  }, 15000);
+
+  it('ошибка обновления при подключённом Garmin — «Garmin подключён» остаётся, баннер с повтором; повтор восстанавливает', async () => {
+    listDevices.mockResolvedValue(deviceList(garmin({ status: 'active' }), wahoo()));
+    await openSignedIn({ surveyCompleted: true, devicesStepCompleted: false });
+    expect(await screen.findByText('Garmin подключён')).toBeOnTheScreen();
+
+    // возврат в фокус — фоновое обновление списка падает
+    listDevices.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    try {
+      await act(async () => {
+        focusManager.setFocused(false);
+      });
+      await act(async () => {
+        focusManager.setFocused(true);
+      });
+
+      expect(
+        await screen.findByRole('button', { name: 'Повторить' }, { timeout: 6000 }),
+      ).toBeOnTheScreen();
+      expect(screen.getByText('Garmin подключён')).toBeOnTheScreen();
+      expect(screen.getByRole('button', { name: 'Продолжить' })).toBeOnTheScreen();
+
+      listDevices.mockResolvedValue(deviceList(garmin({ status: 'active' }), wahoo()));
+      await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Повторить' })).toBeNull());
+      expect(screen.getByText('Garmin подключён')).toBeOnTheScreen();
+      expect(screen.getByRole('button', { name: 'Продолжить' })).toBeOnTheScreen();
+    } finally {
+      focusManager.setFocused(undefined);
+    }
   }, 15000);
 
   it.each([
