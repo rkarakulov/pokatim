@@ -391,6 +391,41 @@ ADR-0009 с обязательными до прода follow-ups (2FA для ad
 
 _Отклонения при реализации — дописываются ниже._
 
+**Отклонения при реализации (coder, 2026-10-25):**
+
+- **D1. `@tanstack/react-table` ^8.21** вместо свежей 9.x: 9 — новый мажор с другим API (features/atoms), документации
+  офлайн нет (context7 недоступен); 8.x — стабильный API `useReactTable`. Переход на 9 — follow-up.
+- **D2. `eslint-disable-next-line react-hooks/incompatible-library`** в `apps/admin/src/ui/DataTable.tsx`: правило
+  React Compiler сообщает (warning), что `useReactTable` несовместим с мемоизацией, и само пропускает компонент; при
+  `--max-warnings=0` это ломает lint. Точечное отключение с комментарием — **вопрос оркестратору** (альтернатива —
+  исключение правила для `apps/admin/src/ui/DataTable.tsx` в пресете базы).
+- **D3. Первый визит без сессии** — «Вход в панель» без «Сессия истекла» (§7 предлагал `reason=expired` уже в
+  `beforeLoad`): иначе первый вход всегда показывал бы «Сессия истекла». «Сессия истекла» — после 401 при уже
+  открытой сессии (глобальный обработчик). `next` сохраняется в обоих случаях.
+- **D4. `AuditQuery`** — `z.strictObject({ ...PageQuery.shape, … })` вместо `PageQuery.extend`: лишние параметры
+  (`action[$ne]=…`) — 400, а не тихое отбрасывание.
+- **D5. `createAdminApiClient.health()`** — статус API на «Обзоре» (прежняя заглушка `App.tsx` удалена); панель
+  ходит в API только этим клиентом.
+- **D6. Модуль `IdentityAccountsModule`** (репозиторий + `IdentityAccounts`; его импортируют `IdentityModule` и CLI):
+  один экземпляр `IdentityRepository` в приложении — без него spy в гоночных int-тестах identity попадал не в тот
+  экземпляр. Тесты `IdentityAccounts` — в `panel-credentials.int.test.ts` (отдельного `identity-accounts.int.test.ts`
+  нет). Из `identity/index.ts` дополнительно экспортированы `randomToken`, `sha256`.
+- **D7. CLI:** окружение — `cliEnv` (только `MONGO_URL` и `EMAIL_TOKEN_SECRET`, без Redis/SMTP/JWT); разбор и
+  выполнение — `apps/api/src/cli/panel-cli.ts` (тестируемая функция), вход — `panel.ts`. Активный член с другой ролью
+  CLI повышает до `admin` (журнал `role_granted { roleFrom, roleTo: 'admin' }`). Смоук вызывает CLI из `dist`.
+- **D8. Смена роли на ту же** — 200 без изменения и без записи журнала.
+- **D9. `POST /admin/session/sign-out` — `@Public()`** (идемпотентный выход и при погашенной сессии); запись
+  `panel.signed_out` — только при отзыве живой сессии. Публичные маршруты панели: вход и выход (тест).
+- **D10. UI-контракты расширены:** `NavItem.group` (основная/нижняя группа сайдбара); `DataTable` — `TableQuery`
+  (подходит и `useInfiniteQuery`), `filter`, `noMatches`, `caption`, `renderError`, `footer`, `initialSorting`.
+  «Войти» неактивна при пустом пароле во всех состояниях, не только «Сессия истекла».
+- **D11. Q17** — `apps/admin/src/panel-tokens.ts` (`--panel-auth-card-width 400`, `--panel-dialog-width 420`,
+  `--panel-form-width 560`, `--panel-rail-width 330`) с TODO.
+- **D12. CSP проверяется смоуком:** `vite preview` отдаёт CSP из `infra/docker/admin-nginx.conf` (разбор `set
+  $panel_csp`), e2e проверяет заголовок и отсутствие ошибок консоли. `pnpm e2e:admin` — шагом job `web` CI (те же
+  MongoDB, Redis, Mailpit, собранный API). Dev-стенд (`infra/deploy`) уже отдавал панель на `/admin/` — не менялся.
+- **D13. 403 глобально** — перечитать `me` (роль могла смениться), экран сам показывает «Нет доступа к разделу».
+
 # 8.3 Security checklist
 
 Затронуты аутентификация и сессии (порт входа identity, новая сессия панели), роли и права, персональные данные
@@ -734,8 +769,68 @@ function ReasonDialog(props: { open: boolean; title: string; consequences: strin
 
 # 12. Outcome
 
-_Заполняется при завершении: слайсы, проверки с выводом, отрицательные доказательства гонок (`pokatim-tests.md`),
-NOT VERIFIED, follow-ups._
+Ветка `feature/admin-01-foundation` (от `origin/develop`), коммиты по слайсам S1–S8.
+
+**Слайсы**
+
+| # | Итог |
+|---|---|
+| S1 | `packages/contracts/src/admin/{permissions,session,members,audit}.schema.ts` + тесты; 5 кодов `PANEL_*` в конец; `createAdminApiClient` (cookie same-origin, без `Authorization`) + тест; тексты кодов |
+| S2 | `CredentialsCheck` (выделена из `SignInService`), `PanelCredentials`, `IdentityAccounts`, `credentialsStamp`; регрессия identity int без правок ожиданий |
+| S3 | `panel.collection`, миграция `0005_panel`, `PanelRepository` (`lockMember`, `lockAdmins`, сессии, журнал только `insertOne` + тест-сторож), `ROLE_PERMISSIONS`, `PanelAudit`, CLI `grant-admin` |
+| S4 | вход/выход/`me`, `PanelSessionCookie`, `PanelGuard` (+ unit порядка отказов), `RequirePermission`, `CurrentPanelUser`, `Public`, тест «все маршруты под гардом» |
+| S5 | выдача/смена/снятие роли, `GET members`, `GET audit` (курсор, фильтры), int AC5–AC8, гонки |
+| S6 | `apps/admin`: TanStack Router (basepath), сессия (`me`, гард, 401/403, `safeNext`), `src/ui`, вход со всеми состояниями, «Обзор», «Нет доступа», «Не найдено», строки `admin.*` |
+| S7 | «Сотрудники» (таблица, фильтры, поиск, диалоги выдачи/смены/снятия), «Журнал действий» («Показать ещё») |
+| S8 | CSP и `no-store` nginx `admin`, Caddy прода `/admin/*` на `PUBLIC_HOST`, `admin` в `docker-compose.prod.yml`, `pnpm e2e:admin` + CI, документация §10 |
+
+**Проверки (2026-10-25, нативные MongoDB RS 127.0.0.1:27117 и Redis :6479)**
+
+- `pnpm check` (`MONGO_URL_TEST=…/pokatim_test?replicaSet=rs0`, `REDIS_URL_TEST=…:6479/1`) → EXIT 0: prettier ok,
+  eslint 0 предупреждений, `✔ no dependency violations found (402 modules)`, typecheck 8/8; тесты — contracts 11 файлов,
+  api-client 5, admin 8 (65 тестов), api 42 файла (309 тестов), прочие пакеты — зелёные.
+- Регрессия входа приложения (AC16): `sign-in.int`, `identity-races.int`, `password-reset.int`, `auth-guard.int` —
+  зелёные без правок ожиданий.
+- Миграции дважды (AC13): `db:migrate` на `pokatim_e2e` — «миграции применены: 0001…0005_panel», повтор — «новых
+  миграций нет»; int `migrations.int.test.ts` — чистая база и повторный `up` (документ-замок не сбрасывается).
+- `ADMIN_BASE=/admin/ pnpm --filter @pokatim/admin build` → ✓ built (предупреждение Vite о чанке > 500 kB).
+- `pnpm e2e:admin` (API :3101 из `dist`, worker, Mailpit, `vite preview` под `/admin/` с CSP панели) → 1 passed (AC15:
+  CLI `grant-admin` → вход → выдача moderator → «Журнал» виден, «Сотрудники» по URL — «Нет доступа к разделу» →
+  снятие роли → «Сессия истекла» → «Нет доступа к панели» → журнал; CSP-заголовок, ошибок консоли нет).
+- `pnpm e2e:web` (`E2E_API=1`, Chrome) → 12 passed (регрессия web приложения).
+- CLI на тестовой БД (AC1): `panel-cli.int.test.ts` (5 тестов) и `node dist/cli/panel.js` в e2e; `--help` → код 0.
+- `caddy validate --config infra/Caddyfile --adapter caddyfile` → «Valid configuration».
+
+**Отрицательные доказательства (`pokatim-tests.md`)**
+
+- R7 «последний администратор» (`panel-races.int.test.ts`): два админа параллельно снимают друг друга (первая
+  транзакция на воротах после подсчёта админов) — с замком `lockAdmins` статусы `[200, 409 PANEL_LAST_ADMIN]`, 1
+  активный админ; **без `lockAdmins`** (spy на прототипе — no-op) — `[200, 200]`, **0 активных админов**.
+- Штамп учётных данных (`panel-session.int.test.ts`): вход проверил старый пароль (ворота перед вставкой сессии) ↔
+  сброс закоммичен — первый запрос выданной сессии 401 (`credentials_changed`); **без сверки штампа** (порт
+  возвращает записанный при входе штамп) — та же сессия **200**.
+- Вход ↔ снятие роли: сессия, выданная после снятия, на первом запросе 401. Две выдачи одному пользователю
+  (4 параллельно) — один 201, три 409, один документ, одна запись журнала.
+
+**NOT VERIFIED**
+
+- `docker build --target admin` + `curl -I /admin/` и `nginx -t` для `admin-nginx.conf` — Docker daemon на машине
+  недоступен, nginx не установлен; строка CSP проверена смоуком (тот же заголовок из этого файла в `vite preview`),
+  синтаксис nginx и запуск образа проверит job `deploy-rehearsal` на PR (меняется `infra/docker/**`).
+- Ручной смоук на dev-стенде (CLI на сервере, вход, выдача и снятие роли, сброс пароля гасит сессию панели),
+  Firefox и Safari.
+
+**Follow-ups**
+
+- Токены размеров панели (`density.compact`: 400/420/560/330) — в `@rkarakulov/design-tokens`; удалить
+  `apps/admin/src/panel-tokens.ts` (Q17).
+- До прода: 2FA (TOTP) для `admin` (N3), строгий CSP web приложения (C3).
+- Роль MongoDB без `update`/`remove` для `panel_audit`.
+- Приглашение на регистрацию и письмо о выдаче/снятии роли (N1, N2, R4б, R5).
+- Удаление аккаунта: снять роль и отозвать `panel_sessions` (правило — `pokatim-db.md`).
+- Вынос `apps/admin/src/ui` и `defineRoles`/гарда в `admin-kit` (F6) после слайса 2 панели.
+- Переход на `@tanstack/react-table` 9 (D1); вопрос по D2; code-splitting сборки панели (чанк > 500 kB).
+
 
 # Приложение A. Карта прототипа (план следующих слайсов панели)
 
