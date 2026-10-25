@@ -1,6 +1,6 @@
 import { size, space } from '@pokatim/design-tokens';
 import { t, type MessageKey } from '@pokatim/i18n';
-import { TextAction, useTheme, type AsyncState } from '@rkarakulov/ui';
+import { EmptyState, TextAction, useTheme } from '@rkarakulov/ui';
 import { useRouter, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
@@ -10,7 +10,8 @@ import { DocumentTitle } from '@/components/document-title';
 import { TopBar } from '@/components/top-bar';
 import { useSignOut } from '@/features/auth/use-sign-out';
 import { HomeSection } from '@/features/home/home-section';
-import { useRideReasons } from '@/features/home/queries';
+import { CalendarStartHero, RaceHero } from '@/features/home/heroes';
+import { useNextCalendarStart, useNextRace, useRideReasons } from '@/features/home/queries';
 import {
   AVAILABLE_HOME_SECTIONS,
   orderHomeSections,
@@ -37,16 +38,6 @@ const SECTION_COPY: Record<
   },
 };
 
-/** Каркас (S3): данные разделов — публичные list-эндпоинты admin-02 (S4); до них слот — скелетон героя. */
-const SECTION_PENDING: AsyncState<never> = {
-  data: undefined,
-  error: null,
-  isPending: true,
-  isError: false,
-  fetchStatus: 'idle',
-  refetch: () => undefined,
-};
-
 const DOCUMENT_TITLE = `${t('home.title')} — ${t('app.name')}`;
 
 /**
@@ -60,8 +51,13 @@ export default function HomeScreen() {
   const signOut = useSignOut();
   const [signingOut, setSigningOut] = useState(false);
   const profile = useRideReasons();
+  const races = useNextRace();
+  const calendar = useNextCalendarStart();
   const sections = orderHomeSections(AVAILABLE_HOME_SECTIONS, profile.reasons);
-  const refetchers = useMemo(() => [profile.refetch], [profile.refetch]);
+  const refetchers = useMemo(
+    () => [races.refetch, calendar.refetch, profile.refetch],
+    [races.refetch, calendar.refetch, profile.refetch],
+  );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
 
   const onSignOut = async () => {
@@ -91,17 +87,48 @@ export default function HomeScreen() {
       >
         {sections.map(({ id, chosen }, index) => {
           const copy = SECTION_COPY[id];
-          return (
+          const frame = {
+            kicker: t(copy.kicker),
+            title: t(copy.title),
+            chosen,
+            first: index === 0,
+            all: { label: t(copy.all), onPress: () => router.navigate(copy.href) },
+          };
+          // «сейчас» для подписей — в рендере клиента: Главная без SSR-данных (R6)
+          const now = new Date();
+          return id === 'races' ? (
             <HomeSection
               key={id}
-              kicker={t(copy.kicker)}
-              title={t(copy.title)}
-              chosen={chosen}
-              first={index === 0}
-              all={{ label: t(copy.all), onPress: () => router.navigate(copy.href) }}
-              query={SECTION_PENDING}
+              {...frame}
+              query={races}
+              empty={{
+                when: (page) => page.items.length === 0,
+                render: () => (
+                  <EmptyState
+                    title={t('home.races.empty')}
+                    action={{
+                      label: t('home.races.emptyAction'),
+                      onPress: () => router.navigate('/calendar'),
+                    }}
+                  />
+                ),
+              }}
             >
-              {() => null}
+              {(page) => (page.items[0] ? <RaceHero race={page.items[0]} now={now} /> : null)}
+            </HomeSection>
+          ) : (
+            <HomeSection
+              key={id}
+              {...frame}
+              query={calendar}
+              empty={{
+                when: (page) => page.items.length === 0,
+                render: () => <EmptyState title={t('home.calendar.empty')} />,
+              }}
+            >
+              {(page) =>
+                page.items[0] ? <CalendarStartHero start={page.items[0]} now={now} /> : null
+              }
             </HomeSection>
           );
         })}
