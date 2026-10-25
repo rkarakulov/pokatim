@@ -34,6 +34,7 @@ export class DevicesPullQueue {
 
 /** Освобождение замка — только своего (сравнение токена в Lua). */
 const RELEASE = `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end`;
+const EXTEND = `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('pexpire', KEYS[1], ARGV[2]) else return 0 end`;
 
 /**
  * Замки Redis модуля (SET NX PX + токен): создание пользователя агрегатора (`devices:account:<userId>`) и pull/отзыв
@@ -59,6 +60,12 @@ export class DevicesLocks {
       if (token || Date.now() >= deadline) return token;
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
+  }
+
+  /** Продлить свой замок; `false` — замок истёк или перешёл другому (владение потеряно). */
+  async extend(key: string, token: string, ttlMs: number): Promise<boolean> {
+    const result = await this.redis.eval(EXTEND, 1, key, token, ttlMs);
+    return result === 1;
   }
 
   async release(key: string, token: string): Promise<void> {

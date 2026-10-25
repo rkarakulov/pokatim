@@ -14,17 +14,20 @@
   серверный вход `@pokatim/tracks/parse` в бандл приложения не попадает.
 
 ## Миграции
-`0010_tracks`, `0011_devices` — expand-only, идемпотентны (`0009` — у параллельного блока app-03; при слиянии
-поправить список и тест порядка миграций).
+`0010_tracks`, `0011_devices`, `0012_track_source_refs` (маркеры удалённых объектов источника — удалённый заезд
+агрегатора не воскресает) — expand-only, идемпотентны; идут после `0009` блока app-03 (develop влит).
 
 ## Env (сервер)
 `TRACK_STORAGE_MAX_BYTES`, `TRACK_STORAGE_MIN_FREE_BYTES`, `DEVICES_ENABLED=false`, `OW_API_URL`, `OW_API_KEY`,
-`OW_WEBHOOK_SECRET`, `OW_SHARED_INSTANCE=true`, `OW_DOCKER_NETWORK` (шаблон дописывает пустые; значения — владелец).
-Compose: том `trackfiles`, `DEPLOY_STAGE: dev`, `docker-compose.ow.yml` (сеть OW — если задан `OW_DOCKER_NETWORK`).
+`OW_WEBHOOK_SECRET`, `OW_SHARED_INSTANCE=true`, `OW_DOCKER_NETWORK` (шаблон дописывает пустые; значения — владелец);
+`OW_PUBLIC_PROXY` (PR #30) — прокси `/ow/` на OW этого хоста (вебхуки и callback Garmin).
+Compose: том `trackfiles`, `DEPLOY_STAGE: dev`, worker — 512m (V6; поток разбора — 160 + 32 МБ),
+`docker-compose.ow.yml` (сеть OW — если задан `OW_DOCKER_NETWORK`).
 
 ## Зависимости и лицензии
-- `@garmin/fitsdk` 21.218.0 — FIT Protocol License (проприетарная: внутреннее использование, без передачи SDK
-  третьим лицам) — **подтвердить владельцу (V5)**; только сервер.
+- `@garmin/fitsdk` 21.218.0 — FIT Protocol License (проприетарная). **V5 принято автором:** только сервер, в git не
+  вендорится, в бандл приложения не попадает, риск принят; рекомендация — приватные образы GHCR (владелец); откат —
+  MIT-парсер FIT за портом разбора.
 - `fast-xml-parser` 5.11.2 — MIT (транзитивные — MIT).
 - `expo-document-picker` ~58.0.4 — MIT.
 
@@ -37,5 +40,8 @@ Compose: том `trackfiles`, `DEPLOY_STAGE: dev`, `docker-compose.ow.yml` (се
 `deploy-rehearsal` (нет Docker), живой OW (Garmin/Wahoo, вебхуки), симуляторы и ручной смоук — `task.md` §12.
 
 ## Действия владельца
-Приложение B `task.md`: проверить живой каталог провайдеров OW (Wahoo в исходниках OW 0.9.0-140 нет), включить
-`DEVICES_ENABLED=true`, тестеры — с аккаунтами, не подключёнными к соседнему сервису; V5, V6.
+- На dev уже заданы `OW_API_KEY`, `OW_API_URL`, `OW_DOCKER_NETWORK`, `OW_SHARED_INSTANCE`, `OW_PUBLIC_PROXY`.
+- Garmin в портале: вебхуки и callback — на `https://pokatim-dev.limedolphin.com/ow/…`, `GARMIN_REDIRECT_URI` в OW
+  задан; приложение переименовано в «pokatim» (экран согласия).
+- Осталось: `DEVICES_ENABLED=true` в `.env` сервера после мержа и деплой; проверить живой каталог провайдеров OW
+  (Wahoo в исходниках OW 0.9.0-140 нет); тестеры — с аккаунтами, не подключёнными к соседнему сервису.

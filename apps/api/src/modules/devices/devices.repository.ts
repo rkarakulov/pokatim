@@ -226,6 +226,23 @@ export class DevicesRepository {
    * Подключение всё ещё `active` той же эпохи (`connectedAt` активации): pull проверяет это перед приёмом заезда —
    * отключение или переподключение во время сетевых ожиданий импорт не продолжает.
    */
+  /**
+   * Барьер импорта (в транзакции приёма `tracks`): подключение всё ещё `active` в той же эпохе (`connectedAt`) —
+   * запись `$inc ingestSeq`, конкурирующее отключение (`active` → `disconnecting` в своей транзакции) конфликтует.
+   */
+  async touchActiveEpoch(
+    session: DbSession,
+    id: string,
+    connectedAt: Date | null,
+  ): Promise<boolean> {
+    const result = await this.c.connections.updateOne(
+      { _id: id, status: 'active', connectedAt },
+      { $inc: { ingestSeq: 1 } },
+      { session },
+    );
+    return result.matchedCount === 1;
+  }
+
   async isActiveEpoch(id: string, connectedAt: Date | null): Promise<boolean> {
     return (
       (await this.c.connections.countDocuments({ _id: id, status: 'active', connectedAt })) === 1

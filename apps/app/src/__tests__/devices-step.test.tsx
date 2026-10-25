@@ -3,7 +3,7 @@ import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { OnboardingStatus } from '@pokatim/contracts';
 import { onlineManager } from '@tanstack/react-query';
 import * as Location from 'expo-location';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { openAuthSessionAsync } from 'expo-web-browser';
 
 import { api } from '@/lib/api';
@@ -148,24 +148,77 @@ describe('экран «Подключите устройство» (AC11)', () =
         ),
     ],
     [
-      '`GET /v1/devices` недоступен',
+      'сервер без агрегатора (404)',
       () =>
-        listDevices.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' })),
+        listDevices.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' })),
     ],
   ])('%s — только «Позже» и подсказка про загрузку файлом', async (_case, arrange) => {
     arrange();
     await openSignedIn({ surveyCompleted: true, devicesStepCompleted: false });
 
     expect(
-      await screen.findByText(
-        'Загрузить заезды файлом можно в разделе «Устройства».',
-        {},
-        { timeout: 5000 },
-      ),
+      await screen.findByText('Загрузить заезды файлом можно в разделе «Устройства».'),
     ).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: /^Подключить/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Повторить' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Позже' })).toBeOnTheScreen();
   });
+
+  it('`GET /v1/devices` отказал (500) — «Не удалось загрузить» с повтором, «Позже» доступна', async () => {
+    listDevices.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await openSignedIn({ surveyCompleted: true, devicesStepCompleted: false });
+
+    expect(
+      await screen.findByText('Не удалось загрузить', {}, { timeout: 6000 }),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Загрузить заезды файлом можно в разделе «Устройства».')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Позже' })).toBeEnabled();
+
+    listDevices.mockResolvedValue(deviceList(garmin(), wahoo()));
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('button', { name: 'Подключить Garmin' })).toBeOnTheScreen();
+  }, 15000);
+
+  it('офлайн → сеть вернулась, запрос отказал (500) — «Не удалось загрузить» с повтором, «Позже» доступна', async () => {
+    onlineManager.setOnline(false);
+    try {
+      listDevices.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+      await openSignedIn({ surveyCompleted: true, devicesStepCompleted: false });
+      expect(await screen.findByText('Нет соединения')).toBeOnTheScreen();
+
+      await act(async () => {
+        onlineManager.setOnline(true);
+      });
+      expect(
+        await screen.findByText('Не удалось загрузить', {}, { timeout: 6000 }),
+      ).toBeOnTheScreen();
+      expect(listDevices).toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
+      expect(screen.getByRole('button', { name: 'Позже' })).toBeEnabled();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  }, 15000);
+
+  it('ошибка обновления при показанных провайдерах — провайдеры остаются, баннер с повтором', async () => {
+    jest
+      .mocked(api.connectDevice)
+      .mockResolvedValue({ authorizeUrl: 'https://ow.example/authorize' });
+    authSession.mockResolvedValue({ type: 'cancel' } as Awaited<
+      ReturnType<typeof openAuthSessionAsync>
+    >);
+    await openSignedIn({ surveyCompleted: true, devicesStepCompleted: false });
+    await screen.findByRole('button', { name: 'Подключить Garmin' });
+
+    // браузер закрыли — список перезапрашивается и падает
+    listDevices.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Подключить Garmin' }));
+
+    expect(await screen.findByText('Повторить', {}, { timeout: 6000 })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Подключить Garmin' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Подключить Wahoo' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Позже' })).toBeEnabled();
+  }, 15000);
 
   it.each([
     ['нет сети', new ApiNetworkError(new TypeError('Network request failed')), /Нет соединения/],

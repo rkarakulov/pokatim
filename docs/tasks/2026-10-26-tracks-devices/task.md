@@ -528,6 +528,11 @@ _Ответы автора и отклонения при реализации �
 - **Уборка неподтверждённых** — атомарный переход `pending` → `disconnecting` (фильтр по `version` и `pendingUntil`) и
   отзыв через outbox `devices.revoke-requested` (`reason: 'unconfirmed'`); отзыв и pull — под одним Redis-замком
   подключения, перед приёмом трека — проверка эпохи подключения.
+- **Барьер эпохи в транзакции приёма (ревью pass 2, H3):** `TrackIngest.ingestProviderStream` принимает
+  `precondition(session)` — первая операция транзакции приёма в `tracks`; devices передаёт `touchActiveEpoch`
+  (`$inc ingestSeq` с фильтром `{ status: 'active', connectedAt }`): отключение после проверки эпохи конфликтует или
+  уже видно → `TrackIngestPreconditionError`, файл убирается, импорт `failed: connection_inactive`. Lease замка pull
+  продлевается перед каждой тренировкой; потерян — pull останавливается (`busy`).
 - **Разово (LOW-7):** кеш онбординга, записанный до этой ветки (без `devicesStepCompleted`), при следующем запуске
   перечитывает статус с сервера — один лишний запрос на устройство; миграции кеша нет.
 - **Expo Go (LOW-8):** `exp://` в `DEVICE_RETURN_URLS` — только локально; подключение устройств проверяется в dev build

@@ -1,5 +1,7 @@
 import type { TrackStreamV1 } from '@pokatim/tracks';
 
+import type { DbSession } from '../../db';
+
 /** Источник заезда от провайдера через агрегатор. */
 export type ProviderTrackSource = 'garmin' | 'wahoo';
 
@@ -10,6 +12,12 @@ export interface IngestProviderStreamInput {
   /** Непрозрачный id объекта у источника (тренировка агрегатора): `(source, sourceRef)` уникален. */
   sourceRef: string;
   stream: TrackStreamV1;
+  /**
+   * Барьер вызывающего: выполняется **внутри** транзакции приёма первой операцией (запись в свой документ —
+   * write-write конфликт с транзакцией, меняющей его). `false` — приём отклонён без записи
+   * (`TrackIngestPreconditionError`), записанный файл убирается.
+   */
+  precondition?: (session: DbSession) => Promise<boolean>;
 }
 
 export interface IngestProviderStreamResult {
@@ -48,5 +56,13 @@ export class TrackSourceDeletedError extends Error {
   constructor() {
     super('track source was deleted by the user');
     this.name = 'TrackSourceDeletedError';
+  }
+}
+
+/** Барьер вызывающего (`precondition`) не выполнен в транзакции приёма: загрузка не создана. */
+export class TrackIngestPreconditionError extends Error {
+  constructor() {
+    super('track ingest precondition failed');
+    this.name = 'TrackIngestPreconditionError';
   }
 }

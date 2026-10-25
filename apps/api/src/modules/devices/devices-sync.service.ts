@@ -8,6 +8,7 @@ import type { Env } from '../../config/env';
 import {
   TRACK_INGEST,
   type TrackIngest,
+  TrackIngestPreconditionError,
   TrackSourceDeletedError,
   TrackStorageFullError,
 } from '../tracks';
@@ -83,7 +84,10 @@ export class DevicesSyncService {
     try {
       const connection = await this.repository.findConnection(connectionId);
       if (connection?.status !== 'active') return 'inactive';
-      return await this.pullConnection(connection, attempt);
+      // lease замка продлевается перед каждой тренировкой; потерян (истёк, забрал отзыв) — pull останавливается.
+      // Сам по себе lease не барьер: запись загрузки защищает барьер эпохи в транзакции приёма (`touchActiveEpoch`)
+      const renew = () => this.locks.extend(key, token, DEVICES_POLICY.pullLockTtlMs);
+      return await this.pullConnection(connection, attempt, renew);
     } finally {
       await this.locks.release(key, token);
     }
@@ -92,6 +96,7 @@ export class DevicesSyncService {
   private async pullConnection(
     connection: DeviceConnectionDoc,
     attempt: Attempt,
+    renew: () => Promise<boolean>,
   ): Promise<PullOutcome> {
     const now = this.clock.now();
     const window = pullWindow(connection, now, this.env.DEVICES_HISTORY_DAYS);
@@ -99,6 +104,10 @@ export class DevicesSyncService {
     let retry: string | null = null;
     try {
       for await (const workout of this.aggregator.listWorkouts(connection.aggUserId, window)) {
+        if (!(await renew())) {
+          this.logger.warn(`devices.pull_stopped connection=${connection._id} reason=lease_lost`);
+          return 'busy';
+        }
         const result = await this.importWorkout(connection, workout);
         if (result === 'inactive') {
           this.logger.log(`devices.pull_stopped connection=${connection._id} reason=inactive`);
@@ -221,6 +230,9 @@ export class DevicesSyncService {
           hasPower: workout.hasPower,
           points,
         },
+        // барьер эпохи в транзакции приёма: отключение, закоммиченное после проверки выше, конфликтует или уже видно
+        precondition: (session) =>
+          this.repository.touchActiveEpoch(session, connection._id, connection.connectedAt),
       });
       await this.repository.finishImport(claimed._id, {
         status: 'imported',
@@ -231,6 +243,16 @@ export class DevicesSyncService {
       this.logger.log(`devices.imported import=${claimed._id} upload=${uploadId}`);
       return 'imported';
     } catch (error) {
+      if (error instanceof TrackIngestPreconditionError) {
+        await this.repository.finishImport(claimed._id, {
+          status: 'failed',
+          reason: 'connection_inactive',
+          uploadId: null,
+          now: now(),
+        });
+        this.logger.log(`devices.import_rejected import=${claimed._id} reason=connection_inactive`);
+        return 'inactive';
+      }
       if (error instanceof TrackSourceDeletedError) {
         await this.repository.tombstone(connection.provider, workout.id, now());
         this.logger.log(`devices.import_source_deleted import=${claimed._id}`);

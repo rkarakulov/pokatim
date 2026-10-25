@@ -32,6 +32,7 @@ export class TrackIngestService implements TrackIngest {
       format: 'stream',
       fileName: null,
       bytes: encodeTrackStream(input.stream),
+      precondition: input.precondition,
     });
     return { uploadId: upload._id, created };
   }

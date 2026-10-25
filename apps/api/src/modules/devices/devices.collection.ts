@@ -50,6 +50,11 @@ export interface DeviceConnectionDoc {
   revokedReason: 'user' | 'unconfirmed' | 'foreign_ticket' | 'aggregator' | null;
   revokeFailed: boolean;
   version: number;
+  /**
+   * Счётчик приёмов трека в эпоху подключения: барьер импорта пишет его в транзакции `tracks` (фильтр `active` и
+   * `connectedAt`) — конфликт с транзакцией отключения. Документы до ревью поля не имеют (`$inc` создаёт).
+   */
+  ingestSeq?: number;
 }
 
 /** Одноразовый тикет активации (`_id` = sha256 тикета), TTL-индекс по `expiresAt`. */

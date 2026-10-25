@@ -7,6 +7,7 @@ export {
   type ProviderTrackSource,
   TRACK_INGEST,
   type TrackIngest,
+  TrackIngestPreconditionError,
   TrackSourceDeletedError,
   TrackStorageFullError,
 } from './track-ingest.port';

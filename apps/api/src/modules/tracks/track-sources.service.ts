@@ -12,8 +12,13 @@ import {
 import type { Redis } from 'ioredis';
 
 import type { Env } from '../../config/env';
+import type { DbSession } from '../../db';
 import { newStorageKey, TRACK_FILE_STORE, type TrackFileStore } from './track-file-store';
-import { TrackSourceDeletedError, TrackStorageFullError } from './track-ingest.port';
+import {
+  TrackIngestPreconditionError,
+  TrackSourceDeletedError,
+  TrackStorageFullError,
+} from './track-ingest.port';
 import type { TrackUploadDoc, TrackVia } from './tracks.collection';
 import { TRACK_UPLOAD_RECEIVED } from './tracks.events';
 import { TRACKS_POLICY } from './tracks.policy';
@@ -30,6 +35,8 @@ export interface StoreSourceInput {
   format: TrackFormat;
   fileName: string | null;
   bytes: Uint8Array;
+  /** Барьер вызывающего внутри транзакции приёма (`TrackIngest`). */
+  precondition?: (session: DbSession) => Promise<boolean>;
 }
 
 export interface StoreSourceResult {
@@ -93,6 +100,9 @@ export class TrackSourcesService {
     };
     try {
       await this.transactions.run(async (session) => {
+        if (input.precondition && !(await input.precondition(session))) {
+          throw new TrackIngestPreconditionError();
+        }
         if (refKey) await this.repository.claimSourceRef(session, refKey, input.userId, now);
         await this.repository.insertUpload(session, upload);
         await this.outbox.append(session, {
@@ -102,6 +112,7 @@ export class TrackSourcesService {
       });
     } catch (error) {
       await this.files.delete(storageKey).catch(() => undefined);
+      if (error instanceof TrackIngestPreconditionError) throw error;
       // удаление закоммитилось между ранней проверкой и транзакцией: маркер `deleted` — `11000` на `_id_` маркера
       if (refKey && (await this.repository.isSourceRefDeleted(refKey))) {
         throw new TrackSourceDeletedError();

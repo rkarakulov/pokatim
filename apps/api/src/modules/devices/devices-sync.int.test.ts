@@ -370,7 +370,11 @@ describe('отзыв с удалением ↔ pull: заезд не возвр�
     ride(hoursAgo(30));
     const locks = h.worker.get(DevicesLocks);
     const repository = h.worker.get(DevicesRepository);
-    if (!options.epoch) vi.spyOn(repository, 'isActiveEpoch').mockResolvedValue(true);
+    if (!options.epoch) {
+      vi.spyOn(repository, 'isActiveEpoch').mockResolvedValue(true);
+      // барьер эпохи в транзакции приёма (ревью pass 2) — тоже снят
+      vi.spyOn(repository, 'touchActiveEpoch').mockResolvedValue(true);
+    }
     const acquire = vi.spyOn(locks, 'acquire');
     if (!options.lock) {
       acquire.mockResolvedValue('no-lock');
@@ -418,6 +422,56 @@ describe('отзыв с удалением ↔ pull: заезд не возвр�
     const { revoked } = await race({ lock: false, epoch: false });
     expect(revoked).toEqual(['revoked']);
     expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(1);
+  });
+
+  /**
+   * Ревью pass 2 (H3): проверка эпохи прошла, приём приостановлен, lease замка pull истёк, отзыв с удалением завершён
+   * целиком — приём продолжается. Барьер эпохи в транзакции приёма (`touchActiveEpoch`) не даёт создать загрузку.
+   */
+  async function leaseExpiredRace(barrier: boolean) {
+    ride(hoursAgo(30));
+    const ingest = h.worker.get<TrackIngest>(TRACK_INGEST);
+    const repository = h.worker.get(DevicesRepository);
+    if (!barrier) vi.spyOn(repository, 'touchActiveEpoch').mockResolvedValue(true);
+    const original = ingest.ingestProviderStream.bind(ingest);
+    const paused = gate();
+    vi.spyOn(ingest, 'ingestProviderStream').mockImplementationOnce(async (input) => {
+      await paused.wait();
+      return original(input);
+    });
+    const pulling = pull();
+    await paused.reached;
+    // lease замка pull истёк (SET PX без продления), отзыв берёт замок и завершается целиком
+    await h.redis.del(`devices:pull:${alice.connectionId}`);
+    expect((await disconnect(h, alice, 'garmin', true)).status).toBe(200);
+    expect(await runOutbox(h, 'devices.revoke-requested')).toEqual(['revoked']);
+    paused.open();
+    return pulling;
+  }
+
+  it('H3: lease истёк, отзыв с удалением завершён до приёма — барьер эпохи в транзакции, загрузок 0', async () => {
+    expect(await leaseExpiredRace(true)).toBe('inactive');
+    expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(0);
+    expect((await imports())[0]).toMatchObject({ status: 'failed', reason: 'connection_inactive' });
+    expect(await devices(h).connections.findOne({ _id: alice.connectionId })).toMatchObject({
+      status: 'revoked',
+    });
+  });
+
+  it('H3, отрицательное доказательство: без барьера в транзакции приёма — загрузка после отзыва', async () => {
+    await leaseExpiredRace(false);
+    expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(1);
+    expect(await devices(h).connections.findOne({ _id: alice.connectionId })).toMatchObject({
+      status: 'revoked',
+    });
+  });
+
+  it('H3: lease потерян между тренировками — pull останавливается без импорта', async () => {
+    ride(hoursAgo(30));
+    vi.spyOn(h.worker.get(DevicesLocks), 'extend').mockResolvedValue(false);
+    expect(await pull()).toBe('busy');
+    expect(await imports()).toEqual([]);
+    expect(await trackUploads(h).countDocuments()).toBe(0);
   });
 
   it('замок pull занят дольше ожидания — задача отзыва повторяется, подключение ждёт в disconnecting', async () => {
