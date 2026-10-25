@@ -8,6 +8,9 @@ import {
   RaceDetail,
   RacePage,
   type RaceListQuery,
+  SeasonCard,
+  SeasonList,
+  type SeasonRaceListQuery,
   ConfirmPasswordResetResponse,
   ConfirmVerificationResponse,
   type ErrorCode,
@@ -70,6 +73,9 @@ export type RaceListParams = {
   cursor?: string;
   limit?: number;
 };
+
+/** Параметры гонок сезона до схемы (`SeasonRaceListQuery`). */
+export type SeasonRaceListParams = Partial<Pick<SeasonRaceListQuery, 'cursor' | 'limit'>>;
 
 /** Параметры календаря приложения до схемы; `from` не задан — сервер берёт «сегодня по Минску». */
 export type CalendarListParams = {
@@ -186,6 +192,13 @@ export function createApiClient({
     getRace: (id: string) => getPublic(`/v1/races/${encodeURIComponent(id)}`, RaceDetail),
     /** Сезон, в который попадает «сейчас», или `null`. */
     getCurrentSeason: () => getPublic('/v1/seasons/current', CurrentSeasonResponse),
+    /** Все сезоны, новые сверху. */
+    listSeasons: () => getPublic('/v1/seasons', SeasonList),
+    /** Сезон по id; неизвестный — 404. */
+    getSeason: (id: string) => getPublic(`/v1/seasons/${encodeURIComponent(id)}`, SeasonCard),
+    /** Опубликованные и отменённые гонки сезона по концу окна; неизвестный сезон — 404. */
+    listSeasonRaces: (id: string, params: SeasonRaceListParams = {}) =>
+      getPublic(`/v1/seasons/${encodeURIComponent(id)}/races${queryString(params)}`, RacePage),
     /** Опубликованные старты с `from` (по умолчанию — сегодня по Минску). */
     listCalendar: (params: CalendarListParams = {}) =>
       getPublic(`/v1/calendar${queryString(params)}`, CalendarPage),

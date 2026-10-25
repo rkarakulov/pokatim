@@ -18,6 +18,8 @@ import {
   RaceDetail,
   RaceListQuery,
   SeasonCard,
+  SeasonList,
+  SeasonRaceListQuery,
 } from './race-public.schema.ts';
 import { PanelSeason, SEASON_PHASES, SeasonInput, UpdateSeasonRequest } from './season.schema.ts';
 
@@ -250,5 +252,33 @@ describe('read-модель приложения', () => {
     expect(RaceListQuery.safeParse({ 'bikeClass[$ne]': 'x' }).success).toBe(false);
     // строгий enum в запросе: новое значение у старого сервера — 400, а не молчаливый фильтр
     expect(RaceListQuery.safeParse({ month: '2026-1' }).success).toBe(false);
+  });
+
+  it('SeasonList: сезоны с незнакомой фазой — unknown', () => {
+    const season = { id: ID, name: 'Сезон 2026', startsOn: '2026-04-01', endsOn: '2026-10-31' };
+    expect(
+      SeasonList.parse({
+        items: [
+          { ...season, phase: 'current' },
+          { ...season, phase: 'archived' },
+        ],
+      }).items.map((item) => item.phase),
+    ).toEqual(['current', 'unknown']);
+    expect(SeasonList.parse({ items: [] })).toEqual({ items: [] });
+    expect(SeasonList.safeParse({}).success).toBe(false);
+  });
+
+  it('SeasonRaceListQuery: limit по умолчанию 20, границы, лишний ключ и мусорный курсор — ошибка', () => {
+    expect(SeasonRaceListQuery.parse({})).toEqual({ limit: 20 });
+    expect(SeasonRaceListQuery.parse({ limit: '1', cursor: 'abc' })).toEqual({
+      limit: 1,
+      cursor: 'abc',
+    });
+    expect(SeasonRaceListQuery.parse({ limit: '50' }).limit).toBe(50);
+    expect(SeasonRaceListQuery.safeParse({ limit: '0' }).success).toBe(false);
+    expect(SeasonRaceListQuery.safeParse({ limit: '51' }).success).toBe(false);
+    expect(SeasonRaceListQuery.safeParse({ scope: 'past' }).success).toBe(false);
+    expect(SeasonRaceListQuery.safeParse({ cursor: 'x'.repeat(201) }).success).toBe(false);
+    expect(SeasonRaceListQuery.safeParse({ cursor: { $ne: null } }).success).toBe(false);
   });
 });
