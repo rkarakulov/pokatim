@@ -54,6 +54,9 @@ describe('коды ошибок', () => {
       'TRACK_FORMAT_UNSUPPORTED',
       'TRACK_TOO_LARGE',
       'TRACK_STORAGE_FULL',
+      'DEVICE_PROVIDER_UNAVAILABLE',
+      'DEVICE_LINK_INVALID',
+      'DEVICE_PROVIDER_ERROR',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

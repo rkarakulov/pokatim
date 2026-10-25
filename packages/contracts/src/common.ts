@@ -33,6 +33,11 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'TRACK_FORMAT_UNSUPPORTED',
   'TRACK_TOO_LARGE',
   'TRACK_STORAGE_FULL',
+  // устройства (tracks-devices): провайдер недоступен (вне allowlist, выключен в агрегаторе, агрегатор выключен);
+  // тикет чужой, истёк или использован; агрегатор ответил ошибкой
+  'DEVICE_PROVIDER_UNAVAILABLE',
+  'DEVICE_LINK_INVALID',
+  'DEVICE_PROVIDER_ERROR',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

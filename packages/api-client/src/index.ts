@@ -35,6 +35,13 @@ import {
   type SubmitOnboardingSurveyRequest,
   TrackUpload,
   TrackUploadPage,
+  ConnectDeviceResponse,
+  DeviceList,
+  type CompleteDeviceRequest,
+  type CompleteDevicesStepRequest,
+  type ConnectDeviceRequest,
+  type DeviceProvider,
+  type DisconnectDeviceRequest,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -125,6 +132,17 @@ export function createApiClient({
     ...init,
     headers: { authorization: `Bearer ${accessToken}` },
   });
+  const postAuthorized = <S extends z.ZodType>(
+    accessToken: string,
+    path: string,
+    schema: S,
+    body: unknown,
+  ) =>
+    request(
+      path,
+      schema,
+      authorized(accessToken, { method: 'POST', body: JSON.stringify(body), ...withCredentials }),
+    );
   /** Транспорт сессии платформы — в тело запросов, которые выдают сессию. */
   const withTransport = <B extends object>(body: B) =>
     sessionTransport ? { sessionTransport, ...body } : body;
@@ -243,6 +261,35 @@ export function createApiClient({
         `/v1/tracks/uploads/${encodeURIComponent(id)}/delete`,
         z.undefined(),
         authorized(accessToken, { method: 'POST', body: '{}', ...withCredentials }),
+      ),
+
+    // --- устройства через агрегатор (вход обязателен, tracks-devices) ---
+    listDevices: (accessToken: string) =>
+      request(
+        '/v1/devices',
+        DeviceList,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Ссылка авторизации агрегатора; `returnUrl` — из allowlist сервера. */
+    connectDevice: (accessToken: string, provider: DeviceProvider, body: ConnectDeviceRequest) =>
+      postAuthorized(accessToken, `/v1/devices/${provider}/connect`, ConnectDeviceResponse, body),
+    /** Активация подключения тикетом из возврата авторизации. */
+    completeDevice: (accessToken: string, provider: DeviceProvider, body: CompleteDeviceRequest) =>
+      postAuthorized(accessToken, `/v1/devices/${provider}/complete`, DeviceList, body),
+    /** «Синхронизировать сейчас» (не чаще раза в 10 минут — иначе 429). */
+    syncDevice: (accessToken: string, provider: DeviceProvider) =>
+      postAuthorized(accessToken, `/v1/devices/${provider}/sync`, DeviceList, {}),
+    disconnectDevice: (
+      accessToken: string,
+      provider: DeviceProvider,
+      body: DisconnectDeviceRequest,
+    ) => postAuthorized(accessToken, `/v1/devices/${provider}/disconnect`, DeviceList, body),
+    /** Шаг онбординга «Подключите устройство» пройден (любой исход). */
+    completeDevicesStep: (accessToken: string, body: CompleteDevicesStepRequest) =>
+      request(
+        '/v1/profile/onboarding/devices',
+        OnboardingStatus,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
       ),
   };
 }
