@@ -109,7 +109,8 @@ native, запуск: сессия из SecureStore сразу (офлайн —
 
 - Модуль `profile` — коллекция `profiles` (`_id` = id пользователя; ответы опроса, `surveyCompletedAt`, `updatedAt`),
   единственный писатель — `ProfileRepository`; запись — одна атомарная операция над одним документом вне транзакции,
-  гонка двух первых upsert (duplicate key на `_id`) — один повтор. Наружу — только `{ surveyCompleted }`, `no-store`.
+  гонка двух первых upsert (duplicate key на `_id`) — один повтор. Онбординг наружу — только `{ surveyCompleted }`;
+  ответы — `GET /v1/profile` для порядка Главной (блок 02); оба `no-store`.
   Сервер опрос не навязывает: другие эндпоинты ответа не требуют.
 - Шаги — группа `(setup)` (`/survey`, `/location`) вне `(onboarding)` и `(tabs)`; координаты не читаются и не
   хранятся (`location-permission(.web).ts`); `expo-location` — только native. Шаг геопозиции выключается флагом
@@ -178,6 +179,22 @@ worker: очередь identity-email ─► письмо «Пароль изм�
 - **`apps/admin`:** «Гонки» (фильтры в URL, форма одной колонкой с метками Europe/Minsk и вычисляемым сезоном,
   зафиксированные поля по `editable`), «Сезоны» (таблица и форма справа), «Календарь»; ввод времени —
   `DateTimeField` (настенное время Минска → `minskWallTimeToUtc`).
+
+### Главная приложения (блок 02)
+
+```
+Главная (вошедший) ─► GET /v1/races?scope=current&limit=1   (публично, max-age=60) ─► герой «Гонки»
+                   ─► GET /v1/calendar?limit=1              (публично, from — сервер) ─► герой «Календарь стартов»
+                   ─► GET /v1/profile (Bearer, no-store) ─► { rideReasons } ─► порядок разделов на клиенте
+```
+
+- Разделы — отдельные запросы к публичным list-эндпоинтам доменов (ключи `['races','list',…]`,
+  `['calendar','list',…]` — общие с вкладками); агрегата `/v1/home` и BFF нет: сбой одного раздела — ошибка в его
+  слоте. Порядок — чистая функция `orderHomeSections` по ответам опроса (`features/home/sections.ts`).
+- `GET /v1/profile` (модуль `profile`, `AuthGuard`): ответы опроса своего пользователя; неизвестные коды клиент
+  отбрасывает (`ProfileView`). После ответа на опрос `['profile']` инвалидируется.
+- Обновление: pull-to-refresh (native) перезапрашивает разделы и профиль; `refetchOnWindowFocus` + `staleTime` 60 с,
+  на native — `focusManager` ↔ `AppState` (`src/lib/focus-manager(.web).ts`). Polling нет.
 
 ### Web (SSR, PWA)
 

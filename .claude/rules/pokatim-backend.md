@@ -11,7 +11,8 @@ paths:
 
 - Контексты `src/modules/<context>/`: identity, profile, routes, rides, calendar, races, results, disputes,
   seasons, gamification, sharing, notifications, moderation, media (по мере появления).
-  Есть: `identity` (учётка, сессии, `AuthGuard`), `profile` (онбординг: опрос, коллекция `profiles`; авторизация —
+  Есть: `identity` (учётка, сессии, `AuthGuard`), `profile` (онбординг: опрос, коллекция `profiles`; `GET /v1/profile` — ответы опроса своего
+  пользователя для Главной, `no-store`, документа нет — `[]`; авторизация —
   `AuthGuard` через `modules/identity/index.ts`, коллекции identity не читает), `panel` (доступ к панели «Протокол»:
   члены команды и роли, сессии панели, журнал; identity — только порт `PanelCredentials`/`IdentityAccounts`),
   `races` (сезоны и гонки по коридору — одна граница, ADR-0010: определение сезона живёт здесь, отдельного модуля

@@ -272,6 +272,21 @@ Architecture Review — app-02-home. **Status: CONCERNS** — блокеров �
 - `DocumentTitle` Главной в jest-web не проверить без дерева expo-router (`Head` требует focus-контекст) —
   `<title>` проверяет смоук S5 (AC8); компонент покрыт `document-title.web.test.tsx`.
 
+**Реализация (coder, S4–S5).** admin-02 влит merge-коммитом (`origin/feature/admin-02-seasons-races`, cf6b7c2),
+конфликтов не было.
+- `ProfileView` оставлен на `z.array(z.string()).transform(filter)` (R5 разрешает оба варианта, выход тот же):
+  `tolerantEnum` дал бы `'unknown'`, который всё равно отбрасывается.
+- Герои — `features/home/heroes.tsx` (`RaceHero`, `CalendarStartHero`) поверх `SectionHero`; подписи — `format.ts`
+  (`raceMeta`, `calendarMeta`, `calendarStatusLine`, `formatDistances` сверх сигнатур §11). Многодневный старт и
+  окно в разных месяцах — вся строка крупно («28 сентября–3 октября»), в одном месяце — «4–12» + «октября».
+- Строки окна и календаря — с точкой в конце («Старт сегодня.», «До старта 5 дней.»: склонение полным словом, как
+  в прототипе «До старта 261 день.»); мета — значения справочников `domain.*` как есть, через « · ».
+- E2E (AC8): фикстура — API панели из Node (`e2e/home-fixture.ts`; вход в панель, cookie из `set-cookie`), не UI
+  панели. Конец окна — 12:00 UTC: дата по Минску та же, перевода пояса в смоуке нет. Сезон по концу окна —
+  существующий или однодневный. Герои сверяются с первыми записями публичного API (в dev-БД могут быть более ранние
+  гонки прошлых прогонов); свои гонка и старт — в публичных списках. Шаг «пустые герои» — в первом сценарии: на
+  пустой БД пустые, иначе — первые записи.
+
 # 8.3 Security checklist
 
 Затронуто: новый авторизованный эндпоинт `GET /v1/profile` (ADR-0008); потребление публичных эндпоинтов admin-02
@@ -428,23 +443,24 @@ export function daysUntilStart(startsOn: string, now: Date): number;            
 
 # 12. Outcome
 
-**Статус: S1–S3 сделаны, S4–S5 ждут admin-02 S7** (в `origin/feature/admin-02-seasons-races` на момент остановки —
-только S1).
+**Статус: S1–S5 сделаны.** admin-02 (S1–S10) влит merge-коммитом; PR — после слияния admin-02 в `develop`.
 
 - **S1** — `ProfileView` (`profile/profile.schema.ts`: неизвестные коды отбрасываются, R5), `api.getProfile(accessToken)`.
 - **S2** — `GET /v1/profile`: `ProfileController` (`AuthGuard`, `@CurrentUser()`, `no-store`) → `ProfileService.view` →
-  `ProfileRepository.findReasons` (projection `rideReasons`); документа нет — `[]`. Int-тест: AC2 (после опроса,
-  без документа, чужой не виден, `401` без access и после выхода).
-- **S3** — Главная-каркас: `TopBar`, `SectionHero` (+ тесты), `features/home/{sections,queries,home-section,
-  use-pull-to-refresh}`, `lib/focus-manager(.web)` подключён в корневом `_layout`, инвалидация `['profile']` после
-  опроса, строки `home.*`. Тесты: AC4 полностью (порядок/теги, ошибка/ожидание профиля), «Все …» → вкладки,
-  pull-to-refresh (профиль перезапрошен, индикатор только на время жеста), AC7 (скрытые разделы, «Выйти» внизу).
+  `ProfileRepository.findReasons`; документа нет — `[]`. Int-тест AC2.
+- **S3** — каркас: `TopBar`, `SectionHero`, `features/home/{sections,queries,home-section,use-pull-to-refresh}`,
+  `lib/focus-manager(.web)`, инвалидация `['profile']` после опроса, строки `home.*`.
+- **S4** — `useNextRace` / `useNextCalendarStart` (публичные списки, `limit: 1`, `staleTime` 60 с), `format.ts`
+  (тесты в TZ UTC / New York / Tokyo), `heroes.tsx`, пустые герои, ошибки в слоте, баннер при ошибке обновления,
+  R9; pull-to-refresh — разделы и профиль. Экранный тест: AC3–AC7.
+- **S5** — e2e: порядок по опросу, `<title>`, герои по публичному API; шаг с данными через API панели (AC8).
+  Документация §10: `docs/product/home.md`, `docs/architecture/README.md`, `.claude/rules/pokatim-{app,backend,
+  contracts}.md`, `docs/runbooks/local-dev.md`, ссылка из onboarding-04.
 
-**Осталось:** S4 (`useNextRace`, `useNextCalendarStart`, `format.ts` в `TZ` ≠ Минск, герои/пусто/ошибка, R9,
-pull-to-refresh разделов), S5 (e2e AC8 с API, docs §10).
-
-**Проверки (S3):** `pnpm check` — 13/13 задач; `build:web`; `pnpm e2e:web` — 11 passed, 1 skipped (шаг с API без
-`E2E_API`); `expo export -p android` — ок. NOT VERIFIED: ручной смоук iOS/Android/Safari (pull-to-refresh, фокус).
+**Проверки:** `pnpm check` — 13/13 задач (app 343 теста, api 52 файла); `pnpm e2e:web` с `E2E_API=1` — 13 passed
+(свой Mailpit, MongoDB RS, Redis, API на :3210); `expo export -p android` — ок.
+NOT VERIFIED: ручной смоук iOS/Android preview (pull-to-refresh, даты при поясе устройства ≠ Минск — `Intl` в
+Hermes, крупный шрифт, тёмная тема), Safari iOS web (обновление по фокусу).
 
 ---
 
