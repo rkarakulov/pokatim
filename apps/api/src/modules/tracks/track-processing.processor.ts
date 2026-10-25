@@ -8,7 +8,10 @@ export interface TrackProcessingJob {
   trackUploadId: string;
 }
 
-/** Заглушка: парсинг файла, проверка коридора (PostGIS), пересчёт результата. Сервер — единственный авторитет. */
+/**
+ * Заглушка: парсинг файла, проверка коридора (`@pokatim/tracks` в worker, ADR-0007), пересчёт результата. Сервер —
+ * единственный авторитет.
+ */
 @Processor(QUEUE.trackProcessing)
 export class TrackProcessingProcessor extends WorkerHost {
   private readonly logger = new Logger(TrackProcessingProcessor.name);

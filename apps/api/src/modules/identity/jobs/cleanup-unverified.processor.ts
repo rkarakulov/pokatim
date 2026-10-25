@@ -1,6 +1,6 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
-import { CLOCK, type Clock } from '@rkarakulov/api-kit';
+import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import type { Job } from 'bullmq';
 
 import { QUEUE } from '../../../queues';
@@ -34,11 +34,7 @@ export class CleanupUnverifiedProcessor extends WorkerHost {
     );
     let total = 0;
     for (;;) {
-      const deleted = await this.repository.deleteUnverifiedBatch(
-        this.repository.db,
-        createdBefore,
-        batchSize,
-      );
+      const deleted = await this.repository.deleteUnverifiedBatch(createdBefore, batchSize);
       total += deleted;
       if (deleted < batchSize) break;
     }

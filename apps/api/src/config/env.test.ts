@@ -37,8 +37,25 @@ describe('env', () => {
     expect(() => testEnv({ CORS_ORIGINS: '*' })).toThrow();
   });
 
-  it('адреса PostgreSQL и Redis обязательны и валидны', () => {
-    expect(() => testEnv({ DATABASE_URL: 'nope' })).toThrow();
+  it('адреса MongoDB и Redis обязательны и валидны', () => {
+    expect(() => testEnv({ MONGO_URL: '' })).toThrow();
+    expect(() => testEnv({ MONGO_URL: 'postgres://127.0.0.1:5432/app' })).toThrow();
     expect(() => testEnv({ REDIS_URL: '' })).toThrow();
+  });
+
+  it('MONGO_URL: имя БД в пути обязательно (без него драйвер молча берёт БД test); multi-host — можно', () => {
+    expect(() => testEnv({ MONGO_URL: 'mongodb://127.0.0.1:27017' })).toThrow();
+    expect(() => testEnv({ MONGO_URL: 'mongodb://127.0.0.1:27017/?replicaSet=rs0' })).toThrow();
+    const multiHost = 'mongodb://user:secret@db1:27017,db2:27017/app?replicaSet=rs0&tls=true';
+    expect(testEnv({ MONGO_URL: multiHost }).MONGO_URL).toBe(multiHost);
+    expect(testEnv({ MONGO_URL: 'mongodb+srv://cluster.example.net/app' }).MONGO_URL).toBe(
+      'mongodb+srv://cluster.example.net/app',
+    );
+  });
+
+  it('ошибка MONGO_URL не раскрывает значение (пароль)', () => {
+    expect(() => testEnv({ MONGO_URL: 'mongodb://user:secret@db1:27017' })).toThrow(
+      expect.objectContaining({ message: expect.not.stringContaining('secret') }),
+    );
   });
 });

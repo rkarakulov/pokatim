@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { MAILER, type Mailer, OutboxReader } from '@rkarakulov/api-kit';
+import { MAILER, type Mailer } from '@rkarakulov/api-kit/core';
+import { MongoOutboxReader } from '@rkarakulov/api-kit/mongo';
 
 import { PasswordChangedEmailRequested } from '../identity.events';
 import { IdentityRepository } from '../identity.repository';
@@ -9,7 +10,7 @@ export type PasswordChangedEmailOutcome = 'sent' | 'skipped';
 
 /**
  * Уведомление «Пароль изменён» (Q3 слайса 3). At-least-once без захвата отправки: дубль уведомления безвреден.
- * Время смены — `used_at` ссылки. Аккаунт удалён или строки нет (каскад) — пропуск.
+ * Время смены — `usedAt` ссылки. Аккаунт удалён или документа нет (каскад очистки) — пропуск.
  */
 @Injectable()
 export class PasswordChangedEmailHandler {
@@ -17,7 +18,7 @@ export class PasswordChangedEmailHandler {
 
   constructor(
     private readonly repository: IdentityRepository,
-    private readonly outbox: OutboxReader,
+    private readonly outbox: MongoOutboxReader,
     @Inject(MAILER) private readonly mailer: Mailer,
   ) {}
 
@@ -29,10 +30,7 @@ export class PasswordChangedEmailHandler {
       this.logger.warn(`event ${outboxEventId}: no valid payload, skipped`);
       return 'skipped';
     }
-    const found = await this.repository.findPasswordResetById(
-      this.repository.db,
-      payload.data.passwordResetTokenId,
-    );
+    const found = await this.repository.findPasswordResetById(payload.data.passwordResetTokenId);
     if (!found || found.user.deletedAt || !found.token.usedAt) return 'skipped';
 
     await this.mailer.send({

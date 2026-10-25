@@ -11,9 +11,7 @@
     "start:worker": "node dist/worker.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:migrate": "tsx src/db/migrate.ts"
   },
   "dependencies": {
     "@pokatim/contracts": "workspace:*",
@@ -25,10 +23,9 @@
     "@node-rs/argon2": "^2.2.2",
     "@rkarakulov/api-kit": "catalog:",
     "bullmq": "catalog:",
-    "drizzle-orm": "catalog:",
     "ioredis": "catalog:",
     "jose": "^6.2.13",
-    "pg": "catalog:",
+    "mongodb": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
     "zod": "catalog:"
@@ -41,8 +38,7 @@
     "@swc/cli": "^0.8.0",
     "@swc/core": "catalog:",
     "@types/node": "catalog:",
-    "@types/pg": "catalog:",
-    "drizzle-kit": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "unplugin-swc": "catalog:",
     "vitest": "catalog:"

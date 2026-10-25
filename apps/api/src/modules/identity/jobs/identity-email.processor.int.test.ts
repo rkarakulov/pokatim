@@ -1,23 +1,23 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { RegisterResponse } from '@pokatim/contracts';
-import { OutboxPublisher, type OutboxJobData } from '@rkarakulov/api-kit';
+import type { OutboxJobData } from '@rkarakulov/api-kit/core';
+import { MongoOutboxPublisher } from '@rkarakulov/api-kit/mongo';
 import type { Job, Queue } from 'bullmq';
-import { desc, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, HOUR, MINUTE, type Harness } from '../../../../test/harness';
 import {
   activeLinkToken,
   call,
+  collections,
   confirm,
   confirmPasswordReset,
+  outboxEvents,
   register,
   requestPasswordReset,
   resend,
 } from '../../../../test/identity';
-import { outbox } from '../../../db';
 import { QUEUE } from '../../../queues';
-import { emailVerificationTokens, passwordResetTokens, users } from '../identity.schema';
 import { sha256 } from '../tokens';
 import { IdentityRepository } from '../identity.repository';
 import { IdentityEmailProcessor } from './identity-email.processor';
@@ -44,9 +44,13 @@ afterAll(async () => {
 
 const linkPattern = /pokatim:\/\/auth\/verify\/([A-Za-z0-9_-]{43})/;
 const lastEventId = async () => {
-  const [event] = await h.db.select().from(outbox).orderBy(desc(outbox.createdAt), desc(outbox.id));
+  const event = (await outboxEvents(h)).at(-1);
   if (!event) throw new Error('no outbox event');
-  return event.id;
+  return event._id;
+};
+/** Аккаунты удалены со связанными документами (каскад очистки неподтверждённых). */
+const deleteAccounts = async () => {
+  for (const collection of Object.values(collections(h))) await collection.deleteMany({});
 };
 const tokenFromMail = (index: number) => {
   const text = h.mailer.sent[index]?.text ?? '';
@@ -60,7 +64,7 @@ describe('IdentityEmailProcessor: письмо подтверждения', () =
     await register(h);
     const eventId = await lastEventId();
 
-    expect(await h.worker.get(OutboxPublisher).publishBatch()).toBe(1);
+    expect(await h.worker.get(MongoOutboxPublisher).publishBatch()).toBe(1);
     const job = (await emailQueue.getJob(eventId)) as Job<OutboxJobData>;
     expect(job.name).toBe('identity.verification-email-requested');
 
@@ -71,7 +75,7 @@ describe('IdentityEmailProcessor: письмо подтверждения', () =
     expect(mail).toMatchObject({ to: 'rider@example.com', subject: 'Подтвердите e-mail' });
     const token = tokenFromMail(0);
     expect(mail?.html).toContain(`href="pokatim://auth/verify/${token}"`);
-    const [row] = await h.db.select().from(emailVerificationTokens);
+    const [row] = await collections(h).emailVerificationTokens.find().toArray();
     expect(row?.tokenHash).toBe(sha256(token));
     expect(row?.sentAt).toEqual(h.clock.now());
     expect((await call(h, 'GET', `/v1/auth/verification/${token}`)).body).toMatchObject({
@@ -94,7 +98,7 @@ describe('IdentityEmailProcessor: письмо подтверждения', () =
     await expect(handle(eventId)).rejects.toThrow();
     expect(await handle(eventId)).toBe('sent');
     expect(h.mailer.sent).toHaveLength(1);
-    const [row] = await h.db.select().from(emailVerificationTokens);
+    const [row] = await collections(h).emailVerificationTokens.find().toArray();
     expect(row?.tokenHash).toBe(sha256(tokenFromMail(0)));
   });
 
@@ -104,7 +108,10 @@ describe('IdentityEmailProcessor: письмо подтверждения', () =
     const release = h.mailer.hold(); // первая доставка захватила отправку и ждёт SMTP
     const first = handle(eventId);
     await expect
-      .poll(async () => (await h.db.select().from(emailVerificationTokens))[0]?.sendClaimedAt)
+      .poll(
+        async () =>
+          (await collections(h).emailVerificationTokens.find().toArray())[0]?.sendClaimedAt,
+      )
       .not.toBeNull();
 
     await expect(handle(eventId)).rejects.toThrow(/in progress/);
@@ -117,11 +124,11 @@ describe('IdentityEmailProcessor: письмо подтверждения', () =
   it('worker упал после захвата — пока захват жив, ретрай ждёт; после срока захвата письмо уходит', async () => {
     await register(h);
     const eventId = await lastEventId();
-    const [token] = await h.db.select().from(emailVerificationTokens);
+    const [token] = await collections(h).emailVerificationTokens.find().toArray();
     const repository = h.worker.get(IdentityRepository);
     // «упавший» worker: захватил отправку и не дошёл до SMTP
     expect(
-      await repository.claimLinkSend(h.db, 'verification', token!.id, h.clock.now(), MINUTE),
+      await repository.claimLinkSend('verification', token!._id, h.clock.now(), MINUTE),
     ).toMatchObject({
       status: 'claimed',
     });
@@ -157,10 +164,10 @@ describe('IdentityEmailProcessor: письмо подтверждения', () =
     expect(h.mailer.sent).toHaveLength(1);
   });
 
-  it('событие без строки ссылки (аккаунт удалён очисткой) — пропуск без ошибки', async () => {
+  it('событие без документа ссылки (аккаунт удалён очисткой) — пропуск без ошибки', async () => {
     await register(h);
     const eventId = await lastEventId();
-    await h.pool.query('DELETE FROM users');
+    await deleteAccounts();
     expect(await handle(eventId)).toBe('skipped');
   });
 
@@ -189,9 +196,9 @@ const job = (name: string, outboxEventId: string) =>
   ({ name, data: { outboxEventId } }) as Job<OutboxJobData>;
 
 describe('IdentityEmailProcessor: письмо сброса пароля', () => {
-  it('через очередь: письмо со ссылкой auth/reset, sha256 токена = token_hash, sent_at', async () => {
+  it('через очередь: письмо со ссылкой auth/reset, sha256 токена = tokenHash, sentAt', async () => {
     const eventId = await requestReset();
-    await h.worker.get(OutboxPublisher).publishBatch();
+    await h.worker.get(MongoOutboxPublisher).publishBatch();
     const queued = (await emailQueue.getJob(eventId)) as Job<OutboxJobData>;
     expect(queued.name).toBe('identity.password-reset-email-requested');
 
@@ -202,7 +209,7 @@ describe('IdentityEmailProcessor: письмо сброса пароля', () =>
     expect(mail).toMatchObject({ to: EMAIL, subject: 'Восстановление пароля' });
     const token = resetTokenFromMail(0);
     expect(mail?.html).toContain(`href="pokatim://auth/reset/${token}"`);
-    const [row] = await h.db.select().from(passwordResetTokens);
+    const [row] = await collections(h).passwordResetTokens.find().toArray();
     expect(row?.tokenHash).toBe(sha256(token));
     expect(row?.sentAt).toEqual(h.clock.now());
     expect((await call(h, 'GET', `/v1/auth/password-reset/${token}`)).body).toEqual({
@@ -223,10 +230,10 @@ describe('IdentityEmailProcessor: письмо сброса пароля', () =>
 
   it('живой захват другого worker — ретрай (общий захват отправки)', async () => {
     const eventId = await requestReset();
-    const [row] = await h.db.select().from(passwordResetTokens);
+    const [row] = await collections(h).passwordResetTokens.find().toArray();
     const repository = h.worker.get(IdentityRepository);
     expect(
-      await repository.claimLinkSend(h.db, 'passwordReset', row!.id, h.clock.now(), MINUTE),
+      await repository.claimLinkSend('passwordReset', row!._id, h.clock.now(), MINUTE),
     ).toMatchObject({ status: 'claimed' });
 
     await expect(linkEmails.handle('passwordReset', eventId)).rejects.toThrow(/in progress/);
@@ -247,20 +254,20 @@ describe('IdentityEmailProcessor: письмо сброса пароля', () =>
     h.clock.advance(MINUTE);
     await requestPasswordReset(h, EMAIL);
     const third = await lastEventId();
-    const [, , row] = await h.db
-      .select()
-      .from(passwordResetTokens)
-      .orderBy(passwordResetTokens.createdAt);
-    await h.db
-      .update(passwordResetTokens)
-      .set({ usedAt: h.clock.now() })
-      .where(eq(passwordResetTokens.id, row!.id));
+    const [, , row] = await collections(h)
+      .passwordResetTokens.find()
+      .sort({ createdAt: 1 })
+      .toArray();
+    await collections(h).passwordResetTokens.updateOne(
+      { _id: row!._id },
+      { $set: { usedAt: h.clock.now() } },
+    );
     expect(await linkEmails.handle('passwordReset', third)).toBe('skipped'); // использована
 
     h.clock.advance(MINUTE);
     await requestPasswordReset(h, EMAIL);
     const fourth = await lastEventId();
-    await h.db.update(users).set({ deletedAt: h.clock.now() });
+    await collections(h).users.updateMany({}, { $set: { deletedAt: h.clock.now() } });
     expect(await linkEmails.handle('passwordReset', fourth)).toBe('skipped'); // аккаунт удалён
     expect(h.mailer.sent).toHaveLength(0);
   });
@@ -293,15 +300,15 @@ describe('IdentityEmailProcessor: «Пароль изменён»', () => {
     }
   });
 
-  it('аккаунт удалён — пропуск; без строки ссылки (каскад) — пропуск', async () => {
+  it('аккаунт удалён — пропуск; без документа ссылки (каскад) — пропуск', async () => {
     await requestReset();
     const resetEvent = await lastEventId();
     await linkEmails.handle('passwordReset', resetEvent);
     await confirmPasswordReset(h, resetTokenFromMail(0), 'brand-new-password');
     const eventId = await lastEventId();
-    await h.db.update(users).set({ deletedAt: h.clock.now() });
+    await collections(h).users.updateMany({}, { $set: { deletedAt: h.clock.now() } });
     expect(await processor.process(job(name, eventId))).toBe('skipped');
-    await h.pool.query('DELETE FROM users');
+    await deleteAccounts();
     expect(await processor.process(job(name, eventId))).toBe('skipped');
     expect(h.mailer.sent).toHaveLength(1);
   });

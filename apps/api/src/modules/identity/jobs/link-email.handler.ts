@@ -6,8 +6,8 @@ import {
   MAILER,
   type Mailer,
   type MailMessage,
-  OutboxReader,
-} from '@rkarakulov/api-kit';
+} from '@rkarakulov/api-kit/core';
+import { MongoOutboxReader } from '@rkarakulov/api-kit/mongo';
 
 import type { Env } from '../../../config/env';
 import { PasswordResetEmailRequested, VerificationEmailRequested } from '../identity.events';
@@ -20,9 +20,9 @@ import { derivePasswordResetToken, deriveVerificationToken } from '../tokens';
 export type LinkEmailOutcome = 'sent' | 'skipped';
 
 interface LinkEmail {
-  /** id строки ссылки из payload события; `undefined` — payload не по схеме. */
+  /** id ссылки из payload события; `undefined` — payload не по схеме. */
   tokenId: (payload: unknown) => string | undefined;
-  /** Путь экрана ссылки в приложении и вывод токена из id строки. */
+  /** Путь экрана ссылки в приложении и вывод токена из id ссылки. */
   path: string;
   derive: (secret: string, id: string) => string;
   render: (input: { link: string }) => Omit<MailMessage, 'to'>;
@@ -44,12 +44,12 @@ const LINK_EMAILS: Record<LinkKind, LinkEmail> = {
 };
 
 /**
- * Письмо со ссылкой (подтверждение e-mail, сброс пароля). Ссылка пересобирается из id строки (HMAC) — ретрай даёт
+ * Письмо со ссылкой (подтверждение e-mail, сброс пароля). Ссылка пересобирается из id ссылки (HMAC) — ретрай даёт
  * ту же ссылку. Заменённая, использованная, истёкшая ссылка, удалённый (для подтверждения — и уже подтверждённый)
- * аккаунт — письмо не нужно. Одно письмо на ссылку: отправку захватывает атомарный UPDATE с ограниченным сроком
- * (`send_claimed_at`), факт отправки — `sent_at` после ответа SMTP. Повтор отправленного — пропуск; параллельная
+ * аккаунт — письмо не нужно. Одно письмо на ссылку: отправку захватывает атомарный `findOneAndUpdate` с ограниченным
+ * сроком (`sendClaimedAt`), факт отправки — `sentAt` после ответа SMTP. Повтор отправленного — пропуск; параллельная
  * доставка и живой захват упавшего worker — ретрай BullMQ; сбой SMTP снимает захват. Остаточный риск
- * (at-least-once): SMTP принял письмо, а worker упал до записи `sent_at` — по истечении захвата уйдёт дубль с той же
+ * (at-least-once): SMTP принял письмо, а worker упал до записи `sentAt` — по истечении захвата уйдёт дубль с той же
  * ссылкой.
  */
 @Injectable()
@@ -58,7 +58,7 @@ export class LinkEmailHandler {
 
   constructor(
     private readonly repository: IdentityRepository,
-    private readonly outbox: OutboxReader,
+    private readonly outbox: MongoOutboxReader,
     @Inject(MAILER) private readonly mailer: Mailer,
     @Inject(ENV) private readonly env: Env,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -72,9 +72,7 @@ export class LinkEmailHandler {
       return 'skipped';
     }
     const now = this.clock.now();
-    const db = this.repository.db;
     const claim = await this.repository.claimLinkSend(
-      db,
       kind,
       tokenId,
       now,
@@ -91,10 +89,10 @@ export class LinkEmailHandler {
     try {
       await this.mailer.send({ to: claim.email, ...mail });
     } catch (error) {
-      await this.repository.releaseLinkSend(db, kind, claim.id, now);
+      await this.repository.releaseLinkSend(kind, claim.id, now);
       throw error;
     }
-    await this.repository.completeLinkSend(db, kind, claim.id, now, this.clock.now());
+    await this.repository.completeLinkSend(kind, claim.id, now, this.clock.now());
     this.logger.log(`${kind} email sent for event ${outboxEventId}`);
     return 'sent';
   }

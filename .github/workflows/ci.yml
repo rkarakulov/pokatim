@@ -36,22 +36,13 @@ jobs:
 
   check:
     runs-on: ubuntu-latest
-    # интеграционные тесты API — на реальных PostgreSQL и Redis (.claude/rules/tests.md)
+    # интеграционные тесты API — на реальных MongoDB (replica set, шаг ниже) и Redis (.claude/rules/tests.md)
     services:
-      postgres:
-        image: postgis/postgis:18-3.6
-        env:
-          POSTGRES_USER: pokatim
-          POSTGRES_PASSWORD: pokatim
-          POSTGRES_DB: pokatim
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U pokatim" --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
         image: redis:8.8
         ports: ['6379:6379']
     env:
-      DATABASE_URL_TEST: postgres://pokatim:pokatim@127.0.0.1:5432/pokatim_test
+      MONGO_URL_TEST: mongodb://127.0.0.1:27017/pokatim_test?directConnection=true
       REDIS_URL_TEST: redis://127.0.0.1:6379/1
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -63,6 +54,18 @@ jobs:
           # пользовательский .npmrc с токеном из NODE_AUTH_TOKEN для @rkarakulov/*
           registry-url: https://npm.pkg.github.com
           scope: '@rkarakulov'
+      # MongoDB replica set (services не принимают command): docker run + rs.initiate, ожидание PRIMARY
+      - name: mongodb replica set
+        run: |
+          docker run -d --name mongo -p 127.0.0.1:27017:27017 mongo:8.0 --replSet rs0 --bind_ip_all
+          initiate="try { rs.status().myState } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] }); 0 }"
+          for _ in $(seq 1 60); do
+            if [ "$(docker exec mongo mongosh --quiet --eval "$initiate" 2>/dev/null || true)" = "1" ]; then exit 0; fi
+            sleep 1
+          done
+          echo "::error::MongoDB replica set не стал PRIMARY за 60 с"
+          docker logs --tail 30 mongo
+          exit 1
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -70,7 +73,7 @@ jobs:
       - run: pnpm check
       # все приложения и пакеты (api, admin, packages/*); web-экспорт apps/app — job `web`
       - run: pnpm build
-      # dist API — CommonJS поверх ESM-пакетов базы (require(esm), две сборки drizzle): typecheck и vitest
+      # dist API — CommonJS поверх ESM-пакетов базы (require(esm)): typecheck и vitest
       # этого не видят, поэтому модули dist загружаются отдельно
       - name: api dist loads
         working-directory: apps/api
@@ -83,17 +86,8 @@ jobs:
   # pokatim: регистрация → письмо (Mailpit) → подтверждение → вход → перезагрузка (cookie сессии)
   web:
     runs-on: ubuntu-latest
-    # проект: services (PostgreSQL, Redis, …) для серверов смоука — здесь
+    # проект: services (Redis, …; MongoDB — шагом, как в check) для серверов смоука — здесь
     services:
-      postgres:
-        image: postgis/postgis:18-3.6
-        env:
-          POSTGRES_USER: pokatim
-          POSTGRES_PASSWORD: pokatim
-          POSTGRES_DB: pokatim
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U pokatim" --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
         image: redis:8.8
         ports: ['6379:6379']
@@ -107,7 +101,7 @@ jobs:
       E2E_API: '1'
       # окружение API и worker смоука: фиктивные несекретные значения (как apps/api/test/test-env.ts);
       # APP_LINK_BASE, CORS_ORIGINS и PORT задаёт apps/app/e2e/project.ts (origin-ы web-серверов смоука)
-      DATABASE_URL: postgres://pokatim:pokatim@127.0.0.1:5432/pokatim
+      MONGO_URL: mongodb://127.0.0.1:27017/pokatim?directConnection=true
       REDIS_URL: redis://127.0.0.1:6379
       SMTP_URL: smtp://127.0.0.1:1025
       MAIL_FROM: 'pokatim <no-reply@pokatim.test>'
@@ -127,6 +121,18 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # проект: подготовка серверов смоука (сборка API, миграции) — шаги здесь
+      # pokatim: MongoDB replica set для API смоука — тот же шаг, что в check
+      - name: mongodb replica set
+        run: |
+          docker run -d --name mongo -p 127.0.0.1:27017:27017 mongo:8.0 --replSet rs0 --bind_ip_all
+          initiate="try { rs.status().myState } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] }); 0 }"
+          for _ in $(seq 1 60); do
+            if [ "$(docker exec mongo mongosh --quiet --eval "$initiate" 2>/dev/null || true)" = "1" ]; then exit 0; fi
+            sleep 1
+          done
+          echo "::error::MongoDB replica set не стал PRIMARY за 60 с"
+          docker logs --tail 30 mongo
+          exit 1
       # pokatim: API и worker смоука — из dist (с пакетами, от которых зависят); схема БД — миграции, как в деплое
       - run: pnpm turbo run build --filter=@pokatim/api
       - run: pnpm --filter @pokatim/api db:migrate
@@ -138,3 +144,68 @@ jobs:
           name: playwright-report
           path: apps/app/test-results/
           retention-days: 7
+
+  # Репетиция переезда dev-стенда PostgreSQL → MongoDB (AC7/AC8, infra/deploy/rehearsal.sh): образы собираются
+  # локально на раннере, старый стек — из базовой ветки PR, свой compose project, без registry и nginx. Только PR,
+  # меняющие деплой, образ, API или workflow; в вызове из деплоя (push) не запускается.
+  deploy-rehearsal:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      POKATIM_PROJECT: pokatim-rehearsal
+      POKATIM_TAG: rehearsal
+      POKATIM_IMAGE_PREFIX: rehearsal/pokatim
+      BASE_REF: origin/${{ github.base_ref }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { fetch-depth: 0 }
+      - name: затронуты деплой, образ, API или workflow?
+        id: changes
+        run: |
+          if git diff --name-only "${BASE_REF}...HEAD" |
+            grep -qE '^(infra/deploy/|infra/docker/|apps/api/|\.github/workflows/)'; then
+            echo "run=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "run=false" >>"$GITHUB_OUTPUT"
+            echo "::notice::деплой, образ, API и workflow не менялись — репетиция пропущена"
+          fi
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        if: steps.changes.outputs.run == 'true'
+      - name: образ api (локально)
+        if: steps.changes.outputs.run == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          target: api
+          load: true
+          tags: ${{ env.POKATIM_IMAGE_PREFIX }}-api:${{ env.POKATIM_TAG }}
+          secrets: NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          cache-from: type=gha,scope=pokatim-api
+      - name: образ web (локально)
+        if: steps.changes.outputs.run == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          target: web
+          load: true
+          tags: ${{ env.POKATIM_IMAGE_PREFIX }}-web:${{ env.POKATIM_TAG }}
+          build-args: EXPO_PUBLIC_API_URL=https://rehearsal.pokatim.test
+          secrets: NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          cache-from: type=gha,scope=pokatim-web
+      - name: образ admin (локально)
+        if: steps.changes.outputs.run == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          target: admin
+          load: true
+          tags: ${{ env.POKATIM_IMAGE_PREFIX }}-admin:${{ env.POKATIM_TAG }}
+          secrets: NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          cache-from: type=gha,scope=pokatim-admin
+      # лог — шаги и проверки без значений секретов (rehearsal.sh сравнивает хеши строк .env)
+      - name: репетиция переезда и повторного деплоя
+        if: steps.changes.outputs.run == 'true'
+        run: bash infra/deploy/rehearsal.sh

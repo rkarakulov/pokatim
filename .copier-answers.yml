@@ -4,8 +4,7 @@ _src_path: gh:rkarakulov/app-foundation
 app_scheme: pokatim
 author: Roman Karakulov
 bundle_id: by.pokatim.app
-database: postgres
+database: mongo
 npm_scope: pokatim
 project_name: pokatim
 project_slug: pokatim
-use_postgis: true

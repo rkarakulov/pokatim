@@ -1,14 +1,15 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { RateLimitedDetails, Session } from '@pokatim/contracts';
-import { CLOCK, type Clock, ENV, RateLimiter } from '@rkarakulov/api-kit';
+import { CLOCK, type Clock, ENV, RateLimiter } from '@rkarakulov/api-kit/core';
+import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { SignJWT } from 'jose';
 
 import type { Env } from '../../config/env';
-import type { DbExecutor } from '../../db';
+import type { DbSession } from '../../db';
 import { domainError } from '../../error-messages';
 import { IDENTITY_POLICY, JWT_AUDIENCE, JWT_ISSUER } from './identity.policy';
 import { IdentityRepository } from './identity.repository';
-import type { SessionRevokedReason } from './identity.schema';
+import type { SessionRevokedReason } from './identity.collection';
 import { randomToken, rateLimitKeyForIp, sha256 } from './tokens';
 
 /**
@@ -30,9 +31,9 @@ export class SessionService {
     this.key = new TextEncoder().encode(env.JWT_SECRET);
   }
 
-  async issue(tx: DbExecutor, userId: string): Promise<Session> {
+  async issue(tx: DbSession, userId: string): Promise<Session> {
     const now = this.clock.now();
-    const sessionId = await this.repository.nextId(tx);
+    const sessionId = uuidv7();
     const expiresAt = new Date(now.getTime() + IDENTITY_POLICY.refreshTokenTtlMs);
     const refreshToken = randomToken();
 
@@ -66,7 +67,7 @@ export class SessionService {
 
     const tokenHash = sha256(refreshToken);
     const nextToken = randomToken();
-    const rotated = await this.repository.rotateSession(this.repository.db, {
+    const rotated = await this.repository.rotateSession({
       tokenHash,
       nextTokenHash: sha256(nextToken),
       now,
@@ -77,7 +78,6 @@ export class SessionService {
     if (rotated) return this.compose(rotated, nextToken, now);
 
     const revokedId = await this.repository.markReuseDetected(
-      this.repository.db,
       tokenHash,
       now,
       IDENTITY_POLICY.refreshReuseGraceMs,
@@ -94,12 +94,7 @@ export class SessionService {
    * сессию. Неизвестный или уже отозванный токен — без ошибки (идемпотентно).
    */
   async revoke(refreshToken: string, reason: SessionRevokedReason = 'signed_out'): Promise<void> {
-    await this.repository.revokeSession(
-      this.repository.db,
-      sha256(refreshToken),
-      this.clock.now(),
-      reason,
-    );
+    await this.repository.revokeSession(sha256(refreshToken), this.clock.now(), reason);
   }
 
   private async compose(

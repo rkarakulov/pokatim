@@ -2,6 +2,8 @@
 
 - Статус: Accepted
 - Дата: 2026-10-24
+- Пересмотр 2026-10-26: реализация на MongoDB — [ADR-0007](0007-mongodb.md) (`FOR UPDATE` → `$inc version` в транзакции,
+  `UPDATE … RETURNING` → `findOneAndUpdate`); гарантии прежние
 
 ## Контекст
 

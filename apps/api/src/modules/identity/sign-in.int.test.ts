@@ -6,7 +6,6 @@ import {
   SESSION_COOKIE,
   SignInResponse,
 } from '@pokatim/contracts';
-import { eq } from 'drizzle-orm';
 import { jwtVerify } from 'jose';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,6 +14,7 @@ import {
   activeLinkToken,
   call,
   type CallResult,
+  collections,
   confirm,
   poll,
   register,
@@ -22,7 +22,6 @@ import {
   validRegistration,
 } from '../../../test/identity';
 import { IDENTITY_POLICY } from './identity.policy';
-import { registrationTokens, sessions, users } from './identity.schema';
 import { PasswordHasher } from './password-hasher';
 import { sha256 } from './tokens';
 
@@ -83,10 +82,10 @@ describe('POST /v1/auth/session/sign-in — успех (AC1)', () => {
     const body = SignInResponse.parse(res.body);
     if (body.state !== 'signedIn') throw new Error('expected signedIn');
     const session = Session.parse(body.session);
-    const [row] = await h.db.select().from(sessions);
-    const [user] = await h.db.select().from(users);
+    const [row] = await collections(h).sessions.find().toArray();
+    const [user] = await collections(h).users.find().toArray();
     expect(row?.refreshTokenHash).toBe(sha256(session.refreshToken));
-    expect(row?.userId).toBe(user?.id);
+    expect(row?.userId).toBe(user?._id);
     expect(session.refreshTokenExpiresAt).toBe(
       new Date(h.clock.now().getTime() + IDENTITY_POLICY.refreshTokenTtlMs).toISOString(),
     );
@@ -95,7 +94,7 @@ describe('POST /v1/auth/session/sign-in — успех (AC1)', () => {
       new TextEncoder().encode(h.env.JWT_SECRET),
       { issuer: 'pokatim', audience: 'pokatim-app', currentDate: h.clock.now() },
     );
-    expect(payload).toMatchObject({ sub: user?.id, sid: row?.id });
+    expect(payload).toMatchObject({ sub: user?._id, sid: row?._id });
   });
 
   it('web (cookie): CookieSession без refresh, cookie с атрибутами F5b; refresh по ней работает', async () => {
@@ -143,15 +142,9 @@ describe('POST /v1/auth/session/sign-in — успех (AC1)', () => {
     expect(res.status).toBe(200);
     const next = cookieValue(res);
     expect(next).not.toBe(first);
-    const [old] = await h.db
-      .select()
-      .from(sessions)
-      .where(eq(sessions.refreshTokenHash, sha256(first ?? '')));
+    const old = await collections(h).sessions.findOne({ refreshTokenHash: sha256(first ?? '') });
     expect(old).toMatchObject({ revokedAt: h.clock.now(), revokedReason: 'superseded' });
-    const [fresh] = await h.db
-      .select()
-      .from(sessions)
-      .where(eq(sessions.refreshTokenHash, sha256(next ?? '')));
+    const fresh = await collections(h).sessions.findOne({ refreshTokenHash: sha256(next ?? '') });
     expect(fresh?.revokedAt).toBeNull();
   });
 
@@ -174,7 +167,7 @@ describe('нейтральный отказ (AC2)', () => {
     await verifiedAccount();
     const wrong = await signIn({ email: EMAIL, password: 'wrong-password' });
     const unknown = await signIn({ email: 'nobody@example.com', password: PASSWORD });
-    await h.db.update(users).set({ deletedAt: h.clock.now() });
+    await collections(h).users.updateMany({}, { $set: { deletedAt: h.clock.now() } });
     const deleted = await signIn({ email: EMAIL, password: PASSWORD });
 
     for (const res of [wrong, unknown, deleted]) {
@@ -184,7 +177,7 @@ describe('нейтральный отказ (AC2)', () => {
       expect(setCookie(res)).toBeUndefined();
     }
     expect(new Set([wrong, unknown, deleted].map((res) => JSON.stringify(res.body))).size).toBe(1);
-    expect(await h.db.select().from(sessions)).toEqual([]);
+    expect(await collections(h).sessions.countDocuments()).toBe(0);
   });
 
   it('для неизвестного адреса argon2 verify вызывается (по пустышке) — время ответа не выдаёт аккаунт', async () => {
@@ -324,8 +317,8 @@ describe('неподтверждённый аккаунт (AC4, Q4)', () => {
     if (body.state !== 'verificationRequired') throw new Error('expected verificationRequired');
     expect(body.email).toBe(EMAIL);
     expect(body.registrationToken).not.toBe(registered.registrationToken);
-    expect(await h.db.select().from(sessions)).toEqual([]);
-    const [row] = await h.db.select().from(registrationTokens);
+    expect(await collections(h).sessions.countDocuments()).toBe(0);
+    const [row] = await collections(h).registrationTokens.find().toArray();
     expect(row?.tokenHash).toBe(sha256(body.registrationToken));
     expect(row?.expiresAt).toEqual(
       new Date(h.clock.now().getTime() + IDENTITY_POLICY.verificationLinkTtlMs),

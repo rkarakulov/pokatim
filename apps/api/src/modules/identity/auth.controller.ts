@@ -18,7 +18,7 @@ import {
   type VerificationLinkInfo,
   VerificationToken,
 } from '@pokatim/contracts';
-import { ZodValidationPipe } from '@rkarakulov/api-kit';
+import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
 import { domainError } from '../../error-messages';
 import { PasswordResetService } from './password-reset.service';

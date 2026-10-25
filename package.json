@@ -26,7 +26,7 @@
     "format:check": "prettier --check .",
     "arch:check": "depcruise apps packages --config .dependency-cruiser.cjs",
     "check": "pnpm format:check && pnpm lint && pnpm arch:check && pnpm typecheck && pnpm test",
-    "infra:up": "docker compose -f infra/docker-compose.dev.yml up -d",
+    "infra:up": "docker compose -f infra/docker-compose.dev.yml up -d --wait",
     "infra:down": "docker compose -f infra/docker-compose.dev.yml down",
     "prepare": "node scripts/install-git-hooks.mjs"
   },

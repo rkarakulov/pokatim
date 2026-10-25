@@ -1,7 +1,7 @@
 # 0001. Стек и монорепо
 
 - Статус: Accepted; частично заменён [ADR-0003](0003-universal-rider-app.md) — гостевой веб (`apps/landing`, Astro)
-  удалён в F5b, веб — то же Expo-приложение
+  удалён в F5b, веб — то же Expo-приложение; и [ADR-0007](0007-mongodb.md) — данные (MongoDB вместо PostgreSQL + PostGIS)
 - Дата: 2026-10-22
 
 ## Контекст
@@ -22,7 +22,8 @@
 - **apps/admin** — Vite + React; TanStack Query / Table, react-hook-form.
 - **apps/landing** — Astro SSR (гостевые страницы, OG-мета, публичное удаление аккаунта). *Заменено ADR-0003:
   гостевой веб — из универсального Expo-приложения.*
-- **Данные** — PostgreSQL 18 + PostGIS через Drizzle; миграции drizzle-kit отдельным шагом деплоя.
+- **Данные** — PostgreSQL 18 + PostGIS через Drizzle; миграции drizzle-kit отдельным шагом деплоя. *Заменено
+  ADR-0007: MongoDB 8.0 (replica set), миграции — `db:migrate` отдельным шагом деплоя.*
 - **Очереди** — Redis + BullMQ. **RabbitMQ не используем**; события между модулями — transactional outbox.
 - **Контракты** — zod-схемы в `packages/contracts`; клиенты — через `packages/api-client`.
 - Общий код клиентов — контракты, hooks, токены, i18n, чистая логика. **UI между web и mobile не шарим**

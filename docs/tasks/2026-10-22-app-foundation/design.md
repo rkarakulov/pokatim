@@ -70,7 +70,7 @@ app-foundation/
 | F4 | Перевод on-bike на базу (identity и tracks остаются) | F3 |
 | F5 | Задача-основа universal-app в базе; on-bike — через `copier update` (сделан: F5a — шаблон `v0.2.0` в базе, F5b — on-bike в браузере, `docs/tasks/2026-10-23-onbike-web`) | F4 |
 | F6 | Identity и доступ в базу: вход, сессии, роли и права, админка (§7) | слайсы 2–3 онбординга, F5 |
-| F7 | MongoDB как опция базы — сделано (0.4.0/0.4.1), on-bike остаётся на PostgreSQL (`docs/tasks/2026-10-24-app-foundation-mongo`) | F5 |
+| F7 | MongoDB как опция базы — сделано (0.4.0/0.4.1); pokatim (бывший on-bike) перешёл на mongo 2026-10-26 (`docs/tasks/2026-10-26-pokatim-mongo`, ADR-0007) | F5 |
 
 Слайс 2 онбординга — после F5. F4 выполнен до F3 по решению автора (2026-10-22): принятие шаблона и переключение
 AI-инфраструктуры on-bike на плагин — вместе с F3; PR F4 — стеком поверх #1–#4 (rebase запрещён).

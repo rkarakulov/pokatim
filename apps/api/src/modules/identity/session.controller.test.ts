@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 
 import { FieldErrorCode, SignInRequest } from '@pokatim/contracts';
-import { ZodValidationPipe } from '@rkarakulov/api-kit';
+import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SessionController } from './session.controller';

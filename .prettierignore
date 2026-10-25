@@ -7,7 +7,6 @@ playwright-report
 .expo
 coverage
 pnpm-lock.yaml
-apps/api/drizzle/meta
 apps/app/assets
 *.md
 .claude

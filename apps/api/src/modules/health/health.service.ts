@@ -1,15 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { HealthResponse } from '@pokatim/contracts';
-import { PG_POOL } from '@rkarakulov/api-kit';
-import { Pool } from 'pg';
+import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
+import type { Db } from 'mongodb';
 
 @Injectable()
 export class HealthService {
-  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
+  constructor(@Inject(MONGO_DB) private readonly db: Db) {}
 
   async check(): Promise<HealthResponse> {
-    const database = await this.pool
-      .query('select 1')
+    const database = await this.db
+      .command({ ping: 1 })
       .then(() => 'up' as const)
       .catch(() => 'down' as const);
     return {

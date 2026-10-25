@@ -26,17 +26,21 @@ push develop ─► deploy-dev.yml
      /mail/*   → 127.0.0.1:8125  mailpit  (UI писем, basic-auth; только при https)
      /         → 127.0.0.1:8180  web      (SSR, expo-server)
   compose project pokatim-dev (~/pokatim/docker-compose.yml, .env):
-     worker, postgres (PostGIS), redis — без портов хоста; mailpit — UI 127.0.0.1:8125, SMTP только внутри
+     worker, mongo (MongoDB 8.0, replica set rs0, keyfile + пользователи), redis — без портов хоста;
+     mailpit — UI 127.0.0.1:8125, SMTP только внутри
 ```
 
-`deploy.sh` на каждом деплое: `bootstrap.sh` (каталог, `.env`, vhost, сертификат) → pull → postgres/redis/mailpit →
-**миграции одноразовым контейнером** (`compose run --rm migrate`) → api/worker/web/admin с ожиданием healthcheck →
-smoke (`/v1/health` = ok, `/register`, `/admin/`, `/mail/` без пароля 401 и с паролем 200, `/v1/health` и `/mail/`
-через vhost nginx) → прочистка образов pokatim без
-контейнеров (по label `by.pokatim.project=pokatim`, чужие образы не трогаются).
+`deploy.sh` на каждом деплое: `bootstrap.sh` (каталог, `.env`, keyfile MongoDB, vhost, сертификат) → pull →
+mongo/redis/mailpit → **набор и пользователи MongoDB** (`mongo-init.js`: rs0, root, пользователь приложения —
+идемпотентно) → **миграции одноразовым контейнером** (`compose run --rm migrate`, `node dist/db/migrate.js`) →
+api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` = ok и `database: up`, `/register`, `/admin/`,
+`/mail/` без пароля 401 и с паролем 200, `/v1/health` и `/mail/` через vhost nginx) → **переезд с PostgreSQL**
+(`retire_postgres`, раздел «Переезд на MongoDB») → прочистка образов pokatim без контейнеров (по label
+`by.pokatim.project=pokatim`, чужие образы не трогаются).
 
 Свои порты хоста — 3100, 8180, 8181, 8125, только `127.0.0.1`; выбраны свободными. Менять — после `sudo ss -ltnp` на
-сервере. Лимиты памяти контейнеров — в `infra/deploy/docker-compose.yml` (всего ≤ 2,5 ГБ), логи контейнеров
+сервере. Лимиты памяти контейнеров — в `infra/deploy/docker-compose.yml`, всего 2560m (mongo 640, redis 320, mailpit
+128, api 512, worker 384, web 512, admin 64; healthcheck mongo — `mongosh` раз в 15 с в лимите mongo), логи контейнеров
 ротируются (json-file, 3 × 10 МБ на контейнер).
 
 ## Первичная настройка (один раз)
@@ -112,13 +116,13 @@ smoke (`/v1/health` = ok, `/register`, `/admin/`, `/mail/` без пароля 4
 
 `~/pokatim/.env` (600) создаёт `bootstrap.sh` по `infra/deploy/env.template`:
 
-- `POSTGRES_PASSWORD`, `JWT_SECRET`, `EMAIL_TOKEN_SECRET`, `MAILPIT_UI_PASSWORD` — генерируются на сервере
-  (`openssl rand -hex 32`) при первом деплое (новый ключ — при первом деплое после его появления в шаблоне); в лог,
-  git и GitHub не попадают; повторные деплои их не меняют.
+- `MONGO_ROOT_PASSWORD` (root MongoDB — только администрирование), `MONGO_PASSWORD` (пользователь приложения
+  `pokatim`, `readWrite` только на БД `pokatim`), `JWT_SECRET`, `EMAIL_TOKEN_SECRET`, `MAILPIT_UI_PASSWORD` —
+  генерируются на сервере (`openssl rand -hex 32`) при первом деплое (новый ключ — при первом деплое после его
+  появления в шаблоне); в лог, git и GitHub не попадают; повторные деплои их не меняют.
+- `~/pokatim/mongo-keyfile` (600) — keyfile replica set (`openssl rand -base64 756`), создаёт `bootstrap.sh` один
+  раз; в контейнер монтируется только для чтения, копия — в томе `mongoconfig` с владельцем `mongodb`.
 - Недостающие ключи шаблона дописываются, существующие значения не трогаются (правка руками сохраняется).
-  Исключение — `MAIL_FROM`, равный прежнему умолчанию (`'on-bike dev <no-reply@on-bike.by>'` или
-  `'Покатим dev <no-reply@on-bike.by>'`): заменяется на текущее из шаблона (`'Покатим dev <no-reply@limedolphin.com>'`,
-  домен проверяется в SES); своё значение остаётся.
 - `MAIL_RELAY_HOST`/`MAIL_RELAY_PORT` (умолчание — SES `email-smtp.eu-north-1.amazonaws.com:587`),
   `MAIL_RELAY_USERNAME`/`MAIL_RELAY_PASSWORD` (пусто) — relay почты, вписываются руками (раздел «Почта»).
 - `MAIL_RELAY_RECIPIENTS` (адреса или `*`) — из секрета `DEV_MAIL_RELAY_RECIPIENTS` каждого деплоя (нет — очищается);
@@ -129,8 +133,12 @@ smoke (`/v1/health` = ok, `/register`, `/admin/`, `/mail/` без пароля 4
 - `CORS_ORIGINS` пусто (web и API — один origin за nginx), `TRUST_PROXY=1` (один прокси — nginx хоста; он
   перезаписывает `X-Forwarded-For` адресом клиента).
 
-Потеря `.env` при живом томе `pgdata`: новый `POSTGRES_PASSWORD` не совпадёт с паролем в базе. Восстановить файл из
-бэкапа или пересоздать стенд (`down -v` — данные dev теряются, только с согласия автора).
+Потеря `.env` при живом томе `mongodata`: новый `MONGO_ROOT_PASSWORD` не совпадёт с root в базе — `mongo-init.js`
+упадёт с сообщением «MONGO_ROOT_PASSWORD из .env не подходит к root в томе mongodata».
+Частично упавший деплой (после старта `mongo`) так не ломается: `bootstrap.sh` дописывает пароли в `.env` до первого
+старта, повторный деплой идёт с тем же `.env` и томом. Восстановить файл из бэкапа или пересоздать стенд (`down -v` — данные dev
+теряются, только с согласия автора). Смена `MONGO_PASSWORD` в `.env` — следующий деплой обновит пароль пользователя
+приложения сам (root не меняется).
 
 ## nginx
 
@@ -177,7 +185,8 @@ webroot, что у соседних сайтов), только если дом�
 
 В лог Actions деплой при сбое выводит только состояние контейнеров (`compose ps`) и коды выхода — логи приложений
 могут содержать персональные данные тестировщиков, их смотрят только по SSH. Вывод миграций каждого деплоя —
-в `~/pokatim/migrate.log` на сервере (права 600, перезаписывается), в Actions — только код выхода:
+в `~/pokatim/migrate.log`, подготовки MongoDB — в `~/pokatim/mongo-init.log` на сервере (права 600,
+перезаписываются), в Actions — только код выхода и строки `mongo-init:`:
 
 ```bash
 ssh ubuntu@<сервер>
@@ -191,7 +200,22 @@ dc run --rm migrate                          # повторить миграци
 curl -s http://127.0.0.1:3100/v1/health      # version = развёрнутый тег
 ```
 
-PostgreSQL/Redis — только изнутри: `dc exec postgres psql -U pokatim pokatim`, `dc exec redis redis-cli`.
+MongoDB/Redis — только изнутри. MongoDB — root, пароль — `MONGO_ROOT_PASSWORD` из `.env` (mongosh спросит, в argv и
+историю не попадает): `dc exec mongo mongosh -u root -p --authenticationDatabase admin pokatim`; Redis —
+`dc exec redis redis-cli`.
+
+**Бэкап MongoDB вручную** (ночной дамп в S3 — задача `backup-restore.md`): пароль root mongodump/mongorestore
+спрашивают сами (`-u` без `-p`, нужен TTY — без `-T`), архив — во временный файл контейнера и в `~/pokatim/backup/`:
+
+```bash
+mkdir -p -m 700 ~/pokatim/backup
+dc exec mongo mongodump -u root --authenticationDatabase admin --db pokatim --gzip --archive=/tmp/pokatim.archive.gz
+dc cp mongo:/tmp/pokatim.archive.gz ~/pokatim/backup/pokatim-$(date +%F).archive.gz && dc exec mongo rm /tmp/pokatim.archive.gz
+# восстановление (--drop — заменить коллекции):
+dc cp ~/pokatim/backup/pokatim-<дата>.archive.gz mongo:/tmp/restore.archive.gz
+dc exec mongo mongorestore -u root --authenticationDatabase admin --gzip --archive=/tmp/restore.archive.gz --drop
+dc exec mongo rm /tmp/restore.archive.gz
+```
 
 ## Почта
 
@@ -294,7 +318,7 @@ PostgreSQL/Redis — только изнутри: `dc exec postgres psql -U poka
    Дождаться статуса Verified.
 2. SES → SMTP settings → Create SMTP credentials (IAM-пользователь с `ses:SendRawEmail`) — логин и пароль SMTP
    (это не ключи IAM). Вписать в `.env` сервера `MAIL_RELAY_USERNAME`/`MAIL_RELAY_PASSWORD`; `MAIL_FROM` — умолчание
-   шаблона `'Покатим dev <no-reply@limedolphin.com>'` (прежние умолчания `@on-bike.by` деплой заменит сам).
+   шаблона `'Покатим dev <no-reply@limedolphin.com>'`.
 3. **Sandbox:** новый аккаунт SES шлёт только на подтверждённые в SES адреса (Identities → Email address) и с
    лимитом 200 писем в сутки. Для любых адресов из списка — запросить production access (Account dashboard →
    Request production access).
@@ -319,47 +343,73 @@ PostgreSQL/Redis — только изнутри: `dc exec postgres psql -U poka
 `MAIL_RELAY_PASSWORD` в `.env` и `bash ~/pokatim/bootstrap.sh` с `PUBLIC_HOST=<хост> POKATIM_SKIP_NGINX=1`, затем
 `dc up -d mailpit`.
 
-## Переезд on-bike → pokatim
+## Переезд на MongoDB
 
-Первый деплой после переименования (2026-10-25) переносит стенд сам (`deploy.sh` → `migrate_legacy_env`,
-`stop_legacy_stack`; `bootstrap.sh` → `remove_legacy_vhost`), повторные деплои — ничего не делают:
+Первый деплой после перехода на MongoDB (ADR-0007, 2026-10-26) переезжает сам, повторные — ничего не делают:
 
-1. Нет `~/pokatim/.env`, есть `~/on-bike/.env` → копия `.env` и `mailpit-relay.yml` (600): пароль БД, `JWT_SECRET`,
-   `EMAIL_TOKEN_SECRET`, пароль Mailpit, логин/пароль relay SMTP и `MAIL_FROM` — прежние. Ключ `ON_BIKE_TAG` bootstrap
-   убирает, вместо него — `POKATIM_TAG`.
-2. После pull новых образов — `docker compose -p on-bike-dev down --remove-orphans` **без `-v`** (порты хоста те же).
-3. Свой vhost `pokatim` ставится, затем прежний `/etc/nginx/sites-{available,enabled}/on-bike` снимается — только если
-   его первая строка — маркер прежнего bootstrap (`nginx -t` перед reload; ошибка — файл возвращается, `::warning::`).
-   Сертификат `live/<хост>` от имени сайта не зависит — переиспользуется, certbot не вызывается.
-4. Образы прочищаются и по прежнему label `by.on-bike.project=on-bike`.
+1. `bootstrap.sh` дописывает в `.env` `MONGO_ROOT_PASSWORD`, `MONGO_PASSWORD` и создаёт `mongo-keyfile`.
+2. Поднимается `mongo` (тома `pokatim-dev_mongodata`, `pokatim-dev_mongoconfig`), `mongo-init.js` создаёт набор rs0,
+   root и пользователя приложения, миграции создают коллекции и индексы (`0001_outbox`, `0002_identity`,
+   `0003_identity_ttl`), поднимаются api/worker/web/admin, smoke.
+3. **Только после зелёного smoke** — `retire_postgres`: контейнер сервиса `postgres` проекта `pokatim-dev`
+   останавливается и удаляется, том **`pokatim-dev_pgdata` удаляется** (только он: точное имя и label проекта; чужой
+   или занятый том — `::warning::` и ручная уборка), из `.env` убираются ключи PostgreSQL (`POSTGRES_*`,
+   `DATABASE_URL`). Затем `compose up --remove-orphans` убирает прочие контейнеры удалённых сервисов.
 
-**Данные не переносятся:** новая БД `pokatim` (том `pokatim-dev_pgdata`) стартует пустой — тестовые аккаунты
-регистрируются заново; войти прежними сессиями нельзя (cookie, issuer JWT и ключи хранилищ — новые). Письма Mailpit
-не переносятся (хранилище без тома).
+**Данные не переносятся:** БД MongoDB стартует пустой — тестовые аккаунты регистрируются заново, сессии и cookie
+dev-пользователей не находятся (401 → вход заново). Задачи BullMQ с id событий PG-outbox, оставшиеся в Redis,
+обработчики пропускают (`skipped`).
 
-**Ручная уборка после проверки стенда** (только с согласия автора, данные прежней БД удаляются навсегда):
+Шаг `retire_postgres` станет лишним после первого успешного деплоя — удалить follow-up задачей.
 
-```bash
-ssh ubuntu@<сервер>
-docker volume rm on-bike-dev_pgdata on-bike-dev_redisdata
-rm -rf ~/on-bike        # прежние .env (секреты), migrate.log, файлы стека
-```
+**Репетиция** (`infra/deploy/rehearsal.sh`, CI job `deploy-rehearsal` на PR, меняющих деплой, образ или API): старый
+стек из базовой ветки → упавший деплой не трогает PostgreSQL → переезд → повторный деплой → права пользователя
+`pokatim`. Только с **отдельным** `POKATIM_PROJECT` (по умолчанию `pokatim-rehearsal`; `pokatim-dev` скрипт
+отвергает — иначе `retire_postgres` удалил бы том стенда), временным `HOME` и `POKATIM_SKIP_PULL=1
+POKATIM_SKIP_NGINX=1`; вручную — на машине с Docker и локальными образами (`POKATIM_TAG`, `POKATIM_IMAGE_PREFIX`),
+не на общем сервере (те же порты хоста).
 
-**Откат на тег до переименования** невозможен через `image_tag`: образов `pokatim-*` с прежними тегами нет. Вернуть
-прежний стенд — `docker compose -p pokatim-dev down` (без `-v`), затем в `~/on-bike`:
-`docker compose -p on-bike-dev -f docker-compose.yml --env-file .env up -d` и vhost — из прежнего bootstrap
-(`git show <коммит до переименования>:infra/deploy/bootstrap.sh`).
+**Ручной возврат на PostgreSQL** (данные PostgreSQL dev удалены переездом — только пустая БД; с согласия автора):
+`dc down` (без `-v`), файлы стека из коммита до перехода
+(`git show <коммит до перехода>:infra/deploy/{docker-compose.yml,deploy.sh,bootstrap.sh,env.template}` → `~/pokatim/`),
+в `.env` — `POSTGRES_PASSWORD` (`openssl rand -hex 32`), затем `deploy.sh` с `POKATIM_TAG` образов до перехода.
+
+## Остатки переезда on-bike → pokatim
+
+Переезд стенда on-bike → pokatim (2026-10-25) завершён деплоем `sha-64bf48d`; шаги переезда из скриптов удалены.
+Каталог `~/on-bike` и тома `on-bike-dev_*` на сервере уже убраны. Если что-то осталось — только с согласия автора:
+`docker volume ls --filter name=on-bike-dev_`, `docker volume rm <тома>`; vhost `on-bike` в
+`/etc/nginx/sites-{available,enabled}/` — `sudo rm` обоих, `sudo nginx -t && sudo systemctl reload nginx`.
 
 ## Откат
 
 Actions → `deploy-dev` → Run workflow, `image_tag` = прошлый тег `sha-<7>` (теги — в Summary прошлых прогонов или
 GHCR → Packages → `pokatim-api`). CI и сборка пропускаются, разворачиваются образы этого тега (из GHCR; локальные
-старые образы прочищаются).
+старые образы прочищаются). Workflow тянет образы токеном `GITHUB_TOKEN` сам.
 
-- Миграции не откатываются (в Drizzle нет down): откат кода на версию до миграции работает, только если миграция
-  обратно совместима. Деструктивные миграции — только с человеком (AGENTS.md §4.6).
+- **Через границу БД откат невозможен:** образы до перехода на MongoDB ждут PostgreSQL (`DATABASE_URL`), а деплой
+  кладёт compose с MongoDB — для них только «Ручной возврат на PostgreSQL» (раздел выше).
+- Миграции MongoDB не откатываются (у мигратора нет down): откат кода на версию до миграции работает, только если
+  миграция обратно совместима (expand → contract). Деструктивные миграции — только с человеком (AGENTS.md §4.6).
 - Образ web прошлого тега содержит адрес API того хоста, с которым собран: после смены домена откатываться только на
   сборки нового домена.
+- **Вручную по SSH** (без workflow) `deploy.sh` тянет образы из GHCR сам: пакеты `pokatim-*` сейчас public, логин не
+  нужен; если пакет закрыт — токен `read:packages` первой строкой stdin:
+  `printf '%s\n' "$TOKEN" | GHCR_USER=<логин> GHCR_TOKEN_STDIN=1 POKATIM_TAG=sha-<7> PUBLIC_HOST=<хост> bash ~/pokatim/deploy.sh`
+  (логин — во временный `DOCKER_CONFIG`, удаляется после pull).
+
+## Уборка GHCR
+
+Пакеты прежнего имени `on-bike-{api,web,admin}` (public) деплой не использует с `sha-64bf48d`. Удаляет человек после
+merge перехода на MongoDB (токен с `delete:packages`: `gh auth refresh -s delete:packages`):
+
+```bash
+for p in on-bike-api on-bike-web on-bike-admin; do
+  gh api -X DELETE "/user/packages/container/$p"
+done
+```
+
+Удаление пакета необратимо (теги и версии пропадают); пакеты `pokatim-*` не трогать.
 
 ## Диск
 

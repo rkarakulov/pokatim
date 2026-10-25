@@ -1,7 +1,7 @@
 import { API_VERSION } from '@pokatim/contracts';
 import { Logger } from '@nestjs/common';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { configureHttpApp } from '@rkarakulov/api-kit';
+import { configureHttpApp } from '@rkarakulov/api-kit/core';
 
 import type { Env } from './config/env';
 

@@ -5,14 +5,12 @@ import {
   ApiExceptionFilter,
   ClockModule,
   ConfigModule,
-  DatabaseModule,
-  OutboxModule,
   QueueModule,
   RedisModule,
-} from '@rkarakulov/api-kit';
+} from '@rkarakulov/api-kit/core';
+import { MongoModule, MongoOutboxModule } from '@rkarakulov/api-kit/mongo';
 
 import { env } from './config/env';
-import { schema } from './db';
 import { PROJECT_ERROR_MESSAGES } from './error-messages';
 import { HealthModule } from './modules/health';
 import { IdentityModule } from './modules/identity';
@@ -22,9 +20,10 @@ import { TracksModule } from './modules/tracks';
   imports: [
     ConfigModule.forRoot(env),
     ClockModule,
-    DatabaseModule.forRoot({ schema }),
+    // replica set проверяется на старте: транзакции и outbox без него не работают
+    MongoModule.forRoot(),
     RedisModule,
-    OutboxModule,
+    MongoOutboxModule,
     QueueModule,
     HealthModule,
     TracksModule,

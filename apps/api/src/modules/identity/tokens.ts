@@ -6,7 +6,7 @@ export function randomToken(): string {
   return randomBytes(32).toString('base64url');
 }
 
-/** В БД токены хранятся только так: утечка таблицы не даёт рабочих ссылок и сессий. */
+/** В БД токены хранятся только так: утечка коллекции не даёт рабочих ссылок и сессий. */
 export function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -88,7 +88,7 @@ export function passwordResetLimitKeys(secret: string, email: string, ip: string
 export type LinkPurpose = 'email-verify' | 'password-reset';
 
 /**
- * Токен ссылки из письма — HMAC от id строки (B1, ADR-0002): worker пересобирает ссылку по id из outbox, поэтому
+ * Токен ссылки из письма — HMAC от id ссылки (B1, ADR-0002): worker пересобирает ссылку по id из outbox, поэтому
  * сырой токен не лежит ни в outbox, ни в Redis, ни в логах; ретрай письма — та же ссылка.
  */
 export function deriveLinkToken(secret: string, purpose: LinkPurpose, id: string): string {

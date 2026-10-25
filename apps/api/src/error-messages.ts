@@ -1,5 +1,5 @@
 import type { BaseErrorCode, ErrorCode } from '@pokatim/contracts';
-import { DomainError } from '@rkarakulov/api-kit';
+import { DomainError } from '@rkarakulov/api-kit/core';
 
 /**
  * Тексты кодов ошибок проекта для фильтра ошибок базы (`API_ERROR_MESSAGES` в AppModule).

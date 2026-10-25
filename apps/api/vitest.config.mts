@@ -19,7 +19,7 @@ export default defineConfig({
         },
       },
       {
-        // реальные PostgreSQL (pokatim_test) и Redis (db 1); файлы — по очереди, общая БД
+        // реальные MongoDB (replica set, pokatim_test) и Redis (db 1); файлы — по очереди, общая БД
         extends: true,
         test: {
           name: 'integration',

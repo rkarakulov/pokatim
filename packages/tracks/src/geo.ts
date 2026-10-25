@@ -9,7 +9,7 @@ export interface TrackPoint {
 const EARTH_RADIUS_M = 6_371_008.8;
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
-/** Расстояние по большому кругу, м. Для клиентского pre-check; авторитетный расчёт — PostGIS на сервере. */
+/** Расстояние по большому кругу, м. Для клиентского pre-check; авторитетный расчёт — тот же код в worker (ADR-0007). */
 export function haversineMeters(a: TrackPoint, b: TrackPoint): number {
   const dLat = toRad(b.lat - a.lat);
   const dLon = toRad(b.lon - a.lon);

@@ -1,10 +1,15 @@
 import { ApiError, RegisterResponse, VerificationLinkInfo } from '@pokatim/contracts';
-import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, DAY, MINUTE, type Harness } from '../../../test/harness';
-import { activeLinkToken, call, confirm, register, resend } from '../../../test/identity';
-import { emailVerificationTokens, users } from './identity.schema';
+import {
+  activeLinkToken,
+  call,
+  collections,
+  confirm,
+  register,
+  resend,
+} from '../../../test/identity';
 import { randomToken } from './tokens';
 
 let h: Harness;
@@ -20,8 +25,8 @@ afterAll(async () => {
 
 const describeLink = (token: string) => call(h, 'GET', `/v1/auth/verification/${token}`);
 const snapshot = async () => ({
-  users: await h.db.select().from(users),
-  tokens: await h.db.select().from(emailVerificationTokens),
+  users: await collections(h).users.find().toArray(),
+  tokens: await collections(h).emailVerificationTokens.find().toArray(),
 });
 
 async function registered() {
@@ -55,7 +60,7 @@ describe('GET /v1/auth/verification/:token', () => {
       email: 'rider@example.com',
     });
 
-    await h.db.update(users).set({ emailVerifiedAt: h.clock.now() });
+    await collections(h).users.updateMany({}, { $set: { emailVerifiedAt: h.clock.now() } });
     expect((await describeLink(link)).body).toEqual({
       state: 'verified',
       email: 'rider@example.com',
@@ -78,16 +83,16 @@ describe('POST /v1/auth/verification/confirm', () => {
     const first = await confirm(h, link);
     expect(first.status).toBe(200);
     expect(first.body).toEqual({ state: 'verified', email: 'rider@example.com' });
-    const [user] = await h.db.select().from(users);
+    const [user] = await collections(h).users.find().toArray();
     expect(user?.emailVerifiedAt).toEqual(h.clock.now());
-    const [token] = await h.db.select().from(emailVerificationTokens);
+    const [token] = await collections(h).emailVerificationTokens.find().toArray();
     expect(token?.usedAt).toEqual(h.clock.now());
 
     h.clock.advance(DAY * 2);
     const again = await confirm(h, link);
     expect(again.status).toBe(200);
     expect(again.body).toEqual({ state: 'verified', email: 'rider@example.com' });
-    const [unchanged] = await h.db.select().from(users);
+    const [unchanged] = await collections(h).users.find().toArray();
     expect(unchanged?.emailVerifiedAt).toEqual(user?.emailVerifiedAt);
   });
 
@@ -103,7 +108,7 @@ describe('POST /v1/auth/verification/confirm', () => {
       message: 'Ссылка устарела',
       details: { email: 'rider@example.com' },
     });
-    const [user] = await h.db.select().from(users);
+    const [user] = await collections(h).users.find().toArray();
     expect(user?.emailVerifiedAt).toBeNull();
   });
 
@@ -129,7 +134,7 @@ describe('POST /v1/auth/verification/confirm', () => {
     const { link } = await registered();
     const results = await Promise.all(Array.from({ length: 5 }, () => confirm(h, link)));
     expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200, 200]);
-    const tokens = await h.db.select().from(emailVerificationTokens);
+    const tokens = await collections(h).emailVerificationTokens.find().toArray();
     expect(tokens.filter((t) => t.usedAt !== null)).toHaveLength(1);
   });
 });
@@ -156,7 +161,7 @@ describe('POST /v1/auth/verification/resend', () => {
     expect(res.body).toEqual({ resendAvailableInSec: 60 });
     expect((await describeLink(old)).body).toMatchObject({ state: 'expired' });
     expect((await describeLink(await activeLinkToken(h))).body).toMatchObject({ state: 'valid' });
-    const tokens = await h.db.select().from(emailVerificationTokens);
+    const tokens = await collections(h).emailVerificationTokens.find().toArray();
     expect(tokens.filter((t) => t.supersededAt === null)).toHaveLength(1);
   });
 
@@ -196,7 +201,7 @@ describe('POST /v1/auth/verification/resend', () => {
 
     expect((await resend(h, { registrationToken })).body).toEqual({ state: 'verified' });
     expect((await resend(h, { linkToken: link })).body).toEqual({ state: 'verified' });
-    expect(await h.db.select().from(emailVerificationTokens)).toHaveLength(1);
+    expect(await collections(h).emailVerificationTokens.countDocuments()).toBe(1);
   });
 
   it('чужой или просроченный токен регистрации — 401; неизвестная ссылка — 404', async () => {
@@ -209,10 +214,10 @@ describe('POST /v1/auth/verification/resend', () => {
 
   it('удалённый аккаунт — ссылка больше не действует (404)', async () => {
     const { link } = await registered();
-    await h.db
-      .update(users)
-      .set({ deletedAt: h.clock.now() })
-      .where(eq(users.email, 'rider@example.com'));
+    await collections(h).users.updateOne(
+      { email: 'rider@example.com' },
+      { $set: { deletedAt: h.clock.now() } },
+    );
     expect((await describeLink(link)).status).toBe(404);
     expect((await confirm(h, link)).status).toBe(404);
   });

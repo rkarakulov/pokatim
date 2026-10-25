@@ -1,17 +1,14 @@
 import { ApiError, RegisterResponse, ValidationErrorDetails } from '@pokatim/contracts';
-import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { call, register, validRegistration } from '../../../test/identity';
-import { outbox } from '../../db';
 import {
-  emailVerificationTokens,
-  registrationTokens,
-  sessions,
-  userConsents,
-  users,
-} from './identity.schema';
+  call,
+  collections,
+  outboxEvents,
+  register,
+  validRegistration,
+} from '../../../test/identity';
 import { sha256 } from './tokens';
 
 let h: Harness;
@@ -38,17 +35,19 @@ describe('POST /v1/auth/register', () => {
       resendAvailableInSec: 60,
     });
 
-    const [user] = await h.db.select().from(users);
+    const db = collections(h);
+    const [user] = await db.users.find().toArray();
     expect(user).toMatchObject({
       email: 'rider@example.com',
       birthDate: '1990-05-01',
       emailVerifiedAt: null,
       deletedAt: null,
       createdAt: h.clock.now(),
+      version: 0,
     });
     expect(user?.passwordHash).toMatch(/^\$argon2id\$/);
 
-    const consents = await h.db.select().from(userConsents);
+    const consents = await db.userConsents.find().toArray();
     expect(consents.map((c) => [c.kind, c.version, c.acceptedAt])).toEqual(
       expect.arrayContaining([
         ['personal_data', 'test-agreement', h.clock.now()],
@@ -56,23 +55,23 @@ describe('POST /v1/auth/register', () => {
       ]),
     );
 
-    const [link] = await h.db.select().from(emailVerificationTokens);
+    const [link] = await db.emailVerificationTokens.find().toArray();
     expect(link?.expiresAt).toEqual(new Date(h.clock.now().getTime() + 24 * 3600_000));
 
-    const [registration] = await h.db.select().from(registrationTokens);
+    const [registration] = await db.registrationTokens.find().toArray();
     expect(registration?.tokenHash).toBe(sha256(body.registrationToken));
     expect(registration?.expiresAt).toEqual(link?.expiresAt);
 
-    // в outbox — только id строки ссылки: ни токенов, ни e-mail
-    const events = await h.db.select().from(outbox);
+    // в outbox — только id ссылки: ни токенов, ни e-mail
+    const events = await outboxEvents(h);
     expect(events).toEqual([
       expect.objectContaining({
         type: 'identity.verification-email-requested',
-        payload: { verificationTokenId: link?.id },
+        payload: { verificationTokenId: link?._id },
         publishedAt: null,
       }),
     ]);
-    expect(await h.db.select().from(sessions)).toEqual([]);
+    expect(await db.sessions.countDocuments()).toBe(0);
   });
 
   it('400 VALIDATION_FAILED с кодами полей: младше 18, без согласия, короткий пароль', async () => {
@@ -94,7 +93,7 @@ describe('POST /v1/auth/register', () => {
       ]),
     );
     expect(JSON.stringify(res.body)).not.toContain('short');
-    expect(await h.db.select().from(users)).toEqual([]);
+    expect(await collections(h).users.countDocuments()).toBe(0);
   });
 
   it('409 EMAIL_TAKEN — адрес занят (без учёта регистра), даже неподтверждённым', async () => {
@@ -109,10 +108,10 @@ describe('POST /v1/auth/register', () => {
 
   it('409 EMAIL_UNAVAILABLE — адрес удалённого аккаунта, без раскрытия причины', async () => {
     await register(h);
-    await h.db
-      .update(users)
-      .set({ deletedAt: h.clock.now() })
-      .where(eq(users.email, 'rider@example.com'));
+    await collections(h).users.updateOne(
+      { email: 'rider@example.com' },
+      { $set: { deletedAt: h.clock.now() } },
+    );
 
     const res = await register(h);
 
@@ -129,7 +128,7 @@ describe('POST /v1/auth/register', () => {
     expect(results.filter((r) => r.status === 409).map((r) => ApiError.parse(r.body).code)).toEqual(
       ['EMAIL_TAKEN', 'EMAIL_TAKEN', 'EMAIL_TAKEN'],
     );
-    expect(await h.db.select().from(users)).toHaveLength(1);
+    expect(await collections(h).users.countDocuments()).toBe(1);
   });
 
   it('429 RATE_LIMITED с Retry-After после 20 регистраций с одного IP за час', async () => {

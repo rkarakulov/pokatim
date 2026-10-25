@@ -1,9 +1,15 @@
-import { ENV, MAILER } from '@rkarakulov/api-kit';
-import { sql } from 'drizzle-orm';
+import { ENV, MAILER } from '@rkarakulov/api-kit/core';
+import {
+  MIGRATIONS_COLLECTION,
+  MongoOutboxPublisher,
+  MongoOutboxWriter,
+  OUTBOX_COLLECTION,
+} from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { outbox } from '../src/db';
-import { users } from '../src/modules/identity/identity.schema';
+import { MongoTransactions, type MongoOutboxDoc } from '../src/db';
+import { migrations } from '../src/db/migrations';
+import { identityCollections } from '../src/modules/identity/identity.collection';
 import { createHarness, type Harness } from './harness';
 import { register } from './identity';
 
@@ -20,10 +26,13 @@ afterAll(async () => {
   await h.close();
 });
 
-describe('стенд pokatim (обёртка createApiHarness)', () => {
-  it('HTTP API pokatim под префиксом версии контракта', async () => {
+const outbox = () => h.db.collection<MongoOutboxDoc>(OUTBOX_COLLECTION);
+
+describe('стенд pokatim (обёртка createMongoApiHarness)', () => {
+  it('HTTP API pokatim под префиксом версии контракта: /v1/health — 200, БД доступна', async () => {
     const res = await h.app.inject({ method: 'GET', url: '/v1/health' });
     expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: 'ok', checks: { database: 'up' } });
   });
 
   it('HTTP-настройка проекта (configureHttp, как в main.ts): CORS только для CORS_ORIGINS', async () => {
@@ -48,18 +57,43 @@ describe('стенд pokatim (обёртка createApiHarness)', () => {
     expect(h.worker.get(MAILER)).toBe(h.mailer);
   });
 
-  it('reset() чистит таблицы pokatim и outbox, справочник PostGIS не трогает', async () => {
+  it('worker-граф с маршрутами outbox проекта собирается: публикатор есть', () => {
+    expect(h.worker.get(MongoOutboxPublisher)).toBeInstanceOf(MongoOutboxPublisher);
+  });
+
+  it('outbox в транзакции: откат — события нет, коммит — есть', async () => {
+    const transactions = h.app.get(MongoTransactions);
+    const writer = h.app.get(MongoOutboxWriter);
+    await expect(
+      transactions.run(async (session) => {
+        await writer.append(session, { type: 'test.event', payload: { id: 1 } });
+        throw new Error('откат');
+      }),
+    ).rejects.toThrow('откат');
+    expect(await outbox().countDocuments()).toBe(0);
+
+    const id = await transactions.run((session) =>
+      writer.append(session, { type: 'test.event', payload: { id: 2 } }),
+    );
+    expect(await outbox().findOne({ _id: id })).toMatchObject({ publishedAt: null });
+  });
+
+  it('reset() чистит коллекции pokatim и outbox; учёт миграций и индексы остаются', async () => {
+    const { users } = identityCollections(h.db);
     expect((await register(h)).status).toBe(201);
-    expect(await h.db.select().from(users)).toHaveLength(1);
-    expect(await h.db.select().from(outbox)).toHaveLength(1);
+    expect(await users.countDocuments()).toBe(1);
+    expect(await outbox().countDocuments()).toBe(1);
 
     await h.reset();
 
-    expect(await h.db.select().from(users)).toEqual([]);
-    expect(await h.db.select().from(outbox)).toEqual([]);
-    const { rows } = await h.db.execute<{ n: number }>(
-      sql`SELECT count(*)::int AS n FROM spatial_ref_sys`,
-    );
-    expect(rows[0]?.n).toBeGreaterThan(0);
+    expect(await users.countDocuments()).toBe(0);
+    expect(await outbox().countDocuments()).toBe(0);
+    expect((await users.indexes()).map((index) => index.name)).toContain('users_email_unique');
+    expect(await h.db.collection(MIGRATIONS_COLLECTION).countDocuments()).toBe(migrations.length);
+  });
+
+  it('миграции применены на чистой *_test: индекс outbox_unpublished_idx на месте', async () => {
+    const indexes = await outbox().indexes();
+    expect(indexes.map((index) => index.name)).toContain('outbox_unpublished_idx');
   });
 });

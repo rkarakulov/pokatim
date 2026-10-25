@@ -7,10 +7,11 @@ import type {
   ResendVerificationResponse,
   VerificationLinkInfo,
 } from '@pokatim/contracts';
-import { CLOCK, type Clock, ENV, OutboxWriter, RateLimiter } from '@rkarakulov/api-kit';
+import { CLOCK, type Clock, ENV, RateLimiter } from '@rkarakulov/api-kit/core';
+import { MongoOutboxWriter, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import type { Env } from '../../config/env';
-import type { DbExecutor } from '../../db';
+import { type DbSession, MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { VERIFICATION_EMAIL_REQUESTED, type VerificationEmailRequested } from './identity.events';
 import { IDENTITY_POLICY } from './identity.policy';
@@ -34,15 +35,16 @@ function isStale(token: VerificationTokenState, now: Date): boolean {
 export class VerificationService {
   constructor(
     private readonly repository: IdentityRepository,
-    private readonly outbox: OutboxWriter,
+    private readonly transactions: MongoTransactions,
+    private readonly outbox: MongoOutboxWriter,
     private readonly rateLimiter: RateLimiter,
     @Inject(ENV) private readonly env: Env,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   /** Новая ссылка и событие на письмо — в транзакции вызывающего. Возвращает срок ссылки. */
-  async issueLink(tx: DbExecutor, userId: string, now: Date): Promise<Date> {
-    const id = await this.repository.nextId(tx);
+  async issueLink(tx: DbSession, userId: string, now: Date): Promise<Date> {
+    const id = uuidv7();
     const expiresAt = new Date(now.getTime() + IDENTITY_POLICY.verificationLinkTtlMs);
     const tokenHash = sha256(deriveVerificationToken(this.env.EMAIL_TOKEN_SECRET, id));
     await this.repository.insertVerificationToken(tx, {
@@ -72,7 +74,7 @@ export class VerificationService {
 
   /** `GET` по ссылке: только чтение. `verified` важнее `expired`. */
   async describeLink(token: string): Promise<VerificationLinkInfo> {
-    const found = await this.repository.findVerificationByHash(this.repository.db, sha256(token));
+    const found = await this.repository.findVerificationByHash(sha256(token));
     if (!found || found.user.deletedAt) throw notFound();
     const { email } = found.user;
     if (found.user.emailVerifiedAt) return { state: 'verified', email };
@@ -84,15 +86,15 @@ export class VerificationService {
   async confirm(token: string): Promise<ConfirmVerificationResponse> {
     const tokenHash = sha256(token);
     const now = this.clock.now();
-    const found = await this.repository.findVerificationByHash(this.repository.db, tokenHash);
+    const found = await this.repository.findVerificationByHash(tokenHash);
     if (!found) throw notFound();
 
-    return this.repository.db.transaction(async (tx) => {
+    return this.transactions.run(async (tx) => {
       const user = await this.repository.lockUser(tx, found.user.id);
       if (!user || user.deletedAt) throw notFound();
       if (user.emailVerifiedAt) return { state: 'verified', email: user.email };
       // под блокировкой аккаунта: ссылку могли заменить параллельным повтором
-      const current = await this.repository.findVerificationByHash(tx, tokenHash);
+      const current = await this.repository.findVerificationByHash(tokenHash, tx);
       if (!current || isStale(current.token, now)) {
         const details: LinkExpiredDetails = { email: user.email };
         throw domainError('LINK_EXPIRED', 410, details);
@@ -114,7 +116,7 @@ export class VerificationService {
 
     await this.takeResendAllowance(owner.id, now);
 
-    return this.repository.db.transaction(async (tx) => {
+    return this.transactions.run(async (tx) => {
       const user = await this.repository.lockUser(tx, owner.id);
       if (!user || user.deletedAt) throw notFound();
       if (user.emailVerifiedAt) return { state: 'verified' as const };
@@ -126,7 +128,7 @@ export class VerificationService {
   }
 
   private async ownerByRegistrationToken(token: string, now: Date): Promise<UserState> {
-    const found = await this.repository.findRegistrationByHash(this.repository.db, sha256(token));
+    const found = await this.repository.findRegistrationByHash(sha256(token));
     if (!found || found.user.deletedAt || found.token.consumedAt || found.token.expiresAt <= now) {
       throw unauthorized();
     }
@@ -134,7 +136,7 @@ export class VerificationService {
   }
 
   private async ownerByLinkToken(token: string): Promise<UserState> {
-    const found = await this.repository.findVerificationByHash(this.repository.db, sha256(token));
+    const found = await this.repository.findVerificationByHash(sha256(token));
     if (!found || found.user.deletedAt) throw notFound();
     return found.user;
   }

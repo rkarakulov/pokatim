@@ -5,9 +5,10 @@ import {
   type RegisterResponse,
   type Session,
 } from '@pokatim/contracts';
-import { CLOCK, type Clock, ENV, RateLimiter } from '@rkarakulov/api-kit';
+import { CLOCK, type Clock, ENV, RateLimiter } from '@rkarakulov/api-kit/core';
 
 import type { Env } from '../../config/env';
+import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { IDENTITY_POLICY } from './identity.policy';
 import { IdentityRepository } from './identity.repository';
@@ -30,6 +31,7 @@ const invalidCredentials = () => domainError('INVALID_CREDENTIALS', 401);
 export class SignInService implements OnModuleInit {
   constructor(
     private readonly repository: IdentityRepository,
+    private readonly transactions: MongoTransactions,
     private readonly sessions: SessionService,
     private readonly registration: RegistrationService,
     private readonly hasher: PasswordHasher,
@@ -48,14 +50,15 @@ export class SignInService implements OnModuleInit {
     const email = normalizeEmail(input.email);
     await this.takeAttempt(email, ip, now);
 
-    const account = await this.repository.findCredentialsByEmail(this.repository.db, email);
+    const account = await this.repository.findCredentialsByEmail(email);
     const known = account !== undefined && account.deletedAt === null;
     const passwordHash = known ? account.passwordHash : await this.hasher.dummyHash();
     const valid = await this.hasher.verify(passwordHash, input.password);
     if (!known || !valid) throw invalidCredentials();
 
-    return this.repository.db.transaction(async (tx) => {
-      // под блокировкой аккаунта: подтверждение, очистка, poll и сброс пароля того же аккаунта идут по очереди
+    return this.transactions.run(async (tx) => {
+      // под блокировкой аккаунта (R1): подтверждение, очистка, poll и сброс пароля того же аккаунта идут по очереди;
+      // сброс «в процессе» даёт конфликт записи — вход повторяется после его коммита и видит новый хеш
       const user = await this.repository.lockUserCredentials(tx, account.id);
       // пароль сменили между проверкой и блокировкой (сброс отозвал все сессии) — старый пароль сессию не получает (R4)
       if (!user || user.deletedAt || user.passwordHash !== account.passwordHash) {

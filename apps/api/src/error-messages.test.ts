@@ -1,6 +1,6 @@
 import type { ArgumentsHost } from '@nestjs/common';
 import { ApiError, BASE_ERROR_CODES, ErrorCode } from '@pokatim/contracts';
-import { ApiExceptionFilter, isDomainError, type ApiErrorMessages } from '@rkarakulov/api-kit';
+import { ApiExceptionFilter, isDomainError, type ApiErrorMessages } from '@rkarakulov/api-kit/core';
 import { describe, expect, it } from 'vitest';
 
 import { domainError, PROJECT_ERROR_MESSAGES } from './error-messages';

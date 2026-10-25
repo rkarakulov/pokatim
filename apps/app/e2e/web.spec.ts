@@ -173,10 +173,7 @@ test('PWA: manifest бренда без ошибок, устанавливает
 });
 
 test.describe('с API', () => {
-  test.skip(
-    !WITH_API,
-    'нужны API, worker, PostgreSQL, Redis и Mailpit: E2E_API=1 (runbook, «Web»)',
-  );
+  test.skip(!WITH_API, 'нужны API, worker, MongoDB, Redis и Mailpit: E2E_API=1 (runbook, «Web»)');
 
   test('регистрация → письмо → подтверждение → вход; вход переживает перезагрузку (cookie)', async ({
     page,

@@ -55,6 +55,8 @@ GitHub Packages): компоненты дизайн-системы `@rkarakulov/
 outbox, очереди, лимитер, почта, HTTP, ошибки), тестовый стенд `@rkarakulov/test-kit`, ядра `design-tokens`,
 `i18n-core`, `contracts-core`, `api-client-core`, пресеты `@rkarakulov/config`. В проекте — бренд, домен, тексты и
 композиция. Изменение общего кода — задача и релиз в app-foundation, не копия в проекте.
+БД — MongoDB: из пакетов API — только входы `@rkarakulov/api-kit/core`, `@rkarakulov/api-kit/mongo`,
+`@rkarakulov/test-kit/core`, `@rkarakulov/test-kit/mongo` (корни пакетов — PostgreSQL, импорт запрещён ESLint).
 
 Шаблон: `.copier-answers.yml` — ответы и версия шаблона. `.ai/dev-kit/`, `.agents/skills/`, `.codex/agents/`
 генерирует база — руками не правятся, обновляются `copier update`.
@@ -73,13 +75,12 @@ outbox, очереди, лимитер, почта, HTTP, ошибки), тес�
 | `pnpm build:web` | web-сборка приложения: SSR + PWA (`apps/app/dist`, service worker) |
 | `pnpm --filter @pokatim/app start:web` | production web-сервер на `dist` (env — `docs/runbooks/local-dev.md`, «Web») |
 | `pnpm e2e:web` | Playwright-смоук web в браузере (сначала `build:web`; нужен Chrome или `PW_CHANNEL`); с API — `E2E_API=1` (регистрация → письмо → вход, runbook «Web») |
-| `pnpm infra:up` / `pnpm infra:down` | docker compose: PostgreSQL 18 + PostGIS, Redis, Mailpit |
+| `pnpm infra:up` / `pnpm infra:down` | docker compose: MongoDB 8.0 (replica set), Redis, Mailpit |
 | `pnpm check` | **completion gate**: format:check + lint + arch:check + typecheck + test |
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | по отдельности |
 | `pnpm format` | prettier --write |
 | `pnpm arch:check` | dependency-cruiser |
-| `pnpm --filter @pokatim/api db:generate` | сгенерировать миграцию Drizzle |
-| `pnpm --filter @pokatim/api db:migrate` | применить миграции |
+| `pnpm --filter @pokatim/api db:migrate` | применить миграции MongoDB (`apps/api/src/db/migrations`) |
 | `pnpm --filter @pokatim/<pkg> <script>` | скрипт одного пакета |
 | `uvx copier update --defaults` | обновить проект до новой версии шаблона app-foundation |
 
@@ -98,7 +99,8 @@ outbox, очереди, лимитер, почта, HTTP, ошибки), тес�
 4. **Пакет выделяется,** только когда его используют ≥2 приложения. Модули API — папки, не пакеты.
    Общий для проектов код — в app-foundation, не в проекте.
 5. **Очереди.** Тяжёлое и асинхронное — задачи BullMQ в `worker`. Задачи идемпотентны.
-   Доменные события между модулями — через transactional outbox в Postgres.
+   Доменные события между модулями — через transactional outbox в MongoDB (коллекция `outbox` в той же
+   транзакции).
 6. **Миграции** — отдельный шаг деплоя, никогда при старте сервиса. Деструктивные — только с человеком.
 7. **Время** храним в UTC, показываем в Europe/Minsk.
 8. **Секреты** никогда не попадают в git, логи, task.md и ответы. Только `.env*` вне git и переменные окружения.
@@ -175,7 +177,7 @@ finishing-a-development-branch). Если его нет — выполни ту 
 | Файл | Зона |
 |---|---|
 | `.claude/rules/backend.md` | `apps/api/**` |
-| `.claude/rules/db.md` | миграции, Drizzle-схемы, PostGIS |
+| `.claude/rules/db.md` | миграции, коллекции и индексы MongoDB |
 | `.claude/rules/contracts.md` | `packages/contracts/**`, `packages/api-client/**` |
 | `.claude/rules/app.md` | `apps/app/**` |
 | `.claude/rules/web.md` | `apps/admin/**` |

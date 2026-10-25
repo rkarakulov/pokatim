@@ -5,7 +5,7 @@ import { APP_FILTER } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { ApiError } from '@pokatim/contracts';
-import { ApiExceptionFilter, createFastifyAdapter } from '@rkarakulov/api-kit';
+import { ApiExceptionFilter, createFastifyAdapter } from '@rkarakulov/api-kit/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Env } from './config/env';

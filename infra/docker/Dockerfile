@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.10
 # Образы деплоя pokatim (docs/runbooks/deploy.md). Контекст — корень репозитория, цели:
-#   api   — NestJS HTTP (dist/main.js), worker (dist/worker.js) и миграции (drizzle-kit migrate) — один образ;
+#   api   — NestJS HTTP (dist/main.js), worker (dist/worker.js) и миграции MongoDB (dist/db/migrate.js) — один образ;
 #   web   — SSR-сервер приложения (apps/app/server, expo-server) со сборкой `build:web`;
 #   admin — статика панели «Протокол» под путём /admin/ (nginx без root).
 # Сборка (linux/amd64; токен GitHub Packages — build secret, в слои не попадает):
@@ -44,9 +44,9 @@ COPY . .
 # ---------- api: сборка и минимальный node_modules ----------
 FROM deps AS build-api
 RUN pnpm turbo run build --filter=@pokatim/api \
-    && node infra/docker/runtime-deps.mjs /repo /out ./apps/api drizzle-kit \
+    && node infra/docker/runtime-deps.mjs /repo /out ./apps/api \
     && mkdir -p /out/apps/api \
-    && cp -r apps/api/dist apps/api/drizzle apps/api/drizzle.config.ts apps/api/package.json /out/apps/api/
+    && cp -r apps/api/dist apps/api/package.json /out/apps/api/
 
 FROM ${NODE_IMAGE} AS api
 LABEL org.opencontainers.image.source="https://github.com/rkarakulov/pokatim" \
@@ -57,7 +57,7 @@ COPY --from=build-api /out /app
 WORKDIR /app/apps/api
 USER node
 EXPOSE 3000
-# worker: node dist/worker.js; миграции: node ../../node_modules/drizzle-kit/bin.cjs migrate
+# worker: node dist/worker.js; миграции: node dist/db/migrate.js (MONGO_URL)
 CMD ["node", "dist/main.js"]
 
 # ---------- web: build:web (SSR + PWA) и сервер ----------

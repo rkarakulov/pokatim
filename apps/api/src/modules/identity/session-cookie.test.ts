@@ -4,7 +4,7 @@ import { Controller, HttpCode, Post, Res } from '@nestjs/common';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { SESSION_COOKIE, type Session } from '@pokatim/contracts';
-import { CLOCK, createFastifyAdapter } from '@rkarakulov/api-kit';
+import { CLOCK, createFastifyAdapter } from '@rkarakulov/api-kit/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { SessionCookie } from './session-cookie';

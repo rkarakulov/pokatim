@@ -29,4 +29,4 @@ pokatim: доменные правила поверх правил шаблон�
 | task2 | `brainstorming` (если размыто) → `test-driven-development` → `verification-before-completion` |
 | task3 | `brainstorming` (обязательно) → `writing-plans` → `subagent-driven-development` / `test-driven-development` → `receiving-code-review` → `verification-before-completion` → `finishing-a-development-branch` |
 
-Документацию библиотек (NestJS, Expo, Drizzle, BullMQ, TanStack Query, MapLibre …) сверяй через context7, а не по памяти.
+Документацию библиотек (NestJS, Expo, драйвер MongoDB, BullMQ, TanStack Query, MapLibre …) сверяй через context7, а не по памяти.

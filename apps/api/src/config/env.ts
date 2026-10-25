@@ -1,4 +1,7 @@
-import { defineEnv, mailEnvShape } from '@rkarakulov/api-kit';
+import { existsSync } from 'node:fs';
+
+import { defineCoreEnv, mailEnvShape } from '@rkarakulov/api-kit/core';
+import { mongoEnvShape } from '@rkarakulov/api-kit/mongo';
 import { z } from 'zod';
 
 const Secret = z.string().min(32, 'не короче 32 символов');
@@ -25,8 +28,12 @@ const corsOrigins = z
     ),
   );
 
-/** Окружение проекта: основа базы (процесс, PostgreSQL, Redis, TRUST_PROXY) + почта; свои переменные — сюда. */
-export const env = defineEnv({
+/**
+ * Окружение проекта: основа базы (процесс, Redis, TRUST_PROXY) + MongoDB (`MONGO_URL` с именем БД) + почта;
+ * свои переменные — сюда.
+ */
+export const env = defineCoreEnv({
+  ...mongoEnvShape,
   ...mailEnvShape,
   /** Подпись access JWT (HS256). */
   JWT_SECRET: Secret,
@@ -47,3 +54,9 @@ export type Env = ReturnType<typeof env.load>;
  * Локально подхватываем apps/api/.env; уже заданные переменные (прод, CI) он не перекрывает.
  */
 export const loadEnv = (source?: NodeJS.ProcessEnv): Env => env.load(source);
+
+/** Только `MONGO_URL` — для `db:migrate`: отдельному шагу деплоя не нужны Redis и почта. `.env` — как у `loadEnv`. */
+export function loadMongoUrl(source: NodeJS.ProcessEnv = process.env): string {
+  if (source === process.env && existsSync('.env')) process.loadEnvFile('.env');
+  return z.object(mongoEnvShape).parse(source).MONGO_URL;
+}

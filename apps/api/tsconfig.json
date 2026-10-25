@@ -1,9 +1,7 @@
 {
   "extends": "@rkarakulov/config/tsconfig.library.json",
-  // Только проверка типов (сборка — SWC в CommonJS). Пакеты базы @rkarakulov/* — ESM: с NodeNext tsc
-  // берёт для кода api CJS-декларации drizzle-orm (.d.cts), а для деклараций api-kit — ESM (.d.ts), и
-  // типы одной библиотеки не совместимы. Bundler — одни декларации (import) для всех; в рантайме
-  // drizzle сопоставляет сущности по entityKind (Symbol.for), а не по классу.
+  // Только проверка типов (сборка — SWC в CommonJS). Пакеты базы @rkarakulov/* — ESM с subpath-входами
+  // (/core, /mongo): Bundler — одни декларации (import) для кода api и пакетов базы.
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "Bundler",
@@ -15,5 +13,5 @@
     "strictPropertyInitialization": false,
     "outDir": "dist"
   },
-  "include": ["src", "test", "drizzle.config.ts", "vitest.config.mts"]
+  "include": ["src", "test", "vitest.config.mts"]
 }

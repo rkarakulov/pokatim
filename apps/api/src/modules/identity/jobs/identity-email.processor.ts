@@ -1,5 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import type { OutboxJobData } from '@rkarakulov/api-kit';
+import type { OutboxJobData } from '@rkarakulov/api-kit/core';
 import type { Job } from 'bullmq';
 
 import { QUEUE } from '../../../queues';

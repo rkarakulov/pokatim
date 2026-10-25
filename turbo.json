@@ -21,7 +21,7 @@
     },
     "test": {
       "dependsOn": ["^typecheck"],
-      "env": ["DATABASE_URL_TEST", "REDIS_URL_TEST"]
+      "env": ["MONGO_URL_TEST", "REDIS_URL_TEST"]
     },
     "dev": {
       "dependsOn": ["^build"],

@@ -6,10 +6,10 @@
 
 ```
 app (Expo)    ─┐
-admin (Vite)  ─┼─ HTTPS ─ Caddy ─ api (NestJS) ─┬─ PostgreSQL 18 + PostGIS
+admin (Vite)  ─┼─ HTTPS ─ Caddy ─ api (NestJS) ─┬─ MongoDB 8.0 (replica set, ADR-0007)
 web (app, SSR)─┘                                ├─ Redis (BullMQ, rate-limit)
                                                 └─ S3 (треки, фото, карточки, бэкапы)
-                         worker (NestJS, BullMQ) ─ те же PG / Redis / S3; ffmpeg, Skia
+                         worker (NestJS, BullMQ) ─ те же MongoDB / Redis / S3; ffmpeg, Skia
 ```
 
 Одна VPS, Docker Compose (`infra/`). Kubernetes, CDN, поиск, push, WebSocket — вне MVP.
@@ -23,7 +23,8 @@ gamification · sharing · notifications · moderation · media
 
 ## Ключевые потоки
 
-- **Заезд:** файл (resumable upload) → S3 → задача разбора трека → проверка коридора (PostGIS) →
+- **Заезд:** файл (resumable upload) → S3 → задача разбора трека → проверка коридора (`packages/tracks` в worker;
+  «рядом»/bbox — `2dsphere` MongoDB, ADR-0007) →
   результат, кластер, флаги правдоподобия → пересчёт мест → уведомление in-app.
 - **Протокол:** чек-лист публикации → публикация → финальные результаты → пересчёт сезона.
 - **Спор:** подача → ответы обвиняемого (append-only) → решение → DQ / отклонение → пересчёт.
@@ -34,19 +35,21 @@ gamification · sharing · notifications · moderation · media
 ```
 app ─ POST /v1/auth/register ─► api: users + user_consents + ссылка + registration_token + outbox
                                           (одна транзакция; Redis: пауза повтора 60 с, лимит по IP)
-worker: outbox-публикатор ─► очередь identity-email ─► захват отправки (send_claimed_at, 60 с)
-        ─► SMTP (dev — Mailpit) ─► sent_at; доставка at-least-once, дубль — с той же ссылкой
-ссылка …auth/verify/<token> ─ GET (только чтение) ─ POST confirm ─► email_verified_at
+worker: outbox-публикатор ─► очередь identity-email ─► захват отправки (sendClaimedAt, 60 с)
+        ─► SMTP (dev — Mailpit) ─► sentAt; доставка at-least-once, дубль — с той же ссылкой
+ссылка …auth/verify/<token> ─ GET (только чтение) ─ POST confirm ─► emailVerifiedAt
 app ─ POST /v1/auth/registration/poll ─► pending | verified + сессия (обмен один раз)
 worker: identity-maintenance, 03:00 Europe/Minsk ─► удаление неподтверждённых старше 7 дней
 ```
 
-- Токен ссылки — HMAC от id строки (`EMAIL_TOKEN_SECRET`), в БД только sha256; ретрай письма — та же ссылка.
+- Токен ссылки — HMAC от id ссылки (`EMAIL_TOKEN_SECRET`), в БД только sha256; ретрай письма — та же ссылка.
 - Повтор письма (`resend`): пауза 60 с и ≤ 10 за сутки (Redis, атомарно через Lua); новая ссылка
   отменяет прежние и продлевает токен регистрации.
-- Мутации аккаунта сериализуются `SELECT … FROM users … FOR UPDATE`; сроки сравниваются с `CLOCK`
-  приложения, а не с `now()` в SQL.
-- Ошибки — единый `ApiError` из contracts (глобальный фильтр), в ответах и логах нет SQL, стеков,
+- Мутации аккаунта сериализуются `lockUser` — `$inc: { version: 1 }` документа `users` первой операцией
+  транзакции: вторая транзакция того же аккаунта получает конфликт записи и повторяется на свежем снимке
+  (ADR-0007, R1). Сроки сравниваются с `CLOCK` приложения. Истёкшие сессии, ссылки и токены регистрации
+  удаляет TTL-индекс через 30 дней после `expiresAt` (только уборка).
+- Ошибки — единый `ApiError` из contracts (глобальный фильтр), в ответах и логах нет запросов БД, стеков,
   e-mail и токенов.
 
 ### Сессия: native и web (модуль `identity`, ADR-0003 п. 4, ADR-0005)
@@ -65,13 +68,13 @@ web, загрузка страницы: POST /v1/auth/session/refresh (cookie, W
         | 429 / сеть / 5xx → повтор, затем «не удалось» с кнопкой повтора (не выход)
 native, запуск: сессия из SecureStore сразу (офлайн — в аккаунте) ─► фоновая ротация по телу
         ─► новый refresh в SecureStore | 401 → выход, экран «Вход» | сеть (1 повтор) / 429 / 5xx → остаёмся
-выход: POST /v1/auth/session/sign-out (текущий или предыдущий refresh) ─► revoked_at, signed_out, 204,
+выход: POST /v1/auth/session/sign-out (текущий или предыдущий refresh) ─► revokedAt, signed_out, 204,
         cookie сброшена; приложение очищает кеш запросов и регистрацию, гард ведёт на «Вход»
 ```
 
-- Ротация — один условный `UPDATE … RETURNING` (жива, не отозвана, пользователь не удалён; текущий refresh или
-  предыдущий в окне 60 с): предыдущим становится текущий хеш строки, срок — 30 дней от ротации, не дальше 180 от
-  входа. Из параллельных refresh одним токеном проходят ровно два (текущим и повтором в окне). Предыдущий вне окна —
+- Ротация — один `findOneAndUpdate` с pipeline-обновлением (жива, не отозвана; текущий refresh или предыдущий в
+  окне 60 с; пользователь не удалён — чтением до ротации): предыдущим становится текущий хеш документа, срок —
+  30 дней от ротации, не дальше 180 от входа. Из параллельных refresh одним токеном проходят ровно два (текущим и повтором в окне). Предыдущий вне окна —
   reuse detection: сессия отозвана (`reuse_detected`, лог только с `sid`), ответ — тот же 401. Лимит refresh —
   60/мин на IP (Redis).
 - HTTP API (`apps/api/src/http-app.ts`): CSRF — `enableCsrfProtection` (Fetch Metadata + `Origin`), доверенные
@@ -98,8 +101,10 @@ worker: очередь identity-email ─► письмо «Пароль изм�
 ```
 
 - Очередь `identity-email` — один процессор-диспетчер по `job.name` (подтверждение, ссылка сброса, «Пароль изменён»):
-  BullMQ раздаёт задачи очереди любому процессору. Захват отправки — общий для таблиц ссылок.
-- Вход сверяет хеш пароля под `lockUser`: проверивший старый пароль до коммита сброса сессию не получает.
+  BullMQ раздаёт задачи очереди любому процессору. Захват отправки — общий для коллекций ссылок.
+- Вход сверяет хеш пароля под `lockUserCredentials`: проверивший старый пароль до коммита сброса или пока сброс «в
+  процессе» сессию не получает; ротация, закоммиченная между снимком сброса и отзывом сессий, вызывает конфликт
+  записи — сброс повторяется и отзывает и её.
 - App: запросы сброса — вне Web Lock сессии (cookie не трогают); после смены пароля сессия этого устройства —
   локальный выход (`useSignOut`); web-сервер отдаёт `Referrer-Policy: no-referrer` на `/auth/*`.
 
@@ -111,10 +116,11 @@ worker: очередь identity-email ─► письмо «Пароль изм�
 
 ## Outbox и очереди
 
-- Модуль пишет событие через `OutboxWriter.append(tx, …)` в той же транзакции, что и данные; в payload —
+- Модуль пишет событие через `MongoOutboxWriter.append(session, …)` в той же транзакции, что и данные; в payload —
   только id.
-- Публикатор (`OutboxPublisherModule` из `@rkarakulov/api-kit`, только worker) раз в ~1 с берёт пачку `FOR UPDATE SKIP LOCKED`,
-  ставит задачу `queue.add(type, { outboxEventId }, { jobId: id })` и отмечает `published_at`.
+- Публикатор (`MongoOutboxPublisherModule` из `@rkarakulov/api-kit/mongo`, только worker) раз в ~1 с захватывает
+  пачку (lease `claimId`/`claimedUntil`), ставит задачу `queue.add(type, { outboxEventId }, { jobId: id })` и отмечает
+  `publishedAt`.
   Маршруты тип → очередь задаёт composition root (`worker.module.ts`); инфраструктура базы о модулях не знает.
 - Задачи идемпотентны: повторная публикация не дублирует задачу (тот же `jobId`), обработчик
   перечитывает состояние из БД. Очистка опубликованных событий outbox — отдельная задача (позже).

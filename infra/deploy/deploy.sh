@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 # Деплой стека pokatim на dev-сервер (вызывает .github/workflows/deploy-dev.yml по SSH; вручную — runbook
-# docs/runbooks/deploy.md). Рядом лежат bootstrap.sh, docker-compose.yml, env.template.
-#   bootstrap (каталог, .env, nginx, сертификат) → pull образов → postgres/redis/mailpit → миграции
-#   (одноразовый контейнер) → api/worker/web/admin с ожиданием healthcheck → smoke → прочистка старых образов
-#   pokatim (только по label проекта).
+# docs/runbooks/deploy.md). Рядом лежат bootstrap.sh, docker-compose.yml, env.template, mongo-init.js.
+#   bootstrap (каталог, .env, keyfile MongoDB, nginx, сертификат) → pull образов → mongo/redis/mailpit → набор rs0 и
+#   пользователи MongoDB (mongo-init.js) → миграции (одноразовый контейнер) → api/worker/web/admin с ожиданием
+#   healthcheck → smoke → переезд с PostgreSQL (retire_postgres: контейнер и том pgdata стека, ключи PG в .env) →
+#   прочистка старых образов pokatim (только по label проекта).
 # Env: POKATIM_TAG (тег образов, обязательно), PUBLIC_HOST (обязательно), POKATIM_DIR (~/pokatim),
 #      POKATIM_PROJECT (compose project, pokatim-dev), GHCR_USER + GHCR_TOKEN_STDIN=1 — токен чтения GHCR
 #      первой строкой stdin (логин во временный DOCKER_CONFIG, удаляется сразу после pull);
 #      MAIL_RELAY_RECIPIENTS_STDIN=1 — получатели relay Mailpit → внешний SMTP (адреса через запятую или «*») следующей
 #      строкой stdin (после токена GHCR); передаются bootstrap.sh тоже через stdin; без флага — прежние из .env;
 #      POKATIM_SKIP_PULL=1 / POKATIM_SKIP_NGINX=1 — локальная проверка без registry и nginx;
-#      MIN_FREE_MB (1536) — минимум свободного места на диске Docker;
-#      POKATIM_LEGACY_DIR (~/on-bike), POKATIM_LEGACY_PROJECT (on-bike-dev) — стенд до переименования on-bike → pokatim:
-#      его .env (секреты) и mailpit-relay.yml переносятся, если в POKATIM_DIR .env ещё нет; его стек останавливается
-#      (compose down без -v — тома остаются, уборка — runbook «Переезд on-bike → pokatim»).
+#      MIN_FREE_MB (1536) — минимум свободного места на диске Docker.
 set -Eeuo pipefail
 
 POKATIM_DIR="${POKATIM_DIR:-${HOME}/pokatim}"
@@ -23,13 +21,12 @@ WEB_PORT="${POKATIM_WEB_PORT:-8180}"
 ADMIN_PORT="${POKATIM_ADMIN_PORT:-8181}"
 MAIL_PORT="${POKATIM_MAIL_UI_PORT:-8125}"
 MIN_FREE_MB="${MIN_FREE_MB:-1536}"
-LEGACY_DIR="${POKATIM_LEGACY_DIR:-${HOME}/on-bike}"
-LEGACY_PROJECT="${POKATIM_LEGACY_PROJECT:-on-bike-dev}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export POKATIM_DIR POKATIM_API_PORT="${API_PORT}" POKATIM_WEB_PORT="${WEB_PORT}" POKATIM_ADMIN_PORT="${ADMIN_PORT}" \
   POKATIM_MAIL_UI_PORT="${MAIL_PORT}"
 
 log() { printf '[deploy] %s\n' "$*"; }
+warn() { printf '::warning::%s\n' "$*"; }
 die() {
   printf '::error::%s\n' "$*"
   exit 1
@@ -37,7 +34,6 @@ die() {
 
 [[ "${POKATIM_TAG:-}" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]] || die "POKATIM_TAG не задан или некорректен"
 [[ "${POKATIM_PROJECT}" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || die "POKATIM_PROJECT некорректен"
-[[ "${LEGACY_PROJECT}" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || die "POKATIM_LEGACY_PROJECT некорректен"
 export POKATIM_TAG
 
 # токен GHCR читается до всего остального: stdin больше никому не нужен
@@ -63,7 +59,8 @@ fi
 
 # файлы стека рядом со скриптом (деплой копирует их в POKATIM_DIR; локально — из infra/deploy)
 if [[ "${SCRIPT_DIR}" != "$(cd "${POKATIM_DIR}" && pwd)" ]]; then
-  cp "${SCRIPT_DIR}/docker-compose.yml" "${SCRIPT_DIR}/env.template" "${SCRIPT_DIR}/bootstrap.sh" "${POKATIM_DIR}/"
+  cp "${SCRIPT_DIR}/docker-compose.yml" "${SCRIPT_DIR}/env.template" "${SCRIPT_DIR}/bootstrap.sh" \
+    "${SCRIPT_DIR}/mongo-init.js" "${POKATIM_DIR}/"
 fi
 
 # путь для лога — от домашнего каталога (имя пользователя сервера в публичный лог не выводится)
@@ -75,20 +72,6 @@ home_hint() {
     printf '%s' "$1"
   fi
 }
-
-# Переезд on-bike → pokatim, шаг 1: .env прежнего стенда (секреты: пароль БД, JWT, Mailpit, relay SMTP, MAIL_FROM) —
-# в новый каталог, пока своего .env нет; копия на том же сервере, 600, значения не выводятся. Повторный деплой
-# ничего не копирует (.env уже есть).
-migrate_legacy_env() {
-  [[ -f "${LEGACY_DIR}/.env" && ! -e "${POKATIM_DIR}/.env" ]] || return 0
-  [[ "$(cd "${LEGACY_DIR}" && pwd)" != "$(cd "${POKATIM_DIR}" && pwd)" ]] || return 0
-  local file
-  for file in mailpit-relay.yml .env; do
-    [[ ! -f "${LEGACY_DIR}/${file}" ]] || install -m 600 "${LEGACY_DIR}/${file}" "${POKATIM_DIR}/${file}"
-  done
-  log "переезд: .env и mailpit-relay.yml перенесены из $(home_hint "${LEGACY_DIR}") в $(home_hint "${POKATIM_DIR}") (секреты сохранены)"
-}
-migrate_legacy_env
 
 docker_root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
 [[ -n "${docker_root}" && -d "${docker_root}" ]] || docker_root="/"
@@ -148,24 +131,41 @@ else
   compose pull --quiet
 fi
 
-# Переезд on-bike → pokatim, шаг 2: прежний стек занимает те же порты хоста — останавливается перед подъёмом нового
-# (после pull: простой — только на время старта). Без -v: тома прежнего стека остаются (уборка руками, runbook).
-# Compose — из пустого каталога, только по имени проекта: файлы прежнего стека не нужны.
-stop_legacy_stack() {
-  [[ "${LEGACY_PROJECT}" != "${POKATIM_PROJECT}" ]] || return 0
-  [[ -n "$(docker ps -aq --filter "label=com.docker.compose.project=${LEGACY_PROJECT}")" ]] || return 0
-  log "переезд: прежний стек ${LEGACY_PROJECT} останавливается (compose down без -v — тома остаются)"
-  local empty
-  empty="$(mktemp -d)"
-  (cd "${empty}" && docker compose -p "${LEGACY_PROJECT}" down --remove-orphans)
-  rmdir "${empty}"
+# значение ключа .env (последнее; без вывода)
+env_value() {
+  awk -v key="$1" 'index($0, key "=") == 1 { sub(/^[^=]*=/, ""); v = $0 } END { print v }' "${POKATIM_DIR}/.env"
 }
-stop_legacy_stack
 
-log "postgres, redis, mailpit"
-compose up -d --wait --wait-timeout 180 postgres redis mailpit
+# Набор rs0, root и пользователь приложения MongoDB (Q1) — идемпотентно, до healthcheck (он ждёт PRIMARY, а PRIMARY
+# появляется после rs.initiate). Пароли — из .env в env процесса mongosh (`exec -e ИМЯ` без значения: не в argv),
+# вывод — в файл на сервере; в лог Actions — только строки `mongo-init:` и код выхода.
+mongo_init() {
+  local init_log="${POKATIM_DIR}/mongo-init.log" code=0 ready=""
+  for _ in $(seq 1 60); do
+    if compose exec -T mongo mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1; then
+      ready=1
+      break
+    fi
+    sleep 2
+  done
+  [[ -n "${ready}" ]] || die "mongo не принимает соединения за 120 с (логи — по SSH, runbook «Логи»)"
+  (umask 077 && : >"${init_log}")
+  MONGO_ROOT_PASSWORD="$(env_value MONGO_ROOT_PASSWORD)" MONGO_PASSWORD="$(env_value MONGO_PASSWORD)" \
+    compose exec -T -e MONGO_ROOT_PASSWORD -e MONGO_PASSWORD -e MONGO_RS_HOST=mongo:27017 \
+    -e MONGO_APP_USER=pokatim -e MONGO_APP_DB=pokatim \
+    mongo mongosh --quiet --nodb --eval "$(cat "${POKATIM_DIR}/mongo-init.js")" >"${init_log}" 2>&1 || code=$?
+  # строки скрипта и текст ошибки (без значений: пароли — только в env mongosh)
+  grep -E '^(mongo-init: |Error: |Mongo[A-Za-z]*Error)' "${init_log}" || true
+  [[ "${code}" -eq 0 ]] ||
+    die "mongo-init.js упал (код ${code}); вывод — по SSH: $(home_hint "${init_log}") (docs/runbooks/deploy.md)"
+}
 
-# вывод миграций (SQL, ошибки БД) — в файл на сервере, не в публичный лог Actions: там только код выхода
+log "mongo, redis, mailpit"
+compose up -d mongo redis mailpit
+mongo_init
+compose up -d --wait --wait-timeout 180 mongo redis mailpit
+
+# вывод миграций (ошибки драйвера MongoDB) — в файл на сервере, не в публичный лог Actions: там только код выхода
 migrate_log="${POKATIM_DIR}/migrate.log"
 migrate_log_hint="$(home_hint "${migrate_log}")"
 log "миграции (одноразовый контейнер), вывод — ${migrate_log_hint} на сервере"
@@ -181,12 +181,14 @@ if [[ "${migrate_code}" -ne 0 ]]; then
   exit "${migrate_code}"
 fi
 
+# без --remove-orphans: контейнер postgres прежнего стека снимает retire_postgres — после зелёного smoke (Q5)
 log "api, worker, web, admin"
-compose up -d --wait --wait-timeout 300 --remove-orphans
+compose up -d --wait --wait-timeout 300
 
 log "smoke"
 health="$(curl -fsS --max-time 10 "http://127.0.0.1:${API_PORT}/v1/health")" || fail_smoke "/v1/health не отвечает"
 [[ "${health}" == *'"status":"ok"'* ]] || fail_smoke "/v1/health не ok: ${health}"
+[[ "${health}" == *'"database":"up"'* ]] || fail_smoke "/v1/health: MongoDB не up: ${health}"
 curl -fsS --max-time 15 -o /dev/null "http://127.0.0.1:${WEB_PORT}/register" || fail_smoke "web /register не отвечает"
 curl -fsS --max-time 10 -o /dev/null "http://127.0.0.1:${ADMIN_PORT}/admin/" || fail_smoke "admin /admin/ не отвечает"
 
@@ -245,10 +247,44 @@ esac
 unset MAIL_UI_PASSWORD
 log "health: ${health}; UI Mailpit /mail/ — под паролем; relay почты: ${mail_relay:-off}"
 
+# Переезд PostgreSQL → MongoDB (ADR-0007, Q5): новый стек healthy и smoke зелёный — контейнер postgres этого стека
+# останавливается и удаляется, том ${POKATIM_PROJECT}_pgdata (только свой: точное имя и label проекта) удаляется,
+# из .env убираются ключи только PostgreSQL. Данные dev не переносятся. Повторный деплой — ничего не делает.
+retire_postgres() {
+  local ids volume="${POKATIM_PROJECT}_pgdata" owner tmp
+  ids="$(docker ps -aq --filter "label=com.docker.compose.project=${POKATIM_PROJECT}" \
+    --filter 'label=com.docker.compose.service=postgres')"
+  if [[ -n "${ids}" ]]; then
+    log "переезд на MongoDB: контейнер postgres стека останавливается и удаляется"
+    # shellcheck disable=SC2086 # список id контейнеров — по словам
+    docker stop ${ids} >/dev/null
+    # shellcheck disable=SC2086
+    docker rm ${ids} >/dev/null
+  fi
+  if docker volume inspect "${volume}" >/dev/null 2>&1; then
+    owner="$(docker volume inspect -f '{{ index .Labels "com.docker.compose.project" }}' "${volume}" 2>/dev/null || true)"
+    if [[ "${owner}" != "${POKATIM_PROJECT}" ]]; then
+      warn "том ${volume} не помечен проектом ${POKATIM_PROJECT} — не удаляется (runbook «Переезд на MongoDB»)"
+    elif docker volume rm "${volume}" >/dev/null; then
+      log "переезд на MongoDB: том ${volume} удалён (данные PostgreSQL dev не переносятся)"
+    else
+      warn "том ${volume} не удалён (занят?) — удалить вручную (runbook «Переезд на MongoDB»)"
+    fi
+  fi
+  if grep -qE '^(POSTGRES_[A-Z0-9_]*|DATABASE_URL)=' "${POKATIM_DIR}/.env"; then
+    tmp="$(mktemp "${POKATIM_DIR}/.env.XXXXXX")"
+    grep -vE '^(POSTGRES_[A-Z0-9_]*|DATABASE_URL)=' "${POKATIM_DIR}/.env" >"${tmp}" || true
+    chmod 600 "${tmp}"
+    mv -f "${tmp}" "${POKATIM_DIR}/.env"
+    log "переезд на MongoDB: ключи PostgreSQL убраны из .env"
+  fi
+}
+retire_postgres
+# прочие контейнеры сервисов, которых больше нет в compose
+compose up -d --wait --wait-timeout 120 --remove-orphans
+
 trap - ERR
 # только образы pokatim без контейнеров (label из infra/docker/Dockerfile); чужие образы не трогаем
 docker image prune -af --filter 'label=by.pokatim.project=pokatim' >/dev/null || true
-# образы стенда до переименования (прежний label): после остановки его стека контейнеров у них нет
-docker image prune -af --filter 'label=by.on-bike.project=on-bike' >/dev/null || true
 log "старые образы pokatim прочищены; свободно: $(df -Pm / | awk 'NR == 2 { print $4 }') МБ"
 echo "POKATIM_DEPLOYED=${POKATIM_TAG}"

@@ -9,7 +9,7 @@ import {
   type SignInResponse,
   SignOutRequest,
 } from '@pokatim/contracts';
-import { isDomainError, ZodValidationPipe } from '@rkarakulov/api-kit';
+import { isDomainError, ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
 import { domainError } from '../../error-messages';
 import { SessionCookie } from './session-cookie';

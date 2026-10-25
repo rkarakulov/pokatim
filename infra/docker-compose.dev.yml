@@ -1,20 +1,23 @@
 # Локальная разработка: только stateful-зависимости. Приложения запускаются через pnpm dev.
 name: pokatim-dev
 services:
-  postgres:
-    # postgis/postgis собирается только под amd64; imresamu/postgis — мультиарх-сборка
-    # мейнтейнера docker-postgis (arm64 для Apple Silicon). В CI (amd64) — официальный образ.
-    image: imresamu/postgis:18-3.6
-    environment:
-      POSTGRES_USER: pokatim
-      POSTGRES_PASSWORD: pokatim
-      POSTGRES_DB: pokatim
-    ports: ['5432:5432']
-    volumes: [pgdata:/var/lib/postgresql]
+  # single-node replica set: транзакции и outbox работают только на replica set. Без auth — поэтому порт только
+  # на 127.0.0.1; член набора объявлен как 127.0.0.1:27017 — адрес приложения с directConnection=true
+  mongo:
+    image: mongo:8.0
+    command: ['--replSet', 'rs0', '--bind_ip_all']
+    ports: ['127.0.0.1:27017:27017']
+    volumes: [mongodata:/data/db]
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U pokatim']
-      interval: 5s
-      retries: 10
+      # первый запуск (пустой том) — rs.initiate; здоров, когда узел стал PRIMARY
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] }) } if (!db.hello().isWritablePrimary) quit(1)"
+      interval: 2s
+      retries: 30
   redis:
     image: redis:8.8
     command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
@@ -25,5 +28,5 @@ services:
     image: axllent/mailpit:v1.31
     ports: ['1025:1025', '8025:8025']
 volumes:
-  pgdata:
+  mongodata:
   redisdata:

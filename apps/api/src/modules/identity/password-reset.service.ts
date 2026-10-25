@@ -8,9 +8,11 @@ import {
   type RateLimitedDetails,
   type RequestPasswordResetResponse,
 } from '@pokatim/contracts';
-import { CLOCK, type Clock, ENV, OutboxWriter, RateLimiter } from '@rkarakulov/api-kit';
+import { CLOCK, type Clock, ENV, RateLimiter } from '@rkarakulov/api-kit/core';
+import { MongoOutboxWriter, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import type { Env } from '../../config/env';
+import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import {
   PASSWORD_CHANGED_EMAIL_REQUESTED,
@@ -45,8 +47,9 @@ export class PasswordResetService {
 
   constructor(
     private readonly repository: IdentityRepository,
+    private readonly transactions: MongoTransactions,
     private readonly hasher: PasswordHasher,
-    private readonly outbox: OutboxWriter,
+    private readonly outbox: MongoOutboxWriter,
     private readonly rateLimiter: RateLimiter,
     @Inject(ENV) private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET'>,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -74,14 +77,14 @@ export class PasswordResetService {
     }
     const response = { resendAvailableInSec: limits.email.cooldownSec };
 
-    const account = await this.repository.findUserByEmail(this.repository.db, email);
+    const account = await this.repository.findUserByEmail(email);
     if (!account || account.deletedAt) return response;
 
-    await this.repository.db.transaction(async (tx) => {
+    await this.transactions.run(async (tx) => {
       const user = await this.repository.lockUser(tx, account.id);
       if (!user || user.deletedAt) return;
       await this.repository.supersedeActivePasswordResetTokens(tx, user.id, now);
-      const id = await this.repository.nextId(tx);
+      const id = uuidv7();
       await this.repository.insertPasswordResetToken(tx, {
         id,
         userId: user.id,
@@ -97,7 +100,7 @@ export class PasswordResetService {
 
   /** `GET` по ссылке: только чтение. `used` важнее `expired`; удалённый аккаунт — как неизвестная ссылка. */
   async describeLink(token: string): Promise<PasswordResetLinkInfo> {
-    const found = await this.repository.findPasswordResetByHash(this.repository.db, sha256(token));
+    const found = await this.repository.findPasswordResetByHash(sha256(token));
     if (!found || found.user.deletedAt) throw notFound();
     const { email } = found.user;
     if (found.token.usedAt) return { state: 'used', email };
@@ -112,17 +115,17 @@ export class PasswordResetService {
    */
   async confirm(input: ConfirmPasswordResetRequest): Promise<ConfirmPasswordResetResponse> {
     const tokenHash = sha256(input.token);
-    const found = await this.repository.findPasswordResetByHash(this.repository.db, tokenHash);
+    const found = await this.repository.findPasswordResetByHash(tokenHash);
     if (!found || found.user.deletedAt) throw notFound();
     if (isStale(found.token, this.clock.now())) throw linkExpired(found.user.email);
 
     const passwordHash = await this.hasher.hash(input.password);
 
-    const result = await this.repository.db.transaction(async (tx) => {
+    const result = await this.transactions.run(async (tx) => {
       const user = await this.repository.lockUser(tx, found.user.id);
       if (!user || user.deletedAt) throw notFound();
-      const current = await this.repository.findPasswordResetByHash(tx, tokenHash);
-      // время — после argon2 и ожидания блокировки: ссылка могла истечь, пока запрос ждал
+      const current = await this.repository.findPasswordResetByHash(tokenHash, tx);
+      // время — после argon2 и повторов транзакции: ссылка могла истечь, пока запрос ждал
       const at = this.clock.now();
       if (!current || isStale(current.token, at)) throw linkExpired(user.email);
 

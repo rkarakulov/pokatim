@@ -1,17 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { DB } from '@rkarakulov/api-kit';
-import { and, eq, gt, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { MONGO_DB, uuidv7 } from '@rkarakulov/api-kit/mongo';
+import type { Db, Filter } from 'mongodb';
 
-import type { Database, DbExecutor } from '../../db';
+import { type DbSession, MongoTransactions } from '../../db';
 import {
-  emailVerificationTokens,
-  passwordResetTokens,
-  registrationTokens,
+  type ConsentKind,
+  type IdentityCollections,
+  identityCollections,
+  type LinkTokenDoc,
   type SessionRevokedReason,
-  sessions,
-  userConsents,
-  users,
-} from './identity.schema';
+  type UserDoc,
+} from './identity.collection';
 
 export interface UserState {
   id: string;
@@ -29,7 +28,7 @@ export interface VerificationTokenState {
   sentAt: Date | null;
 }
 
-/** Ссылка сброса пароля: колонки — как у ссылки подтверждения. */
+/** Ссылка сброса пароля: поля — как у ссылки подтверждения. */
 export type PasswordResetTokenState = VerificationTokenState;
 
 export interface RegistrationTokenState {
@@ -38,417 +37,427 @@ export interface RegistrationTokenState {
   consumedAt: Date | null;
 }
 
-const userState = {
-  id: users.id,
-  email: users.email,
-  emailVerifiedAt: users.emailVerifiedAt,
-  deletedAt: users.deletedAt,
-};
+const userProjection = { _id: 1, email: 1, emailVerifiedAt: 1, deletedAt: 1 } as const;
+const credentialsProjection = { ...userProjection, passwordHash: 1 } as const;
 
-const verificationState = {
-  id: emailVerificationTokens.id,
-  userId: emailVerificationTokens.userId,
-  expiresAt: emailVerificationTokens.expiresAt,
-  usedAt: emailVerificationTokens.usedAt,
-  supersededAt: emailVerificationTokens.supersededAt,
-  sentAt: emailVerificationTokens.sentAt,
-};
+// чтение терпит отсутствие поля (`?? null`) — документы, записанные до добавления поля (expand/contract, D8)
+const toUserState = (
+  doc: Pick<UserDoc, '_id' | 'email' | 'emailVerifiedAt' | 'deletedAt'>,
+): UserState => ({
+  id: doc._id,
+  email: doc.email,
+  emailVerifiedAt: doc.emailVerifiedAt ?? null,
+  deletedAt: doc.deletedAt ?? null,
+});
 
-const passwordResetState = {
-  id: passwordResetTokens.id,
-  userId: passwordResetTokens.userId,
-  expiresAt: passwordResetTokens.expiresAt,
-  usedAt: passwordResetTokens.usedAt,
-  supersededAt: passwordResetTokens.supersededAt,
-  sentAt: passwordResetTokens.sentAt,
-};
+const toLinkState = (doc: LinkTokenDoc): VerificationTokenState => ({
+  id: doc._id,
+  userId: doc.userId,
+  expiresAt: doc.expiresAt,
+  usedAt: doc.usedAt ?? null,
+  supersededAt: doc.supersededAt ?? null,
+  sentAt: doc.sentAt ?? null,
+});
 
 /**
- * Таблицы ссылок из писем с одинаковыми колонками отправки: общий захват отправки (`claimLinkSend`). Подтверждение
+ * Коллекции ссылок из писем с одинаковыми полями отправки: общий захват отправки (`claimLinkSend`). Подтверждение
  * не нужно уже подтверждённому аккаунту; сброс пароля нужен и неподтверждённому (Q4 слайса 3).
  */
-const LINK_TABLES = {
-  verification: { table: emailVerificationTokens, accountCondition: isNull(users.emailVerifiedAt) },
-  passwordReset: { table: passwordResetTokens, accountCondition: undefined },
-} as const;
-export type LinkKind = keyof typeof LINK_TABLES;
+const LINK_KINDS = {
+  verification: { collection: 'emailVerificationTokens', unverifiedOnly: true },
+  passwordReset: { collection: 'passwordResetTokens', unverifiedOnly: false },
+} as const satisfies Record<
+  string,
+  { collection: 'emailVerificationTokens' | 'passwordResetTokens'; unverifiedOnly: boolean }
+>;
+export type LinkKind = keyof typeof LINK_KINDS;
 
-/** Доступ к таблицам identity. Методы принимают пул или транзакцию — транзакцию собирает сервис. */
+type NewLink = { id: string; userId: string; tokenHash: string; createdAt: Date; expiresAt: Date };
+
+/**
+ * Доступ к коллекциям identity (MongoDB, ADR-0007). Транзакцию собирает сервис (`MongoTransactions.run`) и передаёт
+ * `session` в каждый метод. Правила сериализации (`pokatim-db.md`):
+ * - **R1.** Транзакция, меняющая документы аккаунта, первой операцией вызывает `lockUser`/`lockUserCredentials`
+ *   (`$inc: { version: 1 }` документа `users`): две такие транзакции одного аккаунта пишут один документ — у второй
+ *   конфликт записи, и `MongoTransactions.run` повторяет её колбэк на свежем снимке и перечитывает состояние.
+ * - Вне транзакций — только атомарные операции над одним документом (ротация и отзыв по токену, захват отправки):
+ *   если документ держит транзакция, такая запись ждёт её конца и перепроверяет фильтр.
+ * - Значения фильтров — только примитивы после zod (хеши, id, даты), не объекты запроса.
+ */
 @Injectable()
 export class IdentityRepository {
-  constructor(@Inject(DB) readonly db: Database) {}
+  private readonly c: IdentityCollections;
 
-  /** UUID v7 из PostgreSQL до вставки: от id строки выводится токен ссылки (HMAC) и sid сессии. */
-  async nextId(ex: DbExecutor): Promise<string> {
-    const result = await ex.execute<{ id: string }>(sql`SELECT uuidv7() AS id`);
-    const row = result.rows[0];
-    if (!row) throw new Error('uuidv7() returned no row');
-    return row.id;
+  constructor(
+    @Inject(MONGO_DB) db: Db,
+    private readonly transactions: MongoTransactions,
+  ) {
+    this.c = identityCollections(db);
   }
 
-  async findUserByEmail(ex: DbExecutor, email: string): Promise<UserState | undefined> {
-    const [row] = await ex.select(userState).from(users).where(eq(users.email, email));
-    return row;
+  async findUserByEmail(email: string, session?: DbSession): Promise<UserState | undefined> {
+    const doc = await this.c.users.findOne({ email }, { session, projection: userProjection });
+    return doc ? toUserState(doc) : undefined;
   }
 
   /** Хеш пароля и состояние аккаунта для входа; только для сравнения на сервере, наружу не уходит. */
   async findCredentialsByEmail(
-    ex: DbExecutor,
     email: string,
   ): Promise<(UserState & { passwordHash: string }) | undefined> {
-    const [row] = await ex
-      .select({ ...userState, passwordHash: users.passwordHash })
-      .from(users)
-      .where(eq(users.email, email));
-    return row;
+    const doc = await this.c.users.findOne({ email }, { projection: credentialsProjection });
+    return doc ? { ...toUserState(doc), passwordHash: doc.passwordHash } : undefined;
   }
 
-  /** Сериализует мутации одного аккаунта (confirm / resend / poll) — первый шаг каждой транзакции. */
-  async lockUser(ex: DbExecutor, userId: string): Promise<UserState | undefined> {
-    const [row] = await ex.select(userState).from(users).where(eq(users.id, userId)).for('update');
-    return row;
+  private async findUser(userId: string, session?: DbSession): Promise<UserState | undefined> {
+    const doc = await this.c.users.findOne(
+      { _id: userId },
+      { session, projection: userProjection },
+    );
+    return doc ? toUserState(doc) : undefined;
+  }
+
+  /**
+   * Сериализует мутации одного аккаунта (R1) — **первая** операция каждой такой транзакции: запись `version`
+   * конфликтует с другой транзакцией того же аккаунта, проигравшая повторяется после коммита победившей.
+   */
+  async lockUser(session: DbSession, userId: string): Promise<UserState | undefined> {
+    const doc = await this.c.users.findOneAndUpdate(
+      { _id: userId },
+      { $inc: { version: 1 } },
+      { session, returnDocument: 'after', projection: userProjection },
+    );
+    return doc ? toUserState(doc) : undefined;
   }
 
   /**
    * `lockUser` с хешем пароля — для входа (R4 слайса 3): под блокировкой аккаунта вход сверяет, что пароль не сменили
-   * с момента проверки (сброс, закоммиченный между проверкой и блокировкой, сессию не выдаёт).
+   * с момента проверки (сброс, закоммиченный до снимка входа или «в процессе», сессию не выдаёт).
    */
   async lockUserCredentials(
-    ex: DbExecutor,
+    session: DbSession,
     userId: string,
   ): Promise<(UserState & { passwordHash: string }) | undefined> {
-    const [row] = await ex
-      .select({ ...userState, passwordHash: users.passwordHash })
-      .from(users)
-      .where(eq(users.id, userId))
-      .for('update');
-    return row;
+    const doc = await this.c.users.findOneAndUpdate(
+      { _id: userId },
+      { $inc: { version: 1 } },
+      { session, returnDocument: 'after', projection: credentialsProjection },
+    );
+    return doc ? { ...toUserState(doc), passwordHash: doc.passwordHash } : undefined;
   }
 
-  async updatePasswordHash(ex: DbExecutor, userId: string, passwordHash: string): Promise<void> {
-    await ex.update(users).set({ passwordHash }).where(eq(users.id, userId));
-  }
-
-  async insertUser(
-    ex: DbExecutor,
-    user: { email: string; passwordHash: string; birthDate: string; createdAt: Date },
-  ): Promise<string> {
-    const [row] = await ex.insert(users).values(user).returning({ id: users.id });
-    if (!row) throw new Error('users insert returned no row');
-    return row.id;
-  }
-
-  async insertConsents(
-    ex: DbExecutor,
-    userId: string,
-    consents: { kind: 'personal_data' | 'agreement'; version: string }[],
-    acceptedAt: Date,
-  ): Promise<void> {
-    await ex
-      .insert(userConsents)
-      .values(consents.map((consent) => ({ ...consent, userId, acceptedAt })));
-  }
-
-  async markEmailVerified(ex: DbExecutor, userId: string, at: Date): Promise<void> {
-    await ex.update(users).set({ emailVerifiedAt: at }).where(eq(users.id, userId));
-  }
-
-  // --- ссылки подтверждения ---
-
-  async insertVerificationToken(
-    ex: DbExecutor,
-    token: { id: string; userId: string; tokenHash: string; createdAt: Date; expiresAt: Date },
-  ): Promise<void> {
-    await ex.insert(emailVerificationTokens).values(token);
-  }
-
-  /** Новая ссылка отменяет прежние: активной остаётся одна (частичный UNIQUE). */
-  async supersedeActiveVerificationTokens(ex: DbExecutor, userId: string, at: Date): Promise<void> {
-    await ex
-      .update(emailVerificationTokens)
-      .set({ supersededAt: at })
-      .where(
-        and(
-          eq(emailVerificationTokens.userId, userId),
-          isNull(emailVerificationTokens.usedAt),
-          isNull(emailVerificationTokens.supersededAt),
-        ),
-      );
-  }
-
-  async findVerificationByHash(
-    ex: DbExecutor,
-    tokenHash: string,
-  ): Promise<{ token: VerificationTokenState; user: UserState } | undefined> {
-    const [row] = await ex
-      .select({ token: verificationState, user: userState })
-      .from(emailVerificationTokens)
-      .innerJoin(users, eq(users.id, emailVerificationTokens.userId))
-      .where(eq(emailVerificationTokens.tokenHash, tokenHash));
-    return row;
+  async updatePasswordHash(session: DbSession, userId: string, passwordHash: string) {
+    await this.c.users.updateOne({ _id: userId }, { $set: { passwordHash } }, { session });
   }
 
   /**
-   * Захват отправки письма со ссылкой (`kind` — таблица ссылок) с ограниченным сроком (`send_claimed_at`), отдельно
-   * от факта отправки (`sent_at`). Одна реализация для ссылок подтверждения и сброса пароля:
+   * Новый аккаунт (id — UUID v7); дубликат адреса — `users_email_unique` (вызывающий переводит в EMAIL_TAKEN).
+   * Исключение из R1: `lockUser` нечего блокировать — документа ещё нет; гонку одного адреса сериализует уникальный
+   * индекс (конфликт записи в транзакции или `11000` после коммита первой регистрации).
+   */
+  async insertUser(
+    session: DbSession,
+    user: { email: string; passwordHash: string; birthDate: string; createdAt: Date },
+  ): Promise<string> {
+    const id = uuidv7();
+    await this.c.users.insertOne(
+      { _id: id, ...user, emailVerifiedAt: null, deletedAt: null, version: 0 },
+      { session },
+    );
+    return id;
+  }
+
+  async insertConsents(
+    session: DbSession,
+    userId: string,
+    consents: { kind: ConsentKind; version: string }[],
+    acceptedAt: Date,
+  ): Promise<void> {
+    await this.c.userConsents.insertMany(
+      consents.map((consent) => ({ _id: uuidv7(), userId, ...consent, acceptedAt })),
+      { session },
+    );
+  }
+
+  async markEmailVerified(session: DbSession, userId: string, at: Date): Promise<void> {
+    await this.c.users.updateOne({ _id: userId }, { $set: { emailVerifiedAt: at } }, { session });
+  }
+
+  // --- ссылки из писем (подтверждение, сброс пароля) ---
+
+  private async insertLink(kind: LinkKind, session: DbSession, link: NewLink): Promise<void> {
+    const { id, ...rest } = link;
+    await this.c[LINK_KINDS[kind].collection].insertOne(
+      { _id: id, ...rest, usedAt: null, supersededAt: null, sentAt: null, sendClaimedAt: null },
+      { session },
+    );
+  }
+
+  /** Новая ссылка отменяет прежние: активной остаётся одна (частичный уникальный индекс); использованные не трогаем. */
+  private async supersedeActiveLinks(
+    kind: LinkKind,
+    session: DbSession,
+    userId: string,
+    at: Date,
+  ): Promise<void> {
+    await this.c[LINK_KINDS[kind].collection].updateMany(
+      { userId, usedAt: null, supersededAt: null },
+      { $set: { supersededAt: at } },
+      { session },
+    );
+  }
+
+  /** Ссылка и её владелец (в транзакции — в той же `session`); владельца нет — как неизвестная ссылка. */
+  private async findLink(
+    kind: LinkKind,
+    filter: Filter<LinkTokenDoc>,
+    session?: DbSession,
+  ): Promise<{ token: VerificationTokenState; user: UserState } | undefined> {
+    const token = await this.c[LINK_KINDS[kind].collection].findOne(filter, { session });
+    if (!token) return undefined;
+    const user = await this.findUser(token.userId, session);
+    return user ? { token: toLinkState(token), user } : undefined;
+  }
+
+  insertVerificationToken(session: DbSession, link: NewLink): Promise<void> {
+    return this.insertLink('verification', session, link);
+  }
+
+  supersedeActiveVerificationTokens(session: DbSession, userId: string, at: Date): Promise<void> {
+    return this.supersedeActiveLinks('verification', session, userId, at);
+  }
+
+  findVerificationByHash(tokenHash: string, session?: DbSession) {
+    return this.findLink('verification', { tokenHash }, session);
+  }
+
+  /**
+   * Захват отправки письма со ссылкой (`kind` — коллекция ссылок) с ограниченным сроком (`sendClaimedAt`), отдельно
+   * от факта отправки (`sentAt`). Одна реализация для ссылок подтверждения и сброса пароля:
    * - `claimed` — ссылка актуальна, письмо не отправлено, чужого живого захвата нет → отправляем;
    * - `busy` — другой worker держит живой захват → задача уходит на ретрай (если он упал, захват истечёт);
    * - `undefined` — письмо не нужно: уже отправлено, ссылка заменена/использована/истекла, аккаунт удалён
    *   (подтверждение — ещё и уже подтверждён).
-   * Блокирует только строку ссылки и только на один UPDATE — SMTP идёт после коммита.
+   * Захват — один атомарный `findOneAndUpdate` документа ссылки, SMTP — после него. Условие по аккаунту читается
+   * отдельно и не атомарно с захватом (R6): аккаунт подтвердили или удалили между чтением и захватом → одно лишнее
+   * письмо по ссылке, которая уже ничего не делает («уже подтверждён» / 404). Захват в транзакции с `lockUser`
+   * конфликтовал бы с действиями пользователя ради безвредного письма.
    */
   async claimLinkSend(
-    ex: DbExecutor,
     kind: LinkKind,
     id: string,
     now: Date,
     leaseMs: number,
   ): Promise<{ status: 'claimed'; id: string; email: string } | { status: 'busy' } | undefined> {
-    const { table, accountCondition } = LINK_TABLES[kind];
-    const leaseExpired = new Date(now.getTime() - leaseMs);
-    const sendable = and(
-      eq(table.id, id),
-      eq(users.id, table.userId),
-      isNull(table.sentAt),
-      isNull(table.usedAt),
-      isNull(table.supersededAt),
-      gt(table.expiresAt, now),
-      isNull(users.deletedAt),
-      accountCondition,
-    );
-    const [claimed] = await ex
-      .update(table)
-      .set({ sendClaimedAt: now })
-      .from(users)
-      .where(and(sendable, or(isNull(table.sendClaimedAt), lte(table.sendClaimedAt, leaseExpired))))
-      .returning({ id: table.id, email: users.email });
-    if (claimed) return { status: 'claimed', ...claimed };
+    const { collection, unverifiedOnly } = LINK_KINDS[kind];
+    const links = this.c[collection];
+    const link = await links.findOne({ _id: id }, { projection: { userId: 1 } });
+    if (!link) return undefined;
+    const owner = await this.findUser(link.userId);
+    if (!owner || owner.deletedAt || (unverifiedOnly && owner.emailVerifiedAt)) return undefined;
 
-    const [held] = await ex
-      .select({ id: table.id })
-      .from(table)
-      .innerJoin(users, eq(users.id, table.userId))
-      .where(sendable);
+    const sendable: Filter<LinkTokenDoc> = {
+      _id: id,
+      sentAt: null,
+      usedAt: null,
+      supersededAt: null,
+      expiresAt: { $gt: now },
+    };
+    const leaseExpired = new Date(now.getTime() - leaseMs);
+    const claimed = await links.findOneAndUpdate(
+      { ...sendable, $or: [{ sendClaimedAt: null }, { sendClaimedAt: { $lte: leaseExpired } }] },
+      { $set: { sendClaimedAt: now } },
+      { projection: { _id: 1 } },
+    );
+    if (claimed) return { status: 'claimed', id: claimed._id, email: owner.email };
+
+    const held = await links.findOne(sendable, { projection: { _id: 1 } });
     return held ? { status: 'busy' } : undefined;
   }
 
   /** SMTP принял письмо: фиксируем отправку и снимаем свой захват. */
-  async completeLinkSend(
-    ex: DbExecutor,
-    kind: LinkKind,
-    id: string,
-    claimedAt: Date,
-    sentAt: Date,
-  ) {
-    const { table } = LINK_TABLES[kind];
-    await ex
-      .update(table)
-      .set({ sentAt, sendClaimedAt: null })
-      .where(and(eq(table.id, id), eq(table.sendClaimedAt, claimedAt)));
+  async completeLinkSend(kind: LinkKind, id: string, claimedAt: Date, sentAt: Date) {
+    await this.c[LINK_KINDS[kind].collection].updateOne(
+      { _id: id, sendClaimedAt: claimedAt },
+      { $set: { sentAt, sendClaimedAt: null } },
+    );
   }
 
   /** Сбой SMTP: снимаем свой захват — ретрай задачи отправит письмо заново (та же ссылка). */
-  async releaseLinkSend(ex: DbExecutor, kind: LinkKind, id: string, claimedAt: Date) {
-    const { table } = LINK_TABLES[kind];
-    await ex
-      .update(table)
-      .set({ sendClaimedAt: null })
-      .where(and(eq(table.id, id), eq(table.sendClaimedAt, claimedAt)));
+  async releaseLinkSend(kind: LinkKind, id: string, claimedAt: Date) {
+    await this.c[LINK_KINDS[kind].collection].updateOne(
+      { _id: id, sendClaimedAt: claimedAt },
+      { $set: { sendClaimedAt: null } },
+    );
   }
 
-  async markVerificationUsed(ex: DbExecutor, id: string, at: Date): Promise<void> {
-    await ex
-      .update(emailVerificationTokens)
-      .set({ usedAt: at })
-      .where(eq(emailVerificationTokens.id, id));
+  async markVerificationUsed(session: DbSession, id: string, at: Date): Promise<void> {
+    await this.c.emailVerificationTokens.updateOne(
+      { _id: id },
+      { $set: { usedAt: at } },
+      { session },
+    );
   }
 
   // --- ссылки сброса пароля ---
 
-  async insertPasswordResetToken(
-    ex: DbExecutor,
-    token: { id: string; userId: string; tokenHash: string; createdAt: Date; expiresAt: Date },
-  ): Promise<void> {
-    await ex.insert(passwordResetTokens).values(token);
+  insertPasswordResetToken(session: DbSession, link: NewLink): Promise<void> {
+    return this.insertLink('passwordReset', session, link);
   }
 
-  /** Новая ссылка отменяет прежние (Q6): активной остаётся одна (частичный UNIQUE); использованные не трогаем. */
-  async supersedeActivePasswordResetTokens(ex: DbExecutor, userId: string, at: Date) {
-    await ex
-      .update(passwordResetTokens)
-      .set({ supersededAt: at })
-      .where(
-        and(
-          eq(passwordResetTokens.userId, userId),
-          isNull(passwordResetTokens.usedAt),
-          isNull(passwordResetTokens.supersededAt),
-        ),
-      );
+  /** Новая ссылка отменяет прежние (Q6): активной остаётся одна; использованные не трогаем. */
+  supersedeActivePasswordResetTokens(session: DbSession, userId: string, at: Date) {
+    return this.supersedeActiveLinks('passwordReset', session, userId, at);
   }
 
-  async findPasswordResetByHash(
-    ex: DbExecutor,
-    tokenHash: string,
-  ): Promise<{ token: PasswordResetTokenState; user: UserState } | undefined> {
-    const [row] = await ex
-      .select({ token: passwordResetState, user: userState })
-      .from(passwordResetTokens)
-      .innerJoin(users, eq(users.id, passwordResetTokens.userId))
-      .where(eq(passwordResetTokens.tokenHash, tokenHash));
-    return row;
+  findPasswordResetByHash(tokenHash: string, session?: DbSession) {
+    return this.findLink('passwordReset', { tokenHash }, session);
   }
 
-  /** Использованная ссылка и её владелец — для письма «Пароль изменён» (время смены — `used_at`). */
-  async findPasswordResetById(
-    ex: DbExecutor,
-    id: string,
-  ): Promise<{ token: PasswordResetTokenState; user: UserState } | undefined> {
-    const [row] = await ex
-      .select({ token: passwordResetState, user: userState })
-      .from(passwordResetTokens)
-      .innerJoin(users, eq(users.id, passwordResetTokens.userId))
-      .where(eq(passwordResetTokens.id, id));
-    return row;
+  /** Использованная ссылка и её владелец — для письма «Пароль изменён» (время смены — `usedAt`). */
+  findPasswordResetById(id: string) {
+    return this.findLink('passwordReset', { _id: id });
   }
 
-  async markPasswordResetUsed(ex: DbExecutor, id: string, at: Date): Promise<void> {
-    await ex.update(passwordResetTokens).set({ usedAt: at }).where(eq(passwordResetTokens.id, id));
+  async markPasswordResetUsed(session: DbSession, id: string, at: Date): Promise<void> {
+    await this.c.passwordResetTokens.updateOne({ _id: id }, { $set: { usedAt: at } }, { session });
   }
 
   // --- токен регистрации ---
 
   async insertRegistrationToken(
-    ex: DbExecutor,
+    session: DbSession,
     token: { userId: string; tokenHash: string; createdAt: Date; expiresAt: Date },
   ): Promise<void> {
-    await ex.insert(registrationTokens).values(token);
+    await this.c.registrationTokens.insertOne(
+      { _id: uuidv7(), ...token, consumedAt: null },
+      { session },
+    );
   }
 
   async findRegistrationByHash(
-    ex: DbExecutor,
     tokenHash: string,
   ): Promise<{ token: RegistrationTokenState; user: UserState } | undefined> {
-    const [row] = await ex
-      .select({
-        token: {
-          userId: registrationTokens.userId,
-          expiresAt: registrationTokens.expiresAt,
-          consumedAt: registrationTokens.consumedAt,
-        },
-        user: userState,
-      })
-      .from(registrationTokens)
-      .innerJoin(users, eq(users.id, registrationTokens.userId))
-      .where(eq(registrationTokens.tokenHash, tokenHash));
-    return row;
+    const token = await this.c.registrationTokens.findOne({ tokenHash });
+    if (!token) return undefined;
+    const user = await this.findUser(token.userId);
+    if (!user) return undefined;
+    const { userId, expiresAt } = token;
+    return { token: { userId, expiresAt, consumedAt: token.consumedAt ?? null }, user };
   }
 
   /** Скользящий TTL: живой и не обменянный токен регистрации продлевается до срока новой ссылки. */
   async extendRegistrationToken(
-    ex: DbExecutor,
+    session: DbSession,
     userId: string,
     expiresAt: Date,
     now: Date,
   ): Promise<void> {
-    await ex
-      .update(registrationTokens)
-      .set({ expiresAt })
-      .where(
-        and(
-          eq(registrationTokens.userId, userId),
-          isNull(registrationTokens.consumedAt),
-          gt(registrationTokens.expiresAt, now),
-        ),
-      );
+    await this.c.registrationTokens.updateOne(
+      { userId, consumedAt: null, expiresAt: { $gt: now } },
+      { $set: { expiresAt } },
+      { session },
+    );
   }
 
   /**
-   * Одноразовый обмен на сессию: условный UPDATE — из параллельных poll проходит ровно один.
-   * Возвращает userId, если обмен состоялся.
+   * Одноразовый обмен на сессию — в транзакции под `lockUser` владельца (подтверждённость e-mail вызывающий берёт из
+   * документа `lockUser` вместо прежнего `EXISTS`): условный `findOneAndUpdate` — из параллельных poll проходит ровно
+   * один. Возвращает userId, если обмен состоялся.
    */
   async consumeRegistrationToken(
-    ex: DbExecutor,
+    session: DbSession,
     tokenHash: string,
     now: Date,
   ): Promise<string | undefined> {
-    const [row] = await ex
-      .update(registrationTokens)
-      .set({ consumedAt: now })
-      .where(
-        and(
-          eq(registrationTokens.tokenHash, tokenHash),
-          isNull(registrationTokens.consumedAt),
-          gt(registrationTokens.expiresAt, now),
-          sql`EXISTS (SELECT 1 FROM ${users} WHERE ${users.id} = ${registrationTokens.userId} AND ${isNotNull(users.emailVerifiedAt)})`,
-        ),
-      )
-      .returning({ userId: registrationTokens.userId });
-    return row?.userId;
+    const doc = await this.c.registrationTokens.findOneAndUpdate(
+      { tokenHash, consumedAt: null, expiresAt: { $gt: now } },
+      { $set: { consumedAt: now } },
+      { session, projection: { userId: 1 } },
+    );
+    return doc?.userId;
   }
 
   // --- сессии ---
 
   async insertSession(
-    ex: DbExecutor,
-    session: {
-      id: string;
-      userId: string;
-      refreshTokenHash: string;
-      createdAt: Date;
-      expiresAt: Date;
-    },
+    session: DbSession,
+    doc: { id: string; userId: string; refreshTokenHash: string; createdAt: Date; expiresAt: Date },
   ): Promise<void> {
-    await ex.insert(sessions).values(session);
+    const { id, ...rest } = doc;
+    await this.c.sessions.insertOne(
+      {
+        _id: id,
+        ...rest,
+        previousRefreshTokenHash: null,
+        rotatedAt: null,
+        revokedAt: null,
+        revokedReason: null,
+      },
+      { session },
+    );
   }
 
   /**
-   * Ротация refresh одним условным UPDATE (ADR-0005). Живая (не отозвана, не истекла) сессия не удалённого
-   * пользователя принимает текущий refresh или предыдущий в окне повтора (`rotated_at` позже `now − grace`).
-   * Предыдущим становится текущий хеш строки до UPDATE: при повторе в окне брошенный текущий токен тоже станет
-   * «предыдущим» и вне окна сработает как reuse. Срок скользящий: `now + ttl`, но не дальше `created_at + absolute`.
-   * Параллельные ротации одного токена: после ожидания блокировки строки PostgreSQL перепроверяет условие на новой
-   * версии — проходят ровно две (текущим и затем предыдущим в окне), остальные — 0 строк.
+   * Ротация refresh одним `findOneAndUpdate` с pipeline-обновлением (ADR-0005, R3). Живая (не отозвана, не истекла)
+   * сессия принимает текущий refresh или предыдущий в окне повтора (`rotatedAt` позже `now − grace`). Предыдущим
+   * становится текущий хеш документа до обновления (`'$refreshTokenHash'` в pipeline): при повторе в окне брошенный
+   * текущий токен тоже станет «предыдущим» и вне окна сработает как reuse. Срок скользящий: `now + ttl`, но не дальше
+   * `createdAt + absolute`. Значения — только через `$literal`: строка на `$` в pipeline — путь поля.
+   * Параллельные ротации одного токена сериализуются на документе с перепроверкой фильтра — проходят ровно две
+   * (текущим и затем предыдущим в окне). Отзыв всех сессий (сброс пароля) идёт в транзакции: пока она не
+   * закоммичена, ротация ждёт её конца и перепроверяет `revokedAt: null`; ротация, закоммиченная раньше, вызывает
+   * конфликт записи — транзакция сброса повторяется и отзывает ротированную сессию.
+   * Удалённый пользователь — чтение `users` до ротации; окно между чтением и ротацией закрывает инвариант «удаление
+   * аккаунта отзывает все сессии в той же транзакции» (`pokatim-security.md`).
    */
-  async rotateSession(
-    ex: DbExecutor,
-    rotation: {
-      tokenHash: string;
-      nextTokenHash: string;
-      now: Date;
-      graceMs: number;
-      ttlMs: number;
-      absoluteTtlMs: number;
-    },
-  ): Promise<{ id: string; userId: string; expiresAt: Date } | undefined> {
+  async rotateSession(rotation: {
+    tokenHash: string;
+    nextTokenHash: string;
+    now: Date;
+    graceMs: number;
+    ttlMs: number;
+    absoluteTtlMs: number;
+  }): Promise<{ id: string; userId: string; expiresAt: Date } | undefined> {
     const { tokenHash, now } = rotation;
+    const candidate = await this.c.sessions.findOne(
+      { $or: [{ refreshTokenHash: tokenHash }, { previousRefreshTokenHash: tokenHash }] },
+      { projection: { userId: 1 } },
+    );
+    if (!candidate) return undefined;
+    const owner = await this.findUser(candidate.userId);
+    if (!owner || owner.deletedAt) return undefined;
+
     const graceStart = new Date(now.getTime() - rotation.graceMs);
     const slidingExpiry = new Date(now.getTime() + rotation.ttlMs);
-    const absoluteMs = `${rotation.absoluteTtlMs} milliseconds`;
-    const [row] = await ex
-      .update(sessions)
-      .set({
-        // в SET столбец справа — значение строки до UPDATE
-        previousRefreshTokenHash: sql`${sessions.refreshTokenHash}`,
-        refreshTokenHash: rotation.nextTokenHash,
-        rotatedAt: now,
-        expiresAt: sql`LEAST(${slidingExpiry}::timestamptz, ${sessions.createdAt} + ${absoluteMs}::interval)`,
-      })
-      .where(
-        and(
-          isNull(sessions.revokedAt),
-          gt(sessions.expiresAt, now),
-          sql`EXISTS (SELECT 1 FROM ${users} WHERE ${users.id} = ${sessions.userId} AND ${isNull(users.deletedAt)})`,
-          or(
-            eq(sessions.refreshTokenHash, tokenHash),
-            and(
-              eq(sessions.previousRefreshTokenHash, tokenHash),
-              gt(sessions.rotatedAt, graceStart),
-            ),
-          ),
-        ),
-      )
-      .returning({ id: sessions.id, userId: sessions.userId, expiresAt: sessions.expiresAt });
-    return row;
+    const doc = await this.c.sessions.findOneAndUpdate(
+      {
+        _id: candidate._id,
+        revokedAt: null,
+        expiresAt: { $gt: now },
+        $or: [
+          { refreshTokenHash: tokenHash },
+          { previousRefreshTokenHash: tokenHash, rotatedAt: { $gt: graceStart } },
+        ],
+      },
+      [
+        {
+          $set: {
+            // путь поля: значение документа до обновления
+            previousRefreshTokenHash: '$refreshTokenHash',
+            refreshTokenHash: { $literal: rotation.nextTokenHash },
+            rotatedAt: { $literal: now },
+            expiresAt: {
+              $min: [
+                { $literal: slidingExpiry },
+                { $add: ['$createdAt', { $literal: rotation.absoluteTtlMs }] },
+              ],
+            },
+          },
+        },
+      ],
+      { returnDocument: 'after', projection: { userId: 1, expiresAt: 1 } },
+    );
+    return doc ? { id: doc._id, userId: doc.userId, expiresAt: doc.expiresAt } : undefined;
   }
 
   /**
@@ -456,120 +465,124 @@ export class IdentityRepository {
    * отзывается целиком (Q8: одна сессия). Возвращает id отозванной сессии (для лога), иначе `undefined`.
    */
   async markReuseDetected(
-    ex: DbExecutor,
     tokenHash: string,
     now: Date,
     graceMs: number,
   ): Promise<string | undefined> {
-    const [row] = await ex
-      .update(sessions)
-      .set({ revokedAt: now, revokedReason: 'reuse_detected' })
-      .where(
-        and(
-          eq(sessions.previousRefreshTokenHash, tokenHash),
-          lte(sessions.rotatedAt, new Date(now.getTime() - graceMs)),
-          isNull(sessions.revokedAt),
-        ),
-      )
-      .returning({ id: sessions.id });
-    return row?.id;
+    const doc = await this.c.sessions.findOneAndUpdate(
+      {
+        previousRefreshTokenHash: tokenHash,
+        rotatedAt: { $lte: new Date(now.getTime() - graceMs) },
+        revokedAt: null,
+      },
+      { $set: { revokedAt: now, revokedReason: 'reuse_detected' } },
+      { projection: { _id: 1 } },
+    );
+    return doc?._id;
   }
 
   /**
    * Отзыв сессии по хешу текущего или предыдущего refresh (гонка выхода с ротацией не оставляет живую сессию);
    * уже отозванная не меняется (идемпотентно).
    */
-  async revokeSession(
-    ex: DbExecutor,
-    tokenHash: string,
-    at: Date,
-    reason: SessionRevokedReason,
-  ): Promise<void> {
-    await ex
-      .update(sessions)
-      .set({ revokedAt: at, revokedReason: reason })
-      .where(
-        and(
-          or(
-            eq(sessions.refreshTokenHash, tokenHash),
-            eq(sessions.previousRefreshTokenHash, tokenHash),
-          ),
-          isNull(sessions.revokedAt),
-        ),
-      );
+  async revokeSession(tokenHash: string, at: Date, reason: SessionRevokedReason): Promise<void> {
+    await this.c.sessions.updateOne(
+      {
+        $or: [{ refreshTokenHash: tokenHash }, { previousRefreshTokenHash: tokenHash }],
+        revokedAt: null,
+      },
+      { $set: { revokedAt: at, revokedReason: reason } },
+    );
   }
 
   /**
-   * Отзыв всех живых сессий пользователя (смена пароля — `password_reset`) одним UPDATE по `sessions_user_id_idx`.
-   * Уже отозванные не меняются. Гонка с ротацией: строка, которую ротация держит, после ожидания перепроверяется на
-   * новой версии — ротированная сессия тоже отзывается. Возвращает число отозванных.
+   * Отзыв всех живых сессий пользователя (смена пароля — `password_reset`) по `sessions_user_id_idx`, в транзакции
+   * вызывающего. Уже отозванные не меняются. Возвращает число отозванных.
    */
   async revokeAllSessions(
-    ex: DbExecutor,
+    session: DbSession,
     userId: string,
     at: Date,
     reason: SessionRevokedReason,
   ): Promise<number> {
-    const rows = await ex
-      .update(sessions)
-      .set({ revokedAt: at, revokedReason: reason })
-      .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)))
-      .returning({ id: sessions.id });
-    return rows.length;
+    const result = await this.c.sessions.updateMany(
+      { userId, revokedAt: null },
+      { $set: { revokedAt: at, revokedReason: reason } },
+      { session },
+    );
+    return result.modifiedCount;
   }
 
   /**
-   * Новый токен регистрации взамен прежнего (вход неподтверждённого, Q4): прежний перестаёт действовать, срок —
-   * заново. Строка у пользователя одна (UNIQUE user_id).
+   * Новый токен регистрации взамен прежнего (вход неподтверждённого, Q4) — под `lockUser`: прежний перестаёт
+   * действовать, срок — заново. Документ у пользователя один (`registration_tokens_user_id_unique`).
    */
   async replaceRegistrationToken(
-    ex: DbExecutor,
+    session: DbSession,
     token: { userId: string; tokenHash: string; createdAt: Date; expiresAt: Date },
   ): Promise<void> {
-    await ex
-      .insert(registrationTokens)
-      .values(token)
-      .onConflictDoUpdate({
-        target: registrationTokens.userId,
-        set: {
-          tokenHash: token.tokenHash,
-          createdAt: token.createdAt,
-          expiresAt: token.expiresAt,
-          consumedAt: null,
-        },
-      });
+    const { userId, tokenHash, createdAt, expiresAt } = token;
+    await this.c.registrationTokens.updateOne(
+      { userId },
+      {
+        $set: { tokenHash, createdAt, expiresAt, consumedAt: null },
+        $setOnInsert: { _id: uuidv7(), userId },
+      },
+      { session, upsert: true },
+    );
   }
 
   /**
-   * Необратимо гасит токен регистрации (смена пароля, R5 слайса 3): `consumed_at` — тот же признак, что проверяет
+   * Необратимо гасит токен регистрации (смена пароля, R5 слайса 3): `consumedAt` — тот же признак, что проверяет
    * обмен на сессию, поэтому не проходит и poll, начатый раньше сброса и запомнивший более раннее «сейчас» (срок
    * сравнивается с его временем, признак — нет). Уже обменянный токен не меняется.
    */
-  async revokeRegistrationToken(ex: DbExecutor, userId: string, now: Date): Promise<void> {
-    await ex
-      .update(registrationTokens)
-      .set({ consumedAt: now })
-      .where(and(eq(registrationTokens.userId, userId), isNull(registrationTokens.consumedAt)));
+  async revokeRegistrationToken(session: DbSession, userId: string, now: Date): Promise<void> {
+    await this.c.registrationTokens.updateOne(
+      { userId, consumedAt: null },
+      { $set: { consumedAt: now } },
+      { session },
+    );
   }
 
   // --- очистка (V-10) ---
 
   /**
-   * Удаляет пачку неподтверждённых аккаунтов, созданных раньше `createdBefore`; связанные строки — каскадом.
-   * Условия повторены во внешнем DELETE: если строку держит confirm, PostgreSQL после ожидания блокировки
-   * перепроверит их на новой версии строки — только что подтверждённый аккаунт не удалится.
+   * Удаляет пачку неподтверждённых аккаунтов, созданных раньше `createdBefore`, со связанными документами (каскад —
+   * явный, R4). Каждый аккаунт — своя транзакция: `findOneAndDelete` повторяет условия, а удаление — запись в `users`,
+   * которая конфликтует с идущим подтверждением (`lockUser`); после повтора условие не выполняется — только что
+   * подтверждённый аккаунт не удаляется. Согласия удаляются как каскад: аккаунт так и не состоялся. Возвращает
+   * число удалённых аккаунтов.
    */
-  async deleteUnverifiedBatch(ex: DbExecutor, createdBefore: Date, limit: number): Promise<number> {
-    const unverifiedAndStale = and(
-      isNull(users.emailVerifiedAt),
-      isNull(users.deletedAt),
-      lt(users.createdAt, createdBefore),
-    );
-    const batch = ex.select({ id: users.id }).from(users).where(unverifiedAndStale).limit(limit);
-    const deleted = await ex
-      .delete(users)
-      .where(and(sql`${users.id} IN ${batch}`, unverifiedAndStale))
-      .returning({ id: users.id });
-    return deleted.length;
+  async deleteUnverifiedBatch(createdBefore: Date, limit: number): Promise<number> {
+    const unverifiedAndStale: Filter<UserDoc> = {
+      emailVerifiedAt: null,
+      deletedAt: null,
+      createdAt: { $lt: createdBefore },
+    };
+    const candidates = await this.c.users
+      .find(unverifiedAndStale, { projection: { _id: 1 } })
+      .limit(limit)
+      .toArray();
+    let deleted = 0;
+    for (const { _id: userId } of candidates) {
+      const removed = await this.transactions.run(async (session) => {
+        // исключение из R1: первая операция — сама запись в документ users (удаление с условиями в фильтре)
+        const user = await this.c.users.findOneAndDelete(
+          { _id: userId, ...unverifiedAndStale },
+          { session, projection: { _id: 1 } },
+        );
+        if (!user) return false;
+        const byUser = { userId };
+        await this.c.userConsents.deleteMany(byUser, { session });
+        await this.c.emailVerificationTokens.deleteMany(byUser, { session });
+        await this.c.passwordResetTokens.deleteMany(byUser, { session });
+        await this.c.registrationTokens.deleteMany(byUser, { session });
+        await this.c.sessions.deleteMany(byUser, { session });
+        return true;
+      });
+      if (removed) deleted += 1;
+    }
+    return deleted;
   }
 }

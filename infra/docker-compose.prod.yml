@@ -1,6 +1,8 @@
 # Прод: одна VPS (hoster.by), Docker Compose, без Kubernetes.
-# Секреты — в infra/.env на сервере (не в git). Миграции — отдельным шагом деплоя:
-#   docker compose run --rm api node node_modules/drizzle-kit/bin.cjs migrate
+# Секреты — в infra/.env на сервере (не в git). Заготовка: схема как у dev-стенда (infra/deploy, ADR-0007) —
+# MongoDB replica set с keyfile и пользователем приложения; набор и пользователи — infra/deploy/mongo-init.js.
+# Миграции — отдельным шагом деплоя:
+#   docker compose run --rm api node apps/api/dist/db/migrate.js
 name: pokatim
 services:
   caddy:
@@ -16,13 +18,13 @@ services:
     image: ghcr.io/rkarakulov/pokatim-api:${APP_VERSION:-latest}
     command: ['node', 'apps/api/dist/main.js']
     env_file: .env
-    depends_on: [postgres, redis]
+    depends_on: [mongo, redis]
     restart: unless-stopped
   worker:
     image: ghcr.io/rkarakulov/pokatim-api:${APP_VERSION:-latest}
     command: ['node', 'apps/api/dist/worker.js']
     env_file: .env
-    depends_on: [postgres, redis]
+    depends_on: [mongo, redis]
     restart: unless-stopped
   # web/PWA с SSR (expo-server, apps/app/server) — то же приложение, что iOS/Android (ADR-0003)
   web:
@@ -35,10 +37,29 @@ services:
       WEB_ORIGIN: https://${PUBLIC_HOST}
     depends_on: [api]
     restart: unless-stopped
-  postgres:
-    image: postgis/postgis:18-3.6
-    env_file: .env
-    volumes: [pgdata:/var/lib/postgresql]
+  # single-node replica set (транзакции, outbox); keyfile — ./mongo-keyfile (600), копия с владельцем mongodb
+  mongo:
+    image: mongo:8.0
+    entrypoint:
+      - bash
+      - -ec
+      - install -m 400 -o mongodb -g mongodb /run/pokatim/mongo-keyfile /data/configdb/keyfile; exec docker-entrypoint.sh "$$@"
+      - mongo-entrypoint
+    command:
+      [
+        'mongod',
+        '--replSet',
+        'rs0',
+        '--bind_ip_all',
+        '--keyFile',
+        '/data/configdb/keyfile',
+        '--wiredTigerCacheSizeGB',
+        '0.5',
+      ]
+    volumes:
+      - mongodata:/data/db
+      - mongoconfig:/data/configdb
+      - ./mongo-keyfile:/run/pokatim/mongo-keyfile:ro
     restart: unless-stopped
   redis:
     image: redis:8.8
@@ -46,7 +67,8 @@ services:
     volumes: [redisdata:/data]
     restart: unless-stopped
 volumes:
-  pgdata:
+  mongodata:
+  mongoconfig:
   redisdata:
   caddy-data:
   admin-dist:

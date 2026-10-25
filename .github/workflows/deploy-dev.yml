@@ -242,7 +242,7 @@ jobs:
           set -euo pipefail
           ssh dev 'mkdir -p -m 700 pokatim'
           scp -q infra/deploy/deploy.sh infra/deploy/bootstrap.sh infra/deploy/docker-compose.yml \
-            infra/deploy/env.template dev:pokatim/
+            infra/deploy/env.template infra/deploy/mongo-init.js dev:pokatim/
 
       - name: Деплой ${{ env.TAG }}
         env:

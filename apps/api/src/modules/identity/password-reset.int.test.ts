@@ -6,32 +6,30 @@ import {
   Session,
   SignInResponse,
 } from '@pokatim/contracts';
-import { asc, desc, eq } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  createHarness,
-  HOUR,
-  MINUTE,
-  type Harness,
-  waitForLockWaiter,
-} from '../../../test/harness';
+import { createHarness, HOUR, MINUTE, type Harness } from '../../../test/harness';
 import {
   activeLinkToken,
   call,
+  collections,
   confirm,
   confirmPasswordReset,
   describePasswordReset,
+  gate,
+  holdTransaction,
   latestResetToken,
+  outboxEvents,
   poll,
   register,
   requestPasswordReset,
+  retried,
+  untilBlocked,
+  userIdByEmail,
   validRegistration,
 } from '../../../test/identity';
-import { outbox } from '../../db';
 import { IDENTITY_POLICY } from './identity.policy';
 import { IdentityRepository } from './identity.repository';
-import { passwordResetTokens, registrationTokens, sessions, users } from './identity.schema';
 import { PasswordHasher } from './password-hasher';
 import { sha256 } from './tokens';
 
@@ -73,14 +71,13 @@ async function nativeSession(email = EMAIL, password = OLD_PASSWORD): Promise<st
 
 const hasher = () => h.app.get(PasswordHasher, { strict: false });
 const resetRows = () =>
-  h.db.select().from(passwordResetTokens).orderBy(asc(passwordResetTokens.createdAt));
-const eventTypes = async () =>
-  (await h.db.select().from(outbox).orderBy(asc(outbox.createdAt), asc(outbox.id))).map(
-    (event) => event.type,
-  );
+  collections(h).passwordResetTokens.find().sort({ createdAt: 1, _id: 1 }).toArray();
+const eventTypes = async () => (await outboxEvents(h)).map((event) => event.type);
+const sessionByRefresh = (refresh: string) =>
+  collections(h).sessions.findOne({ refreshTokenHash: sha256(refresh) });
 
 describe('POST /v1/auth/password-reset — запрос ссылки (AC1)', () => {
-  it('существующий адрес (любой регистр, пробелы) — 200, строка ссылки на 1 час, событие outbox', async () => {
+  it('существующий адрес (любой регистр, пробелы) — 200, ссылка на 1 час, событие outbox', async () => {
     await verifiedAccount();
 
     const res = await requestPasswordReset(h, '  Rider@Example.COM ');
@@ -89,28 +86,28 @@ describe('POST /v1/auth/password-reset — запрос ссылки (AC1)', () 
     expect(res.headers['cache-control']).toBe('no-store');
     expect(RequestPasswordResetResponse.parse(res.body)).toEqual({ resendAvailableInSec: 60 });
     const [row] = await resetRows();
-    const [user] = await h.db.select().from(users);
+    const [user] = await collections(h).users.find().toArray();
     expect(row).toMatchObject({
-      userId: user?.id,
+      userId: user?._id,
       createdAt: h.clock.now(),
       expiresAt: new Date(h.clock.now().getTime() + HOUR),
       usedAt: null,
       supersededAt: null,
     });
     expect(row?.tokenHash).toBe(sha256(await latestResetToken(h)));
-    const [event] = await h.db.select().from(outbox).orderBy(desc(outbox.createdAt));
+    const event = (await outboxEvents(h)).at(-1);
     expect(event?.type).toBe('identity.password-reset-email-requested');
-    // в payload — только id строки: ни токена, ни e-mail
-    expect(event?.payload).toEqual({ passwordResetTokenId: row?.id });
+    // в payload — только id ссылки: ни токена, ни e-mail
+    expect(event?.payload).toEqual({ passwordResetTokenId: row?._id });
   });
 
-  it('неизвестный и удалённый адрес — тот же 200 побайтно, ни строки, ни события', async () => {
+  it('неизвестный и удалённый адрес — тот же 200 побайтно, ни ссылки, ни события', async () => {
     await verifiedAccount();
     await verifiedAccount('gone@example.com');
-    await h.db
-      .update(users)
-      .set({ deletedAt: h.clock.now() })
-      .where(eq(users.email, 'gone@example.com'));
+    await collections(h).users.updateOne(
+      { email: 'gone@example.com' },
+      { $set: { deletedAt: h.clock.now() } },
+    );
     const eventsBefore = await eventTypes();
 
     const existing = await requestPasswordReset(h, EMAIL, '198.51.100.1');
@@ -213,8 +210,8 @@ describe('лимиты запроса (AC2, Q5)', () => {
 
 describe('GET /v1/auth/password-reset/:token — без побочных эффектов (AC3, AC4)', () => {
   const snapshot = async () => ({
-    users: await h.db.select().from(users),
-    sessions: await h.db.select().from(sessions),
+    users: await collections(h).users.find().toArray(),
+    sessions: await collections(h).sessions.find().toArray(),
     links: await resetRows(),
     events: await eventTypes(),
   });
@@ -279,7 +276,7 @@ describe('GET /v1/auth/password-reset/:token — без побочных эфф�
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
     }
-    await h.db.update(users).set({ deletedAt: h.clock.now() });
+    await collections(h).users.updateMany({}, { $set: { deletedAt: h.clock.now() } });
     expect((await describePasswordReset(h, token)).status).toBe(404);
     expect((await confirmPasswordReset(h, token, NEW_PASSWORD)).status).toBe(404);
   });
@@ -307,17 +304,11 @@ describe('POST /v1/auth/password-reset/confirm — смена пароля (AC5)
     const [link] = await resetRows();
     expect(link?.usedAt).toEqual(h.clock.now());
     for (const refresh of mine) {
-      const [row] = await h.db
-        .select()
-        .from(sessions)
-        .where(eq(sessions.refreshTokenHash, sha256(refresh)));
+      const row = await sessionByRefresh(refresh);
       expect(row).toMatchObject({ revokedAt: h.clock.now(), revokedReason: 'password_reset' });
       expect((await call(h, 'POST', REFRESH, { refreshToken: refresh })).status).toBe(401);
     }
-    const [out] = await h.db
-      .select()
-      .from(sessions)
-      .where(eq(sessions.refreshTokenHash, sha256(signedOut)));
+    const out = await sessionByRefresh(signedOut);
     expect(out?.revokedReason).toBe('signed_out');
     expect((await call(h, 'POST', REFRESH, { refreshToken: others })).status).toBe(200);
 
@@ -325,8 +316,11 @@ describe('POST /v1/auth/password-reset/confirm — смена пароля (AC5)
     expect(SignInResponse.parse((await signIn(EMAIL, NEW_PASSWORD)).body).state).toBe('signedIn');
     expect((await eventTypes()).at(-1)).toBe('identity.password-changed-email-requested');
 
-    const [user] = await h.db.select().from(users).where(eq(users.email, EMAIL));
-    expect(log).toHaveBeenCalledWith({ msg: 'password reset', uid: user?.id, revoked: 2 });
+    expect(log).toHaveBeenCalledWith({
+      msg: 'password reset',
+      uid: await userIdByEmail(h, EMAIL),
+      revoked: 2,
+    });
     const logged = JSON.stringify(log.mock.calls);
     for (const secret of [EMAIL, token, sha256(token), NEW_PASSWORD, '198.51.100']) {
       expect(logged).not.toContain(secret);
@@ -391,38 +385,47 @@ describe('неподтверждённый аккаунт (AC6, Q4, R5)', () => 
       200,
     );
 
-    const [user] = await h.db.select().from(users);
+    const [user] = await collections(h).users.find().toArray();
     expect(user?.emailVerifiedAt).toEqual(h.clock.now());
-    const [regToken] = await h.db.select().from(registrationTokens);
+    const [regToken] = await collections(h).registrationTokens.find().toArray();
     expect(regToken?.consumedAt).toEqual(h.clock.now());
     expect((await poll(h, registrationToken)).status).toBe(401);
-    expect(await h.db.select().from(sessions)).toEqual([]);
+    expect(await collections(h).sessions.countDocuments()).toBe(0);
     expect(SignInResponse.parse((await signIn(EMAIL, NEW_PASSWORD)).body).state).toBe('signedIn');
   });
 });
 
+/**
+ * Гонки без блокировок строк (R9): «удерживаемая транзакция» — другая транзакция аккаунта открыта и уже записала
+ * `users` (`$inc version`), но не закоммичена: проверяемая транзакция получает конфликт записи и повторяется
+ * (spy `lockUser*` вызван ≥ 2 раз) до коммита; «ворота» — проверяемая операция приостановлена между проверкой и
+ * `lockUser`, другая завершается целиком.
+ */
 describe('гонки (AC7, R4)', () => {
-  it('вход, проверивший старый пароль до коммита сброса, — 401 и без новой сессии', async () => {
-    await verifiedAccount();
-    const newHash = await hasher().hash(NEW_PASSWORD);
-    const reset = await h.pool.connect();
-    try {
-      // «сброс» держит блокировку аккаунта и уже сменил хеш, но ещё не закоммитил
-      await reset.query('BEGIN');
-      await reset.query('SELECT id FROM users WHERE email = $1 FOR UPDATE', [EMAIL]);
-      await reset.query('UPDATE users SET password_hash = $1 WHERE email = $2', [newHash, EMAIL]);
-      // вход читает прежний хеш (изменение не закоммичено), проверяет старый пароль и ждёт блокировку
-      const signing = signIn(EMAIL, OLD_PASSWORD);
-      await waitForLockWaiter(h.pool);
-      await reset.query('COMMIT');
+  const repository = () => h.app.get(IdentityRepository, { strict: false });
 
-      const res = await signing;
-      expect(res.status).toBe(401);
-      expect(res.body).toMatchObject({ code: 'INVALID_CREDENTIALS' });
-      expect(await h.db.select().from(sessions)).toEqual([]);
-    } finally {
-      reset.release();
-    }
+  it('вход, проверивший старый пароль, пока сброс «в процессе», — 401 после коммита сброса, без новой сессии', async () => {
+    await verifiedAccount();
+    const userId = await userIdByEmail(h, EMAIL);
+    const newHash = await hasher().hash(NEW_PASSWORD);
+    // «сброс» уже сменил хеш под lockUser, но ещё не закоммитил
+    const reset = await holdTransaction(h, async (session) => {
+      await collections(h).users.updateOne(
+        { _id: userId },
+        { $inc: { version: 1 }, $set: { passwordHash: newHash } },
+        { session },
+      );
+    });
+    const lock = vi.spyOn(repository(), 'lockUserCredentials');
+    // вход читает прежний (закоммиченный) хеш, проверяет старый пароль и повторяет транзакцию на конфликте записи
+    const signing = signIn(EMAIL, OLD_PASSWORD);
+    await untilBlocked(signing, retried(lock));
+    await reset.commit();
+
+    const res = await signing;
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    expect(await collections(h).sessions.countDocuments()).toBe(0);
   });
 
   it('poll подтверждённого аккаунта, начатый до сброса и продолженный после него, — 401 без новой сессии (R5)', async () => {
@@ -432,55 +435,49 @@ describe('гонки (AC7, R4)', () => {
     const token = await latestResetToken(h);
 
     // poll запомнил своё «сейчас» и прочитал токен, но до блокировки аккаунта приостановлен
-    const repository = h.app.get(IdentityRepository, { strict: false });
-    const lockUser = repository.lockUser.bind(repository);
-    let release: () => void = () => undefined;
-    const gate = new Promise<void>((resolve) => (release = resolve));
-    let paused: () => void = () => undefined;
-    const reached = new Promise<void>((resolve) => (paused = resolve));
-    vi.spyOn(repository, 'lockUser').mockImplementationOnce(async (ex, userId) => {
-      paused();
-      await gate;
-      return lockUser(ex, userId);
+    const target = repository();
+    const lockUser = target.lockUser.bind(target);
+    const paused = gate();
+    vi.spyOn(target, 'lockUser').mockImplementationOnce(async (session, userId) => {
+      await paused.wait();
+      return lockUser(session, userId);
     });
     const polling = poll(h, registrationToken);
-    await reached;
+    await paused.reached;
 
-    // сброс с более поздним временем завершается первым (другое соединение)
+    // сброс с более поздним временем завершается первым
     h.clock.advance(MINUTE);
     expect((await confirmPasswordReset(h, token, NEW_PASSWORD)).status).toBe(200);
-    release();
+    paused.open();
 
     const res = await polling;
     expect(res.status).toBe(401);
-    expect(await h.db.select().from(sessions)).toEqual([]);
+    expect(await collections(h).sessions.countDocuments()).toBe(0);
   });
 
-  it('confirm, ждавший блокировку аккаунта, пока ссылка истекла, — 410; пароль и сессии не изменены', async () => {
+  it('confirm, ждавший другую транзакцию аккаунта, пока ссылка истекла, — 410; пароль и сессии не изменены', async () => {
     await verifiedAccount();
     const refresh = await nativeSession();
     await requestPasswordReset(h, EMAIL);
     const token = await latestResetToken(h);
+    const userId = await userIdByEmail(h, EMAIL);
     h.clock.advance(HOUR - MINUTE); // ссылка ещё жива минуту
-    const holder = await h.pool.connect();
-    try {
-      // другая транзакция аккаунта держит блокировку строки users
-      await holder.query('BEGIN');
-      await holder.query('SELECT id FROM users WHERE email = $1 FOR UPDATE', [EMAIL]);
-      const confirming = confirmPasswordReset(h, token, NEW_PASSWORD);
-      await waitForLockWaiter(h.pool);
-      h.clock.advance(MINUTE); // пока confirm ждёт, срок ссылки прошёл
-      await holder.query('COMMIT');
+    // другая транзакция аккаунта держит документ users
+    const holder = await holdTransaction(h, async (session) => {
+      await collections(h).users.updateOne({ _id: userId }, { $inc: { version: 1 } }, { session });
+    });
+    const lock = vi.spyOn(repository(), 'lockUser');
+    const confirming = confirmPasswordReset(h, token, NEW_PASSWORD);
+    await untilBlocked(confirming, retried(lock));
+    h.clock.advance(MINUTE); // пока confirm повторяется, срок ссылки прошёл
+    await holder.commit();
 
-      const res = await confirming;
-      expect(res.status).toBe(410);
-      expect(res.body).toMatchObject({ code: 'LINK_EXPIRED', details: { email: EMAIL } });
-    } finally {
-      holder.release();
-    }
+    const res = await confirming;
+    expect(res.status).toBe(410);
+    expect(res.body).toMatchObject({ code: 'LINK_EXPIRED', details: { email: EMAIL } });
     const [link] = await resetRows();
     expect(link?.usedAt).toBeNull();
-    const [row] = await h.db.select().from(sessions);
+    const [row] = await collections(h).sessions.find().toArray();
     expect(row?.revokedAt).toBeNull();
     expect((await signIn(EMAIL, OLD_PASSWORD)).status).toBe(200);
     expect((await call(h, 'POST', REFRESH, { refreshToken: refresh })).status).toBe(200);

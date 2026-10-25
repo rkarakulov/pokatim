@@ -1,16 +1,12 @@
 import { Module } from '@nestjs/common';
+import { ClockModule, ConfigModule, MailModule, QueueModule } from '@rkarakulov/api-kit/core';
 import {
-  ClockModule,
-  ConfigModule,
-  DatabaseModule,
-  MailModule,
-  OutboxModule,
-  OutboxPublisherModule,
-  QueueModule,
-} from '@rkarakulov/api-kit';
+  MongoModule,
+  MongoOutboxModule,
+  MongoOutboxPublisherModule,
+} from '@rkarakulov/api-kit/mongo';
 
 import { env } from './config/env';
-import { schema } from './db';
 import { identityOutboxRoutes, IdentityWorkerModule } from './modules/identity';
 import { TracksWorkerModule } from './modules/tracks';
 
@@ -19,12 +15,12 @@ import { TracksWorkerModule } from './modules/tracks';
   imports: [
     ConfigModule.forRoot(env),
     ClockModule,
-    DatabaseModule.forRoot({ schema }),
+    MongoModule.forRoot(),
     QueueModule,
     MailModule,
-    OutboxModule,
+    MongoOutboxModule,
     // composition root: какие события outbox в какие очереди (`{ ...<модуль>OutboxRoutes }`)
-    OutboxPublisherModule.forRoot({ routes: { ...identityOutboxRoutes } }),
+    MongoOutboxPublisherModule.forRoot({ routes: { ...identityOutboxRoutes } }),
     TracksWorkerModule,
     IdentityWorkerModule,
   ],

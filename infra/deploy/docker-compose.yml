@@ -1,7 +1,7 @@
 # Dev-сервер (общий EC2): стек pokatim из образов GHCR, docs/runbooks/deploy.md.
 # Кладётся деплоем в ${POKATIM_DIR:-~/pokatim}/docker-compose.yml; переменные — из .env рядом (bootstrap.sh,
 # секреты генерируются на сервере). Запуск — deploy.sh: compose project pokatim-dev, --env-file .env.
-# Наружу ничего: PostgreSQL, Redis, SMTP — только сеть проекта; api/web/admin и UI Mailpit — 127.0.0.1
+# Наружу ничего: MongoDB, Redis, SMTP — только сеть проекта; api/web/admin и UI Mailpit — 127.0.0.1
 # (перед ними nginx хоста; UI Mailpit — под паролем). Сервер общий: порты хоста выбраны свободными, перед
 # сменой — `ss -ltnp`.
 # общий диск: ротация логов каждого контейнера (на сервере нет log-opts в daemon.json)
@@ -14,7 +14,8 @@ x-api-env: &api-env
   PORT: '3000'
   # тег образа — в ответе /v1/health (version)
   APP_VERSION: ${POKATIM_TAG:?}
-  DATABASE_URL: postgres://pokatim:${POSTGRES_PASSWORD:?}@postgres:5432/pokatim
+  # пользователь приложения (readWrite только на БД pokatim, Q1); пароль — hex из .env (без экранирования в URL)
+  MONGO_URL: &mongo-url mongodb://pokatim:${MONGO_PASSWORD:?}@mongo:27017/pokatim?replicaSet=rs0&authSource=pokatim
   REDIS_URL: redis://redis:6379
   # один прокси перед API — nginx хоста: берётся адрес клиента, который он записал в X-Forwarded-For
   TRUST_PROXY: ${TRUST_PROXY:-1}
@@ -30,21 +31,54 @@ x-api-env: &api-env
 x-api-image: &api-image ${POKATIM_IMAGE_PREFIX:-ghcr.io/rkarakulov/pokatim}-api:${POKATIM_TAG:?}
 
 services:
-  postgres:
-    image: postgis/postgis:18-3.6@sha256:e84455a058f60f06dd8c40e66a2c628b8fc113d9fca0896e1f308b25b897207f
-    environment:
-      POSTGRES_USER: pokatim
-      POSTGRES_DB: pokatim
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
-    volumes: [pgdata:/var/lib/postgresql]
+  # MongoDB 8.0 single-node replica set (транзакции и outbox работают только на RS, ADR-0007). Член набора —
+  # mongo:27017 (адрес сервиса в сети проекта). Доступ — keyfile + пользователи (Q1): keyfile генерирует bootstrap.sh
+  # (${POKATIM_DIR}/mongo-keyfile, 600), обёртка entrypoint копирует его в том mongoconfig с владельцем mongodb и 400
+  # (mongod не принимает файл, читаемый другими). Набор rs0, root и пользователя приложения создаёт deploy.sh
+  # (mongo-init.js: localhost exception на пустой БД, дальше — вход root). Healthcheck — `hello` без входа: PRIMARY.
+  mongo:
+    image: mongo:8.0@sha256:4a4ab5d4834207389e0d7270fac988e21ffedccecba77991a552f755df229907
+    entrypoint:
+      - bash
+      - -ec
+      - install -m 400 -o mongodb -g mongodb /run/pokatim/mongo-keyfile /data/configdb/keyfile; exec docker-entrypoint.sh "$$@"
+      - mongo-entrypoint
+    # кэш WiredTiger явно: по умолчанию — половина памяти хоста за вычетом 1 ГБ, а не лимита контейнера
+    command:
+      - mongod
+      - --replSet
+      - rs0
+      - --bind_ip_all
+      - --keyFile
+      - /data/configdb/keyfile
+      - --wiredTigerCacheSizeGB
+      - '0.25'
+    volumes:
+      - mongodata:/data/db
+      - mongoconfig:/data/configdb
+      - type: bind
+        source: ./mongo-keyfile
+        target: /run/pokatim/mongo-keyfile
+        read_only: true
+        bind: { create_host_path: false }
+    # mongosh — отдельный процесс Node (~100 МБ) в лимите контейнера: проверка раз в 15 с, не чаще
     healthcheck:
-      # по TCP: при первом запуске initdb поднимает временный сервер только на unix-сокете и перезапускается —
-      # проверка через сокет «здорова» раньше времени, и миграции попадают в перезапуск
-      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U pokatim -d pokatim']
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    deploy: { resources: { limits: { memory: 512m } } }
+      test:
+        [
+          'CMD',
+          'mongosh',
+          '--quiet',
+          '--norc',
+          '--eval',
+          'quit(db.hello().isWritablePrimary ? 0 : 1)',
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    # бюджет стека на общем сервере — 2560m: mongo 640 + redis 320 + mailpit 128 + api 512 + worker 384 + web 512 +
+    # admin 64; mongod — кэш 0,25 ГБ + служебная память, запас — на mongosh healthcheck и deploy.sh
+    deploy: { resources: { limits: { memory: 640m } } }
     restart: unless-stopped
     logging: *logging
 
@@ -105,11 +139,11 @@ services:
   migrate:
     image: *api-image
     profiles: [migrate]
-    command: ['node', '../../node_modules/drizzle-kit/bin.cjs', 'migrate']
+    command: ['node', 'dist/db/migrate.js']
     environment:
-      DATABASE_URL: postgres://pokatim:${POSTGRES_PASSWORD:?}@postgres:5432/pokatim
+      MONGO_URL: *mongo-url
     depends_on:
-      postgres: { condition: service_healthy }
+      mongo: { condition: service_healthy }
     restart: 'no'
     logging: *logging
 
@@ -119,7 +153,7 @@ services:
     environment: *api-env
     ports: ['127.0.0.1:${POKATIM_API_PORT:-3100}:3000']
     depends_on:
-      postgres: { condition: service_healthy }
+      mongo: { condition: service_healthy }
       redis: { condition: service_healthy }
     healthcheck:
       test:
@@ -140,9 +174,9 @@ services:
     command: ['node', 'dist/worker.js']
     environment: *api-env
     depends_on:
-      postgres: { condition: service_healthy }
+      mongo: { condition: service_healthy }
       redis: { condition: service_healthy }
-    deploy: { resources: { limits: { memory: 512m } } }
+    deploy: { resources: { limits: { memory: 384m } } }
     restart: unless-stopped
     logging: *logging
 
@@ -186,5 +220,6 @@ services:
     logging: *logging
 
 volumes:
-  pgdata:
+  mongodata:
+  mongoconfig:
   redisdata:

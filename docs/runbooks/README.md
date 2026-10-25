@@ -15,7 +15,7 @@
 | Файл | Тема |
 |---|---|
 | `deploy-prod.md` | деплой prod (`main`) на VPS |
-| `backup-restore.md` | ночной дамп PostgreSQL в S3 и проверенное восстановление |
+| `backup-restore.md` | ночной дамп MongoDB (`mongodump`) в S3 и проверенное восстановление; пока — ручной дамп, `deploy.md` |
 | `incident.md` | API недоступен, очередь растёт, диск заполнен, сертификат Caddy |
 | `release-mobile.md` | сборка и публикация через EAS, совместимость API со старыми версиями |
 

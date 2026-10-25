@@ -9,8 +9,9 @@
    `//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}` (pnpm раскрывает переменные только там, не в
    проектном `.npmrc`). Перед `pnpm install` — `export NODE_AUTH_TOKEN=$(gh auth token)`.
    Сам токен нигде не записывается.
-1. Инфраструктура: `pnpm infra:up` — PostgreSQL 18 + PostGIS (`:5432`), Redis (`:6379`),
-   Mailpit (SMTP `:1025`, веб `http://127.0.0.1:8025`).
+1. Инфраструктура: `pnpm infra:up` — MongoDB 8.0 (`127.0.0.1:27017`, single-node replica set `rs0`: при первом
+   запуске healthcheck делает `rs.initiate`, команда ждёт PRIMARY), Redis (`:6379`), Mailpit (SMTP `:1025`, веб
+   `http://127.0.0.1:8025`). MongoDB в dev — без пользователей и пароля, поэтому порт открыт только на `127.0.0.1`.
 2. Окружение API: `cp apps/api/.env.example apps/api/.env` и заполнить секреты:
    `JWT_SECRET` и `EMAIL_TOKEN_SECRET` — случайные строки не короче 32 символов
    (`openssl rand -hex 32`). Файл `.env` в git не попадает.
@@ -25,7 +26,7 @@
 
 | Переменная | Dev-значение | Назначение |
 |---|---|---|
-| `DATABASE_URL` | `postgres://pokatim:pokatim@127.0.0.1:5432/pokatim` | основная БД |
+| `MONGO_URL` | `mongodb://127.0.0.1:27017/pokatim?directConnection=true` | основная БД: имя БД в пути обязательно; `directConnection` — член набора объявлен как `127.0.0.1:27017` внутри контейнера |
 | `REDIS_URL` | `redis://127.0.0.1:6379` | BullMQ, rate-limit |
 | `TRUST_PROXY` | `0` | `1` за обратным прокси: доверять одному прокси в `X-Forwarded-For` |
 | `SMTP_URL` | `smtp://127.0.0.1:1025` | Mailpit |
@@ -89,7 +90,7 @@ Expo Go не открывает схему `pokatim://`. Для проверки
   перезагрузка → выход → «Забыли пароль?» → письмо → новый пароль → старый пароль 401 → вход новым → письмо
   «Пароль изменён»): при `E2E_API=1` Playwright сам
   поднимает API и worker из `apps/api/dist` (`e2e/project.ts`) с `APP_LINK_BASE` и `CORS_ORIGINS` смоука (`:8090`,
-  `:8091`), остальное окружение — из `apps/api/.env`. Нужны `pnpm infra:up` (PostgreSQL, Redis, Mailpit), миграции
+  `:8091`), остальное окружение — из `apps/api/.env`. Нужны `pnpm infra:up` (MongoDB, Redis, Mailpit), миграции
   и свободный порт API из `EXPO_PUBLIC_API_URL` (dev-API на `:3000` — остановить или взять другой порт):
 
   ```bash
@@ -134,10 +135,11 @@ Expo Go не открывает схему `pokatim://`. Для проверки
 
 ## Тесты
 
-`pnpm test` поднимает интеграционные тесты API на реальных PostgreSQL и Redis:
+`pnpm test` поднимает интеграционные тесты API на реальных MongoDB (replica set) и Redis:
 
-- `DATABASE_URL_TEST` (по умолчанию `postgres://pokatim:pokatim@127.0.0.1:5432/pokatim_test`) —
-  база **пересоздаётся** перед прогоном и мигрируется; имя обязано оканчиваться на `_test`;
+- `MONGO_URL_TEST` (по умолчанию `mongodb://127.0.0.1:27017/pokatim_test?directConnection=true`) — база
+  **удаляется** перед прогоном, миграции проекта применяются заново; имя обязано оканчиваться на `_test`;
+  перед каждым тестом коллекции очищаются (индексы и учёт миграций остаются);
 - `REDIS_URL_TEST` (по умолчанию `redis://127.0.0.1:6379/1`) — db 1, очищается перед каждым тестом.
 
 Только unit: `pnpm --filter @pokatim/api exec vitest run --project unit`.
@@ -151,7 +153,8 @@ Expo Go не открывает схему `pokatim://`. Для проверки
 - **Web в CI:** job `web` — `pnpm e2e:web` (web-сборка и Playwright-смоук на Google Chrome раннера). Отчёт при
   падении — артефакт `playwright-report`. Смоук с API — в отмеченных комментариями местах job: `services`, `env`
   (`E2E_API: '1'`, окружение API — только тестовые значения) и шаги подготовки (сборка API, миграции) перед
-  `pnpm e2e:web`. pokatim: services PostgreSQL, Redis и Mailpit, секреты API в job — фиктивные значения.
+  `pnpm e2e:web`. pokatim: MongoDB replica set — шагом (как в `check`), services Redis и Mailpit, секреты API в
+  job — фиктивные значения.
 - **EAS Build** (облачная сборка) не видит ваш `~/.npmrc`: перед первой сборкой создайте в EAS секрет
   `NODE_AUTH_TOKEN` (токен с `read:packages`, видимость — secret) и хук `eas-build-pre-install` в
   `apps/app/package.json`, который дописывает строку авторизации в `~/.npmrc` сборщика — тот же вид, что
@@ -164,36 +167,34 @@ Expo Go не открывает схему `pokatim://`. Для проверки
 в файлах и `*.rej`; разрешить, удалить `*.rej`, затем `pnpm install && pnpm check`. Проверить наличие новой
 версии — `uvx copier check-update`.
 
-## Переезд on-bike → pokatim (2026-10-25)
+## MongoDB: миграции и прод
 
-С переименования проекта dev compose — project `pokatim-dev`, БД, пользователь и пароль — `pokatim`, тестовая БД —
-`pokatim_test`. Прежний стек `on-bike-dev` (БД `on_bike`) занимает те же порты. Один из двух путей:
+- **Миграции** — `apps/api/src/db/migrations/` (`NNNN_<имя>.ts`, объект `{ id, up(db) }`) и список в
+  `migrations/index.ts`: новая — в конец, применённую не меняют. `db:migrate` применяет новые по порядку, учёт —
+  коллекция `_migrations`. В dev и CI — `pnpm --filter @pokatim/api db:migrate` (`tsx`), в проде — шаг
+  деплоя `node dist/db/migrate.js` (в каталоге `apps/api`, с `MONGO_URL`) до запуска новой версии API и worker.
+- **«Миграции MongoDB уже идут»** — блокировка от параллельного запуска: документ `{ _id: 'lock' }` в
+  `_migrations_lock`. Остался после падения процесса — убедиться, что `db:migrate` нигде не идёт, и удалить:
+  `db.getCollection('_migrations_lock').deleteOne({ _id: 'lock' })` в `mongosh`.
+- **Прод:** replica set из 3 узлов или Atlas (standalone `mongod` API не принимает: транзакции и outbox работают
+  только на replica set), `MONGO_URL` с пользователем и паролем, TLS (`tls=true` или `mongodb+srv://`) и
+  `replicaSet=…` вместо `directConnection`; пользователь приложения — роль `readWrite` только на свою БД.
+- **Смена БД** (`database` в `.copier-answers.yml`) у готового проекта через `copier update` не поддерживается.
 
-- **Новый стек (рекомендуется; данные dev не переносятся):**
+## Переезд на MongoDB (2026-10-26, ADR-0007)
 
-  ```bash
-  docker compose -p on-bike-dev down          # без -v: тома on-bike-dev_* остаются
-  pnpm infra:up
-  pnpm --filter @pokatim/api db:migrate
-  ```
+Dev compose (project `pokatim-dev`): сервис `mongo` вместо `postgres`, том `mongodata` вместо `pgdata`. Данные dev
+не переносятся — аккаунты регистрируются заново (сессии приложения — вход заново).
 
-  В своём `apps/api/.env` — `DATABASE_URL` из `.env.example`, `APP_LINK_BASE` со схемой `pokatim://` (сборки).
-  Старые тома убрать, когда не нужны: `docker volume rm on-bike-dev_pgdata on-bike-dev_redisdata`.
-- **Прежний стек с новыми именами (данные dev сохраняются в старом томе, отдельной базой):**
+```bash
+docker compose -f infra/docker-compose.dev.yml up -d --wait --remove-orphans   # снимает контейнер postgres
+pnpm --filter @pokatim/api db:migrate
+```
 
-  ```bash
-  docker exec on-bike-dev-postgres-1 psql -U on_bike -d on_bike \
-    -c "CREATE ROLE pokatim LOGIN SUPERUSER PASSWORD 'pokatim';" -c "CREATE DATABASE pokatim OWNER pokatim;"
-  pnpm --filter @pokatim/api db:migrate
-  ```
-
-  `pnpm infra:up` / `infra:down` при этом не использовать (они поднимают `pokatim-dev`); старый стек —
-  `docker start|stop on-bike-dev-postgres-1 on-bike-dev-redis-1 on-bike-dev-mailpit-1`.
-
-Тестовая БД `pokatim_test` создаётся сама при `pnpm test`. Сессии приложения (ключи `pokatim.*`, cookie
-`__Secure-pokatim_rt`) — новые: после обновления — вход заново.
+В своём `apps/api/.env` — `MONGO_URL` из `.env.example` вместо `DATABASE_URL`. Тестовая БД `pokatim_test`
+создаётся сама при `pnpm test`. Том PostgreSQL удалить, когда не нужен: `docker volume rm pokatim-dev_pgdata`.
 
 ## Откат
 
-Сбросить локальные данные: `pnpm infra:down`, удалить тома docker (`pgdata`, `redisdata`) вручную,
+Сбросить локальные данные: `pnpm infra:down`, удалить тома docker (`mongodata`, `redisdata`) вручную,
 затем шаги 1–3.

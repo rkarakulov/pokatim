@@ -7,7 +7,7 @@ import {
   SESSION_COOKIE,
   type SessionTransport,
 } from '@pokatim/contracts';
-import { CLOCK, type Clock } from '@rkarakulov/api-kit';
+import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 /**
  * Атрибуты cookie refresh — один источник для установки и сброса: браузер заменяет cookie только при тех же

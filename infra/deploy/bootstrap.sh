@@ -3,14 +3,15 @@
 #   1. каталог стека ${POKATIM_DIR} (700);
 #   2. .env (600): недостающие ключи из env.template дописываются, @secret генерируется здесь же
 #      (openssl rand) — значения не печатаются и не покидают сервер; существующие значения не меняются,
-#      кроме управляемых деплоем PUBLIC_HOST, WEB_ORIGIN, APP_LINK_BASE, POKATIM_TAG, MAIL_RELAY_RECIPIENTS,
-#      MAILPIT_RELAY_* и MAIL_FROM, равного прежнему умолчанию шаблона (migrate_mail_from);
+#      кроме управляемых деплоем PUBLIC_HOST, WEB_ORIGIN, APP_LINK_BASE, POKATIM_TAG, MAIL_RELAY_RECIPIENTS и
+#      MAILPIT_RELAY_*;
+#   2b. keyfile replica set MongoDB ${POKATIM_DIR}/mongo-keyfile (600): генерируется здесь же один раз (openssl rand),
+#      не печатается и не покидает сервер (Q1);
 #   2a. relay Mailpit → внешний SMTP (Amazon SES, Gmail): ${POKATIM_DIR}/mailpit-relay.yml (600) из MAIL_RELAY_*
 #      .env; получатели MAIL_RELAY_RECIPIENTS — точные адреса (регулярку для Mailpit собирает этот скрипт) или «*»
 #      (relay всех писем); без логина, пароля или получателей — relay выключен (письма только в Mailpit);
 #   3. vhost nginx хоста /etc/nginx/sites-available/pokatim (+ ссылка в sites-enabled): nginx -t перед reload,
-#      ошибка — откат своего файла; чужие сайты не трогаются; vhost стенда до переименования
-#      (sites-available/on-bike с маркером прежнего bootstrap) снимается (remove_legacy_vhost);
+#      ошибка — откат своего файла; чужие сайты не трогаются;
 #   4. сертификат Let's Encrypt (certbot --webroot /var/www/html) — только если домен ведёт на этот сервер;
 #      иначе (или certbot не смог) vhost только на :80 и предупреждение, деплой не падает.
 #      UI Mailpit /mail/ — только в https-vhost (пароль basic-auth не идёт открытым текстом).
@@ -35,14 +36,9 @@ SITE_FILE="/etc/nginx/sites-available/${SITE_NAME}"
 SITE_LINK="/etc/nginx/sites-enabled/${SITE_NAME}"
 WEBROOT="/var/www/html"
 RELAY_FILE="${POKATIM_DIR}/mailpit-relay.yml"
+KEYFILE="${POKATIM_DIR}/mongo-keyfile"
 MANAGED_KEYS="PUBLIC_HOST WEB_ORIGIN APP_LINK_BASE POKATIM_TAG MAIL_RELAY_RECIPIENTS"
 MANAGED_KEYS="${MANAGED_KEYS} MAILPIT_RELAY_CONFIG MAILPIT_RELAY_ALL MAILPIT_RELAY_MATCHING MAILPIT_RELAY_REV"
-# ключ тега до переименования on-bike → pokatim (.env, перенесённый deploy.sh из ~/on-bike): убирается и не пишется
-MANAGED_KEYS="${MANAGED_KEYS} ON_BIKE_TAG"
-# vhost стенда до переименования: снимается после установки своего, если его первая строка — маркер прежнего
-# bootstrap.sh (файл сгенерирован нами, а не чужой сайт с тем же именем)
-LEGACY_SITE_NAME="on-bike"
-LEGACY_SITE_MARKER="# on-bike dev: генерирует infra/deploy/bootstrap.sh"
 
 log() { printf '[bootstrap] %s\n' "$*"; }
 warn() { printf '::warning::%s\n' "$*"; }
@@ -137,27 +133,6 @@ env_has() {
   [[ -f "${ENV_FILE}" ]] && grep -q "^$1=" "${ENV_FILE}"
 }
 
-# MAIL_FROM, равный одному из прежних умолчаний шаблона (бренд «Покатим» — docs/product/brand.md; домен отправителя,
-# проверенный в SES), меняется на текущее умолчание env.template; значение, заданное руками, не трогается.
-# Значения в лог не выводятся.
-LEGACY_MAIL_FROM=("'on-bike dev <no-reply@on-bike.by>'" "'Покатим dev <no-reply@on-bike.by>'")
-migrate_mail_from() {
-  local current legacy value tmp found=""
-  current="$(env_get MAIL_FROM)"
-  for legacy in "${LEGACY_MAIL_FROM[@]}"; do
-    [[ "${current}" != "${legacy}" ]] || found=1
-  done
-  [[ -n "${found}" ]] || return 0
-  value="$(awk 'index($0, "MAIL_FROM=") == 1 { sub(/^[^=]*=/, ""); print; exit }' "${TEMPLATE}")"
-  [[ -n "${value}" && "${value}" != "${current}" ]] || return 0
-  tmp="$(mktemp "${POKATIM_DIR}/.env.XXXXXX")"
-  awk -v line="MAIL_FROM=${value}" 'index($0, "MAIL_FROM=") == 1 { print line; next } { print }' \
-    "${ENV_FILE}" >"${tmp}"
-  chmod 600 "${tmp}"
-  mv -f "${tmp}" "${ENV_FILE}"
-  log ".env: MAIL_FROM — прежнее умолчание шаблона заменено текущим"
-}
-
 ensure_env() {
   mkdir -p "${POKATIM_DIR}"
   chmod 700 "${POKATIM_DIR}"
@@ -181,7 +156,6 @@ ensure_env() {
     added="${added} ${key}"
   done <"${TEMPLATE}"
   [[ -z "${added}" ]] || log "в .env добавлены ключи:${added}"
-  migrate_mail_from
 
   # управляемые деплоем ключи — всегда из параметров (смена домена, новый тег, регулярка relay)
   PREVIOUS_HOST="$(env_get PUBLIC_HOST)"
@@ -213,6 +187,23 @@ ensure_env() {
   chmod 600 "${tmp}"
   mv -f "${tmp}" "${ENV_FILE}"
   log ".env: PUBLIC_HOST=${PUBLIC_HOST}${tag:+, POKATIM_TAG=${tag}} (секреты не выводятся)"
+}
+
+# ---------- 2b. keyfile replica set MongoDB ----------
+
+# Общий секрет членов набора (Q1): с ним mongod требует входа (пользователи — deploy.sh, mongo-init.js). Base64 756
+# байт (mongod: 6–1024 символа base64); существующий не меняется — смена требует перезапуска mongo.
+ensure_mongo_keyfile() {
+  if [[ -s "${KEYFILE}" ]]; then
+    chmod 600 "${KEYFILE}"
+    return 0
+  fi
+  local tmp
+  tmp="$(mktemp "${POKATIM_DIR}/.keyfile.XXXXXX")"
+  openssl rand -base64 756 >"${tmp}"
+  chmod 600 "${tmp}"
+  mv -f "${tmp}" "${KEYFILE}"
+  log "MongoDB: keyfile replica set создан (значение не выводится)"
 }
 
 # ---------- 2a. relay Mailpit → внешний SMTP (Amazon SES, Gmail) ----------
@@ -539,32 +530,6 @@ issue_cert() {
   return 1
 }
 
-# Переезд on-bike → pokatim: прежний vhost (тот же server_name) снимается, когда свой уже установлен. Только файл с
-# маркером прежнего bootstrap; nginx -t перед reload, ошибка — файл и ссылка возвращаются (деплой не падает).
-remove_legacy_vhost() {
-  local file="/etc/nginx/sites-available/${LEGACY_SITE_NAME}" link="/etc/nginx/sites-enabled/${LEGACY_SITE_NAME}"
-  local backup had_link=0
-  sudo test -e "${file}" || return 0
-  if [[ "$(sudo head -n 1 "${file}")" != "${LEGACY_SITE_MARKER}"* ]]; then
-    warn "nginx: ${file} без маркера прежнего bootstrap — не снимается (runbook «Переезд on-bike → pokatim»)"
-    return 0
-  fi
-  ! sudo test -L "${link}" || had_link=1
-  backup="$(mktemp)"
-  # shellcheck disable=SC2024 # копия читается от root во временный файл текущего пользователя — так и задумано
-  sudo cat "${file}" >"${backup}"
-  sudo rm -f "${link}" "${file}"
-  if sudo nginx -t -q; then
-    sudo systemctl reload nginx
-    log "nginx: прежний vhost ${LEGACY_SITE_NAME} снят (переезд on-bike → pokatim)"
-  else
-    sudo install -m 644 -o root -g root "${backup}" "${file}"
-    [[ "${had_link}" -eq 0 ]] || sudo ln -sfn "${file}" "${link}"
-    warn "nginx: без прежнего vhost ${LEGACY_SITE_NAME} nginx -t не проходит — он возвращён, снять вручную (runbook)"
-  fi
-  rm -f "${backup}"
-}
-
 configure_nginx() {
   command -v nginx >/dev/null 2>&1 || die "nginx на хосте не найден"
   if [[ -n "${PREVIOUS_HOST}" && "${PREVIOUS_HOST}" != "${PUBLIC_HOST}" ]]; then
@@ -585,13 +550,13 @@ configure_nginx() {
       tls=https
     fi
   fi
-  remove_legacy_vhost
   check_not_default
   echo "POKATIM_TLS=${tls}"
 }
 
 PREVIOUS_HOST=""
 ensure_env
+ensure_mongo_keyfile
 if [[ "${POKATIM_SKIP_NGINX:-0}" == "1" ]]; then
   log "POKATIM_SKIP_NGINX=1: nginx и сертификат пропущены"
   echo "POKATIM_TLS=skipped"

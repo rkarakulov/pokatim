@@ -1,4 +1,4 @@
-import type { MailMessage } from '@rkarakulov/api-kit';
+import type { MailMessage } from '@rkarakulov/api-kit/core';
 
 import { escapeHtml, htmlEmail } from './html';
 

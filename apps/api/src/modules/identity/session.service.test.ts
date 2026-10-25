@@ -6,12 +6,13 @@ import { SessionService } from './session.service';
 
 const secret = 'test-jwt-secret-test-jwt-secret-0000';
 const now = new Date('2026-10-22T09:00:00Z');
+// sid — UUID v7 (`uuidv7()` базы): от него выводится claim access и _id сессии
+const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 describe('SessionService', () => {
   it('access JWT HS256 (iss, aud, sub, sid, exp 15 мин) и refresh на 30 дней, в БД — только хеш', async () => {
     const inserted: unknown[] = [];
     const repository = {
-      nextId: () => Promise.resolve('0199f0d2-0000-7000-8000-00000000abcd'),
       insertSession: (_tx: unknown, row: unknown) => {
         inserted.push(row);
         return Promise.resolve();
@@ -36,13 +37,13 @@ describe('SessionService', () => {
     expect(protectedHeader.alg).toBe('HS256');
     expect(payload).toMatchObject({
       sub: 'user-1',
-      sid: '0199f0d2-0000-7000-8000-00000000abcd',
+      sid: expect.stringMatching(UUID_V7),
       iat: now.getTime() / 1000,
       exp: now.getTime() / 1000 + 15 * 60,
     });
     expect(inserted).toEqual([
       {
-        id: '0199f0d2-0000-7000-8000-00000000abcd',
+        id: payload.sid,
         userId: 'user-1',
         refreshTokenHash: sha256(session.refreshToken),
         createdAt: now,

@@ -9,12 +9,12 @@
 ## Быстрый старт
 
 Нужны pnpm 11, Docker и доступ к пакетам `@rkarakulov/*` (runbook, шаг 0). Node 24 pnpm скачает сам
-(`devEngines.runtime`). Dev-образ PostGIS мультиархитектурный — работает и на Apple Silicon.
+(`devEngines.runtime`). Dev-образ MongoDB мультиархитектурный — работает и на Apple Silicon.
 
 ```bash
 export NODE_AUTH_TOKEN=$(gh auth token)
 pnpm install
-pnpm infra:up                           # PostgreSQL 18 + PostGIS, Redis, Mailpit
+pnpm infra:up                           # MongoDB 8.0 (replica set), Redis, Mailpit
 cp apps/api/.env.example apps/api/.env  # и заполнить секреты (runbook, шаг 2)
 pnpm --filter @pokatim/api db:migrate
 pnpm dev                                # все приложения

@@ -6,10 +6,11 @@ import {
   type RegisterResponse,
   type Session,
 } from '@pokatim/contracts';
-import { CLOCK, type Clock, ENV, isUniqueViolation, RateLimiter } from '@rkarakulov/api-kit';
+import { CLOCK, type Clock, ENV, RateLimiter } from '@rkarakulov/api-kit/core';
+import { isDuplicateKey } from '@rkarakulov/api-kit/mongo';
 
 import type { Env } from '../../config/env';
-import type { DbExecutor } from '../../db';
+import { type DbSession, MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { IDENTITY_POLICY } from './identity.policy';
 import { IdentityRepository } from './identity.repository';
@@ -25,6 +26,7 @@ const emailTaken = () => domainError('EMAIL_TAKEN', 409);
 export class RegistrationService {
   constructor(
     private readonly repository: IdentityRepository,
+    private readonly transactions: MongoTransactions,
     private readonly verification: VerificationService,
     private readonly sessions: SessionService,
     private readonly hasher: PasswordHasher,
@@ -50,8 +52,10 @@ export class RegistrationService {
     const passwordHash = await this.hasher.hash(input.password);
     const registrationToken = randomToken();
     try {
-      return await this.repository.db.transaction(async (tx) => {
-        const existing = await this.repository.findUserByEmail(tx, email);
+      // гонка одного адреса: в транзакции вторая регистрация получает конфликт записи (повтор колбэка видит адрес)
+      // или дубликат ключа `users_email_unique` после коммита первой — оба пути дают EMAIL_TAKEN
+      return await this.transactions.run(async (tx) => {
+        const existing = await this.repository.findUserByEmail(email, tx);
         if (existing) {
           // D-07: адрес удалённого аккаунта — нейтральный отказ без причины
           throw existing.deletedAt ? domainError('EMAIL_UNAVAILABLE', 409) : emailTaken();
@@ -79,7 +83,10 @@ export class RegistrationService {
           createdAt: now,
           expiresAt,
         });
-        // письмо при регистрации — первое из лимита повторов; Redis недоступен — откат и 500
+        // письмо при регистрации — первое из лимита повторов; Redis недоступен — откат и 500.
+        // Исключение из правила «в колбэке транзакции — только операции с session» (R12): при повторе колбэка
+        // insertUser выдаёт новый id, и лимит списывается с ключа нового id — 429 не возникает, ключ прежнего id
+        // остаётся «сиротой» до конца окна. Безвредно.
         await this.verification.takeResendAllowance(userId, now);
         return {
           registrationToken,
@@ -89,7 +96,7 @@ export class RegistrationService {
       });
     } catch (error) {
       // параллельная регистрация того же адреса
-      if (isUniqueViolation(error, 'users_email_unique')) throw emailTaken();
+      if (isDuplicateKey(error, 'users_email_unique')) throw emailTaken();
       throw error;
     }
   }
@@ -99,7 +106,7 @@ export class RegistrationService {
    * вызывающего под `lockUser`. Прежний токен перестаёт действовать; срок — как у ссылки (скользящий при повторе
    * письма). Письмо не отправляется: повтор — кнопкой на «Подтвердите e-mail» (пауза — лимит повторов).
    */
-  async reissueToken(tx: DbExecutor, userId: string, email: string, now: Date) {
+  async reissueToken(tx: DbSession, userId: string, email: string, now: Date) {
     const registrationToken = randomToken();
     await this.repository.replaceRegistrationToken(tx, {
       userId,
@@ -116,14 +123,16 @@ export class RegistrationService {
   ): Promise<{ state: 'pending' } | { state: 'verified'; session: Session }> {
     const tokenHash = sha256(registrationToken);
     const now = this.clock.now();
-    const found = await this.repository.findRegistrationByHash(this.repository.db, tokenHash);
+    const found = await this.repository.findRegistrationByHash(tokenHash);
     if (!found || found.user.deletedAt || found.token.consumedAt || found.token.expiresAt <= now) {
       throw domainError('UNAUTHORIZED', 401);
     }
     if (!found.user.emailVerifiedAt) return { state: 'pending' };
 
-    return this.repository.db.transaction(async (tx) => {
-      await this.repository.lockUser(tx, found.user.id);
+    return this.transactions.run(async (tx) => {
+      // подтверждённость e-mail — из документа под lockUser той же транзакции (а не из чтения выше)
+      const user = await this.repository.lockUser(tx, found.user.id);
+      if (!user || user.deletedAt || !user.emailVerifiedAt) throw domainError('UNAUTHORIZED', 401);
       const userId = await this.repository.consumeRegistrationToken(tx, tokenHash, now);
       if (!userId) throw domainError('UNAUTHORIZED', 401);
       const session = await this.sessions.issue(tx, userId);
