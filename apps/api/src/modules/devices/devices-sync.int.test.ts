@@ -22,7 +22,13 @@ import {
 import { type FakeOw, type FakeOwWorkout, startFakeOw } from '../../../test/fake-ow';
 import { DAY, type Harness, HOUR } from '../../../test/harness';
 import { call, gate } from '../../../test/identity';
-import { TRACK_INGEST, type TrackIngest, TrackStorageFullError } from '../tracks';
+import {
+  TRACK_INGEST,
+  type TrackIngest,
+  TrackSourceDeletedError,
+  TrackStorageFullError,
+} from '../tracks';
+import { DevicesLocks } from './devices-jobs';
 import { DevicesMaintenanceProcessor } from './devices-maintenance.processor';
 import { PullRetryError } from './devices-sync.service';
 import { DevicesRepository } from './devices.repository';
@@ -352,5 +358,119 @@ describe('удаление загрузки ↔ pull: без воскрешен�
     await disconnect(h, alice);
     await runOutbox(h, 'devices.revoke-requested');
     expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(1);
+  });
+});
+
+describe('отзыв с удалением ↔ pull: заезд не возвращается (замок подключения + эпоха)', () => {
+  /**
+   * Pull стоит на запросе трека в OW (после списка тренировок и захвата импорта); пользователь отключает с галочкой,
+   * задача отзыва стартует; затем OW отвечает. `blocked` — отзыв дошёл до замка (или, без замка, завершился).
+   */
+  async function race(options: { lock: boolean; epoch: boolean }) {
+    ride(hoursAgo(30));
+    const locks = h.worker.get(DevicesLocks);
+    const repository = h.worker.get(DevicesRepository);
+    if (!options.epoch) vi.spyOn(repository, 'isActiveEpoch').mockResolvedValue(true);
+    const acquire = vi.spyOn(locks, 'acquire');
+    if (!options.lock) {
+      acquire.mockResolvedValue('no-lock');
+      vi.spyOn(locks, 'release').mockResolvedValue();
+    }
+    const track = gate();
+    ow.hold('GET /users/{id}/timeseries', track.wait);
+    const pulling = pull();
+    await track.reached;
+    expect((await disconnect(h, alice, 'garmin', true)).status).toBe(200);
+    let revokeSettled = false;
+    const revoking = runOutbox(h, 'devices.revoke-requested').finally(() => (revokeSettled = true));
+    await vi.waitFor(() => {
+      if (acquire.mock.calls.length === 0 && !revokeSettled)
+        throw new Error('отзыв не дошёл до замка');
+    });
+    track.open();
+    const [pulled, revoked] = await Promise.all([pulling, revoking]);
+    return { pulled, revoked };
+  }
+
+  it('отзыв ждёт текущий импорт под замком devices:pull, проверка эпохи не даёт импорту создать загрузку', async () => {
+    const { pulled, revoked } = await race({ lock: true, epoch: true });
+    expect(pulled).toBe('inactive');
+    expect(revoked).toEqual(['revoked']);
+    expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(0);
+    expect(await devices(h).connections.findOne({ _id: alice.connectionId })).toMatchObject({
+      status: 'revoked',
+    });
+  });
+
+  it('только замок (без проверки эпохи): отзыв удаляет загрузку после импорта — загрузок 0', async () => {
+    const { revoked } = await race({ lock: true, epoch: false });
+    expect(revoked).toEqual(['revoked']);
+    expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(0);
+  });
+
+  it('только проверка эпохи (без замка): импорт видит отключение и не создаёт загрузку', async () => {
+    const { pulled } = await race({ lock: false, epoch: true });
+    expect(pulled).toBe('inactive');
+    expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(0);
+  });
+
+  it('отрицательное доказательство: без замка и без проверки эпохи — заезд вернулся после отзыва с удалением', async () => {
+    const { revoked } = await race({ lock: false, epoch: false });
+    expect(revoked).toEqual(['revoked']);
+    expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(1);
+  });
+
+  it('замок pull занят дольше ожидания — задача отзыва повторяется, подключение ждёт в disconnecting', async () => {
+    await disconnect(h, alice, 'garmin', true);
+    vi.spyOn(h.worker.get(DevicesLocks), 'acquire').mockResolvedValue(null);
+    await expect(runOutbox(h, 'devices.revoke-requested')).rejects.toThrow(/busy/);
+    expect(ow.callsTo('DELETE /users/{id}/connections/garmin')).toHaveLength(0);
+    expect(await devices(h).connections.findOne({ _id: alice.connectionId })).toMatchObject({
+      status: 'disconnecting',
+    });
+  });
+});
+
+describe('удалённый объект источника (TrackSourceDeletedError) — надгробие импорта без повторов', () => {
+  const deleteUpload = (uploadId: string) =>
+    call(h, 'POST', `/v1/tracks/uploads/${uploadId}/delete`, undefined, alice.auth);
+
+  it('порт tracks отклонил приём (объект удалялся) — импорт deleted, без failed и sync_failed, дальше не запрашивается', async () => {
+    ride(hoursAgo(30));
+    const ingest = h.worker.get<TrackIngest>(TRACK_INGEST);
+    const spy = vi
+      .spyOn(ingest, 'ingestProviderStream')
+      .mockRejectedValue(new TrackSourceDeletedError());
+    expect(await pull()).toBe('done');
+    expect((await imports())[0]).toMatchObject({
+      status: 'deleted',
+      reason: 'upload_deleted',
+      uploadId: null,
+      attempts: 1,
+    });
+    const connection = await devices(h).connections.findOne({ _id: alice.connectionId });
+    expect(connection?.issue).toBeNull();
+    expect(connection?.lastSyncedAt).toEqual(h.clock.now());
+    const calls = ow.callsTo('GET /users/{id}/timeseries').length;
+    expect(await pull()).toBe('done');
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(ow.callsTo('GET /users/{id}/timeseries')).toHaveLength(calls);
+  });
+
+  it('worker упал после приёма до отметки импорта → пользователь удалил загрузку → повтор pull до события удаления: заезд не вернулся', async () => {
+    ride(hoursAgo(30));
+    const repository = h.worker.get(DevicesRepository);
+    // «падение» worker: ни одна отметка импорта не записана, попытка pull обрывается
+    vi.spyOn(repository, 'finishImport').mockRejectedValue(new Error('worker crashed'));
+    await expect(pull()).rejects.toThrow('worker crashed');
+    vi.mocked(repository.finishImport).mockRestore();
+    expect((await imports())[0]).toMatchObject({ status: 'queued', uploadId: null });
+    const [upload] = await trackUploads(h).find().toArray();
+    expect((await deleteUpload(upload?._id ?? '')).status).toBe(204);
+
+    // событие tracks.upload-deleted ещё не обработано — надгробия в devices нет
+    expect(await pull()).toBe('done');
+    expect(await trackUploads(h).countDocuments()).toBe(0);
+    expect((await imports())[0]).toMatchObject({ status: 'deleted' });
   });
 });

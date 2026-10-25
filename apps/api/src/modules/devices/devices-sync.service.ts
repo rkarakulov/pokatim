@@ -5,7 +5,12 @@ import { MongoTransactions, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { UnrecoverableError } from 'bullmq';
 
 import type { Env } from '../../config/env';
-import { TRACK_INGEST, type TrackIngest, TrackStorageFullError } from '../tracks';
+import {
+  TRACK_INGEST,
+  type TrackIngest,
+  TrackSourceDeletedError,
+  TrackStorageFullError,
+} from '../tracks';
 import { DeviceAudit } from './device-audit';
 import { DevicesLocks, DevicesPullQueue, pullLockKey } from './devices-jobs';
 import type { DeviceConnectionDoc, DeviceImportDoc } from './devices.collection';
@@ -27,6 +32,14 @@ export interface Attempt {
   final: boolean;
 }
 
+/** Замок подключения держит текущий pull дольше ожидания отзыва: задача отзыва повторится с экспонентой. */
+export class RevokeBusyError extends Error {
+  constructor() {
+    super('revoke will be retried: connection lock is busy');
+    this.name = 'RevokeBusyError';
+  }
+}
+
 /** Повторяемый сбой pull (агрегатор, хранилище): задача BullMQ повторится с экспонентой. */
 export class PullRetryError extends Error {
   constructor(reason: string) {
@@ -42,8 +55,10 @@ const isProvider = (value: string): value is DeviceProvider =>
  * Синхронизация (worker, §7 «Pull и импорт»): тренировки активного подключения за окно → велотипы этого провайдера
  * → новые (`device_imports` уникален `(provider, aggWorkoutId)`) → трек `/timeseries` без децимации →
  * `TrackIngest.ingestProviderStream` (тот же разбор, что у ручной загрузки). Импорт с созданной загрузкой не
- * повторяется (удалённая не воскресает); провал — до 5 попыток, затем `issue: 'sync_failed'`. Логи — id подключения
- * и импорта, без координат, пульса, мощности и id агрегатора.
+ * повторяется (удалённая не воскресает; объект, который пользователь удалял, `tracks` отклоняет —
+ * `TrackSourceDeletedError` → надгробие); провал — до 5 попыток, затем `issue: 'sync_failed'`. Pull и отзыв одного
+ * подключения сериализованы замком `devices:pull:<id>`; перед приёмом заезда pull перепроверяет эпоху подключения.
+ * Логи — id подключения и импорта, без координат, пульса, мощности и id агрегатора.
  */
 @Injectable()
 export class DevicesSyncService {
@@ -85,6 +100,10 @@ export class DevicesSyncService {
     try {
       for await (const workout of this.aggregator.listWorkouts(connection.aggUserId, window)) {
         const result = await this.importWorkout(connection, workout);
+        if (result === 'inactive') {
+          this.logger.log(`devices.pull_stopped connection=${connection._id} reason=inactive`);
+          return 'inactive';
+        }
         if (result === 'failed') failures += 1;
         if (result === 'storage') {
           failures += 1;
@@ -144,7 +163,9 @@ export class DevicesSyncService {
   private async importWorkout(
     connection: DeviceConnectionDoc,
     workout: AggregatorWorkout,
-  ): Promise<'skipped' | 'imported' | 'failed' | 'retry' | 'storage' | 'ignored'> {
+  ): Promise<
+    'skipped' | 'imported' | 'failed' | 'retry' | 'storage' | 'ignored' | 'deleted' | 'inactive'
+  > {
     const decision = importDecision(workout, connection.provider);
     if (decision.kind === 'ignore') return 'ignored';
     const claimed = await this.claim(connection, workout.id);
@@ -177,6 +198,16 @@ export class DevicesSyncService {
         });
         return 'skipped';
       }
+      // после сетевых ожиданий: отключённое или переподключённое за это время не импортирует
+      if (!(await this.repository.isActiveEpoch(connection._id, connection.connectedAt))) {
+        await this.repository.finishImport(claimed._id, {
+          status: 'failed',
+          reason: 'connection_inactive',
+          uploadId: null,
+          now: now(),
+        });
+        return 'inactive';
+      }
       const { uploadId } = await this.ingest.ingestProviderStream({
         userId: connection.userId,
         source: connection.provider,
@@ -200,6 +231,11 @@ export class DevicesSyncService {
       this.logger.log(`devices.imported import=${claimed._id} upload=${uploadId}`);
       return 'imported';
     } catch (error) {
+      if (error instanceof TrackSourceDeletedError) {
+        await this.repository.tombstone(connection.provider, workout.id, now());
+        this.logger.log(`devices.import_source_deleted import=${claimed._id}`);
+        return 'deleted';
+      }
       if (error instanceof TrackTooLongError) {
         await this.repository.finishImport(claimed._id, {
           status: 'skipped',
@@ -280,10 +316,28 @@ export class DevicesSyncService {
   }
 
   /**
-   * `devices.revoke-requested`: `revokeConnection` в агрегаторе → (галочка) удаление загрузок провайдера → `revoked`.
-   * Повторяемый сбой — ретрай BullMQ; финальный или неповторяемый — `revoked` + `revokeFailed` и журнал.
+   * `devices.revoke-requested`: замок подключения `devices:pull:<id>` (ждёт текущий импорт; занят дольше ожидания —
+   * `RevokeBusyError`, повтор задачи) → `revokeConnection` в агрегаторе → (галочка) удаление загрузок провайдера →
+   * `revoked`. Повторяемый сбой агрегатора — ретрай BullMQ; финальный или неповторяемый — `revoked` + `revokeFailed`
+   * и журнал.
    */
   async revoke(
+    event: DevicesRevokeRequested,
+    attempt: Attempt,
+  ): Promise<'revoked' | 'revoke_failed' | 'skipped'> {
+    const key = pullLockKey(event.connectionId);
+    // последняя попытка ждёт весь TTL замка pull: он истекает сам, отзыв не застревает в `disconnecting`
+    const waitMs = attempt.final ? DEVICES_POLICY.pullLockTtlMs : DEVICES_POLICY.revokeLockWaitMs;
+    const token = await this.locks.acquire(key, DEVICES_POLICY.pullLockTtlMs, waitMs);
+    if (!token) throw new RevokeBusyError();
+    try {
+      return await this.revokeLocked(event, attempt);
+    } finally {
+      await this.locks.release(key, token);
+    }
+  }
+
+  private async revokeLocked(
     event: DevicesRevokeRequested,
     attempt: Attempt,
   ): Promise<'revoked' | 'revoke_failed' | 'skipped'> {

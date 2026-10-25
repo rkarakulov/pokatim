@@ -36,8 +36,9 @@ export class DevicesPullQueue {
 const RELEASE = `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end`;
 
 /**
- * Замки Redis модуля (SET NX PX + токен): создание пользователя агрегатора (`devices:account:<userId>`) и pull
- * подключения (`devices:pull:<connectionId>`). Истекают сами — упавший процесс не держит их вечно.
+ * Замки Redis модуля (SET NX PX + токен): создание пользователя агрегатора (`devices:account:<userId>`) и pull/отзыв
+ * подключения (`devices:pull:<connectionId>` — отзыв ждёт текущий импорт). Истекают сами — упавший процесс не держит
+ * их вечно.
  */
 @Injectable()
 export class DevicesLocks {

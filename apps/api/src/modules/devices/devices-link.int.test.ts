@@ -1,4 +1,6 @@
 import { DeviceList } from '@pokatim/contracts';
+import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
+import type { Db } from 'mongodb';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -23,9 +25,11 @@ import {
 import { type FakeOw, startFakeOw } from '../../../test/fake-ow';
 import { type Harness, MINUTE } from '../../../test/harness';
 import { call, gate, outboxEvents } from '../../../test/identity';
+import { devicesCollections } from './devices.collection';
 import { DevicesLocks } from './devices-jobs';
 import { DevicesLinkService } from './devices-link.service';
 import { DevicesMaintenanceProcessor } from './devices-maintenance.processor';
+import { DevicesRepository } from './devices.repository';
 
 let ow: FakeOw;
 let h: Harness;
@@ -299,7 +303,7 @@ describe('connect → callback → complete (AC7)', () => {
     expect((await outboxEvents(h)).some((event) => event.type === 'devices.connected')).toBe(false);
   });
 
-  it('неподтверждённое за TTL тикета — уборка отзывает в OW → revoked: unconfirmed, журнал', async () => {
+  it('неподтверждённое за TTL тикета — уборка: disconnecting + журнал + revoke-requested; отзыв в OW делает задача revoke → revoked: unconfirmed', async () => {
     await connect(h, alice);
     const aggUserId = await aggUserIdOf(h, alice.userId);
     ow.authorize(aggUserId, 'garmin');
@@ -308,24 +312,45 @@ describe('connect → callback → complete (AC7)', () => {
 
     h.clock.advance(31 * MINUTE);
     expect(await maintenance.process(jobOf('cleanup-pending', {}))).toBe(1);
+    // уборка в OW не ходит — только переход и событие
+    expect(ow.callsTo('DELETE /users/{id}/connections/garmin')).toHaveLength(0);
+    expect(await devices(h).connections.findOne({ userId: alice.userId })).toMatchObject({
+      status: 'disconnecting',
+      revokedReason: 'unconfirmed',
+      pendingUntil: null,
+    });
+    expect(
+      (await outboxEvents(h))
+        .filter((event) => event.type === 'devices.revoke-requested')
+        .map((event) => event.payload),
+    ).toEqual([expect.objectContaining({ reason: 'unconfirmed', deleteActivities: false })]);
+    expect(await maintenance.process(jobOf('cleanup-pending', {}))).toBe(0);
+
+    expect(await runOutbox(h, 'devices.revoke-requested')).toEqual(['revoked']);
     expect(ow.connections.get(aggUserId)?.get('garmin')).toBe('revoked');
     expect(await devices(h).connections.findOne({ userId: alice.userId })).toMatchObject({
       status: 'revoked',
       revokedReason: 'unconfirmed',
     });
-    expect((await devices(h).audit.findOne())?.reason).toBe('unconfirmed');
+    expect(
+      (await devices(h).audit.find().toArray()).map((row) => [row.action, row.reason]),
+    ).toEqual([['disconnected', 'unconfirmed']]);
   });
 
-  it('OW недоступен при уборке — подключение ждёт следующего запуска', async () => {
+  it('OW недоступен при отзыве неподтверждённого — повтор задачи revoke, подключение ждёт в disconnecting', async () => {
     await connect(h, alice);
     h.clock.advance(31 * MINUTE);
-    ow.fail('GET /users/{id}/connections', 503);
     expect(
       await h.worker.get(DevicesMaintenanceProcessor).process(jobOf('cleanup-pending', {})),
-    ).toBe(0);
-    expect(await devices(h).connections.findOne({ userId: alice.userId })).toMatchObject({
-      status: 'pending',
+    ).toBe(1);
+    ow.fail('DELETE /users/{id}/connections/garmin', 503);
+    await expect(runOutbox(h, 'devices.revoke-requested')).rejects.toMatchObject({
+      kind: 'unavailable',
     });
+    expect(await devices(h).connections.findOne({ userId: alice.userId })).toMatchObject({
+      status: 'disconnecting',
+    });
+    expect(await runOutbox(h, 'devices.revoke-requested', 1)).toEqual(['revoked']);
   });
 
   it('повторный connect при active без проблемы — 409; при reauthorize — тот же документ снова pending', async () => {
@@ -339,6 +364,75 @@ describe('connect → callback → complete (AC7)', () => {
     expect(await devices(h).connections.findOne({ _id: connected.connectionId })).toMatchObject({
       status: 'pending',
     });
+  });
+});
+
+describe('уборка pending ↔ переподключение (гонка: уборка не отзывает новое подключение)', () => {
+  /**
+   * Уборка прочитала истёкший `pending` и стоит на воротах; тем временем пользователь переподключился (новый тикет)
+   * и подтвердил — подключение `active`. Уборка продолжает.
+   */
+  async function race() {
+    await connect(h, alice);
+    const aggUserId = await aggUserIdOf(h, alice.userId);
+    // тикет истёк (без сдвига часов — access пользователя должен остаться живым для переподключения)
+    await devices(h).connections.updateOne(
+      { userId: alice.userId },
+      { $set: { pendingUntil: new Date(h.clock.now().getTime() - MINUTE) } },
+    );
+    const repository = h.worker.get(DevicesRepository);
+    const read = gate();
+    const original = repository.listExpiredPending.bind(repository);
+    vi.spyOn(repository, 'listExpiredPending').mockImplementation(async (...args) => {
+      const rows = await original(...args);
+      await read.wait();
+      return rows;
+    });
+    const cleanup = h.worker.get(DevicesMaintenanceProcessor).process(jobOf('cleanup-pending', {}));
+    await read.reached;
+    expect((await connect(h, alice)).status).toBe(200);
+    ow.authorize(aggUserId, 'garmin');
+    expect((await complete(h, alice, ticketFromOw(ow, aggUserId))).status).toBe(200);
+    read.open();
+    const cleaned = await cleanup;
+    const revokes = await runOutbox(h, 'devices.revoke-requested');
+    return { aggUserId, cleaned, revokes };
+  }
+
+  it('переподключённое и подтверждённое во время уборки — остаётся active, отзыва в OW нет', async () => {
+    const { aggUserId, cleaned, revokes } = await race();
+    expect(cleaned).toBe(0);
+    expect(revokes).toEqual([]);
+    expect(await devices(h).connections.findOne({ userId: alice.userId })).toMatchObject({
+      status: 'active',
+      revokedReason: null,
+    });
+    expect(ow.connections.get(aggUserId)?.get('garmin')).toBe('active');
+    expect(ow.callsTo('DELETE /users/{id}/connections/garmin')).toHaveLength(0);
+    expect((await devices(h).audit.find().toArray()).map((row) => row.action)).toEqual([
+      'connected',
+    ]);
+  });
+
+  it('отрицательное доказательство: переход без условия status/version/pendingUntil — новое подключение отозвано', async () => {
+    const repository = h.worker.get(DevicesRepository);
+    // сессия транзакции — от клиента worker: пишем его же коллекцией
+    const workerConnections = devicesCollections(h.worker.get<Db>(MONGO_DB)).connections;
+    vi.spyOn(repository, 'expirePending').mockImplementation(async (session, candidate) => {
+      const updated = await workerConnections.findOneAndUpdate(
+        { _id: candidate._id },
+        {
+          $set: { status: 'disconnecting', pendingUntil: null, revokedReason: 'unconfirmed' },
+          $inc: { version: 1 },
+        },
+        { session, returnDocument: 'after' },
+      );
+      return updated ?? undefined;
+    });
+    const { aggUserId, cleaned, revokes } = await race();
+    expect(cleaned).toBe(1);
+    expect(revokes).toEqual(['revoked']);
+    expect(ow.connections.get(aggUserId)?.get('garmin')).toBe('revoked');
   });
 });
 

@@ -146,6 +146,33 @@ export class DevicesRepository {
     );
   }
 
+  /**
+   * Уборка: истёкший `pending` → `disconnecting` (`revokedReason: 'unconfirmed'`) только для прочитанной версии
+   * документа и пока срок истёк — переподключение (новый тикет, `$inc version`) или подтверждение между чтением и
+   * переходом не отзываются.
+   */
+  async expirePending(
+    session: DbSession,
+    candidate: Pick<DeviceConnectionDoc, '_id' | 'version'>,
+    now: Date,
+  ): Promise<DeviceConnectionDoc | undefined> {
+    return (
+      (await this.c.connections.findOneAndUpdate(
+        {
+          _id: candidate._id,
+          status: 'pending',
+          version: candidate.version,
+          pendingUntil: { $lte: now },
+        },
+        {
+          $set: { status: 'disconnecting', pendingUntil: null, revokedReason: 'unconfirmed' },
+          $inc: { version: 1 },
+        },
+        { session, returnDocument: 'after' },
+      )) ?? undefined
+    );
+  }
+
   /** Финал отзыва: `revoked` из ожидаемого статуса. */
   async markRevoked(
     session: DbSession | undefined,
@@ -192,6 +219,16 @@ export class DevicesRepository {
     await this.c.connections.updateOne(
       { _id: id, status: 'active' },
       { $set: { lastSyncedAt: now } },
+    );
+  }
+
+  /**
+   * Подключение всё ещё `active` той же эпохи (`connectedAt` активации): pull проверяет это перед приёмом заезда —
+   * отключение или переподключение во время сетевых ожиданий импорт не продолжает.
+   */
+  async isActiveEpoch(id: string, connectedAt: Date | null): Promise<boolean> {
+    return (
+      (await this.c.connections.countDocuments({ _id: id, status: 'active', connectedAt })) === 1
     );
   }
 

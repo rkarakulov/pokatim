@@ -1,7 +1,7 @@
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { CLOCK, type Clock, ENV } from '@rkarakulov/api-kit/core';
-import { MongoTransactions } from '@rkarakulov/api-kit/mongo';
+import { MongoOutboxWriter, MongoTransactions } from '@rkarakulov/api-kit/mongo';
 import type { Job, Queue } from 'bullmq';
 
 import type { Env } from '../../config/env';
@@ -9,6 +9,7 @@ import { QUEUE } from '../../queues';
 import { DeviceAudit } from './device-audit';
 import { DevicesPullQueue } from './devices-jobs';
 import type { DeviceConnectionDoc } from './devices.collection';
+import { DEVICES_REVOKE_REQUESTED, type DevicesRevokeRequested } from './devices.events';
 import { DEVICES_POLICY } from './devices.policy';
 import { DevicesRepository } from './devices.repository';
 import {
@@ -23,7 +24,7 @@ export const RECONCILE_JOB = 'reconcile';
 
 /**
  * Регламент устройств (`devices-maintenance`): расписание pull активных подключений, уборка неподтверждённых за TTL
- * тикета (отзыв в агрегаторе, если он показывает подключение) и ежедневная сверка `active` ↔ агрегатор (нет или
+ * тикета (перевод в `disconnecting` + событие отзыва) и ежедневная сверка `active` ↔ агрегатор (нет или
  * истекло — `issue: 'reauthorize'`). Ошибка агрегатора по одному подключению не валит пачку — оно разберётся в
  * следующий запуск. Логи — счётчики.
  */
@@ -35,6 +36,7 @@ export class DevicesMaintenanceProcessor extends WorkerHost {
     private readonly repository: DevicesRepository,
     private readonly audit: DeviceAudit,
     private readonly transactions: MongoTransactions,
+    private readonly outbox: MongoOutboxWriter,
     private readonly pulls: DevicesPullQueue,
     @Inject(WEARABLES_AGGREGATOR) private readonly aggregator: WearablesAggregator,
     @Inject(ENV) private readonly env: Env,
@@ -68,40 +70,34 @@ export class DevicesMaintenanceProcessor extends WorkerHost {
     return scheduled;
   }
 
-  /** `pending` с истёкшим тикетом → отзыв в агрегаторе (если подключение там есть) → `revoked: unconfirmed`. */
+  /**
+   * `pending` с истёкшим тикетом → транзакция { `disconnecting` (`unconfirmed`) по прочитанной версии, журнал, outbox
+   * `devices.revoke-requested` } — тот же путь отзыва, что у пользователя; в агрегатор ходит только задача отзыва.
+   * Переподключённое или подтверждённое после чтения кандидата не трогается (условие версии и срока в переходе).
+   */
   async cleanupPending(): Promise<number> {
     const now = this.clock.now();
-    let revoked = 0;
-    let deferred = 0;
-    for (const connection of await this.repository.listExpiredPending(
+    let expired = 0;
+    for (const candidate of await this.repository.listExpiredPending(
       now,
       DEVICES_POLICY.batchSize,
     )) {
-      try {
-        const remote = await this.aggregator.listConnections(connection.aggUserId);
-        const linked = remote.some(
-          (item) => item.provider === connection.provider && item.status !== 'revoked',
-        );
-        if (linked)
-          await this.aggregator.revokeConnection(connection.aggUserId, connection.provider);
-      } catch (error) {
-        if (!(error instanceof AggregatorError)) throw error;
-        deferred += 1;
-        continue;
-      }
       const changed = await this.transactions.run(async (session) => {
-        const updated = await this.repository.markRevoked(session, connection._id, 'pending', {
+        const updated = await this.repository.expirePending(session, candidate, now);
+        if (!updated) return false;
+        await this.disconnectedAudit(session, updated, 'unconfirmed');
+        const payload: DevicesRevokeRequested = {
+          connectionId: updated._id,
           reason: 'unconfirmed',
-          revokeFailed: false,
-          now: this.clock.now(),
-        });
-        if (updated) await this.disconnectedAudit(session, connection, 'unconfirmed');
-        return updated;
+          deleteActivities: false,
+        };
+        await this.outbox.append(session, { type: DEVICES_REVOKE_REQUESTED, payload });
+        return true;
       });
-      if (changed) revoked += 1;
+      if (changed) expired += 1;
     }
-    this.logger.log(`devices.cleanup_pending revoked=${revoked} deferred=${deferred}`);
-    return revoked;
+    this.logger.log(`devices.cleanup_pending expired=${expired}`);
+    return expired;
   }
 
   /** Активные подключения, которых в агрегаторе нет или они не `active`, — `issue: 'reauthorize'` + журнал. */

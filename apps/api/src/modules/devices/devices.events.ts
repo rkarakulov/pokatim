@@ -9,13 +9,13 @@ export const DevicesConnected = z.object({ connectionId: z.uuid() });
 export type DevicesConnected = z.infer<typeof DevicesConnected>;
 
 /**
- * Нужно отозвать подключение в агрегаторе (отключение пользователем, чужой тикет): worker → `revokeConnection` →
- * `revoked`; `deleteActivities` — удалить загрузки провайдера пользователя.
+ * Нужно отозвать подключение в агрегаторе (отключение пользователем, чужой тикет, неподтверждённое за TTL тикета):
+ * worker → `revokeConnection` → `revoked`; `deleteActivities` — удалить загрузки провайдера пользователя.
  */
 export const DEVICES_REVOKE_REQUESTED = 'devices.revoke-requested';
 export const DevicesRevokeRequested = z.object({
   connectionId: z.uuid(),
-  reason: z.enum(['user', 'foreign_ticket']),
+  reason: z.enum(['user', 'foreign_ticket', 'unconfirmed']),
   deleteActivities: z.boolean(),
 });
 export type DevicesRevokeRequested = z.infer<typeof DevicesRevokeRequested>;
