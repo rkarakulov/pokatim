@@ -473,6 +473,16 @@ _Отклонения при реализации — дописываются �
   (как `error-messages.ts`): общие для `races` и `calendar`, без связи модулей. Ключ лимита — `rateLimitKeyForIp`
   (экспорт `modules/identity/index.ts`).
 - `GET /v1/calendar/cities`: написание города — у ближайшего будущего старта с этим `cityKey`.
+**S8–S10 (admin):**
+
+- `src/ui` дополнительно: `ConflictBanner` (409), `LockMark` (замок зафиксированного поля), тон `ink` у `StatusTag`
+  (метка «Текущий» — ink, как в прототипе). `ReadonlyField`, `DisabledReason`, `SplitLayout` — в одном файле
+  `layout-parts.tsx`.
+- Зафиксированные текстовые поля формы гонки — `readOnly` (значение остаётся в форме RHF), даты и выбор — `disabled`
+  через `Controller`; в запрос правки уходят только изменённые поля из `editable.fields`.
+- «Журнал действий»: колонка «Объект» (снимок названия) и детали (шаблон причины отмены, имена изменённых полей);
+  ссылка из строки на гонку/сезон (`[ASSUMPTION]` §7) — не сделана (follow-up).
+- S9a и S9b — одним коммитом (маршруты и навигация общие).
 - `createApiClient`: публичные методы идут через отдельный HTTP-клиент без `getAccessToken` — токен в них не уходит
   даже у вошедшего пользователя.
 
@@ -860,8 +870,43 @@ function DisabledReason(props: { id: string; children: ReactNode }): ReactNode; 
 
 # 12. Outcome
 
-_Заполняется после реализации: ветка, коммиты по слайсам, вывод `pnpm check`, отрицательные доказательства
-(`lockSchedule` × 2), NOT VERIFIED, follow-ups._
+Ветка `feature/admin-02-seasons-races` (от `origin/develop` 9636849). Коммиты по слайсам: task.md и ответы автора;
+S1 (контракты, клиенты; + ожидание прав admin во входе панели); S2 (журнал с объектом, `PanelDirectory`, права,
+`0006`, тест маршрутов `admin/*` уровня `AppModule`); S3 (данные, `0007`, политика); S4 (сезоны); S5 (гонки панели);
+S6 (календарь, `0008`); S7 (публичное чтение); §8.2; S8 (`src/ui`, строки, форматы); S9a+S9b (экраны — одним
+коммитом: маршруты и навигация общие); S10 (e2e, ADR-0010, документация). Push — после S1 и после S7 (pre-push —
+`pnpm check`), финальный — после §12.
+
+**Проверки (нативные MongoDB RS 127.0.0.1:27117 и Redis :6479, Docker недоступен):**
+
+- `pnpm check` → EXIT 0 (format, lint, arch — 0 нарушений, typecheck 8/8, test 13/13: contracts 14 файлов, api-client
+  6, api 51 файл / 379 тестов (unit + integration), admin 14 файлов / 114 тестов, i18n, tracks, design-tokens, app).
+- Миграции на чистой БД (`pokatim_e2e_a02`) и повторно: «миграции применены: 0001…0008» → «новых миграций нет»;
+  int-тест миграций — коллекции, индексы, `race_meta.schedule`, повторный `up` не сбрасывает версию.
+- `pnpm --filter @pokatim/admin build` — собрана (предупреждение о размере чанка — прежнее).
+- `pnpm e2e:admin` → 2 passed (`admin.spec.ts` admin-01 и новый `races.spec.ts`, AC15); Mailpit — локальный бинарник
+  на нестандартных портах (`MAILPIT_URL`).
+- `pnpm e2e:web` (`EXPO_PUBLIC_API_URL=http://127.0.0.1:3000`) → 11 passed, 1 skipped (сценарий с API — только при
+  `E2E_API=1`, не запускался).
+
+**Отрицательные доказательства (`pokatim-tests.md`):**
+
+- `seasons.int.test.ts` «два создания пересекающихся сезонов»: с `lockSchedule` — `[201, 400 SEASON_OVERLAP]`, один
+  сезон; `lockSchedule` → no-op — `[201, 201]`, два пересекающихся сезона (тест зелёный именно на этом результате).
+- `races-schedule-races.int.test.ts` «публикация ↔ сжатие сезона» (ворота после поиска сезона): с замком — публикация
+  200, сжатие 400 `SEASON_EXCLUDES_RACES`, гонка внутри сезона; без замка — оба 200, конец окна опубликованной гонки
+  `≥ endsBefore` её сезона.
+- R3: две вкладки с одной `version` — `[200, 409]` (сезон и гонка); R8: чужая гонка без `races.manage_any` — 404 на
+  GET/правку/публикацию/удаление и нет в списке; права по ролям — AC1 (moderator/organizer/без сессии).
+
+**NOT VERIFIED:** ручной смоук на dev-стенде (`/admin/`, `curl /v1/races`, `/v1/calendar`) — не делался (нет доступа к
+стенду из этой сессии); `deploy-rehearsal` — не нужен (`infra/**` не менялся); независимое ревью (Codex /
+independent-reviewer) — не проводилось в этой сессии (шаг оркестратора).
+
+**Follow-ups:** коридор гонки обязателен до участия (слайс «Маршруты», Q4); V-12, D-19, уведомления об отмене;
+вынос `tolerantEnum`, функций времени и компонентов `src/ui` (`DateTimeField`, `ChipGroup`, `ChoiceDialog`, …) в
+базу (contracts-core / admin-kit F6); ссылка из строки журнала на объект (`[ASSUMPTION]`, не сделано — в журнале
+только снимок названия).
 
 # 13. Для блока 02 «Главный экран» (app-02-home)
 
