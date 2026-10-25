@@ -2,7 +2,9 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
 import { QUEUE } from '../../queues';
+import { AccessTokenVerifier } from './access-token';
 import { AuthController } from './auth.controller';
+import { AuthGuard } from './auth.guard';
 import { IdentityRepository } from './identity.repository';
 import { CleanupUnverifiedProcessor } from './jobs/cleanup-unverified.processor';
 import { IdentitySchedules } from './jobs/identity-schedules';
@@ -20,12 +22,14 @@ import { VerificationService } from './verification.service';
 
 /**
  * HTTP-часть identity: регистрация, ссылки подтверждения, обмен токена регистрации на сессию, вход, ротация, выход,
- * сброс пароля.
+ * сброс пароля. `AuthGuard` — авторизация запросов других модулей (импорт `IdentityModule`, ADR-0008).
  */
 @Module({
   controllers: [AuthController, SessionController],
   providers: [
     IdentityRepository,
+    AccessTokenVerifier,
+    AuthGuard,
     PasswordHasher,
     SessionService,
     SessionCookie,
@@ -34,6 +38,9 @@ import { VerificationService } from './verification.service';
     SignInService,
     PasswordResetService,
   ],
+  // гард создаётся в модуле-потребителе (`@UseGuards`) — ему нужны и зависимости гарда; сам класс репозитория
+  // наружу не экспортируется из `index.ts`: другие модули identity-коллекции не читают
+  exports: [AuthGuard, AccessTokenVerifier, IdentityRepository],
 })
 export class IdentityModule {}
 

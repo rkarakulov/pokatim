@@ -12,12 +12,13 @@ import { useRegistrationStore } from './registration-store';
 
 // Содержимое экранов (заголовок + текст + действия) — внутри AuthScreen у «Подтвердите e-mail» и у ссылки.
 
-/** «E-mail подтверждён» на устройстве регистрации: держится ~1 с, затем вход без пароля. */
+/** «E-mail подтверждён» на устройстве регистрации: держится ~1 с, затем вход без пароля и опрос (слайс 4, Q9). */
 export function VerifiedSigningIn({ email }: { email: string }) {
   return (
     <>
       <AuthTitle>{t('auth.verified.title')}</AuthTitle>
       <AuthText>{t('auth.verified.signingIn', { email: keepTogether(email) })}</AuthText>
+      <AuthText tone="secondary">{t('auth.verified.next')}</AuthText>
     </>
   );
 }

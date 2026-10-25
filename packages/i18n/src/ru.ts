@@ -73,6 +73,7 @@ export const ru = {
   'auth.checkEmail.backToRegister': 'Вернуться к регистрации',
   'auth.verified.title': 'E-mail подтверждён',
   'auth.verified.signingIn': 'Входим в аккаунт {email} — пароль вводить заново не нужно.',
+  'auth.verified.next': 'Дальше — короткий опрос.',
   'auth.verified.otherDevice': 'Адрес {email} подтверждён. Войдите с паролем.',
   // токен регистрации отклонён: обменян (адрес подтверждён) или устарел — по локальной оценке срока (R7)
   'auth.signInRequired.title': 'Войдите в аккаунт',
@@ -116,6 +117,23 @@ export const ru = {
   'auth.reset.usedTitle': 'Пароль уже изменён',
   'auth.reset.usedMessage': 'По этой ссылке пароль уже сменили. Войдите с новым паролем.',
   'auth.reset.goneMessage': 'Запросите восстановление пароля ещё раз.',
+  // онбординг после входа (слайс 4): опрос «Что вас привело?» и геопозиция
+  'onboarding.kicker': 'Знакомство',
+  'onboarding.survey.title': 'Что вас привело?',
+  'onboarding.survey.lead':
+    'Отметьте всё, что подходит. Ответ поможет сделать «Покатим» удобнее для вас.',
+  'onboarding.survey.submit': 'Продолжить',
+  'onboarding.survey.saveFailed': 'Не удалось сохранить ответ. Повторите.',
+  'onboarding.reason.races': 'Гонки и результаты',
+  'onboarding.reason.group_rides': 'Кофе-райды и катание в компании',
+  'onboarding.reason.routes': 'Новые маршруты',
+  'onboarding.reason.calendar': 'Календарь стартов',
+  'onboarding.reason.exploring': 'Пока просто смотрю',
+  'location.title': 'Покажем, что рядом',
+  'location.lead':
+    'Разрешите доступ к геопозиции — найдём кофе-райды, маршруты и старты недалеко от вас. Мы не записываем поездки и не храним вашу геопозицию.',
+  'location.allow': 'Разрешить',
+  'location.notNow': 'Не сейчас',
   'apiStatus.title': 'Статус API',
   'apiStatus.ok': 'Работает',
   'apiStatus.degraded': 'Работает с ограничениями',

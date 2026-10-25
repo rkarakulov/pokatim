@@ -2,6 +2,9 @@ import CheckEmailScreen from '../app/(onboarding)/check-email';
 import ForgotPasswordScreen from '../app/(onboarding)/forgot-password';
 import OnboardingLayout from '../app/(onboarding)/_layout';
 import RegisterScreen from '../app/(onboarding)/register';
+import SetupLayout from '../app/(setup)/_layout';
+import SurveyScreen from '../app/(setup)/survey';
+import LocationScreen from '../app/(setup)/location';
 import SignInScreen from '../app/(onboarding)/sign-in';
 import CalendarScreen from '../app/(tabs)/calendar';
 import HomeScreen from '../app/(tabs)/index';
@@ -25,7 +28,7 @@ export const tabRoutes = {
   '(tabs)/calendar': CalendarScreen,
 };
 
-/** Всё приложение: корневой layout с гардом, вкладки, регистрация, ссылка из письма, витрина, `/status`. */
+/** Всё приложение: корневой layout с гардом, вкладки, регистрация, шаги онбординга, ссылка из письма, витрина, `/status`. */
 export const appRoutes = {
   _layout: RootLayout,
   ...tabRoutes,
@@ -34,6 +37,9 @@ export const appRoutes = {
   '(onboarding)/check-email': CheckEmailScreen,
   '(onboarding)/sign-in': SignInScreen,
   '(onboarding)/forgot-password': ForgotPasswordScreen,
+  '(setup)/_layout': SetupLayout,
+  '(setup)/survey': SurveyScreen,
+  '(setup)/location': LocationScreen,
   'auth/verify/[token]': VerifyEmailScreen,
   'auth/reset/[token]': ResetPasswordScreen,
   'ui-kit': UiKitScreen,

@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 
 import { readJson } from './read-json';
 import { secureStorage } from './secure-storage';
-import type { Revalidation } from './session-revalidation';
+import type { AccessRefresh, Revalidation } from './session-revalidation';
 import { isSessionAlive } from './session-expiry';
 import { withSessionLock } from './session-lock';
 
@@ -20,6 +20,9 @@ const readStored = (now: number) =>
     const parsed = Session.safeParse(value);
     return parsed.success && isSessionAlive(parsed.data, now) ? parsed.data : undefined;
   });
+
+/** Native: сессия при запуске — из SecureStore (не от сервера сейчас). */
+export const RESTORE_IS_NETWORK = false;
 
 /**
  * Сессия прошлого запуска — локально, без сети: офлайн-старт на прогулке не выходит из аккаунта (R5). Просроченная
@@ -81,6 +84,23 @@ async function rotate(refreshToken: string) {
 }
 
 /**
+ * Ротация сохранённого refresh: новый — в SecureStore. 401 (выход в другом месте, reuse, истекла) — сессия забыта,
+ * `signedOut`. Прочее (сеть после повтора, 429, 5xx) — бросает. Вызывается под замком сессии.
+ */
+async function rotateStored(stored: Session): Promise<AccessRefresh> {
+  try {
+    const session = Session.parse(await rotate(stored.refreshToken));
+    // сбой записи — предупреждение без токена: следующий запуск вне окна повтора → вход заново (принято)
+    await persistSession(session);
+    return { status: 'rotated', session };
+  } catch (error) {
+    if (!isUnauthorized(error)) throw error;
+    await forget();
+    return { status: 'signedOut' };
+  }
+}
+
+/**
  * Фоновая проверка сессии после локального восстановления (R5): ротация refresh по телу, новый — в SecureStore.
  * 401 (выход в другом месте, reuse, истекла) — сессия забыта, `signedOut`. Сеть, 429, сбой сервера — остаёмся в
  * аккаунте (`unchanged`). Под замком сессии: выход во время ротации ждёт её. Не бросает.
@@ -89,16 +109,20 @@ export function revalidateSession(now: number): Promise<Revalidation> {
   return withSessionLock(async (): Promise<Revalidation> => {
     const stored = await readStored(now);
     if (!stored) return { status: 'unchanged' };
-    try {
-      const session = Session.parse(await rotate(stored.refreshToken));
-      // сбой записи — предупреждение без токена: следующий запуск вне окна повтора → вход заново (принято)
-      await persistSession(session);
-      return { status: 'rotated', session };
-    } catch (error) {
-      if (!isUnauthorized(error)) return { status: 'unchanged' };
-      await forget();
-      return { status: 'signedOut' };
-    }
+    return rotateStored(stored).catch((): Revalidation => ({ status: 'unchanged' }));
+  });
+}
+
+/**
+ * Новый access для авторизованного запроса (`withAccessToken`, ADR-0008): та же ротация refresh под замком сессии,
+ * что и `revalidateSession`. Сохранённой сессии нет (выход, сбой записи SecureStore) — обновить нечем: `signedOut`.
+ * Сеть, 429, 5xx — бросает: ошибка запроса, не выход.
+ */
+export function refreshAccess(now: number): Promise<AccessRefresh> {
+  return withSessionLock(async (): Promise<AccessRefresh> => {
+    const stored = await readStored(now);
+    if (!stored) return { status: 'signedOut' };
+    return rotateStored(stored);
   });
 }
 

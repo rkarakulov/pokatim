@@ -15,6 +15,7 @@ import {
   session,
   storedValue,
   storeSession,
+  storeSurveyCompleted,
 } from './auth-fixtures';
 import { appRoutes } from './app-routes';
 
@@ -27,6 +28,8 @@ const apiError = (status: number, code: string, details?: unknown) =>
   new ApiHttpError(status, { code, message: code, details });
 
 beforeEach(() => {
+  // опрос онбординга уже пройден (кеш устройства): сценарии ведут на Главную; сам онбординг — onboarding-guard.test
+  storeSurveyCompleted();
   jest.mocked(api.pollRegistration).mockResolvedValue({ state: 'pending' });
   jest.mocked(api.signOut).mockResolvedValue(undefined);
 });
@@ -279,9 +282,12 @@ describe('выход', () => {
       .mocked(api.refreshSession)
       .mockRejectedValue(new ApiNetworkError(new TypeError('Network request failed')));
     storeSession();
+    storeSurveyCompleted();
     await renderRouter(appRoutes, { initialUrl: '/' });
 
     expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
     expect(JSON.parse(storedValue('pokatim.session') ?? '{}')).toEqual(session);
+    // опрос пройден — по кешу устройства, сервер не спрашивается (AC6)
+    expect(api.getOnboardingStatus).not.toHaveBeenCalled();
   });
 });

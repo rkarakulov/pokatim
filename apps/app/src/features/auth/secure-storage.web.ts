@@ -11,8 +11,10 @@ function tabStorage(): Storage | undefined {
 
 /**
  * Web (R10, task.md F5b): `sessionStorage` — переживает перезагрузку вкладки, не делится между вкладками и
- * закрывается вместе с ней. Здесь только токен регистрации; сессию web не хранит (refresh — httpOnly cookie,
- * access — в памяти, `session-persistence.web.ts`). Сбой хранилища не бросает: сценарий идёт в памяти.
+ * закрывается вместе с ней. Здесь токен регистрации и кеш «опрос пройден» (`pokatim.onboarding`, с владельцем —
+ * дубликат вкладки или выход в другой вкладке чужой кеш не подсовывают); сессию web не хранит (refresh — httpOnly
+ * cookie, access — в памяти, `session-persistence.web.ts`). Флаг геопозиции устройства — `localStorage`
+ * (`device-flags.web.ts`). Сбой хранилища не бросает: сценарий идёт в памяти.
  */
 export const secureStorage = {
   get: async (key: SecureKey): Promise<string | null> => {

@@ -379,6 +379,24 @@ export class IdentityRepository {
 
   // --- сессии ---
 
+  /**
+   * Сессия access живая (ADR-0008, `AuthGuard`): `sid` принадлежит `sub`, не отозвана, не истекла по `now`, и
+   * пользователь не удалён. Два чтения по `_id` вне транзакции; условия — в фильтре, значения — UUID после zod.
+   * Гонка «запрос ↔ отзыв» принята: прошедший проверку до коммита отзыва запрос завершается.
+   */
+  async findActiveSession(sessionId: string, userId: string, now: Date): Promise<boolean> {
+    const session = await this.c.sessions.findOne(
+      { _id: sessionId, userId, revokedAt: null, expiresAt: { $gt: now } },
+      { projection: { _id: 1 } },
+    );
+    if (!session) return false;
+    const user = await this.c.users.findOne(
+      { _id: userId, deletedAt: null },
+      { projection: { _id: 1 } },
+    );
+    return user !== null;
+  }
+
   async insertSession(
     session: DbSession,
     doc: { id: string; userId: string; refreshTokenHash: string; createdAt: Date; expiresAt: Date },

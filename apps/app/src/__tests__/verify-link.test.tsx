@@ -15,6 +15,7 @@ import {
   session,
   storedValue,
   storePendingRegistration,
+  storeSurveyCompleted,
 } from './auth-fixtures';
 import { appRoutes } from './app-routes';
 import { useRegistrationStore } from '@/features/auth/registration-store';
@@ -31,6 +32,10 @@ const openLink = () => renderRouter(appRoutes, { initialUrl: `/auth/verify/${LIN
 const httpError = (status: number, code: string, details?: unknown) =>
   new ApiHttpError(status, { code, message: code, details });
 
+beforeEach(() => {
+  // опрос онбординга уже пройден (кеш устройства): сценарии ведут на Главную; сам онбординг — onboarding-guard.test
+  storeSurveyCompleted();
+});
 afterEach(() => {
   jest.clearAllMocks();
   jest.useRealTimers();

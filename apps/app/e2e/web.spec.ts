@@ -6,14 +6,18 @@ import { REFRESH_URL, SIGN_IN_URL } from './project';
 import { API_URL, BASE_URL, DEV_URL, WITH_API } from './urls';
 
 // Смоук web-версии pokatim: SSR → гидрация → гард сессии, публичные экраны с OG, витрина (dev), PWA;
-// с API (E2E_API=1) — регистрация → письмо → подтверждение → вход → вход переживает перезагрузку (cookie) →
+// с API (E2E_API=1) — регистрация → письмо → подтверждение → вход → опрос «Что вас привело?» → геопозиция «Не сейчас» →
+// Главная → вход переживает перезагрузку (cookie) →
 // выход → вход по паролю (неверный пароль — баннер) → перезагрузка → выход → «Забыли пароль?» → письмо → новый пароль
-// → старый пароль не подходит → вход новым → письмо «Пароль изменён».
+// → старый пароль не подходит → вход новым → письмо «Пароль изменён»; вход в браузере с выданным разрешением
+// геопозиции — шаг геопозиции пропущен.
 // Ошибки страницы (исключения, рассинхрон гидрации, неожиданные отказы загрузки) проверяет фикстура (fixtures.ts);
 // ожидаемый 401 восстановления сессии анонима — в e2e/project.ts.
 
 /** Cookie refresh web-сессии — как задано (task.md F5b §7), а не импорт из contracts: смоук проверяет ответ API. */
 const SESSION_COOKIE = { name: '__Secure-pokatim_rt', path: '/v1/auth/session' };
+/** Ответ опроса онбординга (слайс 4) — первый эндпоинт под AuthGuard. */
+const SURVEY_URL = `${API_URL}/v1/profile/onboarding/survey`;
 
 /**
  * Главная гостя после гидрации. С API: восстановление сессии — 401, гард ведёт на регистрацию. Без API: сеть
@@ -124,6 +128,30 @@ test('ссылка сброса /auth/reset/<токен>: HTML с сервера
   );
 });
 
+test('шаги онбординга /survey и /location без сессии: HTML скелетона оболочки, после гидрации — гость', async ({
+  page,
+  request,
+}) => {
+  for (const path of ['/survey', '/location']) {
+    const response = await request.get(path);
+    expect(response.status()).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('role="progressbar"');
+    // экраны не публичные: без содержимого шага и без OG
+    expect(html).not.toContain('Что вас привело?');
+    expect(html).not.toContain('Покажем, что рядом');
+    expect(html).not.toContain('og:title');
+  }
+
+  await page.goto('/survey');
+  if (WITH_API) {
+    await expect(page).toHaveURL(`${BASE_URL}/register`);
+  } else {
+    // без API сессия не проверена — не выход: ошибка с повтором на месте шага
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+});
+
 test('публичный экран /status: заголовок и OG в HTML до JS, после гидрации — тот же экран', async ({
   page,
   request,
@@ -175,7 +203,8 @@ test('PWA: manifest бренда без ошибок, устанавливает
 test.describe('с API', () => {
   test.skip(!WITH_API, 'нужны API, worker, MongoDB, Redis и Mailpit: E2E_API=1 (runbook, «Web»)');
 
-  test('регистрация → письмо → подтверждение → вход; вход переживает перезагрузку (cookie)', async ({
+  test('регистрация → письмо → подтверждение → вход → опрос и геопозиция; вход переживает перезагрузку (cookie)', async ({
+    browser,
     page,
     context,
     request,
@@ -218,6 +247,25 @@ test.describe('с API', () => {
       'accessTokenExpiresAt',
       'refreshTokenExpiresAt',
     ]);
+
+    // онбординг после первого входа: опрос (ответ — на сервер с Bearer) → геопозиция «Не сейчас» → Главная
+    await expect(page).toHaveURL(`${BASE_URL}/survey`);
+    const submit = page.getByRole('button', { name: 'Продолжить' });
+    await expect(submit).toBeDisabled();
+    await page.getByRole('checkbox', { name: 'Новые маршруты' }).click();
+    await page.getByRole('checkbox', { name: 'Календарь стартов' }).click();
+    const surveySaved = page.waitForResponse(
+      (response) => response.url() === SURVEY_URL && response.request().method() === 'PUT',
+    );
+    await submit.click();
+    const saved = await surveySaved;
+    expect(saved.status()).toBe(200);
+    expect(saved.request().headers().authorization).toMatch(/^Bearer [\w-]+\.[\w-]+\.[\w-]+$/);
+    expect(await saved.json()).toEqual({ surveyCompleted: true });
+    await expect(page).toHaveURL(`${BASE_URL}/location`);
+    await expect(page.getByRole('heading', { name: 'Покажем, что рядом' })).toBeVisible();
+    await page.getByRole('button', { name: 'Не сейчас' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/`);
     await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
 
     // refresh — только в httpOnly cookie на пути сессии; JS страницы его не видит
@@ -305,5 +353,20 @@ test.describe('с API', () => {
     const changed = await latestMailText(request, `to:"${email}" subject:"Пароль изменён"`);
     expect(changed).toContain('по минскому времени');
     expect(changed).not.toMatch(/auth\/reset/);
+
+    // другой браузер с уже выданным разрешением геопозиции: опрос пройден (сервер), шаг геопозиции пропущен
+    const granted = await browser.newContext({ permissions: ['geolocation'] });
+    const other = await granted.newPage();
+    watchErrors(other);
+    await other.goto('/sign-in');
+    await other.getByRole('textbox', { name: 'E-mail' }).fill(email);
+    await other.getByRole('textbox', { name: 'Пароль' }).fill(newPassword);
+    await other.getByRole('button', { name: 'Войти' }).click();
+    await expect(other.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    await expect(other).toHaveURL(`${BASE_URL}/`);
+    // перезагрузка: онбординг снова по серверу — Главная
+    await other.reload();
+    await expect(other.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    await granted.close();
   });
 });

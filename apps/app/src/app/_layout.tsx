@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 
 import { useRegistrationStore } from '@/features/auth/registration-store';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { onboardingStep, useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { connectOnlineManager } from '@/lib/online-manager';
 import { createQueryClient } from '@/lib/query-client';
 import { fontAssets } from '@/theme/fonts';
@@ -30,11 +31,31 @@ export default function RootLayout() {
   const registrationHydrated = useRegistrationStore((state) => state.hydrated);
   const fontsReady = fontsLoaded || fontError !== null;
   const hydrated = sessionStatus !== 'unknown' && registrationHydrated;
+  const step = useOnboardingStore(onboardingStep);
+  const surveyState = useOnboardingStore((state) => state.survey);
 
   useEffect(() => {
     void useSessionStore.getState().hydrate();
     void useRegistrationStore.getState().hydrate();
   }, []);
+
+  // онбординг выясняется после входа (опрос — кеш или сервер, геопозиция — устройство); повтор после ошибки —
+  // с вкладок (`hydrate` из скелетона)
+  useEffect(() => {
+    if (signedIn && surveyState === 'unknown') void useOnboardingStore.getState().hydrate();
+  }, [signedIn, surveyState]);
+
+  // выход из аккаунта (явный, отзыв сессии сервером, refresh 401): кеш запросов и онбординг прежнего аккаунта
+  // стираются — следующий вход спросит сервер о своём опросе. Запуск без сессии (`unknown` → `signedOut`) — не выход
+  useEffect(
+    () =>
+      useSessionStore.subscribe((state, previous) => {
+        if (state.status !== 'signedOut' || previous.status !== 'signedIn') return;
+        queryClient.clear();
+        void useOnboardingStore.getState().reset();
+      }),
+    [queryClient],
+  );
 
   useEffect(() => {
     // без шрифтов работаем на системных, но не молча
@@ -58,11 +79,30 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: theme.surface.default },
         }}
       >
+        {/* вкладки: сессия или онбординг ещё неизвестны (скелетон, повтор) или онбординг пройден */}
         <Stack.Protected
-          guard={isSessionPending(sessionStatus) || signedIn}
-          redirectTo={returning ? '/sign-in' : '/register'}
+          guard={
+            isSessionPending(sessionStatus) || (signedIn && (step === 'unknown' || step === 'done'))
+          }
+          redirectTo={
+            signedIn
+              ? step === 'location'
+                ? '/location'
+                : '/survey'
+              : returning
+                ? '/sign-in'
+                : '/register'
+          }
         >
           <Stack.Screen name="(tabs)" />
+        </Stack.Protected>
+        {/* шаги онбординга после входа: опрос → геопозиция → Главная; пока сессия или шаг неизвестны — скелетон
+            (SSR отдаёт HTML оболочки, а не пустую страницу редиректа) */}
+        <Stack.Protected
+          guard={isSessionPending(sessionStatus) || (signedIn && step !== 'done')}
+          redirectTo="/"
+        >
+          <Stack.Screen name="(setup)" />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn} redirectTo="/">
           <Stack.Screen name="(onboarding)" />

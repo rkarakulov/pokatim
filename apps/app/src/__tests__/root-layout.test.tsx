@@ -4,7 +4,7 @@ import { renderRouter, screen } from 'expo-router/testing-library';
 import * as SecureStore from 'expo-secure-store';
 import * as SplashScreen from 'expo-splash-screen';
 
-import { storeSession } from './auth-fixtures';
+import { storeSession, storeSurveyCompleted } from './auth-fixtures';
 import { appRoutes } from './app-routes';
 
 jest.mock('expo-font', () => ({ useFonts: jest.fn() }));
@@ -18,8 +18,11 @@ jest.mock('@/lib/api');
 const mockedUseFonts = jest.mocked(useFonts);
 const app = appRoutes;
 
-// вошедший пользователь: проверяем splash и шрифты на Главной (гард — в auth-guard.test)
-beforeEach(() => storeSession());
+// вошедший пользователь с пройденным опросом: проверяем splash и шрифты на Главной (гард — в auth-guard.test)
+beforeEach(() => {
+  storeSession();
+  storeSurveyCompleted();
+});
 afterEach(() => jest.clearAllMocks());
 
 describe('корневой layout: splash и шрифты', () => {

@@ -24,7 +24,7 @@ export const POLL_INTERVAL_MS = 3000;
  * `onlineManager` (NetInfo) считает сеть недоступной, — кнопка висела бы в «загрузке» без ошибки. Здесь запрос
  * сразу получает сетевую ошибку: баннер «Нет соединения» и повтор нажатием (AGENTS.md §4.12).
  */
-const AUTH_MUTATION = { networkMode: 'always' } as const;
+export const AUTH_MUTATION = { networkMode: 'always' } as const;
 
 export const authKeys = {
   verificationLink: (token: string) => ['auth', 'verification-link', token] as const,

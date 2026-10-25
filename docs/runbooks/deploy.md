@@ -34,9 +34,9 @@ push develop ─► deploy-dev.yml
 mongo/redis/mailpit → **набор и пользователи MongoDB** (`mongo-init.js`: rs0, root, пользователь приложения —
 идемпотентно) → **миграции одноразовым контейнером** (`compose run --rm migrate`, `node dist/db/migrate.js`) →
 api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` = ok и `database: up`, `/register`, `/admin/`,
-`/mail/` без пароля 401 и с паролем 200, `/v1/health` и `/mail/` через vhost nginx) → **переезд с PostgreSQL**
-(`retire_postgres`, раздел «Переезд на MongoDB») → прочистка образов pokatim без контейнеров (по label
-`by.pokatim.project=pokatim`, чужие образы не трогаются).
+`/mail/` без пароля 401 и с паролем 200, `/v1/health` и `/mail/` через vhost nginx) → `compose up --remove-orphans`
+(контейнеры удалённых сервисов) → прочистка образов pokatim без контейнеров (по label `by.pokatim.project=pokatim`,
+чужие образы не трогаются).
 
 Свои порты хоста — 3100, 8180, 8181, 8125, только `127.0.0.1`; выбраны свободными. Менять — после `sudo ss -ltnp` на
 сервере. Лимиты памяти контейнеров — в `infra/deploy/docker-compose.yml`, всего 2560m (mongo 640, redis 320, mailpit
@@ -345,34 +345,19 @@ dc exec mongo rm /tmp/restore.archive.gz
 
 ## Переезд на MongoDB
 
-Первый деплой после перехода на MongoDB (ADR-0007, 2026-10-26) переезжает сам, повторные — ничего не делают:
+Переезд dev-стенда PostgreSQL → MongoDB (ADR-0007, 2026-10-26) выполнен на сервере: контейнер `postgres` и том
+`pokatim-dev_pgdata` удалены, ключи PostgreSQL убраны из `.env`, данные dev не переносились. Шаг `retire_postgres`
+удалён из `deploy.sh` (слайс онбординга 4, 2026-10-25): он был идемпотентен, но больше не нужен. Если на каком-то
+хосте остался стек на PostgreSQL — переезжать деплоем из коммита до удаления шага (история `infra/deploy/deploy.sh`).
 
-1. `bootstrap.sh` дописывает в `.env` `MONGO_ROOT_PASSWORD`, `MONGO_PASSWORD` и создаёт `mongo-keyfile`.
-2. Поднимается `mongo` (тома `pokatim-dev_mongodata`, `pokatim-dev_mongoconfig`), `mongo-init.js` создаёт набор rs0,
-   root и пользователя приложения, миграции создают коллекции и индексы (`0001_outbox`, `0002_identity`,
-   `0003_identity_ttl`), поднимаются api/worker/web/admin, smoke.
-3. **Только после зелёного smoke** — `retire_postgres`: контейнер сервиса `postgres` проекта `pokatim-dev`
-   останавливается и удаляется, том **`pokatim-dev_pgdata` удаляется** (только он: точное имя и label проекта; чужой
-   или занятый том — `::warning::` и ручная уборка), из `.env` убираются ключи PostgreSQL (`POSTGRES_*`,
-   `DATABASE_URL`). Затем `compose up --remove-orphans` убирает прочие контейнеры удалённых сервисов.
-
-**Данные не переносятся:** БД MongoDB стартует пустой — тестовые аккаунты регистрируются заново, сессии и cookie
-dev-пользователей не находятся (401 → вход заново). Задачи BullMQ с id событий PG-outbox, оставшиеся в Redis,
-обработчики пропускают (`skipped`).
-
-Шаг `retire_postgres` станет лишним после первого успешного деплоя — удалить follow-up задачей.
-
-**Репетиция** (`infra/deploy/rehearsal.sh`, CI job `deploy-rehearsal` на PR, меняющих деплой, образ или API): старый
-стек из базовой ветки → упавший деплой не трогает PostgreSQL → переезд → повторный деплой → права пользователя
-`pokatim`. Только с **отдельным** `POKATIM_PROJECT` (по умолчанию `pokatim-rehearsal`; `pokatim-dev` скрипт
-отвергает — иначе `retire_postgres` удалил бы том стенда), временным `HOME` и `POKATIM_SKIP_PULL=1
-POKATIM_SKIP_NGINX=1`; вручную — на машине с Docker и локальными образами (`POKATIM_TAG`, `POKATIM_IMAGE_PREFIX`),
-не на общем сервере (те же порты хоста).
-
-**Ручной возврат на PostgreSQL** (данные PostgreSQL dev удалены переездом — только пустая БД; с согласия автора):
-`dc down` (без `-v`), файлы стека из коммита до перехода
-(`git show <коммит до перехода>:infra/deploy/{docker-compose.yml,deploy.sh,bootstrap.sh,env.template}` → `~/pokatim/`),
-в `.env` — `POSTGRES_PASSWORD` (`openssl rand -hex 32`), затем `deploy.sh` с `POKATIM_TAG` образов до перехода.
+**Репетиция обновления** (`infra/deploy/rehearsal.sh`, CI job `deploy-rehearsal` на PR, меняющих деплой, образ, API
+или workflow): стек базовой ветки (её `deploy.sh` и файлы стека, образы — локальные сборки PR) + маркер-данные в
+MongoDB → новый `deploy.sh` поверх (новые миграции применены, smoke, маркер и секреты `.env` на месте) → повторный
+деплой («новых миграций нет») → права пользователя `pokatim` → деплой с битым `JWT_SECRET` падает, данные на месте,
+после восстановления проходит. Записи миграций, которых нет в базовой ветке, после шага базовой ветки снимаются — БД
+в её состоянии. Только с **отдельным** `POKATIM_PROJECT` (по умолчанию `pokatim-rehearsal`; `pokatim-dev` скрипт
+отвергает), временным `HOME` и `POKATIM_SKIP_PULL=1 POKATIM_SKIP_NGINX=1`; вручную — на машине с Docker и локальными
+образами (`POKATIM_TAG`, `POKATIM_IMAGE_PREFIX`), не на общем сервере (те же порты хоста).
 
 ## Остатки переезда on-bike → pokatim
 
@@ -416,6 +401,18 @@ done
 Порог деплоя — 1,5 ГБ свободно (`MIN_FREE_MB`), иначе `::error::` без изменений на сервере. Освобождать только своё:
 `docker image prune -af --filter label=by.pokatim.project=pokatim`. Чужие образы, тома и `docker system prune` —
 нельзя (общий сервер).
+
+## Миграции релизов
+
+- `0004_profile` (онбординг, слайс 4) — коллекция `profiles`; expand-only, без переноса данных, повторный прогон —
+  без изменений. Применяется шагом `migrate` деплоя до запуска API.
+
+## Release-чеклист сторов (приложение)
+
+- **Шаг геопозиции в онбординге — только при живой фиче «рядом»** (R6 слайса 4, App Review 5.1.1): до первой
+  публикации в App Store / Google Play проверить, что «рядом» использует геопозицию; иначе выключить шаг —
+  `LOCATION_STEP_ENABLED = false` в `apps/app/src/features/onboarding/onboarding-store.ts` (экран и разрешение
+  остаются в сборке, но не запрашиваются).
 
 ## Проверка
 

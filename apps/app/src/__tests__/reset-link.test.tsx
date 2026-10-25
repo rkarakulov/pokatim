@@ -7,7 +7,15 @@ import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-librar
 import { useSessionStore } from '@/features/auth/session-store';
 import { api } from '@/lib/api';
 
-import { EMAIL, LINK_TOKEN, NOW, session, storedValue, storeSession } from './auth-fixtures';
+import {
+  EMAIL,
+  LINK_TOKEN,
+  NOW,
+  session,
+  storedValue,
+  storeSession,
+  storeSurveyCompleted,
+} from './auth-fixtures';
 import { appRoutes } from './app-routes';
 
 jest.mock('@/lib/api');
@@ -29,6 +37,8 @@ async function fillPasswords(password = NEW_PASSWORD, repeat = password) {
 }
 
 beforeEach(() => {
+  // опрос онбординга уже пройден (кеш устройства): сценарии ведут на Главную; сам онбординг — onboarding-guard.test
+  storeSurveyCompleted();
   jest.mocked(api.signOut).mockResolvedValue(undefined);
   jest.mocked(api.refreshSession).mockResolvedValue(session);
 });

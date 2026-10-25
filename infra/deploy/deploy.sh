@@ -3,8 +3,8 @@
 # docs/runbooks/deploy.md). Рядом лежат bootstrap.sh, docker-compose.yml, env.template, mongo-init.js.
 #   bootstrap (каталог, .env, keyfile MongoDB, nginx, сертификат) → pull образов → mongo/redis/mailpit → набор rs0 и
 #   пользователи MongoDB (mongo-init.js) → миграции (одноразовый контейнер) → api/worker/web/admin с ожиданием
-#   healthcheck → smoke → переезд с PostgreSQL (retire_postgres: контейнер и том pgdata стека, ключи PG в .env) →
-#   прочистка старых образов pokatim (только по label проекта).
+#   healthcheck → smoke → прочистка старых образов pokatim (только по label проекта). Переезд с PostgreSQL на сервере
+#   завершён — его шаги удалены (runbook «Переезд на MongoDB»).
 # Env: POKATIM_TAG (тег образов, обязательно), PUBLIC_HOST (обязательно), POKATIM_DIR (~/pokatim),
 #      POKATIM_PROJECT (compose project, pokatim-dev), GHCR_USER + GHCR_TOKEN_STDIN=1 — токен чтения GHCR
 #      первой строкой stdin (логин во временный DOCKER_CONFIG, удаляется сразу после pull);
@@ -181,7 +181,7 @@ if [[ "${migrate_code}" -ne 0 ]]; then
   exit "${migrate_code}"
 fi
 
-# без --remove-orphans: контейнер postgres прежнего стека снимает retire_postgres — после зелёного smoke (Q5)
+# контейнеры сервисов, которых больше нет в compose, — после зелёного smoke (ниже, --remove-orphans)
 log "api, worker, web, admin"
 compose up -d --wait --wait-timeout 300
 
@@ -247,39 +247,6 @@ esac
 unset MAIL_UI_PASSWORD
 log "health: ${health}; UI Mailpit /mail/ — под паролем; relay почты: ${mail_relay:-off}"
 
-# Переезд PostgreSQL → MongoDB (ADR-0007, Q5): новый стек healthy и smoke зелёный — контейнер postgres этого стека
-# останавливается и удаляется, том ${POKATIM_PROJECT}_pgdata (только свой: точное имя и label проекта) удаляется,
-# из .env убираются ключи только PostgreSQL. Данные dev не переносятся. Повторный деплой — ничего не делает.
-retire_postgres() {
-  local ids volume="${POKATIM_PROJECT}_pgdata" owner tmp
-  ids="$(docker ps -aq --filter "label=com.docker.compose.project=${POKATIM_PROJECT}" \
-    --filter 'label=com.docker.compose.service=postgres')"
-  if [[ -n "${ids}" ]]; then
-    log "переезд на MongoDB: контейнер postgres стека останавливается и удаляется"
-    # shellcheck disable=SC2086 # список id контейнеров — по словам
-    docker stop ${ids} >/dev/null
-    # shellcheck disable=SC2086
-    docker rm ${ids} >/dev/null
-  fi
-  if docker volume inspect "${volume}" >/dev/null 2>&1; then
-    owner="$(docker volume inspect -f '{{ index .Labels "com.docker.compose.project" }}' "${volume}" 2>/dev/null || true)"
-    if [[ "${owner}" != "${POKATIM_PROJECT}" ]]; then
-      warn "том ${volume} не помечен проектом ${POKATIM_PROJECT} — не удаляется (runbook «Переезд на MongoDB»)"
-    elif docker volume rm "${volume}" >/dev/null; then
-      log "переезд на MongoDB: том ${volume} удалён (данные PostgreSQL dev не переносятся)"
-    else
-      warn "том ${volume} не удалён (занят?) — удалить вручную (runbook «Переезд на MongoDB»)"
-    fi
-  fi
-  if grep -qE '^(POSTGRES_[A-Z0-9_]*|DATABASE_URL)=' "${POKATIM_DIR}/.env"; then
-    tmp="$(mktemp "${POKATIM_DIR}/.env.XXXXXX")"
-    grep -vE '^(POSTGRES_[A-Z0-9_]*|DATABASE_URL)=' "${POKATIM_DIR}/.env" >"${tmp}" || true
-    chmod 600 "${tmp}"
-    mv -f "${tmp}" "${POKATIM_DIR}/.env"
-    log "переезд на MongoDB: ключи PostgreSQL убраны из .env"
-  fi
-}
-retire_postgres
 # прочие контейнеры сервисов, которых больше нет в compose
 compose up -d --wait --wait-timeout 120 --remove-orphans
 

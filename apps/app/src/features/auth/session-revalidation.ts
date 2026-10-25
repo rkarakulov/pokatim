@@ -6,3 +6,6 @@ import type { CookieSession } from '@pokatim/contracts';
  */
 export type Revalidation =
   { status: 'rotated'; session: CookieSession } | { status: 'signedOut' } | { status: 'unchanged' };
+
+/** Итог обновления access перед авторизованным запросом (`refreshAccess`); временный сбой — исключение. */
+export type AccessRefresh = { status: 'rotated'; session: CookieSession } | { status: 'signedOut' };

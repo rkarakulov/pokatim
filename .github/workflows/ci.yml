@@ -145,8 +145,8 @@ jobs:
           path: apps/app/test-results/
           retention-days: 7
 
-  # Репетиция переезда dev-стенда PostgreSQL → MongoDB (AC7/AC8, infra/deploy/rehearsal.sh): образы собираются
-  # локально на раннере, старый стек — из базовой ветки PR, свой compose project, без registry и nginx. Только PR,
+  # Репетиция обновления dev-стенда (infra/deploy/rehearsal.sh): образы собираются локально на раннере, стек — сначала
+  # из базовой ветки PR, затем новый deploy.sh поверх; свой compose project, без registry и nginx. Только PR,
   # меняющие деплой, образ, API или workflow; в вызове из деплоя (push) не запускается.
   deploy-rehearsal:
     if: github.event_name == 'pull_request'
@@ -206,6 +206,6 @@ jobs:
           secrets: NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
           cache-from: type=gha,scope=pokatim-admin
       # лог — шаги и проверки без значений секретов (rehearsal.sh сравнивает хеши строк .env)
-      - name: репетиция переезда и повторного деплоя
+      - name: репетиция обновления, повторного и упавшего деплоя
         if: steps.changes.outputs.run == 'true'
         run: bash infra/deploy/rehearsal.sh
