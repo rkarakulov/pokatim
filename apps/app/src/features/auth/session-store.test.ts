@@ -5,6 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 
 import { api } from '@/lib/api';
 import { NOW, session } from '@/__tests__/auth-fixtures';
+import { fakeAccessToken } from '@/__tests__/jwt';
 
 import { requestSignIn } from './queries';
 import { withSessionLock } from './session-lock';
@@ -26,7 +27,8 @@ const stored = () =>
 
 const rotated: Session = {
   ...session,
-  accessToken: 'access-2',
+  // та же сессия того же аккаунта, новый access
+  accessToken: fakeAccessToken({}, 'rotated'),
   refreshToken: 'refresh-2',
   refreshTokenExpiresAt: '2026-11-21T10:05:00.000Z',
 };

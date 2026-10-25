@@ -84,6 +84,20 @@ describe('шаг геопозиции (AC7)', () => {
     expect(await home()).toBeOnTheScreen();
   });
 
+  it('системный запрос завис — «Не сейчас» доступна, экран можно покинуть', async () => {
+    signedInWithSurvey();
+    requestPermission.mockReturnValue(new Promise(() => undefined));
+    await renderRouter(appRoutes, { initialUrl: '/' });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Разрешить' }));
+    expect(screen.getByRole('button', { name: 'Разрешить' })).toBeBusy();
+
+    const notNow = screen.getByRole('button', { name: 'Не сейчас' });
+    expect(notNow).toBeEnabled();
+    await fireEvent.press(notNow);
+    expect(await home()).toBeOnTheScreen();
+    expect(JSON.parse(locationFlag() ?? '{}')).toMatchObject({ decision: 'dismissed' });
+  });
+
   it('«Не сейчас» → Главная без системного запроса; флаг устройства', async () => {
     signedInWithSurvey();
     await renderRouter(appRoutes, { initialUrl: '/' });

@@ -9,13 +9,16 @@ import { api } from '@/lib/api';
 import {
   EMAIL,
   liveSession,
+  liveSessionB,
   NOW,
   REGISTRATION_TOKEN,
   storedValue,
   storePendingRegistration,
   storeSession,
   storeSurveyCompleted,
+  session,
 } from './auth-fixtures';
+import { USER_A, USER_B } from './jwt';
 import { appRoutes } from './app-routes';
 
 jest.mock('@/lib/api');
@@ -78,13 +81,14 @@ describe('гард онбординга: опрос после входа (AC6)'
     expect(REGISTRATION_TOKEN).toHaveLength(43);
   });
 
-  it('ответ уже есть на сервере → Главная, кеш «опрос пройден» записан', async () => {
+  it('ответ уже есть на сервере → Главная, кеш «опрос пройден» записан с владельцем', async () => {
     const router = await openSignedIn('/', { surveyCompleted: true });
 
     expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/');
     expect(JSON.parse(storedValue('pokatim.onboarding') ?? '{}')).toEqual({
       surveyCompleted: true,
+      userId: USER_A,
     });
   });
 
@@ -233,6 +237,32 @@ describe('экран «Что вас привело?»', () => {
 
     expect(await screen.findByRole('header', { name: 'Вход' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/sign-in');
+  });
+});
+
+describe('кеш «опрос пройден» привязан к владельцу сессии', () => {
+  it('кеш другого аккаунта игнорируется: сервер спрашивается, показывается опрос', async () => {
+    storeSurveyCompleted(USER_B);
+    const router = await openSignedIn('/');
+
+    expect(await surveyTitle()).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/survey');
+    expect(status).toHaveBeenCalledTimes(1);
+  });
+
+  it('холодный старт с истёкшей сессией A и её кешем → вход аккаунтом B: опрос по ответу сервера для B', async () => {
+    storeSession({ ...session, refreshTokenExpiresAt: '2020-01-01T00:00:00.000Z' });
+    storeSurveyCompleted();
+    status.mockResolvedValue({ surveyCompleted: false });
+    jest.mocked(api.signIn).mockResolvedValue({ state: 'signedIn', session: liveSessionB });
+    const router = await renderRouter(appRoutes, { initialUrl: '/sign-in' });
+    await fireEvent.changeText(await screen.findByLabelText('E-mail'), 'b@mail.by');
+    await fireEvent.changeText(screen.getByLabelText('Пароль'), 'velo-secret');
+    await fireEvent.press(screen.getByRole('button', { name: 'Войти' }));
+
+    expect(await surveyTitle()).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/survey');
+    expect(status).toHaveBeenCalledWith(liveSessionB.accessToken);
   });
 });
 

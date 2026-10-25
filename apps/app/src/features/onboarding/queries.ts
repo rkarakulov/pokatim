@@ -3,6 +3,8 @@ import { useMutation } from '@tanstack/react-query';
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { AUTH_MUTATION } from '@/features/auth/queries';
+import { sessionOwner } from '@/features/auth/session-identity';
+import { useSessionStore } from '@/features/auth/session-store';
 import { api } from '@/lib/api';
 
 import { useOnboardingStore } from './onboarding-store';
@@ -14,8 +16,12 @@ import { useOnboardingStore } from './onboarding-store';
 export function useSubmitSurvey() {
   return useMutation({
     ...AUTH_MUTATION,
-    mutationFn: (body: SubmitOnboardingSurveyRequest) =>
-      withAccessToken((token) => api.submitOnboardingSurvey(token, body)),
-    onSuccess: () => useOnboardingStore.getState().completeSurvey(),
+    mutationFn: async (body: SubmitOnboardingSurveyRequest) => {
+      // ответ принадлежит аккаунту, от имени которого ушёл запрос: сессия сменилась — шаг не засчитывается
+      const owner = sessionOwner(useSessionStore.getState().session);
+      const status = await withAccessToken((token) => api.submitOnboardingSurvey(token, body));
+      await useOnboardingStore.getState().completeSurvey(owner);
+      return status;
+    },
   });
 }

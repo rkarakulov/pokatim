@@ -5,6 +5,8 @@ import { api } from '@/lib/api';
 import { withAccessToken } from '@/features/auth/authorized';
 import { readJson } from '@/features/auth/read-json';
 import { secureStorage } from '@/features/auth/secure-storage';
+import { sessionOwner } from '@/features/auth/session-identity';
+import { useSessionStore } from '@/features/auth/session-store';
 import { getLocationPermission } from '@/features/location/location-permission';
 
 import { hasLocationPrompt, saveLocationPrompt } from './device-flags';
@@ -27,9 +29,16 @@ export type LocationStepState = 'unknown' | 'pending' | 'done';
 /** Шаг онбординга для гарда: опрос → геопозиция → Главная. */
 export type OnboardingStep = 'unknown' | 'survey' | 'location' | 'done';
 
-/** Кеш «опрос пройден» — привязан к сессии (стирается при выходе): офлайн-старт native не ждёт сервер (R4). */
+/**
+ * Кеш «опрос пройден» — офлайн-старт native не ждёт сервер (R4). Привязан к владельцу (`sub` access): чужой кеш
+ * (выход без очистки, холодный старт с истёкшей сессией, дубликат вкладки web) не принимается и удаляется при
+ * чтении; стирается и при выходе.
+ */
 const SURVEY_KEY = 'pokatim.onboarding';
-const SurveyFlag = z.object({ surveyCompleted: z.literal(true) });
+const SurveyFlag = z.object({ surveyCompleted: z.literal(true), userId: z.string().min(1) });
+
+/** Владелец текущей сессии (`sub` access); нет сессии — `undefined`. */
+const currentOwner = () => sessionOwner(useSessionStore.getState().session);
 
 interface OnboardingState {
   survey: SurveyState;
@@ -40,8 +49,8 @@ interface OnboardingState {
   hydrate: () => Promise<void>;
   /** повтор после `unavailable`: снова «неизвестно» (скелетон) — корневой layout выясняет заново */
   retry: () => void;
-  /** ответ опроса сохранён на сервере */
-  completeSurvey: () => Promise<void>;
+  /** ответ опроса аккаунта `owner` сохранён на сервере; сессия за это время сменилась — ничего не меняет */
+  completeSurvey: (owner: string | undefined) => Promise<void>;
   /** экран геопозиции пройден («Разрешить» при любом исходе или «Не сейчас»): флаг устройства, дальше — Главная */
   finishLocation: (decision: LocationPromptDecision) => Promise<void>;
   /** выход: состояние и кеш опроса прежнего аккаунта стираются; флаг геопозиции (устройство) остаётся */
@@ -57,24 +66,33 @@ export const onboardingStep = (
   return state.location === 'pending' ? 'location' : 'done';
 };
 
-async function writeSurveyFlag(): Promise<void> {
+async function writeSurveyFlag(userId: string): Promise<void> {
   try {
-    await secureStorage.set(SURVEY_KEY, JSON.stringify({ surveyCompleted: true }));
+    await secureStorage.set(SURVEY_KEY, JSON.stringify({ surveyCompleted: true, userId }));
   } catch (error) {
     // без кеша следующий запуск спросит сервер — не падение
     console.warn(`onboarding flag not persisted: ${(error as Error).name}`);
   }
 }
 
-async function surveyState(): Promise<Pick<OnboardingState, 'survey' | 'error'>> {
-  const cached = await readJson(SURVEY_KEY, (value) =>
-    SurveyFlag.safeParse(value).success ? true : undefined,
-  );
+/**
+ * Опрос владельца `owner`: кеш этого владельца или сервер. `isCurrent` — гидрация ещё актуальна (то же поколение и
+ * тот же владелец сессии): поздний ответ после выхода или смены аккаунта кеш не пишет.
+ */
+async function surveyState(
+  owner: string | undefined,
+  isCurrent: () => boolean,
+): Promise<Pick<OnboardingState, 'survey' | 'error'>> {
+  const cached = await readJson(SURVEY_KEY, (value) => {
+    const flag = SurveyFlag.safeParse(value);
+    // чужой или старый (без владельца) кеш — как отсутствующий: readJson его удаляет
+    return flag.success && owner !== undefined && flag.data.userId === owner ? true : undefined;
+  });
   if (cached) return { survey: 'completed', error: null };
   try {
     const status = await withAccessToken((token) => api.getOnboardingStatus(token));
     if (!status.surveyCompleted) return { survey: 'required', error: null };
-    await writeSurveyFlag();
+    if (owner !== undefined && isCurrent()) await writeSurveyFlag(owner);
     return { survey: 'completed', error: null };
   } catch (error) {
     // 401 после обновления — сессия уже закрыта, гард ведёт на «Вход»; прочее — повтор с вкладок
@@ -100,16 +118,19 @@ export const useOnboardingStore = create<OnboardingState>()((set, get) => ({
   error: null,
   hydrate: async () => {
     const started = (generation += 1);
-    const [survey, location] = await Promise.all([surveyState(), locationState()]);
-    if (started !== generation) return;
+    const owner = currentOwner();
+    const isCurrent = () => started === generation && currentOwner() === owner;
+    const [survey, location] = await Promise.all([surveyState(owner, isCurrent), locationState()]);
+    if (!isCurrent()) return;
     set({ ...survey, location });
   },
   retry: () => {
     if (get().survey === 'unavailable') set({ survey: 'unknown', error: null });
   },
-  completeSurvey: async () => {
+  completeSurvey: async (owner) => {
+    if (owner === undefined || currentOwner() !== owner) return;
     set({ survey: 'completed', error: null });
-    await writeSurveyFlag();
+    await writeSurveyFlag(owner);
   },
   finishLocation: async (decision) => {
     await saveLocationPrompt(decision);

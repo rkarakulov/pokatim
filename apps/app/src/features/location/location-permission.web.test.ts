@@ -113,6 +113,23 @@ describe('requestLocationPermission (web)', () => {
     await expect(requestLocationPermission()).resolves.toBe('undetermined');
   });
 
+  it('браузер не отвечает (подсказка скрыта, пользователь молчит) — через 45 с undetermined, а не вечное ожидание', async () => {
+    jest.useFakeTimers();
+    setNavigator('permissions', undefined);
+    setNavigator(
+      'geolocation',
+      geolocationWith(() => undefined),
+    );
+    let outcome: string | undefined;
+    void requestLocationPermission().then((value) => (outcome = value));
+
+    await jest.advanceTimersByTimeAsync(44_999);
+    expect(outcome).toBeUndefined();
+    await jest.advanceTimersByTimeAsync(1);
+    expect(outcome).toBe('undetermined');
+    jest.useRealTimers();
+  });
+
   it('нет navigator.geolocation → unavailable без запроса', async () => {
     setNavigator('geolocation', undefined);
     await expect(requestLocationPermission()).resolves.toBe('unavailable');

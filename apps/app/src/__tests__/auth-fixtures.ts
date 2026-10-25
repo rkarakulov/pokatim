@@ -4,6 +4,8 @@ import type { RegisterResponse, Session } from '@pokatim/contracts';
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 
+import { fakeAccessToken, SID_B, USER_A, USER_B } from './jwt';
+
 /** Фикстуры для тестов auth. Токены — 43 символа base64url, как в контракте. */
 export const NOW = new Date('2026-10-22T10:00:00Z');
 
@@ -18,7 +20,8 @@ export const registerResponse: RegisterResponse = {
 };
 
 export const session: Session = {
-  accessToken: 'access-token',
+  // access — JWT аккаунта USER_A (приложение читает из payload только чей он и срок жизни)
+  accessToken: fakeAccessToken(),
   accessTokenExpiresAt: '2026-10-22T10:15:00.000Z',
   refreshToken: 'refresh-token',
   refreshTokenExpiresAt: '2026-11-21T10:00:00.000Z',
@@ -28,6 +31,13 @@ export const session: Session = {
 export const liveSession: Session = {
   ...session,
   accessTokenExpiresAt: '2099-01-01T00:00:00.000Z',
+};
+
+/** Живая сессия другого аккаунта (USER_B) — вход другим пользователем на том же устройстве. */
+export const liveSessionB: Session = {
+  ...liveSession,
+  accessToken: fakeAccessToken({ sub: USER_B, sid: SID_B }),
+  refreshToken: 'refresh-token-b',
 };
 
 const secureStore = () =>
@@ -44,9 +54,9 @@ export const signInForTest = () => {
   useOnboardingStore.setState({ survey: 'completed', location: 'done' });
 };
 
-/** Опрос этого аккаунта уже пройден (кеш устройства, привязан к сессии): сервер не спрашивается. */
-export function storeSurveyCompleted() {
-  secureStore().set('pokatim.onboarding', JSON.stringify({ surveyCompleted: true }));
+/** Опрос аккаунта `userId` уже пройден (кеш устройства, привязан к владельцу сессии): сервер не спрашивается. */
+export function storeSurveyCompleted(userId = USER_A) {
+  secureStore().set('pokatim.onboarding', JSON.stringify({ surveyCompleted: true, userId }));
 }
 
 /** Регистрация, начатая прошлым запуском (токен жив). */

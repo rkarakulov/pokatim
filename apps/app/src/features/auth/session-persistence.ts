@@ -21,6 +21,9 @@ const readStored = (now: number) =>
     return parsed.success && isSessionAlive(parsed.data, now) ? parsed.data : undefined;
   });
 
+/** Native: сессия при запуске — из SecureStore (не от сервера сейчас). */
+export const RESTORE_IS_NETWORK = false;
+
 /**
  * Сессия прошлого запуска — локально, без сети: офлайн-старт на прогулке не выходит из аккаунта (R5). Просроченная
  * или битая удаляется. Не бросает. Сервер её проверяет потом — `revalidateSession`.

@@ -31,6 +31,9 @@ function retryDelaySec(error: unknown): number | undefined {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** Web: сессия при запуске — ответ refresh от сервера (получена сейчас). */
+export const RESTORE_IS_NETWORK = true;
+
 /**
  * Сессия по cookie: `POST /v1/auth/session/refresh` без тела. 401 (нет cookie, отозвана, истекла) — «не вошёл».
  * 429, сеть, сбой сервера — не выход: повтор (429 — через `retryAfterSec`), после попыток — бросает последнюю

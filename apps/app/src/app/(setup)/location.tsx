@@ -21,7 +21,10 @@ export default function LocationScreen() {
     setRequesting(true);
     // ошибка запроса — как «недоступно»: шаг всё равно пройден (функция не бросает)
     await requestLocationPermission();
-    await useOnboardingStore.getState().finishLocation('requested');
+    // пока ждали системный диалог, могли нажать «Не сейчас» (шаг уже пройден) — решение не перезаписываем
+    if (useOnboardingStore.getState().location === 'pending') {
+      await useOnboardingStore.getState().finishLocation('requested');
+    }
   };
   const notNow = () => void useOnboardingStore.getState().finishLocation('dismissed');
 
@@ -34,7 +37,8 @@ export default function LocationScreen() {
       <DocumentTitle title={DOCUMENT_TITLE} />
       <AuthActions>
         <Button label={t('location.allow')} onPress={() => void allow()} loading={requesting} />
-        <TextAction label={t('location.notNow')} onPress={notNow} disabled={requesting} />
+        {/* доступна и во время системного запроса: диалог мог не показаться (web) — экран не должен зависнуть */}
+        <TextAction label={t('location.notNow')} onPress={notNow} />
       </AuthActions>
     </AuthScreen>
   );
