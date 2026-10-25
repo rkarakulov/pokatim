@@ -217,6 +217,10 @@ textarea.field__control {
   color: var(--color-status-error);
 }
 
+.status-tag--ink {
+  color: var(--color-text-primary);
+}
+
 /* ---------- окно входа ---------- */
 .auth {
   display: flex;

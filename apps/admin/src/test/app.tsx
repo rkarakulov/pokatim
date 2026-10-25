@@ -14,15 +14,24 @@ export const USER_ID = '01890a5d-ac96-774b-bcce-b302099a8057';
 export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
   admin: {
     user: { id: USER_ID, displayName: 'Ольга', email: 'olga@example.by', role: 'admin' },
-    permissions: ['members.read', 'members.manage', 'audit.read'],
+    permissions: [
+      'members.read',
+      'members.manage',
+      'audit.read',
+      'races.read',
+      'races.manage',
+      'races.manage_any',
+      'seasons.manage',
+      'calendar.manage',
+    ],
   },
   moderator: {
     user: { id: USER_ID, displayName: 'Марк', email: 'mark@example.by', role: 'moderator' },
-    permissions: ['audit.read'],
+    permissions: ['audit.read', 'races.read'],
   },
   organizer: {
     user: { id: USER_ID, displayName: 'Ира', email: 'ira@example.by', role: 'organizer' },
-    permissions: [],
+    permissions: ['races.read', 'races.manage'],
   },
 };
 

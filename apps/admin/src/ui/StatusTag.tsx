@@ -5,7 +5,7 @@ export function StatusTag({
   tone,
   children,
 }: {
-  tone: 'success' | 'neutral' | 'error';
+  tone: 'success' | 'neutral' | 'error' | 'ink';
   children: ReactNode;
 }) {
   return <span className={`status-tag status-tag--${tone} t-pill`}>{children}</span>;

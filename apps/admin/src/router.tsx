@@ -11,10 +11,14 @@ import {
 import type { ReactNode } from 'react';
 
 import { AuditScreen } from './features/audit/AuditScreen';
+import { CalendarScreen } from './features/calendar/CalendarScreen';
 import { MembersScreen } from './features/members/MembersScreen';
 import { NoAccessScreen } from './features/no-access/NoAccessScreen';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 import { OverviewScreen } from './features/overview/OverviewScreen';
+import { NewRaceScreen, RaceScreen } from './features/races/RaceScreen';
+import { RacesScreen, validateRacesSearch } from './features/races/RacesScreen';
+import { SeasonsScreen } from './features/seasons/SeasonsScreen';
 import { SignInScreen } from './features/sign-in/SignInScreen';
 import { AppLayout, ShellError, ShellSkeleton } from './layout/AppLayout';
 import { Can } from './session/can';
@@ -112,6 +116,64 @@ const auditRoute = createRoute({
   ),
 });
 
+const racesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'races',
+  validateSearch: validateRacesSearch,
+  component: function RacesRoute() {
+    const search = racesRoute.useSearch();
+    const navigate = racesRoute.useNavigate();
+    return (
+      <RequirePermission permission="races.read">
+        <RacesScreen search={search} onSearch={(next) => void navigate({ search: next })} />
+      </RequirePermission>
+    );
+  },
+});
+
+const newRaceRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'races/new',
+  component: () => (
+    <RequirePermission permission="races.manage">
+      <NewRaceScreen />
+    </RequirePermission>
+  ),
+});
+
+const raceRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'races/$raceId',
+  component: function RaceRoute() {
+    const { raceId } = raceRoute.useParams();
+    return (
+      <RequirePermission permission="races.read">
+        <RaceScreen raceId={raceId} />
+      </RequirePermission>
+    );
+  },
+});
+
+const seasonsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'seasons',
+  component: () => (
+    <RequirePermission permission="races.read">
+      <SeasonsScreen />
+    </RequirePermission>
+  ),
+});
+
+const calendarRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'calendar',
+  component: () => (
+    <RequirePermission permission="calendar.manage">
+      <CalendarScreen />
+    </RequirePermission>
+  ),
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '$',
@@ -120,7 +182,17 @@ const notFoundRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   signInRoute,
-  appRoute.addChildren([overviewRoute, membersRoute, auditRoute, notFoundRoute]),
+  appRoute.addChildren([
+    overviewRoute,
+    racesRoute,
+    newRaceRoute,
+    raceRoute,
+    seasonsRoute,
+    calendarRoute,
+    membersRoute,
+    auditRoute,
+    notFoundRoute,
+  ]),
 ]);
 
 /** basepath — из `import.meta.env.BASE_URL` (`/admin/` на стенде и в проде, `/` в `pnpm dev`). */

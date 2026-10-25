@@ -63,7 +63,7 @@ afterEach(() => {
 });
 
 describe('«Журнал действий» (AC12)', () => {
-  it('таблица: время по Минску, кто, действие словами, над кем, причина', async () => {
+  it('таблица: время по Минску, кто, действие словами, объект, над кем, причина', async () => {
     mocked.listAudit.mockResolvedValue({ items: [revoked, granted], nextCursor: null });
     await renderApp('/audit');
     await screen.findByText('смена задач');
@@ -80,13 +80,41 @@ describe('«Журнал действий» (AC12)', () => {
         '26.10.2026, 00:15',
         'Ольга',
         'Изменена роль: Модератор → Организатор',
+        '—',
         'Мария',
         'смена задач',
       ],
-      ['25.10.2026, 12:00', 'Сервер (CLI)', 'Выдана роль: Администратор', 'Ольга', '—'],
+      ['25.10.2026, 12:00', 'Сервер (CLI)', 'Выдана роль: Администратор', '—', 'Ольга', '—'],
     ]);
     expect(screen.getByText('Время — Europe/Minsk')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Показать ещё' })).toBeNull();
+  });
+
+  it('admin-02: объект действия (снимок названия), причина отмены шаблоном, изменённые поля', async () => {
+    mocked.listAudit.mockResolvedValue({
+      items: [
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8061',
+          action: 'race.cancelled',
+          subject: { kind: 'race', id: signedIn.id, label: 'Минское кольцо' },
+          details: { cancelReason: 'weather' },
+        },
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8062',
+          action: 'season.updated',
+          subject: { kind: 'season', id: signedIn.id, label: 'Сезон 2026' },
+          details: { changedFields: ['name', 'endsOn'] },
+        },
+      ],
+      nextCursor: null,
+    });
+    await renderApp('/audit');
+    expect(await screen.findByText('Минское кольцо')).toBeTruthy();
+    expect(screen.getByText('Отменена гонка: Неблагоприятные погодные условия')).toBeTruthy();
+    expect(screen.getByText('Изменён сезон: name, endsOn')).toBeTruthy();
+    expect(screen.getByText('Сезон 2026')).toBeTruthy();
   });
 
   it('«Показать ещё» — следующая страница по курсору сервера', async () => {
