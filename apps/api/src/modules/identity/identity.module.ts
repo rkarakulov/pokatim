@@ -24,13 +24,23 @@ import { SignInService } from './sign-in.service';
 import { VerificationService } from './verification.service';
 
 /**
+ * Репозиторий identity и чтения аккаунтов (`IdentityAccounts`) — один экземпляр репозитория на приложение: его
+ * импортируют `IdentityModule` и CLI панели (без HTTP-части, лимитера и Redis, `createApplicationContext`).
+ */
+@Module({
+  providers: [IdentityRepository, IdentityAccounts],
+  exports: [IdentityRepository, IdentityAccounts],
+})
+export class IdentityAccountsModule {}
+
+/**
  * HTTP-часть identity: регистрация, ссылки подтверждения, обмен токена регистрации на сессию, вход, ротация, выход,
  * сброс пароля. `AuthGuard` — авторизация запросов других модулей (импорт `IdentityModule`, ADR-0008).
  */
 @Module({
+  imports: [IdentityAccountsModule],
   controllers: [AuthController, SessionController],
   providers: [
-    IdentityRepository,
     AccessTokenVerifier,
     AuthGuard,
     PasswordHasher,
@@ -42,24 +52,13 @@ import { VerificationService } from './verification.service';
     SignInService,
     PasswordResetService,
     PanelCredentials,
-    IdentityAccounts,
   ],
   // гард создаётся в модуле-потребителе (`@UseGuards`) — ему нужны и зависимости гарда; сам класс репозитория
   // наружу не экспортируется из `index.ts`: другие модули identity-коллекции не читают
   // `PanelCredentials` и `IdentityAccounts` — узкий порт для модуля `panel` (ADR-0009)
-  exports: [AuthGuard, AccessTokenVerifier, IdentityRepository, PanelCredentials, IdentityAccounts],
+  exports: [AuthGuard, AccessTokenVerifier, PanelCredentials, IdentityAccountsModule],
 })
 export class IdentityModule {}
-
-/**
- * Только чтения аккаунтов (`IdentityAccounts`) — для CLI панели: без HTTP-части, лимитера и Redis
- * (`createApplicationContext`).
- */
-@Module({
-  providers: [IdentityRepository, IdentityAccounts],
-  exports: [IdentityAccounts],
-})
-export class IdentityAccountsModule {}
 
 /** Задачи identity в worker: письма (подтверждение, сброс пароля, «Пароль изменён») и очистка неподтверждённых. */
 @Module({

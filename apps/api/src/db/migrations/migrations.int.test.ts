@@ -73,14 +73,16 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       panel_audit_actor_idx: plain({ 'actor.userId': 1, _id: -1 }),
       panel_audit_target_idx: plain({ targetUserId: 1, _id: -1 }),
     });
+    // документ-замок: создаётся up; повторный up не сбрасывает версию (другие файлы тестов чистят коллекции)
     const meta = h.db.collection<{ _id: string; version: number }>(PANEL_COLLECTIONS.meta);
+    await meta.deleteMany({});
+    await panel.up(h.db);
     expect(await meta.find().toArray()).toEqual([{ _id: 'admins', version: 0 }]);
 
     await meta.updateOne({ _id: 'admins' }, { $inc: { version: 1 } });
     await panel.up(h.db);
     await panel.up(h.db);
     expect(await meta.find().toArray()).toEqual([{ _id: 'admins', version: 1 }]);
-    await meta.updateOne({ _id: 'admins' }, { $set: { version: 0 } });
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

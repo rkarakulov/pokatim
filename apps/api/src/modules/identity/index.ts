@@ -9,3 +9,5 @@ export {
 export type { AuthUser } from './access-token';
 export { AuthGuard } from './auth.guard';
 export { CurrentUser } from './current-user.decorator';
+/** Непрозрачный токен (32 байта base64url) и его sha256 для БД — общие примитивы токенов (сессия панели). */
+export { randomToken, sha256 } from './tokens';
