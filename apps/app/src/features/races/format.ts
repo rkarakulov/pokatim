@@ -27,8 +27,8 @@ export function formatRaceWindow(startsAt: string, endsAt: string, now: Date | n
 }
 
 /** «Окно открыто до …» / «…закрывается сегодня / завтра в …» (сегодня и завтра — только при известном `now`). */
-function openLine(race: RaceCard, now: Date | null): string {
-  const closes = minskDateTime(race.windowEndsAt, now);
+function openLine(race: RaceCard, now: Date | null, dateNow: Date | null = now): string {
+  const closes = minskDateTime(race.windowEndsAt, dateNow);
   if (now !== null) {
     const today = minskToday(now);
     if (closes.localDate === today) {
@@ -62,21 +62,26 @@ export function raceHeroLine(race: RaceCard, now: Date | null): string | null {
 /**
  * Строка окна карточки списка (§7): `upcoming` — «Окно откроется …», `open` — как герой, `closed` — «Протокол —
  * {дата}», а после плановой даты по часам клиента — «Протокол ожидается» (Q9; подпись, не фаза). `cancelled` (баннер)
- * и `'unknown'` — без строки.
+ * и `'unknown'` — без строки. `datesWithYear` — публичный экран: даты всегда с годом (не зависят от «сейчас»).
  */
-export function raceCardLine(race: RaceCard, now: Date | null): string | null {
+export function raceCardLine(
+  race: RaceCard,
+  now: Date | null,
+  datesWithYear = false,
+): string | null {
+  const dateNow = datesWithYear ? null : now;
   switch (race.phase) {
     case 'upcoming': {
-      const opens = minskDateTime(race.windowStartsAt, now);
+      const opens = minskDateTime(race.windowStartsAt, dateNow);
       return t('races.window.opens', { opens: opens.date, openTime: opens.time });
     }
     case 'open':
-      return openLine(race, now);
+      return openLine(race, now, dateNow);
     case 'closed':
       return now !== null && Date.parse(race.protocolPlannedAt) <= now.getTime()
         ? t('races.window.closedAwaiting')
         : t('races.window.closedProtocol', {
-            date: minskDateTime(race.protocolPlannedAt, now).date,
+            date: minskDateTime(race.protocolPlannedAt, dateNow).date,
           });
     default:
       return null;
@@ -125,5 +130,14 @@ export function raceMeta(race: RaceCard): string {
   return meta([
     formatDistances([race.distanceKm]),
     ...race.surfaces.map((surface) => domainLabel('domain.surface', surface)),
+  ]);
+}
+
+/** Описание публичной карточки (мета, OG): «4–12 октября 2026 · Гравий · 62 км» — даты с годом, без ПДн. */
+export function raceShareDescription(race: RaceCard): string {
+  return meta([
+    heroDateText(formatRaceWindow(race.windowStartsAt, race.windowEndsAt, null)),
+    domainLabel('domain.bikeClass', race.bikeClass),
+    formatDistances([race.distanceKm]),
   ]);
 }

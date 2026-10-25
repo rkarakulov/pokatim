@@ -4,6 +4,8 @@ import { generateMetadata as registerMetadata } from '../app/(onboarding)/regist
 import { generateMetadata as signInMetadata } from '../app/(onboarding)/sign-in';
 import { generateMetadata as resetMetadata } from '../app/auth/reset/[token]';
 import { generateMetadata as verifyMetadata } from '../app/auth/verify/[token]';
+import { generateMetadata as raceMetadata, loader as raceLoader } from '../app/races/[id]';
+import { resetPublicSsrCache } from '@/lib/public-ssr';
 
 import { EMAIL, LINK_TOKEN } from './auth-fixtures';
 
@@ -97,5 +99,86 @@ describe('мета публичных экранов (generateMetadata)', () => 
     expect(serialized).not.toContain(LINK_TOKEN);
     expect(serialized).not.toContain(EMAIL);
     expect(serialized).not.toContain(ORIGIN);
+  });
+});
+
+describe('мета публичной карточки гонки (SSR, R5)', () => {
+  const ID = '0190a6f4-0000-7000-8000-000000000001';
+  const race = {
+    id: ID,
+    title: 'Гравийный коридор Логойск',
+    bikeClass: 'gravel',
+    surfaces: ['gravel'],
+    distanceKm: 62,
+    windowStartsAt: '2026-10-03T21:00:00Z',
+    windowEndsAt: '2026-10-12T20:59:00Z',
+    protocolPlannedAt: '2026-10-14T09:00:00Z',
+    phase: 'open',
+    cancelReason: null,
+    season: { id: ID, name: 'Сезон 2026' },
+    description: 'Описание',
+  };
+  const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
+  const respond = (status: number, body: unknown) =>
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(body), { status })),
+    );
+
+  beforeEach(() => {
+    resetPublicSsrCache();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    process.env.API_INTERNAL_URL = 'http://api.internal:3000';
+  });
+  afterEach(() => {
+    fetchMock.mockReset();
+    delete process.env.API_INTERNAL_URL;
+  });
+
+  it('поля гонки (название, даты с годом, класс, дистанция); og:url — WEB_ORIGIN + /races/<id>; один запрос на loader и мету', async () => {
+    respond(200, race);
+    process.env.WEB_ORIGIN = `${ORIGIN}/`;
+
+    expect(await raceLoader(undefined, { id: ID })).toMatchObject({ id: ID, title: race.title });
+    expect(await raceMetadata(undefined, { id: ID })).toEqual({
+      title: 'Гравийный коридор Логойск — Покатим',
+      description: '4–12 октября 2026 · Гравий · 62 км',
+      openGraph: {
+        title: 'Гравийный коридор Логойск',
+        description: '4–12 октября 2026 · Гравий · 62 км',
+        type: 'website',
+        siteName: 'Покатим',
+        url: `${ORIGIN}/races/${ID}`,
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://api.internal:3000/v1/races/${ID}`);
+  });
+
+  it.each([
+    ['404', () => respond(404, { code: 'NOT_FOUND', message: 'x' })],
+    ['API недоступен', () => fetchMock.mockRejectedValue(new TypeError('fetch failed'))],
+  ])('%s — нейтральная мета и noindex, без og:url', async (_name, setup) => {
+    setup();
+    process.env.WEB_ORIGIN = ORIGIN;
+    const meta = await raceMetadata(undefined, { id: ID });
+
+    expect(meta).toEqual({
+      title: 'Гонка — Покатим',
+      description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
+      openGraph: {
+        title: 'Гонка',
+        description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
+        type: 'website',
+        siteName: 'Покатим',
+      },
+      robots: 'noindex',
+    });
+    expect(await raceLoader(undefined, { id: ID })).toBeNull();
+  });
+
+  it('невалидный id — без запроса во внутренний API', async () => {
+    expect(await raceMetadata(undefined, { id: '../admin' })).toMatchObject({ robots: 'noindex' });
+    expect(await raceLoader(undefined, { id: '../admin' })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

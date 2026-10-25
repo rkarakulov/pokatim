@@ -15,6 +15,7 @@ import RoutesScreen from '../app/(tabs)/routes';
 import ResetPasswordScreen from '../app/auth/reset/[token]';
 import VerifyEmailScreen from '../app/auth/verify/[token]';
 import RootLayout from '../app/_layout';
+import RaceRoute from '../app/races/[id]';
 import StatusScreen from '../app/status';
 import UiKitScreen from '../app/ui-kit';
 
@@ -44,4 +45,5 @@ export const appRoutes = {
   'auth/reset/[token]': ResetPasswordScreen,
   'ui-kit': UiKitScreen,
   status: StatusScreen,
+  'races/[id]': RaceRoute,
 };

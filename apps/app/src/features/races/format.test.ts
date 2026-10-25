@@ -9,6 +9,7 @@ import {
   raceHeroLine,
   raceHeroMeta,
   raceMeta,
+  raceShareDescription,
 } from './format';
 
 // перенесено из features/home/format.test.ts (R8 блока 03) без смены ожиданий
@@ -180,6 +181,21 @@ describe.each(['UTC', 'America/New_York', 'Asia/Tokyo'])('строки окна 
       value: '4–12',
       unit: 'октября 2026',
     });
+  });
+
+  it('публичный экран (datesWithYear): после монтирования — «сегодня / завтра», но даты с годом', () => {
+    expect(raceCardLine(race(), NOW, true)).toBe('Окно откроется 4 октября 2026, 00:00');
+    expect(raceCardLine(race({ phase: 'open' }), new Date('2026-10-05T12:00:00Z'), true)).toBe(
+      'Окно открыто до 12 октября 2026, 23:59.',
+    );
+    expect(raceCardLine(race({ phase: 'open' }), new Date('2026-10-12T06:00:00Z'), true)).toBe(
+      'Окно закрывается сегодня в 23:59.',
+    );
+  });
+
+  it('описание для мета и OG: даты с годом · класс · км; без ПДн', () => {
+    expect(raceShareDescription(race())).toBe('4–12 октября 2026 · Гравий · 62 км');
+    expect(raceShareDescription(race({ bikeClass: 'unknown' }))).toBe('4–12 октября 2026 · 62 км');
   });
 
   it('мета героя вкладки: дистанция, класс, окно и время закрытия по Минску', () => {

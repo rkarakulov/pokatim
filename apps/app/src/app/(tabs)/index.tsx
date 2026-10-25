@@ -127,7 +127,16 @@ export default function HomeScreen() {
                 ),
               }}
             >
-              {(page) => (page.items[0] ? <RaceHero race={page.items[0]} now={now} /> : null)}
+              {(page) => {
+                const race = page.items[0];
+                return race ? (
+                  <RaceHero
+                    race={race}
+                    now={now}
+                    onPress={() => router.push(`/races/${race.id}`)}
+                  />
+                ) : null;
+              }}
             </HomeSection>
           ) : (
             <HomeSection

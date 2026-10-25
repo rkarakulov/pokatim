@@ -32,7 +32,7 @@ export function RaceListCard({ race, now, datesWithYear = false, onPress }: Race
     race.windowEndsAt,
     datesWithYear ? null : now,
   );
-  const line = raceCardLine(race, now);
+  const line = raceCardLine(race, now, datesWithYear);
   const cancelled = race.phase === 'cancelled' ? cancelMessage(race.cancelReason) : null;
   const classSurfaces = raceClassSurfaces(race);
   const label = [race.title, heroDateText(dates), cancelled ?? line]
