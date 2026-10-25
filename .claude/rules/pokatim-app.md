@@ -113,8 +113,9 @@ paths:
 - Публичные экраны `races/[id]`, `seasons/[id]` — в корневом `Stack` вне `Stack.Protected` (гость и вошедший; на
   native поверх вкладок). «Назад» — `DetailHeader`: история есть — назад, нет — вошедшему вкладка, гостю `/`.
 - SSR-данные (`loader`, `generateMetadata`) — только `src/lib/public-ssr.ts` (`publicPath` — `Uuid` до запроса,
-  `fetchPublicForSsr` — таймаут, `null` при любой ошибке, кэш процесса публичных данных 60 с); свой `fetch` в экранах
-  нет. Не найдено — нейтральная мета и `robots: noindex` (HTML 200).
+  `fetchPublicForSsr` — таймаут, `found` / `notFound` / `unavailable`, кэш процесса публичных данных 60 с, 404 — в
+  отдельном пуле); свой `fetch` в экранах нет. Не найдено — нейтральная мета и `robots: noindex` (HTML 200); API
+  недоступен — нейтральная мета без `robots`. Без сети при показанных данных — `OfflineBanner`.
 - Даты на публичных экранах — всегда с годом (`now = null` в `minsk-format`); «сегодня / завтра» — после монтирования
   (`useMinskClockAfterMount`). Во вкладке (без SSR) — как Главная. Фаза — только с сервера; выбор сезона для кнопки —
   чистая `pickSeason` по фазам сервера.

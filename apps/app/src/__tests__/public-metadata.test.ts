@@ -155,11 +155,32 @@ describe('мета публичной карточки гонки (SSR, R5)', ()
     expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://api.internal:3000/v1/races/${ID}`);
   });
 
+  const neutral = {
+    title: 'Гонка — Покатим',
+    description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
+    openGraph: {
+      title: 'Гонка',
+      description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
+      type: 'website',
+      siteName: 'Покатим',
+    },
+  };
+
   it.each([
-    ['404', () => respond(404, { code: 'NOT_FOUND', message: 'x' })],
     ['API недоступен', () => fetchMock.mockRejectedValue(new TypeError('fetch failed'))],
-  ])('%s — нейтральная мета и noindex, без og:url', async (_name, setup) => {
-    setup();
+    ['429', () => respond(429, { code: 'RATE_LIMITED', message: 'x' })],
+  ])(
+    '%s — нейтральная мета без robots: гонка есть, превью не должно её «удалить» из индекса',
+    async (_name, setup) => {
+      setup();
+      process.env.WEB_ORIGIN = ORIGIN;
+      expect(await raceMetadata(undefined, { id: ID })).toEqual(neutral);
+      expect(await raceLoader(undefined, { id: ID })).toBeNull();
+    },
+  );
+
+  it('404 — нейтральная мета и noindex, без og:url', async () => {
+    respond(404, { code: 'NOT_FOUND', message: 'x' });
     process.env.WEB_ORIGIN = ORIGIN;
     const meta = await raceMetadata(undefined, { id: ID });
 
@@ -241,5 +262,12 @@ describe('мета публичного экрана сезона (SSR)', () => 
     fetchMock.mockClear();
     expect(await seasonMetadata(undefined, { id: 'current' })).toMatchObject({ robots: 'noindex' });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('API недоступен — нейтральная мета без robots', async () => {
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+    const meta = await seasonMetadata(undefined, { id: ID });
+    expect(meta).toMatchObject({ title: 'Сезон — Покатим' });
+    expect(meta).not.toHaveProperty('robots');
   });
 });

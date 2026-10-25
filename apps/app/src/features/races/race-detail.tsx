@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
+import { OfflineBanner } from '@/components/offline-banner';
 import { SectionHero } from '@/components/section-hero';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import {
@@ -136,6 +137,8 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   const notFound =
     !valid || (race.data === undefined && apiErrorOf(race.error)?.code === 'NOT_FOUND');
+  // «назад» без истории и «Все гонки»: вкладки — только для вошедших, гостю — корень (дальше решает гард)
+  const home = signedIn ? '/races' : '/';
 
   return (
     <SafeAreaView
@@ -147,10 +150,7 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
           race.data && !notFound ? race.data.title : t('races.detail.title'),
         )}
       />
-      <DetailHeader
-        title={notFound ? undefined : race.data?.title}
-        fallback={signedIn ? '/races' : '/'}
-      />
+      <DetailHeader title={notFound ? undefined : race.data?.title} fallback={home} />
       <ScrollView
         testID="race-detail"
         contentContainerStyle={styles.content}
@@ -164,12 +164,13 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
           />
         }
       >
+        <OfflineBanner hasData={race.data !== undefined && !notFound} style={styles.offline} />
         {notFound ? (
           <EmptyState
             title={t('races.detail.notFound')}
             action={{
               label: t('races.detail.allRaces'),
-              onPress: () => router.navigate('/races'),
+              onPress: () => router.navigate(home),
             }}
           />
         ) : (
@@ -194,6 +195,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
   detail: { gap: space.s4 },
+  offline: { paddingBottom: space.s3 },
   row: { gap: space.s1 },
   value: { gap: space.s1 },
   link: { alignItems: 'flex-start' },

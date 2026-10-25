@@ -294,4 +294,63 @@ describe('вкладка «Гонки»: состояния (AC8)', () => {
     expect(await screen.findByText('Данные могли устареть')).toBeOnTheScreen();
     expect(screen.getByRole('link', { name: heroLabel })).toBeOnTheScreen();
   });
+
+  it('ошибка фонового обновления past при данных — «Завершённые» остаются, баннер с повтором past (ревью pass 1)', async () => {
+    await openRaces();
+    await screen.findByText('Гравий Дзержинск');
+
+    listRaces.mockImplementation((params = {}) =>
+      params.scope === 'past'
+        ? Promise.reject(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }))
+        : Promise.resolve(page([hero, soon])),
+    );
+    const control = () => feed().props.refreshControl as ReactElement<RefreshControlProps>;
+    await act(async () => {
+      control().props.onRefresh?.();
+    });
+
+    expect(await screen.findByText('Данные могли устареть')).toBeOnTheScreen();
+    expect(screen.getByText('Гравий Дзержинск')).toBeOnTheScreen();
+    expect(screen.getByRole('link', { name: heroLabel })).toBeOnTheScreen();
+
+    serve([hero, soon], [closed, cancelled, race({ title: 'Новая завершённая' })]);
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByText('Новая завершённая')).toBeOnTheScreen();
+    expect(screen.queryByText('Данные могли устареть')).toBeNull();
+    expect(listRaces).toHaveBeenLastCalledWith(expect.objectContaining({ scope: 'past' }));
+  });
+
+  it('без сети при показанных данных — баннер «Нет соединения», данные остаются (ревью pass 1)', async () => {
+    await openRaces();
+    await screen.findByRole('link', { name: heroLabel });
+    expect(screen.queryByText('Нет соединения')).toBeNull();
+
+    await act(async () => {
+      onlineManager.setOnline(false);
+    });
+    expect(screen.getByText('Нет соединения')).toBeOnTheScreen();
+    expect(screen.getByRole('link', { name: heroLabel })).toBeOnTheScreen();
+  });
+});
+
+describe('вкладка «Гонки»: месяцы фильтра (ревью pass 1)', () => {
+  it('полночь на смене месяца: выбранный месяц, которого больше нет среди чипов, снимается с запроса', async () => {
+    // 31 октября 23:58 по Минску
+    jest.setSystemTime(new Date('2026-10-31T20:58:00Z'));
+    await openRaces();
+    await screen.findByRole('link', { name: heroLabel });
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Октябрь' }));
+    expect(listRaces).toHaveBeenLastCalledWith(expect.objectContaining({ month: ['2026-10'] }));
+    expect(screen.getByText('Сбросить фильтры')).toBeOnTheScreen();
+
+    await act(() => jest.advanceTimersByTimeAsync(3 * 60_000));
+
+    expect(screen.queryByRole('button', { name: 'Октябрь' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Январь 2027' })).toBeOnTheScreen();
+    await waitFor(() =>
+      expect(listRaces).toHaveBeenLastCalledWith(expect.objectContaining({ month: [] })),
+    );
+    expect(screen.queryByText('Сбросить фильтры')).toBeNull();
+  });
 });

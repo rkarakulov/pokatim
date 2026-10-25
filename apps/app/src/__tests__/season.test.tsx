@@ -1,7 +1,10 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
 import type { RaceCard, RaceDetail, SeasonCard } from '@pokatim/contracts';
-import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+import { onlineManager } from '@tanstack/react-query';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
+import type { ReactElement } from 'react';
+import type { RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -87,6 +90,7 @@ beforeEach(() => {
 afterEach(() => {
   jest.clearAllMocks();
   jest.useRealTimers();
+  onlineManager.setOnline(true);
 });
 
 describe('экран сезона (AC7)', () => {
@@ -174,6 +178,75 @@ describe('экран сезона (AC7)', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'Сезон 2026' }));
     expect(router.getPathname()).toBe(`/seasons/${ID}`);
     expect(await screen.findByRole('header', { name: 'Гонки сезона' })).toBeOnTheScreen();
+  });
+});
+
+describe('экран сезона: «Другие сезоны» и сеть (ревью pass 1)', () => {
+  const openSeason = () =>
+    renderRouter(routes, { initialUrl: `/seasons/${ID}`, wrapper: createQueryWrapper() });
+  const never = () => new Promise<never>(() => undefined);
+  const others = () => screen.getByTestId('other-seasons');
+  const control = () =>
+    screen.getByTestId('season-detail').props.refreshControl as ReactElement<RefreshControlProps>;
+
+  it('загрузка — заголовок и скелетон на месте строк', async () => {
+    listSeasons.mockReturnValue(never());
+    await openSeason();
+    await screen.findByText('Гонка сезона 1');
+
+    expect(within(others()).getByRole('header', { name: 'Другие сезоны' })).toBeOnTheScreen();
+    expect(within(others()).getByLabelText('Загрузка')).toBeOnTheScreen();
+  });
+
+  it('ошибка — «Не удалось загрузить» с повтором listSeasons', async () => {
+    listSeasons.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await openSeason();
+
+    expect(await within(others()).findByText('Не удалось загрузить')).toBeOnTheScreen();
+    await fireEvent.press(within(others()).getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('link', { name: /^Сезон 2025/ })).toBeOnTheScreen();
+    expect(listSeasons).toHaveBeenCalledTimes(2);
+  });
+
+  it('ошибка обновления при строках — строки остаются, баннер с повтором', async () => {
+    await openSeason();
+    await screen.findByRole('link', { name: /^Сезон 2025/ });
+
+    listSeasons.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await act(async () => {
+      control().props.onRefresh?.();
+    });
+    expect(await within(others()).findByText('Данные могли устареть')).toBeOnTheScreen();
+    expect(screen.getByRole('link', { name: /^Сезон 2025/ })).toBeOnTheScreen();
+  });
+
+  it('успешный ответ без других сезонов — блока нет', async () => {
+    listSeasons.mockResolvedValue({ items: [s2026] });
+    await openSeason();
+    await screen.findByText('Гонка сезона 1');
+    await waitFor(() => expect(listSeasons).toHaveBeenCalled());
+
+    await waitFor(() => expect(screen.queryByTestId('other-seasons')).toBeNull());
+    expect(screen.queryByText('Другие сезоны')).toBeNull();
+  });
+
+  it('без сети при показанных данных — баннер «Нет соединения», данные остаются', async () => {
+    await openSeason();
+    await screen.findByText('Гонка сезона 1');
+
+    await act(async () => {
+      onlineManager.setOnline(false);
+    });
+    expect(screen.getByText('Нет соединения')).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'Сезон 2026' })).toBeOnTheScreen();
+  });
+
+  it('гость: «Сезон не найден» → «Все гонки» ведёт на корень', async () => {
+    const router = await renderRouter(appRoutes, { initialUrl: '/seasons/current' });
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Все гонки' }));
+    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/register');
   });
 });
 

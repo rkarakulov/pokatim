@@ -198,15 +198,17 @@ test('публичный экран /status: заголовок и OG в HTML д
   await expect(page).toHaveTitle(/^Статус сервиса — /);
 });
 
-test('публичная карточка неизвестной гонки: HTML 200 с noindex, после гидрации — «Гонка не найдена» (без API — «Нет соединения»)', async ({
+test('публичная карточка неизвестной гонки: HTML 200 (с API — noindex), после гидрации — «Гонка не найдена» (без API — «Нет соединения»)', async ({
   page,
   request,
 }) => {
   const response = await request.get(`/races/${UNKNOWN_RACE_ID}`);
   expect(response.status()).toBe(200);
   const html = await response.text();
-  expect(html).toMatch(/<meta name="robots" content="noindex"/);
   expect(html).toMatch(/<meta property="og:title" content="Гонка"/);
+  // noindex — только когда API ответил 404; API недоступен — нейтральная мета без robots
+  if (WITH_API) expect(html).toMatch(/<meta name="robots" content="noindex"/);
+  else expect(html).not.toContain('name="robots"');
   expect(html).not.toContain('og:url');
 
   await page.goto(`/races/${UNKNOWN_RACE_ID}`);

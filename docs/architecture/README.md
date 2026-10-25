@@ -211,8 +211,9 @@ worker: очередь identity-email ─► письмо «Пароль изм�
 - Ключи: `['races','list',{…},'pages']` (`useInfiniteQuery`; префикс общий с Главной), `['races','detail',id]`,
   `['seasons','detail'|'races'|'list'|'current',…]`.
 - `/races/:id` и `/seasons/:id` — корневые маршруты вне гардов (гость и вошедший); вкладка `/races` — под гардом.
-- SSR-данные публичных экранов — только `src/lib/public-ssr.ts`: `Uuid` до запроса, таймаут 2 с, любая ошибка —
-  `null` (не 500), кэш процесса по пути 60 с (≤ 500 записей) — один запрос на `loader` + `generateMetadata`. Все
+- SSR-данные публичных экранов — только `src/lib/public-ssr.ts`: `Uuid` до запроса, таймаут 2 с, результат
+  `found` / `notFound` (404 — мета с `noindex`) / `unavailable` (сбой — нейтральная мета без `robots`, не 500), кэш
+  процесса по пути 60 с (найденное ≤ 500, 404 — отдельный пул ≤ 100) — один запрос на `loader` + `generateMetadata`. Все
   гости делят IP-лимит `public-read` web-сервера; доверенный IP клиента от web-сервера — follow-up (R5в).
 
 ### Web (SSR, PWA)

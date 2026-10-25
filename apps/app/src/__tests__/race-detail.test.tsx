@@ -1,7 +1,8 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
+import { onlineManager } from '@tanstack/react-query';
 import type { RaceDetail } from '@pokatim/contracts';
-import { fireEvent, renderRouter, screen, within } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, within } from 'expo-router/testing-library';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -60,6 +61,7 @@ beforeEach(() => {
 afterEach(() => {
   jest.clearAllMocks();
   jest.useRealTimers();
+  onlineManager.setOnline(true);
 });
 
 const heroLabel = 'Гонка · Гравий. Гравийный коридор Логойск. 4–12 октября 2026';
@@ -196,5 +198,28 @@ describe('карточка гонки (AC5)', () => {
     for (const absent of ['Окно', 'Протокол', 'Класс', 'Покрытие', 'Сезон', 'Описание']) {
       expect(screen.queryByText(absent)).toBeNull();
     }
+  });
+
+  it('гость: «Гонка не найдена» → «Все гонки» ведёт на корень (вкладки — после входа), не во вкладку (ревью pass 1)', async () => {
+    const router = await renderRouter(appRoutes, { initialUrl: '/races/not-a-uuid' });
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Все гонки' }));
+    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/register');
+  });
+
+  it('без сети при показанной карточке — баннер «Нет соединения», данные остаются (ревью pass 1)', async () => {
+    await renderRouter(signedInRoutes, {
+      initialUrl: `/races/${ID}`,
+      wrapper: createQueryWrapper(),
+    });
+    await screen.findByLabelText(heroLabel);
+    expect(screen.queryByText('Нет соединения')).toBeNull();
+
+    await act(async () => {
+      onlineManager.setOnline(false);
+    });
+    expect(screen.getByText('Нет соединения')).toBeOnTheScreen();
+    expect(screen.getByLabelText(heroLabel)).toBeOnTheScreen();
   });
 });

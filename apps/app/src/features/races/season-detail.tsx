@@ -1,5 +1,5 @@
 import { apiErrorOf } from '@pokatim/api-client';
-import { Uuid, type RaceCard, type SeasonCard } from '@pokatim/contracts';
+import { Uuid, type RaceCard, type SeasonCard, type SeasonList } from '@pokatim/contracts';
 import { size, space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
@@ -8,10 +8,12 @@ import {
   EmptyState,
   Pill,
   SkeletonGroup,
+  SkeletonListRow,
   SkeletonText,
   TextAction,
   textStyle,
   useTheme,
+  type AsyncState,
 } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
@@ -20,9 +22,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
+import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
-import { domainLabel, formatLocalRange, heroDateText } from '@/lib/minsk-format';
+import { domainLabel, formatLocalRange, heroDateText, meta } from '@/lib/minsk-format';
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
@@ -62,8 +65,47 @@ function SeasonHead({ season }: { season: SeasonCard }) {
   );
 }
 
-/** «Другие сезоны» — строки (название, даты, фаза) → экран сезона. */
+/**
+ * «Другие сезоны» — строки (название, даты, фаза) → экран сезона. Состояния §4.12 в своём слоте: скелетон строк,
+ * ошибка с повтором, ошибка обновления — строки остаются с баннером. Блок скрыт только после успешного ответа без
+ * других сезонов.
+ */
 function OtherSeasons({
+  query,
+  currentId,
+  onOpen,
+}: {
+  query: AsyncState<SeasonList>;
+  currentId: string;
+  onOpen: (id: string) => void;
+}) {
+  const theme = useTheme();
+  const others = (data: SeasonList) => data.items.filter((item) => item.id !== currentId);
+  if (query.data !== undefined && others(query.data).length === 0) return null;
+  return (
+    <View testID="other-seasons" style={styles.others}>
+      <Text
+        accessibilityRole="header"
+        style={[textStyle('displaySm'), { color: theme.text.primary }]}
+      >
+        {t('season.others')}
+      </Text>
+      <AsyncContent
+        query={query}
+        skeleton={
+          <View>
+            <SkeletonListRow />
+            <SkeletonListRow />
+          </View>
+        }
+      >
+        {(data) => <OtherSeasonRows seasons={others(data)} onOpen={onOpen} />}
+      </AsyncContent>
+    </View>
+  );
+}
+
+function OtherSeasonRows({
   seasons,
   onOpen,
 }: {
@@ -71,15 +113,8 @@ function OtherSeasons({
   onOpen: (id: string) => void;
 }) {
   const theme = useTheme();
-  if (seasons.length === 0) return null;
   return (
-    <View style={styles.others}>
-      <Text
-        accessibilityRole="header"
-        style={[textStyle('displaySm'), { color: theme.text.primary }]}
-      >
-        {t('season.others')}
-      </Text>
+    <View>
       {seasons.map((season) => {
         const phase = phaseLabel(season);
         const dates = seasonDates(season);
@@ -93,7 +128,7 @@ function OtherSeasons({
           >
             <Text style={[textStyle('titleSm'), { color: theme.text.primary }]}>{season.name}</Text>
             <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
-              {phase ? `${dates} · ${phase}` : dates}
+              {meta([dates, phase])}
             </Text>
           </Pressable>
         );
@@ -123,19 +158,24 @@ export function SeasonDetailScreen({ id, seed }: { id: string; seed: SeasonCard 
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   const notFound =
     !valid || (season.data === undefined && apiErrorOf(season.error)?.code === 'NOT_FOUND');
+  // «назад» без истории и «Все гонки»: вкладки — только для вошедших, гостю — корень
+  const home = signedIn ? '/races' : '/';
 
   const items: RaceCard[] = races.data?.pages.flatMap((page) => page.items) ?? [];
-  const others = (seasons.data?.items ?? []).filter((item) => item.id !== id);
   const openSeason = (other: string) => router.push(`/seasons/${other}`);
   const racesState = { ...races, isError: races.isError && !races.isFetchNextPageError };
 
   const header = notFound ? (
     <EmptyState
       title={t('season.notFound')}
-      action={{ label: t('races.detail.allRaces'), onPress: () => router.navigate('/races') }}
+      action={{ label: t('races.detail.allRaces'), onPress: () => router.navigate(home) }}
     />
   ) : (
     <View>
+      <OfflineBanner
+        hasData={season.data !== undefined || races.data !== undefined}
+        style={styles.offline}
+      />
       <AsyncContent
         query={season}
         skeleton={<SkeletonText variant="displayTitle" lines={2} lastLineWidth="50%" />}
@@ -187,7 +227,7 @@ export function SeasonDetailScreen({ id, seed }: { id: string; seed: SeasonCard 
           <RaceListCardSkeleton />
         </SkeletonGroup>
       ) : null}
-      <OtherSeasons seasons={others} onOpen={openSeason} />
+      <OtherSeasons query={seasons} currentId={id} onOpen={openSeason} />
     </View>
   );
 
@@ -200,7 +240,7 @@ export function SeasonDetailScreen({ id, seed }: { id: string; seed: SeasonCard 
         title={seasonDocumentTitle(season.data && !notFound ? season.data.name : t('season.title'))}
       />
       {/* название — заголовком экрана ниже (displayTitle), в title bar не дублируется */}
-      <DetailHeader fallback={signedIn ? '/races' : '/'} />
+      <DetailHeader fallback={home} />
       <FlatList
         testID="season-detail"
         data={notFound ? [] : items}
@@ -240,6 +280,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
   head: { gap: space.s2 },
+  offline: { paddingBottom: space.s3 },
   headMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.s2 },
   racesTitle: { marginTop: size.sectionGap, marginBottom: space.s2 },
   empty: { paddingVertical: space.s3 },

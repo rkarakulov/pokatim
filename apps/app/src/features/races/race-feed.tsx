@@ -16,6 +16,7 @@ import { useMemo, type ReactNode } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { FilterGroup } from '@/components/filter-group';
+import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
 import { SectionHero } from '@/components/section-hero';
 import { domainLabel } from '@/lib/minsk-format';
@@ -55,9 +56,16 @@ export interface RaceFeedProps {
  * списка (`FlatList.onEndReached`), в подвале — скелетон карточки или баннер ошибки догрузки с повтором (загруженное
  * остаётся). Смена фильтра — новый ключ запроса: на месте данных скелетон (R7, без `keepPreviousData`).
  */
-export function RaceFeed({ header, filters, onFiltersChange }: RaceFeedProps) {
+export function RaceFeed({ header, filters: selected, onFiltersChange }: RaceFeedProps) {
   const theme = useTheme();
   const router = useRouter();
+  // чипы месяцев — от «сейчас» по Минску (полночь и возврат в фокус пересчитывают); выбранный месяц, которого среди
+  // чипов больше нет (сменился месяц на открытом экране), в запрос и в состояние чипов не идёт
+  const months = monthChips(useMinskClock([]));
+  const filters: RaceFilters = {
+    ...selected,
+    month: selected.month.filter((month) => months.includes(month)),
+  };
   const { current, past, pastEnabled, loadMore } = useRaceFeed(filters);
   const now = useMinskClock([current.dataUpdatedAt, past.dataUpdatedAt]);
   const filtered = hasFilters(filters);
@@ -90,6 +98,7 @@ export function RaceFeed({ header, filters, onFiltersChange }: RaceFeedProps) {
   const listHeader = (
     <View style={styles.gutter}>
       {header}
+      <OfflineBanner hasData={current.data !== undefined} style={styles.offline} />
       <View style={styles.filters}>
         <FilterGroup
           label={t('races.filter.class')}
@@ -104,7 +113,7 @@ export function RaceFeed({ header, filters, onFiltersChange }: RaceFeedProps) {
         />
         <FilterGroup
           label={t('races.filter.date')}
-          options={monthChips(now).map((value) => ({ value, label: monthChipLabel(value, now) }))}
+          options={months.map((value) => ({ value, label: monthChipLabel(value, now) }))}
           selected={filters.month}
           onToggle={(value) => onFiltersChange({ ...filters, month: toggle(filters.month, value) })}
         />
@@ -167,6 +176,9 @@ export function RaceFeed({ header, filters, onFiltersChange }: RaceFeedProps) {
   const nextPageError =
     (current.isFetchNextPageError && current.data) || (past.isFetchNextPageError && past.data);
   const pastFailed = pastEnabled && past.isError && !past.data;
+  // ошибка фонового обновления «Завершённых» при показанных данных: данные остаются, баннер с повтором past
+  const pastStale =
+    pastEnabled && past.isError && past.data !== undefined && !past.isFetchNextPageError;
   const loadingMore =
     current.isFetchingNextPage ||
     past.isFetchingNextPage ||
@@ -189,6 +201,11 @@ export function RaceFeed({ header, filters, onFiltersChange }: RaceFeedProps) {
               else void past.fetchNextPage();
             }}
           />
+        </View>
+      ) : pastStale ? (
+        <View style={styles.footerError}>
+          <Banner tone="warning" title={t('state.staleTitle')} message={t('state.staleMessage')} />
+          <TextAction label={t('state.retry')} onPress={() => void past.refetch()} />
         </View>
       ) : loadingMore ? (
         <SkeletonGroup>
@@ -241,6 +258,7 @@ export function RaceFeed({ header, filters, onFiltersChange }: RaceFeedProps) {
 const styles = StyleSheet.create({
   gutter: { paddingHorizontal: size.gutter },
   filters: { marginTop: space.s2 },
+  offline: { marginTop: space.s2 },
   reset: { alignItems: 'flex-start' },
   hero: { marginTop: space.s3 },
   skeleton: { gap: space.s3 },

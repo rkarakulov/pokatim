@@ -6,29 +6,31 @@ import type { GenerateMetadataFunction, LoaderFunction } from 'expo-router/serve
 import { SeasonDetailScreen, seasonDates } from '@/features/races/season-detail';
 import { useLoaderSeed } from '@/lib/loader-seed';
 import { publicPageMetadata } from '@/lib/page-metadata';
-import { fetchPublicForSsr, publicPath } from '@/lib/public-ssr';
+import { fetchPublicForSsr, publicPath, ssrData, type PublicSsrResult } from '@/lib/public-ssr';
 
 /*
  * Публичный экран сезона (`/seasons/<id>`): вне гардов, SSR как у карточки гонки — `loader` (сезон) и
  * `generateMetadata` (название и даты) через `public-ssr.ts`.
  */
 
-const seasonForSsr = (params: Record<string, string | string[]>) => {
+const seasonForSsr = (
+  params: Record<string, string | string[]>,
+): Promise<PublicSsrResult<SeasonCard>> => {
   const path = publicPath('/v1/seasons', params.id);
-  return path ? fetchPublicForSsr(path, SeasonCard) : Promise.resolve(null);
+  return path ? fetchPublicForSsr(path, SeasonCard) : Promise.resolve({ status: 'notFound' });
 };
 
-export const loader: LoaderFunction<SeasonCard | null> = (_request, params) => seasonForSsr(params);
+export const loader: LoaderFunction<SeasonCard | null> = async (_request, params) =>
+  ssrData(await seasonForSsr(params));
 
-/** Мета без ПДн; не найден или API недоступен — нейтральная мета и `noindex`. */
+/** Мета без ПДн; не найден — нейтральная мета и `noindex`, API недоступен — нейтральная без `robots`. */
 export const generateMetadata: GenerateMetadataFunction = async (_request, params) => {
-  const season = await seasonForSsr(params);
-  if (!season) {
-    return {
-      ...publicPageMetadata({ title: t('season.title'), description: t('app.tagline') }),
-      robots: 'noindex',
-    };
+  const result = await seasonForSsr(params);
+  if (result.status !== 'found') {
+    const neutral = publicPageMetadata({ title: t('season.title'), description: t('app.tagline') });
+    return result.status === 'notFound' ? { ...neutral, robots: 'noindex' } : neutral;
   }
+  const season = result.data;
   return publicPageMetadata({
     title: season.name,
     description: seasonDates(season),

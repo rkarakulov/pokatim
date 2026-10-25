@@ -20,7 +20,8 @@ export const ru = {
   'home.calendar.kicker': 'Календарь',
   'home.calendar.title': 'Ближайшие старты',
   'home.calendar.all': 'Все старты',
-  'home.offlineMessage': 'Показаны последние загруженные данные. Обновим, когда появится сеть.',
+  // без сети при показанных данных (Главная, Гонки, карточки)
+  'offline.message': 'Показаны последние загруженные данные. Обновим, когда появится сеть.',
   'home.races.heroKicker': 'Окно гонки',
   'home.races.empty': 'Пока нет открытых гонок',
   'home.races.emptyAction': 'Календарь стартов',
