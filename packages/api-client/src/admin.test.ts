@@ -107,6 +107,13 @@ describe('createAdminApiClient: пути, методы, cookie панели', ()
     expect(page.calls[1]?.url).toBe('/v1/admin/audit');
   });
 
+  it('статус API — тот же путь, что у клиента приложения', async () => {
+    const ok = { status: 'ok', version: 'dev', checks: { database: 'up' } };
+    const { calls, api } = admin(200, ok);
+    await expect(api.health()).resolves.toEqual(ok);
+    expect(calls[0]).toMatchObject({ url: '/v1/health', method: 'GET' });
+  });
+
   it('ни одного заголовка Authorization: панель — только cookie', async () => {
     const { calls, api } = admin(200, me);
     await api.me();

@@ -4,6 +4,7 @@ import {
   type AuditQuery,
   type ChangeRoleRequest,
   type GrantRoleRequest,
+  HealthResponse,
   PanelMe,
   PanelMember,
   PanelMemberList,
@@ -52,6 +53,8 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
   const member = (userId: string) => `/v1/admin/members/${encodeURIComponent(userId)}`;
 
   return {
+    /** Статус API (экран «Обзор»). */
+    health: () => get('/v1/health', HealthResponse),
     /** Вход тем же e-mail и паролем, что в приложении: cookie панели или `verificationRequired`. */
     signIn: (body: PanelSignInRequest) =>
       post('/v1/admin/session/sign-in', PanelSignInResponse, body),
