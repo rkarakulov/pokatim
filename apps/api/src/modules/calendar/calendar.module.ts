@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 
 import { PanelModule } from '../panel';
+import { PublicReadGuard } from '../../public-read.guard';
 import { CalendarAdminController } from './calendar-admin.controller';
+import { CalendarPublicController } from './calendar-public.controller';
+import { CalendarPublicService } from './calendar-public.service';
 import { CalendarRepository } from './calendar.repository';
 import { CalendarService } from './calendar.service';
 
@@ -11,7 +14,7 @@ import { CalendarService } from './calendar.service';
  */
 @Module({
   imports: [PanelModule],
-  controllers: [CalendarAdminController],
-  providers: [CalendarRepository, CalendarService],
+  controllers: [CalendarAdminController, CalendarPublicController],
+  providers: [CalendarRepository, CalendarService, CalendarPublicService, PublicReadGuard],
 })
 export class CalendarModule {}

@@ -174,6 +174,66 @@ export class RacesRepository {
     return this.c.races.findOneAndDelete({ _id: id, version, status: 'draft' }, { session });
   }
 
+  /**
+   * Публичный список (только опубликованные и отменённые). `current` — опубликованные с незакрытым окном
+   * (`windowEndsAt > closedBefore`), по началу окна; `past` — закрытые и отменённые, по концу окна (новые сверху).
+   * Внутри фильтра — ИЛИ, между фильтрами — И; месяц — окно пересекает `[startsAt, endsBefore)`.
+   */
+  listPublic(
+    filter: {
+      scope: 'current' | 'past';
+      /** Окно с `windowEndsAt ≤ closedBefore` закрыто (`now − 1 мин`, R12). */
+      closedBefore: Date;
+      bikeClasses?: readonly BikeClass[];
+      months?: readonly InstantRange[];
+    },
+    after: CursorPosition<Date> | null,
+    limit: number,
+  ): Promise<RaceDoc[]> {
+    const current = filter.scope === 'current';
+    const and: Filter<RaceDoc>[] = current
+      ? [{ status: 'published', windowEndsAt: { $gt: filter.closedBefore } }]
+      : [
+          { status: { $in: ['published', 'cancelled'] } },
+          {
+            $or: [{ status: 'cancelled' }, { windowEndsAt: { $lte: filter.closedBefore } }],
+          },
+        ];
+    if (filter.bikeClasses?.length) and.push({ bikeClass: { $in: [...filter.bikeClasses] } });
+    if (filter.months?.length) {
+      and.push({
+        $or: filter.months.map((month) => ({
+          windowStartsAt: { $lt: month.endsBefore },
+          windowEndsAt: { $gte: month.startsAt },
+        })),
+      });
+    }
+    const key = current ? 'windowStartsAt' : 'windowEndsAt';
+    if (after) {
+      and.push({
+        $or: [
+          { [key]: current ? { $gt: after.k } : { $lt: after.k } },
+          { [key]: after.k, _id: current ? { $gt: after.id } : { $lt: after.id } },
+        ],
+      });
+    }
+    const direction = current ? 1 : -1;
+    return this.c.races
+      .find({ $and: and })
+      .sort({ [key]: direction, _id: direction })
+      .limit(limit)
+      .toArray();
+  }
+
+  /** Опубликованная или отменённая гонка (публичная карточка); черновик — нет. */
+  async findPublic(id: string): Promise<RaceDoc | undefined> {
+    const doc = await this.c.races.findOne({
+      _id: id,
+      status: { $in: ['published', 'cancelled'] },
+    });
+    return doc ?? undefined;
+  }
+
   /** Страница панели: новые окна сверху (`windowStartsAt desc, _id desc`), `limit + 1` — признак продолжения. */
   listPanel(
     filter: PanelRaceFilter,
