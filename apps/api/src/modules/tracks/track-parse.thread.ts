@@ -32,6 +32,7 @@ type ThreadMessage =
 
 export interface ParseLimits {
   maxOldGenerationMb: number;
+  maxYoungGenerationMb: number;
   timeoutMs: number;
 }
 
@@ -50,7 +51,10 @@ export function analyzeInThread(
     const worker = new Worker(THREAD_SOURCE, {
       eval: true,
       workerData: { bytes, format, now: now.getTime() },
-      resourceLimits: { maxOldGenerationSizeMb: limits.maxOldGenerationMb },
+      resourceLimits: {
+        maxOldGenerationSizeMb: limits.maxOldGenerationMb,
+        maxYoungGenerationSizeMb: limits.maxYoungGenerationMb,
+      },
       stdout: true,
       stderr: true,
     });

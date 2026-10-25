@@ -27,6 +27,7 @@ export class TrackProcessingProcessor extends WorkerHost {
   /** Лимиты потока разбора (тест «долгий разбор» уменьшает таймаут). */
   parseLimits: ParseLimits = {
     maxOldGenerationMb: TRACKS_POLICY.parseMaxOldGenerationMb,
+    maxYoungGenerationMb: TRACKS_POLICY.parseMaxYoungGenerationMb,
     timeoutMs: TRACKS_POLICY.parseTimeoutMs,
   };
 
@@ -51,19 +52,49 @@ export class TrackProcessingProcessor extends WorkerHost {
       this.logger.warn(`event ${job.data.outboxEventId}: no valid payload, skipped`);
       return 'skipped';
     }
-    return this.processUpload(payload.data.uploadId);
+    // последняя попытка BullMQ: сбой окружения — финальный отказ загрузки, а не вечное `processing`
+    const finalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+    return this.processUpload(payload.data.uploadId, { finalAttempt });
   }
 
-  /** Обработка одной загрузки (вызывается и тестами напрямую). */
-  async processUpload(uploadId: string): Promise<TrackProcessingOutcome> {
+  /** Разбор в потоке с лимитами (точка подмены в тестах сбоя потока). */
+  analyze(bytes: Uint8Array, format: TrackUploadDoc['format']): Promise<ParseOutcome> {
+    return analyzeInThread(bytes, format, this.clock.now(), this.parseLimits);
+  }
+
+  /**
+   * Обработка одной загрузки (вызывается и тестами напрямую). Исходника нет (уборка, потеря тома) — `failed:
+   * storage` сразу; сбой окружения (загрузчик модуля, падение потока) — исключение и ретрай BullMQ, на последней
+   * попытке — `failed: unreadable` (пользователь видит итог, загрузка не висит в «Обрабатываем…»).
+   */
+  async processUpload(
+    uploadId: string,
+    { finalAttempt = false }: { finalAttempt?: boolean } = {},
+  ): Promise<TrackProcessingOutcome> {
     const upload = await this.repository.claimUpload(uploadId, this.clock.now());
     if (!upload) return 'skipped';
     if (!upload.storageKey) {
       await this.repository.failUpload(upload._id, 'storage', this.clock.now());
       return 'failed';
     }
-    const bytes = await this.files.get(upload.storageKey);
-    const outcome = await analyzeInThread(bytes, upload.format, this.clock.now(), this.parseLimits);
+    let bytes: Uint8Array;
+    try {
+      bytes = await this.files.get(upload.storageKey);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !finalAttempt) throw error;
+      await this.repository.failUpload(upload._id, 'storage', this.clock.now());
+      this.logger.warn(`upload ${upload._id} failed: storage`);
+      return 'failed';
+    }
+    let outcome: ParseOutcome;
+    try {
+      outcome = await this.analyze(bytes, upload.format);
+    } catch (error) {
+      if (!finalAttempt) throw error;
+      await this.repository.failUpload(upload._id, 'unreadable', this.clock.now());
+      this.logger.warn(`upload ${upload._id} failed on final attempt: parser error`);
+      return 'failed';
+    }
     if (!outcome.ok) {
       await this.repository.failUpload(upload._id, outcome.failure, this.clock.now());
       this.logger.log(`upload ${upload._id} failed: ${outcome.failure}`);

@@ -1,6 +1,7 @@
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 
 import {
+  TRACK_MAX_POINTS,
   TrackParseError,
   type ActivitySport,
   type ParsedPoint,
@@ -9,6 +10,30 @@ import {
 
 /** DTD и сущности не нужны GPX; их наличие — XXE / «миллиард смехов». Отказ до запуска парсера. */
 const FORBIDDEN_MARKUP = /<!DOCTYPE|<!ENTITY/i;
+
+/**
+ * Предел элементов документа до разбора: точка с расширениями — до ~10 элементов (открывающих тегов), запас ×2.
+ * Враждебный GPX с миллионами элементов отвергается подсчётом, а не разбором в дерево (память потока worker).
+ */
+export const GPX_MAX_ELEMENTS = TRACK_MAX_POINTS * 20;
+
+/** Число совпадений глобального регулярного выражения без сборки массива. */
+function countMatches(text: string, pattern: RegExp): number {
+  let count = 0;
+  pattern.lastIndex = 0;
+  while (pattern.exec(text) !== null) count += 1;
+  return count;
+}
+
+const escapeName = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Число открывающих тегов `name` с любым префиксом пространства имён (`<trkpt`, `<g:trkpt`), без разбора XML. */
+export function countTags(text: string, name: string): number {
+  return countMatches(text, new RegExp(`<(?:[A-Za-z_][\\w.-]*:)?${escapeName(name)}[\\s/>]`, 'g'));
+}
+
+/** Открывающие теги (без закрывающих, комментариев и инструкций) — грубая оценка размера дерева. */
+const ELEMENT_OPEN = /<[^/!?]/g;
 
 /**
  * `<trk><type>`: Garmin Connect/Komoot/RideWithGPS пишут строку (`cycling`, `road_biking`, …), старые экспорты
@@ -70,6 +95,13 @@ type XmlNode = Record<string, unknown>;
  */
 export function parseGpx(text: string): ParsedTrack {
   if (FORBIDDEN_MARKUP.test(text)) throw new TrackParseError('unreadable');
+  // размер — до разбора в дерево (память потока worker)
+  if (
+    countMatches(text, ELEMENT_OPEN) > GPX_MAX_ELEMENTS ||
+    countTags(text, 'trkpt') > TRACK_MAX_POINTS
+  ) {
+    throw new TrackParseError('too_many_points');
+  }
   let document: unknown;
   try {
     // парсер fast-xml-parser не проверяет корректность разметки — валидатор того же пакета до разбора

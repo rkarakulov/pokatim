@@ -7,16 +7,23 @@ import type { DbSession } from '../../db';
 import {
   type ActivityDoc,
   type ActivityTrackDoc,
+  type TrackSourceRefDoc,
   type TrackUploadDoc,
   type TracksCollections,
   tracksCollections,
 } from './tracks.collection';
 import { DEDUP_START_WINDOW_MS } from './tracks.policy';
 
+/** Ключ маркера объекта источника. */
+export const sourceRefKey = (source: TrackSource, sourceRef: string) => `${source}:${sourceRef}`;
+
 /** Статусы загрузки, которые ещё обрабатываются (задача разбора может её захватить). */
 const IN_PROGRESS: TrackUploadStatus[] = ['queued', 'processing'];
-/** Отбракованные: исходник хранится 7 дней (Q10). */
-const REJECTED: TrackUploadStatus[] = ['failed', 'skipped', 'duplicate'];
+/**
+ * Отбракованные: исходник хранится 7 дней (Q10). `duplicate` — не отбракованный: у него есть активность, и при
+ * удалении основной он становится основным (исходник нужен будущим гонкам и спорам).
+ */
+const REJECTED: TrackUploadStatus[] = ['failed', 'skipped'];
 
 /**
  * Единственный писатель `track_uploads`, `activities`, `activity_tracks`, `activity_meta` (`pokatim-db.md`):
@@ -226,6 +233,38 @@ export class TracksRepository {
   /** Бывшие дубли удалённой основной (перевыбор основной). */
   duplicatesOf(session: DbSession, primaryId: string): Promise<ActivityDoc[]> {
     return this.c.activities.find({ duplicateOf: primaryId }, { session }).toArray();
+  }
+
+  // --- маркер объекта источника (воскрешение удалённого) ---
+
+  /** Пользователь удалял этот объект источника (вне транзакции — ранний отказ до записи файла). */
+  async isSourceRefDeleted(key: string, session?: DbSession): Promise<boolean> {
+    const doc = await this.c.sourceRefs.findOne({ _id: key }, { session });
+    return doc?.state === 'deleted';
+  }
+
+  /**
+   * Приём объекта источника (в транзакции вставки загрузки): маркер `live`. Удалённый (`deleted`) — upsert пытается
+   * вставить тот же `_id` → `11000` на `_id_` (вызывающий отвечает `TrackSourceDeletedError`). Запись в тот же
+   * документ, что и удаление, — конкурирующие транзакции конфликтуют.
+   */
+  async claimSourceRef(session: DbSession, key: string, userId: string, now: Date): Promise<void> {
+    await this.c.sourceRefs.updateOne(
+      { _id: key, state: 'live' },
+      { $set: { updatedAt: now }, $setOnInsert: { userId, state: 'live' } },
+      { session, upsert: true },
+    );
+  }
+
+  /** Удаление загрузки источника: маркер `deleted` (в транзакции удаления). */
+  async markSourceRefDeleted(
+    session: DbSession,
+    key: string,
+    userId: string,
+    now: Date,
+  ): Promise<void> {
+    const doc: Omit<TrackSourceRefDoc, '_id'> = { userId, state: 'deleted', updatedAt: now };
+    await this.c.sourceRefs.updateOne({ _id: key }, { $set: doc }, { session, upsert: true });
   }
 
   // --- уборка ---

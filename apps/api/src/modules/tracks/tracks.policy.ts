@@ -16,6 +16,8 @@ export const TRACKS_POLICY = {
   usageCacheSec: 60,
   /** Разбор: память потока и время. */
   parseMaxOldGenerationMb: 160,
+  /** Молодое поколение потока (иначе V8 берёт его по умолчанию сверх лимита старого). */
+  parseMaxYoungGenerationMb: 32,
   parseTimeoutMs: 30_000,
   /** Уборка: исходники отбракованных загрузок и файлы без документа. */
   rejectedRetentionMs: 7 * DAY_MS,

@@ -13,11 +13,11 @@ import type { Redis } from 'ioredis';
 
 import type { Env } from '../../config/env';
 import { newStorageKey, TRACK_FILE_STORE, type TrackFileStore } from './track-file-store';
-import { TrackStorageFullError } from './track-ingest.port';
+import { TrackSourceDeletedError, TrackStorageFullError } from './track-ingest.port';
 import type { TrackUploadDoc, TrackVia } from './tracks.collection';
 import { TRACK_UPLOAD_RECEIVED } from './tracks.events';
 import { TRACKS_POLICY } from './tracks.policy';
-import { TracksRepository } from './tracks.repository';
+import { sourceRefKey, TracksRepository } from './tracks.repository';
 
 /** Ключ кеша суммы хранимых байт (квота): общий для API и worker. */
 const USAGE_CACHE_KEY = 'tracks:storage:used-bytes';
@@ -62,6 +62,11 @@ export class TrackSourcesService {
     const sha256 = createHash('sha256').update(input.bytes).digest('hex');
     const existing = await this.existing(input, sha256);
     if (existing) return { upload: existing, created: false };
+    const refKey = input.sourceRef ? sourceRefKey(input.source, input.sourceRef) : null;
+    // объект источника пользователь удалял — не воскрешаем (ранний отказ до записи файла)
+    if (refKey && (await this.repository.isSourceRefDeleted(refKey))) {
+      throw new TrackSourceDeletedError();
+    }
 
     await this.assertCapacity(input.bytes.byteLength);
     const storageKey = newStorageKey(input.format);
@@ -88,6 +93,7 @@ export class TrackSourcesService {
     };
     try {
       await this.transactions.run(async (session) => {
+        if (refKey) await this.repository.claimSourceRef(session, refKey, input.userId, now);
         await this.repository.insertUpload(session, upload);
         await this.outbox.append(session, {
           type: TRACK_UPLOAD_RECEIVED,
@@ -96,6 +102,10 @@ export class TrackSourcesService {
       });
     } catch (error) {
       await this.files.delete(storageKey).catch(() => undefined);
+      // удаление закоммитилось между ранней проверкой и транзакцией: маркер `deleted` — `11000` на `_id_` маркера
+      if (refKey && (await this.repository.isSourceRefDeleted(refKey))) {
+        throw new TrackSourceDeletedError();
+      }
       const raced =
         isDuplicateKey(error, 'track_uploads_user_sha_unique') ||
         isDuplicateKey(error, 'track_uploads_source_ref_unique');

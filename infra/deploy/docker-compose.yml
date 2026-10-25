@@ -93,7 +93,7 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
-    # бюджет стека на общем сервере — 2560m: mongo 640 + redis 320 + mailpit 128 + api 512 + worker 384 + web 512 +
+    # бюджет стека на общем сервере — 2688m: mongo 640 + redis 320 + mailpit 128 + api 512 + worker 512 + web 512 +
     # admin 64; mongod — кэш 0,25 ГБ + служебная память, запас — на mongosh healthcheck и deploy.sh
     deploy: { resources: { limits: { memory: 640m } } }
     restart: unless-stopped
@@ -191,12 +191,12 @@ services:
     image: *api-image
     command: ['node', 'dist/worker.js']
     environment: *api-env
-    # разбор трека — в worker_threads с лимитом 160 МБ на поток, параллелизм 1 (ADR-0011); при нехватке — 512m (V6)
+    # разбор трека — в worker_threads (старое поколение 160 МБ + молодое 32 МБ), параллелизм 1 (ADR-0011, V6: 512m)
     volumes: [trackfiles:/data/trackfiles]
     depends_on:
       mongo: { condition: service_healthy }
       redis: { condition: service_healthy }
-    deploy: { resources: { limits: { memory: 384m } } }
+    deploy: { resources: { limits: { memory: 512m } } }
     restart: unless-stopped
     logging: *logging
 

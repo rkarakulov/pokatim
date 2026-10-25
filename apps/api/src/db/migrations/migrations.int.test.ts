@@ -17,6 +17,7 @@ import { calendar } from './0008_calendar';
 import { racesSeasonPublicIdx } from './0009_races_season_public_idx';
 import { tracks } from './0010_tracks';
 import { devices } from './0011_devices';
+import { trackSourceRefs } from './0012_track_source_refs';
 import { TRACKS_COLLECTIONS } from '../../modules/tracks/tracks.collection';
 import { DEVICES_COLLECTIONS } from '../../modules/devices/devices.collection';
 import { migrations } from './index';
@@ -66,6 +67,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0009_races_season_public_idx',
       '0010_tracks',
       '0011_devices',
+      '0012_track_source_refs',
     ]);
   });
 
@@ -267,6 +269,21 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     for (const [name, indexes] of Object.entries(expected)) {
       expect(await indexesOf(name)).toEqual(indexes);
     }
+  });
+
+  it('0012_track_source_refs: коллекция маркеров источника и индекс по пользователю; повторный up — без ошибки', async () => {
+    const expected = {
+      track_source_refs_user_idx: {
+        key: { userId: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(TRACKS_COLLECTIONS.sourceRefs)).toEqual(expected);
+    await trackSourceRefs.up(h.db);
+    await trackSourceRefs.up(h.db);
+    expect(await indexesOf(TRACKS_COLLECTIONS.sourceRefs)).toEqual(expected);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

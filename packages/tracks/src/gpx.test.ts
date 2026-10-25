@@ -2,10 +2,12 @@ import { readFileSync } from 'node:fs';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { parseGpx } from './gpx.ts';
+import { XMLValidator } from 'fast-xml-parser';
+
+import { countTags, GPX_MAX_ELEMENTS, parseGpx } from './gpx.ts';
 import { sanitizePoints } from './points.ts';
 import { summarizeTrack } from './summary.ts';
-import { TrackParseError } from './track.ts';
+import { TRACK_MAX_POINTS, TrackParseError } from './track.ts';
 
 const fixture = (name: string) =>
   readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url), 'utf8');
@@ -115,5 +117,26 @@ describe('parseGpx', () => {
     expect(failureCode(() => parseGpx('<?xml version="1.0"?><!doctype gpx><gpx/>'))).toBe(
       'unreadable',
     );
+  });
+});
+
+describe('parseGpx — враждебный размер до полного разбора (ревью MEDIUM-7)', () => {
+  it('точек больше лимита — too_many_points подсчётом <trkpt, без разбора XML', () => {
+    const point = '<trkpt lat="53.9" lon="27.5"/>';
+    const gpx = `<gpx><trk><trkseg>${point.repeat(TRACK_MAX_POINTS + 1)}</trkseg></trk></gpx>`;
+    const validate = vi.spyOn(XMLValidator, 'validate');
+    expect(failureCode(() => parseGpx(gpx))).toBe('too_many_points');
+    expect(validate).not.toHaveBeenCalled();
+  });
+
+  it('элементов слишком много (не точки) — too_many_points без разбора XML', () => {
+    const gpx = `<gpx>${'<a/>'.repeat(GPX_MAX_ELEMENTS + 1)}</gpx>`;
+    const validate = vi.spyOn(XMLValidator, 'validate');
+    expect(failureCode(() => parseGpx(gpx))).toBe('too_many_points');
+    expect(validate).not.toHaveBeenCalled();
+  });
+
+  it('префикс пространства имён у trkpt тоже считается', () => {
+    expect(countTags('<g:trkpt a="1"/><trkpt>x</trkpt><trkptx/>', 'trkpt')).toBe(2);
   });
 });

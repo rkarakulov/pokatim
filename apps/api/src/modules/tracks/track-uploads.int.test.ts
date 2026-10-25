@@ -27,7 +27,7 @@ import {
 } from '../../../test/tracks';
 import { TrackProcessingProcessor } from './track-processing.processor';
 import { newStorageKey, TRACK_FILE_STORE, type TrackFileStore } from './track-file-store';
-import { TRACK_INGEST, type TrackIngest } from './track-ingest.port';
+import { TRACK_INGEST, type TrackIngest, TrackSourceDeletedError } from './track-ingest.port';
 import { TracksMaintenanceProcessor } from './tracks-maintenance.processor';
 import { TracksRepository } from './tracks.repository';
 
@@ -542,5 +542,136 @@ describe('AC13: ответы без служебных полей', () => {
       'source',
       'status',
     ]);
+  });
+});
+
+describe('ревью pass 1: финальные отказы, маркер удаления, 413, уборка дублей', () => {
+  it('HIGH-1: исходник пропал из хранилища — failed: storage, а не вечное processing', async () => {
+    const upload = parsedUpload(await uploadTrack(h, auth, fixture('komoot.gpx')));
+    const doc = await tracks(h).uploads.findOne({ _id: upload.id });
+    await rm(join(TRACK_STORAGE_DIR_TEST, doc?.storageKey ?? ''));
+    expect(await processUpload(h, upload.id)).toBe('failed');
+    expect(await tracks(h).uploads.findOne({ _id: upload.id })).toMatchObject({
+      status: 'failed',
+      failure: 'storage',
+    });
+  });
+
+  it('HIGH-1: сбой потока разбора — ретрай; на последней попытке — failed: unreadable', async () => {
+    const upload = parsedUpload(await uploadTrack(h, auth, fixture('komoot.gpx')));
+    const processor = h.worker.get(TrackProcessingProcessor);
+    const analyze = vi.spyOn(processor, 'analyze').mockRejectedValue(new Error('thread crashed'));
+    try {
+      await expect(processor.processUpload(upload.id)).rejects.toThrow('thread crashed');
+      expect(await tracks(h).uploads.findOne({ _id: upload.id })).toMatchObject({
+        status: 'processing',
+        failure: null,
+      });
+      expect(await processor.processUpload(upload.id, { finalAttempt: true })).toBe('failed');
+    } finally {
+      analyze.mockRestore();
+    }
+    expect(await tracks(h).uploads.findOne({ _id: upload.id })).toMatchObject({
+      status: 'failed',
+      failure: 'unreadable',
+      attempts: 2,
+    });
+  });
+
+  it('HIGH-4: удалённый пользователем объект источника не воскресает при повторе приёма', async () => {
+    const ingest = h.worker.get<TrackIngest>(TRACK_INGEST);
+    const input = {
+      userId,
+      source: 'garmin' as const,
+      via: 'open_wearables' as const,
+      sourceRef: '0b0e0c2a-1d1d-4d4d-8e8e-000000000009',
+      stream: owStream(),
+    };
+    const first = await ingest.ingestProviderStream(input);
+    expect(
+      (await call(h, 'POST', `/v1/tracks/uploads/${first.uploadId}/delete`, {}, auth)).status,
+    ).toBe(204);
+    await expect(ingest.ingestProviderStream(input)).rejects.toBeInstanceOf(
+      TrackSourceDeletedError,
+    );
+    expect(await tracks(h).uploads.countDocuments()).toBe(0);
+    expect(await storedFiles()).toEqual([]);
+    // другой объект того же провайдера принимается
+    const other = await ingest.ingestProviderStream({
+      ...input,
+      sourceRef: '0b0e0c2a-1d1d-4d4d-8e8e-000000000010',
+    });
+    expect(other.created).toBe(true);
+  });
+
+  it('HIGH-4: удаление закоммитилось между ранней проверкой и транзакцией приёма — отказ, без загрузки', async () => {
+    const ingest = h.worker.get<TrackIngest>(TRACK_INGEST);
+    const input = {
+      userId,
+      source: 'wahoo' as const,
+      via: 'open_wearables' as const,
+      sourceRef: '0b0e0c2a-1d1d-4d4d-8e8e-000000000011',
+      stream: owStream({ provider: 'wahoo' }),
+    };
+    const first = await ingest.ingestProviderStream(input);
+    const repository = h.worker.get(TracksRepository);
+    const early = vi.spyOn(repository, 'isSourceRefDeleted');
+    // ранняя проверка «не удалён» устарела: удаление пройдёт до транзакции приёма
+    early.mockResolvedValueOnce(false);
+    const findBySource = vi.spyOn(repository, 'findUploadBySourceRef');
+    findBySource.mockImplementationOnce(async () => {
+      expect(
+        (await call(h, 'POST', `/v1/tracks/uploads/${first.uploadId}/delete`, {}, auth)).status,
+      ).toBe(204);
+      return undefined;
+    });
+    try {
+      await expect(ingest.ingestProviderStream(input)).rejects.toBeInstanceOf(
+        TrackSourceDeletedError,
+      );
+    } finally {
+      early.mockRestore();
+      findBySource.mockRestore();
+    }
+    expect(await tracks(h).uploads.countDocuments()).toBe(0);
+  });
+
+  it('MEDIUM-9: уборка не трогает исходник duplicate (он станет основным при удалении основной)', async () => {
+    const file = parsedUpload(await uploadTrack(h, auth, fixture('garmin-connect.gpx')));
+    expect(await processUpload(h, file.id)).toBe('ready');
+    const streamed = await h.worker.get<TrackIngest>(TRACK_INGEST).ingestProviderStream({
+      userId,
+      source: 'wahoo',
+      via: 'open_wearables',
+      sourceRef: '0b0e0c2a-1d1d-4d4d-8e8e-000000000012',
+      stream: owStream({ provider: 'wahoo', hasPower: true }),
+    });
+    expect(await processUpload(h, streamed.uploadId)).toBe('ready');
+    expect(await tracks(h).uploads.findOne({ _id: file.id })).toMatchObject({
+      status: 'duplicate',
+    });
+    h.clock.advance(8 * DAY);
+    expect(await h.worker.get(TracksMaintenanceProcessor).cleanup()).toEqual({
+      rejectedFiles: 0,
+      orphanFiles: 0,
+    });
+    const duplicate = await tracks(h).uploads.findOne({ _id: file.id });
+    expect(duplicate?.storageKey).not.toBeNull();
+    expect(await storedFiles()).toContain(duplicate?.storageKey);
+  });
+
+  it('MEDIUM-6: > 16 МиБ через настоящий сокет — ответ 413 с кодом контракта и Connection: close, без обрыва', async () => {
+    await h.app.listen(0, '127.0.0.1');
+    const address = h.app.getHttpServer().address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const response = await fetch(`http://127.0.0.1:${port}/v1/tracks/uploads`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream', ...auth },
+      body: new Uint8Array(17 * 1024 * 1024).fill(0x20),
+    });
+    expect(response.status).toBe(413);
+    expect(response.headers.get('connection')).toBe('close');
+    expect(await response.json()).toMatchObject({ code: 'TRACK_TOO_LARGE' });
+    expect(await tracks(h).uploads.countDocuments()).toBe(0);
   });
 });

@@ -30,6 +30,7 @@ import { TrackUploadsService } from './track-uploads.service';
 /** Ответ Fastify: только код статуса (202 — новая загрузка, 200 — тот же файл). */
 interface StatusReply {
   status(code: number): unknown;
+  header(name: string, value: string): unknown;
 }
 
 /**
@@ -37,20 +38,41 @@ interface StatusReply {
  * здесь, после гарда и лимитов, с обрывом на лимите — `413 TRACK_TOO_LARGE` с кодом контракта (глобальный
  * `bodyLimit` 64 КБ остальных маршрутов не меняется). Другой тип содержимого — `415`.
  */
-async function readLimited(body: unknown, maxBytes: number): Promise<Uint8Array> {
-  if (!isReadable(body)) throw domainError('TRACK_FORMAT_UNSUPPORTED', 415);
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of body) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
-    size += buffer.byteLength;
-    if (size > maxBytes) {
-      body.destroy();
-      throw domainError('TRACK_TOO_LARGE', 413);
-    }
-    chunks.push(buffer);
-  }
-  return new Uint8Array(Buffer.concat(chunks, size));
+function readLimited(body: unknown, maxBytes: number): Promise<Uint8Array> {
+  if (!isReadable(body)) return Promise.reject(domainError('TRACK_FORMAT_UNSUPPORTED', 415));
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    const onData = (chunk: Buffer | string) => {
+      const buffer = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+      size += buffer.byteLength;
+      if (size > maxBytes) {
+        // не рвём соединение (клиент получил бы обрыв вместо 413): остаток тела сливается без хранения, ответ
+        // 413 уходит с `Connection: close`
+        cleanup();
+        body.resume();
+        reject(domainError('TRACK_TOO_LARGE', 413));
+        return;
+      }
+      chunks.push(buffer);
+    };
+    const onEnd = () => {
+      cleanup();
+      resolve(new Uint8Array(Buffer.concat(chunks, size)));
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    const cleanup = () => {
+      body.off('data', onData);
+      body.off('end', onEnd);
+      body.off('error', onError);
+    };
+    body.on('data', onData);
+    body.once('end', onEnd);
+    body.once('error', onError);
+  });
 }
 
 function isReadable(value: unknown): value is Readable {
@@ -82,7 +104,11 @@ export class TrackUploadsController {
     const fileName = this.uploads.parseName(rawName);
     const slot = await this.uploads.admit(user.userId, ip);
     try {
-      const bytes = await readLimited(body, TRACKS_POLICY.maxFileBytes);
+      const bytes = await readLimited(body, TRACKS_POLICY.maxFileBytes).catch((error: unknown) => {
+        // тело не дочитано — после ответа соединение закрывается
+        reply.header('Connection', 'close');
+        throw error;
+      });
       const result = await this.uploads.accept(user.userId, fileName, bytes);
       reply.status(result.created ? 202 : 200);
       return result.upload;

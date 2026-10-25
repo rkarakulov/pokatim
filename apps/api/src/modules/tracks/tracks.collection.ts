@@ -16,6 +16,7 @@ export const TRACKS_COLLECTIONS = {
   activities: 'activities',
   tracks: 'activity_tracks',
   meta: 'activity_meta',
+  sourceRefs: 'track_source_refs',
 } as const;
 
 /** Через что пришёл исходник провайдера (агрегатор); у ручной загрузки — `null`. */
@@ -84,11 +85,24 @@ export interface ActivityMetaDoc {
   version: number;
 }
 
+/**
+ * Устойчивый маркер объекта источника (`_id` = `<source>:<sourceRef>`): `live` — заезд принят, `deleted` — пользователь
+ * удалил загрузку (повтор импорта её не вернёт). Приём и удаление пишут этот документ в своих транзакциях — гонка
+ * «приём ↔ удаление» конфликтует на нём (R7-подобный замок без отдельного meta).
+ */
+export interface TrackSourceRefDoc {
+  _id: string;
+  userId: string;
+  state: 'live' | 'deleted';
+  updatedAt: Date;
+}
+
 export interface TracksCollections {
   uploads: Collection<TrackUploadDoc>;
   activities: Collection<ActivityDoc>;
   tracks: Collection<ActivityTrackDoc>;
   meta: Collection<ActivityMetaDoc>;
+  sourceRefs: Collection<TrackSourceRefDoc>;
 }
 
 export function tracksCollections(db: Db): TracksCollections {
@@ -97,5 +111,6 @@ export function tracksCollections(db: Db): TracksCollections {
     activities: db.collection<ActivityDoc>(TRACKS_COLLECTIONS.activities),
     tracks: db.collection<ActivityTrackDoc>(TRACKS_COLLECTIONS.tracks),
     meta: db.collection<ActivityMetaDoc>(TRACKS_COLLECTIONS.meta),
+    sourceRefs: db.collection<TrackSourceRefDoc>(TRACKS_COLLECTIONS.sourceRefs),
   };
 }

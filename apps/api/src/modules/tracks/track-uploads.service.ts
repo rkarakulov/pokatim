@@ -22,7 +22,7 @@ import { TrackSourcesService } from './track-sources.service';
 import type { ActivityDoc, TrackUploadDoc } from './tracks.collection';
 import { TRACK_UPLOAD_DELETED } from './tracks.events';
 import { TRACKS_POLICY } from './tracks.policy';
-import { TracksRepository } from './tracks.repository';
+import { sourceRefKey, TracksRepository } from './tracks.repository';
 
 /** Курсор списка загрузок: ключ — константа (сортировка только по `_id`). */
 const TrackUploadCursorKey = z.literal('u');
@@ -192,6 +192,13 @@ export class TrackUploadsService {
       if (!result) return undefined;
       if (result.activity) await regroupAfterDelete(this.repository, session, result.activity, now);
       if (result.upload.sourceRef) {
+        // устойчивый маркер: повтор импорта (в том числе до события ниже) заезд не вернёт
+        await this.repository.markSourceRefDeleted(
+          session,
+          sourceRefKey(result.upload.source, result.upload.sourceRef),
+          userId,
+          now,
+        );
         await this.outbox.append(session, {
           type: TRACK_UPLOAD_DELETED,
           payload: {
