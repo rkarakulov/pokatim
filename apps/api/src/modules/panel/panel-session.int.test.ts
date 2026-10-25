@@ -414,6 +414,48 @@ describe('PanelGuard: сессия (AC4)', () => {
   });
 });
 
+describe('выход сессией, которую гард уже не пропустил бы', () => {
+  it('после сброса пароля, снятия роли или удаления аккаунта — 204, отзыв с причиной гарда, без panel.signed_out', async () => {
+    const cases = [
+      {
+        email: 'reset-out@example.by',
+        act: async () => {
+          await requestPasswordReset(h, 'reset-out@example.by');
+          const token = await latestResetToken(h, 'reset-out@example.by');
+          expect((await confirmPasswordReset(h, token, 'brand-new-password')).status).toBe(200);
+        },
+        reason: 'credentials_changed',
+      },
+      {
+        email: 'role-out@example.by',
+        act: (userId: string) =>
+          panel(h).members.updateOne({ _id: userId }, { $set: { status: 'revoked' } }),
+        reason: 'role_revoked',
+      },
+      {
+        email: 'deleted-out@example.by',
+        act: (userId: string) =>
+          collections(h).users.updateOne({ _id: userId }, { $set: { deletedAt: h.clock.now() } }),
+        reason: 'account_inactive',
+      },
+    ] as const;
+    for (const { email, act, reason } of cases) {
+      const userId = await memberUser(h, email, 'moderator');
+      const token = await panelSession(h, email);
+      await act(userId);
+
+      const res = await panelCall(h, token, 'POST', SIGN_OUT, {});
+
+      expect(res.status).toBe(204);
+      expectCleared(res);
+      expect(await panel(h).sessions.findOne({ userId })).toMatchObject({ revokedReason: reason });
+      expect(
+        await panel(h).audit.countDocuments({ action: 'panel.signed_out', 'actor.userId': userId }),
+      ).toBe(0);
+    }
+  });
+});
+
 describe('гонка: вход в панель проверил старый пароль ↔ сброс пароля закоммичен (AC4)', () => {
   async function signInAcrossReset() {
     const userId = await memberUser(h, ADMIN, 'admin');

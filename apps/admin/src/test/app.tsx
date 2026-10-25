@@ -42,6 +42,11 @@ export async function renderApp(path: string) {
       if (holder.router) expiredRedirect(holder.router);
     },
   });
+  // повторы запросов (сеть, 5xx) в тестах экранов не нужны: состояние ошибки — сразу
+  queryClient.setDefaultOptions({
+    ...queryClient.getDefaultOptions(),
+    queries: { ...queryClient.getDefaultOptions().queries, retry: false },
+  });
   const history = createMemoryHistory({ initialEntries: [`${BASEPATH}${path}`] });
   const router = createAppRouter({ queryClient, basepath: BASEPATH, history });
   holder.router = router;

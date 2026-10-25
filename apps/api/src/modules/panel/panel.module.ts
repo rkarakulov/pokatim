@@ -6,6 +6,7 @@ import { PanelAuditController } from './panel-audit.controller';
 import { PanelCoreModule } from './panel-core.module';
 import { PanelMembersController } from './panel-members.controller';
 import { PanelGuard } from './panel.guard';
+import { PanelSessionCheck } from './panel-session-check';
 import { PanelSessionCookie } from './panel-session-cookie';
 import { PanelSessionController } from './panel-session.controller';
 import { PanelSessionService } from './panel-session.service';
@@ -18,8 +19,14 @@ import { PanelSessionService } from './panel-session.service';
 @Module({
   imports: [IdentityModule, PanelCoreModule],
   controllers: [PanelSessionController, PanelMembersController, PanelAuditController],
-  providers: [PanelSessionCookie, PanelSessionService, PanelAuditReader, PanelGuard],
+  providers: [
+    PanelSessionCookie,
+    PanelSessionCheck,
+    PanelSessionService,
+    PanelAuditReader,
+    PanelGuard,
+  ],
   // гард создаётся в модуле-потребителе (`@UseGuards`) — ему нужны и зависимости гарда
-  exports: [PanelGuard, PanelSessionCookie, PanelCoreModule, IdentityModule],
+  exports: [PanelGuard, PanelSessionCookie, PanelSessionCheck, PanelCoreModule, IdentityModule],
 })
 export class PanelModule {}

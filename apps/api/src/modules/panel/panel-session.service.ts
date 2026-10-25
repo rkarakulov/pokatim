@@ -10,6 +10,7 @@ import type { PanelPrincipal } from './current-panel-user.decorator';
 import { PanelAudit } from './panel-audit';
 import { DELETED_MEMBER, PANEL_POLICY } from './panel.policy';
 import { PanelRepository } from './panel.repository';
+import { PanelSessionCheck } from './panel-session-check';
 import { permissionsOf } from './permissions';
 
 export type PanelSignInResult =
@@ -28,6 +29,7 @@ export class PanelSessionService {
     private readonly credentials: PanelCredentials,
     private readonly accounts: IdentityAccounts,
     private readonly repository: PanelRepository,
+    private readonly check: PanelSessionCheck,
     private readonly audit: PanelAudit,
     private readonly transactions: MongoTransactions,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -117,6 +119,13 @@ export class PanelSessionService {
     const now = this.clock.now();
     const session = await this.repository.findLiveSession(sha256(token), now);
     if (!session) return;
+    // сессия, которую гард уже не пропустил бы (сброс пароля, снятие роли, удаление), — отзыв с его причиной, без
+    // записи о выходе: сотрудника в панели уже нет
+    const verdict = await this.check.verdict(session);
+    if (!verdict.valid) {
+      await this.repository.revokeSession({ id: session._id }, now, verdict.reason);
+      return;
+    }
     await this.transactions.run(async (tx) => {
       const revoked = await this.repository.revokeSession(
         { id: session._id },

@@ -83,6 +83,7 @@ export function AuditScreen() {
     data: pages.data?.pages.flatMap((page) => page.items),
     isError: pages.isError,
     error: pages.error,
+    fetchStatus: pages.fetchStatus,
     refetch: () => pages.refetch(),
   };
 

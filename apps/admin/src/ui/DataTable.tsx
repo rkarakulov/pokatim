@@ -21,6 +21,8 @@ export interface TableQuery<T> {
   data: T[] | undefined;
   isError: boolean;
   error: unknown;
+  /** `paused` — запрос ждёт сети (TanStack Query): без данных это «Нет соединения», а не загрузка. */
+  fetchStatus?: 'fetching' | 'paused' | 'idle';
   refetch: () => unknown;
 }
 
@@ -83,12 +85,13 @@ export function DataTable<T>({
     getRowId: getRowId ? (row) => getRowId(row) : undefined,
   });
 
-  if (data === undefined && query.isError) {
+  const paused = query.fetchStatus === 'paused';
+  if (data === undefined && (query.isError || paused)) {
     return (
       <>
         {toolbar ? <div className="toolbar">{toolbar}</div> : null}
-        {renderError?.(query.error) ?? (
-          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        {(query.isError ? renderError?.(query.error) : undefined) ?? (
+          <ErrorState error={query.error} offline={paused} onRetry={() => void query.refetch()} />
         )}
       </>
     );

@@ -532,3 +532,8 @@ textarea.field__control {
   display: inline-block;
   width: var(--size-skeleton-word);
 }
+
+/* баннер каркаса (ошибка выхода) — над страницей */
+.main > .banner {
+  margin-bottom: var(--space-s3);
+}

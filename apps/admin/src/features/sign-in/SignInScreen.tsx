@@ -61,8 +61,7 @@ export function SignInScreen() {
     meta: { ownsUnauthorized: true },
     onSuccess: async (result, body) => {
       if (result.state === 'verificationRequired') {
-        syncNow();
-        setView(unverifiedView(result, body.email));
+        setView(unverifiedView(result, body.email, syncNow()));
         return;
       }
       queryClient.setQueryData(ME_QUERY_KEY, result.me);
@@ -77,8 +76,7 @@ export function SignInScreen() {
       } else if (code === 'RATE_LIMITED') {
         const details = RateLimitedDetails.safeParse(apiErrorOf(error)?.details);
         const seconds = details.success ? details.data.retryAfterSec : 60;
-        syncNow();
-        setLockedUntil(Date.now() + seconds * 1000);
+        setLockedUntil(syncNow() + seconds * 1000);
         setBanner(undefined);
       } else if (code === 'INVALID_CREDENTIALS') {
         setBanner('invalid');
@@ -125,10 +123,7 @@ export function SignInScreen() {
       <UnverifiedCard
         view={view}
         now={now}
-        onResent={(resendAt) => {
-          syncNow();
-          setView({ ...view, resendAt });
-        }}
+        onResent={(seconds) => setView({ ...view, resendAt: syncNow() + seconds * 1000 })}
         onBack={backToForm}
       />
     );
@@ -192,12 +187,12 @@ export function SignInScreen() {
   );
 }
 
-function unverifiedView(result: Pending, enteredEmail: string): View {
+function unverifiedView(result: Pending, enteredEmail: string, at: number): View {
   return {
     kind: 'unverified',
     email: result.email || enteredEmail.trim(),
     registrationToken: result.registrationToken,
-    resendAt: Date.now() + result.resendAvailableInSec * 1000,
+    resendAt: at + result.resendAvailableInSec * 1000,
   };
 }
 
@@ -210,7 +205,8 @@ function UnverifiedCard({
 }: {
   view: Extract<View, { kind: 'unverified' }>;
   now: number;
-  onResent: (resendAt: number) => void;
+  /** Пауза до следующего повтора, секунды. */
+  onResent: (seconds: number) => void;
   onBack: () => void;
 }) {
   const [sent, setSent] = useState(false);
@@ -223,11 +219,11 @@ function UnverifiedCard({
         return;
       }
       setSent(true);
-      onResent(Date.now() + result.resendAvailableInSec * 1000);
+      onResent(result.resendAvailableInSec);
     },
     onError: (error) => {
       const details = RateLimitedDetails.safeParse(apiErrorOf(error)?.details);
-      if (details.success) onResent(Date.now() + details.data.retryAfterSec * 1000);
+      if (details.success) onResent(details.data.retryAfterSec);
     },
   });
   const waitSec = Math.max(0, Math.ceil((view.resendAt - now) / 1000));

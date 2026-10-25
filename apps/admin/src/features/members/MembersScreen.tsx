@@ -1,4 +1,10 @@
-import { MEMBER_STATUSES, PANEL_ROLES, type PanelMember, type PanelRole } from '@pokatim/contracts';
+import {
+  MEMBER_STATUSES,
+  PANEL_MEMBER_LIST_CAP,
+  PANEL_ROLES,
+  type PanelMember,
+  type PanelRole,
+} from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createColumnHelper } from '@tanstack/react-table';
@@ -194,7 +200,7 @@ export function MembersScreen() {
           footer={
             truncated ? (
               <p className="table__more muted t-meta">
-                {t('admin.members.truncated', { count: 500 })}
+                {t('admin.members.truncated', { count: PANEL_MEMBER_LIST_CAP })}
               </p>
             ) : null
           }

@@ -10,6 +10,7 @@ import type { PanelRequest } from './current-panel-user.decorator';
 import { PanelGuard } from './panel.guard';
 import type { PanelMemberDoc, PanelSessionDoc } from './panel.collection';
 import type { PanelRepository } from './panel.repository';
+import { PanelSessionCheck } from './panel-session-check';
 import type { PanelSessionCookie } from './panel-session-cookie';
 import { PANEL_PUBLIC } from './public.decorator';
 import { PANEL_PERMISSION } from './require-permission.decorator';
@@ -53,7 +54,10 @@ function setup(
   const guard = new PanelGuard(
     reflector,
     repository as unknown as PanelRepository,
-    accounts as unknown as IdentityAccounts,
+    new PanelSessionCheck(
+      accounts as unknown as IdentityAccounts,
+      repository as unknown as PanelRepository,
+    ),
     cookie as unknown as PanelSessionCookie,
     { now: () => NOW },
   );

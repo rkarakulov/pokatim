@@ -50,6 +50,8 @@ export default defineConfig({
   },
   test: {
     include: ['src/**/*.test.{ts,tsx}'],
+    // реальная сеть в тестах запрещена (src/test/setup.ts)
+    setupFiles: ['src/test/setup.ts'],
     // время панели — Europe/Minsk (AGENTS.md §4.7): тесты не зависят от пояса машины
     env: { TZ: 'Europe/Minsk' },
   },

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
+import { onlineManager } from '@tanstack/react-query';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../api';
-import { currentHref, ME, networkError, renderApp, unauthorized } from '../test/app';
+import { currentHref, httpError, ME, networkError, renderApp, unauthorized } from '../test/app';
 
 vi.mock('../api', () => ({
   api: {
@@ -103,6 +104,45 @@ describe('каркас панели (AC10)', () => {
     expect(queryClient.getQueryData(['admin', 'me'])).toBeUndefined();
     expect(screen.queryByText('Сессия истекла')).toBeNull();
     expect(currentHref(router)).toBe('/admin/sign-in');
+  });
+
+  it.each([
+    ['сеть', networkError()],
+    ['5xx', httpError(503, 'INTERNAL')],
+  ])(
+    'выход не удался (%s) — остаёмся в панели, кэш цел, баннер с повтором; повтор выходит',
+    async (_case, failure) => {
+      mocked.me.mockResolvedValue(ME.admin);
+      mocked.signOut.mockRejectedValueOnce(failure).mockResolvedValueOnce(undefined);
+      const { router, queryClient } = await renderApp('/');
+      await screen.findByRole('heading', { name: 'Обзор' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Выйти' }));
+
+      expect(await screen.findByText('Не удалось выйти')).toBeTruthy();
+      expect(screen.getByText('Сессия панели ещё активна. Повторите выход.')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Обзор' })).toBeTruthy();
+      expect(currentHref(router)).toBe('/admin/');
+      expect(queryClient.getQueryData(['admin', 'me'])).toEqual(ME.admin);
+
+      mocked.me.mockRejectedValue(unauthorized());
+      fireEvent.click(screen.getByRole('button', { name: 'Повторить выход' }));
+      expect(await screen.findByRole('heading', { name: 'Вход в панель' })).toBeTruthy();
+      expect(mocked.signOut).toHaveBeenCalledTimes(2);
+      expect(queryClient.getQueryData(['admin', 'me'])).toBeUndefined();
+    },
+  );
+
+  it('браузер без сети при открытии панели — не вечный скелетон, а «Нет соединения» с повтором', async () => {
+    onlineManager.setOnline(false);
+    mocked.me.mockRejectedValue(networkError());
+    try {
+      await renderApp('/');
+      expect(await screen.findByText('Нет соединения')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it('«кто я» не загрузился из-за сети — «Нет соединения» с повтором; повтор открывает панель', async () => {

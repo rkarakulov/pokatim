@@ -62,6 +62,9 @@ export const PanelMember = z.object({
 });
 export type PanelMember = z.infer<typeof PanelMember>;
 
-/** `GET /v1/admin/members` (`members.read`): до 500 записей; `truncated` — есть ещё. */
+/** Предел списка «Сотрудники» без пагинации (сервер и подпись «показаны первые N» в UI). */
+export const PANEL_MEMBER_LIST_CAP = 500;
+
+/** `GET /v1/admin/members` (`members.read`): до `PANEL_MEMBER_LIST_CAP` записей; `truncated` — есть ещё. */
 export const PanelMemberList = z.object({ items: z.array(PanelMember), truncated: z.boolean() });
 export type PanelMemberList = z.infer<typeof PanelMemberList>;

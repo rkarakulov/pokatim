@@ -5,7 +5,7 @@ import { type ErrorComponentProps, Link, Outlet, useRouter } from '@tanstack/rea
 import { api } from '../api';
 import { NAVIGATION, type NavItem } from '../navigation';
 import { useMe } from '../session/me';
-import { AppShell, ErrorState } from '../ui';
+import { AppShell, Banner, Button, ErrorState } from '../ui';
 
 function NavLinks({ items }: { items: readonly NavItem[] }) {
   return items.map((item) => (
@@ -32,7 +32,9 @@ export function AppLayout() {
   const signOut = useMutation({
     mutationFn: () => api.signOut(),
     meta: { ownsUnauthorized: true },
-    onSettled: async () => {
+    // только подтверждённый сервером выход: при сети или 5xx cookie и серверная сессия живы — пользователь остаётся
+    // в панели и видит ошибку с повтором (иначе «Вход» обманывал бы: `/admin/` открылся бы снова без пароля)
+    onSuccess: async () => {
       queryClient.clear();
       await router.navigate({ to: '/sign-in', search: {} });
     },
@@ -61,6 +63,20 @@ export function AppLayout() {
         </button>
       }
     >
+      {signOut.isError ? (
+        <Banner
+          tone="error"
+          role="alert"
+          title={t('admin.shell.signOutFailed')}
+          actions={
+            <Button size="sm" busy={signOut.isPending} onClick={() => signOut.mutate()}>
+              {t('admin.shell.signOutRetry')}
+            </Button>
+          }
+        >
+          {t('admin.shell.signOutFailedMessage')}
+        </Banner>
+      ) : null}
       <Outlet />
     </AppShell>
   );

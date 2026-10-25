@@ -205,6 +205,12 @@ describe('«Сотрудники» (AC11)', () => {
     expect(await screen.findByRole('heading', { name: 'Нет доступа к разделу' })).toBeTruthy();
   });
 
+  it('список обрезан сервером — подпись с пределом из контракта', async () => {
+    mocked.listMembers.mockResolvedValue({ ...LIST, truncated: true });
+    await renderApp('/members');
+    expect(await screen.findByText('Показаны первые 500 сотрудников.')).toBeTruthy();
+  });
+
   it('пусто — пустое состояние', async () => {
     mocked.listMembers.mockResolvedValue({ items: [], truncated: false });
     await renderApp('/members');

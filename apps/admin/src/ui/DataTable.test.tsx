@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -7,7 +7,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { httpError, networkError } from '../test/app';
 import { DataTable, SKELETON_ROWS } from './DataTable';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  onlineManager.setOnline(true);
+});
 
 interface Row {
   id: string;
@@ -113,6 +116,21 @@ describe('DataTable (AGENTS.md §4.12, AC11)', () => {
     cleanup();
     renderTable(() => Promise.reject(httpError(500, 'INTERNAL')));
     expect(await screen.findByText('Не удалось загрузить')).toBeTruthy();
+  });
+
+  it('нет сети до первой загрузки (запрос на паузе) — «Нет соединения» с повтором, фильтры видны; сеть вернулась — данные', async () => {
+    onlineManager.setOnline(false);
+    const load = vi.fn().mockResolvedValue(ROWS);
+    renderTable(load);
+
+    expect(await screen.findByText('Нет соединения')).toBeTruthy();
+    expect(screen.getByText('Фильтр')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
+    expect(screen.queryAllByTestId('skeleton-row')).toHaveLength(0);
+    expect(load).not.toHaveBeenCalled();
+
+    onlineManager.setOnline(true);
+    expect(await screen.findByText('Анна')).toBeTruthy();
   });
 
   it('ошибка обновления при показанных данных — данные остаются, сверху баннер с повтором', async () => {

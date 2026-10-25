@@ -10,11 +10,11 @@ import type { Permission } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 import { domainError } from '../../error-messages';
-import { IdentityAccounts, sha256 } from '../identity';
+import { sha256 } from '../identity';
 import type { PanelRequest } from './current-panel-user.decorator';
-import type { PanelSessionRevokedReason } from './panel.collection';
 import { PANEL_POLICY } from './panel.policy';
 import { PanelRepository } from './panel.repository';
+import { PanelSessionCheck } from './panel-session-check';
 import { PanelSessionCookie } from './panel-session-cookie';
 import { permissionsOf } from './permissions';
 import { PANEL_PUBLIC } from './public.decorator';
@@ -34,7 +34,7 @@ export class PanelGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly repository: PanelRepository,
-    private readonly accounts: IdentityAccounts,
+    private readonly check: PanelSessionCheck,
     private readonly cookie: PanelSessionCookie,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -58,21 +58,13 @@ export class PanelGuard implements CanActivate {
     const session = await this.repository.findLiveSession(sha256(token), now);
     if (!session) throw deny();
 
-    const account = await this.accounts.accountState(session.userId);
-    const reason: PanelSessionRevokedReason | undefined = !account?.active
-      ? 'account_inactive'
-      : account.credentialsStamp !== session.credentialsStamp
-        ? 'credentials_changed'
-        : undefined;
-    const member = reason ? undefined : await this.repository.findActiveMember(session.userId);
-    const refused = reason ?? (member ? undefined : 'role_revoked');
-    if (refused || !member) {
-      await this.repository.revokeSession({ id: session._id }, now, refused ?? 'role_revoked');
-      this.logger.log(
-        `сессия панели отозвана sid=${session._id} reason=${refused ?? 'role_revoked'}`,
-      );
+    const verdict = await this.check.verdict(session);
+    if (!verdict.valid) {
+      await this.repository.revokeSession({ id: session._id }, now, verdict.reason);
+      this.logger.log(`сессия панели отозвана sid=${session._id} reason=${verdict.reason}`);
       throw deny();
     }
+    const { member } = verdict;
 
     const permissions = permissionsOf(member.role);
     request.panel = {

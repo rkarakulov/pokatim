@@ -18,8 +18,17 @@ export function EmptyState({ title, children }: { title: ReactNode; children?: R
  * Ошибка без данных (AGENTS.md §4.12): сетевая — «Нет соединения», ответ сервера — «Не удалось загрузить»; всегда с
  * повтором.
  */
-export function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const offline = isNetworkError(error);
+export function ErrorState({
+  error,
+  offline: paused = false,
+  onRetry,
+}: {
+  error: unknown;
+  /** Запрос на паузе без сети (TanStack Query `fetchStatus: 'paused'`) — тоже «Нет соединения». */
+  offline?: boolean;
+  onRetry: () => void;
+}) {
+  const offline = paused || isNetworkError(error);
   return (
     <div className="state" role="alert">
       <p className="t-title-sm">{t(offline ? 'state.errorTitle' : 'state.failedTitle')}</p>

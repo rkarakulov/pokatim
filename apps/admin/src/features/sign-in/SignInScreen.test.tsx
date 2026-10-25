@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
@@ -98,6 +98,9 @@ describe('вход в панель — без сессии (AC9)', () => {
   });
 
   it('«E-mail не подтверждён»: повтор письма с токеном из ответа, затем пауза с отсчётом; «Вернуться ко входу»', async () => {
+    // часы заморожены (Date и интервал отсчёта), остальные таймеры — настоящие: отсчёт детерминирован
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date('2026-10-25T10:00:00.000Z'));
     mocked.signIn.mockResolvedValue({
       state: 'verificationRequired',
       registrationToken: TOKEN,
@@ -115,7 +118,18 @@ describe('вход в панель — без сессии (AC9)', () => {
 
     await waitFor(() => expect(resend).toHaveProperty('disabled', true));
     expect(mocked.resendVerification).toHaveBeenCalledWith({ registrationToken: TOKEN });
-    expect(screen.getByText(/Повторно — через (59|60|61) с/)).toBeTruthy();
+    expect(screen.getByText('Повторно — через 60 с')).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(screen.getByText('Повторно — через 30 с')).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(resend).toHaveProperty('disabled', false);
+    expect(screen.queryByText(/Повторно — через/)).toBeNull();
+
     fireEvent.click(screen.getByRole('button', { name: 'Вернуться ко входу' }));
     expect(await screen.findByRole('heading', { name: 'Вход в панель' })).toBeTruthy();
   });

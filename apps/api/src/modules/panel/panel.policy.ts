@@ -1,3 +1,5 @@
+import { PANEL_MEMBER_LIST_CAP } from '@pokatim/contracts';
+
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 
@@ -10,7 +12,7 @@ export const PANEL_POLICY = {
   /** Продление простоя пишется не чаще раза в N: гард не пишет в БД на каждом запросе. */
   touchIntervalMs: 5 * MINUTE_MS,
   /** Список «Сотрудники» — без пагинации до этого предела. */
-  memberListCap: 500,
+  memberListCap: PANEL_MEMBER_LIST_CAP,
 } as const;
 
 /** Удалённый аккаунт в ответах панели вместо e-mail и имени. */

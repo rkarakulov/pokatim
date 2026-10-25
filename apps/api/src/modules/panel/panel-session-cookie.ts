@@ -1,6 +1,5 @@
 import { type CookieSerializeOptions, Inject, Injectable } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
-import { getRequestCookie } from '@nestjs/core/helpers/cookies/request-cookies.js';
 import { OpaqueToken, PANEL_SESSION_COOKIE } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
@@ -16,8 +15,36 @@ const ATTRIBUTES = {
 } as const satisfies CookieSerializeOptions;
 
 /**
+ * Значение cookie запроса: `request.cookies`, если его заполнил плагин, иначе — разбор заголовка `Cookie` (адаптер
+ * Fastify без `@fastify/cookie` объект не заполняет; `@Cookies()` Nest разбирает заголовок так же). Только собственные
+ * ключи; значение проверяет вызывающий (`OpaqueToken`).
+ */
+export function requestCookie(request: unknown, name: string): string | undefined {
+  const { cookies, headers } = request as {
+    cookies?: Record<string, string | undefined>;
+    headers?: Record<string, unknown>;
+  };
+  if (cookies && typeof cookies === 'object') {
+    return Object.hasOwn(cookies, name) ? cookies[name] : undefined;
+  }
+  const header = headers?.cookie;
+  if (typeof header !== 'string') return undefined;
+  for (const part of header.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 0 || part.slice(0, separator).trim() !== name) continue;
+    const raw = part.slice(separator + 1).trim();
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Cookie сессии панели (ADR-0009): идентификатор генерирует только сервер при входе (фиксация невозможна),
- * `Max-Age` — остаток абсолютного срока. Разбор — тот же, что у `@Cookies()` Nest.
+ * `Max-Age` — остаток абсолютного срока.
  */
 @Injectable()
 export class PanelSessionCookie {
@@ -28,7 +55,7 @@ export class PanelSessionCookie {
 
   /** Токен из cookie запроса: мусор и отсутствие — `undefined` (до БД). `presented` — cookie была. */
   read(request: unknown): { token: string | undefined; presented: boolean } {
-    const value = getRequestCookie(request as Record<string, unknown>, PANEL_SESSION_COOKIE.name);
+    const value = requestCookie(request, PANEL_SESSION_COOKIE.name);
     const parsed = OpaqueToken.safeParse(value);
     return { token: parsed.success ? parsed.data : undefined, presented: value !== undefined };
   }
