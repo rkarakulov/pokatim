@@ -118,6 +118,8 @@ export default function RootLayout() {
         {/* публичные карточки по ссылке (блок 03, Q8): гость и вошедший; на native — поверх вкладок, без таб-бара */}
         <Stack.Screen name="races/[id]" />
         <Stack.Screen name="seasons/[id]" />
+        {/* публичная карточка старта календаря (блок 04) — так же */}
+        <Stack.Screen name="calendar/[id]" />
       </Stack>
       <StatusBar style="auto" />
     </QueryClientProvider>

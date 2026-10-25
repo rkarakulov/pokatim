@@ -211,6 +211,17 @@ describe('Главная: разделы (S4)', () => {
     expect(screen.getByText('Регистрация у организатора.')).toBeOnTheScreen();
   });
 
+  it('герой старта — ссылка в карточку /calendar/<id> (блок 04)', async () => {
+    const router = await renderRouter(
+      { ...tabRoutes, 'calendar/[id]': () => null },
+      { initialUrl: '/', wrapper: createQueryWrapper() },
+    );
+    await fireEvent.press(
+      await screen.findByRole('link', { name: 'Ближайший старт. Минская сотка. 14 июня 2027' }),
+    );
+    expect(router.getPathname()).toBe(`/calendar/${start.id}`);
+  });
+
   it('многодневный старт без ссылки регистрации — диапазон, строки регистрации нет', async () => {
     listCalendar.mockResolvedValue(
       calendarPage({

@@ -141,9 +141,16 @@ export default function HomeScreen() {
                 render: () => <EmptyState title={t('calendar.empty')} />,
               }}
             >
-              {(page) =>
-                page.items[0] ? <CalendarStartHero start={page.items[0]} now={now} /> : null
-              }
+              {(page) => {
+                const start = page.items[0];
+                return start ? (
+                  <CalendarStartHero
+                    start={start}
+                    now={now}
+                    onPress={() => router.push(`/calendar/${start.id}`)}
+                  />
+                ) : null;
+              }}
             </HomeSection>
           );
         })}

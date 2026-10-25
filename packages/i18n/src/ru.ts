@@ -141,6 +141,7 @@ export const ru = {
   'calendar.detail.startAt': 'Старт в {time} · {place}',
   'calendar.detail.startAtOnly': 'Старт в {time}',
   'calendar.detail.distance': 'Дистанция',
+  'calendar.detail.km': 'км',
   'calendar.detail.register': 'Регистрация у организатора',
   'calendar.detail.registerHint': 'Откроется сайт организатора. Регистрация и оплата — там.',
   'calendar.detail.finished': 'Старт прошёл.',
