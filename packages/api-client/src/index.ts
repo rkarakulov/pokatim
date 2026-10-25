@@ -4,6 +4,7 @@ import {
   ConfirmVerificationResponse,
   type ErrorCode,
   HealthResponse,
+  OnboardingStatus,
   PasswordResetLinkInfo,
   RefreshSessionResponse,
   RegisterResponse,
@@ -22,6 +23,7 @@ import {
   type SessionTransport,
   type SignInRequest,
   type SignOutRequest,
+  type SubmitOnboardingSurveyRequest,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -78,6 +80,11 @@ export function createApiClient({
     request(path, schema, { method: 'GET', ...withCredentials });
   const post = <S extends z.ZodType>(path: string, schema: S, body: unknown) =>
     request(path, schema, { method: 'POST', body: JSON.stringify(body), ...withCredentials });
+  /** Запрос под `AuthGuard`: access — явным параметром, только в методы, требующие входа (R2). */
+  const authorized = (accessToken: string, init: RequestInit): RequestInit => ({
+    ...init,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
   /** Транспорт сессии платформы — в тело запросов, которые выдают сессию. */
   const withTransport = <B extends object>(body: B) =>
     sessionTransport ? { sessionTransport, ...body } : body;
@@ -111,6 +118,20 @@ export function createApiClient({
     /** Смена пароля по ссылке: отзывает все сессии аккаунта, свою не выдаёт. */
     confirmPasswordReset: (body: ConfirmPasswordResetRequest) =>
       post('/v1/auth/password-reset/confirm', ConfirmPasswordResetResponse, body),
+    /** Статус онбординга (вход обязателен): только признак «опрос пройден». */
+    getOnboardingStatus: (accessToken: string) =>
+      request(
+        '/v1/profile/onboarding',
+        OnboardingStatus,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Ответ опроса «Что вас привело?» (вход обязателен); повтор перезаписывает ответ. */
+    submitOnboardingSurvey: (accessToken: string, body: SubmitOnboardingSurveyRequest) =>
+      request(
+        '/v1/profile/onboarding/survey',
+        OnboardingStatus,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
   };
 }
 

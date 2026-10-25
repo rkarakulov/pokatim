@@ -5,3 +5,4 @@ export * from './auth/verification.schema.ts';
 export * from './auth/session.schema.ts';
 export * from './auth/sign-in.schema.ts';
 export * from './auth/password-reset.schema.ts';
+export * from './profile/onboarding.schema.ts';

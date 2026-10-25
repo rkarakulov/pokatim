@@ -1,0 +1,59 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  OnboardingStatus,
+  RIDE_REASONS,
+  RideReason,
+  SubmitOnboardingSurveyRequest,
+} from './onboarding.schema.ts';
+
+const fieldCodes = (input: unknown) => {
+  const result = SubmitOnboardingSurveyRequest.safeParse(input);
+  if (result.success) return [];
+  return result.error.issues.map((issue) => [issue.path.join('.'), issue.message]);
+};
+
+describe('RideReason', () => {
+  it('коды ответа — в порядке экрана; новые только добавляются в конец (R7)', () => {
+    expect(RIDE_REASONS).toEqual(['races', 'group_rides', 'routes', 'calendar', 'exploring']);
+    expect(RideReason.safeParse('other').success).toBe(false);
+  });
+});
+
+describe('SubmitOnboardingSurveyRequest', () => {
+  it('один вариант и все варианты сразу', () => {
+    expect(SubmitOnboardingSurveyRequest.parse({ reasons: ['routes'] })).toEqual({
+      reasons: ['routes'],
+    });
+    expect(SubmitOnboardingSurveyRequest.parse({ reasons: [...RIDE_REASONS] })).toEqual({
+      reasons: [...RIDE_REASONS],
+    });
+  });
+
+  it('пустой массив и отсутствие ответа — REQUIRED', () => {
+    expect(fieldCodes({ reasons: [] })).toEqual([['reasons', 'REQUIRED']]);
+    expect(fieldCodes({})).toEqual([['reasons', 'REQUIRED']]);
+  });
+
+  it('неизвестное значение, повтор, не-массив, объект-оператор — ошибка', () => {
+    expect(fieldCodes({ reasons: ['races', 'other'] })).toEqual([['reasons.1', 'INVALID']]);
+    expect(fieldCodes({ reasons: ['races', 'races'] })).toEqual([['reasons', 'INVALID']]);
+    expect(fieldCodes({ reasons: 'races' })).toEqual([['reasons', 'REQUIRED']]);
+    expect(SubmitOnboardingSurveyRequest.safeParse({ reasons: { $ne: null } }).success).toBe(false);
+    expect(SubmitOnboardingSurveyRequest.safeParse({ reasons: [{ $gt: '' }] }).success).toBe(false);
+  });
+
+  it('лишний ключ — ошибка', () => {
+    expect(
+      SubmitOnboardingSurveyRequest.safeParse({ reasons: ['races'], userId: 'x' }).success,
+    ).toBe(false);
+  });
+});
+
+describe('OnboardingStatus', () => {
+  it('только признак «опрос пройден», boolean', () => {
+    expect(OnboardingStatus.parse({ surveyCompleted: true })).toEqual({ surveyCompleted: true });
+    expect(OnboardingStatus.safeParse({ surveyCompleted: 'yes' }).success).toBe(false);
+    expect(OnboardingStatus.safeParse({}).success).toBe(false);
+  });
+});
