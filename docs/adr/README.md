@@ -41,3 +41,4 @@ ADR нужен, когда решение: меняет инвариант `AGEN
 | [0007](0007-mongodb.md) | MongoDB вместо PostgreSQL + PostGIS: replica set, сериализация аккаунта `$inc version`, геостратегия | Accepted |
 | [0008](0008-request-authorization.md) | Авторизация запросов: access JWT + живая сессия `sid`; авто-refresh access в приложении | Accepted |
 | [0009](0009-admin-panel-access.md) | Доступ к панели «Протокол»: роль на аккаунте приложения, отдельная серверная сессия панели, штамп учётных данных, журнал; тот же домен `/admin/` — принятый риск | Accepted |
+| [0010](0010-races-seasons-calendar.md) | Гонки по коридору, сезоны и календарь стартов: модули `races` (сезоны внутри) и `calendar`, время Минска, замок расписания, оптимистичная версия, `tolerantEnum` | Accepted |

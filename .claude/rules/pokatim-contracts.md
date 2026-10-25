@@ -12,3 +12,10 @@ paths:
   не присылает.
 - Коды ошибок pokatim добавляются в конец `defineErrorCodes` / `defineFieldErrorCodes` (`common.ts`): установленные
   приложения знают прежний состав.
+- Enum-ы в **ответах приложения** (класс, покрытие, фаза, причина, дисциплина) — `tolerantEnum(values)` (`common.ts`):
+  незнакомое значение — `'unknown'`, UI приложения показывает нейтральный вариант. Запросы и ответы панели — строгий
+  `z.enum`. Значения справочников — только в конец.
+- Время платформы — только `src/time.ts`: `LocalDate`, `LocalTime`, `YearMonth`, `UtcMinute`, `minskWallTimeToUtc`,
+  `utcToMinskWallTime`, `minskDayStartUtc`, `minskToday`, `addLocalDays`. Перевод «по месту» (`+3 ч`,
+  `new Date(local)`) — нет.
+- Массив фильтра в query — `queryArray(item, max)` (одна строка → массив, длина ограничена).
