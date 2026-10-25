@@ -1,0 +1,28 @@
+{
+  "garmin-edge-ride.fit": {
+    "distanceM": 30085.63909873223,
+    "elapsedSec": 4083,
+    "pauseSec": 120,
+    "elevationGainM": 160,
+    "points": 4084
+  },
+  "wahoo-elemnt-ride.fit": {
+    "distanceM": 15201.165007036354,
+    "elapsedSec": 2339,
+    "elevationGainM": 40,
+    "points": 2340
+  },
+  "watch-run.fit": {
+    "distanceM": 5067.055001557014,
+    "points": 1691
+  },
+  "two-sessions.fit": {
+    "distanceM": 12160.932004523418,
+    "points": 2084
+  },
+  "gpx": {
+    "distanceM": 6333.8187515959335,
+    "elapsedSec": 905,
+    "points": 906
+  }
+}

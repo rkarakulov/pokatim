@@ -27,7 +27,8 @@ module.exports = {
       comment: 'Импорт пакета только через его точку входа (src/index.ts), без deep imports',
       severity: 'error',
       from: { pathNot: '^packages/([^/]+)/' },
-      to: { path: '^packages/[^/]+/src/(?!index\\.ts$)' },
+      // src/parse.ts — второй вход @pokatim/tracks (`@pokatim/tracks/parse`, парсеры только для worker API)
+      to: { path: '^packages/[^/]+/src/(?!(index|parse)\\.ts$)' },
     },
     {
       name: 'api-module-public-api-only',

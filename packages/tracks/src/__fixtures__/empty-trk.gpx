@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <wpt lat="53.9006" lon="27.559"><name>Точка</name></wpt>
+  <rte><rtept lat="53.9006" lon="27.559"/><rtept lat="53.91" lon="27.57"/></rte>
+  <trk><name>Пусто</name><trkseg></trkseg></trk>
+</gpx>

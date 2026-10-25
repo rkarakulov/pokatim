@@ -1,0 +1,127 @@
+// Вход для worker API (`@pokatim/tracks/parse`): разбор FIT/GPX (@garmin/fitsdk, fast-xml-parser) и потока
+// агрегатора (node:zlib). Грузится Node напрямую (type stripping, `--conditions=@pokatim/source`) — только
+// стираемый синтаксис TS.
+import { gzipSync, gunzipSync } from 'node:zlib';
+
+import { detectTrackFormat } from './format.ts';
+import { parseFit } from './fit.ts';
+import { parseGpx } from './gpx.ts';
+import { checkPlausibility } from './plausibility.ts';
+import { sanitizePoints } from './points.ts';
+import { simplifyTrack } from './simplify.ts';
+import { parseStream, type TrackStreamV1 } from './stream.ts';
+import { summarizeTrack } from './summary.ts';
+import {
+  TRACK_MAX_POINTS,
+  TRACK_STREAM_MAX_POINTS,
+  TrackParseError,
+  type ActivitySport,
+  type ParsedTrack,
+  type TrackFormat,
+} from './track.ts';
+
+export { parseFit } from './fit.ts';
+export { parseGpx } from './gpx.ts';
+export { parseStream, TrackStreamV1 } from './stream.ts';
+export {
+  TRACK_MAX_POINTS,
+  TRACK_STREAM_MAX_POINTS,
+  TrackParseError,
+  type ActivitySport,
+  type ParsedPoint,
+  type ParsedTrack,
+  type TrackFailureCode,
+  type TrackFormat,
+} from './track.ts';
+
+/** Предел распакованного потока, байт: больше — `unreadable` (gzip-бомба). 300 000 точек ≈ 15 МиБ JSON. */
+export const TRACK_STREAM_MAX_JSON_BYTES = 64 * 1024 * 1024;
+
+/** Допуск упрощения линии, м, и предел точек линии в `activity_tracks`. */
+const LINE_TOLERANCE_M = 5;
+const LINE_MAX_POINTS = 1000;
+
+/** Итог разбора для worker: только сериализуемые значения (structured clone), без значений пульса и мощности. */
+export interface TrackAnalysis {
+  format: TrackFormat;
+  sport: ActivitySport;
+  startedAt: Date;
+  endedAt: Date;
+  elapsedSec: number;
+  movingSec: number;
+  distanceM: number;
+  elevationGainM: number | null;
+  hasHeartRate: boolean;
+  hasPower: boolean;
+  /** [lon, lat] */
+  startPoint: [number, number];
+  /** [lon, lat], упрощённая: ≤ 1000 точек, ≥ 2 различных точек или `[]` */
+  line: [number, number][];
+  sourcePointCount: number;
+}
+
+/** Поток агрегатора → байты для хранилища: JSON, gzip. Вход не проверяется — его собирает адаптер API по типу. */
+export function encodeTrackStream(stream: TrackStreamV1): Uint8Array {
+  return gzipSync(JSON.stringify(stream));
+}
+
+/** Распаковка и разбор потока: битый gzip, превышение `TRACK_STREAM_MAX_JSON_BYTES`, не JSON — `unreadable`. */
+export function decodeTrackStream(bytes: Uint8Array): ParsedTrack {
+  let json: unknown;
+  try {
+    const text = gunzipSync(bytes, { maxOutputLength: TRACK_STREAM_MAX_JSON_BYTES }).toString(
+      'utf8',
+    );
+    json = JSON.parse(text);
+  } catch {
+    throw new TrackParseError('unreadable');
+  }
+  return parseStream(json);
+}
+
+/** Файл FIT/GPX: формат по сигнатуре; не FIT и не GPX — `unreadable`. GPX — UTF-8 (BOM снимается). */
+export function parseTrackFile(bytes: Uint8Array): ParsedTrack {
+  const format = detectTrackFormat(bytes);
+  if (format === 'fit') return parseFit(bytes);
+  if (format === 'gpx') return parseGpx(new TextDecoder('utf-8').decode(bytes));
+  throw new TrackParseError('unreadable');
+}
+
+/**
+ * Всё для worker одним вызовом: разбор → лимит точек → очистка → правдоподобие → итоги → линия.
+ * `format` — из документа загрузки; для FIT/GPX сверяется с сигнатурой (расхождение — `unreadable`).
+ * Лимит точек: файл — `TRACK_MAX_POINTS`, поток — `TRACK_STREAM_MAX_POINTS`. Отказ — `TrackParseError` с кодом.
+ */
+export function analyzeTrack(bytes: Uint8Array, format: TrackFormat, now: Date): TrackAnalysis {
+  let track: ParsedTrack;
+  if (format === 'stream') {
+    track = decodeTrackStream(bytes);
+  } else {
+    if (detectTrackFormat(bytes) !== format) throw new TrackParseError('unreadable');
+    track = parseTrackFile(bytes);
+  }
+  const maxPoints = format === 'stream' ? TRACK_STREAM_MAX_POINTS : TRACK_MAX_POINTS;
+  if (track.points.length > maxPoints) throw new TrackParseError('too_many_points');
+  const points = sanitizePoints(track.points);
+  const failure = checkPlausibility(track, points, now);
+  if (failure !== null) throw new TrackParseError(failure);
+  const summary = summarizeTrack(points);
+  const line = simplifyTrack(points, LINE_TOLERANCE_M, LINE_MAX_POINTS);
+  const start = points[0]!;
+
+  return {
+    format: track.format,
+    sport: track.sport,
+    startedAt: summary.startedAt,
+    endedAt: summary.endedAt,
+    elapsedSec: summary.elapsedSec,
+    movingSec: summary.movingSec,
+    distanceM: summary.distanceM,
+    elevationGainM: summary.elevationGainM,
+    hasHeartRate: track.hasHeartRate,
+    hasPower: track.hasPower,
+    startPoint: [start.lon, start.lat],
+    line: line.map((point): [number, number] => [point.lon, point.lat]),
+    sourcePointCount: track.points.length,
+  };
+}
