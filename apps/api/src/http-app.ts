@@ -8,7 +8,7 @@ import type { Env } from './config/env';
 /**
  * HTTP-конфигурация pokatim поверх базы до `app.init()` — одна для `main.ts`, теста `http-app.test.ts` и стенда
  * int-тестов (`test/harness.ts`, `configureApp`):
- * - CORS с credentials — только для `CORS_ORIGINS` (dev: web на другом порту того же хоста шлёт cookie
+ * - CORS с credentials — только для `CORS_ORIGINS` (методы GET/HEAD/POST/PUT, заголовок `Authorization`) (dev: web на другом порту того же хоста шлёт cookie
  *   сессии); пусто — CORS выключен (прод: web и API за одним origin);
  * - CSRF — Fetch Metadata (`Sec-Fetch-Site`) с fallback `Origin`/`Host` глобально: небезопасный запрос
  *   с чужого сайта → 403, native без этих заголовков проходит. Доверены только те же `CORS_ORIGINS`.
@@ -20,7 +20,13 @@ export function configureHttp(
 ): NestFastifyApplication {
   configureHttpApp(app, { prefix: API_VERSION });
   if (env.CORS_ORIGINS.length > 0) {
-    app.enableCors({ origin: env.CORS_ORIGINS, credentials: true });
+    // методы — явно: по умолчанию @fastify/cors разрешает только GET/HEAD/POST, а профиль пишется PUT;
+    // заголовки не задаются — отражаются запрошенные (Authorization авторизованных эндпоинтов)
+    app.enableCors({
+      origin: env.CORS_ORIGINS,
+      credentials: true,
+      methods: ['GET', 'HEAD', 'POST', 'PUT'],
+    });
   } else if (env.NODE_ENV !== 'production') {
     new Logger('Http').warn(
       'CORS_ORIGINS пуст: браузер с другого origin (web в dev) не получит ответы API — задайте origin-ы web (apps/api/.env.example)',

@@ -164,6 +164,23 @@ describe('configureHttp: CORS с credentials только для CORS_ORIGINS', 
     expect(res.headers['access-control-allow-credentials']).toBe('true');
   });
 
+  it('preflight PUT с заголовком authorization (авторизованные эндпоинты) — разрешён', async () => {
+    const res = await (
+      await createApp([DEV_WEB])
+    ).inject({
+      method: 'OPTIONS',
+      url: '/v1/probe',
+      headers: {
+        origin: DEV_WEB,
+        'access-control-request-method': 'PUT',
+        'access-control-request-headers': 'authorization,content-type',
+      },
+    });
+    expect(res.headers['access-control-allow-origin']).toBe(DEV_WEB);
+    expect(String(res.headers['access-control-allow-methods'])).toMatch(/\bPUT\b/);
+    expect(String(res.headers['access-control-allow-headers'])).toMatch(/authorization/i);
+  });
+
   it('preflight с чужого origin → без Allow-Origin (браузер не пустит запрос и не отдаст ответ)', async () => {
     const res = await preflight(await createApp([DEV_WEB]), 'https://evil.example');
     expect(res.headers['access-control-allow-origin']).toBeUndefined();

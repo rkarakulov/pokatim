@@ -3,8 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
 import { IDENTITY_COLLECTIONS } from '../../modules/identity/identity.collection';
+import { PROFILE_COLLECTIONS } from '../../modules/profile/profile.collection';
 import { IDENTITY_INDEXES } from './0002_identity';
 import { IDENTITY_TTL_SECONDS } from './0003_identity_ttl';
+import { profile } from './0004_profile';
 import { migrations } from './index';
 
 let h: Harness;
@@ -34,7 +36,7 @@ async function indexesOf(collection: string) {
 }
 
 describe('миграции MongoDB на чистой *_test (AC5)', () => {
-  it('применены по порядку: 0001_outbox, 0002_identity, 0003_identity_ttl', async () => {
+  it('применены по порядку: 0001_outbox, 0002_identity, 0003_identity_ttl, 0004_profile', async () => {
     const applied = await h.db
       .collection<{ _id: string }>(MIGRATIONS_COLLECTION)
       .find()
@@ -44,7 +46,20 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0001_outbox',
       '0002_identity',
       '0003_identity_ttl',
+      '0004_profile',
     ]);
+  });
+
+  it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {
+    const exists = () =>
+      h.db.listCollections({ name: PROFILE_COLLECTIONS.profiles }, { nameOnly: true }).toArray();
+    expect(await exists()).toHaveLength(1);
+    expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toEqual({});
+
+    await h.db.collection(PROFILE_COLLECTIONS.profiles).drop();
+    await profile.up(h.db);
+    await profile.up(h.db);
+    expect(await exists()).toHaveLength(1);
   });
 
   it('индексы identity: имена, ключи, unique, partialFilterExpression; TTL 30 дней (Q2)', async () => {

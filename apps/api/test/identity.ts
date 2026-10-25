@@ -1,3 +1,4 @@
+import { RegisterResponse, RegistrationPollResponse, Session } from '@pokatim/contracts';
 import { OUTBOX_COLLECTION, type MongoOutboxDoc } from '@rkarakulov/api-kit/mongo';
 import type { ClientSession } from 'mongodb';
 import { onTestFinished, vi } from 'vitest';
@@ -40,7 +41,7 @@ export interface CallResult {
 
 export async function call(
   h: Harness,
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PUT' | 'OPTIONS',
   url: string,
   payload?: unknown,
   headers: Record<string, string> = {},
@@ -81,6 +82,18 @@ export const poll = (h: Harness, registrationToken: string, sessionTransport?: '
     registrationToken,
     ...(sessionTransport ? { sessionTransport } : {}),
   });
+
+/** Регистрация → подтверждение → poll (native): сессия с access и refresh в теле. */
+export async function signUpSession(h: Harness, email = 'rider@example.com'): Promise<Session> {
+  const registered = RegisterResponse.parse((await register(h, { email })).body);
+  await confirm(h, await activeLinkToken(h, email));
+  const polled = RegistrationPollResponse.parse((await poll(h, registered.registrationToken)).body);
+  if (polled.state !== 'verified') throw new Error('expected verified');
+  return Session.parse(polled.session);
+}
+
+/** Заголовок `Authorization` с access сессии. */
+export const bearer = (accessToken: string) => ({ authorization: `Bearer ${accessToken}` });
 
 export const resend = (h: Harness, body: Record<string, string>) =>
   call(h, 'POST', '/v1/auth/verification/resend', body);
