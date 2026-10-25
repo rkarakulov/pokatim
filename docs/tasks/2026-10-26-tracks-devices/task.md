@@ -469,6 +469,46 @@ _Ответы автора и отклонения при реализации �
 - Эталон поведения провайдерской части — интеграция OW соседнего проекта (порт, адаптер, синхронизация; только
   чтение). Расхождения spec ↔ эталон фиксируются в §12.
 
+**Отклонения при реализации (кодер, 2026-10-26)**
+
+- **D1. GPX с `<!DOCTYPE`/`<!ENTITY`** отвергается уже при загрузке — `415 TRACK_FORMAT_UNSUPPORTED`
+  (`detectTrackFormat` не признаёт DTD перед корнем), а не `failed: unreadable` после разбора (AC2): файл не
+  попадает в хранилище и в worker. Разбор `parseGpx` отказывает так же (unit-тесты пакета).
+- **D2. `checkPlausibility(raw, sanitized, now)`** вместо `(track, now)`: правилу «осталось < 50 %» нужны обе выборки.
+  `ParsedPoint` сохранил внутренние `hr`/`power`/`cadence` (только для флагов; наружу и в БД не выходят).
+- **D3. Дедуп:** две активности одного провайдера (`garmin`/`garmin`, `wahoo`/`wahoo`) — не дубль (как в эталоне:
+  объект провайдера уникален по `sourceRef`); ручные загрузки сравниваются со всеми. Допуск длительности —
+  `max(5 %, 1 с)` (эталон).
+- **D4. `DEPLOY_STAGE`** (`dev` | `prod`, по умолчанию `prod`): dev-сервер работает с `NODE_ENV=production`, и запрет
+  `OW_SHARED_INSTANCE=true` «в production» уронил бы dev. Запрет (и `exp://` в `DEVICE_RETURN_URLS`) — при
+  `NODE_ENV=production` и `DEPLOY_STAGE=prod`; compose dev задаёт `DEPLOY_STAGE: dev`.
+- **D5. Пустые необязательные переменные** (`OW_API_KEY=` из шаблона `.env`) — как не заданные (иначе AC16 падал бы).
+- **D6. Ключ pull:** BullMQ 6 не принимает свой `jobId` с одним `:` — `ow-pull:<id>` стал ключом дедупликации
+  (`deduplication.id`, задача ждёт — новая не ставится); отложенный pull через 3 мин — `ow-pull-late:<id>`. Задача
+  `historical` отдельно не ставится: историческая выгрузка — в обработчике `devices.connected` (один раз на активацию).
+- **D7. `/timeseries`:** `types` — повторяемый параметр (в OW 0.9 `list[SeriesType]`, через запятую — 400; эталон эту
+  ошибку молча глотает), плюс фильтр `provider` подключения; даты окна тренировок — `YYYY-MM-DD` (эталон).
+- **D8. Коды HTTP:** `DEVICE_LINK_INVALID` — 400, `DEVICE_PROVIDER_ERROR` — 503, повторный `connect` при `active` без
+  проблемы — 409 `CONFLICT` (spec статусы не задавал).
+- **D9. Вебхук:** фактический лимит тела — 64 КБ (глобальный `bodyLimit` JSON срабатывает после хука сырого тела), а
+  не 256 КБ; события `workout.created`/`connection.*` в него укладываются, timeseries-события OW (до ~500 КБ) не
+  подписывать (runbook). Событие `connection.revoked` из тела не используется (данные из тела — нет, R5): отзыв ловит
+  ежедневная сверка `reconcile`.
+- **D10. `deleteActivities`** выполняется в worker (задача отзыва), а не в API-транзакции `disconnect`.
+- **D11. Порт `TrackFileStore`** дополнен `list()` и `deleteListed()` — уборка «файлов без документа».
+- **D12. `settings/_layout.tsx` не используется:** dev-экспорт web называет чанки маршрутов по имени файла, второй
+  `_layout` перезаписал чанк корневого (e2e `/ui-kit` dev — «Requiring unknown module»); скелетон оболочки
+  «Устройств» — в экране (`useSettingsShell`).
+- **D13. Возврат с ошибкой:** `GET /v1/devices/callback` с неизвестным/истёкшим тикетом не знает провайдера —
+  `?result=error` без `provider`; приложение показывает «Не удалось подключить. Повторите.» (тот же текст, что для
+  мусорных параметров).
+- **D14. Сжатые метки времени FIT** `@garmin/fitsdk` 21.218 не поддерживает — такой файл `failed: unreadable`.
+- **D15. Фикстуры** — синтетические (генератор `packages/tracks/scripts/generate-fixtures.ts`, «в стиле» Garmin Edge,
+  Wahoo ELEMNT, часов, Garmin Connect, Komoot, Strava, OW): реальных файлов с устройств в репозитории нет (ПДн).
+- **D16. Тестовая инфраструктура:** `apps/api/test/test-urls.ts` (globalSetup не тянет схему env с контрактами);
+  `db:migrate`/`panel` через `tsx --conditions=@pokatim/source`; vitest API — `execArgv: ['--conditions=@pokatim/source']`
+  (поток разбора грузит пакет из исходников).
+
 # 8.3 Security checklist
 
 Затронуты: аутентификация (OAuth через агрегатор, `AuthGuard`), **загрузка и разбор файлов**, **публичные
@@ -832,9 +872,68 @@ Env (`config/env.ts`, зависимости — `superRefine`): `TRACK_STORAGE_
 
 # 12. Outcome
 
-_Заполняется после реализации: ветка, коммиты по слайсам, вывод `pnpm check`, отрицательные доказательства
-(`lockUserActivities`, замок `ensureUser`), e2e, репетиция деплоя, ручной смоук или NOT VERIFIED, follow-ups (свой OW
-и consumer для prod, S3, resumable, TCX, видимость провалов в панели)._
+**Ветка** `feature/tracks-devices` от `develop`. Коммиты по слайсам: spec + §8.2 → S0 (ADR-0011, `AGENTS.md` §1,
+продукт) → S1 (контракты треков; отдельно — устройств и онбординга) → S2 (`packages/tracks`) → S9–S10 (приложение) →
+S3–S4 (`tracks`) → S5–S7 (`devices`) → S8 (`profile`) → S11 (infra, runbook) → S12 (e2e, документация).
+
+**Проверки**
+- `TURBO_CONCURRENCY=1 pnpm check` (MongoDB RS и Redis — нативные, `MONGO_URL_TEST`/`REDIS_URL_TEST`) — EXIT 0,
+  `Tasks: 13 successful, 13 total`. Параллельный прогон (по умолчанию) упирался во флейк вне задачи: admin
+  `SignInScreen.test.tsx` «429 — …» — таймаут 5 с под нагрузкой (отдельно — `Tests 129 passed`).
+- API: unit + int — `Test Files 61 passed`, `Tests 508 passed` (до тестов S8 и `track-uploads`); tracks int —
+  `24 passed`; profile/onboarding — `37 passed`; devices — unit 63, int 52. App — `Test Suites 57`, `Tests 430`.
+  `packages/tracks` — `Tests 82 passed`.
+- Миграции дважды на чистой БД: `миграции применены: 0001_outbox … 0010_tracks, 0011_devices` → `новых миграций нет`;
+  int-тест индексов `0010`/`0011` (уникальные, частичные, TTL, `2dsphere` принимает линию, отвергает вырожденную).
+- `pnpm build:web` (с `EXPO_PUBLIC_API_URL`) — ok. `expo export -p android` — ok, в бандле нет `@garmin/fitsdk` и
+  `fast-xml-parser` (`strings` по `.hbc`: 0 совпадений), маршрут `tracks/uploads` есть.
+- `E2E_API=1 pnpm e2e:web` — `14 passed` (отдельная БД `pokatim_e2e3` на тестовом mongod, свой Mailpit; dev-БД не
+  тронута): «Позже» на шаге → Главная; «Устройства» → «Загрузить файл» (GPX) → «Готово».
+
+**Отрицательные доказательства**
+- `lockUserActivities` (`track-uploads.int.test.ts`, «две параллельные вставки»): ворота после чтения кандидатов
+  первой вставки, вторая завершается целиком → с замком одна основная (вторая повторила транзакцию); замок заменён
+  no-op → **две основные** (тест на это проверяет результат).
+- Замок `ensureUser` (`devices-link.int.test.ts`): с замком — 1 `POST /users`, 1 пользователь OW; без замка (фейк без
+  уникальности `external_user_id`) — 2 вызова, **2 пользователя**; без замка с уникальностью, как OW 0.9, — второй
+  получает 400 и находит пользователя по `external_user_id`.
+
+**Сверка с OW (исходники `the-momentum/open-wearables`, коммит `456b8250` = `0.9.0-140`)** — на сервере
+`0.9.0-140-g25edd80c`, этот хеш в публичном репозитории не найден; считаем эквивалентным (NOT VERIFIED). Закрыто:
+фильтр `GET /users?external_user_id` — точное совпадение, дубль `external_user_id` — 400 (не 409), поле помечено
+deprecated; пути `POST /providers/{p}/users/{id}/sync` и `/sync/historical?days` (у Garmin `days` игнорируется,
+≤ 30 дней); allowlist `redirect_uri` в `authorize` **нет**, успех — 303 на `redirect_uri` без своих параметров; ошибка
+провайдера — 303 на страницу OW `/api/v1/oauth/error` (в наш `redirect_uri` не возвращает); велотипы OW 0.9 —
+`cycling, mountain_biking, indoor_cycling, cyclocross, e_biking` (в `AGGREGATOR_CYCLING_TYPES` есть лишние, безвредные
+`road_cycling, gravel_cycling, bmx, track_cycling, virtual_cycling, spinning`); `/timeseries` — `types` повторяемый,
+`limit ≤ 1000`, курсор; `events/workouts` — даты обязательны, `source.provider`, `avg_heart_rate_bpm`,
+`average_watts`; вебхук — Svix, `data.user_id`; `DELETE …/connections/{p}` — 204/404. **Wahoo в перечислении
+провайдеров этого коммита нет** — живой каталог сервера проверить (без него Wahoo — `available: false`). OW сам
+запускает историческую выгрузку при подключении (`HISTORICAL_SYNC_ON_CONNECT`) — наш запрос её может дублировать.
+
+**Расхождения spec ↔ эталон (что выбрано)** — §8.2 D3, D6, D7, D9; плюс: `ensureUser` — по spec
+(`external_user_id` + поиск при конфликте; эталон шлёт пустое тело); таймаут 15 с, трек без децимации, длительность
+≤ 48 ч, отзыв — 404 = успех, прочие 4xx — ошибка (spec; эталон: 30 с, 1000 точек, 24 ч, глотает 4xx); вебхук без
+секрета — 404 (spec; эталон — 200).
+
+**NOT VERIFIED**
+- `deploy-rehearsal` (AC16) — Docker на машине недоступен; изменения compose/deploy/rehearsal проверены разбором YAML
+  и `bash -n`.
+- Ручной смоук: подключение Garmin/Wahoo через живой OW (iOS/Android/web), «Синхронизировать сейчас», точность потока
+  OW против FIT; доставка Svix-вебхуков; расписания BullMQ в живом worker; загрузка с прогрессом на устройстве
+  (RN XHR из `file://`), web-picker и возврат `/devices/return` в браузере вживую; симуляторы.
+- Остаточный узкий риск (devices): падение worker между приёмом трека и отметкой импорта одновременно с удалением
+  загрузки пользователем — повтор может вернуть заезд.
+
+**Владельцу** — Приложение B: `DEVICES_ENABLED=true` после проверки (`OW_API_KEY`, `OW_API_URL`, `OW_DOCKER_NETWORK`,
+`OW_SHARED_INSTANCE` уже в `.env` сервера), живой каталог провайдеров OW (есть ли Wahoo), V5 — лицензия
+`@garmin/fitsdk` (проприетарная FIT Protocol License: только внутреннее использование, без передачи SDK третьим лицам,
+SDK — конфиденциальная информация Garmin; в бандл приложения не попадает), V6 — память worker (оставлено 384m).
+
+**Follow-ups:** свой OW и consumer Garmin/Wahoo для prod; S3-адаптер `TrackFileStore`; resumable-загрузка; TCX;
+видимость финальных провалов в панели «Протокол»; поддержка сжатых меток времени FIT; согласовать `0009` (app-03) в
+`migrations/index.ts` и `migrations.int.test.ts` при слиянии; коллизия имён чанков dev-экспорта (`[token]`,
+`devices`) — задача базы.
 
 # Приложение A. Open Wearables: что использует pokatim (`[VERIFY]` — сверить с развёрнутой 0.9.x)
 
