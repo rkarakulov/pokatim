@@ -134,6 +134,12 @@ export class PanelRepository {
     return this.c.members.countDocuments({ role: 'admin', status: 'active' }, { session });
   }
 
+  /** Член команды в снимке транзакции (без записи) — решить, нужен ли `lockAdmins`, до `lockMember`. */
+  async findMember(session: DbSession, userId: string): Promise<PanelMemberDoc | undefined> {
+    const doc = await this.c.members.findOne({ _id: userId }, { session });
+    return doc ?? undefined;
+  }
+
   /** Активный член команды — гард и вход в панель (одно чтение по `_id`). */
   async findActiveMember(userId: string): Promise<PanelMemberDoc | undefined> {
     const doc = await this.c.members.findOne({ _id: userId, status: 'active' });
@@ -143,6 +149,11 @@ export class PanelRepository {
   /** Список «Сотрудники»: новые выдачи сверху, `limit + 1` — признак обрезки у вызывающего. */
   listMembers(limit: number): Promise<PanelMemberDoc[]> {
     return this.c.members.find({}).sort({ grantedAt: -1, _id: 1 }).limit(limit).toArray();
+  }
+
+  /** Члены по id (любой статус) — ответ после изменения. */
+  listMembersByIds(userIds: readonly string[]): Promise<PanelMemberDoc[]> {
+    return this.c.members.find({ _id: { $in: [...userIds] } }).toArray();
   }
 
   /** Имена членов (в том числе снятых) для журнала. */

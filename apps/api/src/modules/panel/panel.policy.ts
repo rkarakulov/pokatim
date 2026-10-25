@@ -12,3 +12,6 @@ export const PANEL_POLICY = {
   /** Список «Сотрудники» — без пагинации до этого предела. */
   memberListCap: 500,
 } as const;
+
+/** Удалённый аккаунт в ответах панели вместо e-mail и имени. */
+export const DELETED_MEMBER = 'Удалённый участник';

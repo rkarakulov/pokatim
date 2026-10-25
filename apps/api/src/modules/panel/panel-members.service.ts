@@ -1,12 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { PanelRole } from '@pokatim/contracts';
+import type {
+  ChangeRoleRequest,
+  GrantRoleRequest,
+  PanelMember,
+  PanelMemberList,
+  PanelRole,
+  RevokeRoleRequest,
+} from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import { isDuplicateKey } from '@rkarakulov/api-kit/mongo';
 
 import { type DbSession, MongoTransactions } from '../../db';
+import { domainError } from '../../error-messages';
 import { IdentityAccounts } from '../identity';
 import { PanelAudit } from './panel-audit';
 import type { AuditActor, PanelMemberDoc } from './panel.collection';
+import { DELETED_MEMBER, PANEL_POLICY } from './panel.policy';
 import { PanelRepository } from './panel.repository';
 
 export type CliGrantResult =
@@ -28,6 +37,132 @@ export class PanelMembersService {
     private readonly transactions: MongoTransactions,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
+
+  /** Список «Сотрудники» (до `memberListCap`, все статусы) + e-mail одним запросом `$in`. */
+  async list(): Promise<PanelMemberList> {
+    const cap = PANEL_POLICY.memberListCap;
+    const docs = await this.repository.listMembers(cap + 1);
+    const items = docs.slice(0, cap);
+    const emails = await this.accounts.emailsOf(items.map((doc) => doc._id));
+    return { items: items.map((doc) => toPanelMember(doc, emails)), truncated: docs.length > cap };
+  }
+
+  /**
+   * Выдать роль существующему подтверждённому пользователю по e-mail (R4а): нет аккаунта — 404, не подтверждён — 409
+   * `PANEL_USER_UNVERIFIED`, уже активный член — 409 `PANEL_ALREADY_MEMBER`, снятый — повторная активация с новой
+   * ролью. Журнал `panel.role_granted { roleTo }` — в той же транзакции.
+   */
+  async grant(actorUserId: string, input: GrantRoleRequest): Promise<PanelMember> {
+    const account = await this.accounts.findVerifiedByEmail(input.email);
+    if (!account) throw domainError('NOT_FOUND', 404);
+    if (!account.verified) throw domainError('PANEL_USER_UNVERIFIED', 409);
+    const { userId } = account;
+
+    await this.runWithInsertRetry(async (tx) => {
+      // выдача admin расширяет набор администраторов — тот же замок, что у понижения и снятия (R7)
+      if (input.role === 'admin') await this.repository.lockAdmins(tx);
+      const current = await this.repository.lockMember(tx, userId);
+      if (current?.status === 'active') throw domainError('PANEL_ALREADY_MEMBER', 409);
+      await this.activate(tx, current, {
+        userId,
+        role: input.role,
+        displayName: input.displayName,
+      });
+      await this.audit.append(tx, {
+        action: 'panel.role_granted',
+        actor: { kind: 'user', userId: actorUserId },
+        targetUserId: userId,
+        details: { roleTo: input.role },
+      });
+    });
+    return this.member(userId);
+  }
+
+  /** Сменить роль (причина обязательна); права — со следующего запроса сотрудника (гард читает роль). */
+  async changeRole(
+    actorUserId: string,
+    userId: string,
+    input: ChangeRoleRequest,
+  ): Promise<PanelMember> {
+    if (actorUserId === userId) throw domainError('PANEL_SELF_ACTION', 409);
+    await this.transactions.run(async (tx) => {
+      const current = await this.lockForChange(
+        tx,
+        userId,
+        (role) => role === 'admin' || input.role === 'admin',
+      );
+      if (current.role === input.role) return;
+      await this.ensureAdminRemains(tx, current.role === 'admin' && input.role !== 'admin');
+      await this.repository.setRole(tx, userId, input.role);
+      await this.audit.append(tx, {
+        action: 'panel.role_changed',
+        actor: { kind: 'user', userId: actorUserId },
+        targetUserId: userId,
+        reason: input.reason,
+        details: { roleFrom: current.role, roleTo: input.role },
+      });
+    });
+    return this.member(userId);
+  }
+
+  /**
+   * Снять роль (причина обязательна): все сессии панели сотрудника отзываются в той же транзакции; сессия
+   * приложения не трогается.
+   */
+  async revoke(
+    actorUserId: string,
+    userId: string,
+    input: RevokeRoleRequest,
+  ): Promise<PanelMember> {
+    if (actorUserId === userId) throw domainError('PANEL_SELF_ACTION', 409);
+    await this.transactions.run(async (tx) => {
+      const current = await this.lockForChange(tx, userId, (role) => role === 'admin');
+      await this.ensureAdminRemains(tx, current.role === 'admin');
+      const now = this.clock.now();
+      await this.repository.revokeMember(tx, userId, now);
+      await this.repository.revokeAllSessions(tx, userId, now, 'role_revoked');
+      await this.audit.append(tx, {
+        action: 'panel.role_revoked',
+        actor: { kind: 'user', userId: actorUserId },
+        targetUserId: userId,
+        reason: input.reason,
+        details: { roleFrom: current.role },
+      });
+    });
+    return this.member(userId);
+  }
+
+  /**
+   * Порядок замков (R7): роль из снимка транзакции решает, затронут ли набор администраторов; если да — сначала
+   * `lockAdmins`, затем `lockMember`. Параллельная смена той же записи даёт конфликт на `lockMember` — повтор на свежем
+   * снимке. Не активен — 404.
+   */
+  private async lockForChange(
+    tx: DbSession,
+    userId: string,
+    touchesAdmins: (role: PanelRole) => boolean,
+  ): Promise<PanelMemberDoc> {
+    const snapshot = await this.repository.findMember(tx, userId);
+    if (snapshot?.status !== 'active') throw domainError('NOT_FOUND', 404);
+    if (touchesAdmins(snapshot.role)) await this.repository.lockAdmins(tx);
+    const current = await this.repository.lockMember(tx, userId);
+    if (current?.status !== 'active') throw domainError('NOT_FOUND', 404);
+    return current;
+  }
+
+  /** Изменение убирает администратора — после него должен остаться хотя бы один активный (под `lockAdmins`). */
+  private async ensureAdminRemains(tx: DbSession, removesAdmin: boolean): Promise<void> {
+    if (!removesAdmin) return;
+    if ((await this.repository.countActiveAdmins(tx)) <= 1) {
+      throw domainError('PANEL_LAST_ADMIN', 409);
+    }
+  }
+
+  private async member(userId: string): Promise<PanelMember> {
+    const [doc] = await this.repository.listMembersByIds([userId]);
+    if (!doc) throw domainError('NOT_FOUND', 404);
+    return toPanelMember(doc, await this.accounts.emailsOf([userId]));
+  }
 
   /**
    * CLI `grant-admin` (первый и аварийный администратор, Q10): роль `admin` подтверждённому пользователю. Уже
@@ -90,4 +225,16 @@ export class PanelMembersService {
       return this.transactions.run(work);
     }
   }
+}
+
+function toPanelMember(doc: PanelMemberDoc, emails: Map<string, string>): PanelMember {
+  return {
+    userId: doc._id,
+    displayName: doc.displayName,
+    email: emails.get(doc._id) ?? DELETED_MEMBER,
+    role: doc.role,
+    status: doc.status,
+    grantedAt: doc.grantedAt.toISOString(),
+    revokedAt: doc.revokedAt?.toISOString() ?? null,
+  };
 }

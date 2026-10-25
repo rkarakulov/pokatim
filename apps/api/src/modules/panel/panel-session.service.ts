@@ -8,12 +8,9 @@ import { domainError } from '../../error-messages';
 import { IdentityAccounts, PanelCredentials, randomToken, sha256 } from '../identity';
 import type { PanelPrincipal } from './current-panel-user.decorator';
 import { PanelAudit } from './panel-audit';
-import { PANEL_POLICY } from './panel.policy';
+import { DELETED_MEMBER, PANEL_POLICY } from './panel.policy';
 import { PanelRepository } from './panel.repository';
 import { permissionsOf } from './permissions';
-
-/** Удалённый аккаунт в ответах панели вместо e-mail. */
-export const DELETED_MEMBER_EMAIL = 'Удалённый участник';
 
 export type PanelSignInResult =
   | { state: 'signedIn'; me: PanelMe; token: string; expiresAt: Date }
@@ -104,7 +101,7 @@ export class PanelSessionService {
       user: {
         id: principal.userId,
         displayName: member.displayName,
-        email: emails.get(principal.userId) ?? DELETED_MEMBER_EMAIL,
+        email: emails.get(principal.userId) ?? DELETED_MEMBER,
         role: principal.role,
       },
       permissions: [...principal.permissions],

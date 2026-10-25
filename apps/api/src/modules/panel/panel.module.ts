@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 
 import { IdentityModule } from '../identity';
+import { PanelAuditReader } from './panel-audit';
+import { PanelAuditController } from './panel-audit.controller';
 import { PanelCoreModule } from './panel-core.module';
+import { PanelMembersController } from './panel-members.controller';
 import { PanelGuard } from './panel.guard';
 import { PanelSessionCookie } from './panel-session-cookie';
 import { PanelSessionController } from './panel-session.controller';
@@ -14,8 +17,8 @@ import { PanelSessionService } from './panel-session.service';
  */
 @Module({
   imports: [IdentityModule, PanelCoreModule],
-  controllers: [PanelSessionController],
-  providers: [PanelSessionCookie, PanelSessionService, PanelGuard],
+  controllers: [PanelSessionController, PanelMembersController, PanelAuditController],
+  providers: [PanelSessionCookie, PanelSessionService, PanelAuditReader, PanelGuard],
   // гард создаётся в модуле-потребителе (`@UseGuards`) — ему нужны и зависимости гарда
   exports: [PanelGuard, PanelSessionCookie, PanelCoreModule, IdentityModule],
 })
