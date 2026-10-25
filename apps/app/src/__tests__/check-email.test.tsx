@@ -13,6 +13,7 @@ import {
   session,
   storedValue,
   storePendingRegistration,
+  storeSurveyCompleted,
 } from './auth-fixtures';
 import { appRoutes } from './app-routes';
 
@@ -26,6 +27,8 @@ const resendButton = (name = 'Отправить письмо ещё раз') =>
 const advance = (ms: number) => act(() => jest.advanceTimersByTimeAsync(ms));
 
 beforeEach(() => {
+  // опрос онбординга уже пройден (кеш устройства): сценарии ведут на Главную; сам онбординг — onboarding-guard.test
+  storeSurveyCompleted();
   jest.useFakeTimers({ now: NOW });
   poll.mockResolvedValue({ state: 'pending' });
 });

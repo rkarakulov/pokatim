@@ -5,19 +5,19 @@ import { Tabs } from 'expo-router/js-tabs';
 import { ShellSkeleton } from '@/components/shell-skeleton';
 import { TabBar } from '@/components/tab-bar';
 import { isSessionPending, useSessionStore } from '@/features/auth/session-store';
-
-const retryRestore = () => void useSessionStore.getState().hydrate();
+import { onboardingStep, useOnboardingStore } from '@/features/onboarding/onboarding-store';
+import { useShellFailure } from '@/features/onboarding/use-shell-failure';
 
 export default function TabsLayout() {
   const theme = useTheme();
-  // сессия ещё неизвестна (SSR, восстановление при запуске) или проверить её не удалось (web: 429, сеть): гард
-  // пускает сюда, но контент — только после входа; вместо него скелетон или ошибка с повтором
+  // сессия ещё неизвестна (SSR, восстановление при запуске) или проверить её не удалось (web: 429, сеть), онбординг
+  // вошедшего ещё не выяснен (кеш, сервер): гард пускает сюда, но контент — только после входа и онбординга; вместо
+  // него скелетон или ошибка с повтором — не опрос (без мигания у тех, кто уже ответил)
   const status = useSessionStore((state) => state.status);
-  const restoreError = useSessionStore((state) => state.restoreError);
+  const step = useOnboardingStore(onboardingStep);
+  const failure = useShellFailure();
 
-  if (isSessionPending(status)) {
-    const failure =
-      status === 'unavailable' ? { error: restoreError, retry: retryRestore } : undefined;
+  if (isSessionPending(status) || (status === 'signedIn' && step !== 'done')) {
     return <ShellSkeleton failure={failure} />;
   }
 

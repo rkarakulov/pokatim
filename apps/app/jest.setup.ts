@@ -5,6 +5,7 @@ import './src/theme/design-system';
 import { onlineManager } from '@tanstack/react-query';
 
 import type * as RegistrationStore from './src/features/auth/registration-store';
+import type * as OnboardingStore from './src/features/onboarding/onboarding-store';
 import type * as SessionStore from './src/features/auth/session-store';
 
 // в jest нет Keychain: in-memory хранилище; тесты читают его через jest.requireMock('expo-secure-store').__store
@@ -68,4 +69,7 @@ beforeEach(() => {
   jest
     .requireActual<typeof RegistrationStore>('./src/features/auth/registration-store')
     .resetRegistrationStore();
+  jest
+    .requireActual<typeof OnboardingStore>('./src/features/onboarding/onboarding-store')
+    .resetOnboardingStore();
 });

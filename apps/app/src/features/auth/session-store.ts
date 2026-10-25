@@ -3,6 +3,7 @@ import { create } from 'zustand';
 
 import { isSessionAlive } from './session-expiry';
 import { clearSession, restoreSession, revalidateSession } from './session-persistence';
+import type { AccessRefresh } from './session-revalidation';
 
 /**
  * `unknown` — до восстановления сессии при запуске (native: SecureStore; web: refresh по cookie);
@@ -23,6 +24,12 @@ interface SessionState {
   revalidate: (now?: number) => Promise<void>;
   signIn: (session: AnySession) => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * Итог обновления access перед авторизованным запросом (`withAccessToken`) для сессии `checked`: новая сессия
+   * или локальный выход без запроса отзыва (сервер сессию уже не знает). Выход или новый вход за это время не
+   * затираются.
+   */
+  applyAccessRefresh: (checked: CookieSession | null, result: AccessRefresh) => void;
 }
 
 /** Условие гарда: есть сессия с непросроченным refresh. */
@@ -68,13 +75,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     const checked = get().session;
     const result = await revalidateSession(now);
     // ответ относится только к проверенной сессии: выход или новый вход за это время не затираем
-    set((state) => {
-      if (state.session !== checked || state.status !== 'signedIn') return state;
-      if (result.status === 'rotated') return { session: CookieSession.parse(result.session) };
-      if (result.status === 'signedOut')
-        return { status: 'signedOut', session: null, returning: true };
-      return state;
-    });
+    if (result.status !== 'unchanged') get().applyAccessRefresh(checked, result);
   },
   // только память: сессию уже сохранил тот, кто её получил, — под замком сессии (`requestSignIn`, poll), иначе
   // поздняя запись SecureStore после выхода вернула бы её. В памяти — без refresh (native: он в SecureStore)
@@ -84,6 +85,14 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   signOut: async () => {
     await clearSession();
     set({ status: 'signedOut', session: null, returning: true });
+  },
+  applyAccessRefresh: (checked, result) => {
+    set((state) => {
+      if (state.session !== checked || state.status !== 'signedIn') return state;
+      return result.status === 'rotated'
+        ? { session: CookieSession.parse(result.session) }
+        : { status: 'signedOut', session: null, returning: true };
+    });
   },
 }));
 

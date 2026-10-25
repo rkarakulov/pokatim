@@ -8,7 +8,13 @@ import * as SecureStore from 'expo-secure-store';
 import * as persistence from '@/features/auth/session-persistence';
 import { api } from '@/lib/api';
 
-import { LINK_TOKEN, session, storePendingRegistration, storeSession } from './auth-fixtures';
+import {
+  LINK_TOKEN,
+  session,
+  storePendingRegistration,
+  storeSession,
+  storeSurveyCompleted,
+} from './auth-fixtures';
 import { appRoutes } from './app-routes';
 
 jest.mock('@/lib/api');
@@ -66,6 +72,7 @@ describe('гард сессии (Stack.Protected)', () => {
 
   it('сессия из SecureStore с живым refresh — сразу Главная, регистрация недоступна', async () => {
     storeSession();
+    storeSurveyCompleted();
     const router = await renderRouter(appRoutes, { initialUrl: '/register' });
 
     expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();

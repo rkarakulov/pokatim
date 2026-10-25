@@ -4,7 +4,7 @@ import { type AnySession, CookieSession } from '@pokatim/contracts';
 import { api } from '@/lib/api';
 
 import { apiErrorCode, retryAfterSec } from './error-messages';
-import type { Revalidation } from './session-revalidation';
+import type { AccessRefresh, Revalidation } from './session-revalidation';
 import { withSessionLock } from './session-lock';
 
 /**
@@ -63,6 +63,24 @@ export async function restoreSession(_now: number): Promise<CookieSession | unde
 /** Web: восстановление уже было ротацией по cookie (`restoreSession`) — проверять нечего. */
 export async function revalidateSession(_now: number): Promise<Revalidation> {
   return { status: 'unchanged' };
+}
+
+/**
+ * Новый access для авторизованного запроса (`withAccessToken`, ADR-0008): refresh по cookie под тем же Web Lock, что
+ * и прочие операции с cookie сессии. 401 или незавершённый выход — `signedOut` (cookie уже недействительна).
+ * Сеть, 429, 5xx — бросает: ошибка запроса, не выход; cookie не трогаем.
+ */
+export function refreshAccess(_now: number): Promise<AccessRefresh> {
+  return withSessionLock(async (): Promise<AccessRefresh> => {
+    if (isSignOutPending()) return { status: 'signedOut' };
+    try {
+      // refreshToken в памяти web не держим, даже если сервер ответил телом
+      return { status: 'rotated', session: CookieSession.parse(await api.refreshSession()) };
+    } catch (error) {
+      if (isUnauthorized(error)) return { status: 'signedOut' };
+      throw error;
+    }
+  });
 }
 
 /**
