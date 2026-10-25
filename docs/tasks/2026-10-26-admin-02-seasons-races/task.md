@@ -447,6 +447,9 @@ _Отклонения при реализации — дописываются �
   «Вернуть в календарь» тоже несёт `version` (R3). `PanelCalendarQuery` — `status?`, `discipline?`, курсор.
 - `RaceDescription` и необязательные тексты календаря: пустая строка после обрезки → `null`.
 - `AuditEntry.subject` — обязательное поле ответа (`null` у записей admin-01); `AuditQuery.subjectId`.
+- AC16 «регрессия panel-* без правок ожиданий»: одно ожидание изменено по существу —
+  `panel-session.int.test.ts` (вход admin): `PanelMe.permissions` admin = все права контракта, теперь с
+  `races.*`, `seasons.manage`, `calendar.manage`.
 - `createApiClient`: публичные методы идут через отдельный HTTP-клиент без `getAccessToken` — токен в них не уходит
   даже у вошедшего пользователя.
 
