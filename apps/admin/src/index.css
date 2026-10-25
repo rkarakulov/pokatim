@@ -218,6 +218,116 @@ select.field__control option:disabled {
   color: var(--color-text-disabled);
 }
 
+/* настраиваемый список (Chrome/Edge 135+): плашка строго под полем вместо системного меню поверх поля.
+   Без поддержки — нативный список (Safari, Firefox), разметка формы та же */
+@supports (appearance: base-select) {
+  select.field__control,
+  select.field__control::picker(select) {
+    appearance: base-select;
+  }
+
+  /* закрытое поле — как в остальной панели: 36 px, текст по центру по вертикали */
+  select.field__control {
+    display: flex;
+    align-items: center;
+  }
+
+  /* стрелку рисует обёртка — системную снимаем, при открытом списке поворачиваем свою */
+  select.field__control::picker-icon {
+    display: none;
+  }
+
+  /* закрытое поле больше не берёт ширину самого длинного варианта: держит её невидимая строка data-sizer
+     (отступы и рамка — как у select.field__control) */
+  .field__select {
+    display: grid;
+  }
+
+  .field__select > select,
+  .field__select::before {
+    grid-area: 1 / 1;
+  }
+
+  .field__select::before {
+    content: attr(data-sizer);
+    block-size: 0;
+    padding-inline: calc(var(--inset-caption) + var(--stroke-input))
+      calc(var(--inset-caption) * 2 + var(--size-icon-sm) + var(--stroke-input));
+    overflow: hidden;
+    visibility: hidden;
+    white-space: nowrap;
+  }
+
+  .field__select:has(select:open)::after {
+    transform: translateY(-50%) rotate(180deg);
+  }
+
+  .field__select:has(select:open) {
+    color: var(--color-text-primary);
+  }
+
+  select.field__control:open:not([aria-invalid='true']) {
+    border-color: var(--color-border-focus);
+  }
+
+  /* плашка: под полем (при нехватке места — над ним, запасные позиции браузера), не уже поля */
+  select.field__control::picker(select) {
+    position-area: block-end span-inline-end;
+    min-inline-size: anchor-size(self-inline);
+    max-block-size: calc(var(--density-control-height) * 8);
+    margin-block: var(--space-s1);
+    padding: var(--space-s1) 0;
+    overflow-y: auto;
+    border: var(--stroke-hairline) solid var(--color-border-focus);
+    border-radius: var(--radius-none);
+    background: var(--color-surface-default);
+    color: var(--color-text-primary);
+  }
+
+  select.field__control option {
+    gap: var(--space-s2);
+    min-block-size: var(--density-control-height);
+    padding: 0 var(--inset-caption);
+    background: var(--color-surface-default);
+    color: var(--color-text-primary);
+    cursor: pointer;
+  }
+
+  select.field__control option:hover:enabled,
+  select.field__control option:focus-visible {
+    background: var(--color-surface-raised);
+  }
+
+  /* фокус варианта — общее кольцо панели, но внутри плашки (снаружи его обрезает край списка) */
+  select.field__control option:focus-visible {
+    outline-offset: calc(var(--stroke-indicator) * -1);
+  }
+
+  select.field__control option:checked {
+    font-weight: 600;
+  }
+
+  /* галочка выбранного — справа, у остальных место не занимает */
+  select.field__control option::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+  }
+
+  select.field__control option:not(:checked)::checkmark {
+    display: none;
+  }
+
+  select.field__control option:disabled {
+    background: var(--color-surface-default);
+    color: var(--color-text-disabled);
+    cursor: not-allowed;
+  }
+
+  select.field__control optgroup {
+    color: var(--color-text-secondary);
+  }
+}
+
 .field__error {
   display: flex;
   gap: var(--space-s2);

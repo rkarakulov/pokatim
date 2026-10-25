@@ -106,10 +106,15 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(funct
   ref,
 ) {
   const ids = useFieldIds(error, help);
+  // base-select (index.css) меряет закрытое поле по выбранному варианту — обёртка держит ширину самого длинного
+  const sizer = options.reduce(
+    (longest, option) => (option.label.length > longest.length ? option.label : longest),
+    '',
+  );
   return (
     <Frame {...ids} label={label} labelAside={labelAside} error={error} help={help}>
       {/* обёртка рисует шеврон: у <select> нет ::after, системная стрелка снята (appearance: none) */}
-      <span className="field__select">
+      <span className="field__select t-body" data-sizer={sizer}>
         <select
           ref={ref}
           id={ids.id}
