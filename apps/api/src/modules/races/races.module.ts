@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 
 import { PanelModule } from '../panel';
+import { RacesAdminController } from './races-admin.controller';
 import { RacesRepository } from './races.repository';
+import { RacesService } from './races.service';
 import { SeasonsAdminController } from './seasons-admin.controller';
 import { SeasonsService } from './seasons.service';
 
@@ -12,7 +14,7 @@ import { SeasonsService } from './seasons.service';
  */
 @Module({
   imports: [PanelModule],
-  controllers: [SeasonsAdminController],
-  providers: [RacesRepository, SeasonsService],
+  controllers: [SeasonsAdminController, RacesAdminController],
+  providers: [RacesRepository, SeasonsService, RacesService],
 })
 export class RacesModule {}
