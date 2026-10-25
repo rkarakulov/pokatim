@@ -5,4 +5,5 @@ export { RequirePermission } from './require-permission.decorator';
 export { Public } from './public.decorator';
 export { CurrentPanelUser, type PanelPrincipal } from './current-panel-user.decorator';
 export { PanelAudit, type AuditRecord } from './panel-audit';
+export { PanelDirectory } from './panel-directory';
 export { type CliGrantResult, PanelMembersService } from './panel-members.service';

@@ -9,6 +9,7 @@ import { IDENTITY_INDEXES } from './0002_identity';
 import { IDENTITY_TTL_SECONDS } from './0003_identity_ttl';
 import { profile } from './0004_profile';
 import { panel, PANEL_SESSION_TTL_SECONDS } from './0005_panel';
+import { panelAuditSubject } from './0006_panel_audit_subject';
 import { migrations } from './index';
 
 let h: Harness;
@@ -38,7 +39,7 @@ async function indexesOf(collection: string) {
 }
 
 describe('миграции MongoDB на чистой *_test (AC5)', () => {
-  it('применены по порядку: 0001_outbox … 0005_panel', async () => {
+  it('применены по порядку: 0001_outbox … последняя', async () => {
     const applied = await h.db
       .collection<{ _id: string }>(MIGRATIONS_COLLECTION)
       .find()
@@ -50,6 +51,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0003_identity_ttl',
       '0004_profile',
       '0005_panel',
+      '0006_panel_audit_subject',
     ]);
   });
 
@@ -72,7 +74,11 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       panel_audit_action_idx: plain({ action: 1, _id: -1 }),
       panel_audit_actor_idx: plain({ 'actor.userId': 1, _id: -1 }),
       panel_audit_target_idx: plain({ targetUserId: 1, _id: -1 }),
+      // 0006_panel_audit_subject (admin-02)
+      panel_audit_subject_idx: plain({ 'subject.id': 1, _id: -1 }),
     });
+    await panelAuditSubject.up(h.db);
+    await panelAuditSubject.up(h.db);
     // документ-замок: создаётся up; повторный up не сбрасывает версию (другие файлы тестов чистят коллекции)
     const meta = h.db.collection<{ _id: string; version: number }>(PANEL_COLLECTIONS.meta);
     await meta.deleteMany({});
