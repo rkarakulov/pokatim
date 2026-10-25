@@ -17,7 +17,7 @@ import {
   orderHomeSections,
   type AvailableHomeSectionId,
 } from '@/features/home/sections';
-import { usePullToRefresh } from '@/features/home/use-pull-to-refresh';
+import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 import { useIsOnline, useMinskClock } from '@/lib/use-minsk-clock';
 
 /** Шапка раздела и вкладка «Все …». */

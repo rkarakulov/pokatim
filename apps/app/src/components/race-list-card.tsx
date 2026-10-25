@@ -1,6 +1,6 @@
 import type { RaceCard } from '@pokatim/contracts';
 import { space, stroke } from '@pokatim/design-tokens';
-import { Banner, textStyle, useTheme } from '@rkarakulov/ui';
+import { Banner, SkeletonText, textStyle, useTheme } from '@rkarakulov/ui';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
@@ -78,7 +78,20 @@ export function RaceListCard({ race, now, datesWithYear = false, onPress }: Race
   );
 }
 
+/** Скелетон карточки списка (первая загрузка, догрузка страницы): даты, название, мета — раскладка карточки. */
+export function RaceListCardSkeleton() {
+  const theme = useTheme();
+  return (
+    <View style={[styles.card, styles.skeleton, { borderTopColor: theme.border.subtle }]}>
+      <SkeletonText variant="displayXs" lines={1} lastLineWidth="30%" />
+      <SkeletonText variant="displaySm" lines={1} lastLineWidth="80%" />
+      <SkeletonText variant="meta" lines={2} lastLineWidth="60%" />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  skeleton: { gap: space.s2 },
   card: { borderTopWidth: stroke.hairline, paddingVertical: space.s4 },
   top: {
     flexDirection: 'row',
