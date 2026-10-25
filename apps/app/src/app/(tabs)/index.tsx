@@ -17,8 +17,8 @@ import {
   orderHomeSections,
   type AvailableHomeSectionId,
 } from '@/features/home/sections';
-import { useHomeClock, useIsOnline } from '@/features/home/use-home-clock';
 import { usePullToRefresh } from '@/features/home/use-pull-to-refresh';
+import { useIsOnline, useMinskClock } from '@/lib/use-minsk-clock';
 
 /** Шапка раздела и вкладка «Все …». */
 const SECTION_COPY: Record<
@@ -56,7 +56,7 @@ export default function HomeScreen() {
   const calendar = useNextCalendarStart();
   const sections = orderHomeSections(AVAILABLE_HOME_SECTIONS, profile.reasons);
   // «сейчас» подписей — на клиенте (Главная без SSR-данных, R6): новые данные, фокус, полночь по Минску
-  const now = useHomeClock([races.dataUpdatedAt, calendar.dataUpdatedAt]);
+  const now = useMinskClock([races.dataUpdatedAt, calendar.dataUpdatedAt]);
   // без сети при показанных данных — баннер (§4.12); без данных «Нет соединения» показывает слот раздела
   const online = useIsOnline();
   const offlineWithData = !online && (races.data !== undefined || calendar.data !== undefined);

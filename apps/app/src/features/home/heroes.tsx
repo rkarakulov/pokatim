@@ -3,14 +3,9 @@ import { t } from '@pokatim/i18n';
 
 import { SectionHero } from '@/components/section-hero';
 
-import {
-  calendarMeta,
-  calendarStatusLine,
-  formatCalendarStartDate,
-  formatRaceWindow,
-  raceLifecycleLine,
-  raceMeta,
-} from './format';
+import { formatRaceWindow, raceHeroLine, raceMeta } from '@/features/races/format';
+
+import { calendarMeta, calendarStatusLine, formatCalendarStartDate } from './format';
 
 const present = (lines: (string | null)[]) => lines.filter((line): line is string => !!line);
 
@@ -24,7 +19,7 @@ export function RaceHero({ race, now }: { race: RaceCard; now: Date }) {
       kicker={t('home.races.heroKicker')}
       date={formatRaceWindow(race.windowStartsAt, race.windowEndsAt, now)}
       title={race.title}
-      meta={present([raceMeta(race), raceLifecycleLine(race, now)])}
+      meta={present([raceMeta(race), raceHeroLine(race, now)])}
     />
   );
 }
