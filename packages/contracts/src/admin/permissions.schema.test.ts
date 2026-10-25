@@ -5,13 +5,22 @@ import { PANEL_ROLES, PanelRole, Permission, PERMISSIONS } from './permissions.s
 describe('PanelRole и Permission', () => {
   it('значения — в установленном порядке; новые только добавляются в конец (R6)', () => {
     expect(PANEL_ROLES).toEqual(['admin', 'moderator', 'organizer']);
-    expect(PERMISSIONS).toEqual(['members.read', 'members.manage', 'audit.read']);
+    expect(PERMISSIONS).toEqual([
+      'members.read',
+      'members.manage',
+      'audit.read',
+      'races.read',
+      'races.manage',
+      'races.manage_any',
+      'seasons.manage',
+      'calendar.manage',
+    ]);
   });
 
   it('неизвестные роль и право — ошибка', () => {
     expect(PanelRole.safeParse('owner').success).toBe(false);
     expect(PanelRole.safeParse({ $ne: null }).success).toBe(false);
-    expect(Permission.safeParse('races.manage').success).toBe(false);
+    expect(Permission.safeParse('races.delete').success).toBe(false);
     expect(Permission.parse('audit.read')).toBe('audit.read');
   });
 });

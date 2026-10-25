@@ -80,6 +80,7 @@ export class PanelAuditReader {
           ? { userId: doc.targetUserId, displayName: nameOf(doc.targetUserId) }
           : null,
         reason: doc.reason,
+        subject: null,
         details: doc.details,
       })),
       nextCursor: docs.length > query.limit ? (page.at(-1)?._id ?? null) : null,

@@ -9,10 +9,12 @@ import {
   ValidationErrorDetails,
 } from './common.ts';
 import { LinkExpiredDetails } from './auth/verification.schema.ts';
+import { queryArray, tolerantEnum } from './common.ts';
+import { z } from 'zod';
 
 describe('коды ошибок', () => {
-  it('панель (admin-01): коды — в конце списка, после INVALID_CREDENTIALS (установленные клиенты)', () => {
-    expect(ErrorCode.options.slice(-6)).toEqual([
+  it('панель (admin-01): коды — после INVALID_CREDENTIALS (установленные клиенты)', () => {
+    expect(ErrorCode.options.slice(-7, -1)).toEqual([
       'INVALID_CREDENTIALS',
       'PANEL_ACCESS_DENIED',
       'PANEL_USER_UNVERIFIED',
@@ -47,6 +49,7 @@ describe('коды ошибок', () => {
       'PANEL_ALREADY_MEMBER',
       'PANEL_LAST_ADMIN',
       'PANEL_SELF_ACTION',
+      'RACE_INVALID_STATE',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',
@@ -57,6 +60,16 @@ describe('коды ошибок', () => {
       'INVALID_DATE',
       'AGE_BELOW_18',
       'CONSENT_REQUIRED',
+      'SEASON_OVERLAP',
+      'SEASON_IN_PAST',
+      'SEASON_FINISHED',
+      'SEASON_EXCLUDES_RACES',
+      'DATE_ORDER',
+      'WINDOW_IN_PAST',
+      'OUTSIDE_SEASON',
+      'PROTOCOL_TOO_EARLY',
+      'PROTOCOL_ONLY_LATER',
+      'FIELD_LOCKED',
     ]);
   });
 
@@ -75,5 +88,31 @@ describe('коды ошибок', () => {
     expect(LinkExpiredDetails.parse({ email: 'rider@example.com' })).toEqual({
       email: 'rider@example.com',
     });
+  });
+});
+
+describe('tolerantEnum (ответы приложения, R6)', () => {
+  const Kind = tolerantEnum(['road', 'gravel'] as const);
+
+  it('известное значение — как есть, незнакомое — unknown', () => {
+    expect(Kind.parse('road')).toBe('road');
+    expect(Kind.parse('cyclocross')).toBe('unknown');
+    expect(z.array(Kind).parse(['gravel', 'track'])).toEqual(['gravel', 'unknown']);
+  });
+
+  it('не строка — ошибка', () => {
+    expect(Kind.safeParse(1).success).toBe(false);
+    expect(Kind.safeParse(null).success).toBe(false);
+  });
+});
+
+describe('queryArray', () => {
+  const Filter = queryArray(z.enum(['a', 'b']), 2);
+
+  it('одна строка — массив; массив — как есть; длина ограничена', () => {
+    expect(Filter.parse('a')).toEqual(['a']);
+    expect(Filter.parse(['a', 'b'])).toEqual(['a', 'b']);
+    expect(Filter.safeParse(['a', 'b', 'a']).success).toBe(false);
+    expect(Filter.safeParse({ $ne: 'a' }).success).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import { defineErrorCodes, defineFieldErrorCodes } from '@rkarakulov/contracts-core';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 /** Версия публичного API: установленные приложения живут на старых версиях, ломать нельзя. */
 export const API_VERSION = 'v1' as const;
@@ -27,9 +27,29 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'PANEL_ALREADY_MEMBER',
   'PANEL_LAST_ADMIN',
   'PANEL_SELF_ACTION',
+  // гонки (admin-02): действие недоступно в текущем статусе гонки (публикация не черновика, отмена черновика, …)
+  'RACE_INVALID_STATE',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;
+
+/**
+ * Коды полей правил сезонов, гонок и календаря (admin-02): сервер возвращает их под полем формы панели. Формы
+ * приложения их не получают.
+ */
+export const SCHEDULE_FIELD_ERROR_CODES = [
+  'SEASON_OVERLAP',
+  'SEASON_IN_PAST',
+  'SEASON_FINISHED',
+  'SEASON_EXCLUDES_RACES',
+  'DATE_ORDER',
+  'WINDOW_IN_PAST',
+  'OUTSIDE_SEASON',
+  'PROTOCOL_TOO_EARLY',
+  'PROTOCOL_ONLY_LATER',
+  'FIELD_LOCKED',
+] as const;
+export type ScheduleFieldErrorCode = (typeof SCHEDULE_FIELD_ERROR_CODES)[number];
 
 /**
  * Коды ошибок полей: коды базы (`REQUIRED`, `INVALID`, …) + коды проекта. Сообщение zod-схемы = код,
@@ -38,6 +58,39 @@ export type ApiError = z.infer<typeof ApiError>;
 export const { FieldErrorCode, ValidationErrorDetails, fieldError } = defineFieldErrorCodes([
   'AGE_BELOW_18',
   'CONSENT_REQUIRED',
+  ...SCHEDULE_FIELD_ERROR_CODES,
 ]);
 export type FieldErrorCode = z.infer<typeof FieldErrorCode>;
 export type ValidationErrorDetails = z.infer<typeof ValidationErrorDetails>;
+
+/**
+ * Открытый enum **ответов приложения** (R6): установленные сборки живут долго, а справочники (класс, покрытие, фаза,
+ * причина) только дополняются в конец — незнакомое значение разбирается как `'unknown'`, а не роняет весь ответ.
+ * UI приложения обязан показать нейтральный вариант. Запросы и панель — строгий `z.enum`.
+ */
+export function tolerantEnum<const T extends readonly [string, ...string[]]>(values: T) {
+  return z.union([z.enum(values), z.string().transform(() => 'unknown' as const)]);
+}
+
+/**
+ * Массив фильтра из query: `?k=a&k=b` приходит массивом, `?k=a` — строкой; одна строка → массив из неё. Длина
+ * ограничена (запросы к БД — по индексам, без «тысячи значений»).
+ */
+export function queryArray<T extends z.ZodType>(item: T, max: number) {
+  return z.preprocess(
+    (value) => (typeof value === 'string' ? [value] : value),
+    z.array(item).max(max, { error: 'INVALID' }),
+  );
+}
+
+/** Версия записи для оптимистичной правки (R3): изменение несёт ожидаемую `version`, устаревшая — `409 CONFLICT`. */
+export const Version = z
+  .number({ error: fieldError('INVALID') })
+  .int()
+  .nonnegative();
+export type Version = z.infer<typeof Version>;
+
+/** Однострочный текст без управляющих символов (названия, город). */
+export const SINGLE_LINE = /^[^\p{Cc}]+$/u;
+/** Многострочный текст: из управляющих — только перевод строки. */
+export const MULTI_LINE = /^[^\p{Cc}]*(?:\n[^\p{Cc}]*)*$/u;

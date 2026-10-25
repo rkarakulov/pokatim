@@ -15,6 +15,7 @@ export const PROJECT_ERROR_MESSAGES = {
   PANEL_ALREADY_MEMBER: 'Пользователь уже в команде платформы',
   PANEL_LAST_ADMIN: 'Нельзя оставить панель без администратора',
   PANEL_SELF_ACTION: 'Нельзя менять свою роль',
+  RACE_INVALID_STATE: 'Действие недоступно в текущем статусе гонки',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

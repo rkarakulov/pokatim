@@ -6,10 +6,11 @@ import {
   ValidationErrorDetails,
   type ErrorCode,
   type FieldErrorCode,
+  type ScheduleFieldErrorCode,
 } from '@pokatim/contracts';
 import { t, type MessageKey } from '@pokatim/i18n';
 
-/** Коды, которые показываем у поля: коды zod-схемы + отказы сервера по e-mail. */
+/** Коды, которые показываем у поля: коды zod-схемы + отказы сервера по e-mail (коды панели — не здесь). */
 const FIELD_MESSAGES = {
   REQUIRED: 'auth.field.REQUIRED',
   INVALID: 'auth.field.INVALID',
@@ -21,7 +22,10 @@ const FIELD_MESSAGES = {
   CONSENT_REQUIRED: 'auth.field.CONSENT_REQUIRED',
   EMAIL_TAKEN: 'auth.field.EMAIL_TAKEN',
   EMAIL_UNAVAILABLE: 'auth.field.EMAIL_UNAVAILABLE',
-} as const satisfies Record<FieldErrorCode | 'EMAIL_TAKEN' | 'EMAIL_UNAVAILABLE', MessageKey>;
+} as const satisfies Record<
+  Exclude<FieldErrorCode, ScheduleFieldErrorCode> | 'EMAIL_TAKEN' | 'EMAIL_UNAVAILABLE',
+  MessageKey
+>;
 
 const isFieldMessageCode = (code: string): code is keyof typeof FIELD_MESSAGES =>
   code in FIELD_MESSAGES;

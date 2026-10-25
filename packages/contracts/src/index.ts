@@ -1,4 +1,5 @@
 export * from './common.ts';
+export * from './time.ts';
 export * from './health.ts';
 export * from './auth/registration.schema.ts';
 export * from './auth/verification.schema.ts';
@@ -10,3 +11,8 @@ export * from './admin/permissions.schema.ts';
 export * from './admin/session.schema.ts';
 export * from './admin/members.schema.ts';
 export * from './admin/audit.schema.ts';
+export * from './races/season.schema.ts';
+export * from './races/race.schema.ts';
+export * from './races/race-public.schema.ts';
+export * from './calendar/calendar.schema.ts';
+export * from './calendar/calendar-public.schema.ts';

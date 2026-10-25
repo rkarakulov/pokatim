@@ -29,6 +29,7 @@ const revoked: AuditEntry = {
   actor: { kind: 'user', userId: USER_ID, displayName: 'Ольга' },
   target: { userId: MARIA, displayName: 'Мария' },
   reason: 'смена задач',
+  subject: null,
   details: { roleFrom: 'moderator', roleTo: 'organizer' },
 };
 const granted: AuditEntry = {
@@ -38,6 +39,7 @@ const granted: AuditEntry = {
   actor: { kind: 'cli' },
   target: { userId: USER_ID, displayName: 'Ольга' },
   reason: null,
+  subject: null,
   details: { roleTo: 'admin' },
 };
 const signedIn: AuditEntry = {
@@ -47,6 +49,7 @@ const signedIn: AuditEntry = {
   actor: { kind: 'user', userId: USER_ID, displayName: 'Ольга' },
   target: null,
   reason: null,
+  subject: null,
   details: null,
 };
 

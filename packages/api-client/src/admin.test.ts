@@ -125,7 +125,7 @@ describe('createAdminApiClient: пути, методы, cookie панели', ()
   });
 
   it('ответ не по схеме — ошибка, а не данные', async () => {
-    const { api } = admin(200, { ...me, permissions: ['races.manage'] });
+    const { api } = admin(200, { ...me, permissions: ['routes.manage'] });
     await expect(api.me()).rejects.toThrow();
   });
 

@@ -431,6 +431,25 @@ read-модель — для всех платформ приложения.
 
 _Отклонения при реализации — дописываются ниже._
 
+**S1 (контракты), уточнения формы без изменения смысла read-контракта §13:**
+
+- `minskToday` перенесена из `auth/registration.schema.ts` в `time.ts` (реэкспорт сохранён — потребители не
+  меняются); добавлена `addLocalDays(date, days)` — граница `endsBefore` сезона и «≤ 14 дней» календаря.
+- `minskWallTimeToUtc` возвращает `YYYY-MM-DDTHH:mm:00Z` (как в AC13); ответы API — `toISOString()` (`.000Z`); оба
+  проходят `UtcMinute`.
+- Массивы фильтров query (`RaceListQuery.bikeClass/month`, `CalendarQuery.discipline/city/month`) — через
+  `queryArray(item, max)`: `?k=a` (строка) приводится к `['a']`, тип вывода — тот же массив, что в §11.
+- `Version`, `PageCursor` (≤ 200 символов), `SINGLE_LINE`/`MULTI_LINE` — общие помощники; коды полей admin-02 вынесены
+  в `SCHEDULE_FIELD_ERROR_CODES` (тот же порядок в конце `FieldErrorCode`) — формы приложения исключают их из своей
+  карты текстов.
+- `PanelCalendarStart` описан явными полями ответа (а не `CalendarStartInput.extend`): ответ — форма данных, правила
+  ввода (длины, `https`) в разборе ответа не повторяются. Добавлен `RepublishCalendarStartRequest { version }` —
+  «Вернуть в календарь» тоже несёт `version` (R3). `PanelCalendarQuery` — `status?`, `discipline?`, курсор.
+- `RaceDescription` и необязательные тексты календаря: пустая строка после обрезки → `null`.
+- `AuditEntry.subject` — обязательное поле ответа (`null` у записей admin-01); `AuditQuery.subjectId`.
+- `createApiClient`: публичные методы идут через отдельный HTTP-клиент без `getAccessToken` — токен в них не уходит
+  даже у вошедшего пользователя.
+
 # 8.3 Security checklist
 
 Затронуты роли и права (новые права, владение), конфигурация API (`app.module.ts`, `error-messages.ts`), миграции
