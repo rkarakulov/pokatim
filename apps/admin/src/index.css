@@ -281,7 +281,6 @@ textarea.field__control {
   display: grid;
   grid-template-columns: var(--density-sidebar-width) minmax(0, 1fr);
   min-height: 100vh;
-  max-width: var(--density-content-max-width);
 }
 
 .sidebar {
