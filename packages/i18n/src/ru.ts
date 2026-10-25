@@ -116,6 +116,12 @@ export const ru = {
   'races.detail.description': 'Описание',
   'races.detail.notFound': 'Гонка не найдена',
   'races.detail.allRaces': 'Все гонки',
+  // экран сезона (публичный, блок 03; Q1, Q2 — без таблицы)
+  'season.title': 'Сезон',
+  'season.notFound': 'Сезон не найден',
+  'season.races': 'Гонки сезона',
+  'season.racesEmpty': 'В сезоне пока нет гонок',
+  'season.others': 'Другие сезоны',
   'section.races': 'Гонки',
   'section.rides': 'Кофе-райды',
   'section.routes': 'Маршруты',

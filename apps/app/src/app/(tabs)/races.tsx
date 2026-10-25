@@ -1,5 +1,7 @@
+import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { textStyle, useTheme } from '@rkarakulov/ui';
+import { Button, textStyle, useTheme } from '@rkarakulov/ui';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DocumentTitle } from '@/components/document-title';
 import { TopBar } from '@/components/top-bar';
 import { NO_FILTERS, type RaceFilters } from '@/features/races/filters';
+import { useHeaderSeason } from '@/features/races/queries';
 import { RaceFeed } from '@/features/races/race-feed';
 
 const DOCUMENT_TITLE = `${t('races.title')} — ${t('app.name')}`;
@@ -18,7 +21,10 @@ const DOCUMENT_TITLE = `${t('races.title')} — ${t('app.name')}`;
  */
 export default function RacesScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const [filters, setFilters] = useState<RaceFilters>(NO_FILTERS);
+  // вход в сезон (Q3): текущий → ближайший предстоящий → последний завершённый; сезонов нет — кнопки нет
+  const season = useHeaderSeason();
 
   return (
     <SafeAreaView
@@ -38,6 +44,13 @@ export default function RacesScreen() {
             >
               {t('races.title')}
             </Text>
+            {season ? (
+              <Button
+                variant="secondary"
+                label={season.name}
+                onPress={() => router.push(`/seasons/${season.id}`)}
+              />
+            ) : null}
           </View>
         }
       />
@@ -52,6 +65,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: space.s3,
   },
   title: { flexShrink: 1 },
 });

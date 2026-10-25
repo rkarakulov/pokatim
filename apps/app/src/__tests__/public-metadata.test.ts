@@ -5,6 +5,7 @@ import { generateMetadata as signInMetadata } from '../app/(onboarding)/sign-in'
 import { generateMetadata as resetMetadata } from '../app/auth/reset/[token]';
 import { generateMetadata as verifyMetadata } from '../app/auth/verify/[token]';
 import { generateMetadata as raceMetadata, loader as raceLoader } from '../app/races/[id]';
+import { generateMetadata as seasonMetadata, loader as seasonLoader } from '../app/seasons/[id]';
 import { resetPublicSsrCache } from '@/lib/public-ssr';
 
 import { EMAIL, LINK_TOKEN } from './auth-fixtures';
@@ -179,6 +180,66 @@ describe('мета публичной карточки гонки (SSR, R5)', ()
   it('невалидный id — без запроса во внутренний API', async () => {
     expect(await raceMetadata(undefined, { id: '../admin' })).toMatchObject({ robots: 'noindex' });
     expect(await raceLoader(undefined, { id: '../admin' })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('мета публичного экрана сезона (SSR)', () => {
+  const ID = '0190a6f4-0000-7000-8000-000000000026';
+  const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
+
+  beforeEach(() => {
+    resetPublicSsrCache();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    process.env.API_INTERNAL_URL = 'http://api.internal:3000';
+  });
+  afterEach(() => {
+    fetchMock.mockReset();
+    delete process.env.API_INTERNAL_URL;
+  });
+
+  it('название и даты с годом; og:url — WEB_ORIGIN + /seasons/<id>', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            id: ID,
+            name: 'Сезон 2026',
+            startsOn: '2026-04-01',
+            endsOn: '2026-10-31',
+            phase: 'current',
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+    process.env.WEB_ORIGIN = ORIGIN;
+
+    expect(await seasonLoader(undefined, { id: ID })).toMatchObject({ name: 'Сезон 2026' });
+    expect(await seasonMetadata(undefined, { id: ID })).toEqual({
+      title: 'Сезон 2026 — Покатим',
+      description: '1 апреля–31 октября 2026',
+      openGraph: {
+        title: 'Сезон 2026',
+        description: '1 апреля–31 октября 2026',
+        type: 'website',
+        siteName: 'Покатим',
+        url: `${ORIGIN}/seasons/${ID}`,
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('не найден — нейтральная мета и noindex; невалидный id — без запроса', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404 })),
+    );
+    expect(await seasonMetadata(undefined, { id: ID })).toMatchObject({
+      title: 'Сезон — Покатим',
+      robots: 'noindex',
+    });
+    fetchMock.mockClear();
+    expect(await seasonMetadata(undefined, { id: 'current' })).toMatchObject({ robots: 'noindex' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

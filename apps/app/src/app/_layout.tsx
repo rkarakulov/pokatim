@@ -117,6 +117,7 @@ export default function RootLayout() {
         <Stack.Screen name="status" />
         {/* публичные карточки по ссылке (блок 03, Q8): гость и вошедший; на native — поверх вкладок, без таб-бара */}
         <Stack.Screen name="races/[id]" />
+        <Stack.Screen name="seasons/[id]" />
       </Stack>
       <StatusBar style="auto" />
     </QueryClientProvider>
