@@ -4,7 +4,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
-import { ME, renderApp } from '../../test/app';
+import { httpError, ME, renderApp } from '../../test/app';
 
 vi.mock('../../api', () => ({
   api: {
@@ -146,5 +146,38 @@ describe('«Календарь» (AC12)', () => {
     await waitFor(() =>
       expect(mocked.republishCalendarStart).toHaveBeenCalledWith(HIDDEN, { version: 2 }),
     );
+  });
+
+  it.each([
+    ['80, abc', 'нечисловая'],
+    ['80, 1001', 'вне диапазона'],
+  ])('дистанция «%s» (%s) — ошибка под полем «Дистанция, км», без запроса', async (value) => {
+    await renderApp('/calendar');
+    await screen.findByRole('cell', { name: 'Гран-при Минска' });
+    fireEvent.change(field(/^Название/), { target: { value: 'Гран-при Минска' } });
+    fireEvent.change(field(/^Дата\b/), { target: { value: '2027-06-14' } });
+    fireEvent.change(field(/^Город/), { target: { value: 'Минск' } });
+    fireEvent.change(field(/^Дистанция, км/), { target: { value } });
+    fireEvent.click(within(form()).getByRole('button', { name: 'Опубликовать' }));
+
+    const error = await within(form()).findByText('Проверьте значение.');
+    expect(field(/^Дистанция, км/).getAttribute('aria-describedby')).toContain(error.id);
+    expect(mocked.createCalendarStart).not.toHaveBeenCalled();
+  });
+
+  it('ошибка сервера с путём distancesKm.0 — под полем «Дистанция, км»', async () => {
+    mocked.createCalendarStart.mockRejectedValue(
+      httpError(400, 'VALIDATION_FAILED', { fields: [{ path: 'distancesKm.0', code: 'INVALID' }] }),
+    );
+    await renderApp('/calendar');
+    await screen.findByRole('cell', { name: 'Гран-при Минска' });
+    fireEvent.change(field(/^Название/), { target: { value: 'Гран-при Минска' } });
+    fireEvent.change(field(/^Дата\b/), { target: { value: '2027-06-14' } });
+    fireEvent.change(field(/^Город/), { target: { value: 'Минск' } });
+    fireEvent.change(field(/^Дистанция, км/), { target: { value: '100' } });
+    fireEvent.click(within(form()).getByRole('button', { name: 'Опубликовать' }));
+
+    const error = await within(form()).findByText('Проверьте значение.');
+    expect(field(/^Дистанция, км/).getAttribute('aria-describedby')).toContain(error.id);
   });
 });

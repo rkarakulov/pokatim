@@ -87,3 +87,24 @@ describe('схемы времени', () => {
     expect(UtcMinute.safeParse('2026-10-25').success).toBe(false);
   });
 });
+
+describe('диапазон годов (Codex pass 2): 1900–9998', () => {
+  it('годы 0000–1899 — ошибка схемы, а не RangeError при переводе', () => {
+    expect(LocalDate.safeParse('0099-01-01').success).toBe(false);
+    expect(LocalDate.safeParse('1899-12-31').success).toBe(false);
+    expect(YearMonth.safeParse('0099-01').success).toBe(false);
+    expect(YearMonth.safeParse('1899-12').success).toBe(false);
+    expect(UtcMinute.safeParse('0099-01-01T00:00:00Z').success).toBe(false);
+    expect(LocalDate.parse('1900-01-01')).toBe('1900-01-01');
+    expect(YearMonth.parse('9998-12')).toBe('9998-12');
+    expect(YearMonth.safeParse('9999-01').success).toBe(false);
+    expect(LocalDate.safeParse('9999-12-31').success).toBe(false);
+  });
+
+  it('перевод на границах диапазона не падает', () => {
+    expect(() => minskDayStartUtc('1900-01-01')).not.toThrow();
+    expect(minskDayStartUtc(addLocalDays('9998-12-31', 1)).toISOString()).toBe(
+      '9998-12-31T21:00:00.000Z',
+    );
+  });
+});

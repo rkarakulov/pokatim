@@ -16,7 +16,7 @@ import { type ReactNode, useId, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 
 import { api } from '../../api';
-import { fieldErrorText, serverFieldErrors } from '../../field-errors';
+import { errorCodeOf, fieldErrorText, formFieldOf, serverFieldErrors } from '../../field-errors';
 import { formatDateTimeLong } from '../../format';
 import { isConflict } from '../../session/errors';
 import {
@@ -139,10 +139,31 @@ type Pending = 'publish' | 'discard' | 'cancel' | undefined;
  * допустимой датой. Что можно менять — `editable` сервера (зафиксированные поля — с замком, причина под кнопкой).
  * Подсказки правил — только отображение, решает сервер.
  */
-export function RaceEditor({ race }: { race?: PanelRace }) {
+export function RaceEditor({
+  race: latest,
+  refreshFailed = false,
+  onRetryRefresh,
+}: {
+  race?: PanelRace;
+  /** Фоновое обновление карточки не удалось — данные остаются, сверху баннер с повтором (§4.12). */
+  refreshFailed?: boolean;
+  onRetryRefresh?: () => void;
+}) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const seasons = useQuery(seasonsQuery).data ?? [];
+  /**
+   * Снимок, на котором основана форма (R3): версия запросов и база сравнения изменённых полей. Меняется только своим
+   * `reset` (сохранение, публикация, отмена, «Обновить»); фоновый ответ с новой версией — конфликт, введённое остаётся.
+   */
+  const [race, setBase] = useState(latest);
+  const stale = latest !== undefined && race !== undefined && latest.version > race.version;
+  /**
+   * Вычисляемые сервером поля (фаза, сезон, `editable`) меняются без смены версии (часы, новый сезон): при той же
+   * версии берутся из свежего ответа; значения формы и версия — из снимка.
+   */
+  const view = latest && race && latest.version === race.version ? latest : race;
+  const seasonsState = useQuery(seasonsQuery);
+  const seasons = seasonsState.data;
   const submitReasonId = useId();
   const publishReasonId = useId();
   const [failure, setFailure] = useState<string>();
@@ -158,7 +179,7 @@ export function RaceEditor({ race }: { race?: PanelRace }) {
     name: ['windowEndsAt', 'protocolPlannedAt'],
   });
 
-  const editable = race?.editable;
+  const editable = view?.editable;
   const locked = (field: RaceField) => (editable ? !editable.fields.includes(field) : false);
   const lockMark = (field: RaceField) =>
     locked(field) ? <LockMark label={t('admin.locked')} /> : undefined;
@@ -170,14 +191,35 @@ export function RaceEditor({ race }: { race?: PanelRace }) {
   const tooEarly =
     earliest !== undefined && protocolMs !== undefined && protocolMs < Date.parse(earliest);
   const onlyLater =
-    race?.phase === 'closed' &&
+    race !== undefined &&
+    view?.phase === 'closed' &&
     protocolMs !== undefined &&
     protocolMs < Date.parse(race.protocolPlannedAt);
-  const season = /^\d{4}-\d{2}-\d{2}/.test(windowEndsAt)
-    ? seasonOfDate(seasons, windowEndsAt.slice(0, 10))
-    : undefined;
+  const season =
+    seasons && /^\d{4}-\d{2}-\d{2}/.test(windowEndsAt)
+      ? seasonOfDate(seasons, windowEndsAt.slice(0, 10))
+      : undefined;
+  // «нет сезона» — только после успешного ответа; загрузка — скелетон, ошибка без данных — повтор
+  const seasonValue: ReactNode = seasons ? (
+    season ? (
+      t('admin.races.seasonValue', { name: season.name, range: seasonRangeText(season) })
+    ) : (
+      t('admin.races.seasonNone')
+    )
+  ) : seasonsState.isError ? (
+    <>
+      {t('admin.races.seasonsFailed')}{' '}
+      <Button size="sm" onClick={() => void seasonsState.refetch()}>
+        {t('admin.races.seasonsRetry')}
+      </Button>
+    </>
+  ) : (
+    <span className="skeleton"> </span>
+  );
 
   const reset = (next: PanelRace) => {
+    setBase(next);
+    setConflict(false);
     queryClient.setQueryData(raceQuery(next.id).queryKey, next);
     form.reset(raceFormOf(next));
   };
@@ -190,7 +232,9 @@ export function RaceEditor({ race }: { race?: PanelRace }) {
     const fields = serverFieldErrors(error);
     if (fields?.length) {
       for (const field of fields) {
-        form.setError(field.path as keyof RaceFormValues, { type: 'server', message: field.code });
+        // вложенный путь (`surfaces.0`) — ошибка под полем целиком
+        const path = formFieldOf(field.path) as keyof RaceFormValues;
+        form.setError(path, { type: 'server', message: field.code });
       }
       return;
     }
@@ -201,7 +245,10 @@ export function RaceEditor({ race }: { race?: PanelRace }) {
     mutationFn: async (values: RaceFormOutput) => {
       const input = raceInputOf(values);
       if (!race) return api.createRace(input);
-      return api.updateRace(race.id, { version: race.version, ...raceChanges(race, input) });
+      return api.updateRace(race.id, {
+        version: race.version,
+        ...raceChanges({ ...race, editable: view?.editable ?? race.editable }, input),
+      });
     },
     onSuccess: async (saved) => {
       await afterChange();
@@ -216,7 +263,7 @@ export function RaceEditor({ race }: { race?: PanelRace }) {
 
   const errors = form.formState.errors;
   const errorOf = (field: keyof RaceFormValues): string | undefined => {
-    const code = errors[field]?.message;
+    const code = errorCodeOf(errors[field]);
     if (field === 'protocolPlannedAt') {
       if (code === 'PROTOCOL_ONLY_LATER' || (!code && onlyLater)) {
         return race
@@ -232,9 +279,9 @@ export function RaceEditor({ race }: { race?: PanelRace }) {
     return fieldErrorText(code);
   };
   const protocolHelp = earliest
-    ? race?.phase === 'closed'
+    ? race && view?.phase === 'closed'
       ? t('admin.races.protocolClosedHint', { date: formatDateTimeLong(race.protocolPlannedAt) })
-      : race?.phase === 'open'
+      : view?.phase === 'open'
         ? t('admin.races.protocolOpenHint', { date: formatDateTimeLong(earliest) })
         : t('admin.races.protocolHint', { date: formatDateTimeLong(earliest) })
     : undefined;
@@ -304,15 +351,41 @@ export function RaceEditor({ race }: { race?: PanelRace }) {
         meta={
           race
             ? `${t('admin.races.headline', {
-                phase: t(`domain.racePhase.${race.phase}`),
+                phase: t(`domain.racePhase.${(view ?? race).phase}`),
                 protocol: formatDateTimeLong(race.protocolPlannedAt),
-              })}${race.season ? ` · ${race.season.name}` : ''}`
+              })}${view?.season ? ` · ${view.season.name}` : ''}`
             : t('admin.races.zoneLead')
         }
         actions={actions}
       />
       <div className="page-body form-column">
-        {conflict ? <ConflictBanner onReload={() => void refresh()} /> : null}
+        {refreshFailed ? (
+          <Banner
+            tone="error"
+            role="alert"
+            title={t('admin.refreshFailed')}
+            actions={
+              <Button size="sm" onClick={onRetryRefresh}>
+                {t('state.retry')}
+              </Button>
+            }
+          >
+            {t('admin.refreshFailedMessage')}
+          </Banner>
+        ) : null}
+        {seasons && seasonsState.isError ? (
+          <Banner
+            tone="error"
+            role="alert"
+            title={t('admin.races.seasonsRefreshFailed')}
+            actions={
+              <Button size="sm" onClick={() => void seasonsState.refetch()}>
+                {t('admin.races.seasonsRetry')}
+              </Button>
+            }
+          />
+        ) : null}
+        {conflict || stale ? <ConflictBanner onReload={() => void refresh()} /> : null}
         {editReason ? <Banner>{t(`admin.races.reason.${editReason}`)}</Banner> : null}
         <form
           noValidate
@@ -409,14 +482,7 @@ export function RaceEditor({ race }: { race?: PanelRace }) {
             ))}
             <ReadonlyField
               label={t('admin.races.field.season')}
-              value={
-                season
-                  ? t('admin.races.seasonValue', {
-                      name: season.name,
-                      range: seasonRangeText(season),
-                    })
-                  : t('admin.races.seasonNone')
-              }
+              value={seasonValue}
               help={t('admin.races.seasonHint')}
             />
             <Controller

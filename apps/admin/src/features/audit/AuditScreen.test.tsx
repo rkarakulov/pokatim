@@ -105,7 +105,7 @@ describe('«Журнал действий» (AC12)', () => {
           id: '01890a5d-ac96-774b-bcce-b302099a8062',
           action: 'season.updated',
           subject: { kind: 'season', id: signedIn.id, label: 'Сезон 2026' },
-          details: { changedFields: ['name', 'endsOn'] },
+          details: { changedFields: ['name', 'endsOn', 'futureField'] },
         },
       ],
       nextCursor: null,
@@ -113,7 +113,8 @@ describe('«Журнал действий» (AC12)', () => {
     await renderApp('/audit');
     expect(await screen.findByText('Минское кольцо')).toBeTruthy();
     expect(screen.getByText('Отменена гонка: Неблагоприятные погодные условия')).toBeTruthy();
-    expect(screen.getByText('Изменён сезон: name, endsOn')).toBeTruthy();
+    // подписи полей по виду объекта; незнакомое (сервер новее) — нейтральная подпись
+    expect(screen.getByText('Изменён сезон: Название, Конец, другое поле')).toBeTruthy();
     expect(screen.getByText('Сезон 2026')).toBeTruthy();
   });
 

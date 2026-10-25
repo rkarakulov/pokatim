@@ -170,6 +170,8 @@ describe('GET /v1/calendar (AC8)', () => {
       'city[$gt]=',
       'discipline=road&extra=1',
       'from=2026-02-30',
+      'from=0099-01-01',
+      'month=0099-01',
       'cursor=abc',
       'limit=0',
     ]) {
