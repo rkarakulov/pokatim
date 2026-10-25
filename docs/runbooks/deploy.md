@@ -156,6 +156,10 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
 - Dev-стенд отдаёт `X-Robots-Tag: noindex, nofollow` — поисковики его не индексируют.
 - `/mail/` (UI Mailpit) — только в https-блоке, с WebSocket (`map $http_upgrade $pokatim_mail_connection` — своё имя
   переменной: `map` общий для всех сайтов сервера). Без сертификата `/mail/` → 404.
+- `/ow/` — прокси на Open Wearables этого хоста (ADR-0011), только если в `.env` задан
+  `OW_PUBLIC_PROXY=http://127.0.0.1:<порт API OW>` (другие адреса отклоняются — открытого прокси нет). Нужен для
+  вебхуков провайдеров на нашем домене: в портале Garmin — `https://<PUBLIC_HOST>/ow/api/v1/providers/garmin/webhooks`.
+  Сам API pokatim ходит в OW по docker-сети (`OW_API_URL`), не через этот путь.
 
 ## TLS
 
