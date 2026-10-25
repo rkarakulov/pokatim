@@ -108,20 +108,23 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(funct
   const ids = useFieldIds(error, help);
   return (
     <Frame {...ids} label={label} labelAside={labelAside} error={error} help={help}>
-      <select
-        ref={ref}
-        id={ids.id}
-        className={`field__control t-body ${className ?? ''}`}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={ids.describedBy}
-        {...select}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      {/* обёртка рисует шеврон: у <select> нет ::after, системная стрелка снята (appearance: none) */}
+      <span className="field__select">
+        <select
+          ref={ref}
+          id={ids.id}
+          className={`field__control t-body ${className ?? ''}`}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={ids.describedBy}
+          {...select}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </span>
     </Frame>
   );
 });
