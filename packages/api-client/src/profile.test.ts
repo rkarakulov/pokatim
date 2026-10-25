@@ -64,6 +64,19 @@ describe('api-client: онбординг профиля (Bearer — только
     ).rejects.toBeInstanceOf(ApiHttpError);
   });
 
+  it('getProfile — GET /v1/profile с Bearer; неизвестные коды отброшены', async () => {
+    const { calls, api } = client(200, { rideReasons: ['calendar', 'future_code'] });
+    await expect(api.getProfile('access.jwt.x')).resolves.toEqual({ rideReasons: ['calendar'] });
+    expect(calls).toEqual([
+      {
+        url: 'https://api.test/v1/profile',
+        method: 'GET',
+        authorization: 'Bearer access.jwt.x',
+        body: undefined,
+      },
+    ]);
+  });
+
   it('публичные методы Bearer не отправляют', async () => {
     const { calls, api } = client(200, { status: 'ok' });
     await api.health().catch(() => undefined);

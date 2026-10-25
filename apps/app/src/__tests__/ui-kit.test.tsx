@@ -55,7 +55,7 @@ describe('витрина компонентов', () => {
     setDev(false);
     await renderRouter(app, { initialUrl: '/ui-kit', wrapper: createQueryWrapper() });
 
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Витрина компонентов' })).toBeNull();
   });
 });

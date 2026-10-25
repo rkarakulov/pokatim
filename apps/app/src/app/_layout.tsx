@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { useRegistrationStore } from '@/features/auth/registration-store';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { onboardingStep, useOnboardingStore } from '@/features/onboarding/onboarding-store';
+import { connectFocusManager } from '@/lib/focus-manager';
 import { connectOnlineManager } from '@/lib/online-manager';
 import { createQueryClient } from '@/lib/query-client';
 import { fontAssets } from '@/theme/fonts';
@@ -19,6 +20,8 @@ import { fontAssets } from '@/theme/fonts';
 // входа; на web splash нет, а дерево рендерится сразу (SSR): гарды ниже допускают «сессия ещё неизвестна»
 void SplashScreen.preventAutoHideAsync();
 connectOnlineManager();
+// возврат приложения из фона (native) / фокус вкладки (web) — перезапрос устаревших данных (R7 блока 02)
+connectFocusManager();
 
 export default function RootLayout() {
   const theme = useTheme();

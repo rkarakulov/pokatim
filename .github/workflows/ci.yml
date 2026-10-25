@@ -83,7 +83,8 @@ jobs:
   # (без загрузки браузеров Playwright). API шаблон не поднимает: экраны с данными показывают «Нет соединения».
   # Смоук с API — проектом: серверы — apps/app/e2e/project.ts, здесь — services, env (E2E_API=1, окружение API) и
   # подготовка (сборка API, миграции) в отмеченных местах; `pnpm e2e:web` передаёт окружение job целиком
-  # pokatim: регистрация → письмо (Mailpit) → подтверждение → вход → перезагрузка (cookie сессии)
+  # pokatim: регистрация → письмо (Mailpit) → подтверждение → вход → перезагрузка (cookie сессии); Главная с данными
+  # через API панели (CLI grant-admin из dist, e2e/home-fixture.ts)
   web:
     runs-on: ubuntu-latest
     # проект: services (Redis, …; MongoDB — шагом, как в check) для серверов смоука — здесь

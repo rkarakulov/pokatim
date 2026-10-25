@@ -90,6 +90,19 @@ paths:
   эффектах. Гарды допускают `unknown` и `unavailable`: вкладки — скелетон оболочки или повтор, не редирект (SSR
   отдаёт HTML).
 
+## Главная (блок 02, `docs/product/home.md`)
+
+- Реестр разделов — `features/home/sections.ts` (`AVAILABLE_HOME_SECTIONS`): раздел входит только вместе с живым
+  read-API своего домена, без заглушек «скоро». Порядок — `orderHomeSections` по `GET /v1/profile`; профиль не
+  загрузился — порядок вкладок, без ошибки на экране.
+- Данные раздела — публичный list-эндпоинт домена (`limit: 1`), ключ с префиксом вкладки (`['races', 'list', …]`);
+  своего агрегата/BFF и своих DTO нет. Состояния — `HomeSection` (шапка сразу, скелетон и ошибки — в слоте героя).
+- Время и даты — только `contracts/src/time.ts` (`utcToMinskWallTime`, `minskToday`, `addLocalDays`) + месяцы
+  `date.month.*` (`features/home/format.ts`, тесты в TZ ≠ Минск). Фаза — с сервера; `'unknown'` в фазе, покрытии,
+  дисциплине — нейтрально: без строки и подписи.
+- Обновление: pull-to-refresh (`usePullToRefresh`, индикатор только на время жеста) и `focusManager` — native
+  `src/lib/focus-manager.ts` (`AppState`), web — встроенный `visibilitychange`. Polling — нет.
+
 ## Проверка
 
 `pnpm --filter @pokatim/app typecheck` и тесты; сборку EAS (`build:*`) агент не запускает. Ручная проверка на

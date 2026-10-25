@@ -1,6 +1,12 @@
-import type { Page } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 
 import { expect, test } from './fixtures';
+import {
+  HOME_FIXTURE_PASSWORD,
+  HOME_FIXTURE_YEAR,
+  publishHomeData,
+  registerHomeRider,
+} from './home-fixture';
 import { latestMailText, passwordResetLink, verificationLink } from './mailpit';
 import { REFRESH_URL, SIGN_IN_URL } from './project';
 import { API_URL, BASE_URL, DEV_URL, WITH_API } from './urls';
@@ -10,7 +16,8 @@ import { API_URL, BASE_URL, DEV_URL, WITH_API } from './urls';
 // Главная → вход переживает перезагрузку (cookie) →
 // выход → вход по паролю (неверный пароль — баннер) → перезагрузка → выход → «Забыли пароль?» → письмо → новый пароль
 // → старый пароль не подходит → вход новым → письмо «Пароль изменён»; вход в браузере с выданным разрешением
-// геопозиции — шаг геопозиции пропущен.
+// геопозиции — шаг геопозиции пропущен. Главная (блок 02): порядок разделов по опросу, герои по публичному API;
+// гонка и старт, опубликованные через API панели (`home-fixture.ts`), — герои с названиями.
 // Ошибки страницы (исключения, рассинхрон гидрации, неожиданные отказы загрузки) проверяет фикстура (fixtures.ts);
 // ожидаемый 401 восстановления сессии анонима — в e2e/project.ts.
 
@@ -18,6 +25,25 @@ import { API_URL, BASE_URL, DEV_URL, WITH_API } from './urls';
 const SESSION_COOKIE = { name: '__Secure-pokatim_rt', path: '/v1/auth/session' };
 /** Ответ опроса онбординга (слайс 4) — первый эндпоинт под AuthGuard. */
 const SURVEY_URL = `${API_URL}/v1/profile/onboarding/survey`;
+
+/**
+ * Герои разделов Главной (блок 02) — по публичному API: первая гонка `scope=current` и первый старт календаря (их же
+ * запрашивает приложение); пусто — пустые герои разделов.
+ */
+async function expectHomeHeroes(page: Page, request: APIRequestContext) {
+  const races = await (await request.get(`${API_URL}/v1/races?scope=current&limit=1`)).json();
+  const starts = await (await request.get(`${API_URL}/v1/calendar?limit=1`)).json();
+  const race = races.items[0]?.title as string | undefined;
+  const start = starts.items[0]?.title as string | undefined;
+  await expect(page.getByText(race ?? 'Пока нет открытых гонок', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(start ?? 'Пока нет стартов в календаре', { exact: true }),
+  ).toBeVisible();
+}
+
+/** Заголовки разделов Главной сверху вниз. */
+const homeSections = (page: Page) =>
+  page.getByRole('heading', { name: /^Ближайшие (гонки|старты)$/ });
 
 /**
  * Главная гостя после гидрации. С API: восстановление сессии — 401, гард ведёт на регистрацию. Без API: сеть
@@ -266,7 +292,13 @@ test.describe('с API', () => {
     await expect(page.getByRole('heading', { name: 'Покажем, что рядом' })).toBeVisible();
     await page.getByRole('button', { name: 'Не сейчас' }).click();
     await expect(page).toHaveURL(`${BASE_URL}/`);
-    await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Покатим' })).toBeVisible();
+
+    // Главная (блок 02): «Календарь стартов» отмечен в опросе — раздел первым с тегом; герои или пустые герои
+    await expect(page).toHaveTitle('Главная — Покатим');
+    await expect(homeSections(page)).toHaveText(['Ближайшие старты', 'Ближайшие гонки']);
+    await expect(page.getByText('по вашему выбору', { exact: true })).toHaveCount(1);
+    await expectHomeHeroes(page, request);
 
     // refresh — только в httpOnly cookie на пути сессии; JS страницы его не видит
     const cookies = await context.cookies();
@@ -282,7 +314,7 @@ test.describe('с API', () => {
     const refreshed = page.waitForResponse(REFRESH_URL);
     await page.reload();
     expect((await refreshed).status()).toBe(200);
-    await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Покатим' })).toBeVisible();
 
     // выход: сервер отзывает сессию и стирает cookie, гард ведёт на «Вход» (на устройстве уже входили)
     await page.getByRole('button', { name: 'Выйти' }).click();
@@ -307,14 +339,14 @@ test.describe('с API', () => {
     const signInBody = await (await signedIn).json();
     expect(signInBody.state).toBe('signedIn');
     expect(signInBody.session).not.toHaveProperty('refreshToken');
-    await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Покатим' })).toBeVisible();
     expect(await page.evaluate(() => document.cookie)).not.toContain(SESSION_COOKIE.name);
 
     // и вход по паролю переживает перезагрузку
     const restored = page.waitForResponse(REFRESH_URL);
     await page.reload();
     expect((await restored).status()).toBe(200);
-    await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Покатим' })).toBeVisible();
 
     // сброс пароля: выход → «Забыли пароль?» (e-mail переносится из формы входа) → письмо со ссылкой
     await page.getByRole('button', { name: 'Выйти' }).click();
@@ -347,7 +379,7 @@ test.describe('с API', () => {
     await expect(page.getByText('Неверный e-mail или пароль.')).toBeVisible();
     await page.getByRole('textbox', { name: 'Пароль' }).fill(newPassword);
     await page.getByRole('button', { name: 'Войти' }).click();
-    await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Покатим' })).toBeVisible();
 
     // уведомление о смене пароля — без ссылки с токеном
     const changed = await latestMailText(request, `to:"${email}" subject:"Пароль изменён"`);
@@ -362,11 +394,53 @@ test.describe('с API', () => {
     await other.getByRole('textbox', { name: 'E-mail' }).fill(email);
     await other.getByRole('textbox', { name: 'Пароль' }).fill(newPassword);
     await other.getByRole('button', { name: 'Войти' }).click();
-    await expect(other.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    await expect(other.getByRole('heading', { name: 'Покатим' })).toBeVisible();
     await expect(other).toHaveURL(`${BASE_URL}/`);
     // перезагрузка: онбординг снова по серверу — Главная
     await other.reload();
-    await expect(other.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    await expect(other.getByRole('heading', { name: 'Покатим' })).toBeVisible();
     await granted.close();
+  });
+
+  test('Главная с данными: опубликованные через API панели гонка и старт — герои с названиями (AC8)', async ({
+    page,
+    request,
+  }) => {
+    const { raceTitle, startTitle, withdraw } = await publishHomeData(request);
+    try {
+      // публичное чтение видит свои записи года смоука (без входа)
+      const month = `${HOME_FIXTURE_YEAR}-06`;
+      const races = await (
+        await request.get(`${API_URL}/v1/races`, {
+          params: { scope: 'current', month, limit: 50 },
+        })
+      ).json();
+      expect(races.items.map((item: { title: string }) => item.title)).toContain(raceTitle);
+      const starts = await (
+        await request.get(`${API_URL}/v1/calendar`, { params: { month, limit: 50 } })
+      ).json();
+      expect(starts.items.map((item: { title: string }) => item.title)).toContain(startTitle);
+
+      // райдер прогона входит в приложение: опрос «Гонки и результаты» → геопозиция → Главная
+      const rider = await registerHomeRider(request);
+      await page.goto('/sign-in');
+      await page.getByRole('textbox', { name: 'E-mail' }).fill(rider);
+      await page.getByRole('textbox', { name: 'Пароль' }).fill(HOME_FIXTURE_PASSWORD);
+      await page.getByRole('button', { name: 'Войти' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/survey`);
+      await page.getByRole('checkbox', { name: 'Гонки и результаты' }).click();
+      await page.getByRole('button', { name: 'Продолжить' }).click();
+      await page.getByRole('button', { name: 'Не сейчас' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/`);
+
+      await expect(homeSections(page)).toHaveText(['Ближайшие гонки', 'Ближайшие старты']);
+      await expect(page.getByText('по вашему выбору', { exact: true })).toHaveCount(1);
+      await expect(page.getByText('Окно гонки', { exact: true })).toBeVisible();
+      await expect(page.getByText('Ближайший старт', { exact: true })).toBeVisible();
+      // герой — ближайшая запись публичного API (в dev-БД это может быть не запись смоука)
+      await expectHomeHeroes(page, request);
+    } finally {
+      await withdraw();
+    }
   });
 });

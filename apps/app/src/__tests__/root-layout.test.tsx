@@ -53,7 +53,7 @@ describe('корневой layout: splash и шрифты', () => {
     mockedUseFonts.mockReturnValue([true, null]);
     await renderRouter(app);
 
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(SplashScreen.hideAsync).toHaveBeenCalled();
   });
 
@@ -62,7 +62,7 @@ describe('корневой layout: splash и шрифты', () => {
     mockedUseFonts.mockReturnValue([false, new Error('font failed')]);
     await renderRouter(app);
 
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(SplashScreen.hideAsync).toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('font failed'));
     warn.mockRestore();

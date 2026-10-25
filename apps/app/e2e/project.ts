@@ -26,6 +26,9 @@ const api = {
   CORS_ORIGINS: `${BASE_URL},${DEV_URL}`,
 };
 
+/** Окружение процесса API — для CLI панели (`grant-admin`) из смоука Главной (`home-fixture.ts`). */
+export const apiProcessEnv: NodeJS.ProcessEnv = { ...process.env, ...api };
+
 /** Серверы проекта, которые Playwright поднимает до web-серверов смоука. */
 export const servers: WebServer[] = WITH_API
   ? [

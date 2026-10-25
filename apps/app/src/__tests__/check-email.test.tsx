@@ -153,7 +153,7 @@ describe('«Подтвердите e-mail»', () => {
     await advance(3000);
     await advance(1000);
 
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('session not persisted'));
     if (original) setItem.mockImplementation(original);
     warn.mockRestore();
@@ -174,7 +174,7 @@ describe('«Подтвердите e-mail»', () => {
     expect(JSON.parse(storedValue('pokatim.session') ?? '{}')).toEqual(session);
 
     await advance(1000);
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/');
     expect(storedValue('pokatim.registration')).toBeUndefined();
   });
