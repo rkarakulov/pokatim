@@ -176,7 +176,7 @@ describe('приложение: публичное чтение без Authoriza
     await expect(current.api.getCurrentSeason()).resolves.toEqual({ season: null });
     const cities = app(200, { cities: ['Минск'] });
     await cities.api.listCalendarCities();
-    const start = app(200, { ...calendarStart, discipline: 'cyclocross' });
+    const start = app(200, { ...calendarStart, discipline: 'cyclocross', phase: 'upcoming' });
     await expect(start.api.getCalendarStart(ID)).resolves.toMatchObject({ discipline: 'unknown' });
     expect([current.calls[0]?.url, cities.calls[0]?.url, start.calls[0]?.url]).toEqual([
       'https://api.test/v1/seasons/current',
@@ -187,6 +187,16 @@ describe('приложение: публичное чтение без Authoriza
       expect(call.method).toBe('GET');
       expect(call.headers.has('authorization')).toBe(false);
     }
+  });
+
+  it('месяцы календаря — публично, разбор схемой', async () => {
+    const months = app(200, { months: ['9001-06'] });
+    await expect(months.api.listCalendarMonths()).resolves.toEqual({ months: ['9001-06'] });
+    expect(months.calls[0]?.url).toBe('https://api.test/v1/calendar/months');
+    expect(months.calls[0]?.method).toBe('GET');
+    expect(months.calls[0]?.headers.has('authorization')).toBe(false);
+    const broken = app(200, { months: ['9001-13'] });
+    await expect(broken.api.listCalendarMonths()).rejects.toThrow();
   });
 
   it('404 гонки — ApiHttpError со статусом', async () => {

@@ -18,6 +18,7 @@ const start = (overrides: Partial<CalendarStartCard> = {}): CalendarStartCard =>
   city: 'Минск',
   distancesKm: [100],
   registrationUrl: null,
+  phase: 'upcoming',
   ...overrides,
 });
 

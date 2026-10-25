@@ -53,6 +53,7 @@ const start: CalendarStartCard = {
   city: 'Минск',
   distancesKm: [80, 120],
   registrationUrl: 'https://example.by/registration',
+  phase: 'upcoming',
 };
 
 const racePage = (...items: RaceCard[]): RacePage => ({ items, nextCursor: null });

@@ -1,6 +1,7 @@
 import {
   ApiError,
   CalendarCities,
+  CalendarMonths,
   CalendarPage,
   type CalendarQuery,
   CalendarStartDetail,
@@ -205,6 +206,8 @@ export function createApiClient({
     getCalendarStart: (id: string) =>
       getPublic(`/v1/calendar/${encodeURIComponent(id)}`, CalendarStartDetail),
     listCalendarCities: () => getPublic('/v1/calendar/cities', CalendarCities),
+    /** Месяцы будущих опубликованных стартов — чипы «Дата». */
+    listCalendarMonths: () => getPublic('/v1/calendar/months', CalendarMonths),
   };
 }
 
