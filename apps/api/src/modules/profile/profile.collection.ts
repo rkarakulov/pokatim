@@ -10,10 +10,15 @@ export const PROFILE_COLLECTIONS = { profiles: 'profiles' } as const;
  */
 export interface ProfileDoc {
   _id: string;
-  /** Ответ опроса «Что вас привело?» — коды enum контракта. */
+  /** Ответ опроса «Что вас привело?» — коды enum контракта (`[]`, пока опрос не пройден). */
   rideReasons: RideReason[];
-  /** Время первого ответа (`CLOCK`). */
-  surveyCompletedAt: Date;
-  /** Время последнего ответа (`CLOCK`). */
+  /** Время первого ответа (`CLOCK`); `null` — опрос не пройден (документ создал шаг устройств). */
+  surveyCompletedAt: Date | null;
+  /**
+   * Шаг онбординга «Подключите устройство» пройден (флаг аккаунта, R12 tracks-devices); `null`/нет поля — нет.
+   * Документы до tracks-devices поля не имеют — чтение `?? null`.
+   */
+  devicesStepCompletedAt?: Date | null;
+  /** Время последней записи (`CLOCK`). */
   updatedAt: Date;
 }

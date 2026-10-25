@@ -33,15 +33,18 @@ describe('GET/PUT /v1/profile/onboarding (AC3)', () => {
     const session = await signUpSession(h);
     const before = await getStatus(session);
     expect(before.status).toBe(200);
-    expect(before.body).toEqual({ surveyCompleted: false });
+    expect(before.body).toEqual({ surveyCompleted: false, devicesStepCompleted: false });
     expect(before.headers['cache-control']).toBe('no-store');
 
     const saved = await submit(session, { reasons: ['races', 'routes'] });
     expect(saved.status).toBe(200);
-    expect(saved.body).toEqual({ surveyCompleted: true });
+    expect(saved.body).toEqual({ surveyCompleted: true, devicesStepCompleted: false });
     expect(saved.headers['cache-control']).toBe('no-store');
 
-    expect((await getStatus(session)).body).toEqual({ surveyCompleted: true });
+    expect((await getStatus(session)).body).toEqual({
+      surveyCompleted: true,
+      devicesStepCompleted: false,
+    });
     expect(await profiles().find().toArray()).toEqual([
       {
         _id: userIdOf(session),
@@ -60,7 +63,7 @@ describe('GET/PUT /v1/profile/onboarding (AC3)', () => {
 
     const again = await submit(session, { reasons: ['calendar', 'exploring'] });
 
-    expect(again.body).toEqual({ surveyCompleted: true });
+    expect(again.body).toEqual({ surveyCompleted: true, devicesStepCompleted: false });
     expect(await profiles().findOne({ _id: userIdOf(session) })).toEqual({
       _id: userIdOf(session),
       rideReasons: ['calendar', 'exploring'],
@@ -110,7 +113,10 @@ describe('GET/PUT /v1/profile/onboarding (AC3)', () => {
     const mine = await signUpSession(h, 'rider@example.com');
     const other = await signUpSession(h, 'other@example.com');
     await submit(mine, { reasons: ['races'] });
-    expect((await getStatus(other)).body).toEqual({ surveyCompleted: false });
+    expect((await getStatus(other)).body).toEqual({
+      surveyCompleted: false,
+      devicesStepCompleted: false,
+    });
     // лишний ключ (попытка указать пользователя) — 400 до БД
     const res = await submit(other, { reasons: ['races'], userId: userIdOf(mine) });
     expect(res.status).toBe(400);
@@ -151,5 +157,71 @@ describe('CORS preflight (dev web другого origin)', () => {
     expect(res.headers['access-control-allow-origin']).toBe('http://localhost:8081');
     expect(String(res.headers['access-control-allow-headers'])).toMatch(/authorization/i);
     expect(String(res.headers['access-control-allow-methods'] ?? '')).toMatch(/PUT/);
+  });
+});
+
+describe('PUT /v1/profile/onboarding/devices — шаг «Подключите устройство» (S8, AC11)', () => {
+  const DEVICES = '/v1/profile/onboarding/devices';
+  const completeDevices = (session: Session, body: unknown) =>
+    call(h, 'PUT', DEVICES, body, bearer(session.accessToken));
+
+  it('до — false; «Позже» → true; флаг аккаунта в профиле; повтор идемпотентен (время первого прохождения)', async () => {
+    const session = await signUpSession(h);
+    await submit(session, { reasons: ['races'] });
+    expect((await getStatus(session)).body).toEqual({
+      surveyCompleted: true,
+      devicesStepCompleted: false,
+    });
+
+    const saved = await completeDevices(session, { outcome: 'later' });
+    expect(saved.status).toBe(200);
+    expect(saved.headers['cache-control']).toBe('no-store');
+    expect(saved.body).toEqual({ surveyCompleted: true, devicesStepCompleted: true });
+    const first = h.clock.now();
+
+    h.clock.advance(MINUTE);
+    expect((await completeDevices(session, { outcome: 'connected' })).body).toEqual({
+      surveyCompleted: true,
+      devicesStepCompleted: true,
+    });
+    expect(await profiles().findOne({ _id: userIdOf(session) })).toMatchObject({
+      rideReasons: ['races'],
+      surveyCompletedAt: first,
+      devicesStepCompletedAt: first,
+      updatedAt: h.clock.now(),
+    });
+  });
+
+  it('шаг до опроса: документ без ответа — опрос не пройден; затем опрос — оба флага', async () => {
+    const session = await signUpSession(h);
+    await completeDevices(session, { outcome: 'later' });
+    expect((await getStatus(session)).body).toEqual({
+      surveyCompleted: false,
+      devicesStepCompleted: true,
+    });
+    const profile = await call(h, 'GET', '/v1/profile', undefined, bearer(session.accessToken));
+    expect(profile.body).toEqual({ rideReasons: [] });
+    await submit(session, { reasons: ['routes'] });
+    expect((await getStatus(session)).body).toEqual({
+      surveyCompleted: true,
+      devicesStepCompleted: true,
+    });
+  });
+
+  it.each([
+    ['неизвестный исход', { outcome: 'skip' }],
+    ['без исхода', {}],
+    ['лишний ключ', { outcome: 'later', devicesStepCompleted: true }],
+    ['оператор', { outcome: { $ne: null } }],
+  ])('%s → 400, документ не создан', async (_name, body) => {
+    const session = await signUpSession(h);
+    const res = await completeDevices(session, body);
+    expect(res.status).toBe(400);
+    expect(await profiles().countDocuments()).toBe(0);
+  });
+
+  it('без access — 401', async () => {
+    expect((await call(h, 'PUT', DEVICES, { outcome: 'later' })).status).toBe(401);
+    expect(await profiles().countDocuments()).toBe(0);
   });
 });

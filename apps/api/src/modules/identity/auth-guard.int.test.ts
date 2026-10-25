@@ -68,7 +68,7 @@ describe('AuthGuard (AC2): живой access → 200', () => {
     const session = await signUpSession(h);
     const res = await status(bearer(session.accessToken));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ surveyCompleted: false });
+    expect(res.body).toEqual({ surveyCompleted: false, devicesStepCompleted: false });
   });
 
   it('access после ротации refresh — 200 (sid тот же)', async () => {

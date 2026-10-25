@@ -17,7 +17,7 @@ export class OnboardingService {
   ) {}
 
   async status(userId: string): Promise<OnboardingStatus> {
-    return { surveyCompleted: await this.repository.hasSurvey(userId) };
+    return this.repository.onboardingFlags(userId);
   }
 
   /** Идемпотентно: повтор после потерянного ответа даёт тот же итог; новый набор заменяет прежний. */
@@ -30,6 +30,21 @@ export class OnboardingService {
       if (!isDuplicateKey(error, '_id_')) throw error;
       await this.repository.upsertSurvey(userId, reasons, now);
     }
-    return { surveyCompleted: true };
+    return this.repository.onboardingFlags(userId);
+  }
+
+  /**
+   * Шаг «Подключите устройство» (tracks-devices, R12): любой исход (`connected`, `later`) отмечает шаг пройденным для
+   * аккаунта — другое устройство его не показывает. Идемпотентно; гонка первых upsert — как у опроса.
+   */
+  async completeDevicesStep(userId: string): Promise<OnboardingStatus> {
+    const now = this.clock.now();
+    try {
+      await this.repository.markDevicesStep(userId, now);
+    } catch (error) {
+      if (!isDuplicateKey(error, '_id_')) throw error;
+      await this.repository.markDevicesStep(userId, now);
+    }
+    return this.repository.onboardingFlags(userId);
   }
 }

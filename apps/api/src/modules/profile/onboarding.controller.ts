@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Header, Put, UseGuards } from '@nestjs/common';
 import {
+  CompleteDevicesStepRequest,
   FieldErrorCode,
   type OnboardingStatus,
   SubmitOnboardingSurveyRequest,
@@ -29,5 +30,15 @@ export class OnboardingController {
     body: SubmitOnboardingSurveyRequest,
   ): Promise<OnboardingStatus> {
     return this.onboarding.submit(user.userId, body.reasons);
+  }
+
+  @Put('devices')
+  @Header('Cache-Control', 'no-store')
+  completeDevicesStep(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(CompleteDevicesStepRequest, FieldErrorCode))
+    _body: CompleteDevicesStepRequest,
+  ): Promise<OnboardingStatus> {
+    return this.onboarding.completeDevicesStep(user.userId);
   }
 }
