@@ -134,6 +134,20 @@ Expo Go не открывает схему `pokatim://`. Для проверки
 
 `EXPO_PUBLIC_*` попадают в клиентский бандл — только публичные значения; серверные — без этого префикса.
 
+## Панель «Протокол» (`apps/admin`)
+
+- `pnpm dev --filter=@pokatim/admin` — `http://localhost:5173` (корень, `/v1` проксируется на API :3000). Вход —
+  аккаунт приложения с ролью. «Забыли пароль?» ведёт на web приложения: в dev — `VITE_APP_WEB_URL`
+  (`apps/admin/.env.local`, например `http://127.0.0.1:8081`), на стенде и в проде — тот же origin.
+- Первый администратор локально: зарегистрироваться и подтвердить e-mail (Mailpit), затем
+  `pnpm --filter @pokatim/api panel grant-admin --email <e-mail> --name "<Имя>"` (`tsx`, env — `apps/api/.env`).
+- Cookie панели — `__Secure-…` с `Secure`: Chromium и Firefox сохраняют её на `http://localhost`, Safari — может
+  нет (проверять в Chromium/Firefox).
+- Смоук: `pnpm --filter @pokatim/api build`, `pnpm --filter @pokatim/api db:migrate`, затем `pnpm e2e:admin` — свой
+  API на :3101 (env API из процесса: `MONGO_URL`, `REDIS_URL`, `SMTP_URL`, `MAIL_FROM`, `JWT_SECRET`,
+  `EMAIL_TOKEN_SECRET`, `AGREEMENT_VERSION`; Mailpit — `MAILPIT_URL`) и `vite preview` под `/admin/` с CSP панели
+  из `infra/docker/admin-nginx.conf`. Браузер — Chrome (`PW_CHANNEL=chromium` без него).
+
 ## Проверка
 
 - `curl http://127.0.0.1:3000/v1/health` → `{"status":"ok",…}`.

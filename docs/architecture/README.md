@@ -16,8 +16,11 @@ web (app, SSR)─┘                                ├─ Redis (BullMQ, rate-l
 
 ## Модули API (`apps/api/src/modules/`)
 
-identity · profile · routes · rides · calendar · races · results · disputes · seasons ·
+identity · profile · panel · routes · rides · calendar · races · results · disputes · seasons ·
 gamification · sharing · notifications · moderation · media
+
+Есть: `identity`, `profile`, `panel` (доступ к панели «Протокол», ADR-0009). CLI сервера — `apps/api/src/cli`
+(`dist/cli/panel.js grant-admin`).
 
 Межмодульные вызовы — через `index.ts` модуля; события — outbox → BullMQ.
 
@@ -134,6 +137,30 @@ worker: очередь identity-email ─► письмо «Пароль изм�
   записи — сброс повторяется и отзывает и её.
 - App: запросы сброса — вне Web Lock сессии (cookie не трогают); после смены пароля сессия этого устройства —
   локальный выход (`useSignOut`); web-сервер отдаёт `Referrer-Policy: no-referrer` на `/auth/*`.
+
+### Панель «Протокол» (модуль `panel`, `apps/admin`, ADR-0009)
+
+- **Данные:** `panel_members` (`_id` = id пользователя: роль, статус, имя в панели), `panel_sessions` (токен — sha256,
+  штамп учётных данных, простой 2 ч, абсолют 12 ч), `panel_audit` (append-only, только `PanelAudit.append` в
+  транзакции действия), `panel_meta.admins` (замок набора активных администраторов). Миграция `0005_panel`.
+- **Порт identity:** `PanelCredentials.verify` (та же `CredentialsCheck`, что вход приложения: общие лимиты,
+  пустышка, один 401; неподтверждённому — токен регистрации) и `IdentityAccounts` (`accountState` со штампом
+  `HMAC(EMAIL_TOKEN_SECRET, "credentials:" + passwordHash)`, `findVerifiedByEmail`, `emailsOf`). Identity о `panel`
+  не знает.
+- **Вход:** `POST /v1/admin/session/sign-in` → пароль → член команды `active` (иначе `403 PANEL_ACCESS_DENIED`) →
+  сессия + запись `panel.signed_in` одной транзакцией → cookie `__Secure-pokatim_admin_sid`
+  (`HttpOnly; Secure; SameSite=Strict; Path=/v1/admin`) → прежняя cookie браузера отзывается.
+- **`PanelGuard` на каждом `/v1/admin/*`:** сессия жива → аккаунт активен и штамп совпадает → член `active` → права
+  роли (`ROLE_PERMISSIONS`; admin — всё, moderator — `audit.read`, organizer — нет) → `request.panel`;
+  `@RequirePermission` — 403; любой отказ сессии — один 401 и сброс cookie; `Cache-Control: no-store`. Маршрут без
+  гарда или явного `@Public()` ловит тест. Access JWT и refresh приложения не принимаются.
+- **Сотрудники:** выдача роли существующему подтверждённому пользователю по e-mail, смена и снятие с причиной (снятие
+  отзывает сессии панели в той же транзакции); `lockAdmins` → `lockMember` — нельзя оставить панель без
+  администратора; себе — нельзя. Первый и аварийный администратор — CLI.
+- **`apps/admin`:** TanStack Router (`basepath` из `BASE_URL`: `/admin/` на стенде и в проде), «кто я» — TanStack
+  Query (`me`), гард `beforeLoad`; глобальные 401 («Сессия истекла» с возвратом, `next` только внутри панели) и 403
+  («Нет доступа к разделу»); `Can`/`useCan` — только отображение; навигация — `src/navigation.ts`; компоненты —
+  `src/ui` (кандидаты в `admin-kit`, F6). Прод и стенд — `/admin/` того же домена, nginx образа `admin` — строгий CSP.
 
 ### Web (SSR, PWA)
 

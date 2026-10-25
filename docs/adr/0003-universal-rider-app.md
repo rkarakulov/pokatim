@@ -93,3 +93,10 @@ Expo SDK 58 (Expo Router 58) собирает тот же проект под в
   (`infra/Caddyfile`, `infra/docker-compose.prod.yml`).
 - CI: job `web` — сборка web, Playwright-смоук в Chrome с API, worker, PostgreSQL, Redis и Mailpit (регистрация →
   письмо → подтверждение → вход → перезагрузка).
+
+## Реализация (admin-01, 2026-10-25)
+
+- п. 6: панель «Протокол» (`apps/admin`) — сессия **серверная, не JWT**: непрозрачный токен в cookie
+  `__Secure-pokatim_admin_sid` (`Path=/v1/admin`), проверка на каждом запросе `PanelGuard`; вход — повторным паролем
+  аккаунта приложения (ADR-0009). Прод — `/admin/` того же домена: Caddy `PUBLIC_HOST` `/admin/*` → контейнер `admin`
+  (nginx со строгим CSP), блока `ADMIN_HOST` больше нет.

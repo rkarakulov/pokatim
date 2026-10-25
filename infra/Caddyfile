@@ -1,22 +1,16 @@
 # Домены — заглушки, пока не зарегистрирован .by (см. смету)
+# Панель «Протокол» — /admin/ того же домена (решение Q13, task admin-01; принятый риск — ADR-0009): статика и
+# заголовки (CSP, no-store) — контейнер admin (infra/docker/admin-nginx.conf), API панели — /v1/admin/* того же api.
 {$PUBLIC_HOST:pokatim.localhost} {
 	encode zstd gzip
 	handle /v1/* {
 		reverse_proxy api:3000
 	}
+	redir /admin /admin/ 301
+	handle /admin/* {
+		reverse_proxy admin:8080
+	}
 	handle {
 		reverse_proxy web:8080
-	}
-}
-
-{$ADMIN_HOST:admin.pokatim.localhost} {
-	encode zstd gzip
-	handle /v1/* {
-		reverse_proxy api:3000
-	}
-	handle {
-		root * /srv/admin
-		try_files {path} /index.html
-		file_server
 	}
 }

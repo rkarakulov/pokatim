@@ -10,9 +10,8 @@ services:
     ports: ['80:80', '443:443']
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - admin-dist:/srv/admin:ro
       - caddy-data:/data
-    depends_on: [api, web]
+    depends_on: [api, web, admin]
     restart: unless-stopped
   api:
     image: ghcr.io/rkarakulov/pokatim-api:${APP_VERSION:-latest}
@@ -36,6 +35,10 @@ services:
       API_INTERNAL_URL: http://api:3000
       WEB_ORIGIN: https://${PUBLIC_HOST}
     depends_on: [api]
+    restart: unless-stopped
+  # панель «Протокол»: статика под /admin/ того же домена (nginx с CSP и no-store, Caddy — /admin/*)
+  admin:
+    image: ghcr.io/rkarakulov/pokatim-admin:${APP_VERSION:-latest}
     restart: unless-stopped
   # single-node replica set (транзакции, outbox); keyfile — ./mongo-keyfile (600), копия с владельцем mongodb
   mongo:
@@ -71,4 +74,3 @@ volumes:
   mongoconfig:
   redisdata:
   caddy-data:
-  admin-dist:

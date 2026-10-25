@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright (pnpm e2e:admin)
+test-results
+playwright-report

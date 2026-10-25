@@ -12,7 +12,12 @@ paths:
 - Контексты `src/modules/<context>/`: identity, profile, routes, rides, calendar, races, results, disputes,
   seasons, gamification, sharing, notifications, moderation, media (по мере появления).
   Есть: `identity` (учётка, сессии, `AuthGuard`), `profile` (онбординг: опрос, коллекция `profiles`; авторизация —
-  `AuthGuard` через `modules/identity/index.ts`, коллекции identity не читает).
+  `AuthGuard` через `modules/identity/index.ts`, коллекции identity не читает), `panel` (доступ к панели «Протокол»:
+  члены команды и роли, сессии панели, журнал; identity — только порт `PanelCredentials`/`IdentityAccounts`).
+- Новые эндпоинты панели (`/v1/admin/*`, модули следующих слайсов) — `@UseGuards(PanelGuard)` +
+  `@RequirePermission(...)` + `@CurrentPanelUser()`; чувствительное действие пишет `PanelAudit.append(tx, …)` в
+  транзакции действия. Всё — из `modules/panel/index.ts`; новое право — в конец `PERMISSIONS` контракта и в
+  `ROLE_PERMISSIONS`.
 - Код, нужный ≥2 приложениям (разбор трека для pre-check в приложении и на сервере), — в `packages/tracks`
   (`@pokatim/tracks`): парсинг GPX/TCX/FIT/KML и геометрия; дубли разбора в модулях запрещены.
 

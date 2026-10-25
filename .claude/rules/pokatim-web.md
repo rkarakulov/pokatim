@@ -20,6 +20,23 @@ paths:
 - Флаги правдоподобия видны только команде платформы и не блокируют публикацию.
 - Биометрия (пульс, мощность, FTP, вес) — только в разборе спора (графики HR/мощности по дистанции).
 
+## Каркас, сессия и права (admin-01, ADR-0009)
+
+- Роутер — TanStack Router (`src/router.tsx`, `basepath` из `import.meta.env.BASE_URL`); защищённая ветка —
+  `beforeLoad` с `ensureQueryData(meQuery)`; «кто я» — `src/session/me.ts`. Глобальные 401/403 — `createQueryClient`
+  (`src/session/query-client.ts`): 401 после входа — «Вход» с «Сессия истекла» и `next` (только путь внутри панели —
+  `safeNext`), 403 — «Нет доступа к разделу». Мутация, сама обрабатывающая 401 (вход), — `meta.ownsUnauthorized`.
+- Права в UI — только отображение: `Can` / `useCan(permission)`; раздел с правом — `RequirePermission` в маршруте
+  (прямой URL без права — «Нет доступа к разделу» внутри каркаса). Источник истины — `PanelGuard` сервера.
+- Навигация — один файл `src/navigation.ts` (`{ to, labelKey, permission?, group }`).
+- Новые экраны — только из `src/ui` (`AppShell`, `PageHeader`, `DataTable`, `Dialog`, `ReasonDialog`, поля, `Button`,
+  `Banner`, `StatusTag`, `AuthCard`, `EmptyState`, `ErrorState`): без доменных импортов, кандидаты в
+  `@rkarakulov/admin-kit` (F6, явное исключение `AGENTS.md` §4.11 до выноса). Размеры раскладки панели, которых нет в
+  базе, — `src/panel-tokens.ts` (`--panel-*`, временно до токенов базы, Q17).
+- Время — `src/format.ts` (`Intl` ru-RU, Europe/Minsk); тесты admin — `TZ=Europe/Minsk` (`vite.config.ts`).
+- CSP панели — `infra/docker/admin-nginx.conf`: inline-скриптов нет, inline — только `<style>` дизайн-системы.
+
 ## Проверка
 
-`pnpm --filter @pokatim/admin build` и `pnpm check`; Playwright — для ключевых сценариев (когда появится).
+`pnpm --filter @pokatim/admin build` и `pnpm check`; смоук — `pnpm e2e:admin` (`docs/runbooks/local-dev.md`,
+«Панель»).
