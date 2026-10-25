@@ -13,7 +13,8 @@ export interface StatItem {
 
 /**
  * Стат-блок (`.stats` прототипа): ink-линия сверху, ячейки в ряд с hairline-разделителями, значение `displayStat` с
- * единицей и подпись `label`; ряды переносятся (крупный шрифт, много значений). Для скринридера — одна метка на
+ * единицей и подпись `label`; ячейка — по содержимому (не уже `size.rowMin`), не влезла — новый ряд; «км» при крупном
+ * шрифте переносится под значение. Для скринридера — одна метка на
  * ячейку «Дистанция 100 км». Кандидат в `@rkarakulov/ui` (§5.1).
  */
 export function StatBlock({ items }: { items: readonly StatItem[] }) {
@@ -24,6 +25,7 @@ export function StatBlock({ items }: { items: readonly StatItem[] }) {
         <View
           // значения могут повторяться — ключ по позиции (список статичен)
           key={index}
+          testID="stat-block-cell"
           accessible
           accessibilityLabel={[item.label, item.value, item.unit].filter(Boolean).join(' ')}
           style={[
@@ -31,7 +33,7 @@ export function StatBlock({ items }: { items: readonly StatItem[] }) {
             index === 0 ? styles.first : [styles.next, { borderLeftColor: theme.border.subtle }],
           ]}
         >
-          <View style={styles.valueRow}>
+          <View testID="stat-block-value" style={styles.valueRow}>
             <Text style={[textStyle('displayStat'), { color: theme.text.primary }]}>
               {item.value}
             </Text>
@@ -50,9 +52,17 @@ export function StatBlock({ items }: { items: readonly StatItem[] }) {
 
 const styles = StyleSheet.create({
   block: { flexDirection: 'row', flexWrap: 'wrap', borderTopWidth: stroke.hairline },
-  cell: { flexGrow: 1, flexShrink: 1, flexBasis: 0, paddingTop: space.s3, minWidth: 0 },
+  // ширина — по содержимому (не сжимается в ноль), не уже строки списка; не влезло в ряд — переносится в следующий
+  cell: {
+    flexGrow: 1,
+    flexShrink: 0,
+    flexBasis: 'auto',
+    minWidth: size.rowMin,
+    paddingTop: space.s3,
+  },
   first: { paddingRight: size.statGap },
   next: { paddingHorizontal: size.statGap, borderLeftWidth: stroke.hairline },
-  valueRow: { flexDirection: 'row', alignItems: 'baseline', columnGap: space.s1 },
+  // крупный шрифт: «км» уходит под значение, а не обрезается
+  valueRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: space.s1 },
   label: { marginTop: space.s1 },
 });

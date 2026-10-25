@@ -48,6 +48,42 @@ describe('CalendarListRow', () => {
     expect(screen.getByText('июня 2028')).toBeOnTheScreen();
   });
 
+  it('многодневный через месяц: в рамке — начало, полный диапазон — в мете и метке (ревью pass 1)', async () => {
+    await render(
+      <CalendarListRow
+        start={start({ startsOn: '2027-06-30', endsOn: '2027-07-01' })}
+        now={NOW}
+        onPress={jest.fn()}
+      />,
+    );
+    expect(screen.getByText('30')).toBeOnTheScreen();
+    expect(screen.getByText('июня')).toBeOnTheScreen();
+    expect(screen.queryByText('30 июня–1 июля')).toBeNull();
+    expect(screen.getByText('30 июня–1 июля · 80 и 120 км · Шоссе · Минск')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('link', {
+        name: 'Минская сотка. 30 июня–1 июля. 80 и 120 км · Шоссе · Минск',
+      }),
+    ).toBeOnTheScreen();
+  });
+
+  it('многодневный через год: в рамке — начало с годом, полный диапазон с годами — в мете и метке', async () => {
+    await render(
+      <CalendarListRow
+        start={start({ startsOn: '2027-12-31', endsOn: '2028-01-01' })}
+        now={NOW}
+        onPress={jest.fn()}
+      />,
+    );
+    expect(screen.getByText('31')).toBeOnTheScreen();
+    expect(screen.getByText('декабря')).toBeOnTheScreen();
+    const range = '31 декабря 2027–1 января 2028';
+    expect(screen.getByText(`${range} · 80 и 120 км · Шоссе · Минск`)).toBeOnTheScreen();
+    expect(
+      screen.getByRole('link', { name: `Минская сотка. ${range}. 80 и 120 км · Шоссе · Минск` }),
+    ).toBeOnTheScreen();
+  });
+
   it("'unknown' дисциплина — без подписи, не падает", async () => {
     await render(
       <CalendarListRow start={start({ discipline: 'unknown' })} now={NOW} onPress={jest.fn()} />,

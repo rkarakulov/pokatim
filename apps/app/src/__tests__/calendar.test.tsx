@@ -249,6 +249,38 @@ describe('вкладка «Календарь» (AC3)', () => {
     expect(listCalendar).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'c2' }));
   });
 
+  it('конец списка во время обновления не отменяет refetch: обновлённая первая страница сохраняется (ревью pass 1)', async () => {
+    listCalendar.mockImplementation((params = {}) =>
+      Promise.resolve(params.cursor ? page([start({ title: 'Вторая' })]) : page([hero, nov], 'c2')),
+    );
+    await openCalendar();
+    await screen.findByText('Гравий Нарочь');
+
+    let release: (value: CalendarPage) => void = () => undefined;
+    const updated = start({ title: 'Обновлённый старт', startsOn: '2026-11-20' });
+    listCalendar.mockImplementation((params = {}) =>
+      params.cursor
+        ? Promise.resolve(page([start({ title: 'Вторая' })]))
+        : new Promise<CalendarPage>((resolve) => {
+            release = resolve;
+          }),
+    );
+    const control = () => feed().props.refreshControl as ReactElement<RefreshControlProps>;
+    await act(async () => {
+      control().props.onRefresh?.();
+    });
+    await act(async () => {
+      feed().props.onEndReached?.({ distanceFromEnd: 0 });
+    });
+    // догрузка не стартует, пока идёт обновление
+    expect(listCalendar).not.toHaveBeenCalledWith(expect.objectContaining({ cursor: 'c2' }));
+
+    await act(async () => {
+      release(page([hero, nov, updated], 'c2'));
+    });
+    expect(await screen.findByText('Обновлённый старт')).toBeOnTheScreen();
+  });
+
   it('ошибка догрузки — «Не удалось загрузить» в подвале, загруженное остаётся; повтор', async () => {
     listCalendar.mockImplementation((params = {}) =>
       params.cursor

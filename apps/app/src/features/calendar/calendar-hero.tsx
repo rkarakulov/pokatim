@@ -4,11 +4,13 @@ import { t } from '@pokatim/i18n';
 import { SectionHero } from '@/components/section-hero';
 
 import { calendarMeta, calendarStatusLine, formatCalendarStartDate } from './format';
+import { isRegistrationUrl } from './registration';
 
 /**
  * Герой старта календаря (Главная и вкладка «Календарь»): кикер, дата крупно, название, мета, строка «До старта N
- * дней.» и «Регистрация у организатора.» — текстом (переход на регистрацию — на карточке). «Сейчас» — на клиенте:
- * экраны без SSR. С `onPress` — ссылка в карточку старта.
+ * дней.» и «Регистрация у организатора.» — текстом (переход на регистрацию — на карточке), при той же проверке
+ * ссылки, что у кнопки карточки (`isRegistrationUrl`). «Сейчас» — на клиенте: экраны без SSR. С `onPress` — ссылка в
+ * карточку старта.
  */
 export function CalendarStartHero({
   start,
@@ -29,7 +31,7 @@ export function CalendarStartHero({
       meta={[
         calendarMeta(start),
         calendarStatusLine(start, now),
-        start.registrationUrl ? t('calendar.registration') : null,
+        isRegistrationUrl(start.registrationUrl) ? t('calendar.registration') : null,
       ].filter((line): line is string => !!line)}
       {...(onPress ? { onPress } : {})}
     />

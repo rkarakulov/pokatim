@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import type { CalendarStartDetail } from '@pokatim/contracts';
 
-import { registrationLink } from './registration';
+import { isRegistrationUrl, registrationLink } from './registration';
 
 const start = (overrides: Partial<CalendarStartDetail> = {}): CalendarStartDetail => ({
   id: '0190a6f4-0000-7000-8000-000000000002',
@@ -41,5 +41,20 @@ describe('registrationLink', () => {
   it('нет ссылки или старт прошёл — нет', () => {
     expect(registrationLink(start({ registrationUrl: null }))).toBeNull();
     expect(registrationLink(start({ phase: 'finished' }))).toBeNull();
+  });
+});
+
+describe('isRegistrationUrl (герои и карточка — одно условие)', () => {
+  it('только безопасная https-ссылка', () => {
+    expect(isRegistrationUrl('https://example.by/registration')).toBe(true);
+    for (const url of [
+      null,
+      '',
+      'http://example.by/',
+      'javascript:alert(1)',
+      'https://u:p@h.by/',
+    ]) {
+      expect(isRegistrationUrl(url)).toBe(false);
+    }
   });
 });

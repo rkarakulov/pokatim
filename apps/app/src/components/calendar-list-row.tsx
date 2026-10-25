@@ -3,8 +3,8 @@ import { inset, size, space, stroke } from '@pokatim/design-tokens';
 import { SkeletonText, textStyle, useTheme } from '@rkarakulov/ui';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { calendarMeta, formatCalendarStartDate } from '@/features/calendar/format';
-import { heroDateText } from '@/lib/minsk-format';
+import { calendarMeta, listRowDate } from '@/features/calendar/format';
+import { heroDateText, meta } from '@/lib/minsk-format';
 
 export interface CalendarListRowProps {
   start: CalendarStartCard;
@@ -14,15 +14,18 @@ export interface CalendarListRowProps {
 }
 
 /**
- * Строка старта в списке (`.lrow` прототипа): рамка даты (день или «26–27» + месяц), название, мета; hairline сверху,
+ * Строка старта в списке (`.lrow` прототипа): рамка даты (день или «26–27» + месяц; через месяц или
+ * год — начало, полный диапазон — в мете), название, мета; hairline сверху,
  * без коробок. Шеврона нет — иконок в системе нет (§5.1). Ширина рамки — `size.rowMin` (прототип 62 px, токена
  * нет, Q16). Для скринридера — одна ссылка «название. дата. мета».
  */
 export function CalendarListRow({ start, now, onPress }: CalendarListRowProps) {
   const theme = useTheme();
-  const date = formatCalendarStartDate(start, now);
-  const metaLine = calendarMeta(start);
-  const label = [start.title, heroDateText(date), metaLine].filter(Boolean).join('. ');
+  const { frame: date, range } = listRowDate(start, now);
+  const details = calendarMeta(start);
+  // через месяц или год: в рамке — начало, полный диапазон — первым в мете
+  const metaLine = meta([range, details]);
+  const label = [start.title, range ?? heroDateText(date), details].filter(Boolean).join('. ');
 
   return (
     <Pressable

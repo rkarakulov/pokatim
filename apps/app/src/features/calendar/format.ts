@@ -29,6 +29,20 @@ export function formatCalendarStartDate(card: CalendarStartCard, now: Date | nul
   return formatLocalRange(card.startsOn, card.endsOn ?? card.startsOn, now);
 }
 
+/**
+ * Дата строки списка (рамка шириной `size.rowMin`): один день или диапазон в одном месяце — как у героя («26–27» +
+ * «июня»); через месяц или год — в рамке начало («30» + «июня»), полный диапазон «30 июня–1 июля» — в `range` (мета и
+ * метка скринридера): длинный диапазон в рамке рвался бы посреди слова.
+ */
+export function listRowDate(
+  card: CalendarStartCard,
+  now: Date | null,
+): { frame: HeroDate; range: string | null } {
+  const full = formatCalendarStartDate(card, now);
+  if (full.unit) return { frame: full, range: null };
+  return { frame: formatLocalRange(card.startsOn, card.startsOn, now), range: full.value };
+}
+
 /** Дней до старта по календарным датам Минска (0 — сегодня, отрицательное — уже начался). */
 export function daysUntilStart(startsOn: string, now: Date): number {
   return Math.round(

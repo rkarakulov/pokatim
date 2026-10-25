@@ -38,9 +38,11 @@ export function useCalendarFeed(filters: CalendarFilters) {
     staleTime: PUBLIC_STALE_MS,
   });
 
+  // идёт обновление (pull-to-refresh, фокус) — не догружаем: fetchNextPage по умолчанию отменил бы refetch и
+  // обновлённая первая страница потерялась бы; `cancelRefetch: false` — та же защита на гонке состояний
   const loadMore = () => {
-    if (feed.hasNextPage && !feed.isFetchingNextPage && !feed.isFetchNextPageError) {
-      void feed.fetchNextPage();
+    if (feed.hasNextPage && !feed.isFetching && !feed.isFetchNextPageError) {
+      void feed.fetchNextPage({ cancelRefetch: false });
     }
   };
 

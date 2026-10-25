@@ -1,5 +1,7 @@
 /// <reference types="jest" />
+import { size } from '@pokatim/design-tokens';
 import { render, screen } from '@testing-library/react-native';
+import { View } from 'react-native';
 
 import { StatBlock } from './stat-block';
 
@@ -20,6 +22,29 @@ describe('StatBlock', () => {
     expect(screen.getAllByText('Дистанция')).toHaveLength(2);
     expect(screen.getByLabelText('Дистанция 100 км')).toBeOnTheScreen();
     expect(screen.getByLabelText('Дистанция 60 км')).toBeOnTheScreen();
+  });
+
+  it('пять дистанций в узкой колонке и крупный шрифт: ячейки по содержимому, переносятся рядами, «км» — под значением (ревью pass 1)', async () => {
+    await render(
+      <View style={{ width: 200 }}>
+        <StatBlock
+          items={[100, 80, 60, 42, 21].map((km) => ({
+            value: String(km),
+            unit: 'км',
+            label: 'Дистанция',
+          }))}
+        />
+      </View>,
+    );
+    const cells = screen.getAllByTestId('stat-block-cell');
+    expect(cells).toHaveLength(5);
+    for (const cell of cells) {
+      // ширина — по содержимому, не меньше токена и без сжатия в ноль: не влезло — новый ряд
+      expect(cell).toHaveStyle({ flexBasis: 'auto', flexShrink: 0, minWidth: size.rowMin });
+    }
+    for (const row of screen.getAllByTestId('stat-block-value')) {
+      expect(row).toHaveStyle({ flexWrap: 'wrap' });
+    }
   });
 
   it('без единицы — только значение; ряды переносятся (flexWrap)', async () => {
