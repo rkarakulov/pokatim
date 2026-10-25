@@ -14,6 +14,7 @@ import { env } from './config/env';
 import { PROJECT_ERROR_MESSAGES } from './error-messages';
 import { HealthModule } from './modules/health';
 import { IdentityModule } from './modules/identity';
+import { PanelModule } from './modules/panel';
 import { ProfileModule } from './modules/profile';
 import { TracksModule } from './modules/tracks';
 
@@ -30,6 +31,7 @@ import { TracksModule } from './modules/tracks';
     TracksModule,
     IdentityModule,
     ProfileModule,
+    PanelModule,
   ],
   // единый формат ошибок ApiError для всех модулей; тексты кодов проекта — рядом с фильтром
   providers: [

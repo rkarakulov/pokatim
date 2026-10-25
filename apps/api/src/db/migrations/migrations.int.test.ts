@@ -3,10 +3,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
 import { IDENTITY_COLLECTIONS } from '../../modules/identity/identity.collection';
+import { PANEL_COLLECTIONS } from '../../modules/panel/panel.collection';
 import { PROFILE_COLLECTIONS } from '../../modules/profile/profile.collection';
 import { IDENTITY_INDEXES } from './0002_identity';
 import { IDENTITY_TTL_SECONDS } from './0003_identity_ttl';
 import { profile } from './0004_profile';
+import { panel, PANEL_SESSION_TTL_SECONDS } from './0005_panel';
 import { migrations } from './index';
 
 let h: Harness;
@@ -36,7 +38,7 @@ async function indexesOf(collection: string) {
 }
 
 describe('миграции MongoDB на чистой *_test (AC5)', () => {
-  it('применены по порядку: 0001_outbox, 0002_identity, 0003_identity_ttl, 0004_profile', async () => {
+  it('применены по порядку: 0001_outbox … 0005_panel', async () => {
     const applied = await h.db
       .collection<{ _id: string }>(MIGRATIONS_COLLECTION)
       .find()
@@ -47,7 +49,40 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0002_identity',
       '0003_identity_ttl',
       '0004_profile',
+      '0005_panel',
     ]);
+  });
+
+  it('0005_panel: коллекции, индексы, TTL сессий и документ panel_meta.admins; повторный up не сбрасывает версию (AC13)', async () => {
+    const plain = (key: Record<string, number>, unique = false, ttl?: number) => ({
+      key,
+      unique,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: ttl,
+    });
+    expect(await indexesOf(PANEL_COLLECTIONS.members)).toEqual({
+      panel_members_role_status_idx: plain({ role: 1, status: 1 }),
+    });
+    expect(await indexesOf(PANEL_COLLECTIONS.sessions)).toEqual({
+      panel_sessions_token_hash_unique: plain({ tokenHash: 1 }, true),
+      panel_sessions_user_id_idx: plain({ userId: 1 }),
+      panel_sessions_expires_at_ttl: plain({ expiresAt: 1 }, false, PANEL_SESSION_TTL_SECONDS),
+    });
+    expect(await indexesOf(PANEL_COLLECTIONS.audit)).toEqual({
+      panel_audit_action_idx: plain({ action: 1, _id: -1 }),
+      panel_audit_actor_idx: plain({ 'actor.userId': 1, _id: -1 }),
+      panel_audit_target_idx: plain({ targetUserId: 1, _id: -1 }),
+    });
+    // документ-замок: создаётся up; повторный up не сбрасывает версию (другие файлы тестов чистят коллекции)
+    const meta = h.db.collection<{ _id: string; version: number }>(PANEL_COLLECTIONS.meta);
+    await meta.deleteMany({});
+    await panel.up(h.db);
+    expect(await meta.find().toArray()).toEqual([{ _id: 'admins', version: 0 }]);
+
+    await meta.updateOne({ _id: 'admins' }, { $inc: { version: 1 } });
+    await panel.up(h.db);
+    await panel.up(h.db);
+    expect(await meta.find().toArray()).toEqual([{ _id: 'admins', version: 1 }]);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

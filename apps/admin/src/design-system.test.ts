@@ -16,5 +16,7 @@ describe('installDesignSystem', () => {
     expect(style.textContent).toContain(`--nav-background: ${themes.panel.nav?.background};`);
     expect(style.textContent).toContain('--density-control-height:');
     expect(style.textContent).toContain('.t-panel-title {');
+    expect(style.textContent).toContain('--panel-auth-card-width: 400px;');
+    expect(style.textContent).toContain('--panel-dialog-width: 420px;');
   });
 });

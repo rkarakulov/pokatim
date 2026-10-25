@@ -11,8 +11,15 @@ import {
 import { LinkExpiredDetails } from './auth/verification.schema.ts';
 
 describe('коды ошибок', () => {
-  it('вход: INVALID_CREDENTIALS — последним (установленные клиенты знают прежний состав)', () => {
-    expect(ErrorCode.options.at(-1)).toBe('INVALID_CREDENTIALS');
+  it('панель (admin-01): коды — в конце списка, после INVALID_CREDENTIALS (установленные клиенты)', () => {
+    expect(ErrorCode.options.slice(-6)).toEqual([
+      'INVALID_CREDENTIALS',
+      'PANEL_ACCESS_DENIED',
+      'PANEL_USER_UNVERIFIED',
+      'PANEL_ALREADY_MEMBER',
+      'PANEL_LAST_ADMIN',
+      'PANEL_SELF_ACTION',
+    ]);
   });
 
   it('содержат коды регистрации', () => {
@@ -35,6 +42,11 @@ describe('коды ошибок', () => {
       'EMAIL_UNAVAILABLE',
       'LINK_EXPIRED',
       'INVALID_CREDENTIALS',
+      'PANEL_ACCESS_DENIED',
+      'PANEL_USER_UNVERIFIED',
+      'PANEL_ALREADY_MEMBER',
+      'PANEL_LAST_ADMIN',
+      'PANEL_SELF_ACTION',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

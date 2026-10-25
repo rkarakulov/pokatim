@@ -138,11 +138,16 @@ jobs:
       - run: pnpm --filter @pokatim/api db:migrate
       # e2e:web зависит от build:web (turbo): export web + service worker, затем Playwright
       - run: pnpm e2e:web
+      # pokatim: смоук панели «Протокол» (AC15 admin-01) на тех же API-окружении, MongoDB, Redis и Mailpit — свой
+      # процесс API (порт 3101), `vite preview` под /admin/ с CSP панели, CLI grant-admin из dist
+      - run: pnpm e2e:admin
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
           name: playwright-report
-          path: apps/app/test-results/
+          path: |
+            apps/app/test-results/
+            apps/admin/test-results/
           retention-days: 7
 
   # Репетиция обновления dev-стенда (infra/deploy/rehearsal.sh): образы собираются локально на раннере, стек — сначала

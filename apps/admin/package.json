@@ -9,19 +9,26 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "e2e": "playwright test"
   },
   "dependencies": {
-    "@pokatim/api-client": "workspace:*",
-    "@pokatim/design-tokens": "workspace:*",
-    "@pokatim/i18n": "workspace:*",
     "@fontsource/inter": "catalog:",
     "@fontsource/playfair-display": "catalog:",
+    "@hookform/resolvers": "^6.0.0",
+    "@pokatim/api-client": "workspace:*",
+    "@pokatim/contracts": "workspace:*",
+    "@pokatim/design-tokens": "workspace:*",
+    "@pokatim/i18n": "workspace:*",
     "@tanstack/react-query": "catalog:",
+    "@tanstack/react-router": "^1.170.46",
+    "@tanstack/react-table": "^8.21.3",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "react-hook-form": "^7.90.0"
   },
   "devDependencies": {
+    "@playwright/test": "catalog:",
     "@rkarakulov/config": "catalog:",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "catalog:",

@@ -75,6 +75,7 @@ outbox, очереди, лимитер, почта, HTTP, ошибки), тес�
 | `pnpm build:web` | web-сборка приложения: SSR + PWA (`apps/app/dist`, service worker) |
 | `pnpm --filter @pokatim/app start:web` | production web-сервер на `dist` (env — `docs/runbooks/local-dev.md`, «Web») |
 | `pnpm e2e:web` | Playwright-смоук web в браузере (сначала `build:web`; нужен Chrome или `PW_CHANNEL`); с API — `E2E_API=1` (регистрация → письмо → вход, runbook «Web») |
+| `pnpm e2e:admin` | Playwright-смоук панели «Протокол» под `/admin/` (`vite preview` + API из `apps/api/dist`, Mailpit; сначала `pnpm --filter @pokatim/api build` и `db:migrate`, runbook «Панель») |
 | `pnpm infra:up` / `pnpm infra:down` | docker compose: MongoDB 8.0 (replica set), Redis, Mailpit |
 | `pnpm check` | **completion gate**: format:check + lint + arch:check + typecheck + test |
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | по отдельности |

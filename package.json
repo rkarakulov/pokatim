@@ -19,6 +19,7 @@
     "build": "turbo run build",
     "build:web": "turbo run build:web",
     "e2e:web": "turbo run e2e:web --env-mode=loose",
+    "e2e:admin": "pnpm --filter @pokatim/admin e2e",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "lint": "eslint . --max-warnings=0",

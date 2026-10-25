@@ -55,6 +55,18 @@ export type Env = ReturnType<typeof env.load>;
  */
 export const loadEnv = (source?: NodeJS.ProcessEnv): Env => env.load(source);
 
+/**
+ * Окружение CLI панели (`dist/cli/panel.js`): только MongoDB и ключ HMAC identity (штамп учётных данных в порту
+ * `IdentityAccounts`) — без Redis, почты и JWT. `.env` — как у `loadEnv`.
+ */
+export const cliEnv = {
+  load(source: NodeJS.ProcessEnv = process.env) {
+    if (source === process.env && existsSync('.env')) process.loadEnvFile('.env');
+    return z.object({ ...mongoEnvShape, EMAIL_TOKEN_SECRET: Secret }).parse(source);
+  },
+};
+export type CliEnv = ReturnType<typeof cliEnv.load>;
+
 /** Только `MONGO_URL` — для `db:migrate`: отдельному шагу деплоя не нужны Redis и почта. `.env` — как у `loadEnv`. */
 export function loadMongoUrl(source: NodeJS.ProcessEnv = process.env): string {
   if (source === process.env && existsSync('.env')) process.loadEnvFile('.env');

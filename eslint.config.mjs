@@ -10,7 +10,13 @@ const POSTGRES_ROOTS = ['@rkarakulov/api-kit', '@rkarakulov/test-kit'].map((name
 
 const preset = await createEslintConfig({
   // dist-dev и отчёты Playwright — артефакты web-сборки и e2e
-  ignores: ['apps/app/dist-dev/**', 'apps/app/test-results/**', 'apps/app/playwright-report/**'],
+  ignores: [
+    'apps/app/dist-dev/**',
+    'apps/app/test-results/**',
+    'apps/app/playwright-report/**',
+    'apps/admin/test-results/**',
+    'apps/admin/playwright-report/**',
+  ],
   reactNative: ['apps/app/**/*.{ts,tsx,js}'],
   browser: ['apps/admin/**/*.{ts,tsx}'],
   nest: ['apps/api/**/*.ts'],

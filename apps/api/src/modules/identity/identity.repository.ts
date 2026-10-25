@@ -19,6 +19,9 @@ export interface UserState {
   deletedAt: Date | null;
 }
 
+/** Состояние аккаунта с хешем пароля — только для проверок на сервере. */
+export type CheckedCredentials = UserState & { passwordHash: string };
+
 export interface VerificationTokenState {
   id: string;
   userId: string;
@@ -106,6 +109,24 @@ export class IdentityRepository {
   ): Promise<(UserState & { passwordHash: string }) | undefined> {
     const doc = await this.c.users.findOne({ email }, { projection: credentialsProjection });
     return doc ? { ...toUserState(doc), passwordHash: doc.passwordHash } : undefined;
+  }
+
+  /**
+   * Учётные данные аккаунта по id — для порта панели (`IdentityAccounts.accountState`, ADR-0009): одно чтение по
+   * `_id`; хеш только для штампа, наружу не уходит.
+   */
+  async findCredentialsById(userId: string): Promise<CheckedCredentials | undefined> {
+    const doc = await this.c.users.findOne({ _id: userId }, { projection: credentialsProjection });
+    return doc ? { ...toUserState(doc), passwordHash: doc.passwordHash } : undefined;
+  }
+
+  /** Адреса живых (не удалённых) аккаунтов одним запросом `$in` по `_id` (список сотрудников панели). */
+  async findEmailsByIds(userIds: readonly string[]): Promise<Map<string, string>> {
+    if (userIds.length === 0) return new Map();
+    const docs = await this.c.users
+      .find({ _id: { $in: [...userIds] }, deletedAt: null }, { projection: { _id: 1, email: 1 } })
+      .toArray();
+    return new Map(docs.map((doc) => [doc._id, doc.email]));
   }
 
   private async findUser(userId: string, session?: DbSession): Promise<UserState | undefined> {

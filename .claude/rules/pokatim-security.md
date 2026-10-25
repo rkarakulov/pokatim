@@ -3,6 +3,9 @@ paths:
   - "apps/api/src/modules/identity/**"
   - "apps/api/src/modules/media/**"
   - "apps/app/src/features/auth/**"
+  - "apps/api/src/modules/panel/**"
+  - "apps/api/src/cli/**"
+  - "apps/admin/src/session/**"
 ---
 
 # pokatim — зоны безопасности (дополняет `security.md`)
@@ -47,3 +50,16 @@ paths:
 - Неподтверждённый аккаунт не получает полноценных токенов (AD-28) — спорный момент с V-09, решать в task.md.
 - Файлы пользователей — в S3 под непредсказуемыми ключами; выдача — через подписанные URL.
 - Парсеры FIT/GPX/KML работают в worker с лимитами по памяти и времени; XML — без внешних сущностей (XXE).
+
+- Панель «Протокол» (ADR-0009): вход — только паролем через порт identity `PanelCredentials` (та же
+  `CredentialsCheck`: общие счётчики `signin-*`, пустышка, один 401); второго входа по паролю в `panel` нет, коллекции
+  identity `panel` не читает (только `IdentityAccounts`). Сессия панели — непрозрачный токен в cookie
+  `PANEL_SESSION_COOKIE` (`Path=/v1/admin`, `HttpOnly; Secure; SameSite=Strict`, без `Domain`), в БД — sha256; access
+  JWT и refresh приложения `PanelGuard` не принимает.
+- `PanelGuard` на каждом запросе: сессия → аккаунт активен → **штамп учётных данных** совпадает → член `active` →
+  права роли (карта — только сервер). Маршрут `/v1/admin/*` без `PanelGuard` или явного `@Public()` — тест красный.
+  Снятие роли отзывает сессии панели в той же транзакции; себя менять нельзя; последнего админа убрать нельзя
+  (`lockAdmins`). Логи — `uid`, `sid`, причина; CLI не печатает e-mail.
+- **Принятый риск — тот же домен `/admin/`** (C3): XSS web приложения может действовать от имени открытой в том же
+  браузере сессии панели. Обязательно **до прода**: 2FA (TOTP) для `admin` и строгий CSP web приложения; CSP панели —
+  `infra/docker/admin-nginx.conf` (менять только вместе со смоуком `pnpm e2e:admin`, он отдаёт тот же заголовок).

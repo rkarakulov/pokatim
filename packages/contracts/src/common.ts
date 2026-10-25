@@ -20,6 +20,13 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'LINK_EXPIRED',
   // вход по паролю (слайс 2): неверный пароль, неизвестный и удалённый адрес — один код
   'INVALID_CREDENTIALS',
+  // панель «Протокол» (admin-01): верный пароль без роли; выдача роли неподтверждённому, повторная выдача;
+  // последний активный администратор; действие над собой
+  'PANEL_ACCESS_DENIED',
+  'PANEL_USER_UNVERIFIED',
+  'PANEL_ALREADY_MEMBER',
+  'PANEL_LAST_ADMIN',
+  'PANEL_SELF_ACTION',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

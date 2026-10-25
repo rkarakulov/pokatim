@@ -1,4 +1,7 @@
-/* Значения — только переменные дизайн-системы проекта (installDesignSystem), без копий. */
+/*
+ * Панель «Протокол» (тема panel). Значения — только переменные дизайн-системы (installDesignSystem) и размеры
+ * раскладки --panel-* (panel-tokens.ts, Q17); без hex и px-литералов оформления. Раскладка — flex/grid, проценты, 0.
+ */
 :root {
   font-family: var(--font-text);
   color: var(--color-text-primary);
@@ -9,46 +12,528 @@ body {
   margin: 0;
 }
 
-.shell {
-  max-width: var(--density-content-max-width);
-  margin: 0 auto;
-  padding: var(--space-s5);
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
 }
 
 .muted {
   color: var(--color-text-secondary);
 }
 
-.status {
+.visually-hidden {
+  position: absolute;
+  width: var(--stroke-hairline);
+  height: var(--stroke-hairline);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:focus-visible {
+  outline: var(--stroke-indicator) solid var(--color-border-focus);
+  outline-offset: var(--stroke-indicator);
+}
+
+/* ---------- кнопки ---------- */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-s2);
+  min-height: var(--density-control-height);
+  padding: 0 var(--inset-md);
+  border: var(--stroke-hairline) solid var(--color-text-primary);
+  border-radius: var(--radius-none);
+  background: var(--color-surface-default);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.button--primary {
+  background: var(--color-action-primary);
+  border-color: var(--color-action-primary);
+  color: var(--color-action-on-primary);
+}
+
+.button--danger {
+  border-color: var(--color-status-error);
+  color: var(--color-status-error);
+}
+
+.button--danger-solid {
+  background: var(--color-status-error);
+  border-color: var(--color-status-error);
+  color: var(--color-status-on-error);
+}
+
+.button--sm {
+  min-height: var(--density-control-height-sm);
+  padding: 0 var(--inset-sm);
+}
+
+.button--full {
+  display: flex;
+  width: 100%;
+}
+
+.button:disabled,
+.button[aria-disabled='true'] {
+  background: var(--color-surface-disabled);
+  border-color: var(--color-surface-disabled);
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.link {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: var(--stroke-hairline);
+  text-underline-offset: var(--stroke-indicator);
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* ---------- поля ---------- */
+.field + .field {
+  margin-top: var(--inset-md);
+}
+
+.field__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s2);
+  margin-bottom: var(--space-s2);
+  color: var(--color-text-secondary);
+}
+
+.field__label .link {
+  margin-left: auto;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.field__control {
+  display: block;
+  width: 100%;
+  min-height: var(--density-control-height);
+  padding: var(--space-s2) var(--inset-caption);
+  border: var(--stroke-input) solid var(--color-border-input);
+  border-radius: var(--radius-none);
+  background: var(--color-surface-default);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+textarea.field__control {
+  min-height: var(--size-text-area-height);
+  resize: vertical;
+}
+
+.field__control[aria-invalid='true'] {
+  border-color: var(--color-status-error);
+}
+
+.field__control:disabled {
+  background: var(--color-surface-disabled);
+  border-color: var(--color-surface-disabled);
+  color: var(--color-text-disabled);
+}
+
+.field__error {
+  display: flex;
+  gap: var(--space-s2);
+  margin-top: var(--space-s2);
+  color: var(--color-status-error);
+}
+
+.field__help {
+  display: block;
+  margin-top: var(--space-s2);
+  color: var(--color-text-secondary);
+}
+
+/* ---------- баннер, метка статуса ---------- */
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s1);
+  min-height: var(--size-touch-min);
+  padding: var(--space-s3) var(--inset-md);
+  background: var(--color-surface-raised);
+  box-shadow: inset var(--stroke-indicator) 0 0 var(--color-text-primary);
+}
+
+.banner--warning {
+  box-shadow: inset var(--stroke-banner-warning) 0 0 var(--color-status-warning);
+}
+
+.banner--error {
+  box-shadow: inset var(--stroke-banner-error) 0 0 var(--color-status-error);
+}
+
+.banner--error .banner__title {
+  color: var(--color-status-error);
+}
+
+.banner__actions {
+  display: flex;
+  gap: var(--space-s2);
+  margin-top: var(--space-s2);
+}
+
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0 var(--space-s2);
+  border: var(--stroke-hairline) solid currentColor;
+}
+
+.status-tag--success {
+  color: var(--color-status-success);
+}
+
+.status-tag--neutral {
+  color: var(--color-text-secondary);
+}
+
+.status-tag--error {
+  color: var(--color-status-error);
+}
+
+/* ---------- окно входа ---------- */
+.auth {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-s7);
+  background: var(--color-surface-raised);
+}
+
+.auth__brand {
+  color: var(--color-text-primary);
+}
+
+.auth__role {
+  margin: var(--space-s2) 0 var(--space-s4);
+  color: var(--color-text-secondary);
+}
+
+.auth__box {
+  width: var(--panel-auth-card-width);
+  max-width: 100%;
+  padding: var(--space-s5);
+  border: var(--stroke-hairline) solid var(--color-border-strong);
+  background: var(--color-surface-default);
+}
+
+.auth__lead {
+  margin: var(--space-s2) 0 var(--space-s4);
+  color: var(--color-text-secondary);
+}
+
+.auth__box .banner {
+  margin-bottom: var(--space-s4);
+}
+
+.auth__submit {
+  margin-top: var(--space-s4);
+}
+
+.auth__note {
+  margin-top: var(--space-s4);
+  padding-top: var(--inset-caption);
+  border-top: var(--stroke-hairline) solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+}
+
+.auth__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s3);
+  margin-top: var(--space-s4);
+}
+
+/* ---------- каркас ---------- */
+.shell {
+  display: grid;
+  grid-template-columns: var(--density-sidebar-width) minmax(0, 1fr);
+  min-height: 100vh;
+  max-width: var(--density-content-max-width);
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: var(--space-s5) 0 var(--inset-lg);
+  background: var(--nav-background);
+  color: var(--nav-text);
+}
+
+.sidebar__brand {
+  padding: 0 var(--size-gutter);
+  color: var(--nav-active-text);
+}
+
+.sidebar__role {
+  padding: var(--space-s2) var(--size-gutter) var(--inset-lg);
+  border-bottom: var(--stroke-hairline) solid var(--nav-active-background);
+  color: var(--nav-text-muted);
+}
+
+.sidebar__navs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  padding: var(--inset-caption) 0;
+}
+
+.sidebar__nav--bottom {
+  margin-top: auto;
+}
+
+.sidebar__link {
+  display: flex;
+  align-items: center;
+  min-height: var(--density-nav-item-height);
+  padding: var(--space-s2) var(--size-gutter);
+  color: var(--nav-text);
+  text-decoration: none;
+}
+
+.sidebar__link[aria-current='page'] {
+  background: var(--nav-active-background);
+  box-shadow: inset var(--stroke-indicator) 0 0 var(--nav-active-indicator);
+  color: var(--nav-active-text);
+  font-weight: 600;
+}
+
+.sidebar__link:focus-visible,
+.sidebar__me .link-button:focus-visible {
+  outline-color: var(--nav-focus);
+  outline-offset: calc(-1 * var(--space-s1));
+}
+
+.sidebar__me {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s2);
+  padding: var(--inset-md) var(--size-gutter) 0;
+  border-top: var(--stroke-hairline) solid var(--nav-active-background);
+  color: var(--nav-active-text);
+}
+
+.sidebar__me .link-button {
+  width: fit-content;
+  color: var(--nav-text);
+}
+
+.main {
+  min-width: 0;
+  padding: var(--inset-lg) var(--size-section-gap) var(--space-s6);
+}
+
+/* ---------- голова страницы ---------- */
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-s5);
+  padding: var(--inset-caption) 0 var(--inset-md);
+  border-bottom: var(--stroke-hairline) solid var(--color-text-primary);
+}
+
+.page-head__crumb {
+  color: var(--color-text-secondary);
+}
+
+.page-head__kicker {
+  color: var(--color-text-accent);
+}
+
+.page-head__title {
+  margin-top: var(--space-s1);
+}
+
+.page-head__meta {
+  margin-top: var(--space-s1);
+  color: var(--color-text-secondary);
+}
+
+.page-body {
+  margin-top: var(--space-s4);
+}
+
+/* ---------- пустое состояние и ошибка ---------- */
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-s3);
+  padding: var(--size-empty-padding) 0;
+}
+
+.state__actions {
+  display: flex;
+  gap: var(--space-s2);
+}
+
+/* ---------- таблица ---------- */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-s3);
+  margin-bottom: var(--space-s3);
+}
+
+.toolbar .field + .field {
+  margin-top: 0;
+}
+
+.toolbar__spacer {
+  margin-left: auto;
+}
+
+.table-wrap {
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-s2);
+  border-bottom: var(--stroke-hairline) solid var(--color-text-primary);
+  background: var(--color-surface-default);
+  color: var(--color-text-secondary);
+  text-align: left;
+  vertical-align: bottom;
+}
+
+.table td {
+  height: var(--density-table-row-height);
+  padding: var(--space-s2);
+  border-bottom: var(--stroke-hairline) solid var(--color-border-subtle);
+  vertical-align: middle;
+}
+
+.table__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-s1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.table__skeleton {
+  display: block;
+  width: 100%;
+}
+
+.table__actions {
+  display: flex;
+  gap: var(--space-s2);
+  justify-content: flex-end;
+}
+
+.table__more {
+  margin-top: var(--space-s3);
+}
+
+.table + .banner,
+.banner + .table-wrap {
+  margin-top: var(--space-s3);
+}
+
+/* ---------- диалог ---------- */
+.dialog {
+  width: var(--panel-dialog-width);
+  max-width: 100%;
+  padding: var(--space-s5);
+  border: var(--stroke-hairline) solid var(--color-text-primary);
+  border-radius: var(--radius-none);
+  background: var(--color-surface-default);
+  color: var(--color-text-primary);
+}
+
+.dialog::backdrop {
+  background: color-mix(in srgb, var(--color-overlay-scrim) 45%, transparent);
+}
+
+.dialog__consequences {
+  margin: var(--space-s2) 0 var(--space-s3);
+}
+
+.dialog__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-s2);
+  margin-top: var(--space-s4);
+}
+
+.kbd {
+  padding: 0 var(--space-s1);
+  border: var(--stroke-hairline) solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+}
+
+.dialog .banner {
+  margin-top: var(--space-s3);
+}
+
+/* ---------- обзор ---------- */
+.api-status {
   display: flex;
   align-items: center;
   gap: var(--space-s3);
 }
 
-/* место под значение статуса — ширина короткого слова */
-.status-value {
+.api-status__value {
   display: inline-block;
   width: var(--size-skeleton-word);
 }
 
-.status-error {
-  display: flex;
-  align-items: center;
-  gap: var(--space-s3);
-  color: var(--color-status-error);
-}
-
-/* кнопка веб-панели (тема panel, плотность 36 px) */
-.button {
-  min-height: var(--density-control-height);
-  padding: 0 var(--inset-md);
-  border: var(--stroke-hairline) solid var(--color-text-primary);
-  background: var(--color-surface-default);
-  color: var(--color-text-primary);
-  cursor: pointer;
-}
-
-.button:focus-visible {
-  outline: var(--stroke-indicator) solid var(--color-border-focus);
-  outline-offset: var(--stroke-indicator);
+/* баннер каркаса (ошибка выхода) — над страницей */
+.main > .banner {
+  margin-bottom: var(--space-s3);
 }

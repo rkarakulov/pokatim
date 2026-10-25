@@ -4,6 +4,7 @@ import { VerificationToken } from '@pokatim/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
+  credentialsStamp,
   deriveLinkToken,
   derivePasswordResetToken,
   deriveVerificationToken,
@@ -128,5 +129,25 @@ describe('tokens', () => {
     expect(passwordResetLimitKeys(secret, 'a@b.by', '2001:db8:1:2::1').ip).toBe(
       passwordResetLimitKeys(secret, 'a@b.by', '2001:db8:1:2::ff').ip,
     );
+  });
+});
+
+describe('credentialsStamp (штамп учётных данных панели, R2)', () => {
+  const secret = 'x'.repeat(32);
+  const hashA = '$argon2id$v=19$m=19456,t=2,p=1$aaaa$bbbb';
+  const hashB = '$argon2id$v=19$m=19456,t=2,p=1$cccc$dddd';
+
+  it('детерминирован; меняется при смене хеша пароля; не равен хешу и не содержит его', () => {
+    expect(credentialsStamp(secret, hashA)).toBe(credentialsStamp(secret, hashA));
+    expect(credentialsStamp(secret, hashB)).not.toBe(credentialsStamp(secret, hashA));
+    expect(credentialsStamp(secret, hashA)).not.toContain(hashA);
+    expect(credentialsStamp(secret, hashA)).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
+  it('назначение в HMAC: штамп не совпадает с ключами лимитов и токенами ссылок того же значения', () => {
+    expect(credentialsStamp(secret, hashA)).toBe(
+      createHmac('sha256', secret).update(`credentials:${hashA}`).digest('base64url'),
+    );
+    expect(credentialsStamp('y'.repeat(32), hashA)).not.toBe(credentialsStamp(secret, hashA));
   });
 });
