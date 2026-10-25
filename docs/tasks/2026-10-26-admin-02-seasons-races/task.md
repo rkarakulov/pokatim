@@ -450,6 +450,29 @@ _Отклонения при реализации — дописываются �
 - AC16 «регрессия panel-* без правок ожиданий»: одно ожидание изменено по существу —
   `panel-session.int.test.ts` (вход admin): `PanelMe.permissions` admin = все права контракта, теперь с
   `races.*`, `seasons.manage`, `calendar.manage`.
+- `panel.guard.test.ts` (unit): ожидание `permissions` модератора — `['audit.read', 'races.read']` (матрица §7).
+- Тест-сторож журнала `panel.repository.test.ts`: имя коллекции ищется строкой в кавычках (`'panel_audit'`) — имя
+  файла миграции `0006_panel_audit_subject` в `migrations/index.ts` не обращение к коллекции; список файлов + `0006`.
+
+**S3–S7 (API):**
+
+- `PanelAuditDoc.subject` — необязательное поле документа (записи admin-01 его не имеют; чтение `?? null`).
+- `PanelDirectory.displayNames` возвращает имя для каждого запрошенного id: нет члена команды — «Удалённый участник».
+- `raceEditable(race, now, { canManage, seasonFound })` — вместо `canManage: boolean`: причина `outside_season` и
+  `canPublish` черновика требуют предпросмотра сезона.
+- Правка опубликованной: новое начало окна не раньше «сейчас», новый конец — окно не закрыто на «сейчас»
+  (`WINDOW_IN_PAST`) — иначе правкой можно было бы «закрыть» окно в обход V-11.
+- Видимость по правам (без проверки роли, §5.1): `races.manage` без `races.manage_any` (организатор) — только свои
+  (список и карточка, чужая — 404); только `races.read` (модератор) — все на чтение.
+- Проверки статуса — до сверки `version`: повтор публикации/отмены — 409 `RACE_INVALID_STATE` при любой версии (AC4).
+- Сезон: изменение без фактических изменений — ответ без записи и журнала; `SEASON_IN_PAST`/`DATE_ORDER` — на
+  `endsOn`; `SEASON_FINISHED`/`SEASON_EXCLUDES_RACES` — на изменённом поле дат.
+- Календарь: многодневный старт дольше 14 дней — `INVALID` на `endsOn` (порядок дат — `DATE_ORDER`); снятие/возврат
+  не в том статусе и устаревшая версия — 409 `CONFLICT` (кода «состояние старта» в контракте нет).
+- Курсор (`src/page-cursor.ts`) и IP-лимит публичного чтения (`src/public-read.guard.ts`) — уровень композиции API
+  (как `error-messages.ts`): общие для `races` и `calendar`, без связи модулей. Ключ лимита — `rateLimitKeyForIp`
+  (экспорт `modules/identity/index.ts`).
+- `GET /v1/calendar/cities`: написание города — у ближайшего будущего старта с этим `cityKey`.
 - `createApiClient`: публичные методы идут через отдельный HTTP-клиент без `getAccessToken` — токен в них не уходит
   даже у вошедшего пользователя.
 
