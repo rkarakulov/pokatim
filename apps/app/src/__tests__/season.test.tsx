@@ -230,6 +230,24 @@ describe('экран сезона: «Другие сезоны» и сеть (р
     expect(screen.queryByText('Другие сезоны')).toBeNull();
   });
 
+  it('пустой список, затем ошибка обновления — баннер с повтором, повтор показывает строки', async () => {
+    listSeasons.mockResolvedValue({ items: [s2026] });
+    await openSeason();
+    await screen.findByText('Гонка сезона 1');
+    await waitFor(() => expect(listSeasons).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByTestId('other-seasons')).toBeNull());
+
+    listSeasons.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await act(async () => {
+      control().props.onRefresh?.();
+    });
+    expect(await within(others()).findByText('Данные могли устареть')).toBeOnTheScreen();
+
+    listSeasons.mockResolvedValue({ items: [s2026, s2025] });
+    await fireEvent.press(within(others()).getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('link', { name: /^Сезон 2025/ })).toBeOnTheScreen();
+  });
+
   it('без сети при показанных данных — баннер «Нет соединения», данные остаются', async () => {
     await openSeason();
     await screen.findByText('Гонка сезона 1');

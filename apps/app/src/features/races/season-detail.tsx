@@ -67,8 +67,8 @@ function SeasonHead({ season }: { season: SeasonCard }) {
 
 /**
  * «Другие сезоны» — строки (название, даты, фаза) → экран сезона. Состояния §4.12 в своём слоте: скелетон строк,
- * ошибка с повтором, ошибка обновления — строки остаются с баннером. Блок скрыт только после успешного ответа без
- * других сезонов.
+ * ошибка с повтором, ошибка обновления — строки остаются с баннером (и при пустом прежнем списке). Блок скрыт только
+ * после успешного ответа без других сезонов.
  */
 function OtherSeasons({
   query,
@@ -81,7 +81,7 @@ function OtherSeasons({
 }) {
   const theme = useTheme();
   const others = (data: SeasonList) => data.items.filter((item) => item.id !== currentId);
-  if (query.data !== undefined && others(query.data).length === 0) return null;
+  if (query.data !== undefined && !query.isError && others(query.data).length === 0) return null;
   return (
     <View testID="other-seasons" style={styles.others}>
       <Text
