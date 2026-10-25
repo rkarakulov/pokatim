@@ -330,7 +330,36 @@ gate до S1**: enum уходит в контракт; остальные Q — 
   пользователь не удалён) и **R2** (`withAccessToken`: заблаговременный refresh, на 401 один refresh + один повтор,
   общий refresh под замком сессии) — в scope, ADR-0008.
 
-**Отклонения при реализации:** _нет (дополняется по ходу)._
+**Отклонения при реализации (coder, 2026-10-25):**
+
+1. **CORS: `methods` явно (`GET, HEAD, POST, PUT`)** в `http-app.ts` — по умолчанию `@fastify/cors` разрешает только
+   GET/HEAD/POST, preflight `PUT …/survey` из dev web другого origin падал (int-тест `OPTIONS` это поймал); §8 говорил
+   только о заголовке `Authorization` (он отражается и так).
+2. **`IdentityModule.exports` = `AuthGuard`, `AccessTokenVerifier`, `IdentityRepository`** — Nest создаёт гард из
+   `@UseGuards` в модуле-потребителе, ему нужны зависимости гарда. Из `index.ts` наружу — только `AuthGuard`,
+   `CurrentUser`, `AuthUser`: импортировать репозиторий identity другие модули не могут (arch:check).
+3. **`refreshAccess(now)` платформы возвращает `{ status: 'rotated', session } | { status: 'signedOut' }`**
+   (`AccessRefresh`), а не строку: сессию в стор кладёт `withAccessToken` (single-flight) через
+   `useSessionStore.applyAccessRefresh` — тот же переход, что у `revalidate`. Native без сохранённой сессии (сбой
+   SecureStore) — `signedOut`.
+4. **Гард `(setup)` открыт и пока сессия/шаг неизвестны** (`isSessionPending || (signedIn && step !== 'done')`),
+   `(setup)/_layout` в этом состоянии рисует скелетон оболочки (или ошибку с повтором). С условием §7 (`signedIn &&
+   step ∈ {survey, location}`) SSR `/survey` отдавал пустой `<body>` (редирект Router на сервере не рендерит) — AC9
+   требует HTML скелетона. Общая логика ошибки — `features/onboarding/use-shell-failure.ts`.
+5. **Сброс онбординга (стор + кеш `pokatim.onboarding`) — только на переходе `signedIn → signedOut`**, не на запуске
+   без сессии (`unknown → signedOut`): иначе первый запуск стирал бы кеш и чистил кеш запросов зря (ловил тест
+   ссылки: повторный GET). Повтор после ошибки статуса — `retry()` (шаг снова `unknown`, гидрацию запускает эффект
+   корневого layout — без двойного запроса).
+6. **Инвариант «у удаляемого очисткой аккаунта нет `profiles`»** — `apps/api/test/profile-cleanup.int.test.ts`
+   (межмодульный тест вне `src/modules`: из `profile` нельзя импортировать внутренности identity). Int-тесты гарда
+   (`auth-guard.int.test.ts`) — в коммите S3: проверяются через первый авторизованный эндпоинт.
+7. **Флаг R6** — константа `LOCATION_STEP_ENABLED` в `onboarding-store.ts` (+ release-чеклист в
+   `docs/runbooks/deploy.md`). Схема флага устройства — отдельный `features/onboarding/location-prompt.ts` (общая для
+   `device-flags.ts` и `.web.ts`: `.web` не может импортировать `./device-flags` — бандлер вернул бы его самого).
+8. **Ошибка сохранения опроса:** сеть — общий текст «Нет соединения. Проверьте подключение…» (`auth.error.network`),
+   прочее — «Не удалось сохранить ответ. Повторите.» (Q7); повтор — той же кнопкой «Продолжить».
+9. **«Экраны `(setup)` рендерятся без `window`»** — проверено SSR (`build:web` + `curl /survey`, e2e AC9), отдельного
+   jest-web теста нет.
 
 # 8.3 Security checklist
 
@@ -560,5 +589,53 @@ refreshAccess(): Promise<'rotated' | 'signedOut'>; // сеть/429/5xx — бр�
 
 # 12. Outcome
 
-_Заполняется при завершении: слайсы, проверки с выводом, отрицательные доказательства гонок (`pokatim-tests.md`), NOT
-VERIFIED, follow-ups._
+**Статус:** реализовано S1–S6, ветка `feature/onboarding-04-survey-geo` (от `origin/develop`). Независимое ревью — за
+оркестратором.
+
+**Слайсы (коммиты):** §8.2 решения → S1 контракт + api-client → S2 `AuthGuard` → S3 модуль `profile`, миграция
+`0004_profile`, CORS `PUT` → S4 `withAccessToken`, стор онбординга, гарды, экран опроса, Q9 → S5 `expo-location`,
+экран геопозиции, флаг устройства → S6 e2e + docs (§10).
+
+**Инфраструктура проверок агента:** Docker недоступен — нативные `mongod 8.2.7 --replSet rs0` (`127.0.0.1:27117`),
+`redis-server` (`:6479`), `mailpit` (`:1225`/`:8225`); контейнеры `pokatim-dev-*` не трогались.
+
+**Проверки:**
+
+| Команда | Результат |
+|---|---|
+| `MONGO_URL_TEST=…27117/pokatim_test REDIS_URL_TEST=…6479/1 pnpm check` | EXIT 0: prettier ✔, eslint ✔, `arch:check` ✔ (303 modules), typecheck 8/8, test 13/13 (contracts 56, api-client 30, api 240 в 32 файлах, app 263, admin 7, design-tokens 114, i18n 6, tracks 2) |
+| `db:migrate` на чистой БД (`pokatim_migr`) и повторно | «миграции применены: 0001_outbox, 0002_identity, 0003_identity_ttl, 0004_profile» → «новых миграций нет»; коллекция `profiles` есть |
+| `EXPO_PUBLIC_API_URL=… pnpm build:web` + `start:web` + `curl /survey` | 200, HTML со скелетоном (`progressbar`), без содержимого шага; `expo-location` в `dist` не найден (grep `ExpoLocation`/`getForegroundPermissionsAsync` — пусто) |
+| `pnpm e2e:web` без API | 11 passed, 1 skipped (сценарий с API) |
+| `E2E_API=1 pnpm e2e:web` (API/worker из `dist`, MongoDB RS, Redis, Mailpit) | 12 passed: регистрация → письмо → подтверждение → опрос (PUT с Bearer, 200 `{ surveyCompleted: true }`) → `/location` «Не сейчас» → Главная → перезагрузка → … → сброс пароля → вход в контексте с выданной геопозицией — Главная без шага геопозиции |
+| `npx expo export -p android` / `-p ios` | Android Bundled (1608 modules), iOS Bundled (1460 modules), Exported |
+| `npx expo config --type introspect` (AC10) | `infoPlist`: только `NSLocationWhenInUseUsageDescription` (русская строка); Always/AlwaysAndWhenInUse/Motion/TemporaryFullAccuracy/`UIBackgroundModes` — нет; Android: `ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION` (+ прежние), `ACCESS_BACKGROUND_LOCATION` — нет |
+
+**Отрицательные доказательства (`pokatim-tests.md`)** — механизм убран, тест краснеет по результату:
+
+- фильтр сессии `{ _id: sid, userId: sub, revokedAt: null, expiresAt: { $gt: now } }` → `{ _id: sid }`:
+  `auth-guard.int.test.ts` — 5 failed («sid сессии, отозванной выходом / сбросом пароля / reuse detection», «истёкшая
+  сессия», «sid другого пользователя»): `expected 200 to be 401`;
+- условие `deletedAt: null` у `users` убрано: «удалённый пользователь» — `expected 200 to be 401`;
+- повтор при `isDuplicateKey(error, '_id_')` убран: «гонка upsert (duplicate key на _id)» — `expected 500 to be 200`
+  (дубль-ключ — настоящий E11000 MongoDB). Восемь параллельных первых `PUT` проходят и без повтора: MongoDB 8 сам
+  повторяет upsert при конфликте уникального `_id` — тест на 8 параллельных фиксирует итог (один документ, все 200).
+
+**NOT VERIFIED:**
+
+- Ручной смоук на устройствах: iOS/Android preview-сборка (нужна новая EAS-сборка — нативный модуль `expo-location`):
+  системный диалог с русской строкой, «Разрешить» / «Запретить» / «Приблизительно», повторный запуск без экрана;
+  Safari (iOS) web — запрос разрешения по кнопке. EAS агент не запускает.
+- CI GitHub Actions (push сделан, PR не открывался).
+- Тесты — на `mongod 8.2.7` (CI — `mongo:8.0`).
+
+**Follow-ups:**
+
+- Удаление аккаунта: удалить документ `profiles` идемпотентно (поздний `PUT` после отзыва — §8, `pokatim-db.md`).
+- Кеш «опрос пройден» стирается на переходе `signedIn → signedOut` в живом приложении; если процесс убит между
+  выходом и удалением кеша, следующий вход другим аккаунтом на этом устройстве пропустит опрос (сервер всё равно
+  знает, что ответа нет; ответ спросится после переустановки). Привязать кеш к `sub` access — при следующей правке.
+- Перед сторами: `LOCATION_STEP_ENABLED` и строка `NSLocationWhenInUseUsageDescription` в Info.plist остаётся при
+  выключенном шаге — решать вместе с фичей «рядом».
+- Кандидаты в app-foundation (F6): `AuthGuard`, авторизованный запрос с single-flight refresh в `api-client-core`.
+- Redis-кеш «сессия жива» ≤ 60 с — при нагрузке (ADR-0008).

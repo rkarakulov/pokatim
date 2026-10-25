@@ -417,6 +417,18 @@ done
 `docker image prune -af --filter label=by.pokatim.project=pokatim`. Чужие образы, тома и `docker system prune` —
 нельзя (общий сервер).
 
+## Миграции релизов
+
+- `0004_profile` (онбординг, слайс 4) — коллекция `profiles`; expand-only, без переноса данных, повторный прогон —
+  без изменений. Применяется шагом `migrate` деплоя до запуска API.
+
+## Release-чеклист сторов (приложение)
+
+- **Шаг геопозиции в онбординге — только при живой фиче «рядом»** (R6 слайса 4, App Review 5.1.1): до первой
+  публикации в App Store / Google Play проверить, что «рядом» использует геопозицию; иначе выключить шаг —
+  `LOCATION_STEP_ENABLED = false` в `apps/app/src/features/onboarding/onboarding-store.ts` (экран и разрешение
+  остаются в сборке, но не запрашиваются).
+
 ## Проверка
 
 - Summary прогона: «Статус: success», адреса.

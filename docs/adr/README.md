@@ -39,3 +39,4 @@ ADR нужен, когда решение: меняет инвариант `AGEN
 | [0005](0005-sign-in-and-refresh-lifecycle.md) | Вход по паролю и жизненный цикл refresh: окно повтора, reuse detection, лимиты входа | Accepted |
 | [0006](0006-password-reset.md) | Сброс пароля: токен ссылки, нейтральный запрос, отзыв всех сессий, без автоматического входа | Accepted |
 | [0007](0007-mongodb.md) | MongoDB вместо PostgreSQL + PostGIS: replica set, сериализация аккаунта `$inc version`, геостратегия | Accepted |
+| [0008](0008-request-authorization.md) | Авторизация запросов: access JWT + живая сессия `sid`; авто-refresh access в приложении | Accepted |

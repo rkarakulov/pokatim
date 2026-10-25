@@ -84,6 +84,33 @@ native, запуск: сессия из SecureStore сразу (офлайн —
   Web: вход, refresh, poll регистрации и выход — под одним Web Lock (`session-lock.web.ts`): операции, меняющие
   cookie, не перекрываются между вкладками; API на 401 без предъявленной cookie её не сбрасывает. Native — замок в
   памяти процесса (`session-lock.ts`): выход во время фоновой ротации ждёт её и отзывает уже новый refresh.
+- **Авторизованные запросы (ADR-0008):** `AuthGuard` identity — access JWT (`AccessTokenVerifier`: HS256, iss/aud,
+  exp по `CLOCK`) **и** живая сессия `sid` того же `sub` + пользователь не удалён (два чтения по `_id`); любой отказ —
+  один `401 UNAUTHORIZED`. Другие модули подключают гард через `modules/identity/index.ts`, пользователь —
+  `@CurrentUser()`. App: Bearer — только явным параметром методов, требующих входа; `withAccessToken`
+  (`features/auth/authorized.ts`) обновляет access за 60 с до истечения и после 401 (один refresh + один повтор,
+  single-flight под замком сессии), refresh 401 — локальный выход.
+
+### Онбординг после входа (модули `profile` и `identity`, слайс 4)
+
+```
+вход (автовход V-09 / пароль) ─► гард: онбординг неизвестен ─► скелетон оболочки
+опрос: кеш pokatim.onboarding (сессия) ─► есть: пройден (сервер не спрашиваем, офлайн-старт native)
+        └─ нет: GET /v1/profile/onboarding (Bearer) ─► { surveyCompleted } ─► true: кеш, дальше
+                                                     └─ ошибка: «Нет соединения» / «Не удалось загрузить» + повтор
+        «Что вас привело?» ─ PUT /v1/profile/onboarding/survey { reasons } ─► profiles (upsert по _id = userId)
+геопозиция: флаг устройства pokatim.locationPrompt или решение ОС/браузера ─► пропуск
+        └─ не определено: «Покажем, что рядом» ─ «Разрешить» (системный запрос) / «Не сейчас» ─► флаг ─► Главная
+выход: кеш опроса стёрт (флаг геопозиции — устройства, остаётся)
+```
+
+- Модуль `profile` — коллекция `profiles` (`_id` = id пользователя; ответы опроса, `surveyCompletedAt`, `updatedAt`),
+  единственный писатель — `ProfileRepository`; запись — одна атомарная операция над одним документом вне транзакции,
+  гонка двух первых upsert (duplicate key на `_id`) — один повтор. Наружу — только `{ surveyCompleted }`, `no-store`.
+  Сервер опрос не навязывает: другие эндпоинты ответа не требуют.
+- Шаги — группа `(setup)` (`/survey`, `/location`) вне `(onboarding)` и `(tabs)`; координаты не читаются и не
+  хранятся (`location-permission(.web).ts`); `expo-location` — только native. Шаг геопозиции выключается флагом
+  `LOCATION_STEP_ENABLED` (release-чеклист — `docs/runbooks/deploy.md`).
 
 ### Сброс пароля (модуль `identity`, ADR-0006)
 
