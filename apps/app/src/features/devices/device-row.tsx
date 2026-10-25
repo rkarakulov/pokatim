@@ -15,7 +15,12 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { deviceActionErrorMessage, syncErrorMessage } from './error-messages';
-import { deviceStatusLabel, formatMinskDateTime, isDeviceConnected } from './format';
+import {
+  deviceStatusLabel,
+  formatMinskDateTime,
+  isDeviceConnected,
+  needsDeviceConnect,
+} from './format';
 import { useConnectDevice, useDisconnectDevice, useSyncDevice } from './queries';
 
 function statusTone(device: DeviceView): PillTone {
@@ -32,7 +37,7 @@ interface DeviceRowProps {
 
 /**
  * Провайдер на экране «Устройства»: статус, «Синхронизировано …» по Минску, проблема (`issue`) с действием,
- * «Подключить» / «Подключить снова», «Синхронизировать сейчас», «Отключить» с подтверждением и галочкой «Удалить заезды
+ * «Подключить» / «Подключить снова» (`reauthorize`, `pending`), «Синхронизировать сейчас», «Отключить» с подтверждением и галочкой «Удалить заезды
  * из …» (по умолчанию выключена). `available: false` — «Подключение временно недоступно», без подключения.
  */
 export function DeviceRow({ device, now, first }: DeviceRowProps) {
@@ -46,7 +51,8 @@ export function DeviceRow({ device, now, first }: DeviceRowProps) {
   // провайдер, которого сборка не знает (сервер новее), — только строка статуса
   const provider = device.provider === 'unknown' ? null : device.provider;
   const connected = isDeviceConnected(device);
-  const needsConnect = device.issue === 'reauthorize' || !connected;
+  const needsConnect = needsDeviceConnect(device);
+  const reconnect = device.issue === 'reauthorize' || device.status === 'pending';
   const canConnect =
     provider !== null && device.available && needsConnect && device.status !== 'disconnecting';
   const canSync =
@@ -101,7 +107,7 @@ export function DeviceRow({ device, now, first }: DeviceRowProps) {
 
       {canConnect && provider !== null ? (
         <Button
-          label={device.issue === 'reauthorize' ? t('devices.reconnect') : t('devices.connect')}
+          label={reconnect ? t('devices.reconnect') : t('devices.connect')}
           onPress={() => connect.mutate(provider)}
           loading={connect.isPending}
         />

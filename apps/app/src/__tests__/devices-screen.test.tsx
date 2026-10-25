@@ -3,6 +3,7 @@ import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import { TRACK_FILE_MAX_BYTES } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { getDocumentAsync } from 'expo-document-picker';
+import { openAuthSessionAsync } from 'expo-web-browser';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { api } from '@/lib/api';
@@ -14,6 +15,7 @@ import DevicesScreen from '../app/settings/devices';
 
 jest.mock('@/lib/api');
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
+jest.mock('expo-web-browser', () => ({ openAuthSessionAsync: jest.fn() }));
 
 const listDevices = jest.mocked(api.listDevices);
 const listUploads = jest.mocked(api.listTrackUploads);
@@ -187,6 +189,29 @@ describe('«Устройства»: провайдеры и `issue` (AC12)', () 
     expect(row('garmin').getByText('Нужно подключить снова')).toBeOnTheScreen();
     expect(row('garmin').getByRole('button', { name: 'Подключить снова' })).toBeOnTheScreen();
     expect(row('garmin').queryByRole('button', { name: 'Синхронизировать сейчас' })).toBeNull();
+  });
+
+  it('`pending` (браузер закрыли / OW увёл на свою ошибку) — «Подключить снова» начинает заново', async () => {
+    listDevices.mockResolvedValue(deviceList(garmin({ status: 'pending' })));
+    jest
+      .mocked(api.connectDevice)
+      .mockResolvedValue({ authorizeUrl: 'https://ow.example/authorize' });
+    jest
+      .mocked(openAuthSessionAsync)
+      .mockResolvedValue({ type: 'cancel' } as Awaited<ReturnType<typeof openAuthSessionAsync>>);
+    await openDevices();
+
+    await screen.findByTestId('device-garmin');
+    expect(row('garmin').getByText('Ожидаем подтверждения')).toBeOnTheScreen();
+    expect(row('garmin').queryByRole('button', { name: 'Синхронизировать сейчас' })).toBeNull();
+    await fireEvent.press(row('garmin').getByRole('button', { name: 'Подключить снова' }));
+
+    await waitFor(() => expect(openAuthSessionAsync).toHaveBeenCalled());
+    expect(api.connectDevice).toHaveBeenCalledWith(
+      liveSession.accessToken,
+      'garmin',
+      expect.objectContaining({ returnUrl: expect.any(String) }),
+    );
   });
 
   it('`sync_failed` — «Не удалось получить заезды» и «Синхронизировать сейчас»', async () => {

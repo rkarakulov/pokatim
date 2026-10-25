@@ -39,6 +39,13 @@ export function deviceStatusLabel(device: DeviceView): string {
 export const isDeviceConnected = (device: DeviceView) =>
   device.status === 'active' || device.status === 'pending';
 
+/**
+ * Подключение нужно начать (заново): не подключено, `issue: 'reauthorize'` или `pending` — подтверждение не пришло
+ * (браузер авторизации закрыли, OW увёл на свою страницу ошибки); сервер повторный `connect` при `pending` принимает.
+ */
+export const needsDeviceConnect = (device: DeviceView) =>
+  device.issue === 'reauthorize' || device.status === 'pending' || !isDeviceConnected(device);
+
 /** Загрузка ещё обрабатывается — экран опрашивает её статус. */
 export const isUploadInProgress = (upload: Pick<TrackUpload, 'status'>) =>
   upload.status === 'queued' || upload.status === 'processing';

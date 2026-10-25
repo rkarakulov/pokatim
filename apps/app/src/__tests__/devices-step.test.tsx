@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { OnboardingStatus } from '@pokatim/contracts';
+import { onlineManager } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { openAuthSessionAsync } from 'expo-web-browser';
@@ -179,6 +180,50 @@ describe('экран «Подключите устройство» (AC11)', () =
 
     await fireEvent.press(screen.getByRole('button', { name: 'Позже' }));
     expect(await home()).toBeOnTheScreen();
+  });
+
+  it('офлайн: «Нет соединения» с повтором, «Позже» доступна — без сети баннер, повтор той же кнопкой', async () => {
+    onlineManager.setOnline(false);
+    try {
+      completeStep.mockRejectedValueOnce(
+        new ApiNetworkError(new TypeError('Network request failed')),
+      );
+      await openSignedIn({ surveyCompleted: true, devicesStepCompleted: false });
+
+      expect(await screen.findByText('Нет соединения')).toBeOnTheScreen();
+      expect(screen.getByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
+      expect(listDevices).not.toHaveBeenCalled();
+      const later = screen.getByRole('button', { name: 'Позже' });
+      expect(later).toBeEnabled();
+
+      // мутация шага — `networkMode: 'always'`: запрос уходит и без сети, ошибка — баннер
+      await fireEvent.press(later);
+      expect(await screen.findByText(/Нет соединения\. Проверьте/)).toBeOnTheScreen();
+      expect(completeStep).toHaveBeenCalledWith(liveSession.accessToken, { outcome: 'later' });
+      expect(await stepTitle()).toBeOnTheScreen();
+
+      await fireEvent.press(screen.getByRole('button', { name: 'Позже' }));
+      expect(await home()).toBeOnTheScreen();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it('`pending` (браузер закрыли / OW увёл на свою ошибку) — «Подключить снова» начинает заново', async () => {
+    listDevices.mockResolvedValue(deviceList(garmin({ status: 'pending' }), wahoo()));
+    jest
+      .mocked(api.connectDevice)
+      .mockResolvedValue({ authorizeUrl: 'https://ow.example/authorize' });
+    authSession.mockResolvedValue({ type: 'cancel' } as Awaited<
+      ReturnType<typeof openAuthSessionAsync>
+    >);
+    await openSignedIn({ surveyCompleted: true, devicesStepCompleted: false });
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Подключить Garmin снова' }));
+    await waitFor(() => expect(authSession).toHaveBeenCalled());
+    expect(jest.mocked(api.connectDevice).mock.calls[0]?.[1]).toBe('garmin');
+    expect(screen.getByRole('button', { name: 'Подключить Wahoo' })).toBeOnTheScreen();
+    expect(screen.queryByText('Garmin подключён')).toBeNull();
   });
 
   it('подключение (native): браузер авторизации → тикет → `complete` → «Garmin подключён» → «Продолжить» → Главная', async () => {

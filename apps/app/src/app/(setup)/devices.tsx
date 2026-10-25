@@ -2,13 +2,13 @@ import { isNetworkError } from '@pokatim/api-client';
 import type { DeviceProvider, DeviceView } from '@pokatim/contracts';
 import { size } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { Banner, Button, Skeleton, SkeletonGroup, TextAction } from '@rkarakulov/ui';
+import { AsyncContent, Banner, Button, Skeleton, TextAction } from '@rkarakulov/ui';
 
 import { DocumentTitle } from '@/components/document-title';
 import { AuthActions, AuthScreen, AuthStack, AuthText } from '@/features/auth/auth-screen';
 import { actionErrorMessage } from '@/features/auth/error-messages';
 import { deviceActionErrorMessage } from '@/features/devices/error-messages';
-import { isDeviceConnected } from '@/features/devices/format';
+import { needsDeviceConnect } from '@/features/devices/format';
 import { useConnectDevice, useDevices } from '@/features/devices/queries';
 import { useCompleteDevicesStep } from '@/features/onboarding/queries';
 
@@ -20,13 +20,23 @@ const saveErrorMessage = (error: unknown) =>
 type ConnectableDevice = DeviceView & { provider: DeviceProvider };
 
 const isConnectable = (device: DeviceView): device is ConnectableDevice =>
-  device.provider !== 'unknown' && device.available && !isDeviceConnected(device);
+  device.provider !== 'unknown' &&
+  device.available &&
+  device.status !== 'disconnecting' &&
+  needsDeviceConnect(device);
+
+// подключение начато, но не подтверждено (`pending`) или его нужно обновить — начать заново
+const connectLabel = (device: DeviceView) =>
+  device.status === 'pending' || device.issue === 'reauthorize'
+    ? t('devices.reconnectProvider', { name: device.name })
+    : t('devices.connectProvider', { name: device.name });
 
 /**
  * Шаг онбординга «Подключите устройство» (после геопозиции, один раз на аккаунт): кнопки доступных провайдеров и
  * «Позже». После подключения (native — по возврату из браузера; web — `devices/return` ведёт обратно сюда) —
  * «Garmin подключён» и «Продолжить». `GET /v1/devices` недоступен или провайдеров нет — только «Позже» и подсказка про
- * загрузку файлом. Любой исход — флаг шага на сервере (ошибка — баннер, повтор той же кнопкой) → Главная.
+ * загрузку файлом. Без сети (запрос ждёт её) — «Нет соединения» с повтором и «Позже»; `pending` (подтверждение не
+ * пришло) — «Подключить Garmin снова». Любой исход — флаг шага на сервере (ошибка — баннер, повтор той же кнопкой) → Главная.
  */
 export default function DevicesStepScreen() {
   const devices = useDevices();
@@ -61,13 +71,22 @@ export default function DevicesStepScreen() {
       );
     }
     if (devices.isPending) {
+      // первая загрузка — скелетон; без сети — «Нет соединения» с повтором, шаг можно пропустить
       return (
-        <SkeletonGroup>
-          <AuthStack>
-            <Skeleton height={size.buttonHeight} />
-            <Skeleton height={size.buttonHeight} />
-          </AuthStack>
-        </SkeletonGroup>
+        <>
+          <AsyncContent
+            query={devices}
+            skeleton={
+              <AuthStack>
+                <Skeleton height={size.buttonHeight} />
+                <Skeleton height={size.buttonHeight} />
+              </AuthStack>
+            }
+          >
+            {() => null}
+          </AsyncContent>
+          {devices.fetchStatus === 'paused' ? later : null}
+        </>
       );
     }
     if (unavailable) {
@@ -83,7 +102,7 @@ export default function DevicesStepScreen() {
         {connectable.map((device) => (
           <Button
             key={device.provider}
-            label={t('devices.connectProvider', { name: device.name })}
+            label={connectLabel(device)}
             onPress={() => connect.mutate(device.provider)}
             loading={connect.isPending && connect.variables === device.provider}
             disabled={connect.isPending || finish.isPending}

@@ -271,6 +271,7 @@ export const ru = {
   'devices.connect': 'Подключить',
   'devices.connectProvider': 'Подключить {name}',
   'devices.reconnect': 'Подключить снова',
+  'devices.reconnectProvider': 'Подключить {name} снова',
   'devices.syncNow': 'Синхронизировать сейчас',
   'devices.disconnect': 'Отключить',
   'devices.disconnectProvider': 'Отключить {name}',
