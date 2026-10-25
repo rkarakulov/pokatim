@@ -33,6 +33,8 @@ import {
   type SignInRequest,
   type SignOutRequest,
   type SubmitOnboardingSurveyRequest,
+  TrackUpload,
+  TrackUploadPage,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -127,6 +129,14 @@ export function createApiClient({
   const withTransport = <B extends object>(body: B) =>
     sessionTransport ? { sessionTransport, ...body } : body;
 
+  /** Путь загрузки заезда: `?name=` — исходное имя файла только для показа. */
+  const trackUploadPath = (name?: string) =>
+    `/v1/tracks/uploads${name ? queryString({ name }) : ''}`;
+  const octetStream = (accessToken: string) => ({
+    authorization: `Bearer ${accessToken}`,
+    'content-type': 'application/octet-stream',
+  });
+
   return {
     health: () => get('/v1/health', HealthResponse),
     register: (body: RegisterRequest) => post('/v1/auth/register', RegisterResponse, body),
@@ -192,6 +202,48 @@ export function createApiClient({
     getCalendarStart: (id: string) =>
       getPublic(`/v1/calendar/${encodeURIComponent(id)}`, CalendarStartDetail),
     listCalendarCities: () => getPublic('/v1/calendar/cities', CalendarCities),
+
+    // --- заезды: ручная загрузка FIT/GPX (вход обязателен, tracks-devices) ---
+    /**
+     * Загрузка файла заезда сырыми байтами (`application/octet-stream`): `202` — новая, `200` — тот же файл уже есть.
+     * Формат сервер определяет по содержимому.
+     */
+    uploadTrack: (accessToken: string, body: Blob | Uint8Array, name?: string) =>
+      request(trackUploadPath(name), TrackUpload, {
+        method: 'POST',
+        body: body as BodyInit,
+        headers: octetStream(accessToken),
+        ...withCredentials,
+      }),
+    /**
+     * Тот же запрос для платформенной отправки с прогрессом (XHR в web, upload task в native): ответ разбирается
+     * `TrackUpload`, ошибка — `ApiHttpError`.
+     */
+    trackUploadRequest: (accessToken: string, name?: string) => ({
+      url: `${baseUrl}${trackUploadPath(name)}`,
+      method: 'POST' as const,
+      headers: octetStream(accessToken),
+    }),
+    getTrackUpload: (accessToken: string, id: string) =>
+      request(
+        `/v1/tracks/uploads/${encodeURIComponent(id)}`,
+        TrackUpload,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Свои загрузки, новые сверху. */
+    listTrackUploads: (accessToken: string, params: { limit?: number; cursor?: string } = {}) =>
+      request(
+        `/v1/tracks/uploads${queryString(params)}`,
+        TrackUploadPage,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Удаление своей загрузки вместе с заездом; ответ 204. */
+    deleteTrackUpload: (accessToken: string, id: string) =>
+      request(
+        `/v1/tracks/uploads/${encodeURIComponent(id)}/delete`,
+        z.undefined(),
+        authorized(accessToken, { method: 'POST', body: '{}', ...withCredentials }),
+      ),
   };
 }
 

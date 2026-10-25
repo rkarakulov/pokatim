@@ -14,7 +14,8 @@ import { z } from 'zod';
 
 describe('коды ошибок', () => {
   it('панель (admin-01): коды — после INVALID_CREDENTIALS (установленные клиенты)', () => {
-    expect(ErrorCode.options.slice(-7, -1)).toEqual([
+    const start = ErrorCode.options.indexOf('INVALID_CREDENTIALS');
+    expect(ErrorCode.options.slice(start, start + 6)).toEqual([
       'INVALID_CREDENTIALS',
       'PANEL_ACCESS_DENIED',
       'PANEL_USER_UNVERIFIED',
@@ -50,6 +51,9 @@ describe('коды ошибок', () => {
       'PANEL_LAST_ADMIN',
       'PANEL_SELF_ACTION',
       'RACE_INVALID_STATE',
+      'TRACK_FORMAT_UNSUPPORTED',
+      'TRACK_TOO_LARGE',
+      'TRACK_STORAGE_FULL',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

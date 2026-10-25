@@ -17,3 +17,4 @@ export * from './races/race.schema.ts';
 export * from './races/race-public.schema.ts';
 export * from './calendar/calendar.schema.ts';
 export * from './calendar/calendar-public.schema.ts';
+export * from './tracks/track-upload.schema.ts';
