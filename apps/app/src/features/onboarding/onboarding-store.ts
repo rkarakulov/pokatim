@@ -5,6 +5,17 @@ import { api } from '@/lib/api';
 import { withAccessToken } from '@/features/auth/authorized';
 import { readJson } from '@/features/auth/read-json';
 import { secureStorage } from '@/features/auth/secure-storage';
+import { getLocationPermission } from '@/features/location/location-permission';
+
+import { hasLocationPrompt, saveLocationPrompt } from './device-flags';
+import type { LocationPromptDecision } from './location-prompt';
+
+/**
+ * Шаг геопозиции в онбординге (R6): включён, пока сборки только у внутренних тестеров. Перед публикацией в сторах —
+ * `false`, если фичи «рядом» ещё нет (release-чеклист `docs/runbooks/deploy.md`): запрос разрешения без потребителя
+ * — риск отклонения App Review (5.1.1).
+ */
+export const LOCATION_STEP_ENABLED = true;
 
 /**
  * Опрос: `unknown` — ещё не выяснили; `required` — сервер ответа не знает; `completed` — ответ есть (сервер или кеш
@@ -31,6 +42,8 @@ interface OnboardingState {
   retry: () => void;
   /** ответ опроса сохранён на сервере */
   completeSurvey: () => Promise<void>;
+  /** экран геопозиции пройден («Разрешить» при любом исходе или «Не сейчас»): флаг устройства, дальше — Главная */
+  finishLocation: (decision: LocationPromptDecision) => Promise<void>;
   /** выход: состояние и кеш опроса прежнего аккаунта стираются; флаг геопозиции (устройство) остаётся */
   reset: () => Promise<void>;
 }
@@ -69,9 +82,13 @@ async function surveyState(): Promise<Pick<OnboardingState, 'survey' | 'error'>>
   }
 }
 
-/** Шаг геопозиции (слайс 4, S5): пока экрана нет — решён. */
+/**
+ * Шаг геопозиции: флаг устройства есть — решён (экран один раз на устройство, Q5); иначе — по разрешению ОС/браузера:
+ * не определено — экран, `granted`/`denied`/`unavailable` — пропуск (решение ОС первично, флаг не пишем).
+ */
 async function locationState(): Promise<LocationStepState> {
-  return 'done';
+  if (!LOCATION_STEP_ENABLED || (await hasLocationPrompt())) return 'done';
+  return (await getLocationPermission()) === 'undetermined' ? 'pending' : 'done';
 }
 
 /** Поколение состояния: ответ гидрации, начатой до выхода, не перезаписывает сброс. */
@@ -93,6 +110,10 @@ export const useOnboardingStore = create<OnboardingState>()((set, get) => ({
   completeSurvey: async () => {
     set({ survey: 'completed', error: null });
     await writeSurveyFlag();
+  },
+  finishLocation: async (decision) => {
+    await saveLocationPrompt(decision);
+    set({ location: 'done' });
   },
   reset: async () => {
     generation += 1;

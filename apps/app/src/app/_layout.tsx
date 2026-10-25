@@ -84,7 +84,15 @@ export default function RootLayout() {
           guard={
             isSessionPending(sessionStatus) || (signedIn && (step === 'unknown' || step === 'done'))
           }
-          redirectTo={signedIn ? '/survey' : returning ? '/sign-in' : '/register'}
+          redirectTo={
+            signedIn
+              ? step === 'location'
+                ? '/location'
+                : '/survey'
+              : returning
+                ? '/sign-in'
+                : '/register'
+          }
         >
           <Stack.Screen name="(tabs)" />
         </Stack.Protected>

@@ -23,6 +23,14 @@ jest.mock('expo-secure-store', () => {
   };
 });
 
+// геопозиция: по умолчанию разрешение уже выдано — шаг онбординга пропускается (тесты шага задают своё);
+// getCurrentPositionAsync — сторож: координаты приложение не читает (Q6)
+jest.mock('expo-location', () => ({
+  getForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+  requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+  getCurrentPositionAsync: jest.fn(),
+}));
+
 jest.mock('@react-native-community/netinfo', () =>
   jest.requireActual('@react-native-community/netinfo/jest/netinfo-mock.js'),
 );

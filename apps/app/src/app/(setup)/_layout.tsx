@@ -29,6 +29,9 @@ export default function SetupLayout() {
       <Stack.Protected guard={step === 'survey'}>
         <Stack.Screen name="survey" />
       </Stack.Protected>
+      <Stack.Protected guard={step === 'location'}>
+        <Stack.Screen name="location" />
+      </Stack.Protected>
     </Stack>
   );
 }
