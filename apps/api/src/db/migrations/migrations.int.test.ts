@@ -14,6 +14,10 @@ import { panel, PANEL_SESSION_TTL_SECONDS } from './0005_panel';
 import { panelAuditSubject } from './0006_panel_audit_subject';
 import { races } from './0007_races';
 import { calendar } from './0008_calendar';
+import { tracks } from './0010_tracks';
+import { devices } from './0011_devices';
+import { TRACKS_COLLECTIONS } from '../../modules/tracks/tracks.collection';
+import { DEVICES_COLLECTIONS } from '../../modules/devices/devices.collection';
 import { migrations } from './index';
 
 let h: Harness;
@@ -58,6 +62,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0006_panel_audit_subject',
       '0007_races',
       '0008_calendar',
+      '0010_tracks',
+      '0011_devices',
     ]);
   });
 
@@ -140,6 +146,115 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await calendar.up(h.db);
     await calendar.up(h.db);
     expect(await indexesOf(CALENDAR_COLLECTIONS.starts)).toEqual(expected);
+  });
+
+  it('0010_tracks: коллекции и индексы (уникальные, частичный, 2dsphere); повторный up — без ошибки (AC14)', async () => {
+    const index = (key: Record<string, unknown>, unique = false, partial?: object) => ({
+      key,
+      unique,
+      partialFilterExpression: partial,
+      expireAfterSeconds: undefined,
+    });
+    const expected = {
+      [TRACKS_COLLECTIONS.uploads]: {
+        track_uploads_user_sha_unique: index({ userId: 1, sha256: 1 }, true),
+        track_uploads_source_ref_unique: index({ source: 1, sourceRef: 1 }, true, {
+          sourceRef: { $type: 'string' },
+        }),
+        track_uploads_user_created_idx: index({ userId: 1, _id: -1 }),
+        track_uploads_cleanup_idx: index({ status: 1, updatedAt: 1 }),
+      },
+      [TRACKS_COLLECTIONS.activities]: {
+        activities_user_started_idx: index({ userId: 1, startedAt: -1 }),
+        activities_upload_idx: index({ uploadId: 1 }),
+        activities_start_point_2dsphere: index({ startPoint: '2dsphere' }),
+      },
+      [TRACKS_COLLECTIONS.tracks]: {
+        activity_tracks_line_2dsphere: index({ line: '2dsphere' }),
+        activity_tracks_user_idx: index({ userId: 1 }),
+      },
+      [TRACKS_COLLECTIONS.meta]: {},
+    };
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
+    await tracks.up(h.db);
+    await tracks.up(h.db);
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
+  });
+
+  it('0010_tracks: 2dsphere принимает линию трека и отвергает вырожденную (одна точка дважды)', async () => {
+    const lines = h.db.collection<{ _id: string; userId: string; line: object }>(
+      TRACKS_COLLECTIONS.tracks,
+    );
+    await lines.deleteMany({});
+    await lines.insertOne({
+      _id: 'ok',
+      userId: 'u',
+      line: {
+        type: 'LineString',
+        coordinates: [
+          [27.5615, 53.9023],
+          [27.57, 53.91],
+          [27.58, 53.905],
+        ],
+      },
+    });
+    await expect(
+      lines.insertOne({
+        _id: 'bad',
+        userId: 'u',
+        line: {
+          type: 'LineString',
+          coordinates: [
+            [27.5615, 53.9023],
+            [27.5615, 53.9023],
+          ],
+        },
+      }),
+    ).rejects.toThrow();
+    await lines.deleteMany({});
+  });
+
+  it('0011_devices: коллекции и индексы (уникальные, частичные, TTL тикетов); повторный up — без ошибки (AC14)', async () => {
+    const index = (
+      key: Record<string, unknown>,
+      unique = false,
+      partial?: object,
+      ttl?: number,
+    ) => ({ key, unique, partialFilterExpression: partial, expireAfterSeconds: ttl });
+    const expected = {
+      [DEVICES_COLLECTIONS.accounts]: {
+        device_accounts_agg_user_unique: index({ aggregator: 1, aggUserId: 1 }, true),
+      },
+      [DEVICES_COLLECTIONS.connections]: {
+        device_connections_user_provider_live_unique: index({ userId: 1, provider: 1 }, true, {
+          status: { $in: ['pending', 'active', 'disconnecting'] },
+        }),
+        device_connections_agg_user_idx: index({ aggUserId: 1 }),
+        device_connections_status_idx: index({ status: 1, pendingUntil: 1 }),
+      },
+      [DEVICES_COLLECTIONS.tickets]: {
+        device_link_tickets_ttl: index({ expiresAt: 1 }, false, undefined, 0),
+      },
+      [DEVICES_COLLECTIONS.imports]: {
+        device_imports_workout_unique: index({ provider: 1, aggWorkoutId: 1 }, true),
+        device_imports_upload_idx: index({ uploadId: 1 }, false, { uploadId: { $type: 'string' } }),
+      },
+      [DEVICES_COLLECTIONS.audit]: {
+        device_audit_user_idx: index({ userId: 1, _id: -1 }),
+      },
+    };
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
+    await devices.up(h.db);
+    await devices.up(h.db);
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

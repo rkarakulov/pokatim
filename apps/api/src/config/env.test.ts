@@ -58,4 +58,80 @@ describe('env', () => {
       expect.objectContaining({ message: expect.not.stringContaining('secret') }),
     );
   });
+
+  it('треки и устройства: значения по умолчанию — устройства выключены, стенд стартует без ключей OW', () => {
+    const value = testEnv();
+    expect(value.DEVICES_ENABLED).toBe(false);
+    expect(value.DEVICE_PROVIDERS_ALLOWLIST).toEqual(['garmin', 'wahoo']);
+    expect(value.DEVICES_SYNC_INTERVAL_MIN).toBe(15);
+    expect(value.DEVICES_HISTORY_DAYS).toBe(30);
+    expect(value.TRACK_STORAGE_MAX_BYTES).toBe(2 * 1024 ** 3);
+    expect(value.OW_EXTERNAL_ID_PREFIX).toBe('pokatim:');
+    expect(value.OW_SHARED_INSTANCE).toBe(false);
+    expect(testEnv({ DEVICE_PROVIDERS_ALLOWLIST: 'wahoo' }).DEVICE_PROVIDERS_ALLOWLIST).toEqual([
+      'wahoo',
+    ]);
+    expect(() => testEnv({ DEVICE_PROVIDERS_ALLOWLIST: 'garmin,strava' })).toThrow();
+  });
+
+  const devices = {
+    DEVICES_ENABLED: 'true',
+    OW_API_URL: 'http://open-wearables:8000',
+    OW_API_KEY: 'ow-test-key-0000000000',
+    PUBLIC_API_ORIGIN: 'https://api.example.com',
+    DEVICE_RETURN_URLS: 'https://app.example.com/devices/return,pokatim://devices/return',
+  };
+
+  it('DEVICES_ENABLED=true без адреса/ключа OW, origin API или URL возврата — отказ запуска', () => {
+    expect(testEnv(devices).DEVICE_RETURN_URLS).toEqual([
+      'https://app.example.com/devices/return',
+      'pokatim://devices/return',
+    ]);
+    expect(() => testEnv({ ...devices, OW_API_KEY: '' })).toThrow(/OW_API_KEY/);
+    expect(() => testEnv({ ...devices, OW_API_URL: undefined })).toThrow(/OW_API_URL/);
+    expect(() => testEnv({ ...devices, PUBLIC_API_ORIGIN: undefined })).toThrow(
+      /PUBLIC_API_ORIGIN/,
+    );
+    expect(() => testEnv({ ...devices, DEVICE_RETURN_URLS: '' })).toThrow(/DEVICE_RETURN_URLS/);
+    expect(() =>
+      testEnv({ ...devices, PUBLIC_API_ORIGIN: 'https://api.example.com/v1' }),
+    ).toThrow();
+  });
+
+  it('production: общий инстанс OW и exp:// в URL возврата — отказ запуска', () => {
+    expect(() => testEnv({ NODE_ENV: 'production', OW_SHARED_INSTANCE: 'true' })).toThrow(
+      /OW_SHARED_INSTANCE/,
+    );
+    expect(testEnv({ OW_SHARED_INSTANCE: 'true' }).OW_SHARED_INSTANCE).toBe(true);
+    expect(() =>
+      testEnv({
+        NODE_ENV: 'production',
+        DEVICE_RETURN_URLS: 'exp://127.0.0.1:8081/--/devices/return',
+      }),
+    ).toThrow(/exp/);
+  });
+
+  it('секрет вебхука — только whsec_<base64>; ошибка не раскрывает ключ OW', () => {
+    expect(() => testEnv({ OW_WEBHOOK_SECRET: 'plain-secret' })).toThrow();
+    expect(
+      testEnv({ OW_WEBHOOK_SECRET: `whsec_${Buffer.alloc(24, 1).toString('base64')}` })
+        .OW_WEBHOOK_SECRET,
+    ).toBeDefined();
+    expect(() =>
+      testEnv({ ...devices, OW_API_URL: 'ftp://x', OW_API_KEY: 'marker-key-0000000000' }),
+    ).toThrow(expect.objectContaining({ message: expect.not.stringContaining('marker-key') }));
+  });
+
+  it('пустые необязательные переменные в .env (шаблон деплоя) — как не заданные', () => {
+    const value = testEnv({
+      OW_API_URL: '',
+      OW_API_KEY: '',
+      OW_WEBHOOK_SECRET: '',
+      PUBLIC_API_ORIGIN: '',
+      DEVICE_RETURN_URLS: '',
+    });
+    expect(value.OW_API_KEY).toBeUndefined();
+    expect(value.OW_WEBHOOK_SECRET).toBeUndefined();
+    expect(value.DEVICES_ENABLED).toBe(false);
+  });
 });

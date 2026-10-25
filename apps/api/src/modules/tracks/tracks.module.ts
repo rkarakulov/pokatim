@@ -1,18 +1,63 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
+import { ENV } from '@rkarakulov/api-kit/core';
 
+import type { Env } from '../../config/env';
 import { QUEUE } from '../../queues';
+import { IdentityModule } from '../identity';
+import { FsTrackFileStore } from './fs-track-file-store';
+import { TRACK_FILE_STORE } from './track-file-store';
+import { TrackIngestService } from './track-ingest';
+import { TRACK_INGEST } from './track-ingest.port';
 import { TrackProcessingProcessor } from './track-processing.processor';
+import { TrackSourcesService } from './track-sources.service';
+import { TrackUploadsController } from './track-uploads.controller';
+import { TrackUploadsService } from './track-uploads.service';
+import { TracksMaintenanceProcessor, TracksSchedules } from './tracks-maintenance.processor';
+import { TracksRepository } from './tracks.repository';
 
-/** HTTP-часть (загрузка, статусы) — в TracksModule; обработчики очередей — только в воркере. */
+/**
+ * Ядро `tracks` для API и worker: репозиторий, хранилище исходников (порт, на dev — ФС), приём исходника,
+ * удаление и порт `TrackIngest` для модуля `devices` (только через `index.ts`).
+ */
 @Module({
-  imports: [BullModule.registerQueue({ name: QUEUE.trackProcessing })],
-  exports: [BullModule],
+  providers: [
+    TracksRepository,
+    {
+      provide: TRACK_FILE_STORE,
+      inject: [ENV],
+      useFactory: (env: Env) => new FsTrackFileStore(env.TRACK_STORAGE_DIR),
+    },
+    TrackSourcesService,
+    TrackUploadsService,
+    TrackIngestService,
+    { provide: TRACK_INGEST, useExisting: TrackIngestService },
+  ],
+  exports: [
+    TRACK_INGEST,
+    TracksRepository,
+    TRACK_FILE_STORE,
+    TrackSourcesService,
+    TrackUploadsService,
+  ],
+})
+export class TracksCoreModule {}
+
+/** HTTP-часть: ручная загрузка и свои загрузки (под `AuthGuard`); разбор — только в worker. */
+@Module({
+  imports: [IdentityModule, TracksCoreModule],
+  controllers: [TrackUploadsController],
+  exports: [TracksCoreModule],
 })
 export class TracksModule {}
 
+/** Задачи `tracks` в worker: разбор исходника (`worker_threads`) и уборка хранилища. */
 @Module({
-  imports: [TracksModule],
-  providers: [TrackProcessingProcessor],
+  imports: [
+    TracksCoreModule,
+    BullModule.registerQueue({ name: QUEUE.trackProcessing }, { name: QUEUE.tracksMaintenance }),
+  ],
+  providers: [TrackProcessingProcessor, TracksMaintenanceProcessor, TracksSchedules],
+  exports: [TracksCoreModule],
 })
 export class TracksWorkerModule {}
