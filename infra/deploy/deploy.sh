@@ -154,7 +154,8 @@ mongo_init() {
     compose exec -T -e MONGO_ROOT_PASSWORD -e MONGO_PASSWORD -e MONGO_RS_HOST=mongo:27017 \
     -e MONGO_APP_USER=pokatim -e MONGO_APP_DB=pokatim \
     mongo mongosh --quiet --nodb --eval "$(cat "${POKATIM_DIR}/mongo-init.js")" >"${init_log}" 2>&1 || code=$?
-  grep '^mongo-init: ' "${init_log}" || true
+  # строки скрипта и текст ошибки (без значений: пароли — только в env mongosh)
+  grep -E '^(mongo-init: |Error: |Mongo[A-Za-z]*Error)' "${init_log}" || true
   [[ "${code}" -eq 0 ]] ||
     die "mongo-init.js упал (код ${code}); вывод — по SSH: $(home_hint "${init_log}") (docs/runbooks/deploy.md)"
 }

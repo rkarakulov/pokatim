@@ -73,11 +73,22 @@ ok "старый стек поднят, маркер записан, том ${VO
 endstep
 
 run_deploy() { bash "${REPO}/infra/deploy/deploy.sh" >"${WORK}/deploy-$1.log" 2>&1; }
+# диагностика упавшего шага: стенд CI, персональных данных нет; mongo-init.log — без паролей (они только в env mongosh)
+diagnose() {
+  echo "--- mongo-init.log"
+  cat "${POKATIM_DIR}/mongo-init.log" 2>/dev/null || true
+  echo "--- migrate.log"
+  cat "${POKATIM_DIR}/migrate.log" 2>/dev/null || true
+  echo "--- logs mongo, api"
+  compose_dir logs --no-color --tail 60 mongo api 2>/dev/null || true
+}
 show_log() { grep -vE '^\s*$' "${WORK}/deploy-$1.log" | tail -n "${2:-40}"; }
 
 # ---------- (д) негатив: деплой падает — PostgreSQL на месте ----------
 step "(д) новый deploy.sh с битым JWT_SECRET: деплой падает, postgres и том остаются"
-cp "${ENV_FILE}" "${WORK}/env.backup"
+# портится только JWT_SECRET: остальное (в т. ч. пароли MongoDB, которые допишет bootstrap) переживает сбой, как на
+# сервере — следующий деплой идёт с тем же .env и тем же томом mongodata
+jwt_line="$(grep '^JWT_SECRET=' "${ENV_FILE}")"
 sed -i 's/^JWT_SECRET=.*/JWT_SECRET=short/' "${ENV_FILE}"
 if run_deploy broken; then
   show_log broken
@@ -87,14 +98,20 @@ show_log broken 15
 [[ -n "$(postgres_ids)" ]] || fail "контейнер postgres удалён упавшим деплоем"
 docker volume inspect "${VOLUME}" >/dev/null 2>&1 || fail "том ${VOLUME} удалён упавшим деплоем"
 grep -q '^POSTGRES_PASSWORD=' "${ENV_FILE}" || fail "ключи PostgreSQL убраны из .env упавшим деплоем"
-cp "${WORK}/env.backup" "${ENV_FILE}"
-ok "упавший деплой не тронул PostgreSQL"
+grep -q '^MONGO_ROOT_PASSWORD=' "${ENV_FILE}" || fail "упавший деплой не сохранил MONGO_ROOT_PASSWORD в .env"
+JWT_LINE="${jwt_line}" awk 'index($0, "JWT_SECRET=") == 1 { print ENVIRON["JWT_LINE"]; next } { print }' \
+  "${ENV_FILE}" >"${WORK}/env.fixed"
+cat "${WORK}/env.fixed" >"${ENV_FILE}"
+rm -f "${WORK}/env.fixed"
+[[ "$(line_hash JWT_SECRET)" == "${jwt_before}" ]] || fail "JWT_SECRET не восстановлен"
+ok "упавший деплой не тронул PostgreSQL; повтор — с тем же .env (mongo уже инициализирован)"
 endstep
 
 # ---------- (б) переезд ----------
 step "(б) новый deploy.sh: mongo, миграции из образа, smoke, retire_postgres"
 run_deploy first || {
   show_log first 80
+  diagnose
   fail "первый деплой упал"
 }
 show_log first 60
@@ -119,6 +136,7 @@ endstep
 step "(в) повторный deploy.sh: без шагов переезда, миграций нет"
 run_deploy second || {
   show_log second 80
+  diagnose
   fail "повторный деплой упал"
 }
 show_log second 25

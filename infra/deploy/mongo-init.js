@@ -51,14 +51,26 @@ try {
 } catch {
   authed = false;
 }
+// Пользователи уже есть, а root из .env не входит: .env не совпадает с томом mongodata (потерян, перегенерирован).
+// localhost exception закрыт — без пароля root набор и пользователей не изменить; значения не выводятся.
+const UNAUTHORIZED = 13;
+const MISMATCH =
+  'MONGO_ROOT_PASSWORD из .env не подходит к root в томе mongodata — вернуть прежний .env или пересоздать том ' +
+  '(данные dev теряются), docs/runbooks/deploy.md «.env сервера»';
+// try/catch — прямо здесь: асинхронная перезапись mongosh не ждёт вызов функции, переданной параметром
 if (!authed) {
-  ensureReplicaSet();
-  waitPrimary();
-  admin.createUser({
-    user: 'root',
-    pwd: env.MONGO_ROOT_PASSWORD,
-    roles: [{ role: 'root', db: 'admin' }],
-  });
+  try {
+    ensureReplicaSet();
+    waitPrimary();
+    admin.createUser({
+      user: 'root',
+      pwd: env.MONGO_ROOT_PASSWORD,
+      roles: [{ role: 'root', db: 'admin' }],
+    });
+  } catch (error) {
+    if (error.code === UNAUTHORIZED) throw new Error(MISMATCH);
+    throw error;
+  }
   if (admin.auth('root', env.MONGO_ROOT_PASSWORD).ok !== 1) throw new Error('вход root не удался');
   say('root-пользователь создан');
 }
