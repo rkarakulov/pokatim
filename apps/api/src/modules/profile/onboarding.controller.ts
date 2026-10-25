@@ -37,8 +37,8 @@ export class OnboardingController {
   completeDevicesStep(
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(CompleteDevicesStepRequest, FieldErrorCode))
-    _body: CompleteDevicesStepRequest,
+    body: CompleteDevicesStepRequest,
   ): Promise<OnboardingStatus> {
-    return this.onboarding.completeDevicesStep(user.userId);
+    return this.onboarding.completeDevicesStep(user.userId, body.outcome);
   }
 }

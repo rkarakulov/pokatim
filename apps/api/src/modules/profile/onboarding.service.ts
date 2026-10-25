@@ -1,5 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
-import type { OnboardingStatus, RideReason } from '@pokatim/contracts';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { CompleteDevicesStepRequest, OnboardingStatus, RideReason } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import { isDuplicateKey } from '@rkarakulov/api-kit/mongo';
 
@@ -11,6 +11,8 @@ import { ProfileRepository } from './profile.repository';
  */
 @Injectable()
 export class OnboardingService {
+  private readonly logger = new Logger(OnboardingService.name);
+
   constructor(
     private readonly repository: ProfileRepository,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -37,7 +39,10 @@ export class OnboardingService {
    * Шаг «Подключите устройство» (tracks-devices, R12): любой исход (`connected`, `later`) отмечает шаг пройденным для
    * аккаунта — другое устройство его не показывает. Идемпотентно; гонка первых upsert — как у опроса.
    */
-  async completeDevicesStep(userId: string): Promise<OnboardingStatus> {
+  async completeDevicesStep(
+    userId: string,
+    outcome: CompleteDevicesStepRequest['outcome'],
+  ): Promise<OnboardingStatus> {
     const now = this.clock.now();
     try {
       await this.repository.markDevicesStep(userId, now);
@@ -45,6 +50,7 @@ export class OnboardingService {
       if (!isDuplicateKey(error, '_id_')) throw error;
       await this.repository.markDevicesStep(userId, now);
     }
+    this.logger.log(`devices step completed for ${userId}: ${outcome}`);
     return this.repository.onboardingFlags(userId);
   }
 }
