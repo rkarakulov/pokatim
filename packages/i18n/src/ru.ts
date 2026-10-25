@@ -269,6 +269,7 @@ export const ru = {
   'admin.audit.action.calendar.unpublished': 'Старт снят с публикации',
   'admin.audit.action.calendar.republished': 'Старт возвращён в календарь',
   'admin.audit.column.subject': 'Объект',
+  'admin.audit.field.unknown': 'другое поле',
   // справочники, общие с приложением (admin-02): подписи значений enum-ов контрактов
   'domain.bikeClass.road': 'Шоссе',
   'domain.bikeClass.tt': 'ТТ',
@@ -318,6 +319,8 @@ export const ru = {
   'admin.conflict.reload': 'Обновить',
   'admin.more': 'Показать ещё',
   'admin.saveFailed': 'Не удалось сохранить. Повторите попытку.',
+  'admin.refreshFailed': 'Не удалось обновить данные',
+  'admin.refreshFailedMessage': 'Показаны последние загруженные данные.',
   'admin.filter.all': 'Все',
   // «Сезоны» (3c)
   'admin.seasons.title': 'Сезоны',
@@ -379,6 +382,9 @@ export const ru = {
   'admin.races.seasonHint':
     'Определяется автоматически по концу окна. Изменить сезон можно только через даты окна или раздел «Сезоны».',
   'admin.races.seasonNone': 'Конец окна не попадает ни в один сезон',
+  'admin.races.seasonsFailed': 'Не удалось загрузить сезоны',
+  'admin.races.seasonsRetry': 'Повторить загрузку сезонов',
+  'admin.races.seasonsRefreshFailed': 'Не удалось обновить список сезонов',
   'admin.races.seasonValue': '{name} · {range}',
   'admin.races.protocolHint':
     'Протокол — не раньше чем через 48 ч после конца окна: {date} или позже.',

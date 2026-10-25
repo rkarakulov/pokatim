@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
 import { api } from '../../api';
-import { fieldErrorText, serverFieldErrors } from '../../field-errors';
+import { errorCodeOf, fieldErrorText, formFieldOf, serverFieldErrors } from '../../field-errors';
 import { isConflict } from '../../session/errors';
 import {
   Banner,
@@ -69,7 +69,7 @@ export function CalendarForm({
       const fields = serverFieldErrors(error);
       if (fields?.length) {
         for (const field of fields) {
-          form.setError(field.path as keyof CalendarFormValues, {
+          form.setError(formFieldOf(field.path) as keyof CalendarFormValues, {
             type: 'server',
             message: field.code,
           });
@@ -80,7 +80,7 @@ export function CalendarForm({
     },
   });
   const errors = form.formState.errors;
-  const errorOf = (field: keyof CalendarFormValues) => fieldErrorText(errors[field]?.message);
+  const errorOf = (field: keyof CalendarFormValues) => fieldErrorText(errorCodeOf(errors[field]));
   const title = start ? t('admin.calendar.editTitle') : t('admin.calendar.newTitle');
 
   return (

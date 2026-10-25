@@ -9,6 +9,7 @@ import { ChipGroup } from './ChipGroup';
 import { ChoiceDialog } from './ChoiceDialog';
 import { DateTimeField } from './DateTimeField';
 import { DisabledReason, ReadonlyField } from './layout-parts';
+import { ToggleChip } from './ToggleChip';
 
 const ORIGINAL_TZ = process.env.TZ;
 afterEach(() => {
@@ -210,5 +211,23 @@ describe('DisabledReason и ReadonlyField', () => {
     const output = screen.getByRole('status', { name: 'Сезон (по концу окна)' });
     expect(output.textContent).toBe('Сезон 2026');
     expect(screen.queryByRole('textbox')).toBeNull();
+  });
+});
+
+describe('ToggleChip', () => {
+  it('aria-pressed и переключение', () => {
+    function Harness() {
+      const [pressed, setPressed] = useState(false);
+      return (
+        <ToggleChip pressed={pressed} onToggle={() => setPressed((value) => !value)}>
+          Мои
+        </ToggleChip>
+      );
+    }
+    render(<Harness />);
+    const chip = screen.getByRole('button', { name: 'Мои' });
+    expect(chip.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(chip);
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
   });
 });

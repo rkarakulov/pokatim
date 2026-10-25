@@ -32,7 +32,7 @@ describe('panel_audit — append-only', () => {
       .filter((file) => {
         const code = readFileSync(file, 'utf8');
         // имя коллекции — строкой в кавычках (имя файла миграции `0006_panel_audit_subject` — не обращение)
-        return /['"]panel_audit['"]|PANEL_COLLECTIONS\.audit|panelCollections\(/.test(code);
+        return /['"`]panel_audit['"`]|PANEL_COLLECTIONS\.audit|panelCollections\(/.test(code);
       })
       .map((file) => relative(SRC, file))
       .sort();

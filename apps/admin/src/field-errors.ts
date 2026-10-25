@@ -38,3 +38,22 @@ export function serverFieldErrors(error: unknown): { path: string; code: string 
   const details = ValidationErrorDetails.safeParse(apiError.details);
   return details.success ? details.data.fields : undefined;
 }
+
+/**
+ * Код ошибки поля RHF, включая вложенные (`distancesKm.0` — ошибка элемента массива): первый найденный `message`.
+ * Строковое поле формы, разбираемое схемой в массив, показывает ошибку элемента под собой.
+ */
+export function errorCodeOf(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const { message } = error as { message?: unknown };
+  if (typeof message === 'string' && message) return message;
+  for (const [key, nested] of Object.entries(error)) {
+    if (key === 'ref' || key === 'type' || key === 'types') continue;
+    const code = errorCodeOf(nested);
+    if (code) return code;
+  }
+  return undefined;
+}
+
+/** Поле формы для пути ошибки сервера: вложенный путь (`distancesKm.0`) — поле целиком. */
+export const formFieldOf = (path: string) => path.split('.')[0] ?? path;

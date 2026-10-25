@@ -35,7 +35,16 @@ export function NewRaceScreen() {
  */
 export function RaceScreen({ raceId }: { raceId: string }) {
   const race = useQuery(raceQuery(raceId));
-  if (race.data) return <RaceEditor key={race.data.id} race={race.data} />;
+  if (race.data) {
+    return (
+      <RaceEditor
+        key={race.data.id}
+        race={race.data}
+        refreshFailed={race.isError}
+        onRetryRefresh={() => void race.refetch()}
+      />
+    );
+  }
 
   const crumb = (
     <Link className="link" to="/races">

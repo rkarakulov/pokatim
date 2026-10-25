@@ -81,7 +81,10 @@ describe('маршруты /v1/admin/* всех модулей под PanelGuard
   it('каждый файл с @Controller(admin…) зарегистрирован в модуле AppModule', () => {
     const SRC = __dirname;
     const declared = controllerFiles(join(SRC, 'modules'))
-      .filter((file) => /@Controller\(\s*'admin(\/|')/.test(readFileSync(file, 'utf8')))
+      // строкой в любых кавычках или объектом `{ path: 'admin…' }`
+      .filter((file) =>
+        /@Controller\(\s*(\{[^)]*path:\s*)?['"`]admin(\/|['"`])/.test(readFileSync(file, 'utf8')),
+      )
       .map((file) => relative(SRC, file))
       .sort();
     expect(declared.length).toBeGreaterThan(0);
@@ -90,7 +93,16 @@ describe('маршруты /v1/admin/* всех модулей под PanelGuard
 
   it('контроллеры панели — в нескольких модулях (panel, races, calendar)', () => {
     const names = adminControllers.map((controller) => controller.name);
-    expect(names).toEqual(expect.arrayContaining(['PanelSessionController']));
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'PanelSessionController',
+        'PanelMembersController',
+        'PanelAuditController',
+        'SeasonsAdminController',
+        'RacesAdminController',
+        'CalendarAdminController',
+      ]),
+    );
   });
 
   it('каждый маршрут — под PanelGuard (на контроллере или обработчике)', () => {

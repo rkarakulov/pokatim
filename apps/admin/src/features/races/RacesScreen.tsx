@@ -15,7 +15,15 @@ import { api } from '../../api';
 import { formatDateTimeLong } from '../../format';
 import { useCan } from '../../session/can';
 import { isForbidden } from '../../session/errors';
-import { Button, DataTable, EmptyState, PageHeader, SelectField, StatusTag } from '../../ui';
+import {
+  Button,
+  DataTable,
+  EmptyState,
+  PageHeader,
+  SelectField,
+  StatusTag,
+  ToggleChip,
+} from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { seasonsQuery } from '../seasons/seasons-query';
 import { RACES_QUERY_KEY } from './races-query';
@@ -188,15 +196,12 @@ export function RacesScreen({
                   })),
                 ]}
               />
-              <button
-                type="button"
-                className="chip t-body"
-                aria-pressed={search.mine === true}
-                onClick={() => set({ mine: search.mine ? undefined : true })}
+              <ToggleChip
+                pressed={search.mine === true}
+                onToggle={() => set({ mine: search.mine ? undefined : true })}
               >
-                <span className="chip__check" aria-hidden="true" />
                 {t('admin.races.filter.mine')}
-              </button>
+              </ToggleChip>
             </>
           }
           footer={
