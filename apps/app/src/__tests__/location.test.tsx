@@ -17,7 +17,7 @@ const secureStore = () =>
   jest.requireMock<{ __store: Map<string, string> }>('expo-secure-store').__store;
 const locationFlag = () => secureStore().get('pokatim.locationPrompt');
 const locationTitle = () => screen.findByRole('header', { name: 'Покажем, что рядом' });
-const home = () => screen.findByRole('header', { name: 'Главная' });
+const home = () => screen.findByRole('header', { name: 'Покатим' });
 
 beforeEach(() => {
   jest.mocked(api.signOut).mockResolvedValue(undefined);

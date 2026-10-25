@@ -260,6 +260,18 @@ Architecture Review — app-02-home. **Status: CONCERNS** — блокеров �
 Главной; Q9 — пустые герои разделов. R3(а), R4(а), R6(а), R8 — продуктовые компоненты в `apps/app`; R9 — фаза
 `'unknown'` — нейтральный вариант (без строки жизненного цикла).
 
+**Реализация (coder, S1–S3).**
+- Словесный знак верхней панели — `textStyle('brand')` (600 15, разрядка .18 — `.brand` прототипа), а не
+  `displayBar` из §5.1 (`displayBar` — 500 20/24, заголовок `.titlebar`). Текст — ключ `home.wordmark`, метка для
+  скринридера — `app.name`.
+- Каркас раздела (шапка, слот `AsyncContent` со `SkeletonHeroCard`, «Все …») — `features/home/home-section.tsx`
+  (в §11 не назван; продуктовый, не кандидат в базу). Герой (`components/section-hero.tsx`) — дата героя
+  `{ value, unit }` («4–12» + «октября», «14» + «июня 2027» — как `.fb-date .u` прототипа); `format.ts` (S4)
+  отдаёт эту пару.
+- S3 отдельно не сливается: до S4 слоты разделов — скелетон героя (данных нет до admin-02 S1+S7).
+- `DocumentTitle` Главной в jest-web не проверить без дерева expo-router (`Head` требует focus-контекст) —
+  `<title>` проверяет смоук S5 (AC8); компонент покрыт `document-title.web.test.tsx`.
+
 # 8.3 Security checklist
 
 Затронуто: новый авторизованный эндпоинт `GET /v1/profile` (ADR-0008); потребление публичных эндпоинтов admin-02

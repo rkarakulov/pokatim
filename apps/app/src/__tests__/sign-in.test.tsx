@@ -76,7 +76,7 @@ describe('«Вход»', () => {
     expect(signIn).toHaveBeenCalledWith({ email: EMAIL, password: 'velo-secret' });
 
     await act(async () => resolve({ state: 'signedIn', session }));
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/');
     expect(JSON.parse(storedValue('pokatim.session') ?? '{}')).toEqual(session);
   });
@@ -239,7 +239,7 @@ describe('выход', () => {
     const clear = jest.spyOn(QueryClient.prototype, 'clear');
     storeSession();
     const router = await renderRouter(appRoutes, { initialUrl: '/' });
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Выйти' }));
 
@@ -258,7 +258,7 @@ describe('выход', () => {
       .mockRejectedValue(new ApiNetworkError(new TypeError('Network request failed')));
     storeSession();
     await renderRouter(appRoutes, { initialUrl: '/' });
-    await screen.findByRole('header', { name: 'Главная' });
+    await screen.findByRole('header', { name: 'Покатим' });
 
     await fireEvent.press(screen.getByRole('button', { name: 'Выйти' }));
 
@@ -285,7 +285,7 @@ describe('выход', () => {
     storeSurveyCompleted();
     await renderRouter(appRoutes, { initialUrl: '/' });
 
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(JSON.parse(storedValue('pokatim.session') ?? '{}')).toEqual(session);
     // опрос пройден — по кешу устройства, сервер не спрашивается (AC6)
     expect(api.getOnboardingStatus).not.toHaveBeenCalled();

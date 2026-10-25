@@ -3,17 +3,26 @@ import { stroke, themes } from '@pokatim/design-tokens';
 import { fireEvent, renderRouter, screen, within } from 'expo-router/testing-library';
 import { useColorScheme } from 'react-native';
 
+import { useSessionStore } from '@/features/auth/session-store';
+import { api } from '@/lib/api';
+
 import { tabRoutes } from './app-routes';
-import { signInForTest } from './auth-fixtures';
+import { liveSession, signInForTest } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
+
+jest.mock('@/lib/api');
 
 // jest-пресет React Native подменяет useColorScheme на jest.fn(() => 'light')
 const colorScheme = jest.mocked(useColorScheme);
 
 afterEach(() => colorScheme.mockReturnValue('light'));
 
-// вкладки — только после входа (гард и скелетон оболочки — auth-guard.test)
-beforeEach(signInForTest);
+// вкладки — только после входа (гард и скелетон оболочки — auth-guard.test); Главная спрашивает профиль
+beforeEach(() => {
+  signInForTest();
+  useSessionStore.setState({ session: liveSession });
+  jest.mocked(api.getProfile).mockResolvedValue({ rideReasons: [] });
+});
 
 describe('нижние вкладки', () => {
   it('пять вкладок в порядке прототипа, Главная выбрана', async () => {
@@ -43,7 +52,7 @@ describe('нижние вкладки', () => {
   it('заголовок раздела — Playfair Display, активная вкладка — 600 с полосой, неактивная — 500', async () => {
     await renderRouter(tabRoutes, { wrapper: createQueryWrapper() });
 
-    expect(screen.getByRole('header', { name: 'Главная' })).toHaveStyle({
+    expect(screen.getByRole('header', { name: 'Ближайшие гонки' })).toHaveStyle({
       fontFamily: 'PlayfairDisplay_500Medium',
     });
     const light = themes.light;
@@ -72,7 +81,7 @@ describe('нижние вкладки', () => {
     expect(screen.getByTestId('tab-indicator-index')).toHaveStyle({
       backgroundColor: dark.text.primary,
     });
-    expect(screen.getByRole('header', { name: 'Главная' })).toHaveStyle({
+    expect(screen.getByRole('header', { name: 'Ближайшие гонки' })).toHaveStyle({
       color: dark.text.primary,
     });
   });

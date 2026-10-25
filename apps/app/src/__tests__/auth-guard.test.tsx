@@ -75,7 +75,7 @@ describe('гард сессии (Stack.Protected)', () => {
     storeSurveyCompleted();
     const router = await renderRouter(appRoutes, { initialUrl: '/register' });
 
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/');
   });
 

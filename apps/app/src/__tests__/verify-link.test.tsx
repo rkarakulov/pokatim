@@ -91,7 +91,7 @@ describe('ссылка из письма', () => {
     ).toBeOnTheScreen();
 
     await act(() => jest.advanceTimersByTimeAsync(1000));
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/');
   });
 
@@ -114,7 +114,7 @@ describe('ссылка из письма', () => {
     poll.mockResolvedValue({ state: 'verified', session });
     await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
     await act(() => jest.advanceTimersByTimeAsync(1000));
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
   });
 
   it('«Ссылка устарела» на устройстве регистрации: живая регистрация продлевается после нового письма', async () => {

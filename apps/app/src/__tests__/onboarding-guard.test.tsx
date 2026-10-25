@@ -84,7 +84,7 @@ describe('гард онбординга: опрос после входа (AC6)'
   it('ответ уже есть на сервере → Главная, кеш «опрос пройден» записан с владельцем', async () => {
     const router = await openSignedIn('/', { surveyCompleted: true });
 
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/');
     expect(JSON.parse(storedValue('pokatim.onboarding') ?? '{}')).toEqual({
       surveyCompleted: true,
@@ -101,7 +101,7 @@ describe('гард онбординга: опрос после входа (AC6)'
   it('/survey с пройденным опросом → Главная', async () => {
     storeSurveyCompleted();
     const router = await openSignedIn('/survey');
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/');
   });
 
@@ -157,7 +157,7 @@ describe('гард онбординга: опрос после входа (AC6)'
       .mockRejectedValue(new ApiNetworkError(new TypeError('Network request failed')));
     await renderRouter(appRoutes, { initialUrl: '/' });
 
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(status).not.toHaveBeenCalled();
   });
 });
@@ -201,7 +201,7 @@ describe('экран «Что вас привело?»', () => {
       reasons: ['races', 'exploring'],
     });
     await act(async () => resolve({ surveyCompleted: true }));
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/');
     expect(storedValue('pokatim.onboarding')).toBeDefined();
   });
@@ -220,7 +220,7 @@ describe('экран «Что вас привело?»', () => {
     expect(option('Календарь стартов')).toBeChecked();
 
     await fireEvent.press(continueButton());
-    expect(await screen.findByRole('header', { name: 'Главная' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
   });
 
   it('401 и refresh 401 — сессии нет: «Вход»', async () => {
@@ -269,7 +269,7 @@ describe('кеш «опрос пройден» привязан к владел�
 describe('выход и другой аккаунт (AC8)', () => {
   it('выход стирает кеш опроса: следующий вход спрашивает сервер о своём ответе', async () => {
     await openSignedIn('/', { surveyCompleted: true });
-    await screen.findByRole('header', { name: 'Главная' });
+    await screen.findByRole('header', { name: 'Покатим' });
     expect(storedValue('pokatim.onboarding')).toBeDefined();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Выйти' }));
