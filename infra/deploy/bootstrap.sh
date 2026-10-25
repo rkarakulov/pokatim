@@ -15,6 +15,8 @@
 #   4. сертификат Let's Encrypt (certbot --webroot /var/www/html) — только если домен ведёт на этот сервер;
 #      иначе (или certbot не смог) vhost только на :80 и предупреждение, деплой не падает.
 #      UI Mailpit /mail/ — только в https-vhost (пароль basic-auth не идёт открытым текстом).
+#      /ow/ — прокси на Open Wearables хоста (вебхуки провайдеров, ADR-0011), только если в .env задан
+#      OW_PUBLIC_PROXY=http://127.0.0.1:<порт>; пусто — location нет.
 # Env: PUBLIC_HOST (обязательно), POKATIM_TAG, POKATIM_DIR (~/pokatim), CERTBOT_EMAIL (необязательно),
 #      MAIL_RELAY_RECIPIENTS_STDIN=1 — получатели relay (адреса через запятую или «*») первой строкой stdin: в .env,
 #      пустая строка выключает relay; без флага — прежние из .env,
@@ -280,6 +282,13 @@ configure_mail_relay() {
 render_vhost() {
   local mode="$1"
   local cert_dir="/etc/letsencrypt/live/${PUBLIC_HOST}"
+  local ow_proxy
+  ow_proxy="$(env_value OW_PUBLIC_PROXY)"
+  # только агрегатор на этом же хосте: произвольный адрес превратил бы vhost в открытый прокси
+  if [[ -n "${ow_proxy}" && ! "${ow_proxy}" =~ ^http://127\.0\.0\.1:[0-9]{2,5}$ ]]; then
+    warn "OW_PUBLIC_PROXY должен быть http://127.0.0.1:<порт> — /ow/ не публикуется" >&2
+    ow_proxy=""
+  fi
   printf '# pokatim dev: генерирует infra/deploy/bootstrap.sh на каждом деплое — правки руками перезапишутся\n'
   if [[ "${mode}" == "https" ]]; then
     cat <<EOF
@@ -359,6 +368,18 @@ EOF
         proxy_pass http://127.0.0.1:${ADMIN_PORT};
     }
 EOF
+  if [[ -n "${ow_proxy}" ]]; then
+    cat <<EOF
+
+    # Open Wearables хоста (ADR-0011): вебхуки провайдеров (Garmin шлёт тела до 100 МБ); API самого pokatim к OW
+    # ходит по docker-сети, не сюда
+    location /ow/ {
+        client_max_body_size 100m;
+        proxy_pass ${ow_proxy}/;
+        proxy_read_timeout 120s;
+    }
+EOF
+  fi
   if [[ "${mode}" == "https" ]]; then
     cat <<EOF
 
