@@ -54,6 +54,8 @@ LABEL org.opencontainers.image.source="https://github.com/rkarakulov/pokatim" \
       by.pokatim.project="pokatim"
 ENV NODE_ENV=production
 COPY --from=build-api /out /app
+# том исходников заездов (trackfiles, ADR-0011): новый именованный том наследует владельца каталога образа
+RUN mkdir -p /data/trackfiles && chown node:node /data/trackfiles
 WORKDIR /app/apps/api
 USER node
 EXPOSE 3000

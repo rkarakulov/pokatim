@@ -130,7 +130,14 @@ marker_present || fail "маркер-данные потеряны при обн
 [[ "$(stat -c '%a' "${POKATIM_DIR}/mongo-keyfile")" == "600" ]] || fail "mongo-keyfile не 600"
 health="$(curl -fsS "http://127.0.0.1:${POKATIM_API_PORT:-3100}/v1/health")"
 [[ "${health}" == *'"database":"up"'* ]] || fail "health: ${health}"
+docker volume inspect "${POKATIM_PROJECT}_trackfiles" >/dev/null 2>&1 || fail "нет тома trackfiles"
+[[ "$(env_value DEVICES_ENABLED)" == "false" ]] || fail "устройства включены по умолчанию"
+[[ -z "$(env_value OW_API_KEY)" ]] || fail "в шаблоне .env оказался ключ OW"
+devices="$(curl -sS "http://127.0.0.1:${POKATIM_API_PORT:-3100}/v1/devices" -o /dev/null -w '%{http_code}' || true)"
+[[ "${devices}" == "401" ]] || fail "GET /v1/devices без входа: ${devices} (ждём 401)"
+compose_dir exec -T api sh -c 'test -w /data/trackfiles' || fail "том trackfiles не доступен api на запись"
 ok "обновление: миграции ${new_ids:-—} применены, smoke зелёный, данные и секреты на месте"
+ok "треки и устройства: том trackfiles, DEVICES_ENABLED=false, ключей OW нет — стенд стартует без них"
 endstep
 
 # ---------- (в) повторный деплой ----------

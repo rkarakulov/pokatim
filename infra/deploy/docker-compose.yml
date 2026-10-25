@@ -11,6 +11,8 @@ x-logging: &logging
 
 x-api-env: &api-env
   NODE_ENV: production
+  # dev-стенд: запреты «только не в проде» (общий инстанс OW) — по DEPLOY_STAGE (ADR-0011)
+  DEPLOY_STAGE: dev
   PORT: '3000'
   # тег образа — в ответе /v1/health (version)
   APP_VERSION: ${POKATIM_TAG:?}
@@ -27,6 +29,21 @@ x-api-env: &api-env
   AGREEMENT_VERSION: ${AGREEMENT_VERSION:?}
   # web и API — один origin за прокси: CORS выключен
   CORS_ORIGINS: ''
+  # треки (ADR-0011): исходники заездов — том trackfiles (api пишет, worker читает и убирает); квота и минимум
+  # свободного места общего диска
+  TRACK_STORAGE_DIR: /data/trackfiles
+  TRACK_STORAGE_MAX_BYTES: ${TRACK_STORAGE_MAX_BYTES:-2147483648}
+  TRACK_STORAGE_MIN_FREE_BYTES: ${TRACK_STORAGE_MIN_FREE_BYTES:-1073741824}
+  # устройства через агрегатор Open Wearables: выключены, пока владелец не впишет ключи (runbook «Устройства»);
+  # адрес API OW — внутренний (общая docker-сеть, docker-compose.ow.yml), ключи — только .env сервера
+  DEVICES_ENABLED: ${DEVICES_ENABLED:-false}
+  DEVICE_PROVIDERS_ALLOWLIST: ${DEVICE_PROVIDERS_ALLOWLIST:-garmin,wahoo}
+  PUBLIC_API_ORIGIN: ${WEB_ORIGIN:?}
+  DEVICE_RETURN_URLS: ${WEB_ORIGIN:?}/devices/return,pokatim://devices/return
+  OW_API_URL: ${OW_API_URL:-}
+  OW_API_KEY: ${OW_API_KEY:-}
+  OW_WEBHOOK_SECRET: ${OW_WEBHOOK_SECRET:-}
+  OW_SHARED_INSTANCE: ${OW_SHARED_INSTANCE:-false}
 
 x-api-image: &api-image ${POKATIM_IMAGE_PREFIX:-ghcr.io/rkarakulov/pokatim}-api:${POKATIM_TAG:?}
 
@@ -151,6 +168,7 @@ services:
     image: *api-image
     command: ['node', 'dist/main.js']
     environment: *api-env
+    volumes: [trackfiles:/data/trackfiles]
     ports: ['127.0.0.1:${POKATIM_API_PORT:-3100}:3000']
     depends_on:
       mongo: { condition: service_healthy }
@@ -173,6 +191,8 @@ services:
     image: *api-image
     command: ['node', 'dist/worker.js']
     environment: *api-env
+    # разбор трека — в worker_threads с лимитом 160 МБ на поток, параллелизм 1 (ADR-0011); при нехватке — 512m (V6)
+    volumes: [trackfiles:/data/trackfiles]
     depends_on:
       mongo: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -223,3 +243,5 @@ volumes:
   mongodata:
   mongoconfig:
   redisdata:
+  # исходники заездов (FIT/GPX, потоки агрегатора): квота TRACK_STORAGE_MAX_BYTES, уборка — worker; бэкап — runbook
+  trackfiles:

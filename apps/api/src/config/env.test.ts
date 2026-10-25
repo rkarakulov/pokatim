@@ -103,6 +103,11 @@ describe('env', () => {
       /OW_SHARED_INSTANCE/,
     );
     expect(testEnv({ OW_SHARED_INSTANCE: 'true' }).OW_SHARED_INSTANCE).toBe(true);
+    // dev-стенд — тоже NODE_ENV=production, но объявляет DEPLOY_STAGE=dev: общий OW разрешён
+    expect(
+      testEnv({ NODE_ENV: 'production', DEPLOY_STAGE: 'dev', OW_SHARED_INSTANCE: 'true' })
+        .OW_SHARED_INSTANCE,
+    ).toBe(true);
     expect(() =>
       testEnv({
         NODE_ENV: 'production',

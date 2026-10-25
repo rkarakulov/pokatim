@@ -97,6 +97,12 @@ const tracksDevicesEnvShape = {
     .default('pokatim:'),
   /** Общий инстанс OW с соседним сервисом (dev): в production запрещён. */
   OW_SHARED_INSTANCE: flag(false),
+  /**
+   * Стенд: dev-сервер тоже работает с `NODE_ENV=production` (сборка, производительность), поэтому запреты «только не в
+   * проде» (общий OW, `exp://`) проверяются по паре `NODE_ENV=production` и `DEPLOY_STAGE=prod`. Умолчание — `prod`:
+   * dev-стенд объявляет себя явно (compose).
+   */
+  DEPLOY_STAGE: z.enum(['dev', 'prod']).default('prod'),
 };
 
 const baseEnv = defineCoreEnv({
@@ -119,11 +125,12 @@ type BaseEnv = ReturnType<typeof baseEnv.load>;
 
 /**
  * Зависимости переменных (проверка на старте, §8.3 п. 5): включённые устройства без адреса и ключа OW, без
- * `PUBLIC_API_ORIGIN` и `DEVICE_RETURN_URLS`; общий инстанс OW или `exp://` в production — отказ запуска.
+ * `PUBLIC_API_ORIGIN` и `DEVICE_RETURN_URLS`; общий инстанс OW или `exp://` в production (не dev-стенд) — отказ
+ * запуска.
  */
 export function envDependencyErrors(value: BaseEnv): string[] {
   const errors: string[] = [];
-  const production = value.NODE_ENV === 'production';
+  const production = value.NODE_ENV === 'production' && value.DEPLOY_STAGE === 'prod';
   if (value.DEVICES_ENABLED) {
     if (!value.OW_API_URL || !value.OW_API_KEY) {
       errors.push('DEVICES_ENABLED=true: нужны OW_API_URL и OW_API_KEY');

@@ -36,6 +36,8 @@
 | `APP_LINK_BASE` | `exp://127.0.0.1:8081/--/` | база ссылок в письмах, со слешем в конце |
 | `AGREEMENT_VERSION` | `2026-10-draft` | версия соглашения, записывается в `user_consents` |
 | `CORS_ORIGINS` | `http://localhost:8081,…` | origin-ы web в dev через запятую: `expo start` (:8081), `start:web` (:8080), `e2e:web` (:8090, :8091); пусто — CORS выключен (прод: один origin за прокси) |
+| `TRACK_STORAGE_DIR` | `var/trackfiles` | исходники заездов (ADR-0011); каталог в `.gitignore`; тесты — временный каталог |
+| `DEVICES_ENABLED` | `false` | устройства через Open Wearables; локально выключены — `GET /v1/devices` отдаёт провайдеров `available: false`, ручная загрузка работает; тесты — фейковый OW (`apps/api/test/fake-ow.ts`) |
 
 `127.0.0.1`, а не `localhost`: на macOS `localhost` может уйти в IPv6, где контейнеры не слушают.
 
@@ -181,6 +183,10 @@ Expo Go не открывает схему `pokatim://`. Для проверки
 - `REDIS_URL_TEST` (по умолчанию `redis://127.0.0.1:6379/1`) — db 1, очищается перед каждым тестом.
 
 Только unit: `pnpm --filter @pokatim/api exec vitest run --project unit`.
+
+Разбор трека в тестах идёт в настоящем `worker_threads` (как в worker): vitest передаёт процессам
+`--conditions=@pokatim/source` (`apps/api/vitest.config.mts`), поток грузит `@pokatim/tracks/parse` из исходников.
+Исходники заездов тестов — временный каталог процесса (`TRACK_STORAGE_DIR_TEST`).
 
 ## CI и сборки
 

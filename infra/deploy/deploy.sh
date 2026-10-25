@@ -59,8 +59,8 @@ fi
 
 # файлы стека рядом со скриптом (деплой копирует их в POKATIM_DIR; локально — из infra/deploy)
 if [[ "${SCRIPT_DIR}" != "$(cd "${POKATIM_DIR}" && pwd)" ]]; then
-  cp "${SCRIPT_DIR}/docker-compose.yml" "${SCRIPT_DIR}/env.template" "${SCRIPT_DIR}/bootstrap.sh" \
-    "${SCRIPT_DIR}/mongo-init.js" "${POKATIM_DIR}/"
+  cp "${SCRIPT_DIR}/docker-compose.yml" "${SCRIPT_DIR}/docker-compose.ow.yml" "${SCRIPT_DIR}/env.template" \
+    "${SCRIPT_DIR}/bootstrap.sh" "${SCRIPT_DIR}/mongo-init.js" "${POKATIM_DIR}/"
 fi
 
 # путь для лога — от домашнего каталога (имя пользователя сервера в публичный лог не выводится)
@@ -88,9 +88,15 @@ tls="$(sed -n 's/^POKATIM_TLS=//p' "${bootstrap_log}" | tail -1)"
 mail_relay="$(sed -n 's/^POKATIM_MAIL_RELAY=//p' "${bootstrap_log}" | tail -1)"
 rm -f "${bootstrap_log}"
 
+# api/worker в сети стека Open Wearables (ADR-0011, N3) — только если в .env задан OW_DOCKER_NETWORK
+compose_files=(-f "${POKATIM_DIR}/docker-compose.yml")
+if grep -Eq '^OW_DOCKER_NETWORK=.+' "${POKATIM_DIR}/.env"; then
+  compose_files+=(-f "${POKATIM_DIR}/docker-compose.ow.yml")
+  log "api и worker подключаются к сети Open Wearables (OW_DOCKER_NETWORK)"
+fi
+
 compose() {
-  docker compose -p "${POKATIM_PROJECT}" -f "${POKATIM_DIR}/docker-compose.yml" \
-    --env-file "${POKATIM_DIR}/.env" "$@"
+  docker compose -p "${POKATIM_PROJECT}" "${compose_files[@]}" --env-file "${POKATIM_DIR}/.env" "$@"
 }
 
 # лог Actions публичный: только состояние и коды выхода контейнеров; логи приложений (могут содержать

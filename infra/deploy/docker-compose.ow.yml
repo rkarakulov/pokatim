@@ -1,0 +1,13 @@
+# Дополнение стека pokatim: api и worker — ещё и в docker-сети стека Open Wearables (ADR-0011, N3), чтобы ходить в его
+# API по внутреннему адресу (OW_API_URL=http://<сервис OW>:8000) без публичного пути. deploy.sh подключает этот файл,
+# только если в .env задан OW_DOCKER_NETWORK (сеть создаёт стек OW; pokatim её не создаёт и не удаляет).
+services:
+  api:
+    networks: [default, open-wearables]
+  worker:
+    networks: [default, open-wearables]
+
+networks:
+  open-wearables:
+    external: true
+    name: ${OW_DOCKER_NETWORK:?}
