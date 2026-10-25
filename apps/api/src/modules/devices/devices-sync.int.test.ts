@@ -1,0 +1,356 @@
+import { trackLengthMeters } from '@pokatim/tracks';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  activities,
+  type Connected,
+  connectActive,
+  createDevicesHarness,
+  devices,
+  disconnect,
+  jobOf,
+  listDevices,
+  pendingPulls,
+  processUpload,
+  rider,
+  rideTrack,
+  runOutbox,
+  syncNow,
+  syncService,
+  trackUploads,
+} from '../../../test/devices';
+import { type FakeOw, type FakeOwWorkout, startFakeOw } from '../../../test/fake-ow';
+import { DAY, type Harness, HOUR } from '../../../test/harness';
+import { call, gate } from '../../../test/identity';
+import { TRACK_INGEST, type TrackIngest, TrackStorageFullError } from '../tracks';
+import { DevicesMaintenanceProcessor } from './devices-maintenance.processor';
+import { PullRetryError } from './devices-sync.service';
+import { DevicesRepository } from './devices.repository';
+import {
+  TrackTooLongError,
+  WEARABLES_AGGREGATOR,
+  type WearablesAggregator,
+} from './wearables-aggregator';
+
+let ow: FakeOw;
+let h: Harness;
+let alice: Connected;
+
+beforeAll(async () => {
+  ow = await startFakeOw();
+  h = await createDevicesHarness(ow);
+});
+beforeEach(async () => {
+  await h.reset();
+  ow.reset();
+  alice = await connectActive(h, ow, await rider(h));
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+afterAll(async () => {
+  await h.close();
+  await ow.stop();
+});
+
+const hoursAgo = (hours: number) => new Date(h.clock.now().getTime() - hours * HOUR);
+const pull = (attemptsMade = 0) =>
+  syncService(h).pull(alice.connectionId, { final: attemptsMade >= 4 });
+
+/** Тренировка Garmin с треком в OW. */
+function ride(start: Date, overrides: Partial<FakeOwWorkout> = {}) {
+  const points = rideTrack(start);
+  const workout = ow.addWorkout(alice.aggUserId, {
+    start_time: start.toISOString(),
+    end_time: new Date(start.getTime() + points.length * 1000).toISOString(),
+    duration_seconds: points.length,
+    ...overrides,
+  });
+  ow.addTrack(alice.aggUserId, workout.source.provider, points);
+  return { workout, points };
+}
+
+const imports = () => devices(h).imports.find().sort({ firstSeenAt: 1, _id: 1 }).toArray();
+
+describe('pull и импорт (AC8)', () => {
+  it('cycling и mountain_biking — импорт с треком из /timeseries (все точки), source = провайдер; running и чужой провайдер — без записи; indoor без координат — skipped', async () => {
+    const road = ride(hoursAgo(30), { avg_heart_rate_bpm: 140, average_watts: 205 });
+    const mtb = ride(hoursAgo(20), { type: 'mountain_biking' });
+    ow.addWorkout(alice.aggUserId, {
+      type: 'running',
+      start_time: hoursAgo(10).toISOString(),
+      duration_seconds: 1800,
+    });
+    ow.addWorkout(alice.aggUserId, {
+      type: 'cycling',
+      start_time: hoursAgo(9).toISOString(),
+      duration_seconds: 1800,
+      source: { provider: 'wahoo', device: null },
+    });
+    const indoor = ow.addWorkout(alice.aggUserId, {
+      type: 'indoor_cycling',
+      start_time: hoursAgo(8).toISOString(),
+      duration_seconds: 3600,
+    });
+
+    expect(await pull()).toBe('done');
+
+    const rows = await imports();
+    expect(rows.map((row) => [row.aggWorkoutId, row.status, row.reason]).sort()).toEqual(
+      [
+        [road.workout.id, 'imported', null],
+        [mtb.workout.id, 'imported', null],
+        [indoor.id, 'skipped', 'no_track'],
+      ].sort(),
+    );
+    const uploads = await trackUploads(h).find().toArray();
+    expect(uploads.map((upload) => [upload.source, upload.sourceRef]).sort()).toEqual(
+      [
+        ['garmin', road.workout.id],
+        ['garmin', mtb.workout.id],
+      ].sort(),
+    );
+
+    // тот же разбор, что у ручной загрузки: активность из потока, дистанция потока, все точки без децимации
+    const roadUpload = uploads.find((upload) => upload.sourceRef === road.workout.id);
+    expect(await processUpload(h, roadUpload?._id ?? '')).toBe('ready');
+    const activity = await activities(h).findOne({ uploadId: roadUpload?._id });
+    expect(activity).toMatchObject({
+      source: 'garmin',
+      sport: 'cycling',
+      hasHeartRate: true,
+      hasPower: true,
+    });
+    const expected = trackLengthMeters(road.points.map(([, lat, lon]) => ({ lat, lon })));
+    expect(Math.abs((activity?.distanceM ?? 0) - expected) / expected).toBeLessThan(0.01);
+    expect(
+      await h.db.collection('activity_tracks').findOne({ userId: alice.userId }),
+    ).toMatchObject({
+      sourcePointCount: 600,
+    });
+
+    // запросы трека — только координаты и высота, raw, провайдер подключения
+    const series = ow
+      .callsTo('GET /users/{id}/timeseries')
+      .map((item) => item.query.getAll('types'));
+    expect(new Set(series.flat())).toEqual(new Set(['latitude', 'longitude', 'elevation']));
+  });
+
+  it('повторный pull — без дублей импорта и загрузок; трек повторно не запрашивается', async () => {
+    ride(hoursAgo(30));
+    await pull();
+    const timeseries = ow.callsTo('GET /users/{id}/timeseries').length;
+    await pull();
+    expect(await devices(h).imports.countDocuments()).toBe(1);
+    expect(await trackUploads(h).countDocuments()).toBe(1);
+    expect(ow.callsTo('GET /users/{id}/timeseries')).toHaveLength(timeseries);
+  });
+
+  it('первые 48 ч — окно 30 дней; затем — от lastSyncedAt − 1 сут', async () => {
+    const dates = () => {
+      const last = ow.callsTo('GET /users/{id}/events/workouts').at(-1);
+      return [last?.query.get('start_date'), last?.query.get('end_date')];
+    };
+    await pull();
+    expect(dates()).toEqual(['2026-09-22', '2026-10-22']);
+    h.clock.advance(47 * HOUR);
+    await pull();
+    expect(dates()).toEqual(['2026-09-24', '2026-10-24']);
+
+    h.clock.advance(2 * HOUR); // catch-up закончился; lastSyncedAt — 2026-10-24T08:00Z
+    await pull();
+    expect(dates()).toEqual(['2026-10-23', '2026-10-24']);
+    expect(
+      (await devices(h).connections.findOne({ _id: alice.connectionId }))?.lastSyncedAt,
+    ).toEqual(h.clock.now());
+  });
+
+  it('тренировка старше окна не запрашивается (фильтр OW), длиннее 48 ч — skipped too_long', async () => {
+    ow.addWorkout(alice.aggUserId, {
+      start_time: new Date(h.clock.now().getTime() - 3 * DAY).toISOString(),
+      duration_seconds: 49 * 3600,
+    });
+    await pull();
+    expect((await imports()).map((row) => [row.status, row.reason])).toEqual([
+      ['skipped', 'too_long'],
+    ]);
+  });
+
+  it('429/5xx OW при списке тренировок — повторяемая ошибка задачи; финальная попытка — issue sync_failed', async () => {
+    ow.fail('GET /users/{id}/events/workouts', 429);
+    await expect(pull()).rejects.toMatchObject({ kind: 'unavailable', retryable: true });
+    expect((await devices(h).connections.findOne({ _id: alice.connectionId }))?.issue).toBeNull();
+    ow.fail('GET /users/{id}/events/workouts', 503);
+    await expect(pull(4)).rejects.toMatchObject({ kind: 'unavailable' });
+    expect((await devices(h).connections.findOne({ _id: alice.connectionId }))?.issue).toBe(
+      'sync_failed',
+    );
+  });
+
+  it('401 OW (ключ) — без повторов (UnrecoverableError) и issue sync_failed', async () => {
+    ow.fail('GET /users/{id}/events/workouts', 401);
+    await expect(pull()).rejects.toMatchObject({ name: 'UnrecoverableError' });
+    expect((await devices(h).connections.findOne({ _id: alice.connectionId }))?.issue).toBe(
+      'sync_failed',
+    );
+  });
+
+  it('5 провалов импорта тренировки — issue sync_failed, дальше тренировка не запрашивается; lastSyncedAt не двигается', async () => {
+    ride(hoursAgo(30));
+    ow.fail('GET /users/{id}/timeseries', 500, 6);
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      await expect(pull()).rejects.toBeInstanceOf(PullRetryError);
+      expect((await imports())[0]).toMatchObject({ status: 'failed', attempts: attempt });
+    }
+    const connection = await devices(h).connections.findOne({ _id: alice.connectionId });
+    expect(connection).toMatchObject({ issue: 'sync_failed', lastSyncedAt: null });
+    const calls = ow.callsTo('GET /users/{id}/timeseries').length;
+    expect(await pull()).toBe('done');
+    expect(ow.callsTo('GET /users/{id}/timeseries')).toHaveLength(calls);
+    expect((await devices(h).connections.findOne({ _id: alice.connectionId }))?.issue).toBe(
+      'sync_failed',
+    );
+  });
+
+  it('хранилище заполнено — импорт failed (storage), отложенный повтор задачи; следующий pull импортирует', async () => {
+    ride(hoursAgo(30));
+    const ingest = h.worker.get<TrackIngest>(TRACK_INGEST);
+    const spy = vi
+      .spyOn(ingest, 'ingestProviderStream')
+      .mockRejectedValueOnce(new TrackStorageFullError());
+    await expect(pull()).rejects.toBeInstanceOf(PullRetryError);
+    expect((await imports())[0]).toMatchObject({ status: 'failed', reason: 'storage' });
+    spy.mockRestore();
+    expect(await pull()).toBe('done');
+    expect((await imports())[0]).toMatchObject({ status: 'imported', attempts: 2 });
+  });
+
+  it('трек длиннее лимита — skipped too_many_points без загрузки', async () => {
+    ride(hoursAgo(30));
+    const aggregator = h.worker.get<WearablesAggregator>(WEARABLES_AGGREGATOR);
+    vi.spyOn(aggregator, 'fetchWorkoutTrack').mockRejectedValueOnce(new TrackTooLongError());
+    await pull();
+    expect((await imports())[0]).toMatchObject({ status: 'skipped', reason: 'too_many_points' });
+    expect(await trackUploads(h).countDocuments()).toBe(0);
+  });
+
+  it('pending и отключённые подключения не импортируются; параллельный pull того же подключения — busy', async () => {
+    ride(hoursAgo(30));
+    const hold = gate();
+    ow.hold('GET /users/{id}/events/workouts', hold.wait);
+    const first = pull();
+    await hold.reached;
+    expect(await pull()).toBe('busy');
+    hold.open();
+    expect(await first).toBe('done');
+
+    await disconnect(h, alice);
+    expect(await pull()).toBe('inactive');
+  });
+});
+
+describe('«Синхронизировать сейчас» (AC8)', () => {
+  it('requestSync в OW + pull через 30 с и 3 мин; чаще 1/10 мин — 429', async () => {
+    const response = await syncNow(h, alice);
+    expect(response.status).toBe(200);
+    expect(ow.callsTo('POST /providers/garmin/users/{id}/sync')).toHaveLength(1);
+    const delays = (await pendingPulls(h)).map((job) => job.opts.delay).sort();
+    expect(delays).toEqual([180_000, 30_000].sort());
+
+    const limited = await syncNow(h, alice);
+    expect(limited.status).toBe(429);
+    expect(limited.body).toMatchObject({
+      code: 'RATE_LIMITED',
+      details: { retryAfterSec: expect.any(Number) },
+    });
+  });
+
+  it('OW не принял requestSync — pull всё равно поставлен; не подключено — 404', async () => {
+    ow.fail('POST /providers/garmin/users/{id}/sync', 500);
+    expect((await syncNow(h, alice)).status).toBe(200);
+    expect(await pendingPulls(h)).toHaveLength(2);
+    expect((await syncNow(h, alice, 'wahoo')).status).toBe(404);
+  });
+
+  it('расписание ставит pull активным подключениям без накопления (дедупликация ow-pull)', async () => {
+    const maintenance = h.worker.get(DevicesMaintenanceProcessor);
+    await maintenance.process(jobOf('schedule-pull', {}));
+    await maintenance.process(jobOf('schedule-pull', {}));
+    expect((await pendingPulls(h)).map((job) => job.data)).toEqual([
+      { connectionId: alice.connectionId },
+    ]);
+  });
+
+  it('сверка: в OW подключение истекло — issue reauthorize и журнал; экран показывает проблему', async () => {
+    ow.connections.get(alice.aggUserId)?.set('garmin', 'expired');
+    expect(await h.worker.get(DevicesMaintenanceProcessor).process(jobOf('reconcile', {}))).toBe(1);
+    expect(await h.worker.get(DevicesMaintenanceProcessor).process(jobOf('reconcile', {}))).toBe(0);
+    const garmin = (await listDevices(h, alice)).body as {
+      items: { provider: string; issue: string | null }[];
+    };
+    expect(garmin.items.find((item) => item.provider === 'garmin')?.issue).toBe('reauthorize');
+    expect((await devices(h).audit.find({ action: 'reauthorize_required' }).toArray()).length).toBe(
+      1,
+    );
+  });
+});
+
+describe('удаление загрузки ↔ pull: без воскрешения (AC5, гонка 4)', () => {
+  const deleteUpload = (uploadId: string) =>
+    call(h, 'POST', `/v1/tracks/uploads/${uploadId}/delete`, undefined, alice.auth);
+
+  it('удалённая загрузка → надгробие device_imports.deleted; следующий pull её не возвращает', async () => {
+    ride(hoursAgo(30));
+    await pull();
+    const [upload] = await trackUploads(h).find().toArray();
+    expect((await deleteUpload(upload?._id ?? '')).status).toBe(204);
+    // pull до обработки события: импорт `imported` — не повторяется
+    await pull();
+    expect(await trackUploads(h).countDocuments()).toBe(0);
+    expect(await runOutbox(h, 'tracks.upload-deleted')).toEqual(['tombstoned']);
+    expect((await imports())[0]).toMatchObject({ status: 'deleted', reason: 'upload_deleted' });
+    await pull();
+    expect(await trackUploads(h).countDocuments()).toBe(0);
+  });
+
+  it('удаление и надгробие посреди pull (после приёма трека, до отметки импорта) — отметка не перезаписывает надгробие', async () => {
+    ride(hoursAgo(30));
+    const repository = h.worker.get(DevicesRepository);
+    const finish = gate();
+    const original = repository.finishImport.bind(repository);
+    vi.spyOn(repository, 'finishImport').mockImplementation(async (...args) => {
+      await finish.wait();
+      return original(...args);
+    });
+    const running = pull();
+    await finish.reached;
+    const [upload] = await trackUploads(h).find().toArray();
+    expect((await deleteUpload(upload?._id ?? '')).status).toBe(204);
+    expect(await runOutbox(h, 'tracks.upload-deleted')).toEqual(['tombstoned']);
+    finish.open();
+    expect(await running).toBe('done');
+
+    expect((await imports())[0]).toMatchObject({ status: 'deleted' });
+    vi.mocked(repository.finishImport).mockRestore();
+    await pull();
+    expect(await trackUploads(h).countDocuments()).toBe(0);
+  });
+
+  it('отключение с галочкой — загрузки провайдера удалены (и помечены надгробиями); без галочки — остаются', async () => {
+    ride(hoursAgo(30));
+    await pull();
+    expect(await trackUploads(h).countDocuments()).toBe(1);
+    await disconnect(h, alice, 'garmin', true);
+    expect(await runOutbox(h, 'devices.revoke-requested')).toEqual(['revoked']);
+    expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(0);
+    expect(await runOutbox(h, 'tracks.upload-deleted')).toEqual(['tombstoned']);
+  });
+
+  it('отключение без галочки — заезды остаются', async () => {
+    ride(hoursAgo(30));
+    await pull();
+    await disconnect(h, alice);
+    await runOutbox(h, 'devices.revoke-requested');
+    expect(await trackUploads(h).countDocuments({ source: 'garmin' })).toBe(1);
+  });
+});

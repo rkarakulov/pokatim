@@ -1,5 +1,11 @@
 import { Module } from '@nestjs/common';
-import { ClockModule, ConfigModule, MailModule, QueueModule } from '@rkarakulov/api-kit/core';
+import {
+  ClockModule,
+  ConfigModule,
+  MailModule,
+  QueueModule,
+  RedisModule,
+} from '@rkarakulov/api-kit/core';
 import {
   MongoModule,
   MongoOutboxModule,
@@ -8,7 +14,8 @@ import {
 
 import { env } from './config/env';
 import { identityOutboxRoutes, IdentityWorkerModule } from './modules/identity';
-import { TracksWorkerModule } from './modules/tracks';
+import { devicesOutboxRoutes, DevicesWorkerModule } from './modules/devices';
+import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
 
 /** Отдельный процесс: задачи очередей (письма, тяжёлая обработка) не блокируют API. */
 @Module({
@@ -17,12 +24,17 @@ import { TracksWorkerModule } from './modules/tracks';
     ClockModule,
     MongoModule.forRoot(),
     QueueModule,
+    // лимиты и кеш квоты хранилища, замки синхронизации устройств
+    RedisModule,
     MailModule,
     MongoOutboxModule,
     // composition root: какие события outbox в какие очереди (`{ ...<модуль>OutboxRoutes }`)
-    MongoOutboxPublisherModule.forRoot({ routes: { ...identityOutboxRoutes } }),
+    MongoOutboxPublisherModule.forRoot({
+      routes: { ...identityOutboxRoutes, ...tracksOutboxRoutes, ...devicesOutboxRoutes },
+    }),
     TracksWorkerModule,
     IdentityWorkerModule,
+    DevicesWorkerModule,
   ],
 })
 export class WorkerModule {}
