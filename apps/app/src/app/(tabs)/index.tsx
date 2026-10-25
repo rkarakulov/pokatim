@@ -1,6 +1,6 @@
 import { size, space } from '@pokatim/design-tokens';
 import { t, type MessageKey } from '@pokatim/i18n';
-import { EmptyState, TextAction, useTheme } from '@rkarakulov/ui';
+import { Banner, EmptyState, TextAction, useTheme } from '@rkarakulov/ui';
 import { useRouter, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
@@ -17,6 +17,7 @@ import {
   orderHomeSections,
   type AvailableHomeSectionId,
 } from '@/features/home/sections';
+import { useHomeClock, useIsOnline } from '@/features/home/use-home-clock';
 import { usePullToRefresh } from '@/features/home/use-pull-to-refresh';
 
 /** Шапка раздела и вкладка «Все …». */
@@ -54,6 +55,11 @@ export default function HomeScreen() {
   const races = useNextRace();
   const calendar = useNextCalendarStart();
   const sections = orderHomeSections(AVAILABLE_HOME_SECTIONS, profile.reasons);
+  // «сейчас» подписей — на клиенте (Главная без SSR-данных, R6): новые данные, фокус, полночь по Минску
+  const now = useHomeClock([races.dataUpdatedAt, calendar.dataUpdatedAt]);
+  // без сети при показанных данных — баннер (§4.12); без данных «Нет соединения» показывает слот раздела
+  const online = useIsOnline();
+  const offlineWithData = !online && (races.data !== undefined || calendar.data !== undefined);
   const refetchers = useMemo(
     () => [races.refetch, calendar.refetch, profile.refetch],
     [races.refetch, calendar.refetch, profile.refetch],
@@ -85,6 +91,15 @@ export default function HomeScreen() {
           />
         }
       >
+        {offlineWithData ? (
+          <View style={styles.banner}>
+            <Banner
+              tone="warning"
+              title={t('state.errorTitle')}
+              message={t('home.offlineMessage')}
+            />
+          </View>
+        ) : null}
         {sections.map(({ id, chosen }, index) => {
           const copy = SECTION_COPY[id];
           const frame = {
@@ -94,8 +109,6 @@ export default function HomeScreen() {
             first: index === 0,
             all: { label: t(copy.all), onPress: () => router.navigate(copy.href) },
           };
-          // «сейчас» для подписей — в рендере клиента: Главная без SSR-данных (R6)
-          const now = new Date();
           return id === 'races' ? (
             <HomeSection
               key={id}
@@ -150,6 +163,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
+  banner: { paddingHorizontal: size.gutter, paddingBottom: space.s3 },
   footer: {
     paddingHorizontal: size.gutter,
     paddingVertical: space.s5,

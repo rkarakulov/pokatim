@@ -34,8 +34,10 @@ function parts(localDate: string): LocalDateParts {
 const monthName = (month: number) => t(`date.month.${month}` as MessageKey);
 const dayMonth = ({ day, month }: LocalDateParts) =>
   t('home.dayMonth', { day, month: monthName(month) });
+const dateWithYear = (date: string, year: number) => t('home.dateWithYear', { date, year });
 const withYear = (text: string, year: number, currentYear: number) =>
-  year === currentYear ? text : `${text} ${year}`;
+  year === currentYear ? text : dateWithYear(text, year);
+const range = (from: string | number, to: string | number) => t('home.range', { from, to });
 
 /** Диапазон календарных дат Минска: один день, один месяц, разные месяцы, разные годы (тире без пробелов). */
 function formatLocalRange(from: string, to: string, now: Date): HeroDate {
@@ -43,12 +45,12 @@ function formatLocalRange(from: string, to: string, now: Date): HeroDate {
   const a = parts(from);
   const b = parts(to);
   if (a.year !== b.year) {
-    return { value: `${dayMonth(a)} ${a.year}–${dayMonth(b)} ${b.year}` };
+    return { value: range(dateWithYear(dayMonth(a), a.year), dateWithYear(dayMonth(b), b.year)) };
   }
   if (a.month !== b.month) {
-    return { value: withYear(`${dayMonth(a)}–${dayMonth(b)}`, a.year, currentYear) };
+    return { value: withYear(range(dayMonth(a), dayMonth(b)), a.year, currentYear) };
   }
-  const value = a.day === b.day ? `${a.day}` : `${a.day}–${b.day}`;
+  const value = a.day === b.day ? `${a.day}` : range(a.day, b.day);
   return { value, unit: withYear(monthName(a.month), a.year, currentYear) };
 }
 
@@ -121,39 +123,45 @@ export function calendarStatusLine(card: CalendarStartCard, now: Date): string |
 
 const km = (value: number) => i18n.formatNumber(value, { maximumFractionDigits: 1 });
 
+/** Склейка элементов по шаблону строки (`{head}` + `{next}`); пусто — `null`. */
+const joinWith = (key: MessageKey, items: readonly string[]): string | null =>
+  items.length === 0 ? null : items.reduce((head, next) => t(key, { head, next }));
+
 /** «100 км», «80 и 120 км», «40, 80 и 120 км»; пусто — `null`. */
 export function formatDistances(distances: readonly number[]): string | null {
-  if (distances.length === 0) return null;
   const values = distances.map(km);
-  const last = values.pop() as string;
-  const list = values.length === 0 ? last : t('home.listAnd', { head: values.join(', '), last });
+  const last = values.pop();
+  if (last === undefined) return null;
+  const head = joinWith('home.listComma', values);
+  const list = head === null ? last : t('home.listAnd', { head, last });
   return t('home.distanceKm', { distance: list });
 }
-
-const META_SEPARATOR = ' · ';
 
 /** Подпись значения справочника; `'unknown'` (новое значение у старой сборки) — без подписи (R9). */
 function domainLabel(prefix: string, value: string): string | null {
   return value === 'unknown' ? null : t(`${prefix}.${value}` as MessageKey);
 }
 
+/** Мета героя: элементы через « · » (`home.metaJoin`), пустые — пропускаются. */
+const meta = (parts: readonly (string | null)[]) =>
+  joinWith(
+    'home.metaJoin',
+    parts.filter((part): part is string => part !== null && part !== ''),
+  ) ?? '';
+
 /** Мета гонки: «62 км · Гравий». */
 export function raceMeta(race: RaceCard): string {
-  return [
+  return meta([
     formatDistances([race.distanceKm]),
     ...race.surfaces.map((surface) => domainLabel('domain.surface', surface)),
-  ]
-    .filter((part): part is string => part !== null)
-    .join(META_SEPARATOR);
+  ]);
 }
 
 /** Мета старта: «80 и 120 км · Шоссе · Минск». */
 export function calendarMeta(card: CalendarStartCard): string {
-  return [
+  return meta([
     formatDistances(card.distancesKm),
     domainLabel('domain.discipline', card.discipline),
     card.city,
-  ]
-    .filter((part): part is string => part !== null && part !== '')
-    .join(META_SEPARATOR);
+  ]);
 }

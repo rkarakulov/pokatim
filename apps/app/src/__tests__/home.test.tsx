@@ -7,7 +7,7 @@ import type {
   RaceCard,
   RacePage,
 } from '@pokatim/contracts';
-import { onlineManager } from '@tanstack/react-query';
+import { focusManager, onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
 import type { RefreshControlProps } from 'react-native';
@@ -296,5 +296,72 @@ describe('Главная: разделы (S4)', () => {
     expect(screen.getByText('62 км')).toBeOnTheScreen();
     expect(screen.queryByText(/Окно откроется|Окно открыто|Окно закрывается/)).toBeNull();
     expect(screen.getByText('80 и 120 км · Минск')).toBeOnTheScreen();
+  });
+});
+
+describe('Главная: обновление (ревью pass 1)', () => {
+  const control = () =>
+    screen.getByTestId('home-feed').props.refreshControl as ReactElement<RefreshControlProps>;
+  const raceHero = 'Окно гонки. Гравийный коридор Логойск. 4–12 октября';
+
+  afterEach(() => focusManager.setFocused(undefined));
+
+  it('жест без сети при данных — индикатор снимается сразу, баннер «Нет соединения»; сеть вернулась — перезапрос сам', async () => {
+    await openHome();
+    await screen.findByLabelText(raceHero);
+    expect(screen.queryByText('Нет соединения')).toBeNull();
+
+    await act(async () => {
+      onlineManager.setOnline(false);
+    });
+    await act(async () => {
+      await control().props.onRefresh?.();
+    });
+
+    expect(control().props.refreshing).toBe(false);
+    expect(screen.getByText('Нет соединения')).toBeOnTheScreen();
+    expect(screen.getByLabelText(raceHero)).toBeOnTheScreen();
+    expect(listRaces).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      onlineManager.setOnline(true);
+    });
+    await waitFor(() => expect(listRaces).toHaveBeenCalledTimes(2));
+    expect(listCalendar).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Нет соединения')).toBeNull();
+  });
+
+  it('возврат в фокус после staleTime и смены суток Минска: разделы перезапрошены (профиль — нет), тот же ответ — новая подпись', async () => {
+    // 1 октября 23:00 по Минску; старт 3 октября — через 2 дня
+    jest.setSystemTime(new Date('2026-10-01T20:00:00Z'));
+    listCalendar.mockResolvedValue(calendarPage({ ...start, startsOn: '2026-10-03' }));
+    await openHome();
+    expect(await screen.findByText('До старта 2 дня.')).toBeOnTheScreen();
+
+    // приложение в фоне полтора часа: в Минске уже 2 октября; ответ API тот же
+    await act(async () => {
+      focusManager.setFocused(false);
+    });
+    jest.setSystemTime(new Date('2026-10-01T21:30:00Z'));
+    await act(async () => {
+      focusManager.setFocused(true);
+    });
+
+    expect(await screen.findByText('До старта 1 день.')).toBeOnTheScreen();
+    expect(listRaces).toHaveBeenCalledTimes(2);
+    expect(listCalendar).toHaveBeenCalledTimes(2);
+    expect(getProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it('полночь по Минску на открытом экране — подписи пересчитаны без запроса', async () => {
+    jest.setSystemTime(new Date('2026-10-01T20:59:00Z'));
+    listCalendar.mockResolvedValue(calendarPage({ ...start, startsOn: '2026-10-03' }));
+    await openHome();
+    expect(await screen.findByText('До старта 2 дня.')).toBeOnTheScreen();
+
+    await act(() => jest.advanceTimersByTimeAsync(2 * 60_000));
+
+    expect(screen.getByText('До старта 1 день.')).toBeOnTheScreen();
+    expect(listCalendar).toHaveBeenCalledTimes(1);
   });
 });

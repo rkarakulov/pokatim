@@ -1,7 +1,12 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 
 import { expect, test } from './fixtures';
-import { HOME_FIXTURE_PASSWORD, publishHomeData } from './home-fixture';
+import {
+  HOME_FIXTURE_PASSWORD,
+  HOME_FIXTURE_YEAR,
+  publishHomeData,
+  registerHomeRider,
+} from './home-fixture';
 import { latestMailText, passwordResetLink, verificationLink } from './mailpit';
 import { REFRESH_URL, SIGN_IN_URL } from './project';
 import { API_URL, BASE_URL, DEV_URL, WITH_API } from './urls';
@@ -401,28 +406,41 @@ test.describe('с API', () => {
     page,
     request,
   }) => {
-    const { email, raceTitle, startTitle } = await publishHomeData(request);
-    // публичное чтение видит опубликованное (без входа)
-    const races = await (await request.get(`${API_URL}/v1/races?scope=current&limit=50`)).json();
-    expect(races.items.map((item: { title: string }) => item.title)).toContain(raceTitle);
-    const starts = await (await request.get(`${API_URL}/v1/calendar?limit=50`)).json();
-    expect(starts.items.map((item: { title: string }) => item.title)).toContain(startTitle);
+    const { raceTitle, startTitle, withdraw } = await publishHomeData(request);
+    try {
+      // публичное чтение видит свои записи года смоука (без входа)
+      const month = `${HOME_FIXTURE_YEAR}-06`;
+      const races = await (
+        await request.get(`${API_URL}/v1/races`, {
+          params: { scope: 'current', month, limit: 50 },
+        })
+      ).json();
+      expect(races.items.map((item: { title: string }) => item.title)).toContain(raceTitle);
+      const starts = await (
+        await request.get(`${API_URL}/v1/calendar`, { params: { month, limit: 50 } })
+      ).json();
+      expect(starts.items.map((item: { title: string }) => item.title)).toContain(startTitle);
 
-    // тот же аккаунт входит в приложение: опрос «Гонки и результаты» → геопозиция → Главная
-    await page.goto('/sign-in');
-    await page.getByRole('textbox', { name: 'E-mail' }).fill(email);
-    await page.getByRole('textbox', { name: 'Пароль' }).fill(HOME_FIXTURE_PASSWORD);
-    await page.getByRole('button', { name: 'Войти' }).click();
-    await expect(page).toHaveURL(`${BASE_URL}/survey`);
-    await page.getByRole('checkbox', { name: 'Гонки и результаты' }).click();
-    await page.getByRole('button', { name: 'Продолжить' }).click();
-    await page.getByRole('button', { name: 'Не сейчас' }).click();
-    await expect(page).toHaveURL(`${BASE_URL}/`);
+      // райдер прогона входит в приложение: опрос «Гонки и результаты» → геопозиция → Главная
+      const rider = await registerHomeRider(request);
+      await page.goto('/sign-in');
+      await page.getByRole('textbox', { name: 'E-mail' }).fill(rider);
+      await page.getByRole('textbox', { name: 'Пароль' }).fill(HOME_FIXTURE_PASSWORD);
+      await page.getByRole('button', { name: 'Войти' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/survey`);
+      await page.getByRole('checkbox', { name: 'Гонки и результаты' }).click();
+      await page.getByRole('button', { name: 'Продолжить' }).click();
+      await page.getByRole('button', { name: 'Не сейчас' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/`);
 
-    await expect(homeSections(page)).toHaveText(['Ближайшие гонки', 'Ближайшие старты']);
-    await expect(page.getByText('по вашему выбору', { exact: true })).toHaveCount(1);
-    await expect(page.getByText('Окно гонки', { exact: true })).toBeVisible();
-    await expect(page.getByText('Ближайший старт', { exact: true })).toBeVisible();
-    await expectHomeHeroes(page, request);
+      await expect(homeSections(page)).toHaveText(['Ближайшие гонки', 'Ближайшие старты']);
+      await expect(page.getByText('по вашему выбору', { exact: true })).toHaveCount(1);
+      await expect(page.getByText('Окно гонки', { exact: true })).toBeVisible();
+      await expect(page.getByText('Ближайший старт', { exact: true })).toBeVisible();
+      // герой — ближайшая запись публичного API (в dev-БД это может быть не запись смоука)
+      await expectHomeHeroes(page, request);
+    } finally {
+      await withdraw();
+    }
   });
 });
