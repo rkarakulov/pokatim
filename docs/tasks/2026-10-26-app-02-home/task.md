@@ -428,7 +428,23 @@ export function daysUntilStart(startsOn: string, now: Date): number;            
 
 # 12. Outcome
 
-(заполняет coder)
+**Статус: S1–S3 сделаны, S4–S5 ждут admin-02 S7** (в `origin/feature/admin-02-seasons-races` на момент остановки —
+только S1).
+
+- **S1** — `ProfileView` (`profile/profile.schema.ts`: неизвестные коды отбрасываются, R5), `api.getProfile(accessToken)`.
+- **S2** — `GET /v1/profile`: `ProfileController` (`AuthGuard`, `@CurrentUser()`, `no-store`) → `ProfileService.view` →
+  `ProfileRepository.findReasons` (projection `rideReasons`); документа нет — `[]`. Int-тест: AC2 (после опроса,
+  без документа, чужой не виден, `401` без access и после выхода).
+- **S3** — Главная-каркас: `TopBar`, `SectionHero` (+ тесты), `features/home/{sections,queries,home-section,
+  use-pull-to-refresh}`, `lib/focus-manager(.web)` подключён в корневом `_layout`, инвалидация `['profile']` после
+  опроса, строки `home.*`. Тесты: AC4 полностью (порядок/теги, ошибка/ожидание профиля), «Все …» → вкладки,
+  pull-to-refresh (профиль перезапрошен, индикатор только на время жеста), AC7 (скрытые разделы, «Выйти» внизу).
+
+**Осталось:** S4 (`useNextRace`, `useNextCalendarStart`, `format.ts` в `TZ` ≠ Минск, герои/пусто/ошибка, R9,
+pull-to-refresh разделов), S5 (e2e AC8 с API, docs §10).
+
+**Проверки (S3):** `pnpm check` — 13/13 задач; `build:web`; `pnpm e2e:web` — 11 passed, 1 skipped (шаг с API без
+`E2E_API`); `expo export -p android` — ок. NOT VERIFIED: ручной смоук iOS/Android/Safari (pull-to-refresh, фокус).
 
 ---
 
