@@ -38,7 +38,7 @@ export class PanelSessionService {
   /**
    * Вход: пароль (лимиты и 401 — как у приложения) → `verificationRequired` как есть → член команды `active`, иначе
    * `403 PANEL_ACCESS_DENIED` (только после верного пароля; сессии и записи журнала нет) → сессия + `panel.signed_in`
-   * одной транзакцией → прежняя cookie этого браузера отзывается (`superseded`).
+   * и отзыв прежней cookie этого браузера (`superseded`) одной транзакцией.
    * Гонки «вход ↔ снятие роли / сброс пароля» закрывает гард: роль и штамп проверяются на каждом запросе.
    */
   async signIn(
@@ -71,15 +71,18 @@ export class PanelSessionService {
         action: 'panel.signed_in',
         actor: { kind: 'user', userId: verified.userId },
       });
+      // прежняя сессия этого браузера — в той же транзакции: сбой отзыва отменяет и вход (без живой сессии без
+      // владельца в браузере и без записи о входе, которого не было)
+      if (previousToken) {
+        await this.repository.revokeSession(
+          { tokenHash: sha256(previousToken) },
+          now,
+          'superseded',
+          tx,
+        );
+      }
     });
     this.logger.log(`вход в панель uid=${verified.userId} sid=${sessionId}`);
-
-    // сбой отзыва прежней сессии вход не отменяет: новая уже выдана
-    if (previousToken) {
-      await this.repository
-        .revokeSession({ tokenHash: sha256(previousToken) }, now, 'superseded')
-        .catch(() => undefined);
-    }
     const me: PanelMe = {
       user: {
         id: verified.userId,

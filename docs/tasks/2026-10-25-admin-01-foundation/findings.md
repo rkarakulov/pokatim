@@ -17,3 +17,11 @@ Codex — REQUEST CHANGES; Claude independent-reviewer — APPROVE (5 LOW); CI c
 | L5 | Claude | LOW | Литерал 500 в UI | PANEL_MEMBER_LIST_CAP в контрактах |
 
 D2 (eslint-disable в DataTable.tsx) — оставлен по решению оркестратора.
+
+## Pass 2 (PR #22, eec3b52..d0da586)
+
+Codex — APPROVE с одним MEDIUM.
+
+| # | Источник | Уровень | Находка | Исправление |
+|---|---|---|---|---|
+| M1 | Codex | MEDIUM | `signIn`: отзыв прежней сессии (`superseded`) — после транзакции, ошибка глушилась `.catch` | Отзыв — в той же транзакции, что новая сессия и `panel.signed_in`, без подавления: сбой отзыва — вход не успешен, новой сессии и записи нет, прежняя жива (int-тест) |

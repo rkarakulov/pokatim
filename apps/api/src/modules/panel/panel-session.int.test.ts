@@ -220,6 +220,25 @@ describe('POST /v1/admin/session/sign-in (AC2)', () => {
     expect((await me(panelCookieValue(res))).status).toBe(200);
   });
 
+  it('отзыв прежней cookie не удался — вход не успешен: новой сессии и panel.signed_in нет, прежняя жива', async () => {
+    await memberUser(h, ADMIN, 'admin');
+    const previous = await panelSession(h, ADMIN);
+    const auditBefore = await panel(h).audit.countDocuments();
+    vi.spyOn(PanelRepository.prototype, 'revokeSession').mockRejectedValueOnce(
+      new Error('отзыв не удался'),
+    );
+
+    const res = await panelSignIn(h, ADMIN, PANEL_PASSWORD, {
+      cookie: `${PANEL_SESSION_COOKIE.name}=${previous}`,
+    });
+
+    expect(res.status).toBe(500);
+    expect(panelSetCookie(res)).toBeUndefined();
+    expect(await panel(h).sessions.countDocuments()).toBe(1);
+    expect(await panel(h).audit.countDocuments()).toBe(auditBefore);
+    expect((await me(previous)).status).toBe(200);
+  });
+
   it('инъекция и лишние ключи в теле — 400 до проверки пароля', async () => {
     await memberUser(h, ADMIN, 'admin');
     for (const body of [
