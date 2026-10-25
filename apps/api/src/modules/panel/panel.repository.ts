@@ -21,6 +21,7 @@ export interface AuditFilter {
   action?: AuditAction;
   actorUserId?: string;
   targetUserId?: string;
+  subjectId?: string;
 }
 
 /**
@@ -250,6 +251,7 @@ export class PanelRepository {
     if (filter.action) query.action = filter.action;
     if (filter.actorUserId) query['actor.userId'] = filter.actorUserId;
     if (filter.targetUserId) query.targetUserId = filter.targetUserId;
+    if (filter.subjectId) query['subject.id'] = filter.subjectId;
     return this.c.audit.find(query).sort({ _id: -1 }).limit(limit).toArray();
   }
 }

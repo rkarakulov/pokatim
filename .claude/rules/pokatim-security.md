@@ -4,6 +4,9 @@ paths:
   - "apps/api/src/modules/media/**"
   - "apps/app/src/features/auth/**"
   - "apps/api/src/modules/panel/**"
+  - "apps/api/src/modules/races/**"
+  - "apps/api/src/modules/calendar/**"
+  - "apps/api/src/public-read.guard.ts"
   - "apps/api/src/cli/**"
   - "apps/admin/src/session/**"
 ---
@@ -63,3 +66,7 @@ paths:
 - **Принятый риск — тот же домен `/admin/`** (C3): XSS web приложения может действовать от имени открытой в том же
   браузере сессии панели. Обязательно **до прода**: 2FA (TOTP) для `admin` и строгий CSP web приложения; CSP панели —
   `infra/docker/admin-nginx.conf` (менять только вместе со смоуком `pnpm e2e:admin`, он отдаёт тот же заголовок).
+- Доменные модули панели (`races`, `calendar`): каждый `/v1/admin/*` — `PanelGuard` + `@RequirePermission` (тест
+  `src/admin-routes.test.ts` обходит контроллеры всех модулей); владение гонкой — в сервисе по правам сессии (без
+  `races.manage_any` чужая — `404`, не 403); `ownerUserId`, статус, фаза, сезон — только сервер. Публичное чтение —
+  только опубликованное, без владельца, имён сотрудников и `version`; IP-лимит `public-read`.

@@ -25,7 +25,11 @@ function details(entry: AuditEntry): string {
     });
   }
   const role = to ?? from;
-  return role ? t(`admin.role.${role}`) : '';
+  if (role) return t(`admin.role.${role}`);
+  // admin-02: шаблон причины отмены; имена изменённых полей — без значений
+  const cancelReason = entry.details?.cancelReason;
+  if (cancelReason) return t(`domain.raceCancelReason.${cancelReason}`);
+  return entry.details?.changedFields?.join(', ') ?? '';
 }
 
 const columns = [
@@ -47,6 +51,12 @@ const columns = [
       const extra = details(info.row.original);
       return extra ? `${actionLabel(info.getValue())}: ${extra}` : actionLabel(info.getValue());
     },
+    enableSorting: false,
+  }),
+  // объект доменного модуля (сезон, гонка, старт) — название на момент действия
+  column.accessor((entry) => entry.subject?.label ?? '—', {
+    id: 'subject',
+    header: t('admin.audit.column.subject'),
     enableSorting: false,
   }),
   column.accessor((entry) => entry.target?.displayName ?? '—', {

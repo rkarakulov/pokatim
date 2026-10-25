@@ -13,13 +13,14 @@ export function defineRoles<R extends string, P extends string>(
 }
 
 /**
- * Права ролей панели — только на сервере (решения автора Q2, Q3, Q12): admin — всё; moderator — журнал; organizer —
- * только «Обзор» (прав пока нет). Клиент получает итоговый список в `PanelMe`.
+ * Права ролей панели — только на сервере. admin-01 (Q2, Q3, Q12): admin — всё; moderator — журнал. admin-02 (§7,
+ * Q2, Q13): moderator — чтение «Гонок» и «Сезонов»; organizer — свои гонки (создать, править, опубликовать,
+ * отменить); чужие гонки (`races.manage_any`), сезоны и календарь — только admin. Клиент получает итог в `PanelMe`.
  */
 export const ROLE_PERMISSIONS = defineRoles<PanelRole, Permission>({
   admin: PERMISSIONS,
-  moderator: ['audit.read'],
-  organizer: [],
+  moderator: ['audit.read', 'races.read'],
+  organizer: ['races.read', 'races.manage'],
 });
 
 /** Права роли в порядке контракта. */

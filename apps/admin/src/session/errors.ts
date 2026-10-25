@@ -10,3 +10,7 @@ export const isUnauthorized = (error: unknown) => httpStatus(error) === 401;
 /** Права роли не позволяют (403) — «Нет доступа к разделу». */
 export const isForbidden = (error: unknown) =>
   httpStatus(error) === 403 && apiErrorOf(error)?.code === 'FORBIDDEN';
+
+/** Ожидаемая `version` устарела (R3 admin-02): запись изменили — обновить страницу. */
+export const isConflict = (error: unknown) =>
+  httpStatus(error) === 409 && apiErrorOf(error)?.code === 'CONFLICT';

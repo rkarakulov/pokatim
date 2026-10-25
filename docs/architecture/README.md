@@ -19,8 +19,8 @@ web (app, SSR)─┘                                ├─ Redis (BullMQ, rate-l
 identity · profile · panel · routes · rides · calendar · races · results · disputes · seasons ·
 gamification · sharing · notifications · moderation · media
 
-Есть: `identity`, `profile`, `panel` (доступ к панели «Протокол», ADR-0009). CLI сервера — `apps/api/src/cli`
-(`dist/cli/panel.js grant-admin`).
+Есть: `identity`, `profile`, `panel` (доступ к панели «Протокол», ADR-0009), `races` (сезоны и гонки по коридору,
+ADR-0010), `calendar` (календарь стартов). CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js grant-admin`).
 
 Межмодульные вызовы — через `index.ts` модуля; события — outbox → BullMQ.
 
@@ -151,7 +151,8 @@ worker: очередь identity-email ─► письмо «Пароль изм�
   сессия + запись `panel.signed_in` одной транзакцией → cookie `__Secure-pokatim_admin_sid`
   (`HttpOnly; Secure; SameSite=Strict; Path=/v1/admin`) → прежняя cookie браузера отзывается.
 - **`PanelGuard` на каждом `/v1/admin/*`:** сессия жива → аккаунт активен и штамп совпадает → член `active` → права
-  роли (`ROLE_PERMISSIONS`; admin — всё, moderator — `audit.read`, organizer — нет) → `request.panel`;
+  роли (`ROLE_PERMISSIONS`: admin — всё; moderator — `audit.read`, `races.read`; organizer — `races.read`,
+  `races.manage`) → `request.panel`;
   `@RequirePermission` — 403; любой отказ сессии — один 401 и сброс cookie; `Cache-Control: no-store`. Маршрут без
   гарда или явного `@Public()` ловит тест. Access JWT и refresh приложения не принимаются.
 - **Сотрудники:** выдача роли существующему подтверждённому пользователю по e-mail, смена и снятие с причиной (снятие
@@ -161,6 +162,22 @@ worker: очередь identity-email ─► письмо «Пароль изм�
   Query (`me`), гард `beforeLoad`; глобальные 401 («Сессия истекла» с возвратом, `next` только внутри панели) и 403
   («Нет доступа к разделу»); `Can`/`useCan` — только отображение; навигация — `src/navigation.ts`; компоненты —
   `src/ui` (кандидаты в `admin-kit`, F6). Прод и стенд — `/admin/` того же домена, nginx образа `admin` — строгий CSP.
+
+### Сезоны, гонки, календарь (модули `races`, `calendar`, ADR-0010)
+
+- **Данные:** `seasons` (даты Минска + границы-моменты `startsAt`/`endsBefore`), `races` (статус, окно и протокол —
+  моменты UTC, `seasonId` только у опубликованной), `race_meta.schedule` (замок расписания), `calendar_starts`
+  (`cityKey` для фильтра и списка городов). Миграции `0006_panel_audit_subject`, `0007_races`, `0008_calendar`.
+- **Панель** (`/v1/admin/{seasons,races,calendar}` под `PanelGuard` + права): правки по ожидаемой `version`
+  (устарело — 409); создание и изменение дат сезона, публикация гонки и смена конца окна опубликованной — под
+  `lockSchedule`; фаза и `editable` — сервер по `CLOCK`; организатор — только свои гонки (чужая — 404); каждое
+  изменение — `PanelAudit.append` с `subject` в транзакции действия; имена сотрудников — порт `PanelDirectory`.
+- **Публичное чтение** (`/v1/races`, `/v1/seasons/current`, `/v1/calendar`): без входа, только опубликованное,
+  курсор — base64url `{ k, id }` через zod (`src/page-cursor.ts`), `Cache-Control: public, max-age=60`, IP-лимит
+  `public-read` (`src/public-read.guard.ts`). Enum-ы ответов — `tolerantEnum` (`'unknown'` у старых сборок).
+- **`apps/admin`:** «Гонки» (фильтры в URL, форма одной колонкой с метками Europe/Minsk и вычисляемым сезоном,
+  зафиксированные поля по `editable`), «Сезоны» (таблица и форма справа), «Календарь»; ввод времени —
+  `DateTimeField` (настенное время Минска → `minskWallTimeToUtc`).
 
 ### Web (SSR, PWA)
 

@@ -5,6 +5,7 @@ import { createHarness, MINUTE, type Harness } from '../../../test/harness';
 import { memberUser, panel, panelCall, panelSession, verifiedUser } from '../../../test/panel';
 import { MongoTransactions } from '../../db';
 import { PanelAudit } from './panel-audit';
+import { PanelDirectory } from './panel-directory';
 
 /** Журнал действий (AC8): одна запись на действие, откат — без записи, чтение с курсором и фильтрами, без ПДн. */
 let h: Harness;
@@ -169,5 +170,79 @@ describe('журнал панели (AC8)', () => {
     ).rejects.toThrow('действие откатилось');
 
     expect(await panel(h).audit.countDocuments()).toBe(0);
+  });
+
+  it('объект действия (admin-02): subject со снимком названия, changedFields, cancelReason; фильтр subjectId', async () => {
+    const adminId = await memberUser(h, 'admin@example.by', 'admin');
+    const token = await panelSession(h, 'admin@example.by');
+    const audit = h.app.get(PanelAudit, { strict: false });
+    const transactions = h.app.get(MongoTransactions, { strict: false });
+    const raceId = '01890a5d-ac96-774b-bcce-b302099a8057';
+    const seasonId = '01890a5d-ac96-774b-bcce-b302099a8058';
+    const actor = { kind: 'user', userId: adminId } as const;
+
+    await transactions.run(async (tx) => {
+      await audit.append(tx, {
+        action: 'season.updated',
+        actor,
+        subject: { kind: 'season', id: seasonId, label: 'Сезон 2026' },
+        details: { changedFields: ['name'] },
+      });
+      await audit.append(tx, {
+        action: 'race.cancelled',
+        actor,
+        subject: { kind: 'race', id: raceId, label: 'Минское кольцо' },
+        details: { cancelReason: 'weather' },
+      });
+    });
+
+    const { items } = await page(token, `?subjectId=${raceId}`);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      action: 'race.cancelled',
+      subject: { kind: 'race', id: raceId, label: 'Минское кольцо' },
+      details: { cancelReason: 'weather' },
+      target: null,
+    });
+    const all = await page(token);
+    expect(all.items.find((entry) => entry.action === 'season.updated')).toMatchObject({
+      subject: { kind: 'season', id: seasonId, label: 'Сезон 2026' },
+      details: { changedFields: ['name'] },
+    });
+    // вход admin (admin-01) — без объекта
+    expect(all.items.find((entry) => entry.action === 'panel.signed_in')?.subject).toBeNull();
+    expect((await panelCall(h, token, 'GET', `${AUDIT}?subjectId=abc`)).status).toBe(400);
+  });
+
+  it('старые записи без поля subject (admin-01) читаются с subject: null', async () => {
+    const adminId = await memberUser(h, 'admin@example.by', 'admin');
+    await panel(h).audit.insertOne({
+      _id: '01890a5d-ac96-774b-bcce-b302099a8000',
+      at: h.clock.now(),
+      action: 'panel.role_granted',
+      actor: { kind: 'cli' },
+      targetUserId: adminId,
+      reason: null,
+      details: { roleTo: 'admin' },
+    });
+    const token = await panelSession(h, 'admin@example.by');
+
+    const { items } = await page(token);
+    expect(items.map((entry) => [entry.action, entry.subject])).toEqual([
+      ['panel.signed_in', null],
+      ['panel.role_granted', null],
+    ]);
+  });
+
+  it('PanelDirectory: имена сотрудников по id (без e-mail); нет члена команды — «Удалённый участник»', async () => {
+    const adminId = await memberUser(h, 'admin@example.by', 'admin');
+    const unknown = '01890a5d-ac96-774b-bcce-b302099a8099';
+    const names = await h.app
+      .get(PanelDirectory, { strict: false })
+      .displayNames([adminId, unknown, adminId]);
+    expect([...names.entries()]).toEqual([
+      [adminId, 'Сотрудник admin'],
+      [unknown, 'Удалённый участник'],
+    ]);
   });
 });

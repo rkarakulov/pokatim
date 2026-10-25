@@ -5,6 +5,9 @@ import { identity } from './0002_identity';
 import { identityTtl } from './0003_identity_ttl';
 import { profile } from './0004_profile';
 import { panel } from './0005_panel';
+import { panelAuditSubject } from './0006_panel_audit_subject';
+import { races } from './0007_races';
+import { calendar } from './0008_calendar';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -16,4 +19,7 @@ export const migrations: readonly MongoMigration[] = [
   identityTtl,
   profile,
   panel,
+  panelAuditSubject,
+  races,
+  calendar,
 ];

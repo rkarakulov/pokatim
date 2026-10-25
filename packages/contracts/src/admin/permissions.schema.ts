@@ -10,6 +10,16 @@ export const PanelRole = z.enum(PANEL_ROLES);
 export type PanelRole = z.infer<typeof PanelRole>;
 
 /** Права панели: проверяет сервер на каждом запросе, клиент только скрывает недоступное. Только в конец (R6). */
-export const PERMISSIONS = ['members.read', 'members.manage', 'audit.read'] as const;
+export const PERMISSIONS = [
+  'members.read',
+  'members.manage',
+  'audit.read',
+  // admin-02: гонки (свои; чужие — `races.manage_any`), сезоны, календарь стартов
+  'races.read',
+  'races.manage',
+  'races.manage_any',
+  'seasons.manage',
+  'calendar.manage',
+] as const;
 export const Permission = z.enum(PERMISSIONS);
 export type Permission = z.infer<typeof Permission>;

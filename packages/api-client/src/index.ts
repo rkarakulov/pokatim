@@ -1,5 +1,13 @@
 import {
   ApiError,
+  CalendarCities,
+  CalendarPage,
+  type CalendarQuery,
+  CalendarStartDetail,
+  CurrentSeasonResponse,
+  RaceDetail,
+  RacePage,
+  type RaceListQuery,
   ConfirmPasswordResetResponse,
   ConfirmVerificationResponse,
   type ErrorCode,
@@ -34,6 +42,8 @@ import {
 } from '@rkarakulov/api-client-core';
 import { z } from 'zod';
 
+import { queryString } from './admin.ts';
+
 export {
   ApiHttpError,
   ApiNetworkError,
@@ -51,6 +61,25 @@ export type ParsedApiError = BaseParsedApiError<ErrorCode>;
 export function apiErrorOf(error: unknown): ParsedApiError | undefined {
   return error instanceof ApiHttpError ? parseApiError(error.body, ApiError) : undefined;
 }
+
+/** Параметры списка гонок приложения до схемы (`bikeClass`, `month` — массивы). */
+export type RaceListParams = {
+  scope?: RaceListQuery['scope'];
+  bikeClass?: NonNullable<RaceListQuery['bikeClass']>;
+  month?: NonNullable<RaceListQuery['month']>;
+  cursor?: string;
+  limit?: number;
+};
+
+/** Параметры календаря приложения до схемы; `from` не задан — сервер берёт «сегодня по Минску». */
+export type CalendarListParams = {
+  from?: string;
+  discipline?: NonNullable<CalendarQuery['discipline']>;
+  city?: NonNullable<CalendarQuery['city']>;
+  month?: NonNullable<CalendarQuery['month']>;
+  cursor?: string;
+  limit?: number;
+};
 
 export interface ApiClientOptions {
   baseUrl: string;
@@ -76,7 +105,15 @@ export function createApiClient({
     fetchImpl,
     errorSchema: ApiError,
   });
+  // публичное чтение (Q14): тот же клиент без getAccessToken — токен в эти запросы не уходит
+  const { request: requestPublic } = createHttpClient({
+    baseUrl,
+    fetchImpl,
+    errorSchema: ApiError,
+  });
   const withCredentials = credentials ? { credentials } : {};
+  const getPublic = <S extends z.ZodType>(path: string, schema: S) =>
+    requestPublic(path, schema, { method: 'GET', ...withCredentials });
   const get = <S extends z.ZodType>(path: string, schema: S) =>
     request(path, schema, { method: 'GET', ...withCredentials });
   const post = <S extends z.ZodType>(path: string, schema: S, body: unknown) =>
@@ -140,6 +177,21 @@ export function createApiClient({
         OnboardingStatus,
         authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
       ),
+
+    // --- read-модель гонок, сезона и календаря: публично, без Authorization (admin-02 S7) ---
+    /** Гонки: `current` — с незакрытым окном (по началу), `past` — закрытые и отменённые. */
+    listRaces: (params: RaceListParams = {}) =>
+      getPublic(`/v1/races${queryString(params)}`, RacePage),
+    /** Опубликованная или отменённая гонка; черновик и неизвестная — 404. */
+    getRace: (id: string) => getPublic(`/v1/races/${encodeURIComponent(id)}`, RaceDetail),
+    /** Сезон, в который попадает «сейчас», или `null`. */
+    getCurrentSeason: () => getPublic('/v1/seasons/current', CurrentSeasonResponse),
+    /** Опубликованные старты с `from` (по умолчанию — сегодня по Минску). */
+    listCalendar: (params: CalendarListParams = {}) =>
+      getPublic(`/v1/calendar${queryString(params)}`, CalendarPage),
+    getCalendarStart: (id: string) =>
+      getPublic(`/v1/calendar/${encodeURIComponent(id)}`, CalendarStartDetail),
+    listCalendarCities: () => getPublic('/v1/calendar/cities', CalendarCities),
   };
 }
 
@@ -149,4 +201,6 @@ export {
   type AdminApiClient,
   type AdminApiClientOptions,
   type AuditListParams,
+  type PanelCalendarListParams,
+  type PanelRaceListParams,
 } from './admin.ts';

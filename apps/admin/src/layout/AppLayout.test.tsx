@@ -15,6 +15,8 @@ vi.mock('../api', () => ({
     resendVerification: vi.fn(),
     listMembers: vi.fn(),
     listAudit: vi.fn(),
+    listSeasons: vi.fn(),
+    listCalendar: vi.fn(),
   },
 }));
 
@@ -47,9 +49,10 @@ describe('каркас панели (AC10)', () => {
   });
 
   it.each([
-    ['admin', ['Обзор', 'Сотрудники', 'Журнал действий']],
-    ['moderator', ['Обзор', 'Журнал действий']],
-    ['organizer', ['Обзор']],
+    // admin-02: Гонки, Календарь, Сезоны (последним в основной группе)
+    ['admin', ['Обзор', 'Гонки', 'Календарь', 'Сезоны', 'Сотрудники', 'Журнал действий']],
+    ['moderator', ['Обзор', 'Гонки', 'Сезоны', 'Журнал действий']],
+    ['organizer', ['Обзор', 'Гонки', 'Сезоны']],
   ] as const)('пункты меню по правам: %s', async (role, items) => {
     mocked.me.mockResolvedValue(ME[role]);
     await renderApp('/');
@@ -62,6 +65,9 @@ describe('каркас панели (AC10)', () => {
     ['moderator', '/members'],
     ['organizer', '/members'],
     ['organizer', '/audit'],
+    ['organizer', '/calendar'],
+    ['moderator', '/calendar'],
+    ['moderator', '/races/new'],
   ] as const)(
     'прямой URL без права (%s → %s) — «Нет доступа к разделу» внутри каркаса, без запроса',
     async (role, path) => {
@@ -72,6 +78,8 @@ describe('каркас панели (AC10)', () => {
       expect(sidebar()).toBeTruthy();
       expect(mocked.listMembers).not.toHaveBeenCalled();
       expect(mocked.listAudit).not.toHaveBeenCalled();
+      expect(mocked.listCalendar).not.toHaveBeenCalled();
+      expect(mocked.listSeasons).not.toHaveBeenCalled();
     },
   );
 
