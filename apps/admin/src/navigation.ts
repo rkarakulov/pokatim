@@ -3,7 +3,7 @@ import type { MessageKey } from '@pokatim/i18n';
 
 export interface NavItem {
   /** Путь раздела внутри `basepath` (маршруты — `router.tsx`). */
-  to: '/';
+  to: '/' | '/members' | '/audit';
   labelKey: MessageKey;
   /** Без права пункт скрыт (сервер всё равно проверит право на каждом запросе). */
   permission?: Permission;
@@ -16,4 +16,6 @@ export interface NavItem {
  */
 export const NAVIGATION: readonly NavItem[] = [
   { to: '/', labelKey: 'admin.nav.overview', group: 'main' },
+  { to: '/members', labelKey: 'admin.nav.members', permission: 'members.read', group: 'bottom' },
+  { to: '/audit', labelKey: 'admin.nav.audit', permission: 'audit.read', group: 'bottom' },
 ];

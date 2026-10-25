@@ -10,6 +10,8 @@ import {
 } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 
+import { AuditScreen } from './features/audit/AuditScreen';
+import { MembersScreen } from './features/members/MembersScreen';
 import { NoAccessScreen } from './features/no-access/NoAccessScreen';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 import { OverviewScreen } from './features/overview/OverviewScreen';
@@ -90,6 +92,26 @@ const overviewRoute = createRoute({
   component: OverviewScreen,
 });
 
+const membersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'members',
+  component: () => (
+    <RequirePermission permission="members.read">
+      <MembersScreen />
+    </RequirePermission>
+  ),
+});
+
+const auditRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'audit',
+  component: () => (
+    <RequirePermission permission="audit.read">
+      <AuditScreen />
+    </RequirePermission>
+  ),
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '$',
@@ -98,7 +120,7 @@ const notFoundRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   signInRoute,
-  appRoute.addChildren([overviewRoute, notFoundRoute]),
+  appRoute.addChildren([overviewRoute, membersRoute, auditRoute, notFoundRoute]),
 ]);
 
 /** basepath — из `import.meta.env.BASE_URL` (`/admin/` на стенде и в проде, `/` в `pnpm dev`). */

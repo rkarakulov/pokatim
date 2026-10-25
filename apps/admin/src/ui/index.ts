@@ -6,7 +6,7 @@ export { AppShell } from './AppShell';
 export { AuthCard } from './AuthCard';
 export { Banner } from './Banner';
 export { Button, type ButtonProps } from './Button';
-export { DataTable, type DataTableProps, SKELETON_ROWS } from './DataTable';
+export { DataTable, type DataTableProps, SKELETON_ROWS, type TableQuery } from './DataTable';
 export { Dialog } from './Dialog';
 export { SelectField, TextAreaField, TextField } from './fields';
 export { PageHeader } from './PageHeader';

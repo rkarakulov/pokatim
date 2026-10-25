@@ -12,6 +12,8 @@ vi.mock('../api', () => ({
     signOut: vi.fn(),
     health: vi.fn(),
     resendVerification: vi.fn(),
+    listMembers: vi.fn(),
+    listAudit: vi.fn(),
   },
 }));
 
@@ -42,6 +44,35 @@ describe('каркас панели (AC10)', () => {
     expect(screen.getByText('Разделы панели появятся здесь')).toBeTruthy();
     expect(await screen.findByText('Работает')).toBeTruthy();
   });
+
+  it.each([
+    ['admin', ['Обзор', 'Сотрудники', 'Журнал действий']],
+    ['moderator', ['Обзор', 'Журнал действий']],
+    ['organizer', ['Обзор']],
+  ] as const)('пункты меню по правам: %s', async (role, items) => {
+    mocked.me.mockResolvedValue(ME[role]);
+    await renderApp('/');
+    await screen.findByRole('heading', { name: 'Обзор' });
+    const links = within(screen.getByRole('navigation')).getAllByRole('link');
+    expect(links.map((link) => link.textContent)).toEqual(items);
+  });
+
+  it.each([
+    ['moderator', '/members'],
+    ['organizer', '/members'],
+    ['organizer', '/audit'],
+  ] as const)(
+    'прямой URL без права (%s → %s) — «Нет доступа к разделу» внутри каркаса, без запроса',
+    async (role, path) => {
+      mocked.me.mockResolvedValue(ME[role]);
+      await renderApp(path);
+      expect(await screen.findByRole('heading', { name: 'Нет доступа к разделу' })).toBeTruthy();
+      expect(screen.getByText('Обратитесь к администратору панели.')).toBeTruthy();
+      expect(sidebar()).toBeTruthy();
+      expect(mocked.listMembers).not.toHaveBeenCalled();
+      expect(mocked.listAudit).not.toHaveBeenCalled();
+    },
+  );
 
   it('organizer — подпись роли «Организатор»', async () => {
     mocked.me.mockResolvedValue(ME.organizer);

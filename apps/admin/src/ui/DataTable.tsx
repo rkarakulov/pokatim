@@ -1,5 +1,4 @@
 import { t } from '@pokatim/i18n';
-import type { UseQueryResult } from '@tanstack/react-query';
 import {
   type ColumnDef,
   flexRender,
@@ -17,11 +16,19 @@ import { EmptyState, ErrorState } from './states';
 /** Строк скелетона первой загрузки (раскладка успешного состояния). */
 export const SKELETON_ROWS = 8;
 
+/** Состояние данных таблицы: `useQuery` с массивом или собранные страницы `useInfiniteQuery`. */
+export interface TableQuery<T> {
+  data: T[] | undefined;
+  isError: boolean;
+  error: unknown;
+  refetch: () => unknown;
+}
+
 export interface DataTableProps<T> {
   // ColumnDef с разными типами значений ячеек — any у TanStack Table по замыслу (accessor value)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   columns: ColumnDef<T, any>[];
-  query: UseQueryResult<T[]>;
+  query: TableQuery<T>;
   /** Пусто: данных нет совсем. */
   empty: ReactNode;
   /** Фильтры над таблицей — видны сразу, и на загрузке тоже. */
