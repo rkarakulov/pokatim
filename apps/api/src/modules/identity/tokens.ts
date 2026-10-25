@@ -84,6 +84,15 @@ export function passwordResetLimitKeys(secret: string, email: string, ip: string
   };
 }
 
+/**
+ * Штамп учётных данных (ADR-0009, R2): HMAC текущего хеша пароля с назначением `credentials:`. Сессия панели
+ * запоминает его при входе, гард сверяет на каждом запросе: смена пароля (сброс) гасит сессии панели сразу, без
+ * записи из identity в коллекции панели. Сам хеш наружу не уходит.
+ */
+export function credentialsStamp(secret: string, passwordHash: string): string {
+  return hmacKey(secret, `credentials:${passwordHash}`);
+}
+
 /** Назначение ссылки — префикс HMAC: токен одной ссылки не годится в другую. */
 export type LinkPurpose = 'email-verify' | 'password-reset';
 

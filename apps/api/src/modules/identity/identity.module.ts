@@ -5,6 +5,8 @@ import { QUEUE } from '../../queues';
 import { AccessTokenVerifier } from './access-token';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
+import { CredentialsCheck } from './credentials-check';
+import { IdentityAccounts } from './identity-accounts';
 import { IdentityRepository } from './identity.repository';
 import { CleanupUnverifiedProcessor } from './jobs/cleanup-unverified.processor';
 import { IdentitySchedules } from './jobs/identity-schedules';
@@ -12,6 +14,7 @@ import { IdentityEmailProcessor } from './jobs/identity-email.processor';
 import { LinkEmailHandler } from './jobs/link-email.handler';
 import { PasswordChangedEmailHandler } from './jobs/password-changed-email.handler';
 import { PasswordHasher } from './password-hasher';
+import { PanelCredentials } from './panel-credentials';
 import { PasswordResetService } from './password-reset.service';
 import { RegistrationService } from './registration.service';
 import { SessionController } from './session.controller';
@@ -35,14 +38,28 @@ import { VerificationService } from './verification.service';
     SessionCookie,
     VerificationService,
     RegistrationService,
+    CredentialsCheck,
     SignInService,
     PasswordResetService,
+    PanelCredentials,
+    IdentityAccounts,
   ],
   // гард создаётся в модуле-потребителе (`@UseGuards`) — ему нужны и зависимости гарда; сам класс репозитория
   // наружу не экспортируется из `index.ts`: другие модули identity-коллекции не читают
-  exports: [AuthGuard, AccessTokenVerifier, IdentityRepository],
+  // `PanelCredentials` и `IdentityAccounts` — узкий порт для модуля `panel` (ADR-0009)
+  exports: [AuthGuard, AccessTokenVerifier, IdentityRepository, PanelCredentials, IdentityAccounts],
 })
 export class IdentityModule {}
+
+/**
+ * Только чтения аккаунтов (`IdentityAccounts`) — для CLI панели: без HTTP-части, лимитера и Redis
+ * (`createApplicationContext`).
+ */
+@Module({
+  providers: [IdentityRepository, IdentityAccounts],
+  exports: [IdentityAccounts],
+})
+export class IdentityAccountsModule {}
 
 /** Задачи identity в worker: письма (подтверждение, сброс пароля, «Пароль изменён») и очистка неподтверждённых. */
 @Module({
