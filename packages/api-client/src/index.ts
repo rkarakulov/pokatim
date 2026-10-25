@@ -6,6 +6,7 @@ import {
   HealthResponse,
   OnboardingStatus,
   PasswordResetLinkInfo,
+  ProfileView,
   RefreshSessionResponse,
   RegisterResponse,
   RegistrationPollResponse,
@@ -123,6 +124,13 @@ export function createApiClient({
       request(
         '/v1/profile/onboarding',
         OnboardingStatus,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Профиль своего пользователя (вход обязателен): ответы опроса, неизвестные коды отброшены. */
+    getProfile: (accessToken: string) =>
+      request(
+        '/v1/profile',
+        ProfileView,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
     /** Ответ опроса «Что вас привело?» (вход обязателен); повтор перезаписывает ответ. */
