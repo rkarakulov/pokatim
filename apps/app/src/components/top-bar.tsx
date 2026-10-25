@@ -1,13 +1,20 @@
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { textStyle, useTheme } from '@rkarakulov/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+interface TopBarProps {
+  /** вход в «Устройства» — иконка справа (место будущего аватара «Личная линия»); без обработчика иконки нет */
+  onOpenDevices?: () => void;
+}
 
 /**
- * Верхняя панель корня вкладки (`.topbar` прототипа): словесный знак продукта. Колокольчик и аватар «Личная линия» —
- * с блоками уведомлений и профиля; тогда же — кандидат в `@rkarakulov/ui` (R8 блока 02).
+ * Верхняя панель корня вкладки (`.topbar` прототипа): словесный знак продукта и иконка «Устройства» (часы: SF Symbols
+ * на iOS, Material Symbols на Android и web — `expo-symbols`). Колокольчик и аватар — с блоками уведомлений и профиля;
+ * тогда же — кандидат в `@rkarakulov/ui` (R8 блока 02).
  */
-export function TopBar() {
+export function TopBar({ onOpenDevices }: TopBarProps) {
   const theme = useTheme();
   return (
     <View testID="top-bar" style={styles.bar}>
@@ -18,6 +25,21 @@ export function TopBar() {
       >
         {t('home.wordmark')}
       </Text>
+      {onOpenDevices ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('devices.title')}
+          onPress={onOpenDevices}
+          hitSlop={space.s2}
+          style={styles.action}
+        >
+          <SymbolView
+            name={{ ios: 'applewatch', android: 'watch', web: 'watch' }}
+            size={size.icon}
+            tintColor={theme.text.primary}
+          />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -30,5 +52,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingLeft: size.gutter,
     paddingRight: space.s2,
+  },
+  action: {
+    minWidth: size.touchMin,
+    minHeight: size.touchMin,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

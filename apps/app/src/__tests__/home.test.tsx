@@ -63,7 +63,7 @@ beforeEach(() => {
   // таймеры идут сами (waitFor работает), «сейчас» — фиксированное
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
-  useOnboardingStore.setState({ survey: 'completed', location: 'done' });
+  useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
   getProfile.mockResolvedValue({ rideReasons: [] });
   listRaces.mockResolvedValue(racePage(race));
   listCalendar.mockResolvedValue(calendarPage(start));

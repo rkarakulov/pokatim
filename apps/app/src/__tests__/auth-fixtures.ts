@@ -51,12 +51,22 @@ export function storeSession(value: Session = session) {
 /** Вошедший пользователь без корневого layout: вкладки рендерят контент только при известной сессии и пройденном онбординге. */
 export const signInForTest = () => {
   useSessionStore.setState({ status: 'signedIn', session });
-  useOnboardingStore.setState({ survey: 'completed', location: 'done' });
+  useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
 };
 
-/** Опрос аккаунта `userId` уже пройден (кеш устройства, привязан к владельцу сессии): сервер не спрашивается. */
-export function storeSurveyCompleted(userId = USER_A) {
-  secureStore().set('pokatim.onboarding', JSON.stringify({ surveyCompleted: true, userId }));
+/**
+ * Опрос аккаунта `userId` уже пройден (кеш устройства, привязан к владельцу сессии). Шаг устройств — тоже
+ * (`devicesStepCompleted`), если не сказано иное: тогда сервер не спрашивается вовсе.
+ */
+export function storeSurveyCompleted(userId = USER_A, { devicesStepCompleted = true } = {}) {
+  secureStore().set(
+    'pokatim.onboarding',
+    JSON.stringify({
+      surveyCompleted: true,
+      userId,
+      ...(devicesStepCompleted ? { devicesStepCompleted: true } : {}),
+    }),
+  );
 }
 
 /** Регистрация, начатая прошлым запуском (токен жив). */

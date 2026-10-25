@@ -13,10 +13,18 @@ export const securityHeaders: Readonly<Record<string, string>> = {
 };
 
 /**
- * Пути с токеном из письма (`/auth/verify/<token>`, `/auth/reset/<token>`): без `Referer` даже к своему origin —
- * запросы страницы к API (прод — тот же origin) иначе несли бы полный URL с токеном.
+ * Пути с токеном в URL: ссылки из письма (`/auth/verify/<token>`, `/auth/reset/<token>`) и возврат из авторизации
+ * устройства (`/devices/return?…&t=<тикет>`): без `Referer` даже к своему origin — запросы страницы к API (прод — тот
+ * же origin) иначе несли бы полный URL с токеном.
  */
-const TOKEN_PATH_PREFIX = '/auth/';
+const TOKEN_PATH_PREFIXES = ['/auth/', '/devices/return'] as const;
+
+const isTokenPath = (path: string) =>
+  TOKEN_PATH_PREFIXES.some((prefix) =>
+    prefix.endsWith('/')
+      ? path.startsWith(prefix)
+      : path === prefix || path.startsWith(`${prefix}/`),
+  );
 
 /** Хешированные бандлы Expo: имя меняется с содержимым — кешируются навсегда. */
 const IMMUTABLE_PREFIX = '/_expo/static/';
@@ -34,7 +42,7 @@ export function createWebServer({ dist, render }: WebServerOptions): express.Exp
 
   app.use((req, res, next) => {
     res.set(securityHeaders);
-    if (req.path.startsWith(TOKEN_PATH_PREFIX)) res.set('Referrer-Policy', 'no-referrer');
+    if (isTokenPath(req.path)) res.set('Referrer-Policy', 'no-referrer');
     next();
   });
 

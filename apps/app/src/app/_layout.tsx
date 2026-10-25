@@ -91,15 +91,19 @@ export default function RootLayout() {
             signedIn
               ? step === 'location'
                 ? '/location'
-                : '/survey'
+                : step === 'devices'
+                  ? '/devices'
+                  : '/survey'
               : returning
                 ? '/sign-in'
                 : '/register'
           }
         >
           <Stack.Screen name="(tabs)" />
+          {/* «Устройства» (вход — иконка верхней панели): тот же гард, что у вкладок; скелетон — `settings/_layout` */}
+          <Stack.Screen name="settings" />
         </Stack.Protected>
-        {/* шаги онбординга после входа: опрос → геопозиция → Главная; пока сессия или шаг неизвестны — скелетон
+        {/* шаги онбординга после входа: опрос → геопозиция → устройства → Главная; пока сессия или шаг неизвестны — скелетон
             (SSR отдаёт HTML оболочки, а не пустую страницу редиректа) */}
         <Stack.Protected
           guard={isSessionPending(sessionStatus) || (signedIn && step !== 'done')}
@@ -113,6 +117,9 @@ export default function RootLayout() {
         {/* публичные экраны вне гардов: ссылка из письма — и до входа, и на другом устройстве */}
         <Stack.Screen name="auth/verify/[token]" />
         <Stack.Screen name="auth/reset/[token]" />
+        {/* возврат из авторизации устройства (web — переход страницы, native — холодный старт по ссылке): и из шага
+            онбординга, и из «Устройств»; вход экран проверяет сам */}
+        <Stack.Screen name="devices/return" />
         <Stack.Screen name="ui-kit" />
         <Stack.Screen name="status" />
       </Stack>

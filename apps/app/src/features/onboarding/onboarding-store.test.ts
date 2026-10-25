@@ -60,4 +60,20 @@ describe('стор онбординга: кеш опроса и поздние �
     expect(cache()).toBeUndefined();
     expect(useOnboardingStore.getState().survey).toBe('unknown');
   });
+
+  it('completeDevicesStep после смены аккаунта — ни кеша, ни «пройден» для нового владельца', async () => {
+    signIn(liveSessionB);
+    await useOnboardingStore.getState().completeDevicesStep('not-the-current-owner');
+    expect(cache()).toBeUndefined();
+    expect(useOnboardingStore.getState().devices).toBe('unknown');
+  });
+
+  it('статус без поля шага (старый API) — шаг пропущен и не кешируется: следующий запуск спросит сервер', async () => {
+    signIn();
+    status.mockResolvedValueOnce({ surveyCompleted: true });
+    await useOnboardingStore.getState().hydrate();
+
+    expect(useOnboardingStore.getState().devices).toBe('done');
+    expect(JSON.parse(cache() ?? '{}')).not.toHaveProperty('devicesStepCompleted');
+  });
 });
