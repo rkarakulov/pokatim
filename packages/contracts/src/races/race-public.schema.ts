@@ -71,3 +71,19 @@ export type RacePage = z.infer<typeof RacePage>;
 /** `GET /v1/seasons/current` — сезон, в который попадает «сейчас», или `null`. */
 export const CurrentSeasonResponse = z.object({ season: SeasonCard.nullable() });
 export type CurrentSeasonResponse = z.infer<typeof CurrentSeasonResponse>;
+
+/** `GET /v1/seasons` — все сезоны (их десятки), новые сверху. Публично (Q14 admin-02); `items` оставляет путь к курсору. */
+export const SeasonList = z.object({ items: z.array(SeasonCard) });
+export type SeasonList = z.infer<typeof SeasonList>;
+
+/**
+ * `GET /v1/seasons/:id/races?cursor&limit` → `RacePage`: опубликованные и отменённые гонки сезона по концу окна
+ * (определение сезона), возрастание. Отдельная схема, не `scope` в `RaceListQuery` (R2). `GET /v1/seasons/:id` →
+ * `SeasonCard`; неизвестный сезон — 404.
+ */
+export const SeasonRaceListQuery = z.strictObject({
+  ...PageQuery.shape,
+  limit: z.coerce.number().int().min(1).max(RACE_LIST_MAX_LIMIT).default(20),
+  cursor: PageCursor.optional(),
+});
+export type SeasonRaceListQuery = z.infer<typeof SeasonRaceListQuery>;

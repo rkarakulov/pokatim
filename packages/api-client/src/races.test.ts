@@ -193,4 +193,28 @@ describe('приложение: публичное чтение без Authoriza
     const missing = app(404, { code: 'NOT_FOUND', message: 'Не найдено' });
     await expect(missing.api.getRace(ID)).rejects.toMatchObject({ status: 404 });
   });
+
+  it('сезоны: список, сезон по id, гонки сезона — путь, encodeURIComponent, без токена', async () => {
+    const card = { id: ID, name: 'Сезон 2026', startsOn: '2026-04-01', endsOn: '2026-10-31' };
+    const list = app(200, { items: [{ ...card, phase: 'archived' }] });
+    await expect(list.api.listSeasons()).resolves.toEqual({
+      items: [{ ...card, phase: 'unknown' }],
+    });
+    const one = app(200, { ...card, phase: 'current' });
+    await expect(one.api.getSeason('a/b')).resolves.toMatchObject({ phase: 'current' });
+    const races = app(200, { items: [], nextCursor: null });
+    await races.api.listSeasonRaces(ID, { cursor: 'c 1', limit: 5 });
+    const first = app(200, { items: [], nextCursor: null });
+    await first.api.listSeasonRaces(ID);
+    expect([list, one, races, first].map((client) => client.calls[0]?.url)).toEqual([
+      'https://api.test/v1/seasons',
+      'https://api.test/v1/seasons/a%2Fb',
+      `https://api.test/v1/seasons/${ID}/races?cursor=c+1&limit=5`,
+      `https://api.test/v1/seasons/${ID}/races`,
+    ]);
+    for (const client of [list, one, races, first]) {
+      expect(client.calls[0]?.method).toBe('GET');
+      expect(client.calls[0]?.headers.has('authorization')).toBe(false);
+    }
+  });
 });

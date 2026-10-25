@@ -7,13 +7,16 @@ import {
   type RaceDetail,
   type RaceListQuery,
   type RacePage,
+  type SeasonCard,
+  type SeasonList,
+  type SeasonRaceListQuery,
   UtcMinute,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
-import type { RaceDoc } from './races.collection';
+import type { RaceDoc, SeasonDoc } from './races.collection';
 import { RACE_POLICY, racePhase, seasonPhase } from './races.policy';
 import { type InstantRange, RacesRepository } from './races.repository';
 
@@ -22,6 +25,17 @@ function monthRange(month: string): InstantRange {
   const first = `${month}-01`;
   const next = addLocalDays(`${month}-28`, 4).slice(0, 7);
   return { startsAt: minskDayStartUtc(first), endsBefore: minskDayStartUtc(`${next}-01`) };
+}
+
+/** Сезон приложения: только поля `SeasonCard`, фаза по `now`. */
+function seasonCard(season: SeasonDoc, now: Date): SeasonCard {
+  return {
+    id: season._id,
+    name: season.name,
+    startsOn: season.startsOn,
+    endsOn: season.endsOn,
+    phase: seasonPhase(season, now),
+  };
 }
 
 /**
@@ -69,16 +83,40 @@ export class RacesPublicService {
   async currentSeason(): Promise<CurrentSeasonResponse> {
     const now = this.clock.now();
     const season = await this.repository.seasonCovering(now);
+    return { season: season ? seasonCard(season, now) : null };
+  }
+
+  /** Все сезоны новыми сверху (их десятки — без пагинации). Статуса публикации у сезона нет (Q5 admin-02). */
+  async listSeasons(): Promise<SeasonList> {
+    const now = this.clock.now();
     return {
-      season: season
-        ? {
-            id: season._id,
-            name: season.name,
-            startsOn: season.startsOn,
-            endsOn: season.endsOn,
-            phase: seasonPhase(season, now),
-          }
-        : null,
+      items: (await this.repository.listSeasons()).map((season) => seasonCard(season, now)),
+    };
+  }
+
+  async getSeason(id: string): Promise<SeasonCard> {
+    const season = await this.repository.findSeason(id);
+    if (!season) throw domainError('NOT_FOUND', 404);
+    return seasonCard(season, this.clock.now());
+  }
+
+  /** Гонки сезона по концу окна. Сначала сезон (неизвестный — 404 и с мусорным курсором), потом курсор (400). */
+  async listSeasonRaces(id: string, query: SeasonRaceListQuery): Promise<RacePage> {
+    if (!(await this.repository.findSeason(id))) throw domainError('NOT_FOUND', 404);
+    const after = query.cursor ? decodeCursor(query.cursor, UtcMinute) : null;
+    const docs = await this.repository.listSeasonRacesPublic(
+      id,
+      after ? { k: new Date(after.k), id: after.id } : null,
+      query.limit + 1,
+    );
+    const page = docs.slice(0, query.limit);
+    const last = page.at(-1);
+    return {
+      items: await this.cards(page, this.clock.now()),
+      nextCursor:
+        docs.length > query.limit && last
+          ? encodeCursor(last.windowEndsAt.toISOString(), last._id)
+          : null,
     };
   }
 

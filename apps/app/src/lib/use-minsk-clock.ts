@@ -3,11 +3,11 @@ import { focusManager, onlineManager } from '@tanstack/react-query';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
 /**
- * «Сейчас» для подписей Главной («До старта N дней», «закрывается сегодня»). Пересчитывается, когда пришли данные
+ * «Сейчас» для подписей по Минску (Главная, вкладка «Гонки»: «До старта N дней», «закрывается сегодня»). Пересчитывается, когда пришли данные
  * (`dataUpdatedAt` — и при том же ответе после refetch), при возврате в фокус и в полночь по Минску на открытом
  * экране: подписи не остаются вчерашними (ревью pass 1).
  */
-export function useHomeClock(dataUpdatedAt: readonly number[]): Date {
+export function useMinskClock(dataUpdatedAt: readonly number[]): Date {
   const [now, setNow] = useState(() => new Date());
   const updated = dataUpdatedAt.join(',');
   const [seen, setSeen] = useState(updated);
@@ -42,3 +42,18 @@ export function useIsOnline(): boolean {
     () => true,
   );
 }
+
+/**
+ * «Сейчас» публичного экрана с SSR: `null` на сервере и при гидрации web (HTML совпадает с гидрацией — без «сегодня /
+ * завтра»), затем — как `useMinskClock`.
+ */
+export function useMinskClockAfterMount(dataUpdatedAt: readonly number[]): Date | null {
+  const now = useMinskClock(dataUpdatedAt);
+  // гидрация web берёт серверный снимок (`false`), затем клиентский; native не гидрирует — сразу `true`
+  const mounted = useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
+  return mounted ? now : null;
+}
+
+const subscribeNever = () => () => undefined;
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;

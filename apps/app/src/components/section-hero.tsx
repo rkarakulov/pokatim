@@ -1,6 +1,6 @@
 import { size, space, stroke } from '@pokatim/design-tokens';
 import { textStyle, useTheme } from '@rkarakulov/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export interface SectionHeroProps {
   /** Кикер героя («Окно гонки», «Ближайший старт»). */
@@ -10,23 +10,27 @@ export interface SectionHeroProps {
   title: string;
   /** Строки меты под героем (дистанция, покрытия, строка жизненного цикла). */
   meta?: readonly string[];
+  /** Переход в карточку объекта (блок 03): блок героя — ссылка, метка для скринридера та же. */
+  onPress?: () => void;
 }
 
 /**
  * Типографский герой раздела Главной (`.hero.fb-type` прототипа): кикер → дата → название → линия 1 px, под ним —
  * мета. Обложек нет (нет `media`), поэтому всегда типографский; вариант с фото и скримом — кандидат `HeroCard` в
  * `@rkarakulov/ui` (R8 блока 02). Ставится в колонку с полями `gutter`: блок героя выходит во всю ширину экрана.
- * Не нажимается (Q6): для скринридера — один элемент «кикер. название. даты».
+ * Для скринридера — один элемент «кикер. название. даты»; с `onPress` — ссылка (роль `link`), без него не нажимается.
  */
-export function SectionHero({ kicker, date, title, meta = [] }: SectionHeroProps) {
+export function SectionHero({ kicker, date, title, meta = [], onPress }: SectionHeroProps) {
   const theme = useTheme();
   const dateText = date.unit ? `${date.value} ${date.unit}` : date.value;
+  const Block = onPress ? Pressable : View;
 
   return (
     <View>
-      <View
+      <Block
         accessible
         accessibilityLabel={`${kicker}. ${title}. ${dateText}`}
+        {...(onPress ? { accessibilityRole: 'link' as const, onPress } : {})}
         style={[styles.hero, { backgroundColor: theme.surface.raised }]}
       >
         <Text style={[textStyle('label'), { color: theme.text.primary }]}>{kicker}</Text>
@@ -45,7 +49,7 @@ export function SectionHero({ kicker, date, title, meta = [] }: SectionHeroProps
           testID="section-hero-rule"
           style={[styles.rule, { backgroundColor: theme.text.primary }]}
         />
-      </View>
+      </Block>
       {meta.length > 0 ? (
         <View style={styles.meta}>
           {meta.map((line) => (

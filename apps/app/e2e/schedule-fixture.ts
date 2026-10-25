@@ -7,7 +7,8 @@ import { verificationLink } from './mailpit';
 import { apiProcessEnv } from './project';
 import { API_URL } from './urls';
 
-// Данные Главной для смоука с API (AC8 блока 02): сотрудник-админ публикует через API панели гонку и старт календаря
+// Данные расписания для смоука с API (Главная — AC8 блока 02, «Гонки и сезон» — блок 03): сотрудник-админ публикует
+// через API панели гонки и старт календаря
 // в далёком году — ближайшие реальные даты dev-БД не засоряются, сезон этого года — один на все прогоны (не
 // пересекается с настоящими и с годами смоука панели 3000–7999). После проверки гонка отменяется, старт снимается
 // с публикации: в публичных списках прогоны не копятся. Запросы — из Node, без Origin/Sec-Fetch-Site (CSRF их
@@ -129,43 +130,64 @@ interface Versioned {
   version: number;
 }
 
+type Panel = Awaited<ReturnType<typeof panelSession>>;
+
+/** Сезон года смоука: первый прогон создаёт, дальше — тот же (весь год `HOME_FIXTURE_YEAR`); id. */
+async function ensureFixtureSeason(panel: Panel): Promise<string> {
+  const year = HOME_FIXTURE_YEAR;
+  const { items: seasons } = (await panel.get('/v1/admin/seasons')) as {
+    items: { id: string; startsOn: string; endsOn: string }[];
+  };
+  const mid = `${year}-06-02`;
+  const existing = seasons.find(({ startsOn, endsOn }) => startsOn <= mid && mid <= endsOn);
+  if (existing) return existing.id;
+  const created = (await panel.post(
+    '/v1/admin/seasons',
+    { name: `Сезон смоука Главной ${year}`, startsOn: `${year}-01-01`, endsOn: `${year}-12-31` },
+    201,
+  )) as Versioned;
+  return created.id;
+}
+
+/** Опубликовать гонку года смоука (окно — по Минску тот же день, 12:00 UTC); id и версия. */
+async function publishRace(
+  panel: Panel,
+  body: { title: string; bikeClass: string; startsAt: string; endsAt: string; protocolAt: string },
+): Promise<Versioned> {
+  const draft = (await panel.post(
+    '/v1/admin/races',
+    {
+      title: body.title,
+      bikeClass: body.bikeClass,
+      surfaces: ['gravel'],
+      distanceKm: 62,
+      description: 'Смоук расписания.',
+      windowStartsAt: body.startsAt,
+      windowEndsAt: body.endsAt,
+      protocolPlannedAt: body.protocolAt,
+    },
+    201,
+  )) as Versioned;
+  return (await panel.post(`/v1/admin/races/${draft.id}/publish`, {
+    version: draft.version,
+  })) as Versioned;
+}
+
 /** Публикует гонку и старт календаря `HOME_FIXTURE_YEAR` от имени сотрудника смоука. */
 export async function publishHomeData(request: APIRequestContext): Promise<PublishedHomeData> {
   const run = Date.now();
   const year = HOME_FIXTURE_YEAR;
   const panel = await panelSession(request);
-
-  // сезон года смоука: первый прогон создаёт, дальше — тот же
-  const { items: seasons } = (await panel.get('/v1/admin/seasons')) as {
-    items: { startsOn: string; endsOn: string }[];
-  };
-  const mid = `${year}-06-02`;
-  if (!seasons.some(({ startsOn, endsOn }) => startsOn <= mid && mid <= endsOn)) {
-    await panel.post(
-      '/v1/admin/seasons',
-      { name: `Сезон смоука Главной ${year}`, startsOn: `${year}-01-01`, endsOn: `${year}-12-31` },
-      201,
-    );
-  }
+  await ensureFixtureSeason(panel);
 
   const raceTitle = `Коридор Главной ${run}`;
-  const draft = (await panel.post(
-    '/v1/admin/races',
-    {
-      title: raceTitle,
-      bikeClass: 'gravel',
-      surfaces: ['gravel'],
-      distanceKm: 62,
-      description: 'Смоук Главной.',
-      windowStartsAt: `${year}-06-01T09:00:00Z`,
-      windowEndsAt: `${year}-06-02T12:00:00Z`,
-      protocolPlannedAt: `${year}-06-05T12:00:00Z`,
-    },
-    201,
-  )) as Versioned;
-  const race = (await panel.post(`/v1/admin/races/${draft.id}/publish`, {
-    version: draft.version,
-  })) as Versioned;
+  const race = await publishRace(panel, {
+    title: raceTitle,
+    bikeClass: 'gravel',
+    startsAt: `${year}-06-01T09:00:00Z`,
+    endsAt: `${year}-06-02T12:00:00Z`,
+    protocolAt: `${year}-06-05T12:00:00Z`,
+  });
 
   const startTitle = `Старт Главной ${run}`;
   const start = (await panel.post(
@@ -196,6 +218,58 @@ export async function publishHomeData(request: APIRequestContext): Promise<Publi
       await panel.post(`/v1/admin/calendar/${start.id}/unpublish`, {
         version: start.version,
         reason: 'Смоук Главной: данные прогона снимаются после проверки.',
+      });
+    },
+  };
+}
+
+export interface PublishedRaceData {
+  seasonId: string;
+  race: { id: string; title: string };
+  cancelled: { id: string; title: string };
+  /** Отменить опубликованную гонку прогона (отменённая остаётся в «Завершённых» — как в проде). */
+  withdraw: () => Promise<void>;
+}
+
+/**
+ * Данные блока 03 (Гонки и сезон): в сезоне года смоука — опубликованная гонка и вторая, сразу отменённая
+ * («Неблагоприятные погодные условия»). После проверки опубликованная тоже отменяется.
+ */
+export async function publishRaceData(request: APIRequestContext): Promise<PublishedRaceData> {
+  const run = Date.now();
+  const year = HOME_FIXTURE_YEAR;
+  const panel = await panelSession(request);
+  const seasonId = await ensureFixtureSeason(panel);
+
+  const title = `Коридор гонок ${run}`;
+  const race = await publishRace(panel, {
+    title,
+    bikeClass: 'gravel',
+    startsAt: `${year}-07-01T09:00:00Z`,
+    endsAt: `${year}-07-03T12:00:00Z`,
+    protocolAt: `${year}-07-06T12:00:00Z`,
+  });
+  const cancelledTitle = `Отменённый коридор ${run}`;
+  const toCancel = await publishRace(panel, {
+    title: cancelledTitle,
+    bikeClass: 'mtb',
+    startsAt: `${year}-07-10T09:00:00Z`,
+    endsAt: `${year}-07-11T12:00:00Z`,
+    protocolAt: `${year}-07-14T12:00:00Z`,
+  });
+  await panel.post(`/v1/admin/races/${toCancel.id}/cancel`, {
+    version: toCancel.version,
+    reason: 'weather',
+  });
+
+  return {
+    seasonId,
+    race: { id: race.id, title },
+    cancelled: { id: toCancel.id, title: cancelledTitle },
+    withdraw: async () => {
+      await panel.post(`/v1/admin/races/${race.id}/cancel`, {
+        version: race.version,
+        reason: 'organizational',
       });
     },
   };

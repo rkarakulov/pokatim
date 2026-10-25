@@ -19,9 +19,11 @@ paths:
   `seasons` нет), `calendar` (календарь стартов, с гонками не связан).
 - Доменный модуль панели пишет журнал `PanelAudit.append(tx, { action, subject: { kind, id, label }, details })` —
   `label` — название на момент действия; имена сотрудников — порт `PanelDirectory` (не `panel_members`).
-- Публичное чтение (`/v1/races`, `/v1/seasons`, `/v1/calendar`) — отдельные контроллеры без гарда панели: только
-  опубликованное, без владельца и служебных полей, `@Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)`,
-  `PublicReadGuard` (IP-лимит `public-read`), курсор — `src/page-cursor.ts`. Мутаций без гарда нет.
+- Публичное чтение (`/v1/races`, `/v1/seasons` — список, `current`, `:id`, `:id/races`; `/v1/calendar`) — отдельные
+  контроллеры без гарда панели; статический маршрут (`seasons/current`) объявляется до параметрического
+  (`seasons/:id`), иначе он уйдёт в pipe `Uuid` (400). Только опубликованное, без владельца и служебных полей,
+  `@Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)`, `PublicReadGuard` (IP-лимит `public-read`), курсор —
+  `src/page-cursor.ts`. Мутаций без гарда нет.
 - Новые эндпоинты панели (`/v1/admin/*`, модули следующих слайсов) — `@UseGuards(PanelGuard)` +
   `@RequirePermission(...)` + `@CurrentPanelUser()`; чувствительное действие пишет `PanelAudit.append(tx, …)` в
   транзакции действия. Всё — из `modules/panel/index.ts`; новое право — в конец `PERMISSIONS` контракта и в
