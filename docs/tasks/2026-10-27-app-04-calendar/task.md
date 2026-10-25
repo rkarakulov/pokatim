@@ -367,6 +367,26 @@ Q8 «Старт прошёл» после последнего дня по Ми�
 дисциплина с заглавной; Q16 `size.rowMin` (64) вместо 62 px до токена базы; Q17 OG только текстом. R1–R10 — по
 рекомендациям.
 
+**Реализация (coder, S1–S6).**
+- `ru.ts`: ключи `home.calendar.{heroKicker,empty,daysLeft,today,ongoing,registration}` перенесены в `calendar.*`
+  (старые удалены — перенос, а не дубль; блок удаления далеко от ключей PR #28 `devices.*`). Сверх Q12:
+  `calendar.detail.lineNoDiscipline` («Массовый старт · вне приложения» для `'unknown'`), `calendar.detail.startAtOnly`
+  («Старт в 8:00» без города и места), `calendar.detail.km` (единица стат-блока).
+- Время старта — без ведущего нуля часа («Старт в 8:00», как пример §3); дата с годом — `now = null`.
+- Карточка: кикер раздела «Календарь» — `Kicker` над героем; строка «{Дисциплина} · массовый старт · вне приложения»
+  — кикер `SectionHero` (у героя один кикер); для скринридера — «строка. название. дата».
+- Чипы «Дата» / «Город» до ответа — `FilterGroupSkeleton` (новый экспорт `components/filter-group.tsx`, с тестом; в
+  §5.1 не назван). Офлайн-старт (запрос на паузе) — группа скрыта, а не вечный скелетон.
+- Предел значений `CalendarQuery` — `toggleWithinLimit` (13-е значение не добавляется, [ASSUMPTION] §7).
+- `GET /v1/calendar/months`: мусор в БД отбрасывается `YearMonth.safeParse` в сервисе (не 500), как защита `cities`.
+- Исчезнувший месяц снимается с ключа запроса; выдача без месяца приходит из свежего кэша (без лишнего запроса).
+- Тест маршрутов: «Назад» после перехода из вкладки в jest без корневого layout не проверяется (артефакт стенда
+  `renderRouter`: вкладки — корень); «Назад» без истории — jest, «Назад» из вкладки — e2e в браузере.
+- `docs/product/races-and-seasons.md`: строки «карточка старта календаря — блок 09» в разделе блока 03 нет (была только
+  в task.md блока 03 — дописана ссылка); «блок результатов (блок 04)» там же — старая нумерация, не тронута.
+- E2E: опрос райдера прогона — «Календарь стартов»; фикстура `publishCalendarData` (город «Смоук», июнь 9001); новый
+  ожидаемый 404 — `UNKNOWN_START_ID` в `e2e/project.ts`.
+
 # 8.3 Security checklist
 
 Затронуто: **публичная ссылка** (карточка старта — SSR без входа), новый публичный эндпоинт и поле API, **внешние
@@ -615,7 +635,40 @@ app-foundation (кандидаты §5.1); доверенный IP web-серв�
 
 # 12. Outcome
 
-_Заполняет coder._
+**Сделано (S1–S6, ветка `feature/app-04-calendar` от `origin/develop` ffe35c0).**
+- **S1 contracts/api-client:** `CALENDAR_PHASES`, `CalendarPhase`, `phase` (`tolerantEnum`) в `CalendarStartCard`,
+  `CalendarMonths`, `CALENDAR_MONTHS_CAP = 24`; `api.listCalendarMonths()` (публично, без Bearer).
+- **S2 API:** `calendar.policy.ts` (`calendarPhase`), фаза в `card()`, `CalendarRepository.months` (агрегация,
+  многодневный — оба месяца, без месяцев раньше текущего, `$limit 24`), `GET /v1/calendar/months` до `:id`.
+- **S3 app (перенос):** `features/calendar/{format.ts,calendar-hero.tsx}` из Главной (тесты переехали без смены
+  ожиданий), `src/lib/filter-chips.ts`, `components/{calendar-list-row,stat-block}.tsx`,
+  `src/lib/open-external-url(.web).ts`.
+- **S4 вкладка:** `features/calendar/{filters,queries,calendar-feed}`, `(tabs)/calendar.tsx`.
+- **S5 карточка:** `src/app/calendar/[id].tsx` (loader, `generateMetadata`), `calendar-detail.tsx`,
+  `registration.ts`; корневой `Stack`; герой старта Главной → карточка.
+- **S6:** e2e (`publishCalendarData`, шаги карточки без входа, новой вкладки организатора и вкладки после входа;
+  неизвестный старт), документация §10. Миграций и env нет.
+
+**Проверки (2026-10-25, MongoDB RS 127.0.0.1:27117, Redis :6479).**
+- `TURBO_CONCURRENCY=1 pnpm check` (с `MONGO_URL_TEST`/`REDIS_URL_TEST`) — EXIT 0: format, lint, arch (583 modules,
+  без нарушений), typecheck, test `13 successful, 13 total`; app 528 tests, api 53 files, contracts 15, api-client 6.
+- Int (реальный MongoDB RS): фаза на границе 00:00 Минска (20:59:59Z / 21:00:00Z), `months` (многодневный через
+  границу, начавшийся в прошлом месяце, снятые, прошедшие, 25 → 24, `Cache-Control`), порядок маршрутов, 429 на 301-м.
+- Миграции на чистой `pokatim_e2e_app04` — `0001 … 0009` применены (новых миграций у блока нет).
+- `pnpm build:web` — маршрут `/calendar/[id]` собран. `curl` production-сервера с API: `/calendar/<id>` — 200,
+  `<title>`/`og:title` — название, `og:description` «21 июня 9001 · Гравий · Смоук · 100 км», `og:url` =
+  `WEB_ORIGIN/calendar/<id>`, в HTML «Старт в 8:00 · Смоук» и «Регистрация у организатора», без e-mail /
+  `createdByUserId` / `cityKey` / `noindex`; `/calendar/not-a-uuid` — 200 + `noindex`; API остановлен — 200,
+  скелетон («Загрузка»), нейтральная мета без `robots`.
+- `E2E_API=1 playwright test` (API :3214, свой Mailpit :8225/:1225, БД `pokatim_e2e_app04`, web :8290/:8291) —
+  `17 passed (44.1s)`; без API — `13 passed, 4 skipped`. Новая вкладка организатора — `window.opener === null`.
+- `expo export -p android` — бандл собран (`entry-….hbc`, 4.4MB).
+
+**NOT VERIFIED** (ручной смоук человека): iOS/Android preview — «Регистрация у организатора» открывает системный
+браузер и возврат в приложение, `pokatim://calendar/<id>` из холодного старта и из фона (гость и вошедший), «назад»
+без истории на устройстве, подгрузка прокруткой (на e2e-БД < 20 стартов — покрыта jest), пояс устройства ≠ Минск,
+крупный шрифт, тёмная тема; iOS PWA (standalone) — ссылка в Safari; превью ссылки в Safari iOS / Telegram.
+Независимое ревью — не проводилось (шаг оркестратора).
 
 ---
 
