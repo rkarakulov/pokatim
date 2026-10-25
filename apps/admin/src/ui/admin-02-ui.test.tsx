@@ -8,6 +8,7 @@ import { Button } from './Button';
 import { ChipGroup } from './ChipGroup';
 import { ChoiceDialog } from './ChoiceDialog';
 import { DateTimeField } from './DateTimeField';
+import { SelectField } from './fields';
 import { DisabledReason, ReadonlyField } from './layout-parts';
 import { ToggleChip } from './ToggleChip';
 
@@ -229,5 +230,23 @@ describe('ToggleChip', () => {
     expect(chip.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(chip);
     expect(chip.getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+describe('SelectField', () => {
+  it('ширина закрытого поля — по самому длинному варианту (base-select меряет только выбранный)', () => {
+    render(
+      <SelectField
+        label="Статус"
+        options={[
+          { value: '', label: 'Все' },
+          { value: 'open', label: 'Регистрация открыта' },
+          { value: 'closed', label: 'Завершена' },
+        ]}
+      />,
+    );
+    const select = screen.getByRole('combobox', { name: 'Статус' });
+    expect(select.parentElement?.getAttribute('data-sizer')).toBe('Регистрация открыта');
+    expect(screen.queryAllByText('Регистрация открыта')).toHaveLength(1);
   });
 });
