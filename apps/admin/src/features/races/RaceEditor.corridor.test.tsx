@@ -223,14 +223,13 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
 
     const ready = route({ id: NEW_ROUTE_ID, title: 'Новый круг', distanceM: 62_049 });
     mocked.getRoute.mockResolvedValue(ready);
-    mocked.listRoutes.mockResolvedValue({
-      items: [summary({ id: NEW_ROUTE_ID, title: 'Новый круг', distanceM: 62_049 }), summary()],
-      nextCursor: null,
-    });
     await act(async () => {
       await queryClient.refetchQueries({ queryKey: ['admin', 'routes', 'item', NEW_ROUTE_ID] });
     });
+    // список готовых ещё старый — выбранный маршрут всё равно вариант поля
     await waitFor(() => expect(corridorSelect().value).toBe(NEW_ROUTE_ID));
+    expect(corridorSelect().selectedOptions[0]?.textContent).toBe('Новый круг');
+    await waitFor(() => expect(mocked.listRoutes).toHaveBeenCalledTimes(2));
     expect(screen.queryByText('Обрабатываем маршрут…')).toBeNull();
     await waitFor(() =>
       expect(text(screen.getByRole('status', { name: 'Дистанция, км' }).textContent)).toBe(

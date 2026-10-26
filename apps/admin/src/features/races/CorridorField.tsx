@@ -162,6 +162,10 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
   if (current && !items.some((route) => route.id === current.route.id)) {
     options.push({ value: current.route.id, label: current.route.title });
   }
+  // только что готовый маршрут — вариант сразу, до обновления списка
+  if (pending?.status === 'ready' && !options.some((option) => option.value === pending.id)) {
+    options.push({ value: pending.id, label: pending.title });
+  }
   const selectedTitle = options.find((option) => option.value === value)?.label ?? '';
   const failureText = failed?.failure ? t(`admin.routes.failure.${failed.failure}`) : undefined;
   const fieldError = failureText ?? error;
