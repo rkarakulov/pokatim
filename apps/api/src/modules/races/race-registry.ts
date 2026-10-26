@@ -19,6 +19,7 @@ const toRace = (doc: RaceDoc): RaceForResults => ({
   protocolPlannedAt: doc.protocolPlannedAt,
   corridor: doc.corridor ?? null,
   lockedAt: doc.lockedAt ?? null,
+  protocolPublishedAt: doc.protocolPublishedAt ?? null,
 });
 
 /** Реализация порта `RaceRegistry`: читает и пишет `races` только через `RacesRepository`. */
@@ -29,6 +30,15 @@ export class RaceRegistryService implements RaceRegistry {
   async admitEntry(tx: DbSession, raceId: string, now: Date): Promise<RaceForResults | null> {
     const doc = await this.repository.admitEntry(tx, raceId, now);
     return doc ? toRace(doc) : null;
+  }
+
+  async lockResults(tx: DbSession, raceId: string): Promise<RaceForResults | null> {
+    const doc = await this.repository.lockResults(tx, raceId);
+    return doc ? toRace(doc) : null;
+  }
+
+  markProtocolPublished(tx: DbSession, raceId: string, at: Date): Promise<boolean> {
+    return this.repository.markProtocolPublished(tx, raceId, at);
   }
 
   async get(raceId: string, tx?: DbSession): Promise<RaceForResults | null> {

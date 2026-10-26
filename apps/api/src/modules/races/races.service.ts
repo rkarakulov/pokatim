@@ -28,6 +28,7 @@ import {
   corridorDistanceKm,
   type FieldIssue,
   ownScope,
+  protocolPublished,
   raceEditable,
   racePhase,
   type RaceValues,
@@ -180,6 +181,7 @@ export class RacesService {
         publishedAt: null,
         cancelledAt: null,
         lockedAt: null,
+        protocolPublishedAt: null,
         version: 0,
       };
       await this.repository.insertRace(tx, doc);
@@ -317,7 +319,7 @@ export class RacesService {
     return this.presentOne(principal, race);
   }
 
-  /** Отмена опубликованной — только шаблонная причина (D-20), необратимо. */
+  /** Отмена опубликованной — только шаблонная причина (D-20), необратимо; после публикации протокола — нет (D-19). */
   async cancel(
     principal: PanelPrincipal,
     id: string,
@@ -325,13 +327,14 @@ export class RacesService {
   ): Promise<PanelRace> {
     const race = await this.transactions.run(async (tx) => {
       const current = await this.manageable(principal, id, tx);
-      if (current.status !== 'published') throw invalidState();
+      if (current.status !== 'published' || protocolPublished(current)) throw invalidState();
       if (current.version !== input.version) throw staleVersion();
       const now = this.clock.now();
       return this.transition(tx, principal, current, input.version, 'published', {
         action: 'race.cancelled',
         set: { status: 'cancelled', cancelReason: input.reason, cancelledAt: now, updatedAt: now },
         details: { cancelReason: input.reason },
+        guard: { protocolPublishedAt: null },
       });
     });
     return this.presentOne(principal, race);
@@ -363,9 +366,17 @@ export class RacesService {
       action: 'race.published' | 'race.cancelled';
       set: Partial<RaceDoc>;
       details?: { cancelReason: RaceCancelReason };
+      guard?: { protocolPublishedAt?: null };
     },
   ): Promise<RaceDoc> {
-    const updated = await this.repository.updateRace(tx, current._id, version, [from], change.set);
+    const updated = await this.repository.updateRace(
+      tx,
+      current._id,
+      version,
+      [from],
+      change.set,
+      change.guard,
+    );
     if (!updated) throw staleVersion();
     await this.audit.append(tx, {
       action: change.action,

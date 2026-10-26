@@ -22,6 +22,8 @@ export interface RaceForResults {
   protocolPlannedAt: Date;
   corridor: RaceCorridor | null;
   lockedAt: Date | null;
+  /** момент публикации протокола (race-results-05); `null` — не опубликован */
+  protocolPublishedAt: Date | null;
 }
 
 export interface RaceRegistry {
@@ -30,6 +32,14 @@ export interface RaceRegistry {
    * правкой и отменой гонки панелью). Не опубликована или не найдена — `null`.
    */
   admitEntry(tx: DbSession, raceId: string, now: Date): Promise<RaceForResults | null>;
+  /**
+   * Замок результатов гонки (race-results-05): запись `resultsVersion` в документ опубликованной или отменённой
+   * гонки — **первая** операция транзакций действий панели над результатами. Нет или черновик — `null`
+   * (отменённую вызывающий отклоняет сам).
+   */
+  lockResults(tx: DbSession, raceId: string): Promise<RaceForResults | null>;
+  /** Протокол опубликован (`protocolPublishedAt = at`): только опубликованная без протокола; иначе `false`. */
+  markProtocolPublished(tx: DbSession, raceId: string, at: Date): Promise<boolean>;
   /** Только `published` и `cancelled`. */
   get(raceId: string, tx?: DbSession): Promise<RaceForResults | null>;
   /** Гонка, видимая сотруднику (видимость — как в панели гонок); иначе `null`. */

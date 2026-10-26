@@ -41,6 +41,7 @@ const race = (overrides: Partial<RaceForResults> = {}): RaceForResults => ({
   protocolPlannedAt: new Date(ENDS.getTime() + 48 * HOUR),
   corridor: { routeId: 'route', widthM: 50, distanceM: 8000 },
   lockedAt: null,
+  protocolPublishedAt: null,
   ...overrides,
 });
 

@@ -22,6 +22,7 @@ import { routes } from './0013_routes';
 import { rides } from './0014_rides';
 import { RIDES_COLLECTIONS } from '../../modules/rides/rides.collection';
 import { results } from './0015_results';
+import { protocol } from './0016_protocol';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
 import { ROUTES_COLLECTIONS } from '../../modules/routes/routes.collection';
 import { TRACKS_COLLECTIONS } from '../../modules/tracks/tracks.collection';
@@ -77,6 +78,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0013_routes',
       '0014_rides',
       '0015_results',
+      '0016_protocol',
     ]);
   });
 
@@ -398,6 +400,56 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await races.findOne({ _id: 'locked-race' })).toEqual({ _id: 'locked-race', lockedAt });
     await races.deleteMany({ _id: { $in: ['old-race', 'locked-race'] } });
 
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
+  });
+
+  it('0016_protocol: коллекции протокола и индексы, бэкфилл races.protocolPublishedAt = null; повторный up — без изменений (AC13)', async () => {
+    const index = (
+      key: Record<string, unknown>,
+      unique = false,
+      partialFilterExpression: Record<string, unknown> | undefined = undefined,
+    ) => ({ key, unique, partialFilterExpression, expireAfterSeconds: undefined });
+    const expected = {
+      [RESULTS_COLLECTIONS.reviews]: {
+        race_attempt_reviews_race_idx: index({ raceId: 1, _id: 1 }),
+        race_attempt_reviews_attempt_idx: index({ attemptId: 1, _id: 1 }),
+      },
+      [RESULTS_COLLECTIONS.protocolRows]: {
+        race_protocol_rows_unique: index({ raceId: 1, revision: 1, entryId: 1 }, true),
+        race_protocol_rows_order_unique: index({ raceId: 1, revision: 1, order: 1 }, true),
+      },
+      [RESULTS_COLLECTIONS.recalculations]: {
+        race_recalculations_race_idx: index({ raceId: 1, _id: 1 }),
+        race_recalculations_revision_unique: index({ raceId: 1, revision: 1 }, true, {
+          revision: { $type: 'number' },
+        }),
+      },
+    };
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
+
+    const races = h.db.collection<{ _id: string; protocolPublishedAt?: unknown }>(
+      RACES_COLLECTIONS.races,
+    );
+    const publishedAt = new Date('2026-10-28T10:00:00Z');
+    await races.insertMany([
+      { _id: 'old-race' },
+      { _id: 'final-race', protocolPublishedAt: publishedAt },
+    ]);
+    await protocol.up(h.db);
+    await protocol.up(h.db);
+    expect(await races.findOne({ _id: 'old-race' })).toEqual({
+      _id: 'old-race',
+      protocolPublishedAt: null,
+    });
+    expect(await races.findOne({ _id: 'final-race' })).toEqual({
+      _id: 'final-race',
+      protocolPublishedAt: publishedAt,
+    });
+    await races.deleteMany({ _id: { $in: ['old-race', 'final-race'] } });
     for (const [name, indexes] of Object.entries(expected)) {
       expect(await indexesOf(name)).toEqual(indexes);
     }

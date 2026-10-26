@@ -64,6 +64,15 @@ export class ActivitySourceService implements ActivitySource {
     return this.refs(await this.repository.primaryActivitiesInRange(userId, from, to, limit));
   }
 
+  countUnprocessed(
+    userIds: readonly string[],
+    from: Date,
+    before: Date,
+    tx?: DbSession,
+  ): Promise<number> {
+    return this.repository.countUnprocessedUploads(userIds, from, before, tx);
+  }
+
   async readSource(activityId: string): Promise<{ bytes: Uint8Array; format: TrackFormat } | null> {
     const activity = await this.repository.findActivity(activityId);
     const upload = activity ? await this.repository.findUpload(activity.uploadId) : undefined;

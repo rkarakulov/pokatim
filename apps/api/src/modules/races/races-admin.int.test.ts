@@ -391,6 +391,67 @@ describe('отмена (AC6)', () => {
   });
 });
 
+describe('протокол опубликован — фаза final (race-results-05: AC6, RC-6, RC-8)', () => {
+  it('панель и публичная карточка — final; только описание (200), прочее — FIELD_LOCKED; отмена — 409 RACE_INVALID_STATE', async () => {
+    const { org } = await setup();
+    const race = await publishedRace(h, org.token);
+    // 28.10 12:00 — окно закрыто; протокол опубликован (подготовка: публикацию проверяет results)
+    const [token] = await travel(6 * DAY, 'org@example.by');
+    await racesDb(h).races.updateOne(
+      { _id: race.id },
+      { $set: { protocolPublishedAt: h.clock.now() } },
+    );
+    const final = parse((await panelCall(h, token, 'GET', `${RACES}/${race.id}`)).body);
+    expect(final).toMatchObject({
+      phase: 'final',
+      editable: { fields: ['description'], canCancel: false, reasons: ['results_final'] },
+    });
+    expect(final.editable.reasons).not.toContain('window_closed');
+    const card = await panelCall(h, undefined, 'GET', `/v1/races/${race.id}`);
+    expect((card.body as { phase: string }).phase).toBe('final');
+
+    const edit = (body: Record<string, unknown>) =>
+      panelCall(h, token, 'POST', `${RACES}/${race.id}`, { version: final.version, ...body });
+    expect(
+      fieldCodes((await edit({ protocolPlannedAt: minskWallTimeToUtc('2026-10-31T12:00') })).body),
+    ).toEqual(['protocolPlannedAt:FIELD_LOCKED']);
+    const described = await edit({ description: 'Итоги опубликованы' });
+    expect(described.status).toBe(200);
+    const version = parse(described.body).version;
+
+    const cancel = await panelCall(h, token, 'POST', `${RACES}/${race.id}/cancel`, {
+      version,
+      reason: 'weather',
+    });
+    expect(cancel.status).toBe(409);
+    expect(cancel.body).toMatchObject({ code: 'RACE_INVALID_STATE' });
+    expect((await racesDb(h).races.findOne({ _id: race.id }))?.status).toBe('published');
+    expect(await auditOf('race.cancelled')).toHaveLength(0);
+  });
+
+  it('публикация между чтением гонки и записью отмены — повтор транзакции видит протокол, 409', async () => {
+    const { org } = await setup();
+    const race = await publishedRace(h, org.token);
+    const [token] = await travel(6 * DAY, 'org@example.by');
+    // публикация «между чтением и записью» отмены: первая запись сервиса видит протокол
+    const repository = h.app.get(RacesRepository, { strict: false });
+    const original = repository.updateRace.bind(repository);
+    vi.spyOn(repository, 'updateRace').mockImplementationOnce(async (...args) => {
+      await racesDb(h).races.updateOne(
+        { _id: race.id },
+        { $set: { protocolPublishedAt: h.clock.now() } },
+      );
+      return original(...args);
+    });
+    const cancel = await panelCall(h, token, 'POST', `${RACES}/${race.id}/cancel`, {
+      version: race.version,
+      reason: 'weather',
+    });
+    expect(cancel.status).toBe(409);
+    expect((await racesDb(h).races.findOne({ _id: race.id }))?.status).toBe('published');
+  });
+});
+
 describe('журнал и список (AC9, AC11)', () => {
   it('откат действия — без записи журнала', async () => {
     const { org } = await setup();
