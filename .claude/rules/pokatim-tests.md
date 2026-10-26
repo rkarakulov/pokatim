@@ -15,6 +15,10 @@ paths:
   `CORRIDOR_ENGINE_VERSION`; длинный трек (200 000 точек) — в памяти теста, не коммитится. Сторож версии —
   `corridor-golden.json` (полный результат всех фикстур): изменился — поднять версию и перезаписать
   `UPDATE_CORRIDOR_GOLDEN=1`.
+- Результаты гонок (race-results-03) — int на реальном MongoDB: заезд эталона сдвигается во времени в окно гонки
+  стенда (`rideGpx` из `apps/api/test/results.ts`), маршрут — линия из `corridor-expected.json` в `route_geometries`;
+  проверка — `AttemptCheckProcessor.check` напрямую, события — `resultsWorker(h)`. Отрицательные доказательства —
+  `admitEntry` без записи, запрос без `lockEntry`, без `checkRevision`, без семафора потоков.
 - Гео-запросы MongoDB (`2dsphere`) — только интеграционные тесты на реальной БД; геометрия `packages/tracks` —
   unit на фикстурах.
 - Гонки identity (MongoDB, R9): **ворота** — `vi.spyOn(repository, 'lockUser…')` приостанавливает операцию между

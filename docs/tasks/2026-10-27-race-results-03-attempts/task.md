@@ -609,7 +609,30 @@ export const RESULTS_POLICY = {
 - A13 — повторной заявки после отмены нет.
 - A14 — V-12 фиксирует окно целиком (продление тоже запрещено).
 
-**Отклонения реализации:** _дополняются по ходу._
+**Отклонения реализации (мелкие, без смены контрактов §11):**
+- `RaceAttemptDoc.activity` — снимок сводки активности (`startedAt`, `source`, `elapsedSec`, `distanceM`; активность
+  неизменяема после разбора): «моё участие» не читает `tracks` на каждую попытку (в порту нет пакетного чтения).
+- `checkRevision` первой постановки — `1`; `summary.total` — все попытки заявки, включая снятые (предел 30 держит
+  объём документов).
+- `ResultsRepository.lockEntryOf(raceId, userId)` — поиск и замок своей заявки одной записью (первая операция
+  транзакций отмены и явной попытки); `failAttempt` — финальный провал зависшей проверки.
+- Модуль: `ResultsCoreModule` (репозиторий, приём, чтение, перепроверка; реэкспорт ядер `races`/`routes`/`tracks`) +
+  `ResultsModule` (HTTP) + `ResultsWorkerModule` (процессоры) — как ядра других модулей.
+- Отмена участия и явная попытка на **отменённой** гонке: `409 RACE_WITHDRAW_CLOSED` и `409 ATTEMPT_UPLOAD_CLOSED`
+  (`details.reason: 'cancelled'`); в `actions.reasons` — `cancelled`.
+- Коды потока `no_track`/`no_timestamps`/`too_many_points` при проверке (файл уже разобран — не ожидаются) →
+  `failed: unreadable` (в `ATTEMPT_FAILURES` их нет).
+- Граница A5 для явной попытки — время приёма **запрошенной** загрузки/активности; для автоматической — основной
+  активности группы (предфильтр).
+- `RaceRegistry.findForPanel` отдаёт и черновик (видимость как в панели гонок): сводка черновика — нули.
+- `PanelRaceResults.counts.attempts` — все статусы (zod 4: `z.record` по enum — исчерпывающий).
+- `CORRIDOR_ENGINE_VERSION` для сводки панели — из `@pokatim/tracks/parse` в API (вход уже загружается API:
+  `track-ingest.ts`); движок в API не вызывается.
+- Панель: под формой — баннер каждой причины правки (`window_open` и `entries_locked` вместе), не одной.
+- AC13 «`far-away` скрыта для auto»: предфильтр рамки не создаёт auto-попытку для `far-away.gpx` (далеко от маршрута);
+  скрытый автоматический отказ без сегмента показан на `mid-start.gpx` (`no_start`), `far-away` — явная (AC8).
+- Отрицательное доказательство (2) — см. §12: без `lockEntry` в вердикте AC17 остаётся зелёным (конфликт записи
+  `refreshEntry` в документ заявки), замок оставлен — он нужен запросу (AC9) и единообразен.
 
 # 8.3 Security checklist
 
@@ -1080,4 +1103,41 @@ export const PARSE_THREADS_MAX = 1;
 
 # 12. Outcome
 
-_Заполняет реализация._
+**Сделано (точки A, B, C):** контракты `results` (приложение — `tolerantEnum`, панель — строгие), api-client, i18n;
+`packages/tracks` — `CorridorError`, `corridorGateRadiusM`, `boundsOf`/`boundsNear` (golden движка не менялся);
+`parse-thread` — `analyzeAttempt`, `corridor_invalid`, семафор `PARSE_THREADS_MAX = 1`; `races` — `lockedAt`, V-12,
+`CORRIDOR_GATES_OVERLAP`, `RacesCoreModule` + порт `RaceRegistry`; `routes` — порт `RouteGeometry`; `tracks` — события
+`activity-ready/-removed`, порт `ActivitySource`; модуль `results` (заявка, отмена, моё участие, явные попытки,
+кандидаты, публичная таблица, панель только чтения, `results-intake`, `attempt-check`, `results-maintenance`,
+`ResultsRecheck`); миграция `0015_results`; панель — причина `entries_locked` и текст ошибки поля; документы §10.
+
+**Отрицательные доказательства** (механизм убран временно, тест — по результату, не по таймауту):
+1. `admitEntry` только читает (`findOne`) — AC3 красный: «заявка ↔ правка коридора» — `expected 200 to be 400`
+   (правка коридора прошла при существующей заявке); «заявка ↔ отмена» — `expected [201, undefined] to deeply equal
+   [409, 'cancelled']`; AC2 — `expected [] to include 'entries_locked'`.
+2. Без `lockEntry` в вердикте (замок — чтение) — AC17 **остался зелёным**: каждая транзакция вердикта пишет документ
+   заявки (`refreshEntry`: сводка меняется при любом вердикте), и MongoDB ловит конфликт записи на нём — повтор видит
+   обе попытки. Write skew в вердиктах невозможен и без замка; `lockEntry` оставлен (первая операция по
+   `pokatim-db.md`, единообразно с запросами, где запись может быть пустой). Тест AC17 — проверка результата гонки
+   двух вердиктов, не отрицательное доказательство.
+3. Без `lockEntry` в запросе по загрузке — AC9 красный: `expected undefined to match object { origin: 'explicit', … }`
+   (запрос навсегда ждёт файл, попытки нет).
+4. Без `checkRevision` в фильтрах захвата и записи — AC14 красный: `expected 'counted' to be 'skipped'` (старая
+   ревизия проверила и записала поверх новой).
+5. Без семафора (`activeThreads < Infinity`) — тест семафора красный: `expected { active: 3, waiting: 0 } to deeply
+   equal { active: 1, waiting: 2 }`.
+
+**Проверки** (изолированные БД: `MONGO_URL_TEST=…/pokatim_rr03_test`, `REDIS_URL_TEST=…:6479/11`):
+- `TURBO_CONCURRENCY=1 pnpm check` — EXIT 0: format, lint, arch (782 модуля), typecheck; тесты — contracts 160,
+  tracks 202 (golden без изменений), api-client 60, i18n 6, design-tokens 114, api 696 (75 файлов, unit + int),
+  admin 151, app — зелёные.
+- `db:migrate` дважды на чистой `pokatim_rr03_mig`: первый — `…, 0013_routes, 0015_results`, второй — «новых
+  миграций нет»; int `0015_results` — индексы, бэкфилл `lockedAt: null`, повторный `up` без изменений.
+- Новые int: `results-entries` (10), `results-attempts` (14), `results-check` (11), `results-read` (5),
+  `races-entries-lock` (2), `activity-source` (6); регрессия `tracks`, `devices`, `routes`, `races` — без изменений
+  ожиданий (кроме `lockedAt: null` в фикстурах документов и ожидаемого списка кодов ошибок).
+- `expo export` — не запускался: `apps/app` не менялся (только пакеты contracts/api-client/i18n, typecheck и тесты
+  приложения зелёные). e2e — новых нет, не запускались.
+
+**Follow-up:** проверка плотности линии маршрута при разборе (`line too dense`) — `routes`; UI участия — слайс 04;
+раздел «Результаты» панели и запуск перепроверки — слайс 05.

@@ -25,6 +25,10 @@ paths:
   `CorridorInput` (`strictObject`, `routeId` — `Uuid`, `widthM` 20–200 шагом 5) или `null`; `distanceKm` с коридором
   не обязательна (правило сервера). `RaceDetail.corridor` — `{ widthM } | null`, **`.optional()`** (новая сборка со
   старым API — как без коридора); `PanelRace.corridor` обязателен (панель деплоится с API).
+- Участие и результаты (race-results-03): `src/results/results.schema.ts` — ответы приложения и публичная таблица,
+  `tolerantEnum`; `ATTEMPT_REJECTIONS` = коды движка (`CORRIDOR_REJECTIONS`) + `implausible`, совпадение держит
+  сторож в `apps/api`; публичная строка — `entryId`, место, ничья, время сегмента (без `userId`, активности, времени
+  суток, координат). `src/results/results-admin.schema.ts` — панель, строгие `z.enum`.
 - Треки и устройства (ADR-0011): `src/tracks/track-upload.schema.ts`, `src/devices/device.schema.ts` — статусы,
   причины, источники, провайдеры, проблемы подключения в ответах — `tolerantEnum`; путь `:provider` и запросы —
   строгие; формат `stream` — только сервер. Ответы без идентификаторов агрегатора, ключей хранилища, координат и

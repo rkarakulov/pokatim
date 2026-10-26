@@ -16,6 +16,7 @@ paths:
   - "apps/api/src/modules/routes/**"
   - "apps/api/src/raw-body.ts"
   - "apps/api/src/parse-thread.ts"
+  - "apps/api/src/modules/results/**"
 ---
 
 # pokatim — зоны безопасности (дополняет `security.md`)
@@ -84,6 +85,16 @@ paths:
   `src/admin-routes.test.ts` обходит контроллеры всех модулей); владение гонкой — в сервисе по правам сессии (без
   `races.manage_any` чужая — `404`, не 403); `ownerUserId`, статус, фаза, сезон — только сервер. Публичное чтение —
   только опубликованное, без владельца, имён сотрудников и `version`; IP-лимит `public-read`.
+
+## Участие и результаты (race-results-03)
+
+- Приложение — `AuthGuard`, пользователь — из access; заявка своя по `(raceId, userId)`; загрузка и активность —
+  порт `ActivitySource` с `userId` вызывающего, чужое и неизвестное — один `404`. Статусы, вердикты, время, места,
+  `lockedAt`, `origin` — только сервер; клиент присылает id и намерение. Лимиты `results-entry-user` 20/ч,
+  `results-attempt-user` 30/ч; ≤ 30 попыток и запросов на заявку.
+- Публичная таблица — `PublicReadGuard`, только опубликованные гонки, строки анонимны. Панель — `PanelGuard` +
+  `races.read`, видимость гонки — как в `races` (чужая гонка организатора — 404); наружу — `userId` и id попыток,
+  без e-mail, координат и биометрии. Логи — id, статусы, коды.
 
 ## Загрузка маршрутов (race-results-01)
 

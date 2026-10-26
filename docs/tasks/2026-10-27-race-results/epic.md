@@ -96,6 +96,10 @@
 - **Результат участника** (`race_results`, по одному на заявку, материализован): лучшая засчитанная попытка, время,
   статус `pending` (есть попытки в проверке, засчитанных нет) · `provisional` · `final` · `dq` · `revised`
   («Пересчитан») · `not_counted` (только отказы) · `dns` (окно закрыто, попыток нет) · `withdrawn`.
+- **Уточнение слайса 03:** до снимка протокола (05) отдельной коллекции `race_results` нет — лучший результат и
+  сводка попыток хранятся полями заявки (`best`, `summary`), статус результата считается при чтении (`dns` задачей
+  не пишется). `not_matched` — не статус: хранится `rejected` + `matched`, «скрыта» — вычисление по `origin` (§7.4
+  spec слайса 03).
 - **Места** — по группе зачёта, сортировка по времени с точностью 1 с, ничья — одно место «=N», следующее — N+k
   («1, =2, =2, 4», равенство до секунды — A7, D-37); v1 группа одна на гонку (A3), с кластерами — по кластеру; START — без мест. До
   публикации места считаются при чтении (сотни строк), при публикации — фиксируются снимком строк протокола.
@@ -136,7 +140,7 @@
 ```
 routes ◄── races (коридор: проверка маршрута, снимок длины)        [порт RouteCatalog]
 races  ◄── results (окно, коридор, фиксация V-12, фаза final)       [порт RaceRegistry]
-routes ◄── results (плотная линия для сверки)                        [порт RouteGeometry]
+routes ◄── results (линия сверки и рамка маршрута, кэш в процессе)   [порт RouteGeometry]
 tracks ◄── results (активность, исходник для worker; события ready/removed) [порт ActivitySource + outbox]
 results ◄── disputes (результат, группа, блокировки)                 [порт ResultsForDisputes]
 results ──► standings (события outbox)
@@ -150,11 +154,13 @@ results ──► standings (события outbox)
 
 - **Очереди BullMQ** (worker), все задачи идемпотентны, `jobId` = id события outbox либо детерминированный ключ:
   - `route-processing` — разбор GPX маршрута (`worker_threads`, лимиты), слайс 01;
-  - `attempt-check` — сверка попытки: `jobId = attempt-check:<attemptId>:<checkRevision>`; захват по статусу
+  - `attempt-check` — сверка попытки: `jobId` = id события outbox `results.attempt-check-requested { attemptId,
+    checkRevision }` (слайс 03: постановка атомарна с попыткой; идемпотентность — `checkRevision`); захват по статусу
     (`queued|checking`), результат пишется `findOneAndUpdate({ _id, checkRevision })` — поздний повтор старой ревизии
     — no-op; транзакция «попытка → лучший результат участника» под замком заявки (`$inc version` документа
     `race_entries`) — две попытки одного участника не перезапишут лучший результат друг друга (write skew);
-  - `results-maintenance` — переход `dns` после закрытия окна, повторная постановка зависших `checking`;
+  - `results-intake` (слайс 03) — события `tracks.activity-ready/-removed` и `results.entry-created` → попытки;
+  - `results-maintenance` — повторная постановка зависших `checking`/`queued` (`dns` — при чтении, слайс 03);
   - `dispute-series` (слайс 06) — ряды пульса/мощности по запросу панели, результат — кэш Redis с TTL, не БД;
   - `standings-recalc` (слайс 08) — пересчёт сезона, `jobId = standings:<seasonId>:<eventId>`.
 - **Финальный провал** — попытка `failed` → строка-ошибка чек-листа публикации и действие «Исключить трек» (D-23).
@@ -162,7 +168,8 @@ results ──► standings (события outbox)
   зафиксирован. Пересчёт гонки «по сохранённым трекам» (экстренный или до публикации) — новая `checkRevision` всех
   попыток гонки.
 - **Индексы:** `race_attempts (raceId, activityId)` unique, `(entryId, status)`, `(status, updatedAt)`;
-  `race_entries (raceId, userId)` unique, `(userId, status)`; `race_results (raceId, groupKey, status, timeSec)`;
+  `race_entries (raceId, userId)` unique, `(userId, status)`, места — `(raceId, groupKey, best.elapsedSec,
+  best.startedAt, _id)` частичный (слайс 03; `race_results` — снимок протокола, слайс 05);
   `2dsphere` для сверки не нужен (сверка — код по исходнику); предфильтр автоматических попыток — по заявкам райдера
   (единицы) и пересечению bbox в коде.
 
