@@ -488,7 +488,29 @@ Architect, сверено с кодом `develop` @ `0b152c0`. Ниже 14 на�
 
 # 8.2 Deviations from spec
 
-(пока нет)
+Coder (backend, точки A–C3). Продуктовые значения не менялись; ниже — уточнения механики.
+
+- DV-1 `RaceRegistry.lockResults(tx, raceId)` — без `now` (как в TYPES §11; в §3 был `now`): замок пишет только
+  `resultsVersion`, время не нужно.
+- DV-2 Чтения панели вынесены в `results-panel-read.service.ts` (`ResultsPanelReadService`, по §11 «выше ~450
+  строк»): туда же перенесены `panelSummary`/`panelAttempts` 03 (`summary`/`attempts`); `ResultsReadService` — только
+  приложение. Сервис в `ResultsModule` (HTTP), не в `ResultsCoreModule` (нужен `PanelDirectory`).
+- DV-3 `currentRevision` — фильтр `revision: { $ne: null }` вместо `$type: 'number'` (в типах драйвера нет алиаса
+  `number`); записей на гонку единицы, индекс `(raceId, _id)`. Частичный уникальный индекс миграции — как в spec.
+- DV-4 `recheck_started` после публикации — тоже `revision: null` (номер ревизии — только у записей, создающих
+  ревизию; иначе конфликт с уникальным `(raceId, revision)`); ревизия — в `details.revision` журнала.
+- DV-5 Порядок «запуск ↔ публикация ↔ применение» и «устаревший вердикт» — по `at`/`checkedAt` из `CLOCK` (строгое
+  `<`); `uuidv7` базы не монотонен внутри миллисекунды, поэтому `_id` не используется. Int-тесты сдвигают часы между
+  действиями.
+- DV-6 `summary.excluded` считает все исключённые (и скрытые auto) — буквально §7.3; `resultStatus` → `not_counted`.
+- DV-7 «Участники» после публикации, прочие заявки: `bestAttemptId: null` вместе с `place`/`elapsedSec: null` (RC-5).
+- DV-8 Мутации над черновиком (включая публикацию) — 404 (RC-7); `blockedBy: 'draft'` виден только в `GET …/results`.
+- DV-9 `AttemptCheckProcessor`: итог `excluded` (недостижим из вердикта) сводится к `skipped` — только для типа
+  `AttemptCheckOutcome`.
+- DV-10 Тесты 03, где `final`/`excluded` служили примером «незнакомого значения» (`unknown`), получили другие
+  незнакомые значения; литералы `summary` — `excluded: 0`; вызовы `requestRace` — с `requestedAt`.
+- DV-11 Точка D (UI) не делалась, кроме правок для typecheck/RC-6: `RacesScreen.PHASE_TONE.final = 'success'`,
+  `RaceEditor.editReasons` + `results_final`. Docs §10 (точка E) не делались.
 
 # 8.3 Security checklist
 
@@ -903,4 +925,35 @@ export function buildProtocol(base: readonly ProtocolBase[],
 
 # 12. Outcome
 
-(заполняет coder)
+**Частично: backend (точки A, B, C1–C3).** Точка D (экран «Результаты» в `apps/admin`, `StatTile`, RTL) и E (docs
+§10, `pnpm --filter @pokatim/admin build`, `e2e:admin`) — не сделаны (вне поручения coder). Отклонения — §8.2.
+
+Коммиты: `3448448` (A — contracts, api-client, i18n), `983d494` (B — races/tracks, миграция `0016_protocol`),
+`3513362` (C1 — модель и политика results), `02d662c` (C2+C3 — действия, контроллеры, worker, чтения).
+
+Сделано:
+- contracts/api-client/i18n — по §3 и TYPES §11; ключи `admin.results.*` одним блоком, `domain.racePhase.final`,
+  `admin.races.reason.results_final` (текст RC-6), статусы приложения `excluded`/`final`/`dq`/`revised`.
+- races: `protocolPublishedAt`/`resultsVersion`, фаза `final` (только описание, `canCancel: false`, причины
+  `results_final` [+ `entries_locked`]), отмена — `RACE_INVALID_STATE` + фильтр `protocolPublishedAt: null`;
+  порт `lockResults`/`markProtocolPublished`. tracks: `countUnprocessed`.
+- results: `excluded`, чек-лист, `buildProtocol`, снимок и журнал пересчётов только вставками (сторож
+  `results.repository.test.ts`), перепроверка через `results.race-recheck-requested` → worker (RC-1), DQ/отмена DQ,
+  «Применить пересчёт», чтения панели (сводка, попытки с `review`, участники, история) и приложения из снимка (RC-5).
+  Права: organizer + `results.manage`; `results.revise` — только admin.
+
+Проверки (изоляция `pokatim_05protocol_test`, Redis db 7): `TURBO_CONCURRENCY=1 pnpm check` — exit 0;
+api 82 файла / 797 тестов, contracts 185, api-client 66, i18n 6, admin 151, app 720 — все зелёные; arch:check без
+нарушений.
+
+**Отрицательное доказательство AC11 (исключение ↔ публикация).** `RacesRepository.lockResults` временно заменён
+чтением (`findOne` без записи): тест «исключение ↔ публикация» краснеет по результату — исключение
+`200` вместо `409 protocol_published` (`expected [ 200, undefined ] to deeply equal [ 409, 'protocol_published' ]`),
+снимок публикации содержит исключённую попытку. С замком — исключение повторяется на конфликте записи и получает
+409, снимок согласован. Замена откатана.
+
+**Справочно (RC-3, не проверялось прогоном):** два DQ без замка вставляли бы одну и ту же ревизию N+1; уникальный
+`(raceId, revision)` даёт либо конфликт записи с повтором (оба применены), либо `E11000` (500) — недетерминированно.
+С замком — int «два одновременных DQ»: оба 200, ревизии 2 и 3, в 3 оба `dq`.
+
+Открыто: точки D и E; ADR-0012 п. 6–7 и правила `.claude/rules/*` (§10) не обновлены.
