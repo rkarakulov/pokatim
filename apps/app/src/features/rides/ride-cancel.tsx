@@ -51,7 +51,7 @@ export function RideCancelScreen({ ride }: { ride: RideDetailForOrganizer }) {
         <Text style={[textStyle('label'), { color: theme.text.secondary }]}>
           {t('rides.cancel.reason')}
         </Text>
-        <View style={styles.chips} accessibilityRole="radiogroup">
+        <View style={styles.chips}>
           {RIDE_CANCEL_REASONS.map((value) => (
             <Chip
               key={value}

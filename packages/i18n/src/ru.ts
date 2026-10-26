@@ -240,7 +240,6 @@ export const ru = {
   'rides.detail.km': 'км',
   'rides.detail.kmh': 'км/ч',
   'rides.detail.going': 'Вы идёте · {date}, {time}',
-  'rides.detail.fullHint': 'Свободных мест нет',
   'rides.detail.edit': 'Изменить',
   'rides.detail.cancel': 'Отменить райд',
   'rides.detail.share': 'Поделиться',

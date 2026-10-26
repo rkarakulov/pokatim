@@ -1,19 +1,19 @@
-import { isReturnPath } from './return-path-allowlist';
+import { freshReturnPath, isReturnPath, type PendingReturn } from './return-path-allowlist';
 
 /** Native: путь возврата — память процесса (холодный старт его забывает — принято). */
-let pending: string | null = null;
+let pending: PendingReturn | null = null;
 
 /**
  * Запомнить карточку, к которой вернуть гостя после входа (нажал «Я иду» без входа). Путь вне allowlist —
- * не запоминается.
+ * не запоминается; живёт 30 минут.
  */
 export function rememberReturnPath(path: string): void {
-  pending = isReturnPath(path) ? path : null;
+  pending = isReturnPath(path) ? { path, at: Date.now() } : null;
 }
 
-/** Забрать путь возврата один раз (корневой layout после входа и онбординга); повтор — `null`. */
+/** Забрать путь возврата один раз (корневой layout после входа и онбординга); повтор и устаревший — `null`. */
 export function takeReturnPath(): string | null {
-  const path = pending;
+  const taken = pending;
   pending = null;
-  return path !== null && isReturnPath(path) ? path : null;
+  return freshReturnPath(taken);
 }

@@ -9,16 +9,25 @@ describe('возврат после входа (web)', () => {
 
   it('путь — и в sessionStorage вкладки (переживает перезагрузку), снимается при чтении', () => {
     rememberReturnPath(`/rides/${ID}`);
-    expect(sessionStorage.getItem(RETURN_PATH_KEY)).toBe(`/rides/${ID}`);
+    expect(JSON.parse(sessionStorage.getItem(RETURN_PATH_KEY) ?? '{}')).toMatchObject({
+      path: `/rides/${ID}`,
+    });
     expect(takeReturnPath()).toBe(`/rides/${ID}`);
     expect(sessionStorage.getItem(RETURN_PATH_KEY)).toBeNull();
     expect(takeReturnPath()).toBeNull();
   });
 
   it('после перезагрузки (память пуста) — из sessionStorage; подменённое значение вне allowlist — null', () => {
-    sessionStorage.setItem(RETURN_PATH_KEY, `/calendar/${ID}`);
+    const stored = (path: string, at = Date.now()) =>
+      sessionStorage.setItem(RETURN_PATH_KEY, JSON.stringify({ path, at }));
+    stored(`/calendar/${ID}`);
     expect(takeReturnPath()).toBe(`/calendar/${ID}`);
-    sessionStorage.setItem(RETURN_PATH_KEY, '//evil.example/x');
+    // старше 30 минут — не срабатывает
+    stored(`/calendar/${ID}`, Date.now() - 31 * 60_000);
+    expect(takeReturnPath()).toBeNull();
+    sessionStorage.setItem(RETURN_PATH_KEY, `/calendar/${ID}`);
+    expect(takeReturnPath()).toBeNull();
+    stored('//evil.example/x');
     expect(takeReturnPath()).toBeNull();
     expect(sessionStorage.getItem(RETURN_PATH_KEY)).toBeNull();
   });

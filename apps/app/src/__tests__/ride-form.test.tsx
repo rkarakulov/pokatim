@@ -116,6 +116,10 @@ describe('форма «Новый райд» (S5, AC10)', () => {
 
     await fillValid();
     expect(screen.getByDisplayValue('10:00')).toBeOnTheScreen();
+    // одиночный выбор города: состояние — у чипа (выбран один), без роли radiogroup поверх кнопок
+    expect(screen.getByRole('button', { name: 'Минск' })).toBeSelected();
+    expect(screen.getByRole('button', { name: 'Брест' })).not.toBeSelected();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
     await fireEvent.press(publish());
 
     await waitFor(() =>

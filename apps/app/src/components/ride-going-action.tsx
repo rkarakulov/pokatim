@@ -97,7 +97,8 @@ export function RideGoingAction({
       ? t('rides.error.fullNoLimit')
       : t('rides.error.full', { limit: ride.limit });
   return (
-    <View style={styles.stack} accessibilityHint={t('rides.detail.fullHint')}>
+    // причина выключения — видимый текст над кнопкой (подсказки у `Button` базы нет — follow-up `DisabledReason`)
+    <View style={styles.stack}>
       <Banner tone="warning" message={reason} />
       <Button label={t('rides.action.join')} disabled />
     </View>

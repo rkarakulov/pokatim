@@ -201,7 +201,7 @@ function CityPicker({
       <Text style={[textStyle('label'), { color: theme.text.secondary }]}>
         {t('rides.form.city')}
       </Text>
-      <View style={styles.chips} accessibilityRole="radiogroup">
+      <View style={styles.chips}>
         {visible.map((city) => (
           <Chip
             key={city}

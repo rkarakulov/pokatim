@@ -29,4 +29,15 @@ describe('возврат после входа (native)', () => {
     rememberReturnPath('https://evil.example');
     expect(takeReturnPath()).toBeNull();
   });
+
+  it('устаревший путь (старше 30 мин) — не срабатывает после постороннего входа', () => {
+    jest.useFakeTimers({ now: new Date('2026-10-01T12:00:00Z') });
+    rememberReturnPath(`/rides/${ID}`);
+    jest.setSystemTime(new Date('2026-10-01T12:30:00Z'));
+    expect(takeReturnPath()).toBe(`/rides/${ID}`);
+    rememberReturnPath(`/rides/${ID}`);
+    jest.setSystemTime(new Date('2026-10-01T13:00:01Z'));
+    expect(takeReturnPath()).toBeNull();
+    jest.useRealTimers();
+  });
 });
