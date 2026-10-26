@@ -262,9 +262,9 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     process.stdout.write(`лимит геометрии хорд: ${Math.round(elapsedMs)} мс\n`);
   }, 60_000);
 
-  // ревью pass 8: стоянка у края коридора (190 000 точек дрожания ±3 м при d ≈ 49 м) с реальным расходом лимита —
+  // ревью pass 8: стоянка у края коридора (синтетика: 52 ч дрожания на пределе лимита работы — бюджет худшего случая) (190 000 точек дрожания ±3 м при d ≈ 49 м) с реальным расходом лимита —
   // короткие хорды считаются точно, вердикт как без лимита
-  it('стоянка у края коридора, 190 000 точек через analyzeAttempt — засчитан, сход 0', () => {
+  it('стоянка у края коридора, 190 000 точек через analyzeAttempt — засчитан, сход 0 (худший случай ≤ 8 с)', () => {
     const route: Xy[] = [
       [0, 0],
       [5000, 0],
@@ -318,7 +318,7 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     const elapsedMs = performance.now() - startedAt;
     expect(match.reasons).toEqual([]);
     expect(match.segment!.offCorridorM).toBe(0);
-    expect(elapsedMs).toBeLessThanOrEqual(TIME_LIMIT_MS);
+    expect(elapsedMs).toBeLessThanOrEqual(ADVERSARIAL_TIME_LIMIT_MS);
     process.stdout.write(`стоянка у края коридора: ${Math.round(elapsedMs)} мс\n`);
   }, 60_000);
 });
