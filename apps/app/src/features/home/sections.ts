@@ -12,10 +12,11 @@ export const HOME_SECTION_ORDER: readonly HomeSectionId[] = [
 
 /**
  * Разделы с живым read-API (Q1, Q2): раздел входит в реестр только вместе со своим бэкендом, без заглушек «скоро».
- * `rides` и `routes` — со своими блоками.
+ * `rides` — с блоком 05 (лента под `AuthGuard`: зависит от зрителя); `routes` — со своим блоком.
  */
 export const AVAILABLE_HOME_SECTIONS = [
   'races',
+  'rides',
   'calendar',
 ] as const satisfies readonly HomeSectionId[];
 export type AvailableHomeSectionId = (typeof AVAILABLE_HOME_SECTIONS)[number];

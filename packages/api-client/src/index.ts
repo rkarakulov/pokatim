@@ -51,6 +51,14 @@ import {
   type ConnectDeviceRequest,
   type DeviceProvider,
   type DisconnectDeviceRequest,
+  type CancelRideRequest,
+  type CreateRideRequest,
+  RideCities,
+  RideDetail,
+  type RideListQuery,
+  RidePage,
+  RideView,
+  type UpdateRideRequest,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -98,6 +106,13 @@ export type CalendarListParams = {
   discipline?: NonNullable<CalendarQuery['discipline']>;
   city?: NonNullable<CalendarQuery['city']>;
   month?: NonNullable<CalendarQuery['month']>;
+  cursor?: string;
+  limit?: number;
+};
+
+/** Параметры ленты кофе-райдов до схемы (`city` — массив кодов справочника). */
+export type RideListParams = {
+  city?: NonNullable<RideListQuery['city']>;
   cursor?: string;
   limit?: number;
 };
@@ -241,6 +256,44 @@ export function createApiClient({
     listCalendarCities: () => getPublic('/v1/calendar/cities', CalendarCities),
     /** Месяцы будущих опубликованных стартов — чипы «Дата». */
     listCalendarMonths: () => getPublic('/v1/calendar/months', CalendarMonths),
+
+    // --- кофе-райды (блок 05): карточка — публично; лента, города, состояние зрителя и мутации — вход обязателен ---
+    /** Будущие райды по времени старта (+ отменённые свои), роль зрителя в каждой карточке. */
+    listRides: (accessToken: string, params: RideListParams = {}) =>
+      request(
+        `/v1/rides${queryString(params)}`,
+        RidePage,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Города, где есть видимые зрителю будущие райды. */
+    listRideCities: (accessToken: string) =>
+      request(
+        '/v1/rides/cities',
+        RideCities,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Публичная карточка без зрителя: опубликованный, отменённый, прошедший; неизвестный — 404. */
+    getRide: (id: string) => getPublic(`/v1/rides/${encodeURIComponent(id)}`, RideDetail),
+    /** Карточка + состояние зрителя (роль, права); организатору — с `version`. */
+    getRideForViewer: (accessToken: string, id: string) =>
+      request(
+        `/v1/rides/${encodeURIComponent(id)}/me`,
+        RideView,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    createRide: (accessToken: string, body: CreateRideRequest) =>
+      postAuthorized(accessToken, '/v1/rides', RideView, body),
+    /** Правка организатором: изменённые поля + `version` (устарела — 409 `CONFLICT`). */
+    updateRide: (accessToken: string, id: string, body: UpdateRideRequest) =>
+      postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}`, RideView, body),
+    cancelRide: (accessToken: string, id: string, body: CancelRideRequest) =>
+      postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}/cancel`, RideView, body),
+    /** «Я иду» (идемпотентно); мест нет — 409 `RIDE_FULL`. */
+    joinRide: (accessToken: string, id: string) =>
+      postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}/join`, RideView, {}),
+    /** «Не иду» (идемпотентно); организатор — 409 `RIDE_INVALID_STATE`. */
+    leaveRide: (accessToken: string, id: string) =>
+      postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}/leave`, RideView, {}),
 
     // --- заезды: ручная загрузка FIT/GPX (вход обязателен, tracks-devices) ---
     /**

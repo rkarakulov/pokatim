@@ -13,6 +13,7 @@ import { tracks } from './0010_tracks';
 import { devices } from './0011_devices';
 import { trackSourceRefs } from './0012_track_source_refs';
 import { routes } from './0013_routes';
+import { rides } from './0014_rides';
 import { results } from './0015_results';
 
 /**
@@ -33,5 +34,6 @@ export const migrations: readonly MongoMigration[] = [
   devices,
   trackSourceRefs,
   routes,
+  rides,
   results,
 ];

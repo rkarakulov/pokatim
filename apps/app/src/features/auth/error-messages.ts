@@ -4,8 +4,10 @@ import {
   PASSWORD_MIN_LENGTH,
   RateLimitedDetails,
   ValidationErrorDetails,
+  type CorridorFieldErrorCode,
   type ErrorCode,
   type FieldErrorCode,
+  type RideFieldErrorCode,
   type ScheduleFieldErrorCode,
 } from '@pokatim/contracts';
 import { t, type MessageKey } from '@pokatim/i18n';
@@ -23,7 +25,9 @@ const FIELD_MESSAGES = {
   EMAIL_TAKEN: 'auth.field.EMAIL_TAKEN',
   EMAIL_UNAVAILABLE: 'auth.field.EMAIL_UNAVAILABLE',
 } as const satisfies Record<
-  Exclude<FieldErrorCode, ScheduleFieldErrorCode> | 'EMAIL_TAKEN' | 'EMAIL_UNAVAILABLE',
+  | Exclude<FieldErrorCode, ScheduleFieldErrorCode | RideFieldErrorCode | CorridorFieldErrorCode>
+  | 'EMAIL_TAKEN'
+  | 'EMAIL_UNAVAILABLE',
   MessageKey
 >;
 

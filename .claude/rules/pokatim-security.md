@@ -16,6 +16,9 @@ paths:
   - "apps/api/src/modules/routes/**"
   - "apps/api/src/raw-body.ts"
   - "apps/api/src/parse-thread.ts"
+  - "apps/api/src/modules/rides/**"
+  - "apps/app/src/features/rides/**"
+  - "apps/app/src/features/auth/return-path*"
   - "apps/api/src/modules/results/**"
 ---
 
@@ -104,3 +107,18 @@ paths:
   через `runParseThread` (отказ на `<!DOCTYPE`/`<!ENTITY`, подсчёт элементов и `rtept` до дерева, `XMLValidator`).
 - Чтение — `races.read`; чужой необработанный маршрут — 404. Публично — только `corridor.widthM`: `routeId` и
   координаты не выходят. Логи — `routeId`, код отказа, id сотрудника; без названий файлов и координат.
+
+## Кофе-райды (блок 05, ADR-0013 Proposed)
+
+- UGC: публичная карточка `GET /v1/rides/:id` — всегда `robots: noindex`; OG и мета — название, дата, город, км, темп
+  (без описания и подписи организатора); описание — текст (`Text selectable`, без разметки и автоссылок).
+- Все мутации, лента, города и `me` — `AuthGuard`; пользователь — только `@CurrentUser()`. Владение — фильтр
+  `organizerUserId` в той же атомарной операции; чужой райд для правки/отмены — 404 (не 403).
+- Ответы без `organizerUserId`, id участников и `version` (кроме организатору в `me`/мутациях); роль зрителя — по
+  `$elemMatch` своего id. Подпись организатора — только введённая им самим (`organizerName`), данные аккаунта не
+  читаются.
+- Лимиты частоты по `uid`: `rides-create` 10/сут, `rides-manage` 30/ч, `rides-rsvp` 60/ч; квоты 5 будущих райдов и
+  20 отметок (принятая гонка на единицу). Логи — id райда и `uid`, без названий, мест и описаний.
+- Возврат гостя после входа — только путь из allowlist `^/(rides|races|calendar)/<uuid>$`
+  (`features/auth/return-path-allowlist.ts`), не адрес; шаринг — только собственный web-origin.
+- Выпуск в прод и сторы — только вместе с 05b (жалобы, скрытие командой).

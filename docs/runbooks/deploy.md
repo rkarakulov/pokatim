@@ -501,6 +501,11 @@ ADR-0011, `docs/product/tracks-and-devices.md`.
   публикации в App Store / Google Play проверить, что «рядом» использует геопозицию; иначе выключить шаг —
   `LOCATION_STEP_ENABLED = false` в `apps/app/src/features/onboarding/onboarding-store.ts` (экран и разрешение
   остаются в сборке, но не запрашиваются).
+- **Кофе-райды — не в сторы и не в прод без 05b** (жалобы и скрытие командой, ADR-0013): UGC без модерации живёт
+  только на dev-стенде.
+- **«Поделиться» в native** — сборке EAS нужен `EXPO_PUBLIC_WEB_ORIGIN` (`https://<хост>`, публичный адрес web-
+  карточек; задаётся в EAS env профиля вместе с `EXPO_PUBLIC_API_URL`): без него кнопки «Поделиться» нет. Web берёт
+  адрес страницы.
 
 ## Проверка
 

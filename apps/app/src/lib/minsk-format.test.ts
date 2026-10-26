@@ -1,5 +1,11 @@
 /// <reference types="jest" />
-import { domainLabel, formatDistances, formatLocalRange, meta } from './minsk-format';
+import {
+  domainLabel,
+  formatDistances,
+  formatLocalRange,
+  formatMinskDateTime,
+  meta,
+} from './minsk-format';
 
 // перенесено из features/home/format.test.ts (R8 блока 03) без смены ожиданий
 describe('мета героев', () => {
@@ -38,5 +44,31 @@ describe('даты и справочники', () => {
     expect(domainLabel('domain.bikeClass', 'unknown')).toBeNull();
     expect(meta(['62 км', null, '', 'Гравий'])).toBe('62 км · Гравий');
     expect(meta([])).toBe('');
+  });
+});
+
+describe('formatMinskDateTime (кофе-райды)', () => {
+  const NOW = new Date('2026-10-01T12:00:00Z');
+
+  it('день недели, дата, время по Минску; год — только не текущий; now = null — всегда', () => {
+    // 4 октября 2026 10:00 Минска = 07:00 UTC, воскресенье
+    expect(formatMinskDateTime('2026-10-04T07:00:00Z', NOW)).toEqual({
+      date: 'Воскресенье, 4 октября',
+      time: '10:00',
+      full: 'Воскресенье, 4 октября, 10:00',
+    });
+    expect(formatMinskDateTime('2026-10-03T06:00:00Z', NOW, 'short').full).toBe(
+      'Сб 3 октября, 9:00',
+    );
+    expect(formatMinskDateTime('2026-10-04T07:00:00Z', null).full).toBe(
+      'Воскресенье, 4 октября 2026, 10:00',
+    );
+    expect(formatMinskDateTime('2027-01-02T07:00:00Z', NOW, 'short').date).toBe('Сб 2 января 2027');
+  });
+
+  it('полночь Минска: 21:30 UTC — уже следующий день и его день недели', () => {
+    expect(formatMinskDateTime('2026-10-03T21:30:00Z', NOW).full).toBe(
+      'Воскресенье, 4 октября, 0:30',
+    );
   });
 });

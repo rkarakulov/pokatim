@@ -19,6 +19,8 @@ import { tracks } from './0010_tracks';
 import { devices } from './0011_devices';
 import { trackSourceRefs } from './0012_track_source_refs';
 import { routes } from './0013_routes';
+import { rides } from './0014_rides';
+import { RIDES_COLLECTIONS } from '../../modules/rides/rides.collection';
 import { results } from './0015_results';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
 import { ROUTES_COLLECTIONS } from '../../modules/routes/routes.collection';
@@ -73,6 +75,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0011_devices',
       '0012_track_source_refs',
       '0013_routes',
+      '0014_rides',
       '0015_results',
     ]);
   });
@@ -148,6 +151,30 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await racesSeasonPublicIdx.up(h.db);
     await racesSeasonPublicIdx.up(h.db);
     expect(await indexesOf(RACES_COLLECTIONS.races)).toEqual(before);
+  });
+
+  it('0014_rides: коллекция и индексы (multikey участника); после 0013_routes; повторный up — без ошибки (AC-T6)', async () => {
+    const plain = (key: Record<string, number>) => ({
+      key,
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+    const expected = {
+      rides_feed_idx: plain({ startsAt: 1, _id: 1 }),
+      rides_city_feed_idx: plain({ cityCode: 1, startsAt: 1, _id: 1 }),
+      rides_participant_idx: plain({ 'participants.userId': 1, startsAt: 1 }),
+      rides_organizer_idx: plain({ organizerUserId: 1, startsAt: -1 }),
+    };
+    expect(await indexesOf(RIDES_COLLECTIONS.rides)).toEqual(expected);
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.slice(ids.indexOf('0013_routes'), ids.indexOf('0013_routes') + 2)).toEqual([
+      '0013_routes',
+      '0014_rides',
+    ]);
+    await rides.up(h.db);
+    await rides.up(h.db);
+    expect(await indexesOf(RIDES_COLLECTIONS.rides)).toEqual(expected);
   });
 
   it('0008_calendar: коллекция и индексы; повторный up — без ошибки (AC14)', async () => {

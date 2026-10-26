@@ -19,6 +19,10 @@ import DevicesScreen from '../app/settings/devices';
 import VerifyEmailScreen from '../app/auth/verify/[token]';
 import RootLayout from '../app/_layout';
 import CalendarStartRoute from '../app/calendar/[id]';
+import RideRoute from '../app/rides/[id]';
+import NewRideRoute from '../app/rides/new';
+import EditRideRoute from '../app/rides/edit/[id]';
+import CancelRideRoute from '../app/rides/cancel/[id]';
 import RaceRoute from '../app/races/[id]';
 import SeasonRoute from '../app/seasons/[id]';
 import StatusScreen from '../app/status';
@@ -59,4 +63,8 @@ export const appRoutes = {
   'races/[id]': RaceRoute,
   'seasons/[id]': SeasonRoute,
   'calendar/[id]': CalendarStartRoute,
+  'rides/[id]': RideRoute,
+  'rides/new': NewRideRoute,
+  'rides/edit/[id]': EditRideRoute,
+  'rides/cancel/[id]': CancelRideRoute,
 };

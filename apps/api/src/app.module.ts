@@ -19,6 +19,7 @@ import { IdentityModule } from './modules/identity';
 import { PanelModule } from './modules/panel';
 import { ProfileModule } from './modules/profile';
 import { RacesModule } from './modules/races';
+import { RidesModule } from './modules/rides';
 import { ResultsModule } from './modules/results';
 import { RoutesModule } from './modules/routes';
 import { TracksModule } from './modules/tracks';
@@ -41,6 +42,7 @@ import { TracksModule } from './modules/tracks';
     RacesModule,
     ResultsModule,
     CalendarModule,
+    RidesModule,
     DevicesModule,
   ],
   // единый формат ошибок ApiError для всех модулей; тексты кодов проекта — рядом с фильтром

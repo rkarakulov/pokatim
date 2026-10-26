@@ -41,6 +41,10 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   // маршруты (race-results-01): формат не GPX по содержимому; файл больше 5 МиБ
   'ROUTE_FORMAT_UNSUPPORTED',
   'ROUTE_TOO_LARGE',
+  // кофе-райды (app-05): мест нет; райд начался или отменён; квота будущих райдов или отметок
+  'RIDE_FULL',
+  'RIDE_INVALID_STATE',
+  'RIDE_QUOTA_EXCEEDED',
   // участие и попытки (race-results-03): заявка закрыта (details.reason); участие уже отменено; нужна активная
   // заявка; отмена после окна; срок загрузки (details.reason); предел попыток; заезд нельзя добавить в гонку
   'RACE_ENTRY_CLOSED',
@@ -71,10 +75,27 @@ export const SCHEDULE_FIELD_ERROR_CODES = [
   'FIELD_LOCKED',
   // коридор гонки (race-results-01): маршрут не готов, не найден или недоступен
   'ROUTE_NOT_READY',
-  // коридор гонки (race-results-03): ворота старта и финиша линейного маршрута пересекаются при этом допуске
-  'CORRIDOR_GATES_OVERLAP',
 ] as const;
 export type ScheduleFieldErrorCode = (typeof SCHEDULE_FIELD_ERROR_CODES)[number];
+
+/**
+ * Коды полей формы кофе-райда (app-05): старт раньше чем через 30 мин / дальше 60 дней; темп «от» больше «до»; лимит
+ * ниже идущих. Только в конец общего списка.
+ */
+export const RIDE_FIELD_ERROR_CODES = [
+  'RIDE_START_IN_PAST',
+  'RIDE_START_TOO_FAR',
+  'RIDE_PACE_ORDER',
+  'RIDE_LIMIT_BELOW_GOING',
+] as const;
+export type RideFieldErrorCode = (typeof RIDE_FIELD_ERROR_CODES)[number];
+
+/**
+ * Коды полей коридора гонки (race-results-03): ворота старта и финиша линейного маршрута пересекаются при этом
+ * допуске. После кодов кофе-райдов — только в конец общего списка.
+ */
+export const CORRIDOR_FIELD_ERROR_CODES = ['CORRIDOR_GATES_OVERLAP'] as const;
+export type CorridorFieldErrorCode = (typeof CORRIDOR_FIELD_ERROR_CODES)[number];
 
 /**
  * Коды ошибок полей: коды базы (`REQUIRED`, `INVALID`, …) + коды проекта. Сообщение zod-схемы = код,
@@ -84,6 +105,8 @@ export const { FieldErrorCode, ValidationErrorDetails, fieldError } = defineFiel
   'AGE_BELOW_18',
   'CONSENT_REQUIRED',
   ...SCHEDULE_FIELD_ERROR_CODES,
+  ...RIDE_FIELD_ERROR_CODES,
+  ...CORRIDOR_FIELD_ERROR_CODES,
 ]);
 export type FieldErrorCode = z.infer<typeof FieldErrorCode>;
 export type ValidationErrorDetails = z.infer<typeof ValidationErrorDetails>;
@@ -119,3 +142,13 @@ export type Version = z.infer<typeof Version>;
 export const SINGLE_LINE = /^[^\p{Cc}]+$/u;
 /** Многострочный текст: из управляющих — только перевод строки. */
 export const MULTI_LINE = /^[^\p{Cc}]*(?:\n[^\p{Cc}]*)*$/u;
+
+/** Необязательный текст: пустой после обрезки — `null`. */
+export const optionalText = (max: number, pattern: RegExp) =>
+  z
+    .string({ error: fieldError('INVALID') })
+    .trim()
+    .max(max, { error: 'TOO_LONG' })
+    .regex(new RegExp(`${pattern.source}|^$`, pattern.flags), { error: 'INVALID' })
+    .transform((value) => (value === '' ? null : value))
+    .nullable();

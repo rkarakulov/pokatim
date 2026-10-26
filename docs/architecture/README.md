@@ -24,6 +24,8 @@ gamification · sharing · notifications · moderation · media
 Есть: `identity`, `profile`, `panel` (доступ к панели «Протокол», ADR-0009), `races` (сезоны и гонки по коридору,
 ADR-0010), `calendar` (календарь стартов), `tracks` (загрузки и активности, разбор в worker) и `devices` (Garmin/Wahoo
 через агрегатор Open Wearables) — ADR-0011; `routes` (маршруты команды платформы — эталон коридора гонки, ADR-0012
+Proposed; `races → routes` только через порт `RouteCatalog`) и `rides` (кофе-райды, ADR-0013 Proposed: зависит
+только от `identity`). CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js grant-admin`).
 Proposed; `races → routes` только через порт `RouteCatalog`); `results` (заявки и попытки гонок, race-results-03:
 порты `RaceRegistry`, `RouteGeometry`, `ActivitySource`). CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js
 grant-admin`).
@@ -240,6 +242,25 @@ worker: очередь identity-email ─► письмо «Пароль изм�
   `/calendar` — под гардом.
 - Внешняя ссылка организатора — только `src/lib/open-external-url(.web).ts` после `RegistrationUrl.safeParse`:
   native — `Linking.openURL` (системный браузер), web — `window.open(url, '_blank', 'noopener,noreferrer')`.
+
+### Кофе-райды (модуль `rides`, блок 05, ADR-0013 Proposed)
+
+```
+вкладка «Райды» / Главная ─► GET /v1/rides?city&cursor&limit (AuthGuard, no-store) ─► герой + строки по дням, роль зрителя
+                          ─► GET /v1/rides/cities (AuthGuard)                       ─► чипы «Город»
+/rides/<id> (вне гардов)  ─► GET /v1/rides/:id (публично, public-read, 60 с; SSR: loader + generateMetadata, noindex)
+                          ─► GET /v1/rides/:id/me (вошедшим: роль и права, организатору — version)
+«Я иду» / «Не иду»        ─► POST /v1/rides/:id/join|leave — одна findOneAndUpdate (лимит, статус, время в фильтре)
+форма / отмена            ─► POST /v1/rides, POST /v1/rides/:id (version), POST /v1/rides/:id/cancel (причина)
+```
+
+- Одна коллекция `rides` (миграция `0014_rides`): участники — встроенный массив + `goingCount`; все инварианты участия
+  и правки лимита — условие в фильтре одной атомарной операции (без транзакций). Квоты будущих райдов (5) и отметок
+  (20) — `countDocuments` до операции, принятая гонка на единицу; основной барьер — лимиты частоты Redis.
+- Фаза (`upcoming | past | cancelled`) и права зрителя (`viewer`) — только сервер (`rides.policy.ts`); клиент — показ.
+- Приложение: `features/rides/*`, `components/{ride-list-row,ride-going-action}.tsx`, шаринг — `lib/share-link(.web).ts`,
+  возврат гостя после входа — `features/auth/return-path(.web).ts` (allowlist путей карточек); мутации — ответ в кеш
+  `me`, затем инвалидация `['rides']`. Outbox-событий и аудита в 05a нет.
 
 ### Треки и устройства (модули `tracks`, `devices`, ADR-0011)
 
