@@ -138,10 +138,6 @@ export type UpdateRideRequest = z.infer<typeof UpdateRideRequest>;
 export const CancelRideRequest = z.strictObject({ reason: RideCancelReason });
 export type CancelRideRequest = z.infer<typeof CancelRideRequest>;
 
-/** `POST /v1/rides/:id/join|leave` — тело пустое. */
-export const RideRsvpRequest = z.strictObject({});
-export type RideRsvpRequest = z.infer<typeof RideRsvpRequest>;
-
 /**
  * Строка поля формы → число схемы. Пустая — `undefined`: `fieldError` схемы даёт `REQUIRED` (тип — `number`, чтобы
  * выход формы совпадал с запросом; `undefined` до схемы не доходит без ошибки).

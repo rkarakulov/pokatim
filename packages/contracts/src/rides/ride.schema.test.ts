@@ -13,7 +13,6 @@ import {
   RideDetail,
   RideListQuery,
   RideQuotaDetails,
-  RideRsvpRequest,
   RideView,
   UpdateRideRequest,
 } from './ride.schema.ts';
@@ -154,7 +153,7 @@ describe('CreateRideRequest', () => {
   });
 });
 
-describe('UpdateRideRequest, CancelRideRequest, RideRsvpRequest', () => {
+describe('UpdateRideRequest, CancelRideRequest', () => {
   it('правка: часть полей + version; без version — ошибка; темп проверяется, когда есть оба', () => {
     expect(UpdateRideRequest.parse({ version: 2, title: 'Новый райд' })).toEqual({
       version: 2,
@@ -173,11 +172,6 @@ describe('UpdateRideRequest, CancelRideRequest, RideRsvpRequest', () => {
     expect(codesOf(CancelRideRequest.safeParse({}))).toEqual(['REQUIRED']);
     expect(CancelRideRequest.safeParse({ reason: 'дождь' }).success).toBe(false);
     expect(CancelRideRequest.safeParse({ reason: 'other', comment: 'x' }).success).toBe(false);
-  });
-
-  it('«Я иду» / «Не иду» — пустое тело', () => {
-    expect(RideRsvpRequest.parse({})).toEqual({});
-    expect(RideRsvpRequest.safeParse({ userId: ID }).success).toBe(false);
   });
 });
 

@@ -24,6 +24,9 @@ export const PROJECT_ERROR_MESSAGES = {
   DEVICE_PROVIDER_ERROR: 'Сервис подключения устройств не ответил',
   ROUTE_FORMAT_UNSUPPORTED: 'Выберите файл GPX',
   ROUTE_TOO_LARGE: 'Файл больше 5 МБ',
+  RIDE_FULL: 'Мест нет',
+  RIDE_INVALID_STATE: 'Райд уже начался или отменён',
+  RIDE_QUOTA_EXCEEDED: 'Достигнут предел будущих райдов',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */
