@@ -10,7 +10,7 @@ const MAX_WIDTH_M = 200;
 /**
  * Подготовка коридора: проверка инвариантов (нарушение — ошибка программиста, не отказ попытки), прореживание
  * почти прямых участков (допуск 2 м, без разворотов), уплотнение до отрезков ≤ 25 м, chainage вершин, сеточный
- * индекс отрезков (не больше 64 в ячейке — время привязки ограничено), ворота, число ячеек покрытия 250 м.
+ * индекс отрезков (не больше 32 в ячейке ≈ три прохода — время привязки ограничено), ворота, число ячеек покрытия 250 м.
  * Метрика коридора — длина уплотнённой линии; `distanceM` маршрута только переносится в диагностику.
  * Ворота старта — вокруг первой вершины, финиша — вокруг последней (`isLoop` — только развёртка `s` по кругам).
  */
@@ -43,8 +43,14 @@ export function prepareCorridor(geometry: CorridorGeometry): PreparedCorridor {
   const { ky } = localProjection(0);
   const segments = lon.length - 1;
   const segKx = new Float64Array(segments);
+  const segDx = new Float64Array(segments);
+  const segDy = new Float64Array(segments);
+  const segLength2 = new Float64Array(segments);
   for (let j = 0; j < segments; j += 1) {
     segKx[j] = localProjection((lat[j]! + lat[j + 1]!) / 2).kx;
+    segDx[j] = (lon[j + 1]! - lon[j]!) * segKx[j]!;
+    segDy[j] = (lat[j + 1]! - lat[j]!) * ky;
+    segLength2[j] = segDx[j]! ** 2 + segDy[j]! ** 2;
   }
   const startGate = [lon[0]!, lat[0]!] as const;
 
@@ -57,6 +63,9 @@ export function prepareCorridor(geometry: CorridorGeometry): PreparedCorridor {
     lengthM,
     declaredDistanceM: distanceM,
     segKx,
+    segDx,
+    segDy,
+    segLength2,
     ky,
     grid: buildGrid(lon, lat, ky),
     gateRadiusM,

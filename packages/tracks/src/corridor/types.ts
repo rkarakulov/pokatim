@@ -71,6 +71,10 @@ export interface PreparedCorridor {
   readonly declaredDistanceM: number;
   /** на отрезок: метров в градусе долготы (локальная проекция вокруг середины отрезка) */
   readonly segKx: Float64Array;
+  /** вектор отрезка в его локальной проекции, м, и квадрат длины */
+  readonly segDx: Float64Array;
+  readonly segDy: Float64Array;
+  readonly segLength2: Float64Array;
   /** метров в градусе широты */
   readonly ky: number;
   readonly grid: SegmentGrid;

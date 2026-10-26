@@ -94,92 +94,79 @@ function collectBranches(
   const out = new Int32Array(segments);
   const stamp = new Int32Array(segments);
   const radius = CORRIDOR_POLICY.searchRadius(corridor.widthM);
-  // буферы без аллокаций на точку (200 000 точек — память потока worker)
-  const foundS: number[] = [];
-  const foundD: number[] = [];
-  const order: number[] = [];
-  const projection = new Float64Array(3); // raw t, t, расстояние
+  const radius2 = radius * radius;
+  const { lon: vLon, lat: vLat, chainage, segKx, segDx, segDy, segLength2, ky } = corridor;
+  // K ближайших ветвей точки по (d, s) — без аллокаций на точку (200 000 точек — память потока worker)
+  const keptS = new Float64Array(K);
+  const keptD = new Float64Array(K);
 
-  const project = (j: number, lon: number, lat: number) => {
-    const kx = corridor.segKx[j]!;
-    const px = (lon - corridor.lon[j]!) * kx;
-    const py = (lat - corridor.lat[j]!) * corridor.ky;
-    const dx = (corridor.lon[j + 1]! - corridor.lon[j]!) * kx;
-    const dy = (corridor.lat[j + 1]! - corridor.lat[j]!) * corridor.ky;
-    const raw = (px * dx + py * dy) / (dx * dx + dy * dy);
-    const t = Math.max(0, Math.min(1, raw));
-    projection[0] = raw;
-    projection[1] = t;
-    projection[2] = Math.hypot(px - t * dx, py - t * dy);
-  };
-  /** a раньше b: по возрастанию s, затем d */
-  const bySD = (a: number, b: number) =>
-    foundS[a]! < foundS[b]! || (foundS[a] === foundS[b] && foundD[a]! < foundD[b]!);
+  /** Параметр проекции точки на отрезок j без обрезки (< 0 — до начала, > 1 — за концом). */
+  const rawT = (j: number, lon: number, lat: number) =>
+    ((lon - vLon[j]!) * segKx[j]! * segDx[j]! + (lat - vLat[j]!) * ky * segDy[j]!) / segLength2[j]!;
 
   for (let k = 0; k < count; k += 1) {
     const { lon, lat } = points[k]!;
     const found = gridCandidates(corridor, lon, lat, radius, out, stamp, k + 1);
-    foundS.length = 0;
-    foundD.length = 0;
-    let minD = Infinity;
+    let kept = 0;
+    let minD2 = Infinity;
     for (let c = 0; c < found; c += 1) {
       const j = out[c]!;
-      project(j, lon, lat);
-      const raw = projection[0]!;
-      const t = projection[1]!;
-      const dist = projection[2]!;
-      if (dist > radius) continue;
-      minD = Math.min(minD, dist);
+      const px = (lon - vLon[j]!) * segKx[j]!;
+      const py = (lat - vLat[j]!) * ky;
+      const dx = segDx[j]!;
+      const dy = segDy[j]!;
+      const raw = (px * dx + py * dy) / segLength2[j]!;
+      const t = raw < 0 ? 0 : raw > 1 ? 1 : raw;
+      const ex = px - t * dx;
+      const ey = py - t * dy;
+      const dist2 = ex * ex + ey * ey;
+      if (dist2 > radius2) continue;
+      if (dist2 < minD2) minD2 = dist2;
       // ветвь — локальный минимум расстояния вдоль линии: проекция внутрь отрезка или вершина «снаружи угла»
-      if (raw <= 0 && j > 0) {
-        project(j - 1, lon, lat);
-        if (projection[0]! < 1) continue;
+      if (raw <= 0 && j > 0 && rawT(j - 1, lon, lat) < 1) continue;
+      if (raw >= 1 && j < segments - 1 && rawT(j + 1, lon, lat) > 0) continue;
+      const sc = chainage[j]! + t * (chainage[j + 1]! - chainage[j]!);
+      const dc = Math.sqrt(dist2);
+      // та же s (вершина двух отрезков) — одна ветвь с меньшим d
+      let same = -1;
+      for (let i = 0; i < kept; i += 1) if (keptS[i] === sc) same = i;
+      if (same >= 0) {
+        if (dc >= keptD[same]!) continue;
+        // удалить и вставить заново по (d, s)
+        for (let i = same; i + 1 < kept; i += 1) {
+          keptS[i] = keptS[i + 1]!;
+          keptD[i] = keptD[i + 1]!;
+        }
+        kept -= 1;
       }
-      if (raw >= 1 && j < segments - 1) {
-        project(j + 1, lon, lat);
-        if (projection[0]! > 0) continue;
-      }
-      foundS.push(corridor.chainage[j]! + t * (corridor.chainage[j + 1]! - corridor.chainage[j]!));
-      foundD.push(dist);
-    }
-    dOut[k] = minD;
-    if (foundS.length === 0) continue;
-
-    // вставками по (s, d); совпадающие s (вершина двух отрезков) — одна ветвь с меньшим d
-    order.length = 0;
-    for (let i = 0; i < foundS.length; i += 1) {
-      let at = order.length;
-      order.push(i);
-      while (at > 0 && bySD(i, order[at - 1]!)) {
-        order[at] = order[at - 1]!;
+      // вставка в K ближайших, упорядоченных по (d, s)
+      let at = kept;
+      while (at > 0 && (dc < keptD[at - 1]! || (dc === keptD[at - 1] && sc < keptS[at - 1]!))) {
         at -= 1;
       }
-      order[at] = i;
-    }
-    let unique = 0;
-    for (const i of order) {
-      if (unique === 0 || foundS[i] !== foundS[order[unique - 1]!]) {
-        order[unique] = i;
-        unique += 1;
+      if (at >= K) continue;
+      for (let i = Math.min(kept, K - 1); i > at; i -= 1) {
+        keptS[i] = keptS[i - 1]!;
+        keptD[i] = keptD[i - 1]!;
       }
+      keptS[at] = sc;
+      keptD[at] = dc;
+      if (kept < K) kept += 1;
     }
-    order.length = unique;
-    // больше K — K ближайших (при равенстве — меньшая s), порядок по s сохраняется
-    while (order.length > K) {
-      let worst = 0;
-      for (let i = 1; i < order.length; i += 1) {
-        const a = order[i]!;
-        const b = order[worst]!;
-        if (foundD[a]! > foundD[b]! || (foundD[a] === foundD[b] && foundS[a]! > foundS[b]!)) {
-          worst = i;
-        }
+    dOut[k] = Math.sqrt(minD2);
+    if (kept === 0) continue;
+    // ветви точки — по возрастанию s (порядок состояний Витерби)
+    size[k] = kept;
+    const base = k * K;
+    for (let i = 0; i < kept; i += 1) {
+      let at = i;
+      while (at > 0 && bs[base + at - 1]! > keptS[i]!) {
+        bs[base + at] = bs[base + at - 1]!;
+        bd[base + at] = bd[base + at - 1]!;
+        at -= 1;
       }
-      order.splice(worst, 1);
-    }
-    size[k] = order.length;
-    for (let c = 0; c < order.length; c += 1) {
-      bs[k * K + c] = foundS[order[c]!]!;
-      bd[k * K + c] = foundD[order[c]!]!;
+      bs[base + at] = keptS[i]!;
+      bd[base + at] = keptD[i]!;
     }
   }
   return { size, s: bs, d: bd };

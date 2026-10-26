@@ -8,6 +8,7 @@ import { encodeTrackStream, type TrackStreamV1 } from '../parse.ts';
 import type { ParsedPoint } from '../track.ts';
 import { at, corridorOf, pointAt, polylineLength, T0, type Xy } from './__testing__/synthetic.ts';
 import { matchCorridor } from './match.ts';
+import { CORRIDOR_POLICY } from './policy.ts';
 import { prepareCorridor } from './prepare.ts';
 import type { CorridorMatch, MatchWindow } from './types.ts';
 
@@ -117,14 +118,14 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     process.stdout.write(`analyzeAttempt 200k в Worker: ${Math.round(outcome.ms)} мс\n`);
   }, 30_000);
 
-  it('плотный коридор на пределе (≤ 64 отрезков в ячейке): 200 000 точек ≤ 3 с', () => {
-    // «змейка» 66 × 1 км с шагом 35 м: в ячейке 200 м — до 64 отрезков (больше коридор отвергает)
+  it('плотный коридор на пределе (≤ 32 отрезков в ячейке): 200 000 точек ≤ 3 с', () => {
+    // «змейка» 66 × 1 км с шагом 90 м: в ячейке 200 м — 32 отрезка, предел (больше коридор отвергает)
     const corners: Xy[] = [[0, 0]];
     for (let i = 0; i < 66; i += 1) {
       const [x, y] = corners[corners.length - 1]!;
       corners.push(
         [x + (i % 2 === 0 ? 1000 : -1000), y],
-        [x + (i % 2 === 0 ? 1000 : -1000), y + 35],
+        [x + (i % 2 === 0 ? 1000 : -1000), y + 90],
       );
     }
     const corridor = prepareCorridor(corridorOf(corners, { widthM: 20 }));
@@ -132,7 +133,7 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     for (let k = 0; k + 1 < corridor.grid.offsets.length; k += 1) {
       densest = Math.max(densest, corridor.grid.offsets[k + 1]! - corridor.grid.offsets[k]!);
     }
-    expect(densest).toBeGreaterThan(55);
+    expect(densest).toBe(CORRIDOR_POLICY.maxSegmentsPerCell);
     const total = polylineLength(corners);
     const points = Array.from({ length: POINTS }, (_, k): ParsedPoint => {
       const [lon, lat] = at(pointAt(corners, (k * total) / POINTS));
