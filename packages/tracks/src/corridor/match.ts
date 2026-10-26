@@ -1,6 +1,7 @@
 import { localProjection } from '../geo.ts';
 import type { ParsedPoint } from '../track.ts';
 import { CORRIDOR_ENGINE_VERSION, CORRIDOR_POLICY } from './policy.ts';
+import { corridorDistance } from './prepare.ts';
 import { projectTrack, type ProjectedTrack } from './project.ts';
 import type {
   CorridorMatch,
@@ -103,6 +104,32 @@ export function matchCorridor(
   return result('rejected', bestRejected!.reasons, bestRejected!.segment);
 }
 
+/** k-я порядковая статистика первых `count` значений (быстрый выбор, детерминированный опорный — середина). */
+function select(values: Float64Array, count: number, k: number): number {
+  let lo = 0;
+  let hi = count - 1;
+  while (lo < hi) {
+    const pivot = values[(lo + hi) >> 1]!;
+    let i = lo;
+    let j = hi;
+    while (i <= j) {
+      while (values[i]! < pivot) i += 1;
+      while (values[j]! > pivot) j -= 1;
+      if (i <= j) {
+        const swap = values[i]!;
+        values[i] = values[j]!;
+        values[j] = swap;
+        i += 1;
+        j -= 1;
+      }
+    }
+    if (k <= j) hi = j;
+    else if (k >= i) lo = i;
+    else return values[k]!;
+  }
+  return values[k]!;
+}
+
 class Engine {
   private readonly cells: Uint8Array;
   private readonly inStart: Uint8Array;
@@ -119,8 +146,12 @@ class Engine {
   private wholeTrackWrong: boolean | undefined;
   private readonly corridor: PreparedCorridor;
   private readonly track: ProjectedTrack;
-  /** шаг дольше — аномальный (удалённые точки): превышение Δs над хордой — в сход */
-  private readonly anomalousStepMs: number;
+  /** буферы запроса сетки для точек хорды аномального шага */
+  private readonly gridOut: Int32Array;
+  private readonly gridStamp: Int32Array;
+  private gridMark = 0;
+  /** интервалы шагов в движении — медиана сегмента (буфер) */
+  private readonly movingIntervals: Float64Array;
 
   // без параметров-свойств: вход `parse` грузится Node со стиранием типов (только стираемый синтаксис)
   constructor(corridor: PreparedCorridor, track: ProjectedTrack) {
@@ -148,14 +179,10 @@ class Engine {
       this.inStart[k] = this.gateX[k]! ** 2 + this.gateY[k]! ** 2 <= r2 ? 1 : 0;
       this.inFinish[k] = this.finishX[k]! ** 2 + this.finishY[k]! ** 2 <= r2 ? 1 : 0;
     }
-    const intervals = new Float64Array(Math.max(0, n - 1));
-    for (let k = 0; k + 1 < n; k += 1) intervals[k] = track.time[k + 1]! - track.time[k]!;
-    intervals.sort();
-    const median = intervals.length > 0 ? intervals[intervals.length >> 1]! : 0;
-    this.anomalousStepMs = Math.max(
-      CORRIDOR_POLICY.anomalousStepFactor * median,
-      CORRIDOR_POLICY.anomalousStepMinS * 1000,
-    );
+    const segments = corridor.lon.length - 1;
+    this.gridOut = new Int32Array(segments);
+    this.gridStamp = new Int32Array(segments);
+    this.movingIntervals = new Float64Array(Math.max(0, n - 1));
   }
 
   /** Выходы из ворот старта вперёд по маршруту; подряд в пределах 60 с — последний; не больше 20. */
@@ -280,16 +307,14 @@ class Engine {
    * до точки входа, доля `u` ворот).
    */
   private scan(start: Crossing, lastIndex: number, findFinish: boolean): Scan {
-    const { track, corridor } = this;
+    const { corridor } = this;
     const n = corridor.coverageCells;
     this.resetCells();
-    let distanceM = 0;
-    let offCorridorM = 0;
-    let excursion = 0;
-    let maxExcursionM = 0;
     let finish: Crossing | null = null;
     let lastEarlyEntry: Crossing | null = null;
     let endIndex = lastIndex;
+    /** доля последнего шага до конца сегмента (вход в ворота финиша) */
+    let endU = 1;
     this.cover(start.index);
 
     for (let k = start.index + 1; k <= lastIndex; k += 1) {
@@ -309,25 +334,7 @@ class Engine {
         findFinish &&
         (this.covered + this.gapCells + this.uncoveredTail()) / n >= CORRIDOR_POLICY.coverageMin;
       const partialEnd = !findFinish && k === lastIndex && entering;
-
-      const from = k - 1 === start.index ? start.u : 0;
-      const to = isFinish || partialEnd ? entry!.u : 1;
-      const length = track.step[k - 1]! * Math.max(0, to - from);
-      distanceM += length;
-      // момент пересечения ворот (начало первого и конец последнего шага) — точка коридора
-      const fromInside = k - 1 === start.index || track.inside[k - 1] === 1;
-      const toInside = isFinish || partialEnd || track.inside[k] === 1;
-      const outside = (fromInside ? 0 : 1) + (toInside ? 0 : 1);
-      // выход — подряд идущие вклады; точка внутри коридора его завершает (входящая половина шага — в нём)
-      let off = outside === 2 ? length : outside === 1 ? length / 2 : 0;
-      // аномально долгий шаг «внутри → внутри»: путь по маршруту длиннее хорды — срезка без точек
-      if (outside === 0) off = this.hiddenExcursion(k - 1) * Math.max(0, to - from);
-      if (off > 0) {
-        offCorridorM += off;
-        excursion = fromInside ? off : excursion + off;
-        maxExcursionM = Math.max(maxExcursionM, excursion);
-      }
-      if (toInside) excursion = 0;
+      if (isFinish || partialEnd) endU = entry!.u;
 
       if (isFinish) this.coverTail();
       if (isFinish) {
@@ -339,6 +346,7 @@ class Engine {
     }
 
     const runs = this.runs();
+    const { distanceM, offCorridorM, maxExcursionM } = this.offCorridor(start, endIndex, endU);
     return {
       finish,
       lastEarlyEntry,
@@ -415,12 +423,93 @@ class Engine {
     );
   }
 
-  /** Превышение пути по маршруту над хордой на аномально долгом шаге по маршруту, м. */
-  private hiddenExcursion(k: number): number {
+  /**
+   * Длина трека и сход на сегменте: шаги от выхода из ворот старта (доля `start.u`) до точки `endIndex` (последний
+   * шаг — до доли `endU`; < 1 — вход в ворота финиша). Шаг целиком снаружи — весь, одна точка снаружи — половина;
+   * выход завершается точкой внутри; момент ворот — точка коридора. Аномально долгий шаг «внутри → внутри» —
+   * отдельный выход: больше из превышения `Δs` над хордой и части хорды вне коридора (удалённые точки на срезке).
+   */
+  private offCorridor(
+    start: Crossing,
+    endIndex: number,
+    endU: number,
+  ): { distanceM: number; offCorridorM: number; maxExcursionM: number } {
     const { track } = this;
-    if (track.time[k + 1]! - track.time[k]! <= this.anomalousStepMs) return 0;
+    const anomalousMs = this.anomalousStepMs(start.index, endIndex);
+    let distanceM = 0;
+    let offCorridorM = 0;
+    let excursion = 0;
+    let maxExcursionM = 0;
+    for (let k = start.index + 1; k <= endIndex; k += 1) {
+      const from = k - 1 === start.index ? start.u : 0;
+      const atEnd = k === endIndex && endU < 1;
+      const to = atEnd ? endU : 1;
+      const share = Math.max(0, to - from);
+      const length = track.step[k - 1]! * share;
+      distanceM += length;
+      const fromInside = k - 1 === start.index || track.inside[k - 1] === 1;
+      const toInside = atEnd || track.inside[k] === 1;
+      const outside = (fromInside ? 0 : 1) + (toInside ? 0 : 1);
+      let off = outside === 2 ? length : outside === 1 ? length / 2 : 0;
+      if (outside === 0 && track.time[k]! - track.time[k - 1]! > anomalousMs) {
+        off = this.hiddenExcursion(k - 1) * share;
+      }
+      if (off > 0) {
+        offCorridorM += off;
+        excursion = fromInside ? off : excursion + off;
+        maxExcursionM = Math.max(maxExcursionM, excursion);
+      }
+      if (toInside) excursion = 0;
+    }
+    return { distanceM, offCorridorM, maxExcursionM };
+  }
+
+  /**
+   * Порог аномального шага: `max(factor × медиана интервала, minS)`, медиана — по шагам в движении (≥ 1 м/с) самого
+   * сегмента: стоянка и запись вне сегмента с другой частотой порог не сдвигают.
+   */
+  private anomalousStepMs(from: number, to: number): number {
+    const { track } = this;
+    let count = 0;
+    for (let k = from; k < to; k += 1) {
+      const dt = track.time[k + 1]! - track.time[k]!;
+      if (dt > 0 && track.step[k]! >= dt / 1000) {
+        this.movingIntervals[count] = dt;
+        count += 1;
+      }
+    }
+    const median = count > 0 ? select(this.movingIntervals, count, count >> 1) : 0;
+    return Math.max(
+      CORRIDOR_POLICY.anomalousStepFactor * median,
+      CORRIDOR_POLICY.anomalousStepMinS * 1000,
+    );
+  }
+
+  /** Аномальный шаг по маршруту: больше из превышения `Δs` над хордой и части хорды вне коридора, м. */
+  private hiddenExcursion(k: number): number {
+    const { track, corridor } = this;
     if (!this.interpolable(k)) return 0;
-    return Math.max(0, track.s[k + 1]! - track.s[k]! - track.step[k]!);
+    const shortcut = Math.max(0, track.s[k + 1]! - track.s[k]! - track.step[k]!);
+    const a = track.points[k]!;
+    const b = track.points[k + 1]!;
+    const samples = Math.max(1, Math.ceil(track.step[k]! / CORRIDOR_POLICY.chordSampleM));
+    const radius = CORRIDOR_POLICY.searchRadius(corridor.widthM);
+    let outside = 0;
+    for (let i = 0; i < samples; i += 1) {
+      const u = (i + 0.5) / samples;
+      this.gridMark += 1;
+      const d = corridorDistance(
+        corridor,
+        a.lon + (b.lon - a.lon) * u,
+        a.lat + (b.lat - a.lat) * u,
+        radius,
+        this.gridOut,
+        this.gridStamp,
+        this.gridMark,
+      );
+      if (d > corridor.widthM) outside += track.step[k]! / samples;
+    }
+    return Math.max(shortcut, outside);
   }
 
   /** Обе точки шага [k, k + 1] вне ворот, а хорда (≤ gapMaxM) проходит сквозь круг. */

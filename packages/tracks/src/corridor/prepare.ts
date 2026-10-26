@@ -254,6 +254,31 @@ export function gridCandidates(
   return count;
 }
 
+/** Расстояние от точки до линии коридора в радиусе `radiusM`, м (`Infinity` — дальше). */
+export function corridorDistance(
+  corridor: PreparedCorridor,
+  lon: number,
+  lat: number,
+  radiusM: number,
+  out: Int32Array,
+  stamp: Int32Array,
+  mark: number,
+): number {
+  const found = gridCandidates(corridor, lon, lat, radiusM, out, stamp, mark);
+  let best = Infinity;
+  for (let c = 0; c < found; c += 1) {
+    const j = out[c]!;
+    const px = (lon - corridor.lon[j]!) * corridor.segKx[j]!;
+    const py = (lat - corridor.lat[j]!) * corridor.ky;
+    const dx = corridor.segDx[j]!;
+    const dy = corridor.segDy[j]!;
+    const raw = (px * dx + py * dy) / corridor.segLength2[j]!;
+    const t = raw < 0 ? 0 : raw > 1 ? 1 : raw;
+    best = Math.min(best, Math.hypot(px - t * dx, py - t * dy));
+  }
+  return best <= radiusM ? best : Infinity;
+}
+
 function lowerBound(values: Float64Array, target: number): number {
   let lo = 0;
   let hi = values.length;

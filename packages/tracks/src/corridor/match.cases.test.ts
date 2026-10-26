@@ -233,6 +233,61 @@ describe('сход (A6)', () => {
     ];
     const result = brief(timed([...before, ...after], seconds), corridor);
     expect(result.reasons).toEqual(['off_corridor']);
+
+    // стоянка до старта (400 точек раз в 12 с) и после финиша (раз в 30 с) не меняет вердикт
+    const parked = [...Array.from({ length: 400 }, (): Xy => [-95, 0])];
+    const tail = Array.from({ length: 50 }, (): Xy => [2195, 1000]);
+    const shift = 400 * 12;
+    const last = seconds[seconds.length - 1]! + shift;
+    const padded = timed(
+      [...parked, ...before, ...after, ...tail],
+      [
+        ...parked.map((_, i) => i * 12),
+        ...seconds.map((second) => second + shift),
+        ...tail.map((_, i) => last + 30 * (i + 1)),
+      ],
+    );
+    const withParking = brief(padded, corridor);
+    expect(withParking.reasons).toEqual(['off_corridor']);
+    expect(withParking.segment!.offCorridorM).toBe(result.segment!.offCorridorM);
+  });
+
+  /** Длинный маршрут (доля < 2 %), один аномальный шаг 100 с срезает угол: часть хорды вне коридора > 500 м. */
+  it('аномальная срезка: непрерывный выход — часть хорды вне коридора, не только сокращение пути', () => {
+    const route: Xy[] = [
+      [0, 0],
+      [10_000, 0],
+      [10_000, 10_000],
+      [40_000, 10_000],
+    ];
+    const corridor = prepareCorridor(corridorOf(route));
+    const before = steps(-95, 9345, 10).map((x): Xy => [x, 0]);
+    const after = [
+      ...steps(655, 9995, 10).map((y): Xy => [10_000, y]),
+      ...steps(10_005, 40_195, 10).map((x): Xy => [x, 10_000]),
+    ];
+    const cut: Xy[] = [
+      [9350, 0],
+      [10_000, 650],
+    ];
+    const seconds = [
+      ...[...before, cut[0]!].map((_, i) => i),
+      ...[cut[1]!, ...after].map((_, i) => before.length + 100 + i),
+    ];
+    const result = brief(timed([...before, ...cut, ...after], seconds), corridor);
+    // независимо: часть хорды (9350,0)→(10000,650) дальше 50 м от маршрута, шаг 1 см
+    let outside = 0;
+    const chord = Math.hypot(650, 650);
+    for (let i = 0; i < chord * 100; i += 1) {
+      const u = (i + 0.5) / (chord * 100);
+      const [x, y] = [9350 + 650 * u, 650 * u];
+      const d = Math.min(Math.hypot(Math.max(0, x - 10_000), y), Math.abs(10_000 - x));
+      if (Math.min(d, Math.abs(y)) > 50) outside += 0.01;
+    }
+    expect(outside).toBeGreaterThan(500);
+    expect(result.reasons).toEqual(['off_corridor']);
+    expect(Math.abs(result.segment!.maxExcursionM - outside)).toBeLessThanOrEqual(10);
+    expect(result.segment!.offCorridorShare).toBeLessThan(0.02);
   });
 });
 
