@@ -3,6 +3,7 @@ import type {
   MyAttempt,
   MyRaceEntry,
   PendingUpload,
+  RaceResultStatus,
   RaceResultsPage,
   RaceResultsQuery,
 } from '@pokatim/contracts';
@@ -33,6 +34,11 @@ import {
 import { ResultsRepository } from './results.repository';
 
 const notFound = () => domainError('NOT_FOUND', 404);
+
+/** Статус, время и место участника (без группы) — «моё участие» и место цели спора. */
+export type EntryResult = Omit<MyRaceEntry['result'], 'group' | 'status'> & {
+  status: RaceResultStatus;
+};
 const invalidCursor = () =>
   domainError('VALIDATION_FAILED', 400, { fields: [{ path: 'cursor', code: 'INVALID' }] });
 
@@ -123,7 +129,7 @@ export class ResultsReadService {
     entry: RaceEntryDoc | null,
     now: Date,
     session: DbSession,
-  ): Promise<Omit<MyRaceEntry['result'], 'group'>> {
+  ): Promise<EntryResult> {
     return race.protocolPublishedAt !== null
       ? this.protocolResult(race, entry, now, session)
       : this.liveResult(race, entry, now, session);
@@ -138,7 +144,7 @@ export class ResultsReadService {
     entry: RaceEntryDoc | null,
     now: Date,
     session: DbSession,
-  ): Promise<Omit<MyRaceEntry['result'], 'group'>> {
+  ): Promise<EntryResult> {
     const ranked = await this.repository.countRanked(race.id, session);
     const status = resultStatus(entry, race, now);
     const best = entry?.status === 'active' ? entry.best : null;
@@ -160,7 +166,7 @@ export class ResultsReadService {
     entry: RaceEntryDoc | null,
     now: Date,
     session: DbSession,
-  ): Promise<Omit<MyRaceEntry['result'], 'group'>> {
+  ): Promise<EntryResult> {
     const revision = await this.protocolRevision(race.id, session);
     const { ranked } = await this.repository.countProtocolRows(race.id, revision, session);
     const row = entry

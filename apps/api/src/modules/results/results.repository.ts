@@ -136,8 +136,8 @@ export class ResultsRepository {
     return (await this.c.entries.findOne({ raceId, userId }, { session })) ?? undefined;
   }
 
-  async findEntryById(id: string): Promise<RaceEntryDoc | undefined> {
-    return (await this.c.entries.findOne({ _id: id })) ?? undefined;
+  async findEntryById(id: string, session?: DbSession): Promise<RaceEntryDoc | undefined> {
+    return (await this.c.entries.findOne({ _id: id }, { session })) ?? undefined;
   }
 
   /** Вставка заявки (транзакция заявки после `admitEntry`); гонку двух вставок ловит уникальный индекс. */

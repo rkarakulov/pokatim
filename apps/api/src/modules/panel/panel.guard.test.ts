@@ -137,7 +137,13 @@ describe('PanelGuard — порядок отказов', () => {
       userId: 'uid',
       sessionId: 'sid',
       role: 'moderator',
-      permissions: ['audit.read', 'races.read', 'rides.moderate'],
+      permissions: [
+        'audit.read',
+        'races.read',
+        'rides.moderate',
+        'disputes.read',
+        'disputes.decide',
+      ],
     });
     expect(allowed.repository.touchSession).toHaveBeenCalled();
   });

@@ -12,6 +12,8 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
     expect([...ROLE_PERMISSIONS.admin].sort()).toEqual([...PERMISSIONS].sort());
     expect([...ROLE_PERMISSIONS.moderator].sort()).toEqual([
       'audit.read',
+      'disputes.decide',
+      'disputes.read',
       'races.read',
       'rides.moderate',
     ]);
@@ -46,9 +48,23 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
     expect(ROLE_PERMISSIONS.organizer.has('rides.moderate')).toBe(false);
   });
 
+  it('race-results-06 (R1): споры — admin и moderator, не organizer', () => {
+    for (const permission of ['disputes.read', 'disputes.decide'] as const) {
+      expect(ROLE_PERMISSIONS.admin.has(permission)).toBe(true);
+      expect(ROLE_PERMISSIONS.moderator.has(permission)).toBe(true);
+      expect(ROLE_PERMISSIONS.organizer.has(permission)).toBe(false);
+    }
+  });
+
   it('permissionsOf — в порядке контракта (стабильный ответ PanelMe)', () => {
     expect(permissionsOf('admin')).toEqual([...PERMISSIONS]);
-    expect(permissionsOf('moderator')).toEqual(['audit.read', 'races.read', 'rides.moderate']);
+    expect(permissionsOf('moderator')).toEqual([
+      'audit.read',
+      'races.read',
+      'rides.moderate',
+      'disputes.read',
+      'disputes.decide',
+    ]);
     expect(permissionsOf('organizer')).toEqual(['races.read', 'races.manage', 'results.manage']);
   });
 

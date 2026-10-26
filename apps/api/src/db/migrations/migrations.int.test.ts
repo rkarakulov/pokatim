@@ -24,6 +24,8 @@ import { RIDES_COLLECTIONS } from '../../modules/rides/rides.collection';
 import { results } from './0015_results';
 import { protocol } from './0016_protocol';
 import { rideReports } from './0017_ride_reports';
+import { disputes } from './0018_disputes';
+import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
 import { ROUTES_COLLECTIONS } from '../../modules/routes/routes.collection';
@@ -82,6 +84,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0015_results',
       '0016_protocol',
       '0017_ride_reports',
+      '0018_disputes',
     ]);
   });
 
@@ -512,6 +515,66 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
 
     expect(await indexesOf(RIDE_REPORTS_COLLECTIONS.reports)).toEqual(reports);
     expect(await indexesOf(RIDES_COLLECTIONS.rides)).toMatchObject(queues);
+  });
+
+  it('0018_disputes: споры (unique пары), гейты и списки, история; бэкфилл disqualified и disputeFilingClosedAt; повторный up — без изменений', async () => {
+    const index = (key: Record<string, unknown>, unique = false) => ({
+      key,
+      unique,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+    const disputeIndexes = {
+      disputes_pair_unique: index({ raceId: 1, complainantUserId: 1, targetEntryId: 1 }, true),
+      disputes_target_idx: index({ targetEntryId: 1, status: 1 }),
+      disputes_race_idx: index({ raceId: 1, status: 1, filedAt: -1, _id: -1 }),
+      disputes_queue_idx: index({ status: 1, filedAt: -1, _id: -1 }),
+      disputes_all_idx: index({ filedAt: -1, _id: -1 }),
+    };
+    const eventIndexes = {
+      dispute_events_dispute_idx: index({ disputeId: 1, at: 1, _id: 1 }),
+    };
+    expect(await indexesOf(DISPUTES_COLLECTIONS.disputes)).toEqual(disputeIndexes);
+    expect(await indexesOf(DISPUTES_COLLECTIONS.events)).toEqual(eventIndexes);
+    expect(migrations.at(-1)?.id).toBe('0018_disputes');
+
+    // заявка и гонка до 06 (без полей) и уже с полями — бэкфилл трогает только отсутствующие
+    const entriesDb = h.db.collection<Record<string, unknown> & { _id: string }>(
+      RESULTS_COLLECTIONS.entries,
+    );
+    const racesDb = h.db.collection<Record<string, unknown> & { _id: string }>(
+      RACES_COLLECTIONS.races,
+    );
+    const mark = { at: new Date('2026-10-27T10:00:00Z'), disputeId: 'd' };
+    await entriesDb.insertMany([
+      { _id: 'old-entry', raceId: 'r', userId: 'u1', status: 'active' },
+      { _id: 'dq-entry', raceId: 'r', userId: 'u2', status: 'active', disqualified: mark },
+    ]);
+    await racesDb.insertMany([
+      { _id: 'old-race', status: 'published' },
+      { _id: 'frozen-race', status: 'published', disputeFilingClosedAt: mark.at },
+    ]);
+    await disputes.up(h.db);
+    await disputes.up(h.db);
+    expect(await entriesDb.findOne({ _id: 'old-entry' })).toEqual({
+      _id: 'old-entry',
+      raceId: 'r',
+      userId: 'u1',
+      status: 'active',
+      disqualified: null,
+    });
+    expect((await entriesDb.findOne({ _id: 'dq-entry' }))?.disqualified).toEqual(mark);
+    expect(await racesDb.findOne({ _id: 'old-race' })).toEqual({
+      _id: 'old-race',
+      status: 'published',
+      disputeFilingClosedAt: null,
+    });
+    expect((await racesDb.findOne({ _id: 'frozen-race' }))?.disputeFilingClosedAt).toEqual(mark.at);
+    await entriesDb.deleteMany({ _id: { $in: ['old-entry', 'dq-entry'] } });
+    await racesDb.deleteMany({ _id: { $in: ['old-race', 'frozen-race'] } });
+
+    expect(await indexesOf(DISPUTES_COLLECTIONS.disputes)).toEqual(disputeIndexes);
+    expect(await indexesOf(DISPUTES_COLLECTIONS.events)).toEqual(eventIndexes);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

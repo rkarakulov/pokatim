@@ -1,9 +1,15 @@
 import { Global, Module } from '@nestjs/common';
 
+import { IdentityModule } from '../identity';
+import { PanelModule } from '../panel';
 import { RACE_CANCEL_GATE } from '../races';
-import { RESULT_DISPUTE_GATE } from '../results';
+import { RESULT_DISPUTE_GATE, ResultsCoreModule } from '../results';
 import { DisputeGates } from './dispute-gates';
+import { DisputesAdminController } from './disputes-admin.controller';
+import { DisputesController } from './disputes.controller';
+import { DisputesPanelService } from './disputes-panel.service';
 import { DisputesRepository } from './disputes.repository';
+import { DisputesService } from './disputes.service';
 
 /**
  * Ядро `disputes` (RC-1): репозиторий и гейты для `results` (`RESULT_DISPUTE_GATE`) и `races` (`RACE_CANCEL_GATE`).
@@ -21,3 +27,14 @@ import { DisputesRepository } from './disputes.repository';
   exports: [DisputesRepository, RESULT_DISPUTE_GATE, RACE_CANCEL_GATE],
 })
 export class DisputesCoreModule {}
+
+/**
+ * Споры по результатам гонки (race-results-06): приложение — `AuthGuard` identity; панель — `/v1/admin/disputes` под
+ * `PanelGuard`. `results` и `races` — только порты через их `index.ts` (`ResultsForDisputes`, `RaceRegistry`).
+ */
+@Module({
+  imports: [IdentityModule, PanelModule, ResultsCoreModule],
+  controllers: [DisputesController, DisputesAdminController],
+  providers: [DisputesService, DisputesPanelService],
+})
+export class DisputesModule {}
