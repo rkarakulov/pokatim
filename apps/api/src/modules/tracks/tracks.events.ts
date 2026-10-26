@@ -34,8 +34,9 @@ export const TrackActivityReady = z.object({
 export type TrackActivityReady = z.infer<typeof TrackActivityReady>;
 
 /**
- * Загрузка с активностью удалена: в транзакции удаления; `primaryActivityId` — новая основная группы (бывший дубль
- * удалённой основной) или `null`. Маршрут очереди задаёт подписчик.
+ * Загрузка с активностью удалена: в транзакции удаления; `primaryActivityId` — основная оставшейся группы: новая
+ * (удалена основная — бывший дубль) или прежняя (удалён дубль); группы не осталось — `null`. Маршрут очереди задаёт
+ * подписчик.
  */
 export const TRACK_ACTIVITY_REMOVED = 'tracks.activity-removed';
 export const TrackActivityRemoved = z.object({

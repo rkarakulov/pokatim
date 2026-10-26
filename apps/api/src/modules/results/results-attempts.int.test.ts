@@ -370,6 +370,35 @@ describe('поздний дубль после срока загрузки (A5, 
    * стал основной группы. Для гонки группу представляет сильнейший своевременный член (A) — попытка A, у B попытки
    * нет. Отрицательное доказательство: без выбора своевременного члена A игнорируется — участник без результата.
    */
+  /**
+   * Представитель гонки — дубль в `tracks` (основная — поздняя B). Его удаление — удаление дубля: группа в `tracks` не
+   * пересобирается, но событие несёт оставшуюся основную, и приём выбирает следующего своевременного (C). Отрицательное
+   * доказательство: событие без оставшегося члена — C без попытки, у участника нет результата.
+   */
+  it('удаление представителя-дубля → попытку получает оставшийся своевременный файл, поздний — нет', async () => {
+    const { raceId, auth, worker } = await entered();
+    const first = await uploadRide(h, auth, rideGpx('clean.gpx', RIDE));
+    const second = await uploadRide(h, auth, rideGpx('clean.gpx', RIDE, { scale: 0.99 }));
+    const late = await afterDeadline();
+    const powered = await uploadRide(h, late, rideGpx('clean.gpx', RIDE, { power: true }));
+    await worker.drain();
+    expect((await attempts()).map((a) => [a.activityId, a.status])).toEqual([
+      [first.activityId, 'counted'],
+    ]);
+    expect(
+      (await call(h, 'POST', `/v1/tracks/uploads/${first.uploadId}/delete`, {}, late)).status,
+    ).toBe(204);
+    await worker.drain();
+    const byActivity = new Map((await attempts()).map((a) => [a.activityId, a]));
+    expect(byActivity.get(first.activityId!)).toMatchObject({
+      status: 'withdrawn',
+      withdrawReason: 'activity_removed',
+    });
+    expect(byActivity.get(second.activityId!)).toMatchObject({ status: 'counted' });
+    expect(byActivity.has(powered.activityId!)).toBe(false);
+    expect((await myEntry(h, late, raceId)).result.status).toBe('provisional');
+  });
+
   it('приём отстал: своевременный A получает попытку, поздняя основная B — нет', async () => {
     const { raceId, auth, worker } = await entered();
     const timely = await uploadRide(h, auth, rideGpx('clean.gpx', RIDE));

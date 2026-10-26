@@ -99,6 +99,23 @@ describe('события outbox', () => {
   });
 });
 
+describe('activity-removed при удалении дубля', () => {
+  it('удалён дубль — primaryActivityId = прежняя основная группы (подписчик пересобирает группу)', async () => {
+    const { file, fileActivity, streamActivity } = await fileAndStream();
+    expect((await call(h, 'POST', `/v1/tracks/uploads/${file.id}/delete`, {}, auth)).status).toBe(
+      204,
+    );
+    expect(await eventsOf('tracks.activity-removed')).toEqual([
+      {
+        activityId: fileActivity._id,
+        uploadId: file.id,
+        userId,
+        primaryActivityId: streamActivity._id,
+      },
+    ]);
+  });
+});
+
 describe('порт ActivitySource', () => {
   it('group: состояние сейчас — основная и дубль, время приёма файла, рамка линии', async () => {
     const { file, streamed, fileActivity, streamActivity } = await fileAndStream();

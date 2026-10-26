@@ -192,12 +192,11 @@ export class TrackUploadsService {
       const result = await this.repository.deleteUploadCascade(session, userId, id);
       if (!result) return undefined;
       if (result.activity) {
-        const primaryActivityId = await regroupAfterDelete(
-          this.repository,
-          session,
-          result.activity,
-          now,
-        );
+        // основная группы после удаления: новая (удалена основная) или прежняя (удалён дубль) — подписчик
+        // пересобирает группу по оставшемуся члену (представитель гонки может быть дублем, race-results-03)
+        const primaryActivityId =
+          (await regroupAfterDelete(this.repository, session, result.activity, now)) ??
+          result.activity.duplicateOf;
         await this.outbox.append(session, {
           type: TRACK_ACTIVITY_REMOVED,
           payload: {
