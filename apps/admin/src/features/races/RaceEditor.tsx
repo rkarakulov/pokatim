@@ -201,6 +201,9 @@ export function RaceEditor({
   const lockMark = (field: RaceField) =>
     locked(field) ? <LockMark label={t('admin.locked')} /> : undefined;
   const lockedLabel = (field: RaceField) => (locked(field) ? t('admin.locked') : undefined);
+  // коридор снят в форме (и его можно менять) — дистанция снова вводится вручную, хотя `editable` сервера ещё
+  // считает её вычисляемой (до сохранения)
+  const distanceLocked = locked('distanceKm') && (corridorRouteId !== '' || locked('corridor'));
 
   // подсказки правил (сервер решает): ближайшая дата протокола, «только позже» после закрытия окна
   const earliest = earliestProtocol(windowEndsAt);
@@ -502,11 +505,11 @@ export function RaceEditor({
             ) : (
               <TextField
                 label={t('admin.races.field.distanceKm')}
-                labelAside={lockMark('distanceKm')}
+                labelAside={distanceLocked ? lockMark('distanceKm') : undefined}
                 inputMode="decimal"
                 autoComplete="off"
-                readOnly={locked('distanceKm')}
-                className={locked('distanceKm') ? 'field__control--locked' : undefined}
+                readOnly={distanceLocked}
+                className={distanceLocked ? 'field__control--locked' : undefined}
                 error={errorOf('distanceKm')}
                 {...form.register('distanceKm')}
               />

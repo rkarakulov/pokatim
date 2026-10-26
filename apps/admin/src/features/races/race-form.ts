@@ -174,7 +174,14 @@ export function raceChanges(race: PanelRace, input: RaceInput): Partial<RaceInpu
   for (const field of RACE_FIELDS) {
     // дистанции нет в запросе с коридором — её считает сервер
     if (after[field] === undefined) continue;
-    if (race.editable.fields.includes(field) && !same(before[field], after[field])) {
+    // коридор снят в этой правке — дистанция снова ручная и уходит вместе с ним
+    const editable =
+      race.editable.fields.includes(field) ||
+      (field === 'distanceKm' &&
+        input.corridor === null &&
+        race.corridor !== null &&
+        race.editable.fields.includes('corridor'));
+    if (editable && !same(before[field], after[field])) {
       changes[field] = input[field];
     }
   }

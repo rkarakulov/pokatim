@@ -300,6 +300,90 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
     expect(screen.getByRole('button', { name: 'Загрузить GPX' })).toBeTruthy();
   });
 
+  it('превью: ошибка обновления при показанной линии — линия остаётся, баннер с повтором', async () => {
+    const { queryClient } = await renderApp(`/races/${RACE_ID}`);
+    await screen.findByRole('img', { name: /Линия маршрута/ });
+    mocked.getRoute.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
+    await act(async () => {
+      await queryClient
+        .refetchQueries({ queryKey: ['admin', 'routes', 'item', ROUTE_ID] })
+        .catch(() => undefined);
+    });
+    expect(await screen.findByText('Не удалось обновить маршрут')).toBeTruthy();
+    expect(screen.getByRole('img', { name: /Линия маршрута/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(screen.queryByText('Не удалось обновить маршрут')).toBeNull());
+  });
+
+  it('готовые маршруты — все страницы списка, не только первые 100', async () => {
+    const FAR_ID = '01890a5d-ac96-774b-bcce-b302099a8099';
+    mocked.listRoutes.mockImplementation((params = {}) =>
+      Promise.resolve(
+        params.cursor === 'page-2'
+          ? { items: [summary({ id: FAR_ID, title: 'Дальний маршрут' })], nextCursor: null }
+          : { items: [summary()], nextCursor: 'page-2' },
+      ),
+    );
+    await newRace();
+    await waitFor(() =>
+      expect([...corridorSelect().options].map((option) => option.textContent)).toEqual([
+        'Без коридора',
+        'Минское кольцо',
+        'Дальний маршрут',
+      ]),
+    );
+    expect(mocked.listRoutes).toHaveBeenCalledWith({ status: 'ready', limit: 100 });
+    expect(mocked.listRoutes).toHaveBeenCalledWith({
+      status: 'ready',
+      limit: 100,
+      cursor: 'page-2',
+    });
+  });
+
+  it('тот же файл снова после снятия коридора — готовый маршрут выбирается снова', async () => {
+    await newRace();
+    await waitFor(() => expect(corridorSelect().options).toHaveLength(2));
+    mocked.uploadRoute.mockResolvedValue(route());
+    for (let round = 0; round < 2; round += 1) {
+      chooseGpx('Минское кольцо.gpx');
+      const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
+      await waitFor(() => expect(corridorSelect().value).toBe(ROUTE_ID));
+      fireEvent.change(corridorSelect(), { target: { value: '' } });
+      expect(corridorSelect().value).toBe('');
+    }
+    expect(mocked.uploadRoute).toHaveBeenCalledTimes(2);
+  });
+
+  it('обработка дольше 5 мин — опрос прекращается, текст «проверьте позже»', async () => {
+    const { queryClient } = await newRace();
+    await waitFor(() => expect(corridorSelect().options).toHaveLength(2));
+    const processing = route({ id: NEW_ROUTE_ID, status: 'processing', line: [] });
+    mocked.uploadRoute.mockResolvedValue(processing);
+    mocked.getRoute.mockResolvedValue(processing);
+    chooseGpx();
+    const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
+    await screen.findByText('Обрабатываем маршрут…');
+
+    const later = Date.now() + 6 * 60 * 1000;
+    vi.spyOn(Date, 'now').mockReturnValue(later);
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ['admin', 'routes', 'item', NEW_ROUTE_ID] });
+    });
+    expect(
+      await screen.findByText(
+        'Маршрут обрабатывается дольше обычного — проверьте позже или загрузите файл ещё раз',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText('Обрабатываем маршрут…')).toBeNull();
+    const route_ = queryClient
+      .getQueryCache()
+      .find({ queryKey: ['admin', 'routes', 'item', NEW_ROUTE_ID] });
+    const interval = route_?.observers[0]?.options.refetchInterval;
+    expect(typeof interval === 'function' ? interval(route_!) : interval).toBe(false);
+  });
+
   it('превью: ошибка загрузки маршрута — текст и повтор', async () => {
     mocked.getRoute.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
     await renderApp(`/races/${RACE_ID}`);
@@ -357,11 +441,18 @@ describe('зафиксированный коридор (AC4, V-11)', () => {
     await screen.findByRole('heading', { name: 'Осенний коридор Заславль', level: 1 });
     await waitFor(() => expect(corridorSelect().value).toBe(ROUTE_ID));
     fireEvent.change(corridorSelect(), { target: { value: '' } });
+    // сервер ещё считает дистанцию вычисляемой (`editable` без distanceKm), но коридор снят в форме — поле открыто
     expect(input(/^Дистанция, км/).value).toBe('86');
+    expect(input(/^Дистанция, км/).readOnly).toBe(false);
     expect(screen.queryByLabelText(/^Допуск коридора/)).toBeNull();
+    fireEvent.change(input(/^Дистанция, км/), { target: { value: '90' } });
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить изменения' }));
     await waitFor(() =>
-      expect(mocked.updateRace).toHaveBeenCalledWith(RACE_ID, { version: 3, corridor: null }),
+      expect(mocked.updateRace).toHaveBeenCalledWith(RACE_ID, {
+        version: 3,
+        distanceKm: 90,
+        corridor: null,
+      }),
     );
   });
 });

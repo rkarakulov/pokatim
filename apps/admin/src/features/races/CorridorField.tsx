@@ -18,7 +18,13 @@ import {
   SelectField,
   TextField,
 } from '../../ui';
-import { readyRoutesQuery, ROUTE_POLL_MS, ROUTES_QUERY_KEY, routeQuery } from './routes-query';
+import {
+  readyRoutesQuery,
+  ROUTE_POLL_MAX_MS,
+  ROUTE_POLL_MS,
+  ROUTES_QUERY_KEY,
+  routeQuery,
+} from './routes-query';
 
 /** Ответы загрузки с текстом под полем окна (остальное — «Не удалось сохранить»). */
 const UPLOAD_ERRORS: Partial<Record<string, MessageKey>> = {
@@ -73,6 +79,18 @@ function RoutePreview({ routeId }: { routeId: string }) {
   if (route.status !== 'ready') return null;
   return (
     <div className="corridor-preview">
+      {state.isError ? (
+        <Banner
+          tone="error"
+          role="alert"
+          title={t('admin.races.corridor.previewRefreshFailed')}
+          actions={
+            <Button size="sm" onClick={() => void state.refetch()}>
+              {t('state.retry')}
+            </Button>
+          }
+        />
+      ) : null}
       <LinePreview
         points={route.line}
         label={t('admin.races.corridor.previewLabel', {
@@ -108,6 +126,8 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
   const [title, setTitle] = useState('');
   const [uploadError, setUploadError] = useState<string>();
   const [pendingId, setPendingId] = useState<string>();
+  /** Момент начала опроса загруженного маршрута (мс) — предел ожидания `ROUTE_POLL_MAX_MS`. */
+  const [pendingSince, setPendingSince] = useState(0);
 
   // опрос загруженного маршрута: каждые 2 с, пока `processing`; три сбоя подряд (повторы запроса) — баннер
   const poll = useQuery({
@@ -115,10 +135,14 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
     enabled: pendingId !== undefined,
     retry: 2,
     retryDelay: ROUTE_POLL_MS,
-    refetchInterval: (query) =>
-      query.state.data && query.state.data.status !== 'processing' ? false : ROUTE_POLL_MS,
+    refetchInterval: (query) => {
+      if (query.state.data && query.state.data.status !== 'processing') return false;
+      return query.state.dataUpdatedAt - pendingSince >= ROUTE_POLL_MAX_MS ? false : ROUTE_POLL_MS;
+    },
   });
   const pending = pendingId ? poll.data : undefined;
+  const pollExpired =
+    pending?.status === 'processing' && poll.dataUpdatedAt - pendingSince >= ROUTE_POLL_MAX_MS;
   // маршрут готов — один раз выбрать его в поле и обновить список вариантов
   const selected = useRef<string>(undefined);
   useEffect(() => {
@@ -132,6 +156,9 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
   const upload = useMutation({
     mutationFn: ({ bytes, name }: { bytes: File; name: string }) => api.uploadRoute(bytes, name),
     onSuccess: (route) => {
+      // новый цикл загрузки: тот же файл после «Без коридора» снова выбирает свой маршрут
+      selected.current = undefined;
+      setPendingSince(Date.now());
       queryClient.setQueryData(routeQuery(route.id).queryKey, route);
       setFile(undefined);
       setPendingId(route.id);
@@ -249,7 +276,9 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
       {picker}
       {pending?.status === 'processing' ? (
         <p className="field__help t-meta" role="status">
-          {t('admin.races.corridor.processing')}
+          {pollExpired
+            ? t('admin.races.corridor.processingLong')
+            : t('admin.races.corridor.processing')}
         </p>
       ) : null}
       {pendingId && poll.isError ? (

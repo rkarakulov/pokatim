@@ -654,6 +654,9 @@ export const ru = {
   'admin.races.corridor.loop': 'Круговой',
   'admin.races.corridor.elevation': 'набор {gain} м',
   'admin.races.corridor.processing': 'Обрабатываем маршрут…',
+  'admin.races.corridor.processingLong':
+    'Маршрут обрабатывается дольше обычного — проверьте позже или загрузите файл ещё раз',
+  'admin.races.corridor.previewRefreshFailed': 'Не удалось обновить маршрут',
   'admin.races.corridor.previewLabel': 'Линия маршрута «{title}», {distance}',
   'admin.races.corridor.previewFailed': 'Не удалось загрузить маршрут',
   'admin.races.corridor.pollFailed': 'Не удаётся получить статус маршрута — продолжаем проверять',
