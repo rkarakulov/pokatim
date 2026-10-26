@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
-import { onlineManager } from '@tanstack/react-query';
+import { focusManager, onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { getDocumentAsync } from 'expo-document-picker';
 import { AccessibilityInfo } from 'react-native';
@@ -176,8 +176,9 @@ describe('гость (AC1)', () => {
 
   it.each([
     ['без коридора', corridorRace({ corridor: null })],
+    ['закрыта (гостю блока нет)', corridorRace({ phase: 'closed' })],
     ['отменена', corridorRace({ phase: 'cancelled' })],
-  ])('сессия ещё неизвестна, %s — без скелетона (блока не будет)', async (_case, race) => {
+  ])('сессия ещё неизвестна, %s — без скелетона', async (_case, race) => {
     getRace.mockResolvedValue(race);
     useSessionStore.setState({ status: 'unknown', session: null });
     await renderRouter(
@@ -214,6 +215,29 @@ describe('вошедший: заявка (AC2, AC3, AC15, AC16)', () => {
     ).toBeOnTheScreen();
     expect(participation().getByRole('button', { name: 'Отменить участие' })).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Участвовать' })).toBeNull();
+  });
+
+  it('возврат фокуса сразу после ответа — без повторного запроса участия; через 10 с — с ним (B13)', async () => {
+    await openSignedIn();
+    expect(await screen.findByRole('button', { name: 'Участвовать' })).toBeOnTheScreen();
+    expect(getMyRaceEntry).toHaveBeenCalledTimes(1);
+
+    try {
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      expect(getMyRaceEntry).toHaveBeenCalledTimes(1);
+
+      await act(() => jest.advanceTimersByTimeAsync(10_000));
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() => expect(getMyRaceEntry).toHaveBeenCalledTimes(2));
+    } finally {
+      focusManager.setFocused(undefined);
+    }
   });
 
   it('без canEnter — причина заявки (не not_entered)', async () => {

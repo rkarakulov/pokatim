@@ -23,7 +23,6 @@ import {
   blockReasonText,
   enterBlockReason,
   guestCanSeeEnter,
-  mayShowParticipation,
   raceActionErrorText,
 } from '../participation-format';
 import { useEnterRace } from '../queries';
@@ -95,7 +94,8 @@ export function RaceParticipation({
   sessionPending: boolean;
 }) {
   const theme = useTheme();
-  if (sessionPending) return mayShowParticipation(race) ? <BlockSkeleton /> : null;
+  // место держим только там, где блок будет и у гостя: на завершённых гонках гость (SSR, ссылки) блока не видит
+  if (sessionPending) return guestCanSeeEnter(race) ? <BlockSkeleton /> : null;
   if (!signedIn) {
     return guestCanSeeEnter(race) ? <EnterAction raceId={race.id} signedIn={false} /> : null;
   }

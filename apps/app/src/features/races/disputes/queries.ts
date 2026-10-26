@@ -9,6 +9,7 @@ import { withAccessToken } from '@/features/auth/authorized';
 import { apiErrorCode } from '@/features/auth/error-messages';
 import { AUTH_MUTATION } from '@/features/auth/queries';
 import { api } from '@/lib/api';
+import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
 import { ENTRY_POLL_MS, raceEntryKey, raceResultsKey } from '../queries';
 import { needsDisputePolling } from './dispute-format';
@@ -32,7 +33,7 @@ export function useMyRaceDisputes(raceId: string, enabled: boolean) {
         throw error;
       }
     },
-    staleTime: 0,
+    staleTime: DEFAULT_STALE_MS,
     refetchInterval: (q) => (needsDisputePolling(q.state.data) ? ENTRY_POLL_MS : false),
     enabled,
   });
