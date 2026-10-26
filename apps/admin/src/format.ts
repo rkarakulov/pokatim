@@ -46,6 +46,13 @@ export function formatDateTimeLong(iso: string): string {
   return `${part('day')} ${part('month')} ${part('year')}, ${part('hour')}:${part('minute')}`;
 }
 
+const KM = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/** «86,0 км» из метров (длина маршрута, 0,1 км). */
+export function formatKmFromMeters(meters: number): string {
+  return `${KM.format(Math.round(meters / 100) / 10)} км`;
+}
+
 /** «1 апреля 2026» из календарной даты `YYYY-MM-DD` (дата Минска, без перевода). */
 export function formatLocalDate(date: string): string {
   const part = parts(DATE_LONG, new Date(`${date}T12:00:00Z`));
