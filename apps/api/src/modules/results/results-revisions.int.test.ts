@@ -330,3 +330,61 @@ describe('перепроверка после публикации (AC8, RC-1, R
     expect([again.status, blockReason(again.body)]).toEqual([409, 'recheck_not_started']);
   });
 });
+
+describe('DQ переживает выпадение из ревизии (ревью pass 1)', () => {
+  it('DQ → перепроверка без лучшего (выпал) → перепроверка с лучшим — строка снова dq, не место', async () => {
+    const race = await corridorRace(h);
+    const r1 = await rider(h, 'r1@example.com');
+    const r2 = await rider(h, 'r2@example.com');
+    await enterRace(h, r1.auth, race.raceId);
+    await enterRace(h, r2.auth, race.raceId);
+    const worker = resultsWorker(h);
+    await worker.drain();
+    travelTo(h, new Date('2026-10-25T09:00:00Z'));
+    await uploadRide(
+      h,
+      await signIn(h, r1.email),
+      rideGpx('clean.gpx', new Date('2026-10-25T06:00:00Z')),
+    );
+    await uploadRide(
+      h,
+      await signIn(h, r2.email),
+      rideGpx('clean.gpx', new Date('2026-10-25T07:00:00Z'), { scale: 1.2 }),
+    );
+    await worker.drain();
+    const e2 = (await resultsDb(h).entries.findOne({ userId: r2.userId }))!;
+    travelTo(h, UPLOAD_CLOSES);
+    const token = await panelSession(h, 'admin@example.by');
+    const raceId = race.raceId;
+    expect((await protocolAction(h, token, raceId, '/protocol')).status).toBe(200);
+    const dq = { entryId: e2._id, reason: 'Срезка' };
+    expect((await protocolAction(h, token, raceId, '/protocol/disqualify', dq)).status).toBe(200);
+    const processor = h.worker.get(AttemptCheckProcessor);
+
+    /** Перепроверка: попытка r2 — отказ или засчитана; остальные — как есть; применить. */
+    const recheckRound = async (r2Counted: boolean) => {
+      h.clock.advance(1000);
+      expect((await protocolAction(h, token, raceId, '/protocol/recheck')).status).toBe(200);
+      await worker.intake();
+      const attempt = (await resultsDb(h).attempts.findOne({ entryId: e2._id }))!;
+      if (!r2Counted) {
+        vi.spyOn(processor, 'analyze').mockResolvedValueOnce({ ok: false, code: 'implausible' });
+      }
+      await processor.check(attempt._id, attempt.checkRevision);
+      await worker.drain();
+      const res = await protocolAction(h, token, raceId, '/protocol/apply-recheck');
+      expect(res.status).toBe(200);
+      return PanelRaceResults.parse(res.body).protocol!.revision;
+    };
+
+    const dropped = await recheckRound(false);
+    expect((await rowsOf(raceId, dropped)).map((row) => row[0])).not.toContain(e2._id);
+    const back = await recheckRound(true);
+    expect((await rowsOf(raceId, back)).find((row) => row[0] === e2._id)).toEqual([
+      e2._id,
+      null,
+      false,
+      'dq',
+    ]);
+  });
+});

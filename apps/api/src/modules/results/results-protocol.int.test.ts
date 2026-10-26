@@ -5,7 +5,7 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { gate, outboxEvents, retried, untilBlocked } from '../../../test/identity';
+import { call, gate, outboxEvents, retried, untilBlocked } from '../../../test/identity';
 import { panel, panelCall, panelSession } from '../../../test/panel';
 import { publishedRace, RACES, racesDb, racesRepository, staff } from '../../../test/races';
 import {
@@ -247,6 +247,31 @@ describe('исключение и возврат трека (AC2, AC3, D-24)', (
       status: 'excluded',
       segment: null,
     });
+  });
+});
+
+describe('исключение действует на поездку (ревью pass 1)', () => {
+  it('дубль той же поездки (новая основная) не создаёт попытку в обход исключения; явный выбор — тоже', async () => {
+    const { raceId, attempt, auth, worker, ride } = await countedRide();
+    const token = await panelSession(h, 'admin@example.by');
+    expect(
+      (await protocolAction(h, token, raceId, `/attempts/${attempt._id}/exclude`)).status,
+    ).toBe(200);
+    const powered = await uploadRide(h, auth, rideGpx('clean.gpx', RIDE, { power: true }));
+    await worker.drain();
+    expect((await attempts()).map((item) => [item.activityId, item.status])).toEqual([
+      [ride.activityId, 'excluded'],
+    ]);
+    const explicit = await call(
+      h,
+      'POST',
+      `/v1/races/${raceId}/attempts`,
+      { activityId: powered.activityId },
+      auth,
+    );
+    expect(explicit.status).toBe(200);
+    expect(await attempts()).toHaveLength(1);
+    expect((await resultsDb(h).entries.findOne())?.best).toBeNull();
   });
 });
 

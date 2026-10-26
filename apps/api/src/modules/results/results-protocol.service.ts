@@ -242,7 +242,7 @@ export class ResultsProtocolService {
   /**
    * «Применить пересчёт» (R3): есть запуск перепроверки после публикации, новее применения (`recheck_not_started`);
    * незавершённых проверок нет (`checks_pending` с числом). Новая ревизия — по текущим лучшим результатам заявок с
-   * переносом DQ; участник без лучшего выпадает из протокола.
+   * действующими DQ из журнала пересчётов; участник без лучшего выпадает из протокола, его DQ сохраняется.
    */
   async applyRecheck(
     principal: PanelPrincipal,
@@ -260,9 +260,8 @@ export class ResultsProtocolService {
       if (pending > 0) throw blocked('checks_pending', pending);
       const current = await this.currentRevision(tx, raceId);
       const previous = await this.repository.protocolRows(raceId, current, tx);
-      const disqualified = new Set(
-        previous.filter((row) => row.status === 'dq').map((row) => row.entryId),
-      );
+      // DQ — по журналу пересчётов: выпавший из прошлой ревизии участник с DQ не возвращается с местом
+      const disqualified = await this.repository.disqualifiedEntries(raceId, tx);
       const ranked = await this.repository.rankedEntries(raceId, tx);
       const protocol = buildProtocol(
         ranked.map((entry) => baseOf(entry, disqualified.has(entry._id))),

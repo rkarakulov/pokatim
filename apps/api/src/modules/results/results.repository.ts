@@ -745,6 +745,28 @@ export class ResultsRepository {
     return { startedAt, appliedAt };
   }
 
+  /**
+   * Действующие DQ гонки — по журналу пересчётов (последнее решение `disqualified`/`disqualification_revoked` по
+   * участнику в порядке ревизий), а не по строкам ревизии: участник с DQ мог выпасть из протокола без лучшего
+   * результата и вернуться при следующей перепроверке — DQ снимает только явная отмена (D-28).
+   */
+  async disqualifiedEntries(raceId: string, session?: DbSession): Promise<Set<string>> {
+    const docs = await this.c.recalculations
+      .find(
+        { raceId, kind: { $in: ['disqualified', 'disqualification_revoked'] } },
+        { session, projection: { kind: 1, entryId: 1, revision: 1 } },
+      )
+      .sort({ revision: 1 })
+      .toArray();
+    const active = new Set<string>();
+    for (const doc of docs) {
+      if (!doc.entryId) continue;
+      if (doc.kind === 'disqualified') active.add(doc.entryId);
+      else active.delete(doc.entryId);
+    }
+    return active;
+  }
+
   /** История пересчётов гонки — новые сверху. */
   listRecalculations(raceId: string, limit: number): Promise<RaceRecalculationDoc[]> {
     return this.c.recalculations.find({ raceId }).sort({ at: -1, _id: -1 }).limit(limit).toArray();

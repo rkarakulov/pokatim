@@ -377,6 +377,20 @@ describe('«Результаты» гонки — до публикации', ()
     expect(screen.queryByRole('button', { name: 'Исключить трек' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Перепроверить треки' })).toBeNull();
   });
+
+  it('черновик (открыт по URL): ни исключения, ни перепроверки — сервер ответил бы 404', async () => {
+    mocked.getRaceResultsSummary.mockResolvedValue(
+      summary({
+        phase: 'draft',
+        publish: { canPublish: false, blockedBy: 'draft', checklist: CHECKS_EMPTY },
+      }),
+    );
+    await renderApp(PATH);
+    const attempts = await screen.findByRole('region', { name: 'Попытки' });
+    await within(attempts).findByText('Проверка не уложилась во время');
+    expect(screen.queryByRole('button', { name: 'Исключить трек' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Перепроверить треки' })).toBeNull();
+  });
 });
 
 describe('«Результаты» гонки — после публикации', () => {

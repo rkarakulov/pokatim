@@ -107,7 +107,12 @@ export function AttemptsTable({
   const titleId = useId();
   const { raceId } = summary;
   const canManage = useCan('results.manage');
-  const editable = canManage && summary.protocol === null && summary.phase !== 'cancelled';
+  // черновик (экран открыт по URL) и отменённая гонка — действия сервер отклоняет
+  const editable =
+    canManage &&
+    summary.protocol === null &&
+    summary.phase !== 'cancelled' &&
+    summary.phase !== 'draft';
   const [status, setStatus] = useState<AttemptStatus>();
   const pages = useInfiniteQuery({
     queryKey: attemptsQueryKey(raceId, status),

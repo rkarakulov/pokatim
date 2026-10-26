@@ -137,6 +137,7 @@ export class AttemptIntake {
         const ensured = await this.ensureAttempt(tx, entry, race, primary, attempts, {
           origin: requested ? 'explicit' : 'auto',
           now,
+          groupIds: group.members.map((member) => member.id),
         });
         limited = ensured.refused === 'limit';
         attemptId = ensured.attemptId;
@@ -160,7 +161,9 @@ export class AttemptIntake {
   /**
    * Попытка основной активности в транзакции под `lockEntry` заявки: есть — явное намерение делает её явной, снятая
    * оживает новой ревизией; нет — новая `queued` и событие проверки (если не исчерпан предел попыток заявки). Файл
-   * основной принят после срока загрузки (A5) — ни новой, ни ожившей попытки, для любого `origin`.
+   * основной принят после срока загрузки (A5) — ни новой, ни ожившей попытки, для любого `origin`. Исключение трека
+   * панелью действует на поездку (D-24, ревью pass 1): есть исключённая попытка члена той же группы дублей
+   * (`groupIds`) — новой попытки для другого члена нет, итог — исключённая.
    */
   async ensureAttempt(
     tx: DbSession,
@@ -168,10 +171,18 @@ export class AttemptIntake {
     race: RaceForResults,
     activity: ActivityRef,
     attempts: readonly RaceAttemptDoc[],
-    { origin, now }: { origin: AttemptOrigin; now: Date },
+    {
+      origin,
+      now,
+      groupIds = [],
+    }: { origin: AttemptOrigin; now: Date; groupIds?: readonly string[] },
   ): Promise<EnsuredAttempt> {
     if (activity.uploadCreatedAt >= uploadClosesAt(race))
       return { attemptId: null, refused: 'late' };
+    const excluded = attempts.find(
+      (attempt) => attempt.status === 'excluded' && groupIds.includes(attempt.activityId),
+    );
+    if (excluded) return { attemptId: excluded._id, refused: null };
     const existing = attempts.find((attempt) => attempt.activityId === activity.id);
     if (existing) {
       if (existing.status === 'withdrawn') {
