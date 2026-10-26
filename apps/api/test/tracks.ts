@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { TrackUpload } from '@pokatim/contracts';
 
+import { TRACK_FILE_STORE, type TrackFileStore } from '../src/modules/tracks/track-file-store';
 import { TrackProcessingProcessor } from '../src/modules/tracks/track-processing.processor';
 import { tracksCollections } from '../src/modules/tracks/tracks.collection';
 import type { Harness } from './harness';
@@ -58,3 +59,6 @@ export const parsedUpload = (result: UploadResult) => TrackUpload.parse(result.b
 /** Разбор загрузки задачей worker (как по событию outbox). */
 export const processUpload = (h: Harness, uploadId: string) =>
   h.worker.get(TrackProcessingProcessor).processUpload(uploadId);
+
+/** Хранилище исходников worker стенда (тесты других модулей: «исходник пропал»). */
+export const trackFileStore = (h: Harness) => h.worker.get<TrackFileStore>(TRACK_FILE_STORE);

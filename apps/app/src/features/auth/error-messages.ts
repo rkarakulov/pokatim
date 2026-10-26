@@ -4,6 +4,7 @@ import {
   PASSWORD_MIN_LENGTH,
   RateLimitedDetails,
   ValidationErrorDetails,
+  type CorridorFieldErrorCode,
   type ErrorCode,
   type FieldErrorCode,
   type RideFieldErrorCode,
@@ -24,7 +25,7 @@ const FIELD_MESSAGES = {
   EMAIL_TAKEN: 'auth.field.EMAIL_TAKEN',
   EMAIL_UNAVAILABLE: 'auth.field.EMAIL_UNAVAILABLE',
 } as const satisfies Record<
-  | Exclude<FieldErrorCode, ScheduleFieldErrorCode | RideFieldErrorCode>
+  | Exclude<FieldErrorCode, ScheduleFieldErrorCode | RideFieldErrorCode | CorridorFieldErrorCode>
   | 'EMAIL_TAKEN'
   | 'EMAIL_UNAVAILABLE',
   MessageKey

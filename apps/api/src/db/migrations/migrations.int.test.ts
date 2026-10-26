@@ -21,6 +21,8 @@ import { trackSourceRefs } from './0012_track_source_refs';
 import { routes } from './0013_routes';
 import { rides } from './0014_rides';
 import { RIDES_COLLECTIONS } from '../../modules/rides/rides.collection';
+import { results } from './0015_results';
+import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
 import { ROUTES_COLLECTIONS } from '../../modules/routes/routes.collection';
 import { TRACKS_COLLECTIONS } from '../../modules/tracks/tracks.collection';
 import { DEVICES_COLLECTIONS } from '../../modules/devices/devices.collection';
@@ -74,6 +76,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0012_track_source_refs',
       '0013_routes',
       '0014_rides',
+      '0015_results',
     ]);
   });
 
@@ -164,7 +167,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       rides_organizer_idx: plain({ organizerUserId: 1, startsAt: -1 }),
     };
     expect(await indexesOf(RIDES_COLLECTIONS.rides)).toEqual(expected);
-    expect(migrations.map((migration) => migration.id).slice(-2)).toEqual([
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.slice(ids.indexOf('0013_routes'), ids.indexOf('0013_routes') + 2)).toEqual([
       '0013_routes',
       '0014_rides',
     ]);
@@ -347,6 +351,52 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       corridor,
     });
     await races.deleteMany({ _id: { $in: ['old-race', 'corridor-race'] } });
+
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
+  });
+
+  it('0015_results: коллекции и индексы заявок и попыток, бэкфилл races.lockedAt = null; повторный up — без изменений (AC24)', async () => {
+    const index = (
+      key: Record<string, unknown>,
+      unique = false,
+      partialFilterExpression: Record<string, unknown> | undefined = undefined,
+    ) => ({ key, unique, partialFilterExpression, expireAfterSeconds: undefined });
+    const expected = {
+      [RESULTS_COLLECTIONS.entries]: {
+        race_entries_race_user_unique: index({ raceId: 1, userId: 1 }, true),
+        race_entries_user_idx: index({ userId: 1, status: 1 }),
+        race_entries_ranking_idx: index(
+          { raceId: 1, groupKey: 1, 'best.elapsedSec': 1, 'best.startedAt': 1, _id: 1 },
+          false,
+          { status: 'active', best: { $type: 'object' } },
+        ),
+        race_entries_race_idx: index({ raceId: 1, status: 1 }),
+      },
+      [RESULTS_COLLECTIONS.attempts]: {
+        race_attempts_race_activity_unique: index({ raceId: 1, activityId: 1 }, true),
+        race_attempts_entry_idx: index({ entryId: 1, _id: -1 }),
+        race_attempts_activity_idx: index({ activityId: 1 }),
+        race_attempts_race_status_idx: index({ raceId: 1, status: 1, _id: -1 }),
+        race_attempts_stuck_idx: index({ status: 1, updatedAt: 1 }, false, {
+          status: { $in: ['queued', 'checking'] },
+        }),
+      },
+    };
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
+
+    // гонка до слайса заявок (без поля) и гонка с заявками — бэкфилл трогает только первую
+    const races = h.db.collection<{ _id: string; lockedAt?: unknown }>(RACES_COLLECTIONS.races);
+    const lockedAt = new Date('2026-10-24T10:00:00Z');
+    await races.insertMany([{ _id: 'old-race' }, { _id: 'locked-race', lockedAt }]);
+    await results.up(h.db);
+    await results.up(h.db);
+    expect(await races.findOne({ _id: 'old-race' })).toEqual({ _id: 'old-race', lockedAt: null });
+    expect(await races.findOne({ _id: 'locked-race' })).toEqual({ _id: 'locked-race', lockedAt });
+    await races.deleteMany({ _id: { $in: ['old-race', 'locked-race'] } });
 
     for (const [name, indexes] of Object.entries(expected)) {
       expect(await indexesOf(name)).toEqual(indexes);

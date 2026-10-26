@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import { haversineMeters, trackLengthMeters } from '../geo.ts';
-import type { CorridorGeometry } from '../track.ts';
-import { chordOutsideM, gridCandidates, prepareCorridor, visitMarks } from './prepare.ts';
+import { corridorGateRadiusM, type CorridorGeometry } from '../track.ts';
+import { CORRIDOR_POLICY } from './policy.ts';
+import {
+  chordOutsideM,
+  CorridorError,
+  gridCandidates,
+  prepareCorridor,
+  visitMarks,
+} from './prepare.ts';
 
 const CENTER = { lat: 53.9006, lon: 27.559 };
 const M_LAT = 111_195;
@@ -141,5 +148,29 @@ describe('prepareCorridor', () => {
     );
     const huge = Array.from({ length: 20_001 }, (_, i) => at(i, 0));
     expect(() => prepareCorridor(geometry(huge))).toThrow(/line size/);
+  });
+
+  it('нарушение инварианта — CorridorError (ворота, плотность линии)', () => {
+    const overlap = () =>
+      prepareCorridor(
+        geometry([
+          [27.559, 53.9],
+          [27.5595, 53.9],
+        ]),
+      );
+    expect(overlap).toThrow(CorridorError);
+    // зигзаг в одной ячейке сетки: развороты не прореживаются, отрезков в ячейке > 32
+    const zigzag = Array.from({ length: 40 }, (_, i) => at(i % 2 === 0 ? 0 : 100, i));
+    expect(() => prepareCorridor(geometry(zigzag, { isLoop: true }))).toThrow(CorridorError);
+    expect(() => prepareCorridor(geometry(zigzag, { isLoop: true }))).toThrow(/too dense/);
+  });
+
+  it('радиус ворот — corridorGateRadiusM', () => {
+    for (const widthM of [20, 30, 50, 200]) {
+      expect(CORRIDOR_POLICY.gateRadius(widthM)).toBe(corridorGateRadiusM(widthM));
+    }
+    expect(corridorGateRadiusM(20)).toBe(30);
+    expect(corridorGateRadiusM(50)).toBe(50);
+    expect(prepareCorridor(geometry(line)).gateRadiusM).toBe(50);
   });
 });

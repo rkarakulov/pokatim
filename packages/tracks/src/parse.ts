@@ -34,7 +34,7 @@ export { parseGpx } from './gpx.ts';
 export { parseStream, TrackStreamV1 } from './stream.ts';
 export { matchCorridor } from './corridor/match.ts';
 export { CORRIDOR_ENGINE_VERSION, CORRIDOR_POLICY } from './corridor/policy.ts';
-export { prepareCorridor } from './corridor/prepare.ts';
+export { CorridorError, prepareCorridor } from './corridor/prepare.ts';
 export {
   CORRIDOR_REJECTIONS,
   type CorridorMatch,
@@ -215,8 +215,8 @@ export function analyzeRoute(bytes: Uint8Array): RouteAnalysis {
 
 /**
  * Сверка попытки для worker (слайс 03 — в потоке разбора): `loadTrack` → `matchCorridor` по исходнику без
- * прореживания. Ошибки файла — `TrackParseError` (как `analyzeTrack`); нарушение инвариантов коридора — `Error`
- * (ошибка программиста). Результат сериализуем (structured clone), без координат заезда и значений датчиков.
+ * прореживания. Ошибки файла — `TrackParseError` (как `analyzeTrack`); нарушение инвариантов коридора —
+ * `CorridorError`. Результат сериализуем (structured clone), без координат заезда и значений датчиков.
  */
 export function analyzeAttempt(
   bytes: Uint8Array,

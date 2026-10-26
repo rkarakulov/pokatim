@@ -26,6 +26,9 @@ ADR-0010), `calendar` (календарь стартов), `tracks` (загру�
 через агрегатор Open Wearables) — ADR-0011; `routes` (маршруты команды платформы — эталон коридора гонки, ADR-0012
 Proposed; `races → routes` только через порт `RouteCatalog`) и `rides` (кофе-райды, ADR-0013 Proposed: зависит
 только от `identity`). CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js grant-admin`).
+Proposed; `races → routes` только через порт `RouteCatalog`); `results` (заявки и попытки гонок, race-results-03:
+порты `RaceRegistry`, `RouteGeometry`, `ActivitySource`). CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js
+grant-admin`).
 
 Межмодульные вызовы — через `index.ts` модуля; события — outbox → BullMQ.
 
@@ -293,6 +296,22 @@ worker: очередь identity-email ─► письмо «Пароль изм�
 - **Коридор:** `races.corridor = { routeId, widthM, distanceM }`; создание и правка гонки проверяют маршрут через
   `RouteCatalog.findReady` в своей транзакции (`ROUTE_NOT_READY`), дистанция — длина маршрута. Публично —
   `GET /v1/races/:id` → `corridor: { widthM }` без маршрута и координат.
+
+### Участие в гонке (модуль `results`, ADR-0012 Proposed, race-results-03)
+
+- **Заявка:** `POST /v1/races/:raceId/entry` (`AuthGuard`, лимит 20/ч) → транзакция { `RaceRegistry.admitEntry`
+  (запись `races.lockedAt ??= now` и `entryAdmissions + 1`, V-12) → `race_entries` → outbox `results.entry-created` }
+  → `201`. Отмена —
+  `…/entry/withdraw` под `lockEntry` (замок участника — `$inc version` заявки).
+- **Попытки:** `tracks.activity-ready/-removed` (outbox `tracks`) и `results.entry-created` → очередь
+  `results-intake` (параллелизм 2) → `syncGroup` под `lockEntry` (группа дублей сейчас, предфильтр по окну, рамке,
+  времени приёма) → `race_attempts` `queued` + outbox `results.attempt-check-requested`. Явные — `POST
+  /v1/races/:raceId/attempts { activityId | uploadId }` (запрос по загрузке ждёт `activity-ready`).
+- **Проверка:** `attempt-check` (параллелизм 1) → исходник (`ActivitySource.readSource`) → `analyzeAttempt` через
+  `runParseThread` (семафор: один поток разбора на процесс) → вердикт своей ревизией → `best`/`summary` заявки.
+  `results-maintenance` (каждые 10 мин) перепоставляет зависшие.
+- **Чтение:** `GET /v1/races/:raceId/entry` (своё, `no-store`), `GET /v1/races/:raceId/results` (публично, кэш 60 с,
+  места при чтении в snapshot-сессии), панель — `GET /v1/admin/races/:raceId/{results,attempts}` (`races.read`).
 
 ### Web (SSR, PWA)
 

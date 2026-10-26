@@ -10,6 +10,9 @@ import {
   PanelRace,
   PanelRacePage,
   type PanelRaceQuery,
+  PanelRaceAttemptPage,
+  type PanelRaceAttemptQuery,
+  PanelRaceResults,
   PanelRoute,
   PanelRoutePage,
   type PanelRouteQuery,
@@ -130,6 +133,11 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     /** Удаление черновика: 204. */
     discardRace: (id: string, body: DiscardRaceRequest) =>
       post(`${race(id)}/discard`, z.undefined(), body),
+
+    // --- результаты гонки (races.read, только чтение; чужая гонка организатора — 404) ---
+    getRaceResultsSummary: (raceId: string) => get(`${race(raceId)}/results`, PanelRaceResults),
+    listRaceAttempts: (raceId: string, params: Partial<PanelRaceAttemptQuery> = {}) =>
+      get(`${race(raceId)}/attempts${queryString(params)}`, PanelRaceAttemptPage),
 
     // --- маршруты коридора (загрузка — races.manage, чтение — races.read) ---
     /**

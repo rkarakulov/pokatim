@@ -27,6 +27,13 @@ export const PROJECT_ERROR_MESSAGES = {
   RIDE_FULL: 'Мест нет',
   RIDE_INVALID_STATE: 'Райд уже начался или отменён',
   RIDE_QUOTA_EXCEEDED: 'Достигнут предел будущих райдов',
+  RACE_ENTRY_CLOSED: 'Приём заявок на гонку закрыт',
+  RACE_ENTRY_WITHDRAWN: 'Участие в этой гонке уже отменено',
+  RACE_ENTRY_REQUIRED: 'Сначала заявитесь на гонку',
+  RACE_WITHDRAW_CLOSED: 'Отменить участие можно, пока окно открыто',
+  ATTEMPT_UPLOAD_CLOSED: 'Срок загрузки заездов истёк',
+  ATTEMPT_LIMIT: 'Достигнут предел заездов для гонки',
+  ATTEMPT_SOURCE_INVALID: 'Этот заезд нельзя добавить в гонку',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

@@ -1,3 +1,5 @@
+import { corridorGateRadiusM } from '../track.ts';
+
 /**
  * Версия алгоритма сверки — пишется в попытку. Любое изменение порогов, привязки, ворот или округления → +1 и новые
  * эталоны `__fixtures__/corridor/corridor-expected.json` (тест-сторож сравнивает версию).
@@ -15,7 +17,7 @@ export const CORRIDOR_POLICY = {
   /** радиус поиска отрезков-кандидатов вокруг точки */
   searchRadius: (widthM: number) => Math.max(3 * widthM, 150),
   /** радиус ворот старта и финиша */
-  gateRadius: (widthM: number) => Math.max(widthM, 30),
+  gateRadius: corridorGateRadiusM,
   /** ячейка покрытия маршрута */
   coverageCellM: 250,
   /** доля покрытых ячеек для финиша и зачёта */

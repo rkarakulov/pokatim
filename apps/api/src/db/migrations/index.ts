@@ -14,6 +14,7 @@ import { devices } from './0011_devices';
 import { trackSourceRefs } from './0012_track_source_refs';
 import { routes } from './0013_routes';
 import { rides } from './0014_rides';
+import { results } from './0015_results';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -34,4 +35,5 @@ export const migrations: readonly MongoMigration[] = [
   trackSourceRefs,
   routes,
   rides,
+  results,
 ];

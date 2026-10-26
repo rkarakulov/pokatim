@@ -70,6 +70,12 @@ paths:
 - Геометрия (ADR-0007, R11): GeoJSON + `2dsphere` в MongoDB для «рядом»/bbox; коридор, длина, прогресс по маршруту,
   правдоподобие — функции `packages/tracks` в worker (`pokatim-db.md`). Геозапросы проверяются интеграционными
   тестами на реальном MongoDB, моки БД для геозапросов запрещены.
+- `results` (race-results-03): заявки и попытки; другие модули — только порты через `index.ts`: `RaceRegistry`
+  (`races`: гонка, окно, `admitEntry` — фиксация V-12 в транзакции заявки, видимость в панели), `RouteGeometry`
+  (`routes`: линия сверки и рамка, кэш в процессе), `ActivitySource` (`tracks`: группа дублей, свои активности и
+  загрузки, исходник для worker). События `tracks.activity-ready/-removed` — свои типы подписчика: outbox базы
+  отправляет тип в одну очередь. Сверка — `runParseThread('analyzeAttempt')` в worker; потоки разбора на процесс
+  ограничены семафором `PARSE_THREADS_MAX` (`src/parse-thread.ts`).
 - Сверка заезда с коридором гонки — `matchCorridor` / `analyzeAttempt` из `@pokatim/tracks/parse` (ADR-0012 п. 5):
   только worker (`worker_threads`), по исходнику без прореживания; `engineVersion` пишется в попытку, смена версии
   не пересчитывает результаты молча. Лёгкий вход `@pokatim/tracks` движок не экспортирует.

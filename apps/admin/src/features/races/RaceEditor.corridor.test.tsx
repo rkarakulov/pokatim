@@ -451,6 +451,53 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
   });
 });
 
+describe('заявки участников (race-results-03, V-12)', () => {
+  it('entries_locked: причина под формой, коридор, окно, класс и покрытия с замком; название правится', async () => {
+    mocked.getRace.mockResolvedValue(
+      race({
+        status: 'published',
+        phase: 'open',
+        editable: {
+          fields: ['title', 'description', 'protocolPlannedAt'],
+          canPublish: false,
+          canCancel: true,
+          canDiscard: false,
+          reasons: ['window_open', 'entries_locked'],
+        },
+      }),
+    );
+    await renderApp(`/races/${RACE_ID}`);
+    await screen.findByRole('heading', { name: 'Осенний коридор Заславль', level: 1 });
+    expect(
+      screen.getByText('Есть заявки участников: коридор, окно, класс и покрытия зафиксированы.'),
+    ).toBeTruthy();
+    expect(screen.getByText('Окно открыто: начало окна зафиксировано.')).toBeTruthy();
+    expect(input(/^Окно: начало/).disabled).toBe(true);
+    expect(input(/^Окно: конец/).disabled).toBe(true);
+    expect(input(/^Допуск коридора, м/).readOnly).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Загрузить GPX' })).toBeNull();
+    expect(input(/^Название/).readOnly).toBe(false);
+  });
+
+  it('CORRIDOR_GATES_OVERLAP сервера — текст под полем коридора', async () => {
+    mocked.createRace.mockRejectedValue(
+      httpError(400, 'VALIDATION_FAILED', {
+        fields: [{ path: 'corridor.routeId', code: 'CORRIDOR_GATES_OVERLAP' }],
+      }),
+    );
+    await newRace();
+    await waitFor(() => expect(corridorSelect().options).toHaveLength(2));
+    fireEvent.change(corridorSelect(), { target: { value: ROUTE_ID } });
+    fireEvent.click(screen.getByRole('button', { name: 'Создать гонку' }));
+    expect(
+      await screen.findByText(
+        'Старт и финиш маршрута слишком близко для такого допуска — выберите круговой маршрут или уменьшите допуск',
+      ),
+    ).toBeTruthy();
+    expect(corridorSelect().getAttribute('aria-invalid')).toBe('true');
+  });
+});
+
 describe('зафиксированный коридор (AC4, V-11)', () => {
   it('editable без corridor — только чтение с замком, без загрузки; дистанция по маршруту; правка без коридора в запросе', async () => {
     mocked.getRace.mockResolvedValue(

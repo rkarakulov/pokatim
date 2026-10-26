@@ -20,7 +20,7 @@ import { TRACK_FILE_STORE, type TrackFileStore } from './track-file-store';
 import { TrackStorageFullError } from './track-ingest.port';
 import { TrackSourcesService } from './track-sources.service';
 import type { ActivityDoc, TrackUploadDoc } from './tracks.collection';
-import { TRACK_UPLOAD_DELETED } from './tracks.events';
+import { TRACK_ACTIVITY_REMOVED, TRACK_UPLOAD_DELETED } from './tracks.events';
 import { TRACKS_POLICY } from './tracks.policy';
 import { sourceRefKey, TracksRepository } from './tracks.repository';
 
@@ -181,8 +181,9 @@ export class TrackUploadsService {
   }
 
   /**
-   * Транзакция { замок активностей → загрузка, активность, линия → перевыбор основной группы; источник провайдера —
-   * outbox `tracks.upload-deleted` } → затем файл (сбой — подберёт уборка «файлы без документа»).
+   * Транзакция { замок активностей → загрузка, активность, линия → перевыбор основной группы → outbox
+   * `tracks.activity-removed` (была активность); источник провайдера — outbox `tracks.upload-deleted` } → затем файл
+   * (сбой — подберёт уборка «файлы без документа»).
    */
   private async remove(userId: string, id: string): Promise<boolean> {
     const now = this.clock.now();
@@ -190,7 +191,22 @@ export class TrackUploadsService {
       await this.repository.lockUserActivities(session, userId);
       const result = await this.repository.deleteUploadCascade(session, userId, id);
       if (!result) return undefined;
-      if (result.activity) await regroupAfterDelete(this.repository, session, result.activity, now);
+      if (result.activity) {
+        // основная группы после удаления: новая (удалена основная) или прежняя (удалён дубль) — подписчик
+        // пересобирает группу по оставшемуся члену (представитель гонки может быть дублем, race-results-03)
+        const primaryActivityId =
+          (await regroupAfterDelete(this.repository, session, result.activity, now)) ??
+          result.activity.duplicateOf;
+        await this.outbox.append(session, {
+          type: TRACK_ACTIVITY_REMOVED,
+          payload: {
+            activityId: result.activity._id,
+            uploadId: result.upload._id,
+            userId,
+            primaryActivityId,
+          },
+        });
+      }
       if (result.upload.sourceRef) {
         // устойчивый маркер: повтор импорта (в том числе до события ниже) заезд не вернёт
         await this.repository.markSourceRefDeleted(

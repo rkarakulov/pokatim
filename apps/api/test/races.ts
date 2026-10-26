@@ -1,8 +1,12 @@
 import { minskWallTimeToUtc, type PanelRole } from '@pokatim/contracts';
 
 import { racesCollections } from '../src/modules/races/races.collection';
+import { RacesRepository } from '../src/modules/races/races.repository';
 import type { Harness } from './harness';
 import { memberUser, panelCall, panelSession } from './panel';
+
+/** Репозиторий `races` API стенда (spy в тестах гонок записи других модулей). */
+export const racesRepository = (h: Harness) => h.app.get(RacesRepository, { strict: false });
 
 /** Коллекции модуля `races` тестовой БД. */
 export const racesDb = (h: Harness) => racesCollections(h.db);

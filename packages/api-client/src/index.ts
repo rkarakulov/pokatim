@@ -39,6 +39,11 @@ import {
   type SubmitOnboardingSurveyRequest,
   TrackUpload,
   TrackUploadPage,
+  AttemptCandidates,
+  MyRaceEntry,
+  RaceResultsPage,
+  type AttemptRequest,
+  type RaceResultsQuery,
   ConnectDeviceResponse,
   DeviceList,
   type CompleteDeviceRequest,
@@ -330,6 +335,47 @@ export function createApiClient({
         `/v1/tracks/uploads/${encodeURIComponent(id)}/delete`,
         z.undefined(),
         authorized(accessToken, { method: 'POST', body: '{}', ...withCredentials }),
+      ),
+
+    // --- участие в гонке и результаты (race-results-03) ---
+    /** Предварительная таблица гонки — публично, анонимные строки; черновик и неизвестная — 404. */
+    getRaceResults: (raceId: string, params: Partial<RaceResultsQuery> = {}) =>
+      getPublic(
+        `/v1/races/${encodeURIComponent(raceId)}/results${queryString(params)}`,
+        RaceResultsPage,
+      ),
+    /** Моё участие (вход обязателен): заявка, видимые попытки, результат, действия; не заявлен — `entry: null`. */
+    getMyRaceEntry: (accessToken: string, raceId: string) =>
+      request(
+        `/v1/races/${encodeURIComponent(raceId)}/entry`,
+        MyRaceEntry,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** «Участвовать»: `201` — новая заявка, `200` — уже заявлен. */
+    enterRace: (accessToken: string, raceId: string) =>
+      postAuthorized(accessToken, `/v1/races/${encodeURIComponent(raceId)}/entry`, MyRaceEntry, {}),
+    /** «Отменить участие»: повторная заявка на эту гонку невозможна. */
+    withdrawFromRace: (accessToken: string, raceId: string) =>
+      postAuthorized(
+        accessToken,
+        `/v1/races/${encodeURIComponent(raceId)}/entry/withdraw`,
+        MyRaceEntry,
+        {},
+      ),
+    /** «Выбрать свой заезд» (`activityId`) или «загрузить в гонку» после `uploadTrack` (`uploadId`). */
+    addRaceAttempt: (accessToken: string, raceId: string, body: AttemptRequest) =>
+      postAuthorized(
+        accessToken,
+        `/v1/races/${encodeURIComponent(raceId)}/attempts`,
+        MyRaceEntry,
+        body,
+      ),
+    /** Свои заезды, пересекающие окно гонки (≤ 50), с отметкой «уже попытка». */
+    listAttemptCandidates: (accessToken: string, raceId: string) =>
+      request(
+        `/v1/races/${encodeURIComponent(raceId)}/attempt-candidates`,
+        AttemptCandidates,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
 
     // --- устройства через агрегатор (вход обязателен, tracks-devices) ---

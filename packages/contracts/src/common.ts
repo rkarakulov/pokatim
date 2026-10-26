@@ -45,6 +45,15 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'RIDE_FULL',
   'RIDE_INVALID_STATE',
   'RIDE_QUOTA_EXCEEDED',
+  // участие и попытки (race-results-03): заявка закрыта (details.reason); участие уже отменено; нужна активная
+  // заявка; отмена после окна; срок загрузки (details.reason); предел попыток; заезд нельзя добавить в гонку
+  'RACE_ENTRY_CLOSED',
+  'RACE_ENTRY_WITHDRAWN',
+  'RACE_ENTRY_REQUIRED',
+  'RACE_WITHDRAW_CLOSED',
+  'ATTEMPT_UPLOAD_CLOSED',
+  'ATTEMPT_LIMIT',
+  'ATTEMPT_SOURCE_INVALID',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;
@@ -82,6 +91,13 @@ export const RIDE_FIELD_ERROR_CODES = [
 export type RideFieldErrorCode = (typeof RIDE_FIELD_ERROR_CODES)[number];
 
 /**
+ * Коды полей коридора гонки (race-results-03): ворота старта и финиша линейного маршрута пересекаются при этом
+ * допуске. После кодов кофе-райдов — только в конец общего списка.
+ */
+export const CORRIDOR_FIELD_ERROR_CODES = ['CORRIDOR_GATES_OVERLAP'] as const;
+export type CorridorFieldErrorCode = (typeof CORRIDOR_FIELD_ERROR_CODES)[number];
+
+/**
  * Коды ошибок полей: коды базы (`REQUIRED`, `INVALID`, …) + коды проекта. Сообщение zod-схемы = код,
  * текст для человека выбирает клиент (i18n). `fieldError` — с кодами проекта, не базовый.
  */
@@ -90,6 +106,7 @@ export const { FieldErrorCode, ValidationErrorDetails, fieldError } = defineFiel
   'CONSENT_REQUIRED',
   ...SCHEDULE_FIELD_ERROR_CODES,
   ...RIDE_FIELD_ERROR_CODES,
+  ...CORRIDOR_FIELD_ERROR_CODES,
 ]);
 export type FieldErrorCode = z.infer<typeof FieldErrorCode>;
 export type ValidationErrorDetails = z.infer<typeof ValidationErrorDetails>;

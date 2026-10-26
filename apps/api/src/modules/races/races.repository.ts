@@ -169,6 +169,30 @@ export class RacesRepository {
     );
   }
 
+  /**
+   * Заявка участника (race-results-03, V-12): **запись** `lockedAt ??= now` и `entryAdmissions + 1` в документ
+   * опубликованной гонки — первая операция транзакции заявки. Каждая заявка действительно меняет документ (счётчик):
+   * конфликт записи с правкой (`updateRace`) и отменой гонки — проигравшая транзакция повторяется и видит `lockedAt`
+   * или новый коридор/статус. `version` не меняется:
+   * открытая форма панели не получает лишний `409`, поля блокирует политика. `null` — не опубликована.
+   */
+  admitEntry(session: DbSession, id: string, now: Date): Promise<RaceDoc | null> {
+    return this.c.races.findOneAndUpdate(
+      { _id: id, status: 'published' },
+      [
+        {
+          $set: {
+            lockedAt: { $ifNull: ['$lockedAt', { $literal: now }] },
+            // настоящая запись каждой заявкой: после первой `lockedAt` не меняется, и без счётчика вторая заявка не
+            // конфликтовала бы с отменой гонки
+            entryAdmissions: { $add: [{ $ifNull: ['$entryAdmissions', 0] }, 1] },
+          },
+        },
+      ],
+      { session, returnDocument: 'after' },
+    );
+  }
+
   /** Удаление черновика с ожидаемой версией; `null` — не черновик или версия устарела. */
   deleteDraft(session: DbSession, id: string, version: number): Promise<RaceDoc | null> {
     return this.c.races.findOneAndDelete({ _id: id, version, status: 'draft' }, { session });

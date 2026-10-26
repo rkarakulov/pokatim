@@ -1,7 +1,12 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import { CLOCK, type Clock, type OutboxJobData } from '@rkarakulov/api-kit/core';
-import { MongoOutboxReader, MongoTransactions, uuidv7 } from '@rkarakulov/api-kit/mongo';
+import {
+  MongoOutboxReader,
+  MongoOutboxWriter,
+  MongoTransactions,
+  uuidv7,
+} from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
 
 import { QUEUE } from '../../queues';
@@ -9,7 +14,7 @@ import { insertGrouped } from './activity-groups';
 import { analyzeInThread, type ParseLimits, type ParseOutcome } from './track-parse.thread';
 import { TRACK_FILE_STORE, type TrackFileStore } from './track-file-store';
 import type { ActivityDoc, TrackUploadDoc } from './tracks.collection';
-import { TRACK_UPLOAD_RECEIVED, TrackUploadReceived } from './tracks.events';
+import { TRACK_ACTIVITY_READY, TRACK_UPLOAD_RECEIVED, TrackUploadReceived } from './tracks.events';
 import { TRACKS_POLICY } from './tracks.policy';
 import { TracksRepository } from './tracks.repository';
 
@@ -18,7 +23,8 @@ export type TrackProcessingOutcome = 'ready' | 'duplicate' | 'failed' | 'skipped
 /**
  * Разбор загрузки (`track-processing`, jobId = id события outbox): захват по статусу (`queued`/`processing`;
  * финальная — no-op, повтор outbox безопасен) → исходник из хранилища → `analyzeTrack` в потоке с лимитами → отказ
- * `failed: <код>` или транзакция { `lockUserActivities` → активность + линия → группа дублей → статус загрузки }.
+ * `failed: <код>` или транзакция { `lockUserActivities` → активность + линия → группа дублей → статус загрузки →
+ * outbox `tracks.activity-ready` }.
  * Параллелизм процессора — 1 (память worker-контейнера).
  */
 @Processor(QUEUE.trackProcessing, { concurrency: 1 })
@@ -30,6 +36,7 @@ export class TrackProcessingProcessor extends WorkerHost {
   constructor(
     private readonly repository: TracksRepository,
     private readonly outbox: MongoOutboxReader,
+    private readonly outboxWriter: MongoOutboxWriter,
     private readonly transactions: MongoTransactions,
     @Inject(TRACK_FILE_STORE) private readonly files: TrackFileStore,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -139,7 +146,13 @@ export class TrackProcessingProcessor extends WorkerHost {
       if (!(await this.repository.attachActivity(session, upload._id, activity._id, now))) {
         return null;
       }
-      return insertGrouped(this.repository, session, activity, track, now);
+      const primary = await insertGrouped(this.repository, session, activity, track, now);
+      // и для дубля: состав группы мог смениться (новая основная — подписчик читает группу сам)
+      await this.outboxWriter.append(session, {
+        type: TRACK_ACTIVITY_READY,
+        payload: { activityId: activity._id, uploadId: upload._id, userId: upload.userId },
+      });
+      return primary;
     });
     if (primaryId === null) return 'skipped';
     const status = primaryId === activity._id ? 'ready' : 'duplicate';

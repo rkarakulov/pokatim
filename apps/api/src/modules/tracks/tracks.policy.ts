@@ -54,12 +54,9 @@ export function isSameRide(a: DedupCandidate, b: DedupCandidate): boolean {
 
 const SOURCE_RANK: Record<TrackSource, number> = { upload: 0, garmin: 1, wahoo: 2 };
 
-/**
- * Основная активность группы дублей (R7): с мощностью > с пульсом > ручная загрузка > Garmin > Wahoo > раньше
- * созданная (затем `_id` — детерминированно).
- */
-export function pickPrimary<T extends DedupCandidate>(group: readonly T[]): T {
-  const ranked = [...group].sort(
+/** Члены группы дублей в порядке приоритета основной (`pickPrimary` — первый). */
+export function byPrimaryPriority<T extends DedupCandidate>(group: readonly T[]): T[] {
+  return [...group].sort(
     (a, b) =>
       Number(b.hasPower) - Number(a.hasPower) ||
       Number(b.hasHeartRate) - Number(a.hasHeartRate) ||
@@ -67,7 +64,14 @@ export function pickPrimary<T extends DedupCandidate>(group: readonly T[]): T {
       a.createdAt.getTime() - b.createdAt.getTime() ||
       a._id.localeCompare(b._id),
   );
-  const primary = ranked[0];
+}
+
+/**
+ * Основная активность группы дублей (R7): с мощностью > с пульсом > ручная загрузка > Garmin > Wahoo > раньше
+ * созданная (затем `_id` — детерминированно).
+ */
+export function pickPrimary<T extends DedupCandidate>(group: readonly T[]): T {
+  const primary = byPrimaryPriority(group)[0];
   if (!primary) throw new Error('empty dedup group');
   return primary;
 }

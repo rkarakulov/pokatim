@@ -22,3 +22,5 @@ export * from './routes/route.schema.ts';
 export * from './devices/device.schema.ts';
 export * from './geo/city.schema.ts';
 export * from './rides/ride.schema.ts';
+export * from './results/results.schema.ts';
+export * from './results/results-admin.schema.ts';

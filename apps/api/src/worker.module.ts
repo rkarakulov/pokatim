@@ -15,6 +15,7 @@ import {
 import { env } from './config/env';
 import { identityOutboxRoutes, IdentityWorkerModule } from './modules/identity';
 import { devicesOutboxRoutes, DevicesWorkerModule } from './modules/devices';
+import { resultsOutboxRoutes, ResultsWorkerModule } from './modules/results';
 import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
 import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
 
@@ -36,12 +37,14 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
         ...tracksOutboxRoutes,
         ...devicesOutboxRoutes,
         ...routesOutboxRoutes,
+        ...resultsOutboxRoutes,
       },
     }),
     TracksWorkerModule,
     IdentityWorkerModule,
     DevicesWorkerModule,
     RoutesWorkerModule,
+    ResultsWorkerModule,
   ],
 })
 export class WorkerModule {}

@@ -27,6 +27,36 @@ export function localProjection(lat0: number): { kx: number; ky: number } {
   return { kx: METERS_PER_DEGREE * Math.cos(toRad(lat0)), ky: METERS_PER_DEGREE };
 }
 
+/** Рамка [minLon, minLat, maxLon, maxLat], градусы (антимеридиан не поддерживается — Беларусь). */
+export type Bounds = [minLon: number, minLat: number, maxLon: number, maxLat: number];
+
+/** Рамка точек [lon, lat]; пустой вход — `null`. */
+export function boundsOf(coords: readonly (readonly [number, number])[]): Bounds | null {
+  if (coords.length === 0) return null;
+  let minLon = Infinity;
+  let minLat = Infinity;
+  let maxLon = -Infinity;
+  let maxLat = -Infinity;
+  for (const [lon, lat] of coords) {
+    minLon = Math.min(minLon, lon);
+    maxLon = Math.max(maxLon, lon);
+    minLat = Math.min(minLat, lat);
+    maxLat = Math.max(maxLat, lat);
+  }
+  return [minLon, minLat, maxLon, maxLat];
+}
+
+/**
+ * Рамки ближе `marginM` метров по каждой оси (пересекаются после расширения на `marginM`). Метров в градусе
+ * долготы — на широте, самой далёкой от экватора: запас не меньше заявленного.
+ */
+export function boundsNear(a: Bounds, b: Bounds, marginM: number): boolean {
+  const farLat = Math.max(Math.abs(a[1]), Math.abs(a[3]), Math.abs(b[1]), Math.abs(b[3]));
+  const dLat = marginM / METERS_PER_DEGREE;
+  const dLon = marginM / localProjection(Math.min(farLat, 89.9)).kx;
+  return a[0] - dLon <= b[2] && b[0] <= a[2] + dLon && a[1] - dLat <= b[3] && b[1] <= a[3] + dLat;
+}
+
 export function trackLengthMeters(points: readonly TrackPoint[]): number {
   let total = 0;
   for (let i = 1; i < points.length; i += 1) {

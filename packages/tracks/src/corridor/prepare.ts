@@ -75,8 +75,19 @@ export function prepareCorridor(geometry: CorridorGeometry): PreparedCorridor {
   };
 }
 
+/**
+ * Нарушение инварианта коридора: линия или допуск негодны для движка (ошибка входа, не отказ попытки). Поток разбора
+ * отличает её от ошибки файла (`corridor_invalid`).
+ */
+export class CorridorError extends Error {
+  constructor(message: string) {
+    super(`corridor: ${message}`);
+    this.name = 'CorridorError';
+  }
+}
+
 function assert(condition: boolean, message: string): asserts condition {
-  if (!condition) throw new Error(`corridor: ${message}`);
+  if (!condition) throw new CorridorError(message);
 }
 
 /**

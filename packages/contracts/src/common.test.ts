@@ -62,6 +62,13 @@ describe('коды ошибок', () => {
       'RIDE_FULL',
       'RIDE_INVALID_STATE',
       'RIDE_QUOTA_EXCEEDED',
+      'RACE_ENTRY_CLOSED',
+      'RACE_ENTRY_WITHDRAWN',
+      'RACE_ENTRY_REQUIRED',
+      'RACE_WITHDRAW_CLOSED',
+      'ATTEMPT_UPLOAD_CLOSED',
+      'ATTEMPT_LIMIT',
+      'ATTEMPT_SOURCE_INVALID',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',
@@ -87,6 +94,7 @@ describe('коды ошибок', () => {
       'RIDE_START_TOO_FAR',
       'RIDE_PACE_ORDER',
       'RIDE_LIMIT_BELOW_GOING',
+      'CORRIDOR_GATES_OVERLAP',
     ]);
   });
 

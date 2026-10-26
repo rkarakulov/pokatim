@@ -34,15 +34,20 @@ export async function insertGrouped(
   return primary._id;
 }
 
-/** Удалена основная активность: из её дублей выбирается новая основная (под тем же замком). */
+/**
+ * Удалена основная активность: из её дублей выбирается новая основная (под тем же замком). Возвращает id новой
+ * основной; удалён дубль или дублей не было — `null`.
+ */
 export async function regroupAfterDelete(
   repository: TracksRepository,
   session: DbSession,
   removed: ActivityDoc,
   now: Date,
-): Promise<void> {
-  if (removed.duplicateOf !== null) return;
+): Promise<string | null> {
+  if (removed.duplicateOf !== null) return null;
   const rest = await repository.duplicatesOf(session, removed._id);
-  if (rest.length === 0) return;
-  await repository.applyGroup(session, rest, pickPrimary(rest)._id, now);
+  if (rest.length === 0) return null;
+  const primaryId = pickPrimary(rest)._id;
+  await repository.applyGroup(session, rest, primaryId, now);
+  return primaryId;
 }

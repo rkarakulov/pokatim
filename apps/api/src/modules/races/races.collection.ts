@@ -47,6 +47,16 @@ export interface RaceDoc {
   updatedAt: Date;
   publishedAt: Date | null;
   cancelledAt: Date | null;
+  /**
+   * Момент первой заявки участника (race-results-03, V-12): коридор, окно, класс и покрытия больше не меняются.
+   * Пишет только `RacesRepository.admitEntry` (порт `RaceRegistry`); документы до `0015_results` — `?? null`.
+   */
+  lockedAt: Date | null;
+  /**
+   * Счётчик заявок (race-results-03): `admitEntry` увеличивает его каждой заявкой — запись в документ гонки
+   * конфликтует с её отменой и правкой и после первой заявки. Документы без заявок поля не имеют.
+   */
+  entryAdmissions?: number;
   version: number;
 }
 

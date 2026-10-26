@@ -22,6 +22,8 @@ const FIELD_ERROR_KEYS: Record<string, MessageKey> = {
   FIELD_LOCKED: 'field.error.FIELD_LOCKED',
   // коридор гонки (race-results-01)
   ROUTE_NOT_READY: 'field.error.ROUTE_NOT_READY',
+  // ворота коридора (race-results-03)
+  CORRIDOR_GATES_OVERLAP: 'field.error.CORRIDOR_GATES_OVERLAP',
 };
 
 /** Код ошибки поля из схемы контракта (сообщение zod = код) → текст; незнакомый — «Проверьте значение». */
