@@ -113,6 +113,18 @@ export const ru = {
   'races.detail.map.label':
     'Карта маршрута: {distance}, коридор ±{width} м от маршрута, старт и финиш отмечены',
   'races.detail.map.failed': 'Карта не загрузилась',
+  // maps-02: свой трек на карте гонки — текстовая альтернатива подсветки [ASSUMPTION copy]
+  'races.detail.myTrack.legendTrack': 'Ваш трек',
+  'races.detail.myTrack.legendOff': 'Вне коридора — пунктир',
+  'races.detail.myTrack.offSummary': 'Вне коридора {off} м, самый длинный выход {max} м',
+  'races.detail.myTrack.allInside': 'Весь сегмент в коридоре',
+  'races.detail.myTrack.whereOff': 'Где сход — пунктиром на карте',
+  'races.detail.myTrack.pending': 'Трек проверяется — участки вне коридора появятся после проверки',
+  'races.detail.myTrack.unavailable': 'Разметка участков для этой попытки недоступна',
+  'races.detail.myTrack.failed': 'Не удалось загрузить трек',
+  'races.detail.myTrack.attempts': 'Попытка на карте',
+  'races.detail.myTrack.attemptChip': '{date} · {status}',
+  'races.detail.myTrack.mapLabel': '{map}. Ваш трек: {track}',
   'races.detail.allRaces': 'Все гонки',
   // экран сезона (публичный, блок 03; Q1, Q2 — без таблицы)
   'season.title': 'Сезон',

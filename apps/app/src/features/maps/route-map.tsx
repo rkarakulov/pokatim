@@ -6,6 +6,13 @@ import { MAP_PADDING, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corr
 import { loadMapLibreNative } from './load-maplibre-native';
 import { RouteMapFrame } from './route-map-frame';
 import type { RouteMapProps } from './route-map-props';
+import {
+  TRACK_BEFORE_LAYER_ID,
+  TRACK_SOURCE_ID,
+  trackFeatures,
+  trackLayers,
+  unionBounds,
+} from './track-style';
 
 const padding = { top: MAP_PADDING, right: MAP_PADDING, bottom: MAP_PADDING, left: MAP_PADDING };
 
@@ -21,12 +28,16 @@ export function RouteMap({
   theme,
   accessibilityLabel,
   failedMessage,
+  track,
 }: RouteMapProps) {
   const [lib, setLib] = useState<typeof MapLibreNative | null>(null);
   const [failed, setFailed] = useState(false);
   // GeoJSONSource сериализует `data` в строку на каждом рендере — только при смене маршрута или темы
   const features = useMemo(() => routeFeatures(map), [map]);
   const layers = useMemo(() => routeLayers(theme, map.widthM, map.bounds), [theme, map]);
+  const trackData = useMemo(() => (track ? trackFeatures(track) : null), [track]);
+  const trackStyle = useMemo(() => trackLayers(theme), [theme]);
+  const bounds = useMemo(() => unionBounds(map.bounds, track?.line), [map, track]);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,12 +75,20 @@ export function RouteMap({
           touchPitch={false}
           onDidFailLoadingMap={() => setFailed(true)}
         >
-          <lib.Camera initialViewState={{ bounds: map.bounds, padding }} />
+          <lib.Camera initialViewState={{ bounds, padding }} />
           <lib.GeoJSONSource id={ROUTE_SOURCE_ID} data={features}>
             {layers.map((layer) => (
               <lib.Layer key={layer.id} {...layer} />
             ))}
           </lib.GeoJSONSource>
+          {trackData ? (
+            // трек — под старт и финиш маршрута; смена трека — новая карта (`key` у вызывающего, RC-5)
+            <lib.GeoJSONSource id={TRACK_SOURCE_ID} data={trackData}>
+              {trackStyle.map((layer) => (
+                <lib.Layer key={layer.id} {...layer} beforeId={TRACK_BEFORE_LAYER_ID} />
+              ))}
+            </lib.GeoJSONSource>
+          ) : null}
         </lib.Map>
       ) : null}
     </RouteMapFrame>

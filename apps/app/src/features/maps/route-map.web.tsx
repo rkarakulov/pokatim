@@ -8,6 +8,13 @@ import { loadMaplibre } from './load-maplibre';
 import { MAP_WORKER_FILE } from './map-worker';
 import { RouteMapFrame } from './route-map-frame';
 import type { RouteMapProps } from './route-map-props';
+import {
+  TRACK_BEFORE_LAYER_ID,
+  TRACK_SOURCE_ID,
+  trackFeatures,
+  trackLayers,
+  unionBounds,
+} from './track-style';
 
 /**
  * Web-карта маршрута (`maplibre-gl` 6, ADR-0014 п. 5): модуль грузится динамическим `import()` только после
@@ -21,6 +28,7 @@ export function RouteMap({
   theme,
   accessibilityLabel,
   failedMessage,
+  track,
 }: RouteMapProps) {
   const container = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
@@ -40,13 +48,18 @@ export function RouteMap({
           style: styleUrl,
           interactive: false,
           attributionControl: { compact: true },
-          bounds: map.bounds,
+          bounds: unionBounds(map.bounds, track?.line),
           fitBoundsOptions: { padding: MAP_PADDING, animate: false },
         });
         instance = created;
         created.on('load', () => {
           created.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: routeFeatures(map) });
           for (const layer of routeLayers(theme, map.widthM, map.bounds)) created.addLayer(layer);
+          if (track) {
+            // трек — под старт и финиш маршрута
+            created.addSource(TRACK_SOURCE_ID, { type: 'geojson', data: trackFeatures(track) });
+            for (const layer of trackLayers(theme)) created.addLayer(layer, TRACK_BEFORE_LAYER_ID);
+          }
         });
         created.on('error', () => setFailed(true));
       })
@@ -57,7 +70,7 @@ export function RouteMap({
       cancelled = true;
       instance?.remove();
     };
-  }, [map, styleUrl, theme]);
+  }, [map, styleUrl, theme, track]);
 
   return (
     <RouteMapFrame

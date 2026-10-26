@@ -164,3 +164,43 @@ describe('RouteMap (web, maplibre-gl)', () => {
     expect(second.remove).toHaveBeenCalled();
   });
 });
+
+describe('RouteMap (web): свой трек (maps-02)', () => {
+  const track = {
+    line: [
+      [27.45, 53.85],
+      [27.55, 53.9],
+      [27.65, 54.05],
+    ] as [number, number][],
+    segment: { from: 0.5, to: 1.5 },
+    offRuns: [{ from: 1, to: 1.2 }],
+  };
+
+  it('без track — источник и слои maps-01 без изменений (AC9)', async () => {
+    await render(<RouteMap {...props()} />);
+    await flush();
+    const map = state.maps.at(-1)!;
+    await act(async () => map.handlers.load!());
+    expect(map.addSource).toHaveBeenCalledTimes(1);
+    expect(map.addLayer.mock.calls.every((call) => call.length === 1)).toBe(true);
+    expect(map.options.bounds).toEqual(route.bounds);
+  });
+
+  it('с track — второй источник, слои трека перед start; рамка охватывает маршрут и трек', async () => {
+    await render(<RouteMap {...props()} track={track} />);
+    await flush();
+    const map = state.maps.at(-1)!;
+    expect(map.options.bounds).toEqual([27.45, 53.8, 27.65, 54.05]);
+    await act(async () => map.handlers.load!());
+    expect(map.addSource).toHaveBeenLastCalledWith(
+      'my-track',
+      expect.objectContaining({ type: 'geojson' }),
+    );
+    const trackCalls = map.addLayer.mock.calls.filter(([layer]) => layer.source === 'my-track');
+    expect(trackCalls.map(([layer, before]) => [layer.id, before])).toEqual([
+      ['track-outside', 'start'],
+      ['track', 'start'],
+      ['track-off', 'start'],
+    ]);
+  });
+});
