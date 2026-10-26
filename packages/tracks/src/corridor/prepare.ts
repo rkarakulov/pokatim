@@ -254,6 +254,22 @@ export function gridCandidates(
   return count;
 }
 
+/** Расстояние от точки до отрезка маршрута j, м (локальная проекция отрезка). */
+export function segmentDistance(
+  corridor: PreparedCorridor,
+  j: number,
+  lon: number,
+  lat: number,
+): number {
+  const px = (lon - corridor.lon[j]!) * corridor.segKx[j]!;
+  const py = (lat - corridor.lat[j]!) * corridor.ky;
+  const dx = corridor.segDx[j]!;
+  const dy = corridor.segDy[j]!;
+  const raw = (px * dx + py * dy) / corridor.segLength2[j]!;
+  const t = raw < 0 ? 0 : raw > 1 ? 1 : raw;
+  return Math.hypot(px - t * dx, py - t * dy);
+}
+
 /** Метки посещения отрезков для запросов сетки: поколение растёт, на пределе Int32 метки очищаются. */
 export interface VisitMarks {
   readonly marks: Int32Array;

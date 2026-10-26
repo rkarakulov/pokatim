@@ -1,7 +1,7 @@
 import { localProjection } from '../geo.ts';
 import type { ParsedPoint } from '../track.ts';
 import { CORRIDOR_ENGINE_VERSION, CORRIDOR_POLICY } from './policy.ts';
-import { chordOutsideM, visitMarks, type VisitMarks } from './prepare.ts';
+import { chordOutsideM, segmentDistance, visitMarks, type VisitMarks } from './prepare.ts';
 import { projectTrack, type ProjectedTrack } from './project.ts';
 import type {
   CorridorMatch,
@@ -484,7 +484,14 @@ class Engine {
   private chordOutside(k: number, from: number, to: number): number {
     const full = from === 0 && to === 1;
     if (full && !Number.isNaN(this.chordCache[k]!)) return this.chordCache[k]!;
-    if (full && this.chordWork.count >= CORRIDOR_POLICY.maxChordWork) {
+    // точно и дёшево: оба конца в буфере одного отрезка маршрута (буфер выпуклый) — хорда внутри
+    if (full && this.insideOneBuffer(k)) return 0;
+    // за лимитом — оценка только длинных хорд (> 2w); короткие (стоянки, дрожание) — всегда точно
+    if (
+      full &&
+      this.chordWork.count >= CORRIDOR_POLICY.maxChordWork &&
+      this.track.step[k]! > 2 * this.corridor.widthM
+    ) {
       // за лимитом — верхняя оценка: у каждого конца внутри коридора гарантированно (w − d) хорды
       this.geometryLimited = true;
       const w = this.corridor.widthM;
@@ -494,6 +501,19 @@ class Engine {
     const value = this.exactChordOutside(k, from, to);
     if (full) this.chordCache[k] = value;
     return value;
+  }
+
+  private insideOneBuffer(k: number): boolean {
+    const { track, corridor } = this;
+    const w = corridor.widthM;
+    const a = track.points[k]!;
+    const b = track.points[k + 1]!;
+    const segA = track.nearest[k]!;
+    const segB = track.nearest[k + 1]!;
+    return (
+      (segA >= 0 && segmentDistance(corridor, segA, b.lon, b.lat) <= w) ||
+      (segB >= 0 && segmentDistance(corridor, segB, a.lon, a.lat) <= w)
+    );
   }
 
   private exactChordOutside(k: number, from: number, to: number): number {

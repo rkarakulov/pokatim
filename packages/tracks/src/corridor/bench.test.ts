@@ -256,4 +256,64 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     expect(elapsedMs).toBeLessThanOrEqual(TIME_LIMIT_MS);
     process.stdout.write(`лимит геометрии хорд: ${Math.round(elapsedMs)} мс\n`);
   }, 60_000);
+
+  // ревью pass 8: стоянка у края коридора (190 000 точек дрожания ±3 м при d ≈ 49 м) с реальным расходом лимита —
+  // короткие хорды считаются точно, вердикт как без лимита
+  it('стоянка у края коридора, 190 000 точек через analyzeAttempt — засчитан, сход 0', () => {
+    const route: Xy[] = [
+      [0, 0],
+      [5000, 0],
+      [5000, -90],
+      [0, -90],
+      [0, -180],
+      [5000, -180],
+      [5000, -1000],
+    ];
+    const geometry = corridorOf(route);
+    const moving = [[-95, 0] as Xy, ...route, [5000, -1100] as Xy];
+    const path: ParsedPoint[] = [];
+    let t = T0;
+    const push = ([x, y]: Xy, dt: number) => {
+      const [lon, lat] = at([x, y]);
+      path.push({ lon, lat, time: new Date(t) });
+      t += dt;
+    };
+    // проезд 8 м/с до x = 2600, стоянка, затем дальше
+    const total = moving.reduce(
+      (sum, p, i) =>
+        i === 0 ? 0 : sum + Math.hypot(p[0] - moving[i - 1]![0], p[1] - moving[i - 1]![1]),
+      0,
+    );
+    const position = (along: number): Xy => {
+      let rest = along;
+      for (let i = 1; i < moving.length; i += 1) {
+        const [ax, ay] = moving[i - 1]!;
+        const [bx, by] = moving[i]!;
+        const length = Math.hypot(bx - ax, by - ay);
+        if (rest <= length)
+          return [ax + ((bx - ax) * rest) / length, ay + ((by - ay) * rest) / length];
+        rest -= length;
+      }
+      return moving[moving.length - 1]!;
+    };
+    let along = 0;
+    for (; along < 95 + 2600; along += 8) push(position(along), 1000);
+    for (let k = 0; k < 190_000; k += 1) push([2600 + 3 * (-1) ** k, 49], 250);
+    for (; along <= total; along += 8) push(position(along), 1000);
+    const bytes = encodeTrackStream({
+      v: 1,
+      provider: 'garmin',
+      sport: 'road_cycling',
+      hasHeartRate: false,
+      hasPower: false,
+      points: path.map((p) => [p.time!.getTime(), p.lat, p.lon, null]),
+    });
+    const startedAt = performance.now();
+    const match = analyzeAttempt(bytes, 'stream', geometry, window, new Date(T0 + 3 * 86_400_000));
+    const elapsedMs = performance.now() - startedAt;
+    expect(match.reasons).toEqual([]);
+    expect(match.segment!.offCorridorM).toBe(0);
+    expect(elapsedMs).toBeLessThanOrEqual(TIME_LIMIT_MS);
+    process.stdout.write(`стоянка у края коридора: ${Math.round(elapsedMs)} мс\n`);
+  }, 60_000);
 });

@@ -8,6 +8,7 @@ import {
   CENTER,
   corridorOf,
   M_LON,
+  mulberry32,
   noisyRide,
   ride,
   steps,
@@ -385,6 +386,89 @@ describe('недобранный путь и выход по хорде', () => 
     const under = brief(cutRide([9650, 0], [10_000, 550.5], 100), corridor50);
     expect(under.reasons).toEqual([]);
     expect(under.segment!.maxExcursionM).toBe(Math.round(exactOutside(550.5)));
+  });
+
+  // ревью pass 8: ветви ищутся во всей ширине коридора — ближняя встречная ветвь не вытесняет свою
+  it('своя ветвь в 75 м, встречная в 45 м (коридор ±100 м) — засчитан без скачка', () => {
+    const route: Xy[] = [
+      [0, 0],
+      [5000, 0],
+      [5000, 120],
+      [0, 120],
+      [0, 2000],
+    ];
+    const corridor = prepareCorridor(corridorOf(route, { widthM: 100 }));
+    const points = ride([[0, -120], ...route.slice(0), [0, 2200]], { speed: 8 }).map((point) => {
+      const x = (point.lon - CENTER.lon) * M_LON;
+      const y = (point.lat - CENTER.lat) * 111_195;
+      if (x > 1000 && x < 1400 && Math.abs(y) < 1) {
+        const [lon, lat] = at([x, 75]);
+        return { ...point, lon, lat };
+      }
+      return point;
+    });
+    const result = brief(points, corridor);
+    expect(result.reasons).toEqual([]);
+    expect(result.segment!.offCorridorM).toBe(0);
+  });
+
+  /**
+   * Ревью pass 8: лимит работы геометрии не меняет вердикт честного трека — случайные треки внутри коридора (шум,
+   * стоянки у края коридора, медленная запись) при лимите 0 дают тот же результат, что без лимита.
+   */
+  it('свойство: честные треки внутри коридора — лимит геометрии 0 не меняет результат', () => {
+    const policy = CORRIDOR_POLICY as { maxChordWork: number };
+    const saved = policy.maxChordWork;
+    const random = mulberry32(2026);
+    try {
+      for (let trial = 0; trial < 24; trial += 1) {
+        // ломаная из 4–7 отрезков 400–1500 м с поворотами до ±100°
+        const route: Xy[] = [[0, 0]];
+        let heading = 0;
+        const legs = 4 + Math.floor(random() * 4);
+        for (let i = 0; i < legs; i += 1) {
+          heading += (random() - 0.5) * (Math.PI * 1.1);
+          const length = 400 + random() * 1100;
+          const [x, y] = route[route.length - 1]!;
+          route.push([x + length * Math.cos(heading), y + length * Math.sin(heading)]);
+        }
+        const widthM = 30 + Math.floor(random() * 60);
+        const corridor = prepareCorridor(corridorOf(route, { widthM }));
+        const speed = 1 + random() * 11;
+        const sigma = random() * Math.min(10, widthM / 4);
+        const base = noisyRide([[-120, 0], ...route], sigma, trial + 1, speed);
+        // стоянка у края коридора середины второго отрезка: d ≈ w − 3 м, дрожание ±2 м вдоль отрезка
+        const [ax, ay] = route[1]!;
+        const [bx, by] = route[2]!;
+        const length = Math.hypot(bx - ax, by - ay);
+        const [ux, uy] = [(bx - ax) / length, (by - ay) / length];
+        const [mx, my] = [(ax + bx) / 2 + -uy * (widthM - 3), (ay + by) / 2 + ux * (widthM - 3)];
+        const stop = Array.from({ length: 400 }, (_, k): ParsedPoint => {
+          const [lon, lat] = at([mx + ux * 2 * (-1) ** k, my + uy * 2 * (-1) ** k]);
+          return { lon, lat, time: new Date(0) };
+        });
+        const near = (p: ParsedPoint) =>
+          Math.hypot(
+            (p.lon - CENTER.lon) * M_LON - (ax + bx) / 2,
+            (p.lat - CENTER.lat) * 111_195 - (ay + by) / 2,
+          );
+        let half = 0;
+        for (let k = 1; k < base.length; k += 1) if (near(base[k]!) < near(base[half]!)) half = k;
+        const points = [...base.slice(0, half), ...stop, ...base.slice(half)].map(
+          (point, k): ParsedPoint => ({ ...point, time: new Date(T0 + k * 1000) }),
+        );
+        policy.maxChordWork = saved;
+        const unlimited = matchCorridor(points, corridor, WIDE);
+        policy.maxChordWork = 0;
+        const limited = matchCorridor(points, corridor, WIDE);
+        expect(limited.reasons, `trial ${trial}`).toEqual(unlimited.reasons);
+        expect(limited.segment?.offCorridorM, `trial ${trial}`).toBe(
+          unlimited.segment?.offCorridorM,
+        );
+      }
+    } finally {
+      policy.maxChordWork = saved;
+    }
   });
 
   it('лимит работы геометрии исчерпан: за лимитом оценка консервативная — срезка остаётся сходом', () => {

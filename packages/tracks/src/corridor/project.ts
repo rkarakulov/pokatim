@@ -19,6 +19,8 @@ export interface ProjectedTrack {
   inside: Uint8Array;
   /** длина шага к следующей точке, м (haversine) */
   step: Float64Array;
+  /** ближайший отрезок маршрута (−1 — вне радиуса поиска) */
+  nearest: Int32Array;
   /** моменты выбросов, мс, по возрастанию */
   noiseTimes: Float64Array;
 }
@@ -56,7 +58,8 @@ export function projectTrack(
 
   assertPlausible(kept, time);
 
-  const branches = collectBranches(kept, corridor, d);
+  const nearest = new Int32Array(count).fill(-1);
+  const branches = collectBranches(kept, corridor, d, nearest);
   const s = viterbi(branches, step, corridor);
   const inside = new Uint8Array(count);
   for (let k = 0; k < count; k += 1) inside[k] = d[k]! <= corridor.widthM ? 1 : 0;
@@ -69,6 +72,7 @@ export function projectTrack(
     s,
     inside,
     step,
+    nearest,
     noiseTimes: Float64Array.from(noiseTimes),
   };
 }
@@ -86,6 +90,7 @@ function collectBranches(
   points: readonly ParsedPoint[],
   corridor: PreparedCorridor,
   dOut: Float64Array,
+  nearestOut: Int32Array,
 ): Branches {
   const K = CORRIDOR_POLICY.maxBranches;
   const count = points.length;
@@ -95,9 +100,8 @@ function collectBranches(
   const segments = corridor.lon.length - 1;
   const out = new Int32Array(segments);
   const stamp = new Int32Array(segments);
-  // ступени радиуса: ближе всего — до 50 м, затем коридор, затем полный радиус поиска; ветви ищутся до первой
-  // ступени, на которой нашлась точка маршрута (ближайшая ветвь всегда среди найденных)
-  const reaches = [Math.min(corridor.widthM, 50), corridor.widthM];
+  // сначала — вся ширина коридора (точка внутри: все ветви коридора — кандидаты Витерби), пусто — полный радиус
+  const near = corridor.widthM;
   const radius = CORRIDOR_POLICY.searchRadius(corridor.widthM);
   const { lon: vLon, lat: vLat, chainage, segKx, segDx, segDy, segLength2, ky } = corridor;
   // K ближайших ветвей точки по (d, s) — без аллокаций на точку (200 000 точек — память потока worker)
@@ -112,10 +116,10 @@ function collectBranches(
     const { lon, lat } = points[k]!;
     let kept = 0;
     let minD2 = Infinity;
-    for (let pass = 0; pass < 3; pass += 1) {
-      const reach = pass < 2 ? reaches[pass]! : radius;
+    for (let pass = 0; pass < 2; pass += 1) {
+      const reach = pass === 0 ? near : radius;
       const radius2 = reach * reach;
-      const found = gridCandidates(corridor, lon, lat, reach, out, stamp, 3 * k + 1 + pass);
+      const found = gridCandidates(corridor, lon, lat, reach, out, stamp, 2 * k + 1 + pass);
       for (let c = 0; c < found; c += 1) {
         const j = out[c]!;
         const px = (lon - vLon[j]!) * segKx[j]!;
@@ -128,7 +132,10 @@ function collectBranches(
         const ey = py - t * dy;
         const dist2 = ex * ex + ey * ey;
         if (dist2 > radius2) continue;
-        if (dist2 < minD2) minD2 = dist2;
+        if (dist2 < minD2) {
+          minD2 = dist2;
+          nearestOut[k] = j;
+        }
         // ветвь — локальный минимум расстояния вдоль линии: проекция внутрь отрезка или вершина «снаружи угла»
         if (raw <= 0 && j > 0 && rawT(j - 1, lon, lat) < 1) continue;
         if (raw >= 1 && j < segments - 1 && rawT(j + 1, lon, lat) > 0) continue;
@@ -160,7 +167,7 @@ function collectBranches(
         keptD[at] = dc;
         if (kept < K) kept += 1;
       }
-      if (kept > 0 && minD2 <= reach * reach) break;
+      if (kept > 0 && minD2 <= near * near) break;
     }
     dOut[k] = Math.sqrt(minD2);
     if (kept === 0) continue;
