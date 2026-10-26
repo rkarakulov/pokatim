@@ -20,7 +20,8 @@ export function defineRoles<R extends string, P extends string>(
 export const ROLE_PERMISSIONS = defineRoles<PanelRole, Permission>({
   admin: PERMISSIONS,
   moderator: ['audit.read', 'races.read'],
-  organizer: ['races.read', 'races.manage'],
+  // race-results-05 (R1): исключение треков и публикация — организатор (свои гонки); пересчёт после — только admin
+  organizer: ['races.read', 'races.manage', 'results.manage'],
 });
 
 /** Права роли в порядке контракта. */

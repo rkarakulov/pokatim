@@ -17,6 +17,38 @@ export const ResultsAttemptCheckRequested = z.object({
 export type ResultsAttemptCheckRequested = z.infer<typeof ResultsAttemptCheckRequested>;
 
 /**
+ * Запущена перепроверка треков гонки (race-results-05, RC-1): worker (`results-intake`) ставит на новую проверку
+ * вердикты старше `requestedAt` — каждая попытка своей транзакцией под `lockEntry`, повтор задачи идемпотентен.
+ */
+export const RESULTS_RACE_RECHECK_REQUESTED = 'results.race-recheck-requested';
+export const ResultsRaceRecheckRequested = z.object({
+  raceId: z.uuid(),
+  requestedAt: z.iso.datetime(),
+});
+export type ResultsRaceRecheckRequested = z.infer<typeof ResultsRaceRecheckRequested>;
+
+/**
+ * Протокол гонки опубликован (D-22) — для рейтинга сезона (слайс 08). **Без маршрута** (RC-4): издатель outbox берёт
+ * только типы из маршрутов, событие ждёт `publishedAt: null`, пока маршрут подписчика не заберёт накопленные.
+ */
+export const RESULTS_PROTOCOL_PUBLISHED = 'results.protocol-published';
+export const ResultsProtocolPublished = z.object({
+  raceId: z.uuid(),
+  revision: z.number().int().positive(),
+});
+export type ResultsProtocolPublished = z.infer<typeof ResultsProtocolPublished>;
+
+/** Новая ревизия опубликованного протокола (D-27, D-28) — для рейтинга (08); без маршрута, как `protocol-published`. */
+export const RESULTS_RESULT_REVISED = 'results.result-revised';
+export const ResultsResultRevised = z.object({
+  raceId: z.uuid(),
+  revision: z.number().int().positive(),
+  kind: z.enum(['disqualified', 'disqualification_revoked', 'recheck_applied']),
+  entryId: z.uuid().nullable(),
+});
+export type ResultsResultRevised = z.infer<typeof ResultsResultRevised>;
+
+/**
  * Маршруты событий для очередей `results` (подключает worker.module.ts): свои события и подписка на события
  * `tracks` (тип события → одна очередь: у подписчика — свои типы, `tracks.upload-deleted` слушает `devices`).
  */
@@ -24,5 +56,6 @@ export const resultsOutboxRoutes = {
   [TRACK_ACTIVITY_READY]: QUEUE.resultsIntake,
   [TRACK_ACTIVITY_REMOVED]: QUEUE.resultsIntake,
   [RESULTS_ENTRY_CREATED]: QUEUE.resultsIntake,
+  [RESULTS_RACE_RECHECK_REQUESTED]: QUEUE.resultsIntake,
   [RESULTS_ATTEMPT_CHECK_REQUESTED]: QUEUE.attemptCheck,
 } as const;

@@ -50,6 +50,12 @@ export const RESULTS_POLICY = {
   resultsPageMax: 100,
   /** A3: одна группа зачёта v1 */
   groupKey: 'overall',
+  /** race-results-05: строк «Участников» панели за ответ; больше — `truncated` */
+  standingsMax: 1000,
+  /** мутации протокола на сотрудника */
+  panelUserLimit: { limit: 60, windowSec: 3600 },
+  /** история пересчётов в панели */
+  recalculationsMax: 100,
 } as const;
 
 /** Окно гонки для попыток: начало и исключающая граница `closesAt` (считает `races`). */

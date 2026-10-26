@@ -229,7 +229,10 @@ describe('участие и результаты: панель', () => {
 
   it('сводка: счётчики по всем статусам (с excluded), фаза, протокол и чек-лист', () => {
     expect(PanelRaceResults.parse(summary).counts.attempts.excluded).toBe(0);
-    const { excluded: _excluded, ...withoutExcluded } = summary.counts.attempts;
+    const withoutExcluded: Partial<typeof summary.counts.attempts> = {
+      ...summary.counts.attempts,
+    };
+    delete withoutExcluded.excluded;
     expect(
       PanelRaceResults.safeParse({
         ...summary,

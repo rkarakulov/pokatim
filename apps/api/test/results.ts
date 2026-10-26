@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { MyRaceEntry, SignInResponse } from '@pokatim/contracts';
+import { MyRaceEntry, PanelRaceResults, SignInResponse } from '@pokatim/contracts';
 import type { CorridorGeometry } from '@pokatim/tracks';
 import type { OutboxJobData } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
@@ -21,7 +21,8 @@ import {
   userIdByEmail,
   validRegistration,
 } from './identity';
-import { createSeason, publishedRace, staff } from './races';
+import { panelCall, panelSession } from './panel';
+import { createSeason, publishedRace, RACES, staff } from './races';
 import { routesDb } from './routes';
 import { parsedUpload, processUpload, tracks, uploadTrack } from './tracks';
 
@@ -241,4 +242,69 @@ export function resultsWorker(h: Harness) {
       }
     },
   };
+}
+
+// --- протокол гонки (race-results-05) ---
+
+/** Срок загрузки заездов гонки стенда (конец окна + 24 ч, A5): публикация — не раньше. */
+export const UPLOAD_CLOSES = new Date(WINDOW.closesAt.getTime() + 24 * 3_600_000);
+
+/** Путь панели гонки: `/v1/admin/races/:raceId{path}`. */
+export const raceAdminUrl = (raceId: string, path = '') => `${RACES}/${raceId}${path}`;
+
+/** Причина действия панели (3–500). */
+export const REASON = { reason: 'Проверка протокола' };
+
+/** Действие панели над протоколом. */
+export const protocolAction = (
+  h: Harness,
+  token: string,
+  raceId: string,
+  path: string,
+  body: Record<string, unknown> = REASON,
+) => panelCall(h, token, 'POST', raceAdminUrl(raceId, path), body);
+
+/** Сводка результатов панели (тест знает, что 200). */
+export async function panelResults(h: Harness, token: string, raceId: string) {
+  const res = await panelCall(h, token, 'GET', raceAdminUrl(raceId, '/results'));
+  if (res.status !== 200) throw new Error(`сводка: ${res.status} ${JSON.stringify(res.body)}`);
+  return PanelRaceResults.parse(res.body);
+}
+
+/** Лучший результат заявки — напрямую в БД (подготовка мест протокола; проверки — в results-check). */
+export async function seedBest(h: Harness, entryId: string, elapsedSec: number, startedAt: Date) {
+  await resultsDb(h).entries.updateOne(
+    { _id: entryId },
+    {
+      $set: {
+        best: {
+          attemptId: uuidv7(),
+          elapsedSec,
+          startedAt,
+          finishedAt: new Date(startedAt.getTime() + elapsedSec * 1000),
+        },
+        summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
+      },
+    },
+  );
+}
+
+/**
+ * Гонка с заявками райдеров (по порядку e-mail) и лучшими временами (`null` — без результата); часы — после срока
+ * загрузки, сессия админа панели — свежая.
+ */
+export async function protocolRace(h: Harness, times: readonly (number | null)[]) {
+  const race = await corridorRace(h);
+  const riders = [];
+  for (const [index, elapsed] of times.entries()) {
+    const r = await rider(h, `rider${index}@example.com`);
+    const entry = MyRaceEntry.parse((await enterRace(h, r.auth, race.raceId)).body).entry!;
+    if (elapsed !== null) {
+      await seedBest(h, entry.id, elapsed, new Date(`2026-10-25T0${index}:00:00Z`));
+    }
+    riders.push({ ...r, entryId: entry.id });
+  }
+  travelTo(h, UPLOAD_CLOSES);
+  const token = await panelSession(h, 'admin@example.by');
+  return { ...race, riders, token };
 }

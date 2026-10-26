@@ -422,8 +422,9 @@ describe('протокол опубликован — фаза final (race-resul
     expect(racePhase(published(), CLOSED)).toBe('final');
     expect(racePhase(published({ status: 'cancelled' }), CLOSED)).toBe('cancelled');
     expect(racePhase(published({ status: 'draft' }), CLOSED)).toBe('draft');
-    const { protocolPublishedAt: _omitted, ...legacy } = race();
-    expect(racePhase(legacy, CLOSED)).toBe('closed');
+    const legacy: Partial<RaceDoc> = race();
+    delete legacy.protocolPublishedAt;
+    expect(racePhase(legacy as RaceDoc, CLOSED)).toBe('closed');
   });
 
   it('raceEditable: только описание, отмена недоступна; причины — results_final (+ entries_locked), без window_closed', () => {

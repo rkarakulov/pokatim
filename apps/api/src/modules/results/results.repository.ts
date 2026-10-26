@@ -643,6 +643,14 @@ export class ResultsRepository {
     return docs.flatMap(({ _id, userId, best }) => (best ? [{ _id, userId, best }] : []));
   }
 
+  /** Заявки по id (строки с местами в «Участниках» панели). */
+  entriesByIds(ids: readonly string[], session: DbSession): Promise<RaceEntryDoc[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.c.entries
+      .find({ _id: { $in: [...ids] } }, { session, projection: { requests: 0 } })
+      .toArray();
+  }
+
   /** Заявки гонки для «Участников» панели — по времени заявки, не больше `limit`. */
   entriesForStandings(raceId: string, limit: number, session: DbSession): Promise<RaceEntryDoc[]> {
     return this.c.entries
