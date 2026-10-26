@@ -20,6 +20,8 @@ export const PERMISSIONS = [
   'races.manage_any',
   'seasons.manage',
   'calendar.manage',
+  // 05b: модерация кофе-райдов по жалобам
+  'rides.moderate',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
 export type Permission = z.infer<typeof Permission>;

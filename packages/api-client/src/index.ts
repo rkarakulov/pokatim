@@ -53,6 +53,7 @@ import {
   type DisconnectDeviceRequest,
   type CancelRideRequest,
   type CreateRideRequest,
+  type CreateRideReportRequest,
   RideCities,
   RideDetail,
   type RideListQuery,
@@ -294,6 +295,9 @@ export function createApiClient({
     /** «Не иду» (идемпотентно); организатор — 409 `RIDE_INVALID_STATE`. */
     leaveRide: (accessToken: string, id: string) =>
       postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}/leave`, RideView, {}),
+    /** Жалоба на райд (05b, идемпотентно); организатор — 409 `RIDE_INVALID_STATE`, лимит — 429. */
+    reportRide: (accessToken: string, id: string, body: CreateRideReportRequest) =>
+      postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}/reports`, RideView, body),
 
     // --- заезды: ручная загрузка FIT/GPX (вход обязателен, tracks-devices) ---
     /**

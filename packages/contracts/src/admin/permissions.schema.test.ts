@@ -14,6 +14,7 @@ describe('PanelRole и Permission', () => {
       'races.manage_any',
       'seasons.manage',
       'calendar.manage',
+      'rides.moderate',
     ]);
   });
 
