@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { IdentityModule } from '../identity';
 import { PublicReadGuard } from '../../public-read.guard';
+import { RideReportsRepository } from './ride-reports.repository';
 import { RidesPublicController } from './rides-public.controller';
 import { RidesController } from './rides.controller';
 import { RidesFeedService } from './rides-feed.service';
@@ -16,6 +17,12 @@ import { RidesService } from './rides.service';
 @Module({
   imports: [IdentityModule],
   controllers: [RidesController, RidesPublicController],
-  providers: [RidesRepository, RidesService, RidesFeedService, PublicReadGuard],
+  providers: [
+    RidesRepository,
+    RideReportsRepository,
+    RidesService,
+    RidesFeedService,
+    PublicReadGuard,
+  ],
 })
 export class RidesModule {}

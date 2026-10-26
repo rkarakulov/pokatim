@@ -3,6 +3,7 @@ import { type CityCode, RIDE_MAX_PARTICIPANTS, type RideCancelReason } from '@po
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Collection, Db, Filter } from 'mongodb';
 
+import type { DbSession } from '../../db';
 import { type RideDoc, type RidePublicDoc, ridesCollections } from './rides.collection';
 
 /** Документ для зрителя: из участников — только он сам (`$elemMatch` своего id), чужие id не читаются. */
@@ -32,14 +33,38 @@ const VIEWER_FIELDS = {
   createdAt: 1,
   updatedAt: 1,
   version: 1,
+  hiddenAt: 1,
+  hiddenFromStatus: 1,
+  openReportCount: 1,
+  lastReportAt: 1,
 } as const satisfies Record<Exclude<keyof RideDoc, '_id' | 'participants'>, 1>;
 const viewerProjection = (userId: string) => ({
   ...VIEWER_FIELDS,
   participants: { $elemMatch: { userId } },
 });
 
-/** Публичная проекция: без организатора, участников, `version`. */
-const PUBLIC_PROJECTION = { organizerUserId: 0, participants: 0, version: 0 } as const;
+/** Публичная проекция: без организатора, участников, `version` и полей модерации. */
+const PUBLIC_PROJECTION = {
+  organizerUserId: 0,
+  participants: 0,
+  version: 0,
+  hiddenAt: 0,
+  hiddenFromStatus: 0,
+  openReportCount: 0,
+  lastReportAt: 0,
+} as const;
+
+/** Статусы, видимые не только организатору (скрытый — 05b — нет). */
+const VISIBLE_STATUSES = ['published', 'cancelled'] as const;
+
+/** Документ модерации: без участников. */
+export type RideModerationDoc = Omit<RideDoc, 'participants'>;
+
+/** Курсор очереди модерации: время (`lastReportAt` / `hiddenAt`) и id последней строки. */
+export interface ModerationAfter {
+  at: Date;
+  id: string;
+}
 
 /** Поля, которые правка организатора может менять (значения — примитивы после zod). */
 export type RidePatch = Partial<
@@ -83,11 +108,13 @@ export class RidesRepository {
     );
   }
 
-  /** Публичная карточка: опубликованный, отменённый и прошедший райд; без служебных полей. */
+  /** Публичная карточка: опубликованный, отменённый и прошедший райд; скрытый — нет; без служебных полей. */
   async findPublic(id: string): Promise<RidePublicDoc | undefined> {
     return (
-      (await this.rides.findOne<RidePublicDoc>({ _id: id }, { projection: PUBLIC_PROJECTION })) ??
-      undefined
+      (await this.rides.findOne<RidePublicDoc>(
+        { _id: id, status: { $in: [...VISIBLE_STATUSES] } },
+        { projection: PUBLIC_PROJECTION },
+      )) ?? undefined
     );
   }
 
@@ -228,9 +255,10 @@ export class RidesRepository {
    * параллельные запросы могут превысить квоту на единицу, это безвредно; основной барьер — лимит частоты Redis.
    */
   countUpcomingOrganized(userId: string, now: Date): Promise<number> {
+    // скрытый из опубликованного занимает слот до старта (8.1 Q2): нарушитель не освобождает квоту скрытием
     return this.rides.countDocuments({
       organizerUserId: userId,
-      status: 'published',
+      $or: [{ status: 'published' }, { status: 'hidden', hiddenFromStatus: 'published' }],
       startsAt: { $gt: now },
     });
   }
@@ -243,5 +271,128 @@ export class RidesRepository {
       status: 'published',
       startsAt: { $gt: now },
     });
+  }
+
+  // --- жалобы и модерация (05b): в транзакциях сервисов запись райда — первой (8.1 D2) ---
+
+  /**
+   * Жалоба: райд виден и не свой — `$inc openReportCount`, `$max lastReportAt` (поздний коммит не откатит время).
+   * `null` — условие не выполнено (нет, скрыт, свой); причину классифицирует сервис по свежему чтению.
+   */
+  recordReport(tx: DbSession, id: string, userId: string, now: Date): Promise<RideDoc | null> {
+    return this.rides.findOneAndUpdate(
+      { _id: id, status: { $in: [...VISIBLE_STATUSES] }, organizerUserId: { $ne: userId } },
+      { $inc: { openReportCount: 1 }, $max: { lastReportAt: now } },
+      { session: tx, returnDocument: 'after', projection: { participants: 0 } },
+    );
+  }
+
+  /** Состояние для модерации (без участников), в транзакции действия — с её снимком. */
+  async findForModeration(id: string, tx?: DbSession): Promise<RideModerationDoc | undefined> {
+    return (
+      (await this.rides.findOne<RideModerationDoc>(
+        { _id: id },
+        { session: tx, projection: { participants: 0 } },
+      )) ?? undefined
+    );
+  }
+
+  /** «Скрыть» по `version` из `published`/`cancelled`: прежний статус — в `hiddenFromStatus`, `version + 1`. */
+  hide(tx: DbSession, id: string, version: number, now: Date): Promise<RideModerationDoc | null> {
+    return this.rides.findOneAndUpdate(
+      { _id: id, version, status: { $in: [...VISIBLE_STATUSES] } },
+      [
+        {
+          $set: {
+            hiddenFromStatus: '$status',
+            status: { $literal: 'hidden' },
+            hiddenAt: { $literal: now },
+            openReportCount: { $literal: 0 },
+            updatedAt: { $literal: now },
+            version: { $add: ['$version', 1] },
+          },
+        },
+      ],
+      { session: tx, returnDocument: 'after', projection: { participants: 0 } },
+    );
+  }
+
+  /** «Вернуть» по `version` скрытый — в `hiddenFromStatus`, `version + 1`; жалобы не трогает. */
+  restore(
+    tx: DbSession,
+    id: string,
+    version: number,
+    now: Date,
+  ): Promise<RideModerationDoc | null> {
+    return this.rides.findOneAndUpdate(
+      { _id: id, version, status: 'hidden' },
+      [
+        {
+          $set: {
+            status: { $ifNull: ['$hiddenFromStatus', 'published'] },
+            hiddenFromStatus: { $literal: null },
+            hiddenAt: { $literal: null },
+            updatedAt: { $literal: now },
+            version: { $add: ['$version', 1] },
+          },
+        },
+      ],
+      { session: tx, returnDocument: 'after', projection: { participants: 0 } },
+    );
+  }
+
+  /**
+   * «Отклонить жалобы» по `version` и `lastReportAt` карточки (новая жалоба — `null`): нескрытый с открытыми
+   * жалобами, `openReportCount = 0`; `version` не меняется.
+   */
+  clearReports(
+    tx: DbSession,
+    id: string,
+    version: number,
+    lastReportAt: Date,
+  ): Promise<RideModerationDoc | null> {
+    return this.rides.findOneAndUpdate(
+      {
+        _id: id,
+        version,
+        lastReportAt,
+        status: { $in: [...VISIBLE_STATUSES] },
+        openReportCount: { $gt: 0 },
+      },
+      { $set: { openReportCount: 0 } },
+      { session: tx, returnDocument: 'after', projection: { participants: 0 } },
+    );
+  }
+
+  /** Очередь «Открытые жалобы»: новые жалобы сверху (`rides_report_queue_idx`, условие частичного индекса). */
+  listReported(after: ModerationAfter | null, limit: number): Promise<RideModerationDoc[]> {
+    const filter: Filter<RideDoc> = { openReportCount: { $gt: 0 } };
+    if (after) {
+      filter.$or = [
+        { lastReportAt: { $lt: after.at } },
+        { lastReportAt: after.at, _id: { $lt: after.id } },
+      ];
+    }
+    return this.rides
+      .find<RideModerationDoc>(filter, { projection: { participants: 0 } })
+      .sort({ lastReportAt: -1, _id: -1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  /** Очередь «Скрытые»: недавно скрытые сверху (`rides_hidden_queue_idx`). */
+  listHidden(after: ModerationAfter | null, limit: number): Promise<RideModerationDoc[]> {
+    const filter: Filter<RideDoc> = { status: 'hidden' };
+    if (after) {
+      filter.$or = [
+        { hiddenAt: { $lt: after.at } },
+        { hiddenAt: after.at, _id: { $lt: after.id } },
+      ];
+    }
+    return this.rides
+      .find<RideModerationDoc>(filter, { projection: { participants: 0 } })
+      .sort({ hiddenAt: -1, _id: -1 })
+      .limit(limit)
+      .toArray();
   }
 }

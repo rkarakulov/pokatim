@@ -73,3 +73,38 @@ export const leave = (h: Harness, who: Rider, id: string) =>
 /** Коды полей `VALIDATION_FAILED`. */
 export const fieldCodesOf = (body: unknown) =>
   (body as { details?: { fields?: { path: string; code: string }[] } }).details?.fields ?? [];
+
+// --- жалобы и модерация (05b) ---
+
+/** Пожаловаться на райд. */
+export const report = (
+  h: Harness,
+  who: Rider,
+  id: string,
+  body: Record<string, unknown> = { reason: 'spam' },
+) => authed(h, who, 'POST', `${RIDES}/${id}/reports`, body);
+
+/**
+ * Скрыть райд напрямую в БД (подготовка теста видимости, не проверяемое действие — его проверяет
+ * `rides-moderation.int.test.ts`). Возвращает функцию «вернуть как было».
+ */
+export async function hideInDb(h: Harness, id: string): Promise<() => Promise<void>> {
+  const doc = await ridesDb(h).findOne({ _id: id });
+  if (!doc || doc.status === 'hidden') throw new Error('райд не найден или уже скрыт');
+  const from = doc.status;
+  await ridesDb(h).updateOne(
+    { _id: id },
+    {
+      $set: { status: 'hidden', hiddenFromStatus: from, hiddenAt: h.clock.now() },
+      $inc: { version: 1 },
+    },
+  );
+  return async () => {
+    await ridesDb(h).updateOne(
+      { _id: id },
+      { $set: { status: from, hiddenFromStatus: null, hiddenAt: null }, $inc: { version: 1 } },
+    );
+  };
+}
+
+export const MODERATION = '/v1/admin/rides';

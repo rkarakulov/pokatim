@@ -214,6 +214,8 @@ describe('me', () => {
       canJoin: true,
       canLeave: false,
       canManage: false,
+      reported: false,
+      canReport: true,
     });
     expect(keysOf(asStranger.body)).not.toContain('version');
     await join(h, viewer, ride.id);

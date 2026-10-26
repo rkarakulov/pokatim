@@ -15,8 +15,11 @@ export interface RideParticipant {
 /**
  * Райд. Участники — встроенный массив (≤ `RIDE_MAX_PARTICIPANTS`, организатор — первый) + `goingCount` той же
  * операцией: все инварианты участия держит одна атомарная операция над этим документом (без транзакций и замков).
- * `version` меняют только правки организатора (правка, отмена); участие её не трогает. `organizerName` — подпись,
- * введённая самим организатором (D2), не данные аккаунта.
+ * `version` меняют правки организатора (правка, отмена) и модерация «Скрыть»/«Вернуть» (05b); участие и «Отклонить
+ * жалобы» её не трогают. `organizerName` — подпись, введённая самим организатором (D2), не данные аккаунта.
+ * Поля модерации (05b): `hiddenAt`/`hiddenFromStatus` (для «Вернуть»), `openReportCount`/`lastReportAt` — очередь
+ * без агрегации по жалобам; счётчик меняют только транзакции жалобы и модерации (запись райда — первой). Старые
+ * документы без полей бэкфиллит `0017_ride_reports`; чтение терпит отсутствие (`?? 0` / `?? null`).
  */
 export interface RideDoc {
   _id: string;
@@ -41,10 +44,21 @@ export interface RideDoc {
   createdAt: Date;
   updatedAt: Date;
   version: number;
+  hiddenAt: Date | null;
+  hiddenFromStatus: Exclude<RideStatus, 'hidden'> | null;
+  openReportCount: number;
+  lastReportAt: Date | null;
 }
 
-/** Публичное чтение: без организатора, участников и `version` (проекция репозитория). */
-export type RidePublicDoc = Omit<RideDoc, 'organizerUserId' | 'participants' | 'version'>;
+/** Поля модерации — не в публичном чтении. */
+export type RideModerationField =
+  'hiddenAt' | 'hiddenFromStatus' | 'openReportCount' | 'lastReportAt';
+
+/** Публичное чтение: без организатора, участников, `version` и полей модерации (проекция репозитория). */
+export type RidePublicDoc = Omit<
+  RideDoc,
+  'organizerUserId' | 'participants' | 'version' | RideModerationField
+>;
 
 export function ridesCollections(db: Db): { rides: Collection<RideDoc> } {
   return { rides: db.collection<RideDoc>(RIDES_COLLECTIONS.rides) };

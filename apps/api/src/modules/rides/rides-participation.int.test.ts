@@ -53,6 +53,8 @@ describe('«Я иду» / «Не иду»', () => {
       canJoin: false,
       canLeave: true,
       canManage: false,
+      reported: false,
+      canReport: true,
     });
     expect(joined.ride.goingCount).toBe(2);
     expect(joined.ride).not.toHaveProperty('version');

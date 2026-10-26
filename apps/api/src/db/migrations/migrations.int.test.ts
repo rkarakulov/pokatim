@@ -22,6 +22,8 @@ import { routes } from './0013_routes';
 import { rides } from './0014_rides';
 import { RIDES_COLLECTIONS } from '../../modules/rides/rides.collection';
 import { results } from './0015_results';
+import { rideReports } from './0017_ride_reports';
+import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
 import { ROUTES_COLLECTIONS } from '../../modules/routes/routes.collection';
 import { TRACKS_COLLECTIONS } from '../../modules/tracks/tracks.collection';
@@ -77,6 +79,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0013_routes',
       '0014_rides',
       '0015_results',
+      '0017_ride_reports',
     ]);
   });
 
@@ -166,7 +169,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       rides_participant_idx: plain({ 'participants.userId': 1, startsAt: 1 }),
       rides_organizer_idx: plain({ organizerUserId: 1, startsAt: -1 }),
     };
-    expect(await indexesOf(RIDES_COLLECTIONS.rides)).toEqual(expected);
+    // индексы очередей модерации на `rides` добавляет 0017_ride_reports — здесь только свои
+    expect(await indexesOf(RIDES_COLLECTIONS.rides)).toMatchObject(expected);
     const ids = migrations.map((migration) => migration.id);
     expect(ids.slice(ids.indexOf('0013_routes'), ids.indexOf('0013_routes') + 2)).toEqual([
       '0013_routes',
@@ -174,7 +178,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     ]);
     await rides.up(h.db);
     await rides.up(h.db);
-    expect(await indexesOf(RIDES_COLLECTIONS.rides)).toEqual(expected);
+    expect(await indexesOf(RIDES_COLLECTIONS.rides)).toMatchObject(expected);
   });
 
   it('0008_calendar: коллекция и индексы; повторный up — без ошибки (AC14)', async () => {
@@ -401,6 +405,61 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     for (const [name, indexes] of Object.entries(expected)) {
       expect(await indexesOf(name)).toEqual(indexes);
     }
+  });
+
+  it('0017_ride_reports: жалобы (unique), очереди модерации (partial), бэкфилл полей модерации; после 0015_results; повторный up — без изменений', async () => {
+    const index = (
+      key: Record<string, unknown>,
+      unique = false,
+      partialFilterExpression: Record<string, unknown> | undefined = undefined,
+    ) => ({ key, unique, partialFilterExpression, expireAfterSeconds: undefined });
+    const reports = {
+      ride_reports_ride_reporter_unique: index({ rideId: 1, reporterUserId: 1 }, true),
+      ride_reports_ride_idx: index({ rideId: 1, _id: -1 }),
+    };
+    const queues = {
+      rides_report_queue_idx: index({ lastReportAt: -1, _id: -1 }, false, {
+        openReportCount: { $gt: 0 },
+      }),
+      rides_hidden_queue_idx: index({ hiddenAt: -1, _id: -1 }, false, { status: 'hidden' }),
+    };
+    expect(await indexesOf(RIDE_REPORTS_COLLECTIONS.reports)).toEqual(reports);
+    expect(await indexesOf(RIDES_COLLECTIONS.rides)).toMatchObject(queues);
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.slice(ids.indexOf('0015_results'), ids.indexOf('0015_results') + 2)).toEqual([
+      '0015_results',
+      '0017_ride_reports',
+    ]);
+
+    // райд до 05b (без полей) и скрытый — бэкфилл трогает только отсутствующие поля
+    const ridesDb = h.db.collection<Record<string, unknown> & { _id: string }>(
+      RIDES_COLLECTIONS.rides,
+    );
+    const hiddenAt = new Date('2026-10-27T10:00:00Z');
+    const hidden = {
+      _id: 'hidden-ride',
+      status: 'hidden',
+      openReportCount: 0,
+      lastReportAt: hiddenAt,
+      hiddenAt,
+      hiddenFromStatus: 'cancelled',
+    };
+    await ridesDb.insertMany([{ _id: 'old-ride', status: 'published' }, hidden]);
+    await rideReports.up(h.db);
+    await rideReports.up(h.db);
+    expect(await ridesDb.findOne({ _id: 'old-ride' })).toEqual({
+      _id: 'old-ride',
+      status: 'published',
+      openReportCount: 0,
+      lastReportAt: null,
+      hiddenAt: null,
+      hiddenFromStatus: null,
+    });
+    expect(await ridesDb.findOne({ _id: 'hidden-ride' })).toEqual(hidden);
+    await ridesDb.deleteMany({ _id: { $in: ['old-ride', 'hidden-ride'] } });
+
+    expect(await indexesOf(RIDE_REPORTS_COLLECTIONS.reports)).toEqual(reports);
+    expect(await indexesOf(RIDES_COLLECTIONS.rides)).toMatchObject(queues);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

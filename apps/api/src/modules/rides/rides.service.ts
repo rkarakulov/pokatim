@@ -13,9 +13,10 @@ import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import { domainError } from '../../error-messages';
+import { RideReportsRepository } from './ride-reports.repository';
 import { rideViewOf } from './rides-feed.service';
 import type { RideDoc } from './rides.collection';
-import { changesStart, ridePhase, RIDES_POLICY, validateStartsAt } from './rides.policy';
+import { changesStart, ridePhase, RIDES_POLICY, validateStartsAt, visibleTo } from './rides.policy';
 import { type RidePatch, RidesRepository } from './rides.repository';
 
 const fieldFailure = (path: string, code: FieldErrorCode) => {
@@ -52,6 +53,7 @@ export class RidesService {
 
   constructor(
     private readonly repository: RidesRepository,
+    private readonly reports: RideReportsRepository,
     private readonly rateLimiter: RateLimiter,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -102,6 +104,10 @@ export class RidesService {
       createdAt: now,
       updatedAt: now,
       version: 0,
+      hiddenAt: null,
+      hiddenFromStatus: null,
+      openReportCount: 0,
+      lastReportAt: null,
     };
     await this.repository.insert(doc);
     this.logger.log(`rides.created ride=${doc._id} uid=${userId}`);
@@ -174,15 +180,17 @@ export class RidesService {
       (await this.repository.countUpcomingJoined(userId, now)) >= RIDES_POLICY.maxUpcomingJoined
     ) {
       const doc = await this.repository.findForViewer(id, userId);
-      if (doc && doc.participants?.length) return rideViewOf(doc, userId, now);
+      if (doc) this.assertVisible(doc, userId);
+      if (doc && doc.participants?.length) return this.viewOf(doc, userId, now);
       throw quotaExceeded('joined', RIDES_POLICY.maxUpcomingJoined);
     }
     const joined = await this.repository.join(id, userId, now);
-    if (joined) return rideViewOf(joined, userId, now);
+    if (joined) return this.viewOf(joined, userId, now);
     const doc = await this.repository.findForViewer(id, userId);
     if (!doc) throw domainError('NOT_FOUND', 404);
+    this.assertVisible(doc, userId);
     // уже участник (или организатор) — идемпотентный успех без двойного счёта
-    if (doc.participants?.length) return rideViewOf(doc, userId, now);
+    if (doc.participants?.length) return this.viewOf(doc, userId, now);
     if (ridePhase(doc, now) !== 'upcoming') throw domainError('RIDE_INVALID_STATE', 409);
     throw domainError('RIDE_FULL', 409);
   }
@@ -191,13 +199,28 @@ export class RidesService {
     await this.limit('rides-rsvp', userId, RIDES_POLICY.rsvpLimit);
     const now = this.clock.now();
     const left = await this.repository.leave(id, userId, now);
-    if (left) return rideViewOf(left, userId, now);
+    if (left) return this.viewOf(left, userId, now);
     const doc = await this.repository.findForViewer(id, userId);
     if (!doc) throw domainError('NOT_FOUND', 404);
+    this.assertVisible(doc, userId);
     if (doc.organizerUserId === userId) throw domainError('RIDE_INVALID_STATE', 409);
     // не участник — идемпотентный успех
-    if (!doc.participants?.length) return rideViewOf(doc, userId, now);
+    if (!doc.participants?.length) return this.viewOf(doc, userId, now);
     throw domainError('RIDE_INVALID_STATE', 409);
+  }
+
+  /**
+   * Скрытый райд (05b, 8.1 A5) — первой проверкой после чтения, до идемпотентных веток: чужому и участнику — 404
+   * (существование не раскрывается), организатору — 409 `RIDE_INVALID_STATE`.
+   */
+  private assertVisible(doc: RideDoc, userId: string): void {
+    if (!visibleTo(doc, userId)) throw domainError('NOT_FOUND', 404);
+    if (doc.status === 'hidden') throw domainError('RIDE_INVALID_STATE', 409);
+  }
+
+  /** Ответ участия: `reported` — по жалобам зрителя. */
+  private async viewOf(doc: RideDoc, userId: string, now: Date): Promise<RideView> {
+    return rideViewOf(doc, userId, now, await this.reports.exists(doc._id, userId));
   }
 
   /** Свой райд организатора; чужой и неизвестный — 404 (не 403: существование чужого не раскрывается). */
