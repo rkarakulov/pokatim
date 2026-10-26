@@ -70,6 +70,18 @@ export const SCHEDULE_FIELD_ERROR_CODES = [
 export type ScheduleFieldErrorCode = (typeof SCHEDULE_FIELD_ERROR_CODES)[number];
 
 /**
+ * Коды полей формы кофе-райда (app-05): старт раньше чем через 30 мин / дальше 60 дней; темп «от» больше «до»; лимит
+ * ниже идущих. Только в конец общего списка.
+ */
+export const RIDE_FIELD_ERROR_CODES = [
+  'RIDE_START_IN_PAST',
+  'RIDE_START_TOO_FAR',
+  'RIDE_PACE_ORDER',
+  'RIDE_LIMIT_BELOW_GOING',
+] as const;
+export type RideFieldErrorCode = (typeof RIDE_FIELD_ERROR_CODES)[number];
+
+/**
  * Коды ошибок полей: коды базы (`REQUIRED`, `INVALID`, …) + коды проекта. Сообщение zod-схемы = код,
  * текст для человека выбирает клиент (i18n). `fieldError` — с кодами проекта, не базовый.
  */
@@ -77,11 +89,7 @@ export const { FieldErrorCode, ValidationErrorDetails, fieldError } = defineFiel
   'AGE_BELOW_18',
   'CONSENT_REQUIRED',
   ...SCHEDULE_FIELD_ERROR_CODES,
-  // кофе-райды (app-05): старт раньше чем через 30 мин / дальше 60 дней; темп «от» больше «до»; лимит ниже идущих
-  'RIDE_START_IN_PAST',
-  'RIDE_START_TOO_FAR',
-  'RIDE_PACE_ORDER',
-  'RIDE_LIMIT_BELOW_GOING',
+  ...RIDE_FIELD_ERROR_CODES,
 ]);
 export type FieldErrorCode = z.infer<typeof FieldErrorCode>;
 export type ValidationErrorDetails = z.infer<typeof ValidationErrorDetails>;
