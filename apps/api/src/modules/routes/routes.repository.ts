@@ -81,6 +81,12 @@ export class RoutesRepository {
     return (await this.c.geometries.findOne({ _id: id })) ?? undefined;
   }
 
+  /** Только линия показа (проекция без `matchLine` ≤ 20 000 точек). */
+  async displayLine(id: string): Promise<[number, number][] | undefined> {
+    const doc = await this.c.geometries.findOne({ _id: id }, { projection: { line: 1 } });
+    return doc?.line.coordinates;
+  }
+
   /** Захват задачи разбора: только `processing` (терминальный статус — `null`, повтор — no-op). */
   claim(id: string, now: Date): Promise<RouteDoc | null> {
     return this.c.routes.findOneAndUpdate(
