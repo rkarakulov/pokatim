@@ -1,5 +1,5 @@
 import { apiErrorOf } from '@pokatim/api-client';
-import { Uuid, type RaceDetail } from '@pokatim/contracts';
+import { Uuid, type MyRaceEntry, type RaceDetail } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
@@ -12,6 +12,7 @@ import {
   textStyle,
   useTheme,
 } from '@rkarakulov/ui';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useMemo, type ReactNode } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -21,7 +22,7 @@ import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { SectionHero } from '@/components/section-hero';
-import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import {
   domainLabel,
   formatDistances,
@@ -33,7 +34,10 @@ import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { cancelMessage, formatRaceWindow, raceCardLine } from './format';
-import { useRace } from './queries';
+import { RaceParticipation } from './participation/race-participation';
+import { showsResultsTable } from './participation-format';
+import { useMyRaceEntry, useRace, useRaceResults } from './queries';
+import { RaceResultsTable } from './results-table';
 
 export const raceDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
 
@@ -58,7 +62,21 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
  * без разметки и автоссылок). Отменённая — баннер с причиной, строк окна нет. Даты — с годом (не зависят от «сейчас»);
  * «сегодня / завтра» — после монтирования (`now`). `'unknown'` — без строки и подписи (R9).
  */
-function RaceDetailView({ race, now }: { race: RaceDetail; now: Date | null }) {
+function RaceDetailView({
+  race,
+  now,
+  entry,
+  results,
+  signedIn,
+  sessionPending,
+}: {
+  race: RaceDetail;
+  now: Date | null;
+  entry: UseQueryResult<MyRaceEntry | null>;
+  results: ReturnType<typeof useRaceResults>;
+  signedIn: boolean;
+  sessionPending: boolean;
+}) {
   const theme = useTheme();
   const router = useRouter();
   const bikeClass = domainLabel('domain.bikeClass', race.bikeClass);
@@ -77,6 +95,13 @@ function RaceDetailView({ race, now }: { race: RaceDetail; now: Date | null }) {
         title={race.title}
       />
       {cancelled ? <Banner tone="info" message={cancelMessage(race.cancelReason)} /> : null}
+      <RaceParticipation
+        race={race}
+        now={now}
+        entry={entry}
+        signedIn={signedIn}
+        sessionPending={sessionPending}
+      />
       {cancelled ? null : (
         <Row label={t('races.detail.window')}>
           <View style={styles.value}>
@@ -130,6 +155,12 @@ function RaceDetailView({ race, now }: { race: RaceDetail; now: Date | null }) {
           </Text>
         </Row>
       ) : null}
+      {showsResultsTable(race) ? (
+        <RaceResultsTable
+          results={results}
+          ownEntryId={signedIn ? (entry.data?.entry?.id ?? null) : null}
+        />
+      ) : null}
     </View>
   );
 }
@@ -144,9 +175,21 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
   const router = useRouter();
   const valid = Uuid.safeParse(id).success;
   const signedIn = useSessionStore(isSignedIn);
+  const sessionPending = useSessionStore((state) => isSessionPending(state.status));
   const race = useRace(id, seed, valid);
-  const now = useMinskClockAfterMount([race.dataUpdatedAt]);
-  const refetchers = useMemo(() => [race.refetch], [race.refetch]);
+  // участие и таблица — только клиентские запросы (в SSR не попадают): `loader` сеет лишь `RaceDetail`
+  const entry = useMyRaceEntry(id, valid && signedIn);
+  const tableShown = race.data !== undefined && showsResultsTable(race.data);
+  const results = useRaceResults(id, valid && tableShown);
+  const now = useMinskClockAfterMount([race.dataUpdatedAt, entry.dataUpdatedAt]);
+  const refetchers = useMemo(
+    () => [
+      race.refetch,
+      ...(signedIn ? [entry.refetch] : []),
+      ...(tableShown ? [results.refetch] : []),
+    ],
+    [race.refetch, signedIn, entry.refetch, tableShown, results.refetch],
+  );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   const notFound =
     !valid || (race.data === undefined && apiErrorOf(race.error)?.code === 'NOT_FOUND');
@@ -196,7 +239,16 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
               </View>
             }
           >
-            {(data) => <RaceDetailView race={data} now={now} />}
+            {(data) => (
+              <RaceDetailView
+                race={data}
+                now={now}
+                entry={entry}
+                results={results}
+                signedIn={signedIn}
+                sessionPending={sessionPending}
+              />
+            )}
           </AsyncContent>
         )}
       </ScrollView>

@@ -15,6 +15,7 @@ import SeasonRoute from '../app/seasons/[id]';
 import { appRoutes, tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
+import { actions, noEntry, resultsPage } from './races-fixtures';
 
 jest.mock('@/lib/api');
 jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
@@ -86,6 +87,11 @@ beforeEach(() => {
   getCurrentSeason.mockResolvedValue({ season: s2026 });
   listRaces.mockResolvedValue({ items: [], nextCursor: null });
   getRace.mockResolvedValue(race(1));
+  // участие и таблица (race-results-04): гонка фикстуры без коридора — сервер отвечает «нет коридора»
+  jest
+    .mocked(api.getMyRaceEntry)
+    .mockResolvedValue(noEntry({ actions: actions({ reasons: ['no_corridor', 'not_entered'] }) }));
+  jest.mocked(api.getRaceResults).mockResolvedValue(resultsPage());
 });
 afterEach(() => {
   jest.clearAllMocks();
