@@ -256,6 +256,7 @@ describe('createAdminApiClient: протокол гонки (race-results-05)', 
     createdAt: AT,
     checkedAt: AT,
     review: { kind: 'excluded', reason: 'Чужой трек', at: AT },
+    riderName: 'Анна К.',
   };
   const reason = { reason: 'Причина действия' };
   const entryAction = { entryId: USER_ID, reason: 'Срезка маршрута' };
@@ -393,5 +394,26 @@ describe('createAdminApiClient: модерация райдов (05b)', () => {
         { version: 0, reason: 'Норма', lastReportAt: AT },
       ],
     ]);
+  });
+});
+
+describe('createAdminApiClient: сброс имени райдера (profile-02)', () => {
+  it('POST name-reset: путь, тело, cookie панели, разбор ответа', async () => {
+    const { calls, api } = admin(200, { reset: true });
+    await expect(api.resetRiderName(USER_ID, { reason: 'Оскорбительное имя' })).resolves.toEqual({
+      reset: true,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      url: `/v1/admin/profiles/${USER_ID}/name-reset`,
+      method: 'POST',
+      credentials: 'same-origin',
+      body: { reason: 'Оскорбительное имя' },
+    });
+  });
+
+  it('ответ не по схеме — ошибка разбора', async () => {
+    const { api } = admin(200, { ok: true });
+    await expect(api.resetRiderName(USER_ID, { reason: 'Оскорбительное имя' })).rejects.toThrow();
   });
 });

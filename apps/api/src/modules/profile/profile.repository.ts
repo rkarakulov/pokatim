@@ -3,19 +3,28 @@ import type { RideReason } from '@pokatim/contracts';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Collection, Db } from 'mongodb';
 
-import { PROFILE_COLLECTIONS, type ProfileDoc } from './profile.collection';
+import type { DbSession } from '../../db';
+import {
+  PROFILE_COLLECTIONS,
+  type ProfileConsentEventDoc,
+  type ProfileDoc,
+} from './profile.collection';
 
 /**
- * Единственный писатель `profiles`. Запись — одна атомарная операция над одним документом вне транзакции: документы
- * аккаунта identity не меняются, `lockUser` не нужен (R1 касается транзакций, меняющих документы аккаунта).
- * Значения фильтров — только `userId` из проверенного access и коды enum после zod.
+ * Единственный писатель `profiles` и `profile_consent_events`. Опрос и шаг устройств — одна атомарная операция над
+ * одним документом вне транзакции. `PATCH /v1/profile` (имя и согласие) и сброс имени модератором — транзакции
+ * (profile-02): чтение и запись **одного** документа профиля, событие согласия или журнал панели; документы аккаунта
+ * identity не меняются — `lockUser` не нужен (R1 касается транзакций, меняющих документы аккаунта). Значения
+ * фильтров — только `userId` из проверенного access/пути после zod и коды enum.
  */
 @Injectable()
 export class ProfileRepository {
   private readonly profiles: Collection<ProfileDoc>;
+  private readonly consentEvents: Collection<ProfileConsentEventDoc>;
 
   constructor(@Inject(MONGO_DB) db: Db) {
     this.profiles = db.collection<ProfileDoc>(PROFILE_COLLECTIONS.profiles);
+    this.consentEvents = db.collection<ProfileConsentEventDoc>(PROFILE_COLLECTIONS.consentEvents);
   }
 
   /**
@@ -74,23 +83,28 @@ export class ProfileRepository {
     };
   }
 
-  /** Профиль для `GET /v1/profile`; `null` — документа нет. Поля до этого слайса могут отсутствовать. */
+  /**
+   * Профиль для `GET /v1/profile` и прежний флаг согласия в транзакции `PATCH`; `null` — документа нет. Поля до
+   * этого слайса могут отсутствовать.
+   */
   async findProfile(
     userId: string,
+    session?: DbSession,
   ): Promise<Pick<ProfileDoc, 'rideReasons' | 'publicName' | 'showNameInResults'> | null> {
     return this.profiles.findOne(
       { _id: userId },
-      { projection: { _id: 0, rideReasons: 1, publicName: 1, showNameInResults: 1 } },
+      { session, projection: { _id: 0, rideReasons: 1, publicName: 1, showNameInResults: 1 } },
     );
   }
 
   /**
    * Имя и согласие (`PATCH /v1/profile`, RC-5/RC-6): одна операция — upsert по `_id` (pipeline, значения — `$literal`),
    * ответ — документ после записи. Ключа нет в `patch` — поле не меняется. Документа нет — создаётся без ответа опроса
-   * (как у шага устройств). `devicesStepCompletedAt` не трогается, `updatedAt` — всегда. Гонка двух первых upsert —
-   * duplicate key на `_id_` (повтор — у сервиса).
+   * (как у шага устройств). `devicesStepCompletedAt` не трогается, `updatedAt` — всегда. В транзакции `PATCH`
+   * (profile-02). Гонка двух первых upsert — duplicate key на `_id_` (повтор всей транзакции — у сервиса).
    */
   async updatePublicName(
+    session: DbSession,
     userId: string,
     patch: { publicName?: string | null; showNameInResults?: boolean },
     now: Date,
@@ -114,11 +128,39 @@ export class ProfileRepository {
           },
         },
       ],
-      { upsert: true, returnDocument: 'after' },
+      { upsert: true, returnDocument: 'after', session },
     );
     // upsert с `returnDocument: 'after'` документ возвращает всегда
     if (!doc) throw new Error('profile upsert returned no document');
     return doc;
+  }
+
+  /** Событие журнала согласий (append-only: только вставка) — в транзакции `PATCH` вместе с документом профиля. */
+  async insertConsentEvent(session: DbSession, doc: ProfileConsentEventDoc): Promise<void> {
+    await this.consentEvents.insertOne(doc, { session });
+  }
+
+  /**
+   * Сброс публичного имени модератором (profile-02, D5) — в транзакции действия панели: **первой** операцией —
+   * условная запись (имя есть) в документ профиля; согласие не трогается. Не совпало — чтение `_id`: документа нет —
+   * `not_found`, есть (имени уже нет) — `empty` без записи. Прежнее имя наружу не возвращается.
+   */
+  async resetPublicName(
+    session: DbSession,
+    userId: string,
+    now: Date,
+  ): Promise<'reset' | 'empty' | 'not_found'> {
+    const updated = await this.profiles.findOneAndUpdate(
+      { _id: userId, publicName: { $type: 'string' } },
+      { $set: { publicName: null, updatedAt: now } },
+      { session, projection: { _id: 1 } },
+    );
+    if (updated) return 'reset';
+    const existing = await this.profiles.findOne(
+      { _id: userId },
+      { session, projection: { _id: 1 } },
+    );
+    return existing ? 'empty' : 'not_found';
   }
 
   /**

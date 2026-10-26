@@ -58,10 +58,11 @@ export class ResultsCoreModule {}
 
 /**
  * HTTP: участие (`AuthGuard`), публичная таблица (`PublicReadGuard`), панель (`PanelGuard`) — чтение и действия над
- * протоколом (race-results-05).
+ * протоколом (race-results-05). `ProfileCoreModule` — порт `RIDER_NAMES` для имён в панели (profile-02; ядро его не
+ * реэкспортирует).
  */
 @Module({
-  imports: [IdentityModule, PanelModule, ResultsCoreModule],
+  imports: [IdentityModule, PanelModule, ProfileCoreModule, ResultsCoreModule],
   controllers: [
     RaceEntryController,
     ResultsPublicController,

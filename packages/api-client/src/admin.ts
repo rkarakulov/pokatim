@@ -53,6 +53,8 @@ import {
   PanelDispute,
   PanelDisputePage,
   type PanelDisputeQuery,
+  type ResetRiderNameRequest,
+  RiderNameResetResult,
 } from '@pokatim/contracts';
 import { createHttpClient } from '@rkarakulov/api-client-core';
 import { z } from 'zod';
@@ -235,6 +237,14 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     getDispute: (id: string) => get(dispute(id), PanelDispute),
     decideDispute: (id: string, body: DisputeDecisionRequest) =>
       post(`${dispute(id)}/decision`, PanelDispute, body),
+
+    // --- профили райдеров (profiles.moderate, profile-02) ---
+    resetRiderName: (userId: string, body: ResetRiderNameRequest) =>
+      post(
+        `/v1/admin/profiles/${encodeURIComponent(userId)}/name-reset`,
+        RiderNameResetResult,
+        body,
+      ),
   };
 }
 

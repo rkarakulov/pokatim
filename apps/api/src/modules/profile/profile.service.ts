@@ -1,8 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ProfileView, RateLimitedDetails, UpdateProfileRequest } from '@pokatim/contracts';
+import {
+  PUBLIC_NAME_CONSENT_VERSION,
+  type ProfileView,
+  type RateLimitedDetails,
+  type UpdateProfileRequest,
+} from '@pokatim/contracts';
 import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
-import { isDuplicateKey } from '@rkarakulov/api-kit/mongo';
+import { isDuplicateKey, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
+import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import type { ProfileDoc } from './profile.collection';
 import { PROFILE_POLICY } from './profile.policy';
@@ -25,6 +31,7 @@ export class ProfileService {
   constructor(
     private readonly repository: ProfileRepository,
     private readonly rateLimiter: RateLimiter,
+    private readonly transactions: MongoTransactions,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -32,7 +39,12 @@ export class ProfileService {
     return viewOf(await this.repository.findProfile(userId));
   }
 
-  /** Частичное обновление имени и согласия; лимит `profile-update` — до записи. Ответ — профиль после записи. */
+  /**
+   * Частичное обновление имени и согласия; лимит `profile-update` — до транзакции (Redis вне колбэка). Ответ —
+   * профиль после записи. Фактическая смена согласия пишет событие журнала (profile-02, D4) в той же транзакции:
+   * прежний флаг читается внутри неё до записи того же документа — параллельный `PATCH` конфликтует и повторяется
+   * на свежем снимке (двойного `granted` нет). Версия текста и время — сервер.
+   */
   async update(userId: string, body: UpdateProfileRequest): Promise<ProfileView> {
     const now = this.clock.now();
     const limited = await this.rateLimiter.consume(
@@ -46,11 +58,35 @@ export class ProfileService {
     }
     const patch = { publicName: body.publicName, showNameInResults: body.showNameInResults };
     try {
-      return viewOf(await this.repository.updatePublicName(userId, patch, now));
+      return viewOf(await this.writeProfile(userId, patch, now));
     } catch (error) {
-      // гонка двух первых upsert: документ уже вставлен — повтор его найдёт и обновит
+      // гонка двух первых upsert: документ уже вставлен — повтор всей транзакции его найдёт и обновит
       if (!isDuplicateKey(error, '_id_')) throw error;
-      return viewOf(await this.repository.updatePublicName(userId, patch, now));
+      return viewOf(await this.writeProfile(userId, patch, now));
     }
+  }
+
+  private writeProfile(
+    userId: string,
+    patch: { publicName?: string | null; showNameInResults?: boolean },
+    now: Date,
+  ): Promise<ProfileDoc> {
+    return this.transactions.run(async (tx) => {
+      const before = await this.repository.findProfile(userId, tx);
+      const wasShown = before?.showNameInResults ?? false;
+      const after = await this.repository.updatePublicName(tx, userId, patch, now);
+      const shown = after.showNameInResults ?? false;
+      if (shown !== wasShown) {
+        await this.repository.insertConsentEvent(tx, {
+          _id: uuidv7(),
+          userId,
+          kind: 'public_name',
+          action: shown ? 'granted' : 'revoked',
+          version: PUBLIC_NAME_CONSENT_VERSION,
+          at: now,
+        });
+      }
+      return after;
+    });
   }
 }

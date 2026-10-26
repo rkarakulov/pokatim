@@ -32,6 +32,7 @@ vi.mock('../../api', () => ({
     revokeDisqualification: vi.fn(),
     recheckProtocol: vi.fn(),
     applyProtocolRecheck: vi.fn(),
+    resetRiderName: vi.fn(),
   },
 }));
 
@@ -140,6 +141,7 @@ const row = (overrides: Partial<PanelStandingRow> = {}): PanelStandingRow => ({
   elapsedSec: 6123,
   bestAttemptId: ATTEMPT_ID,
   summary: { total: 3, pending: 0, counted: 2, rejectedShown: 1, failed: 0, excluded: 0 },
+  riderName: null,
   ...overrides,
 });
 
@@ -162,6 +164,7 @@ const attempt = (overrides: Partial<PanelRaceAttempt> = {}): PanelRaceAttempt =>
   createdAt: '2026-10-20T07:15:00.000Z',
   checkedAt: null,
   review: null,
+  riderName: null,
   ...overrides,
 });
 
@@ -363,8 +366,10 @@ describe('«Результаты» гонки — до публикации', ()
     const cells = within(rider.closest('tr')!)
       .getAllByRole('cell')
       .map((cell) => cell.textContent);
-    expect(cells).toEqual(['=2', 'Участник ·9a0a01', '1:42:03', 'Предварительный', '3']);
+    // колонка действий до публикации — только из-за права сброса имени (profile-02); имени нет — кнопки нет
+    expect(cells).toEqual(['=2', 'Участник ·9a0a01', '1:42:03', 'Предварительный', '3', '']);
     expect(within(standings).queryByRole('button', { name: 'Дисквалифицировать' })).toBeNull();
+    expect(within(standings).queryByRole('button', { name: 'Сбросить имя' })).toBeNull();
   });
 
   it('открытые споры (06): ссылка «Открыть споры» на список гонки — при count > 0 и disputes.read', async () => {
@@ -583,5 +588,79 @@ describe('«Результаты» гонки — после публикаци�
     expect(screen.queryByRole('button', { name: 'Дисквалифицировать' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Отменить DQ' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Перепроверить треки' })).toBeNull();
+  });
+});
+
+describe('«Результаты» гонки — имя участника (profile-02)', () => {
+  const NAMED = row({ riderName: 'Анна К.' });
+
+  it('имя при согласии — «Анна К. ·id» в участниках и попытках, иначе «Участник ·id» (AC5)', async () => {
+    mocked.getRaceStandings.mockResolvedValue({
+      source: 'live',
+      revision: null,
+      truncated: false,
+      items: [NAMED, row({ entryId: ENTRY_B, place: 3, tied: false })],
+    });
+    mocked.listRaceAttempts.mockResolvedValue({
+      items: [attempt({ riderName: 'Анна К.' })],
+      nextCursor: null,
+    });
+    await renderApp(PATH);
+    const standings = await screen.findByRole('region', { name: 'Участники' });
+    expect(await within(standings).findByText('Анна К. ·9a0a01')).toBeTruthy();
+    expect(within(standings).getByText('Участник ·9a0b02')).toBeTruthy();
+    const attempts = section('Попытки');
+    expect(await within(attempts).findByText('Анна К. ·9a0a01')).toBeTruthy();
+  });
+
+  it('организатор без profiles.moderate: до публикации колонки действий нет, «Сбросить имя» нет', async () => {
+    mocked.me.mockResolvedValue(ME.organizer);
+    mocked.getRaceStandings.mockResolvedValue({
+      source: 'live',
+      revision: null,
+      truncated: false,
+      items: [NAMED],
+    });
+    await renderApp(PATH);
+    const standings = await screen.findByRole('region', { name: 'Участники' });
+    const rider = await within(standings).findByText('Анна К. ·9a0a01');
+    expect(within(rider.closest('tr')!).getAllByRole('cell')).toHaveLength(5);
+    expect(screen.queryByRole('button', { name: 'Сбросить имя' })).toBeNull();
+  });
+
+  it('модератор: «Сбросить имя» → ReasonDialog с предупреждением → запрос → строка «Участник» (AC7)', async () => {
+    mocked.me.mockResolvedValue(ME.moderator);
+    mocked.getRaceStandings
+      .mockResolvedValueOnce({ source: 'live', revision: null, truncated: false, items: [NAMED] })
+      .mockResolvedValue({ source: 'live', revision: null, truncated: false, items: [row()] });
+    mocked.resetRiderName.mockResolvedValue({ reset: true });
+    await renderApp(PATH);
+    const standings = await screen.findByRole('region', { name: 'Участники' });
+    fireEvent.click(await within(standings).findByRole('button', { name: 'Сбросить имя' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/Не повторяйте имя в причине/)).toBeTruthy();
+    fireEvent.change(reasonField(), { target: { value: 'Оскорбительное имя' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Сбросить имя' }));
+    await waitFor(() =>
+      expect(mocked.resetRiderName).toHaveBeenCalledWith(USER_A, { reason: 'Оскорбительное имя' }),
+    );
+    expect(await within(standings).findByText('Участник ·9a0a01')).toBeTruthy();
+    expect(within(standings).queryByRole('button', { name: 'Сбросить имя' })).toBeNull();
+  });
+
+  it('после публикации у админа — и DQ, и «Сбросить имя» в одной ячейке', async () => {
+    mocked.getRaceResultsSummary.mockResolvedValue(summary(PUBLISHED));
+    mocked.getRaceStandings.mockResolvedValue({
+      source: 'protocol',
+      revision: 2,
+      truncated: false,
+      items: [row({ riderName: 'Анна К.', resultStatus: 'final', place: 1, tied: false })],
+    });
+    await renderApp(PATH);
+    const standings = await screen.findByRole('region', { name: 'Участники' });
+    expect(
+      await within(standings).findByRole('button', { name: 'Дисквалифицировать' }),
+    ).toBeTruthy();
+    expect(within(standings).getByRole('button', { name: 'Сбросить имя' })).toBeTruthy();
   });
 });

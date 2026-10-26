@@ -39,6 +39,8 @@ export const AUDIT_ACTIONS = [
   'ride.reports_dismissed',
   // race-results-06: решение по спору
   'disputes.decided',
+  // profile-02: сброс публичного имени райдера модератором (имени в записи нет)
+  'profile.name_reset',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -58,7 +60,15 @@ export const AuditQuery = z.strictObject({
 export type AuditQuery = z.infer<typeof AuditQuery>;
 
 /** Вид объекта записи журнала (доменные модули панели); только в конец. */
-export const AUDIT_SUBJECT_KINDS = ['season', 'race', 'calendar_start', 'route', 'ride'] as const;
+export const AUDIT_SUBJECT_KINDS = [
+  'season',
+  'race',
+  'calendar_start',
+  'route',
+  'ride',
+  // profile-02: райдер (`id` — userId, `label` — «Участник ·<id>», без имени)
+  'rider',
+] as const;
 export const AuditSubjectKind = z.enum(AUDIT_SUBJECT_KINDS);
 export type AuditSubjectKind = z.infer<typeof AuditSubjectKind>;
 

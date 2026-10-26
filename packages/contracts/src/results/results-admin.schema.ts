@@ -136,6 +136,11 @@ export const PanelRaceAttempt = z.object({
   review: z
     .object({ kind: z.enum(ATTEMPT_REVIEW_KINDS), reason: z.string(), at: z.iso.datetime() })
     .nullable(),
+  /**
+   * Публичное имя райдера (profile-02, D8) — только при имени и согласии (порт `RIDER_NAMES`), иначе `null`.
+   * Обязательное: панель деплоится вместе с API.
+   */
+  riderName: z.string().nullable(),
 });
 export type PanelRaceAttempt = z.infer<typeof PanelRaceAttempt>;
 
@@ -171,6 +176,11 @@ export const PanelStandingRow = z.object({
     failed: z.number().int(),
     excluded: z.number().int(),
   }),
+  /**
+   * Публичное имя райдера (profile-02, D8) — только при имени и согласии (порт `RIDER_NAMES`), иначе `null`.
+   * Обязательное: панель деплоится вместе с API.
+   */
+  riderName: z.string().nullable(),
 });
 export type PanelStandingRow = z.infer<typeof PanelStandingRow>;
 

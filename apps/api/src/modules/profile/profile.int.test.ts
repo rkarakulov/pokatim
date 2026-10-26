@@ -1,10 +1,14 @@
-import type { Session } from '@pokatim/contracts';
+import { PUBLIC_NAME_CONSENT_VERSION, type Session } from '@pokatim/contracts';
 import { decodeJwt } from 'jose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, MINUTE, type Harness } from '../../../test/harness';
 import { bearer, call, signUpSession } from '../../../test/identity';
-import { PROFILE_COLLECTIONS, type ProfileDoc } from './profile.collection';
+import {
+  PROFILE_COLLECTIONS,
+  type ProfileConsentEventDoc,
+  type ProfileDoc,
+} from './profile.collection';
 import { PROFILE_POLICY } from './profile.policy';
 import { ProfileRepository } from './profile.repository';
 import { RIDER_NAMES, type RiderNameDirectory } from './rider-names.port';
@@ -28,6 +32,8 @@ const submit = (session: Session, reasons: string[]) =>
 const patch = (session: Session, body: unknown) =>
   call(h, 'PATCH', PROFILE, body, bearer(session.accessToken));
 const profiles = () => h.db.collection<ProfileDoc>(PROFILE_COLLECTIONS.profiles);
+const consentEvents = () =>
+  h.db.collection<ProfileConsentEventDoc>(PROFILE_COLLECTIONS.consentEvents);
 const userIdOf = (session: Session) => String(decodeJwt(session.accessToken).sub);
 const EMPTY = { rideReasons: [], publicName: null, showNameInResults: false };
 
@@ -255,7 +261,90 @@ describe('PATCH /v1/profile — имя и согласие (AC2–AC4)', () => {
     expect(spy).toHaveBeenCalledTimes(2);
     expect(res.body).toEqual({ ...EMPTY, publicName: 'Анна К.', showNameInResults: true });
     expect(await profiles().countDocuments()).toBe(1);
+    expect(await consentEvents().countDocuments({ action: 'granted' })).toBe(1);
     spy.mockRestore();
+  });
+});
+
+describe('PATCH /v1/profile — журнал согласий (profile-02, AC1/AC2)', () => {
+  it('false → true: одно событие granted с версией и временем сервера; повтор true — без событий; false — revoked (AC1)', async () => {
+    const session = await signUpSession(h);
+    const userId = userIdOf(session);
+
+    expect((await patch(session, { showNameInResults: true })).status).toBe(200);
+    const granted = await consentEvents().find().toArray();
+    expect(granted).toEqual([
+      {
+        _id: expect.any(String),
+        userId,
+        kind: 'public_name',
+        action: 'granted',
+        version: PUBLIC_NAME_CONSENT_VERSION,
+        at: h.clock.now(),
+      },
+    ]);
+
+    h.clock.advance(MINUTE);
+    expect((await patch(session, { showNameInResults: true })).status).toBe(200);
+    expect(await consentEvents().countDocuments()).toBe(1);
+
+    h.clock.advance(MINUTE);
+    expect((await patch(session, { showNameInResults: false })).status).toBe(200);
+    const events = await consentEvents()
+      .find({}, { sort: { at: 1 } })
+      .toArray();
+    expect(events.map(({ action, at }) => ({ action, at }))).toEqual([
+      { action: 'granted', at: granted[0]?.at },
+      { action: 'revoked', at: h.clock.now() },
+    ]);
+  });
+
+  it('первый false без документа — не событие; true вместе с именем — одно событие без имени', async () => {
+    const off = await signUpSession(h, 'off@example.com');
+    expect((await patch(off, { showNameInResults: false })).status).toBe(200);
+    expect(await consentEvents().countDocuments()).toBe(0);
+
+    const on = await signUpSession(h, 'on@example.com');
+    const res = await patch(on, { publicName: 'Анна К.', showNameInResults: true });
+    expect(res.body).toMatchObject({ publicName: 'Анна К.', showNameInResults: true });
+    const events = await consentEvents().find().toArray();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.userId).toBe(userIdOf(on));
+    expect(JSON.stringify(events)).not.toContain('Анна');
+  });
+
+  it('только имя — событий нет (AC2)', async () => {
+    const session = await signUpSession(h);
+    await patch(session, { publicName: 'Анна К.' });
+    await patch(session, { publicName: 'Ян' });
+    expect(await consentEvents().countDocuments()).toBe(0);
+  });
+
+  it('сбой записи события — откат: флаг и имя прежние, событий нет (AC2)', async () => {
+    const session = await signUpSession(h);
+    await patch(session, { publicName: 'Анна К.' });
+    const before = await profiles().findOne({ _id: userIdOf(session) });
+    const spy = vi
+      .spyOn(h.app.get(ProfileRepository), 'insertConsentEvent')
+      .mockRejectedValueOnce(new Error('сбой записи журнала'));
+
+    const res = await patch(session, { publicName: 'Ян', showNameInResults: true });
+
+    expect(res.status).toBe(500);
+    expect(await profiles().findOne({ _id: userIdOf(session) })).toEqual(before);
+    expect(await consentEvents().countDocuments()).toBe(0);
+    spy.mockRestore();
+  });
+
+  it('гонка двух PATCH true от false — ровно одно granted (чтение прежнего флага в транзакции)', async () => {
+    const session = await signUpSession(h);
+    await patch(session, { showNameInResults: false });
+    const results = await Promise.all([
+      patch(session, { showNameInResults: true }),
+      patch(session, { showNameInResults: true }),
+    ]);
+    expect(results.map((res) => res.status)).toEqual([200, 200]);
+    expect(await consentEvents().countDocuments({ action: 'granted' })).toBe(1);
   });
 });
 

@@ -35,7 +35,12 @@ paths:
   сторож в `apps/api`; публичная строка — `entryId`, место, ничья, время сегмента (без `userId`, активности, времени
   суток, координат) и `riderName` — только при согласии райдера (profile-rider-name), `.nullable().default(null)`.
   `ProfileView.publicName` / `showNameInResults` — новые поля ответа с `.default` (`null` / `false`): новая сборка со
-  старым API разбирает ответ. `src/results/results-admin.schema.ts` — панель, строгие `z.enum`.
+  старым API разбирает ответ. `src/results/results-admin.schema.ts` — панель, строгие `z.enum`;
+  `PanelStandingRow.riderName` / `PanelRaceAttempt.riderName` — обязательные `nullable` (панель деплоится с API).
+- Согласие на показ имени (profile-02): `PUBLIC_NAME_CONSENT_VERSION` (`src/profile/profile.schema.ts`) — версия
+  текста `profile.show.label` + `profile.show.hint` (i18n). Сменили формулировку — **подняли версию** (дата), иначе
+  журнал согласий ссылается на чужой текст. Версию в событие пишет сервер. Сброс имени —
+  `src/profile/profile-admin.schema.ts` (`ResetRiderNameRequest` с `ActionReason`, `RiderNameResetResult`).
 - Треки и устройства (ADR-0011): `src/tracks/track-upload.schema.ts`, `src/devices/device.schema.ts` — статусы,
   причины, источники, провайдеры, проблемы подключения в ответах — `tolerantEnum`; путь `:provider` и запросы —
   строгие; формат `stream` — только сервер. Ответы без идентификаторов агрегатора, ключей хранилища, координат и

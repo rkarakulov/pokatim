@@ -45,9 +45,9 @@ const baseColumns = [
     cell: (info) => <time dateTime={info.getValue()}>{formatDateTime(info.getValue())}</time>,
     enableSorting: false,
   }),
-  column.accessor('entryId', {
+  column.accessor((attempt) => riderLabel(attempt.entryId, attempt.riderName), {
+    id: 'rider',
     header: t('admin.results.column.rider'),
-    cell: (info) => riderLabel(info.getValue()),
     enableSorting: false,
   }),
   column.accessor('origin', {

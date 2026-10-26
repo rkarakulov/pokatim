@@ -473,6 +473,7 @@ export const ru = {
   'profile.back': 'Назад',
   'profile.name.label': 'Как вас показывать в результатах',
   'profile.name.hint': 'Например, Анна К.',
+  // profile-02: сменили текст `profile.show.label`/`profile.show.hint` — поднять `PUBLIC_NAME_CONSENT_VERSION` (contracts)
   'profile.show.label': 'Показывать имя в таблицах результатов',
   'profile.show.hint':
     'Имя увидят все в таблицах результатов гонок. Выключите — вы будете «Участник»',
@@ -1402,4 +1403,11 @@ export const ru = {
   'admin.disputes.decideBlock.cancelled': 'Гонка отменена — решение недоступно',
   'admin.disputes.error.DISPUTE_NOT_FOUND': 'Спор не найден',
   'admin.disputes.error.DISPUTE_ACTION_BLOCKED': 'Решение недоступно — обновите страницу.',
+  // profile-02: имя райдера в панели «Протокол» и сброс имени модератором
+  'admin.results.riderNamed': '{name} ·{id}',
+  'admin.results.action.resetName': 'Сбросить имя',
+  'admin.results.dialog.resetName': 'Сбросить имя участника?',
+  'admin.results.dialog.resetNameConsequences':
+    'Имя исчезнет из таблиц результатов — участник будет показан как «Участник». Он сможет задать новое имя в профиле. Не повторяйте имя в причине: она навсегда остаётся в журнале действий.',
+  'admin.audit.action.profile.name_reset': 'Сброшено имя участника',
 } as const;

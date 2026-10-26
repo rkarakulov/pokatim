@@ -20,9 +20,9 @@ const baseColumns = [
     cell: (info) => placeLabel(info.getValue(), info.row.original.tied),
     enableSorting: false,
   }),
-  column.accessor('entryId', {
+  column.accessor((row) => riderLabel(row.entryId, row.riderName), {
+    id: 'rider',
     header: t('admin.results.column.rider'),
-    cell: (info) => riderLabel(info.getValue()),
     enableSorting: false,
   }),
   column.accessor('elapsedSec', {
@@ -51,7 +51,8 @@ const baseColumns = [
 
 /**
  * «Участники»: места и статусы считает сервер (до публикации — живые, после — текущая ревизия протокола). После
- * публикации с `results.revise` — «Дисквалифицировать» / «Отменить DQ» (D-27).
+ * публикации с `results.revise` — «Дисквалифицировать» / «Отменить DQ» (D-27). Публичное имя — только с согласием
+ * райдера; с `profiles.moderate` при имени — «Сбросить имя» (profile-02).
  */
 export function StandingsTable({
   raceId,
@@ -66,53 +67,83 @@ export function StandingsTable({
 }) {
   const titleId = useId();
   const canRevise = useCan('results.revise');
+  const canModerate = useCan('profiles.moderate');
   const standings = useQuery(standingsQuery(raceId));
 
+  /** «Дисквалифицировать» / «Отменить DQ» опубликованного результата (D-27). */
+  const disqualifyAction = (row: PanelStandingRow) => {
+    if (row.resultStatus === 'dq') {
+      return (
+        <Button
+          size="sm"
+          onClick={() =>
+            open({
+              title: t('admin.results.dialog.revokeDq'),
+              consequences: t('admin.results.dialog.revokeDqConsequences'),
+              confirmLabel: t('admin.results.action.revokeDq'),
+              run: (reason) =>
+                run(() => api.revokeDisqualification(raceId, { entryId: row.entryId, reason })),
+            })
+          }
+        >
+          {t('admin.results.action.revokeDq')}
+        </Button>
+      );
+    }
+    if (row.resultStatus !== 'final' && row.resultStatus !== 'revised') return null;
+    return (
+      <Button
+        size="sm"
+        variant="danger"
+        onClick={() =>
+          open({
+            title: t('admin.results.dialog.disqualify'),
+            consequences: t('admin.results.dialog.disqualifyConsequences'),
+            confirmLabel: t('admin.results.action.disqualify'),
+            destructive: true,
+            run: (reason) =>
+              run(() => api.disqualifyResult(raceId, { entryId: row.entryId, reason })),
+          })
+        }
+      >
+        {t('admin.results.action.disqualify')}
+      </Button>
+    );
+  };
+
+  const canDisqualify = published && canRevise;
   const actions =
-    published && canRevise
+    canDisqualify || canModerate
       ? column.display({
           id: 'actions',
           header: t('admin.results.column.actions'),
           cell: (info) => {
             const row = info.row.original;
-            if (row.resultStatus === 'dq') {
-              return (
+            const dq = canDisqualify ? disqualifyAction(row) : null;
+            const reset =
+              canModerate && row.riderName !== null ? (
                 <Button
                   size="sm"
+                  variant="danger"
                   onClick={() =>
                     open({
-                      title: t('admin.results.dialog.revokeDq'),
-                      consequences: t('admin.results.dialog.revokeDqConsequences'),
-                      confirmLabel: t('admin.results.action.revokeDq'),
-                      run: (reason) =>
-                        run(() =>
-                          api.revokeDisqualification(raceId, { entryId: row.entryId, reason }),
-                        ),
+                      title: t('admin.results.dialog.resetName'),
+                      consequences: t('admin.results.dialog.resetNameConsequences'),
+                      confirmLabel: t('admin.results.action.resetName'),
+                      destructive: true,
+                      run: (reason) => run(() => api.resetRiderName(row.userId, { reason })),
                     })
                   }
                 >
-                  {t('admin.results.action.revokeDq')}
+                  {t('admin.results.action.resetName')}
                 </Button>
-              );
-            }
-            if (row.resultStatus !== 'final' && row.resultStatus !== 'revised') return null;
+              ) : null;
+            if (!dq && !reset) return null;
             return (
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() =>
-                  open({
-                    title: t('admin.results.dialog.disqualify'),
-                    consequences: t('admin.results.dialog.disqualifyConsequences'),
-                    confirmLabel: t('admin.results.action.disqualify'),
-                    destructive: true,
-                    run: (reason) =>
-                      run(() => api.disqualifyResult(raceId, { entryId: row.entryId, reason })),
-                  })
-                }
-              >
-                {t('admin.results.action.disqualify')}
-              </Button>
+              <span className="table__actions">
+                {dq}
+                {reset}
+              </span>
             );
           },
         })

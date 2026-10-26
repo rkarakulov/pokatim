@@ -18,6 +18,7 @@ import { results } from './0015_results';
 import { protocol } from './0016_protocol';
 import { rideReports } from './0017_ride_reports';
 import { disputes } from './0018_disputes';
+import { profileConsents } from './0019_profile_consents';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -42,4 +43,5 @@ export const migrations: readonly MongoMigration[] = [
   protocol,
   rideReports,
   disputes,
+  profileConsents,
 ];
