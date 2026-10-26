@@ -5,6 +5,7 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { latestMailText, passwordResetLink, verificationLink } from './mailpit';
 import {
+  NOT_FOUND_PATHS,
   REFRESH_URL,
   SIGN_IN_URL,
   UNKNOWN_RACE_ID,
@@ -308,7 +309,7 @@ test('жалоба на райд /rides/report/<id> без сессии (05b): H
 test('неизвестный адрес, /_sitemap и витрина /ui-kit в production — «Страница не найдена»', async ({
   page,
 }) => {
-  for (const path of ['/profile', '/_sitemap']) {
+  for (const path of NOT_FOUND_PATHS) {
     const response = await page.goto(path);
     expect(response?.status()).toBe(404);
     await expect(page.getByRole('heading', { name: 'Страница не найдена' })).toBeVisible();
