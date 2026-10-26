@@ -1,5 +1,5 @@
 import { haversineMeters } from '../geo.ts';
-import type { ParsedPoint } from '../track.ts';
+import { TrackParseError, type ParsedPoint } from '../track.ts';
 import { CORRIDOR_POLICY } from './policy.ts';
 import { gridCandidates } from './prepare.ts';
 import type { PreparedCorridor } from './types.ts';
@@ -52,6 +52,18 @@ export function projectTrack(
   for (let k = 0; k < count; k += 1) {
     time[k] = kept[k]!.time!.getTime();
     if (k + 1 < count) step[k] = haversineMeters(kept[k]!, kept[k + 1]!);
+  }
+
+  // средняя скорость трека (длина по точкам без выбросов / длительность) не выше `spikeSpeedMps` (108 км/ч), иначе
+  // трек неправдоподобен (`TrackParseError('implausible')`, как у разбора) — до привязки: так суммарная длина хорд
+  // для точной геометрии ограничена 30 м/с × длительность (≤ 48 ч у файла)
+  if (count >= 2) {
+    let length = 0;
+    for (let k = 0; k + 1 < count; k += 1) length += step[k]!;
+    const seconds = (time[count - 1]! - time[0]!) / 1000;
+    if (length > CORRIDOR_POLICY.spikeSpeedMps * Math.max(seconds, 1)) {
+      throw new TrackParseError('implausible');
+    }
   }
 
   const branches = collectBranches(kept, corridor, d);

@@ -1,7 +1,7 @@
 import { localProjection } from '../geo.ts';
 import type { ParsedPoint } from '../track.ts';
 import { CORRIDOR_ENGINE_VERSION, CORRIDOR_POLICY } from './policy.ts';
-import { chordOutsideM } from './prepare.ts';
+import { chordOutsideM, visitMarks, type VisitMarks } from './prepare.ts';
 import { projectTrack, type ProjectedTrack } from './project.ts';
 import type {
   CorridorMatch,
@@ -124,8 +124,7 @@ class Engine {
   private readonly track: ProjectedTrack;
   /** буферы запроса сетки и интервалов пересечения хорды с коридором */
   private readonly gridOut: Int32Array;
-  private readonly gridStamp: Int32Array;
-  private gridMark = 0;
+  private readonly visits: VisitMarks;
   private readonly lows: Float64Array;
   private readonly highs: Float64Array;
 
@@ -157,7 +156,7 @@ class Engine {
     }
     const segments = corridor.lon.length - 1;
     this.gridOut = new Int32Array(segments);
-    this.gridStamp = new Int32Array(segments);
+    this.visits = visitMarks(segments);
     this.lows = new Float64Array(segments);
     this.highs = new Float64Array(segments);
   }
@@ -412,8 +411,8 @@ class Engine {
    * шаг — до доли `endU`; < 1 — вход в ворота финиша). Шаг целиком снаружи — весь, одна точка снаружи — половина;
    * выход завершается точкой внутри; момент ворот — точка коридора. Шаг «внутри → внутри» — отдельный выход:
    * больше из части хорды вне коридора (точно) и недобранного пути `Δs − хорда` сверх допуска
-   * (`chordToleranceM + chordToleranceShare · хорда`) — на каждом шаге, от частоты записи и Δt не зависит; шаг с
-   * неправдоподобной скоростью (> 30 м/с) — целиком вне коридора (и ограничивает работу геометрии хорд).
+   * (`chordToleranceM + chordToleranceShare · хорда`) — на каждом шаге, от частоты записи и Δt не зависит.
+   * Работа геометрии хорд ограничена правдоподобием трека (`matchCorridor`: средняя скорость ≤ 30 м/с).
    */
   private offCorridor(
     start: Crossing,
@@ -450,12 +449,8 @@ class Engine {
         // Δs > 1.5·хорда + 50 редкой записью не объяснить (так короче хорды не бывает дуга) — это сход, не «редкая
         // запись»: `sparse_recording` — только по шагам, где покрытие интерполируется
         const sparse = this.interpolable(k - 1, k - 1 === start.index);
-        const seconds = (track.time[k]! - track.time[k - 1]!) / 1000;
         let geometric = 0;
-        if (seconds <= 0 ? chord > 0 : chord / seconds > policy.spikeSpeedMps) {
-          // неправдоподобная скорость между точками (> 30 м/с) — шаг целиком вне коридора, без геометрии
-          geometric = length;
-        } else if (chord <= policy.gapMaxM) {
+        if (chord <= policy.gapMaxM) {
           // хорда длиннее — разрыв GPS (gps_gap); точка хорды не дальше половины хорды от конца, конец — не
           // дальше d от маршрута: короткая хорда внутри без расчёта
           const nearest = Math.max(track.d[k - 1]!, track.d[k]!);
@@ -482,7 +477,6 @@ class Engine {
   private chordOutside(k: number, from: number, to: number): number {
     const a = this.track.points[k]!;
     const b = this.track.points[k + 1]!;
-    this.gridMark += 1;
     return chordOutsideM(
       this.corridor,
       a.lon + (b.lon - a.lon) * from,
@@ -490,8 +484,7 @@ class Engine {
       a.lon + (b.lon - a.lon) * to,
       a.lat + (b.lat - a.lat) * to,
       this.gridOut,
-      this.gridStamp,
-      this.gridMark,
+      this.visits,
       this.lows,
       this.highs,
     );

@@ -4,7 +4,12 @@ import { Worker } from 'node:worker_threads';
 
 import { describe, expect, it } from 'vitest';
 
-import { analyzeAttempt, encodeTrackStream, type TrackStreamV1 } from '../parse.ts';
+import {
+  analyzeAttempt,
+  encodeTrackStream,
+  TrackParseError,
+  type TrackStreamV1,
+} from '../parse.ts';
 import type { ParsedPoint } from '../track.ts';
 import { at, corridorOf, pointAt, polylineLength, T0, type Xy } from './__testing__/synthetic.ts';
 import { matchCorridor } from './match.ts';
@@ -178,16 +183,43 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     };
     const bytes = encodeTrackStream(stream);
     const startedAt = performance.now();
-    const match = analyzeAttempt(
-      bytes,
-      'stream',
-      geometry200,
-      window,
-      new Date(T0 + 3 * 86_400_000),
-    );
+    // средняя скорость ≈ 1300 м/с — трек неправдоподобен (ошибка файла), геометрия хорд не считается
+    expect(() =>
+      analyzeAttempt(bytes, 'stream', geometry200, window, new Date(T0 + 3 * 86_400_000)),
+    ).toThrow(TrackParseError);
     const elapsedMs = performance.now() - startedAt;
-    expect(match.verdict).toBe('rejected');
     expect(elapsedMs).toBeLessThanOrEqual(TIME_LIMIT_MS);
     process.stdout.write(`длинные хорды (analyzeAttempt): ${Math.round(elapsedMs)} мс\n`);
+  }, 60_000);
+
+  // предел правдоподобия: средняя скорость 30 м/с, каждая хорда пересекает промежуток между проходами узкого
+  // плотного коридора — точная геометрия на каждом шаге
+  it('геометрия хорд на пределе правдоподобия (30 м/с, узкий плотный коридор): 200 000 точек ≤ 3 с', () => {
+    const corners: Xy[] = [[0, 0]];
+    for (let i = 0; i < 66; i += 1) {
+      const [x, y] = corners[corners.length - 1]!;
+      corners.push(
+        [x + (i % 2 === 0 ? 1000 : -1000), y],
+        [x + (i % 2 === 0 ? 1000 : -1000), y + 90],
+      );
+    }
+    const corridor = prepareCorridor(corridorOf(corners, { widthM: 20 }));
+    // 90 м поперёк проходов раз в 3,1 с (≈ 29 м/с — не выброс), вдоль — по 1 м
+    // старт: из ворот (0, 0) вперёд по первому проходу — сегмент тянется до конца трека
+    const points = Array.from({ length: POINTS }, (_, k): ParsedPoint => {
+      const [lon, lat] = at(
+        k < 2 ? [k * 60, 0] : [100 + (k % 800), (k % 2) * 90 + 90 * (Math.floor(k / 800) % 60)],
+      );
+      return { lon, lat, time: new Date(T0 + k * 3100) };
+    });
+    const startedAt = performance.now();
+    const match = matchCorridor(points, corridor, window);
+    const elapsedMs = performance.now() - startedAt;
+    expect(match.candidates).toBe(1);
+    // ≈ 50 м вне коридора на каждой хорде — геометрия действительно посчитана
+    expect(match.segment!.offCorridorM).toBeGreaterThan(5_000_000);
+    expect(match.verdict).toBe('rejected');
+    expect(elapsedMs).toBeLessThanOrEqual(TIME_LIMIT_MS);
+    process.stdout.write(`геометрия хорд на пределе 30 м/с: ${Math.round(elapsedMs)} мс\n`);
   }, 60_000);
 });

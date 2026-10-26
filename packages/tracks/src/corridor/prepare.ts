@@ -254,6 +254,26 @@ export function gridCandidates(
   return count;
 }
 
+/** Метки посещения отрезков для запросов сетки: поколение растёт, на пределе Int32 метки очищаются. */
+export interface VisitMarks {
+  readonly marks: Int32Array;
+  current: number;
+}
+
+export function visitMarks(segments: number): VisitMarks {
+  return { marks: new Int32Array(segments), current: 0 };
+}
+
+/** Новое поколение меток; на пределе Int32 — очистка (иначе сравнение с сохранённой меткой ломается). */
+export function nextVisit(visits: VisitMarks): number {
+  if (visits.current >= 0x7fffffff) {
+    visits.marks.fill(0);
+    visits.current = 0;
+  }
+  visits.current += 1;
+  return visits.current;
+}
+
 /**
  * Длина части отрезка a → b вне коридора, м — точно. Отрезок делится на куски ≤ `max(widthM, 25 м)`; кусок, у
  * которого расстояние от середины до маршрута + половина длины ≤ `widthM`, целиком внутри (без расчёта). Остальные —
@@ -267,8 +287,7 @@ export function chordOutsideM(
   bLon: number,
   bLat: number,
   out: Int32Array,
-  stamp: Int32Array,
-  mark: number,
+  visits: VisitMarks,
   lows: Float64Array,
   highs: Float64Array,
 ): number {
@@ -283,7 +302,6 @@ export function chordOutsideM(
   const pieces = Math.max(1, Math.ceil(total / Math.max(w, CORRIDOR_POLICY.densifyStepM)));
   const pieceLength = total / pieces;
   let outside = 0;
-  let stampMark = mark * 0x10000;
 
   for (let p = 0; p < pieces; p += 1) {
     // кусок [p, p+1] / pieces в метрах от a
@@ -294,15 +312,14 @@ export function chordOutsideM(
     const length2 = vx * vx + vy * vy;
     const midLon = aLon + (bLon - aLon) * ((p + 0.5) / pieces);
     const midLat = aLat + (bLat - aLat) * ((p + 0.5) / pieces);
-    stampMark += 1;
     const found = gridCandidates(
       corridor,
       midLon,
       midLat,
       pieceLength / 2 + w,
       out,
-      stamp,
-      stampMark,
+      visits.marks,
+      nextVisit(visits),
     );
     // ближайший отрезок к середине: кусок внутри, если d(середины) + половина ≤ w
     const mx = ax + vx / 2;

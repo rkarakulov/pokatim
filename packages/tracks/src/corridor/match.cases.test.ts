@@ -426,6 +426,30 @@ describe('недобранный путь и выход по хорде', () => 
     expect(result.reasons).toEqual(['off_corridor']);
   });
 
+  it.each([20, 25])(
+    'быстрый проезд %i м/с с шумом σ 15 м внутри коридора — засчитан (скорость шага — не сход)',
+    (speed) => {
+      const corridor = prepareCorridor(
+        corridorOf([
+          [0, 0],
+          [5000, 0],
+        ]),
+      );
+      const points = noisyRide(
+        [
+          [-200, 0],
+          [5200, 0],
+        ],
+        15,
+        1,
+        speed,
+      );
+      const result = brief(points, corridor);
+      expect(result.reasons).toEqual([]);
+      expect(result.segment!.offCorridorM).toBe(0);
+    },
+  );
+
   /** Извилистая дорога y = 25·sin(x/30), коридор ±50 м: хорды между редкими точками остаются в коридоре. */
   it('редкая запись на извилистом маршруте — sparse_recording; раз в 1 с и прямая раз в 60 с — засчитаны', () => {
     const winding: Xy[] = steps(0, 6000, 5).map((x): Xy => [x, 25 * Math.sin(x / 30)]);

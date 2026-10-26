@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { haversineMeters, trackLengthMeters } from '../geo.ts';
 import type { CorridorGeometry } from '../track.ts';
-import { gridCandidates, prepareCorridor } from './prepare.ts';
+import { chordOutsideM, gridCandidates, prepareCorridor, visitMarks } from './prepare.ts';
 
 const CENTER = { lat: 53.9006, lon: 27.559 };
 const M_LAT = 111_195;
@@ -94,6 +94,30 @@ describe('prepareCorridor', () => {
     ];
     const back = prepareCorridor(geometry(xs.map((x) => at(x, 0))));
     expect(back.lengthM).toBeCloseTo(14_000, -1);
+  });
+
+  it('метки посещения сетки не переполняются: > 65 536 расчётов хорды — тот же результат (ревью pass 5)', () => {
+    const corridor = prepareCorridor(
+      geometry(
+        [
+          [CENTER.lon, CENTER.lat],
+          [at(500, 0)[0], at(500, 0)[1]],
+        ],
+        { widthM: 175 },
+      ),
+    );
+    const segments = corridor.lon.length - 1;
+    const out = new Int32Array(segments);
+    const visits = visitMarks(segments);
+    const lows = new Float64Array(segments);
+    const highs = new Float64Array(segments);
+    const [aLon, aLat] = at(499, 173);
+    const [bLon, bLat] = at(339, 167);
+    const chord = () => chordOutsideM(corridor, aLon, aLat, bLon, bLat, out, visits, lows, highs);
+    expect(chord()).toBe(0);
+    // граница Int32 меток: поколение сбрасывается, повторы не проходят
+    visits.current = 0x7fffffff - 3;
+    for (let i = 0; i < 70_000; i += 1) expect(chord()).toBe(0);
   });
 
   it('инварианты входа — исключение программиста', () => {
