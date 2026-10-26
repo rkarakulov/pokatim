@@ -42,8 +42,16 @@ describe('AuditAction', () => {
       'ride.reports_dismissed',
       'disputes.decided',
       'disputes.series_viewed',
+      'profile.name_reset',
     ]);
-    expect(AUDIT_SUBJECT_KINDS).toEqual(['season', 'race', 'calendar_start', 'route', 'ride']);
+    expect(AUDIT_SUBJECT_KINDS).toEqual([
+      'season',
+      'race',
+      'calendar_start',
+      'route',
+      'ride',
+      'rider',
+    ]);
     expect(AuditAction.safeParse('panel.deleted').success).toBe(false);
   });
 });

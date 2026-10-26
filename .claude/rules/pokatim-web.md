@@ -61,6 +61,9 @@ paths:
   причиной; затем инвалидация ключа гонки (`['admin','races','item',id]` — результаты лежат под ним), 409 — тоже.
   Ошибки `RESULTS_ACTION_BLOCKED` / `RESULTS_PUBLISH_BLOCKED` — текст по `details` (`results-errors.ts`). Действия
   скрывают права `results.manage` / `results.revise`; места, статусы и ревизии — только с сервера.
+  Подпись участника — `riderLabel(entryId, riderName)`: «Анна К. ·id» при имени (сервер отдаёт его только с
+  согласием), иначе «Участник ·id» (profile-02). «Сбросить имя» в «Участниках» — только с `profiles.moderate` и при
+  имени, `ReasonDialog` с предупреждением не писать имя в причину.
 - «Модерация райдов» (05b) — `features/rides-moderation/*`, маршруты `/rides-moderation` (`?state=hidden` — в URL) и
   `/rides-moderation/$rideId` под `RequirePermission permission="rides.moderate"`, пункт навигации — группа `bottom`
   в конце. Действия — `ReasonDialog`; 409 `CONFLICT` и `RIDE_INVALID_STATE` — `ConflictBanner` с перечитыванием

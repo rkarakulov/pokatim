@@ -97,9 +97,17 @@ paths:
   `results-attempt-user` 30/ч; ≤ 30 попыток и запросов на заявку.
 - Публичная таблица — `PublicReadGuard`, только опубликованные гонки, строки без `userId`; имя
   (`riderName`) — только при `showNameInResults` через порт `RIDER_NAMES`, согласие — в фильтре запроса
-  (profile-rider-name), иначе `null` («Участник»). Панель — `PanelGuard` +
+  (profile-rider-name), иначе `null` («Участник»); панель («Участники», «Попытки», ответы исключения и возврата) — тот
+  же порт, тоже только с согласием (profile-02). Панель — `PanelGuard` +
   `races.read`, видимость гонки — как в `races` (чужая гонка организатора — 404); наружу — `userId` и id попыток,
   без e-mail, координат и биометрии. Логи — id, статусы, коды.
+
+## Сброс имени райдера (profile-02)
+
+- `/v1/admin/profiles/*` — `PanelGuard` + `@RequirePermission('profiles.moderate')` на классе (admin, moderator);
+  `userId` пути — `Uuid`, тело — `strictObject` с `ActionReason`. Журнал `profile.name_reset` — объект `rider`
+  (`Участник ·<id>`), причина; ни сброшенного имени, ни `targetUserId`. Лог после коммита — только id сотрудника и
+  исход, без имени, причины и `userId` райдера. Причина может содержать имя (D11) — предупреждение в окне сброса.
 
 ## Протокол (race-results-05)
 

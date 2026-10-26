@@ -25,8 +25,16 @@ export const RESULT_TONE: Record<RaceResultStatus, Tone> = {
   revised: 'ink',
 };
 
-/** «Участник ·a1b2c3» — имён в панели нет (A12), короткий id заявки. */
-export const riderLabel = (entryId: string) => t('admin.results.rider', { id: entryId.slice(-6) });
+/**
+ * «Анна К. ·a1b2c3» — публичное имя (только с согласием райдера, profile-02) и короткий id заявки; имени нет —
+ * «Участник ·a1b2c3».
+ */
+export function riderLabel(entryId: string, riderName: string | null = null): string {
+  const id = entryId.slice(-6);
+  return riderName === null
+    ? t('admin.results.rider', { id })
+    : t('admin.results.riderNamed', { name: riderName, id });
+}
 
 /** «1», «=2» (ничья), «—» (без места). */
 export function placeLabel(place: number | null, tied: boolean): string {

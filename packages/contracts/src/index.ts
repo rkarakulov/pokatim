@@ -8,6 +8,7 @@ export * from './auth/sign-in.schema.ts';
 export * from './auth/password-reset.schema.ts';
 export * from './profile/onboarding.schema.ts';
 export * from './profile/profile.schema.ts';
+export * from './profile/profile-admin.schema.ts';
 export * from './admin/permissions.schema.ts';
 export * from './admin/session.schema.ts';
 export * from './admin/members.schema.ts';

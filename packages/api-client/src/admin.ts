@@ -54,6 +54,8 @@ import {
   PanelDisputeSeries,
   PanelDisputePage,
   type PanelDisputeQuery,
+  type ResetRiderNameRequest,
+  RiderNameResetResult,
 } from '@pokatim/contracts';
 import { createHttpClient } from '@rkarakulov/api-client-core';
 import { z } from 'zod';
@@ -238,6 +240,14 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       post(`${dispute(id)}/decision`, PanelDispute, body),
     /** Ряды пульса и мощности оспоренного результата (06b): `preparing` — опрашивать дальше. */
     getDisputeSeries: (id: string) => get(`${dispute(id)}/series`, PanelDisputeSeries),
+
+    // --- профили райдеров (profiles.moderate, profile-02) ---
+    resetRiderName: (userId: string, body: ResetRiderNameRequest) =>
+      post(
+        `/v1/admin/profiles/${encodeURIComponent(userId)}/name-reset`,
+        RiderNameResetResult,
+        body,
+      ),
   };
 }
 

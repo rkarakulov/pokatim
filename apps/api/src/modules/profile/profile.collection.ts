@@ -1,7 +1,13 @@
 import type { RideReason } from '@pokatim/contracts';
 
-/** Коллекции профиля (MongoDB, ADR-0007). Создаёт миграция `0004_profile`; индексов сверх `_id` нет. */
-export const PROFILE_COLLECTIONS = { profiles: 'profiles' } as const;
+/**
+ * Коллекции профиля (MongoDB, ADR-0007). `profiles` создаёт миграция `0004_profile` (индексов сверх `_id` нет),
+ * `profile_consent_events` — `0019_profile_consents` (индекс `{ userId, at }`).
+ */
+export const PROFILE_COLLECTIONS = {
+  profiles: 'profiles',
+  consentEvents: 'profile_consent_events',
+} as const;
 
 /**
  * Профиль райдера — ПДн отдельно от учётки identity (`pokatim-db.md`): анонимизация при удалении аккаунта —
@@ -28,4 +34,25 @@ export interface ProfileDoc {
   showNameInResults?: boolean;
   /** Время последней записи (`CLOCK`). */
   updatedAt: Date;
+}
+
+/** Виды согласий журнала (profile-02): пока только показ публичного имени в таблицах результатов. */
+export const PROFILE_CONSENT_KINDS = ['public_name'] as const;
+/** Действие события согласия: включение или отзыв. */
+export const PROFILE_CONSENT_ACTIONS = ['granted', 'revoked'] as const;
+
+/**
+ * Событие журнала согласий (profile-02, Q1): append-only — только `insertOne` в `ProfileRepository` (тест-сторож),
+ * пишется в транзакции `PATCH /v1/profile` при фактической смене флага. Имени нет (только псевдонимный `userId`);
+ * журнал переживает удаление аккаунта как доказательство согласия (D10). Версия текста и время — сервер.
+ */
+export interface ProfileConsentEventDoc {
+  _id: string;
+  userId: string;
+  kind: (typeof PROFILE_CONSENT_KINDS)[number];
+  action: (typeof PROFILE_CONSENT_ACTIONS)[number];
+  /** `PUBLIC_NAME_CONSENT_VERSION` контракта на момент события. */
+  version: string;
+  /** Время события (`CLOCK`). */
+  at: Date;
 }

@@ -143,6 +143,7 @@ describe('PanelGuard — порядок отказов', () => {
         'rides.moderate',
         'disputes.read',
         'disputes.decide',
+        'profiles.moderate',
       ],
     });
     expect(allowed.repository.touchSession).toHaveBeenCalled();

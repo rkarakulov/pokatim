@@ -201,6 +201,7 @@ describe('участие и результаты: панель', () => {
     createdAt: AT,
     checkedAt: AT,
     review: null,
+    riderName: null,
   };
 
   it('строгие enum: незнакомое значение — ошибка; excluded — статус попытки и фильтра', () => {
@@ -214,6 +215,11 @@ describe('участие и результаты: панель', () => {
     });
     expect(PanelRaceAttemptQuery.safeParse({ status: 'nope' }).success).toBe(false);
     expect(PanelRaceAttemptQuery.safeParse({ userId: ID }).success).toBe(false);
+  });
+
+  it('имя райдера (profile-02, D8): обязательное, строка или null', () => {
+    expect(PanelRaceAttempt.parse({ ...attempt, riderName: 'Анна К.' }).riderName).toBe('Анна К.');
+    expect(PanelRaceAttempt.safeParse({ ...attempt, riderName: undefined }).success).toBe(false);
   });
 
   it('причина исключения попытки (RC-10): вид из справочника', () => {
@@ -370,7 +376,25 @@ describe('участие и результаты: панель', () => {
       elapsedSec: 3600,
       bestAttemptId: ID,
       summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
+      riderName: null,
     };
+    expect(
+      PanelRaceStandings.parse({
+        source: 'live',
+        revision: null,
+        truncated: false,
+        items: [{ ...row, riderName: 'Анна К.' }],
+      }).items[0]?.riderName,
+    ).toBe('Анна К.');
+    const withoutName = { ...row, riderName: undefined };
+    expect(
+      PanelRaceStandings.safeParse({
+        source: 'live',
+        revision: null,
+        truncated: false,
+        items: [withoutName],
+      }).success,
+    ).toBe(false);
     expect(
       PanelRaceStandings.parse({ source: 'protocol', revision: 2, truncated: false, items: [row] })
         .items[0]?.resultStatus,

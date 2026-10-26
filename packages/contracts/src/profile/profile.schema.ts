@@ -6,6 +6,12 @@ import { RIDE_REASONS, type RideReason } from './onboarding.schema.ts';
 const isRideReason = (code: string): code is RideReason =>
   (RIDE_REASONS as readonly string[]).includes(code);
 
+/**
+ * Версия текста согласия на показ имени (profile-02): ключи i18n `profile.show.label` и `profile.show.hint`. Сменили
+ * формулировку — подняли версию (дата). Пишет сервер в `profile_consent_events`; клиент присылает только флаг.
+ */
+export const PUBLIC_NAME_CONSENT_VERSION = '2026-10-26';
+
 export const RIDER_PUBLIC_NAME_MIN = 2;
 export const RIDER_PUBLIC_NAME_MAX = 80;
 /** Одна строка без управляющих (`\p{Cc}`) и форматирующих (`\p{Cf}`: RTL-override, нулевая ширина) символов (RC-8). */

@@ -1,13 +1,26 @@
-import { RaceResultsPage } from '@pokatim/contracts';
+import {
+  PanelRaceAttempt,
+  PanelRaceAttemptPage,
+  PanelRaceStandings,
+  RaceResultsPage,
+} from '@pokatim/contracts';
+import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
 import { call } from '../../../test/identity';
-import { protocolAction, protocolRace, resultsDb, signIn } from '../../../test/results';
+import { panelCall } from '../../../test/panel';
+import {
+  protocolAction,
+  protocolRace,
+  raceAdminUrl,
+  resultsDb,
+  signIn,
+} from '../../../test/results';
 
 /**
- * Имя райдера в публичной таблице (profile-rider-name: AC5–AC7). Имя — из профиля при каждом чтении (P3), только
- * с согласием (P1); в снимок протокола не пишется.
+ * Имя райдера в публичной таблице (profile-rider-name: AC5–AC7) и в панели (profile-02: AC4, AC6). Имя — из профиля
+ * при каждом чтении (P3), только с согласием (P1); в снимок протокола не пишется.
  */
 let h: Harness;
 beforeAll(async () => {
@@ -106,5 +119,125 @@ describe('имя в публичной таблице (AC5–AC7)', () => {
     const final = (await table(raceId)).body;
     expect(final.status).toBe('final');
     expect(final.items.map((row) => row.riderName)).toEqual([null, null, null, null]);
+  });
+});
+
+const panelGet = async (token: string, url: string) => {
+  const res = await panelCall(h, token, 'GET', url);
+  expect(res.status).toBe(200);
+  return res.body;
+};
+const standings = async (token: string, raceId: string) =>
+  PanelRaceStandings.parse(await panelGet(token, raceAdminUrl(raceId, '/standings')));
+const standingNames = (body: PanelRaceStandings) =>
+  body.items.map((row) => [row.entryId, row.userId, row.riderName]);
+
+/** Попытка, которую можно исключить (`failed`), — напрямую в БД (подготовка; проверки — в results-protocol). */
+async function seedAttempt(raceId: string, entryId: string, userId: string) {
+  const now = h.clock.now();
+  const _id = uuidv7();
+  await resultsDb(h).attempts.insertOne({
+    _id,
+    raceId,
+    entryId,
+    userId,
+    activityId: uuidv7(),
+    uploadId: uuidv7(),
+    activity: { startedAt: now, source: 'upload', elapsedSec: 1, distanceM: 1 },
+    origin: 'auto',
+    status: 'failed',
+    matched: null,
+    reasons: [],
+    failure: 'timeout',
+    withdrawReason: null,
+    segment: null,
+    touchedCorridor: null,
+    candidates: null,
+    diagnostics: null,
+    engineVersion: null,
+    corridor: { routeId: uuidv7(), widthM: 50 },
+    checkRevision: 1,
+    checkAttempts: 1,
+    requeues: 0,
+    checkJobId: null,
+    createdAt: now,
+    updatedAt: now,
+    checkedAt: now,
+  });
+  return _id;
+}
+
+describe('имя в панели «Протокол» (profile-02, AC4)', () => {
+  it('«Участники» live и после публикации: riderName только при имени и согласии, userId на месте', async () => {
+    const { raceId, riders, token } = await namedRace();
+    const expected = [
+      [riders[0]!.entryId, riders[0]!.userId, 'Анна К.'],
+      [riders[1]!.entryId, riders[1]!.userId, null],
+      [riders[2]!.entryId, riders[2]!.userId, null],
+      [riders[3]!.entryId, riders[3]!.userId, null],
+    ];
+    const live = await standings(token, raceId);
+    expect(live.source).toBe('live');
+    expect(standingNames(live)).toEqual(expected);
+
+    expect((await protocolAction(h, token, raceId, '/protocol')).status).toBe(200);
+    const published = await standings(token, raceId);
+    expect(published.source).toBe('protocol');
+    expect(standingNames(published)).toEqual(expected);
+  });
+
+  it('попытки и ответ «Исключить»: riderName только при имени и согласии', async () => {
+    const { raceId, riders, token } = await namedRace();
+    const namedAttempt = await seedAttempt(raceId, riders[0]!.entryId, riders[0]!.userId);
+    const hiddenAttempt = await seedAttempt(raceId, riders[1]!.entryId, riders[1]!.userId);
+
+    const page = PanelRaceAttemptPage.parse(
+      await panelGet(token, raceAdminUrl(raceId, '/attempts')),
+    );
+    expect(
+      Object.fromEntries(page.items.map((attempt) => [attempt.id, attempt.riderName])),
+    ).toEqual({ [namedAttempt]: 'Анна К.', [hiddenAttempt]: null });
+
+    const excluded = await protocolAction(h, token, raceId, `/attempts/${namedAttempt}/exclude`);
+    expect(excluded.status).toBe(200);
+    expect(PanelRaceAttempt.parse(excluded.body)).toMatchObject({
+      id: namedAttempt,
+      status: 'excluded',
+      userId: riders[0]!.userId,
+      riderName: 'Анна К.',
+    });
+
+    const restored = await protocolAction(h, token, raceId, `/attempts/${namedAttempt}/restore`);
+    expect(restored.status).toBe(200);
+    expect(PanelRaceAttempt.parse(restored.body)).toMatchObject({
+      id: namedAttempt,
+      riderName: 'Анна К.',
+    });
+  });
+});
+
+describe('сброс имени модератором (profile-02, AC6)', () => {
+  it('после name-reset — null и в публичной таблице, и в панели', async () => {
+    const { raceId, riders, token } = await namedRace();
+    const reset = await panelCall(
+      h,
+      token,
+      'POST',
+      `/v1/admin/profiles/${riders[0]!.userId}/name-reset`,
+      { reason: 'Оскорбительное имя' },
+    );
+    expect(reset.status).toBe(200);
+    expect((await table(raceId)).body.items.map((row) => row.riderName)).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ]);
+    expect((await standings(token, raceId)).items.map((row) => row.riderName)).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ]);
   });
 });

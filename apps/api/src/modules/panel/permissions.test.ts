@@ -14,6 +14,7 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
       'audit.read',
       'disputes.decide',
       'disputes.read',
+      'profiles.moderate',
       'races.read',
       'rides.moderate',
     ]);
@@ -56,6 +57,12 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
     }
   });
 
+  it('profile-02: сброс имени райдера — admin и moderator, не organizer', () => {
+    expect(ROLE_PERMISSIONS.admin.has('profiles.moderate')).toBe(true);
+    expect(ROLE_PERMISSIONS.moderator.has('profiles.moderate')).toBe(true);
+    expect(ROLE_PERMISSIONS.organizer.has('profiles.moderate')).toBe(false);
+  });
+
   it('permissionsOf — в порядке контракта (стабильный ответ PanelMe)', () => {
     expect(permissionsOf('admin')).toEqual([...PERMISSIONS]);
     expect(permissionsOf('moderator')).toEqual([
@@ -64,6 +71,7 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
       'rides.moderate',
       'disputes.read',
       'disputes.decide',
+      'profiles.moderate',
     ]);
     expect(permissionsOf('organizer')).toEqual(['races.read', 'races.manage', 'results.manage']);
   });

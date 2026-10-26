@@ -17,11 +17,19 @@ export function defineRoles<R extends string, P extends string>(
  * Q2, Q13): moderator — чтение «Гонок» и «Сезонов»; organizer — свои гонки (создать, править, опубликовать,
  * отменить); чужие гонки (`races.manage_any`), сезоны и календарь — только admin. 05b: модерация райдов
  * (`rides.moderate`) — admin и moderator. race-results-06 (R1, `[ASSUMPTION]`): споры (`disputes.read`,
- * `disputes.decide`) — admin и moderator (работа команды платформы); organizer — нет. Клиент получает итог в `PanelMe`.
+ * `disputes.decide`) — admin и moderator (работа команды платформы); organizer — нет. profile-02: сброс публичного
+ * имени райдера (`profiles.moderate`) — admin и moderator. Клиент получает итог в `PanelMe`.
  */
 export const ROLE_PERMISSIONS = defineRoles<PanelRole, Permission>({
   admin: PERMISSIONS,
-  moderator: ['audit.read', 'races.read', 'rides.moderate', 'disputes.read', 'disputes.decide'],
+  moderator: [
+    'audit.read',
+    'races.read',
+    'rides.moderate',
+    'disputes.read',
+    'disputes.decide',
+    'profiles.moderate',
+  ],
   // race-results-05 (R1): исключение треков и публикация — организатор (свои гонки); пересчёт после — только admin
   organizer: ['races.read', 'races.manage', 'results.manage'],
 });

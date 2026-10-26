@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ProfileView,
+  PUBLIC_NAME_CONSENT_VERSION,
   RIDER_PUBLIC_NAME_MAX,
   RiderPublicName,
   UpdateProfileRequest,
 } from './profile.schema.ts';
+import { ResetRiderNameRequest, RiderNameResetResult } from './profile-admin.schema.ts';
 
 const codesOf = (result: {
   success: boolean;
@@ -121,5 +123,29 @@ describe('UpdateProfileRequest', () => {
     expect(codesOf(UpdateProfileRequest.safeParse({ publicName: { $ne: null } }))).toEqual([
       'INVALID',
     ]);
+  });
+});
+
+describe('PUBLIC_NAME_CONSENT_VERSION (profile-02)', () => {
+  it('версия текста согласия — дата ГГГГ-ММ-ДД', () => {
+    expect(PUBLIC_NAME_CONSENT_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('ResetRiderNameRequest / RiderNameResetResult (profile-02)', () => {
+  it('причина обрезается; ответ — флаг reset', () => {
+    expect(ResetRiderNameRequest.parse({ reason: '  Оскорбительное имя ' })).toEqual({
+      reason: 'Оскорбительное имя',
+    });
+    expect(RiderNameResetResult.parse({ reset: false })).toEqual({ reset: false });
+    expect(RiderNameResetResult.safeParse({}).success).toBe(false);
+  });
+
+  it('без причины — REQUIRED, короткая — TOO_SHORT, лишний ключ — ошибка', () => {
+    expect(codesOf(ResetRiderNameRequest.safeParse({}))).toEqual(['REQUIRED']);
+    expect(codesOf(ResetRiderNameRequest.safeParse({ reason: 'ab' }))).toEqual(['TOO_SHORT']);
+    expect(
+      ResetRiderNameRequest.safeParse({ reason: 'Оскорбительное', publicName: null }).success,
+    ).toBe(false);
   });
 });

@@ -17,6 +17,7 @@ import type { DbSession } from '../../db';
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { PanelDirectory, type PanelPrincipal } from '../panel';
+import { RIDER_NAMES, type RiderNameDirectory } from '../profile';
 import { RACE_REGISTRY, type RaceForResults, type RaceRegistry } from '../races';
 import { ACTIVITY_SOURCE, type ActivitySource } from '../tracks';
 import { RESULT_DISPUTE_GATE, type ResultDisputeGate } from './result-dispute-gate.port';
@@ -65,7 +66,8 @@ const summaryView = (summary: RaceEntryDoc['summary']): PanelStandingRow['summar
 /**
  * Чтения протокола в панели (race-results-03 сводка и попытки; race-results-05 — фаза, протокол, чек-лист,
  * «Участники», история пересчётов). Видимость гонки — `RaceRegistry.findForPanel` (чужая гонка организатора — 404).
- * Чек-лист считает только сервер (`publishChecklist`).
+ * Чек-лист считает только сервер (`publishChecklist`). Публичное имя райдера (profile-02) — порт `RIDER_NAMES` (только
+ * с согласием), один вызов на ответ, после snapshot-сессии; в снимок не пишется.
  */
 @Injectable()
 export class ResultsPanelReadService {
@@ -75,6 +77,7 @@ export class ResultsPanelReadService {
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
     @Inject(ACTIVITY_SOURCE) private readonly activities: ActivitySource,
     @Inject(RESULT_DISPUTE_GATE) private readonly disputes: ResultDisputeGate,
+    @Inject(RIDER_NAMES) private readonly names: RiderNameDirectory,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -173,14 +176,34 @@ export class ResultsPanelReadService {
     const page = docs.slice(0, query.limit);
     const last = page.at(-1);
     const reviews = await this.repository.latestReviews(page.map((attempt) => attempt._id));
+    const names = await this.names.publicNames(page.map((attempt) => attempt.userId));
     return {
-      items: page.map((attempt) => this.attemptView(attempt, reviews.get(attempt._id) ?? null)),
+      items: page.map((attempt) =>
+        this.attemptView(
+          attempt,
+          reviews.get(attempt._id) ?? null,
+          names.get(attempt.userId) ?? null,
+        ),
+      ),
       nextCursor: docs.length > query.limit && last ? encodeCursor('a', last._id) : null,
     };
   }
 
+  /** Попытка с именем райдера (ответы действий «Исключить»/«Вернуть»): один вызов порта. */
+  async namedAttemptView(
+    attempt: RaceAttemptDoc,
+    review: RaceAttemptReviewDoc | null,
+  ): Promise<PanelRaceAttempt> {
+    const names = await this.names.publicNames([attempt.userId]);
+    return this.attemptView(attempt, review, names.get(attempt.userId) ?? null);
+  }
+
   /** Попытка в панели: всё, включая скрытые, и последняя причина исключения/возврата (RC-10). */
-  attemptView(attempt: RaceAttemptDoc, review: RaceAttemptReviewDoc | null): PanelRaceAttempt {
+  private attemptView(
+    attempt: RaceAttemptDoc,
+    review: RaceAttemptReviewDoc | null,
+    riderName: string | null,
+  ): PanelRaceAttempt {
     return {
       id: attempt._id,
       entryId: attempt.entryId,
@@ -202,6 +225,7 @@ export class ResultsPanelReadService {
       review: review
         ? { kind: review.kind, reason: review.reason, at: review.at.toISOString() }
         : null,
+      riderName,
     };
   }
 
@@ -213,7 +237,7 @@ export class ResultsPanelReadService {
     const race = await this.race(principal, raceId);
     const now = this.clock.now();
     const max = RESULTS_POLICY.standingsMax;
-    return this.repository.withSnapshot(async (session) => {
+    const standings = await this.repository.withSnapshot(async (session) => {
       const revision =
         race.protocolPublishedAt !== null
           ? ((await this.repository.currentRevision(raceId, session)) ?? 1)
@@ -236,7 +260,7 @@ export class ResultsPanelReadService {
       const rest = (
         await this.repository.entriesForStandings(raceId, max + head.length + 1, session)
       ).filter((entry) => !headIds.has(entry._id));
-      const items: PanelStandingRow[] = [];
+      const items: Omit<PanelStandingRow, 'riderName'>[] = [];
       for (const row of head.slice(0, max)) {
         const entry = headEntries.get(row.entryId);
         if (!entry) continue;
@@ -261,12 +285,18 @@ export class ResultsPanelReadService {
         });
       }
       return {
-        source: revision === null ? 'live' : 'protocol',
+        source: revision === null ? ('live' as const) : ('protocol' as const),
         revision,
         truncated: head.length + rest.length > max,
         items,
       };
     });
+    // имена — после snapshot-сессии, одним вызовом порта (в снимок не пишутся)
+    const names = await this.names.publicNames(standings.items.map((row) => row.userId));
+    return {
+      ...standings,
+      items: standings.items.map((row) => ({ ...row, riderName: names.get(row.userId) ?? null })),
+    };
   }
 
   /** Живые строки с местами: вся таблица гонки по порядку `(elapsedSec, startedAt, _id)`. */

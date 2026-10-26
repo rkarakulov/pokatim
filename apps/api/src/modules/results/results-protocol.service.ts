@@ -103,7 +103,7 @@ export class ResultsProtocolService {
       return { attempt: excluded, review: doc };
     });
     this.logger.log(`race ${raceId}: attempt ${attemptId} excluded`);
-    return this.read.attemptView(attempt, review);
+    return this.read.namedAttemptView(attempt, review);
   }
 
   /** «Вернуть в обработку» до публикации: `excluded` → новая ревизия `queued` и событие проверки (D-24). */
@@ -130,7 +130,7 @@ export class ResultsProtocolService {
       return { attempt: requeued, review: doc };
     });
     this.logger.log(`race ${raceId}: attempt ${attemptId} restored`);
-    return this.read.attemptView(attempt, review);
+    return this.read.namedAttemptView(attempt, review);
   }
 
   /**

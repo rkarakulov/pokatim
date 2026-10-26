@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
 
 import { IdentityModule } from '../identity';
+import { PanelModule } from '../panel';
 import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
+import { ProfileAdminController } from './profile-admin.controller';
 import { ProfileController } from './profile.controller';
+import { ProfileModerationService } from './profile-moderation.service';
 import { ProfileRepository } from './profile.repository';
 import { ProfileService } from './profile.service';
 import { RiderNamesService } from './rider-names';
@@ -24,12 +27,13 @@ import { RIDER_NAMES } from './rider-names.port';
 export class ProfileCoreModule {}
 
 /**
- * Профиль райдера: онбординг (опрос «Что вас привело?»), чтение своего профиля, публичное имя и согласие на показ.
- * Авторизация — `AuthGuard` identity.
+ * Профиль райдера: онбординг (опрос «Что вас привело?»), чтение своего профиля, публичное имя и согласие на показ
+ * (журнал согласий — profile-02). Авторизация — `AuthGuard` identity; сброс имени модератором (`admin/profiles`) —
+ * `PanelGuard` + `profiles.moderate` из `panel`.
  */
 @Module({
-  imports: [IdentityModule, ProfileCoreModule],
-  controllers: [OnboardingController, ProfileController],
-  providers: [OnboardingService, ProfileService],
+  imports: [IdentityModule, PanelModule, ProfileCoreModule],
+  controllers: [OnboardingController, ProfileController, ProfileAdminController],
+  providers: [OnboardingService, ProfileService, ProfileModerationService],
 })
 export class ProfileModule {}

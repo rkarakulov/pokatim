@@ -25,6 +25,7 @@ import { results } from './0015_results';
 import { protocol } from './0016_protocol';
 import { rideReports } from './0017_ride_reports';
 import { disputes } from './0018_disputes';
+import { profileConsents } from './0019_profile_consents';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
@@ -85,6 +86,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0016_protocol',
       '0017_ride_reports',
       '0018_disputes',
+      '0019_profile_consents',
     ]);
   });
 
@@ -536,7 +538,6 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     };
     expect(await indexesOf(DISPUTES_COLLECTIONS.disputes)).toEqual(disputeIndexes);
     expect(await indexesOf(DISPUTES_COLLECTIONS.events)).toEqual(eventIndexes);
-    expect(migrations.at(-1)?.id).toBe('0018_disputes');
 
     // заявка и гонка до 06 (без полей) и уже с полями — бэкфилл трогает только отсутствующие
     const entriesDb = h.db.collection<Record<string, unknown> & { _id: string }>(
@@ -575,6 +576,30 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
 
     expect(await indexesOf(DISPUTES_COLLECTIONS.disputes)).toEqual(disputeIndexes);
     expect(await indexesOf(DISPUTES_COLLECTIONS.events)).toEqual(eventIndexes);
+  });
+
+  it('0019_profile_consents: журнал согласий с индексом (userId, at); повторный up — без изменений (AC3)', async () => {
+    const exists = () =>
+      h.db
+        .listCollections({ name: PROFILE_COLLECTIONS.consentEvents }, { nameOnly: true })
+        .toArray();
+    const expected = {
+      profile_consent_events_user_idx: {
+        key: { userId: 1, at: -1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await exists()).toHaveLength(1);
+    expect(await indexesOf(PROFILE_COLLECTIONS.consentEvents)).toEqual(expected);
+    expect(migrations.at(-1)?.id).toBe('0019_profile_consents');
+
+    await h.db.collection(PROFILE_COLLECTIONS.consentEvents).drop();
+    await profileConsents.up(h.db);
+    await profileConsents.up(h.db);
+    expect(await exists()).toHaveLength(1);
+    expect(await indexesOf(PROFILE_COLLECTIONS.consentEvents)).toEqual(expected);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {
