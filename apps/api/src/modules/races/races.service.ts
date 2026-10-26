@@ -24,7 +24,9 @@ import { ROUTE_CATALOG, type RouteCatalog } from '../routes';
 import type { RaceCorridor, RaceDoc, SeasonDoc } from './races.collection';
 import {
   changedRaceFields,
+  corridorChangeAllowed,
   corridorDistanceKm,
+  type FieldIssue,
   raceEditable,
   racePhase,
   type RaceValues,
@@ -35,6 +37,17 @@ import { RacesRepository } from './races.repository';
 import { fieldError, fieldsError, staleVersion } from './schedule-errors';
 
 const invalidState = () => domainError('RACE_INVALID_STATE', 409);
+
+/** Коридор запроса после проверки маршрута; `placeholder` — длина неизвестна (маршрут не готов или поле закрыто). */
+interface ResolvedCorridor {
+  corridor: RaceCorridor | null;
+  placeholder: boolean;
+  issue?: FieldIssue;
+}
+
+/** Ошибки дистанции из-за заглушки длины маршрута не показываются — причина уже в ошибке коридора. */
+const withoutPlaceholderDistance = (issues: FieldIssue[], resolved: ResolvedCorridor) =>
+  resolved.placeholder ? issues.filter((issue) => issue.path !== 'distanceKm') : issues;
 const notFound = () => domainError('NOT_FOUND', 404);
 
 /**
@@ -151,14 +164,17 @@ export class RacesService {
    * транзакции); без коридора дистанция обязательна (`REQUIRED`).
    */
   async create(principal: PanelPrincipal, input: RaceInput): Promise<PanelRace> {
-    if (!input.corridor && input.distanceKm === undefined) {
-      throw fieldError('distanceKm', 'REQUIRED');
-    }
     const race = await this.transactions.run(async (tx) => {
       const now = this.clock.now();
-      const corridor = await this.resolveCorridor(input.corridor ?? null, null, tx);
-      const values = toValues(input, corridor);
-      const issues = validateRaceRules(values, null, now);
+      // все ошибки формы одним ответом: обязательная дистанция, маршрут, правила окна
+      const issues: FieldIssue[] = [];
+      if (!input.corridor && input.distanceKm === undefined) {
+        issues.push({ path: 'distanceKm', code: 'REQUIRED' });
+      }
+      const resolved = await this.resolveCorridor(input.corridor ?? null, null, tx, true);
+      if (resolved.issue) issues.push(resolved.issue);
+      const values = toValues(input, resolved.corridor);
+      issues.push(...withoutPlaceholderDistance(validateRaceRules(values, null, now), resolved));
       if (issues.length > 0) throw fieldsError(issues);
       const doc: RaceDoc = {
         _id: uuidv7(),
@@ -193,14 +209,36 @@ export class RacesService {
     input: CorridorInput | null,
     current: RaceCorridor | null,
     tx: DbSession,
-  ): Promise<RaceCorridor | null> {
-    if (input === null) return null;
+    /** `false` — коридор менять нельзя (фаза): маршрут не проверяется, ответ — `FIELD_LOCKED` правил. */
+    editable: boolean,
+  ): Promise<ResolvedCorridor> {
+    if (input === null) return { corridor: null, placeholder: false };
     if (current && current.routeId === input.routeId) {
-      return { routeId: input.routeId, widthM: input.widthM, distanceM: current.distanceM };
+      const corridor = {
+        routeId: input.routeId,
+        widthM: input.widthM,
+        distanceM: current.distanceM,
+      };
+      return { corridor, placeholder: false };
     }
+    // заглушка длины: правила проверят остальные поля, ошибки дистанции из-за неё не показываются
+    const placeholder = {
+      corridor: {
+        routeId: input.routeId,
+        widthM: input.widthM,
+        distanceM: current?.distanceM ?? 0,
+      },
+      placeholder: true,
+    };
+    if (!editable) return placeholder;
     const route = await this.routes.findReady(input.routeId, tx);
-    if (!route) throw fieldError('corridor.routeId', 'ROUTE_NOT_READY');
-    return { routeId: route.id, widthM: input.widthM, distanceM: route.distanceM };
+    if (!route) {
+      return { ...placeholder, issue: { path: 'corridor.routeId', code: 'ROUTE_NOT_READY' } };
+    }
+    return {
+      corridor: { routeId: route.id, widthM: input.widthM, distanceM: route.distanceM },
+      placeholder: false,
+    };
   }
 
   /**
@@ -219,14 +257,22 @@ export class RacesService {
       if (snapshot.version !== input.version) throw staleVersion();
       const now = this.clock.now();
       const current = snapshot.corridor ?? null;
-      const corridor =
+      const resolved: ResolvedCorridor =
         input.corridor === undefined
-          ? current
-          : await this.resolveCorridor(input.corridor, current, tx);
-      const next = mergeValues(snapshot, input, corridor);
+          ? { corridor: current, placeholder: false }
+          : await this.resolveCorridor(
+              input.corridor,
+              current,
+              tx,
+              corridorChangeAllowed(snapshot, now),
+            );
+      const next = mergeValues(snapshot, input, resolved.corridor);
       const changed = changedRaceFields(snapshot, next);
-      if (changed.length === 0) return snapshot;
-      const issues = validateRaceRules(next, snapshot, now);
+      if (changed.length === 0 && !resolved.issue) return snapshot;
+      const issues = [
+        ...(resolved.issue ? [resolved.issue] : []),
+        ...withoutPlaceholderDistance(validateRaceRules(next, snapshot, now), resolved),
+      ];
       if (issues.length > 0) throw fieldsError(issues);
 
       let seasonId = snapshot.seasonId;

@@ -107,6 +107,11 @@ function corridorEditable(race: RaceDoc, phase: RacePhase, locked: boolean): boo
   return phase === 'open' && corridorOf(race) === null;
 }
 
+/** Можно ли сейчас менять коридор гонки (до проверки маршрута: зафиксированный коридор маршрут не проверяет). */
+export function corridorChangeAllowed(race: RaceDoc, now: Date, locked = false): boolean {
+  return corridorEditable(race, racePhase(race, now), locked);
+}
+
 /** Фиксация полей с первой заявки (V-12) добавит слайс 03; здесь — всегда `false`. */
 export interface RaceLockOptions {
   locked?: boolean;

@@ -238,6 +238,46 @@ describe('фазы (AC4, AC7)', () => {
 });
 
 describe('ROUTE_NOT_READY и права (AC5, AC14)', () => {
+  it('все ошибки сразу: REQUIRED дистанции и ROUTE_NOT_READY — вместе с правилами окна; зафиксированный коридор — FIELD_LOCKED, не ROUTE_NOT_READY', async () => {
+    const { org, routeId } = await setup();
+    const tooEarly = { protocol: '2026-10-27T00:00' };
+    const missing = await panelCall(
+      h,
+      org.token,
+      'POST',
+      RACES,
+      raceBody(withoutDistance, tooEarly),
+    );
+    expect(fieldCodes(missing.body)).toEqual([
+      'distanceKm:REQUIRED',
+      'protocolPlannedAt:PROTOCOL_TOO_EARLY',
+    ]);
+    const unknown = '01890a5d-ac96-774b-bcce-b302099a8057';
+    const notReady = await panelCall(
+      h,
+      org.token,
+      'POST',
+      RACES,
+      raceBody({ ...withoutDistance, corridor: { routeId: unknown, widthM: 50 } }, tooEarly),
+    );
+    expect(fieldCodes(notReady.body)).toEqual([
+      'corridor.routeId:ROUTE_NOT_READY',
+      'protocolPlannedAt:PROTOCOL_TOO_EARLY',
+    ]);
+
+    // открытое окно, коридор есть: смена на несуществующий маршрут — поле зафиксировано (маршрут не проверяется)
+    const race = await publishedRace(h, org.token, {
+      ...withoutDistance,
+      corridor: { routeId, widthM: 50 },
+    });
+    const token = await travel(2 * DAY, 'org@example.by');
+    const locked = await panelCall(h, token, 'POST', `${RACES}/${race.id}`, {
+      version: race.version,
+      corridor: { routeId: unknown, widthM: 50 },
+    });
+    expect(fieldCodes(locked.body)).toEqual(['corridor:FIELD_LOCKED']);
+  });
+
   it('маршрут processing, failed, несуществующий, чужой необработанный — 400 corridor.routeId ROUTE_NOT_READY', async () => {
     const { admin, org } = await setup();
     const own = parsedRoute(await uploadRoute(h, org.token, fixture('route-rte.gpx'))).id;
