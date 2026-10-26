@@ -41,6 +41,10 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   // маршруты (race-results-01): формат не GPX по содержимому; файл больше 5 МиБ
   'ROUTE_FORMAT_UNSUPPORTED',
   'ROUTE_TOO_LARGE',
+  // кофе-райды (app-05): мест нет; райд начался или отменён; квота будущих райдов или отметок
+  'RIDE_FULL',
+  'RIDE_INVALID_STATE',
+  'RIDE_QUOTA_EXCEEDED',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;
@@ -73,6 +77,11 @@ export const { FieldErrorCode, ValidationErrorDetails, fieldError } = defineFiel
   'AGE_BELOW_18',
   'CONSENT_REQUIRED',
   ...SCHEDULE_FIELD_ERROR_CODES,
+  // кофе-райды (app-05): старт раньше чем через 30 мин / дальше 60 дней; темп «от» больше «до»; лимит ниже идущих
+  'RIDE_START_IN_PAST',
+  'RIDE_START_TOO_FAR',
+  'RIDE_PACE_ORDER',
+  'RIDE_LIMIT_BELOW_GOING',
 ]);
 export type FieldErrorCode = z.infer<typeof FieldErrorCode>;
 export type ValidationErrorDetails = z.infer<typeof ValidationErrorDetails>;
@@ -108,3 +117,13 @@ export type Version = z.infer<typeof Version>;
 export const SINGLE_LINE = /^[^\p{Cc}]+$/u;
 /** Многострочный текст: из управляющих — только перевод строки. */
 export const MULTI_LINE = /^[^\p{Cc}]*(?:\n[^\p{Cc}]*)*$/u;
+
+/** Необязательный текст: пустой после обрезки — `null`. */
+export const optionalText = (max: number, pattern: RegExp) =>
+  z
+    .string({ error: fieldError('INVALID') })
+    .trim()
+    .max(max, { error: 'TOO_LONG' })
+    .regex(new RegExp(`${pattern.source}|^$`, pattern.flags), { error: 'INVALID' })
+    .transform((value) => (value === '' ? null : value))
+    .nullable();

@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
-import { fieldError, MULTI_LINE, PageQuery, SINGLE_LINE, Uuid, Version } from '../common.ts';
+import {
+  fieldError,
+  MULTI_LINE,
+  optionalText,
+  PageQuery,
+  SINGLE_LINE,
+  Uuid,
+  Version,
+} from '../common.ts';
 import { ActionReason } from '../admin/members.schema.ts';
 import { PageCursor, RaceTitle } from '../races/race.schema.ts';
 import { LocalDate, LocalTime } from '../time.ts';
@@ -24,16 +32,6 @@ export const CALENDAR_PLACE_MAX_LENGTH = 200;
 export const CALENDAR_DESCRIPTION_MAX_LENGTH = 4000;
 export const CALENDAR_URL_MAX_LENGTH = 500;
 export const CALENDAR_DISTANCES_MAX = 5;
-
-/** Необязательный текст: пустой после обрезки — `null`. */
-const optionalText = (max: number, pattern: RegExp) =>
-  z
-    .string({ error: fieldError('INVALID') })
-    .trim()
-    .max(max, { error: 'TOO_LONG' })
-    .regex(new RegExp(`${pattern.source}|^$`, pattern.flags), { error: 'INVALID' })
-    .transform((value) => (value === '' ? null : value))
-    .nullable();
 
 export const CalendarCity = z
   .string({ error: fieldError('REQUIRED') })
