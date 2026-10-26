@@ -67,10 +67,19 @@ describe('ReasonDialog (AC11)', () => {
 
   it('подтверждение — причина без пробелов по краям, окно закрывается, фокус — на кнопку-триггер', async () => {
     const { trigger, onConfirm } = open();
+    // Фокус в момент удаления окна из DOM: закрытие после await — не дискретное обновление, и восстановление
+    // фокуса в пассивном эффекте отставало от DOM на задачу планировщика (флак CI: фокус на body).
+    let focusOnClose: Element | null = null;
+    const observer = new MutationObserver(() => {
+      if (!document.querySelector('dialog')) focusOnClose ??= document.activeElement;
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
     fireEvent.change(reason(), { target: { value: '  ушла из команды  ' } });
     fireEvent.click(confirm());
     await waitFor(() => expect(screen.queryByRole('heading', { name: /Снять роль:/ })).toBeNull());
+    observer.disconnect();
     expect(onConfirm).toHaveBeenCalledWith('ушла из команды');
+    expect(focusOnClose).toBe(trigger);
     expect(document.activeElement).toBe(trigger);
   });
 

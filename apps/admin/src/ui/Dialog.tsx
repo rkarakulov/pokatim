@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useId, useRef } from 'react';
+import { type ReactNode, useId, useLayoutEffect, useRef } from 'react';
 
 export interface DialogProps {
   open: boolean;
@@ -16,7 +16,9 @@ export function Dialog({ open, title, onClose, children }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
-  useEffect(() => {
+  // layout-эффект: фокус возвращается в том же коммите, что убирает окно, — не отдельной задачей планировщика
+  // после обновления из промиса (иначе между ними фокус на body)
+  useLayoutEffect(() => {
     const dialog = ref.current;
     if (!open || !dialog) return;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
