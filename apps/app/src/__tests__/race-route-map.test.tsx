@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
 import type { RaceDetail, RaceRouteMap } from '@pokatim/contracts';
-import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
 import { type RefreshControlProps, TurboModuleRegistry, useColorScheme } from 'react-native';
 
@@ -191,6 +191,31 @@ describe('карта маршрута на карточке гонки (maps-01)
     expect(corridor?.props.paint['line-width']).toEqual(
       corridorLineWidth(100, centerLat(route.bounds)),
     );
+  });
+
+  it('маршрут коридора сменили — после pull-to-refresh новая карта с камерой по новой рамке', async () => {
+    await openCard();
+    await screen.findByTestId('maplibre-Camera');
+    expect(loadMapLibreNative).toHaveBeenCalledTimes(1);
+    const moved: RaceRouteMap = {
+      ...route,
+      line: [
+        [28.0, 54.2],
+        [28.1, 54.3],
+      ],
+      start: [28.0, 54.2],
+      finish: [28.1, 54.3],
+      bounds: [28.0, 54.2, 28.1, 54.3],
+    };
+    getRaceRoute.mockResolvedValue(moved);
+    await pullToRefresh();
+    await waitFor(() =>
+      expect(screen.getByTestId('maplibre-Camera').props.initialViewState).toMatchObject({
+        bounds: moved.bounds,
+      }),
+    );
+    // native-камера берёт `initialViewState` один раз — карта перемонтирована (загрузчик вызван заново)
+    expect(loadMapLibreNative).toHaveBeenCalledTimes(2);
   });
 
   it('без коридора — запроса нет, блока нет', async () => {

@@ -1,6 +1,6 @@
 # Findings — maps-01-route-corridor — pass 1 — reviewer: claude
 
-base: origin/develop   commits: origin/develop..9a55432 (3a573fd … ef666b5, merge 9a55432); working tree чистый
+base: origin/develop commits: origin/develop..9a55432 (3a573fd … ef666b5, merge 9a55432); working tree чистый
 verdict: REQUEST CHANGES (HIGH-1)
 
 ## Pass 1
@@ -29,6 +29,7 @@ ARG, многострочные `build-args`, turbo `build:web` с `env: EXPO_PU
 ограничивает `connect-src`/`worker-src`.
 
 ### [HIGH] Ошибка повторного запроса геометрии прячет уже показанную карту
+
 - **file:** apps/app/src/features/races/race-route-map.tsx
 - **location:** строка 31 (`if (mounted && (styleUrl === null || route.isError)) return null;`)
 - **problem:** в TanStack Query v5 неудачный refetch при имеющихся данных даёт `status: 'error'` / `isError: true`
@@ -45,6 +46,7 @@ ARG, многострочные `build-args`, turbo `build:web` с `env: EXPO_PU
   (`queryClient.refetchQueries` / invalidate) → `maplibre-Map` остаётся.
 
 ### [MEDIUM] Карта не обновляется после правки коридора опубликованной гонки (ширина и маршрут)
+
 - **file:** apps/app/src/features/races/queries.ts; apps/app/src/features/races/race-route-map.tsx
 - **location:** `useRaceRoute` (ключ `['races','route',id]`); `race-route-map.tsx` стр. 41–47 (ширина в подписи — из
   `race.corridor`, на карте — из `route.data.widthM`); pull-to-refresh `race-detail.tsx` стр. 203–212 ключ не трогает
@@ -61,6 +63,7 @@ ARG, многострочные `build-args`, turbo `build:web` с `env: EXPO_PU
   (единый источник с текстом). Смену `routeId` клиент не видит — достаточно refetch по pull-to-refresh.
 
 ### [LOW] `accessible`-обёртка прячет кнопку атрибуции от скринридера
+
 - **file:** apps/app/src/features/maps/route-map-frame.tsx
 - **location:** стр. 26–31 (`accessible`, `accessibilityRole="image"` вокруг карты)
 - **problem:** на iOS `accessible` делает потомков недоступными для VoiceOver, на web RNW даёт `role="img"` —
@@ -72,6 +75,7 @@ ARG, многострочные `build-args`, turbo `build:web` с `env: EXPO_PU
   `pointerEvents="none"`) рядом с картой, а не оборачивать ею карту; либо принять и записать в §8.2.
 
 ### [LOW] ADR-0014 расходится с фактом сборки: `maplibre-gl` в серверном бандле, CSS глобально, чанк в precache
+
 - **file:** docs/adr/0014-maps-and-tiles.md
 - **location:** «Решение» п. 5 («в серверный бандл и первый чанк не попадает»), «Последствия» («отдельным чанком
   только на карточке гонки»)
@@ -83,6 +87,7 @@ ARG, многострочные `build-args`, turbo `build:web` с `env: EXPO_PU
   follow-up).
 
 ### [LOW] Native: GeoJSON и спецификации слоёв пересобираются на каждый рендер
+
 - **file:** apps/app/src/features/maps/route-map.tsx
 - **location:** стр. 65–66 (`data={routeFeatures(map)}`, `routeLayers(theme, …)` в JSX)
 - **problem:** `GeoJSONSource` v11 делает `JSON.stringify(data)` (≈ 25–40 КБ для 1000 точек) и передаёт строку в
@@ -91,6 +96,7 @@ ARG, многострочные `build-args`, turbo `build:web` с `env: EXPO_PU
 - **recommended_fix:** `useMemo` по `map` и `[theme, map.widthM, map.bounds]`.
 
 ### [LOW] Ошибка стиля native не сбрасывается при смене темы; без повтора
+
 - **file:** apps/app/src/features/maps/route-map.tsx
 - **location:** `const [failed, setFailed] = useState(false)` / `onDidFailLoadingMap`
 - **problem:** web сбрасывает `failed` при пересоздании (`setFailed(false)` в эффекте), native — нет: после сбоя
@@ -104,3 +110,66 @@ ARG, многострочные `build-args`, turbo `build:web` с `env: EXPO_PU
 CRITICAL: 0 · HIGH: 1 · MEDIUM: 1 · LOW: 4. Блокер — HIGH «ошибка повторного запроса прячет карту»
 (`race-route-map.tsx:31`). Безопасность публичного ответа, видимость гонки, границы модулей, кэш, гидрация SSR,
 ленивая загрузка native, ширина коридора и CI/инфра — без замечаний.
+
+## Pass 2
+
+base: origin/develop commits: origin/develop..1a57c7f (фиксы — d540811, findings — 1a57c7f); working tree чистый
+verdict: APPROVE (CRITICAL/HIGH нет)
+
+Проверено самостоятельно: `tsc --noEmit` apps/app — 0 ошибок; jest app (`race-route-map.test.tsx`,
+`features/maps/*`, `scripts/*`) — 6 suites / 27 tests зелёные (4 прогона: 3 зелёных, 1 холодный прогон сразу после
+изменений — 8 таймаутов `findByLabelText` в `race-route-map.test.tsx` на загрузке, отдельно и повторно — зелёные;
+считаю холодной трансформацией, не дефектом кода). API int и полный `pnpm check` — NOT VERIFIED (как в pass 1).
+
+### Закрытие findings pass 1
+
+- **HIGH (ошибка refetch прячет карту)** — закрыт. `race-route-map.tsx:39` схлопывает только при
+  `route.isError && !route.data`; тест «ошибка обновления при показанной карте» (pull-to-refresh → 5xx с исчерпанием
+  `shouldRetry` → `maplibre-Map` и подпись на месте).
+- **MEDIUM (карта не обновляется после правки коридора)** — закрыт для ширины и для web; для native смены маршрута
+  закрыт частично — см. новый MEDIUM ниже. Ширина — из `race.corridor.widthM` (`race-route-map.tsx:30–35`, memo по
+  `route.data`/`widthM`; структурное разделение TanStack держит ссылку `route.data` при неизменном ответе → web-карта
+  не пересоздаётся зря); `useRaceRouteRefetch` (`queries.ts:112–118`, `type: 'active'` — отключённый запрос без
+  env/модуля не трогается) включён в `refetchers` только при коридоре (`race-detail.tsx:203–225`), deps memo полные;
+  `usePullToRefresh` использует `allSettled` — сбой карты индикатор не держит. Тест на ширину после правки есть.
+- **LOW (a11y-обёртка прячет атрибуцию)** — закрыт: подпись — отдельный `accessible` слой `absoluteFill` с
+  `pointerEvents: 'none'` под картой (`route-map-frame.tsx:27–33`), карта и атрибуция поверх; принято как D8.
+- **LOW (ADR-0014 vs сборка)** — закрыт: п. 5 и «Последствия» уточнены (серверный бандл, precache, CSS глобально,
+  ошибка без повтора).
+- **LOW (native пересборка GeoJSON/слоёв)** — закрыт: `useMemo` (`route-map.tsx:28–29`).
+- **LOW (ошибка стиля native не сбрасывается)** — закрыт: `key={styleUrl}` у `RouteMap` (`race-route-map.tsx:50`) —
+  смена темы монтирует новую карту со свежим `failed`; ленивый `import()` уже в кэше модулей — пустой кадр максимум на
+  микрозадачу. На web `key` избыточен (эффект и так пересоздаёт карту по `styleUrl`), но безвреден. «Без повтора»
+  записано как D7.
+
+### [MEDIUM] Native: после смены маршрута коридора камера остаётся на рамке старого маршрута
+
+- **file:** apps/app/src/features/maps/route-map.tsx; apps/app/src/features/races/race-route-map.tsx
+- **location:** `route-map.tsx:67` (`<lib.Camera initialViewState={{ bounds: map.bounds, padding }} />`);
+  `race-route-map.tsx:50` (`key={styleUrl}`)
+- **problem:** d540811 сделал перезапрос геометрии по pull-to-refresh, чтобы смена `corridor.routeId` опубликованной
+  гонки дошла до карты. Линия и слои обновятся (новые `features`/`layers`), но камера native задаётся только
+  `initialViewState` — он применяется один раз: `MLRNCameraComponentView.mm:96` (`if (_view.initialViewState == nil)`),
+  `MLRNCamera.m:124`. `RouteMap` не перемонтируется (ключ — только `styleUrl`), поэтому рамка остаётся от старого
+  маршрута; новый маршрут может оказаться частично или полностью вне кадра, а жесты выключены — пользователь не может
+  сдвинуть карту. Web этой проблемы не имеет (эффект пересоздаёт карту по `map`).
+- **why_it_matters:** незакрытая на native часть MEDIUM pass 1 (расхождение карты с карточкой после правки коридора);
+  платформенное расхождение поведения native/web (AGENTS.md §4 — все платформы).
+- **evidence:** `node_modules/@maplibre/maplibre-react-native/ios/components/camera/MLRNCameraComponentView.mm:96`;
+  `Camera.tsx:232` («Default view settings applied on camera»); тест «допуск коридора изменили» проверяет только
+  ширину, смену `bounds` не покрывает.
+- **recommended_fix:** включить рамку в ключ native-карты, например `key={`${styleUrl}|${map.bounds.join(',')}`}`
+  (перемонтирование только при реальной смене маршрута), либо при смене `map.bounds` звать `fitBounds` через ref камеры
+  без анимации. Добавить кейс в `race-route-map.test.tsx`: refetch с другим `bounds` → у `maplibre-Camera`
+  `initialViewState.bounds` новые (при варианте с `key`).
+
+## Итог pass 2
+
+CRITICAL: 0 · HIGH: 0 · MEDIUM: 1 · LOW: 0. Все findings pass 1 закрыты (MEDIUM — частично: native-камера при смене
+маршрута, новый MEDIUM). Блокеров нет — APPROVE; MEDIUM рекомендуется исправить в этой ветке (однострочный фикс ключа).
+
+### Разбор pass 2 (автор)
+
+- MEDIUM (камера native по старой рамке) — исправлено: `key` карты — стиль + рамка (`race-route-map.tsx`), тест
+  «маршрут коридора сменили» (`race-route-map.test.tsx`); отрицательное доказательство — с `key={styleUrl}` тест
+  красный (загрузчик вызван 1 раз вместо 2).

@@ -46,8 +46,9 @@ export function RaceRouteMap({ race }: { race: RaceDetail }) {
   }
   return (
     <RouteMap
-      // смена стиля (темы) — новая карта: сброс ошибки прошлого стиля
-      key={styleUrl}
+      // смена стиля (темы) — новая карта: сброс ошибки прошлого стиля; смена рамки (другой маршрут коридора) — тоже:
+      // native-камера применяет `initialViewState` один раз
+      key={`${styleUrl}|${map.bounds.join(',')}`}
       map={map}
       styleUrl={styleUrl}
       theme={theme}
