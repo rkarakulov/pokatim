@@ -223,7 +223,9 @@ export function RideFormScreen({
       const view = ride
         ? await update.mutateAsync({ ...body, version: ride.version })
         : await create.mutateAsync(body);
-      router.replace(ride ? `/rides/${view.ride.id}` : `/rides/${view.ride.id}?published=1`);
+      // правка — назад к карточке в стеке (без истории — замена); создание — новая карточка с баннером
+      if (ride && router.canGoBack()) router.back();
+      else router.replace(ride ? `/rides/${view.ride.id}` : `/rides/${view.ride.id}?published=1`);
     } catch (error) {
       if (apiErrorOf(error)?.code === 'CONFLICT') return setConflict(true);
       const fields = serverFieldErrors(error, SERVER_FIELDS);

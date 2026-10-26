@@ -4,7 +4,7 @@ import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { AsyncContent, EmptyState, SkeletonHeroCard, useTheme } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -32,6 +32,7 @@ export function OwnRide({
   const router = useRouter();
   const valid = Uuid.safeParse(id).success;
   const me = useRideForViewer(id, valid);
+  const [managed, setManaged] = useState<boolean>();
   const reload = async () => {
     const result = await me.refetch();
     const ride = result.data?.ride;
@@ -54,7 +55,10 @@ export function OwnRide({
   if (!valid || apiErrorOf(me.error)?.code === 'NOT_FOUND') return notFound;
   if (me.data) {
     const { ride, viewer } = me.data;
-    return viewer.canManage && 'version' in ride ? children(ride, reload) : notFound;
+    // права — по первому ответу: после своей отмены `canManage` гаснет, а экран должен успеть уйти на карточку
+    const allowed = managed ?? viewer.canManage;
+    if (managed === undefined) setManaged(viewer.canManage);
+    return allowed && 'version' in ride ? children(ride, reload) : notFound;
   }
   return (
     <SafeAreaView
