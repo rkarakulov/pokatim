@@ -35,6 +35,13 @@ describe('стенд pokatim (обёртка createMongoApiHarness)', () => {
     expect(res.json()).toMatchObject({ status: 'ok', checks: { database: 'up' } });
   });
 
+  it('монитор TTL MongoDB выключен: сроки тестов — по TestClock, не по настенным часам сервера', async () => {
+    const { ttlMonitorEnabled } = await h.db
+      .admin()
+      .command({ getParameter: 1, ttlMonitorEnabled: 1 });
+    expect(ttlMonitorEnabled).toBe(false);
+  });
+
   it('HTTP-настройка проекта (configureHttp, как в main.ts): CORS только для CORS_ORIGINS', async () => {
     const fromWeb = await h.app.inject({
       method: 'GET',
