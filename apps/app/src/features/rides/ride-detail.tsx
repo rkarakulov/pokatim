@@ -1,4 +1,4 @@
-import { apiErrorOf } from '@pokatim/api-client';
+import { apiErrorOf, isNetworkError } from '@pokatim/api-client';
 import { Uuid, type RideDetail, type RideViewer } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
@@ -241,6 +241,8 @@ export function RideDetailScreen({
     signedIn && (me.data !== undefined || pub.data === undefined) ? me : pub;
   const notFound = !valid || (ride === undefined && apiErrorOf(query.error)?.code === 'NOT_FOUND');
   const home = signedIn ? '/rides' : '/';
+  // публичные данные показаны, а состояние зрителя не загрузилось: без действий — баннер с повтором (§4.12)
+  const viewerFailed = signedIn && me.isError && me.data === undefined && pub.data !== undefined;
 
   return (
     <SafeAreaView
@@ -265,6 +267,18 @@ export function RideDetailScreen({
         }
       >
         <OfflineBanner hasData={ride !== undefined && !notFound} style={styles.offline} />
+        {viewerFailed ? (
+          <View style={[styles.stack, styles.offline]}>
+            <Banner
+              tone="warning"
+              title={t(isNetworkError(me.error) ? 'state.errorTitle' : 'state.failedTitle')}
+              message={t('rides.detail.viewerFailed')}
+            />
+            <View style={styles.start}>
+              <TextAction label={t('state.retry')} onPress={() => void me.refetch()} />
+            </View>
+          </View>
+        ) : null}
         {notFound ? (
           <EmptyState
             title={t('rides.detail.notFound')}

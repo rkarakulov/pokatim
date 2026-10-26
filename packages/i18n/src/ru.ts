@@ -222,6 +222,11 @@ export const ru = {
   'rides.error.rateLimited': 'Слишком часто. Повторите через {seconds} с.',
   'rides.error.network': 'Нет соединения.',
   'rides.error.unknown': 'Не получилось. Повторите.',
+  'rides.error.quotaJoined':
+    'У вас уже {count} будущих отметок «Я иду». Снимите одну, чтобы записаться.',
+  'rides.error.citiesFailed': 'Не удалось загрузить города.',
+  'rides.error.citiesStale': 'Не удалось обновить города.',
+  'rides.detail.viewerFailed': 'Не удалось загрузить вашу запись на райд — действия недоступны.',
   // карточка райда (публичная)
   'rides.detail.title': 'Кофе-райд',
   'rides.detail.kicker': 'Кофе-райд',
@@ -281,8 +286,6 @@ export const ru = {
     many: 'У вас уже {count} будущих райдов. Отмените один, чтобы создать новый.',
     other: 'У вас уже {count} будущих райда. Отмените один, чтобы создать новый.',
   },
-  'rides.form.quotaJoined':
-    'У вас уже {count} будущих отметок «Я иду». Снимите одну, чтобы записаться.',
   'rides.form.failed': 'Не удалось сохранить райд. Повторите.',
   // отмена райда организатором
   'rides.cancel.title': 'Отменить райд',

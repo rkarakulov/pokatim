@@ -221,6 +221,31 @@ describe('вкладка «Райды» (S3)', () => {
     expect(screen.getByText('Ближайший райд')).toBeOnTheScreen();
   });
 
+  it('ошибка загрузки городов — подпись «Город», ошибка и «Повторить» в группе; лента работает', async () => {
+    listRideCities.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await openRides();
+    await screen.findByRole('link', { name: heroLabel });
+    expect(await screen.findByText('Не удалось загрузить города.')).toBeOnTheScreen();
+    expect(screen.getByText('Город')).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('button', { name: 'Брест' })).toBeOnTheScreen();
+    expect(screen.queryByText('Не удалось загрузить города.')).toBeNull();
+  });
+
+  it('ошибка обновления городов при чипах — чипы остаются, рядом ошибка с повтором', async () => {
+    await openRides();
+    await screen.findByRole('button', { name: 'Брест' });
+    listRideCities.mockRejectedValue(new ApiNetworkError(new Error('offline')));
+    const control = feed().props.refreshControl as ReactElement<{ onRefresh: () => void }>;
+    await act(async () => {
+      control.props.onRefresh();
+    });
+    expect(await screen.findByText('Не удалось обновить города.')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Брест' })).toBeOnTheScreen();
+    expect(screen.getAllByRole('button', { name: 'Повторить' }).length).toBeGreaterThan(0);
+  });
+
   it('пусто без фильтров — приглашение и primary «Создать райд» (кнопка шапки скрыта)', async () => {
     listRides.mockResolvedValue(page([]));
     listRideCities.mockResolvedValue({ cities: [] });

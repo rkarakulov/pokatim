@@ -43,10 +43,10 @@ export type RideCancelReason = z.infer<typeof RideCancelReason>;
 export const RIDE_VIEWER_ROLES = ['organizer', 'participant', 'none'] as const;
 export type RideViewerRole = (typeof RIDE_VIEWER_ROLES)[number];
 
-/** Ограничения полей (Q8 [ASSUMPTION]); имя организатора — как название (решение автора D2). */
+/** Ограничения полей (Q8 [ASSUMPTION]); подпись организатора — 2–80 (D2, решение оркестратора: «Ян»). */
 export const RIDE_TITLE_MIN = 3;
 export const RIDE_TITLE_MAX = 80;
-export const RIDE_ORGANIZER_NAME_MIN = RIDE_TITLE_MIN;
+export const RIDE_ORGANIZER_NAME_MIN = 2;
 export const RIDE_ORGANIZER_NAME_MAX = RIDE_TITLE_MAX;
 export const RIDE_PLACE_MIN = 3;
 export const RIDE_PLACE_MAX = 120;
@@ -80,7 +80,7 @@ const integer = ({ min, max }: { min: number; max: number }) =>
 
 export const RideTitle = text(RIDE_TITLE_MIN, RIDE_TITLE_MAX);
 export const RidePlace = text(RIDE_PLACE_MIN, RIDE_PLACE_MAX);
-/** «Как вас подписать» (D2): необязательно, пусто — `null`; 3–80 символов одной строкой. */
+/** «Как вас подписать» (D2): необязательно, пусто — `null`; 2–80 символов одной строкой. */
 export const RideOrganizerName = optionalText(RIDE_ORGANIZER_NAME_MAX, SINGLE_LINE).refine(
   (value) => value === null || value.length >= RIDE_ORGANIZER_NAME_MIN,
   { error: 'TOO_SHORT' },

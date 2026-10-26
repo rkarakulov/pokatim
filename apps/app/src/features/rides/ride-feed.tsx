@@ -45,6 +45,27 @@ const SKELETON_ROWS = [0, 1, 2];
 const itemKey = (item: FeedItem) =>
   item.kind === 'all' ? 'all' : item.kind === 'day' ? `d-${item.day}` : `r-${item.ride.id}`;
 
+/**
+ * Ошибка чипов «Город» (§4.12): первая загрузка — подпись группы, текст и «Повторить» на месте ряда; ошибка обновления
+ * при показанных чипах — чипы остаются, под ними текст с повтором. Лента от городов не зависит.
+ */
+function CitiesFailure({ stale, onRetry }: { stale: boolean; onRetry: () => void }) {
+  const theme = useTheme();
+  return (
+    <View style={styles.citiesFailure}>
+      {stale ? null : (
+        <Text style={[textStyle('label'), styles.citiesLabel, { color: theme.text.secondary }]}>
+          {t('rides.filter.city')}
+        </Text>
+      )}
+      <Text style={[textStyle('meta'), styles.citiesText, { color: theme.text.secondary }]}>
+        {t(stale ? 'rides.error.citiesStale' : 'rides.error.citiesFailed')}
+      </Text>
+      <TextAction label={t('state.retry')} onPress={onRetry} />
+    </View>
+  );
+}
+
 export interface RideFeedProps {
   filters: RideFilters;
   onFiltersChange: (filters: RideFilters) => void;
@@ -98,6 +119,8 @@ export function RideFeed({ filters: selected, onFiltersChange }: RideFeedProps) 
         {available === undefined ? (
           citiesLoading ? (
             <FilterGroupSkeleton label={t('rides.filter.city')} />
+          ) : cities.isError ? (
+            <CitiesFailure stale={false} onRetry={() => void cities.refetch()} />
           ) : null
         ) : available.length > 0 ? (
           <FilterGroup<CityCode>
@@ -106,6 +129,9 @@ export function RideFeed({ filters: selected, onFiltersChange }: RideFeedProps) 
             selected={filters.city}
             onToggle={(value) => onFiltersChange({ city: toggleCity(filters.city, value) })}
           />
+        ) : null}
+        {available !== undefined && cities.isError ? (
+          <CitiesFailure stale onRetry={() => void cities.refetch()} />
         ) : null}
       </View>
       {filtered ? (
@@ -237,4 +263,12 @@ const styles = StyleSheet.create({
   group: { marginTop: space.s5, marginBottom: space.s2 },
   footer: { paddingBottom: space.s6 },
   footerError: { gap: space.s3, paddingTop: space.s3 },
+  citiesFailure: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: space.s2,
+  },
+  citiesLabel: { width: '28%' },
+  citiesText: { flexShrink: 1 },
 });

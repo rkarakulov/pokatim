@@ -1,11 +1,12 @@
 import { apiErrorOf, isNetworkError } from '@pokatim/api-client';
-import type {
-  CancelRideRequest,
-  CreateRideRequest,
-  RideDetail,
-  RidePage,
-  RideView,
-  UpdateRideRequest,
+import {
+  RideQuotaDetails,
+  type CancelRideRequest,
+  type CreateRideRequest,
+  type RideDetail,
+  type RidePage,
+  type RideView,
+  type UpdateRideRequest,
 } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import {
@@ -165,6 +166,11 @@ export function rideActionErrorText(error: unknown, limit: number | null): strin
     return limit === null ? t('rides.error.fullNoLimit') : t('rides.error.full', { limit });
   }
   if (code === 'RIDE_INVALID_STATE') return t('rides.error.invalidState');
+  if (code === 'RIDE_QUOTA_EXCEEDED') {
+    // «Я иду» сверх квоты будущих отметок
+    const details = RideQuotaDetails.safeParse(apiErrorOf(error)?.details);
+    return t('rides.error.quotaJoined', { count: details.success ? details.data.limit : 20 });
+  }
   if (code === 'RATE_LIMITED') {
     return t('rides.error.rateLimited', { seconds: retryAfterSec(error) ?? 60 });
   }

@@ -61,14 +61,16 @@ describe('CreateRideRequest', () => {
     );
   });
 
-  it('границы длин: название и подпись 3–80, место 3–120, описание ≤ 1000', () => {
+  it('границы длин: название 3–80, подпись 2–80, место 3–120, описание ≤ 1000', () => {
     expect(codesOf(CreateRideRequest.safeParse({ ...ride, title: 'ab' }))).toEqual(['TOO_SHORT']);
     expect(CreateRideRequest.safeParse({ ...ride, title: 'a'.repeat(80) }).success).toBe(true);
     expect(codesOf(CreateRideRequest.safeParse({ ...ride, title: 'a'.repeat(81) }))).toEqual([
       'TOO_LONG',
     ]);
     expect(codesOf(CreateRideRequest.safeParse({ ...ride, title: ' ' }))).toEqual(['REQUIRED']);
-    expect(codesOf(CreateRideRequest.safeParse({ ...ride, organizerName: 'Ян' }))).toEqual([
+    // подпись — от 2 символов (решение оркестратора: «Ян»)
+    expect(CreateRideRequest.parse({ ...ride, organizerName: 'Ян' }).organizerName).toBe('Ян');
+    expect(codesOf(CreateRideRequest.safeParse({ ...ride, organizerName: ' Я ' }))).toEqual([
       'TOO_SHORT',
     ]);
     expect(

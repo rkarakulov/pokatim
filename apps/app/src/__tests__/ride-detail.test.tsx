@@ -276,6 +276,37 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
     expect(screen.queryByText(/Райд отменён/)).toBeNull();
   });
 
+  it('публичные данные есть, а состояние зрителя (me) — 500: карточка остаётся, баннер с повтором; повтор — «Я иду»', async () => {
+    getRideForViewer.mockRejectedValueOnce(
+      new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }),
+    );
+    await openSignedIn();
+    expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Я иду' })).toBeNull();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('button', { name: 'Я иду' })).toBeOnTheScreen();
+    expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+  });
+
+  it('«Я иду» сверх квоты отметок — текст квоты у кнопки', async () => {
+    joinRide.mockRejectedValue(
+      new ApiHttpError(409, {
+        code: 'RIDE_QUOTA_EXCEEDED',
+        message: 'x',
+        details: { quota: 'joined', limit: 20 },
+      }),
+    );
+    await openSignedIn();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Я иду' }));
+    expect(
+      await screen.findByText(
+        'У вас уже 20 будущих отметок «Я иду». Снимите одну, чтобы записаться.',
+      ),
+    ).toBeOnTheScreen();
+  });
+
   it('сервер недоступен — «Не удалось загрузить» + «Повторить»', async () => {
     getRide.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
     getRideForViewer.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
