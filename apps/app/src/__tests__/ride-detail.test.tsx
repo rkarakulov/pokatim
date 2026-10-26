@@ -2,6 +2,7 @@
 import { ApiHttpError } from '@pokatim/api-client';
 import type { RideDetail, RideView, RideViewer } from '@pokatim/contracts';
 import { onlineManager } from '@tanstack/react-query';
+import * as Location from 'expo-location';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 import { useSessionStore } from '@/features/auth/session-store';
@@ -12,6 +13,7 @@ import { shareLink, shareOrigin } from '@/lib/share-link';
 import RideRoute from '../app/rides/[id]';
 import { appRoutes, tabRoutes } from './app-routes';
 import { EMAIL, liveSession, session, storeSurveyCompleted } from './auth-fixtures';
+import { USER_A } from './jwt';
 import { createQueryWrapper } from './query-wrapper';
 
 jest.mock('@/lib/api');
@@ -129,6 +131,35 @@ describe('карточка райда: гость (AC8)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/rides/${ID}`));
     expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
     expect(joinRide).not.toHaveBeenCalled();
+  });
+
+  it('«Я иду» гостя → вход → шаг онбординга «Позже» → снова карточка райда, а не Главная (возврат, Q13)', async () => {
+    jest
+      .mocked(Location.getForegroundPermissionsAsync)
+      .mockResolvedValue({ status: 'granted' } as Location.LocationPermissionResponse);
+    storeSurveyCompleted(USER_A, { devicesStepCompleted: false });
+    jest
+      .mocked(api.getOnboardingStatus)
+      .mockResolvedValue({ surveyCompleted: true, devicesStepCompleted: false });
+    jest.mocked(api.listDevices).mockResolvedValue({ items: [] });
+    jest
+      .mocked(api.completeDevicesStep)
+      .mockResolvedValue({ surveyCompleted: true, devicesStepCompleted: true });
+    jest.mocked(api.signIn).mockResolvedValue({ state: 'signedIn', session });
+    jest.mocked(api.pollRegistration).mockResolvedValue({ state: 'pending' });
+    const router = await renderRouter(appRoutes, { initialUrl: `/rides/${ID}` });
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Я иду' }));
+    await fireEvent.changeText(await screen.findByLabelText('E-mail'), EMAIL);
+    await fireEvent.changeText(screen.getByLabelText('Пароль'), 'velo-secret');
+    await fireEvent.press(screen.getByRole('button', { name: 'Войти' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Позже' }));
+
+    await waitFor(() => expect(router.getPathname()).toBe(`/rides/${ID}`));
+    expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
+    // возврат не перебит гардом шагов онбординга (redirectTo «/»)
+    await act(() => jest.advanceTimersByTimeAsync(1000));
+    expect(router.getPathname()).toBe(`/rides/${ID}`);
   });
 
   it('404 — «Райд не найден» + «Все райды»; невалидный id — без запроса', async () => {
