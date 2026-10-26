@@ -979,6 +979,37 @@ export const ru = {
   'admin.results.rowStatus.final': 'Финальный',
   'admin.results.rowStatus.revised': 'Пересчитан',
   'admin.results.rowStatus.dq': 'Дисквалифицирован',
+  // экран «Результаты» панели (race-results-05, точка D) [ASSUMPTION copy]
+  'admin.results.kpi.title': 'Сводка',
+  'admin.results.revise.title': 'Экстренный пересчёт',
+  'admin.results.attempts.filter': 'Статус попытки',
+  'admin.results.attempts.reviewReason': 'Исключена: {reason}',
+  'admin.results.failure.storage': 'Трек недоступен в хранилище',
+  'admin.results.failure.timeout': 'Проверка не уложилась во время',
+  'admin.results.failure.unreadable': 'Трек не читается',
+  'admin.results.failure.corridor_invalid': 'Коридор гонки недействителен',
+  'admin.results.failure.error': 'Ошибка проверки',
+  'admin.results.withdrawReason.activity_removed': 'Заезд удалён райдером',
+  'admin.results.withdrawReason.not_primary': 'Заменена другой попыткой',
+  'admin.results.dialog.excludeConsequences':
+    'Трек не войдёт в результат участника; лучший результат и места пересчитаются. Вернуть можно до публикации.',
+  'admin.results.dialog.restoreConsequences':
+    'Трек снова встанет в очередь и будет проверен заново.',
+  'admin.results.dialog.recheckConsequences':
+    'Все проверенные треки гонки встанут в очередь на повторную проверку текущей версией движка.',
+  'admin.results.dialog.protocolRecheckConsequences':
+    'Треки проверятся заново; опубликованный протокол не изменится, пока вы не примените пересчёт.',
+  'admin.results.dialog.applyConsequences':
+    'Протокол пересчитается по новым вердиктам — появится новая ревизия; дисквалификации сохранятся.',
+  'admin.results.dialog.disqualifyConsequences':
+    'Результат участника уйдёт из зачёта, места остальных пересчитаются — появится новая ревизия протокола.',
+  'admin.results.dialog.revokeDqConsequences':
+    'Результат участника вернётся в зачёт, места пересчитаются — появится новая ревизия протокола.',
+  'admin.results.recalc.column.at': 'Когда',
+  'admin.results.recalc.column.kind': 'Действие',
+  'admin.results.recalc.column.rider': 'Участник',
+  'admin.results.recalc.column.actor': 'Сотрудник',
+  'admin.results.recalc.column.reason': 'Причина',
   // «Календарь» [ASSUMPTION: таблица, снятие и возврат — вне макетов]
   'admin.calendar.title': 'Календарь',
   'admin.calendar.lead':

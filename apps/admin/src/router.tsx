@@ -18,6 +18,7 @@ import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 import { OverviewScreen } from './features/overview/OverviewScreen';
 import { NewRaceScreen, RaceScreen } from './features/races/RaceScreen';
 import { RacesScreen, validateRacesSearch } from './features/races/RacesScreen';
+import { RaceResultsScreen } from './features/results/RaceResultsScreen';
 import { SeasonsScreen } from './features/seasons/SeasonsScreen';
 import { SignInScreen } from './features/sign-in/SignInScreen';
 import { AppLayout, ShellError, ShellSkeleton } from './layout/AppLayout';
@@ -154,6 +155,19 @@ const raceRoute = createRoute({
   },
 });
 
+const raceResultsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'races/$raceId/results',
+  component: function RaceResultsRoute() {
+    const { raceId } = raceResultsRoute.useParams();
+    return (
+      <RequirePermission permission="races.read">
+        <RaceResultsScreen raceId={raceId} />
+      </RequirePermission>
+    );
+  },
+});
+
 const seasonsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: 'seasons',
@@ -187,6 +201,7 @@ const routeTree = rootRoute.addChildren([
     racesRoute,
     newRaceRoute,
     raceRoute,
+    raceResultsRoute,
     seasonsRoute,
     calendarRoute,
     membersRoute,

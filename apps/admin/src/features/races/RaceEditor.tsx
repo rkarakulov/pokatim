@@ -352,6 +352,15 @@ export function RaceEditor({
           ) : null}
         </>
       ) : null}
+      {race.status !== 'draft' ? (
+        <Link
+          className="button t-panel-button"
+          to="/races/$raceId/results"
+          params={{ raceId: race.id }}
+        >
+          {t('admin.results.link')}
+        </Link>
+      ) : null}
       {editable?.canCancel ? (
         <Button variant="danger" onClick={() => setPending('cancel')}>
           {t('admin.races.cancelRace')}

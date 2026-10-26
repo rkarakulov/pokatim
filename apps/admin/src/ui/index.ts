@@ -20,5 +20,6 @@ export { PageHeader } from './PageHeader';
 export { RadioGroup, type RadioGroupProps } from './RadioGroup';
 export { ReasonDialog, type ReasonDialogProps } from './ReasonDialog';
 export { EmptyState, ErrorState } from './states';
+export { StatTile } from './StatTile';
 export { StatusTag } from './StatusTag';
 export { ToggleChip } from './ToggleChip';

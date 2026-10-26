@@ -956,3 +956,63 @@ select.field__control option:disabled {
   margin-top: var(--space-s3);
   color: var(--color-text-secondary);
 }
+
+/* ---------- race-results-05: раздел «Результаты» гонки ---------- */
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-s3);
+}
+
+.stat-tile {
+  padding: var(--space-s3) var(--inset-md);
+  border: var(--stroke-hairline) solid var(--color-border-strong);
+}
+
+.stat-tile__label {
+  color: var(--color-text-secondary);
+}
+
+.stat-tile__value {
+  margin-top: var(--space-s1);
+}
+
+.stat-tile__skeleton {
+  display: inline-block;
+  width: var(--size-skeleton-word);
+}
+
+.stat-tile__hint {
+  margin-top: var(--space-s1);
+  color: var(--color-text-secondary);
+}
+
+.section {
+  margin-top: var(--space-s5);
+}
+
+.section__title {
+  margin-bottom: var(--space-s3);
+  padding-bottom: var(--space-s1);
+  border-bottom: var(--stroke-hairline) solid var(--color-text-primary);
+  color: var(--color-text-secondary);
+}
+
+.section > .banner {
+  margin-bottom: var(--space-s3);
+}
+
+.checklist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checklist__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s2);
+}
