@@ -1,5 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { CityCode, RouteDistanceBucket, RouteFailureCode, Surface } from '@pokatim/contracts';
+import {
+  type CityCode,
+  isCityCode,
+  type RouteDistanceBucket,
+  type RouteFailureCode,
+  type Surface,
+} from '@pokatim/contracts';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import { Binary, type Db, type Filter } from 'mongodb';
 
@@ -114,9 +120,12 @@ export class RoutesRepository {
   }
 
   /** Коды городов старта опубликованных маршрутов (чипы фильтра). */
-  async catalogCities(): Promise<string[]> {
-    const cities = await this.c.routes.distinct('catalog.city', { status: 'ready', ...IN_CATALOG });
-    return cities.filter((city): city is string => typeof city === 'string');
+  async catalogCities(): Promise<CityCode[]> {
+    const cities: unknown[] = await this.c.routes.distinct('catalog.city', {
+      status: 'ready',
+      ...IN_CATALOG,
+    });
+    return cities.filter((city): city is CityCode => typeof city === 'string' && isCityCode(city));
   }
 
   /**

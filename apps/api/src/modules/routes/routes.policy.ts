@@ -18,13 +18,13 @@ export const ROUTE_POLICY = {
 
 /**
  * Корзины дистанции каталога (routes-01 §7), метры: `lt50` < 50 000, `50to100` — [50 000; 100 000], `gt100` > 100 000.
- * Границы `gt`/`lt` — строгие, `gte`/`lte` — включительно.
+ * Значение — условие MongoDB на `distanceM` (только репозиторий).
  */
 export const ROUTE_DISTANCE_RANGES_M: Record<
   RouteDistanceBucket,
-  { gt?: number; gte?: number; lt?: number; lte?: number }
+  { $gt?: number; $gte?: number; $lt?: number; $lte?: number }
 > = {
-  lt50: { lt: 50_000 },
-  '50to100': { gte: 50_000, lte: 100_000 },
-  gt100: { gt: 100_000 },
+  lt50: { $lt: 50_000 },
+  '50to100': { $gte: 50_000, $lte: 100_000 },
+  gt100: { $gt: 100_000 },
 };
