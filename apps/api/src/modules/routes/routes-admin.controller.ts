@@ -1,9 +1,21 @@
-import { Body, Controller, Get, Header, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import {
   FieldErrorCode,
   type PanelRoute,
   type PanelRoutePage,
   PanelRouteQuery,
+  PublishRouteInput,
   UploadRouteQuery,
   Uuid,
 } from '@pokatim/contracts';
@@ -11,6 +23,7 @@ import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
 import { readLimited } from '../../raw-body';
 import { CurrentPanelUser, PanelGuard, type PanelPrincipal, RequirePermission } from '../panel';
+import { RoutesCatalogAdminService } from './routes-catalog-admin.service';
 import { ROUTE_POLICY } from './routes.policy';
 import { RoutesService } from './routes.service';
 
@@ -27,13 +40,16 @@ const UPLOAD_ERRORS = {
 } as const;
 
 /**
- * Маршруты коридора в панели (race-results-01): загрузка GPX — `races.manage`, чтение — `races.read` (Q1). Тонкий
- * слой: гард, права, контракт, чтение тела после лимита частоты; разбор — только worker.
+ * Маршруты коридора в панели (race-results-01): загрузка GPX — `races.manage`, чтение — `races.read` (Q1); каталог
+ * (routes-01) — публикация и снятие, `races.manage`. Тонкий слой: гард, права, контракт, чтение тела после лимита частоты; разбор — только worker.
  */
 @Controller('admin/routes')
 @UseGuards(PanelGuard)
 export class RoutesAdminController {
-  constructor(private readonly routes: RoutesService) {}
+  constructor(
+    private readonly routes: RoutesService,
+    private readonly catalog: RoutesCatalogAdminService,
+  ) {}
 
   @Post()
   @RequirePermission('races.manage')
@@ -73,5 +89,28 @@ export class RoutesAdminController {
     @Param('id', idPipe) id: string,
   ): Promise<PanelRoute> {
     return this.routes.get(actor, id);
+  }
+
+  /** Публикация в каталог или правка города и покрытия опубликованного (routes-01). */
+  @Post(':id/publish')
+  @RequirePermission('races.manage')
+  @HttpCode(200)
+  publish(
+    @CurrentPanelUser() actor: PanelPrincipal,
+    @Param('id', idPipe) id: string,
+    @Body(new ZodValidationPipe(PublishRouteInput, FieldErrorCode)) body: PublishRouteInput,
+  ): Promise<PanelRoute> {
+    return this.catalog.publish(actor, id, body);
+  }
+
+  /** Снятие с публикации; неопубликованный — 200 без изменений. */
+  @Post(':id/unpublish')
+  @RequirePermission('races.manage')
+  @HttpCode(200)
+  unpublish(
+    @CurrentPanelUser() actor: PanelPrincipal,
+    @Param('id', idPipe) id: string,
+  ): Promise<PanelRoute> {
+    return this.catalog.unpublish(actor, id);
   }
 }

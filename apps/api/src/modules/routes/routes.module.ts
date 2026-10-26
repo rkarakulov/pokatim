@@ -8,6 +8,7 @@ import { ROUTE_CATALOG } from './route-catalog.port';
 import { ROUTE_GEOMETRY } from './route-geometry.port';
 import { RouteProcessingProcessor } from './route-processing.processor';
 import { RoutesAdminController } from './routes-admin.controller';
+import { RoutesCatalogAdminService } from './routes-catalog-admin.service';
 import { RoutesRepository } from './routes.repository';
 import { RoutesService } from './routes.service';
 
@@ -30,7 +31,7 @@ export class RoutesCoreModule {}
 @Module({
   imports: [PanelModule, RoutesCoreModule],
   controllers: [RoutesAdminController],
-  providers: [RoutesService],
+  providers: [RoutesService, RoutesCatalogAdminService],
   exports: [RoutesCoreModule],
 })
 export class RoutesModule {}

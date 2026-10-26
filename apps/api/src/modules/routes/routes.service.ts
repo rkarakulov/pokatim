@@ -196,8 +196,8 @@ export class RoutesService {
     };
   }
 
-  /** Маршрут с линией показа (у необработанного — `[]`). */
-  private async view(route: RouteDoc): Promise<PanelRoute> {
+  /** Маршрут с линией показа (у необработанного — `[]`); ответ и действий каталога (`RoutesCatalogAdminService`). */
+  async view(route: RouteDoc): Promise<PanelRoute> {
     const [names, geometry] = await Promise.all([
       this.directory.displayNames([route.ownerUserId]),
       route.status === 'ready' ? this.repository.geometry(route._id) : undefined,
@@ -210,6 +210,6 @@ export class RoutesService {
 }
 
 /** Готовый маршрут платформы — всем с `races.read`; необработанный и отказ — только автору. */
-function visible(principal: PanelPrincipal, route: RouteDoc): boolean {
+export function visible(principal: PanelPrincipal, route: RouteDoc): boolean {
   return route.status === 'ready' || route.ownerUserId === principal.userId;
 }
