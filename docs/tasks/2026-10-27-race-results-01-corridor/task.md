@@ -339,7 +339,23 @@ web SSR), развилок нет; web-смоук открывает карто�
 - A2 — да: допуск по умолчанию ±50 м, 20–200 м шагом 5.
 - A3–A11 — для следующих слайсов, здесь не применяются.
 
-**Отклонения реализации:** — (дополняется по ходу).
+**Отклонения реализации:**
+- D1 (AC2, строже): GPX с `<!DOCTYPE …>` до корня (`xxe.gpx`, `billion-laughs.gpx`) отвергается при приёме —
+  `415 ROUTE_FORMAT_UNSUPPORTED` (сигнатура `detectTrackFormat`, как у заездов), а не `failed`. `<!ENTITY` внутри
+  документа после корня — `failed: unreadable` в worker. Оба пути покрыты int-тестами.
+- D2 (AC9): `changedFields` журнала — в порядке `RACE_FIELDS`: `['distanceKm', 'corridor']` (состав как в spec).
+- D3: реализация порта `RouteCatalog` — отдельный файл `modules/routes/route-catalog.ts` (`RoutesCatalogService`);
+  `races-query.ts` панели не менялся (запросы маршрутов — `routes-query.ts`).
+- D4: `TrackParseError.code` — `TrackFailureCode | RouteFailureCode` (один класс ошибки разбора для заездов и маршрутов).
+- D5: «баннер после 3 сбоев опроса подряд» — запрос статуса маршрута с `retry: 2` и `retryDelay` 2 с: состояние
+  ошибки наступает после трёх неудачных попыток подряд, опрос продолжается.
+- D6: тексты сверх §7 `[ASSUMPTION copy]`: `admin.races.corridor.uploadOther` «Загрузить другой файл»,
+  `…elevation` «набор {gain} м», `…previewFailed`, `…pollFailed`, `admin.routes.listRefreshFailed`,
+  `admin.routes.error.RATE_LIMITED`. Подпись вида объекта журнала `route` не добавлена — экран журнала вид не
+  показывает (только `label`).
+- D7: форма панели — ошибка дистанции/допуска (зависит от выбора коридора, проверка уровня формы) показывается вместе
+  с ошибками других полей, кроме случая, когда другое поле отвергнуто с `abort` (пустое название): тогда — после его
+  исправления (ограничение `superRefine` zod 4). Сервер проверяет всё сразу.
 
 # 8.3 Security checklist
 

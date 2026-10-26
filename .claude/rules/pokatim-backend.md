@@ -17,7 +17,17 @@ paths:
   члены команды и роли, сессии панели, журнал; identity — только порт `PanelCredentials`/`IdentityAccounts`),
   `races` (сезоны и гонки по коридору — одна граница, ADR-0010: определение сезона живёт здесь, отдельного модуля
   `seasons` нет), `calendar` (календарь стартов, с гонками не связан), `tracks` (загрузки, разбор, активности —
-  ADR-0011) и `devices` (Garmin/Wahoo через агрегатор Open Wearables).
+  ADR-0011), `devices` (Garmin/Wahoo через агрегатор Open Wearables) и `routes` (маршруты команды платформы —
+  эталон коридора гонки, ADR-0012 Proposed).
+- `routes` о гонках не знает и зависит только от `panel`; `races → routes` — только порт `RouteCatalog`
+  (`modules/routes/index.ts`, `RoutesCoreModule`): готовый маршрут по id в транзакции правки гонки и названия
+  маршрутов списка. Записи `routes`/`route_*` из `races` (и наоборот) — нет. Линию сверки для слайса 02 даст
+  отдельный порт.
+- Общий код загрузок в `src/`: `raw-body.ts` (`readLimited` — тело `application/octet-stream` после гарда и лимита,
+  обрыв на лимите — `413` с кодом модуля и `Connection: close`) и `parse-thread.ts` (`runParseThread` — функция
+  `@pokatim/tracks/parse` из белого списка `PARSE_FUNCTIONS` в `worker_threads`, `DEFAULT_PARSE_LIMITS` 160/32 МБ,
+  30 с; таймаут — `timeout`, OOM — `unreadable`, сбой загрузчика — исключение и ретрай). Свой поток разбора в модуле —
+  нет.
 - `tracks` об агрегаторе не знает (источник — enum + непрозрачный `sourceRef`, поле `via`); `devices` пишет в
   `tracks` только через порт `TrackIngest` (`modules/tracks/index.ts`). Разбор FIT/GPX/потока — только
   `@pokatim/tracks/parse` в worker (`worker_threads` с лимитами), в HTTP-обработчике — только сигнатура формата.
