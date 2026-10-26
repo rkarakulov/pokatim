@@ -92,6 +92,12 @@ step "(а) стек ${BASE_REF}: его deploy.sh + маркер-данные в
 for file in deploy.sh bootstrap.sh docker-compose.yml env.template mongo-init.js; do
   git -C "${REPO}" show "${BASE_REF}:infra/deploy/${file}" >"${WORK}/base/${file}"
 done
+# необязательные файлы базовой ветки (появились позже): берутся, если в ней есть
+for file in docker-compose.ow.yml; do
+  if git -C "${REPO}" cat-file -e "${BASE_REF}:infra/deploy/${file}" 2>/dev/null; then
+    git -C "${REPO}" show "${BASE_REF}:infra/deploy/${file}" >"${WORK}/base/${file}"
+  fi
+done
 run_deploy "${WORK}/base/deploy.sh" base || {
   show_log base 80
   diagnose

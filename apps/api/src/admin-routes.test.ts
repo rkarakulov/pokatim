@@ -91,7 +91,7 @@ describe('маршруты /v1/admin/* всех модулей под PanelGuard
     expect(adminControllers.length).toBe(declared.length);
   });
 
-  it('контроллеры панели — в нескольких модулях (panel, races, calendar)', () => {
+  it('контроллеры панели — в нескольких модулях (panel, races, calendar, routes)', () => {
     const names = adminControllers.map((controller) => controller.name);
     expect(names).toEqual(
       expect.arrayContaining([
@@ -101,6 +101,7 @@ describe('маршруты /v1/admin/* всех модулей под PanelGuard
         'SeasonsAdminController',
         'RacesAdminController',
         'CalendarAdminController',
+        'RoutesAdminController',
       ]),
     );
   });

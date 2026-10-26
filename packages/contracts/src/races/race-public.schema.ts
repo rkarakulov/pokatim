@@ -61,8 +61,14 @@ export const RaceCard = z.object({
 });
 export type RaceCard = z.infer<typeof RaceCard>;
 
-/** `GET /v1/races/:id` — опубликованная или отменённая; черновик и неизвестная — 404. */
-export const RaceDetail = RaceCard.extend({ description: z.string().nullable() });
+/**
+ * `GET /v1/races/:id` — опубликованная или отменённая; черновик и неизвестная — 404. `corridor` — допуск коридора
+ * (без маршрута и координат); `null` — без коридора; поля нет у старого API — как без коридора.
+ */
+export const RaceDetail = RaceCard.extend({
+  description: z.string().nullable(),
+  corridor: z.object({ widthM: z.number() }).nullable().optional(),
+});
 export type RaceDetail = z.infer<typeof RaceDetail>;
 
 export const RacePage = z.object({ items: z.array(RaceCard), nextCursor: z.string().nullable() });

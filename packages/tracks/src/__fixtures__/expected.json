@@ -24,5 +24,22 @@
     "distanceM": 6333.8187515959335,
     "elapsedSec": 905,
     "points": 906
+  },
+  "route-trk-no-time.gpx": {
+    "distanceM": 10634.127775995223,
+    "elevationGainM": 40,
+    "points": 1200
+  },
+  "route-rte.gpx": {
+    "distanceM": 20786.837708788862,
+    "points": 60
+  },
+  "route-loop.gpx": {
+    "distanceM": 10041.78933531101,
+    "points": 801
+  },
+  "route-short.gpx": {
+    "distanceM": 589.6416260626539,
+    "points": 40
   }
 }

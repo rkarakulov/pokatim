@@ -57,6 +57,8 @@ describe('коды ошибок', () => {
       'DEVICE_PROVIDER_UNAVAILABLE',
       'DEVICE_LINK_INVALID',
       'DEVICE_PROVIDER_ERROR',
+      'ROUTE_FORMAT_UNSUPPORTED',
+      'ROUTE_TOO_LARGE',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',
@@ -77,6 +79,7 @@ describe('коды ошибок', () => {
       'PROTOCOL_TOO_EARLY',
       'PROTOCOL_ONLY_LATER',
       'FIELD_LOCKED',
+      'ROUTE_NOT_READY',
     ]);
   });
 

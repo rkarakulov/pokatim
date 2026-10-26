@@ -25,7 +25,8 @@ export interface SeasonDoc {
 
 /**
  * Гонка по коридору. Окно `[windowStartsAt, windowEndsAt]` включает последнюю минуту (R12). `seasonId` — только у
- * опубликованной (черновик без сезона, R9). Коридора нет до слайса маршрутов (Q4).
+ * опубликованной (черновик без сезона, R9). `corridor` — эталонный коридор (race-results-01): маршрут `routes`, допуск
+ * и снимок длины маршрута; `null` — гонка-анонс. Документы до миграции `0013_routes` поля не имеют (чтение — `?? null`).
  */
 export interface RaceDoc {
   _id: string;
@@ -41,11 +42,19 @@ export interface RaceDoc {
   protocolPlannedAt: Date;
   seasonId: string | null;
   cancelReason: RaceCancelReason | null;
+  corridor: RaceCorridor | null;
   createdAt: Date;
   updatedAt: Date;
   publishedAt: Date | null;
   cancelledAt: Date | null;
   version: number;
+}
+
+/** Коридор гонки: готовый маршрут, допуск ±`widthM` м, длина маршрута, м (снимок; дистанция гонки — из неё). */
+export interface RaceCorridor {
+  routeId: string;
+  widthM: number;
+  distanceM: number;
 }
 
 /**

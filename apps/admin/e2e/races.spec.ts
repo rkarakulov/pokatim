@@ -7,12 +7,17 @@ import { verificationToken } from './mailpit';
 import { API_URL, apiEnv, ORIGIN } from './project';
 
 // Смоук сезонов и гонок (admin-02 AC15): CLI grant-admin первому → админ выдаёт organizer второму → админ создаёт
-// сезон → организатор создаёт и публикует гонку → публичный `GET /v1/races` её видит → админ отменяет с шаблонной
-// причиной → «Журнал действий» содержит сезон и гонку. Ошибки страницы — только согласованный 401 «кто я».
+// сезон → организатор загружает GPX маршрута (worker из `dist` разбирает его) и создаёт гонку с коридором ±50 м
+// (race-results-01) → после перезагрузки — коридор и дистанция по маршруту → публикует → публичный `GET /v1/races` её
+// видит, карточка — допуск коридора → админ отменяет с шаблонной причиной → «Журнал действий» содержит сезон и гонку. Ошибки страницы — только согласованный 401 «кто я».
 // Даты — далёкий год, свой на каждый прогон: сезоны dev-БД не пересекаются с прошлыми прогонами.
 
 const PASSWORD = 'e2e-long-enough';
 const API_DIR = fileURLToPath(new URL('../../api/', import.meta.url));
+/** Маршрут коридора — синтетическая фикстура `packages/tracks` (GPX без времени, ≈ 10,6 км). */
+const ROUTE_GPX = fileURLToPath(
+  new URL('../../../packages/tracks/src/__fixtures__/route-trk-no-time.gpx', import.meta.url),
+);
 const RESOURCE_ERROR = /^Failed to load resource: the server responded with a status of (\d{3})/;
 
 function watchErrors(page: Page, errors: string[]) {
@@ -99,7 +104,23 @@ test('сезон → гонка организатора → публикаци�
   await org.getByRole('link', { name: 'Новая гонка' }).click();
   await org.getByLabel('Название').fill(raceTitle);
   await org.getByRole('button', { name: 'Гравий' }).click();
-  await org.getByLabel('Дистанция, км').fill('64,5');
+  // эталонный коридор: загрузка GPX → «Обрабатываем маршрут…» → маршрут выбран
+  await org.locator('input[type="file"]').setInputFiles(ROUTE_GPX);
+  const newRoute = org.getByRole('dialog', { name: 'Новый маршрут' });
+  await expect(newRoute.getByLabel('Название маршрута')).toHaveValue('route-trk-no-time');
+  await newRoute.getByLabel('Название маршрута').fill(`Маршрут ${run}`);
+  await newRoute.getByRole('button', { name: 'Загрузить' }).click();
+  await expect(newRoute).toBeHidden();
+  const corridor = org.getByLabel(/^Эталонный коридор/);
+  await expect(corridor).toHaveValue(/[0-9a-f-]{36}/, { timeout: 30_000 });
+  await expect(org.getByLabel(/^Допуск коридора, м/)).toHaveValue('50');
+  await expect(org.getByText('Коридор: ±50 м от маршрута')).toBeVisible();
+  await expect(org.getByRole('status', { name: 'Дистанция, км' })).toHaveText(
+    /^10,6\s?км — по маршруту$/,
+  );
+  await expect(
+    org.getByRole('img', { name: new RegExp(`Линия маршрута «Маршрут ${run}»`) }),
+  ).toBeVisible();
   await org.getByLabel(/^Окно: начало/).fill(`${year}-06-01T00:00`);
   await org.getByLabel(/^Окно: конец/).fill(`${year}-06-03T23:59`);
   await expect(org.getByRole('status', { name: 'Сезон (по концу окна)' })).toContainText(
@@ -110,6 +131,11 @@ test('сезон → гонка организатора → публикаци�
   await expect(org.getByRole('heading', { name: raceTitle, level: 1 })).toBeVisible();
   const raceId = /\/races\/([0-9a-f-]{36})$/.exec(org.url())?.[1];
   expect(raceId).toBeDefined();
+  await org.reload();
+  await expect(org.getByLabel(/^Эталонный коридор/)).toHaveValue(/[0-9a-f-]{36}/);
+  await expect(org.getByRole('status', { name: 'Дистанция, км' })).toHaveText(
+    /^10,6\s?км — по маршруту$/,
+  );
   await org.getByRole('button', { name: 'Опубликовать' }).click();
   await org.getByRole('dialog').getByRole('button', { name: 'Опубликовать' }).click();
   await expect(org.getByText(/^Скоро · протокол по плану/)).toBeVisible();
@@ -122,8 +148,10 @@ test('сезон → гонка организатора → публикаци�
   expect(list.headers()['cache-control']).toBe('public, max-age=60');
   const page = (await list.json()) as { items: { id: string; title: string; phase: string }[] };
   expect(page.items).toContainEqual(
-    expect.objectContaining({ id: raceId, title: raceTitle, phase: 'upcoming' }),
+    expect.objectContaining({ id: raceId, title: raceTitle, phase: 'upcoming', distanceKm: 10.6 }),
   );
+  const detail = await request.get(`${API_URL}/v1/races/${raceId}`);
+  expect(((await detail.json()) as { corridor: unknown }).corridor).toEqual({ widthM: 50 });
 
   // админ отменяет с шаблонной причиной
   await admin.getByRole('link', { name: 'Гонки' }).click();

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>Короткий</name></metadata>
+  <trk>
+    <name>Короткий</name>
+    <trkseg>
+      <trkpt lat="53.9000000" lon="27.5600000"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5602308"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5604615"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5606923"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5609231"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5611538"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5613846"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5616154"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5618462"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5620769"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5623077"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5625385"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5627692"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5630000"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5632308"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5634615"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5636923"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5639231"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5641538"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5643846"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5646154"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5648462"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5650769"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5653077"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5655385"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5657692"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5660000"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5662308"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5664615"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5666923"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5669231"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5671538"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5673846"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5676154"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5678462"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5680769"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5683077"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5685385"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5687692"><ele>200.0</ele></trkpt>
+      <trkpt lat="53.9000000" lon="27.5690000"><ele>200.0</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

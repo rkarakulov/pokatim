@@ -42,6 +42,7 @@ async function seedPublishedRace(seasonId: string, windowEndsAt: Date) {
     protocolPlannedAt: new Date(windowEndsAt.getTime() + 3 * DAY),
     seasonId,
     cancelReason: null,
+    corridor: null,
     createdAt: now,
     updatedAt: now,
     publishedAt: now,

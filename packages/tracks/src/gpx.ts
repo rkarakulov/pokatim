@@ -71,7 +71,7 @@ const OTHER_TYPES = new Set([
   'other',
 ]);
 
-const ALWAYS_ARRAY = new Set(['trk', 'trkseg', 'trkpt']);
+const ALWAYS_ARRAY = new Set(['trk', 'trkseg', 'trkpt', 'rte', 'rtept']);
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -88,17 +88,27 @@ const parser = new XMLParser({
 
 type XmlNode = Record<string, unknown>;
 
+export interface ParseGpxOptions {
+  /** Маршрут: без `trkpt` в документе берутся точки `rte/rtept` (планировщики). Заезды — без этого флага. */
+  allowRoute?: boolean;
+  /** Предел точек (`trkpt`, при `allowRoute` — и `rtept`) — подсчётом до разбора; по умолчанию `TRACK_MAX_POINTS`. */
+  maxPoints?: number;
+}
+
 /**
  * Разбор GPX (`fast-xml-parser`, без DTD, сущностей и внешних ресурсов). Трек — только `trk/trkseg/trkpt`
- * (маршрут `rte` и точки `wpt` треком не считаются). Пульс, каденс и мощность — из расширений
- * (Garmin `TrackPointExtension` `hr`/`cad`, `power` — в `extensions` точки), только для флагов.
+ * (точки `wpt` не считаются; маршрут `rte` — только при `allowRoute` и только если в документе нет ни одной
+ * `trkpt`). Пульс, каденс и мощность — из расширений (Garmin `TrackPointExtension` `hr`/`cad`, `power` — в
+ * `extensions` точки), только для флагов.
  */
-export function parseGpx(text: string): ParsedTrack {
+export function parseGpx(text: string, options: ParseGpxOptions = {}): ParsedTrack {
   if (FORBIDDEN_MARKUP.test(text)) throw new TrackParseError('unreadable');
   // размер — до разбора в дерево (память потока worker)
+  const maxPoints = options.maxPoints ?? TRACK_MAX_POINTS;
   if (
     countMatches(text, ELEMENT_OPEN) > GPX_MAX_ELEMENTS ||
-    countTags(text, 'trkpt') > TRACK_MAX_POINTS
+    countTags(text, 'trkpt') > maxPoints ||
+    (options.allowRoute === true && countTags(text, 'rtept') > maxPoints)
   ) {
     throw new TrackParseError('too_many_points');
   }
@@ -115,19 +125,21 @@ export function parseGpx(text: string): ParsedTrack {
   if (!isNode(gpx)) throw new TrackParseError('unreadable');
 
   const tracks = asNodes(gpx['trk']);
+  let nodes = tracks.flatMap((track) =>
+    asNodes(track['trkseg']).flatMap((segment) => asNodes(segment['trkpt'])),
+  );
+  if (nodes.length === 0 && options.allowRoute === true) {
+    nodes = asNodes(gpx['rte']).flatMap((route) => asNodes(route['rtept']));
+  }
   const points: ParsedPoint[] = [];
   let hasHeartRate = false;
   let hasPower = false;
-  for (const track of tracks) {
-    for (const segment of asNodes(track['trkseg'])) {
-      for (const node of asNodes(segment['trkpt'])) {
-        const point = gpxPoint(node);
-        if (point === null) continue;
-        if (point.hr !== undefined) hasHeartRate = true;
-        if (point.power !== undefined) hasPower = true;
-        points.push(point);
-      }
-    }
+  for (const node of nodes) {
+    const point = gpxPoint(node);
+    if (point === null) continue;
+    if (point.hr !== undefined) hasHeartRate = true;
+    if (point.power !== undefined) hasPower = true;
+    points.push(point);
   }
 
   return { format: 'gpx', sport: gpxSport(tracks), points, hasHeartRate, hasPower };

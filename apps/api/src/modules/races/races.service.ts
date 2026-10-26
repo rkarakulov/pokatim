@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   type CancelRaceRequest,
+  type CorridorInput,
   type DiscardRaceRequest,
   type PanelRace,
   type PanelRacePage,
@@ -19,9 +20,13 @@ import { type DbSession, MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { PanelAudit, PanelDirectory, type PanelPrincipal } from '../panel';
-import type { RaceDoc, SeasonDoc } from './races.collection';
+import { ROUTE_CATALOG, type RouteCatalog } from '../routes';
+import type { RaceCorridor, RaceDoc, SeasonDoc } from './races.collection';
 import {
   changedRaceFields,
+  corridorChangeAllowed,
+  corridorDistanceKm,
+  type FieldIssue,
   raceEditable,
   racePhase,
   type RaceValues,
@@ -32,6 +37,17 @@ import { RacesRepository } from './races.repository';
 import { fieldError, fieldsError, staleVersion } from './schedule-errors';
 
 const invalidState = () => domainError('RACE_INVALID_STATE', 409);
+
+/** Коридор запроса после проверки маршрута; `placeholder` — длина неизвестна (маршрут не готов или поле закрыто). */
+interface ResolvedCorridor {
+  corridor: RaceCorridor | null;
+  placeholder: boolean;
+  issue?: FieldIssue;
+}
+
+/** Ошибки дистанции из-за заглушки длины маршрута не показываются — причина уже в ошибке коридора. */
+const withoutPlaceholderDistance = (issues: FieldIssue[], resolved: ResolvedCorridor) =>
+  resolved.placeholder ? issues.filter((issue) => issue.path !== 'distanceKm') : issues;
 const notFound = () => domainError('NOT_FOUND', 404);
 
 /**
@@ -51,30 +67,50 @@ function canManage(principal: PanelPrincipal, race: RaceDoc): boolean {
   return principal.permissions.includes('races.manage') && race.ownerUserId === principal.userId;
 }
 
-const toValues = (input: RaceInput): RaceValues => ({
+/**
+ * Дистанция гонки: с коридором — из запроса (если есть; несовпадение с вычисленной — `FIELD_LOCKED` в правилах), иначе
+ * вычисленная из длины маршрута; без коридора — из запроса или прежняя (снятие коридора оставляет последнюю).
+ */
+function distanceFor(
+  corridor: RaceCorridor | null,
+  requested: number | undefined,
+  fallback: number,
+): number {
+  if (requested !== undefined) return requested;
+  return corridor ? corridorDistanceKm(corridor) : fallback;
+}
+
+const toValues = (input: RaceInput, corridor: RaceCorridor | null): RaceValues => ({
   title: input.title,
   bikeClass: input.bikeClass,
   surfaces: input.surfaces,
-  distanceKm: input.distanceKm,
+  // без коридора и без дистанции создание отклонено раньше (`REQUIRED`)
+  distanceKm: distanceFor(corridor, input.distanceKm, 0),
   description: input.description,
   windowStartsAt: new Date(input.windowStartsAt),
   windowEndsAt: new Date(input.windowEndsAt),
   protocolPlannedAt: new Date(input.protocolPlannedAt),
+  corridor,
 });
 
-/** Изменённые значения запроса поверх документа. */
-function mergeValues(current: RaceDoc, input: UpdateRaceRequest): RaceValues {
+/** Изменённые значения запроса поверх документа; коридор уже разрешён (`resolveCorridor`). */
+function mergeValues(
+  current: RaceDoc,
+  input: UpdateRaceRequest,
+  corridor: RaceCorridor | null,
+): RaceValues {
   const date = (value: string | undefined, fallback: Date) =>
     value === undefined ? fallback : new Date(value);
   return {
     title: input.title ?? current.title,
     bikeClass: input.bikeClass ?? current.bikeClass,
     surfaces: input.surfaces ?? current.surfaces,
-    distanceKm: input.distanceKm ?? current.distanceKm,
+    distanceKm: distanceFor(corridor, input.distanceKm, current.distanceKm),
     description: input.description === undefined ? current.description : input.description,
     windowStartsAt: date(input.windowStartsAt, current.windowStartsAt),
     windowEndsAt: date(input.windowEndsAt, current.windowEndsAt),
     protocolPlannedAt: date(input.protocolPlannedAt, current.protocolPlannedAt),
+    corridor,
   };
 }
 
@@ -90,6 +126,7 @@ export class RacesService {
     private readonly audit: PanelAudit,
     private readonly directory: PanelDirectory,
     private readonly transactions: MongoTransactions,
+    @Inject(ROUTE_CATALOG) private readonly routes: RouteCatalog,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -122,34 +159,86 @@ export class RacesService {
     return this.presentOne(principal, race);
   }
 
-  /** Черновик: правила формы, владелец — автор; сезон не хранится (R9). */
+  /**
+   * Черновик: правила формы, владелец — автор; сезон не хранится (R9). Коридор — готовый маршрут (проверка в той же
+   * транзакции); без коридора дистанция обязательна (`REQUIRED`).
+   */
   async create(principal: PanelPrincipal, input: RaceInput): Promise<PanelRace> {
-    const now = this.clock.now();
-    const values = toValues(input);
-    const issues = validateRaceRules(values, null, now);
-    if (issues.length > 0) throw fieldsError(issues);
-    const race: RaceDoc = {
-      _id: uuidv7(),
-      ownerUserId: principal.userId,
-      status: 'draft',
-      ...values,
-      seasonId: null,
-      cancelReason: null,
-      createdAt: now,
-      updatedAt: now,
-      publishedAt: null,
-      cancelledAt: null,
-      version: 0,
-    };
-    await this.transactions.run(async (tx) => {
-      await this.repository.insertRace(tx, race);
+    const race = await this.transactions.run(async (tx) => {
+      const now = this.clock.now();
+      // все ошибки формы одним ответом: обязательная дистанция, маршрут, правила окна
+      const issues: FieldIssue[] = [];
+      if (!input.corridor && input.distanceKm === undefined) {
+        issues.push({ path: 'distanceKm', code: 'REQUIRED' });
+      }
+      const resolved = await this.resolveCorridor(input.corridor ?? null, null, tx, true);
+      if (resolved.issue) issues.push(resolved.issue);
+      const values = toValues(input, resolved.corridor);
+      issues.push(...withoutPlaceholderDistance(validateRaceRules(values, null, now), resolved));
+      if (issues.length > 0) throw fieldsError(issues);
+      const doc: RaceDoc = {
+        _id: uuidv7(),
+        ownerUserId: principal.userId,
+        status: 'draft',
+        ...values,
+        seasonId: null,
+        cancelReason: null,
+        createdAt: now,
+        updatedAt: now,
+        publishedAt: null,
+        cancelledAt: null,
+        version: 0,
+      };
+      await this.repository.insertRace(tx, doc);
       await this.audit.append(tx, {
         action: 'race.created',
         actor: { kind: 'user', userId: principal.userId },
-        subject: { kind: 'race', id: race._id, label: race.title },
+        subject: { kind: 'race', id: doc._id, label: doc.title },
       });
+      return doc;
     });
     return this.presentOne(principal, race);
+  }
+
+  /**
+   * Коридор запроса → коридор документа: `null` — без коридора; тот же маршрут, что у гонки, — снимок длины прежний;
+   * иначе маршрут обязан быть готовым (`RouteCatalog.findReady` в транзакции действия; `ready` терминален и маршрут
+   * не удаляется — замок не нужен). Не готов, не найден, чужой необработанный — `ROUTE_NOT_READY` на `corridor.routeId`.
+   */
+  private async resolveCorridor(
+    input: CorridorInput | null,
+    current: RaceCorridor | null,
+    tx: DbSession,
+    /** `false` — коридор менять нельзя (фаза): маршрут не проверяется, ответ — `FIELD_LOCKED` правил. */
+    editable: boolean,
+  ): Promise<ResolvedCorridor> {
+    if (input === null) return { corridor: null, placeholder: false };
+    if (current && current.routeId === input.routeId) {
+      const corridor = {
+        routeId: input.routeId,
+        widthM: input.widthM,
+        distanceM: current.distanceM,
+      };
+      return { corridor, placeholder: false };
+    }
+    // заглушка длины: правила проверят остальные поля, ошибки дистанции из-за неё не показываются
+    const placeholder = {
+      corridor: {
+        routeId: input.routeId,
+        widthM: input.widthM,
+        distanceM: current?.distanceM ?? 0,
+      },
+      placeholder: true,
+    };
+    if (!editable) return placeholder;
+    const route = await this.routes.findReady(input.routeId, tx);
+    if (!route) {
+      return { ...placeholder, issue: { path: 'corridor.routeId', code: 'ROUTE_NOT_READY' } };
+    }
+    return {
+      corridor: { routeId: route.id, widthM: input.widthM, distanceM: route.distanceM },
+      placeholder: false,
+    };
   }
 
   /**
@@ -167,10 +256,23 @@ export class RacesService {
       if (snapshot.status === 'cancelled') throw invalidState();
       if (snapshot.version !== input.version) throw staleVersion();
       const now = this.clock.now();
-      const next = mergeValues(snapshot, input);
+      const current = snapshot.corridor ?? null;
+      const resolved: ResolvedCorridor =
+        input.corridor === undefined
+          ? { corridor: current, placeholder: false }
+          : await this.resolveCorridor(
+              input.corridor,
+              current,
+              tx,
+              corridorChangeAllowed(snapshot, now),
+            );
+      const next = mergeValues(snapshot, input, resolved.corridor);
       const changed = changedRaceFields(snapshot, next);
-      if (changed.length === 0) return snapshot;
-      const issues = validateRaceRules(next, snapshot, now);
+      if (changed.length === 0 && !resolved.issue) return snapshot;
+      const issues = [
+        ...(resolved.issue ? [resolved.issue] : []),
+        ...withoutPlaceholderDistance(validateRaceRules(next, snapshot, now), resolved),
+      ];
       if (issues.length > 0) throw fieldsError(issues);
 
       let seasonId = snapshot.seasonId;
@@ -308,9 +410,11 @@ export class RacesService {
     races: readonly RaceDoc[],
   ): Promise<PanelRace[]> {
     if (races.length === 0) return [];
-    const [names, seasons] = await Promise.all([
+    const routeIds = races.flatMap((race) => (race.corridor ? [race.corridor.routeId] : []));
+    const [names, seasons, routes] = await Promise.all([
       this.directory.displayNames(races.map((race) => race.ownerUserId)),
       this.repository.listSeasons(),
+      this.routes.summaries(routeIds),
     ]);
     const now = this.clock.now();
     const byId = new Map(seasons.map((season) => [season._id, season]));
@@ -335,6 +439,16 @@ export class RacesService {
         season: season ? { id: season._id, name: season.name, preview: !fixed } : null,
         owner: { userId: race.ownerUserId, displayName: names.get(race.ownerUserId) ?? '' },
         cancelReason: race.cancelReason,
+        corridor: race.corridor
+          ? {
+              route: {
+                id: race.corridor.routeId,
+                title: routes.get(race.corridor.routeId)?.title ?? '',
+              },
+              widthM: race.corridor.widthM,
+              distanceM: race.corridor.distanceM,
+            }
+          : null,
         createdAt: race.createdAt.toISOString(),
         updatedAt: race.updatedAt.toISOString(),
         publishedAt: race.publishedAt?.toISOString() ?? null,

@@ -11,6 +11,8 @@ vi.mock('../../api', () => ({
     me: vi.fn(),
     health: vi.fn(),
     listSeasons: vi.fn(),
+    listRoutes: vi.fn(),
+    getRoute: vi.fn(),
     listRaces: vi.fn(),
     getRace: vi.fn(),
     createRace: vi.fn(),
@@ -50,6 +52,7 @@ const race = (overrides: Partial<PanelRace> = {}): PanelRace => ({
   season: { id: SEASON_ID, name: 'Сезон 2026', preview: false },
   owner: { userId: USER_ID, displayName: 'Ира' },
   cancelReason: null,
+  corridor: null,
   createdAt: '2026-10-01T10:00:00.000Z',
   updatedAt: '2026-10-01T10:00:00.000Z',
   publishedAt: '2026-10-01T10:00:00.000Z',
@@ -68,6 +71,7 @@ const race = (overrides: Partial<PanelRace> = {}): PanelRace => ({
 beforeEach(() => {
   mocked.me.mockResolvedValue(ME.admin);
   mocked.listSeasons.mockResolvedValue({ items: [SEASON] });
+  mocked.listRoutes.mockResolvedValue({ items: [], nextCursor: null });
   mocked.listRaces.mockResolvedValue({ items: [race()], nextCursor: null });
   mocked.getRace.mockResolvedValue(race());
 });
@@ -213,6 +217,7 @@ describe('«Новая гонка» (AC11, AC13)', () => {
         windowStartsAt: '2026-10-18T21:00:00Z',
         windowEndsAt: '2026-10-25T20:59:00Z',
         protocolPlannedAt: '2026-10-27T20:59:00Z',
+        corridor: null,
       }),
     );
     await waitFor(() => expect(mocked.getRace).toHaveBeenCalledWith(RACE_ID));

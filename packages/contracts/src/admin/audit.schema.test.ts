@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { AUDIT_ACTIONS, AuditAction, AuditPage, AuditQuery } from './audit.schema.ts';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_SUBJECT_KINDS,
+  AuditAction,
+  AuditPage,
+  AuditQuery,
+} from './audit.schema.ts';
 
 const ID = '01890a5d-ac96-774b-bcce-b302099a8057';
 
@@ -23,7 +29,9 @@ describe('AuditAction', () => {
       'calendar.updated',
       'calendar.unpublished',
       'calendar.republished',
+      'route.created',
     ]);
+    expect(AUDIT_SUBJECT_KINDS).toEqual(['season', 'race', 'calendar_start', 'route']);
     expect(AuditAction.safeParse('panel.deleted').success).toBe(false);
   });
 });
@@ -122,7 +130,7 @@ describe('AuditEntry — объект и детали', () => {
     };
     expect(
       AuditPage.safeParse({
-        items: [{ ...base, subject: { kind: 'route', id: ID, label: 'x' } }],
+        items: [{ ...base, subject: { kind: 'track', id: ID, label: 'x' } }],
         nextCursor: null,
       }).success,
     ).toBe(false);

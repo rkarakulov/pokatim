@@ -53,10 +53,10 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * Поля гонки (§3): типографский герой (без карты и коридора), окно по фазе сервера, дистанция, класс, покрытия,
- * сезон ссылкой, плановая дата протокола, описание как есть (`Text`: без разметки и автоссылок). Отменённая —
- * баннер с причиной, строк окна нет. Даты — с годом (не зависят от «сейчас»); «сегодня / завтра» — после
- * монтирования (`now`). `'unknown'` — без строки и подписи (R9).
+ * Поля гонки (§3): типографский герой (без карты), окно по фазе сервера, допуск коридора (race-results-01), дистанция
+ * («по GPS-треку» при коридоре), класс, покрытия, сезон ссылкой, плановая дата протокола, описание как есть (`Text`:
+ * без разметки и автоссылок). Отменённая — баннер с причиной, строк окна нет. Даты — с годом (не зависят от «сейчас»);
+ * «сегодня / завтра» — после монтирования (`now`). `'unknown'` — без строки и подписи (R9).
  */
 function RaceDetailView({ race, now }: { race: RaceDetail; now: Date | null }) {
   const theme = useTheme();
@@ -66,6 +66,8 @@ function RaceDetailView({ race, now }: { race: RaceDetail; now: Date | null }) {
   const cancelled = race.phase === 'cancelled';
   const window = formatRaceWindow(race.windowStartsAt, race.windowEndsAt, null);
   const line = raceCardLine(race, now, true);
+  // старый API поля не присылает — как без коридора
+  const corridor = race.corridor ?? null;
 
   return (
     <View style={styles.detail}>
@@ -90,7 +92,18 @@ function RaceDetailView({ race, now }: { race: RaceDetail; now: Date | null }) {
           </View>
         </Row>
       )}
-      <Row label={t('races.detail.distance')}>{formatDistances([race.distanceKm]) ?? ''}</Row>
+      {corridor ? (
+        <Row label={t('races.detail.corridor')}>
+          {t('races.detail.corridorValue', { width: corridor.widthM })}
+        </Row>
+      ) : null}
+      <Row label={t('races.detail.distance')}>
+        {corridor
+          ? t('races.detail.distanceByRoute', {
+              distance: formatDistances([race.distanceKm]) ?? '',
+            })
+          : (formatDistances([race.distanceKm]) ?? '')}
+      </Row>
       {bikeClass ? <Row label={t('races.detail.bikeClass')}>{bikeClass}</Row> : null}
       {surfaces ? <Row label={t('races.detail.surfaces')}>{surfaces}</Row> : null}
       {race.season ? (

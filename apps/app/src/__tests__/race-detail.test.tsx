@@ -104,6 +104,25 @@ describe('карточка гонки (AC5)', () => {
     expect(screen.queryByRole('tab', { name: 'Главная' })).toBeNull();
   });
 
+  it('коридор: строка «Коридор — ±50 м от маршрута» и «62 км по GPS-треку»; corridor: null — как без поля', async () => {
+    getRace.mockResolvedValue({ ...race, corridor: { widthM: 50 } });
+    await renderRouter(appRoutes, { initialUrl: `/races/${ID}` });
+    expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
+    expect(screen.getByText('Коридор')).toBeOnTheScreen();
+    expect(screen.getByText('±50 м от маршрута')).toBeOnTheScreen();
+    expect(screen.getByText('62 км по GPS-треку')).toBeOnTheScreen();
+    expect(screen.queryByText('62 км')).toBeNull();
+  });
+
+  it('коридор null — строки нет, дистанция как раньше', async () => {
+    getRace.mockResolvedValue({ ...race, corridor: null });
+    await renderRouter(appRoutes, { initialUrl: `/races/${ID}` });
+    expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
+    expect(screen.getByText('62 км')).toBeOnTheScreen();
+    expect(screen.queryByText('Коридор')).toBeNull();
+    expect(screen.queryByText(/по GPS-треку/)).toBeNull();
+  });
+
   it('«Назад» без истории: гость — на корень (дальше гард ведёт на регистрацию)', async () => {
     const router = await renderRouter(appRoutes, { initialUrl: `/races/${ID}` });
     await screen.findByLabelText(heroLabel);

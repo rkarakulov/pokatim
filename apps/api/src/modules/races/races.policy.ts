@@ -9,7 +9,7 @@ import {
   type SeasonPhase,
 } from '@pokatim/contracts';
 
-import type { RaceDoc, SeasonDoc } from './races.collection';
+import type { RaceCorridor, RaceDoc, SeasonDoc } from './races.collection';
 
 /**
  * Правила гонок и сезонов — чистые функции (unit, ADR-0010). Источник истины — сервер; UI получает итог в
@@ -63,8 +63,22 @@ export function windowPassed(race: Pick<RaceDoc, 'windowEndsAt'>, now: Date): bo
   return windowClosesAt(race) <= now.getTime();
 }
 
+/** Дистанция гонки с коридором — длина маршрута, км с точностью 0,1 (сервер — авторитет, Q7). */
+export const corridorDistanceKm = (corridor: Pick<RaceCorridor, 'distanceM'>): number =>
+  Math.round(corridor.distanceM / 100) / 10;
+
+/** Коридор документа (до миграции `0013_routes` поля нет — как без коридора). */
+const corridorOf = (race: Pick<RaceValues, 'corridor'>): RaceCorridor | null =>
+  race.corridor ?? null;
+
+const isCorridor = (value: unknown): value is RaceCorridor =>
+  typeof value === 'object' && value !== null && 'routeId' in value;
+
 const sameValue = (a: unknown, b: unknown): boolean => {
   if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+  // коридор — по маршруту и допуску: снимок длины следует из маршрута
+  if (isCorridor(a) && isCorridor(b)) return a.routeId === b.routeId && a.widthM === b.widthM;
+  if (a === undefined || b === undefined) return (a ?? null) === (b ?? null);
   if (Array.isArray(a) && Array.isArray(b)) {
     return a.length === b.length && a.every((item, index) => item === b[index]);
   }
@@ -84,15 +98,47 @@ function publishedFields(phase: RacePhase): RaceField[] {
 }
 
 /**
+ * Можно ли менять коридор (race-results-01 §5): черновик и до окна — да; открытое окно — только гонке без коридора
+ * (анонсу); закрытое окно — нет. `locked` — точка расширения слайса 03 («есть заявки»), сейчас всегда `false`.
+ */
+function corridorEditable(race: RaceDoc, phase: RacePhase, locked: boolean): boolean {
+  if (locked) return false;
+  if (race.status === 'draft' || phase === 'upcoming') return true;
+  return phase === 'open' && corridorOf(race) === null;
+}
+
+/** Можно ли сейчас менять коридор гонки (до проверки маршрута: зафиксированный коридор маршрут не проверяет). */
+export function corridorChangeAllowed(race: RaceDoc, now: Date, locked = false): boolean {
+  return corridorEditable(race, racePhase(race, now), locked);
+}
+
+/** Фиксация полей с первой заявки (V-12) добавит слайс 03; здесь — всегда `false`. */
+export interface RaceLockOptions {
+  locked?: boolean;
+}
+
+/**
  * Правила формы гонки (создание и каждое изменение) и V-11 для опубликованной: `prev` — текущий документ или
  * `null` (создание). Порядок ошибок стабилен (по полям).
  */
-export function validateRaceRules(next: RaceValues, prev: RaceDoc | null, now: Date): FieldIssue[] {
+export function validateRaceRules(
+  next: RaceValues,
+  prev: RaceDoc | null,
+  now: Date,
+  { locked = false }: RaceLockOptions = {},
+): FieldIssue[] {
   const issues: FieldIssue[] = [];
 
+  if (prev && prev.status !== 'published' && changedRaceFields(prev, next).includes('corridor')) {
+    if (!corridorEditable(prev, racePhase(prev, now), locked)) {
+      issues.push({ path: 'corridor', code: 'FIELD_LOCKED' });
+    }
+  }
   if (prev?.status === 'published') {
     const phase = racePhase(prev, now);
-    const allowed = publishedFields(phase);
+    const allowed = publishedFields(phase).filter(
+      (field) => field !== 'corridor' || corridorEditable(prev, phase, locked),
+    );
     const changed = changedRaceFields(prev, next);
     for (const field of changed) {
       if (!allowed.includes(field)) issues.push({ path: field, code: 'FIELD_LOCKED' });
@@ -111,6 +157,16 @@ export function validateRaceRules(next: RaceValues, prev: RaceDoc | null, now: D
     ) {
       issues.push({ path: 'protocolPlannedAt', code: 'PROTOCOL_ONLY_LATER' });
     }
+  }
+
+  // с коридором дистанцию вычисляет сервер: другое значение в запросе — поле зафиксировано
+  const corridor = corridorOf(next);
+  if (
+    corridor !== null &&
+    next.distanceKm !== corridorDistanceKm(corridor) &&
+    !issues.some((issue) => issue.path === 'distanceKm')
+  ) {
+    issues.push({ path: 'distanceKm', code: 'FIELD_LOCKED' });
   }
 
   const windowMs = next.windowEndsAt.getTime() - next.windowStartsAt.getTime();
@@ -134,7 +190,11 @@ export function validateRaceRules(next: RaceValues, prev: RaceDoc | null, now: D
 export function raceEditable(
   race: RaceDoc,
   now: Date,
-  { canManage, seasonFound }: { canManage: boolean; seasonFound: boolean },
+  {
+    canManage,
+    seasonFound,
+    locked = false,
+  }: { canManage: boolean; seasonFound: boolean } & RaceLockOptions,
 ): RaceEditable {
   const none: RaceEditable = {
     fields: [],
@@ -151,7 +211,7 @@ export function raceEditable(
     if (windowPassed(race, now)) reasons.push('window_closed');
     if (!seasonFound) reasons.push('outside_season');
     return {
-      fields: [...RACE_FIELDS],
+      fields: editableFields(race, [...RACE_FIELDS], 'draft', locked),
       canPublish: reasons.length === 0,
       canCancel: false,
       canDiscard: true,
@@ -162,5 +222,25 @@ export function raceEditable(
   const phase = racePhase(race, now);
   const reasons: RaceEditBlockReason[] =
     phase === 'open' ? ['window_open'] : phase === 'closed' ? ['window_closed'] : [];
-  return { ...none, fields: publishedFields(phase), canCancel: true, reasons };
+  return {
+    ...none,
+    fields: editableFields(race, publishedFields(phase), phase, locked),
+    canCancel: true,
+    reasons,
+  };
+}
+
+/** Поля фазы с правилами коридора: с коридором `distanceKm` вычисляется сервером — не в `fields`. */
+function editableFields(
+  race: RaceDoc,
+  fields: RaceField[],
+  phase: RacePhase,
+  locked: boolean,
+): RaceField[] {
+  const hasCorridor = corridorOf(race) !== null;
+  return fields.filter((field) => {
+    if (field === 'distanceKm') return !hasCorridor;
+    if (field === 'corridor') return corridorEditable(race, phase, locked);
+    return true;
+  });
 }

@@ -3,9 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   BIKE_CLASSES,
   CancelRaceRequest,
+  CORRIDOR_WIDTH_DEFAULT_M,
+  CorridorInput,
   PanelRace,
   PanelRaceQuery,
   RACE_CANCEL_REASONS,
+  RACE_FIELDS,
   RACE_PHASES,
   RACE_STATUSES,
   RaceInput,
@@ -58,6 +61,37 @@ describe('справочники — значения только в конец
       'organizational',
     ]);
     expect(SEASON_PHASES).toEqual(['upcoming', 'current', 'finished']);
+    expect(RACE_FIELDS.at(-1)).toBe('corridor');
+  });
+});
+
+describe('коридор', () => {
+  it('CorridorInput: допуск 20–200 шагом 5, целое; лишние ключи и операторы — ошибка', () => {
+    expect(CORRIDOR_WIDTH_DEFAULT_M).toBe(50);
+    for (const widthM of [20, 50, 200]) {
+      expect(CorridorInput.safeParse({ routeId: ID, widthM }).success).toBe(true);
+    }
+    for (const widthM of [15, 52, 205, 50.5]) {
+      expect(codes(CorridorInput.safeParse({ routeId: ID, widthM }))).toEqual(['widthM:INVALID']);
+    }
+    expect(codes(CorridorInput.safeParse({ routeId: ID }))).toEqual(['widthM:REQUIRED']);
+    expect(CorridorInput.safeParse({ routeId: { $ne: null }, widthM: 50 }).success).toBe(false);
+    expect(CorridorInput.safeParse({ routeId: ID, widthM: 50, distanceM: 1 }).success).toBe(false);
+  });
+
+  it('RaceInput: с коридором без distanceKm, без коридора (null), коридор не объект — ошибка', () => {
+    const noDistance = { ...race, distanceKm: undefined };
+    expect(RaceInput.parse({ ...noDistance, corridor: { routeId: ID, widthM: 50 } })).toMatchObject(
+      {
+        corridor: { routeId: ID, widthM: 50 },
+      },
+    );
+    expect(RaceInput.parse({ ...race, corridor: null }).corridor).toBeNull();
+    expect(RaceInput.parse(race).corridor).toBeUndefined();
+    expect(RaceInput.safeParse({ ...race, corridor: ID }).success).toBe(false);
+    expect(UpdateRaceRequest.parse({ version: 1, corridor: { routeId: ID, widthM: 100 } })).toEqual(
+      { version: 1, corridor: { routeId: ID, widthM: 100 } },
+    );
   });
 });
 
@@ -164,6 +198,7 @@ describe('ответы панели', () => {
       season: { id: ID, name: 'Сезон 2026', preview: true },
       owner: { userId: ID, displayName: 'Ольга' },
       cancelReason: null,
+      corridor: { route: { id: ID, title: 'Кольцо' }, widthM: 50, distanceM: 42_312 },
       createdAt: '2026-10-01T10:00:00.000Z',
       updatedAt: '2026-10-01T10:00:00.000Z',
       publishedAt: null,
@@ -179,6 +214,9 @@ describe('ответы панели', () => {
     };
     expect(PanelRace.parse(panelRace)).toEqual(panelRace);
     expect(PanelRace.safeParse({ ...panelRace, phase: 'final' }).success).toBe(false);
+    expect(PanelRace.parse({ ...panelRace, corridor: null }).corridor).toBeNull();
+    const withoutCorridor = { ...panelRace, corridor: undefined };
+    expect(PanelRace.safeParse(withoutCorridor).success).toBe(false);
     expect(
       PanelSeason.parse({
         id: ID,
@@ -223,6 +261,12 @@ describe('read-модель приложения', () => {
       cancelReason: 'unknown',
     });
     expect(RaceDetail.parse({ ...card, description: 'Описание' }).description).toBe('Описание');
+    // старый API без поля коридора и новый — с допуском или null
+    expect(RaceDetail.parse({ ...card, description: null }).corridor).toBeUndefined();
+    expect(RaceDetail.parse({ ...card, description: null, corridor: null }).corridor).toBeNull();
+    expect(
+      RaceDetail.parse({ ...card, description: null, corridor: { widthM: 50 } }).corridor,
+    ).toEqual({ widthM: 50 });
     expect(
       CurrentSeasonResponse.parse({
         season: { id: ID, name: 'С', startsOn: '2026-04-01', endsOn: '2026-10-31', phase: 'x' },

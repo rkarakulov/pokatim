@@ -83,6 +83,19 @@ describe('parseGpx', () => {
     expect(parseGpx(fixture('empty-trk.gpx')).points).toEqual([]);
   });
 
+  it('allowRoute: без trkpt — точки всех rte по порядку; с trkpt — только trk', () => {
+    expect(parseGpx(fixture('route-rte.gpx')).points).toEqual([]);
+    const route = parseGpx(fixture('route-rte.gpx'), { allowRoute: true });
+    expect(route.points).toHaveLength(60);
+    expect(route.points[0]).toMatchObject({ lat: 53.85, lon: 27.4, ele: 225 });
+
+    const two = `<gpx><rte><rtept lat="1" lon="2"/></rte><rte><rtept lat="3" lon="4"/><rtept lat="5" lon="6"/></rte></gpx>`;
+    expect(parseGpx(two, { allowRoute: true }).points.map((point) => point.lat)).toEqual([1, 3, 5]);
+
+    const mixed = `<gpx><rte><rtept lat="1" lon="2"/></rte><trk><trkseg><trkpt lat="7" lon="8"/></trkseg></trk></gpx>`;
+    expect(parseGpx(mixed, { allowRoute: true }).points).toEqual([{ lat: 7, lon: 8 }]);
+  });
+
   it('точки (0,0) приходят как есть — их отбрасывает sanitizePoints', () => {
     const track = parseGpx(fixture('zero-points.gpx'));
     expect(track.points).toHaveLength(ref.points);
@@ -133,6 +146,14 @@ describe('parseGpx — враждебный размер до полного р�
     const gpx = `<gpx>${'<a/>'.repeat(GPX_MAX_ELEMENTS + 1)}</gpx>`;
     const validate = vi.spyOn(XMLValidator, 'validate');
     expect(failureCode(() => parseGpx(gpx))).toBe('too_many_points');
+    expect(validate).not.toHaveBeenCalled();
+  });
+
+  it('allowRoute: rtept больше лимита — too_many_points без разбора XML', () => {
+    const point = '<rtept lat="53.9" lon="27.5"/>';
+    const gpx = `<gpx><rte>${point.repeat(TRACK_MAX_POINTS + 1)}</rte></gpx>`;
+    const validate = vi.spyOn(XMLValidator, 'validate');
+    expect(failureCode(() => parseGpx(gpx, { allowRoute: true }))).toBe('too_many_points');
     expect(validate).not.toHaveBeenCalled();
   });
 

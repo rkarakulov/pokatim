@@ -144,3 +144,57 @@ describe('createAdminApiClient: пути, методы, cookie панели', ()
     });
   });
 });
+
+describe('createAdminApiClient: маршруты (race-results-01)', () => {
+  const route = {
+    id: USER_ID,
+    title: 'Минское кольцо',
+    status: 'processing',
+    failure: null,
+    distanceM: null,
+    elevationGainM: null,
+    isLoop: null,
+    owner: { userId: USER_ID, displayName: 'Ольга' },
+    createdAt: '2026-10-27T10:00:00.000Z',
+    line: [],
+  };
+
+  it('uploadRoute — POST octet-stream с сырыми байтами, название в ?title=, cookie без Authorization', async () => {
+    const fetchCalls: { url: string; init?: RequestInit }[] = [];
+    const fetchImpl = ((url: string, init?: RequestInit) => {
+      fetchCalls.push({ url, init });
+      return Promise.resolve(new Response(JSON.stringify(route), { status: 202 }));
+    }) as typeof fetch;
+    const api = createAdminApiClient({ baseUrl: '', fetchImpl });
+    const bytes = new Uint8Array([60, 103, 112, 120]);
+    await expect(api.uploadRoute(bytes, 'Кольцо & круг')).resolves.toEqual(route);
+    const call = fetchCalls[0]!;
+    expect(call.url).toBe(
+      '/v1/admin/routes?title=%D0%9A%D0%BE%D0%BB%D1%8C%D1%86%D0%BE+%26+%D0%BA%D1%80%D1%83%D0%B3',
+    );
+    expect(call.init?.method).toBe('POST');
+    expect(call.init?.body).toBe(bytes);
+    expect(call.init?.credentials).toBe('same-origin');
+    const headers = new Headers(call.init?.headers);
+    expect(headers.get('content-type')).toBe('application/octet-stream');
+    expect(headers.has('authorization')).toBe(false);
+  });
+
+  it('listRoutes и getRoute — пути, query, строгий разбор', async () => {
+    const summary = { ...route, line: undefined };
+    const list = admin(200, { items: [summary], nextCursor: null });
+    await list.api.listRoutes({ status: 'ready', limit: 100 });
+    expect(list.calls[0]).toMatchObject({
+      url: '/v1/admin/routes?status=ready&limit=100',
+      method: 'GET',
+      credentials: 'same-origin',
+    });
+
+    const one = admin(200, route);
+    await expect(one.api.getRoute(USER_ID)).resolves.toEqual(route);
+    expect(one.calls[0]).toMatchObject({ url: `/v1/admin/routes/${USER_ID}`, method: 'GET' });
+
+    const broken = admin(200, { ...route, status: 'published' });
+    await expect(broken.api.getRoute(USER_ID)).rejects.toThrow();
+  });
+});

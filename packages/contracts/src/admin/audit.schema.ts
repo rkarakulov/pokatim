@@ -23,6 +23,8 @@ export const AUDIT_ACTIONS = [
   'calendar.updated',
   'calendar.unpublished',
   'calendar.republished',
+  // race-results-01: маршруты команды платформы
+  'route.created',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -42,7 +44,7 @@ export const AuditQuery = z.strictObject({
 export type AuditQuery = z.infer<typeof AuditQuery>;
 
 /** Вид объекта записи журнала (доменные модули панели); только в конец. */
-export const AUDIT_SUBJECT_KINDS = ['season', 'race', 'calendar_start'] as const;
+export const AUDIT_SUBJECT_KINDS = ['season', 'race', 'calendar_start', 'route'] as const;
 export const AuditSubjectKind = z.enum(AUDIT_SUBJECT_KINDS);
 export type AuditSubjectKind = z.infer<typeof AuditSubjectKind>;
 

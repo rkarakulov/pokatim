@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { expect, type APIRequestContext } from '@playwright/test';
@@ -15,6 +16,11 @@ import { API_URL } from './urls';
 // пропускает, как native); cookie панели — из `set-cookie` ответа входа.
 
 const API_DIR = resolve(__dirname, '../../api');
+/** Маршрут коридора (race-results-01) — синтетическая фикстура `packages/tracks`, GPX без времени ≈ 10,6 км. */
+const ROUTE_GPX = resolve(
+  __dirname,
+  '../../../packages/tracks/src/__fixtures__/route-trk-no-time.gpx',
+);
 /** Год данных смоука Главной (`PLATFORM_MAX_YEAR` — 9998). */
 export const HOME_FIXTURE_YEAR = 9001;
 /** Сотрудник смоука — один на dev-БД: создаётся при первом прогоне, дальше переиспользуется. */
@@ -115,6 +121,28 @@ async function panelSession(request: APIRequestContext) {
       expect(res.status(), `POST ${path}: ${await res.text()}`).toBe(status);
       return res.json();
     },
+    /** Маршрут из GPX: 202 — новый, 200 — тот же файл прошлого прогона; дальше — разбор worker до `ready`. */
+    readyRoute: async (title: string): Promise<string> => {
+      const res = await request.post(
+        `${API_URL}/v1/admin/routes?title=${encodeURIComponent(title)}`,
+        {
+          headers: { ...headers, 'content-type': 'application/octet-stream' },
+          data: readFileSync(ROUTE_GPX),
+        },
+      );
+      expect([200, 202], `POST /v1/admin/routes: ${await res.text()}`).toContain(res.status());
+      const { id } = (await res.json()) as { id: string };
+      await expect
+        .poll(
+          async () => {
+            const route = await request.get(`${API_URL}/v1/admin/routes/${id}`, { headers });
+            return ((await route.json()) as { status: string }).status;
+          },
+          { timeout: 30_000, message: 'маршрут коридора разобран worker' },
+        )
+        .toBe('ready');
+      return id;
+    },
   };
 }
 
@@ -152,7 +180,15 @@ async function ensureFixtureSeason(panel: Panel): Promise<string> {
 /** Опубликовать гонку года смоука (окно — по Минску тот же день, 12:00 UTC); id и версия. */
 async function publishRace(
   panel: Panel,
-  body: { title: string; bikeClass: string; startsAt: string; endsAt: string; protocolAt: string },
+  body: {
+    title: string;
+    bikeClass: string;
+    startsAt: string;
+    endsAt: string;
+    protocolAt: string;
+    /** Коридор: дистанцию считает сервер из длины маршрута. */
+    corridor?: { routeId: string; widthM: number };
+  },
 ): Promise<Versioned> {
   const draft = (await panel.post(
     '/v1/admin/races',
@@ -160,7 +196,7 @@ async function publishRace(
       title: body.title,
       bikeClass: body.bikeClass,
       surfaces: ['gravel'],
-      distanceKm: 62,
+      ...(body.corridor ? { corridor: body.corridor } : { distanceKm: 62 }),
       description: 'Смоук расписания.',
       windowStartsAt: body.startsAt,
       windowEndsAt: body.endsAt,
@@ -226,14 +262,17 @@ export async function publishHomeData(request: APIRequestContext): Promise<Publi
 export interface PublishedRaceData {
   seasonId: string;
   race: { id: string; title: string };
+  /** С эталонным коридором ±50 м (race-results-01). */
+  corridorRace: { id: string; title: string };
   cancelled: { id: string; title: string };
   /** Отменить опубликованную гонку прогона (отменённая остаётся в «Завершённых» — как в проде). */
   withdraw: () => Promise<void>;
 }
 
 /**
- * Данные блока 03 (Гонки и сезон): в сезоне года смоука — опубликованная гонка и вторая, сразу отменённая
- * («Неблагоприятные погодные условия»). После проверки опубликованная тоже отменяется.
+ * Данные блока 03 (Гонки и сезон): в сезоне года смоука — опубликованная гонка, вторая — сразу отменённая
+ * («Неблагоприятные погодные условия»), третья — с эталонным коридором ±50 м по маршруту GPX (race-results-01: маршрут
+ * загружается через API панели и разбирается worker). После проверки опубликованные тоже отменяются.
  */
 export async function publishRaceData(request: APIRequestContext): Promise<PublishedRaceData> {
   const run = Date.now();
@@ -261,16 +300,29 @@ export async function publishRaceData(request: APIRequestContext): Promise<Publi
     version: toCancel.version,
     reason: 'weather',
   });
+  const corridorTitle = `Коридор с маршрутом ${run}`;
+  const routeId = await panel.readyRoute('Маршрут смоука');
+  const withCorridor = await publishRace(panel, {
+    title: corridorTitle,
+    bikeClass: 'road',
+    startsAt: `${year}-07-20T09:00:00Z`,
+    endsAt: `${year}-07-21T12:00:00Z`,
+    protocolAt: `${year}-07-24T12:00:00Z`,
+    corridor: { routeId, widthM: 50 },
+  });
 
   return {
     seasonId,
     race: { id: race.id, title },
+    corridorRace: { id: withCorridor.id, title: corridorTitle },
     cancelled: { id: toCancel.id, title: cancelledTitle },
     withdraw: async () => {
-      await panel.post(`/v1/admin/races/${race.id}/cancel`, {
-        version: race.version,
-        reason: 'organizational',
-      });
+      for (const published of [race, withCorridor]) {
+        await panel.post(`/v1/admin/races/${published.id}/cancel`, {
+          version: published.version,
+          reason: 'organizational',
+        });
+      }
     },
   };
 }

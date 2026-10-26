@@ -549,7 +549,7 @@ test.describe('с API', () => {
     page,
     request,
   }) => {
-    const { seasonId, race, cancelled, withdraw } = await publishRaceData(request);
+    const { seasonId, race, corridorRace, cancelled, withdraw } = await publishRaceData(request);
     try {
       // SSR карточки: название и OG до JS, og:url — из WEB_ORIGIN, без e-mail и служебных полей
       const html = await (await request.get(`/races/${race.id}`)).text();
@@ -578,6 +578,13 @@ test.describe('с API', () => {
       await expect(page.getByRole('heading', { name: season.name })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Гонки сезона' })).toBeVisible();
       await expect(page.getByText('Таблица сезона')).toHaveCount(0);
+
+      // гонка с эталонным коридором (race-results-01): допуск и дистанция по маршруту
+      await page.goto(`/races/${corridorRace.id}`);
+      await expect(page.getByText(corridorRace.title, { exact: true }).first()).toBeVisible();
+      await expect(page.getByText('Коридор', { exact: true })).toBeVisible();
+      await expect(page.getByText('±50 м от маршрута')).toBeVisible();
+      await expect(page.getByText(/^10,6\s?км по GPS-треку$/)).toBeVisible();
 
       // отменённая — баннер с причиной, без строк окна
       await page.goto(`/races/${cancelled.id}`);

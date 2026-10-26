@@ -1,4 +1,4 @@
-import { haversineMeters } from './geo.ts';
+import { haversineMeters, type TrackPoint } from './geo.ts';
 import { TrackParseError, type ParsedPoint, type TrackSummary } from './track.ts';
 
 /** Интервал «в движении»: средняя скорость не ниже 1 м/с (3,6 км/ч) … */
@@ -48,11 +48,12 @@ export function summarizeTrack(points: readonly ParsedPoint[]): TrackSummary {
     elapsedSec: Math.round((last.getTime() - first.getTime()) / 1000),
     movingSec: Math.round(movingSec),
     distanceM: Math.round(distanceM),
-    elevationGainM: elevationGain(points),
+    elevationGainM: elevationGainM(points),
   };
 }
 
-function elevationGain(points: readonly ParsedPoint[]): number | null {
+/** Набор высоты, м (целое), с гистерезисом 3 м; `null` — в точках нет высот. Общий для заездов и маршрутов. */
+export function elevationGainM(points: readonly TrackPoint[]): number | null {
   let reference: number | undefined;
   let gain = 0;
   for (const { ele } of points) {

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { RaceDoc } from './races.collection';
 import {
   changedRaceFields,
+  corridorDistanceKm,
   type RaceValues,
   raceEditable,
   racePhase,
@@ -29,6 +30,7 @@ const values: RaceValues = {
   windowStartsAt: WINDOW_START,
   windowEndsAt: WINDOW_END,
   protocolPlannedAt: new Date(WINDOW_END.getTime() + 48 * HOUR),
+  corridor: null,
 };
 
 function race(overrides: Partial<RaceDoc> = {}): RaceDoc {
@@ -231,5 +233,114 @@ describe('changedRaceFields', () => {
         distanceKm: 43,
       }),
     ).toEqual(['distanceKm', 'description']);
+  });
+});
+
+describe('коридор (race-results-01 §5)', () => {
+  const corridor = { routeId: 'route-a', widthM: 50, distanceM: 86_012 };
+  const withCorridor: RaceValues = { ...values, corridor, distanceKm: 86 };
+  const before = new Date(WINDOW_START.getTime() - 1);
+  const open = WINDOW_START;
+  const closed = new Date(WINDOW_END.getTime() + MIN);
+  const opts = { canManage: true, seasonFound: true };
+
+  it('дистанция с коридором — длина маршрута, 0,1 км', () => {
+    expect(corridorDistanceKm(corridor)).toBe(86);
+    expect(corridorDistanceKm({ ...corridor, distanceM: 62_049 })).toBe(62);
+    expect(corridorDistanceKm({ ...corridor, distanceM: 62_050 })).toBe(62.1);
+    expect(corridorDistanceKm({ ...corridor, distanceM: 1_000 })).toBe(1);
+  });
+
+  it('sameValue: коридор сравнивается по маршруту и допуску (снимок длины не важен)', () => {
+    expect(changedRaceFields(withCorridor, { ...withCorridor })).toEqual([]);
+    expect(
+      changedRaceFields(withCorridor, {
+        ...withCorridor,
+        corridor: { ...corridor, distanceM: 1 },
+      }),
+    ).toEqual([]);
+    expect(
+      changedRaceFields(withCorridor, { ...withCorridor, corridor: { ...corridor, widthM: 100 } }),
+    ).toEqual(['corridor']);
+    expect(changedRaceFields(values, withCorridor)).toEqual(['distanceKm', 'corridor']);
+    expect(changedRaceFields(withCorridor, { ...withCorridor, corridor: null })).toEqual([
+      'corridor',
+    ]);
+  });
+
+  it('distanceKm при коридоре ≠ вычисленной — FIELD_LOCKED; совпадает — без ошибок', () => {
+    expect(validateRaceRules(withCorridor, null, before)).toEqual([]);
+    expect(validateRaceRules({ ...withCorridor, distanceKm: 85.9 }, null, before)).toEqual([
+      { path: 'distanceKm', code: 'FIELD_LOCKED' },
+    ]);
+  });
+
+  it('черновик и до окна — коридор задать, сменить, снять', () => {
+    for (const prev of [race({ status: 'draft', seasonId: null }), race()]) {
+      expect(validateRaceRules(withCorridor, prev, before)).toEqual([]);
+      const prevWith = { ...prev, ...withCorridor };
+      expect(
+        validateRaceRules(
+          {
+            ...withCorridor,
+            corridor: { ...corridor, routeId: 'route-b', distanceM: 70_000 },
+            distanceKm: 70,
+          },
+          prevWith,
+          before,
+        ),
+      ).toEqual([]);
+      expect(validateRaceRules({ ...withCorridor, corridor: null }, prevWith, before)).toEqual([]);
+    }
+  });
+
+  it('окно открыто: без коридора — задать можно; с коридором — FIELD_LOCKED (смена, допуск, снятие)', () => {
+    expect(validateRaceRules(withCorridor, race(), open)).toEqual([]);
+    const prevWith = race({ ...withCorridor });
+    for (const next of [
+      { ...withCorridor, corridor: { ...corridor, widthM: 100 } },
+      { ...withCorridor, corridor: null },
+    ]) {
+      expect(validateRaceRules(next, prevWith, open)).toEqual([
+        { path: 'corridor', code: 'FIELD_LOCKED' },
+      ]);
+    }
+  });
+
+  it('окно закрыто — коридор FIELD_LOCKED', () => {
+    expect(validateRaceRules(withCorridor, race(), closed)).toEqual(
+      expect.arrayContaining([{ path: 'corridor', code: 'FIELD_LOCKED' }]),
+    );
+  });
+
+  it('точка расширения locked (слайс 03): коридор зафиксирован в любой фазе', () => {
+    const draft = race({ status: 'draft', seasonId: null });
+    expect(validateRaceRules(withCorridor, draft, before, { locked: true })).toEqual([
+      { path: 'corridor', code: 'FIELD_LOCKED' },
+    ]);
+    expect(raceEditable(draft, before, { ...opts, locked: true }).fields).not.toContain('corridor');
+  });
+
+  it('editable: с коридором distanceKm вне fields; открытое окно — corridor только без коридора', () => {
+    const draftWith = race({ status: 'draft', seasonId: null, ...withCorridor });
+    expect(raceEditable(draftWith, before, opts).fields).toEqual(
+      RACE_FIELDS.filter((field) => field !== 'distanceKm'),
+    );
+    expect(raceEditable(race(), open, opts).fields).toContain('corridor');
+    expect(raceEditable(race(), open, opts).fields).toContain('distanceKm');
+    const openWith = raceEditable(race({ ...withCorridor }), open, opts).fields;
+    expect(openWith).not.toContain('corridor');
+    expect(openWith).not.toContain('distanceKm');
+    expect(raceEditable(race({ ...withCorridor }), closed, opts).fields).toEqual([
+      'description',
+      'protocolPlannedAt',
+    ]);
+  });
+
+  it('документ до миграции без поля corridor — как без коридора', () => {
+    const legacy = race();
+    delete (legacy as Partial<RaceDoc>).corridor;
+    expect(raceEditable(legacy, open, opts).fields).toContain('corridor');
+    expect(validateRaceRules({ ...values }, legacy, open)).toEqual([]);
   });
 });

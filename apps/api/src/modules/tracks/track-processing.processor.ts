@@ -25,11 +25,7 @@ export type TrackProcessingOutcome = 'ready' | 'duplicate' | 'failed' | 'skipped
 export class TrackProcessingProcessor extends WorkerHost {
   private readonly logger = new Logger(TrackProcessingProcessor.name);
   /** Лимиты потока разбора (тест «долгий разбор» уменьшает таймаут). */
-  parseLimits: ParseLimits = {
-    maxOldGenerationMb: TRACKS_POLICY.parseMaxOldGenerationMb,
-    maxYoungGenerationMb: TRACKS_POLICY.parseMaxYoungGenerationMb,
-    timeoutMs: TRACKS_POLICY.parseTimeoutMs,
-  };
+  parseLimits: ParseLimits = TRACKS_POLICY.parseLimits;
 
   constructor(
     private readonly repository: TracksRepository,
