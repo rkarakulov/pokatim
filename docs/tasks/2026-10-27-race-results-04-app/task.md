@@ -360,6 +360,10 @@ tied|elapsedSec`; изменилась относительно прошлого
 - **D6 (coder) — дефолтный мок участия в `race-detail` / `season` тестах** — `noEntry` с причинами `['no_corridor',
   'not_entered']` (а не `canEnter`): гонка фикстуры без коридора, так отвечает сервер. Ожидания тестов не менялись.
 
+- **D7 (fix pass 1) — сигнатура `WithdrawConfirm`.** Вместо `{ raceId, onClose }` — `{ pending, onConfirm, onClose }`:
+  мутация отмены живёт в `EntryActions`, чтобы текст отказа 409 оставался, когда сервер уже вернул `canWithdraw: false`
+  (findings pass 1, MEDIUM 2).
+
 # 8.3 Security checklist
 
 - AuthN/AuthZ: «моё участие», мутации, кандидаты — `AuthGuard` на сервере (слайс 03); клиент токен — через
@@ -691,9 +695,15 @@ Jest (jest-expo, TZ Europe/Minsk, fake timers с фиксированным `now
   состояние. **NOT VERIFIED:** `E2E_API=1 pnpm e2e:web` не запускался (нужны API, worker, Mailpit и web-сборка).
 - Ручная проверка на iOS / Android-симуляторе и в браузере — **NOT VERIFIED**.
 
+**Fix pass 1** (`72c7f2e`, findings.md): отмена устаревшего опроса до записи ответа мутации, текст отказа отмены после
+перезапроса, прогресс отправки вне `canAddAttempt`, своя причина важнее `unknown`, фокус скринридера на заголовок
+подтверждения (`lib/accessibility-focus(.web).ts`), полоса своей строки — `stroke.indicator` + `border.strong`.
+`pnpm check` → exit 0, `Tests: 822 passed`.
+
 **Follow-ups и риски**
 
 - Ответ мутации меняет подпись результата в кеше — эффект `useMyRaceEntry` может инвалидировать таблицу второй раз
   (лишний публичный запрос, на показ не влияет).
+- В системе нет акцентной роли рамки — полоса своей строки таблицы на `border.strong` (кандидат в app-foundation).
 - `TextAction` без `loading` / `busy` — кандидат в app-foundation (D4).
 - `formatElapsed`, `UploadProgress` — кандидаты в общий код при втором потребителе (панель, слайс 05).
