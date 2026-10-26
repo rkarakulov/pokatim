@@ -48,6 +48,7 @@ async function seedPublishedRace(seasonId: string, windowEndsAt: Date) {
     publishedAt: now,
     cancelledAt: null,
     lockedAt: null,
+    protocolPublishedAt: null,
     version: 1,
   });
 }

@@ -54,6 +54,10 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'ATTEMPT_UPLOAD_CLOSED',
   'ATTEMPT_LIMIT',
   'ATTEMPT_SOURCE_INVALID',
+  // протокол гонки (race-results-05): действие панели недоступно (details.reason); публикация заблокирована
+  // чек-листом или состоянием гонки (details: blockedBy, checklist)
+  'RESULTS_ACTION_BLOCKED',
+  'RESULTS_PUBLISH_BLOCKED',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

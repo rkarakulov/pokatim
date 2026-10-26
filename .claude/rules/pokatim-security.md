@@ -99,6 +99,15 @@ paths:
   `races.read`, видимость гонки — как в `races` (чужая гонка организатора — 404); наружу — `userId` и id попыток,
   без e-mail, координат и биометрии. Логи — id, статусы, коды.
 
+## Протокол (race-results-05)
+
+- Права: `results.manage` (исключение, возврат, перепроверка, публикация) — admin и organizer (свои гонки через
+  видимость `races`); `results.revise` (DQ, отмена DQ, пересчёт после публикации) — только admin; moderator — чтение.
+  Каждый эндпоинт — `PanelGuard` + `RequirePermission`; попытка или участник другой гонки — 404.
+- Тело — `strictObject` с `ActionReason` (3–500); лимит мутаций `results-panel-user` 60/ч на сотрудника.
+- Причина исключения, DQ и пересчёта — только панели и append-only журналу (`panel_audit`, `race_recalculations`),
+  райдеру не уходит; логи — без причины и без `userId` райдера.
+
 ## Загрузка маршрутов (race-results-01)
 
 - `POST /v1/admin/routes` — `PanelGuard` + `races.manage`, лимит 20/ч на сотрудника до чтения тела; тело — только

@@ -25,6 +25,14 @@ export const AUDIT_ACTIONS = [
   'calendar.republished',
   // race-results-01: маршруты команды платформы
   'route.created',
+  // race-results-05: протокол гонки (перепроверка после публикации — `recheck_requested` с ревизией)
+  'results.attempt_excluded',
+  'results.attempt_restored',
+  'results.recheck_requested',
+  'results.protocol_published',
+  'results.result_disqualified',
+  'results.disqualification_revoked',
+  'results.recalculation_applied',
   // 05b: модерация кофе-райдов
   'ride.hidden',
   'ride.restored',
@@ -75,6 +83,10 @@ export const AuditEntry = z.object({
       /** Имена изменённых полей (без значений). */
       changedFields: z.array(z.string()).optional(),
       cancelReason: RaceCancelReason.optional(),
+      /** race-results-05: попытка, заявка участника, ревизия протокола */
+      attemptId: Uuid.optional(),
+      entryId: Uuid.optional(),
+      revision: z.number().int().optional(),
       /** Модерация райдов: число жалоб, закрытых этим действием. */
       reportCount: z.number().int().nonnegative().optional(),
     })

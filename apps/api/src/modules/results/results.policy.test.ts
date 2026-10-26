@@ -6,11 +6,17 @@ import { describe, expect, it } from 'vitest';
 import type { RaceForResults } from '../races';
 import type { ActivityRef } from '../tracks';
 import type { AttemptSegmentDoc, RaceAttemptDoc, RaceEntryDoc } from './results.collection';
+import type { RaceProtocolRowDoc } from './results.collection';
 import {
   attemptClosedReason,
   attemptHidden,
   attemptMatched,
+  buildProtocol,
   entryActions,
+  EXCLUDABLE_STATUSES,
+  type ProtocolBase,
+  publishChecklist,
+  recheckPending,
   mayMatch,
   pickBest,
   raceRepresentative,
@@ -41,6 +47,7 @@ const race = (overrides: Partial<RaceForResults> = {}): RaceForResults => ({
   protocolPlannedAt: new Date(ENDS.getTime() + 48 * HOUR),
   corridor: { routeId: 'route', widthM: 50, distanceM: 8000 },
   lockedAt: null,
+  protocolPublishedAt: null,
   ...overrides,
 });
 
@@ -94,7 +101,7 @@ const entry = (
 ): Pick<RaceEntryDoc, 'status' | 'best' | 'summary'> => ({
   status: 'active',
   best: null,
-  summary: { total: 0, pending: 0, counted: 0, rejectedShown: 0, failed: 0 },
+  summary: { total: 0, pending: 0, counted: 0, rejectedShown: 0, failed: 0, excluded: 0 },
   ...overrides,
 });
 
@@ -196,6 +203,17 @@ describe('видимость и вердикт (A8, §7.4)', () => {
     expect(attemptHidden(attempt({ status: 'queued', matched: null }))).toBe(false);
   });
 
+  it('исключённая (race-results-05): auto без полного сегмента скрыта, как отказ; совпавшая и явная — видны', () => {
+    expect(
+      attemptHidden(attempt({ status: 'excluded', matched: false, reasons: ['no_start'] })),
+    ).toBe(true);
+    expect(attemptHidden(attempt({ status: 'excluded', matched: true }))).toBe(false);
+    expect(attemptHidden(attempt({ status: 'excluded', matched: null }))).toBe(false);
+    expect(attemptHidden(attempt({ origin: 'explicit', status: 'excluded', matched: false }))).toBe(
+      false,
+    );
+  });
+
   it('verdictFields: засчитано — без причин; отказ — причины движка', () => {
     const seg = segment(790, '2026-06-14T06:00:14.5Z');
     expect(
@@ -246,8 +264,9 @@ describe('pickBest и сводка', () => {
         attempt({ status: 'rejected', matched: false, reasons: ['no_start'] }),
         attempt({ status: 'failed' }),
         attempt({ status: 'withdrawn' }),
+        attempt({ status: 'excluded' }),
       ]),
-    ).toEqual({ total: 7, pending: 2, counted: 1, rejectedShown: 1, failed: 1 });
+    ).toEqual({ total: 8, pending: 2, counted: 1, rejectedShown: 1, failed: 1, excluded: 1 });
   });
 });
 
@@ -260,21 +279,28 @@ describe('resultStatus (§7.4, AC19)', () => {
     expect(resultStatus(entry({ status: 'withdrawn', best }), race(), now)).toBe('withdrawn');
     expect(
       resultStatus(
-        entry({ best, summary: { total: 2, pending: 1, counted: 1, rejectedShown: 0, failed: 0 } }),
+        entry({
+          best,
+          summary: { total: 2, pending: 1, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
+        }),
         race(),
         now,
       ),
     ).toBe('provisional');
     expect(
       resultStatus(
-        entry({ summary: { total: 2, pending: 1, counted: 0, rejectedShown: 1, failed: 0 } }),
+        entry({
+          summary: { total: 2, pending: 1, counted: 0, rejectedShown: 1, failed: 0, excluded: 0 },
+        }),
         race(),
         now,
       ),
     ).toBe('pending');
     expect(
       resultStatus(
-        entry({ summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 1 } }),
+        entry({
+          summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 1, excluded: 0 },
+        }),
         race(),
         late,
       ),
@@ -283,11 +309,42 @@ describe('resultStatus (§7.4, AC19)', () => {
     expect(resultStatus(entry(), race(), late)).toBe('dns');
     expect(
       resultStatus(
-        entry({ summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 0 } }),
+        entry({
+          summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 0, excluded: 0 },
+        }),
         race(),
         late,
       ),
     ).toBe('dns');
+  });
+
+  it('исключённые (race-results-05): одни исключённые — not_counted; старая сводка без поля — как 0', () => {
+    expect(
+      resultStatus(
+        entry({
+          summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 0, excluded: 1 },
+        }),
+        race(),
+        now,
+      ),
+    ).toBe('not_counted');
+    const legacy = { total: 0, pending: 0, counted: 0, rejectedShown: 0, failed: 0 };
+    expect(resultStatus(entry({ summary: legacy as never }), race(), late)).toBe('dns');
+  });
+
+  it('ignoreBest (RC-5): после публикации живой лучший не даёт provisional', () => {
+    const summary = { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 };
+    expect(resultStatus(entry({ best, summary }), race(), late, { ignoreBest: true })).toBe('dns');
+    expect(
+      resultStatus(entry({ best, summary: { ...summary, pending: 1 } }), race(), late, {
+        ignoreBest: true,
+      }),
+    ).toBe('pending');
+    expect(
+      resultStatus(entry({ status: 'withdrawn', best, summary }), race(), late, {
+        ignoreBest: true,
+      }),
+    ).toBe('withdrawn');
   });
 });
 
@@ -358,6 +415,7 @@ describe('entryActions (D-37, C1/H2)', () => {
         counted: 0,
         rejectedShown: 0,
         failed: 0,
+        excluded: 0,
       },
     });
     expect(entryActions(race(), 'open', full, open).reasons).toEqual(['attempt_limit']);
@@ -422,5 +480,182 @@ describe('rankRows — места «1, =2, =2, 4» (A7, AC18)', () => {
       { place: 2, tied: true },
       { place: 4, tied: false },
     ]);
+  });
+});
+
+describe('протокол (race-results-05)', () => {
+  it('EXCLUDABLE_STATUSES — исключить можно всё, кроме снятых и уже исключённых', () => {
+    expect([...EXCLUDABLE_STATUSES]).toEqual([
+      'queued',
+      'checking',
+      'counted',
+      'rejected',
+      'failed',
+    ]);
+  });
+
+  describe('publishChecklist (D-22, D-23)', () => {
+    const closes = uploadClosesAt(race());
+    const input = (overrides: Partial<Parameters<typeof publishChecklist>[0]> = {}) => ({
+      race: race(),
+      now: closes,
+      uploadClosesAt: closes,
+      openDisputes: 0,
+      unprocessedTracks: 0,
+      pendingChecks: 0,
+      failedChecks: 0,
+      ...overrides,
+    });
+
+    it('все 5 строк в порядке; пусто и blockedBy null — можно публиковать', () => {
+      expect(publishChecklist(input())).toEqual({
+        canPublish: true,
+        blockedBy: null,
+        checklist: [
+          { code: 'open_disputes', count: 0 },
+          { code: 'unprocessed_tracks', count: 0 },
+          { code: 'checks_queued', count: 0 },
+          { code: 'checks_failed', count: 0 },
+          { code: 'window_open', count: 0 },
+        ],
+      });
+    });
+
+    it('каждая строка по своей причине; window_open — до uploadClosesAt (граница исключающая)', () => {
+      const result = publishChecklist(
+        input({
+          now: new Date(closes.getTime() - 1),
+          openDisputes: 1,
+          unprocessedTracks: 2,
+          pendingChecks: 3,
+          failedChecks: 4,
+        }),
+      );
+      expect(result.canPublish).toBe(false);
+      expect(result.checklist.map((row) => row.count)).toEqual([1, 2, 3, 4, 1]);
+      expect(publishChecklist(input({ failedChecks: 1 })).canPublish).toBe(false);
+    });
+
+    it('blockedBy по приоритету draft > cancelled > no_corridor > published', () => {
+      const published = new Date(closes.getTime() + HOUR);
+      expect(
+        publishChecklist(input({ race: race({ status: 'draft', corridor: null }) })).blockedBy,
+      ).toBe('draft');
+      expect(
+        publishChecklist(
+          input({
+            race: race({ status: 'cancelled', corridor: null, protocolPublishedAt: published }),
+          }),
+        ).blockedBy,
+      ).toBe('cancelled');
+      expect(
+        publishChecklist(input({ race: race({ corridor: null, protocolPublishedAt: published }) }))
+          .blockedBy,
+      ).toBe('no_corridor');
+      const done = publishChecklist(input({ race: race({ protocolPublishedAt: published }) }));
+      expect(done).toMatchObject({ blockedBy: 'published', canPublish: false });
+    });
+  });
+
+  describe('buildProtocol (D-27, D-28)', () => {
+    const t = (iso: string) => at(`2026-10-25T${iso}:00Z`);
+    const base = (
+      entryId: string,
+      elapsedSec: number,
+      startedAt = '08:00',
+      dq = false,
+    ): ProtocolBase => ({
+      entryId,
+      userId: `u-${entryId}`,
+      attemptId: `a-${entryId}`,
+      elapsedSec,
+      startedAt: t(startedAt),
+      dq,
+    });
+    const view = (rows: ReturnType<typeof buildProtocol>) =>
+      rows.map((row) => [row.order, row.entryId, row.place, row.tied, row.status]);
+    const previousOf = (rows: ReturnType<typeof buildProtocol>) =>
+      new Map<string, Pick<RaceProtocolRowDoc, 'place' | 'tied' | 'elapsedSec' | 'status'>>(
+        rows.map((row) => [row.entryId, row]),
+      );
+
+    it('публикация: «1, =2, =2, 4», статус final; порядок (elapsedSec, startedAt, entryId)', () => {
+      const rows = buildProtocol(
+        [base('d', 3800), base('c', 3700, '09:00'), base('b', 3700, '08:00'), base('a', 3600)],
+        null,
+      );
+      expect(view(rows)).toEqual([
+        [0, 'a', 1, false, 'final'],
+        [1, 'b', 2, true, 'final'],
+        [2, 'c', 2, true, 'final'],
+        [3, 'd', 4, false, 'final'],
+      ]);
+      expect(rows[0]).toMatchObject({ userId: 'u-a', attemptId: 'a-a', elapsedSec: 3600 });
+      // равные время и старт — по entryId
+      expect(
+        view(buildProtocol([base('y', 3600), base('x', 3600)], null)).map((r) => r[1]),
+      ).toEqual(['x', 'y']);
+    });
+
+    it('DQ: в конце без места; места остальных пересчитаны — изменившиеся revised, прочие — статус прошлой', () => {
+      const published = buildProtocol([base('a', 3600), base('b', 3700), base('c', 3800)], null);
+      const dq = buildProtocol(
+        [base('a', 3600, '08:00', true), base('b', 3700), base('c', 3800)],
+        previousOf(published),
+      );
+      expect(view(dq)).toEqual([
+        [0, 'b', 1, false, 'revised'],
+        [1, 'c', 2, false, 'revised'],
+        [2, 'a', null, false, 'dq'],
+      ]);
+      const dqLast = buildProtocol(
+        [base('a', 3600), base('b', 3700), base('c', 3800, '08:00', true)],
+        previousOf(published),
+      );
+      expect(view(dqLast)).toEqual([
+        [0, 'a', 1, false, 'final'],
+        [1, 'b', 2, false, 'final'],
+        [2, 'c', null, false, 'dq'],
+      ]);
+      // отмена DQ — место возвращается со статусом revised
+      const revoked = buildProtocol(
+        [base('a', 3600), base('b', 3700), base('c', 3800)],
+        previousOf(dqLast),
+      );
+      expect(view(revoked)).toEqual([
+        [0, 'a', 1, false, 'final'],
+        [1, 'b', 2, false, 'final'],
+        [2, 'c', 3, false, 'revised'],
+      ]);
+    });
+
+    it('ничья появилась или ушла — revised; новое время — revised; новый участник — revised; выпавший — нет строки', () => {
+      const published = buildProtocol([base('a', 3600), base('b', 3700), base('c', 3800)], null);
+      const next = buildProtocol(
+        [base('a', 3600), base('b', 3800), base('c', 3800), base('n', 4000)],
+        previousOf(published),
+      );
+      expect(view(next)).toEqual([
+        [0, 'a', 1, false, 'final'],
+        [1, 'b', 2, true, 'revised'],
+        [2, 'c', 2, true, 'revised'],
+        [3, 'n', 4, false, 'revised'],
+      ]);
+      expect(view(buildProtocol([base('a', 3600)], previousOf(published)))).toEqual([
+        [0, 'a', 1, false, 'final'],
+      ]);
+      expect(buildProtocol([], null)).toEqual([]);
+    });
+  });
+
+  it('recheckPending: запуск после публикации новее применения', () => {
+    const published = at('2026-10-28T10:00:00Z');
+    const later = (ms: number) => new Date(published.getTime() + ms);
+    expect(recheckPending({ startedAt: null, appliedAt: null }, published)).toBe(false);
+    expect(recheckPending({ startedAt: later(-1), appliedAt: null }, published)).toBe(false);
+    expect(recheckPending({ startedAt: later(1), appliedAt: null }, published)).toBe(true);
+    expect(recheckPending({ startedAt: later(1), appliedAt: later(2) }, published)).toBe(false);
+    expect(recheckPending({ startedAt: later(3), appliedAt: later(2) }, published)).toBe(true);
+    expect(recheckPending({ startedAt: later(1), appliedAt: null }, null)).toBe(false);
   });
 });

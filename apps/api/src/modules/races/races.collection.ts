@@ -57,6 +57,17 @@ export interface RaceDoc {
    * конфликтует с её отменой и правкой и после первой заявки. Документы без заявок поля не имеют.
    */
   entryAdmissions?: number;
+  /**
+   * Момент публикации протокола (race-results-05): фаза `final`, отмена гонки недоступна (D-19). Пишет только
+   * `RacesRepository.markProtocolPublished` (порт `RaceRegistry`); документы до `0016_protocol` — `?? null`.
+   */
+  protocolPublishedAt: Date | null;
+  /**
+   * Счётчик замка результатов гонки (race-results-05): `lockResults` увеличивает его первой операцией каждой
+   * транзакции действий панели над результатами — две такие транзакции одной гонки, а также они и отмена/правка
+   * гонки конфликтуют. Документы без действий поля не имеют.
+   */
+  resultsVersion?: number;
   version: number;
 }
 

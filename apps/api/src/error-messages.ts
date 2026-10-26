@@ -34,6 +34,8 @@ export const PROJECT_ERROR_MESSAGES = {
   ATTEMPT_UPLOAD_CLOSED: 'Срок загрузки заездов истёк',
   ATTEMPT_LIMIT: 'Достигнут предел заездов для гонки',
   ATTEMPT_SOURCE_INVALID: 'Этот заезд нельзя добавить в гонку',
+  RESULTS_ACTION_BLOCKED: 'Действие с результатами гонки сейчас недоступно',
+  RESULTS_PUBLISH_BLOCKED: 'Протокол пока нельзя опубликовать',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

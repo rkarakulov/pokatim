@@ -2,25 +2,24 @@ import { Inject, Injectable } from '@nestjs/common';
 import type {
   MyAttempt,
   MyRaceEntry,
-  PanelRaceAttempt,
-  PanelRaceAttemptPage,
-  PanelRaceAttemptQuery,
-  PanelRaceResults,
   PendingUpload,
   RaceResultsPage,
   RaceResultsQuery,
 } from '@pokatim/contracts';
-import { CORRIDOR_ENGINE_VERSION } from '@pokatim/tracks/parse';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import { z } from 'zod';
 
 import type { DbSession } from '../../db';
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
-import type { PanelPrincipal } from '../panel';
 import { RACE_REGISTRY, type RaceForResults, type RaceRegistry } from '../races';
 import { ACTIVITY_SOURCE, type ActivitySource } from '../tracks';
-import type { AttemptSegmentDoc, RaceAttemptDoc, RaceEntryDoc } from './results.collection';
+import type {
+  AttemptSegmentDoc,
+  RaceAttemptDoc,
+  RaceEntryDoc,
+  RaceProtocolRowDoc,
+} from './results.collection';
 import {
   attemptHidden,
   entryActions,
@@ -40,10 +39,8 @@ const invalidCursor = () =>
  * (AC21), позицию сортировки сервер берёт из самой строки.
  */
 const RankCursorKey = z.literal('e');
-/** Курсор попыток панели: только `_id` (новые сверху). */
-const AttemptCursorKey = z.literal('a');
-
-const segmentView = (segment: AttemptSegmentDoc | null) =>
+/** Сегмент попытки наружу: без координат и датчиков (приложение и панель). */
+export const segmentView = (segment: AttemptSegmentDoc | null) =>
   segment
     ? {
         startedAt: segment.startedAt.toISOString(),
@@ -58,8 +55,9 @@ const segmentView = (segment: AttemptSegmentDoc | null) =>
     : null;
 
 /**
- * Чтение участия и результатов (race-results-03): «моё участие» (только свои попытки, без скрытых), публичная
- * предварительная таблица (анонимные строки, места при чтении в snapshot-сессии), панель — сводка и попытки.
+ * Чтение участия и результатов приложения (race-results-03): «моё участие» (только свои попытки, без скрытых),
+ * публичная таблица (анонимные строки). До публикации протокола места считаются при чтении в snapshot-сессии; после
+ * (race-results-05, §7.7) — только из текущей ревизии снимка протокола. Панель — `ResultsPanelReadService`.
  */
 @Injectable()
 export class ResultsReadService {
@@ -81,12 +79,15 @@ export class ResultsReadService {
     const race = await this.race(raceId);
     const now = this.clock.now();
     // заявка, попытки и место — из одного снимка БД (согласованы `best`, `isBest` и место)
-    const { entry, attempts, standing } = await this.repository.withSnapshot(async (session) => {
+    const { entry, attempts, result } = await this.repository.withSnapshot(async (session) => {
       const found = (await this.repository.findEntry(raceId, userId, session)) ?? null;
       return {
         entry: found,
         attempts: found ? await this.repository.attemptsOfEntry(found._id, session) : [],
-        standing: await this.standing(raceId, found, session),
+        result:
+          race.protocolPublishedAt !== null
+            ? await this.protocolResult(race, found, now, session)
+            : await this.liveResult(race, found, now, session),
       };
     });
     return {
@@ -99,14 +100,7 @@ export class ResultsReadService {
             withdrawnAt: entry.withdrawnAt?.toISOString() ?? null,
           }
         : null,
-      result: {
-        status: resultStatus(entry, race, now),
-        elapsedSec: standing.place === null ? null : (entry?.best?.elapsedSec ?? null),
-        place: standing.place,
-        tied: standing.tied,
-        ranked: standing.ranked,
-        group: RESULTS_POLICY.groupKey,
-      },
+      result: { ...result, group: RESULTS_POLICY.groupKey },
       attempts: attempts
         .filter((attempt) => !attemptHidden(attempt))
         .map((attempt) => this.myAttempt(attempt, entry)),
@@ -116,18 +110,58 @@ export class ResultsReadService {
     };
   }
 
-  /** Место своей строки (активная заявка с лучшим) и число строк — в snapshot-сессии вызывающего. */
-  private async standing(
-    raceId: string,
+  /** До публикации: место своей строки (активная заявка с лучшим) и число строк — в snapshot-сессии вызывающего. */
+  private async liveResult(
+    race: RaceForResults,
     entry: RaceEntryDoc | null,
+    now: Date,
     session: DbSession,
-  ): Promise<{ place: number | null; tied: boolean; ranked: number }> {
-    const ranked = await this.repository.countRanked(raceId, session);
+  ): Promise<Omit<MyRaceEntry['result'], 'group'>> {
+    const ranked = await this.repository.countRanked(race.id, session);
+    const status = resultStatus(entry, race, now);
     const best = entry?.status === 'active' ? entry.best : null;
-    if (!best) return { place: null, tied: false, ranked };
-    const less = await this.repository.countRankedLess(raceId, best.elapsedSec, session);
-    const equal = await this.repository.countRankedEqual(raceId, best.elapsedSec, session);
-    return { place: less + 1, tied: equal >= 2, ranked };
+    if (!best) return { status, elapsedSec: null, place: null, tied: false, ranked };
+    const less = await this.repository.countRankedLess(race.id, best.elapsedSec, session);
+    const equal = await this.repository.countRankedEqual(race.id, best.elapsedSec, session);
+    return { status, elapsedSec: best.elapsedSec, place: less + 1, tied: equal >= 2, ranked };
+  }
+
+  /**
+   * После публикации (§7.7, RC-5): строка участника в текущей ревизии — её статус, место и время (DQ — без места,
+   * время показывается); строки нет — без места и времени, статус по заявке без живого лучшего результата.
+   */
+  private async protocolResult(
+    race: RaceForResults,
+    entry: RaceEntryDoc | null,
+    now: Date,
+    session: DbSession,
+  ): Promise<Omit<MyRaceEntry['result'], 'group'>> {
+    const revision = await this.protocolRevision(race.id, session);
+    const { ranked } = await this.repository.countProtocolRows(race.id, revision, session);
+    const row = entry
+      ? await this.repository.protocolRow(race.id, revision, entry._id, session)
+      : undefined;
+    if (!row) {
+      return {
+        status: resultStatus(entry, race, now, { ignoreBest: true }),
+        elapsedSec: null,
+        place: null,
+        tied: false,
+        ranked,
+      };
+    }
+    return {
+      status: row.status,
+      elapsedSec: row.elapsedSec,
+      place: row.place,
+      tied: row.tied,
+      ranked,
+    };
+  }
+
+  /** Текущая ревизия опубликованного протокола (журнал пересчётов; публикация пишет ревизию 1). */
+  private async protocolRevision(raceId: string, session: DbSession): Promise<number> {
+    return (await this.repository.currentRevision(raceId, session)) ?? 1;
   }
 
   private myAttempt(attempt: RaceAttemptDoc, entry: RaceEntryDoc | null): MyAttempt {
@@ -173,6 +207,9 @@ export class ResultsReadService {
     const race = await this.race(raceId);
     const cursorEntryId = query.cursor ? decodeCursor(query.cursor, RankCursorKey).id : null;
     const empty = race.status === 'cancelled' || race.corridor === null;
+    if (!empty && race.protocolPublishedAt !== null) {
+      return this.protocolResults(raceId, cursorEntryId, query.limit);
+    }
     return this.repository.withSnapshot(async (session) => {
       const entries = await this.repository.countActiveEntries(raceId, session);
       const base = {
@@ -222,63 +259,53 @@ export class ResultsReadService {
     });
   }
 
-  /** Гонка в панели: невидимая сотруднику (чужая гонка организатора) — 404. */
-  private async panelRace(principal: PanelPrincipal, raceId: string): Promise<RaceForResults> {
-    const race = await this.races.findForPanel(principal, raceId);
-    if (!race) throw notFound();
-    return race;
-  }
-
-  async panelSummary(principal: PanelPrincipal, raceId: string): Promise<PanelRaceResults> {
-    const race = await this.panelRace(principal, raceId);
-    return {
-      raceId,
-      lockedAt: race.lockedAt?.toISOString() ?? null,
-      engineVersion: CORRIDOR_ENGINE_VERSION,
-      counts: await this.repository.panelCounts(raceId, CORRIDOR_ENGINE_VERSION),
-    };
-  }
-
-  async panelAttempts(
-    principal: PanelPrincipal,
+  /**
+   * Таблица опубликованного протокола (§7.7): строки текущей ревизии без DQ по `order`, `status: 'final'`. Курсор —
+   * `entryId` строки (позиция — её `order`); строка DQ или не из ревизии — `400` на поле `cursor`.
+   */
+  private protocolResults(
     raceId: string,
-    query: PanelRaceAttemptQuery,
-  ): Promise<PanelRaceAttemptPage> {
-    await this.panelRace(principal, raceId);
-    const afterId = query.cursor ? decodeCursor(query.cursor, AttemptCursorKey).id : null;
-    const docs = await this.repository.panelAttempts(
-      raceId,
-      query.status,
-      afterId,
-      query.limit + 1,
-    );
-    const page = docs.slice(0, query.limit);
-    const last = page.at(-1);
-    return {
-      items: page.map((attempt) => this.panelAttempt(attempt)),
-      nextCursor: docs.length > query.limit && last ? encodeCursor('a', last._id) : null,
-    };
-  }
-
-  private panelAttempt(attempt: RaceAttemptDoc): PanelRaceAttempt {
-    return {
-      id: attempt._id,
-      entryId: attempt.entryId,
-      userId: attempt.userId,
-      activityId: attempt.activityId,
-      origin: attempt.origin,
-      status: attempt.status,
-      hidden: attemptHidden(attempt),
-      reasons: attempt.reasons,
-      failure: attempt.failure,
-      withdrawReason: attempt.withdrawReason,
-      segment: segmentView(attempt.segment),
-      engineVersion: attempt.engineVersion,
-      checkRevision: attempt.checkRevision,
-      checkAttempts: attempt.checkAttempts,
-      diagnostics: attempt.diagnostics,
-      createdAt: attempt.createdAt.toISOString(),
-      checkedAt: attempt.checkedAt?.toISOString() ?? null,
-    };
+    cursorEntryId: string | null,
+    limit: number,
+  ): Promise<RaceResultsPage> {
+    return this.repository.withSnapshot(async (session) => {
+      const revision = await this.protocolRevision(raceId, session);
+      let afterOrder: number | null = null;
+      if (cursorEntryId) {
+        const at = await this.repository.protocolRow(raceId, revision, cursorEntryId, session);
+        if (!at || at.status === 'dq') throw invalidCursor();
+        afterOrder = at.order;
+      }
+      const entries = await this.repository.countActiveEntries(raceId, session);
+      const { ranked } = await this.repository.countProtocolRows(raceId, revision, session);
+      const rows = await this.repository.protocolRowsPage(
+        raceId,
+        revision,
+        afterOrder,
+        limit + 1,
+        session,
+      );
+      const page = rows.slice(0, limit);
+      const last = page.at(-1);
+      return {
+        group: RESULTS_POLICY.groupKey,
+        status: 'final' as const,
+        entries,
+        ranked,
+        items: page.flatMap((row: RaceProtocolRowDoc) =>
+          row.place === null
+            ? []
+            : [
+                {
+                  entryId: row.entryId,
+                  place: row.place,
+                  tied: row.tied,
+                  elapsedSec: row.elapsedSec,
+                },
+              ],
+        ),
+        nextCursor: rows.length > limit && last ? encodeCursor('e', last.entryId) : null,
+      };
+    });
   }
 }

@@ -1,4 +1,4 @@
-import { MyRaceEntry, RaceResultsPage } from '@pokatim/contracts';
+import { MyRaceEntry, PanelRaceStandings, RaceResultsPage } from '@pokatim/contracts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
@@ -9,8 +9,11 @@ import {
   corridorRace,
   enterRace,
   myEntry,
+  protocolAction,
+  protocolRace,
   resultsDb,
   rider,
+  signIn,
   withdraw,
 } from '../../../test/results';
 import { ResultsRepository } from './results.repository';
@@ -47,7 +50,7 @@ async function seedBest(entryId: string, elapsedSec: number, startedAt: string) 
           startedAt: at,
           finishedAt: new Date(at.getTime() + elapsedSec * 1000),
         },
-        summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0 },
+        summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
       },
     },
   );
@@ -199,7 +202,7 @@ describe('моё участие — один снимок БД (ревью Codex
       {
         $set: {
           best: null,
-          summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 0 },
+          summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 0, excluded: 0 },
         },
       },
     );
@@ -240,5 +243,113 @@ describe('панель (AC22)', () => {
       (await panelCall(h, moderator.token, 'GET', `${RACES}/${raceId}/attempts?status=nope`))
         .status,
     ).toBe(400);
+  });
+});
+
+describe('после публикации протокола (race-results-05: AC9, RC-5, §7.6)', () => {
+  const encode = (entryId: string) =>
+    encodeURIComponent(Buffer.from(JSON.stringify({ k: 'e', id: entryId })).toString('base64url'));
+
+  it('таблица и «моё участие» — из текущей ревизии: final, DQ нет в таблице, у участника dq; курсор строки DQ — 400', async () => {
+    const { raceId, riders, token } = await protocolRace(h, [3600, 3700, 3800, null]);
+    expect((await protocolAction(h, token, raceId, '/protocol')).status).toBe(200);
+    expect(page((await results(raceId)).body)).toMatchObject({
+      status: 'final',
+      ranked: 3,
+      entries: 4,
+    });
+    expect(
+      (
+        await protocolAction(h, token, raceId, '/protocol/disqualify', {
+          entryId: riders[0]!.entryId,
+          reason: 'Срезка',
+        })
+      ).status,
+    ).toBe(200);
+    const body = page((await results(raceId)).body);
+    expect(body).toMatchObject({ status: 'final', ranked: 2, entries: 4, nextCursor: null });
+    expect(body.items.map((row) => [row.entryId, row.place, row.tied, row.elapsedSec])).toEqual([
+      [riders[1]!.entryId, 1, false, 3700],
+      [riders[2]!.entryId, 2, false, 3800],
+    ]);
+    const first = page((await results(raceId, '?limit=1')).body);
+    expect(first.items.map((row) => row.entryId)).toEqual([riders[1]!.entryId]);
+    const second = page(
+      (await results(raceId, `?limit=1&cursor=${encodeURIComponent(first.nextCursor!)}`)).body,
+    );
+    expect(second.items.map((row) => row.entryId)).toEqual([riders[2]!.entryId]);
+    expect((await results(raceId, `?cursor=${encode(riders[0]!.entryId)}`)).status).toBe(400);
+    expect((await results(raceId, `?cursor=${encode(riders[3]!.entryId)}`)).status).toBe(400);
+
+    const auth = await signIn(h, riders[0]!.email);
+    expect((await myEntry(h, auth, raceId)).result).toMatchObject({
+      status: 'dq',
+      place: null,
+      tied: false,
+      elapsedSec: 3600,
+      ranked: 2,
+    });
+    expect((await myEntry(h, await signIn(h, riders[1]!.email), raceId)).result).toMatchObject({
+      status: 'revised',
+      place: 1,
+      elapsedSec: 3700,
+    });
+  });
+
+  it('RC-5: заявка без строки протокола — без места и не provisional, даже с лучшим после снимка', async () => {
+    const { raceId, riders, token } = await protocolRace(h, [3600, null]);
+    expect((await protocolAction(h, token, raceId, '/protocol')).status).toBe(200);
+    // остаточная гонка: лучший результат появился в заявке после снимка
+    await seedBest(riders[1]!.entryId, 3500, '2026-10-25T05:00:00Z');
+    const auth = await signIn(h, riders[1]!.email);
+    expect((await myEntry(h, auth, raceId)).result).toMatchObject({
+      status: 'dns',
+      place: null,
+      tied: false,
+      elapsedSec: null,
+      ranked: 1,
+    });
+    const standings = PanelRaceStandings.parse(
+      (await panelCall(h, token, 'GET', `${RACES}/${raceId}/standings`)).body,
+    );
+    expect(standings).toMatchObject({ source: 'protocol', revision: 1, truncated: false });
+    expect(
+      standings.items.map((row) => [row.entryId, row.resultStatus, row.place, row.elapsedSec]),
+    ).toEqual([
+      [riders[0]!.entryId, 'final', 1, 3600],
+      [riders[1]!.entryId, 'dns', null, null],
+    ]);
+  });
+
+  it('«Участники» до публикации: строки с местами по таблице, затем прочие по времени заявки', async () => {
+    const { raceId, riders, token } = await protocolRace(h, [3700, null, 3600, 3700]);
+    const res = await panelCall(h, token, 'GET', `${RACES}/${raceId}/standings`);
+    expect(res.status).toBe(200);
+    const body = PanelRaceStandings.parse(res.body);
+    expect(body).toMatchObject({ source: 'live', revision: null, truncated: false });
+    expect(
+      body.items.map((row) => [row.entryId, row.place, row.tied, row.resultStatus, row.userId]),
+    ).toEqual([
+      [riders[2]!.entryId, 1, false, 'provisional', riders[2]!.userId],
+      [riders[0]!.entryId, 2, true, 'provisional', riders[0]!.userId],
+      [riders[3]!.entryId, 2, true, 'provisional', riders[3]!.userId],
+      [riders[1]!.entryId, null, false, 'dns', riders[1]!.userId],
+    ]);
+    expect(body.items[0]?.summary).toEqual({
+      total: 1,
+      pending: 0,
+      counted: 1,
+      rejectedShown: 0,
+      failed: 0,
+      excluded: 0,
+    });
+    const organizer = await staff(h, 'org@example.by', 'organizer');
+    expect(
+      (await panelCall(h, organizer.token, 'GET', `${RACES}/${raceId}/standings`)).status,
+    ).toBe(404);
+    expect(
+      (await panelCall(h, organizer.token, 'GET', `${RACES}/${raceId}/protocol/recalculations`))
+        .status,
+    ).toBe(404);
   });
 });

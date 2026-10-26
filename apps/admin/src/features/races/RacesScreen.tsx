@@ -61,6 +61,7 @@ const PHASE_TONE: Record<RacePhase, 'ink' | 'neutral' | 'success' | 'error'> = {
   open: 'success',
   closed: 'neutral',
   cancelled: 'error',
+  final: 'success',
 };
 
 const columns = [

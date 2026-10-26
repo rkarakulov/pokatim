@@ -87,6 +87,24 @@ export class TracksRepository {
     return this.c.uploads.find({ _id: { $in: [...ids] } }, { session }).toArray();
   }
 
+  /** Загрузки пользователей в обработке (`queued|processing`), принятые в `[from, before)` — чек-лист протокола. */
+  countUnprocessedUploads(
+    userIds: readonly string[],
+    from: Date,
+    before: Date,
+    session?: DbSession,
+  ): Promise<number> {
+    if (userIds.length === 0) return Promise.resolve(0);
+    return this.c.uploads.countDocuments(
+      {
+        userId: { $in: [...userIds] },
+        status: { $in: IN_PROGRESS },
+        createdAt: { $gte: from, $lt: before },
+      },
+      { session },
+    );
+  }
+
   async insertUpload(session: DbSession, doc: TrackUploadDoc): Promise<void> {
     await this.c.uploads.insertOne(doc, { session });
   }

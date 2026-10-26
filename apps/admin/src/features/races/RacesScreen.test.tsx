@@ -157,6 +157,13 @@ describe('«Гонки» — список (AC11)', () => {
     expect(screen.getByRole('option', { name: 'Сезон 2026' })).toBeTruthy();
   });
 
+  it('фаза «Протокол опубликован» (final) — метка успеха', async () => {
+    mocked.listRaces.mockResolvedValue({ items: [race({ phase: 'final' })], nextCursor: null });
+    await renderApp('/races');
+    const tag = await screen.findByText('Протокол опубликован');
+    expect(tag.className).toContain('status-tag--success');
+  });
+
   it('модератор — без «Новая гонка»', async () => {
     mocked.me.mockResolvedValue(ME.moderator);
     await renderApp('/races');
@@ -362,6 +369,37 @@ describe('«Редактирование» (AC11)', () => {
     );
     await waitFor(() => expect(mocked.discardRace).toHaveBeenCalledWith(RACE_ID, { version: 3 }));
     await waitFor(() => expect(currentHref(router)).toBe('/admin/races'));
+  });
+
+  it('опубликованный протокол (D-19): причина results_final, ссылка «Результаты», без «Отменить гонку»', async () => {
+    mocked.getRace.mockResolvedValue(
+      race({
+        phase: 'final',
+        editable: {
+          fields: ['description'],
+          canPublish: false,
+          canCancel: false,
+          canDiscard: false,
+          reasons: ['results_final'],
+        },
+      }),
+    );
+    await renderApp(`/races/${RACE_ID}`);
+    expect(
+      await screen.findByText(
+        'Протокол опубликован: можно изменить только описание; отмена гонки недоступна (D-19).',
+      ),
+    ).toBeTruthy();
+    const link = screen.getByRole('link', { name: 'Результаты' });
+    expect(link.getAttribute('href')).toBe(`/admin/races/${RACE_ID}/results`);
+    expect(screen.queryByRole('button', { name: 'Отменить гонку' })).toBeNull();
+  });
+
+  it('черновик — без ссылки «Результаты»', async () => {
+    mocked.getRace.mockResolvedValue(race({ status: 'draft', phase: 'draft', publishedAt: null }));
+    await renderApp(`/races/${RACE_ID}`);
+    await screen.findByRole('heading', { name: 'Осенний коридор Заславль' });
+    expect(screen.queryByRole('link', { name: 'Результаты' })).toBeNull();
   });
 
   it('чужая или несуществующая гонка (404) — «не найдена»', async () => {

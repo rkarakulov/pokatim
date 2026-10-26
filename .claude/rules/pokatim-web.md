@@ -49,6 +49,13 @@ paths:
   чтение («… — по маршруту»), допуск — поле с подсказкой «Коридор: ±N м от маршрута». Ошибки сервера
   `corridor.routeId` / `corridor.widthM` — под своими полями формы.
 - 409 `CONFLICT` правки по устаревшей версии — `ConflictBanner` «Запись изменили — обновите страницу» с «Обновить».
+- Раздел «Результаты» гонки (race-results-05) — `features/results/` по маршруту `races/$raceId/results`
+  (`races.read`), ссылка «Результаты» из `RaceEditor` опубликованной или отменённой гонки. KPI — `StatTile` (`src/ui`).
+  Чек-лист публикации — только из `PanelRaceResults.publish` (на клиенте не считается): «Опубликовать протокол»
+  неактивна с первой причиной и количеством (`DisabledReason`). Все действия — `ReasonDialog` с обязательной
+  причиной; затем инвалидация ключа гонки (`['admin','races','item',id]` — результаты лежат под ним), 409 — тоже.
+  Ошибки `RESULTS_ACTION_BLOCKED` / `RESULTS_PUBLISH_BLOCKED` — текст по `details` (`results-errors.ts`). Действия
+  скрывают права `results.manage` / `results.revise`; места, статусы и ревизии — только с сервера.
 - «Модерация райдов» (05b) — `features/rides-moderation/*`, маршруты `/rides-moderation` (`?state=hidden` — в URL) и
   `/rides-moderation/$rideId` под `RequirePermission permission="rides.moderate"`, пункт навигации — группа `bottom`
   в конце. Действия — `ReasonDialog`; 409 `CONFLICT` и `RIDE_INVALID_STATE` — `ConflictBanner` с перечитыванием

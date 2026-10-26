@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 
 import { useRegistrationStore } from '@/features/auth/registration-store';
 import { takeReturnPath } from '@/features/auth/return-path';
+import { useReturnTarget } from '@/features/auth/return-target';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { onboardingStep, useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { connectFocusManager } from '@/lib/focus-manager';
@@ -62,13 +63,24 @@ export default function RootLayout() {
     [queryClient],
   );
 
-  // возврат к карточке после входа (гость нажал «Я иду», Q13 блока 05): один раз, когда вошёл и прошёл онбординг;
-  // путь — только из allowlist (`return-path`), действие «Я иду» повторно не выполняется
+  // возврат к карточке после входа (гость нажал «Я иду» / «Участвовать», Q13 блока 05): один раз, когда вошёл и прошёл
+  // онбординг; путь — только из allowlist (`return-path`), действие повторно не выполняется. Путь забирается сразу после
+  // входа и до выхода остаётся целью гарда шагов онбординга: иначе его редирект на Главную перебил бы возврат
+  const returnTarget = useReturnTarget();
   useEffect(() => {
-    if (!signedIn || step !== 'done') return;
+    if (!signedIn) {
+      useReturnTarget.setState({ path: null, done: false });
+      return;
+    }
+    if (useReturnTarget.getState().path !== null) return;
     const path = takeReturnPath();
-    if (path) router.replace(path as Href);
-  }, [signedIn, step, router]);
+    if (path) useReturnTarget.setState({ path, done: false });
+  }, [signedIn]);
+  useEffect(() => {
+    if (!signedIn || step !== 'done' || returnTarget.path === null || returnTarget.done) return;
+    useReturnTarget.setState({ done: true });
+    router.replace(returnTarget.path as Href);
+  }, [signedIn, step, returnTarget, router]);
 
   useEffect(() => {
     // без шрифтов работаем на системных, но не молча
@@ -126,7 +138,7 @@ export default function RootLayout() {
             (SSR отдаёт HTML оболочки, а не пустую страницу редиректа) */}
         <Stack.Protected
           guard={isSessionPending(sessionStatus) || (signedIn && step !== 'done')}
-          redirectTo="/"
+          redirectTo={(returnTarget.path ?? '/') as Href}
         >
           <Stack.Screen name="(setup)" />
         </Stack.Protected>

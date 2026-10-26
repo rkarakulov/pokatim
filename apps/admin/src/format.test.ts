@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { formatDateTime, formatDateTimeLong, formatKmFromMeters, formatLocalDate } from './format';
+import {
+  formatDateTime,
+  formatDateTimeLong,
+  formatElapsed,
+  formatKmFromMeters,
+  formatLocalDate,
+} from './format';
 
 const ORIGINAL_TZ = process.env.TZ;
 afterEach(() => {
@@ -21,5 +27,13 @@ describe('длина маршрута', () => {
     expect(formatKmFromMeters(86_012).replace('\u00a0', ' ')).toBe('86,0 км');
     expect(formatKmFromMeters(62_050).replace('\u00a0', ' ')).toBe('62,1 км');
     expect(formatKmFromMeters(1_234_560).replace(/\s/g, ' ')).toBe('1 234,6 км');
+  });
+});
+
+describe('время заезда', () => {
+  it('секунды → «ч:мм:сс»; меньше часа — «м:сс»', () => {
+    expect(formatElapsed(3723)).toBe('1:02:03');
+    expect(formatElapsed(59)).toBe('0:59');
+    expect(formatElapsed(36_000)).toBe('10:00:00');
   });
 });

@@ -20,6 +20,9 @@ export const PERMISSIONS = [
   'races.manage_any',
   'seasons.manage',
   'calendar.manage',
+  // race-results-05: протокол гонки — исключение треков и публикация; экстренный пересчёт после публикации
+  'results.manage',
+  'results.revise',
   // 05b: модерация кофе-райдов по жалобам
   'rides.moderate',
 ] as const;

@@ -23,6 +23,8 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
       'races.manage_any',
       'seasons.manage',
       'calendar.manage',
+      'results.manage',
+      'results.revise',
       'rides.moderate',
     ],
   },
@@ -32,7 +34,7 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
   },
   organizer: {
     user: { id: USER_ID, displayName: 'Ира', email: 'ira@example.by', role: 'organizer' },
-    permissions: ['races.read', 'races.manage'],
+    permissions: ['races.read', 'races.manage', 'results.manage'],
   },
 };
 

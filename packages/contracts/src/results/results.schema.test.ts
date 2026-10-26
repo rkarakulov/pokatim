@@ -3,12 +3,27 @@ import { describe, expect, it } from 'vitest';
 import { ErrorCode, FieldErrorCode } from '../common.ts';
 import { RaceEditBlockReason } from '../races/race.schema.ts';
 import {
+  ATTEMPT_REVIEW_KINDS,
+  PanelProtocolRecalculations,
   PanelRaceAttempt,
   PanelRaceAttemptQuery,
   PanelRaceResults,
+  PanelRaceStandings,
+  PROTOCOL_ROW_STATUSES,
+  ProtocolEntryActionRequest,
+  PUBLISH_CHECKS,
+  PUBLISH_STATE_BLOCKS,
+  RECALCULATION_KINDS,
+  RESULTS_ACTION_BLOCKS,
+  ResultsActionBlockedDetails,
+  ResultsActionRequest,
+  ResultsPublishBlockedDetails,
 } from './results-admin.schema.ts';
 import {
   ATTEMPT_REJECTIONS,
+  ATTEMPT_STATUSES,
+  RACE_RESULT_STATUSES,
+  RACE_RESULTS_STATUSES,
   AttemptRequest,
   MyRaceEntry,
   RaceResultsPage,
@@ -73,9 +88,9 @@ describe('участие и результаты: приложение', () => {
     const future = MyRaceEntry.parse({
       ...myEntry,
       entry: { ...myEntry.entry, status: 'suspended' },
-      result: { ...myEntry.result, status: 'final', group: 'cluster_a' },
+      result: { ...myEntry.result, status: 'appealed', group: 'cluster_a' },
       attempts: [
-        { ...myEntry.attempts[0], origin: 'judge', status: 'excluded', reasons: ['too_fast'] },
+        { ...myEntry.attempts[0], origin: 'judge', status: 'judged', reasons: ['too_fast'] },
       ],
       pendingUploads: [{ uploadId: ID, status: 'paused', failure: 'virus' }],
       actions: { ...myEntry.actions, reasons: ['dispute_open'] },
@@ -103,7 +118,7 @@ describe('участие и результаты: приложение', () => {
     expect(RaceResultsQuery.safeParse({ userId: ID }).success).toBe(false);
     const page = RaceResultsPage.parse({
       group: 'overall',
-      status: 'final',
+      status: 'archived',
       ranked: 1,
       entries: 2,
       items: [{ entryId: ID, place: 1, tied: false, elapsedSec: 3600 }],
@@ -129,9 +144,12 @@ describe('участие и результаты: приложение', () => {
     ]) {
       expect(ErrorCode.options).toContain(code);
     }
-    expect(ErrorCode.options.at(-1)).toBe('ATTEMPT_SOURCE_INVALID');
+    expect(ErrorCode.options.slice(-2)).toEqual([
+      'RESULTS_ACTION_BLOCKED',
+      'RESULTS_PUBLISH_BLOCKED',
+    ]);
     expect(FieldErrorCode.options.at(-1)).toBe('CORRIDOR_GATES_OVERLAP');
-    expect(RaceEditBlockReason.options.at(-1)).toBe('entries_locked');
+    expect(RaceEditBlockReason.options.slice(-2)).toEqual(['entries_locked', 'results_final']);
   });
 });
 
@@ -154,42 +172,210 @@ describe('участие и результаты: панель', () => {
     diagnostics: null,
     createdAt: AT,
     checkedAt: AT,
+    review: null,
   };
 
-  it('строгие enum: незнакомое значение — ошибка', () => {
+  it('строгие enum: незнакомое значение — ошибка; excluded — статус попытки и фильтра', () => {
     expect(PanelRaceAttempt.parse(attempt).failure).toBe('timeout');
-    expect(PanelRaceAttempt.safeParse({ ...attempt, status: 'excluded' }).success).toBe(false);
+    expect(PanelRaceAttempt.parse({ ...attempt, status: 'excluded' }).status).toBe('excluded');
+    expect(PanelRaceAttempt.safeParse({ ...attempt, status: 'judged' }).success).toBe(false);
     expect(PanelRaceAttempt.safeParse({ ...attempt, failure: 'virus' }).success).toBe(false);
-    expect(PanelRaceAttemptQuery.parse({ status: 'failed' })).toEqual({
-      status: 'failed',
+    expect(PanelRaceAttemptQuery.parse({ status: 'excluded' })).toEqual({
+      status: 'excluded',
       limit: 50,
     });
     expect(PanelRaceAttemptQuery.safeParse({ status: 'nope' }).success).toBe(false);
     expect(PanelRaceAttemptQuery.safeParse({ userId: ID }).success).toBe(false);
   });
 
-  it('сводка: счётчики по всем статусам, незнакомый — ошибка', () => {
-    const summary = {
-      raceId: ID,
-      lockedAt: null,
-      engineVersion: 1,
-      counts: {
-        entries: 2,
-        active: 1,
-        withdrawn: 1,
-        ranked: 1,
-        attempts: { queued: 0, checking: 0, counted: 1, rejected: 0, failed: 1, withdrawn: 0 },
-        hidden: 0,
+  it('причина исключения попытки (RC-10): вид из справочника', () => {
+    const review = { kind: 'excluded', reason: 'Чужой трек', at: AT };
+    expect(PanelRaceAttempt.parse({ ...attempt, review }).review).toEqual(review);
+    expect(
+      PanelRaceAttempt.safeParse({ ...attempt, review: { ...review, kind: 'deleted' } }).success,
+    ).toBe(false);
+    expect(ATTEMPT_REVIEW_KINDS).toEqual(['excluded', 'restored']);
+  });
+
+  const checklist = PUBLISH_CHECKS.map((code) => ({ code, count: 0 }));
+  const summary = {
+    raceId: ID,
+    lockedAt: null,
+    engineVersion: 1,
+    counts: {
+      entries: 2,
+      active: 1,
+      withdrawn: 1,
+      ranked: 1,
+      attempts: {
+        queued: 0,
+        checking: 0,
+        counted: 1,
+        rejected: 0,
         failed: 1,
-        staleEngine: 0,
+        withdrawn: 0,
+        excluded: 0,
       },
+      hidden: 0,
+      failed: 1,
+      staleEngine: 0,
+    },
+    phase: 'closed',
+    uploadClosesAt: AT,
+    protocol: null,
+    recheck: null,
+    publish: { canPublish: true, blockedBy: null, checklist },
+  };
+
+  it('сводка: счётчики по всем статусам (с excluded), фаза, протокол и чек-лист', () => {
+    expect(PanelRaceResults.parse(summary).counts.attempts.excluded).toBe(0);
+    const withoutExcluded: Partial<typeof summary.counts.attempts> = {
+      ...summary.counts.attempts,
     };
-    expect(PanelRaceResults.parse(summary).counts.failed).toBe(1);
+    delete withoutExcluded.excluded;
     expect(
       PanelRaceResults.safeParse({
         ...summary,
-        counts: { ...summary.counts, attempts: { ...summary.counts.attempts, excluded: 1 } },
+        counts: { ...summary.counts, attempts: withoutExcluded },
       }).success,
+    ).toBe(false);
+    const published = PanelRaceResults.parse({
+      ...summary,
+      phase: 'final',
+      protocol: {
+        publishedAt: AT,
+        revision: 2,
+        ranked: 3,
+        disqualified: 1,
+        recheckPending: false,
+      },
+      recheck: { startedAt: AT, pending: 4 },
+      publish: { canPublish: false, blockedBy: 'published', checklist },
+    });
+    expect(published.protocol?.revision).toBe(2);
+    expect(PanelRaceResults.safeParse({ ...summary, phase: 'archived' }).success).toBe(false);
+    expect(
+      PanelRaceResults.safeParse({
+        ...summary,
+        publish: { canPublish: false, blockedBy: 'frozen', checklist },
+      }).success,
+    ).toBe(false);
+    expect(
+      PanelRaceResults.safeParse({
+        ...summary,
+        publish: { ...summary.publish, checklist: [{ code: 'flags', count: 1 }] },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('справочники протокола — в установленном порядке', () => {
+    expect(PUBLISH_CHECKS).toEqual([
+      'open_disputes',
+      'unprocessed_tracks',
+      'checks_queued',
+      'checks_failed',
+      'window_open',
+    ]);
+    expect(PUBLISH_STATE_BLOCKS).toEqual(['draft', 'cancelled', 'no_corridor', 'published']);
+    expect(RESULTS_ACTION_BLOCKS).toEqual([
+      'protocol_published',
+      'protocol_not_published',
+      'race_cancelled',
+      'attempt_state',
+      'row_state',
+      'checks_pending',
+      'recheck_not_started',
+    ]);
+    expect(RECALCULATION_KINDS).toEqual([
+      'published',
+      'disqualified',
+      'disqualification_revoked',
+      'recheck_started',
+      'recheck_applied',
+    ]);
+    expect(PROTOCOL_ROW_STATUSES).toEqual(['final', 'revised', 'dq']);
+    expect(RACE_RESULT_STATUSES.slice(-3)).toEqual(['final', 'dq', 'revised']);
+    expect(ATTEMPT_STATUSES.at(-1)).toBe('excluded');
+    expect(RACE_RESULTS_STATUSES).toEqual(['provisional', 'final']);
+  });
+
+  it('запросы действий: только причина (3–500) и id участника; лишние ключи — ошибка', () => {
+    expect(ResultsActionRequest.parse({ reason: '  Чужой трек  ' })).toEqual({
+      reason: 'Чужой трек',
+    });
+    expect(ResultsActionRequest.safeParse({ reason: 'ab' }).success).toBe(false);
+    expect(ResultsActionRequest.safeParse({ reason: 'x'.repeat(501) }).success).toBe(false);
+    expect(ResultsActionRequest.safeParse({ reason: 'Причина', place: 1 }).success).toBe(false);
+    expect(ResultsActionRequest.safeParse({}).success).toBe(false);
+    expect(ProtocolEntryActionRequest.parse({ entryId: ID, reason: 'Срезка' })).toEqual({
+      entryId: ID,
+      reason: 'Срезка',
+    });
+    expect(ProtocolEntryActionRequest.safeParse({ entryId: 'x', reason: 'Срезка' }).success).toBe(
+      false,
+    );
+    expect(
+      ProtocolEntryActionRequest.safeParse({ entryId: ID, reason: 'Срезка', elapsedSec: 1 })
+        .success,
+    ).toBe(false);
+  });
+
+  it('детали блокировок: причина из справочника, количество; чек-лист публикации', () => {
+    expect(ResultsActionBlockedDetails.parse({ reason: 'checks_pending', count: 3 })).toEqual({
+      reason: 'checks_pending',
+      count: 3,
+    });
+    expect(ResultsActionBlockedDetails.safeParse({ reason: 'busy' }).success).toBe(false);
+    expect(
+      ResultsPublishBlockedDetails.parse({ blockedBy: null, checklist }).checklist,
+    ).toHaveLength(5);
+  });
+
+  it('участники и история пересчётов', () => {
+    const row = {
+      entryId: ID,
+      userId: ID,
+      entryStatus: 'active',
+      resultStatus: 'dq',
+      place: null,
+      tied: false,
+      elapsedSec: 3600,
+      bestAttemptId: ID,
+      summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
+    };
+    expect(
+      PanelRaceStandings.parse({ source: 'protocol', revision: 2, truncated: false, items: [row] })
+        .items[0]?.resultStatus,
+    ).toBe('dq');
+    expect(
+      PanelRaceStandings.safeParse({
+        source: 'archive',
+        revision: null,
+        truncated: false,
+        items: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      PanelRaceStandings.safeParse({
+        source: 'live',
+        revision: null,
+        truncated: false,
+        items: [{ ...row, resultStatus: 'appealed' }],
+      }).success,
+    ).toBe(false);
+    const recalculation = {
+      id: ID,
+      kind: 'disqualified',
+      entryId: ID,
+      revision: 2,
+      reason: 'Срезка',
+      actor: { userId: ID, displayName: 'Ольга' },
+      at: AT,
+    };
+    expect(PanelProtocolRecalculations.parse({ items: [recalculation] }).items).toHaveLength(1);
+    expect(
+      PanelProtocolRecalculations.safeParse({ items: [{ ...recalculation, kind: 'rolled_back' }] })
+        .success,
     ).toBe(false);
   });
 });

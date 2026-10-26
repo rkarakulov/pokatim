@@ -15,6 +15,7 @@ import { trackSourceRefs } from './0012_track_source_refs';
 import { routes } from './0013_routes';
 import { rides } from './0014_rides';
 import { results } from './0015_results';
+import { protocol } from './0016_protocol';
 import { rideReports } from './0017_ride_reports';
 
 /**
@@ -37,5 +38,6 @@ export const migrations: readonly MongoMigration[] = [
   routes,
   rides,
   results,
+  protocol,
   rideReports,
 ];
