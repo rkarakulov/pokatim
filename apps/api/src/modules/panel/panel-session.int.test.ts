@@ -104,6 +104,8 @@ describe('POST /v1/admin/session/sign-in (AC2)', () => {
           'results.manage',
           'results.revise',
           'rides.moderate',
+          'disputes.read',
+          'disputes.decide',
         ],
       },
     });

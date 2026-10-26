@@ -42,7 +42,8 @@ paths:
 - Мягкое удаление пользователя = анонимизация («Удалённый участник»), а не каскадное удаление результатов.
 - Персональные и биометрические данные (пульс, мощность, FTP, вес) — в отдельных полях/коллекциях, чтобы их было
   просто анонимизировать и не выдавать лишнего.
-- Append-only на уровне данных: аудит, споры, пересчёты, модерация — без update/delete в коде.
+- Append-only на уровне данных: аудит, история споров (`dispute_events`), пересчёты, модерация — без update/delete
+  в коде. `disputes` — проекция состояния, переходы только из `open` (см. «Споры»).
 - Профиль райдера — `profiles` модуля `profile` (`_id` = id пользователя, ПДн отдельно от `users`): запись — одна
   атомарная операция над одним документом вне транзакции (`updateOne … upsert`), без `lockUser` (документы аккаунта
   не меняются); гонка первых upsert — `isDuplicateKey(error, '_id_')` и один повтор. Удаление аккаунта (когда
@@ -142,6 +143,29 @@ paths:
   с замком); `protocolPublishedAt`/`resultsVersion` пишет только `RacesRepository` (порт `RaceRegistry`).
 - Порядок «запуск ↔ публикация ↔ применение» и «устаревший вердикт» — по `at`/`checkedAt` из `CLOCK`, не по `_id`
   (`uuidv7` не монотонен внутри миллисекунды).
+
+## Споры (race-results-06)
+
+- `disputes`, `dispute_events` — единственный писатель `DisputesRepository` (модуль `disputes`). `dispute_events` —
+  только `insertOne`, без свободного текста (описание, ответ и заметка — только в документе спора). `disputes` —
+  проекция: `insertOne` и `updateOne` с фильтром `status: 'open'` (ответ — ещё `response: null`), без
+  delete/replace/`updateMany`/`findOneAndUpdate`/`bulkWrite`. Сторож — `disputes.repository.test.ts`.
+- Индексы (`0018_disputes`): уникальный `(raceId, complainantUserId, targetEntryId)` — один спор на пару, и после
+  отзыва (E11000 → `already_filed`); `(targetEntryId, status)` — D-39; `(raceId, status, filedAt, _id)` — чек-лист,
+  D-19, список по гонке; `(status, filedAt, _id)`, `(filedAt, _id)` — списки панели; история —
+  `(disputeId, at, _id)`.
+- Замки: подача — `RaceRegistry.lockResults` гонки, затем `ResultsForDisputes.lockEntry` цели (конфликт с
+  публикацией, отменой гонки, отменой участия и попыткой цели); решение — те же замки и `disqualify` в той же
+  транзакции. Отзыв и ответ — без замков результатов (атомарный переход из `open`).
+- `race_entries.disqualified { at, disputeId } | null` — проекция «DQ по спору до публикации»: читается только при
+  `protocolPublishedAt === null` (`rankedFilter`, статус `dq`, право подачи, `entryActions`). Протокол и
+  «Применить пересчёт» берут DQ из журнала `race_recalculations` (`revision: null`, `reason: 'dispute:<id>'`), базу —
+  из `protocolBaseEntries` (активные с `best`, включая DQ). После публикации поле не читается и не меняется.
+- `races.disputeFilingClosedAt` — момент отсечки D-44, фиксирует `RacesService.update` при переносе плановой даты
+  после наступления срока; пишет только `RacesRepository`. Срок приёма — `disputeFilingClosedAt ??
+  protocolPlannedAt − 24 ч`.
+- `disputes` не читает `race_entries`/`races` (только порты `ResultsForDisputes`, `RaceRegistry`); `results`/`races`
+  не читают `disputes` (только гейты `ResultDisputeGate`, `RaceCancelGate`).
 
 ## Сезоны, гонки, календарь (ADR-0010)
 

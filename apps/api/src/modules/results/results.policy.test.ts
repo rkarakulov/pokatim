@@ -13,6 +13,7 @@ import {
   attemptMatched,
   buildProtocol,
   entryActions,
+  entryDisputeBlock,
   EXCLUDABLE_STATUSES,
   type ProtocolBase,
   publishChecklist,
@@ -48,6 +49,7 @@ const race = (overrides: Partial<RaceForResults> = {}): RaceForResults => ({
   corridor: { routeId: 'route', widthM: 50, distanceM: 8000 },
   lockedAt: null,
   protocolPublishedAt: null,
+  disputeFilingClosedAt: null,
   ...overrides,
 });
 
@@ -96,14 +98,16 @@ const attempt = (overrides: Partial<AttemptState> = {}): AttemptState => ({
   ...overrides,
 });
 
-const entry = (
-  overrides: Partial<Pick<RaceEntryDoc, 'status' | 'best' | 'summary'>> = {},
-): Pick<RaceEntryDoc, 'status' | 'best' | 'summary'> => ({
+type EntryState = Pick<RaceEntryDoc, 'status' | 'best' | 'summary' | 'disqualified'>;
+const entry = (overrides: Partial<EntryState> = {}): EntryState => ({
   status: 'active',
   best: null,
   summary: { total: 0, pending: 0, counted: 0, rejectedShown: 0, failed: 0, excluded: 0 },
+  disqualified: null,
   ...overrides,
 });
+/** Без открытых споров (race-results-06). */
+const NO_DISPUTES = { openDisputes: 0 };
 
 describe('сторож кодов отказа (AC27)', () => {
   it('ATTEMPT_REJECTIONS = CORRIDOR_REJECTIONS движка в том же порядке + implausible', () => {
@@ -348,6 +352,82 @@ describe('resultStatus (§7.4, AC19)', () => {
   });
 });
 
+describe('resultStatus — DQ по спору до публикации (race-results-06, D-43)', () => {
+  const now = at('2026-10-25T12:00:00Z');
+  const best = { attemptId: 'a', elapsedSec: 1, startedAt: now, finishedAt: now };
+  const disqualified = { at: now, disputeId: 'd' };
+
+  it('DQ до публикации — dq вместо provisional; отменённая — withdrawn', () => {
+    expect(resultStatus(entry({ best, disqualified }), race(), now)).toBe('dq');
+    expect(resultStatus(entry({ best }), race(), now)).toBe('provisional');
+    expect(resultStatus(entry({ status: 'withdrawn', best, disqualified }), race(), now)).toBe(
+      'withdrawn',
+    );
+  });
+
+  it('после публикации поле не читается (RC-3); ignoreBest — без dq', () => {
+    const published = race({ protocolPublishedAt: now });
+    expect(resultStatus(entry({ best, disqualified }), published, now)).toBe('provisional');
+    expect(resultStatus(entry({ best, disqualified }), race(), now, { ignoreBest: true })).not.toBe(
+      'dq',
+    );
+  });
+});
+
+describe('entryDisputeBlock (D-39, RC-6)', () => {
+  const now = at('2026-10-25T12:00:00Z');
+  const disqualified = { at: now, disputeId: 'd' };
+
+  it('DQ до публикации важнее открытого спора; после публикации поле не читается', () => {
+    expect(entryDisputeBlock(entry(), 0, race())).toBeNull();
+    expect(entryDisputeBlock(entry(), 2, race())).toBe('dispute_open');
+    expect(entryDisputeBlock(entry({ disqualified }), 1, race())).toBe('disqualified');
+    expect(entryDisputeBlock(entry({ disqualified }), 0, race({ protocolPublishedAt: now }))).toBe(
+      null,
+    );
+  });
+});
+
+describe('entryActions — споры (D-39, RC-4, RC-6)', () => {
+  const open = at('2026-10-25T12:00:00Z');
+  const closed = new Date(CLOSES.getTime() + HOUR);
+  const late = uploadClosesAt(race());
+
+  it('открытый спор: отмена и попытка закрыты одной причиной dispute_open', () => {
+    expect(entryActions(race(), 'open', entry(), open, { openDisputes: 1 })).toEqual({
+      canEnter: false,
+      canWithdraw: false,
+      canAddAttempt: false,
+      reasons: ['dispute_open'],
+    });
+  });
+
+  it('DQ: причина disqualified', () => {
+    const disqualified = { at: open, disputeId: 'd' };
+    expect(
+      entryActions(race(), 'open', entry({ disqualified }), open, { openDisputes: 1 }),
+    ).toEqual({
+      canEnter: false,
+      canWithdraw: false,
+      canAddAttempt: false,
+      reasons: ['disqualified'],
+    });
+  });
+
+  it('закрытое окно объясняется своей причиной; спор — только у ещё доступного действия', () => {
+    expect(entryActions(race(), 'closed', entry(), closed, { openDisputes: 1 })).toEqual({
+      canEnter: false,
+      canWithdraw: false,
+      canAddAttempt: false,
+      reasons: ['window_closed', 'dispute_open'],
+    });
+    expect(entryActions(race(), 'closed', entry(), late, { openDisputes: 1 }).reasons).toEqual([
+      'window_closed',
+      'upload_closed',
+    ]);
+  });
+});
+
 describe('entryActions (D-37, C1/H2)', () => {
   const before = new Date(STARTS.getTime() - HOUR);
   const open = at('2026-10-25T12:00:00Z');
@@ -355,56 +435,56 @@ describe('entryActions (D-37, C1/H2)', () => {
   const late = uploadClosesAt(race());
 
   it('без заявки: заявиться можно в upcoming/open; без коридора, отменена, окно закрыто — причина', () => {
-    expect(entryActions(race(), 'upcoming', null, before)).toEqual({
+    expect(entryActions(race(), 'upcoming', null, before, NO_DISPUTES)).toEqual({
       canEnter: true,
       canWithdraw: false,
       canAddAttempt: false,
       reasons: ['not_entered'],
     });
-    expect(entryActions(race(), 'open', null, open).canEnter).toBe(true);
-    expect(entryActions(race({ corridor: null }), 'open', null, open).reasons).toEqual([
-      'no_corridor',
-      'not_entered',
-    ]);
-    expect(entryActions(race({ status: 'cancelled' }), 'cancelled', null, open).reasons).toEqual([
-      'cancelled',
-      'not_entered',
-    ]);
-    expect(entryActions(race(), 'closed', null, closed)).toMatchObject({
+    expect(entryActions(race(), 'open', null, open, NO_DISPUTES).canEnter).toBe(true);
+    expect(entryActions(race({ corridor: null }), 'open', null, open, NO_DISPUTES).reasons).toEqual(
+      ['no_corridor', 'not_entered'],
+    );
+    expect(
+      entryActions(race({ status: 'cancelled' }), 'cancelled', null, open, NO_DISPUTES).reasons,
+    ).toEqual(['cancelled', 'not_entered']);
+    expect(entryActions(race(), 'closed', null, closed, NO_DISPUTES)).toMatchObject({
       canEnter: false,
       reasons: ['entries_closed', 'not_entered'],
     });
   });
 
   it('отменённая заявка: ничего нельзя, причина withdrawn', () => {
-    expect(entryActions(race(), 'open', entry({ status: 'withdrawn' }), open)).toEqual({
-      canEnter: false,
-      canWithdraw: false,
-      canAddAttempt: false,
-      reasons: ['withdrawn'],
-    });
+    expect(entryActions(race(), 'open', entry({ status: 'withdrawn' }), open, NO_DISPUTES)).toEqual(
+      {
+        canEnter: false,
+        canWithdraw: false,
+        canAddAttempt: false,
+        reasons: ['withdrawn'],
+      },
+    );
   });
 
   it('активная: отмена до закрытия окна, попытки — с открытия окна до срока загрузки и до предела', () => {
-    expect(entryActions(race(), 'upcoming', entry(), before)).toEqual({
+    expect(entryActions(race(), 'upcoming', entry(), before, NO_DISPUTES)).toEqual({
       canEnter: false,
       canWithdraw: true,
       canAddAttempt: false,
       reasons: ['window_not_open'],
     });
-    expect(entryActions(race(), 'open', entry(), open)).toEqual({
+    expect(entryActions(race(), 'open', entry(), open, NO_DISPUTES)).toEqual({
       canEnter: false,
       canWithdraw: true,
       canAddAttempt: true,
       reasons: [],
     });
-    expect(entryActions(race(), 'closed', entry(), closed)).toEqual({
+    expect(entryActions(race(), 'closed', entry(), closed, NO_DISPUTES)).toEqual({
       canEnter: false,
       canWithdraw: false,
       canAddAttempt: true,
       reasons: ['window_closed'],
     });
-    expect(entryActions(race(), 'closed', entry(), late).reasons).toEqual([
+    expect(entryActions(race(), 'closed', entry(), late, NO_DISPUTES).reasons).toEqual([
       'window_closed',
       'upload_closed',
     ]);
@@ -418,7 +498,9 @@ describe('entryActions (D-37, C1/H2)', () => {
         excluded: 0,
       },
     });
-    expect(entryActions(race(), 'open', full, open).reasons).toEqual(['attempt_limit']);
+    expect(entryActions(race(), 'open', full, open, NO_DISPUTES).reasons).toEqual([
+      'attempt_limit',
+    ]);
   });
 
   it('attemptClosedReason: до окна, после срока, отменена', () => {

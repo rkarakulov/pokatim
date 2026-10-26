@@ -15,6 +15,8 @@ import { AttemptsService } from './attempts.service';
 import { EntriesService } from './entries.service';
 import { RaceEntryController } from './race-entry.controller';
 import { ResultsAdminController } from './results-admin.controller';
+import { ResultsForDisputesService } from './results-for-disputes';
+import { RESULTS_FOR_DISPUTES } from './results-for-disputes.port';
 import { ResultsIntakeProcessor } from './results-intake.processor';
 import { ResultsMaintenanceProcessor, ResultsSchedules } from './results-maintenance.processor';
 import { ResultsPanelReadService } from './results-panel-read.service';
@@ -28,11 +30,19 @@ import { ResultsRepository } from './results.repository';
 /**
  * Ядро `results` для API и worker: репозиторий, приём попыток, чтение, перепроверка. Другие модули — только через
  * их `index.ts` (порты `RaceRegistry`, `RouteGeometry`, `ActivitySource`, `RiderNameDirectory` (`profile`));
- * `races`, `routes`, `tracks`, `profile` о `results` не знают.
+ * `races`, `routes`, `tracks`, `profile` о `results` не знают. Для `disputes` (race-results-06) — порт
+ * `RESULTS_FOR_DISPUTES`; гейт споров `RESULT_DISPUTE_GATE` даёт `@Global DisputesCoreModule`.
  */
 @Module({
   imports: [RacesCoreModule, RoutesCoreModule, TracksCoreModule, ProfileCoreModule],
-  providers: [ResultsRepository, AttemptIntake, ResultsReadService, ResultsRecheck],
+  providers: [
+    ResultsRepository,
+    AttemptIntake,
+    ResultsReadService,
+    ResultsRecheck,
+    ResultsForDisputesService,
+    { provide: RESULTS_FOR_DISPUTES, useExisting: ResultsForDisputesService },
+  ],
   exports: [
     RacesCoreModule,
     RoutesCoreModule,
@@ -41,6 +51,7 @@ import { ResultsRepository } from './results.repository';
     AttemptIntake,
     ResultsReadService,
     ResultsRecheck,
+    RESULTS_FOR_DISPUTES,
   ],
 })
 export class ResultsCoreModule {}

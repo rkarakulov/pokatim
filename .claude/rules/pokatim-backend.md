@@ -57,7 +57,8 @@ paths:
 ## Авторитет сервера и история
 
 - Результаты, места, кластеры считает только сервер; входящие от клиента значения времени игнорируются.
-- Append-only (только INSERT): споры, исключения треков, пересчёты, модерация, решения организатора.
+- Append-only (только INSERT): история споров (`dispute_events`), исключения треков, пересчёты, модерация, решения
+  организатора. Проекция `disputes` — переходы только из `open` (`pokatim-db.md`, «Споры»).
 
 ## Очереди (worker)
 
@@ -87,8 +88,8 @@ paths:
 
 ## Красные флаги pokatim
 
-Клиентское время в расчёте результата · UPDATE/DELETE аудита и споров · биометрия или e-mail в логах ·
-разбор трека или рендер в HTTP-обработчике.
+Клиентское время в расчёте результата · UPDATE/DELETE аудита и истории споров, переход спора не из `open` ·
+биометрия или e-mail в логах · разбор трека или рендер в HTTP-обработчике.
 
 ## Протокол (`results`, race-results-05)
 
@@ -104,6 +105,27 @@ paths:
   издатель базы берёт только типы из маршрутов).
 - Отказы состояния — `409 RESULTS_ACTION_BLOCKED { reason, count? }`, `409 RESULTS_PUBLISH_BLOCKED { blockedBy,
   checklist }`.
+
+## Споры (`disputes`, race-results-06)
+
+- Модуль `disputes`: `DisputesService` (приложение — подача, отзыв, ответ, «мои споры в гонке»), `DisputesPanelService`
+  (список, разбор, решение), политика — чистые функции `disputes.policy.ts`. Другие модули — только через
+  `index.ts`: `ResultsForDisputes` (`results`: заявки гонки, `lockEntry` цели, `disqualify`, `standing` — место через
+  `ResultsReadService.entryResult`, без второго расчёта мест), `RaceRegistry` (`races`: гонка, фаза, `lockResults`).
+- Гейты: `results` объявляет `ResultDisputeGate` (D-39, чек-лист `open_disputes`), `races` — `RaceCancelGate`
+  (D-19); реализация `DisputeGates` — в `@Global DisputesCoreModule`, его импортируют `AppModule` и `WorkerModule`.
+  Инъекция обязательная, без `@Optional`: забытая регистрация роняет старт, а не выключает D-39 молча.
+- D-39: `EntriesService.withdraw` и `AttemptsService.add` под `lockEntry` → `RACE_WITHDRAW_CLOSED` /
+  `ATTEMPT_UPLOAD_CLOSED { reason: 'dispute_open' | 'disqualified' }`. Авто-приём (`AttemptIntake.syncGroup`) при
+  открытом споре по заявке и без запроса райдера по группе — выход без изменений: группа заморожена целиком (снятие
+  `not_primary` тоже). После решения авто-попытки сами не появятся — райдер выбирает заезд явно.
+- Решение — `lockResults` → проверки (`not_open`, `cancelled`, `protocol_published`, `too_early` с `availableAt`) →
+  `lockEntry` цели → переход → при `upheld` `disqualify` (идемпотентно) → событие, outbox, `PanelAudit.append` в той же
+  транзакции.
+- События `disputes.dispute-filed/-withdrawn/-responded/-decided` — в outbox без маршрута до модуля `notifications`
+  (A11); в событиях только id и коды. Лог после коммита — `disputeId`, `raceId`, действие, исход.
+- Отказы — `409 DISPUTE_ACTION_BLOCKED { reason, availableAt? }`, `404 DISPUTE_NOT_FOUND`; отмена гонки при открытых
+  спорах — `409 RACE_INVALID_STATE { reason: 'disputes_open' }`.
 
 ## Кофе-райды (`rides`, блок 05)
 

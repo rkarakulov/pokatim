@@ -1,5 +1,6 @@
 import { corridorGateRadiusM } from '@pokatim/tracks';
 import {
+  DISPUTE_FILING_LEAD_HOURS,
   RACE_FIELDS,
   RACE_PROTOCOL_MIN_DELAY_HOURS,
   type FieldErrorCode,
@@ -246,7 +247,11 @@ export function validateRaceRules(next: RaceValues, prev: RaceDoc | null, now: D
 export function raceEditable(
   race: RaceDoc,
   now: Date,
-  { canManage, seasonFound }: { canManage: boolean; seasonFound: boolean },
+  {
+    canManage,
+    seasonFound,
+    openDisputes = 0,
+  }: { canManage: boolean; seasonFound: boolean; openDisputes?: number },
 ): RaceEditable {
   const none: RaceEditable = {
     fields: [],
@@ -283,12 +288,34 @@ export function raceEditable(
           ? ['results_final']
           : [];
   if (locked) reasons.push('entries_locked');
+  // D-19 (race-results-06): открытый спор — отмена гонки недоступна до решения
+  const disputesOpen = phase !== 'final' && openDisputes > 0;
+  if (disputesOpen) reasons.push('disputes_open');
   return {
     ...none,
     fields: editableFields(race, publishedFields(phase, locked), phase),
-    canCancel: phase !== 'final',
+    canCancel: phase !== 'final' && !disputesOpen,
     reasons,
   };
+}
+
+/**
+ * Фиксация отсечки приёма споров (D-44, RC-7): при переносе плановой даты протокола после наступления отсечки
+ * (`now ≥ current − 24 ч`) — `current − 24 ч`, чтобы перенос позже (V-11) не открыл приём снова. Уже зафиксирована —
+ * она; дата не меняется или отсечка не наступила — `null`.
+ */
+export function disputeFilingFreeze(
+  current: Pick<RaceDoc, 'protocolPlannedAt' | 'disputeFilingClosedAt'>,
+  nextPlannedAt: Date,
+  now: Date,
+): Date | null {
+  const frozen = current.disputeFilingClosedAt ?? null;
+  if (frozen) return frozen;
+  if (nextPlannedAt.getTime() === current.protocolPlannedAt.getTime()) return null;
+  const cutoff = new Date(
+    current.protocolPlannedAt.getTime() - DISPUTE_FILING_LEAD_HOURS * 3_600_000,
+  );
+  return now >= cutoff ? cutoff : null;
 }
 
 /** Поля фазы с правилами коридора: с коридором `distanceKm` вычисляется сервером — не в `fields`. */

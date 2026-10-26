@@ -140,6 +140,20 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `features/races/participation-format.ts`), не `reasons[0]`. `races/pick/[id]` — под гардом вкладок. Загрузка в
   гонку — `useTrackFileUpload({ onUploaded })` + `addRaceAttempt({ uploadId })`; прогресс — общий `UploadProgress`.
 
+- Споры (race-results-06) — `features/races/disputes/*`. Экраны внутри `Stack.Protected` (статический сегмент
+  первым): `races/result/[id]/[entryId]` — карточка соперника, `races/dispute/[id]/[entryId]` — подача,
+  `races/dispute-response/[id]/[disputeId]` — ответ; все — в `app/_layout.tsx` и `__tests__/app-routes.ts`. Строки
+  таблицы (кроме своей) нажимаемы только у участника, когда карточке есть что показать (`filing.status !==
+  'unavailable'` или мой спор по строке); гостю и неучастнику таблица не меняется. Карточка соперника — без имени
+  (A12): место и время из кэша `useRaceResults`, статус — `page.status` таблицы; нет строки — `EmptyState`.
+  `useMyRaceDisputes` (ключ `['races','disputes',id]`) — только у вошедшего с заявкой; опрос `ENTRY_POLL_MS`, пока
+  есть открытый спор; мутации инвалидируют споры, участие и таблицу. Право подачи, сроки (D-44, D-25), анонимность
+  (D-51) и D-39 — только с сервера (`filing`, `actions`); причина `filing.status: 'closed'` — по `filing.reason`
+  («…будет опубликован {date}» только для `filing_closed`). Подача — категория обязательна, без вложений (A10);
+  описание и ответ — однострочный `TextField` базы. Отзыв — `WithdrawConfirm` с `texts`. D-39: причины у
+  «Загрузить заезд» (`races.block.*`) и «Отменить участие» (`races.withdrawBlock.*` — только `dispute_open` /
+  `disqualified`); 409 — текст по `details.reason`.
+
 ## Календарь стартов (блок 04, `docs/product/races-and-seasons.md`)
 
 - Вкладка «Календарь» — `features/calendar/calendar-feed.tsx` (`FlatList`): одна выдача, ключ

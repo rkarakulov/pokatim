@@ -61,6 +61,11 @@ import {
   RidePage,
   RideView,
   type UpdateRideRequest,
+  DisputeAgainstMe,
+  MyDispute,
+  MyRaceDisputes,
+  type DisputeFileRequest,
+  type DisputeResponseRequest,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -392,6 +397,39 @@ export function createApiClient({
         `/v1/races/${encodeURIComponent(raceId)}/attempt-candidates`,
         AttemptCandidates,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+
+    // --- споры по результатам (race-results-06) ---
+    /** Приём споров и мои споры в гонке: поданные мной и по моему результату (D-51). */
+    getMyRaceDisputes: (accessToken: string, raceId: string) =>
+      request(
+        `/v1/races/${encodeURIComponent(raceId)}/disputes`,
+        MyRaceDisputes,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** «Оспорить результат»: `201 MyDispute`; отказ — `409 DISPUTE_ACTION_BLOCKED` с причиной. */
+    fileDispute: (accessToken: string, raceId: string, body: DisputeFileRequest) =>
+      postAuthorized(
+        accessToken,
+        `/v1/races/${encodeURIComponent(raceId)}/disputes`,
+        MyDispute,
+        body,
+      ),
+    /** «Отозвать спор» (только заявитель, только открытый); подать снова нельзя. */
+    withdrawDispute: (accessToken: string, disputeId: string) =>
+      postAuthorized(
+        accessToken,
+        `/v1/disputes/${encodeURIComponent(disputeId)}/withdraw`,
+        MyDispute,
+        {},
+      ),
+    /** Ответ участника, чей результат оспорен (один раз). */
+    respondToDispute: (accessToken: string, disputeId: string, body: DisputeResponseRequest) =>
+      postAuthorized(
+        accessToken,
+        `/v1/disputes/${encodeURIComponent(disputeId)}/response`,
+        DisputeAgainstMe,
+        body,
       ),
 
     // --- устройства через агрегатор (вход обязателен, tracks-devices) ---

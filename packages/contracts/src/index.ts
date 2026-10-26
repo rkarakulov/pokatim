@@ -26,3 +26,5 @@ export * from './results/results.schema.ts';
 export * from './results/results-admin.schema.ts';
 export * from './rides/ride-report.schema.ts';
 export * from './rides/ride-moderation.schema.ts';
+export * from './disputes/disputes.schema.ts';
+export * from './disputes/disputes-admin.schema.ts';

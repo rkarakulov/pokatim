@@ -1,5 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { MyRaceEntry, RaceEntryBlockReason, RateLimitedDetails } from '@pokatim/contracts';
+import type {
+  MyRaceEntry,
+  RaceEntryBlockedDetails,
+  RaceEntryBlockReason,
+  RateLimitedDetails,
+} from '@pokatim/contracts';
 import { CLOCK, type Clock, RateLimiter, type RateLimitRule } from '@rkarakulov/api-kit/core';
 import {
   isDuplicateKey,
@@ -10,9 +15,10 @@ import {
 
 import { domainError } from '../../error-messages';
 import { RACE_REGISTRY, type RaceRegistry } from '../races';
+import { RESULT_DISPUTE_GATE, type ResultDisputeGate } from './result-dispute-gate.port';
 import type { RaceEntryDoc } from './results.collection';
 import { RESULTS_ENTRY_CREATED } from './results.events';
-import { RESULTS_POLICY } from './results.policy';
+import { entryDisputeBlock, RESULTS_POLICY } from './results.policy';
 import { ResultsReadService } from './results-read.service';
 import { ResultsRepository } from './results.repository';
 
@@ -48,6 +54,7 @@ export class EntriesService {
     private readonly outbox: MongoOutboxWriter,
     private readonly rateLimiter: RateLimiter,
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
+    @Inject(RESULT_DISPUTE_GATE) private readonly disputes: ResultDisputeGate,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -88,6 +95,7 @@ export class EntriesService {
           createdAt: now,
           updatedAt: now,
           withdrawnAt: null,
+          disqualified: null,
           version: 0,
         };
         await this.repository.insertEntry(tx, entry);
@@ -108,7 +116,9 @@ export class EntriesService {
 
   /**
    * «Отменить участие» (C1/H2): только в `upcoming|open`; попытки и треки остаются, строки в таблице нет, повторной
-   * заявки нет. Уже отменённая — идемпотентно.
+   * заявки нет. Уже отменённая — идемпотентно. Споры (race-results-06): DQ до публикации — `disqualified` (RC-6);
+   * открытый спор против заявки — `dispute_open` (D-39). Гейт читается под `lockEntry`: подача спора тоже берёт замок
+   * заявки-цели — конфликт записи.
    */
   async withdraw(userId: string, raceId: string): Promise<MyRaceEntry> {
     const now = this.clock.now();
@@ -122,6 +132,15 @@ export class EntriesService {
       if (!race) throw domainError('NOT_FOUND', 404);
       const phase = this.races.phase(race, now);
       if (phase !== 'upcoming' && phase !== 'open') throw domainError('RACE_WITHDRAW_CLOSED', 409);
+      const dispute = entryDisputeBlock(
+        entry,
+        await this.disputes.openAgainst(entry._id, tx),
+        race,
+      );
+      if (dispute) {
+        const details: RaceEntryBlockedDetails = { reason: dispute };
+        throw domainError('RACE_WITHDRAW_CLOSED', 409, details);
+      }
       await this.repository.withdrawEntry(tx, entry._id, now);
     });
     return this.read.myEntry(userId, raceId);

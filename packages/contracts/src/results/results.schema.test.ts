@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ErrorCode, FieldErrorCode } from '../common.ts';
-import { RaceEditBlockReason } from '../races/race.schema.ts';
+import { RaceEditBlockReason, RaceInvalidStateDetails } from '../races/race.schema.ts';
 import {
   ATTEMPT_REVIEW_KINDS,
   PanelProtocolRecalculations,
@@ -21,6 +21,8 @@ import {
 } from './results-admin.schema.ts';
 import {
   ATTEMPT_REJECTIONS,
+  RACE_ENTRY_BLOCK_REASONS,
+  RaceEntryBlockedDetails,
   ATTEMPT_STATUSES,
   RACE_RESULT_STATUSES,
   RACE_RESULTS_STATUSES,
@@ -94,7 +96,7 @@ describe('участие и результаты: приложение', () => {
         { ...myEntry.attempts[0], origin: 'judge', status: 'judged', reasons: ['too_fast'] },
       ],
       pendingUploads: [{ uploadId: ID, status: 'paused', failure: 'virus' }],
-      actions: { ...myEntry.actions, reasons: ['dispute_open'] },
+      actions: { ...myEntry.actions, reasons: ['cluster_closed'] },
     });
     expect(future.entry?.status).toBe('unknown');
     expect(future.result.status).toBe('unknown');
@@ -152,12 +154,30 @@ describe('участие и результаты: приложение', () => {
     ]) {
       expect(ErrorCode.options).toContain(code);
     }
-    expect(ErrorCode.options.slice(-2)).toEqual([
-      'RESULTS_ACTION_BLOCKED',
-      'RESULTS_PUBLISH_BLOCKED',
-    ]);
+    expect(ErrorCode.options).toContain('RESULTS_ACTION_BLOCKED');
+    expect(ErrorCode.options).toContain('RESULTS_PUBLISH_BLOCKED');
     expect(FieldErrorCode.options.at(-1)).toBe('CORRIDOR_GATES_OVERLAP');
-    expect(RaceEditBlockReason.options.slice(-2)).toEqual(['entries_locked', 'results_final']);
+    expect(RaceEditBlockReason.options.slice(-3)).toEqual([
+      'entries_locked',
+      'results_final',
+      'disputes_open',
+    ]);
+  });
+
+  it('споры (06): причины участия в конце; детали 409 отмены участия и попытки терпят новое', () => {
+    expect(RACE_ENTRY_BLOCK_REASONS.slice(-3)).toEqual([
+      'attempt_limit',
+      'dispute_open',
+      'disqualified',
+    ]);
+    expect(RaceEntryBlockedDetails.parse({ reason: 'dispute_open' })).toEqual({
+      reason: 'dispute_open',
+    });
+    expect(RaceEntryBlockedDetails.parse({ reason: 'later' }).reason).toBe('unknown');
+    expect(RaceInvalidStateDetails.parse({ reason: 'disputes_open' })).toEqual({
+      reason: 'disputes_open',
+    });
+    expect(RaceInvalidStateDetails.safeParse({ reason: 'later' }).success).toBe(false);
   });
 });
 

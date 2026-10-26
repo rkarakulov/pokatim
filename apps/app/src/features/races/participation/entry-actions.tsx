@@ -14,6 +14,7 @@ import {
   addAttemptBlockReason,
   blockReasonText,
   raceActionErrorText,
+  withdrawBlockReason,
 } from '../participation-format';
 import { useAddRaceAttempt, useWithdrawFromRace } from '../queries';
 import { WithdrawConfirm } from './withdraw-confirm';
@@ -43,6 +44,8 @@ export function EntryActions({
   });
   const { actions } = entry;
   const blocked = actions.canAddAttempt ? null : addAttemptBlockReason(actions);
+  // D-39 / DQ (RC-4, RC-6): почему нельзя отменить участие; закрытое окно — без текста, как раньше
+  const withdrawBlocked = withdrawBlockReason(actions);
   const meta = [textStyle('meta'), { color: theme.text.secondary }];
   const closes = now === null ? null : minskDateTime(entry.uploadClosesAt, now);
 
@@ -117,6 +120,7 @@ export function EntryActions({
           </View>
         )
       ) : null}
+      {withdrawBlocked ? <Text style={meta}>{withdrawBlocked}</Text> : null}
       {withdraw.error ? (
         <Banner tone="error" message={raceActionErrorText(withdraw.error)} />
       ) : null}

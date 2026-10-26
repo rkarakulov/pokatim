@@ -10,19 +10,27 @@ import { focusForAccessibility } from '@/lib/accessibility-focus';
  * Инлайн-подтверждение «Отменить участие?» (§7.4; одинаково на всех платформах, не модалка): последствия C1/H2,
  * destructive «Отменить участие» и «Оставить участие»; при появлении фокус скринридера — на заголовке. Мутация и её
  * отказ — у владельца (`EntryActions`): текст отказа остаётся, даже когда сервер уже не даёт отменить и панель
- * закрывается. На время запроса обе кнопки выключены.
+ * закрывается. На время запроса обе кнопки выключены. Тексты по умолчанию — отмены участия; `texts` — то же
+ * подтверждение для другого необратимого действия («Отозвать спор?», race-results-06).
  */
 export function WithdrawConfirm({
   pending,
   onConfirm,
   onClose,
+  texts,
 }: {
   pending: boolean;
   onConfirm: () => void;
   onClose: () => void;
+  texts?: { title: string; body: string; confirm: string; keep: string };
 }) {
   const theme = useTheme();
-  const title = t('races.entry.withdrawTitle');
+  const { title, body, confirm, keep } = texts ?? {
+    title: t('races.entry.withdrawTitle'),
+    body: t('races.entry.withdrawBody'),
+    confirm: t('races.entry.withdrawConfirm'),
+    keep: t('races.entry.keep'),
+  };
   const heading = useRef<HostInstance>(null);
 
   useEffect(() => {
@@ -39,23 +47,11 @@ export function WithdrawConfirm({
       >
         {title}
       </Text>
-      <Text style={[textStyle('body'), { color: theme.text.primary }]}>
-        {t('races.entry.withdrawBody')}
-      </Text>
+      <Text style={[textStyle('body'), { color: theme.text.primary }]}>{body}</Text>
       <View style={styles.start}>
-        <TextAction
-          label={t('races.entry.withdrawConfirm')}
-          destructive
-          disabled={pending}
-          onPress={onConfirm}
-        />
+        <TextAction label={confirm} destructive disabled={pending} onPress={onConfirm} />
       </View>
-      <Button
-        label={t('races.entry.keep')}
-        variant="secondary"
-        disabled={pending}
-        onPress={onClose}
-      />
+      <Button label={keep} variant="secondary" disabled={pending} onPress={onClose} />
     </View>
   );
 }
