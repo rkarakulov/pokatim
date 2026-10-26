@@ -20,4 +20,13 @@ export const QUEUE = {
   identityEmail: 'identity-email',
   /** Регламентные задачи identity по расписанию (очистка неподтверждённых). */
   identityMaintenance: 'identity-maintenance',
+  /**
+   * Приём попыток гонок (race-results-03): события `tracks.activity-ready/-removed` и `results.entry-created` →
+   * попытки заявок; jobId = id события outbox.
+   */
+  resultsIntake: 'results-intake',
+  /** Сверка попытки с коридором (`analyzeAttempt` в потоке разбора): jobId = id события outbox. */
+  attemptCheck: 'attempt-check',
+  /** Регламент результатов: повторная постановка зависших проверок. */
+  resultsMaintenance: 'results-maintenance',
 } as const;

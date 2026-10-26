@@ -47,6 +47,11 @@ export interface RaceDoc {
   updatedAt: Date;
   publishedAt: Date | null;
   cancelledAt: Date | null;
+  /**
+   * Момент первой заявки участника (race-results-03, V-12): коридор, окно, класс и покрытия больше не меняются.
+   * Пишет только `RacesRepository.admitEntry` (порт `RaceRegistry`); документы до `0015_results` — `?? null`.
+   */
+  lockedAt: Date | null;
   version: number;
 }
 

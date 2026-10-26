@@ -76,6 +76,7 @@ async function seed() {
       updatedAt: now,
       publishedAt: status === 'draft' ? null : now,
       cancelledAt: status === 'cancelled' ? now : null,
+      lockedAt: null,
       version: 3,
     };
   });
@@ -261,6 +262,7 @@ async function insertRace(
     updatedAt: now,
     publishedAt: status === 'draft' ? null : now,
     cancelledAt: status === 'cancelled' ? now : null,
+    lockedAt: null,
     version: 1,
   };
   await racesDb(h).races.insertOne(doc);

@@ -6,9 +6,13 @@ import {
   changedRaceFields,
   corridorDistanceKm,
   type RaceValues,
+  entriesLocked,
+  LOCKED_BY_ENTRIES,
   raceEditable,
   racePhase,
+  raceVisible,
   seasonPhase,
+  validateCorridorRoute,
   validateRaceRules,
 } from './races.policy';
 
@@ -45,6 +49,7 @@ function race(overrides: Partial<RaceDoc> = {}): RaceDoc {
     updatedAt: at('2026-09-01T00:00:00Z'),
     publishedAt: at('2026-09-01T00:00:00Z'),
     cancelledAt: null,
+    lockedAt: null,
     version: 0,
     ...overrides,
   };
@@ -313,12 +318,62 @@ describe('коридор (race-results-01 §5)', () => {
     );
   });
 
-  it('точка расширения locked (слайс 03): коридор зафиксирован в любой фазе', () => {
-    const draft = race({ status: 'draft', seasonId: null });
-    expect(validateRaceRules(withCorridor, draft, before, { locked: true })).toEqual([
-      { path: 'corridor', code: 'FIELD_LOCKED' },
+  it('V-12: есть заявки — коридор, окно, класс, покрытия FIELD_LOCKED в любой фазе; причина entries_locked', () => {
+    const lockedAt = at('2026-09-20T00:00:00Z');
+    expect(LOCKED_BY_ENTRIES).toEqual([
+      'corridor',
+      'windowStartsAt',
+      'windowEndsAt',
+      'bikeClass',
+      'surfaces',
     ]);
-    expect(raceEditable(draft, before, { ...opts, locked: true }).fields).not.toContain('corridor');
+    for (const now of [before, open]) {
+      const prev = race({ ...withCorridor, lockedAt });
+      const editable = raceEditable(prev, now, opts);
+      for (const field of LOCKED_BY_ENTRIES) expect(editable.fields).not.toContain(field);
+      expect(editable.fields).toEqual(expect.arrayContaining(['title', 'description']));
+      expect(editable.reasons.at(-1)).toBe('entries_locked');
+      const longer = new Date(WINDOW_END.getTime() + DAY);
+      expect(
+        validateRaceRules(
+          {
+            ...withCorridor,
+            corridor: { ...corridor, widthM: 100 },
+            windowEndsAt: longer,
+            protocolPlannedAt: new Date(longer.getTime() + 48 * HOUR),
+            bikeClass: 'gravel',
+            surfaces: ['gravel'],
+          },
+          prev,
+          now,
+        ).filter((issue) => issue.code === 'FIELD_LOCKED'),
+      ).toEqual(
+        expect.arrayContaining([
+          { path: 'bikeClass', code: 'FIELD_LOCKED' },
+          { path: 'surfaces', code: 'FIELD_LOCKED' },
+          { path: 'windowEndsAt', code: 'FIELD_LOCKED' },
+          { path: 'corridor', code: 'FIELD_LOCKED' },
+        ]),
+      );
+      // название и описание — как V-11
+      expect(
+        validateRaceRules({ ...withCorridor, title: 'Новое', description: 'Текст' }, prev, now),
+      ).toEqual([]);
+    }
+    expect(raceEditable(race({ ...withCorridor }), before, opts).reasons).toEqual([]);
+    expect(entriesLocked(race())).toBe(false);
+    const legacy = race();
+    delete (legacy as Partial<RaceDoc>).lockedAt;
+    expect(entriesLocked(legacy)).toBe(false);
+  });
+
+  it('ворота: линейный маршрут с концами ≤ 2·max(widthM, 30) — CORRIDOR_GATES_OVERLAP; петля — нет', () => {
+    const issue = { path: 'corridor.routeId', code: 'CORRIDOR_GATES_OVERLAP' };
+    expect(validateCorridorRoute({ isLoop: false, endsDistanceM: 100 }, 50)).toEqual(issue);
+    expect(validateCorridorRoute({ isLoop: false, endsDistanceM: 100.5 }, 50)).toBeNull();
+    expect(validateCorridorRoute({ isLoop: false, endsDistanceM: 60 }, 20)).toEqual(issue);
+    expect(validateCorridorRoute({ isLoop: false, endsDistanceM: 61 }, 20)).toBeNull();
+    expect(validateCorridorRoute({ isLoop: true, endsDistanceM: 0 }, 200)).toBeNull();
   });
 
   it('editable: с коридором distanceKm вне fields; открытое окно — corridor только без коридора', () => {
@@ -335,6 +390,18 @@ describe('коридор (race-results-01 §5)', () => {
       'description',
       'protocolPlannedAt',
     ]);
+  });
+
+  it('видимость в панели: организатор — только свои; manage_any и только чтение — все', () => {
+    const own = race({ ownerUserId: 'org' });
+    const other = race({ ownerUserId: 'x' });
+    const organizer = { userId: 'org', permissions: ['races.read', 'races.manage'] } as const;
+    const admin = { userId: 'a', permissions: ['races.manage', 'races.manage_any'] } as const;
+    const moderator = { userId: 'm', permissions: ['races.read'] } as const;
+    expect(raceVisible(organizer, own)).toBe(true);
+    expect(raceVisible(organizer, other)).toBe(false);
+    expect(raceVisible(admin, other)).toBe(true);
+    expect(raceVisible(moderator, other)).toBe(true);
   });
 
   it('документ до миграции без поля corridor — как без коридора', () => {

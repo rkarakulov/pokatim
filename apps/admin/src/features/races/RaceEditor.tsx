@@ -318,8 +318,13 @@ export function RaceEditor({
   const publishReason = editable?.reasons
     .map((reason) => PUBLISH_REASON[reason])
     .find((key): key is MessageKey => key !== undefined);
-  const editReason = editable?.reasons.find(
-    (reason) => reason === 'window_open' || reason === 'window_closed' || reason === 'cancelled',
+  // причины ограничений правки под формой: фаза окна, отмена, заявки участников (V-12)
+  const editReasons = (editable?.reasons ?? []).filter(
+    (reason) =>
+      reason === 'window_open' ||
+      reason === 'window_closed' ||
+      reason === 'cancelled' ||
+      reason === 'entries_locked',
   );
 
   const actions: ReactNode = race ? (
@@ -405,7 +410,9 @@ export function RaceEditor({
           />
         ) : null}
         {conflict || stale ? <ConflictBanner onReload={() => void refresh()} /> : null}
-        {editReason ? <Banner>{t(`admin.races.reason.${editReason}`)}</Banner> : null}
+        {editReasons.map((reason) => (
+          <Banner key={reason}>{t(`admin.races.reason.${reason}`)}</Banner>
+        ))}
         <form
           noValidate
           aria-label={race ? race.title : t('admin.races.new')}

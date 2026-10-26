@@ -67,8 +67,24 @@ export class TracksRepository {
   }
 
   /** Своя загрузка; чужая и неизвестная — `undefined` (404 без различия). */
-  async findOwnUpload(userId: string, id: string): Promise<TrackUploadDoc | undefined> {
-    return (await this.c.uploads.findOne({ _id: id, userId })) ?? undefined;
+  async findOwnUpload(
+    userId: string,
+    id: string,
+    session?: DbSession,
+  ): Promise<TrackUploadDoc | undefined> {
+    return (await this.c.uploads.findOne({ _id: id, userId }, { session })) ?? undefined;
+  }
+
+  /** Свои загрузки по id (порт `ActivitySource`, статусы запросов «загрузить в гонку»). */
+  ownUploadsByIds(userId: string, ids: readonly string[]): Promise<TrackUploadDoc[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.c.uploads.find({ userId, _id: { $in: [...ids] } }).toArray();
+  }
+
+  /** Загрузки по id (время приёма файла для порта `ActivitySource`). */
+  uploadsByIds(ids: readonly string[], session?: DbSession): Promise<TrackUploadDoc[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.c.uploads.find({ _id: { $in: [...ids] } }, { session }).toArray();
   }
 
   async insertUpload(session: DbSession, doc: TrackUploadDoc): Promise<void> {
@@ -141,7 +157,11 @@ export class TracksRepository {
   }
 
   /** Все члены групп с основными `rootIds` (сами основные и их дубли). */
-  groupMembers(session: DbSession, userId: string, rootIds: string[]): Promise<ActivityDoc[]> {
+  groupMembers(
+    session: DbSession | undefined,
+    userId: string,
+    rootIds: string[],
+  ): Promise<ActivityDoc[]> {
     return this.c.activities
       .find(
         { userId, $or: [{ _id: { $in: rootIds } }, { duplicateOf: { $in: rootIds } }] },
@@ -208,6 +228,39 @@ export class TracksRepository {
     uploadId: string,
   ): Promise<ActivityDoc | undefined> {
     return (await this.c.activities.findOne({ uploadId }, { session })) ?? undefined;
+  }
+
+  async findActivity(id: string, session?: DbSession): Promise<ActivityDoc | undefined> {
+    return (await this.c.activities.findOne({ _id: id }, { session })) ?? undefined;
+  }
+
+  /**
+   * Основные активности пользователя, пересекающие `[from, to)` (`startedAt < to`, `endedAt > from`), новые сверху —
+   * индекс `(userId, startedAt)`; дубли — нет.
+   */
+  primaryActivitiesInRange(
+    userId: string,
+    from: Date,
+    to: Date,
+    limit: number,
+  ): Promise<ActivityDoc[]> {
+    return this.c.activities
+      .find({ userId, startedAt: { $lt: to }, endedAt: { $gt: from }, duplicateOf: null })
+      .sort({ startedAt: -1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  /** Линии показа активностей по id (рамка для предфильтра попыток гонки). */
+  async trackLines(
+    ids: readonly string[],
+    session?: DbSession,
+  ): Promise<Map<string, [number, number][]>> {
+    if (ids.length === 0) return new Map();
+    const docs = await this.c.tracks
+      .find({ _id: { $in: [...ids] } }, { session, projection: { line: 1 } })
+      .toArray();
+    return new Map(docs.map((doc) => [doc._id, doc.line.coordinates]));
   }
 
   /** Сводки активностей по id (список загрузок). */

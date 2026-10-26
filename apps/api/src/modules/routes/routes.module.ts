@@ -5,19 +5,24 @@ import { QUEUE } from '../../queues';
 import { PanelModule } from '../panel';
 import { RoutesCatalogService } from './route-catalog';
 import { ROUTE_CATALOG } from './route-catalog.port';
+import { ROUTE_GEOMETRY } from './route-geometry.port';
 import { RouteProcessingProcessor } from './route-processing.processor';
 import { RoutesAdminController } from './routes-admin.controller';
 import { RoutesRepository } from './routes.repository';
 import { RoutesService } from './routes.service';
 
-/** Ядро `routes` для API и worker: репозиторий и порт `RouteCatalog` для модуля `races` (через `index.ts`). */
+/**
+ * Ядро `routes` для API и worker: репозиторий, порт `RouteCatalog` для `races` и `RouteGeometry` для `results`
+ * (через `index.ts`).
+ */
 @Module({
   providers: [
     RoutesRepository,
     RoutesCatalogService,
     { provide: ROUTE_CATALOG, useExisting: RoutesCatalogService },
+    { provide: ROUTE_GEOMETRY, useExisting: RoutesCatalogService },
   ],
-  exports: [RoutesRepository, ROUTE_CATALOG],
+  exports: [RoutesRepository, ROUTE_CATALOG, ROUTE_GEOMETRY],
 })
 export class RoutesCoreModule {}
 

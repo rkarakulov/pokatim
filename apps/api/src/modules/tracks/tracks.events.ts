@@ -20,6 +20,32 @@ export const TrackUploadDeleted = z.object({
 });
 export type TrackUploadDeleted = z.infer<typeof TrackUploadDeleted>;
 
+/**
+ * Активность записана (основная или дубль — состав группы мог смениться): в транзакции записи активности. Подписчик
+ * читает состояние группы **сейчас** (`ActivitySource.group`), не из payload: порядок и повтор событий не важны.
+ * Маршрут очереди задаёт подписчик (race-results-03: `results`).
+ */
+export const TRACK_ACTIVITY_READY = 'tracks.activity-ready';
+export const TrackActivityReady = z.object({
+  activityId: z.uuid(),
+  uploadId: z.uuid(),
+  userId: z.uuid(),
+});
+export type TrackActivityReady = z.infer<typeof TrackActivityReady>;
+
+/**
+ * Загрузка с активностью удалена: в транзакции удаления; `primaryActivityId` — новая основная группы (бывший дубль
+ * удалённой основной) или `null`. Маршрут очереди задаёт подписчик.
+ */
+export const TRACK_ACTIVITY_REMOVED = 'tracks.activity-removed';
+export const TrackActivityRemoved = z.object({
+  activityId: z.uuid(),
+  uploadId: z.uuid(),
+  userId: z.uuid(),
+  primaryActivityId: z.uuid().nullable(),
+});
+export type TrackActivityRemoved = z.infer<typeof TrackActivityRemoved>;
+
 /** Маршруты событий tracks для публикатора outbox (подключает worker.module.ts). */
 export const tracksOutboxRoutes = {
   [TRACK_UPLOAD_RECEIVED]: QUEUE.trackProcessing,

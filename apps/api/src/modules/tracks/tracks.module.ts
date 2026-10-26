@@ -5,6 +5,8 @@ import { ENV } from '@rkarakulov/api-kit/core';
 import type { Env } from '../../config/env';
 import { QUEUE } from '../../queues';
 import { IdentityModule } from '../identity';
+import { ActivitySourceService } from './activity-source';
+import { ACTIVITY_SOURCE } from './activity-source.port';
 import { FsTrackFileStore } from './fs-track-file-store';
 import { TRACK_FILE_STORE } from './track-file-store';
 import { TrackIngestService } from './track-ingest';
@@ -18,7 +20,7 @@ import { TracksRepository } from './tracks.repository';
 
 /**
  * Ядро `tracks` для API и worker: репозиторий, хранилище исходников (порт, на dev — ФС), приём исходника,
- * удаление и порт `TrackIngest` для модуля `devices` (только через `index.ts`).
+ * удаление, порт `TrackIngest` для модуля `devices` и `ActivitySource` для `results` (только через `index.ts`).
  */
 @Module({
   providers: [
@@ -32,9 +34,12 @@ import { TracksRepository } from './tracks.repository';
     TrackUploadsService,
     TrackIngestService,
     { provide: TRACK_INGEST, useExisting: TrackIngestService },
+    ActivitySourceService,
+    { provide: ACTIVITY_SOURCE, useExisting: ActivitySourceService },
   ],
   exports: [
     TRACK_INGEST,
+    ACTIVITY_SOURCE,
     TracksRepository,
     TRACK_FILE_STORE,
     TrackSourcesService,

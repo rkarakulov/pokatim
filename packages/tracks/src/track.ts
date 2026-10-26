@@ -48,6 +48,12 @@ export interface CorridorGeometry {
   distanceM: number;
 }
 
+/**
+ * Радиус ворот старта и финиша коридора, м — единственный источник (`CORRIDOR_POLICY.gateRadius` движка, проверка
+ * ворот при выборе коридора гонки).
+ */
+export const corridorGateRadiusM = (widthM: number): number => Math.max(widthM, 30);
+
 /** Точка разбора. Значения датчиков — только внутри процесса разбора, наружу выходят флаги. */
 export interface ParsedPoint extends TrackPoint {
   hr?: number;

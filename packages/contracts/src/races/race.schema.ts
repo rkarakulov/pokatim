@@ -60,6 +60,8 @@ export const RACE_EDIT_BLOCK_REASONS = [
   'window_closed',
   'cancelled',
   'outside_season',
+  // race-results-03: есть заявки — коридор, окно, класс и покрытия зафиксированы (V-12)
+  'entries_locked',
 ] as const;
 export const RaceEditBlockReason = z.enum(RACE_EDIT_BLOCK_REASONS);
 export type RaceEditBlockReason = z.infer<typeof RaceEditBlockReason>;

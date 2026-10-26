@@ -27,9 +27,12 @@ import {
   corridorChangeAllowed,
   corridorDistanceKm,
   type FieldIssue,
+  ownScope,
   raceEditable,
   racePhase,
   type RaceValues,
+  raceVisible,
+  validateCorridorRoute,
   validateRaceRules,
   windowPassed,
 } from './races.policy';
@@ -49,17 +52,6 @@ interface ResolvedCorridor {
 const withoutPlaceholderDistance = (issues: FieldIssue[], resolved: ResolvedCorridor) =>
   resolved.placeholder ? issues.filter((issue) => issue.path !== 'distanceKm') : issues;
 const notFound = () => domainError('NOT_FOUND', 404);
-
-/**
- * Видимость гонок по правам (R8, Q3): с `races.manage_any` — все; с `races.manage` без него (организатор) — только
- * свои; только чтение (`races.read`, модератор) — все. Чужая невидимая гонка — 404 (существование не раскрываем).
- */
-function ownScope(principal: PanelPrincipal): boolean {
-  return (
-    principal.permissions.includes('races.manage') &&
-    !principal.permissions.includes('races.manage_any')
-  );
-}
 
 /** Сотрудник может менять гонку: `races.manage_any` или `races.manage` и она своя. */
 function canManage(principal: PanelPrincipal, race: RaceDoc): boolean {
@@ -187,6 +179,7 @@ export class RacesService {
         updatedAt: now,
         publishedAt: null,
         cancelledAt: null,
+        lockedAt: null,
         version: 0,
       };
       await this.repository.insertRace(tx, doc);
@@ -201,9 +194,10 @@ export class RacesService {
   }
 
   /**
-   * Коридор запроса → коридор документа: `null` — без коридора; тот же маршрут, что у гонки, — снимок длины прежний;
-   * иначе маршрут обязан быть готовым (`RouteCatalog.findReady` в транзакции действия; `ready` терминален и маршрут
-   * не удаляется — замок не нужен). Не готов, не найден, чужой необработанный — `ROUTE_NOT_READY` на `corridor.routeId`.
+   * Коридор запроса → коридор документа: `null` — без коридора; тот же маршрут и допуск — без изменений; иначе
+   * маршрут обязан быть готовым (`RouteCatalog.findReady` в транзакции действия; `ready` терминален и маршрут не
+   * удаляется — замок не нужен). Не готов, не найден, чужой необработанный — `ROUTE_NOT_READY` на `corridor.routeId`;
+   * ворота линейного маршрута пересекаются при этом допуске — `CORRIDOR_GATES_OVERLAP` (race-results-03).
    */
   private async resolveCorridor(
     input: CorridorInput | null,
@@ -213,7 +207,8 @@ export class RacesService {
     editable: boolean,
   ): Promise<ResolvedCorridor> {
     if (input === null) return { corridor: null, placeholder: false };
-    if (current && current.routeId === input.routeId) {
+    const sameRoute = current !== null && current.routeId === input.routeId;
+    if (sameRoute && (current.widthM === input.widthM || !editable)) {
       const corridor = {
         routeId: input.routeId,
         widthM: input.widthM,
@@ -235,10 +230,11 @@ export class RacesService {
     if (!route) {
       return { ...placeholder, issue: { path: 'corridor.routeId', code: 'ROUTE_NOT_READY' } };
     }
-    return {
-      corridor: { routeId: route.id, widthM: input.widthM, distanceM: route.distanceM },
-      placeholder: false,
-    };
+    const corridor = { routeId: route.id, widthM: input.widthM, distanceM: route.distanceM };
+    const gates = validateCorridorRoute(route, input.widthM);
+    return gates
+      ? { corridor, placeholder: false, issue: gates }
+      : { corridor, placeholder: false };
   }
 
   /**
@@ -388,7 +384,7 @@ export class RacesService {
   }
 
   private visible(principal: PanelPrincipal, race: RaceDoc): boolean {
-    return !ownScope(principal) || race.ownerUserId === principal.userId;
+    return raceVisible(principal, race);
   }
 
   /** Сезон, в который попадает конец окна (`startsAt ≤ end < endsBefore`); нет — `OUTSIDE_SEASON`. */

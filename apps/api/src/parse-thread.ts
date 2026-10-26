@@ -1,7 +1,7 @@
 import { Worker } from 'node:worker_threads';
 
 /** Функции серверного входа `@pokatim/tracks/parse`, которые можно запустить в потоке (белый список). */
-export const PARSE_FUNCTIONS = ['analyzeTrack', 'analyzeRoute'] as const;
+export const PARSE_FUNCTIONS = ['analyzeTrack', 'analyzeRoute', 'analyzeAttempt'] as const;
 export type ParseFunction = (typeof PARSE_FUNCTIONS)[number];
 
 export interface ParseLimits {
@@ -20,7 +20,39 @@ export const DEFAULT_PARSE_LIMITS: ParseLimits = {
   timeoutMs: 30_000,
 };
 
-/** Итог потока: результат функции или код отказа (`TrackParseError.code`, `timeout`, `unreadable`). */
+/**
+ * Потоков разбора одновременно на процесс (R4 race-results-03): track-processing, route-processing и attempt-check не
+ * держат несколько потоков по 160 + 32 МБ в worker с лимитом 512 МиБ. Поднять — вместе с лимитом контейнера.
+ */
+export const PARSE_THREADS_MAX = 1;
+
+let activeThreads = 0;
+const waiting: (() => void)[] = [];
+
+/** Семафор потоков (FIFO). Свободный слот берётся синхронно; ожидание не входит в таймаут потока. */
+function acquireThread(): Promise<void> {
+  if (activeThreads < PARSE_THREADS_MAX) {
+    activeThreads += 1;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => waiting.push(resolve));
+}
+
+function releaseThread(): void {
+  const next = waiting.shift();
+  if (next) next();
+  else activeThreads -= 1;
+}
+
+/** Нагрузка семафора (тесты, логи): потоков в работе и вызовов в ожидании. */
+export function parseThreadLoad(): { active: number; waiting: number } {
+  return { active: activeThreads, waiting: waiting.length };
+}
+
+/**
+ * Итог потока: результат функции или код отказа (`TrackParseError.code`, `corridor_invalid` — `CorridorError`,
+ * `timeout`, `unreadable`).
+ */
 export type ThreadOutcome<T> = { ok: true; result: T } | { ok: false; code: string };
 
 /**
@@ -36,7 +68,12 @@ import('@pokatim/tracks/parse').then(
       const result = tracks[workerData.fn](...workerData.args);
       parentPort.postMessage({ ok: true, result });
     } catch (error) {
-      const code = error instanceof tracks.TrackParseError ? error.code : 'unreadable';
+      const code =
+        error instanceof tracks.TrackParseError
+          ? error.code
+          : error instanceof tracks.CorridorError
+            ? 'corridor_invalid'
+            : 'unreadable';
       parentPort.postMessage({ ok: false, code });
     }
   },
@@ -50,16 +87,30 @@ type ThreadMessage = { ok: true; result: unknown } | { ok: false; code: string }
  * Запуск функции разбора в `worker_threads` (`AGENTS.md` §4.5, `pokatim-backend.md`): лимит памяти потока
  * (`resourceLimits`) и времени (`terminate()` по таймауту → `timeout`); исчерпание памяти → `unreadable`. Ошибка
  * загрузки модуля разбора и падение потока — не отказ файла, а сбой окружения (исключение → ретрай задачи).
- * Аргументы и результат проходят structured clone.
+ * Аргументы и результат проходят structured clone. Одновременно — не больше `PARSE_THREADS_MAX` потоков на процесс
+ * (очередь FIFO; ожидание слота не входит в `timeoutMs`).
  */
-export function runParseThread<T>(
+export async function runParseThread<T>(
   fn: ParseFunction,
   args: readonly unknown[],
   limits: ParseLimits,
 ): Promise<ThreadOutcome<T>> {
   if (!PARSE_FUNCTIONS.includes(fn)) {
-    return Promise.reject(new Error(`parse function is not allowed: ${String(fn)}`));
+    throw new Error(`parse function is not allowed: ${String(fn)}`);
   }
+  await acquireThread();
+  try {
+    return await startThread<T>(fn, args, limits);
+  } finally {
+    releaseThread();
+  }
+}
+
+function startThread<T>(
+  fn: ParseFunction,
+  args: readonly unknown[],
+  limits: ParseLimits,
+): Promise<ThreadOutcome<T>> {
   return new Promise<ThreadOutcome<T>>((resolve, reject) => {
     const worker = new Worker(THREAD_SOURCE, {
       eval: true,

@@ -1,3 +1,4 @@
+import { corridorGateRadiusM } from '@pokatim/tracks';
 import {
   RACE_FIELDS,
   RACE_PROTOCOL_MIN_DELAY_HOURS,
@@ -9,6 +10,8 @@ import {
   type SeasonPhase,
 } from '@pokatim/contracts';
 
+import type { PanelPrincipal } from '../panel';
+import type { ReadyRoute } from '../routes';
 import type { RaceCorridor, RaceDoc, SeasonDoc } from './races.collection';
 
 /**
@@ -31,6 +34,22 @@ export interface FieldIssue {
   path: string;
   code: FieldErrorCode;
 }
+
+/**
+ * Поля, зафиксированные первой заявкой участника (V-12, race-results-03): коридор, окно (оба конца — продление тоже,
+ * A14), класс, покрытия. Строже V-11 и применяется поверх него.
+ */
+export const LOCKED_BY_ENTRIES: readonly RaceField[] = [
+  'corridor',
+  'windowStartsAt',
+  'windowEndsAt',
+  'bikeClass',
+  'surfaces',
+];
+
+/** Есть заявки (`lockedAt` пишет первая заявка); документы до `0015_results` поля не имеют. */
+export const entriesLocked = (race: Pick<RaceDoc, 'lockedAt'>): boolean =>
+  (race.lockedAt ?? null) !== null;
 
 /** Поля, которые можно менять у опубликованной гонки с закрытым окном (V-11). */
 const CLOSED_WINDOW_FIELDS: readonly RaceField[] = ['description', 'protocolPlannedAt'];
@@ -56,6 +75,25 @@ export function seasonPhase(
 ): SeasonPhase {
   if (now < season.startsAt) return 'upcoming';
   return now < season.endsBefore ? 'current' : 'finished';
+}
+
+/**
+ * Видимость гонок панели по правам (R8, Q3): с `races.manage_any` — все; с `races.manage` без него (организатор) —
+ * только свои; только чтение (`races.read`, модератор) — все. Чужая невидимая гонка — 404 (существование не
+ * раскрываем). Одна функция для `races` и порта `RaceRegistry` (результаты гонки в панели).
+ */
+export function ownScope(principal: Pick<PanelPrincipal, 'permissions'>): boolean {
+  return (
+    principal.permissions.includes('races.manage') &&
+    !principal.permissions.includes('races.manage_any')
+  );
+}
+
+export function raceVisible(
+  principal: Pick<PanelPrincipal, 'permissions' | 'userId'>,
+  race: Pick<RaceDoc, 'ownerUserId'>,
+): boolean {
+  return !ownScope(principal) || race.ownerUserId === principal.userId;
 }
 
 /** Окно уже закрылось на `now` (опубликовать нельзя, `WINDOW_IN_PAST`). */
@@ -90,54 +128,60 @@ export function changedRaceFields(prev: RaceValues, next: RaceValues): RaceField
   return RACE_FIELDS.filter((field) => !sameValue(prev[field], next[field]));
 }
 
-/** Поля, которые опубликованная гонка позволяет менять в своей фазе. */
-function publishedFields(phase: RacePhase): RaceField[] {
-  if (phase === 'upcoming') return [...RACE_FIELDS];
-  if (phase === 'open') return RACE_FIELDS.filter((field) => field !== 'windowStartsAt');
-  return [...CLOSED_WINDOW_FIELDS];
+/** Поля, которые опубликованная гонка позволяет менять в своей фазе; `locked` — есть заявки (V-12). */
+function publishedFields(phase: RacePhase, locked: boolean): RaceField[] {
+  const fields =
+    phase === 'upcoming'
+      ? [...RACE_FIELDS]
+      : phase === 'open'
+        ? RACE_FIELDS.filter((field) => field !== 'windowStartsAt')
+        : [...CLOSED_WINDOW_FIELDS];
+  return locked ? fields.filter((field) => !LOCKED_BY_ENTRIES.includes(field)) : fields;
 }
 
 /**
  * Можно ли менять коридор (race-results-01 §5): черновик и до окна — да; открытое окно — только гонке без коридора
- * (анонсу); закрытое окно — нет. `locked` — точка расширения слайса 03 («есть заявки»), сейчас всегда `false`.
+ * (анонсу); закрытое окно — нет; есть заявки (V-12) — нет.
  */
-function corridorEditable(race: RaceDoc, phase: RacePhase, locked: boolean): boolean {
-  if (locked) return false;
+function corridorEditable(race: RaceDoc, phase: RacePhase): boolean {
+  if (entriesLocked(race)) return false;
   if (race.status === 'draft' || phase === 'upcoming') return true;
   return phase === 'open' && corridorOf(race) === null;
 }
 
 /** Можно ли сейчас менять коридор гонки (до проверки маршрута: зафиксированный коридор маршрут не проверяет). */
-export function corridorChangeAllowed(race: RaceDoc, now: Date, locked = false): boolean {
-  return corridorEditable(race, racePhase(race, now), locked);
+export function corridorChangeAllowed(race: RaceDoc, now: Date): boolean {
+  return corridorEditable(race, racePhase(race, now));
 }
 
-/** Фиксация полей с первой заявки (V-12) добавит слайс 03; здесь — всегда `false`. */
-export interface RaceLockOptions {
-  locked?: boolean;
+/**
+ * Ворота коридора (то же, что `assert` движка `gates overlap`, но при выборе коридора, а не в каждой попытке):
+ * линейный маршрут с концами не дальше `2 · corridorGateRadiusM(widthM)` — `CORRIDOR_GATES_OVERLAP`.
+ */
+export function validateCorridorRoute(
+  route: Pick<ReadyRoute, 'isLoop' | 'endsDistanceM'>,
+  widthM: number,
+): FieldIssue | null {
+  if (route.isLoop || route.endsDistanceM > 2 * corridorGateRadiusM(widthM)) return null;
+  return { path: 'corridor.routeId', code: 'CORRIDOR_GATES_OVERLAP' };
 }
 
 /**
  * Правила формы гонки (создание и каждое изменение) и V-11 для опубликованной: `prev` — текущий документ или
  * `null` (создание). Порядок ошибок стабилен (по полям).
  */
-export function validateRaceRules(
-  next: RaceValues,
-  prev: RaceDoc | null,
-  now: Date,
-  { locked = false }: RaceLockOptions = {},
-): FieldIssue[] {
+export function validateRaceRules(next: RaceValues, prev: RaceDoc | null, now: Date): FieldIssue[] {
   const issues: FieldIssue[] = [];
 
   if (prev && prev.status !== 'published' && changedRaceFields(prev, next).includes('corridor')) {
-    if (!corridorEditable(prev, racePhase(prev, now), locked)) {
+    if (!corridorEditable(prev, racePhase(prev, now))) {
       issues.push({ path: 'corridor', code: 'FIELD_LOCKED' });
     }
   }
   if (prev?.status === 'published') {
     const phase = racePhase(prev, now);
-    const allowed = publishedFields(phase).filter(
-      (field) => field !== 'corridor' || corridorEditable(prev, phase, locked),
+    const allowed = publishedFields(phase, entriesLocked(prev)).filter(
+      (field) => field !== 'corridor' || corridorEditable(prev, phase),
     );
     const changed = changedRaceFields(prev, next);
     for (const field of changed) {
@@ -190,11 +234,7 @@ export function validateRaceRules(
 export function raceEditable(
   race: RaceDoc,
   now: Date,
-  {
-    canManage,
-    seasonFound,
-    locked = false,
-  }: { canManage: boolean; seasonFound: boolean } & RaceLockOptions,
+  { canManage, seasonFound }: { canManage: boolean; seasonFound: boolean },
 ): RaceEditable {
   const none: RaceEditable = {
     fields: [],
@@ -211,7 +251,7 @@ export function raceEditable(
     if (windowPassed(race, now)) reasons.push('window_closed');
     if (!seasonFound) reasons.push('outside_season');
     return {
-      fields: editableFields(race, [...RACE_FIELDS], 'draft', locked),
+      fields: editableFields(race, [...RACE_FIELDS], 'draft'),
       canPublish: reasons.length === 0,
       canCancel: false,
       canDiscard: true,
@@ -220,27 +260,24 @@ export function raceEditable(
   }
 
   const phase = racePhase(race, now);
+  const locked = entriesLocked(race);
   const reasons: RaceEditBlockReason[] =
     phase === 'open' ? ['window_open'] : phase === 'closed' ? ['window_closed'] : [];
+  if (locked) reasons.push('entries_locked');
   return {
     ...none,
-    fields: editableFields(race, publishedFields(phase), phase, locked),
+    fields: editableFields(race, publishedFields(phase, locked), phase),
     canCancel: true,
     reasons,
   };
 }
 
 /** Поля фазы с правилами коридора: с коридором `distanceKm` вычисляется сервером — не в `fields`. */
-function editableFields(
-  race: RaceDoc,
-  fields: RaceField[],
-  phase: RacePhase,
-  locked: boolean,
-): RaceField[] {
+function editableFields(race: RaceDoc, fields: RaceField[], phase: RacePhase): RaceField[] {
   const hasCorridor = corridorOf(race) !== null;
   return fields.filter((field) => {
     if (field === 'distanceKm') return !hasCorridor;
-    if (field === 'corridor') return corridorEditable(race, phase, locked);
+    if (field === 'corridor') return corridorEditable(race, phase);
     return true;
   });
 }

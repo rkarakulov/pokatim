@@ -59,6 +59,13 @@ describe('коды ошибок', () => {
       'DEVICE_PROVIDER_ERROR',
       'ROUTE_FORMAT_UNSUPPORTED',
       'ROUTE_TOO_LARGE',
+      'RACE_ENTRY_CLOSED',
+      'RACE_ENTRY_WITHDRAWN',
+      'RACE_ENTRY_REQUIRED',
+      'RACE_WITHDRAW_CLOSED',
+      'ATTEMPT_UPLOAD_CLOSED',
+      'ATTEMPT_LIMIT',
+      'ATTEMPT_SOURCE_INVALID',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',
@@ -80,6 +87,7 @@ describe('коды ошибок', () => {
       'PROTOCOL_ONLY_LATER',
       'FIELD_LOCKED',
       'ROUTE_NOT_READY',
+      'CORRIDOR_GATES_OVERLAP',
     ]);
   });
 
