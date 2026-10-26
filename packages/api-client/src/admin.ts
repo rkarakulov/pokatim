@@ -10,6 +10,9 @@ import {
   PanelRace,
   PanelRacePage,
   type PanelRaceQuery,
+  PanelRoute,
+  PanelRoutePage,
+  type PanelRouteQuery,
   PanelSeason,
   PanelSeasonList,
   type PublishRaceRequest,
@@ -49,6 +52,8 @@ export type AuditListParams = Partial<z.input<typeof AuditQuery>>;
 export type PanelRaceListParams = Partial<
   Omit<PanelRaceQuery, 'limit' | 'mine'> & { limit: number; mine: boolean }
 >;
+/** Параметры списка маршрутов панели до схемы. */
+export type PanelRouteListParams = Partial<PanelRouteQuery>;
 /** Параметры списка календаря панели до схемы. */
 export type PanelCalendarListParams = Partial<PanelCalendarQuery>;
 
@@ -83,6 +88,7 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
   const season = (id: string) => `/v1/admin/seasons/${encodeURIComponent(id)}`;
   const race = (id: string) => `/v1/admin/races/${encodeURIComponent(id)}`;
   const calendar = (id: string) => `/v1/admin/calendar/${encodeURIComponent(id)}`;
+  const route = (id: string) => `/v1/admin/routes/${encodeURIComponent(id)}`;
 
   return {
     /** Статус API (экран «Обзор»). */
@@ -124,6 +130,22 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     /** Удаление черновика: 204. */
     discardRace: (id: string, body: DiscardRaceRequest) =>
       post(`${race(id)}/discard`, z.undefined(), body),
+
+    // --- маршруты коридора (загрузка — races.manage, чтение — races.read) ---
+    /**
+     * Загрузка GPX маршрута сырыми байтами (`application/octet-stream`): `202` — новый (`processing`), `200` — тот же
+     * файл того же сотрудника. Формат сервер определяет по содержимому.
+     */
+    uploadRoute: (body: Blob | Uint8Array, title: string) =>
+      request(`/v1/admin/routes${queryString({ title })}`, PanelRoute, {
+        method: 'POST',
+        body: body as BodyInit,
+        headers: { 'content-type': 'application/octet-stream' },
+        credentials: 'same-origin',
+      }),
+    listRoutes: (params: PanelRouteListParams = {}) =>
+      get(`/v1/admin/routes${queryString(params)}`, PanelRoutePage),
+    getRoute: (id: string) => get(route(id), PanelRoute),
 
     // --- календарь стартов (calendar.manage) ---
     listCalendar: (params: PanelCalendarListParams = {}) =>

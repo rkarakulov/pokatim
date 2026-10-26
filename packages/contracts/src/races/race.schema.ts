@@ -48,6 +48,8 @@ export const RACE_FIELDS = [
   'windowStartsAt',
   'windowEndsAt',
   'protocolPlannedAt',
+  // race-results-01: эталонный коридор (маршрут + допуск)
+  'corridor',
 ] as const;
 export const RaceField = z.enum(RACE_FIELDS);
 export type RaceField = z.infer<typeof RaceField>;
@@ -86,6 +88,27 @@ export const DistanceKm = z
   .max(RACE_DISTANCE_MAX_KM, { error: 'INVALID' })
   .multipleOf(0.1, { error: 'INVALID' });
 
+/** Допуск коридора «±N м от маршрута» (эпик A2): 20–200 м шагом 5, по умолчанию 50. */
+export const CORRIDOR_WIDTH_MIN_M = 20;
+export const CORRIDOR_WIDTH_MAX_M = 200;
+export const CORRIDOR_WIDTH_STEP_M = 5;
+export const CORRIDOR_WIDTH_DEFAULT_M = 50;
+
+/**
+ * Эталонный коридор гонки: готовый маршрут (`routeId`) и допуск. Длину (дистанцию гонки) считает сервер из маршрута;
+ * готовность маршрута — правило сервера (`ROUTE_NOT_READY` на `corridor.routeId`).
+ */
+export const CorridorInput = z.strictObject({
+  routeId: Uuid,
+  widthM: z
+    .number({ error: fieldError('REQUIRED') })
+    .int({ error: 'INVALID' })
+    .min(CORRIDOR_WIDTH_MIN_M, { error: 'INVALID' })
+    .max(CORRIDOR_WIDTH_MAX_M, { error: 'INVALID' })
+    .multipleOf(CORRIDOR_WIDTH_STEP_M, { error: 'INVALID' }),
+});
+export type CorridorInput = z.infer<typeof CorridorInput>;
+
 /** Описание: пустое после обрезки — `null` (поле очищено). */
 export const RaceDescription = z
   .string({ error: fieldError('INVALID') })
@@ -98,7 +121,8 @@ export const RaceDescription = z
 /**
  * `POST /v1/admin/races` (`races.manage`) → 201 `PanelRace` (черновик). Моменты — UTC с точностью до минуты (панель
  * переводит настенное время Минска `minskWallTimeToUtc`). Порядок окна, 48 ч, длина окна — правила сервера.
- * Владелец, статус, сезон — только сервер.
+ * Владелец, статус, сезон — только сервер. `corridor: null` — без коридора (анонс). `distanceKm` обязательна только без
+ * коридора (правило сервера, `REQUIRED`); с коридором дистанцию вычисляет сервер из длины маршрута.
  */
 export const RaceInput = z.strictObject({
   title: RaceTitle,
@@ -108,11 +132,12 @@ export const RaceInput = z.strictObject({
     .min(1, { error: 'REQUIRED' })
     .max(SURFACES.length, { error: 'INVALID' })
     .refine((list) => new Set(list).size === list.length, { error: 'INVALID' }),
-  distanceKm: DistanceKm,
+  distanceKm: DistanceKm.optional(),
   description: RaceDescription,
   windowStartsAt: UtcMinute,
   windowEndsAt: UtcMinute,
   protocolPlannedAt: UtcMinute,
+  corridor: CorridorInput.nullable().optional(),
 });
 export type RaceInput = z.infer<typeof RaceInput>;
 
@@ -158,6 +183,14 @@ export const PanelRace = z.object({
   season: z.object({ id: Uuid, name: z.string(), preview: z.boolean() }).nullable(),
   owner: z.object({ userId: Uuid, displayName: z.string() }),
   cancelReason: RaceCancelReason.nullable(),
+  /** Коридор: маршрут (название — для показа), допуск, длина маршрута, м (снимок; дистанция гонки — из неё). */
+  corridor: z
+    .object({
+      route: z.object({ id: Uuid, title: z.string() }),
+      widthM: z.number().int(),
+      distanceM: z.number().int(),
+    })
+    .nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
   publishedAt: z.iso.datetime().nullable(),
