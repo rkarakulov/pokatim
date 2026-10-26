@@ -91,6 +91,8 @@ type XmlNode = Record<string, unknown>;
 export interface ParseGpxOptions {
   /** Маршрут: без `trkpt` в документе берутся точки `rte/rtept` (планировщики). Заезды — без этого флага. */
   allowRoute?: boolean;
+  /** Предел точек (`trkpt`, при `allowRoute` — и `rtept`) — подсчётом до разбора; по умолчанию `TRACK_MAX_POINTS`. */
+  maxPoints?: number;
 }
 
 /**
@@ -102,10 +104,11 @@ export interface ParseGpxOptions {
 export function parseGpx(text: string, options: ParseGpxOptions = {}): ParsedTrack {
   if (FORBIDDEN_MARKUP.test(text)) throw new TrackParseError('unreadable');
   // размер — до разбора в дерево (память потока worker)
+  const maxPoints = options.maxPoints ?? TRACK_MAX_POINTS;
   if (
     countMatches(text, ELEMENT_OPEN) > GPX_MAX_ELEMENTS ||
-    countTags(text, 'trkpt') > TRACK_MAX_POINTS ||
-    (options.allowRoute === true && countTags(text, 'rtept') > TRACK_MAX_POINTS)
+    countTags(text, 'trkpt') > maxPoints ||
+    (options.allowRoute === true && countTags(text, 'rtept') > maxPoints)
   ) {
     throw new TrackParseError('too_many_points');
   }

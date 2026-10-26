@@ -161,8 +161,11 @@ const lonLat = (point: { lon: number; lat: number }): [number, number] => [point
  */
 export function analyzeRoute(bytes: Uint8Array): RouteAnalysis {
   if (detectTrackFormat(bytes) !== 'gpx') throw new TrackParseError('unreadable');
-  const track = parseGpx(new TextDecoder('utf-8').decode(bytes), { allowRoute: true });
-  if (track.points.length > ROUTE_MAX_POINTS) throw new TrackParseError('too_many_points');
+  // предел точек маршрута — подсчётом до разбора XML (память потока worker)
+  const track = parseGpx(new TextDecoder('utf-8').decode(bytes), {
+    allowRoute: true,
+    maxPoints: ROUTE_MAX_POINTS,
+  });
   const points = sanitizePoints(track.points);
   if (points.length < 2) throw new TrackParseError('no_track');
   const lengthM = trackLengthMeters(points);

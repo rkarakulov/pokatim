@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 
-import { describe, expect, it } from 'vitest';
+import { XMLValidator } from 'fast-xml-parser';
+import { describe, expect, it, vi } from 'vitest';
 
 import { analyzeRoute, ROUTE_MAX_POINTS, TrackParseError } from './parse.ts';
+import { simplifyTrack } from './simplify.ts';
 
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url)));
@@ -119,20 +121,31 @@ describe('analyzeRoute', () => {
     expect(failureCode(() => analyzeRoute(utf8(trkGpx(straight(200, 0.1)))))).toBe('too_long');
   });
 
-  it('точек больше ROUTE_MAX_POINTS — too_many_points; линии в пределах на максимуме', () => {
-    expect(
-      failureCode(() => analyzeRoute(utf8(trkGpx(straight(ROUTE_MAX_POINTS + 1, 0.00001))))),
-    ).toBe('too_many_points');
+  it('точек больше ROUTE_MAX_POINTS — too_many_points подсчётом до разбора XML (trkpt и rtept)', () => {
+    const validate = vi.spyOn(XMLValidator, 'validate');
+    const points = straight(ROUTE_MAX_POINTS + 1, 0.00001);
+    expect(failureCode(() => analyzeRoute(utf8(trkGpx(points))))).toBe('too_many_points');
+    const rte = `<gpx><rte>${points.map(([lon, lat]) => `<rtept lat="${lat}" lon="${lon}"/>`).join('')}</rte></gpx>`;
+    expect(failureCode(() => analyzeRoute(utf8(rte)))).toBe('too_many_points');
+    expect(validate).not.toHaveBeenCalled();
+    validate.mockRestore();
+  });
 
-    // синусоида (500 волн по ±33 м): линии показа при допуске 5 м нужно больше 1000 точек — допуск растёт
+  it('линия показа длиннее 1000 точек при допуске 5 м — допуск растёт, концы сохранены', () => {
+    // синусоида (500 волн по ±33 м): при исходном допуске линии показа нужно больше 1000 точек
     const wave = Array.from(
-      { length: ROUTE_MAX_POINTS },
-      (_, i) => [27.5 + i * 0.00002, 53.9 + 0.0003 * Math.sin((i / 100) * 2 * Math.PI)] as const,
+      { length: 6000 },
+      (_, i) => [27.5 + i * 0.00002, 53.9 + 0.0003 * Math.sin((i / 12) * 2 * Math.PI)] as const,
     );
+    const points = wave.map(([lon, lat]) => ({ lon, lat }));
+    expect(simplifyTrack(points, 5, Number.MAX_SAFE_INTEGER).length).toBeGreaterThan(1000);
+
     const result = analyzeRoute(utf8(trkGpx(wave)));
     expect(result.line.length).toBeLessThanOrEqual(1000);
+    expect(result.line.length).toBeGreaterThan(100);
     expect(result.matchLine.length).toBeLessThanOrEqual(20_000);
     expect(result.line[0]).toEqual([27.5, 53.9]);
+    expect(result.line.at(-1)).toEqual(result.finish);
     expect(result.matchLine.at(-1)).toEqual(result.finish);
   });
 });
