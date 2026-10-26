@@ -1,5 +1,8 @@
 import { rm } from 'node:fs/promises';
 
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Job, Queue } from 'bullmq';
+
 import { PanelRaceAttemptPage, PanelRaceResults } from '@pokatim/contracts';
 import { CORRIDOR_ENGINE_VERSION } from '@pokatim/tracks/parse';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { createHarness, MINUTE, type Harness } from '../../../test/harness';
 import { gate, retried, untilBlocked } from '../../../test/identity';
 import { panelCall, panelSession } from '../../../test/panel';
+import { QUEUE } from '../../queues';
 import { RACES } from '../../../test/races';
 import {
   addAttempt,
@@ -26,6 +30,10 @@ import { routesDb } from '../../../test/routes';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
 import { trackFileStore, tracks } from '../../../test/tracks';
 import { AttemptCheckProcessor } from './attempt-check.processor';
+import {
+  RESULTS_REQUEUE_STUCK_JOB,
+  ResultsMaintenanceProcessor,
+} from './results-maintenance.processor';
 import { ResultsRecheck } from './results-recheck';
 import { ResultsRepository } from './results.repository';
 
@@ -293,6 +301,34 @@ describe('зависшие проверки (AC16)', () => {
       .find({ type: 'results.attempt-check-requested' })
       .toArray();
     expect(events.map((event) => event.payload['checkRevision'])).toEqual([1, 2, 3, 4]);
+  });
+});
+
+describe('ожидание в очереди — не зависание (ревью L1)', () => {
+  it('queued дольше 2 ч с живой задачей attempt-check — не переставляется; задачи нет — новая ревизия', async () => {
+    const { attempt } = await queuedAttempt();
+    const queued = await resultsDb(h).attempts.findOne({ _id: attempt._id });
+    expect(queued?.checkJobId).toEqual(expect.any(String));
+    const queue = h.worker.get<Queue>(getQueueToken(QUEUE.attemptCheck));
+    await queue.add(
+      'results.attempt-check-requested',
+      { outboxEventId: queued!.checkJobId },
+      {
+        jobId: queued!.checkJobId!,
+      },
+    );
+    const maintenance = h.worker.get(ResultsMaintenanceProcessor);
+    const job = { name: RESULTS_REQUEUE_STUCK_JOB } as Job;
+    h.clock.advance(3 * 60 * MINUTE);
+    expect(await maintenance.process(job)).toEqual({ requeued: 0, failed: 0 });
+    expect(await resultsDb(h).attempts.findOne({ _id: attempt._id })).toMatchObject({
+      checkRevision: 1,
+    });
+    await (await queue.getJob(queued!.checkJobId!))?.remove();
+    expect(await maintenance.process(job)).toEqual({ requeued: 1, failed: 0 });
+    const requeued = await resultsDb(h).attempts.findOne({ _id: attempt._id });
+    expect(requeued).toMatchObject({ status: 'queued', checkRevision: 2, requeues: 1 });
+    expect(requeued?.checkJobId).not.toBe(queued?.checkJobId);
   });
 });
 

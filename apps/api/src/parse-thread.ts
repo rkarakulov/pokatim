@@ -27,6 +27,9 @@ export const DEFAULT_PARSE_LIMITS: ParseLimits = {
 export const PARSE_THREADS_MAX = 1;
 
 let activeThreads = 0;
+/** Потоков, ещё не завершившихся (событие `exit`): слот семафора держится до него. */
+let liveThreads = 0;
+let peakLiveThreads = 0;
 const waiting: (() => void)[] = [];
 
 /** Семафор потоков (FIFO). Свободный слот берётся синхронно; ожидание не входит в таймаут потока. */
@@ -44,9 +47,14 @@ function releaseThread(): void {
   else activeThreads -= 1;
 }
 
-/** Нагрузка семафора (тесты, логи): потоков в работе и вызовов в ожидании. */
-export function parseThreadLoad(): { active: number; waiting: number } {
-  return { active: activeThreads, waiting: waiting.length };
+/** Нагрузка семафора (тесты, логи): слоты в работе, вызовы в ожидании, живые потоки и их максимум за процесс. */
+export function parseThreadLoad(): { active: number; waiting: number; live: number; peak: number } {
+  return {
+    active: activeThreads,
+    waiting: waiting.length,
+    live: liveThreads,
+    peak: peakLiveThreads,
+  };
 }
 
 /**
@@ -122,13 +130,22 @@ function startThread<T>(
       stdout: true,
       stderr: true,
     });
+    liveThreads += 1;
+    peakLiveThreads = Math.max(peakLiveThreads, liveThreads);
+    const exited = new Promise<void>((done) =>
+      worker.once('exit', () => {
+        liveThreads -= 1;
+        done();
+      }),
+    );
     let settled = false;
     const finish = (action: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      action();
+      // итог — после завершения потока: слот семафора не освобождается, пока поток держит память
       void worker.terminate();
+      void exited.then(action);
     };
     const timer = setTimeout(
       () => finish(() => resolve({ ok: false, code: 'timeout' })),

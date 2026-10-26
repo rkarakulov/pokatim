@@ -52,6 +52,11 @@ export interface RaceDoc {
    * Пишет только `RacesRepository.admitEntry` (порт `RaceRegistry`); документы до `0015_results` — `?? null`.
    */
   lockedAt: Date | null;
+  /**
+   * Счётчик заявок (race-results-03): `admitEntry` увеличивает его каждой заявкой — запись в документ гонки
+   * конфликтует с её отменой и правкой и после первой заявки. Документы без заявок поля не имеют.
+   */
+  entryAdmissions?: number;
   version: number;
 }
 

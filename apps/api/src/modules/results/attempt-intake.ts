@@ -9,12 +9,15 @@ import { ROUTE_GEOMETRY, type RouteGeometry } from '../routes';
 import { ACTIVITY_SOURCE, type ActivityRef, type ActivitySource } from '../tracks';
 import type { RaceAttemptDoc, RaceEntryDoc } from './results.collection';
 import { RESULTS_ATTEMPT_CHECK_REQUESTED } from './results.events';
-import { mayMatch, RESULTS_POLICY } from './results.policy';
+import { mayMatch, RESULTS_POLICY, uploadClosesAt } from './results.policy';
 import { ResultsRepository } from './results.repository';
 
-/** Итог `ensureAttempt`: попытка основной активности или предел попыток заявки. */
+/**
+ * Итог `ensureAttempt`: попытка основной активности; `limit` — исчерпан предел попыток заявки; `late` — файл принят
+ * сервером после срока загрузки (A5) — новой попытки нет.
+ */
 export type EnsuredAttempt =
-  { attemptId: string; limited: false } | { attemptId: null; limited: true };
+  { attemptId: string; refused: null } | { attemptId: null; refused: 'limit' | 'late' };
 
 /**
  * Приём попыток (race-results-03): автоматические — по событиям `tracks` и заявке (`results-intake`), общий шаг явной
@@ -104,9 +107,12 @@ export class AttemptIntake {
       const group = await this.activities.group(activityId, tx);
       if (!group || group.userId !== entry.userId) return;
       const attempts = await this.repository.attemptsOfEntry(entry._id, tx);
-      const primary = group.members.find((member) => member.isPrimary) ?? null;
+      // основная, принятая после срока загрузки (A5), в гонку не идёт и прежнюю попытку группы не вытесняет:
+      // поздний дубль не снимает засчитанный результат и не улучшает время (снимает только удаление заезда)
+      const found = group.members.find((member) => member.isPrimary) ?? null;
+      const primary = found && found.uploadCreatedAt < uploadClosesAt(race) ? found : null;
       const byUpload = new Map(group.members.map((member) => [member.uploadId, member]));
-      for (const attempt of attempts) {
+      for (const attempt of primary ? attempts : []) {
         const member = group.members.find((candidate) => candidate.id === attempt.activityId);
         if (member && member.id !== primary?.id && attempt.status !== 'withdrawn') {
           await this.repository.withdrawAttempt(tx, attempt._id, 'not_primary', now);
@@ -122,7 +128,7 @@ export class AttemptIntake {
           origin: requested ? 'explicit' : 'auto',
           now,
         });
-        limited = ensured.limited;
+        limited = ensured.refused === 'limit';
         attemptId = ensured.attemptId;
       }
       const requests = entry.requests.map((request) => {
@@ -143,7 +149,8 @@ export class AttemptIntake {
 
   /**
    * Попытка основной активности в транзакции под `lockEntry` заявки: есть — явное намерение делает её явной, снятая
-   * оживает новой ревизией; нет — новая `queued` и событие проверки (если не исчерпан предел попыток заявки).
+   * оживает новой ревизией; нет — новая `queued` и событие проверки (если не исчерпан предел попыток заявки). Файл
+   * основной принят после срока загрузки (A5) — ни новой, ни ожившей попытки, для любого `origin`.
    */
   async ensureAttempt(
     tx: DbSession,
@@ -153,6 +160,8 @@ export class AttemptIntake {
     attempts: readonly RaceAttemptDoc[],
     { origin, now }: { origin: AttemptOrigin; now: Date },
   ): Promise<EnsuredAttempt> {
+    if (activity.uploadCreatedAt >= uploadClosesAt(race))
+      return { attemptId: null, refused: 'late' };
     const existing = attempts.find((attempt) => attempt.activityId === activity.id);
     if (existing) {
       if (existing.status === 'withdrawn') {
@@ -164,10 +173,10 @@ export class AttemptIntake {
       if (origin === 'explicit' && existing.origin === 'auto') {
         await this.repository.markExplicit(tx, existing._id, now);
       }
-      return { attemptId: existing._id, limited: false };
+      return { attemptId: existing._id, refused: null };
     }
     if (attempts.length >= RESULTS_POLICY.maxAttemptsPerEntry || !race.corridor) {
-      return { attemptId: null, limited: true };
+      return { attemptId: null, refused: 'limit' };
     }
     const attempt: RaceAttemptDoc = {
       _id: uuidv7(),
@@ -197,23 +206,25 @@ export class AttemptIntake {
       checkRevision: 1,
       checkAttempts: 0,
       requeues: 0,
+      checkJobId: null,
       createdAt: now,
       updatedAt: now,
       checkedAt: null,
     };
     await this.repository.insertAttempt(tx, attempt);
     await this.queueCheck(tx, attempt);
-    return { attemptId: attempt._id, limited: false };
+    return { attemptId: attempt._id, refused: null };
   }
 
-  /** Событие проверки ревизии попытки — в той же транзакции. */
+  /** Событие проверки ревизии попытки — в той же транзакции; id события (jobId задачи) — в попытку. */
   async queueCheck(
     tx: DbSession,
     attempt: Pick<RaceAttemptDoc, '_id' | 'checkRevision'>,
   ): Promise<void> {
-    await this.outbox.append(tx, {
+    const jobId = await this.outbox.append(tx, {
       type: RESULTS_ATTEMPT_CHECK_REQUESTED,
       payload: { attemptId: attempt._id, checkRevision: attempt.checkRevision },
     });
+    await this.repository.setCheckJob(tx, attempt._id, jobId);
   }
 }

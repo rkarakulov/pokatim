@@ -93,10 +93,18 @@ describe('runParseThread', () => {
     const first = run('first');
     const second = run('second');
     const third = run('third');
-    expect(parseThreadLoad()).toEqual({ active: 1, waiting: 2 });
+    expect(parseThreadLoad()).toMatchObject({ active: 1, waiting: 2 });
     const outcomes = await Promise.all([first, second, third]);
     expect(outcomes.every((outcome) => outcome.ok)).toBe(true);
     expect(order).toEqual(['first', 'second', 'third']);
-    expect(parseThreadLoad()).toEqual({ active: 0, waiting: 0 });
+    expect(parseThreadLoad()).toMatchObject({ active: 0, waiting: 0, live: 0 });
+  });
+
+  it('слот освобождается после завершения потока: живых потоков не больше одного', async () => {
+    const run = (limits = DEFAULT_PARSE_LIMITS) =>
+      runParseThread('analyzeRoute', [fixture('route-loop.gpx')], limits);
+    // успех, таймаут (terminate) и снова успех — следующий поток не создаётся, пока прежний жив
+    await Promise.all([run(), run({ ...DEFAULT_PARSE_LIMITS, timeoutMs: 1 }), run()]);
+    expect(parseThreadLoad()).toEqual({ active: 0, waiting: 0, live: 0, peak: PARSE_THREADS_MAX });
   });
 });

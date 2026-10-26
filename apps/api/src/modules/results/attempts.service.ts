@@ -84,7 +84,9 @@ export class AttemptsService {
           origin: 'explicit',
           now,
         });
-        if (ensured.limited) throw attemptLimit();
+        // основная группы загрузки-дубля принята после срока (A5) — заезд в гонку не идёт
+        if (ensured.refused === 'late') throw sourceInvalid();
+        if (ensured.refused === 'limit') throw attemptLimit();
         attemptId = ensured.attemptId;
       }
       const known = entry.requests.find((item) => item.uploadId === request.uploadId);

@@ -46,9 +46,15 @@ export class ResultsRecheck {
 
   /**
    * Зависшие проверки (`results-maintenance`): `checking` дольше 15 мин или `queued` дольше 2 ч — новая ревизия и
-   * событие; после `maxRequeues` перепостановок — `failed: error` (видно в панели).
+   * событие; после `maxRequeues` перепостановок — `failed: error` (видно в панели). `queued`, задача которой ещё
+   * ждёт в очереди (`jobPending` по `checkJobId` — долгий хвост очереди последнего вечера окна), не трогается.
    */
-  async requeueStuck(): Promise<{ requeued: number; failed: number }> {
+  async requeueStuck({
+    jobPending = () => Promise.resolve(false),
+  }: { jobPending?: (jobId: string) => Promise<boolean> } = {}): Promise<{
+    requeued: number;
+    failed: number;
+  }> {
     const now = this.clock.now().getTime();
     const checkingBefore = new Date(now - RESULTS_POLICY.stuckCheckingMs);
     const queuedBefore = new Date(now - RESULTS_POLICY.stuckQueuedMs);
@@ -60,6 +66,13 @@ export class ResultsRecheck {
     let requeued = 0;
     let failed = 0;
     for (const candidate of stuck) {
+      if (
+        candidate.status === 'queued' &&
+        candidate.checkJobId !== null &&
+        (await jobPending(candidate.checkJobId))
+      ) {
+        continue;
+      }
       const outcome = await this.transactions.run(async (tx) => {
         const at = this.clock.now();
         const entry = await this.repository.lockEntry(tx, candidate.entryId, at);

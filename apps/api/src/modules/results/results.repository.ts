@@ -187,6 +187,11 @@ export class ResultsRepository {
     await this.c.attempts.insertOne(doc, { session });
   }
 
+  /** Задача проверки последней постановки (под `lockEntry`, вместе с событием outbox). */
+  async setCheckJob(session: DbSession, id: string, checkJobId: string): Promise<void> {
+    await this.c.attempts.updateOne({ _id: id }, { $set: { checkJobId } }, { session });
+  }
+
   /** Явное намерение: автоматическая попытка становится явной (видимость отказа без перепроверки). */
   async markExplicit(session: DbSession, id: string, now: Date): Promise<void> {
     await this.c.attempts.updateOne(
@@ -323,6 +328,21 @@ export class ResultsRepository {
       status: 'active',
       best: { $type: 'object' },
     };
+  }
+
+  /** Позиция строки таблицы гонки (курсор): не строка этой гонки — `null`. */
+  async rankedPosition(
+    raceId: string,
+    entryId: string,
+    session?: DbSession,
+  ): Promise<RankPosition | null> {
+    const doc = await this.c.entries.findOne(
+      { ...this.rankedFilter(raceId), _id: entryId },
+      { session, projection: { best: 1 } },
+    );
+    return doc?.best
+      ? { elapsedSec: doc.best.elapsedSec, startedAt: doc.best.startedAt, id: doc._id }
+      : null;
   }
 
   /** Строки группы (индекс `race_entries_ranking_idx`). */

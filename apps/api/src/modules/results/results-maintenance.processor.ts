@@ -16,10 +16,25 @@ export const RESULTS_SCHEDULES = [
   },
 ] as const;
 
-/** Регламент (`results-maintenance`, каждые 10 мин): повторная постановка зависших проверок. */
+/** Состояния задачи BullMQ, в которых она ещё будет выполнена. */
+const PENDING_JOB_STATES: readonly string[] = [
+  'waiting',
+  'delayed',
+  'active',
+  'prioritized',
+  'waiting-children',
+];
+
+/**
+ * Регламент (`results-maintenance`, каждые 10 мин): повторная постановка зависших проверок; `queued` с живой задачей
+ * в `attempt-check` (по `jobId`) — не зависшая, а ждёт очередь.
+ */
 @Processor(QUEUE.resultsMaintenance)
 export class ResultsMaintenanceProcessor extends WorkerHost {
-  constructor(private readonly recheck: ResultsRecheck) {
+  constructor(
+    private readonly recheck: ResultsRecheck,
+    @InjectQueue(QUEUE.attemptCheck) private readonly checks: Queue,
+  ) {
     super();
   }
 
@@ -27,7 +42,12 @@ export class ResultsMaintenanceProcessor extends WorkerHost {
     if (job.name !== RESULTS_REQUEUE_STUCK_JOB) {
       throw new Error(`unknown job ${job.name} in queue ${QUEUE.resultsMaintenance}`);
     }
-    return this.recheck.requeueStuck();
+    return this.recheck.requeueStuck({ jobPending: (jobId) => this.jobPending(jobId) });
+  }
+
+  private async jobPending(jobId: string): Promise<boolean> {
+    const job = await this.checks.getJob(jobId);
+    return job ? PENDING_JOB_STATES.includes(await job.getState()) : false;
   }
 }
 

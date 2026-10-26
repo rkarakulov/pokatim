@@ -211,6 +211,35 @@ describe('V-12 и гонки записи в документ гонки (AC2, A
   });
 });
 
+describe('вторая заявка ↔ отмена гонки (ревью M1)', () => {
+  /**
+   * После первой заявки `lockedAt` уже записан, и `$ifNull` его не меняет — без настоящей записи вторая заявка не
+   * конфликтует с отменой. `admitEntry` увеличивает счётчик `entryAdmissions` каждой заявкой. Отрицательное
+   * доказательство: без счётчика вторая заявка проходит на отменённую гонку.
+   */
+  it('вторая заявка во время отмены гонки — 409 cancelled, заявки нет', async () => {
+    const { raceId } = await corridorRace(h);
+    const first = await rider(h);
+    expect((await enterRace(h, first.auth, raceId)).status).toBe(201);
+    const second = await rider(h, 'second@example.com');
+    const admitSpy = vi.spyOn(racesRepository(h), 'admitEntry');
+    const hold = await holdTransaction(h, async (session) => {
+      await racesDb(h).races.updateOne(
+        { _id: raceId },
+        { $set: { status: 'cancelled', cancelReason: 'weather', cancelledAt: h.clock.now() } },
+        { session },
+      );
+    });
+    const entering = enterRace(h, second.auth, raceId);
+    await untilBlocked(entering, retried(admitSpy));
+    await hold.commit();
+    const entered = await entering;
+    expect([entered.status, reason(entered.body)]).toEqual([409, 'cancelled']);
+    expect(await resultsDb(h).entries.countDocuments()).toBe(1);
+    expect((await racesDb(h).races.findOne({ _id: raceId }))?.entryAdmissions).toBe(1);
+  });
+});
+
 describe('отмена участия (AC4)', () => {
   it('в upcoming/open — withdrawn, повтор 200; повторная заявка — 409 RACE_ENTRY_WITHDRAWN', async () => {
     const { raceId } = await corridorRace(h);

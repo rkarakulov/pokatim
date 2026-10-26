@@ -1,10 +1,10 @@
 import { MyRaceEntry, RaceResultsPage } from '@pokatim/contracts';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { call } from '../../../test/identity';
+import { call, gate } from '../../../test/identity';
 import { panelCall } from '../../../test/panel';
-import { createRace, RACES, staff } from '../../../test/races';
+import { createRace, publishedRace, RACES, staff } from '../../../test/races';
 import {
   corridorRace,
   enterRace,
@@ -13,6 +13,7 @@ import {
   rider,
   withdraw,
 } from '../../../test/results';
+import { ResultsRepository } from './results.repository';
 
 /**
  * Таблица и чтение (race-results-03: AC18, AC19, AC21, AC22): места при чтении «1, =2, =2, 4», граница страниц,
@@ -117,6 +118,35 @@ describe('предварительная таблица (AC18, AC21)', () => {
     expect((await results(raceId, '?userId=x')).status).toBe(400);
   });
 
+  it('курсор не раскрывает время старта: только строка таблицы; строка выбыла — 400 cursor', async () => {
+    const { raceId, riders, admin, routeId } = await standings([3600, 3700, 3800]);
+    const first = page((await results(raceId, '?limit=1')).body);
+    const decoded = JSON.parse(Buffer.from(first.nextCursor!, 'base64url').toString('utf8')) as {
+      k: string;
+      id: string;
+    };
+    expect(decoded).toEqual({ k: 'e', id: riders[0]!.entryId });
+    const startedAt = new Date('2026-10-25T00:00:00Z');
+    expect(first.nextCursor).not.toContain(String(startedAt.getTime()));
+    const second = page(
+      (await results(raceId, `?limit=1&cursor=${encodeURIComponent(first.nextCursor!)}`)).body,
+    );
+    expect(second.items.map((row) => [row.entryId, row.place])).toEqual([[riders[1]!.entryId, 2]]);
+    // строка курсора выбыла из таблицы (отмена участия) — клиент начинает сначала
+    expect((await withdraw(h, riders[0]!.auth, raceId)).status).toBe(200);
+    const stale = await results(raceId, `?limit=1&cursor=${encodeURIComponent(first.nextCursor!)}`);
+    expect(stale.status).toBe(400);
+    // курсор строки другой гонки — тоже 400
+    const other = await publishedRace(h, admin.token, {
+      title: 'Другая гонка',
+      distanceKm: undefined,
+      corridor: { routeId, widthM: 50 },
+    });
+    expect(
+      (await results(other.id, `?limit=1&cursor=${encodeURIComponent(second.nextCursor!)}`)).status,
+    ).toBe(400);
+  });
+
   it('отмена участия — строки нет, места остальных сдвинулись; попытки и результат райдера — withdrawn', async () => {
     const { raceId, riders } = await standings([3600, 3700, 3800]);
     expect((await withdraw(h, riders[0]!.auth, raceId)).status).toBe(200);
@@ -145,6 +175,37 @@ describe('предварительная таблица (AC18, AC21)', () => {
       reason: 'weather',
     });
     expect(page((await results(raceId)).body)).toMatchObject({ ranked: 0, items: [] });
+  });
+});
+
+describe('моё участие — один снимок БД (ревью Codex)', () => {
+  /**
+   * Заявка, попытки и место читаются в одной snapshot-сессии: лучший результат сняли между чтениями (ворота перед
+   * подсчётом строк) — ответ согласован со снимком (место и число строк из одного состояния), не «место 1 из 0».
+   */
+  it('снятие лучшего между чтениями не даёт место при ranked = 0', async () => {
+    const { raceId, riders } = await standings([3600]);
+    const repository = h.app.get(ResultsRepository, { strict: false });
+    const g = gate();
+    const countRanked = repository.countRanked.bind(repository);
+    vi.spyOn(repository, 'countRanked').mockImplementationOnce(async (...args) => {
+      await g.wait();
+      return countRanked(...args);
+    });
+    const reading = myEntry(h, riders[0]!.auth, raceId);
+    await g.reached;
+    await resultsDb(h).entries.updateOne(
+      { _id: riders[0]!.entryId },
+      {
+        $set: {
+          best: null,
+          summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 0 },
+        },
+      },
+    );
+    g.open();
+    const view = await reading;
+    expect(view.result).toMatchObject({ status: 'provisional', place: 1, ranked: 1 });
   });
 });
 

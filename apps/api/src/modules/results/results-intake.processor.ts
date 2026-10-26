@@ -31,6 +31,20 @@ export class ResultsIntakeProcessor extends WorkerHost {
   }
 
   async process(job: Job<OutboxJobData>): Promise<void> {
+    try {
+      await this.handle(job);
+    } catch (error) {
+      // финальный провал приёма — видимый след с id (попытки заявки могли не появиться)
+      if (job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
+        this.logger.error(
+          `event ${job.data.outboxEventId} (${job.name}) failed on final attempt: ${(error as Error).name}`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async handle(job: Job<OutboxJobData>): Promise<void> {
     const payload = await this.outbox.payloadOf(job.data.outboxEventId);
     if (job.name === TRACK_ACTIVITY_READY) {
       const event = TrackActivityReady.safeParse(payload);

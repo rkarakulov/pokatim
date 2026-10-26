@@ -114,6 +114,8 @@ export interface RaceAttemptDoc {
   checkRevision: number;
   checkAttempts: number;
   requeues: number;
+  /** id события outbox последней постановки на проверку (= jobId задачи `attempt-check`); до постановки — `null` */
+  checkJobId: string | null;
   createdAt: Date;
   updatedAt: Date;
   checkedAt: Date | null;

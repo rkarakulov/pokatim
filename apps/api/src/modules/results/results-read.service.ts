@@ -14,6 +14,7 @@ import { CORRIDOR_ENGINE_VERSION } from '@pokatim/tracks/parse';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import { z } from 'zod';
 
+import type { DbSession } from '../../db';
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import type { PanelPrincipal } from '../panel';
@@ -28,12 +29,17 @@ import {
   resultStatus,
   uploadClosesAt,
 } from './results.policy';
-import { type RankPosition, ResultsRepository } from './results.repository';
+import { ResultsRepository } from './results.repository';
 
 const notFound = () => domainError('NOT_FOUND', 404);
+const invalidCursor = () =>
+  domainError('VALIDATION_FAILED', 400, { fields: [{ path: 'cursor', code: 'INVALID' }] });
 
-/** Курсор таблицы: `<elapsedSec>.<startedAt, мс>` + `_id` последней строки. */
-const RankCursorKey = z.string().regex(/^\d{1,9}\.\d{1,15}$/);
+/**
+ * Курсор таблицы — только `entryId` последней строки (публичный id строки): время старта сегмента наружу не выходит
+ * (AC21), позицию сортировки сервер берёт из самой строки.
+ */
+const RankCursorKey = z.literal('e');
 /** Курсор попыток панели: только `_id` (новые сверху). */
 const AttemptCursorKey = z.literal('a');
 
@@ -74,9 +80,15 @@ export class ResultsReadService {
   async myEntry(userId: string, raceId: string): Promise<MyRaceEntry> {
     const race = await this.race(raceId);
     const now = this.clock.now();
-    const entry = (await this.repository.findEntry(raceId, userId)) ?? null;
-    const attempts = entry ? await this.repository.attemptsOfEntry(entry._id) : [];
-    const standing = await this.standing(raceId, entry);
+    // заявка, попытки и место — из одного снимка БД (согласованы `best`, `isBest` и место)
+    const { entry, attempts, standing } = await this.repository.withSnapshot(async (session) => {
+      const found = (await this.repository.findEntry(raceId, userId, session)) ?? null;
+      return {
+        entry: found,
+        attempts: found ? await this.repository.attemptsOfEntry(found._id, session) : [],
+        standing: await this.standing(raceId, found, session),
+      };
+    });
     return {
       raceId,
       entry: entry
@@ -104,19 +116,18 @@ export class ResultsReadService {
     };
   }
 
-  /** Место своей строки (активная заявка с лучшим) и число строк — в одной snapshot-сессии. */
-  private standing(
+  /** Место своей строки (активная заявка с лучшим) и число строк — в snapshot-сессии вызывающего. */
+  private async standing(
     raceId: string,
     entry: RaceEntryDoc | null,
+    session: DbSession,
   ): Promise<{ place: number | null; tied: boolean; ranked: number }> {
-    return this.repository.withSnapshot(async (session) => {
-      const ranked = await this.repository.countRanked(raceId, session);
-      const best = entry?.status === 'active' ? entry.best : null;
-      if (!best) return { place: null, tied: false, ranked };
-      const less = await this.repository.countRankedLess(raceId, best.elapsedSec, session);
-      const equal = await this.repository.countRankedEqual(raceId, best.elapsedSec, session);
-      return { place: less + 1, tied: equal >= 2, ranked };
-    });
+    const ranked = await this.repository.countRanked(raceId, session);
+    const best = entry?.status === 'active' ? entry.best : null;
+    if (!best) return { place: null, tied: false, ranked };
+    const less = await this.repository.countRankedLess(raceId, best.elapsedSec, session);
+    const equal = await this.repository.countRankedEqual(raceId, best.elapsedSec, session);
+    return { place: less + 1, tied: equal >= 2, ranked };
   }
 
   private myAttempt(attempt: RaceAttemptDoc, entry: RaceEntryDoc | null): MyAttempt {
@@ -155,11 +166,12 @@ export class ResultsReadService {
 
   /**
    * Публичная предварительная таблица (без ПДн: `entryId`, место, ничья, время сегмента). Отменённая или без
-   * коридора — пусто. Страница и счётчики мест — в одной snapshot-сессии.
+   * коридора — пусто. Страница и счётчики мест — в одной snapshot-сессии. Курсор — строка этой таблицы: выбыла
+   * (отмена участия, снятие лучшего) или чужая гонка — `400` на поле `cursor`, клиент начинает сначала.
    */
   async publicResults(raceId: string, query: RaceResultsQuery): Promise<RaceResultsPage> {
     const race = await this.race(raceId);
-    const after = query.cursor ? this.decodeRankCursor(query.cursor) : null;
+    const cursorEntryId = query.cursor ? decodeCursor(query.cursor, RankCursorKey).id : null;
     const empty = race.status === 'cancelled' || race.corridor === null;
     return this.repository.withSnapshot(async (session) => {
       const entries = await this.repository.countActiveEntries(raceId, session);
@@ -169,6 +181,10 @@ export class ResultsReadService {
         entries,
       };
       if (empty) return { ...base, ranked: 0, items: [], nextCursor: null };
+      const after = cursorEntryId
+        ? await this.repository.rankedPosition(raceId, cursorEntryId, session)
+        : null;
+      if (cursorEntryId && !after) throw invalidCursor();
       const ranked = await this.repository.countRanked(raceId, session);
       const rows = await this.repository.rankedPage(raceId, after, query.limit + 1, session);
       const page = rows.slice(0, query.limit);
@@ -201,18 +217,9 @@ export class ResultsReadService {
           tied: places[index]!.tied,
           elapsedSec: row.best.elapsedSec,
         })),
-        nextCursor:
-          rows.length > query.limit
-            ? encodeCursor(`${last.best.elapsedSec}.${last.best.startedAt.getTime()}`, last._id)
-            : null,
+        nextCursor: rows.length > query.limit ? encodeCursor('e', last._id) : null,
       };
     });
-  }
-
-  private decodeRankCursor(raw: string): RankPosition {
-    const { k, id } = decodeCursor(raw, RankCursorKey);
-    const [elapsed, started] = k.split('.');
-    return { elapsedSec: Number(elapsed), startedAt: new Date(Number(started)), id };
   }
 
   /** Гонка в панели: невидимая сотруднику (чужая гонка организатора) — 404. */

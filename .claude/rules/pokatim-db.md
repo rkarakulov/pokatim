@@ -111,8 +111,12 @@ paths:
 - `race_entries`, `race_attempts` — единственный писатель `ResultsRepository`. Транзакция, меняющая попытки заявки,
   её запросы, лучший результат, сводку или статус, **первой** операцией вызывает `lockEntry` (`$inc version`
   заявки). Без замка — **HIGH** в ревью (отрицательное доказательство — запрос по загрузке ↔ `activity-ready`).
-- Заявка — транзакция с `RaceRegistry.admitEntry` первой операцией: **запись** `lockedAt ??= now` в документ гонки
-  (pipeline `$ifNull` + `$literal`), без `version` гонки. `races.lockedAt` пишет только `RacesRepository`.
+- Заявка — транзакция с `RaceRegistry.admitEntry` первой операцией: **настоящая запись** в документ гонки каждой
+  заявкой — `lockedAt ??= now` и `entryAdmissions + 1` (pipeline `$ifNull` + `$literal`), без `version` гонки. Только
+  `$ifNull` после первой заявки ничего не меняет — вторая заявка не конфликтовала бы с отменой гонки (отрицательное
+  доказательство в `results-entries.int.test.ts`). `races.lockedAt`/`entryAdmissions` пишет только `RacesRepository`.
+- Попытка на основную группы — только если файл основной принят сервером до `closesAt + 24 ч` (A5): поздний дубль
+  не снимает прежнюю попытку (`not_primary`) и не создаёт новую; снимает попытку только удаление заезда.
 - Вердикт пишет только своя ревизия: `checkRevision` в фильтре захвата (`queued|checking`) и записи (`checking`);
   поздний повтор — no-op.
 - Лучший результат и сводка — поля заявки (`best`, `summary`), пересчёт `refreshEntry` в той же транзакции (без

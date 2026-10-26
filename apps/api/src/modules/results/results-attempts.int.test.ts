@@ -331,6 +331,57 @@ describe('дубли и удаление (AC10, AC11)', () => {
   });
 });
 
+describe('поздний дубль после срока загрузки (A5, ревью H1)', () => {
+  /** Срок загрузки прошёл: файл принят сервером позже закрытия окна + 24 ч. */
+  async function afterDeadline() {
+    travelTo(h, new Date(WINDOW.closesAt.getTime() + DAY + HOUR));
+    return signIn(h, 'rider@example.com');
+  }
+
+  /**
+   * Тот же заезд с мощностью после срока становится основной группы в `tracks`, но в гонку не идёт: прежняя засчитанная
+   * попытка остаётся лучшей, новой нет. Отрицательное доказательство: без проверки времени приёма основной прежняя
+   * снимается как `not_primary` — результат пропадает.
+   */
+  it('дубль с мощностью после срока — прежний counted остаётся best, новой попытки нет', async () => {
+    const { raceId, auth, worker } = await entered();
+    const first = await uploadRide(h, auth, rideGpx('clean.gpx', RIDE));
+    await worker.drain();
+    const [counted] = await attempts();
+    expect(counted).toMatchObject({ activityId: first.activityId, status: 'counted' });
+
+    const late = await afterDeadline();
+    const powered = await uploadRide(h, late, rideGpx('clean.gpx', RIDE, { power: true }));
+    expect(await tracks(h).activities.findOne({ _id: powered.activityId! })).toMatchObject({
+      duplicateOf: null,
+    });
+    await worker.drain();
+    expect(await attempts()).toMatchObject([
+      { _id: counted!._id, status: 'counted', withdrawReason: null },
+    ]);
+    expect((await myEntry(h, late, raceId)).result).toMatchObject({
+      status: 'provisional',
+      elapsedSec: counted!.segment!.elapsedSec,
+    });
+  });
+
+  it('подправленный GPX после срока (быстрее на 3 %, с мощностью) не улучшает время', async () => {
+    const { raceId, auth, worker } = await entered();
+    await uploadRide(h, auth, rideGpx('clean.gpx', RIDE));
+    await worker.drain();
+    const before = (await myEntry(h, auth, raceId)).result.elapsedSec;
+
+    const late = await afterDeadline();
+    await uploadRide(h, late, rideGpx('clean.gpx', RIDE, { scale: 0.97, power: true }));
+    await worker.drain();
+    expect(await resultsDb(h).attempts.countDocuments()).toBe(1);
+    expect((await myEntry(h, late, raceId)).result).toMatchObject({
+      status: 'provisional',
+      elapsedSec: before,
+    });
+  });
+});
+
 describe('сроки и пределы (AC12)', () => {
   it('до окна — ATTEMPT_UPLOAD_CLOSED window_not_open; после срока — upload_closed; без заявки — RACE_ENTRY_REQUIRED', async () => {
     const { raceId } = await corridorRace(h);
@@ -379,6 +430,7 @@ describe('сроки и пределы (AC12)', () => {
         checkRevision: 1,
         checkAttempts: 1,
         requeues: 0,
+        checkJobId: null,
         createdAt: now,
         updatedAt: now,
         checkedAt: now,

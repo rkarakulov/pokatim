@@ -300,7 +300,8 @@ worker: очередь identity-email ─► письмо «Пароль изм�
 ### Участие в гонке (модуль `results`, ADR-0012 Proposed, race-results-03)
 
 - **Заявка:** `POST /v1/races/:raceId/entry` (`AuthGuard`, лимит 20/ч) → транзакция { `RaceRegistry.admitEntry`
-  (запись `races.lockedAt ??= now`, V-12) → `race_entries` → outbox `results.entry-created` } → `201`. Отмена —
+  (запись `races.lockedAt ??= now` и `entryAdmissions + 1`, V-12) → `race_entries` → outbox `results.entry-created` }
+  → `201`. Отмена —
   `…/entry/withdraw` под `lockEntry` (замок участника — `$inc version` заявки).
 - **Попытки:** `tracks.activity-ready/-removed` (outbox `tracks`) и `results.entry-created` → очередь
   `results-intake` (параллелизм 2) → `syncGroup` под `lockEntry` (группа дублей сейчас, предфильтр по окну, рамке,
