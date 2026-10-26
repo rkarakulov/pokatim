@@ -131,6 +131,15 @@ paths:
   GPS-треку», если `race.corridor` есть; `null` и отсутствие поля (старый API) — как без коридора. Карты и линии
   маршрута в приложении нет (эпик «вне эпика»); SSR-мета не меняется.
 
+- Участие и результат (race-results-04): блок «Ваше участие» и таблица «Результаты» на карточке `races/[id]` — только
+  клиентские запросы (в SSR не попадают; пока сессия неизвестна — блока нет). Ключи `['races','entry',id]`
+  (`no-store`, 404 старого API — `null`), `['races','results',id,'pages']` (публичная, префикс `['races','results',id]`
+  для инвалидации), `['races','candidates',id]`. Опрос участия — `needsPolling` раз в 3 с; смена результата —
+  тихая инвалидация таблицы (без уведомлений). Права и статусы — только `actions` / `result` сервера; причина
+  недоступности — первая из подмножества своего действия (`enterBlockReason` / `addAttemptBlockReason`,
+  `features/races/participation-format.ts`), не `reasons[0]`. `races/pick/[id]` — под гардом вкладок. Загрузка в
+  гонку — `useTrackFileUpload({ onUploaded })` + `addRaceAttempt({ uploadId })`; прогресс — общий `UploadProgress`.
+
 ## Календарь стартов (блок 04, `docs/product/races-and-seasons.md`)
 
 - Вкладка «Календарь» — `features/calendar/calendar-feed.tsx` (`FlatList`): одна выдача, ключ
