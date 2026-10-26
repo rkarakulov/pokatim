@@ -26,12 +26,11 @@ function ResultRow({ row, own }: { row: RaceResultRow; own: boolean }) {
       style={[
         styles.row,
         { borderTopColor: theme.border.subtle },
-        own ? [styles.own, { borderLeftColor: theme.text.accent }] : null,
+        // полоса — роль рамки (акцентной рамки в системе нет); «Вы» — текстом, не только цветом
+        own ? [styles.own, { borderLeftColor: theme.border.strong }] : null,
       ]}
     >
-      <Text style={[textStyle('time'), styles.place, { color: theme.text.primary }]}>
-        {view.place}
-      </Text>
+      <Text style={[textStyle('time'), { color: theme.text.primary }]}>{view.place}</Text>
       <Text
         style={[
           textStyle(own ? 'label' : 'body'),
@@ -135,7 +134,6 @@ const styles = StyleSheet.create({
     paddingVertical: space.s2,
     borderTopWidth: stroke.hairline,
   },
-  own: { borderLeftWidth: stroke.bannerError, paddingLeft: space.s2 },
-  place: { minWidth: space.s6 },
+  own: { borderLeftWidth: stroke.indicator, paddingLeft: space.s2 },
   who: { flex: 1 },
 });

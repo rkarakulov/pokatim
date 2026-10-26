@@ -219,6 +219,8 @@ export function useAttemptCandidates(id: string, enabled: boolean) {
 
 /** Ответ мутации — в кеш участия; затем таблица и кандидаты устаревают. */
 async function applyEntry(queryClient: QueryClient, entry: MyRaceEntry): Promise<void> {
+  // опрос или обновление, ушедшие во время мутации, несут состояние до неё — их ответ не должен затереть этот
+  await queryClient.cancelQueries({ queryKey: raceEntryKey(entry.raceId) });
   queryClient.setQueryData(raceEntryKey(entry.raceId), entry);
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: raceResultsKey(entry.raceId) }),
@@ -231,6 +233,8 @@ function useEntryMutation<V>(id: string, call: (token: string, body: V) => Promi
   const queryClient = useQueryClient();
   return useMutation({
     ...AUTH_MUTATION,
+    // опрос, начатый до мутации, отменяем сразу: его ответ не придёт поверх ответа мутации
+    onMutate: () => queryClient.cancelQueries({ queryKey: raceEntryKey(id) }),
     mutationFn: (body: V) => withAccessToken((token) => call(token, body)),
     onSuccess: (entry) => applyEntry(queryClient, entry),
     onError: (error) => {

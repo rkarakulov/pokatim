@@ -15,7 +15,7 @@ import {
   blockReasonText,
   raceActionErrorText,
 } from '../participation-format';
-import { useAddRaceAttempt } from '../queries';
+import { useAddRaceAttempt, useWithdrawFromRace } from '../queries';
 import { WithdrawConfirm } from './withdraw-confirm';
 
 /**
@@ -36,6 +36,8 @@ export function EntryActions({
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const addAttempt = useAddRaceAttempt(raceId);
+  // отмена — здесь, а не в панели: после 409 сервер даст `canWithdraw: false`, панель уйдёт, а текст отказа останется
+  const withdraw = useWithdrawFromRace(raceId);
   const upload = useTrackFileUpload({
     onUploaded: (sent) => addAttempt.mutate({ uploadId: sent.id }),
   });
@@ -44,6 +46,8 @@ export function EntryActions({
   const meta = [textStyle('meta'), { color: theme.text.secondary }];
   const closes = now === null ? null : minskDateTime(entry.uploadClosesAt, now);
 
+  const uploading = upload.state.phase === 'uploading';
+
   const choose = () => {
     addAttempt.reset();
     void upload.choose();
@@ -51,15 +55,17 @@ export function EntryActions({
 
   return (
     <View style={styles.actions}>
+      {/* идущую отправку видно и после того, как срок загрузки истёк посреди неё */}
+      {upload.state.phase === 'uploading' ? (
+        <UploadProgress
+          name={upload.state.name}
+          progress={upload.state.progress}
+          onCancel={upload.cancel}
+        />
+      ) : null}
       {actions.canAddAttempt ? (
         <View style={styles.stack}>
-          {upload.state.phase === 'uploading' ? (
-            <UploadProgress
-              name={upload.state.name}
-              progress={upload.state.progress}
-              onCancel={upload.cancel}
-            />
-          ) : (
+          {uploading ? null : (
             <Button
               label={t(
                 entry.attempts.length === 0 ? 'races.entry.upload' : 'races.entry.uploadMore',
@@ -90,16 +96,26 @@ export function EntryActions({
       ) : null}
       {actions.canWithdraw ? (
         confirming ? (
-          <WithdrawConfirm raceId={raceId} onClose={() => setConfirming(false)} />
+          <WithdrawConfirm
+            pending={withdraw.isPending}
+            onConfirm={() => withdraw.mutate(undefined, { onSuccess: () => setConfirming(false) })}
+            onClose={() => setConfirming(false)}
+          />
         ) : (
           <View style={styles.start}>
             <TextAction
               label={t('races.entry.withdraw')}
               destructive
-              onPress={() => setConfirming(true)}
+              onPress={() => {
+                withdraw.reset();
+                setConfirming(true);
+              }}
             />
           </View>
         )
+      ) : null}
+      {withdraw.error ? (
+        <Banner tone="error" message={raceActionErrorText(withdraw.error)} />
       ) : null}
     </View>
   );

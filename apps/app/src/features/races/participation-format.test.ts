@@ -47,6 +47,15 @@ describe('причины недоступности — по подмножес�
     expect(addAttemptBlockReason(actions({ reasons: ['window_closed'] }))).toBeNull();
   });
 
+  it('unknown не перебивает свою причину: [unknown, upload_closed] → upload_closed', () => {
+    expect(addAttemptBlockReason(actions({ reasons: ['unknown', 'upload_closed'] }))).toBe(
+      'upload_closed',
+    );
+    expect(enterBlockReason(actions({ reasons: ['unknown', 'entries_closed'] }))).toBe(
+      'entries_closed',
+    );
+  });
+
   it('заявка: [no_corridor, not_entered] → no_corridor; [unknown] → unknown; [not_entered] → null', () => {
     expect(enterBlockReason(actions({ reasons: ['no_corridor', 'not_entered'] }))).toBe(
       'no_corridor',

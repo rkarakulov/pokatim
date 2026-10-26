@@ -3,6 +3,7 @@ import { ApiHttpError } from '@pokatim/api-client';
 import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { getDocumentAsync } from 'expo-document-picker';
+import { AccessibilityInfo } from 'react-native';
 
 import { takeReturnPath } from '@/features/auth/return-path';
 import { useSessionStore } from '@/features/auth/session-store';
@@ -46,6 +47,14 @@ const NOW = new Date('2026-10-08T18:00:00Z');
 const TOKEN = liveSession.accessToken;
 const never = () => new Promise<never>(() => undefined);
 const conflict = (code: string) => new ApiHttpError(409, { code, message: 'x' });
+
+/** Ответ сервера после отмены участия. */
+const withdrawnEntry = () =>
+  myEntry({
+    entry: { ...myEntry().entry!, status: 'withdrawn', withdrawnAt: NOW.toISOString() },
+    result: result({ status: 'withdrawn' }),
+    actions: actions({ reasons: ['withdrawn'] }),
+  });
 
 const signedIn = () => {
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
@@ -394,6 +403,37 @@ describe('polling — место появляется тихо (AC6)', () => {
     expect(getMyRaceEntry).toHaveBeenCalledTimes(2);
   });
 
+  it('ответ опроса, начатого до мутации, не затирает ответ мутации', async () => {
+    const checking = myEntry({
+      result: result({ status: 'pending' }),
+      attempts: [attempt({ status: 'checking', segment: null, isBest: false })],
+    });
+    getMyRaceEntry.mockResolvedValue(checking);
+    await openSignedIn();
+    expect(await screen.findByText('Место появится после проверки.')).toBeOnTheScreen();
+
+    // опрос уходит и висит
+    let finishPoll: () => void = () => undefined;
+    getMyRaceEntry.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishPoll = () => resolve(checking);
+      }),
+    );
+    await act(() => jest.advanceTimersByTimeAsync(3000));
+    expect(getMyRaceEntry).toHaveBeenCalledTimes(2);
+
+    withdrawFromRace.mockResolvedValue(withdrawnEntry());
+    await fireEvent.press(screen.getByRole('button', { name: 'Отменить участие' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Отменить участие' }));
+    expect(await screen.findByText('Участие отменено')).toBeOnTheScreen();
+
+    // устаревший ответ опроса приходит после мутации
+    await act(async () => finishPoll());
+    await act(() => jest.advanceTimersByTimeAsync(0));
+    expect(screen.getByText('Участие отменено')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Отменить участие' })).toBeNull();
+  });
+
   it('всё проверено — без опроса', async () => {
     getMyRaceEntry.mockResolvedValue(
       myEntry({ result: result({ status: 'provisional', elapsedSec: 1, place: 1 }) }),
@@ -439,6 +479,26 @@ describe('загрузка заезда в гонку (AC7)', () => {
     );
     expect(await screen.findByText('В очереди на проверку')).toBeOnTheScreen();
     expect(screen.getByText('Место появится после проверки.')).toBeOnTheScreen();
+  });
+
+  it('срок загрузки истёк посреди отправки — прогресс и «Отменить» остаются', async () => {
+    getMyRaceEntry.mockResolvedValue(myEntry({ result: result({ status: 'pending' }) }));
+    picked('ride.gpx', 1024);
+    await openSignedIn();
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Загрузить заезд' }));
+    await waitFor(() => expect(FakeXhr.last).toBeDefined());
+    getMyRaceEntry.mockResolvedValue(
+      myEntry({
+        result: result({ status: 'pending' }),
+        actions: actions({ canWithdraw: true, reasons: ['upload_closed'] }),
+      }),
+    );
+    await act(() => jest.advanceTimersByTimeAsync(3000));
+    expect(await screen.findByText('Срок загрузки заездов истёк')).toBeOnTheScreen();
+    expect(screen.getByText('Загружаем ride.gpx: 0%')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Отменить' }));
+    expect(FakeXhr.last?.aborted).toBe(true);
   });
 
   it('отказ pre-check — баннер, запроса нет', async () => {
@@ -513,12 +573,29 @@ describe('отмена участия (AC9)', () => {
     expect(screen.queryByText('Отменить участие?')).toBeNull();
   });
 
-  it('409 RACE_WITHDRAW_CLOSED — текст под кнопками', async () => {
+  it('409 RACE_WITHDRAW_CLOSED — текст остаётся и после перезапроса с canWithdraw: false', async () => {
     withdrawFromRace.mockRejectedValue(conflict('RACE_WITHDRAW_CLOSED'));
     await openSignedIn();
 
     await fireEvent.press(await screen.findByRole('button', { name: 'Отменить участие' }));
+    // так ответит сервер после закрытия окна: отмена и загрузка недоступны
+    getMyRaceEntry.mockResolvedValue(
+      myEntry({ actions: actions({ reasons: ['window_closed', 'upload_closed'] }) }),
+    );
     await fireEvent.press(screen.getByRole('button', { name: 'Отменить участие' }));
     expect(await screen.findByText('Отменить участие можно, пока окно открыто')).toBeOnTheScreen();
+    await waitFor(() => expect(getMyRaceEntry).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Срок загрузки заездов истёк')).toBeOnTheScreen();
+    expect(screen.queryByText('Отменить участие?')).toBeNull();
+    expect(screen.getByText('Отменить участие можно, пока окно открыто')).toBeOnTheScreen();
+  });
+
+  it('подтверждение — фокус скринридера на заголовок', async () => {
+    const focus = jest.spyOn(AccessibilityInfo, 'sendAccessibilityEvent');
+    await openSignedIn();
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Отменить участие' }));
+    await waitFor(() => expect(focus).toHaveBeenCalledWith(expect.anything(), 'focus'));
+    focus.mockRestore();
   });
 });

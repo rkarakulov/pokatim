@@ -39,10 +39,14 @@ export const ATTEMPT_REASONS: readonly RaceEntryBlockReason[] = [
   'attempt_limit',
 ];
 
-const firstReason = (actions: Actions, own: readonly RaceEntryBlockReason[]): BlockReason | null =>
-  actions.reasons.find(
-    (reason): reason is BlockReason => reason === 'unknown' || own.includes(reason),
-  ) ?? null;
+/** Своя причина важнее незнакомой (`unknown` может быть причиной другого действия); своей нет — `unknown`, если есть. */
+function firstReason(actions: Actions, own: readonly RaceEntryBlockReason[]): BlockReason | null {
+  const known = actions.reasons.find((reason): reason is RaceEntryBlockReason =>
+    own.includes(reason as RaceEntryBlockReason),
+  );
+  if (known) return known;
+  return actions.reasons.includes('unknown') ? 'unknown' : null;
+}
 
 /** Первая причина недоступности «Участвовать» из ответа сервера; своих причин нет — `null`. */
 export const enterBlockReason = (actions: Actions) => firstReason(actions, ENTER_REASONS);
