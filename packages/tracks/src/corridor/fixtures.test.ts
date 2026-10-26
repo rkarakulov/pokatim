@@ -260,11 +260,12 @@ describe('matchCorridorDetailed: интервалы схода выбранно�
     );
   };
 
+  // два прогона движка на каждой фикстуре — на раннере CI дольше 5 с по умолчанию
   it('match = matchCorridor на всех фикстурах (вердикт и метрики не меняются)', () => {
     for (const name of Object.keys(SCENARIOS)) {
       expect(detailed(name).match, name).toEqual(run(name));
     }
-  });
+  }, 30_000);
 
   it('clean — интервалов нет; mid-start (no_start) — []', () => {
     expect(detailed('clean.gpx').offRunsMs).toEqual([]);
