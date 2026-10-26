@@ -5,6 +5,8 @@
 export const QUEUE = {
   /** Разбор исходника загрузки в worker_threads (tracks-devices): jobId = id события outbox. */
   trackProcessing: 'track-processing',
+  /** Разбор GPX маршрута коридора в worker_threads (race-results-01): jobId = id события outbox. */
+  routeProcessing: 'route-processing',
   /** Регламент треков: уборка отбракованных исходников и файлов без документа. */
   tracksMaintenance: 'tracks-maintenance',
   /** Синхронизация устройств через агрегатор: pull, история, отзыв подключения, надгробия удалённых загрузок. */

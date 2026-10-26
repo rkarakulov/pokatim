@@ -22,6 +22,8 @@ export const PROJECT_ERROR_MESSAGES = {
   DEVICE_PROVIDER_UNAVAILABLE: 'Подключение временно недоступно',
   DEVICE_LINK_INVALID: 'Ссылка подключения недействительна',
   DEVICE_PROVIDER_ERROR: 'Сервис подключения устройств не ответил',
+  ROUTE_FORMAT_UNSUPPORTED: 'Выберите файл GPX',
+  ROUTE_TOO_LARGE: 'Файл больше 5 МБ',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

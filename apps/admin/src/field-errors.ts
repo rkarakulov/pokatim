@@ -20,6 +20,8 @@ const FIELD_ERROR_KEYS: Record<string, MessageKey> = {
   PROTOCOL_TOO_EARLY: 'field.error.PROTOCOL_TOO_EARLY',
   PROTOCOL_ONLY_LATER: 'field.error.PROTOCOL_ONLY_LATER',
   FIELD_LOCKED: 'field.error.FIELD_LOCKED',
+  // коридор гонки (race-results-01)
+  ROUTE_NOT_READY: 'field.error.ROUTE_NOT_READY',
 };
 
 /** Код ошибки поля из схемы контракта (сообщение zod = код) → текст; незнакомый — «Проверьте значение». */

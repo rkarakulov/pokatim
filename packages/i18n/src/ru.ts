@@ -105,6 +105,10 @@ export const ru = {
   'races.detail.protocolPlanned': '{date} (план)',
   'races.detail.description': 'Описание',
   'races.detail.notFound': 'Гонка не найдена',
+  // race-results-01: коридор гонки [ASSUMPTION copy]
+  'races.detail.corridor': 'Коридор',
+  'races.detail.corridorValue': '±{width} м от маршрута',
+  'races.detail.distanceByRoute': '{distance} по GPS-треку',
   'races.detail.allRaces': 'Все гонки',
   // экран сезона (публичный, блок 03; Q1, Q2 — без таблицы)
   'season.title': 'Сезон',
@@ -485,6 +489,7 @@ export const ru = {
   'admin.audit.action.calendar.updated': 'Изменён старт календаря',
   'admin.audit.action.calendar.unpublished': 'Старт снят с публикации',
   'admin.audit.action.calendar.republished': 'Старт возвращён в календарь',
+  'admin.audit.action.route.created': 'Загружен маршрут',
   'admin.audit.column.subject': 'Объект',
   'admin.audit.field.unknown': 'другое поле',
   // справочники, общие с приложением (admin-02): подписи значений enum-ов контрактов
@@ -528,6 +533,7 @@ export const ru = {
   'field.error.PROTOCOL_ONLY_LATER':
     'Окно гонки закрыто — дату протокола можно перенести только позже: {date} или позже.',
   'field.error.FIELD_LOCKED': 'Поле зафиксировано и не меняется.',
+  'field.error.ROUTE_NOT_READY': 'Маршрут ещё обрабатывается или недоступен.',
   // общее для экранов admin-02
   'admin.zone': 'Europe/Minsk',
   'admin.locked': 'зафиксировано',
@@ -636,6 +642,38 @@ export const ru = {
   'admin.races.reason.publish_window_closed': 'Опубликовать нельзя: окно уже прошло.',
   'admin.races.headline': '{phase} · протокол по плану {protocol}',
   'admin.races.notFound': 'Гонка не найдена или недоступна.',
+  // эталонный коридор (race-results-01) [ASSUMPTION copy]
+  'admin.races.field.corridor': 'Эталонный коридор',
+  'admin.races.corridor.none': 'Без коридора',
+  'admin.races.corridor.upload': 'Загрузить GPX',
+  'admin.races.corridor.uploadOther': 'Загрузить другой файл',
+  'admin.races.corridor.hint': 'Только маршрут GPX. Старт и финиш — начало и конец маршрута.',
+  'admin.races.field.corridorWidthM': 'Допуск коридора, м',
+  'admin.races.corridor.widthHint': 'Коридор: ±{width} м от маршрута',
+  'admin.races.corridor.distanceByRoute': '{distance} — по маршруту',
+  'admin.races.corridor.loop': 'Круговой',
+  'admin.races.corridor.elevation': 'набор {gain} м',
+  'admin.races.corridor.processing': 'Обрабатываем маршрут…',
+  'admin.races.corridor.processingLong':
+    'Маршрут обрабатывается дольше обычного — проверьте позже или загрузите файл ещё раз',
+  'admin.races.corridor.previewRefreshFailed': 'Не удалось обновить маршрут',
+  'admin.races.corridor.previewLabel': 'Линия маршрута «{title}», {distance}',
+  'admin.races.corridor.previewFailed': 'Не удалось загрузить маршрут',
+  'admin.races.corridor.pollFailed': 'Не удаётся получить статус маршрута — продолжаем проверять',
+  'admin.routes.dialog.title': 'Новый маршрут',
+  'admin.routes.field.title': 'Название маршрута',
+  'admin.routes.dialog.submit': 'Загрузить',
+  'admin.routes.listFailed': 'Не удалось загрузить маршруты',
+  'admin.routes.listRefreshFailed': 'Не удалось обновить список маршрутов',
+  'admin.routes.failure.unreadable': 'Не удалось прочитать GPX',
+  'admin.routes.failure.no_track': 'В файле нет маршрута',
+  'admin.routes.failure.too_many_points': 'Слишком много точек — упростите маршрут',
+  'admin.routes.failure.too_short': 'Маршрут короче 1 км',
+  'admin.routes.failure.too_long': 'Маршрут длиннее 1000 км',
+  'admin.routes.failure.timeout': 'Обработка заняла слишком долго — попробуйте другой файл',
+  'admin.routes.error.ROUTE_FORMAT_UNSUPPORTED': 'Выберите файл GPX',
+  'admin.routes.error.ROUTE_TOO_LARGE': 'Файл больше 5 МБ',
+  'admin.routes.error.RATE_LIMITED': 'Слишком много загрузок — попробуйте позже',
   'admin.races.error.RACE_INVALID_STATE':
     'Действие недоступно в текущем статусе гонки — обновите страницу.',
   // «Календарь» [ASSUMPTION: таблица, снятие и возврат — вне макетов]

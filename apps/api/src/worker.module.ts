@@ -15,6 +15,7 @@ import {
 import { env } from './config/env';
 import { identityOutboxRoutes, IdentityWorkerModule } from './modules/identity';
 import { devicesOutboxRoutes, DevicesWorkerModule } from './modules/devices';
+import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
 import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
 
 /** Отдельный процесс: задачи очередей (письма, тяжёлая обработка) не блокируют API. */
@@ -30,11 +31,17 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     MongoOutboxModule,
     // composition root: какие события outbox в какие очереди (`{ ...<модуль>OutboxRoutes }`)
     MongoOutboxPublisherModule.forRoot({
-      routes: { ...identityOutboxRoutes, ...tracksOutboxRoutes, ...devicesOutboxRoutes },
+      routes: {
+        ...identityOutboxRoutes,
+        ...tracksOutboxRoutes,
+        ...devicesOutboxRoutes,
+        ...routesOutboxRoutes,
+      },
     }),
     TracksWorkerModule,
     IdentityWorkerModule,
     DevicesWorkerModule,
+    RoutesWorkerModule,
   ],
 })
 export class WorkerModule {}

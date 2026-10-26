@@ -17,7 +17,7 @@ import { Controller, useForm, useWatch } from 'react-hook-form';
 
 import { api } from '../../api';
 import { errorCodeOf, fieldErrorText, formFieldOf, serverFieldErrors } from '../../field-errors';
-import { formatDateTimeLong } from '../../format';
+import { formatDateTimeLong, formatKmFromMeters } from '../../format';
 import { isConflict } from '../../session/errors';
 import {
   Banner,
@@ -37,6 +37,7 @@ import {
 } from '../../ui';
 import { seasonOfDate, seasonRangeText } from '../seasons/season-hints';
 import { seasonsQuery } from '../seasons/seasons-query';
+import { CorridorField } from './CorridorField';
 import {
   earliestProtocol,
   emptyRaceForm,
@@ -49,6 +50,7 @@ import {
   wallMs,
 } from './race-form';
 import { RACES_QUERY_KEY, raceQuery } from './races-query';
+import { routeQuery } from './routes-query';
 
 const BIKE_CLASS_OPTIONS = BIKE_CLASSES.map((value) => ({
   value,
@@ -65,6 +67,13 @@ const PUBLISH_REASON: Partial<Record<RaceEditBlockReason, MessageKey>> = {
   window_closed: 'admin.races.reason.publish_window_closed',
   outside_season: 'admin.races.reason.outside_season',
 };
+
+/** Поле формы для пути ошибки сервера: коридор — свои поля формы (`corridor.routeId` → «Эталонный коридор»). */
+function formPathOf(path: string): keyof RaceFormValues {
+  if (path === 'corridor.widthM') return 'corridorWidthM';
+  if (path === 'corridor' || path.startsWith('corridor.')) return 'corridorRouteId';
+  return formFieldOf(path) as keyof RaceFormValues;
+}
 
 /** Текст ошибки действия над гонкой (кроме полей и 409 версии). */
 function actionErrorText(error: unknown): string {
@@ -174,16 +183,27 @@ export function RaceEditor({
     resolver: zodResolver(RaceFormSchema),
     defaultValues: race ? raceFormOf(race) : emptyRaceForm(),
   });
-  const [windowEndsAt, protocolPlannedAt] = useWatch({
+  const [windowEndsAt, protocolPlannedAt, corridorRouteId, corridorWidthM] = useWatch({
     control: form.control,
-    name: ['windowEndsAt', 'protocolPlannedAt'],
+    name: ['windowEndsAt', 'protocolPlannedAt', 'corridorRouteId', 'corridorWidthM'],
   });
+  // дистанция с коридором — длина выбранного маршрута (тот же запрос, что у превью; источник истины — сервер)
+  const corridorRoute = useQuery({
+    ...routeQuery(corridorRouteId),
+    enabled: corridorRouteId !== '',
+  }).data;
+  const corridorDistanceM =
+    corridorRoute?.distanceM ??
+    (race?.corridor?.route.id === corridorRouteId ? race.corridor.distanceM : undefined);
 
   const editable = view?.editable;
   const locked = (field: RaceField) => (editable ? !editable.fields.includes(field) : false);
   const lockMark = (field: RaceField) =>
     locked(field) ? <LockMark label={t('admin.locked')} /> : undefined;
   const lockedLabel = (field: RaceField) => (locked(field) ? t('admin.locked') : undefined);
+  // коридор снят в форме (и его можно менять) — дистанция снова вводится вручную, хотя `editable` сервера ещё
+  // считает её вычисляемой (до сохранения)
+  const distanceLocked = locked('distanceKm') && (corridorRouteId !== '' || locked('corridor'));
 
   // подсказки правил (сервер решает): ближайшая дата протокола, «только позже» после закрытия окна
   const earliest = earliestProtocol(windowEndsAt);
@@ -233,8 +253,7 @@ export function RaceEditor({
     if (fields?.length) {
       for (const field of fields) {
         // вложенный путь (`surfaces.0`) — ошибка под полем целиком
-        const path = formFieldOf(field.path) as keyof RaceFormValues;
-        form.setError(path, { type: 'server', message: field.code });
+        form.setError(formPathOf(field.path), { type: 'server', message: field.code });
       }
       return;
     }
@@ -440,16 +459,61 @@ export function RaceEditor({
                 />
               )}
             />
-            <TextField
-              label={t('admin.races.field.distanceKm')}
-              labelAside={lockMark('distanceKm')}
-              inputMode="decimal"
-              autoComplete="off"
-              readOnly={locked('distanceKm')}
-              className={locked('distanceKm') ? 'field__control--locked' : undefined}
-              error={errorOf('distanceKm')}
-              {...form.register('distanceKm')}
+            <Controller
+              control={form.control}
+              name="corridorRouteId"
+              render={({ field }) => (
+                <CorridorField
+                  value={field.value}
+                  onChange={field.onChange}
+                  locked={locked('corridor')}
+                  current={race?.corridor}
+                  error={errorOf('corridorRouteId')}
+                />
+              )}
             />
+            {corridorRouteId !== '' ? (
+              <TextField
+                label={t('admin.races.field.corridorWidthM')}
+                labelAside={lockMark('corridor')}
+                inputMode="numeric"
+                autoComplete="off"
+                readOnly={locked('corridor')}
+                className={locked('corridor') ? 'field__control--locked' : undefined}
+                error={errorOf('corridorWidthM')}
+                help={
+                  /^\d+$/.test(corridorWidthM.trim())
+                    ? t('admin.races.corridor.widthHint', { width: corridorWidthM.trim() })
+                    : undefined
+                }
+                {...form.register('corridorWidthM')}
+              />
+            ) : null}
+            {corridorRouteId !== '' ? (
+              <ReadonlyField
+                label={t('admin.races.field.distanceKm')}
+                value={
+                  corridorDistanceM !== undefined ? (
+                    t('admin.races.corridor.distanceByRoute', {
+                      distance: formatKmFromMeters(corridorDistanceM),
+                    })
+                  ) : (
+                    <span className="skeleton"> </span>
+                  )
+                }
+              />
+            ) : (
+              <TextField
+                label={t('admin.races.field.distanceKm')}
+                labelAside={distanceLocked ? lockMark('distanceKm') : undefined}
+                inputMode="decimal"
+                autoComplete="off"
+                readOnly={distanceLocked}
+                className={distanceLocked ? 'field__control--locked' : undefined}
+                error={errorOf('distanceKm')}
+                {...form.register('distanceKm')}
+              />
+            )}
             <TextAreaField
               label={t('admin.races.field.description')}
               labelAside={lockMark('description')}

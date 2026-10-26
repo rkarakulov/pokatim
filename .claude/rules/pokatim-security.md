@@ -13,6 +13,9 @@ paths:
   - "apps/api/src/modules/devices/**"
   - "apps/app/src/features/devices/**"
   - "packages/tracks/src/parse*"
+  - "apps/api/src/modules/routes/**"
+  - "apps/api/src/raw-body.ts"
+  - "apps/api/src/parse-thread.ts"
 ---
 
 # pokatim — зоны безопасности (дополняет `security.md`)
@@ -81,3 +84,12 @@ paths:
   `src/admin-routes.test.ts` обходит контроллеры всех модулей); владение гонкой — в сервисе по правам сессии (без
   `races.manage_any` чужая — `404`, не 403); `ownerUserId`, статус, фаза, сезон — только сервер. Публичное чтение —
   только опубликованное, без владельца, имён сотрудников и `version`; IP-лимит `public-read`.
+
+## Загрузка маршрутов (race-results-01)
+
+- `POST /v1/admin/routes` — `PanelGuard` + `races.manage`, лимит 20/ч на сотрудника до чтения тела; тело — только
+  `application/octet-stream` (`readLimited`, обрыв на 5 МиБ — `413 ROUTE_TOO_LARGE` + `Connection: close`); формат —
+  по сигнатуре (не GPX, в т. ч. `<!DOCTYPE` до корня и FIT — `415 ROUTE_FORMAT_UNSUPPORTED`); разбор — только worker
+  через `runParseThread` (отказ на `<!DOCTYPE`/`<!ENTITY`, подсчёт элементов и `rtept` до дерева, `XMLValidator`).
+- Чтение — `races.read`; чужой необработанный маршрут — 404. Публично — только `corridor.widthM`: `routeId` и
+  координаты не выходят. Логи — `routeId`, код отказа, id сотрудника; без названий файлов и координат.

@@ -38,6 +38,9 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'DEVICE_PROVIDER_UNAVAILABLE',
   'DEVICE_LINK_INVALID',
   'DEVICE_PROVIDER_ERROR',
+  // маршруты (race-results-01): формат не GPX по содержимому; файл больше 5 МиБ
+  'ROUTE_FORMAT_UNSUPPORTED',
+  'ROUTE_TOO_LARGE',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;
@@ -57,6 +60,8 @@ export const SCHEDULE_FIELD_ERROR_CODES = [
   'PROTOCOL_TOO_EARLY',
   'PROTOCOL_ONLY_LATER',
   'FIELD_LOCKED',
+  // коридор гонки (race-results-01): маршрут не готов, не найден или недоступен
+  'ROUTE_NOT_READY',
 ] as const;
 export type ScheduleFieldErrorCode = (typeof SCHEDULE_FIELD_ERROR_CODES)[number];
 

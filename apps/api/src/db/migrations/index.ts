@@ -12,6 +12,7 @@ import { racesSeasonPublicIdx } from './0009_races_season_public_idx';
 import { tracks } from './0010_tracks';
 import { devices } from './0011_devices';
 import { trackSourceRefs } from './0012_track_source_refs';
+import { routes } from './0013_routes';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -30,4 +31,5 @@ export const migrations: readonly MongoMigration[] = [
   tracks,
   devices,
   trackSourceRefs,
+  routes,
 ];

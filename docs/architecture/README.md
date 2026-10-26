@@ -23,7 +23,8 @@ gamification · sharing · notifications · moderation · media
 
 Есть: `identity`, `profile`, `panel` (доступ к панели «Протокол», ADR-0009), `races` (сезоны и гонки по коридору,
 ADR-0010), `calendar` (календарь стартов), `tracks` (загрузки и активности, разбор в worker) и `devices` (Garmin/Wahoo
-через агрегатор Open Wearables) — ADR-0011. CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js grant-admin`).
+через агрегатор Open Wearables) — ADR-0011; `routes` (маршруты команды платформы — эталон коридора гонки, ADR-0012
+Proposed; `races → routes` только через порт `RouteCatalog`). CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js grant-admin`).
 
 Межмодульные вызовы — через `index.ts` модуля; события — outbox → BullMQ.
 
@@ -258,6 +259,20 @@ worker: очередь identity-email ─► письмо «Пароль изм�
 - **Очереди:** `track-processing`, `tracks-maintenance` (уборка ежечасно), `devices-sync` (pull, история, отзыв,
   надгробия импортов удалённых загрузок по `tracks.upload-deleted`), `devices-maintenance` (расписание pull, уборка
   неподтверждённых, сверка).
+
+### Маршрут и коридор гонки (модули `routes`, `races`, ADR-0012 Proposed, race-results-01)
+
+- **Маршрут:** панель → `POST /v1/admin/routes?title=` (`PanelGuard` + `races.manage`, лимит 20/ч на сотрудника,
+  `application/octet-stream` — `src/raw-body.ts`, обрыв на 5 МиБ) → GPX по сигнатуре → sha256 (тот же файл того же
+  сотрудника — `200`) → транзакция { `routes` `processing` + `route_sources` (исходник в БД) + журнал `route.created` +
+  outbox `routes.route-received` } → `202`. Панель опрашивает `GET …/routes/:id` (2 с), пока `processing`.
+- **Разбор (`route-processing`, worker, параллелизм 1):** захват по статусу `processing` → исходник из `route_sources`
+  → `analyzeRoute` (`@pokatim/tracks/parse`) через `src/parse-thread.ts` (`worker_threads`, 160 МБ, 30 с) →
+  транзакция { `route_geometries` (линия показа ≤ 1000, сверки ≤ 20 000 точек) + `routes` `ready` } или
+  `failed: <код>`; сбой окружения — ретрай, последняя попытка — `failed: unreadable`. Готовый маршрут не меняется.
+- **Коридор:** `races.corridor = { routeId, widthM, distanceM }`; создание и правка гонки проверяют маршрут через
+  `RouteCatalog.findReady` в своей транзакции (`ROUTE_NOT_READY`), дистанция — длина маршрута. Публично —
+  `GET /v1/races/:id` → `corridor: { widthM }` без маршрута и координат.
 
 ### Web (SSR, PWA)
 

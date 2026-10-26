@@ -1,5 +1,7 @@
 import { TRACK_FILE_MAX_BYTES, type TrackSource } from '@pokatim/contracts';
 
+import { DEFAULT_PARSE_LIMITS } from '../../parse-thread';
+
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -14,11 +16,8 @@ export const TRACKS_POLICY = {
   maxConcurrentUploads: 4,
   /** Кеш суммы хранимых байт (квота) в Redis. */
   usageCacheSec: 60,
-  /** Разбор: память потока и время. */
-  parseMaxOldGenerationMb: 160,
-  /** Молодое поколение потока (иначе V8 берёт его по умолчанию сверх лимита старого). */
-  parseMaxYoungGenerationMb: 32,
-  parseTimeoutMs: 30_000,
+  /** Разбор: память потока и время — общие лимиты `src/parse-thread.ts`. */
+  parseLimits: DEFAULT_PARSE_LIMITS,
   /** Уборка: исходники отбракованных загрузок и файлы без документа. */
   rejectedRetentionMs: 7 * DAY_MS,
   orphanFileAgeMs: HOUR_MS,

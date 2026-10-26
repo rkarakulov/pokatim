@@ -18,6 +18,8 @@ import { racesSeasonPublicIdx } from './0009_races_season_public_idx';
 import { tracks } from './0010_tracks';
 import { devices } from './0011_devices';
 import { trackSourceRefs } from './0012_track_source_refs';
+import { routes } from './0013_routes';
+import { ROUTES_COLLECTIONS } from '../../modules/routes/routes.collection';
 import { TRACKS_COLLECTIONS } from '../../modules/tracks/tracks.collection';
 import { DEVICES_COLLECTIONS } from '../../modules/devices/devices.collection';
 import { migrations } from './index';
@@ -68,6 +70,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0010_tracks',
       '0011_devices',
       '0012_track_source_refs',
+      '0013_routes',
     ]);
   });
 
@@ -284,6 +287,44 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await trackSourceRefs.up(h.db);
     await trackSourceRefs.up(h.db);
     expect(await indexesOf(TRACKS_COLLECTIONS.sourceRefs)).toEqual(expected);
+  });
+
+  it('0013_routes: коллекции и индексы маршрутов, бэкфилл races.corridor = null; повторный up — без изменений (AC11)', async () => {
+    const index = (key: Record<string, unknown>, unique = false) => ({
+      key,
+      unique,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+    const expected = {
+      [ROUTES_COLLECTIONS.routes]: {
+        routes_owner_sha_unique: index({ ownerUserId: 1, sha256: 1 }, true),
+        routes_list_idx: index({ origin: 1, status: 1, _id: -1 }),
+        routes_owner_idx: index({ ownerUserId: 1, _id: -1 }),
+      },
+      [ROUTES_COLLECTIONS.geometries]: {},
+      [ROUTES_COLLECTIONS.sources]: {},
+    };
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
+
+    // гонка до слайса коридора (без поля) и гонка с коридором — бэкфилл трогает только первую
+    const races = h.db.collection<{ _id: string; corridor?: unknown }>(RACES_COLLECTIONS.races);
+    const corridor = { routeId: 'r', widthM: 50, distanceM: 42_000 };
+    await races.insertMany([{ _id: 'old-race' }, { _id: 'corridor-race', corridor }]);
+    await routes.up(h.db);
+    await routes.up(h.db);
+    expect(await races.findOne({ _id: 'old-race' })).toEqual({ _id: 'old-race', corridor: null });
+    expect(await races.findOne({ _id: 'corridor-race' })).toEqual({
+      _id: 'corridor-race',
+      corridor,
+    });
+    await races.deleteMany({ _id: { $in: ['old-race', 'corridor-race'] } });
+
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

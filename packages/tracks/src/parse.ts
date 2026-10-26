@@ -5,13 +5,17 @@ import { gzipSync, gunzipSync } from 'node:zlib';
 
 import { detectTrackFormat } from './format.ts';
 import { parseFit } from './fit.ts';
+import { haversineMeters, trackLengthMeters } from './geo.ts';
 import { parseGpx } from './gpx.ts';
 import { checkPlausibility } from './plausibility.ts';
 import { sanitizePoints } from './points.ts';
 import { simplifyTrack } from './simplify.ts';
 import { parseStream, type TrackStreamV1 } from './stream.ts';
-import { summarizeTrack } from './summary.ts';
+import { elevationGainM, summarizeTrack } from './summary.ts';
 import {
+  ROUTE_MAX_LENGTH_M,
+  ROUTE_MAX_POINTS,
+  ROUTE_MIN_LENGTH_M,
   TRACK_MAX_POINTS,
   TRACK_STREAM_MAX_POINTS,
   TrackParseError,
@@ -24,12 +28,14 @@ export { parseFit } from './fit.ts';
 export { parseGpx } from './gpx.ts';
 export { parseStream, TrackStreamV1 } from './stream.ts';
 export {
+  ROUTE_MAX_POINTS,
   TRACK_MAX_POINTS,
   TRACK_STREAM_MAX_POINTS,
   TrackParseError,
   type ActivitySport,
   type ParsedPoint,
   type ParsedTrack,
+  type RouteFailureCode,
   type TrackFailureCode,
   type TrackFormat,
 } from './track.ts';
@@ -40,6 +46,11 @@ export const TRACK_STREAM_MAX_JSON_BYTES = 64 * 1024 * 1024;
 /** Допуск упрощения линии, м, и предел точек линии в `activity_tracks`. */
 const LINE_TOLERANCE_M = 5;
 const LINE_MAX_POINTS = 1000;
+/** Линия сверки маршрута: допуск упрощения, м, и предел точек (сверка заезда — слайс 02). */
+const MATCH_LINE_TOLERANCE_M = 1;
+const MATCH_LINE_MAX_POINTS = 20_000;
+/** Старт и финиш маршрута ближе — петля. */
+const LOOP_MAX_GAP_M = 200;
 
 /** Итог разбора для worker: только сериализуемые значения (structured clone), без значений пульса и мощности. */
 export interface TrackAnalysis {
@@ -122,6 +133,55 @@ export function analyzeTrack(bytes: Uint8Array, format: TrackFormat, now: Date):
     hasPower: track.hasPower,
     startPoint: [start.lon, start.lat],
     line: line.map((point): [number, number] => [point.lon, point.lat]),
+    sourcePointCount: track.points.length,
+  };
+}
+
+/** Итог разбора маршрута для worker: только сериализуемые значения (structured clone). Координаты — [lon, lat]. */
+export interface RouteAnalysis {
+  /** м, целое */
+  distanceM: number;
+  /** м, целое; `null` — в маршруте нет высот */
+  elevationGainM: number | null;
+  isLoop: boolean;
+  start: [number, number];
+  finish: [number, number];
+  /** линия показа: ≤ 1000 точек, концы сохранены */
+  line: [number, number][];
+  /** линия сверки: ≤ 20 000 точек, концы сохранены */
+  matchLine: [number, number][];
+  sourcePointCount: number;
+}
+
+const lonLat = (point: { lon: number; lat: number }): [number, number] => [point.lon, point.lat];
+
+/**
+ * Маршрут GPX (`trk` или, без `trkpt`, `rte`) одним вызовом для worker: сигнатура → разбор → лимит точек → очистка
+ * → длина → линии показа и сверки. Время в точках не нужно. Отказ — `TrackParseError` с `RouteFailureCode`.
+ */
+export function analyzeRoute(bytes: Uint8Array): RouteAnalysis {
+  if (detectTrackFormat(bytes) !== 'gpx') throw new TrackParseError('unreadable');
+  // предел точек маршрута — подсчётом до разбора XML (память потока worker)
+  const track = parseGpx(new TextDecoder('utf-8').decode(bytes), {
+    allowRoute: true,
+    maxPoints: ROUTE_MAX_POINTS,
+  });
+  const points = sanitizePoints(track.points);
+  if (points.length < 2) throw new TrackParseError('no_track');
+  const lengthM = trackLengthMeters(points);
+  if (lengthM < ROUTE_MIN_LENGTH_M) throw new TrackParseError('too_short');
+  if (lengthM > ROUTE_MAX_LENGTH_M) throw new TrackParseError('too_long');
+  const start = points[0]!;
+  const finish = points[points.length - 1]!;
+
+  return {
+    distanceM: Math.round(lengthM),
+    elevationGainM: elevationGainM(points),
+    isLoop: haversineMeters(start, finish) <= LOOP_MAX_GAP_M,
+    start: lonLat(start),
+    finish: lonLat(finish),
+    line: simplifyTrack(points, LINE_TOLERANCE_M, LINE_MAX_POINTS).map(lonLat),
+    matchLine: simplifyTrack(points, MATCH_LINE_TOLERANCE_M, MATCH_LINE_MAX_POINTS).map(lonLat),
     sourcePointCount: track.points.length,
   };
 }

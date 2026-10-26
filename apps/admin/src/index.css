@@ -857,6 +857,51 @@ select.field__control option:disabled {
   color: var(--color-text-secondary);
 }
 
+/* превью линии маршрута (race-results-01): без подложки карты, цвет — роль map.route темы */
+.line-preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  padding: var(--space-s2);
+  background: var(--color-map-background);
+  border: var(--stroke-hairline) solid var(--color-border-strong);
+}
+
+.line-preview__line {
+  fill: none;
+  stroke: var(--color-map-route);
+  stroke-width: var(--stroke-indicator);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* поле «Эталонный коридор»: выбор маршрута и «Загрузить GPX» в одну строку */
+.corridor-picker {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-s2);
+}
+
+.corridor-picker > .field {
+  flex: 1;
+}
+
+.corridor-preview {
+  margin-bottom: var(--space-s3);
+}
+
+.corridor-preview__meta {
+  margin-top: var(--space-s1);
+  color: var(--color-text-secondary);
+}
+
+.corridor-preview__skeleton {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+}
+
 .split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--panel-rail-width);
