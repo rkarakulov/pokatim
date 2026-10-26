@@ -41,6 +41,7 @@ describe('AuditAction', () => {
       'ride.restored',
       'ride.reports_dismissed',
       'disputes.decided',
+      'disputes.series_viewed',
       'profile.name_reset',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([

@@ -39,6 +39,8 @@ export const AUDIT_ACTIONS = [
   'ride.reports_dismissed',
   // race-results-06: решение по спору
   'disputes.decided',
+  // race-results-06b: просмотр рядов пульса и мощности на разборе спора (раз в час на сотрудника и спор)
+  'disputes.series_viewed',
   // profile-02: сброс публичного имени райдера модератором (имени в записи нет)
   'profile.name_reset',
 ] as const;
