@@ -646,6 +646,11 @@ status: 1, _id: -1 }`; `routes_owner_idx { ownerUserId: 1, _id: -1 }`; `route_ge
 - Отрицательные доказательства: без условия `status: 'processing'` в захвате — int-тест «повтор после ready» красный;
   без `findReady` — тест `ROUTE_NOT_READY` красный.
 
+- Ревью pass 1: `TURBO_CONCURRENCY=1 pnpm check` — EXIT 0 (один прогон упал на нестабильном
+  `ChoiceDialog` «фокус возвращается на триггер» в `admin-02-ui.test.tsx` — файл слайс не менял; отдельно 3/3 зелёный,
+  повтор `check` — EXIT 0); `pnpm e2e:admin` — 2 passed; `E2E_API=1 pnpm e2e:web` — 18 passed (повторные прогоны
+  упираются в IP-лимиты регистрации в Redis смоука — нужна чистая БД Redis).
+
 **NOT VERIFIED**
 - iOS/Android на симуляторе/устройстве (только `expo export -p android` и jest); визуальная сверка с прототипами.
 - e2e `pnpm e2e:admin` / `e2e:web` в CI (локально — на нативных mongod/redis/mailpit вместо docker).
