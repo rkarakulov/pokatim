@@ -1,5 +1,7 @@
 import type {
   AttemptRequest,
+  MyAttempt,
+  MyAttemptTrack,
   MyRaceEntry,
   RaceDetail,
   RacePage,
@@ -214,6 +216,44 @@ export function useMyRaceEntry(id: string, enabled: boolean) {
   }, [signature, id, queryClient]);
 
   return query;
+}
+
+/**
+ * Ключ своего трека попытки (maps-02) — под `raceEntryKey` (инвалидация участия накрывает трек) с маркером ревизии
+ * попытки (RC-4): опрос участия пишет кеш через `setQueryData` без каскада на дочерние ключи — новый статус или
+ * `checkedAt` дают новый ключ, и трек перезапрашивается после вердикта.
+ */
+export const myAttemptTrackKey = (
+  raceId: string,
+  attemptId: string,
+  status: string,
+  checkedAt: string | null,
+) => [...raceEntryKey(raceId), 'attempts', attemptId, 'track', status, checkedAt] as const;
+
+/**
+ * Свой трек попытки (только вошедшему, только клиент): данные меняются только с маркером ревизии в ключе — свежи
+ * бессрочно, своего опроса нет. 404 (старый API, удалённая активность, попытка скрыта) — `null`: карта без трека и
+ * без строки ошибки (RC-8).
+ */
+export function useMyAttemptTrack(raceId: string, attempt: MyAttempt | null, enabled: boolean) {
+  return useQuery({
+    queryKey: myAttemptTrackKey(
+      raceId,
+      attempt?.id ?? '',
+      attempt?.status ?? '',
+      attempt?.checkedAt ?? null,
+    ),
+    queryFn: async (): Promise<MyAttemptTrack | null> => {
+      try {
+        return await withAccessToken((token) => api.getMyAttemptTrack(token, raceId, attempt!.id));
+      } catch (error) {
+        if (apiErrorCode(error) === 'NOT_FOUND') return null;
+        throw error;
+      }
+    },
+    staleTime: Infinity,
+    enabled: enabled && attempt !== null,
+  });
 }
 
 const nextResultsCursor = (page: RaceResultsPage) => page.nextCursor ?? undefined;

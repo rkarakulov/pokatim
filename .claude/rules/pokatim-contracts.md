@@ -28,6 +28,9 @@ paths:
 - Карта коридора (maps-01, ADR-0014): `src/races/race-route.schema.ts` — `RaceRouteMap` (`line` `[lon, lat][]` 2–1000
   точек, `start`, `finish`, `bounds` `[west, south, east, north]`, `widthM`), `z.object` как прочие ответы; «ровно 5
   ключей» держат сервис и int-тест. Клиент — `getRaceRoute(id)`; новая сборка со старым API — 404, блок карты скрыт.
+- Свой трек (maps-02): `src/results/results.schema.ts` — `MyAttemptTrack` (`attemptId`, `line` — `LonLat` 2–1000,
+  `segment: TrackMapRun | null`, `offRuns` ≤ 100, `marks` — `tolerantEnum(ATTEMPT_TRACK_MARKS)`: незнакомое клиент
+  трактует как `unavailable`); позиции — дробные индексы вершин `{ from, to }`. Клиент — `getMyAttemptTrack`.
 - Кофе-райды (ADR-0013 Proposed): `src/rides/ride.schema.ts` (запросы — `strictObject`, строгие `z.enum`; ответы —
   `tolerantEnum` фазы, роли, города и причины; города ленты — незнакомые коды отбрасываются), `src/geo/city.schema.ts`
   (`CITY_CODES` — единственный справочник городов). Справочники (`RIDE_STATUSES`, `RIDE_PHASES`,

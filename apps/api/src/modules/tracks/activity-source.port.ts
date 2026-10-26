@@ -74,6 +74,11 @@ export interface ActivitySource {
     before: Date,
     tx?: DbSession,
   ): Promise<number>;
+  /**
+   * Линия показа своей активности (`activity_tracks`, [lon, lat], ≤ 1000 точек) — карта трека участника и разметка
+   * схода (maps-02); чужая, неизвестная или без линии — `null`.
+   */
+  trackLine(userId: string, activityId: string): Promise<[number, number][] | null>;
   /** Исходник активности для worker; активности, файла или ключа нет — `null`. Сбой хранилища — исключение. */
   readSource(activityId: string): Promise<{ bytes: Uint8Array; format: TrackFormat } | null>;
 }

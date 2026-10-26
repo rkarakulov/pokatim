@@ -2,8 +2,8 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import type { AttemptFailure } from '@pokatim/contracts';
 import type {
+  AttemptAnalysis,
   CorridorGeometry,
-  CorridorMatch,
   MatchWindow,
   TrackFormat,
 } from '@pokatim/tracks/parse';
@@ -45,6 +45,7 @@ const emptyResult = (now: Date): CheckResult => ({
   candidates: null,
   diagnostics: null,
   engineVersion: null,
+  trackMap: null,
   checkedAt: now,
 });
 
@@ -55,7 +56,8 @@ const failed = (failure: AttemptFailure, now: Date): CheckResult => ({
 
 /**
  * Сверка попытки (`attempt-check`, jobId = id события outbox `results.attempt-check-requested`): захват своей
- * ревизии (`queued`/`checking`) → гонка, линия сверки и исходник через порты → `analyzeAttempt` в потоке разбора
+ * ревизии (`queued`/`checking`) → гонка, линия сверки, исходник и линия показа активности (разметка трека, maps-02)
+ * через порты → `analyzeAttempt` в потоке разбора
  * (семафор, 30 с, 160/32 МБ) → транзакция { `lockEntry` → вердикт своей ревизией → лучший и сводка }. Сбой окружения
  * — исключение и ретрай BullMQ, на последней попытке — `failed: error` (виден в панели). Параллелизм — 1.
  */
@@ -99,10 +101,11 @@ export class AttemptCheckProcessor extends WorkerHost {
     corridor: CorridorGeometry,
     window: MatchWindow,
     now: Date,
-  ): Promise<ThreadOutcome<CorridorMatch>> {
-    return runParseThread<CorridorMatch>(
+    line: [number, number][] | null = null,
+  ): Promise<ThreadOutcome<AttemptAnalysis>> {
+    return runParseThread<AttemptAnalysis>(
       'analyzeAttempt',
-      [bytes, format, corridor, window, now],
+      [bytes, format, corridor, window, now, line],
       this.parseLimits,
     );
   }
@@ -149,6 +152,8 @@ export class AttemptCheckProcessor extends WorkerHost {
       }
       return failed('storage', now);
     }
+    // сохранённая линия показа — разметка трека считается по ней, не по пересчёту упрощения (§8.2 maps-02)
+    const line = await this.activities.trackLine(attempt.userId, attempt.activityId);
     const now = this.clock.now();
     const outcome = await this.analyze(
       source.bytes,
@@ -156,6 +161,7 @@ export class AttemptCheckProcessor extends WorkerHost {
       { ...geometry, widthM: attempt.corridor.widthM },
       { startsAt: race.windowStartsAt, closesAt: race.closesAt },
       now,
+      line,
     );
     if (!outcome.ok) {
       if (outcome.code === 'implausible') {
@@ -183,6 +189,7 @@ export class AttemptCheckProcessor extends WorkerHost {
       candidates: match.candidates,
       diagnostics: match.diagnostics,
       engineVersion: match.engineVersion,
+      trackMap: match.trackMap,
     };
   }
 

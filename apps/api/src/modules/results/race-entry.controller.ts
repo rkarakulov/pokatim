@@ -13,6 +13,7 @@ import {
   type AttemptCandidates,
   AttemptRequest,
   FieldErrorCode,
+  type MyAttemptTrack,
   type MyRaceEntry,
   Uuid,
 } from '@pokatim/contracts';
@@ -88,6 +89,17 @@ export class RaceEntryController {
     @Body(new ZodValidationPipe(AttemptRequest, FieldErrorCode)) body: AttemptRequest,
   ): Promise<MyRaceEntry> {
     return this.attempts.add(user.userId, raceId, body);
+  }
+
+  /** Свой трек попытки с разметкой схода (maps-02): только владельцу, `no-store`; чужая и неизвестная — 404. */
+  @Get(':raceId/entry/attempts/:attemptId/track')
+  @Header('Cache-Control', 'no-store')
+  myAttemptTrack(
+    @CurrentUser() user: AuthUser,
+    @Param('raceId', raceIdPipe) raceId: string,
+    @Param('attemptId', raceIdPipe) attemptId: string,
+  ): Promise<MyAttemptTrack> {
+    return this.read.myAttemptTrack(user.userId, raceId, attemptId);
   }
 
   @Get(':raceId/attempt-candidates')

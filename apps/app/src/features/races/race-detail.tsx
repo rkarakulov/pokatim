@@ -129,8 +129,8 @@ function RaceDetailView({
           {t('races.detail.corridorValue', { width: corridor.widthM })}
         </Row>
       ) : null}
-      {/* карта маршрута с коридором (maps-01): без коридора — ничего */}
-      <RaceRouteMap race={race} />
+      {/* карта маршрута с коридором (maps-01): без коридора — ничего; участнику — свой трек (maps-02) */}
+      <RaceRouteMap race={race} entry={signedIn ? (entry.data ?? null) : null} now={now} />
       <Row label={t('races.detail.distance')}>
         {corridor
           ? t('races.detail.distanceByRoute', {

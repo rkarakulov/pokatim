@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { corridorOf, ride, steps, T0, track, type Xy } from './__testing__/synthetic.ts';
-import { matchCorridor } from './match.ts';
+import { matchCorridor, matchCorridorDetailed } from './match.ts';
 import { CORRIDOR_ENGINE_VERSION } from './policy.ts';
 import { prepareCorridor } from './prepare.ts';
 import type { MatchWindow } from './types.ts';
@@ -164,5 +164,14 @@ describe('matchCorridor', () => {
     expect(match.verdict).toBe('rejected');
     expect(match.reasons).toEqual(['off_corridor', 'outside_window']);
     expect(match.segment).not.toBeNull();
+  });
+
+  it('matchCorridorDetailed: выход на ответвление — один интервал по шагам вне коридора, match не меняется', () => {
+    // точка раз в секунду: 1015-я — y = 45 (внутри), 1016-я — y = 55 (снаружи) … 1066-я — y = 55, 1067-я — y = 45
+    const points = track(spurRide(24_500, 10_005, 300));
+    const corridor = straight(24_500);
+    const { match, offRunsMs } = matchCorridorDetailed(points, corridor, WIDE);
+    expect(match).toEqual(matchCorridor(points, corridor, WIDE));
+    expect(offRunsMs).toEqual([[T0 + 1_015_000, T0 + 1_067_000]]);
   });
 });

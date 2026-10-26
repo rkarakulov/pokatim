@@ -58,6 +58,7 @@ export type CheckResult = Pick<
   | 'candidates'
   | 'diagnostics'
   | 'engineVersion'
+  | 'trackMap'
   | 'checkedAt'
 >;
 
@@ -253,6 +254,7 @@ export class ResultsRepository {
           touchedCorridor: null,
           candidates: null,
           diagnostics: null,
+          trackMap: null,
           checkedAt: null,
           updatedAt: now,
         },
