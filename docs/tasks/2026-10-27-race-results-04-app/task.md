@@ -348,6 +348,18 @@ tied|elapsedSec`; изменилась относительно прошлого
   блок на карточке гонки (тот же результат, «открытый позже», прототип ведёт туда же). Отдельный маршрут нужен для
   шеринга результата — вне эпика. Принято оркестратором 2026-10-27.
 
+- **D3 (coder, оформление) — тоны плашек попыток.** Spec задаёт тоны только для результата (§7.2). Попытки:
+  `checking` — `warning` (как `pending`), `counted` — `success`, `rejected` / `failed` — `error`, `queued` / `withdrawn` /
+  `unknown` — `neutral`; «Лучший» — `Pill tone="accent"` (`ATTEMPT_TONES` в `participation-format.ts`).
+- **D4 (coder) — подтверждение отмены.** В `@rkarakulov/ui` destructive есть только у `TextAction` (без `loading`):
+  «Отменить участие» — `TextAction destructive` (выключен на время запроса, без `busy`), «Оставить участие» —
+  `Button secondary`. Кнопки с `loading` («Участвовать», «Загрузить заезд») дают `busy` сами.
+- **D5 (coder) — таблица без `AsyncContent`.** §3 п.4 требует компактный баннер ошибки внутри карточки (полноэкранное
+  «Не удалось загрузить» `AsyncContent` выглядело бы как сбой карточки): скелетон `SkeletonListRow` в `SkeletonGroup`
+  и баннер с «Повторить» — в `results-table.tsx`.
+- **D6 (coder) — дефолтный мок участия в `race-detail` / `season` тестах** — `noEntry` с причинами `['no_corridor',
+  'not_entered']` (а не `canEnter`): гонка фикстуры без коридора, так отвечает сервер. Ожидания тестов не менялись.
+
 # 8.3 Security checklist
 
 - AuthN/AuthZ: «моё участие», мутации, кандидаты — `AuthGuard` на сервере (слайс 03); клиент токен — через
@@ -631,4 +643,57 @@ Jest (jest-expo, TZ Europe/Minsk, fake timers с фиксированным `now
 
 # 12. Outcome
 
-(заполняет coder)
+**Сделано (coder, 2026-10-26)** — коммиты на `feature/race-results-04-ui` поверх spec: `3427404` (i18n, логика показа,
+запросы, `UploadProgress`), `06313e9` (блок участия, таблица, экран выбора, маршрут), `2595792` (смоук web,
+документация), затем коммит с этим разделом.
+
+**Изменения по модулям**
+
+- `packages/i18n` — 9 ключей §11 (`races.entry.failed`, `races.attempt.best`, `races.pick.{attempted,empty,emptyHint}`,
+  `races.results.{more,failed,tiedA11y,rowA11y}`); `withdrawnBanner` / `pick.title` не заводились.
+- `features/races/format.ts` — `formatElapsed` (h:mm:ss, часы без ограничения).
+- `features/races/participation-format.ts` — чистая логика: причины по подмножеству действия (F1), показ гостя и
+  таблицы, плашка / время / баннер результата, строка попытки, `pendingUploadText`, `needsPolling`, `resultSignature`,
+  `raceActionErrorText` (7 кодов + `actionErrorMessage`), `resultRow`.
+- `features/races/queries.ts` — ключи `raceEntryKey` / `raceResultsKey` / `raceCandidatesKey`, `useMyRaceEntry`
+  (404 → `null`, опрос 3 с по `needsPolling`, тихая инвалидация таблицы по смене подписи результата),
+  `useRaceResults` (infinite, 50), `useAttemptCandidates`, мутации `useEnterRace` / `useWithdrawFromRace` /
+  `useAddRaceAttempt` (`AUTH_MUTATION`, `applyEntry`, 409 участия → перезапрос участия, F14).
+- `features/races/participation/*` — `RaceParticipation` (состояния §7.1), `EntryResult`, `EntryActions` (загрузка в
+  гонку через `useTrackFileUpload({ onUploaded })` → `addRaceAttempt({ uploadId })`), `WithdrawConfirm`, `AttemptList`.
+- `features/races/results-table.tsx` — `RaceResultsTable`; `race-detail.tsx` — блоки встроены, `refetchers` расширены.
+- `features/races/race-pick.tsx` + `app/races/pick/[id].tsx` — экран «Выбрать свой заезд»; `_layout.tsx` — экран под
+  `Stack.Protected` вкладок.
+- `features/devices` — общий `UploadProgress`, `TrackUploadBlock` на нём; хук загрузки — опция `onUploaded` (ref).
+- Тесты: `__tests__/races-fixtures.ts`, `__tests__/fake-xhr.ts` (вынесен из `devices-screen.test.tsx`, ожидания не
+  менялись), `app-routes.ts` (+ маршрут), дефолтные моки в `race-detail.test.tsx` / `season.test.tsx` (F15, D6).
+
+**Тесты (новые):** `format.test.ts` (+6), `participation-format.test.ts` (42; F1-регресс
+`['window_closed','upload_closed']` → `upload_closed` с отрицательным доказательством `reasons[0]`),
+`race-participation.test.tsx` (29: гость, F7, F8; заявка, 409 и перезапрос; ошибка и 404 участия; `withdrawn`;
+`pending` / `provisional` / ничья / без места; попытки и загрузки; F1; переход на выбор; **polling** — повтор через 3 с,
+перезапрос таблицы, остановка опроса, без `alert`; **загрузка** — прогресс, `{ uploadId }`, pre-check, 409 второго
+шага, «Отменить»; **отмена** — «Оставить», подтверждение, 409), `race-results.test.tsx` (9), `race-pick.test.tsx` (10:
+гард гостя, скелетон, список и выключенный, выбор с историей и без, ошибка мутации, пусто, сеть / сбой с повтором,
+невалидный id).
+
+**Документация:** `docs/product/races-and-seasons.md` («Участие и результат» — экраны слайса 04, D1/D2), эпик §7
+(пометка D1/D2), `.claude/rules/pokatim-app.md` (раздел race-results-04). ADR не нужен.
+
+**Проверки**
+
+- `TURBO_CONCURRENCY=1 pnpm check` (Node 24.22.1, `MONGO_URL_TEST=…/pokatim_r04ui_test`, `REDIS_URL_TEST=…/11`) →
+  exit 0: `Tasks: 13 successful, 13 total` (`Cached: 5`), `@pokatim/app:test: Test Suites: 93 passed, 93 total`,
+  `Tests: 816 passed, 816 total`.
+- `devices-screen.test.tsx`, `devices-step.test.tsx` — зелёные без правок ожиданий (AC12).
+- `e2e/web.spec.ts` — шаг F16 в тесте «Гонки и сезон (блок 03)»: гость видит «Участвовать» и «Войдите, чтобы
+  участвовать» на гонке с коридором, без коридора — нет; вошедший на `/races/pick/<id>` — заголовок и пустое
+  состояние. **NOT VERIFIED:** `E2E_API=1 pnpm e2e:web` не запускался (нужны API, worker, Mailpit и web-сборка).
+- Ручная проверка на iOS / Android-симуляторе и в браузере — **NOT VERIFIED**.
+
+**Follow-ups и риски**
+
+- Ответ мутации меняет подпись результата в кеше — эффект `useMyRaceEntry` может инвалидировать таблицу второй раз
+  (лишний публичный запрос, на показ не влияет).
+- `TextAction` без `loading` / `busy` — кандидат в app-foundation (D4).
+- `formatElapsed`, `UploadProgress` — кандидаты в общий код при втором потребителе (панель, слайс 05).
