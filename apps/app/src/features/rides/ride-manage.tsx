@@ -25,18 +25,21 @@ export function OwnRide({
   title: string;
   children: (
     ride: RideDetailForOrganizer,
-    reload: () => Promise<RideDetailForOrganizer | undefined>,
+    reload: () => Promise<RideDetailForOrganizer>,
   ) => ReactNode;
 }) {
   const theme = useTheme();
   const router = useRouter();
   const valid = Uuid.safeParse(id).success;
-  const me = useRideForViewer(id, valid);
+  const me = useRideForViewer(id, valid, { manage: true });
   const [managed, setManaged] = useState<boolean>();
-  const reload = async () => {
+  /** Явное «Обновить» формы: сбой — исключение (форма показывает его и не сбрасывает введённое). */
+  const reload = async (): Promise<RideDetailForOrganizer> => {
     const result = await me.refetch();
+    if (result.isError) throw result.error;
     const ride = result.data?.ride;
-    return ride && 'version' in ride ? ride : undefined;
+    if (!ride || !('version' in ride)) throw new Error('not an organizer view');
+    return ride;
   };
   const notFound = (
     <SafeAreaView

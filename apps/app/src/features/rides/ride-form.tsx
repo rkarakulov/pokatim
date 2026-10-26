@@ -6,6 +6,7 @@ import {
   CreateRideForm,
   minskToday,
   minskWallTimeToUtc,
+  RIDE_ORGANIZER_NAME_MIN,
   RIDE_START_MAX_AHEAD_DAYS,
   RIDE_TITLE_MIN,
   RideQuotaDetails,
@@ -65,7 +66,11 @@ const formFieldOf = (path: (typeof SERVER_FIELDS)[number]): FieldName =>
 
 /** Видимых городов до «Все города» [ASSUMPTION до компонента `Picker` базы]. */
 const COLLAPSED_CITIES = 8;
-const SORTED_CITIES = sortCitiesByLabel(CITY_CODES);
+/** Минск — первым (больше всего райдов), дальше — по алфавиту подписи. */
+const SORTED_CITIES: CityCode[] = [
+  'minsk',
+  ...sortCitiesByLabel(CITY_CODES).filter((city) => city !== 'minsk'),
+];
 
 const emptyForm = (): CreateRideFormValues => ({
   title: '',
@@ -107,17 +112,58 @@ export function rideRequestOf(values: CreateRideFormOutput): CreateRideRequest {
 
 /** Маска времени «ЧЧ:ММ»: только цифры, двоеточие после часов (фолбэк до `TimeField` базы, §8.2 O1). */
 export function maskTime(input: string): string {
+  // «9:30» — час одной цифрой с двоеточием: ведущий ноль
+  const short = /^(\d):(\d{0,2})$/.exec(input.trim());
+  if (short) return `0${short[1]}:${short[2]}`;
   const digits = input.replace(/\D/g, '').slice(0, 4);
   return digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
 }
 
 /** Текст ошибки поля по коду (сообщение zod = код); дата в прошлом — свой текст. */
-function fieldText(code: string | undefined, dateInPast: boolean): string | undefined {
+function fieldText(
+  code: string | undefined,
+  dateInPast: boolean,
+  min: number = RIDE_TITLE_MIN,
+): string | undefined {
   if (code === undefined) return undefined;
   if (code === 'RIDE_START_IN_PAST' && dateInPast) return t('field.error.RIDE_START_IN_PAST_DATE');
   const key = `field.error.${code}` as MessageKey;
-  const text = t(key, { min: RIDE_TITLE_MIN });
+  const text = t(key, { min });
   return text === key ? t('field.error.INVALID') : text;
+}
+
+type RideRequestFields = CreateRideRequest;
+
+/** Поля запроса из карточки организатора — точка отсчёта «что изменилось» в правке. */
+function requestOfRide(ride: RideDetailForOrganizer): RideRequestFields {
+  return {
+    title: ride.title,
+    organizerName: ride.organizerName,
+    startsAt: ride.startsAt,
+    cityCode: ride.city as CityCode,
+    place: ride.place,
+    distanceKm: ride.distanceKm,
+    paceMinKmh: ride.paceMinKmh,
+    paceMaxKmh: ride.paceMaxKmh,
+    limit: ride.limit,
+    description: ride.description,
+  };
+}
+
+/** Только изменённые поля правки: чужая правка других полей по той же версии не затирается. */
+export function changedFields(
+  base: RideRequestFields,
+  next: RideRequestFields,
+): Partial<RideRequestFields> {
+  const changed: Partial<RideRequestFields> = {};
+  for (const key of Object.keys(next) as (keyof RideRequestFields)[]) {
+    const same =
+      key === 'startsAt'
+        ? Date.parse(base.startsAt) === Date.parse(next.startsAt)
+        : base[key] === next[key];
+    if (!same) Object.assign(changed, { [key]: next[key] });
+  }
+  return changed;
 }
 
 /** Текст отказа сохранения (баннер над кнопкой): 429, квота, сеть, прочее. */
@@ -128,11 +174,9 @@ function failureText(error: unknown): string {
     return t('rides.error.rateLimited', { seconds: retryAfterSec(error) ?? 60 });
   }
   if (apiError?.code === 'RIDE_QUOTA_EXCEEDED') {
+    // форма создаёт райд — квота будущих своих райдов
     const details = RideQuotaDetails.safeParse(apiError.details);
-    const count = details.success ? details.data.limit : 5;
-    return details.success && details.data.quota === 'joined'
-      ? t('rides.form.quotaJoined', { count })
-      : t('rides.form.quota', { count });
+    return t('rides.form.quota', { count: details.success ? details.data.limit : 5 });
   }
   return t('rides.form.failed');
 }
@@ -192,7 +236,7 @@ export function RideFormScreen({
   /** Правка: карточка организатора (с `version`); нет — создание. */
   ride?: RideDetailForOrganizer;
   /** Правка: перезагрузить райд после 409 (`CONFLICT`). */
-  onReload?: () => Promise<RideDetailForOrganizer | undefined>;
+  onReload?: () => Promise<RideDetailForOrganizer>;
 }) {
   const theme = useTheme();
   const router = useRouter();
@@ -200,6 +244,10 @@ export function RideFormScreen({
   const update = useUpdateRide(ride?.id ?? '');
   const mutation = ride ? update : create;
   const [conflict, setConflict] = useState(false);
+  // правка: версия и значения загрузки формы — фиксируются до явного «Обновить» (фоновые ответы их не меняют)
+  const [loaded, setLoaded] = useState(ride);
+  const [reloadError, setReloadError] = useState<unknown>();
+  const [reloading, setReloading] = useState(false);
   const [failure, setFailure] = useState<string>();
   const today = minskToday();
   const title = t(ride ? 'rides.form.editTitle' : 'rides.form.newTitle');
@@ -212,7 +260,12 @@ export function RideFormScreen({
   const { errors } = form.formState;
   const date = useWatch({ control: form.control, name: 'date' });
   const dateInPast = /^\d{4}-\d{2}-\d{2}$/.test(date ?? '') && date < today;
-  const errorOf = (name: FieldName) => fieldText(errors[name]?.message, dateInPast);
+  const errorOf = (name: FieldName) =>
+    fieldText(
+      errors[name]?.message,
+      dateInPast,
+      name === 'organizerName' ? RIDE_ORGANIZER_NAME_MIN : RIDE_TITLE_MIN,
+    );
   const dateError = dateInPast ? t('field.error.RIDE_START_IN_PAST_DATE') : errorOf('date');
 
   const onSubmit = form.handleSubmit(async (values) => {
@@ -220,8 +273,11 @@ export function RideFormScreen({
     setConflict(false);
     const body = rideRequestOf(values);
     try {
-      const view = ride
-        ? await update.mutateAsync({ ...body, version: ride.version })
+      const view = loaded
+        ? await update.mutateAsync({
+            ...changedFields(requestOfRide(loaded), body),
+            version: loaded.version,
+          })
         : await create.mutateAsync(body);
       // правка — назад к карточке в стеке (без истории — замена); создание — новая карточка с баннером
       if (ride && router.canGoBack()) router.back();
@@ -239,10 +295,22 @@ export function RideFormScreen({
     }
   });
 
+  // «Обновить» после 409: успех — свежие поля и версия, конфликт снят; сбой — конфликт и введённое остаются, ошибка
+  // с повтором
   const reload = async () => {
-    const fresh = await onReload?.();
-    if (fresh) form.reset(rideFormOf(fresh));
-    setConflict(false);
+    if (!onReload) return;
+    setReloading(true);
+    try {
+      const fresh = await onReload();
+      setLoaded(fresh);
+      form.reset(rideFormOf(fresh));
+      setConflict(false);
+      setReloadError(undefined);
+    } catch (error) {
+      setReloadError(error);
+    } finally {
+      setReloading(false);
+    }
   };
 
   const text = (
@@ -279,8 +347,19 @@ export function RideFormScreen({
         {conflict ? (
           <View style={styles.stack}>
             <Banner tone="warning" message={t('rides.form.conflict')} />
+            {reloadError ? (
+              <Banner
+                tone="error"
+                title={t(isNetworkError(reloadError) ? 'state.errorTitle' : 'state.failedTitle')}
+                message={t('state.failedMessage')}
+              />
+            ) : null}
             <View style={styles.start}>
-              <TextAction label={t('rides.form.reload')} onPress={() => void reload()} />
+              <TextAction
+                label={t('rides.form.reload')}
+                disabled={reloading}
+                onPress={() => void reload()}
+              />
             </View>
           </View>
         ) : null}

@@ -99,12 +99,17 @@ export function useRide(id: string, seed: RideDetail | undefined, enabled: boole
   });
 }
 
-/** Состояние зрителя (только вошедшим). */
-export function useRideForViewer(id: string, enabled: boolean) {
+/**
+ * Состояние зрителя (только вошедшим). `manage` — экраны правки и отмены: без фонового обновления (фокус, сеть) —
+ * форма держит `version` загрузки, свежие данные — только явным «Обновить».
+ */
+export function useRideForViewer(id: string, enabled: boolean, { manage = false } = {}) {
   return useQuery({
     queryKey: rideViewerKey(id),
     queryFn: () => withAccessToken((accessToken) => api.getRideForViewer(accessToken, id)),
-    staleTime: 0,
+    staleTime: manage ? Infinity : 0,
+    refetchOnWindowFocus: !manage,
+    refetchOnReconnect: !manage,
     enabled,
   });
 }

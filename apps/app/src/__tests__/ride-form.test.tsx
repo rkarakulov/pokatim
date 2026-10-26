@@ -1,7 +1,8 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { RideDetailForOrganizer, RideView } from '@pokatim/contracts';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { focusManager } from '@tanstack/react-query';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { Text } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
@@ -84,7 +85,6 @@ async function fillValid() {
   await type('Название', 'Кофе-райд на море');
   await pickDate(new Date(2026, 9, 4));
   await type('Время старта', '1000');
-  await fireEvent.press(screen.getByRole('button', { name: 'Все города' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Минск' }));
   await type('Место старта', 'Парк Победы');
   await type('Дистанция, км', '42');
@@ -104,9 +104,12 @@ describe('форма «Новый райд» (S5, AC10)', () => {
         includeHiddenElements: true,
       }),
     ).toBeOnTheScreen();
-    // свёрнуто до 8 городов по алфавиту
+    // свёрнуто до 8 городов: Минск — первым, дальше по алфавиту
+    expect(screen.getByRole('button', { name: 'Минск' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Барановичи' })).toBeOnTheScreen();
-    expect(screen.queryByRole('button', { name: 'Минск' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Гродно' })).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Все города' }));
+    expect(screen.getByRole('button', { name: 'Гродно' })).toBeOnTheScreen();
     expect(screen.getByText('После публикации можно поделиться ссылкой.')).toBeOnTheScreen();
     expect(screen.getByPlaceholderText('Без ограничения')).toBeOnTheScreen();
     expect(screen.getByLabelText('Как вас подписать')).toBeOnTheScreen();
@@ -142,6 +145,17 @@ describe('форма «Новый райд» (S5, AC10)', () => {
     ).toBeOnTheScreen();
     expect(publish()).toBeDisabled();
     expect(screen.getByText('Исправьте дату, чтобы опубликовать райд')).toBeOnTheScreen();
+  });
+
+  it('время: «9:30» → «09:30», цифры — с двоеточием; подпись «Я» — не короче 2 символов', async () => {
+    await open('/rides/new');
+    await type('Время старта', '9:30');
+    expect(screen.getByDisplayValue('09:30')).toBeOnTheScreen();
+    await type('Время старта', '1015');
+    expect(screen.getByDisplayValue('10:15')).toBeOnTheScreen();
+    await type('Как вас подписать', 'Я');
+    await fireEvent(screen.getByLabelText('Как вас подписать'), 'blur');
+    expect(await screen.findByText('Не короче 2 символов.')).toBeOnTheScreen();
   });
 
   it('клиентская схема: пустые обязательные, темп «от» > «до» — под полями, запроса нет', async () => {
@@ -205,27 +219,26 @@ describe('форма «Новый райд» (S5, AC10)', () => {
 });
 
 describe('«Изменить райд» (AC4)', () => {
-  it('поля из карточки; «Сохранить» — все поля + version; затем карточка', async () => {
+  it('поля из карточки; «Сохранить» — изменённые поля + version загрузки; затем карточка', async () => {
     const router = await open(`/rides/edit/${ID}`);
     expect(await screen.findByDisplayValue('Кофе-райд на море')).toBeOnTheScreen();
     expect(screen.getByDisplayValue('Катя')).toBeOnTheScreen();
     expect(screen.getByDisplayValue('10:00')).toBeOnTheScreen();
     expect(screen.getByDisplayValue('12')).toBeOnTheScreen();
 
+    // фоновое обновление `me` (фокус) на экране правки не подменяет version формы
+    getRideForViewer.mockResolvedValue({ ...organizerView, ride: { ...ride, version: 3 } });
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    expect(getRideForViewer).toHaveBeenCalledTimes(1);
     await type('Максимум участников (необязательно)', '20');
     await fireEvent.press(screen.getByRole('button', { name: 'Сохранить' }));
+    // только изменённые поля + version загрузки формы: чужая правка других полей не затирается
     await waitFor(() =>
       expect(updateRide).toHaveBeenCalledWith(liveSession.accessToken, ID, {
-        title: 'Кофе-райд на море',
-        organizerName: 'Катя',
-        startsAt: '2026-10-04T07:00:00Z',
-        cityCode: 'minsk',
-        place: 'Парк Победы',
-        distanceKm: 42,
-        paceMinKmh: 22,
-        paceMaxKmh: 24,
         limit: 20,
-        description: 'Едем',
         version: 2,
       }),
     );
@@ -263,6 +276,42 @@ describe('«Изменить райд» (AC4)', () => {
     await fireEvent.press(screen.getByText('Обновить'));
     expect(await screen.findByDisplayValue('Новое название')).toBeOnTheScreen();
     expect(screen.queryByText('Райд изменили — обновите страницу')).toBeNull();
+  });
+
+  it('409 → «Обновить» → сбой загрузки: конфликт остаётся, ошибка с повтором, введённое не сброшено', async () => {
+    updateRide.mockRejectedValue(new ApiHttpError(409, { code: 'CONFLICT', message: 'x' }));
+    await open(`/rides/edit/${ID}`);
+    await screen.findByDisplayValue('Кофе-райд на море');
+    await type('Название', 'Моё новое название');
+    await fireEvent.press(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(await screen.findByText('Райд изменили — обновите страницу')).toBeOnTheScreen();
+
+    getRideForViewer.mockRejectedValueOnce(
+      new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }),
+    );
+    await fireEvent.press(screen.getByText('Обновить'));
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.getByText('Райд изменили — обновите страницу')).toBeOnTheScreen();
+    expect(screen.getByDisplayValue('Моё новое название')).toBeOnTheScreen();
+
+    getRideForViewer.mockResolvedValue({
+      ...organizerView,
+      ride: { ...ride, title: 'Новое название', version: 3 },
+    });
+    await fireEvent.press(screen.getByText('Обновить'));
+    expect(await screen.findByDisplayValue('Новое название')).toBeOnTheScreen();
+    expect(screen.queryByText('Райд изменили — обновите страницу')).toBeNull();
+    expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+
+    updateRide.mockResolvedValue({ ...organizerView, ride: { ...ride, version: 4 } });
+    await type('Описание', 'Новое описание');
+    await fireEvent.press(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(updateRide).toHaveBeenLastCalledWith(liveSession.accessToken, ID, {
+        description: 'Новое описание',
+        version: 3,
+      }),
+    );
   });
 
   it('не организатор (canManage false) — «Райд не найден»', async () => {
