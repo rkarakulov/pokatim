@@ -146,6 +146,15 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
     setTitle(titleOf(chosen));
     setFile(chosen);
   };
+  const submitUpload = () => {
+    if (!file || file.size > ROUTE_FILE_MAX_BYTES || upload.isPending) return;
+    if (title.trim() === '') {
+      setUploadError(fieldErrorText('REQUIRED'));
+      return;
+    }
+    setUploadError(undefined);
+    upload.mutate({ bytes: file, name: title.trim() });
+  };
   const closeDialog = () => {
     if (upload.isPending) return;
     setFile(undefined);
@@ -255,36 +264,27 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
         title={t('admin.routes.dialog.title')}
         onClose={closeDialog}
       >
-        <form
-          noValidate
-          onSubmit={(event) => {
+        {/* без вложенного <form>: окно — внутри формы гонки, отправка вложенной формы перезагрузила бы страницу */}
+        <TextField
+          label={t('admin.routes.field.title')}
+          autoComplete="off"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
             event.preventDefault();
-            if (!file || file.size > ROUTE_FILE_MAX_BYTES) return;
-            if (title.trim() === '') {
-              setUploadError(fieldErrorText('REQUIRED'));
-              return;
-            }
-            setUploadError(undefined);
-            upload.mutate({ bytes: file, name: title.trim() });
+            submitUpload();
           }}
-        >
-          <TextField
-            label={t('admin.routes.field.title')}
-            autoComplete="off"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            error={uploadError}
-          />
-          <div className="dialog__actions">
-            <Button onClick={closeDialog} disabled={upload.isPending}>
-              {t('admin.dialog.cancel')}{' '}
-              <kbd className="kbd t-meta-xs">{t('admin.dialog.esc')}</kbd>
-            </Button>
-            <Button type="submit" variant="primary" busy={upload.isPending}>
-              {t('admin.routes.dialog.submit')}
-            </Button>
-          </div>
-        </form>
+          error={uploadError}
+        />
+        <div className="dialog__actions">
+          <Button onClick={closeDialog} disabled={upload.isPending}>
+            {t('admin.dialog.cancel')} <kbd className="kbd t-meta-xs">{t('admin.dialog.esc')}</kbd>
+          </Button>
+          <Button variant="primary" busy={upload.isPending} onClick={submitUpload}>
+            {t('admin.routes.dialog.submit')}
+          </Button>
+        </div>
       </Dialog>
     </>
   );

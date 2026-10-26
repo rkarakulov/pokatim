@@ -191,6 +191,8 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
     const title = within(dialog).getByLabelText(/^Название маршрута/) as HTMLInputElement;
     expect(title.value).toBe('Кольцо вокруг Минска');
+    // окно — внутри формы гонки: вложенная форма в браузере отправила бы форму гонки (перезагрузка страницы)
+    expect(document.querySelectorAll('form form')).toHaveLength(0);
     fireEvent.change(title, { target: { value: 'Новый круг' } });
 
     let resolveUpload: (value: PanelRoute) => void = () => undefined;
@@ -252,7 +254,8 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
     mocked.uploadRoute.mockRejectedValueOnce(httpError(415, 'ROUTE_FORMAT_UNSUPPORTED'));
     chooseGpx('track.fit');
     const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
+    // Enter в названии — та же отправка
+    fireEvent.keyDown(within(dialog).getByLabelText(/^Название маршрута/), { key: 'Enter' });
     expect(await within(dialog).findByText('Выберите файл GPX')).toBeTruthy();
 
     const processing = route({ id: NEW_ROUTE_ID, status: 'processing', line: [] });
