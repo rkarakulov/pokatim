@@ -321,6 +321,18 @@ Architecture Review — 05b rides moderation. **Status: CONCERNS** (разреш
 - Квота организатора считает будущие скрытые из `published` (было `[ASSUMPTION]` «не считает», 8.1 Q2).
 - «Отклонить жалобы» несёт `lastReportAt` (8.1 D3); `RideViewer` + `canReport` (8.1 D9); индексы — 8.1 D7;
   пункт панели — группа `bottom` (8.1 A8); новых кодов ошибок нет (8.1 D10).
+- (coder) Номер миграции — `0017_ride_reports` по A1: мигратор и `migrations.int.test.ts` непрерывности номеров не
+  требуют (список применённых сортируется по `_id` строкой, `0017` идёт после `0015`), `0016` в develop нет.
+- (coder) D4 уточнён: сверка `lastReportAt` «Отклонить жалобы» — только если у райда уже есть `lastReportAt`; у райда
+  без жалоб сразу 409 `RIDE_INVALID_STATE` (иначе AC10 «Отклонить без открытых жалоб — RIDE_INVALID_STATE» был бы
+  недостижим: тело требует `lastReportAt`, у райда без жалоб оно `null` → всегда `CONFLICT`).
+- (coder) Комментарий жалобы в приложении — однострочный `TextField`: у `TextField` базы нет `multiline`/`maxLength`
+  (как и у описания райда в форме 05a, `pokatim-app.md`); длину и символы проверяет схема контракта (ошибка под полем).
+- (coder) Вкладки очереди в панели — пара `ToggleChip` (одиночный выбор, `aria-pressed`), а не `ChipGroup`
+  (мультивыбор); на вкладке «Скрытые» колонка «Жалобы» заменена колонкой «Скрыт» (время скрытия, 8.1 D5).
+- (coder) Int-тесты видимости скрытого райда — отдельный файл `rides-hidden.int.test.ts` (не дописывались в три файла
+  05a); подготовка скрытия в них — прямой записью в БД (`hideInDb`), действие «Скрыть» проверяет
+  `rides-moderation.int.test.ts`.
 
 # 8.3 Security checklist
 
@@ -533,4 +545,71 @@ update для `ride_reports`.
 
 # 12. Outcome (coder)
 
-_(заполняет coder)_
+**Changes (по слайсам, коммиты `Райды 05b: …`):**
+
+1. Contracts + api-client: `hidden` в `RIDE_STATUSES`/`RIDE_PHASES`; `RideViewer.reported/canReport` (default
+   `false`); `ride-report.schema.ts` (`RIDE_REPORT_REASONS`, `CreateRideReportRequest`), `ride-moderation.schema.ts`
+   (очередь, карточка без автора жалобы, `Hide/Restore/DismissRideReportsRequest`); `rides.moderate`, `ride.hidden`,
+   `ride.restored`, `ride.reports_dismissed`, вид объекта `ride`, `details.reportCount` — в конец. `reportRide`,
+   `listModerationRides`, `getModerationRide`, `hideRide`, `restoreRide`, `dismissRideReports`.
+2. API, данные и видимость: поля модерации `RideDoc`, `ride_reports` + `RideReportsRepository` (вставка и закрытие),
+   миграция `0017_ride_reports` (индексы, бэкфилл), политика (`hidden`, `visibleTo`, `canReport`,
+   `moderationTransition`, `reportLimit`), `findPublic` со статусом, квота организатора считает скрытые из
+   `published` (Q2), классификация `join/leave/me` (A5), `reported` в ленте (батч на страницу), `me` и мутациях.
+3. API, жалоба: `RideReportsService` (лимит → видимость → организатор → уже жаловался → транзакция: `recordReport`
+   первым, затем `insert`; дубль — идемпотентно), `POST /v1/rides/:id/reports`.
+4. API, модерация: `RidesModerationService` + `RidesModerationController` (`admin/rides`, `PanelGuard` +
+   `rides.moderate`), транзакция действия: райд первым → `closeOpen` → `PanelAudit.append`; `RidesModule` импортирует
+   `PanelModule`; moderator получил `rides.moderate`; `AuditDetailsDoc.reportCount`.
+5. Приложение: на карточке «Пожаловаться» (`canReport`), «Вы пожаловались на этот райд» (`reported`), баннер
+   скрытого организатору; экран `rides/report/[id]` в `Stack.Protected`; i18n; смоук e2e web.
+6. Панель: `features/rides-moderation/*` (очередь с вкладками в URL, карточка с превью и жалобами, действия через
+   `ReasonDialog`, 409 → `ConflictBanner`), маршруты, пункт навигации (`bottom`, в конце), `AuditScreen` — «Жалоб: N».
+7. Docs и правила (§10).
+
+**Files touched:** `packages/contracts/src/{rides/ride.schema.ts,rides/ride-report.schema.ts,rides/ride-moderation.schema.ts,
+admin/permissions.schema.ts,admin/audit.schema.ts,index.ts}` (+ тесты); `packages/api-client/src/{index.ts,admin.ts}`
+(+ тесты); `packages/i18n/src/ru.ts`; `apps/api/src/modules/rides/{rides.collection.ts,ride-reports.collection.ts,
+ride-reports.repository.ts,ride-reports.service.ts,rides-moderation.service.ts,rides-moderation.controller.ts,
+rides.policy.ts,rides.repository.ts,rides.service.ts,rides-feed.service.ts,rides.controller.ts,rides.module.ts}`;
+`apps/api/src/modules/panel/{permissions.ts,panel.collection.ts}`; `apps/api/src/db/migrations/{0017_ride_reports.ts,
+index.ts}`; `apps/api/test/rides.ts`; `apps/app/src/{app/_layout.tsx,app/rides/report/[id].tsx,features/rides/
+{queries.ts,ride-detail.tsx,ride-report.tsx}}`, `apps/app/e2e/web.spec.ts`; `apps/admin/src/{router.tsx,
+navigation.ts,features/audit/AuditScreen.tsx,features/rides-moderation/*,test/app.tsx}`.
+
+**Docs:** `docs/product/rides.md` (раздел «Жалобы и модерация (05b)», таблица «Скрыто» — сделано),
+`docs/adr/0013-coffee-rides.md` (п. 7, «Последствия»), `docs/runbooks/deploy.md` (запрет снят, проверка наличия
+модератора), `docs/product/admin-panel.md` (право, журнал, карта разделов), `.claude/rules/{pokatim-db,
+pokatim-security,pokatim-app,pokatim-web}.md`.
+
+**Tests:**
+
+- Новые: `ride-report.schema.test.ts`, `ride-moderation.schema.test.ts`; `ride-reports.repository.test.ts` (сторож:
+  только вставка и закрытие, имя коллекции — только у описания, репозитория, миграции); `ride-reports.int.test.ts`
+  (жалоба, повтор, два райдера, организатор 409, гость 401, 400, 404 скрытого, лимит 21-й → 429, `reported` в ленте и
+  `me`, лог без комментария, гонка); `rides-hidden.int.test.ts` (публично/лента/города, `me`, `join` в т. ч. ветка
+  квоты, `leave`, правка, отмена, квота организатора, после «Вернуть»); `rides-moderation.int.test.ts` (401/403/200,
+  очередь и курсор, `topReason`, карточка без автора и ≤ 100, скрыть/вернуть/отклонить с журналом, устаревшая
+  `version` и `lastReportAt` → `CONFLICT` без журнала, недопустимые переходы → `RIDE_INVALID_STATE`, 400/404, откат
+  при сбое `PanelAudit.append`); миграция `0017_ride_reports` в `migrations.int.test.ts`; app —
+  `ride-report.test.tsx`, блок в `ride-detail.test.tsx`, `hidden` в `ride-going-action.test.tsx`; admin —
+  `RidesModerationScreen.test.tsx`, `RideModerationScreen.test.tsx`, навигация в `AppLayout.test.tsx`, журнал в
+  `AuditScreen.test.tsx`.
+- **Отрицательное доказательство гонки** «Скрыть ↔ жалоба»: при удалённой записи райда первой
+  (`recordReport` не вызывается, только `insertOne`) тест краснеет по результату — `AssertionError: expected 200 to
+  be 404` (жалоба осталась открытой у скрытого райда); с механизмом — зелёный (жалоба повторяется на конфликте записи
+  и получает 404, открытых жалоб 0).
+- `TURBO_CONCURRENCY=1 pnpm check` (изолированные `MONGO_URL_TEST=…/pokatim_rides05b_test`, `REDIS_URL_TEST=…/12`) —
+  **pass**: `Tasks: 13 successful, 13 total`; contracts 190, api-client 66, i18n 6, tracks 202, design-tokens 114,
+  api 795 (83 файла), app 835 (95 наборов), admin 165. После правки docs — `pnpm format:check` pass.
+- NOT VERIFIED: `pnpm e2e:web` и `pnpm e2e:admin` (нужны сборки и стенд; шаг смоука `/rides/report/<uuid>` добавлен,
+  не прогнан); ручная проверка на симуляторе/в браузере.
+
+**Follow-ups:**
+
+- При sync с «Протоколом» (`0016_protocol`): свои строки — после чужих в `PERMISSIONS`, `AUDIT_ACTIONS`,
+  `AuditEntry.details`, `ROLE_PERMISSIONS.organizer/moderator`, `ru.ts`, `router.tsx` (импорты и `addChildren`); если
+  05b мержится первым — перенумеровать миграцию в `0016_ride_reports` (8.1 A1).
+- Многострочное поле комментария — после `TextField multiline` в базе app-foundation.
+- Удаление аккаунта — обработка `ride_reports.reporterUserId` (записано в `pokatim-db.md`).
+- Роль MongoDB без update/delete для `ride_reports`/`panel_audit` — отдельно (out of scope).
