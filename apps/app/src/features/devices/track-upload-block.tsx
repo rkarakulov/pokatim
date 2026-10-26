@@ -1,10 +1,11 @@
 import type { TrackUpload } from '@pokatim/contracts';
-import { space, stroke } from '@pokatim/design-tokens';
+import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { Banner, Button, TextAction, textStyle, useTheme } from '@rkarakulov/ui';
+import { Banner, Button, textStyle, useTheme } from '@rkarakulov/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { uploadStatus } from './format';
+import { UploadProgress } from './upload-progress';
 import { useTrackFileUpload } from './use-track-file-upload';
 
 interface TrackUploadBlockProps {
@@ -30,33 +31,7 @@ export function TrackUploadBlock({ uploads }: TrackUploadBlockProps) {
     <View style={styles.block}>
       <Text style={meta}>{t('tracks.upload.hint')}</Text>
       {state.phase === 'uploading' ? (
-        <View style={styles.progress}>
-          <Text style={[textStyle('body'), { color: theme.text.primary }]}>
-            {t('tracks.upload.progress', {
-              name: state.name,
-              percent: Math.round(state.progress * 100),
-            })}
-          </Text>
-          <View
-            accessibilityRole="progressbar"
-            accessibilityLabel={state.name}
-            accessibilityValue={{ min: 0, max: 100, now: Math.round(state.progress * 100) }}
-            style={[styles.track, { backgroundColor: theme.border.subtle }]}
-          >
-            <View
-              style={[
-                styles.fill,
-                {
-                  backgroundColor: theme.text.primary,
-                  width: `${Math.round(state.progress * 100)}%`,
-                },
-              ]}
-            />
-          </View>
-          <View style={styles.action}>
-            <TextAction label={t('tracks.upload.cancel')} onPress={cancel} />
-          </View>
-        </View>
+        <UploadProgress name={state.name} progress={state.progress} onCancel={cancel} />
       ) : (
         <Button label={t('tracks.upload.action')} onPress={() => void choose()} />
       )}
@@ -75,8 +50,4 @@ export function TrackUploadBlock({ uploads }: TrackUploadBlockProps) {
 
 const styles = StyleSheet.create({
   block: { gap: space.s3 },
-  progress: { gap: space.s2 },
-  track: { height: stroke.indicator, alignSelf: 'stretch' },
-  fill: { height: stroke.indicator },
-  action: { alignItems: 'flex-start' },
 });

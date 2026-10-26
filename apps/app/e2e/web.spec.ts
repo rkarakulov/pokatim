@@ -606,6 +606,9 @@ test.describe('с API', () => {
       await expect(page.getByText(race.title, { exact: true }).first()).toBeVisible();
       await expect(page.getByText(`1–3 июля ${HOME_FIXTURE_YEAR}, до 15:00`)).toBeVisible();
       await expect(page).toHaveTitle(`${race.title} — Покатим`);
+      // без коридора — ни «Участвовать», ни «Результатов»
+      await expect(page.getByRole('button', { name: 'Участвовать' })).toHaveCount(0);
+      await expect(page.getByText('Результаты', { exact: true })).toHaveCount(0);
       await page.getByRole('button', { name: season.name }).click();
       await expect(page).toHaveURL(`${BASE_URL}/seasons/${seasonId}`);
       await expect(page.getByRole('heading', { name: season.name })).toBeVisible();
@@ -618,6 +621,9 @@ test.describe('с API', () => {
       await expect(page.getByText('Коридор', { exact: true })).toBeVisible();
       await expect(page.getByText('±50 м от маршрута')).toBeVisible();
       await expect(page.getByText(/^10,6\s?км по GPS-треку$/)).toBeVisible();
+      // участие (race-results-04, F16): гостю на гонке с коридором до окна — «Участвовать» со входом
+      await expect(page.getByRole('button', { name: 'Участвовать' })).toBeVisible();
+      await expect(page.getByText('Войдите, чтобы участвовать')).toBeVisible();
 
       // отменённая — баннер с причиной, без строк окна
       await page.goto(`/races/${cancelled.id}`);
@@ -674,6 +680,11 @@ test.describe('с API', () => {
       await seasonButton.click();
       await expect(page).toHaveURL(new RegExp(`^${BASE_URL}/seasons/`));
       await expect(page.getByRole('heading', { name: 'Гонки сезона' })).toBeVisible();
+
+      // «Выбрать свой заезд» (race-results-04, F16): экран за входом; у нового райдера заездов в окне нет
+      await page.goto(`/races/pick/${corridorRace.id}`);
+      await expect(page.getByText('Выбрать свой заезд', { exact: true }).first()).toBeVisible();
+      await expect(page.getByText('Нет заездов в окне гонки')).toBeVisible();
     } finally {
       await withdraw();
     }
