@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>Маршрут rte</name></metadata>
+  <rte>
+    <name>Маршрут rte</name>
+    <rtept lat="53.8500000" lon="27.4000000"><ele>225.0</ele></rtept>
+    <rtept lat="53.8521259" lon="27.4047458"><ele>224.8</ele></rtept>
+    <rtept lat="53.8542277" lon="27.4094915"><ele>224.2</ele></rtept>
+    <rtept lat="53.8562815" lon="27.4142373"><ele>223.3</ele></rtept>
+    <rtept lat="53.8582642" lon="27.4189831"><ele>222.0</ele></rtept>
+    <rtept lat="53.8601533" lon="27.4237288"><ele>220.5</ele></rtept>
+    <rtept lat="53.8619273" lon="27.4284746"><ele>218.6</ele></rtept>
+    <rtept lat="53.8635662" lon="27.4332203"><ele>216.6</ele></rtept>
+    <rtept lat="53.8650514" lon="27.4379661"><ele>214.3</ele></rtept>
+    <rtept lat="53.8663661" lon="27.4427119"><ele>212.0</ele></rtept>
+    <rtept lat="53.8674953" lon="27.4474576"><ele>209.6</ele></rtept>
+    <rtept lat="53.8684262" lon="27.4522034"><ele>207.2</ele></rtept>
+    <rtept lat="53.8691484" lon="27.4569492"><ele>204.9</ele></rtept>
+    <rtept lat="53.8696537" lon="27.4616949"><ele>202.7</ele></rtept>
+    <rtept lat="53.8699362" lon="27.4664407"><ele>200.7</ele></rtept>
+    <rtept lat="53.8699929" lon="27.4711864"><ele>199.0</ele></rtept>
+    <rtept lat="53.8698231" lon="27.4759322"><ele>197.5</ele></rtept>
+    <rtept lat="53.8694286" lon="27.4806780"><ele>196.3</ele></rtept>
+    <rtept lat="53.8688140" lon="27.4854237"><ele>195.5</ele></rtept>
+    <rtept lat="53.8679862" lon="27.4901695"><ele>195.1</ele></rtept>
+    <rtept lat="53.8669547" lon="27.4949153"><ele>195.0</ele></rtept>
+    <rtept lat="53.8657310" lon="27.4996610"><ele>195.3</ele></rtept>
+    <rtept lat="53.8643291" lon="27.5044068"><ele>196.0</ele></rtept>
+    <rtept lat="53.8627649" lon="27.5091525"><ele>197.1</ele></rtept>
+    <rtept lat="53.8610560" lon="27.5138983"><ele>198.5</ele></rtept>
+    <rtept lat="53.8592219" lon="27.5186441"><ele>200.1</ele></rtept>
+    <rtept lat="53.8572832" lon="27.5233898"><ele>202.0</ele></rtept>
+    <rtept lat="53.8552621" lon="27.5281356"><ele>204.2</ele></rtept>
+    <rtept lat="53.8531813" lon="27.5328814"><ele>206.4</ele></rtept>
+    <rtept lat="53.8510644" lon="27.5376271"><ele>208.8</ele></rtept>
+    <rtept lat="53.8489356" lon="27.5423729"><ele>211.2</ele></rtept>
+    <rtept lat="53.8468187" lon="27.5471186"><ele>213.6</ele></rtept>
+    <rtept lat="53.8447379" lon="27.5518644"><ele>215.8</ele></rtept>
+    <rtept lat="53.8427168" lon="27.5566102"><ele>218.0</ele></rtept>
+    <rtept lat="53.8407781" lon="27.5613559"><ele>219.9</ele></rtept>
+    <rtept lat="53.8389440" lon="27.5661017"><ele>221.5</ele></rtept>
+    <rtept lat="53.8372351" lon="27.5708475"><ele>222.9</ele></rtept>
+    <rtept lat="53.8356709" lon="27.5755932"><ele>224.0</ele></rtept>
+    <rtept lat="53.8342690" lon="27.5803390"><ele>224.7</ele></rtept>
+    <rtept lat="53.8330453" lon="27.5850847"><ele>225.0</ele></rtept>
+    <rtept lat="53.8320138" lon="27.5898305"><ele>224.9</ele></rtept>
+    <rtept lat="53.8311860" lon="27.5945763"><ele>224.5</ele></rtept>
+    <rtept lat="53.8305714" lon="27.5993220"><ele>223.7</ele></rtept>
+    <rtept lat="53.8301769" lon="27.6040678"><ele>222.5</ele></rtept>
+    <rtept lat="53.8300071" lon="27.6088136"><ele>221.0</ele></rtept>
+    <rtept lat="53.8300638" lon="27.6135593"><ele>219.3</ele></rtept>
+    <rtept lat="53.8303463" lon="27.6183051"><ele>217.3</ele></rtept>
+    <rtept lat="53.8308516" lon="27.6230508"><ele>215.1</ele></rtept>
+    <rtept lat="53.8315738" lon="27.6277966"><ele>212.8</ele></rtept>
+    <rtept lat="53.8325047" lon="27.6325424"><ele>210.4</ele></rtept>
+    <rtept lat="53.8336339" lon="27.6372881"><ele>208.0</ele></rtept>
+    <rtept lat="53.8349486" lon="27.6420339"><ele>205.7</ele></rtept>
+    <rtept lat="53.8364338" lon="27.6467797"><ele>203.4</ele></rtept>
+    <rtept lat="53.8380727" lon="27.6515254"><ele>201.4</ele></rtept>
+    <rtept lat="53.8398467" lon="27.6562712"><ele>199.5</ele></rtept>
+    <rtept lat="53.8417358" lon="27.6610169"><ele>198.0</ele></rtept>
+    <rtept lat="53.8437185" lon="27.6657627"><ele>196.7</ele></rtept>
+    <rtept lat="53.8457723" lon="27.6705085"><ele>195.8</ele></rtept>
+    <rtept lat="53.8478741" lon="27.6752542"><ele>195.2</ele></rtept>
+    <rtept lat="53.8500000" lon="27.6800000"><ele>195.0</ele></rtept>
+  </rte>
+</gpx>

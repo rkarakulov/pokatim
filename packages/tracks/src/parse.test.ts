@@ -78,6 +78,8 @@ describe('analyzeTrack', () => {
   it.each([
     ['indoor-trainer.fit', 'no_track'],
     ['empty-trk.gpx', 'no_track'],
+    // маршрут (rte) заездом не считается — разбор заездов не включает allowRoute
+    ['route-rte.gpx', 'no_track'],
     ['no-time.gpx', 'no_timestamps'],
     ['zero-points.gpx', 'implausible'],
     ['reversed-time.gpx', 'implausible'],

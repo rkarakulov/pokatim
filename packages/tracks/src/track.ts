@@ -19,12 +19,33 @@ export type TrackFailureCode =
   | 'timeout'
   | 'storage';
 
+/** Совпадает с `ROUTE_FAILURE_CODES` контракта. `timeout` ставит worker, не пакет. */
+export type RouteFailureCode =
+  'unreadable' | 'no_track' | 'too_many_points' | 'too_short' | 'too_long' | 'timeout';
+
 export const TRACK_FILE_MAX_BYTES = 16 * 1024 * 1024;
 export const TRACK_FILE_EXTENSIONS = ['fit', 'gpx'] as const;
 /** Больше точек в файле FIT/GPX — `too_many_points` (≈ 55 ч записи раз в секунду). */
 export const TRACK_MAX_POINTS = 200_000;
 /** Больше точек в потоке агрегатора — `too_many_points`. */
 export const TRACK_STREAM_MAX_POINTS = 300_000;
+
+/** Больше точек в GPX маршрута — `too_many_points`. */
+export const ROUTE_MAX_POINTS = 50_000;
+/** Пределы длины маршрута, м: короче — `too_short`, длиннее — `too_long`. */
+export const ROUTE_MIN_LENGTH_M = 1000;
+export const ROUTE_MAX_LENGTH_M = 1_000_000;
+
+/**
+ * Эталонный коридор гонки для сверки заезда (вход `matchCorridor`, слайс 02): линия сверки маршрута [lon, lat],
+ * допуск ±`widthM` от линии, петля и длина маршрута.
+ */
+export interface CorridorGeometry {
+  line: [number, number][];
+  widthM: number;
+  isLoop: boolean;
+  distanceM: number;
+}
 
 /** Точка разбора. Значения датчиков — только внутри процесса разбора, наружу выходят флаги. */
 export interface ParsedPoint extends TrackPoint {
@@ -57,9 +78,9 @@ export interface TrackSummary {
 }
 
 export class TrackParseError extends Error {
-  readonly code: TrackFailureCode;
+  readonly code: TrackFailureCode | RouteFailureCode;
 
-  constructor(code: TrackFailureCode) {
+  constructor(code: TrackFailureCode | RouteFailureCode) {
     super(`track: ${code}`);
     this.name = 'TrackParseError';
     this.code = code;
