@@ -19,6 +19,9 @@ paths:
   стенда (`rideGpx` из `apps/api/test/results.ts`), маршрут — линия из `corridor-expected.json` в `route_geometries`;
   проверка — `AttemptCheckProcessor.check` напрямую, события — `resultsWorker(h)`. Отрицательные доказательства —
   `admitEntry` без записи, запрос без `lockEntry`, без `checkRevision`, без семафора потоков.
+- Протокол (race-results-05) — отрицательное доказательство замка результатов: `lockResults` подменён чтением →
+  исключение лучшей попытки, закоммиченное после чтения чек-листа публикации, даёт 200 вместо `409
+  protocol_published` и попадает в снимок (`results-protocol.int.test.ts`).
 - Гео-запросы MongoDB (`2dsphere`) — только интеграционные тесты на реальной БД; геометрия `packages/tracks` —
   unit на фикстурах.
 - Гонки identity (MongoDB, R9): **ворота** — `vi.spyOn(repository, 'lockUser…')` приостанавливает операцию между

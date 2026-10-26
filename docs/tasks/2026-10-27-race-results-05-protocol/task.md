@@ -511,6 +511,9 @@ Coder (backend, точки A–C3). Продуктовые значения не
   незнакомые значения; литералы `summary` — `excluded: 0`; вызовы `requestRace` — с `requestedAt`.
 - DV-11 Точка D (UI) не делалась, кроме правок для typecheck/RC-6: `RacesScreen.PHASE_TONE.final = 'success'`,
   `RaceEditor.editReasons` + `results_final`. Docs §10 (точка E) не делались.
+- DV-12 (D) Фильтр попыток — `ChipGroup` в режиме одного значения (API принимает один `status`): нажатый чип
+  заменяет прежний, повторное нажатие — «все». История пересчётов показывается и до публикации (записи
+  `recheck_started`, RC-1). Действия над попытками скрыты и у отменённой гонки (сервер ответил бы `race_cancelled`).
 
 # 8.3 Security checklist
 
@@ -925,8 +928,7 @@ export function buildProtocol(base: readonly ProtocolBase[],
 
 # 12. Outcome
 
-**Частично: backend (точки A, B, C1–C3).** Точка D (экран «Результаты» в `apps/admin`, `StatTile`, RTL) и E (docs
-§10, `pnpm --filter @pokatim/admin build`, `e2e:admin`) — не сделаны (вне поручения coder). Отклонения — §8.2.
+**Backend (точки A, B, C1–C3), панель (D) и docs (E).** `e2e:admin` — не прогонялся. Отклонения — §8.2.
 
 Коммиты: `3448448` (A — contracts, api-client, i18n), `983d494` (B — races/tracks, миграция `0016_protocol`),
 `3513362` (C1 — модель и политика results), `02d662c` (C2+C3 — действия, контроллеры, worker, чтения).
@@ -956,4 +958,41 @@ api 82 файла / 797 тестов, contracts 185, api-client 66, i18n 6, admi
 `(raceId, revision)` даёт либо конфликт записи с повтором (оба применены), либо `E11000` (500) — недетерминированно.
 С замком — int «два одновременных DQ»: оба 200, ревизии 2 и 3, в 3 оба `dq`.
 
-Открыто: точки D и E; ADR-0012 п. 6–7 и правила `.claude/rules/*` (§10) не обновлены.
+**Точка D — панель (`apps/admin`).**
+- `src/ui/StatTile.tsx` (+ тест, экспорт в `src/ui/index.ts`): подпись + число, скелетон до данных, роль `group`.
+- Маршрут `races/$raceId/results` (`RequirePermission races.read`) → `features/results/RaceResultsScreen.tsx`:
+  KPI (6 плиток; «в зачёте» после публикации — `protocol.ranked`), `PublishBlock` (чек-лист сервера, «Опубликовать
+  протокол» с `aria-disabled` + `DisabledReason` первой причины с количеством; после публикации — баннер ревизии,
+  «Перепроверить треки» и «Применить пересчёт» с `results.revise`, неактивна при `recheck.pending > 0`),
+  `StandingsTable` (место «=N», «Участник ·xxxxxx», время, статус; DQ / «Отменить DQ»), `AttemptsTable` (фильтр
+  статуса `ChipGroup` — один статус за раз, запрос с `status`; «Исключить трек» / «Вернуть в обработку», причина
+  исключения из `review`; «Перепроверить треки» до публикации с подсказкой `staleEngine`), `RecalculationsList`.
+  Одно окно `ReasonDialog` на экран; действие → инвалидация `['admin','races','item',id]` (гонка и все результаты),
+  409 — тоже инвалидация. Ошибки — `results-errors.ts` (`RESULTS_ACTION_BLOCKED` по `details.reason`/`count`,
+  `RESULTS_PUBLISH_BLOCKED` — первая причина `details`, `RATE_LIMITED`, сеть, 403).
+- `RaceEditor`: ссылка «Результаты» у не-черновика; `format.ts`: `formatElapsed`; CSS — `.stat-tiles`,
+  `.stat-tile*`, `.section*`, `.checklist*` (только токены).
+- i18n: недостающие ключи своим подблоком `admin.results.*` (`kpi.title`, `revise.title`, `attempts.filter`,
+  `attempts.reviewReason`, `failure.*`, `withdrawReason.*`, `dialog.*Consequences`, `recalc.column.*`).
+- Тестовый `ME` (`src/test/app.tsx`) получил права R1: admin + `results.manage`/`results.revise`, organizer +
+  `results.manage`.
+- RTL: `RaceResultsScreen.test.tsx` (17: скелетон, «Нет соединения» / «Не удалось загрузить» / 404 с повтором,
+  баннер ошибки обновления, KPI, неактивная публикация с причиной, публикация с обязательной причиной и
+  обновлением, 409 publish/action по `details`, фильтр `excluded`, исключение и возврат, участники, права moderator /
+  organizer, после публикации — баннер ревизии, история, DQ / отмена DQ, «Применить пересчёт» неактивна при
+  незавершённых, перепроверка и применение), `RacesScreen.test.tsx` (+3: тон `final`, `results_final` + ссылка и без
+  «Отменить гонку», у черновика ссылки нет), `StatTile.test.tsx` (2), `format.test.ts` (+1).
+
+**Точка E — docs (§10).** ADR-0012 — «Реализация п. 6–7 (слайс 05)»; `.claude/rules/pokatim-db.md`,
+`pokatim-backend.md`, `pokatim-security.md` — разделы «Протокол (race-results-05)»; `pokatim-tests.md` —
+отрицательное доказательство `lockResults`; `pokatim-web.md` — экран «Результаты».
+
+**Итоговый гейт** (изоляция `pokatim_05protocol_test`, Redis db 7): `TURBO_CONCURRENCY=1 pnpm check` — exit 0
+(format, lint, arch:check без нарушений, typecheck, тесты: api 82/797, contracts 185, api-client 66, tracks 202,
+design-tokens 114, admin 19 файлов/174; остальные пакеты — из кэша turbo, зелёные). Первый прогон упал на
+`admin-02-ui.test.tsx` «ChoiceDialog … фокус возвращается на триггер» (файл не менялся; под нагрузкой гейта
+флаки, 5 одиночных и 2 полных прогона admin — зелёные), повторный гейт — зелёный.
+`pnpm --filter @pokatim/admin build` — успешно (предупреждение о размере чанка > 500 кБ — прежнее).
+`pnpm e2e:admin` — NOT VERIFIED (стенд не поднимался).
+
+Открыто: коммиты D и E — среда coder запретила `git add`/`git commit`, изменения лежат в рабочем дереве.
