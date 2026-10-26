@@ -24,8 +24,6 @@ interface Sample {
   t: number;
   /** пройденное по пути (без шума), м */
   along: number;
-  /** известное по построению отклонение от маршрута, м */
-  offset: number;
   outlier?: boolean;
 }
 
@@ -128,28 +126,23 @@ function sampleRide(path: readonly Xy[], options: RideOptions): Sample[] {
       y: at.y + at.dx * side,
       t: startMs + k * interval * 1000,
       along,
-      offset: Math.abs(side),
     });
     if (along >= total - 1e-9) break;
   }
   return samples;
 }
 
-/** Явные позиции раз в секунду; `offset` — функция позиции (по построению). */
-function explicitRide(
-  positions: readonly Xy[],
-  offset: (xy: Xy) => number,
-  startMs = START,
-): Sample[] {
+/** Явные позиции раз в секунду. */
+function explicitRide(positions: readonly Xy[], startMs = START): Sample[] {
   let along = 0;
   return positions.map((xy, k) => {
     if (k > 0) along += Math.hypot(xy[0] - positions[k - 1]![0], xy[1] - positions[k - 1]![1]);
-    return { x: xy[0], y: xy[1], t: startMs + k * 1000, along, offset: offset(xy) };
+    return { x: xy[0], y: xy[1], t: startMs + k * 1000, along };
   });
 }
 
-/** Коррелированный шум GPS (AR(1), ρ = 0.995) со стационарным σ, модуль ограничен 3σ. */
-function addNoise(samples: Sample[], sigma: number, seed: number): void {
+/** Коррелированный шум GPS (AR(1), ρ = 0.995) со стационарным σ, модуль ограничен `clip`·σ. */
+function addNoise(samples: Sample[], sigma: number, seed: number, clip = 3): void {
   const random = mulberry32(seed);
   const gauss = () => {
     const u = Math.max(random(), 1e-12);
@@ -163,10 +156,9 @@ function addNoise(samples: Sample[], sigma: number, seed: number): void {
     nx = rho * nx + innovation * gauss();
     ny = rho * ny + innovation * gauss();
     const magnitude = Math.hypot(nx, ny);
-    const scale = magnitude > 3 * sigma ? (3 * sigma) / magnitude : 1;
+    const scale = magnitude > clip * sigma ? (clip * sigma) / magnitude : 1;
     sample.x += nx * scale;
     sample.y += ny * scale;
-    sample.offset = Math.max(sample.offset, magnitude * scale);
   }
 }
 
@@ -216,6 +208,8 @@ interface Expected {
   momentToleranceMs?: number;
   coverage?: number;
   offCorridorShare?: number;
+  /** допуск доли схода: у шумной фикстуры границы сегмента (ворота) сдвинуты шумом */
+  offShareTolerance?: number;
   maxExcursionM?: number;
   noisePoints?: number;
 }
@@ -240,9 +234,24 @@ function emit(
 
 /**
  * Эталон засчитанного проезда: моменты ворот — по профилю скорости (`startAlong`, `finishAlong` на пути), длина
- * трека и сход — по хордам между точками (как пишет трек), с долями крайних шагов; правило схода — A6.
+ * трека и сход — по хордам между точками (как пишет трек), с долями крайних шагов; отклонение точки — расстояние
+ * до ломаной маршрута; правило схода — A6: момент ворот — точка коридора, выход завершается точкой внутри.
  */
+/** Расстояние от точки до ломаной маршрута в локальной плоскости, м. */
+function distanceToRoute(x: number, y: number, line: readonly Xy[]): number {
+  let best = Infinity;
+  for (let i = 1; i < line.length; i += 1) {
+    const [ax, ay] = line[i - 1]!;
+    const dx = line[i]![0] - ax;
+    const dy = line[i]![1] - ay;
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
+    best = Math.min(best, Math.hypot(x - ax - t * dx, y - ay - t * dy));
+  }
+  return best;
+}
+
 function counted(
+  line: readonly Xy[],
   samples: readonly Sample[],
   profile: SpeedProfile,
   startAlong: number,
@@ -265,13 +274,16 @@ function counted(
     const to = b.along > finishAlong ? (finishAlong - a.along) / (b.along - a.along) : 1;
     const chord = Math.hypot(b.x - a.x, b.y - a.y) * (to - from);
     distance += chord;
-    const outside = (a.offset > WIDTH_M ? 1 : 0) + (b.offset > WIDTH_M ? 1 : 0);
-    if (outside === 0) excursion = 0;
-    else {
-      off += outside === 2 ? chord : chord / 2;
-      excursion += outside === 2 ? chord : chord / 2;
+    const fromInside = from > 0 || distanceToRoute(a.x, a.y, line) <= WIDTH_M;
+    const toInside = to < 1 || distanceToRoute(b.x, b.y, line) <= WIDTH_M;
+    const outside = (fromInside ? 0 : 1) + (toInside ? 0 : 1);
+    if (outside > 0) {
+      const part = outside === 2 ? chord : chord / 2;
+      off += part;
+      excursion = fromInside ? part : excursion + part;
       maxExcursion = Math.max(maxExcursion, excursion);
     }
+    if (toInside) excursion = 0;
   }
   const distanceM = Math.round(distance);
   const offM = Math.round(off);
@@ -323,7 +335,12 @@ const v10: SpeedProfile = [[length(A_PATH), 10]];
 {
   const samples = sampleRide(A_PATH, { speed: 10 });
   addNoise(samples, 3, 1);
-  emit('clean.gpx', samples, A, counted(samples, v10, A_START, A_FINISH, { maxExcursionM: 0 }));
+  emit(
+    'clean.gpx',
+    samples,
+    A,
+    counted(A.line, samples, v10, A_START, A_FINISH, { maxExcursionM: 0 }),
+  );
 }
 
 /** Боковые сходы по 65 м: смещения точек 23 → 47 → 70 ×5 → 47 → 23 м (пять точек вне коридора ±50 м). */
@@ -344,7 +361,7 @@ for (const [name, centers] of [
   ['wobble-1_5pct.gpx', [1000, 4500]],
 ] as const) {
   const samples = sampleRide(A_PATH, { speed: 10, lateral: wobbles([...centers]) });
-  const expected = counted(samples, v10, A_START, A_FINISH);
+  const expected = counted(A.line, samples, v10, A_START, A_FINISH);
   const { offCorridorShare, maxExcursionM } = expected;
   emit(
     name,
@@ -358,7 +375,8 @@ for (const [name, centers] of [
 
 {
   const samples = sampleRide(A_PATH, { speed: 10 });
-  addNoise(samples, 15, 2);
+  // хвост шума до 5σ = 75 м: при этом зерне 5 точек уходят за коридор ±50 м (на 2,7 м)
+  addNoise(samples, 15, 37, 5);
   // 5 одиночных выбросов на 300 м в сторону (многолучёвость у зданий)
   for (const index of [150, 300, 450, 600, 750]) {
     const s = samples[index]!;
@@ -373,17 +391,23 @@ for (const [name, centers] of [
     'noisy.gpx',
     samples,
     A,
-    counted(samples, v10, A_START, A_FINISH, {
-      toleranceSec: 3,
-      momentToleranceMs: 3000,
-      maxExcursionM: 0,
+    // моменты ворот — по пути без шума; шум у ворот до 75 м при 10 м/с сдвигает их до ≈ 7,5 с
+    counted(A.line, samples, v10, A_START, A_FINISH, {
+      toleranceSec: 8,
+      momentToleranceMs: 8000,
+      offShareTolerance: 0.003,
     }),
   );
 }
 
 {
   const samples = sampleRide(A_PATH, { speed: 10, intervalS: 30 });
-  emit('sparse-30s.gpx', samples, A, counted(samples, v10, A_START, A_FINISH, { toleranceSec: 5 }));
+  emit(
+    'sparse-30s.gpx',
+    samples,
+    A,
+    counted(A.line, samples, v10, A_START, A_FINISH, { toleranceSec: 5 }),
+  );
 }
 {
   const path: Xy[] = [...A_PATH.slice(0, -1), [3000, 5800]];
@@ -393,7 +417,7 @@ for (const [name, centers] of [
     'sparse-60s.gpx',
     samples,
     A,
-    counted(samples, [[length(path), speed]], A_START, A_FINISH, { toleranceSec: 5 }),
+    counted(A.line, samples, [[length(path), speed]], A_START, A_FINISH, { toleranceSec: 5 }),
   );
 }
 
@@ -409,7 +433,7 @@ for (const [name, centers] of [
   const samples = sampleRide(A_PATH, { speed: 10 }).filter(
     (s) => s.along <= 1095 || s.along >= 1695,
   );
-  emit('tunnel-600m.gpx', samples, A, counted(samples, v10, A_START, A_FINISH));
+  emit('tunnel-600m.gpx', samples, A, counted(A.line, samples, v10, A_START, A_FINISH));
 }
 
 // окно: старт 14,5 с, финиш 804,5 с от начала записи; день — свой у каждой фикстуры
@@ -440,6 +464,7 @@ for (const [index, [name, window, verdict]] of (
   const startMs = START + (index + 1) * 86_400_000;
   const samples = sampleRide(A_PATH, { speed: 10, startMs });
   const expected = counted(
+    A.line,
     samples,
     v10,
     A_START,
@@ -463,7 +488,7 @@ for (const [index, [name, window, verdict]] of (
     'gates-10s.gpx',
     samples,
     A,
-    counted(samples, v10, A_START, A_FINISH, { toleranceSec: 0, momentToleranceMs: 500 }),
+    counted(A.line, samples, v10, A_START, A_FINISH, { toleranceSec: 0, momentToleranceMs: 500 }),
   );
 }
 
@@ -546,11 +571,12 @@ for (const [name, depth] of [
   ['shortcut-500.gpx', 300],
 ] as const) {
   const positions = spur(depth);
-  const samples = explicitRide(positions, ([x, y]) => (x === 13_505 ? y : 0));
+  const samples = explicitRide(positions);
   const finishAlong = samples.find((s) => s.x === 26_945)!.along + 5;
   const startAlong = LEAD_IN_M + GATE_M;
   // 1 точка в секунду: на прямой — 10 м/с (старт по профилю), на срезе шаг 5–10 м — финиш по точке перед воротами
   const expected = counted(
+    S.line,
     samples,
     [[samples[samples.length - 1]!.along, 10]],
     startAlong,
@@ -584,7 +610,7 @@ const B = { line: LOOP, isLoop: true };
 {
   const path: Xy[] = [[0, -LEAD_IN_M], ...LOOP, [-LEAD_IN_M, 0]];
   const samples = sampleRide(path, { speed: 8 });
-  emit('loop-1lap.gpx', samples, B, counted(samples, [[length(path), 8]], 145, 6045));
+  emit('loop-1lap.gpx', samples, B, counted(B.line, samples, [[length(path), 8]], 145, 6045));
 }
 {
   const path: Xy[] = [[0, -LEAD_IN_M], ...LOOP, ...LOOP.slice(1), [-LEAD_IN_M, 0]];
@@ -594,7 +620,7 @@ const B = { line: LOOP, isLoop: true };
   ];
   const samples = sampleRide(path, { speed: profile });
   // лучший — второй круг (9 м/с): выход 6145 м, вход 12 045 м пути
-  emit('loop-2laps.gpx', samples, B, counted(samples, profile, 6145, 12_045));
+  emit('loop-2laps.gpx', samples, B, counted(B.line, samples, profile, 6145, 12_045));
 }
 {
   // три выхода из ворот вперёд с возвратом (каждые ≈ 25 с) — старт = последний выход
@@ -608,7 +634,7 @@ const B = { line: LOOP, isLoop: true };
     [-LEAD_IN_M, 0],
   ];
   const samples = sampleRide(path, { speed: 8 });
-  emit('loop-loiter.gpx', samples, B, counted(samples, [[length(path), 8]], 545, 6445));
+  emit('loop-loiter.gpx', samples, B, counted(B.line, samples, [[length(path), 8]], 545, 6445));
 }
 emit(
   'reverse-loop.gpx',
@@ -634,7 +660,7 @@ const C = {
     [-LEAD_IN_M, 0],
   ];
   const samples = sampleRide(path, { speed: 10 });
-  emit('outback-full.gpx', samples, C, counted(samples, [[length(path), 10]], 145, 20_045));
+  emit('outback-full.gpx', samples, C, counted(C.line, samples, [[length(path), 10]], 145, 20_045));
 }
 emit(
   'outback-turn-7km.gpx',

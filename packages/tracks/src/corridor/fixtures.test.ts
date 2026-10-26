@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -27,6 +27,7 @@ interface FixtureCase {
     momentToleranceMs?: number;
     coverage?: number;
     offCorridorShare?: number;
+    offShareTolerance?: number;
     maxExcursionM?: number;
     noisePoints?: number;
   };
@@ -116,7 +117,9 @@ describe('matchCorridor на фикстурах (corridor-expected.json)', () =>
     }
     if (expected.coverage !== undefined) expect(segment.coverage).toBe(expected.coverage);
     if (expected.offCorridorShare !== undefined) {
-      expect(Math.abs(segment.offCorridorShare - expected.offCorridorShare)).toBeLessThan(0.001);
+      expect(Math.abs(segment.offCorridorShare - expected.offCorridorShare)).toBeLessThan(
+        expected.offShareTolerance ?? 0.001,
+      );
     }
     if (expected.maxExcursionM !== undefined) {
       expect(Math.abs(segment.maxExcursionM - expected.maxExcursionM)).toBeLessThanOrEqual(1);
@@ -173,6 +176,40 @@ describe('реальный формат и инварианты результа
     }
   });
 
+  /**
+   * Сторож версии: полный `CorridorMatch` всех фикстур (точные мс, метры, покрытие, кандидаты) против
+   * `corridor-golden.json`. Изменился результат — поднять `CORRIDOR_ENGINE_VERSION` и перезаписать эталон:
+   * `UPDATE_CORRIDOR_GOLDEN=1 pnpm --filter @pokatim/tracks test`.
+   */
+  it('AC15: полный результат всех фикстур = эталону своей версии (golden)', () => {
+    const golden = new URL('../__fixtures__/corridor/corridor-golden.json', import.meta.url);
+    const results: Record<string, CorridorMatch> = {};
+    for (const name of Object.keys(SCENARIOS).sort()) results[name] = run(name);
+    results['garmin-edge-ride.fit'] = matchCorridor(
+      edgePoints,
+      prepareCorridor(edgeCorridor),
+      window,
+    );
+    const actual = JSON.stringify({ engineVersion: CORRIDOR_ENGINE_VERSION, results }, null, 2)
+      // раскладка prettier: короткие массивы — в строку
+      .replace(
+        /\[\n([^[\]{}]*?)\n\s*\]/g,
+        (_, items: string) =>
+          `[${items
+            .trim()
+            .split(/,\n\s*/)
+            .join(', ')}]`,
+      );
+    if (process.env.UPDATE_CORRIDOR_GOLDEN === '1') writeFileSync(golden, `${actual}\n`);
+    const stored = JSON.parse(readFileSync(golden, 'utf8')) as { engineVersion: number };
+    expect(stored.engineVersion, 'эталон другой версии — перезаписать').toBe(
+      CORRIDOR_ENGINE_VERSION,
+    );
+    expect(JSON.parse(actual), 'результат изменился — поднять CORRIDOR_ENGINE_VERSION').toEqual(
+      stored,
+    );
+  });
+
   it('AC16: пульс и мощность не влияют на результат и не попадают в него', () => {
     expect(edge.hasHeartRate && edge.hasPower).toBe(true);
     const corridor = prepareCorridor(edgeCorridor);
@@ -185,7 +222,15 @@ describe('реальный формат и инварианты результа
     const withSensors = matchCorridor(edgePoints, corridor, window);
     expect(matchCorridor(stripped, corridor, window)).toEqual(withSensors);
     expect(Object.keys(withSensors).sort()).toEqual(
-      ['candidates', 'engineVersion', 'reasons', 'segment', 'touchedCorridor', 'verdict'].sort(),
+      [
+        'candidates',
+        'diagnostics',
+        'engineVersion',
+        'reasons',
+        'segment',
+        'touchedCorridor',
+        'verdict',
+      ].sort(),
     );
     expect(Object.keys(withSensors.segment!).sort()).toEqual(
       [

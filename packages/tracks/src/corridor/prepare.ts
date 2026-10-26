@@ -6,11 +6,13 @@ import type { PreparedCorridor, SegmentGrid } from './types.ts';
 const MAX_LINE_POINTS = 20_000;
 const MIN_WIDTH_M = 20;
 const MAX_WIDTH_M = 200;
-const MAX_DISTANCE_MISMATCH = 0.01;
 
 /**
- * Подготовка коридора: проверка инвариантов (нарушение — ошибка программиста, не отказ попытки), уплотнение линии
- * до отрезков ≤ 25 м, chainage вершин, сеточный индекс отрезков, ворота, число ячеек покрытия 250 м.
+ * Подготовка коридора: проверка инвариантов (нарушение — ошибка программиста, не отказ попытки), прореживание
+ * почти прямых участков (допуск 2 м, без разворотов), уплотнение до отрезков ≤ 25 м, chainage вершин, сеточный
+ * индекс отрезков (не больше 64 в ячейке — время привязки ограничено), ворота, число ячеек покрытия 250 м.
+ * Метрика коридора — длина уплотнённой линии; `distanceM` маршрута только переносится в диагностику.
+ * Ворота старта — вокруг первой вершины, финиша — вокруг последней (`isLoop` — только развёртка `s` по кругам).
  */
 export function prepareCorridor(geometry: CorridorGeometry): PreparedCorridor {
   const { line, widthM, isLoop, distanceM } = geometry;
@@ -26,15 +28,17 @@ export function prepareCorridor(geometry: CorridorGeometry): PreparedCorridor {
     );
   }
 
-  const { lon, lat, chainage } = densify(line);
+  const { lon, lat, chainage } = densify(thin(line));
   assert(lon.length >= 2, 'line needs at least 2 distinct points');
   const lengthM = chainage[chainage.length - 1]!;
-  assert(
-    Number.isFinite(distanceM) &&
-      distanceM > 0 &&
-      Math.abs(lengthM - distanceM) <= MAX_DISTANCE_MISMATCH * distanceM,
-    'distanceM does not match line length',
+  const gateRadiusM = CORRIDOR_POLICY.gateRadius(widthM);
+  const last = lon.length - 1;
+  const ends = haversineMeters(
+    { lon: lon[0]!, lat: lat[0]! },
+    { lon: lon[last]!, lat: lat[last]! },
   );
+  // линейный маршрут: финиш строго после старта — круги ворот не пересекаются
+  assert(isLoop || ends > 2 * gateRadiusM, 'gates overlap on a linear route');
 
   const { ky } = localProjection(0);
   const segments = lon.length - 1;
@@ -42,7 +46,6 @@ export function prepareCorridor(geometry: CorridorGeometry): PreparedCorridor {
   for (let j = 0; j < segments; j += 1) {
     segKx[j] = localProjection((lat[j]! + lat[j + 1]!) / 2).kx;
   }
-  const last = lon.length - 1;
   const startGate = [lon[0]!, lat[0]!] as const;
 
   return {
@@ -52,18 +55,55 @@ export function prepareCorridor(geometry: CorridorGeometry): PreparedCorridor {
     lat,
     chainage,
     lengthM,
+    declaredDistanceM: distanceM,
     segKx,
     ky,
     grid: buildGrid(lon, lat, ky),
-    gateRadiusM: CORRIDOR_POLICY.gateRadius(widthM),
+    gateRadiusM,
     startGate,
-    finishGate: isLoop ? startGate : ([lon[last]!, lat[last]!] as const),
+    finishGate: [lon[last]!, lat[last]!] as const,
     coverageCells: Math.max(1, Math.ceil(lengthM / CORRIDOR_POLICY.coverageCellM)),
   };
 }
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`corridor: ${message}`);
+}
+
+/**
+ * Прореживание: вершины между якорем и концом отрезка ≤ `densifyStepM` выбрасываются, если все лежат в пределах
+ * `lineToleranceM` от отрезка и проецируются на него по ходу (разворот и «туда-обратно» не схлопываются). Частые
+ * вершины линии (запись GPS, планировщики) иначе множат отрезки в ячейке сетки и время привязки.
+ */
+function thin(line: readonly (readonly [number, number])[]): (readonly [number, number])[] {
+  const tolerance = CORRIDOR_POLICY.lineToleranceM;
+  const maxLength = CORRIDOR_POLICY.densifyStepM;
+  const kept: (readonly [number, number])[] = [line[0]!];
+  let anchor = 0;
+  while (anchor < line.length - 1) {
+    const [aLon, aLat] = line[anchor]!;
+    const { kx, ky } = localProjection(aLat);
+    const x = (i: number) => (line[i]![0] - aLon) * kx;
+    const y = (i: number) => (line[i]![1] - aLat) * ky;
+    let end = anchor + 1;
+    for (let b = anchor + 2; b < line.length; b += 1) {
+      const bx = x(b);
+      const by = y(b);
+      const length2 = bx * bx + by * by;
+      if (length2 === 0 || length2 > maxLength * maxLength) break;
+      let fits = true;
+      for (let i = anchor + 1; i < b && fits; i += 1) {
+        const t = (x(i) * bx + y(i) * by) / length2;
+        const off = Math.abs(x(i) * by - y(i) * bx) / Math.sqrt(length2);
+        fits = t >= 0 && t <= 1 && off <= tolerance;
+      }
+      if (!fits) break;
+      end = b;
+    }
+    kept.push(line[end]!);
+    anchor = end;
+  }
+  return kept;
 }
 
 function densify(line: readonly (readonly [number, number])[]): {
@@ -147,6 +187,12 @@ function buildGrid(lon: Float64Array, lat: Float64Array, ky: number): SegmentGri
     }
   }
   offsets.push(sorted.length);
+  for (let k = 0; k + 1 < offsets.length; k += 1) {
+    assert(
+      offsets[k + 1]! - offsets[k]! <= CORRIDOR_POLICY.maxSegmentsPerCell,
+      'line too dense (segments per grid cell)',
+    );
+  }
   return {
     minLon,
     minLat,
@@ -176,7 +222,8 @@ export function gridCandidates(
   const grid = corridor.grid;
   const rLat = radiusM / corridor.ky;
   const farLat = Math.min(89.9, Math.max(Math.abs(pointLat - rLat), Math.abs(pointLat + rLat)));
-  const rLon = radiusM / localProjection(farLat).kx;
+  // без объекта на запрос: kx = ky · cos(широты) (как `localProjection`)
+  const rLon = radiusM / (corridor.ky * Math.cos((farLat * Math.PI) / 180));
   const c0 = Math.max(0, Math.floor((pointLon - rLon - grid.minLon) / grid.cellLon));
   const c1 = Math.min(grid.columns - 1, Math.floor((pointLon + rLon - grid.minLon) / grid.cellLon));
   const r0 = Math.max(0, Math.floor((pointLat - rLat - grid.minLat) / grid.cellLat));

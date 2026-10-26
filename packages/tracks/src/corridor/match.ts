@@ -32,6 +32,7 @@ interface Scan {
   gapCells: number;
   directionNeg: number;
   directionAbs: number;
+  /** неокруглённые метры: пороги A6 сравниваются по ним, в результат — целые */
   distanceM: number;
   offCorridorM: number;
   maxExcursionM: number;
@@ -59,12 +60,28 @@ export function matchCorridor(
   const engine = new Engine(corridor, track);
   const touchedCorridor = track.inside.some((flag) => flag === 1);
   const starts = engine.startCandidates();
+  const result = (
+    verdict: CorridorMatch['verdict'],
+    reasons: CorridorRejection[],
+    segment: CorridorSegment | null,
+  ): CorridorMatch => ({
+    engineVersion: CORRIDOR_ENGINE_VERSION,
+    verdict,
+    reasons,
+    segment,
+    touchedCorridor,
+    candidates: starts.length,
+    diagnostics: {
+      corridorLengthM: Math.round(corridor.lengthM),
+      declaredDistanceM: Math.round(corridor.declaredDistanceM),
+    },
+  });
 
   if (starts.length === 0) {
     const reason: CorridorRejection = engine.wholeTrackWrongDirection()
       ? 'wrong_direction'
       : 'no_start';
-    return result('rejected', [reason], null, touchedCorridor, 0);
+    return result('rejected', [reason], null);
   }
 
   let bestCounted: CorridorSegment | null = null;
@@ -82,32 +99,8 @@ export function matchCorridor(
       bestRejected = evaluated;
     }
   }
-  if (bestCounted !== null)
-    return result('counted', [], bestCounted, touchedCorridor, starts.length);
-  return result(
-    'rejected',
-    bestRejected!.reasons,
-    bestRejected!.segment,
-    touchedCorridor,
-    starts.length,
-  );
-}
-
-function result(
-  verdict: CorridorMatch['verdict'],
-  reasons: CorridorRejection[],
-  segment: CorridorSegment | null,
-  touchedCorridor: boolean,
-  candidates: number,
-): CorridorMatch {
-  return {
-    engineVersion: CORRIDOR_ENGINE_VERSION,
-    verdict,
-    reasons,
-    segment,
-    touchedCorridor,
-    candidates,
-  };
+  if (bestCounted !== null) return result('counted', [], bestCounted);
+  return result('rejected', bestRejected!.reasons, bestRejected!.segment);
 }
 
 class Engine {
@@ -126,6 +119,8 @@ class Engine {
   private wholeTrackWrong: boolean | undefined;
   private readonly corridor: PreparedCorridor;
   private readonly track: ProjectedTrack;
+  /** шаг дольше — аномальный (удалённые точки): превышение Δs над хордой — в сход */
+  private readonly anomalousStepMs: number;
 
   // без параметров-свойств: вход `parse` грузится Node со стиранием типов (только стираемый синтаксис)
   constructor(corridor: PreparedCorridor, track: ProjectedTrack) {
@@ -153,6 +148,14 @@ class Engine {
       this.inStart[k] = this.gateX[k]! ** 2 + this.gateY[k]! ** 2 <= r2 ? 1 : 0;
       this.inFinish[k] = this.finishX[k]! ** 2 + this.finishY[k]! ** 2 <= r2 ? 1 : 0;
     }
+    const intervals = new Float64Array(Math.max(0, n - 1));
+    for (let k = 0; k + 1 < n; k += 1) intervals[k] = track.time[k + 1]! - track.time[k]!;
+    intervals.sort();
+    const median = intervals.length > 0 ? intervals[intervals.length >> 1]! : 0;
+    this.anomalousStepMs = Math.max(
+      CORRIDOR_POLICY.anomalousStepFactor * median,
+      CORRIDOR_POLICY.anomalousStepMinS * 1000,
+    );
   }
 
   /** Выходы из ворот старта вперёд по маршруту; подряд в пределах 60 с — последний; не больше 20. */
@@ -160,10 +163,8 @@ class Engine {
     const { track } = this;
     const exits: Crossing[] = [];
     for (let k = 0; k + 1 < track.count; k += 1) {
-      if (this.inStart[k + 1] === 1) continue;
-      if (this.inStart[k] !== 1 && !this.passesThrough(k, this.gateX, this.gateY)) continue;
-      if (track.s[k + 1]! < track.s[k]!) continue;
-      const crossing = this.crossing(k, this.gateX, this.gateY, 'exit');
+      const crossing = this.startExit(k);
+      if (crossing === null) continue;
       const previous = exits[exits.length - 1];
       if (
         previous !== undefined &&
@@ -238,9 +239,10 @@ class Engine {
     ) {
       reasons.push('gps_gap');
     }
+    const tolerance = policy.thresholdToleranceM;
     if (
-      segment.offCorridorShare > policy.maxOffCorridorShare ||
-      segment.maxExcursionM > policy.maxExcursionM
+      scan.offCorridorM > policy.maxOffCorridorShare * scan.distanceM + tolerance ||
+      scan.maxExcursionM > policy.maxExcursionM + tolerance
     ) {
       reasons.push('off_corridor');
     }
@@ -293,11 +295,15 @@ class Engine {
     for (let k = start.index + 1; k <= lastIndex; k += 1) {
       this.cover(k);
       this.coverStep(k - 1, k - 1 === start.index);
-      const entering =
-        this.inFinish[k - 1] !== 1 &&
-        (this.inFinish[k] === 1 || this.passesThrough(k - 1, this.finishX, this.finishY));
-      let entry: Crossing | null = null;
-      if (entering) entry = this.crossing(k - 1, this.finishX, this.finishY, 'entry');
+      // вход в ворота финиша — строго после выхода из ворот старта
+      let entry = this.finishEntry(k - 1);
+      if (
+        entry !== null &&
+        (entry.timeMs <= start.timeMs || (k - 1 === start.index && entry.u <= start.u))
+      ) {
+        entry = null;
+      }
+      const entering = entry !== null;
       const isFinish =
         entering &&
         findFinish &&
@@ -312,14 +318,16 @@ class Engine {
       const fromInside = k - 1 === start.index || track.inside[k - 1] === 1;
       const toInside = isFinish || partialEnd || track.inside[k] === 1;
       const outside = (fromInside ? 0 : 1) + (toInside ? 0 : 1);
-      if (outside === 0) {
-        excursion = 0;
-      } else {
-        const off = outside === 2 ? length : length / 2;
+      // выход — подряд идущие вклады; точка внутри коридора его завершает (входящая половина шага — в нём)
+      let off = outside === 2 ? length : outside === 1 ? length / 2 : 0;
+      // аномально долгий шаг «внутри → внутри»: путь по маршруту длиннее хорды — срезка без точек
+      if (outside === 0) off = this.hiddenExcursion(k - 1) * Math.max(0, to - from);
+      if (off > 0) {
         offCorridorM += off;
-        excursion += off;
+        excursion = fromInside ? off : excursion + off;
         maxExcursionM = Math.max(maxExcursionM, excursion);
       }
+      if (toInside) excursion = 0;
 
       if (isFinish) this.coverTail();
       if (isFinish) {
@@ -347,8 +355,77 @@ class Engine {
     };
   }
 
-  /** Обе точки шага [k, k + 1] вне ворот, а хорда проходит сквозь круг (редкая запись перескочила ворота). */
+  /**
+   * Выход из ворот старта вперёд по маршруту на шаге [k, k + 1]: точка в круге → точка вне круга, или хорда сквозь
+   * круг (шаг ≤ gapMaxM), или — длинный шаг по маршруту (редкая запись, поворот у ворот) — `s` проходит отметку
+   * выхода (R от начала, у петли — от начала круга).
+   */
+  private startExit(k: number): Crossing | null {
+    const { track } = this;
+    if (track.s[k + 1]! < track.s[k]!) return null;
+    if (
+      this.inStart[k + 1] !== 1 &&
+      (this.inStart[k] === 1 || this.passesThrough(k, this.gateX, this.gateY))
+    ) {
+      return this.crossing(k, this.gateX, this.gateY, 'exit');
+    }
+    return this.chainageCrossing(k, this.corridor.gateRadiusM);
+  }
+
+  /** Вход в ворота финиша на шаге [k, k + 1] — то же правило, отметка — R до конца маршрута (круга). */
+  private finishEntry(k: number): Crossing | null {
+    if (this.inFinish[k] === 1) return null;
+    if (this.inFinish[k + 1] === 1 || this.passesThrough(k, this.finishX, this.finishY)) {
+      return this.crossing(k, this.finishX, this.finishY, 'entry');
+    }
+    return this.chainageCrossing(k, this.corridor.lengthM - this.corridor.gateRadiusM);
+  }
+
+  /**
+   * Длинный шаг по маршруту (`interpolable`, хорда > 2R — может обойти круг ворот): первая отметка `mark` (у петли —
+   * с целым числом кругов) внутри (s_k, s_k+1] — пересечение; момент — линейно по `s`.
+   */
+  private chainageCrossing(k: number, mark: number): Crossing | null {
+    const { track, corridor } = this;
+    if (track.step[k]! <= 2 * corridor.gateRadiusM || !this.interpolable(k)) return null;
+    const s0 = track.s[k]!;
+    const s1 = track.s[k + 1]!;
+    let position = mark;
+    if (corridor.isLoop) {
+      const L = corridor.lengthM;
+      position = mark + (Math.floor((s0 - mark) / L) + 1) * L;
+    }
+    if (!(position > s0 && position <= s1)) return null;
+    const u = (position - s0) / (s1 - s0);
+    const t0 = track.time[k]!;
+    return { index: k, u, timeMs: Math.round(t0 + u * (track.time[k + 1]! - t0)) };
+  }
+
+  /** Шаг по маршруту: обе точки внутри, `Δgeo ≤ gapMaxM`, `0 ≤ Δs ≤ 1.5·Δgeo + 50`. */
+  private interpolable(k: number, fromGate = false): boolean {
+    const { track } = this;
+    const geo = track.step[k]!;
+    const ds = track.s[k + 1]! - track.s[k]!;
+    return (
+      (fromGate || track.inside[k] === 1) &&
+      track.inside[k + 1] === 1 &&
+      geo <= CORRIDOR_POLICY.gapMaxM &&
+      ds >= 0 &&
+      ds <= 1.5 * geo + 50
+    );
+  }
+
+  /** Превышение пути по маршруту над хордой на аномально долгом шаге по маршруту, м. */
+  private hiddenExcursion(k: number): number {
+    const { track } = this;
+    if (track.time[k + 1]! - track.time[k]! <= this.anomalousStepMs) return 0;
+    if (!this.interpolable(k)) return 0;
+    return Math.max(0, track.s[k + 1]! - track.s[k]! - track.step[k]!);
+  }
+
+  /** Обе точки шага [k, k + 1] вне ворот, а хорда (≤ gapMaxM) проходит сквозь круг. */
   private passesThrough(k: number, xs: Float64Array, ys: Float64Array): boolean {
+    if (this.track.step[k]! > CORRIDOR_POLICY.gapMaxM) return false;
     const ax = xs[k]!;
     const ay = ys[k]!;
     const dx = xs[k + 1]! - ax;
@@ -420,10 +497,7 @@ class Engine {
       if (ds > 0) this.markRange(s0, s1, GAP);
       return;
     }
-    const fromInside = fromGate || track.inside[k] === 1;
-    if (fromInside && track.inside[k + 1] === 1 && ds >= 0 && ds <= 1.5 * geo + 50) {
-      this.markRange(s0, s1, COVERED);
-    }
+    if (this.interpolable(k, fromGate)) this.markRange(s0, s1, COVERED);
   }
 
   /** Первая ячейка, целиком лежащая в воротах финиша (`[L − R, L]`): её покрывает сам вход в ворота. */

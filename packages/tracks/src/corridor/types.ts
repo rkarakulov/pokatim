@@ -49,6 +49,8 @@ export interface CorridorMatch {
   touchedCorridor: boolean;
   /** число проверенных кандидатов старта */
   candidates: number;
+  /** длина линии коридора (по ней ячейки и привязка) и заявленная длина маршрута, м (целые) — для журнала */
+  diagnostics: { corridorLengthM: number; declaredDistanceM: number };
 }
 
 /**
@@ -65,13 +67,15 @@ export interface PreparedCorridor {
   readonly chainage: Float64Array;
   /** длина уплотнённой линии, м */
   readonly lengthM: number;
+  /** `CorridorGeometry.distanceM` — только диагностика (метрика коридора — `lengthM`) */
+  readonly declaredDistanceM: number;
   /** на отрезок: метров в градусе долготы (локальная проекция вокруг середины отрезка) */
   readonly segKx: Float64Array;
   /** метров в градусе широты */
   readonly ky: number;
   readonly grid: SegmentGrid;
   readonly gateRadiusM: number;
-  /** центры ворот [lon, lat] (петля — один круг) */
+  /** центры ворот [lon, lat]: старт — первая вершина, финиш — последняя (у петли с общим концом — один круг) */
   readonly startGate: readonly [number, number];
   readonly finishGate: readonly [number, number];
   readonly coverageCells: number;

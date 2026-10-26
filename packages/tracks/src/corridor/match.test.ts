@@ -19,10 +19,8 @@ const straight = (length: number) => prepareCorridor(corridorOf(line(length)));
 /** Прямой маршрут вдоль параллели, ответвление на север (меридиан) глубиной `depth` в точке `junction` и назад. */
 function spurRide(length: number, junction: number, depth: number): Xy[] {
   const along = (xs: number[]): Xy[] => xs.map((x) => [x, 0]);
-  const spur = [...steps(5, depth - 5, 10), depth, ...steps(depth - 5, 5, -10)].map((y): Xy => [
-    junction,
-    y,
-  ]);
+  const up = steps(5, depth - 1, 10);
+  const spur = [...up, depth, ...[...up].reverse()].map((y): Xy => [junction, y]);
   return [...along(steps(-95, junction, 10)), ...spur, ...along(steps(junction, length + 195, 10))];
 }
 
@@ -125,6 +123,11 @@ describe('matchCorridor', () => {
     const longer = matchCorridor(track(spurRide(30_000, 10_005, 310)), straight(30_000), WIDE);
     expect(longer.reasons).toEqual(['off_corridor']);
     expect(longer.segment!.maxExcursionM).toBe(520);
+
+    // чуть больше порога — уже сход: A6 сравнивается по неокруглённым метрам (допуск — 1 см квантования)
+    const above = matchCorridor(track(spurRide(24_500, 10_005, 300.2)), straight(24_500), WIDE);
+    expect(above.reasons).toEqual(['off_corridor']);
+    expect(above.segment!.maxExcursionM).toBe(500);
 
     const share = matchCorridor(track(spurRide(24_400, 10_005, 300)), straight(24_400), WIDE);
     expect(share.reasons).toEqual(['off_corridor']);

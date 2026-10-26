@@ -46,7 +46,8 @@ describe('prepareCorridor', () => {
     expect(corridor.chainage[corridor.chainage.length - 1]).toBe(corridor.lengthM);
   });
 
-  it('ворота — max(widthM, 30 м), петля — один круг; ячейки 250 м', () => {
+  it('ворота — max(widthM, 30 м) вокруг концов линии; ячейки 250 м; distanceM — диагностика', () => {
+    expect(prepareCorridor(geometry(line, { distanceM: 5200 })).declaredDistanceM).toBe(5200);
     expect(corridor.gateRadiusM).toBe(50);
     expect(corridor.startGate).toEqual([line[0]![0], line[0]![1]]);
     expect(corridor.finishGate).toEqual([line[2]![0], line[2]![1]]);
@@ -79,6 +80,22 @@ describe('prepareCorridor', () => {
     expect(gridCandidates(corridor, farLon, farLat, 150, out, stamp, 2)).toBe(0);
   });
 
+  it('прореживание: частые вершины прямой схлопываются, разворот по той же дороге — нет', () => {
+    const dense = Array.from({ length: 10_001 }, (_, i) => at(i, i % 2 === 0 ? 0 : 0.4));
+    const straight = prepareCorridor(geometry(dense));
+    expect(straight.lon.length).toBeLessThan(450);
+    expect(straight.lengthM).toBeCloseTo(10_000, -1);
+
+    // 0 → 5 км → назад до 3 км → 10 км: обратный ход 2 км сохраняется (длина 14 км)
+    const xs = [
+      ...Array.from({ length: 5001 }, (_, i) => i),
+      ...Array.from({ length: 2000 }, (_, i) => 4999 - i),
+      ...Array.from({ length: 7001 }, (_, i) => 3000 + i),
+    ];
+    const back = prepareCorridor(geometry(xs.map((x) => at(x, 0))));
+    expect(back.lengthM).toBeCloseTo(14_000, -1);
+  });
+
   it('инварианты входа — исключение программиста', () => {
     expect(() => prepareCorridor(geometry(line, { widthM: 10 }))).toThrow(/widthM/);
     expect(() => prepareCorridor(geometry(line, { widthM: 250 }))).toThrow(/widthM/);
@@ -86,7 +103,14 @@ describe('prepareCorridor', () => {
     expect(() => prepareCorridor(geometry([at(0, 0), at(0, 0)], { distanceM: 1 }))).toThrow(
       /distinct/,
     );
-    expect(() => prepareCorridor(geometry(line, { distanceM: 5200 }))).toThrow(/distanceM/);
+    expect(() =>
+      prepareCorridor(
+        geometry([
+          [27.559, 53.9],
+          [27.5595, 53.9],
+        ]),
+      ),
+    ).toThrow(/gates overlap/);
     expect(() => prepareCorridor(geometry([at(0, 0), [200, 0]], { distanceM: 1 }))).toThrow(
       /coordinate/,
     );

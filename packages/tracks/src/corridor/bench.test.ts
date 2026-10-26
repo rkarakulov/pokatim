@@ -116,4 +116,33 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     expect(outcome.result.verdict).toBe('counted');
     process.stdout.write(`analyzeAttempt 200k в Worker: ${Math.round(outcome.ms)} мс\n`);
   }, 30_000);
+
+  it('плотный коридор на пределе (≤ 64 отрезков в ячейке): 200 000 точек ≤ 3 с', () => {
+    // «змейка» 66 × 1 км с шагом 35 м: в ячейке 200 м — до 64 отрезков (больше коридор отвергает)
+    const corners: Xy[] = [[0, 0]];
+    for (let i = 0; i < 66; i += 1) {
+      const [x, y] = corners[corners.length - 1]!;
+      corners.push(
+        [x + (i % 2 === 0 ? 1000 : -1000), y],
+        [x + (i % 2 === 0 ? 1000 : -1000), y + 35],
+      );
+    }
+    const corridor = prepareCorridor(corridorOf(corners, { widthM: 20 }));
+    let densest = 0;
+    for (let k = 0; k + 1 < corridor.grid.offsets.length; k += 1) {
+      densest = Math.max(densest, corridor.grid.offsets[k + 1]! - corridor.grid.offsets[k]!);
+    }
+    expect(densest).toBeGreaterThan(55);
+    const total = polylineLength(corners);
+    const points = Array.from({ length: POINTS }, (_, k): ParsedPoint => {
+      const [lon, lat] = at(pointAt(corners, (k * total) / POINTS));
+      return { lon, lat, time: new Date(T0 + k * INTERVAL_MS) };
+    });
+    const startedAt = performance.now();
+    const match = matchCorridor(points, corridor, window);
+    const elapsedMs = performance.now() - startedAt;
+    expect(match.verdict).toBe('counted');
+    expect(elapsedMs).toBeLessThanOrEqual(TIME_LIMIT_MS);
+    process.stdout.write(`плотный коридор (${densest} в ячейке): ${Math.round(elapsedMs)} мс\n`);
+  }, 30_000);
 });

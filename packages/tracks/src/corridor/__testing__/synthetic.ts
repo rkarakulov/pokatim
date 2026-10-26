@@ -81,3 +81,48 @@ export function steps(from: number, to: number, step: number): number[] {
   for (let v = from; step > 0 ? v <= to : v >= to; v += step) result.push(v);
   return result;
 }
+
+/** mulberry32 — детерминированный псевдослучайный поток [0, 1). */
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
+
+/** Проезд 1 Гц с коррелированным шумом GPS (AR(1), ρ = 0.95, стационарное σ). */
+export function noisyRide(
+  path: readonly Xy[],
+  sigma: number,
+  seed: number,
+  speed = 8,
+): ParsedPoint[] {
+  const random = mulberry32(seed);
+  const gauss = () =>
+    Math.sqrt(-2 * Math.log(Math.max(random(), 1e-12))) * Math.cos(2 * Math.PI * random());
+  const rho = 0.95;
+  const innovation = sigma * Math.sqrt(1 - rho * rho);
+  let nx = gauss() * sigma;
+  let ny = gauss() * sigma;
+  const positions: Xy[] = [];
+  const total = polylineLength(path);
+  for (let k = 0; k * speed <= total; k += 1) {
+    const [x, y] = pointAt(path, k * speed);
+    nx = rho * nx + innovation * gauss();
+    ny = rho * ny + innovation * gauss();
+    positions.push([x + nx, y + ny]);
+  }
+  return track(positions);
+}
+
+/** Точки по позициям с явными моментами (секунды от T0). */
+export function timed(positions: readonly Xy[], seconds: readonly number[]): ParsedPoint[] {
+  return positions.map((position, k) => {
+    const [lon, lat] = at(position);
+    return { lon, lat, time: new Date(T0 + seconds[k]! * 1000) };
+  });
+}

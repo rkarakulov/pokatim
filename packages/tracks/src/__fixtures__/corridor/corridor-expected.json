@@ -104,14 +104,15 @@
         "reasons": [],
         "touchedCorridor": true,
         "elapsedSec": 790,
-        "toleranceSec": 3,
+        "toleranceSec": 8,
         "startedAt": "2026-06-14T06:00:14.500Z",
         "finishedAt": "2026-06-14T06:13:24.500Z",
-        "momentToleranceMs": 3000,
+        "momentToleranceMs": 8000,
         "coverage": 1,
-        "offCorridorShare": 0,
-        "maxExcursionM": 0,
-        "noisePoints": 5
+        "offCorridorShare": 0.00655241935483871,
+        "maxExcursionM": 42,
+        "noisePoints": 5,
+        "offShareTolerance": 0.003
       }
     },
     "sparse-30s.gpx": {
