@@ -251,6 +251,23 @@ describe('«Изменить райд» (AC4)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/rides/${ID}`));
   });
 
+  it('очистка заполненных необязательных полей — в запросе null (подпись, описание, лимит)', async () => {
+    await open(`/rides/edit/${ID}`);
+    await screen.findByDisplayValue('Кофе-райд на море');
+    await type('Как вас подписать', '');
+    await type('Описание', '');
+    await type('Максимум участников (необязательно)', '');
+    await fireEvent.press(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(updateRide).toHaveBeenCalledWith(liveSession.accessToken, ID, {
+        organizerName: null,
+        description: null,
+        limit: null,
+        version: 2,
+      }),
+    );
+  });
+
   it('лимит ниже идущих — ошибка сервера под полем', async () => {
     updateRide.mockRejectedValue(
       new ApiHttpError(400, {

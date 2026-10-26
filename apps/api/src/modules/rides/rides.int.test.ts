@@ -159,6 +159,32 @@ describe('правка', () => {
     });
   });
 
+  it('очистка необязательных полей: null (и пустая строка) — поле очищается, а не пропускается', async () => {
+    const ride = await createRide(h, organizer, {
+      organizerName: 'Катя Л.',
+      description: 'Едем спокойно',
+      limit: 12,
+    });
+    const res = await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, {
+      version: 0,
+      organizerName: null,
+      description: '  ',
+      limit: null,
+    });
+    expect(res.status).toBe(200);
+    expect(RideView.parse(res.body).ride).toMatchObject({
+      organizerName: null,
+      description: null,
+      limit: null,
+      version: 1,
+    });
+    expect(await ridesDb(h).findOne({ _id: ride.id })).toMatchObject({
+      organizerName: null,
+      description: null,
+      limit: null,
+    });
+  });
+
   it('устаревшая version — 409 CONFLICT; чужой и неизвестный — 404', async () => {
     const ride = await createRide(h, organizer);
     await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, { version: 0, title: 'Раз' });

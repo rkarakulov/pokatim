@@ -162,6 +162,10 @@ describe('UpdateRideRequest, CancelRideRequest', () => {
       title: 'Новый райд',
     });
     expect(UpdateRideRequest.safeParse({ title: 'Новый райд' }).success).toBe(false);
+    // очистка необязательных полей — null или пустая строка → null (не пропуск поля)
+    expect(
+      UpdateRideRequest.parse({ version: 1, organizerName: '', description: null, limit: null }),
+    ).toEqual({ version: 1, organizerName: null, description: null, limit: null });
     expect(UpdateRideRequest.safeParse({ version: 0, paceMinKmh: 40 }).success).toBe(true);
     expect(
       codesOf(UpdateRideRequest.safeParse({ version: 0, paceMinKmh: 40, paceMaxKmh: 30 })),
