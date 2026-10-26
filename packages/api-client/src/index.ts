@@ -8,6 +8,7 @@ import {
   CurrentSeasonResponse,
   RaceDetail,
   RacePage,
+  RaceRouteMap,
   type RaceListQuery,
   SeasonCard,
   SeasonList,
@@ -245,6 +246,9 @@ export function createApiClient({
       getPublic(`/v1/races${queryString(params)}`, RacePage),
     /** Опубликованная или отменённая гонка; черновик и неизвестная — 404. */
     getRace: (id: string) => getPublic(`/v1/races/${encodeURIComponent(id)}`, RaceDetail),
+    /** Линия показа и коридор гонки для карты (ADR-0014); без коридора, черновик, маршрут не готов — 404. */
+    getRaceRoute: (id: string) =>
+      getPublic(`/v1/races/${encodeURIComponent(id)}/route`, RaceRouteMap),
     /** Сезон, в который попадает «сейчас», или `null`. */
     getCurrentSeason: () => getPublic('/v1/seasons/current', CurrentSeasonResponse),
     /** Все сезоны, новые сверху. */
