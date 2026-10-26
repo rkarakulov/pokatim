@@ -80,6 +80,8 @@ export interface AuditDetailsDoc {
   attemptId?: string;
   entryId?: string;
   revision?: number;
+  /** Модерация райдов (05b): число жалоб, закрытых действием. */
+  reportCount?: number;
 }
 
 /**

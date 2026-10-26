@@ -37,8 +37,8 @@ const codesOf = (result: { success: boolean; error?: { issues: { message: string
 
 describe('справочники райдов (только в конец)', () => {
   it('порядок значений зафиксирован', () => {
-    expect(RIDE_STATUSES).toEqual(['published', 'cancelled']);
-    expect(RIDE_PHASES).toEqual(['upcoming', 'past', 'cancelled']);
+    expect(RIDE_STATUSES).toEqual(['published', 'cancelled', 'hidden']);
+    expect(RIDE_PHASES).toEqual(['upcoming', 'past', 'cancelled', 'hidden']);
     expect(RIDE_CANCEL_REASONS).toEqual([
       'weather',
       'organizer_unavailable',
@@ -247,7 +247,7 @@ describe('ответы (tolerantEnum, без служебных полей)', ()
   it('незнакомые фаза, город, причина, роль — unknown', () => {
     const card = RideCard.parse({
       ...summary,
-      phase: 'hidden',
+      phase: 'archived',
       city: 'atlantis',
       cancelReason: 'aliens',
       viewer: { ...viewer, role: 'moderator' },
@@ -270,6 +270,17 @@ describe('ответы (tolerantEnum, без служебных полей)', ()
     expect(asOrganizer.ride).toHaveProperty('version', 3);
     const asGuest = RideView.parse({ ride: { ...summary, description: null }, viewer });
     expect(asGuest.ride).not.toHaveProperty('version');
+  });
+
+  it('05b: фаза hidden разбирается; зритель без reported/canReport (старый ответ) — false', () => {
+    const card = RideCard.parse({ ...summary, phase: 'hidden', viewer });
+    expect(card.phase).toBe('hidden');
+    expect(card.viewer).toMatchObject({ reported: false, canReport: false });
+    const reported = RideView.parse({
+      ride: { ...summary, description: null },
+      viewer: { ...viewer, reported: true, canReport: false },
+    });
+    expect(reported.viewer).toMatchObject({ reported: true, canReport: false });
   });
 
   it('города: незнакомые коды отбрасываются', () => {

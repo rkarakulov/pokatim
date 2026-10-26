@@ -286,6 +286,25 @@ test('публичная карточка неизвестного кофе-ра
   await expect(page).toHaveURL(`${BASE_URL}/rides/${UNKNOWN_RIDE_ID}`);
 });
 
+test('жалоба на райд /rides/report/<id> без сессии (05b): HTML без формы и OG, после гидрации — гард входа', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get(`/rides/report/${UNKNOWN_RIDE_ID}`);
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  // экран не публичный: без формы жалобы и без OG
+  expect(html).not.toContain('Причина жалобы');
+  expect(html).not.toContain('og:title');
+
+  await page.goto(`/rides/report/${UNKNOWN_RIDE_ID}`);
+  if (WITH_API) {
+    await expect(page).toHaveURL(`${BASE_URL}/register`);
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+});
+
 test('витрина /ui-kit: в production — Главная гостя', async ({ page }) => {
   await page.goto('/ui-kit');
   await expectGuestHome(page);

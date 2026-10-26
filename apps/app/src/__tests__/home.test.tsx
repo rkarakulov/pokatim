@@ -77,7 +77,14 @@ const ride: RideCard = {
   phase: 'upcoming',
   cancelReason: null,
   rescheduledAt: null,
-  viewer: { role: 'none', canJoin: true, canLeave: false, canManage: false },
+  viewer: {
+    role: 'none',
+    canJoin: true,
+    canLeave: false,
+    canManage: false,
+    reported: false,
+    canReport: false,
+  },
 };
 const ridePage = (...items: RideCard[]): RidePage => ({ items, nextCursor: null });
 
@@ -396,7 +403,14 @@ describe('Главная: раздел «Кофе-райды» (блок 05, S6)
   it('«Я иду» с Главной — запрос с Bearer, после ответа раздел перезапрошен', async () => {
     joinRide.mockResolvedValue({
       ride: { ...ride, goingCount: 6, description: null },
-      viewer: { role: 'participant', canJoin: false, canLeave: true, canManage: false },
+      viewer: {
+        role: 'participant',
+        canJoin: false,
+        canLeave: true,
+        canManage: false,
+        reported: false,
+        canReport: false,
+      },
     });
     await openHome();
     await fireEvent.press(await screen.findByRole('button', { name: 'Я иду' }));

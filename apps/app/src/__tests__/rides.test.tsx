@@ -23,7 +23,14 @@ const joinRide = jest.mocked(api.joinRide);
 /** «Сейчас»: 1 октября 2026, 15:00 по Минску. */
 const NOW = new Date('2026-10-01T12:00:00Z');
 
-const none = { role: 'none', canJoin: true, canLeave: false, canManage: false } as const;
+const none = {
+  role: 'none',
+  canJoin: true,
+  canLeave: false,
+  canManage: false,
+  reported: false,
+  canReport: false,
+} as const;
 let seq = 0;
 const ride = (overrides: Partial<RideCard> = {}): RideCard => ({
   id: `0190a6f4-0000-7000-8000-${String((seq += 1)).padStart(12, '0')}`,
@@ -60,25 +67,53 @@ const hero = ride({
 });
 const going = ride({
   title: 'Участник',
-  viewer: { role: 'participant', canJoin: false, canLeave: true, canManage: false },
+  viewer: {
+    role: 'participant',
+    canJoin: false,
+    canLeave: true,
+    canManage: false,
+    reported: false,
+    canReport: false,
+  },
 });
 const own = ride({
   title: 'Свой',
   goingCount: 1,
-  viewer: { role: 'organizer', canJoin: false, canLeave: false, canManage: true },
+  viewer: {
+    role: 'organizer',
+    canJoin: false,
+    canLeave: false,
+    canManage: true,
+    reported: false,
+    canReport: false,
+  },
 });
 const full = ride({
   title: 'Полный',
   goingCount: 12,
   full: true,
-  viewer: { role: 'none', canJoin: false, canLeave: false, canManage: false },
+  viewer: {
+    role: 'none',
+    canJoin: false,
+    canLeave: false,
+    canManage: false,
+    reported: false,
+    canReport: false,
+  },
 });
 const cancelled = ride({
   title: 'Отменённый',
   phase: 'cancelled',
   cancelReason: 'weather',
   startsAt: '2026-10-05T07:00:00Z',
-  viewer: { role: 'participant', canJoin: false, canLeave: false, canManage: false },
+  viewer: {
+    role: 'participant',
+    canJoin: false,
+    canLeave: false,
+    canManage: false,
+    reported: false,
+    canReport: false,
+  },
 });
 const open = ride({
   title: 'Свободный',
@@ -167,7 +202,14 @@ describe('вкладка «Райды» (S3)', () => {
 
     joinRide.mockResolvedValueOnce({
       ride: { ...open, goingCount: 8, description: null },
-      viewer: { role: 'participant', canJoin: false, canLeave: true, canManage: false },
+      viewer: {
+        role: 'participant',
+        canJoin: false,
+        canLeave: true,
+        canManage: false,
+        reported: false,
+        canReport: false,
+      },
     });
     await fireEvent.press(within(rowOf('Свободный')).getByRole('button', { name: 'Я иду' }));
     await waitFor(() => expect(listRides).toHaveBeenCalledTimes(2));
@@ -318,7 +360,14 @@ describe('вкладка «Райды» (S3)', () => {
           title: 'Новое',
           phase: 'unknown',
           city: 'unknown',
-          viewer: { role: 'unknown', canJoin: false, canLeave: false, canManage: false },
+          viewer: {
+            role: 'unknown',
+            canJoin: false,
+            canLeave: false,
+            canManage: false,
+            reported: false,
+            canReport: false,
+          },
         }),
       ]),
     );

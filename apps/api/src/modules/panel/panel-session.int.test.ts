@@ -103,6 +103,7 @@ describe('POST /v1/admin/session/sign-in (AC2)', () => {
           'calendar.manage',
           'results.manage',
           'results.revise',
+          'rides.moderate',
         ],
       },
     });

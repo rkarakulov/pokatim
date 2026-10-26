@@ -12,6 +12,9 @@ import type { ReactNode } from 'react';
 
 import { AuditScreen } from './features/audit/AuditScreen';
 import { CalendarScreen } from './features/calendar/CalendarScreen';
+import { validateRidesModerationSearch } from './features/rides-moderation/moderation-format';
+import { RideModerationScreen } from './features/rides-moderation/RideModerationScreen';
+import { RidesModerationScreen } from './features/rides-moderation/RidesModerationScreen';
 import { MembersScreen } from './features/members/MembersScreen';
 import { NoAccessScreen } from './features/no-access/NoAccessScreen';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
@@ -188,6 +191,37 @@ const calendarRoute = createRoute({
   ),
 });
 
+const ridesModerationRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'rides-moderation',
+  validateSearch: validateRidesModerationSearch,
+  component: function RidesModerationRoute() {
+    const search = ridesModerationRoute.useSearch();
+    const navigate = ridesModerationRoute.useNavigate();
+    return (
+      <RequirePermission permission="rides.moderate">
+        <RidesModerationScreen
+          search={search}
+          onSearch={(next) => void navigate({ search: next })}
+        />
+      </RequirePermission>
+    );
+  },
+});
+
+const rideModerationRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'rides-moderation/$rideId',
+  component: function RideModerationRoute() {
+    const { rideId } = rideModerationRoute.useParams();
+    return (
+      <RequirePermission permission="rides.moderate">
+        <RideModerationScreen rideId={rideId} />
+      </RequirePermission>
+    );
+  },
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '$',
@@ -206,6 +240,8 @@ const routeTree = rootRoute.addChildren([
     calendarRoute,
     membersRoute,
     auditRoute,
+    ridesModerationRoute,
+    rideModerationRoute,
     notFoundRoute,
   ]),
 ]);

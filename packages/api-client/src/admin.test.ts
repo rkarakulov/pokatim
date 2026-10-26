@@ -342,3 +342,56 @@ describe('createAdminApiClient: протокол гонки (race-results-05)', 
     });
   });
 });
+
+describe('createAdminApiClient: модерация райдов (05b)', () => {
+  const AT = '2027-06-14T07:00:00.000Z';
+  const detail = {
+    id: USER_ID,
+    title: 'Кофе-райд',
+    organizerName: null,
+    startsAt: AT,
+    city: 'minsk',
+    place: 'Парк',
+    distanceKm: 40,
+    paceMinKmh: 22,
+    paceMaxKmh: 25,
+    limit: null,
+    goingCount: 3,
+    description: null,
+    status: 'published',
+    phase: 'upcoming',
+    cancelReason: null,
+    rescheduledAt: null,
+    hiddenAt: null,
+    openReportCount: 1,
+    lastReportAt: AT,
+    version: 0,
+    reports: [],
+  };
+
+  it('очередь, карточка и действия — пути, тела, cookie', async () => {
+    const list = admin(200, { items: [], nextCursor: null });
+    await list.api.listModerationRides({ state: 'hidden', cursor: 'c' });
+    expect(list.calls[0]).toMatchObject({
+      url: '/v1/admin/rides?state=hidden&cursor=c',
+      method: 'GET',
+      credentials: 'same-origin',
+    });
+
+    const { calls, api } = admin(200, detail);
+    await api.getModerationRide(USER_ID);
+    await api.hideRide(USER_ID, { version: 0, reason: 'Спам' });
+    await api.restoreRide(USER_ID, { version: 1, reason: 'Ошибка' });
+    await api.dismissRideReports(USER_ID, { version: 0, reason: 'Норма', lastReportAt: AT });
+    expect(calls.map(({ url, method, body }) => [method, url, body])).toEqual([
+      ['GET', `/v1/admin/rides/${USER_ID}`, undefined],
+      ['POST', `/v1/admin/rides/${USER_ID}/hide`, { version: 0, reason: 'Спам' }],
+      ['POST', `/v1/admin/rides/${USER_ID}/restore`, { version: 1, reason: 'Ошибка' }],
+      [
+        'POST',
+        `/v1/admin/rides/${USER_ID}/dismiss-reports`,
+        { version: 0, reason: 'Норма', lastReportAt: AT },
+      ],
+    ]);
+  });
+});

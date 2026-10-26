@@ -43,6 +43,12 @@ import {
   type ResendVerificationRequest,
   ResendVerificationResponse,
   type RevokeRoleRequest,
+  type DismissRideReportsRequest,
+  type HideRideRequest,
+  ModerationRideDetail,
+  ModerationRidePage,
+  type ModerationRideQuery,
+  type RestoreRideRequest,
 } from '@pokatim/contracts';
 import { createHttpClient } from '@rkarakulov/api-client-core';
 import { z } from 'zod';
@@ -64,6 +70,8 @@ export type PanelRaceListParams = Partial<
 export type PanelRouteListParams = Partial<PanelRouteQuery>;
 /** Параметры списка календаря панели до схемы. */
 export type PanelCalendarListParams = Partial<PanelCalendarQuery>;
+/** Параметры очереди модерации райдов до схемы. */
+export type ModerationRideListParams = Partial<ModerationRideQuery>;
 
 /** Query-строка: пустые значения не уходят, массив — повтором ключа (`k=a&k=b`). */
 export function queryString(params: object): string {
@@ -97,6 +105,7 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
   const race = (id: string) => `/v1/admin/races/${encodeURIComponent(id)}`;
   const calendar = (id: string) => `/v1/admin/calendar/${encodeURIComponent(id)}`;
   const route = (id: string) => `/v1/admin/routes/${encodeURIComponent(id)}`;
+  const moderationRide = (id: string) => `/v1/admin/rides/${encodeURIComponent(id)}`;
 
   return {
     /** Статус API (экран «Обзор»). */
@@ -201,6 +210,17 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       post(`${calendar(id)}/unpublish`, PanelCalendarStart, body),
     republishCalendarStart: (id: string, body: RepublishCalendarStartRequest) =>
       post(`${calendar(id)}/republish`, PanelCalendarStart, body),
+
+    // --- модерация кофе-райдов (rides.moderate, 05b) ---
+    listModerationRides: (params: ModerationRideListParams = {}) =>
+      get(`/v1/admin/rides${queryString(params)}`, ModerationRidePage),
+    getModerationRide: (id: string) => get(moderationRide(id), ModerationRideDetail),
+    hideRide: (id: string, body: HideRideRequest) =>
+      post(`${moderationRide(id)}/hide`, ModerationRideDetail, body),
+    restoreRide: (id: string, body: RestoreRideRequest) =>
+      post(`${moderationRide(id)}/restore`, ModerationRideDetail, body),
+    dismissRideReports: (id: string, body: DismissRideReportsRequest) =>
+      post(`${moderationRide(id)}/dismiss-reports`, ModerationRideDetail, body),
   };
 }
 

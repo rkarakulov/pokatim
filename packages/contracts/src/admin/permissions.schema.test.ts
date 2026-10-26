@@ -16,6 +16,7 @@ describe('PanelRole и Permission', () => {
       'calendar.manage',
       'results.manage',
       'results.revise',
+      'rides.moderate',
     ]);
   });
 

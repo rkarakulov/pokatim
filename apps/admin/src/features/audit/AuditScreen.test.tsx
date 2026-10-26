@@ -118,6 +118,33 @@ describe('«Журнал действий» (AC12)', () => {
     expect(screen.getByText('Сезон 2026')).toBeTruthy();
   });
 
+  it('05b: модерация райдов — действие словами, объект-райд, число закрытых жалоб', async () => {
+    mocked.listAudit.mockResolvedValue({
+      items: [
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8063',
+          action: 'ride.hidden',
+          reason: 'Оскорбления',
+          subject: { kind: 'ride', id: signedIn.id, label: 'Кофе-райд на море' },
+          details: { reportCount: 2 },
+        },
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8064',
+          action: 'ride.restored',
+          reason: 'Ошибка',
+          subject: { kind: 'ride', id: signedIn.id, label: 'Кофе-райд на море' },
+        },
+      ],
+      nextCursor: null,
+    });
+    await renderApp('/audit');
+    expect(await screen.findByText('Скрыт кофе-райд: Жалоб: 2')).toBeTruthy();
+    expect(screen.getByRole('cell', { name: 'Возвращён кофе-райд' })).toBeTruthy();
+    expect(screen.getAllByText('Кофе-райд на море')).toHaveLength(2);
+  });
+
   it('«Показать ещё» — следующая страница по курсору сервера', async () => {
     mocked.listAudit
       .mockResolvedValueOnce({ items: [revoked, granted], nextCursor: granted.id })

@@ -42,6 +42,9 @@ function details(entry: AuditEntry): string {
   // admin-02: шаблон причины отмены; имена изменённых полей — без значений
   const cancelReason = entry.details?.cancelReason;
   if (cancelReason) return t(`domain.raceCancelReason.${cancelReason}`);
+  // 05b: модерация райдов — число закрытых действием жалоб
+  const reportCount = entry.details?.reportCount;
+  if (reportCount !== undefined) return t('admin.audit.reportCount', { count: reportCount });
   return (
     entry.details?.changedFields
       ?.map((field) => fieldLabel(entry.subject?.kind, field))

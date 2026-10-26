@@ -24,12 +24,15 @@ export const RIDES_POLICY = {
   createLimit: { limit: 10, windowSec: 24 * 3600 },
   manageLimit: { limit: 30, windowSec: 3600 },
   rsvpLimit: { limit: 60, windowSec: 3600 },
+  /** Жалобы (05b): 20 в сутки на пользователя (`[ASSUMPTION]`), ключ `rides-report:<uid>`. */
+  reportLimit: { limit: 20, windowSec: 24 * 3600 },
 } as const;
 
 type PhaseInput = Pick<RideDoc, 'status' | 'startsAt'>;
 
-/** Фаза не хранится: `cancelled` (статус) → `past` (`now ≥ startsAt`) → `upcoming`. */
+/** Фаза не хранится: `hidden` (статус) → `cancelled` (статус) → `past` (`now ≥ startsAt`) → `upcoming`. */
 export function ridePhase(ride: PhaseInput, now: Date): RidePhase {
+  if (ride.status === 'hidden') return 'hidden';
   if (ride.status === 'cancelled') return 'cancelled';
   return now.getTime() >= ride.startsAt.getTime() ? 'past' : 'upcoming';
 }
@@ -48,11 +51,14 @@ export interface RideViewerInput {
 /**
  * Права зрителя — источник для клиента (он только показывает). Записаться — будущий опубликованный райд с местами,
  * не участник; снять отметку — участник, не организатор; управлять — организатор будущего опубликованного.
+ * Пожаловаться (05b) — вошедший не-организатор, ещё не жаловался, райд не скрыт (фаза любая: текст прошедшего тоже
+ * бывает оскорбительным). Скрытый — всё `false`.
  */
 export function rideViewer(
   ride: PhaseInput & Pick<RideDoc, 'organizerUserId' | 'goingCount' | 'limit'>,
   viewer: RideViewerInput | null,
   now: Date,
+  reported = false,
 ): RideViewer {
   const upcoming = ridePhase(ride, now) === 'upcoming';
   const role =
@@ -68,7 +74,36 @@ export function rideViewer(
     canJoin: upcoming && role === 'none' && !rideFull(ride),
     canLeave: upcoming && role === 'participant',
     canManage: upcoming && role === 'organizer',
+    reported,
+    canReport: viewer !== null && role !== 'organizer' && !reported && ride.status !== 'hidden',
   };
+}
+
+/** Виден ли райд зрителю: скрытый — только организатору; гостю (`null`) — нет. */
+export function visibleTo(
+  ride: Pick<RideDoc, 'status' | 'organizerUserId'>,
+  userId: string | null,
+): boolean {
+  return ride.status !== 'hidden' || (userId !== null && ride.organizerUserId === userId);
+}
+
+export type ModerationAction = 'hide' | 'restore' | 'dismiss';
+
+/**
+ * Переходы модерации (05b): «Скрыть» — из `published`/`cancelled`; «Вернуть» — только `hidden` (в
+ * `hiddenFromStatus`); «Отклонить жалобы» — есть открытые и не `hidden`. Иначе — `RIDE_INVALID_STATE`.
+ */
+export function moderationTransition(
+  ride: Pick<RideDoc, 'status' | 'openReportCount'>,
+  action: ModerationAction,
+): 'ok' | 'RIDE_INVALID_STATE' {
+  const allowed =
+    action === 'hide'
+      ? ride.status !== 'hidden'
+      : action === 'restore'
+        ? ride.status === 'hidden'
+        : ride.status !== 'hidden' && ride.openReportCount > 0;
+  return allowed ? 'ok' : 'RIDE_INVALID_STATE';
 }
 
 /**

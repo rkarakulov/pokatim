@@ -20,12 +20,15 @@ import { LocalDate, LocalTime, UtcMinute } from '../time.ts';
  * необязательным лимитом мест. Фаза — по `CLOCK` сервера, права зрителя — `viewer` сервера (клиент только показывает).
  */
 
-/** Статусы документа (`hidden` добавит модерация 05b — в конец). */
-export const RIDE_STATUSES = ['published', 'cancelled'] as const;
+/** Статусы документа; `hidden` — скрыт модератором (05b). Только в конец. */
+export const RIDE_STATUSES = ['published', 'cancelled', 'hidden'] as const;
 export type RideStatus = (typeof RIDE_STATUSES)[number];
 
-/** Фаза для приложения: `cancelled` (статус) → `past` (с момента старта) → `upcoming`. Только в конец. */
-export const RIDE_PHASES = ['upcoming', 'past', 'cancelled'] as const;
+/**
+ * Фаза для приложения: `hidden` (статус, видит только организатор) → `cancelled` (статус) → `past` (с момента
+ * старта) → `upcoming`. Только в конец.
+ */
+export const RIDE_PHASES = ['upcoming', 'past', 'cancelled', 'hidden'] as const;
 export type RidePhase = (typeof RIDE_PHASES)[number];
 
 /** Причины отмены организатором (Q6) — без свободного текста. Только в конец. */
@@ -184,12 +187,17 @@ export const RideListQuery = z.strictObject({
 });
 export type RideListQuery = z.infer<typeof RideListQuery>;
 
-/** Права зрителя считает сервер; клиент только показывает. */
+/**
+ * Права зрителя считает сервер; клиент только показывает. `reported` — зритель уже пожаловался, `canReport` — кнопка
+ * «Пожаловаться» (05b); старый ответ без них — `false`.
+ */
 export const RideViewer = z.object({
   role: tolerantEnum(RIDE_VIEWER_ROLES),
   canJoin: z.boolean(),
   canLeave: z.boolean(),
   canManage: z.boolean(),
+  reported: z.boolean().default(false),
+  canReport: z.boolean().default(false),
 });
 export type RideViewer = z.infer<typeof RideViewer>;
 

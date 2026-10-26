@@ -91,6 +91,21 @@ describe('api-client: кофе-райды', () => {
     expect(new Set(calls.map((call) => call.authorization))).toEqual(new Set(['Bearer t']));
   });
 
+  it('reportRide — Bearer, путь и тело; ответ с reported', async () => {
+    const { calls, api } = client(200, { ...view, viewer: { ...viewer, reported: true } });
+    await expect(api.reportRide('t', ID, { reason: 'spam', comment: null })).resolves.toMatchObject(
+      { viewer: { reported: true, canReport: false } },
+    );
+    expect(calls).toEqual([
+      {
+        url: `https://api.test/v1/rides/${ID}/reports`,
+        method: 'POST',
+        authorization: 'Bearer t',
+        body: { reason: 'spam', comment: null },
+      },
+    ]);
+  });
+
   it('createRide — 201 RideView; RIDE_FULL — ApiHttpError с кодом', async () => {
     const created = client(201, { ...view, ride: { ...detail, version: 0 } });
     await expect(

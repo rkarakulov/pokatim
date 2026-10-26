@@ -50,6 +50,8 @@ describe('создание', () => {
       canJoin: false,
       canLeave: false,
       canManage: true,
+      reported: false,
+      canReport: false,
     });
     expect(view.ride).toMatchObject({
       goingCount: 1,

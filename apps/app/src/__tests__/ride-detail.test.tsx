@@ -53,6 +53,8 @@ const viewer = (role: RideViewer['role'], rights: Partial<RideViewer> = {}): Rid
   canJoin: false,
   canLeave: false,
   canManage: false,
+  reported: false,
+  canReport: false,
   ...rights,
 });
 const view = (ride: Partial<RideDetail>, who: RideViewer): RideView => ({
@@ -69,6 +71,7 @@ const signedInRoutes = {
   'rides/[id]': RideRoute,
   'rides/edit/[id]': () => null,
   'rides/cancel/[id]': () => null,
+  'rides/report/[id]': () => null,
 };
 const openSignedIn = (url = `/rides/${ID}`) =>
   renderRouter(signedInRoutes, { initialUrl: url, wrapper: createQueryWrapper() });
@@ -348,5 +351,70 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
       await fireEvent.press(screen.getByText('Повторить'));
     });
     expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
+  });
+});
+
+describe('карточка райда: жалоба и скрытый (05b, AC7)', () => {
+  it('гость — без «Пожаловаться»', async () => {
+    await renderRouter(appRoutes, { initialUrl: `/rides/${ID}` });
+    expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
+    expect(screen.queryByText('Пожаловаться')).toBeNull();
+  });
+
+  describe('вошедший', () => {
+    beforeEach(signedIn);
+
+    it('canReport — «Пожаловаться» ведёт на экран жалобы', async () => {
+      getRideForViewer.mockResolvedValue(
+        view({}, viewer('none', { canJoin: true, canReport: true })),
+      );
+      const router = await openSignedIn();
+      await fireEvent.press(await screen.findByText('Пожаловаться'));
+      expect(router.getPathname()).toBe(`/rides/report/${ID}`);
+    });
+
+    it('уже пожаловался — строка «Вы пожаловались на этот райд» вместо действия', async () => {
+      getRideForViewer.mockResolvedValue(
+        view({}, viewer('participant', { canLeave: true, reported: true })),
+      );
+      await openSignedIn();
+      expect(await screen.findByText('Вы пожаловались на этот райд')).toBeOnTheScreen();
+      expect(screen.queryByText('Пожаловаться')).toBeNull();
+    });
+
+    it('организатор (canReport false) — без «Пожаловаться»', async () => {
+      getRideForViewer.mockResolvedValue({
+        ride: { ...detail, version: 0 },
+        viewer: viewer('organizer', { canManage: true }),
+      });
+      await openSignedIn();
+      expect(await screen.findByText('Кофе-райд · вы организатор')).toBeOnTheScreen();
+      expect(screen.queryByText('Пожаловаться')).toBeNull();
+    });
+
+    it('скрытый: публично 404, организатору — me с баннером, без действий', async () => {
+      getRide.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+      getRideForViewer.mockResolvedValue({
+        ride: { ...detail, phase: 'hidden', version: 3 },
+        viewer: viewer('organizer'),
+      });
+      await openSignedIn();
+      expect(
+        await screen.findByText('Райд скрыт модератором. Другие райдеры его не видят'),
+      ).toBeOnTheScreen();
+      expect(screen.getByLabelText(heroLabel)).toBeOnTheScreen();
+      for (const action of ['Изменить', 'Отменить райд', 'Поделиться', 'Я иду', 'Пожаловаться']) {
+        expect(screen.queryByText(action)).toBeNull();
+      }
+    });
+
+    it('скрытый не организатору — «Райд не найден»', async () => {
+      getRide.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+      getRideForViewer.mockRejectedValue(
+        new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }),
+      );
+      await openSignedIn();
+      expect(await screen.findByText('Райд не найден')).toBeOnTheScreen();
+    });
   });
 });

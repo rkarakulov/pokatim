@@ -23,6 +23,8 @@ export const PERMISSIONS = [
   // race-results-05: протокол гонки — исключение треков и публикация; экстренный пересчёт после публикации
   'results.manage',
   'results.revise',
+  // 05b: модерация кофе-райдов по жалобам
+  'rides.moderate',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
 export type Permission = z.infer<typeof Permission>;

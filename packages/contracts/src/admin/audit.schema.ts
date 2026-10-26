@@ -33,6 +33,10 @@ export const AUDIT_ACTIONS = [
   'results.result_disqualified',
   'results.disqualification_revoked',
   'results.recalculation_applied',
+  // 05b: модерация кофе-райдов
+  'ride.hidden',
+  'ride.restored',
+  'ride.reports_dismissed',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -52,7 +56,7 @@ export const AuditQuery = z.strictObject({
 export type AuditQuery = z.infer<typeof AuditQuery>;
 
 /** Вид объекта записи журнала (доменные модули панели); только в конец. */
-export const AUDIT_SUBJECT_KINDS = ['season', 'race', 'calendar_start', 'route'] as const;
+export const AUDIT_SUBJECT_KINDS = ['season', 'race', 'calendar_start', 'route', 'ride'] as const;
 export const AuditSubjectKind = z.enum(AUDIT_SUBJECT_KINDS);
 export type AuditSubjectKind = z.infer<typeof AuditSubjectKind>;
 
@@ -83,6 +87,8 @@ export const AuditEntry = z.object({
       attemptId: Uuid.optional(),
       entryId: Uuid.optional(),
       revision: z.number().int().optional(),
+      /** Модерация райдов: число жалоб, закрытых этим действием. */
+      reportCount: z.number().int().nonnegative().optional(),
     })
     .nullable(),
 });
