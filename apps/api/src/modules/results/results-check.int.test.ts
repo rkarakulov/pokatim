@@ -57,6 +57,8 @@ afterAll(async () => {
 const RIDE = new Date('2026-10-25T06:00:00Z');
 const AFTER_RIDE = new Date('2026-10-25T08:00:00Z');
 const processor = () => h.worker.get(AttemptCheckProcessor);
+/** Момент запроса перепроверки — после вердиктов, записанных «сейчас» (часы стенда стоят). */
+const justAfter = () => new Date(h.clock.now().getTime() + 1);
 const attempts = () => resultsDb(h).attempts.find().sort({ _id: 1 }).toArray();
 
 async function entered() {
@@ -108,6 +110,7 @@ describe('эталоны движка в attempt-check (AC13)', () => {
       counted: 1,
       rejectedShown: 0,
       failed: 0,
+      excluded: 0,
     });
     expect((await myEntry(h, auth, raceId)).attempts[0]?.segment?.elapsedSec).toBe(
       checked!.segment!.elapsedSec,
@@ -152,7 +155,7 @@ describe('ревизии проверки (AC14)', () => {
     const { attempt, raceId } = await queuedAttempt();
     expect(await processor().check(attempt._id, 1)).toBe('counted');
     expect(await processor().check(attempt._id, 1)).toBe('skipped');
-    expect(await h.worker.get(ResultsRecheck).requestRace(raceId)).toBe(1);
+    expect(await h.worker.get(ResultsRecheck).requestRace(raceId, justAfter())).toBe(1);
     expect(await resultsDb(h).attempts.findOne({ _id: attempt._id })).toMatchObject({
       status: 'queued',
       checkRevision: 2,
@@ -206,7 +209,7 @@ describe('сбои проверки (AC15)', () => {
       status: 'failed',
       failure: 'timeout',
     });
-    await h.worker.get(ResultsRecheck).requestRace(attempt.raceId);
+    await h.worker.get(ResultsRecheck).requestRace(attempt.raceId, justAfter());
     analyze.mockResolvedValueOnce({ ok: false, code: 'implausible' });
     expect(await processor().check(attempt._id, 2)).toBe('rejected');
     expect(await resultsDb(h).attempts.findOne({ _id: attempt._id })).toMatchObject({
@@ -243,7 +246,7 @@ describe('сбои проверки (AC15)', () => {
     expect(await resultsDb(h).attempts.findOne({ _id: attempt._id })).toMatchObject({
       failure: 'storage',
     });
-    await h.worker.get(ResultsRecheck).requestRace(attempt.raceId);
+    await h.worker.get(ResultsRecheck).requestRace(attempt.raceId, justAfter());
     await tracks(h).activities.deleteOne({ _id: ride.activityId! });
     expect(await processor().check(attempt._id, 2)).toBe('withdrawn');
     expect(await resultsDb(h).attempts.findOne({ _id: attempt._id })).toMatchObject({

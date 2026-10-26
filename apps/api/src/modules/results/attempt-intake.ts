@@ -97,6 +97,10 @@ export class AttemptIntake {
     // коридор и окно после первой заявки не меняются (V-12): гонка и рамка маршрута читаются до транзакции
     const race = await this.races.get(snapshot.raceId);
     if (race?.status !== 'published' || !race.corridor) return;
+    // протокол опубликован — новых попыток нет (§7.4). Остаточная гонка (R4, RC-13): гонка прочитана до публикации —
+    // попытка появится в заявке, но не в снимке (протокол читается только из снимка); публикация возможна лишь через
+    // 24 ч после окна (A5), к этому моменту приём давно завершён
+    if (race.protocolPublishedAt !== null) return;
     const routeBounds = await this.routes.bounds(race.corridor.routeId);
     let limited = false;
     await this.transactions.run(async (tx) => {
@@ -114,7 +118,13 @@ export class AttemptIntake {
       const byUpload = new Map(group.members.map((member) => [member.uploadId, member]));
       for (const attempt of primary ? attempts : []) {
         const member = group.members.find((candidate) => candidate.id === attempt.activityId);
-        if (member && member.id !== primary?.id && attempt.status !== 'withdrawn') {
+        // исключённую панелью приём не снимает и не оживляет (D-24)
+        if (
+          member &&
+          member.id !== primary?.id &&
+          attempt.status !== 'withdrawn' &&
+          attempt.status !== 'excluded'
+        ) {
           await this.repository.withdrawAttempt(tx, attempt._id, 'not_primary', now);
         }
       }

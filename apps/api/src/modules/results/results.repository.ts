@@ -7,11 +7,20 @@ import type { DbSession } from '../../db';
 import {
   type EntryRequest,
   type RaceAttemptDoc,
+  type RaceAttemptReviewDoc,
   type RaceEntryDoc,
+  type RaceProtocolRowDoc,
+  type RaceRecalculationDoc,
   type ResultsCollections,
   resultsCollections,
 } from './results.collection';
-import { attemptHidden, pickBest, RESULTS_POLICY, summarize } from './results.policy';
+import {
+  attemptHidden,
+  EXCLUDABLE_STATUSES,
+  pickBest,
+  RESULTS_POLICY,
+  summarize,
+} from './results.policy';
 
 /** Позиция строки таблицы в порядке `(best.elapsedSec, best.startedAt, _id)`. */
 export interface RankPosition {
@@ -52,6 +61,18 @@ export type CheckResult = Pick<
   | 'checkedAt'
 >;
 
+/** Незавершённые проверки гонки (RC-1) и финальные провалы. */
+export interface PendingChecks {
+  queued: number;
+  checking: number;
+  /** вердикты (`counted|rejected|failed`) старше последнего запуска перепроверки */
+  stale: number;
+  failed: number;
+}
+
+/** Вердикты, которые перепроверка ставит на новую проверку. */
+const VERDICT_STATUSES = ['counted', 'rejected', 'failed'] as const;
+
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
@@ -61,7 +82,13 @@ const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringif
  *   загрузке получил попытку» — условия по другим документам; без замка — write skew;
  * - вердикт пишется только своей ревизией: `checkRevision` и статус `checking` в фильтре (поздний повтор — no-op);
  * - места — при чтении, обе выборки страницы в одной snapshot-сессии;
- * - значения фильтров — только примитивы после zod.
+ * - значения фильтров — только примитивы после zod;
+ * - протокол (race-results-05): `race_attempt_reviews`, `race_protocol_rows`, `race_recalculations` — только вставки
+ *   (тест-сторож `results.repository.test.ts`); действия панели — под замком результатов гонки
+ *   (`RaceRegistry.lockResults`) первой операцией, изменение попыток и заявки — ещё и под `lockEntry`.
+ * После публикации протокола заявку ещё могут изменить остаточные гонки (RC-13): приём, прочитавший гонку до
+ * публикации; явная попытка, взявшая `now` до срока загрузки; снятие по `activity-removed` (R6). Снимок протокола
+ * они не меняют — протокол читается только из снимка (RC-5), новых замков не нужно.
  */
 @Injectable()
 export class ResultsRepository {
@@ -235,7 +262,10 @@ export class ResultsRepository {
     );
   }
 
-  /** Снятие попытки (под `lockEntry`): активность удалена или перестала быть основной. */
+  /**
+   * Снятие попытки (под `lockEntry`): активность удалена (и исключённую) или перестала быть основной (исключённую
+   * панелью — нет: приём её не снимает и не оживляет, race-results-05).
+   */
   async withdrawAttempt(
     session: DbSession,
     id: string,
@@ -243,7 +273,11 @@ export class ResultsRepository {
     now: Date,
   ): Promise<void> {
     await this.c.attempts.updateOne(
-      { _id: id, status: { $ne: 'withdrawn' } },
+      {
+        _id: id,
+        status:
+          reason === 'not_primary' ? { $nin: ['withdrawn', 'excluded'] } : { $ne: 'withdrawn' },
+      },
       { $set: { status: 'withdrawn', withdrawReason: reason, updatedAt: now } },
       { session },
     );
@@ -494,5 +528,217 @@ export class ResultsRepository {
     if (status) filter.status = status;
     if (afterId) filter._id = { $lt: afterId };
     return this.c.attempts.find(filter).sort({ _id: -1 }).limit(limit).toArray();
+  }
+
+  // --- протокол (race-results-05; все записи — под замком результатов гонки) ---
+
+  /**
+   * Исключение трека (под `lockEntry`, D-24): попытка этой гонки в `EXCLUDABLE_STATUSES` → `excluded`. Вердикт прежней
+   * ревизии остаётся в попытке (история), `checkRevision` не меняется: поздний вердикт — no-op (фильтр `checking`).
+   * `null` — попытки нет в гонке или статус не подходит.
+   */
+  excludeAttempt(
+    session: DbSession,
+    raceId: string,
+    attemptId: string,
+    now: Date,
+  ): Promise<RaceAttemptDoc | null> {
+    return this.c.attempts.findOneAndUpdate(
+      { _id: attemptId, raceId, status: { $in: [...EXCLUDABLE_STATUSES] } },
+      { $set: { status: 'excluded', updatedAt: now } },
+      { session, returnDocument: 'after' },
+    );
+  }
+
+  /** Запись исключения или возврата — только вставка. */
+  async insertReview(session: DbSession, doc: RaceAttemptReviewDoc): Promise<void> {
+    await this.c.reviews.insertOne(doc, { session });
+  }
+
+  /** Последняя запись исключения/возврата попыток страницы (индекс `(attemptId, _id)`, одна выборка). */
+  async latestReviews(attemptIds: readonly string[]): Promise<Map<string, RaceAttemptReviewDoc>> {
+    if (attemptIds.length === 0) return new Map();
+    const docs = await this.c.reviews
+      .find({ attemptId: { $in: [...attemptIds] } })
+      .sort({ attemptId: 1, _id: -1 })
+      .toArray();
+    const latest = new Map<string, RaceAttemptReviewDoc>();
+    for (const doc of docs) if (!latest.has(doc.attemptId)) latest.set(doc.attemptId, doc);
+    return latest;
+  }
+
+  /** Райдеры активных заявок гонки (строка чек-листа «необработанные треки»). */
+  async activeEntryUserIds(raceId: string, session?: DbSession): Promise<string[]> {
+    const docs = await this.c.entries
+      .find({ raceId, status: 'active' }, { session, projection: { userId: 1 } })
+      .toArray();
+    return docs.map((doc) => doc.userId);
+  }
+
+  /**
+   * Незавершённые проверки гонки (RC-1): `queued`, `checking` и вердикты старше `staleBefore` (последний запуск
+   * перепроверки; `null` — не запускалась), плюс финальные провалы `failed`. Одна выборка.
+   */
+  async pendingChecks(
+    raceId: string,
+    staleBefore: Date | null,
+    session?: DbSession,
+  ): Promise<PendingChecks> {
+    const is = (status: string) => ({ $cond: [{ $eq: ['$status', status] }, 1, 0] });
+    const stale = staleBefore
+      ? {
+          $cond: [
+            {
+              $and: [
+                { $in: ['$status', [...VERDICT_STATUSES]] },
+                { $ne: ['$checkedAt', null] },
+                { $lt: ['$checkedAt', staleBefore] },
+              ],
+            },
+            1,
+            0,
+          ],
+        }
+      : 0;
+    const [row] = await this.c.attempts
+      .aggregate<PendingChecks>(
+        [
+          { $match: { raceId, status: { $in: ['queued', 'checking', ...VERDICT_STATUSES] } } },
+          {
+            $group: {
+              _id: null,
+              queued: { $sum: is('queued') },
+              checking: { $sum: is('checking') },
+              stale: { $sum: stale },
+              failed: { $sum: is('failed') },
+            },
+          },
+          { $project: { _id: 0, queued: 1, checking: 1, stale: 1, failed: 1 } },
+        ],
+        { session },
+      )
+      .toArray();
+    return row ?? { queued: 0, checking: 0, stale: 0, failed: 0 };
+  }
+
+  /** Попытки с вердиктом старше запроса перепроверки (worker перепоставляет их по одной под `lockEntry`). */
+  staleVerdictAttempts(
+    raceId: string,
+    before: Date,
+  ): Promise<Pick<RaceAttemptDoc, '_id' | 'entryId'>[]> {
+    return this.c.attempts
+      .find(
+        { raceId, status: { $in: [...VERDICT_STATUSES] }, checkedAt: { $lt: before } },
+        { projection: { _id: 1, entryId: 1 }, sort: { _id: 1 } },
+      )
+      .toArray();
+  }
+
+  /** Все строки таблицы гонки по порядку `(best.elapsedSec, best.startedAt, _id)` — база протокола. */
+  async rankedEntries(raceId: string, session: DbSession): Promise<RankedEntry[]> {
+    const docs = await this.c.entries
+      .find(this.rankedFilter(raceId), { session, projection: { _id: 1, userId: 1, best: 1 } })
+      .sort({ 'best.elapsedSec': 1, 'best.startedAt': 1, _id: 1 })
+      .toArray();
+    return docs.flatMap(({ _id, userId, best }) => (best ? [{ _id, userId, best }] : []));
+  }
+
+  /** Заявки гонки для «Участников» панели — по времени заявки, не больше `limit`. */
+  entriesForStandings(raceId: string, limit: number, session: DbSession): Promise<RaceEntryDoc[]> {
+    return this.c.entries
+      .find({ raceId }, { session, projection: { requests: 0 } })
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  /** Ревизия протокола целиком — только вставка (пустой протокол — без записи строк). */
+  async insertProtocolRows(session: DbSession, rows: RaceProtocolRowDoc[]): Promise<void> {
+    if (rows.length === 0) return;
+    await this.c.protocolRows.insertMany(rows, { session });
+  }
+
+  /** Строки ревизии по порядку протокола. */
+  protocolRows(
+    raceId: string,
+    revision: number,
+    session?: DbSession,
+  ): Promise<RaceProtocolRowDoc[]> {
+    return this.c.protocolRows.find({ raceId, revision }, { session }).sort({ order: 1 }).toArray();
+  }
+
+  async protocolRow(
+    raceId: string,
+    revision: number,
+    entryId: string,
+    session?: DbSession,
+  ): Promise<RaceProtocolRowDoc | undefined> {
+    return (
+      (await this.c.protocolRows.findOne({ raceId, revision, entryId }, { session })) ?? undefined
+    );
+  }
+
+  /** Публичная страница протокола: строки без DQ после позиции `afterOrder`. */
+  protocolRowsPage(
+    raceId: string,
+    revision: number,
+    afterOrder: number | null,
+    limit: number,
+    session: DbSession,
+  ): Promise<RaceProtocolRowDoc[]> {
+    const filter: Filter<RaceProtocolRowDoc> = { raceId, revision, status: { $ne: 'dq' } };
+    if (afterOrder !== null) filter.order = { $gt: afterOrder };
+    return this.c.protocolRows.find(filter, { session }).sort({ order: 1 }).limit(limit).toArray();
+  }
+
+  async countProtocolRows(
+    raceId: string,
+    revision: number,
+    session?: DbSession,
+  ): Promise<{ ranked: number; disqualified: number }> {
+    const [total, disqualified] = [
+      await this.c.protocolRows.countDocuments({ raceId, revision }, { session }),
+      await this.c.protocolRows.countDocuments({ raceId, revision, status: 'dq' }, { session }),
+    ];
+    return { ranked: total - disqualified, disqualified };
+  }
+
+  /** Запись журнала пересчётов — только вставка; ревизию держит уникальный `(raceId, revision)`. */
+  async insertRecalculation(session: DbSession, doc: RaceRecalculationDoc): Promise<void> {
+    await this.c.recalculations.insertOne(doc, { session });
+  }
+
+  /**
+   * Текущая ревизия протокола — максимальная ревизия журнала пересчётов гонки (RC-2); нет — `null`. Записей на гонку
+   * единицы (индекс `(raceId, _id)`).
+   */
+  async currentRevision(raceId: string, session?: DbSession): Promise<number | null> {
+    const doc = await this.c.recalculations.findOne(
+      { raceId, revision: { $ne: null } },
+      { session, sort: { revision: -1 }, projection: { revision: 1 } },
+    );
+    return doc?.revision ?? null;
+  }
+
+  /** Моменты последнего запуска и последнего применения перепроверки гонки. */
+  async lastRecheck(
+    raceId: string,
+    session?: DbSession,
+  ): Promise<{ startedAt: Date | null; appliedAt: Date | null }> {
+    const last = async (kind: RaceRecalculationDoc['kind']) =>
+      (
+        await this.c.recalculations.findOne(
+          { raceId, kind },
+          { session, sort: { at: -1, _id: -1 }, projection: { at: 1 } },
+        )
+      )?.at ?? null;
+    const startedAt = await last('recheck_started');
+    const appliedAt = await last('recheck_applied');
+    return { startedAt, appliedAt };
+  }
+
+  /** История пересчётов гонки — новые сверху. */
+  listRecalculations(raceId: string, limit: number): Promise<RaceRecalculationDoc[]> {
+    return this.c.recalculations.find({ raceId }).sort({ at: -1, _id: -1 }).limit(limit).toArray();
   }
 }

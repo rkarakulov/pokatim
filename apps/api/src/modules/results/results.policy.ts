@@ -1,15 +1,26 @@
-import type {
-  AttemptRejection,
-  MyRaceEntry,
-  RaceEntryBlockReason,
-  RacePhase,
-  RaceResultStatus,
+import {
+  type AttemptRejection,
+  type MyRaceEntry,
+  PUBLISH_CHECKS,
+  PUBLISH_STATE_BLOCKS,
+  type PublishCheck,
+  type PublishChecklist,
+  type PublishStateBlock,
+  type RaceEntryBlockReason,
+  type RacePhase,
+  type RaceResultStatus,
 } from '@pokatim/contracts';
 import { type Bounds, boundsNear } from '@pokatim/tracks';
 
 import type { RaceForResults } from '../races';
 import type { ActivityRef } from '../tracks';
-import type { EntryBest, EntrySummary, RaceAttemptDoc, RaceEntryDoc } from './results.collection';
+import type {
+  EntryBest,
+  EntrySummary,
+  RaceAttemptDoc,
+  RaceEntryDoc,
+  RaceProtocolRowDoc,
+} from './results.collection';
 
 /**
  * Правила участия и результатов (race-results-03) — чистые функции (unit). Значения — `[ASSUMPTION]`, кроме A5
@@ -88,8 +99,8 @@ export function attemptMatched(match: {
 }
 
 /**
- * Скрыта от райдера (§7.4): снятые; автоматическая без полного сегмента или неправдоподобная. Явная — всегда видна.
- * Панель видит всё с флагом.
+ * Скрыта от райдера (§7.4): снятые; автоматическая без полного сегмента (отказ или исключённая панелью —
+ * race-results-05) или неправдоподобная. Явная — всегда видна. Панель видит всё с флагом.
  */
 export function attemptHidden(
   attempt: Pick<RaceAttemptDoc, 'origin' | 'status' | 'matched' | 'reasons'>,
@@ -97,7 +108,9 @@ export function attemptHidden(
   if (attempt.status === 'withdrawn') return true;
   if (attempt.origin !== 'auto') return false;
   if (attempt.reasons[0] === 'implausible') return true;
-  return attempt.status === 'rejected' && attempt.matched === false;
+  return (
+    (attempt.status === 'rejected' || attempt.status === 'excluded') && attempt.matched === false
+  );
 }
 
 type RankedAttempt = Pick<RaceAttemptDoc, '_id' | 'status' | 'segment'>;
@@ -132,12 +145,20 @@ function compareCounted(a: RankedAttempt, b: RankedAttempt): number {
 export function summarize(
   attempts: readonly Pick<RaceAttemptDoc, 'origin' | 'status' | 'matched' | 'reasons'>[],
 ): EntrySummary {
-  const summary: EntrySummary = { total: 0, pending: 0, counted: 0, rejectedShown: 0, failed: 0 };
+  const summary: EntrySummary = {
+    total: 0,
+    pending: 0,
+    counted: 0,
+    rejectedShown: 0,
+    failed: 0,
+    excluded: 0,
+  };
   for (const attempt of attempts) {
     summary.total += 1;
     if (attempt.status === 'queued' || attempt.status === 'checking') summary.pending += 1;
     else if (attempt.status === 'counted') summary.counted += 1;
     else if (attempt.status === 'failed') summary.failed += 1;
+    else if (attempt.status === 'excluded') summary.excluded += 1;
     else if (attempt.status === 'rejected' && !attemptHidden(attempt)) summary.rejectedShown += 1;
   }
   return summary;
@@ -145,18 +166,21 @@ export function summarize(
 
 /**
  * Статус результата участника (§7.4, по порядку) — считается при чтении: отменил → есть лучший → идёт проверка →
- * видимые отказы и провалы → срок загрузки истёк → ещё нет попыток.
+ * видимые отказы, провалы и исключённые → срок загрузки истёк → ещё нет попыток. `ignoreBest` (RC-5): протокол
+ * опубликован, а строки участника в нём нет — живой лучший результат места не даёт.
  */
 export function resultStatus(
   entry: Pick<RaceEntryDoc, 'status' | 'best' | 'summary'> | null,
   race: Pick<RaceForResults, 'closesAt'>,
   now: Date,
+  { ignoreBest = false }: { ignoreBest?: boolean } = {},
 ): RaceResultStatus {
   if (!entry) return 'none';
   if (entry.status === 'withdrawn') return 'withdrawn';
-  if (entry.best) return 'provisional';
+  if (entry.best && !ignoreBest) return 'provisional';
   if (entry.summary.pending > 0) return 'pending';
-  if (entry.summary.rejectedShown + entry.summary.failed > 0) return 'not_counted';
+  const { rejectedShown, failed, excluded = 0 } = entry.summary;
+  if (rejectedShown + failed + excluded > 0) return 'not_counted';
   if (now >= uploadClosesAt(race)) return 'dns';
   return 'none';
 }
@@ -265,4 +289,124 @@ export function verdictFields(match: {
     reasons: match.verdict === 'counted' ? [] : [...match.reasons],
     matched: attemptMatched(match),
   };
+}
+
+// --- протокол (race-results-05) ---
+
+/** Исключить трек можно из любого статуса, кроме снятого и уже исключённого (D-24). */
+export const EXCLUDABLE_STATUSES = ['queued', 'checking', 'counted', 'rejected', 'failed'] as const;
+
+/**
+ * Чек-лист публикации (D-22, D-23) — одна функция для чтения панели и транзакции публикации: все строки
+ * `PUBLISH_CHECKS` в их порядке; `blockedBy` — первое подходящее состояние гонки (`PUBLISH_STATE_BLOCKS`).
+ * `pendingChecks` — незавершённые проверки (`queued + checking +` устаревшие вердикты, RC-1). «Требует внимания» не
+ * блокирует (D-22).
+ */
+export function publishChecklist(input: {
+  race: Pick<RaceForResults, 'status' | 'corridor' | 'protocolPublishedAt'>;
+  now: Date;
+  uploadClosesAt: Date;
+  openDisputes: number;
+  unprocessedTracks: number;
+  pendingChecks: number;
+  failedChecks: number;
+}): PublishChecklist {
+  const { race } = input;
+  const states: Record<PublishStateBlock, boolean> = {
+    draft: race.status === 'draft',
+    cancelled: race.status === 'cancelled',
+    no_corridor: race.corridor === null,
+    published: race.protocolPublishedAt !== null,
+  };
+  const counts: Record<PublishCheck, number> = {
+    open_disputes: input.openDisputes,
+    unprocessed_tracks: input.unprocessedTracks,
+    checks_queued: input.pendingChecks,
+    checks_failed: input.failedChecks,
+    // A5: файлы принимаются до конца окна + 24 ч
+    window_open: input.now < input.uploadClosesAt ? 1 : 0,
+  };
+  const blockedBy = PUBLISH_STATE_BLOCKS.find((state) => states[state]) ?? null;
+  const checklist = PUBLISH_CHECKS.map((code) => ({ code, count: counts[code] }));
+  return {
+    canPublish: blockedBy === null && checklist.every((row) => row.count === 0),
+    blockedBy,
+    checklist,
+  };
+}
+
+/** Участник протокола до расчёта мест: лучший результат и признак DQ. */
+export interface ProtocolBase {
+  entryId: string;
+  userId: string;
+  attemptId: string;
+  elapsedSec: number;
+  startedAt: Date;
+  dq: boolean;
+}
+
+type PreviousRow = Pick<RaceProtocolRowDoc, 'place' | 'tied' | 'elapsedSec' | 'status'>;
+
+const byProtocolOrder = (a: ProtocolBase, b: ProtocolBase): number => {
+  if (a.elapsedSec !== b.elapsedSec) return a.elapsedSec - b.elapsedSec;
+  const ta = a.startedAt.getTime();
+  const tb = b.startedAt.getTime();
+  if (ta !== tb) return ta - tb;
+  return a.entryId < b.entryId ? -1 : a.entryId > b.entryId ? 1 : 0;
+};
+
+/**
+ * Ревизия протокола целиком (D-27, D-28): не-DQ по `(elapsedSec, startedAt, entryId)` с местами `rankRows`, DQ — в
+ * конце в том же порядке без места. Статус строки: DQ — `dq`; публикация (`previous: null`) — `final`; место, ничья и
+ * время как в прошлой ревизии (и там не DQ) — статус прошлой; иначе — `revised` («Пересчитан»).
+ */
+export function buildProtocol(
+  base: readonly ProtocolBase[],
+  previous: ReadonlyMap<string, PreviousRow> | null,
+): Omit<RaceProtocolRowDoc, '_id' | 'raceId' | 'revision' | 'createdAt'>[] {
+  const ranked = base.filter((row) => !row.dq).sort(byProtocolOrder);
+  const disqualified = base.filter((row) => row.dq).sort(byProtocolOrder);
+  const equalCounts = new Map<number, number>();
+  for (const row of ranked)
+    equalCounts.set(row.elapsedSec, (equalCounts.get(row.elapsedSec) ?? 0) + 1);
+  const places = rankRows(ranked, { lessThanFirst: 0, firstIndex: 0, equalCounts });
+  const statusOf = (row: ProtocolBase, place: number | null, tied: boolean) => {
+    if (row.dq) return 'dq' as const;
+    if (previous === null) return 'final' as const;
+    const prev = previous.get(row.entryId);
+    const same =
+      prev !== undefined &&
+      prev.status !== 'dq' &&
+      prev.place === place &&
+      prev.tied === tied &&
+      prev.elapsedSec === row.elapsedSec;
+    return same ? prev.status : ('revised' as const);
+  };
+  return [
+    ...ranked.map((row, index) => ({ row, ...places[index]! })),
+    ...disqualified.map((row) => ({ row, place: null, tied: false })),
+  ].map(({ row, place, tied }, order) => ({
+    order,
+    entryId: row.entryId,
+    userId: row.userId,
+    attemptId: row.attemptId,
+    elapsedSec: row.elapsedSec,
+    startedAt: row.startedAt,
+    place,
+    tied,
+    status: statusOf(row, place, tied),
+  }));
+}
+
+/**
+ * Перепроверка после публикации ждёт «Применить»: последний запуск не раньше публикации и новее последнего
+ * применения (R3).
+ */
+export function recheckPending(
+  last: { startedAt: Date | null; appliedAt: Date | null },
+  protocolPublishedAt: Date | null,
+): boolean {
+  if (last.startedAt === null || protocolPublishedAt === null) return false;
+  if (last.startedAt < protocolPublishedAt) return false;
+  return last.appliedAt === null || last.startedAt > last.appliedAt;
 }

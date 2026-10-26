@@ -84,7 +84,7 @@ export class EntriesService {
           tier: null,
           requests: [],
           best: null,
-          summary: { total: 0, pending: 0, counted: 0, rejectedShown: 0, failed: 0 },
+          summary: { total: 0, pending: 0, counted: 0, rejectedShown: 0, failed: 0, excluded: 0 },
           createdAt: now,
           updatedAt: now,
           withdrawnAt: null,

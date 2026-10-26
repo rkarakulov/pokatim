@@ -47,7 +47,7 @@ async function seedBest(entryId: string, elapsedSec: number, startedAt: string) 
           startedAt: at,
           finishedAt: new Date(at.getTime() + elapsedSec * 1000),
         },
-        summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0 },
+        summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
       },
     },
   );
@@ -199,7 +199,7 @@ describe('моё участие — один снимок БД (ревью Codex
       {
         $set: {
           best: null,
-          summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 0 },
+          summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 0, excluded: 0 },
         },
       },
     );
