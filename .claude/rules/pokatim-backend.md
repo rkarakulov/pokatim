@@ -22,8 +22,10 @@ paths:
   панель — с модерацией 05b).
 - `routes` о гонках не знает и зависит только от `panel`; `races → routes` — только порт `RouteCatalog`
   (`modules/routes/index.ts`, `RoutesCoreModule`): готовый маршрут по id в транзакции правки гонки и названия
-  маршрутов списка. Записи `routes`/`route_*` из `races` (и наоборот) — нет. Линию сверки для слайса 02 даст
-  отдельный порт.
+  маршрутов списка. Записи `routes`/`route_*` из `races` (и наоборот) — нет. Карта коридора (maps-01, ADR-0014):
+  `races` читает линию показа через порт `RouteGeometry.displayGeometry` (только `ready`, проекция без
+  `matchLine`, свой LRU-кэш в процессе отдельно от кэша линии сверки); публичный `GET /v1/races/:id/route` —
+  `RacesPublicController`, видимость — общий `publicRace` сервиса (та же, что у `GET /v1/races/:id`).
 - Общий код загрузок в `src/`: `raw-body.ts` (`readLimited` — тело `application/octet-stream` после гарда и лимита,
   обрыв на лимите — `413` с кодом модуля и `Connection: close`) и `parse-thread.ts` (`runParseThread` — функция
   `@pokatim/tracks/parse` из белого списка `PARSE_FUNCTIONS` в `worker_threads`, `DEFAULT_PARSE_LIMITS` 160/32 МБ,
@@ -73,7 +75,7 @@ paths:
   тестами на реальном MongoDB, моки БД для геозапросов запрещены.
 - `results` (race-results-03): заявки и попытки; другие модули — только порты через `index.ts`: `RaceRegistry`
   (`races`: гонка, окно, `admitEntry` — фиксация V-12 в транзакции заявки, видимость в панели), `RouteGeometry`
-  (`routes`: линия сверки и рамка, кэш в процессе), `ActivitySource` (`tracks`: группа дублей, свои активности и
+  (`routes`: линия сверки и рамка, кэш в процессе; `races` — линия показа для карты), `ActivitySource` (`tracks`: группа дублей, свои активности и
   загрузки, исходник для worker). События `tracks.activity-ready/-removed` — свои типы подписчика: outbox базы
   отправляет тип в одну очередь. Сверка — `runParseThread('analyzeAttempt')` в worker; потоки разбора на процесс
   ограничены семафором `PARSE_THREADS_MAX` (`src/parse-thread.ts`).
