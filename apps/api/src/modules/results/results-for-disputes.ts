@@ -9,6 +9,7 @@ import type {
   DisputeEntry,
   DisputeStanding,
   ResultsForDisputes,
+  SeriesSegment,
 } from './results-for-disputes.port';
 import { ResultsReadService } from './results-read.service';
 import { ResultsRepository } from './results.repository';
@@ -88,5 +89,19 @@ export class ResultsForDisputesService implements ResultsForDisputes {
         elapsedSec: result.elapsedSec,
       };
     });
+  }
+
+  async bestSegment(entryId: string): Promise<SeriesSegment | null> {
+    const entry = await this.repository.findEntryById(entryId);
+    if (!entry?.best) return null;
+    const attempt = await this.repository.findAttempt(entry.best.attemptId);
+    if (!attempt || attempt.status !== 'counted' || !attempt.segment) return null;
+    return {
+      attemptId: attempt._id,
+      activityId: attempt.activityId,
+      checkRevision: attempt.checkRevision,
+      startedAt: attempt.segment.startedAt,
+      finishedAt: attempt.segment.finishedAt,
+    };
   }
 }

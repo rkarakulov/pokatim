@@ -29,6 +29,18 @@ export interface DisputeStanding {
   elapsedSec: number | null;
 }
 
+/**
+ * Сегмент лучшей засчитанной попытки заявки — что строить на разборе спора (race-results-06b): активность-исходник и
+ * моменты ворот; `checkRevision` — ключ кэша рядов (перепроверка даёт новую ревизию).
+ */
+export interface SeriesSegment {
+  attemptId: string;
+  activityId: string;
+  checkRevision: number;
+  startedAt: Date;
+  finishedAt: Date;
+}
+
 export interface ResultsForDisputes {
   /** Заявка пользователя на гонку (без замка, RC-12). */
   entryOf(raceId: string, userId: string, session?: DbSession): Promise<DisputeEntry | null>;
@@ -45,4 +57,6 @@ export interface ResultsForDisputes {
   ): Promise<boolean>;
   /** Статус и место как в «моём участии» (`ResultsReadService.entryResult`), snapshot-сессия. */
   standing(race: RaceForResults, entryId: string): Promise<DisputeStanding | null>;
+  /** Сегмент лучшей попытки заявки (`counted`, с сегментом); нет лучшей — `null`. */
+  bestSegment(entryId: string): Promise<SeriesSegment | null>;
 }

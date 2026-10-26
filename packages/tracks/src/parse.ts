@@ -13,6 +13,7 @@ import type { CorridorMatch, MatchWindow } from './corridor/types.ts';
 import { checkPlausibility } from './plausibility.ts';
 import { sanitizePoints } from './points.ts';
 import { simplifyTrack } from './simplify.ts';
+import { buildSeries, type DisputeSeries, type SeriesWindow } from './series.ts';
 import { parseStream, type TrackStreamV1 } from './stream.ts';
 import { elevationGainM, summarizeTrack } from './summary.ts';
 import {
@@ -33,6 +34,13 @@ export { parseFit } from './fit.ts';
 export { parseGpx } from './gpx.ts';
 export { parseStream, TrackStreamV1 } from './stream.ts';
 export { matchCorridor } from './corridor/match.ts';
+export {
+  buildSeries,
+  type DisputeSeries,
+  SERIES_MAX_BINS,
+  type SeriesSummary,
+  type SeriesWindow,
+} from './series.ts';
 export { CORRIDOR_ENGINE_VERSION, CORRIDOR_POLICY } from './corridor/policy.ts';
 export { CorridorError, prepareCorridor } from './corridor/prepare.ts';
 export {
@@ -228,4 +236,19 @@ export function analyzeAttempt(
   const prepared = prepareCorridor(corridor);
   const { points } = loadTrack(bytes, format, now);
   return matchCorridor(points, prepared, window);
+}
+
+/**
+ * Ряды пульса, мощности и скорости сегмента попытки для разбора спора (слайс 06b) — в потоке разбора worker:
+ * `loadTrack` → `buildSeries` по исходнику без прореживания. Значения датчиков выходят из потока только прореженными
+ * (≤ `SERIES_MAX_BINS` ячеек), без координат и времени точек. Ошибки файла — `TrackParseError`.
+ */
+export function analyzeSeries(
+  bytes: Uint8Array,
+  format: TrackFormat,
+  window: SeriesWindow,
+  now: Date,
+): DisputeSeries {
+  const { points } = loadTrack(bytes, format, now);
+  return buildSeries(points, window);
 }

@@ -51,6 +51,7 @@ import {
   type RestoreRideRequest,
   type DisputeDecisionRequest,
   PanelDispute,
+  PanelDisputeSeries,
   PanelDisputePage,
   type PanelDisputeQuery,
 } from '@pokatim/contracts';
@@ -235,6 +236,8 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     getDispute: (id: string) => get(dispute(id), PanelDispute),
     decideDispute: (id: string, body: DisputeDecisionRequest) =>
       post(`${dispute(id)}/decision`, PanelDispute, body),
+    /** Ряды пульса и мощности оспоренного результата (06b): `preparing` — опрашивать дальше. */
+    getDisputeSeries: (id: string) => get(`${dispute(id)}/series`, PanelDisputeSeries),
   };
 }
 

@@ -5,11 +5,13 @@ import {
   type PanelDispute,
   type PanelDisputePage,
   PanelDisputeQuery,
+  type PanelDisputeSeries,
   Uuid,
 } from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
 import { CurrentPanelUser, PanelGuard, type PanelPrincipal, RequirePermission } from '../panel';
+import { DisputeSeriesService } from './dispute-series.service';
 import { DisputesPanelService } from './disputes-panel.service';
 
 const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
@@ -18,7 +20,10 @@ const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
 @Controller('admin/disputes')
 @UseGuards(PanelGuard)
 export class DisputesAdminController {
-  constructor(private readonly disputes: DisputesPanelService) {}
+  constructor(
+    private readonly disputes: DisputesPanelService,
+    private readonly series: DisputeSeriesService,
+  ) {}
 
   @Get()
   @RequirePermission('disputes.read')
@@ -32,6 +37,16 @@ export class DisputesAdminController {
   @RequirePermission('disputes.read')
   get(@Param('disputeId', idPipe) disputeId: string): Promise<PanelDispute> {
     return this.disputes.get(disputeId);
+  }
+
+  /** Ряды пульса и мощности оспоренного результата (06b): `preparing` → опрос; биометрия — только здесь. */
+  @Get(':disputeId/series')
+  @RequirePermission('disputes.read')
+  getSeries(
+    @CurrentPanelUser() principal: PanelPrincipal,
+    @Param('disputeId', idPipe) disputeId: string,
+  ): Promise<PanelDisputeSeries> {
+    return this.series.get(principal, disputeId);
   }
 
   @Post(':disputeId/decision')

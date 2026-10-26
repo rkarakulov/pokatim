@@ -1016,3 +1016,77 @@ select.field__control option:disabled {
   align-items: center;
   gap: var(--space-s2);
 }
+
+/* разбор спора (06b): графики пульса, мощности и скорости по дистанции — один ряд на график, общая ось X */
+.series {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s3);
+}
+
+.series-chart {
+  margin: 0;
+}
+
+.series-chart__head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-s2);
+  margin-bottom: var(--space-s1);
+}
+
+.series-chart__readout {
+  flex: 1;
+  text-align: right;
+  color: var(--color-text-secondary);
+}
+
+.series-chart__range {
+  color: var(--color-text-secondary);
+}
+
+.series-chart__plot {
+  display: block;
+  width: 100%;
+  aspect-ratio: 6 / 1;
+  background: var(--color-surface-raised);
+  border: var(--stroke-hairline) solid var(--color-border-subtle);
+  touch-action: none;
+}
+
+.series-chart__line {
+  fill: none;
+  stroke: var(--color-map-route);
+  stroke-width: var(--stroke-indicator);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.series-chart__grid,
+.series-chart__crosshair {
+  stroke-width: var(--stroke-hairline);
+  vector-effect: non-scaling-stroke;
+}
+
+.series-chart__grid {
+  stroke: var(--color-border-subtle);
+}
+
+.series-chart__crosshair {
+  stroke: var(--color-text-secondary);
+}
+
+.series__missing {
+  color: var(--color-text-secondary);
+}
+
+.series__axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text-secondary);
+}
+
+.series__table summary {
+  cursor: pointer;
+}

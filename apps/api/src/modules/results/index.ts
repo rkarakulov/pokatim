@@ -10,4 +10,5 @@ export {
   type DisputeStanding,
   RESULTS_FOR_DISPUTES,
   type ResultsForDisputes,
+  type SeriesSegment,
 } from './results-for-disputes.port';
