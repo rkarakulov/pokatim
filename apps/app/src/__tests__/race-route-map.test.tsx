@@ -2,7 +2,10 @@
 import { ApiHttpError } from '@pokatim/api-client';
 import type { RaceDetail, RaceRouteMap } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
-import { TurboModuleRegistry, useColorScheme } from 'react-native';
+import type { ReactElement } from 'react';
+import { type RefreshControlProps, TurboModuleRegistry, useColorScheme } from 'react-native';
+
+import { centerLat, corridorLineWidth } from '@/features/maps/corridor-style';
 
 import { loadMapLibreNative } from '@/features/maps/load-maplibre-native';
 import { api } from '@/lib/api';
@@ -73,6 +76,14 @@ afterEach(() => {
 async function openCard() {
   await renderRouter(appRoutes, { initialUrl: `/races/${ID}` });
   expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
+}
+
+async function pullToRefresh() {
+  const control = screen.getByTestId('race-detail').props
+    .refreshControl as ReactElement<RefreshControlProps>;
+  await act(async () => {
+    await control.props.onRefresh?.();
+  });
 }
 
 describe('карта маршрута на карточке гонки (maps-01)', () => {
@@ -150,6 +161,36 @@ describe('карта маршрута на карточке гонки (maps-01)
     expect(screen.queryByTestId('route-map')).toBeNull();
     expect(screen.getByText('±50 м от маршрута')).toBeOnTheScreen();
     expect(screen.getByText('62 км по GPS-треку')).toBeOnTheScreen();
+  });
+
+  it('ошибка обновления при показанной карте — карта остаётся (§4.12); pull-to-refresh перезапрашивает карту', async () => {
+    await openCard();
+    await screen.findByTestId('maplibre-Map');
+    getRaceRoute.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await pullToRefresh();
+    // 5xx повторяется (`shouldRetry`): дождаться исчерпания повторов — запрос в состоянии ошибки с данными
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10_000);
+    });
+    expect(getRaceRoute).toHaveBeenCalledTimes(4);
+    expect(screen.getByTestId('maplibre-Map')).toBeOnTheScreen();
+    expect(screen.getByLabelText(mapLabel)).toBeOnTheScreen();
+  });
+
+  it('допуск коридора изменили — после pull-to-refresh карта рисует ширину из карточки', async () => {
+    await openCard();
+    await screen.findByTestId('maplibre-Map');
+    getRace.mockResolvedValue({ ...race, corridor: { widthM: 100 } });
+    await pullToRefresh();
+    expect(
+      await screen.findByLabelText(
+        'Карта маршрута: 62 км, коридор ±100 м от маршрута, старт и финиш отмечены',
+      ),
+    ).toBeOnTheScreen();
+    const [corridor] = screen.getAllByTestId('maplibre-Layer');
+    expect(corridor?.props.paint['line-width']).toEqual(
+      corridorLineWidth(100, centerLat(route.bounds)),
+    );
   });
 
   it('без коридора — запроса нет, блока нет', async () => {

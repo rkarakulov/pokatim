@@ -1,5 +1,5 @@
 import type * as MapLibreNative from '@maplibre/maplibre-react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { MAP_PADDING, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
@@ -12,8 +12,8 @@ const padding = { top: MAP_PADDING, right: MAP_PADDING, bottom: MAP_PADDING, lef
 /**
  * Native-карта маршрута (`@maplibre/maplibre-react-native` 11, ADR-0014): пакет грузится лениво (`loadMapLibreNative`,
  * вызывающий проверяет `mapSupported()`). Статичный вид — жесты выключены пропсами (не `pointerEvents`: кнопка
- * атрибуции остаётся нажимаемой, RC-6), камера сразу по рамке без анимации (RC-4). Смена темы — новый `mapStyle`,
- * слои-дети библиотека добавляет заново.
+ * атрибуции остаётся нажимаемой, RC-6), камера сразу по рамке без анимации (RC-4). Смена стиля (темы) — новая
+ * карта (`key` у вызывающего): сброс ошибки прошлого стиля.
  */
 export function RouteMap({
   map,
@@ -24,6 +24,9 @@ export function RouteMap({
 }: RouteMapProps) {
   const [lib, setLib] = useState<typeof MapLibreNative | null>(null);
   const [failed, setFailed] = useState(false);
+  // GeoJSONSource сериализует `data` в строку на каждом рендере — только при смене маршрута или темы
+  const features = useMemo(() => routeFeatures(map), [map]);
+  const layers = useMemo(() => routeLayers(theme, map.widthM, map.bounds), [theme, map]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,8 +65,8 @@ export function RouteMap({
           onDidFailLoadingMap={() => setFailed(true)}
         >
           <lib.Camera initialViewState={{ bounds: map.bounds, padding }} />
-          <lib.GeoJSONSource id={ROUTE_SOURCE_ID} data={routeFeatures(map)}>
-            {routeLayers(theme, map.widthM, map.bounds).map((layer) => (
+          <lib.GeoJSONSource id={ROUTE_SOURCE_ID} data={features}>
+            {layers.map((layer) => (
               <lib.Layer key={layer.id} {...layer} />
             ))}
           </lib.GeoJSONSource>

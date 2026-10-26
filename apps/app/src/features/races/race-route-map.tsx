@@ -2,6 +2,7 @@ import type { RaceDetail } from '@pokatim/contracts';
 import { themes, type AppTheme } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { SkeletonGroup, useTheme } from '@rkarakulov/ui';
+import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { MAP_ASPECT_RATIO } from '@/features/maps/corridor-style';
@@ -26,10 +27,17 @@ export function RaceRouteMap({ race }: { race: RaceDetail }) {
   // нет нативного модуля (Expo Go, старый dev-клиент) — как env не задан
   const styleUrl = mounted && mapSupported() ? mapStyleUrl(theme === themes.dark) : null;
   const route = useRaceRoute(race.id, Boolean(corridor) && styleUrl !== null);
+  const widthM = corridor?.widthM;
+  // ширина коридора на карте — из карточки, как в строке «Коридор» и подписи (один источник после правки гонки)
+  const map = useMemo(
+    () => (route.data && widthM !== undefined ? { ...route.data, widthM } : null),
+    [route.data, widthM],
+  );
 
   if (!corridor) return null;
-  if (mounted && (styleUrl === null || route.isError)) return null;
-  if (!route.data || styleUrl === null) {
+  // ошибка без данных — блока нет; ошибка обновления при показанной карте — карта остаётся (§4.12)
+  if (mounted && (styleUrl === null || (route.isError && !route.data))) return null;
+  if (!map || styleUrl === null) {
     return (
       <SkeletonGroup>
         <View style={[styles.place, { backgroundColor: theme.surface.skeleton }]} />
@@ -38,7 +46,9 @@ export function RaceRouteMap({ race }: { race: RaceDetail }) {
   }
   return (
     <RouteMap
-      map={route.data}
+      // смена стиля (темы) — новая карта: сброс ошибки прошлого стиля
+      key={styleUrl}
+      map={map}
       styleUrl={styleUrl}
       theme={theme}
       accessibilityLabel={t('races.detail.map.label', {

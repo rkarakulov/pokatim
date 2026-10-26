@@ -141,7 +141,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   карты нет. Статичный вид: жесты выключены пропсами (не `pointerEvents` — атрибуция нажимается), камера по рамке
   без анимации. Карточка `races/[id]`: блок `race-route-map.tsx` после строки «Коридор» — SSR и первый рендер — место
   карты (скелетон той же пропорции), после монтирования: env не задан, геометрия 404/ошибка — блок схлопывается
-  (строки остаются); запрос `['races','route',id]` — только клиент, pull-to-refresh его не трогает. Native —
+  (строки остаются; ошибка обновления при показанной карте — карта остаётся); запрос `['races','route',id]` — только
+  клиент, pull-to-refresh карточки перезапрашивает его, когда коридор есть (`useRaceRouteRefetch`: коридор
+  опубликованной гонки до старта правится); ширина коридора на карте — из `race.corridor.widthM` карточки. Native —
   config plugin в `app.json`; пакет MapLibre RN импортируется только лениво (`load-maplibre-native.ts`, `import()`)
   и только при `mapSupported()` (`map-support(.web).ts`: `TurboModuleRegistry.get` модулей `MLRNCameraModule`,
   `MLRNMapViewModule`) — статический импорт бросает `getEnforcing` в Expo Go и старом dev-клиенте; нет модулей —
