@@ -482,6 +482,14 @@ describe('«Результаты» гонки — после публикаци�
     const history = await screen.findByRole('region', { name: 'История пересчётов' });
     const link = await within(history).findByRole('link', { name: 'Решение по спору ·9a9001' });
     expect(link.getAttribute('href')).toBe(`/admin/disputes/${DISPUTE_ID}`);
+
+    // без `disputes.read` (организатор) — текст без ссылки
+    cleanup();
+    mocked.me.mockResolvedValue(ME.organizer);
+    await renderApp(PATH);
+    const plain = await screen.findByRole('region', { name: 'История пересчётов' });
+    expect(await within(plain).findByText('Решение по спору ·9a9001')).toBeTruthy();
+    expect(within(plain).queryByRole('link', { name: 'Решение по спору ·9a9001' })).toBeNull();
   });
 
   it('DQ и отмена DQ — с причиной, тело с entryId', async () => {
