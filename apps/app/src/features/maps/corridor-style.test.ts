@@ -4,6 +4,7 @@ import { size, stroke, themes } from '@pokatim/design-tokens';
 
 import {
   centerLat,
+  CORRIDOR_MIN_WIDTH_PX,
   CORRIDOR_OPACITY,
   corridorLineWidth,
   metersPerPixel,
@@ -38,17 +39,39 @@ describe('corridor-style (maps-01)', () => {
     expect(centerLat(map.bounds)).toBeCloseTo(53.9, 9);
   });
 
-  it('ширина коридора: interpolate exponential 2 по zoom, опоры 0 и 22 — 2 × widthM / mpp', () => {
+  /** Значение `interpolate exponential 2` по опорам `[z, w, …]` на зуме `zoom`. */
+  const widthAt = (expression: ReturnType<typeof corridorLineWidth>, zoom: number) => {
+    const stops = (expression.slice(3) as number[]).reduce<[number, number][]>(
+      (pairs, value, i, all) => (i % 2 === 0 ? [...pairs, [value, all[i + 1]!]] : pairs),
+      [],
+    );
+    const b = stops.findIndex(([z]) => z >= zoom);
+    if (b < 0) return stops.at(-1)![1];
+    if (b === 0) return stops[0]![1];
+    const [za, wa] = stops[b - 1]!;
+    const [zb, wb] = stops[b]!;
+    const t = (2 ** (zoom - za) - 1) / (2 ** (zb - za) - 1);
+    return wa + t * (wb - wa);
+  };
+
+  it('ширина коридора (B3 maps-02): max(2 × widthM / mpp, минимум px) на всех зумах, exponential 2 по zoom', () => {
     const lat = 53.9;
     const expression = corridorLineWidth(50, lat);
     expect(expression.slice(0, 3)).toEqual(['interpolate', ['exponential', 2], ['zoom']]);
-    const [, , , z0, w0, z22, w22] = expression;
-    expect([z0, z22]).toEqual([0, 22]);
-    expect(w0).toBeCloseTo(100 / metersPerPixel(lat, 0), 9);
-    expect(w22).toBeCloseTo(100 / metersPerPixel(lat, 22), 6);
-    // на zoom 22 коридор ±50 м — тысячи пикселей; на zoom 0 — доли пикселя
-    expect(w22 as number).toBeGreaterThan(9000);
-    expect(w0 as number).toBeLessThan(0.01);
+    expect(CORRIDOR_MIN_WIDTH_PX).toBeGreaterThan(stroke.indicator * 2);
+    for (const zoom of [0, 5, 9, 10, 11, 12, 13, 14, 16, 18, 22]) {
+      const metric = 100 / metersPerPixel(lat, zoom);
+      expect(widthAt(expression, zoom)).toBeCloseTo(Math.max(metric, CORRIDOR_MIN_WIDTH_PX), 4);
+    }
+    // обзорный зум маршрута ~60 км: метрически 2–4 px — показывается минимум
+    expect(100 / metersPerPixel(lat, 10)).toBeLessThan(CORRIDOR_MIN_WIDTH_PX);
+    expect(widthAt(expression, 10)).toBe(CORRIDOR_MIN_WIDTH_PX);
+    // на zoom 22 коридор ±50 м — тысячи пикселей
+    expect(widthAt(expression, 22)).toBeGreaterThan(9000);
+    // опоры строго по возрастанию (иначе MapLibre отвергнет выражение)
+    const zooms = (expression.slice(3) as number[]).filter((_, i) => i % 2 === 0);
+    expect([...zooms].sort((a, b) => a - b)).toEqual(zooms);
+    expect(new Set(zooms).size).toBe(zooms.length);
   });
 
   it('GeoJSON: линия маршрута и точки старта и финиша с kind', () => {

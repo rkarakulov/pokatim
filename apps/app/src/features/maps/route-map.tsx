@@ -1,8 +1,9 @@
 import type * as MapLibreNative from '@maplibre/maplibre-react-native';
 import { useEffect, useMemo, useState } from 'react';
+import { space } from '@pokatim/design-tokens';
 import { StyleSheet } from 'react-native';
 
-import { MAP_PADDING, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
+import { MAP_FIT_PADDING, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
 import { loadMapLibreNative } from './load-maplibre-native';
 import { RouteMapFrame } from './route-map-frame';
 import type { RouteMapProps } from './route-map-props';
@@ -14,7 +15,8 @@ import {
   unionBounds,
 } from './track-style';
 
-const padding = { top: MAP_PADDING, right: MAP_PADDING, bottom: MAP_PADDING, left: MAP_PADDING };
+/** Кнопка атрибуции «i» — в нижнем правом углу, как на web: отступ камеры снизу её учитывает (B2 maps-02). */
+const ATTRIBUTION_POSITION = { bottom: space.s2, right: space.s2 };
 
 /**
  * Native-карта маршрута (`@maplibre/maplibre-react-native` 11, ADR-0014): пакет грузится лениво (`loadMapLibreNative`,
@@ -64,6 +66,9 @@ export function RouteMap({
           style={StyleSheet.absoluteFill}
           mapStyle={styleUrl}
           attribution
+          attributionPosition={ATTRIBUTION_POSITION}
+          // B4 maps-02: кнопка атрибуции — в цвете темы
+          tintColor={theme.text.secondary}
           logo={false}
           compass={false}
           scaleBar={false}
@@ -75,7 +80,7 @@ export function RouteMap({
           touchPitch={false}
           onDidFailLoadingMap={() => setFailed(true)}
         >
-          <lib.Camera initialViewState={{ bounds, padding }} />
+          <lib.Camera initialViewState={{ bounds, padding: MAP_FIT_PADDING }} />
           <lib.GeoJSONSource id={ROUTE_SOURCE_ID} data={features}>
             {layers.map((layer) => (
               <lib.Layer key={layer.id} {...layer} />

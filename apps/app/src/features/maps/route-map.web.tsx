@@ -1,9 +1,10 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
-import { MAP_PADDING, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
+import { attributionCss, collapseAttribution } from './attribution.web';
+import { MAP_FIT_PADDING, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
 import { loadMaplibre } from './load-maplibre';
 import { MAP_WORKER_FILE } from './map-worker';
 import { RouteMapFrame } from './route-map-frame';
@@ -19,8 +20,9 @@ import {
 /**
  * Web-карта маршрута (`maplibre-gl` 6, ADR-0014 п. 5): модуль грузится динамическим `import()` только после
  * монтирования — в серверный рендер и первый чанк не попадает (статически — только CSS). Статичный вид
- * (`interactive: false`), компактная атрибуция, камера сразу по рамке без анимации (RC-4). Смена стиля (темы) —
- * пересоздание карты. Ошибка стиля или тайлов — сообщение поверх карты.
+ * (`interactive: false`), компактная атрибуция — свёрнута при старте и в цветах темы (B2, B4 maps-02), камера сразу
+ * по рамке без анимации (RC-4) с отступом под контрол атрибуции. Смена стиля (темы) — пересоздание карты. Ошибка
+ * стиля или тайлов — сообщение поверх карты.
  */
 export function RouteMap({
   map,
@@ -31,6 +33,7 @@ export function RouteMap({
   track,
 }: RouteMapProps) {
   const container = useRef<HTMLDivElement>(null);
+  const scope = useId();
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -49,9 +52,10 @@ export function RouteMap({
           interactive: false,
           attributionControl: { compact: true },
           bounds: unionBounds(map.bounds, track?.line),
-          fitBoundsOptions: { padding: MAP_PADDING, animate: false },
+          fitBoundsOptions: { padding: MAP_FIT_PADDING, animate: false },
         });
         instance = created;
+        collapseAttribution(created, node);
         created.on('load', () => {
           created.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: routeFeatures(map) });
           for (const layer of routeLayers(theme, map.widthM, map.bounds)) created.addLayer(layer);
@@ -78,7 +82,13 @@ export function RouteMap({
       accessibilityLabel={accessibilityLabel}
       failedMessage={failed ? failedMessage : null}
     >
-      <div ref={container} data-testid="route-map-canvas" style={canvasStyle} />
+      <style>{attributionCss(scope, theme)}</style>
+      <div
+        ref={container}
+        data-testid="route-map-canvas"
+        data-route-map={scope}
+        style={canvasStyle}
+      />
     </RouteMapFrame>
   );
 }
