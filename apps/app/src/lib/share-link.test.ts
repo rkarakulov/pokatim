@@ -23,14 +23,16 @@ describe('shareLink (native)', () => {
 
   it('системный share sheet: текст + ссылка на web-карточку; закрыто — dismissed', async () => {
     process.env.EXPO_PUBLIC_WEB_ORIGIN = 'https://pokatim.by';
-    const sheet = jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.sharedAction });
+    const sheet = jest
+      .spyOn(Share, 'share')
+      .mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
     await expect(shareLink(input)).resolves.toBe('shared');
     expect(sheet).toHaveBeenCalledWith({
       title: 'Райд',
       message: `${input.text}\nhttps://pokatim.by/rides/x`,
       url: 'https://pokatim.by/rides/x',
     });
-    sheet.mockResolvedValue({ action: Share.dismissedAction });
+    sheet.mockResolvedValue({ action: Share.dismissedAction, activityType: undefined });
     await expect(shareLink(input)).resolves.toBe('dismissed');
   });
 
