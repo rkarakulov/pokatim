@@ -17,8 +17,9 @@ paths:
   члены команды и роли, сессии панели, журнал; identity — только порт `PanelCredentials`/`IdentityAccounts`),
   `races` (сезоны и гонки по коридору — одна граница, ADR-0010: определение сезона живёт здесь, отдельного модуля
   `seasons` нет), `calendar` (календарь стартов, с гонками не связан), `tracks` (загрузки, разбор, активности —
-  ADR-0011), `devices` (Garmin/Wahoo через агрегатор Open Wearables) и `routes` (маршруты команды платформы —
-  эталон коридора гонки, ADR-0012 Proposed).
+  ADR-0011), `devices` (Garmin/Wahoo через агрегатор Open Wearables), `routes` (маршруты команды платформы —
+  эталон коридора гонки, ADR-0012 Proposed) и `rides` (кофе-райды, ADR-0013 Proposed: зависит только от `identity`;
+  панель — с модерацией 05b).
 - `routes` о гонках не знает и зависит только от `panel`; `races → routes` — только порт `RouteCatalog`
   (`modules/routes/index.ts`, `RoutesCoreModule`): готовый маршрут по id в транзакции правки гонки и названия
   маршрутов списка. Записи `routes`/`route_*` из `races` (и наоборот) — нет. Линию сверки для слайса 02 даст
@@ -75,3 +76,14 @@ paths:
 
 Клиентское время в расчёте результата · UPDATE/DELETE аудита и споров · биометрия или e-mail в логах ·
 разбор трека или рендер в HTTP-обработчике.
+
+## Кофе-райды (`rides`, блок 05)
+
+- Лента `GET /v1/rides`, города `GET /v1/rides/cities`, состояние зрителя `GET /v1/rides/:id/me` и все мутации —
+  `rides.controller.ts` под `AuthGuard`, `no-store` (лента зависит от зрителя: роль, отменённые свои). Публичное
+  чтение — только `GET /v1/rides/:id` (`rides-public.controller.ts`, `PublicReadGuard`, `public, max-age=60`).
+  `rides/cities` — статический путь, в pipe `Uuid` не уходит (int-тест).
+- Фаза и права зрителя — `rides.policy.ts` (`ridePhase`, `rideViewer`, `validateStartsAt`, `RIDES_POLICY`); ответы
+  собирает `rides-feed.service.ts` из явного списка полей.
+- Лимиты частоты (`RateLimiter` базы, ключ — `uid`): `rides-create`, `rides-manage` (правка и отмена), `rides-rsvp`
+  (join и leave); квоты — `409 RIDE_QUOTA_EXCEEDED` с `RideQuotaDetails`. Outbox-событий и аудита в 05a нет.

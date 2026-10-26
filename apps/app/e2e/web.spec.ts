@@ -4,7 +4,14 @@ import type { APIRequestContext, Page } from '@playwright/test';
 
 import { expect, test } from './fixtures';
 import { latestMailText, passwordResetLink, verificationLink } from './mailpit';
-import { REFRESH_URL, SIGN_IN_URL, UNKNOWN_RACE_ID, UNKNOWN_START_ID } from './project';
+import {
+  REFRESH_URL,
+  SIGN_IN_URL,
+  UNKNOWN_RACE_ID,
+  UNKNOWN_RIDE_ID,
+  UNKNOWN_START_ID,
+} from './project';
+import { cancelRideByApi, rideFixtureDate, signInRider } from './ride-fixture';
 import {
   HOME_FIXTURE_PASSWORD,
   HOME_FIXTURE_YEAR,
@@ -25,7 +32,9 @@ import { API_URL, BASE_URL, DEV_URL, WITH_API } from './urls';
 // публичные карточка гонки и сезон по ссылке без входа (SSR + OG без ПДн, отменённая — баннер), вкладка «Гонки» после
 // входа — герой, группы, чип класса, переход в карточку и в сезон. Календарь (блок 04): публичная карточка старта по
 // ссылке без входа (SSR + OG без ПДн), «Регистрация у организатора» — новая вкладка без opener, вкладка «Календарь»
-// после входа — чип месяца, подпись группы, переход в карточку и назад.
+// после входа — чип месяца, подпись группы, переход в карточку и назад. Кофе-райды (блок 05): райдер A создаёт райд
+// формой → вкладка «Райды»; гость — карточка по ссылке (SSR, OG без ПДн, всегда noindex); райдер B — «Я иду» → «Вы
+// идёте»; A отменяет → гость видит «Райд отменён».
 // Ошибки страницы (исключения, рассинхрон гидрации, неожиданные отказы загрузки) проверяет фикстура (fixtures.ts);
 // ожидаемый 401 восстановления сессии анонима — в e2e/project.ts.
 
@@ -52,6 +61,9 @@ async function expectHomeHeroes(page: Page, request: APIRequestContext) {
     page.getByText(start ?? 'Пока нет стартов в календаре', { exact: true }),
   ).toBeVisible();
 }
+
+/** Карточка кофе-райда на странице (вкладки остаются в DOM — тексты ищем только в ней). */
+const card = (page: Page) => page.getByTestId('ride-detail');
 
 /** Заголовки разделов Главной сверху вниз. */
 const homeSections = (page: Page) =>
@@ -251,6 +263,27 @@ test('публичная карточка неизвестного старта:
     await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
   }
   await expect(page).toHaveURL(`${BASE_URL}/calendar/${UNKNOWN_START_ID}`);
+});
+
+test('публичная карточка неизвестного кофе-райда: HTML 200 + noindex всегда, после гидрации — «Райд не найден» (без API — «Нет соединения»)', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get(`/rides/${UNKNOWN_RIDE_ID}`);
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(html).toMatch(/<meta property="og:title" content="Кофе-райд"/);
+  expect(html).toMatch(/<meta name="robots" content="noindex"/);
+  expect(html).not.toContain('og:url');
+
+  await page.goto(`/rides/${UNKNOWN_RIDE_ID}`);
+  if (WITH_API) {
+    await expect(page.getByText('Райд не найден', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Все райды' })).toBeVisible();
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+  await expect(page).toHaveURL(`${BASE_URL}/rides/${UNKNOWN_RIDE_ID}`);
 });
 
 test('витрина /ui-kit: в production — Главная гостя', async ({ page }) => {
@@ -719,6 +752,93 @@ test.describe('с API', () => {
       await expect(page).toHaveURL(`${BASE_URL}/calendar`);
     } finally {
       await withdraw();
+    }
+  });
+  test('Кофе-райды (блок 05): райдер создаёт райд формой, гость открывает ссылку (SSR, OG без ПДн, noindex), другой райдер «Я иду», отмена видна гостю', async ({
+    page,
+    request,
+    browser,
+  }) => {
+    // ожидание кэша публичной карточки гостем (до 2 × 60 с)
+    test.setTimeout(240_000);
+    const organizer = await registerHomeRider(request);
+    const title = `Смоук-райд ${Date.now()}`;
+    let rideId: string | undefined;
+    try {
+      // A: форма «Новый райд» → карточка с баннером «опубликован»
+      await signInRider(page, organizer);
+      await page.getByRole('tab', { name: 'Райды' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/rides`);
+      await page.getByRole('button', { name: 'Создать райд' }).first().click();
+      await expect(page).toHaveURL(`${BASE_URL}/rides/new`);
+      await page.getByRole('textbox', { name: 'Название' }).fill(title);
+      await page.getByRole('textbox', { name: 'Как вас подписать' }).fill('Смоук');
+      await page.getByLabel('Дата').fill(rideFixtureDate());
+      await page.getByRole('textbox', { name: 'Время старта' }).fill('10:00');
+      await page.getByRole('button', { name: 'Все города' }).click();
+      await page.getByRole('button', { name: 'Минск', exact: true }).click();
+      await page.getByRole('textbox', { name: 'Место старта' }).fill('Площадь смоука');
+      await page.getByRole('textbox', { name: 'Дистанция, км' }).fill('42');
+      await page.getByRole('textbox', { name: 'Темп от, км/ч' }).fill('22');
+      await page.getByRole('textbox', { name: 'Темп до, км/ч' }).fill('24');
+      await page.getByRole('textbox', { name: 'Максимум участников (необязательно)' }).fill('2');
+      await page.getByRole('button', { name: 'Опубликовать' }).click();
+      await expect(page).toHaveURL(new RegExp(`^${BASE_URL}/rides/[0-9a-f-]{36}\\?published=1$`));
+      rideId = new URL(page.url()).pathname.split('/').pop();
+      await expect(
+        card(page).getByText('Райд опубликован. Пригласите друзей ссылкой.'),
+      ).toBeVisible();
+      await expect(card(page).getByText('Кофе-райд · вы организатор')).toBeVisible();
+      await expect(card(page).getByText('идёт 1 из 2 · вы')).toBeVisible();
+
+      // вкладка «Райды»: райд виден (герой или строка)
+      await page.goto('/rides');
+      await expect(page.getByText(title, { exact: true }).first()).toBeVisible();
+
+      // гость: SSR карточки — название, OG без описания и ПДн, всегда noindex
+      const html = await (await request.get(`/rides/${rideId}`)).text();
+      expect(html).toContain(`<meta property="og:title" content="${title}"`);
+      expect(html).toContain('Площадь смоука');
+      expect(html).toMatch(/<meta name="robots" content="noindex"/);
+      expect(html).toContain(`<meta property="og:url" content="${BASE_URL}/rides/${rideId}"`);
+      expect(html).not.toMatch(/@pokatim\.test|organizerUserId|participants/);
+      const guest = await browser.newPage();
+      await guest.goto(`${BASE_URL}/rides/${rideId}`);
+      await expect(card(guest).getByText(title, { exact: true }).first()).toBeVisible();
+      await expect(card(guest).getByRole('button', { name: 'Я иду' })).toBeVisible();
+
+      // B: вход → карточка → «Я иду» → «Вы идёте · …», мест больше нет
+      const rider = await registerHomeRider(request);
+      const second = await browser.newPage();
+      await signInRider(second, rider);
+      await second.goto(`${BASE_URL}/rides/${rideId}`);
+      await card(second).getByRole('button', { name: 'Я иду' }).click();
+      await expect(card(second).getByText(/^Вы идёте · /)).toBeVisible();
+      await expect(card(second).getByText('идут 2 из 2 · вы в списке')).toBeVisible();
+      await second.close();
+
+      // A отменяет с причиной → гость видит отмену
+      await page.goto(`/rides/${rideId}`);
+      await card(page).getByRole('button', { name: 'Отменить райд' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/rides/cancel/${rideId}`);
+      const cancel = page.getByTestId('ride-cancel');
+      await cancel.getByRole('button', { name: 'плохая погода' }).click();
+      await cancel.getByRole('button', { name: 'Отменить райд' }).click();
+      await expect(card(page).getByText('Райд отменён. Причина: плохая погода.')).toBeVisible();
+      // гость: публичная карточка кэшируется до 60 с (ответ API и SSR-кэш web-сервера, риск §8 task.md) — ждём
+      // свежую выдачу перезагрузками; API без кэша уже отдаёт отмену
+      const fresh = await (await request.get(`${API_URL}/v1/rides/${rideId}`)).json();
+      expect(fresh).toMatchObject({ phase: 'cancelled', cancelReason: 'weather' });
+      await expect(async () => {
+        await guest.reload();
+        await expect(card(guest).getByText('Райд отменён. Причина: плохая погода.')).toBeVisible({
+          timeout: 2_000,
+        });
+      }).toPass({ timeout: 150_000, intervals: [10_000] });
+      await expect(card(guest).getByRole('button', { name: 'Я иду' })).toHaveCount(0);
+      await guest.close();
+    } finally {
+      if (rideId) await cancelRideByApi(request, organizer, rideId);
     }
   });
 });
