@@ -46,6 +46,12 @@ export const CORRIDOR_POLICY = {
    */
   chordToleranceM: 10,
   chordToleranceShare: 0.05,
+  /** сглаженный путь для правдоподобия: точки через столько секунд или метров */
+  plausibilityIntervalS: 10,
+  plausibilityDistanceM: 100,
+  /** бюджет геометрии: сумма хорд ≤ factor × сглаженный путь + perPoint × точки, иначе implausible */
+  chordBudgetFactor: 2,
+  chordBudgetPerPointM: 20,
   /** допуск сравнения с порогами A6, м — разрешение координат (1e-7° ≈ 1,1 см) */
   thresholdToleranceM: 0.01,
   /** доля обратного хода, не меньше — `wrong_direction` */

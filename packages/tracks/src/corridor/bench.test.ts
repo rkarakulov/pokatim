@@ -192,9 +192,10 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     process.stdout.write(`длинные хорды (analyzeAttempt): ${Math.round(elapsedMs)} мс\n`);
   }, 60_000);
 
-  // предел правдоподобия: средняя скорость 30 м/с, каждая хорда пересекает промежуток между проходами узкого
-  // плотного коридора — точная геометрия на каждом шаге
-  it('геометрия хорд на пределе правдоподобия (30 м/с, узкий плотный коридор): 200 000 точек ≤ 3 с', () => {
+  // предел бюджета геометрии: хорды 108 м (60 м вдоль, 90 м поперёк проходов узкого плотного коридора) раз в 3,1 с —
+  // сглаженный путь ≈ 20 м/с, сумма хорд в бюджете (≤ 2 × сглаженный + 20 м на точку); каждая хорда пересекает
+  // промежуток между проходами — точная геометрия на каждом шаге
+  it('геометрия хорд на пределе бюджета (узкий плотный коридор): 200 000 точек ≤ 3 с', () => {
     const corners: Xy[] = [[0, 0]];
     for (let i = 0; i < 66; i += 1) {
       const [x, y] = corners[corners.length - 1]!;
@@ -204,12 +205,14 @@ describe('AC14: длинный трек — 200 000 точек на маршру
       );
     }
     const corridor = prepareCorridor(corridorOf(corners, { widthM: 20 }));
-    // 90 м поперёк проходов раз в 3,1 с (≈ 29 м/с — не выброс), вдоль — по 1 м
-    // старт: из ворот (0, 0) вперёд по первому проходу — сегмент тянется до конца трека
+    // старт: из ворот (0, 0) вперёд по первому проходу; дальше «змейкой» по парам соседних проходов
     const points = Array.from({ length: POINTS }, (_, k): ParsedPoint => {
-      const [lon, lat] = at(
-        k < 2 ? [k * 60, 0] : [100 + (k % 800), (k % 2) * 90 + 90 * (Math.floor(k / 800) % 60)],
-      );
+      const m = k - 2;
+      const pair = Math.floor(m / 14);
+      const i = m % 14;
+      const x = pair % 2 === 0 ? 100 + 60 * i : 880 - 60 * i;
+      const y = 90 * (pair % 60) + (m % 2) * 90;
+      const [lon, lat] = at(k < 2 ? [k * 60, 0] : [x, y]);
       return { lon, lat, time: new Date(T0 + k * 3100) };
     });
     const startedAt = performance.now();
@@ -220,6 +223,6 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     expect(match.segment!.offCorridorM).toBeGreaterThan(5_000_000);
     expect(match.verdict).toBe('rejected');
     expect(elapsedMs).toBeLessThanOrEqual(TIME_LIMIT_MS);
-    process.stdout.write(`геометрия хорд на пределе 30 м/с: ${Math.round(elapsedMs)} мс\n`);
+    process.stdout.write(`геометрия хорд на пределе бюджета: ${Math.round(elapsedMs)} мс\n`);
   }, 60_000);
 });

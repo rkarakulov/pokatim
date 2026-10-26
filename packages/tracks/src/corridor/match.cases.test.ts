@@ -1,7 +1,8 @@
 // Сценарии ревью pass 1 (PR #32): каждый — воспроизведение находки, красный до исправления.
 import { describe, expect, it } from 'vitest';
 
-import type { ParsedPoint } from '../track.ts';
+import { analyzeAttempt, encodeTrackStream } from '../parse.ts';
+import { TrackParseError, type ParsedPoint } from '../track.ts';
 import {
   at,
   CENTER,
@@ -449,6 +450,68 @@ describe('недобранный путь и выход по хорде', () => 
       expect(result.segment!.offCorridorM).toBe(0);
     },
   );
+
+  describe('правдоподобие трека — по сглаженному пути (ревью pass 6)', () => {
+    const straight5k = corridorOf([
+      [0, 0],
+      [5000, 0],
+    ]);
+    const attempt = (points: ParsedPoint[]) =>
+      analyzeAttempt(
+        encodeTrackStream({
+          v: 1,
+          provider: 'garmin',
+          sport: 'road_cycling',
+          hasHeartRate: false,
+          hasPower: false,
+          points: points.map((p) => [p.time!.getTime(), p.lat, p.lon, null]),
+        }),
+        'stream',
+        straight5k,
+        WIDE,
+        new Date(T0 + 86_400_000),
+      );
+
+    it('25 м/с с шумом ±16 м (хорды в среднем 30,2 м/с) — засчитан', () => {
+      const points = timed(
+        Array.from({ length: 217 }, (_, k): Xy => [-200 + 25 * k, 16 * (-1) ** Math.floor(k / 3)]),
+        Array.from({ length: 217 }, (_, k) => k),
+      );
+      expect(attempt(points).reasons).toEqual([]);
+    });
+
+    it('29,5 м/с с шумом σ 15 м — засчитан', () => {
+      const points = noisyRide(
+        [
+          [-200, 0],
+          [5200, 0],
+        ],
+        15,
+        2,
+        29.5,
+      );
+      expect(attempt(points).reasons).toEqual([]);
+    });
+
+    it('подделка: 40 м/с по сглаженному пути — implausible', () => {
+      const points = ride(
+        [
+          [-200, 0],
+          [5200, 0],
+        ],
+        { speed: 40 },
+      );
+      expect(() => attempt(points)).toThrow(TrackParseError);
+    });
+
+    it('подделка: хорды много длиннее сглаженного пути (зигзаг на месте) — implausible', () => {
+      const points = timed(
+        Array.from({ length: 2000 }, (_, k): Xy => [1000 + (k % 400), (k % 2) * 90]),
+        Array.from({ length: 2000 }, (_, k) => k * 3.1),
+      );
+      expect(() => attempt(points)).toThrow(TrackParseError);
+    });
+  });
 
   /** Извилистая дорога y = 25·sin(x/30), коридор ±50 м: хорды между редкими точками остаются в коридоре. */
   it('редкая запись на извилистом маршруте — sparse_recording; раз в 1 с и прямая раз в 60 с — засчитаны', () => {

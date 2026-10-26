@@ -299,7 +299,9 @@ export function chordOutsideM(
   if (total === 0) return 0;
   const w = corridor.widthM;
   const w2 = w * w;
-  const pieces = Math.max(1, Math.ceil(total / Math.max(w, CORRIDOR_POLICY.densifyStepM)));
+  // короткий отрезок — один кусок (один запрос сетки); длинный — куски для отсечки «середина + половина ≤ w»
+  const piece = Math.max(w, CORRIDOR_POLICY.densifyStepM);
+  const pieces = total <= 8 * piece ? 1 : Math.ceil(total / piece);
   const pieceLength = total / pieces;
   let outside = 0;
 

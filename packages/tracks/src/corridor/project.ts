@@ -54,17 +54,7 @@ export function projectTrack(
     if (k + 1 < count) step[k] = haversineMeters(kept[k]!, kept[k + 1]!);
   }
 
-  // средняя скорость трека (длина по точкам без выбросов / длительность) не выше `spikeSpeedMps` (108 км/ч), иначе
-  // трек неправдоподобен (`TrackParseError('implausible')`, как у разбора) — до привязки: так суммарная длина хорд
-  // для точной геометрии ограничена 30 м/с × длительность (≤ 48 ч у файла)
-  if (count >= 2) {
-    let length = 0;
-    for (let k = 0; k + 1 < count; k += 1) length += step[k]!;
-    const seconds = (time[count - 1]! - time[0]!) / 1000;
-    if (length > CORRIDOR_POLICY.spikeSpeedMps * Math.max(seconds, 1)) {
-      throw new TrackParseError('implausible');
-    }
-  }
+  assertPlausible(kept, time, step);
 
   const branches = collectBranches(kept, corridor, d);
   const s = viterbi(branches, step, corridor);
@@ -269,6 +259,45 @@ function viterbi(branches: Branches, step: Float64Array, corridor: PreparedCorri
     else s[k] = Number.isNaN(last) ? 0 : last;
   }
   return s;
+}
+
+/**
+ * Правдоподобие трека до привязки (иначе `TrackParseError('implausible')`, как у разбора):
+ * - средняя скорость по **сглаженному** пути (точки через ≥ 10 с или ≥ 100 м — шум GPS между ними не копится)
+ *   не выше `spikeSpeedMps` (108 км/ч) — честный быстрый проезд с шумом проходит;
+ * - бюджет геометрии: сумма хорд между точками ≤ 2 × сглаженный путь + 20 м на точку (шум, стояние) — так работа
+ *   точной геометрии хорд ограничена: ≤ 2 × 30 м/с × длительность + 20 м × точки.
+ */
+function assertPlausible(
+  points: readonly ParsedPoint[],
+  time: Float64Array,
+  step: Float64Array,
+): void {
+  const count = points.length;
+  if (count < 2) return;
+  const policy = CORRIDOR_POLICY;
+  let smoothed = 0;
+  let chords = 0;
+  let anchor = 0;
+  for (let k = 1; k < count; k += 1) {
+    chords += step[k - 1]!;
+    const last = k === count - 1;
+    if (last || time[k]! - time[anchor]! >= policy.plausibilityIntervalS * 1000) {
+      smoothed += haversineMeters(points[anchor]!, points[k]!);
+      anchor = k;
+    } else {
+      const distance = haversineMeters(points[anchor]!, points[k]!);
+      if (distance >= policy.plausibilityDistanceM) {
+        smoothed += distance;
+        anchor = k;
+      }
+    }
+  }
+  const seconds = Math.max(1, (time[count - 1]! - time[0]!) / 1000);
+  if (smoothed > policy.spikeSpeedMps * seconds) throw new TrackParseError('implausible');
+  if (chords > policy.chordBudgetFactor * smoothed + policy.chordBudgetPerPointM * count) {
+    throw new TrackParseError('implausible');
+  }
 }
 
 /**
