@@ -14,7 +14,9 @@ paths:
   построению (генератор `scripts/generate-corridor-fixtures.ts`, пакет не вызывается), версия в эталоне =
   `CORRIDOR_ENGINE_VERSION`; длинный трек (200 000 точек) — в памяти теста, не коммитится. Сторож версии —
   `corridor-golden.json` (полный результат всех фикстур): изменился — поднять версию и перезаписать
-  `UPDATE_CORRIDOR_GOLDEN=1`.
+  `UPDATE_CORRIDOR_GOLDEN=1`. Новые выходы движка, не меняющие вердикт (maps-02: интервалы схода
+  `matchCorridorDetailed`), — отдельной функцией вне `CorridorMatch`: golden и AC16 (ключи результата) не меняются,
+  тест `match` = `matchCorridor` на всех фикстурах.
 - Результаты гонок (race-results-03) — int на реальном MongoDB: заезд эталона сдвигается во времени в окно гонки
   стенда (`rideGpx` из `apps/api/test/results.ts`), маршрут — линия из `corridor-expected.json` в `route_geometries`;
   проверка — `AttemptCheckProcessor.check` напрямую, события — `resultsWorker(h)`. Отрицательные доказательства —

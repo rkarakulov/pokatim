@@ -69,7 +69,7 @@ describe('«Профиль»: загрузка (AC9)', () => {
     expect(screen.getByLabelText(NAME)).toHaveProp('accessibilityHint', 'Например, Анна К.');
     expect(
       screen.getByText(
-        'Имя увидят все в таблицах результатов гонок. Выключите — вы будете «Участник»',
+        'Имя увидят все в таблицах результатов гонок. Выключите — вы будете «Участник».',
       ),
     ).toBeOnTheScreen();
   });

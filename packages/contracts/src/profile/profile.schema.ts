@@ -10,7 +10,7 @@ const isRideReason = (code: string): code is RideReason =>
  * Версия текста согласия на показ имени (profile-02): ключи i18n `profile.show.label` и `profile.show.hint`. Сменили
  * формулировку — подняли версию (дата). Пишет сервер в `profile_consent_events`; клиент присылает только флаг.
  */
-export const PUBLIC_NAME_CONSENT_VERSION = '2026-10-26';
+export const PUBLIC_NAME_CONSENT_VERSION = '2026-10-27';
 
 export const RIDER_PUBLIC_NAME_MIN = 2;
 export const RIDER_PUBLIC_NAME_MAX = 80;

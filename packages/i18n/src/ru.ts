@@ -113,6 +113,18 @@ export const ru = {
   'races.detail.map.label':
     'Карта маршрута: {distance}, коридор ±{width} м от маршрута, старт и финиш отмечены',
   'races.detail.map.failed': 'Карта не загрузилась',
+  // maps-02: свой трек на карте гонки — текстовая альтернатива подсветки [ASSUMPTION copy]
+  'races.detail.myTrack.legendTrack': 'Ваш трек',
+  'races.detail.myTrack.legendOff': 'Вне коридора — пунктир',
+  'races.detail.myTrack.offSummary': 'Вне коридора {off} м, самый длинный выход {max} м',
+  'races.detail.myTrack.allInside': 'Весь сегмент в коридоре',
+  'races.detail.myTrack.whereOff': 'Где сход — пунктиром на карте',
+  'races.detail.myTrack.pending': 'Трек проверяется — участки вне коридора появятся после проверки',
+  'races.detail.myTrack.unavailable': 'Разметка участков для этой попытки недоступна',
+  'races.detail.myTrack.failed': 'Не удалось загрузить трек',
+  'races.detail.myTrack.attempts': 'Попытка на карте',
+  'races.detail.myTrack.attemptChip': '{date} · {status}',
+  'races.detail.myTrack.mapLabel': '{map}. Ваш трек: {track}',
   'races.detail.allRaces': 'Все гонки',
   // экран сезона (публичный, блок 03; Q1, Q2 — без таблицы)
   'season.title': 'Сезон',
@@ -213,7 +225,6 @@ export const ru = {
   },
   'rides.going.you': '{caption} · вы',
   'rides.going.youListed': '{caption} · вы в списке',
-  'rides.going.person': 'Участник',
   'rides.action.join': 'Я иду',
   'rides.action.leave': 'Не иду',
   'rides.action.going': 'Вы идёте',
@@ -236,7 +247,6 @@ export const ru = {
   'rides.detail.kicker': 'Кофе-райд',
   'rides.detail.kickerOrganizer': 'Кофе-райд · вы организатор',
   'rides.detail.organizer': 'Организатор: {name}',
-  'rides.detail.organizerAnonymous': 'Организатор',
   'rides.detail.start': 'Старт: {city}, {place}',
   'rides.detail.startPlace': 'Старт: {place}',
   'rides.detail.distance': 'Дистанция',
@@ -480,7 +490,7 @@ export const ru = {
   // profile-02: сменили текст `profile.show.label`/`profile.show.hint` — поднять `PUBLIC_NAME_CONSENT_VERSION` (contracts)
   'profile.show.label': 'Показывать имя в таблицах результатов',
   'profile.show.hint':
-    'Имя увидят все в таблицах результатов гонок. Выключите — вы будете «Участник»',
+    'Имя увидят все в таблицах результатов гонок. Выключите — вы будете «Участник».',
   'profile.save': 'Сохранить',
   'profile.saved': 'Сохранено',
   'tracks.upload.kicker': 'Файл',
@@ -1171,7 +1181,7 @@ export const ru = {
   'rides.report.comment': 'Комментарий — необязательно',
   'rides.report.hint': 'Жалобу увидит только команда платформы.',
   'rides.report.submit': 'Отправить',
-  'rides.report.sent': 'Жалоба отправлена — команда проверит райд',
+  'rides.report.sent': 'Жалоба отправлена — команда проверит райд.',
   'rides.report.back': 'К райду',
   'rides.report.unavailable': 'На этот райд нельзя пожаловаться',
   // --- кофе-райды 05b: «Модерация райдов» в панели ---
@@ -1530,4 +1540,10 @@ export const ru = {
   'home.routes.all': 'Все маршруты',
   'home.routes.heroKicker': 'Маршрут команды',
   'home.routes.empty': 'Маршрутов пока нет',
+  // смоук dev 2026-10-27 (приложение): неизвестный адрес, отмена без результата
+  'notFound.title': 'Страница не найдена',
+  'notFound.message': 'Проверьте адрес или откройте Главную.',
+  'notFound.home': 'На главную',
+  'races.entry.withdrawBodyNoResult':
+    'Заявка будет отменена. Заявиться на эту гонку снова будет нельзя.',
 } as const;

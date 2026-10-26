@@ -1,10 +1,12 @@
 import type { RideCard } from '@pokatim/contracts';
 import { size, space, stroke } from '@pokatim/design-tokens';
-import { AvatarStack, SkeletonText, textStyle, useTheme } from '@rkarakulov/ui';
+import { SkeletonText, textStyle, useTheme } from '@rkarakulov/ui';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { goingCaption, rideRowMeta, rideRowTime, stackPeople } from '@/features/rides/format';
+import { goingCaption, rideRowMeta, rideRowTime } from '@/features/rides/format';
+
+import { GoingStack } from './going-stack';
 
 export interface RideListRowProps {
   ride: RideCard;
@@ -42,7 +44,7 @@ export function RideListRow({ ride, now, onPress, action }: RideListRowProps) {
           {details}
         </Text>
         <View style={styles.stack}>
-          <AvatarStack people={stackPeople(ride.goingCount)} caption={caption} />
+          <GoingStack count={ride.goingCount} caption={caption} />
         </View>
       </Pressable>
       {action ? <View style={styles.action}>{action}</View> : null}

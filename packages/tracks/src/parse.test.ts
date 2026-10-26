@@ -165,6 +165,8 @@ describe('входы пакета', () => {
   it('движок сверки — только в серверном входе: лёгкий вход его не экспортирует', () => {
     for (const name of [
       'matchCorridor',
+      'matchCorridorDetailed',
+      'trackMapOf',
       'prepareCorridor',
       'analyzeAttempt',
       'CORRIDOR_POLICY',
@@ -210,6 +212,58 @@ describe('analyzeAttempt', () => {
     );
     expect(result).toMatchObject({ verdict: 'counted', engineVersion: CORRIDOR_ENGINE_VERSION });
     expect(structuredClone(result)).toEqual(result);
+  });
+
+  it('trackMap: позиции на той же линии, что analyzeTrack пишет в activity_tracks; без координат и времени', () => {
+    const { corridor, window } = corridorCase('wobble-3pct.gpx');
+    const bytes = fixture('corridor/wobble-3pct.gpx');
+    const { line } = analyzeTrack(bytes, 'gpx', NOW);
+    const result = analyzeAttempt(bytes, 'gpx', corridor, windowOf(window), NOW, line);
+    const trackMap = result.trackMap!;
+    expect(Object.keys(trackMap).sort()).toEqual(['linePoints', 'offRuns', 'segment']);
+    expect(trackMap.linePoints).toBe(line.length);
+    const [from, to] = trackMap.segment!;
+    expect(from).toBeLessThan(to);
+    expect(to).toBeLessThanOrEqual(line.length - 1);
+    expect(trackMap.offRuns.length).toBeGreaterThan(0);
+    for (const [a, b] of trackMap.offRuns) {
+      expect(a).toBeGreaterThanOrEqual(from);
+      expect(b).toBeLessThanOrEqual(to);
+      expect(Math.round(a * 1000) / 1000).toBe(a);
+    }
+    expect(structuredClone(result)).toEqual(result);
+    expect(JSON.stringify(trackMap)).not.toMatch(/T\d\d:|lon|lat/);
+    // без линии (по умолчанию) — разметки нет, вердикт тот же
+    const withoutLine = analyzeAttempt(bytes, 'gpx', corridor, windowOf(window), NOW);
+    expect(withoutLine.trackMap).toBeNull();
+    expect({ ...withoutLine, trackMap: result.trackMap }).toEqual(result);
+  });
+
+  it('trackMap: чистый проезд — сход пуст, сегмент задан; нет старта (mid-start) — null', () => {
+    const clean = corridorCase('clean.gpx');
+    const cleanBytes = fixture('corridor/clean.gpx');
+    const counted = analyzeAttempt(
+      cleanBytes,
+      'gpx',
+      clean.corridor,
+      windowOf(clean.window),
+      NOW,
+      analyzeTrack(cleanBytes, 'gpx', NOW).line,
+    );
+    expect(counted.trackMap!.offRuns).toEqual([]);
+    expect(counted.trackMap!.segment).not.toBeNull();
+    const midStart = corridorCase('mid-start.gpx');
+    const midBytes = fixture('corridor/mid-start.gpx');
+    const noStart = analyzeAttempt(
+      midBytes,
+      'gpx',
+      midStart.corridor,
+      windowOf(midStart.window),
+      NOW,
+      analyzeTrack(midBytes, 'gpx', NOW).line,
+    );
+    expect(noStart.reasons).toEqual(['no_start']);
+    expect(noStart.trackMap).toBeNull();
   });
 
   it('ошибки файла — TrackParseError, как у analyzeTrack; инварианты коридора — ошибка программиста', () => {

@@ -5,6 +5,7 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { latestMailText, passwordResetLink, verificationLink } from './mailpit';
 import {
+  NOT_FOUND_PATHS,
   REFRESH_URL,
   SIGN_IN_URL,
   UNKNOWN_RACE_ID,
@@ -69,7 +70,7 @@ const card = (page: Page) => page.getByTestId('ride-detail');
 
 /** Заголовки разделов Главной сверху вниз. */
 const homeSections = (page: Page) =>
-  page.getByRole('heading', { name: /^Ближайшие (гонки|старты)$/ });
+  page.getByRole('heading', { name: /^(Ближайшие (гонки|старты)|Маршруты команды)$/ });
 
 /**
  * Главная гостя после гидрации. С API: восстановление сессии — 401, гард ведёт на регистрацию. Без API: сеть
@@ -330,8 +331,19 @@ test('жалоба на райд /rides/report/<id> без сессии (05b): H
   }
 });
 
-test('витрина /ui-kit: в production — Главная гостя', async ({ page }) => {
+test('неизвестный адрес, /_sitemap и витрина /ui-kit в production — «Страница не найдена»', async ({
+  page,
+}) => {
+  for (const path of NOT_FOUND_PATHS) {
+    const response = await page.goto(path);
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole('heading', { name: 'Страница не найдена' })).toBeVisible();
+    await expect(page.getByText('Unmatched Route')).toHaveCount(0);
+  }
   await page.goto('/ui-kit');
+  await expect(page.getByRole('heading', { name: 'Страница не найдена' })).toBeVisible();
+  await expect(page.getByText('Кнопки', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'На главную' }).click();
   await expectGuestHome(page);
 });
 
@@ -440,10 +452,15 @@ test.describe('с API', () => {
     await expect(page).toHaveURL(`${BASE_URL}/`);
     await expect(page.getByRole('heading', { name: 'Покатим' })).toBeVisible();
 
-    // Главная (блок 02): «Календарь стартов» отмечен в опросе — раздел первым с тегом; герои или пустые герои
+    // Главная (блок 02): «Новые маршруты» и «Календарь стартов» отмечены в опросе — разделы первыми (в порядке вкладок)
+    // с тегом; герои или пустые герои
     await expect(page).toHaveTitle('Главная — Покатим');
-    await expect(homeSections(page)).toHaveText(['Ближайшие старты', 'Ближайшие гонки']);
-    await expect(page.getByText('по вашему выбору', { exact: true })).toHaveCount(1);
+    await expect(homeSections(page)).toHaveText([
+      'Маршруты команды',
+      'Ближайшие старты',
+      'Ближайшие гонки',
+    ]);
+    await expect(page.getByText('по вашему выбору', { exact: true })).toHaveCount(2);
     await expectHomeHeroes(page, request);
 
     // refresh — только в httpOnly cookie на пути сессии; JS страницы его не видит
@@ -580,7 +597,11 @@ test.describe('с API', () => {
       await page.getByRole('button', { name: 'Позже' }).click();
       await expect(page).toHaveURL(`${BASE_URL}/`);
 
-      await expect(homeSections(page)).toHaveText(['Ближайшие гонки', 'Ближайшие старты']);
+      await expect(homeSections(page)).toHaveText([
+        'Ближайшие гонки',
+        'Маршруты команды',
+        'Ближайшие старты',
+      ]);
       await expect(page.getByText('по вашему выбору', { exact: true })).toHaveCount(1);
       await expect(page.getByText('Окно гонки', { exact: true })).toBeVisible();
       await expect(page.getByText('Ближайший старт', { exact: true })).toBeVisible();

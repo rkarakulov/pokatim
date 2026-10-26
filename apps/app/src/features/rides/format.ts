@@ -95,15 +95,12 @@ export function goingCaption(
   return count <= 1 ? t('rides.going.you', { caption }) : t('rides.going.youListed', { caption });
 }
 
-/** Люди стопки: пустые квадраты «Личная линия» по числу, не больше 4 (без имён и фото, Q4). */
-export const stackPeople = (goingCount: number) =>
-  Array.from({ length: Math.min(goingCount, 4) }, () => ({ label: t('rides.going.person') }));
-
-/** Подпись организатора на карточке: введённая им подпись или «Организатор» (D2). */
+/**
+ * Подпись организатора в кикере героя: «Организатор: Катя Л.»; без имени — строки нет (B9 смоука dev: одинокое
+ * «ОРГАНИЗАТОР» читалось как пустое поле).
+ */
 export const organizerLine = (organizerName: string | null) =>
-  organizerName
-    ? t('rides.detail.organizer', { name: organizerName })
-    : t('rides.detail.organizerAnonymous');
+  organizerName ? t('rides.detail.organizer', { name: organizerName }) : null;
 
 /** Текст сообщения «Поделиться»: «{название} — {дата}, {время}, {город}». */
 export function rideShareText(ride: Pick<RideDetail, 'title' | 'startsAt' | 'city'>): string {

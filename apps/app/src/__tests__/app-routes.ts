@@ -33,6 +33,7 @@ import RivalResultRoute from '../app/races/result/[id]/[entryId]';
 import SeasonRoute from '../app/seasons/[id]';
 import StatusScreen from '../app/status';
 import UiKitScreen from '../app/ui-kit';
+import NotFoundRoute from '../app/+not-found';
 
 /** Маршруты вкладок для renderRouter (корневой layout подключают отдельные тесты). */
 export const tabRoutes = {
@@ -65,6 +66,7 @@ export const appRoutes = {
   'auth/verify/[token]': VerifyEmailScreen,
   'auth/reset/[token]': ResetPasswordScreen,
   'ui-kit': UiKitScreen,
+  '+not-found': NotFoundRoute,
   status: StatusScreen,
   'races/[id]': RaceRoute,
   'races/pick/[id]': RacePickRoute,

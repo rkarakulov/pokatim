@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import NetInfo from '@react-native-community/netinfo';
-import { onlineManager } from '@tanstack/react-query';
+import { focusManager, onlineManager, QueryObserver } from '@tanstack/react-query';
 
 import { connectOnlineManager } from './online-manager';
 import { createQueryClient, shouldRetry } from './query-client';
@@ -36,5 +36,36 @@ describe('QueryClient приложения', () => {
     const client = createQueryClient();
     expect(client.getDefaultOptions().mutations?.retry).toBe(false);
     expect(client.getDefaultOptions().queries?.retry).toBe(shouldRetry);
+  });
+
+  it('возврат фокуса сразу после ответа не повторяет запрос; через 10 с — повторяет (B13 смоука dev)', async () => {
+    jest.useFakeTimers({ now: new Date('2026-10-27T09:00:00Z') });
+    try {
+      const client = createQueryClient();
+      // как QueryClientProvider: подписка клиента на focusManager
+      client.mount();
+      const queryFn = jest.fn(async () => 'участие');
+      const observer = new QueryObserver(client, { queryKey: ['races', 'entry', 'x'], queryFn });
+      const unsubscribe = observer.subscribe(() => undefined);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(10_000);
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(queryFn).toHaveBeenCalledTimes(2);
+      unsubscribe();
+      client.unmount();
+      client.clear();
+    } finally {
+      focusManager.setFocused(undefined);
+      jest.useRealTimers();
+    }
   });
 });

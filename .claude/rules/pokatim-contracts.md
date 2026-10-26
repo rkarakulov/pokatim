@@ -34,6 +34,9 @@ paths:
   `RouteMapGeometry` (как `RaceRouteMap` без `widthM`; `race-route.schema.ts` не меняется — совместимость держит тест
   типов), `CatalogRouteRacesQuery`. Панель — `PublishRouteInput` (`city`, `surfaces: SurfaceList`), обязательное
   `PanelRouteSummary.catalog` (`null` | `{ city, surfaces, publishedAt }`); код `ROUTE_INVALID_STATE` (409).
+- Свой трек (maps-02): `src/results/results.schema.ts` — `MyAttemptTrack` (`attemptId`, `line` — `LonLat` 2–1000,
+  `segment: TrackMapRun | null`, `offRuns` ≤ 100, `marks` — `tolerantEnum(ATTEMPT_TRACK_MARKS)`: незнакомое клиент
+  трактует как `unavailable`); позиции — дробные индексы вершин `{ from, to }`. Клиент — `getMyAttemptTrack`.
 - Кофе-райды (ADR-0013 Proposed): `src/rides/ride.schema.ts` (запросы — `strictObject`, строгие `z.enum`; ответы —
   `tolerantEnum` фазы, роли, города и причины; города ленты — незнакомые коды отбрасываются), `src/geo/city.schema.ts`
   (`CITY_CODES` — единственный справочник городов). Справочники (`RIDE_STATUSES`, `RIDE_PHASES`,

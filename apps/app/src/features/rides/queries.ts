@@ -21,6 +21,7 @@ import {
 import { withAccessToken } from '@/features/auth/authorized';
 import { retryAfterSec } from '@/features/auth/error-messages';
 import { api } from '@/lib/api';
+import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
 import type { RideFilters } from './filters';
 
@@ -108,7 +109,7 @@ export function useRideForViewer(id: string, enabled: boolean, { manage = false 
   return useQuery({
     queryKey: rideViewerKey(id),
     queryFn: () => withAccessToken((accessToken) => api.getRideForViewer(accessToken, id)),
-    staleTime: manage ? Infinity : 0,
+    staleTime: manage ? Infinity : DEFAULT_STALE_MS,
     refetchOnWindowFocus: !manage,
     refetchOnReconnect: !manage,
     enabled,
