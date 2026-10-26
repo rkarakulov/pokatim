@@ -96,7 +96,8 @@ afterEach(() => {
   onlineManager.setOnline(true);
 });
 
-const heroLabel = 'Организатор. Кофе-райд на Минское море. Воскресенье, 4 октября 2026, 10:00';
+// без имени организатора строки «Организатор» в герое нет (B9 смоука dev)
+const heroLabel = 'Кофе-райд на Минское море. Воскресенье, 4 октября 2026, 10:00';
 
 describe('карточка райда: гость (AC8)', () => {
   it('открывается без входа: поля, дата с годом, стопка, «Я иду», «Поделиться»; описание — текст; без me', async () => {
@@ -105,6 +106,7 @@ describe('карточка райда: гость (AC8)', () => {
     expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
     expect(router.getPathname()).toBe(`/rides/${ID}`);
     expect(screen.getByText('Кофе-райд')).toBeOnTheScreen();
+    expect(screen.queryByText(/^Организатор/)).toBeNull();
     expect(screen.getByText('Старт: Минск, Парк Победы')).toBeOnTheScreen();
     expect(screen.getByLabelText('Дистанция 42 км')).toBeOnTheScreen();
     expect(screen.getByLabelText('Темп 22–24 км/ч')).toBeOnTheScreen();

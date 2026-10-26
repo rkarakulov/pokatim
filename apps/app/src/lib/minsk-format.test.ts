@@ -5,6 +5,7 @@ import {
   formatLocalRange,
   formatMinskDateTime,
   meta,
+  minskLastMinuteBefore,
 } from './minsk-format';
 
 // перенесено из features/home/format.test.ts (R8 блока 03) без смены ожиданий
@@ -70,5 +71,19 @@ describe('formatMinskDateTime (кофе-райды)', () => {
     expect(formatMinskDateTime('2026-10-03T21:30:00Z', NOW).full).toBe(
       'Воскресенье, 4 октября, 0:30',
     );
+  });
+});
+
+describe('исключающая граница (B6 смоука dev)', () => {
+  it('полночь по Минску — последняя включённая минута предыдущего дня', () => {
+    expect(minskLastMinuteBefore('2026-11-09T21:00:00Z', null)).toMatchObject({
+      date: '9 ноября 2026',
+      time: '23:59',
+    });
+  });
+
+  it('граница внутри минуты — сама эта минута; ровно на минуте — минута раньше', () => {
+    expect(minskLastMinuteBefore('2026-11-09T18:30:30Z', null).time).toBe('21:30');
+    expect(minskLastMinuteBefore('2026-11-09T18:30:00Z', null).time).toBe('21:29');
   });
 });

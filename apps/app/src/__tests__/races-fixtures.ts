@@ -59,8 +59,8 @@ export const noEntry = (overrides: Partial<MyRaceEntry> = {}): MyRaceEntry => ({
   result: result(),
   attempts: [],
   pendingUploads: [],
-  // 12 октября 23:59 по Минску
-  uploadClosesAt: '2026-10-12T20:59:00Z',
+  // исключающая граница сервера: 13 октября 00:00 по Минску — последняя минута загрузки 12 октября 23:59
+  uploadClosesAt: '2026-10-12T21:00:00Z',
   actions: actions({ canEnter: true, reasons: ['not_entered'] }),
   ...overrides,
 });

@@ -1,4 +1,5 @@
 /// <reference types="jest" />
+import { layout } from '@pokatim/design-tokens';
 import { useFonts } from 'expo-font';
 import { renderRouter, screen } from 'expo-router/testing-library';
 import * as SecureStore from 'expo-secure-store';
@@ -66,5 +67,17 @@ describe('корневой layout: splash и шрифты', () => {
     expect(SplashScreen.hideAsync).toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('font failed'));
     warn.mockRestore();
+  });
+
+  it('колонка экранов не шире layout.contentMaxWidth, по центру (B20 смоука dev)', async () => {
+    mockedUseFonts.mockReturnValue([true, null]);
+    await renderRouter(app);
+    await screen.findByRole('header', { name: 'Покатим' });
+
+    expect(screen.getByTestId('app-column')).toHaveStyle({
+      width: '100%',
+      maxWidth: layout.contentMaxWidth,
+      alignSelf: 'center',
+    });
   });
 });

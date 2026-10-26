@@ -1,7 +1,8 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import { onlineManager } from '@tanstack/react-query';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { getDocumentAsync } from 'expo-document-picker';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -11,6 +12,8 @@ import RaceRoute from '../app/races/[id]';
 import RacePickRoute from '../app/races/pick/[id]';
 import { appRoutes, tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
+import { upload } from './devices-fixtures';
+import { FakeXhr } from './fake-xhr';
 import { createQueryWrapper } from './query-wrapper';
 import {
   attempt,
@@ -20,10 +23,12 @@ import {
   myEntry,
   RACE_ID,
   resultsPage,
+  UPLOAD_ID,
 } from './races-fixtures';
 
 jest.mock('@/lib/api');
 jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
+jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
 
 const listCandidates = jest.mocked(api.listAttemptCandidates);
 const addRaceAttempt = jest.mocked(api.addRaceAttempt);
@@ -65,7 +70,11 @@ beforeEach(() => {
     ),
   );
 });
+const realXhr = global.XMLHttpRequest;
+const realFetch = global.fetch;
 afterEach(() => {
+  global.XMLHttpRequest = realXhr;
+  global.fetch = realFetch;
   jest.clearAllMocks();
   jest.useRealTimers();
   onlineManager.setOnline(true);
@@ -152,6 +161,38 @@ describe('«Выбрать свой заезд» (AC8)', () => {
     expect(
       screen.getByText('Загрузите файл заезда или дождитесь импорта Garmin/Wahoo.'),
     ).toBeOnTheScreen();
+  });
+
+  it('пусто — «Загрузить заезд»: файл → загрузка → addRaceAttempt({ uploadId }) → карточка гонки (B8)', async () => {
+    signedIn();
+    listCandidates.mockResolvedValue(candidates());
+    jest.mocked(getDocumentAsync).mockResolvedValue({
+      canceled: false,
+      assets: [{ name: 'ride.gpx', size: 1024, uri: 'file:///cache/ride.gpx', lastModified: 0 }],
+    });
+    jest.mocked(api.trackUploadRequest).mockReturnValue({
+      url: 'https://api.example/v1/tracks/uploads?name=ride.gpx',
+      method: 'POST',
+      headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/octet-stream' },
+    });
+    FakeXhr.last = undefined;
+    global.XMLHttpRequest = FakeXhr as unknown as typeof XMLHttpRequest;
+    global.fetch = jest.fn(async () => ({ blob: async () => ({ size: 1024 }) })) as never;
+    addRaceAttempt.mockResolvedValue(
+      myEntry({ attempts: [attempt({ status: 'queued', segment: null, isBest: false })] }),
+    );
+    const router = await openPick();
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Загрузить заезд' }));
+    await waitFor(() => expect(FakeXhr.last).toBeDefined());
+    await act(async () => FakeXhr.last?.progress(42, 100));
+    expect(screen.getByText('Загружаем ride.gpx: 42%')).toBeOnTheScreen();
+
+    await act(async () => FakeXhr.last?.respond(202, upload({ status: 'queued', activity: null })));
+    await waitFor(() =>
+      expect(addRaceAttempt).toHaveBeenCalledWith(TOKEN, RACE_ID, { uploadId: UPLOAD_ID }),
+    );
+    await waitFor(() => expect(router.getPathname()).toBe(`/races/${RACE_ID}`));
   });
 
   it.each([

@@ -17,6 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { formatKm, formatMinskDateTime } from '@/features/devices/format';
+import { UploadProgress } from '@/features/devices/upload-progress';
+import { useTrackFileUpload } from '@/features/devices/use-track-file-upload';
 import { meta } from '@/lib/minsk-format';
 import { useMinskClock } from '@/lib/use-minsk-clock';
 
@@ -82,8 +84,8 @@ function CandidateRow({
 
 /**
  * «Выбрать свой заезд» (`/races/pick/<id>`, только вошедшим): свои заезды в окне гонки; уже добавленные выключены.
- * Выбор — попытка `{ activityId }` (вердикт — сервер), затем назад к карточке гонки. Невалидный id — «Гонка не
- * найдена» без запроса.
+ * Выбор — попытка `{ activityId }` (вердикт — сервер), затем назад к карточке гонки; заездов нет — «Загрузить заезд»
+ * (файл → попытка `{ uploadId }` → назад). Невалидный id — «Гонка не найдена» без запроса.
  */
 export function RacePickScreen({ id }: { id: string }) {
   const theme = useTheme();
@@ -94,16 +96,20 @@ export function RacePickScreen({ id }: { id: string }) {
   const now = useMinskClock([candidates.dataUpdatedAt]);
   const title = t('races.entry.pickRide');
 
+  const backToRace = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace(`/races/${id}`);
+  };
   const pickActivity = (activityId: string) =>
-    addAttempt.mutate(
-      { activityId },
-      {
-        onSuccess: () => {
-          if (router.canGoBack()) router.back();
-          else router.replace(`/races/${id}`);
-        },
-      },
-    );
+    addAttempt.mutate({ activityId }, { onSuccess: backToRace });
+  // пусто — «Загрузить заезд» тем же путём, что на карточке гонки: файл, затем попытка `{ uploadId }` (B8 смоука dev)
+  const upload = useTrackFileUpload({
+    onUploaded: (sent) => addAttempt.mutate({ uploadId: sent.id }, { onSuccess: backToRace }),
+  });
+  const chooseFile = () => {
+    addAttempt.reset();
+    void upload.choose();
+  };
 
   return (
     <SafeAreaView
@@ -115,6 +121,16 @@ export function RacePickScreen({ id }: { id: string }) {
       <ScrollView contentContainerStyle={styles.content}>
         {valid ? (
           <View style={styles.list}>
+            {upload.state.phase === 'uploading' ? (
+              <UploadProgress
+                name={upload.state.name}
+                progress={upload.state.progress}
+                onCancel={upload.cancel}
+              />
+            ) : null}
+            {upload.state.phase === 'failed' ? (
+              <Banner tone="error" message={upload.state.message} />
+            ) : null}
             {addAttempt.error ? (
               <Banner tone="error" message={raceActionErrorText(addAttempt.error)} />
             ) : null}
@@ -130,7 +146,13 @@ export function RacePickScreen({ id }: { id: string }) {
               empty={{
                 when: (data) => data.items.length === 0,
                 render: () => (
-                  <EmptyState title={t('races.pick.empty')} message={t('races.pick.emptyHint')} />
+                  <EmptyState
+                    title={t('races.pick.empty')}
+                    message={t('races.pick.emptyHint')}
+                    {...(upload.state.phase === 'uploading' || addAttempt.isPending
+                      ? {}
+                      : { action: { label: t('races.entry.upload'), onPress: chooseFile } })}
+                  />
                 ),
               }}
             >

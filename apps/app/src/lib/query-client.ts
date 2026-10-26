@@ -2,6 +2,13 @@ import { ApiHttpError } from '@pokatim/api-client';
 import { QueryClient } from '@tanstack/react-query';
 
 const MAX_RETRIES = 2;
+/**
+ * Свежесть по умолчанию; данные зрителя без `max-age` (участие, кандидаты, `me` райда, споры) берут её явно — в
+ * тестах их обёртка без общих настроек. При 0 каждый возврат фокуса
+ * вкладки (`visibilitychange`) повторял только что пришедший ответ — «дубли» GET на смоуке dev (B13). Инвалидация
+ * после мутаций, опрос (`refetchInterval`) и pull-to-refresh от `staleTime` не зависят.
+ */
+export const DEFAULT_STALE_MS = 10_000;
 
 /** Повторяем то, что может пройти со второй попытки: сеть и 5xx. Ответ 4xx не изменится. */
 export function shouldRetry(failureCount: number, error: unknown): boolean {
@@ -12,7 +19,7 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
 export function createQueryClient() {
   return new QueryClient({
     defaultOptions: {
-      queries: { retry: shouldRetry },
+      queries: { retry: shouldRetry, staleTime: DEFAULT_STALE_MS },
       mutations: { retry: false },
     },
   });

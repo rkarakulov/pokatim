@@ -22,6 +22,7 @@ import { withAccessToken } from '@/features/auth/authorized';
 import { apiErrorCode } from '@/features/auth/error-messages';
 import { AUTH_MUTATION } from '@/features/auth/queries';
 import { api } from '@/lib/api';
+import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
 import type { RaceFilters } from './filters';
 import { isRaceErrorCode, needsPolling, resultSignature } from './participation-format';
@@ -200,7 +201,7 @@ export function useMyRaceEntry(id: string, enabled: boolean) {
         throw error;
       }
     },
-    staleTime: 0,
+    staleTime: DEFAULT_STALE_MS,
     refetchInterval: (q) => (needsPolling(q.state.data) ? ENTRY_POLL_MS : false),
     enabled,
   });
@@ -279,7 +280,7 @@ export function useAttemptCandidates(id: string, enabled: boolean) {
   return useQuery({
     queryKey: raceCandidatesKey(id),
     queryFn: () => withAccessToken((token) => api.listAttemptCandidates(token, id)),
-    staleTime: 0,
+    staleTime: DEFAULT_STALE_MS,
     enabled,
   });
 }

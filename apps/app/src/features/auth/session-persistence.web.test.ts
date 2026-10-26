@@ -5,6 +5,7 @@ import type { CookieSession } from '@pokatim/contracts';
 import { api } from '@/lib/api';
 
 import { fetchRegistrationPoll, requestSignIn } from './queries';
+import { refreshAccess } from './session-persistence';
 import { resetSessionStore, useSessionStore } from './session-store';
 
 jest.mock('@/lib/api', () => ({
@@ -347,11 +348,11 @@ describe('сессия web: refresh в httpOnly cookie, access в памяти',
         expect(refresh).not.toHaveBeenCalled();
         expect(signOut).toHaveBeenCalledTimes(2);
 
-        // отзыв подтверждён — дальше обычное восстановление
+        // отзыв подтверждён — cookie мертва: дальше гость без refresh (B21), отзыв не повторяется
         resetSessionStore();
-        refresh.mockRejectedValue(unauthorized());
         await useSessionStore.getState().hydrate(NOW);
-        expect(refresh).toHaveBeenCalledTimes(1);
+        expect(useSessionStore.getState().status).toBe('signedOut');
+        expect(refresh).not.toHaveBeenCalled();
         expect(signOut).toHaveBeenCalledTimes(2);
       },
     );
@@ -451,5 +452,100 @@ describe('сессия web: refresh в httpOnly cookie, access в памяти',
       setItem.mockRestore();
       getItem.mockRestore();
     });
+  });
+});
+
+describe('гость без лишнего refresh: признак «сессии нет» (B21 смоука dev)', () => {
+  it('401 восстановления — признак; следующие запуски не зовут refresh', async () => {
+    refresh.mockRejectedValue(unauthorized());
+    await useSessionStore.getState().hydrate(NOW);
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    resetSessionStore();
+    await useSessionStore.getState().hydrate(NOW);
+    resetSessionStore();
+    await useSessionStore.getState().hydrate(NOW);
+
+    expect(useSessionStore.getState().status).toBe('signedOut');
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('без признака (сессии до обновления, хранилище очищено) — refresh, как раньше', async () => {
+    refresh.mockResolvedValue(cookieSession);
+    await useSessionStore.getState().hydrate(NOW);
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(useSessionStore.getState().status).toBe('signedIn');
+    expect(localStorage.length).toBe(0);
+  });
+
+  it.each([
+    [
+      'вход по паролю',
+      async () => {
+        signIn.mockResolvedValue({ state: 'signedIn', session: cookieSession });
+        await requestSignIn({ email: 'rider@example.com', password: 'velo-secret' });
+      },
+    ],
+    [
+      'обмен регистрации (poll)',
+      async () => {
+        pollRegistration.mockResolvedValue({ state: 'verified', session: cookieSession });
+        await fetchRegistrationPoll(REGISTRATION_TOKEN);
+      },
+    ],
+  ])('%s снимает признак: перезагрузка восстанавливает сессию', async (_case, enter) => {
+    refresh.mockRejectedValueOnce(unauthorized());
+    await useSessionStore.getState().hydrate(NOW);
+
+    await enter();
+    expect(localStorage.length).toBe(0);
+
+    resetSessionStore();
+    refresh.mockResolvedValue(cookieSession);
+    await useSessionStore.getState().hydrate(NOW);
+    expect(useSessionStore.getState()).toMatchObject({
+      status: 'signedIn',
+      session: cookieSession,
+    });
+  });
+
+  it('выход подтверждён — следующий запуск без refresh', async () => {
+    await useSessionStore.getState().signIn(cookieSession);
+    signOut.mockResolvedValue(undefined);
+    await useSessionStore.getState().signOut();
+
+    resetSessionStore();
+    await useSessionStore.getState().hydrate(NOW);
+    expect(useSessionStore.getState().status).toBe('signedOut');
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('401 обновления access (сессию отозвали) — признак; перезагрузка без refresh', async () => {
+    refresh.mockResolvedValueOnce(cookieSession);
+    await useSessionStore.getState().hydrate(NOW);
+    refresh.mockRejectedValue(unauthorized());
+    await expect(refreshAccess(NOW)).resolves.toEqual({ status: 'signedOut' });
+
+    resetSessionStore();
+    await useSessionStore.getState().hydrate(NOW);
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(useSessionStore.getState().status).toBe('signedOut');
+  });
+
+  it('незавершённый выход при признаке — отзыв всё равно повторяется', async () => {
+    refresh.mockRejectedValueOnce(unauthorized());
+    await useSessionStore.getState().hydrate(NOW);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await useSessionStore.getState().signIn(cookieSession);
+    signOut.mockRejectedValueOnce(offline());
+    await useSessionStore.getState().signOut();
+    warn.mockRestore();
+
+    resetSessionStore();
+    signOut.mockResolvedValue(undefined);
+    await useSessionStore.getState().hydrate(NOW);
+    expect(signOut).toHaveBeenCalledTimes(2);
+    expect(useSessionStore.getState().status).toBe('signedOut');
   });
 });
