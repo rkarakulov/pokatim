@@ -145,16 +145,27 @@ describe('свой трек на карте гонки (maps-02)', () => {
   it('несколько попыток: по умолчанию лучшая; выбор другой — новый трек и строка (AC6)', async () => {
     signedIn();
     getMyRaceEntry.mockResolvedValue(myEntry({ attempts: [rejectedOff, counted] }));
-    getMyAttemptTrack.mockImplementation(async (_token, _race, id) =>
-      track({ attemptId: id, offRuns: id === OTHER ? [] : track().offRuns }),
+    let releaseBest: () => void = () => undefined;
+    getMyAttemptTrack.mockImplementation((_token, _race, id) =>
+      id === OTHER
+        ? Promise.resolve(track({ attemptId: id, offRuns: [] }))
+        : new Promise((resolve) => {
+            releaseBest = () => resolve(track({ attemptId: id }));
+          }),
     );
     await openSignedIn();
     expect(await screen.findByText('Весь сегмент в коридоре')).toBeOnTheScreen();
     expect(getMyAttemptTrack).toHaveBeenLastCalledWith(liveSession.accessToken, RACE_ID, OTHER);
     expect(screen.getByLabelText('Попытка на карте')).toBeOnTheScreen();
+    // легенда «пунктир» — только когда участки схода есть
+    expect(screen.getByText('Ваш трек')).toBeOnTheScreen();
     await act(async () =>
       fireEvent.press(within(screen.getByTestId('my-track-attempts')).getByText(/Не засчитано/)),
     );
+    // пока грузится трек другой попытки — скелетон только на месте карты, чипы остаются (фокус не теряется)
+    expect(screen.getByTestId('my-track-attempts')).toBeOnTheScreen();
+    expect(screen.queryByTestId('maplibre-Map')).toBeNull();
+    await act(async () => releaseBest());
     expect(
       await screen.findByText('Вне коридора 820 м, самый длинный выход 640 м'),
     ).toBeOnTheScreen();
@@ -183,6 +194,33 @@ describe('свой трек на карте гонки (maps-02)', () => {
     ).toEqual(['segment']);
   });
 
+  it('вердикт после «проверяется» — опрос участия перезапрашивает трек с подсветкой (RC-4)', async () => {
+    signedIn();
+    const checking = attempt({ id: BEST, status: 'checking', segment: null, checkedAt: null });
+    getMyRaceEntry.mockResolvedValue(myEntry({ attempts: [checking] }));
+    getMyAttemptTrack.mockResolvedValue(track({ segment: null, offRuns: [], marks: 'pending' }));
+    await openSignedIn();
+    expect(
+      await screen.findByText('Трек проверяется — участки вне коридора появятся после проверки'),
+    ).toBeOnTheScreen();
+    getMyRaceEntry.mockResolvedValue(myEntry({ attempts: [rejectedOff] }));
+    getMyAttemptTrack.mockResolvedValue(track());
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(5_000);
+    });
+    expect(
+      await screen.findByText('Вне коридора 820 м, самый длинный выход 640 м'),
+    ).toBeOnTheScreen();
+    expect(getMyAttemptTrack).toHaveBeenCalledTimes(2);
+    await waitFor(() =>
+      expect(
+        trackSource()!.props.data.features.map(
+          (f: { properties: { kind: string } }) => f.properties.kind,
+        ),
+      ).toContain('off'),
+    );
+  });
+
   it('ошибка трека — карта маршрута остаётся, строка с повтором (AC8); 404 — без строки', async () => {
     signedIn();
     getMyAttemptTrack.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
@@ -193,10 +231,19 @@ describe('свой трек на карте гонки (maps-02)', () => {
     expect(await screen.findByText('Не удалось загрузить трек')).toBeOnTheScreen();
     expect(screen.getByTestId('maplibre-Map')).toBeOnTheScreen();
     expect(trackSource()).toBeUndefined();
-    getMyAttemptTrack.mockResolvedValue(track());
+    let releaseRetry: () => void = () => undefined;
+    getMyAttemptTrack.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseRetry = () => resolve(track());
+        }),
+    );
     await act(async () =>
       fireEvent.press(within(screen.getByTestId('my-track-error')).getByText('Повторить')),
     );
+    // повтор — карта маршрута не прячется за скелетон (фокус не теряется)
+    expect(screen.getByTestId('maplibre-Map')).toBeOnTheScreen();
+    await act(async () => releaseRetry());
     await waitFor(() => expect(trackSource()).toBeDefined());
     expect(screen.queryByText('Не удалось загрузить трек')).toBeNull();
   });

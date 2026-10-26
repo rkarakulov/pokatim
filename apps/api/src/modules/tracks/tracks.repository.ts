@@ -269,13 +269,13 @@ export class TracksRepository {
       .toArray();
   }
 
-  /** Линии показа активностей по id (рамка для предфильтра попыток гонки). */
   /** Линия показа своей активности (по `_id` и `userId`); чужая и неизвестная — `undefined`. */
   async ownTrackLine(userId: string, id: string): Promise<[number, number][] | undefined> {
     const doc = await this.c.tracks.findOne({ _id: id, userId }, { projection: { line: 1 } });
     return doc?.line.coordinates;
   }
 
+  /** Линии показа активностей по id (рамка для предфильтра попыток гонки). */
   async trackLines(
     ids: readonly string[],
     session?: DbSession,

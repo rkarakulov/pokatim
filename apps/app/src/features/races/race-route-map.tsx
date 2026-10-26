@@ -27,8 +27,8 @@ const NO_ATTEMPTS: readonly MyAttempt[] = [];
  *
  * maps-02: участнику с попытками — свой трек выбранной попытки (по умолчанию лучшая, иначе новая; переключатель —
  * чипы при нескольких), легенда и текстовая альтернатива подсветки под картой и в подписи карты. Гостю и не
- * заявленному — без трека и без запроса. Пока грузится трек — скелетон (карта не монтируется дважды, RC-5); ошибка
- * трека — карта маршрута и строка с повтором; 404 трека — карта без трека и без строки (RC-8).
+ * заявленному — без трека и без запроса. Пока впервые грузится трек — скелетон на месте карты (карта не монтируется дважды, RC-5; чипы остаются); ошибка
+ * трека — карта маршрута и строка с повтором; легенда «пунктир» — только при участках схода; 404 трека — карта без трека и без строки (RC-8).
  */
 export function RaceRouteMap({
   race,
@@ -67,13 +67,16 @@ export function RaceRouteMap({
   if (!corridor) return null;
   // ошибка без данных — блока нет; ошибка обновления при показанной карте — карта остаётся (§4.12)
   if (mounted && (styleUrl === null || (route.isError && !route.data))) return null;
-  if (!map || styleUrl === null || trackQuery.isLoading) {
-    return (
-      <SkeletonGroup>
-        <View style={[styles.place, { backgroundColor: theme.surface.skeleton }]} />
-      </SkeletonGroup>
-    );
-  }
+  const skeleton = (
+    <SkeletonGroup>
+      <View style={[styles.place, { backgroundColor: theme.surface.skeleton }]} />
+    </SkeletonGroup>
+  );
+  if (!map || styleUrl === null) return skeleton;
+  // первая загрузка трека — скелетон только на месте карты (чипы и строки остаются: фокус не теряется); после первой
+  // ошибки (и при «Повторить» — `refetch` сбрасывает `failureCount`) — карта маршрута без трека
+  const trackPending =
+    trackQuery.isLoading && trackQuery.failureCount === 0 && trackQuery.errorUpdateCount === 0;
 
   const mapLabel = t('races.detail.map.label', {
     distance: formatDistances([race.distanceKm]) ?? '',
@@ -83,24 +86,30 @@ export function RaceRouteMap({
   const secondary = [textStyle('meta'), { color: theme.text.secondary }];
   return (
     <View style={styles.block}>
-      <RouteMap
-        // смена стиля (темы) — новая карта: сброс ошибки прошлого стиля; смена рамки (другой маршрут коридора) — тоже:
-        // native-камера применяет `initialViewState` один раз; смена попытки или её ревизии — новая карта (RC-5)
-        key={[
-          styleUrl,
-          map.bounds.join(','),
-          track && attempt ? `${attempt.id}|${attempt.status}|${attempt.checkedAt ?? ''}` : '',
-        ].join('|')}
-        map={map}
-        styleUrl={styleUrl}
-        theme={theme}
-        accessibilityLabel={lines.length > 0 ? myTrackMapLabel(mapLabel, lines) : mapLabel}
-        failedMessage={t('races.detail.map.failed')}
-        track={track}
-      />
-      {track ? (
+      {trackPending ? (
+        skeleton
+      ) : (
+        <RouteMap
+          // смена стиля (темы) — новая карта: сброс ошибки прошлого стиля; смена рамки (другой маршрут коридора) — тоже:
+          // native-камера применяет `initialViewState` один раз; смена попытки или её ревизии — новая карта (RC-5)
+          key={[
+            styleUrl,
+            map.bounds.join(','),
+            track && attempt ? `${attempt.id}|${attempt.status}|${attempt.checkedAt ?? ''}` : '',
+          ].join('|')}
+          map={map}
+          styleUrl={styleUrl}
+          theme={theme}
+          accessibilityLabel={lines.length > 0 ? myTrackMapLabel(mapLabel, lines) : mapLabel}
+          failedMessage={t('races.detail.map.failed')}
+          track={track}
+        />
+      )}
+      {track && data ? (
         <Text style={secondary}>
-          {`${t('races.detail.myTrack.legendTrack')} · ${t('races.detail.myTrack.legendOff')}`}
+          {data.marks === 'ready' && data.offRuns.length > 0
+            ? `${t('races.detail.myTrack.legendTrack')} · ${t('races.detail.myTrack.legendOff')}`
+            : t('races.detail.myTrack.legendTrack')}
         </Text>
       ) : null}
       {lines.map((line) => (
