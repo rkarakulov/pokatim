@@ -23,11 +23,12 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
       'races.manage_any',
       'seasons.manage',
       'calendar.manage',
+      'rides.moderate',
     ],
   },
   moderator: {
     user: { id: USER_ID, displayName: 'Марк', email: 'mark@example.by', role: 'moderator' },
-    permissions: ['audit.read', 'races.read'],
+    permissions: ['audit.read', 'races.read', 'rides.moderate'],
   },
   organizer: {
     user: { id: USER_ID, displayName: 'Ира', email: 'ira@example.by', role: 'organizer' },

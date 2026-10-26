@@ -1060,4 +1060,8 @@ export const ru = {
   'admin.ridesModeration.dismissTitle': 'Отклонить жалобы на «{title}»?',
   'admin.ridesModeration.dismissConsequences':
     'Открытые жалобы закроются, райд останется видимым. Повторно эти райдеры пожаловаться не смогут.',
+  'admin.ridesModeration.report.reason': 'Причина',
+  'admin.ridesModeration.report.comment': 'Комментарий',
+  'admin.ridesModeration.report.createdAt': 'Когда',
+  'admin.ridesModeration.report.resolution': 'Решение',
 } as const;

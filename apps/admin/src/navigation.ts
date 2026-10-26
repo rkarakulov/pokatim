@@ -3,7 +3,7 @@ import type { MessageKey } from '@pokatim/i18n';
 
 export interface NavItem {
   /** Путь раздела внутри `basepath` (маршруты — `router.tsx`). */
-  to: '/' | '/races' | '/calendar' | '/seasons' | '/members' | '/audit';
+  to: '/' | '/races' | '/calendar' | '/seasons' | '/members' | '/audit' | '/rides-moderation';
   labelKey: MessageKey;
   /** Без права пункт скрыт (сервер всё равно проверит право на каждом запросе). */
   permission?: Permission;
@@ -22,4 +22,11 @@ export const NAVIGATION: readonly NavItem[] = [
   { to: '/seasons', labelKey: 'admin.nav.seasons', permission: 'races.read', group: 'main' },
   { to: '/members', labelKey: 'admin.nav.members', permission: 'members.read', group: 'bottom' },
   { to: '/audit', labelKey: 'admin.nav.audit', permission: 'audit.read', group: 'bottom' },
+  // 05b: в конец массива, группа `bottom` («Сезоны» остаются последними в основной группе, 8.1 A8)
+  {
+    to: '/rides-moderation',
+    labelKey: 'admin.nav.ridesModeration',
+    permission: 'rides.moderate',
+    group: 'bottom',
+  },
 ];
