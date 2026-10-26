@@ -600,4 +600,45 @@ status: 1, _id: -1 }`; `routes_owner_idx { ownerUserId: 1, _id: -1 }`; `route_ge
 
 # 12. Outcome
 
-(заполняет coder)
+**Статус:** реализовано по слайсам §11 (8 шагов), ветка `feature/race-results-01-corridor` от `origin/develop`
+@ `41e4590`. Решения Q1–Q8, A1, A2 — §8.2; отклонения D1–D7 — §8.2.
+
+**Сделано**
+- `packages/tracks`: `parseGpx(text, { allowRoute })` (точки `rte/rtept` только без `trkpt`, подсчёт `rtept` до
+  разбора), `analyzeRoute` (сигнатура → разбор → ≤ 50 000 точек → очистка → 1–1000 км → линии показа ≤ 1000 и сверки
+  ≤ 20 000, петля ≤ 200 м), экспорт `elevationGainM`, типы `RouteFailureCode`, `CorridorGeometry`; фикстуры
+  `route-{trk-no-time,rte,loop,short}.gpx` (синтетика).
+- Контракты: `routes/route.schema.ts`, `CorridorInput`, `RaceInput.corridor` / `distanceKm?`, `PanelRace.corridor`,
+  `RaceDetail.corridor` (optional), `route.created` / `route`, коды `ROUTE_FORMAT_UNSUPPORTED`, `ROUTE_TOO_LARGE`,
+  `ROUTE_NOT_READY`; api-client панели: `uploadRoute`, `listRoutes`, `getRoute`.
+- API: общие `src/raw-body.ts`, `src/parse-thread.ts` (белый список функций); `tracks` переведён на них (int-тесты
+  загрузок без правок ожиданий). Модуль `routes` (приём, дедуп, транзакция с журналом и outbox, список и чтение,
+  `route-processing` в worker, порт `RouteCatalog`), миграция `0013_routes`. `races.corridor`: правила по фазам
+  (`raceEditable`, `validateRaceRules`, точка расширения `locked`), дистанция из маршрута, `ROUTE_NOT_READY`, журнал,
+  публичный `{ widthM }`.
+- Панель: `FileButton`, `LinePreview` (`src/ui`), `CorridorField` (выбор, загрузка, опрос, отказ, превью, замок),
+  допуск и дистанция «по маршруту» в `RaceEditor`; e2e `races.spec.ts` — загрузка GPX → ready → коридор ±50 →
+  после перезагрузки коридор и 10,6 км → публичный `corridor: { widthM: 50 }`.
+- Приложение: строка «Коридор — ±50 м от маршрута» и «… по GPS-треку» в карточке гонки; шаг web-смоука с гонкой с
+  коридором (маршрут через API панели, разбор worker).
+- Документы: ADR-0012 (Proposed) + реестр, продукт, архитектура, правила `pokatim-{backend,db,contracts,security,web,
+  app}`.
+
+**Проверки**
+- `TURBO_CONCURRENCY=1 pnpm check` (MongoDB RS :27117, Redis :6479/1) — EXIT 0: format, lint, arch, typecheck, тесты
+  (api 68 файлов / 621+ тестов, admin 17 / 143, app 631, пакеты).
+- Миграции на отдельной БД: чистая — 0001…0013 по порядку; состояние develop (без 0013, гонка без поля) — применена
+  только `0013_routes`, бэкфилл `corridor: null`, индексы `routes_*`; повтор — «новых миграций нет».
+- `E2E_API=1 pnpm e2e:web` (своя БД `pokatim_e2e_slice01`, свой Mailpit :1126/:8126, Redis db 2; включает
+  `build:web`) — 18 passed. `pnpm e2e:admin` (то же окружение, API :3202) — 2 passed (первый прогон нашёл вложенную
+  форму окна «Новый маршрут» — исправлено, тест-сторож в RTL). `vite build` панели — ок. `expo export -p android` — ок.
+- Отрицательные доказательства: без условия `status: 'processing'` в захвате — int-тест «повтор после ready» красный;
+  без `findReady` — тест `ROUTE_NOT_READY` красный.
+
+**NOT VERIFIED**
+- iOS/Android на симуляторе/устройстве (только `expo export -p android` и jest); визуальная сверка с прототипами.
+- e2e `pnpm e2e:admin` / `e2e:web` в CI (локально — на нативных mongod/redis/mailpit вместо docker).
+
+**Follow-up**
+- `parse-thread`, `FileButton`, `LinePreview` — кандидаты в базу (app-foundation, F6).
+- Слайс 02: порт `RouteGeometry` (линия сверки), `matchCorridor`; слайс 03: условие `locked` («есть заявки»).
