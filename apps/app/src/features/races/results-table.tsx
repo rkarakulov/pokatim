@@ -1,6 +1,6 @@
 import { isNetworkError } from '@pokatim/api-client';
 import type { RaceResultRow } from '@pokatim/contracts';
-import { space, stroke } from '@pokatim/design-tokens';
+import { size, space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
   Banner,
@@ -30,7 +30,9 @@ function ResultRow({ row, own }: { row: RaceResultRow; own: boolean }) {
         own ? [styles.own, { borderLeftColor: theme.border.strong }] : null,
       ]}
     >
-      <Text style={[textStyle('time'), { color: theme.text.primary }]}>{view.place}</Text>
+      <Text style={[textStyle('time'), styles.place, { color: theme.text.primary }]}>
+        {view.place}
+      </Text>
       <Text
         style={[
           textStyle(own ? 'label' : 'body'),
@@ -135,5 +137,7 @@ const styles = StyleSheet.create({
     borderTopWidth: stroke.hairline,
   },
   own: { borderLeftWidth: stroke.indicator, paddingLeft: space.s2 },
+  // колонка мест одной ширины («1», «12», «=12»): токен ширины короткого числового значения
+  place: { minWidth: size.skeletonWord },
   who: { flex: 1 },
 });

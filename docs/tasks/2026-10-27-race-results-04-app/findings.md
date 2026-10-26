@@ -110,3 +110,86 @@ coder, коммит `72c7f2e` («Результаты, слайс 04: испра
 - `TURBO_CONCURRENCY=1 pnpm check` (Node 24.22.1, `MONGO_URL_TEST=…/pokatim_r04ui_test`, `REDIS_URL_TEST=…/11`) → exit 0:
   `Tasks: 13 successful, 13 total` (`Cached: 12`), `@pokatim/app:test: Test Suites: 94 passed`, `Tests: 822 passed, 822 total`.
 - `E2E_API=1 pnpm e2e:web`, ручная проверка на симуляторах и в браузере — NOT VERIFIED.
+
+# Claude pass 2
+
+# Findings — race-results-04-app — pass 2 — reviewer: claude
+base: origin/develop   commits: 042c14e..7329fbe (working tree clean)
+verdict: APPROVE
+
+Проверено: фикс-коммит `72c7f2e` целиком и весь `git diff origin/develop...HEAD` заново (37 файлов) на CRITICAL/HIGH;
+вызовы мутаций (`EntryActions`, `EnterAction`, `RacePickScreen` — общий `useEntryMutation` с новым `onMutate`), наблюдатели
+`raceEntryKey` (только `useMyRaceEntry` на карточке), `usePullToRefresh` (refetch без `throwOnError` — отменённый refetch не
+бросает), фикстуры (`actions()` по умолчанию `canWithdraw: false, canAddAttempt: false` — тесты «после 409» и «срок истёк
+посреди отправки» действительно отдают серверное `false`), jest-проекты (`*.web.test.*` — проект `jest-expo/web`, native-проект
+их игнорирует, поэтому `accessibility-focus.web.test.ts` проверяет именно web-вариант).
+Запущено: `npx jest` race-participation / race-pick / race-results / race-detail / devices-screen / features/races /
+accessibility-focus.web — 10 suites, 202 tests passed; `npx tsc --noEmit` (apps/app) — exit 0.
+`pnpm check` целиком, `E2E_API=1 pnpm e2e:web`, VoiceOver/TalkBack и браузерный скринридер — NOT VERIFIED ревьюером.
+
+Закрытие находок pass 1:
+- MEDIUM гонка опрос/мутация — закрыта. `onMutate` отменяет опрос, ушедший до мутации; `applyEntry` — опрос, ушедший во время
+  неё. Отмена с `revert` возвращает прежние данные, интервал (`setInterval` наблюдателя) не сбрасывается; отменить начальную загрузку
+  без данных (и «застрять» в `pending/idle`) нельзя: кнопки мутаций рисуются только при `entry.data`, экран выбора ключ участия
+  не наблюдает. Тест честный: висящий опрос → отмена → поздний ответ `checking`; без фикса поздний ответ вернул бы активную
+  заявку и кнопку «Отменить участие».
+- MEDIUM текст отказа отмены — закрыт: мутация в `EntryActions`, баннер вне ветки `canWithdraw`; тест отдаёт серверное
+  `canWithdraw: false` + `['window_closed','upload_closed']`.
+- LOW прогресс при `canAddAttempt: false`, LOW `unknown` vs своя причина — закрыты, тесты есть.
+- LOW фокус — закрыт в коде (native `sendAccessibilityEvent(ref,'focus')`, web `tabindex=-1` + `focus()`); см. LOW ниже про
+  проверку.
+- LOW полоса своей строки — закрыт частично (обосновано: акцентной роли рамки нет), но см. LOW ниже про колонку места.
+
+Измерения без новых находок: безопасность, серверный авторитет, contracts-first, миграции / BullMQ / аудит (не затронуты),
+placement (`src/lib/accessibility-focus(.web).ts` — тот же паттерн платформенных файлов, что `focus-manager`, `share-link`),
+i18n (новых ключей фикс не добавил), Documentation Sync (task.md §Outcome дополнен), все платформы (развилка — файлами, SSR
+не затронут: панель — только клиент после нажатия).
+
+### [LOW] Ошибка отмены остаётся после «Оставить участие»
+- **file:** apps/app/src/features/races/participation/entry-actions.tsx
+- **location:** стр. 102 (`onClose={() => setConfirming(false)}`), 117–119
+- **problem:** после перевода мутации в `EntryActions` баннер `withdraw.error` живёт, пока не нажата снова «Отменить участие».
+  Сценарий: сеть пропала → «Отменить участие» → баннер «нет соединения» под панелью → «Оставить участие» — панель закрыта,
+  баннер об ошибке действия, которое пользователь уже отменил сам, остаётся висеть.
+- **why_it_matters:** устаревшее сообщение без контекста; для 409 (панель ушла по ответу сервера) персистентность нужна, для
+  явного «Оставить участие» — нет.
+- **evidence:** `onClose` не вызывает `withdraw.reset()`; сброс — только в `onPress` кнопки «Отменить участие».
+- **recommended_fix:** в `onClose` панели — `withdraw.reset(); setConfirming(false)`; тест: ошибка сети → «Оставить участие» →
+  баннера нет.
+
+### [LOW] Тест фокуса native не проверяет цель и не ловит гонку монтирования
+- **file:** apps/app/src/__tests__/race-participation.test.tsx; apps/app/src/features/races/participation/withdraw-confirm.tsx
+- **location:** тест «подтверждение — фокус скринридера на заголовок» (`toHaveBeenCalledWith(expect.anything(), 'focus')`);
+  `useEffect` стр. 28–30
+- **problem:** тест пройдёт при фокусе на любой элемент (не обязательно заголовок). В рантайме iOS событие фокуса, отправленное
+  в `useEffect` сразу после монтирования, VoiceOver иногда игнорирует (элемент ещё не в дереве доступности) — обычно фокус
+  ставят после `onLayout`/короткой задержки. Реальный эффект на устройстве не проверен (Fix pass 1: «ручная проверка — NOT VERIFIED»).
+- **why_it_matters:** §7.4 «фокус — на заголовок подтверждения» может молча не работать на iOS при зелёном тесте.
+- **evidence:** `expect(focus).toHaveBeenCalledWith(expect.anything(), 'focus')`.
+- **recommended_fix:** в тесте сверять аргумент с узлом заголовка (`screen.getByRole('header', { name: 'Отменить участие?' })`
+  / его instance); на iOS проверить VoiceOver вручную, при необходимости — фокус из `onLayout` заголовка.
+
+### [LOW] Колонка места без минимальной ширины — «Участник/Вы» гуляет по строкам
+- **file:** apps/app/src/features/races/results-table.tsx
+- **location:** стр. 33 (`<Text style={[textStyle('time'), …]}>{view.place}</Text>`), стили стр. 125–139
+- **problem:** фикс убрал `minWidth: space.s6` у места, ничего не дав взамен. «1», «12», «=12» имеют разную ширину, поэтому
+  колонка «Участник / Вы» начинается в разных строках с разного x (`gap` фиксирован, `who` — `flex: 1`).
+- **why_it_matters:** таблица результатов визуально «пляшет»; находка pass 1 была про семантику токена, а не про отказ от выравнивания.
+- **evidence:** diff `72c7f2e`: `- place: { minWidth: space.s6 },` и `styles.place` снят со строки.
+- **recommended_fix:** вернуть выравнивание размерным токеном (если в `size` есть подходящий — колонка/иконка) или табличные
+  цифры + `minWidth` из `size`; при отсутствии токена — кандидат в дизайн-систему, как акцентная рамка.
+
+## Вердикт
+
+APPROVE — CRITICAL/HIGH нет; оба MEDIUM pass 1 закрыты по-настоящему, тесты честные (отдают серверное состояние, без фикса
+падали бы). Новых регрессий от отмены запросов и переноса мутации не найдено; три LOW — по желанию до merge.
+
+## Fix pass 2 (оркестратор)
+
+- LOW 1 (ошибка отмены после «Оставить участие») — **исправлено**: `onClose` подтверждения вызывает
+  `withdraw.reset()`; тест «ошибка отмены уходит после «Оставить участие»» (красный до правки).
+- LOW 2 (тест фокуса проверяет любой элемент; VoiceOver на iOS может игнорировать фокус при монтировании) — **оставлено**:
+  проверка на устройстве — `NOT VERIFIED`, follow-up вместе с ручной проверкой на симуляторе.
+- LOW 3 (колонка мест без ширины) — **исправлено**: `minWidth: size.skeletonWord` (ширина короткого числового значения).
+
+Вердикт pass 2 — APPROVE; CRITICAL/HIGH нет.

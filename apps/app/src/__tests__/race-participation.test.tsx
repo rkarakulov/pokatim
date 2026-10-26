@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-import { ApiHttpError } from '@pokatim/api-client';
+import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { getDocumentAsync } from 'expo-document-picker';
@@ -588,6 +588,17 @@ describe('отмена участия (AC9)', () => {
     expect(await screen.findByText('Срок загрузки заездов истёк')).toBeOnTheScreen();
     expect(screen.queryByText('Отменить участие?')).toBeNull();
     expect(screen.getByText('Отменить участие можно, пока окно открыто')).toBeOnTheScreen();
+  });
+
+  it('ошибка отмены уходит после «Оставить участие»', async () => {
+    withdrawFromRace.mockRejectedValue(new ApiNetworkError(new TypeError('offline')));
+    await openSignedIn();
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Отменить участие' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Отменить участие' }));
+    await waitFor(() => expect(withdrawFromRace).toHaveBeenCalledTimes(1));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Оставить участие' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 
   it('подтверждение — фокус скринридера на заголовок', async () => {

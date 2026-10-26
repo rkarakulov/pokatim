@@ -99,7 +99,10 @@ export function EntryActions({
           <WithdrawConfirm
             pending={withdraw.isPending}
             onConfirm={() => withdraw.mutate(undefined, { onSuccess: () => setConfirming(false) })}
-            onClose={() => setConfirming(false)}
+            onClose={() => {
+              withdraw.reset();
+              setConfirming(false);
+            }}
           />
         ) : (
           <View style={styles.start}>
