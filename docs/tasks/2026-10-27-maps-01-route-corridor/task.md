@@ -423,8 +423,11 @@ export interface RouteDisplayGeometry {
 
 **Риски / follow-up**
 
-- Expo Go: пакет MapLibre RN зовёт `TurboModuleRegistry.getEnforcing` при импорте — экран `races/[id]` в Expo Go
-  упадёт (вопрос оркестратору: ленивый `require` с проверкой модуля, чтобы Expo Go деградировал до «без карты»).
+- Expo Go / старый dev-клиент (решено после отчёта, оркестратор 2026-10-26): пакет MapLibre RN зовёт
+  `TurboModuleRegistry.getEnforcing` при импорте — теперь загрузка ленивая (`load-maplibre-native.ts`, `import()`;
+  `require` в `.ts` запрещён ESLint) и только при `mapSupported()` (`MLRNCameraModule` — первый при импорте,
+  `MLRNMapViewModule` — главный); иначе блока нет. Тест `race-route-map.test.tsx` («нет нативного модуля»),
+  отрицательное доказательство: без `mapSupported()` тест красный (1 failed).
 - CSS `maplibre-gl` (~70 КБ) Metro web подключает глобально — `<link>` на всех страницах, не только на карточке.
 - RC-8: чанк `maplibre-gl` в precache SW (хешированный); воркер — без хеша, не в precache.
 - RC-5: токены карты (пропорция, прозрачность, роли старта/финиша) — follow-up в app-foundation.

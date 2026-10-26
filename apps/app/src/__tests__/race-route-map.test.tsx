@@ -2,8 +2,9 @@
 import { ApiHttpError } from '@pokatim/api-client';
 import type { RaceDetail, RaceRouteMap } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
-import { useColorScheme } from 'react-native';
+import { TurboModuleRegistry, useColorScheme } from 'react-native';
 
+import { loadMapLibreNative } from '@/features/maps/load-maplibre-native';
 import { api } from '@/lib/api';
 
 import { appRoutes } from './app-routes';
@@ -79,7 +80,8 @@ describe('карта маршрута на карточке гонки (maps-01)
     await openCard();
     expect(await screen.findByLabelText(mapLabel)).toBeOnTheScreen();
     expect(getRaceRoute).toHaveBeenCalledWith(ID);
-    const map = screen.getByTestId('maplibre-Map');
+    const map = await screen.findByTestId('maplibre-Map');
+    expect(loadMapLibreNative).toHaveBeenCalled();
     expect(map).toHaveProp('mapStyle', LIGHT);
     expect(map).toHaveProp('attribution', true);
     for (const gesture of ['dragPan', 'touchZoom', 'doubleTapZoom', 'touchRotate', 'touchPitch']) {
@@ -105,14 +107,13 @@ describe('карта маршрута на карточке гонки (maps-01)
   it('тёмная системная тема — тёмный стиль карты', async () => {
     colorScheme.mockReturnValue('dark');
     await openCard();
-    await screen.findByLabelText(mapLabel);
-    expect(screen.getByTestId('maplibre-Map')).toHaveProp('mapStyle', DARK);
+    expect(await screen.findByTestId('maplibre-Map')).toHaveProp('mapStyle', DARK);
   });
 
   it('ошибка загрузки стиля — «Карта не загрузилась», карточка цела', async () => {
     await openCard();
-    await screen.findByLabelText(mapLabel);
-    await act(async () => fireEvent(screen.getByTestId('maplibre-Map'), 'didFailLoadingMap'));
+    const map = await screen.findByTestId('maplibre-Map');
+    await act(async () => fireEvent(map, 'didFailLoadingMap'));
     expect(screen.getByText('Карта не загрузилась')).toBeOnTheScreen();
     expect(screen.getByText('Коридор')).toBeOnTheScreen();
   });
@@ -138,6 +139,17 @@ describe('карта маршрута на карточке гонки (maps-01)
     expect(getRaceRoute).not.toHaveBeenCalled();
     expect(screen.queryByTestId('maplibre-Map')).toBeNull();
     expect(screen.getByText('Коридор')).toBeOnTheScreen();
+  });
+
+  it('нет нативного модуля MapLibre (Expo Go, старый dev-клиент) — пакет не загружается, блока нет, карточка цела', async () => {
+    jest.mocked(TurboModuleRegistry.get).mockReturnValue(null);
+    await openCard();
+    expect(TurboModuleRegistry.get).toHaveBeenCalledWith('MLRNCameraModule');
+    expect(loadMapLibreNative).not.toHaveBeenCalled();
+    expect(getRaceRoute).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('route-map')).toBeNull();
+    expect(screen.getByText('±50 м от маршрута')).toBeOnTheScreen();
+    expect(screen.getByText('62 км по GPS-треку')).toBeOnTheScreen();
   });
 
   it('без коридора — запроса нет, блока нет', async () => {

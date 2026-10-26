@@ -142,8 +142,11 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   без анимации. Карточка `races/[id]`: блок `race-route-map.tsx` после строки «Коридор» — SSR и первый рендер — место
   карты (скелетон той же пропорции), после монтирования: env не задан, геометрия 404/ошибка — блок схлопывается
   (строки остаются); запрос `['races','route',id]` — только клиент, pull-to-refresh его не трогает. Native —
-  config plugin в `app.json`, Expo Go не поддерживает (dev-сборка); jest — мок модуля в `jest.setup.ts`, web —
-  мок `load-maplibre`.
+  config plugin в `app.json`; пакет MapLibre RN импортируется только лениво (`load-maplibre-native.ts`, `import()`)
+  и только при `mapSupported()` (`map-support(.web).ts`: `TurboModuleRegistry.get` модулей `MLRNCameraModule`,
+  `MLRNMapViewModule`) — статический импорт бросает `getEnforcing` в Expo Go и старом dev-клиенте; нет модулей —
+  блока карты нет, как без env. Jest — мок пакета и загрузчика в `jest.setup.ts` (модули «есть»), web — мок
+  `load-maplibre`.
 
 - Участие и результат (race-results-04): блок «Ваше участие» и таблица «Результаты» на карточке `races/[id]` — только
   клиентские запросы (в SSR не попадают; пока сессия неизвестна — блока нет). Ключи `['races','entry',id]`

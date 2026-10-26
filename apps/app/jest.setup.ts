@@ -4,6 +4,8 @@ import './src/theme/design-system';
 // Моки нативных модулей для всех тестов: в jest нет ни NetInfo, ни нативного пикера.
 import { onlineManager } from '@tanstack/react-query';
 
+import type * as ReactNative from 'react-native';
+
 import type * as RegistrationStore from './src/features/auth/registration-store';
 import type * as OnboardingStore from './src/features/onboarding/onboarding-store';
 import type * as SessionStore from './src/features/auth/session-store';
@@ -84,9 +86,26 @@ jest.mock('@maplibre/maplibre-react-native', () => {
   };
 });
 
+// ленивый загрузчик карты (`import()` jest не исполняет) — сразу мок пакета выше
+jest.mock('./src/features/maps/load-maplibre-native', () => ({
+  loadMapLibreNative: jest.fn(async () => jest.requireMock('@maplibre/maplibre-react-native')),
+}));
+
+// нативные модули MapLibre «установлены» (dev-сборка); тест Expo Go подменяет `get` на null
+const turboModules = jest.requireActual<typeof ReactNative>('react-native').TurboModuleRegistry;
+const turboModuleGet = turboModules.get.bind(turboModules);
+function withMapLibreModules() {
+  jest
+    .spyOn(turboModules, 'get')
+    .mockImplementation(
+      (name: string) => (name.startsWith('MLRN') ? {} : turboModuleGet(name)) as never,
+    );
+}
+
 // onlineManager — синглтон модуля: каждый тест начинает как свежий запуск приложения
 beforeEach(() => {
   onlineManager.setOnline(true);
+  withMapLibreModules();
   // сторы сессии и регистрации — тоже синглтоны; сброс до теста, а не после: в afterEach экраны
   // прошлого теста ещё смонтированы (сброс стора вне act)
   jest.requireMock<{ __store: Map<string, string> }>('expo-secure-store').__store.clear();
