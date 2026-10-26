@@ -20,3 +20,5 @@ export * from './calendar/calendar-public.schema.ts';
 export * from './tracks/track-upload.schema.ts';
 export * from './routes/route.schema.ts';
 export * from './devices/device.schema.ts';
+export * from './geo/city.schema.ts';
+export * from './rides/ride.schema.ts';

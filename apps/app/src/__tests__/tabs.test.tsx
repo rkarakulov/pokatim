@@ -44,7 +44,7 @@ describe('нижние вкладки', () => {
 
     await fireEvent.press(screen.getByRole('tab', { name: 'Райды' }));
 
-    expect(await screen.findByRole('header', { name: 'Кофе-райды' })).toBeOnTheScreen();
+    expect(await screen.findByTestId('rides-feed')).toBeOnTheScreen();
     expect(screen.getByRole('tab', { name: 'Райды' })).toBeSelected();
     expect(screen.getByRole('tab', { name: 'Главная' })).not.toBeSelected();
   });

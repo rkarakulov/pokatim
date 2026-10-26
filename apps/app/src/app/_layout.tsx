@@ -3,12 +3,13 @@ import '@/theme/design-system';
 import { useTheme } from '@rkarakulov/ui';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 
 import { useRegistrationStore } from '@/features/auth/registration-store';
+import { takeReturnPath } from '@/features/auth/return-path';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { onboardingStep, useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { connectFocusManager } from '@/lib/focus-manager';
@@ -36,6 +37,7 @@ export default function RootLayout() {
   const hydrated = sessionStatus !== 'unknown' && registrationHydrated;
   const step = useOnboardingStore(onboardingStep);
   const surveyState = useOnboardingStore((state) => state.survey);
+  const router = useRouter();
 
   useEffect(() => {
     void useSessionStore.getState().hydrate();
@@ -59,6 +61,14 @@ export default function RootLayout() {
       }),
     [queryClient],
   );
+
+  // возврат к карточке после входа (гость нажал «Я иду», Q13 блока 05): один раз, когда вошёл и прошёл онбординг;
+  // путь — только из allowlist (`return-path`), действие «Я иду» повторно не выполняется
+  useEffect(() => {
+    if (!signedIn || step !== 'done') return;
+    const path = takeReturnPath();
+    if (path) router.replace(path as Href);
+  }, [signedIn, step, router]);
 
   useEffect(() => {
     // без шрифтов работаем на системных, но не молча
@@ -103,6 +113,10 @@ export default function RootLayout() {
           {/* «Устройства» (вход — иконка верхней панели): тот же гард, что у вкладок; скелетон — в экране
               (`useSettingsShell`) */}
           <Stack.Screen name="settings/devices" />
+          {/* кофе-райды (блок 05): форма, правка и отмена — только вошедшим, без таб-бара; гость — «Вход» */}
+          <Stack.Screen name="rides/new" />
+          <Stack.Screen name="rides/edit/[id]" />
+          <Stack.Screen name="rides/cancel/[id]" />
         </Stack.Protected>
         {/* шаги онбординга после входа: опрос → геопозиция → устройства → Главная; пока сессия или шаг неизвестны — скелетон
             (SSR отдаёт HTML оболочки, а не пустую страницу редиректа) */}
@@ -128,6 +142,8 @@ export default function RootLayout() {
         <Stack.Screen name="seasons/[id]" />
         {/* публичная карточка старта календаря (блок 04) — так же */}
         <Stack.Screen name="calendar/[id]" />
+        {/* публичная карточка кофе-райда (блок 05) — так же: ссылка-приглашение открывается без входа */}
+        <Stack.Screen name="rides/[id]" />
       </Stack>
       <StatusBar style="auto" />
     </QueryClientProvider>

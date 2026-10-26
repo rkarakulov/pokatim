@@ -64,6 +64,34 @@ export function minskDateTime(iso: string, now: Date | null) {
   };
 }
 
+/** День недели календарной даты (0 — воскресенье): арифметика дат, без часового пояса. */
+const weekdayOf = (localDate: string) => new Date(`${localDate}T00:00:00Z`).getUTCDay();
+
+/** Время «9:00» — часы без ведущего нуля (прототип райдов). */
+const shortTime = (time: string) => time.replace(/^0(\d)/, '$1');
+
+/**
+ * Момент UTC по Минску: «день недели, число месяц[, год], время» — общая подпись карточек и лент (кофе-райды).
+ * `weekday: 'long'` — «Воскресенье, 4 октября 2026» (подпись дня, карточка), `'short'` — «Сб 3 октября» (герой).
+ * Год — по правилу `now` (`null` — всегда). Время — отдельно «9:00» (`time`) и целиком (`full`).
+ */
+export function formatMinskDateTime(
+  iso: string,
+  now: Date | null,
+  weekday: 'long' | 'short' = 'long',
+): { date: string; time: string; full: string } {
+  const { localDate, date: dayMonthYear, time } = minskDateTime(iso, now);
+  const name = t(
+    `${weekday === 'long' ? 'date.weekday' : 'date.weekdayShort'}.${weekdayOf(localDate)}` as MessageKey,
+  );
+  const date = t(weekday === 'long' ? 'format.weekdayLong' : 'format.weekdayShort', {
+    weekday: name,
+    date: dayMonthYear,
+  });
+  const clock = shortTime(time);
+  return { date, time: clock, full: t('format.dateTime', { date, time: clock }) };
+}
+
 const km = (value: number) => i18n.formatNumber(value, { maximumFractionDigits: 1 });
 
 /** Склейка элементов по шаблону строки (`{head}` + `{next}`); пусто — `null`. */

@@ -102,8 +102,8 @@ paths:
 - Реестр разделов — `features/home/sections.ts` (`AVAILABLE_HOME_SECTIONS`): раздел входит только вместе с живым
   read-API своего домена, без заглушек «скоро». Порядок — `orderHomeSections` по `GET /v1/profile`; профиль не
   загрузился — порядок вкладок, без ошибки на экране.
-- Данные раздела — публичный list-эндпоинт домена (`limit: 1`), ключ с префиксом вкладки (`['races', 'list', …]`);
-  своего агрегата/BFF и своих DTO нет. Состояния — `HomeSection` (шапка сразу, скелетон и ошибки — в слоте героя).
+- Данные раздела — list-эндпоинт домена (`limit: 1`; зависящий от зрителя — под `AuthGuard` через `withAccessToken`,
+  как «Кофе-райды»), ключ с префиксом вкладки (`['races', 'list', …]`); своего агрегата/BFF и своих DTO нет. Состояния — `HomeSection` (шапка сразу, скелетон и ошибки — в слоте героя).
 - Время и даты — только `contracts/src/time.ts` (`utcToMinskWallTime`, `minskToday`, `addLocalDays`) + месяцы
   `date.month.*`; общие подписи дат, дистанций и меты — `src/lib/minsk-format.ts`, подписи гонки —
   `features/races/format.ts`, «сейчас» — `src/lib/use-minsk-clock.ts` (тесты в TZ ≠ Минск). Фаза — с сервера; `'unknown'` в фазе, покрытии,
@@ -145,6 +145,26 @@ paths:
   (`features/calendar/registration.ts`); адрес не логируется; `Linking` / `window.open` в экранах — нет.
 - Общие чипы фильтров вкладок (`toggle`, `monthChipLabel`) — `src/lib/filter-chips.ts`; подписи календаря и герой
   старта (Главная и вкладка) — `features/calendar/{format.ts,calendar-hero.tsx}`.
+
+## Кофе-райды (блок 05, `docs/product/rides.md`)
+
+- Вкладка «Райды» — `features/rides/ride-feed.tsx` (`FlatList`): ключ `['rides','list',{ city, limit },'pages']`
+  (`useInfiniteQuery`), Главная — `['rides','list',{ limit: 1 }]`, города — `['rides','cities']`; всё — через
+  `withAccessToken`, `staleTime` 30 с, без polling. Подписи дней — по Минску (`groupByDay`, поперёк страниц).
+- Карточка `rides/[id]` — в корневом `Stack` вне `Stack.Protected` (как `calendar/[id]`): публичные данные
+  `['rides','detail',id]` (посев SSR), вошедшему — ещё `['rides','detail',id,'me']`; мета — всегда `robots: noindex`.
+  `rides/new`, `rides/edit/[id]`, `rides/cancel/[id]` — внутри `Stack.Protected` вкладок.
+- Участие — `RideGoingAction` (`src/components/ride-going-action.tsx`) только по `viewer`, `full`, `phase` сервера;
+  клиент не вычисляет «полон / можно / фаза». Мутации (`networkMode: 'always'`): ответ `RideView` → кеш `me`, затем
+  `invalidateQueries(['rides'])`.
+- «Поделиться» — только `src/lib/share-link(.web).ts` (native — `Share`, origin — `EXPO_PUBLIC_WEB_ORIGIN`, не задан —
+  кнопки нет; web — `navigator.share`, иначе буфер и «Ссылка скопирована»); `Share` / `navigator.share` / `Clipboard`
+  в экранах — нет.
+- Возврат гостя к объекту после входа — `features/auth/return-path(.web).ts` (память; web — ещё `sessionStorage`
+  вкладки): ставит карточка при «Я иду» гостя, читает и снимает корневой layout один раз (`signedIn && step === 'done'`);
+  действие после возврата не выполняется автоматически.
+- Форма — `react-hook-form` + `zodResolver(CreateRideForm)` из contracts; до релиза `TimeField` и многострочного поля
+  базы — фолбэк (`TextField` с маской `ЧЧ:ММ`, однострочное описание, единицы в подписи).
 
 ## Проверка
 

@@ -9,6 +9,7 @@ import {
   loader as calendarLoader,
 } from '../app/calendar/[id]';
 import { generateMetadata as raceMetadata, loader as raceLoader } from '../app/races/[id]';
+import { generateMetadata as rideMetadata, loader as rideLoader } from '../app/rides/[id]';
 import { generateMetadata as seasonMetadata, loader as seasonLoader } from '../app/seasons/[id]';
 import { resetPublicSsrCache } from '@/lib/public-ssr';
 
@@ -359,5 +360,90 @@ describe('мета публичной карточки старта (SSR, бло
     fetchMock.mockRejectedValue(new TypeError('fetch failed'));
     expect(await calendarMetadata(undefined, { id: ID })).toEqual(neutral);
     expect(await calendarLoader(undefined, { id: ID })).toBeNull();
+  });
+});
+
+describe('мета публичной карточки кофе-райда (SSR, блок 05)', () => {
+  const ID = '0190a6f4-0000-7000-8000-000000000051';
+  const ride = {
+    id: ID,
+    title: 'Кофе-райд на Минское море',
+    organizerName: 'Катя Л.',
+    startsAt: '2026-10-04T07:00:00Z',
+    city: 'minsk',
+    place: 'Парк Победы',
+    distanceKm: 42,
+    paceMinKmh: 22,
+    paceMaxKmh: 24,
+    limit: 12,
+    goingCount: 5,
+    full: false,
+    phase: 'upcoming',
+    cancelReason: null,
+    rescheduledAt: null,
+    description: 'Секретное описание',
+  };
+  const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
+  const respond = (status: number, body: unknown) =>
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(body), { status })),
+    );
+  const neutral = {
+    title: 'Кофе-райд — Покатим',
+    description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
+    openGraph: {
+      title: 'Кофе-райд',
+      description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
+      type: 'website',
+      siteName: 'Покатим',
+    },
+    robots: 'noindex',
+  };
+
+  beforeEach(() => {
+    resetPublicSsrCache();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    process.env.API_INTERNAL_URL = 'http://api.internal:3000';
+  });
+  afterEach(() => {
+    fetchMock.mockReset();
+    delete process.env.API_INTERNAL_URL;
+  });
+
+  it('дата с годом, город, км, темп; og:url — WEB_ORIGIN + /rides/<id>; всегда noindex; без описания и организатора', async () => {
+    respond(200, ride);
+    process.env.WEB_ORIGIN = ORIGIN;
+
+    expect(await rideLoader(undefined, { id: ID })).toMatchObject({ id: ID });
+    const description = 'Воскресенье, 4 октября 2026, 10:00 · Минск · 42 км · темп 22–24 км/ч';
+    const meta = await rideMetadata(undefined, { id: ID });
+    expect(meta).toEqual({
+      title: 'Кофе-райд на Минское море — Покатим',
+      description,
+      openGraph: {
+        title: 'Кофе-райд на Минское море',
+        description,
+        type: 'website',
+        siteName: 'Покатим',
+        url: `${ORIGIN}/rides/${ID}`,
+      },
+      robots: 'noindex',
+    });
+    const text = JSON.stringify(meta);
+    expect(text).not.toContain('Секретное');
+    expect(text).not.toContain('Катя');
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://api.internal:3000/v1/rides/${ID}`);
+  });
+
+  it('404, невалидный id (без запроса) и API недоступен — нейтральная мета с noindex', async () => {
+    respond(404, { code: 'NOT_FOUND', message: 'x' });
+    expect(await rideMetadata(undefined, { id: ID })).toEqual(neutral);
+    expect(await rideLoader(undefined, { id: ID })).toBeNull();
+    fetchMock.mockReset();
+    expect(await rideMetadata(undefined, { id: 'new' })).toEqual(neutral);
+    expect(fetchMock).not.toHaveBeenCalled();
+    resetPublicSsrCache();
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+    expect(await rideMetadata(undefined, { id: ID })).toEqual(neutral);
   });
 });

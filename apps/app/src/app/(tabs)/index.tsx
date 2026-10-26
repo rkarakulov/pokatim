@@ -14,6 +14,8 @@ import { HomeSection } from '@/features/home/home-section';
 import { CalendarStartHero } from '@/features/calendar/calendar-hero';
 import { RaceHero } from '@/features/home/heroes';
 import { useNextCalendarStart, useNextRace, useRideReasons } from '@/features/home/queries';
+import { useNextRide } from '@/features/rides/queries';
+import { RideHero } from '@/features/rides/ride-hero';
 import {
   AVAILABLE_HOME_SECTIONS,
   orderHomeSections,
@@ -33,6 +35,12 @@ const SECTION_COPY: Record<
     all: 'home.races.all',
     href: '/races',
   },
+  rides: {
+    kicker: 'home.rides.kicker',
+    title: 'home.rides.title',
+    all: 'home.rides.all',
+    href: '/rides',
+  },
   calendar: {
     kicker: 'home.calendar.kicker',
     title: 'home.calendar.title',
@@ -44,7 +52,7 @@ const SECTION_COPY: Record<
 const DOCUMENT_TITLE = `${t('home.title')} — ${t('app.name')}`;
 
 /**
- * Главная: верхняя панель и лента разделов («Гонки», «Календарь стартов»). Порядок — по ответам опроса (R4):
+ * Главная: верхняя панель и лента разделов («Гонки», «Кофе-райды», «Календарь стартов»). Порядок — по ответам опроса (R4):
  * отмеченные — первыми с тегом; профиль ещё не пришёл или не загрузился — базовый порядок без ошибки на экране.
  * Обновление — pull-to-refresh (native) и фокус вкладки / возврат из фона (`focusManager`, R7).
  */
@@ -56,14 +64,16 @@ export default function HomeScreen() {
   const profile = useRideReasons();
   const races = useNextRace();
   const calendar = useNextCalendarStart();
+  const rides = useNextRide();
   const sections = orderHomeSections(AVAILABLE_HOME_SECTIONS, profile.reasons);
   // «сейчас» подписей — на клиенте (Главная без SSR-данных, R6): новые данные, фокус, полночь по Минску
-  const now = useMinskClock([races.dataUpdatedAt, calendar.dataUpdatedAt]);
+  const now = useMinskClock([races.dataUpdatedAt, rides.dataUpdatedAt, calendar.dataUpdatedAt]);
   // без сети при показанных данных — баннер (§4.12); без данных «Нет соединения» показывает слот раздела
-  const hasData = races.data !== undefined || calendar.data !== undefined;
+  const hasData =
+    races.data !== undefined || rides.data !== undefined || calendar.data !== undefined;
   const refetchers = useMemo(
-    () => [races.refetch, calendar.refetch, profile.refetch],
-    [races.refetch, calendar.refetch, profile.refetch],
+    () => [races.refetch, rides.refetch, calendar.refetch, profile.refetch],
+    [races.refetch, rides.refetch, calendar.refetch, profile.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
 
@@ -127,6 +137,35 @@ export default function HomeScreen() {
                     race={race}
                     now={now}
                     onPress={() => router.push(`/races/${race.id}`)}
+                  />
+                ) : null;
+              }}
+            </HomeSection>
+          ) : id === 'rides' ? (
+            <HomeSection
+              key={id}
+              {...frame}
+              query={rides}
+              empty={{
+                when: (page) => page.items.length === 0,
+                render: () => (
+                  <EmptyState
+                    title={t('home.rides.empty')}
+                    action={{
+                      label: t('home.rides.emptyAction'),
+                      onPress: () => router.push('/rides/new'),
+                    }}
+                  />
+                ),
+              }}
+            >
+              {(page) => {
+                const ride = page.items[0];
+                return ride ? (
+                  <RideHero
+                    ride={ride}
+                    now={now}
+                    onPress={() => router.push(`/rides/${ride.id}`)}
                   />
                 ) : null;
               }}

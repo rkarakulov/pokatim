@@ -59,6 +59,9 @@ describe('коды ошибок', () => {
       'DEVICE_PROVIDER_ERROR',
       'ROUTE_FORMAT_UNSUPPORTED',
       'ROUTE_TOO_LARGE',
+      'RIDE_FULL',
+      'RIDE_INVALID_STATE',
+      'RIDE_QUOTA_EXCEEDED',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',
@@ -80,6 +83,10 @@ describe('коды ошибок', () => {
       'PROTOCOL_ONLY_LATER',
       'FIELD_LOCKED',
       'ROUTE_NOT_READY',
+      'RIDE_START_IN_PAST',
+      'RIDE_START_TOO_FAR',
+      'RIDE_PACE_ORDER',
+      'RIDE_LIMIT_BELOW_GOING',
     ]);
   });
 
