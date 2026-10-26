@@ -1309,6 +1309,7 @@ export const ru = {
   // --- споры 06: панель «Протокол» ---
   'admin.nav.disputes': 'Споры',
   'admin.audit.action.disputes.decided': 'Решение по спору',
+  'admin.audit.action.disputes.series_viewed': 'Просмотр пульса и мощности по спору',
   'admin.races.reason.disputes_open': 'По гонке есть открытые споры — отмена недоступна (D-19).',
   'admin.results.check.open_disputes.link': 'Открыть споры',
   'admin.results.recalc.disputeReason': 'Решение по спору ·{id}',
@@ -1392,4 +1393,37 @@ export const ru = {
   'admin.disputes.decideBlock.cancelled': 'Гонка отменена — решение недоступно',
   'admin.disputes.error.DISPUTE_NOT_FOUND': 'Спор не найден',
   'admin.disputes.error.DISPUTE_ACTION_BLOCKED': 'Решение недоступно — обновите страницу.',
+  // race-results-06b: ряды пульса и мощности на разборе спора
+  'admin.disputes.series.title': 'Пульс и мощность',
+  'admin.disputes.series.note':
+    'Биометрия заезда — только для разбора спора: видит команда платформы, в системе не сохраняется.',
+  'admin.disputes.series.show': 'Показать пульс и мощность',
+  'admin.disputes.series.preparing': 'Ряды готовятся…',
+  'admin.disputes.series.timeout': 'Ряды не подготовлены вовремя — попробуйте ещё раз.',
+  'admin.disputes.series.retry': 'Повторить',
+  'admin.disputes.series.unavailable.no_result':
+    'У оспоренного результата нет засчитанного заезда — рядов нет.',
+  'admin.disputes.series.unavailable.no_source': 'Исходный файл заезда недоступен — рядов нет.',
+  'admin.disputes.series.unavailable.failed':
+    'Не удалось построить ряды из файла заезда. Повторить можно через 2 минуты.',
+  'admin.disputes.series.segment': 'Сегмент старт → финиш: {distance}',
+  'admin.disputes.series.empty': 'В сегменте старт → финиш нет точек с временем — рядов нет.',
+  'admin.disputes.series.heartRate': 'Пульс',
+  'admin.disputes.series.power': 'Мощность',
+  'admin.disputes.series.speed': 'Скорость',
+  'admin.disputes.series.unit.heartRate': 'уд/мин',
+  'admin.disputes.series.unit.power': 'Вт',
+  'admin.disputes.series.unit.speed': 'км/ч',
+  'admin.disputes.series.noData.heartRate': 'Нет данных пульса в этом заезде',
+  'admin.disputes.series.noData.power': 'Нет данных мощности в этом заезде',
+  'admin.disputes.series.summary': 'среднее {avg}, максимум {max} {unit}',
+  'admin.disputes.series.summarySpeed': 'средняя {avg} {unit}',
+  'admin.disputes.series.point': '{distance}: {value}',
+  'admin.disputes.series.chartLabel': '{name} по дистанции: {summary}',
+  'admin.disputes.series.axis': 'Дистанция сегмента, км',
+  'admin.disputes.series.hint':
+    'Наведите курсор на график — значение в точке; все значения — в таблице ниже.',
+  'admin.disputes.series.range': 'шкала {min}–{max} {unit}',
+  'admin.disputes.series.table': 'Таблица значений',
+  'admin.disputes.series.column.distance': 'Дистанция',
 } as const;

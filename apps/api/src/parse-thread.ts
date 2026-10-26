@@ -1,7 +1,12 @@
 import { Worker } from 'node:worker_threads';
 
 /** Функции серверного входа `@pokatim/tracks/parse`, которые можно запустить в потоке (белый список). */
-export const PARSE_FUNCTIONS = ['analyzeTrack', 'analyzeRoute', 'analyzeAttempt'] as const;
+export const PARSE_FUNCTIONS = [
+  'analyzeTrack',
+  'analyzeRoute',
+  'analyzeAttempt',
+  'analyzeSeries',
+] as const;
 export type ParseFunction = (typeof PARSE_FUNCTIONS)[number];
 
 export interface ParseLimits {
@@ -21,7 +26,8 @@ export const DEFAULT_PARSE_LIMITS: ParseLimits = {
 };
 
 /**
- * Потоков разбора одновременно на процесс (R4 race-results-03): track-processing, route-processing и attempt-check не
+ * Потоков разбора одновременно на процесс (R4 race-results-03): track-processing, route-processing, attempt-check и
+ * dispute-series не
  * держат несколько потоков по 160 + 32 МБ в worker с лимитом 512 МиБ. Поднять — вместе с лимитом контейнера.
  */
 export const PARSE_THREADS_MAX = 1;

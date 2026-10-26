@@ -167,4 +167,10 @@ describe('панель: споры', () => {
       ],
     ]);
   });
+
+  it('ряды пульса и мощности — GET …/series, ответ по схеме', async () => {
+    const { calls, api } = admin(200, { state: 'preparing' });
+    expect(await api.getDisputeSeries(ID)).toEqual({ state: 'preparing' });
+    expect(calls[0]).toMatchObject({ url: `/v1/admin/disputes/${ID}/series`, method: 'GET' });
+  });
 });

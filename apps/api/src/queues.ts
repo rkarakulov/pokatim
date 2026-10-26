@@ -29,4 +29,9 @@ export const QUEUE = {
   attemptCheck: 'attempt-check',
   /** Регламент результатов: повторная постановка зависших проверок. */
   resultsMaintenance: 'results-maintenance',
+  /**
+   * Ряды пульса и мощности для разбора спора (race-results-06b, `analyzeSeries` в потоке разбора): итог — кэш Redis с
+   * TTL; дедупликация — ключ постановки в Redis (`DisputeSeriesCache`), не jobId.
+   */
+  disputeSeries: 'dispute-series',
 } as const;

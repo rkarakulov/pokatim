@@ -59,14 +59,14 @@ export const CORRIDOR = corridorExpected.fixtures['clean.gpx']!.corridor;
 /**
  * Фикстура коридора со сдвигом времени: первая точка — `startAt`, интервалы × `scale` (медленнее — больше время).
  * Позволяет проехать эталонный трек в окне гонки стенда (окно эталона — июнь 2026). `power` — мощность в точках
- * (активность станет основной группы дублей), `type` — тип трека GPX.
+ * (активность станет основной группы дублей), `heartRate` — пульс в точках, `type` — тип трека GPX.
  */
 export function rideGpx(
   name: string,
   startAt: Date,
-  options: { scale?: number; power?: boolean; type?: string } = {},
+  options: { scale?: number; power?: boolean; heartRate?: number; type?: string } = {},
 ): Buffer {
-  const { scale = 1, power = false, type } = options;
+  const { scale = 1, power = false, heartRate, type } = options;
   let text = readFileSync(join(CORRIDOR_FIXTURES, name), 'utf8');
   const times = [
     ...text.matchAll(/<trkpt[^>]*>\s*(?:<ele>[^<]*<\/ele>\s*)?<time>([^<]+)<\/time>/g),
@@ -75,9 +75,8 @@ export function rideGpx(
   const shift = (iso: string) =>
     new Date(startAt.getTime() + (new Date(iso).getTime() - first) * scale).toISOString();
   text = text.replace(/<time>([^<]+)<\/time>/g, (_, iso: string) => `<time>${shift(iso)}</time>`);
-  if (power) {
-    text = text.replaceAll('</trkpt>', '<extensions><power>200</power></extensions></trkpt>');
-  }
+  const sensors = `${heartRate ? `<hr>${heartRate}</hr>` : ''}${power ? '<power>200</power>' : ''}`;
+  if (sensors) text = text.replaceAll('</trkpt>', `<extensions>${sensors}</extensions></trkpt>`);
   if (type) text = text.replace(/<type>[^<]*<\/type>/, `<type>${type}</type>`);
   return Buffer.from(text);
 }

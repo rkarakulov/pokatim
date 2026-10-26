@@ -1,10 +1,17 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Global, Module } from '@nestjs/common';
+
+import { QUEUE } from '../../queues';
 
 import { IdentityModule } from '../identity';
 import { PanelModule } from '../panel';
 import { RACE_CANCEL_GATE } from '../races';
 import { RESULT_DISPUTE_GATE, ResultsCoreModule } from '../results';
+import { TracksCoreModule } from '../tracks';
 import { DisputeGates } from './dispute-gates';
+import { DisputeSeriesCache } from './dispute-series.cache';
+import { DisputeSeriesProcessor } from './dispute-series.processor';
+import { DisputeSeriesService } from './dispute-series.service';
 import { DisputesAdminController } from './disputes-admin.controller';
 import { DisputesController } from './disputes.controller';
 import { DisputesPanelService } from './disputes-panel.service';
@@ -33,8 +40,27 @@ export class DisputesCoreModule {}
  * `PanelGuard`. `results` и `races` — только порты через их `index.ts` (`ResultsForDisputes`, `RaceRegistry`).
  */
 @Module({
-  imports: [IdentityModule, PanelModule, ResultsCoreModule],
+  imports: [
+    IdentityModule,
+    PanelModule,
+    ResultsCoreModule,
+    BullModule.registerQueue({ name: QUEUE.disputeSeries }),
+  ],
   controllers: [DisputesController, DisputesAdminController],
-  providers: [DisputesService, DisputesPanelService],
+  providers: [DisputesService, DisputesPanelService, DisputeSeriesService, DisputeSeriesCache],
 })
 export class DisputesModule {}
+
+/**
+ * Задачи `disputes` в worker (race-results-06b): ряды пульса и мощности для разбора спора — поток разбора, итог в кэш
+ * Redis. `results` — порт `ResultsForDisputes`, исходник — порт `tracks` `ActivitySource` (через их `index.ts`).
+ */
+@Module({
+  imports: [
+    ResultsCoreModule,
+    TracksCoreModule,
+    BullModule.registerQueue({ name: QUEUE.disputeSeries }),
+  ],
+  providers: [DisputeSeriesCache, DisputeSeriesProcessor],
+})
+export class DisputesWorkerModule {}
