@@ -13,6 +13,7 @@ import {
   entryActions,
   mayMatch,
   pickBest,
+  raceRepresentative,
   rankRows,
   RESULTS_POLICY,
   resultStatus,
@@ -137,8 +138,15 @@ describe('mayMatch — предфильтр автоматической поп�
     ).toBe(false);
   });
 
-  it('дубль, indoor, далеко от маршрута — нет', () => {
-    expect(mayMatch(activity({ isPrimary: false }), race(), ROUTE)).toBe(false);
+  it('представитель группы — первый своевременный по приоритету основной; поздний не идёт в гонку', () => {
+    const late = activity({ id: 'late', uploadCreatedAt: uploadClosesAt(race()) });
+    const timely = activity({ id: 'timely', isPrimary: false });
+    expect(raceRepresentative([late, timely], race())?.id).toBe('timely');
+    expect(raceRepresentative([timely, late], race())?.id).toBe('timely');
+    expect(raceRepresentative([late], race())).toBeNull();
+  });
+
+  it('indoor, далеко от маршрута — нет', () => {
     expect(mayMatch(activity({ sport: 'cycling_indoor' }), race(), ROUTE)).toBe(false);
     expect(mayMatch(activity({ bounds: [28.5, 54.5, 28.6, 54.6] }), race(), ROUTE)).toBe(false);
   });

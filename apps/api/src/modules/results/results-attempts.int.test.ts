@@ -365,6 +365,26 @@ describe('поздний дубль после срока загрузки (A5, 
     });
   });
 
+  /**
+   * Приём отстаёт от очереди: A принят до срока, но его `activity-ready` ещё не обработан, а поздний B с мощностью уже
+   * стал основной группы. Для гонки группу представляет сильнейший своевременный член (A) — попытка A, у B попытки
+   * нет. Отрицательное доказательство: без выбора своевременного члена A игнорируется — участник без результата.
+   */
+  it('приём отстал: своевременный A получает попытку, поздняя основная B — нет', async () => {
+    const { raceId, auth, worker } = await entered();
+    const timely = await uploadRide(h, auth, rideGpx('clean.gpx', RIDE));
+    const late = await afterDeadline();
+    const powered = await uploadRide(h, late, rideGpx('clean.gpx', RIDE, { power: true }));
+    expect(await tracks(h).activities.findOne({ _id: timely.activityId! })).toMatchObject({
+      duplicateOf: powered.activityId,
+    });
+    await worker.drain();
+    expect((await attempts()).map((a) => [a.activityId, a.status])).toEqual([
+      [timely.activityId, 'counted'],
+    ]);
+    expect((await myEntry(h, late, raceId)).result.status).toBe('provisional');
+  });
+
   it('подправленный GPX после срока (быстрее на 3 %, с мощностью) не улучшает время', async () => {
     const { raceId, auth, worker } = await entered();
     await uploadRide(h, auth, rideGpx('clean.gpx', RIDE));

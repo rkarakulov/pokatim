@@ -292,19 +292,36 @@ export class ResultsRepository {
     );
   }
 
-  /** Зависшие проверки: `checking` с `checkingBefore`, `queued` с `queuedBefore` (индекс `race_attempts_stuck_idx`). */
+  /**
+   * Зависшие проверки: `checking` с `checkingBefore`, `queued` с `queuedBefore` (индекс `race_attempts_stuck_idx`),
+   * по `(updatedAt, _id)` после позиции `after`.
+   */
   stuckAttempts(
     checkingBefore: Date,
     queuedBefore: Date,
+    after: { updatedAt: Date; id: string } | null,
     limit: number,
   ): Promise<RaceAttemptDoc[]> {
-    return this.c.attempts
-      .find({
+    const and: Filter<RaceAttemptDoc>[] = [
+      {
         $or: [
           { status: 'checking', updatedAt: { $lt: checkingBefore } },
           { status: 'queued', updatedAt: { $lt: queuedBefore } },
         ],
-      })
+      },
+    ];
+    // продолжение обхода после пропущенных (живые задачи): самые давние — первыми
+    if (after) {
+      and.push({
+        $or: [
+          { updatedAt: { $gt: after.updatedAt } },
+          { updatedAt: after.updatedAt, _id: { $gt: after.id } },
+        ],
+      });
+    }
+    return this.c.attempts
+      .find({ $and: and })
+      .sort({ updatedAt: 1, _id: 1 })
       .limit(limit)
       .toArray();
   }

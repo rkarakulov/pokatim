@@ -9,7 +9,12 @@ import { ACTIVITY_SOURCE, type ActivityRef, type ActivitySource } from '../track
 import { AttemptIntake } from './attempt-intake';
 import { consumeUserLimit } from './entries.service';
 import type { EntryRequest } from './results.collection';
-import { attemptClosedReason, RESULTS_POLICY, uploadClosesAt } from './results.policy';
+import {
+  attemptClosedReason,
+  raceRepresentative,
+  RESULTS_POLICY,
+  uploadClosesAt,
+} from './results.policy';
 import { ResultsReadService } from './results-read.service';
 import { ResultsRepository } from './results.repository';
 
@@ -67,14 +72,9 @@ export class AttemptsService {
         if (upload.status === 'failed' || upload.status === 'skipped') throw sourceInvalid();
         if (upload.createdAt >= closesAt) throw sourceInvalid();
         request = { uploadId: input.uploadId, activityId: upload.activity?.id ?? null };
-        // загрузка-дубль относится к основной группы
-        target = upload.activity?.isPrimary
-          ? upload.activity
-          : upload.activity
-            ? ((await this.activities.group(upload.activity.id, tx))?.members.find(
-                (member) => member.isPrimary,
-              ) ?? null)
-            : null;
+        // загрузка-дубль относится к представителю группы в гонке (своевременная основная)
+        const group = upload.activity ? await this.activities.group(upload.activity.id, tx) : null;
+        target = group ? raceRepresentative(group.members, race) : null;
       }
 
       let attemptId: string | null = null;

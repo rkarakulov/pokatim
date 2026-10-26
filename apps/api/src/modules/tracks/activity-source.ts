@@ -6,6 +6,7 @@ import type { DbSession } from '../../db';
 import type { ActivityRef, ActivitySource, UploadState } from './activity-source.port';
 import { TRACK_FILE_STORE, type TrackFileStore } from './track-file-store';
 import type { ActivityDoc } from './tracks.collection';
+import { byPrimaryPriority } from './tracks.policy';
 import { TracksRepository } from './tracks.repository';
 
 /** Реализация порта `ActivitySource`: читает только через `TracksRepository`, файл — через `TrackFileStore`. */
@@ -23,7 +24,9 @@ export class ActivitySourceService implements ActivitySource {
     const activity = await this.repository.findActivity(activityId, tx);
     if (!activity) return null;
     const root = activity.duplicateOf ?? activity._id;
-    const members = await this.repository.groupMembers(tx, activity.userId, [root]);
+    const members = byPrimaryPriority(
+      await this.repository.groupMembers(tx, activity.userId, [root]),
+    );
     return { userId: activity.userId, members: await this.refs(members, tx) };
   }
 

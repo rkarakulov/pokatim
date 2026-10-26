@@ -45,7 +45,10 @@ export interface UploadState {
 }
 
 export interface ActivitySource {
-  /** Группа дублей активности (состояние сейчас); активности нет — `null`. */
+  /**
+   * Группа дублей активности (состояние сейчас): `members` — в порядке приоритета основной (первый — основная);
+   * активности нет — `null`.
+   */
   group(
     activityId: string,
     tx?: DbSession,

@@ -33,6 +33,8 @@ export const RESULTS_POLICY = {
   stuckQueuedMs: 2 * 3_600_000,
   maxRequeues: 3,
   stuckBatchSize: 100,
+  /** пакетов обхода зависших за проход (пропущенные с живой задачей не останавливают обход) */
+  stuckScanBatches: 20,
   resultsPageDefault: 50,
   resultsPageMax: 100,
   /** A3: одна группа зачёта v1 */
@@ -47,13 +49,24 @@ export const uploadClosesAt = (race: Pick<RaceForResults, 'closesAt'>): Date =>
   new Date(race.closesAt.getTime() + RESULTS_POLICY.uploadGraceMs);
 
 /**
- * Предфильтр автоматической попытки (§7.3): основная активность, не indoor, интервал заезда пересекает
- * `[windowStartsAt, closesAt)`, файл принят сервером до `uploadClosesAt`, рамки трека и маршрута ближе маржи.
- * Явный запрос райдера предфильтр не требует — судит движок.
+ * Представитель группы дублей в гонке: первый по приоритету основной (`members` порта — в этом порядке) среди
+ * принятых сервером до `uploadClosesAt` (A5). Поздний файл в гонку не идёт; своевременный не теряет попытку из-за
+ * позднего дубля, ставшего основной в `tracks`. Своевременных нет — `null`.
+ */
+export function raceRepresentative(
+  members: readonly ActivityRef[],
+  race: Pick<RaceForResults, 'closesAt'>,
+): ActivityRef | null {
+  return members.find((member) => member.uploadCreatedAt < uploadClosesAt(race)) ?? null;
+}
+
+/**
+ * Предфильтр автоматической попытки (§7.3) для представителя группы (`raceRepresentative`): не indoor, интервал
+ * заезда пересекает `[windowStartsAt, closesAt)`, файл принят сервером до `uploadClosesAt`, рамки трека и маршрута
+ * ближе маржи. Явный запрос райдера предфильтр не требует — судит движок.
  */
 export function mayMatch(activity: ActivityRef, race: RaceWindow, routeBounds: Bounds): boolean {
   return (
-    activity.isPrimary &&
     activity.sport !== 'cycling_indoor' &&
     activity.endedAt >= race.windowStartsAt &&
     activity.startedAt < race.closesAt &&

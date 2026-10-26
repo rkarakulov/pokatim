@@ -304,6 +304,38 @@ describe('зависшие проверки (AC16)', () => {
   });
 });
 
+describe('регламент зависших — обход дальше живых задач (ревью pass 2)', () => {
+  /**
+   * 100 старых `queued` с живыми задачами впереди (по `_id`) и одна с потерянной задачей за ними: проход регламента не
+   * застревает на пропущенных и перепоставляет последнюю. Отрицательное доказательство: без продолжения обхода
+   * пакет из первых 100 занят пропущенными — потерянная задача не восстанавливается.
+   */
+  it('101 queued: первые 100 с живыми задачами пропущены, потерянная — новая ревизия', async () => {
+    const { attempt } = await queuedAttempt();
+    const base = (await resultsDb(h).attempts.findOne({ _id: attempt._id }))!;
+    await resultsDb(h).attempts.insertMany(
+      Array.from({ length: 100 }, (_, i) => ({
+        ...base,
+        _id: `01890a5d-ac96-774b-bcce-b3020990${String(i).padStart(4, '0')}`,
+        activityId: `01890a5d-ac96-774b-bcce-b3020991${String(i).padStart(4, '0')}`,
+        checkJobId: `live-${i}`,
+        // старше потерянной: идут первыми в порядке обхода (самые давние)
+        updatedAt: new Date(base.updatedAt.getTime() - (100 - i) * MINUTE),
+      })),
+    );
+    h.clock.advance(3 * 60 * MINUTE);
+    const result = await h.worker
+      .get(ResultsRecheck)
+      .requeueStuck({ jobPending: (jobId) => Promise.resolve(jobId.startsWith('live-')) });
+    expect(result).toEqual({ requeued: 1, failed: 0 });
+    expect(await resultsDb(h).attempts.findOne({ _id: attempt._id })).toMatchObject({
+      status: 'queued',
+      checkRevision: 2,
+    });
+    expect(await resultsDb(h).attempts.countDocuments({ checkRevision: 1 })).toBe(100);
+  });
+});
+
 describe('ожидание в очереди — не зависание (ревью L1)', () => {
   it('queued дольше 2 ч с живой задачей attempt-check — не переставляется; задачи нет — новая ревизия', async () => {
     const { attempt } = await queuedAttempt();

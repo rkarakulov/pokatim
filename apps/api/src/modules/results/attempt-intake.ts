@@ -9,7 +9,7 @@ import { ROUTE_GEOMETRY, type RouteGeometry } from '../routes';
 import { ACTIVITY_SOURCE, type ActivityRef, type ActivitySource } from '../tracks';
 import type { RaceAttemptDoc, RaceEntryDoc } from './results.collection';
 import { RESULTS_ATTEMPT_CHECK_REQUESTED } from './results.events';
-import { mayMatch, RESULTS_POLICY, uploadClosesAt } from './results.policy';
+import { mayMatch, raceRepresentative, RESULTS_POLICY, uploadClosesAt } from './results.policy';
 import { ResultsRepository } from './results.repository';
 
 /**
@@ -107,10 +107,10 @@ export class AttemptIntake {
       const group = await this.activities.group(activityId, tx);
       if (!group || group.userId !== entry.userId) return;
       const attempts = await this.repository.attemptsOfEntry(entry._id, tx);
-      // основная, принятая после срока загрузки (A5), в гонку не идёт и прежнюю попытку группы не вытесняет:
-      // поздний дубль не снимает засчитанный результат и не улучшает время (снимает только удаление заезда)
-      const found = group.members.find((member) => member.isPrimary) ?? null;
-      const primary = found && found.uploadCreatedAt < uploadClosesAt(race) ? found : null;
+      // для гонки группу представляет сильнейший (по приоритету основной) член, принятый до срока загрузки (A5):
+      // поздний дубль не снимает засчитанный результат, не улучшает время и не лишает попытки своевременный файл,
+      // даже если приём попыток отстал от очереди (снимает попытку только удаление заезда)
+      const primary = raceRepresentative(group.members, race);
       const byUpload = new Map(group.members.map((member) => [member.uploadId, member]));
       for (const attempt of primary ? attempts : []) {
         const member = group.members.find((candidate) => candidate.id === attempt.activityId);
