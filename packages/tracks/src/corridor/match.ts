@@ -29,6 +29,8 @@ interface Scan {
   lastEarlyEntry: Crossing | null;
   /** конец просмотра (финиш или последняя точка) */
   endIndex: number;
+  /** доля последнего шага до конца сегмента (< 1 — вход в ворота финиша) */
+  endU: number;
   covered: number;
   gapCells: number;
   directionNeg: number;
@@ -46,6 +48,22 @@ interface Scan {
 interface Evaluated {
   segment: CorridorSegment;
   reasons: CorridorRejection[];
+  /** просмотр, по которому построен сегмент: выход из ворот старта и конец (точка, доля последнего шага) */
+  span: { start: Crossing; endIndex: number; endU: number };
+}
+
+/** Интервал схода по времени трека, мс: `[from, to]`. */
+export type OffRunMs = [number, number];
+
+/** Сверка и интервалы схода выбранного сегмента (серверный вход, разметка трека на карте — maps-02). */
+export interface CorridorMatchDetailed {
+  /** то же, что `matchCorridor` */
+  match: CorridorMatch;
+  /**
+   * непрерывные выходы из коридора на выбранном сегменте (засчитанный или лучший отказной), мс времени трека, по
+   * возрастанию, соседние слиты; нет сегмента (`no_start`) — `[]`. На вердикт и метрики не влияет.
+   */
+  offRunsMs: OffRunMs[];
 }
 
 /**
@@ -59,6 +77,29 @@ export function matchCorridor(
   corridor: PreparedCorridor,
   window: MatchWindow,
 ): CorridorMatch {
+  return matchWith(points, corridor, window, false).match;
+}
+
+/**
+ * `matchCorridor` + интервалы схода выбранного сегмента: после выбора — один повторный проход `offCorridor` по нему
+ * со сборщиком интервалов (общий код, не копия; кандидаты старта интервалы не собирают). Повтор детерминирован:
+ * полные хорды — из кэша первого прохода, за лимитом работы — та же оценка, доли ворот — всегда точно. `match`
+ * собирается до повтора и совпадает с `matchCorridor` (golden движка не меняется, `CORRIDOR_ENGINE_VERSION` тоже).
+ */
+export function matchCorridorDetailed(
+  points: readonly ParsedPoint[],
+  corridor: PreparedCorridor,
+  window: MatchWindow,
+): CorridorMatchDetailed {
+  return matchWith(points, corridor, window, true);
+}
+
+function matchWith(
+  points: readonly ParsedPoint[],
+  corridor: PreparedCorridor,
+  window: MatchWindow,
+  detailed: boolean,
+): CorridorMatchDetailed {
   const track = projectTrack(points, corridor);
   const engine = new Engine(corridor, track);
   const touchedCorridor = track.inside.some((flag) => flag === 1);
@@ -85,16 +126,16 @@ export function matchCorridor(
     const reason: CorridorRejection = engine.wholeTrackWrongDirection()
       ? 'wrong_direction'
       : 'no_start';
-    return result('rejected', [reason], null);
+    return { match: result('rejected', [reason], null), offRunsMs: [] };
   }
 
-  let bestCounted: CorridorSegment | null = null;
+  let bestCounted: Evaluated | null = null;
   let bestRejected: Evaluated | null = null;
   for (const start of starts) {
     const evaluated = engine.evaluate(start, window);
     if (evaluated.reasons.length === 0) {
-      if (bestCounted === null || evaluated.segment.elapsedMs < bestCounted.elapsedMs) {
-        bestCounted = evaluated.segment;
+      if (bestCounted === null || evaluated.segment.elapsedMs < bestCounted.segment.elapsedMs) {
+        bestCounted = evaluated;
       }
     } else if (
       bestRejected === null ||
@@ -103,8 +144,12 @@ export function matchCorridor(
       bestRejected = evaluated;
     }
   }
-  if (bestCounted !== null) return result('counted', [], bestCounted);
-  return result('rejected', bestRejected!.reasons, bestRejected!.segment);
+  const chosen = bestCounted ?? bestRejected!;
+  const match =
+    bestCounted !== null
+      ? result('counted', [], bestCounted.segment)
+      : result('rejected', chosen.reasons, chosen.segment);
+  return { match, offRunsMs: detailed ? engine.offRunsOf(chosen) : [] };
 }
 
 class Engine {
@@ -216,7 +261,16 @@ class Engine {
     return {
       segment: this.segment(start, end, scan),
       reasons: [wrong ? 'wrong_direction' : 'no_finish'],
+      span: { start, endIndex: scan.endIndex, endU: scan.endU },
     };
+  }
+
+  /** Интервалы схода по времени трека для сегмента `evaluated` — повторный проход `offCorridor` по его просмотру. */
+  offRunsOf(evaluated: Evaluated): OffRunMs[] {
+    const runs: OffRunMs[] = [];
+    const { start, endIndex, endU } = evaluated.span;
+    this.offCorridor(start, endIndex, endU, runs);
+    return runs;
   }
 
   private verdict(
@@ -261,7 +315,7 @@ class Engine {
     if (start.timeMs < window.startsAt.getTime() || finish.timeMs >= window.closesAt.getTime()) {
       reasons.push('outside_window');
     }
-    return { segment, reasons };
+    return { segment, reasons, span: { start, endIndex: scan.endIndex, endU: scan.endU } };
   }
 
   private segment(start: Crossing, finish: Crossing, scan: Scan): CorridorSegment {
@@ -340,6 +394,7 @@ class Engine {
       finish,
       lastEarlyEntry,
       endIndex,
+      endU,
       covered: this.covered,
       gapCells: this.gapCells,
       directionNeg: this.directionNeg,
@@ -420,11 +475,14 @@ class Engine {
    * больше из части хорды вне коридора (точно) и недобранного пути `Δs − хорда` сверх допуска
    * (`chordToleranceM + chordToleranceShare · хорда`) — на каждом шаге, от частоты записи и Δt не зависит.
    * Работа геометрии хорд ограничена правдоподобием трека (`matchCorridor`: средняя скорость ≤ 30 м/с).
+   * `runs` — сборщик интервалов схода (мс): шаг со сходом даёт `[t(k−1) + from·Δt, t(k−1) + to·Δt]`, касающиеся
+   * и перекрытые сливаются сразу.
    */
   private offCorridor(
     start: Crossing,
     endIndex: number,
     endU: number,
+    runs?: OffRunMs[],
   ): { distanceM: number; offCorridorM: number; maxExcursionM: number; shortfallM: number } {
     const { track } = this;
     const policy = CORRIDOR_POLICY;
@@ -471,10 +529,20 @@ class Engine {
         offCorridorM += off;
         excursion = fromInside ? off : excursion + off;
         maxExcursionM = Math.max(maxExcursionM, excursion);
+        if (runs !== undefined) this.collectRun(runs, k - 1, from, to);
       }
       if (toInside) excursion = 0;
     }
     return { distanceM, offCorridorM, maxExcursionM, shortfallM };
+  }
+
+  private collectRun(runs: OffRunMs[], k: number, from: number, to: number): void {
+    const t0 = this.track.time[k]!;
+    const dt = this.track.time[k + 1]! - t0;
+    const run: OffRunMs = [t0 + from * dt, t0 + to * dt];
+    const last = runs[runs.length - 1];
+    if (last !== undefined && run[0] <= last[1]) last[1] = Math.max(last[1], run[1]);
+    else runs.push(run);
   }
 
   /**

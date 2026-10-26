@@ -8,7 +8,7 @@ import { parseGpx } from '../gpx.ts';
 import { sanitizePoints } from '../points.ts';
 import { simplifyTrack } from '../simplify.ts';
 import type { CorridorGeometry, ParsedPoint } from '../track.ts';
-import { matchCorridor } from './match.ts';
+import { matchCorridor, matchCorridorDetailed } from './match.ts';
 import { CORRIDOR_ENGINE_VERSION } from './policy.ts';
 import { prepareCorridor } from './prepare.ts';
 import type { CorridorMatch, MatchWindow } from './types.ts';
@@ -247,5 +247,60 @@ describe('реальный формат и инварианты результа
         'startedAt',
       ].sort(),
     );
+  });
+});
+
+describe('matchCorridorDetailed: интервалы схода выбранного сегмента (maps-02, RC-1/RC-3)', () => {
+  const detailed = (name: string) => {
+    const fixture = expectedFile.fixtures[name]!;
+    return matchCorridorDetailed(
+      gpxPoints(name),
+      prepareCorridor(fixture.corridor),
+      toWindow(fixture.window),
+    );
+  };
+
+  it('match = matchCorridor на всех фикстурах (вердикт и метрики не меняются)', () => {
+    for (const name of Object.keys(SCENARIOS)) {
+      expect(detailed(name).match, name).toEqual(run(name));
+    }
+  });
+
+  it('clean — интервалов нет; mid-start (no_start) — []', () => {
+    expect(detailed('clean.gpx').offRunsMs).toEqual([]);
+    const midStart = detailed('mid-start.gpx');
+    expect(midStart.match.segment).toBeNull();
+    expect(midStart.offRunsMs).toEqual([]);
+  });
+
+  it.each([
+    'shortcut-800.gpx',
+    'wobble-3pct.gpx',
+    'outback-turn-7km.gpx',
+    'sparse-winding-30s.gpx',
+  ])('%s — интервалы есть, по возрастанию, не пересекаются, внутри сегмента', (name) => {
+    const { match, offRunsMs } = detailed(name);
+    const segment = match.segment!;
+    expect(offRunsMs.length).toBeGreaterThan(0);
+    let previous = -Infinity;
+    for (const [from, to] of offRunsMs) {
+      expect(from).toBeLessThan(to);
+      expect(from).toBeGreaterThan(previous);
+      expect(from).toBeGreaterThanOrEqual(segment.startedAt.getTime() - 1);
+      expect(to).toBeLessThanOrEqual(segment.finishedAt.getTime() + 1);
+      previous = to;
+    }
+  });
+
+  it('sparse-winding-30s — причина sparse_recording, а интервалы схода всё равно отдаются', () => {
+    const { match, offRunsMs } = detailed('sparse-winding-30s.gpx');
+    expect(match.reasons).toContain('sparse_recording');
+    expect(offRunsMs.length).toBeGreaterThan(0);
+  });
+
+  it('детерминирован и сериализуем (structured clone)', () => {
+    const first = detailed('wobble-3pct.gpx');
+    expect(detailed('wobble-3pct.gpx')).toEqual(first);
+    expect(structuredClone(first)).toEqual(first);
   });
 });
