@@ -1,0 +1,96 @@
+import { describe, expect, it } from 'vitest';
+
+import { haversineMeters, trackLengthMeters } from '../geo.ts';
+import type { CorridorGeometry } from '../track.ts';
+import { gridCandidates, prepareCorridor } from './prepare.ts';
+
+const CENTER = { lat: 53.9006, lon: 27.559 };
+const M_LAT = 111_195;
+const M_LON = M_LAT * Math.cos((CENTER.lat * Math.PI) / 180);
+const at = (x: number, y: number): [number, number] => [
+  CENTER.lon + x / M_LON,
+  CENTER.lat + y / M_LAT,
+];
+const geometry = (line: [number, number][], overrides: Partial<CorridorGeometry> = {}) => ({
+  line,
+  widthM: 50,
+  isLoop: false,
+  distanceM: trackLengthMeters(line.map(([lon, lat]) => ({ lon, lat }))),
+  ...overrides,
+});
+
+describe('prepareCorridor', () => {
+  const line = [at(0, 0), at(3000, 0), at(3000, 2000)];
+  const corridor = prepareCorridor(geometry(line));
+
+  it('уплотняет линию до отрезков ≤ 25 м, сохраняя вершины и длину', () => {
+    let maxStep = 0;
+    for (let i = 1; i < corridor.lon.length; i += 1) {
+      maxStep = Math.max(
+        maxStep,
+        haversineMeters(
+          { lon: corridor.lon[i - 1]!, lat: corridor.lat[i - 1]! },
+          { lon: corridor.lon[i]!, lat: corridor.lat[i]! },
+        ),
+      );
+    }
+    expect(maxStep).toBeLessThanOrEqual(25.0001);
+    expect(corridor.lon.length).toBeGreaterThanOrEqual(201);
+    expect(corridor.lon.length).toBeLessThanOrEqual(203);
+    const corner = Array.from(corridor.lon).findIndex(
+      (value, i) => value === line[1]![0] && corridor.lat[i] === line[1]![1],
+    );
+    expect(corner).toBeGreaterThan(0);
+    expect(corridor.lengthM).toBeCloseTo(5000, -1);
+    expect(corridor.chainage[0]).toBe(0);
+    expect(corridor.chainage[corridor.chainage.length - 1]).toBe(corridor.lengthM);
+  });
+
+  it('ворота — max(widthM, 30 м), петля — один круг; ячейки 250 м', () => {
+    expect(corridor.gateRadiusM).toBe(50);
+    expect(corridor.startGate).toEqual([line[0]![0], line[0]![1]]);
+    expect(corridor.finishGate).toEqual([line[2]![0], line[2]![1]]);
+    expect(corridor.coverageCells).toBe(Math.ceil(corridor.lengthM / 250));
+
+    const narrow = prepareCorridor(geometry(line, { widthM: 20 }));
+    expect(narrow.gateRadiusM).toBe(30);
+    const loopLine = [at(0, 0), at(1000, 0), at(1000, 1000), at(0, 0)];
+    const loop = prepareCorridor(geometry(loopLine, { isLoop: true }));
+    expect(loop.finishGate).toEqual(loop.startGate);
+  });
+
+  it('сетка находит отрезки в радиусе и только их', () => {
+    const out = new Int32Array(corridor.lon.length);
+    const stamp = new Int32Array(corridor.lon.length);
+    const [lon, lat] = at(1500, 100);
+    const count = gridCandidates(corridor, lon, lat, 150, out, stamp, 1);
+    const found = Array.from(out.subarray(0, count));
+    // точка над первой стороной: найдены отрезки, проходящие x = 1350…1650 м, и только первой стороны
+    const covering = (j: number) => {
+      const x0 = (corridor.lon[j]! - CENTER.lon) * M_LON;
+      const x1 = (corridor.lon[j + 1]! - CENTER.lon) * M_LON;
+      return corridor.lat[j] === CENTER.lat && Math.max(x0, x1) >= 1350 && Math.min(x0, x1) <= 1650;
+    };
+    const expected = Array.from({ length: corridor.lon.length - 1 }, (_, j) => j).filter(covering);
+    expect(expected.length).toBeGreaterThanOrEqual(12);
+    for (const j of expected) expect(found).toContain(j);
+    expect(found.every((j) => corridor.lat[j] === CENTER.lat)).toBe(true);
+    const [farLon, farLat] = at(1500, 2000);
+    expect(gridCandidates(corridor, farLon, farLat, 150, out, stamp, 2)).toBe(0);
+  });
+
+  it('инварианты входа — исключение программиста', () => {
+    expect(() => prepareCorridor(geometry(line, { widthM: 10 }))).toThrow(/widthM/);
+    expect(() => prepareCorridor(geometry(line, { widthM: 250 }))).toThrow(/widthM/);
+    expect(() => prepareCorridor(geometry([at(0, 0)]))).toThrow(/line size/);
+    expect(() => prepareCorridor(geometry([at(0, 0), at(0, 0)], { distanceM: 1 }))).toThrow(
+      /distinct/,
+    );
+    expect(() => prepareCorridor(geometry(line, { distanceM: 5200 }))).toThrow(/distanceM/);
+    expect(() => prepareCorridor(geometry([at(0, 0), [200, 0]], { distanceM: 1 }))).toThrow(
+      /coordinate/,
+    );
+    const huge = Array.from({ length: 20_001 }, (_, i) => at(i, 0));
+    expect(() => prepareCorridor(geometry(huge))).toThrow(/line size/);
+  });
+});

@@ -56,6 +56,14 @@ export interface TrackSummary {
   elevationGainM: number | null;
 }
 
+/** Коридор гонки — вход сверки `matchCorridor` (`@pokatim/tracks/parse`); строит worker из маршрута и гонки. */
+export interface CorridorGeometry {
+  line: [number, number][]; // [lon, lat], = route_geometries.matchLine, ≥ 2 различных точек, ≤ 20 000
+  widthM: number; // допуск ±N м, 20–200 (A2: по умолчанию 50)
+  isLoop: boolean;
+  distanceM: number; // длина маршрута из routes (сверка с уплотнённой линией, расхождение ≤ 1 %)
+}
+
 export class TrackParseError extends Error {
   readonly code: TrackFailureCode;
 
