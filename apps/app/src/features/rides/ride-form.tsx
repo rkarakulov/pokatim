@@ -275,6 +275,7 @@ export function RideFormScreen({
   const onSubmit = form.handleSubmit(async (values) => {
     setFailure(undefined);
     setConflict(false);
+    setReloadError(undefined);
     const body = rideRequestOf(values);
     try {
       const view = loaded
