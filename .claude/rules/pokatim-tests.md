@@ -10,6 +10,9 @@ paths:
 
 - Обработка треков (`packages/tracks`, коридор, кластеры) — фикстуры реальных FIT/GPX/TCX в `__fixtures__/`,
   включая битые, пустые, без timestamp, вне коридора.
+- Сверка с коридором — `packages/tracks/src/__fixtures__/corridor/*.gpx` + `corridor-expected.json`: эталоны по
+  построению (генератор `scripts/generate-corridor-fixtures.ts`, пакет не вызывается), версия в эталоне =
+  `CORRIDOR_ENGINE_VERSION`; длинный трек (200 000 точек) — в памяти теста, не коммитится.
 - Гео-запросы MongoDB (`2dsphere`) — только интеграционные тесты на реальной БД; геометрия `packages/tracks` —
   unit на фикстурах.
 - Гонки identity (MongoDB, R9): **ворота** — `vi.spyOn(repository, 'lockUser…')` приостанавливает операцию между
