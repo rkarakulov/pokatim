@@ -1,0 +1,447 @@
+# 1. Title
+
+Результат гонки, слайс 02: движок сверки заезда с коридором `matchCorridor` в `packages/tracks` — привязка к
+маршруту, ворота старта и финиша с интерполяцией, покрытие и направление, сход с коридора, разрывы GPS, окно,
+версия алгоритма; фикстуры и бенчмарк
+
+# 2. Goal
+
+Слайс 02 эпика `docs/tasks/2026-10-27-race-results/epic.md` (§3.3, §7; параллелен слайсу 01). Чистая,
+детерминированная функция, которая по точкам заезда (исходник без прореживания) и коридору гонки решает: засчитан ли
+проезд, какое время между воротами старта и финиша, и если нет — почему. Это ядро результата гонки и самый рискованный
+кусок эпика, поэтому он выделен в отдельный PR с фикстурами до любого API.
+
+Решения автора (эпик §6, 2026-10-27), которые здесь становятся кодом:
+- **A2** — допуск коридора по умолчанию ±50 м (значение приходит в `CorridorGeometry.widthM`);
+- **A4** — результат = время между воротами старта и финиша **включая остановки**;
+- **A5** — сегмент старт→финиш **целиком в окне** (поздняя загрузка + 24 ч — правило слайса 03, не движка);
+- **A6** — **> 2 % дистанции сегмента вне коридора или один непрерывный выход > 500 м → не засчитано**;
+- **A7** — равенство до секунды: движок отдаёт `elapsedSec` (целые секунды), места считает слайс 03.
+
+Сервер — единственный авторитет (`AGENTS.md` §4.1): функция работает только в worker (вызов — слайс 03), клиент её
+не получает. Геометрия — код `packages/tracks`, не MongoDB (ADR-0007, `pokatim-db.md` «Геометрия»).
+
+Источники: эпик §3.3, §4, §6; spec слайса 01 (`docs/tasks/2026-10-27-race-results-01-corridor/task.md`, §11:
+`CorridorGeometry`, `RouteAnalysis.matchLine`); ADR-0007, 0011; `.claude/rules/{pokatim-backend,pokatim-db,
+pokatim-tests,tests}.md`. Код сверен по `origin/develop` @ `41e4590` и ветке `feature/race-results-01-corridor`
+@ `14021b7` (spec 01 без изменений контракта).
+
+# 3. Scope
+
+Только `packages/tracks` (`@pokatim/tracks`):
+
+- `src/corridor/prepare.ts` — `prepareCorridor(geometry)`: уплотнение линии маршрута (отрезки ≤ 25 м), пройденная
+  доля (chainage) вершин, сеточный индекс отрезков, ворота, ячейки покрытия (250 м).
+- `src/corridor/project.ts` — привязка точек заезда к маршруту: отклонение `d` и доля `s` с монотонной привязкой
+  (участки «туда-обратно», петли, самопересечения), фильтр выбросов.
+- `src/corridor/match.ts` — `matchCorridor(points, corridor, window)`: кандидаты сегментов (выход из ворот старта →
+  вход в ворота финиша), интерполяция моментов пересечения, покрытие и направление, сход, разрывы, окно, выбор лучшего
+  сегмента, вердикт и коды.
+- `src/corridor/policy.ts` — `CORRIDOR_ENGINE_VERSION = 1`, `CORRIDOR_POLICY` (пороги).
+- `src/corridor/types.ts` — `CorridorGeometry` (тот же, что в spec 01), `MatchWindow`, `CorridorMatch`,
+  `CorridorRejection`.
+- `src/parse.ts` — `analyzeAttempt(bytes, format, corridor, window, now)` для потока worker (слайс 03 добавит её в
+  белый список `parse-thread`); общий шаг загрузки трека выносится из `analyzeTrack` в `loadTrack` без изменения
+  поведения. Экспорт `matchCorridor`, `prepareCorridor`, политики и типов — **только из `@pokatim/tracks/parse`**
+  (серверный вход; лёгкий вход приложения не растёт). `CorridorGeometry` как тип — и из `.`.
+- Фикстуры `src/__fixtures__/corridor/*.gpx` + `corridor-expected.json`, генератор
+  `scripts/generate-corridor-fixtures.ts` (детерминированный, эталоны — по построению), тесты, бенчмарк.
+
+**Изменений API, БД, контрактов, приложений нет.** Обоснование: потребитель (очередь `attempt-check`, попытки) —
+слайс 03; здесь — чистая функция и её доказательства. Единственная «внешняя» точка — экспорт серверного входа пакета.
+
+# 4. Out of Scope
+
+- Вызов из worker, очередь `attempt-check`, попытки, лучший результат, места и ничьи — слайс 03.
+- Окно «закрытие + 24 ч на загрузку» (A5, часть про загрузку) — правило `results`, не движка.
+- Флаги правдоподобия «Требует внимания» (FR-11: скорость против кластера, пульс/мощность) — слайс 07; движок не
+  читает `hr`/`power`.
+- Ручные контрольные точки и отдельные линии ворот (эпик §3.1: v1 — неявные КП покрытием).
+- Перевод коридора и порогов в настройки гонки (кроме `widthM`) — пороги — политика сервера.
+- Перевод ADR-0012 в Accepted — после ревью этого слайса (эпик §5), правка ADR — в §10.
+
+# 5. Architecture Context
+
+- **Размещение:** `packages/tracks` — единственное место геометрии треков (`AGENTS.md` §2, `pokatim-backend.md`:
+  «коридор, длина, прогресс по маршруту, правдоподобие — функции `packages/tracks` в worker»). Новый пакет не нужен:
+  потребитель один (API worker), но код геометрии уже живёт здесь.
+- **Вход и выход:**
+
+  ```
+  analyzeAttempt(bytes, format, corridor, window, now)          // worker_threads (слайс 03)
+    └─ loadTrack(bytes, format, now)  — разбор → лимит точек → sanitizePoints → checkPlausibility (как analyzeTrack)
+    └─ matchCorridor(points, prepareCorridor(corridor), window) → CorridorMatch
+  ```
+
+  `CorridorGeometry` строит слайс 03 из данных слайса 01: `line` = `route_geometries.matchLine` (≤ 20 000 точек,
+  допуск упрощения 1 м), `widthM` = `races.corridor.widthM`, `isLoop`, `distanceM` — из `routes`. `MatchWindow` —
+  из гонки: `startsAt = windowStartsAt`, `closesAt = windowEndsAt + 1 мин` (R12 ADR-0010; правило минуты считает
+  `races`, движок получает готовую исключающую границу).
+- **Детерминизм:** нет `Date.now`, `Math.random`, порядка `Map`/`Set` в решениях; одинаковый вход → побитово
+  одинаковый выход (в т. ч. на повторе задачи BullMQ). Результат сериализуем (structured clone потока: числа,
+  строки, `Date`).
+- **Версия алгоритма** `CORRIDOR_ENGINE_VERSION` пишется в результат; любое изменение порогов, привязки, ворот,
+  округления → +1 и новые эталоны в `corridor-expected.json` (тест-сторож сравнивает версию с эталоном). Слайс 03
+  хранит версию в попытке; смена версии не пересчитывает результаты молча (эпик §3.3).
+- **Ресурсы:** память — типизированные массивы (`Float64Array` на точку: x, y, t, d, s), ≈ 40 байт/точку → 200 000
+  точек ≈ 8 МБ + индекс маршрута; укладывается в лимит потока worker 160 МБ (ADR-0011) вместе с разбором. Время —
+  ≤ 2 с на 200 000 точек и маршрут 200 км на машине CI (тест — порог 3 с).
+- **Биометрия:** `ParsedPoint.hr/power/cadence` движком не читаются, в выход не попадают (ADR-0011 R9).
+
+# 5.1 Placement & Reuse Gate
+
+- **Переиспользуем:** `haversineMeters`, `trackLengthMeters` (`geo.ts`), `sanitizePoints` (`points.ts`),
+  `checkPlausibility` (`plausibility.ts`), `parseTrackFile`/`decodeTrackStream`, `TRACK_MAX_POINTS`,
+  `TRACK_STREAM_MAX_POINTS`, `TrackParseError` (`parse.ts`, `track.ts`); локальная равнопромежуточная проекция —
+  та же формула, что в `simplify.ts` (`METERS_PER_DEGREE`), вынести в `geo.ts` как `localProjection(lat0)` и
+  использовать в `simplify.ts` и `corridor/*` (без дубля констант). Генератор фикстур — по образцу
+  `scripts/generate-fixtures.ts` (кольца у центра Минска, без ПДн, без случайных чисел — псевдошум из
+  детерминированной последовательности).
+- **Запрещённые дубли:** второй разбор FIT/GPX; своя формула haversine; копия конвейера `analyzeTrack` (общий
+  `loadTrack`); геометрия коридора в `apps/api`; чтение `hr`/`power` в движке.
+- **Новые зависимости:** нет (turf, rbush, flatbush — не нужны: сетка на типизированных массивах проще и
+  детерминированна; `@turf/*` тянет GeoJSON-объекты на каждую точку — память).
+- **Кандидаты в базу:** нет (домен pokatim).
+
+# 6. Relevant Files
+
+- `packages/tracks/src/parse.ts` — `analyzeTrack` (выделить `loadTrack`), новый `analyzeAttempt`, экспорты входа.
+- `packages/tracks/src/geo.ts` — `haversineMeters`, место для `localProjection`.
+- `packages/tracks/src/simplify.ts` — проекция `METERS_PER_DEGREE` (перевести на `localProjection`).
+- `packages/tracks/src/points.ts`, `plausibility.ts`, `summary.ts` — очистка, правдоподобие, итоги (паузы считаются
+  так же: `MOVING_MAX_GAP_SEC`).
+- `packages/tracks/src/track.ts` — `ParsedPoint`, `TrackFormat`, `CorridorGeometry` (слайс 01).
+- `packages/tracks/scripts/generate-fixtures.ts`, `src/__fixtures__/{expected.json,garmin-edge-ride.fit}` — образец
+  генератора; синтетический заезд с паузой 120 с — фикстура «чистый проезд с остановкой».
+- `packages/tracks/package.json` — входы `.`/`./parse` (без изменений), скрипт генератора — описание в шапке файла.
+- `apps/api/src/modules/tracks/track-parse.thread.ts` — как вход вызывается в потоке (только чтение; правка — слайс 03).
+
+# 7. Implementation Notes
+
+### 7.1 Подготовка коридора `prepareCorridor`
+
+1. Вход: `line` (`[lon, lat][]`, ≥ 2 различных точек), `widthM` (20–200), `isLoop`.
+2. Уплотнение: отрезок длиннее 25 м делится равномерно (маршруты планировщиков бывают с точками в километрах).
+3. Chainage `S[i]` — накопленная длина (haversine) уплотнённой линии; `L = S[last]`. Для покрытия используется `L`
+   уплотнённой линии (не `distanceM` из `routes`, чтобы ячейки и привязка жили в одной метрике); `distanceM`
+   сверяется: расхождение > 1 % — ошибка программиста (`assert`), а не отказ попытки.
+4. Метрика: расстояние точка↔отрезок — в локальной проекции **вокруг отрезка** (`kx = cos(lat середины отрезка)`), а
+   не одной на весь маршрут: на 1000 км ошибка одной проекции до ~10 % поперёк, у отрезка ≤ 25 м — < 0,1 %.
+5. Сеточный индекс: ячейка 200 м (в градусах по широте центра bbox, запас на искажение — в радиусе поиска), в ячейке
+   — индексы отрезков (CSR-массивы `Int32Array`, без объектов на отрезок).
+6. Ворота: круг радиуса `R = max(widthM, 30 м)` вокруг первой (старт) и последней (финиш) вершины.
+7. Покрытие: `ceil(L / 250)` ячеек; ячейка `k` — отрезок доли `[250k, 250(k+1))`.
+
+### 7.2 Привязка точек `project`
+
+- Берутся только точки со временем (после `sanitizePoints`; время уже неубывающее). Точки без времени игнорируются.
+- **Выбросы:** точка, в которую и из которой подразумеваемая скорость > 30 м/с (108 км/ч), помечается шумом и не
+  участвует ни в чём (одиночные «прыжки» GPS у зданий); счётчик — `noisePoints`.
+- **Кандидаты:** отрезки маршрута в радиусе `max(3·widthM, 150 м)` от точки. Нет кандидатов — `d = +∞`, `s`
+  наследуется от предыдущей точки (вне коридора).
+- **Монотонная привязка** (для «туда-обратно», петель, восьмёрок): из кандидатов выбирается минимум стоимости
+  `d + λ · | (s − s_prev) − Δgeo |`, где `Δgeo` — пройденное между точками по haversine, `λ = 0.5`; первая точка —
+  минимум `d`, при равенстве — меньшая `s`. Возврат на дорогу после схода — тот же критерий (большой скачок `s`
+  штрафуется, но допускается, если кандидат один).
+- Выход — массивы `d[i]`, `s[i]`, `inside[i] = d[i] ≤ widthM`.
+
+### 7.3 Сегменты, ворота, интерполяция
+
+- **Кандидат старта** — каждый **выход** из круга старта (точка `i` внутри, `i+1` снаружи) при `s[i+1]`, растущей
+  вперёд (`s[i+1] ≥ s[i]`); подряд идущие выходы в пределах 60 с схлопываются в последний (райдер топчется на
+  старте). Не более 20 кандидатов (последние по времени перед максимумом прогресса) — защита от вырожденных треков.
+- **Финиш кандидата** — первый **вход** в круг финиша после старта при покрытии ячеек сегмента ≥ 98 %. Петля
+  (`isLoop`): старт и финиш — один круг; финиш засчитывается только после покрытия ≥ 98 %, поэтому выход со старта и
+  мгновенный вход не дают нулевого сегмента.
+- **Интерполяция:** момент пересечения окружности ворот на отрезке `[i, i+1]` — решение квадратного уравнения в
+  локальной проекции; время — линейно по доле отрезка; точность — миллисекунды. `elapsedMs = finish − start`;
+  `elapsedSec = Math.round(elapsedMs / 1000)` (A7: равенство до секунды; правило округления — в политике, часть
+  версии).
+- **Остановки** внутри сегмента входят во время (A4) — паузы записи не вычитаются.
+
+### 7.4 Проверки сегмента (в порядке; первая неудача — основной код)
+
+1. **Направление** — сумма отрицательных приращений `s` внутри коридора ≥ 50 % от суммы модулей → `wrong_direction`.
+2. **Покрытие** — ячейка покрыта, если в неё попала точка внутри коридора, либо её пересекает отрезок между двумя
+   соседними точками внутри коридора с `0 ≤ Δs ≤ 1.5·Δgeo + 50 м` и `Δgeo ≤ 1000 м` (редкая запись, тоннель).
+   Покрытие < 98 % или непрерывная непокрытая полоса > 2 ячеек (500 м) → `missed_section` (это и есть «пропуск КП»).
+3. **Разрыв GPS** — непокрытая полоса, целиком лежащая внутри пары соседних точек с `Δgeo > 1000 м` → `gps_gap`
+   (а не `missed_section`): данных нет, а не «проехал мимо».
+4. **Сход (A6)** — длина трека вне коридора: отрезок `[i, i+1]` целиком снаружи — вся длина, одна точка снаружи —
+   половина. `offCorridorShare = offCorridorM / segmentDistanceM`; непрерывный выход — сумма подряд идущих вкладов.
+   `offCorridorShare > 0.02` **или** `maxExcursionM > 500` → `off_corridor`. Строго «больше»: ровно 2 % и ровно
+   500 м — засчитано.
+5. **Окно (A5)** — `start ≥ window.startsAt` и `finish < window.closesAt`, иначе `outside_window`.
+
+### 7.5 Выбор результата
+
+- Засчитанные сегменты — выбирается с минимальным `elapsedMs` (два круга в одном заезде — лучший круг), равенство —
+  более ранний старт.
+- Ни одного засчитанного: кандидат с наибольшим покрытием, его основной код + все сработавшие коды (`reasons`,
+  порядок §7.4). Нет ни одного кандидата старта: `no_start` (трек не выходил из ворот старта вперёд); старт был, но
+  ни одного входа в финиш после 98 % покрытия: `no_finish`, если направление верное, иначе `wrong_direction`.
+- `touchedCorridor` — хоть одна точка внутри коридора (слайс 03 скрывает автоматические попытки без касания —
+  `not_matched`, эпик A8).
+
+### 7.6 Политика (часть версии 1)
+
+```ts
+export const CORRIDOR_ENGINE_VERSION = 1;
+export const CORRIDOR_POLICY = {
+  densifyStepM: 25,
+  gridCellM: 200,
+  searchRadius: (widthM: number) => Math.max(3 * widthM, 150),
+  gateRadius: (widthM: number) => Math.max(widthM, 30),
+  coverageCellM: 250,
+  coverageMin: 0.98,            // доля покрытых ячеек
+  maxUncoveredCells: 2,          // > 500 м подряд — missed_section
+  maxOffCorridorShare: 0.02,     // A6
+  maxExcursionM: 500,            // A6
+  gapMaxM: 1000,                 // интерполяция покрытия между точками
+  spikeSpeedMps: 30,
+  startDebounceMs: 60_000,
+  maxStartCandidates: 20,
+  matchLambda: 0.5,
+  wrongDirectionShare: 0.5,
+  rounding: 'round',             // elapsedSec = Math.round(elapsedMs / 1000)
+} as const;
+```
+
+### 7.7 Фикстуры
+
+Генератор `scripts/generate-corridor-fixtures.ts` (запуск из корня: `pnpm exec node
+packages/tracks/scripts/generate-corridor-fixtures.ts`, как существующий): маршруты и заезды у центра Минска, GPX
+1.1, время UTC; псевдошум — детерминированная последовательность (mulberry32 с фиксированным зерном). Эталоны
+(`corridor-expected.json`: вердикт, коды, `elapsedSec`, моменты ворот, `offCorridorShare`, `maxExcursionM`,
+покрытие) считаются **по построению** (известная скорость и геометрия), не вызовом пакета. Файлы ≤ 1 МБ каждый;
+длинный трек (200 000 точек) генерируется в памяти теста, не коммитится.
+
+# 8. Risks / Assumptions / Open Questions
+
+- **R1. Шум GPS в лесу и у зданий** (σ 15–30 м, выбросы 100–300 м): допуск 50 м с фильтром выбросов и правилом
+  «выход > 500 м» держит; при σ ≥ 40 м возможны ложные сходы — флаг для слайса 07, а не автоматический DQ (ручное
+  исключение/возврат — слайс 05).
+- **R2. Редкая запись** (smart recording, 1 точка в 10–60 с): покрытие интерполируется до 1 км, ворота —
+  интерполяцией; ошибка времени — до доли интервала записи (тест: ≤ 5 с при 30 с).
+- **R3. «Туда-обратно» и петли:** монотонная привязка закрывает типовые случаи; патологические (тот же отрезок
+  трижды) — покрытие и направление дают отказ, а не неверное время.
+- **R4. Срез по параллельной дороге ближе 50 м** коридором не ловится — принятый предел допуска (A2).
+- **R5. Пороги** (98 %, 500 м, 30 м/с, λ) — `[ASSUMPTION]` архитектора поверх A6; меняются только новой версией.
+- **A. Допущения:** граница окна `closesAt` исключающая (её считает `races`); `elapsedSec` округляется по
+  `Math.round`; точки без времени не участвуют.
+
+# 8.1 Requirements Consistency
+
+- **Недоопределено → решено (A7 + округление):** «равенство до секунды» не говорит, как получить секунды из
+  интерполированных миллисекунд. → `Math.round` (половина вверх); альтернатива — отбрасывание долей (`floor`) —
+  систематически в пользу райдера на 0,5 с. Рекомендация — `round`, часть версии 1.
+- **Недоопределено → решено (A6 «дистанции»):** «2 % дистанции» — дистанции маршрута или трека на сегменте? →
+  **трека на сегменте** (сход измеряется пройденным вне коридора; длина маршрута для срезок короче трека и занижала бы
+  долю в пользу срезающего). Альтернатива — длина маршрута; рекомендация — трека.
+- **Недоопределено → решено (A5 «сегмент в окне»):** граница по моментам ворот (интерполированным), а не по первой и
+  последней точке файла: райдер может включить запись до открытия окна и доехать до старта уже в окне.
+- **Конфликт со spec 01:** нет. `CorridorGeometry` — тот же тип (`line`, `widthM`, `isLoop`, `distanceM`); источник
+  `line` — `matchLine` (≤ 20 000 точек, 1 м). Если слайс 02 сливается раньше 01, тип объявляется здесь в `track.ts`
+  дословно как в spec 01 §11, второй PR удаляет дубль при слиянии (конфликт тривиальный).
+- **Противоречие эпик §3.3 ↔ здесь:** эпик описывал старт как «последний вход в ворота перед движением вперёд»; здесь
+  — **выход** из ворот старта и **вход** в ворота финиша (одинаковое смещение `R` для всех, сегмент без топтания на
+  старте). Эпик уточняется (§10).
+- **Вредное решение:** нет находок.
+
+### Вопросы (по умолчанию — рекомендация; блокирующих нет)
+
+| № | Вопрос | По умолчанию |
+|---|---|---|
+| Q1 | Несколько засчитанных сегментов в одном заезде | лучший (два круга — лучший круг) |
+| Q2 | Ворота — круг или линия поперёк маршрута | круг `max(widthM, 30 м)` (линия неоднозначна на петлях и разворотах) |
+| Q3 | Учитывать ли точки без времени | нет |
+| Q4 | Порог выброса | 30 м/с туда и обратно |
+| Q5 | Покрытие | ≥ 98 % и без непокрытых > 500 м подряд |
+
+# 8.2 Deviations from spec
+
+Пусто (заполняет coder).
+
+# 8.3 Security checklist
+
+Зона `pokatim-security.md` (`packages/tracks/src/parse*`) затронута входом `analyzeAttempt`.
+
+- **AuthN/AuthZ:** не применимо (чистая функция; вызов — worker слайса 03).
+- **Входные данные:** точки — только после существующего конвейера (`TRACK_MAX_POINTS` / `TRACK_STREAM_MAX_POINTS`,
+  `sanitizePoints`, `checkPlausibility`); коридор — проверка инвариантов (`line` ≥ 2 различных точек, ≤ 20 000,
+  `widthM` 20–200) с исключением программиста; число кандидатов старта ограничено (20) — нет квадратичного взрыва на
+  враждебном треке; память — типизированные массивы фиксированного размера.
+- **Данные наружу:** результат без координат точек заезда и без `hr`/`power`; только моменты ворот, метрики и коды.
+- **Злоупотребления:** время работы — линейно по точкам × ≤ 20 кандидатов; бенчмарк 200 000 точек ≤ 3 с; поток
+  worker со своими лимитами (ADR-0011) ограничит и непредвиденное.
+- **Секреты и логи:** пакет ничего не логирует.
+- **Аудит:** не применимо.
+
+# 9. Acceptance Criteria
+
+Каждый AC — тест на фикстуре с эталоном из `corridor-expected.json`.
+
+- AC1. **Чистый проезд** (1 Гц, шум σ 3 м) → `counted`, `elapsedSec` = эталон ± 1 с, покрытие 100 %, сход 0.
+- AC2. **Проезд с остановкой 120 с** (`garmin-edge-ride.fit` против коридора по его же линии) → `counted`, время
+  включает паузу (A4).
+- AC3. **Срез:** один выход 800 м → `off_corridor` (`maxExcursionM > 500`); выход 450 м при доле < 2 % → `counted`;
+  ровно 500 м — `counted` (строгое «больше»).
+- AC4. **Мелкие сходы:** суммарно 3 % дистанции выходами по 60–80 м → `off_corridor`; 1,5 % → `counted`.
+- AC5. **Шум GPS:** σ 15 м + 5 выбросов на 300 м → `counted`, `noisePoints = 5`, сход 0.
+- AC6. **Редкая запись:** точка раз в 30 с → `counted`, `elapsedSec` = эталон ± 5 с; раз в 60 с на 40 км/ч
+  (≈ 670 м) → `counted`.
+- AC7. **Петля:** старт = финиш, один круг → `counted`; два круга → `counted`, время лучшего круга; ожидание в
+  воротах старта с тремя выходами/входами → старт = последний выход.
+- AC8. **«Туда-обратно»:** маршрут 10 км туда и обратно по той же дороге — полный проезд `counted`; разворот на 7 км
+  → `missed_section`.
+- AC9. **Обратное направление:** линейный маршрут с финиша на старт → `wrong_direction`; петля против хода →
+  `wrong_direction`.
+- AC10. **Разрыв GPS:** 3 км без точек в середине → `gps_gap`; тоннель 600 м без точек → `counted`.
+- AC11. **Окно:** старт на 1 с раньше `startsAt` → `outside_window`; финиш ровно в `closesAt` → `outside_window`;
+  финиш за 1 с до `closesAt` → `counted`; запись начата до окна, старт в окне → `counted`.
+- AC12. **Интерполяция ворот:** точки раз в 10 с с аналитически известными моментами пересечения окружностей →
+  моменты старта и финиша ± 0,5 с, `elapsedSec` = эталон.
+- AC13. **Нет старта/финиша:** заезд начат с середины маршрута → `no_start`; остановка на 80 % → `no_finish`;
+  заезд вдали от коридора → `no_start`, `touchedCorridor = false`.
+- AC14. **Длинный трек:** 200 000 точек на маршруте 200 км → результат за ≤ 3 с (CI), прирост памяти
+  (`heapUsed + arrayBuffers`) ≤ 64 МБ; `analyzeAttempt` укладывается в лимит потока 160 МБ (тот же тест — в
+  `Worker` с `resourceLimits`, как `track-parse.thread.ts`).
+- AC15. **Детерминизм:** два прогона любой фикстуры — побитово одинаковый `CorridorMatch`; в результате
+  `engineVersion = 1`; тест-сторож: версия в `corridor-expected.json` = `CORRIDOR_ENGINE_VERSION`.
+- AC16. **Биометрия:** фикстура с `hr`/`power` даёт тот же результат, что без них; в `CorridorMatch` нет полей
+  датчиков (тест по ключам).
+- AC17. **Без регрессий:** `analyzeTrack` после выделения `loadTrack` — все текущие тесты и `expected.json`
+  без изменений; лёгкий вход `@pokatim/tracks` не экспортирует движок (тест экспорта).
+- AC18. **Архитектура:** изменения только в `packages/tracks`; `pnpm check` зелёный; новых зависимостей нет.
+
+# 10. Documentation Impact
+
+- `docs/adr/0012-race-results.md` (создаёт слайс 01; если 02 сливается раньше — создаёт 02): п. 5 — алгоритм
+  (монотонная привязка, круги ворот с интерполяцией, покрытие 250 м/98 %, A6, окно по моментам ворот, `round`,
+  `engineVersion`). После ревью слайса 02 — статус Accepted (эпик §5).
+- `docs/tasks/2026-10-27-race-results/epic.md` §3.3 — ворота «выход/вход» вместо «последний вход» (§8.1).
+- `.claude/rules/pokatim-backend.md` / `pokatim-db.md` («Геометрия») — строка: сверка с коридором —
+  `matchCorridor` (`@pokatim/tracks/parse`), только worker, версия алгоритма пишется в попытку.
+- `.claude/rules/pokatim-tests.md` — фикстуры коридора (`__fixtures__/corridor`, эталоны по построению, длинный трек
+  в памяти).
+- `docs/product/races-and-seasons.md` — раздел «Как засчитывается проезд» (A2, A4–A7 простыми словами).
+- API, runbooks, `AGENTS.md` — не меняются.
+
+# 11. Implementation Context
+
+### ENTRY POINTS
+- `packages/tracks/src/corridor/match.ts` — `matchCorridor`; `packages/tracks/src/parse.ts` — `analyzeAttempt`.
+
+### Порядок
+1. `geo.ts`: `localProjection`; `simplify.ts` на неё (тесты `simplify` без изменений).
+2. `corridor/types.ts`, `policy.ts`, `prepare.ts` + unit (уплотнение, chainage, сетка, ворота).
+3. `project.ts` + unit (выбросы, монотонная привязка на «туда-обратно» и восьмёрке).
+4. `match.ts` + unit на синтетике в коде (ворота, интерполяция, покрытие, сход, окно).
+5. Генератор и фикстуры, `corridor-expected.json`, тесты AC1–AC13.
+6. `parse.ts`: `loadTrack`, `analyzeAttempt`, экспорты; AC14–AC17.
+7. Документация §10; `pnpm check`.
+
+### FILES TO MODIFY
+- `packages/tracks/src/{geo.ts,simplify.ts,parse.ts,track.ts,index.ts}`.
+- Новые: `packages/tracks/src/corridor/{types.ts,policy.ts,prepare.ts,project.ts,match.ts}` и тесты
+  `{prepare,project,match,fixtures,bench}.test.ts`; `src/__fixtures__/corridor/*.gpx`,
+  `src/__fixtures__/corridor/corridor-expected.json`; `scripts/generate-corridor-fixtures.ts`.
+- Документы §10.
+
+### FILES TO READ
+- `packages/tracks/src/{parse,points,plausibility,summary,simplify,geo,track,stream}.ts`,
+  `scripts/generate-fixtures.ts`, `src/__fixtures__/expected.json`.
+- `apps/api/src/modules/tracks/track-parse.thread.ts` (как вход грузится в потоке: только стираемый синтаксис TS,
+  `--conditions=@pokatim/source`).
+- Spec 01 §11 (`CorridorGeometry`, `RouteAnalysis`), эпик §3.3, §6.
+
+### TYPES & SCHEMAS
+
+```ts
+// track.ts (дословно как spec 01 §11)
+export interface CorridorGeometry {
+  line: [number, number][];   // [lon, lat], = route_geometries.matchLine, ≥ 2 различных точек, ≤ 20 000
+  widthM: number;             // допуск ±N м, 20–200 (A2: по умолчанию 50)
+  isLoop: boolean;
+  distanceM: number;          // длина маршрута из routes (сверка с уплотнённой линией, расхождение ≤ 1 %)
+}
+
+// corridor/types.ts
+export interface MatchWindow { startsAt: Date; closesAt: Date }   // closesAt — исключающая (windowEndsAt + 1 мин)
+
+export const CORRIDOR_REJECTIONS = [
+  'no_start', 'no_finish', 'wrong_direction', 'missed_section', 'gps_gap', 'off_corridor', 'outside_window',
+] as const;                                           // только в конец; совпадёт с enum контракта слайса 03
+export type CorridorRejection = (typeof CORRIDOR_REJECTIONS)[number];
+
+export interface CorridorSegment {
+  startedAt: Date;            // интерполированный выход из ворот старта
+  finishedAt: Date;           // интерполированный вход в ворота финиша
+  elapsedMs: number;
+  elapsedSec: number;         // Math.round(elapsedMs / 1000) — A7
+  distanceM: number;          // длина трека на сегменте (целое)
+  offCorridorM: number;
+  offCorridorShare: number;   // 0..1
+  maxExcursionM: number;
+  coverage: number;           // доля покрытых ячеек 250 м, 0..1
+  noisePoints: number;
+}
+
+export interface CorridorMatch {
+  engineVersion: number;      // CORRIDOR_ENGINE_VERSION
+  verdict: 'counted' | 'rejected';
+  reasons: CorridorRejection[];       // [] при counted; первый — основной
+  segment: CorridorSegment | null;    // counted — лучший; rejected — лучший кандидат или null (no_start)
+  touchedCorridor: boolean;
+  candidates: number;                 // число проверенных кандидатов старта
+}
+
+export interface PreparedCorridor { /* непрозрачно: типизированные массивы, сетка, ворота, ячейки */ }
+
+export function prepareCorridor(geometry: CorridorGeometry): PreparedCorridor;
+export function matchCorridor(
+  points: readonly ParsedPoint[], corridor: PreparedCorridor, window: MatchWindow,
+): CorridorMatch;
+
+// parse.ts
+export function analyzeAttempt(
+  bytes: Uint8Array, format: TrackFormat, corridor: CorridorGeometry, window: MatchWindow, now: Date,
+): CorridorMatch;             // ошибки файла — TrackParseError (как analyzeTrack)
+```
+
+### TESTS
+
+| Уровень | Файл | Что |
+|---|---|---|
+| unit | `corridor/prepare.test.ts` | уплотнение ≤ 25 м, chainage = длина, сетка находит отрезок в радиусе, ворота `max(widthM, 30)`, ячейки, инварианты входа |
+| unit | `corridor/project.test.ts` | выбросы 30 м/с, монотонная привязка на «туда-обратно» и восьмёрке, первая точка — меньшая `s`, `d = ∞` вне радиуса |
+| unit | `corridor/match.test.ts` | синтетика в коде: интерполяция окружности (аналитика), схлопывание выходов старта, петля без нулевого сегмента, строгие пороги 2 % / 500 м, окно по моментам ворот, выбор лучшего круга, порядок кодов |
+| фикстуры | `corridor/fixtures.test.ts` | AC1–AC13, AC15–AC16 по `corridor-expected.json` (вердикт, коды, `elapsedSec`, моменты ± допуск, метрики) |
+| бенчмарк | `corridor/bench.test.ts` | AC14: 200 000 точек в памяти, время ≤ 3 с, память ≤ 64 МБ; `analyzeAttempt` в `Worker` с `resourceLimits` 160/32 МБ |
+| регрессия | существующие `parse.test.ts`, `simplify.test.ts`, `track-checks.test.ts` | без изменений ожиданий (AC17); тест экспорта лёгкого входа |
+
+Матрица фикстур:
+
+| Фикстура | Сценарий | Ожидание |
+|---|---|---|
+| `clean.gpx` | чистый проезд, 1 Гц, σ 3 м | `counted` |
+| `garmin-edge-ride.fit` + коридор по его линии | реальный формат, пауза 120 с | `counted`, пауза во времени |
+| `shortcut-800.gpx` / `shortcut-450.gpx` / `shortcut-500.gpx` | один срез | `off_corridor` / `counted` / `counted` |
+| `wobble-3pct.gpx` / `wobble-1_5pct.gpx` | мелкие сходы | `off_corridor` / `counted` |
+| `noisy.gpx` | σ 15 м + 5 выбросов 300 м | `counted`, `noisePoints = 5` |
+| `sparse-30s.gpx` / `sparse-60s.gpx` | редкая запись | `counted` ± 5 с |
+| `loop-1lap.gpx` / `loop-2laps.gpx` / `loop-loiter.gpx` | петля | `counted`; лучший круг; старт — последний выход |
+| `outback-full.gpx` / `outback-turn-7km.gpx` | «туда-обратно» | `counted` / `missed_section` |
+| `reverse-linear.gpx` / `reverse-loop.gpx` | обратное направление | `wrong_direction` |
+| `gap-3km.gpx` / `tunnel-600m.gpx` | разрыв GPS | `gps_gap` / `counted` |
+| `window-*.gpx` (4 шт.) | старт до окна, финиш в `closesAt`, финиш за 1 с до, запись до окна | `outside_window` ×2 / `counted` ×2 |
+| `gates-10s.gpx` | ворота с интерполяцией | моменты ± 0,5 с |
+| `mid-start.gpx` / `stop-80pct.gpx` / `far-away.gpx` | нет старта / финиша / касания | `no_start` / `no_finish` / `no_start` + `touchedCorridor = false` |
+| в памяти | 200 000 точек, маршрут 200 км | ≤ 3 с, ≤ 64 МБ |
+
+### OUT OF SCOPE
+§4.
+
+# 12. Outcome
+
+(заполняет coder)
