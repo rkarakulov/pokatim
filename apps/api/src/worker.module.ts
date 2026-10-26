@@ -15,6 +15,7 @@ import {
 import { env } from './config/env';
 import { identityOutboxRoutes, IdentityWorkerModule } from './modules/identity';
 import { devicesOutboxRoutes, DevicesWorkerModule } from './modules/devices';
+import { DisputesCoreModule } from './modules/disputes';
 import { resultsOutboxRoutes, ResultsWorkerModule } from './modules/results';
 import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
 import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
@@ -45,6 +46,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     DevicesWorkerModule,
     RoutesWorkerModule,
     ResultsWorkerModule,
+    // гейт D-39 для приёма попыток (@Global, RC-1)
+    DisputesCoreModule,
   ],
 })
 export class WorkerModule {}

@@ -372,7 +372,17 @@ export class ResultsRepository {
     }
   }
 
+  /**
+   * Строки таблицы: активные заявки группы с лучшим результатом, без DQ по спору до публикации (race-results-06; после
+   * публикации таблица читается из снимка). `disqualified: null` совпадает и с отсутствующим полем (заявки до `0018`);
+   * частичный `race_entries_ranking_idx` остаётся пригодным — условие остаточное, DQ единичны.
+   */
   private rankedFilter(raceId: string): Filter<RaceEntryDoc> {
+    return { ...this.countedFilter(raceId), disqualified: null };
+  }
+
+  /** Активные заявки группы с лучшим результатом — с DQ по спору и без (база протокола). */
+  private countedFilter(raceId: string): Filter<RaceEntryDoc> {
     return {
       raceId,
       groupKey: RESULTS_POLICY.groupKey,
@@ -643,6 +653,36 @@ export class ResultsRepository {
     return docs.flatMap(({ _id, userId, best }) => (best ? [{ _id, userId, best }] : []));
   }
 
+  /**
+   * База протокола (race-results-06, RC-2): активные заявки группы с лучшим результатом, **включая** DQ по спору, по
+   * порядку `(best.elapsedSec, best.startedAt, _id)`. Признак DQ — из журнала (`disqualifiedEntries`).
+   */
+  async protocolBaseEntries(raceId: string, session: DbSession): Promise<RankedEntry[]> {
+    const docs = await this.c.entries
+      .find(this.countedFilter(raceId), { session, projection: { _id: 1, userId: 1, best: 1 } })
+      .sort({ 'best.elapsedSec': 1, 'best.startedAt': 1, _id: 1 })
+      .toArray();
+    return docs.flatMap(({ _id, userId, best }) => (best ? [{ _id, userId, best }] : []));
+  }
+
+  /**
+   * DQ по спору до публикации (D-43, под `lockEntry` заявки в транзакции решения): только активная заявка гонки без
+   * DQ; `false` — уже DQ или не активна (идемпотентно, без второй записи журнала).
+   */
+  async disqualifyEntry(
+    session: DbSession,
+    raceId: string,
+    entryId: string,
+    mark: { at: Date; disputeId: string },
+  ): Promise<boolean> {
+    const updated = await this.c.entries.updateOne(
+      { _id: entryId, raceId, status: 'active', disqualified: null },
+      { $set: { disqualified: mark, updatedAt: mark.at }, $inc: { version: 1 } },
+      { session },
+    );
+    return updated.modifiedCount === 1;
+  }
+
   /** Заявки по id (строки с местами в «Участниках» панели). */
   entriesByIds(ids: readonly string[], session: DbSession): Promise<RaceEntryDoc[]> {
     if (ids.length === 0) return Promise.resolve([]);
@@ -748,7 +788,8 @@ export class ResultsRepository {
   /**
    * Действующие DQ гонки — по журналу пересчётов (последнее решение `disqualified`/`disqualification_revoked` по
    * участнику в порядке ревизий), а не по строкам ревизии: участник с DQ мог выпасть из протокола без лучшего
-   * результата и вернуться при следующей перепроверке — DQ снимает только явная отмена (D-28).
+   * результата и вернуться при следующей перепроверке — DQ снимает только явная отмена (D-28). Записи DQ по спору до
+   * публикации (race-results-06) — `revision: null`, в порядке сортировки идут первыми.
    */
   async disqualifiedEntries(raceId: string, session?: DbSession): Promise<Set<string>> {
     const docs = await this.c.recalculations
@@ -756,7 +797,7 @@ export class ResultsRepository {
         { raceId, kind: { $in: ['disqualified', 'disqualification_revoked'] } },
         { session, projection: { kind: 1, entryId: 1, revision: 1 } },
       )
-      .sort({ revision: 1 })
+      .sort({ revision: 1, at: 1, _id: 1 })
       .toArray();
     const active = new Set<string>();
     for (const doc of docs) {

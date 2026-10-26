@@ -9,6 +9,7 @@ import {
   type PublishRaceRequest,
   type RaceCancelReason,
   type RaceInput,
+  type RaceInvalidStateDetails,
   type RaceStatus,
   type UpdateRaceRequest,
   UtcMinute,
@@ -21,11 +22,13 @@ import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { PanelAudit, PanelDirectory, type PanelPrincipal } from '../panel';
 import { ROUTE_CATALOG, type RouteCatalog } from '../routes';
+import { RACE_CANCEL_GATE, type RaceCancelGate } from './race-cancel-gate.port';
 import type { RaceCorridor, RaceDoc, SeasonDoc } from './races.collection';
 import {
   changedRaceFields,
   corridorChangeAllowed,
   corridorDistanceKm,
+  disputeFilingFreeze,
   type FieldIssue,
   ownScope,
   protocolPublished,
@@ -40,7 +43,8 @@ import {
 import { RacesRepository } from './races.repository';
 import { fieldError, fieldsError, staleVersion } from './schedule-errors';
 
-const invalidState = () => domainError('RACE_INVALID_STATE', 409);
+const invalidState = (details?: RaceInvalidStateDetails) =>
+  domainError('RACE_INVALID_STATE', 409, details);
 
 /** Коридор запроса после проверки маршрута; `placeholder` — длина неизвестна (маршрут не готов или поле закрыто). */
 interface ResolvedCorridor {
@@ -120,6 +124,7 @@ export class RacesService {
     private readonly directory: PanelDirectory,
     private readonly transactions: MongoTransactions,
     @Inject(ROUTE_CATALOG) private readonly routes: RouteCatalog,
+    @Inject(RACE_CANCEL_GATE) private readonly disputes: RaceCancelGate,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -182,6 +187,7 @@ export class RacesService {
         cancelledAt: null,
         lockedAt: null,
         protocolPublishedAt: null,
+        disputeFilingClosedAt: null,
         version: 0,
       };
       await this.repository.insertRace(tx, doc);
@@ -278,9 +284,14 @@ export class RacesService {
         await this.repository.lockSchedule(tx);
         seasonId = (await this.seasonFor(next.windowEndsAt, tx))._id;
       }
+      // D-44 (RC-7): перенос плановой даты после отсечки фиксирует её — приём споров не открывается снова
+      const frozen = disputeFilingFreeze(snapshot, next.protocolPlannedAt, now);
       const updated = await this.repository.updateRace(tx, id, input.version, [snapshot.status], {
         ...next,
         seasonId,
+        ...(frozen && frozen.getTime() !== snapshot.disputeFilingClosedAt?.getTime()
+          ? { disputeFilingClosedAt: frozen }
+          : {}),
         updatedAt: now,
       });
       if (!updated) throw staleVersion();
@@ -319,7 +330,11 @@ export class RacesService {
     return this.presentOne(principal, race);
   }
 
-  /** Отмена опубликованной — только шаблонная причина (D-20), необратимо; после публикации протокола — нет (D-19). */
+  /**
+   * Отмена опубликованной — только шаблонная причина (D-20), необратимо; после публикации протокола и при открытых
+   * спорах — нет (D-19). Гейт споров — в транзакции после проверки версии; гонку «подача ↔ отмена» закрывает конфликт
+   * записи: подача пишет `resultsVersion` (`lockResults`), отмена — документ гонки (RC-9).
+   */
   async cancel(
     principal: PanelPrincipal,
     id: string,
@@ -329,6 +344,9 @@ export class RacesService {
       const current = await this.manageable(principal, id, tx);
       if (current.status !== 'published' || protocolPublished(current)) throw invalidState();
       if (current.version !== input.version) throw staleVersion();
+      if ((await this.disputes.openDisputes(id, tx)) > 0) {
+        throw invalidState({ reason: 'disputes_open' });
+      }
       const now = this.clock.now();
       return this.transition(tx, principal, current, input.version, 'published', {
         action: 'race.cancelled',
@@ -418,10 +436,14 @@ export class RacesService {
   ): Promise<PanelRace[]> {
     if (races.length === 0) return [];
     const routeIds = races.flatMap((race) => (race.corridor ? [race.corridor.routeId] : []));
-    const [names, seasons, routes] = await Promise.all([
+    const [names, seasons, routes, disputes] = await Promise.all([
       this.directory.displayNames(races.map((race) => race.ownerUserId)),
       this.repository.listSeasons(),
       this.routes.summaries(routeIds),
+      // D-19: одна агрегация по гонкам страницы (только опубликованные — у прочих споров нет)
+      this.disputes.openDisputesByRace(
+        races.filter((race) => race.status === 'published').map((race) => race._id),
+      ),
     ]);
     const now = this.clock.now();
     const byId = new Map(seasons.map((season) => [season._id, season]));
@@ -464,6 +486,7 @@ export class RacesService {
         editable: raceEditable(race, now, {
           canManage: canManage(principal, race),
           seasonFound: preview !== undefined,
+          openDisputes: disputes.get(race._id) ?? 0,
         }),
       };
     });

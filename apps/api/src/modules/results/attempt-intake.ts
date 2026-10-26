@@ -5,6 +5,7 @@ import { MongoOutboxWriter, MongoTransactions, uuidv7 } from '@rkarakulov/api-ki
 
 import type { DbSession } from '../../db';
 import { RACE_REGISTRY, type RaceForResults, type RaceRegistry } from '../races';
+import { RESULT_DISPUTE_GATE, type ResultDisputeGate } from './result-dispute-gate.port';
 import { ROUTE_GEOMETRY, type RouteGeometry } from '../routes';
 import { ACTIVITY_SOURCE, type ActivityRef, type ActivitySource } from '../tracks';
 import type { RaceAttemptDoc, RaceEntryDoc } from './results.collection';
@@ -35,6 +36,7 @@ export class AttemptIntake {
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
     @Inject(ROUTE_GEOMETRY) private readonly routes: RouteGeometry,
     @Inject(ACTIVITY_SOURCE) private readonly activities: ActivitySource,
+    @Inject(RESULT_DISPUTE_GATE) private readonly disputes: ResultDisputeGate,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -111,12 +113,19 @@ export class AttemptIntake {
       if (entry?.status !== 'active') return;
       const group = await this.activities.group(activityId, tx);
       if (!group || group.userId !== entry.userId) return;
+      const byUpload = new Map(group.members.map((member) => [member.uploadId, member]));
+      const requested = entry.requests.some((request) => byUpload.has(request.uploadId));
+      // D-39 (race-results-06, RC-5): открытый спор против заявки замораживает группу целиком — ни новой попытки, ни
+      // снятия `not_primary` (иначе дубль с более высоким приоритетом лишил бы цель оспоренного результата без её
+      // действия). Записан только замок. Запрос райдера «загрузить в гонку», принятый до подачи, обрабатывается как
+      // явное намерение. После решения или отзыва авто-попытки замороженной группы сами не появятся — райдер выбирает
+      // заезд явно (принятый риск R5).
+      if (!requested && (await this.disputes.openAgainst(entry._id, tx)) > 0) return;
       const attempts = await this.repository.attemptsOfEntry(entry._id, tx);
       // для гонки группу представляет сильнейший (по приоритету основной) член, принятый до срока загрузки (A5):
       // поздний дубль не снимает засчитанный результат, не улучшает время и не лишает попытки своевременный файл,
       // даже если приём попыток отстал от очереди (снимает попытку только удаление заезда)
       const primary = raceRepresentative(group.members, race);
-      const byUpload = new Map(group.members.map((member) => [member.uploadId, member]));
       for (const attempt of primary ? attempts : []) {
         const member = group.members.find((candidate) => candidate.id === attempt.activityId);
         // исключённую панелью приём не снимает и не оживляет (D-24)
@@ -129,7 +138,6 @@ export class AttemptIntake {
           await this.repository.withdrawAttempt(tx, attempt._id, 'not_primary', now);
         }
       }
-      const requested = entry.requests.some((request) => byUpload.has(request.uploadId));
       let attemptId: string | null = null;
       if (
         primary &&

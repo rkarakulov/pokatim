@@ -24,6 +24,8 @@ export interface RaceForResults {
   lockedAt: Date | null;
   /** момент публикации протокола (race-results-05); `null` — не опубликован */
   protocolPublishedAt: Date | null;
+  /** зафиксированная отсечка приёма споров (race-results-06, RC-7); `null` — от плановой даты протокола */
+  disputeFilingClosedAt: Date | null;
 }
 
 export interface RaceRegistry {
