@@ -13,7 +13,7 @@ import { api } from '@/lib/api';
 import RaceRoute from '../app/races/[id]';
 import RacePickRoute from '../app/races/pick/[id]';
 import { appRoutes, tabRoutes } from './app-routes';
-import { liveSession } from './auth-fixtures';
+import { EMAIL, liveSession, session, storeSurveyCompleted } from './auth-fixtures';
 import { upload } from './devices-fixtures';
 import { FakeXhr } from './fake-xhr';
 import { myDisputes } from './disputes-fixtures';
@@ -119,6 +119,30 @@ describe('гость (AC1)', () => {
     },
   );
 
+  it('«Участвовать» → вход → снова карточка гонки (возврат, Q13); заявка — не автоматически', async () => {
+    storeSurveyCompleted();
+    jest.mocked(api.signIn).mockResolvedValue({ state: 'signedIn', session });
+    jest.mocked(api.pollRegistration).mockResolvedValue({ state: 'pending' });
+    jest.mocked(api.listCalendar).mockResolvedValue({ items: [], nextCursor: null });
+    jest.mocked(api.listRides).mockResolvedValue({ items: [], nextCursor: null });
+    jest
+      .mocked(api.getProfile)
+      .mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
+    const router = await renderRouter(appRoutes, { initialUrl: `/races/${RACE_ID}` });
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Участвовать' }));
+    expect(await screen.findByRole('header', { name: 'Вход' })).toBeOnTheScreen();
+    await fireEvent.changeText(screen.getByLabelText('E-mail'), EMAIL);
+    await fireEvent.changeText(screen.getByLabelText('Пароль'), 'velo-secret');
+    await fireEvent.press(screen.getByRole('button', { name: 'Войти' }));
+
+    await waitFor(() => expect(router.getPathname()).toBe(`/races/${RACE_ID}`));
+    expect(await screen.findAllByText('Гравийный коридор Логойск')).not.toHaveLength(0);
+    await act(() => jest.advanceTimersByTimeAsync(1000));
+    expect(router.getPathname()).toBe(`/races/${RACE_ID}`);
+    expect(enterRace).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['без коридора', corridorRace({ corridor: null })],
     ['закрыта', corridorRace({ phase: 'closed' })],
@@ -135,7 +159,7 @@ describe('гость (AC1)', () => {
     expect(getMyRaceEntry).not.toHaveBeenCalled();
   });
 
-  it('сессия ещё неизвестна — блока нет (F7)', async () => {
+  it('сессия ещё неизвестна — скелетон блока, без кнопок (F7, B5 смоука dev)', async () => {
     useSessionStore.setState({ status: 'unknown', session: null });
     await renderRouter(
       { 'races/[id]': RaceRoute },
@@ -145,8 +169,26 @@ describe('гость (AC1)', () => {
     expect(
       await screen.findByRole('header', { name: 'Гравийный коридор Логойск' }),
     ).toBeOnTheScreen();
+    expect(screen.getByTestId('race-participation-skeleton')).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Участвовать' })).toBeNull();
     expect(screen.queryByTestId('race-participation')).toBeNull();
+  });
+
+  it.each([
+    ['без коридора', corridorRace({ corridor: null })],
+    ['отменена', corridorRace({ phase: 'cancelled' })],
+  ])('сессия ещё неизвестна, %s — без скелетона (блока не будет)', async (_case, race) => {
+    getRace.mockResolvedValue(race);
+    useSessionStore.setState({ status: 'unknown', session: null });
+    await renderRouter(
+      { 'races/[id]': RaceRoute },
+      { initialUrl: `/races/${RACE_ID}`, wrapper: createQueryWrapper() },
+    );
+
+    expect(
+      await screen.findByRole('header', { name: 'Гравийный коридор Логойск' }),
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('race-participation-skeleton')).toBeNull();
   });
 });
 
@@ -591,19 +633,32 @@ describe('отмена участия (AC9)', () => {
     getMyRaceEntry.mockResolvedValue(myEntry());
   });
 
-  it('«Оставить участие» закрывает панель без запроса', async () => {
+  it('«Оставить участие» закрывает панель без запроса; без результата — текст без «уйдёт из зачёта» (B7)', async () => {
     await openSignedIn();
 
     await fireEvent.press(await screen.findByRole('button', { name: 'Отменить участие' }));
     expect(screen.getByText('Отменить участие?')).toBeOnTheScreen();
     expect(
+      screen.getByText('Заявка будет отменена. Заявиться на эту гонку снова будет нельзя.'),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/результат уйдёт из зачёта/)).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Оставить участие' }));
+    expect(screen.queryByText('Отменить участие?')).toBeNull();
+    expect(withdrawFromRace).not.toHaveBeenCalled();
+  });
+
+  it('с результатом — последствия для зачёта', async () => {
+    getMyRaceEntry.mockResolvedValue(
+      myEntry({ result: result({ status: 'provisional', elapsedSec: 5400, place: 3, ranked: 8 }) }),
+    );
+    await openSignedIn();
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Отменить участие' }));
+    expect(
       screen.getByText(
         'Ваш результат уйдёт из зачёта, места других участников пересчитаются. Заявиться на эту гонку снова будет нельзя.',
       ),
     ).toBeOnTheScreen();
-    await fireEvent.press(screen.getByRole('button', { name: 'Оставить участие' }));
-    expect(screen.queryByText('Отменить участие?')).toBeNull();
-    expect(withdrawFromRace).not.toHaveBeenCalled();
   });
 
   it('подтверждение → withdrawFromRace → блок «Участие отменено»', async () => {

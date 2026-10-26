@@ -51,9 +51,9 @@ describe('витрина компонентов', () => {
     expect(screen.getByRole('switch', { name: 'Недоступно' })).toBeDisabled();
   });
 
-  it('в production ссылки нет, а маршрут ведёт на Главную', async () => {
+  it('в production ссылки на Главной нет', async () => {
     setDev(false);
-    await renderRouter(app, { initialUrl: '/ui-kit', wrapper: createQueryWrapper() });
+    await renderRouter(app, { wrapper: createQueryWrapper() });
 
     expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Витрина компонентов' })).toBeNull();

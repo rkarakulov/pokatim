@@ -35,7 +35,8 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 export const RESTORE_IS_NETWORK = true;
 
 /**
- * Сессия по cookie: `POST /v1/auth/session/refresh` без тела. 401 (нет cookie, отозвана, истекла) — «не вошёл».
+ * Сессия по cookie: `POST /v1/auth/session/refresh` без тела. 401 (нет cookie, отозвана, истекла) — «не вошёл» и
+ * признак «сессии нет»: следующие запуски гостя не зовут refresh (B21 смоука dev — 401 при каждой загрузке).
  * 429, сеть, сбой сервера — не выход: повтор (429 — через `retryAfterSec`), после попыток — бросает последнюю
  * ошибку, стор показывает «сессию проверить не удалось» с повтором. Cookie при сбое не трогаем.
  */
@@ -49,12 +50,22 @@ export async function restoreSession(_now: number): Promise<CookieSession | unde
           await revokeOnServer();
           return undefined;
         }
-        return api.refreshSession();
+        if (isNoSession()) return undefined;
+        try {
+          const session = await api.refreshSession();
+          setNoSession(false);
+          return session;
+        } catch (error) {
+          if (isUnauthorized(error)) {
+            setNoSession(true);
+            return undefined;
+          }
+          throw error;
+        }
       });
       // refreshToken в памяти web не держим, даже если сервер ответил телом
       return restored === undefined ? undefined : CookieSession.parse(restored);
     } catch (error) {
-      if (isUnauthorized(error)) return undefined;
       const waitSec = retryDelaySec(error);
       if (attempt >= RESTORE_ATTEMPTS || waitSec === undefined) throw error;
       // ждём вне замка: другие вкладки тем временем не стоят в очереди
@@ -80,7 +91,10 @@ export function refreshAccess(_now: number): Promise<AccessRefresh> {
       // refreshToken в памяти web не держим, даже если сервер ответил телом
       return { status: 'rotated', session: CookieSession.parse(await api.refreshSession()) };
     } catch (error) {
-      if (isUnauthorized(error)) return { status: 'signedOut' };
+      if (isUnauthorized(error)) {
+        setNoSession(true);
+        return { status: 'signedOut' };
+      }
       throw error;
     }
   });
@@ -110,11 +124,38 @@ function isSignOutPending(): boolean {
   }
 }
 
+/**
+ * Признак «сессии нет» (в `localStorage`, общий для вкладок): сервер подтвердил, что cookie сессии нет или она мертва
+ * (401 восстановления или обновления access, подтверждённый отзыв). Запуск с признаком не зовёт refresh — гость не
+ * получает 401 при каждой загрузке. Снимается входом и poll регистрации (`persistSession`) — только они ставят cookie.
+ * Пишется только отрицательный признак: после входа в хранилищах браузера по-прежнему пусто. Не токен и не данные
+ * сессии; хранилище недоступно — признака нет, refresh как раньше. Читается и пишется только под замком сессии.
+ */
+const NO_SESSION = 'pokatim.noSession';
+
+function setNoSession(none: boolean): void {
+  try {
+    if (none) localStorage.setItem(NO_SESSION, '1');
+    else localStorage.removeItem(NO_SESSION);
+  } catch {
+    // без хранилища — без признака
+  }
+}
+
+function isNoSession(): boolean {
+  try {
+    return localStorage.getItem(NO_SESSION) !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** Отзыв сессии по cookie — вызывается под замком сессии; подтверждён — признак выхода снимается. Не бросает. */
 async function revokeOnServer(): Promise<void> {
   try {
     await api.signOut();
     setSignOutPending(false);
+    setNoSession(true);
   } catch (error) {
     console.warn(`sign-out failed: ${(error as Error).name}`);
   }
@@ -127,6 +168,7 @@ async function revokeOnServer(): Promise<void> {
  */
 export async function persistSession(_session: AnySession): Promise<boolean> {
   setSignOutPending(false);
+  setNoSession(false);
   return true;
 }
 

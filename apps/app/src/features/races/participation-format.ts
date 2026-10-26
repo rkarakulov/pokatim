@@ -80,6 +80,13 @@ const hasCorridor = (race: RaceDetail) => (race.corridor ?? null) !== null;
 export const guestCanSeeEnter = (race: RaceDetail) =>
   hasCorridor(race) && (race.phase === 'upcoming' || race.phase === 'open');
 
+/**
+ * Пока сессия неизвестна, на месте блока участия — скелетон (B5 смоука dev): блок, скорее всего, будет — коридор есть,
+ * гонка не отменена. Без коридора и у отменённой блока нет ни у кого — места не держим.
+ */
+export const mayShowParticipation = (race: RaceDetail) =>
+  hasCorridor(race) && race.phase !== 'cancelled';
+
 /** Таблица результатов: коридор есть и фаза сервера `open | closed | final` (протокол — race-results-05). */
 export const showsResultsTable = (race: RaceDetail) =>
   hasCorridor(race) && (race.phase === 'open' || race.phase === 'closed' || race.phase === 'final');

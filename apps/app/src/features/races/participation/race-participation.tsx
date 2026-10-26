@@ -23,6 +23,7 @@ import {
   blockReasonText,
   enterBlockReason,
   guestCanSeeEnter,
+  mayShowParticipation,
   raceActionErrorText,
 } from '../participation-format';
 import { useEnterRace } from '../queries';
@@ -34,6 +35,17 @@ function Block({ children }: { children: ReactNode }) {
   return (
     <View testID="race-participation" style={styles.block}>
       {children}
+    </View>
+  );
+}
+
+/** Место блока до ответа: сессия ещё неизвестна или участие загружается — страница не сдвигается рывком. */
+function BlockSkeleton() {
+  return (
+    <View testID="race-participation-skeleton">
+      <SkeletonGroup>
+        <SkeletonText variant="body" lines={2} lastLineWidth="60%" />
+      </SkeletonGroup>
     </View>
   );
 }
@@ -65,7 +77,7 @@ function EnterAction({ raceId, signedIn }: { raceId: string; signedIn: boolean }
 }
 
 /**
- * Блок «Ваше участие» на карточке гонки (§7.1): только клиент (в SSR не попадает — сессия ещё неизвестна). Гость —
+ * Блок «Ваше участие» на карточке гонки (§7.1): только клиент (SSR и неизвестная сессия — скелетон). Гость —
  * «Участвовать» при коридоре и фазе `upcoming | open`; вошедший — по «моему участию» сервера: заявка, причина
  * недоступности, результат, действия и попытки. Локальных правил «можно ли» нет — только `actions` и `result`.
  */
@@ -83,7 +95,7 @@ export function RaceParticipation({
   sessionPending: boolean;
 }) {
   const theme = useTheme();
-  if (sessionPending) return null;
+  if (sessionPending) return mayShowParticipation(race) ? <BlockSkeleton /> : null;
   if (!signedIn) {
     return guestCanSeeEnter(race) ? <EnterAction raceId={race.id} signedIn={false} /> : null;
   }
@@ -104,11 +116,7 @@ export function RaceParticipation({
         </Block>
       );
     }
-    return (
-      <SkeletonGroup>
-        <SkeletonText variant="body" lines={2} lastLineWidth="60%" />
-      </SkeletonGroup>
-    );
+    return <BlockSkeleton />;
   }
   // старый API без эндпоинта участия (R4)
   if (data === null) return null;
