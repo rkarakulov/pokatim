@@ -14,12 +14,15 @@ export interface ReadyRoute {
 
 /**
  * Порт `routes` для модуля `races` (через `modules/routes/index.ts`): готовый маршрут по id — в транзакции правки
- * гонки (`ready` терминален и маршрут не удаляется — замок не нужен); названия маршрутов списка гонок одним запросом.
- * Линия сверки — порт `RouteGeometry` (`results`).
+ * гонки (`ready` терминален и маршрут не удаляется — замок не нужен); названия маршрутов списка гонок одним запросом;
+ * `inCatalog` — гонки маршрута каталога (routes-01, `GET /v1/routes/:id/races`). Линия сверки — порт `RouteGeometry`
+ * (`results`).
  */
 export const ROUTE_CATALOG = Symbol('ROUTE_CATALOG');
 
 export interface RouteCatalog {
   findReady(id: string, tx?: DbSession): Promise<ReadyRoute | null>;
   summaries(ids: readonly string[]): Promise<Map<string, { title: string }>>;
+  /** Маршрут опубликован в каталоге (видимость — `RoutesRepository.findPublished`, без кэша: каталог изменяем). */
+  inCatalog(id: string): Promise<boolean>;
 }

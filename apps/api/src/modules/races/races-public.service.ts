@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   addLocalDays,
+  type CatalogRouteRacesQuery,
   type CurrentSeasonResponse,
   minskDayStartUtc,
   type RaceCard,
@@ -17,7 +18,7 @@ import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
-import { ROUTE_GEOMETRY, type RouteGeometry } from '../routes';
+import { ROUTE_CATALOG, ROUTE_GEOMETRY, type RouteCatalog, type RouteGeometry } from '../routes';
 import type { RaceDoc, SeasonDoc } from './races.collection';
 import { RACE_POLICY, racePhase, seasonPhase } from './races.policy';
 import { type InstantRange, RacesRepository } from './races.repository';
@@ -50,6 +51,7 @@ export class RacesPublicService {
     private readonly repository: RacesRepository,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(ROUTE_GEOMETRY) private readonly routes: RouteGeometry,
+    @Inject(ROUTE_CATALOG) private readonly catalog: RouteCatalog,
   ) {}
 
   async list(query: RaceListQuery): Promise<RacePage> {
@@ -139,6 +141,29 @@ export class RacesPublicService {
       nextCursor:
         docs.length > query.limit && last
           ? encodeCursor(last.windowEndsAt.toISOString(), last._id)
+          : null,
+    };
+  }
+
+  /**
+   * Гонки маршрута каталога (routes-01): сначала видимость маршрута (не в каталоге — `404` до разбора курсора), затем
+   * опубликованные и отменённые гонки с его коридором — новые окна сверху.
+   */
+  async listRouteRaces(routeId: string, query: CatalogRouteRacesQuery): Promise<RacePage> {
+    if (!(await this.catalog.inCatalog(routeId))) throw domainError('NOT_FOUND', 404);
+    const after = query.cursor ? decodeCursor(query.cursor, UtcMinute) : null;
+    const docs = await this.repository.listPublicByRoute(
+      routeId,
+      after ? { k: new Date(after.k), id: after.id } : null,
+      query.limit + 1,
+    );
+    const page = docs.slice(0, query.limit);
+    const last = page.at(-1);
+    return {
+      items: await this.cards(page, this.clock.now()),
+      nextCursor:
+        docs.length > query.limit && last
+          ? encodeCursor(last.windowStartsAt.toISOString(), last._id)
           : null,
     };
   }
