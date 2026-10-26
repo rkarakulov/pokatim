@@ -26,7 +26,7 @@ import { RoutesService } from './routes.service';
     { provide: ROUTE_CATALOG, useExisting: RoutesCatalogService },
     { provide: ROUTE_GEOMETRY, useExisting: RoutesCatalogService },
   ],
-  exports: [RoutesRepository, RoutesCatalogService, ROUTE_CATALOG, ROUTE_GEOMETRY],
+  exports: [RoutesRepository, ROUTE_CATALOG, ROUTE_GEOMETRY],
 })
 export class RoutesCoreModule {}
 

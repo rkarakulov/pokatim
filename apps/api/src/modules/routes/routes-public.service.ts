@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type {
   CatalogRouteCard,
   CatalogRouteCities,
@@ -11,7 +11,7 @@ import { z } from 'zod';
 
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
-import { RoutesCatalogService } from './route-catalog';
+import { ROUTE_GEOMETRY, type RouteGeometry } from './route-geometry.port';
 import type { RouteCatalogDoc, RouteDoc } from './routes.collection';
 import { RoutesRepository } from './routes.repository';
 
@@ -40,13 +40,14 @@ function toCatalogCard(route: CatalogRoute): CatalogRouteCard {
 /**
  * Публичный каталог маршрутов команды (routes-01): список с фильтрами и курсором `(publishedAt, _id)`, города,
  * карточка и карта. Видимость — одна точка `RoutesRepository.findPublished` (без кэша: каталог изменяем); кэшируется
- * только неизменная геометрия (`RoutesCatalogService.displayGeometry`).
+ * только неизменная геометрия (`displayGeometry`).
  */
 @Injectable()
 export class RoutesPublicService {
   constructor(
     private readonly repository: RoutesRepository,
-    private readonly geometry: RoutesCatalogService,
+    /** `RoutesCatalogService.displayGeometry` (кэш неизменной геометрии) через тот же порт, что у `races`. */
+    @Inject(ROUTE_GEOMETRY) private readonly geometry: RouteGeometry,
   ) {}
 
   async list(query: CatalogRouteQuery): Promise<CatalogRoutePage> {
