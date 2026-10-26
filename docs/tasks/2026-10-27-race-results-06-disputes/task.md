@@ -654,6 +654,27 @@ D-коды и права R1 не меняются, уточнена механи
 - DV-10 (coder) **Приложение и панель без правок.** Typecheck `apps/app` и `apps/admin` с новыми значениями enum
   зелёный: карты текстов строятся по ключам i18n, а ключи добавлены в точке A. Правка в духе DV-11 слайса 05 не
   понадобилась. Точки D, E, F не выполнялись (вне поручения).
+- DV-11 (coder, D) **Текст при `filing.status: 'closed'` — по причине.** «Приём споров закрыт — протокол будет
+  опубликован {date}» — только для `filing_closed`; для `protocol_published` и `open_limit` — свой текст
+  `disputes.filingBlock.<reason>`.
+- DV-12 (coder, D) **Подтверждение отзыва** переиспользует `WithdrawConfirm` через проп `texts` (тело —
+  `disputes.mine.withdrawBody`), нового диалога нет. Неиспользуемый ключ `disputes.mine.withdrawConfirm` удалён из
+  `ru.ts` в точке F.
+- DV-13 (coder, D) **Статус на карточке соперника** берётся из `page.status` таблицы результатов, а не фиксированным
+  «Предварительный».
+- DV-14 (coder, D) **«Отменить участие» без доступа** объясняется текстом только для `dispute_open` и `disqualified`;
+  прочие причины — как в 04 (кнопка скрыта).
+- DV-15 (coder, D) **Описание и ответ — однострочный `TextField`:** многострочного поля в базе `@rkarakulov/ui` нет
+  (как у жалобы 05b).
+- DV-21 (coder, E) **Форма решения на `useState`,** не react-hook-form: радио исхода и шаблона и необязательная
+  заметка; тело проверяет схема контракта на сервере. `pokatim-web.md` фиксирует исключение.
+- DV-22 (coder, E) **Подтверждение решения — `Dialog` без свободной причины.** Обязательная причина — шаблон исхода,
+  выбранный в форме; журнал пишет в `reason` заметку, без неё — код шаблона. `ReasonDialog` не используется (§5.1).
+  Правило `pokatim-web.md` о модалке с обязательной причиной уточнено под решение спора.
+- DV-23 (coder, E) **Фильтр гонки в списке** — текст «Гонка: {название}» и «Все гонки», без выбора гонки (фильтр
+  приходит ссылкой чек-листа `?raceId=`).
+- DV-24 (coder, E) **Заголовок разбора** — категория спора, статус справа.
+- DV-25 (coder, E) **`AppLayout.test.tsx`** — ожидаемое меню дополнено пунктом «Споры».
 
 # 8.3 Security checklist
 
@@ -1269,7 +1290,7 @@ decideBlock(dispute: Pick<DisputeDoc, 'status' | 'filedAt'>, race: RaceForResult
 
 # 12. Outcome
 
-Coder, точки ORDER A, B, C (D — приложение, E — панель, F — docs: вне поручения).
+Coder, точки ORDER A, B, C; затем D (приложение), E (панель), F (docs и гейт) — отдельными поручениями, ниже.
 
 **Коммиты**
 - `0443100` A — контракты (`disputes/*.schema.ts`, enum `results` / `races` / `permissions` / `audit`, коды ошибок),
@@ -1334,3 +1355,39 @@ Coder, точки ORDER A, B, C (D — приложение, E — панель,
   - тесты 13/13: api 902 (92 файла), app 838 (95 наборов), admin 189, contracts 210, api-client 71, tracks 202,
     design-tokens 114, i18n 6.
 - Не проверялось: `pnpm --filter @pokatim/admin build` и `pnpm e2e:admin` — точка F, вне поручения.
+
+**Точка D — приложение (`ab16ea2`)**
+- Карточка соперника, экран подачи, экран ответа (`races/result|dispute|dispute-response/...`, RC-14), блок «Споры»
+  на карточке гонки, D-39 и DQ тексты у «Загрузить заезд» / «Отменить участие», нажимаемые строки таблицы,
+  `features/races/disputes/*` (запросы, формат, экраны).
+- Тесты: `race-disputes.test.tsx` (RTL), `dispute-format.test.ts`, дополнения `race-participation.test.tsx`,
+  `participation-format.test.ts`, `app-routes.ts`.
+- Отклонения — DV-11…DV-15.
+- Проверки: app typecheck, jest 97 наборов / 888 тестов, eslint, prettier — зелёные. NOT VERIFIED: web и симулятор
+  (ручной смоук не выполнялся).
+
+**Точка E — панель (`4fe48c2`)**
+- Навигация «Споры» (`disputes.read`), маршруты `/disputes`, `/disputes/$disputeId`; `DisputesScreen`,
+  `DisputeScreen`, `DecisionPanel`; ссылка «Открыть споры» в чек-листе, запись `dispute:<id>` в
+  `RecalculationsList`, причина `disputes_open` в `RaceEditor`.
+- Тесты: `DisputesScreen.test.tsx`, `DisputeScreen.test.tsx`, дополнения `RaceResultsScreen.test.tsx`,
+  `RacesScreen.test.tsx`, `AppLayout.test.tsx`.
+- Отклонения — DV-21…DV-25.
+- Проверки: admin typecheck, eslint, vitest 23 файла / 212 тестов, `pnpm --filter @pokatim/admin build` — зелёные.
+  NOT VERIFIED: `pnpm e2e:admin`.
+
+**Точка F — docs и гейт**
+- Docs (§10): ADR-0012 «Реализация п. 7–8 (слайс 06)»; эпик — §3.5 и очередь `dispute-series` отнесены к 06b, §7
+  строка 06 уточнена, добавлена строка 06b, порядок слайсов; `.claude/rules/pokatim-{db,backend,security,app,web,
+  tests}.md` — разделы «Споры (race-results-06)». Уточнены формулировки append-only (история споров —
+  `dispute_events`, проекция `disputes` — переходы из `open`, RC-8) и правило панели о модалке с причиной (DV-22),
+  исключение react-hook-form (DV-21). Биометрия на разборе спора помечена слайсом 06b.
+- Код: из `ru.ts` удалён неиспользуемый ключ `disputes.mine.withdrawConfirm` (DV-12).
+- Гейт: `MONGO_URL_TEST=…/pokatim_06disputes_test REDIS_URL_TEST=…:6479/8 TURBO_CONCURRENCY=1 pnpm check` — **EXIT 0**
+  с первого прогона (1 мин 11 с):
+  - format:check, lint, arch:check (`no dependency violations found`, 966 модулей), typecheck 8/8 — зелёные;
+  - тесты 13/13: api 902 (92 файла), app 888 (97 наборов), admin 212 (23 файла), contracts 210, api-client 71,
+    tracks 202, design-tokens 114, i18n 6.
+  - Turbo взял из кэша задачи пакетов, чьи входы не менялись с прогонов C–E (api, contracts, api-client, tracks,
+    design-tokens); i18n, app и admin после правки `ru.ts` прогнаны заново.
+- NOT VERIFIED: `pnpm e2e:admin` и ручной смоук приложения (web, симулятор).
