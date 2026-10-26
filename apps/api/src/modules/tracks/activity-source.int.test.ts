@@ -160,6 +160,20 @@ describe('порт ActivitySource', () => {
     });
   });
 
+  it('trackLine (maps-02): своя линия показа; чужая, неизвестная и без линии — null', async () => {
+    const { fileActivity } = await fileAndStream();
+    const stored = await tracks(h).tracks.findOne({ _id: fileActivity._id });
+    const line = await source().trackLine(userId, fileActivity._id);
+    expect(line).toEqual(stored!.line.coordinates);
+    expect(line!.length).toBeGreaterThanOrEqual(2);
+    expect(
+      await source().trackLine('01890a5d-ac96-774b-bcce-b302099a8099', fileActivity._id),
+    ).toBeNull();
+    expect(await source().trackLine(userId, '01890a5d-ac96-774b-bcce-b302099a8057')).toBeNull();
+    await tracks(h).tracks.deleteOne({ _id: fileActivity._id });
+    expect(await source().trackLine(userId, fileActivity._id)).toBeNull();
+  });
+
   it('listInRange — только основные, пересекающие интервал; readSource — байты и формат, нет файла — null', async () => {
     const { streamActivity, fileActivity } = await fileAndStream();
     const from = new Date(streamActivity.startedAt.getTime() + 60_000);

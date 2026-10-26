@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
   MyAttempt,
+  MyAttemptTrack,
   MyRaceEntry,
   PendingUpload,
   RaceResultRow,
@@ -126,6 +127,38 @@ export class ResultsReadService {
       pendingUploads: entry ? await this.pendingUploads(entry) : [],
       uploadClosesAt: uploadClosesAt(race).toISOString(),
       actions: entryActions(race, this.races.phase(race, now), entry, now, { openDisputes }),
+    };
+  }
+
+  /**
+   * Свой трек попытки (maps-02): попытка этой гонки, своя и видимая в «моём участии» (фильтр `attemptHidden`, как
+   * `myEntry`); иначе, и если линии активности нет, — один `404` (не раскрываем существование). Разметка — из
+   * `trackMap`, посчитанной worker при сверке: `queued`/`checking` — `pending`; разметка есть и число точек линии
+   * совпало — `ready`; иначе — `unavailable`. Ответ собирается по полям: без id активности, времени и датчиков.
+   */
+  async myAttemptTrack(userId: string, raceId: string, attemptId: string): Promise<MyAttemptTrack> {
+    await this.race(raceId);
+    const attempt = await this.repository.findAttempt(attemptId);
+    if (
+      !attempt ||
+      attempt.raceId !== raceId ||
+      attempt.userId !== userId ||
+      attemptHidden(attempt)
+    ) {
+      throw notFound();
+    }
+    const line = await this.activities.trackLine(userId, attempt.activityId);
+    if (!line || line.length < 2) throw notFound();
+    const trackMap = attempt.trackMap ?? null;
+    const pending = attempt.status === 'queued' || attempt.status === 'checking';
+    const ready = !pending && trackMap !== null && trackMap.linePoints === line.length;
+    return {
+      attemptId: attempt._id,
+      line,
+      segment:
+        ready && trackMap.segment ? { from: trackMap.segment[0], to: trackMap.segment[1] } : null,
+      offRuns: ready ? trackMap.offRuns.map(([from, to]) => ({ from, to })) : [],
+      marks: pending ? 'pending' : ready ? 'ready' : 'unavailable',
     };
   }
 

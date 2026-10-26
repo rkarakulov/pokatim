@@ -232,6 +232,7 @@ export class AttemptIntake {
       candidates: null,
       diagnostics: null,
       engineVersion: null,
+      trackMap: null,
       corridor: { routeId: race.corridor.routeId, widthM: race.corridor.widthM },
       checkRevision: 1,
       checkAttempts: 0,
