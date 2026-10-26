@@ -74,13 +74,64 @@ export class ProfileRepository {
     };
   }
 
-  /** Ответы опроса пользователя; `null` — документа нет (опрос не пройден). */
-  async findReasons(userId: string): Promise<RideReason[] | null> {
-    const doc = await this.profiles.findOne(
+  /** Профиль для `GET /v1/profile`; `null` — документа нет. Поля до этого слайса могут отсутствовать. */
+  async findProfile(
+    userId: string,
+  ): Promise<Pick<ProfileDoc, 'rideReasons' | 'publicName' | 'showNameInResults'> | null> {
+    return this.profiles.findOne(
       { _id: userId },
-      { projection: { _id: 0, rideReasons: 1 } },
+      { projection: { _id: 0, rideReasons: 1, publicName: 1, showNameInResults: 1 } },
     );
-    // документ шага устройств без опроса — опрос не пройден
-    return doc?.rideReasons?.length ? doc.rideReasons : null;
+  }
+
+  /**
+   * Имя и согласие (`PATCH /v1/profile`, RC-5/RC-6): одна операция — upsert по `_id` (pipeline, значения — `$literal`),
+   * ответ — документ после записи. Ключа нет в `patch` — поле не меняется. Документа нет — создаётся без ответа опроса
+   * (как у шага устройств). `devicesStepCompletedAt` не трогается, `updatedAt` — всегда. Гонка двух первых upsert —
+   * duplicate key на `_id_` (повтор — у сервиса).
+   */
+  async updatePublicName(
+    userId: string,
+    patch: { publicName?: string | null; showNameInResults?: boolean },
+    now: Date,
+  ): Promise<ProfileDoc> {
+    const doc = await this.profiles.findOneAndUpdate(
+      { _id: userId },
+      [
+        {
+          $set: {
+            rideReasons: { $ifNull: ['$rideReasons', { $literal: [] }] },
+            surveyCompletedAt: { $ifNull: ['$surveyCompletedAt', null] },
+            publicName:
+              patch.publicName === undefined
+                ? { $ifNull: ['$publicName', null] }
+                : { $literal: patch.publicName },
+            showNameInResults:
+              patch.showNameInResults === undefined
+                ? { $ifNull: ['$showNameInResults', false] }
+                : { $literal: patch.showNameInResults },
+            updatedAt: { $literal: now },
+          },
+        },
+      ],
+      { upsert: true, returnDocument: 'after' },
+    );
+    // upsert с `returnDocument: 'after'` документ возвращает всегда
+    if (!doc) throw new Error('profile upsert returned no document');
+    return doc;
+  }
+
+  /**
+   * Публичные имена для таблиц результатов (порт `RIDER_NAMES`): согласие и наличие имени — в фильтре, не в коде.
+   * Один запрос по `_id` (индекс `_id`), только `publicName`.
+   */
+  async findPublicNames(userIds: readonly string[]): Promise<Map<string, string>> {
+    const docs = await this.profiles
+      .find(
+        { _id: { $in: [...userIds] }, showNameInResults: true, publicName: { $type: 'string' } },
+        { projection: { publicName: 1 } },
+      )
+      .toArray();
+    return new Map(docs.map((doc) => [doc._id, doc.publicName as string]));
   }
 }

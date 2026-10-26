@@ -12,8 +12,12 @@ paths:
 - Контексты `src/modules/<context>/`: identity, profile, routes, rides, calendar, races, results, disputes,
   seasons, gamification, sharing, notifications, moderation, media (по мере появления).
   Есть: `identity` (учётка, сессии, `AuthGuard`), `profile` (онбординг: опрос, коллекция `profiles`; `GET /v1/profile` — ответы опроса своего
-  пользователя для Главной, `no-store`, документа нет — `[]`; авторизация —
-  `AuthGuard` через `modules/identity/index.ts`, коллекции identity не читает), `panel` (доступ к панели «Протокол»:
+  пользователя для Главной, публичное имя и согласие, `no-store`, документа нет — `[]` / `null` / `false`;
+  `PATCH /v1/profile` — частичное обновление имени и согласия, лимит `profile-update:<uid>` 30/ч; порт `RIDER_NAMES`
+  (`RiderNameDirectory`) для `results` — через `ProfileCoreModule` (репозиторий + порт, без контроллеров; его
+  импортируют `ProfileModule` и `ResultsCoreModule`); авторизация — `AuthGuard` через `modules/identity/index.ts`,
+  коллекции identity не читает; `results` берёт имена только через порт после snapshot-сессии, в снимок протокола
+  их не пишет), `panel` (доступ к панели «Протокол»:
   члены команды и роли, сессии панели, журнал; identity — только порт `PanelCredentials`/`IdentityAccounts`),
   `races` (сезоны и гонки по коридору — одна граница, ADR-0010: определение сезона живёт здесь, отдельного модуля
   `seasons` нет), `calendar` (календарь стартов, с гонками не связан), `tracks` (загрузки, разбор, активности —
@@ -124,6 +128,11 @@ paths:
   (A11); в событиях только id и коды. Лог после коммита — `disputeId`, `raceId`, действие, исход.
 - Отказы — `409 DISPUTE_ACTION_BLOCKED { reason, availableAt? }`, `404 DISPUTE_NOT_FOUND`; отмена гонки при открытых
   спорах — `409 RACE_INVALID_STATE { reason: 'disputes_open' }`.
+- Ряды пульса и мощности (06b): `DisputeSeriesService` (HTTP — кэш и постановка) → очередь `dispute-series` →
+  `DisputeSeriesProcessor` в `DisputesWorkerModule` (`WorkerModule`): `ResultsForDisputes.bestSegment` → исходник
+  через порт `tracks` `ActivitySource.readSource` (зависимость `disputes → tracks`, только `index.ts`) →
+  `runParseThread('analyzeSeries')` → `DisputeSeriesCache` (Redis, ключ — попытка и ревизия; дедупликация — ключ
+  постановки NX, не jobId). Лучшая попытка или ревизия сменилась — задача `skipped`, кэш не пишет.
 
 ## Кофе-райды (`rides`, блок 05)
 

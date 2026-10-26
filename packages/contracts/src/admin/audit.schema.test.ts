@@ -41,6 +41,7 @@ describe('AuditAction', () => {
       'ride.restored',
       'ride.reports_dismissed',
       'disputes.decided',
+      'disputes.series_viewed',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual(['season', 'race', 'calendar_start', 'route', 'ride']);
     expect(AuditAction.safeParse('panel.deleted').success).toBe(false);

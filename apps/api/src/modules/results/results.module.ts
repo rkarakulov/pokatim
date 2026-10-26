@@ -5,6 +5,7 @@ import { PublicReadGuard } from '../../public-read.guard';
 import { QUEUE } from '../../queues';
 import { IdentityModule } from '../identity';
 import { PanelModule } from '../panel';
+import { ProfileCoreModule } from '../profile';
 import { RacesCoreModule } from '../races';
 import { RoutesCoreModule } from '../routes';
 import { TracksCoreModule } from '../tracks';
@@ -28,12 +29,12 @@ import { ResultsRepository } from './results.repository';
 
 /**
  * Ядро `results` для API и worker: репозиторий, приём попыток, чтение, перепроверка. Другие модули — только через
- * их `index.ts` (порты `RaceRegistry`, `RouteGeometry`, `ActivitySource`); `races`, `routes`, `tracks` о `results`
- * не знают. Для `disputes` (race-results-06) — порт `RESULTS_FOR_DISPUTES`; гейт споров `RESULT_DISPUTE_GATE` даёт
- * `@Global DisputesCoreModule`.
+ * их `index.ts` (порты `RaceRegistry`, `RouteGeometry`, `ActivitySource`, `RiderNameDirectory` (`profile`));
+ * `races`, `routes`, `tracks`, `profile` о `results` не знают. Для `disputes` (race-results-06) — порт
+ * `RESULTS_FOR_DISPUTES`; гейт споров `RESULT_DISPUTE_GATE` даёт `@Global DisputesCoreModule`.
  */
 @Module({
-  imports: [RacesCoreModule, RoutesCoreModule, TracksCoreModule],
+  imports: [RacesCoreModule, RoutesCoreModule, TracksCoreModule, ProfileCoreModule],
   providers: [
     ResultsRepository,
     AttemptIntake,

@@ -181,6 +181,22 @@ describe('configureHttp: CORS с credentials только для CORS_ORIGINS', 
     expect(String(res.headers['access-control-allow-headers'])).toMatch(/authorization/i);
   });
 
+  it('preflight PATCH (частичное обновление профиля) — разрешён', async () => {
+    const res = await (
+      await createApp([DEV_WEB])
+    ).inject({
+      method: 'OPTIONS',
+      url: '/v1/probe',
+      headers: {
+        origin: DEV_WEB,
+        'access-control-request-method': 'PATCH',
+        'access-control-request-headers': 'authorization,content-type',
+      },
+    });
+    expect(res.headers['access-control-allow-origin']).toBe(DEV_WEB);
+    expect(String(res.headers['access-control-allow-methods'])).toMatch(/\bPATCH\b/);
+  });
+
   it('preflight с чужого origin → без Allow-Origin (браузер не пустит запрос и не отдаст ответ)', async () => {
     const res = await preflight(await createApp([DEV_WEB]), 'https://evil.example');
     expect(res.headers['access-control-allow-origin']).toBeUndefined();

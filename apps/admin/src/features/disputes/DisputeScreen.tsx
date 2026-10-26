@@ -13,6 +13,7 @@ import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { raceItemKey } from '../results/results-query';
 import { placeLabel, RESULT_TONE } from '../results/results-format';
 import { DecisionPanel } from './DecisionPanel';
+import { DisputeSeries } from './DisputeSeries';
 import { DISPUTE_STATUS_TONE, disputeRiderLabel } from './disputes-format';
 import { DISPUTES_QUERY_KEY, disputeQuery } from './disputes-query';
 
@@ -130,7 +131,7 @@ function Review({ dispute }: { dispute: PanelDispute }) {
 /**
  * Разбор спора (`disputes.read`, race-results-06): оспоренный результат, заявление (заявитель скрыт от участника,
  * D-51), ответ участника, история; открытый спор с `disputes.decide` — панель решения. Решение инвалидирует споры,
- * гонку (результаты — под её ключом) и журнал. Биометрии нет (слайс 06b).
+ * гонку (результаты — под её ключом) и журнал. Пульс и мощность — блок `DisputeSeries` по кнопке (слайс 06b).
  */
 export function DisputeScreen({ disputeId }: { disputeId: string }) {
   const queryClient = useQueryClient();
@@ -199,6 +200,7 @@ export function DisputeScreen({ disputeId }: { disputeId: string }) {
       />
       <div className="page-body">
         <Review dispute={data} />
+        <DisputeSeries disputeId={data.id} />
         {canDecide && data.status === 'open' ? (
           <DecisionPanel
             dispute={data}

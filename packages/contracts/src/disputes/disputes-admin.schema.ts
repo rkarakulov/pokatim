@@ -107,3 +107,38 @@ export const PanelDispute = PanelDisputeListItem.extend({
   decideBlockedBy: z.enum(DISPUTE_DECIDE_BLOCKS).nullable(),
 });
 export type PanelDispute = z.infer<typeof PanelDispute>;
+
+/** Почему рядов пульса и мощности нет (race-results-06b): нет засчитанного результата, исходника, разбор не удался. */
+export const DISPUTE_SERIES_UNAVAILABLE = ['no_result', 'no_source', 'failed'] as const;
+export type DisputeSeriesUnavailable = (typeof DISPUTE_SERIES_UNAVAILABLE)[number];
+
+const SeriesValues = z.array(z.number().nullable());
+
+/**
+ * Ряды заезда оспоренного результата по дистанции сегмента старт→финиш (≤ 400 ячеек): `distanceM[k]` — конец ячейки,
+ * м; пульс — уд/мин, мощность — Вт (целые), скорость — км/ч (0,1). Ряд без датчика — `null`, ячейка без значений —
+ * `null` внутри ряда. Биометрия: только этот ответ панели (`disputes.read`), `no-store`.
+ */
+export const PanelDisputeSeriesData = z.object({
+  segmentDistanceM: z.number().int().nonnegative(),
+  distanceM: z.array(z.number().int().nonnegative()),
+  heartRate: SeriesValues.nullable(),
+  power: SeriesValues.nullable(),
+  speedKmh: SeriesValues,
+  summary: z.object({
+    avgHeartRate: z.number().int().nullable(),
+    maxHeartRate: z.number().int().nullable(),
+    avgPower: z.number().int().nullable(),
+    maxPower: z.number().int().nullable(),
+    avgSpeedKmh: z.number().nullable(),
+  }),
+});
+export type PanelDisputeSeriesData = z.infer<typeof PanelDisputeSeriesData>;
+
+/** `GET /v1/admin/disputes/:disputeId/series`: «готовится» (опрос) → ряды или причина, почему их нет. */
+export const PanelDisputeSeries = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('preparing') }),
+  z.object({ state: z.literal('ready'), series: PanelDisputeSeriesData }),
+  z.object({ state: z.literal('unavailable'), reason: z.enum(DISPUTE_SERIES_UNAVAILABLE) }),
+]);
+export type PanelDisputeSeries = z.infer<typeof PanelDisputeSeries>;

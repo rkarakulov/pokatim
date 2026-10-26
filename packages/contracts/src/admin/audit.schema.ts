@@ -39,6 +39,8 @@ export const AUDIT_ACTIONS = [
   'ride.reports_dismissed',
   // race-results-06: решение по спору
   'disputes.decided',
+  // race-results-06b: просмотр рядов пульса и мощности на разборе спора (раз в час на сотрудника и спор)
+  'disputes.series_viewed',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;

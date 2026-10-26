@@ -112,6 +112,7 @@ export const row = (overrides: Partial<RaceResultRow> = {}): RaceResultRow => ({
   place: 1,
   tied: false,
   elapsedSec: 5400,
+  riderName: null,
   ...overrides,
 });
 

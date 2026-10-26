@@ -86,7 +86,9 @@ beforeEach(() => {
   jest.mocked(api.listRideCities).mockResolvedValue({ cities: [] });
   jest.mocked(api.listRaces).mockResolvedValue({ items: [], nextCursor: null });
   jest.mocked(api.listCalendar).mockResolvedValue({ items: [], nextCursor: null });
-  jest.mocked(api.getProfile).mockResolvedValue({ rideReasons: [] });
+  jest
+    .mocked(api.getProfile)
+    .mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
 });
 afterEach(() => {
   jest.clearAllMocks();

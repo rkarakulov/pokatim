@@ -24,6 +24,26 @@ export const DISPUTES_POLICY = {
   panelUserLimit: { limit: 60, windowSec: 3600 },
 } as const;
 
+/**
+ * Ряды пульса и мощности на разборе спора (race-results-06b): TTL кэша Redis, постановки и отметки журнала, лимит
+ * постановок сотрудника, повторы задачи. Опрос «готовится» лимит не тратит.
+ */
+export const DISPUTE_SERIES_POLICY = {
+  readyTtlSec: 15 * 60,
+  failedTtlSec: 2 * 60,
+  /**
+   * Ключ постановки живёт дольше окна опроса панели (3 мин): ожидание слота семафора потоков (общего со сверкой
+   * попыток) не ограничено, и при очереди сверок задача ждёт минуты. Процессор снимает ключ в конце; истёк (worker
+   * упал) — следующий запрос ставит задачу снова.
+   */
+  pendingTtlSec: 10 * 60,
+  /** журнал `disputes.series_viewed` — не чаще раза в час на (сотрудник, спор) */
+  viewedTtlSec: 60 * 60,
+  staffLimit: { limit: 30, windowSec: 3600 },
+  jobAttempts: 2,
+  jobBackoffMs: 5_000,
+} as const;
+
 /** D-44 (RC-7): приём закрывается зафиксированной отсечкой или за 24 ч до плановой публикации (исключающая граница). */
 export function filingClosesAt(
   race: Pick<RaceForResults, 'protocolPlannedAt' | 'disputeFilingClosedAt'>,

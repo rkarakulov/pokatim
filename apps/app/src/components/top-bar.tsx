@@ -7,14 +7,16 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 interface TopBarProps {
   /** вход в «Устройства» — иконка справа (место будущего аватара «Личная линия»); без обработчика иконки нет */
   onOpenDevices?: () => void;
+  /** вход в «Профиль» (profile-rider-name) — иконка справа после «Устройств»; без обработчика иконки нет */
+  onOpenProfile?: () => void;
 }
 
 /**
- * Верхняя панель корня вкладки (`.topbar` прототипа): словесный знак продукта и иконка «Устройства» (часы: SF Symbols
- * на iOS, Material Symbols на Android и web — `expo-symbols`). Колокольчик и аватар — с блоками уведомлений и профиля;
- * тогда же — кандидат в `@rkarakulov/ui` (R8 блока 02).
+ * Верхняя панель корня вкладки (`.topbar` прототипа): словесный знак продукта, иконки «Устройства» (часы) и «Профиль»
+ * (SF Symbols на iOS, Material Symbols на Android и web — `expo-symbols`). Колокольчик и аватар — с блоками уведомлений
+ * и профиля; тогда же — кандидат в `@rkarakulov/ui` (R8 блока 02).
  */
-export function TopBar({ onOpenDevices }: TopBarProps) {
+export function TopBar({ onOpenDevices, onOpenProfile }: TopBarProps) {
   const theme = useTheme();
   return (
     <View testID="top-bar" style={styles.bar}>
@@ -25,21 +27,38 @@ export function TopBar({ onOpenDevices }: TopBarProps) {
       >
         {t('home.wordmark')}
       </Text>
-      {onOpenDevices ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('devices.title')}
-          onPress={onOpenDevices}
-          hitSlop={space.s2}
-          style={styles.action}
-        >
-          <SymbolView
-            name={{ ios: 'applewatch', android: 'watch', web: 'watch' }}
-            size={size.icon}
-            tintColor={theme.text.primary}
-          />
-        </Pressable>
-      ) : null}
+      <View style={styles.actions}>
+        {onOpenDevices ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('devices.title')}
+            onPress={onOpenDevices}
+            hitSlop={space.s2}
+            style={styles.action}
+          >
+            <SymbolView
+              name={{ ios: 'applewatch', android: 'watch', web: 'watch' }}
+              size={size.icon}
+              tintColor={theme.text.primary}
+            />
+          </Pressable>
+        ) : null}
+        {onOpenProfile ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('profile.title')}
+            onPress={onOpenProfile}
+            hitSlop={space.s2}
+            style={styles.action}
+          >
+            <SymbolView
+              name={{ ios: 'person.crop.circle', android: 'account_circle', web: 'account_circle' }}
+              size={size.icon}
+              tintColor={theme.text.primary}
+            />
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -53,6 +72,7 @@ const styles = StyleSheet.create({
     paddingLeft: size.gutter,
     paddingRight: space.s2,
   },
+  actions: { flexDirection: 'row', alignItems: 'center' },
   action: {
     minWidth: size.touchMin,
     minHeight: size.touchMin,

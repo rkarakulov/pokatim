@@ -1,1 +1,1 @@
-export { DisputesCoreModule, DisputesModule } from './disputes.module';
+export { DisputesCoreModule, DisputesModule, DisputesWorkerModule } from './disputes.module';

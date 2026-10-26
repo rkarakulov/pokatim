@@ -121,6 +121,19 @@ describe('строки таблицы (RC-14)', () => {
 });
 
 describe('карточка соперника (AC12)', () => {
+  it('имя соперника (profile-rider-name) — в кнопке строки и на карточке вместо «Участник»', async () => {
+    getRaceResults.mockResolvedValue(
+      resultsPage([{ ...rows[0]!, riderName: 'Анна К.' }, ...rows.slice(1)]),
+    );
+    await open();
+    await fireEvent.press(
+      await screen.findByRole('button', { name: 'Анна К., 1 место, 1:30:00. Открыть карточку' }),
+    );
+
+    expect(await screen.findByText('Анна К.')).toBeOnTheScreen();
+    expect(screen.queryByText('Участник')).toBeNull();
+  });
+
   it('open: место, «Участник», время, статус, «Оспорить результат» и срок → форма', async () => {
     const router = await open(rivalUrl);
 
