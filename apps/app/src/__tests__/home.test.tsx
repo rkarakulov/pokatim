@@ -6,6 +6,8 @@ import type {
   ProfileView,
   RaceCard,
   RacePage,
+  RideCard,
+  RidePage,
 } from '@pokatim/contracts';
 import { focusManager, onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
@@ -25,6 +27,8 @@ jest.mock('@/lib/api');
 const getProfile = jest.mocked(api.getProfile);
 const listRaces = jest.mocked(api.listRaces);
 const listCalendar = jest.mocked(api.listCalendar);
+const listRides = jest.mocked(api.listRides);
+const joinRide = jest.mocked(api.joinRide);
 
 /** «Сейчас»: 1 октября 2026, 15:00 по Минску. */
 const NOW = new Date('2026-10-01T12:00:00Z');
@@ -56,6 +60,27 @@ const start: CalendarStartCard = {
   phase: 'upcoming',
 };
 
+const ride: RideCard = {
+  id: '0190a6f4-0000-7000-8000-000000000003',
+  title: 'Кофе-райд на Минское море',
+  organizerName: null,
+  // 3 октября 2026, 9:00 по Минску (суббота)
+  startsAt: '2026-10-03T06:00:00Z',
+  city: 'minsk',
+  place: 'Парк Победы',
+  distanceKm: 104,
+  paceMinKmh: 25,
+  paceMaxKmh: 27,
+  limit: 12,
+  goingCount: 5,
+  full: false,
+  phase: 'upcoming',
+  cancelReason: null,
+  rescheduledAt: null,
+  viewer: { role: 'none', canJoin: true, canLeave: false, canManage: false },
+};
+const ridePage = (...items: RideCard[]): RidePage => ({ items, nextCursor: null });
+
 const racePage = (...items: RaceCard[]): RacePage => ({ items, nextCursor: null });
 const calendarPage = (...items: CalendarStartCard[]): CalendarPage => ({ items, nextCursor: null });
 const never = () => new Promise<never>(() => undefined);
@@ -68,6 +93,7 @@ beforeEach(() => {
   getProfile.mockResolvedValue({ rideReasons: [] });
   listRaces.mockResolvedValue(racePage(race));
   listCalendar.mockResolvedValue(calendarPage(start));
+  listRides.mockResolvedValue(ridePage(ride));
 });
 afterEach(() => {
   jest.clearAllMocks();
@@ -89,21 +115,26 @@ const sectionTitles = () =>
     .filter((title) => title !== 'ПОКАТИМ');
 
 describe('Главная: каркас (S3)', () => {
-  it('верхняя панель, шапки разделов сразу, скелетоны на месте героев; Маршрутов и Кофе-райдов нет (AC3, AC7)', async () => {
+  it('верхняя панель, шапки разделов сразу, скелетоны на месте героев; Маршрутов нет (AC3, AC7)', async () => {
     getProfile.mockReturnValue(never());
     listRaces.mockReturnValue(never());
     listCalendar.mockReturnValue(never());
+    listRides.mockReturnValue(never());
     await openHome();
 
     expect(screen.getByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
-    expect(sectionTitles()).toEqual(['Ближайшие гонки', 'Ближайшие старты']);
+    expect(sectionTitles()).toEqual([
+      'Ближайшие гонки',
+      'Ближайшие кофе-райды',
+      'Ближайшие старты',
+    ]);
     // кикеры разделов (такие же подписи у вкладок — ищем в ленте)
     const feed = within(screen.getByTestId('home-feed'));
     expect(feed.getByText('Гонки')).toBeOnTheScreen();
+    expect(feed.getByText('Кофе-райды')).toBeOnTheScreen();
     expect(feed.getByText('Календарь')).toBeOnTheScreen();
-    expect(screen.getAllByLabelText('Загрузка')).toHaveLength(2);
+    expect(screen.getAllByLabelText('Загрузка')).toHaveLength(3);
     expect(screen.queryByText('Маршруты рядом с вами')).toBeNull();
-    expect(screen.queryByText('Кофе-райды')).toBeNull();
     expect(screen.queryByText('по вашему выбору')).toBeNull();
     // временно внизу Главной (Q8)
     expect(screen.getByText('Выйти')).toBeOnTheScreen();
@@ -113,7 +144,13 @@ describe('Главная: каркас (S3)', () => {
     profile(['calendar']);
     await openHome();
 
-    await waitFor(() => expect(sectionTitles()).toEqual(['Ближайшие старты', 'Ближайшие гонки']));
+    await waitFor(() =>
+      expect(sectionTitles()).toEqual([
+        'Ближайшие старты',
+        'Ближайшие гонки',
+        'Ближайшие кофе-райды',
+      ]),
+    );
     expect(screen.getAllByText('по вашему выбору')).toHaveLength(1);
     expect(getProfile).toHaveBeenCalledWith(liveSession.accessToken);
   });
@@ -123,7 +160,25 @@ describe('Главная: каркас (S3)', () => {
     await openHome();
 
     await waitFor(() => expect(screen.getAllByText('по вашему выбору')).toHaveLength(2));
-    expect(sectionTitles()).toEqual(['Ближайшие гонки', 'Ближайшие старты']);
+    expect(sectionTitles()).toEqual([
+      'Ближайшие гонки',
+      'Ближайшие старты',
+      'Ближайшие кофе-райды',
+    ]);
+  });
+
+  it('«Кофе-райды» в опросе (group_rides) поднимает раздел первым с тегом (блок 05)', async () => {
+    profile(['group_rides']);
+    await openHome();
+
+    await waitFor(() =>
+      expect(sectionTitles()).toEqual([
+        'Ближайшие кофе-райды',
+        'Ближайшие гонки',
+        'Ближайшие старты',
+      ]),
+    );
+    expect(screen.getAllByText('по вашему выбору')).toHaveLength(1);
   });
 
   it.each([
@@ -134,7 +189,11 @@ describe('Главная: каркас (S3)', () => {
     await openHome();
 
     await waitFor(() => expect(getProfile).toHaveBeenCalled());
-    expect(sectionTitles()).toEqual(['Ближайшие гонки', 'Ближайшие старты']);
+    expect(sectionTitles()).toEqual([
+      'Ближайшие гонки',
+      'Ближайшие кофе-райды',
+      'Ближайшие старты',
+    ]);
     expect(screen.queryByText('по вашему выбору')).toBeNull();
   });
 
@@ -143,7 +202,11 @@ describe('Главная: каркас (S3)', () => {
     await openHome();
 
     await waitFor(() => expect(getProfile).toHaveBeenCalled());
-    expect(sectionTitles()).toEqual(['Ближайшие гонки', 'Ближайшие старты']);
+    expect(sectionTitles()).toEqual([
+      'Ближайшие гонки',
+      'Ближайшие кофе-райды',
+      'Ближайшие старты',
+    ]);
     expect(screen.queryByText('Не удалось загрузить')).toBeNull();
     expect(screen.queryByText('Нет соединения')).toBeNull();
   });
@@ -269,7 +332,7 @@ describe('Главная: разделы (S4)', () => {
     onlineManager.setOnline(false);
     await openHome();
 
-    expect(await screen.findAllByText('Нет соединения')).toHaveLength(2);
+    expect(await screen.findAllByText('Нет соединения')).toHaveLength(3);
     expect(listRaces).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -308,6 +371,56 @@ describe('Главная: разделы (S4)', () => {
     expect(screen.getByText('62 км')).toBeOnTheScreen();
     expect(screen.queryByText(/Окно откроется|Окно открыто|Окно закрывается/)).toBeNull();
     expect(screen.getByText('80 и 120 км · Минск')).toBeOnTheScreen();
+  });
+});
+
+describe('Главная: раздел «Кофе-райды» (блок 05, S6)', () => {
+  const rideHero = 'Ближайший райд. Кофе-райд на Минское море. Сб 3 октября, 9:00';
+
+  it('герой — первый райд ленты (limit 1, Bearer), мета, стопка и «Я иду»; «Все райды» → вкладка', async () => {
+    const router = await renderRouter(
+      { ...tabRoutes, 'rides/[id]': () => null },
+      { initialUrl: '/', wrapper: createQueryWrapper() },
+    );
+
+    expect(await screen.findByLabelText(rideHero)).toBeOnTheScreen();
+    expect(listRides).toHaveBeenCalledWith(liveSession.accessToken, { limit: 1 });
+    expect(screen.getByText('104 км · темп 25–27 км/ч · Минск, Парк Победы')).toBeOnTheScreen();
+    expect(screen.getByText('идут 5 из 12')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Я иду' })).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByLabelText(rideHero));
+    expect(router.getPathname()).toBe(`/rides/${ride.id}`);
+  });
+
+  it('«Я иду» с Главной — запрос с Bearer, после ответа раздел перезапрошен', async () => {
+    joinRide.mockResolvedValue({
+      ride: { ...ride, goingCount: 6, description: null },
+      viewer: { role: 'participant', canJoin: false, canLeave: true, canManage: false },
+    });
+    await openHome();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Я иду' }));
+
+    expect(joinRide).toHaveBeenCalledWith(liveSession.accessToken, ride.id);
+    await waitFor(() => expect(listRides).toHaveBeenCalledTimes(2));
+  });
+
+  it('пусто — «Пока нет кофе-райдов» + «Создать райд» → форма; «Все райды» → вкладка «Райды»', async () => {
+    listRides.mockResolvedValue(ridePage());
+    const router = await renderRouter(
+      { ...tabRoutes, 'rides/new': () => null },
+      { initialUrl: '/', wrapper: createQueryWrapper() },
+    );
+
+    expect(await screen.findByText('Пока нет кофе-райдов')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Создать райд'));
+    expect(router.getPathname()).toBe('/rides/new');
+  });
+
+  it('«Все райды» → вкладка «Райды»', async () => {
+    const router = await openHome();
+    await fireEvent.press(await screen.findByText('Все райды'));
+    expect(router.getPathname()).toBe('/rides');
   });
 });
 
