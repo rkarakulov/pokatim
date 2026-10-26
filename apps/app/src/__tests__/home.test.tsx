@@ -3,6 +3,7 @@ import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type {
   CalendarPage,
   CalendarStartCard,
+  CatalogRouteCard,
   ProfileView,
   RaceCard,
   RacePage,
@@ -28,6 +29,7 @@ const getProfile = jest.mocked(api.getProfile);
 const listRaces = jest.mocked(api.listRaces);
 const listCalendar = jest.mocked(api.listCalendar);
 const listRides = jest.mocked(api.listRides);
+const listRoutes = jest.mocked(api.listCatalogRoutes);
 const joinRide = jest.mocked(api.joinRide);
 
 /** «Сейчас»: 1 октября 2026, 15:00 по Минску. */
@@ -88,6 +90,18 @@ const ride: RideCard = {
 };
 const ridePage = (...items: RideCard[]): RidePage => ({ items, nextCursor: null });
 
+const catalogRoute: CatalogRouteCard = {
+  id: '0190a6f4-0000-7000-8000-000000000004',
+  title: 'Минское кольцо',
+  distanceM: 86_012,
+  elevationGainM: 412,
+  isLoop: true,
+  city: 'minsk',
+  surfaces: ['asphalt', 'gravel'],
+  publishedAt: '2026-09-20T10:00:00.000Z',
+};
+const routePage = (...items: CatalogRouteCard[]) => ({ items, nextCursor: null });
+
 const racePage = (...items: RaceCard[]): RacePage => ({ items, nextCursor: null });
 const calendarPage = (...items: CalendarStartCard[]): CalendarPage => ({ items, nextCursor: null });
 const never = () => new Promise<never>(() => undefined);
@@ -101,6 +115,7 @@ beforeEach(() => {
   listRaces.mockResolvedValue(racePage(race));
   listCalendar.mockResolvedValue(calendarPage(start));
   listRides.mockResolvedValue(ridePage(ride));
+  listRoutes.mockResolvedValue(routePage(catalogRoute));
 });
 afterEach(() => {
   jest.clearAllMocks();
@@ -122,17 +137,19 @@ const sectionTitles = () =>
     .filter((title) => title !== 'ПОКАТИМ');
 
 describe('Главная: каркас (S3)', () => {
-  it('верхняя панель, шапки разделов сразу, скелетоны на месте героев; Маршрутов нет (AC3, AC7)', async () => {
+  it('верхняя панель, шапки разделов сразу, скелетоны на месте героев; раздел «Маршруты» (routes-01) (AC3, AC7)', async () => {
     getProfile.mockReturnValue(never());
     listRaces.mockReturnValue(never());
     listCalendar.mockReturnValue(never());
     listRides.mockReturnValue(never());
+    listRoutes.mockReturnValue(never());
     await openHome();
 
     expect(screen.getByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
     expect(sectionTitles()).toEqual([
       'Ближайшие гонки',
       'Ближайшие кофе-райды',
+      'Маршруты команды',
       'Ближайшие старты',
     ]);
     // кикеры разделов (такие же подписи у вкладок — ищем в ленте)
@@ -140,7 +157,8 @@ describe('Главная: каркас (S3)', () => {
     expect(feed.getByText('Гонки')).toBeOnTheScreen();
     expect(feed.getByText('Кофе-райды')).toBeOnTheScreen();
     expect(feed.getByText('Календарь')).toBeOnTheScreen();
-    expect(screen.getAllByLabelText('Загрузка')).toHaveLength(3);
+    expect(feed.getByText('Маршруты')).toBeOnTheScreen();
+    expect(screen.getAllByLabelText('Загрузка')).toHaveLength(4);
     expect(screen.queryByText('Маршруты рядом с вами')).toBeNull();
     expect(screen.queryByText('по вашему выбору')).toBeNull();
     // временно внизу Главной (Q8)
@@ -156,6 +174,7 @@ describe('Главная: каркас (S3)', () => {
         'Ближайшие старты',
         'Ближайшие гонки',
         'Ближайшие кофе-райды',
+        'Маршруты команды',
       ]),
     );
     expect(screen.getAllByText('по вашему выбору')).toHaveLength(1);
@@ -171,6 +190,7 @@ describe('Главная: каркас (S3)', () => {
       'Ближайшие гонки',
       'Ближайшие старты',
       'Ближайшие кофе-райды',
+      'Маршруты команды',
     ]);
   });
 
@@ -182,27 +202,44 @@ describe('Главная: каркас (S3)', () => {
       expect(sectionTitles()).toEqual([
         'Ближайшие кофе-райды',
         'Ближайшие гонки',
+        'Маршруты команды',
         'Ближайшие старты',
       ]),
     );
     expect(screen.getAllByText('по вашему выбору')).toHaveLength(1);
   });
 
-  it.each([
-    ['«Пока просто смотрю»', ['exploring'] as const],
-    ['раздел без бэкенда', ['routes'] as const],
-  ])('%s — базовый порядок без тегов (AC4)', async (_name, reasons) => {
-    profile([...reasons]);
+  it('«Маршруты» в опросе (routes) поднимает раздел первым с тегом (routes-01)', async () => {
+    profile(['routes']);
     await openHome();
 
-    await waitFor(() => expect(getProfile).toHaveBeenCalled());
-    expect(sectionTitles()).toEqual([
-      'Ближайшие гонки',
-      'Ближайшие кофе-райды',
-      'Ближайшие старты',
-    ]);
-    expect(screen.queryByText('по вашему выбору')).toBeNull();
+    await waitFor(() =>
+      expect(sectionTitles()).toEqual([
+        'Маршруты команды',
+        'Ближайшие гонки',
+        'Ближайшие кофе-райды',
+        'Ближайшие старты',
+      ]),
+    );
+    expect(screen.getAllByText('по вашему выбору')).toHaveLength(1);
   });
+
+  it.each([['«Пока просто смотрю»', ['exploring'] as const]])(
+    '%s — базовый порядок без тегов (AC4)',
+    async (_name, reasons) => {
+      profile([...reasons]);
+      await openHome();
+
+      await waitFor(() => expect(getProfile).toHaveBeenCalled());
+      expect(sectionTitles()).toEqual([
+        'Ближайшие гонки',
+        'Ближайшие кофе-райды',
+        'Маршруты команды',
+        'Ближайшие старты',
+      ]);
+      expect(screen.queryByText('по вашему выбору')).toBeNull();
+    },
+  );
 
   it('ошибка профиля — базовый порядок, ошибка на экране не показывается (AC4)', async () => {
     getProfile.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
@@ -212,6 +249,7 @@ describe('Главная: каркас (S3)', () => {
     expect(sectionTitles()).toEqual([
       'Ближайшие гонки',
       'Ближайшие кофе-райды',
+      'Маршруты команды',
       'Ближайшие старты',
     ]);
     expect(screen.queryByText('Не удалось загрузить')).toBeNull();
@@ -350,7 +388,7 @@ describe('Главная: разделы (S4)', () => {
     onlineManager.setOnline(false);
     await openHome();
 
-    expect(await screen.findAllByText('Нет соединения')).toHaveLength(3);
+    expect(await screen.findAllByText('Нет соединения')).toHaveLength(4);
     expect(listRaces).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -513,5 +551,29 @@ describe('Главная: обновление (ревью pass 1)', () => {
 
     expect(screen.getByText('До старта 1 день.')).toBeOnTheScreen();
     expect(listCalendar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Главная: раздел «Маршруты» (routes-01, AC7)', () => {
+  it('герой — последний опубликованный маршрут (limit 1, публичный): длина крупно, название, мета; ведёт в /routes/<id>', async () => {
+    const router = await renderRouter(
+      { ...tabRoutes, 'routes/[id]': () => null },
+      { initialUrl: '/', wrapper: createQueryWrapper() },
+    );
+    const hero = await screen.findByLabelText(/^Маршрут команды\. Минское кольцо/);
+    expect(listRoutes).toHaveBeenCalledWith({ limit: 1 });
+    expect(screen.getByText('86 км · набор 412 м · петля')).toBeOnTheScreen();
+    expect(screen.getByText('Минск · асфальт, гравий')).toBeOnTheScreen();
+    await fireEvent.press(hero);
+    expect(router.getPathname()).toBe(`/routes/${catalogRoute.id}`);
+  });
+
+  it('пустой каталог — раздел на месте с «Маршрутов пока нет»; «Все маршруты» → вкладка', async () => {
+    listRoutes.mockResolvedValue(routePage());
+    const router = await openHome();
+    expect(await screen.findByText('Маршрутов пока нет')).toBeOnTheScreen();
+    expect(sectionTitles()).toContain('Маршруты команды');
+    await fireEvent.press(screen.getByText('Все маршруты'));
+    expect(router.getPathname()).toBe('/routes');
   });
 });

@@ -73,6 +73,7 @@ describe('коды ошибок', () => {
       'RESULTS_PUBLISH_BLOCKED',
       'DISPUTE_ACTION_BLOCKED',
       'DISPUTE_NOT_FOUND',
+      'ROUTE_INVALID_STATE',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

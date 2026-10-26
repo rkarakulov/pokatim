@@ -194,6 +194,22 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   «Загрузить заезд» (`races.block.*`) и «Отменить участие» (`races.withdrawBlock.*` — только `dispute_open` /
   `disqualified`); 409 — текст по `details.reason`.
 
+## Маршруты (routes-01, `docs/product/routes.md`)
+
+- Вкладка «Маршруты» — `features/routes/route-feed.tsx` (`FlatList`): ключ `['routes','list',{ city, distance,
+  surface, limit },'pages']`, Главная — `['routes','list',{ limit: 1 }]`, чипы «Город» — `['routes','cities']` (до
+  ответа — `FilterGroupSkeleton`, ошибка или пусто — группа скрыта, исчезнувший город снимается); всё публичное, без
+  `withAccessToken`, `staleTime` 60 с. Карточка списка — `components/route-list-card.tsx`, подписи —
+  `features/routes/format.ts`.
+- Карточка `routes/[id]` — в корневом `Stack` вне `Stack.Protected` (гость по ссылке, RC-9), SSR и мета — как
+  `races/[id]` (`publicPath`, `fetchPublicForSsr`, 404 — `noindex`). Карта — `catalog-route-map.tsx`: `useMapStyle`
+  (`features/maps/use-map-style.ts`), `RouteMap corridor={false}` с `withoutCorridor(geometry)` (слоя коридора нет,
+  `widthM` не показывается); ключ `['routes','map',id]` — только клиент. «Гонки на маршруте» — `['routes','races',
+  id,'pages']`, `RaceListCard` с датами с годом; пусто, 404, ошибка — блока нет. «Поделиться» — `share-link`.
+- Пропс `RouteMap.corridor?` (по умолчанию `true`) — единственное изменение карты для каталога; существующие пропсы
+  и `race-route-map.tsx` не меняются.
+- Главная — раздел `routes` (текстовый герой `RouteHero`, RC-8; пустой каталог — `EmptyState`).
+
 ## Календарь стартов (блок 04, `docs/product/races-and-seasons.md`)
 
 - Вкладка «Календарь» — `features/calendar/calendar-feed.tsx` (`FlatList`): одна выдача, ключ

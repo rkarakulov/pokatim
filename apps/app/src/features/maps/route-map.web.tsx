@@ -4,7 +4,13 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { attributionCss, collapseAttribution } from './attribution.web';
-import { MAP_FIT_PADDING, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
+import {
+  CORRIDOR_LAYER_ID,
+  MAP_FIT_PADDING,
+  ROUTE_SOURCE_ID,
+  routeFeatures,
+  routeLayers,
+} from './corridor-style';
 import { loadMaplibre } from './load-maplibre';
 import { MAP_WORKER_FILE } from './map-worker';
 import { RouteMapFrame } from './route-map-frame';
@@ -30,6 +36,7 @@ export function RouteMap({
   theme,
   accessibilityLabel,
   failedMessage,
+  corridor = true,
   track,
 }: RouteMapProps) {
   const container = useRef<HTMLDivElement>(null);
@@ -58,7 +65,9 @@ export function RouteMap({
         collapseAttribution(created, node);
         created.on('load', () => {
           created.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: routeFeatures(map) });
-          for (const layer of routeLayers(theme, map.widthM, map.bounds)) created.addLayer(layer);
+          for (const layer of routeLayers(theme, map.widthM, map.bounds)) {
+            if (corridor || layer.id !== CORRIDOR_LAYER_ID) created.addLayer(layer);
+          }
           if (track) {
             // трек — под старт и финиш маршрута
             created.addSource(TRACK_SOURCE_ID, { type: 'geojson', data: trackFeatures(track) });
@@ -74,7 +83,7 @@ export function RouteMap({
       cancelled = true;
       instance?.remove();
     };
-  }, [map, styleUrl, theme, track]);
+  }, [map, styleUrl, theme, corridor, track]);
 
   return (
     <RouteMapFrame

@@ -4,6 +4,7 @@ import {
   PanelRoute,
   PanelRoutePage,
   PanelRouteQuery,
+  PublishRouteInput,
   ROUTE_FAILURE_CODES,
   ROUTE_FILE_MAX_BYTES,
   ROUTE_STATUSES,
@@ -22,6 +23,7 @@ const route = {
   isLoop: true,
   owner: { userId: ID, displayName: 'Ольга' },
   createdAt: '2026-10-27T10:00:00.000Z',
+  catalog: null,
   line: [
     [27.5, 53.9],
     [27.6, 53.95],
@@ -81,5 +83,39 @@ describe('маршрут', () => {
     expect(UploadRouteQuery.safeParse({ title: 'a'.repeat(121) }).success).toBe(false);
     expect(UploadRouteQuery.safeParse({ title: 'две\nстроки' }).success).toBe(false);
     expect(UploadRouteQuery.safeParse({ title: 'Круг', extra: '1' }).success).toBe(false);
+  });
+
+  it('PanelRoute.catalog: null или город, покрытия, момент публикации; строгие справочники; поле обязательно', () => {
+    const catalog = {
+      city: 'minsk',
+      surfaces: ['asphalt', 'gravel'],
+      publishedAt: '2026-10-27T11:00:00.000Z',
+    };
+    expect(PanelRoute.parse({ ...route, catalog }).catalog).toEqual(catalog);
+    expect(
+      PanelRoute.safeParse({ ...route, catalog: { ...catalog, city: 'kaunas' } }).success,
+    ).toBe(false);
+    expect(
+      PanelRoute.safeParse({ ...route, catalog: { ...catalog, surfaces: ['cobbles'] } }).success,
+    ).toBe(false);
+    expect(PanelRoute.safeParse({ ...route, catalog: undefined }).success).toBe(false);
+  });
+
+  it('PublishRouteInput (routes-01): город из справочника, покрытия 1–2 без повторов, лишний ключ — ошибка', () => {
+    expect(PublishRouteInput.parse({ city: 'minsk', surfaces: ['gravel'] })).toEqual({
+      city: 'minsk',
+      surfaces: ['gravel'],
+    });
+    for (const broken of [
+      {},
+      { city: 'minsk' },
+      { city: 'minsk', surfaces: [] },
+      { city: 'minsk', surfaces: ['asphalt', 'asphalt'] },
+      { city: 'minsk', surfaces: ['cobbles'] },
+      { city: 'Минск', surfaces: ['asphalt'] },
+      { city: 'minsk', surfaces: ['asphalt'], title: 'Новое' },
+    ]) {
+      expect(PublishRouteInput.safeParse(broken).success, JSON.stringify(broken)).toBe(false);
+    }
   });
 });

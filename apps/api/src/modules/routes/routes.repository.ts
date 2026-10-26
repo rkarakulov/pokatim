@@ -1,10 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { RouteFailureCode } from '@pokatim/contracts';
+import {
+  type CityCode,
+  isCityCode,
+  type RouteDistanceBucket,
+  type RouteFailureCode,
+  type Surface,
+} from '@pokatim/contracts';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import { Binary, type Db, type Filter } from 'mongodb';
 
 import type { DbSession } from '../../db';
+import { ROUTE_DISTANCE_RANGES_M } from './routes.policy';
 import {
+  type RouteCatalogDoc,
   type RouteDoc,
   type RouteGeometryDoc,
   type RoutesCollections,
@@ -19,6 +27,22 @@ export interface RouteReadyFields {
   start: [number, number];
   finish: [number, number];
 }
+
+/** Фильтр каталога (значения — после zod `CatalogRouteQuery`). */
+export interface CatalogFilter {
+  cities?: readonly CityCode[];
+  distance?: readonly RouteDistanceBucket[];
+  surfaces?: readonly Surface[];
+}
+
+/** Позиция курсора каталога: момент публикации и `_id` последнего элемента страницы. */
+export interface CatalogPosition {
+  publishedAt: Date;
+  id: string;
+}
+
+/** Опубликован в каталоге — условие частичного индекса `routes_catalog_idx` (обязательно в запросе каталога). */
+const IN_CATALOG = { 'catalog.publishedAt': { $type: 'date' } } as const;
 
 /**
  * Единственный писатель `routes`, `route_geometries`, `route_sources` (race-results-01). Правила (`pokatim-db.md`):
@@ -51,6 +75,85 @@ export class RoutesRepository {
   /** Готовый маршрут (`ready` терминален: читать в транзакции гонки можно без замка). */
   async findReady(id: string, session?: DbSession): Promise<RouteDoc | undefined> {
     return (await this.c.routes.findOne({ _id: id, status: 'ready' }, { session })) ?? undefined;
+  }
+
+  /**
+   * Маршрут каталога (routes-01) — единственная точка публичной видимости: готовый и опубликованный. Неизвестный,
+   * не готовый, не опубликованный и снятый — `undefined` (один `404`). Без кэша: каталог изменяем.
+   */
+  async findPublished(id: string): Promise<RouteDoc | undefined> {
+    return (await this.c.routes.findOne({ _id: id, status: 'ready', ...IN_CATALOG })) ?? undefined;
+  }
+
+  /**
+   * Страница каталога: новые публикации сверху (`publishedAt desc, _id desc`, индекс `routes_catalog_idx`). Внутри
+   * фильтра — ИЛИ (покрытие — хотя бы одно из выбранных, корзины — `$or` диапазонов), между — И.
+   */
+  listCatalog(
+    filter: CatalogFilter,
+    after: CatalogPosition | null,
+    limit: number,
+  ): Promise<RouteDoc[]> {
+    const and: Filter<RouteDoc>[] = [{ status: 'ready', ...IN_CATALOG }];
+    if (filter.cities?.length) and.push({ 'catalog.city': { $in: [...filter.cities] } });
+    if (filter.surfaces?.length) and.push({ 'catalog.surfaces': { $in: [...filter.surfaces] } });
+    if (filter.distance?.length) {
+      and.push({
+        $or: filter.distance.map((bucket) => ({
+          distanceM: { ...ROUTE_DISTANCE_RANGES_M[bucket] },
+        })),
+      });
+    }
+    if (after) {
+      and.push({
+        $or: [
+          { 'catalog.publishedAt': { $lt: after.publishedAt } },
+          { 'catalog.publishedAt': after.publishedAt, _id: { $lt: after.id } },
+        ],
+      });
+    }
+    return this.c.routes
+      .find({ $and: and })
+      .sort({ 'catalog.publishedAt': -1, _id: -1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  /** Коды городов старта опубликованных маршрутов (чипы фильтра). */
+  async catalogCities(): Promise<CityCode[]> {
+    const cities: unknown[] = await this.c.routes.distinct('catalog.city', {
+      status: 'ready',
+      ...IN_CATALOG,
+    });
+    return cities.filter((city): city is CityCode => typeof city === 'string' && isCityCode(city));
+  }
+
+  /**
+   * Публикация или правка каталожных полей готового маршрута платформы — в транзакции действия панели (чтение →
+   * запись → журнал). `false` — маршрут не готов (условие в фильтре).
+   */
+  async setCatalog(
+    session: DbSession,
+    id: string,
+    catalog: RouteCatalogDoc,
+    now: Date,
+  ): Promise<boolean> {
+    const result = await this.c.routes.updateOne(
+      { _id: id, status: 'ready', origin: 'platform' },
+      { $set: { catalog, updatedAt: now } },
+      { session },
+    );
+    return result.matchedCount === 1;
+  }
+
+  /** Снятие с публикации — в транзакции действия панели. `false` — маршрут не готов. */
+  async clearCatalog(session: DbSession, id: string, now: Date): Promise<boolean> {
+    const result = await this.c.routes.updateOne(
+      { _id: id, status: 'ready', origin: 'platform' },
+      { $set: { catalog: null, updatedAt: now } },
+      { session },
+    );
+    return result.matchedCount === 1;
   }
 
   routesByIds(ids: readonly string[]): Promise<RouteDoc[]> {

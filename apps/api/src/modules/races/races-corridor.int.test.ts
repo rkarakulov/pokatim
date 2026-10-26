@@ -1,4 +1,5 @@
-import { PanelRace, RaceDetail, RaceRouteMap } from '@pokatim/contracts';
+import { PanelRace, RaceCard, RaceDetail, RacePage, RaceRouteMap } from '@pokatim/contracts';
+import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, DAY, type Harness } from '../../../test/harness';
@@ -19,6 +20,7 @@ import {
   parsedRoute,
   processRoute,
   readyRoute,
+  ROUTES,
   routesRepository,
   uploadRoute,
 } from '../../../test/routes';
@@ -468,5 +470,97 @@ describe('карта маршрута (maps-01)', () => {
       display.mockRestore();
       match.mockRestore();
     }
+  });
+});
+
+describe('гонки маршрута (routes-01)', () => {
+  const racesOf = (routeId: string, query = '') =>
+    call(h, 'GET', `/v1/routes/${routeId}/races${query}`);
+  const toCatalog = (token: string, routeId: string) =>
+    panelCall(h, token, 'POST', `${ROUTES}/${routeId}/publish`, {
+      city: 'minsk',
+      surfaces: ['asphalt'],
+    });
+
+  it('опубликованная и отменённая гонка маршрута каталога — в RacePage новыми окнами сверху; черновик и другой маршрут — нет', async () => {
+    const { admin, org, routeId } = await setup();
+    const otherRoute = await readyRoute(h, admin.token, 'route-rte.gpx', 'Другой маршрут');
+    expect((await toCatalog(admin.token, routeId)).status).toBe(200);
+    const corridor = { routeId, widthM: 50 };
+
+    const early = await publishedRace(h, org.token, { ...withoutDistance, corridor });
+    const late = await publishedRace(
+      h,
+      org.token,
+      { ...withoutDistance, corridor },
+      { start: '2026-10-25T00:00', end: '2026-10-27T23:59', protocol: '2026-10-29T23:59' },
+    );
+    const cancelled = await publishedRace(
+      h,
+      org.token,
+      { ...withoutDistance, corridor },
+      { start: '2026-10-24T12:00' },
+    );
+    expect(
+      (
+        await panelCall(h, org.token, 'POST', `${RACES}/${cancelled.id}/cancel`, {
+          version: cancelled.version,
+          reason: 'weather',
+        })
+      ).status,
+    ).toBe(200);
+    await createRace(h, org.token, { ...withoutDistance, corridor });
+    await publishedRace(h, org.token, {
+      ...withoutDistance,
+      corridor: { routeId: otherRoute, widthM: 50 },
+    });
+    await publishedRace(h, org.token);
+
+    const res = await racesOf(routeId);
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('public, max-age=60');
+    const body = RacePage.parse(res.body);
+    expect(body.items.map((race) => race.id)).toEqual([late.id, cancelled.id, early.id]);
+    expect(body.items.find((race) => race.id === cancelled.id)?.phase).toBe('cancelled');
+    const raw = res.body as { items: Record<string, unknown>[] };
+    for (const item of raw.items) {
+      expect(Object.keys(item).sort()).toEqual(Object.keys(RaceCard.shape).sort());
+    }
+
+    // курсор: по одной, без дублей и пропусков
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const next: RacePage = RacePage.parse(
+        (await racesOf(routeId, `?limit=1${cursor ? `&cursor=${cursor}` : ''}`)).body,
+      );
+      seen.push(...next.items.map((race) => race.id));
+      cursor = next.nextCursor;
+    } while (cursor && seen.length < 10);
+    expect(seen).toEqual([late.id, cancelled.id, early.id]);
+  });
+
+  it('маршрут не в каталоге, снят, неизвестный — 404 (и с мусорным курсором); мусорный курсор и limit у каталожного — 400; не uuid — 400', async () => {
+    const { admin, org, routeId } = await setup();
+    await publishedRace(h, org.token, { ...withoutDistance, corridor: { routeId, widthM: 50 } });
+
+    for (const query of ['', '?cursor=abc']) {
+      const res = await racesOf(routeId, query);
+      expect(res.status, query).toBe(404);
+      expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
+    }
+    expect((await racesOf(uuidv7())).status).toBe(404);
+
+    expect((await toCatalog(admin.token, routeId)).status).toBe(200);
+    expect(RacePage.parse((await racesOf(routeId)).body).items).toHaveLength(1);
+    for (const query of ['?cursor=abc', '?limit=0', '?limit=51', '?scope=past']) {
+      expect((await racesOf(routeId, query)).status, query).toBe(400);
+    }
+
+    expect(
+      (await panelCall(h, admin.token, 'POST', `${ROUTES}/${routeId}/unpublish`, {})).status,
+    ).toBe(200);
+    expect((await racesOf(routeId)).status).toBe(404);
+    expect((await racesOf('not-a-uuid')).status).toBe(400);
   });
 });

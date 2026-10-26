@@ -1,5 +1,6 @@
 import { Controller, Get, Header, Param, Query, UseGuards } from '@nestjs/common';
 import {
+  CatalogRouteRacesQuery,
   type CurrentSeasonResponse,
   FieldErrorCode,
   type RaceDetail,
@@ -76,5 +77,16 @@ export class RacesPublicController {
     @Query(new ZodValidationPipe(SeasonRaceListQuery, FieldErrorCode)) query: SeasonRaceListQuery,
   ): Promise<RacePage> {
     return this.races.listSeasonRaces(id, query);
+  }
+
+  /** Гонки маршрута каталога (routes-01): маршрут не в каталоге — 404; модуль `routes` о гонках не знает. */
+  @Get('routes/:id/races')
+  @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
+  routeRaces(
+    @Param('id', new ZodValidationPipe(Uuid, FieldErrorCode)) id: string,
+    @Query(new ZodValidationPipe(CatalogRouteRacesQuery, FieldErrorCode))
+    query: CatalogRouteRacesQuery,
+  ): Promise<RacePage> {
+    return this.races.listRouteRaces(id, query);
   }
 }

@@ -1,5 +1,5 @@
 import type { PanelRouteSummary } from '@pokatim/contracts';
-import { queryOptions } from '@tanstack/react-query';
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 
 import { api } from '../../api';
 
@@ -37,3 +37,15 @@ export const readyRoutesQuery = queryOptions({
 /** Маршрут с линией показа. */
 export const routeQuery = (id: string) =>
   queryOptions({ queryKey: [...ROUTES_QUERY_KEY, 'item', id], queryFn: () => api.getRoute(id) });
+
+/** Страница экрана «Маршруты» (готовые платформы + свои необработанные, новые сверху). */
+export const ROUTES_PAGE_SIZE = 50;
+
+/** Экран «Маршруты»: страницы списка по курсору (`useInfiniteQuery`), «Показать ещё». */
+export const routesPagesQuery = infiniteQueryOptions({
+  queryKey: [...ROUTES_QUERY_KEY, 'list'],
+  queryFn: ({ pageParam }) =>
+    api.listRoutes({ limit: ROUTES_PAGE_SIZE, ...(pageParam ? { cursor: pageParam } : {}) }),
+  initialPageParam: undefined as string | undefined,
+  getNextPageParam: (last) => last.nextCursor ?? undefined,
+});

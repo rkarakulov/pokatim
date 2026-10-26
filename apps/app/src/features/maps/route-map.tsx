@@ -3,7 +3,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { space } from '@pokatim/design-tokens';
 import { StyleSheet } from 'react-native';
 
-import { MAP_FIT_PADDING, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
+import {
+  CORRIDOR_LAYER_ID,
+  MAP_FIT_PADDING,
+  ROUTE_SOURCE_ID,
+  routeFeatures,
+  routeLayers,
+} from './corridor-style';
 import { loadMapLibreNative } from './load-maplibre-native';
 import { RouteMapFrame } from './route-map-frame';
 import type { RouteMapProps } from './route-map-props';
@@ -30,13 +36,20 @@ export function RouteMap({
   theme,
   accessibilityLabel,
   failedMessage,
+  corridor = true,
   track,
 }: RouteMapProps) {
   const [lib, setLib] = useState<typeof MapLibreNative | null>(null);
   const [failed, setFailed] = useState(false);
   // GeoJSONSource сериализует `data` в строку на каждом рендере — только при смене маршрута или темы
   const features = useMemo(() => routeFeatures(map), [map]);
-  const layers = useMemo(() => routeLayers(theme, map.widthM, map.bounds), [theme, map]);
+  const layers = useMemo(
+    () =>
+      routeLayers(theme, map.widthM, map.bounds).filter(
+        (layer) => corridor || layer.id !== CORRIDOR_LAYER_ID,
+      ),
+    [theme, map, corridor],
+  );
   const trackData = useMemo(() => (track ? trackFeatures(track) : null), [track]);
   const trackStyle = useMemo(() => trackLayers(theme), [theme]);
   const bounds = useMemo(() => unionBounds(map.bounds, track?.line), [map, track]);

@@ -13,6 +13,7 @@ import {
   RACE_STATUSES,
   RaceInput,
   SURFACES,
+  SurfaceList,
   UpdateRaceRequest,
 } from './race.schema.ts';
 import {
@@ -126,6 +127,11 @@ describe('RaceInput', () => {
     expect(RaceInput.safeParse({ ...race, surfaces: [] }).success).toBe(false);
     expect(RaceInput.safeParse({ ...race, surfaces: ['asphalt', 'asphalt'] }).success).toBe(false);
     expect(RaceInput.safeParse({ ...race, surfaces: ['asphalt', 'gravel'] }).success).toBe(true);
+    // routes-01: список вынесен в SurfaceList — поведение прежнее
+    expect(SurfaceList.safeParse(['gravel']).success).toBe(true);
+    expect(SurfaceList.safeParse([]).success).toBe(false);
+    expect(SurfaceList.safeParse(['gravel', 'gravel']).success).toBe(false);
+    expect(SurfaceList.safeParse(['asphalt', 'gravel', 'asphalt']).success).toBe(false);
     expect(RaceInput.safeParse({ ...race, bikeClass: 'track' }).success).toBe(false);
     expect(RaceInput.safeParse({ ...race, description: 'x'.repeat(2001) }).success).toBe(false);
   });

@@ -25,6 +25,7 @@ import EditRideRoute from '../app/rides/edit/[id]';
 import CancelRideRoute from '../app/rides/cancel/[id]';
 import ReportRideRoute from '../app/rides/report/[id]';
 import RaceRoute from '../app/races/[id]';
+import CatalogRouteRoute from '../app/routes/[id]';
 import RacePickRoute from '../app/races/pick/[id]';
 import DisputeResponseRoute from '../app/races/dispute-response/[id]/[disputeId]';
 import FileDisputeRoute from '../app/races/dispute/[id]/[entryId]';
@@ -72,6 +73,7 @@ export const appRoutes = {
   'races/result/[id]/[entryId]': RivalResultRoute,
   'races/dispute/[id]/[entryId]': FileDisputeRoute,
   'races/dispute-response/[id]/[disputeId]': DisputeResponseRoute,
+  'routes/[id]': CatalogRouteRoute,
   'seasons/[id]': SeasonRoute,
   'calendar/[id]': CalendarStartRoute,
   'rides/[id]': RideRoute,

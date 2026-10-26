@@ -168,6 +168,8 @@ export default function RootLayout() {
             <Stack.Screen name="status" />
             {/* публичные карточки по ссылке (блок 03, Q8): гость и вошедший; на native — поверх вкладок, без таб-бара */}
             <Stack.Screen name="races/[id]" />
+            {/* routes-01: публичная карточка маршрута каталога — гость открывает по ссылке (RC-9) */}
+            <Stack.Screen name="routes/[id]" />
             <Stack.Screen name="seasons/[id]" />
             {/* публичная карточка старта календаря (блок 04) — так же */}
             <Stack.Screen name="calendar/[id]" />

@@ -12,6 +12,9 @@ import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
  * слоёв MapLibre из ролей темы `map.*`. Коридор — линия маршрута шириной 2 × `widthM` в метрах (выражение зума).
  */
 
+/** id слоя коридора — без коридора (`RouteMap corridor={false}`, маршрут каталога) слой не создаётся. */
+export const CORRIDOR_LAYER_ID = 'corridor';
+
 /** id источника GeoJSON маршрута на карте. */
 export const ROUTE_SOURCE_ID = 'race-route';
 
@@ -134,7 +137,7 @@ export function routeLayers(
   });
   return [
     {
-      id: 'corridor',
+      id: CORRIDOR_LAYER_ID,
       type: 'line',
       source: ROUTE_SOURCE_ID,
       filter: kindIs('route'),

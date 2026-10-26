@@ -119,6 +119,15 @@ paths:
 - `races.corridor = { routeId, widthM, distanceM } | null` — пишет только `RacesRepository`; `distanceM` — снимок
   длины маршрута, `distanceKm` гонки с коридором — из него. Документы до `0013_routes` поля не имеют — чтение
   `?? null` (миграция ставит `null`).
+- Каталог (routes-01): `routes.catalog = { city, surfaces, publishedAt } | null` — изменяемые метаданные готового
+  маршрута (на коридоры не влияют); пишут только `RoutesRepository.setCatalog`/`clearCatalog` (условие `status:
+  'ready', origin: 'platform'` в фильтре). Повторная публикация после снятия — новый `publishedAt`, правка города и
+  покрытия — прежний. Действие панели — транзакция «чтение маршрута → `updateOne` того же документа →
+  `PanelAudit.append`», колбэк без логов (повторяется). Миграция `0020_routes_catalog` (expand-only): частичный
+  `routes_catalog_idx { 'catalog.publishedAt': -1, _id: -1 }` (запрос каталога обязан содержать
+  `'catalog.publishedAt': { $type: 'date' }`), `races_route_idx { 'corridor.routeId': 1, windowStartsAt: -1, _id: -1 }`,
+  бэкфилл `catalog: null`; чтение — `?? null`. Город, покрытие, дистанция — остаточный фильтр по скану индекса без
+  `SORT`.
 
 ## Заявки и попытки (race-results-03)
 

@@ -21,6 +21,7 @@ import {
   PanelRoute,
   PanelRoutePage,
   type PanelRouteQuery,
+  type PublishRouteInput,
   PanelSeason,
   PanelSeasonList,
   type PublishRaceRequest,
@@ -207,6 +208,11 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     listRoutes: (params: PanelRouteListParams = {}) =>
       get(`/v1/admin/routes${queryString(params)}`, PanelRoutePage),
     getRoute: (id: string) => get(route(id), PanelRoute),
+    /** Публикация в каталог или правка города и покрытия (routes-01); не готов — 409 `ROUTE_INVALID_STATE`. */
+    publishRoute: (id: string, body: PublishRouteInput) =>
+      post(`${route(id)}/publish`, PanelRoute, body),
+    /** Снятие с публикации; неопубликованный — 200 без изменений. */
+    unpublishRoute: (id: string) => post(`${route(id)}/unpublish`, PanelRoute),
 
     // --- календарь стартов (calendar.manage) ---
     listCalendar: (params: PanelCalendarListParams = {}) =>

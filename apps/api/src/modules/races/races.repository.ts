@@ -307,6 +307,28 @@ export class RacesRepository {
     return this.c.races.find(query).sort({ windowEndsAt: 1, _id: 1 }).limit(limit).toArray();
   }
 
+  /**
+   * Публичные гонки маршрута каталога (routes-01): опубликованные и отменённые с коридором по `routeId`, новые окна
+   * сверху `(windowStartsAt desc, _id desc)` — индекс `races_route_idx`.
+   */
+  listPublicByRoute(
+    routeId: string,
+    after: CursorPosition<Date> | null,
+    limit: number,
+  ): Promise<RaceDoc[]> {
+    const query: Filter<RaceDoc> = {
+      'corridor.routeId': routeId,
+      status: { $in: ['published', 'cancelled'] },
+    };
+    if (after) {
+      query.$or = [
+        { windowStartsAt: { $lt: after.k } },
+        { windowStartsAt: after.k, _id: { $lt: after.id } },
+      ];
+    }
+    return this.c.races.find(query).sort({ windowStartsAt: -1, _id: -1 }).limit(limit).toArray();
+  }
+
   /** Страница панели: новые окна сверху (`windowStartsAt desc, _id desc`), `limit + 1` — признак продолжения. */
   listPanel(
     filter: PanelRaceFilter,

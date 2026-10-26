@@ -26,6 +26,7 @@ import { protocol } from './0016_protocol';
 import { rideReports } from './0017_ride_reports';
 import { disputes } from './0018_disputes';
 import { profileConsents } from './0019_profile_consents';
+import { routesCatalog } from './0020_routes_catalog';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
@@ -87,6 +88,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0017_ride_reports',
       '0018_disputes',
       '0019_profile_consents',
+      '0020_routes_catalog',
     ]);
   });
 
@@ -144,6 +146,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       races_panel_idx: plain({ windowStartsAt: -1, _id: -1 }),
       // 0009_races_season_public_idx (app-03): старый races_season_idx остаётся
       races_season_public_idx: plain({ seasonId: 1, windowEndsAt: 1, _id: 1 }),
+      // 0020_routes_catalog (routes-01): гонки маршрута каталога
+      races_route_idx: plain({ 'corridor.routeId': 1, windowStartsAt: -1, _id: -1 }),
     });
     const meta = h.db.collection<{ _id: string; version: number }>(RACES_COLLECTIONS.meta);
     await meta.deleteMany({});
@@ -342,6 +346,11 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         routes_owner_sha_unique: index({ ownerUserId: 1, sha256: 1 }, true),
         routes_list_idx: index({ origin: 1, status: 1, _id: -1 }),
         routes_owner_idx: index({ ownerUserId: 1, _id: -1 }),
+        // 0020_routes_catalog (routes-01): частичный индекс каталога
+        routes_catalog_idx: {
+          ...index({ 'catalog.publishedAt': -1, _id: -1 }),
+          partialFilterExpression: { 'catalog.publishedAt': { $type: 'date' } },
+        },
       },
       [ROUTES_COLLECTIONS.geometries]: {},
       [ROUTES_COLLECTIONS.sources]: {},
@@ -593,13 +602,61 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     };
     expect(await exists()).toHaveLength(1);
     expect(await indexesOf(PROFILE_COLLECTIONS.consentEvents)).toEqual(expected);
-    expect(migrations.at(-1)?.id).toBe('0019_profile_consents');
 
     await h.db.collection(PROFILE_COLLECTIONS.consentEvents).drop();
     await profileConsents.up(h.db);
     await profileConsents.up(h.db);
     expect(await exists()).toHaveLength(1);
     expect(await indexesOf(PROFILE_COLLECTIONS.consentEvents)).toEqual(expected);
+  });
+
+  it('0020_routes_catalog: частичный индекс каталога, индекс гонок маршрута, бэкфилл routes.catalog = null; повторный up — без изменений', async () => {
+    expect(migrations.at(-1)?.id).toBe('0020_routes_catalog');
+    const routeIndexes = await indexesOf(ROUTES_COLLECTIONS.routes);
+    expect(routeIndexes.routes_catalog_idx).toEqual({
+      key: { 'catalog.publishedAt': -1, _id: -1 },
+      unique: false,
+      partialFilterExpression: { 'catalog.publishedAt': { $type: 'date' } },
+      expireAfterSeconds: undefined,
+    });
+    const raceIndexes = await indexesOf(RACES_COLLECTIONS.races);
+    expect(raceIndexes.races_route_idx).toEqual({
+      key: { 'corridor.routeId': 1, windowStartsAt: -1, _id: -1 },
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+
+    // маршрут до слайса каталога (без поля) и опубликованный — бэкфилл трогает только первый
+    // (уникальный индекс `(ownerUserId, sha256)` — у каждого свой sha256)
+    const docs = h.db.collection<{ _id: string; sha256: string; catalog?: unknown }>(
+      ROUTES_COLLECTIONS.routes,
+    );
+    const catalog = {
+      city: 'minsk',
+      surfaces: ['asphalt'],
+      publishedAt: new Date('2026-10-27T10:00:00Z'),
+    };
+    await docs.insertMany([
+      { _id: 'old-route', sha256: 'a' },
+      { _id: 'catalog-route', sha256: 'b', catalog },
+    ]);
+    await routesCatalog.up(h.db);
+    await routesCatalog.up(h.db);
+    expect(await docs.findOne({ _id: 'old-route' })).toEqual({
+      _id: 'old-route',
+      sha256: 'a',
+      catalog: null,
+    });
+    expect(await docs.findOne({ _id: 'catalog-route' })).toEqual({
+      _id: 'catalog-route',
+      sha256: 'b',
+      catalog,
+    });
+    await docs.deleteMany({ _id: { $in: ['old-route', 'catalog-route'] } });
+
+    expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toEqual(routeIndexes);
+    expect(await indexesOf(RACES_COLLECTIONS.races)).toEqual(raceIndexes);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

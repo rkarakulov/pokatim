@@ -43,6 +43,9 @@ describe('AuditAction', () => {
       'disputes.decided',
       'disputes.series_viewed',
       'profile.name_reset',
+      'route.published',
+      'route.unpublished',
+      'route.catalog_updated',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',
