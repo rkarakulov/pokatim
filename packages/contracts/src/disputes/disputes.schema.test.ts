@@ -89,8 +89,12 @@ describe('справочники споров — состав и порядок
     ]);
   });
 
-  it('коды ошибок — в конце ErrorCode', () => {
-    expect(ErrorCode.options.slice(-2)).toEqual(['DISPUTE_ACTION_BLOCKED', 'DISPUTE_NOT_FOUND']);
+  it('коды ошибок — добавлены в конец ErrorCode (после кодов протокола; полный порядок — common.test)', () => {
+    const start = ErrorCode.options.indexOf('RESULTS_PUBLISH_BLOCKED');
+    expect(ErrorCode.options.slice(start + 1, start + 3)).toEqual([
+      'DISPUTE_ACTION_BLOCKED',
+      'DISPUTE_NOT_FOUND',
+    ]);
   });
 });
 
