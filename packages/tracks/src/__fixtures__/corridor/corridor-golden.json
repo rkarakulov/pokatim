@@ -21,7 +21,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "far-away.gpx": {
@@ -33,7 +34,8 @@
       "candidates": 0,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "gap-3km.gpx": {
@@ -56,7 +58,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "gates-10s.gpx": {
@@ -79,7 +82,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "loop-1lap.gpx": {
@@ -102,7 +106,8 @@
       "candidates": 2,
       "diagnostics": {
         "corridorLengthM": 6000,
-        "declaredDistanceM": 6000
+        "declaredDistanceM": 6000,
+        "geometryLimited": false
       }
     },
     "loop-2laps.gpx": {
@@ -125,7 +130,8 @@
       "candidates": 3,
       "diagnostics": {
         "corridorLengthM": 6000,
-        "declaredDistanceM": 6000
+        "declaredDistanceM": 6000,
+        "geometryLimited": false
       }
     },
     "loop-loiter.gpx": {
@@ -148,7 +154,8 @@
       "candidates": 2,
       "diagnostics": {
         "corridorLengthM": 6000,
-        "declaredDistanceM": 6000
+        "declaredDistanceM": 6000,
+        "geometryLimited": false
       }
     },
     "mid-start.gpx": {
@@ -160,7 +167,8 @@
       "candidates": 0,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "noisy.gpx": {
@@ -183,7 +191,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "outback-full.gpx": {
@@ -206,7 +215,8 @@
       "candidates": 2,
       "diagnostics": {
         "corridorLengthM": 20000,
-        "declaredDistanceM": 20000
+        "declaredDistanceM": 20000,
+        "geometryLimited": false
       }
     },
     "outback-turn-7km.gpx": {
@@ -229,7 +239,8 @@
       "candidates": 2,
       "diagnostics": {
         "corridorLengthM": 20000,
-        "declaredDistanceM": 20000
+        "declaredDistanceM": 20000,
+        "geometryLimited": false
       }
     },
     "reverse-linear.gpx": {
@@ -252,7 +263,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "reverse-loop.gpx": {
@@ -275,7 +287,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 6000,
-        "declaredDistanceM": 6000
+        "declaredDistanceM": 6000,
+        "geometryLimited": false
       }
     },
     "shortcut-450.gpx": {
@@ -298,7 +311,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 27000,
-        "declaredDistanceM": 27000
+        "declaredDistanceM": 27000,
+        "geometryLimited": false
       }
     },
     "shortcut-500.gpx": {
@@ -321,7 +335,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 27000,
-        "declaredDistanceM": 27000
+        "declaredDistanceM": 27000,
+        "geometryLimited": false
       }
     },
     "shortcut-800.gpx": {
@@ -344,7 +359,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 27000,
-        "declaredDistanceM": 27000
+        "declaredDistanceM": 27000,
+        "geometryLimited": false
       }
     },
     "sparse-30s.gpx": {
@@ -367,7 +383,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "sparse-60s.gpx": {
@@ -390,7 +407,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "sparse-winding-30s.gpx": {
@@ -413,7 +431,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 6902,
-        "declaredDistanceM": 6931
+        "declaredDistanceM": 6931,
+        "geometryLimited": false
       }
     },
     "stop-80pct.gpx": {
@@ -436,7 +455,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "tunnel-600m.gpx": {
@@ -459,7 +479,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "window-finish-at-close.gpx": {
@@ -482,7 +503,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "window-finish-before-close.gpx": {
@@ -505,7 +527,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "window-record-before.gpx": {
@@ -528,7 +551,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "window-start-before.gpx": {
@@ -551,7 +575,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "wobble-1_5pct.gpx": {
@@ -574,7 +599,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "wobble-3pct.gpx": {
@@ -597,7 +623,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 8000,
-        "declaredDistanceM": 8000
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
       }
     },
     "garmin-edge-ride.fit": {
@@ -620,7 +647,8 @@
       "candidates": 1,
       "diagnostics": {
         "corridorLengthM": 30100,
-        "declaredDistanceM": 30100
+        "declaredDistanceM": 30100,
+        "geometryLimited": false
       }
     }
   }

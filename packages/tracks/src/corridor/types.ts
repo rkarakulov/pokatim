@@ -50,8 +50,11 @@ export interface CorridorMatch {
   touchedCorridor: boolean;
   /** число проверенных кандидатов старта */
   candidates: number;
-  /** длина линии коридора (по ней ячейки и привязка) и заявленная длина маршрута, м (целые) — для журнала */
-  diagnostics: { corridorLengthM: number; declaredDistanceM: number };
+  /**
+   * длина линии коридора (по ней ячейки и привязка) и заявленная длина маршрута, м (целые); `geometryLimited` —
+   * исчерпан лимит работы точной геометрии хорд, часть хорд оценена консервативно (сход не занижен) — для журнала
+   */
+  diagnostics: { corridorLengthM: number; declaredDistanceM: number; geometryLimited: boolean };
 }
 
 /**

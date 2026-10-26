@@ -290,6 +290,7 @@ export function chordOutsideM(
   visits: VisitMarks,
   lows: Float64Array,
   highs: Float64Array,
+  work: { count: number },
 ): number {
   const ky = corridor.ky;
   const kx = ky * Math.cos((aLat * Math.PI) / 180);
@@ -323,6 +324,7 @@ export function chordOutsideM(
       visits.marks,
       nextVisit(visits),
     );
+    work.count += found;
     // ближайший отрезок к середине: кусок внутри, если d(середины) + половина ≤ w
     const mx = ax + vx / 2;
     const my = ay + vy / 2;

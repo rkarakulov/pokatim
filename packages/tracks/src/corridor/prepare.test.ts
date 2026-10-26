@@ -113,7 +113,8 @@ describe('prepareCorridor', () => {
     const highs = new Float64Array(segments);
     const [aLon, aLat] = at(499, 173);
     const [bLon, bLat] = at(339, 167);
-    const chord = () => chordOutsideM(corridor, aLon, aLat, bLon, bLat, out, visits, lows, highs);
+    const chord = () =>
+      chordOutsideM(corridor, aLon, aLat, bLon, bLat, out, visits, lows, highs, { count: 0 });
     expect(chord()).toBe(0);
     // граница Int32 меток: поколение сбрасывается, повторы не проходят
     visits.current = 0x7fffffff - 3;

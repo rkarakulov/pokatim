@@ -77,6 +77,7 @@ export function matchCorridor(
     diagnostics: {
       corridorLengthM: Math.round(corridor.lengthM),
       declaredDistanceM: Math.round(corridor.declaredDistanceM),
+      geometryLimited: engine.geometryLimited,
     },
   });
 
@@ -127,6 +128,11 @@ class Engine {
   private readonly visits: VisitMarks;
   private readonly lows: Float64Array;
   private readonly highs: Float64Array;
+  /** часть хорды вне коридора по шагу (полный шаг) — общая для всех кандидатов старта; NaN — не считалась */
+  private readonly chordCache: Float64Array;
+  private readonly chordWork = { count: 0 };
+  /** лимит работы точной геометрии исчерпан — дальше консервативная оценка */
+  geometryLimited = false;
 
   // без параметров-свойств: вход `parse` грузится Node со стиранием типов (только стираемый синтаксис)
   constructor(corridor: PreparedCorridor, track: ProjectedTrack) {
@@ -159,6 +165,7 @@ class Engine {
     this.visits = visitMarks(segments);
     this.lows = new Float64Array(segments);
     this.highs = new Float64Array(segments);
+    this.chordCache = new Float64Array(n).fill(Number.NaN);
   }
 
   /** Выходы из ворот старта вперёд по маршруту; подряд в пределах 60 с — последний; не больше 20. */
@@ -475,6 +482,21 @@ class Engine {
    * отрезков маршрута.
    */
   private chordOutside(k: number, from: number, to: number): number {
+    const full = from === 0 && to === 1;
+    if (full && !Number.isNaN(this.chordCache[k]!)) return this.chordCache[k]!;
+    if (full && this.chordWork.count >= CORRIDOR_POLICY.maxChordWork) {
+      // за лимитом — верхняя оценка: у каждого конца внутри коридора гарантированно (w − d) хорды
+      this.geometryLimited = true;
+      const w = this.corridor.widthM;
+      const inside = Math.max(0, w - this.track.d[k]!) + Math.max(0, w - this.track.d[k + 1]!);
+      return Math.max(0, this.track.step[k]! - inside);
+    }
+    const value = this.exactChordOutside(k, from, to);
+    if (full) this.chordCache[k] = value;
+    return value;
+  }
+
+  private exactChordOutside(k: number, from: number, to: number): number {
     const a = this.track.points[k]!;
     const b = this.track.points[k + 1]!;
     return chordOutsideM(
@@ -487,6 +509,7 @@ class Engine {
       this.visits,
       this.lows,
       this.highs,
+      this.chordWork,
     );
   }
 

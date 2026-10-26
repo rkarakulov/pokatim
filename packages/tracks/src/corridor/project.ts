@@ -54,7 +54,7 @@ export function projectTrack(
     if (k + 1 < count) step[k] = haversineMeters(kept[k]!, kept[k + 1]!);
   }
 
-  assertPlausible(kept, time, step);
+  assertPlausible(kept, time);
 
   const branches = collectBranches(kept, corridor, d);
   const s = viterbi(branches, step, corridor);
@@ -95,8 +95,9 @@ function collectBranches(
   const segments = corridor.lon.length - 1;
   const out = new Int32Array(segments);
   const stamp = new Int32Array(segments);
-  // сначала — радиус коридора (точка внутри: ветви дальше коридора не нужны), пусто — полный радиус поиска
-  const near = corridor.widthM;
+  // ступени радиуса: ближе всего — до 50 м, затем коридор, затем полный радиус поиска; ветви ищутся до первой
+  // ступени, на которой нашлась точка маршрута (ближайшая ветвь всегда среди найденных)
+  const reaches = [Math.min(corridor.widthM, 50), corridor.widthM];
   const radius = CORRIDOR_POLICY.searchRadius(corridor.widthM);
   const { lon: vLon, lat: vLat, chainage, segKx, segDx, segDy, segLength2, ky } = corridor;
   // K ближайших ветвей точки по (d, s) — без аллокаций на точку (200 000 точек — память потока worker)
@@ -111,10 +112,10 @@ function collectBranches(
     const { lon, lat } = points[k]!;
     let kept = 0;
     let minD2 = Infinity;
-    for (let pass = 0; pass < 2; pass += 1) {
-      const reach = pass === 0 ? near : radius;
+    for (let pass = 0; pass < 3; pass += 1) {
+      const reach = pass < 2 ? reaches[pass]! : radius;
       const radius2 = reach * reach;
-      const found = gridCandidates(corridor, lon, lat, reach, out, stamp, 2 * k + 1 + pass);
+      const found = gridCandidates(corridor, lon, lat, reach, out, stamp, 3 * k + 1 + pass);
       for (let c = 0; c < found; c += 1) {
         const j = out[c]!;
         const px = (lon - vLon[j]!) * segKx[j]!;
@@ -159,7 +160,7 @@ function collectBranches(
         keptD[at] = dc;
         if (kept < K) kept += 1;
       }
-      if (kept > 0 && minD2 <= near * near) break;
+      if (kept > 0 && minD2 <= reach * reach) break;
     }
     dOut[k] = Math.sqrt(minD2);
     if (kept === 0) continue;
@@ -262,25 +263,17 @@ function viterbi(branches: Branches, step: Float64Array, corridor: PreparedCorri
 }
 
 /**
- * Правдоподобие трека до привязки (иначе `TrackParseError('implausible')`, как у разбора):
- * - средняя скорость по **сглаженному** пути (точки через ≥ 10 с или ≥ 100 м — шум GPS между ними не копится)
- *   не выше `spikeSpeedMps` (108 км/ч) — честный быстрый проезд с шумом проходит;
- * - бюджет геометрии: сумма хорд между точками ≤ 2 × сглаженный путь + 20 м на точку (шум, стояние) — так работа
- *   точной геометрии хорд ограничена: ≤ 2 × 30 м/с × длительность + 20 м × точки.
+ * Правдоподобие трека до привязки: средняя скорость по **сглаженному** пути (точки через ≥ 10 с или ≥ 100 м — шум
+ * GPS между ними не копится) не выше `spikeSpeedMps` (108 км/ч), иначе `TrackParseError('implausible')`, как у
+ * разбора. Честный быстрый проезд с шумом, медленная запись и стоянки с дрожанием проходят.
  */
-function assertPlausible(
-  points: readonly ParsedPoint[],
-  time: Float64Array,
-  step: Float64Array,
-): void {
+function assertPlausible(points: readonly ParsedPoint[], time: Float64Array): void {
   const count = points.length;
   if (count < 2) return;
   const policy = CORRIDOR_POLICY;
   let smoothed = 0;
-  let chords = 0;
   let anchor = 0;
   for (let k = 1; k < count; k += 1) {
-    chords += step[k - 1]!;
     const last = k === count - 1;
     if (last || time[k]! - time[anchor]! >= policy.plausibilityIntervalS * 1000) {
       smoothed += haversineMeters(points[anchor]!, points[k]!);
@@ -295,9 +288,6 @@ function assertPlausible(
   }
   const seconds = Math.max(1, (time[count - 1]! - time[0]!) / 1000);
   if (smoothed > policy.spikeSpeedMps * seconds) throw new TrackParseError('implausible');
-  if (chords > policy.chordBudgetFactor * smoothed + policy.chordBudgetPerPointM * count) {
-    throw new TrackParseError('implausible');
-  }
 }
 
 /**

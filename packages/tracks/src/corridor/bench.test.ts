@@ -225,4 +225,35 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     expect(elapsedMs).toBeLessThanOrEqual(TIME_LIMIT_MS);
     process.stdout.write(`геометрия хорд на пределе бюджета: ${Math.round(elapsedMs)} мс\n`);
   }, 60_000);
+
+  // лимит работы точной геометрии: широкий плотный коридор, хорды 650 м раз в 22 с (сглаженная скорость < 30 м/с) —
+  // ≈ 1000 отрезков на хорду; после лимита — консервативная оценка, время ограничено
+  it('лимит работы геометрии хорд: широкий плотный коридор, 200 000 длинных хорд ≤ 3 с', () => {
+    const corners: Xy[] = [[0, 0]];
+    for (let i = 0; i < 184; i += 1) {
+      const [x, y] = corners[corners.length - 1]!;
+      corners.push(
+        [x + (i % 2 === 0 ? 1000 : -1000), y],
+        [x + (i % 2 === 0 ? 1000 : -1000), y + 90],
+      );
+    }
+    const corridor = prepareCorridor(corridorOf(corners, { widthM: 200 }));
+    const cycle: Xy[] = [
+      [300, 0],
+      [950, 0],
+      [300, 450],
+      [950, 450],
+      [600, 900],
+    ];
+    const points = Array.from({ length: POINTS }, (_, k): ParsedPoint => {
+      const [lon, lat] = at(k === 0 ? [0, 0] : cycle[(k - 1) % cycle.length]!);
+      return { lon, lat, time: new Date(T0 + k * 22_000) };
+    });
+    const startedAt = performance.now();
+    const match = matchCorridor(points, corridor, window);
+    const elapsedMs = performance.now() - startedAt;
+    expect(match.diagnostics.geometryLimited).toBe(true);
+    expect(elapsedMs).toBeLessThanOrEqual(TIME_LIMIT_MS);
+    process.stdout.write(`лимит геометрии хорд: ${Math.round(elapsedMs)} мс\n`);
+  }, 60_000);
 });

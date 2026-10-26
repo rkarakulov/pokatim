@@ -17,6 +17,7 @@ import {
   type Xy,
 } from './__testing__/synthetic.ts';
 import { matchCorridor } from './match.ts';
+import { CORRIDOR_POLICY } from './policy.ts';
 import { prepareCorridor } from './prepare.ts';
 import { projectTrack } from './project.ts';
 import type { MatchWindow } from './types.ts';
@@ -327,7 +328,11 @@ describe('выбросы и коридор', () => {
       WIDE,
     );
     expect(match.verdict).toBe('counted');
-    expect(match.diagnostics).toEqual({ corridorLengthM: 5000, declaredDistanceM: 5200 });
+    expect(match.diagnostics).toEqual({
+      corridorLengthM: 5000,
+      declaredDistanceM: 5200,
+      geometryLimited: false,
+    });
   });
 
   it('плотная линия (тысячи отрезков в одной ячейке) — быстрый отказ коридора', () => {
@@ -380,6 +385,20 @@ describe('недобранный путь и выход по хорде', () => 
     const under = brief(cutRide([9650, 0], [10_000, 550.5], 100), corridor50);
     expect(under.reasons).toEqual([]);
     expect(under.segment!.maxExcursionM).toBe(Math.round(exactOutside(550.5)));
+  });
+
+  it('лимит работы геометрии исчерпан: за лимитом оценка консервативная — срезка остаётся сходом', () => {
+    const policy = CORRIDOR_POLICY as { maxChordWork: number };
+    const saved = policy.maxChordWork;
+    policy.maxChordWork = 0;
+    try {
+      const over = brief(cutRide([9350, 0], [10_000, 650], 40), corridor50);
+      expect(over.match.diagnostics.geometryLimited).toBe(true);
+      expect(over.reasons).toEqual(['off_corridor']);
+      expect(over.segment!.maxExcursionM).toBeGreaterThanOrEqual(779);
+    } finally {
+      policy.maxChordWork = saved;
+    }
   });
 
   it('прореживание записи внутри гонки (интервалы 1/8/8 с) не скрывает срезку', () => {
@@ -504,13 +523,34 @@ describe('недобранный путь и выход по хорде', () => 
       expect(() => attempt(points)).toThrow(TrackParseError);
     });
 
-    it('подделка: хорды много длиннее сглаженного пути (зигзаг на месте) — implausible', () => {
+    // ревью pass 7: лимит работы геометрии не меняет вердикт честного трека
+    it('медленная запись 1 Гц (1 м/с) с шумом ±12 м — засчитан, лимит геометрии не сработал', () => {
       const points = timed(
-        Array.from({ length: 2000 }, (_, k): Xy => [1000 + (k % 400), (k % 2) * 90]),
-        Array.from({ length: 2000 }, (_, k) => k * 3.1),
+        Array.from({ length: 5401 }, (_, k): Xy => [-200 + k, 12 * (-1) ** k]),
+        Array.from({ length: 5401 }, (_, k) => k),
       );
-      expect(() => attempt(points)).toThrow(TrackParseError);
+      const match = attempt(points);
+      expect(match.reasons).toEqual([]);
+      expect(match.diagnostics.geometryLimited).toBe(false);
     });
+
+    it.each([2600, 5200])(
+      'проезд 8 м/с и остановка 2 ч с дрожанием ±12 м в x = %i — засчитан',
+      (stopX) => {
+        const before = steps(-200, stopX, 8).map((x): Xy => [x, 0]);
+        const stop = Array.from({ length: 7200 }, (_, k): Xy => [stopX, 12 * (-1) ** k]);
+        const after = stopX < 5000 ? steps(stopX + 8, 5200, 8).map((x): Xy => [x, 0]) : [];
+        const positions = [...before, ...stop, ...after];
+        const match = attempt(
+          timed(
+            positions,
+            positions.map((_, k) => k),
+          ),
+        );
+        expect(match.reasons).toEqual([]);
+        expect(match.diagnostics.geometryLimited).toBe(false);
+      },
+    );
   });
 
   /** Извилистая дорога y = 25·sin(x/30), коридор ±50 м: хорды между редкими точками остаются в коридоре. */
