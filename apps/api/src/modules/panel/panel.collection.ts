@@ -76,6 +76,8 @@ export interface AuditDetailsDoc {
   roleTo?: PanelRole;
   changedFields?: string[];
   cancelReason?: RaceCancelReason;
+  /** Модерация райдов (05b): число жалоб, закрытых действием. */
+  reportCount?: number;
 }
 
 /**

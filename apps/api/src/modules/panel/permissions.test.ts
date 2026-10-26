@@ -10,7 +10,11 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
 
   it('admin — все права; moderator — журнал и чтение гонок/сезонов; organizer — свои гонки', () => {
     expect([...ROLE_PERMISSIONS.admin].sort()).toEqual([...PERMISSIONS].sort());
-    expect([...ROLE_PERMISSIONS.moderator].sort()).toEqual(['audit.read', 'races.read']);
+    expect([...ROLE_PERMISSIONS.moderator].sort()).toEqual([
+      'audit.read',
+      'races.read',
+      'rides.moderate',
+    ]);
     expect([...ROLE_PERMISSIONS.organizer].sort()).toEqual(['races.manage', 'races.read']);
   });
 
@@ -23,9 +27,15 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
     expect(ROLE_PERMISSIONS.moderator.has('races.manage')).toBe(false);
   });
 
+  it('05b: модерация райдов — admin и moderator, не organizer', () => {
+    expect(ROLE_PERMISSIONS.admin.has('rides.moderate')).toBe(true);
+    expect(ROLE_PERMISSIONS.moderator.has('rides.moderate')).toBe(true);
+    expect(ROLE_PERMISSIONS.organizer.has('rides.moderate')).toBe(false);
+  });
+
   it('permissionsOf — в порядке контракта (стабильный ответ PanelMe)', () => {
     expect(permissionsOf('admin')).toEqual([...PERMISSIONS]);
-    expect(permissionsOf('moderator')).toEqual(['audit.read', 'races.read']);
+    expect(permissionsOf('moderator')).toEqual(['audit.read', 'races.read', 'rides.moderate']);
     expect(permissionsOf('organizer')).toEqual(['races.read', 'races.manage']);
   });
 

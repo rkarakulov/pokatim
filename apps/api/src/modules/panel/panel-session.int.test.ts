@@ -101,6 +101,7 @@ describe('POST /v1/admin/session/sign-in (AC2)', () => {
           'races.manage_any',
           'seasons.manage',
           'calendar.manage',
+          'rides.moderate',
         ],
       },
     });
