@@ -378,4 +378,14 @@ describe('строка таблицы', () => {
       a11y: '2-е место поровну, Вы, 1:30:00',
     });
   });
+
+  it('чужая строка с именем — имя и a11y с именем; своя с именем — «Вы» (AC8)', () => {
+    expect(resultRow(row({ place: 1, elapsedSec: 3600, riderName: 'Анна К.' }), false)).toEqual({
+      place: '1',
+      who: 'Анна К.',
+      time: '1:00:00',
+      a11y: '1, Анна К., 1:00:00',
+    });
+    expect(resultRow(row({ riderName: 'Анна К.' }), true).who).toBe('Вы');
+  });
 });

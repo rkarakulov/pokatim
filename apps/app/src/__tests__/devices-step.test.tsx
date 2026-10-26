@@ -36,7 +36,9 @@ beforeEach(() => {
   listDevices.mockResolvedValue(deviceList(garmin(), wahoo()));
   completeStep.mockResolvedValue({ surveyCompleted: true, devicesStepCompleted: true });
   // Главная после шага
-  jest.mocked(api.getProfile).mockResolvedValue({ rideReasons: [] });
+  jest
+    .mocked(api.getProfile)
+    .mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
   jest.mocked(api.listRaces).mockResolvedValue({ items: [], nextCursor: null });
   jest.mocked(api.listCalendar).mockResolvedValue({ items: [], nextCursor: null });
   jest.mocked(api.listTrackUploads).mockResolvedValue(uploadPage());

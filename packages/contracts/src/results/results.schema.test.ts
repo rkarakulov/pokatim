@@ -28,6 +28,7 @@ import {
   RACE_RESULTS_STATUSES,
   AttemptRequest,
   MyRaceEntry,
+  RaceResultRow,
   RaceResultsPage,
   RaceResultsQuery,
 } from './results.schema.ts';
@@ -127,6 +128,13 @@ describe('участие и результаты: приложение', () => {
       nextCursor: null,
     });
     expect(page.status).toBe('unknown');
+  });
+
+  it('строка таблицы: имя райдера — с согласием; старый сервер без поля — null', () => {
+    const row = { entryId: ID, place: 1, tied: false, elapsedSec: 3600 };
+    expect(RaceResultRow.parse(row).riderName).toBeNull();
+    expect(RaceResultRow.parse({ ...row, riderName: 'Анна К.' }).riderName).toBe('Анна К.');
+    expect(RaceResultRow.parse({ ...row, riderName: null }).riderName).toBeNull();
   });
 
   it('причины отказа — коды движка + implausible в конце', () => {
