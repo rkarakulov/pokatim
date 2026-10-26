@@ -1,0 +1,418 @@
+import { ATTEMPT_REJECTIONS } from '@pokatim/contracts';
+import type { Bounds } from '@pokatim/tracks';
+import { CORRIDOR_REJECTIONS } from '@pokatim/tracks/parse';
+import { describe, expect, it } from 'vitest';
+
+import type { RaceForResults } from '../races';
+import type { ActivityRef } from '../tracks';
+import type { AttemptSegmentDoc, RaceAttemptDoc, RaceEntryDoc } from './results.collection';
+import {
+  attemptClosedReason,
+  attemptHidden,
+  attemptMatched,
+  entryActions,
+  mayMatch,
+  pickBest,
+  rankRows,
+  RESULTS_POLICY,
+  resultStatus,
+  summarize,
+  uploadClosesAt,
+  verdictFields,
+} from './results.policy';
+
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+const at = (iso: string) => new Date(iso);
+
+const STARTS = at('2026-10-23T21:00:00Z');
+const ENDS = at('2026-10-26T20:59:00Z');
+const CLOSES = new Date(ENDS.getTime() + MIN);
+
+const race = (overrides: Partial<RaceForResults> = {}): RaceForResults => ({
+  id: 'race',
+  ownerUserId: 'owner',
+  status: 'published',
+  title: 'Коридор',
+  windowStartsAt: STARTS,
+  windowEndsAt: ENDS,
+  closesAt: CLOSES,
+  protocolPlannedAt: new Date(ENDS.getTime() + 48 * HOUR),
+  corridor: { routeId: 'route', widthM: 50, distanceM: 8000 },
+  lockedAt: null,
+  ...overrides,
+});
+
+const ROUTE: Bounds = [27.55, 53.9, 27.61, 53.95];
+const activity = (overrides: Partial<ActivityRef> = {}): ActivityRef => ({
+  id: 'a',
+  userId: 'u',
+  uploadId: 'up',
+  uploadCreatedAt: at('2026-10-25T10:00:00Z'),
+  isPrimary: true,
+  primaryId: 'a',
+  sport: 'cycling',
+  source: 'upload',
+  startedAt: at('2026-10-25T08:00:00Z'),
+  endedAt: at('2026-10-25T09:00:00Z'),
+  elapsedSec: 3600,
+  distanceM: 30_000,
+  bounds: [27.56, 53.91, 27.6, 53.94],
+  ...overrides,
+});
+
+const segment = (elapsedSec: number, startedAt: string): AttemptSegmentDoc => ({
+  startedAt: at(startedAt),
+  finishedAt: new Date(at(startedAt).getTime() + elapsedSec * 1000),
+  elapsedMs: elapsedSec * 1000,
+  elapsedSec,
+  distanceM: 8000,
+  offCorridorM: 0,
+  offCorridorShare: 0,
+  maxExcursionM: 0,
+  coverage: 1,
+  noisePoints: 0,
+});
+
+type AttemptState = Pick<
+  RaceAttemptDoc,
+  '_id' | 'origin' | 'status' | 'matched' | 'reasons' | 'segment'
+>;
+const attempt = (overrides: Partial<AttemptState> = {}): AttemptState => ({
+  _id: 'x',
+  origin: 'auto',
+  status: 'counted',
+  matched: true,
+  reasons: [],
+  segment: segment(3600, '2026-10-25T08:00:00Z'),
+  ...overrides,
+});
+
+const entry = (
+  overrides: Partial<Pick<RaceEntryDoc, 'status' | 'best' | 'summary'>> = {},
+): Pick<RaceEntryDoc, 'status' | 'best' | 'summary'> => ({
+  status: 'active',
+  best: null,
+  summary: { total: 0, pending: 0, counted: 0, rejectedShown: 0, failed: 0 },
+  ...overrides,
+});
+
+describe('сторож кодов отказа (AC27)', () => {
+  it('ATTEMPT_REJECTIONS = CORRIDOR_REJECTIONS движка в том же порядке + implausible', () => {
+    expect(ATTEMPT_REJECTIONS.slice(0, -1)).toEqual([...CORRIDOR_REJECTIONS]);
+    expect(ATTEMPT_REJECTIONS.at(-1)).toBe('implausible');
+  });
+});
+
+describe('uploadClosesAt (A5)', () => {
+  it('закрытие окна + 24 ч', () => {
+    expect(uploadClosesAt(race())).toEqual(new Date(CLOSES.getTime() + 24 * HOUR));
+  });
+});
+
+describe('mayMatch — предфильтр автоматической попытки', () => {
+  it('основная, в окне, в рамке, файл принят вовремя — да', () => {
+    expect(mayMatch(activity(), race(), ROUTE)).toBe(true);
+  });
+
+  it('границы окна: конец на старте окна — да, старт на closesAt — нет', () => {
+    expect(
+      mayMatch(activity({ startedAt: at('2026-10-23T20:00:00Z'), endedAt: STARTS }), race(), ROUTE),
+    ).toBe(true);
+    expect(mayMatch(activity({ endedAt: new Date(STARTS.getTime() - 1) }), race(), ROUTE)).toBe(
+      false,
+    );
+    expect(
+      mayMatch(
+        activity({
+          startedAt: new Date(CLOSES.getTime() - 1),
+          endedAt: at('2026-10-27T00:00:00Z'),
+        }),
+        race(),
+        ROUTE,
+      ),
+    ).toBe(true);
+    expect(
+      mayMatch(activity({ startedAt: CLOSES, endedAt: at('2026-10-27T00:00:00Z') }), race(), ROUTE),
+    ).toBe(false);
+  });
+
+  it('дубль, indoor, далеко от маршрута — нет', () => {
+    expect(mayMatch(activity({ isPrimary: false }), race(), ROUTE)).toBe(false);
+    expect(mayMatch(activity({ sport: 'cycling_indoor' }), race(), ROUTE)).toBe(false);
+    expect(mayMatch(activity({ bounds: [28.5, 54.5, 28.6, 54.6] }), race(), ROUTE)).toBe(false);
+  });
+
+  it('время приёма файла сервером: до closesAt + 24 ч — да, позже — нет', () => {
+    const last = new Date(uploadClosesAt(race()).getTime() - 1);
+    expect(mayMatch(activity({ uploadCreatedAt: last }), race(), ROUTE)).toBe(true);
+    expect(mayMatch(activity({ uploadCreatedAt: uploadClosesAt(race()) }), race(), ROUTE)).toBe(
+      false,
+    );
+  });
+});
+
+describe('видимость и вердикт (A8, §7.4)', () => {
+  it('matched: касание коридора, сегмент и не no_start/no_finish', () => {
+    const seg = segment(1, '2026-10-25T08:00:00Z');
+    expect(attemptMatched({ touchedCorridor: true, segment: seg, reasons: ['off_corridor'] })).toBe(
+      true,
+    );
+    expect(attemptMatched({ touchedCorridor: true, segment: seg, reasons: ['no_finish'] })).toBe(
+      false,
+    );
+    expect(attemptMatched({ touchedCorridor: false, segment: null, reasons: ['no_start'] })).toBe(
+      false,
+    );
+    expect(attemptMatched({ touchedCorridor: true, segment: null, reasons: ['no_start'] })).toBe(
+      false,
+    );
+  });
+
+  it('скрыты: снятые; auto без полного сегмента и implausible; явная — видна', () => {
+    expect(attemptHidden(attempt({ status: 'withdrawn' }))).toBe(true);
+    expect(
+      attemptHidden(attempt({ status: 'rejected', matched: false, reasons: ['no_start'] })),
+    ).toBe(true);
+    expect(
+      attemptHidden(attempt({ status: 'rejected', matched: false, reasons: ['implausible'] })),
+    ).toBe(true);
+    expect(
+      attemptHidden(attempt({ status: 'rejected', matched: true, reasons: ['off_corridor'] })),
+    ).toBe(false);
+    expect(
+      attemptHidden(
+        attempt({ origin: 'explicit', status: 'rejected', matched: false, reasons: ['no_start'] }),
+      ),
+    ).toBe(false);
+    expect(attemptHidden(attempt({ status: 'queued', matched: null }))).toBe(false);
+  });
+
+  it('verdictFields: засчитано — без причин; отказ — причины движка', () => {
+    const seg = segment(790, '2026-06-14T06:00:14.5Z');
+    expect(
+      verdictFields({ verdict: 'counted', reasons: [], touchedCorridor: true, segment: seg }),
+    ).toEqual({
+      status: 'counted',
+      reasons: [],
+      matched: true,
+    });
+    expect(
+      verdictFields({
+        verdict: 'rejected',
+        reasons: ['no_start'],
+        touchedCorridor: false,
+        segment: null,
+      }),
+    ).toEqual({
+      status: 'rejected',
+      reasons: ['no_start'],
+      matched: false,
+    });
+  });
+});
+
+describe('pickBest и сводка', () => {
+  it('лучшая — минимальное время; равенство — раньше старт, затем _id; незасчитанные не участвуют', () => {
+    const attempts = [
+      attempt({ _id: 'c', segment: segment(3700, '2026-10-25T08:00:00Z') }),
+      attempt({ _id: 'b', segment: segment(3600, '2026-10-25T09:00:00Z') }),
+      attempt({ _id: 'a', segment: segment(3600, '2026-10-25T09:00:00Z') }),
+      attempt({ _id: '0', status: 'rejected', segment: segment(100, '2026-10-25T07:00:00Z') }),
+    ];
+    expect(pickBest(attempts)?.attemptId).toBe('a');
+    expect(
+      pickBest([...attempts, attempt({ _id: 'z', segment: segment(3600, '2026-10-25T08:30:00Z') })])
+        ?.attemptId,
+    ).toBe('z');
+    expect(pickBest([attempt({ status: 'failed', segment: null })])).toBeNull();
+  });
+
+  it('summarize: ожидание, засчитанные, видимые отказы, провалы, всего', () => {
+    expect(
+      summarize([
+        attempt({ status: 'queued' }),
+        attempt({ status: 'checking' }),
+        attempt({ status: 'counted' }),
+        attempt({ status: 'rejected', matched: true, reasons: ['off_corridor'] }),
+        attempt({ status: 'rejected', matched: false, reasons: ['no_start'] }),
+        attempt({ status: 'failed' }),
+        attempt({ status: 'withdrawn' }),
+      ]),
+    ).toEqual({ total: 7, pending: 2, counted: 1, rejectedShown: 1, failed: 1 });
+  });
+});
+
+describe('resultStatus (§7.4, AC19)', () => {
+  const now = at('2026-10-25T12:00:00Z');
+  const late = uploadClosesAt(race());
+  const best = { attemptId: 'a', elapsedSec: 1, startedAt: now, finishedAt: now };
+  it('по порядку: withdrawn → provisional → pending → not_counted → dns → none', () => {
+    expect(resultStatus(null, race(), now)).toBe('none');
+    expect(resultStatus(entry({ status: 'withdrawn', best }), race(), now)).toBe('withdrawn');
+    expect(
+      resultStatus(
+        entry({ best, summary: { total: 2, pending: 1, counted: 1, rejectedShown: 0, failed: 0 } }),
+        race(),
+        now,
+      ),
+    ).toBe('provisional');
+    expect(
+      resultStatus(
+        entry({ summary: { total: 2, pending: 1, counted: 0, rejectedShown: 1, failed: 0 } }),
+        race(),
+        now,
+      ),
+    ).toBe('pending');
+    expect(
+      resultStatus(
+        entry({ summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 1 } }),
+        race(),
+        late,
+      ),
+    ).toBe('not_counted');
+    expect(resultStatus(entry(), race(), now)).toBe('none');
+    expect(resultStatus(entry(), race(), late)).toBe('dns');
+    expect(
+      resultStatus(
+        entry({ summary: { total: 1, pending: 0, counted: 0, rejectedShown: 0, failed: 0 } }),
+        race(),
+        late,
+      ),
+    ).toBe('dns');
+  });
+});
+
+describe('entryActions (D-37, C1/H2)', () => {
+  const before = new Date(STARTS.getTime() - HOUR);
+  const open = at('2026-10-25T12:00:00Z');
+  const closed = new Date(CLOSES.getTime() + HOUR);
+  const late = uploadClosesAt(race());
+
+  it('без заявки: заявиться можно в upcoming/open; без коридора, отменена, окно закрыто — причина', () => {
+    expect(entryActions(race(), 'upcoming', null, before)).toEqual({
+      canEnter: true,
+      canWithdraw: false,
+      canAddAttempt: false,
+      reasons: ['not_entered'],
+    });
+    expect(entryActions(race(), 'open', null, open).canEnter).toBe(true);
+    expect(entryActions(race({ corridor: null }), 'open', null, open).reasons).toEqual([
+      'no_corridor',
+      'not_entered',
+    ]);
+    expect(entryActions(race({ status: 'cancelled' }), 'cancelled', null, open).reasons).toEqual([
+      'cancelled',
+      'not_entered',
+    ]);
+    expect(entryActions(race(), 'closed', null, closed)).toMatchObject({
+      canEnter: false,
+      reasons: ['entries_closed', 'not_entered'],
+    });
+  });
+
+  it('отменённая заявка: ничего нельзя, причина withdrawn', () => {
+    expect(entryActions(race(), 'open', entry({ status: 'withdrawn' }), open)).toEqual({
+      canEnter: false,
+      canWithdraw: false,
+      canAddAttempt: false,
+      reasons: ['withdrawn'],
+    });
+  });
+
+  it('активная: отмена до закрытия окна, попытки — с открытия окна до срока загрузки и до предела', () => {
+    expect(entryActions(race(), 'upcoming', entry(), before)).toEqual({
+      canEnter: false,
+      canWithdraw: true,
+      canAddAttempt: false,
+      reasons: ['window_not_open'],
+    });
+    expect(entryActions(race(), 'open', entry(), open)).toEqual({
+      canEnter: false,
+      canWithdraw: true,
+      canAddAttempt: true,
+      reasons: [],
+    });
+    expect(entryActions(race(), 'closed', entry(), closed)).toEqual({
+      canEnter: false,
+      canWithdraw: false,
+      canAddAttempt: true,
+      reasons: ['window_closed'],
+    });
+    expect(entryActions(race(), 'closed', entry(), late).reasons).toEqual([
+      'window_closed',
+      'upload_closed',
+    ]);
+    const full = entry({
+      summary: {
+        total: RESULTS_POLICY.maxAttemptsPerEntry,
+        pending: 0,
+        counted: 0,
+        rejectedShown: 0,
+        failed: 0,
+      },
+    });
+    expect(entryActions(race(), 'open', full, open).reasons).toEqual(['attempt_limit']);
+  });
+
+  it('attemptClosedReason: до окна, после срока, отменена', () => {
+    expect(attemptClosedReason(race(), 'upcoming', before)).toBe('window_not_open');
+    expect(attemptClosedReason(race(), 'open', open)).toBeNull();
+    expect(attemptClosedReason(race(), 'closed', closed)).toBeNull();
+    expect(attemptClosedReason(race(), 'closed', late)).toBe('upload_closed');
+    expect(attemptClosedReason(race({ status: 'cancelled' }), 'cancelled', open)).toBe('cancelled');
+  });
+});
+
+describe('rankRows — места «1, =2, =2, 4» (A7, AC18)', () => {
+  const rows = (...times: number[]) => times.map((elapsedSec) => ({ elapsedSec }));
+
+  it('одна страница', () => {
+    expect(
+      rankRows(rows(3600, 3700, 3700, 3800), {
+        lessThanFirst: 0,
+        firstIndex: 0,
+        equalCounts: new Map([
+          [3600, 1],
+          [3800, 1],
+        ]),
+      }),
+    ).toEqual([
+      { place: 1, tied: false },
+      { place: 2, tied: true },
+      { place: 2, tied: true },
+      { place: 4, tied: false },
+    ]);
+  });
+
+  it('ничья на границе страниц сохраняет место и «=»', () => {
+    // страница 1 (limit 2): 3600, 3700 — у 3700 ещё одна строка на следующей странице
+    expect(
+      rankRows(rows(3600, 3700), {
+        lessThanFirst: 0,
+        firstIndex: 0,
+        equalCounts: new Map([
+          [3600, 1],
+          [3700, 2],
+        ]),
+      }),
+    ).toEqual([
+      { place: 1, tied: false },
+      { place: 2, tied: true },
+    ]);
+    // страница 2: 3700, 3800 — перед первой строкой 2 строки, меньше по времени — 1
+    expect(
+      rankRows(rows(3700, 3800), {
+        lessThanFirst: 1,
+        firstIndex: 2,
+        equalCounts: new Map([
+          [3700, 2],
+          [3800, 1],
+        ]),
+      }),
+    ).toEqual([
+      { place: 2, tied: true },
+      { place: 4, tied: false },
+    ]);
+  });
+});
