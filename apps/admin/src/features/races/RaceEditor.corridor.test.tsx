@@ -356,32 +356,89 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
   });
 
   it('обработка дольше 5 мин — опрос прекращается, текст «проверьте позже»', async () => {
-    const { queryClient } = await newRace();
-    await waitFor(() => expect(corridorSelect().options).toHaveLength(2));
-    const processing = route({ id: NEW_ROUTE_ID, status: 'processing', line: [] });
-    mocked.uploadRoute.mockResolvedValue(processing);
-    mocked.getRoute.mockResolvedValue(processing);
-    chooseGpx();
-    const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
-    await screen.findByText('Обрабатываем маршрут…');
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await newRace();
+      await waitFor(() => expect(corridorSelect().options).toHaveLength(2));
+      const processing = route({ id: NEW_ROUTE_ID, status: 'processing', line: [] });
+      mocked.uploadRoute.mockResolvedValue(processing);
+      mocked.getRoute.mockResolvedValue(processing);
+      chooseGpx();
+      const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
+      await screen.findByText('Обрабатываем маршрут…');
 
-    const later = Date.now() + 6 * 60 * 1000;
-    vi.spyOn(Date, 'now').mockReturnValue(later);
-    await act(async () => {
-      await queryClient.refetchQueries({ queryKey: ['admin', 'routes', 'item', NEW_ROUTE_ID] });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 10_000);
+      });
+      expect(
+        screen.getByText(
+          'Маршрут обрабатывается дольше обычного — проверьте позже или загрузите файл ещё раз',
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByText('Обрабатываем маршрут…')).toBeNull();
+      const calls = mocked.getRoute.mock.calls.length;
+      expect(calls).toBeGreaterThan(100);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(mocked.getRoute.mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('постоянные ошибки опроса — через 5 мин запросы прекращаются, текст «проверьте позже»', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await newRace();
+      await waitFor(() => expect(corridorSelect().options).toHaveLength(2));
+      mocked.uploadRoute.mockResolvedValue(
+        route({ id: NEW_ROUTE_ID, status: 'processing', line: [] }),
+      );
+      mocked.getRoute.mockRejectedValue(networkError());
+      chooseGpx();
+      const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
+      await screen.findByText('Обрабатываем маршрут…');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 10_000);
+      });
+      expect(
+        screen.getByText(
+          'Маршрут обрабатывается дольше обычного — проверьте позже или загрузите файл ещё раз',
+        ),
+      ).toBeTruthy();
+      const calls = mocked.getRoute.mock.calls.length;
+      expect(calls).toBeGreaterThan(10);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(mocked.getRoute.mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('список маршрутов: все страницы без скрытого предела; зацикленный курсор — ошибка с повтором, не «полный» список', async () => {
+    const page = (n: number) => ({
+      items: [
+        summary({ id: `01890a5d-ac96-774b-bcce-${String(n).padStart(12, '0')}`, title: `М${n}` }),
+      ],
+      nextCursor: n < 60 ? `page-${n + 1}` : null,
     });
-    expect(
-      await screen.findByText(
-        'Маршрут обрабатывается дольше обычного — проверьте позже или загрузите файл ещё раз',
-      ),
-    ).toBeTruthy();
-    expect(screen.queryByText('Обрабатываем маршрут…')).toBeNull();
-    const route_ = queryClient
-      .getQueryCache()
-      .find({ queryKey: ['admin', 'routes', 'item', NEW_ROUTE_ID] });
-    const interval = route_?.observers[0]?.options.refetchInterval;
-    expect(typeof interval === 'function' ? interval(route_!) : interval).toBe(false);
+    mocked.listRoutes.mockImplementation((params = {}) =>
+      Promise.resolve(page(params.cursor ? Number(params.cursor.slice(5)) : 1)),
+    );
+    await newRace();
+    await waitFor(() => expect(corridorSelect().options).toHaveLength(61));
+    cleanup();
+
+    mocked.listRoutes.mockResolvedValue({ items: [summary()], nextCursor: 'same' });
+    await renderApp('/races/new');
+    expect(await screen.findByText('Не удалось загрузить маршруты')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
   });
 
   it('превью: ошибка загрузки маршрута — текст и повтор', async () => {

@@ -126,8 +126,10 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
   const [title, setTitle] = useState('');
   const [uploadError, setUploadError] = useState<string>();
   const [pendingId, setPendingId] = useState<string>();
-  /** Момент начала опроса загруженного маршрута (мс) — предел ожидания `ROUTE_POLL_MAX_MS`. */
+  /** Момент начала опроса загруженного маршрута (мс) — предел ожидания `ROUTE_POLL_MAX_MS` по часам, не по ответам. */
   const [pendingSince, setPendingSince] = useState(0);
+  /** Предел ожидания истёк (таймер): опрос остановлен и при сплошных ошибках запросов. */
+  const [pollExpired, setPollExpired] = useState(false);
 
   // опрос загруженного маршрута: каждые 2 с, пока `processing`; три сбоя подряд (повторы запроса) — баннер
   const poll = useQuery({
@@ -137,12 +139,18 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
     retryDelay: ROUTE_POLL_MS,
     refetchInterval: (query) => {
       if (query.state.data && query.state.data.status !== 'processing') return false;
-      return query.state.dataUpdatedAt - pendingSince >= ROUTE_POLL_MAX_MS ? false : ROUTE_POLL_MS;
+      return Date.now() - pendingSince >= ROUTE_POLL_MAX_MS ? false : ROUTE_POLL_MS;
     },
   });
   const pending = pendingId ? poll.data : undefined;
-  const pollExpired =
-    pending?.status === 'processing' && poll.dataUpdatedAt - pendingSince >= ROUTE_POLL_MAX_MS;
+  useEffect(() => {
+    if (pendingId === undefined) return;
+    const timer = setTimeout(
+      () => setPollExpired(true),
+      Math.max(pendingSince + ROUTE_POLL_MAX_MS - Date.now(), 0),
+    );
+    return () => clearTimeout(timer);
+  }, [pendingId, pendingSince]);
   // маршрут готов — один раз выбрать его в поле и обновить список вариантов
   const selected = useRef<string>(undefined);
   useEffect(() => {
@@ -159,6 +167,7 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
       // новый цикл загрузки: тот же файл после «Без коридора» снова выбирает свой маршрут
       selected.current = undefined;
       setPendingSince(Date.now());
+      setPollExpired(false);
       queryClient.setQueryData(routeQuery(route.id).queryKey, route);
       setFile(undefined);
       setPendingId(route.id);
@@ -281,7 +290,7 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
             : t('admin.races.corridor.processing')}
         </p>
       ) : null}
-      {pendingId && poll.isError ? (
+      {pendingId && poll.isError && !pollExpired ? (
         <Banner tone="warning" role="status">
           {t('admin.races.corridor.pollFailed')}
         </Banner>
