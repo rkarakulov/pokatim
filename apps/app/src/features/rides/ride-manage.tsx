@@ -1,8 +1,15 @@
-import { apiErrorOf } from '@pokatim/api-client';
+import { apiErrorOf, isNetworkError } from '@pokatim/api-client';
 import { Uuid, type RideDetailForOrganizer } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { AsyncContent, EmptyState, SkeletonHeroCard, useTheme } from '@rkarakulov/ui';
+import {
+  AsyncContent,
+  Banner,
+  EmptyState,
+  SkeletonHeroCard,
+  TextAction,
+  useTheme,
+} from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -11,6 +18,32 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DetailHeader } from '@/components/detail-header';
 
 import { useRideForViewer } from './queries';
+
+/** Сбой обновления `me` при уже показанном экране управления. */
+export interface RefreshFailure {
+  error: unknown;
+  retry: () => void;
+}
+
+/**
+ * Ошибка обновления над формой правки или отмены (§4.12): данные и введённое остаются, «Повторить» — новый запрос
+ * `me`. Кто запустил запрос — неважно (карточка под формой в стеке обновляется по фокусу и сети тем же ключом).
+ */
+export function RefreshFailedBanner({ failure }: { failure: RefreshFailure | undefined }) {
+  if (!failure) return null;
+  return (
+    <View style={styles.failure}>
+      <Banner
+        tone="warning"
+        title={t(isNetworkError(failure.error) ? 'state.errorTitle' : 'state.failedTitle')}
+        message={t('state.failedMessage')}
+      />
+      <View style={styles.start}>
+        <TextAction label={t('state.retry')} onPress={failure.retry} />
+      </View>
+    </View>
+  );
+}
 
 /**
  * Загрузка своего райда для правки и отмены: `me` (роль и `version` с сервера). Не организатор, прошёл или отменён
@@ -26,6 +59,7 @@ export function OwnRide({
   children: (
     ride: RideDetailForOrganizer,
     reload: () => Promise<RideDetailForOrganizer>,
+    refreshFailure: RefreshFailure | undefined,
   ) => ReactNode;
 }) {
   const theme = useTheme();
@@ -61,7 +95,10 @@ export function OwnRide({
     // права — по первому ответу: после своей отмены `canManage` гаснет, а экран должен успеть уйти на карточку
     const allowed = managed ?? viewer.canManage;
     if (managed === undefined) setManaged(viewer.canManage);
-    return allowed && 'version' in ride ? children(ride, reload) : notFound;
+    const refreshFailure = me.isError
+      ? { error: me.error, retry: () => void me.refetch() }
+      : undefined;
+    return allowed && 'version' in ride ? children(ride, reload, refreshFailure) : notFound;
   }
   return (
     <SafeAreaView
@@ -79,6 +116,8 @@ export function OwnRide({
 }
 
 const styles = StyleSheet.create({
+  failure: { gap: space.s2 },
+  start: { alignItems: 'flex-start' },
   safeArea: { flex: 1 },
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
 });

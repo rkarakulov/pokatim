@@ -16,12 +16,20 @@ import { DocumentTitle } from '@/components/document-title';
 import { domainLabel } from '@/lib/minsk-format';
 
 import { rideActionErrorText, useCancelRide } from './queries';
+import { RefreshFailedBanner, type RefreshFailure } from './ride-manage';
 
 /**
  * «Отменить райд» (Q6): причина из справочника обязательна (без свободного текста), destructive-действие выключено,
  * пока причина не выбрана; пояснение — участники увидят отмену и причину. После — карточка с баннером отмены.
  */
-export function RideCancelScreen({ ride }: { ride: RideDetailForOrganizer }) {
+export function RideCancelScreen({
+  ride,
+  refreshFailure,
+}: {
+  ride: RideDetailForOrganizer;
+  /** Фоновое обновление `me` упало — баннер с повтором, выбор причины остаётся. */
+  refreshFailure?: RefreshFailure;
+}) {
   const theme = useTheme();
   const router = useRouter();
   const cancel = useCancelRide(ride.id);
@@ -47,6 +55,7 @@ export function RideCancelScreen({ ride }: { ride: RideDetailForOrganizer }) {
       <DocumentTitle title={`${t('rides.cancel.title')} — ${t('app.name')}`} />
       <DetailHeader title={t('rides.cancel.title')} fallback={`/rides/${ride.id}`} />
       <ScrollView testID="ride-cancel" contentContainerStyle={styles.content}>
+        <RefreshFailedBanner failure={refreshFailure} />
         <Text style={[textStyle('titleSm'), { color: theme.text.primary }]}>{ride.title}</Text>
         <Text style={[textStyle('label'), { color: theme.text.secondary }]}>
           {t('rides.cancel.reason')}

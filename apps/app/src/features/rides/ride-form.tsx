@@ -41,6 +41,7 @@ import { retryAfterSec, serverFieldErrors } from '@/features/auth/error-messages
 
 import { sortCitiesByLabel } from './filters';
 import { cityLabel } from './format';
+import { RefreshFailedBanner, type RefreshFailure } from './ride-manage';
 import { useCreateRide, useUpdateRide } from './queries';
 
 type FieldName = keyof CreateRideFormValues;
@@ -232,11 +233,14 @@ function CityPicker({
 export function RideFormScreen({
   ride,
   onReload,
+  refreshFailure,
 }: {
   /** Правка: карточка организатора (с `version`); нет — создание. */
   ride?: RideDetailForOrganizer;
   /** Правка: перезагрузить райд после 409 (`CONFLICT`). */
   onReload?: () => Promise<RideDetailForOrganizer>;
+  /** Правка: фоновое обновление `me` упало — баннер над формой, введённое и `version` загрузки не меняются. */
+  refreshFailure?: RefreshFailure;
 }) {
   const theme = useTheme();
   const router = useRouter();
@@ -344,6 +348,7 @@ export function RideFormScreen({
       <DocumentTitle title={`${title} — ${t('app.name')}`} />
       <DetailHeader title={title} fallback={ride ? `/rides/${ride.id}` : '/rides'} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <RefreshFailedBanner failure={refreshFailure} />
         {conflict ? (
           <View style={styles.stack}>
             <Banner tone="warning" message={t('rides.form.conflict')} />

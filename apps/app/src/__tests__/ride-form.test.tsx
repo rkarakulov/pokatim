@@ -3,6 +3,7 @@ import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { RideDetailForOrganizer, RideView } from '@pokatim/contracts';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { Stack } from 'expo-router';
 import { Text } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
@@ -11,6 +12,7 @@ import { api } from '@/lib/api';
 
 import CancelRideRoute from '../app/rides/cancel/[id]';
 import EditRideRoute from '../app/rides/edit/[id]';
+import RideRoute from '../app/rides/[id]';
 import NewRideRoute from '../app/rides/new';
 import { liveSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
@@ -314,6 +316,48 @@ describe('«Изменить райд» (AC4)', () => {
       expect(updateRide).toHaveBeenLastCalledWith(liveSession.accessToken, ID, {
         description: 'Новое описание',
         version: 3,
+      }),
+    );
+  });
+
+  it('карточка под формой: её фоновое обновление me упало — баннер над формой, поля и version те же, «Повторить» работает', async () => {
+    jest.mocked(api.getRide).mockResolvedValue(ride);
+    // стек, как в приложении: карточка остаётся смонтированной под формой
+    const router = await renderRouter(
+      {
+        _layout: () => <Stack screenOptions={{ headerShown: false }} />,
+        ...routes,
+        'rides/[id]': RideRoute,
+      },
+      { initialUrl: `/rides/${ID}`, wrapper: createQueryWrapper() },
+    );
+    await fireEvent.press(await screen.findByRole('button', { name: 'Изменить' }));
+    expect(router.getPathname()).toBe(`/rides/edit/${ID}`);
+    await screen.findByDisplayValue('Кофе-райд на море');
+    expect(screen.queryAllByTestId('ride-detail', { includeHiddenElements: true })).toHaveLength(1);
+    await type('Название', 'Моё название');
+
+    // приложение свернули и вернули: карточка (тот же ключ me) обновляется и получает 500
+    getRideForViewer.mockRejectedValueOnce(
+      new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }),
+    );
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.getByDisplayValue('Моё название')).toBeOnTheScreen();
+
+    getRideForViewer.mockResolvedValue({ ...organizerView, ride: { ...ride, version: 3 } });
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(screen.queryByText('Не удалось загрузить')).toBeNull());
+    expect(screen.getByDisplayValue('Моё название')).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(updateRide).toHaveBeenCalledWith(liveSession.accessToken, ID, {
+        title: 'Моё название',
+        version: 2,
       }),
     );
   });

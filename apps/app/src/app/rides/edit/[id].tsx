@@ -9,7 +9,9 @@ export default function EditRideRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   return (
     <OwnRide id={String(id)} title={t('rides.form.editTitle')}>
-      {(ride, reload) => <RideFormScreen ride={ride} onReload={reload} />}
+      {(ride, reload, refreshFailure) => (
+        <RideFormScreen ride={ride} onReload={reload} refreshFailure={refreshFailure} />
+      )}
     </OwnRide>
   );
 }

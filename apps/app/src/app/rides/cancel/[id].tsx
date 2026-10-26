@@ -9,7 +9,9 @@ export default function CancelRideRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   return (
     <OwnRide id={String(id)} title={t('rides.cancel.title')}>
-      {(ride) => <RideCancelScreen ride={ride} />}
+      {(ride, _reload, refreshFailure) => (
+        <RideCancelScreen ride={ride} refreshFailure={refreshFailure} />
+      )}
     </OwnRide>
   );
 }
