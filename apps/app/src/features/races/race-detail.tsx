@@ -39,7 +39,8 @@ import { RaceDisputes } from './disputes/race-disputes';
 import { cancelMessage, formatRaceWindow, raceCardLine } from './format';
 import { RaceParticipation } from './participation/race-participation';
 import { showsResultsTable } from './participation-format';
-import { useMyRaceEntry, useRace, useRaceResults } from './queries';
+import { useMyRaceEntry, useRace, useRaceResults, useRaceRouteRefetch } from './queries';
+import { RaceRouteMap } from './race-route-map';
 import { RaceResultsTable } from './results-table';
 
 export const raceDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
@@ -128,6 +129,8 @@ function RaceDetailView({
           {t('races.detail.corridorValue', { width: corridor.widthM })}
         </Row>
       ) : null}
+      {/* карта маршрута с коридором (maps-01): без коридора — ничего */}
+      <RaceRouteMap race={race} />
       <Row label={t('races.detail.distance')}>
         {corridor
           ? t('races.detail.distanceByRoute', {
@@ -197,14 +200,28 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
   const tableShown = race.data !== undefined && showsResultsTable(race.data);
   const results = useRaceResults(id, valid && tableShown);
   const now = useMinskClockAfterMount([race.dataUpdatedAt, entry.dataUpdatedAt]);
+  // карта коридора (maps-01): правка коридора опубликованной гонки — карта тоже обновляется
+  const routeRefetch = useRaceRouteRefetch(id);
+  const hasCorridor = Boolean(race.data?.corridor);
   const refetchers = useMemo(
     () => [
       race.refetch,
+      ...(hasCorridor ? [routeRefetch] : []),
       ...(signedIn ? [entry.refetch] : []),
       ...(entered ? [disputes.refetch] : []),
       ...(tableShown ? [results.refetch] : []),
     ],
-    [race.refetch, signedIn, entry.refetch, entered, disputes.refetch, tableShown, results.refetch],
+    [
+      race.refetch,
+      hasCorridor,
+      routeRefetch,
+      signedIn,
+      entry.refetch,
+      entered,
+      disputes.refetch,
+      tableShown,
+      results.refetch,
+    ],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   const notFound =

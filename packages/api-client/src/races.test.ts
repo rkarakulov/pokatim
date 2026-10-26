@@ -205,6 +205,28 @@ describe('приложение: публичное чтение без Authoriza
     await expect(missing.api.getRace(ID)).rejects.toMatchObject({ status: 404 });
   });
 
+  it('карта маршрута гонки (maps-01): путь, encodeURIComponent, без токена, разбор; 404 — ApiHttpError', async () => {
+    const map = {
+      line: [
+        [27.55, 53.9],
+        [27.56, 53.91],
+      ],
+      start: [27.55, 53.9],
+      finish: [27.56, 53.91],
+      bounds: [27.55, 53.9, 27.56, 53.91],
+      widthM: 50,
+    };
+    const ok = app(200, map);
+    await expect(ok.api.getRaceRoute('a/b')).resolves.toEqual(map);
+    expect(ok.calls[0]?.url).toBe('https://api.test/v1/races/a%2Fb/route');
+    expect(ok.calls[0]?.method).toBe('GET');
+    expect(ok.calls[0]?.headers.has('authorization')).toBe(false);
+    const broken = app(200, { ...map, line: [[27.55, 53.9]] });
+    await expect(broken.api.getRaceRoute(ID)).rejects.toThrow();
+    const missing = app(404, { code: 'NOT_FOUND', message: 'Не найдено' });
+    await expect(missing.api.getRaceRoute(ID)).rejects.toMatchObject({ status: 404 });
+  });
+
   it('сезоны: список, сезон по id, гонки сезона — путь, encodeURIComponent, без токена', async () => {
     const card = { id: ID, name: 'Сезон 2026', startsOn: '2026-04-01', endsOn: '2026-10-31' };
     const list = app(200, { items: [{ ...card, phase: 'archived' }] });

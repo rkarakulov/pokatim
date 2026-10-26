@@ -2,6 +2,7 @@ import { PanelRoute } from '@pokatim/contracts';
 
 import { RouteProcessingProcessor } from '../src/modules/routes/route-processing.processor';
 import { routesCollections } from '../src/modules/routes/routes.collection';
+import { RoutesRepository } from '../src/modules/routes/routes.repository';
 import type { Harness } from './harness';
 import { panelCookie } from './panel';
 import { fixture, type UploadResult } from './tracks';
@@ -12,6 +13,9 @@ export const ROUTES = '/v1/admin/routes';
 
 /** Коллекции модуля `routes` тестовой БД. */
 export const routesDb = (h: Harness) => routesCollections(h.db);
+
+/** Репозиторий `routes` приложения стенда — для spy на чтения (кэш геометрии). */
+export const routesRepository = (h: Harness) => h.app.get(RoutesRepository, { strict: false });
 
 /** `POST /v1/admin/routes?title=` сырыми байтами (`application/octet-stream` по умолчанию) с cookie панели. */
 export async function uploadRoute(

@@ -7,6 +7,7 @@ import {
   type RaceDetail,
   type RaceListQuery,
   type RacePage,
+  type RaceRouteMap,
   type SeasonCard,
   type SeasonList,
   type SeasonRaceListQuery,
@@ -16,6 +17,7 @@ import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
+import { ROUTE_GEOMETRY, type RouteGeometry } from '../routes';
 import type { RaceDoc, SeasonDoc } from './races.collection';
 import { RACE_POLICY, racePhase, seasonPhase } from './races.policy';
 import { type InstantRange, RacesRepository } from './races.repository';
@@ -47,6 +49,7 @@ export class RacesPublicService {
   constructor(
     private readonly repository: RacesRepository,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(ROUTE_GEOMETRY) private readonly routes: RouteGeometry,
   ) {}
 
   async list(query: RaceListQuery): Promise<RacePage> {
@@ -73,13 +76,31 @@ export class RacesPublicService {
   }
 
   async get(id: string): Promise<RaceDetail> {
-    const race = await this.repository.findPublic(id);
-    if (!race) throw domainError('NOT_FOUND', 404);
+    const race = await this.publicRace(id);
     const [card] = await this.cards([race], this.clock.now());
     if (!card) throw domainError('NOT_FOUND', 404);
     // допуск коридора без маршрута и координат (Q8: геометрия наружу — с картой)
     const corridor = race.corridor ? { widthM: race.corridor.widthM } : null;
     return { ...card, description: race.description, corridor };
+  }
+
+  /**
+   * Линия показа коридора для карты (ADR-0014): видимость — как у карточки; без коридора или готового маршрута — тот
+   * же `404`. Ответ — явный список полей: без `routeId`, линии сверки, sha256 и названия маршрута.
+   */
+  async route(id: string): Promise<RaceRouteMap> {
+    const race = await this.publicRace(id);
+    const geometry = race.corridor
+      ? await this.routes.displayGeometry(race.corridor.routeId)
+      : null;
+    if (!race.corridor || !geometry) throw domainError('NOT_FOUND', 404);
+    return {
+      line: geometry.line,
+      start: geometry.start,
+      finish: geometry.finish,
+      bounds: geometry.bounds,
+      widthM: race.corridor.widthM,
+    };
   }
 
   async currentSeason(): Promise<CurrentSeasonResponse> {
@@ -120,6 +141,13 @@ export class RacesPublicService {
           ? encodeCursor(last.windowEndsAt.toISOString(), last._id)
           : null,
     };
+  }
+
+  /** Опубликованная или отменённая гонка; иначе `404` (одна точка видимости публичного чтения). */
+  private async publicRace(id: string): Promise<RaceDoc> {
+    const race = await this.repository.findPublic(id);
+    if (!race) throw domainError('NOT_FOUND', 404);
+    return race;
   }
 
   private async cards(races: readonly RaceDoc[], now: Date): Promise<RaceCard[]> {

@@ -61,6 +61,12 @@ Expo Go не открывает схему `pokatim://`. Для проверки
 - Deep link в dev: Expo Go — `exp://127.0.0.1:8081/--/races/<id>` (симулятор: `xcrun simctl openurl booted …`,
   Android: `adb shell am start -a android.intent.action.VIEW -d …`); dev/preview-сборка — `pokatim://races/<id>`.
   Universal/app links (https) — слайс 5 онбординга.
+- **Карта маршрута (maps-01):** гонка с коридором и готовым маршрутом + `EXPO_PUBLIC_MAP_STYLE_LIGHT/DARK` в
+  `apps/app/.env` (перезапуск Metro с `-c`: env вшивается в бандл). Web — `pnpm --filter @pokatim/app dev`, `w`
+  (скрипт `dev` кладёт воркер `maplibre-gl` в `public/`). Native: нативный модуль MapLibre в Expo Go нет — нужна
+  dev-сборка (`eas build --profile development` или `npx expo run:ios|android` — локально генерирует `ios/`/`android/`,
+  в git их не коммитим). В Expo Go и dev-клиенте, собранном до maps-01, карточка открывается **без карты** (нет
+  нативных модулей `MLRNCameraModule`/`MLRNMapViewModule` — пакет не загружается, как при пустом env).
 
 ## Календарь стартов с данными (блок 04)
 
@@ -162,6 +168,7 @@ Expo Go не открывает схему `pokatim://`. Для проверки
 | `WEB_ORIGIN` | `http://127.0.0.1:8080` | публичный origin сайта для `og:url`; не задан — `og:url` не выводится |
 | `WEB_DIST` | `dist` | каталог сборки (e2e dev-сборки — `dist-dev`) |
 | `EXPO_PUBLIC_WEB_ORIGIN` | не задан | только native: публичный origin web-карточек для «Поделиться» (кофе-райды); не задан — кнопки нет, web берёт адрес страницы |
+| `EXPO_PUBLIC_MAP_STYLE_LIGHT`, `EXPO_PUBLIC_MAP_STYLE_DARK` | не заданы (`.env.example` — OpenFreeMap `…/styles/positron`, `…/styles/dark`) | URL стилей карты маршрута гонки (ADR-0014): нужны **при сборке** (клиентский бандл; SSR их не читает — карта только в браузере); не заданы — карты нет. Dev EC2 — `build-args` в `deploy-dev.yml` |
 
 `EXPO_PUBLIC_*` попадают в клиентский бандл — только публичные значения; серверные — без этого префикса.
 

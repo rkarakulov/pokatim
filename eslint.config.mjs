@@ -12,6 +12,8 @@ const preset = await createEslintConfig({
   // dist-dev и отчёты Playwright — артефакты web-сборки и e2e
   ignores: [
     'apps/app/dist-dev/**',
+    // копия воркера maplibre-gl из пакета (scripts/copy-map-worker.ts), не в git
+    'apps/app/public/maplibre-gl-worker.mjs',
     'apps/app/test-results/**',
     'apps/app/playwright-report/**',
     'apps/admin/test-results/**',

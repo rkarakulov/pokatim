@@ -44,5 +44,7 @@ example
 
 # web
 dist-dev/
+# воркер maplibre-gl — копия из пакета (scripts/copy-map-worker.ts)
+public/maplibre-gl-worker.mjs
 test-results/
 playwright-report/

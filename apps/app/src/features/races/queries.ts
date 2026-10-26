@@ -4,6 +4,7 @@ import type {
   RaceDetail,
   RacePage,
   RaceResultsPage,
+  RaceRouteMap,
   SeasonCard,
 } from '@pokatim/contracts';
 import {
@@ -13,7 +14,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { apiErrorCode } from '@/features/auth/error-messages';
@@ -88,6 +89,32 @@ export function useRace(id: string, seed: RaceDetail | undefined, enabled: boole
     staleTime: PUBLIC_STALE_MS,
     enabled,
   });
+}
+
+/**
+ * Линия показа коридора для карты (ADR-0014): только клиент (в SSR не попадает). Коридор опубликованной гонки до
+ * старта правится — pull-to-refresh карточки перезапрашивает (`useRaceRouteRefetch`). 404 (нет коридора, старый
+ * API) не повторяется (`shouldRetry`).
+ */
+export function useRaceRoute(id: string, enabled: boolean) {
+  return useQuery<RaceRouteMap>({
+    queryKey: ['races', 'route', id],
+    queryFn: () => api.getRaceRoute(id),
+    staleTime: PUBLIC_STALE_MS,
+    enabled,
+  });
+}
+
+/**
+ * Pull-to-refresh карточки: перезапрос карты, если она на экране, — коридор (маршрут, допуск) у опубликованной
+ * гонки до старта правится, ключ этого не знает.
+ */
+export function useRaceRouteRefetch(id: string) {
+  const client = useQueryClient();
+  return useCallback(
+    () => client.refetchQueries({ queryKey: ['races', 'route', id], type: 'active' }),
+    [client, id],
+  );
 }
 
 export function useSeason(id: string, seed: SeasonCard | undefined, enabled: boolean) {

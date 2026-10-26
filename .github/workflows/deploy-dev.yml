@@ -173,8 +173,12 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ env.IMAGE_PREFIX }}-web:${{ env.TAG }},${{ env.IMAGE_PREFIX }}-web:develop
-          # публичный адрес API вшивается в клиентский бандл: образ web привязан к DEV_PUBLIC_HOST
-          build-args: EXPO_PUBLIC_API_URL=https://${{ env.DEV_PUBLIC_HOST }}
+          # публичный адрес API вшивается в клиентский бандл: образ web привязан к DEV_PUBLIC_HOST;
+          # стили карты — OpenFreeMap (ADR-0014, публичные URL без ключа)
+          build-args: |
+            EXPO_PUBLIC_API_URL=https://${{ env.DEV_PUBLIC_HOST }}
+            EXPO_PUBLIC_MAP_STYLE_LIGHT=https://tiles.openfreemap.org/styles/positron
+            EXPO_PUBLIC_MAP_STYLE_DARK=https://tiles.openfreemap.org/styles/dark
           secrets: NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
           cache-from: type=gha,scope=pokatim-web
           cache-to: type=gha,mode=max,scope=pokatim-web

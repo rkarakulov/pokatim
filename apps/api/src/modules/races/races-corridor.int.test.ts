@@ -1,5 +1,5 @@
-import { PanelRace, RaceDetail } from '@pokatim/contracts';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { PanelRace, RaceDetail, RaceRouteMap } from '@pokatim/contracts';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, DAY, type Harness } from '../../../test/harness';
 import { call } from '../../../test/identity';
@@ -14,7 +14,14 @@ import {
   racesDb,
   staff,
 } from '../../../test/races';
-import { fixture, parsedRoute, processRoute, readyRoute, uploadRoute } from '../../../test/routes';
+import {
+  fixture,
+  parsedRoute,
+  processRoute,
+  readyRoute,
+  routesRepository,
+  uploadRoute,
+} from '../../../test/routes';
 
 /**
  * Коридор гонки (race-results-01: AC3–AC9, AC15): готовый маршрут + допуск, дистанция из маршрута, правила по фазам,
@@ -362,5 +369,104 @@ describe('публичная карточка (AC8)', () => {
 
     const plain = await call(h, 'GET', `/v1/races/${announce.id}`);
     expect((plain.body as { corridor: unknown }).corridor).toBeNull();
+  });
+});
+
+describe('карта маршрута (maps-01)', () => {
+  const routeUrl = (id: string) => `/v1/races/${id}/route`;
+
+  it('опубликованная с коридором — 200: ровно line/start/finish/bounds/widthM из маршрута, public max-age=60', async () => {
+    const { org, routeId } = await setup();
+    const race = await publishedRace(h, org.token, {
+      ...withoutDistance,
+      corridor: { routeId, widthM: 50 },
+    });
+    const res = await call(h, 'GET', routeUrl(race.id));
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('public, max-age=60');
+    const body = RaceRouteMap.parse(res.body);
+    expect(Object.keys(res.body as object).sort()).toEqual([
+      'bounds',
+      'finish',
+      'line',
+      'start',
+      'widthM',
+    ]);
+    const route = await h.db
+      .collection<{
+        _id: string;
+        title: string;
+        sha256: string;
+        start: { coordinates: [number, number] };
+        finish: { coordinates: [number, number] };
+      }>('routes')
+      .findOne({ _id: routeId });
+    const geometry = await h.db
+      .collection<{ _id: string; line: { coordinates: [number, number][] } }>('route_geometries')
+      .findOne({ _id: routeId });
+    expect(body.line).toEqual(geometry!.line.coordinates);
+    expect(body.start).toEqual(route!.start.coordinates);
+    expect(body.finish).toEqual(route!.finish.coordinates);
+    expect(body.widthM).toBe(50);
+    const [west, south, east, north] = body.bounds;
+    for (const [lon, lat] of body.line) {
+      expect(lon).toBeGreaterThanOrEqual(west);
+      expect(lon).toBeLessThanOrEqual(east);
+      expect(lat).toBeGreaterThanOrEqual(south);
+      expect(lat).toBeLessThanOrEqual(north);
+    }
+    const text = JSON.stringify(res.body);
+    for (const secret of [routeId, route!.sha256, route!.title, 'matchLine', 'routeId', 'status']) {
+      expect(text).not.toContain(secret);
+    }
+  });
+
+  it('отменённая с коридором — 200; черновик, неизвестный id, без коридора, коридор снят — 404 NOT_FOUND; не uuid — 400', async () => {
+    const { org, routeId } = await setup();
+    const corridor = { routeId, widthM: 50 };
+    const cancelled = await publishedRace(h, org.token, { ...withoutDistance, corridor });
+    const cancel = await panelCall(h, org.token, 'POST', `${RACES}/${cancelled.id}/cancel`, {
+      version: cancelled.version,
+      reason: 'weather',
+    });
+    expect(cancel.status).toBe(200);
+    expect((await call(h, 'GET', routeUrl(cancelled.id))).status).toBe(200);
+
+    const draft = await createRace(h, org.token, { ...withoutDistance, corridor });
+    const plain = await publishedRace(h, org.token);
+    const removed = await publishedRace(h, org.token, { ...withoutDistance, corridor });
+    const edit = await panelCall(h, org.token, 'POST', `${RACES}/${removed.id}`, {
+      version: removed.version,
+      corridor: null,
+    });
+    expect(edit.status).toBe(200);
+    for (const id of [draft.id, plain.id, removed.id, '01890a5d-ac96-774b-bcce-b302099a8057']) {
+      const res = await call(h, 'GET', routeUrl(id));
+      expect(res.status, id).toBe(404);
+      expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
+    }
+    expect((await call(h, 'GET', routeUrl('not-a-uuid'))).status).toBe(400);
+  });
+
+  it('кэш процесса: повторный запрос не читает route_geometries, линия сверки не грузится', async () => {
+    const { org, routeId } = await setup();
+    const race = await publishedRace(h, org.token, {
+      ...withoutDistance,
+      corridor: { routeId, widthM: 50 },
+    });
+    const repository = routesRepository(h);
+    const display = vi.spyOn(repository, 'displayLine');
+    const match = vi.spyOn(repository, 'geometry');
+    try {
+      const first = await call(h, 'GET', routeUrl(race.id));
+      const second = await call(h, 'GET', routeUrl(race.id));
+      expect([first.status, second.status]).toEqual([200, 200]);
+      expect(second.body).toEqual(first.body);
+      expect(display).toHaveBeenCalledTimes(1);
+      expect(match).not.toHaveBeenCalled();
+    } finally {
+      display.mockRestore();
+      match.mockRestore();
+    }
   });
 });

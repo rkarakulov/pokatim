@@ -5,6 +5,7 @@ import {
   type RaceDetail,
   RaceListQuery,
   type RacePage,
+  type RaceRouteMap,
   type SeasonCard,
   type SeasonList,
   SeasonRaceListQuery,
@@ -36,6 +37,15 @@ export class RacesPublicController {
   @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
   get(@Param('id', new ZodValidationPipe(Uuid, FieldErrorCode)) id: string): Promise<RaceDetail> {
     return this.races.get(id);
+  }
+
+  /** Линия показа коридора для карты (ADR-0014): только опубликованная/отменённая с коридором и готовым маршрутом. */
+  @Get('races/:id/route')
+  @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
+  route(
+    @Param('id', new ZodValidationPipe(Uuid, FieldErrorCode)) id: string,
+  ): Promise<RaceRouteMap> {
+    return this.races.route(id);
   }
 
   @Get('seasons')

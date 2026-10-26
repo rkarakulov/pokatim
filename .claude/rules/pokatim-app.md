@@ -128,8 +128,27 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   чистая `pickSeason` по фазам сервера.
 
 - Коридор гонки (race-results-01): карточка показывает строку «Коридор — ±N м от маршрута» и дистанцию «… по
-  GPS-треку», если `race.corridor` есть; `null` и отсутствие поля (старый API) — как без коридора. Карты и линии
-  маршрута в приложении нет (эпик «вне эпика»); SSR-мета не меняется.
+  GPS-треку», если `race.corridor` есть; `null` и отсутствие поля (старый API) — как без коридора. SSR-мета не
+  меняется.
+- Карта (maps-01, ADR-0014): переиспользуемый модуль `features/maps/` — `route-map.tsx` (native,
+  `@maplibre/maplibre-react-native` 11: `Map`/`Camera`/`GeoJSONSource`/`Layer`) и `route-map.web.tsx` (`maplibre-gl`
+  6 через `load-maplibre.ts` — динамический `import()` после монтирования, в SSR не исполняется; воркер —
+  `public/maplibre-gl-worker.mjs` по `setWorkerUrl`, копию кладёт `scripts/copy-map-worker.ts` в `dev`/`build:web`,
+  в git не хранится); слои и GeoJSON — один источник `corridor-style.ts` (коридор — ширина линии 2 × `widthM` в
+  метрах выражением зума, роли `map.*`, `CORRIDOR_OPACITY`), рамка — `route-map-frame.tsx` (пропорция
+  `MAP_ASPECT_RATIO`, доступное изображение с подписью без координат, сообщение «Карта не загрузилась» поверх). URL
+  стилей — только `EXPO_PUBLIC_MAP_STYLE_LIGHT/DARK` (`map-style.ts`, прямое обращение к `process.env`); не заданы —
+  карты нет. Статичный вид: жесты выключены пропсами (не `pointerEvents` — атрибуция нажимается), камера по рамке
+  без анимации. Карточка `races/[id]`: блок `race-route-map.tsx` после строки «Коридор» — SSR и первый рендер — место
+  карты (скелетон той же пропорции), после монтирования: env не задан, геометрия 404/ошибка — блок схлопывается
+  (строки остаются; ошибка обновления при показанной карте — карта остаётся); запрос `['races','route',id]` — только
+  клиент, pull-to-refresh карточки перезапрашивает его, когда коридор есть (`useRaceRouteRefetch`: коридор
+  опубликованной гонки до старта правится); ширина коридора на карте — из `race.corridor.widthM` карточки. Native —
+  config plugin в `app.json`; пакет MapLibre RN импортируется только лениво (`load-maplibre-native.ts`, `import()`)
+  и только при `mapSupported()` (`map-support(.web).ts`: `TurboModuleRegistry.get` модулей `MLRNCameraModule`,
+  `MLRNMapViewModule`) — статический импорт бросает `getEnforcing` в Expo Go и старом dev-клиенте; нет модулей —
+  блока карты нет, как без env. Jest — мок пакета и загрузчика в `jest.setup.ts` (модули «есть»), web — мок
+  `load-maplibre`.
 
 - Участие и результат (race-results-04): блок «Ваше участие» и таблица «Результаты» на карточке `races/[id]` — только
   клиентские запросы (в SSR не попадают; пока сессия неизвестна — блока нет). Ключи `['races','entry',id]`

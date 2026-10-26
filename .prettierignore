@@ -8,6 +8,7 @@ playwright-report
 coverage
 pnpm-lock.yaml
 apps/app/assets
+apps/app/public/maplibre-gl-worker.mjs
 *.md
 .claude
 .agents
