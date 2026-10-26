@@ -219,6 +219,21 @@ Architecture Review — routes-01-library: **CONCERNS** (блокеров нет
 
 ## 8.2 Deviations from spec
 
+- DEV-1 (coder, backend): `ROUTE_DISTANCE_RANGES_M` хранит диапазоны сразу операторами MongoDB (`$lt`/`$gte`/`$lte`/`$gt`)
+  — константа используется только репозиторием, границы §7 те же (int-тест границ 49 999 / 50 000 / 100 000 / 100 001).
+- DEV-2 (coder, backend): фильтр `findPublished`/`listCatalog`/`catalogCities` дополнительно содержит `status: 'ready'`
+  (остаточный фильтр; `catalog` пишется только у `ready`) — `explain` по-прежнему `IXSCAN routes_catalog_idx` без `SORT`.
+- DEV-3 (coder, backend): `RoutesPublicService` получает `displayGeometry` через порт `ROUTE_GEOMETRY` (тот же
+  экземпляр `RoutesCatalogService`), чтобы не добавлять экспорт в `RoutesCoreModule`.
+- DEV-4 (coder, backend): вне шагов 1–6, но нужно для зелёного `pnpm check` после смены контрактов — подписи журнала
+  `admin.audit.action.route.published|unpublished|catalog_updated` в `packages/i18n` (типизированный `t()` экрана
+  журнала), `catalog: null` в фикстурах `RaceEditor.corridor.test.tsx` и `api-client/admin.test.ts` (§11
+  «Совместимость»). Остальные ключи `admin.routes.*`/`routes.*` — со следующей частью.
+- DEV-5 (coder, backend): тест `disputes.schema.test.ts` «коды споров — в конце `ErrorCode`» проверял `slice(-2)` и
+  ломался любым новым кодом; теперь проверяет, что коды споров идут сразу после `RESULTS_PUBLISH_BLOCKED` (полный
+  порядок `ErrorCode` по-прежнему держит `common.test.ts`). Ожидания полного набора индексов в тестах `0007_races` и
+  `0013_routes` дополнены индексами `0020` (как было с `0009`).
+
 ## 8.3 Security checklist
 
 - Публичные ответы — только перечисленные поля (int-тест на ключи); не опубликованный маршрут не виден публично ни
@@ -646,3 +661,46 @@ maps-02); `RoutesService.view` без чтения `matchLine` (follow-up: `disp
 публичный список; засев маршрутов на dev.
 
 ## 12. Outcome (заполняет coder)
+
+### Backend (шаги 1–6 §11: contracts, api, api-client) — coder, 2026-10-27
+
+Коммиты: `05f4e0a` контракты · `72e67e4` данные и миграция `0020` · `3387c09` панель publish/unpublish · `bfbbb53`
+публичный каталог · `a6da109` гонки маршрута · `f21846f` api-client · `ac5f48f` геометрия через порт.
+
+Сделано:
+- contracts: `route-catalog.schema.ts` (`ROUTE_DISTANCE_BUCKETS`, `CatalogRouteQuery/Card/Detail/Page/Cities`,
+  `RouteMapGeometry`, `CatalogRouteRacesQuery`), `PublishRouteInput`, `PanelRouteCatalog`, обязательное
+  `PanelRouteSummary.catalog`, `SurfaceList` (вынос из `RaceInput`), `ROUTE_INVALID_STATE`, `route.published|unpublished|
+  catalog_updated`; `race-route.schema.ts` не тронут, `RaceRouteMap` присваивается `RouteMapGeometry` (тест типов).
+- api данные: `RouteDoc.catalog` (новый маршрут — `null`, чтение `?? null`), миграция `0020_routes_catalog`
+  (`routes_catalog_idx` частичный, `races_route_idx`, бэкфилл), `RoutesRepository.findPublished|listCatalog|catalogCities|
+  setCatalog|clearCatalog`.
+- api панель: `POST /v1/admin/routes/:id/publish|unpublish` (`races.manage`) → `RoutesCatalogAdminService`: транзакция
+  «чтение → запись → журнал», `route.catalog_updated { changedFields }`, повтор без записи и журнала, не `ready` —
+  `409 ROUTE_INVALID_STATE`, не виден — 404; лог после коммита — id маршрута, действие, uid.
+- api публично: `RoutesPublicController` (`routes`, `routes/cities` до `routes/:id`, `routes/:id/map`),
+  `PublicReadGuard` + `public, max-age=60`, явный список полей, курсор `(publishedAt, _id)`.
+- api races: порт `RouteCatalog.inCatalog`, `RacesRepository.listPublicByRoute`, `GET /v1/routes/:id/races`
+  (404 до разбора курсора).
+- api-client: `listCatalogRoutes`, `listCatalogRouteCities`, `getCatalogRoute`, `getCatalogRouteMap`,
+  `listCatalogRouteRaces`; панель — `publishRoute`, `unpublishRoute`.
+
+Тесты: `route-catalog.schema.test.ts`, дополнены `route.schema.test.ts`, `race.schema.test.ts`, `common.test.ts`,
+`audit.schema.test.ts`; int `routes-catalog-admin.int.test.ts` (7), `routes-public.int.test.ts` (9, в т. ч. `explain`
+через `system.profile`), `races-corridor.int.test.ts` «гонки маршрута (routes-01)» (2), `migrations.int.test.ts`
+(`0020`); `api-client/src/routes.test.ts` (4).
+
+Проверка: `TURBO_CONCURRENCY=1 pnpm check` (`MONGO_URL_TEST=…/pokatim_routes_test`, `REDIS_URL_TEST=…:6479/12`) → exit 0:
+
+```
+$ pnpm format:check && pnpm lint && pnpm arch:check && pnpm typecheck && pnpm test
+All matched files use Prettier code style!
+@pokatim/contracts:test:       Tests  236 passed (236)
+@pokatim/api-client:test:       Tests  80 passed (80)
+@pokatim/api:test:       Tests  981 passed (981)
+@pokatim/admin:test:       Tests  223 passed (223)
+@pokatim/app:test: Tests:       924 passed, 924 total
+ Tasks:    13 successful, 13 total
+```
+
+Не сделано в этой части (по поручению): admin, app, e2e, docs §10 — следующая часть (шаги 7–11).
