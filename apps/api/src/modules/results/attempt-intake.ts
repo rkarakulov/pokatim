@@ -47,7 +47,8 @@ export class AttemptIntake {
 
   /**
    * `tracks.activity-removed`: попытки удалённой активности → `withdrawn: activity_removed` (под замком каждой
-   * заявки), лучший пересчитан; новая основная группы — `activityReady`.
+   * заявки), лучший пересчитан; новая основная группы — `activityReady`. Принятый риск (race-results-05, DV-13):
+   * снимается и исключённая попытка — связь исключения с группой теряется, новая основная получает попытку.
    */
   async activityRemoved(
     activityId: string,

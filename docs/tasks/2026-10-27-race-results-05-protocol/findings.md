@@ -106,3 +106,67 @@ Coder. TDD: каждый тест сначала красный по резул�
 - **[LOW] Действия у черновика — исправлено.** `AttemptsTable`: `editable` исключает `phase === 'draft'`. RTL
   «черновик (открыт по URL)» — нет «Исключить трек» и «Перепроверить треки».
 - **[LOW] Часы двух процессов** — не менялось (вне scope, допущение RC-1).
+
+# Review pass 2
+
+# Findings — race-results-05-protocol — pass 2 — reviewer: claude (independent-reviewer)
+base: origin/develop   commits: 208babd, 7fc163e (re-review fix pass 1), working tree clean
+verdict: APPROVE
+
+Проверено прогоном (изоляция `pokatim_05review_test`, Redis db 11): `tsc --noEmit` api/admin/app — ок; vitest
+`apps/api/src/modules/results` (unit + int) — 104/104; RTL admin `features/results` — 18/18; jest app
+`features/races` — 113/113. «Красный до исправления» для двух новых int — **NOT VERIFIED** (код не правился);
+по разбору оба теста ловят исходный дефект: в M2 `powered` — основная (явный выбор по `activityId` прошёл
+`isPrimary`, 200), без проверки группы `ensureAttempt` создал бы вторую попытку; в M1 строка r2 без журнала была бы
+`revised` с местом.
+
+Закрытие находок pass 1:
+- **M1 (DQ при выпадении) — закрыто.** `disqualifiedEntries` читает журнал под тем же `lockResults`, что и
+  `toggleDisqualification` (DQ ↔ применение сериализованы записью в документ гонки). Порядок — по `revision`
+  (уникальный на гонку, `race_recalculations_revision_unique`) — детерминирован; `recheck_started` (`revision:
+  null`) отфильтрован по `kind`. Инвариант «строки ревизии = журнал ∩ ranked» сохраняется: DQ/отмена DQ меняют только
+  строки и пишут журнал в одной транзакции. Выборка — по `(raceId, _id)` + сортировка в памяти по единицам записей
+  ручных действий — производительность не вопрос. Событие `result-revised` и аудит — без изменений.
+- **M2 (дубль в обход исключения) — закрыто в заявленном объёме.** Проверка `excluded` по `groupIds` — после
+  проверки срока (поздний член не представитель, A5) и до `existing`; все вызовы `ensureAttempt` (`syncGroup`, обе
+  ветки `AttemptsService.add`) передают группу; конкурентность — под `lockEntry`, как и исключение
+  (`lockResults` → `lockEntry`). Цикл `not_primary` исключённую не трогает. Побочный, но безопасный эффект: «Вернуть в
+  обработку» исключённой попытки неосновного члена перепроверяет старый трек, следующий `syncGroup` снимет её
+  `not_primary` и создаст попытку основной — публикацию держит `checks_queued`.
+- **L3 (действия у черновика) — закрыто**, RTL покрывает.
+- **L4 (часы API/worker)** — допущение задокументировано в task.md RC-1 (стр. ~382); достаточно.
+
+`208babd` (приложение): тоны/время/таблица в `final` — ключи `races.result.status.{final,dq,revised}` и
+`races.attempt.status.excluded` есть в `@pokatim/i18n`; `Record` по enum контракта — компилятор проверяет полноту;
+баннер места для `final|revised|dq` не показывается — в рамках принятого RC-12.
+
+### [MEDIUM] Новая семантика и остаточный риск зафиксированы только в findings.md
+- **file:** docs/adr/0012-race-results.md; docs/tasks/2026-10-27-race-results-05-protocol/task.md
+- **location:** ADR-0012 «Реализация п. 6–7», пункты «Исключение трека» и «Перепроверка»; task.md §8 / §12
+- **problem:** fix pass 1 изменил доменные правила: исключение действует на поездку (группу дублей), DQ при
+  «Применить» берётся из журнала `race_recalculations`, а не переносится со строк. ADR по-прежнему пишет «статус
+  попытки `excluded`» и «Снимок меняется только при „Применить“ (перенос DQ)». Принятый риск «райдер удаляет
+  исключённую активность при живом дубле → `activity_removed` снимает исключённую, новая основная получает попытку и
+  может попасть в протокол» записан только в разделе Fix pass 1 findings.md — ни в §8 task.md, ни в ADR /
+  `pokatim-db.md`, ни комментарием в `activityRemoved`/`ensureAttempt`. Pass 1 (вариант b) просил именно это.
+- **why_it_matters:** Documentation Sync (§10 task.md): следующий слайс (07 «Требует внимания», 08 рейтинг) будет
+  опираться на ADR, а не на findings ревью; дыра в D-24 без записи в каноне будет «открыта заново» или закрыта не там.
+- **evidence:** `git show --stat 7fc163e` — из docs изменён только `findings.md`; `grep "перенос DQ"
+  docs/adr/0012-race-results.md` — стр. 129; `grep "дубл" task.md` — только стр. 180 (запрет дублей кода).
+- **recommended_fix:** ADR-0012: «исключение действует на группу дублей заявки (D-24); DQ при „Применить“ —
+  действующие по журналу пересчётов»; task.md §8.2 — запись о принятом риске удаления исключённой активности (с
+  follow-up); однострочный комментарий в `activityRemoved` о том, что исключённая снимается и связь с группой теряется.
+
+### [LOW] Дубль исключённой поездки выглядит в «Выбрать свой заезд» как доступный, выбор молча привязывается к исключённой
+- **file:** apps/api/src/modules/results/attempts.service.ts
+- **location:** `candidates`, `attempted` (стр. ~126–131); `add` → `ensureAttempt` (стр. 85)
+- **problem:** `attempted` считается по `activityId` попыток. После M2 у основной-дубля (`B`) попытки нет, поэтому
+  кандидат `B` показан `attempted: false`; выбор отвечает 200, новой попытки нет, запрос привязан к исключённой
+  попытке `A`. Райдер может повторять выбор (расходуя `maxRequestsPerEntry`), не понимая, почему ничего не меняется.
+- **why_it_matters:** UX/честность состояния; на зачёт не влияет (защита сервера работает), поэтому не блокер.
+- **evidence:** `attempted = new Set(attempts.filter(status !== 'withdrawn').map(a => a.activityId))`; int
+  «исключение действует на поездку» — `explicit.status === 200`, попыток 1.
+- **recommended_fix:** по желанию: помечать `attempted` для основных, чья группа содержит исключённую попытку заявки
+  (или вернуть `ATTEMPT_SOURCE_INVALID`); либо принять и записать вместе с MEDIUM выше.
+
+Итог: CRITICAL/HIGH нет — **APPROVE**. M1, M2, L3 pass 1 закрыты; L4 — принятое и задокументированное допущение.
