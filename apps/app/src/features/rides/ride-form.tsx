@@ -275,6 +275,7 @@ export function RideFormScreen({
   const onSubmit = form.handleSubmit(async (values) => {
     setFailure(undefined);
     setConflict(false);
+    setReloadError(undefined);
     const body = rideRequestOf(values);
     try {
       const view = loaded
@@ -348,7 +349,8 @@ export function RideFormScreen({
       <DocumentTitle title={`${title} — ${t('app.name')}`} />
       <DetailHeader title={title} fallback={ride ? `/rides/${ride.id}` : '/rides'} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <RefreshFailedBanner failure={refreshFailure} />
+        {/* сбой «Обновить» — тот же запрос `me`: его ошибка уже в блоке конфликта, второй баннер не нужен */}
+        <RefreshFailedBanner failure={conflict && reloadError ? undefined : refreshFailure} />
         {conflict ? (
           <View style={styles.stack}>
             <Banner tone="warning" message={t('rides.form.conflict')} />
