@@ -706,7 +706,8 @@ emit(
     { speed: 10 },
   ),
   C,
-  rejected(['missed_section']),
+  // обратный путь — скачок на встречную ветку (Витерби): 6 км маршрута не пройдены — и сход
+  rejected(['missed_section', 'off_corridor']),
 );
 
 // раскладка prettier: короткие массивы значений — в одну строку (`prettier --check` не трогает эталон)

@@ -212,16 +212,16 @@
     "outback-turn-7km.gpx": {
       "engineVersion": 1,
       "verdict": "rejected",
-      "reasons": ["missed_section"],
+      "reasons": ["missed_section", "off_corridor"],
       "segment": {
         "startedAt": "2026-06-14T06:00:14.500Z",
         "finishedAt": "2026-06-14T06:23:24.500Z",
         "elapsedMs": 1390000,
         "elapsedSec": 1390,
         "distanceM": 13890,
-        "offCorridorM": 0,
-        "offCorridorShare": 0,
-        "maxExcursionM": 0,
+        "offCorridorM": 6000,
+        "offCorridorShare": 0.4319654427645788,
+        "maxExcursionM": 6000,
         "coverage": 0.691358024691358,
         "noisePoints": 0
       },

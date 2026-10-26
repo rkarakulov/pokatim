@@ -4,7 +4,7 @@ import { Worker } from 'node:worker_threads';
 
 import { describe, expect, it } from 'vitest';
 
-import { encodeTrackStream, type TrackStreamV1 } from '../parse.ts';
+import { analyzeAttempt, encodeTrackStream, type TrackStreamV1 } from '../parse.ts';
 import type { ParsedPoint } from '../track.ts';
 import { at, corridorOf, pointAt, polylineLength, T0, type Xy } from './__testing__/synthetic.ts';
 import { matchCorridor } from './match.ts';
@@ -146,4 +146,48 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     expect(elapsedMs).toBeLessThanOrEqual(TIME_LIMIT_MS);
     process.stdout.write(`плотный коридор (${densest} в ячейке): ${Math.round(elapsedMs)} мс\n`);
   }, 30_000);
+
+  // ревью pass 4: длинные хорды «внутри → внутри» через широкую «змейку» — геометрия хорд на каждом шаге
+  it('длинные хорды через analyzeAttempt (поток, 200 000 точек): ≤ 3 с', () => {
+    const corners: Xy[] = [[0, 0]];
+    for (let i = 0; i < 184; i += 1) {
+      const [x, y] = corners[corners.length - 1]!;
+      corners.push(
+        [x + (i % 2 === 0 ? 1000 : -1000), y],
+        [x + (i % 2 === 0 ? 1000 : -1000), y + 90],
+      );
+    }
+    const geometry200 = corridorOf(corners, { widthM: 200 });
+    const cycle: Xy[] = [
+      [300, 0],
+      [950, 0],
+      [300, 450],
+      [950, 450],
+      [600, 900],
+    ];
+    const stream: TrackStreamV1 = {
+      v: 1,
+      provider: 'garmin',
+      sport: 'road_cycling',
+      hasHeartRate: false,
+      hasPower: false,
+      points: Array.from({ length: POINTS }, (_, k) => {
+        const [lon, lat] = at(k === 0 ? [0, 0] : cycle[(k - 1) % cycle.length]!);
+        return [T0 + k * INTERVAL_MS, lat, lon, null];
+      }),
+    };
+    const bytes = encodeTrackStream(stream);
+    const startedAt = performance.now();
+    const match = analyzeAttempt(
+      bytes,
+      'stream',
+      geometry200,
+      window,
+      new Date(T0 + 3 * 86_400_000),
+    );
+    const elapsedMs = performance.now() - startedAt;
+    expect(match.verdict).toBe('rejected');
+    expect(elapsedMs).toBeLessThanOrEqual(TIME_LIMIT_MS);
+    process.stdout.write(`длинные хорды (analyzeAttempt): ${Math.round(elapsedMs)} мс\n`);
+  }, 60_000);
 });

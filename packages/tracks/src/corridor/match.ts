@@ -412,7 +412,8 @@ class Engine {
    * шаг — до доли `endU`; < 1 — вход в ворота финиша). Шаг целиком снаружи — весь, одна точка снаружи — половина;
    * выход завершается точкой внутри; момент ворот — точка коридора. Шаг «внутри → внутри» — отдельный выход:
    * больше из части хорды вне коридора (точно) и недобранного пути `Δs − хорда` сверх допуска
-   * (`chordToleranceM + chordToleranceShare · хорда`) — на каждом шаге, от частоты записи и Δt не зависит.
+   * (`chordToleranceM + chordToleranceShare · хорда`) — на каждом шаге, от частоты записи и Δt не зависит; шаг с
+   * неправдоподобной скоростью (> 30 м/с) — целиком вне коридора (и ограничивает работу геометрии хорд).
    */
   private offCorridor(
     start: Crossing,
@@ -438,19 +439,31 @@ class Engine {
       const toInside = atEnd || track.inside[k] === 1;
       const outside = (fromInside ? 0 : 1) + (toInside ? 0 : 1);
       let off = outside === 2 ? length : outside === 1 ? length / 2 : 0;
-      if (outside === 0 && chord <= policy.gapMaxM && share > 0) {
-        // точка хорды не дальше половины хорды от конца, конец — не дальше d от маршрута: короткая хорда внутри
-        const nearest = Math.max(track.d[k - 1]!, track.d[k]!);
-        // крайние шаги — только часть хорды между моментом ворот и точкой
-        const geometric =
-          chord / 2 + nearest <= this.corridor.widthM ? 0 : this.chordOutside(k - 1, from, to);
-        let shortfall = 0;
-        if (this.interpolable(k - 1, k - 1 === start.index)) {
-          const tolerance = policy.chordToleranceM + policy.chordToleranceShare * chord;
-          shortfall = Math.max(0, track.s[k]! - track.s[k - 1]! - chord - tolerance);
+      if (outside === 0 && share > 0) {
+        // недобранный путь — на каждом шаге «внутри → внутри», без условия интерполяции покрытия; хорда длиннее
+        // gapMaxM — разрыв GPS (`gps_gap`), не сход
+        const tolerance = policy.chordToleranceM + policy.chordToleranceShare * chord;
+        const shortfall =
+          chord > policy.gapMaxM
+            ? 0
+            : Math.max(0, track.s[k]! - track.s[k - 1]! - chord - tolerance) * share;
+        // Δs > 1.5·хорда + 50 редкой записью не объяснить (так короче хорды не бывает дуга) — это сход, не «редкая
+        // запись»: `sparse_recording` — только по шагам, где покрытие интерполируется
+        const sparse = this.interpolable(k - 1, k - 1 === start.index);
+        const seconds = (track.time[k]! - track.time[k - 1]!) / 1000;
+        let geometric = 0;
+        if (seconds <= 0 ? chord > 0 : chord / seconds > policy.spikeSpeedMps) {
+          // неправдоподобная скорость между точками (> 30 м/с) — шаг целиком вне коридора, без геометрии
+          geometric = length;
+        } else if (chord <= policy.gapMaxM) {
+          // хорда длиннее — разрыв GPS (gps_gap); точка хорды не дальше половины хорды от конца, конец — не
+          // дальше d от маршрута: короткая хорда внутри без расчёта
+          const nearest = Math.max(track.d[k - 1]!, track.d[k]!);
+          if (chord / 2 + nearest > this.corridor.widthM)
+            geometric = this.chordOutside(k - 1, from, to);
         }
-        off = Math.max(geometric, shortfall * share);
-        if (shortfall * share > geometric) shortfallM += off;
+        off = Math.max(geometric, shortfall);
+        if (sparse && shortfall > geometric) shortfallM += off;
       }
       if (off > 0) {
         offCorridorM += off;

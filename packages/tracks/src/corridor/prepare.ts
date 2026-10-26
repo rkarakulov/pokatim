@@ -255,8 +255,10 @@ export function gridCandidates(
 }
 
 /**
- * Длина части отрезка a → b вне коридора, м: точное пересечение отрезка с буферами («капсулами» радиуса `widthM`)
- * отрезков маршрута рядом (сетка), объединение интервалов. Локальная проекция вокруг `a` (хорда ≤ 1 км).
+ * Длина части отрезка a → b вне коридора, м — точно. Отрезок делится на куски ≤ `max(widthM, 25 м)`; кусок, у
+ * которого расстояние от середины до маршрута + половина длины ≤ `widthM`, целиком внутри (без расчёта). Остальные —
+ * пересечение с буферами («капсулами» радиуса `widthM`) отрезков маршрута рядом: интервалы по доле куска, длина
+ * объединения — проходом по отсортированным началам и концам. Локальная проекция вокруг `a` (отрезок ≤ 1 км).
  */
 export function chordOutsideM(
   corridor: PreparedCorridor,
@@ -272,102 +274,153 @@ export function chordOutsideM(
 ): number {
   const ky = corridor.ky;
   const kx = ky * Math.cos((aLat * Math.PI) / 180);
-  const vx = (bLon - aLon) * kx;
-  const vy = (bLat - aLat) * ky;
-  const length2 = vx * vx + vy * vy;
-  if (length2 === 0) return 0;
-  const length = Math.sqrt(length2);
+  const totalX = (bLon - aLon) * kx;
+  const totalY = (bLat - aLat) * ky;
+  const total = Math.hypot(totalX, totalY);
+  if (total === 0) return 0;
   const w = corridor.widthM;
-  const found = gridCandidates(
-    corridor,
-    (aLon + bLon) / 2,
-    (aLat + bLat) / 2,
-    length / 2 + w,
-    out,
-    stamp,
-    mark,
-  );
-  let count = 0;
-  for (let c = 0; c < found; c += 1) {
-    const j = out[c]!;
-    const cx = (corridor.lon[j]! - aLon) * kx;
-    const cy = (corridor.lat[j]! - aLat) * ky;
-    const dx = (corridor.lon[j + 1]! - aLon) * kx;
-    const dy = (corridor.lat[j + 1]! - aLat) * ky;
-    let lo = Infinity;
-    let hi = -Infinity;
-    // круги вокруг концов отрезка: |u·v − P|² ≤ w²
-    for (const [px, py] of [
-      [cx, cy],
-      [dx, dy],
-    ] as const) {
-      const half = (vx * px + vy * py) / length2;
-      const disc = half * half - (px * px + py * py - w * w) / length2;
-      if (disc < 0) continue;
-      const root = Math.sqrt(disc);
-      lo = Math.min(lo, half - root);
-      hi = Math.max(hi, half + root);
-    }
-    // полоса вдоль отрезка: проекция в [0, L], поперечное смещение в [−w, w]
-    const ex = dx - cx;
-    const ey = dy - cy;
-    const segment = Math.hypot(ex, ey);
-    if (segment > 0) {
+  const w2 = w * w;
+  const pieces = Math.max(1, Math.ceil(total / Math.max(w, CORRIDOR_POLICY.densifyStepM)));
+  const pieceLength = total / pieces;
+  let outside = 0;
+  let stampMark = mark * 0x10000;
+
+  for (let p = 0; p < pieces; p += 1) {
+    // кусок [p, p+1] / pieces в метрах от a
+    const ax = (totalX * p) / pieces;
+    const ay = (totalY * p) / pieces;
+    const vx = totalX / pieces;
+    const vy = totalY / pieces;
+    const length2 = vx * vx + vy * vy;
+    const midLon = aLon + (bLon - aLon) * ((p + 0.5) / pieces);
+    const midLat = aLat + (bLat - aLat) * ((p + 0.5) / pieces);
+    stampMark += 1;
+    const found = gridCandidates(
+      corridor,
+      midLon,
+      midLat,
+      pieceLength / 2 + w,
+      out,
+      stamp,
+      stampMark,
+    );
+    // ближайший отрезок к середине: кусок внутри, если d(середины) + половина ≤ w
+    const mx = ax + vx / 2;
+    const my = ay + vy / 2;
+    let nearest2 = Infinity;
+    let count = 0;
+    let full = false;
+    for (let c = 0; c < found; c += 1) {
+      const j = out[c]!;
+      const cx = (corridor.lon[j]! - aLon) * kx;
+      const cy = (corridor.lat[j]! - aLat) * ky;
+      const ex = (corridor.lon[j + 1]! - aLon) * kx - cx;
+      const ey = (corridor.lat[j + 1]! - aLat) * ky - cy;
+      const segment2 = ex * ex + ey * ey;
+      // расстояние от середины куска до отрезка маршрута
+      let t = ((mx - cx) * ex + (my - cy) * ey) / segment2;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const fx = mx - cx - t * ex;
+      const fy = my - cy - t * ey;
+      const mid2 = fx * fx + fy * fy;
+      if (mid2 < nearest2) nearest2 = mid2;
+      // капсула дальше w + половины куска от середины — не пересекает кусок
+      const reach = w + pieceLength / 2;
+      if (mid2 > reach * reach) continue;
+      let lo = Infinity;
+      let hi = -Infinity;
+      // круги вокруг концов отрезка маршрута: |a + u·v − P|² ≤ w²
+      for (let end = 0; end < 2; end += 1) {
+        const px = (end === 0 ? cx : cx + ex) - ax;
+        const py = (end === 0 ? cy : cy + ey) - ay;
+        const half = (vx * px + vy * py) / length2;
+        const disc = half * half - (px * px + py * py - w2) / length2;
+        if (disc < 0) continue;
+        const root = Math.sqrt(disc);
+        if (half - root < lo) lo = half - root;
+        if (half + root > hi) hi = half + root;
+      }
+      // полоса вдоль отрезка: проекция в [0, L], поперечное смещение в [−w, w]
+      const segment = Math.sqrt(segment2);
       const ux = ex / segment;
       const uy = ey / segment;
       let from = -Infinity;
       let to = Infinity;
-      const clip = (base: number, slope: number, min: number, max: number) => {
-        if (slope === 0) {
-          if (base < min || base > max) {
-            from = Infinity;
-            to = -Infinity;
-          }
-          return;
-        }
-        const u0 = (min - base) / slope;
-        const u1 = (max - base) / slope;
+      const baseT = (ax - cx) * ux + (ay - cy) * uy;
+      const slopeT = vx * ux + vy * uy;
+      const baseN = -(ax - cx) * uy + (ay - cy) * ux;
+      const slopeN = -vx * uy + vy * ux;
+      if (slopeT === 0) {
+        if (baseT < 0 || baseT > segment) to = -Infinity;
+      } else {
+        const u0 = -baseT / slopeT;
+        const u1 = (segment - baseT) / slopeT;
         from = Math.max(from, Math.min(u0, u1));
         to = Math.min(to, Math.max(u0, u1));
-      };
-      clip(-(cx * ux + cy * uy), vx * ux + vy * uy, 0, segment);
-      clip(-(cx * -uy + cy * ux), vx * -uy + vy * ux, -w, w);
+      }
+      if (slopeN === 0) {
+        if (baseN < -w || baseN > w) to = -Infinity;
+      } else {
+        const u0 = (-w - baseN) / slopeN;
+        const u1 = (w - baseN) / slopeN;
+        from = Math.max(from, Math.min(u0, u1));
+        to = Math.min(to, Math.max(u0, u1));
+      }
       if (from <= to) {
-        lo = Math.min(lo, from);
-        hi = Math.max(hi, to);
+        if (from < lo) lo = from;
+        if (to > hi) hi = to;
+      }
+      lo = lo < 0 ? 0 : lo;
+      hi = hi > 1 ? 1 : hi;
+      if (lo <= 0 && hi >= 1) {
+        full = true;
+        break;
+      }
+      if (lo < hi) {
+        lows[count] = lo;
+        highs[count] = hi;
+        count += 1;
       }
     }
-    lo = Math.max(0, lo);
-    hi = Math.min(1, hi);
-    if (lo < hi) {
-      lows[count] = lo;
-      highs[count] = hi;
-      count += 1;
+    if (full || Math.sqrt(nearest2) + pieceLength / 2 <= w) continue;
+    outside += pieceLength * (1 - unionLength(lows, highs, count));
+  }
+  return Math.max(0, outside);
+}
+
+/** Длина объединения интервалов [lows[i], highs[i]]: начала и концы сортируются отдельно, проход со счётчиком. */
+function unionLength(lows: Float64Array, highs: Float64Array, count: number): number {
+  insertionSort(lows, count);
+  insertionSort(highs, count);
+  let covered = 0;
+  let active = 0;
+  let since = 0;
+  let i = 0;
+  let j = 0;
+  while (i < count || j < count) {
+    if (i < count && lows[i]! <= highs[j]!) {
+      if (active === 0) since = lows[i]!;
+      active += 1;
+      i += 1;
+    } else {
+      active -= 1;
+      if (active === 0) covered += highs[j]! - since;
+      j += 1;
     }
   }
-  // объединение интервалов (вставками по началу; кандидатов немного)
+  return covered;
+}
+
+function insertionSort(values: Float64Array, count: number): void {
   for (let i = 1; i < count; i += 1) {
-    const lo = lows[i]!;
-    const hi = highs[i]!;
+    const value = values[i]!;
     let at = i;
-    while (at > 0 && lows[at - 1]! > lo) {
-      lows[at] = lows[at - 1]!;
-      highs[at] = highs[at - 1]!;
+    while (at > 0 && values[at - 1]! > value) {
+      values[at] = values[at - 1]!;
       at -= 1;
     }
-    lows[at] = lo;
-    highs[at] = hi;
+    values[at] = value;
   }
-  let covered = 0;
-  let reach = 0;
-  for (let i = 0; i < count; i += 1) {
-    const lo = Math.max(lows[i]!, reach);
-    if (highs[i]! > lo) {
-      covered += highs[i]! - lo;
-      reach = highs[i]!;
-    }
-  }
-  return Math.max(0, length * (1 - covered));
 }
 
 function lowerBound(values: Float64Array, target: number): number {

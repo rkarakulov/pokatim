@@ -1905,7 +1905,7 @@
       },
       "expected": {
         "verdict": "rejected",
-        "reasons": ["missed_section"],
+        "reasons": ["missed_section", "off_corridor"],
         "touchedCorridor": true
       }
     }
