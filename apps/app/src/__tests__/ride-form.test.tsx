@@ -313,7 +313,12 @@ describe('«Изменить райд» (AC4)', () => {
       new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }),
     );
     await fireEvent.press(screen.getByText('Обновить'));
-    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    await screen.findAllByText('Не удалось загрузить');
+    // состояние запроса доходит до экрана через notifyManager позже промиса refetch — дать ему дойти
+    await act(() => jest.advanceTimersByTimeAsync(100));
+    // одно сообщение у «Обновить», без второго баннера фонового обновления с «Повторить»
+    expect(screen.getAllByText('Не удалось загрузить')).toHaveLength(1);
+    expect(screen.queryByText('Повторить')).toBeNull();
     expect(screen.getByText('Райд изменили — обновите страницу')).toBeOnTheScreen();
     expect(screen.getByDisplayValue('Моё новое название')).toBeOnTheScreen();
 
@@ -324,7 +329,7 @@ describe('«Изменить райд» (AC4)', () => {
     await fireEvent.press(screen.getByText('Обновить'));
     expect(await screen.findByDisplayValue('Новое название')).toBeOnTheScreen();
     expect(screen.queryByText('Райд изменили — обновите страницу')).toBeNull();
-    expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Не удалось загрузить')).toBeNull());
 
     updateRide.mockResolvedValue({ ...organizerView, ride: { ...ride, version: 4 } });
     await type('Описание', 'Новое описание');
