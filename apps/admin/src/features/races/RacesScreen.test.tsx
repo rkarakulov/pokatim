@@ -395,6 +395,42 @@ describe('«Редактирование» (AC11)', () => {
     expect(screen.queryByRole('button', { name: 'Отменить гонку' })).toBeNull();
   });
 
+  it('открытые споры (D-19, 06): причина disputes_open, без «Отменить гонку»', async () => {
+    mocked.getRace.mockResolvedValue(
+      race({
+        phase: 'closed',
+        editable: {
+          fields: ['description'],
+          canPublish: false,
+          canCancel: false,
+          canDiscard: false,
+          reasons: ['window_closed', 'disputes_open'],
+        },
+      }),
+    );
+    await renderApp(`/races/${RACE_ID}`);
+    expect(
+      await screen.findByText('По гонке есть открытые споры — отмена недоступна (D-19).'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Отменить гонку' })).toBeNull();
+  });
+
+  it('409 RACE_INVALID_STATE disputes_open при отмене — текст причины в окне', async () => {
+    mocked.cancelRace.mockRejectedValue(
+      httpError(409, 'RACE_INVALID_STATE', { reason: 'disputes_open' }),
+    );
+    await renderApp(`/races/${RACE_ID}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Отменить гонку' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(
+      within(dialog).getByRole('radio', { name: 'Неблагоприятные погодные условия' }),
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Отменить гонку' }));
+    expect(
+      await within(dialog).findByText('По гонке есть открытые споры — отмена недоступна (D-19).'),
+    ).toBeTruthy();
+  });
+
   it('черновик — без ссылки «Результаты»', async () => {
     mocked.getRace.mockResolvedValue(race({ status: 'draft', phase: 'draft', publishedAt: null }));
     await renderApp(`/races/${RACE_ID}`);

@@ -367,6 +367,36 @@ describe('«Результаты» гонки — до публикации', ()
     expect(within(standings).queryByRole('button', { name: 'Дисквалифицировать' })).toBeNull();
   });
 
+  it('открытые споры (06): ссылка «Открыть споры» на список гонки — при count > 0 и disputes.read', async () => {
+    mocked.getRaceResultsSummary.mockResolvedValue(
+      summary({
+        publish: {
+          canPublish: false,
+          blockedBy: null,
+          checklist: CHECKS_EMPTY.map((check) =>
+            check.code === 'open_disputes' ? { ...check, count: 2 } : check,
+          ),
+        },
+      }),
+    );
+    await renderApp(PATH);
+    const list = await screen.findByRole('list', { name: 'Публикация протокола' });
+    expect(within(list).getByText('Открытые споры: 2')).toBeTruthy();
+    const link = within(list).getByRole('link', { name: 'Открыть споры' });
+    expect(link.getAttribute('href')).toBe(`/admin/disputes?raceId=${RACE_ID}`);
+    cleanup();
+    mocked.me.mockResolvedValue(ME.organizer);
+    await renderApp(PATH);
+    const again = await screen.findByRole('list', { name: 'Публикация протокола' });
+    expect(within(again).queryByRole('link', { name: 'Открыть споры' })).toBeNull();
+  });
+
+  it('без открытых споров ссылки нет', async () => {
+    await renderApp(PATH);
+    const list = await screen.findByRole('list', { name: 'Публикация протокола' });
+    expect(within(list).queryByRole('link', { name: 'Открыть споры' })).toBeNull();
+  });
+
   it('модератор: действий нет — ни публикации, ни исключения, ни перепроверки', async () => {
     mocked.me.mockResolvedValue(ME.moderator);
     await renderApp(PATH);
@@ -431,6 +461,27 @@ describe('«Результаты» гонки — после публикаци�
     expect(within(history).getByText('Чужой трек')).toBeTruthy();
     await within(section('Попытки')).findByText('Проверка не уложилась во время');
     expect(screen.queryByRole('button', { name: 'Исключить трек' })).toBeNull();
+  });
+
+  it('история пересчётов: DQ по решению спора — «Решение по спору ·xxxxxx» со ссылкой на разбор (RC-13)', async () => {
+    const DISPUTE_ID = '01890a5d-ac96-774b-bcce-b302099a9001';
+    mocked.listProtocolRecalculations.mockResolvedValue({
+      items: [
+        {
+          id: '01890a5d-ac96-774b-bcce-b302099a0f07',
+          kind: 'disqualified',
+          entryId: ENTRY_B,
+          revision: null,
+          reason: `dispute:${DISPUTE_ID}`,
+          actor: { userId: USER_ID, displayName: 'Марк' },
+          at: '2026-10-26T20:00:00.000Z',
+        },
+      ],
+    });
+    await renderApp(PATH);
+    const history = await screen.findByRole('region', { name: 'История пересчётов' });
+    const link = await within(history).findByRole('link', { name: 'Решение по спору ·9a9001' });
+    expect(link.getAttribute('href')).toBe(`/admin/disputes/${DISPUTE_ID}`);
   });
 
   it('DQ и отмена DQ — с причиной, тело с entryId', async () => {

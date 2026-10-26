@@ -7,6 +7,7 @@ import {
   type RaceCancelReason,
   type RaceEditBlockReason,
   type RaceField,
+  RaceInvalidStateDetails,
   SURFACES,
 } from '@pokatim/contracts';
 import { type MessageKey, t } from '@pokatim/i18n';
@@ -78,8 +79,13 @@ function formPathOf(path: string): keyof RaceFormValues {
 /** Текст ошибки действия над гонкой (кроме полей и 409 версии). */
 function actionErrorText(error: unknown): string {
   if (isNetworkError(error)) return t('error.network');
-  if (apiErrorOf(error)?.code === 'RACE_INVALID_STATE') {
-    return t('admin.races.error.RACE_INVALID_STATE');
+  const parsed = apiErrorOf(error);
+  if (parsed?.code === 'RACE_INVALID_STATE') {
+    // отмена при открытых спорах (D-19) — текст причины; прочие состояния — общий текст
+    const details = RaceInvalidStateDetails.safeParse(parsed.details);
+    return details.success && details.data.reason === 'disputes_open'
+      ? t('admin.races.reason.disputes_open')
+      : t('admin.races.error.RACE_INVALID_STATE');
   }
   return t('admin.saveFailed');
 }
@@ -318,14 +324,15 @@ export function RaceEditor({
   const publishReason = editable?.reasons
     .map((reason) => PUBLISH_REASON[reason])
     .find((key): key is MessageKey => key !== undefined);
-  // причины ограничений правки под формой: фаза окна, отмена, заявки участников (V-12), протокол (D-19)
+  // причины ограничений правки под формой: фаза окна, отмена, заявки участников (V-12), протокол и споры (D-19)
   const editReasons = (editable?.reasons ?? []).filter(
     (reason) =>
       reason === 'window_open' ||
       reason === 'window_closed' ||
       reason === 'cancelled' ||
       reason === 'entries_locked' ||
-      reason === 'results_final',
+      reason === 'results_final' ||
+      reason === 'disputes_open',
   );
 
   const actions: ReactNode = race ? (

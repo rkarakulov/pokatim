@@ -1,6 +1,7 @@
 import type { PanelProtocolRecalculation } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { createColumnHelper } from '@tanstack/react-table';
 import { useId } from 'react';
 
@@ -10,6 +11,8 @@ import { riderLabel } from './results-format';
 import { recalculationsQuery } from './results-query';
 
 const column = createColumnHelper<PanelProtocolRecalculation>();
+/** DQ по решению спора (RC-13): `reason` записи — `dispute:<disputeId>`. */
+const DISPUTE_REASON = 'dispute:';
 
 const columns = [
   column.accessor('at', {
@@ -43,6 +46,19 @@ const columns = [
   }),
   column.accessor('reason', {
     header: t('admin.results.recalc.column.reason'),
+    cell: (info) => {
+      const reason = info.getValue();
+      const disputeId = reason.startsWith(DISPUTE_REASON)
+        ? reason.slice(DISPUTE_REASON.length)
+        : null;
+      return disputeId ? (
+        <Link className="link" to="/disputes/$disputeId" params={{ disputeId }}>
+          {t('admin.results.recalc.disputeReason', { id: disputeId.slice(-6) })}
+        </Link>
+      ) : (
+        reason
+      );
+    },
     enableSorting: false,
   }),
 ];

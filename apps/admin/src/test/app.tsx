@@ -26,11 +26,13 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
       'results.manage',
       'results.revise',
       'rides.moderate',
+      'disputes.read',
+      'disputes.decide',
     ],
   },
   moderator: {
     user: { id: USER_ID, displayName: 'Марк', email: 'mark@example.by', role: 'moderator' },
-    permissions: ['audit.read', 'races.read', 'rides.moderate'],
+    permissions: ['audit.read', 'races.read', 'rides.moderate', 'disputes.read', 'disputes.decide'],
   },
   organizer: {
     user: { id: USER_ID, displayName: 'Ира', email: 'ira@example.by', role: 'organizer' },
