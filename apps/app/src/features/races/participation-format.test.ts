@@ -24,6 +24,7 @@ import {
   resultRow,
   resultSignature,
   showsResultsTable,
+  withdrawBlockReason,
 } from './participation-format';
 
 const PROTOCOL = '14 октября';
@@ -315,6 +316,46 @@ describe('тексты ошибок действий (F5)', () => {
     ).toBe('Слишком много попыток. Попробуйте позже.');
     expect(raceActionErrorText(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }))).toBe(
       'Что-то пошло не так. Попробуйте ещё раз.',
+    );
+  });
+});
+
+describe('споры: D-39 и DQ (race-results-06, RC-4, RC-6)', () => {
+  it('попытка: dispute_open и disqualified — свои причины с текстом', () => {
+    expect(addAttemptBlockReason(actions({ reasons: ['dispute_open'] }))).toBe('dispute_open');
+    expect(blockReasonText('dispute_open')).toBe(
+      'По результату открыт спор — новые заезды можно загрузить после решения',
+    );
+    expect(addAttemptBlockReason(actions({ reasons: ['disqualified'] }))).toBe('disqualified');
+  });
+
+  it('отмена участия: только dispute_open / disqualified; закрытое окно и unknown — без текста', () => {
+    expect(withdrawBlockReason(actions({ reasons: ['dispute_open'] }))).toBe(
+      'Отменить участие можно после решения по спору',
+    );
+    expect(withdrawBlockReason(actions({ reasons: ['disqualified'] }))).toBe(
+      'Результат дисквалифицирован по решению команды платформы',
+    );
+    expect(withdrawBlockReason(actions({ reasons: ['window_closed', 'unknown'] }))).toBeNull();
+    expect(
+      withdrawBlockReason(actions({ canWithdraw: true, reasons: ['dispute_open'] })),
+    ).toBeNull();
+  });
+
+  it('409 по details.reason: отмена — races.withdrawBlock, попытка — races.block', () => {
+    const blocked = (code: string, reason: string) =>
+      new ApiHttpError(409, { code, message: 'x', details: { reason } });
+    expect(raceActionErrorText(blocked('RACE_WITHDRAW_CLOSED', 'dispute_open'))).toBe(
+      'Отменить участие можно после решения по спору',
+    );
+    expect(raceActionErrorText(blocked('RACE_WITHDRAW_CLOSED', 'something_new'))).toBe(
+      'Отменить участие сейчас нельзя',
+    );
+    expect(raceActionErrorText(blocked('ATTEMPT_UPLOAD_CLOSED', 'dispute_open'))).toBe(
+      'По результату открыт спор — новые заезды можно загрузить после решения',
+    );
+    expect(raceActionErrorText(blocked('ATTEMPT_UPLOAD_CLOSED', 'attempt_limit'))).toBe(
+      'Достигнут предел заездов для гонки',
     );
   });
 });

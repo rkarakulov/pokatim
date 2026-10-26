@@ -1,5 +1,5 @@
 import { apiErrorOf } from '@pokatim/api-client';
-import { Uuid, type MyRaceEntry, type RaceDetail } from '@pokatim/contracts';
+import { Uuid, type MyRaceDisputes, type MyRaceEntry, type RaceDetail } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
@@ -33,6 +33,9 @@ import {
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
+import { canOpenRival } from './disputes/dispute-format';
+import { useMyRaceDisputes } from './disputes/queries';
+import { RaceDisputes } from './disputes/race-disputes';
 import { cancelMessage, formatRaceWindow, raceCardLine } from './format';
 import { RaceParticipation } from './participation/race-participation';
 import { showsResultsTable } from './participation-format';
@@ -66,6 +69,7 @@ function RaceDetailView({
   race,
   now,
   entry,
+  disputes,
   results,
   signedIn,
   sessionPending,
@@ -73,6 +77,7 @@ function RaceDetailView({
   race: RaceDetail;
   now: Date | null;
   entry: UseQueryResult<MyRaceEntry | null>;
+  disputes: UseQueryResult<MyRaceDisputes | null>;
   results: ReturnType<typeof useRaceResults>;
   signedIn: boolean;
   sessionPending: boolean;
@@ -102,6 +107,7 @@ function RaceDetailView({
         signedIn={signedIn}
         sessionPending={sessionPending}
       />
+      {signedIn ? <RaceDisputes raceId={race.id} disputes={disputes} /> : null}
       {cancelled ? null : (
         <Row label={t('races.detail.window')}>
           <View style={styles.value}>
@@ -159,6 +165,12 @@ function RaceDetailView({
         <RaceResultsTable
           results={results}
           ownEntryId={signedIn ? (entry.data?.entry?.id ?? null) : null}
+          // карточка соперника — только вошедшему участнику, когда ей есть что показать (RC-14)
+          rowAction={(entryId) =>
+            signedIn && canOpenRival(disputes.data, entryId)
+              ? () => router.push(`/races/result/${race.id}/${entryId}`)
+              : null
+          }
         />
       ) : null}
     </View>
@@ -179,6 +191,9 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
   const race = useRace(id, seed, valid);
   // участие и таблица — только клиентские запросы (в SSR не попадают): `loader` сеет лишь `RaceDetail`
   const entry = useMyRaceEntry(id, valid && signedIn);
+  // споры (race-results-06) — только у вошедшего с заявкой (RC-14)
+  const entered = signedIn && (entry.data?.entry ?? null) !== null;
+  const disputes = useMyRaceDisputes(id, valid && entered);
   const tableShown = race.data !== undefined && showsResultsTable(race.data);
   const results = useRaceResults(id, valid && tableShown);
   const now = useMinskClockAfterMount([race.dataUpdatedAt, entry.dataUpdatedAt]);
@@ -186,9 +201,10 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
     () => [
       race.refetch,
       ...(signedIn ? [entry.refetch] : []),
+      ...(entered ? [disputes.refetch] : []),
       ...(tableShown ? [results.refetch] : []),
     ],
-    [race.refetch, signedIn, entry.refetch, tableShown, results.refetch],
+    [race.refetch, signedIn, entry.refetch, entered, disputes.refetch, tableShown, results.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   const notFound =
@@ -244,6 +260,7 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
                 race={data}
                 now={now}
                 entry={entry}
+                disputes={disputes}
                 results={results}
                 signedIn={signedIn}
                 sessionPending={sessionPending}

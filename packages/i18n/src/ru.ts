@@ -1261,6 +1261,7 @@ export const ru = {
   'disputes.mine.withdrawTitle': 'Отозвать спор?',
   'disputes.mine.withdrawConfirm': 'Отозвать спор? Подать его снова будет нельзя.',
   'disputes.mine.withdrawCancel': 'Не отзывать',
+  'disputes.mine.withdrawBody': 'Подать его снова будет нельзя.',
   'disputes.mine.decision': '{status}: {template}',
   'disputes.against.banner':
     'По вашему результату открыт спор: {category}. Решение — до публикации протокола {date}',

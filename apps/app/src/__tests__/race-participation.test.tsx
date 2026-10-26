@@ -16,6 +16,7 @@ import { appRoutes, tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { upload } from './devices-fixtures';
 import { FakeXhr } from './fake-xhr';
+import { myDisputes } from './disputes-fixtures';
 import { createQueryWrapper } from './query-wrapper';
 import {
   actions,
@@ -82,6 +83,8 @@ beforeEach(() => {
   getRace.mockResolvedValue(corridorRace());
   getMyRaceEntry.mockResolvedValue(noEntry());
   getRaceResults.mockResolvedValue(resultsPage());
+  // споры (race-results-06): у участника — запрос «моих споров»; здесь их нет
+  jest.mocked(api.getMyRaceDisputes).mockResolvedValue(myDisputes());
   jest.mocked(api.listRaces).mockResolvedValue({ items: [], nextCursor: null });
   jest.mocked(api.trackUploadRequest).mockReturnValue({
     url: 'https://api.example/v1/tracks/uploads?name=ride.gpx',
@@ -532,6 +535,53 @@ describe('загрузка заезда в гонку (AC7)', () => {
     expect(FakeXhr.last?.aborted).toBe(true);
     expect(await screen.findByRole('button', { name: 'Загрузить заезд' })).toBeOnTheScreen();
     expect(addRaceAttempt).not.toHaveBeenCalled();
+  });
+});
+
+describe('споры: D-39 и DQ (race-results-06, AC12)', () => {
+  beforeEach(signedIn);
+
+  it('открыт спор по моему результату — причины у загрузки и отмены, кнопок нет', async () => {
+    getMyRaceEntry.mockResolvedValue(myEntry({ actions: actions({ reasons: ['dispute_open'] }) }));
+    await openSignedIn();
+
+    expect(
+      await screen.findByText(
+        'По результату открыт спор — новые заезды можно загрузить после решения',
+      ),
+    ).toBeOnTheScreen();
+    expect(
+      participation().getByText('Отменить участие можно после решения по спору'),
+    ).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Загрузить заезд' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Отменить участие' })).toBeNull();
+  });
+
+  it('DQ — причина у загрузки и отмены', async () => {
+    getMyRaceEntry.mockResolvedValue(myEntry({ actions: actions({ reasons: ['disqualified'] }) }));
+    await openSignedIn();
+
+    expect(
+      await screen.findAllByText('Результат дисквалифицирован по решению команды платформы'),
+    ).toHaveLength(2);
+  });
+
+  it('409 RACE_WITHDRAW_CLOSED с dispute_open — текст по details.reason', async () => {
+    getMyRaceEntry.mockResolvedValue(myEntry());
+    withdrawFromRace.mockRejectedValue(
+      new ApiHttpError(409, {
+        code: 'RACE_WITHDRAW_CLOSED',
+        message: 'x',
+        details: { reason: 'dispute_open' },
+      }),
+    );
+    await openSignedIn();
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Отменить участие' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Отменить участие' }));
+    expect(
+      await screen.findAllByText('Отменить участие можно после решения по спору'),
+    ).not.toHaveLength(0);
   });
 });
 

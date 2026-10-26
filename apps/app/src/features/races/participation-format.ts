@@ -1,10 +1,12 @@
-import type {
-  MyAttempt,
-  MyRaceEntry,
-  PendingUpload,
-  RaceDetail,
-  RaceEntryBlockReason,
-  RaceResultRow,
+import { apiErrorOf } from '@pokatim/api-client';
+import {
+  RaceEntryBlockedDetails,
+  type MyAttempt,
+  type MyRaceEntry,
+  type PendingUpload,
+  type RaceDetail,
+  type RaceEntryBlockReason,
+  type RaceResultRow,
 } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import type { PillTone } from '@rkarakulov/ui';
@@ -37,7 +39,16 @@ export const ATTEMPT_REASONS: readonly RaceEntryBlockReason[] = [
   'window_not_open',
   'upload_closed',
   'attempt_limit',
+  // race-results-06: открыт спор по своему результату (D-39); результат дисквалифицирован по спору (RC-6)
+  'dispute_open',
+  'disqualified',
 ];
+/** Причины недоступности отмены участия с текстом под действиями (RC-4); закрытое окно — без текста, как раньше. */
+export const WITHDRAW_REASONS = [
+  'dispute_open',
+  'disqualified',
+] as const satisfies readonly RaceEntryBlockReason[];
+const withdrawReasonOf = (reason: string) => WITHDRAW_REASONS.find((own) => own === reason);
 
 /** Своя причина важнее незнакомой (`unknown` может быть причиной другого действия); своей нет — `unknown`, если есть. */
 function firstReason(actions: Actions, own: readonly RaceEntryBlockReason[]): BlockReason | null {
@@ -55,6 +66,13 @@ export const enterBlockReason = (actions: Actions) => firstReason(actions, ENTER
 export const addAttemptBlockReason = (actions: Actions) => firstReason(actions, ATTEMPT_REASONS);
 
 export const blockReasonText = (reason: BlockReason): string => t(`races.block.${reason}`);
+
+/** Текст недоступной «Отменить участие» (D-39, RC-6): только свои причины; отмена доступна — `null`. */
+export function withdrawBlockReason(actions: Actions): string | null {
+  if (actions.canWithdraw) return null;
+  const reason = actions.reasons.map(withdrawReasonOf).find((own) => own !== undefined);
+  return reason ? t(`races.withdrawBlock.${reason}`) : null;
+}
 
 const hasCorridor = (race: RaceDetail) => (race.corridor ?? null) !== null;
 
@@ -206,10 +224,22 @@ type RaceErrorCode = (typeof RACE_ERROR_CODES)[number];
 export const isRaceErrorCode = (code: string | undefined): code is RaceErrorCode =>
   code !== undefined && (RACE_ERROR_CODES as readonly string[]).includes(code);
 
-/** Отказ действия участия: `races.error.<код>`, иначе общий текст (сеть, 429, сбой) — F5. */
+/**
+ * Отказ действия участия (F5): с `details.reason` (RC-4) — у отмены `races.withdrawBlock.<причина>`, у попытки
+ * `races.block.<причина>`; иначе `races.error.<код>`, иначе общий текст (сеть, 429, сбой).
+ */
 export function raceActionErrorText(error: unknown): string {
   const code = apiErrorCode(error);
-  return isRaceErrorCode(code) ? t(`races.error.${code}`) : actionErrorMessage(error);
+  if (!isRaceErrorCode(code)) return actionErrorMessage(error);
+  const details = RaceEntryBlockedDetails.safeParse(apiErrorOf(error)?.details);
+  if (details.success) {
+    const { reason } = details.data;
+    if (code === 'RACE_WITHDRAW_CLOSED') {
+      return t(`races.withdrawBlock.${withdrawReasonOf(reason) ?? 'unknown'}`);
+    }
+    if (code === 'ATTEMPT_UPLOAD_CLOSED') return blockReasonText(reason);
+  }
+  return t(`races.error.${code}`);
 }
 
 /** Строка предварительной таблицы: место («=2» при ничьей), «Участник» / «Вы», время, подпись для скринридера. */

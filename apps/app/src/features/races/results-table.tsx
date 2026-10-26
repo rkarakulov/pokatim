@@ -1,6 +1,6 @@
 import { isNetworkError } from '@pokatim/api-client';
 import type { RaceResultRow } from '@pokatim/contracts';
-import { size, space, stroke } from '@pokatim/design-tokens';
+import { motion, size, space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
   Banner,
@@ -11,25 +11,31 @@ import {
   textStyle,
   useTheme,
 } from '@rkarakulov/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { resultRow } from './participation-format';
 import type { useRaceResults } from './queries';
 
-function ResultRow({ row, own }: { row: RaceResultRow; own: boolean }) {
+/** Строка таблицы; `onPress` — карточка соперника (race-results-06, RC-14): строка становится кнопкой. */
+function ResultRow({
+  row,
+  own,
+  onPress,
+}: {
+  row: RaceResultRow;
+  own: boolean;
+  onPress: (() => void) | null;
+}) {
   const theme = useTheme();
   const view = resultRow(row, own);
-  return (
-    <View
-      accessible
-      accessibilityLabel={view.a11y}
-      style={[
-        styles.row,
-        { borderTopColor: theme.border.subtle },
-        // полоса — роль рамки (акцентной рамки в системе нет); «Вы» — текстом, не только цветом
-        own ? [styles.own, { borderLeftColor: theme.border.strong }] : null,
-      ]}
-    >
+  const style = [
+    styles.row,
+    { borderTopColor: theme.border.subtle },
+    // полоса — роль рамки (акцентной рамки в системе нет); «Вы» — текстом, не только цветом
+    own ? [styles.own, { borderLeftColor: theme.border.strong }] : null,
+  ];
+  const cells = (
+    <>
       <Text style={[textStyle('time'), styles.place, { color: theme.text.primary }]}>
         {view.place}
       </Text>
@@ -43,6 +49,23 @@ function ResultRow({ row, own }: { row: RaceResultRow; own: boolean }) {
         {view.who}
       </Text>
       <Text style={[textStyle('time'), { color: theme.text.primary }]}>{view.time}</Text>
+    </>
+  );
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('disputes.rival.open', { place: view.place, time: view.time })}
+        onPress={onPress}
+        style={({ pressed }) => [...style, { opacity: pressed ? motion.pressedOpacity : 1 }]}
+      >
+        {cells}
+      </Pressable>
+    );
+  }
+  return (
+    <View accessible accessibilityLabel={view.a11y} style={style}>
+      {cells}
     </View>
   );
 }
@@ -55,9 +78,12 @@ function ResultRow({ row, own }: { row: RaceResultRow; own: boolean }) {
 export function RaceResultsTable({
   results,
   ownEntryId,
+  rowAction,
 }: {
   results: ReturnType<typeof useRaceResults>;
   ownEntryId: string | null;
+  /** нажатие на чужую строку (карточка соперника); `null` — строка не нажимаема */
+  rowAction?: (entryId: string) => (() => void) | null;
 }) {
   const theme = useTheme();
   const pages = results.data?.pages;
@@ -106,9 +132,17 @@ export function RaceResultsTable({
         </Text>
       ) : (
         <View>
-          {rows.map((row) => (
-            <ResultRow key={row.entryId} row={row} own={row.entryId === ownEntryId} />
-          ))}
+          {rows.map((row) => {
+            const own = row.entryId === ownEntryId;
+            return (
+              <ResultRow
+                key={row.entryId}
+                row={row}
+                own={own}
+                onPress={own ? null : (rowAction?.(row.entryId) ?? null)}
+              />
+            );
+          })}
         </View>
       )}
       {results.hasNextPage ? (
