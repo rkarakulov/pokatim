@@ -19,13 +19,19 @@ import type { CorridorMatch, MatchWindow } from './types.ts';
 
 const POINTS = 200_000;
 const INTERVAL_MS = 500;
-const TIME_LIMIT_MS = 3000;
+/**
+ * Бюджеты AC14 строгие локально; на CI (общая медленная машина, параллельные задачи, шумные замеры памяти) — с
+ * множителем 3: CI ловит регрессии на порядок, а не дрожание раннера. Строгий прогон: `pnpm --filter @pokatim/tracks
+ * exec vitest run src/corridor/bench.test.ts` без `CI`.
+ */
+const CI_BUDGET_FACTOR = process.env.CI ? 3 : 1;
+const TIME_LIMIT_MS = 3000 * CI_BUDGET_FACTOR;
 /**
  * Искусственный худший случай (злонамеренный трек на пределе лимита работы) — не честный трек: его граница — запас до
  * таймаута потока разбора (30 с), а не бюджет обычного трека. На CI машина в ~8–10 раз медленнее локальной.
  */
-const ADVERSARIAL_TIME_LIMIT_MS = 8000;
-const MEMORY_LIMIT_BYTES = 64 * 1024 * 1024;
+const ADVERSARIAL_TIME_LIMIT_MS = 8000 * CI_BUDGET_FACTOR;
+const MEMORY_LIMIT_BYTES = 64 * 1024 * 1024 * CI_BUDGET_FACTOR;
 
 /** Маршрут 200 км «змейкой»: 20 × (9,5 км на восток/запад + 0,5 км на север); вершины линии — раз в 100 м. */
 function longRoute(): Xy[] {
