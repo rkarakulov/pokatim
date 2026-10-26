@@ -631,6 +631,29 @@ D-коды и права R1 не меняются, уточнена механи
   (место, «Участник», время, статус) с «Оспорить результат» и сроком — анатомия шита прототипа без имени, аватара и
   тренера. Отдельный экран, а не bottom sheet: одинаково на iOS/Android/web, deep link, без новой зависимости.
 - DV-2 (spec) **Ряды пульса и мощности** вынесены в слайс 06b (эпик §7 — строка добавлена).
+- DV-3 (coder) **Порядок `decideBlock`:** `not_open` → `cancelled` → `protocol_published` → `too_early`. Для открытого
+  спора результат тот же, что в таблице транзакций §5 (`lockResults` первым, затем проверки). Отличие: у решённого
+  спора разбор показывает `decideBlockedBy: 'not_open'`, а не состояние гонки.
+- DV-4 (coder) **`raceEditable(…, { openDisputes })` — параметр необязательный** (по умолчанию `0`). Прежние unit-тесты
+  `races.policy` не меняются. Единственный вызов в коде, `RacesService.present`, передаёт число всегда (одна агрегация
+  `openDisputesByRace`). `entryActions` получает `{ openDisputes }` обязательно.
+- DV-5 (coder) **Размещение int-тестов точки B.** D-39, RC-5, RC-6 и строка чек-листа проверяются в новом
+  `results/results-disputes.int.test.ts`, а не в `results-entries` / `results-attempts`. Споры в нём вставляются
+  напрямую (`test/disputes.ts: seedDispute`). AC9 и RC-7 — в `races-admin.int.test.ts`. RC-7 через API подачи
+  проверяется ещё и в `disputes.int.test.ts`.
+- DV-6 (coder) **Чужая сторона спора.** Отзыв от цели и ответ от заявителя возвращают `404 DISPUTE_NOT_FOUND`, как у
+  постороннего. Действие доступно только своей стороне, существование спора не раскрывается.
+- DV-7 (coder) **`RACE_WITHDRAW_CLOSED` при закрытом окне** остаётся без `details`, как в 05. `details.reason`
+  (`RaceEntryBlockedDetails`) приходит только с причинами `dispute_open` / `disqualified`. `ATTEMPT_UPLOAD_CLOSED`
+  отдаёт `details.reason` для всех причин, как и раньше.
+- DV-8 (coder) **Тип `EntryResult`.** `ResultsReadService.entryResult` возвращает статус `RaceResultStatus`, а не
+  ответный `tolerantEnum` с `'unknown'`. Это нужно порту `DisputeStanding`, форма ответа «моего участия» не меняется.
+- DV-9 (coder) **Отрицательные доказательства AC10 — постоянные тесты.** В `disputes-locks.int.test.ts` замок подменён
+  чтением (`ResultsForDisputes.lockEntry` → `entry`, `RacesRepository.lockResults` → `findRace`). Тест ожидает
+  нарушенный инвариант: прогон повторяем, а без механизма тест краснеет по результату.
+- DV-10 (coder) **Приложение и панель без правок.** Typecheck `apps/app` и `apps/admin` с новыми значениями enum
+  зелёный: карты текстов строятся по ключам i18n, а ключи добавлены в точке A. Правка в духе DV-11 слайса 05 не
+  понадобилась. Точки D, E, F не выполнялись (вне поручения).
 
 # 8.3 Security checklist
 
@@ -1246,4 +1269,68 @@ decideBlock(dispute: Pick<DisputeDoc, 'status' | 'filedAt'>, race: RaceForResult
 
 # 12. Outcome
 
-(coder)
+Coder, точки ORDER A, B, C (D — приложение, E — панель, F — docs: вне поручения).
+
+**Коммиты**
+- `0443100` A — контракты (`disputes/*.schema.ts`, enum `results` / `races` / `permissions` / `audit`, коды ошибок),
+  api-client (приложение и панель), i18n (`disputes.*`, `admin.disputes.*`, `races.block.*`,
+  `races.withdrawBlock.*`), тексты `error-messages`.
+- `528b510` B — порты `ResultDisputeGate`, `ResultsForDisputes`, `RaceCancelGate`; `@Global DisputesCoreModule` в
+  `AppModule` и `WorkerModule` (RC-1). Сюда же вошли:
+  - DQ до публикации: `disqualified`, `rankedFilter`, `protocolBaseEntries` в `publish` / `applyRecheck`, `resultStatus`
+    / `entryActions` / `entryDisputeBlock`, `entryResult`;
+  - D-39 в `withdraw`, `add` и `syncGroup` (RC-5);
+  - чек-лист из гейта;
+  - `races.disputeFilingClosedAt` (RC-7), D-19 в `raceEditable`, `present` и `cancel`.
+- `4b035b8` C — модуль `disputes`:
+  - политика, репозиторий и сторож (RC-8, AC11), события;
+  - `DisputesService` / `DisputesPanelService`, контроллеры;
+  - `ResultsForDisputesService` (`disqualify`, `standing`);
+  - права R1, `AuditDetailsDoc.disputeId`;
+  - миграция `0018_disputes`;
+  - int AC1–AC10.
+
+**Тесты (новые)**
+- Unit:
+  - `disputes.policy.test.ts`, `disputes.repository.test.ts` (сторож);
+  - `results.policy.test.ts` (dq, `entryDisputeBlock`, `entryActions` споров);
+  - `races.policy.test.ts` (`disputes_open`, `disputeFilingFreeze`), `permissions.test.ts`;
+  - контракты `disputes.schema.test.ts` и правки соседних, api-client `disputes.test.ts`.
+- Int:
+  - `disputes.int.test.ts` (14): AC1–AC4, лимит 429, RC-7;
+  - `disputes-panel.int.test.ts` (9): AC5, AC6, AC8, RC-2, RC-3, список и курсор, идемпотентный DQ;
+  - `disputes-locks.int.test.ts` (6): AC10 и отрицательные доказательства;
+  - `results-disputes.int.test.ts` (9): AC7, RC-5, RC-6, RC-16, чек-лист;
+  - `races-admin.int.test.ts` (+2): AC9, RC-7;
+  - `migrations.int.test.ts` (+1): `0018` идемпотентна.
+
+**Отрицательные доказательства (AC10, RC-17)** — `disputes-locks.int.test.ts`:
+1. Подача ↔ отмена участия цели.
+   - С `lockEntry` цели: отмена повторяется на замке (`lockEntryOf` ≥ 2), подача — 201, отмена —
+     `409 RACE_WITHDRAW_CLOSED dispute_open`, заявка активна.
+   - Без замка (`lockEntry` порта подменён чтением `entry`): отмена 200, подача 201, открытый спор против отменённой
+     заявки.
+2. Подача ↔ публикация.
+   - С `lockResults` в подаче: публикация повторяется (`lockResults` ≥ 3 вызовов), подача — 201, публикация —
+     `409 RESULTS_PUBLISH_BLOCKED` (`open_disputes: 1`).
+   - Без замка (`RacesRepository.lockResults` → `findRace`): публикация 200, подача 201, спор открыт при опубликованном
+     протоколе.
+3. Решение ↔ решение: одно 200, другое `409 not_open`, одно событие `decided`.
+4. Подача ↔ отмена гонки: побеждает одна. При отмене — `cancelled`, открытых споров 0; при подаче —
+   `RACE_INVALID_STATE disputes_open`, гонка опубликована.
+
+**Проверки** (изоляция `MONGO_URL_TEST=…/pokatim_06disputes_test`, `REDIS_URL_TEST=…:6479/8`)
+- После A: typecheck всех пакетов (turbo, 8/8) зелёный; contracts 210, api-client 71, i18n 6, admin 189, app 838
+  тестов зелёные.
+- После B: `@pokatim/api` vitest — 860 тестов, одна правка ожидания прав admin в `panel-session.int`, затем зелёный;
+  `tsc`, `eslint`, `arch:check` зелёные.
+- После C: `@pokatim/api` vitest — 902 теста, две правки (ожидание прав moderator в `panel.guard.test`, уникальный
+  индекс в тесте миграции), затем зелёный.
+- Финал, первый прогон `TURBO_CONCURRENCY=1 pnpm check` — красный: `arch:check`, `disputes-locks.int.test.ts`
+  импортировал `results/results.repository` в обход `index.ts`. Исправлено хелпером стенда
+  `test/results.ts: resultsRepository(h)`.
+- Финал, повторный прогон `TURBO_CONCURRENCY=1 pnpm check` — **EXIT 0** (7 мин 5 с):
+  - format:check, lint, arch:check зелёные (`no dependency violations found`, 943 модуля); typecheck 8/8;
+  - тесты 13/13: api 902 (92 файла), app 838 (95 наборов), admin 189, contracts 210, api-client 71, tracks 202,
+    design-tokens 114, i18n 6.
+- Не проверялось: `pnpm --filter @pokatim/admin build` и `pnpm e2e:admin` — точка F, вне поручения.

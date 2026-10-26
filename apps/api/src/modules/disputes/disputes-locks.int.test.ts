@@ -20,6 +20,7 @@ import {
   enterRace,
   protocolAction,
   resultsDb,
+  resultsRepository,
   rider,
   seedBest,
   signIn,
@@ -27,7 +28,6 @@ import {
   withdraw,
 } from '../../../test/results';
 import { RESULTS_FOR_DISPUTES, type ResultsForDisputes } from '../results';
-import { ResultsRepository } from '../results/results.repository';
 import { DisputesRepository } from './disputes.repository';
 
 /**
@@ -86,7 +86,7 @@ describe('подача ↔ отмена участия цели (lockEntry це�
     const { raceId, riders } = await openWindowRace();
     const [me, rival] = riders;
     const g = gateAfterTargetLock();
-    const lockSpy = vi.spyOn(h.app.get(ResultsRepository, { strict: false }), 'lockEntryOf');
+    const lockSpy = vi.spyOn(resultsRepository(h), 'lockEntryOf');
     const filing = fileDispute(h, me!.auth, raceId, {
       targetEntryId: rival!.entryId,
       category: 'other',
