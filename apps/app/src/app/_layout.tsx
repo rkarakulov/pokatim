@@ -117,6 +117,8 @@ export default function RootLayout() {
           <Stack.Screen name="rides/new" />
           <Stack.Screen name="rides/edit/[id]" />
           <Stack.Screen name="rides/cancel/[id]" />
+          {/* «Выбрать свой заезд» в гонку (race-results-04): только вошедшим, без таб-бара */}
+          <Stack.Screen name="races/pick/[id]" />
         </Stack.Protected>
         {/* шаги онбординга после входа: опрос → геопозиция → устройства → Главная; пока сессия или шаг неизвестны — скелетон
             (SSR отдаёт HTML оболочки, а не пустую страницу редиректа) */}

@@ -21,15 +21,25 @@ export type TrackFileUploadState =
   /** байты приняты: дальше статус обработки — из списка загрузок (опрос) */
   | { phase: 'sent'; name: string; upload: TrackUpload };
 
+export interface TrackFileUploadOptions {
+  /** байты приняты сервером (только для текущей отправки): загрузка в гонку делает второй шаг — попытку */
+  onUploaded?: (upload: TrackUpload) => void;
+}
+
 /**
  * Загрузка файла заезда: системный выбор → pre-check (`@pokatim/tracks`: расширение, пустой, > 16 МБ — без запроса) →
  * отправка с прогрессом и «Отменить» → загрузка в начало списка (его опрос ведёт «Обрабатываем…» → «Готово»).
  * Без resumable-очереди (v1, task.md §8.2): уход с экрана прерывает отправку.
  */
-export function useTrackFileUpload() {
+export function useTrackFileUpload(options: TrackFileUploadOptions = {}) {
   const queryClient = useQueryClient();
   const [state, setState] = useState<TrackFileUploadState>({ phase: 'idle' });
   const active = useRef<AbortController | null>(null);
+  // колбэк — через ref: `choose` не пересоздаётся на каждый рендер владельца
+  const onUploaded = useRef(options.onUploaded);
+  useEffect(() => {
+    onUploaded.current = options.onUploaded;
+  }, [options.onUploaded]);
 
   useEffect(() => () => active.current?.abort(), []);
 
@@ -64,6 +74,7 @@ export function useTrackFileUpload() {
       );
       void queryClient.invalidateQueries({ queryKey: devicesKeys.uploads });
       setState({ phase: 'sent', name: file.name, upload });
+      onUploaded.current?.(upload);
     } catch (error) {
       if (error instanceof UploadCanceledError || !isCurrent()) return;
       setState({ phase: 'failed', message: deviceActionErrorMessage(error) });

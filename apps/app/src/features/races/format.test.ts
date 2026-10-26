@@ -3,6 +3,7 @@ import type { RaceCard } from '@pokatim/contracts';
 
 import {
   cancelMessage,
+  formatElapsed,
   formatRaceWindow,
   raceCardLine,
   raceClassSurfaces,
@@ -222,5 +223,18 @@ describe('подписи карточки гонки', () => {
     );
     expect(cancelMessage('unknown')).toBe('Гонка отменена.');
     expect(cancelMessage(null)).toBe('Гонка отменена.');
+  });
+});
+
+describe('formatElapsed (F4)', () => {
+  it.each([
+    [0, '0:00:00'],
+    [59, '0:00:59'],
+    [2527, '0:42:07'],
+    [3600, '1:00:00'],
+    [3725, '1:02:05'],
+    [90061, '25:01:01'],
+  ])('%i с — «%s»', (sec, text) => {
+    expect(formatElapsed(sec)).toBe(text);
   });
 });

@@ -24,6 +24,7 @@ import NewRideRoute from '../app/rides/new';
 import EditRideRoute from '../app/rides/edit/[id]';
 import CancelRideRoute from '../app/rides/cancel/[id]';
 import RaceRoute from '../app/races/[id]';
+import RacePickRoute from '../app/races/pick/[id]';
 import SeasonRoute from '../app/seasons/[id]';
 import StatusScreen from '../app/status';
 import UiKitScreen from '../app/ui-kit';
@@ -61,6 +62,7 @@ export const appRoutes = {
   'ui-kit': UiKitScreen,
   status: StatusScreen,
   'races/[id]': RaceRoute,
+  'races/pick/[id]': RacePickRoute,
   'seasons/[id]': SeasonRoute,
   'calendar/[id]': CalendarStartRoute,
   'rides/[id]': RideRoute,
