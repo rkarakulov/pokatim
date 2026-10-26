@@ -12,6 +12,9 @@ import type { ReactNode } from 'react';
 
 import { AuditScreen } from './features/audit/AuditScreen';
 import { CalendarScreen } from './features/calendar/CalendarScreen';
+import { validateDisputesSearch } from './features/disputes/disputes-format';
+import { DisputeScreen } from './features/disputes/DisputeScreen';
+import { DisputesScreen } from './features/disputes/DisputesScreen';
 import { validateRidesModerationSearch } from './features/rides-moderation/moderation-format';
 import { RideModerationScreen } from './features/rides-moderation/RideModerationScreen';
 import { RidesModerationScreen } from './features/rides-moderation/RidesModerationScreen';
@@ -222,6 +225,34 @@ const rideModerationRoute = createRoute({
   },
 });
 
+const disputesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'disputes',
+  validateSearch: validateDisputesSearch,
+  component: function DisputesRoute() {
+    const search = disputesRoute.useSearch();
+    const navigate = disputesRoute.useNavigate();
+    return (
+      <RequirePermission permission="disputes.read">
+        <DisputesScreen search={search} onSearch={(next) => void navigate({ search: next })} />
+      </RequirePermission>
+    );
+  },
+});
+
+const disputeRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'disputes/$disputeId',
+  component: function DisputeRoute() {
+    const { disputeId } = disputeRoute.useParams();
+    return (
+      <RequirePermission permission="disputes.read">
+        <DisputeScreen disputeId={disputeId} />
+      </RequirePermission>
+    );
+  },
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '$',
@@ -242,6 +273,8 @@ const routeTree = rootRoute.addChildren([
     auditRoute,
     ridesModerationRoute,
     rideModerationRoute,
+    disputesRoute,
+    disputeRoute,
     notFoundRoute,
   ]),
 ]);

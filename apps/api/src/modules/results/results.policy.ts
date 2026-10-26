@@ -171,18 +171,20 @@ export function summarize(
 }
 
 /**
- * Статус результата участника (§7.4, по порядку) — считается при чтении: отменил → есть лучший → идёт проверка →
- * видимые отказы, провалы и исключённые → срок загрузки истёк → ещё нет попыток. `ignoreBest` (RC-5): протокол
- * опубликован, а строки участника в нём нет — живой лучший результат места не даёт.
+ * Статус результата участника (§7.4, по порядку) — считается при чтении: отменил → DQ по спору до публикации
+ * (race-results-06, D-43) → есть лучший → идёт проверка → видимые отказы, провалы и исключённые → срок загрузки истёк
+ * → ещё нет попыток. `ignoreBest` (RC-5): протокол опубликован, а строки участника в нём нет — живой лучший результат
+ * места не даёт (и поле DQ не читается, RC-3).
  */
 export function resultStatus(
-  entry: Pick<RaceEntryDoc, 'status' | 'best' | 'summary'> | null,
-  race: Pick<RaceForResults, 'closesAt'>,
+  entry: Pick<RaceEntryDoc, 'status' | 'best' | 'summary' | 'disqualified'> | null,
+  race: Pick<RaceForResults, 'closesAt' | 'protocolPublishedAt'>,
   now: Date,
   { ignoreBest = false }: { ignoreBest?: boolean } = {},
 ): RaceResultStatus {
   if (!entry) return 'none';
   if (entry.status === 'withdrawn') return 'withdrawn';
+  if (!ignoreBest && disqualifiedBeforePublication(entry, race)) return 'dq';
   if (entry.best && !ignoreBest) return 'provisional';
   if (entry.summary.pending > 0) return 'pending';
   const { rejectedShown, failed, excluded = 0 } = entry.summary;
@@ -192,14 +194,40 @@ export function resultStatus(
 }
 
 /**
+ * DQ по спору до публикации (RC-3): поле заявки — проекция, читается только пока протокол не опубликован; после —
+ * истина в журнале пересчётов и снимке. Документы до `0018_disputes` поля не имеют — `?? null`.
+ */
+export function disqualifiedBeforePublication(
+  entry: Pick<RaceEntryDoc, 'disqualified'>,
+  race: Pick<RaceForResults, 'protocolPublishedAt'>,
+): boolean {
+  return race.protocolPublishedAt === null && (entry.disqualified ?? null) !== null;
+}
+
+/**
+ * Блок действий участника из-за спора (D-39, RC-6) — одна функция для «моего участия» и сервера: DQ до публикации →
+ * `disqualified`; открытый спор против заявки → `dispute_open`; иначе `null`.
+ */
+export function entryDisputeBlock(
+  entry: Pick<RaceEntryDoc, 'disqualified'>,
+  openDisputes: number,
+  race: Pick<RaceForResults, 'protocolPublishedAt'>,
+): 'disqualified' | 'dispute_open' | null {
+  if (disqualifiedBeforePublication(entry, race)) return 'disqualified';
+  return openDisputes > 0 ? 'dispute_open' : null;
+}
+
+/**
  * Действия участия (D-37, C1/H2): заявиться, отменить, добавить попытку — и причины недоступности (без повторов).
- * `phase` — фаза гонки (`racePhase` из `races`).
+ * `phase` — фаза гонки (`racePhase` из `races`). Споры (race-results-06, RC-4): причина спора добавляется, только
+ * когда действие по прежним правилам было бы доступно (закрытое окно объясняется своей причиной).
  */
 export function entryActions(
-  race: Pick<RaceForResults, 'status' | 'corridor' | 'closesAt'>,
+  race: Pick<RaceForResults, 'status' | 'corridor' | 'closesAt' | 'protocolPublishedAt'>,
   phase: RacePhase,
-  entry: Pick<RaceEntryDoc, 'status' | 'summary'> | null,
+  entry: Pick<RaceEntryDoc, 'status' | 'summary' | 'disqualified'> | null,
   now: Date,
+  { openDisputes }: { openDisputes: number },
 ): MyRaceEntry['actions'] {
   const reasons: RaceEntryBlockReason[] = [];
   const block = (reason: RaceEntryBlockReason) => {
@@ -232,6 +260,10 @@ export function entryActions(
   else if (entry.summary.total >= RESULTS_POLICY.maxAttemptsPerEntry) {
     canAddAttempt = block('attempt_limit');
   }
+
+  const dispute = entryDisputeBlock(entry, openDisputes, race);
+  if (dispute && canWithdraw) canWithdraw = block(dispute);
+  if (dispute && canAddAttempt) canAddAttempt = block(dispute);
   return { canEnter: false, canWithdraw, canAddAttempt, reasons };
 }
 

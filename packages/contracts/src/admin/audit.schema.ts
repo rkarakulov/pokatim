@@ -37,6 +37,8 @@ export const AUDIT_ACTIONS = [
   'ride.hidden',
   'ride.restored',
   'ride.reports_dismissed',
+  // race-results-06: решение по спору
+  'disputes.decided',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -89,6 +91,8 @@ export const AuditEntry = z.object({
       revision: z.number().int().optional(),
       /** Модерация райдов: число жалоб, закрытых этим действием. */
       reportCount: z.number().int().nonnegative().optional(),
+      /** race-results-06: спор, по которому принято решение */
+      disputeId: Uuid.optional(),
     })
     .nullable(),
 });

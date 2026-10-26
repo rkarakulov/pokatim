@@ -25,6 +25,9 @@ export const PERMISSIONS = [
   'results.revise',
   // 05b: модерация кофе-райдов по жалобам
   'rides.moderate',
+  // race-results-06: споры по результатам — просмотр и решение (команда платформы)
+  'disputes.read',
+  'disputes.decide',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
 export type Permission = z.infer<typeof Permission>;

@@ -2,6 +2,7 @@ import { minskWallTimeToUtc, PanelRace, PanelRacePage } from '@pokatim/contracts
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { closeSeededDispute, seedDispute } from '../../../test/disputes';
 import { createHarness, DAY, HOUR, type Harness } from '../../../test/harness';
 import { panel, panelCall, panelSession } from '../../../test/panel';
 import {
@@ -495,5 +496,72 @@ describe('журнал и список (AC9, AC11)', () => {
     for (const query of ['?cursor=abc', '?status[$ne]=x', `?ownerUserId=${admin.userId}`]) {
       expect((await panelCall(h, admin.token, 'GET', `${RACES}${query}`)).status, query).toBe(400);
     }
+  });
+});
+
+describe('споры (race-results-06)', () => {
+  it('D-19 (AC9): открытый спор — canCancel false и disputes_open в гонке и в списке; отмена — 409; после закрытия — 200', async () => {
+    const { admin } = await setup();
+    const race = await publishedRace(h, admin.token);
+    const dispute = await seedDispute(h, { raceId: race.id, targetEntryId: uuidv7() });
+
+    const one = parse((await panelCall(h, admin.token, 'GET', `${RACES}/${race.id}`)).body);
+    expect(one.editable).toMatchObject({ canCancel: false, reasons: ['disputes_open'] });
+    const list = PanelRacePage.parse((await panelCall(h, admin.token, 'GET', RACES)).body);
+    expect(list.items.find((item) => item.id === race.id)?.editable).toMatchObject({
+      canCancel: false,
+      reasons: ['disputes_open'],
+    });
+
+    const refused = await panelCall(h, admin.token, 'POST', `${RACES}/${race.id}/cancel`, {
+      version: race.version,
+      reason: 'weather',
+    });
+    expect([refused.status, refused.body]).toMatchObject([
+      409,
+      { code: 'RACE_INVALID_STATE', details: { reason: 'disputes_open' } },
+    ]);
+    expect(await auditOf('race.cancelled')).toHaveLength(0);
+
+    await closeSeededDispute(h, dispute._id);
+    const cancelled = await panelCall(h, admin.token, 'POST', `${RACES}/${race.id}/cancel`, {
+      version: race.version,
+      reason: 'weather',
+    });
+    expect(cancelled.status).toBe(200);
+  });
+
+  it('D-44 (RC-7): перенос плановой даты после отсечки фиксирует её; повторный перенос — первое значение', async () => {
+    const { admin } = await setup();
+    const race = await publishedRace(h, admin.token);
+    const planned = minskWallTimeToUtc('2026-10-28T23:59');
+    const cutoff = new Date(new Date(planned).getTime() - DAY);
+    const edit = (token: string, version: number, at: string) =>
+      panelCall(h, token, 'POST', `${RACES}/${race.id}`, {
+        version,
+        protocolPlannedAt: minskWallTimeToUtc(at),
+      });
+    // до отсечки перенос не фиксирует
+    let [token] = await travel(
+      cutoff.getTime() - h.clock.now().getTime() - HOUR,
+      'admin@example.by',
+    );
+    const early = await edit(token!, race.version, '2026-10-29T23:59');
+    expect(early.status).toBe(200);
+    expect((await racesDb(h).races.findOne({ _id: race.id }))?.disputeFilingClosedAt).toBeNull();
+
+    // отсечка от новой даты (29.10 − 24 ч) наступила
+    [token] = await travel(DAY + 2 * HOUR, 'admin@example.by');
+    const late = await edit(token!, parse(early.body).version, '2026-10-31T12:00');
+    expect(late.status).toBe(200);
+    const frozen = new Date(new Date(minskWallTimeToUtc('2026-10-29T23:59')).getTime() - DAY);
+    expect((await racesDb(h).races.findOne({ _id: race.id }))?.disputeFilingClosedAt).toEqual(
+      frozen,
+    );
+    const again = await edit(token!, parse(late.body).version, '2026-11-02T12:00');
+    expect(again.status).toBe(200);
+    expect((await racesDb(h).races.findOne({ _id: race.id }))?.disputeFilingClosedAt).toEqual(
+      frozen,
+    );
   });
 });

@@ -14,6 +14,7 @@ import { env } from './config/env';
 import { PROJECT_ERROR_MESSAGES } from './error-messages';
 import { CalendarModule } from './modules/calendar';
 import { DevicesModule } from './modules/devices';
+import { DisputesCoreModule, DisputesModule } from './modules/disputes';
 import { HealthModule } from './modules/health';
 import { IdentityModule } from './modules/identity';
 import { PanelModule } from './modules/panel';
@@ -41,6 +42,9 @@ import { TracksModule } from './modules/tracks';
     RoutesModule,
     RacesModule,
     ResultsModule,
+    // гейты споров для `results` и `races` (@Global, RC-1)
+    DisputesCoreModule,
+    DisputesModule,
     CalendarModule,
     RidesModule,
     DevicesModule,

@@ -26,6 +26,9 @@ import CancelRideRoute from '../app/rides/cancel/[id]';
 import ReportRideRoute from '../app/rides/report/[id]';
 import RaceRoute from '../app/races/[id]';
 import RacePickRoute from '../app/races/pick/[id]';
+import DisputeResponseRoute from '../app/races/dispute-response/[id]/[disputeId]';
+import FileDisputeRoute from '../app/races/dispute/[id]/[entryId]';
+import RivalResultRoute from '../app/races/result/[id]/[entryId]';
 import SeasonRoute from '../app/seasons/[id]';
 import StatusScreen from '../app/status';
 import UiKitScreen from '../app/ui-kit';
@@ -64,6 +67,9 @@ export const appRoutes = {
   status: StatusScreen,
   'races/[id]': RaceRoute,
   'races/pick/[id]': RacePickRoute,
+  'races/result/[id]/[entryId]': RivalResultRoute,
+  'races/dispute/[id]/[entryId]': FileDisputeRoute,
+  'races/dispute-response/[id]/[disputeId]': DisputeResponseRoute,
   'seasons/[id]': SeasonRoute,
   'calendar/[id]': CalendarStartRoute,
   'rides/[id]': RideRoute,

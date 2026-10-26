@@ -1,5 +1,6 @@
 import type { PanelRaceResults } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
+import { Link } from '@tanstack/react-router';
 import { useId } from 'react';
 
 import { api } from '../../api';
@@ -13,7 +14,7 @@ import { publishBlockText } from './results-errors';
  * Протокол гонки. До публикации — чек-лист сервера (D-23) и «Опубликовать протокол» (`results.manage`): неактивна с
  * первой причиной и количеством; «Требует внимания» не блокирует (D-22). После — баннер ревизии и экстренный
  * пересчёт (`results.revise`, D-27/D-28): перепроверка треков и «Применить пересчёт», пока проверки не завершены —
- * неактивна.
+ * неактивна. Строка «Открытые споры» — ссылка на споры гонки (`disputes.read`, race-results-06).
  */
 export function PublishBlock({
   summary,
@@ -26,6 +27,7 @@ export function PublishBlock({
 }) {
   const canManage = useCan('results.manage');
   const canRevise = useCan('results.revise');
+  const canReadDisputes = useCan('disputes.read');
   const publishReasonId = useId();
   const applyReasonId = useId();
   const { raceId, protocol, recheck, publish } = summary;
@@ -116,6 +118,11 @@ export function PublishBlock({
               {check.count === 0 ? `✓ ${t('admin.results.check.done')}` : check.count}
             </StatusTag>
             <span>{t(`admin.results.check.${check.code}`, { count: check.count })}</span>
+            {check.code === 'open_disputes' && check.count > 0 && canReadDisputes ? (
+              <Link className="link" to="/disputes" search={{ raceId }}>
+                {t('admin.results.check.open_disputes.link')}
+              </Link>
+            ) : null}
           </li>
         ))}
       </ul>

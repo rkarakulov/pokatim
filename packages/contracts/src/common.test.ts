@@ -71,6 +71,8 @@ describe('коды ошибок', () => {
       'ATTEMPT_SOURCE_INVALID',
       'RESULTS_ACTION_BLOCKED',
       'RESULTS_PUBLISH_BLOCKED',
+      'DISPUTE_ACTION_BLOCKED',
+      'DISPUTE_NOT_FOUND',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

@@ -36,6 +36,8 @@ export const PROJECT_ERROR_MESSAGES = {
   ATTEMPT_SOURCE_INVALID: 'Этот заезд нельзя добавить в гонку',
   RESULTS_ACTION_BLOCKED: 'Действие с результатами гонки сейчас недоступно',
   RESULTS_PUBLISH_BLOCKED: 'Протокол пока нельзя опубликовать',
+  DISPUTE_ACTION_BLOCKED: 'Действие со спором сейчас недоступно',
+  DISPUTE_NOT_FOUND: 'Спор не найден',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

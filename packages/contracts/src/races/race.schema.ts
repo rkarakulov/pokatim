@@ -64,9 +64,15 @@ export const RACE_EDIT_BLOCK_REASONS = [
   'entries_locked',
   // race-results-05: протокол опубликован — только описание, отмена гонки недоступна (D-19)
   'results_final',
+  // race-results-06: по гонке есть открытые споры — отмена гонки недоступна (D-19)
+  'disputes_open',
 ] as const;
 export const RaceEditBlockReason = z.enum(RACE_EDIT_BLOCK_REASONS);
 export type RaceEditBlockReason = z.infer<typeof RaceEditBlockReason>;
+
+/** `409 RACE_INVALID_STATE` отмены гонки: причина (панель, строгий enum). */
+export const RaceInvalidStateDetails = z.object({ reason: RaceEditBlockReason });
+export type RaceInvalidStateDetails = z.infer<typeof RaceInvalidStateDetails>;
 
 /** Правило сервера «протокол — не раньше конца окна + 48 ч» — для подсказки UI (источник истины — сервер). */
 export const RACE_PROTOCOL_MIN_DELAY_HOURS = 48;

@@ -17,6 +17,8 @@ describe('PanelRole и Permission', () => {
       'results.manage',
       'results.revise',
       'rides.moderate',
+      'disputes.read',
+      'disputes.decide',
     ]);
   });
 

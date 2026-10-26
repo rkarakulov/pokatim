@@ -20,6 +20,7 @@ const toRace = (doc: RaceDoc): RaceForResults => ({
   corridor: doc.corridor ?? null,
   lockedAt: doc.lockedAt ?? null,
   protocolPublishedAt: doc.protocolPublishedAt ?? null,
+  disputeFilingClosedAt: doc.disputeFilingClosedAt ?? null,
 });
 
 /** Реализация порта `RaceRegistry`: читает и пишет `races` только через `RacesRepository`. */

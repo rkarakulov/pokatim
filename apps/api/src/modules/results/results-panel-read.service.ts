@@ -19,6 +19,7 @@ import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { PanelDirectory, type PanelPrincipal } from '../panel';
 import { RACE_REGISTRY, type RaceForResults, type RaceRegistry } from '../races';
 import { ACTIVITY_SOURCE, type ActivitySource } from '../tracks';
+import { RESULT_DISPUTE_GATE, type ResultDisputeGate } from './result-dispute-gate.port';
 import type {
   RaceAttemptDoc,
   RaceAttemptReviewDoc,
@@ -73,6 +74,7 @@ export class ResultsPanelReadService {
     private readonly directory: PanelDirectory,
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
     @Inject(ACTIVITY_SOURCE) private readonly activities: ActivitySource,
+    @Inject(RESULT_DISPUTE_GATE) private readonly disputes: ResultDisputeGate,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -84,8 +86,8 @@ export class ResultsPanelReadService {
   }
 
   /**
-   * Чек-лист публикации гонки (§7.2): строки «необработанные треки» (`ActivitySource`), незавершённые проверки и
-   * сбои (RC-1), окно загрузки (A5). `session` — транзакция публикации (то же вычисление, что видит панель).
+   * Чек-лист публикации гонки (§7.2): открытые споры (гейт `disputes`), «необработанные треки» (`ActivitySource`),
+   * незавершённые проверки и сбои (RC-1), окно загрузки (A5). `session` — транзакция публикации (то же вычисление, что видит панель).
    */
   async checks(race: RaceForResults, now: Date, session?: DbSession): Promise<ProtocolChecks> {
     const last = await this.repository.lastRecheck(race.id, session);
@@ -104,8 +106,8 @@ export class ResultsPanelReadService {
         race,
         now,
         uploadClosesAt: closesAt,
-        // споры — слайс 06
-        openDisputes: 0,
+        // race-results-06: в транзакции публикации — то же чтение, что видит панель (подача берёт `lockResults`)
+        openDisputes: await this.disputes.openInRace(race.id, session),
         unprocessedTracks,
         pendingChecks: pending,
         failedChecks: checks.failed,

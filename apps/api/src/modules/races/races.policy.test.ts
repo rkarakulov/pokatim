@@ -5,6 +5,7 @@ import type { RaceDoc } from './races.collection';
 import {
   changedRaceFields,
   corridorDistanceKm,
+  disputeFilingFreeze,
   type RaceValues,
   entriesLocked,
   LOCKED_BY_ENTRIES,
@@ -51,6 +52,7 @@ function race(overrides: Partial<RaceDoc> = {}): RaceDoc {
     cancelledAt: null,
     lockedAt: null,
     protocolPublishedAt: null,
+    disputeFilingClosedAt: null,
     version: 0,
     ...overrides,
   };
@@ -453,5 +455,55 @@ describe('протокол опубликован — фаза final (race-resul
         CLOSED,
       ),
     ).toEqual([{ path: 'protocolPlannedAt', code: 'FIELD_LOCKED' }]);
+  });
+});
+
+describe('споры (race-results-06)', () => {
+  const opts = { canManage: true, seasonFound: true };
+
+  it('raceEditable: открытые споры — canCancel false и причина disputes_open в конце (D-19)', () => {
+    const upcoming = new Date(WINDOW_START.getTime() - HOUR);
+    const closed = new Date(WINDOW_END.getTime() + DAY);
+    expect(raceEditable(race(), upcoming, { ...opts, openDisputes: 1 })).toMatchObject({
+      canCancel: false,
+      reasons: ['disputes_open'],
+    });
+    expect(
+      raceEditable(race({ lockedAt: WINDOW_START }), closed, { ...opts, openDisputes: 2 }),
+    ).toMatchObject({
+      canCancel: false,
+      reasons: ['window_closed', 'entries_locked', 'disputes_open'],
+    });
+    expect(raceEditable(race(), closed, { ...opts, openDisputes: 0 })).toMatchObject({
+      canCancel: true,
+      reasons: ['window_closed'],
+    });
+  });
+
+  it('raceEditable: в final и у отменённой disputes_open не добавляется', () => {
+    const closed = new Date(WINDOW_END.getTime() + 3 * DAY);
+    expect(
+      raceEditable(race({ protocolPublishedAt: closed }), closed, { ...opts, openDisputes: 1 })
+        .reasons,
+    ).toEqual(['results_final']);
+    expect(
+      raceEditable(race({ status: 'cancelled' }), closed, { ...opts, openDisputes: 1 }).reasons,
+    ).toEqual(['cancelled']);
+  });
+
+  it('disputeFilingFreeze (RC-7): до отсечки — null, после — плановая − 24 ч, повторный перенос — первое значение', () => {
+    const planned = values.protocolPlannedAt;
+    const cutoff = new Date(planned.getTime() - DAY);
+    const later = new Date(planned.getTime() + 2 * DAY);
+    const current = { protocolPlannedAt: planned, disputeFilingClosedAt: null };
+    expect(disputeFilingFreeze(current, later, new Date(cutoff.getTime() - MIN))).toBeNull();
+    expect(disputeFilingFreeze(current, later, cutoff)).toEqual(cutoff);
+    expect(disputeFilingFreeze(current, planned, cutoff)).toBeNull();
+    const frozen = { protocolPlannedAt: later, disputeFilingClosedAt: cutoff };
+    expect(
+      disputeFilingFreeze(frozen, new Date(later.getTime() + DAY), new Date(later.getTime())),
+    ).toEqual(cutoff);
+    const legacy = { protocolPlannedAt: planned } as Parameters<typeof disputeFilingFreeze>[0];
+    expect(disputeFilingFreeze(legacy, later, cutoff)).toEqual(cutoff);
   });
 });

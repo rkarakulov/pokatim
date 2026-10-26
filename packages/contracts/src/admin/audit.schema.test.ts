@@ -40,6 +40,7 @@ describe('AuditAction', () => {
       'ride.hidden',
       'ride.restored',
       'ride.reports_dismissed',
+      'disputes.decided',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual(['season', 'race', 'calendar_start', 'route', 'ride']);
     expect(AuditAction.safeParse('panel.deleted').success).toBe(false);
@@ -145,6 +146,26 @@ describe('AuditEntry — модерация райдов (05b)', () => {
         items: [{ ...entry, details: { reportCount: -1 } }],
         nextCursor: null,
       }).success,
+    ).toBe(false);
+  });
+});
+
+describe('AuditEntry — решение по спору (06)', () => {
+  it('объект race, детали disputeId и entryId', () => {
+    const entry = {
+      id: ID,
+      at: '2026-10-25T10:00:00.000Z',
+      action: 'disputes.decided',
+      actor: { kind: 'user', userId: ID, displayName: 'Ольга' },
+      target: null,
+      reason: 'track_confirmed',
+      subject: { kind: 'race', id: ID, label: 'Гонка' },
+      details: { disputeId: ID, entryId: ID },
+    };
+    expect(AuditPage.parse({ items: [entry], nextCursor: null }).items[0]).toEqual(entry);
+    expect(
+      AuditPage.safeParse({ items: [{ ...entry, details: { disputeId: 'x' } }], nextCursor: null })
+        .success,
     ).toBe(false);
   });
 });

@@ -82,6 +82,8 @@ export interface AuditDetailsDoc {
   revision?: number;
   /** Модерация райдов (05b): число жалоб, закрытых действием. */
   reportCount?: number;
+  /** race-results-06: спор, по которому принято решение */
+  disputeId?: string;
 }
 
 /**

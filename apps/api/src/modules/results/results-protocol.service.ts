@@ -175,7 +175,8 @@ export class ResultsProtocolService {
 
   /**
    * Публикация протокола (D-22, D-23): чек-лист — в той же транзакции и той же функцией, что видит панель; не пуст
-   * или гонка не публикуема — `RESULTS_PUBLISH_BLOCKED`. Ревизия 1 — строки активных заявок с лучшим результатом.
+   * или гонка не публикуема — `RESULTS_PUBLISH_BLOCKED`. Ревизия 1 — строки активных заявок с лучшим результатом
+   * (DQ по спору до публикации — строкой `dq` без места, race-results-06).
    */
   async publish(
     principal: PanelPrincipal,
@@ -195,9 +196,11 @@ export class ResultsProtocolService {
         };
         throw domainError('RESULTS_PUBLISH_BLOCKED', 409, details);
       }
-      const ranked = await this.repository.rankedEntries(raceId, tx);
+      // база — заявки с лучшим, включая DQ по спору до публикации (RC-2): DQ получает строку `dq` без места
+      const disqualified = await this.repository.disqualifiedEntries(raceId, tx);
+      const base = await this.repository.protocolBaseEntries(raceId, tx);
       const protocol = buildProtocol(
-        ranked.map((entry) => baseOf(entry, false)),
+        base.map((entry) => baseOf(entry, disqualified.has(entry._id))),
         null,
       );
       await this.writeRevision(tx, principal, race, 1, protocol, now, {
@@ -262,9 +265,9 @@ export class ResultsProtocolService {
       const previous = await this.repository.protocolRows(raceId, current, tx);
       // DQ — по журналу пересчётов: выпавший из прошлой ревизии участник с DQ не возвращается с местом
       const disqualified = await this.repository.disqualifiedEntries(raceId, tx);
-      const ranked = await this.repository.rankedEntries(raceId, tx);
+      const base = await this.repository.protocolBaseEntries(raceId, tx);
       const protocol = buildProtocol(
-        ranked.map((entry) => baseOf(entry, disqualified.has(entry._id))),
+        base.map((entry) => baseOf(entry, disqualified.has(entry._id))),
         new Map(previous.map((row) => [row.entryId, row])),
       );
       return this.revise(tx, principal, race, current + 1, protocol, now, {

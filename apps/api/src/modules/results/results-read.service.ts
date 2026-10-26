@@ -3,6 +3,7 @@ import type {
   MyAttempt,
   MyRaceEntry,
   PendingUpload,
+  RaceResultStatus,
   RaceResultsPage,
   RaceResultsQuery,
 } from '@pokatim/contracts';
@@ -14,6 +15,7 @@ import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { RACE_REGISTRY, type RaceForResults, type RaceRegistry } from '../races';
 import { ACTIVITY_SOURCE, type ActivitySource } from '../tracks';
+import { RESULT_DISPUTE_GATE, type ResultDisputeGate } from './result-dispute-gate.port';
 import type {
   AttemptSegmentDoc,
   RaceAttemptDoc,
@@ -22,6 +24,7 @@ import type {
 } from './results.collection';
 import {
   attemptHidden,
+  disqualifiedBeforePublication,
   entryActions,
   rankRows,
   RESULTS_POLICY,
@@ -31,6 +34,11 @@ import {
 import { ResultsRepository } from './results.repository';
 
 const notFound = () => domainError('NOT_FOUND', 404);
+
+/** Статус, время и место участника (без группы) — «моё участие» и место цели спора. */
+export type EntryResult = Omit<MyRaceEntry['result'], 'group' | 'status'> & {
+  status: RaceResultStatus;
+};
 const invalidCursor = () =>
   domainError('VALIDATION_FAILED', 400, { fields: [{ path: 'cursor', code: 'INVALID' }] });
 
@@ -65,6 +73,7 @@ export class ResultsReadService {
     private readonly repository: ResultsRepository,
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
     @Inject(ACTIVITY_SOURCE) private readonly activities: ActivitySource,
+    @Inject(RESULT_DISPUTE_GATE) private readonly disputes: ResultDisputeGate,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -79,17 +88,18 @@ export class ResultsReadService {
     const race = await this.race(raceId);
     const now = this.clock.now();
     // заявка, попытки и место — из одного снимка БД (согласованы `best`, `isBest` и место)
-    const { entry, attempts, result } = await this.repository.withSnapshot(async (session) => {
-      const found = (await this.repository.findEntry(raceId, userId, session)) ?? null;
-      return {
-        entry: found,
-        attempts: found ? await this.repository.attemptsOfEntry(found._id, session) : [],
-        result:
-          race.protocolPublishedAt !== null
-            ? await this.protocolResult(race, found, now, session)
-            : await this.liveResult(race, found, now, session),
-      };
-    });
+    const { entry, attempts, result, openDisputes } = await this.repository.withSnapshot(
+      async (session) => {
+        const found = (await this.repository.findEntry(raceId, userId, session)) ?? null;
+        return {
+          entry: found,
+          attempts: found ? await this.repository.attemptsOfEntry(found._id, session) : [],
+          result: await this.entryResult(race, found, now, session),
+          // D-39: открытые споры против своей заявки закрывают отмену участия и новые попытки
+          openDisputes: found ? await this.disputes.openAgainst(found._id, session) : 0,
+        };
+      },
+    );
     return {
       raceId,
       entry: entry
@@ -106,21 +116,42 @@ export class ResultsReadService {
         .map((attempt) => this.myAttempt(attempt, entry)),
       pendingUploads: entry ? await this.pendingUploads(entry) : [],
       uploadClosesAt: uploadClosesAt(race).toISOString(),
-      actions: entryActions(race, this.races.phase(race, now), entry, now),
+      actions: entryActions(race, this.races.phase(race, now), entry, now, { openDisputes }),
     };
   }
 
-  /** До публикации: место своей строки (активная заявка с лучшим) и число строк — в snapshot-сессии вызывающего. */
+  /**
+   * Статус, время и место участника — «моё участие» и место цели спора (race-results-06, порт `ResultsForDisputes`):
+   * до публикации — при чтении, после — из текущей ревизии протокола. Сессия — snapshot вызывающего.
+   */
+  entryResult(
+    race: RaceForResults,
+    entry: RaceEntryDoc | null,
+    now: Date,
+    session: DbSession,
+  ): Promise<EntryResult> {
+    return race.protocolPublishedAt !== null
+      ? this.protocolResult(race, entry, now, session)
+      : this.liveResult(race, entry, now, session);
+  }
+
+  /**
+   * До публикации: место своей строки (активная заявка с лучшим) и число строк — в snapshot-сессии вызывающего. DQ по
+   * спору (RC-16): `dq` без места, время лучшего результата показывается.
+   */
   private async liveResult(
     race: RaceForResults,
     entry: RaceEntryDoc | null,
     now: Date,
     session: DbSession,
-  ): Promise<Omit<MyRaceEntry['result'], 'group'>> {
+  ): Promise<EntryResult> {
     const ranked = await this.repository.countRanked(race.id, session);
     const status = resultStatus(entry, race, now);
     const best = entry?.status === 'active' ? entry.best : null;
     if (!best) return { status, elapsedSec: null, place: null, tied: false, ranked };
+    if (entry && disqualifiedBeforePublication(entry, race)) {
+      return { status, elapsedSec: best.elapsedSec, place: null, tied: false, ranked };
+    }
     const less = await this.repository.countRankedLess(race.id, best.elapsedSec, session);
     const equal = await this.repository.countRankedEqual(race.id, best.elapsedSec, session);
     return { status, elapsedSec: best.elapsedSec, place: less + 1, tied: equal >= 2, ranked };
@@ -135,7 +166,7 @@ export class ResultsReadService {
     entry: RaceEntryDoc | null,
     now: Date,
     session: DbSession,
-  ): Promise<Omit<MyRaceEntry['result'], 'group'>> {
+  ): Promise<EntryResult> {
     const revision = await this.protocolRevision(race.id, session);
     const { ranked } = await this.repository.countProtocolRows(race.id, revision, session);
     const row = entry

@@ -12,6 +12,7 @@ import { AttemptCheckProcessor } from '../src/modules/results/attempt-check.proc
 import { resultsCollections } from '../src/modules/results/results.collection';
 import { resultsOutboxRoutes } from '../src/modules/results/results.events';
 import { ResultsIntakeProcessor } from '../src/modules/results/results-intake.processor';
+import { ResultsRepository } from '../src/modules/results/results.repository';
 import type { Harness } from './harness';
 import {
   bearer,
@@ -28,6 +29,9 @@ import { parsedUpload, processUpload, tracks, uploadTrack } from './tracks';
 
 /** Коллекции модуля `results` тестовой БД. */
 export const resultsDb = (h: Harness) => resultsCollections(h.db);
+
+/** Репозиторий `results` API стенда (spy в тестах гонок записи других модулей). */
+export const resultsRepository = (h: Harness) => h.app.get(ResultsRepository, { strict: false });
 
 const CORRIDOR_FIXTURES = fileURLToPath(
   new URL('../../../packages/tracks/src/__fixtures__/corridor', import.meta.url),

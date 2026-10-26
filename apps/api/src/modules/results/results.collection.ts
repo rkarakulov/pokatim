@@ -76,6 +76,13 @@ export interface RaceEntryDoc {
   createdAt: Date;
   updatedAt: Date;
   withdrawnAt: Date | null;
+  /**
+   * DQ по спору до публикации протокола (race-results-06, D-43): проекция решения «Удовлетворить», пишет
+   * `ResultsRepository.disqualifyEntry`. Читается **только пока `protocolPublishedAt === null`** (RC-3): после
+   * публикации «действующие DQ» — журнал `race_recalculations` и снимок, поле не читается и не меняется. Документы до
+   * `0018_disputes` поля не имеют — чтение `?? null`.
+   */
+  disqualified: { at: Date; disputeId: string } | null;
   version: number;
 }
 
