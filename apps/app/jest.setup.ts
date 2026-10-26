@@ -65,6 +65,25 @@ jest.mock('@react-native-community/datetimepicker', () => {
   };
 });
 
+// MapLibre (ADR-0014): нативного модуля в jest нет — компоненты карты как View с пропсами (тесты читают их через
+// UNSAFE_getByType или testID); дети источника рендерятся
+jest.mock('@maplibre/maplibre-react-native', () => {
+  const { createElement } = jest.requireActual('react');
+  const { View } = jest.requireActual('react-native');
+  const stub = (name: string) => {
+    const Component = (props: { children?: unknown }) =>
+      createElement(View, { testID: `maplibre-${name}`, ...props });
+    Component.displayName = name;
+    return Component;
+  };
+  return {
+    Map: stub('Map'),
+    Camera: stub('Camera'),
+    GeoJSONSource: stub('GeoJSONSource'),
+    Layer: stub('Layer'),
+  };
+});
+
 // onlineManager — синглтон модуля: каждый тест начинает как свежий запуск приложения
 beforeEach(() => {
   onlineManager.setOnline(true);

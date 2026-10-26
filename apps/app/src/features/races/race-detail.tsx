@@ -40,6 +40,7 @@ import { cancelMessage, formatRaceWindow, raceCardLine } from './format';
 import { RaceParticipation } from './participation/race-participation';
 import { showsResultsTable } from './participation-format';
 import { useMyRaceEntry, useRace, useRaceResults } from './queries';
+import { RaceRouteMap } from './race-route-map';
 import { RaceResultsTable } from './results-table';
 
 export const raceDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
@@ -128,6 +129,8 @@ function RaceDetailView({
           {t('races.detail.corridorValue', { width: corridor.widthM })}
         </Row>
       ) : null}
+      {/* карта маршрута с коридором (maps-01): без коридора — ничего */}
+      <RaceRouteMap race={race} />
       <Row label={t('races.detail.distance')}>
         {corridor
           ? t('races.detail.distanceByRoute', {

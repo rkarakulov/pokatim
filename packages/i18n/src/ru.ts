@@ -109,6 +109,10 @@ export const ru = {
   'races.detail.corridor': 'Коридор',
   'races.detail.corridorValue': '±{width} м от маршрута',
   'races.detail.distanceByRoute': '{distance} по GPS-треку',
+  // maps-01: карта маршрута с коридором (ADR-0014) — подпись-альтернатива без координат [ASSUMPTION copy]
+  'races.detail.map.label':
+    'Карта маршрута: {distance}, коридор ±{width} м от маршрута, старт и финиш отмечены',
+  'races.detail.map.failed': 'Карта не загрузилась',
   'races.detail.allRaces': 'Все гонки',
   // экран сезона (публичный, блок 03; Q1, Q2 — без таблицы)
   'season.title': 'Сезон',

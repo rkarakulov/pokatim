@@ -49,9 +49,14 @@ export function useIsOnline(): boolean {
  */
 export function useMinskClockAfterMount(dataUpdatedAt: readonly number[]): Date | null {
   const now = useMinskClock(dataUpdatedAt);
-  // гидрация web берёт серверный снимок (`false`), затем клиентский; native не гидрирует — сразу `true`
-  const mounted = useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
-  return mounted ? now : null;
+  return useMounted() ? now : null;
+}
+
+/**
+ * `false` на сервере и при гидрации web (разметка совпадает с SSR), затем `true`; native не гидрирует — сразу `true`.
+ */
+export function useMounted(): boolean {
+  return useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
 }
 
 const subscribeNever = () => () => undefined;

@@ -4,6 +4,7 @@ import type {
   RaceDetail,
   RacePage,
   RaceResultsPage,
+  RaceRouteMap,
   SeasonCard,
 } from '@pokatim/contracts';
 import {
@@ -85,6 +86,19 @@ export function useRace(id: string, seed: RaceDetail | undefined, enabled: boole
     queryKey: ['races', 'detail', id],
     queryFn: () => api.getRace(id),
     initialData: seed,
+    staleTime: PUBLIC_STALE_MS,
+    enabled,
+  });
+}
+
+/**
+ * Линия показа коридора для карты (ADR-0014): только клиент (в SSR не попадает), геометрия готового маршрута неизменна —
+ * pull-to-refresh карточки её не перезапрашивает. 404 (нет коридора, старый API) не повторяется (`shouldRetry`).
+ */
+export function useRaceRoute(id: string, enabled: boolean) {
+  return useQuery<RaceRouteMap>({
+    queryKey: ['races', 'route', id],
+    queryFn: () => api.getRaceRoute(id),
     staleTime: PUBLIC_STALE_MS,
     enabled,
   });
