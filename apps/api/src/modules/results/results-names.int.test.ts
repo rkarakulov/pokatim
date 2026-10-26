@@ -206,6 +206,13 @@ describe('имя в панели «Протокол» (profile-02, AC4)', () => 
       userId: riders[0]!.userId,
       riderName: 'Анна К.',
     });
+
+    const restored = await protocolAction(h, token, raceId, `/attempts/${namedAttempt}/restore`);
+    expect(restored.status).toBe(200);
+    expect(PanelRaceAttempt.parse(restored.body)).toMatchObject({
+      id: namedAttempt,
+      riderName: 'Анна К.',
+    });
   });
 });
 

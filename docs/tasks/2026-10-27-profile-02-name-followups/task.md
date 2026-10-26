@@ -452,3 +452,10 @@ live/protocol, attempts, exclude, после name-reset); `permissions.test.ts`,
   нарушений нет), typecheck — зелёные.
 
 e2e (`pnpm e2e:admin`) не запускался: маршруты и CSP панели не менялись.
+
+## Независимое ревью
+
+- Pass 1 (Claude `independent-reviewer`, ddcec33..086942d) — **APPROVE**: CRITICAL 0 / HIGH 0 / MEDIUM 0 / LOW 3.
+  LOW-2 (ответ «Вернуть» с `riderName` без теста) — закрыт тестом в `results-names.int.test.ts`. LOW-1 (подпись
+  «Участник ·id» журнала собирается на сервере) и LOW-3 (в журнале короткий id пользователя, в таблице — заявки) —
+  приняты по D3, follow-up: префикс подписи — через i18n в `AuditScreen` по `subject.kind`.
