@@ -75,6 +75,9 @@ export const RACE_ENTRY_BLOCK_REASONS = [
   'window_closed',
   'upload_closed',
   'attempt_limit',
+  // race-results-06: открыт спор по своему результату (D-39); результат дисквалифицирован по спору (RC-6)
+  'dispute_open',
+  'disqualified',
 ] as const;
 /** Группа зачёта (A3): одна в v1; кластеры — слайс 07. */
 export const RESULT_GROUP_KEYS = ['overall'] as const;
@@ -176,6 +179,10 @@ export const MyRaceEntry = z.object({
   }),
 });
 export type MyRaceEntry = z.infer<typeof MyRaceEntry>;
+
+/** `409 RACE_WITHDRAW_CLOSED` и `409 ATTEMPT_UPLOAD_CLOSED`: причина из `RACE_ENTRY_BLOCK_REASONS`. */
+export const RaceEntryBlockedDetails = z.object({ reason: tolerantEnum(RACE_ENTRY_BLOCK_REASONS) });
+export type RaceEntryBlockedDetails = z.infer<typeof RaceEntryBlockedDetails>;
 
 /** `GET /v1/races/:raceId/attempt-candidates`: свои основные активности, пересекающие окно (≤ 50). */
 export const AttemptCandidates = z.object({

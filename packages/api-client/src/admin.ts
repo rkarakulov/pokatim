@@ -49,6 +49,10 @@ import {
   ModerationRidePage,
   type ModerationRideQuery,
   type RestoreRideRequest,
+  type DisputeDecisionRequest,
+  PanelDispute,
+  PanelDisputePage,
+  type PanelDisputeQuery,
 } from '@pokatim/contracts';
 import { createHttpClient } from '@rkarakulov/api-client-core';
 import { z } from 'zod';
@@ -72,6 +76,8 @@ export type PanelRouteListParams = Partial<PanelRouteQuery>;
 export type PanelCalendarListParams = Partial<PanelCalendarQuery>;
 /** Параметры очереди модерации райдов до схемы. */
 export type ModerationRideListParams = Partial<ModerationRideQuery>;
+/** Параметры списка споров панели до схемы. */
+export type PanelDisputeListParams = Partial<PanelDisputeQuery>;
 
 /** Query-строка: пустые значения не уходят, массив — повтором ключа (`k=a&k=b`). */
 export function queryString(params: object): string {
@@ -106,6 +112,7 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
   const calendar = (id: string) => `/v1/admin/calendar/${encodeURIComponent(id)}`;
   const route = (id: string) => `/v1/admin/routes/${encodeURIComponent(id)}`;
   const moderationRide = (id: string) => `/v1/admin/rides/${encodeURIComponent(id)}`;
+  const dispute = (id: string) => `/v1/admin/disputes/${encodeURIComponent(id)}`;
 
   return {
     /** Статус API (экран «Обзор»). */
@@ -221,6 +228,13 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       post(`${moderationRide(id)}/restore`, ModerationRideDetail, body),
     dismissRideReports: (id: string, body: DismissRideReportsRequest) =>
       post(`${moderationRide(id)}/dismiss-reports`, ModerationRideDetail, body),
+
+    // --- споры по результатам (disputes.read / disputes.decide, race-results-06) ---
+    listDisputes: (params: PanelDisputeListParams = {}) =>
+      get(`/v1/admin/disputes${queryString(params)}`, PanelDisputePage),
+    getDispute: (id: string) => get(dispute(id), PanelDispute),
+    decideDispute: (id: string, body: DisputeDecisionRequest) =>
+      post(`${dispute(id)}/decision`, PanelDispute, body),
   };
 }
 

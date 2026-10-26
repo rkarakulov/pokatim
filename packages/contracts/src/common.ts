@@ -58,6 +58,9 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   // чек-листом или состоянием гонки (details: blockedBy, checklist)
   'RESULTS_ACTION_BLOCKED',
   'RESULTS_PUBLISH_BLOCKED',
+  // споры (race-results-06): действие со спором недоступно (details.reason, availableAt); спора нет или он не виден
+  'DISPUTE_ACTION_BLOCKED',
+  'DISPUTE_NOT_FOUND',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;
