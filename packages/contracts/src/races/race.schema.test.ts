@@ -80,7 +80,7 @@ describe('коридор', () => {
   });
 
   it('RaceInput: с коридором без distanceKm, без коридора (null), коридор не объект — ошибка', () => {
-    const { distanceKm: _distanceKm, ...noDistance } = race;
+    const noDistance = { ...race, distanceKm: undefined };
     expect(RaceInput.parse({ ...noDistance, corridor: { routeId: ID, widthM: 50 } })).toMatchObject(
       {
         corridor: { routeId: ID, widthM: 50 },
@@ -215,7 +215,7 @@ describe('ответы панели', () => {
     expect(PanelRace.parse(panelRace)).toEqual(panelRace);
     expect(PanelRace.safeParse({ ...panelRace, phase: 'final' }).success).toBe(false);
     expect(PanelRace.parse({ ...panelRace, corridor: null }).corridor).toBeNull();
-    const { corridor: _corridor, ...withoutCorridor } = panelRace;
+    const withoutCorridor = { ...panelRace, corridor: undefined };
     expect(PanelRace.safeParse(withoutCorridor).success).toBe(false);
     expect(
       PanelSeason.parse({

@@ -181,7 +181,7 @@ describe('createAdminApiClient: маршруты (race-results-01)', () => {
   });
 
   it('listRoutes и getRoute — пути, query, строгий разбор', async () => {
-    const { line: _line, ...summary } = route;
+    const summary = { ...route, line: undefined };
     const list = admin(200, { items: [summary], nextCursor: null });
     await list.api.listRoutes({ status: 'ready', limit: 100 });
     expect(list.calls[0]).toMatchObject({

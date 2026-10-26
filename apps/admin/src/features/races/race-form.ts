@@ -53,19 +53,29 @@ export const RaceFormSchema = z
     windowEndsAt: WallTime,
     protocolPlannedAt: WallTime,
   })
-  .transform((values, ctx) => {
-    const corridor = values.corridorRouteId !== '';
-    const field = corridor
-      ? WidthField.safeParse(values.corridorWidthM)
-      : DistanceField.safeParse(values.distanceKm);
-    if (!field.success) {
+  // дистанция или допуск — по выбору коридора; проверяется и при ошибках других полей (все ошибки формы сразу)
+  .superRefine(
+    (values, ctx) => {
+      const corridor = values.corridorRouteId !== '';
+      const field = corridor
+        ? WidthField.safeParse(values.corridorWidthM)
+        : DistanceField.safeParse(values.distanceKm);
+      if (field.success) return;
       ctx.addIssue({
         code: 'custom',
         path: [corridor ? 'corridorWidthM' : 'distanceKm'],
         message: field.error.issues[0]?.message ?? 'INVALID',
       });
-      return z.NEVER;
-    }
+    },
+    {
+      when: ({ value }) =>
+        typeof value === 'object' &&
+        value !== null &&
+        typeof (value as Record<string, unknown>)['corridorRouteId'] === 'string',
+    },
+  )
+  .transform((values) => {
+    const corridor = values.corridorRouteId !== '';
     return {
       title: values.title,
       bikeClass: values.bikeClass,
@@ -74,8 +84,10 @@ export const RaceFormSchema = z
       windowStartsAt: values.windowStartsAt,
       windowEndsAt: values.windowEndsAt,
       protocolPlannedAt: values.protocolPlannedAt,
-      distanceKm: corridor ? undefined : field.data,
-      corridor: corridor ? { routeId: values.corridorRouteId, widthM: field.data } : null,
+      distanceKm: corridor ? undefined : DistanceField.parse(values.distanceKm),
+      corridor: corridor
+        ? { routeId: values.corridorRouteId, widthM: WidthField.parse(values.corridorWidthM) }
+        : null,
     };
   });
 export type RaceFormValues = z.input<typeof RaceFormSchema>;

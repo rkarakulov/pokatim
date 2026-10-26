@@ -59,7 +59,7 @@ describe('маршрут', () => {
       PanelRoute.safeParse({ ...route, line: Array.from({ length: 1001 }, () => [27.5, 53.9]) })
         .success,
     ).toBe(false);
-    const { line: _line, ...summary } = route;
+    const summary = { ...route, line: undefined };
     expect(PanelRoutePage.parse({ items: [summary], nextCursor: null }).items).toHaveLength(1);
   });
 
