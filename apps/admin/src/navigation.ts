@@ -7,6 +7,7 @@ export interface NavItem {
     | '/'
     | '/races'
     | '/calendar'
+    | '/routes'
     | '/seasons'
     | '/members'
     | '/audit'
@@ -28,6 +29,8 @@ export const NAVIGATION: readonly NavItem[] = [
   // 06: сразу после «Гонок» (8.1 RC-18)
   { to: '/disputes', labelKey: 'admin.nav.disputes', permission: 'disputes.read', group: 'main' },
   { to: '/calendar', labelKey: 'admin.nav.calendar', permission: 'calendar.manage', group: 'main' },
+  // routes-01: после «Календаря», до «Сезонов»
+  { to: '/routes', labelKey: 'admin.nav.routes', permission: 'races.read', group: 'main' },
   // «Сезоны» — последним в основной группе (прототип 3c)
   { to: '/seasons', labelKey: 'admin.nav.seasons', permission: 'races.read', group: 'main' },
   { to: '/members', labelKey: 'admin.nav.members', permission: 'members.read', group: 'bottom' },

@@ -51,7 +51,7 @@ import {
   wallMs,
 } from './race-form';
 import { RACES_QUERY_KEY, raceQuery } from './races-query';
-import { routeQuery } from './routes-query';
+import { routeQuery } from '../routes/routes-query';
 
 const BIKE_CLASS_OPTIONS = BIKE_CLASSES.map((value) => ({
   value,

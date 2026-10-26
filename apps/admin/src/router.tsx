@@ -25,6 +25,7 @@ import { OverviewScreen } from './features/overview/OverviewScreen';
 import { NewRaceScreen, RaceScreen } from './features/races/RaceScreen';
 import { RacesScreen, validateRacesSearch } from './features/races/RacesScreen';
 import { RaceResultsScreen } from './features/results/RaceResultsScreen';
+import { RoutesScreen } from './features/routes/RoutesScreen';
 import { SeasonsScreen } from './features/seasons/SeasonsScreen';
 import { SignInScreen } from './features/sign-in/SignInScreen';
 import { AppLayout, ShellError, ShellSkeleton } from './layout/AppLayout';
@@ -194,6 +195,17 @@ const calendarRoute = createRoute({
   ),
 });
 
+// routes-01: маршруты команды и публикация в каталог (видят все с `races.read`, действия — `races.manage`)
+const routesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'routes',
+  component: () => (
+    <RequirePermission permission="races.read">
+      <RoutesScreen />
+    </RequirePermission>
+  ),
+});
+
 const ridesModerationRoute = createRoute({
   getParentRoute: () => appRoute,
   path: 'rides-moderation',
@@ -269,6 +281,7 @@ const routeTree = rootRoute.addChildren([
     raceResultsRoute,
     seasonsRoute,
     calendarRoute,
+    routesRoute,
     membersRoute,
     auditRoute,
     ridesModerationRoute,
