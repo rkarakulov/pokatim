@@ -6,6 +6,9 @@ import { gzipSync, gunzipSync } from 'node:zlib';
 import { detectTrackFormat } from './format.ts';
 import { parseFit } from './fit.ts';
 import { parseGpx } from './gpx.ts';
+import { matchCorridor } from './corridor/match.ts';
+import { prepareCorridor } from './corridor/prepare.ts';
+import type { CorridorMatch, MatchWindow } from './corridor/types.ts';
 import { checkPlausibility } from './plausibility.ts';
 import { sanitizePoints } from './points.ts';
 import { simplifyTrack } from './simplify.ts';
@@ -16,6 +19,8 @@ import {
   TRACK_STREAM_MAX_POINTS,
   TrackParseError,
   type ActivitySport,
+  type CorridorGeometry,
+  type ParsedPoint,
   type ParsedTrack,
   type TrackFormat,
 } from './track.ts';
@@ -23,11 +28,23 @@ import {
 export { parseFit } from './fit.ts';
 export { parseGpx } from './gpx.ts';
 export { parseStream, TrackStreamV1 } from './stream.ts';
+export { matchCorridor } from './corridor/match.ts';
+export { CORRIDOR_ENGINE_VERSION, CORRIDOR_POLICY } from './corridor/policy.ts';
+export { prepareCorridor } from './corridor/prepare.ts';
+export {
+  CORRIDOR_REJECTIONS,
+  type CorridorMatch,
+  type CorridorRejection,
+  type CorridorSegment,
+  type MatchWindow,
+  type PreparedCorridor,
+} from './corridor/types.ts';
 export {
   TRACK_MAX_POINTS,
   TRACK_STREAM_MAX_POINTS,
   TrackParseError,
   type ActivitySport,
+  type CorridorGeometry,
   type ParsedPoint,
   type ParsedTrack,
   type TrackFailureCode,
@@ -88,11 +105,15 @@ export function parseTrackFile(bytes: Uint8Array): ParsedTrack {
 }
 
 /**
- * Всё для worker одним вызовом: разбор → лимит точек → очистка → правдоподобие → итоги → линия.
+ * Общий шаг загрузки трека для worker: разбор → лимит точек → очистка → правдоподобие.
  * `format` — из документа загрузки; для FIT/GPX сверяется с сигнатурой (расхождение — `unreadable`).
  * Лимит точек: файл — `TRACK_MAX_POINTS`, поток — `TRACK_STREAM_MAX_POINTS`. Отказ — `TrackParseError` с кодом.
  */
-export function analyzeTrack(bytes: Uint8Array, format: TrackFormat, now: Date): TrackAnalysis {
+export function loadTrack(
+  bytes: Uint8Array,
+  format: TrackFormat,
+  now: Date,
+): { track: ParsedTrack; points: ParsedPoint[] } {
   let track: ParsedTrack;
   if (format === 'stream') {
     track = decodeTrackStream(bytes);
@@ -105,6 +126,12 @@ export function analyzeTrack(bytes: Uint8Array, format: TrackFormat, now: Date):
   const points = sanitizePoints(track.points);
   const failure = checkPlausibility(track, points, now);
   if (failure !== null) throw new TrackParseError(failure);
+  return { track, points };
+}
+
+/** Всё для worker одним вызовом: `loadTrack` → итоги → линия. Отказ — `TrackParseError` с кодом. */
+export function analyzeTrack(bytes: Uint8Array, format: TrackFormat, now: Date): TrackAnalysis {
+  const { track, points } = loadTrack(bytes, format, now);
   const summary = summarizeTrack(points);
   const line = simplifyTrack(points, LINE_TOLERANCE_M, LINE_MAX_POINTS);
   const start = points[0]!;
@@ -124,4 +151,21 @@ export function analyzeTrack(bytes: Uint8Array, format: TrackFormat, now: Date):
     line: line.map((point): [number, number] => [point.lon, point.lat]),
     sourcePointCount: track.points.length,
   };
+}
+
+/**
+ * Сверка попытки для worker (слайс 03 — в потоке разбора): `loadTrack` → `matchCorridor` по исходнику без
+ * прореживания. Ошибки файла — `TrackParseError` (как `analyzeTrack`); нарушение инвариантов коридора — `Error`
+ * (ошибка программиста). Результат сериализуем (structured clone), без координат заезда и значений датчиков.
+ */
+export function analyzeAttempt(
+  bytes: Uint8Array,
+  format: TrackFormat,
+  corridor: CorridorGeometry,
+  window: MatchWindow,
+  now: Date,
+): CorridorMatch {
+  const prepared = prepareCorridor(corridor);
+  const { points } = loadTrack(bytes, format, now);
+  return matchCorridor(points, prepared, window);
 }
