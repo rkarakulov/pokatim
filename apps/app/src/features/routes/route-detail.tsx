@@ -7,6 +7,7 @@ import {
   Banner,
   Button,
   EmptyState,
+  SkeletonGroup,
   SkeletonHeroCard,
   SkeletonText,
   TextAction,
@@ -21,7 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
-import { RaceListCard } from '@/components/race-list-card';
+import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
 import { SectionHero } from '@/components/section-hero';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { shareLink, shareOrigin } from '@/lib/share-link';
@@ -75,7 +76,9 @@ function ShareAction({ route }: { route: CatalogRouteDetail }) {
 
 /**
  * «Гонки на маршруте» (RC-12): публичные гонки с коридором по этому маршруту, новые сверху; ссылки на `races/<id>`,
- * «Показать ещё». Пусто, 404 и ошибка без данных — блока нет (тихо, как карта; карточка цела). Даты — с годом.
+ * «Показать ещё». Состояния §4.12: первая загрузка — заголовок и скелетон карточек; подтверждённо пусто и ошибка без
+ * данных (в т. ч. 404) — блока нет (тихо, как карта; карточка цела); ошибка обновления — карточки остаются, баннер с
+ * повтором; догрузка — скелетон под списком, ошибка следующей страницы — баннер с повтором. Даты — с годом.
  */
 function RouteRaces({
   races,
@@ -86,8 +89,14 @@ function RouteRaces({
 }) {
   const theme = useTheme();
   const router = useRouter();
+  const loading = races.isPending && races.fetchStatus === 'fetching';
   const items = races.data?.pages.flatMap((page) => page.items) ?? [];
-  if (items.length === 0) return null;
+  if (!loading && items.length === 0) return null;
+  // идёт обновление — не догружаем: fetchNextPage по умолчанию отменил бы refetch (ревью pass 1 блока 04)
+  const loadMore = () => {
+    if (races.hasNextPage && !races.isFetching) void races.fetchNextPage({ cancelRefetch: false });
+  };
+  const refreshFailed = races.data !== undefined && races.isError && !races.isFetchNextPageError;
   return (
     <View>
       <Text
@@ -96,6 +105,20 @@ function RouteRaces({
       >
         {t('routes.detail.races')}
       </Text>
+      {loading ? (
+        <View testID="route-races-skeleton">
+          <SkeletonGroup>
+            <RaceListCardSkeleton />
+            <RaceListCardSkeleton />
+          </SkeletonGroup>
+        </View>
+      ) : null}
+      {refreshFailed ? (
+        <View style={styles.racesNotice}>
+          <Banner tone="warning" title={t('state.staleTitle')} message={t('state.staleMessage')} />
+          <TextAction label={t('state.retry')} onPress={() => void races.refetch()} />
+        </View>
+      ) : null}
       {items.map((race) => (
         <RaceListCard
           key={race.id}
@@ -105,14 +128,25 @@ function RouteRaces({
           onPress={() => router.push(`/races/${race.id}`)}
         />
       ))}
-      {races.hasNextPage ? (
-        <View style={styles.more}>
-          <TextAction
-            label={t('routes.detail.racesMore')}
-            onPress={() => {
-              if (!races.isFetchingNextPage) void races.fetchNextPage();
-            }}
+      {races.isFetchNextPageError ? (
+        <View style={styles.racesNotice}>
+          <Banner
+            tone="warning"
+            title={t('state.failedTitle')}
+            message={t('state.failedMessage')}
           />
+          <TextAction
+            label={t('state.retry')}
+            onPress={() => void races.fetchNextPage({ cancelRefetch: false })}
+          />
+        </View>
+      ) : races.isFetchingNextPage ? (
+        <SkeletonGroup>
+          <RaceListCardSkeleton />
+        </SkeletonGroup>
+      ) : races.hasNextPage ? (
+        <View style={styles.more}>
+          <TextAction label={t('routes.detail.racesMore')} onPress={loadMore} />
         </View>
       ) : null}
     </View>
@@ -258,4 +292,5 @@ const styles = StyleSheet.create({
   stack: { gap: space.s3 },
   racesTitle: { marginBottom: space.s2 },
   more: { alignItems: 'flex-start', paddingTop: space.s2 },
+  racesNotice: { gap: space.s3, paddingVertical: space.s3 },
 });

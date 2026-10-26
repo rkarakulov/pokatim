@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import type { PanelRoute, PanelRouteSummary } from '@pokatim/contracts';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
-import { httpError, ME, renderApp, USER_ID } from '../../test/app';
+import { httpError, ME, networkError, renderApp, USER_ID } from '../../test/app';
 
 vi.mock('../../api', () => ({
   api: {
@@ -218,5 +218,44 @@ describe('«Маршруты» панели (routes-01)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
     await waitFor(() => expect(mocked.uploadRoute).toHaveBeenCalledWith(file, 'Кольцо'));
     await waitFor(() => expect(mocked.listRoutes).toHaveBeenCalledTimes(2));
+  });
+
+  it('опрос загрузки: сбои — баннер «продолжаем проверять»; дольше 5 мин — «проверьте позже» и «Обновить»', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await renderApp('/routes');
+      await rowOf('Минское кольцо');
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      fireEvent.change(input, {
+        target: { files: [new File(['<gpx/>'], 'Кольцо.gpx', { type: 'application/gpx+xml' })] },
+      });
+      const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
+      mocked.uploadRoute.mockResolvedValue(
+        route({ id: FAILED_ID, status: 'processing', line: [] }),
+      );
+      mocked.getRoute.mockRejectedValue(networkError());
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
+      await waitFor(() => expect(mocked.uploadRoute).toHaveBeenCalled());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(
+        await screen.findByText('Не удаётся получить статус маршрута — продолжаем проверять'),
+      ).toBeTruthy();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      });
+      expect(
+        screen.getByText(
+          'Маршрут обрабатывается дольше обычного — проверьте позже или загрузите файл ещё раз',
+        ),
+      ).toBeTruthy();
+      const calls = mocked.listRoutes.mock.calls.length;
+      fireEvent.click(screen.getByRole('button', { name: 'Обновить список' }));
+      await waitFor(() => expect(mocked.listRoutes.mock.calls.length).toBeGreaterThan(calls));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

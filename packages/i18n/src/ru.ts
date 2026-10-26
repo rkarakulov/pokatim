@@ -1455,6 +1455,7 @@ export const ru = {
   'admin.nav.routes': 'Маршруты',
   'admin.routes.title': 'Маршруты',
   'admin.routes.upload': 'Загрузить GPX',
+  'admin.routes.refreshList': 'Обновить список',
   'admin.routes.empty': 'Маршрутов пока нет',
   'admin.routes.column.title': 'Название',
   'admin.routes.column.distance': 'Длина',

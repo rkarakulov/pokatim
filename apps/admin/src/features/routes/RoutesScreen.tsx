@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react';
 import { formatKmFromMeters } from '../../format';
 import { useCan } from '../../session/can';
 import { isForbidden } from '../../session/errors';
-import { Button, DataTable, EmptyState, FileButton, PageHeader, StatusTag } from '../../ui';
+import { Banner, Button, DataTable, EmptyState, FileButton, PageHeader, StatusTag } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { RouteCatalogDialog, UnpublishRouteDialog } from './RouteCatalogDialog';
 import { RouteUploadDialog, useRouteUpload } from './route-upload';
@@ -33,14 +33,18 @@ type Action = { kind: 'publish' | 'unpublish'; route: PanelRouteSummary };
 
 /**
  * «Маршруты» (`races.read`, routes-01): маршруты команды с колонкой «В каталоге»; с `races.manage` — «Загрузить GPX»
- * (та же загрузка, что в поле коридора гонки, RC-15) и действия готового маршрута: «Опубликовать в каталоге»,
- * «Изменить», «Снять с публикации» (подтверждение). Видимость и готовность проверяет сервер.
+ * (та же загрузка, что в поле коридора гонки, RC-15; сбои опроса и «дольше обычного» — баннер над таблицей) и
+ * действия готового маршрута: «Опубликовать в каталоге», «Изменить», «Снять с публикации» (подтверждение). Видимость
+ * и готовность проверяет сервер.
  */
 export function RoutesScreen() {
   const canManage = useCan('races.manage');
   const pages = useInfiniteQuery(routesPagesQuery);
   const upload = useRouteUpload();
   const [action, setAction] = useState<Action>();
+  // обработка загруженного не завершилась за предел ожидания — строка «Обрабатывается» до ручного обновления
+  const uploadStuck =
+    upload.pollExpired && upload.pending?.status !== 'ready' && upload.pending?.status !== 'failed';
   const query = {
     data: pages.data?.pages.flatMap((page) => page.items),
     isError: pages.isError,
@@ -163,6 +167,21 @@ export function RoutesScreen() {
         }
       />
       <div className="page-body">
+        {uploadStuck ? (
+          <Banner
+            tone="warning"
+            title={t('admin.races.corridor.processingLong')}
+            actions={
+              <Button size="sm" onClick={() => void pages.refetch()}>
+                {t('admin.routes.refreshList')}
+              </Button>
+            }
+          />
+        ) : upload.pollFailed ? (
+          <Banner tone="warning" role="status">
+            {t('admin.races.corridor.pollFailed')}
+          </Banner>
+        ) : null}
         <DataTable
           caption={t('admin.routes.title')}
           columns={columns}

@@ -3,6 +3,8 @@ import { ApiHttpError } from '@pokatim/api-client';
 import type { CatalogRouteDetail, RaceCard, RouteMapGeometry } from '@pokatim/contracts';
 import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import type { ReactElement } from 'react';
+import type { RefreshControlProps } from 'react-native';
 
 import { api } from '@/lib/api';
 import { shareLink, shareOrigin } from '@/lib/share-link';
@@ -78,6 +80,16 @@ afterEach(() => {
   onlineManager.setOnline(true);
 });
 
+const pullToRefresh = async () => {
+  const control = screen.getByTestId('route-detail').props
+    .refreshControl as ReactElement<RefreshControlProps>;
+  await act(async () => {
+    await control.props.onRefresh?.();
+  });
+};
+// 4xx не повторяется (`shouldRetry`) — состояние ошибки сразу
+const failure = () => new ApiHttpError(429, { code: 'RATE_LIMITED', message: 'x' });
+
 const open = (id = ID) => renderRouter(appRoutes, { initialUrl: `/routes/${id}` });
 
 describe('карточка маршрута каталога: гость по ссылке (routes-01, AC6)', () => {
@@ -132,7 +144,8 @@ describe('карточка маршрута каталога: гость по с
     await open();
     await screen.findByLabelText(heroLabel);
     await waitFor(() => expect(listRaces).toHaveBeenCalledWith(ID, { limit: 10 }));
-    expect(screen.queryByText('Гонки на маршруте')).toBeNull();
+    // пока грузится — заголовок и скелетон; подтверждённо пусто — блока нет
+    await waitFor(() => expect(screen.queryByText('Гонки на маршруте')).toBeNull());
   });
 
   it('гонки на маршруте: карточки-ссылки, «Показать ещё» догружает по курсору', async () => {
@@ -146,8 +159,8 @@ describe('карточка маршрута каталога: гость по с
       ),
     );
     const router = await open();
-    expect(await screen.findByRole('header', { name: 'Гонки на маршруте' })).toBeOnTheScreen();
-    expect(screen.getByText('Осенний коридор')).toBeOnTheScreen();
+    expect(await screen.findByText('Осенний коридор')).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'Гонки на маршруте' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByText('Показать ещё'));
     expect(await screen.findByText('Весенний коридор')).toBeOnTheScreen();
     expect(listRaces).toHaveBeenLastCalledWith(ID, { limit: 10, cursor: 'c2' });
@@ -161,7 +174,7 @@ describe('карточка маршрута каталога: гость по с
     await open();
     await screen.findByLabelText(heroLabel);
     await waitFor(() => expect(listRaces).toHaveBeenCalled());
-    expect(screen.queryByText('Гонки на маршруте')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Гонки на маршруте')).toBeNull());
     expect(screen.getByText('Длина')).toBeOnTheScreen();
   });
 
@@ -179,5 +192,53 @@ describe('карточка маршрута каталога: гость по с
     await open();
     await screen.findByLabelText(heroLabel);
     expect(screen.queryByRole('button', { name: 'Поделиться' })).toBeNull();
+  });
+
+  it('гонки маршрута грузятся — заголовок блока и скелетон карточек', async () => {
+    listRaces.mockReturnValue(new Promise(() => undefined));
+    await open();
+    await screen.findByLabelText(heroLabel);
+    expect(await screen.findByRole('header', { name: 'Гонки на маршруте' })).toBeOnTheScreen();
+    expect(screen.getByTestId('route-races-skeleton')).toBeOnTheScreen();
+  });
+
+  it('ошибка обновления гонок — карточки остаются, баннер с повтором', async () => {
+    listRaces.mockResolvedValue({ items: [race({ title: 'Осенний коридор' })], nextCursor: null });
+    await open();
+    expect(await screen.findByText('Осенний коридор')).toBeOnTheScreen();
+    listRaces.mockRejectedValue(failure());
+    await pullToRefresh();
+    expect(await screen.findByText('Данные могли устареть')).toBeOnTheScreen();
+    expect(screen.getByText('Осенний коридор')).toBeOnTheScreen();
+    listRaces.mockResolvedValue({
+      items: [race({ title: 'Обновлённая гонка' })],
+      nextCursor: null,
+    });
+    await fireEvent.press(screen.getByText('Повторить'));
+    expect(await screen.findByText('Обновлённая гонка')).toBeOnTheScreen();
+    expect(screen.queryByText('Данные могли устареть')).toBeNull();
+  });
+
+  it('ошибка следующей страницы — баннер в подвале блока с повтором, загруженное остаётся', async () => {
+    const first = race({ title: 'Осенний коридор' });
+    listRaces.mockImplementation((_id, params = {}) =>
+      params.cursor
+        ? Promise.reject(failure())
+        : Promise.resolve({ items: [first], nextCursor: 'c2' }),
+    );
+    await open();
+    await fireEvent.press(await screen.findByText('Показать ещё'));
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.getByText('Осенний коридор')).toBeOnTheScreen();
+    listRaces.mockImplementation((_id, params = {}) =>
+      Promise.resolve(
+        params.cursor
+          ? { items: [race({ title: 'Весенний коридор' })], nextCursor: null }
+          : { items: [first], nextCursor: 'c2' },
+      ),
+    );
+    await fireEvent.press(screen.getByText('Повторить'));
+    expect(await screen.findByText('Весенний коридор')).toBeOnTheScreen();
+    expect(screen.queryByText('Не удалось загрузить')).toBeNull();
   });
 });

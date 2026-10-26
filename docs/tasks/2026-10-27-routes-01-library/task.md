@@ -772,3 +772,30 @@ All matched files use Prettier code style!
 - NOT VERIFIED: e2e с API (`E2E_API=1`, шаг «Маршруты (routes-01)») — нужен поднятый API/worker/mailpit смоука на
   общей БД стенда; `pnpm e2e:admin`; ручная проверка на симуляторе iOS/Android и в браузере с картой (env стиля).
 - `git merge origin/develop` перед прогоном — «Already up to date» (DEV-9).
+
+### Фиксы ревью pass 1 (`findings.md`) — coder, 2026-10-27
+
+- HIGH Codex / MEDIUM Claude — «Гонки на маршруте» (`route-detail.tsx`, `RouteRaces`): первая загрузка — заголовок и
+  скелетон карточек; подтверждённо пусто и ошибка без данных (в т. ч. 404) — блока нет (RC-12); ошибка обновления —
+  карточки остаются, баннер «Данные могли устареть» с повтором; «Показать ещё» — `fetchNextPage({ cancelRefetch:
+  false })` только без идущего запроса, во время догрузки — скелетон под списком, ошибка следующей страницы — баннер с
+  повтором (как `season-detail.tsx`). Тесты `route-detail.test.tsx` (+3, красные до правки): незавершённый запрос,
+  ошибка обновления, ошибка следующей страницы; два прежних кейса «блока нет» ждут исчезновения заголовка (во время
+  загрузки он теперь виден).
+- LOW Claude — экран «Маршруты» панели: сбои опроса загрузки — баннер «…продолжаем проверять», предел 5 мин — баннер
+  «…проверьте позже» с «Обновить список» (`pages.refetch`); тест `RoutesScreen.test.tsx` (+1). Ключ
+  `admin.routes.refreshList`.
+- LOW — e2e-фикстура `publishCatalogRoute`: снимает маршрут только если опубликовала сама (`catalog === null` до
+  публикации); риск параллельных прогонов — в комментарии.
+
+Проверка: `TURBO_CONCURRENCY=1 pnpm check` (изолированные `MONGO_URL_TEST`/`REDIS_URL_TEST`) → exit 0:
+
+```
+All matched files use Prettier code style!
+✔ no dependency violations found (1056 modules, 3785 dependencies cruised)
+ Tasks:    8 successful, 8 total
+@pokatim/api:test:       Tests  981 passed (981)
+@pokatim/admin:test:       Tests  232 passed (232)
+@pokatim/app:test: Tests:       962 passed, 962 total
+ Tasks:    13 successful, 13 total
+```
