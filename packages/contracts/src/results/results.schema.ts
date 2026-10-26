@@ -208,13 +208,18 @@ export const RaceResultsQuery = z.strictObject({
 });
 export type RaceResultsQuery = z.infer<typeof RaceResultsQuery>;
 
-/** Строка таблицы — без ПДн: анонимный участник (A12), своя строка — по `entryId` из «моего участия». */
+/**
+ * Строка таблицы; своя строка — по `entryId` из «моего участия». Имя — только при явном согласии райдера (P1,
+ * profile-rider-name); иначе `null`, приложение — «Участник».
+ */
 export const RaceResultRow = z.object({
   entryId: Uuid,
   place: z.number().int(),
   /** место разделено (ничья до секунды): «=N» */
   tied: z.boolean(),
   elapsedSec: z.number().int(),
+  /** публичное имя из профиля; старый сервер поля не знает — `null` */
+  riderName: z.string().nullable().default(null),
 });
 export type RaceResultRow = z.infer<typeof RaceResultRow>;
 

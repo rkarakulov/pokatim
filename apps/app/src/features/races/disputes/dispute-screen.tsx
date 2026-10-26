@@ -91,7 +91,7 @@ export function DisputeScreenShell({
   );
 }
 
-/** Оспариваемый результат: «N место», «Участник», время, статус таблицы (без имени — A12). */
+/** Оспариваемый результат: «N место», имя райдера (с его согласием) или «Участник», время, статус таблицы. */
 export function RivalResult({ row, page }: { row: RaceResultRow; page: RaceResultsPage }) {
   const theme = useTheme();
   const view = resultRow(row, false);
@@ -101,7 +101,7 @@ export function RivalResult({ row, page }: { row: RaceResultRow; page: RaceResul
     <View style={styles.result}>
       <Kicker label={t('disputes.rival.place', { place: view.place })} />
       <Text style={[textStyle('titleSm'), { color: theme.text.primary }]}>
-        {t('disputes.rival.participant')}
+        {row.riderName ?? t('disputes.rival.participant')}
       </Text>
       <Text style={[textStyle('time'), { color: theme.text.primary }]}>{view.time}</Text>
       <View style={styles.start}>

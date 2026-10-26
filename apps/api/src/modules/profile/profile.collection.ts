@@ -19,6 +19,13 @@ export interface ProfileDoc {
    * Документы до tracks-devices поля не имеют — чтение `?? null`.
    */
   devicesStepCompletedAt?: Date | null;
+  /**
+   * «Как вас показывать в результатах» (profile-rider-name, P2): 2–80 символов после zod; `null`/нет поля — не задано.
+   * Документы до этого слайса поля не имеют — чтение `?? null`.
+   */
+  publicName?: string | null;
+  /** Согласие на показ имени в таблицах результатов (P1, opt-in); нет поля — `false`. */
+  showNameInResults?: boolean;
   /** Время последней записи (`CLOCK`). */
   updatedAt: Date;
 }

@@ -37,6 +37,7 @@ import {
   type SignInRequest,
   type SignOutRequest,
   type SubmitOnboardingSurveyRequest,
+  type UpdateProfileRequest,
   TrackUpload,
   TrackUploadPage,
   AttemptCandidates,
@@ -230,6 +231,17 @@ export function createApiClient({
         '/v1/profile',
         ProfileView,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Частичное обновление публичного имени и согласия на показ (вход обязателен); ответ — профиль после записи. */
+    updateProfile: (accessToken: string, body: UpdateProfileRequest) =>
+      request(
+        '/v1/profile',
+        ProfileView,
+        authorized(accessToken, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+          ...withCredentials,
+        }),
       ),
     /** Ответ опроса «Что вас привело?» (вход обязателен); повтор перезаписывает ответ. */
     submitOnboardingSurvey: (accessToken: string, body: SubmitOnboardingSurveyRequest) =>

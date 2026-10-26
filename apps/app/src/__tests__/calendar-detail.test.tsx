@@ -59,7 +59,9 @@ beforeEach(() => {
   jest.mocked(api.listCalendarMonths).mockResolvedValue({ months: ['2027-06'] });
   jest.mocked(api.listCalendarCities).mockResolvedValue({ cities: ['Минск'] });
   jest.mocked(api.listRaces).mockResolvedValue({ items: [], nextCursor: null });
-  jest.mocked(api.getProfile).mockResolvedValue({ rideReasons: [] });
+  jest
+    .mocked(api.getProfile)
+    .mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
   open.mockResolvedValue(undefined);
 });
 afterEach(() => {

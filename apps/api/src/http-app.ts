@@ -21,12 +21,12 @@ export function configureHttp(
 ): NestFastifyApplication {
   configureHttpApp(app, { prefix: API_VERSION });
   if (env.CORS_ORIGINS.length > 0) {
-    // методы — явно: по умолчанию @fastify/cors разрешает только GET/HEAD/POST, а профиль пишется PUT;
-    // заголовки не задаются — отражаются запрошенные (Authorization авторизованных эндпоинтов)
+    // методы — явно: по умолчанию @fastify/cors разрешает только GET/HEAD/POST, а профиль пишется PUT (онбординг)
+    // и PATCH (имя и согласие); заголовки не задаются — отражаются запрошенные (Authorization авторизованных эндпоинтов)
     app.enableCors({
       origin: env.CORS_ORIGINS,
       credentials: true,
-      methods: ['GET', 'HEAD', 'POST', 'PUT'],
+      methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH'],
     });
   } else if (env.NODE_ENV !== 'production') {
     new Logger('Http').warn(

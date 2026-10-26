@@ -40,6 +40,7 @@ function ResultRow({
         {view.place}
       </Text>
       <Text
+        numberOfLines={1}
         style={[
           textStyle(own ? 'label' : 'body'),
           styles.who,
@@ -55,7 +56,11 @@ function ResultRow({
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={t('disputes.rival.open', { place: view.place, time: view.time })}
+        accessibilityLabel={t('disputes.rival.open', {
+          who: view.who,
+          place: view.place,
+          time: view.time,
+        })}
         onPress={onPress}
         style={({ pressed }) => [...style, { opacity: pressed ? motion.pressedOpacity : 1 }]}
       >
@@ -71,7 +76,8 @@ function ResultRow({
 }
 
 /**
- * Предварительная таблица гонки (публичная, анонимная, A12): место («=N» при ничьей), «Участник» / «Вы» (своя — по id
+ * Предварительная таблица гонки (публичная): место («=N» при ничьей), имя райдера (с его согласием) или
+ * «Участник» / «Вы» (своя — по id
  * своей заявки, полоса и метка текстом), время. «Показать ещё» — по курсору. Ошибка — компактный баннер с повтором:
  * карточка гонки не ломается.
  */

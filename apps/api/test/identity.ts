@@ -41,7 +41,7 @@ export interface CallResult {
 
 export async function call(
   h: Harness,
-  method: 'GET' | 'POST' | 'PUT' | 'OPTIONS',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'OPTIONS',
   url: string,
   payload?: unknown,
   headers: Record<string, string> = {},

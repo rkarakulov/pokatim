@@ -97,7 +97,7 @@ beforeEach(() => {
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
   useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
-  getProfile.mockResolvedValue({ rideReasons: [] });
+  getProfile.mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
   listRaces.mockResolvedValue(racePage(race));
   listCalendar.mockResolvedValue(calendarPage(start));
   listRides.mockResolvedValue(ridePage(ride));
@@ -108,7 +108,7 @@ afterEach(() => {
 });
 
 const profile = (rideReasons: ProfileView['rideReasons']) =>
-  getProfile.mockResolvedValue({ rideReasons });
+  getProfile.mockResolvedValue({ rideReasons, publicName: null, showNameInResults: false });
 
 async function openHome() {
   return renderRouter(tabRoutes, { initialUrl: '/', wrapper: createQueryWrapper() });
@@ -290,6 +290,17 @@ describe('Главная: разделы (S4)', () => {
       await screen.findByRole('link', { name: 'Ближайший старт. Минская сотка. 14 июня 2027' }),
     );
     expect(router.getPathname()).toBe(`/calendar/${start.id}`);
+  });
+
+  it('иконка «Профиль» верхней панели ведёт на /settings/profile (profile-rider-name)', async () => {
+    const router = await renderRouter(
+      { ...tabRoutes, 'settings/profile': () => null },
+      { initialUrl: '/', wrapper: createQueryWrapper() },
+    );
+    const bar = within(await screen.findByTestId('top-bar'));
+    expect(bar.getByRole('button', { name: 'Устройства' })).toBeOnTheScreen();
+    await fireEvent.press(bar.getByRole('button', { name: 'Профиль' }));
+    expect(router.getPathname()).toBe('/settings/profile');
   });
 
   it('многодневный старт без ссылки регистрации — диапазон, строки регистрации нет', async () => {

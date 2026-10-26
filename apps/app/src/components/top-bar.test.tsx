@@ -29,4 +29,18 @@ describe('TopBar', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Устройства' }));
     expect(open).toHaveBeenCalledTimes(1);
   });
+
+  it('иконка «Профиль» после «Устройств» — кнопка с доступной подписью (profile-rider-name)', async () => {
+    const openDevices = jest.fn();
+    const openProfile = jest.fn();
+    await render(<TopBar onOpenDevices={openDevices} onOpenProfile={openProfile} />);
+
+    expect(screen.getAllByRole('button').map((button) => button.props.accessibilityLabel)).toEqual([
+      'Устройства',
+      'Профиль',
+    ]);
+    await fireEvent.press(screen.getByRole('button', { name: 'Профиль' }));
+    expect(openProfile).toHaveBeenCalledTimes(1);
+    expect(openDevices).not.toHaveBeenCalled();
+  });
 });
