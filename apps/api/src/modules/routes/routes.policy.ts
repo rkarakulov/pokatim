@@ -1,4 +1,4 @@
-import { ROUTE_FILE_MAX_BYTES } from '@pokatim/contracts';
+import { ROUTE_FILE_MAX_BYTES, type RouteDistanceBucket } from '@pokatim/contracts';
 
 import { DEFAULT_PARSE_LIMITS } from '../../parse-thread';
 
@@ -15,3 +15,16 @@ export const ROUTE_POLICY = {
   /** Разбор: память потока и время — общие лимиты `src/parse-thread.ts`. */
   parseLimits: DEFAULT_PARSE_LIMITS,
 } as const;
+
+/**
+ * Корзины дистанции каталога (routes-01 §7), метры: `lt50` < 50 000, `50to100` — [50 000; 100 000], `gt100` > 100 000.
+ * Границы `gt`/`lt` — строгие, `gte`/`lte` — включительно.
+ */
+export const ROUTE_DISTANCE_RANGES_M: Record<
+  RouteDistanceBucket,
+  { gt?: number; gte?: number; lt?: number; lte?: number }
+> = {
+  lt50: { lt: 50_000 },
+  '50to100': { gte: 50_000, lte: 100_000 },
+  gt100: { gt: 100_000 },
+};

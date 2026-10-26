@@ -1,4 +1,4 @@
-import type { RouteFailureCode, RouteStatus } from '@pokatim/contracts';
+import type { CityCode, RouteFailureCode, RouteStatus, Surface } from '@pokatim/contracts';
 import type { Binary, Collection, Db } from 'mongodb';
 
 /**
@@ -11,6 +11,16 @@ export const ROUTES_COLLECTIONS = {
   geometries: 'route_geometries',
   sources: 'route_sources',
 } as const;
+
+/**
+ * Публикация маршрута в каталоге (routes-01): изменяемые метаданные готового маршрута, на коридоры гонок не влияют.
+ * `publishedAt` — момент публикации (правка города/покрытия его не меняет, повторная публикация после снятия — новый).
+ */
+export interface RouteCatalogDoc {
+  city: CityCode;
+  surfaces: Surface[];
+  publishedAt: Date;
+}
 
 /** Маршрут: v1 — только маршруты команды платформы (`origin: 'platform'`). Уникальны `(ownerUserId, sha256)`. */
 export interface RouteDoc {
@@ -28,6 +38,8 @@ export interface RouteDoc {
   isLoop: boolean | null;
   start: { type: 'Point'; coordinates: [number, number] } | null;
   finish: { type: 'Point'; coordinates: [number, number] } | null;
+  /** `null` — не в каталоге; документы до `0020_routes_catalog` поля не имеют — чтение `?? null`. */
+  catalog: RouteCatalogDoc | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -43,7 +43,20 @@ function toSummary(route: RouteDoc, ownerName: string): PanelRouteSummary {
     isLoop: route.isLoop,
     owner: { userId: route.ownerUserId, displayName: ownerName },
     createdAt: route.createdAt.toISOString(),
+    catalog: catalogOf(route),
   };
+}
+
+/** Каталожные поля панели; документ до `0020_routes_catalog` — `null`. */
+function catalogOf(route: RouteDoc): PanelRouteSummary['catalog'] {
+  const catalog = route.catalog ?? null;
+  return catalog
+    ? {
+        city: catalog.city,
+        surfaces: catalog.surfaces,
+        publishedAt: catalog.publishedAt.toISOString(),
+      }
+    : null;
 }
 
 /**
@@ -110,6 +123,7 @@ export class RoutesService {
       isLoop: null,
       start: null,
       finish: null,
+      catalog: null,
       createdAt: now,
       updatedAt: now,
     };

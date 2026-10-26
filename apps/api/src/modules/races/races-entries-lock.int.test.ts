@@ -52,6 +52,7 @@ async function linearRoute(ownerUserId: string, endsM: number): Promise<string> 
     isLoop: false,
     start: { type: 'Point', coordinates: start },
     finish: { type: 'Point', coordinates: finish },
+    catalog: null,
     createdAt: now,
     updatedAt: now,
   });
