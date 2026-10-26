@@ -212,13 +212,16 @@ export function raceActionErrorText(error: unknown): string {
   return isRaceErrorCode(code) ? t(`races.error.${code}`) : actionErrorMessage(error);
 }
 
-/** Строка предварительной таблицы: место («=2» при ничьей), «Участник» / «Вы», время, подпись для скринридера. */
+/**
+ * Строка таблицы: место («=2» при ничьей), кто — своя «Вы», чужая — имя (только с согласием райдера,
+ * profile-rider-name) или «Участник», время, подпись для скринридера.
+ */
 export function resultRow(
   row: RaceResultRow,
   own: boolean,
 ): { place: string; who: string; time: string; a11y: string } {
   const place = row.tied ? t('races.results.tiePlace', { place: row.place }) : String(row.place);
-  const who = t(own ? 'races.results.you' : 'races.results.rider');
+  const who = own ? t('races.results.you') : (row.riderName ?? t('races.results.rider'));
   const time = formatElapsed(row.elapsedSec);
   const spoken = row.tied ? t('races.results.tiedA11y', { place: row.place }) : String(row.place);
   return { place, who, time, a11y: t('races.results.rowA11y', { place: spoken, who, time }) };

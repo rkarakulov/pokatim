@@ -33,6 +33,8 @@ export function useNextCalendarStart() {
 
 /** Профиль своего пользователя; после ответа на опрос — инвалидация (`useSubmitSurvey`), при выходе — `clear()`. */
 export const PROFILE_QUERY_KEY = ['profile'] as const;
+/** Запрос профиля — один для всех читателей ключа `PROFILE_QUERY_KEY` (Главная, экран «Профиль»). */
+export const fetchProfile = () => withAccessToken((accessToken) => api.getProfile(accessToken));
 
 /**
  * Ответы опроса для порядка разделов Главной (R4). `reasons === undefined` — профиль ещё не пришёл или не
@@ -45,7 +47,7 @@ export function useRideReasons(): {
 } {
   const query = useQuery({
     queryKey: PROFILE_QUERY_KEY,
-    queryFn: () => withAccessToken((accessToken) => api.getProfile(accessToken)),
+    queryFn: fetchProfile,
     staleTime: Infinity,
     select: (profile) => profile.rideReasons,
   });

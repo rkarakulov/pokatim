@@ -3,6 +3,7 @@ import type {
   MyAttempt,
   MyRaceEntry,
   PendingUpload,
+  RaceResultRow,
   RaceResultsPage,
   RaceResultsQuery,
 } from '@pokatim/contracts';
@@ -12,6 +13,7 @@ import { z } from 'zod';
 import type { DbSession } from '../../db';
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
+import { RIDER_NAMES, type RiderNameDirectory } from '../profile';
 import { RACE_REGISTRY, type RaceForResults, type RaceRegistry } from '../races';
 import { ACTIVITY_SOURCE, type ActivitySource } from '../tracks';
 import type {
@@ -39,6 +41,12 @@ const invalidCursor = () =>
  * (AC21), позицию сортировки сервер берёт из самой строки.
  */
 const RankCursorKey = z.literal('e');
+/** Строка таблицы до подстановки имени: `userId` — только для порта имён, наружу не выходит. */
+interface UnnamedRow {
+  userId: string;
+  row: Omit<RaceResultRow, 'riderName'>;
+}
+type UnnamedPage = Omit<RaceResultsPage, 'items'> & { items: UnnamedRow[] };
 /** Сегмент попытки наружу: без координат и датчиков (приложение и панель). */
 export const segmentView = (segment: AttemptSegmentDoc | null) =>
   segment
@@ -56,7 +64,7 @@ export const segmentView = (segment: AttemptSegmentDoc | null) =>
 
 /**
  * Чтение участия и результатов приложения (race-results-03): «моё участие» (только свои попытки, без скрытых),
- * публичная таблица (анонимные строки). До публикации протокола места считаются при чтении в snapshot-сессии; после
+ * публичная таблица (имя — только с согласием, порт `RIDER_NAMES`). До публикации протокола места считаются при чтении в snapshot-сессии; после
  * (race-results-05, §7.7) — только из текущей ревизии снимка протокола. Панель — `ResultsPanelReadService`.
  */
 @Injectable()
@@ -66,6 +74,7 @@ export class ResultsReadService {
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
     @Inject(ACTIVITY_SOURCE) private readonly activities: ActivitySource,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(RIDER_NAMES) private readonly names: RiderNameDirectory,
   ) {}
 
   /** Опубликованная или отменённая гонка; черновик и неизвестная — 404. */
@@ -199,7 +208,8 @@ export class ResultsReadService {
   }
 
   /**
-   * Публичная предварительная таблица (без ПДн: `entryId`, место, ничья, время сегмента). Отменённая или без
+   * Публичная предварительная таблица (`entryId`, место, ничья, время сегмента; имя — только с согласием, порт
+   * `RIDER_NAMES`). Отменённая или без
    * коридора — пусто. Страница и счётчики мест — в одной snapshot-сессии. Курсор — строка этой таблицы: выбыла
    * (отмена участия, снятие лучшего) или чужая гонка — `400` на поле `cursor`, клиент начинает сначала.
    */
@@ -210,7 +220,7 @@ export class ResultsReadService {
     if (!empty && race.protocolPublishedAt !== null) {
       return this.protocolResults(raceId, cursorEntryId, query.limit);
     }
-    return this.repository.withSnapshot(async (session) => {
+    const unnamed = await this.repository.withSnapshot(async (session): Promise<UnnamedPage> => {
       const entries = await this.repository.countActiveEntries(raceId, session);
       const base = {
         group: RESULTS_POLICY.groupKey,
@@ -249,26 +259,48 @@ export class ResultsReadService {
         ...base,
         ranked,
         items: page.map((row, index) => ({
-          entryId: row._id,
-          place: places[index]!.place,
-          tied: places[index]!.tied,
-          elapsedSec: row.best.elapsedSec,
+          userId: row.userId,
+          row: {
+            entryId: row._id,
+            place: places[index]!.place,
+            tied: places[index]!.tied,
+            elapsedSec: row.best.elapsedSec,
+          },
         })),
         nextCursor: rows.length > query.limit ? encodeCursor('e', last._id) : null,
       };
     });
+    return this.withRiderNames(unnamed);
+  }
+
+  /**
+   * Имена строк страницы (profile-rider-name, P1/P3): один вызов порта после snapshot-сессии — имя не участвует в
+   * согласованности мест и в снимок протокола не пишется. Строка — явным списком полей: `userId` наружу не выходит.
+   */
+  private async withRiderNames(page: UnnamedPage): Promise<RaceResultsPage> {
+    const names = await this.names.publicNames(page.items.map((item) => item.userId));
+    return {
+      ...page,
+      items: page.items.map(({ userId, row }) => ({
+        entryId: row.entryId,
+        place: row.place,
+        tied: row.tied,
+        elapsedSec: row.elapsedSec,
+        riderName: names.get(userId) ?? null,
+      })),
+    };
   }
 
   /**
    * Таблица опубликованного протокола (§7.7): строки текущей ревизии без DQ по `order`, `status: 'final'`. Курсор —
    * `entryId` строки (позиция — её `order`); строка DQ или не из ревизии — `400` на поле `cursor`.
    */
-  private protocolResults(
+  private async protocolResults(
     raceId: string,
     cursorEntryId: string | null,
     limit: number,
   ): Promise<RaceResultsPage> {
-    return this.repository.withSnapshot(async (session) => {
+    const unnamed = await this.repository.withSnapshot(async (session): Promise<UnnamedPage> => {
       const revision = await this.protocolRevision(raceId, session);
       let afterOrder: number | null = null;
       if (cursorEntryId) {
@@ -297,15 +329,19 @@ export class ResultsReadService {
             ? []
             : [
                 {
-                  entryId: row.entryId,
-                  place: row.place,
-                  tied: row.tied,
-                  elapsedSec: row.elapsedSec,
+                  userId: row.userId,
+                  row: {
+                    entryId: row.entryId,
+                    place: row.place,
+                    tied: row.tied,
+                    elapsedSec: row.elapsedSec,
+                  },
                 },
               ],
         ),
         nextCursor: rows.length > limit && last ? encodeCursor('e', last.entryId) : null,
       };
     });
+    return this.withRiderNames(unnamed);
   }
 }

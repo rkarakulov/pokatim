@@ -66,7 +66,11 @@ describe('api-client: онбординг профиля (Bearer — только
 
   it('getProfile — GET /v1/profile с Bearer; неизвестные коды отброшены', async () => {
     const { calls, api } = client(200, { rideReasons: ['calendar', 'future_code'] });
-    await expect(api.getProfile('access.jwt.x')).resolves.toEqual({ rideReasons: ['calendar'] });
+    await expect(api.getProfile('access.jwt.x')).resolves.toEqual({
+      rideReasons: ['calendar'],
+      publicName: null,
+      showNameInResults: false,
+    });
     expect(calls).toEqual([
       {
         url: 'https://api.test/v1/profile',
@@ -75,6 +79,27 @@ describe('api-client: онбординг профиля (Bearer — только
         body: undefined,
       },
     ]);
+  });
+
+  it('updateProfile — PATCH /v1/profile с Bearer и телом, ответ — профиль', async () => {
+    const view = { rideReasons: ['races'], publicName: 'Анна К.', showNameInResults: true };
+    const { calls, api } = client(200, view);
+    await expect(
+      api.updateProfile('access.jwt.x', { publicName: 'Анна К.', showNameInResults: true }),
+    ).resolves.toEqual(view);
+    expect(calls).toEqual([
+      {
+        url: 'https://api.test/v1/profile',
+        method: 'PATCH',
+        authorization: 'Bearer access.jwt.x',
+        body: { publicName: 'Анна К.', showNameInResults: true },
+      },
+    ]);
+    await expect(
+      client(200, { rideReasons: [], showNameInResults: 'yes' }).api.updateProfile('t', {
+        showNameInResults: true,
+      }),
+    ).rejects.toThrow();
   });
 
   it('публичные методы Bearer не отправляют', async () => {

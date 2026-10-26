@@ -88,7 +88,13 @@ describe('предварительная таблица (AC18, AC21)', () => {
       ['entries', 'group', 'items', 'nextCursor', 'ranked', 'status'].sort(),
     );
     for (const row of (res.body as { items: object[] }).items) {
-      expect(Object.keys(row).sort()).toEqual(['elapsedSec', 'entryId', 'place', 'tied']);
+      expect(Object.keys(row).sort()).toEqual([
+        'elapsedSec',
+        'entryId',
+        'place',
+        'riderName',
+        'tied',
+      ]);
     }
     // своё место — в «моём участии»
     expect((await myEntry(h, riders[3]!.auth, raceId)).result).toMatchObject({

@@ -468,6 +468,16 @@ export const ru = {
   'devices.step.continue': 'Продолжить',
   'devices.step.fileHint': 'Загрузить заезды файлом можно в разделе «Устройства».',
   'devices.step.saveFailed': 'Не удалось сохранить. Повторите.',
+  // профиль райдера (profile-rider-name): публичное имя и согласие на показ в таблицах результатов
+  'profile.title': 'Профиль',
+  'profile.back': 'Назад',
+  'profile.name.label': 'Как вас показывать в результатах',
+  'profile.name.hint': 'Например, Анна К.',
+  'profile.show.label': 'Показывать имя в таблицах результатов',
+  'profile.show.hint':
+    'Имя увидят все в таблицах результатов гонок. Выключите — вы будете «Участник»',
+  'profile.save': 'Сохранить',
+  'profile.saved': 'Сохранено',
   'tracks.upload.kicker': 'Файл',
   'tracks.upload.title': 'Загрузить файл',
   'tracks.upload.hint': 'FIT или GPX, до 16 МБ',

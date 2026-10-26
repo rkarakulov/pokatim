@@ -125,6 +125,8 @@ export default function RootLayout() {
           {/* «Устройства» (вход — иконка верхней панели): тот же гард, что у вкладок; скелетон — в экране
               (`useSettingsShell`) */}
           <Stack.Screen name="settings/devices" />
+          {/* «Профиль» (profile-rider-name, вход — иконка верхней панели): тот же гард и оболочка, что у «Устройств» */}
+          <Stack.Screen name="settings/profile" />
           {/* кофе-райды (блок 05): форма, правка и отмена — только вошедшим, без таб-бара; гость — «Вход» */}
           <Stack.Screen name="rides/new" />
           <Stack.Screen name="rides/edit/[id]" />

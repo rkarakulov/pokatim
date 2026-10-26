@@ -200,7 +200,7 @@ describe('PUT /v1/profile/onboarding/devices — шаг «Подключите �
       devicesStepCompleted: true,
     });
     const profile = await call(h, 'GET', '/v1/profile', undefined, bearer(session.accessToken));
-    expect(profile.body).toEqual({ rideReasons: [] });
+    expect(profile.body).toEqual({ rideReasons: [], publicName: null, showNameInResults: false });
     await submit(session, { reasons: ['routes'] });
     expect((await getStatus(session)).body).toEqual({
       surveyCompleted: true,
