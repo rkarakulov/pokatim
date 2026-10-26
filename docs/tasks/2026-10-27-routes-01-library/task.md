@@ -233,6 +233,20 @@ Architecture Review — routes-01-library: **CONCERNS** (блокеров нет
   ломался любым новым кодом; теперь проверяет, что коды споров идут сразу после `RESULTS_PUBLISH_BLOCKED` (полный
   порядок `ErrorCode` по-прежнему держит `common.test.ts`). Ожидания полного набора индексов в тестах `0007_races` и
   `0013_routes` дополнены индексами `0020` (как было с `0009`).
+- DEV-6 (coder, frontend): кроме `useRouteUpload`/`RouteUploadDialog` (RC-15) из `CorridorField` вынесен и превью
+  `RoutePreview` (`features/routes/RoutePreview.tsx`) — его же показывает окно публикации (RC-11), без копии. Хук
+  загрузки дополнительно инвалидирует `['admin','routes','list']` (после загрузки и по завершении обработки), чтобы
+  экран «Маршруты» видел новый маршрут; ключ `ready` — как раньше (только при `ready`).
+- DEV-7 (coder, frontend): существующие тесты, кодирующие прежний состав, обновлены под новое поведение (не
+  ослаблены): `AppLayout.test.tsx` (пункт «Маршруты» в навигации), `sections.test.ts` и `home.test.tsx` (раздел
+  `routes` в реестре; кейс «раздел без бэкенда» заменён на «`routes` в опросе поднимает раздел с тегом», скелетонов и
+  «Нет соединения» — 4). Тесты maps-01 и `RaceEditor.corridor.test.tsx` — без правок.
+- DEV-8 (coder, frontend): i18n отличается от перечня §11 в деталях: нет `routes.citiesFailed` (ошибка городов —
+  группа скрыта без текста, как календарь); добавлены `routes.heroUnit`, `routes.detail.kicker|elevationValue|
+  copied|shareFailed`, `admin.routes.column.*|status.*|yes|no|elevation`, `admin.routes.catalog.dialog.save|
+  cityPlaceholder`. Мета `routes/[id]` — отдельный файл `route-metadata.test.ts` (не `public-metadata.test.ts`).
+- DEV-9 (coder, frontend): `docs/tasks/README.md` индекса задач не ведёт — не менялся. `git merge origin/develop` —
+  «Already up to date» (maps-02 в develop ещё нет, R1 остаётся до слияния maps-02).
 
 ## 8.3 Security checklist
 
@@ -704,3 +718,57 @@ All matched files use Prettier code style!
 ```
 
 Не сделано в этой части (по поручению): admin, app, e2e, docs §10 — следующая часть (шаги 7–11).
+
+### Frontend (шаги 7–11 §11: admin, app maps, app routes, Главная, e2e, docs) — coder, 2026-10-27
+
+Коммиты: `6fa71e7` панель · `cd0ac66` карта (`corridor?`) · `72a5487` вкладка и карточка `/routes/<id>` · `9660104`
+Главная · `5b5d334` документация · `5c8433c` e2e-смоук.
+
+Сделано:
+- admin: `routes-query.ts` перенесён в `features/routes/` (+ `routesPagesQuery`); загрузка GPX — `useRouteUpload` +
+  `RouteUploadDialog`, превью — `RoutePreview` (RC-15, DEV-6), `CorridorField` на них без смены поведения
+  (`RaceEditor.corridor.test.tsx` без правок, зелёный); экран «Маршруты» (`/routes`, `races.read`): таблица с
+  «В каталоге», «Загрузить GPX» и действия только с `races.manage` и только у `ready`; `RouteCatalogDialog` (линия +
+  предупреждение RC-11, город — справочник по алфавиту, покрытие — чипы, react-hook-form + zod контракта, ошибки
+  сервера под полями, `409 ROUTE_INVALID_STATE` — баннер), «Снять с публикации» — подтверждение; пункт навигации
+  после «Календаря».
+- app maps: `RouteMap.corridor?` (по умолчанию `true`, native и web — фильтр слоя `CORRIDOR_LAYER_ID`),
+  `withoutCorridor`, `useMapStyle`; существующие пропсы, `RaceRouteMap`, `race-route-map.tsx`, тесты maps-01 — без
+  изменений.
+- app routes: `features/routes/{filters,format,queries,route-feed,route-detail,catalog-route-map}`,
+  `components/route-list-card.tsx`, вкладка `(tabs)/routes.tsx` (вместо заглушки), карточка `routes/[id].tsx` (SSR,
+  `generateMetadata`: найден / 404 `noindex` / недоступен), `Stack.Screen` вне `Stack.Protected`.
+- Главная: `routes` в `AVAILABLE_HOME_SECTIONS` (между райдами и календарём), `useLatestRoute`, текстовый `RouteHero`
+  (RC-8), пусто — «Маршрутов пока нет».
+- i18n: `routes.*`, `home.routes.*`, `admin.routes.*` (дополнен), `admin.nav.routes` (DEV-8).
+- e2e: без API — неизвестный маршрут (HTML 200, «Маршрут недоступен» / «Нет соединения», гостя не уводит); с API —
+  `publishCatalogRoute` (фикстура через API панели) → SSR/OG без ПДн → вкладка после входа → карточка; снятие в `finally`.
+- docs: `docs/product/routes.md` (новый), `docs/product/{README,home}.md`, эпик race-results §3.1, правила
+  `pokatim-{security,app,backend,db,contracts,web}.md`.
+
+Тесты: admin `RoutesScreen.test.tsx` (8); app `filters.test.ts`, `format.test.ts`, `route-list-card.test.tsx`,
+`routes.test.tsx` (9), `route-detail.test.tsx` (8, в т. ч. слои `route/start/finish` без `corridor`, env не задан —
+без карты и запроса), `route-metadata.test.ts` (4), `route-map-corridor.web.test.tsx` (2), `home.test.tsx` (+3),
+`sections.test.ts` (обновлён, DEV-7).
+
+Проверки:
+- `TURBO_CONCURRENCY=1 pnpm check` (`MONGO_URL_TEST=…/pokatim_routes_test`, `REDIS_URL_TEST=…:6479/12`) → exit 0:
+
+```
+$ pnpm format:check && pnpm lint && pnpm arch:check && pnpm typecheck && pnpm test
+All matched files use Prettier code style!
+✔ no dependency violations found (1056 modules, 3785 dependencies cruised)
+ Tasks:    8 successful, 8 total
+@pokatim/contracts:test:       Tests  236 passed (236)
+@pokatim/api-client:test:       Tests  80 passed (80)
+@pokatim/api:test:       Tests  981 passed (981)
+@pokatim/admin:test:       Tests  231 passed (231)
+@pokatim/app:test: Tests:       959 passed, 959 total
+ Tasks:    13 successful, 13 total
+```
+
+- `EXPO_PUBLIC_API_URL=http://127.0.0.1:3000 pnpm build:web && pnpm build:web:dev && playwright test -g
+  "маршрут|Главная без входа|неизвестной гонки"` (без API) → `3 passed, 1 skipped` (шаг с API пропущен).
+- NOT VERIFIED: e2e с API (`E2E_API=1`, шаг «Маршруты (routes-01)») — нужен поднятый API/worker/mailpit смоука на
+  общей БД стенда; `pnpm e2e:admin`; ручная проверка на симуляторе iOS/Android и в браузере с картой (env стиля).
+- `git merge origin/develop` перед прогоном — «Already up to date» (DEV-9).
