@@ -12,11 +12,18 @@ import {
   TrackActivityRemoved,
 } from '../tracks';
 import { AttemptIntake } from './attempt-intake';
-import { RESULTS_ENTRY_CREATED, ResultsEntryCreated } from './results.events';
+import {
+  RESULTS_ENTRY_CREATED,
+  RESULTS_RACE_RECHECK_REQUESTED,
+  ResultsEntryCreated,
+  ResultsRaceRecheckRequested,
+} from './results.events';
+import { ResultsRecheck } from './results-recheck';
 
 /**
  * Приём попыток (`results-intake`, jobId = id события outbox): события `tracks` (`activity-ready`,
- * `activity-removed`) и своя «заявка создана» → `AttemptIntake`. Задачи идемпотентны: состояние группы читается
+ * `activity-removed`) и своя «заявка создана» → `AttemptIntake`; «перепроверка гонки» (race-results-05) →
+ * `ResultsRecheck.requestRace`. Задачи идемпотентны: состояние группы читается
  * сейчас, попытка уникальна по (гонка, активность). Параллелизм — 2.
  */
 @Processor(QUEUE.resultsIntake, { concurrency: 2 })
@@ -25,6 +32,7 @@ export class ResultsIntakeProcessor extends WorkerHost {
 
   constructor(
     private readonly intake: AttemptIntake,
+    private readonly recheck: ResultsRecheck,
     private readonly outbox: MongoOutboxReader,
   ) {
     super();
@@ -67,6 +75,13 @@ export class ResultsIntakeProcessor extends WorkerHost {
       const event = ResultsEntryCreated.safeParse(payload);
       if (event.success) await this.intake.entryCreated(event.data.entryId);
       else this.skip(job);
+      return;
+    }
+    if (job.name === RESULTS_RACE_RECHECK_REQUESTED) {
+      const event = ResultsRaceRecheckRequested.safeParse(payload);
+      if (event.success) {
+        await this.recheck.requestRace(event.data.raceId, new Date(event.data.requestedAt));
+      } else this.skip(job);
       return;
     }
     throw new Error(`unknown job ${job.name} in queue ${QUEUE.resultsIntake}`);

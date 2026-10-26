@@ -179,3 +179,27 @@ describe('порт ActivitySource', () => {
     expect(await source().readSource('01890a5d-ac96-774b-bcce-b302099a8057')).toBeNull();
   });
 });
+
+describe('countUnprocessed (race-results-05: строка чек-листа «необработанные треки»)', () => {
+  it('загрузки пользователей в queued|processing, принятые в [from, before); прочие статусы и чужие — нет', async () => {
+    const queued = parsedUpload(await uploadTrack(h, auth, fixture('komoot.gpx')));
+    const done = parsedUpload(await uploadTrack(h, auth, fixture('garmin-connect.gpx')));
+    expect(await processUpload(h, done.id)).toBe('ready');
+    const processing = parsedUpload(await uploadTrack(h, auth, fixture('no-time.gpx')));
+    await tracks(h).uploads.updateOne({ _id: processing.id }, { $set: { status: 'processing' } });
+    const other = bearer((await signUpSession(h, 'other@example.com')).accessToken);
+    const otherUserId = await userIdByEmail(h, 'other@example.com');
+    parsedUpload(await uploadTrack(h, other, fixture('komoot.gpx')));
+
+    const now = h.clock.now();
+    const before = new Date(now.getTime() + 1);
+    expect(await source().countUnprocessed([userId], now, before)).toBe(2);
+    expect(await source().countUnprocessed([userId, otherUserId], now, before)).toBe(3);
+    expect(await source().countUnprocessed([otherUserId], now, before)).toBe(1);
+    // граница: before исключающая, from включающая
+    expect(await source().countUnprocessed([userId], now, now)).toBe(0);
+    expect(await source().countUnprocessed([userId], before, new Date(now.getTime() + 2))).toBe(0);
+    expect(await source().countUnprocessed([], now, before)).toBe(0);
+    expect(queued.status).toBe('queued');
+  });
+});

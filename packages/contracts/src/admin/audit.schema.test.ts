@@ -30,6 +30,13 @@ describe('AuditAction', () => {
       'calendar.unpublished',
       'calendar.republished',
       'route.created',
+      'results.attempt_excluded',
+      'results.attempt_restored',
+      'results.recheck_requested',
+      'results.protocol_published',
+      'results.result_disqualified',
+      'results.disqualification_revoked',
+      'results.recalculation_applied',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual(['season', 'race', 'calendar_start', 'route']);
     expect(AuditAction.safeParse('panel.deleted').success).toBe(false);
@@ -137,6 +144,38 @@ describe('AuditEntry — объект и детали', () => {
     expect(
       AuditPage.safeParse({
         items: [{ ...base, subject: null, details: { cancelReason: 'дождь' } }],
+        nextCursor: null,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('AuditEntry — протокол гонки (race-results-05)', () => {
+  it('детали действия результатов: попытка, заявка, ревизия; ревизия — целое', () => {
+    const entry = {
+      id: ID,
+      at: '2026-10-28T10:00:00.000Z',
+      action: 'results.result_disqualified',
+      actor: { kind: 'user', userId: ID, displayName: 'Ольга' },
+      target: null,
+      reason: 'Срезка маршрута',
+      subject: { kind: 'race', id: ID, label: 'Минское кольцо' },
+      details: { attemptId: ID, entryId: ID, revision: 2 },
+    };
+    expect(AuditPage.parse({ items: [entry], nextCursor: null }).items[0]?.details).toEqual({
+      attemptId: ID,
+      entryId: ID,
+      revision: 2,
+    });
+    expect(
+      AuditPage.safeParse({
+        items: [{ ...entry, details: { revision: 1.5 } }],
+        nextCursor: null,
+      }).success,
+    ).toBe(false);
+    expect(
+      AuditPage.safeParse({
+        items: [{ ...entry, details: { entryId: 'x' } }],
         nextCursor: null,
       }).success,
     ).toBe(false);

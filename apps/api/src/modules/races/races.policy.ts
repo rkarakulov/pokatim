@@ -57,13 +57,20 @@ const CLOSED_WINDOW_FIELDS: readonly RaceField[] = ['description', 'protocolPlan
 const windowClosesAt = (race: Pick<RaceDoc, 'windowEndsAt'>) =>
   race.windowEndsAt.getTime() + RACE_POLICY.windowEndGraceMs;
 
-/** Фаза гонки по статусу и окну (R5). */
+/** Протокол гонки опубликован (race-results-05); документы до `0016_protocol` поля не имеют. */
+export const protocolPublished = (race: { protocolPublishedAt?: Date | null }): boolean =>
+  (race.protocolPublishedAt ?? null) !== null;
+
+/** Фаза гонки по статусу, окну и публикации протокола (R5; `final` — race-results-05). */
 export function racePhase(
-  race: Pick<RaceDoc, 'status' | 'windowStartsAt' | 'windowEndsAt'>,
+  race: Pick<RaceDoc, 'status' | 'windowStartsAt' | 'windowEndsAt'> & {
+    protocolPublishedAt?: Date | null;
+  },
   now: Date,
 ): RacePhase {
   if (race.status === 'draft') return 'draft';
   if (race.status === 'cancelled') return 'cancelled';
+  if (protocolPublished(race)) return 'final';
   if (now < race.windowStartsAt) return 'upcoming';
   return now.getTime() < windowClosesAt(race) ? 'open' : 'closed';
 }
@@ -128,6 +135,9 @@ export function changedRaceFields(prev: RaceValues, next: RaceValues): RaceField
   return RACE_FIELDS.filter((field) => !sameValue(prev[field], next[field]));
 }
 
+/** Поля опубликованного протокола (race-results-05): только описание. */
+const FINAL_FIELDS: readonly RaceField[] = ['description'];
+
 /** Поля, которые опубликованная гонка позволяет менять в своей фазе; `locked` — есть заявки (V-12). */
 function publishedFields(phase: RacePhase, locked: boolean): RaceField[] {
   const fields =
@@ -135,7 +145,9 @@ function publishedFields(phase: RacePhase, locked: boolean): RaceField[] {
       ? [...RACE_FIELDS]
       : phase === 'open'
         ? RACE_FIELDS.filter((field) => field !== 'windowStartsAt')
-        : [...CLOSED_WINDOW_FIELDS];
+        : phase === 'final'
+          ? [...FINAL_FIELDS]
+          : [...CLOSED_WINDOW_FIELDS];
   return locked ? fields.filter((field) => !LOCKED_BY_ENTRIES.includes(field)) : fields;
 }
 
@@ -261,13 +273,20 @@ export function raceEditable(
 
   const phase = racePhase(race, now);
   const locked = entriesLocked(race);
+  // протокол опубликован: только описание, отмена недоступна (D-19); `window_closed` не показывается (RC-6)
   const reasons: RaceEditBlockReason[] =
-    phase === 'open' ? ['window_open'] : phase === 'closed' ? ['window_closed'] : [];
+    phase === 'open'
+      ? ['window_open']
+      : phase === 'closed'
+        ? ['window_closed']
+        : phase === 'final'
+          ? ['results_final']
+          : [];
   if (locked) reasons.push('entries_locked');
   return {
     ...none,
     fields: editableFields(race, publishedFields(phase, locked), phase),
-    canCancel: true,
+    canCancel: phase !== 'final',
     reasons,
   };
 }

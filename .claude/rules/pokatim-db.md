@@ -125,6 +125,20 @@ paths:
   изменений — без записи); места — при чтении (`race_entries_ranking_idx`), страница и счётчики — в одной
   snapshot-сессии.
 
+## Протокол (race-results-05)
+
+- Транзакции действий панели над результатами (исключение, возврат, публикация, перепроверка, DQ, отмена DQ,
+  «Применить пересчёт») **первой** операцией вызывают `RaceRegistry.lockResults` (`$inc resultsVersion` документа
+  гонки, без `version`/`updatedAt`; черновик — `null` → 404). Без замка — **HIGH** (отрицательное доказательство —
+  исключение ↔ публикация, `results-protocol.int.test.ts`).
+- `race_attempt_reviews`, `race_protocol_rows`, `race_recalculations` — только `insertOne`/`insertMany` в
+  `ResultsRepository` (сторож `results.repository.test.ts`). Ревизия — новый набор строк целиком; журнал ревизий —
+  `race_recalculations` (уникальный частичный `(raceId, revision)`), текущая — максимальный номер журнала, не строк.
+- D-19: отмена гонки — фильтр `protocolPublishedAt: null` в переходе `cancel` (второй рубеж после конфликта записи
+  с замком); `protocolPublishedAt`/`resultsVersion` пишет только `RacesRepository` (порт `RaceRegistry`).
+- Порядок «запуск ↔ публикация ↔ применение» и «устаревший вердикт» — по `at`/`checkedAt` из `CLOCK`, не по `_id`
+  (`uuidv7` не монотонен внутри миллисекунды).
+
 ## Сезоны, гонки, календарь (ADR-0010)
 
 - Транзакция, создающая или меняющая даты сезона, публикующая гонку или меняющая конец окна опубликованной гонки,

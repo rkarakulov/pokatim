@@ -86,6 +86,21 @@ paths:
 Клиентское время в расчёте результата · UPDATE/DELETE аудита и споров · биометрия или e-mail в логах ·
 разбор трека или рендер в HTTP-обработчике.
 
+## Протокол (`results`, race-results-05)
+
+- Мутации панели — `results-protocol.controller.ts` → `ResultsProtocolService` (транзакция под `lockResults`, журнал
+  `PanelAudit.append` и outbox в ней же, лог после коммита — без причины и `userId` райдера); чтения панели —
+  `results-admin.controller.ts` → `ResultsPanelReadService`. Чек-лист — одна чистая `publishChecklist` для чтения и
+  транзакции публикации, снимок — `buildProtocol`, места — только `rankRows`.
+- «Перепроверить треки» в HTTP не перепоставляет попытки: только `recheck_started` + событие
+  `results.race-recheck-requested` → `results-intake` → `ResultsRecheck.requestRace` (транзакция на попытку под
+  `lockEntry`, идемпотентно по `checkedAt < requestedAt`). Пока есть незавершённые проверки — публикация и
+  «Применить пересчёт» отвечают 409.
+- `results.protocol-published` / `results.result-revised` — в outbox без маршрута (`publishedAt: null` до слайса 08;
+  издатель базы берёт только типы из маршрутов).
+- Отказы состояния — `409 RESULTS_ACTION_BLOCKED { reason, count? }`, `409 RESULTS_PUBLISH_BLOCKED { blockedBy,
+  checklist }`.
+
 ## Кофе-райды (`rides`, блок 05)
 
 - Лента `GET /v1/rides`, города `GET /v1/rides/cities`, состояние зрителя `GET /v1/rides/:id/me` и все мутации —

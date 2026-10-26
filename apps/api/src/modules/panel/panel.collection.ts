@@ -76,6 +76,10 @@ export interface AuditDetailsDoc {
   roleTo?: PanelRole;
   changedFields?: string[];
   cancelReason?: RaceCancelReason;
+  /** race-results-05: попытка, заявка участника, ревизия протокола */
+  attemptId?: string;
+  entryId?: string;
+  revision?: number;
 }
 
 /**

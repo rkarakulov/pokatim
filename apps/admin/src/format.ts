@@ -58,3 +58,12 @@ export function formatLocalDate(date: string): string {
   const part = parts(DATE_LONG, new Date(`${date}T12:00:00Z`));
   return `${part('day')} ${part('month')} ${part('year')}`;
 }
+
+/** «1:02:03» (меньше часа — «2:03») из секунд: время заезда, сегмента. */
+export function formatElapsed(totalSec: number): string {
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+}

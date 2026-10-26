@@ -50,6 +50,7 @@ function race(overrides: Partial<RaceDoc> = {}): RaceDoc {
     publishedAt: at('2026-09-01T00:00:00Z'),
     cancelledAt: null,
     lockedAt: null,
+    protocolPublishedAt: null,
     version: 0,
     ...overrides,
   };
@@ -409,5 +410,48 @@ describe('коридор (race-results-01 §5)', () => {
     delete (legacy as Partial<RaceDoc>).corridor;
     expect(raceEditable(legacy, open, opts).fields).toContain('corridor');
     expect(validateRaceRules({ ...values }, legacy, open)).toEqual([]);
+  });
+});
+
+describe('протокол опубликован — фаза final (race-results-05, D-19, RC-6)', () => {
+  const CLOSED = new Date(WINDOW_END.getTime() + 3 * DAY);
+  const published = (overrides: Partial<RaceDoc> = {}) =>
+    race({ protocolPublishedAt: CLOSED, ...overrides });
+
+  it('racePhase: опубликованная с protocolPublishedAt — final; отменённая и черновик важнее; без поля — по окну', () => {
+    expect(racePhase(published(), CLOSED)).toBe('final');
+    expect(racePhase(published({ status: 'cancelled' }), CLOSED)).toBe('cancelled');
+    expect(racePhase(published({ status: 'draft' }), CLOSED)).toBe('draft');
+    const legacy: Partial<RaceDoc> = race();
+    delete legacy.protocolPublishedAt;
+    expect(racePhase(legacy as RaceDoc, CLOSED)).toBe('closed');
+  });
+
+  it('raceEditable: только описание, отмена недоступна; причины — results_final (+ entries_locked), без window_closed', () => {
+    expect(raceEditable(published(), CLOSED, { canManage: true, seasonFound: true })).toEqual({
+      fields: ['description'],
+      canPublish: false,
+      canCancel: false,
+      canDiscard: false,
+      reasons: ['results_final'],
+    });
+    expect(
+      raceEditable(published({ lockedAt: WINDOW_START }), CLOSED, {
+        canManage: true,
+        seasonFound: true,
+      }).reasons,
+    ).toEqual(['results_final', 'entries_locked']);
+  });
+
+  it('validateRaceRules: в final меняется только описание; плановая дата протокола — FIELD_LOCKED', () => {
+    const prev = published();
+    expect(validateRaceRules({ ...values, description: 'Итоги' }, prev, CLOSED)).toEqual([]);
+    expect(
+      validateRaceRules(
+        { ...values, protocolPlannedAt: new Date(values.protocolPlannedAt.getTime() + DAY) },
+        prev,
+        CLOSED,
+      ),
+    ).toEqual([{ path: 'protocolPlannedAt', code: 'FIELD_LOCKED' }]);
   });
 });

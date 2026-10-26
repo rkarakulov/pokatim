@@ -16,6 +16,9 @@ import { RaceEntryController } from './race-entry.controller';
 import { ResultsAdminController } from './results-admin.controller';
 import { ResultsIntakeProcessor } from './results-intake.processor';
 import { ResultsMaintenanceProcessor, ResultsSchedules } from './results-maintenance.processor';
+import { ResultsPanelReadService } from './results-panel-read.service';
+import { ResultsProtocolController } from './results-protocol.controller';
+import { ResultsProtocolService } from './results-protocol.service';
 import { ResultsPublicController } from './results-public.controller';
 import { ResultsReadService } from './results-read.service';
 import { ResultsRecheck } from './results-recheck';
@@ -41,11 +44,25 @@ import { ResultsRepository } from './results.repository';
 })
 export class ResultsCoreModule {}
 
-/** HTTP: участие (`AuthGuard`), публичная таблица (`PublicReadGuard`), панель только чтения (`PanelGuard`). */
+/**
+ * HTTP: участие (`AuthGuard`), публичная таблица (`PublicReadGuard`), панель (`PanelGuard`) — чтение и действия над
+ * протоколом (race-results-05).
+ */
 @Module({
   imports: [IdentityModule, PanelModule, ResultsCoreModule],
-  controllers: [RaceEntryController, ResultsPublicController, ResultsAdminController],
-  providers: [EntriesService, AttemptsService, PublicReadGuard],
+  controllers: [
+    RaceEntryController,
+    ResultsPublicController,
+    ResultsAdminController,
+    ResultsProtocolController,
+  ],
+  providers: [
+    EntriesService,
+    AttemptsService,
+    ResultsPanelReadService,
+    ResultsProtocolService,
+    PublicReadGuard,
+  ],
 })
 export class ResultsModule {}
 

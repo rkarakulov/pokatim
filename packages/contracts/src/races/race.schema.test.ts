@@ -52,7 +52,7 @@ describe('справочники — значения только в конец
     expect(BIKE_CLASSES).toEqual(['road', 'tt', 'gravel', 'mtb']);
     expect(SURFACES).toEqual(['asphalt', 'gravel']);
     expect(RACE_STATUSES).toEqual(['draft', 'published', 'cancelled']);
-    expect(RACE_PHASES).toEqual(['draft', 'upcoming', 'open', 'closed', 'cancelled']);
+    expect(RACE_PHASES).toEqual(['draft', 'upcoming', 'open', 'closed', 'cancelled', 'final']);
     expect(RACE_CANCEL_REASONS).toEqual([
       'weather',
       'route_unavailable',
@@ -213,7 +213,7 @@ describe('ответы панели', () => {
       },
     };
     expect(PanelRace.parse(panelRace)).toEqual(panelRace);
-    expect(PanelRace.safeParse({ ...panelRace, phase: 'final' }).success).toBe(false);
+    expect(PanelRace.safeParse({ ...panelRace, phase: 'archived' }).success).toBe(false);
     expect(PanelRace.parse({ ...panelRace, corridor: null }).corridor).toBeNull();
     const withoutCorridor = { ...panelRace, corridor: undefined };
     expect(PanelRace.safeParse(withoutCorridor).success).toBe(false);
@@ -251,7 +251,7 @@ describe('read-модель приложения', () => {
       ...card,
       bikeClass: 'cyclocross',
       surfaces: ['asphalt', 'cobbles'],
-      phase: 'final',
+      phase: 'archived',
       cancelReason: 'flood',
     });
     expect(parsed).toMatchObject({

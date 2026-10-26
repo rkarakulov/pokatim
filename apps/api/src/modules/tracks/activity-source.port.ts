@@ -64,6 +64,16 @@ export interface ActivitySource {
   ): Promise<Map<string, { status: TrackUploadStatus; failure: TrackFailureCode | null }>>;
   /** Свои основные активности, пересекающие `[from, to)`, новые сверху. */
   listInRange(userId: string, from: Date, to: Date, limit: number): Promise<ActivityRef[]>;
+  /**
+   * Загрузки пользователей в `queued|processing`, принятые сервером в `[from, before)` (race-results-05: строка
+   * чек-листа публикации «необработанные треки»). `userIds` — участники гонки (≤ числа активных заявок).
+   */
+  countUnprocessed(
+    userIds: readonly string[],
+    from: Date,
+    before: Date,
+    tx?: DbSession,
+  ): Promise<number>;
   /** Исходник активности для worker; активности, файла или ключа нет — `null`. Сбой хранилища — исключение. */
   readSource(activityId: string): Promise<{ bytes: Uint8Array; format: TrackFormat } | null>;
 }

@@ -204,6 +204,11 @@ export class AttemptCheckProcessor extends WorkerHost {
       if (error instanceof StaleRevision) return 'skipped';
       throw error;
     }
-    return result.status === 'queued' || result.status === 'checking' ? 'skipped' : result.status;
+    // вердикт проверки — только counted|rejected|failed|withdrawn; прочие статусы сюда не приходят
+    return result.status === 'queued' ||
+      result.status === 'checking' ||
+      result.status === 'excluded'
+      ? 'skipped'
+      : result.status;
   }
 }

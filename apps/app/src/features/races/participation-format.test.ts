@@ -74,6 +74,7 @@ describe('показ кнопки гостя и таблицы — по фазе
     ['upcoming', true, false],
     ['open', true, true],
     ['closed', false, true],
+    ['final', false, true],
     ['cancelled', false, false],
     ['unknown', false, false],
   ] as const)('фаза %s: гость — %s, таблица — %s', (phase, guest, table) => {
@@ -110,6 +111,8 @@ describe('результат → показ (§7.2)', () => {
     expect(resultElapsed(result({ status: 'provisional', elapsedSec: 3725 }))).toBe('1:02:05');
     expect(resultElapsed(result({ status: 'unknown', elapsedSec: 60 }))).toBe('0:01:00');
     expect(resultElapsed(result({ status: 'unknown', elapsedSec: null }))).toBeNull();
+    expect(resultElapsed(result({ status: 'final', elapsedSec: 3725 }))).toBe('1:02:05');
+    expect(resultElapsed(result({ status: 'dq', elapsedSec: 3725 }))).toBe('1:02:05');
     expect(resultElapsed(result({ status: 'pending', elapsedSec: 3725 }))).toBeNull();
     expect(resultElapsed(result({ status: 'not_counted', elapsedSec: 3725 }))).toBeNull();
   });

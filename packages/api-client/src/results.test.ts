@@ -94,7 +94,7 @@ describe('приложение: участие в гонке и результа
   });
 
   it('незнакомый статус результата — unknown; 409 — ApiHttpError', async () => {
-    const future = app(200, { ...myEntry, result: { ...myEntry.result, status: 'final' } });
+    const future = app(200, { ...myEntry, result: { ...myEntry.result, status: 'appealed' } });
     await expect(future.api.getMyRaceEntry('access', ID)).resolves.toMatchObject({
       result: { status: 'unknown' },
     });
@@ -114,10 +114,33 @@ describe('панель: результаты гонки', () => {
         active: 0,
         withdrawn: 0,
         ranked: 0,
-        attempts: { queued: 0, checking: 0, counted: 0, rejected: 0, failed: 0, withdrawn: 0 },
+        attempts: {
+          queued: 0,
+          checking: 0,
+          counted: 0,
+          rejected: 0,
+          failed: 0,
+          withdrawn: 0,
+          excluded: 0,
+        },
         hidden: 0,
         failed: 0,
         staleEngine: 0,
+      },
+      phase: 'closed',
+      uploadClosesAt: '2026-10-27T21:00:00.000Z',
+      protocol: null,
+      recheck: null,
+      publish: {
+        canPublish: false,
+        blockedBy: null,
+        checklist: [
+          { code: 'open_disputes', count: 0 },
+          { code: 'unprocessed_tracks', count: 0 },
+          { code: 'checks_queued', count: 0 },
+          { code: 'checks_failed', count: 0 },
+          { code: 'window_open', count: 1 },
+        ],
       },
     });
     await createAdminApiClient({ baseUrl: '', fetchImpl: summary.fetchImpl }).getRaceResultsSummary(

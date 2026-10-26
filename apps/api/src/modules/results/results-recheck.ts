@@ -8,9 +8,9 @@ import { RESULTS_POLICY } from './results.policy';
 import { ResultsRepository } from './results.repository';
 
 /**
- * Перепроверка попыток (race-results-03): механизм для слайса 05 («перепроверить гонку» после смены версии движка —
- * запуск и журнал пересчётов там) и регламент зависших проверок. Каждая попытка — своя транзакция под `lockEntry`:
- * новая `checkRevision`, `queued`, событие проверки; лучшие результаты пересчитываются по мере вердиктов.
+ * Перепроверка попыток (race-results-03; запуск из панели — race-results-05, RC-1) и регламент зависших проверок.
+ * Каждая попытка — своя транзакция под `lockEntry`: новая `checkRevision`, `queued`, событие проверки; лучшие
+ * результаты пересчитываются по мере вердиктов.
  */
 @Injectable()
 export class ResultsRecheck {
@@ -23,16 +23,27 @@ export class ResultsRecheck {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  /** Все попытки гонки, кроме снятых, — на новую проверку; число поставленных. */
-  async requestRace(raceId: string): Promise<number> {
+  /**
+   * Задача `results.race-recheck-requested` (worker): вердикты (`counted|rejected|failed`) старше `requestedAt` — на
+   * новую проверку; число поставленных. Идемпотентна: перепоставленная попытка вердикта не имеет, повтор задачи её
+   * пропускает. Пока цикл не дошёл до конца, такие попытки считаются «незавершёнными проверками» — публикация и
+   * «Применить пересчёт» закрыты. Исключённые и снятые не трогаются.
+   */
+  async requestRace(raceId: string, requestedAt: Date): Promise<number> {
     let queued = 0;
-    for (const { _id, entryId } of await this.repository.liveAttemptsOfRace(raceId)) {
+    for (const { _id, entryId } of await this.repository.staleVerdictAttempts(
+      raceId,
+      requestedAt,
+    )) {
       const requeued = await this.transactions.run(async (tx) => {
         const now = this.clock.now();
         const entry = await this.repository.lockEntry(tx, entryId, now);
         if (!entry) return false;
+        // под замком заявки: вердикт всё ещё старше запроса (иначе его уже перепоставили или исключили)
+        const current = await this.repository.findAttempt(_id, tx);
+        if (!current?.checkedAt || current.checkedAt >= requestedAt) return false;
         const attempt = await this.repository.requeueAttempt(tx, _id, now, {
-          statusIn: ['queued', 'checking', 'counted', 'rejected', 'failed'],
+          statusIn: ['counted', 'rejected', 'failed'],
         });
         if (!attempt) return false;
         await this.intake.queueCheck(tx, attempt);

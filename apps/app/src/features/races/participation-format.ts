@@ -62,9 +62,9 @@ const hasCorridor = (race: RaceDetail) => (race.corridor ?? null) !== null;
 export const guestCanSeeEnter = (race: RaceDetail) =>
   hasCorridor(race) && (race.phase === 'upcoming' || race.phase === 'open');
 
-/** Предварительная таблица: коридор есть и фаза сервера `open | closed`. */
+/** Таблица результатов: коридор есть и фаза сервера `open | closed | final` (протокол — race-results-05). */
 export const showsResultsTable = (race: RaceDetail) =>
-  hasCorridor(race) && (race.phase === 'open' || race.phase === 'closed');
+  hasCorridor(race) && (race.phase === 'open' || race.phase === 'closed' || race.phase === 'final');
 
 const RESULT_TONES: Record<Exclude<Result['status'], 'withdrawn'>, PillTone> = {
   none: 'neutral',
@@ -72,6 +72,10 @@ const RESULT_TONES: Record<Exclude<Result['status'], 'withdrawn'>, PillTone> = {
   provisional: 'neutral',
   not_counted: 'error',
   dns: 'neutral',
+  // race-results-05: протокол опубликован; подробный показ — follow-up приложения
+  final: 'success',
+  dq: 'error',
+  revised: 'neutral',
   unknown: 'neutral',
 };
 
@@ -81,12 +85,19 @@ export function resultPill(status: Result['status']): { label: string; tone: Pil
   return { label: t(`races.result.status.${status}`), tone: RESULT_TONES[status] };
 }
 
-/** «Ваше время»: только `provisional` / `unknown` с временем; при `pending` сегмента ещё нет (D-37). */
+/** Статусы с временем сегмента: предварительный и протокол (race-results-05); `pending` — сегмента ещё нет (D-37). */
+const TIMED_STATUSES: readonly Result['status'][] = [
+  'provisional',
+  'final',
+  'revised',
+  'dq',
+  'unknown',
+];
+
+/** «Ваше время»: только статусы с сегментом и временем. */
 export function resultElapsed(result: Result): string | null {
   if (result.elapsedSec === null) return null;
-  return result.status === 'provisional' || result.status === 'unknown'
-    ? formatElapsed(result.elapsedSec)
-    : null;
+  return TIMED_STATUSES.includes(result.status) ? formatElapsed(result.elapsedSec) : null;
 }
 
 /** Баннер результата: `pending` — «Место появится после проверки.»; `provisional` — место / ничья / примечание. */
@@ -117,6 +128,7 @@ const ATTEMPT_TONES: Record<MyAttempt['status'], PillTone> = {
   rejected: 'error',
   failed: 'error',
   withdrawn: 'neutral',
+  excluded: 'error',
   unknown: 'neutral',
 };
 

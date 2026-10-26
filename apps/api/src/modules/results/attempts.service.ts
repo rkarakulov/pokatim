@@ -60,12 +60,14 @@ export class AttemptsService {
 
       let request: Pick<EntryRequest, 'uploadId' | 'activityId'>;
       let target: ActivityRef | null;
+      let group: Awaited<ReturnType<ActivitySource['group']>> = null;
       if ('activityId' in input) {
         const activity = await this.activities.activity(userId, input.activityId, tx);
         if (!activity) throw domainError('NOT_FOUND', 404);
         if (!activity.isPrimary || activity.uploadCreatedAt >= closesAt) throw sourceInvalid();
         request = { uploadId: activity.uploadId, activityId: activity.id };
         target = activity;
+        group = await this.activities.group(activity.id, tx);
       } else {
         const upload = await this.activities.uploadState(userId, input.uploadId, tx);
         if (!upload) throw domainError('NOT_FOUND', 404);
@@ -73,7 +75,7 @@ export class AttemptsService {
         if (upload.createdAt >= closesAt) throw sourceInvalid();
         request = { uploadId: input.uploadId, activityId: upload.activity?.id ?? null };
         // загрузка-дубль относится к представителю группы в гонке (своевременная основная)
-        const group = upload.activity ? await this.activities.group(upload.activity.id, tx) : null;
+        group = upload.activity ? await this.activities.group(upload.activity.id, tx) : null;
         target = group ? raceRepresentative(group.members, race) : null;
       }
 
@@ -83,6 +85,7 @@ export class AttemptsService {
         const ensured = await this.intake.ensureAttempt(tx, entry, race, target, attempts, {
           origin: 'explicit',
           now,
+          groupIds: group?.members.map((member) => member.id) ?? [],
         });
         // основная группы загрузки-дубля принята после срока (A5) — заезд в гонку не идёт
         if (ensured.refused === 'late') throw sourceInvalid();

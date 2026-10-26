@@ -153,7 +153,8 @@ export class RacesRepository {
 
   /**
    * Атомарное изменение гонки (R3): совпадение по `_id`, ожидаемой `version` и допустимому статусу; `null` — версия
-   * устарела или статус уже другой.
+   * устарела или статус уже другой. `guard.protocolPublishedAt: null` — протокол не опубликован (отмена, D-19:
+   * второй рубеж после проверки в сервисе; гонку «отмена ↔ публикация» закрывает конфликт записи в документ гонки).
    */
   async updateRace(
     session: DbSession,
@@ -161,9 +162,10 @@ export class RacesRepository {
     version: number,
     statusIn: readonly RaceStatus[],
     set: UpdateFilter<RaceDoc>['$set'],
+    guard: { protocolPublishedAt?: null } = {},
   ): Promise<RaceDoc | null> {
     return this.c.races.findOneAndUpdate(
-      { _id: id, version, status: { $in: [...statusIn] } },
+      { _id: id, version, status: { $in: [...statusIn] }, ...guard },
       { $set: set, $inc: { version: 1 } },
       { session, returnDocument: 'after' },
     );
@@ -191,6 +193,31 @@ export class RacesRepository {
       ],
       { session, returnDocument: 'after' },
     );
+  }
+
+  /**
+   * Замок результатов гонки (race-results-05): `resultsVersion + 1` в документе опубликованной или отменённой гонки —
+   * **первая** операция транзакций действий панели над результатами (исключение, возврат, публикация, перепроверка,
+   * пересчёты). Две такие транзакции одной гонки конфликтуют (повтор `MongoTransactions.run`), как и с отменой и
+   * правкой гонки (запись в тот же документ). `version` не меняется: открытая форма гонки не получает лишний `409`.
+   * `null` — гонки нет или черновик.
+   */
+  lockResults(session: DbSession, id: string): Promise<RaceDoc | null> {
+    return this.c.races.findOneAndUpdate(
+      { _id: id, status: { $in: ['published', 'cancelled'] } },
+      { $inc: { resultsVersion: 1 } },
+      { session, returnDocument: 'after' },
+    );
+  }
+
+  /** Протокол опубликован (D-22): только опубликованная гонка без протокола; `false` — не совпало. */
+  async markProtocolPublished(session: DbSession, id: string, at: Date): Promise<boolean> {
+    const updated = await this.c.races.updateOne(
+      { _id: id, status: 'published', protocolPublishedAt: null },
+      { $set: { protocolPublishedAt: at } },
+      { session },
+    );
+    return updated.matchedCount === 1;
   }
 
   /** Удаление черновика с ожидаемой версией; `null` — не черновик или версия устарела. */

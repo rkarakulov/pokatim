@@ -318,13 +318,14 @@ export function RaceEditor({
   const publishReason = editable?.reasons
     .map((reason) => PUBLISH_REASON[reason])
     .find((key): key is MessageKey => key !== undefined);
-  // причины ограничений правки под формой: фаза окна, отмена, заявки участников (V-12)
+  // причины ограничений правки под формой: фаза окна, отмена, заявки участников (V-12), протокол (D-19)
   const editReasons = (editable?.reasons ?? []).filter(
     (reason) =>
       reason === 'window_open' ||
       reason === 'window_closed' ||
       reason === 'cancelled' ||
-      reason === 'entries_locked',
+      reason === 'entries_locked' ||
+      reason === 'results_final',
   );
 
   const actions: ReactNode = race ? (
@@ -350,6 +351,15 @@ export function RaceEditor({
             <DisabledReason id={publishReasonId}>{t(publishReason)}</DisabledReason>
           ) : null}
         </>
+      ) : null}
+      {race.status !== 'draft' ? (
+        <Link
+          className="button t-panel-button"
+          to="/races/$raceId/results"
+          params={{ raceId: race.id }}
+        >
+          {t('admin.results.link')}
+        </Link>
       ) : null}
       {editable?.canCancel ? (
         <Button variant="danger" onClick={() => setPending('cancel')}>
