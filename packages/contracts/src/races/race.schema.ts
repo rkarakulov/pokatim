@@ -22,8 +22,8 @@ export const RACE_STATUSES = ['draft', 'published', 'cancelled'] as const;
 export const RaceStatus = z.enum(RACE_STATUSES);
 export type RaceStatus = z.infer<typeof RaceStatus>;
 
-/** Фаза гонки (R5); фазы результатов (`provisional`, `final`) добавит admin-04 в конец. */
-export const RACE_PHASES = ['draft', 'upcoming', 'open', 'closed', 'cancelled'] as const;
+/** Фаза гонки (R5); race-results-05: `final` — протокол опубликован. Только в конец. */
+export const RACE_PHASES = ['draft', 'upcoming', 'open', 'closed', 'cancelled', 'final'] as const;
 export const RacePhase = z.enum(RACE_PHASES);
 export type RacePhase = z.infer<typeof RacePhase>;
 
@@ -62,6 +62,8 @@ export const RACE_EDIT_BLOCK_REASONS = [
   'outside_season',
   // race-results-03: есть заявки — коридор, окно, класс и покрытия зафиксированы (V-12)
   'entries_locked',
+  // race-results-05: протокол опубликован — только описание, отмена гонки недоступна (D-19)
+  'results_final',
 ] as const;
 export const RaceEditBlockReason = z.enum(RACE_EDIT_BLOCK_REASONS);
 export type RaceEditBlockReason = z.infer<typeof RaceEditBlockReason>;

@@ -69,6 +69,8 @@ describe('коды ошибок', () => {
       'ATTEMPT_UPLOAD_CLOSED',
       'ATTEMPT_LIMIT',
       'ATTEMPT_SOURCE_INVALID',
+      'RESULTS_ACTION_BLOCKED',
+      'RESULTS_PUBLISH_BLOCKED',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

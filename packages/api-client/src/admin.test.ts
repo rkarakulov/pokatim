@@ -198,3 +198,147 @@ describe('createAdminApiClient: маршруты (race-results-01)', () => {
     await expect(broken.api.getRoute(USER_ID)).rejects.toThrow();
   });
 });
+
+describe('createAdminApiClient: протокол гонки (race-results-05)', () => {
+  const AT = '2026-10-28T10:00:00.000Z';
+  const RACE = `/v1/admin/races/${USER_ID}`;
+  const checklist = [
+    'open_disputes',
+    'unprocessed_tracks',
+    'checks_queued',
+    'checks_failed',
+    'window_open',
+  ].map((code) => ({ code, count: 0 }));
+  const summary = {
+    raceId: USER_ID,
+    lockedAt: null,
+    engineVersion: 1,
+    counts: {
+      entries: 0,
+      active: 0,
+      withdrawn: 0,
+      ranked: 0,
+      attempts: {
+        queued: 0,
+        checking: 0,
+        counted: 0,
+        rejected: 0,
+        failed: 0,
+        withdrawn: 0,
+        excluded: 0,
+      },
+      hidden: 0,
+      failed: 0,
+      staleEngine: 0,
+    },
+    phase: 'final',
+    uploadClosesAt: AT,
+    protocol: { publishedAt: AT, revision: 1, ranked: 0, disqualified: 0, recheckPending: false },
+    recheck: null,
+    publish: { canPublish: false, blockedBy: 'published', checklist },
+  };
+  const attempt = {
+    id: USER_ID,
+    entryId: USER_ID,
+    userId: USER_ID,
+    activityId: USER_ID,
+    origin: 'auto',
+    status: 'excluded',
+    hidden: false,
+    reasons: [],
+    failure: null,
+    withdrawReason: null,
+    segment: null,
+    engineVersion: 1,
+    checkRevision: 1,
+    checkAttempts: 1,
+    diagnostics: null,
+    createdAt: AT,
+    checkedAt: AT,
+    review: { kind: 'excluded', reason: 'Чужой трек', at: AT },
+  };
+  const reason = { reason: 'Причина действия' };
+  const entryAction = { entryId: USER_ID, reason: 'Срезка маршрута' };
+
+  it('мутации — POST с причиной на путях протокола; ответ — по схеме', async () => {
+    const cases = [
+      [
+        (api: ReturnType<typeof createAdminApiClient>) =>
+          api.excludeAttempt(USER_ID, USER_ID, reason),
+        `${RACE}/attempts/${USER_ID}/exclude`,
+        reason,
+        attempt,
+      ],
+      [
+        (api: ReturnType<typeof createAdminApiClient>) =>
+          api.restoreAttempt(USER_ID, USER_ID, reason),
+        `${RACE}/attempts/${USER_ID}/restore`,
+        reason,
+        { ...attempt, status: 'queued', review: { ...attempt.review, kind: 'restored' } },
+      ],
+      [
+        (api: ReturnType<typeof createAdminApiClient>) => api.recheckRaceResults(USER_ID, reason),
+        `${RACE}/results/recheck`,
+        reason,
+        summary,
+      ],
+      [
+        (api: ReturnType<typeof createAdminApiClient>) => api.publishProtocol(USER_ID, reason),
+        `${RACE}/protocol`,
+        reason,
+        summary,
+      ],
+      [
+        (api: ReturnType<typeof createAdminApiClient>) =>
+          api.disqualifyResult(USER_ID, entryAction),
+        `${RACE}/protocol/disqualify`,
+        entryAction,
+        summary,
+      ],
+      [
+        (api: ReturnType<typeof createAdminApiClient>) =>
+          api.revokeDisqualification(USER_ID, entryAction),
+        `${RACE}/protocol/revoke-disqualification`,
+        entryAction,
+        summary,
+      ],
+      [
+        (api: ReturnType<typeof createAdminApiClient>) => api.recheckProtocol(USER_ID, reason),
+        `${RACE}/protocol/recheck`,
+        reason,
+        summary,
+      ],
+      [
+        (api: ReturnType<typeof createAdminApiClient>) => api.applyProtocolRecheck(USER_ID, reason),
+        `${RACE}/protocol/apply-recheck`,
+        reason,
+        summary,
+      ],
+    ] as const;
+    for (const [run, url, body, response] of cases) {
+      const client = admin(200, response);
+      await expect(run(client.api)).resolves.toEqual(response);
+      expect(client.calls[0]).toMatchObject({
+        url,
+        method: 'POST',
+        credentials: 'same-origin',
+        body,
+      });
+    }
+    const broken = admin(200, { ...summary, phase: 'archived' });
+    await expect(broken.api.publishProtocol(USER_ID, reason)).rejects.toThrow();
+  });
+
+  it('чтения: участники и история пересчётов', async () => {
+    const standings = admin(200, { source: 'live', revision: null, truncated: false, items: [] });
+    await standings.api.getRaceStandings(USER_ID);
+    expect(standings.calls[0]).toMatchObject({ url: `${RACE}/standings`, method: 'GET' });
+
+    const history = admin(200, { items: [] });
+    await history.api.listProtocolRecalculations(USER_ID);
+    expect(history.calls[0]).toMatchObject({
+      url: `${RACE}/protocol/recalculations`,
+      method: 'GET',
+    });
+  });
+});

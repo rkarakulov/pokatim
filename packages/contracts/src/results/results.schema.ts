@@ -23,6 +23,8 @@ export const ATTEMPT_STATUSES = [
   'rejected',
   'failed',
   'withdrawn',
+  // race-results-05: исключена панелью до публикации протокола (D-24)
+  'excluded',
 ] as const;
 /**
  * Причины отказа попытки = `CORRIDOR_REJECTIONS` движка (`@pokatim/tracks/parse`) + `implausible`. contracts от
@@ -47,7 +49,10 @@ export const ATTEMPT_FAILURES = [
   'error',
 ] as const;
 export const ATTEMPT_WITHDRAW_REASONS = ['activity_removed', 'not_primary'] as const;
-/** Статус результата участника (считается при чтении). Слайс 05: + `final`, `dq`, `revised`. */
+/**
+ * Статус результата участника (считается при чтении). race-results-05: после публикации — статус строки протокола
+ * (`final`, `dq` — дисквалифицирован, `revised` — пересчитан).
+ */
 export const RACE_RESULT_STATUSES = [
   'none',
   'pending',
@@ -55,6 +60,9 @@ export const RACE_RESULT_STATUSES = [
   'not_counted',
   'dns',
   'withdrawn',
+  'final',
+  'dq',
+  'revised',
 ] as const;
 /** Причины недоступности действий участия (`MyRaceEntry.actions.reasons`). */
 export const RACE_ENTRY_BLOCK_REASONS = [
@@ -134,8 +142,8 @@ export const PendingUpload = z.object({
 export type PendingUpload = z.infer<typeof PendingUpload>;
 
 /**
- * `GET /v1/races/:raceId/entry` (и ответ мутаций участия), `no-store`. `entry: null` — не заявлен. Место —
- * предварительное (до публикации протокола), считается при чтении.
+ * `GET /v1/races/:raceId/entry` (и ответ мутаций участия), `no-store`. `entry: null` — не заявлен. Место до
+ * публикации протокола — предварительное (считается при чтении), после — из текущей ревизии протокола.
  */
 export const MyRaceEntry = z.object({
   raceId: Uuid,
@@ -203,11 +211,11 @@ export const RaceResultRow = z.object({
 });
 export type RaceResultRow = z.infer<typeof RaceResultRow>;
 
-export const RACE_RESULTS_STATUSES = ['provisional'] as const;
+/** Статус таблицы: предварительная или из опубликованного протокола (race-results-05). */
+export const RACE_RESULTS_STATUSES = ['provisional', 'final'] as const;
 
 export const RaceResultsPage = z.object({
   group: tolerantEnum(RESULT_GROUP_KEYS),
-  /** 05: + `final` */
   status: tolerantEnum(RACE_RESULTS_STATUSES),
   ranked: z.number().int(),
   entries: z.number().int(),

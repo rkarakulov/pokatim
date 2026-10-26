@@ -10,9 +10,14 @@ import {
   PanelRace,
   PanelRacePage,
   type PanelRaceQuery,
+  PanelProtocolRecalculations,
+  PanelRaceAttempt,
   PanelRaceAttemptPage,
   type PanelRaceAttemptQuery,
   PanelRaceResults,
+  PanelRaceStandings,
+  type ProtocolEntryActionRequest,
+  type ResultsActionRequest,
   PanelRoute,
   PanelRoutePage,
   type PanelRouteQuery,
@@ -134,10 +139,39 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     discardRace: (id: string, body: DiscardRaceRequest) =>
       post(`${race(id)}/discard`, z.undefined(), body),
 
-    // --- результаты гонки (races.read, только чтение; чужая гонка организатора — 404) ---
+    // --- результаты гонки (чтение — races.read; чужая гонка организатора — 404) ---
     getRaceResultsSummary: (raceId: string) => get(`${race(raceId)}/results`, PanelRaceResults),
     listRaceAttempts: (raceId: string, params: Partial<PanelRaceAttemptQuery> = {}) =>
       get(`${race(raceId)}/attempts${queryString(params)}`, PanelRaceAttemptPage),
+    getRaceStandings: (raceId: string) => get(`${race(raceId)}/standings`, PanelRaceStandings),
+    listProtocolRecalculations: (raceId: string) =>
+      get(`${race(raceId)}/protocol/recalculations`, PanelProtocolRecalculations),
+
+    // --- протокол гонки (race-results-05): до публикации — results.manage, пересчёт после — results.revise ---
+    excludeAttempt: (raceId: string, attemptId: string, body: ResultsActionRequest) =>
+      post(
+        `${race(raceId)}/attempts/${encodeURIComponent(attemptId)}/exclude`,
+        PanelRaceAttempt,
+        body,
+      ),
+    restoreAttempt: (raceId: string, attemptId: string, body: ResultsActionRequest) =>
+      post(
+        `${race(raceId)}/attempts/${encodeURIComponent(attemptId)}/restore`,
+        PanelRaceAttempt,
+        body,
+      ),
+    recheckRaceResults: (raceId: string, body: ResultsActionRequest) =>
+      post(`${race(raceId)}/results/recheck`, PanelRaceResults, body),
+    publishProtocol: (raceId: string, body: ResultsActionRequest) =>
+      post(`${race(raceId)}/protocol`, PanelRaceResults, body),
+    disqualifyResult: (raceId: string, body: ProtocolEntryActionRequest) =>
+      post(`${race(raceId)}/protocol/disqualify`, PanelRaceResults, body),
+    revokeDisqualification: (raceId: string, body: ProtocolEntryActionRequest) =>
+      post(`${race(raceId)}/protocol/revoke-disqualification`, PanelRaceResults, body),
+    recheckProtocol: (raceId: string, body: ResultsActionRequest) =>
+      post(`${race(raceId)}/protocol/recheck`, PanelRaceResults, body),
+    applyProtocolRecheck: (raceId: string, body: ResultsActionRequest) =>
+      post(`${race(raceId)}/protocol/apply-recheck`, PanelRaceResults, body),
 
     // --- маршруты коридора (загрузка — races.manage, чтение — races.read) ---
     /**
