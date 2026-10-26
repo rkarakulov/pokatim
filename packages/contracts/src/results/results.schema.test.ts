@@ -27,6 +27,9 @@ import {
   RACE_RESULT_STATUSES,
   RACE_RESULTS_STATUSES,
   AttemptRequest,
+  MY_ATTEMPT_TRACK_MAX_POINTS,
+  MY_ATTEMPT_TRACK_MAX_RUNS,
+  MyAttemptTrack,
   MyRaceEntry,
   RaceResultRow,
   RaceResultsPage,
@@ -429,5 +432,39 @@ describe('участие и результаты: панель', () => {
       PanelProtocolRecalculations.safeParse({ items: [{ ...recalculation, kind: 'rolled_back' }] })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('свой трек попытки (maps-02)', () => {
+  const line = [
+    [27.5, 53.9],
+    [27.6, 53.95],
+  ];
+  const track = {
+    attemptId: ID,
+    line,
+    segment: { from: 0, to: 1 },
+    offRuns: [{ from: 0.2, to: 0.5 }],
+    marks: 'ready',
+  };
+
+  it('ответ разбирается; незнакомый marks — unknown (клиент трактует как unavailable)', () => {
+    expect(MyAttemptTrack.parse(track)).toEqual(track);
+    expect(MyAttemptTrack.parse({ ...track, marks: 'later' }).marks).toBe('unknown');
+    expect(
+      MyAttemptTrack.parse({ ...track, segment: null, offRuns: [], marks: 'pending' }).segment,
+    ).toBeNull();
+  });
+
+  it(`пределы: линия 2…${MY_ATTEMPT_TRACK_MAX_POINTS} точек, сход ≤ ${MY_ATTEMPT_TRACK_MAX_RUNS}, позиции ≥ 0`, () => {
+    expect(MY_ATTEMPT_TRACK_MAX_POINTS).toBe(1000);
+    expect(MY_ATTEMPT_TRACK_MAX_RUNS).toBe(100);
+    const ok = (value: object) => MyAttemptTrack.safeParse({ ...track, ...value }).success;
+    expect(ok({ line: [line[0]] })).toBe(false);
+    expect(ok({ line: Array.from({ length: 1000 }, () => line[0]) })).toBe(true);
+    expect(ok({ line: Array.from({ length: 1001 }, () => line[0]) })).toBe(false);
+    expect(ok({ offRuns: Array.from({ length: 100 }, () => ({ from: 0, to: 1 })) })).toBe(true);
+    expect(ok({ offRuns: Array.from({ length: 101 }, () => ({ from: 0, to: 1 })) })).toBe(false);
+    expect(ok({ segment: { from: -1, to: 1 } })).toBe(false);
   });
 });

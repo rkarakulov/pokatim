@@ -96,6 +96,8 @@ describe('контраст WCAG — темы pokatim', () => {
         'text.primary / surface.default',
         'map.route / map.background',
         'map.corridor / map.background',
+        'map.track / map.background',
+        'map.offCorridor / map.background',
       ]),
     );
   });

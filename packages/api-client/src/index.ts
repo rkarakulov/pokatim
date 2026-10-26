@@ -42,6 +42,7 @@ import {
   TrackUpload,
   TrackUploadPage,
   AttemptCandidates,
+  MyAttemptTrack,
   MyRaceEntry,
   RaceResultsPage,
   type AttemptRequest,
@@ -374,6 +375,13 @@ export function createApiClient({
       request(
         `/v1/races/${encodeURIComponent(raceId)}/entry`,
         MyRaceEntry,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Свой трек попытки с разметкой схода (maps-02): чужая, скрытая и неизвестная — `404`. */
+    getMyAttemptTrack: (accessToken: string, raceId: string, attemptId: string) =>
+      request(
+        `/v1/races/${encodeURIComponent(raceId)}/entry/attempts/${encodeURIComponent(attemptId)}/track`,
+        MyAttemptTrack,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
     /** «Участвовать»: `201` — новая заявка, `200` — уже заявлен. */
