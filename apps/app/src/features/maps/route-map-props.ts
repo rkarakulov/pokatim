@@ -10,4 +10,9 @@ export interface RouteMapProps {
   accessibilityLabel: string;
   /** сообщение при ошибке загрузки стиля или тайлов */
   failedMessage: string;
+  /**
+   * routes-01: `false` — линия, старт и финиш без коридора (маршрут каталога); `map.widthM` не показывается.
+   * По умолчанию `true` (карта гонки).
+   */
+  corridor?: boolean;
 }
