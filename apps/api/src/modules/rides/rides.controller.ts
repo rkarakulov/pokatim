@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import {
   CancelRideRequest,
+  CreateRideReportRequest,
   CreateRideRequest,
   FieldErrorCode,
   type RideCities,
@@ -23,6 +24,7 @@ import {
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
 import { AuthGuard, type AuthUser, CurrentUser } from '../identity';
+import { RideReportsService } from './ride-reports.service';
 import { RidesFeedService } from './rides-feed.service';
 import { RidesService } from './rides.service';
 
@@ -41,6 +43,7 @@ export class RidesController {
   constructor(
     private readonly rides: RidesService,
     private readonly feed: RidesFeedService,
+    private readonly reports: RideReportsService,
   ) {}
 
   @Get()
@@ -103,5 +106,17 @@ export class RidesController {
   @HttpCode(200)
   leave(@CurrentUser() user: AuthUser, @Param('id', idPipe) id: string): Promise<RideView> {
     return this.rides.leave(user.userId, id);
+  }
+
+  /** Жалоба (05b): одна на райд, повтор — идемпотентный успех; ответ — `viewer.reported = true`. */
+  @Post(':id/reports')
+  @HttpCode(200)
+  report(
+    @CurrentUser() user: AuthUser,
+    @Param('id', idPipe) id: string,
+    @Body(new ZodValidationPipe(CreateRideReportRequest, FieldErrorCode))
+    body: CreateRideReportRequest,
+  ): Promise<RideView> {
+    return this.reports.report(user.userId, id, body);
   }
 }

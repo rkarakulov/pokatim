@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { IdentityModule } from '../identity';
 import { PublicReadGuard } from '../../public-read.guard';
 import { RideReportsRepository } from './ride-reports.repository';
+import { RideReportsService } from './ride-reports.service';
 import { RidesPublicController } from './rides-public.controller';
 import { RidesController } from './rides.controller';
 import { RidesFeedService } from './rides-feed.service';
@@ -20,6 +21,7 @@ import { RidesService } from './rides.service';
   providers: [
     RidesRepository,
     RideReportsRepository,
+    RideReportsService,
     RidesService,
     RidesFeedService,
     PublicReadGuard,
