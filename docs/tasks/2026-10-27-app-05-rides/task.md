@@ -437,7 +437,7 @@ _id: 1 }`; `rides_participant_idx { 'participants.userId': 1, startsAt: 1 }` (mu
 - D1 (вопрос 1). Место встречи видно всем (рекомендация): гостям и в публичной карточке; `noindex`, подсказка
   «людное место».
 - D2 (вопрос 4, отклонение от Q4). Имя организатора — **необязательное поле «Как вас подписать»** в форме райда
-  (`organizerName`, пусто → `null`, на карточке и в ленте — «Организатор»). Добавляется в модель (`RideDoc.
+  (`organizerName`, пусто → `null`, на карточке — «Организатор: {подпись}» или «Организатор»). Добавляется в модель (`RideDoc.
   organizerName: string | null`), контракты (`RideFields`, `RideCard`/`RideDetail`), форму и карточку. Ограничения
   длины и символов — как у названия (`SINGLE_LINE`, trim, 3–80). ПДн сверх введённого самим организатором нет: имя
   аккаунта не читается, e-mail не показывается; в OG/мета имени нет.
@@ -450,6 +450,26 @@ _id: 1 }`; `rides_participant_idx { 'participants.userId': 1, startsAt: 1 }` (mu
   (время — `TextField` с маской `ЧЧ:ММ` и `LocalTime`, описание — однострочное до релиза, единицы — в подписи поля).
   Follow-up — §12.
 - O2. Миграция — `0014_rides` после `0013_routes` (PR #33 уже в develop).
+- O3. Тестовые прогоны — на своих БД (Mongo `pokatim_rides_test`, Redis `/8`; e2e — `pokatim_rides_e2e`, Redis `/9`,
+  свой Mailpit): общие `pokatim_test` и Redis `/1` делят параллельные агенты.
+
+**Отклонения реализации (coder)**
+- C1. «Я иду» / «Не иду» — без тела запроса (как `devices/:provider/sync`): схема `RideRsvpRequest` из §11 не введена —
+  параметр `@Body` без использования запрещает линт, а действие целиком задают путь и access. Клиент шлёт `{}`.
+- C2. `RideQuotaDetails { quota: 'organized' | 'joined', limit }` — `details` у `409 RIDE_QUOTA_EXCEEDED` (текст баннера
+  «У вас уже {n} будущих райдов» берёт `n` с сервера). `RIDE_FIELD_ERROR_CODES` вынесены константой (как
+  `SCHEDULE_FIELD_ERROR_CODES`), порядок кодов полей — прежний + `RIDE_*` в конце.
+- C3. `optionalText` перенесён из `calendar.schema.ts` в `common.ts` без смены поведения (переиспользован райдами).
+- C4. `apps/app/eas.json` не меняется: `EXPO_PUBLIC_API_URL` там тоже нет — публичные значения сборки задаёт EAS env
+  профиля; `EXPO_PUBLIC_WEB_ORIGIN` описан в `docs/runbooks/deploy.md` (release-чеклист) и `.env.example`.
+- C5. Подпись дня ленты и дата героя — с годом, только если год не текущий (как блок 03); время — «9:00» без ведущего
+  нуля (прототип). Дата героя — одной строкой в `SectionHero.date.value`.
+- C6. После отмены и сохранения правки — назад к карточке в стеке (без истории — замена); права экрана управления
+  (`canManage`) берутся по первому ответу `me`, иначе собственная отмена закрывала бы экран до перехода.
+- C7. Смоук: гость видит отмену после истечения кэша публичной карточки (до 60 с ответа API + 60 с SSR-кэша
+  web-сервера, риск §8) — шаг ждёт перезагрузками до 150 с, отмену в API проверяет сразу.
+- C8. Город в форме — чипы по алфавиту, свёрнуто до 8 + «Все города» (выбранный виден всегда) [ASSUMPTION до `Picker`
+  базы]; «Минск» — в развёрнутом списке.
 
 # 8.3 Security checklist
 
@@ -642,7 +662,46 @@ _id: 1 }`; `rides_participant_idx { 'participants.userId': 1, startsAt: 1 }` (mu
 
 # 12. Outcome (coder)
 
-(заполняется после реализации)
+**Сделано (PR 05a, ветка `feature/app-05-rides`)** — слайсы S1–S7; S0 (app-foundation) — фолбэк §5.1 (O1).
+
+- S1 контракты: `geo/city.schema.ts` (`CITY_CODES` 25, `CityCode`, `isCityCode`), `rides/ride.schema.ts` (справочники,
+  лимиты, `RideFields`/`Create`/`Update`/`Cancel`, `CreateRideForm`, `RideListQuery`, `RideViewer`, `RideCard`,
+  `RideDetail`, `RideDetailForOrganizer`, `RideView`, `RidePage`, `RideCities`, `RideQuotaDetails`); коды `RIDE_*` в
+  конце; api-client — 9 методов; i18n — города, причины, ошибки полей, строки экранов.
+- S2 API `modules/rides` + `0014_rides`: репозиторий (join/leave/update/cancel — одна `findOneAndUpdate` с условиями в
+  фильтре), политика, два сервиса, два контроллера (`AuthGuard` — первым), лимиты частоты и квоты, `AppModule`,
+  `error-messages`.
+- S3 вкладка «Райды»; S4 карточка (SSR, OG, `noindex`, «Поделиться», возврат гостя); S5 форма, правка, отмена; S6
+  раздел Главной; S7 смоук web, ADR-0013 (Proposed), `docs/product/rides.md`, правила, runbook-и, `.env.example`.
+
+**Отрицательное доказательство (AC-T1)** — из фильтра `RidesRepository.join` удалён `$expr` лимита: тест «K
+параллельных «Я иду» на одно место» (`rides-participation.int.test.ts`) красный по результату — `expected [ …(6) ] to
+have a length of 1 but got 6` (все 6 претендентов записались, `goingCount` 8 при `limit` 3); с условием — зелёный.
+
+**Проверки**
+- `TURBO_CONCURRENCY=1 pnpm check` (Mongo `pokatim_rides_test`, Redis `/8`) — `EXIT=0`: contracts 172, api 670
+  (unit + int), api-client 60, i18n 6, app 711, admin 149; `arch:check` — без нарушений.
+- Миграции дважды: БД в состоянии develop (0001–0013) → `db:migrate` — «миграции применены: 0014_rides» → повтор —
+  «новых миграций нет»; индексы `rides_feed_idx`, `rides_city_feed_idx`, `rides_participant_idx`,
+  `rides_organizer_idx`. Чистая БД и повтор `up` — `migrations.int.test.ts`.
+- `build:web` + `curl` карточки (web :8190, API :3190 на e2e-БД): `<title>{название} — Покатим`, description/OG
+  «Понедельник, 2 ноября 2026, 10:00 · Минск · 42 км · темп 22–24 км/ч», `og:url` из `WEB_ORIGIN`,
+  `<meta name="robots" content="noindex">`; в HTML нет e-mail, `organizerUserId`, `participants`; неизвестный id —
+  `noindex`; API — `cache-control: public, max-age=60`.
+- `E2E_API=1 pnpm e2e:web` (своя БД, свой Mailpit, Redis `/9`) — 20 passed; без API — 14 passed, 6 skipped.
+- `expo export -p android` — бандл собран (4,6 МБ).
+
+**NOT VERIFIED**
+- Ручная проверка на симуляторах iOS/Android (share sheet, нативный DateField) — не делалась.
+- Прогон с общими `pokatim_test` / Redis `/1` — не делался по указанию оркестратора (параллельные агенты).
+
+**Follow-up**
+- S0 в app-foundation: `TextField` (`multiline`, `numberOfLines`, `maxLength`, `suffix`), `TimeField` (native/web),
+  витрина и тесты, релиз `@rkarakulov/ui` 0.4.2 → заменить фолбэк формы (маска `ЧЧ:ММ`, однострочное описание,
+  единицы в подписи).
+- Кандидаты в базу: `Picker` (город), `DisabledReason` для приложения, `Sheet`, `HeroCard` с фото.
+- EAS env профилей: `EXPO_PUBLIC_WEB_ORIGIN` (иначе «Поделиться» в native скрыта).
+- PR 05b (жалобы и модерация) — до прода и сторов; удаление аккаунта — обязательства `pokatim-db.md`.
 
 ---
 
