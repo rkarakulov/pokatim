@@ -77,7 +77,9 @@ export class RacesPublicService {
     if (!race) throw domainError('NOT_FOUND', 404);
     const [card] = await this.cards([race], this.clock.now());
     if (!card) throw domainError('NOT_FOUND', 404);
-    return { ...card, description: race.description };
+    // допуск коридора без маршрута и координат (Q8: геометрия наружу — с картой)
+    const corridor = race.corridor ? { widthM: race.corridor.widthM } : null;
+    return { ...card, description: race.description, corridor };
   }
 
   async currentSeason(): Promise<CurrentSeasonResponse> {
