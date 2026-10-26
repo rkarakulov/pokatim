@@ -127,6 +127,22 @@ export class RoutesRepository {
     return true;
   }
 
+  /**
+   * Тот же файл загружен снова, а маршрут не готов: отказ (`failed`) или обработка, зависшая дольше
+   * `ROUTE_POLICY.stuckAfterMs` (`updatedAt < staleBefore`), — снова `processing` (попытки с нуля). `null` — маршрут
+   * уже готов или обрабатывается (повтор не нужен).
+   */
+  requeue(session: DbSession, id: string, staleBefore: Date, now: Date): Promise<RouteDoc | null> {
+    return this.c.routes.findOneAndUpdate(
+      {
+        _id: id,
+        $or: [{ status: 'failed' }, { status: 'processing', updatedAt: { $lt: staleBefore } }],
+      },
+      { $set: { status: 'processing', failure: null, attempts: 0, updatedAt: now } },
+      { session, returnDocument: 'after' },
+    );
+  }
+
   /** Финальный отказ разбора; только из `processing`. */
   async markFailed(id: string, failure: RouteFailureCode, now: Date): Promise<boolean> {
     const result = await this.c.routes.updateOne(

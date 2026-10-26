@@ -17,8 +17,9 @@ export type RouteProcessingOutcome = 'ready' | 'failed' | 'skipped';
 /**
  * Разбор маршрута (`route-processing`, jobId = id события outbox): захват по статусу `processing` (терминальный —
  * no-op) → исходник из `route_sources` → `analyzeRoute` в потоке с лимитами → отказ `failed: <код>` или транзакция
- * { геометрия + `processing → ready` }. Сбой окружения — исключение и ретрай BullMQ; последняя попытка —
- * `failed: unreadable` (панель показывает причину, маршрут не висит в «Обрабатываем…»). Параллелизм — 1.
+ * { геометрия + `processing → ready` }. Сбой окружения (исходник, поток, запись результата) — исключение и ретрай
+ * BullMQ; последняя попытка — `failed: unreadable` (панель показывает причину, маршрут не висит в «Обрабатываем…»;
+ * если и эта запись не удалась — повторная загрузка того же файла вернёт маршрут в обработку). Параллелизм — 1.
  */
 @Processor(QUEUE.routeProcessing, { concurrency: 1 })
 export class RouteProcessingProcessor extends WorkerHost {
@@ -60,21 +61,25 @@ export class RouteProcessingProcessor extends WorkerHost {
   ): Promise<RouteProcessingOutcome> {
     const route = await this.repository.claim(routeId, this.clock.now());
     if (!route) return 'skipped';
-    let outcome: ThreadOutcome<RouteAnalysis>;
     try {
-      const bytes = await this.repository.sourceBytes(route._id);
-      if (!bytes) throw new Error(`route ${route._id}: source is missing`);
-      outcome = await this.analyze(bytes);
+      return await this.analyzeAndRecord(route._id);
     } catch (error) {
+      // сбой окружения (исходник, поток, запись результата) — ретрай; на последней попытке — видимый отказ
       if (!finalAttempt) throw error;
       await this.repository.markFailed(route._id, 'unreadable', this.clock.now());
-      this.logger.warn(`route ${route._id} failed on final attempt: parser error`);
+      this.logger.warn(`route ${route._id} failed on final attempt: environment error`);
       return 'failed';
     }
+  }
+
+  private async analyzeAndRecord(routeId: string): Promise<RouteProcessingOutcome> {
+    const bytes = await this.repository.sourceBytes(routeId);
+    if (!bytes) throw new Error(`route ${routeId}: source is missing`);
+    const outcome = await this.analyze(bytes);
     if (!outcome.ok) {
       const failure = outcome.code as RouteFailureCode;
-      await this.repository.markFailed(route._id, failure, this.clock.now());
-      this.logger.log(`route ${route._id} failed: ${failure}`);
+      await this.repository.markFailed(routeId, failure, this.clock.now());
+      this.logger.log(`route ${routeId} failed: ${failure}`);
       return 'failed';
     }
     const analysis = outcome.result;
@@ -82,7 +87,7 @@ export class RouteProcessingProcessor extends WorkerHost {
     const recorded = await this.transactions.run((tx) =>
       this.repository.markReady(
         tx,
-        route._id,
+        routeId,
         {
           distanceM: analysis.distanceM,
           elevationGainM: analysis.elevationGainM,
@@ -99,7 +104,7 @@ export class RouteProcessingProcessor extends WorkerHost {
       ),
     );
     if (!recorded) return 'skipped';
-    this.logger.log(`route ${route._id} ready`);
+    this.logger.log(`route ${routeId} ready`);
     return 'ready';
   }
 }

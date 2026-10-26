@@ -1,7 +1,7 @@
 import { PanelRoutePage, Session } from '@pokatim/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createHarness, type Harness } from '../../../test/harness';
+import { createHarness, type Harness, MINUTE } from '../../../test/harness';
 import { bearer, outboxEvents, signUpSession } from '../../../test/identity';
 import { panel, panelCall } from '../../../test/panel';
 import { staff } from '../../../test/races';
@@ -17,6 +17,7 @@ import {
 } from '../../../test/routes';
 import { RouteProcessingProcessor } from './route-processing.processor';
 import { ROUTE_RECEIVED } from './routes.events';
+import { RoutesRepository } from './routes.repository';
 
 /**
  * Маршруты коридора (race-results-01: AC1, AC2, AC10, AC14, AC16): права, приём GPX, дедуп, разбор в worker
@@ -258,19 +259,88 @@ describe('отказы (AC2, AC10)', () => {
 });
 
 describe('дедуп при гонке загрузок (AC16)', () => {
-  it('две одинаковые загрузки одновременно — один маршрут, ответы 202 и 200 с одним id', async () => {
+  it('вставка проиграла гонку (дубль ключа routes_owner_sha_unique) — 200 с маршрутом победителя, без второй записи', async () => {
     const org = await staff(h, 'org@example.by', 'organizer');
     const bytes = fixture('route-rte.gpx');
-    const results = await Promise.all([
-      uploadRoute(h, org.token, bytes),
-      uploadRoute(h, org.token, bytes),
-    ]);
-    expect(results.map((res) => res.status).sort()).toEqual([200, 202]);
-    const [a, b] = results.map(parsedRoute);
-    expect(a!.id).toBe(b!.id);
+    const first = parsedRoute(await uploadRoute(h, org.token, bytes));
+    // ранняя проверка «тот же файл» не видит победителя (он ещё не закоммичен) — вставка получает E11000
+    const lookup = vi
+      .spyOn(h.app.get(RoutesRepository, { strict: false }), 'findByOwnerSha')
+      .mockResolvedValueOnce(undefined);
+    const raced = await uploadRoute(h, org.token, bytes);
+    expect(lookup).toHaveBeenCalled();
+    expect(raced.status).toBe(200);
+    expect(parsedRoute(raced).id).toBe(first.id);
     expect(await routesDb(h).routes.countDocuments()).toBe(1);
     expect(await routesDb(h).sources.countDocuments()).toBe(1);
     expect(await panel(h).audit.countDocuments({ action: 'route.created' })).toBe(1);
+    const events = (await outboxEvents(h)).filter((event) => event.type === ROUTE_RECEIVED);
+    expect(events).toHaveLength(1);
+  });
+});
+
+describe('повторная обработка (ревью pass 1)', () => {
+  const routeEvents = async () =>
+    (await outboxEvents(h)).filter((event) => event.type === ROUTE_RECEIVED);
+
+  it('последняя попытка: сбой записи результата — failed: unreadable; не последняя — ретрай, processing', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const { id } = parsedRoute(await uploadRoute(h, org.token, fixture('route-rte.gpx')));
+    const processor = h.worker.get(RouteProcessingProcessor);
+    const write = vi
+      .spyOn(h.worker.get(RoutesRepository), 'markReady')
+      .mockRejectedValue(new Error('write conflict'));
+    await expect(processor.processRoute(id)).rejects.toThrow('write conflict');
+    expect(await routeDoc(id)).toMatchObject({ status: 'processing', failure: null });
+    expect(await processor.processRoute(id, { finalAttempt: true })).toBe('failed');
+    write.mockRestore();
+    expect(await routeDoc(id)).toMatchObject({ status: 'failed', failure: 'unreadable' });
+    expect(await routesDb(h).geometries.countDocuments()).toBe(0);
+  });
+
+  it('тот же файл после failed — 202, тот же маршрут снова в обработке (новое событие), worker → ready', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const bytes = fixture('route-rte.gpx');
+    const { id } = parsedRoute(await uploadRoute(h, org.token, bytes));
+    const processor = h.worker.get(RouteProcessingProcessor);
+    const analyze = vi.spyOn(processor, 'analyze').mockRejectedValue(new Error('thread crashed'));
+    expect(await processor.processRoute(id, { finalAttempt: true })).toBe('failed');
+    analyze.mockRestore();
+    expect(await routeEvents()).toHaveLength(1);
+
+    const again = await uploadRoute(h, org.token, bytes);
+    expect(again.status).toBe(202);
+    expect(parsedRoute(again)).toMatchObject({ id, status: 'processing', failure: null });
+    expect(await routeEvents()).toHaveLength(2);
+    expect(await routeDoc(id)).toMatchObject({ status: 'processing', attempts: 0 });
+    expect(await processRoute(h, id)).toBe('ready');
+    expect(await routesDb(h).routes.countDocuments()).toBe(1);
+    expect(await panel(h).audit.countDocuments({ action: 'route.created' })).toBe(1);
+  });
+
+  it('тот же файл, маршрут завис в processing дольше 15 мин — снова в обработку; раньше — 200 без события', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const bytes = fixture('route-rte.gpx');
+    const { id } = parsedRoute(await uploadRoute(h, org.token, bytes));
+
+    h.clock.advance(14 * MINUTE);
+    const fresh = await uploadRoute(h, org.token, bytes);
+    expect(fresh.status).toBe(200);
+    expect(await routeEvents()).toHaveLength(1);
+
+    h.clock.advance(2 * MINUTE);
+    const stuck = await uploadRoute(h, org.token, bytes);
+    expect(stuck.status).toBe(202);
+    expect(parsedRoute(stuck).id).toBe(id);
+    expect(await routeEvents()).toHaveLength(2);
+
+    // готовый маршрут повтором не трогается
+    expect(await processRoute(h, id)).toBe('ready');
+    h.clock.advance(60 * MINUTE);
+    const ready = await uploadRoute(h, org.token, bytes);
+    expect(ready.status).toBe(200);
+    expect(parsedRoute(ready).status).toBe('ready');
+    expect(await routeEvents()).toHaveLength(2);
   });
 });
 

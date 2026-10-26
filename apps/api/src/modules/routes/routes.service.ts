@@ -78,7 +78,7 @@ export class RoutesService {
     }
   }
 
-  /** Приём GPX: `created` — новый маршрут (`202`), иначе тот же файл того же сотрудника (`200`). */
+  /** Приём GPX: `created` — маршрут поставлен в обработку (`202`: новый или повтор отказа), иначе тот же (`200`). */
   async accept(
     principal: PanelPrincipal,
     title: string,
@@ -92,7 +92,7 @@ export class RoutesService {
     if (detectTrackFormat(bytes) !== 'gpx') throw domainError('ROUTE_FORMAT_UNSUPPORTED', 415);
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     const existing = await this.repository.findByOwnerSha(principal.userId, sha256);
-    if (existing) return { created: false, route: await this.view(existing) };
+    if (existing) return this.again(existing);
 
     const now = this.clock.now();
     const route: RouteDoc = {
@@ -128,11 +128,35 @@ export class RoutesService {
       const winner = isDuplicateKey(error, 'routes_owner_sha_unique')
         ? await this.repository.findByOwnerSha(principal.userId, sha256)
         : undefined;
-      if (winner) return { created: false, route: await this.view(winner) };
+      if (winner) return this.again(winner);
       throw error;
     }
     this.logger.log(`route ${route._id} queued by ${principal.userId}`);
     return { created: true, route: await this.view(route) };
+  }
+
+  /**
+   * Тот же файл того же сотрудника: готовый или обрабатываемый маршрут — как есть (`200`); отказ или зависшая
+   * обработка — снова в обработку новым событием outbox (`202`): сбой окружения не закрывает файл навсегда.
+   */
+  private async again(route: RouteDoc): Promise<{ created: boolean; route: PanelRoute }> {
+    const now = this.clock.now();
+    const staleBefore = new Date(now.getTime() - ROUTE_POLICY.stuckAfterMs);
+    const retry =
+      route.status === 'failed' || (route.status === 'processing' && route.updatedAt < staleBefore);
+    if (!retry) return { created: false, route: await this.view(route) };
+    const requeued = await this.transactions.run(async (tx) => {
+      const doc = await this.repository.requeue(tx, route._id, staleBefore, now);
+      if (doc)
+        await this.outbox.append(tx, { type: ROUTE_RECEIVED, payload: { routeId: doc._id } });
+      return doc;
+    });
+    if (!requeued) {
+      const current = await this.repository.findRoute(route._id);
+      return { created: false, route: await this.view(current ?? route) };
+    }
+    this.logger.log(`route ${route._id} requeued by ${requeued.ownerUserId}`);
+    return { created: true, route: await this.view(requeued) };
   }
 
   async get(principal: PanelPrincipal, id: string): Promise<PanelRoute> {

@@ -14,7 +14,7 @@ import { CurrentPanelUser, PanelGuard, type PanelPrincipal, RequirePermission } 
 import { ROUTE_POLICY } from './routes.policy';
 import { RoutesService } from './routes.service';
 
-/** Ответ Fastify: код статуса (202 — новый маршрут, 200 — тот же файл) и заголовок. */
+/** Ответ Fastify: код статуса (202 — маршрут поставлен в обработку, 200 — тот же файл как есть) и заголовок. */
 interface StatusReply {
   status(code: number): unknown;
   header(name: string, value: string): unknown;

@@ -133,8 +133,8 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
 
     // --- маршруты коридора (загрузка — races.manage, чтение — races.read) ---
     /**
-     * Загрузка GPX маршрута сырыми байтами (`application/octet-stream`): `202` — новый (`processing`), `200` — тот же
-     * файл того же сотрудника. Формат сервер определяет по содержимому.
+     * Загрузка GPX маршрута сырыми байтами (`application/octet-stream`): `202` — в обработке (`processing`: новый или
+     * повтор после отказа), `200` — тот же файл того же сотрудника как есть. Формат сервер определяет по содержимому.
      */
     uploadRoute: (body: Blob | Uint8Array, title: string) =>
       request(`/v1/admin/routes${queryString({ title })}`, PanelRoute, {
