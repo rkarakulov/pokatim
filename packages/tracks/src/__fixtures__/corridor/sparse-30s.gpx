@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="pokatim corridor fixtures" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><time>2026-06-14T06:00:00Z</time></metadata>
+  <trk>
+    <name>Синтетический заезд</name>
+    <type>cycling</type>
+    <trkseg>
+      <trkpt lat="53.90060000" lon="27.55754994"><time>2026-06-14T06:00:00Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.56212907"><time>2026-06-14T06:00:30Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.56670819"><time>2026-06-14T06:01:00Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.57128731"><time>2026-06-14T06:01:30Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.57586643"><time>2026-06-14T06:02:00Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.58044555"><time>2026-06-14T06:02:30Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.58502467"><time>2026-06-14T06:03:00Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.58960380"><time>2026-06-14T06:03:30Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.59418292"><time>2026-06-14T06:04:00Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.59876204"><time>2026-06-14T06:04:30Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.60334116"><time>2026-06-14T06:05:00Z</time></trkpt>
+      <trkpt lat="53.90244361" lon="27.60479122"><time>2026-06-14T06:05:30Z</time></trkpt>
+      <trkpt lat="53.90514157" lon="27.60479122"><time>2026-06-14T06:06:00Z</time></trkpt>
+      <trkpt lat="53.90783953" lon="27.60479122"><time>2026-06-14T06:06:30Z</time></trkpt>
+      <trkpt lat="53.91053750" lon="27.60479122"><time>2026-06-14T06:07:00Z</time></trkpt>
+      <trkpt lat="53.91323546" lon="27.60479122"><time>2026-06-14T06:07:30Z</time></trkpt>
+      <trkpt lat="53.91593342" lon="27.60479122"><time>2026-06-14T06:08:00Z</time></trkpt>
+      <trkpt lat="53.91863139" lon="27.60479122"><time>2026-06-14T06:08:30Z</time></trkpt>
+      <trkpt lat="53.92132935" lon="27.60479122"><time>2026-06-14T06:09:00Z</time></trkpt>
+      <trkpt lat="53.92402731" lon="27.60479122"><time>2026-06-14T06:09:30Z</time></trkpt>
+      <trkpt lat="53.92672528" lon="27.60479122"><time>2026-06-14T06:10:00Z</time></trkpt>
+      <trkpt lat="53.92942324" lon="27.60479122"><time>2026-06-14T06:10:30Z</time></trkpt>
+      <trkpt lat="53.93212120" lon="27.60479122"><time>2026-06-14T06:11:00Z</time></trkpt>
+      <trkpt lat="53.93481916" lon="27.60479122"><time>2026-06-14T06:11:30Z</time></trkpt>
+      <trkpt lat="53.93751713" lon="27.60479122"><time>2026-06-14T06:12:00Z</time></trkpt>
+      <trkpt lat="53.94021509" lon="27.60479122"><time>2026-06-14T06:12:30Z</time></trkpt>
+      <trkpt lat="53.94291305" lon="27.60479122"><time>2026-06-14T06:13:00Z</time></trkpt>
+      <trkpt lat="53.94561102" lon="27.60479122"><time>2026-06-14T06:13:30Z</time></trkpt>
+      <trkpt lat="53.94826401" lon="27.60479122"><time>2026-06-14T06:14:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="pokatim corridor fixtures" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><time>2026-06-14T06:00:00Z</time></metadata>
+  <trk>
+    <name>Синтетический заезд</name>
+    <type>cycling</type>
+    <trkseg>
+      <trkpt lat="53.90060000" lon="27.55754994"><time>2026-06-14T06:00:00Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.56772577"><time>2026-06-14T06:01:00Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.57790160"><time>2026-06-14T06:02:00Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.58807742"><time>2026-06-14T06:03:00Z</time></trkpt>
+      <trkpt lat="53.90060000" lon="27.59825325"><time>2026-06-14T06:04:00Z</time></trkpt>
+      <trkpt lat="53.90274338" lon="27.60479122"><time>2026-06-14T06:05:00Z</time></trkpt>
+      <trkpt lat="53.90873886" lon="27.60479122"><time>2026-06-14T06:06:00Z</time></trkpt>
+      <trkpt lat="53.91473433" lon="27.60479122"><time>2026-06-14T06:07:00Z</time></trkpt>
+      <trkpt lat="53.92072980" lon="27.60479122"><time>2026-06-14T06:08:00Z</time></trkpt>
+      <trkpt lat="53.92672528" lon="27.60479122"><time>2026-06-14T06:09:00Z</time></trkpt>
+      <trkpt lat="53.93272075" lon="27.60479122"><time>2026-06-14T06:10:00Z</time></trkpt>
+      <trkpt lat="53.93871622" lon="27.60479122"><time>2026-06-14T06:11:00Z</time></trkpt>
+      <trkpt lat="53.94471170" lon="27.60479122"><time>2026-06-14T06:12:00Z</time></trkpt>
+      <trkpt lat="53.95070717" lon="27.60479122"><time>2026-06-14T06:13:00Z</time></trkpt>
+      <trkpt lat="53.95276062" lon="27.60479122"><time>2026-06-14T06:14:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

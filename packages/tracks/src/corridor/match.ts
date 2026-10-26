@@ -124,11 +124,13 @@ class Engine {
   private directionNeg = 0;
   private directionAbs = 0;
   private wholeTrackWrong: boolean | undefined;
+  private readonly corridor: PreparedCorridor;
+  private readonly track: ProjectedTrack;
 
-  constructor(
-    private readonly corridor: PreparedCorridor,
-    private readonly track: ProjectedTrack,
-  ) {
+  // без параметров-свойств: вход `parse` грузится Node со стиранием типов (только стираемый синтаксис)
+  constructor(corridor: PreparedCorridor, track: ProjectedTrack) {
+    this.corridor = corridor;
+    this.track = track;
     this.cells = new Uint8Array(corridor.coverageCells);
     const n = track.count;
     this.gateX = new Float64Array(n);
@@ -158,7 +160,8 @@ class Engine {
     const { track } = this;
     const exits: Crossing[] = [];
     for (let k = 0; k + 1 < track.count; k += 1) {
-      if (this.inStart[k] !== 1 || this.inStart[k + 1] === 1) continue;
+      if (this.inStart[k + 1] === 1) continue;
+      if (this.inStart[k] !== 1 && !this.passesThrough(k, this.gateX, this.gateY)) continue;
       if (track.s[k + 1]! < track.s[k]!) continue;
       const crossing = this.crossing(k, this.gateX, this.gateY, 'exit');
       const previous = exits[exits.length - 1];
@@ -289,8 +292,10 @@ class Engine {
 
     for (let k = start.index + 1; k <= lastIndex; k += 1) {
       this.cover(k);
-      this.coverStep(k - 1);
-      const entering = this.inFinish[k - 1] !== 1 && this.inFinish[k] === 1;
+      this.coverStep(k - 1, k - 1 === start.index);
+      const entering =
+        this.inFinish[k - 1] !== 1 &&
+        (this.inFinish[k] === 1 || this.passesThrough(k - 1, this.finishX, this.finishY));
       let entry: Crossing | null = null;
       if (entering) entry = this.crossing(k - 1, this.finishX, this.finishY, 'entry');
       const isFinish =
@@ -303,7 +308,10 @@ class Engine {
       const to = isFinish || partialEnd ? entry!.u : 1;
       const length = track.step[k - 1]! * Math.max(0, to - from);
       distanceM += length;
-      const outside = (track.inside[k - 1] === 1 ? 0 : 1) + (track.inside[k] === 1 ? 0 : 1);
+      // момент пересечения ворот (начало первого и конец последнего шага) — точка коридора
+      const fromInside = k - 1 === start.index || track.inside[k - 1] === 1;
+      const toInside = isFinish || partialEnd || track.inside[k] === 1;
+      const outside = (fromInside ? 0 : 1) + (toInside ? 0 : 1);
       if (outside === 0) {
         excursion = 0;
       } else {
@@ -313,7 +321,7 @@ class Engine {
         maxExcursionM = Math.max(maxExcursionM, excursion);
       }
 
-      if (isFinish || partialEnd) this.coverTail();
+      if (isFinish) this.coverTail();
       if (isFinish) {
         finish = entry;
         endIndex = k;
@@ -337,6 +345,18 @@ class Engine {
       maxMissedRun: runs.missed,
       maxGapRun: runs.gap,
     };
+  }
+
+  /** Обе точки шага [k, k + 1] вне ворот, а хорда проходит сквозь круг (редкая запись перескочила ворота). */
+  private passesThrough(k: number, xs: Float64Array, ys: Float64Array): boolean {
+    const ax = xs[k]!;
+    const ay = ys[k]!;
+    const dx = xs[k + 1]! - ax;
+    const dy = ys[k + 1]! - ay;
+    const a = dx * dx + dy * dy;
+    if (a === 0) return false;
+    const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / a));
+    return (ax + t * dx) ** 2 + (ay + t * dy) ** 2 <= this.corridor.gateRadiusM ** 2;
   }
 
   /** Момент пересечения окружности ворот на шаге [k, k + 1]: корень квадратного уравнения, время — линейно. */
@@ -388,8 +408,9 @@ class Engine {
   /**
    * Шаг [k, k + 1]: обе точки внутри, `Δgeo ≤ gapMaxM`, `0 ≤ Δs ≤ 1.5·Δgeo + 50` — покрывает ячейки между ними;
    * `Δgeo > gapMaxM` и движение вперёд — ячейки между точками помечаются разрывом GPS (если не покрыты).
+   * `fromGate` — шаг начинается выходом из ворот старта: момент выхода — точка коридора.
    */
-  private coverStep(k: number): void {
+  private coverStep(k: number, fromGate = false): void {
     const { track } = this;
     const geo = track.step[k]!;
     const s0 = track.s[k]!;
@@ -399,7 +420,8 @@ class Engine {
       if (ds > 0) this.markRange(s0, s1, GAP);
       return;
     }
-    if (track.inside[k] === 1 && track.inside[k + 1] === 1 && ds >= 0 && ds <= 1.5 * geo + 50) {
+    const fromInside = fromGate || track.inside[k] === 1;
+    if (fromInside && track.inside[k + 1] === 1 && ds >= 0 && ds <= 1.5 * geo + 50) {
       this.markRange(s0, s1, COVERED);
     }
   }
