@@ -1,0 +1,655 @@
+{
+  "engineVersion": 1,
+  "results": {
+    "clean.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.170Z",
+        "finishedAt": "2026-06-14T06:13:24.508Z",
+        "elapsedMs": 790338,
+        "elapsedSec": 790,
+        "distanceM": 7900,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "far-away.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["no_start"],
+      "segment": null,
+      "touchedCorridor": false,
+      "candidates": 0,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "gap-3km.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["gps_gap"],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:13:24.500Z",
+        "elapsedMs": 790000,
+        "elapsedSec": 790,
+        "distanceM": 7445,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 0.6363636363636364,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "gates-10s.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:13:24.500Z",
+        "elapsedMs": 790000,
+        "elapsedSec": 790,
+        "distanceM": 7895,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "loop-1lap.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:18.125Z",
+        "finishedAt": "2026-06-14T06:12:35.625Z",
+        "elapsedMs": 737500,
+        "elapsedSec": 738,
+        "distanceM": 5894,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 2,
+      "diagnostics": {
+        "corridorLengthM": 6000,
+        "declaredDistanceM": 6000,
+        "geometryLimited": false
+      }
+    },
+    "loop-2laps.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:12:47.431Z",
+        "finishedAt": "2026-06-14T06:23:42.986Z",
+        "elapsedMs": 655555,
+        "elapsedSec": 656,
+        "distanceM": 5894,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 3,
+      "diagnostics": {
+        "corridorLengthM": 6000,
+        "declaredDistanceM": 6000,
+        "geometryLimited": false
+      }
+    },
+    "loop-loiter.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:01:08.125Z",
+        "finishedAt": "2026-06-14T06:13:25.625Z",
+        "elapsedMs": 737500,
+        "elapsedSec": 738,
+        "distanceM": 5894,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 2,
+      "diagnostics": {
+        "corridorLengthM": 6000,
+        "declaredDistanceM": 6000,
+        "geometryLimited": false
+      }
+    },
+    "mid-start.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["no_start"],
+      "segment": null,
+      "touchedCorridor": true,
+      "candidates": 0,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "noisy.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:13.650Z",
+        "finishedAt": "2026-06-14T06:13:29.694Z",
+        "elapsedMs": 796044,
+        "elapsedSec": 796,
+        "distanceM": 7999,
+        "offCorridorM": 52,
+        "offCorridorShare": 0.006500812601575197,
+        "maxExcursionM": 42,
+        "coverage": 1,
+        "noisePoints": 5
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "outback-full.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:33:24.500Z",
+        "elapsedMs": 1990000,
+        "elapsedSec": 1990,
+        "distanceM": 19890,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 2,
+      "diagnostics": {
+        "corridorLengthM": 20000,
+        "declaredDistanceM": 20000,
+        "geometryLimited": false
+      }
+    },
+    "outback-turn-7km.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["missed_section", "off_corridor"],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:23:24.500Z",
+        "elapsedMs": 1390000,
+        "elapsedSec": 1390,
+        "distanceM": 13890,
+        "offCorridorM": 6000,
+        "offCorridorShare": 0.4319654427645788,
+        "maxExcursionM": 6000,
+        "coverage": 0.691358024691358,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 2,
+      "diagnostics": {
+        "corridorLengthM": 20000,
+        "declaredDistanceM": 20000,
+        "geometryLimited": false
+      }
+    },
+    "reverse-linear.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["wrong_direction"],
+      "segment": {
+        "startedAt": "2026-06-14T06:13:55.000Z",
+        "finishedAt": "2026-06-14T06:14:00.000Z",
+        "elapsedMs": 5000,
+        "elapsedSec": 5,
+        "distanceM": 45,
+        "offCorridorM": 45,
+        "offCorridorShare": 1,
+        "maxExcursionM": 45,
+        "coverage": 0.030303030303030304,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "reverse-loop.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["wrong_direction"],
+      "segment": {
+        "startedAt": "2026-06-14T06:12:48.125Z",
+        "finishedAt": "2026-06-14T06:12:54.000Z",
+        "elapsedMs": 5875,
+        "elapsedSec": 6,
+        "distanceM": 45,
+        "offCorridorM": 41,
+        "offCorridorShare": 0.9111111111111111,
+        "maxExcursionM": 41,
+        "coverage": 0.041666666666666664,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 6000,
+        "declaredDistanceM": 6000,
+        "geometryLimited": false
+      }
+    },
+    "shortcut-450.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:46:00.500Z",
+        "elapsedMs": 2746000,
+        "elapsedSec": 2746,
+        "distanceM": 27450,
+        "offCorridorM": 450,
+        "offCorridorShare": 0.01639344262295082,
+        "maxExcursionM": 450,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 27000,
+        "declaredDistanceM": 27000,
+        "geometryLimited": false
+      }
+    },
+    "shortcut-500.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:46:06.500Z",
+        "elapsedMs": 2752000,
+        "elapsedSec": 2752,
+        "distanceM": 27500,
+        "offCorridorM": 500,
+        "offCorridorShare": 0.01818181818181818,
+        "maxExcursionM": 500,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 27000,
+        "declaredDistanceM": 27000,
+        "geometryLimited": false
+      }
+    },
+    "shortcut-800.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["off_corridor"],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:46:36.500Z",
+        "elapsedMs": 2782000,
+        "elapsedSec": 2782,
+        "distanceM": 27800,
+        "offCorridorM": 800,
+        "offCorridorShare": 0.02877697841726619,
+        "maxExcursionM": 800,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 27000,
+        "declaredDistanceM": 27000,
+        "geometryLimited": false
+      }
+    },
+    "sparse-30s.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:13:24.500Z",
+        "elapsedMs": 790000,
+        "elapsedSec": 790,
+        "distanceM": 7900,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "sparse-60s.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:13.050Z",
+        "finishedAt": "2026-06-14T06:12:04.050Z",
+        "elapsedMs": 711000,
+        "elapsedSec": 711,
+        "distanceM": 7900,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "sparse-winding-30s.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["sparse_recording"],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:15.880Z",
+        "finishedAt": "2026-06-14T06:11:37.859Z",
+        "elapsedMs": 681979,
+        "elapsedSec": 682,
+        "distanceM": 5958,
+        "offCorridorM": 311,
+        "offCorridorShare": 0.05219872440416247,
+        "maxExcursionM": 15,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 6902,
+        "declaredDistanceM": 6931,
+        "geometryLimited": false
+      }
+    },
+    "stop-80pct.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["no_finish"],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:10:50.000Z",
+        "elapsedMs": 635500,
+        "elapsedSec": 636,
+        "distanceM": 6347,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 0.7878787878787878,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "tunnel-600m.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:13:24.500Z",
+        "elapsedMs": 790000,
+        "elapsedSec": 790,
+        "distanceM": 7897,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "window-finish-at-close.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["outside_window"],
+      "segment": {
+        "startedAt": "2026-06-16T06:00:14.500Z",
+        "finishedAt": "2026-06-16T06:13:24.500Z",
+        "elapsedMs": 790000,
+        "elapsedSec": 790,
+        "distanceM": 7897,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "window-finish-before-close.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-17T06:00:14.500Z",
+        "finishedAt": "2026-06-17T06:13:24.500Z",
+        "elapsedMs": 790000,
+        "elapsedSec": 790,
+        "distanceM": 7897,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "window-record-before.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-18T06:00:14.500Z",
+        "finishedAt": "2026-06-18T06:13:24.500Z",
+        "elapsedMs": 790000,
+        "elapsedSec": 790,
+        "distanceM": 7897,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "window-start-before.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["outside_window"],
+      "segment": {
+        "startedAt": "2026-06-15T06:00:14.500Z",
+        "finishedAt": "2026-06-15T06:13:24.500Z",
+        "elapsedMs": 790000,
+        "elapsedSec": 790,
+        "distanceM": 7897,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "wobble-1_5pct.gpx": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:13:24.500Z",
+        "elapsedMs": 790000,
+        "elapsedSec": 790,
+        "distanceM": 8082,
+        "offCorridorM": 130,
+        "offCorridorShare": 0.016085127443702055,
+        "maxExcursionM": 65,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "wobble-3pct.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["off_corridor"],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:14.500Z",
+        "finishedAt": "2026-06-14T06:13:24.500Z",
+        "elapsedMs": 790000,
+        "elapsedSec": 790,
+        "distanceM": 8266,
+        "offCorridorM": 260,
+        "offCorridorShare": 0.03145414952818776,
+        "maxExcursionM": 65,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 8000,
+        "declaredDistanceM": 8000,
+        "geometryLimited": false
+      }
+    },
+    "garmin-edge-ride.fit": {
+      "engineVersion": 1,
+      "verdict": "counted",
+      "reasons": [],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:06.642Z",
+        "finishedAt": "2026-06-14T07:07:57.114Z",
+        "elapsedMs": 4070472,
+        "elapsedSec": 4070,
+        "distanceM": 30001,
+        "offCorridorM": 0,
+        "offCorridorShare": 0,
+        "maxExcursionM": 0,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 30100,
+        "declaredDistanceM": 30100,
+        "geometryLimited": false
+      }
+    }
+  }
+}

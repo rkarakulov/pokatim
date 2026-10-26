@@ -1,6 +1,4 @@
-import type { TrackPoint } from './geo.ts';
-
-const METERS_PER_DEGREE = (6_371_008.8 * Math.PI) / 180;
+import { localProjection, type TrackPoint } from './geo.ts';
 
 /**
  * Упрощение линии (Дуглас — Пекер, итеративно — без рекурсии на 200 000 точек). Концы сохраняются.
@@ -16,13 +14,12 @@ export function simplifyTrack(
   const unique = dropConsecutiveDuplicates(points);
   if (unique.length < 2) return [];
 
-  const lat0 = (unique[0]!.lat * Math.PI) / 180;
-  const kx = METERS_PER_DEGREE * Math.cos(lat0);
+  const { kx, ky } = localProjection(unique[0]!.lat);
   const xs = new Float64Array(unique.length);
   const ys = new Float64Array(unique.length);
   for (let i = 0; i < unique.length; i += 1) {
     xs[i] = unique[i]!.lon * kx;
-    ys[i] = unique[i]!.lat * METERS_PER_DEGREE;
+    ys[i] = unique[i]!.lat * ky;
   }
 
   const limit = Math.max(maxPoints, 3);

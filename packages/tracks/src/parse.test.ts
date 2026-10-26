@@ -2,7 +2,15 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { analyzeTrack, parseTrackFile, TrackParseError, TRACK_MAX_POINTS } from './parse.ts';
+import * as lightEntry from './index.ts';
+import {
+  analyzeAttempt,
+  analyzeTrack,
+  CORRIDOR_ENGINE_VERSION,
+  parseTrackFile,
+  TrackParseError,
+  TRACK_MAX_POINTS,
+} from './parse.ts';
 
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url)));
@@ -152,5 +160,78 @@ describe('входы пакета', () => {
     expect(seen).not.toContain('./gpx.ts');
     expect(seen).toContain('./simplify.ts');
     expect(seen).toContain('./stream.ts');
+  });
+
+  it('движок сверки — только в серверном входе: лёгкий вход его не экспортирует', () => {
+    for (const name of [
+      'matchCorridor',
+      'prepareCorridor',
+      'analyzeAttempt',
+      'CORRIDOR_POLICY',
+      'CORRIDOR_ENGINE_VERSION',
+      'CORRIDOR_REJECTIONS',
+    ]) {
+      expect(lightEntry, name).not.toHaveProperty(name);
+    }
+  });
+});
+
+describe('analyzeAttempt', () => {
+  const corridorCase = (name: string) =>
+    (
+      JSON.parse(
+        readFileSync(
+          new URL('./__fixtures__/corridor/corridor-expected.json', import.meta.url),
+          'utf8',
+        ),
+      ) as {
+        fixtures: Record<
+          string,
+          {
+            corridor: Parameters<typeof analyzeAttempt>[2];
+            window: { startsAt: string; closesAt: string };
+          }
+        >;
+      }
+    ).fixtures[name]!;
+  const windowOf = (window: { startsAt: string; closesAt: string }) => ({
+    startsAt: new Date(window.startsAt),
+    closesAt: new Date(window.closesAt),
+  });
+
+  it('файл → loadTrack → matchCorridor: засчитанный проезд, версия алгоритма', () => {
+    const { corridor, window } = corridorCase('clean.gpx');
+    const result = analyzeAttempt(
+      fixture('corridor/clean.gpx'),
+      'gpx',
+      corridor,
+      windowOf(window),
+      NOW,
+    );
+    expect(result).toMatchObject({ verdict: 'counted', engineVersion: CORRIDOR_ENGINE_VERSION });
+    expect(structuredClone(result)).toEqual(result);
+  });
+
+  it('ошибки файла — TrackParseError, как у analyzeTrack; инварианты коридора — ошибка программиста', () => {
+    const { corridor, window } = corridorCase('clean.gpx');
+    expect(
+      failureCode(() =>
+        analyzeAttempt(fixture('corridor/clean.gpx'), 'fit', corridor, windowOf(window), NOW),
+      ),
+    ).toBe('unreadable');
+    expect(
+      failureCode(() =>
+        analyzeAttempt(fixture('no-time.gpx'), 'gpx', corridor, windowOf(window), NOW),
+      ),
+    ).toBe('no_timestamps');
+    expect(() =>
+      analyzeAttempt(
+        fixture('corridor/clean.gpx'),
+        'gpx',
+        { ...corridor, widthM: 5 },
+        windowOf(window),
+        NOW,
+      ),
+    ).toThrow(/corridor: widthM/);
   });
 });
