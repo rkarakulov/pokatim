@@ -49,7 +49,14 @@ const ride: RideDetailForOrganizer = {
 };
 const organizerView: RideView = {
   ride,
-  viewer: { role: 'organizer', canJoin: false, canLeave: false, canManage: true },
+  viewer: {
+    role: 'organizer',
+    canJoin: false,
+    canLeave: false,
+    canManage: true,
+    reported: false,
+    canReport: false,
+  },
 };
 
 const routes = {
@@ -382,7 +389,14 @@ describe('«Изменить райд» (AC4)', () => {
   it('не организатор (canManage false) — «Райд не найден»', async () => {
     getRideForViewer.mockResolvedValue({
       ride: { ...ride },
-      viewer: { role: 'participant', canJoin: false, canLeave: true, canManage: false },
+      viewer: {
+        role: 'participant',
+        canJoin: false,
+        canLeave: true,
+        canManage: false,
+        reported: false,
+        canReport: false,
+      },
     });
     await open(`/rides/edit/${ID}`);
     expect(await screen.findByText('Райд не найден')).toBeOnTheScreen();
@@ -393,7 +407,14 @@ describe('«Отменить райд» (AC5)', () => {
   it('причина обязательна; отмена — запрос с причиной, затем карточка', async () => {
     cancelRide.mockResolvedValue({
       ride: { ...ride, phase: 'cancelled', cancelReason: 'weather', version: 3 },
-      viewer: { role: 'organizer', canJoin: false, canLeave: false, canManage: false },
+      viewer: {
+        role: 'organizer',
+        canJoin: false,
+        canLeave: false,
+        canManage: false,
+        reported: false,
+        canReport: false,
+      },
     });
     const router = await open(`/rides/cancel/${ID}`);
     expect(

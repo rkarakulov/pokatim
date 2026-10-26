@@ -23,6 +23,7 @@ import RideRoute from '../app/rides/[id]';
 import NewRideRoute from '../app/rides/new';
 import EditRideRoute from '../app/rides/edit/[id]';
 import CancelRideRoute from '../app/rides/cancel/[id]';
+import ReportRideRoute from '../app/rides/report/[id]';
 import RaceRoute from '../app/races/[id]';
 import RacePickRoute from '../app/races/pick/[id]';
 import SeasonRoute from '../app/seasons/[id]';
@@ -69,4 +70,5 @@ export const appRoutes = {
   'rides/new': NewRideRoute,
   'rides/edit/[id]': EditRideRoute,
   'rides/cancel/[id]': CancelRideRoute,
+  'rides/report/[id]': ReportRideRoute,
 };

@@ -2,6 +2,7 @@ import { apiErrorOf, isNetworkError } from '@pokatim/api-client';
 import {
   RideQuotaDetails,
   type CancelRideRequest,
+  type CreateRideReportRequest,
   type CreateRideRequest,
   type RideDetail,
   type RidePage,
@@ -161,6 +162,23 @@ export function useCancelRide(id: string) {
     networkMode: 'always',
     onSuccess: (view) => applyRideView(queryClient, view),
   });
+}
+
+/** Жалоба (05b): ответ — `viewer.reported`, кеш `me` и инвалидация, как у других мутаций. */
+export function useReportRide(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateRideReportRequest) =>
+      withAccessToken((accessToken) => api.reportRide(accessToken, id, body)),
+    networkMode: 'always',
+    onSuccess: (view) => applyRideView(queryClient, view),
+  });
+}
+
+/** Текст отказа жалобы: райда нет (удалён или скрыт) — «Райд не найден»; остальное — как у действий. */
+export function rideReportErrorText(error: unknown): string {
+  if (apiErrorOf(error)?.code === 'NOT_FOUND') return t('rides.detail.notFound');
+  return rideActionErrorText(error, null);
 }
 
 /** Текст отказа действия с райдом (баннер у кнопки): мест нет, начался/отменён, 429, сеть. */

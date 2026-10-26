@@ -117,6 +117,8 @@ export default function RootLayout() {
           <Stack.Screen name="rides/new" />
           <Stack.Screen name="rides/edit/[id]" />
           <Stack.Screen name="rides/cancel/[id]" />
+          {/* жалоба на райд (05b): только вошедшим; гость — «Вход» */}
+          <Stack.Screen name="rides/report/[id]" />
           {/* «Выбрать свой заезд» в гонку (race-results-04): только вошедшим, без таб-бара */}
           <Stack.Screen name="races/pick/[id]" />
         </Stack.Protected>

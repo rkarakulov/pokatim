@@ -72,6 +72,8 @@ function ShareAction({ ride }: { ride: RideDetail }) {
  * Поля и действия карточки (§3): метка «Кофе-райд» / «… · вы организатор», подпись организатора (D2), типографская
  * шапка (дата всегда с годом), «Старт: город, место», `StatBlock` дистанции и темпа, стопка, действия по `viewer`
  * сервера, баннеры отмены / прошедшего / переноса, «Об этом райде» как текст. Карты, «Набора», имён и фото нет (§4).
+ * 05b: «Пожаловаться» — по `viewer.canReport`, строка «Вы пожаловались…» — по `viewer.reported`; скрытый
+ * (`phase: 'hidden'`, видит только организатор) — баннер, действий нет (права сервера выключены).
  */
 function RideDetailView({
   ride,
@@ -112,6 +114,9 @@ function RideDetailView({
   return (
     <View style={styles.detail}>
       <Kicker label={t(organizer ? 'rides.detail.kickerOrganizer' : 'rides.detail.kicker')} />
+      {ride.phase === 'hidden' ? (
+        <Banner tone="warning" message={t('rides.detail.hidden')} />
+      ) : null}
       {published && upcoming ? <Banner message={t('rides.detail.published')} /> : null}
       {ride.phase === 'cancelled' ? (
         <Banner
@@ -190,6 +195,19 @@ function RideDetailView({
           <TextAction
             label={t('rides.detail.allRides')}
             onPress={() => router.navigate(signedIn ? '/rides' : '/')}
+          />
+        </View>
+      ) : null}
+      {viewer?.reported ? (
+        <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+          {t('rides.detail.reported')}
+        </Text>
+      ) : null}
+      {viewer?.canReport ? (
+        <View style={styles.start}>
+          <TextAction
+            label={t('rides.detail.report')}
+            onPress={() => router.push(`/rides/report/${ride.id}`)}
           />
         </View>
       ) : null}

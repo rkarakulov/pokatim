@@ -34,7 +34,14 @@ const ride: RideCard = {
   phase: 'upcoming',
   cancelReason: null,
   rescheduledAt: null,
-  viewer: { role: 'none', canJoin: true, canLeave: false, canManage: false },
+  viewer: {
+    role: 'none',
+    canJoin: true,
+    canLeave: false,
+    canManage: false,
+    reported: false,
+    canReport: false,
+  },
 };
 
 describe('подписи кофе-райда', () => {

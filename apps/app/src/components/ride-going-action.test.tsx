@@ -10,6 +10,8 @@ const viewer = (role: RideViewer['role'], rights: Partial<RideViewer> = {}): Rid
   canJoin: false,
   canLeave: false,
   canManage: false,
+  reported: false,
+  canReport: false,
   ...rights,
 });
 
@@ -97,7 +99,7 @@ describe('RideGoingAction — по viewer, full и phase сервера', () => 
     expect(screen.getByRole('button', { name: 'Я иду' })).toBeEnabled();
   });
 
-  it('отменён — «Райд отменён» (карточка — баннер экрана); прошедший и unknown — без действия', async () => {
+  it('отменён — «Райд отменён» (карточка — баннер экрана); прошедший, скрытый (05b) и unknown — без действия', async () => {
     const { rerender } = await render(
       <RideGoingAction
         ride={{ ...upcoming, phase: 'cancelled' }}
@@ -107,7 +109,7 @@ describe('RideGoingAction — по viewer, full и phase сервера', () => 
       />,
     );
     expect(screen.getByText('Райд отменён')).toBeOnTheScreen();
-    for (const phase of ['past', 'unknown'] as const) {
+    for (const phase of ['past', 'unknown', 'hidden'] as const) {
       await rerender(
         <RideGoingAction
           ride={{ ...upcoming, phase }}
