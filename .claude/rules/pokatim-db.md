@@ -98,7 +98,8 @@ paths:
 - Исходник GPX — в `route_sources` (BSON Binary ≤ 5 МиБ), **не** в `TrackFileStore`: уборка `tracks-maintenance`
   удаляет файлы без документа `track_uploads` и стёрла бы маршрут. Наружу исходник, sha256 и линия сверки не выходят.
 - Дедуп загрузки — `routes_owner_sha_unique { ownerUserId, sha256 }`; гонка двух одинаковых — `isDuplicateKey` →
-  существующий.
+  существующий. Тот же файл после `failed` или зависшей (> 15 мин) обработки — `RoutesRepository.requeue` (условие по
+  статусу и `updatedAt`) + новое событие outbox в одной транзакции: сбой окружения не закрывает файл навсегда.
 - `races.corridor = { routeId, widthM, distanceM } | null` — пишет только `RacesRepository`; `distanceM` — снимок
   длины маршрута, `distanceKm` гонки с коридором — из него. Документы до `0013_routes` поля не имеют — чтение
   `?? null` (миграция ставит `null`).
