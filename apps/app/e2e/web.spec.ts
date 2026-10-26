@@ -9,6 +9,7 @@ import {
   SIGN_IN_URL,
   UNKNOWN_RACE_ID,
   UNKNOWN_RIDE_ID,
+  UNKNOWN_ROUTE_ID,
   UNKNOWN_START_ID,
 } from './project';
 import { cancelRideByApi, rideFixtureDate, signInRider } from './ride-fixture';
@@ -16,6 +17,7 @@ import {
   HOME_FIXTURE_PASSWORD,
   HOME_FIXTURE_YEAR,
   publishCalendarData,
+  publishCatalogRoute,
   publishHomeData,
   publishRaceData,
   registerHomeRider,
@@ -284,6 +286,29 @@ test('публичная карточка неизвестного кофе-ра
     await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
   }
   await expect(page).toHaveURL(`${BASE_URL}/rides/${UNKNOWN_RIDE_ID}`);
+});
+
+test('публичная карточка неизвестного маршрута (routes-01): HTML 200 (с API — noindex), после гидрации — «Маршрут недоступен» (без API — «Нет соединения»)', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get(`/routes/${UNKNOWN_ROUTE_ID}`);
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(html).toMatch(/<meta property="og:title" content="Маршрут"/);
+  if (WITH_API) expect(html).toMatch(/<meta name="robots" content="noindex"/);
+  else expect(html).not.toContain('name="robots"');
+  expect(html).not.toContain('og:url');
+
+  await page.goto(`/routes/${UNKNOWN_ROUTE_ID}`);
+  if (WITH_API) {
+    await expect(page.getByText('Маршрут недоступен', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Все маршруты' })).toBeVisible();
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+  // публичный экран вне гардов: гостя не уводит на регистрацию
+  await expect(page).toHaveURL(`${BASE_URL}/routes/${UNKNOWN_ROUTE_ID}`);
 });
 
 test('жалоба на райд /rides/report/<id> без сессии (05b): HTML без формы и OG, после гидрации — гард входа', async ({
@@ -706,6 +731,50 @@ test.describe('с API', () => {
       await expect(page.getByText('Нет заездов в окне гонки')).toBeVisible();
     } finally {
       await withdraw();
+    }
+  });
+
+  test('Маршруты (routes-01): карточка маршрута каталога по ссылке без входа (SSR, OG без ПДн), вкладка «Маршруты» после входа', async ({
+    page,
+    request,
+  }) => {
+    const route = await publishCatalogRoute(request);
+    try {
+      // SSR карточки: название и OG до JS, og:url — из WEB_ORIGIN, без e-mail и служебных полей
+      const html = await (await request.get(`/routes/${route.id}`)).text();
+      expect(html).toContain(`<meta property="og:title" content="${route.title}"`);
+      expect(html).toContain(`<meta property="og:url" content="${BASE_URL}/routes/${route.id}"`);
+      expect(html).toMatch(/<meta property="og:description" content="[^"]*км[^"]*· Минск"/);
+      expect(html).not.toMatch(/@pokatim\.test|ownerUserId|sha256|noindex/);
+
+      // гость открывает карточку по ссылке: цифры, город и покрытие (вне гардов)
+      await page.goto(`/routes/${route.id}`);
+      await expect(page.getByText(route.title, { exact: true }).first()).toBeVisible();
+      await expect(page).toHaveTitle(`${route.title} — Покатим`);
+      await expect(page.getByText('Длина', { exact: true })).toBeVisible();
+      await expect(page.getByText('Город старта', { exact: true })).toBeVisible();
+      await expect(page).toHaveURL(`${BASE_URL}/routes/${route.id}`);
+
+      // вкладка «Маршруты» после входа: маршрут прогона — в каталоге
+      const rider = await registerHomeRider(request);
+      await page.goto('/sign-in');
+      await page.getByRole('textbox', { name: 'E-mail' }).fill(rider);
+      await page.getByRole('textbox', { name: 'Пароль' }).fill(HOME_FIXTURE_PASSWORD);
+      await page.getByRole('button', { name: 'Войти' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/survey`);
+      await page.getByRole('checkbox', { name: 'Гонки и результаты' }).click();
+      await page.getByRole('button', { name: 'Продолжить' }).click();
+      await page.getByRole('button', { name: 'Не сейчас' }).click();
+      await page.getByRole('button', { name: 'Позже' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/`);
+      await page.getByRole('tab', { name: 'Маршруты' }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/routes`);
+      const card = page.getByRole('link', { name: new RegExp(`^${route.title}\\. `) });
+      await expect(card.first()).toBeVisible();
+      await card.first().click();
+      await expect(page).toHaveURL(`${BASE_URL}/routes/${route.id}`);
+    } finally {
+      await route.withdraw();
     }
   });
 
