@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isReschedule, rideFull, ridePhase, rideViewer, validateStartsAt } from './rides.policy';
+import { changesStart, rideFull, ridePhase, rideViewer, validateStartsAt } from './rides.policy';
 
 const NOW = new Date('2026-10-22T09:00:00.000Z');
 const MINUTE = 60_000;
@@ -86,18 +86,17 @@ describe('validateStartsAt', () => {
   });
 });
 
-describe('isReschedule', () => {
-  it('время, город или место изменены при других участниках', () => {
-    const base = ride({ goingCount: 2 });
-    expect(isReschedule(base, { startsAt: at(2 * DAY) })).toBe(true);
-    expect(isReschedule(base, { cityCode: 'brest' })).toBe(true);
-    expect(isReschedule(base, { place: 'Другое место' })).toBe(true);
+describe('changesStart', () => {
+  it('время, город или место изменены', () => {
+    const base = ride();
+    expect(changesStart(base, { startsAt: at(2 * DAY) })).toBe(true);
+    expect(changesStart(base, { cityCode: 'brest' })).toBe(true);
+    expect(changesStart(base, { place: 'Другое место' })).toBe(true);
   });
 
-  it('то же значение, другие поля или только организатор — не перенос', () => {
-    const base = ride({ goingCount: 2 });
-    expect(isReschedule(base, { startsAt: at(DAY), place: 'Парк Победы' })).toBe(false);
-    expect(isReschedule(base, {})).toBe(false);
-    expect(isReschedule(ride({ goingCount: 1 }), { startsAt: at(2 * DAY) })).toBe(false);
+  it('то же значение или другие поля — не перенос (счётчик участников проверяет запись)', () => {
+    const base = ride();
+    expect(changesStart(base, { startsAt: at(DAY), place: 'Парк Победы' })).toBe(false);
+    expect(changesStart(base, {})).toBe(false);
   });
 });

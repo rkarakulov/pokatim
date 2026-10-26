@@ -55,7 +55,6 @@ export type RidePatch = Partial<
     | 'paceMinKmh'
     | 'paceMaxKmh'
     | 'limit'
-    | 'rescheduledAt'
   >
 >;
 
@@ -135,7 +134,9 @@ export class RidesRepository {
 
   /**
    * Правка организатором по ожидаемой `version` до старта; новый лимит — не ниже идущих в том же фильтре (гонка
-   * «правка лимита ↔ запись» закрыта: обе операции — над одним документом с условием).
+   * «правка лимита ↔ запись» закрыта: обе операции — над одним документом с условием). Pipeline-обновление: значения —
+   * только `$literal`; `reschedule` (меняются время, город или место) ставит `rescheduledAt`, только если в момент
+   * записи идут другие участники (`goingCount > 1` документа, а не прочитанный заранее).
    */
   update(
     id: string,
@@ -143,6 +144,7 @@ export class RidesRepository {
     version: number,
     now: Date,
     patch: RidePatch,
+    reschedule: boolean,
   ): Promise<RideDoc | null> {
     const filter: Filter<RideDoc> = {
       _id: id,
@@ -154,11 +156,16 @@ export class RidesRepository {
     if (patch.limit !== undefined && patch.limit !== null) {
       filter.goingCount = { $lte: patch.limit };
     }
-    return this.rides.findOneAndUpdate(
-      filter,
-      { $set: { ...patch, updatedAt: now }, $inc: { version: 1 } },
-      { returnDocument: 'after' },
-    );
+    const set: Record<string, unknown> = {};
+    for (const [field, value] of Object.entries(patch)) set[field] = { $literal: value };
+    set.updatedAt = { $literal: now };
+    set.version = { $add: ['$version', 1] };
+    if (reschedule) {
+      set.rescheduledAt = {
+        $cond: [{ $gt: ['$goingCount', 1] }, { $literal: now }, '$rescheduledAt'],
+      };
+    }
+    return this.rides.findOneAndUpdate(filter, [{ $set: set }], { returnDocument: 'after' });
   }
 
   /** Отмена организатором до старта, причина — из справочника. */

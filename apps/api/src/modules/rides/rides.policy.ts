@@ -85,12 +85,15 @@ export function validateStartsAt(
   return null;
 }
 
-/** Перенос: правка меняет время, город или место старта, когда идут другие участники (`goingCount > 1`). */
-export function isReschedule(
-  ride: Pick<RideDoc, 'startsAt' | 'cityCode' | 'place' | 'goingCount'>,
+/**
+ * Правка меняет время, город или место старта. «Перенос» (`rescheduledAt`) — только если при этом идут другие
+ * участники: это условие проверяет сама запись по счётчику документа в момент операции (репозиторий), а не
+ * прочитанный заранее `goingCount` — первый участник мог записаться между чтением и правкой.
+ */
+export function changesStart(
+  ride: Pick<RideDoc, 'startsAt' | 'cityCode' | 'place'>,
   patch: { startsAt?: Date; cityCode?: RideDoc['cityCode']; place?: string },
 ): boolean {
-  if (ride.goingCount <= 1) return false;
   return (
     (patch.startsAt !== undefined && patch.startsAt.getTime() !== ride.startsAt.getTime()) ||
     (patch.cityCode !== undefined && patch.cityCode !== ride.cityCode) ||

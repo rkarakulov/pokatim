@@ -1,5 +1,5 @@
 import { RideView } from '@pokatim/contracts';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, DAY, type Harness, MINUTE } from '../../../test/harness';
 import {
@@ -15,6 +15,7 @@ import {
   type Rider,
 } from '../../../test/rides';
 import { RIDES_POLICY } from './rides.policy';
+import { RidesRepository } from './rides.repository';
 
 /**
  * Создание, правка и отмена кофе-райда организатором (AC1, AC4, AC5, AC-T5): окно времени старта, квота будущих
@@ -228,11 +229,15 @@ describe('правка', () => {
 
   it('перенос времени или места при других участниках — rescheduledAt; без них — нет', async () => {
     const solo = await createRide(h, organizer);
+    // строка с `$` в pipeline-обновлении — значение, не путь поля (`$literal`)
     const soloRes = await authed(h, organizer, 'POST', `${RIDES}/${solo.id}`, {
       version: 0,
-      place: 'Другое место',
+      place: '$goingCount',
     });
-    expect(RideView.parse(soloRes.body).ride.rescheduledAt).toBeNull();
+    expect(RideView.parse(soloRes.body).ride).toMatchObject({
+      rescheduledAt: null,
+      place: '$goingCount',
+    });
 
     const ride = await createRide(h, organizer);
     await join(h, await rider(h, 'a@example.by'), ride.id);
@@ -241,6 +246,28 @@ describe('правка', () => {
       startsAt: startsIn(h, 2 * DAY),
     });
     expect(RideView.parse(res.body).ride.rescheduledAt).toBe(h.clock.now().toISOString());
+  });
+
+  it('гонка «чтение правки ↔ первый участник ↔ перенос»: rescheduledAt по счётчику в момент записи', async () => {
+    const ride = await createRide(h, organizer);
+    const a = await rider(h, 'a@example.by');
+    const repository = h.app.get(RidesRepository, { strict: false });
+    const update = repository.update.bind(repository);
+    // сервис прочитал райд (идёт только организатор), затем до записи правки записался первый участник
+    const spy = vi.spyOn(repository, 'update').mockImplementationOnce(async (...args) => {
+      expect((await join(h, a, ride.id)).status).toBe(200);
+      return update(...args);
+    });
+    const res = await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, {
+      version: 0,
+      startsAt: startsIn(h, 2 * DAY),
+    });
+    spy.mockRestore();
+    expect(res.status).toBe(200);
+    expect(RideView.parse(res.body).ride).toMatchObject({
+      goingCount: 2,
+      rescheduledAt: h.clock.now().toISOString(),
+    });
   });
 
   it('новое время старта проверяется окном; темп с текущим значением — RIDE_PACE_ORDER', async () => {

@@ -15,7 +15,7 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { domainError } from '../../error-messages';
 import { rideViewOf } from './rides-feed.service';
 import type { RideDoc } from './rides.collection';
-import { isReschedule, ridePhase, RIDES_POLICY, validateStartsAt } from './rides.policy';
+import { changesStart, ridePhase, RIDES_POLICY, validateStartsAt } from './rides.policy';
 import { type RidePatch, RidesRepository } from './rides.repository';
 
 const fieldFailure = (path: string, code: FieldErrorCode) => {
@@ -134,9 +134,14 @@ export class RidesService {
     if (patch.limit !== undefined && patch.limit !== null && patch.limit < current.goingCount) {
       throw fieldFailure('limit', 'RIDE_LIMIT_BELOW_GOING');
     }
-    if (isReschedule(current, patch)) patch.rescheduledAt = now;
-
-    const updated = await this.repository.update(id, userId, body.version, now, patch);
+    const updated = await this.repository.update(
+      id,
+      userId,
+      body.version,
+      now,
+      patch,
+      changesStart(current, patch),
+    );
     if (!updated) {
       // условие фильтра не выполнено между чтением и записью: причину — по свежему документу
       const fresh = await this.ownRide(userId, id);
