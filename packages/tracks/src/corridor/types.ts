@@ -13,6 +13,7 @@ export const CORRIDOR_REJECTIONS = [
   'gps_gap',
   'off_corridor',
   'outside_window',
+  'sparse_recording',
 ] as const;
 export type CorridorRejection = (typeof CORRIDOR_REJECTIONS)[number];
 

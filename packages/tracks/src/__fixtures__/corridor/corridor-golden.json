@@ -173,8 +173,8 @@
         "elapsedMs": 796044,
         "elapsedSec": 796,
         "distanceM": 7999,
-        "offCorridorM": 42,
-        "offCorridorShare": 0.005250656332041505,
+        "offCorridorM": 52,
+        "offCorridorShare": 0.006500812601575197,
         "maxExcursionM": 42,
         "coverage": 1,
         "noisePoints": 5
@@ -356,7 +356,7 @@
         "finishedAt": "2026-06-14T06:13:24.500Z",
         "elapsedMs": 790000,
         "elapsedSec": 790,
-        "distanceM": 7826,
+        "distanceM": 7900,
         "offCorridorM": 0,
         "offCorridorShare": 0,
         "maxExcursionM": 0,
@@ -379,7 +379,7 @@
         "finishedAt": "2026-06-14T06:12:04.050Z",
         "elapsedMs": 711000,
         "elapsedSec": 711,
-        "distanceM": 7724,
+        "distanceM": 7900,
         "offCorridorM": 0,
         "offCorridorShare": 0,
         "maxExcursionM": 0,
@@ -391,6 +391,29 @@
       "diagnostics": {
         "corridorLengthM": 8000,
         "declaredDistanceM": 8000
+      }
+    },
+    "sparse-winding-30s.gpx": {
+      "engineVersion": 1,
+      "verdict": "rejected",
+      "reasons": ["sparse_recording"],
+      "segment": {
+        "startedAt": "2026-06-14T06:00:15.880Z",
+        "finishedAt": "2026-06-14T06:11:37.859Z",
+        "elapsedMs": 681979,
+        "elapsedSec": 682,
+        "distanceM": 5958,
+        "offCorridorM": 311,
+        "offCorridorShare": 0.05219872440416247,
+        "maxExcursionM": 15,
+        "coverage": 1,
+        "noisePoints": 0
+      },
+      "touchedCorridor": true,
+      "candidates": 1,
+      "diagnostics": {
+        "corridorLengthM": 6902,
+        "declaredDistanceM": 6931
       }
     },
     "stop-80pct.gpx": {

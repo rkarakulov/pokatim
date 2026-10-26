@@ -400,24 +400,56 @@ for (const [name, centers] of [
   );
 }
 
+// Редкая запись (решение автора 2026-10-27): недобранный путь хорды — сход на каждом шаге. Прямая 8 км раз в
+// 30–60 с — засчитана (хорда = путь); извилистая дорога раз в 30 с — `sparse_recording`.
+const STRAIGHT = {
+  line: [
+    [0, 0],
+    [8000, 0],
+  ] as Xy[],
+  isLoop: false,
+};
 {
-  const samples = sampleRide(A_PATH, { speed: 10, intervalS: 30 });
+  const path: Xy[] = [
+    [-LEAD_IN_M, 0],
+    [8800, 0],
+  ];
+  const samples = sampleRide(path, { speed: 10, intervalS: 30 });
   emit(
     'sparse-30s.gpx',
     samples,
-    A,
-    counted(A.line, samples, v10, A_START, A_FINISH, { toleranceSec: 5 }),
+    STRAIGHT,
+    counted(STRAIGHT.line, samples, [[length(path), 10]], A_START, A_FINISH, { toleranceSec: 5 }),
   );
 }
 {
-  const path: Xy[] = [...A_PATH.slice(0, -1), [3000, 5800]];
+  const path: Xy[] = [
+    [-LEAD_IN_M, 0],
+    [9000, 0],
+  ];
   const speed = 40 / 3.6;
   const samples = sampleRide(path, { speed, intervalS: 60 });
   emit(
     'sparse-60s.gpx',
     samples,
-    A,
-    counted(A.line, samples, [[length(path), speed]], A_START, A_FINISH, { toleranceSec: 5 }),
+    STRAIGHT,
+    counted(STRAIGHT.line, samples, [[length(path), speed]], A_START, A_FINISH, {
+      toleranceSec: 5,
+    }),
+  );
+}
+{
+  // y = 25·sin(x/30): путь на ≈ 17 % длиннее хорды 300 м, хорды остаются в коридоре ±50 м
+  const winding = steps(0, 6000, 5).map((x): Xy => [x, 25 * Math.sin(x / 30)]);
+  const samples = sampleRide([[-LEAD_IN_M, 0], ...winding, [6200, 25 * Math.sin(200)]], {
+    speed: 10,
+    intervalS: 30,
+  });
+  emit(
+    'sparse-winding-30s.gpx',
+    samples,
+    { line: winding, isLoop: false },
+    rejected(['sparse_recording']),
   );
 }
 

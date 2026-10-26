@@ -1,7 +1,7 @@
 import { localProjection } from '../geo.ts';
 import type { ParsedPoint } from '../track.ts';
 import { CORRIDOR_ENGINE_VERSION, CORRIDOR_POLICY } from './policy.ts';
-import { corridorDistance } from './prepare.ts';
+import { chordOutsideM } from './prepare.ts';
 import { projectTrack, type ProjectedTrack } from './project.ts';
 import type {
   CorridorMatch,
@@ -36,6 +36,8 @@ interface Scan {
   /** неокруглённые метры: пороги A6 сравниваются по ним, в результат — целые */
   distanceM: number;
   offCorridorM: number;
+  /** часть схода — недобранный путь хорд (редкая запись), а не точки или хорды вне коридора */
+  shortfallM: number;
   maxExcursionM: number;
   maxMissedRun: number;
   maxGapRun: number;
@@ -104,32 +106,6 @@ export function matchCorridor(
   return result('rejected', bestRejected!.reasons, bestRejected!.segment);
 }
 
-/** k-я порядковая статистика первых `count` значений (быстрый выбор, детерминированный опорный — середина). */
-function select(values: Float64Array, count: number, k: number): number {
-  let lo = 0;
-  let hi = count - 1;
-  while (lo < hi) {
-    const pivot = values[(lo + hi) >> 1]!;
-    let i = lo;
-    let j = hi;
-    while (i <= j) {
-      while (values[i]! < pivot) i += 1;
-      while (values[j]! > pivot) j -= 1;
-      if (i <= j) {
-        const swap = values[i]!;
-        values[i] = values[j]!;
-        values[j] = swap;
-        i += 1;
-        j -= 1;
-      }
-    }
-    if (k <= j) hi = j;
-    else if (k >= i) lo = i;
-    else return values[k]!;
-  }
-  return values[k]!;
-}
-
 class Engine {
   private readonly cells: Uint8Array;
   private readonly inStart: Uint8Array;
@@ -146,12 +122,12 @@ class Engine {
   private wholeTrackWrong: boolean | undefined;
   private readonly corridor: PreparedCorridor;
   private readonly track: ProjectedTrack;
-  /** буферы запроса сетки для точек хорды аномального шага */
+  /** буферы запроса сетки и интервалов пересечения хорды с коридором */
   private readonly gridOut: Int32Array;
   private readonly gridStamp: Int32Array;
   private gridMark = 0;
-  /** интервалы шагов в движении — медиана сегмента (буфер) */
-  private readonly movingIntervals: Float64Array;
+  private readonly lows: Float64Array;
+  private readonly highs: Float64Array;
 
   // без параметров-свойств: вход `parse` грузится Node со стиранием типов (только стираемый синтаксис)
   constructor(corridor: PreparedCorridor, track: ProjectedTrack) {
@@ -182,7 +158,8 @@ class Engine {
     const segments = corridor.lon.length - 1;
     this.gridOut = new Int32Array(segments);
     this.gridStamp = new Int32Array(segments);
-    this.movingIntervals = new Float64Array(Math.max(0, n - 1));
+    this.lows = new Float64Array(segments);
+    this.highs = new Float64Array(segments);
   }
 
   /** Выходы из ворот старта вперёд по маршруту; подряд в пределах 60 с — последний; не больше 20. */
@@ -271,7 +248,9 @@ class Engine {
       scan.offCorridorM > policy.maxOffCorridorShare * scan.distanceM + tolerance ||
       scan.maxExcursionM > policy.maxExcursionM + tolerance
     ) {
-      reasons.push('off_corridor');
+      // сход главным образом из-за недобранного пути хорд — «запись слишком редкая»
+      const sparse = scan.shortfallM > scan.offCorridorM - scan.shortfallM;
+      reasons.push(sparse ? 'sparse_recording' : 'off_corridor');
     }
     if (start.timeMs < window.startsAt.getTime() || finish.timeMs >= window.closesAt.getTime()) {
       reasons.push('outside_window');
@@ -346,7 +325,11 @@ class Engine {
     }
 
     const runs = this.runs();
-    const { distanceM, offCorridorM, maxExcursionM } = this.offCorridor(start, endIndex, endU);
+    const { distanceM, offCorridorM, maxExcursionM, shortfallM } = this.offCorridor(
+      start,
+      endIndex,
+      endU,
+    );
     return {
       finish,
       lastEarlyEntry,
@@ -357,6 +340,7 @@ class Engine {
       directionAbs: this.directionAbs,
       distanceM,
       offCorridorM,
+      shortfallM,
       maxExcursionM,
       maxMissedRun: runs.missed,
       maxGapRun: runs.gap,
@@ -426,18 +410,20 @@ class Engine {
   /**
    * Длина трека и сход на сегменте: шаги от выхода из ворот старта (доля `start.u`) до точки `endIndex` (последний
    * шаг — до доли `endU`; < 1 — вход в ворота финиша). Шаг целиком снаружи — весь, одна точка снаружи — половина;
-   * выход завершается точкой внутри; момент ворот — точка коридора. Аномально долгий шаг «внутри → внутри» —
-   * отдельный выход: больше из превышения `Δs` над хордой и части хорды вне коридора (удалённые точки на срезке).
+   * выход завершается точкой внутри; момент ворот — точка коридора. Шаг «внутри → внутри» — отдельный выход:
+   * больше из части хорды вне коридора (точно) и недобранного пути `Δs − хорда` сверх допуска
+   * (`chordToleranceM + chordToleranceShare · хорда`) — на каждом шаге, от частоты записи и Δt не зависит.
    */
   private offCorridor(
     start: Crossing,
     endIndex: number,
     endU: number,
-  ): { distanceM: number; offCorridorM: number; maxExcursionM: number } {
+  ): { distanceM: number; offCorridorM: number; maxExcursionM: number; shortfallM: number } {
     const { track } = this;
-    const anomalousMs = this.anomalousStepMs(start.index, endIndex);
+    const policy = CORRIDOR_POLICY;
     let distanceM = 0;
     let offCorridorM = 0;
+    let shortfallM = 0;
     let excursion = 0;
     let maxExcursionM = 0;
     for (let k = start.index + 1; k <= endIndex; k += 1) {
@@ -445,14 +431,26 @@ class Engine {
       const atEnd = k === endIndex && endU < 1;
       const to = atEnd ? endU : 1;
       const share = Math.max(0, to - from);
-      const length = track.step[k - 1]! * share;
+      const chord = track.step[k - 1]!;
+      const length = chord * share;
       distanceM += length;
       const fromInside = k - 1 === start.index || track.inside[k - 1] === 1;
       const toInside = atEnd || track.inside[k] === 1;
       const outside = (fromInside ? 0 : 1) + (toInside ? 0 : 1);
       let off = outside === 2 ? length : outside === 1 ? length / 2 : 0;
-      if (outside === 0 && track.time[k]! - track.time[k - 1]! > anomalousMs) {
-        off = this.hiddenExcursion(k - 1) * share;
+      if (outside === 0 && chord <= policy.gapMaxM && share > 0) {
+        // точка хорды не дальше половины хорды от конца, конец — не дальше d от маршрута: короткая хорда внутри
+        const nearest = Math.max(track.d[k - 1]!, track.d[k]!);
+        // крайние шаги — только часть хорды между моментом ворот и точкой
+        const geometric =
+          chord / 2 + nearest <= this.corridor.widthM ? 0 : this.chordOutside(k - 1, from, to);
+        let shortfall = 0;
+        if (this.interpolable(k - 1, k - 1 === start.index)) {
+          const tolerance = policy.chordToleranceM + policy.chordToleranceShare * chord;
+          shortfall = Math.max(0, track.s[k]! - track.s[k - 1]! - chord - tolerance);
+        }
+        off = Math.max(geometric, shortfall * share);
+        if (shortfall * share > geometric) shortfallM += off;
       }
       if (off > 0) {
         offCorridorM += off;
@@ -461,55 +459,29 @@ class Engine {
       }
       if (toInside) excursion = 0;
     }
-    return { distanceM, offCorridorM, maxExcursionM };
+    return { distanceM, offCorridorM, maxExcursionM, shortfallM };
   }
 
   /**
-   * Порог аномального шага: `max(factor × медиана интервала, minS)`, медиана — по шагам в движении (≥ 1 м/с) самого
-   * сегмента: стоянка и запись вне сегмента с другой частотой порог не сдвигают.
+   * Часть хорды шага [k, k + 1] между долями `from` и `to` вне коридора, м — точно: пересечение отрезка с буферами
+   * отрезков маршрута.
    */
-  private anomalousStepMs(from: number, to: number): number {
-    const { track } = this;
-    let count = 0;
-    for (let k = from; k < to; k += 1) {
-      const dt = track.time[k + 1]! - track.time[k]!;
-      if (dt > 0 && track.step[k]! >= dt / 1000) {
-        this.movingIntervals[count] = dt;
-        count += 1;
-      }
-    }
-    const median = count > 0 ? select(this.movingIntervals, count, count >> 1) : 0;
-    return Math.max(
-      CORRIDOR_POLICY.anomalousStepFactor * median,
-      CORRIDOR_POLICY.anomalousStepMinS * 1000,
+  private chordOutside(k: number, from: number, to: number): number {
+    const a = this.track.points[k]!;
+    const b = this.track.points[k + 1]!;
+    this.gridMark += 1;
+    return chordOutsideM(
+      this.corridor,
+      a.lon + (b.lon - a.lon) * from,
+      a.lat + (b.lat - a.lat) * from,
+      a.lon + (b.lon - a.lon) * to,
+      a.lat + (b.lat - a.lat) * to,
+      this.gridOut,
+      this.gridStamp,
+      this.gridMark,
+      this.lows,
+      this.highs,
     );
-  }
-
-  /** Аномальный шаг по маршруту: больше из превышения `Δs` над хордой и части хорды вне коридора, м. */
-  private hiddenExcursion(k: number): number {
-    const { track, corridor } = this;
-    if (!this.interpolable(k)) return 0;
-    const shortcut = Math.max(0, track.s[k + 1]! - track.s[k]! - track.step[k]!);
-    const a = track.points[k]!;
-    const b = track.points[k + 1]!;
-    const samples = Math.max(1, Math.ceil(track.step[k]! / CORRIDOR_POLICY.chordSampleM));
-    const radius = CORRIDOR_POLICY.searchRadius(corridor.widthM);
-    let outside = 0;
-    for (let i = 0; i < samples; i += 1) {
-      const u = (i + 0.5) / samples;
-      this.gridMark += 1;
-      const d = corridorDistance(
-        corridor,
-        a.lon + (b.lon - a.lon) * u,
-        a.lat + (b.lat - a.lat) * u,
-        radius,
-        this.gridOut,
-        this.gridStamp,
-        this.gridMark,
-      );
-      if (d > corridor.widthM) outside += track.step[k]! / samples;
-    }
-    return Math.max(shortcut, outside);
   }
 
   /** Обе точки шага [k, k + 1] вне ворот, а хорда (≤ gapMaxM) проходит сквозь круг. */

@@ -254,29 +254,120 @@ export function gridCandidates(
   return count;
 }
 
-/** Расстояние от точки до линии коридора в радиусе `radiusM`, м (`Infinity` — дальше). */
-export function corridorDistance(
+/**
+ * Длина части отрезка a → b вне коридора, м: точное пересечение отрезка с буферами («капсулами» радиуса `widthM`)
+ * отрезков маршрута рядом (сетка), объединение интервалов. Локальная проекция вокруг `a` (хорда ≤ 1 км).
+ */
+export function chordOutsideM(
   corridor: PreparedCorridor,
-  lon: number,
-  lat: number,
-  radiusM: number,
+  aLon: number,
+  aLat: number,
+  bLon: number,
+  bLat: number,
   out: Int32Array,
   stamp: Int32Array,
   mark: number,
+  lows: Float64Array,
+  highs: Float64Array,
 ): number {
-  const found = gridCandidates(corridor, lon, lat, radiusM, out, stamp, mark);
-  let best = Infinity;
+  const ky = corridor.ky;
+  const kx = ky * Math.cos((aLat * Math.PI) / 180);
+  const vx = (bLon - aLon) * kx;
+  const vy = (bLat - aLat) * ky;
+  const length2 = vx * vx + vy * vy;
+  if (length2 === 0) return 0;
+  const length = Math.sqrt(length2);
+  const w = corridor.widthM;
+  const found = gridCandidates(
+    corridor,
+    (aLon + bLon) / 2,
+    (aLat + bLat) / 2,
+    length / 2 + w,
+    out,
+    stamp,
+    mark,
+  );
+  let count = 0;
   for (let c = 0; c < found; c += 1) {
     const j = out[c]!;
-    const px = (lon - corridor.lon[j]!) * corridor.segKx[j]!;
-    const py = (lat - corridor.lat[j]!) * corridor.ky;
-    const dx = corridor.segDx[j]!;
-    const dy = corridor.segDy[j]!;
-    const raw = (px * dx + py * dy) / corridor.segLength2[j]!;
-    const t = raw < 0 ? 0 : raw > 1 ? 1 : raw;
-    best = Math.min(best, Math.hypot(px - t * dx, py - t * dy));
+    const cx = (corridor.lon[j]! - aLon) * kx;
+    const cy = (corridor.lat[j]! - aLat) * ky;
+    const dx = (corridor.lon[j + 1]! - aLon) * kx;
+    const dy = (corridor.lat[j + 1]! - aLat) * ky;
+    let lo = Infinity;
+    let hi = -Infinity;
+    // круги вокруг концов отрезка: |u·v − P|² ≤ w²
+    for (const [px, py] of [
+      [cx, cy],
+      [dx, dy],
+    ] as const) {
+      const half = (vx * px + vy * py) / length2;
+      const disc = half * half - (px * px + py * py - w * w) / length2;
+      if (disc < 0) continue;
+      const root = Math.sqrt(disc);
+      lo = Math.min(lo, half - root);
+      hi = Math.max(hi, half + root);
+    }
+    // полоса вдоль отрезка: проекция в [0, L], поперечное смещение в [−w, w]
+    const ex = dx - cx;
+    const ey = dy - cy;
+    const segment = Math.hypot(ex, ey);
+    if (segment > 0) {
+      const ux = ex / segment;
+      const uy = ey / segment;
+      let from = -Infinity;
+      let to = Infinity;
+      const clip = (base: number, slope: number, min: number, max: number) => {
+        if (slope === 0) {
+          if (base < min || base > max) {
+            from = Infinity;
+            to = -Infinity;
+          }
+          return;
+        }
+        const u0 = (min - base) / slope;
+        const u1 = (max - base) / slope;
+        from = Math.max(from, Math.min(u0, u1));
+        to = Math.min(to, Math.max(u0, u1));
+      };
+      clip(-(cx * ux + cy * uy), vx * ux + vy * uy, 0, segment);
+      clip(-(cx * -uy + cy * ux), vx * -uy + vy * ux, -w, w);
+      if (from <= to) {
+        lo = Math.min(lo, from);
+        hi = Math.max(hi, to);
+      }
+    }
+    lo = Math.max(0, lo);
+    hi = Math.min(1, hi);
+    if (lo < hi) {
+      lows[count] = lo;
+      highs[count] = hi;
+      count += 1;
+    }
   }
-  return best <= radiusM ? best : Infinity;
+  // объединение интервалов (вставками по началу; кандидатов немного)
+  for (let i = 1; i < count; i += 1) {
+    const lo = lows[i]!;
+    const hi = highs[i]!;
+    let at = i;
+    while (at > 0 && lows[at - 1]! > lo) {
+      lows[at] = lows[at - 1]!;
+      highs[at] = highs[at - 1]!;
+      at -= 1;
+    }
+    lows[at] = lo;
+    highs[at] = hi;
+  }
+  let covered = 0;
+  let reach = 0;
+  for (let i = 0; i < count; i += 1) {
+    const lo = Math.max(lows[i]!, reach);
+    if (highs[i]! > lo) {
+      covered += highs[i]! - lo;
+      reach = highs[i]!;
+    }
+  }
+  return Math.max(0, length * (1 - covered));
 }
 
 function lowerBound(values: Float64Array, target: number): number {

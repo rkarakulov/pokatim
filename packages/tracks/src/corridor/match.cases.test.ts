@@ -124,7 +124,7 @@ describe('ворота', () => {
     expect(Math.abs(result.segment!.elapsedSec - (5880 - 100) / 8)).toBeLessThanOrEqual(1);
   });
 
-  it('редкая запись (30 с) на петле: два круга — два сегмента, засчитан круг, не сумма', () => {
+  it('редкая запись (15 с, шаг 150 м > 2R) на петле: два круга — два сегмента, засчитан круг, не сумма', () => {
     const LOOP: Xy[] = [
       [0, 0],
       [0, 1000],
@@ -134,7 +134,7 @@ describe('ворота', () => {
     ];
     const corridor = prepareCorridor(corridorOf(LOOP, { isLoop: true }));
     const result = brief(
-      ride([[0, -95], ...LOOP, ...LOOP.slice(1), [-95, 0]], { speed: 10, intervalS: 30 }),
+      ride([[0, -95], ...LOOP, ...LOOP.slice(1), [-95, 0]], { speed: 10, intervalS: 15 }),
       corridor,
     );
     expect(result.reasons).toEqual([]);
@@ -338,5 +338,99 @@ describe('выбросы и коридор', () => {
       prepareCorridor({ line, widthM: 50, isLoop: true, distanceM: 20 * 19_999 }),
     ).toThrow(/too dense/);
     expect(performance.now() - startedAt).toBeLessThan(1000);
+  });
+});
+
+// Ревью pass 3 и решение автора 2026-10-27: недобранный путь хорды — сход на каждом шаге, без частоты записи.
+describe('недобранный путь и выход по хорде', () => {
+  const route50: Xy[] = [
+    [0, 0],
+    [10_000, 0],
+    [10_000, 10_000],
+    [40_000, 10_000],
+  ];
+  const corridor50 = prepareCorridor(corridorOf(route50));
+  /** 1 Гц по маршруту, кроме одного шага from → to за `cutS` секунд; `keep` — какие точки оставить. */
+  const cutRide = (from: Xy, to: Xy, cutS: number, keep: (i: number) => boolean = () => true) => {
+    const before = steps(-95, from[0] - 5, 10).map((x): Xy => [x, 0]);
+    const after = [
+      ...steps(Math.ceil((to[1] + 5) / 10) * 10 - 5, 9995, 10).map((y): Xy => [10_000, y]),
+      ...steps(10_005, 40_195, 10).map((x): Xy => [x, 10_000]),
+    ];
+    const positions = [...before, from, to, ...after];
+    const seconds = positions.map((_, i) => (i <= before.length ? i : i + cutS - 1));
+    const kept = positions
+      .map((position, i) => ({ position, second: seconds[i]! }))
+      .filter(({ position }, i) => keep(i) || position === from || position === to);
+    return timed(
+      kept.map(({ position }) => position),
+      kept.map(({ second }) => second),
+    );
+  };
+  /** Выход хорды (9650,0)→(10000,y) за ±50 м — аналитически: y > 50 и x < 9950. */
+  const exactOutside = (y: number) => (300 / 350 - 50 / y) * Math.hypot(350, y);
+
+  it('выход по хорде — геометрически точно по обе стороны порога 500 м', () => {
+    expect(exactOutside(551)).toBeGreaterThan(500.2);
+    expect(exactOutside(550.5)).toBeLessThan(499.95);
+    const over = brief(cutRide([9650, 0], [10_000, 551], 100), corridor50);
+    expect(over.reasons).toEqual(['off_corridor']);
+    expect(over.segment!.maxExcursionM).toBe(Math.round(exactOutside(551)));
+    const under = brief(cutRide([9650, 0], [10_000, 550.5], 100), corridor50);
+    expect(under.reasons).toEqual([]);
+    expect(under.segment!.maxExcursionM).toBe(Math.round(exactOutside(550.5)));
+  });
+
+  it('прореживание записи внутри гонки (интервалы 1/8/8 с) не скрывает срезку', () => {
+    const full = brief(cutRide([9350, 0], [10_000, 650], 40), corridor50);
+    expect(full.reasons).toEqual(['off_corridor']);
+    const thinned = brief(
+      cutRide([9350, 0], [10_000, 650], 40, (i) => i % 17 === 0 || i % 17 === 1 || i % 17 === 9),
+      corridor50,
+    );
+    expect(thinned.reasons).toEqual(['off_corridor']);
+  });
+
+  it('автопауза: шаг через остановку (те же координаты, 10 мин) не даёт схода', () => {
+    const line: Xy[] = [
+      [0, 0],
+      [3000, 0],
+      [3000, 3000],
+    ];
+    const corridor = prepareCorridor(corridorOf(line));
+    const moving = ride([[-95, 0], ...line.slice(1), [3000, 3200]], { speed: 10 });
+    const paused = moving.map((point, i) =>
+      i <= 400 ? point : { ...point, time: new Date(point.time!.getTime() + 600_000) },
+    );
+    const plain = brief(moving, corridor);
+    const stop = brief(paused, corridor);
+    expect(stop.reasons).toEqual([]);
+    expect(stop.segment!.offCorridorM).toBe(plain.segment!.offCorridorM);
+    expect(stop.segment!.elapsedSec).toBe(plain.segment!.elapsedSec + 600);
+  });
+
+  /** Извилистая дорога y = 25·sin(x/30), коридор ±50 м: хорды между редкими точками остаются в коридоре. */
+  it('редкая запись на извилистом маршруте — sparse_recording; раз в 1 с и прямая раз в 60 с — засчитаны', () => {
+    const winding: Xy[] = steps(0, 6000, 5).map((x): Xy => [x, 25 * Math.sin(x / 30)]);
+    const corridor = prepareCorridor(corridorOf(winding));
+    const path: Xy[] = [[-95, 0], ...winding, [6200, 25 * Math.sin(200)]];
+    expect(brief(ride(path, { speed: 10 }), corridor).reasons).toEqual([]);
+    expect(brief(ride(path, { speed: 10, intervalS: 30 }), corridor).reasons).toEqual([
+      'sparse_recording',
+    ]);
+    const straight = prepareCorridor(
+      corridorOf([
+        [0, 0],
+        [6000, 0],
+      ]),
+    );
+    const sparse = ride(
+      [
+        [-95, 0],
+        [6700, 0],
+      ],
+      { speed: 10, intervalS: 60 },
+    );
+    expect(brief(sparse, straight).reasons).toEqual([]);
   });
 });
