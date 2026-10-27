@@ -141,6 +141,13 @@ describe('карточка списка: варианты по теме (app-the
     expect(screen.getByText('86 км · набор 412 м · петля')).toBeOnTheScreen();
   });
 
+  it('tile (Хронометр, плотность regular) — плитки не вплотную: зазор s2', async () => {
+    await render(<RouteListCard route={route()} onPress={jest.fn()} />, {
+      wrapper: appThemeWrapper('chrono'),
+    });
+    expect(screen.getByRole('link')).toHaveStyle({ padding: space.s4, marginBottom: space.s2 });
+  });
+
   it('numeral (Типографика) — дистанция крупно, название, мета и шеврон; ссылка та же', async () => {
     await render(<RouteListCard route={route()} onPress={jest.fn()} />, {
       wrapper: appThemeWrapper('typography'),

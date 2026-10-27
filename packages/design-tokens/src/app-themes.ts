@@ -13,9 +13,12 @@ export type AppThemeId =
 export type AppColorScheme = 'system' | 'dark';
 /** Отступы карточек и строк списка. */
 export type AppDensity = 'regular' | 'comfortable';
-/** Плотность → отступы (px из `space`): внутренний отступ карточки списка и зазор между карточками. */
+/**
+ * Плотность → отступы (px из `space`): внутренний отступ карточки списка и зазор между карточками-плитками (вариант
+ * `tile`; строки «Классики» разделены hairline и зазора не берут).
+ */
 export const appDensity: Readonly<Record<AppDensity, { cardPadding: number; listGap: number }>> = {
-  regular: { cardPadding: space.s4, listGap: 0 },
+  regular: { cardPadding: space.s4, listGap: space.s2 },
   comfortable: { cardPadding: space.s5, listGap: space.s3 },
 };
 /** Вес иконок `expo-symbols`. */

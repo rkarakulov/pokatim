@@ -235,8 +235,8 @@ describe('шесть тем слайса C', () => {
 });
 
 describe('плотность (appDensity)', () => {
-  it('regular — нынешний отступ без зазора; comfortable — крупнее и с зазором', () => {
-    expect(appDensity.regular).toEqual({ cardPadding: space.s4, listGap: 0 });
+  it('regular — нынешний отступ, узкий зазор плиток; comfortable — крупнее и шире', () => {
+    expect(appDensity.regular).toEqual({ cardPadding: space.s4, listGap: space.s2 });
     expect(appDensity.comfortable).toEqual({ cardPadding: space.s5, listGap: space.s3 });
   });
 });
