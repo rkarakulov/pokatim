@@ -470,6 +470,22 @@ export class IdentityRepository {
     return user !== null;
   }
 
+  /** Живые (не отозванные, не истёкшие) сессии пользователя из `sessionIds`. */
+  async findLiveSessionIds(
+    userId: string,
+    sessionIds: readonly string[],
+    now: Date,
+  ): Promise<Set<string>> {
+    if (sessionIds.length === 0) return new Set();
+    const docs = await this.c.sessions
+      .find(
+        { _id: { $in: [...sessionIds] }, userId, revokedAt: null, expiresAt: { $gt: now } },
+        { projection: { _id: 1 } },
+      )
+      .toArray();
+    return new Set(docs.map((doc) => doc._id));
+  }
+
   async insertSession(
     session: DbSession,
     doc: { id: string; userId: string; refreshTokenHash: string; createdAt: Date; expiresAt: Date },

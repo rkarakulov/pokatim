@@ -51,4 +51,12 @@ export class IdentityAccounts {
   liveUserIds(userIds: readonly string[]): Promise<Set<string>> {
     return this.repository.findLiveIds(userIds);
   }
+
+  /**
+   * Живые сессии пользователя из `sessionIds` (не отозваны выходом, сбросом пароля или reuse detection, не истекли) —
+   * push-токены `notifications` уходят только под живой сессией.
+   */
+  liveSessionIds(userId: string, sessionIds: readonly string[], now: Date): Promise<Set<string>> {
+    return this.repository.findLiveSessionIds(userId, sessionIds, now);
+  }
 }

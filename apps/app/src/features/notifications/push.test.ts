@@ -1,15 +1,47 @@
 /// <reference types="jest" />
 import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 
 import { pushTargetPath } from './notification-target';
-import { subscribePushResponses } from './push';
+import { requestPushPermission, subscribePushResponses } from './push';
 
 const RIDE = '0190a6f4-0000-7000-8000-000000000002';
 
 const response = (data: unknown) =>
   ({ notification: { request: { content: { data } } }, actionIdentifier: 'default' }) as never;
 
-afterEach(() => jest.clearAllMocks());
+afterEach(() => {
+  jest.clearAllMocks();
+  jest.restoreAllMocks();
+});
+
+const callOrder = (fn: jest.Mock | ((...args: never[]) => unknown)) =>
+  jest.mocked(fn).mock.invocationCallOrder[0];
+
+describe('requestPushPermission — канал Android до системного запроса (Android 13+)', () => {
+  it('Android: канал `default` создаётся до запроса разрешения', async () => {
+    jest.replaceProperty(Platform, 'OS', 'android');
+
+    await expect(requestPushPermission()).resolves.toEqual({
+      status: 'granted',
+      canAskAgain: true,
+    });
+
+    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith(
+      'default',
+      expect.objectContaining({ name: 'default' }),
+    );
+    expect(callOrder(Notifications.setNotificationChannelAsync)).toBeLessThan(
+      callOrder(Notifications.requestPermissionsAsync)!,
+    );
+  });
+
+  it('iOS: канала нет, только запрос', async () => {
+    await requestPushPermission();
+    expect(Notifications.setNotificationChannelAsync).not.toHaveBeenCalled();
+    expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('subscribePushResponses — нажатие на push (N10)', () => {
   it('холодный старт по push — цель последнего ответа, ответ гасится', () => {

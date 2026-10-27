@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 
 import { liveSession, signInForTest } from '@/__tests__/auth-fixtures';
 import { useSessionStore } from '@/features/auth/session-store';
@@ -27,7 +28,8 @@ const granted = { status: 'granted', canAskAgain: true } as Awaited<
 
 beforeEach(() => {
   signInForTest();
-  useSessionStore.setState({ session: liveSession });
+  // новый объект сессии — как новый вход: выход в прошлом тесте не закрывает регистрацию в этом
+  useSessionStore.setState({ session: { ...liveSession } });
   config.expoConfig.extra = { eas: { projectId: 'eas-project-id' } };
   getPermissions.mockResolvedValue(granted);
   register.mockResolvedValue(undefined);
@@ -35,8 +37,18 @@ beforeEach(() => {
 });
 afterEach(() => {
   jest.clearAllMocks();
+  jest.restoreAllMocks();
   jest.useRealTimers();
 });
+
+/** Ответ сервера, который тест отпускает сам (`release`). */
+function deferred() {
+  let release!: () => void;
+  const promise = new Promise<undefined>((resolve) => {
+    release = () => resolve(undefined);
+  });
+  return { promise, release };
+}
 
 describe('registerDevicePush (ADR-0017)', () => {
   it('разрешение есть и projectId задан — токен уходит на сервер и запоминается', async () => {
@@ -67,12 +79,102 @@ describe('registerDevicePush (ADR-0017)', () => {
     expect(register).not.toHaveBeenCalled();
   });
 
-  it('сбой сервера не бросает и токен не запоминается', async () => {
+  it('токен запоминается до запроса: сбой сервера не бросает, выход всё равно снимет токен', async () => {
     register.mockRejectedValue(new Error('network'));
     await expect(registerDevicePush()).resolves.toBeUndefined();
+    expect(await storedPushToken()).toBe(TOKEN);
+  });
+
+  it('Android: канал `default` создаётся до проверки разрешения и токена', async () => {
+    jest.replaceProperty(Platform, 'OS', 'android');
+    await registerDevicePush();
+
+    const channel = jest.mocked(Notifications.setNotificationChannelAsync);
+    expect(channel).toHaveBeenCalledWith('default', expect.objectContaining({ name: 'default' }));
+    expect(channel.mock.invocationCallOrder[0]).toBeLessThan(
+      getPermissions.mock.invocationCallOrder[0]!,
+    );
+    expect(register).toHaveBeenCalledWith(liveSession.accessToken, {
+      token: TOKEN,
+      platform: 'android',
+    });
+  });
+});
+
+describe('регистрация и выход одновременно (ADR-0017)', () => {
+  it('выход во время запроса регистрации ждёт её и снимает тот же токен', async () => {
+    const server = deferred();
+    register.mockReturnValue(server.promise);
+
+    const registering = registerDevicePush();
+    await waitForCall(register);
+    const revoking = revokeDevicePushToken();
+    // запрос регистрации ещё в полёте — снятия пока нет
+    await Promise.resolve();
+    expect(revoke).not.toHaveBeenCalled();
+
+    server.release();
+    await Promise.all([registering, revoking]);
+    expect(revoke).toHaveBeenCalledWith(liveSession.accessToken, { token: TOKEN });
+    expect(revoke.mock.invocationCallOrder[0]).toBeGreaterThan(
+      register.mock.invocationCallOrder[0]!,
+    );
+    expect(await storedPushToken()).toBeNull();
+  });
+
+  it('регистрация, ещё не дошедшая до сервера, при начавшемся выходе не стартует', async () => {
+    const token = deferred();
+    getToken.mockReturnValueOnce(
+      token.promise.then(() => ({ type: 'expo', data: TOKEN })) as ReturnType<typeof getToken>,
+    );
+
+    const registering = registerDevicePush();
+    await waitForCall(getToken);
+    const revoking = revokeDevicePushToken();
+    token.release();
+    await Promise.all([registering, revoking]);
+
+    expect(register).not.toHaveBeenCalled();
+    expect(await storedPushToken()).toBeNull();
+  });
+
+  it('после начала выхода новые регистрации не стартуют; после нового входа — снова', async () => {
+    await revokeDevicePushToken();
+    await registerDevicePush();
+    expect(getToken).not.toHaveBeenCalled();
+    expect(register).not.toHaveBeenCalled();
+
+    useSessionStore.setState({ session: { ...liveSession } });
+    await registerDevicePush();
+    expect(register).toHaveBeenCalledTimes(1);
+  });
+
+  it('регистрация зависла — выход ждёт не дольше таймаута и стирает токен', async () => {
+    const server = deferred();
+    register.mockReturnValue(server.promise);
+    const registering = registerDevicePush();
+    await waitForCall(register);
+    jest.useFakeTimers();
+
+    const revoking = revokeDevicePushToken();
+    await jest.advanceTimersByTimeAsync(REVOKE_TIMEOUT_MS);
+    await expect(revoking).resolves.toBeUndefined();
+    expect(revoke).not.toHaveBeenCalled();
+    expect(await storedPushToken()).toBeNull();
+    // ответ пришёл после выхода: токен не возвращается в хранилище
+    server.release();
+    await registering;
     expect(await storedPushToken()).toBeNull();
   });
 });
+
+/** Дождаться вызова мока (асинхронные шаги до него — SecureStore, разрешение). */
+async function waitForCall(fn: jest.Mock | ((...args: never[]) => unknown)) {
+  for (let i = 0; i < 50 && jest.mocked(fn).mock.calls.length === 0; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  expect(fn).toHaveBeenCalled();
+}
 
 describe('revokeDevicePushToken — выход снимает токен устройства', () => {
   it('токен был зарегистрирован — сервер снимает его, устройство забывает', async () => {

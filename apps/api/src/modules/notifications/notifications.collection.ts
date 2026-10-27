@@ -29,6 +29,8 @@ export interface PushDelivery {
   claimedUntil: Date | null;
   sentAt: Date | null;
   reason: string | null;
+  /** лимит 20/ч уже списан попыткой, упавшей на отправке: ретрай не списывает его снова */
+  limitCharged?: boolean;
 }
 
 /** Письмо — только событиям N2 (`ride_cancelled`, `dispute_decided`), иначе `null`. */
@@ -65,11 +67,16 @@ export interface NotificationSettingsDoc extends NotificationSettings {
   updatedAt: Date;
 }
 
-/** Push-токен устройства (Expo): уникален глобально (устройство одно — владелец переходит), ≤ 10 на пользователя. */
+/**
+ * Push-токен устройства (Expo): уникален глобально (устройство одно — владелец переходит), ≤ 10 на пользователя.
+ * `sessionId` — сессия, под которой токен зарегистрирован: push уходит, только пока она жива (выход, сброс пароля,
+ * отзыв, reuse detection — токен снимается при доставке). Токены, записанные до привязки, без поля — как мёртвые.
+ */
 export interface PushTokenDoc {
   _id: string;
   token: string;
   userId: string;
+  sessionId?: string;
   platform: PushPlatform;
   createdAt: Date;
   updatedAt: Date;

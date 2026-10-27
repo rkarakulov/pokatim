@@ -8,7 +8,7 @@ import { MongoTransactions, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, DAY, type Harness, MINUTE } from '../../../test/harness';
-import { bearer, call, type CallResult } from '../../../test/identity';
+import { bearer, call, type CallResult, collections } from '../../../test/identity';
 import {
   expoToken,
   NOTIFICATIONS,
@@ -290,6 +290,15 @@ describe('push-токены', () => {
     expect(docs).toHaveLength(1);
     expect(docs[0]).toMatchObject({ platform: 'android', updatedAt: h.clock.now() });
     expect(docs[0]?.createdAt.getTime()).toBe(h.clock.now().getTime() - MINUTE);
+  });
+
+  it('токен привязан к сессии запроса (доставка — только живым сессиям)', async () => {
+    const token = expoToken('bound');
+    await as(a, 'PUT', `${NOTIFICATIONS}/push-tokens`, { token, platform: 'ios' });
+    const session = await collections(h).sessions.findOne({ userId: a.userId });
+    expect(await notificationsDb(h).pushTokens.findOne({ token })).toMatchObject({
+      sessionId: session!._id,
+    });
   });
 
   it('тот же токен другим аккаунтом — переходит к нему (устройство одно)', async () => {

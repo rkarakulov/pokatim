@@ -37,7 +37,7 @@ export type PendingDelivery = Pick<NotificationDoc, '_id' | 'userId' | 'push' | 
 export type ClaimedPush = Pick<
   NotificationDoc,
   '_id' | 'group' | 'title' | 'body' | 'target' | 'createdAt'
->;
+> & { push: Pick<NotificationDoc['push'], 'limitCharged'> };
 export type ClaimedEmail = Pick<NotificationDoc, '_id' | 'userId' | 'title' | 'body'>;
 
 /** Позиция курсора списка: `(createdAt, _id)` последнего показанного. */
@@ -217,6 +217,7 @@ export class NotificationsRepository {
    */
   async registerToken(
     userId: string,
+    sessionId: string,
     token: string,
     platform: PushPlatform,
     now: Date,
@@ -226,7 +227,7 @@ export class NotificationsRepository {
       this.pushTokens.updateOne(
         { token },
         {
-          $set: { userId, platform, updatedAt: now },
+          $set: { userId, sessionId, platform, updatedAt: now },
           $setOnInsert: { _id: uuidv7(), token, createdAt: now },
         },
         { upsert: true },
@@ -305,7 +306,16 @@ export class NotificationsRepository {
     return this.notifications
       .find(
         { userId, 'push.state': 'sending', 'push.claimId': claimId },
-        { projection: { group: 1, title: 1, body: 1, target: 1, createdAt: 1 } },
+        {
+          projection: {
+            group: 1,
+            title: 1,
+            body: 1,
+            target: 1,
+            createdAt: 1,
+            'push.limitCharged': 1,
+          },
+        },
       )
       .sort({ createdAt: 1, _id: 1 })
       .toArray();
@@ -322,7 +332,7 @@ export class NotificationsRepository {
     outcome:
       | { state: 'sent'; sentAt: Date }
       | { state: 'skipped' | 'limited' | 'failed'; reason: string }
-      | { state: 'pending'; notBefore?: Date },
+      | { state: 'pending'; notBefore?: Date; limitCharged?: boolean },
   ): Promise<number> {
     const set: Record<string, unknown> = {
       'push.state': outcome.state,
@@ -332,6 +342,7 @@ export class NotificationsRepository {
     if (outcome.state === 'sent') set['push.sentAt'] = outcome.sentAt;
     if ('reason' in outcome) set['push.reason'] = outcome.reason;
     if (outcome.state === 'pending' && outcome.notBefore) set['push.notBefore'] = outcome.notBefore;
+    if (outcome.state === 'pending' && outcome.limitCharged) set['push.limitCharged'] = true;
     const result = await this.notifications.updateMany(
       {
         'push.claimId': claimId,
@@ -344,7 +355,8 @@ export class NotificationsRepository {
   }
 
   /**
-   * Захват письма уведомления (как `claimLinkSend`): `pending` или `sending` с истёкшим захватом → `sending`.
+   * Захват письма уведомления (как `claimLinkSend`): `pending` или `sending` с истёкшим захватом → `sending`;
+   * истёкшее (`expireAt ≤ now`, TTL ещё не убрал) не захватывается — как у push.
    * `busy` — живой чужой захват (ретрай задачи); `undefined` — письмо не нужно (нет, отправлено, пропущено).
    */
   async claimEmail(
@@ -355,6 +367,7 @@ export class NotificationsRepository {
     const doc = await this.notifications.findOneAndUpdate(
       {
         _id: id,
+        expireAt: { $gt: now },
         $or: [
           { 'email.state': 'pending' },
           { 'email.state': 'sending', 'email.claimedUntil': { $lte: now } },
@@ -387,7 +400,7 @@ export class NotificationsRepository {
   }
 
   /**
-   * Потерянные задачи push (регламент): `pending` со сроком раньше `pendingBefore` и `sending` с истёкшим захватом
+   * Потерянные задачи push (регламент, без истёкших по `expireAt`): `pending` со сроком раньше `pendingBefore` и `sending` с истёкшим захватом
    * (`notifications_push_due_idx`) — по одному на пользователя с его сроком (jobId задачи).
    */
   async stuckPush(
@@ -399,6 +412,7 @@ export class NotificationsRepository {
       .aggregate<{ _id: string; notBefore: Date }>([
         {
           $match: {
+            expireAt: { $gt: now },
             $or: [
               { 'push.state': 'pending', 'push.notBefore': { $lt: pendingBefore } },
               { 'push.state': 'sending', 'push.claimedUntil': { $lte: now } },
@@ -413,11 +427,15 @@ export class NotificationsRepository {
     return rows.map((row) => ({ userId: row._id, notBefore: row.notBefore }));
   }
 
-  /** Потерянные задачи писем (регламент): `pending`, созданные раньше `createdBefore`, и истёкший захват `sending`. */
+  /**
+   * Потерянные задачи писем (регламент, без истёкших по `expireAt`): `pending`, созданные раньше `createdBefore`, и
+   * истёкший захват `sending`.
+   */
   async stuckEmails(createdBefore: Date, now: Date, limit: number): Promise<string[]> {
     const docs = await this.notifications
       .find(
         {
+          expireAt: { $gt: now },
           $or: [
             { 'email.state': 'pending', createdAt: { $lt: createdBefore } },
             { 'email.state': 'sending', 'email.claimedUntil': { $lte: now } },
@@ -431,9 +449,9 @@ export class NotificationsRepository {
   }
 
   /** Токены устройств пользователя (для отправки; в логи не попадают). */
-  tokensOf(userId: string): Promise<Pick<PushTokenDoc, '_id' | 'token'>[]> {
+  tokensOf(userId: string): Promise<Pick<PushTokenDoc, '_id' | 'token' | 'sessionId'>[]> {
     return this.pushTokens
-      .find({ userId }, { projection: { _id: 1, token: 1 } })
+      .find({ userId }, { projection: { _id: 1, token: 1, sessionId: 1 } })
       .sort({ updatedAt: 1, _id: 1 })
       .toArray();
   }

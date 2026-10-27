@@ -314,6 +314,15 @@ Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров �
   в `docs/runbooks/push.md` и `infra/deploy/env.template`/`docker-compose.yml`. `docs/runbooks/deploy.md` не менялся:
   миграции применяются общим шагом `migrate`, отдельных действий 0024–0025 не требуют. Web-смоук (`e2e:web`,
   опционально при `E2E_API=1`) не добавлен.
+- **R1-1 (фиксы ревью pass 1, push-токен и сессия).** Токен привязан к сессии регистрации (`push_tokens.sessionId`
+  из `AuthGuard`); доставка шлёт только на токены живых сессий (`IdentityAccounts.liveSessionIds`, пачкой), остальные
+  снимает. Токены, записанные до привязки (dev), без `sessionId` — как мёртвые: снимаются при первой доставке,
+  приложение регистрирует заново при следующем запуске. Поле без индекса (фильтр — по `_id` сессий) — миграции нет.
+  `revokeAllOf` при сбросе пароля не добавлялся: мёртвую сессию отсекает доставка.
+- **R1-2 (фиксы ревью pass 1, приложение).** Токен запоминается локально до запроса регистрации (раньше — после
+  ответа): сбой регистрации оставляет запись, выход снимет токен (идемпотентный `204`). У `Chip` базы нет `disabled` —
+  ряд часов на время сохранения недоступен целиком (`aria-disabled`, `pointerEvents: 'none'`), без визуального
+  приглушения (токена прозрачности нет); `disabled` у `Chip` — follow-up в app-foundation.
 
 ## 8.3 Security checklist
 
@@ -873,3 +882,45 @@ total`. `EXPO_PUBLIC_API_URL=http://127.0.0.1:3000 pnpm --filter @pokatim/app bu
 
 **NOT VERIFIED.** Push на устройстве (нет EAS `projectId` и ключей APNs/FCM — runbook `push.md`), ручная проверка на
 симуляторе и в браузере (`start:web`), web-смоук `e2e:web`.
+
+### Фиксы ревью pass 1
+
+По `findings-codex-pass1.md` и `findings-claude-pass1.md`; отклонения — §8.2 R1-1, R1-2.
+
+- **[HIGH] Канал Android до разрешения.** `push.ts`: `ensureAndroidChannel()` — канал `default` до
+  `requestPermissionsAsync` («Включить push») и до проверки разрешения при регистрации. Тесты: `push.test.ts` (+2:
+  порядок вызовов на Android, iOS без канала), `push-registration.test.ts` (+1: канал до `getPermissionsAsync`).
+- **[HIGH] Настройки во время сохранения.** `settings/notifications.tsx`: все `Toggle` — `disabled` при
+  `update.isPending`, ряды часов — `aria-disabled` и без нажатий, `save` при pending — no-op. Тест
+  `__tests__/notifications.test.tsx` (+1: при pending тумблеры и чип недоступны, второе изменение не уходит).
+- **[HIGH] Гонка регистрации и выхода.** `push-registration.ts`: токен запоминается до запроса; регистрации в полёте —
+  в наборе, `revokeDevicePushToken` ждёт их и снимает сохранённый токен (общий таймаут 3 с), затем стирает запись;
+  после начала выхода регистрации под этой сессией не стартуют (новый вход — новая сессия). Тесты (+4): выход во время
+  запроса ждёт и снимает тот же токен; регистрация до сервера при начавшемся выходе не стартует; после выхода — нет,
+  после нового входа — да; зависшая регистрация — выход по таймауту, поздний ответ токен не возвращает.
+- **[MEDIUM] Токены после сброса пароля / отзыва сессий.** API: `sessionId` в `push_tokens` (регистрация —
+  `user.sessionId`), `IdentityAccounts.liveSessionIds(userId, ids, now)` + `IdentityRepository.findLiveSessionIds`,
+  `PushDelivery.liveTokensOf` — push только на токены живых сессий, мёртвые снимаются (лог
+  `notifications.token_session_ended`). Приложение: локальный выход по 401 (`applyAccessRefresh`, в т. ч.
+  `revalidateSession`) — `forgetPushToken()`. ADR-0017 п. 7, `pokatim-security.md`. Int-тесты (+3): токен привязан к
+  сессии запроса; сброс пароля → push не уходит, токен снят; отозванная сессия и сессия чужого пользователя — токены
+  сняты, push только на живой. `session-store.test.ts`: 401 → токен забыт.
+- **[MEDIUM] `expireAt` у писем.** `claimEmail`, `stuckEmails`, `stuckPush` — `expireAt > now`. Int-тест (+1:
+  `expireAt === now` — письмо не захватывается, регламент не перепоставляет ни письмо, ни push).
+- **[LOW] Лимит 20/ч на ретрае.** Сбой отправки (не последняя попытка) возвращает уведомления в `pending` с
+  `push.limitCharged: true`; ретрай, где все уведомления уже списаны, лимит не тратит. Int-тест (+1: три сбоя Expo на
+  20-м push — уходит, 21-й — `limited`).
+- **[LOW] Documentation Sync.** `docs/runbooks/deploy.md` — строка про `PUSH_ENABLED`/`EXPO_ACCESS_TOKEN` в `.env`
+  сервера.
+
+**Проверки.** `TURBO_CONCURRENCY=1 pnpm check` (`MONGO_URL_TEST=…:27117/pokatim_notifications_test`,
+`REDIS_URL_TEST=…:6479/14`) — зелёный: arch:check «no dependency violations found», api 119 files / 1269 tests, app
+1379 tests, `Tasks: 15 successful, 15 total`.
+
+**Follow-ups.**
+- `apps/api/.env.example`: добавить `PUSH_ENABLED=false`, `EXPO_ACCESS_TOKEN=`, `EXPO_PUSH_API_URL` с комментариями —
+  человеку (агентам чтение `.env*` запрещено).
+- [LOW claude] Схлопывание при одновременной первой вставке двух событий одного объекта — не исправлялось.
+- app-foundation: `disabled` у `Chip` `@rkarakulov/ui` (сейчас ряд часов блокируется обёрткой).
+- Зависшая регистрация (без ответа сервера) остаётся в наборе ожидания до ответа сети: следующий выход ждёт её до
+  таймаута 3 с.

@@ -27,7 +27,7 @@ import {
 } from '../src/modules/notifications/notifications.collection';
 import { NOTIFICATIONS_POLICY } from '../src/modules/notifications/notifications.policy';
 import { DAY, type Harness } from './harness';
-import { outboxEvents } from './identity';
+import { collections, outboxEvents } from './identity';
 
 export const NOTIFICATIONS = '/v1/notifications';
 
@@ -144,14 +144,27 @@ export function notificationsIntake(h: Harness) {
 export const notificationsOf = (h: Harness, userId: string) =>
   notificationsDb(h).notifications.find({ userId }).sort({ createdAt: -1, _id: -1 }).toArray();
 
-/** Push-токен устройства прямой вставкой (регистрацию по HTTP проверяет `notifications.int.test.ts`); id документа. */
-export async function seedPushToken(h: Harness, userId: string, suffix: string): Promise<string> {
+/**
+ * Push-токен устройства прямой вставкой (регистрацию по HTTP проверяет `notifications.int.test.ts`), привязан к
+ * сессии `sessionId` или последней сессии пользователя; id документа.
+ */
+export async function seedPushToken(
+  h: Harness,
+  userId: string,
+  suffix: string,
+  sessionId?: string,
+): Promise<string> {
   const now = h.clock.now();
   const _id = uuidv7();
+  // по умолчанию — последняя сессия пользователя (как регистрация из приложения под этой сессией)
+  const session = sessionId
+    ? { _id: sessionId }
+    : await collections(h).sessions.findOne({ userId }, { sort: { createdAt: -1 } });
   await notificationsDb(h).pushTokens.insertOne({
     _id,
     token: expoToken(suffix),
     userId,
+    sessionId: session?._id ?? uuidv7(),
     platform: 'ios',
     createdAt: now,
     updatedAt: now,

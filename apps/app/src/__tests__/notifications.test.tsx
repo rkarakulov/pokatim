@@ -311,6 +311,25 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     expect(screen.queryByRole('header', { name: 'Начало' })).toBeNull();
   });
 
+  it('пока идёт сохранение, тумблеры и часы недоступны — второе изменение не уходит (§4.12)', async () => {
+    updateSettings.mockImplementation(never);
+    await open('/settings/notifications');
+    const [racesPush] = await screen.findAllByRole('switch', { name: 'Push-уведомления' });
+
+    await fireEvent.press(racesPush!);
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })[0]).not.toBeChecked(),
+    );
+    for (const toggle of screen.getAllByRole('switch')) expect(toggle).toBeDisabled();
+    const [hour] = screen.getAllByRole('button', { name: '23:00' });
+    expect(hour).toBeDisabled();
+    await fireEvent.press(screen.getAllByRole('switch', { name: 'Письма на e-mail' })[0]!);
+    await fireEvent.press(hour!);
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+  });
+
   it('ошибка сохранения — баннер и прежнее значение', async () => {
     updateSettings.mockRejectedValue(new ApiNetworkError(new TypeError('Network request failed')));
     await open('/settings/notifications');

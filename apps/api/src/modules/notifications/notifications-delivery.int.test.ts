@@ -1,10 +1,19 @@
 import { Logger } from '@nestjs/common';
+import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { Worker } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type FakeExpo, notRegisteredReceipt, startFakeExpo } from '../../../test/fake-expo';
 import { createHarness, HOUR, type Harness, MINUTE } from '../../../test/harness';
-import { bearer, call, collections, gate } from '../../../test/identity';
+import {
+  bearer,
+  call,
+  collections,
+  confirmPasswordReset,
+  gate,
+  latestResetToken,
+  requestPasswordReset,
+} from '../../../test/identity';
 import {
   deliveryJobs,
   deliveryQueue,
@@ -294,6 +303,26 @@ describe('push', () => {
     expect(expo.delivered).toHaveLength(21);
   });
 
+  it('ретрай после сбоя Expo не списывает лимит повторно', async () => {
+    await seedPushToken(h, a.userId, 'a1');
+    for (let i = 0; i < 19; i += 1) {
+      await pendingPush(a.userId);
+      expect(await runPush(h, a.userId)).toBe('sent');
+      h.clock.advance(MINUTE);
+    }
+    // 20-й push: три сбоя Expo — лимит списан один раз, ретрай уходит
+    await pendingPush(a.userId);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      expo.fail('send', 503);
+      await expect(runPush(h, a.userId, attempt)).rejects.toThrow();
+    }
+    expect(await runPush(h, a.userId, 3)).toBe('sent');
+    expect(expo.delivered).toHaveLength(20);
+    // 21-й в том же часе — limited
+    await pendingPush(a.userId);
+    expect(await runPush(h, a.userId)).toBe('limited');
+  });
+
   it('нет токенов — skipped/no_tokens; удалённый аккаунт — skipped/deleted, без запроса к Expo', async () => {
     const noTokens = await pendingPush(a.userId);
     expect(await runPush(h, a.userId)).toBe('skipped');
@@ -323,6 +352,53 @@ describe('push', () => {
     expect(await notificationsDb(h).pushTickets.find().toArray()).toEqual([
       expect.objectContaining({ tokenId: alive }),
     ]);
+  });
+
+  it('сброс пароля отзывает сессии — push на токен прежней сессии не уходит, токен снят', async () => {
+    const token = await seedPushToken(h, a.userId, 'a1');
+    expect((await requestPasswordReset(h, 'a@example.by')).status).toBe(200);
+    const reset = await confirmPasswordReset(
+      h,
+      await latestResetToken(h, 'a@example.by'),
+      'brand-new-password',
+    );
+    expect(reset.status).toBe(200);
+    const doc = await pendingPush(a.userId);
+
+    expect(await runPush(h, a.userId)).toBe('skipped');
+    expect((await docOf(doc._id))?.push).toMatchObject({ state: 'skipped', reason: 'no_tokens' });
+    expect(await notificationsDb(h).pushTokens.countDocuments({ _id: token })).toBe(0);
+    expect(expo.calls).toHaveLength(0);
+  });
+
+  it('отозванная сессия — её токен снимается, push уходит только на токен живой сессии', async () => {
+    const [session] = await collections(h)
+      .sessions.find({ userId: a.userId })
+      .sort({ createdAt: -1 })
+      .toArray();
+    const alive = await seedPushToken(h, a.userId, 'a1');
+    const revoked = await seedPushToken(h, a.userId, 'a2', uuidv7());
+    await collections(h).sessions.insertOne({
+      ...session!,
+      _id: (await notificationsDb(h).pushTokens.findOne({ _id: revoked }))!.sessionId!,
+      refreshTokenHash: 'revoked-session-hash',
+      revokedAt: h.clock.now(),
+      revokedReason: 'signed_out',
+    });
+    const foreign = await seedPushToken(h, a.userId, 'a3', session!._id);
+    // сессия чужого пользователя под токеном a — не считается живой сессией a
+    await notificationsDb(h).pushTokens.updateOne(
+      { _id: foreign },
+      { $set: { sessionId: (await collections(h).sessions.findOne({ userId: b.userId }))!._id } },
+    );
+    await pendingPush(a.userId);
+
+    expect(await runPush(h, a.userId)).toBe('sent');
+    expect(expo.delivered.map((entry) => entry.message.to)).toEqual([expoToken('a1')]);
+    expect(await notificationsDb(h).pushTokens.countDocuments({ _id: alive })).toBe(1);
+    expect(
+      await notificationsDb(h).pushTokens.countDocuments({ _id: { $in: [revoked, foreign] } }),
+    ).toBe(0);
   });
 
   it('все тикеты с ошибкой — failed с кодом Expo', async () => {
@@ -507,5 +583,29 @@ describe('перепостановка (регламент)', () => {
     await pendingPush(a.userId, { expireAt: h.clock.now() });
     expect(await runPush(h, a.userId)).toBe('none');
     expect(expo.calls).toHaveLength(0);
+  });
+
+  it('истёкшее уведомление (expireAt = сейчас) — письмо не захватывается и не перепоставляется', async () => {
+    const expired = await seedNotification(h, a.userId, {
+      createdAt: new Date(h.clock.now().getTime() - 20 * MINUTE),
+      expireAt: h.clock.now(),
+      email: { state: 'pending', claimedUntil: null, sentAt: null },
+    });
+    await pendingPush(b.userId, {
+      expireAt: h.clock.now(),
+      push: {
+        state: 'pending',
+        notBefore: new Date(h.clock.now().getTime() - 20 * MINUTE),
+        claimId: null,
+        claimedUntil: null,
+        sentAt: null,
+        reason: null,
+      },
+    });
+
+    expect(await runRedeliver(h)).toEqual({ push: 0, email: 0 });
+    expect(await runEmail(h, expired._id)).toBe('skipped');
+    expect(h.mailer.sent).toHaveLength(0);
+    expect((await docOf(expired._id))?.email?.state).toBe('pending');
   });
 });

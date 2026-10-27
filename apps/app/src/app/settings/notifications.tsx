@@ -39,7 +39,8 @@ const GROUPS: readonly { id: PushGroup; email: EmailGroup | null }[] = [
 /**
  * «Настройки уведомлений» (N4, N6; вход — из центра и из «Профиля»): push по трём группам, e-mail — только у
  * «Споры» и «Райды» (события N2), тихие часы (вкл/выкл, начало и конец по часам Минска). Каждое изменение сразу
- * сохраняет полный объект (`PUT`); пока идёт запрос, видно новое значение, ошибка — баннер и прежнее значение.
+ * сохраняет полный объект (`PUT`); пока идёт запрос, видно новое значение, а тумблеры и часы недоступны (§4.12: два
+ * полных `PUT` подряд затёрли бы друг друга); ошибка — баннер и прежнее значение.
  */
 export default function NotificationSettingsScreen() {
   const shell = useSettingsShell();
@@ -94,7 +95,10 @@ function SettingsForm({ saved }: { saved: NotificationSettings }) {
   const update = useUpdateNotificationSettings();
   // пока запрос идёт — новое значение; ошибка — прежнее (кеш) и баннер
   const value = update.isPending && update.variables ? update.variables : saved;
-  const save = (next: NotificationSettings) => update.mutate(next);
+  const busy = update.isPending;
+  const save = (next: NotificationSettings) => {
+    if (!busy) update.mutate(next);
+  };
   const quiet = value.quietHours;
   const setQuiet = (patch: Partial<NotificationSettings['quietHours']>) =>
     save({ ...value, quietHours: { ...quiet, ...patch } });
@@ -116,6 +120,7 @@ function SettingsForm({ saved }: { saved: NotificationSettings }) {
           <Toggle
             label={t('notifications.settings.push')}
             value={value.push[group.id]}
+            disabled={busy}
             onChange={(on) => save({ ...value, push: { ...value.push, [group.id]: on } })}
           />
           {group.email ? (
@@ -123,6 +128,7 @@ function SettingsForm({ saved }: { saved: NotificationSettings }) {
               <Toggle
                 label={t('notifications.settings.email')}
                 value={value.email[group.email]}
+                disabled={busy}
                 onChange={(on) =>
                   save({ ...value, email: { ...value.email, [group.email as EmailGroup]: on } })
                 }
@@ -139,6 +145,7 @@ function SettingsForm({ saved }: { saved: NotificationSettings }) {
         <Toggle
           label={t('notifications.settings.quiet.toggle')}
           value={quiet.enabled}
+          disabled={busy}
           onChange={(enabled) => setQuiet({ enabled })}
         />
         <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
@@ -150,12 +157,14 @@ function SettingsForm({ saved }: { saved: NotificationSettings }) {
               label={t('notifications.settings.quiet.start')}
               selected={quiet.startHour}
               excluded={quiet.endHour}
+              disabled={busy}
               onSelect={(startHour) => setQuiet({ startHour })}
             />
             <HourPicker
               label={t('notifications.settings.quiet.end')}
               selected={quiet.endHour}
               excluded={quiet.startHour}
+              disabled={busy}
               onSelect={(endHour) => setQuiet({ endHour })}
             />
           </>
@@ -165,16 +174,21 @@ function SettingsForm({ saved }: { saved: NotificationSettings }) {
   );
 }
 
-/** Час начала или конца — ряд чипов 0–23; час другого края пропущен (начало ≠ концу). */
+/**
+ * Час начала или конца — ряд чипов 0–23; час другого края пропущен (начало ≠ концу). `disabled` — на время
+ * сохранения: у `Chip` базы нет `disabled`, поэтому ряд недоступен целиком (`aria-disabled`, без нажатий).
+ */
 function HourPicker({
   label,
   selected,
   excluded,
+  disabled,
   onSelect,
 }: {
   label: string;
   selected: number;
   excluded: number;
+  disabled: boolean;
   onSelect: (hour: number) => void;
 }) {
   const theme = useTheme();
@@ -187,14 +201,14 @@ function HourPicker({
         {label}
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.chips}>
+        <View aria-disabled={disabled} style={[styles.chips, disabled ? styles.disabled : null]}>
           {HOURS.filter((hour) => hour !== excluded).map((hour) => (
             <Chip
               key={hour}
               label={t('notifications.settings.quiet.hour', { hour })}
               selected={hour === selected}
               onPress={() => {
-                if (hour !== selected) onSelect(hour);
+                if (!disabled && hour !== selected) onSelect(hour);
               }}
             />
           ))}
@@ -212,4 +226,5 @@ const styles = StyleSheet.create({
   group: { gap: space.s2, paddingTop: space.s4, borderTopWidth: stroke.hairline },
   hours: { gap: space.s2 },
   chips: { flexDirection: 'row', gap: space.s2 },
+  disabled: { pointerEvents: 'none' },
 });

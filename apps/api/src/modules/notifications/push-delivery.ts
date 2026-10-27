@@ -23,7 +23,8 @@ export type PushOutcome = 'sent' | 'none' | 'deferred' | 'skipped' | 'limited' |
  * Push пользователя (`notifications.push`, ADR-0017 п. 4). Захват (`claimPush`) берёт все его уведомления к сроку —
  * повтор задачи и параллельная задача того же пользователя захватывают уже нечего (`none`). Затем — в момент отправки
  * (RC-13): `PUSH_ENABLED`, живой аккаунт (RC-4), тумблер группы, тихие часы (сейчас тихо — назад в `pending` до конца
- * интервала и задача на этот срок), токены, лимит 20/ч (после захвата: повтор лимит не тратит). Одно сообщение на
+ * интервала и задача на этот срок), токены живых сессий (токены мёртвых снимаются), лимит 20/ч (после захвата:
+ * повтор лимит не тратит; ретрай после сбоя отправки — тоже, `limitCharged`). Одно сообщение на
  * токен: одно уведомление — его текст и цель, несколько — сводка без цели (N7). Тикет `DeviceNotRegistered` снимает
  * токен сразу, остальные `ok` — в `push_tickets` (квитанции). Сбой отправки — захват снят, ретрай BullMQ; последняя
  * попытка — `failed`. Остаточный риск at-least-once: Expo принял, worker упал до записи `sent`. Токены в логи не
@@ -76,16 +77,20 @@ export class PushDelivery {
       await this.jobs.schedulePush(userId, quietEnd);
       return 'deferred';
     }
-    const tokens = await this.repository.tokensOf(userId);
+    const tokens = await this.liveTokensOf(userId, now);
     if (tokens.length === 0) {
       await skip('no_tokens');
       return 'skipped';
     }
-    const limited = await this.rateLimiter.consume(
-      `notifications-push:${userId}`,
-      NOTIFICATIONS_POLICY.pushLimit,
-      now,
-    );
+    // повтор после сбоя отправки лимит не списывает: его уже списала упавшая попытка
+    const charged = due.every((doc) => doc.push.limitCharged === true);
+    const limited = charged
+      ? { allowed: true as const }
+      : await this.rateLimiter.consume(
+          `notifications-push:${userId}`,
+          NOTIFICATIONS_POLICY.pushLimit,
+          now,
+        );
     if (!limited.allowed) {
       await this.repository.settlePush(claimId, null, { state: 'limited', reason: 'rate_limit' });
       this.logger.log(`notifications.push_limited uid=${userId} count=${due.length}`);
@@ -103,7 +108,7 @@ export class PushDelivery {
         await this.repository.settlePush(claimId, null, { state: 'failed', reason });
         this.logger.error(`notifications.push_failed uid=${userId} count=${due.length}`);
       } else {
-        await this.repository.settlePush(claimId, null, { state: 'pending' });
+        await this.repository.settlePush(claimId, null, { state: 'pending', limitCharged: true });
       }
       throw error;
     }
@@ -135,6 +140,25 @@ export class PushDelivery {
       `notifications.push uid=${userId} count=${due.length} tokens=${tokens.length} accepted=${accepted.length} unregistered=${removed}`,
     );
     return accepted.length > 0 ? 'sent' : 'failed';
+  }
+
+  /**
+   * Токены под живыми сессиями пользователя (порт identity, одной пачкой). Токены мёртвых сессий (выход, сброс
+   * пароля, отзыв, reuse detection) и записанные без сессии снимаются сразу.
+   */
+  private async liveTokensOf(userId: string, now: Date) {
+    const tokens = await this.repository.tokensOf(userId);
+    const sessionIds = [
+      ...new Set(tokens.flatMap((token) => (token.sessionId ? [token.sessionId] : []))),
+    ];
+    const live = await this.identity.liveSessionIds(userId, sessionIds, now);
+    const isLive = (token: (typeof tokens)[number]) =>
+      token.sessionId !== undefined && live.has(token.sessionId);
+    const dead = tokens.filter((token) => !isLive(token)).map((token) => token._id);
+    const removed = await this.repository.deleteTokens(dead);
+    if (removed > 0)
+      this.logger.log(`notifications.token_session_ended uid=${userId} count=${removed}`);
+    return tokens.filter(isLive);
   }
 }
 

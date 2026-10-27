@@ -21,11 +21,13 @@ export class PushTokensService {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  async register(userId: string, body: RegisterPushToken): Promise<void> {
+  /** Токен привязан к сессии запроса (`sessionId` из `AuthGuard`): push уходит, только пока она жива. */
+  async register(userId: string, sessionId: string, body: RegisterPushToken): Promise<void> {
     const now = this.clock.now();
     await this.limit(userId, now);
     await this.repository.registerToken(
       userId,
+      sessionId,
       body.token,
       body.platform,
       now,

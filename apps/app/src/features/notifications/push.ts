@@ -44,9 +44,22 @@ export async function getPushPermission(): Promise<PushPermissionState> {
   }
 }
 
-/** Системный запрос — только по нажатию «Включить push-уведомления» (N5). Не бросает. */
+/**
+ * Канал Android `default` (его указывает сервер). На Android 13+ системный запрос разрешения не показывается, пока
+ * у приложения нет ни одного канала, — поэтому канал создаётся до запроса и до проверки разрешения. Иначе — no-op.
+ */
+async function ensureAndroidChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL, {
+    name: ANDROID_CHANNEL,
+    importance: AndroidImportance.DEFAULT,
+  });
+}
+
+/** Системный запрос — только по нажатию «Включить push-уведомления» (N5); Android — после канала. Не бросает. */
 export async function requestPushPermission(): Promise<PushPermissionState> {
   try {
+    await ensureAndroidChannel();
     const result = await Notifications.requestPermissionsAsync();
     return { status: fromStatus(result.status), canAskAgain: result.canAskAgain };
   } catch {
@@ -72,7 +85,7 @@ function easProjectId(): string | null {
 
 /**
  * Токен Expo этого устройства — только при выданном разрешении, на устройстве (не симулятор) и с `projectId`;
- * иначе или при сбое — `null` (центр и колокольчик работают без push). Канал Android создаётся до токена.
+ * иначе или при сбое — `null` (центр и колокольчик работают без push). Канал Android создаётся до проверки разрешения.
  */
 export async function obtainPushToken(): Promise<DevicePushToken | null> {
   const projectId = easProjectId();
@@ -80,13 +93,8 @@ export async function obtainPushToken(): Promise<DevicePushToken | null> {
   const platform = Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : null;
   if (!platform) return null;
   try {
+    await ensureAndroidChannel();
     if ((await Notifications.getPermissionsAsync()).status !== 'granted') return null;
-    if (platform === 'android') {
-      await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL, {
-        name: ANDROID_CHANNEL,
-        importance: AndroidImportance.DEFAULT,
-      });
-    }
     const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
     return { token: data, platform };
   } catch {

@@ -79,7 +79,7 @@ export class NotificationsController {
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(RegisterPushToken, FieldErrorCode)) body: RegisterPushToken,
   ): Promise<void> {
-    return this.pushTokens.register(user.userId, body);
+    return this.pushTokens.register(user.userId, user.sessionId, body);
   }
 
   @Post('push-tokens/revoke')

@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
+import { useSessionStore } from '@/features/auth/session-store';
 import { api } from '@/lib/api';
 
 import { pushTargetPath } from './notification-target';
@@ -18,16 +19,35 @@ import { unreadCountKey } from './queries';
 /** Снятие токена при выходе не задерживает выход дольше этого (сеть, сервер). */
 export const REVOKE_TIMEOUT_MS = 3_000;
 
+/** Регистрации в полёте: выход дожидается их (в пределах таймаута), чтобы снять и их токен. */
+const inFlight = new Set<Promise<void>>();
+/** Сессия, выход из которой начат: под ней новые регистрации не стартуют (новый вход — другая сессия). */
+let closingSession: object | null = null;
+
+const closing = () => {
+  const session = useSessionStore.getState().session;
+  return session !== null && session === closingSession;
+};
+
 /**
  * Регистрация токена этого устройства (вход, запуск с сессией, выданное разрешение). Нет разрешения, `projectId`,
- * устройства или web — ничего не делает. Сбой не бросает: следующая попытка — при следующем входе или запуске.
+ * устройства или web — ничего не делает. Токен запоминается до запроса: выход, начавшийся во время запроса, снимет
+ * и его. После начала выхода не стартует. Сбой не бросает: следующая попытка — при следующем входе или запуске.
  */
-export async function registerDevicePush(): Promise<void> {
+export function registerDevicePush(): Promise<void> {
+  if (closing()) return Promise.resolve();
+  const run = registerToken().finally(() => inFlight.delete(run));
+  inFlight.add(run);
+  return run;
+}
+
+async function registerToken(): Promise<void> {
   const device = await obtainPushToken();
-  if (!device) return;
+  if (!device || closing()) return;
+  await rememberPushToken(device.token);
+  if (closing()) return;
   try {
     await withAccessToken((accessToken) => api.registerPushToken(accessToken, device));
-    await rememberPushToken(device.token);
   } catch {
     // сеть, 429, выход во время запроса — без push до следующей попытки
   }
@@ -35,15 +55,16 @@ export async function registerDevicePush(): Promise<void> {
 
 /**
  * Снять токен устройства до выхода (`useSignOut`, до `api.signOut`): следующий владелец устройства чужих push не
- * получит. Ошибка и таймаут выход не блокируют; локальная запись токена стирается всегда.
+ * получит. Новые регистрации под этой сессией не стартуют; начатые — дожидаются, и снимается их токен. Ошибка и
+ * таймаут (общий на ожидание и запрос) выход не блокируют; локальная запись токена стирается всегда. Поздняя запись
+ * на сервере после таймаута push не вернёт: токен привязан к сессии, а она отзывается выходом.
  */
 export async function revokeDevicePushToken(): Promise<void> {
-  const token = await storedPushToken();
-  if (!token) return;
+  closingSession = useSessionStore.getState().session;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      withAccessToken((accessToken) => api.revokePushToken(accessToken, { token })),
+      revokeStoredToken(),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, REVOKE_TIMEOUT_MS);
       }),
@@ -54,6 +75,13 @@ export async function revokeDevicePushToken(): Promise<void> {
     clearTimeout(timer);
     await forgetPushToken();
   }
+}
+
+async function revokeStoredToken(): Promise<void> {
+  await Promise.allSettled([...inFlight]);
+  const token = await storedPushToken();
+  if (!token) return;
+  await withAccessToken((accessToken) => api.revokePushToken(accessToken, { token }));
 }
 
 /**
