@@ -15,6 +15,7 @@ import { useRegistrationStore } from '@/features/auth/registration-store';
 import { takeReturnPath } from '@/features/auth/return-path';
 import { useReturnTarget } from '@/features/auth/return-target';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { usePushNotifications } from '@/features/notifications/push-registration';
 import { onboardingStep, useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { connectFocusManager } from '@/lib/focus-manager';
 import { connectOnlineManager } from '@/lib/online-manager';
@@ -85,6 +86,9 @@ export default function RootLayout() {
     router.replace(returnTarget.path as Href);
   }, [signedIn, step, returnTarget, router]);
 
+  // push (ADR-0016): токен устройства и нажатия на push — после входа и онбординга; web — no-op
+  usePushNotifications(signedIn && step === 'done', queryClient);
+
   useEffect(() => {
     // без шрифтов работаем на системных, но не молча
     if (fontError) console.warn(`Шрифты не загрузились: ${fontError.message}`);
@@ -136,6 +140,9 @@ export default function RootLayout() {
               <Stack.Screen name="settings/devices" />
               {/* «Профиль» (profile-rider-name, вход — иконка верхней панели): тот же гард и оболочка, что у «Устройств» */}
               <Stack.Screen name="settings/profile" />
+              {/* центр и настройки уведомлений (notifications): тот же гард и оболочка, что у «Профиля» */}
+              <Stack.Screen name="notifications" />
+              <Stack.Screen name="settings/notifications" />
               {/* кофе-райды (блок 05): форма, правка и отмена — только вошедшим, без таб-бара; гость — «Вход» */}
               <Stack.Screen name="rides/new" />
               <Stack.Screen name="rides/edit/[id]" />

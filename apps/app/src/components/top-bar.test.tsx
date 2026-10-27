@@ -43,4 +43,24 @@ describe('TopBar', () => {
     expect(openProfile).toHaveBeenCalledTimes(1);
     expect(openDevices).not.toHaveBeenCalled();
   });
+
+  it('колокольчик со счётчиком — первым справа (notifications)', async () => {
+    const openNotifications = jest.fn();
+    await render(
+      <TopBar
+        onOpenNotifications={openNotifications}
+        unreadCount={3}
+        onOpenDevices={jest.fn()}
+        onOpenProfile={jest.fn()}
+      />,
+    );
+
+    expect(screen.getAllByRole('button').map((button) => button.props.accessibilityLabel)).toEqual([
+      'Уведомления, 3 непрочитанных',
+      'Устройства',
+      'Профиль',
+    ]);
+    await fireEvent.press(screen.getByRole('button', { name: 'Уведомления, 3 непрочитанных' }));
+    expect(openNotifications).toHaveBeenCalledTimes(1);
+  });
 });
