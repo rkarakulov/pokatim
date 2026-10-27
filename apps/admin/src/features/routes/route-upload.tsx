@@ -1,5 +1,5 @@
 import { apiErrorOf, isNetworkError } from '@pokatim/api-client';
-import { type PanelRoute, ROUTE_FILE_MAX_BYTES } from '@pokatim/contracts';
+import { type PanelRoute, ROUTE_FILE_EXTENSIONS, ROUTE_FILE_MAX_BYTES } from '@pokatim/contracts';
 import { type MessageKey, t } from '@pokatim/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -23,6 +23,11 @@ function uploadErrorText(error: unknown): string {
   const key = UPLOAD_ERRORS[apiErrorOf(error)?.code ?? ''];
   return key ? t(key) : t('admin.saveFailed');
 }
+
+/** Фильтр окна выбора файла маршрута (`.gpx,.kml`); формат проверяет сервер по содержимому. */
+export const ROUTE_FILE_ACCEPT = ROUTE_FILE_EXTENSIONS.map((extension) => `.${extension}`).join(
+  ',',
+);
 
 /** Название по умолчанию — имя файла без расширения (Q4). */
 const titleOf = (file: File) => file.name.replace(/\.[^.]+$/, '').trim();
@@ -52,7 +57,7 @@ export interface RouteUpload {
 }
 
 /**
- * Загрузка GPX в панели (RC-15): окно «Новый маршрут» → `POST /v1/admin/routes` → опрос статуса каждые 2 с, пока
+ * Загрузка маршрута GPX или KML в панели (RC-15): окно «Новый маршрут» → `POST /v1/admin/routes` → опрос статуса каждые 2 с, пока
  * `processing`, не дольше 5 мин по часам — и при сплошных ошибках запросов. Готов — `onReady` один раз на загрузку;
  * готов или отказ — списки маршрутов (`ROUTES_QUERY_KEY`) обновляются. Используют «Эталонный коридор» гонки и экран
  * «Маршруты».

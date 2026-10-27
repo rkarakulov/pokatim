@@ -14,6 +14,7 @@ import { z } from 'zod';
 import type { Env } from '../../config/env';
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
+import { type UploadSlot, UploadSlots } from '../../upload-slots';
 import { rateLimitKeyForIp } from '../identity';
 import { regroupAfterDelete } from './activity-groups';
 import { TRACK_FILE_STORE, type TrackFileStore } from './track-file-store';
@@ -59,7 +60,10 @@ export function toTrackUpload(
 @Injectable()
 export class TrackUploadsService {
   private readonly logger = new Logger(TrackUploadsService.name);
-  private inFlight = 0;
+  private readonly slots = new UploadSlots({
+    maxTotal: TRACKS_POLICY.maxConcurrentUploads,
+    maxPerUser: TRACKS_POLICY.maxConcurrentUploadsPerUser,
+  });
 
   constructor(
     private readonly repository: TracksRepository,
@@ -82,8 +86,8 @@ export class TrackUploadsService {
     return parsed.data;
   }
 
-  /** Лимиты пользователя и IP (до чтения тела) и семафор приёмов; `release` — после ответа. */
-  async admit(userId: string, ip: string): Promise<{ release: () => void }> {
+  /** Лимиты пользователя и IP (до чтения тела) и слот приёма (процесс и пользователь); `release` — после ответа. */
+  async admit(userId: string, ip: string): Promise<UploadSlot> {
     const now = this.clock.now();
     await this.consume(`tracks-upload-user:${userId}`, TRACKS_POLICY.uploadUserLimit, now);
     await this.consume(
@@ -91,19 +95,12 @@ export class TrackUploadsService {
       TRACKS_POLICY.uploadIpLimit,
       now,
     );
-    if (this.inFlight >= TRACKS_POLICY.maxConcurrentUploads) {
+    const slot = this.slots.tryAcquire(userId);
+    if (!slot) {
       const details: RateLimitedDetails = { retryAfterSec: 5 };
       throw domainError('RATE_LIMITED', 429, details);
     }
-    this.inFlight += 1;
-    let released = false;
-    return {
-      release: () => {
-        if (released) return;
-        released = true;
-        this.inFlight -= 1;
-      },
-    };
+    return slot;
   }
 
   private async consume(key: string, rule: RateLimitRule, now: Date): Promise<void> {

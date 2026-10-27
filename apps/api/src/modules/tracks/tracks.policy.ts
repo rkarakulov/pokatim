@@ -1,6 +1,7 @@
 import { TRACK_FILE_MAX_BYTES, type TrackSource } from '@pokatim/contracts';
 
 import { DEFAULT_PARSE_LIMITS } from '../../parse-thread';
+import { DEFAULT_BODY_TIMEOUTS } from '../../raw-body';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -14,6 +15,10 @@ export const TRACKS_POLICY = {
   uploadIpLimit: { limit: 60, windowSec: 60 * 60 },
   /** Одновременных приёмов в процессе API (память): остальным — 429. */
   maxConcurrentUploads: 4,
+  /** Одновременных приёмов одного пользователя (upload-limits-kml-panel): второй — 429 до чтения тела. */
+  maxConcurrentUploadsPerUser: 1,
+  /** Тело загрузки: тишина и всё тело — `408` (общие таймауты `src/raw-body.ts`). */
+  bodyTimeouts: DEFAULT_BODY_TIMEOUTS,
   /** Кеш суммы хранимых байт (квота) в Redis. */
   usageCacheSec: 60,
   /** Разбор: память потока и время — общие лимиты `src/parse-thread.ts`. */

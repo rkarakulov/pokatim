@@ -61,13 +61,16 @@ export class RoutesMineController {
   ): Promise<MyRoute> {
     const slot = await this.routes.admit(user.userId, ip);
     try {
-      const bytes = await readLimited(body, ROUTE_POLICY.maxFileBytes, UPLOAD_ERRORS).catch(
-        (error: unknown) => {
-          // тело не дочитано — после ответа соединение закрывается
-          reply.header('Connection', 'close');
-          throw error;
-        },
-      );
+      const bytes = await readLimited(
+        body,
+        ROUTE_POLICY.maxFileBytes,
+        UPLOAD_ERRORS,
+        ROUTE_POLICY.bodyTimeouts,
+      ).catch((error: unknown) => {
+        // тело не дочитано — после ответа соединение закрывается
+        reply.header('Connection', 'close');
+        throw error;
+      });
       const result = await this.routes.upload(user.userId, query.title, bytes);
       reply.status(result.created ? 202 : 200);
       return result.route;

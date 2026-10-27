@@ -10,32 +10,60 @@ export interface RawBodyErrors {
   tooLarge: ErrorCode;
 }
 
+/** Таймауты чтения тела: тишина между порциями и всё тело. */
+export interface BodyTimeouts {
+  idleMs: number;
+  totalMs: number;
+}
+
+/**
+ * Таймауты тела загрузок по умолчанию (`[ASSUMPTION]` upload-limits-kml-panel §2): тишина 30 с, всё тело 180 с
+ * (16 МиБ заезда на 1 Мбит/с ≈ 135 с, 5 МиБ маршрута на 0,5 Мбит/с ≈ 80 с). Политики модулей ссылаются на них.
+ */
+export const DEFAULT_BODY_TIMEOUTS: BodyTimeouts = { idleMs: 30_000, totalMs: 180_000 };
+
+/** Тело не пришло вовремя — `408` без нового кода контракта. */
+const bodyTimedOut = () =>
+  domainError('VALIDATION_FAILED', 408, { fields: [{ path: 'body', code: 'INVALID' }] });
+
 /**
  * Тело загрузки — сырой поток (`application/octet-stream`, парсер `http-app.ts` передаёт его без чтения): читается
  * обработчиком после гарда и лимитов, с обрывом на лимите — `413` с кодом контракта (глобальный `bodyLimit` 64 КБ
- * остальных маршрутов не меняется). Другой тип содержимого — `415`. Общий для загрузок заездов и маршрутов.
+ * остальных маршрутов не меняется). Другой тип содержимого — `415`. Тишина дольше `idleMs` или всё тело дольше
+ * `totalMs` — `408` (медленная отправка не держит слот приёма). При отказе остаток тела сливается без хранения,
+ * обработчик отвечает с `Connection: close`. Общий для загрузок заездов и маршрутов.
  */
 export function readLimited(
   body: unknown,
   maxBytes: number,
   errors: RawBodyErrors,
+  timeouts: BodyTimeouts,
 ): Promise<Uint8Array> {
   if (!isReadable(body)) return Promise.reject(domainError(errors.unsupported, 415));
   return new Promise<Uint8Array>((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
+    const fail = (error: Error) => {
+      cleanup();
+      // не рвём соединение (клиент получил бы обрыв вместо ответа): остаток тела сливается без хранения, ответ
+      // уходит с `Connection: close`; обрыв клиента во время слива — без необработанной ошибки потока
+      body.on('error', () => undefined);
+      body.resume();
+      reject(error);
+    };
+    const timedOut = () => fail(bodyTimedOut());
+    const total = setTimeout(timedOut, timeouts.totalMs);
+    let idle = setTimeout(timedOut, timeouts.idleMs);
     const onData = (chunk: Buffer | string) => {
       const buffer = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
       size += buffer.byteLength;
       if (size > maxBytes) {
-        // не рвём соединение (клиент получил бы обрыв вместо 413): остаток тела сливается без хранения, ответ
-        // 413 уходит с `Connection: close`
-        cleanup();
-        body.resume();
-        reject(domainError(errors.tooLarge, 413));
+        fail(domainError(errors.tooLarge, 413));
         return;
       }
       chunks.push(buffer);
+      clearTimeout(idle);
+      idle = setTimeout(timedOut, timeouts.idleMs);
     };
     const onEnd = () => {
       cleanup();
@@ -46,6 +74,8 @@ export function readLimited(
       reject(error);
     };
     const cleanup = () => {
+      clearTimeout(total);
+      clearTimeout(idle);
       body.off('data', onData);
       body.off('end', onEnd);
       body.off('error', onError);
