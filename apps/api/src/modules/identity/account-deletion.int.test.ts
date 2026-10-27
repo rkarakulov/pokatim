@@ -157,6 +157,32 @@ describe('AccountErasure.notifyAndErase', () => {
     expect(h.mailer.sent).toHaveLength(1);
   });
 
+  it('сбой SMTP с адресом в тексте — брошенная ошибка без e-mail (failedReason/stacktrace задачи), только uid и код', async () => {
+    await signUpSession(h);
+    const userId = await userIdByEmail(h);
+    await closeAccount(userId);
+    const smtp = Object.assign(
+      new Error(`Can't send mail - all recipients were rejected: <${EMAIL}>`),
+      {
+        code: 'EENVELOPE',
+      },
+    );
+    vi.spyOn(h.mailer, 'send').mockRejectedValueOnce(smtp);
+
+    const thrown = (await erasure()
+      .notifyAndErase(userId, h.clock.now(), OPTIONS)
+      .catch((error: unknown) => error)) as Error;
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown.message).toBe(`account deletion email failed user=${userId} code=EENVELOPE`);
+    expect(`${thrown.message}\n${thrown.stack ?? ''}`).not.toContain(EMAIL);
+    expect(JSON.stringify(thrown, Object.getOwnPropertyNames(thrown))).not.toContain(EMAIL);
+    // захват снят — ретрай задачи отправит письмо
+    expect(await collections(h).users.findOne({ _id: userId })).toMatchObject({
+      deletionEmailClaimedAt: null,
+    });
+  });
+
   it('свежий чужой захват — бросок без письма; после истечения захвата — одно письмо', async () => {
     await signUpSession(h);
     const userId = await userIdByEmail(h);
