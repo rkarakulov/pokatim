@@ -1,4 +1,6 @@
-import { useScrub, type ScrubStore } from '@/features/maps/scrub-store';
+import { type ScrubStore } from '@pokatim/route-view';
+
+import { useScrub } from '@/features/maps/use-scrub';
 
 /**
  * Прокрутка экрана карточки при скраббинге (native, routes-04 RC-3): на время жеста по профилю или маркеру

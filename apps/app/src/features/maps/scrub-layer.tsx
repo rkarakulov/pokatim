@@ -1,9 +1,8 @@
 import type { AppTheme } from '@pokatim/design-tokens';
+import { type MapViewStore, type ScrubStore } from '@pokatim/route-view';
 import { useStore } from 'zustand';
 
-import type { MapViewStore } from './map-view-store';
 import { ScrubMarker } from './scrub-marker';
-import type { ScrubStore } from './scrub-store';
 
 /**
  * Слой маркера скраббинга (routes-04b, RC-4, I4): единственный подписчик пикселей линии в сторе вида — на движение

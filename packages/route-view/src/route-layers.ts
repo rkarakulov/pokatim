@@ -3,16 +3,20 @@ import type {
   ExpressionSpecification,
   LineLayerSpecification,
 } from '@maplibre/maplibre-gl-style-spec';
-import type { RaceRouteMap } from '@pokatim/contracts';
-import { size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
+import type { RouteMapGeometry } from '@pokatim/contracts';
+import { size, space, stroke, type Theme } from '@pokatim/design-tokens';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 
 /*
- * Оформление карты коридора гонки (ADR-0014 п. 6) — один источник для native и web: GeoJSON маршрута и спецификации
- * слоёв MapLibre из ролей темы `map.*`. Коридор — линия маршрута шириной 2 × `widthM` в метрах (выражение зума).
+ * Оформление карты маршрута и коридора гонки (ADR-0014 п. 6) — один источник для приложения (native и web) и панели
+ * (routes-05): GeoJSON маршрута и спецификации слоёв MapLibre из ролей темы `map.*`. Коридор — линия маршрута шириной
+ * 2 × `widthM` в метрах (выражение зума).
  */
 
-/** id слоя коридора — без коридора (`RouteMap corridor={false}`, маршрут каталога) слой не создаётся. */
+/** Роли темы, которые нужны слоям карты (любая тема набора: приложение — `light`/`dark`, панель — `panel`). */
+export type MapTheme = Pick<Theme, 'map'>;
+
+/** id слоя коридора — без коридора (`RouteMap corridor={false}`, маршрут каталога, панель) слой не создаётся. */
 export const CORRIDOR_LAYER_ID = 'corridor';
 
 /** id источника GeoJSON маршрута на карте. */
@@ -63,7 +67,7 @@ export function metersPerPixel(lat: number, zoom: number): number {
 }
 
 /** Широта центра рамки `[west, south, east, north]`. */
-export function centerLat(bounds: RaceRouteMap['bounds']): number {
+export function centerLat(bounds: RouteMapGeometry['bounds']): number {
   return (bounds[1] + bounds[3]) / 2;
 }
 
@@ -91,7 +95,7 @@ type RouteFeature = Feature<LineString | Point, { kind: RouteKind }>;
 
 /** GeoJSON маршрута: линия показа + точки старта и финиша (`properties.kind`). */
 export function routeFeatures(
-  map: RaceRouteMap,
+  map: RouteMapGeometry,
 ): FeatureCollection<LineString | Point, { kind: RouteKind }> {
   const point = (kind: 'start' | 'finish', coordinates: [number, number]): RouteFeature => ({
     type: 'Feature',
@@ -121,9 +125,9 @@ const kindIs = (kind: RouteKind): ExpressionSpecification => ['==', ['get', 'kin
  * маршрута: различимы без цвета (RC-5). `lineWidth` — толщина осевой линии (по умолчанию — карта гонки).
  */
 export function routeLayers(
-  theme: AppTheme,
+  theme: MapTheme,
   widthM: number,
-  bounds: RaceRouteMap['bounds'],
+  bounds: RouteMapGeometry['bounds'],
   lineWidth: number = stroke.indicator,
 ): RouteLayer[] {
   const round = { 'line-cap': 'round', 'line-join': 'round' } as const;

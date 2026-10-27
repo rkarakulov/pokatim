@@ -1,8 +1,6 @@
 import type { CatalogRouteDetail } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
-
-import { ROUTE_CATALOG_LINE_WIDTH } from '@/features/maps/corridor-style';
-import type { ScrubStore } from '@/features/maps/scrub-store';
+import { ROUTE_CATALOG_LINE_WIDTH, type ScrubStore } from '@pokatim/route-view';
 
 import { routeKm } from './format';
 import { catalogRouteMapOptions } from './queries';

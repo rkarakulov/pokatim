@@ -1,6 +1,6 @@
-import type { MiddlewareSettings } from 'expo-server';
+import type { ImmutableRequest, MiddlewareSettings } from 'expo-server';
 
-import { refreshSsrTheme, SSR_THEME_PATHS } from '@/features/appearance/ssr-theme';
+import { isSsrThemePage, refreshSsrTheme, SSR_THEME_PATHS } from '@/features/appearance/ssr-theme';
 
 /**
  * Серверный middleware Expo Router (до рендера): обновляет тему процесса из API — её читают `+html.tsx`, корень
@@ -12,6 +12,7 @@ export const unstable_settings: MiddlewareSettings = {
   matcher: { methods: ['GET'], patterns: SSR_THEME_PATHS },
 };
 
-export default async function middleware(): Promise<void> {
+export default async function middleware(request: ImmutableRequest): Promise<void> {
+  if (!isSsrThemePage(request.url)) return;
   await refreshSsrTheme();
 }

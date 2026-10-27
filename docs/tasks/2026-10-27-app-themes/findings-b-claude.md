@@ -79,3 +79,51 @@ verdict: REQUEST CHANGES (1 HIGH)
   `colors` — `useTheme()` как сейчас.
 
 NOT VERIFIED: `expo start --web` (middleware в dev, R1), native-симуляторы (сплэш, смена темы на лету), `E2E_API=1`.
+
+# Findings — app-themes / slice B — pass 2 — reviewer: claude
+base: ccad7ec   commits: ccad7ec..3b99634 (fix-коммиты 52528e0 … 3b99634; ab2b259 — план C, не ревьюился)
+verdict: APPROVE
+
+Проверено: `pnpm --filter @pokatim/app test` — 156 suites / 1325 tests, EXIT 0 (запуск ревьюера; предупреждение jest
+«worker failed to exit gracefully» — не падение). `pnpm check`, `build:web`, `e2e:web` — NOT VERIFIED.
+
+Закрытие прошлых находок (по коду):
+- HIGH pass 1 (middleware без ограничения) — закрыта. `refreshSsrTheme`: single-flight (`inflight` в `globalThis`),
+  окно 60 с от завершения попытки (`attemptAt` в `finally`) при любом исходе, включая reject (`.catch`) и `unavailable`;
+  ждёт только первая попытка процесса (`settled`), дальше — фон; фоновый промис с `.catch` — unhandled rejection нет.
+  Верхняя граница ожидания первой страницы — `AbortSignal.timeout(2 с)` (покрывает и чтение тела). Тесты: параллельные
+  вызовы → 1 fetch; сбои подряд → 1 за окно; фон не блокирует; последняя известная при сбое.
+- MEDIUM codex pass 2 (два окна) — закрыта: `cache: false` — тема не читает и не кладёт в кэш `public-ssr`;
+  `ssr-theme-fetch.test.ts` на настоящем `fetchPublicForSsr` с задержкой ответа — смена видна ≤ 61 с, 2 fetch.
+  Остальные вызовы (`rides|calendar|seasons|races|routes/[id].tsx`) передают 2 аргумента → `cache = true`, поведение
+  прежнее; тест `public-ssr.test.ts` «cache: false — мимо кэша» + прежние тесты кэша зелёные.
+- MEDIUM codex pass 2 (шрифты web ready до скачивания) — закрыта: `allLoaded` = `isLoaded && !isLoading`
+  (`expo-font/build/Font.js:37` — `fontFamily in loadPromises`, удаляется в `finally` загрузки); гидрация SSR — без
+  загрузки в полёте → готово с первого рендера. Тест «@font-face зарегистрирован, файл скачивается — не готов».
+  MEDIUM codex pass 1 (возврат A→B→A) — закрыта, тест есть. Ветка ошибки: `isLoading` снимается в `finally`, состояние
+  `{set, ready: true, error}` — тема не зависает.
+- LOW (тест `initialThemeId`) — закрыта: `initial-theme-id.web.test.ts` (недоверенные значения → `classic`) и
+  `.server.test.ts` (без `window` → `ssrThemeId()`).
+- LOW (`useAppTheme` фолбэк по подложке) — закрыта: `appThemeScheme(DEFAULT_THEME, useColorScheme())`, тест с `dark`.
+
+Регрессий не найдено: matcher `GET` + `SSR_THEME_PATHS` исключает manifest (`+api`), `sw.js`, иконки, ассеты; manifest
+читает последнюю известную тему (на свежем процессе — «Классика», задокументировано).
+
+### [LOW] Matcher не исключает loader-ы: expo-server проверяет и «эффективный» путь `/_expo/loaders/*`
+- **file:** apps/app/src/features/appearance/ssr-theme.ts, apps/app/src/app/+middleware.ts, docs/adr/0016-app-themes.md
+- **location:** `SSR_THEME_PATHS`, комментарии «не `/_expo/*`»; ADR-0016 п.5; тест «пути middleware темы»
+- **problem:** `shouldRunMiddleware` при несовпадении сырого пути проверяет `effectivePathname` — для
+  `/_expo/loaders/races/1` это `/races/1` («so matchers can't be bypassed via /_expo/loaders»), он совпадает с
+  `SSR_THEME_PATHS`. Middleware темы выполняется и для loader-ов. Тест проверяет только regex по сырому пути, поэтому
+  `'/_expo/loaders/races/1' — нет` зелёный, но не отражает реального поведения.
+- **why_it_matters:** нагрузку не меняет (окно 60 с и single-flight общие; ждать может только первый запрос процесса,
+  ≤ 2 с), но документация (ADR, комментарии) и тест утверждают неверное — следующий, кто будет полагаться на
+  «loader-ы мимо middleware», ошибётся.
+- **evidence:** `node_modules/expo-server/build/cjs/vendor/abstract.js:67-71` (`effectivePathname` = путь без
+  `LOADER_PREFIX`), `build/cjs/utils/middleware.js` `shouldRunMiddleware`: `if (effectivePathname && effectivePathname
+  !== rawPathname) return patterns.some(...)`.
+- **recommended_fix:** либо принять и исправить формулировки (ADR п.5, комментарии `SSR_THEME_PATHS`/middleware: «loader-ы
+  тоже, без ожидания после первой попытки») и тест на `shouldRunMiddleware` с реальной логикой; либо в `middleware(request)`
+  ранний выход по `new URL(request.url).pathname.startsWith('/_expo/')`.
+
+NOT VERIFIED: `expo start --web`/`start:web` с реальным middleware, native-симуляторы, `E2E_API=1`.

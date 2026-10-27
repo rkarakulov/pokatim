@@ -11,6 +11,7 @@ import { z } from 'zod';
 
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
+import { elevationOf } from './route-elevation';
 import { ROUTE_GEOMETRY, type RouteGeometry } from './route-geometry.port';
 import type { RouteCatalogDoc, RouteDoc } from './routes.collection';
 import { type RouteDerivedState, RoutesRepository } from './routes.repository';
@@ -45,13 +46,9 @@ function toCatalogDetail(
   route: CatalogRoute,
   derived: RouteDerivedState | undefined,
 ): CatalogRouteDetail {
-  const profile = derived?.profile ?? null;
-  const elevations = profile?.map(([, elevation]) => elevation) ?? [];
   return {
     ...toCatalogCard(route),
-    elevation: profile
-      ? { minM: Math.min(...elevations), maxM: Math.max(...elevations), profile }
-      : null,
+    elevation: elevationOf(derived?.profile ?? null),
     gpxAvailable: (derived?.derivedVersion ?? null) !== null,
   };
 }

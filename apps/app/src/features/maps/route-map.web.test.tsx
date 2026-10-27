@@ -1,19 +1,24 @@
 /// <reference types="jest" />
 import type { RaceRouteMap } from '@pokatim/contracts';
 import { themes } from '@pokatim/design-tokens';
+import {
+  CORRIDOR_OPACITY,
+  MAP_FIT_PADDING,
+  MAP_MAX_ZOOM,
+  MAP_MIN_ZOOM,
+  ROUTE_SOURCE_ID,
+  WHEEL_HINT_MS,
+} from '@pokatim/route-view';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 
 import { AccessibilityInfo } from 'react-native';
 
-import { CORRIDOR_OPACITY, MAP_FIT_PADDING, ROUTE_SOURCE_ID } from './corridor-style';
 import type * as Position from '@/features/location/current-position';
 
 import type * as Loader from './load-maplibre';
 import { LOCATE_ZOOM, LOCATION_SOURCE_ID } from './location-style';
-import { MAP_MAX_ZOOM, MAP_MIN_ZOOM } from './map-camera';
-import { WHEEL_HINT_MS } from './map-wheel.web';
 import { RouteMap } from './route-map';
 
 interface MockMap {

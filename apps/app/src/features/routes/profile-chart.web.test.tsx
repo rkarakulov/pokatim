@@ -1,16 +1,20 @@
 /// <reference types="jest" />
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { appThemes, themes } from '@pokatim/design-tokens';
+import {
+  createScrubStore,
+  PROFILE_FILL_OPACITY,
+  PROFILE_SOLID_OPACITY,
+  SCRUB_MARKER_ATTR,
+  type ScrubStore,
+} from '@pokatim/route-view';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 
-import { createScrubStore, SCRUB_MARKER_ATTR, type ScrubStore } from '@/features/maps/scrub-store';
-
-import { ProfileArea, ProfileChart } from './profile-chart.web';
 import { appThemeWrapper } from '@/__tests__/app-theme-wrapper';
 
-import { PROFILE_FILL_OPACITY, PROFILE_SOLID_OPACITY } from './profile-style';
+import { ProfileArea, ProfileChart } from './profile-chart.web';
 
 const elevation: CatalogRouteElevation = {
   minM: 191,

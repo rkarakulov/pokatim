@@ -98,6 +98,14 @@ for file in docker-compose.ow.yml; do
     git -C "${REPO}" show "${BASE_REF}:infra/deploy/${file}" >"${WORK}/base/${file}"
   fi
 done
+# ядро раннера ≥ 6.19: mongod 8.0 базовой ветки не стартует без обхода rseq (SERVER-121912) — добавляем его в её
+# compose, если там его ещё нет (после слияния обхода в базовую ветку шаг ничего не меняет)
+if ! grep -q 'GLIBC_TUNABLES' "${WORK}/base/docker-compose.yml"; then
+  awk '{ print } /^    image: mongo:8\.0/ { print "    environment:"; print "      GLIBC_TUNABLES: glibc.pthread.rseq=1" }' \
+    "${WORK}/base/docker-compose.yml" >"${WORK}/base/docker-compose.rseq.yml"
+  mv "${WORK}/base/docker-compose.rseq.yml" "${WORK}/base/docker-compose.yml"
+  grep -q 'GLIBC_TUNABLES' "${WORK}/base/docker-compose.yml" || fail 'обход rseq не добавлен в compose базовой ветки'
+fi
 run_deploy "${WORK}/base/deploy.sh" base || {
   show_log base 80
   diagnose

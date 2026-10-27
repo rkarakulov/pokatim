@@ -34,28 +34,35 @@ describe('CardRadioGroup', () => {
     const group = screen.getByRole('group', { name: 'Тема' });
     const radios = within(group).getAllByRole('radio');
     expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(['a', 'b', 'c']);
-    expect((screen.getByRole('radio', { name: /Первая/ }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('radio', { name: 'Первая' }) as HTMLInputElement).checked).toBe(true);
     expect(screen.getByText('Описание второй')).toBeTruthy();
     expect(new Set(radios.map((radio) => (radio as HTMLInputElement).name)).size).toBe(1);
+  });
+
+  it('имя радио — только заголовок карточки, содержимое — описание', () => {
+    render(<Controlled onChange={vi.fn()} />);
+    const second = screen.getByRole('radio', { name: 'Вторая' });
+    const described = document.getElementById(second.getAttribute('aria-describedby') ?? '');
+    expect(described?.textContent).toBe('Описание второй');
   });
 
   it('выбор карточки — onChange со значением, отметка и класс выбранной', () => {
     const onChange = vi.fn();
     render(<Controlled onChange={onChange} />);
-    const second = screen.getByRole('radio', { name: /Вторая/ }) as HTMLInputElement;
+    const second = screen.getByRole('radio', { name: 'Вторая' }) as HTMLInputElement;
     fireEvent.click(second);
     expect(onChange).toHaveBeenCalledWith('b');
     expect(second.checked).toBe(true);
     expect(second.closest('label')?.className).toContain('card-radio--checked');
     expect(
-      (screen.getByRole('radio', { name: /Первая/ }) as HTMLInputElement).closest('label')
+      (screen.getByRole('radio', { name: 'Первая' }) as HTMLInputElement).closest('label')
         ?.className,
     ).not.toContain('card-radio--checked');
   });
 
   it('фокус — на нативном радио (клавиатура браузера)', () => {
     render(<Controlled onChange={vi.fn()} />);
-    const first = screen.getByRole('radio', { name: /Первая/ });
+    const first = screen.getByRole('radio', { name: 'Первая' });
     first.focus();
     expect(document.activeElement).toBe(first);
   });

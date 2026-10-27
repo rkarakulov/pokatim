@@ -185,6 +185,10 @@ Expo Go не открывает схему `pokatim://`. Для проверки
 - `pnpm dev --filter=@pokatim/admin` — `http://localhost:5173` (корень, `/v1` проксируется на API :3000). Вход —
   аккаунт приложения с ролью. «Забыли пароль?» ведёт на web приложения: в dev — `VITE_APP_WEB_URL`
   (`apps/admin/.env.local`, например `http://127.0.0.1:8081`), на стенде и в проде — тот же origin.
+- Карта маршрута (routes-05): `VITE_MAP_STYLE_LIGHT=https://tiles.openfreemap.org/styles/positron` в
+  `apps/admin/.env.local` (только светлый стиль); без него — SVG-превью линии вместо карты, профиль и цифры есть.
+  `vite preview` (смоук) отдаёт CSP панели: другой провайдер стиля — сначала его origin в `connect-src`
+  `infra/docker/admin-nginx.conf`.
 - Первый администратор локально: зарегистрироваться и подтвердить e-mail (Mailpit), затем
   `pnpm --filter @pokatim/api panel grant-admin --email <e-mail> --name "<Имя>"` (`tsx`, env — `apps/api/.env`).
 - Cookie панели — `__Secure-…` с `Secure`: Chromium и Firefox сохраняют её на `http://localhost`, Safari — может

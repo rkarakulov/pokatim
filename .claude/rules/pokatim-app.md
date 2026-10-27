@@ -156,14 +156,14 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `@maplibre/maplibre-react-native` 11: `Map`/`Camera`/`GeoJSONSource`/`Layer`) и `route-map.web.tsx` (`maplibre-gl`
   6 через `load-maplibre.ts` — динамический `import()` после монтирования, в SSR не исполняется; воркер —
   `public/maplibre-gl-worker.mjs` по `setWorkerUrl`, копию кладёт `scripts/copy-map-worker.ts` в `dev`/`build:web`,
-  в git не хранится); слои и GeoJSON — один источник `corridor-style.ts` (коридор — ширина линии 2 × `widthM` в
+  в git не хранится); слои и GeoJSON — один источник `route-layers.ts` пакета `@pokatim/route-view` (routes-05; коридор — ширина линии 2 × `widthM` в
   метрах выражением зума, роли `map.*`, `CORRIDOR_OPACITY`), рамка — `route-map-frame.tsx` (пропорция
   `MAP_ASPECT_RATIO`, доступное изображение с подписью без координат, сообщение «Карта не загрузилась» поверх). URL
   стилей — только `EXPO_PUBLIC_MAP_STYLE_LIGHT/DARK` (`map-style.ts`, прямое обращение к `process.env`); не заданы —
   карты нет. Интерактивная карта (routes-04b, поправка routes-04c ADR-0014 — одним пальцем): web — без
   `cooperativeGestures` (мышь и один палец тащат карту), колесо — зум только с Ctrl/⌘, без модификатора — прокрутка
-  страницы и своя подсказка (`map-wheel.web.ts`: слушатель `wheel` в фазе перехвата, без `preventDefault`), подпись
-  холста — `locale` (`map-locale.web.ts`), вращение и наклон выключены; native — нативные жесты MapLibre RN
+  страницы и своя подсказка (`guardWheelZoom` пакета `@pokatim/route-view`: слушатель `wheel` в фазе перехвата, без
+  `preventDefault`; опции жестов — `interactiveMapOptions`), подпись холста — `locale` (`mapLocale` пакета), вращение и наклон выключены; native — нативные жесты MapLibre RN
   (`dragPan`, `touchZoom`, `doubleTapZoom` — выкл при reduce motion; `doubleTapHoldZoom`, `touchRotate`,
   `touchPitch` — выкл), прокрутку карточки на время жеста блокирует натив (Android `requestDisallowInterceptTouchEvent`),
   своей блокировки и RNGH-оверлея нет. Зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM` (2–17: рамка 1000 км вписывается), без `maxBounds`; кнопки «+», «−»,
@@ -193,7 +193,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   Легенда («пунктир» — только при участках схода) и текстовая альтернатива подсветки (`my-track-format.ts`) — под картой и в подписи a11y; 404 трека — без
   трека и без строки; сеть/5xx — «Не удалось загрузить трек» с повтором. Гостю и не заявленному — без запроса.
 - Атрибуция и отступы (B2–B4 maps-02): web — компактная атрибуция свёрнута при старте и после обновлений стиля
-  (`attribution.web.ts`, до первого нажатия «i»), цвета контрола — роли темы в области карты (`data-route-map`);
+  (`collapseAttribution`/`attributionCss` пакета `@pokatim/route-view`, до первого нажатия «i»), цвета контрола — роли темы в области карты (`data-route-map`);
   routes-04d — «i» в нижнем левом углу на обеих платформах (web — `AttributionControl` в `'bottom-left'`), над шторкой
   — со сдвигом на `bottomInset`; native — `tintColor` темы. Камера — `MAP_FIT_PADDING` (снизу место под «i»), со
   шторкой — `cameraPadding(inset, mapHeight)`. Полоса
@@ -247,15 +247,17 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   зависит только от данных: SSR = первый рендер; routes-04 — см. «Скраббинг» ниже); «Скачать GPX» — только `src/lib/download-file(.web).ts` (native —
   `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteGpxUrl(id)`, только при
   `gpxAvailable`.
-- Скраббинг (routes-04): стор на экземпляр экрана — `features/maps/scrub-store.ts` (`zustand/vanilla`,
-  `{ fraction, active, dragging }`, доля длины линии показа; читают только подписчики `useScrub` — карта и экран на
+- Скраббинг (routes-04): стор на экземпляр экрана — `createScrubStore` пакета `@pokatim/route-view` (`zustand/vanilla`,
+  `{ fraction, active, dragging }`, доля длины линии показа; читают только подписчики `useScrub` (`features/maps/use-scrub.ts`) — карта и экран на
   кадр не перерисовываются; экран: native — `scrollEnabled` при `dragging === null` (`use-scrub-scroll-lock(.web).ts`;
   web прокрутку не выключает: RN-web дал бы скроллеру `overflow: hidden`), `onScrollBeginDrag` скрывает курсор).
   Чистая логика (доля ↔ точка, ближайшая точка с подсказкой для петли, высота/уклон/набор, шаг 1 км, точки профиля) —
-  `@pokatim/tracks` (`src/scrub.ts`, лёгкий вход; её же берёт панель), подписи — `features/routes/scrub.ts`.
+  `@pokatim/tracks` (`src/scrub.ts`, лёгкий вход); числа карточки, шаг и клавиши slider, тики оси, время в пути —
+  `@pokatim/route-view` (`scrubValues`, `scrubStep`, `scrubKeyTarget`, `profileTickValues`, `pace.ts`; общие с
+  панелью, routes-05), подписи (i18n) — `features/routes/scrub.ts`, `format.ts`.
   Маркер — оверлей над холстом (`scrub-marker(.web).tsx`), пиксели линии — одна функция `projectLine` на изменение
   камеры (web — `map.project` на `load`/`SCRUB_REPROJECT_EVENTS` = `resize`, `move`; native — `mercatorProjector` по
-  `ViewState.bounds` событий региона + `onLayout`) в стор вида карты (`map-view-store.ts`, на экземпляр; подписан
+  `ViewState.bounds` событий региона + `onLayout`) в стор вида карты (`createMapViewStore` пакета, на экземпляр; подписан
   только `ScrubLayer` — `RouteMap` на кадр камеры не перерисовывается); перетаскивание — жест маркера; допуск петли —
   не меньше `SCRUB_TOLERANCE_MIN_PX`. Носитель жеста на долю и на точки камеры не подписан (точки и допуск — из ref),
   конфиг `usePanGesture` — из `useMemo` (не литерал: иначе перенастройка обработчика в натив на кадр); подписчик доли
@@ -263,7 +265,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `profile-chart(.web).tsx`: web — inline SVG (SSR = первый рендер), `role="slider"`, pointer events, клавиши,
   `:focus-visible`; native — `react-native-svg` лениво (`load-svg-native.ts` после `svgSupported()`; старый
   dev-клиент — столбики), `adjustable` с `accessibilityActions`, RNGH v3 `usePanGesture({ activateAfterLongPress:
-  250, runOnJS: true })` (касание без удержания — скрыть). Пути и градиент заливки — `profile-path.ts` (G1). Корень
+  250, runOnJS: true })` (касание без удержания — скрыть). Пути и градиент заливки — `profile.ts` пакета `@pokatim/route-view` (G1). Корень
   жестов — `components/gesture-root(.web).tsx` в `_layout` (RNGH не в web-бандле). Стат-блок карточки —
   `StatBlock equalColumns` (routes-04d — `variant="compact"`). Jest (routes-04d): мок `expo-location` — с `Accuracy`,
   ответ `getCurrentPositionAsync` задают тесты «Моё местоположение» (онбординг его не вызывает). Jest: `react-native-gesture-handler/jestSetup`, обёртка RNGH «без Reanimated», мок

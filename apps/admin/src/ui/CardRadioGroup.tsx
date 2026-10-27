@@ -17,7 +17,8 @@ export interface CardRadioGroupProps<T extends string> {
 
 /**
  * Радиогруппа карточек с произвольным содержимым (у `RadioGroup` подпись — только строка): нативные
- * `input[type=radio]` в `fieldset` (стрелки и Tab — браузера), вся карточка — `label`. Кандидат в `admin-kit`.
+ * `input[type=radio]` в `fieldset` (стрелки и Tab — браузера), вся карточка — `label` (клик по карточке). Имя радио —
+ * только заголовок (`aria-labelledby`), содержимое — описание (`aria-describedby`). Кандидат в `admin-kit`.
  */
 export function CardRadioGroup<T extends string>({
   legend,
@@ -32,6 +33,8 @@ export function CardRadioGroup<T extends string>({
       <div className="card-radios__grid">
         {options.map((option) => {
           const checked = value === option.value;
+          const titleId = `${name}-${option.value}-title`;
+          const bodyId = `${name}-${option.value}-body`;
           return (
             <label
               key={option.value}
@@ -43,11 +46,19 @@ export function CardRadioGroup<T extends string>({
                   name={name}
                   value={option.value}
                   checked={checked}
+                  aria-labelledby={titleId}
+                  aria-describedby={option.children ? bodyId : undefined}
                   onChange={() => onChange(option.value)}
                 />
-                <span className="card-radio__title t-title-sm">{option.label}</span>
+                <span id={titleId} className="card-radio__title t-title-sm">
+                  {option.label}
+                </span>
               </span>
-              {option.children}
+              {option.children ? (
+                <span id={bodyId} className="card-radio__body">
+                  {option.children}
+                </span>
+              ) : null}
             </label>
           );
         })}

@@ -1,7 +1,7 @@
-/// <reference types="jest" />
+import { describe, expect, it } from 'vitest';
 import { nearestFraction, type Planar } from '@pokatim/tracks';
 
-import { mercatorProjector, SCRUB_TOLERANCE_MIN_PX, scrubTolerance } from './scrub-line';
+import { mercatorProjector, SCRUB_TOLERANCE_MIN_PX, scrubTolerance } from './scrub-line.ts';
 
 describe('scrub-line (routes-04, RC-2)', () => {
   it('mercatorProjector: углы рамки → углы вида; по широте — не линейно (Web Mercator)', () => {

@@ -1,9 +1,8 @@
 /// <reference types="jest" />
+import { createScrubStore, type ScrubStore } from '@pokatim/route-view';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { ScrollView, Text } from 'react-native';
-
-import { createScrubStore, type ScrubStore } from '@/features/maps/scrub-store';
 
 import { useScrubScrollEnabled } from './use-scrub-scroll-lock';
 

@@ -1,6 +1,16 @@
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { stroke, type AppTheme } from '@pokatim/design-tokens';
 import {
+  fractionAt,
+  PROFILE_ASPECT_RATIO,
+  PROFILE_FILL,
+  PROFILE_VIEW_BOX,
+  profilePaths,
+  SCRUB_MARKER_ATTR,
+  scrubKeyTarget,
+  type ScrubStore,
+} from '@pokatim/route-view';
+import {
   memo,
   useEffect,
   useRef,
@@ -9,13 +19,11 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 
-import { SCRUB_MARKER_ATTR, useScrub, type ScrubStore } from '@/features/maps/scrub-store';
+import { useScrub } from '@/features/maps/use-scrub';
 import { useAppTheme } from '@/theme/use-app-theme';
 
 import type { ProfileChartProps } from './profile-chart-props';
-import { PROFILE_VIEW_BOX, profilePaths } from './profile-path';
-import { PROFILE_ASPECT_RATIO, PROFILE_FILL } from './profile-style';
-import { scrubReadout, scrubStep } from './scrub';
+import { scrubReadout } from './scrub';
 
 /**
  * Площадь профиля на web (routes-03 fix + routes-04 G1): inline SVG — плавная линия по всем точкам профиля в
@@ -117,13 +125,6 @@ export function ProfileChart(props: ProfileChartProps) {
   return <ScrubbableChart {...props} scrub={scrub} />;
 }
 
-const KEY_STEPS: Record<string, 1 | -1> = {
-  ArrowRight: 1,
-  ArrowUp: 1,
-  ArrowLeft: -1,
-  ArrowDown: -1,
-};
-
 function ScrubbableChart({
   elevation,
   distanceM,
@@ -152,8 +153,7 @@ function ScrubbableChart({
   const follow = (event: ReactPointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     if (rect.width <= 0) return;
-    const next = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    scrub.setState({ fraction: next, active: true });
+    scrub.setState({ fraction: fractionAt(event.clientX, rect.left, rect.width), active: true });
   };
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== 'mouse') {
@@ -180,15 +180,7 @@ function ScrubbableChart({
     }
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = KEY_STEPS[event.key];
-    const next =
-      step !== undefined
-        ? scrubStep(fraction, distanceM, step)
-        : event.key === 'Home'
-          ? 0
-          : event.key === 'End'
-            ? 1
-            : null;
+    const next = scrubKeyTarget(event.key, fraction, distanceM);
     if (next === null) return;
     event.preventDefault();
     scrub.setState({ fraction: next, active: true });

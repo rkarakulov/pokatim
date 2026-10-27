@@ -1,4 +1,4 @@
-import type { ScrubStore } from '@/features/maps/scrub-store';
+import { type ScrubStore } from '@pokatim/route-view';
 
 /**
  * Web (ревью pass 1, M2): прокрутку не выключаем — `scrollEnabled={false}` в RN-web даёт единственному скроллеру

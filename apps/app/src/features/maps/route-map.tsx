@@ -1,32 +1,36 @@
 import type * as MapLibreNative from '@maplibre/maplibre-react-native';
 import { space } from '@pokatim/design-tokens';
-import { cumulativeMeters } from '@pokatim/tracks';
-import { useReducedMotion } from '@rkarakulov/ui';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-
-import { CORRIDOR_LAYER_ID, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
-import { loadMapLibreNative } from './load-maplibre-native';
-import { LocationLayer } from './location-layer';
-import { createLocationStore } from './location-store';
-import { LOCATE_ZOOM } from './location-style';
 import {
   cameraCall,
   cameraPadding,
-  clampZoom,
   type CameraPadding,
+  clampZoom,
+  CORRIDOR_LAYER_ID,
+  createMapViewStore,
   MAP_CAMERA_ANIMATION_MS,
   MAP_MAX_ZOOM,
   MAP_MIN_ZOOM,
   MAP_ZOOM_STEP,
   type MapViewSize,
   type MapViewSnapshot,
-} from './map-camera';
+  mercatorProjector,
+  projectLine,
+  ROUTE_SOURCE_ID,
+  routeFeatures,
+  routeLayers,
+} from '@pokatim/route-view';
+import { cumulativeMeters } from '@pokatim/tracks';
+import { useReducedMotion } from '@rkarakulov/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+
+import { loadMapLibreNative } from './load-maplibre-native';
+import { LocationLayer } from './location-layer';
+import { createLocationStore } from './location-store';
+import { LOCATE_ZOOM } from './location-style';
 import { MapOverlayControls } from './map-overlay-controls';
-import { createMapViewStore } from './map-view-store';
 import { RouteMapFrame } from './route-map-frame';
 import type { RouteMapProps } from './route-map-props';
-import { mercatorProjector, projectLine } from './scrub-line';
 import { ScrubLayer } from './scrub-layer';
 import {
   TRACK_BEFORE_LAYER_ID,

@@ -256,7 +256,7 @@ export function BottomSheet({
           onPointerUp={onPointerEnd}
           onPointerCancel={onPointerEnd}
         >
-          <div ref={grabberBox}>
+          <div ref={grabberBox} style={grabberBoxStyle}>
             <Pressable
               ref={grabber}
               testID={`${testID}-grabber`}
@@ -281,6 +281,8 @@ export function BottomSheet({
 
 // касание шапки не прокручивает и не масштабирует страницу — его забирает шторка
 const headerStyle: CSSProperties = { touchAction: 'none', flexShrink: 0 };
+// «чёрточка» — <button>: в блочном потоке сжимается до полосы у левого края, во flex-колонке — на всю ширину
+const grabberBoxStyle: CSSProperties = { display: 'flex', flexDirection: 'column' };
 const bodyStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',

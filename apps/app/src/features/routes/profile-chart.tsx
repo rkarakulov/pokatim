@@ -1,17 +1,25 @@
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { stroke, type AppTheme } from '@pokatim/design-tokens';
+import {
+  PROFILE_ASPECT_RATIO,
+  PROFILE_FILL,
+  PROFILE_NATIVE_FILL_OPACITY,
+  PROFILE_VIEW_BOX,
+  profileGradientId,
+  profilePaths,
+  scrubStep,
+  type ScrubStore,
+} from '@pokatim/route-view';
 import { memo, useCallback, useId, useMemo, useRef } from 'react';
 import { StyleSheet, View, type AccessibilityActionEvent } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 
-import { useScrub, type ScrubStore } from '@/features/maps/scrub-store';
+import { useScrub } from '@/features/maps/use-scrub';
 import { useAppTheme } from '@/theme/use-app-theme';
 
 import { profileBarHeights, profileBars } from './format';
 import type { ProfileChartProps } from './profile-chart-props';
-import { PROFILE_VIEW_BOX, profileGradientId, profilePaths } from './profile-path';
-import { PROFILE_ASPECT_RATIO, PROFILE_FILL, PROFILE_NATIVE_FILL_OPACITY } from './profile-style';
-import { scrubReadout, scrubStep } from './scrub';
+import { scrubReadout } from './scrub';
 import { useSvgLib } from './use-svg-native';
 
 /** Столбиков фолбэка: ≈ 2 px при ширине телефона — ступенек не видно, Yoga округляет к пиксельной сетке. */

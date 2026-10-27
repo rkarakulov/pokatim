@@ -2,6 +2,7 @@ import { apiErrorOf } from '@pokatim/api-client';
 import { Uuid, type CatalogRouteDetail } from '@pokatim/contracts';
 import { size, space, type AppTheme, type AppThemeLayout } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
+import { createScrubStore, PROFILE_ASPECT_RATIO, type ScrubStore } from '@pokatim/route-view';
 import {
   AsyncContent,
   Banner,
@@ -34,7 +35,6 @@ import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
 import { StatBlock, type StatVariant } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
-import { createScrubStore, type ScrubStore } from '@/features/maps/scrub-store';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
@@ -43,7 +43,7 @@ import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 import { useAppTheme } from '@/theme/use-app-theme';
 
 import { CatalogRouteMap } from './catalog-route-map';
-import { ElevationProfile, PROFILE_ASPECT_RATIO } from './elevation-profile';
+import { ElevationProfile } from './elevation-profile';
 import { routeChips, routeShareDescription, routeStatItems } from './format';
 import { useCatalogRoute, useCatalogRouteRaces } from './queries';
 import { useScrubScrollEnabled } from './use-scrub-scroll-lock';

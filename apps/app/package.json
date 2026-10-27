@@ -19,6 +19,7 @@
     "@pokatim/contracts": "workspace:*",
     "@pokatim/design-tokens": "workspace:*",
     "@pokatim/i18n": "workspace:*",
+    "@pokatim/route-view": "workspace:*",
     "@pokatim/tracks": "workspace:*",
     "@react-native-community/datetimepicker": "9.2.1",
     "@react-native-community/netinfo": "12.0.1",

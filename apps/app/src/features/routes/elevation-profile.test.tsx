@@ -1,6 +1,13 @@
 /// <reference types="jest" />
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { appThemes, contrastRatio, themes, WCAG } from '@pokatim/design-tokens';
+import {
+  createScrubStore,
+  PROFILE_FILL_OPACITY,
+  PROFILE_NATIVE_FILL_OPACITY,
+  PROFILE_SOLID_OPACITY,
+  type ScrubStore,
+} from '@pokatim/route-view';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type * as ReactNative from 'react-native';
 import { GestureHandlerRootView, State } from 'react-native-gesture-handler';
@@ -11,15 +18,9 @@ import {
 } from 'react-native-gesture-handler/jest-utils';
 
 import { appThemeWrapper } from '@/__tests__/app-theme-wrapper';
-import { createScrubStore, type ScrubStore } from '@/features/maps/scrub-store';
 
 import { ElevationProfile } from './elevation-profile';
 import { PROFILE_BARS, PROFILE_PAN_TEST_ID } from './profile-chart';
-import {
-  PROFILE_FILL_OPACITY,
-  PROFILE_NATIVE_FILL_OPACITY,
-  PROFILE_SOLID_OPACITY,
-} from './profile-style';
 
 /** RNGH v3: передача конфига обработчика в натив (эффект `useGesture` по ссылке конфига) — счётчик для M1. */
 const nativeProxy = () =>

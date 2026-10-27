@@ -1,13 +1,13 @@
 /// <reference types="jest" />
 import type { RaceRouteMap } from '@pokatim/contracts';
 import { themes } from '@pokatim/design-tokens';
+import { createScrubStore, type ScrubStore } from '@pokatim/route-view';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 import type * as Loader from './load-maplibre';
 import { RouteMap } from './route-map';
 import * as Frame from './route-map-frame';
-import { createScrubStore, type ScrubStore } from './scrub-store';
 
 jest.mock('./load-maplibre', () => ({ loadMaplibre: jest.fn() }));
 
