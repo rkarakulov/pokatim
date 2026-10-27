@@ -540,3 +540,58 @@ OUT OF SCOPE
 - `apps/api`, `packages/contracts`, `packages/api-client`, `apps/admin` (кроме бампа каталога).
 - `server/web-server.ts`, Dockerfile — без изменений.
 - Нативный сплэш/`expo-system-ui` по теме (R5), личная тема райдера, push-смена темы.
+
+## 12. Outcome
+
+Ветка `feature/app-themes` (worktree `nice-pasteur-1d135d`), коммиты по подзадачам B1–B9; не запушено.
+
+**Сделано (по 7.7):**
+
+- **B1** — каталог `@rkarakulov/*` → 0.5.0 (все 8 пакетов), lockfile.
+- **B2** — `@pokatim/design-tokens`: `PokatimRoleGroups.map.basemap`, группа `profile`, `AppTheme` = `Theme<…> & { shape }`
+  (у `light`/`dark` — `defaultShape`, значения прежние); `app-themes.ts` (`appThemes` — 7 тем, 6 — алиасы «Классики» с
+  `TODO(app-themes C)`, `DEFAULT_THEME`, `appThemeScheme`, инвариант «dark ⇒ одна схема» при загрузке модуля);
+  `contrastPairsOf` (+ `profile.line / surface.default`); `designSystemCss` без `--color-map-basemap`.
+- **B3** — карта: `theme.map.basemap === 'dark'` (`use-map-style`, `race-route-map`, `attribution.web`); профиль —
+  `profile.line` / `fillTop` / `fillBottom` / `grid` (native и web).
+- **B4** — `components/icon.tsx` (реестр 7 имён, заливка iOS, вес из темы, `key` по весу, `WEIGHT_FONTS` пуст);
+  замены в `top-bar`, `going-stack` (`filled`), `map-controls` (`icon: IconName`).
+- **B5** — `theme/fonts.ts`: `themeFonts(def)` (мемо по id, все темы реестра собираются при загрузке модуля),
+  `fontFamilies` = семейства «Классики»; `theme/use-theme-fonts.ts`.
+- **B6** — `AppThemeProvider`, `useAppTheme`, `activeAppTheme`.
+- **B7** — `features/appearance/*` (`toAppThemeId`, `useAppearanceQuery`, кэш native/web, `initialThemeId`,
+  `useActiveThemeId`), `SecureKey` + `pokatim.appTheme`, `_layout.tsx`: `RootLayout` → `RootShell` → `AppThemeProvider` →
+  `ThemedRoot` (фон, `StatusBar` по схеме, сплэш).
+- **B8** — `ssr-theme.ts`, `src/app/+middleware.ts`, `theme/document-theme.ts`, `+html.tsx` (`documentCss`,
+  `theme-color`, `window.__POKATIM_THEME__`), manifest, `types/window.d.ts`; e2e-шаг темы; сторож AC3
+  `__tests__/theme-guards.test.ts`.
+- **B9** — ADR-0016 + индекс, `.claude/rules/pokatim-app.md` (раздел тем, middleware в строке SSR-данных, профиль).
+
+**B0 (спайк, для pr.md):** `build:web` кладёт middleware в `dist/server/_expo/functions/+middleware.js`. `start:web` с
+`API_INTERNAL_URL` на заглушку API (`{ themeId: 'atlas' }`): HTML `/` и `/sign-in` — `window.__POKATIM_THEME__="atlas"`,
+заглушка получила 1 запрос на несколько страниц (кэш 60 с); в браузере после гидрации — `atlas`, ошибок гидрации
+нет. `expo start --web` (dev) — **NOT VERIFIED** (R1): middleware в dev-сервере не проверялся.
+
+**Проверки:**
+
+- `TURBO_CONCURRENCY=1 pnpm check` (MONGO/REDIS изолированные) — EXIT 0: format, lint, arch (1279 модулей, без
+  нарушений), typecheck, test — app 152 suites / 1299 tests, design-tokens 453, admin 253, api 1110, contracts 258,
+  api-client 93, tracks 288, i18n 6.
+- `pnpm build:web` (`EXPO_PUBLIC_API_URL=http://127.0.0.1:3000`) — успешно (в составе `e2e:web`).
+- `pnpm e2e:web` (без API) — 17 passed, 7 skipped (с API), **1 failed**: «жалоба на райд /rides/report/<id> без
+  сессии» (ожидает «Нет соединения», экран показывает «Не удалось загрузить»). Падение воспроизводится на базовом
+  коммите `ccad7ec` (отдельный worktree, та же сборка и тест) — не связано с B. Новый шаг «тема приложения в HTML» —
+  passed; PWA `theme_color: '#FFFFFF'` — passed. `E2E_API=1` — не запускался.
+
+**Отклонения от плана (8.2 дополнить):**
+
+| Отклонение | Причина |
+|---|---|
+| `use-theme-fonts.ts` один файл с развилкой по `window` (как `useFonts` expo-font), без `.web.ts`; SSR-тест — `use-theme-fonts.server.test.tsx` в проекте jest `server` (+ `src/**/*.server.test.*` в `jest.config.js`) | `.web.ts` не может импортировать общий клиентский хук из `./use-theme-fonts` (Metro разрешил бы его в себя) — пришлось бы дублировать клиентскую ветку; в jsdom `window` неудаляем — SSR-ветку проверить можно только в Node |
+| Мок `expo-font` изменён не только в `root-layout.test.tsx`: 24 копии `jest.mock('expo-font', () => ({ useFonts }))` в `src/__tests__/*` удалены, один общий мок (`isLoaded`/`loadAsync`, «уже загружены») — в `jest.setup.ts` | корень больше не вызывает `useFonts`; с прежними моками `isLoaded`/`loadAsync` были бы `undefined`. Ожидания и снимки этих тестов не менялись |
+| Порядок коммитов B5 → B6 → B4 | `Icon` читает `useAppTheme()` (B6) |
+| `useActiveThemeId`: до чтения кэша native — `null` даже при пришедшем ответе сервера | AC5 «сплэш скрыт только после чтения кэша» |
+| `pr.md` не создавался | этап finish-task; результат B0 — выше |
+
+**Риски / не проверено:** dev-сервер (`expo start --web`) и native-симуляторы — NOT VERIFIED; смена темы на лету в
+браузере проверена только юнит-тестами (6 тем в B совпадают с «Классикой»); `E2E_API=1` не запускался.
