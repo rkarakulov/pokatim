@@ -6,15 +6,23 @@ describe('renderAccountDeletedEmail', () => {
   // 21:05 UTC — уже следующий день по Минску (UTC+3)
   const deletedAt = new Date('2026-10-27T21:05:00.000Z');
 
-  it('тема «Аккаунт удалён», дата удаления — по Минску, «если это были не вы»', () => {
-    const mail = renderAccountDeletedEmail({ deletedAt });
+  it('тема «Аккаунт удалён», дата удаления — по Минску, «если это были не вы» с адресом поддержки', () => {
+    const mail = renderAccountDeletedEmail({ deletedAt, supportEmail: 'help@example.test' });
     expect(mail.subject).toBe('Аккаунт удалён');
     for (const body of [mail.text, mail.html]) {
       expect(body).toContain('28 октября 2026');
       expect(body).toContain('00:05');
       expect(body).toContain('по минскому времени');
       expect(body).toContain('«Покатим»');
-      expect(body).toContain('Если это были не вы');
+      expect(body).toContain('Если это были не вы — напишите на help@example.test.');
+    }
+  });
+
+  it('без SUPPORT_EMAIL строки «если это были не вы» нет (писать на no-reply некуда)', () => {
+    const mail = renderAccountDeletedEmail({ deletedAt });
+    for (const body of [mail.text, mail.html]) {
+      expect(body).toContain('удалён');
+      expect(body).not.toContain('Если это были не вы');
     }
   });
 

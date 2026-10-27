@@ -27,6 +27,7 @@ x-api-env: &api-env
   MAIL_FROM: ${MAIL_FROM:?}
   APP_LINK_BASE: ${APP_LINK_BASE:?}
   AGREEMENT_VERSION: ${AGREEMENT_VERSION:?}
+  SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
   # web и API — один origin за прокси: CORS выключен
   CORS_ORIGINS: ''
   # треки (ADR-0011): исходники заездов — том trackfiles (api пишет, worker читает и убирает); квота и минимум

@@ -27,7 +27,7 @@ export class AccountErasure {
   constructor(
     private readonly repository: IdentityRepository,
     @Inject(MAILER) private readonly mailer: Mailer,
-    @Inject(ENV) private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET'>,
+    @Inject(ENV) private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET' | 'SUPPORT_EMAIL'>,
   ) {}
 
   deletionState(userId: string): Promise<DeletionState | undefined> {
@@ -89,7 +89,10 @@ export class AccountErasure {
     try {
       await this.mailer.send({
         to: claim.email,
-        ...renderAccountDeletedEmail({ deletedAt: claim.deletedAt }),
+        ...renderAccountDeletedEmail({
+          deletedAt: claim.deletedAt,
+          supportEmail: this.env.SUPPORT_EMAIL,
+        }),
       });
     } catch (error) {
       await this.repository.releaseDeletionEmail(userId, now);
