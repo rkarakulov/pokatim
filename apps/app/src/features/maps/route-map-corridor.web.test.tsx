@@ -1,10 +1,10 @@
 /// <reference types="jest" />
 import type { RaceRouteMap } from '@pokatim/contracts';
 import { stroke, themes } from '@pokatim/design-tokens';
+import { CORRIDOR_LAYER_ID, ROUTE_CATALOG_LINE_WIDTH } from '@pokatim/route-view';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
-import { CORRIDOR_LAYER_ID, ROUTE_CATALOG_LINE_WIDTH } from './corridor-style';
 import type * as Loader from './load-maplibre';
 import { RouteMap } from './route-map';
 

@@ -17,8 +17,8 @@ module.exports = {
       displayName: 'native',
       preset: 'jest-expo',
       testMatch: ['<rootDir>/src/**/*.test.{ts,tsx}'],
-      // *.web.test.* — web-проект ниже
-      testPathIgnorePatterns: ['/node_modules/', '\\.web\\.test\\.'],
+      // *.web.test.* — web-проект ниже, *.server.test.* — проект server (SSR без `window`)
+      testPathIgnorePatterns: ['/node_modules/', '\\.web\\.test\\.', '\\.server\\.test\\.'],
       // дизайн-система проекта и моки нативных модулей — общие для всех тестов
       setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
       transformIgnorePatterns: transpileBase,
@@ -40,10 +40,14 @@ module.exports = {
       },
     },
     {
-      // web-сервер (server/), сборка (scripts/) и помощники смоука (e2e/): Node без рантайма React Native
+      // web-сервер (server/), сборка (scripts/), помощники смоука (e2e/) и SSR-ветки модулей (src/**/*.server.test.*):
+      // Node без рантайма React Native и без `window`
       displayName: 'server',
       preset: 'jest-expo/node',
-      testMatch: ['<rootDir>/{server,scripts,e2e}/**/*.test.ts'],
+      testMatch: [
+        '<rootDir>/{server,scripts,e2e}/**/*.test.ts',
+        '<rootDir>/src/**/*.server.test.{ts,tsx}',
+      ],
     },
   ],
 };

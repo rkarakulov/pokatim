@@ -4,7 +4,7 @@ import type { DbSession } from '../../db';
 import { NotificationsRepository } from './notifications.repository';
 
 /**
- * Порт для модуля `account` (N11, ADR-0016): снять все push-токены пользователя в транзакции удаления аккаунта —
+ * Порт для модуля `account` (N11, ADR-0017): снять все push-токены пользователя в транзакции удаления аккаунта —
  * push перестают уходить сразу. Возвращает число снятых.
  */
 @Injectable()

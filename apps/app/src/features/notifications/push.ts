@@ -8,7 +8,7 @@ import { Linking, Platform } from 'react-native';
 import { secureStorage } from '@/features/auth/secure-storage';
 
 /**
- * Push на native (ADR-0016, `expo-notifications`). Web — `push.web.ts` (web push нет, N1): экраны и хуки импортируют
+ * Push на native (ADR-0017, `expo-notifications`). Web — `push.web.ts` (web push нет, N1): экраны и хуки импортируют
  * модуль без расширения и не знают платформы.
  */
 export type PushPermission = 'granted' | 'denied' | 'undetermined' | 'unavailable';

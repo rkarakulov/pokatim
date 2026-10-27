@@ -4,7 +4,7 @@ import { fieldError, tolerantEnum, Uuid } from '../common.ts';
 import { PageCursor } from '../races/race.schema.ts';
 
 /**
- * Центр уведомлений (ADR-0016, `docs/product/notifications.md`). Все эндпоинты — под `AuthGuard`, только свои
+ * Центр уведомлений (ADR-0017, `docs/product/notifications.md`). Все эндпоинты — под `AuthGuard`, только свои
  * уведомления. Тексты и цели считает сервер при создании (снимок); клиент присылает только намерение (прочитать,
  * настройки, токен). Справочники — только в конец: ответы приложения разбирают их `tolerantEnum`.
  */

@@ -18,7 +18,7 @@ import { RidesService } from './rides.service';
 
 /**
  * Ядро `rides` без HTTP: единственные писатели райдов и жалоб, порт стирания `RideErasure` (модуль
- * `account`, worker) и порт получателей уведомлений `RIDE_NOTICES` (`notifications`, ADR-0016).
+ * `account`, worker) и порт получателей уведомлений `RIDE_NOTICES` (`notifications`, ADR-0017).
  */
 @Module({
   providers: [

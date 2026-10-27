@@ -42,7 +42,7 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
         ...routesOutboxRoutes,
         ...resultsOutboxRoutes,
         ...accountOutboxRoutes,
-        // подписчик чужих типов (results, disputes, rides) — ADR-0016
+        // подписчик чужих типов (results, disputes, rides) — ADR-0017
         ...notificationsOutboxRoutes,
       },
     }),
@@ -57,7 +57,7 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     DisputesWorkerModule,
     // фоновая очистка удалённого аккаунта (account-deletion, ADR-0015)
     AccountWorkerModule,
-    // приём событий для центра уведомлений (ADR-0016)
+    // приём событий для центра уведомлений (ADR-0017)
     NotificationsWorkerModule,
   ],
 })

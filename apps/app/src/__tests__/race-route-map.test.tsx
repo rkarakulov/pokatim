@@ -1,21 +1,18 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
 import type { RaceDetail, RaceRouteMap } from '@pokatim/contracts';
+import { centerLat, corridorLineWidth, MAP_MAX_ZOOM, MAP_MIN_ZOOM } from '@pokatim/route-view';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
 import { type RefreshControlProps, TurboModuleRegistry, useColorScheme } from 'react-native';
 
-import { centerLat, corridorLineWidth } from '@/features/maps/corridor-style';
-
 import { loadMapLibreNative } from '@/features/maps/load-maplibre-native';
-import { MAP_MAX_ZOOM, MAP_MIN_ZOOM } from '@/features/maps/map-camera';
 import { api } from '@/lib/api';
 
 import { appRoutes } from './app-routes';
 import { actions, noEntry, resultsPage } from './races-fixtures';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 // jest-пресет React Native подменяет useColorScheme на jest.fn(() => 'light')
 const colorScheme = jest.mocked(useColorScheme);

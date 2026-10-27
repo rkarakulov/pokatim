@@ -41,8 +41,8 @@ export const ResultsAttemptVerdictChanged = z.object({
 export type ResultsAttemptVerdictChanged = z.infer<typeof ResultsAttemptVerdictChanged>;
 
 /**
- * Протокол гонки опубликован (D-22): маршрут — у подписчика `notifications` (`notificationsOutboxRoutes`, ADR-0016);
- * рейтингу сезона (слайс 08) нужен fan-out outbox (ADR-0016 п. 5).
+ * Протокол гонки опубликован (D-22): маршрут — у подписчика `notifications` (`notificationsOutboxRoutes`, ADR-0017);
+ * рейтингу сезона (слайс 08) нужен fan-out outbox (ADR-0017 п. 5).
  */
 export const RESULTS_PROTOCOL_PUBLISHED = 'results.protocol-published';
 export const ResultsProtocolPublished = z.object({

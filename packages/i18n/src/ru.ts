@@ -1584,6 +1584,60 @@ export const ru = {
   'admin.routes.catalog.unpublishConfirm.confirm': 'Снять с публикации',
   'admin.routes.error.ROUTE_INVALID_STATE':
     'Маршрут ещё не готов — опубликовать можно только готовый',
+  // app-themes D1: раздел «Оформление приложения» панели и журнал смены темы
+  'admin.nav.appearance': 'Оформление приложения',
+  'admin.appearance.title': 'Оформление приложения',
+  'admin.appearance.hint':
+    'Тема меняется у всех райдеров в приложении и на сайте. Панель «Протокол» остаётся в своей теме.',
+  'admin.appearance.legend': 'Тема приложения',
+  'admin.appearance.current': 'Сейчас в приложении',
+  'admin.appearance.save': 'Сохранить',
+  'admin.appearance.saved': 'Тема сохранена. Приложение применит её в течение минуты.',
+  'admin.appearance.saveFailed': 'Не удалось сохранить тему',
+  'admin.appearance.previewPending': 'Превью появится позже',
+  'admin.appearance.theme.classic.name': 'Классика',
+  'admin.appearance.theme.classic.description':
+    'Нынешний облик: строгие карточки и чёткая типографика',
+  'admin.appearance.theme.atlas.name': 'Атлас',
+  'admin.appearance.theme.atlas.description':
+    'Светло-серый фон, белые скруглённые карточки, оранжевый акцент и герой маршрута с картой',
+  'admin.appearance.theme.chrono.name': 'Хронометр',
+  'admin.appearance.theme.chrono.description':
+    'Всегда тёмная: почти чёрный фон, ярко-оранжевые линии и крупные цифры плитками',
+  'admin.appearance.theme.planner.name': 'Планировщик',
+  'admin.appearance.theme.planner.description':
+    'Тёплый бежево-серый фон, чёрные линии маршрутов и плитки рекомендаций с мини-картами',
+  'admin.appearance.theme.journal.name': 'Журнал',
+  'admin.appearance.theme.journal.description':
+    'Светлый фон с зеленоватым оттенком, зелёные контуры и профиль высоты',
+  'admin.appearance.theme.navigation.name': 'Навигация',
+  'admin.appearance.theme.navigation.description':
+    'Всегда тёмная: карта во весь блок, круглые кнопки и крупные цифры',
+  'admin.appearance.theme.typography.name': 'Типографика',
+  'admin.appearance.theme.typography.description':
+    'Светлый фон, оранжевый диагональный блок и огромные сжатые цифры километров',
+  'admin.audit.action.appearance.theme_changed': 'Тема приложения изменена',
+  'admin.audit.themeChange': '{from} → {to}',
+  // routes-05: страница маршрута панели — карта, цифры, профиль высоты со скраббингом
+  'admin.routes.detail.notFound': 'Маршрут не найден',
+  'admin.routes.detail.processing': 'Маршрут обрабатывается — страница обновится сама',
+  'admin.routes.detail.processingLong': 'Обрабатывается — проверьте позже',
+  'admin.routes.detail.refresh': 'Обновить',
+  'admin.routes.detail.failed': 'Маршрут не обработан',
+  'admin.routes.detail.map': 'Карта',
+  'admin.routes.detail.mapLabel': 'Карта маршрута «{title}»: {distance}, старт и финиш отмечены',
+  'admin.routes.detail.stats': 'Цифры',
+  'admin.routes.detail.stats.distance': 'Длина',
+  'admin.routes.detail.stats.gain': 'Набор',
+  'admin.routes.detail.stats.max': 'Макс. высота',
+  'admin.routes.detail.stats.min': 'Мин. высота',
+  'admin.routes.detail.stats.shape': 'Форма',
+  'admin.routes.detail.stats.time': 'В пути',
+  'admin.routes.detail.profile': 'Профиль высоты',
+  'admin.routes.detail.noElevation': 'Нет данных о высоте',
+  'admin.routes.detail.scrubHint': 'Наведите на профиль или перетащите точку на карте',
+  'admin.routes.detail.open': 'Открыть маршрут',
+  'admin.routes.detail.newTab': '(в новой вкладке)',
   // routes-01: вкладка «Маршруты», карточка маршрута каталога и раздел Главной
   'routes.title': 'Маршруты',
   'routes.filter.city': 'Город',

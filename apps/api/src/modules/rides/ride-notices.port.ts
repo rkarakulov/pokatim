@@ -1,7 +1,7 @@
 import type { RideStatus } from '@pokatim/contracts';
 
 /**
- * Порт `rides` для модуля `notifications` (ADR-0016; через `modules/rides/index.ts`): поля текста и получатели
+ * Порт `rides` для модуля `notifications` (ADR-0017; через `modules/rides/index.ts`): поля текста и получатели
  * уведомлений о райдах. `notifications` райды и жалобы напрямую не читает; подпись организатора, описание
  * и комментарии жалоб сюда не попадают (N12).
  */

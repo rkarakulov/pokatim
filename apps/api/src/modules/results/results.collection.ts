@@ -147,7 +147,7 @@ export interface RaceAttemptDoc {
   trackMap?: AttemptTrackMapDoc | null;
   /**
    * последний видимый райдеру вердикт (`visibleVerdict`, notifications RC-2): `requeueAttempt` его не стирает, провал и
-   * снятие не затирают — уведомление «засчитан/не засчитан» только при смене. Документы до `0025_attempt_last_verdict`
+   * снятие не затирают — уведомление «засчитан/не засчитан» только при смене. Документы до `0026_attempt_last_verdict`
    * без поля — чтение `?? null`
    */
   lastVisibleVerdict?: 'counted' | 'rejected' | null;

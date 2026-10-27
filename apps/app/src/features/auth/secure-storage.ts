@@ -6,6 +6,7 @@ export type SecureKey =
   | 'pokatim.registration'
   | 'pokatim.onboarding'
   | 'pokatim.locationPrompt'
+  | 'pokatim.appTheme'
   | 'pokatim.pushToken';
 
 /**

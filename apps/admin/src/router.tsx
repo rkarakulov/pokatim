@@ -11,6 +11,7 @@ import {
 import type { ReactNode } from 'react';
 
 import { AuditScreen } from './features/audit/AuditScreen';
+import { AppearanceScreen } from './features/appearance/AppearanceScreen';
 import { CalendarScreen } from './features/calendar/CalendarScreen';
 import { validateDisputesSearch } from './features/disputes/disputes-format';
 import { DisputeScreen } from './features/disputes/DisputeScreen';
@@ -25,6 +26,7 @@ import { OverviewScreen } from './features/overview/OverviewScreen';
 import { NewRaceScreen, RaceScreen } from './features/races/RaceScreen';
 import { RacesScreen, validateRacesSearch } from './features/races/RacesScreen';
 import { RaceResultsScreen } from './features/results/RaceResultsScreen';
+import { RouteScreen } from './features/routes/RouteScreen';
 import { RoutesScreen } from './features/routes/RoutesScreen';
 import { SeasonsScreen } from './features/seasons/SeasonsScreen';
 import { SignInScreen } from './features/sign-in/SignInScreen';
@@ -206,6 +208,19 @@ const routesRoute = createRoute({
   ),
 });
 
+const routeRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'routes/$routeId',
+  component: function RouteRoute() {
+    const { routeId } = routeRoute.useParams();
+    return (
+      <RequirePermission permission="races.read">
+        <RouteScreen key={routeId} routeId={routeId} />
+      </RequirePermission>
+    );
+  },
+});
+
 const ridesModerationRoute = createRoute({
   getParentRoute: () => appRoute,
   path: 'rides-moderation',
@@ -265,6 +280,17 @@ const disputeRoute = createRoute({
   },
 });
 
+// app-themes D1: тема приложения райдера (только admin)
+const appearanceRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'appearance',
+  component: () => (
+    <RequirePermission permission="appearance.manage">
+      <AppearanceScreen />
+    </RequirePermission>
+  ),
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '$',
@@ -282,12 +308,14 @@ const routeTree = rootRoute.addChildren([
     seasonsRoute,
     calendarRoute,
     routesRoute,
+    routeRoute,
     membersRoute,
     auditRoute,
     ridesModerationRoute,
     rideModerationRoute,
     disputesRoute,
     disputeRoute,
+    appearanceRoute,
     notFoundRoute,
   ]),
 ]);

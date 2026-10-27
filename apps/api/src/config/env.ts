@@ -105,11 +105,11 @@ const tracksDevicesEnvShape = {
   DEPLOY_STAGE: z.enum(['dev', 'prod']).default('prod'),
 };
 
-/** Адрес Expo Push API по умолчанию — единственный разрешённый в production (ADR-0016). */
+/** Адрес Expo Push API по умолчанию — единственный разрешённый в production (ADR-0017). */
 export const EXPO_PUSH_API_DEFAULT_URL = 'https://exp.host/--/api/v2/push';
 
 /**
- * Уведомления (ADR-0016): push через Expo Push Service. Выключен по умолчанию (`PUSH_ENABLED=false` — push помечается
+ * Уведомления (ADR-0017): push через Expo Push Service. Выключен по умолчанию (`PUSH_ENABLED=false` — push помечается
  * `skipped`, центр работает). Ключ Expo — только env, необязательный. Адрес меняют только тесты (фейк-сервер) и
  * dev-стенд; в production — только `exp.host`.
  */

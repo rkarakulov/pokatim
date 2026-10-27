@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
-import { httpError, ME, networkError, renderApp, USER_ID } from '../../test/app';
+import { currentHref, httpError, ME, networkError, renderApp, USER_ID } from '../../test/app';
 
 vi.mock('../../api', () => ({
   api: {
@@ -42,6 +42,7 @@ const route = (overrides: Partial<PanelRoute> = {}): PanelRoute => ({
     [27.5, 53.9],
     [27.6, 53.95],
   ],
+  elevation: null,
   ...overrides,
 });
 const PUBLISHED = summary({
@@ -108,6 +109,25 @@ describe('«Маршруты» панели (routes-01)', () => {
     expect(within(failed).getByText('Маршрут короче 1 км')).toBeTruthy();
     expect(within(failed).queryByRole('button')).toBeNull();
     expect(mocked.listRoutes).toHaveBeenCalledWith({ limit: 50 });
+  });
+
+  it('routes-05: название — ссылка на страницу маршрута (и у отказа); окно публикации — «Открыть маршрут» в той же вкладке', async () => {
+    const { router } = await renderApp('/routes');
+    const failed = await rowOf('Битый файл');
+    expect(within(failed).getByRole('link', { name: 'Битый файл' }).getAttribute('href')).toBe(
+      `/admin/routes/${FAILED_ID}`,
+    );
+    fireEvent.click(
+      within(await rowOf('Минское кольцо')).getByRole('button', {
+        name: /Опубликовать в каталоге/,
+      }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    const open = await within(dialog).findByRole('link', { name: 'Открыть маршрут' });
+    expect(open.getAttribute('target')).toBeNull();
+    fireEvent.click(open);
+    await waitFor(() => expect(currentHref(router)).toBe(`/admin/routes/${ROUTE_ID}`));
+    expect(await screen.findByRole('heading', { name: 'Минское кольцо', level: 1 })).toBeTruthy();
   });
 
   it('пусто — «Маршрутов пока нет»', async () => {

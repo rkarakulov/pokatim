@@ -17,6 +17,7 @@ vi.mock('../api', () => ({
     listAudit: vi.fn(),
     listSeasons: vi.fn(),
     listCalendar: vi.fn(),
+    getAppearance: vi.fn(),
   },
 }));
 
@@ -50,7 +51,7 @@ describe('каркас панели (AC10)', () => {
 
   it.each([
     // admin-02: Гонки, Календарь, Сезоны (последним в основной группе); 05b: «Модерация райдов» — в конце;
-    // 06: «Споры» — сразу после «Гонок» (8.1 RC-18)
+    // 06: «Споры» — сразу после «Гонок» (8.1 RC-18); app-themes: «Оформление приложения» — последним в bottom
     [
       'admin',
       [
@@ -63,6 +64,7 @@ describe('каркас панели (AC10)', () => {
         'Сотрудники',
         'Журнал действий',
         'Модерация райдов',
+        'Оформление приложения',
       ],
     ],
     [
@@ -85,6 +87,8 @@ describe('каркас панели (AC10)', () => {
     ['organizer', '/calendar'],
     ['organizer', '/rides-moderation'],
     ['organizer', '/disputes'],
+    ['organizer', '/appearance'],
+    ['moderator', '/appearance'],
     ['moderator', '/calendar'],
     ['moderator', '/races/new'],
   ] as const)(
@@ -99,6 +103,7 @@ describe('каркас панели (AC10)', () => {
       expect(mocked.listAudit).not.toHaveBeenCalled();
       expect(mocked.listCalendar).not.toHaveBeenCalled();
       expect(mocked.listSeasons).not.toHaveBeenCalled();
+      expect(mocked.getAppearance).not.toHaveBeenCalled();
     },
   );
 

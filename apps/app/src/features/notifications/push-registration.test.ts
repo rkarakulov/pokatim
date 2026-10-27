@@ -38,7 +38,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-describe('registerDevicePush (ADR-0016)', () => {
+describe('registerDevicePush (ADR-0017)', () => {
   it('разрешение есть и projectId задан — токен уходит на сервер и запоминается', async () => {
     await registerDevicePush();
 

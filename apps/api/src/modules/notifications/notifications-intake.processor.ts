@@ -24,7 +24,7 @@ const RECIPIENTS_BATCH = 500;
 const DAY_MS = 86_400_000;
 
 /**
- * Приём событий для уведомлений (`notifications-intake`, ADR-0016; имя задачи = тип события, jobId = id события
+ * Приём событий для уведомлений (`notifications-intake`, ADR-0017; имя задачи = тип события, jobId = id события
  * outbox): событие старше 72 ч — skip (RC-6) → черновики через порты источников (`NotificationIntake`) → живые
  * получатели (`IdentityAccounts.liveUserIds`, RC-4) → настройки пачкой → запись (`writeNotices`: уникальный
  * `(sourceEventId, userId)`, схлопывание по `collapseKey`). Повтор задачи и повторная публикация не создают дублей.

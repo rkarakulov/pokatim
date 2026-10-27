@@ -1,14 +1,12 @@
 import type { RouteMapGeometry } from '@pokatim/contracts';
 import { apiErrorOf } from '@pokatim/api-client';
+import { MAP_ASPECT_RATIO, type ScrubStore, withoutCorridor } from '@pokatim/route-view';
 import { AsyncContent, SkeletonGroup } from '@rkarakulov/ui';
 import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { MAP_ASPECT_RATIO } from '@/features/maps/corridor-style';
 import { RouteMap } from '@/features/maps/route-map';
-import type { ScrubStore } from '@/features/maps/scrub-store';
-import { withoutCorridor } from '@/features/maps/route-geometry';
 import { useMapStyle } from '@/features/maps/use-map-style';
 
 export interface RouteLineMapProps {

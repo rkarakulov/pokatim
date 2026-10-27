@@ -18,7 +18,6 @@ import { appRoutes } from './app-routes';
 jest.mock('@/lib/api');
 jest.mock('@/lib/share-link', () => ({ shareLink: jest.fn(), shareOrigin: jest.fn() }));
 jest.mock('@/lib/download-file', () => ({ downloadFile: jest.fn() }));
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getRoute = jest.mocked(api.getCatalogRoute);
 const getMap = jest.mocked(api.getCatalogRouteMap);

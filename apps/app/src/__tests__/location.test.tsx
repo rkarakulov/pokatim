@@ -8,7 +8,6 @@ import { liveSession, storedValue, storeSession, storeSurveyCompleted } from './
 import { appRoutes } from './app-routes';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getPermission = jest.mocked(Location.getForegroundPermissionsAsync);
 const requestPermission = jest.mocked(Location.requestForegroundPermissionsAsync);

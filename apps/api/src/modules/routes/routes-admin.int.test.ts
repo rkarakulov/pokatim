@@ -435,3 +435,57 @@ describe('изоляция маршрутов райдера (routes-02, RC-2)',
     expect(await routeDoc(rider)).toMatchObject({ origin: 'rider', title: 'Мой маршрут' });
   });
 });
+
+describe('страница маршрута панели (routes-05, A4)', () => {
+  const PANEL_ROUTE_KEYS = [
+    'catalog',
+    'createdAt',
+    'distanceM',
+    'elevation',
+    'elevationGainM',
+    'failure',
+    'id',
+    'isLoop',
+    'line',
+    'owner',
+    'status',
+    'title',
+  ];
+
+  it('GET :id — ключи ровно summary + line + elevation; профиль: мин./макс. по профилю; без профиля — null', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const moderator = await staff(h, 'mod@example.by', 'moderator');
+    const id = await readyRoute(h, org.token, 'route-trk-no-time.gpx', 'Минское кольцо');
+    const geometry = await routesDb(h).geometries.findOne({ _id: id });
+    const profile = geometry!.profile!;
+    const elevations = profile.map(([, elevation]) => elevation);
+
+    const read = await panelCall(h, moderator.token, 'GET', `${ROUTES}/${id}`);
+    expect(read.status).toBe(200);
+    expect(Object.keys(read.body as object).sort()).toEqual(PANEL_ROUTE_KEYS);
+    expect(parsedRoute(read).elevation).toEqual({
+      minM: Math.min(...elevations),
+      maxM: Math.max(...elevations),
+      profile,
+    });
+
+    await routesDb(h).geometries.updateOne({ _id: id }, { $set: { profile: null } });
+    const noProfile = await panelCall(h, moderator.token, 'GET', `${ROUTES}/${id}`);
+    expect(parsedRoute(noProfile)).toMatchObject({
+      elevation: null,
+      line: geometry!.line.coordinates,
+    });
+  });
+
+  it('processing автора — line [] и elevation null; маршрут райдера — 404', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const pending = parsedRoute(await uploadRoute(h, org.token, fixture('route-rte.gpx'))).id;
+    const read = await panelCall(h, org.token, 'GET', `${ROUTES}/${pending}`);
+    expect(read.status).toBe(200);
+    expect(Object.keys(read.body as object).sort()).toEqual(PANEL_ROUTE_KEYS);
+    expect(parsedRoute(read)).toMatchObject({ status: 'processing', line: [], elevation: null });
+
+    const rider = await seedRiderRoute(h, org.userId);
+    expect((await panelCall(h, org.token, 'GET', `${ROUTES}/${rider}`)).status).toBe(404);
+  });
+});

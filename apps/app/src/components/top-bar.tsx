@@ -1,9 +1,9 @@
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { textStyle, useTheme } from '@rkarakulov/ui';
-import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Icon } from './icon';
 import { NotificationBell } from './notification-bell';
 
 interface TopBarProps {
@@ -19,7 +19,7 @@ interface TopBarProps {
 
 /**
  * Верхняя панель корня вкладки (`.topbar` прототипа): словесный знак продукта, иконки «Устройства» (часы) и «Профиль»
- * (SF Symbols на iOS, Material Symbols на Android и web — `expo-symbols`), колокольчик уведомлений со счётчиком.
+ * (`Icon`: SF Symbols на iOS, Material Symbols на Android и web), колокольчик уведомлений со счётчиком.
  * Аватар — с блоком профиля; тогда же — кандидат в `@rkarakulov/ui` (R8 блока 02).
  */
 export function TopBar({
@@ -50,11 +50,7 @@ export function TopBar({
             hitSlop={space.s2}
             style={styles.action}
           >
-            <SymbolView
-              name={{ ios: 'applewatch', android: 'watch', web: 'watch' }}
-              size={size.icon}
-              tintColor={theme.text.primary}
-            />
+            <Icon name="watch" size={size.icon} color={theme.text.primary} />
           </Pressable>
         ) : null}
         {onOpenProfile ? (
@@ -65,11 +61,7 @@ export function TopBar({
             hitSlop={space.s2}
             style={styles.action}
           >
-            <SymbolView
-              name={{ ios: 'person.crop.circle', android: 'account_circle', web: 'account_circle' }}
-              size={size.icon}
-              tintColor={theme.text.primary}
-            />
+            <Icon name="profile" size={size.icon} color={theme.text.primary} />
           </Pressable>
         ) : null}
       </View>

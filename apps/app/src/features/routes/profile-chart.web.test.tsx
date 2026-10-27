@@ -1,14 +1,17 @@
 /// <reference types="jest" />
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { themes } from '@pokatim/design-tokens';
+import {
+  createScrubStore,
+  PROFILE_FILL_OPACITY,
+  SCRUB_MARKER_ATTR,
+  type ScrubStore,
+} from '@pokatim/route-view';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 
-import { createScrubStore, SCRUB_MARKER_ATTR, type ScrubStore } from '@/features/maps/scrub-store';
-
 import { ProfileArea, ProfileChart } from './profile-chart.web';
-import { PROFILE_FILL_OPACITY } from './profile-style';
 
 const elevation: CatalogRouteElevation = {
   minM: 191,
@@ -49,6 +52,28 @@ describe('ProfileArea web (fix профиля routes-03)', () => {
         <ProfileArea elevation={{ minM: 1, maxM: 1, profile: [[0, 1]] }} theme={themes.dark} />,
       ),
     ).toBe('');
+  });
+});
+
+describe('ProfileChart web — роли профиля темы (app-themes)', () => {
+  it('линия — profile.line, стопы градиента — profile.fillTop/fillBottom, базовая линия — profile.grid', () => {
+    const theme = {
+      ...themes.light,
+      profile: { line: '#000001', fillTop: '#000002', fillBottom: '#000003', grid: '#000004' },
+    };
+    const html = renderToString(
+      <ProfileChart
+        elevation={elevation}
+        distanceM={67_000}
+        gainM={null}
+        theme={theme}
+        label="Профиль"
+      />,
+    );
+    expect(html).toContain('stroke="#000001"');
+    expect(html).toContain('<stop offset="0" stop-color="#000002"');
+    expect(html).toContain('<stop offset="1" stop-color="#000003"');
+    expect(html).toContain('solid #000004');
   });
 });
 

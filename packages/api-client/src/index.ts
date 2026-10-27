@@ -1,4 +1,5 @@
 import {
+  AppAppearance,
   ApiError,
   CatalogRouteCities,
   CatalogRouteDetail,
@@ -341,6 +342,8 @@ export function createApiClient({
     listCalendarCities: () => getPublic('/v1/calendar/cities', CalendarCities),
     /** Месяцы будущих опубликованных стартов — чипы «Дата». */
     listCalendarMonths: () => getPublic('/v1/calendar/months', CalendarMonths),
+    /** Тема приложения (app-themes): публично, кэш 60 с; незнакомая тема — `'unknown'` (клиент → «Классика»). */
+    getAppearance: () => getPublic('/v1/appearance', AppAppearance),
 
     // --- кофе-райды (блок 05): карточка — публично; лента, города, состояние зрителя и мутации — вход обязателен ---
     /** Будущие райды по времени старта (+ отменённые свои), роль зрителя в каждой карточке. */
@@ -556,7 +559,7 @@ export function createApiClient({
         body,
       ),
 
-    // --- центр уведомлений (вход обязателен, ADR-0016): только свои ---
+    // --- центр уведомлений (вход обязателен, ADR-0017): только свои ---
     /** Новые сверху, курсор; незнакомая цель — `{ type: 'unknown' }` (без перехода). */
     listNotifications: (accessToken: string, params: NotificationListParams = {}) =>
       request(

@@ -1,7 +1,7 @@
 # Центр уведомлений: модуль notifications, push через Expo, экран в приложении
 
 Уровень task3. Ветка `feature/notifications` от `origin/develop`. Продукт — `docs/product/notifications.md`
-(N1–N12, тексты), ADR-0016.
+(N1–N12, тексты), ADR-0017.
 
 ## 1. Title
 
@@ -30,7 +30,7 @@
 
 **Модуль `apps/api/src/modules/notifications`:**
 
-- Коллекции (миграция `0024_notifications`, RC-5): `notifications` (TTL 90 дней по `expireAt`), `notification_settings`, `push_tickets`,
+- Коллекции (миграция `0025_notifications`, RC-5): `notifications` (TTL 90 дней по `expireAt`), `notification_settings`, `push_tickets`,
   `push_tokens`. Уникальность уведомления — `(sourceEventId, userId)`; схлопывание — `collapseKey` (N7).
 - Очередь `notifications-intake`: событие outbox → получатели через порты → настройки → upsert уведомлений; событие
   старше 72 ч — skip. Повтор задачи не создаёт дублей (уникальный ключ).
@@ -90,13 +90,13 @@ Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров �
   `publishedAt: null`). После выката публикатор выгрузит накопленные — intake отсечёт их по 72 ч.
 - Очереди: `notifications-intake` (событие → уведомления), `notifications-delivery` (push по пользователю, письмо по
   уведомлению), `notifications-maintenance` (квитанции Expo, перепостановка зависших доставок).
-- Миграции: `0024_notifications` — expand (коллекции и индексы), `0025_attempt_last_verdict` — бэкфилл нового поля
+- Миграции: `0025_notifications` — expand (коллекции и индексы), `0026_attempt_last_verdict` — бэкфилл нового поля
   попыток (не деструктивно). Последняя применённая — `0023_account_deletion` (проверено в `migrations/index.ts`).
 - Совместимость клиентов: только новые эндпоинты и поля; старые сборки их не вызывают. Новые enum-ы ответов —
   `tolerantEnum`, неизвестная цель — `{ type: 'unknown' }` (уведомление без перехода).
 - Rides: `update`/`cancel`/`join` и отмена при стирании переходят на `MongoTransactions` + outbox; инвариант
   участия не меняется — по-прежнему **одна условная операция над документом райда** (фильтр с лимитом, статусом,
-  временем, членством), транзакция только добавляет событие (поправка ADR-0013 п. 2 — в ADR-0016).
+  временем, членством), транзакция только добавляет событие (поправка ADR-0013 п. 2 — в ADR-0017).
 
 ## 5.1 Placement & Reuse Gate
 
@@ -146,7 +146,7 @@ Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров �
   внутри транзакции: `next = visibleVerdict(attempt.origin, result)`; `recordCheck` пишет
   `lastVisibleVerdict: next ?? attempt.lastVisibleVerdict ?? null` (провал/снятие прежний не затирают); событие
   `results.attempt-verdict-changed` — только если `next !== null && next !== (attempt.lastVisibleVerdict ?? null)`.
-  Бэкфилл `0025_attempt_last_verdict`: `status ∈ {counted, rejected}` и поля нет → `lastVisibleVerdict = status`
+  Бэкфилл `0026_attempt_last_verdict`: `status ∈ {counted, rejected}` и поля нет → `lastVisibleVerdict = status`
   (pipeline `$set`), иначе первая же перепроверка старых гонок разошлёт «засчитан» повторно. `failed`, `withdrawn`,
   `excluded` и `failAttempt` регламента — без события.
 - **`result-revised`:** `disqualified`/`disqualification_revoked` — владельцу `entryId`; `recheck_applied` —
@@ -193,17 +193,17 @@ Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров �
 
 - `[ASSUMPTION]` всё помеченное в `docs/product/notifications.md`.
 - Нет EAS `projectId` и ключей APNs/FCM — push на устройствах не проверяется на dev; проверка — центр (web).
-- Слайс 08 и fan-out — ADR-0016, follow-up.
+- Слайс 08 и fan-out — ADR-0017, follow-up.
 - Rides без транзакций: перевод update/cancel/join на транзакции — регресс-риск, покрыть существующими int-тестами.
 
 ## 8.1 Requirements Consistency (заполняет architect)
 
-Итог: противоречий, требующих человека до старта coder, нет; ниже — конфликты, которые снимает ADR-0016, и
+Итог: противоречий, требующих человека до старта coder, нет; ниже — конфликты, которые снимает ADR-0017, и
 недоопределённости с принятым решением (`R` — рекомендация architect, реализуется по ней).
 
 - **RC-1 Конфликт с инвариантом (снят автором).** AGENTS §1 и §4.9 «нет push», `pokatim-app.md` (строки «нет push»,
-  «уведомления — только in-app»), `docs/product/account.md` A6 «push в MVP нет» vs N1. Снимает ADR-0016 + правка этих
-  мест в той же PR. Ключевые пункты ADR-0016:
+  «уведомления — только in-app»), `docs/product/account.md` A6 «push в MVP нет» vs N1. Снимает ADR-0017 + правка этих
+  мест в той же PR. Ключевые пункты ADR-0017:
   1. Push — Expo Push Service (новый внешний сервис, исходящий HTTPS только на `exp.host`); web push — нет.
   2. Модуль `notifications` — единственный потребитель событий для уведомлений; модули-источники пишут только
      outbox (payload — id и коды) и дают порт чтения получателей через `index.ts`.
@@ -263,6 +263,10 @@ Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров �
 
 ## 8.2 Deviations from spec
 
+- **M-1 (слияние develop, оркестратор).** develop (темы приложения, PR #69) занял миграцию `0024` и ADR-0016:
+  миграции слайса перенумерованы в `0025_notifications` и `0026_attempt_last_verdict`, ADR — в
+  `0017-notifications-and-push.md`. Упоминания `0024`/`0025` в отчётах шагов ниже — номера до слияния.
+  Колокольчик рисуется через `Icon` (`bell`) — единственный вход `expo-symbols` по ADR-0016 тем.
 - **A-1 (шаг A).** Уведомления в int-тестах шага A вставляются хелпером `test/notifications.ts` прямо в коллекцию
   (`notificationsCollections(h.db)`), а не методом репозитория: метода вставки «только для тестов» в репозитории нет,
   запись уведомлений появится в intake (шаг B). Причина — не держать мёртвый код в единственном писателе.
@@ -334,9 +338,9 @@ rate limit мутаций и регистрации токенов, лимит �
 
 ## 10. Documentation Impact
 
-- `docs/adr/0016-notifications-and-push.md` (пункты — §8.1 RC-1) + строка в `docs/adr/README.md`; пометка в
-  `docs/adr/0013-coffee-rides.md` («п. 2 уточнён ADR-0016»).
-- `AGENTS.md` §1 (push через Expo на iOS/Android по ADR-0016; WebSocket/BLE/Strava — по-прежнему нет) и §4.9 (пример
+- `docs/adr/0017-notifications-and-push.md` (пункты — §8.1 RC-1) + строка в `docs/adr/README.md`; пометка в
+  `docs/adr/0013-coffee-rides.md` («п. 2 уточнён ADR-0017»).
+- `AGENTS.md` §1 (push через Expo на iOS/Android по ADR-0017; WebSocket/BLE/Strava — по-прежнему нет) и §4.9 (пример
   «push» убрать из списка запретов).
 - `.claude/rules/pokatim-app.md` — «нет push» и «уведомления — только in-app»; новый абзац «Уведомления»
   (`features/notifications`, развилка `push(.web).ts`, белый список целей, polling 60 с).
@@ -460,7 +464,7 @@ Coder сверяет через context7: `getExpoPushTokenAsync`, `setNotificat
   `push-delivery.ts`, `email-delivery.ts`, `notifications-delivery.processor.ts`, `push-receipts.ts`,
   `notifications-maintenance.processor.ts` (+ `NotificationsSchedules`), `push-sender.ts` (порт `PUSH_SENDER`),
   `expo-push.sender.ts`.
-- `apps/api/src/db/migrations/0024_notifications.ts`, `0025_attempt_last_verdict.ts`.
+- `apps/api/src/db/migrations/0025_notifications.ts`, `0026_attempt_last_verdict.ts`.
 - `packages/contracts/src/notifications/notification.schema.ts` (+ `.test.ts`).
 - `apps/api/test/notifications.ts` (хелперы: событие outbox с id на момент, прогон intake/delivery),
   `apps/api/test/fake-expo.ts`.
@@ -563,7 +567,7 @@ PushTokenDoc { _id: uuidv7; token; userId; platform; createdAt; updatedAt }   //
 PushTicketDoc { _id: uuidv7; ticketId; tokenId; createdAt; expireAt /* + 24 ч */ }
 ```
 
-Индексы `0024_notifications` (имена — для `isDuplicateKey`):
+Индексы `0025_notifications` (имена — для `isDuplicateKey`):
 `notifications_event_user_unique { sourceEventId: 1, userId: 1 }` unique;
 `notifications_collapse_unique { userId: 1, collapseKey: 1 }` unique, partial `{ collapseKey: { $type: 'string' } }`;
 `notifications_user_list_idx { userId: 1, createdAt: -1, _id: -1 }` (список, курсор, стирание);
@@ -663,7 +667,7 @@ failed-доставок (follow-up вместе с F13); WebSocket; fan-out outb
 - **D — приложение.** `expo-notifications` (пакет + плагин), `features/notifications` (запросы, цели, развилки
   push), колокольчик, экраны центра и настроек, вход из профиля, снятие токена при выходе, обработка нажатия; i18n.
   Тесты: unit целей, колокольчика, экранов (состояния §4.12: скелетон, пусто, ошибка с повтором, баннер обновления);
-  web-смоук. Затем — документация §10 и ADR-0016.
+  web-смоук. Затем — документация §10 и ADR-0017.
 
 ### Security notes (зона `pokatim-security.md` и `security.md` затронута — чек-лист 8.3 обязателен)
 
@@ -685,7 +689,7 @@ failed-доставок (follow-up вместе с F13); WebSocket; fan-out outb
   `UnreadCount` (0–100), `NotificationSettings` (`strictObject`, `start ≠ end` → `INVALID` на `quietHours.endHour`),
   `DEFAULT_NOTIFICATION_SETTINGS`, `ExpoPushToken`, `RegisterPushToken`, `RevokePushToken`. api-client — 8 методов §11.
 - api: `queues.ts` (+3 очереди, процессоров ещё нет — шаги B/C), env `PUSH_ENABLED`/`EXPO_ACCESS_TOKEN`/
-  `EXPO_PUSH_API_URL` (+ `envDependencyErrors`: в production+prod — только `exp.host`), миграция `0024_notifications`
+  `EXPO_PUSH_API_URL` (+ `envDependencyErrors`: в production+prod — только `exp.host`), миграция `0025_notifications`
   (4 коллекции, 12 индексов; `$in` в `partialFilterExpression` на MongoDB 8 работает — проверено int-тестом).
 - Модуль `notifications`: `notifications.collection.ts`, `notifications.repository.ts` (единственный писатель; все
   выборки с `userId` и `expireAt > now`), `notifications.policy.ts` (`groupOf`, `EMAIL_KINDS`, `quietUntil`, лимиты),
@@ -698,7 +702,7 @@ failed-доставок (follow-up вместе с F13); WebSocket; fan-out outb
 
 **Files.** `packages/contracts/src/notifications/notification.schema{,.test}.ts`, `packages/contracts/src/index.ts`,
 `packages/api-client/src/{index,notifications.test}.ts`, `apps/api/src/{queues,app.module}.ts`,
-`apps/api/src/config/env{,.test}.ts`, `apps/api/src/db/migrations/{0024_notifications,index,migrations.int.test}.ts`,
+`apps/api/src/config/env{,.test}.ts`, `apps/api/src/db/migrations/{0025_notifications,index,migrations.int.test}.ts`,
 `apps/api/src/modules/notifications/*` (index, module, collection, repository, policy, texts, event-time,
 controller, 3 сервиса, push-tokens, notification-erasure + тесты), `apps/api/test/notifications.ts`.
 
@@ -725,7 +729,7 @@ dependency violations found», api 113 files / 1177 tests passed, contracts 270,
 - `results`: поле попытки `lastVisibleVerdict` (не стирается `requeueAttempt`), `visibleVerdict(origin, result)` поверх
   `attemptHidden`; `AttemptCheckProcessor.record` пишет поле (`next ?? previous`) и событие
   `results.attempt-verdict-changed` в транзакции вердикта только при смене на видимый `counted`/`rejected`; миграция
-  `0025_attempt_last_verdict` (pipeline-бэкфилл `counted|rejected` без поля); порт `RESULTS_NOTICES`
+  `0026_attempt_last_verdict` (pipeline-бэкфилл `counted|rejected` без поля); порт `RESULTS_NOTICES`
   (`ResultsCoreModule`), экспорт событий протокола.
 - `disputes`: порт `DISPUTE_NOTICES` (проекция сторон без описания/ответа/решения) в `DisputesCoreModule`, экспорт
   событий. `identity`: `IdentityAccounts.liveUserIds`.
@@ -739,7 +743,7 @@ dependency violations found», api 113 files / 1177 tests passed, contracts 270,
   тихие часы; письмо N2 по тумблеру), `NotificationsWorkerModule`. Постановка доставки — точка расширения шага C
   (комментарий в процессоре после записи; push остаётся `pending` без задач). Текст исхода спора — §8.2 A-3.
 
-**Files.** `apps/api/src/db/migrations/{0025_attempt_last_verdict,index,migrations.int.test}.ts`,
+**Files.** `apps/api/src/db/migrations/{0026_attempt_last_verdict,index,migrations.int.test}.ts`,
 `apps/api/src/modules/results/{attempt-check.processor,results.events,results.collection,results.policy(.test),
 results.repository,results-notices(.port),results.module,index,results-check.int.test}.ts`,
 `apps/api/src/modules/disputes/{dispute-notices(.port),disputes.repository,disputes.module,disputes.events,index}.ts`,
@@ -847,7 +851,7 @@ worktree (`nice-pasteur-1d135d`, `flushdb`) — отладочные прого�
   каждого изменения, ошибка — баннер и прежнее значение); оба — в `Stack.Protected` вкладок; строка «Уведомления» в
   «Профиле». `useSignOut` снимает токен до отзыва сессии; после удаления аккаунта (`serverEnded`) — только забывает.
   Строки — `packages/i18n` (`notifications.*`, `profile.notifications`). Отклонения — §8.2 D-1…D-4.
-- Документация: ADR-0016 + `docs/adr/README.md`, пометка в ADR-0013 п. 2; `AGENTS.md` §1 и §4.9; правила
+- Документация: ADR-0017 + `docs/adr/README.md`, пометка в ADR-0013 п. 2; `AGENTS.md` §1 и §4.9; правила
   `pokatim-app/backend/db/contracts/security.md`; `docs/product/{home,account,README}.md`; `docs/runbooks/push.md`
   (новый), `account-deletion.md`, `runbooks/README.md`; `infra/deploy/docker-compose.yml` (`PUSH_ENABLED`,
   `EXPO_ACCESS_TOKEN` с пустым умолчанием) и `env.template` (`PUSH_ENABLED=false`).

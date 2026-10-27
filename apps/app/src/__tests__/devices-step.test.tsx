@@ -14,7 +14,6 @@ import { deviceList, garmin, TICKET, uploadPage, wahoo } from './devices-fixture
 import { USER_A } from './jwt';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 jest.mock('expo-web-browser', () => ({ openAuthSessionAsync: jest.fn() }));
 
 const status = jest.mocked(api.getOnboardingStatus);

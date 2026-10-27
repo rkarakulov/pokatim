@@ -52,7 +52,7 @@ const pushSenderProvider: Provider = {
 })
 export class NotificationsCoreModule {}
 
-/** Центр уведомлений (ADR-0016): HTTP `/v1/notifications` под `AuthGuard` identity. */
+/** Центр уведомлений (ADR-0017): HTTP `/v1/notifications` под `AuthGuard` identity. */
 @Module({
   imports: [IdentityModule, NotificationsCoreModule],
   controllers: [NotificationsController],
@@ -61,7 +61,7 @@ export class NotificationsCoreModule {}
 export class NotificationsModule {}
 
 /**
- * Задачи `notifications` в worker (ADR-0016): приём событий источников (`notifications-intake`), доставка push и писем
+ * Задачи `notifications` в worker (ADR-0017): приём событий источников (`notifications-intake`), доставка push и писем
  * (`notifications-delivery`), регламент квитанций и перепостановки (`notifications-maintenance`). Источники — только
  * порты через их `index.ts`: `RESULTS_NOTICES` и `RACE_REGISTRY` (`ResultsCoreModule` реэкспортирует `RacesCoreModule`),
  * `DISPUTE_NOTICES`, `RIDE_NOTICES`, `IdentityAccounts`.

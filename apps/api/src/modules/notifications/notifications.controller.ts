@@ -30,7 +30,7 @@ import { PushTokensService } from './push-tokens.service';
 const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
 
 /**
- * Центр уведомлений (ADR-0016): только вошедший, только свои (`@CurrentUser()`). Статические пути (`unread-count`,
+ * Центр уведомлений (ADR-0017): только вошедший, только свои (`@CurrentUser()`). Статические пути (`unread-count`,
  * `settings`, `push-tokens`, `read-all`) объявлены до `:id/read`. Чтения — `no-store`.
  */
 @Controller('notifications')

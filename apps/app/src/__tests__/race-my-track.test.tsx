@@ -4,9 +4,9 @@ import type { MyAttemptTrack, RaceRouteMap } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 
 import { themes } from '@pokatim/design-tokens';
+import { MAP_FIT_PADDING } from '@pokatim/route-view';
 
 import { useSessionStore } from '@/features/auth/session-store';
-import { MAP_FIT_PADDING } from '@/features/maps/corridor-style';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
 
@@ -18,7 +18,6 @@ import { createQueryWrapper } from './query-wrapper';
 import { attempt, corridorRace, myEntry, noEntry, RACE_ID, resultsPage } from './races-fixtures';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getRaceRoute = jest.mocked(api.getRaceRoute);
 const getMyRaceEntry = jest.mocked(api.getMyRaceEntry);

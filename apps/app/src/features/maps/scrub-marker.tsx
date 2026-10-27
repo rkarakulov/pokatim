@@ -1,12 +1,12 @@
 import { size, stroke } from '@pokatim/design-tokens';
+import { scrubTolerance } from '@pokatim/route-view';
 import { nearestFraction, pointAtFraction, type Planar } from '@pokatim/tracks';
 import { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 
-import { scrubTolerance } from './scrub-line';
 import type { ScrubMarkerProps } from './route-map-props';
-import { useScrub } from './scrub-store';
+import { useScrub } from './use-scrub';
 
 /** testID жеста маркера — для `getByGestureTestId` в тестах. */
 export const SCRUB_MARKER_PAN_TEST_ID = 'scrub-marker-pan';

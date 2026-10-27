@@ -158,6 +158,7 @@ describe('createAdminApiClient: маршруты (race-results-01)', () => {
     createdAt: '2026-10-27T10:00:00.000Z',
     catalog: null,
     line: [],
+    elevation: null,
   };
 
   it('uploadRoute — POST octet-stream с сырыми байтами, название в ?title=, cookie без Authorization', async () => {
@@ -416,5 +417,35 @@ describe('createAdminApiClient: сброс имени райдера (profile-02
   it('ответ не по схеме — ошибка разбора', async () => {
     const { api } = admin(200, { ok: true });
     await expect(api.resetRiderName(USER_ID, { reason: 'Оскорбительное имя' })).rejects.toThrow();
+  });
+});
+
+describe('createAdminApiClient: оформление приложения (app-themes)', () => {
+  const appearance = { themeId: 'atlas', version: 2, updatedAt: '2026-10-27T10:00:00.000Z' };
+
+  it('GET appearance: путь, cookie панели, разбор PanelAppearance', async () => {
+    const { calls, api } = admin(200, appearance);
+    await expect(api.getAppearance()).resolves.toEqual(appearance);
+    expect(calls[0]).toMatchObject({
+      url: '/v1/admin/appearance',
+      method: 'GET',
+      credentials: 'same-origin',
+    });
+  });
+
+  it('PUT appearance: метод, тело, cookie панели; ответ не по схеме — ошибка', async () => {
+    const { calls, api } = admin(200, appearance);
+    await expect(api.updateAppearance({ themeId: 'atlas', version: 1 })).resolves.toEqual(
+      appearance,
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      url: '/v1/admin/appearance',
+      method: 'PUT',
+      credentials: 'same-origin',
+      body: { themeId: 'atlas', version: 1 },
+    });
+    const broken = admin(200, { ...appearance, themeId: 'neon' });
+    await expect(broken.api.updateAppearance({ themeId: 'atlas', version: 1 })).rejects.toThrow();
   });
 });

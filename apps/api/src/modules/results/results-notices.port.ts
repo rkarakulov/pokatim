@@ -1,5 +1,5 @@
 /**
- * Порт `results` для модуля `notifications` (ADR-0016; через `modules/results/index.ts`): получатели и поля текста
+ * Порт `results` для модуля `notifications` (ADR-0017; через `modules/results/index.ts`): получатели и поля текста
  * уведомлений о результатах. `notifications` коллекций `results` не читает; только id и время — без результатов.
  */
 export const RESULTS_NOTICES = Symbol('RESULTS_NOTICES');

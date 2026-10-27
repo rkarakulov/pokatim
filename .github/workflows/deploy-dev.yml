@@ -191,6 +191,9 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ env.IMAGE_PREFIX }}-admin:${{ env.TAG }},${{ env.IMAGE_PREFIX }}-admin:develop
+          # стиль карты маршрута панели (routes-05) — OpenFreeMap, только светлый; origin — в CSP admin-nginx.conf
+          build-args: |
+            VITE_MAP_STYLE_LIGHT=https://tiles.openfreemap.org/styles/positron
           secrets: NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
           cache-from: type=gha,scope=pokatim-admin
           cache-to: type=gha,mode=max,scope=pokatim-admin

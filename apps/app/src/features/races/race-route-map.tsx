@@ -1,12 +1,12 @@
 import type { MyAttempt, MyRaceEntry, RaceDetail } from '@pokatim/contracts';
-import { space, themes, type AppTheme } from '@pokatim/design-tokens';
+import { space, type AppTheme } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
+import { MAP_ASPECT_RATIO } from '@pokatim/route-view';
 import { Chip, SkeletonGroup, TextAction, textStyle, useTheme } from '@rkarakulov/ui';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { formatMinskDateTime } from '@/features/devices/format';
-import { MAP_ASPECT_RATIO } from '@/features/maps/corridor-style';
 import { mapStyleUrl } from '@/features/maps/map-style';
 import { mapSupported } from '@/features/maps/map-support';
 import { RouteMap } from '@/features/maps/route-map';
@@ -45,7 +45,7 @@ export function RaceRouteMap({
   const mounted = useMounted();
   const corridor = race.corridor ?? null;
   // нет нативного модуля (Expo Go, старый dev-клиент) — как env не задан
-  const styleUrl = mounted && mapSupported() ? mapStyleUrl(theme === themes.dark) : null;
+  const styleUrl = mounted && mapSupported() ? mapStyleUrl(theme.map.basemap === 'dark') : null;
   const route = useRaceRoute(race.id, Boolean(corridor) && styleUrl !== null);
   const widthM = corridor?.widthM;
   // ширина коридора на карте — из карточки, как в строке «Коридор» и подписи (один источник после правки гонки)

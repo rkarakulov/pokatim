@@ -6,6 +6,7 @@ export { AppShell } from './AppShell';
 export { AuthCard } from './AuthCard';
 export { Banner } from './Banner';
 export { Button, type ButtonProps } from './Button';
+export { CardRadioGroup, type CardRadioGroupProps, type CardRadioOption } from './CardRadioGroup';
 export { ChipGroup, type ChipGroupProps } from './ChipGroup';
 export { ChoiceDialog, type ChoiceDialogProps } from './ChoiceDialog';
 export { ConflictBanner } from './ConflictBanner';

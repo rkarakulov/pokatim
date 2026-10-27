@@ -47,6 +47,7 @@ describe('AuditAction', () => {
       'route.unpublished',
       'route.catalog_updated',
       'account.deleted',
+      'appearance.theme_changed',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',
@@ -55,6 +56,7 @@ describe('AuditAction', () => {
       'route',
       'ride',
       'rider',
+      'platform',
     ]);
     expect(AuditAction.safeParse('panel.deleted').success).toBe(false);
   });
@@ -235,6 +237,33 @@ describe('AuditEntry — протокол гонки (race-results-05)', () => {
     expect(
       AuditPage.safeParse({
         items: [{ ...entry, details: { entryId: 'x' } }],
+        nextCursor: null,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('AuditEntry — смена темы приложения (app-themes)', () => {
+  const NIL = '00000000-0000-0000-0000-000000000000';
+  const entry = {
+    id: ID,
+    at: '2026-10-27T10:00:00.000Z',
+    action: 'appearance.theme_changed',
+    actor: { kind: 'user', userId: ID, displayName: 'Ольга' },
+    target: null,
+    reason: null,
+    subject: { kind: 'platform', id: NIL, label: 'Оформление приложения' },
+    details: { themeFrom: 'classic', themeTo: 'atlas' },
+  };
+
+  it('объект platform (nil UUID) и детали themeFrom/themeTo', () => {
+    expect(AuditPage.parse({ items: [entry], nextCursor: null }).items[0]).toEqual(entry);
+  });
+
+  it('неизвестная тема в деталях — ошибка', () => {
+    expect(
+      AuditPage.safeParse({
+        items: [{ ...entry, details: { themeFrom: 'classic', themeTo: 'neon' } }],
         nextCursor: null,
       }).success,
     ).toBe(false);

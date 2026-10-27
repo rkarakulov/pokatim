@@ -61,7 +61,7 @@ export class AccountDeletionService {
         actor: { kind: 'user', userId },
         subject: { kind: 'rider', id: userId, label: riderSubjectLabel(userId) },
       });
-      // push перестают уходить сразу (N11, ADR-0016): токены — в той же транзакции, откат оставляет их
+      // push перестают уходить сразу (N11, ADR-0017): токены — в той же транзакции, откат оставляет их
       await this.pushTokens.revokeAllOf(tx, userId);
       const payload: AccountDeletionRequested = { userId };
       await this.outbox.append(tx, { type: ACCOUNT_DELETION_REQUESTED, payload });

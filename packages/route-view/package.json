@@ -1,0 +1,38 @@
+{
+  "name": "@pokatim/route-view",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Отображение маршрута без React и RN: слои MapLibre, камера, скраббинг, профиль высоты, время в пути",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@pokatim/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@pokatim/contracts": "workspace:*",
+    "@pokatim/design-tokens": "workspace:*",
+    "@pokatim/i18n": "workspace:*",
+    "@pokatim/tracks": "workspace:*",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@maplibre/maplibre-gl-style-spec": "26.2.1",
+    "@rkarakulov/config": "catalog:",
+    "@types/geojson": "^7946.0.16",
+    "jsdom": "^30.1.3",
+    "maplibre-gl": "~6.16.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

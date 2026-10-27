@@ -8,7 +8,7 @@ import type {
 import type { Collection, Db } from 'mongodb';
 
 /**
- * Коллекции центра уведомлений (ADR-0016). Создаёт миграция `0024_notifications`; единственный писатель — модуль
+ * Коллекции центра уведомлений (ADR-0017). Создаёт миграция `0025_notifications`; единственный писатель — модуль
  * `notifications`. TTL-индексы — только уборка: истечение проверяет сервер по `CLOCK`.
  */
 export const NOTIFICATIONS_COLLECTIONS = {

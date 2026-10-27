@@ -26,7 +26,7 @@
 
 - приложение **не записывает GPS** — заезд загружается файлом (FIT/GPX/TCX) с часов/велокомпьютера;
 - **нет WebSocket, BLE, Strava API** — статусы и счётчик уведомлений — polling; push — только через Expo на iOS и
-  Android (ADR-0016), web push нет; Garmin и Wahoo — только импорт велозаездов через self-hosted агрегатор
+  Android (ADR-0017), web push нет; Garmin и Wahoo — только импорт велозаездов через self-hosted агрегатор
   (ADR-0011);
 - результаты гонок считает **только сервер**; клиент никогда не диктует итог;
 - модерация — по жалобам, своя очередь в каждом модуле (без сквозного сервиса).
@@ -42,6 +42,7 @@ packages/
   contracts/     zod-схемы — источник правды API (DTO, enum-ы, коды ошибок)
   api-client/    тонкий HTTP-клиент поверх contracts (zod-валидация ответов)
   tracks/        парсинг GPX/TCX/FIT/KML, геометрия
+  route-view/    отображение маршрута без React/RN: слои MapLibre, камера, скраббинг, профиль (приложение и панель)
   design-tokens/ бренд: Jersey Aura / Night Ride / «Протокол» (тема panel) поверх @rkarakulov/design-tokens
   i18n/          русские строки поверх словарей @rkarakulov/i18n-core
 infra/        docker-compose (dev — из шаблона; prod), Caddy

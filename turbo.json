@@ -5,7 +5,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
-      "env": ["ADMIN_BASE"]
+      "env": ["ADMIN_BASE", "VITE_MAP_STYLE_LIGHT"]
     },
     "build:web": {
       "cache": false,

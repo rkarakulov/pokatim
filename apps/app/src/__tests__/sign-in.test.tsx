@@ -20,7 +20,6 @@ import {
 import { appRoutes } from './app-routes';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const signIn = jest.mocked(api.signIn);
 const submitButton = () => screen.getByRole('button', { name: 'Войти' });

@@ -2,7 +2,7 @@ import { DISPUTE_OUTCOMES } from '@pokatim/contracts';
 import { z } from 'zod';
 
 /*
- * События споров (race-results-06): потребитель — модуль `notifications` (A11, ADR-0016), маршрут объявляет он
+ * События споров (race-results-06): потребитель — модуль `notifications` (A11, ADR-0017), маршрут объявляет он
  * (`notificationsOutboxRoutes`). Только id и коды — без описания, ответа, заметки и `userId` райдеров.
  */
 

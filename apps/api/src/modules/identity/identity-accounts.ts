@@ -13,7 +13,7 @@ export interface AccountState {
 }
 
 /**
- * Чтения аккаунтов приложения для модулей `panel` (ADR-0009) и `notifications` (ADR-0016): коллекции identity читает
+ * Чтения аккаунтов приложения для модулей `panel` (ADR-0009) и `notifications` (ADR-0017): коллекции identity читает
  * только identity. Без лимитера и Redis — порт годится и для CLI. Значения фильтров — id после zod и нормализованный
  * e-mail.
  */

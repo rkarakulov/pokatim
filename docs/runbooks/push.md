@@ -1,6 +1,6 @@
 # Push через Expo
 
-Как устроено — ADR-0016, продукт — `docs/product/notifications.md`. Центр уведомлений и колокольчик работают всегда;
+Как устроено — ADR-0017, продукт — `docs/product/notifications.md`. Центр уведомлений и колокольчик работают всегда;
 push — только на iOS и Android, когда есть EAS `projectId`, ключи APNs/FCM в EAS и `PUSH_ENABLED=true` на сервере.
 Web push нет.
 

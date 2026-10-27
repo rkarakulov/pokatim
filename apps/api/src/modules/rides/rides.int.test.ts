@@ -408,7 +408,7 @@ describe('отмена', () => {
   });
 });
 
-describe('события для уведомлений (notifications, ADR-0016)', () => {
+describe('события для уведомлений (notifications, ADR-0017)', () => {
   const payloads = async (type: string) => (await eventsOfType(h, type)).map((e) => e.payload);
 
   it('отмена — rides.ride-cancelled { rideId }; повторная отмена — без второго события', async () => {

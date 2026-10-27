@@ -34,7 +34,7 @@ import { ResultsRepository } from './results.repository';
  * их `index.ts` (порты `RaceRegistry`, `RouteGeometry`, `ActivitySource`, `RiderNameDirectory` (`profile`));
  * `races`, `routes`, `tracks`, `profile` о `results` не знают. Для `disputes` (race-results-06) — порт
  * `RESULTS_FOR_DISPUTES`; гейт споров `RESULT_DISPUTE_GATE` даёт `@Global DisputesCoreModule`. Для `notifications` —
- * порт `RESULTS_NOTICES` (получатели уведомлений, ADR-0016).
+ * порт `RESULTS_NOTICES` (получатели уведомлений, ADR-0017).
  */
 @Module({
   imports: [RacesCoreModule, RoutesCoreModule, TracksCoreModule, ProfileCoreModule],

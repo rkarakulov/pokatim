@@ -1,7 +1,7 @@
 import type { DevicePushToken, PushPermissionState } from './push';
 
 /**
- * Web (N1, ADR-0016): web push нет — уведомления видны в центре и на колокольчике. Без `expo-notifications` в
+ * Web (N1, ADR-0017): web push нет — уведомления видны в центре и на колокольчике. Без `expo-notifications` в
  * web-бандле; все вызовы — no-op.
  */
 export const pushSupported = false;

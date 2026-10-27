@@ -1,5 +1,6 @@
 /// <reference types="jest" />
 import type { CatalogRouteCard, CatalogRouteDetail } from '@pokatim/contracts';
+import { ROUTE_PACE_KMH, routeDurationMin, routePaceKmh } from '@pokatim/route-view';
 
 import {
   profileBarHeights,
@@ -8,13 +9,10 @@ import {
   profileRangeLabel,
   profileSummary,
   profileTicks,
-  ROUTE_PACE_KMH,
   routeChips,
   routeDuration,
-  routeDurationMin,
   routeHeroDate,
   routeKm,
-  routePaceKmh,
   routePlace,
   routeShareDescription,
   routeStatItems,

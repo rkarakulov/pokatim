@@ -15,7 +15,7 @@ import { PushDelivery, type PushOutcome } from './push-delivery';
 const isFinal = (job: Job) => job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 
 /**
- * Доставка уведомлений (`notifications-delivery`, ADR-0016): `notifications.push` — push пользователя (jobId
+ * Доставка уведомлений (`notifications-delivery`, ADR-0017): `notifications.push` — push пользователя (jobId
  * `push-<userId>-<notBeforeMs>`), `notifications.email` — письмо уведомления (jobId `email-<id>`). Состояние — в
  * документе уведомления (захват): повтор задачи не шлёт второй push или письмо. Данные не по схеме — пропуск.
  */

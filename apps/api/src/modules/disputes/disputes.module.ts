@@ -22,7 +22,7 @@ import { DisputesService } from './disputes.service';
 
 /**
  * Ядро `disputes` (RC-1): репозиторий и гейты для `results` (`RESULT_DISPUTE_GATE`) и `races` (`RACE_CANCEL_GATE`),
- * стороны спора для `notifications` (`DISPUTE_NOTICES`, ADR-0016).
+ * стороны спора для `notifications` (`DISPUTE_NOTICES`, ADR-0017).
  * `@Global`: `results` и `races` о `disputes` не знают (цикла импортов нет), а инъекция гейтов обязательная —
  * модуль импортируют оба корня композиции, `AppModule` и `WorkerModule` (приёму попыток в worker нужен D-39).
  */

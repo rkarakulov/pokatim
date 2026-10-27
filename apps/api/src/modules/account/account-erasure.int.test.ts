@@ -384,7 +384,7 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
     expect(await firstPass(w.a.userId)).toBe('erased');
     const once = await snapshotOf(w.a.userId);
     const rides = await ridesDb(h).find().sort({ _id: 1 }).toArray();
-    // отмена будущего опубликованного — событие на райд (ADR-0016); скрытый — без события (RC-8)
+    // отмена будущего опубликованного — событие на райд (ADR-0017); скрытый — без события (RC-8)
     const cancelled = async () =>
       (await eventsOfType(h, 'rides.ride-cancelled')).map((event) => event.payload);
     expect(await cancelled()).toEqual([{ rideId: w.rides.aFuture }]);
@@ -472,7 +472,7 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
   });
 });
 
-describe('шаг notifications (N11, ADR-0016)', () => {
+describe('шаг notifications (N11, ADR-0017)', () => {
   /** Уведомление, настройки, токен устройства и тикет Expo пользователя. */
   async function notificationData(userId: string, suffix: string) {
     const db = notificationsDb(h);

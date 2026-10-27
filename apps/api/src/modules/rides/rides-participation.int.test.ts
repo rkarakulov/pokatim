@@ -199,7 +199,7 @@ describe('гонка на последнее место (AC-T1)', () => {
   });
 });
 
-describe('событие rides.participant-joined (notifications, ADR-0016)', () => {
+describe('событие rides.participant-joined (notifications, ADR-0017)', () => {
   it('новый участник — событие { rideId }; повтор, организатор, полный и «Не иду» — без события', async () => {
     const ride = await createRide(h, organizer, { limit: 2 });
     const a = await rider(h, 'a@example.by');

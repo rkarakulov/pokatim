@@ -1,5 +1,5 @@
 export { DisputesCoreModule, DisputesModule, DisputesWorkerModule } from './disputes.module';
-/** Порт и события для `notifications` (ADR-0016): стороны спора и события `disputes.*`. */
+/** Порт и события для `notifications` (ADR-0017): стороны спора и события `disputes.*`. */
 export { DISPUTE_NOTICES, type DisputeNotices, type DisputeParties } from './dispute-notices.port';
 export {
   DISPUTES_DISPUTE_DECIDED,

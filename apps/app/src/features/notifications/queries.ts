@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
 /**
- * Центр уведомлений (ADR-0016): всё — только вошедшему через `withAccessToken`, сервер отдаёт `no-store`. Счётчик
+ * Центр уведомлений (ADR-0017): всё — только вошедшему через `withAccessToken`, сервер отдаёт `no-store`. Счётчик
  * колокольчика — polling раз в 60 с (реального времени нет, N9); мутации прочтения и настроек инвалидируют
  * `['notifications']` (список и счётчик).
  */

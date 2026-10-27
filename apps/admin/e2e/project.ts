@@ -17,6 +17,13 @@ export const API_URL = `http://127.0.0.1:${API_PORT}`;
 export const PREVIEW_PORT = Number(process.env.ADMIN_E2E_PORT ?? 4173);
 export const ORIGIN = `http://localhost:${PREVIEW_PORT}`;
 export const PANEL_URL = `${ORIGIN}/admin/`;
+/**
+ * Стиль карты смоука (routes-05): свой origin, без сети — ответ подменяет `page.route` (`MAP_STYLE_STUB`). Карта
+ * поднимается в сборке смоука: async-чанк MapLibre, воркер и CSP панели проверяются в CI.
+ */
+export const MAP_STYLE_URL = `${PANEL_URL}__e2e__/map-style.json`;
+/** Пустой стиль MapLibre: без источников и тайлов. */
+export const MAP_STYLE_STUB = { version: 8, sources: {}, layers: [] };
 
 const api = {
   PORT: String(API_PORT),
@@ -47,7 +54,7 @@ export const servers: WebServer[] = [
     name: 'admin',
     command: `vite build && vite preview --port ${PREVIEW_PORT} --strictPort`,
     url: PANEL_URL,
-    env: { ADMIN_BASE: '/admin/', ADMIN_API_URL: API_URL },
+    env: { ADMIN_BASE: '/admin/', ADMIN_API_URL: API_URL, VITE_MAP_STYLE_LIGHT: MAP_STYLE_URL },
     reuseExistingServer: false,
     timeout: 120_000,
   },

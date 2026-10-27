@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 import { layout } from '@pokatim/design-tokens';
-import { useFonts } from 'expo-font';
+import * as Font from 'expo-font';
 import { renderRouter, screen } from 'expo-router/testing-library';
 import * as SecureStore from 'expo-secure-store';
 import * as SplashScreen from 'expo-splash-screen';
@@ -8,7 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { storeSession, storeSurveyCompleted } from './auth-fixtures';
 import { appRoutes } from './app-routes';
 
-jest.mock('expo-font', () => ({ useFonts: jest.fn() }));
+jest.mock('expo-font', () => ({ isLoaded: jest.fn(), isLoading: jest.fn(), loadAsync: jest.fn() }));
 jest.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: jest.fn(() => Promise.resolve(true)),
   hideAsync: jest.fn(() => Promise.resolve()),
@@ -16,7 +16,19 @@ jest.mock('expo-splash-screen', () => ({
 
 jest.mock('@/lib/api');
 
-const mockedUseFonts = jest.mocked(useFonts);
+// шрифты темы (`useThemeFonts`): загружены, грузятся (не завершится) или загрузка упала
+function mockFonts(state: 'loaded' | 'loading' | Error) {
+  jest.mocked(Font.isLoaded).mockReturnValue(state === 'loaded');
+  jest
+    .mocked(Font.loadAsync)
+    .mockReturnValue(
+      state === 'loaded'
+        ? Promise.resolve()
+        : state === 'loading'
+          ? new Promise(() => undefined)
+          : Promise.reject(state),
+    );
+}
 const app = appRoutes;
 
 // вошедший пользователь с пройденным опросом: проверяем splash и шрифты на Главной (гард — в auth-guard.test)
@@ -33,7 +45,7 @@ describe('корневой layout: splash и шрифты', () => {
   });
 
   it('пока шрифты грузятся — splash не скрыт и экран не рендерится', async () => {
-    mockedUseFonts.mockReturnValue([false, null]);
+    mockFonts('loading');
     await renderRouter(app);
 
     expect(screen.queryByRole('tab', { name: 'Главная' })).toBeNull();
@@ -41,7 +53,7 @@ describe('корневой layout: splash и шрифты', () => {
   });
 
   it('пока сессия не прочитана из SecureStore — splash не скрыт, контента нет (скелетон оболочки)', async () => {
-    mockedUseFonts.mockReturnValue([true, null]);
+    mockFonts('loaded');
     jest.mocked(SecureStore.getItemAsync).mockReturnValueOnce(new Promise(() => undefined));
     await renderRouter(app);
 
@@ -50,8 +62,24 @@ describe('корневой layout: splash и шрифты', () => {
     expect(SplashScreen.hideAsync).not.toHaveBeenCalled();
   });
 
+  it('кэш темы не прочитан — splash не скрыт и экран не рендерится', async () => {
+    mockFonts('loaded');
+    const read = jest.mocked(SecureStore.getItemAsync).getMockImplementation();
+    jest
+      .mocked(SecureStore.getItemAsync)
+      .mockImplementation((key, options) =>
+        key === 'pokatim.appTheme' ? new Promise(() => undefined) : read!(key, options),
+      );
+    await renderRouter(app);
+
+    expect(screen.queryByRole('tab', { name: 'Главная' })).toBeNull();
+    expect(screen.queryByRole('progressbar', { name: 'Загрузка' })).toBeNull();
+    expect(SplashScreen.hideAsync).not.toHaveBeenCalled();
+    if (read) jest.mocked(SecureStore.getItemAsync).mockImplementation(read);
+  });
+
   it('шрифты загружены — splash скрыт, открыта Главная', async () => {
-    mockedUseFonts.mockReturnValue([true, null]);
+    mockFonts('loaded');
     await renderRouter(app);
 
     expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
@@ -60,7 +88,7 @@ describe('корневой layout: splash и шрифты', () => {
 
   it('ошибка шрифтов не блокирует запуск и пишется в лог', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    mockedUseFonts.mockReturnValue([false, new Error('font failed')]);
+    mockFonts(new Error('font failed'));
     await renderRouter(app);
 
     expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
@@ -70,7 +98,7 @@ describe('корневой layout: splash и шрифты', () => {
   });
 
   it('колонка экранов не шире layout.contentMaxWidth, по центру (B20 смоука dev)', async () => {
-    mockedUseFonts.mockReturnValue([true, null]);
+    mockFonts('loaded');
     await renderRouter(app);
     await screen.findByRole('header', { name: 'Покатим' });
 

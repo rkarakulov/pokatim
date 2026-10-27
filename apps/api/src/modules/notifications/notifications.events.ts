@@ -20,9 +20,9 @@ import {
 } from '../rides';
 
 /**
- * Маршруты событий модулей-источников в очередь приёма уведомлений (ADR-0016): объявляет подписчик (как
+ * Маршруты событий модулей-источников в очередь приёма уведомлений (ADR-0017): объявляет подписчик (как
  * `resultsOutboxRoutes` для `tracks.*`), подключает worker.module.ts. Тип события → одна очередь: другим подписчикам
- * этих типов нужен fan-out outbox (ADR-0016 п. 5). Имя задачи = тип события, jobId = id события.
+ * этих типов нужен fan-out outbox (ADR-0017 п. 5). Имя задачи = тип события, jobId = id события.
  */
 export const notificationsOutboxRoutes = {
   [RESULTS_ATTEMPT_VERDICT_CHANGED]: QUEUE.notificationsIntake,

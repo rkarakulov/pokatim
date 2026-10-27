@@ -1,7 +1,8 @@
 import { motion, size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
+
+import { Icon, type IconName } from '@/components/icon';
 
 export interface MapControlsProps {
   theme: AppTheme;
@@ -17,7 +18,7 @@ export interface MapControlsProps {
 
 /**
  * Кнопки камеры карты (routes-04b, RC-5…RC-7): колонка сверху справа — «+», «−», «в рамку» (видна всегда),
- * routes-04d — «Моё местоположение» четвёртой (RC-6); атрибуция «i» — снизу слева, не пересекаются. Иконки — `expo-symbols` (SF Symbols / Material Symbols), цель `size.touchMin`.
+ * routes-04d — «Моё местоположение» четвёртой (RC-6); атрибуция «i» — снизу слева, не пересекаются. Иконки — `Icon` (SF Symbols / Material Symbols), цель `size.touchMin`.
  * Локальный компонент: `IconButton` в `@rkarakulov/ui` нет (follow-up в app-foundation, второй потребитель — `TopBar`).
  * Без RNGH — идёт и в web-бандл.
  */
@@ -32,26 +33,26 @@ export function MapControls({
   const buttons: {
     testID: string;
     label: string;
-    icon: SymbolViewProps['name'];
+    icon: IconName;
     onPress: () => void;
     busy?: boolean;
   }[] = [
     {
       testID: 'map-zoom-in',
       label: t('maps.controls.zoomIn'),
-      icon: { ios: 'plus', android: 'add', web: 'add' },
+      icon: 'zoomIn',
       onPress: onZoomIn,
     },
     {
       testID: 'map-zoom-out',
       label: t('maps.controls.zoomOut'),
-      icon: { ios: 'minus', android: 'remove', web: 'remove' },
+      icon: 'zoomOut',
       onPress: onZoomOut,
     },
     {
       testID: 'map-fit',
       label: t('maps.controls.fit'),
-      icon: { ios: 'arrow.up.left.and.arrow.down.right', android: 'fit_screen', web: 'fit_screen' },
+      icon: 'fit',
       onPress: onFit,
     },
     ...(onLocate
@@ -59,7 +60,7 @@ export function MapControls({
           {
             testID: 'map-locate',
             label: t('maps.controls.locate'),
-            icon: { ios: 'location', android: 'my_location', web: 'my_location' } as const,
+            icon: 'locate' as const,
             onPress: onLocate,
             busy: locating,
           },
@@ -87,7 +88,7 @@ export function MapControls({
             },
           ]}
         >
-          <SymbolView name={button.icon} size={size.icon} tintColor={theme.text.primary} />
+          <Icon name={button.icon} size={size.icon} color={theme.text.primary} />
         </Pressable>
       ))}
     </View>

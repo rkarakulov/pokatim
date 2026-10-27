@@ -139,7 +139,7 @@ describe('POST /v1/account/delete — успех (AC1, AC7)', () => {
   });
 });
 
-describe('push-токены (N11, ADR-0016)', () => {
+describe('push-токены (N11, ADR-0017)', () => {
   const registerToken = async (accessToken: string, suffix: string) => {
     const res = await call(
       h,

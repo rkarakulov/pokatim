@@ -25,7 +25,11 @@ paths:
   `seasons` нет), `calendar` (календарь стартов, с гонками не связан), `tracks` (загрузки, разбор, активности —
   ADR-0011), `devices` (Garmin/Wahoo через агрегатор Open Wearables), `routes` (маршруты команды платформы —
   эталон коридора гонки, ADR-0012 Proposed) и `rides` (кофе-райды, ADR-0013 Proposed: зависит только от `identity`;
-  панель — с модерацией 05b).
+  панель — с модерацией 05b), `appearance` (app-themes: тема приложения — глобальная настройка платформы,
+  `platform_settings/appearance`; импортирует только `panel/index.ts` и `public-read.guard.ts`; публичное
+  `GET /v1/appearance` — ровно `{ themeId }`; панель `GET|PUT /v1/admin/appearance` — `appearance.manage`, замена по
+  `version` (409), журнал `appearance.theme_changed` с `subject.kind = 'platform'` (nil UUID) в транзакции; повтор той
+  же темы — без записи).
 - `routes` о гонках не знает и зависит от `panel` и `identity` (routes-02: `AuthGuard` «моих маршрутов», как `rides`); `races → routes` — только порт `RouteCatalog`
   (`modules/routes/index.ts`, `RoutesCoreModule`): готовый маршрут по id в транзакции правки гонки и названия
   маршрутов списка. Записи `routes`/`route_*` из `races` (и наоборот) — нет. Карта коридора (maps-01, ADR-0014):
@@ -73,7 +77,8 @@ paths:
   тела не используются); импорт — только для `active` подключений. Ключ OW и секрет вебхука — только env.
 - Доменный модуль панели пишет журнал `PanelAudit.append(tx, { action, subject: { kind, id, label }, details })` —
   `label` — название на момент действия; имена сотрудников — порт `PanelDirectory` (не `panel_members`).
-- Публичное чтение (`/v1/races`, `/v1/seasons` — список, `current`, `:id`, `:id/races`; `/v1/calendar`) — отдельные
+- Публичное чтение (`/v1/races`, `/v1/seasons` — список, `current`, `:id`, `:id/races`; `/v1/calendar`;
+  `/v1/appearance`) — отдельные
   контроллеры без гарда панели; статический маршрут (`seasons/current`) объявляется до параметрического
   (`seasons/:id`), иначе он уйдёт в pipe `Uuid` (400). Только опубликованное, без владельца и служебных полей,
   `@Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)`, `PublicReadGuard` (IP-лимит `public-read`), курсор —
@@ -158,7 +163,7 @@ paths:
   `lockEntry`, идемпотентно по `checkedAt < requestedAt`). Пока есть незавершённые проверки — публикация и
   «Применить пересчёт» отвечают 409.
 - `results.protocol-published` / `results.result-revised` / `results.attempt-verdict-changed` — маршрут в
-  `notifications-intake` (объявляет подписчик, ADR-0016); слайсу 08 нужен fan-out outbox — задача в app-foundation.
+  `notifications-intake` (объявляет подписчик, ADR-0017); слайсу 08 нужен fan-out outbox — задача в app-foundation.
 - Отказы состояния — `409 RESULTS_ACTION_BLOCKED { reason, count? }`, `409 RESULTS_PUBLISH_BLOCKED { blockedBy,
   checklist }`.
 
@@ -179,7 +184,7 @@ paths:
   `lockEntry` цели → переход → при `upheld` `disqualify` (идемпотентно) → событие, outbox, `PanelAudit.append` в той же
   транзакции.
 - События `disputes.dispute-filed/-withdrawn/-responded/-decided` — маршрут в `notifications-intake` (A11,
-  ADR-0016); в событиях только id и коды. Лог после коммита — `disputeId`, `raceId`, действие, исход.
+  ADR-0017); в событиях только id и коды. Лог после коммита — `disputeId`, `raceId`, действие, исход.
 - Отказы — `409 DISPUTE_ACTION_BLOCKED { reason, availableAt? }`, `404 DISPUTE_NOT_FOUND`; отмена гонки при открытых
   спорах — `409 RACE_INVALID_STATE { reason: 'disputes_open' }`.
 - Ряды пульса и мощности (06b): `DisputeSeriesService` (HTTP — кэш и постановка) → очередь `dispute-series` →
@@ -197,12 +202,12 @@ paths:
 - Фаза и права зрителя — `rides.policy.ts` (`ridePhase`, `rideViewer`, `validateStartsAt`, `RIDES_POLICY`); ответы
   собирает `rides-feed.service.ts` из явного списка полей.
 - Лимиты частоты (`RateLimiter` базы, ключ — `uid`): `rides-create`, `rides-manage` (правка и отмена), `rides-rsvp`
-  (join и leave); квоты — `409 RIDE_QUOTA_EXCEEDED` с `RideQuotaDetails`. Аудита в 05a нет. События (ADR-0016) — `rides.events.ts`:
+  (join и leave); квоты — `409 RIDE_QUOTA_EXCEEDED` с `RideQuotaDetails`. Аудита в 05a нет. События (ADR-0017) — `rides.events.ts`:
   `update`/`cancel`/`join`, отмена при стирании и `act` модерации — та же одна условная операция над документом, но
   в `MongoTransactions` с outbox (`ride-cancelled`, `ride-rescheduled` по смене старта, `participant-joined`,
   `reports-resolved`); повтор и отказ — без события.
 
-## Уведомления (`notifications`, ADR-0016)
+## Уведомления (`notifications`, ADR-0017)
 
 - Источники (`results`, `disputes`, `rides`) пишут только outbox в своих транзакциях (payload — id и коды) и дают
   порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`; плюс `RaceRegistry`,

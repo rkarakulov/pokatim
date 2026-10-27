@@ -1,6 +1,16 @@
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { stroke, type AppTheme } from '@pokatim/design-tokens';
 import {
+  fractionAt,
+  PROFILE_ASPECT_RATIO,
+  PROFILE_FILL_OPACITY,
+  PROFILE_VIEW_BOX,
+  profilePaths,
+  SCRUB_MARKER_ATTR,
+  scrubKeyTarget,
+  type ScrubStore,
+} from '@pokatim/route-view';
+import {
   memo,
   useEffect,
   useRef,
@@ -9,16 +19,14 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 
-import { SCRUB_MARKER_ATTR, useScrub, type ScrubStore } from '@/features/maps/scrub-store';
+import { useScrub } from '@/features/maps/use-scrub';
 
 import type { ProfileChartProps } from './profile-chart-props';
-import { PROFILE_VIEW_BOX, profilePaths } from './profile-path';
-import { PROFILE_ASPECT_RATIO, PROFILE_FILL_OPACITY } from './profile-style';
-import { scrubReadout, scrubStep } from './scrub';
+import { scrubReadout } from './scrub';
 
 /**
  * Площадь профиля на web (routes-03 fix + routes-04 G1): inline SVG — плавная линия по всем точкам профиля в
- * приглушённом `map.corridor` толщиной `stroke.input` и заливка-градиент под ней (у линии `PROFILE_FILL_OPACITY`, внизу
+ * `profile.line` толщиной `stroke.input` и заливка-градиент `profile.fillTop` → `profile.fillBottom` (у линии `PROFILE_FILL_OPACITY`, внизу
  * прозрачно). Inline, а не `react-native-svg`: разметка зависит только от данных — SSR и первый клиентский рендер
  * совпадают, пакет в web-бандл не попадает. Для скринридера скрыт (альтернатива — у контейнера), при движении курсора
  * не перерисовывается (`memo`).
@@ -46,7 +54,7 @@ export const ProfileArea = memo(function ProfileArea({
   const gradient = PROFILE_WEB_GRADIENT_ID;
   const paths = profilePaths(elevation);
   if (!paths) return null;
-  const color = theme.map.corridor;
+  const { line, fillTop, fillBottom } = theme.profile;
   return (
     <svg
       data-testid="elevation-profile-svg"
@@ -60,15 +68,15 @@ export const ProfileArea = memo(function ProfileArea({
     >
       <defs>
         <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={color} stopOpacity={PROFILE_FILL_OPACITY} />
-          <stop offset="1" stopColor={color} stopOpacity={0} />
+          <stop offset="0" stopColor={fillTop} stopOpacity={PROFILE_FILL_OPACITY} />
+          <stop offset="1" stopColor={fillBottom} stopOpacity={0} />
         </linearGradient>
       </defs>
       <path d={paths.area} fill={`url(#${gradient})`} stroke="none" />
       <path
         d={paths.line}
         fill="none"
-        stroke={color}
+        stroke={line}
         strokeWidth={stroke.input}
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -84,7 +92,7 @@ const boxStyle = (theme: AppTheme) =>
     boxSizing: 'border-box',
     width: '100%',
     aspectRatio: String(PROFILE_ASPECT_RATIO),
-    borderBottom: `${stroke.hairline}px solid ${theme.border.subtle}`,
+    borderBottom: `${stroke.hairline}px solid ${theme.profile.grid}`,
   }) as const;
 
 /**
@@ -110,13 +118,6 @@ export function ProfileChart(props: ProfileChartProps) {
   }
   return <ScrubbableChart {...props} scrub={scrub} />;
 }
-
-const KEY_STEPS: Record<string, 1 | -1> = {
-  ArrowRight: 1,
-  ArrowUp: 1,
-  ArrowLeft: -1,
-  ArrowDown: -1,
-};
 
 function ScrubbableChart({
   elevation,
@@ -146,8 +147,7 @@ function ScrubbableChart({
   const follow = (event: ReactPointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     if (rect.width <= 0) return;
-    const next = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    scrub.setState({ fraction: next, active: true });
+    scrub.setState({ fraction: fractionAt(event.clientX, rect.left, rect.width), active: true });
   };
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== 'mouse') {
@@ -174,15 +174,7 @@ function ScrubbableChart({
     }
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = KEY_STEPS[event.key];
-    const next =
-      step !== undefined
-        ? scrubStep(fraction, distanceM, step)
-        : event.key === 'Home'
-          ? 0
-          : event.key === 'End'
-            ? 1
-            : null;
+    const next = scrubKeyTarget(event.key, fraction, distanceM);
     if (next === null) return;
     event.preventDefault();
     scrub.setState({ fraction: next, active: true });

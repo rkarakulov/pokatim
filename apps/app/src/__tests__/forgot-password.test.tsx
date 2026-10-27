@@ -12,7 +12,6 @@ import { EMAIL, NOW } from './auth-fixtures';
 import { appRoutes } from './app-routes';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const request = jest.mocked(api.requestPasswordReset);
 const sendButton = () => screen.getByRole('button', { name: 'Отправить ссылку' });

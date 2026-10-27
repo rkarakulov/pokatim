@@ -1,4 +1,4 @@
-import { MAP_CAMERA_ANIMATION_MS } from '@/features/maps/map-camera';
+import { MAP_CAMERA_ANIMATION_MS } from '@pokatim/route-view';
 
 import {
   clampSheetOffset,

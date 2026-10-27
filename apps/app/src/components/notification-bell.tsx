@@ -1,8 +1,9 @@
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { Pill, useTheme } from '@rkarakulov/ui';
-import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet } from 'react-native';
+
+import { Icon } from './icon';
 
 /** Больше — «99+» (N9; сервер считает до 100). */
 const COUNT_MAX = 99;
@@ -35,11 +36,7 @@ export function NotificationBell({ count, onPress }: NotificationBellProps) {
       hitSlop={space.s2}
       style={styles.action}
     >
-      <SymbolView
-        name={{ ios: 'bell', android: 'notifications', web: 'notifications' }}
-        size={size.icon}
-        tintColor={theme.text.primary}
-      />
+      <Icon name="bell" size={size.icon} color={theme.text.primary} />
       {badge ? <Pill label={badge} tone="accent" /> : null}
     </Pressable>
   );

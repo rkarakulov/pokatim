@@ -14,6 +14,7 @@ import { env } from './config/env';
 import { PROJECT_ERROR_MESSAGES } from './error-messages';
 import { AccountModule } from './modules/account';
 import { CalendarModule } from './modules/calendar';
+import { AppearanceModule } from './modules/appearance';
 import { DevicesModule } from './modules/devices';
 import { DisputesCoreModule, DisputesModule } from './modules/disputes';
 import { HealthModule } from './modules/health';
@@ -48,11 +49,12 @@ import { TracksModule } from './modules/tracks';
     DisputesCoreModule,
     DisputesModule,
     CalendarModule,
+    AppearanceModule,
     RidesModule,
     DevicesModule,
     // удаление аккаунта (оркестратор, ADR-0015)
     AccountModule,
-    // центр уведомлений (ADR-0016)
+    // центр уведомлений (ADR-0017)
     NotificationsModule,
   ],
   // единый формат ошибок ApiError для всех модулей; тексты кодов проекта — рядом с фильтром

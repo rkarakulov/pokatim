@@ -33,7 +33,7 @@ beforeEach(async () => {
 });
 afterEach(() => jest.clearAllMocks());
 
-describe('useSignOut — push-токен устройства (ADR-0016)', () => {
+describe('useSignOut — push-токен устройства (ADR-0017)', () => {
   it('выход снимает токен до отзыва сессии', async () => {
     const statusAtRevoke: string[] = [];
     revoke.mockImplementation(async () => {

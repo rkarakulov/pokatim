@@ -46,7 +46,7 @@ export const QUEUE = {
    */
   accountDeletion: 'account-deletion',
   /**
-   * Приём событий для уведомлений (ADR-0016): события outbox модулей-источников → уведомления получателям; jobId = id
+   * Приём событий для уведомлений (ADR-0017): события outbox модулей-источников → уведомления получателям; jobId = id
    * события outbox, повтор не дублирует (уникальный `(sourceEventId, userId)`).
    */
   notificationsIntake: 'notifications-intake',

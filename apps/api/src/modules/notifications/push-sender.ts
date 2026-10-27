@@ -1,6 +1,6 @@
 import type { NotificationTarget } from '@pokatim/contracts';
 
-/** Порт отправки push (ADR-0016): адаптер — `ExpoPushSender`; тесты доставки подменяют сервер (`test/fake-expo.ts`). */
+/** Порт отправки push (ADR-0017): адаптер — `ExpoPushSender`; тесты доставки подменяют сервер (`test/fake-expo.ts`). */
 export const PUSH_SENDER = Symbol('PUSH_SENDER');
 
 /** Сообщение одному устройству: текст — снимок уведомления или сводка, цель — из белого списка (сводка — `null`). */
