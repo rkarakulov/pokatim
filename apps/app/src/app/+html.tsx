@@ -1,17 +1,10 @@
-import { autofillCss, themes } from '@pokatim/design-tokens';
+import { appThemes } from '@pokatim/design-tokens';
 import { i18n } from '@pokatim/i18n';
 import { ScrollViewStyleReset, useServerDocumentContext } from 'expo-router/html';
 import type { ReactNode } from 'react';
 
-// фон документа до гидрации — из темы по системной схеме: без белой вспышки в тёмной теме
-const documentBackground = `
-html, body { background-color: ${themes.light.surface.default}; }
-@media (prefers-color-scheme: dark) {
-  html, body { background-color: ${themes.dark.surface.default}; }
-}`;
-
-// автозаполнение браузера (:-webkit-autofill) — фон и текст поля темы вместо голубой заливки браузера
-const autofill = autofillCss({ theme: themes.light, darkTheme: themes.dark });
+import { ssrThemeId } from '@/features/appearance/ssr-theme';
+import { documentCss, themeColors } from '@/theme/document-theme';
 
 // service worker (кеш статики, scripts/service-worker.ts) — только в production: в dev он кешировал бы бандлы Metro
 const registerServiceWorker = `
@@ -22,9 +15,13 @@ if ('serviceWorker' in navigator) {
 /**
  * Корневой HTML web-версии: только сервер (SSR), в браузере не гидратируется — без `window`/`document`.
  * `useServerDocumentContext` — все четыре поля: мета маршрута (`generateMetadata`), стили, бандлы гидрации.
+ * Тема — активная тема процесса (`+middleware.ts`): фон документа до гидрации (без белой вспышки в тёмной схеме),
+ * автозаполнение, `theme-color` и id для гидрации без мигания (`window.__POKATIM_THEME__` — только id из закрытого
+ * списка, `JSON.stringify`).
  */
 export default function RootHtml({ children }: { children: ReactNode }) {
   const { htmlAttributes, headNodes, bodyAttributes, bodyNodes } = useServerDocumentContext();
+  const theme = appThemes[ssrThemeId()];
 
   return (
     // базовый язык словаря; язык пользователя на сервере (Accept-Language) — вместе с сессией в web
@@ -32,23 +29,20 @@ export default function RootHtml({ children }: { children: ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta
-          name="theme-color"
-          media="(prefers-color-scheme: light)"
-          content={themes.light.surface.default}
-        />
-        <meta
-          name="theme-color"
-          media="(prefers-color-scheme: dark)"
-          content={themes.dark.surface.default}
-        />
+        {themeColors(theme).map(({ media, color }) => (
+          <meta key={media ?? 'all'} name="theme-color" media={media} content={color} />
+        ))}
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <style dangerouslySetInnerHTML={{ __html: documentBackground }} />
-        <style dangerouslySetInnerHTML={{ __html: autofill }} />
+        <style dangerouslySetInnerHTML={{ __html: documentCss(theme) }} />
         <ScrollViewStyleReset />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__POKATIM_THEME__=${JSON.stringify(theme.id)}`,
+          }}
+        />
         {headNodes}
       </head>
       <body {...bodyAttributes}>
