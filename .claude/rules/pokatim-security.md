@@ -229,7 +229,7 @@ paths:
 - Лимиты частоты по `uid`: `rides-create` 10/сут, `rides-manage` 30/ч, `rides-rsvp` 60/ч; квоты 5 будущих райдов и
   20 отметок (принятая гонка на единицу). Логи — id райда и `uid`, без названий, мест и описаний.
 - Возврат гостя после входа — только путь из allowlist `^/(rides|races|calendar)/<uuid>$` и точный
-  `/settings/account/delete` (экран удаления, адрес для Google Play — этап 2 app)
+  `/settings/account/delete` (экран удаления, адрес для Google Play)
   (`features/auth/return-path-allowlist.ts`), не адрес; шаринг — только собственный web-origin.
 - Жалоба (05b) — `POST /v1/rides/:id/reports` под `AuthGuard`, лимит `rides-report` 20/сут по `uid`, одна на
   (райд, пользователь) — уникальный индекс; организатор — 409; скрытый чужому — 404. Логи — id райда, `uid` и код
