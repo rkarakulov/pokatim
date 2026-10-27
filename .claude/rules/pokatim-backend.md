@@ -167,8 +167,8 @@ paths:
 - Чтения — по группе заявки: «моё участие» (`verified`, `canUpgrade`, `unranked`), публичная таблица
   `GET /v1/races/:id/results?group` (`groups`, `finishers`), таблица финишёров `GET /v1/races/:id/finishers`
   (`ResultsPublicController`, курсор `f`); протокол — `buildProtocol` по группам (флаг скорости — по строкам
-  ревизии), «Участники» панели — тот же `buildProtocol` на живых строках, фильтры `group`/`attention`,
-  `counts.attention`/`finishers`. `SPEED_CLUSTER_HIGH` — `speedClusterFlags`; флаги датчиков — worker
+  ревизии), «Участники» панели — тот же `buildProtocol` на живых строках, фильтры `group`/`attention`/`finishers`
+  (до предела ответа), `counts.attention`/`finishers`. `SPEED_CLUSTER_HIGH` — `speedClusterFlags`; флаги датчиков — worker
   (`analyzeAttempt` → `sensorFlags`), outbox-событий нет (R4). Споры — `not_ranked` / `target_not_counted` по
   `DisputeEntry.ranked`, флаги цели — в `DisputeStanding`.
 

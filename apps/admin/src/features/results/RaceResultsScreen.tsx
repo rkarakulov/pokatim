@@ -24,7 +24,10 @@ import { resultsErrorText } from './results-errors';
 import { resultsSummaryQuery } from './results-query';
 import { StandingsTable } from './StandingsTable';
 
-/** Шесть плиток KPI (§7.9); «в зачёте» после публикации — строки протокола без DQ (RC-5). */
+/**
+ * Плитки KPI (§7.9); «в зачёте» после публикации — строки протокола без DQ (RC-5). race-results-07: «Требует
+ * внимания» (строки с флагами по всей гонке) и «Финишёры» (время без места) — счётчики сервера.
+ */
 function Kpi({ summary }: { summary: PanelRaceResults | undefined }) {
   const titleId = useId();
   const attempts = summary?.counts.attempts;
@@ -38,13 +41,15 @@ function Kpi({ summary }: { summary: PanelRaceResults | undefined }) {
     { key: 'rejected', value: attempts?.rejected },
     { key: 'failed', value: summary?.counts.failed },
     { key: 'excluded', value: attempts?.excluded },
+    { key: 'attention', value: summary?.counts.attention },
+    { key: 'finishers', value: summary?.counts.finishers },
   ] as const;
   return (
     <section aria-labelledby={titleId}>
       <h2 id={titleId} className="visually-hidden">
         {t('admin.results.kpi.title')}
       </h2>
-      <div className="stat-tiles">
+      <div className="stat-tiles stat-tiles--8">
         {tiles.map((tile) => (
           <StatTile key={tile.key} label={t(`admin.results.kpi.${tile.key}`)} value={tile.value} />
         ))}
@@ -141,6 +146,7 @@ export function RaceResultsScreen({ raceId }: { raceId: string }) {
             <StandingsTable
               raceId={raceId}
               published={data.protocol !== null}
+              finishersTotal={data.counts.finishers}
               run={run}
               open={setDialog}
             />

@@ -291,7 +291,8 @@ export class ResultsPanelReadService {
    * «Участники» (§7.6) в одной snapshot-сессии: до публикации — строки с местами по группам (`buildProtocol` без DQ —
    * те же места и флаги, что даст публикация), затем прочие заявки по времени заявки (финишёры — с временем и
    * причиной); после — строки текущей ревизии протокола, затем прочие заявки без места (RC-5). Фильтры
-   * (race-results-07): `group` — строки группы, `attention` — только с флагами.
+   * (race-results-07): `group` — строки группы, `attention` — только с флагами, `finishers` — только финишёры без
+   * места (блок панели — отдельным запросом, за пределом «Участников» не теряется).
    */
   async standings(
     principal: PanelPrincipal,
@@ -303,6 +304,7 @@ export class ResultsPanelReadService {
     const filter: StandingsFilter = {
       ...(query.group === undefined ? {} : { group: query.group }),
       ...(query.attention === undefined ? {} : { attention: true }),
+      ...(query.finishers === undefined ? {} : { finishers: true }),
     };
     const all = await this.repository.withSnapshot((session) =>
       this.standingItems(race, now, session, filter),
@@ -368,7 +370,8 @@ export class ResultsPanelReadService {
     const matches = (row: Pick<StandingItem, 'groupKey' | 'flags'>) =>
       (filter.group === undefined || row.groupKey === filter.group) &&
       (!filter.attention || row.flags.length > 0);
-    const headRows = head.filter(matches);
+    // строки с местом — не финишёры
+    const headRows = filter.finishers ? [] : head.filter(matches);
     const headEntries = new Map(
       (
         await this.repository.entriesByIds(
@@ -414,7 +417,7 @@ export class ResultsPanelReadService {
         unranked,
         flags: best?.flags ?? [],
       };
-      if (matches(row)) restRows.push(row);
+      if (matches(row) && (!filter.finishers || unranked !== null)) restRows.push(row);
     }
     items.push(...restRows.slice(0, Math.max(0, max - items.length)));
     return { revision, groups, items, overflow: headRows.length + restRows.length > max };

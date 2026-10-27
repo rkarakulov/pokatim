@@ -1040,6 +1040,99 @@ exit=0
 `TURBO_CONCURRENCY=1 pnpm check` (MONGO `pokatim_r07_test`, Redis db 11) — `exit=0`, `Tasks: 15 successful, 15 total`
 (tracks 307, contracts 277, api 1171, api-client 98, admin 282, app 1208). Первый прогон упал только на фикстуре api-client.
 
+## 12.2 07b — панель «Протокол»
+
+### Changes
+
+- «Результаты» гонки: KPI «Требует внимания» (`counts.attention`) и «Финишёры» (`counts.finishers`) — восемь плиток
+  (`.stat-tiles--8`). «Участники»: вкладки групп — `ChipGroup` по `groups` ответа («Все группы» — запрос без `group`),
+  «Только «Требует внимания»» — `ToggleChip` (`attention=true`); фильтры — на сервере и в ключе запроса
+  (`standingsQuery(raceId, filter)`, `keepPreviousData`: при смене фильтра таблицы — скелетон, вкладки остаются и при
+  ошибке, повтор — «Повторить» в таблице). Колонки «Группа», «Уровень», «Требует внимания» (`FlagList`: подпись кода из
+  `admin.results.flag.*`, метрика подсказкой — «Время ×0,782 медианы группы», «18 % сегмента без пульса»). Пустой
+  результат фильтра — «Нет участников по выбранным фильтрам».
+- Финишёры: строки ответа с `unranked ≠ null` — отдельный блок «Финишёры — без места» (без колонки места, причина
+  `results.unranked.*`), виден при `counts.finishers > 0`. Источник — тот же `getRaceStandings` (07a отдаёт финишёров в
+  «Участниках»; отдельного панельного эндпоинта нет — §11.2). START-финишёры (`groupKey: overall`) видны во вкладке
+  «Все группы», во вкладке группы — только Verified без пульса этой группы (фильтр `group` сервера).
+- «Попытки»: колонки «Датчики» («Пульс, мощность» / «Пульс» / «Мощность» / «Нет» / «—») и «Требует внимания».
+- «Попытки», DV-11 (после слияния 07a): импорт Garmin/Wahoo (`sensors.source: 'declared'`) — «Датчики» с пометкой
+  «(заявлено импортом)», например «Пульс (заявлено импортом)» (`admin.results.sensors.declared`); флагов у таких
+  попыток нет (`flags: []` от сервера), колонка «Требует внимания» пустая.
+- Разбор спора: «Группа», «Уровень», «Требует внимания» цели (`target.groupKey/tier/flags`).
+- «Пол и год» (`VerifiedDemographicsDialog`): кнопка только с `profiles.verified_edit` и у Verified в группе пол × возраст
+  (у них анкета зафиксирована заявкой); GET текущих значений при открытии (`gcTime: 0`, скелетон полей, 404 — «Анкета
+  Verified не заполнена», сеть/5xx — `ErrorState` с повтором); радио пола, год (проверка `VerifiedBirthYear` контракта,
+  ошибка под полем), причина; «Сохранить» неактивна без изменений (`DisabledReason`), с неверным годом и без причины;
+  PATCH — только изменённые поля + причина (`useMutation`: глобальные 401/403); ошибки в окне — 409 «Анкету изменили
+  одновременно…», 403 «Нет доступа к этому действию.», 404, 400/422, 429. Вес, рост, FTP — не запрашиваются и не
+  показываются. После сохранения — инвалидация журнала.
+- i18n (`packages/i18n/src/ru.ts`, блоки `admin.results.*`, `admin.disputes.result.*`); правило
+  `.claude/rules/pokatim-web.md` — абзац «Группы и флаги».
+- Отклонение от `pokatim-web.md` «Формы — react-hook-form + zod»: окно пола и года — `useState` по образцу `ReasonDialog`
+  / смены роли (`MembersScreen`), тело проверяет схема контракта `UpdateVerifiedDemographicsRequest` до отправки.
+
+### Files touched
+
+- `apps/admin/src/features/results/{RaceResultsScreen,StandingsTable,AttemptsTable}.tsx`,
+  `results-{format,query,errors}.ts`; новые `FlagList.tsx`, `VerifiedDemographicsDialog.tsx`.
+- `apps/admin/src/features/disputes/DisputeScreen.tsx`.
+- `apps/admin/src/index.css` (`.stat-tiles--8`, `.flag-list` — только переменные дизайн-системы).
+- `apps/admin/src/test/app.tsx` (`ME.admin` + `profiles.verified_edit`, как `ROLE_PERMISSIONS.admin`).
+- `packages/i18n/src/ru.ts`; `.claude/rules/pokatim-web.md`.
+
+### Tests
+
+- `RaceResultsScreen.test.tsx` (+8 в describe «группы, уровни, «Требует внимания»»): KPI attention/finishers; строка с
+  местом — группа, уровень, флаги с метрикой; финишёр — отдельный блок без места; вкладки и фильтр → запросы `{}` →
+  `{ group }` → `{ group, attention }` → `{ attention }`; пустой фильтр; ошибка при смене фильтра — повтор, вкладки
+  видны; схема `overall` — без вкладок и финишёров; попытки — датчики и флаги; «Пол и год» — у admin (Verified группы),
+  нет у финишёра START и у модератора. Обновлены: скелетоны KPI 6 → 8, состав ячеек строки.
+- `VerifiedDemographicsDialog.test.tsx` (6): загрузка — скелетон, затем пол/год/фиксация, без кг/см/Вт; без изменений —
+  неактивна, PATCH только с `birthYear`; смена пола — только `gender`, год вне пределов — ошибка под полем; 409 и 403 —
+  текст в окне; 404 — «Анкета Verified не заполнена»; нет сети — повтор.
+- `DisputeScreen.test.tsx` (+1): группа, уровень, флаги цели с метрикой; без флагов — нет подписи.
+- После слияния 07a: фикстуры `sensors` в `RaceResultsScreen.test.tsx` дополнены `source` (typecheck падал на
+  обязательном поле); тест «попытки: датчики…» — третья попытка `source: 'declared'` → «Пульс (заявлено импортом)».
+
+`pnpm --filter @pokatim/admin test` — 34 файла, 297 тестов; `typecheck`, `eslint`, `build` — зелёные.
+После слияния 07a и DV-11: `pnpm --filter @pokatim/admin test` — 35 файлов, 300 тестов; `typecheck`, `eslint
+--max-warnings=0` (results, i18n), `prettier --check` изменённых файлов — зелёные; полный `pnpm check` не прогонялся.
+`TURBO_CONCURRENCY=1 pnpm check` (MONGO `pokatim_r07b_test`, Redis db 12) — `exit=0`, `Tasks: 15 successful, 15 total`.
+
+### Фиксы ревью 07b pass 1
+
+Находки — `findings-07b-codex.md` (REQUEST CHANGES), `findings-07b-claude.md` (APPROVE с замечаниями).
+
+- [HIGH codex] Финишёры за пределом 1000 строк: контракт `PanelRaceStandingsQuery.finishers` (`'true'`, необязательный —
+  совместимо), `StandingsFilter.finishers` в репозитории (`status: active`, `best.ranked: false` — как `unrankedOf`),
+  в сервисе строки с местом при `finishers` не берутся — фильтр до предела, `truncated` по отфильтрованному. Панель:
+  блок «Финишёры» — отдельный `useQuery` (`standingsQuery(raceId, { ...filter, finishers: 'true' })`, `enabled` при
+  `counts.finishers > 0`, ключ включает `finishers`), свой баннер «Показаны первые N финишёров»; пустое состояние —
+  только по пустому ответу этого запроса. Это изменение `apps/api` + contracts + api-client в 07b — по решению
+  оркестратора (8.2 не требуется: параметр совместим).
+- [HIGH codex] `VerifiedDemographicsDialog`: ошибка фонового обновления при показанных данных — форма остаётся, над
+  ней баннер «Не удалось обновить анкету» с «Повторить» (`current.refetch()`), AGENTS §4.12.
+- [MEDIUM codex] Подпись `HR_POWER_DECOUPLED` — «Расхождение {value} %» (ветки половин и рывков одним кодом).
+- [MEDIUM claude] Esc/«Отмена» во время PATCH: мутация с `mutationKey`, окно читает `useIsMutating` и не закрывается.
+- [MEDIUM claude] Подсказка у причины (`help`): не указывать пол и год — журнал append-only, только названия полей.
+- [MEDIUM claude] «Сохранить» — `aria-disabled` (в порядке фокуса, клик игнорируется) + `DisabledReason` со всеми
+  причинами: «Измените пол или год рождения», «Исправьте год рождения», «Укажите причину — от 3 символов».
+- [LOW] Исключение «форма на `useState`» — в `.claude/rules/pokatim-web.md`; баннеры предела скрыты при
+  `isPlaceholderData`. Правила `pokatim-web.md`/`pokatim-backend.md` обновлены (фильтр `finishers`).
+
+Тесты: int `results-tiers.int.test.ts` («standingsMax»): 1000 ранжированных + Verified-женщина + START-финишёр →
+`?finishers=true` отдаёт START (`truncated: false`), `?finishers=true&group=m_u40` — пусто (до фикса — красный:
+`truncated: true`, финишёра нет). `RaceResultsScreen.test.tsx` (+1): финишёры — отдельный запрос, при усечённых
+«Участниках» финишёр виден, свой баннер; вкладки/фильтр — пары запросов с `finishers`; подпись «Расхождение 40 %».
+`VerifiedDemographicsDialog.test.tsx` (+3, переписаны 2): `aria-disabled` и причины (в т. ч. пустая причина, клик
+неактивной не шлёт PATCH); подсказка причины; Esc и `cancel` во время PATCH — окно открыто; ошибка фонового
+обновления — форма с введённым, баннер, повтор.
+
+`pnpm --filter @pokatim/admin test` — 35 файлов, 304 теста; `typecheck`, `eslint --max-warnings=0` изменённых,
+`prettier --check` — зелёные. `TURBO_CONCURRENCY=1 pnpm check` (MONGO `pokatim_r07b_test`, Redis db 12) — `exit=0`,
+`Tasks: 15 successful, 15 total` (api 1334, admin 304), флаков не было.
+
 ## 12.3 07c — приложение
 
 ### Changes
