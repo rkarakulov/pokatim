@@ -25,7 +25,6 @@ import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { actionErrorMessage } from '@/features/auth/error-messages';
-import { MapGestureLockContext, useMapGestureLock } from '@/features/maps/map-gesture-lock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { DetailRow } from './detail-row';
@@ -221,8 +220,6 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
   useEffect(() => {
     if (gone) queryClient.removeQueries({ queryKey: myRoutesKeys.map(id) });
   }, [gone, queryClient, id]);
-  // routes-04b (RC-3): жест карты двумя пальцами (native) — экран не прокручивается; web контекст не вызывает
-  const [scrollEnabled, onMapGesture] = useMapGestureLock();
 
   return (
     <SafeAreaView
@@ -235,45 +232,42 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
         )}
       />
       <DetailHeader title={notFound ? undefined : route.data?.title} fallback={MY_ROUTES_HREF} />
-      <MapGestureLockContext value={onMapGesture}>
-        <ScrollView
-          testID="my-route-detail"
-          contentContainerStyle={styles.content}
-          scrollEnabled={scrollEnabled}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void onRefresh()}
-              tintColor={theme.text.secondary}
-              colors={[theme.text.primary]}
-              progressBackgroundColor={theme.surface.raised}
-            />
-          }
-        >
-          <OfflineBanner hasData={route.data !== undefined && !notFound} style={styles.offline} />
-          {notFound ? (
-            <EmptyState
-              title={t('routes.mine.detail.notFound')}
-              action={{
-                label: t('routes.mine.detail.back'),
-                onPress: () => router.navigate(MY_ROUTES_HREF),
-              }}
-            />
-          ) : (
-            <AsyncContent
-              query={route}
-              skeleton={
-                <View style={styles.detail}>
-                  <SkeletonHeroCard />
-                  <SkeletonText variant="body" lines={4} lastLineWidth="60%" />
-                </View>
-              }
-            >
-              {(data) => <MyRouteView route={data} />}
-            </AsyncContent>
-          )}
-        </ScrollView>
-      </MapGestureLockContext>
+      <ScrollView
+        testID="my-route-detail"
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={theme.text.secondary}
+            colors={[theme.text.primary]}
+            progressBackgroundColor={theme.surface.raised}
+          />
+        }
+      >
+        <OfflineBanner hasData={route.data !== undefined && !notFound} style={styles.offline} />
+        {notFound ? (
+          <EmptyState
+            title={t('routes.mine.detail.notFound')}
+            action={{
+              label: t('routes.mine.detail.back'),
+              onPress: () => router.navigate(MY_ROUTES_HREF),
+            }}
+          />
+        ) : (
+          <AsyncContent
+            query={route}
+            skeleton={
+              <View style={styles.detail}>
+                <SkeletonHeroCard />
+                <SkeletonText variant="body" lines={4} lastLineWidth="60%" />
+              </View>
+            }
+          >
+            {(data) => <MyRouteView route={data} />}
+          </AsyncContent>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }

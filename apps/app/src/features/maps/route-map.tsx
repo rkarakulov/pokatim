@@ -2,9 +2,8 @@ import type * as MapLibreNative from '@maplibre/maplibre-react-native';
 import { space } from '@pokatim/design-tokens';
 import { cumulativeMeters } from '@pokatim/tracks';
 import { useReducedMotion } from '@rkarakulov/ui';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { GestureDetector } from 'react-native-gesture-handler';
 
 import {
   CORRIDOR_LAYER_ID,
@@ -15,16 +14,16 @@ import {
 } from './corridor-style';
 import { loadMapLibreNative } from './load-maplibre-native';
 import {
+  cameraCall,
   clampZoom,
   MAP_CAMERA_ANIMATION_MS,
   MAP_MAX_ZOOM,
   MAP_MIN_ZOOM,
   MAP_ZOOM_STEP,
   type MapViewSize,
+  type MapViewSnapshot,
 } from './map-camera';
 import { MapControls } from './map-controls';
-import { MapGestureLockContext } from './map-gesture-lock';
-import { cameraCall, useMapGestures, type MapViewSnapshot } from './map-gestures';
 import { createMapViewStore } from './map-view-store';
 import { RouteMapFrame } from './route-map-frame';
 import type { RouteMapProps } from './route-map-props';
@@ -48,10 +47,11 @@ const styles = StyleSheet.create({
 
 /**
  * Native-карта маршрута (`@maplibre/maplibre-react-native` 11, ADR-0014): пакет грузится лениво (`loadMapLibreNative`,
- * вызывающий проверяет `mapSupported()`). Интерактивная (routes-04b, RC-2): нативные жесты карты выключены пропсами
- * (один палец забирал бы прокрутку страницы; не `pointerEvents` — кнопка атрибуции нажимается), перетаскивание и
- * щипок двумя пальцами, двойной тап — RNGH поверх карты (`useMapGestures`), камера — императивно через `CameraRef`;
- * на время жеста экран не прокручивается (`MapGestureLockContext`). Зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM`, кнопки «+», «−»,
+ * вызывающий проверяет `mapSupported()`). Интерактивная (routes-04b; routes-04c — решение пользователя «одним
+ * пальцем»): нативные жесты MapLibre — перетаскивание одним пальцем, щипок, двойной тап (при reduce motion выключен:
+ * анимация нативная); вращение и наклон выключены. Касание карты забирает жест у прокрутки экрана (Android —
+ * `requestDisallowInterceptTouchEvent` при `dragPan`, iOS — распознаватель карты глубже `UIScrollView`), вне карты
+ * страница прокручивается. Зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM` (`Camera`, ограничивает и жесты), кнопки «+», «−»,
  * «в рамку» с явной длительностью (по умолчанию `fitBounds` — 2 с `'fly'`), при reduce motion — без анимации.
  * Начальная камера — по рамке без анимации. Смена стиля (темы) — новая карта (`key` у вызывающего): сброс ошибки и
  * камеры. `scrub` (routes-04) — маркер скраббинга оверлеем над холстом: пиксели линии — `mercatorProjector` по
@@ -119,14 +119,6 @@ export function RouteMap({
   // `null` (ответа ещё нет) — как «уменьшить» (RC-9)
   const reduceMotion = reduced !== false;
   const duration = reduceMotion ? 0 : MAP_CAMERA_ANIMATION_MS;
-  const onMapGesture = useContext(MapGestureLockContext);
-  const gestures = useMapGestures({
-    camera: cameraRef,
-    view: viewState,
-    size: viewSize,
-    reduceMotion,
-    onActive: onMapGesture,
-  });
   const zoomBy = (delta: number) => {
     const zoomTo = (zoom: number) =>
       cameraRef.current?.zoomTo(clampZoom(zoom + delta), { duration, easing: 'ease' });
@@ -156,66 +148,60 @@ export function RouteMap({
       failedMessage={failed ? failedMessage : null}
     >
       {lib ? (
-        <GestureDetector gesture={gestures}>
-          <View
-            testID="map-gesture-area"
+        <View testID="map-area" style={StyleSheet.absoluteFill} onLayout={onLayout}>
+          <lib.Map
+            ref={mapRef}
             style={StyleSheet.absoluteFill}
-            collapsable={false}
-            onLayout={onLayout}
+            mapStyle={styleUrl}
+            attribution
+            attributionPosition={ATTRIBUTION_POSITION}
+            // B4 maps-02: кнопка атрибуции — в цвете темы
+            tintColor={theme.text.secondary}
+            logo={false}
+            compass={false}
+            scaleBar={false}
+            // routes-04c: нативные жесты — один палец двигает карту, щипок — зум; двойной тап анимирует камеру
+            // нативно — при reduce motion выключен (кнопки «+», «−» — без анимации)
+            dragPan
+            touchZoom
+            doubleTapZoom={!reduceMotion}
+            doubleTapHoldZoom={false}
+            touchRotate={false}
+            touchPitch={false}
+            onDidFailLoadingMap={() => setFailed(true)}
+            onDidFinishLoadingMap={() => {
+              mapRef.current
+                ?.getViewState()
+                .then((state) => {
+                  viewState.current = state;
+                  reproject();
+                })
+                .catch(() => undefined);
+            }}
+            onRegionIsChanging={onRegion}
+            onRegionDidChange={onRegion}
           >
-            <lib.Map
-              ref={mapRef}
-              style={StyleSheet.absoluteFill}
-              mapStyle={styleUrl}
-              attribution
-              attributionPosition={ATTRIBUTION_POSITION}
-              // B4 maps-02: кнопка атрибуции — в цвете темы
-              tintColor={theme.text.secondary}
-              logo={false}
-              compass={false}
-              scaleBar={false}
-              // нативные жесты — выключены: жесты двумя пальцами ведёт RNGH (`useMapGestures`, RC-2)
-              dragPan={false}
-              touchZoom={false}
-              doubleTapZoom={false}
-              doubleTapHoldZoom={false}
-              touchRotate={false}
-              touchPitch={false}
-              onDidFailLoadingMap={() => setFailed(true)}
-              onDidFinishLoadingMap={() => {
-                mapRef.current
-                  ?.getViewState()
-                  .then((state) => {
-                    viewState.current = state;
-                    reproject();
-                  })
-                  .catch(() => undefined);
-              }}
-              onRegionIsChanging={onRegion}
-              onRegionDidChange={onRegion}
-            >
-              <lib.Camera
-                ref={cameraRef}
-                minZoom={MAP_MIN_ZOOM}
-                maxZoom={MAP_MAX_ZOOM}
-                initialViewState={{ bounds, padding: MAP_FIT_PADDING }}
-              />
-              <lib.GeoJSONSource id={ROUTE_SOURCE_ID} data={features}>
-                {layers.map((layer) => (
-                  <lib.Layer key={layer.id} {...layer} />
+            <lib.Camera
+              ref={cameraRef}
+              minZoom={MAP_MIN_ZOOM}
+              maxZoom={MAP_MAX_ZOOM}
+              initialViewState={{ bounds, padding: MAP_FIT_PADDING }}
+            />
+            <lib.GeoJSONSource id={ROUTE_SOURCE_ID} data={features}>
+              {layers.map((layer) => (
+                <lib.Layer key={layer.id} {...layer} />
+              ))}
+            </lib.GeoJSONSource>
+            {trackData ? (
+              // трек — под старт и финиш маршрута; смена трека — новая карта (`key` у вызывающего, RC-5)
+              <lib.GeoJSONSource id={TRACK_SOURCE_ID} data={trackData}>
+                {trackStyle.map((layer) => (
+                  <lib.Layer key={layer.id} {...layer} beforeId={TRACK_BEFORE_LAYER_ID} />
                 ))}
               </lib.GeoJSONSource>
-              {trackData ? (
-                // трек — под старт и финиш маршрута; смена трека — новая карта (`key` у вызывающего, RC-5)
-                <lib.GeoJSONSource id={TRACK_SOURCE_ID} data={trackData}>
-                  {trackStyle.map((layer) => (
-                    <lib.Layer key={layer.id} {...layer} beforeId={TRACK_BEFORE_LAYER_ID} />
-                  ))}
-                </lib.GeoJSONSource>
-              ) : null}
-            </lib.Map>
-          </View>
-        </GestureDetector>
+            ) : null}
+          </lib.Map>
+        </View>
       ) : null}
       {lib && scrub ? (
         <View testID="scrub-overlay" style={styles.overlay} onLayout={onLayout}>

@@ -10,6 +10,7 @@ import { AccessibilityInfo } from 'react-native';
 import { CORRIDOR_OPACITY, MAP_FIT_PADDING, ROUTE_SOURCE_ID } from './corridor-style';
 import type * as Loader from './load-maplibre';
 import { MAP_MAX_ZOOM, MAP_MIN_ZOOM } from './map-camera';
+import { WHEEL_HINT_MS } from './map-wheel.web';
 import { RouteMap } from './route-map';
 
 interface MockMap {
@@ -234,29 +235,93 @@ describe('RouteMap (web): атрибуция и отступы (B2, B4 maps-02)'
 });
 
 describe('RouteMap (web): интерактивная карта (routes-04b, RC-1, RC-9)', () => {
-  it('кооперативные жесты, без вращения и наклона, зум 2–17, строки интерфейса из i18n', async () => {
+  it('routes-04c: без кооперативного режима (один палец и мышь двигают карту), без вращения и наклона, зум 2–17', async () => {
     await render(<RouteMap {...props()} />);
     await flush();
     const map = state.maps.at(-1)!;
     expect(map.options).toMatchObject({
       interactive: true,
-      cooperativeGestures: true,
+      cooperativeGestures: false,
+      dragPan: true,
       dragRotate: false,
       pitchWithRotate: false,
       touchPitch: false,
       maxPitch: 0,
       minZoom: MAP_MIN_ZOOM,
       maxZoom: MAP_MAX_ZOOM,
-      locale: {
-        'Map.Title': 'Карта: стрелки — сдвиг, плюс и минус — масштаб',
-        'CooperativeGesturesHandler.WindowsHelpText':
-          'Чтобы изменить масштаб, крутите колесо с Ctrl',
-        'CooperativeGesturesHandler.MacHelpText': 'Чтобы изменить масштаб, крутите колесо с ⌘',
-        'CooperativeGesturesHandler.MobileHelpText': 'Двигайте карту двумя пальцами',
-      },
+      locale: { 'Map.Title': 'Карта: стрелки — сдвиг, плюс и минус — масштаб' },
     });
     expect(map.touchZoomRotate.disableRotation).toHaveBeenCalled();
     expect(map.keyboard.disableRotation).toHaveBeenCalled();
+  });
+
+  describe('колесо мыши (routes-04c): зум только с Ctrl/⌘, без модификатора — прокрутка страницы', () => {
+    const HINT = 'Чтобы изменить масштаб, крутите колесо с Ctrl';
+    /** Узел внутри контейнера карты — как холст maplibre-gl, где слушает колесо `scrollZoom`. */
+    async function mapWithWheelSpy() {
+      await render(<RouteMap {...props()} />);
+      await flush();
+      const canvas = host.querySelector<HTMLElement>('[data-testid="route-map-canvas"]')!;
+      const inner = document.createElement('div');
+      canvas.append(inner);
+      const scrollZoom = jest.fn();
+      inner.addEventListener('wheel', scrollZoom);
+      const wheel = (init: WheelEventInit = {}) => {
+        const event = new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          deltaY: 100,
+          ...init,
+        });
+        act(() => {
+          inner.dispatchEvent(event);
+        });
+        return event;
+      };
+      return { scrollZoom, wheel };
+    }
+
+    it('без модификатора: до зума карты не доходит, прокрутка страницы не отменена, подсказка', async () => {
+      const { scrollZoom, wheel } = await mapWithWheelSpy();
+      expect(text()).not.toContain(HINT);
+      const event = wheel();
+      expect(scrollZoom).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(false);
+      expect(text()).toContain(HINT);
+    });
+
+    it.each([['ctrlKey'], ['metaKey']])(
+      'с %s — зум карты (scrollZoom maplibre-gl), подсказки нет',
+      async (key) => {
+        const { scrollZoom, wheel } = await mapWithWheelSpy();
+        wheel({ [key]: true });
+        expect(scrollZoom).toHaveBeenCalledTimes(1);
+        expect(text()).not.toContain(HINT);
+      },
+    );
+
+    it('подсказка гаснет сама; размонтирование снимает обработчик', async () => {
+      jest.useFakeTimers();
+      try {
+        const { scrollZoom, wheel } = await mapWithWheelSpy();
+        wheel();
+        expect(text()).toContain(HINT);
+        act(() => {
+          jest.advanceTimersByTime(WHEEL_HINT_MS);
+        });
+        expect(text()).not.toContain(HINT);
+        const canvas = host.querySelector<HTMLElement>('[data-testid="route-map-canvas"]')!;
+        await act(async () => root?.unmount());
+        root = null;
+        const inner = document.createElement('div');
+        canvas.append(inner);
+        inner.addEventListener('wheel', scrollZoom);
+        inner.dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+        expect(scrollZoom).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
   });
 
   it('серверный рендер (карты ещё нет) — кнопок нет', () => {

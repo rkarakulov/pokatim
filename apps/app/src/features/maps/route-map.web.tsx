@@ -1,9 +1,12 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 
+import { space, stroke } from '@pokatim/design-tokens';
+import { t } from '@pokatim/i18n';
 import { cumulativeMeters } from '@pokatim/tracks';
-import { useReducedMotion } from '@rkarakulov/ui';
+import { textStyle, useReducedMotion } from '@rkarakulov/ui';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { attributionCss, collapseAttribution } from './attribution.web';
 import {
@@ -17,6 +20,7 @@ import { loadMaplibre } from './load-maplibre';
 import { MAP_MAX_ZOOM, MAP_MIN_ZOOM } from './map-camera';
 import { MapControls } from './map-controls';
 import { mapLocale } from './map-locale.web';
+import { guardWheelZoom, isMacPlatform, WHEEL_HINT_MS } from './map-wheel.web';
 import { createMapViewStore } from './map-view-store';
 import { MAP_WORKER_FILE } from './map-worker';
 import { RouteMapFrame } from './route-map-frame';
@@ -33,11 +37,12 @@ import {
 
 /**
  * Web-карта маршрута (`maplibre-gl` 6, ADR-0014 п. 5): модуль грузится динамическим `import()` только после
- * монтирования — в серверный рендер и первый чанк не попадает (статически — только CSS). Интерактивная (routes-04b,
- * RC-1): кооперативный режим — мышь тащит карту, колесо с Ctrl/⌘ — зум (без — прокрутка страницы и подсказка), на
- * тач-экране один палец прокручивает страницу, два — карту; двойной клик — приближение; вращение и наклон выключены;
- * зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM`; кнопки «+», «−», «в рамку» (без анимации при reduce motion). Компактная атрибуция —
- * свёрнута при старте и в цветах темы (B2, B4 maps-02), начальная камера — по рамке без анимации с отступом под
+ * монтирования — в серверный рендер и первый чанк не попадает (статически — только CSS). Интерактивная (routes-04b;
+ * routes-04c — решение пользователя «одним пальцем»): без кооперативного режима — мышь и один палец тащат карту
+ * (касание карты страницу не прокручивает, вне карты — прокручивает), два пальца — зум; колесо с Ctrl/⌘ — зум, без
+ * модификатора — прокрутка страницы и подсказка (`guardWheelZoom`); двойной клик — приближение; вращение и наклон
+ * выключены; зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM`; кнопки «+», «−», «в рамку» (без анимации при reduce motion).
+ * Компактная атрибуция — свёрнута при старте и в цветах темы (B2, B4 maps-02), начальная камера — по рамке без анимации с отступом под
  * контролы. Смена стиля (темы) — пересоздание карты. Ошибка до `load` (стиль, первые тайлы) — сообщение поверх
  * карты; ошибки тайлов после `load` — без сообщения (как native). `scrub` (routes-04) — маркер скраббинга оверлеем:
  * пиксели линии — `map.project` после `load` и на `SCRUB_REPROJECT_EVENTS` в стор вида (подписан только
@@ -75,6 +80,22 @@ export function RouteMap({
   useEffect(() => {
     animate.current = reduced === false;
   }, [reduced]);
+  // routes-04c: колесо без Ctrl/⌘ — прокрутка страницы; подсказка на `WHEEL_HINT_MS` после последнего прокручивания
+  const [wheelHint, setWheelHint] = useState(false);
+  useEffect(() => {
+    const node = container.current;
+    if (!node) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const release = guardWheelZoom(node, () => {
+      setWheelHint(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setWheelHint(false), WHEEL_HINT_MS);
+    });
+    return () => {
+      release();
+      clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     const node = container.current;
@@ -89,9 +110,10 @@ export function RouteMap({
         const created = new Map({
           container: node,
           style: styleUrl,
-          // routes-04b (RC-1): кооперативные жесты — прокрутка страницы колесом и одним пальцем остаётся странице
+          // routes-04c: один палец и мышь двигают карту; колесо без Ctrl/⌘ — странице (`guardWheelZoom`)
           interactive: true,
-          cooperativeGestures: true,
+          cooperativeGestures: false,
+          dragPan: true,
           dragRotate: false,
           pitchWithRotate: false,
           touchPitch: false,
@@ -175,6 +197,23 @@ export function RouteMap({
       {scrub ? (
         <ScrubLayer view={view} store={scrub} cumulative={cumulative} theme={theme} />
       ) : null}
+      {wheelHint ? (
+        <View aria-hidden style={styles.hintArea}>
+          <Text
+            style={[
+              textStyle('meta'),
+              styles.hint,
+              {
+                color: theme.text.primary,
+                backgroundColor: theme.surface.raised,
+                borderColor: theme.border.subtle,
+              },
+            ]}
+          >
+            {t(isMacPlatform() ? 'maps.gestures.wheelMac' : 'maps.gestures.wheel')}
+          </Text>
+        </View>
+      ) : null}
       {ready && !failed ? (
         <MapControls
           theme={theme}
@@ -191,3 +230,14 @@ export function RouteMap({
 const SCRUB_REPROJECT_EVENTS = ['resize', 'move'] as const;
 
 const canvasStyle = { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } as const;
+
+const styles = StyleSheet.create({
+  hintArea: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: space.s4,
+    pointerEvents: 'none',
+  },
+  hint: { paddingHorizontal: space.s3, paddingVertical: space.s2, borderWidth: stroke.hairline },
+});

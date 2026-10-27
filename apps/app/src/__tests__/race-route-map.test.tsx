@@ -4,13 +4,11 @@ import type { RaceDetail, RaceRouteMap } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
 import { type RefreshControlProps, TurboModuleRegistry, useColorScheme } from 'react-native';
-import { createGestureController } from 'react-native-gesture-handler/jest-utils';
 
 import { centerLat, corridorLineWidth } from '@/features/maps/corridor-style';
 
 import { loadMapLibreNative } from '@/features/maps/load-maplibre-native';
 import { MAP_MAX_ZOOM, MAP_MIN_ZOOM } from '@/features/maps/map-camera';
-import { MAP_PAN_TEST_ID } from '@/features/maps/map-gestures';
 import { api } from '@/lib/api';
 
 import { appRoutes } from './app-routes';
@@ -98,9 +96,13 @@ describe('карта маршрута на карточке гонки (maps-01)
     expect(loadMapLibreNative).toHaveBeenCalled();
     expect(map).toHaveProp('mapStyle', LIGHT);
     expect(map).toHaveProp('attribution', true);
-    for (const gesture of ['dragPan', 'touchZoom', 'doubleTapZoom', 'touchRotate', 'touchPitch']) {
-      expect(map).toHaveProp(gesture, false);
-    }
+    // routes-04c: один палец двигает карту, щипок — зум (нативные жесты); вращения и наклона нет
+    expect(map.props).toMatchObject({
+      dragPan: true,
+      touchZoom: true,
+      touchRotate: false,
+      touchPitch: false,
+    });
     const camera = screen.getByTestId('maplibre-Camera');
     expect(camera.props.initialViewState).toMatchObject({ bounds: route.bounds });
     // routes-04b (RC-8): зум ограничен; кнопки камеры — сверху справа
@@ -232,17 +234,16 @@ describe('карта маршрута на карточке гонки (maps-01)
     expect(screen.queryByTestId('maplibre-Map')).toBeNull();
   });
 
-  it('routes-04b (I2, RC-3): жест карты двумя пальцами выключает прокрутку карточки, конец жеста — включает', async () => {
+  it('routes-04c: карту двигает один палец нативно — прокрутка карточки не выключается (вне карты — страница)', async () => {
     await openCard();
-    await screen.findByTestId('maplibre-Map');
+    const map = await screen.findByTestId('maplibre-Map');
     const scroll = () => screen.getByTestId('race-detail');
-    expect(scroll()).toHaveProp('scrollEnabled', true);
-    const pan = createGestureController(MAP_PAN_TEST_ID);
-    await act(async () => pan.begin({ x: 100, y: 80, translationX: 0, translationY: 0 }));
-    expect(scroll()).toHaveProp('scrollEnabled', true);
-    await act(async () => pan.activate({ x: 110, y: 80, translationX: 10, translationY: 0 }));
-    expect(scroll()).toHaveProp('scrollEnabled', false);
-    await act(async () => pan.end({ x: 110, y: 80, translationX: 10, translationY: 0 }));
-    expect(scroll()).toHaveProp('scrollEnabled', true);
+    expect(map).toHaveProp('dragPan', true);
+    expect(scroll().props.scrollEnabled).not.toBe(false);
+    // нативный жест карты двигает камеру — экран прокрутку не трогает
+    await fireEvent(map, 'regionIsChanging', {
+      nativeEvent: { center: [27.6, 53.9], zoom: 12, bounds: [27.5, 53.8, 27.7, 54.0] },
+    });
+    expect(scroll().props.scrollEnabled).not.toBe(false);
   });
 });
