@@ -827,3 +827,10 @@ Coder, 2026-10-27, ветка `feature/routes-02-my-routes` (коммиты `98d
   Prettier чисто, ESLint 0, dependency-cruiser «no dependency violations found (1106 modules)», typecheck и test —
   13/13 задач (часть — из кеша turbo при тех же входах); tracks 255, contracts 246, design-tokens 120, i18n 6,
   api-client 84, api 1013, admin 238, app 1059 (119 наборов).
+
+### Фикс ревью pass 2 (Codex MEDIUM) — оркестратор, 2026-10-27
+
+«Загрузить маршрут» в ленте «Мои» — и во время первой загрузки списка, и при его ошибке (раньше блок был только при
+непустом списке); в успешном пустом списке — одна кнопка, действие `EmptyState`. Тесты: скелетон, ошибка (сеть, 500),
+пусто — одна кнопка (`my-routes.test.tsx`, без фикса — 3 красных). Независимые ревью: Claude pass 1 — APPROVE;
+Codex pass 1 — REQUEST CHANGES (исправлено), pass 2 — APPROVE.

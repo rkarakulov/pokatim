@@ -140,13 +140,16 @@ describe('лента «Мои маршруты»', () => {
     expect(screen.getByRole('header', { name: 'Маршруты' })).toBeOnTheScreen();
     expect(screen.getByRole('tab', { name: 'Мои' })).toBeOnTheScreen();
     expect(screen.getAllByLabelText('Загрузка').length).toBeGreaterThanOrEqual(1);
+    // загрузка файла не ждёт списка (findings pass 2)
+    expect(screen.getByRole('button', { name: 'Загрузить маршрут' })).toBeOnTheScreen();
   });
 
   it('пусто — «У вас пока нет маршрутов» и «Загрузить маршрут»', async () => {
     listMine.mockResolvedValue(page([]));
     await openTab();
     expect(await screen.findByText('У вас пока нет маршрутов')).toBeOnTheScreen();
-    expect(screen.getByRole('button', { name: 'Загрузить маршрут' })).toBeOnTheScreen();
+    // одна кнопка — в пустом состоянии
+    expect(screen.getAllByRole('button', { name: 'Загрузить маршрут' })).toHaveLength(1);
   });
 
   it.each([
@@ -156,6 +159,7 @@ describe('лента «Мои маршруты»', () => {
     listMine.mockRejectedValueOnce(error);
     await openTab();
     expect(await screen.findByText(title)).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Загрузить маршрут' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByText('Повторить'));
     expect(await screen.findByRole('link', { name: ringLabel })).toBeOnTheScreen();
   });

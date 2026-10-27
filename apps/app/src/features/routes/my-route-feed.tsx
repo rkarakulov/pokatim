@@ -49,12 +49,14 @@ export function MyRouteFeed({
   const items: MyRoute[] = (feed.data?.pages ?? []).flatMap((page) => page.items);
   // ошибка догрузки страницы — баннер в подвале: данные остаются
   const feedState = { ...feed, isError: feed.isError && !feed.isFetchNextPageError };
+  // загрузка не ждёт списка; в пустом списке кнопка — действие пустого состояния
+  const emptyIdle = feed.data !== undefined && items.length === 0 && upload.state.phase === 'idle';
 
   const listHeader = (
     <View style={styles.gutter}>
       {header}
       <OfflineBanner hasData={feed.data !== undefined} style={styles.offline} />
-      {items.length > 0 || upload.state.phase !== 'idle' ? (
+      {!emptyIdle ? (
         <View style={styles.upload}>
           <MyRouteUpload upload={upload} />
         </View>
