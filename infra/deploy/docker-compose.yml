@@ -56,6 +56,9 @@ services:
   # (mongo-init.js: localhost exception на пустой БД, дальше — вход root). Healthcheck — `hello` без входа: PRIMARY.
   mongo:
     image: mongo:8.0@sha256:4a4ab5d4834207389e0d7270fac988e21ffedccecba77991a552f755df229907
+    # ядро хоста ≥ 6.19: mongod 8.0 (TCMalloc + rseq) не стартует — SERVER-121912; обход — rseq glibc
+    environment:
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
     entrypoint:
       - bash
       - -ec
