@@ -296,8 +296,10 @@ paths:
   (TTL 90 дней по `expireAt`; `notifications_event_user_unique { sourceEventId, userId }`, частичный
   `notifications_collapse_unique { userId, collapseKey }`, список `{ userId, createdAt: -1, _id: -1 }`, частичные
   индексы непрочитанных и сроков доставки push/e-mail), `notification_settings` (`_id` = `userId`; нет документа —
-  умолчания), `push_tokens` (`token` уникален, ≤ 10 на пользователя), `push_tickets` (TTL 24 ч). Чтения сами проверяют
-  `expireAt > now` (TTL — только уборка).
+  умолчания), `push_tokens` (`token` уникален, ≤ 10 на пользователя), `push_tickets` (TTL 24 ч; `userId` владельца —
+  стирание аккаунта по нему, индекс `push_tickets_user_idx` из `0027_push_tickets_user`). Чтения сами проверяют
+  `expireAt > now` (TTL — только уборка). Токены при доставке снимаются по снимку `{ _id, userId, sessionId }`, не по
+  одному `_id`.
 - Доставка — состояние в документе уведомления (`push`/`email`: захват `claimId`/`claimedUntil`, `sent`, `skipped`,
   `limited`, `failed`); захват — условием состояния в фильтре. Убрать условие — дубль push/письма (**HIGH**).
 - `race_attempts.lastVisibleVerdict` (`0026_attempt_last_verdict`, бэкфилл `counted|rejected`) — прежний видимый

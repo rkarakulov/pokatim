@@ -34,13 +34,16 @@ export class PushReceipts {
       if (tickets.length === 0) break;
       const receipts = await this.sender.receipts(tickets.map((ticket) => ticket.ticketId));
       const done = tickets.filter((ticket) => receipts.has(ticket.ticketId));
-      const dead = done
-        .filter((ticket) => {
-          const receipt = receipts.get(ticket.ticketId);
-          return receipt?.status === 'error' && receipt.error === DEVICE_NOT_REGISTERED;
-        })
-        .map((ticket) => ticket.tokenId);
-      unregistered += await this.repository.deleteTokens([...new Set(dead)]);
+      // снимок квитанции — токен и владелец на момент отправки; токен, перешедший к другому аккаунту, не снимается
+      const dead = new Map(
+        done
+          .filter((ticket) => {
+            const receipt = receipts.get(ticket.ticketId);
+            return receipt?.status === 'error' && receipt.error === DEVICE_NOT_REGISTERED;
+          })
+          .map((ticket) => [ticket.tokenId, { _id: ticket.tokenId, userId: ticket.userId }]),
+      );
+      unregistered += await this.repository.deleteTokens([...dead.values()]);
       await this.repository.deleteTickets(done.map((ticket) => ticket._id));
       checked += done.length;
       // неполная пачка — всё просмотрено; пачка без готовых квитанций — следующая была бы той же

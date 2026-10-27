@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-import { liveSession, signInForTest } from '@/__tests__/auth-fixtures';
+import { liveSession, liveSessionB, signInForTest } from '@/__tests__/auth-fixtures';
 import { useSessionStore } from '@/features/auth/session-store';
 import { api } from '@/lib/api';
 
@@ -166,7 +166,40 @@ describe('регистрация и выход одновременно (ADR-001
     await registering;
     expect(await storedPushToken()).toBeNull();
   });
+
+  it('выход A истёк по таймауту, вошёл B — поздний ответ регистрации A не читает и не снимает токен B', async () => {
+    const TOKEN_B = 'ExpoPushToken[device-token-b]';
+    const server = deferred();
+    register.mockReturnValueOnce(server.promise);
+    const registering = registerDevicePush();
+    await waitForCall(register);
+    jest.useFakeTimers();
+    const revoking = revokeDevicePushToken();
+    await jest.advanceTimersByTimeAsync(REVOKE_TIMEOUT_MS);
+    await revoking;
+    jest.useRealTimers();
+
+    // вход B на том же устройстве: своя сессия и свой токен
+    useSessionStore.setState({ session: { ...liveSessionB } });
+    getToken.mockResolvedValueOnce({ type: 'expo', data: TOKEN_B });
+    await registerDevicePush();
+    expect(register).toHaveBeenLastCalledWith(liveSessionB.accessToken, {
+      token: TOKEN_B,
+      platform: 'ios',
+    });
+
+    server.release();
+    await registering;
+    await settle();
+    expect(revoke).not.toHaveBeenCalled();
+    expect(await storedPushToken()).toBe(TOKEN_B);
+  });
 });
+
+/** Отпустить цепочки промисов, которые тест не может дождаться напрямую (оставшаяся операция выхода). */
+async function settle() {
+  for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setImmediate(resolve));
+}
 
 /** Дождаться вызова мока (асинхронные шаги до него — SecureStore, разрешение). */
 async function waitForCall(fn: jest.Mock | ((...args: never[]) => unknown)) {

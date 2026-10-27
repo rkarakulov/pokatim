@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { uuidv7 } from '@rkarakulov/api-kit/mongo';
+import { MongoTransactions, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { Worker } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -32,8 +32,10 @@ import {
 import { authed, createRide, join, RIDES, rider, type Rider } from '../../../test/rides';
 import { RIDES_RIDE_CANCELLED } from '../rides';
 import type { NotificationDoc } from './notifications.collection';
+import { NotificationErasure } from './notification-erasure';
 import { emailJobId, pushJobId } from './notifications.events';
 import { NotificationsRepository } from './notifications.repository';
+import { PushTokens } from './push-tokens';
 
 /**
  * Доставка уведомлений (шаг C, AC2, AC5, AC6): push через фейковый Expo Push API, письма N2 — `FakeMailer`. Процессоры
@@ -401,6 +403,43 @@ describe('push', () => {
     ).toBe(0);
   });
 
+  /** Снятие токена: между чтением токенов и удалением устройство перерегистрировалось (`reassign`). */
+  function reregisterBeforeDelete(tokenId: string, reassign: Record<string, string>) {
+    const repository = h.worker.get(NotificationsRepository);
+    const original = repository.deleteTokens.bind(repository);
+    vi.spyOn(repository, 'deleteTokens').mockImplementationOnce(async (snapshot) => {
+      await notificationsDb(h).pushTokens.updateOne({ _id: tokenId }, { $set: reassign });
+      return original(snapshot);
+    });
+  }
+
+  it('токен мёртвой сессии, перепривязанный в окне к другому аккаунту, не снимается (снятие по снимку)', async () => {
+    const token = await seedPushToken(h, a.userId, 'a1', uuidv7());
+    const sessionB = (await collections(h).sessions.findOne({ userId: b.userId }))!._id;
+    reregisterBeforeDelete(token, { userId: b.userId, sessionId: sessionB });
+    await pendingPush(a.userId);
+
+    expect(await runPush(h, a.userId)).toBe('skipped');
+    expect(await notificationsDb(h).pushTokens.findOne({ _id: token })).toMatchObject({
+      userId: b.userId,
+      sessionId: sessionB,
+    });
+  });
+
+  it('тикет DeviceNotRegistered: токен, перерегистрированный в окне под новой сессией, не снимается', async () => {
+    const token = await seedPushToken(h, a.userId, 'a1');
+    expo.unregistered.add(expoToken('a1'));
+    const fresh = uuidv7();
+    reregisterBeforeDelete(token, { sessionId: fresh });
+    await pendingPush(a.userId);
+
+    expect(await runPush(h, a.userId)).toBe('failed');
+    expect(await notificationsDb(h).pushTokens.findOne({ _id: token })).toMatchObject({
+      userId: a.userId,
+      sessionId: fresh,
+    });
+  });
+
   it('все тикеты с ошибкой — failed с кодом Expo', async () => {
     await seedPushToken(h, a.userId, 'a1');
     expo.unregistered.add(expoToken('a1'));
@@ -476,6 +515,33 @@ describe('квитанции Expo (регламент)', () => {
     h.clock.advance(16 * MINUTE);
     expect(await runReceipts(h)).toEqual({ checked: 0, unregistered: 0 });
     expect(await notificationsDb(h).pushTickets.countDocuments()).toBe(1);
+  });
+});
+
+describe('удаление аккаунта (N11)', () => {
+  it('push → тикет → токены сняты транзакцией удаления → стирание: тикетов пользователя нет, чужие целы', async () => {
+    await seedPushToken(h, a.userId, 'a1');
+    await seedPushToken(h, b.userId, 'b1');
+    await pendingPush(a.userId);
+    await pendingPush(b.userId);
+    expect(await runPush(h, a.userId)).toBe('sent');
+    expect(await runPush(h, b.userId)).toBe('sent');
+    const tickets = notificationsDb(h).pushTickets;
+    expect(await tickets.countDocuments({ userId: a.userId })).toBe(1);
+
+    // как AccountDeletionService: токены снимаются в транзакции удаления, стирание — позже, фоном
+    await h.app
+      .get(MongoTransactions, { strict: false })
+      .run((tx) => h.app.get(PushTokens, { strict: false }).revokeAllOf(tx, a.userId));
+    expect(
+      await h.worker.get(NotificationErasure, { strict: false }).erase(a.userId),
+    ).toMatchObject({
+      tokens: 0,
+      tickets: 1,
+    });
+
+    expect(await tickets.countDocuments({ userId: a.userId })).toBe(0);
+    expect(await tickets.countDocuments({ userId: b.userId })).toBe(1);
   });
 });
 

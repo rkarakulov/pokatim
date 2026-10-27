@@ -39,6 +39,12 @@ export type ClaimedPush = Pick<
   '_id' | 'group' | 'title' | 'body' | 'target' | 'createdAt'
 > & { push: Pick<NotificationDoc['push'], 'limitCharged'> };
 export type ClaimedEmail = Pick<NotificationDoc, '_id' | 'userId' | 'title' | 'body'>;
+/** Снимок токена для снятия (`deleteTokens`): `sessionId` — `null` без сессии, без ключа — не сверяется. */
+export interface PushTokenSnapshot {
+  _id: string;
+  userId: string;
+  sessionId?: string | null;
+}
 
 /** Позиция курсора списка: `(createdAt, _id)` последнего показанного. */
 export interface NotificationPosition {
@@ -456,15 +462,28 @@ export class NotificationsRepository {
       .toArray();
   }
 
-  /** Снять токен по id документа (`DeviceNotRegistered` в тикете или квитанции). */
-  async deleteTokens(tokenIds: readonly string[]): Promise<number> {
-    if (tokenIds.length === 0) return 0;
-    const result = await this.pushTokens.deleteMany({ _id: { $in: [...tokenIds] } });
+  /**
+   * Снять токены по снимку, прочитанному при доставке (мёртвая сессия, `DeviceNotRegistered`): документ, который с тех
+   * пор перерегистрировали (новый вход, другой владелец устройства), не трогается. `sessionId: null` — токен без
+   * сессии; ключа нет (квитанция) — сессия не сверяется.
+   */
+  async deleteTokens(snapshot: readonly PushTokenSnapshot[]): Promise<number> {
+    if (snapshot.length === 0) return 0;
+    const result = await this.pushTokens.deleteMany({
+      $or: snapshot.map(({ _id, userId, sessionId }) => ({
+        _id,
+        userId,
+        ...(sessionId === undefined
+          ? {}
+          : { sessionId: sessionId === null ? { $exists: false } : sessionId }),
+      })),
+    });
     return result.deletedCount;
   }
 
-  /** Тикеты принятых сообщений — до проверки квитанции (TTL 24 ч). */
+  /** Тикеты принятых сообщений — до проверки квитанции (TTL 24 ч); владелец — для стирания аккаунта. */
   async insertTickets(
+    userId: string,
     tickets: readonly { ticketId: string; tokenId: string }[],
     now: Date,
   ): Promise<void> {
@@ -474,6 +493,7 @@ export class NotificationsRepository {
         _id: uuidv7(),
         ticketId: ticket.ticketId,
         tokenId: ticket.tokenId,
+        userId,
         createdAt: now,
         expireAt: new Date(now.getTime() + TICKET_TTL_MS),
       })),
@@ -486,11 +506,11 @@ export class NotificationsRepository {
     before: Date,
     now: Date,
     limit: number,
-  ): Promise<Pick<PushTicketDoc, '_id' | 'ticketId' | 'tokenId'>[]> {
+  ): Promise<Pick<PushTicketDoc, '_id' | 'ticketId' | 'tokenId' | 'userId'>[]> {
     return this.pushTickets
       .find(
         { createdAt: { $lte: before }, expireAt: { $gt: now } },
-        { projection: { _id: 1, ticketId: 1, tokenId: 1 } },
+        { projection: { _id: 1, ticketId: 1, tokenId: 1, userId: 1 } },
       )
       .sort({ createdAt: 1, _id: 1 })
       .limit(limit)
@@ -506,19 +526,13 @@ export class NotificationsRepository {
   // --- стирание удалённого аккаунта ---
 
   /**
-   * Стереть данные центра пользователя: тикеты его токенов, токены, уведомления, настройки. Повторяемо: второй проход
-   * ничего не находит.
+   * Стереть данные центра пользователя: его тикеты (по владельцу — токены к этому времени уже сняты транзакцией
+   * удаления), токены, уведомления, настройки. Повторяемо: второй проход ничего не находит.
    */
   async eraseUser(
     userId: string,
   ): Promise<{ notifications: number; settings: number; tokens: number; tickets: number }> {
-    const tokenIds = (
-      await this.pushTokens.find({ userId }, { projection: { _id: 1 } }).toArray()
-    ).map((doc) => doc._id);
-    const tickets =
-      tokenIds.length > 0
-        ? (await this.pushTickets.deleteMany({ tokenId: { $in: tokenIds } })).deletedCount
-        : 0;
+    const tickets = (await this.pushTickets.deleteMany({ userId })).deletedCount;
     const tokens = (await this.pushTokens.deleteMany({ userId })).deletedCount;
     const notifications = (await this.notifications.deleteMany({ userId })).deletedCount;
     const settings = (await this.settings.deleteOne({ _id: userId })).deletedCount;

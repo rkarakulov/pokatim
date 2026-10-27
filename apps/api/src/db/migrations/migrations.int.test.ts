@@ -34,6 +34,7 @@ import { platformSettings } from './0024_platform_settings';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
 import { notifications } from './0025_notifications';
 import { attemptLastVerdict } from './0026_attempt_last_verdict';
+import { pushTicketsUser } from './0027_push_tickets_user';
 import { NOTIFICATIONS_COLLECTIONS } from '../../modules/notifications/notifications.collection';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
@@ -103,6 +104,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0024_platform_settings',
       '0025_notifications',
       '0026_attempt_last_verdict',
+      '0027_push_tickets_user',
     ]);
   });
 
@@ -834,6 +836,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         push_tickets_ticket_unique: index({ ticketId: 1 }, { unique: true }),
         push_tickets_created_idx: index({ createdAt: 1 }),
         push_tickets_expire_ttl: index({ expireAt: 1 }, { ttl: 0 }),
+        // 0027_push_tickets_user
+        push_tickets_user_idx: index({ userId: 1 }),
       },
     };
     expect(await snapshot()).toEqual(expected);
@@ -844,9 +848,26 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await snapshot()).toEqual(expected);
   });
 
-  it('0026_attempt_last_verdict: counted/rejected без поля получают lastVisibleVerdict = status, прочие — нет; последняя; повторный up — без изменений', async () => {
+  it('0027_push_tickets_user: индекс владельца тикета; последняя, после 0026; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0026_attempt_last_verdict');
+    expect(ids.at(-1)).toBe('0027_push_tickets_user');
+    expect(ids.indexOf('0027_push_tickets_user')).toBe(
+      ids.indexOf('0026_attempt_last_verdict') + 1,
+    );
+    const before = await indexesOf(NOTIFICATIONS_COLLECTIONS.pushTickets);
+    expect(before.push_tickets_user_idx).toEqual({
+      key: { userId: 1 },
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+    await pushTicketsUser.up(h.db);
+    await pushTicketsUser.up(h.db);
+    expect(await indexesOf(NOTIFICATIONS_COLLECTIONS.pushTickets)).toEqual(before);
+  });
+
+  it('0026_attempt_last_verdict: counted/rejected без поля получают lastVisibleVerdict = status, прочие — нет; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
     expect(ids.indexOf('0026_attempt_last_verdict')).toBe(ids.indexOf('0025_notifications') + 1);
     const attemptsDb = h.db.collection<Record<string, unknown> & { _id: string }>(
       RESULTS_COLLECTIONS.attempts,

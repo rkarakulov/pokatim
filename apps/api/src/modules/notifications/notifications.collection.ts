@@ -82,11 +82,15 @@ export interface PushTokenDoc {
   updatedAt: Date;
 }
 
-/** Тикет Expo Push до проверки квитанции (≥ 15 мин); `expireAt = createdAt + 24 ч`. */
+/**
+ * Тикет Expo Push до проверки квитанции (≥ 15 мин); `expireAt = createdAt + 24 ч`. `userId` — владелец токена на момент
+ * отправки: стирание аккаунта находит тикеты и после снятия токенов (`push_tickets_user_idx`, 0027).
+ */
 export interface PushTicketDoc {
   _id: string;
   ticketId: string;
   tokenId: string;
+  userId: string;
   createdAt: Date;
   expireAt: Date;
 }

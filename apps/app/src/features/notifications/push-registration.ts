@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 
@@ -56,15 +56,20 @@ async function registerToken(): Promise<void> {
 /**
  * Снять токен устройства до выхода (`useSignOut`, до `api.signOut`): следующий владелец устройства чужих push не
  * получит. Новые регистрации под этой сессией не стартуют; начатые — дожидаются, и снимается их токен. Ошибка и
- * таймаут (общий на ожидание и запрос) выход не блокируют; локальная запись токена стирается всегда. Поздняя запись
- * на сервере после таймаута push не вернёт: токен привязан к сессии, а она отзывается выходом.
+ * таймаут (общий на ожидание и запрос) выход не блокируют; локальная запись токена стирается всегда. После таймаута
+ * оставшаяся операция завершается, ничего не читая: хранилище и сессия к тому времени могут принадлежать следующему
+ * входу. Поздняя запись на сервере push не вернёт: токен привязан к сессии, а она отзывается выходом.
  */
 export async function revokeDevicePushToken(): Promise<void> {
-  closingSession = useSessionStore.getState().session;
+  const session = useSessionStore.getState().session;
+  closingSession = session;
+  // операция актуальна, пока не истекла и под той же сессией (новый вход — другая сессия)
+  const operation = { expired: false };
+  const current = () => !operation.expired && useSessionStore.getState().session === session;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      revokeStoredToken(),
+      revokeStoredToken(current),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, REVOKE_TIMEOUT_MS);
       }),
@@ -72,25 +77,29 @@ export async function revokeDevicePushToken(): Promise<void> {
   } catch {
     // офлайн или сессии уже нет — выход всё равно локальный
   } finally {
+    operation.expired = true;
     clearTimeout(timer);
     await forgetPushToken();
   }
 }
 
-async function revokeStoredToken(): Promise<void> {
+async function revokeStoredToken(current: () => boolean): Promise<void> {
   await Promise.allSettled([...inFlight]);
+  if (!current()) return;
   const token = await storedPushToken();
-  if (!token) return;
+  if (!token || !current()) return;
   await withAccessToken((accessToken) => api.revokePushToken(accessToken, { token }));
 }
 
 /**
- * Push в корневом layout (`ready` — вошёл и прошёл онбординг): регистрация токена и нажатия на push → экран цели
- * из белого списка (иначе — центр уведомлений); пришедший push обновляет счётчик колокольчика. Web — no-op.
- * `queryClient` — явно: корневой layout сам создаёт провайдер и вызывает хук вне него.
+ * Push (ADR-0017; `ready` — вошёл и прошёл онбординг): регистрация токена и нажатия на push → экран цели из белого
+ * списка (иначе — центр уведомлений); пришедший push обновляет счётчик колокольчика. Web — no-op. Рендерится рядом с
+ * `Stack` корневого layout: эффекты идут после монтирования навигатора (тема и шрифты готовы), так что переход по
+ * нажатию при холодном старте не опережает навигатор.
  */
-export function usePushNotifications(ready: boolean, queryClient: QueryClient): void {
+export function PushNotifications({ ready }: { ready: boolean }): null {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (ready) void registerDevicePush();
@@ -103,4 +112,6 @@ export function usePushNotifications(ready: boolean, queryClient: QueryClient): 
       onReceive: () => void queryClient.invalidateQueries({ queryKey: unreadCountKey }),
     });
   }, [ready, router, queryClient]);
+
+  return null;
 }

@@ -323,6 +323,15 @@ Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров �
   ответа): сбой регистрации оставляет запись, выход снимет токен (идемпотентный `204`). У `Chip` базы нет `disabled` —
   ряд часов на время сохранения недоступен целиком (`aria-disabled`, `pointerEvents: 'none'`), без визуального
   приглушения (токена прозрачности нет); `disabled` у `Chip` — follow-up в app-foundation.
+- **R2-1 (фиксы ревью pass 2, приложение).** Хук `usePushNotifications(ready, queryClient)` (D-2) заменён компонентом
+  `PushNotifications({ ready })` в `push-registration.ts`: рендерится рядом со `Stack` корневого layout (внутри
+  `AppThemeProvider` и `QueryClientProvider`), `queryClient` — из контекста. Отложенная цель — сам последний ответ
+  `expo-notifications`: гасится только после успешного перехода, иначе повторяется при следующей подписке (отдельного
+  хранилища нет). `useRootNavigationState`/`isReady()` не используются: в expo-router 58 контейнер с засеянным
+  состоянием `isReady()` = `true` ещё до монтирования `Stack`, сигналом служит само монтирование компонента.
+- **R2-2 (фиксы ревью pass 2, API).** `push_tickets.userId` + миграция `0027_push_tickets_user` (индекс
+  `push_tickets_user_idx`); `eraseUser` стирает тикеты по владельцу. Тикеты без поля (до миграции, dev) убирает TTL
+  24 ч. Квитанции снимают токен по `{ _id, userId }` (сессии в тикете нет).
 
 ## 8.3 Security checklist
 
@@ -924,3 +933,33 @@ total`. `EXPO_PUBLIC_API_URL=http://127.0.0.1:3000 pnpm --filter @pokatim/app bu
 - app-foundation: `disabled` у `Chip` `@rkarakulov/ui` (сейчас ряд часов блокируется обёрткой).
 - Зависшая регистрация (без ответа сервера) остаётся в наборе ожидания до ответа сети: следующий выход ждёт её до
   таймаута 3 с.
+
+### Фиксы ревью pass 2
+
+По `findings-codex-pass2.md` (HIGH, 2 MEDIUM) и `findings-claude-pass2.md` (LOW 1); отклонения — §8.2 R2-1, R2-2.
+
+- **[HIGH] Холодный старт по push до монтирования навигатора.** `PushNotifications` рядом со `Stack` в `_layout.tsx`:
+  эффекты подписки и регистрации — только после готовности темы и шрифтов и монтирования навигатора.
+  `subscribePushResponses`: слушатель нажатий ставится первым, сбои обработчика показа / последнего ответа — по
+  отдельности и в `console.warn` (не отключают нажатия); последний ответ гасится только после успешного перехода.
+  Тесты: `push-cold-start.test.tsx` (+1, `renderRouter`: корень ждёт шрифты, сессия готова раньше — до готовности
+  ответ не тронут, после — `/rides/:id`, ответ погашен); `push.test.ts` (+2: неудачный переход — ответ не гасится,
+  слушатель есть; сбой `setNotificationHandler` — нажатия и холодный старт работают).
+- **[MEDIUM] Выход после таймаута и следующий аккаунт.** `revokeDevicePushToken` фиксирует сессию и операцию;
+  `revokeStoredToken` после каждого ожидания проверяет, что операция не истекла и сессия та же, — иначе не читает
+  хранилище и не снимает токен. Тест `push-registration.test.ts` (+1: A → таймаут выхода → вход B с токеном B →
+  поздний ответ A — `revoke` не вызван, в хранилище токен B).
+- **[MEDIUM] Тикеты при удалении аккаунта.** `PushTicketDoc.userId`, `insertTickets(userId, …)`, `eraseUser` —
+  `deleteMany({ userId })`; миграция `0027_push_tickets_user`. Int-тесты: `notifications-delivery.int.test.ts` (+1: push
+  → тикет → `revokeAllOf` в транзакции → `NotificationErasure.erase` — тикетов A нет, тикет B цел),
+  `migrations.int.test.ts` (+1: индекс, порядок, повторный `up`).
+- **[LOW claude-1] Снятие токенов по снимку.** `deleteTokens(PushTokenSnapshot[])` — `$or` по `{ _id, userId,
+  sessionId }` (`null` → `$exists: false`); доставка — снимок прочитанного токена, квитанции — `{ _id, userId }`.
+  Int-тесты (+2): токен мёртвой сессии, перепривязанный в окне к B, остаётся; `DeviceNotRegistered` при
+  перерегистрации в окне под новой сессией — токен остаётся.
+- Документация: `.claude/rules/pokatim-app.md` (`PushNotifications`), `.claude/rules/pokatim-db.md` (`push_tickets.userId`,
+  0027, снятие по снимку).
+
+**Проверки.** `TURBO_CONCURRENCY=1 pnpm check` (`MONGO_URL_TEST=…:27117/pokatim_notifications_test`,
+`REDIS_URL_TEST=…:6479/14`) — зелёный: arch:check «no dependency violations found», api 119 files / 1273 tests, app
+1383 tests, `Tasks: 15 successful, 15 total`.

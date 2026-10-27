@@ -125,14 +125,35 @@ export async function forgetPushToken(): Promise<void> {
 const targetOf = (response: Notifications.NotificationResponse): unknown =>
   (response.notification.request.content.data as { target?: unknown } | null)?.target ?? null;
 
+/** Сбой подключения к модулю уведомлений — в лог, без текста push. */
+const warnPush = (step: string, error: unknown) =>
+  console.warn(`push ${step} failed: ${(error as Error).name}`);
+
 /**
- * Нажатия на push: холодный старт (последний ответ) и живые нажатия → `onOpen(target)`; пришедший при открытом
- * приложении push показывается баннером и зовёт `onReceive` (обновить счётчик). Возвращает отписку.
+ * Нажатия на push: живые нажатия и холодный старт (последний ответ) → `onOpen(target)`; пришедший при открытом
+ * приложении push показывается баннером и зовёт `onReceive` (обновить счётчик). Вызывать, когда навигатор смонтирован
+ * (`PushNotifications`). Слушатель ставится первым и не зависит от сбоя обработчика показа; ответ гасится только после
+ * перехода — не удавшийся переход повторится при следующей подписке. Возвращает отписку.
  */
 export function subscribePushResponses(handlers: {
   onOpen: (target: unknown) => void;
   onReceive: () => void;
 }): () => void {
+  const open = (response: Notifications.NotificationResponse) => {
+    try {
+      handlers.onOpen(targetOf(response));
+      Notifications.clearLastNotificationResponse();
+    } catch (error) {
+      warnPush('open', error);
+    }
+  };
+  let subscription: { remove: () => void } | null = null;
+  try {
+    subscription = Notifications.addNotificationResponseReceivedListener(open);
+  } catch (error) {
+    warnPush('subscribe', error);
+  }
+  let handlerSet = false;
   try {
     Notifications.setNotificationHandler({
       handleNotification: async () => {
@@ -145,20 +166,18 @@ export function subscribePushResponses(handlers: {
         };
       },
     });
-    const last = Notifications.getLastNotificationResponse();
-    if (last) {
-      handlers.onOpen(targetOf(last));
-      Notifications.clearLastNotificationResponse();
-    }
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      handlers.onOpen(targetOf(response));
-      Notifications.clearLastNotificationResponse();
-    });
-    return () => {
-      subscription.remove();
-      Notifications.setNotificationHandler(null);
-    };
-  } catch {
-    return () => undefined;
+    handlerSet = true;
+  } catch (error) {
+    warnPush('handler', error);
   }
+  try {
+    const last = Notifications.getLastNotificationResponse();
+    if (last) open(last);
+  } catch (error) {
+    warnPush('last response', error);
+  }
+  return () => {
+    subscription?.remove();
+    if (handlerSet) Notifications.setNotificationHandler(null);
+  };
 }

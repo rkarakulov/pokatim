@@ -80,6 +80,39 @@ describe('subscribePushResponses — нажатие на push (N10)', () => {
     expect(behavior).toMatchObject({ shouldShowBanner: true, shouldShowList: true });
   });
 
+  it('переход не удался — ответ не гасится (повтор при следующей подписке); слушатель нажатий установлен', () => {
+    jest
+      .mocked(Notifications.getLastNotificationResponse)
+      .mockReturnValueOnce(response({ target: { type: 'ride', rideId: RIDE } }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const onOpen = jest.fn(() => {
+      throw new Error('navigator is not mounted');
+    });
+
+    subscribePushResponses({ onOpen, onReceive: jest.fn() });
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(Notifications.clearLastNotificationResponse).not.toHaveBeenCalled();
+    expect(Notifications.addNotificationResponseReceivedListener).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('сбой обработчика показа не отключает нажатия: слушатель и холодный старт работают', () => {
+    jest.mocked(Notifications.setNotificationHandler).mockImplementationOnce(() => {
+      throw new Error('native module');
+    });
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    jest
+      .mocked(Notifications.getLastNotificationResponse)
+      .mockReturnValueOnce(response({ target: { type: 'ride', rideId: RIDE } }));
+    const onOpen = jest.fn();
+
+    subscribePushResponses({ onOpen, onReceive: jest.fn() });
+
+    expect(onOpen).toHaveBeenCalledWith({ type: 'ride', rideId: RIDE });
+    expect(Notifications.addNotificationResponseReceivedListener).toHaveBeenCalledTimes(1);
+  });
+
   it('отписка снимает слушатель и обработчик', () => {
     const remove = jest.fn();
     jest

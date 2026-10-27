@@ -498,6 +498,7 @@ describe('шаг notifications (N11, ADR-0017)', () => {
       _id: `0190a8c8-0000-7000-8000-0000000001${suffix}`,
       ticketId: `ticket-${suffix}`,
       tokenId,
+      userId,
       createdAt: now,
       expireAt: new Date(now.getTime() + DAY),
     });

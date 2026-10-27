@@ -8,7 +8,11 @@ import { IdentityAccounts } from '../identity';
 import { DeliveryJobs } from './delivery-jobs';
 import { renderPushSummary } from './notification-texts';
 import { NOTIFICATIONS_POLICY, quietUntil } from './notifications.policy';
-import { type ClaimedPush, NotificationsRepository } from './notifications.repository';
+import {
+  type ClaimedPush,
+  NotificationsRepository,
+  type PushTokenSnapshot,
+} from './notifications.repository';
 import {
   DEVICE_NOT_REGISTERED,
   type PushMessage,
@@ -113,20 +117,20 @@ export class PushDelivery {
       throw error;
     }
 
-    const unregistered: string[] = [];
+    const unregistered: PushTokenSnapshot[] = [];
     const accepted: { ticketId: string; tokenId: string }[] = [];
     let firstError: string | null = null;
     tickets.forEach((ticket, index) => {
-      const tokenId = tokens[index]!._id;
+      const token = tokens[index]!;
       if (ticket.status === 'ok') {
-        accepted.push({ ticketId: ticket.id, tokenId });
+        accepted.push({ ticketId: ticket.id, tokenId: token._id });
         return;
       }
       firstError ??= ticket.error ?? 'error';
-      if (ticket.error === DEVICE_NOT_REGISTERED) unregistered.push(tokenId);
+      if (ticket.error === DEVICE_NOT_REGISTERED) unregistered.push(snapshotOf(userId, token));
     });
     const removed = await this.repository.deleteTokens(unregistered);
-    await this.repository.insertTickets(accepted, now);
+    await this.repository.insertTickets(userId, accepted, now);
     const sentAt = this.clock.now();
     if (accepted.length > 0) {
       await this.repository.settlePush(claimId, null, { state: 'sent', sentAt });
@@ -154,13 +158,19 @@ export class PushDelivery {
     const live = await this.identity.liveSessionIds(userId, sessionIds, now);
     const isLive = (token: (typeof tokens)[number]) =>
       token.sessionId !== undefined && live.has(token.sessionId);
-    const dead = tokens.filter((token) => !isLive(token)).map((token) => token._id);
+    const dead = tokens.filter((token) => !isLive(token)).map((token) => snapshotOf(userId, token));
     const removed = await this.repository.deleteTokens(dead);
     if (removed > 0)
       this.logger.log(`notifications.token_session_ended uid=${userId} count=${removed}`);
     return tokens.filter(isLive);
   }
 }
+
+/** Снимок прочитанного токена: снятие не тронет документ, перерегистрированный после чтения. */
+const snapshotOf = (
+  userId: string,
+  token: { _id: string; sessionId?: string },
+): PushTokenSnapshot => ({ _id: token._id, userId, sessionId: token.sessionId ?? null });
 
 /** Одно уведомление — его текст и цель; несколько — сводка «У вас N новых уведомлений» без цели (N7). */
 function contentOf(due: readonly ClaimedPush[]): Omit<PushMessage, 'to'> {

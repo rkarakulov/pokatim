@@ -415,16 +415,20 @@ describe('порты для account', () => {
     await as(a, 'PUT', `${NOTIFICATIONS}/push-tokens`, { token: expoToken('e1'), platform: 'ios' });
     await as(b, 'PUT', `${NOTIFICATIONS}/push-tokens`, { token: expoToken('e2'), platform: 'ios' });
     const db = notificationsDb(h);
-    const ticket = (tokenId: string) => ({
+    const ticket = (tokenId: string, userId: string) => ({
       _id: uuidv7(),
       ticketId: uuidv7(),
       tokenId,
+      userId,
       createdAt: h.clock.now(),
       expireAt: new Date(h.clock.now().getTime() + DAY),
     });
     const tokenA = await db.pushTokens.findOne({ userId: a.userId });
     const tokenB = await db.pushTokens.findOne({ userId: b.userId });
-    await db.pushTickets.insertMany([ticket(tokenA?._id ?? ''), ticket(tokenB?._id ?? '')]);
+    await db.pushTickets.insertMany([
+      ticket(tokenA?._id ?? '', a.userId),
+      ticket(tokenB?._id ?? '', b.userId),
+    ]);
 
     const erasure = h.app.get(NotificationErasure, { strict: false });
     expect(await erasure.erase(a.userId)).toEqual({
