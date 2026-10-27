@@ -1,6 +1,6 @@
 import { size, space, stroke } from '@pokatim/design-tokens';
 import { textStyle, useTheme } from '@rkarakulov/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 export interface StatItem {
   /** Значение крупно: «100». */
@@ -19,8 +19,8 @@ export interface StatItem {
  * шрифте переносится под значение; необязательное пояснение `note` — строкой под подписью. Для скринридера — одна
  * метка на ячейку «Дистанция 100 км» (с пояснением — «Дистанция 68 км круговой»). Кандидат в `@rkarakulov/ui` (§5.1).
  * `variant="compact"` (routes-04d, RC-9) — строка шторки карточки маршрута: один ряд равных колонок без ink-линии,
- * подпись над значением, значение `bodyStrong` с единицей в одну строку (без переноса); `note` не показывается, но
- * остаётся в метке ячейки.
+ * подпись над значением, значение `bodyStrong` с единицей в одну строку (без переноса; при крупном системном шрифте —
+ * перенос внутри колонки, не многоточие); `note` не показывается, но остаётся в метке ячейки.
  */
 export function StatBlock({
   items,
@@ -76,6 +76,8 @@ export function StatBlock({
 
 function CompactStats({ items }: { items: readonly StatItem[] }) {
   const theme = useTheme();
+  // крупный системный шрифт — перенос внутри колонки вместо многоточия: текст не теряется (ревью pass 1, M1)
+  const lines = useWindowDimensions().fontScale > 1 ? undefined : 1;
   return (
     <View testID="stat-block" style={styles.compactRow}>
       {items.map((item, index) => (
@@ -88,12 +90,12 @@ function CompactStats({ items }: { items: readonly StatItem[] }) {
             .join(' ')}
           style={styles.compactCell}
         >
-          <Text numberOfLines={1} style={[textStyle('label'), { color: theme.text.secondary }]}>
+          <Text numberOfLines={lines} style={[textStyle('label'), { color: theme.text.secondary }]}>
             {item.label}
           </Text>
           <Text
             testID="stat-block-value"
-            numberOfLines={1}
+            numberOfLines={lines}
             style={[textStyle('bodyStrong'), { color: theme.text.primary }]}
           >
             {item.value}
@@ -111,7 +113,7 @@ function CompactStats({ items }: { items: readonly StatItem[] }) {
 
 const styles = StyleSheet.create({
   compactRow: { flexDirection: 'row', columnGap: size.statGap },
-  // равные колонки в один ряд; узко — значение обрезается многоточием, а не переносится
+  // равные колонки в один ряд; при обычном шрифте — одна строка, при крупном — перенос внутри колонки
   compactCell: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, gap: space.s1 },
   block: { flexDirection: 'row', flexWrap: 'wrap', borderTopWidth: stroke.hairline },
   // ширина — по содержимому (не сжимается в ноль), не уже строки списка; не влезло в ряд — переносится в следующий

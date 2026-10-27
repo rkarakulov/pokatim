@@ -116,7 +116,8 @@ describe('BottomSheet web (routes-04d, L4, L6, RC-1, RC-17)', () => {
     await act(async () => undefined);
     withHeights(380, 300);
     const header = screen.getByTestId('bottom-sheet-header');
-    pointer('pointerdown', header, 1, 100);
+    // жест начат на «чёрточке»: браузер пришлёт ей click после pointerup
+    pointer('pointerdown', grabber(), 1, 100);
     pointer('pointermove', header, 1, 150);
     expect(screen.getByTestId('bottom-sheet').style.transform).toBe('translateY(50px)');
     pointer('pointermove', header, 1, 300);
@@ -189,6 +190,76 @@ describe('BottomSheet web (routes-04d, L4, L6, RC-1, RC-17)', () => {
       expect(onHeight).toHaveBeenLastCalledWith(80);
     } finally {
       if (proto) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', proto);
+    }
+  });
+});
+
+describe('BottomSheet web: ревью pass 1', () => {
+  it('L2: перетаскивание за строку цифр (не «чёрточку») — следующее нажатие «чёрточки» не теряется', async () => {
+    render(<Harness />);
+    await act(async () => undefined);
+    withHeights(380, 300);
+    const stats = screen.getByText('Дистанция 86 км');
+    pointer('pointerdown', stats, 1, 100);
+    pointer('pointermove', stats, 1, 120);
+    pointer('pointerup', stats, 1, 120);
+    expect(grabber().getAttribute('aria-expanded')).toBe('true');
+    // клавиатура: Enter на <button> — click
+    fireEvent.click(grabber());
+    expect(grabber().getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('L2: клик не пришёл после жеста на «чёрточке» — флаг сбрасывается, следующее нажатие работает', async () => {
+    jest.useFakeTimers();
+    try {
+      render(<Harness />);
+      await act(async () => undefined);
+      withHeights(380, 300);
+      pointer('pointerdown', grabber(), 1, 100);
+      pointer('pointermove', grabber(), 1, 120);
+      pointer('pointerup', grabber(), 1, 120);
+      act(() => {
+        jest.runOnlyPendingTimers();
+      });
+      fireEvent.click(grabber());
+      expect(grabber().getAttribute('aria-expanded')).toBe('false');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('L1: перетаскивание во время перехода — с текущего места, переход отменён', async () => {
+    reduceMotion.mockResolvedValue(false);
+    jest.useFakeTimers();
+    try {
+      render(<Harness />);
+      await act(async () => undefined);
+      withHeights(380, 300);
+      fireEvent.click(grabber());
+      const sheet = screen.getByTestId('bottom-sheet');
+      // посреди перехода к 300 px вычисленный сдвиг — 180 px
+      const computed = jest
+        .spyOn(window, 'getComputedStyle')
+        .mockReturnValue({ transform: 'matrix(1, 0, 0, 1, 0, 180)' } as CSSStyleDeclaration);
+      const header = screen.getByTestId('bottom-sheet-header');
+      pointer('pointerdown', header, 1, 100);
+      pointer('pointermove', header, 1, 90);
+      computed.mockRestore();
+      expect(sheet.style.transform).toBe('translateY(170px)');
+      act(() => {
+        jest.advanceTimersByTime(SHEET_ANIMATION_MS * 2);
+      });
+      // отменённый переход шторку не свернул
+      expect(grabber().getAttribute('aria-expanded')).toBe('true');
+      pointer('pointermove', header, 1, -100);
+      pointer('pointerup', header, 1, -100);
+      act(() => {
+        jest.advanceTimersByTime(SHEET_ANIMATION_MS);
+      });
+      expect(grabber().getAttribute('aria-expanded')).toBe('true');
+      expect(sheet.style.transform).toBe('');
+    } finally {
+      jest.useRealTimers();
     }
   });
 });

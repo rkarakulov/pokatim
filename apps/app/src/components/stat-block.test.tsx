@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import { size } from '@pokatim/design-tokens';
 import { render, screen } from '@testing-library/react-native';
-import { View } from 'react-native';
+import { Dimensions, View } from 'react-native';
 
 import { StatBlock } from './stat-block';
 
@@ -96,6 +96,9 @@ describe('StatBlock variant="compact" (routes-04d, RC-9)', () => {
   ];
 
   it('один ряд равных колонок без ink-линии; значение — одна строка; note — только в метке ячейки', async () => {
+    // обычный размер шрифта (мок Dimensions в jest — fontScale 2)
+    const window = Dimensions.get('window');
+    Dimensions.set({ window: { ...window, fontScale: 1 }, screen: Dimensions.get('screen') });
     await render(<StatBlock variant="compact" items={items} />);
     const block = screen.getByTestId('stat-block');
     expect(block).toHaveStyle({ flexDirection: 'row' });
@@ -111,5 +114,28 @@ describe('StatBlock variant="compact" (routes-04d, RC-9)', () => {
     expect(screen.getByLabelText('Дистанция 68 км круговой')).toBeOnTheScreen();
     expect(screen.getByLabelText('В пути 2 ч 30 мин при 24 км/ч')).toBeOnTheScreen();
     expect(screen.getByText('Дистанция')).toBeOnTheScreen();
+    Dimensions.set({ window, screen: Dimensions.get('screen') });
+  });
+});
+
+describe('StatBlock compact: крупный шрифт (ревью pass 1, M1)', () => {
+  const window = Dimensions.get('window');
+  afterEach(() => {
+    Dimensions.set({ window, screen: Dimensions.get('screen') });
+  });
+
+  it('fontScale > 1 — значение и подпись переносятся внутри колонки, без многоточия; текст целиком', async () => {
+    Dimensions.set({ window: { ...window, fontScale: 1.6 }, screen: Dimensions.get('screen') });
+    await render(
+      <StatBlock
+        variant="compact"
+        items={[{ value: '2 ч 30 мин', label: 'В пути', note: 'при 24 км/ч' }]}
+      />,
+    );
+    const value = screen.getByTestId('stat-block-value');
+    expect(value).not.toHaveProp('numberOfLines', 1);
+    expect(value.props.numberOfLines).toBeUndefined();
+    expect(screen.getByText('В пути').props.numberOfLines).toBeUndefined();
+    expect(screen.getByText('2 ч 30 мин')).toBeOnTheScreen();
   });
 });

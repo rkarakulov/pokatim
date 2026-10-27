@@ -25,8 +25,20 @@ import {
 /** Пауза перед отпусканием, мс: дольше — скорость броска не учитывается. */
 const FLING_IDLE_MS = 100;
 
+/** Текущий сдвиг шторки по вычисленному стилю (посреди CSS-перехода — промежуточный), px. */
+function computedOffset(node: HTMLElement | null): number | null {
+  if (!node || typeof getComputedStyle === 'undefined') return null;
+  const transform = getComputedStyle(node).transform;
+  const matrix = /^matrix\((?:[^,]+,){5}\s*([-\d.e]+)\)$/.exec(transform);
+  if (matrix) return Number(matrix[1]);
+  const translate = /translateY\(([-\d.e]+)px\)/.exec(transform);
+  return translate ? Number(translate[1]) : null;
+}
+
 interface Drag {
   pointerId: number;
+  /** нажатие началось на «чёрточке»: клик после перетаскивания — не тап */
+  onGrabber: boolean;
   startY: number;
   active: boolean;
   /** ход — высота тела при начале перетаскивания */
@@ -68,6 +80,7 @@ export function BottomSheet({
   const sheet = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const grabber = useRef<ComponentRef<typeof Pressable>>(null);
+  const grabberBox = useRef<HTMLDivElement>(null);
   const range = useRef(0);
   const drag = useRef<Drag | null>(null);
   // клик после перетаскивания — не тап
@@ -97,7 +110,10 @@ export function BottomSheet({
     }
     setInstant(false);
     setOffset(toExpanded ? 0 : range.current);
-    timer.current = setTimeout(() => finish(toExpanded), SHEET_ANIMATION_MS);
+    timer.current = setTimeout(() => {
+      timer.current = undefined;
+      finish(toExpanded);
+    }, SHEET_ANIMATION_MS);
   };
 
   // разворачивание из свёрнутой: тело уже в DOM на месте хода — пересчёт стиля и переход к 0
@@ -133,6 +149,7 @@ export function BottomSheet({
     suppressPress.current = false;
     drag.current = {
       pointerId: event.pointerId,
+      onGrabber: grabberBox.current?.contains(event.target as Node) ?? false,
       startY: event.clientY,
       active: false,
       range: 0,
@@ -154,11 +171,16 @@ export function BottomSheet({
         drag.current = null;
         return;
       }
+      // снап ещё идёт (таймер не сработал) — продолжаем с текущего места перехода, без рывка (ревью pass 1, L1)
+      const inTransition = timer.current !== undefined;
       clearTimeout(timer.current);
+      timer.current = undefined;
       current.active = true;
       current.range = height;
-      current.start = expanded ? 0 : height;
-      suppressPress.current = true;
+      const now = inTransition ? computedOffset(sheet.current) : null;
+      current.start = now === null ? (expanded ? 0 : height) : clampSheetOffset(now, height);
+      // клик после жеста дойдёт только до «чёрточки», и только если жест начат на ней (ревью pass 1, L2)
+      suppressPress.current = current.onGrabber;
       event.currentTarget.setPointerCapture?.(event.pointerId);
       setMoving(true);
       setInstant(true);
@@ -175,6 +197,10 @@ export function BottomSheet({
     if (!current || current.pointerId !== event.pointerId) return;
     drag.current = null;
     if (!current.active) return;
+    // клик после жеста приходит сразу за pointerup; не пришёл (захват указателя) — следующее нажатие не теряется
+    setTimeout(() => {
+      suppressPress.current = false;
+    }, 0);
     // палец остановился перед отпусканием — броска нет
     if (event.timeStamp - current.lastTime > FLING_IDLE_MS) current.velocity = 0;
     settle(
@@ -227,17 +253,19 @@ export function BottomSheet({
           onPointerUp={onPointerEnd}
           onPointerCancel={onPointerEnd}
         >
-          <Pressable
-            ref={grabber}
-            testID={`${testID}-grabber`}
-            accessibilityRole="button"
-            aria-label={expanded ? collapseLabel : expandLabel}
-            aria-expanded={expanded}
-            onPress={toggle}
-            style={styles.grabber}
-          >
-            <View style={[styles.bar, { backgroundColor: theme.border.strong }]} />
-          </Pressable>
+          <div ref={grabberBox}>
+            <Pressable
+              ref={grabber}
+              testID={`${testID}-grabber`}
+              accessibilityRole="button"
+              aria-label={expanded ? collapseLabel : expandLabel}
+              aria-expanded={expanded}
+              onPress={toggle}
+              style={styles.grabber}
+            >
+              <View style={[styles.bar, { backgroundColor: theme.border.strong }]} />
+            </Pressable>
+          </div>
           {header}
         </div>
         <div ref={body} data-testid={`${testID}-body`} style={visible ? bodyStyle : hiddenStyle}>

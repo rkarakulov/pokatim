@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { useState } from 'react';
-import { AccessibilityInfo, Text } from 'react-native';
+import { AccessibilityInfo, Animated, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { createGestureController } from 'react-native-gesture-handler/jest-utils';
 
@@ -11,13 +11,22 @@ import { SHEET_ANIMATION_MS, SHEET_FLING_VELOCITY } from './bottom-sheet-snap';
 
 const reduceMotion = jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled');
 
-function Harness({ onHeight }: { onHeight?: (height: number) => void }) {
+function Harness({
+  onHeight,
+  onChange,
+}: {
+  onHeight?: (height: number) => void;
+  onChange?: (expanded: boolean) => void;
+}) {
   const [expanded, setExpanded] = useState(true);
   return (
     <GestureHandlerRootView>
       <BottomSheet
         expanded={expanded}
-        onExpandedChange={setExpanded}
+        onExpandedChange={(next) => {
+          onChange?.(next);
+          setExpanded(next);
+        }}
         onVisibleHeightChange={onHeight}
         collapseLabel="Свернуть панель"
         expandLabel="Развернуть панель"
@@ -136,6 +145,40 @@ describe('BottomSheet native (routes-04d, L2, L4, RC-2, RC-17)', () => {
       expect(screen.queryByText('Гонки на маршруте')).toBeNull();
     } finally {
       jest.useRealTimers();
+    }
+  });
+
+  it('ревью pass 1 (L1): шторку схватили посреди снапа — снап не считается завершённым, жест продолжается с текущего места', async () => {
+    reduceMotion.mockResolvedValue(false);
+    // нативный драйвер в jest не шагает анимацию: текущее значение снапа на момент захвата — 150 px
+    const stop = jest
+      .spyOn(Animated.Value.prototype, 'stopAnimation')
+      .mockImplementation((callback) => {
+        callback?.(150);
+      });
+    const setValue = jest.spyOn(Animated.Value.prototype, 'setValue');
+    const onChange = jest.fn();
+    try {
+      await render(<Harness onChange={onChange} />);
+      await act(async () => undefined);
+      await layout(380);
+      // тап «Свернуть» — снап пошёл; сразу хватаем шапку
+      await fireEvent.press(grabber());
+      const pan = createGestureController(SHEET_PAN_TEST_ID);
+      await act(async () => pan.begin({ translationY: 0 }));
+      await act(async () => pan.activate({ translationY: 0 }));
+      await act(async () => pan.update({ translationY: 10 }));
+      // прерванный снап не свернул шторку посреди жеста, сдвиг — от места захвата
+      expect(onChange).not.toHaveBeenCalled();
+      expect(grabber()).toHaveProp('accessibilityState', { expanded: true });
+      // значение уходит нативному драйверу: проверяем, что передано (до фикса — 10, от развёрнутого положения)
+      expect(setValue).toHaveBeenLastCalledWith(160);
+      await act(async () => pan.end({ translationY: 10, velocityY: -SHEET_FLING_VELOCITY * 2 }));
+      await act(async () => undefined);
+      expect(grabber()).toHaveProp('accessibilityState', { expanded: true });
+    } finally {
+      setValue.mockRestore();
+      stop.mockRestore();
     }
   });
 });

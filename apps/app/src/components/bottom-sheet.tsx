@@ -54,6 +54,8 @@ export function BottomSheet({
   /** текущее смещение вниз от развёрнутого положения, px */
   const offset = useRef(0);
   const dragging = useRef(false);
+  /** смещение в начале жеста — с места, где шторку схватили (в т. ч. посреди снапа) */
+  const dragStart = useRef(0);
   const pendingExpand = useRef(false);
 
   const settle = useCallback(
@@ -73,7 +75,10 @@ export function BottomSheet({
         toValue: target,
         duration: SHEET_ANIMATION_MS,
         useNativeDriver: true,
-      }).start(finish);
+        // прерванный снап (шторку схватили) — не итог: состояние решит новый жест (ревью pass 1, L1)
+      }).start(({ finished }) => {
+        if (finished) finish();
+      });
     },
     [translate],
   );
@@ -102,14 +107,17 @@ export function BottomSheet({
       onActivate: () => {
         if (range.current <= 0) return;
         dragging.current = true;
-        translate.stopAnimation();
-        offset.current = live.current.expanded ? 0 : range.current;
+        dragStart.current = live.current.expanded ? 0 : range.current;
+        // снап ещё идёт — продолжаем с текущего значения, без рывка
+        translate.stopAnimation((value) => {
+          if (live.current.moving) dragStart.current = clampSheetOffset(value, range.current);
+        });
+        offset.current = dragStart.current;
         setMoving(true);
       },
       onUpdate: (event: { translationY: number }) => {
         if (!dragging.current) return;
-        const start = live.current.expanded ? 0 : range.current;
-        offset.current = clampSheetOffset(start + event.translationY, range.current);
+        offset.current = clampSheetOffset(dragStart.current + event.translationY, range.current);
         translate.setValue(offset.current);
       },
       onDeactivate: (event: { velocityY: number }) => {
