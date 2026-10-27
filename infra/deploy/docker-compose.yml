@@ -45,6 +45,10 @@ x-api-env: &api-env
   OW_API_KEY: ${OW_API_KEY:-}
   OW_WEBHOOK_SECRET: ${OW_WEBHOOK_SECRET:-}
   OW_SHARED_INSTANCE: ${OW_SHARED_INSTANCE:-false}
+  # push через Expo (ADR-0016, runbook «Push»): выключен по умолчанию — центр уведомлений работает без него;
+  # EXPO_ACCESS_TOKEN — необязательный секрет, только .env сервера
+  PUSH_ENABLED: ${PUSH_ENABLED:-false}
+  EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
 
 x-api-image: &api-image ${POKATIM_IMAGE_PREFIX:-ghcr.io/rkarakulov/pokatim}-api:${POKATIM_TAG:?}
 

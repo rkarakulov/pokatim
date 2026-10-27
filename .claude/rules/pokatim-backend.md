@@ -134,9 +134,11 @@ paths:
   транзакция `AccountClosure.close` + `PanelAudit` `account.deleted` + outbox `account.deletion-requested`) и
   `AccountWorkerModule` (очередь `account-deletion`, `AccountErasureProcessor` по имени задачи: событие, sweep,
   регламент `account.erasure-resume`). Зависимости: `account → identity, panel, profile, rides, routes, tracks,
-  devices` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
+  devices, notifications` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
   (`ProfileCoreModule`), `RideErasure` (`RidesCoreModule`), `RouteErasure` (`RoutesCoreModule`), `DeviceErasure`
-  (`DevicesCoreModule`), `TrackErasure` (`TracksCoreModule`), `AccountErasure` (`IdentityErasureModule`). Новый модуль с
+  (`DevicesCoreModule`), `TrackErasure` (`TracksCoreModule`), `NotificationErasure` (`NotificationsCoreModule`, шаг
+  между `tracks` и `identity`), `AccountErasure` (`IdentityErasureModule`); push-токены — `PushTokens.revokeAllOf(tx)`
+  в транзакции удаления. Новый модуль с
   данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник» (A3). Финальный провал шага — лог
   `account.erasure_failed user=<uid> step=<s>`, failed-набор BullMQ, регламент; экран в панели — follow-up (F13).
 
@@ -155,8 +157,8 @@ paths:
   `results.race-recheck-requested` → `results-intake` → `ResultsRecheck.requestRace` (транзакция на попытку под
   `lockEntry`, идемпотентно по `checkedAt < requestedAt`). Пока есть незавершённые проверки — публикация и
   «Применить пересчёт» отвечают 409.
-- `results.protocol-published` / `results.result-revised` — в outbox без маршрута (`publishedAt: null` до слайса 08;
-  издатель базы берёт только типы из маршрутов).
+- `results.protocol-published` / `results.result-revised` / `results.attempt-verdict-changed` — маршрут в
+  `notifications-intake` (объявляет подписчик, ADR-0016); слайсу 08 нужен fan-out outbox — задача в app-foundation.
 - Отказы состояния — `409 RESULTS_ACTION_BLOCKED { reason, count? }`, `409 RESULTS_PUBLISH_BLOCKED { blockedBy,
   checklist }`.
 
@@ -176,8 +178,8 @@ paths:
 - Решение — `lockResults` → проверки (`not_open`, `cancelled`, `protocol_published`, `too_early` с `availableAt`) →
   `lockEntry` цели → переход → при `upheld` `disqualify` (идемпотентно) → событие, outbox, `PanelAudit.append` в той же
   транзакции.
-- События `disputes.dispute-filed/-withdrawn/-responded/-decided` — в outbox без маршрута до модуля `notifications`
-  (A11); в событиях только id и коды. Лог после коммита — `disputeId`, `raceId`, действие, исход.
+- События `disputes.dispute-filed/-withdrawn/-responded/-decided` — маршрут в `notifications-intake` (A11,
+  ADR-0016); в событиях только id и коды. Лог после коммита — `disputeId`, `raceId`, действие, исход.
 - Отказы — `409 DISPUTE_ACTION_BLOCKED { reason, availableAt? }`, `404 DISPUTE_NOT_FOUND`; отмена гонки при открытых
   спорах — `409 RACE_INVALID_STATE { reason: 'disputes_open' }`.
 - Ряды пульса и мощности (06b): `DisputeSeriesService` (HTTP — кэш и постановка) → очередь `dispute-series` →
@@ -195,4 +197,23 @@ paths:
 - Фаза и права зрителя — `rides.policy.ts` (`ridePhase`, `rideViewer`, `validateStartsAt`, `RIDES_POLICY`); ответы
   собирает `rides-feed.service.ts` из явного списка полей.
 - Лимиты частоты (`RateLimiter` базы, ключ — `uid`): `rides-create`, `rides-manage` (правка и отмена), `rides-rsvp`
-  (join и leave); квоты — `409 RIDE_QUOTA_EXCEEDED` с `RideQuotaDetails`. Outbox-событий и аудита в 05a нет.
+  (join и leave); квоты — `409 RIDE_QUOTA_EXCEEDED` с `RideQuotaDetails`. Аудита в 05a нет. События (ADR-0016) — `rides.events.ts`:
+  `update`/`cancel`/`join`, отмена при стирании и `act` модерации — та же одна условная операция над документом, но
+  в `MongoTransactions` с outbox (`ride-cancelled`, `ride-rescheduled` по смене старта, `participant-joined`,
+  `reports-resolved`); повтор и отказ — без события.
+
+## Уведомления (`notifications`, ADR-0016)
+
+- Источники (`results`, `disputes`, `rides`) пишут только outbox в своих транзакциях (payload — id и коды) и дают
+  порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`; плюс `RaceRegistry`,
+  `IdentityAccounts.liveUserIds/emailsOf`. Чужих коллекций `notifications` не читает; источники о нём не знают.
+- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (11 типов → `notifications-intake`). Очереди:
+  `notifications-intake` (событие → получатели → настройки → upsert; > 72 ч — skip; уникальность `(sourceEventId,
+  userId)`, схлопывание `collapseKey`), `notifications-delivery` (`notifications.push` по пользователю — захват,
+  тумблер, тихие часы, лимит 20/ч, сводка; `notifications.email` — только N2), `notifications-maintenance`
+  (`receipts` */15 — `DeviceNotRegistered` снимает токен; `redeliver` */10).
+- Текст — снимок сервера (`notification-texts.ts`, не `@pokatim/i18n`); цель — белый список типов. Expo — порт
+  `PUSH_SENDER` (`expo-push.sender.ts`, адрес из env, в production — только `exp.host`); `PUSH_ENABLED=false` — push
+  `skipped`.
+- HTTP `/v1/notifications` под `AuthGuard`, только свои (`userId` сессии в фильтре, чужое — 404); лимиты
+  `notifications-read` 120/мин, `notifications-settings` 30/ч, `notifications-push-token` 30/ч → `429 RATE_LIMITED`.

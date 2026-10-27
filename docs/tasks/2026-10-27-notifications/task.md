@@ -295,6 +295,22 @@ Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров �
   `failed` с кодом Expo (`DeviceNotRegistered` при этом снимает токены); письмо удалённому — `skipped`. Тумблер e-mail
   в момент отправки не перепроверяется (только intake, §11).
 
+- **D-1 (шаг D, UI минимальный).** Тихие часы — ряды `Chip` 0–23 прямо на экране настроек (без `BottomSheet` и
+  `quiet-hours-sheet.tsx`); час другого края в ряду не показывается — `start == end` из UI недостижимо (сервер
+  по-прежнему отвечает 400). Список центра — в самом экране (`app/notifications.tsx`, без `notifications-list.tsx`).
+- **D-2 (шаг D, развилки).** Весь нативный push — в одном `features/notifications/push.ts` (+ `push.web.ts` no-op):
+  разрешение, канал, токен, хранение, подписка на нажатия. Хуки и регистрация (`push-registration.ts`:
+  `registerDevicePush`, `revokeDevicePushToken`, `usePushNotifications(ready, queryClient)`) платформонезависимы —
+  отдельных `push-responses(.web).ts`/`push-registration.web.ts` нет. `queryClient` передаётся явно: корневой layout
+  вызывает хук вне своего `QueryClientProvider`.
+- **D-3 (шаг D).** `expo-notifications` `~58.1.6` (по `bundledNativeModules.json` SDK 58 — `~58.1.5`; §11 писал
+  `~58.0.x`). Смена токена (`addPushTokenListener`) не слушается: регистрация — при каждом входе и запуске с сессией
+  (идемпотентный `PUT`).
+- **D-4 (шаг D, документация).** `apps/api/.env.example` не правился (запрет чтения `.env*` в брифе шага); переменные —
+  в `docs/runbooks/push.md` и `infra/deploy/env.template`/`docker-compose.yml`. `docs/runbooks/deploy.md` не менялся:
+  миграции применяются общим шагом `migrate`, отдельных действий 0024–0025 не требуют. Web-смоук (`e2e:web`,
+  опционально при `E2E_API=1`) не добавлен.
+
 ## 8.3 Security checklist
 
 AuthN/AuthZ: все эндпоинты под AuthGuard, выборки только по `userId` из сессии; чужое уведомление → 404.
@@ -811,3 +827,45 @@ worktree (`nice-pasteur-1d135d`, `flushdb`) — отладочные прого�
 **Follow-ups.** Шаг D (приложение, документация §10). Риски: две параллельные задачи push одного пользователя при
 нескольких созревших уведомлениях делят их (два разных push, не дубль); уведомление, пришедшее во время активной задачи
 того же jobId, ждёт регламента (≤ 20 мин).
+
+### Шаг D — приложение и документация
+
+**Changes.**
+- Пакет `expo-notifications` `~58.1.6` (SDK 58) + плагин в `app.json`; `features/notifications/`: `queries.ts`
+  (счётчик — polling 60 с только у вошедшего, список — `useInfiniteQuery`, мутации read/read-all/settings с
+  инвалидацией `['notifications']`), `notification-target.ts` (белый список `race`/`ride`/`dispute-response` через
+  схему контрактов; незнакомое — без перехода, из push — `/notifications`), `push.ts` (разрешение, канал Android
+  `default`, токен только при `extra.eas.projectId` и на устройстве, токен в `secureStorage` `pokatim.pushToken`,
+  обработчик и нажатия на push) + `push.web.ts` (no-op), `push-registration.ts` (регистрация, снятие с таймаутом 3 с,
+  `usePushNotifications` в корневом layout после входа и онбординга), `push-permission-row.tsx` (запрос по нажатию;
+  отказ навсегда — настройки ОС), `notification-row.tsx`.
+- Колокольчик `components/notification-bell.tsx` («99+», a11y «Уведомления, N непрочитанных») в `TopBar` (новые
+  необязательные пропсы), Главная передаёт счётчик. Экраны `/notifications` (FlatList, `AsyncContent` + скелетон строк,
+  пусто, ошибки с повтором, баннер устаревших данных, догрузка с баннером ошибки в подвале, нажатие → read + переход,
+  «Прочитать все» — недоступна без непрочитанных и во время запроса, строка push, вход в настройки) и
+  `/settings/notifications` (группы × push, e-mail у «Споры»/«Райды», тихие часы — тумблер и чипы часов; сохранение
+  каждого изменения, ошибка — баннер и прежнее значение); оба — в `Stack.Protected` вкладок; строка «Уведомления» в
+  «Профиле». `useSignOut` снимает токен до отзыва сессии; после удаления аккаунта (`serverEnded`) — только забывает.
+  Строки — `packages/i18n` (`notifications.*`, `profile.notifications`). Отклонения — §8.2 D-1…D-4.
+- Документация: ADR-0016 + `docs/adr/README.md`, пометка в ADR-0013 п. 2; `AGENTS.md` §1 и §4.9; правила
+  `pokatim-app/backend/db/contracts/security.md`; `docs/product/{home,account,README}.md`; `docs/runbooks/push.md`
+  (новый), `account-deletion.md`, `runbooks/README.md`; `infra/deploy/docker-compose.yml` (`PUSH_ENABLED`,
+  `EXPO_ACCESS_TOKEN` с пустым умолчанием) и `env.template` (`PUSH_ENABLED=false`).
+
+**Tests.** `notification-target.test.ts` (15: белый список, unknown/null/не Uuid/адрес/путь строкой — без перехода,
+push без цели — центр), `notification-bell.test.tsx` (9: 0/99/100 → «99+», a11y), `top-bar.test.tsx` (+1: колокольчик
+первым), `push.test.ts` (4: холодный старт, нажатие, сводка без цели, баннер и счётчик, отписка),
+`push-registration.test.ts` (8: регистрация, нет projectId — нет, нет разрешения — без запроса, снятие, ошибка и
+таймаут не блокируют), `push.web.test.ts` (2: web без push), `use-sign-out.test.tsx` (3: снятие до отзыва сессии, сбой
+не мешает выходу, `serverEnded` — без запроса), `__tests__/notifications.test.tsx` (25: скелетон, список, пусто, ошибки
+с повтором, баннер обновления, догрузка по курсору и ошибка в подвале, переход по цели, unknown/null — без перехода,
+«Прочитать все» и её состояния, строка push — запрос/нет/отказ навсегда, настройки — группы, тумблер, часы, выключено,
+ошибка сохранения и загрузки, вход из «Профиля»).
+
+`TURBO_CONCURRENCY=1 pnpm check` (`MONGO_URL_TEST=…/pokatim_notifications_test`, `REDIS_URL_TEST=…/14`) — зелёный:
+arch:check «no dependency violations found», api 117 files, app 148 suites / 1298 tests, `Tasks: 13 successful, 13
+total`. `EXPO_PUBLIC_API_URL=http://127.0.0.1:3000 pnpm --filter @pokatim/app build:web` — `Exported: dist`, чанки
+`notifications`, `expo-notifications` в web-бандл не попал.
+
+**NOT VERIFIED.** Push на устройстве (нет EAS `projectId` и ключей APNs/FCM — runbook `push.md`), ручная проверка на
+симуляторе и в браузере (`start:web`), web-смоук `e2e:web`.

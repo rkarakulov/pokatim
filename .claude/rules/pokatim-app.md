@@ -9,9 +9,9 @@ paths:
 
 ## Рамки MVP (не расширять без ADR)
 
-- Нет записи GPS, нет фоновой геолокации, нет BLE-датчиков, нет push, нет Strava API, нет биометрического
-  входа. Garmin и Wahoo — только импорт велозаездов через агрегатор (ADR-0011). Задача требует что-то из этого —
-  стоп: продуктовое решение и ADR, а не реализация.
+- Нет записи GPS, нет фоновой геолокации, нет BLE-датчиков, нет web push, нет Strava API, нет биометрического
+  входа. Push на iOS и Android — только через Expo (ADR-0016). Garmin и Wahoo — только импорт велозаездов через
+  агрегатор (ADR-0011). Задача требует что-то из этого — стоп: продуктовое решение и ADR, а не реализация.
 - Геолокация — только foreground для «рядом», после pre-permission экрана («Не сейчас»), при отказе — баннер со
   ссылкой в настройки ОС.
   Сейчас (слайс 4): один pre-permission экран в онбординге (`(setup)/location`), координаты не читаются, не хранятся и
@@ -27,7 +27,15 @@ paths:
   `OnboardingStatus.devicesStepCompleted`; поля нет — старый API — шаг пропускается); экран «Устройства»
   `settings/devices` (вход — иконка верхней панели); возврат авторизации `devices/return` — вне гардов. Развилки —
   файлами: `features/devices/connect-flow(.web).ts`, `pick-track-file(.web).ts`, `upload-track(.web).ts`.
-- Уведомления — in-app центр, обновление polling'ом (`refetchInterval`, не сокеты); статусы обработки — так же.
+- Уведомления (ADR-0016, `docs/product/notifications.md`) — центр `/notifications` и настройки
+  `settings/notifications` внутри `Stack.Protected` вкладок (оболочка `useSettingsShell`), колокольчик в `TopBar`
+  Главной (`components/notification-bell.tsx`, «99+»); всё — `features/notifications/` (ключи `['notifications', …]`,
+  счётчик — polling `refetchInterval` 60 с, не сокеты; статусы обработки — так же). Переход по цели — только
+  `notification-target.ts` (белый список типов с `Uuid`; незнакомое — без перехода, из push — центр). Push — развилка
+  `push(.web).ts` (`expo-notifications` только в native-файле; web — no-op): разрешение — только по нажатию строки
+  «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
+  `usePushNotifications` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
+  `serverEnded`: токены снял сервер), последний токен — `secureStorage` `pokatim.pushToken`.
 
 ## Правила pokatim
 
