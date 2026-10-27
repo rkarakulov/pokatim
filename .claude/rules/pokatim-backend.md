@@ -64,8 +64,9 @@ paths:
   общие. Порты `RouteCatalog`/`RouteGeometry` и `RoutesCatalogService` видят только `platform`. Мутации «моих» — `POST` с глаголом (`rename`, `delete`).
 - Публикация маршрутов райдеров (routes-06): порядок контроллеров `RoutesModule` — `RoutesMineController`,
   `RoutesViewerController`, `RoutesAdminController`, `RoutesModerationController`, `RoutesPublicController`.
-  `RoutesMineController` + `publish`/`unpublish` → `MyRoutePublicationService` (атомарная запись без транзакции и
-  журнала; лимит `routes-publication-submit:<uid>` 10/сут списывается после проверок, отказ 409 его не тратит);
+  `RoutesMineController` + `publish`/`unpublish` → `MyRoutePublicationService` (атомарная запись без журнала;
+  подача — транзакция: условная запись, затем лимит `routes-publication-submit:<uid>` 10/сут — квоту тратят только
+  успешные подачи, отказ 409 и проигравшая параллельная подача — нет, 429 откатывает запись);
   `RoutesViewerController` (`@Controller('routes')` + `AuthGuard`, `:id/me`, `:id/reports`) → `RouteReportsService`
   (лимит `routes-report:<uid>` 20/сут); `RoutesModerationController` (`admin/rider-routes`, `PanelGuard` +
   `routes.moderate`) → `RoutesModerationService`. Публичный каталог — `findInCatalog`/`listCatalog` (`IN_CATALOG`);

@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { formatDateTimeLong } from '../../format';
 import { httpStatus, isForbidden } from '../../session/errors';
 import {
+  Banner,
   Button,
   ConflictBanner,
   DataTable,
@@ -71,7 +72,7 @@ function actionsOf(route: RiderRouteModerationDetail): RiderRouteAction[] {
     case 'pending':
       return ['approve', 'reject'];
     case 'approved':
-      return route.openReportCount > 0 && route.lastReportAt ? ['hide', 'dismiss'] : ['hide'];
+      return route.openReportCount > 0 ? ['hide', 'dismiss'] : ['hide'];
     case 'hidden':
       return ['restore'];
     case 'rejected':
@@ -182,14 +183,17 @@ export function RiderRouteScreen({ routeId }: { routeId: string }) {
     </Link>
   );
 
-  if (!route.data) {
+  // ошибка перечитывания при показанной заявке: 403 и 404 (автор отозвал, RC-10) — как при первой загрузке, линия и
+  // действия убираются; прочее — баннер с повтором поверх последних данных (AGENTS.md §4.12)
+  if (route.isError && isForbidden(route.error)) return <NoAccessScreen />;
+  const notFound = route.isError && httpStatus(route.error) === 404;
+  if (!route.data || notFound) {
     if (route.isError || route.fetchStatus === 'paused') {
-      if (isForbidden(route.error)) return <NoAccessScreen />;
       return (
         <>
           <PageHeader crumb={crumb} title={t('admin.riderRoutes.title')} />
           <div className="page-body">
-            {httpStatus(route.error) === 404 ? (
+            {notFound ? (
               <EmptyState title={t('admin.riderRoutes.notFound')} />
             ) : (
               <ErrorState
@@ -226,9 +230,10 @@ export function RiderRouteScreen({ routeId }: { routeId: string }) {
       queryClient.invalidateQueries({ queryKey: ['admin', 'audit'] }),
     ]);
   };
+  // конфликт снимается только после успешного перечитывания; ошибку показывает баннер ниже
   const reload = async () => {
-    await route.refetch();
-    setStale(false);
+    const result = await route.refetch();
+    if (result.isSuccess) setStale(false);
   };
   const handlers = {
     route: data,
@@ -250,6 +255,20 @@ export function RiderRouteScreen({ routeId }: { routeId: string }) {
         ))}
       />
       <div className="page-body">
+        {route.isError ? (
+          <Banner
+            tone="error"
+            role="alert"
+            title={t('admin.refreshFailed')}
+            actions={
+              <Button size="sm" busy={route.isFetching} onClick={() => void reload()}>
+                {t('state.retry')}
+              </Button>
+            }
+          >
+            {t('admin.refreshFailedMessage')}
+          </Banner>
+        ) : null}
         {stale ? (
           <ConflictBanner
             title={t('admin.riderRoutes.conflict')}

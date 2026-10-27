@@ -8,6 +8,7 @@ import type {
 } from '@pokatim/contracts';
 import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
 
+import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { toMyRoute } from './my-routes.service';
 import type { RouteDoc } from './routes.collection';
@@ -27,9 +28,9 @@ const limitReached = (limit: RoutePublicationLimitDetails['limit'], max: number)
 
 /**
  * Публикация своего маршрута в каталог автором (routes-06): подача заявки, отзыв заявки и снятие с публикации. Каждое
- * действие — одна атомарная запись документа `routes` (условия — в фильтре `RoutesRepository`), без транзакции и
- * журнала панели (действия райдера в журнал не пишутся, правило routes-02). Чужой, команды и неизвестный — один `404`.
- * Логи — id и коды, без названий.
+ * действие — одна атомарная запись документа `routes` (условия — в фильтре `RoutesRepository`; подача — в транзакции
+ * с суточной квотой), без журнала панели (действия райдера в журнал не пишутся, правило routes-02). Чужой, команды и
+ * неизвестный — один `404`. Логи — id и коды, без названий.
  */
 @Injectable()
 export class MyRoutePublicationService {
@@ -38,13 +39,15 @@ export class MyRoutePublicationService {
   constructor(
     private readonly repository: RoutesRepository,
     private readonly rateLimiter: RateLimiter,
+    private readonly transactions: MongoTransactions,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   /**
    * Подача (порядок проверок — task.md §11): свой → готов → состояние → подач < 3 → на проверке < 3 (принятая гонка,
-   * 8.1 RC-7) → суточный лимит (списывается после проверок: отказ 409 его не тратит, RC-8) → запись. Запись не
-   * прошла — причина по свежему документу.
+   * 8.1 RC-7) → в одной транзакции условная запись, затем суточный лимит (RC-8: тратят только успешные подачи — отказ
+   * 409 и проигравшая параллельная подача квоту не списывают; 429 откатывает запись). Запись не прошла — причина по
+   * свежему документу.
    */
   async submit(userId: string, id: string, input: SubmitRoutePublicationInput): Promise<MyRoute> {
     this.assertSubmittable(await this.own(userId, id));
@@ -52,22 +55,29 @@ export class MyRoutePublicationService {
       throw limitReached('pending', ROUTE_POLICY.maxPendingPublications);
     }
     const now = this.clock.now();
-    const limited = await this.rateLimiter.consume(
-      `routes-publication-submit:${userId}`,
-      ROUTE_POLICY.publicationSubmitLimit,
-      now,
-    );
-    if (!limited.allowed) {
-      const details: RateLimitedDetails = { retryAfterSec: limited.retryAfterSec };
-      throw domainError('RATE_LIMITED', 429, details);
-    }
-    const submitted = await this.repository.submitPublication(
-      userId,
-      id,
-      input,
-      ROUTE_POLICY.maxSubmissionsPerRoute,
-      now,
-    );
+    // запись — первой в транзакции: параллельная подача того же маршрута ждёт (write conflict → повтор) и после
+    // коммита не проходит фильтр, до квоты не доходит; квота кончилась — 429 откатывает запись
+    const submitted = await this.transactions.run(async (tx) => {
+      const written = await this.repository.submitPublication(
+        tx,
+        userId,
+        id,
+        input,
+        ROUTE_POLICY.maxSubmissionsPerRoute,
+        now,
+      );
+      if (!written) return null;
+      const limited = await this.rateLimiter.consume(
+        `routes-publication-submit:${userId}`,
+        ROUTE_POLICY.publicationSubmitLimit,
+        now,
+      );
+      if (!limited.allowed) {
+        const details: RateLimitedDetails = { retryAfterSec: limited.retryAfterSec };
+        throw domainError('RATE_LIMITED', 429, details);
+      }
+      return written;
+    });
     if (!submitted) {
       this.assertSubmittable(await this.own(userId, id));
       throw domainError('CONFLICT', 409);

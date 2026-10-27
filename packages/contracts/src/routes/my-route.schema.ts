@@ -17,8 +17,8 @@ export const MY_ROUTE_LIST_MAX_LIMIT = 50;
 
 /**
  * Свой маршрут в списке и карточке; длина, набор и петля — `null`, пока маршрут не готов (набор — и без высот).
- * routes-06: `publication` — заявка в каталог (`null` — не подавался, отозван или снят), `canPublish` — можно подать
- * (считает сервер); дефолты — новый клиент против старого API.
+ * routes-06: `publication` — заявка в каталог (`null` — не подавался, отозван или снят), `canPublish` — можно подать,
+ * `submissionsExhausted` — подачи кончились (считает сервер); дефолты — новый клиент против старого API.
  */
 export const MyRoute = z.object({
   id: Uuid,
@@ -31,6 +31,8 @@ export const MyRoute = z.object({
   createdAt: z.iso.datetime(),
   publication: MyRoutePublication.nullable().default(null),
   canPublish: z.boolean().default(false),
+  /** Все подачи маршрута (3) использованы — клиент объясняет, почему «Опубликовать» нет (считает сервер). */
+  submissionsExhausted: z.boolean().default(false),
 });
 export type MyRoute = z.infer<typeof MyRoute>;
 

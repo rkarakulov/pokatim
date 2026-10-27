@@ -47,6 +47,7 @@ const detail = (
   hiddenAt: null,
   openReportCount: 0,
   lastReportAt: null,
+  reportRevision: 0,
   version: 2,
   distanceM: 42_300,
   elevationGainM: 180,
@@ -75,6 +76,7 @@ const approvedWithReport = () =>
     approvedAt: '2026-10-04T08:00:00.000Z',
     openReportCount: 1,
     lastReportAt: LAST,
+    reportRevision: 3,
     reports: [
       {
         id: REPORT,
@@ -198,7 +200,7 @@ describe('страница заявки райдера (routes-06, AC1–AC5, N7
     expect(screen.queryByRole('button', { name: 'Скрыть' })).toBeNull();
   });
 
-  it('в каталоге с жалобой: жалоба без автора; «Отклонить жалобы» — с lastReportAt; «Скрыть» — с причиной', async () => {
+  it('в каталоге с жалобой: жалоба без автора; «Отклонить жалобы» — с reportRevision; «Скрыть» — с причиной', async () => {
     mocked.getRiderRoute.mockResolvedValue(approvedWithReport());
     mocked.dismissRiderRouteReports.mockResolvedValue(detail({ status: 'approved', version: 2 }));
     await open();
@@ -211,7 +213,7 @@ describe('страница заявки райдера (routes-06, AC1–AC5, N7
       expect(mocked.dismissRiderRouteReports).toHaveBeenCalledWith(ID, {
         version: 2,
         reason: 'Нарушений нет',
-        lastReportAt: LAST,
+        reportRevision: 3,
       }),
     );
     cleanup();
@@ -264,6 +266,47 @@ describe('страница заявки райдера (routes-06, AC1–AC5, N7
       expect(screen.queryByText('Заявку уже изменили — обновите страницу')).toBeNull();
     },
   );
+
+  const conflictThenReload = async () => {
+    mocked.approveRiderRoute.mockRejectedValue(httpError(404, 'NOT_FOUND'));
+    await open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Одобрить' }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Одобрить' }));
+    expect(await screen.findByText('Заявку уже изменили — обновите страницу')).toBeTruthy();
+  };
+
+  it('«Обновить» при 404 (заявку отозвали) — «Заявка не найдена» без линии и действий', async () => {
+    await conflictThenReload();
+    mocked.getRiderRoute.mockRejectedValue(httpError(404, 'NOT_FOUND'));
+    fireEvent.click(screen.getByRole('button', { name: 'Обновить' }));
+    expect(await screen.findByText('Заявка не найдена')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Одобрить' })).toBeNull();
+    expect(screen.queryByRole('img', { name: /Линия маршрута/ })).toBeNull();
+    expect(screen.queryByText('Заявку уже изменили — обновите страницу')).toBeNull();
+  });
+
+  it('«Обновить» при сбое сети/5xx — данные остаются, баннер ошибки с повтором, конфликт не снят', async () => {
+    await conflictThenReload();
+    mocked.getRiderRoute.mockRejectedValue(httpError(500, 'INTERNAL'));
+    fireEvent.click(screen.getByRole('button', { name: 'Обновить' }));
+    expect(await screen.findByText('Не удалось обновить данные')).toBeTruthy();
+    expect(screen.getByText('Заявку уже изменили — обновите страницу')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Вокруг Минского моря', level: 1 })).toBeTruthy();
+
+    mocked.getRiderRoute.mockResolvedValue(detail({ status: 'approved', version: 3 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('button', { name: 'Скрыть' })).toBeTruthy();
+    expect(screen.queryByText('Не удалось обновить данные')).toBeNull();
+    expect(screen.queryByText('Заявку уже изменили — обновите страницу')).toBeNull();
+  });
+
+  it('«Обновить» при 403 — «Нет доступа»', async () => {
+    await conflictThenReload();
+    mocked.getRiderRoute.mockRejectedValue(httpError(403, 'FORBIDDEN'));
+    fireEvent.click(screen.getByRole('button', { name: 'Обновить' }));
+    expect(await screen.findByText(/Нет доступа/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Одобрить' })).toBeNull();
+  });
 
   it('409 при «Скрыть» (новая жалоба/версия) — тот же баннер, окно причины закрыто', async () => {
     mocked.getRiderRoute.mockResolvedValue(approvedWithReport());

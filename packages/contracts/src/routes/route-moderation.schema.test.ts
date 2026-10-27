@@ -47,6 +47,7 @@ const detail = {
   hiddenAt: null,
   openReportCount: 1,
   lastReportAt: AT,
+  reportRevision: 1,
   version: 1,
   distanceM: 42_000,
   elevationGainM: null,
@@ -138,8 +139,19 @@ describe('модерация маршрутов райдеров (routes-06, п�
       expect(schema.safeParse({ version: 2, reason: 'Причина', extra: 1 }).success).toBe(false);
     }
     expect(
-      DismissRiderRouteReportsRequest.parse({ version: 1, reason: 'Ложные', lastReportAt: AT }),
-    ).toEqual({ version: 1, reason: 'Ложные', lastReportAt: AT });
+      DismissRiderRouteReportsRequest.parse({ version: 1, reason: 'Ложные', reportRevision: 2 }),
+    ).toEqual({ version: 1, reason: 'Ложные', reportRevision: 2 });
+    expect(
+      DismissRiderRouteReportsRequest.safeParse({ version: 1, reason: 'Ложные', lastReportAt: AT })
+        .success,
+    ).toBe(false);
+    expect(
+      DismissRiderRouteReportsRequest.safeParse({
+        version: 1,
+        reason: 'Ложные',
+        reportRevision: -1,
+      }).success,
+    ).toBe(false);
     expect(
       DismissRiderRouteReportsRequest.safeParse({ version: 1, reason: 'Ложные' }).success,
     ).toBe(false);

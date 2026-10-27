@@ -300,7 +300,9 @@ export class RoutesRepository {
 
   /**
    * Переименование своего маршрута; название заморожено в `pending` и `approved` (routes-06, A3) — условие в фильтре.
-   * `null` — не свой, нет или заморожен (вызывающий перечитывает).
+   * Есть заявка (`hidden`, `rejected`, `withdrawn`) — `publication.version + 1` той же записью: «Вернуть» по карточке со
+   * старым названием получит конфликт. Pipeline — поле `publication` может быть `null`. `null` — не свой, нет или
+   * заморожен (вызывающий перечитывает).
    */
   renameOwn(ownerUserId: string, id: string, title: string, now: Date): Promise<RouteDoc | null> {
     return this.c.routes.findOneAndUpdate(
@@ -309,7 +311,26 @@ export class RoutesRepository {
         ...ownRider(ownerUserId),
         'publication.status': { $nin: ['pending', 'approved'] },
       },
-      { $set: { title, updatedAt: now } },
+      [
+        {
+          $set: {
+            title: { $literal: title },
+            updatedAt: { $literal: now },
+            publication: {
+              $cond: [
+                { $eq: [{ $type: '$publication' }, 'object'] },
+                {
+                  $mergeObjects: [
+                    '$publication',
+                    { version: { $add: ['$publication.version', 1] } },
+                  ],
+                },
+                '$publication',
+              ],
+            },
+          },
+        },
+      ],
       { returnDocument: 'after' },
     );
   }
@@ -330,10 +351,12 @@ export class RoutesRepository {
 
   /**
    * Подача своего готового маршрута: нет заявки / `withdrawn` / `rejected` → `pending`, подач < 3 — всё в фильтре.
+   * Первая запись транзакции подачи (суточная квота списывается после неё, RC-8).
    * Pipeline-обновление (поле `publication` может быть `null`), значения — `$literal`; счётчики подач и версия — от
    * прежних, жалобы переживают новую подачу (8.1 RC-4). `null` — условие не выполнено (вызывающий перечитывает).
    */
   submitPublication(
+    tx: DbSession,
     ownerUserId: string,
     id: string,
     submission: PublicationSubmission,
@@ -369,6 +392,7 @@ export class RoutesRepository {
                   hiddenAt: { $literal: null },
                   openReportCount: { $ifNull: ['$publication.openReportCount', 0] },
                   lastReportAt: { $ifNull: ['$publication.lastReportAt', null] },
+                  reportRevision: { $ifNull: ['$publication.reportRevision', 0] },
                   version: { $add: [{ $ifNull: ['$publication.version', -1] }, 1] },
                 },
               ],
@@ -377,7 +401,7 @@ export class RoutesRepository {
           },
         },
       ],
-      { returnDocument: 'after' },
+      { session: tx, returnDocument: 'after' },
     );
   }
 
@@ -542,14 +566,14 @@ export class RoutesRepository {
   }
 
   /**
-   * «Отклонить жалобы» по `version` и `lastReportAt` карточки (новая жалоба — `null`): опубликованный с открытыми
+   * «Отклонить жалобы» по `version` и `reportRevision` карточки (новая жалоба — `null`): опубликованный с открытыми
    * жалобами → `openReportCount = 0`; `version` не меняется (как у райдов).
    */
   clearRouteReports(
     tx: DbSession,
     id: string,
     version: number,
-    lastReportAt: Date,
+    reportRevision: number,
   ): Promise<PublishedRiderRoute | null> {
     return this.moderate(
       tx,
@@ -558,7 +582,7 @@ export class RoutesRepository {
       version,
       {
         'publication.openReportCount': { $gt: 0 },
-        'publication.lastReportAt': lastReportAt,
+        'publication.reportRevision': reportRevision,
       },
       { 'publication.openReportCount': 0 },
       false,
@@ -567,7 +591,8 @@ export class RoutesRepository {
 
   /**
    * Жалоба — **первая** запись транзакции жалобы (конкурирующее «Скрыть» пишет тот же документ: write conflict):
-   * опубликованный маршрут райдера, не свой → `$inc openReportCount`, `$max lastReportAt`. `null` — условие не выполнено.
+   * опубликованный маршрут райдера, не свой → `$inc openReportCount` и `reportRevision` (маркер «Отклонить жалобы»),
+   * `$max lastReportAt` (только порядок очереди). `null` — условие не выполнено.
    */
   recordRouteReport(
     tx: DbSession,
@@ -584,7 +609,10 @@ export class RoutesRepository {
         'publication.status': 'approved',
         ...CATALOG_PUBLISHED,
       },
-      { $inc: { 'publication.openReportCount': 1 }, $max: { 'publication.lastReportAt': now } },
+      {
+        $inc: { 'publication.openReportCount': 1, 'publication.reportRevision': 1 },
+        $max: { 'publication.lastReportAt': now },
+      },
       { session: tx, returnDocument: 'after' },
     );
   }

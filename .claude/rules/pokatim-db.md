@@ -132,19 +132,21 @@ paths:
   кандидатом `routes_list_idx`).
 - Публикация маршрута райдера (routes-06): поле `routes.publication` (`RoutePublicationDoc`: `status` `pending |
   approved | rejected | hidden | withdrawn`, город, покрытие, `showAuthorName`, `submissionCount` ≤ 3, даты,
-  `rejection`, `openReportCount`/`lastReportAt`, `version`); нет поля — «не подавался» (`?? null`, бэкфилла нет).
+  `rejection`, `openReportCount`/`lastReportAt`, `reportRevision` (`$inc` каждой жалобой — маркер «Отклонить жалобы»,
+  `lastReportAt` — только порядок очереди), `version`); нет поля — «не подавался» (`?? null`, бэкфилла нет).
   **`catalog` маршрута райдера заполнен ⇔ `publication.status = 'approved'`** — одна запись с переходом (одобрение и
   «Вернуть» пишут, отклонение, скрытие, отзыв и снятие — снимают). Каждый переход — одна условная запись документа
   `routes` (`publicationTransition` в `routes.policy.ts`; модерация — `publication.version` в фильтре, `+1` кроме жалобы
-  и «Отклонить жалобы»); подача — pipeline (`$mergeObjects`, значения — `$literal`, счётчики и жалобы — от прежних,
-  `submissionCount < 3` в фильтре). Действия автора — без транзакции и журнала; действия модератора — транзакция:
+  и «Отклонить жалобы»; переименование автором при заявке — тоже `+1`); подача — pipeline (`$mergeObjects`, значения — `$literal`, счётчики и жалобы — от прежних,
+  `submissionCount < 3` в фильтре). Действия автора — без журнала; подача — транзакция «запись `routes` → суточная
+  квота» (проигравшая параллельная подача квоту не тратит, 429 откатывает запись); действия модератора — транзакция:
   **первой** — запись `routes`, затем `route_reports.closeOpen`, `PanelAudit.append`, outbox. Лимит «≤ 3 на проверке» —
   `countDocuments` до записи, **принятая гонка** (8.1 RC-7, комментарий в репозитории).
 - Жалобы на маршруты райдеров — `route_reports` (routes-06), единственный писатель `RouteReportsRepository`: вставка,
   закрытие открытых (`resolvedAt: null` → дата, как `ride_reports`) и **единственное удаление** — `deleteForRoute` в
   транзакции удаления маршрута (U6, 8.1 RC-5); жалобы удалённого жалобщика хранятся. Сторож —
-  `route-reports.repository.test.ts`. Жалоба — транзакция, **первой** — `recordRouteReport` (`$inc openReportCount`,
-  `$max lastReportAt`, условия в фильтре): гонка с «Скрыть» — write conflict (отрицательное доказательство — гонка в
+  `route-reports.repository.test.ts`. Жалоба — транзакция, **первой** — `recordRouteReport` (`$inc openReportCount` и
+  `reportRevision`, `$max lastReportAt`, условия в фильтре): гонка с «Скрыть» — write conflict (отрицательное доказательство — гонка в
   `route-reports.int.test.ts`). Миграция `0025_routes_publication` (expand-only): `route_reports_route_reporter_unique`,
   `route_reports_route_idx`; частичные индексы очередей `routes_publication_pending_idx` (`publication.status:
   'pending'`), `routes_publication_reports_idx` (`publication.openReportCount > 0`), `routes_publication_hidden_idx`

@@ -73,7 +73,7 @@ function UnpublishAction({
  * Блок «Публикация в каталоге» карточки своего маршрута (routes-06, A1): статус заявки и действия по нему —
  * «На проверке» → «Отозвать заявку»; «В каталоге» → «Открыть в каталоге», «Снять с публикации»; «Отклонён» — причина
  * и комментарий модератора; «Скрыт модератором» — пояснение без действий. «Опубликовать» — только по `canPublish`
- * сервера; отклонённый без подач — «использованы все 3 подачи». Не готовый маршрут — блока нет.
+ * сервера; отклонённый, отозванный или снятый без подач — «использованы все 3 подачи». Не готовый маршрут — блока нет.
  */
 export function MyRoutePublication({ route }: { route: MyRoute }) {
   const theme = useTheme();
@@ -85,7 +85,10 @@ export function MyRoutePublication({ route }: { route: MyRoute }) {
   const rejectionReason = rejection
     ? domainLabel('domain.routeRejectionReason', rejection.reason)
     : null;
-  if (!status && !route.canPublish) return null;
+  // подачи кончились: у отозванного/снятого заявки наружу нет — причину даёт флаг сервера (старый API — `false`)
+  const exhausted =
+    !route.canPublish && (route.submissionsExhausted || publication?.status === 'rejected');
+  if (!status && !route.canPublish && !exhausted) return null;
   const secondary = { color: theme.text.secondary };
 
   return (
@@ -146,7 +149,7 @@ export function MyRoutePublication({ route }: { route: MyRoute }) {
           variant="secondary"
           onPress={() => router.push(myRoutePublishPath(route.id))}
         />
-      ) : publication?.status === 'rejected' ? (
+      ) : exhausted ? (
         <Text style={[textStyle('body'), secondary]}>
           {t('routes.publication.noSubmissionsLeft')}
         </Text>

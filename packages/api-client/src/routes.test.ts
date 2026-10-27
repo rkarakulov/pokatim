@@ -201,11 +201,12 @@ describe('api-client: мои маршруты (routes-02, Bearer — тольк�
   it('uploadMyRoute — POST octet-stream, ?title= с кириллицей; myRouteUploadRequest — те же путь и заголовки', async () => {
     const { calls, api } = app(202, myRoute);
     const bytes = new Uint8Array([1, 2, 3]);
-    // API до routes-06 — без publication и canPublish: дефолты
+    // API до routes-06 — без publication, canPublish и submissionsExhausted: дефолты
     await expect(api.uploadMyRoute('access', bytes, 'Кольцо & ко')).resolves.toEqual({
       ...myRoute,
       publication: null,
       canPublish: false,
+      submissionsExhausted: false,
     });
     expect(calls[0]?.url).toBe(
       'https://api.test/v1/routes/mine?title=%D0%9A%D0%BE%D0%BB%D1%8C%D1%86%D0%BE+%26+%D0%BA%D0%BE',
@@ -292,6 +293,7 @@ describe('api-client: публикация маршрутов райдеров (
     createdAt: '2026-10-27T10:00:00.000Z',
     publication,
     canPublish: false,
+    submissionsExhausted: false,
   };
 
   it('submitMyRoutePublication и unpublishMyRoute — POST с Bearer вызова, тело заявки, MyRoute', async () => {
@@ -379,6 +381,7 @@ describe('api-client: публикация маршрутов райдеров (
       decidedAt: null,
       approvedAt: null,
       rejection: null,
+      reportRevision: 0,
       version: 0,
       elevationGainM: null,
       isLoop: false,
@@ -400,7 +403,6 @@ describe('api-client: публикация маршрутов райдеров (
     await expect(one.api.getRiderRoute('a/b')).resolves.toEqual(detail);
     expect(one.calls[0]?.url).toBe('/v1/admin/rider-routes/a%2Fb');
 
-    const at = '2026-10-27T10:00:00.000Z';
     const actions = [
       ['approveRiderRoute', 'approve', { version: 0, city: 'minsk', surfaces: ['asphalt'] }],
       ['rejectRiderRoute', 'reject', { version: 0, reason: 'duplicate', comment: 'Есть такой' }],
@@ -409,7 +411,7 @@ describe('api-client: публикация маршрутов райдеров (
       [
         'dismissRiderRouteReports',
         'dismiss-reports',
-        { version: 1, reason: 'Ложные', lastReportAt: at },
+        { version: 1, reason: 'Ложные', reportRevision: 2 },
       ],
     ] as const;
     for (const [method, path, body] of actions) {

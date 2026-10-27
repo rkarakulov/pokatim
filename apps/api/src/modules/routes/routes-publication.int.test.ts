@@ -1,6 +1,6 @@
 import { MyRoute, MyRoutePage, RiderRouteModerationPage } from '@pokatim/contracts';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
 import { call, signUpSession, userIdByEmail } from '../../../test/identity';
@@ -17,6 +17,7 @@ import {
   submitPublication,
   withdrawPublication,
 } from '../../../test/routes';
+import { RoutesRepository } from './routes.repository';
 
 /**
  * Публикация своего маршрута автором (routes-06, AC1, AC3, AC4; N2, N5, N6): заявка, статус в «Моих», отзыв и снятие,
@@ -46,7 +47,7 @@ const PUBLICATION_KEYS = [
   'surfaces',
 ];
 const HIDDEN =
-  /ownerUserId|"origin"|catalog|"version"|submissionCount|openReportCount|lastReportAt|approvedAt|hiddenAt/;
+  /ownerUserId|"origin"|catalog|"version"|submissionCount|openReportCount|lastReportAt|reportRevision|approvedAt|hiddenAt/;
 
 async function rider(email = 'rider@example.com') {
   const session = await signUpSession(h, email);
@@ -119,7 +120,13 @@ describe('подача и статус в «Моих» (AC1)', () => {
     expect(await panel(h).audit.countDocuments({ action: { $regex: /^route\./ } })).toBe(0);
     expect(await routesDb(h).routes.findOne({ _id: id })).toMatchObject({
       catalog: null,
-      publication: { submissionCount: 1, version: 0, openReportCount: 0, lastReportAt: null },
+      publication: {
+        submissionCount: 1,
+        version: 0,
+        openReportCount: 0,
+        lastReportAt: null,
+        reportRevision: 0,
+      },
     });
   });
 
@@ -171,6 +178,7 @@ describe('отклонение и повторная подача (AC3)', () => 
         decidedAt: h.clock.now().toISOString(),
       });
       expect(route.canPublish).toBe(i < 3);
+      expect(route.submissionsExhausted).toBe(i === 3);
     }
     const fourth = await submitPublication(h, me.token, id);
     expect(fourth.status).toBe(409);
@@ -329,5 +337,52 @@ describe('лимиты подач (N5, U8, 8.1 RC-7, RC-8)', () => {
     expect(limited.body).toMatchObject({ code: 'RATE_LIMITED' });
     expect(limited.headers['retry-after']).toBeDefined();
     expect((await myRoute(me.token, routes[4]!)).publication).toBeNull();
+  });
+
+  it('параллельные подачи одного маршрута — одна заявка; проигравшие 409 суточную квоту не тратят (RC-8)', async () => {
+    const me = await rider();
+    const routes: string[] = [];
+    for (let i = 0; i < 4; i += 1) routes.push(await seedRiderRoute(h, me.userId));
+    for (const id of routes.slice(0, 2)) {
+      for (let i = 0; i < 3; i += 1) {
+        expect((await submitPublication(h, me.token, id)).status).toBe(200);
+        expect((await withdrawPublication(h, me.token, id)).status).toBe(200);
+      }
+    }
+    // отозван после 3-й подачи: заявки наружу нет, «Опубликовать» нет — причина флагом сервера
+    expect(await myRoute(me.token, routes[0]!)).toMatchObject({
+      publication: null,
+      canPublish: false,
+      submissionsExhausted: true,
+    });
+    expect((await myRoute(me.token, routes[3]!)).submissionsExhausted).toBe(false);
+    // 6 успешных подач; все параллельные запросы проходят проверки состояния до первой записи (ворота)
+    const PARALLEL = 4;
+    const repository = h.app.get(RoutesRepository, { strict: false });
+    const count = repository.countPendingOwn.bind(repository);
+    let reached = 0;
+    let release!: () => void;
+    const all = new Promise<void>((resolve) => (release = resolve));
+    const spy = vi.spyOn(repository, 'countPendingOwn').mockImplementation(async (userId) => {
+      reached += 1;
+      if (reached === PARALLEL) release();
+      await all;
+      return count(userId);
+    });
+    const results = await Promise.all(
+      Array.from({ length: PARALLEL }, () => submitPublication(h, me.token, routes[2]!)),
+    );
+    spy.mockRestore();
+    expect(results.map((res) => res.status).sort()).toEqual([200, 409, 409, 409]);
+    expect(await routesDb(h).routes.findOne({ _id: routes[2]! })).toMatchObject({
+      publication: { status: 'pending', submissionCount: 1 },
+    });
+    // потрачено 7 из 10: ещё три успешные подачи, 11-я — 429
+    for (let i = 0; i < 3; i += 1) {
+      expect((await submitPublication(h, me.token, routes[3]!)).status).toBe(200);
+      expect((await withdrawPublication(h, me.token, routes[3]!)).status).toBe(200);
+    }
+    const extra = await seedRiderRoute(h, me.userId);
+    expect((await submitPublication(h, me.token, extra)).status).toBe(429);
   });
 });

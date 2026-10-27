@@ -59,6 +59,8 @@ export function toMyRoute(route: RouteDoc): MyRoute {
     createdAt: route.createdAt.toISOString(),
     publication: publicationOf(route.publication ?? null),
     canPublish: canPublish(route),
+    submissionsExhausted:
+      (route.publication?.submissionCount ?? 0) >= ROUTE_POLICY.maxSubmissionsPerRoute,
   };
 }
 

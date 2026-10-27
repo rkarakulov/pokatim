@@ -196,6 +196,7 @@ export function publicationDoc(
     rejection: status === 'rejected' ? { reason: 'dangerous', comment: null } : null,
     hiddenAt: status === 'hidden' ? now : null,
     openReportCount: 0,
+    reportRevision: 0,
     lastReportAt: null,
     version: 0,
     ...overrides,

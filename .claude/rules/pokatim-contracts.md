@@ -46,9 +46,9 @@ paths:
   `ROUTE_REJECTION_REASONS`, `ROUTE_STATE_REASONS` (`details` у `409 ROUTE_INVALID_STATE`, `RouteStateDetails`),
   `ROUTE_PUBLICATION_LIMITS` (`409 ROUTE_PUBLICATION_LIMIT`, `RoutePublicationLimitDetails`), заявка
   `SubmitRoutePublicationInput` (`strictObject`), ответ `MyRoutePublication` (`tolerantEnum`); `MyRoute.publication`
-  (`.nullable().default(null)`) и `canPublish` (`.default(false)`). `src/routes/route-report.schema.ts` —
+  (`.nullable().default(null)`), `canPublish` и `submissionsExhausted` (`.default(false)`). `src/routes/route-report.schema.ts` —
   `ROUTE_REPORT_REASONS`, `CreateRouteReportRequest`, `CatalogRouteViewer`. `src/routes/route-moderation.schema.ts` —
-  панель, строгие `z.enum`, без имени автора. Каталог: `CatalogRouteCard.author` (`{ kind: 'team' } | { kind: 'rider',
+  панель, строгие `z.enum`, без имени автора; «Отклонить жалобы» — `reportRevision` карточки (не время). Каталог: `CatalogRouteCard.author` (`{ kind: 'team' } | { kind: 'rider',
   name }`, `.default({ kind: 'team' })`), `CatalogRouteQuery.author` (`queryArray`). Право `routes.moderate`, пять
   действий журнала `route.submission_*`/`route.rider_*`, деталь `rejectionReason`, код `ROUTE_PUBLICATION_LIMIT` — в
   конце списков. api-client: `submitMyRoutePublication`, `unpublishMyRoute`, `getCatalogRouteViewer`,

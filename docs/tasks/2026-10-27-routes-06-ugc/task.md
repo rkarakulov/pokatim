@@ -302,6 +302,25 @@ BLOCKERS нет. Находки (решения architect; U1–U9 и A1–A7 н
 - Экран жалобы показывает название из публичной карточки (`['routes','detail',id]`), право — из `me`; 404 любого — «Маршрут
   недоступен».
 
+Фиксы ревью pass 1 (coder, 2026-10-27; решения оркестратора по findings.md / findings-codex.md):
+- **Маркер «Отклонить жалобы» — `publication.reportRevision`** вместо `lastReportAt` (§11, таблица эндпоинтов,
+  `DismissRiderRouteReportsRequest`): тело `{ version, reason, reportRevision }`, карточка панели отдаёт
+  `reportRevision`. Поле `lastReportAt` в ответах осталось (порядок очереди и показ). Замена поля запроса панели без
+  новой версии эндпоинта: панель деплоится с API, routes-06 ещё не выпущен (клиентов со старым телом нет).
+  Отдельная ревизия, а не `$inc publication.version`: иначе новая жалоба давала бы 409 на «Скрыть» по увиденной версии.
+- **Переименование автором при заявке — `publication.version + 1`** (§11: «жалоба и „Отклонить жалобы“ `version` не
+  меняют» — rename теперь меняет): «Вернуть» по карточке со старым названием — 409 `CONFLICT`.
+- **Подача — транзакция** «условная запись `routes` → суточная квота» (§11/RC-8: было «без транзакции, квота перед
+  записью»). `RateLimiter` базы не умеет вернуть единицу или проверить без списания, поэтому квота списывается после
+  записи в той же транзакции: проигравшая параллельная подача (write conflict → повтор → фильтр не проходит) до квоты
+  не доходит, 429 откатывает запись. Остаточный риск — повтор колбэка `withTransaction` на транзиентной ошибке коммита
+  после списания (двойное списание одной подачи) или нетранзиентный сбой коммита — принят как редкий.
+- **`MyRoute.submissionsExhausted`** (`z.boolean().default(false)`, считает сервер: `submissionCount ≥ 3`) — признак
+  для пояснения «использованы все 3 подачи» у отозванного/снятого маршрута (`publication: null`). Вывод из
+  `publication === null && !canPublish` отвергнут: старый API без `canPublish` (дефолт `false`) показал бы пояснение
+  у всех готовых маршрутов — это сторожит тест «canPublish false (старый API)». Текст — существующий
+  `routes.publication.noSubmissionsLeft` (новых ключей нет).
+
 ## 8.3 Security checklist
 
 Затронуто: AuthZ (свой маршрут, право `routes.moderate`), данные наружу (публичный маршрут райдера, имя), злоупотребления
@@ -770,3 +789,52 @@ prettier — «All matched files use Prettier code style!»; eslint — 0; depcr
 typecheck — `Tasks: 9 successful, 9 total`; test — `Tasks: 15 successful, 15 total` (app 1260 / 139 сьютов, admin 301,
 api 116 файлов). NOT VERIFIED: ручная проверка на симуляторе и в браузере (`build:web` + `start:web`) — не делалась;
 новые экраны за входом, шаг Playwright-смоука не добавлялся.
+
+### Фиксы ревью pass 1 (coder, 2026-10-27)
+
+Все находки pass 1 (findings.md — Claude, findings-codex.md — Codex) проверены по коду и подтверждены; оспоренных нет.
+Решения по контракту — §8.2 «Фиксы ревью pass 1».
+
+1. **[HIGH] Перечитывание карточки заявки в панели** (`RiderRouteScreen.tsx`). Подтверждено: `refetch()` не бросает,
+   TanStack Query оставляет `data`, ветка ошибок была только при `!route.data`, `reload` снимал баннер безусловно.
+   Исправлено: 403 при любой загрузке — `NoAccessScreen`; 404 при показанной заявке — «Заявка не найдена» без линии и
+   действий (та же ветка, что при первой загрузке); прочая ошибка — `Banner` «Не удалось обновить данные» с «Повторить»
+   поверх последних данных; конфликт снимается только при `result.isSuccess`. Тесты (`RiderRouteScreen.test.tsx`, кеш
+   заполнен, затем ошибка «Обновить»): 404 → «Заявка не найдена», нет «Одобрить» и линии; 500 → баннер, конфликт и
+   заголовок остаются, «Повторить» с успехом снимает оба баннера; 403 → «Нет доступа к разделу». До фикса — 3 красных.
+2. **[HIGH/MEDIUM] «Отклонить жалобы» и невиденная жалоба.** Подтверждено (`$max lastReportAt`, `version` не меняется).
+   Исправлено: `recordRouteReport` — `$inc publication.reportRevision`; `clearRouteReports` — `reportRevision` в
+   фильтре; сервис — сверка до перехода (409 `CONFLICT`); подача переносит ревизию (`$ifNull`). Контракт, api-client
+   (тест), панель (`ReasonDecisionDialog` шлёт `reportRevision`; «Отклонить жалобы» — при `openReportCount > 0`).
+   Тест `routes-moderation.int.test.ts` — `it.each` новой жалобы: позже, в ту же миллисекунду, задержанная с более
+   ранним временем → 409, обе жалобы открыты, журнала нет. **Отрицательное доказательство (откачено):** без сверки
+   ревизии в сервисе и фильтре — все 3 случая красные.
+3. **[MEDIUM] Rename в `hidden` без смены версии.** Подтверждено. Исправлено: `renameOwn` — pipeline-обновление,
+   `publication.version + 1` при объекте `publication` (`null` не трогается). Тест «„Вернуть“ после переименования
+   скрытого автором — 409, вне каталога; по новой версии — 200». **Отрицательное доказательство (откачено):** `+0` вместо
+   `+1` → «expected 200 to be 409».
+4. **[MEDIUM] Квота при параллельных подачах.** Подтверждено. Исправлено: транзакция «запись → квота» (§8.2). Тест
+   `routes-publication.int.test.ts` «параллельные подачи одного маршрута»: ворота на `countPendingOwn` пропускают
+   4 запроса через проверки состояния одновременно → `[200, 409, 409, 409]`, `submissionCount: 1`; потрачено 7 из 10 —
+   ещё 3 успешные подачи, 11-я — 429. До фикса — красный (проигравшие списали квоту).
+5. **[LOW] Блок «Публикация» молча исчезает после 3 подач.** Подтверждено. Исправлено: `MyRoute.submissionsExhausted`
+   (сервер), блок показывает `routes.publication.noSubmissionsLeft` при `!canPublish && (submissionsExhausted ||
+   rejected)`. Тесты: контракт (дефолт `false`, строгий boolean), int (`submissionsExhausted` после 3-й подачи —
+   отклонённый и отозванный; `false` у свежего), приложение «отозван или снят после 3-й подачи — пояснение, без
+   „Опубликовать“» (до фикса красный); «canPublish false (старый API)» остался зелёным.
+6. **[LOW] Документация.** `pokatim-security.md` — видимость каталога и GPX через `findInCatalog` (`IN_CATALOG`),
+   `findPublished` — только порт гонок; `pokatim-app.md` — ключ ленты routes-01 с `author`, пояснение исчерпанных
+   подач; `pokatim-web.md` — `reportRevision`, ошибки перечитывания; `pokatim-db.md`, `pokatim-backend.md`,
+   `pokatim-contracts.md` — `reportRevision`, rename `+1`, транзакция подачи, `submissionsExhausted`.
+
+Попутно замечено, не исправлялось (вне находок): `RideModerationScreen.tsx` (05b) — тот же шаблон `reload` без проверки
+результата `refetch`.
+
+Попутно — фикстуры `MyRoute` с `submissionsExhausted: false` в тестах приложения (`my-routes.test.tsx`,
+`route-list-card.test.tsx`, `my-route-format.test.ts`) и api-client (выходной тип схемы стал обязательным).
+
+**Проверки:** `MONGO_URL_TEST=…/pokatim_routes06_test REDIS_URL_TEST=…/13 TURBO_CONCURRENCY=1 pnpm check` → `EXIT 0`:
+prettier — «All matched files use Prettier code style!»; eslint — 0; depcruise — «no dependency violations found»;
+typecheck — `Tasks: 9 successful, 9 total`; test — `Tasks: 15 successful, 15 total` (api 1173 / 116 файлов, admin 304,
+contracts 273, api-client 96, app 1261 / 139 сьютов). NOT VERIFIED: ручная проверка панели и приложения в браузере и
+на симуляторе.

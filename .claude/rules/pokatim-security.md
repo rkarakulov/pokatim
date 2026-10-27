@@ -176,11 +176,13 @@ paths:
   /v1/admin/routes/:id/publish|unpublish` — `PanelGuard` + `races.manage`, только `ready` (иначе `409
   ROUTE_INVALID_STATE`), журнал панели без координат; окно публикации показывает линию и предупреждение (RC-11).
   Публичное чтение (`GET /v1/routes`, `/cities`, `/:id`, `/:id/map`, `/:id/races`) — `PublicReadGuard`, `public,
-  max-age=60`; видимость — одна точка `RoutesRepository.findPublished` (не опубликованный, снятый, не готовый,
-  неизвестный — один `404 NOT_FOUND`, включая карту и гонки маршрута). Ответы — явный список полей: без
+  max-age=60`; видимость — одна точка `RoutesRepository.findInCatalog` (условие `IN_CATALOG`; с routes-06 — и
+  одобренные маршруты райдеров, раздел ниже; не опубликованный, снятый, не готовый, неизвестный — один `404
+  NOT_FOUND`, включая карту). `findPublished` — только порт гонок `RouteCatalog.inCatalog` («Гонки на маршруте»,
+  маршруты команды). Ответы — явный список полей: без
   `ownerUserId`, `sha256`, статуса, `failure`, `attempts` и линии сверки (int-тест на ключи). Снятый маршрут может
   быть виден до минуты из кэша (RC-13).
-- Очищенный GPX каталога (routes-03): `GET /v1/routes/:id/gpx` — только маршрут каталога (`findPublished`, иначе
+- Очищенный GPX каталога (routes-03): `GET /v1/routes/:id/gpx` — только маршрут каталога (`findInCatalog`, иначе
   один `404 NOT_FOUND`), `PublicReadGuard` + отдельный IP-лимит `route-gpx` 30/мин (`IpRateLimitGuard` +
   `@IpRateLimit`, `consumeIpLimit` в `src/public-read.guard.ts`; 429 + `Retry-After`), `public, max-age=60`. Файл
   посчитан worker'ом (`routeGpx`: только `trkpt lat lon` и `ele` точек линии сверки — без `time`, датчиков,
@@ -203,7 +205,8 @@ paths:
   (мягкая, после дедупа). KML — те же защиты, что GPX (`xml.ts`: отказ на `<!DOCTYPE`/`<!ENTITY`, подсчёт элементов и
   `gx:coord` до дерева, `XMLValidator`, обрыв кортежей `coordinates`), разбор — только `runParseThread` в worker.
 - Наружу — `MyRoute` явным списком полей (без `origin`, `ownerUserId`, `sha256`, `attempts`, `catalog`, линии сверки;
-  routes-06: `publication` — без счётчиков подач и жалоб и `version`, `canPublish` считает сервер);
+  routes-06: `publication` — без счётчиков подач и жалоб и `version`; `canPublish` и `submissionsExhausted` считает
+  сервер);
   карта — только линия показа своего готового маршрута. Логи — `routeId`, `userId`, коды; без названий, имён файлов и
   координат. Действия райдера не пишутся в журнал панели (`PanelAudit`).
 

@@ -23,8 +23,15 @@ const route = {
 };
 
 describe('мои маршруты', () => {
-  it('MyRoute: готовый и в обработке; без publication/canPublish — null/false (старый API)', () => {
-    expect(MyRoute.parse(route)).toEqual({ ...route, publication: null, canPublish: false });
+  it('MyRoute: готовый и в обработке; без publication/canPublish/submissionsExhausted — null/false (старый API)', () => {
+    expect(MyRoute.parse(route)).toEqual({
+      ...route,
+      publication: null,
+      canPublish: false,
+      submissionsExhausted: false,
+    });
+    expect(MyRoute.parse({ ...route, submissionsExhausted: true }).submissionsExhausted).toBe(true);
+    expect(MyRoute.safeParse({ ...route, submissionsExhausted: 'yes' }).success).toBe(false);
     expect(
       MyRoute.parse({
         ...route,
@@ -86,6 +93,7 @@ describe('публикация в «Моих» (routes-06)', () => {
       ...route,
       publication,
       canPublish: true,
+      submissionsExhausted: false,
     });
     const future = MyRoute.parse({
       ...route,

@@ -219,7 +219,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 ## Маршруты (routes-01, `docs/product/routes.md`)
 
 - Вкладка «Маршруты» — `features/routes/route-feed.tsx` (`FlatList`): ключ `['routes','list',{ city, distance,
-  surface, limit },'pages']`, Главная — `['routes','list',{ limit: 1 }]`, чипы «Город» — `['routes','cities']` (до
+  surface, author, limit },'pages']` (`author` — с routes-06), Главная — `['routes','list',{ limit: 1 }]`, чипы «Город» — `['routes','cities']` (до
   ответа — `FilterGroupSkeleton`, ошибка или пусто — группа скрыта, исчезнувший город снимается); всё публичное, без
   `withAccessToken`, `staleTime` 60 с. Карточка списка — `components/route-list-card.tsx`, подписи —
   `features/routes/format.ts`.
@@ -287,7 +287,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   «От райдера · Имя», имя — только с сервера) и статус заявки в «Моих» (`myRoutePublicationStatus`; `'unknown'` — без
   бейджа). Фильтр «Автор» — группа чипов `AUTHOR_CHIPS` в состоянии экрана, ключ ленты `['routes','list',{ city,
   distance, surface, author, limit },'pages']`. Блок «Публикация в каталоге» карточки своего маршрута —
-  `my-route-publication.tsx` («Опубликовать» — только по `canPublish` сервера; «Отозвать заявку» / «Снять с публикации»
+  `my-route-publication.tsx` («Опубликовать» — только по `canPublish` сервера, подачи кончились — пояснение по
+  `submissionsExhausted` или `rejected`; «Отозвать заявку» / «Снять с публикации»
   — с подтверждением; переименование в `pending`/`approved` скрыто, A3; удаление `approved` — предупреждение). Экраны
   `routes/mine/publish/[id]` (`my-route-publish.tsx`, город — `CityPicker` формы райда) и `routes/report/[id]`
   (`route-report.tsx`, образец жалобы на райд) — внутри `Stack.Protected`. Мутации публикации и удаление: ответ — в

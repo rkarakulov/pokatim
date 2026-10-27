@@ -49,6 +49,7 @@ const mine = (overrides: Partial<MyRoute> = {}): MyRoute => ({
   createdAt: '2026-10-26T21:30:00.000Z',
   publication: null,
   canPublish: false,
+  submissionsExhausted: false,
   ...overrides,
 });
 const http = (status: number, code: string, details?: unknown) =>
@@ -90,6 +91,16 @@ describe('карточка своего маршрута: публикация �
     await openDetail();
     expect(await screen.findByText('Длина')).toBeOnTheScreen();
     expect(screen.queryByText('Публикация в каталоге')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Опубликовать' })).toBeNull();
+  });
+
+  it('отозван или снят после 3-й подачи — блок с пояснением «использованы все 3 подачи», без «Опубликовать»', async () => {
+    getMine.mockResolvedValue(mine({ submissionsExhausted: true }));
+    await openDetail();
+    expect(await screen.findByText('Публикация в каталоге')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Подать маршрут снова нельзя: использованы все 3 подачи.'),
+    ).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Опубликовать' })).toBeNull();
   });
 

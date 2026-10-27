@@ -93,6 +93,8 @@ export const RiderRouteModerationDetail = z.object({
   hiddenAt: z.iso.datetime().nullable(),
   openReportCount: z.number().int().nonnegative(),
   lastReportAt: z.iso.datetime().nullable(),
+  /** Ревизия жалоб: каждая новая жалоба увеличивает её на 1 — маркер «Отклонить жалобы» (не время жалобы). */
+  reportRevision: z.number().int().nonnegative(),
   version: Version,
   distanceM: z.number().int(),
   elevationGainM: z.number().int().nullable(),
@@ -128,12 +130,12 @@ export const RestoreRiderRouteRequest = z.strictObject({ version: Version, reaso
 export type RestoreRiderRouteRequest = z.infer<typeof RestoreRiderRouteRequest>;
 
 /**
- * `POST …/:id/dismiss-reports` — закрыть открытые жалобы без смены маршрута. `lastReportAt` — из карточки: пришла
- * новая жалоба — `409 CONFLICT`.
+ * `POST …/:id/dismiss-reports` — закрыть открытые жалобы без смены маршрута. `reportRevision` — из карточки: пришла
+ * новая жалоба (в том числе с тем же или более ранним временем) — `409 CONFLICT`.
  */
 export const DismissRiderRouteReportsRequest = z.strictObject({
   version: Version,
   reason: ActionReason,
-  lastReportAt: z.iso.datetime(),
+  reportRevision: z.number().int().nonnegative(),
 });
 export type DismissRiderRouteReportsRequest = z.infer<typeof DismissRiderRouteReportsRequest>;

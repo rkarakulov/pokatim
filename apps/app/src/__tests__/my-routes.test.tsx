@@ -48,6 +48,7 @@ const mine = (overrides: Partial<MyRoute> = {}): MyRoute => ({
   createdAt: '2026-10-26T21:30:00.000Z',
   publication: null,
   canPublish: false,
+  submissionsExhausted: false,
   ...overrides,
 });
 const page = (items: MyRoute[], nextCursor: string | null = null): MyRoutePage => ({

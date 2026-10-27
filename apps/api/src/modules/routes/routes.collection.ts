@@ -34,7 +34,8 @@ export interface RouteCatalogDoc {
 /**
  * Публикация маршрута райдера в каталог (routes-06, A1): `pending` → `approved` | `rejected`; `approved` → `hidden` →
  * `approved`; автор отзывает и снимает (`withdrawn` — наружу `publication: null`). Каждый переход — одна условная
- * запись документа `routes` (`version` в фильтре); жалоба и «Отклонить жалобы» `version` не меняют.
+ * запись документа `routes` (`version` в фильтре); жалоба и «Отклонить жалобы» `version` не меняют, переименование автором
+ * — меняет (модератор не вернёт в каталог название, которого не видел).
  */
 export interface RoutePublicationDoc {
   status: 'pending' | 'approved' | 'rejected' | 'hidden' | 'withdrawn';
@@ -53,6 +54,11 @@ export interface RoutePublicationDoc {
   /** Очередь «Жалобы»: переживают отзыв и новую подачу (8.1 RC-4). */
   openReportCount: number;
   lastReportAt: Date | null;
+  /**
+   * Ревизия жалоб: каждая жалоба — `$inc` той же записью (монотонна, в отличие от `lastReportAt`); «Отклонить жалобы»
+   * сверяет увиденную в карточке (N7). Переживает новую подачу.
+   */
+  reportRevision: number;
   version: number;
 }
 

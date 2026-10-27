@@ -286,7 +286,7 @@ export function RejectRiderRouteDialog({ route, ...handlers }: DecisionProps) {
 
 /**
  * «Скрыть» / «Вернуть» / «Отклонить жалобы» — `ReasonDialog` с обязательной причиной (уходит в журнал панели);
- * «Отклонить жалобы» отправляет `lastReportAt` карточки (пришла новая жалоба — 409).
+ * «Отклонить жалобы» отправляет `reportRevision` карточки (пришла новая жалоба — 409).
  */
 export function ReasonDecisionDialog({
   route,
@@ -299,10 +299,9 @@ export function ReasonDecisionDialog({
     const body = { version: route.version, reason };
     if (action === 'hide') return api.hideRiderRoute(route.id, body);
     if (action === 'restore') return api.restoreRiderRoute(route.id, body);
-    // «Отклонить жалобы» предлагается только при открытых жалобах — `lastReportAt` есть
     return api.dismissRiderRouteReports(route.id, {
       ...body,
-      lastReportAt: route.lastReportAt ?? '',
+      reportRevision: route.reportRevision,
     });
   };
   const confirm = async (reason: string) => {

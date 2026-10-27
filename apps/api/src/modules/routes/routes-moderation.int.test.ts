@@ -13,9 +13,11 @@ import { staff } from '../../../test/races';
 import { rider, type Rider } from '../../../test/rides';
 import {
   moderationCall,
+  MY_ROUTES,
   publicationDoc,
   reportRoute,
   RIDER_ROUTES,
+  riderCall,
   routeReportsDb,
   routesDb,
   seedRiderRoute,
@@ -398,7 +400,7 @@ describe('скрыть, вернуть, отклонить жалобы (AC5)', 
     const res = await mod('POST', `/${id}/dismiss-reports`, {
       version: before.version,
       reason: 'Жалобы ложные',
-      lastReportAt: before.lastReportAt,
+      reportRevision: before.reportRevision,
     });
     expect(res.status).toBe(200);
     expect(RiderRouteModerationDetail.parse(res.body)).toMatchObject({
@@ -441,7 +443,7 @@ describe('конфликты (N7)', () => {
     const dismiss = await mod('POST', `/${id}/dismiss-reports`, {
       version: 1,
       reason: 'Жалоб нет',
-      lastReportAt: h.clock.now().toISOString(),
+      reportRevision: 0,
     });
     expect(dismiss.body).toMatchObject({ code: 'ROUTE_INVALID_STATE' });
     const hidePending = await mod('POST', `/${await submitted()}/hide`, {
@@ -452,20 +454,62 @@ describe('конфликты (N7)', () => {
     expect(await panel(h).audit.countDocuments()).toBe(audits);
   });
 
-  it('«Отклонить жалобы» после новой жалобы — 409 CONFLICT, жалобы открыты', async () => {
+  // новая жалоба — монотонная `reportRevision` (`$inc`), не время: задержанная жалоба с более ранним `now` и жалоба в ту
+  // же миллисекунду тоже дают конфликт (ревью pass 1)
+  it.each([
+    ['позже', MINUTE],
+    ['в ту же миллисекунду', 0],
+    ['задержанная, с более ранним временем', -MINUTE],
+  ])(
+    '«Отклонить жалобы» после новой жалобы (%s) — 409 CONFLICT, жалобы открыты',
+    async (_, shift) => {
+      const id = await approved();
+      const late = await rider(h, 'late-reporter@example.by');
+      h.clock.advance(MINUTE);
+      await reportBy(id);
+      const seen = await detailOf(id);
+      expect(seen.reportRevision).toBe(1);
+      h.clock.advance(shift);
+      expect((await reportRoute(h, late.token, id, { reason: 'spam' })).status).toBe(200);
+      const res = await mod('POST', `/${id}/dismiss-reports`, {
+        version: seen.version,
+        reason: 'Ложные',
+        reportRevision: seen.reportRevision,
+      });
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ code: 'CONFLICT' });
+      expect(await routeReportsDb(h).countDocuments({ routeId: id, resolvedAt: null })).toBe(2);
+      expect(await panel(h).audit.countDocuments({ action: 'route.rider_reports_dismissed' })).toBe(
+        0,
+      );
+    },
+  );
+
+  it('«Вернуть» после переименования скрытого автором — 409 CONFLICT, вне каталога; по новой версии — 200', async () => {
     const id = await approved();
-    await reportBy(id);
+    expect(
+      (await mod('POST', `/${id}/hide`, { version: 1, reason: 'Плохое название' })).status,
+    ).toBe(200);
     const seen = await detailOf(id);
-    h.clock.advance(MINUTE);
-    await reportBy(id);
-    const res = await mod('POST', `/${id}/dismiss-reports`, {
-      version: seen.version,
-      reason: 'Ложные',
-      lastReportAt: seen.lastReportAt,
+    const renamed = await riderCall(h, author.token, 'POST', `${MY_ROUTES}/${id}/rename`, {
+      title: 'Другое название',
     });
-    expect(res.status).toBe(409);
-    expect(res.body).toMatchObject({ code: 'CONFLICT' });
-    expect(await routeReportsDb(h).countDocuments({ routeId: id, resolvedAt: null })).toBe(2);
+    expect(renamed.status).toBe(200);
+    const stale = await mod('POST', `/${id}/restore`, {
+      version: seen.version,
+      reason: 'Исправлено',
+    });
+    expect(stale.status).toBe(409);
+    expect(stale.body).toMatchObject({ code: 'CONFLICT' });
+    expect(await catalogIds()).toEqual([]);
+    const fresh = await detailOf(id);
+    expect(fresh).toMatchObject({ title: 'Другое название', version: seen.version + 1 });
+    const restored = await mod('POST', `/${id}/restore`, {
+      version: fresh.version,
+      reason: 'Проверено',
+    });
+    expect(restored.status).toBe(200);
+    expect(await catalogIds()).toEqual([id]);
   });
 
   it('действие по заявке, отозванной автором после открытия карточки, — 404; снятой после одобрения — 404', async () => {

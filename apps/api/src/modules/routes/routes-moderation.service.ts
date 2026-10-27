@@ -154,10 +154,8 @@ export class RoutesModerationService {
       const current = await this.routes.findForModeration(id, tx);
       if (!current) throw domainError('NOT_FOUND', 404);
       if (current.publication.version !== body.version) throw domainError('CONFLICT', 409);
-      const seenAt = body.action === 'dismiss' ? new Date(body.lastReportAt) : null;
-      // пришла жалоба, которую модератор не видел (у маршрута без жалоб сверять нечего — дальше 409 перехода)
-      const lastReportAt = current.publication.lastReportAt;
-      if (seenAt && lastReportAt && lastReportAt.getTime() !== seenAt.getTime()) {
+      // пришла жалоба, которую модератор не видел (ревизия монотонна: время жалобы её не заменяет)
+      if (body.action === 'dismiss' && current.publication.reportRevision !== body.reportRevision) {
         throw domainError('CONFLICT', 409);
       }
       const transition = publicationTransition(current.publication.status, body.action);
@@ -238,7 +236,7 @@ export class RoutesModerationService {
         );
       }
       case 'dismiss':
-        return this.routes.clearRouteReports(tx, id, body.version, new Date(body.lastReportAt));
+        return this.routes.clearRouteReports(tx, id, body.version, body.reportRevision);
     }
   }
 
@@ -289,6 +287,7 @@ export class RoutesModerationService {
       hiddenAt: iso(p.hiddenAt),
       openReportCount: p.openReportCount,
       lastReportAt: iso(p.lastReportAt),
+      reportRevision: p.reportRevision,
       version: p.version,
       distanceM: route.distanceM ?? 0,
       elevationGainM: route.elevationGainM,

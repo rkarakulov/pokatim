@@ -80,6 +80,7 @@ describe('жалоба (AC5)', () => {
     expect(await publication(id)).toMatchObject({
       openReportCount: 1,
       lastReportAt: h.clock.now(),
+      reportRevision: 1,
       version: 0,
     });
     const moderator = await staff(h, 'moderator@example.by', 'moderator');
