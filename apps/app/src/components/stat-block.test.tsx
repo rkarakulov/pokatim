@@ -164,11 +164,13 @@ describe('StatBlock: варианты шапки шторки (app-themes C2)', 
     const tiles = screen.getAllByTestId('stat-block-cell');
     expect(tiles).toHaveLength(3);
     for (const tile of tiles) {
+      // ширина — по содержимому (не уже строки списка), не влезли в ряд — переносятся рядом (ревью pass 1)
       expect(tile).toHaveStyle({
         backgroundColor: surface.default,
         borderRadius: shape.card,
-        flexBasis: 0,
+        flexBasis: 'auto',
         flexGrow: 1,
+        minWidth: size.rowMin,
       });
     }
     expect(screen.getByLabelText('Дистанция 68 км круговой')).toBeOnTheScreen();
@@ -220,7 +222,8 @@ describe('StatBlock tiles: узкий экран (app-themes C, ревью pass 
         { wrapper: appThemeWrapper(themeId) },
       );
       const block = screen.getByTestId('stat-block');
-      // части переносятся строками внутри плитки
+      // плитки переносятся рядами, части значения — строками внутри плитки
+      expect(block).toHaveStyle({ flexWrap: 'wrap' });
       for (const value of screen.getAllByTestId('stat-block-value')) {
         expect(value).toHaveStyle({ flexDirection: 'row', flexWrap: 'wrap' });
       }

@@ -142,7 +142,8 @@ function CompactCells({ items }: Pick<StatsProps, 'items'>) {
 /**
  * Плитки (Хронометр, Навигация): три равные плитки с радиусом `shape.card` на фоне экрана `surface.default` — шторка,
  * где они стоят, уже `surface.sheet` (= `surface.raised` у тем). Значение `displayNumeral36` частями с единицами
- * (`parts`: «3 ч» / «35 мин»), части и подпись переносятся строками — без многоточия при любом размере шрифта.
+ * (`parts`: «3 ч» / «35 мин»); плитки — по содержимому и переносятся рядами, части и подпись — строками: без
+ * многоточия при любой ширине и размере шрифта.
  */
 function TileStats({ items }: Pick<StatsProps, 'items'>) {
   const theme = useTheme<AppTheme>();
@@ -298,17 +299,18 @@ const styles = StyleSheet.create({
   // крупный шрифт: «км» уходит под значение, а не обрезается
   valueRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: space.s1 },
   label: { marginTop: space.s1 },
+  // ширина — по содержимому, не уже строки списка; не влезли в ряд (широкая гарнитура, длинное время) — новый ряд
   tile: {
     flexGrow: 1,
     flexShrink: 1,
-    flexBasis: 0,
-    minWidth: 0,
+    flexBasis: 'auto',
+    minWidth: size.rowMin,
     // по горизонтали — уже: подпись «ДИСТАНЦИЯ» и «123,4» в трети ширины телефона 360 px
     paddingHorizontal: space.s2,
     paddingVertical: space.s3,
   },
-  // плитки — с узким зазором (s1): ширина плитки важнее воздуха между ними
-  tileRow: { columnGap: space.s1 },
+  // плитки — с узким зазором (s1), переносятся рядами
+  tileRow: { flexWrap: 'wrap', columnGap: space.s1, rowGap: space.s1 },
   tileValue: {
     flexDirection: 'row',
     flexWrap: 'wrap',
