@@ -8,6 +8,7 @@ import type { Job } from 'bullmq';
 import type { Env } from '../../config/env';
 import { QUEUE } from '../../queues';
 import { IdentityAccounts } from '../identity';
+import { DeliveryJobs } from './delivery-jobs';
 import { isEventStale } from './event-time';
 import { type NoticeDraft, NotificationIntake } from './notification-intake';
 import { renderNotification } from './notification-texts';
@@ -27,7 +28,8 @@ const DAY_MS = 86_400_000;
  * outbox): событие старше 72 ч — skip (RC-6) → черновики через порты источников (`NotificationIntake`) → живые
  * получатели (`IdentityAccounts.liveUserIds`, RC-4) → настройки пачкой → запись (`writeNotices`: уникальный
  * `(sourceEventId, userId)`, схлопывание по `collapseKey`). Повтор задачи и повторная публикация не создают дублей.
- * Текст — снимок на момент приёма, `createdAt` — `CLOCK` приёма (не время события).
+ * Текст — снимок на момент приёма, `createdAt` — `CLOCK` приёма (не время события). Затем — задачи доставки по
+ * уведомлениям события в `pending` (`DeliveryJobs.scheduleEvent`, детерминированные jobId).
  */
 @Processor(QUEUE.notificationsIntake, { concurrency: 4 })
 export class NotificationsIntakeProcessor extends WorkerHost {
@@ -38,6 +40,7 @@ export class NotificationsIntakeProcessor extends WorkerHost {
     private readonly intake: NotificationIntake,
     private readonly identity: IdentityAccounts,
     private readonly repository: NotificationsRepository,
+    private readonly jobs: DeliveryJobs,
     @Inject(ENV) private readonly env: Pick<Env, 'PUSH_ENABLED'>,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {
@@ -62,8 +65,11 @@ export class NotificationsIntakeProcessor extends WorkerHost {
     }
     let written = 0;
     for (const draft of drafts) written += await this.writeDraft(eventId, draft, now);
-    // шаг C: постановка доставки (push по пользователю, письмо по уведомлению) — по уведомлениям события в `pending`
-    this.logger.log(`notifications.intake type=${type} event=${eventId} written=${written}`);
+    // доставка — по уведомлениям события в `pending` (и при повторе задачи: те же jobId, запись могла пройти до сбоя)
+    const scheduled = await this.jobs.scheduleEvent(eventId);
+    this.logger.log(
+      `notifications.intake type=${type} event=${eventId} written=${written} scheduled=${scheduled}`,
+    );
     return written > 0 ? 'written' : 'unchanged';
   }
 

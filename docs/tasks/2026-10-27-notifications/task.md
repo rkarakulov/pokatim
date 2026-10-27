@@ -283,6 +283,17 @@ Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров �
 - **B-4 (шаг B, недоопределённость).** `rides.ride-rescheduled` пишется, только если правка меняет старт
   (`changesStart`) **и** `rescheduledAt` поставлен этой записью: правка не старта в тот же миллисекундный момент
   (`TestClock`) события не даёт.
+- **C-1 (шаг C, документация).** context7 в сессии недоступен (MCP не подключился): формат Expo Push API (`POST
+  …/send` — массив ≤ 100, ответ `{ data: [{ status: 'ok', id } | { status: 'error', message, details: { error } }] }`;
+  `POST …/getReceipts { ids ≤ 1000 }` → `{ data: { <id>: … } }`; код `DeviceNotRegistered`) и семантика BullMQ
+  (`add` с существующим `jobId` в любом состоянии — no-op) — по памяти и `node_modules`.
+- **C-2 (шаг C, недоопределённость jobId).** BullMQ хранит завершённые задачи (`removeOnComplete: 1000`) и молча
+  отбрасывает `add` с тем же `jobId`: новое уведомление пользователя в тот же миллисекундный `notBefore` и
+  перепостановка регламентом терялись бы. Постановка — `DeliveryJobs` (новый `delivery-jobs.ts`): живая задача с тем
+  же jobId — пропуск, завершённая/упавшая — удаляется и ставится заново.
+- **C-3 (шаг C).** Исходы push сверх §11: удалённый аккаунт в момент отправки — `skipped/deleted`; все тикеты с ошибкой —
+  `failed` с кодом Expo (`DeviceNotRegistered` при этом снимает токены); письмо удалённому — `skipped`. Тумблер e-mail
+  в момент отправки не перепроверяется (только intake, §11).
 
 ## 8.3 Security checklist
 
@@ -745,3 +756,58 @@ dependency violations found», api 114 files / 1211 tests passed, contracts 270,
 **Follow-ups.** Шаг C: постановка задач доставки из intake (точка — `NotificationsIntakeProcessor.process`),
 доставка, регламент, `account`. Документация §10 (правила «rides без outbox», «без маршрута» у протокола и споров) —
 шаг D.
+
+### Шаг C — доставка push и писем, регламент, account
+
+**Changes.**
+- Порт `PUSH_SENDER` (`push-sender.ts`) и адаптер `ExpoPushSender` (`expo-push.sender.ts`, фабрика от `ENV`):
+  `send` пачками ≤ 100 (`sound: 'default'`, `channelId: 'default'`, `data.target`), `getReceipts` пачками ≤ 1000,
+  `Authorization: Bearer` только при `EXPO_ACCESS_TOKEN`, таймаут 10 с, тело ≤ 1 МБ, `redirect: 'error'`, zod-ответы;
+  ошибки `PushSendError` (`unavailable` — сеть/таймаут/429/5xx, `rejected`, `protocol`), токены и тела — не в логах.
+- Доставка (`notifications-delivery`): `PushDelivery` — захват всех уведомлений пользователя к сроку (`claimPush`,
+  `claimId` + `claimedUntil` 60 с) → `PUSH_ENABLED` → живость → тумблер группы → тихие часы (назад в `pending` до
+  конца интервала + задача на этот срок) → токены → лимит 20/ч после захвата → одно сообщение на токен (1 — текст и
+  цель, > 1 — сводка без цели) → тикеты (`DeviceNotRegistered` снимает токен, `ok` → `push_tickets`) → `sent`; сбой —
+  захват снят и ретрай, последняя попытка — `failed` + `notifications.push_failed`. `EmailDelivery` — по образцу
+  `link-email.handler.ts` (`claimEmail`/`settleEmail`, `emailsOf` в момент отправки, `busy` → ретрай), шаблон
+  `notification-email.ts` через `htmlEmail`/`escapeHtml` из `identity/index.ts`.
+- Постановка: `DeliveryJobs.scheduleEvent` из `NotificationsIntakeProcessor` (и при повторе intake — те же jobId
+  `push-<uid>-<notBeforeMs>` с задержкой, `email-<id>`), см. 8.2 C-2.
+- Регламент (`notifications-maintenance`, `NotificationsSchedules`): `notifications.receipts` (*/15) — `PushReceipts`;
+  `notifications.redeliver` (*/10) — потерянные `pending` (> 10 мин) и истёкшие `sending`.
+- `account`: `PushTokens.revokeAllOf(tx, userId)` в транзакции `account-deletion.service.ts`; шаг `notifications` между
+  `tracks` и `identity` в `account-erasure.service.ts`; `NotificationsCoreModule` в оба модуля account.
+- `NOTIFICATIONS_POLICY`: `pushLimit`, `deliveryLeaseMs`, сроки регламента; job-константы и схемы данных — в
+  `notifications.events.ts`.
+
+**Files.** `apps/api/src/modules/notifications/{push-sender,expo-push.sender(.test),delivery-jobs,push-delivery,
+email-delivery,notification-email(.test),push-receipts,notifications-delivery.processor,
+notifications-maintenance.processor,notifications-delivery.int.test,notifications.module,notifications.events,
+notifications.policy,notifications.repository,notifications-intake.processor}.ts`, `apps/api/src/modules/identity/
+index.ts`, `apps/api/src/modules/account/{account-deletion.service,account-erasure.service,account.module,
+account-deletion.int.test,account-erasure.int.test}.ts`, `apps/api/test/{fake-expo,notifications}.ts`.
+
+**Tests.** Unit: `expo-push.sender.test.ts` (11: форма сообщения и заголовки, пачки 100/1000, без ключа — без
+`Authorization`, 429/5xx/4xx, не по схеме/не JSON/число тикетов, лимит тела, таймаут и сеть, редирект, токены и ключ
+не в логах), `notification-email.test.ts` (2). Int `notifications-delivery.int.test.ts` (22): постановка из intake и
+повтор — те же 4 задачи; тихие часы — задача с задержкой, письмо сразу; push один раз и повтор `none`, чужие токены —
+нет; две параллельные задачи — один push; сбой Expo → ретрай один push, последняя — `failed`; сбой worker после ответа
+Expo — ретрай в пределах захвата не шлёт; выключенная группа — `skipped/disabled`; тихие часы → отложено, два — одна
+сводка «У вас 2 новых уведомления.»; 21-й за час — `limited`; нет токенов / удалённый; тикет `DeviceNotRegistered`;
+все тикеты с ошибкой; `PUSH_ENABLED=false` — `push_off` без запросов; квитанции (моложе 15 мин не проверяются,
+`DeviceNotRegistered` снимает токен, неготовые остаются); письмо один раз, параллель — `busy`, сбой SMTP → ретрай,
+последняя — `failed`, удалённый — `skipped`; регламент — потерянные задачи, без дублей, завершённая задача с тем же
+jobId не мешает; истёкшее не захватывается. `account-deletion.int.test.ts` (+3: токены сняты, чужие на месте; откат
+транзакции — токены остаются; неверный пароль — не тронуты), `account-erasure.int.test.ts` (+1: шаг стирает
+уведомления/настройки/токены/тикеты A, B цел, повтор; шаг `notifications` в логах).
+Отрицательные доказательства (вернул после): `revokeAllOf` вне транзакции — красный «откат транзакции»; захват push и
+письма без условия состояния — 4 красных (push один раз, ретрай после сбоя, письмо один раз, параллельное письмо).
+
+`TURBO_CONCURRENCY=1 pnpm check --force` (`MONGO_URL_TEST=…/pokatim_notifications_test`, `REDIS_URL_TEST=…/9`) —
+зелёный: arch:check «no dependency violations found», api 117 files / 1250 tests passed, contracts 270, api-client 96,
+admin 240; `Tasks: 13 successful, 13 total`. Во время разработки Redis db 9 параллельно чистили тесты другого
+worktree (`nice-pasteur-1d135d`, `flushdb`) — отладочные прогоны шли на db 15, итоговый — на db 9 после их остановки.
+
+**Follow-ups.** Шаг D (приложение, документация §10). Риски: две параллельные задачи push одного пользователя при
+нескольких созревших уведомлениях делят их (два разных push, не дубль); уведомление, пришедшее во время активной задачи
+того же jobId, ждёт регламента (≤ 20 мин).

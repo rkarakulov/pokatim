@@ -1,15 +1,26 @@
 import { randomBytes } from 'node:crypto';
 
+import { getQueueToken } from '@nestjs/bullmq';
+
 import type { OutboxJobData } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
-import type { Job } from 'bullmq';
+import type { Job, Queue } from 'bullmq';
 
 import { OUTBOX_COLLECTION, type MongoOutboxDoc } from '../src/db';
+import { QUEUE } from '../src/queues';
+import { NotificationsDeliveryProcessor } from '../src/modules/notifications/notifications-delivery.processor';
+import { NotificationsMaintenanceProcessor } from '../src/modules/notifications/notifications-maintenance.processor';
 import {
   type IntakeOutcome,
   NotificationsIntakeProcessor,
 } from '../src/modules/notifications/notifications-intake.processor';
-import { notificationsOutboxRoutes } from '../src/modules/notifications/notifications.events';
+import {
+  NOTIFICATIONS_EMAIL_JOB,
+  NOTIFICATIONS_PUSH_JOB,
+  NOTIFICATIONS_RECEIPTS_JOB,
+  NOTIFICATIONS_REDELIVER_JOB,
+  notificationsOutboxRoutes,
+} from '../src/modules/notifications/notifications.events';
 import {
   type NotificationDoc,
   notificationsCollections,
@@ -132,3 +143,60 @@ export function notificationsIntake(h: Harness) {
 /** Уведомления пользователя, новые сверху. */
 export const notificationsOf = (h: Harness, userId: string) =>
   notificationsDb(h).notifications.find({ userId }).sort({ createdAt: -1, _id: -1 }).toArray();
+
+/** Push-токен устройства прямой вставкой (регистрацию по HTTP проверяет `notifications.int.test.ts`); id документа. */
+export async function seedPushToken(h: Harness, userId: string, suffix: string): Promise<string> {
+  const now = h.clock.now();
+  const _id = uuidv7();
+  await notificationsDb(h).pushTokens.insertOne({
+    _id,
+    token: expoToken(suffix),
+    userId,
+    platform: 'ios',
+    createdAt: now,
+    updatedAt: now,
+  });
+  return _id;
+}
+
+const deliveryJob = (name: string, data: unknown, attemptsMade: number) =>
+  ({ name, data, attemptsMade, opts: { attempts: 5 } }) as unknown as Job;
+
+/** Задача push пользователя, как её отдал бы worker (`attemptsMade` — номер попытки, 4 — последняя). */
+export const runPush = (h: Harness, userId: string, attemptsMade = 0) =>
+  h.worker
+    .get(NotificationsDeliveryProcessor)
+    .process(deliveryJob(NOTIFICATIONS_PUSH_JOB, { userId }, attemptsMade));
+
+/** Задача письма уведомления. */
+export const runEmail = (h: Harness, notificationId: string, attemptsMade = 0) =>
+  h.worker
+    .get(NotificationsDeliveryProcessor)
+    .process(deliveryJob(NOTIFICATIONS_EMAIL_JOB, { notificationId }, attemptsMade));
+
+/** Регламент: квитанции Expo / перепостановка потерянных доставок. */
+export const runReceipts = (h: Harness) =>
+  h.worker
+    .get(NotificationsMaintenanceProcessor)
+    .process(deliveryJob(NOTIFICATIONS_RECEIPTS_JOB, {}, 0));
+export const runRedeliver = (h: Harness) =>
+  h.worker
+    .get(NotificationsMaintenanceProcessor)
+    .process(deliveryJob(NOTIFICATIONS_REDELIVER_JOB, {}, 0));
+
+/** Очередь доставки графа worker (туда intake и регламент ставят задачи). */
+export const deliveryQueue = (h: Harness): Queue =>
+  h.worker.get(getQueueToken(QUEUE.notificationsDelivery), { strict: false });
+
+/** Ждущие задачи доставки: имя, jobId, данные, задержка. */
+export async function deliveryJobs(h: Harness) {
+  const jobs = await deliveryQueue(h).getJobs(['waiting', 'delayed', 'prioritized']);
+  return jobs
+    .map((job) => ({
+      name: job.name,
+      id: job.id,
+      data: job.data as unknown,
+      delay: job.opts.delay ?? 0,
+    }))
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}

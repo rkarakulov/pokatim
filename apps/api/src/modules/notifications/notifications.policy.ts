@@ -20,6 +20,17 @@ export const NOTIFICATIONS_POLICY = {
   settingsLimit: { limit: 30, windowSec: 3600 },
   pushTokenLimit: { limit: 30, windowSec: 3600 },
   readLimit: { limit: 120, windowSec: 60 },
+  /** Не больше 20 push в час на райдера (N7); сводка — один push. Сверх — только центр (`limited`). */
+  pushLimit: { limit: 20, windowSec: 3600 },
+  /** Захват отправки push и письма: упавший worker отпускает его по истечении (at-least-once). */
+  deliveryLeaseMs: 60_000,
+  /** Регламент: `pending` старше 10 мин после `notBefore` (письмо — после создания) — задача потеряна. */
+  redeliverAfterMs: 10 * 60_000,
+  redeliverBatch: 500,
+  /** Квитанции Expo готовы не раньше 15 мин после отправки; пачка `getReceipts` — до 1000 id. */
+  receiptsAfterMs: 15 * 60_000,
+  receiptsBatch: 1000,
+  receiptsMaxBatches: 10,
 } as const;
 
 // группы — из справочника контракта: строковый литерал группы споров совпал бы с именем коллекции споров (сторож

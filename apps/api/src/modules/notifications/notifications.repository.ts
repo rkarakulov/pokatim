@@ -30,6 +30,16 @@ const isRepeatOrStale = (error: unknown) =>
   isDuplicateKey(error, NOTIFICATIONS_EVENT_USER_UNIQUE_INDEX) ||
   isDuplicateKey(error, NOTIFICATIONS_COLLAPSE_UNIQUE_INDEX);
 
+/** Тикет Expo живёт сутки: квитанции позже не приходят. */
+const TICKET_TTL_MS = 24 * 3_600_000;
+
+export type PendingDelivery = Pick<NotificationDoc, '_id' | 'userId' | 'push' | 'email'>;
+export type ClaimedPush = Pick<
+  NotificationDoc,
+  '_id' | 'group' | 'title' | 'body' | 'target' | 'createdAt'
+>;
+export type ClaimedEmail = Pick<NotificationDoc, '_id' | 'userId' | 'title' | 'body'>;
+
 /** Позиция курсора списка: `(createdAt, _id)` последнего показанного. */
 export interface NotificationPosition {
   createdAt: Date;
@@ -246,6 +256,232 @@ export class NotificationsRepository {
   /** Снять все токены пользователя (в транзакции удаления аккаунта). */
   async revokeAllTokens(tx: DbSession, userId: string): Promise<number> {
     const result = await this.pushTokens.deleteMany({ userId }, { session: tx });
+    return result.deletedCount;
+  }
+
+  // --- доставка (worker `notifications-delivery`) ---
+
+  /** Уведомления события, ждущие доставки (intake ставит задачи по ним): получатель, push и письмо. */
+  pendingDeliveriesOf(sourceEventId: string): Promise<PendingDelivery[]> {
+    return this.notifications
+      .find(
+        {
+          sourceEventId,
+          $or: [{ 'push.state': 'pending' }, { 'email.state': 'pending' }],
+        },
+        { projection: { userId: 1, push: 1, email: 1 } },
+      )
+      .toArray();
+  }
+
+  /**
+   * Захват push пользователя (как `claimLinkSend`): живые уведомления в `pending` со сроком `notBefore ≤ now` и
+   * `sending` с истёкшим захватом (упавший worker) → `sending` с `claimId` и сроком захвата. Каждый документ —
+   * атомарно: параллельная задача не захватит тот же документ. Возвращает захваченные, старые первыми.
+   */
+  async claimPush(
+    userId: string,
+    now: Date,
+    claimId: string,
+    claimedUntil: Date,
+  ): Promise<ClaimedPush[]> {
+    await this.notifications.updateMany(
+      {
+        userId,
+        expireAt: { $gt: now },
+        $or: [
+          { 'push.state': 'pending', 'push.notBefore': { $lte: now } },
+          { 'push.state': 'sending', 'push.claimedUntil': { $lte: now } },
+        ],
+      },
+      {
+        $set: {
+          'push.state': 'sending',
+          'push.claimId': claimId,
+          'push.claimedUntil': claimedUntil,
+        },
+      },
+    );
+    return this.notifications
+      .find(
+        { userId, 'push.state': 'sending', 'push.claimId': claimId },
+        { projection: { group: 1, title: 1, body: 1, target: 1, createdAt: 1 } },
+      )
+      .sort({ createdAt: 1, _id: 1 })
+      .toArray();
+  }
+
+  /**
+   * Итог своего захвата push (по `claimId`, только `sending`; `ids` — часть захваченных): `sent`/`skipped`/`limited`/
+   * `failed` — захват снят; `pending` — захват снят, `notBefore` — новый срок (тихие часы) или прежний (сбой отправки).
+   * Уведомление, заменённое схлопыванием во время отправки, уже не под этим захватом — не трогается.
+   */
+  async settlePush(
+    claimId: string,
+    ids: readonly string[] | null,
+    outcome:
+      | { state: 'sent'; sentAt: Date }
+      | { state: 'skipped' | 'limited' | 'failed'; reason: string }
+      | { state: 'pending'; notBefore?: Date },
+  ): Promise<number> {
+    const set: Record<string, unknown> = {
+      'push.state': outcome.state,
+      'push.claimId': null,
+      'push.claimedUntil': null,
+    };
+    if (outcome.state === 'sent') set['push.sentAt'] = outcome.sentAt;
+    if ('reason' in outcome) set['push.reason'] = outcome.reason;
+    if (outcome.state === 'pending' && outcome.notBefore) set['push.notBefore'] = outcome.notBefore;
+    const result = await this.notifications.updateMany(
+      {
+        'push.claimId': claimId,
+        'push.state': 'sending',
+        ...(ids ? { _id: { $in: [...ids] } } : {}),
+      },
+      { $set: set },
+    );
+    return result.modifiedCount;
+  }
+
+  /**
+   * Захват письма уведомления (как `claimLinkSend`): `pending` или `sending` с истёкшим захватом → `sending`.
+   * `busy` — живой чужой захват (ретрай задачи); `undefined` — письмо не нужно (нет, отправлено, пропущено).
+   */
+  async claimEmail(
+    id: string,
+    now: Date,
+    claimedUntil: Date,
+  ): Promise<{ status: 'claimed'; doc: ClaimedEmail } | { status: 'busy' } | undefined> {
+    const doc = await this.notifications.findOneAndUpdate(
+      {
+        _id: id,
+        $or: [
+          { 'email.state': 'pending' },
+          { 'email.state': 'sending', 'email.claimedUntil': { $lte: now } },
+        ],
+      },
+      { $set: { 'email.state': 'sending', 'email.claimedUntil': claimedUntil } },
+      { projection: { userId: 1, title: 1, body: 1 }, returnDocument: 'after' },
+    );
+    if (doc) return { status: 'claimed', doc };
+    const held = await this.notifications.countDocuments({ _id: id, 'email.state': 'sending' });
+    return held > 0 ? { status: 'busy' } : undefined;
+  }
+
+  /** Итог своего захвата письма (сверка по `claimedUntil`): `pending` — снять захват после сбоя SMTP. */
+  async settleEmail(
+    id: string,
+    claimedUntil: Date,
+    outcome: { state: 'sent'; sentAt: Date } | { state: 'skipped' | 'failed' | 'pending' },
+  ): Promise<void> {
+    await this.notifications.updateOne(
+      { _id: id, 'email.state': 'sending', 'email.claimedUntil': claimedUntil },
+      {
+        $set: {
+          'email.state': outcome.state,
+          'email.claimedUntil': null,
+          ...(outcome.state === 'sent' ? { 'email.sentAt': outcome.sentAt } : {}),
+        },
+      },
+    );
+  }
+
+  /**
+   * Потерянные задачи push (регламент): `pending` со сроком раньше `pendingBefore` и `sending` с истёкшим захватом
+   * (`notifications_push_due_idx`) — по одному на пользователя с его сроком (jobId задачи).
+   */
+  async stuckPush(
+    pendingBefore: Date,
+    now: Date,
+    limit: number,
+  ): Promise<{ userId: string; notBefore: Date }[]> {
+    const rows = await this.notifications
+      .aggregate<{ _id: string; notBefore: Date }>([
+        {
+          $match: {
+            $or: [
+              { 'push.state': 'pending', 'push.notBefore': { $lt: pendingBefore } },
+              { 'push.state': 'sending', 'push.claimedUntil': { $lte: now } },
+            ],
+          },
+        },
+        { $group: { _id: '$userId', notBefore: { $min: '$push.notBefore' } } },
+        { $sort: { notBefore: 1 } },
+        { $limit: limit },
+      ])
+      .toArray();
+    return rows.map((row) => ({ userId: row._id, notBefore: row.notBefore }));
+  }
+
+  /** Потерянные задачи писем (регламент): `pending`, созданные раньше `createdBefore`, и истёкший захват `sending`. */
+  async stuckEmails(createdBefore: Date, now: Date, limit: number): Promise<string[]> {
+    const docs = await this.notifications
+      .find(
+        {
+          $or: [
+            { 'email.state': 'pending', createdAt: { $lt: createdBefore } },
+            { 'email.state': 'sending', 'email.claimedUntil': { $lte: now } },
+          ],
+        },
+        { projection: { _id: 1 } },
+      )
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => doc._id);
+  }
+
+  /** Токены устройств пользователя (для отправки; в логи не попадают). */
+  tokensOf(userId: string): Promise<Pick<PushTokenDoc, '_id' | 'token'>[]> {
+    return this.pushTokens
+      .find({ userId }, { projection: { _id: 1, token: 1 } })
+      .sort({ updatedAt: 1, _id: 1 })
+      .toArray();
+  }
+
+  /** Снять токен по id документа (`DeviceNotRegistered` в тикете или квитанции). */
+  async deleteTokens(tokenIds: readonly string[]): Promise<number> {
+    if (tokenIds.length === 0) return 0;
+    const result = await this.pushTokens.deleteMany({ _id: { $in: [...tokenIds] } });
+    return result.deletedCount;
+  }
+
+  /** Тикеты принятых сообщений — до проверки квитанции (TTL 24 ч). */
+  async insertTickets(
+    tickets: readonly { ticketId: string; tokenId: string }[],
+    now: Date,
+  ): Promise<void> {
+    if (tickets.length === 0) return;
+    await this.pushTickets.insertMany(
+      tickets.map((ticket) => ({
+        _id: uuidv7(),
+        ticketId: ticket.ticketId,
+        tokenId: ticket.tokenId,
+        createdAt: now,
+        expireAt: new Date(now.getTime() + TICKET_TTL_MS),
+      })),
+      { ordered: false },
+    );
+  }
+
+  /** Тикеты, отправленные раньше `before` и ещё живые, старые первыми (`push_tickets_created_idx`). */
+  dueTickets(
+    before: Date,
+    now: Date,
+    limit: number,
+  ): Promise<Pick<PushTicketDoc, '_id' | 'ticketId' | 'tokenId'>[]> {
+    return this.pushTickets
+      .find(
+        { createdAt: { $lte: before }, expireAt: { $gt: now } },
+        { projection: { _id: 1, ticketId: 1, tokenId: 1 } },
+      )
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  async deleteTickets(ids: readonly string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await this.pushTickets.deleteMany({ _id: { $in: [...ids] } });
     return result.deletedCount;
   }
 

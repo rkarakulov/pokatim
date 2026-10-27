@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { QUEUE } from '../../queues';
 import { DevicesCoreModule } from '../devices';
 import { IdentityErasureModule, IdentityModule } from '../identity';
+import { NotificationsCoreModule } from '../notifications';
 import { PanelCoreModule } from '../panel';
 import { ProfileCoreModule } from '../profile';
 import { RidesCoreModule } from '../rides';
@@ -17,10 +18,11 @@ import { AccountController } from './account.controller';
 
 /**
  * Удаление аккаунта, HTTP-часть (ADR-0015): оркестратор без своих коллекций — identity (`AccountClosure`, `AuthGuard`,
- * `SessionCookie`) и panel (`PanelMembership`, `PanelAudit`) только через их `index.ts`. Никто не импортирует `account`.
+ * `SessionCookie`), panel (`PanelMembership`, `PanelAudit`) и notifications (`PushTokens` — снятие токенов в транзакции)
+ * только через их `index.ts`. Никто не импортирует `account`.
  */
 @Module({
-  imports: [IdentityModule, PanelCoreModule],
+  imports: [IdentityModule, PanelCoreModule, NotificationsCoreModule],
   controllers: [AccountController],
   providers: [AccountDeletionService],
 })
@@ -38,6 +40,7 @@ export class AccountModule {}
     RoutesCoreModule,
     TracksCoreModule,
     DevicesCoreModule,
+    NotificationsCoreModule,
     BullModule.registerQueue({ name: QUEUE.accountDeletion }),
   ],
   providers: [AccountErasureService, AccountErasureProcessor, AccountSchedules],

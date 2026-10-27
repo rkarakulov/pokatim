@@ -1,4 +1,5 @@
 import { SESSION_COOKIE, SignInResponse } from '@pokatim/contracts';
+import { MongoOutboxWriter } from '@rkarakulov/api-kit/mongo';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
@@ -16,6 +17,7 @@ import {
   userIdByEmail,
   validRegistration,
 } from '../../../test/identity';
+import { expoToken, NOTIFICATIONS, notificationsDb } from '../../../test/notifications';
 import { panel, seedMember } from '../../../test/panel';
 import { ACCOUNT_DELETION_REQUESTED } from './account.events';
 
@@ -134,6 +136,64 @@ describe('POST /v1/account/delete — успех (AC1, AC7)', () => {
     for (const r of results) expect([204, 401]).toContain(r.status);
     expect(await deletionEvents()).toHaveLength(1);
     expect(await panel(h).audit.countDocuments({ action: 'account.deleted' })).toBe(1);
+  });
+});
+
+describe('push-токены (N11, ADR-0016)', () => {
+  const registerToken = async (accessToken: string, suffix: string) => {
+    const res = await call(
+      h,
+      'PUT',
+      `${NOTIFICATIONS}/push-tokens`,
+      { token: expoToken(suffix), platform: 'ios' },
+      bearer(accessToken),
+    );
+    expect(res.status).toBe(204);
+  };
+  const tokensOf = (userId: string) => notificationsDb(h).pushTokens.countDocuments({ userId });
+
+  it('удаление снимает все токены пользователя в транзакции; чужие — на месте', async () => {
+    const session = await signUpSession(h);
+    const userId = await userIdByEmail(h);
+    await registerToken(session.accessToken, 'a1');
+    await registerToken(session.accessToken, 'a2');
+    await notificationsDb(h).pushTokens.insertOne({
+      _id: '0190a8c8-0000-7000-8000-00000000b001',
+      token: expoToken('b1'),
+      userId: '0190a8c8-0000-7000-8000-00000000b000',
+      platform: 'android',
+      createdAt: h.clock.now(),
+      updatedAt: h.clock.now(),
+    });
+    expect(await tokensOf(userId)).toBe(2);
+
+    expect((await deleteAccount(session.accessToken)).status).toBe(204);
+
+    expect(await tokensOf(userId)).toBe(0);
+    expect(await notificationsDb(h).pushTokens.countDocuments()).toBe(1);
+  });
+
+  it('откат транзакции (сбой записи outbox) — токены остаются, аккаунт не удалён', async () => {
+    const session = await signUpSession(h);
+    const userId = await userIdByEmail(h);
+    await registerToken(session.accessToken, 'a1');
+    vi.spyOn(MongoOutboxWriter.prototype, 'append').mockRejectedValueOnce(new Error('boom'));
+
+    expect((await deleteAccount(session.accessToken)).status).toBe(500);
+
+    expect(await tokensOf(userId)).toBe(1);
+    expect((await userDoc())?.deletedAt).toBeNull();
+    expect(await deletionEvents()).toHaveLength(0);
+  });
+
+  it('неверный пароль — токены не тронуты', async () => {
+    const session = await signUpSession(h);
+    const userId = await userIdByEmail(h);
+    await registerToken(session.accessToken, 'a1');
+
+    expect((await deleteAccount(session.accessToken, 'wrong-password-123')).status).toBe(403);
+
+    expect(await tokensOf(userId)).toBe(1);
   });
 });
 

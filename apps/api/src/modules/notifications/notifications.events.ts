@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import { QUEUE } from '../../queues';
 import {
   DISPUTES_DISPUTE_DECIDED,
@@ -40,3 +42,24 @@ export type NotificationSourceEvent = keyof typeof notificationsOutboxRoutes;
 
 export const isNotificationSourceEvent = (type: string): type is NotificationSourceEvent =>
   Object.hasOwn(notificationsOutboxRoutes, type);
+
+/** Задачи доставки (`notifications-delivery`): push — по пользователю, письмо — по уведомлению. */
+export const NOTIFICATIONS_PUSH_JOB = 'notifications.push';
+export const NOTIFICATIONS_EMAIL_JOB = 'notifications.email';
+/** Регламент (`notifications-maintenance`): квитанции Expo и перепостановка потерянных доставок. */
+export const NOTIFICATIONS_RECEIPTS_JOB = 'notifications.receipts';
+export const NOTIFICATIONS_REDELIVER_JOB = 'notifications.redeliver';
+
+export const PushJobData = z.object({ userId: z.uuid() });
+export type PushJobData = z.infer<typeof PushJobData>;
+export const EmailJobData = z.object({ notificationId: z.uuid() });
+export type EmailJobData = z.infer<typeof EmailJobData>;
+
+/**
+ * jobId push: пользователь и срок (`notBefore`, мс) — отложенные до конца тихих часов уведомления одного пользователя
+ * собираются одной задачей (сводка), повтор intake ставит ту же задачу. Без `:` (BullMQ).
+ */
+export const pushJobId = (userId: string, notBefore: Date) =>
+  `push-${userId}-${notBefore.getTime()}`;
+/** jobId письма — по уведомлению. */
+export const emailJobId = (notificationId: string) => `email-${notificationId}`;
