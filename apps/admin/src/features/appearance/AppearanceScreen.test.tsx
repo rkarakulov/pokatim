@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { PanelAppearance } from '@pokatim/contracts';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { onlineManager } from '@tanstack/react-query';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
@@ -34,7 +35,7 @@ const saved = (overrides: Partial<PanelAppearance> = {}): PanelAppearance => ({
 });
 
 const open = () => renderApp('/appearance');
-const radio = (name: string) => screen.getByRole('radio', { name: new RegExp(`^${name}`) });
+const radio = (name: string) => screen.getByRole('radio', { name });
 const saveButton = () => screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement;
 
 beforeEach(() => {
@@ -43,6 +44,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  onlineManager.setOnline(true);
   vi.resetAllMocks();
 });
 
@@ -52,6 +54,26 @@ describe('«Оформление приложения» (app-themes D1, AC6)', (
     await open();
     expect(await screen.findByRole('heading', { name: 'Оформление приложения' })).toBeTruthy();
     expect(screen.getAllByTestId('skeleton-theme-card')).toHaveLength(7);
+    expect(screen.getByTestId('appearance-loading').getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('радио — точное имя темы, описание и превью — описание радио', async () => {
+    await open();
+    await screen.findByRole('group', { name: 'Тема приложения' });
+    const atlas = radio('Атлас');
+    const describedBy = atlas.getAttribute('aria-describedby') ?? '';
+    expect(document.getElementById(describedBy)?.textContent).toContain('Превью появится позже');
+    expect(radio('Классика').getAttribute('aria-describedby')).toBeTruthy();
+  });
+
+  it('первая загрузка без сети — «Нет соединения» с повтором, не бесконечный скелетон', async () => {
+    const { queryClient } = await open();
+    await screen.findByRole('group', { name: 'Тема приложения' });
+    onlineManager.setOnline(false);
+    act(() => void queryClient.resetQueries({ queryKey: ['admin', 'appearance'] }));
+    expect(await screen.findByRole('button', { name: 'Повторить' })).toBeTruthy();
+    expect(screen.getByText('Нет соединения')).toBeTruthy();
+    expect(screen.queryAllByTestId('skeleton-theme-card')).toHaveLength(0);
   });
 
   it('7 карточек в порядке APP_THEME_IDS, текущая отмечена; «Сохранить» неактивна без изменений', async () => {
@@ -118,6 +140,28 @@ describe('«Оформление приложения» (app-themes D1, AC6)', (
     expect(screen.getByText('Сейчас в приложении').closest('label')).toBe(
       radio('Планировщик').closest('label'),
     );
+    expect(saveButton().disabled).toBe(true);
+  });
+
+  it('409 → «Обновить» → ошибка GET: конфликт и выбор остаются, баннер с повтором; повтор успешен — сброс', async () => {
+    mocked.updateAppearance.mockRejectedValue(httpError(409, 'CONFLICT'));
+    await open();
+    await screen.findByRole('group', { name: 'Тема приложения' });
+    fireEvent.click(radio('Журнал'));
+    fireEvent.click(saveButton());
+    expect(await screen.findByText('Запись изменили — обновите страницу')).toBeTruthy();
+
+    mocked.getAppearance.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
+    fireEvent.click(screen.getByRole('button', { name: 'Обновить' }));
+    const retry = await screen.findByRole('button', { name: 'Повторить' });
+    expect(screen.getByText('Запись изменили — обновите страницу')).toBeTruthy();
+    expect((radio('Журнал') as HTMLInputElement).checked).toBe(true);
+
+    mocked.getAppearance.mockResolvedValue(saved({ themeId: 'planner', version: 3 }));
+    fireEvent.click(retry);
+    await waitFor(() => expect((radio('Планировщик') as HTMLInputElement).checked).toBe(true));
+    expect(screen.queryByText('Запись изменили — обновите страницу')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Повторить' })).toBeNull();
     expect(saveButton().disabled).toBe(true);
   });
 

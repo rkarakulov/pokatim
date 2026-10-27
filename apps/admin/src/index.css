@@ -1143,6 +1143,12 @@ select.field__control option:disabled {
   gap: var(--space-s2);
 }
 
+.card-radio__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s2);
+}
+
 .card-radio__badge {
   align-self: flex-start;
   padding: var(--space-s1) var(--inset-caption);

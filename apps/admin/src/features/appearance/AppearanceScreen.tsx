@@ -56,11 +56,15 @@ export function AppearanceScreen() {
     },
   });
 
+  // после 409: выбор и конфликт сбрасываются только после успешного перечитывания (ошибка — баннер с повтором)
   const reload = async () => {
-    await query.refetch();
-    setChoice(undefined);
-    setConflict(false);
+    const result = await query.refetch();
+    if (result.isSuccess) {
+      setChoice(undefined);
+      setConflict(false);
+    }
   };
+  const paused = query.fetchStatus === 'paused';
 
   const options: CardRadioOption<AppThemeId>[] = APP_THEME_IDS.map((id) => ({
     value: id,
@@ -83,6 +87,23 @@ export function AppearanceScreen() {
       <PageHeader title={t('admin.appearance.title')} meta={t('admin.appearance.hint')} />
       {current ? (
         <div className="appearance">
+          {query.isError ? (
+            <Banner
+              tone="warning"
+              title={t('state.staleTitle')}
+              actions={
+                <Button
+                  size="sm"
+                  busy={query.isFetching}
+                  onClick={() => void (conflict ? reload() : query.refetch())}
+                >
+                  {t('state.retry')}
+                </Button>
+              }
+            >
+              {t('state.staleMessage')}
+            </Banner>
+          ) : null}
           {conflict ? (
             <ConflictBanner busy={query.isFetching} onReload={() => void reload()} />
           ) : null}
@@ -114,21 +135,19 @@ export function AppearanceScreen() {
             </Button>
           </div>
         </div>
-      ) : query.isError ? (
-        <ErrorState
-          error={query.error}
-          offline={query.fetchStatus === 'paused'}
-          onRetry={() => void query.refetch()}
-        />
+      ) : query.isError || paused ? (
+        <ErrorState error={query.error} offline={paused} onRetry={() => void query.refetch()} />
       ) : (
-        <div className="card-radios__grid" aria-hidden="true">
-          {APP_THEME_IDS.map((id) => (
-            <span
-              key={id}
-              className="skeleton card-radio__skeleton"
-              data-testid="skeleton-theme-card"
-            />
-          ))}
+        <div aria-busy="true" data-testid="appearance-loading">
+          <div className="card-radios__grid" aria-hidden="true">
+            {APP_THEME_IDS.map((id) => (
+              <span
+                key={id}
+                className="skeleton card-radio__skeleton"
+                data-testid="skeleton-theme-card"
+              />
+            ))}
+          </div>
         </div>
       )}
     </>
