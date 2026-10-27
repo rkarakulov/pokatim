@@ -1,5 +1,5 @@
-import { ATTEMPT_FLAG_CODES } from '@pokatim/contracts';
-import { SENSOR_FLAG_CODES } from '@pokatim/tracks/parse';
+import { ATTEMPT_FLAG_CODES, ATTEMPT_SENSOR_SOURCES } from '@pokatim/contracts';
+import { SENSOR_FLAG_CODES, SENSOR_SOURCES } from '@pokatim/tracks/parse';
 import { describe, expect, it } from 'vitest';
 
 import type { RaceForResults } from '../races';
@@ -323,6 +323,10 @@ describe('SPEED_CLUSTER_HIGH', () => {
 
   it('сторож: коды флагов датчиков — подмножество ATTEMPT_FLAG_CODES', () => {
     for (const code of SENSOR_FLAG_CODES) expect(ATTEMPT_FLAG_CODES).toContain(code);
+  });
+
+  it('сторож: источники датчиков движка = ATTEMPT_SENSOR_SOURCES контракта', () => {
+    expect([...SENSOR_SOURCES]).toEqual([...ATTEMPT_SENSOR_SOURCES]);
   });
 
   it('(а) группа из 5: время < 0,80 медианы — флаг; ровно 0,80 — нет; группа из 4 — нет', () => {

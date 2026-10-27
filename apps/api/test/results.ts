@@ -9,7 +9,8 @@ import {
   type RaceEntryRequest,
   SignInResponse,
 } from '@pokatim/contracts';
-import type { CorridorGeometry } from '@pokatim/tracks';
+import type { CorridorGeometry, TrackStreamV1 } from '@pokatim/tracks';
+import { parseTrackFile } from '@pokatim/tracks/parse';
 import type { OutboxJobData } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
@@ -21,6 +22,7 @@ import { resultsCollections } from '../src/modules/results/results.collection';
 import { resultsOutboxRoutes } from '../src/modules/results/results.events';
 import { ResultsIntakeProcessor } from '../src/modules/results/results-intake.processor';
 import { ResultsRepository } from '../src/modules/results/results.repository';
+import { TRACK_INGEST, type TrackIngest } from '../src/modules/tracks/track-ingest.port';
 import type { Harness } from './harness';
 import {
   bearer,
@@ -247,6 +249,36 @@ export async function uploadRide(h: Harness, auth: Record<string, string>, bytes
   const outcome = await processUpload(h, upload.id);
   const activity = await tracks(h).activities.findOne({ uploadId: upload.id });
   return { uploadId: upload.id, outcome, activityId: activity?._id ?? null };
+}
+
+/**
+ * Тот же заезд импортом Garmin через агрегатор (`pokatim.stream.v1`): точки без датчиков, пульс и мощность — только
+ * признаки тренировки (ADR-0011). Приём через порт `TrackIngest` и разбор (worker); id загрузки и активности.
+ */
+export async function importRide(
+  h: Harness,
+  userId: string,
+  gpx: Buffer,
+  declared: Pick<TrackStreamV1, 'hasHeartRate' | 'hasPower'>,
+) {
+  const points = parseTrackFile(new Uint8Array(gpx)).points.map(
+    (point): TrackStreamV1['points'][number] => [
+      point.time!.getTime(),
+      point.lat,
+      point.lon,
+      point.ele ?? null,
+    ],
+  );
+  const { uploadId } = await h.worker.get<TrackIngest>(TRACK_INGEST).ingestProviderStream({
+    userId,
+    source: 'garmin',
+    via: 'open_wearables',
+    sourceRef: uuidv7(),
+    stream: { v: 1, provider: 'garmin', sport: 'cycling', ...declared, points },
+  });
+  const outcome = await processUpload(h, uploadId);
+  const activity = await tracks(h).activities.findOne({ uploadId });
+  return { uploadId, outcome, activityId: activity?._id ?? null };
 }
 
 const job = (name: string, outboxEventId: string, attemptsMade = 0) =>

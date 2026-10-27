@@ -3,6 +3,7 @@ import type {
   AttemptOrigin,
   AttemptRejection,
   AttemptReviewKind,
+  AttemptSensorSource,
   AttemptStatus,
   AttemptWithdrawReason,
   EntryTier,
@@ -171,9 +172,10 @@ export interface RaceAttemptDoc {
   trackMap?: AttemptTrackMapDoc | null;
   /**
    * датчики сегмента (race-results-07, пишет worker с вердиктом): есть ли отсчёты пульса и мощности; `null` — до
-   * вердикта, провал, нет сегмента; документы до 07 поля не имеют
+   * вердикта, провал, нет сегмента; документы до 07 поля не имеют. `source: 'declared'` — импорт Garmin/Wahoo:
+   * признаки тренировки потока агрегатора, флаги датчиков не считаются; нет поля (до 07a pass 2) — `samples`
    */
-  sensors?: { hr: boolean; power: boolean } | null;
+  sensors?: { hr: boolean; power: boolean; source?: AttemptSensorSource } | null;
   /** флаги датчиков сегмента (`HR_*`); до 07 — нет поля → `[]` */
   flags?: AttemptFlagDoc[];
   /** `FLAGS_VERSION` движка флагов; `null` — флаги не считались */

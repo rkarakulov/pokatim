@@ -262,7 +262,7 @@ describe('createAdminApiClient: протокол гонки (race-results-05)', 
     checkedAt: AT,
     review: { kind: 'excluded', reason: 'Чужой трек', at: AT },
     riderName: 'Анна К.',
-    sensors: { hr: true, power: false },
+    sensors: { hr: true, power: false, source: 'samples' },
     flags: [{ code: 'HR_GAPS', metric: 12 }],
     flagsVersion: 1,
   };

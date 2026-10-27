@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DISPUTE_FILE_BLOCKS } from '../disputes/disputes.schema.ts';
 import { ErrorCode } from '../common.ts';
 import {
+  ATTEMPT_SENSOR_SOURCES,
   AttemptSensors,
   PanelAttemptFlag,
   PanelRaceStandingsQuery,
@@ -181,6 +182,21 @@ describe('race-results-07: панель', () => {
     });
     expect(PanelAttemptFlag.safeParse({ code: 'HR_LOW', metric: 1 }).success).toBe(false);
     expect(AttemptSensors.safeParse({ hr: true }).success).toBe(false);
+  });
+
+  it('датчики: источник — отсчёты или признаки импорта; попытка до pass 2 без source — samples', () => {
+    expect(ATTEMPT_SENSOR_SOURCES).toEqual(['samples', 'declared']);
+    expect(AttemptSensors.parse({ hr: true, power: false })).toEqual({
+      hr: true,
+      power: false,
+      source: 'samples',
+    });
+    expect(AttemptSensors.parse({ hr: true, power: false, source: 'declared' }).source).toBe(
+      'declared',
+    );
+    expect(AttemptSensors.safeParse({ hr: true, power: false, source: 'file' }).success).toBe(
+      false,
+    );
   });
 
   it('PanelRaceStandingsQuery: group, attention=true; лишнее — ошибка', () => {

@@ -45,6 +45,18 @@ export interface SensorPresence {
   power: boolean;
 }
 
+/**
+ * Откуда наличие каналов попытки: `samples` — отсчёты датчиков сегмента (файл FIT/GPX), `declared` — признаки
+ * тренировки потока агрегатора (`pokatim.stream.v1` рядов не несёт, ADR-0011; решение автора 2026-10-27).
+ */
+export const SENSOR_SOURCES = ['samples', 'declared'] as const;
+export type SensorSource = (typeof SENSOR_SOURCES)[number];
+
+/** Каналы попытки с источником (результат `analyzeAttempt`). */
+export interface AttemptSensors extends SensorPresence {
+  source: SensorSource;
+}
+
 /** Флаг датчиков: метрика — целые проценты. */
 export interface SensorFlag {
   code: SensorFlagCode;

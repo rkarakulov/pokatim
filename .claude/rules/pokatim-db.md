@@ -194,8 +194,9 @@ paths:
   `race_entries_finishers_idx` (`best.ranked: false`); старый `race_entries_ranking_idx` удалён `0025` (решение автора).
   Строки протокола — `groupKey`, `flags` (снимок на ревизию); ревизии до 07 без полей — `overall`/`[]`, индекс
   `race_protocol_rows_group_idx (raceId, revision, groupKey, order)`, `order` сквозной.
-- Попытка: `sensors { hr, power } | null`, `flags` (только `HR_*`, целые проценты), `flagsVersion` — пишет worker с
-  вердиктом, перепостановка сбрасывает; значений пульса и мощности нет. `SPEED_CLUSTER_HIGH` не хранится в попытке —
+- Попытка: `sensors { hr, power, source } | null`, `flags` (только `HR_*`, целые проценты), `flagsVersion` — пишет
+  worker с вердиктом, перепостановка сбрасывает; значений пульса и мощности нет. `source: 'declared'` — импорт
+  Garmin/Wahoo (поток агрегатора без рядов, ADR-0011): каналы — признаки тренировки, `flags: []`; нет поля — `samples`. `SPEED_CLUSTER_HIGH` не хранится в попытке —
   считается при чтении панели и в ревизии протокола.
 - Анкета Verified — `rider_verified_profiles` (`_id` = userId; пол, год, вес, рост, FTP, согласие с версией,
   `demographicsLockedAt`, `version`), единственный писатель `VerifiedProfileRepository` (сторож
