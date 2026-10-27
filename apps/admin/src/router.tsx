@@ -11,6 +11,7 @@ import {
 import type { ReactNode } from 'react';
 
 import { AuditScreen } from './features/audit/AuditScreen';
+import { AppearanceScreen } from './features/appearance/AppearanceScreen';
 import { CalendarScreen } from './features/calendar/CalendarScreen';
 import { validateDisputesSearch } from './features/disputes/disputes-format';
 import { DisputeScreen } from './features/disputes/DisputeScreen';
@@ -265,6 +266,17 @@ const disputeRoute = createRoute({
   },
 });
 
+// app-themes D1: тема приложения райдера (только admin)
+const appearanceRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'appearance',
+  component: () => (
+    <RequirePermission permission="appearance.manage">
+      <AppearanceScreen />
+    </RequirePermission>
+  ),
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '$',
@@ -288,6 +300,7 @@ const routeTree = rootRoute.addChildren([
     rideModerationRoute,
     disputesRoute,
     disputeRoute,
+    appearanceRoute,
     notFoundRoute,
   ]),
 ]);

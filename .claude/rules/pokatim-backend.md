@@ -25,7 +25,11 @@ paths:
   `seasons` нет), `calendar` (календарь стартов, с гонками не связан), `tracks` (загрузки, разбор, активности —
   ADR-0011), `devices` (Garmin/Wahoo через агрегатор Open Wearables), `routes` (маршруты команды платформы —
   эталон коридора гонки, ADR-0012 Proposed) и `rides` (кофе-райды, ADR-0013 Proposed: зависит только от `identity`;
-  панель — с модерацией 05b).
+  панель — с модерацией 05b), `appearance` (app-themes: тема приложения — глобальная настройка платформы,
+  `platform_settings/appearance`; импортирует только `panel/index.ts` и `public-read.guard.ts`; публичное
+  `GET /v1/appearance` — ровно `{ themeId }`; панель `GET|PUT /v1/admin/appearance` — `appearance.manage`, замена по
+  `version` (409), журнал `appearance.theme_changed` с `subject.kind = 'platform'` (nil UUID) в транзакции; повтор той
+  же темы — без записи).
 - `routes` о гонках не знает и зависит от `panel` и `identity` (routes-02: `AuthGuard` «моих маршрутов», как `rides`); `races → routes` — только порт `RouteCatalog`
   (`modules/routes/index.ts`, `RoutesCoreModule`): готовый маршрут по id в транзакции правки гонки и названия
   маршрутов списка. Записи `routes`/`route_*` из `races` (и наоборот) — нет. Карта коридора (maps-01, ADR-0014):
@@ -73,7 +77,8 @@ paths:
   тела не используются); импорт — только для `active` подключений. Ключ OW и секрет вебхука — только env.
 - Доменный модуль панели пишет журнал `PanelAudit.append(tx, { action, subject: { kind, id, label }, details })` —
   `label` — название на момент действия; имена сотрудников — порт `PanelDirectory` (не `panel_members`).
-- Публичное чтение (`/v1/races`, `/v1/seasons` — список, `current`, `:id`, `:id/races`; `/v1/calendar`) — отдельные
+- Публичное чтение (`/v1/races`, `/v1/seasons` — список, `current`, `:id`, `:id/races`; `/v1/calendar`;
+  `/v1/appearance`) — отдельные
   контроллеры без гарда панели; статический маршрут (`seasons/current`) объявляется до параметрического
   (`seasons/:id`), иначе он уйдёт в pipe `Uuid` (400). Только опубликованное, без владельца и служебных полей,
   `@Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)`, `PublicReadGuard` (IP-лимит `public-read`), курсор —

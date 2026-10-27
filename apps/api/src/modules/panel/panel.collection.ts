@@ -1,4 +1,5 @@
 import type {
+  AppThemeId,
   AuditAction,
   AuditSubjectKind,
   MemberStatus,
@@ -84,6 +85,9 @@ export interface AuditDetailsDoc {
   reportCount?: number;
   /** race-results-06: спор, по которому принято решение */
   disputeId?: string;
+  /** app-themes: смена темы приложения */
+  themeFrom?: AppThemeId;
+  themeTo?: AppThemeId;
 }
 
 /**
