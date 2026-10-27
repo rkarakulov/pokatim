@@ -129,9 +129,9 @@ describe('свой трек на карте гонки (maps-02)', () => {
     expect(
       screen.getByLabelText(new RegExp(`^${mapLabel}\\. Ваш трек: ${summary}`)),
     ).toBeOnTheScreen();
-    // B2/B4: «i» атрибуции — в нижнем правом углу в цвете темы, камера с отступом под неё
+    // B2/B4: «i» атрибуции — в цвете темы, камера с отступом под неё; routes-04d (RC-6) — в нижнем левом углу
     const map = screen.getByTestId('maplibre-Map');
-    expect(map.props.attributionPosition).toEqual({ bottom: 8, right: 8 });
+    expect(map.props.attributionPosition).toEqual({ bottom: 8, left: 8 });
     expect(map.props.tintColor).toBe(themes.light.text.secondary);
     expect(screen.getByTestId('maplibre-Camera').props.initialViewState.padding).toEqual(
       MAP_FIT_PADDING,

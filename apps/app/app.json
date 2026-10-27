@@ -42,7 +42,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Геопозиция нужна, чтобы показать заезды, маршруты и старты рядом с вами. Покатим её не записывает и не хранит.",
+          "locationWhenInUsePermission": "Покатим показывает ваше местоположение на карте, когда вы нажимаете кнопку «Моё местоположение». Координаты не сохраняются и не отправляются.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
           "motionUsagePermission": false,

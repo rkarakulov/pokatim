@@ -1,3 +1,7 @@
+import { size } from '@pokatim/design-tokens';
+
+import { MAP_FIT_PADDING } from './corridor-style';
+
 /*
  * Камера интерактивной карты (routes-04b, ADR-0014): ограничения зума, шаг и длительность кнопок. Жесты — нативные
  * MapLibre RN / maplibre-gl (routes-04c: перетаскивание одним пальцем). Без RN и RNGH — идёт и в web-бандл.
@@ -45,4 +49,28 @@ export function cameraCall(call: () => unknown): void {
   } catch {
     // карта ещё не готова — вызов пропускается
   }
+}
+
+/** Отступы камеры, px (`ViewPadding` MapLibre RN; web — `PaddingOptions` maplibre-gl). */
+export interface CameraPadding {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+/** Наименьшая высота поля камеры над шторкой, px: отступы не съедают холст целиком. */
+export const CAMERA_MIN_VIEW_PX = size.touchMin * 2;
+
+/**
+ * Отступ камеры с учётом шторки (routes-04d, RC-5): `MAP_FIT_PADDING` + видимая высота шторки снизу. Ограничен
+ * высотой карты — без ограничения `fitBounds` maplibre-gl при отступах больше холста предупреждает и не двигает
+ * камеру; над шторкой остаётся не меньше `CAMERA_MIN_VIEW_PX`. Высота карты неизвестна — только база. Целые
+ * пиксели (натив принимает Int32).
+ */
+export function cameraPadding(insetBottom: number, mapHeight: number | null): CameraPadding {
+  const base = { ...MAP_FIT_PADDING };
+  if (mapHeight === null || insetBottom <= 0) return base;
+  const max = Math.max(base.bottom, mapHeight - base.top - CAMERA_MIN_VIEW_PX);
+  return { ...base, bottom: Math.round(Math.min(base.bottom + insetBottom, max)) };
 }

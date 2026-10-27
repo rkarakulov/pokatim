@@ -111,17 +111,34 @@ const pullToRefresh = async () => {
 const failure = () => new ApiHttpError(429, { code: 'RATE_LIMITED', message: 'x' });
 
 const open = (id = ID) => renderRouter(appRoutes, { initialUrl: `/routes/${id}` });
+const layoutOf = (height: number) => ({
+  nativeEvent: { layout: { x: 0, y: 0, width: 375, height } },
+});
+/** routes-04d (RC-5): карта монтируется после измерения шторки и области карты. */
+const showMap = async () => {
+  await fireEvent(await screen.findByTestId('bottom-sheet'), 'layout', layoutOf(420));
+  await fireEvent(await screen.findByTestId('map-area'), 'layout', layoutOf(700));
+  return screen.findByTestId('maplibre-Map');
+};
 
 describe('карточка маршрута каталога: гость по ссылке (routes-01, AC6)', () => {
-  it('раскладка routes-03: без героя; название, чипы, стат-блок, профиль; гостя не уводит', async () => {
+  it('раскладка routes-04d: название — только в шапке; в шторке — строка цифр, чипы, профиль без заголовка; гостя не уводит', async () => {
     const router = await open();
     expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
     expect(router.getPathname()).toBe(`/routes/${ID}`);
     // типографского героя (SectionHero) нет
     expect(screen.queryByText('Маршрут команды')).toBeNull();
+    // название под картой не дублируется — только шапка экрана
+    expect(within(screen.getByTestId('bottom-sheet')).queryByText('Минское кольцо')).toBeNull();
+    expect(screen.getAllByText('Минское кольцо')).toHaveLength(1);
+    // строка цифр — в шапке шторки, чипы, профиль и кнопки — в теле
     expect(
-      within(screen.getByTestId('route-detail')).getByRole('header', { name: 'Минское кольцо' }),
+      within(screen.getByTestId('bottom-sheet-header')).getByTestId('stat-block'),
     ).toBeOnTheScreen();
+    const body = within(screen.getByTestId('route-detail'));
+    expect(body.getByTestId('route-chips')).toBeOnTheScreen();
+    expect(body.getByTestId('elevation-profile')).toBeOnTheScreen();
+    expect(body.getByTestId('route-actions')).toBeOnTheScreen();
     for (const chip of ['Асфальт', 'Гравий', 'Круговой', 'Минск']) {
       expect(screen.getByText(chip)).toBeOnTheScreen();
     }
@@ -129,7 +146,7 @@ describe('карточка маршрута каталога: гость по с
     expect(screen.getByLabelText(/^Набор 1\s240 м макс\. 267 м$/)).toBeOnTheScreen();
     // асфальт + гравий — 24 км/ч: 86 км → 3 ч 35 мин
     expect(screen.getByLabelText('В пути 3 ч 35 мин при 24 км/ч')).toBeOnTheScreen();
-    expect(screen.getByRole('header', { name: 'Профиль высоты' })).toBeOnTheScreen();
+    expect(screen.queryByRole('header', { name: 'Профиль высоты' })).toBeNull();
     expect(
       screen.getByRole('adjustable', { name: /^Профиль высоты: от 191 до 267 м, набор 1\s240 м$/ }),
     ).toBeOnTheScreen();
@@ -139,7 +156,7 @@ describe('карточка маршрута каталога: гость по с
   it('скраббинг (routes-04): increment профиля — карточка «1 км · …», маркер на карте; стат-блок в три колонки', async () => {
     await open();
     const profile = await screen.findByRole('adjustable', { name: /^Профиль высоты/ });
-    await screen.findByTestId('maplibre-Map');
+    await showMap();
     expect(screen.getByTestId('scrub-overlay')).toBeOnTheScreen();
     await fireEvent(profile, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
     expect(
@@ -153,7 +170,7 @@ describe('карточка маршрута каталога: гость по с
     }
   });
 
-  it('скраббинг: жест по профилю (dragging) выключает прокрутку экрана, конец жеста — включает; прокрутка скрывает курсор', async () => {
+  it('скраббинг: жест по профилю (dragging) выключает прокрутку тела шторки, конец жеста — включает; прокрутка скрывает курсор', async () => {
     await open();
     const profile = await screen.findByRole('adjustable', { name: /^Профиль высоты/ });
     const scroll = () => screen.getByTestId('route-detail');
@@ -177,10 +194,12 @@ describe('карточка маршрута каталога: гость по с
     ).toBeNull();
   });
 
-  it('routes-04c: карта двигается одним пальцем нативно — прокрутку выключает только скраббинг', async () => {
+  it('routes-04c/04d: карта вне шторки двигается одним пальцем нативно — прокрутку тела шторки выключает только скраббинг', async () => {
     await open();
     const profile = await screen.findByRole('adjustable', { name: /^Профиль высоты/ });
-    const map = await screen.findByTestId('maplibre-Map');
+    const map = await showMap();
+    // карта — не внутри прокрутки (шторка — сосед поверх)
+    expect(within(screen.getByTestId('route-detail')).queryByTestId('maplibre-Map')).toBeNull();
     const scroll = () => screen.getByTestId('route-detail');
     expect(map).toHaveProp('dragPan', true);
     // нативный жест карты двигает камеру — прокрутка экрана остаётся
@@ -209,9 +228,13 @@ describe('карточка маршрута каталога: гость по с
     expect(screen.getByRole('button', { name: 'Поделиться' })).toBeOnTheScreen();
   });
 
-  it('«Поделиться» — primary, «Скачать GPX» — secondary; нажатие — downloadFile(адрес API)', async () => {
+  it('«Поделиться» — primary, «Скачать GPX» — secondary, в одну строку; нажатие — downloadFile(адрес API)', async () => {
     await open();
     const gpx = await screen.findByRole('button', { name: 'Скачать GPX' });
+    const row = screen.getByTestId('route-actions');
+    expect(row).toHaveStyle({ flexDirection: 'row' });
+    expect(within(row).getByRole('button', { name: 'Поделиться' })).toBeOnTheScreen();
+    expect(within(row).getByRole('button', { name: 'Скачать GPX' })).toBeOnTheScreen();
     // primary — заливка, secondary — прозрачная кнопка с рамкой (Button UI-кита)
     expect(screen.getByRole('button', { name: 'Поделиться' })).not.toHaveStyle({
       backgroundColor: 'transparent',
@@ -230,7 +253,7 @@ describe('карточка маршрута каталога: гость по с
     expect(await screen.findByText('Не удалось открыть файл GPX.')).toBeOnTheScreen();
   });
 
-  it('первая загрузка — скелетон той же раскладки (карта, название, стат-блок, профиль)', async () => {
+  it('первая загрузка — скелетон той же раскладки (место карты, шторка-скелетон)', async () => {
     getRoute.mockReturnValue(new Promise(() => undefined));
     await open();
     expect(
@@ -240,9 +263,14 @@ describe('карточка маршрута каталога: гость по с
 
   it('карта без коридора: RouteMap с линией, стартом и финишем; подпись без координат', async () => {
     await open();
+    await showMap();
     expect(await screen.findByLabelText(mapLabel)).toBeOnTheScreen();
     expect(mapLabel).not.toMatch(/\d+\.\d+/);
-    await screen.findByTestId('maplibre-Map');
+    // карта на всю область под шапкой; камера — с отступом шторки (RC-5)
+    expect(screen.getByTestId('route-map')).toHaveStyle({ flex: 1 });
+    expect(
+      screen.getByTestId('maplibre-Camera').props.initialViewState.padding.bottom,
+    ).toBeGreaterThan(420);
     expect(screen.getAllByTestId('maplibre-Layer').map((layer) => layer.props.id)).toEqual([
       'route',
       'start',
@@ -260,6 +288,39 @@ describe('карточка маршрута каталога: гость по с
     expect(screen.queryByLabelText(mapLabel)).toBeNull();
     expect(getMap).not.toHaveBeenCalled();
     expect(screen.getByTestId('stat-block')).toBeOnTheScreen();
+    // routes-04d (RC-8): область под шторкой — ровный фон, не пустота
+    expect(screen.getByTestId('route-line-map-empty')).toBeOnTheScreen();
+  });
+
+  it('шторка: «чёрточка» сворачивает — видна только строка цифр; разворачивает обратно', async () => {
+    await open();
+    await screen.findByLabelText(heroLabel);
+    await fireEvent.press(screen.getByRole('button', { name: 'Свернуть панель' }));
+    expect(screen.getByRole('button', { name: 'Развернуть панель' })).toHaveProp(
+      'accessibilityState',
+      { expanded: false },
+    );
+    expect(screen.getByLabelText(heroLabel)).toBeOnTheScreen();
+    expect(screen.queryByTestId('route-chips')).toBeNull();
+    expect(screen.queryByRole('adjustable', { name: /^Профиль высоты/ })).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Развернуть панель' }));
+    expect(screen.getByTestId('route-chips')).toBeOnTheScreen();
+  });
+
+  it('до измерения шторки — место карты, карта не монтируется (RC-5)', async () => {
+    await open();
+    await screen.findByLabelText(heroLabel);
+    expect(screen.queryByTestId('maplibre-Map')).toBeNull();
+    expect(screen.getByTestId('catalog-route-map-skeleton')).toBeOnTheScreen();
+  });
+
+  it('без сети при показанных данных — баннер «Нет соединения» под шапкой, вне шторки', async () => {
+    await open();
+    await screen.findByLabelText(heroLabel);
+    await act(async () => onlineManager.setOnline(false));
+    const banner = await screen.findByText('Нет соединения');
+    expect(within(screen.getByTestId('bottom-sheet')).queryByText('Нет соединения')).toBeNull();
+    expect(banner).toBeOnTheScreen();
   });
 
   it('404 — «Маршрут недоступен»; невалидный id — то же без запроса', async () => {

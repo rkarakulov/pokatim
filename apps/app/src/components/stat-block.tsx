@@ -18,10 +18,14 @@ export interface StatItem {
  * единицей и подпись `label`; ячейка — по содержимому (не уже `size.rowMin`), не влезла — новый ряд; «км» при крупном
  * шрифте переносится под значение; необязательное пояснение `note` — строкой под подписью. Для скринридера — одна
  * метка на ячейку «Дистанция 100 км» (с пояснением — «Дистанция 68 км круговой»). Кандидат в `@rkarakulov/ui` (§5.1).
+ * `variant="compact"` (routes-04d, RC-9) — строка шторки карточки маршрута: один ряд равных колонок без ink-линии,
+ * подпись над значением, значение `bodyStrong` с единицей в одну строку (без переноса); `note` не показывается, но
+ * остаётся в метке ячейки.
  */
 export function StatBlock({
   items,
   equalColumns = false,
+  variant = 'default',
 }: {
   items: readonly StatItem[];
   /**
@@ -29,8 +33,10 @@ export function StatBlock({
    * переносятся внутри ячейки. По умолчанию — ширина по содержимому с переносом рядами (календарь, кофе-райд).
    */
   equalColumns?: boolean;
+  variant?: 'default' | 'compact';
 }) {
   const theme = useTheme();
+  if (variant === 'compact') return <CompactStats items={items} />;
   return (
     <View testID="stat-block" style={[styles.block, { borderTopColor: theme.text.primary }]}>
       {items.map((item, index) => (
@@ -68,7 +74,45 @@ export function StatBlock({
   );
 }
 
+function CompactStats({ items }: { items: readonly StatItem[] }) {
+  const theme = useTheme();
+  return (
+    <View testID="stat-block" style={styles.compactRow}>
+      {items.map((item, index) => (
+        <View
+          key={index}
+          testID="stat-block-cell"
+          accessible
+          accessibilityLabel={[item.label, item.value, item.unit, item.note]
+            .filter(Boolean)
+            .join(' ')}
+          style={styles.compactCell}
+        >
+          <Text numberOfLines={1} style={[textStyle('label'), { color: theme.text.secondary }]}>
+            {item.label}
+          </Text>
+          <Text
+            testID="stat-block-value"
+            numberOfLines={1}
+            style={[textStyle('bodyStrong'), { color: theme.text.primary }]}
+          >
+            {item.value}
+            {item.unit ? (
+              <Text style={[textStyle('unit'), { color: theme.text.secondary }]}>
+                {` ${item.unit}`}
+              </Text>
+            ) : null}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  compactRow: { flexDirection: 'row', columnGap: size.statGap },
+  // равные колонки в один ряд; узко — значение обрезается многоточием, а не переносится
+  compactCell: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, gap: space.s1 },
   block: { flexDirection: 'row', flexWrap: 'wrap', borderTopWidth: stroke.hairline },
   // ширина — по содержимому (не сжимается в ноль), не уже строки списка; не влезло в ряд — переносится в следующий
   cell: {

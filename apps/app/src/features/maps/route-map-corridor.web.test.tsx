@@ -26,6 +26,7 @@ class FakeMap implements MockMap {
   addSource = jest.fn();
   addLayer = jest.fn();
   remove = jest.fn();
+  addControl = jest.fn();
   touchZoomRotate = { disableRotation: jest.fn() };
   keyboard = { disableRotation: jest.fn() };
   constructor(options: Record<string, unknown>) {
@@ -48,6 +49,8 @@ beforeEach(() => {
       // мок модуля: только то, что зовёт карта
       ({
         Map: FakeMap,
+        // routes-04d: атрибуция — отдельным контролом слева внизу
+        AttributionControl: class {},
         getVersion: () => '6.16.0',
         setWorkerUrl: (url: string) => {
           state.workerUrl = url;

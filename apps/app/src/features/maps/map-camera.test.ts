@@ -1,5 +1,12 @@
 import { MAP_ASPECT_RATIO, MAP_FIT_PADDING } from './corridor-style';
-import { cameraCall, clampZoom, MAP_MAX_ZOOM, MAP_MIN_ZOOM } from './map-camera';
+import {
+  CAMERA_MIN_VIEW_PX,
+  cameraCall,
+  cameraPadding,
+  clampZoom,
+  MAP_MAX_ZOOM,
+  MAP_MIN_ZOOM,
+} from './map-camera';
 
 describe('map-camera: ограничения зума (routes-04b, RC-8)', () => {
   it('clampZoom', () => {
@@ -37,5 +44,35 @@ describe('map-camera: ограничения зума (routes-04b, RC-8)', () =>
     );
     expect(fitZoom).toBeGreaterThan(MAP_MIN_ZOOM);
     expect(clampZoom(fitZoom)).toBe(fitZoom);
+  });
+});
+
+describe('cameraPadding (routes-04d, RC-5): отступ камеры над шторкой', () => {
+  it('без шторки — базовый отступ рамки', () => {
+    expect(cameraPadding(0, 600)).toEqual(MAP_FIT_PADDING);
+    expect(cameraPadding(0, null)).toEqual(MAP_FIT_PADDING);
+  });
+
+  it('шторка — снизу база + её видимая высота', () => {
+    expect(cameraPadding(300, 700)).toEqual({
+      ...MAP_FIT_PADDING,
+      bottom: MAP_FIT_PADDING.bottom + 300,
+    });
+  });
+
+  it('высота карты неизвестна — без inset сверх базы', () => {
+    expect(cameraPadding(300, null)).toEqual(MAP_FIT_PADDING);
+  });
+
+  it('ограничение по высоте карты: отступы не больше холста — над шторкой остаётся место камеры', () => {
+    const padding = cameraPadding(500, 520);
+    expect(padding.top + padding.bottom).toBeLessThanOrEqual(520 - CAMERA_MIN_VIEW_PX);
+    expect(padding.bottom).toBeGreaterThanOrEqual(MAP_FIT_PADDING.bottom);
+    // совсем низкая карта — не меньше базы
+    expect(cameraPadding(500, 50).bottom).toBe(MAP_FIT_PADDING.bottom);
+  });
+
+  it('целые пиксели (натив принимает Int32)', () => {
+    expect(Number.isInteger(cameraPadding(123.6, 700).bottom)).toBe(true);
   });
 });

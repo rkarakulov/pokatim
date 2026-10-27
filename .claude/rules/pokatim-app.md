@@ -18,6 +18,10 @@ paths:
   не отправляются до фичи «рядом»; развилка — `features/location/location-permission(.web).ts` (`expo-location` —
   только в native-файле, web — Geolocation API); «экран показан» — флаг устройства `pokatim.locationPrompt`
   (`features/onboarding/device-flags(.web).ts`). Перед сторами — `LOCATION_STEP_ENABLED` (release-чеклист).
+  Исключение (routes-04d, поправка ADR-0014, G2): кнопка «Моё местоположение» на карте — одно foreground-чтение по
+  нажатию (`features/location/current-position(.web).ts`, без `watch`), координаты — только в памяти (стор карты без
+  persist; не в TanStack Query, `console.*`, URL, подписях a11y и запросах); отказ — сообщение над картой со ссылкой
+  в настройки ОС (`location-settings(.web).ts`; web — текстом).
 - Заезды и маршруты — импорт файла через системный picker (заезд: FIT/GPX, TCX — нет, ADR-0011; маршрут: GPX/KML).
 - Треки и устройства (ADR-0011): шаг онбординга `(setup)/devices` после геопозиции (флаг аккаунта на сервере
   `OnboardingStatus.devicesStepCompleted`; поля нет — старый API — шаг пропускается); экран «Устройства»
@@ -149,7 +153,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   (`dragPan`, `touchZoom`, `doubleTapZoom` — выкл при reduce motion; `doubleTapHoldZoom`, `touchRotate`,
   `touchPitch` — выкл), прокрутку карточки на время жеста блокирует натив (Android `requestDisallowInterceptTouchEvent`),
   своей блокировки и RNGH-оверлея нет. Зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM` (2–17: рамка 1000 км вписывается), без `maxBounds`; кнопки «+», «−»,
-  «в рамку» — `map-controls.tsx` сверху справа (`MAP_FIT_PADDING.right` — под них), анимация камеры
+  «в рамку» и «Моё местоположение» (routes-04d) — `map-controls.tsx` сверху справа (`MAP_FIT_PADDING.right` — под
+  них; состояние чтения позиции — листовой `map-overlay-controls.tsx` + `use-locate.ts`, сообщение —
+  `map-locate-notice.tsx`; точка — `location-style.ts`, native `location-layer.tsx` по `location-store.ts`, web
+  императивно, камера — native `easeTo` с `padding`, web — с `offset`), анимация камеры
   `MAP_CAMERA_ANIMATION_MS`, при reduce motion — без анимации (native — длительность всегда явно); начальная камера —
   по рамке без анимации. Сдвиг карты на native — исключение из правила `accessibilityActions` (ADR-0014). Карточка `races/[id]`: блок `race-route-map.tsx` после строки «Коридор» — SSR и первый рендер — место
   карты (скелетон той же пропорции), после монтирования: env не задан, геометрия 404/ошибка — блок схлопывается
@@ -173,7 +180,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   трека и без строки; сеть/5xx — «Не удалось загрузить трек» с повтором. Гостю и не заявленному — без запроса.
 - Атрибуция и отступы (B2–B4 maps-02): web — компактная атрибуция свёрнута при старте и после обновлений стиля
   (`attribution.web.ts`, до первого нажатия «i»), цвета контрола — роли темы в области карты (`data-route-map`);
-  native — «i» в нижнем правом углу, `tintColor` темы. Камера — `MAP_FIT_PADDING` (снизу место под «i»). Полоса
+  routes-04d — «i» в нижнем левом углу на обеих платформах (web — `AttributionControl` в `'bottom-left'`), над шторкой
+  — со сдвигом на `bottomInset`; native — `tintColor` темы. Камера — `MAP_FIT_PADDING` (снизу место под «i»), со
+  шторкой — `cameraPadding(inset, mapHeight)`. Полоса
   коридора не уже `CORRIDOR_MIN_WIDTH_PX` (минимум — опорой выражения зума: `max` с `zoom` MapLibre не допускает).
 
 - Участие и результат (race-results-04): блок «Ваше участие» и таблица «Результаты» на карточке `races/[id]` — только
@@ -242,10 +251,20 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   dev-клиент — столбики), `adjustable` с `accessibilityActions`, RNGH v3 `usePanGesture({ activateAfterLongPress:
   250, runOnJS: true })` (касание без удержания — скрыть). Пути и градиент заливки — `profile-path.ts` (G1). Корень
   жестов — `components/gesture-root(.web).tsx` в `_layout` (RNGH не в web-бандле). Стат-блок карточки —
-  `StatBlock equalColumns`. Jest: `react-native-gesture-handler/jestSetup`, обёртка RNGH «без Reanimated», мок
+  `StatBlock equalColumns` (routes-04d — `variant="compact"`). Jest (routes-04d): мок `expo-location` — с `Accuracy`,
+  ответ `getCurrentPositionAsync` задают тесты «Моё местоположение» (онбординг его не вызывает). Jest: `react-native-gesture-handler/jestSetup`, обёртка RNGH «без Reanimated», мок
   `react-native-svg` и его загрузчика, `Map`/`Camera` MapLibre с `ref` (методы — `__camera`/`__map` мока) в
   `jest.setup.ts`, web — заглушка `matchMedia` (`jest.match-media.web.ts`, `useReducedMotion` в jsdom); шаги жеста — `createGestureController` (у
   `fireGestureHandler` всегда есть ACTIVE; в jest RNGH резолвится в `lib/module` — шпионы и моки по этому пути).
+- Раскладка карточки (routes-04d, ADR-0014): `SafeAreaView top` → `DetailHeader` (название — только здесь) →
+  `OfflineBanner` → область `flex: 1` с `CatalogRouteMap fill bottomInset` (карта монтируется после измерения шторки;
+  нет карты — фон `map.background`) и шторкой `components/bottom-sheet(.web).tsx` поверх (снап —
+  `bottom-sheet-snap.ts`; native — RNGH v3 `usePanGesture` из `useMemo` + `Animated` из `react-native`, без
+  Reanimated; web — pointer events, CSS-переход; перетаскивание — только за шапку; SSR — развёрнута; свёрнута — тело
+  `display: none`). Шапка шторки — `StatBlock variant="compact"`, тело — `ScrollView` с `RefreshControl`, скраббинг
+  выключает прокрутку тела (`useScrubScrollEnabled`): чипы, `ElevationProfile` без заголовка, `RouteActions` в строку,
+  «Гонки на маршруте». 404 и ошибка без данных — без карты и шторки. Web: в `fill` колесо масштабирует без Ctrl/⌘.
+  «Мой маршрут» — пока прежняя раскладка (follow-up).
 - Главная — раздел `routes` (текстовый герой `RouteHero`, RC-8; пустой каталог — `EmptyState`).
 - Мои маршруты (routes-02): переключатель «Каталог / Мои» — `SegmentedControl` в шапке обеих лент, состояние —
   `?view=mine` (`useLocalSearchParams` + `router.setParams`). Лента — `features/routes/my-route-feed.tsx`, ключи

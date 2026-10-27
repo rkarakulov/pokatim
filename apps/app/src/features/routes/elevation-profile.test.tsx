@@ -30,9 +30,10 @@ const elevation: CatalogRouteElevation = {
 };
 
 describe('ElevationProfile (routes-03, P4, RC-7)', () => {
-  it('заголовок, диапазон справа, график — одно изображение с текстовой альтернативой, подписи км', async () => {
+  it('routes-04d (RC-10): без заголовка; диапазон строкой над графиком, график — одно изображение с текстовой альтернативой, подписи км', async () => {
     await render(<ElevationProfile elevation={elevation} distanceM={68_000} gainM={620} />);
-    expect(screen.getByRole('header', { name: 'Профиль высоты' })).toBeOnTheScreen();
+    expect(screen.queryByRole('header')).toBeNull();
+    expect(screen.queryByText('Профиль высоты')).toBeNull();
     expect(screen.getByText('191–267 м')).toBeOnTheScreen();
     const chart = screen.getByRole('image');
     expect(chart).toHaveProp('accessibilityLabel', 'Профиль высоты: от 191 до 267 м, набор 620 м');

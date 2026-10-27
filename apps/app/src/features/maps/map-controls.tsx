@@ -9,20 +9,32 @@ export interface MapControlsProps {
   onZoomOut: () => void;
   /** «в рамку» — камера по рамке маршрута (и трека) */
   onFit: () => void;
+  /** routes-04d: «Моё местоположение» — четвёртая кнопка; нет — кнопки нет */
+  onLocate?: () => void;
+  /** идёт чтение позиции: кнопка недоступна и «занята» */
+  locating?: boolean;
 }
 
 /**
- * Кнопки камеры карты (routes-04b, RC-5…RC-7): колонка сверху справа — «+», «−», «в рамку» (видна всегда); атрибуция
- * «i» — снизу справа, не пересекаются. Иконки — `expo-symbols` (SF Symbols / Material Symbols), цель `size.touchMin`.
+ * Кнопки камеры карты (routes-04b, RC-5…RC-7): колонка сверху справа — «+», «−», «в рамку» (видна всегда),
+ * routes-04d — «Моё местоположение» четвёртой (RC-6); атрибуция «i» — снизу слева, не пересекаются. Иконки — `expo-symbols` (SF Symbols / Material Symbols), цель `size.touchMin`.
  * Локальный компонент: `IconButton` в `@rkarakulov/ui` нет (follow-up в app-foundation, второй потребитель — `TopBar`).
  * Без RNGH — идёт и в web-бандл.
  */
-export function MapControls({ theme, onZoomIn, onZoomOut, onFit }: MapControlsProps) {
+export function MapControls({
+  theme,
+  onZoomIn,
+  onZoomOut,
+  onFit,
+  onLocate,
+  locating = false,
+}: MapControlsProps) {
   const buttons: {
     testID: string;
     label: string;
     icon: SymbolViewProps['name'];
     onPress: () => void;
+    busy?: boolean;
   }[] = [
     {
       testID: 'map-zoom-in',
@@ -42,6 +54,17 @@ export function MapControls({ theme, onZoomIn, onZoomOut, onFit }: MapControlsPr
       icon: { ios: 'arrow.up.left.and.arrow.down.right', android: 'fit_screen', web: 'fit_screen' },
       onPress: onFit,
     },
+    ...(onLocate
+      ? [
+          {
+            testID: 'map-locate',
+            label: t('maps.controls.locate'),
+            icon: { ios: 'location', android: 'my_location', web: 'my_location' } as const,
+            onPress: onLocate,
+            busy: locating,
+          },
+        ]
+      : []),
   ];
   return (
     <View testID="map-controls" style={styles.column}>
@@ -51,6 +74,9 @@ export function MapControls({ theme, onZoomIn, onZoomOut, onFit }: MapControlsPr
           testID={button.testID}
           accessibilityRole="button"
           accessibilityLabel={button.label}
+          // aria-*: RN переводит в accessibilityState, RN-web — в атрибуты
+          aria-busy={button.busy}
+          disabled={button.busy}
           onPress={button.onPress}
           style={({ pressed }) => [
             styles.button,

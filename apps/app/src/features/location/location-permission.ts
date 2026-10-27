@@ -13,8 +13,8 @@ const fromStatus = (status: Location.PermissionStatus | string): LocationPermiss
 };
 
 /**
- * Native (`expo-location`): единственный импорт модуля в приложении. Координаты не запрашиваются и не читаются —
- * только статус разрешения (Q6; координаты понадобятся фиче «рядом»).
+ * Native (`expo-location`): статус разрешения для шага онбординга — координаты здесь не читаются (Q6). Одно чтение
+ * позиции по нажатию «Моё местоположение» — `current-position.ts` (routes-04d, G1).
  */
 export async function getLocationPermission(): Promise<LocationPermission> {
   try {

@@ -87,3 +87,29 @@ describe('StatBlock: пояснение (routes-03)', () => {
     }
   });
 });
+
+describe('StatBlock variant="compact" (routes-04d, RC-9)', () => {
+  const items = [
+    { value: '68', unit: 'км', label: 'Дистанция', note: 'круговой' },
+    { value: '1 240', unit: 'м', label: 'Набор', note: 'макс. 267 м' },
+    { value: '2 ч 30 мин', label: 'В пути', note: 'при 24 км/ч' },
+  ];
+
+  it('один ряд равных колонок без ink-линии; значение — одна строка; note — только в метке ячейки', async () => {
+    await render(<StatBlock variant="compact" items={items} />);
+    const block = screen.getByTestId('stat-block');
+    expect(block).toHaveStyle({ flexDirection: 'row' });
+    expect(block).not.toHaveStyle({ flexWrap: 'wrap' });
+    expect(block).not.toHaveStyle({ borderTopWidth: expect.anything() });
+    for (const cell of screen.getAllByTestId('stat-block-cell')) {
+      expect(cell).toHaveStyle({ flexBasis: 0, flexGrow: 1, flexShrink: 1 });
+    }
+    for (const value of screen.getAllByTestId('stat-block-value')) {
+      expect(value).toHaveProp('numberOfLines', 1);
+    }
+    expect(screen.queryByText('круговой')).toBeNull();
+    expect(screen.getByLabelText('Дистанция 68 км круговой')).toBeOnTheScreen();
+    expect(screen.getByLabelText('В пути 2 ч 30 мин при 24 км/ч')).toBeOnTheScreen();
+    expect(screen.getByText('Дистанция')).toBeOnTheScreen();
+  });
+});

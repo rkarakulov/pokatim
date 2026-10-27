@@ -23,6 +23,13 @@ export interface RouteLineMapProps {
   lineWidth?: number;
   /** routes-04: стор скраббинга экрана — маркер на линии, связанный с профилем; нет — без маркера */
   scrub?: ScrubStore;
+  /**
+   * routes-04d (RC-5, RC-8): карта на всю область под шторкой. Место карты и «карты нет» — ровный фон на всю область
+   * (без схлопывания); карта монтируется, когда известна высота шторки `bottomInset`.
+   */
+  fill?: boolean;
+  /** видимая высота шторки, px; `undefined` — ещё не измерена (в `fill` карта ждёт) */
+  bottomInset?: number;
 }
 
 /**
@@ -30,7 +37,9 @@ export interface RouteLineMapProps {
  * клиентский рендер — место карты (скелетон той же пропорции): env стиля и геометрия известны только после
  * монтирования. Env не задан или нативного модуля нет — блока нет (цифры карточки остаются); геометрии нет (404) —
  * тоже. Остальное — `AsyncContent` (§4.12): загрузка — скелетон, ошибка без данных — «Нет соединения» / «Не удалось
- * загрузить» с повтором (`geometry.refetch`), ошибка обновления при показанной карте — карта и баннер.
+ * загрузить» с повтором (`geometry.refetch`), ошибка обновления при показанной карте — карта и баннер. `fill`
+ * (routes-04d): место карты — блок на всю область без пульса (`SkeletonGroup` не растягивается), «карты нет» — фон
+ * `map.background` (RC-8), карта — после измерения шторки; ошибка без данных — `AsyncContent` с повтором.
  */
 export function RouteLineMap({
   mapQuery,
@@ -39,6 +48,8 @@ export function RouteLineMap({
   skeletonTestID,
   lineWidth,
   scrub,
+  fill = false,
+  bottomInset,
 }: RouteLineMapProps) {
   const { mounted, styleUrl, theme } = useMapStyle();
   const geometry = useQuery({ ...mapQuery, enabled: styleUrl !== null });
@@ -51,22 +62,50 @@ export function RouteLineMap({
       />
     </SkeletonGroup>
   );
+  const map = (data: RouteMapGeometry, url: string) => (
+    <LineMap
+      geometry={data}
+      styleUrl={url}
+      theme={theme}
+      accessibilityLabel={accessibilityLabel}
+      failedMessage={failedMessage}
+      lineWidth={lineWidth}
+      scrub={scrub}
+      fill={fill}
+      bottomInset={bottomInset}
+    />
+  );
+  const notFound = !geometry.data && apiErrorOf(geometry.error)?.code === 'NOT_FOUND';
+  if (fill) {
+    const place = (testID: string, color: string) => (
+      <View testID={testID} style={[styles.fill, { backgroundColor: color }]} />
+    );
+    const empty = place('route-line-map-empty', theme.map.background);
+    if (mounted && styleUrl === null) return empty;
+    if (styleUrl === null) return place(skeletonTestID, theme.surface.skeleton);
+    if (notFound) return empty;
+    if (geometry.data !== undefined) {
+      return bottomInset === undefined
+        ? place(skeletonTestID, theme.surface.skeleton)
+        : map(geometry.data, styleUrl);
+    }
+    if (geometry.isPending && geometry.fetchStatus !== 'paused') {
+      return place(skeletonTestID, theme.surface.skeleton);
+    }
+    return (
+      <View style={styles.fill}>
+        <AsyncContent query={geometry} skeleton={null}>
+          {() => null}
+        </AsyncContent>
+      </View>
+    );
+  }
   if (mounted && styleUrl === null) return null;
   if (styleUrl === null) return skeleton;
-  if (!geometry.data && apiErrorOf(geometry.error)?.code === 'NOT_FOUND') return null;
+  if (notFound) return null;
   return (
     <AsyncContent query={geometry} skeleton={skeleton}>
-      {(data) => (
-        <LineMap
-          geometry={data}
-          styleUrl={styleUrl}
-          theme={theme}
-          accessibilityLabel={accessibilityLabel}
-          failedMessage={failedMessage}
-          lineWidth={lineWidth}
-          scrub={scrub}
-        />
-      )}
+      {(data) => map(data, styleUrl)}
     </AsyncContent>
   );
 }
@@ -79,6 +118,8 @@ function LineMap({
   failedMessage,
   lineWidth,
   scrub,
+  fill,
+  bottomInset,
 }: {
   geometry: RouteMapGeometry;
   styleUrl: string;
@@ -87,6 +128,8 @@ function LineMap({
   failedMessage: string;
   lineWidth: number | undefined;
   scrub: ScrubStore | undefined;
+  fill: boolean;
+  bottomInset: number | undefined;
 }) {
   const map = useMemo(() => withoutCorridor(geometry), [geometry]);
   return (
@@ -97,6 +140,8 @@ function LineMap({
       corridor={false}
       lineWidth={lineWidth}
       scrub={scrub}
+      fill={fill}
+      bottomInset={bottomInset}
       styleUrl={styleUrl}
       theme={theme}
       accessibilityLabel={accessibilityLabel}
@@ -107,4 +152,5 @@ function LineMap({
 
 const styles = StyleSheet.create({
   place: { width: '100%', aspectRatio: MAP_ASPECT_RATIO },
+  fill: { flex: 1 },
 });
