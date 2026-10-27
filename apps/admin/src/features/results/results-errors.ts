@@ -50,3 +50,24 @@ export function resultsErrorText(error: unknown): string {
       return httpStatus(error) === 404 ? t('admin.races.notFound') : t('error.unknown');
   }
 }
+
+/**
+ * Текст ошибки правки пола и года анкеты (race-results-07): 409 — параллельная запись (транзакция анкеты), 403 — нет
+ * права `profiles.verified_edit`, 404 — анкеты нет, 422/400 — год вне пределов контракта.
+ */
+export function demographicsErrorText(error: unknown): string {
+  if (isNetworkError(error)) return t('error.network');
+  if (isForbidden(error)) return t('admin.error.forbidden');
+  if (apiErrorOf(error)?.code === 'RATE_LIMITED') return t('error.rateLimited');
+  switch (httpStatus(error)) {
+    case 404:
+      return t('admin.results.demographics.noProfile');
+    case 409:
+      return t('admin.results.demographics.conflict');
+    case 400:
+    case 422:
+      return t('admin.results.demographics.birthYearInvalid');
+    default:
+      return t('error.unknown');
+  }
+}

@@ -973,6 +973,27 @@ select.field__control option:disabled {
   gap: var(--space-s3);
 }
 
+/* race-results-07: KPI «Результатов» — восемь плиток в ряд (+ «Требует внимания», «Финишёры») */
+.stat-tiles--8 {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+/* race-results-07: флаги «Требует внимания» — подпись и метрика подсказкой */
+.flag-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flag-list__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
 .stat-tile {
   padding: var(--space-s3) var(--inset-md);
   border: var(--stroke-hairline) solid var(--color-border-strong);

@@ -14,7 +14,8 @@ import { formatDateTime, formatElapsed } from '../../format';
 import { useCan } from '../../session/can';
 import { Button, ChipGroup, DataTable, EmptyState, StatusTag } from '../../ui';
 import type { OpenResultsDialog } from './results-actions';
-import { ATTEMPT_TONE, riderLabel } from './results-format';
+import { FlagList } from './FlagList';
+import { ATTEMPT_TONE, riderLabel, sensorsText } from './results-format';
 import { attemptsQueryKey } from './results-query';
 
 const PAGE_SIZE = 50;
@@ -82,6 +83,17 @@ const baseColumns = [
       return value === null ? '—' : formatElapsed(value);
     },
     enableSorting: false,
+  }),
+  // race-results-07: какие датчики есть в сегменте (без значений) и флаги датчиков с метрикой
+  column.accessor('sensors', {
+    header: t('admin.results.column.sensors'),
+    cell: (info) => sensorsText(info.getValue()),
+    enableSorting: false,
+  }),
+  column.display({
+    id: 'attention',
+    header: t('admin.results.column.attention'),
+    cell: (info) => <FlagList flags={info.row.original.flags} />,
   }),
   column.accessor('engineVersion', {
     header: t('admin.results.column.engine'),
