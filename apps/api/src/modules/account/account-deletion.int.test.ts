@@ -8,6 +8,7 @@ import {
   collections,
   confirmPasswordReset,
   gate,
+  identityRepository,
   latestResetToken,
   outboxEvents,
   requestPasswordReset,
@@ -16,7 +17,6 @@ import {
   validRegistration,
 } from '../../../test/identity';
 import { panel, seedMember } from '../../../test/panel';
-import { IdentityRepository } from '../identity/identity.repository';
 import { ACCOUNT_DELETION_REQUESTED } from './account.events';
 
 let h: Harness;
@@ -59,7 +59,7 @@ const profile = (accessToken: string) =>
 const deletionEvents = async () =>
   (await outboxEvents(h)).filter((event) => event.type === ACCOUNT_DELETION_REQUESTED);
 const userDoc = async () => collections(h).users.findOne({ email: EMAIL });
-const repository = () => h.app.get(IdentityRepository, { strict: false });
+const repository = () => identityRepository(h);
 
 describe('POST /v1/account/delete — успех (AC1, AC7)', () => {
   it('204: сессии отозваны (access и refresh — 401), cookie сброшена, одно событие очистки, no-store', async () => {

@@ -19,7 +19,14 @@ import {
 } from '../../../test/devices';
 import { type FakeOw, startFakeOw } from '../../../test/fake-ow';
 import { DAY, HOUR, type Harness } from '../../../test/harness';
-import { bearer, call, collections, outboxEvents, validRegistration } from '../../../test/identity';
+import {
+  bearer,
+  call,
+  collections,
+  erasedEmail,
+  outboxEvents,
+  validRegistration,
+} from '../../../test/identity';
 import { panel } from '../../../test/panel';
 import {
   corridorRace,
@@ -37,15 +44,13 @@ import {
 import { createRide, hideInDb, join, ridesDb, startsIn } from '../../../test/rides';
 import { routesDb, seedRiderRoute } from '../../../test/routes';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
-import { trackFileStore, tracks } from '../../../test/tracks';
+import { storeUpload, trackFileStore, tracks } from '../../../test/tracks';
 import { QUEUE } from '../../queues';
 import { DeviceErasure } from '../devices';
-import { erasedEmailMarker } from '../identity/tokens';
 import { ProfileErasure } from '../profile';
 import { RideErasure } from '../rides';
 import { RouteErasure } from '../routes';
 import { TrackErasure } from '../tracks';
-import { TrackSourcesService } from '../tracks/track-sources.service';
 import { AccountErasure } from '../identity';
 import { AccountErasureProcessor } from './account-erasure.processor';
 import {
@@ -340,7 +345,7 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
     expect(h.mailer.sent).toHaveLength(1);
     expect(h.mailer.sent[0]).toMatchObject({ to: 'a@example.com', subject: 'Аккаунт удалён' });
     expect(await collections(h).users.findOne({ _id: a })).toMatchObject({
-      email: erasedEmailMarker(h.env.EMAIL_TOKEN_SECRET, 'a@example.com'),
+      email: erasedEmail(h, 'a@example.com'),
       birthDate: null,
       passwordHash: null,
     });
@@ -483,15 +488,11 @@ describe('охрана и повторный проход (N8, N9, resume)', () 
     // запросы, прошедшие AuthGuard до удаления, коммитят после очистки (R5)
     await h.db.collection('profiles').insertOne({ _id: w.a.userId as never, publicName: 'Поздно' });
     await seedRiderRoute(h, w.a.userId);
-    await h.worker.get(TrackSourcesService).store({
-      userId: w.a.userId,
-      source: 'upload',
-      via: null,
-      sourceRef: null,
-      format: 'gpx',
-      fileName: null,
-      bytes: rideGpx('clean.gpx', new Date(h.clock.now().getTime() - 2 * HOUR)),
-    });
+    await storeUpload(
+      h,
+      w.a.userId,
+      rideGpx('clean.gpx', new Date(h.clock.now().getTime() - 2 * HOUR)),
+    );
 
     expect(await sweep(w.a.userId)).toBe('erased');
 
