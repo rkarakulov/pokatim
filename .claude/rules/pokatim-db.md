@@ -110,11 +110,20 @@ paths:
 - `routes`, `route_geometries`, `route_sources` — единственный писатель `RoutesRepository`. Переход статуса — только
   из `processing` (условие в фильтре: повтор задачи после `ready`/`failed` — no-op); геометрия пишется один раз вместе
   с переходом в `ready` в одной транзакции. Готовый маршрут **не меняется** (ни линия, ни длина): правка маршрута —
-  новый маршрут; удаления нет. Поэтому чтение «маршрут готов» в транзакции гонки — без замка.
+  новый маршрут. Маршрут **платформы** не удаляется — поэтому чтение «маршрут готов» в транзакции гонки — без замка.
+- `routes.origin`: `'platform' | 'rider'` (routes-02), неизменно. Маршрут райдера — `catalog: null`, меняются только
+  `title` (`renameOwn`, один `findOneAndUpdate`) и поля обработки (worker); удаляет автор — `deleteOwn` в
+  `MongoTransactions.run`: `routes` (фильтр `{ _id, ownerUserId, origin: 'rider' }`) → `route_geometries` →
+  `route_sources`, без журнала и outbox; конфликт с `markReady` — write conflict по документу `routes` → повтор.
+  Удалён во время обработки — worker `skipped` (захват `null`; исходника и маршрута нет). **Чтение вне «моих» — только
+  с `origin: 'platform'` в фильтре** (`findReady`, `findPublished`, `routesByIds`, `listVisible`, каталог); «мои» —
+  только методы `*Own` с `{ ownerUserId, origin: 'rider' }`. Запрос каталога — `hint('routes_catalog_idx')` (`origin` в
+  фильтре делает кандидатом `routes_list_idx`).
 - Исходник GPX — в `route_sources` (BSON Binary ≤ 5 МиБ), **не** в `TrackFileStore`: уборка `tracks-maintenance`
   удаляет файлы без документа `track_uploads` и стёрла бы маршрут. Наружу исходник, sha256 и линия сверки не выходят.
-- Дедуп загрузки — `routes_owner_sha_unique { ownerUserId, sha256 }`; гонка двух одинаковых — `isDuplicateKey` →
-  существующий. Тот же файл после `failed` или зависшей (> 15 мин) обработки — `RoutesRepository.requeue` (условие по
+- Дедуп загрузки — `routes_owner_origin_sha_unique { ownerUserId, origin, sha256 }` (`0021_routes_rider`: создаёт его и
+  `routes_owner_origin_idx { ownerUserId, origin, _id: -1 }` — список и квота «моих», затем удаляет
+  `routes_owner_sha_unique` — подтверждено человеком, HG-1); гонка двух одинаковых — `isDuplicateKey` → существующий. Тот же файл после `failed` или зависшей (> 15 мин) обработки — `RoutesRepository.requeue` (условие по
   статусу и `updatedAt`) + новое событие outbox в одной транзакции: сбой окружения не закрывает файл навсегда.
 - `races.corridor = { routeId, widthM, distanceM } | null` — пишет только `RacesRepository`; `distanceM` — снимок
   длины маршрута, `distanceKm` гонки с коридором — из него. Документы до `0013_routes` поля не имеют — чтение
@@ -135,9 +144,11 @@ paths:
   (бэкфилл), обе — с экспортом в одной транзакции: есть `derivedVersion` ⇒ есть экспорт (`gpxAvailable` без чтения
   `route_exports`). Пересчёт — только регламент `routes-maintenance` по росту `ROUTE_DERIVED_VERSION`
   (`@pokatim/tracks/parse`); детерминированный отказ разбора — метка `derivedFailure` этой версии (не берётся до роста
-  версии), сбой окружения — без метки. Документы до `0021_routes_derived` полей не имеют — чтение `?? null`, выборка
+  версии), сбой окружения — без метки. Документы до `0022_routes_derived` полей не имеют — чтение `?? null`, выборка
   бэкфилла — `$exists: false` или `$lt` версии по `route_geometries_derived_idx { derivedVersion: 1 }` (IXSCAN, int-тест).
-  Миграция `0021_routes_derived` (expand-only): коллекция `route_exports` и индекс; данные досчитывает регламент.
+  Миграция `0022_routes_derived` (expand-only): коллекция `route_exports` и индекс; данные досчитывает регламент.
+- **Удаление аккаунта** (когда появится) обязано удалить `routes` `origin: 'rider'` автора вместе с
+  `route_geometries`/`route_sources`/`route_exports` (маршруты платформы сотрудника — остаются).
 
 ## Заявки и попытки (race-results-03)
 

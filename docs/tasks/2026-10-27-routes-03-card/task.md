@@ -581,3 +581,14 @@ e2e — `web.spec.ts` (опрос `gpxAvailable`, SSR-профиль, скачи
   зелёные, процесс завершается; повторный полный прогон — зелёный (выше). Утечки хэндлов в новых тестах не найдено.
 - **NOT VERIFIED:** `pnpm e2e:web` (нужны `build:web`, API-сборка, Chrome) — смоук расширен, не запускался; ручная
   проверка на iOS/Android-симуляторе и в браузере не делалась.
+
+## 13. Слияние с routes-02 (develop, PR #55)
+
+- Миграция переименована: `0021_routes_derived` → `0022_routes_derived` (`0021_routes_rider` — routes-02).
+- `loadRoutePoints` разбирает GPX и KML (`detectRouteFormat`, routes-02): бэкфилл `deriveRoute` считает и KML-маршруты.
+- Карта каталога — общий `RouteLineMap` (routes-02) с новым необязательным пропсом `lineWidth`.
+- `RoutesRepository.deleteOwn` (удаление своего маршрута, routes-02) удаляет и `route_exports` в той же транзакции
+  (иначе очищенный GPX райдера остался бы в БД); `recordDerived` пишет экспорт только при существующей геометрии —
+  гонки с удалением нет. Int-тест удаления проверяет экспорт; маршрут райдера — `GET /gpx` → 404.
+- Ключи `routes.detail.{length,elevation,elevationValue,loop,yes,no}` возвращены: их использует карточка «Моего
+  маршрута».

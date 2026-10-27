@@ -74,6 +74,7 @@ describe('коды ошибок', () => {
       'DISPUTE_ACTION_BLOCKED',
       'DISPUTE_NOT_FOUND',
       'ROUTE_INVALID_STATE',
+      'ROUTE_QUOTA_EXCEEDED',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

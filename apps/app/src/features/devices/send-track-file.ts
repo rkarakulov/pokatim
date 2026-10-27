@@ -1,5 +1,6 @@
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import { ApiError, TrackUpload, TrackUploadName } from '@pokatim/contracts';
+import type { z } from 'zod';
 
 /** Пользователь нажал «Отменить»: запрос прерван, ошибки на экране нет. */
 export class UploadCanceledError extends Error {
@@ -31,14 +32,15 @@ const parseBody = (text: string): unknown => {
 
 /**
  * Отправка байт файла с прогрессом: `XMLHttpRequest` (`upload.onprogress`) есть и в браузере, и в React Native — fetch
- * прогресса отправки не даёт. Ответ — та же схема и те же ошибки, что у api-client: `TrackUpload`, `ApiHttpError`
- * (код из контракта), `ApiNetworkError` (нет сети — «Нет соединения»); отмена — `UploadCanceledError`.
+ * прогресса отправки не даёт. Ответ — схема вызывающего (`TrackUpload`, `MyRoute`) и те же ошибки, что у api-client:
+ * `ApiHttpError` (код из контракта), `ApiNetworkError` (нет сети — «Нет соединения»); отмена — `UploadCanceledError`.
  */
-export function sendTrackFile(
+export function sendFile<T>(
   request: UploadRequest,
   body: Blob,
+  schema: z.ZodType<T>,
   { onProgress, signal }: SendOptions,
-): Promise<TrackUpload> {
+): Promise<T> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
       reject(new UploadCanceledError());
@@ -58,8 +60,8 @@ export function sendTrackFile(
       settle();
       const payload = parseBody(xhr.responseText);
       if (xhr.status >= 200 && xhr.status < 300) {
-        const upload = TrackUpload.safeParse(payload);
-        if (upload.success) resolve(upload.data);
+        const parsed = schema.safeParse(payload);
+        if (parsed.success) resolve(parsed.data);
         else reject(new ApiHttpError(xhr.status, payload, ApiError));
         return;
       }
@@ -76,6 +78,13 @@ export function sendTrackFile(
     xhr.send(body);
   });
 }
+
+/** Файл заезда (`POST /v1/tracks/uploads`): ответ — `TrackUpload`. */
+export const sendTrackFile = (
+  request: UploadRequest,
+  body: Blob,
+  options: SendOptions,
+): Promise<TrackUpload> => sendFile(request, body, TrackUpload, options);
 
 /** `?name=` — исходное имя только для показа: длиннее 120 символов — обрезается, недопустимое — не передаётся. */
 export function uploadName(fileName: string): string | undefined {

@@ -40,7 +40,7 @@ const UPLOAD_ERRORS = {
 } as const;
 
 /**
- * Маршруты коридора в панели (race-results-01): загрузка GPX — `races.manage`, чтение — `races.read` (Q1); каталог
+ * Маршруты коридора в панели (race-results-01): загрузка GPX (API принимает и KML, routes-02 RC-10) — `races.manage`, чтение — `races.read` (Q1); каталог
  * (routes-01) — публикация и снятие, `races.manage`. Тонкий слой: гард, права, контракт, чтение тела после лимита частоты; разбор — только worker.
  */
 @Controller('admin/routes')
@@ -68,9 +68,13 @@ export class RoutesAdminController {
         throw error;
       },
     );
-    const result = await this.routes.accept(actor, query.title, bytes);
+    const result = await this.routes.accept(
+      { userId: actor.userId, origin: 'platform' },
+      query.title,
+      bytes,
+    );
     reply.status(result.created ? 202 : 200);
-    return result.route;
+    return this.routes.view(result.route);
   }
 
   @Get()

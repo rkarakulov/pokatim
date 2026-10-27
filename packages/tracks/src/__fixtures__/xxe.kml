@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE kml [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Placemark><name>&xxe;</name><LineString><coordinates>27.559,53.9006 27.569,53.9106</coordinates></LineString></Placemark>
+</kml>

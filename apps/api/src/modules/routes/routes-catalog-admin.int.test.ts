@@ -11,6 +11,7 @@ import {
   readyRoute,
   ROUTES,
   routesDb,
+  seedRiderRoute,
   uploadRoute,
 } from '../../../test/routes';
 import { PanelAudit } from '../panel';
@@ -243,5 +244,18 @@ describe('отказы (AC1)', () => {
     }
     expect((await routeDoc(id))?.catalog).toBeNull();
     expect(await catalogAudit(id)).toEqual([]);
+  });
+});
+
+describe('изоляция маршрутов райдера (routes-02, RC-2)', () => {
+  it('публикация и снятие маршрута райдера — 404 и автору-сотруднику; catalog остался null, журнала нет', async () => {
+    const admin = await staff(h, 'admin@example.by', 'admin');
+    const rider = await seedRiderRoute(h, admin.userId);
+    const res = await publish(admin.token, rider, { city: 'minsk', surfaces: ['asphalt'] });
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
+    expect((await unpublish(admin.token, rider)).status).toBe(404);
+    expect((await routeDoc(rider))?.catalog).toBeNull();
+    expect(await auditOf(rider)).toEqual([]);
   });
 });

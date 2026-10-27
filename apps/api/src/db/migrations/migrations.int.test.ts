@@ -27,7 +27,8 @@ import { rideReports } from './0017_ride_reports';
 import { disputes } from './0018_disputes';
 import { profileConsents } from './0019_profile_consents';
 import { routesCatalog } from './0020_routes_catalog';
-import { routesDerived } from './0021_routes_derived';
+import { routesRider } from './0021_routes_rider';
+import { routesDerived } from './0022_routes_derived';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
@@ -90,7 +91,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0018_disputes',
       '0019_profile_consents',
       '0020_routes_catalog',
-      '0021_routes_derived',
+      '0021_routes_rider',
+      '0022_routes_derived',
     ]);
   });
 
@@ -345,7 +347,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     });
     const expected = {
       [ROUTES_COLLECTIONS.routes]: {
-        routes_owner_sha_unique: index({ ownerUserId: 1, sha256: 1 }, true),
+        // routes_owner_sha_unique удалён 0021_routes_rider (routes-02, HG-1)
         routes_list_idx: index({ origin: 1, status: 1, _id: -1 }),
         routes_owner_idx: index({ ownerUserId: 1, _id: -1 }),
         // 0020_routes_catalog (routes-01): частичный индекс каталога
@@ -353,8 +355,11 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
           ...index({ 'catalog.publishedAt': -1, _id: -1 }),
           partialFilterExpression: { 'catalog.publishedAt': { $type: 'date' } },
         },
+        // 0021_routes_rider (routes-02): дедуп в пределах происхождения, список своих маршрутов
+        routes_owner_origin_sha_unique: index({ ownerUserId: 1, origin: 1, sha256: 1 }, true),
+        routes_owner_origin_idx: index({ ownerUserId: 1, origin: 1, _id: -1 }),
       },
-      // 0021_routes_derived (routes-03): выборка бэкфилла производных
+      // 0022_routes_derived (routes-03): выборка бэкфилла производных
       [ROUTES_COLLECTIONS.geometries]: {
         route_geometries_derived_idx: index({ derivedVersion: 1 }),
       },
@@ -370,6 +375,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await races.insertMany([{ _id: 'old-race' }, { _id: 'corridor-race', corridor }]);
     await routes.up(h.db);
     await routes.up(h.db);
+    // повтор 0013 заново создаёт старый индекс дедупа — следующая 0021 его снова удаляет
+    await routesRider.up(h.db);
     expect(await races.findOne({ _id: 'old-race' })).toEqual({ _id: 'old-race', corridor: null });
     expect(await races.findOne({ _id: 'corridor-race' })).toEqual({
       _id: 'corridor-race',
@@ -616,6 +623,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
   });
 
   it('0020_routes_catalog: частичный индекс каталога, индекс гонок маршрута, бэкфилл routes.catalog = null; повторный up — без изменений', async () => {
+    expect(migrations.map((migration) => migration.id)).toContain('0020_routes_catalog');
     const routeIndexes = await indexesOf(ROUTES_COLLECTIONS.routes);
     expect(routeIndexes.routes_catalog_idx).toEqual({
       key: { 'catalog.publishedAt': -1, _id: -1 },
@@ -663,10 +671,45 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(RACES_COLLECTIONS.races)).toEqual(raceIndexes);
   });
 
-  it('0021_routes_derived: коллекция route_exports, индекс бэкфилла; после 0020; повторный up — без изменений', async () => {
+  it('0021_routes_rider: дедуп (ownerUserId, origin, sha256) и список своих — созданы, routes_owner_sha_unique удалён; повторный up — без ошибки', async () => {
+    expect(migrations.map((migration) => migration.id)).toContain('0021_routes_rider');
+    const index = (key: Record<string, unknown>, unique = false) => ({
+      key,
+      unique,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+    const before = await indexesOf(ROUTES_COLLECTIONS.routes);
+    expect(before.routes_owner_origin_sha_unique).toEqual(
+      index({ ownerUserId: 1, origin: 1, sha256: 1 }, true),
+    );
+    expect(before.routes_owner_origin_idx).toEqual(index({ ownerUserId: 1, origin: 1, _id: -1 }));
+    expect(before.routes_owner_sha_unique).toBeUndefined();
+
+    // тот же файл того же пользователя: маршрут платформы и маршрут райдера уживаются; дубль в пределах origin — нет
+    const docs = h.db.collection<{
+      _id: string;
+      ownerUserId: string;
+      origin: string;
+      sha256: string;
+    }>(ROUTES_COLLECTIONS.routes);
+    await docs.insertMany([
+      { _id: 'platform-copy', ownerUserId: 'u', origin: 'platform', sha256: 'same' },
+      { _id: 'rider-copy', ownerUserId: 'u', origin: 'rider', sha256: 'same' },
+    ]);
+    await expect(
+      docs.insertOne({ _id: 'rider-dup', ownerUserId: 'u', origin: 'rider', sha256: 'same' }),
+    ).rejects.toThrow(/routes_owner_origin_sha_unique/);
+    await routesRider.up(h.db);
+    await routesRider.up(h.db);
+    await docs.deleteMany({ _id: { $in: ['platform-copy', 'rider-copy'] } });
+    expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toEqual(before);
+  });
+
+  it('0022_routes_derived: коллекция route_exports, индекс бэкфилла; после 0021; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0021_routes_derived');
-    expect(ids.indexOf('0021_routes_derived')).toBe(ids.indexOf('0020_routes_catalog') + 1);
+    expect(ids.at(-1)).toBe('0022_routes_derived');
+    expect(ids.indexOf('0022_routes_derived')).toBe(ids.indexOf('0021_routes_rider') + 1);
     const exists = () =>
       h.db.listCollections({ name: ROUTES_COLLECTIONS.exports }, { nameOnly: true }).toArray();
     const expected = {

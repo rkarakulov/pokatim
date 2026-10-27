@@ -16,7 +16,9 @@ import { createHarness, type Harness, MINUTE } from '../../../test/harness';
 import { call } from '../../../test/identity';
 import { panelCall } from '../../../test/panel';
 import { staff } from '../../../test/races';
-import { fixture, ROUTES, readyRoute, routesDb } from '../../../test/routes';
+import { fixture, ROUTES, readyRoute, routesDb, seedRiderRoute } from '../../../test/routes';
+import { ROUTE_CATALOG, type RouteCatalog } from './route-catalog.port';
+import { ROUTE_GEOMETRY, type RouteGeometry } from './route-geometry.port';
 import type { RouteDoc } from './routes.collection';
 
 /**
@@ -308,7 +310,7 @@ describe('GET /v1/routes/:id и /map (AC3)', () => {
     const hidden = await seedRoute({ publishedAt: null });
     const processing = await seedRoute({ status: 'processing', publishedAt: null });
     for (const id of [hidden, processing, uuidv7()]) {
-      for (const suffix of ['', '/map']) {
+      for (const suffix of ['', '/map', '/gpx']) {
         const res = await get(`/v1/routes/${id}${suffix}`);
         expect(res.status, `${id}${suffix}`).toBe(404);
         expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
@@ -468,5 +470,44 @@ describe('GET /v1/routes/:id/gpx (routes-03, AC4)', () => {
     expect((await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.4')).statusCode).toBe(200);
     // карточка с того же адреса — лимит public-read (300) не исчерпан
     expect((await getRaw(`/v1/routes/${id}`, '198.51.100.3')).statusCode).toBe(200);
+  });
+});
+
+describe('изоляция маршрутов райдера (routes-02, RC-2)', () => {
+  /** Защита в глубину: каталог у маршрута райдера подставлен в БД вручную (приложение его не ставит). */
+  const riderInCatalog = () =>
+    seedRiderRoute(h, uuidv7(), {
+      catalog: { city: 'brest', surfaces: ['asphalt'], publishedAt: h.clock.now() },
+    });
+
+  it('публично: нет в списке и городах; карточка, карта и GPX — 404 (даже с подставленным catalog)', async () => {
+    const platform = await seedRoute({ city: 'minsk' });
+    const rider = await riderInCatalog();
+    const plain = await seedRiderRoute(h, uuidv7());
+
+    expect(await ids()).toEqual([platform]);
+    expect(await ids('?city=brest')).toEqual([]);
+    expect(CatalogRouteCities.parse((await get('/v1/routes/cities')).body).cities).toEqual([
+      'minsk',
+    ]);
+    for (const id of [rider, plain]) {
+      for (const suffix of ['', '/map', '/gpx']) {
+        const res = await get(`/v1/routes/${id}${suffix}`);
+        expect(res.status, `${id}${suffix}`).toBe(404);
+        expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
+      }
+    }
+  });
+
+  it('порты races/results: готовый маршрут райдера — не коридор, нет геометрии сверки, рамки, линии показа и названия', async () => {
+    const rider = await riderInCatalog();
+    const catalog = h.app.get<RouteCatalog>(ROUTE_CATALOG, { strict: false });
+    const geometry = h.app.get<RouteGeometry>(ROUTE_GEOMETRY, { strict: false });
+    expect(await catalog.findReady(rider)).toBeNull();
+    expect(await catalog.inCatalog(rider)).toBe(false);
+    expect((await catalog.summaries([rider])).size).toBe(0);
+    expect(await geometry.matchGeometry(rider)).toBeNull();
+    expect(await geometry.bounds(rider)).toBeNull();
+    expect(await geometry.displayGeometry(rider)).toBeNull();
   });
 });

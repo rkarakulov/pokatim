@@ -10,7 +10,7 @@ import { ensureCollection } from './0002_identity';
  * Expand-only, без транзакции, идемпотентна; данные досчитывает регламент `routes-maintenance`, не миграция.
  */
 export const routesDerived: MongoMigration = {
-  id: '0021_routes_derived',
+  id: '0022_routes_derived',
   async up(db) {
     await ensureCollection(db, ROUTES_COLLECTIONS.exports);
     await db

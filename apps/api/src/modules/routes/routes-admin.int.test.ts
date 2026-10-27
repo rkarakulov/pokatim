@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { PanelRoutePage, Session } from '@pokatim/contracts';
 import { parseGpx, ROUTE_DERIVED_VERSION } from '@pokatim/tracks/parse';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +16,7 @@ import {
   readyRoute,
   ROUTES,
   routesDb,
+  seedRiderRoute,
   uploadRoute,
 } from '../../../test/routes';
 import { RouteProcessingProcessor } from './route-processing.processor';
@@ -271,7 +274,7 @@ describe('отказы (AC2, AC10)', () => {
 });
 
 describe('дедуп при гонке загрузок (AC16)', () => {
-  it('вставка проиграла гонку (дубль ключа routes_owner_sha_unique) — 200 с маршрутом победителя, без второй записи', async () => {
+  it('вставка проиграла гонку (дубль ключа routes_owner_origin_sha_unique) — 200 с маршрутом победителя, без второй записи', async () => {
     const org = await staff(h, 'org@example.by', 'organizer');
     const bytes = fixture('route-rte.gpx');
     const first = parsedRoute(await uploadRoute(h, org.token, bytes));
@@ -390,5 +393,45 @@ describe('видимость и список (Q2)', () => {
     expect(second.items.map((item) => item.id)).toEqual([ready]);
     expect(second.nextCursor).toBeNull();
     expect(second.items[0]).not.toHaveProperty('line');
+  });
+});
+
+describe('изоляция маршрутов райдера (routes-02, RC-2)', () => {
+  it('сотрудник-автор маршрутов райдера: в списке панели (с status=ready и без) их нет, GET :id — 404 автору и другому сотруднику', async () => {
+    const admin = await staff(h, 'admin@example.by', 'admin');
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const platform = await readyRoute(h, admin.token, 'route-loop.gpx', 'Круг админа');
+    // тот же пользователь вошёл в приложение и загрузил свои маршруты
+    const riderReady = await seedRiderRoute(h, org.userId);
+    const riderProcessing = await seedRiderRoute(h, org.userId, { status: 'processing' });
+    const riderFailed = await seedRiderRoute(h, org.userId, { status: 'failed' });
+
+    const ids = async (token: string, query: string) =>
+      PanelRoutePage.parse((await panelCall(h, token, 'GET', `${ROUTES}${query}`)).body).items.map(
+        (item) => item.id,
+      );
+    for (const token of [org.token, admin.token]) {
+      expect(await ids(token, '')).toEqual([platform]);
+      expect(await ids(token, '?status=ready')).toEqual([platform]);
+      for (const id of [riderReady, riderProcessing, riderFailed]) {
+        const res = await panelCall(h, token, 'GET', `${ROUTES}/${id}`);
+        expect(res.status, id).toBe(404);
+        expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
+      }
+    }
+  });
+
+  it('дедуп панели — только среди маршрутов платформы: файл, уже загруженный в приложении, даёт новый маршрут команды', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const bytes = fixture('route-rte.gpx');
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const rider = await seedRiderRoute(h, org.userId, { sha256 });
+
+    const res = await uploadRoute(h, org.token, bytes);
+    expect(res.status).toBe(202);
+    const route = parsedRoute(res);
+    expect(route.id).not.toBe(rider);
+    expect(await routeDoc(route.id)).toMatchObject({ origin: 'platform', sha256 });
+    expect(await routeDoc(rider)).toMatchObject({ origin: 'rider', title: 'Мой маршрут' });
   });
 });

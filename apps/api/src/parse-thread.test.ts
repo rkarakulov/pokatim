@@ -55,6 +55,20 @@ describe('runParseThread', () => {
     ).resolves.toEqual({ ok: false, code: 'unreadable' });
   });
 
+  it('analyzeRoute KML в потоке (routes-02): My Maps и gx:Track — результат; billion laughs — unreadable', async () => {
+    for (const name of ['route-mymaps.kml', 'route-earth-gxtrack.kml']) {
+      const outcome = await runParseThread<RouteAnalysis>(
+        'analyzeRoute',
+        [fixture(name)],
+        DEFAULT_PARSE_LIMITS,
+      );
+      expect(outcome.ok, name).toBe(true);
+    }
+    await expect(
+      runParseThread('analyzeRoute', [fixture('billion-laughs.kml')], DEFAULT_PARSE_LIMITS),
+    ).resolves.toEqual({ ok: false, code: 'unreadable' });
+  });
+
   it('дольше лимита — timeout', async () => {
     await expect(
       runParseThread('analyzeRoute', [fixture('route-loop.gpx')], {

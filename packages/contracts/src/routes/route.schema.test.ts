@@ -6,7 +6,9 @@ import {
   PanelRouteQuery,
   PublishRouteInput,
   ROUTE_FAILURE_CODES,
+  ROUTE_FILE_EXTENSIONS,
   ROUTE_FILE_MAX_BYTES,
+  ROUTE_ORIGINS,
   ROUTE_STATUSES,
   UploadRouteQuery,
 } from './route.schema.ts';
@@ -117,5 +119,15 @@ describe('маршрут', () => {
     ]) {
       expect(PublishRouteInput.safeParse(broken).success, JSON.stringify(broken)).toBe(false);
     }
+  });
+});
+
+describe('routes-02: происхождение и расширения файла маршрута', () => {
+  it('ROUTE_ORIGINS — platform, rider (только в конец)', () => {
+    expect(ROUTE_ORIGINS).toEqual(['platform', 'rider']);
+  });
+
+  it('ROUTE_FILE_EXTENSIONS — gpx, kml', () => {
+    expect(ROUTE_FILE_EXTENSIONS).toEqual(['gpx', 'kml']);
   });
 });

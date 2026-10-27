@@ -4,6 +4,7 @@ import {
   isCityCode,
   type RouteDistanceBucket,
   type RouteFailureCode,
+  type RouteOrigin,
   type Surface,
 } from '@pokatim/contracts';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
@@ -47,13 +48,27 @@ export interface RouteDerivedState {
   derivedVersion: number | null;
 }
 
-/** Опубликован в каталоге — условие частичного индекса `routes_catalog_idx` (обязательно в запросе каталога). */
-const IN_CATALOG = { 'catalog.publishedAt': { $type: 'date' } } as const;
+/** Маршрут команды платформы (routes-02, RC-2): условие каждого чтения панели, каталога и портов. */
+const PLATFORM = { origin: 'platform' } as const;
+
+/** Свой маршрут райдера (routes-02): единственное условие чтения и записи «моих». */
+const ownRider = (ownerUserId: string) => ({ ownerUserId, origin: 'rider' }) as const;
+
+/** Частичный индекс каталога (`0020_routes_catalog`). */
+const CATALOG_INDEX = 'routes_catalog_idx';
+
+/**
+ * Опубликован в каталоге — условие частичного индекса `routes_catalog_idx` (обязательно в запросе каталога); только
+ * маршрут платформы (защита в глубину: у маршрута райдера `catalog` всегда `null`).
+ */
+const IN_CATALOG = { 'catalog.publishedAt': { $type: 'date' }, ...PLATFORM } as const;
 
 /**
  * Единственный писатель `routes`, `route_geometries`, `route_sources` (race-results-01). Правила (`pokatim-db.md`):
  * - переход статуса — только из `processing` (условие в фильтре): повтор задачи после `ready`/`failed` — no-op;
- * - готовый маршрут не меняется (линии и длина пишутся один раз, вместе с переходом в `ready`);
+ * - готовый маршрут не меняет линию и длину (геометрия пишется один раз, вместе с переходом в `ready`);
+ * - граница приватности (routes-02, RC-2) — здесь: чтения панели, каталога и портов — с `origin: 'platform'` в
+ *   фильтре; маршрут райдера — только методы `*Own` с `{ ownerUserId, origin: 'rider' }`;
  * - производные данные (`profile`, `derivedVersion`, `route_exports`, routes-03) пишут только `markReady` и
  *   `recordDerived` — обе с экспортом GPX в одной транзакции (инвариант «есть `derivedVersion` ⇒ есть экспорт»);
  * - значения фильтров — только примитивы после zod (id, статус).
@@ -72,17 +87,33 @@ export class RoutesRepository {
     await this.c.sources.insertOne({ _id: route._id, bytes: new Binary(bytes) }, { session });
   }
 
-  async findByOwnerSha(ownerUserId: string, sha256: string): Promise<RouteDoc | undefined> {
-    return (await this.c.routes.findOne({ ownerUserId, sha256 })) ?? undefined;
+  /** Дедуп приёма — в пределах происхождения (индекс `routes_owner_origin_sha_unique`). */
+  async findByOwnerSha(
+    origin: RouteOrigin,
+    ownerUserId: string,
+    sha256: string,
+  ): Promise<RouteDoc | undefined> {
+    return (await this.c.routes.findOne({ ownerUserId, origin, sha256 })) ?? undefined;
+  }
+
+  /** Число маршрутов владельца в пределах происхождения (квота «моих», все статусы). */
+  countOwned(origin: RouteOrigin, ownerUserId: string): Promise<number> {
+    return this.c.routes.countDocuments({ ownerUserId, origin });
   }
 
   async findRoute(id: string, session?: DbSession): Promise<RouteDoc | undefined> {
     return (await this.c.routes.findOne({ _id: id }, { session })) ?? undefined;
   }
 
-  /** Готовый маршрут (`ready` терминален: читать в транзакции гонки можно без замка). */
+  /**
+   * Готовый маршрут платформы (`ready` терминален, маршрут платформы не удаляется: читать в транзакции гонки можно
+   * без замка). Маршрут райдера — `undefined` (коридор, карта, сверка).
+   */
   async findReady(id: string, session?: DbSession): Promise<RouteDoc | undefined> {
-    return (await this.c.routes.findOne({ _id: id, status: 'ready' }, { session })) ?? undefined;
+    return (
+      (await this.c.routes.findOne({ _id: id, status: 'ready', ...PLATFORM }, { session })) ??
+      undefined
+    );
   }
 
   /**
@@ -120,11 +151,15 @@ export class RoutesRepository {
         ],
       });
     }
-    return this.c.routes
-      .find({ $and: and })
-      .sort({ 'catalog.publishedAt': -1, _id: -1 })
-      .limit(limit)
-      .toArray();
+    return (
+      this.c.routes
+        .find({ $and: and })
+        .sort({ 'catalog.publishedAt': -1, _id: -1 })
+        // `origin` в фильтре делает кандидатом `routes_list_idx` (сортировка в памяти) — план фиксирован
+        .hint(CATALOG_INDEX)
+        .limit(limit)
+        .toArray()
+    );
   }
 
   /** Коды городов старта опубликованных маршрутов (чипы фильтра). */
@@ -166,12 +201,12 @@ export class RoutesRepository {
 
   routesByIds(ids: readonly string[]): Promise<RouteDoc[]> {
     if (ids.length === 0) return Promise.resolve([]);
-    return this.c.routes.find({ _id: { $in: [...ids] } }).toArray();
+    return this.c.routes.find({ _id: { $in: [...ids] }, ...PLATFORM }).toArray();
   }
 
   /**
    * Список панели, новые сверху (`_id` — UUID v7): `readyOnly` — все готовые маршруты платформы; иначе — готовые +
-   * свои необработанные (`processing`, `failed`) сотрудника `viewerUserId`.
+   * свои необработанные (`processing`, `failed`) сотрудника `viewerUserId`. Только маршруты платформы.
    */
   listVisible(
     viewerUserId: string,
@@ -182,10 +217,55 @@ export class RoutesRepository {
     const and: Filter<RouteDoc>[] = [
       readyOnly
         ? { origin: 'platform', status: 'ready' }
-        : { $or: [{ origin: 'platform', status: 'ready' }, { ownerUserId: viewerUserId }] },
+        : {
+            $or: [
+              { origin: 'platform', status: 'ready' },
+              { origin: 'platform', ownerUserId: viewerUserId },
+            ],
+          },
     ];
     if (beforeId) and.push({ _id: { $lt: beforeId } });
     return this.c.routes.find({ $and: and }).sort({ _id: -1 }).limit(limit).toArray();
+  }
+
+  /** Свой маршрут райдера (routes-02): чужой, маршрут платформы и неизвестный — `undefined`. */
+  async findOwn(ownerUserId: string, id: string): Promise<RouteDoc | undefined> {
+    return (await this.c.routes.findOne({ _id: id, ...ownRider(ownerUserId) })) ?? undefined;
+  }
+
+  /** Свои маршруты райдера, новые сверху (`_id` — UUID v7; индекс `routes_owner_origin_idx`). */
+  listOwn(ownerUserId: string, beforeId: string | null, limit: number): Promise<RouteDoc[]> {
+    return this.c.routes
+      .find({ ...ownRider(ownerUserId), ...(beforeId ? { _id: { $lt: beforeId } } : {}) })
+      .sort({ _id: -1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  /** Переименование своего маршрута (в любом статусе); `null` — не свой или нет. */
+  renameOwn(ownerUserId: string, id: string, title: string, now: Date): Promise<RouteDoc | null> {
+    return this.c.routes.findOneAndUpdate(
+      { _id: id, ...ownRider(ownerUserId) },
+      { $set: { title, updatedAt: now } },
+      { returnDocument: 'after' },
+    );
+  }
+
+  /**
+   * Удаление своего маршрута — в транзакции: маршрут (фильтр владельца и `rider`), геометрия, исходник и очищенный
+   * GPX (`route_exports`, routes-03; бэкфилл пишет экспорт только при существующей геометрии). `false` — не
+   * свой или нет (ничего не удалено). Запись worker'а того же маршрута конфликтует по документу `routes` — повтор.
+   */
+  async deleteOwn(session: DbSession, ownerUserId: string, id: string): Promise<boolean> {
+    const deleted = await this.c.routes.deleteOne(
+      { _id: id, ...ownRider(ownerUserId) },
+      { session },
+    );
+    if (deleted.deletedCount !== 1) return false;
+    await this.c.geometries.deleteOne({ _id: id }, { session });
+    await this.c.sources.deleteOne({ _id: id }, { session });
+    await this.c.exports.deleteOne({ _id: id }, { session });
+    return true;
   }
 
   async geometry(id: string): Promise<RouteGeometryDoc | undefined> {

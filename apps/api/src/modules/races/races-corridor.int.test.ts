@@ -22,6 +22,7 @@ import {
   readyRoute,
   ROUTES,
   routesRepository,
+  seedRiderRoute,
   uploadRoute,
 } from '../../../test/routes';
 
@@ -562,5 +563,48 @@ describe('гонки маршрута (routes-01)', () => {
     ).toBe(200);
     expect((await racesOf(routeId)).status).toBe(404);
     expect((await racesOf('not-a-uuid')).status).toBe(400);
+  });
+});
+
+describe('изоляция маршрутов райдера (routes-02, RC-2)', () => {
+  it('готовый маршрут райдера (даже автора-организатора) — 400 corridor.routeId ROUTE_NOT_READY при создании и правке', async () => {
+    const { org } = await setup();
+    const rider = await seedRiderRoute(h, org.userId);
+    const race = await createRace(h, org.token);
+
+    const created = await panelCall(
+      h,
+      org.token,
+      'POST',
+      RACES,
+      raceBody({ ...withoutDistance, corridor: { routeId: rider, widthM: 50 } }),
+    );
+    expect(created.status).toBe(400);
+    expect(fieldCodes(created.body)).toEqual(['corridor.routeId:ROUTE_NOT_READY']);
+    const updated = await panelCall(h, org.token, 'POST', `${RACES}/${race.id}`, {
+      version: race.version,
+      corridor: { routeId: rider, widthM: 50 },
+    });
+    expect(fieldCodes(updated.body)).toEqual(['corridor.routeId:ROUTE_NOT_READY']);
+    expect(await racesDb(h).races.countDocuments({ 'corridor.routeId': rider })).toBe(0);
+  });
+
+  it('гонки маршрута райдера — 404 (даже с подставленным catalog); гонка с подставленным в БД коридором райдера — карта 404', async () => {
+    const { org, routeId } = await setup();
+    const rider = await seedRiderRoute(h, org.userId, {
+      catalog: { city: 'minsk', surfaces: ['asphalt'], publishedAt: h.clock.now() },
+    });
+    const races = await call(h, 'GET', `/v1/routes/${rider}/races`);
+    expect(races.status).toBe(404);
+    expect(races.body).toMatchObject({ code: 'NOT_FOUND' });
+
+    const race = await publishedRace(h, org.token, {
+      ...withoutDistance,
+      corridor: { routeId, widthM: 50 },
+    });
+    await racesDb(h).races.updateOne({ _id: race.id }, { $set: { 'corridor.routeId': rider } });
+    const map = await call(h, 'GET', `/v1/races/${race.id}/route`);
+    expect(map.status).toBe(404);
+    expect(map.body).toMatchObject({ code: 'NOT_FOUND' });
   });
 });

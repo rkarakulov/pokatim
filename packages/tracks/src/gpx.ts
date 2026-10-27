@@ -1,4 +1,4 @@
-import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { XMLParser } from 'fast-xml-parser';
 
 import {
   TRACK_MAX_POINTS,
@@ -7,33 +7,17 @@ import {
   type ParsedPoint,
   type ParsedTrack,
 } from './track.ts';
+import {
+  assertElementCount,
+  assertNoForbiddenMarkup,
+  countTags,
+  parseValidXml,
+  XML_MAX_ELEMENTS,
+} from './xml.ts';
 
-/** DTD и сущности не нужны GPX; их наличие — XXE / «миллиард смехов». Отказ до запуска парсера. */
-const FORBIDDEN_MARKUP = /<!DOCTYPE|<!ENTITY/i;
-
-/**
- * Предел элементов документа до разбора: точка с расширениями — до ~10 элементов (открывающих тегов), запас ×2.
- * Враждебный GPX с миллионами элементов отвергается подсчётом, а не разбором в дерево (память потока worker).
- */
-export const GPX_MAX_ELEMENTS = TRACK_MAX_POINTS * 20;
-
-/** Число совпадений глобального регулярного выражения без сборки массива. */
-function countMatches(text: string, pattern: RegExp): number {
-  let count = 0;
-  pattern.lastIndex = 0;
-  while (pattern.exec(text) !== null) count += 1;
-  return count;
-}
-
-const escapeName = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** Число открывающих тегов `name` с любым префиксом пространства имён (`<trkpt`, `<g:trkpt`), без разбора XML. */
-export function countTags(text: string, name: string): number {
-  return countMatches(text, new RegExp(`<(?:[A-Za-z_][\\w.-]*:)?${escapeName(name)}[\\s/>]`, 'g'));
-}
-
-/** Открывающие теги (без закрывающих, комментариев и инструкций) — грубая оценка размера дерева. */
-const ELEMENT_OPEN = /<[^/!?]/g;
+/** Прежнее имя предела элементов GPX — общий `XML_MAX_ELEMENTS` (`xml.ts`). */
+export const GPX_MAX_ELEMENTS = XML_MAX_ELEMENTS;
+export { countTags };
 
 /**
  * `<trk><type>`: Garmin Connect/Komoot/RideWithGPS пишут строку (`cycling`, `road_biking`, …), старые экспорты
@@ -102,25 +86,17 @@ export interface ParseGpxOptions {
  * `extensions` точки), только для флагов.
  */
 export function parseGpx(text: string, options: ParseGpxOptions = {}): ParsedTrack {
-  if (FORBIDDEN_MARKUP.test(text)) throw new TrackParseError('unreadable');
+  assertNoForbiddenMarkup(text);
   // размер — до разбора в дерево (память потока worker)
   const maxPoints = options.maxPoints ?? TRACK_MAX_POINTS;
+  assertElementCount(text);
   if (
-    countMatches(text, ELEMENT_OPEN) > GPX_MAX_ELEMENTS ||
     countTags(text, 'trkpt') > maxPoints ||
     (options.allowRoute === true && countTags(text, 'rtept') > maxPoints)
   ) {
     throw new TrackParseError('too_many_points');
   }
-  let document: unknown;
-  try {
-    // парсер fast-xml-parser не проверяет корректность разметки — валидатор того же пакета до разбора
-    if (XMLValidator.validate(text) !== true) throw new TrackParseError('unreadable');
-    document = parser.parse(text);
-  } catch (error) {
-    if (error instanceof TrackParseError) throw error;
-    throw new TrackParseError('unreadable');
-  }
+  const document = parseValidXml(text, parser);
   const gpx = isNode(document) ? document['gpx'] : undefined;
   if (!isNode(gpx)) throw new TrackParseError('unreadable');
 

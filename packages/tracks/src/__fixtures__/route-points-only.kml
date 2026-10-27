@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark><name>Кофейня</name><Point><coordinates>27.55,53.9,0</coordinates></Point></Placemark>
+    <Placemark><name>Парковка</name><Point><coordinates>27.56,53.91,0</coordinates></Point></Placemark>
+  </Document>
+</kml>

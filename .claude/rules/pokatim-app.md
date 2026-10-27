@@ -216,6 +216,16 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteGpxUrl(id)`, только при
   `gpxAvailable`.
 - Главная — раздел `routes` (текстовый герой `RouteHero`, RC-8; пустой каталог — `EmptyState`).
+- Мои маршруты (routes-02): переключатель «Каталог / Мои» — `SegmentedControl` в шапке обеих лент, состояние —
+  `?view=mine` (`useLocalSearchParams` + `router.setParams`). Лента — `features/routes/my-route-feed.tsx`, ключи
+  `['routes','mine','list','pages']` (опрос 3 с, пока есть `processing`), `['routes','mine','detail',id]`,
+  `['routes','mine','map',id]` (`staleTime: Infinity`) — всё через `withAccessToken`; инвалидация после мутаций — только
+  `['routes','mine']`, при выходе — `queryClient.clear()`. Загрузка — конвейер `features/devices`
+  (`pickTrackFile(ROUTE_FILE_EXTENSIONS)`, `trackFileBody`, `sendFile(…, MyRoute, …)`, `UploadProgress`) +
+  `precheckRouteFile` и шаг «Название» (`use-my-route-upload.ts`). Карточка `routes/mine/[id]` — внутри
+  `Stack.Protected` вкладок (гость — на вход), без `loader`, мета, OG и «Поделиться»; карта — общий `RouteLineMap`
+  (`route-line-map.tsx`, им же пользуется `CatalogRouteMap`), строки — `DetailRow`; карточка списка —
+  `MyRouteListCard` (общая рамка с `RouteListCard`).
 
 ## Календарь стартов (блок 04, `docs/product/races-and-seasons.md`)
 

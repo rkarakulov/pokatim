@@ -1,4 +1,8 @@
-import { ROUTE_FILE_MAX_BYTES, type RouteDistanceBucket } from '@pokatim/contracts';
+import {
+  MY_ROUTE_MAX_COUNT,
+  ROUTE_FILE_MAX_BYTES,
+  type RouteDistanceBucket,
+} from '@pokatim/contracts';
 
 import { DEFAULT_PARSE_LIMITS } from '../../parse-thread';
 
@@ -7,6 +11,13 @@ export const ROUTE_POLICY = {
   maxFileBytes: ROUTE_FILE_MAX_BYTES,
   /** Загрузок на сотрудника в час. */
   uploadUserLimit: { limit: 20, windowSec: 60 * 60 },
+  /** Мои маршруты (routes-02, RC-5): загрузок на райдера и на IP в час — до чтения тела. */
+  riderUploadUserLimit: { limit: 20, windowSec: 60 * 60 },
+  riderUploadIpLimit: { limit: 60, windowSec: 60 * 60 },
+  /** Одновременных приёмов райдеров в процессе API (тело до 5 МиБ в памяти): остальным — 429. */
+  riderMaxConcurrentUploads: 4,
+  /** Квота своих маршрутов райдера (все статусы): больше — `409 ROUTE_QUOTA_EXCEEDED`. */
+  riderMaxRoutes: MY_ROUTE_MAX_COUNT,
   /**
    * Обработка дольше — считается зависшей (все попытки BullMQ с бэкоффом укладываются в минуты; запись отказа
    * последней попытки могла не пройти): повторная загрузка того же файла возвращает маршрут в обработку.

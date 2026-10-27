@@ -41,5 +41,23 @@
   "route-short.gpx": {
     "distanceM": 589.6416260626539,
     "points": 40
+  },
+  "route-mymaps.kml": {
+    "distanceM": 9729.21611365837,
+    "points": 240
+  },
+  "route-earth-gxtrack.kml": {
+    "distanceM": 10003.527824941042,
+    "elevationGainM": 40,
+    "points": 400
+  },
+  "route-no-alt.kml": {
+    "distanceM": 4842.623300610076,
+    "points": 120
+  },
+  "route-multigeometry.kml": {
+    "distanceM": 5954.049682227688,
+    "elevationGainM": 0,
+    "points": 140
   }
 }
