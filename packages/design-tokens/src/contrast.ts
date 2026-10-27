@@ -24,6 +24,23 @@ export function contrastPairsOf(t: Theme<PokatimRoleGroups>): ContrastPair[] {
     contrastPair('map.offCorridor / map.background', t.map.offCorridor, t.map.background, WCAG.ui),
     // профиль высоты на экране маршрута
     contrastPair('profile.line / surface.default', t.profile.line, t.surface.default, WCAG.ui),
+    // профиль высоты в шторке карточки маршрута
+    contrastPair('profile.line / surface.sheet', t.profile.line, t.surface.sheet, WCAG.ui),
+    // акцент на карточках вариантов раскладки (плитки, герой)
+    contrastPair('text.accent / surface.raised', t.text.accent, t.surface.raised, WCAG.text),
+    // подписи вкладок — текст
+    contrastPair(
+      'tabBar.active / tabBar.background',
+      t.tabBar.active,
+      t.tabBar.background,
+      WCAG.text,
+    ),
+    contrastPair(
+      'tabBar.inactive / tabBar.background',
+      t.tabBar.inactive,
+      t.tabBar.background,
+      WCAG.text,
+    ),
   ];
 }
 

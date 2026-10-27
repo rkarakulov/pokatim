@@ -8,8 +8,9 @@ import {
 } from '@rkarakulov/design-tokens';
 
 /**
- * Палитра pokatim из CSS прототипов («Воздух», визуальный слой «Ателье»). Только внутри этого файла:
- * компоненты и приложения используют роли тем (`useTheme()` / CSS-переменные), не палитру.
+ * Палитра pokatim из CSS прототипов («Воздух», визуальный слой «Ателье»). Палитры живут только внутри design-tokens
+ * (`brand.ts`, `app-theme-palettes.ts`): компоненты и приложения используют роли тем (`useTheme()` / CSS-переменные),
+ * не палитру.
  */
 const color = {
   neutral0: '#FFFFFF',
@@ -43,7 +44,7 @@ const color = {
 /** Подложка MapLibre для схемы: URL — `EXPO_PUBLIC_MAP_STYLE_LIGHT|DARK` (ADR-0014). */
 export type Basemap = 'light' | 'dark';
 
-/** Группы ролей pokatim поверх ролей базы: карта маршрута, полоса покрытия, профиль высоты. */
+/** Группы ролей pokatim поверх ролей базы: карта маршрута, полоса покрытия, профиль высоты, вкладки. */
 export interface PokatimRoleGroups {
   map: {
     /** подложка карты — не цвет: в CSS не выводится (`css.ts`) */
@@ -69,6 +70,12 @@ export interface PokatimRoleGroups {
     fillTop: string;
     fillBottom: string;
     grid: string;
+  };
+  /** панель вкладок: фон, активная и неактивная вкладка (подпись и иконка; полоса «Классики» — `active`) */
+  tabBar: {
+    background: string;
+    active: string;
+    inactive: string;
   };
 }
 
@@ -142,6 +149,12 @@ const light: AppTheme = {
     thumb: color.neutral0,
     thumbOn: color.neutral0,
   },
+  // как прежде: фон — surface.default, активная — text.primary, неактивная — text.secondary
+  tabBar: {
+    background: color.neutral0,
+    active: color.neutral900,
+    inactive: color.neutral600,
+  },
   shape: defaultShape,
 };
 
@@ -206,6 +219,11 @@ const dark: AppTheme = {
     trackOn: color.neutral50,
     thumb: color.neutral0,
     thumbOn: color.neutral950,
+  },
+  tabBar: {
+    background: color.neutral950,
+    active: color.neutral50,
+    inactive: color.neutral400,
   },
   shape: defaultShape,
 };

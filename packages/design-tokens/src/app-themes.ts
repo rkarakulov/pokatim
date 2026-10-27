@@ -1,5 +1,6 @@
-import type { FontStack } from '@rkarakulov/design-tokens';
+import { space, type FontStack } from '@rkarakulov/design-tokens';
 
+import * as palettes from './app-theme-palettes.ts';
 import { font, fontStack, themes, type AppTheme } from './brand.ts';
 
 /**
@@ -12,6 +13,11 @@ export type AppThemeId =
 export type AppColorScheme = 'system' | 'dark';
 /** Отступы карточек и строк списка. */
 export type AppDensity = 'regular' | 'comfortable';
+/** Плотность → отступы (px из `space`): внутренний отступ карточки списка и зазор между карточками. */
+export const appDensity: Readonly<Record<AppDensity, { cardPadding: number; listGap: number }>> = {
+  regular: { cardPadding: space.s4, listGap: 0 },
+  comfortable: { cardPadding: space.s5, listGap: space.s3 },
+};
 /** Вес иконок `expo-symbols`. */
 export type IconWeight = 'light' | 'regular' | 'medium' | 'semibold' | 'bold';
 
@@ -70,21 +76,97 @@ const classic = defineAppTheme({
   },
 });
 
+/** Раскладка «Классики» (слайс C1: у всех тем; варианты — C2). */
+const classicLayout: AppThemeLayout = classic.layout;
+
+/** CSS-стеки: гарнитура темы + фолбэк; сжатые — со сжатыми фолбэками. */
+const sansStack = (name: string) => `'${name}', system-ui, Arial, sans-serif`;
+const interText = fontStack.text;
+
 /** Реестр тем приложения; порядок ключей = `APP_THEME_IDS`. */
 export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
   classic,
-  // TODO(app-themes C): палитра, шрифты, форма, раскладка
-  atlas: defineAppTheme({ ...classic, id: 'atlas' }),
-  // TODO(app-themes C): палитра, шрифты, форма, раскладка
-  chrono: defineAppTheme({ ...classic, id: 'chrono' }),
-  // TODO(app-themes C): палитра, шрифты, форма, раскладка
-  planner: defineAppTheme({ ...classic, id: 'planner' }),
-  // TODO(app-themes C): палитра, шрифты, форма, раскладка
-  journal: defineAppTheme({ ...classic, id: 'journal' }),
-  // TODO(app-themes C): палитра, шрифты, форма, раскладка
-  navigation: defineAppTheme({ ...classic, id: 'navigation' }),
-  // TODO(app-themes C): палитра, шрифты, форма, раскладка
-  typography: defineAppTheme({ ...classic, id: 'typography' }),
+  atlas: defineAppTheme({
+    id: 'atlas',
+    colorScheme: 'system',
+    schemes: palettes.atlas,
+    fonts: {
+      display: 'Manrope',
+      text: 'Manrope',
+      stack: { display: sansStack('Manrope'), text: sansStack('Manrope') },
+    },
+    density: 'comfortable',
+    icons: { weight: 'regular', filled: false },
+    layout: classicLayout,
+  }),
+  chrono: defineAppTheme({
+    id: 'chrono',
+    colorScheme: 'dark',
+    schemes: { light: palettes.chrono, dark: palettes.chrono },
+    fonts: {
+      display: 'Roboto Condensed',
+      text: font.text,
+      stack: {
+        display: "'Roboto Condensed', 'Arial Narrow', Arial, sans-serif",
+        text: interText,
+      },
+    },
+    density: 'regular',
+    icons: { weight: 'semibold', filled: true },
+    layout: classicLayout,
+  }),
+  planner: defineAppTheme({
+    id: 'planner',
+    colorScheme: 'system',
+    schemes: palettes.planner,
+    fonts: {
+      display: 'Onest',
+      text: 'Onest',
+      stack: { display: sansStack('Onest'), text: sansStack('Onest') },
+    },
+    density: 'comfortable',
+    icons: { weight: 'regular', filled: false },
+    layout: classicLayout,
+  }),
+  journal: defineAppTheme({
+    id: 'journal',
+    colorScheme: 'system',
+    schemes: palettes.journal,
+    fonts: {
+      display: 'Golos Text',
+      text: 'Golos Text',
+      stack: { display: sansStack('Golos Text'), text: sansStack('Golos Text') },
+    },
+    density: 'comfortable',
+    icons: { weight: 'regular', filled: false },
+    layout: classicLayout,
+  }),
+  navigation: defineAppTheme({
+    id: 'navigation',
+    colorScheme: 'dark',
+    schemes: { light: palettes.navigation, dark: palettes.navigation },
+    fonts: {
+      display: 'Inter Tight',
+      text: font.text,
+      stack: { display: sansStack('Inter Tight'), text: interText },
+    },
+    density: 'regular',
+    icons: { weight: 'semibold', filled: true },
+    layout: classicLayout,
+  }),
+  typography: defineAppTheme({
+    id: 'typography',
+    colorScheme: 'system',
+    schemes: palettes.typography,
+    fonts: {
+      display: 'Oswald',
+      text: font.text,
+      stack: { display: "Oswald, 'Arial Narrow', Impact, sans-serif", text: interText },
+    },
+    density: 'regular',
+    icons: { weight: 'semibold', filled: false },
+    layout: classicLayout,
+  }),
 };
 
 /** Тема по умолчанию: нет настройки, незнакомый id, нет сети. */

@@ -114,6 +114,17 @@ describe('контраст WCAG — темы pokatim', () => {
     }
   }
 
+  it('пары слайса C: профиль в шторке, акцент на карточке, подписи вкладок', () => {
+    expect(contrastPairs('light').map((p) => p.name)).toEqual(
+      expect.arrayContaining([
+        'profile.line / surface.sheet',
+        'text.accent / surface.raised',
+        'tabBar.active / tabBar.background',
+        'tabBar.inactive / tabBar.background',
+      ]),
+    );
+  });
+
   it('к парам добавлена линия профиля высоты', () => {
     expect(contrastPairs('light').map((p) => p.name)).toContain('profile.line / surface.default');
   });
@@ -144,6 +155,13 @@ describe('CSS для веба (обёртка с брендом pokatim)', () =>
     const panel = designSystemCss({ theme: 'panel' });
     expect(panel).not.toContain('--color-map-basemap');
     expect(panel).toContain('--color-profile-line: #5C5C5C;');
+  });
+
+  it('вкладки — переменные --color-tab-bar-* (роли «Классики»)', () => {
+    const light = designSystemCss({ theme: 'light' });
+    expect(light).toContain('--color-tab-bar-background: #FFFFFF;');
+    expect(light).toContain('--color-tab-bar-active: #111111;');
+    expect(light).toContain('--color-tab-bar-inactive: #5C5C5C;');
   });
 
   it('плотность — только у темы panel', () => {
