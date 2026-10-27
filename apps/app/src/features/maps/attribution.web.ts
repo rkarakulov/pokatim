@@ -37,7 +37,8 @@ export function collapseAttribution(
 /**
  * B4: контрол атрибуции по теме приложения (по умолчанию — светлая плашка и чёрная «i» в любой теме). Правила —
  * в области `[data-route-map="scope"]` карты, цвета — роли темы; иконка «i» — SVG фона MapLibre (чёрная), в тёмной
- * теме инвертируется.
+ * теме инвертируется. Подсказка кооперативных жестов (routes-04b) — цвета MapLibre (затемнение, нейтрально в обеих
+ * темах, RC-10), при reduce motion — без анимации.
  */
 export function attributionCss(scope: string, theme: AppTheme): string {
   const root = `[data-route-map="${scope}"]`;
@@ -46,5 +47,7 @@ export function attributionCss(scope: string, theme: AppTheme): string {
     `${root} .maplibregl-ctrl.maplibregl-ctrl-attrib{background-color:${theme.surface.raised};color:${theme.text.secondary}}`,
     `${root} .maplibregl-ctrl-attrib a{color:${theme.text.secondary}}`,
     `${root} .maplibregl-ctrl-attrib-button{filter:${dark ? 'invert(1)' : 'none'}}`,
+    // routes-04b (RC-9): подсказка кооперативных жестов без затухания при reduce motion
+    `@media (prefers-reduced-motion: reduce){${root} .maplibregl-cooperative-gesture-screen{transition:none}}`,
   ].join('\n');
 }

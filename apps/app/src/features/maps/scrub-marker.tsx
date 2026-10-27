@@ -1,6 +1,6 @@
 import { size, stroke } from '@pokatim/design-tokens';
 import { nearestFraction, pointAtFraction, type Planar } from '@pokatim/tracks';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 
@@ -14,25 +14,35 @@ export const SCRUB_MARKER_PAN_TEST_ID = 'scrub-marker-pan';
 const HALF = size.touchMin / 2;
 
 /**
- * Маркер скраббинга поверх статичной карты (native, routes-04, RC-2, RC-8): свой вид над холстом в пикселях проекции
+ * Маркер скраббинга поверх карты (native, routes-04, RC-2, RC-8): свой вид над холстом в пикселях проекции
  * линии; подписан на стор только он (карта не перерисовывается). Виден всегда (старт — доля 0), отличим от старта и
  * финиша без цвета: крупнее (`size.icon`), обводка `map.background`. Перетаскивание — жест на маркере (область
  * касания `size.touchMin`): позиция пальца → ближайшая точка линии с подсказкой текущей доли (петля не прыгает на
- * другой проход); `dragging: 'map'` — с `onBegin` (экран не прокручивается). Карта не панорамируется (ADR-0014 RC-4).
- * Для скринридера скрыт: без жеста то же даёт `adjustable` профиля (S4).
+ * другой проход); `dragging: 'map'` — с `onBegin` (экран не прокручивается). Камера интерактивна (routes-04b): точки
+ * меняются на кадр движения камеры — конфиг жеста от них не зависит (точки и допуск — из ref, M1), точка маркера
+ * получает их пропсом и двигается вместе с линией. Для скринридера скрыт: без жеста то же даёт `adjustable` профиля (S4).
  */
 export function ScrubMarker({ store, points, cumulative, theme }: ScrubMarkerProps) {
   // точка маркера в начале жеста: позиция пальца = она + смещение жеста (маркер под пальцем двигается)
   const origin = useRef<Planar>([0, 0]);
-  // конфиг жеста стабилен на время скраббинга (меняется только при пересчёте проекции): доля — из стора через
-  // getState, на долю носитель жеста не подписан — обработчик не перерегистрируется в натив на кадр (ревью pass 1, M1)
-  const config = useMemo(() => {
-    const tolerance = scrubTolerance(points, cumulative);
-    return {
+  // точки линии и допуск меняются на кадр камеры (routes-04b) — жест читает их из ref
+  const tolerance = useMemo(() => scrubTolerance(points, cumulative), [points, cumulative]);
+  const line = useRef({ points, tolerance });
+  useEffect(() => {
+    line.current = { points, tolerance };
+  }, [points, tolerance]);
+  // конфиг жеста стабилен (ни доля, ни камера его не меняют): доля — из стора через getState, точки — из ref;
+  // обработчик не перерегистрируется в натив на кадр (ревью pass 1, M1)
+  const config = useMemo(
+    () => ({
       testID: SCRUB_MARKER_PAN_TEST_ID,
       runOnJS: true,
       onBegin: () => {
-        origin.current = pointAtFraction(points, cumulative, store.getState().fraction);
+        origin.current = pointAtFraction(
+          line.current.points,
+          cumulative,
+          store.getState().fraction,
+        );
         store.setState({ dragging: 'map', active: true });
       },
       onUpdate: (event: { translationX: number; translationY: number }) => {
@@ -42,19 +52,20 @@ export function ScrubMarker({ store, points, cumulative, theme }: ScrubMarkerPro
         ];
         store.setState({
           fraction: nearestFraction(
-            points,
+            line.current.points,
             cumulative,
             target,
             store.getState().fraction,
-            tolerance,
+            line.current.tolerance,
           ),
         });
       },
       onFinalize: () => {
         if (store.getState().dragging === 'map') store.setState({ dragging: null });
       },
-    };
-  }, [store, points, cumulative]);
+    }),
+    [store, cumulative],
+  );
   const pan = usePanGesture(config);
   return (
     <View

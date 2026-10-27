@@ -11,8 +11,8 @@ const mercatorY = (lat: number) => {
 };
 
 /**
- * Проекция `[lon, lat]` → пиксели вида по видимой рамке `[запад, юг, восток, север]` и размеру вида (native: камера
- * статична — рамка из `ViewState.bounds` не меняется, RC-2). Web Mercator: по долготе линейно, по широте — `ln tan`.
+ * Проекция `[lon, lat]` → пиксели вида по видимой рамке `[запад, юг, восток, север]` и размеру вида (native: рамка —
+ * `ViewState.bounds` последнего события региона, пересчёт на каждое движение камеры, routes-04b). Web Mercator: по долготе линейно, по широте — `ln tan`.
  */
 export function mercatorProjector(
   bounds: readonly [west: number, south: number, east: number, north: number],
@@ -52,8 +52,8 @@ export function scrubTolerance(points: readonly Planar[], cumulative: readonly n
 
 /**
  * Пиксели линии `[lon, lat]` по проекции камеры (routes-04): одна функция пересчёта для оверлея маркера — вызывается
- * на любое изменение камеры (web — `map.project` на `load`/`resize`, native — `mercatorProjector` по рамке и размеру;
- * интерактивная карта routes-04b добавит события движения, не меняя оверлей).
+ * на любое изменение камеры (web — `map.project` на `load`/`resize`/`move`, native — `mercatorProjector` по рамке
+ * событий региона и размеру вида; routes-04b — интерактивная камера, оверлей тот же).
  */
 export function projectLine(
   line: readonly (readonly [number, number])[],
