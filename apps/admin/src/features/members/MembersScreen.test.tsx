@@ -111,7 +111,9 @@ describe('«Сотрудники» (AC11)', () => {
 
   it('«Выдать роль»: 404 — под полем e-mail, окно открыто; успех — запрос по схеме и список перечитан', async () => {
     mocked.grantRole.mockRejectedValueOnce(httpError(404, 'NOT_FOUND'));
-    await renderApp('/members');
+    const { queryClient } = await renderApp('/members');
+    // журнал, открытый раньше: после выдачи роли его кэш устарел (staleTime панели — B12)
+    queryClient.setQueryData(['admin', 'audit', 'probe'], 'журнал');
     await screen.findByText('maria@example.by');
     fireEvent.click(screen.getByRole('button', { name: 'Выдать роль' }));
 
@@ -139,6 +141,7 @@ describe('«Сотрудники» (AC11)', () => {
       role: 'organizer',
     });
     expect(mocked.listMembers).toHaveBeenCalledTimes(2);
+    expect(queryClient.getQueryState(['admin', 'audit', 'probe'])?.isInvalidated).toBe(true);
   });
 
   it('«Выдать роль»: 409 неподтверждённый и уже член — под полем e-mail', async () => {

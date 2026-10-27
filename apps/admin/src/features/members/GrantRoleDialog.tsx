@@ -33,7 +33,10 @@ export function GrantRoleDialog({ open, onClose }: { open: boolean; onClose: () 
   const grant = useMutation({
     mutationFn: (body: GrantRoleRequest) => api.grantRole(body),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: MEMBERS_QUERY_KEY });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: MEMBERS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'audit'] }),
+      ]);
       close();
     },
     onError: (error) => {

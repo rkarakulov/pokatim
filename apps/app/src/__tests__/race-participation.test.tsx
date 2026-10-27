@@ -337,7 +337,7 @@ describe('вошедший: результат и попытки (AC4, AC5)', ()
     expect(await screen.findByText('Лучший')).toBeOnTheScreen();
     expect(participation().getByText('Засчитано')).toBeOnTheScreen();
     expect(participation().getByText('Обратное направление')).toBeOnTheScreen();
-    expect(participation().getByText(/Garmin · Из импорта/)).toBeOnTheScreen();
+    expect(participation().getByText(/Garmin · Автоматически/)).toBeOnTheScreen();
     expect(participation().getAllByText(/8 октября, 19:42/).length).toBe(3);
     expect(
       participation().getByText('Не удалось проверить трек — команда платформы разберётся.'),

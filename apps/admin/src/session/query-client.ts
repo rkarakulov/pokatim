@@ -17,6 +17,12 @@ declare module '@tanstack/react-query' {
   }
 }
 
+/**
+ * Свежесть ответа по умолчанию: с нулём каждый фокус окна и каждый повторный монтаж экрана давали второй такой же GET
+ * (B12). Свои действия панель инвалидирует сама, опросы — `refetchInterval`; через 30 с фокус окна перечитывает данные.
+ */
+export const QUERY_STALE_MS = 30_000;
+
 const sameKey = (a: readonly unknown[], b: readonly unknown[]) =>
   a.length === b.length && a.every((part, index) => part === b[index]);
 
@@ -51,6 +57,7 @@ export function createQueryClient(handlers: SessionHandlers): QueryClient {
     }),
     defaultOptions: {
       queries: {
+        staleTime: QUERY_STALE_MS,
         retry: (failures, error) => {
           const status = httpStatus(error);
           return (status === undefined || status >= 500) && failures < 2;

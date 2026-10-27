@@ -4,7 +4,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
-import { httpError, ME, renderApp } from '../../test/app';
+import { httpError, ME, mountPanelCss, renderApp } from '../../test/app';
 
 vi.mock('../../api', () => ({
   api: {
@@ -98,6 +98,17 @@ describe('карточка модерации (05b, AC4–AC6, AC8)', () => {
     expect(screen.getByRole('button', { name: 'Скрыть' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Отклонить жалобы' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Вернуть' })).toBeNull();
+  });
+
+  it('описание — с переносами строк, как в приложении (B17)', async () => {
+    mountPanelCss();
+    mocked.getModerationRide.mockResolvedValue(
+      detail({ description: 'Первый абзац.\n\nТестовые данные dev.' }),
+    );
+    await open();
+    const description = await screen.findByText(/Первый абзац\./);
+    expect(description.textContent).toBe('Первый абзац.\n\nТестовые данные dev.');
+    expect(getComputedStyle(description).whiteSpace).toBe('pre-line');
   });
 
   it('без открытых жалоб — только «Скрыть»; скрытый — только «Вернуть»', async () => {

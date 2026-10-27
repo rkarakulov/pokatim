@@ -1,7 +1,7 @@
 import { t } from '@pokatim/i18n';
 import type { PointerEvent } from 'react';
 
-import { formatKmFromMeters } from '../../format';
+import { formatKmPrecise } from '../../format';
 
 /** Единицы `viewBox` графика (не px): масштабируются по ширине блока, линии — `non-scaling-stroke`. */
 const VIEW_WIDTH = 1000;
@@ -106,7 +106,7 @@ export function SeriesChart({
     hover === null
       ? summary
       : t('admin.disputes.series.point', {
-          distance: formatKmFromMeters(distanceM[hover]!),
+          distance: formatKmPrecise(distanceM[hover]!),
           value: formatValue(values[hover] ?? null, kind),
         });
 

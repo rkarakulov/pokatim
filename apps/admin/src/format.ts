@@ -53,17 +53,27 @@ export function formatKmFromMeters(meters: number): string {
   return `${KM.format(Math.round(meters / 100) / 10)} км`;
 }
 
+const KM_PRECISE = new Intl.NumberFormat('ru-RU', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** «0,05 км» из метров: ячейка рядов спора (не короче 25 м) — соседние подписи различимы. */
+export function formatKmPrecise(meters: number): string {
+  return `${KM_PRECISE.format(Math.round(meters / 10) / 100)} км`;
+}
+
 /** «1 апреля 2026» из календарной даты `YYYY-MM-DD` (дата Минска, без перевода). */
 export function formatLocalDate(date: string): string {
   const part = parts(DATE_LONG, new Date(`${date}T12:00:00Z`));
   return `${part('day')} ${part('month')} ${part('year')}`;
 }
 
-/** «1:02:03» (меньше часа — «2:03») из секунд: время заезда, сегмента. */
+/** Всегда «ч:мм:сс» из секунд («0:32:19», «25:01:01») — как в приложении: время заезда, сегмента. */
 export function formatElapsed(totalSec: number): string {
   const hours = Math.floor(totalSec / 3600);
   const minutes = Math.floor((totalSec % 3600) / 60);
   const seconds = totalSec % 60;
   const pad = (value: number) => String(value).padStart(2, '0');
-  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+  return `${hours}:${pad(minutes)}:${pad(seconds)}`;
 }
