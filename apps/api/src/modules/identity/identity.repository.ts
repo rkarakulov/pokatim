@@ -162,6 +162,15 @@ export class IdentityRepository {
     return new Map(docs.map((doc) => [doc._id, doc.email]));
   }
 
+  /** Дата рождения живого аккаунта (race-results-07: подсказка года анкеты); удалённый или стёртый — `null`. */
+  async findBirthDate(userId: string): Promise<string | null> {
+    const doc = await this.c.users.findOne(
+      { _id: userId, deletedAt: null },
+      { projection: { _id: 1, birthDate: 1 } },
+    );
+    return doc?.birthDate ?? null;
+  }
+
   /** Живые (не удалённые) аккаунты из `userIds` — проекция `_id`. */
   async findLiveIds(userIds: readonly string[]): Promise<Set<string>> {
     if (userIds.length === 0) return new Set();

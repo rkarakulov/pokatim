@@ -1764,4 +1764,37 @@ export const ru = {
   'notFound.home': 'На главную',
   'races.entry.withdrawBodyNoResult':
     'Заявка будет отменена. Заявиться на эту гонку снова будет нельзя.',
+  // race-results-07: уровни заявки, группы зачёта, финишёры, флаги «Требует внимания» (экранные тексты — 07b/07c)
+  'races.error.VERIFIED_PROFILE_REQUIRED': 'Для Verified заполните анкету зачёта',
+  'races.error.RACE_TIER_LOCKED': 'Уровень и группу заявки уже нельзя изменить',
+  'races.error.RESULT_GROUP_NOT_ALLOWED': 'Можно выбрать свою группу или более молодую своего пола',
+  'profile.verified.error.VERIFIED_DEMOGRAPHICS_LOCKED':
+    'Пол и год рождения уже зафиксированы заявкой Verified — изменить их может команда платформы',
+  // race-results-07: сменили текст — поднять `VERIFIED_PROFILE_CONSENT_VERSION` (contracts)
+  'profile.verified.consent':
+    'Согласен на обработку анкеты (пол, год рождения, вес, рост, FTP) для зачёта Verified. Вес, рост и FTP видите только вы.',
+  'results.group.overall': 'Общий зачёт',
+  'results.group.m_u40': 'Мужчины до 40',
+  'results.group.m_40_49': 'Мужчины 40–49',
+  'results.group.m_50p': 'Мужчины 50+',
+  'results.group.w_u40': 'Женщины до 40',
+  'results.group.w_40_49': 'Женщины 40–49',
+  'results.group.w_50p': 'Женщины 50+',
+  'results.group.unknown': 'Группа',
+  'results.tier.verified': 'Verified',
+  'results.tier.start': 'START',
+  'results.tier.unknown': '—',
+  'results.unranked.start': 'Финишёр',
+  'results.unranked.no_heart_rate': 'Без пульса — вне зачёта',
+  'results.unranked.unknown': 'Без места',
+  'races.result.status.finisher': 'Финишёр',
+  'admin.results.resultStatus.finisher': 'Финишёр',
+  'admin.results.flag.SPEED_CLUSTER_HIGH': 'Скорость выше группы',
+  'admin.results.flag.HR_POWER_DECOUPLED': 'Пульс не отвечает на мощность',
+  'admin.results.flag.HR_GAPS': 'Пропуски пульса',
+  'admin.audit.action.profile.verified_demographics_changed':
+    'Изменены пол или год рождения анкеты',
+  'disputes.filingBlock.not_ranked': 'Спор может подать только участник Verified с местом в группе',
+  'disputes.error.DISPUTE_ACTION_BLOCKED.not_ranked':
+    'Спор может подать только участник Verified с местом в группе',
 } as const;

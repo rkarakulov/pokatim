@@ -58,6 +58,11 @@ import {
   MyAttemptTrack,
   MyRaceEntry,
   RaceResultsPage,
+  RaceFinishersPage,
+  type RaceFinishersQuery,
+  type RaceEntryRequest,
+  VerifiedProfileView,
+  type UpdateVerifiedProfileRequest,
   type AttemptRequest,
   type RaceResultsQuery,
   ConnectDeviceResponse,
@@ -277,6 +282,22 @@ export function createApiClient({
           body: JSON.stringify(body),
           ...withCredentials,
         }),
+      ),
+    /** Анкета зачёта Verified (race-results-07, вход обязателен); нет анкеты — `profile: null` и подсказка года. */
+    getVerifiedProfile: (accessToken: string) =>
+      request(
+        '/v1/profile/verified',
+        VerifiedProfileView,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /**
+     * Анкета целиком; пол и год после первой Verified-заявки — только прежние (`409 VERIFIED_DEMOGRAPHICS_LOCKED`).
+     */
+    updateVerifiedProfile: (accessToken: string, body: UpdateVerifiedProfileRequest) =>
+      request(
+        '/v1/profile/verified',
+        VerifiedProfileView,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
       ),
     /**
      * Удаление своего аккаунта (вход обязателен), подтверждение — текущий пароль; `204` без тела, все сессии отозваны
@@ -499,9 +520,23 @@ export function createApiClient({
         MyAttemptTrack,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
-    /** «Участвовать»: `201` — новая заявка, `200` — уже заявлен. */
-    enterRace: (accessToken: string, raceId: string) =>
-      postAuthorized(accessToken, `/v1/races/${encodeURIComponent(raceId)}/entry`, MyRaceEntry, {}),
+    /**
+     * «Участвовать» (`201` — новая заявка, `200` — уже заявлен) и «Повысить до Verified» (race-results-07):
+     * `tier`/`groupKey` — намерение; без тела — новая заявка START (в старой гонке — как v1).
+     */
+    enterRace: (accessToken: string, raceId: string, body: NonNullable<RaceEntryRequest> = {}) =>
+      postAuthorized(
+        accessToken,
+        `/v1/races/${encodeURIComponent(raceId)}/entry`,
+        MyRaceEntry,
+        body,
+      ),
+    /** Финишёры гонки (race-results-07): START и Verified без пульса — время без места, публично. */
+    getRaceFinishers: (raceId: string, params: Partial<RaceFinishersQuery> = {}) =>
+      getPublic(
+        `/v1/races/${encodeURIComponent(raceId)}/finishers${queryString(params)}`,
+        RaceFinishersPage,
+      ),
     /** «Отменить участие»: повторная заявка на эту гонку невозможна. */
     withdrawFromRace: (accessToken: string, raceId: string) =>
       postAuthorized(

@@ -61,6 +61,8 @@ export const DISPUTE_FILE_BLOCKS = [
   'protocol_published',
   'filing_closed',
   'open_limit',
+  // race-results-07: результат без места (START или Verified без пульса)
+  'not_ranked',
 ] as const;
 /** `409 DISPUTE_ACTION_BLOCKED.details.reason`: причины подачи + причины действий над спором. */
 export const DISPUTE_ACTION_BLOCKS = [

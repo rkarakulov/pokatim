@@ -31,6 +31,7 @@ import { routesRider } from './0021_routes_rider';
 import { routesDerived } from './0022_routes_derived';
 import { accountDeletion } from './0023_account_deletion';
 import { platformSettings } from './0024_platform_settings';
+import { entryTier, LEGACY_RANKING_INDEX } from './0028_entry_tier';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
 import { notifications } from './0025_notifications';
 import { attemptLastVerdict } from './0026_attempt_last_verdict';
@@ -105,6 +106,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0025_notifications',
       '0026_attempt_last_verdict',
       '0027_push_tickets_user',
+      '0028_entry_tier',
     ]);
   });
 
@@ -432,9 +434,17 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         }),
       },
     };
-    for (const [name, indexes] of Object.entries(expected)) {
-      expect(await indexesOf(name)).toEqual(indexes);
-    }
+    // индексы 0015 (старый индекс мест удалён 0028_entry_tier; новые индексы 0028 — в своём тесте)
+    const own = async (name: string, indexes: Record<string, unknown>) =>
+      Object.fromEntries(Object.entries(await indexesOf(name)).filter(([key]) => key in indexes));
+    const { [LEGACY_RANKING_INDEX]: legacy, ...entriesAfter0028 } =
+      expected[RESULTS_COLLECTIONS.entries];
+    expect(await own(RESULTS_COLLECTIONS.entries, expected[RESULTS_COLLECTIONS.entries])).toEqual(
+      entriesAfter0028,
+    );
+    expect(await own(RESULTS_COLLECTIONS.attempts, expected[RESULTS_COLLECTIONS.attempts])).toEqual(
+      expected[RESULTS_COLLECTIONS.attempts],
+    );
 
     // гонка до слайса заявок (без поля) и гонка с заявками — бэкфилл трогает только первую
     const races = h.db.collection<{ _id: string; lockedAt?: unknown }>(RACES_COLLECTIONS.races);
@@ -446,9 +456,14 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await races.findOne({ _id: 'locked-race' })).toEqual({ _id: 'locked-race', lockedAt });
     await races.deleteMany({ _id: { $in: ['old-race', 'locked-race'] } });
 
+    // повтор 0015 заново создаёт старый индекс мест (RC-17: рядом с новым — тот же ключ, другой частичный фильтр)
     for (const [name, indexes] of Object.entries(expected)) {
-      expect(await indexesOf(name)).toEqual(indexes);
+      expect(await own(name, indexes)).toEqual(indexes);
     }
+    expect(legacy).toBeDefined();
+    // …следующая 0028 его снова удаляет
+    await entryTier.up(h.db);
+    expect((await indexesOf(RESULTS_COLLECTIONS.entries))[LEGACY_RANKING_INDEX]).toBeUndefined();
   });
 
   it('0016_protocol: коллекции протокола и индексы, бэкфилл races.protocolPublishedAt = null; повторный up — без изменений (AC13)', async () => {
@@ -465,6 +480,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       [RESULTS_COLLECTIONS.protocolRows]: {
         race_protocol_rows_unique: index({ raceId: 1, revision: 1, entryId: 1 }, true),
         race_protocol_rows_order_unique: index({ raceId: 1, revision: 1, order: 1 }, true),
+        // 0028_entry_tier (race-results-07): строки протокола по группе
+        race_protocol_rows_group_idx: index({ raceId: 1, revision: 1, groupKey: 1, order: 1 }),
       },
       [RESULTS_COLLECTIONS.recalculations]: {
         race_recalculations_race_idx: index({ raceId: 1, _id: 1 }),
@@ -789,6 +806,90 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(APPEARANCE_COLLECTIONS.settings)).toEqual({});
   });
 
+  it('0028_entry_tier: бэкфилл уровня, best.ranked и groupScheme; анкеты; индексы мест, финишёров и групп протокола; старый индекс мест удалён; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0028_entry_tier');
+    expect(ids.indexOf('0028_entry_tier')).toBe(ids.indexOf('0027_push_tickets_user') + 1);
+    const index = (key: Record<string, unknown>, partial?: Record<string, unknown>) => ({
+      key,
+      unique: false,
+      partialFilterExpression: partial,
+      expireAfterSeconds: undefined,
+    });
+    const snapshot = async () => ({
+      entries: await indexesOf(RESULTS_COLLECTIONS.entries),
+      group: (await indexesOf(RESULTS_COLLECTIONS.protocolRows)).race_protocol_rows_group_idx,
+      verified: await h.db
+        .listCollections({ name: PROFILE_COLLECTIONS.verified }, { nameOnly: true })
+        .toArray(),
+    });
+    const before = await snapshot();
+    expect(before.entries.race_entries_ranked_idx).toEqual(
+      index(
+        { raceId: 1, groupKey: 1, 'best.elapsedSec': 1, 'best.startedAt': 1, _id: 1 },
+        { status: 'active', best: { $type: 'object' }, tier: 'verified', 'best.ranked': true },
+      ),
+    );
+    expect(before.entries.race_entries_finishers_idx).toEqual(
+      index(
+        { raceId: 1, 'best.elapsedSec': 1, 'best.startedAt': 1, _id: 1 },
+        { status: 'active', best: { $type: 'object' }, 'best.ranked': false },
+      ),
+    );
+    expect(before.entries[LEGACY_RANKING_INDEX]).toBeUndefined();
+    expect(before.group).toEqual(index({ raceId: 1, revision: 1, groupKey: 1, order: 1 }));
+    expect(before.verified).toHaveLength(1);
+    expect(await indexesOf(PROFILE_COLLECTIONS.verified)).toEqual({});
+
+    // документы до 07: заявка без уровня с лучшим, заявка без лучшего, уже новая START; гонки с заявками и без
+    const entries = h.db.collection<{
+      _id: string;
+      raceId: string;
+      userId: string;
+      tier: unknown;
+      best: unknown;
+    }>(RESULTS_COLLECTIONS.entries);
+    const best = { attemptId: 'a', elapsedSec: 60 };
+    const doc = (_id: string, tier: unknown, value: unknown) => ({
+      _id,
+      raceId: 'r',
+      userId: _id,
+      tier,
+      best: value,
+    });
+    await entries.insertMany([
+      doc('old-best', null, best),
+      doc('old-none', null, null),
+      doc('new-start', 'start', { ...best, ranked: false }),
+    ]);
+    const races = h.db.collection<{ _id: string; lockedAt?: unknown; groupScheme?: unknown }>(
+      RACES_COLLECTIONS.races,
+    );
+    const lockedAt = new Date('2026-10-24T10:00:00Z');
+    await races.insertMany([
+      { _id: 'locked-race', lockedAt },
+      { _id: 'empty-race', lockedAt: null },
+      { _id: 'new-race', lockedAt, groupScheme: 'gender_age' },
+    ]);
+    await entryTier.up(h.db);
+    await entryTier.up(h.db);
+    const entryIds = { _id: { $in: ['old-best', 'old-none', 'new-start'] } };
+    const raceIds = { _id: { $in: ['locked-race', 'empty-race', 'new-race'] } };
+    expect(await entries.find(entryIds, { sort: { _id: 1 } }).toArray()).toEqual([
+      doc('new-start', 'start', { ...best, ranked: false }),
+      doc('old-best', 'verified', { ...best, ranked: true }),
+      doc('old-none', 'verified', null),
+    ]);
+    expect(await races.find(raceIds, { sort: { _id: 1 } }).toArray()).toEqual([
+      { _id: 'empty-race', lockedAt: null, groupScheme: null },
+      { _id: 'locked-race', lockedAt, groupScheme: 'overall' },
+      { _id: 'new-race', lockedAt, groupScheme: 'gender_age' },
+    ]);
+    await entries.deleteMany(entryIds);
+    await races.deleteMany(raceIds);
+    expect(await snapshot()).toEqual(before);
+  });
+
   it('0025_notifications: коллекции и индексы центра уведомлений (unique, partial, TTL); после 0024; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
     expect(ids.indexOf('0025_notifications')).toBe(ids.indexOf('0024_platform_settings') + 1);
@@ -848,9 +949,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await snapshot()).toEqual(expected);
   });
 
-  it('0027_push_tickets_user: индекс владельца тикета; последняя, после 0026; повторный up — без изменений', async () => {
+  it('0027_push_tickets_user: индекс владельца тикета; после 0026; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0027_push_tickets_user');
     expect(ids.indexOf('0027_push_tickets_user')).toBe(
       ids.indexOf('0026_attempt_last_verdict') + 1,
     );

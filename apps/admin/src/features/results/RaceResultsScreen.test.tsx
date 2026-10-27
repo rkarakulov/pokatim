@@ -104,7 +104,10 @@ const summary = (overrides: Partial<PanelRaceResults> = {}): PanelRaceResults =>
     hidden: 0,
     failed: 1,
     staleEngine: 0,
+    attention: 0,
+    finishers: 0,
   },
+  groupScheme: 'overall',
   phase: 'closed',
   uploadClosesAt: '2026-10-26T20:59:00.000Z',
   protocol: null,
@@ -142,6 +145,10 @@ const row = (overrides: Partial<PanelStandingRow> = {}): PanelStandingRow => ({
   bestAttemptId: ATTEMPT_ID,
   summary: { total: 3, pending: 0, counted: 2, rejectedShown: 1, failed: 0, excluded: 0 },
   riderName: null,
+  tier: 'verified',
+  groupKey: 'overall',
+  unranked: null,
+  flags: [],
   ...overrides,
 });
 
@@ -165,6 +172,9 @@ const attempt = (overrides: Partial<PanelRaceAttempt> = {}): PanelRaceAttempt =>
   checkedAt: null,
   review: null,
   riderName: null,
+  sensors: null,
+  flags: [],
+  flagsVersion: null,
   ...overrides,
 });
 
@@ -175,6 +185,8 @@ beforeEach(() => {
   mocked.getRaceStandings.mockResolvedValue({
     source: 'live',
     revision: null,
+    groupScheme: 'overall',
+    groups: [],
     truncated: false,
     items: [row()],
   });
@@ -418,6 +430,8 @@ describe('«Результаты» гонки — до публикации', ()
     mocked.getRaceStandings.mockResolvedValue({
       source: 'live',
       revision: null,
+      groupScheme: 'overall',
+      groups: [],
       truncated: false,
       items: [row({ elapsedSec: 1939 })],
     });
@@ -494,6 +508,8 @@ describe('«Результаты» гонки — после публикаци�
     mocked.getRaceStandings.mockResolvedValue({
       source: 'protocol',
       revision: 2,
+      groupScheme: 'overall',
+      groups: [],
       truncated: false,
       items: [
         row({ resultStatus: 'final', place: 1, tied: false }),
@@ -658,6 +674,8 @@ describe('«Результаты» гонки — имя участника (pro
     mocked.getRaceStandings.mockResolvedValue({
       source: 'live',
       revision: null,
+      groupScheme: 'overall',
+      groups: [],
       truncated: false,
       items: [NAMED, row({ entryId: ENTRY_B, place: 3, tied: false })],
     });
@@ -678,6 +696,8 @@ describe('«Результаты» гонки — имя участника (pro
     mocked.getRaceStandings.mockResolvedValue({
       source: 'live',
       revision: null,
+      groupScheme: 'overall',
+      groups: [],
       truncated: false,
       items: [NAMED],
     });
@@ -691,8 +711,22 @@ describe('«Результаты» гонки — имя участника (pro
   it('модератор: «Сбросить имя» → ReasonDialog с предупреждением → запрос → строка «Участник» (AC7)', async () => {
     mocked.me.mockResolvedValue(ME.moderator);
     mocked.getRaceStandings
-      .mockResolvedValueOnce({ source: 'live', revision: null, truncated: false, items: [NAMED] })
-      .mockResolvedValue({ source: 'live', revision: null, truncated: false, items: [row()] });
+      .mockResolvedValueOnce({
+        source: 'live',
+        revision: null,
+        groupScheme: 'overall',
+        groups: [],
+        truncated: false,
+        items: [NAMED],
+      })
+      .mockResolvedValue({
+        source: 'live',
+        revision: null,
+        groupScheme: 'overall',
+        groups: [],
+        truncated: false,
+        items: [row()],
+      });
     mocked.resetRiderName.mockResolvedValue({ reset: true });
     await renderApp(PATH);
     const standings = await screen.findByRole('region', { name: 'Участники' });
@@ -713,6 +747,8 @@ describe('«Результаты» гонки — имя участника (pro
     mocked.getRaceStandings.mockResolvedValue({
       source: 'protocol',
       revision: 2,
+      groupScheme: 'overall',
+      groups: [],
       truncated: false,
       items: [row({ riderName: 'Анна К.', resultStatus: 'final', place: 1, tied: false })],
     });

@@ -32,6 +32,8 @@ export const PERMISSIONS = [
   'profiles.moderate',
   // app-themes: тема приложения райдера (только admin)
   'appearance.manage',
+  // race-results-07: правка пола и года рождения анкеты Verified после фиксации (только admin)
+  'profiles.verified_edit',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
 export type Permission = z.infer<typeof Permission>;

@@ -186,6 +186,7 @@ export class RacesService {
         publishedAt: null,
         cancelledAt: null,
         lockedAt: null,
+        groupScheme: null,
         protocolPublishedAt: null,
         disputeFilingClosedAt: null,
         version: 0,

@@ -108,6 +108,7 @@ describe('POST /v1/admin/session/sign-in (AC2)', () => {
           'disputes.decide',
           'profiles.moderate',
           'appearance.manage',
+          'profiles.verified_edit',
         ],
       },
     });

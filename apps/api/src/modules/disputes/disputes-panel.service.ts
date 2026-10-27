@@ -112,6 +112,9 @@ export class DisputesPanelService {
         place: standing?.place ?? null,
         tied: standing?.tied ?? false,
         elapsedSec: standing?.elapsedSec ?? null,
+        tier: standing?.tier ?? 'verified',
+        groupKey: standing?.groupKey ?? doc.groupKey,
+        flags: standing?.flags ?? [],
       },
       complainant: { entryId: doc.complainantEntryId, userId: doc.complainantUserId },
       decision: doc.decision

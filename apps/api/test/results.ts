@@ -2,17 +2,27 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { MyRaceEntry, PanelRaceResults, SignInResponse } from '@pokatim/contracts';
-import type { CorridorGeometry } from '@pokatim/tracks';
+import {
+  type GroupScheme,
+  MyRaceEntry,
+  PanelRaceResults,
+  type RaceEntryRequest,
+  SignInResponse,
+} from '@pokatim/contracts';
+import type { CorridorGeometry, TrackStreamV1 } from '@pokatim/tracks';
+import { parseTrackFile } from '@pokatim/tracks/parse';
 import type { OutboxJobData } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
 
+import { PROFILE_COLLECTIONS } from '../src/modules/profile/profile.collection';
+import type { RiderVerifiedProfileDoc } from '../src/modules/profile/verified-profile.collection';
 import { AttemptCheckProcessor } from '../src/modules/results/attempt-check.processor';
 import { resultsCollections } from '../src/modules/results/results.collection';
 import { resultsOutboxRoutes } from '../src/modules/results/results.events';
 import { ResultsIntakeProcessor } from '../src/modules/results/results-intake.processor';
 import { ResultsRepository } from '../src/modules/results/results.repository';
+import { TRACK_INGEST, type TrackIngest } from '../src/modules/tracks/track-ingest.port';
 import type { Harness } from './harness';
 import {
   bearer,
@@ -23,7 +33,7 @@ import {
   validRegistration,
 } from './identity';
 import { panelCall, panelSession } from './panel';
-import { createSeason, publishedRace, RACES, staff } from './races';
+import { createSeason, publishedRace, RACES, racesDb, staff } from './races';
 import { routesDb } from './routes';
 import { parsedUpload, processUpload, tracks, uploadTrack } from './tracks';
 
@@ -125,8 +135,16 @@ export const WINDOW = {
   closesAt: new Date('2026-10-26T21:00:00Z'),
 };
 
-/** Админ, сезон, маршрут эталона и опубликованная гонка с коридором ±50 м. */
-export async function corridorRace(h: Harness, overrides: Record<string, unknown> = {}) {
+/**
+ * Админ, сезон, маршрут эталона и опубликованная гонка с коридором ±50 м. `scheme` (race-results-07): по умолчанию
+ * `overall` — гонка как до слайса 07 (одна группа, места без правила пульса; тесты v1-правил мест, протокола и
+ * споров); `gender_age` — новая гонка (схему ставит первая заявка), `null` — как создала панель.
+ */
+export async function corridorRace(
+  h: Harness,
+  overrides: Record<string, unknown> = {},
+  { scheme = 'overall' }: { scheme?: GroupScheme | null } = {},
+) {
   const admin = await staff(h, 'admin@example.by', 'admin');
   await createSeason(h, admin.token);
   const routeId = await corridorRoute(h, admin.userId);
@@ -135,7 +153,37 @@ export async function corridorRace(h: Harness, overrides: Record<string, unknown
     corridor: { routeId, widthM: CORRIDOR.widthM },
     ...overrides,
   });
+  if (scheme !== null) {
+    await racesDb(h).races.updateOne({ _id: race.id }, { $set: { groupScheme: scheme } });
+  }
   return { admin, routeId, raceId: race.id, version: race.version };
+}
+
+/** Коллекция анкет Verified тестовой БД (race-results-07). */
+export const verifiedProfilesDb = (h: Harness) =>
+  h.db.collection<RiderVerifiedProfileDoc>(PROFILE_COLLECTIONS.verified);
+
+/** Анкета Verified райдера — напрямую в БД (подготовка; `PUT /v1/profile/verified` — в своих тестах). */
+export async function seedVerifiedProfile(
+  h: Harness,
+  userId: string,
+  values: Partial<Omit<RiderVerifiedProfileDoc, '_id'>> = {},
+) {
+  const now = h.clock.now();
+  await verifiedProfilesDb(h).insertOne({
+    _id: userId,
+    gender: 'm',
+    birthYear: 1990,
+    weightKg: 72,
+    heightCm: 180,
+    ftpW: null,
+    consentAt: now,
+    consentVersion: '2026-10-27',
+    demographicsLockedAt: null,
+    updatedAt: now,
+    version: 0,
+    ...values,
+  });
 }
 
 /** Перевести часы стенда к моменту (только вперёд). */
@@ -169,8 +217,12 @@ export async function signIn(h: Harness, email: string): Promise<Record<string, 
 
 export const entryUrl = (raceId: string) => `/v1/races/${raceId}/entry`;
 
-export const enterRace = (h: Harness, auth: Record<string, string>, raceId: string) =>
-  call(h, 'POST', entryUrl(raceId), {}, auth);
+export const enterRace = (
+  h: Harness,
+  auth: Record<string, string>,
+  raceId: string,
+  body: NonNullable<RaceEntryRequest> = {},
+) => call(h, 'POST', entryUrl(raceId), body, auth);
 export const withdraw = (h: Harness, auth: Record<string, string>, raceId: string) =>
   call(h, 'POST', `${entryUrl(raceId)}/withdraw`, {}, auth);
 export const addAttempt = (
@@ -197,6 +249,36 @@ export async function uploadRide(h: Harness, auth: Record<string, string>, bytes
   const outcome = await processUpload(h, upload.id);
   const activity = await tracks(h).activities.findOne({ uploadId: upload.id });
   return { uploadId: upload.id, outcome, activityId: activity?._id ?? null };
+}
+
+/**
+ * Тот же заезд импортом Garmin через агрегатор (`pokatim.stream.v1`): точки без датчиков, пульс и мощность — только
+ * признаки тренировки (ADR-0011). Приём через порт `TrackIngest` и разбор (worker); id загрузки и активности.
+ */
+export async function importRide(
+  h: Harness,
+  userId: string,
+  gpx: Buffer,
+  declared: Pick<TrackStreamV1, 'hasHeartRate' | 'hasPower'>,
+) {
+  const points = parseTrackFile(new Uint8Array(gpx)).points.map(
+    (point): TrackStreamV1['points'][number] => [
+      point.time!.getTime(),
+      point.lat,
+      point.lon,
+      point.ele ?? null,
+    ],
+  );
+  const { uploadId } = await h.worker.get<TrackIngest>(TRACK_INGEST).ingestProviderStream({
+    userId,
+    source: 'garmin',
+    via: 'open_wearables',
+    sourceRef: uuidv7(),
+    stream: { v: 1, provider: 'garmin', sport: 'cycling', ...declared, points },
+  });
+  const outcome = await processUpload(h, uploadId);
+  const activity = await tracks(h).activities.findOne({ uploadId });
+  return { uploadId, outcome, activityId: activity?._id ?? null };
 }
 
 const job = (name: string, outboxEventId: string, attemptsMade = 0) =>
@@ -275,8 +357,23 @@ export async function panelResults(h: Harness, token: string, raceId: string) {
   return PanelRaceResults.parse(res.body);
 }
 
-/** Лучший результат заявки — напрямую в БД (подготовка мест протокола; проверки — в results-check). */
-export async function seedBest(h: Harness, entryId: string, elapsedSec: number, startedAt: Date) {
+/**
+ * Лучший результат заявки — напрямую в БД (подготовка мест протокола; проверки — в results-check). `ranked`
+ * (race-results-07) — даёт ли место; `flags` — флаги датчиков лучшей попытки.
+ */
+export async function seedBest(
+  h: Harness,
+  entryId: string,
+  elapsedSec: number,
+  startedAt: Date,
+  {
+    ranked = true,
+    flags = [],
+  }: {
+    ranked?: boolean;
+    flags?: { code: 'HR_GAPS' | 'HR_POWER_DECOUPLED'; metric: number }[];
+  } = {},
+) {
   await resultsDb(h).entries.updateOne(
     { _id: entryId },
     {
@@ -286,6 +383,8 @@ export async function seedBest(h: Harness, entryId: string, elapsedSec: number, 
           elapsedSec,
           startedAt,
           finishedAt: new Date(startedAt.getTime() + elapsedSec * 1000),
+          ranked,
+          flags,
         },
         summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
       },

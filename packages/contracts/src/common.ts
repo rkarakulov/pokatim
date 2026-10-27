@@ -69,6 +69,12 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   // панели аккаунт не удаляет (409, A11)
   'PASSWORD_INCORRECT',
   'ACCOUNT_PANEL_MEMBER',
+  // race-results-07: Verified без анкеты (409); понижение до START, смена группы или уровня после окна (409); группа
+  // не своя и не младшая своего пола (422); пол и год анкеты зафиксированы первой Verified-заявкой (409)
+  'VERIFIED_PROFILE_REQUIRED',
+  'RACE_TIER_LOCKED',
+  'RESULT_GROUP_NOT_ALLOWED',
+  'VERIFIED_DEMOGRAPHICS_LOCKED',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

@@ -57,6 +57,7 @@ describe('заявка (AC1)', () => {
       canWithdraw: true,
       canAddAttempt: false,
       reasons: ['window_not_open'],
+      canUpgrade: false,
     });
     const again = await enterRace(h, auth, raceId);
     expect(again.status).toBe(200);
@@ -259,6 +260,7 @@ describe('отмена участия (AC4)', () => {
       canWithdraw: false,
       canAddAttempt: false,
       reasons: ['withdrawn'],
+      canUpgrade: false,
     });
     expect((await withdraw(h, auth, raceId)).status).toBe(200);
     const again = await enterRace(h, auth, raceId);

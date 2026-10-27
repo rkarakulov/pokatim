@@ -5,13 +5,18 @@ import { Uuid } from '../common.ts';
 import { PageCursor, RacePhase } from '../races/race.schema.ts';
 import {
   ATTEMPT_FAILURES,
+  ATTEMPT_FLAG_CODES,
   ATTEMPT_ORIGINS,
   ATTEMPT_REJECTIONS,
   ATTEMPT_STATUSES,
   ATTEMPT_WITHDRAW_REASONS,
   AttemptSegment,
+  ENTRY_TIERS,
+  GROUP_SCHEMES,
   RACE_ENTRY_STATUSES,
   RACE_RESULT_STATUSES,
+  RESULT_GROUP_KEYS,
+  RESULT_UNRANKED_REASONS,
 } from './results.schema.ts';
 
 /*
@@ -60,6 +65,35 @@ export type RecalculationKind = (typeof RECALCULATION_KINDS)[number];
 export type ProtocolRowStatus = (typeof PROTOCOL_ROW_STATUSES)[number];
 export type AttemptReviewKind = (typeof ATTEMPT_REVIEW_KINDS)[number];
 
+/**
+ * Флаг «Требует внимания» (race-results-07): код и метрика — целые проценты (`HR_*`) или отношение к медиане группы
+ * (`SPEED_CLUSTER_HIGH`, до 0,001). Без пульса и мощности. Только панель.
+ */
+export const PanelAttemptFlag = z.object({ code: z.enum(ATTEMPT_FLAG_CODES), metric: z.number() });
+export type PanelAttemptFlag = z.infer<typeof PanelAttemptFlag>;
+
+/**
+ * Источник наличия датчиков попытки: `samples` — отсчёты сегмента в файле; `declared` — признаки тренировки импорта
+ * Garmin/Wahoo (поток агрегатора без рядов, ADR-0011), флаги датчиков не считаются — панель показывает «заявлен импортом».
+ */
+export const ATTEMPT_SENSOR_SOURCES = ['samples', 'declared'] as const;
+export type AttemptSensorSource = (typeof ATTEMPT_SENSOR_SOURCES)[number];
+
+/** Какие датчики есть в сегменте попытки (без значений); `source` нет у попыток до 07a pass 2 — `samples`. */
+export const AttemptSensors = z.object({
+  hr: z.boolean(),
+  power: z.boolean(),
+  source: z.enum(ATTEMPT_SENSOR_SOURCES).default('samples'),
+});
+export type AttemptSensors = z.infer<typeof AttemptSensors>;
+
+/** Группа гонки и число строк с местом (вкладки панели). */
+export const PanelResultGroup = z.object({
+  key: z.enum(RESULT_GROUP_KEYS),
+  ranked: z.number().int(),
+});
+export type PanelResultGroup = z.infer<typeof PanelResultGroup>;
+
 /** Чек-лист публикации: `canPublish` — `blockedBy: null` и все количества нулевые («Требует внимания» не входит). */
 export const PublishChecklist = z.object({
   canPublish: z.boolean(),
@@ -73,6 +107,8 @@ export type PublishChecklist = z.infer<typeof PublishChecklist>;
 export const PanelRaceResults = z.object({
   raceId: Uuid,
   lockedAt: z.iso.datetime().nullable(),
+  /** схема групп гонки (race-results-07); `null` — заявок ещё не было */
+  groupScheme: z.enum(GROUP_SCHEMES).nullable(),
   /** текущая версия движка сверки */
   engineVersion: z.number().int(),
   counts: z.object({
@@ -86,6 +122,10 @@ export const PanelRaceResults = z.object({
     failed: z.number().int(),
     /** проверены прежней версией движка */
     staleEngine: z.number().int(),
+    /** race-results-07: строк участников с флагами «Требует внимания» */
+    attention: z.number().int(),
+    /** race-results-07: время без места (START, Verified без пульса) */
+    finishers: z.number().int(),
   }),
   phase: RacePhase,
   /** срок приёма заездов (конец окна + 24 ч, A5) */
@@ -141,6 +181,11 @@ export const PanelRaceAttempt = z.object({
    * Обязательное: панель деплоится вместе с API.
    */
   riderName: z.string().nullable(),
+  /** race-results-07: датчики сегмента; `null` — до вердикта, провал, нет сегмента, попытка до 07 */
+  sensors: AttemptSensors.nullable(),
+  /** флаги датчиков попытки (без `SPEED_CLUSTER_HIGH` — он у строки участника) */
+  flags: z.array(PanelAttemptFlag),
+  flagsVersion: z.number().int().nullable(),
 });
 export type PanelRaceAttempt = z.infer<typeof PanelRaceAttempt>;
 
@@ -181,13 +226,29 @@ export const PanelStandingRow = z.object({
    * Обязательное: панель деплоится вместе с API.
    */
   riderName: z.string().nullable(),
+  /** race-results-07: уровень и группа заявки, причина «без места», флаги «Требует внимания» */
+  tier: z.enum(ENTRY_TIERS),
+  groupKey: z.enum(RESULT_GROUP_KEYS),
+  unranked: z.enum(RESULT_UNRANKED_REASONS).nullable(),
+  flags: z.array(PanelAttemptFlag),
 });
 export type PanelStandingRow = z.infer<typeof PanelStandingRow>;
+
+/** `GET /v1/admin/races/:raceId/standings?group&attention` (race-results-07): группа и «только с флагами». */
+export const PanelRaceStandingsQuery = z.strictObject({
+  group: z.enum(RESULT_GROUP_KEYS).optional(),
+  /** только строки с флагами */
+  attention: z.enum(['true']).optional(),
+});
+export type PanelRaceStandingsQuery = z.infer<typeof PanelRaceStandingsQuery>;
 
 /** `GET /v1/admin/races/:raceId/standings` (`races.read`): `protocol` — текущая ревизия снимка. */
 export const PanelRaceStandings = z.object({
   source: z.enum(['live', 'protocol']),
   revision: z.number().int().nullable(),
+  /** race-results-07: схема групп (`null` — заявок не было) и непустые группы по порядку справочника */
+  groupScheme: z.enum(GROUP_SCHEMES).nullable(),
+  groups: z.array(PanelResultGroup),
   /** заявок больше предела ответа */
   truncated: z.boolean(),
   items: z.array(PanelStandingRow),

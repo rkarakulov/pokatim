@@ -2,11 +2,13 @@ import type { RideReason } from '@pokatim/contracts';
 
 /**
  * Коллекции профиля (MongoDB, ADR-0007). `profiles` создаёт миграция `0004_profile` (индексов сверх `_id` нет),
- * `profile_consent_events` — `0019_profile_consents` (индекс `{ userId, at }`).
+ * `profile_consent_events` — `0019_profile_consents` (индекс `{ userId, at }`), `rider_verified_profiles` —
+ * `0028_entry_tier` (race-results-07, индексов сверх `_id` нет).
  */
 export const PROFILE_COLLECTIONS = {
   profiles: 'profiles',
   consentEvents: 'profile_consent_events',
+  verified: 'rider_verified_profiles',
 } as const;
 
 /**

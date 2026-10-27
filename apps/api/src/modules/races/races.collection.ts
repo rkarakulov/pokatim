@@ -1,4 +1,10 @@
-import type { BikeClass, RaceCancelReason, RaceStatus, Surface } from '@pokatim/contracts';
+import type {
+  BikeClass,
+  GroupScheme,
+  RaceCancelReason,
+  RaceStatus,
+  Surface,
+} from '@pokatim/contracts';
 import type { Collection, Db } from 'mongodb';
 
 /**
@@ -57,6 +63,12 @@ export interface RaceDoc {
    * конфликтует с её отменой и правкой и после первой заявки. Документы без заявок поля не имеют.
    */
   entryAdmissions?: number;
+  /**
+   * Схема групп зачёта (race-results-07): ставит только `admitEntry` первой заявкой — `gender_age`; гонки, получившие
+   * `lockedAt` до `0028_entry_tier` (или первую заявку от старого API, RC-7), — `overall`. Новые гонки — `null`;
+   * документы до 0028 — бэкфилл миграцией, чтение `?? null`.
+   */
+  groupScheme?: GroupScheme | null;
   /**
    * Момент публикации протокола (race-results-05): фаза `final`, отмена гонки недоступна (D-19). Пишет только
    * `RacesRepository.markProtocolPublished` (порт `RaceRegistry`); документы до `0016_protocol` — `?? null`.

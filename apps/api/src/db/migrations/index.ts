@@ -27,6 +27,7 @@ import { platformSettings } from './0024_platform_settings';
 import { notifications } from './0025_notifications';
 import { attemptLastVerdict } from './0026_attempt_last_verdict';
 import { pushTicketsUser } from './0027_push_tickets_user';
+import { entryTier } from './0028_entry_tier';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -60,4 +61,5 @@ export const migrations: readonly MongoMigration[] = [
   notifications,
   attemptLastVerdict,
   pushTicketsUser,
+  entryTier,
 ];
