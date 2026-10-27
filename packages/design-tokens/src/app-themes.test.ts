@@ -251,3 +251,17 @@ describe('«Классика»: группа tabBar = прежние роли в
     });
   });
 });
+
+describe('варианты раскладки (7.7 плана C)', () => {
+  it.each([
+    ['classic', 'classic', 'classic', 'gradient', 'classic', 'classic'],
+    ['atlas', 'contour', 'classic', 'gradient', 'icons', 'tile'],
+    ['chrono', 'classic', 'tiles', 'gradient', 'icons', 'tile'],
+    ['planner', 'contour', 'classic', 'solid', 'icons', 'classic'],
+    ['journal', 'classic', 'classic', 'solid', 'icons', 'tile'],
+    ['navigation', 'contour', 'tiles', 'line', 'icons', 'tile'],
+    ['typography', 'numeral', 'numeral', 'solid', 'icons', 'numeral'],
+  ] as const)('%s', (id, home, routeStats, profileFill, tabBar, routeCard) => {
+    expect(appThemes[id].layout).toEqual({ home, routeStats, profileFill, tabBar, routeCard });
+  });
+});

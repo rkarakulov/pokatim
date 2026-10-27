@@ -28,13 +28,21 @@ export interface AppThemeFonts {
   stack: FontStack;
 }
 
-/** Варианты раскладки (слайс C расширяет объединения; у «Классики» — нынешние). */
+/**
+ * Варианты раскладки (ADR-0016, слайс C2). Компоненты выбирают вариант таблицей `Record<вариант, компонент>`, без
+ * сравнений значения и id темы. У «Классики» — нынешняя раскладка.
+ */
 export interface AppThemeLayout {
-  home: 'classic';
-  routeStats: 'classic';
-  profileFill: 'gradient';
-  tabBar: 'classic';
-  routeCard: 'classic';
+  /** герой раздела «Маршруты» Главной: текстовый, с контуром маршрута, с крупной цифрой */
+  home: 'classic' | 'contour' | 'numeral';
+  /** шапка шторки карточки маршрута: строка, плитки, крупная дистанция */
+  routeStats: 'classic' | 'tiles' | 'numeral';
+  /** заливка профиля высоты: градиент, сплошная, без заливки */
+  profileFill: 'gradient' | 'solid' | 'line';
+  /** таб-бар: полоса и подпись / иконка над подписью */
+  tabBar: 'classic' | 'icons';
+  /** карточка маршрута в списке: строка с hairline, карточка-плитка, крупная дистанция */
+  routeCard: 'classic' | 'tile' | 'numeral';
 }
 
 export interface AppThemeDefinition {
@@ -76,9 +84,6 @@ const classic = defineAppTheme({
   },
 });
 
-/** Раскладка «Классики» (слайс C1: у всех тем; варианты — C2). */
-const classicLayout: AppThemeLayout = classic.layout;
-
 /** CSS-стеки: гарнитура темы + фолбэк; сжатые — со сжатыми фолбэками. */
 const sansStack = (name: string) => `'${name}', system-ui, Arial, sans-serif`;
 const interText = fontStack.text;
@@ -97,7 +102,13 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     },
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
-    layout: classicLayout,
+    layout: {
+      home: 'contour',
+      routeStats: 'classic',
+      profileFill: 'gradient',
+      tabBar: 'icons',
+      routeCard: 'tile',
+    },
   }),
   chrono: defineAppTheme({
     id: 'chrono',
@@ -113,7 +124,13 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     },
     density: 'regular',
     icons: { weight: 'semibold', filled: true },
-    layout: classicLayout,
+    layout: {
+      home: 'classic',
+      routeStats: 'tiles',
+      profileFill: 'gradient',
+      tabBar: 'icons',
+      routeCard: 'tile',
+    },
   }),
   planner: defineAppTheme({
     id: 'planner',
@@ -126,7 +143,13 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     },
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
-    layout: classicLayout,
+    layout: {
+      home: 'contour',
+      routeStats: 'classic',
+      profileFill: 'solid',
+      tabBar: 'icons',
+      routeCard: 'classic',
+    },
   }),
   journal: defineAppTheme({
     id: 'journal',
@@ -139,7 +162,13 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     },
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
-    layout: classicLayout,
+    layout: {
+      home: 'classic',
+      routeStats: 'classic',
+      profileFill: 'solid',
+      tabBar: 'icons',
+      routeCard: 'tile',
+    },
   }),
   navigation: defineAppTheme({
     id: 'navigation',
@@ -152,7 +181,13 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     },
     density: 'regular',
     icons: { weight: 'semibold', filled: true },
-    layout: classicLayout,
+    layout: {
+      home: 'contour',
+      routeStats: 'tiles',
+      profileFill: 'line',
+      tabBar: 'icons',
+      routeCard: 'tile',
+    },
   }),
   typography: defineAppTheme({
     id: 'typography',
@@ -165,7 +200,13 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     },
     density: 'regular',
     icons: { weight: 'semibold', filled: false },
-    layout: classicLayout,
+    layout: {
+      home: 'numeral',
+      routeStats: 'numeral',
+      profileFill: 'solid',
+      tabBar: 'icons',
+      routeCard: 'numeral',
+    },
   }),
 };
 
