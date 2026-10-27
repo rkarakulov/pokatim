@@ -37,6 +37,7 @@ export function RouteMap({
   accessibilityLabel,
   failedMessage,
   corridor = true,
+  lineWidth,
   track,
 }: RouteMapProps) {
   const [lib, setLib] = useState<typeof MapLibreNative | null>(null);
@@ -45,10 +46,10 @@ export function RouteMap({
   const features = useMemo(() => routeFeatures(map), [map]);
   const layers = useMemo(
     () =>
-      routeLayers(theme, map.widthM, map.bounds).filter(
+      routeLayers(theme, map.widthM, map.bounds, lineWidth).filter(
         (layer) => corridor || layer.id !== CORRIDOR_LAYER_ID,
       ),
-    [theme, map, corridor],
+    [theme, map, corridor, lineWidth],
   );
   const trackData = useMemo(() => (track ? trackFeatures(track) : null), [track]);
   const trackStyle = useMemo(() => trackLayers(theme), [theme]);

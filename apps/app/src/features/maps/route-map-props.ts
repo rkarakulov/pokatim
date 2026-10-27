@@ -17,6 +17,8 @@ export interface RouteMapProps {
    * По умолчанию `true` (карта гонки).
    */
   corridor?: boolean;
+  /** routes-03: толщина осевой линии маршрута, px; по умолчанию `stroke.indicator` (карта гонки) */
+  lineWidth?: number;
   /** свой трек участника поверх маршрута (maps-02); камера охватывает маршрут и трек */
   track?: RouteMapTrack;
 }

@@ -28,6 +28,7 @@ import { disputes } from './0018_disputes';
 import { profileConsents } from './0019_profile_consents';
 import { routesCatalog } from './0020_routes_catalog';
 import { routesRider } from './0021_routes_rider';
+import { routesDerived } from './0022_routes_derived';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
@@ -91,6 +92,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0019_profile_consents',
       '0020_routes_catalog',
       '0021_routes_rider',
+      '0022_routes_derived',
     ]);
   });
 
@@ -357,7 +359,10 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         routes_owner_origin_sha_unique: index({ ownerUserId: 1, origin: 1, sha256: 1 }, true),
         routes_owner_origin_idx: index({ ownerUserId: 1, origin: 1, _id: -1 }),
       },
-      [ROUTES_COLLECTIONS.geometries]: {},
+      // 0022_routes_derived (routes-03): выборка бэкфилла производных
+      [ROUTES_COLLECTIONS.geometries]: {
+        route_geometries_derived_idx: index({ derivedVersion: 1 }),
+      },
       [ROUTES_COLLECTIONS.sources]: {},
     };
     for (const [name, indexes] of Object.entries(expected)) {
@@ -667,7 +672,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
   });
 
   it('0021_routes_rider: дедуп (ownerUserId, origin, sha256) и список своих — созданы, routes_owner_sha_unique удалён; повторный up — без ошибки', async () => {
-    expect(migrations.at(-1)?.id).toBe('0021_routes_rider');
+    expect(migrations.map((migration) => migration.id)).toContain('0021_routes_rider');
     const index = (key: Record<string, unknown>, unique = false) => ({
       key,
       unique,
@@ -699,6 +704,29 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await routesRider.up(h.db);
     await docs.deleteMany({ _id: { $in: ['platform-copy', 'rider-copy'] } });
     expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toEqual(before);
+  });
+
+  it('0022_routes_derived: коллекция route_exports, индекс бэкфилла; после 0021; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0022_routes_derived');
+    expect(ids.indexOf('0022_routes_derived')).toBe(ids.indexOf('0021_routes_rider') + 1);
+    const exists = () =>
+      h.db.listCollections({ name: ROUTES_COLLECTIONS.exports }, { nameOnly: true }).toArray();
+    const expected = {
+      route_geometries_derived_idx: {
+        key: { derivedVersion: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await exists()).toHaveLength(1);
+    expect(await indexesOf(ROUTES_COLLECTIONS.exports)).toEqual({});
+    expect(await indexesOf(ROUTES_COLLECTIONS.geometries)).toEqual(expected);
+    await routesDerived.up(h.db);
+    await routesDerived.up(h.db);
+    expect(await exists()).toHaveLength(1);
+    expect(await indexesOf(ROUTES_COLLECTIONS.geometries)).toEqual(expected);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

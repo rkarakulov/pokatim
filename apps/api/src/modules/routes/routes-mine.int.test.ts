@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { MyRoute, MyRoutePage, RouteMapGeometry } from '@pokatim/contracts';
+import { Binary } from 'mongodb';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness, MINUTE } from '../../../test/harness';
@@ -316,15 +317,23 @@ describe('переименование и удаление (AC3)', () => {
     }
   });
 
-  it('delete → 204: маршрут, геометрия и исходник удалены; повтор — 404; карточка — 404', async () => {
+  it('delete → 204: маршрут, геометрия, исходник и экспорт GPX удалены; повтор — 404; карточка — 404', async () => {
     const me = await rider();
     const id = await seedRiderRoute(h, me.userId);
+    // экспорт routes-03 (пишут разбор и бэкфилл)
+    await routesDb(h).exports.insertOne({
+      _id: id,
+      gpx: new Binary(new Uint8Array([60])),
+      sizeBytes: 1,
+      derivedVersion: 1,
+    });
     const deleted = await post(me.token, `${MY_ROUTES}/${id}/delete`);
     expect(deleted.status).toBe(204);
     expect(deleted.headers['cache-control']).toBe('no-store');
     expect(await routesDb(h).routes.countDocuments({ _id: id })).toBe(0);
     expect(await routesDb(h).geometries.countDocuments({ _id: id })).toBe(0);
     expect(await routesDb(h).sources.countDocuments({ _id: id })).toBe(0);
+    expect(await routesDb(h).exports.countDocuments({ _id: id })).toBe(0);
     expect((await post(me.token, `${MY_ROUTES}/${id}/delete`)).status).toBe(404);
     expect((await get(me.token, `${MY_ROUTES}/${id}`)).status).toBe(404);
     expect(await panel(h).audit.countDocuments()).toBe(0);

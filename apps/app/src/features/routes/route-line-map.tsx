@@ -18,6 +18,8 @@ export interface RouteLineMapProps {
   failedMessage: string;
   /** testID места карты до данных */
   skeletonTestID: string;
+  /** толщина линии маршрута, px (routes-03: каталог — `ROUTE_CATALOG_LINE_WIDTH`); по умолчанию — как у карты гонки */
+  lineWidth?: number;
 }
 
 /**
@@ -32,6 +34,7 @@ export function RouteLineMap({
   accessibilityLabel,
   failedMessage,
   skeletonTestID,
+  lineWidth,
 }: RouteLineMapProps) {
   const { mounted, styleUrl, theme } = useMapStyle();
   const geometry = useQuery({ ...mapQuery, enabled: styleUrl !== null });
@@ -56,6 +59,7 @@ export function RouteLineMap({
           theme={theme}
           accessibilityLabel={accessibilityLabel}
           failedMessage={failedMessage}
+          lineWidth={lineWidth}
         />
       )}
     </AsyncContent>
@@ -68,12 +72,14 @@ function LineMap({
   theme,
   accessibilityLabel,
   failedMessage,
+  lineWidth,
 }: {
   geometry: RouteMapGeometry;
   styleUrl: string;
   theme: ReturnType<typeof useMapStyle>['theme'];
   accessibilityLabel: string;
   failedMessage: string;
+  lineWidth: number | undefined;
 }) {
   const map = useMemo(() => withoutCorridor(geometry), [geometry]);
   return (
@@ -82,6 +88,7 @@ function LineMap({
       key={`${styleUrl}|${map.bounds.join(',')}`}
       map={map}
       corridor={false}
+      lineWidth={lineWidth}
       styleUrl={styleUrl}
       theme={theme}
       accessibilityLabel={accessibilityLabel}

@@ -169,6 +169,15 @@ paths:
   неизвестный — один `404 NOT_FOUND`, включая карту и гонки маршрута). Ответы — явный список полей: без
   `ownerUserId`, `sha256`, статуса, `failure`, `attempts` и линии сверки (int-тест на ключи). Снятый маршрут может
   быть виден до минуты из кэша (RC-13).
+- Очищенный GPX каталога (routes-03): `GET /v1/routes/:id/gpx` — только маршрут каталога (`findPublished`, иначе
+  один `404 NOT_FOUND`), `PublicReadGuard` + отдельный IP-лимит `route-gpx` 30/мин (`IpRateLimitGuard` +
+  `@IpRateLimit`, `consumeIpLimit` в `src/public-read.guard.ts`; 429 + `Retry-After`), `public, max-age=60`. Файл
+  посчитан worker'ом (`routeGpx`: только `trkpt lat lon` и `ele` точек линии сверки — без `time`, датчиков,
+  `name`/`desc`, `metadata`, `extensions` исходника); API GPX не разбирает. Заголовки файла — только у 200:
+  `application/gpx+xml; charset=utf-8`, `Content-Disposition: attachment` с ASCII-fallback и `filename*` RFC 5987
+  (`gpxFileName`: без `\p{Cc}`/`\p{Cf}` — bidi-подмена расширения, без `\/:*?"<>|`, ≤ 80 кодовых точек),
+  `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`. Раскрывает то же, что
+  линия на карте, плюс высоты. Логи бэкфилла — `routeId` и код, без названия и координат.
 
 ## Маршруты райдера (routes-02)
 

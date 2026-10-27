@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import type { RouteFailureCode } from '@pokatim/contracts';
-import type { RouteAnalysis } from '@pokatim/tracks/parse';
+import { ROUTE_DERIVED_VERSION, type RouteAnalysis } from '@pokatim/tracks/parse';
 import { CLOCK, type Clock, type OutboxJobData } from '@rkarakulov/api-kit/core';
 import { MongoOutboxReader, MongoTransactions } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
@@ -17,7 +17,7 @@ export type RouteProcessingOutcome = 'ready' | 'failed' | 'skipped';
 /**
  * Разбор маршрута (`route-processing`, jobId = id события outbox): захват по статусу `processing` (терминальный —
  * no-op) → исходник из `route_sources` → `analyzeRoute` в потоке с лимитами → отказ `failed: <код>` или транзакция
- * { геометрия + `processing → ready` }. Сбой окружения (исходник, поток, запись результата) — исключение и ретрай
+ * { геометрия, профиль высоты и очищенный GPX (routes-03) + `processing → ready` }. Сбой окружения (исходник, поток, запись результата) — исключение и ретрай
  * BullMQ; последняя попытка — `failed: unreadable` (панель показывает причину, маршрут не висит в «Обрабатываем…»;
  * если и эта запись не удалась — повторная загрузка того же файла вернёт маршрут в обработку). Параллелизм — 1.
  * Маршрут райдера, удалённый автором во время обработки (routes-02), — `skipped`: захвата нет, исходника и маршрута
@@ -108,7 +108,10 @@ export class RouteProcessingProcessor extends WorkerHost {
           line: { type: 'LineString', coordinates: analysis.line },
           matchLine: analysis.matchLine,
           sourcePointCount: analysis.sourcePointCount,
+          profile: analysis.profile,
+          derivedVersion: ROUTE_DERIVED_VERSION,
         },
+        new TextEncoder().encode(analysis.gpx),
         now,
       ),
     );

@@ -16,6 +16,8 @@ import { checkPlausibility } from './plausibility.ts';
 import { sanitizePoints } from './points.ts';
 import { simplifyTrack } from './simplify.ts';
 import { buildSeries, type DisputeSeries, type SeriesWindow } from './series.ts';
+import { routeGpx } from './route-gpx.ts';
+import { elevationProfile } from './route-profile.ts';
 import { parseStream, type TrackStreamV1 } from './stream.ts';
 import { elevationGainM, summarizeTrack } from './summary.ts';
 import {
@@ -51,6 +53,8 @@ export {
   type SeriesWindow,
 } from './series.ts';
 export { CORRIDOR_ENGINE_VERSION, CORRIDOR_POLICY } from './corridor/policy.ts';
+export { ROUTE_PROFILE_MAX_POINTS, elevationProfile } from './route-profile.ts';
+export { routeGpx } from './route-gpx.ts';
 export { CorridorError, prepareCorridor } from './corridor/prepare.ts';
 export {
   CORRIDOR_REJECTIONS,
@@ -181,8 +185,22 @@ export function analyzeTrack(bytes: Uint8Array, format: TrackFormat, now: Date):
   };
 }
 
+/**
+ * Версия производных данных маршрута (профиль высоты и очищенный GPX, routes-03). +1 при смене
+ * `elevationProfile`/`routeGpx`/допуска точек экспорта — регламент `routes-maintenance` пересчитает готовые маршруты.
+ */
+export const ROUTE_DERIVED_VERSION = 1;
+
+/** Производные данные маршрута (routes-03): только сериализуемые значения (structured clone). */
+export interface RouteDerived {
+  /** профиль высоты `[distanceM, elevationM]` (целые, ≤ 300 точек); `null` — в маршруте нет высот */
+  profile: [number, number][] | null;
+  /** очищенный GPX 1.1: только точки линии сверки с высотами */
+  gpx: string;
+}
+
 /** Итог разбора маршрута для worker: только сериализуемые значения (structured clone). Координаты — [lon, lat]. */
-export interface RouteAnalysis {
+export interface RouteAnalysis extends RouteDerived {
   /** м, целое */
   distanceM: number;
   /** м, целое; `null` — в маршруте нет высот */
@@ -200,11 +218,16 @@ export interface RouteAnalysis {
 const lonLat = (point: { lon: number; lat: number }): [number, number] => [point.lon, point.lat];
 
 /**
- * Маршрут GPX (`trk` или, без `trkpt`, `rte`) или KML (`LineString`/`gx:Track`, routes-02) одним вызовом для
- * worker: сигнатура → разбор → лимит точек → очистка → длина → линии показа и сверки. Время в точках не нужно.
- * Отказ — `TrackParseError` с `RouteFailureCode`.
+ * Общий шаг разбора маршрута: сигнатура GPX или KML (`LineString`/`gx:Track`, routes-02) → разбор (GPX — `trk`
+ * или, без `trkpt`, `rte`) с пределом точек → очистка → ≥ 2 точек → пределы длины. Время в точках не нужно. Отказ —
+ * `TrackParseError` с `RouteFailureCode`. Новые форматы маршрута добавляются сюда — их разбирают и `analyzeRoute`, и
+ * бэкфилл `deriveRoute` (RC-12).
  */
-export function analyzeRoute(bytes: Uint8Array): RouteAnalysis {
+function loadRoutePoints(bytes: Uint8Array): {
+  points: ParsedPoint[];
+  sourcePointCount: number;
+  lengthM: number;
+} {
   const format = detectRouteFormat(bytes);
   if (format === null) throw new TrackParseError('unreadable');
   const text = new TextDecoder('utf-8').decode(bytes);
@@ -218,8 +241,22 @@ export function analyzeRoute(bytes: Uint8Array): RouteAnalysis {
   const lengthM = trackLengthMeters(points);
   if (lengthM < ROUTE_MIN_LENGTH_M) throw new TrackParseError('too_short');
   if (lengthM > ROUTE_MAX_LENGTH_M) throw new TrackParseError('too_long');
+  return { points, sourcePointCount: track.points.length, lengthM };
+}
+
+/** Точки линии сверки (одно вычисление — и `matchLine`, и точки экспорта GPX). */
+const matchPointsOf = (points: readonly ParsedPoint[]) =>
+  simplifyTrack(points, MATCH_LINE_TOLERANCE_M, MATCH_LINE_MAX_POINTS);
+
+/**
+ * Маршрут одним вызовом для worker: `loadRoutePoints` → длина → линии показа и сверки → профиль высоты и очищенный
+ * GPX. Отказ — `TrackParseError` с `RouteFailureCode`.
+ */
+export function analyzeRoute(bytes: Uint8Array): RouteAnalysis {
+  const { points, sourcePointCount, lengthM } = loadRoutePoints(bytes);
   const start = points[0]!;
   const finish = points[points.length - 1]!;
+  const matchPoints = matchPointsOf(points);
 
   return {
     distanceM: Math.round(lengthM),
@@ -228,9 +265,20 @@ export function analyzeRoute(bytes: Uint8Array): RouteAnalysis {
     start: lonLat(start),
     finish: lonLat(finish),
     line: simplifyTrack(points, LINE_TOLERANCE_M, LINE_MAX_POINTS).map(lonLat),
-    matchLine: simplifyTrack(points, MATCH_LINE_TOLERANCE_M, MATCH_LINE_MAX_POINTS).map(lonLat),
-    sourcePointCount: track.points.length,
+    matchLine: matchPoints.map(lonLat),
+    sourcePointCount,
+    profile: elevationProfile(points),
+    gpx: routeGpx(matchPoints),
   };
+}
+
+/**
+ * Производные данные готового маршрута для бэкфилла (регламент `routes-maintenance`, поток разбора worker): тот же
+ * разбор исходника, что `analyzeRoute`, только `profile` и `gpx`. Отказ — `TrackParseError` с тем же кодом.
+ */
+export function deriveRoute(bytes: Uint8Array): RouteDerived {
+  const { points } = loadRoutePoints(bytes);
+  return { profile: elevationProfile(points), gpx: routeGpx(matchPointsOf(points)) };
 }
 
 /** Итог сверки попытки для worker: результат движка и разметка трека на линии показа (maps-02). */

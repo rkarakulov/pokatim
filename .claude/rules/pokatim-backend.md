@@ -39,6 +39,18 @@ paths:
   `ROUTE_GEOMETRY`, тот же `RoutesCatalogService`). `GET /v1/routes/:id/races` живёт в `races`
   (`RacesPublicController`): проверка «в каталоге» — порт `RouteCatalog.inCatalog` (без кэша), 404 — до разбора
   курсора.
+- Карточка и GPX каталога (routes-03): `RoutesPublicService.get` — `findPublished` → `RoutesRepository.derivedOf`
+  (проекция профиля и версии, без кэша в процессе; порт `RouteGeometry` и `displayCache` не меняются);
+  `routes/:id/gpx` — `IpRateLimitGuard` + `@IpRateLimit('route-gpx', ROUTE_POLICY.gpxIpLimit)` после класс-гарда,
+  байты `route_exports`, заголовки файла через `HttpAdapterHost` после чтения (Nest пишет `@Header` до обработчика —
+  404 с типом файла не сериализовался бы). Общий IP-лимит метода — `consumeIpLimit`/`IpRateLimitGuard` в
+  `src/public-read.guard.ts` (им же пользуется `PublicReadGuard`).
+- Очередь `routes-maintenance` (routes-03, `RoutesWorkerModule`): `RoutesSchedules` — расписание `routes.maintenance`
+  каждые 10 мин + разовая `routes.derive.boot` при старте worker; `RoutesMaintenanceProcessor` → `RouteDerivedBackfill.run`
+  (≤ `ROUTE_POLICY.deriveBatch` маршрутов, `runParseThread('deriveRoute')` по одному — семафор отпускается между ними;
+  полная пачка с прогрессом — следующая пачка в той же задаче, ≤ `ROUTES_DERIVE_MAX_BATCHES`; продолжение отдельной
+  задачей с постоянным `jobId` BullMQ отбросил бы как дубль ещё не удалённой текущей). `deriveRoute` и `analyzeRoute` разбирают исходник одним
+  `loadRoutePoints` (`@pokatim/tracks/parse`) — новый формат маршрута добавляется туда.
 - Мои маршруты (routes-02): `RoutesMineController` (`@Controller('routes/mine')`, `AuthGuard`) — **первым** в
   `RoutesModule.controllers` (статический сегмент до публичного `routes/:id`, иначе pipe `Uuid` → 400) →
   `MyRoutesService` (лимиты и семафор до тела, квота, список, карточка, карта через `displayGeometryOf` — не через
