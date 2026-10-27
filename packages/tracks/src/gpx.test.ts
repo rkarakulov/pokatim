@@ -112,7 +112,13 @@ describe('parseGpx', () => {
       { lat: 53.9, lon: 27.5, power: 0 },
       { lat: 53.9, lon: 27.5 },
     ]);
-    expect(track).toMatchObject({ hasPower: true, hasHeartRate: false });
+    // канал из одних нулей — не «есть мощность»: не обгоняет дубль с пульсом при выборе основной активности
+    expect(track).toMatchObject({ hasPower: false, hasHeartRate: false });
+    const withPower = parseGpx(
+      `<gpx><trk><trkseg>${point('<power>0</power>')}${point('<power>120</power>')}</trkseg></trk></gpx>`,
+    );
+    expect(withPower.points.map((p) => p.power)).toEqual([0, 120]);
+    expect(withPower.hasPower).toBe(true);
   });
 
   it('BOM-строка и разметка внутри значения не ломают разбор', () => {

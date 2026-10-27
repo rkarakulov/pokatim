@@ -114,7 +114,7 @@ export function parseGpx(text: string, options: ParseGpxOptions = {}): ParsedTra
     const point = gpxPoint(node);
     if (point === null) continue;
     if (point.hr !== undefined) hasHeartRate = true;
-    if (point.power !== undefined) hasPower = true;
+    if (point.power !== undefined && point.power > 0) hasPower = true;
     points.push(point);
   }
 

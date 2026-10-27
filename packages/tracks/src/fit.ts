@@ -51,7 +51,7 @@ export function parseFit(bytes: Uint8Array): ParsedTrack {
     const hr = positiveNumber(record.heartRate);
     const power = nonNegativeNumber(record.power);
     if (hr !== undefined) hasHeartRate = true;
-    if (power !== undefined) hasPower = true;
+    if (power !== undefined && power > 0) hasPower = true;
     if (typeof record.positionLat !== 'number' || typeof record.positionLong !== 'number') continue;
 
     const point: ParsedPoint = {
