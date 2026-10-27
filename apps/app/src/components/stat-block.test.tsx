@@ -155,7 +155,7 @@ describe('StatBlock: варианты шапки шторки (app-themes C2)', 
     Dimensions.set({ window, screen: Dimensions.get('screen') });
   });
 
-  it('tiles: три равные плитки surface.raised с радиусом shape.card; значение — одна строка, единица и подпись; note — только в метке', async () => {
+  it('tiles: три равные плитки surface.default (шторка — surface.sheet = raised) с радиусом shape.card; значение — одна строка, единица и подпись; note — только в метке', async () => {
     fontScale(1);
     await render(<StatBlock variant="tiles" items={items} />, {
       wrapper: appThemeWrapper('chrono'),
@@ -165,7 +165,7 @@ describe('StatBlock: варианты шапки шторки (app-themes C2)', 
     expect(tiles).toHaveLength(3);
     for (const tile of tiles) {
       expect(tile).toHaveStyle({
-        backgroundColor: surface.raised,
+        backgroundColor: surface.default,
         borderRadius: shape.card,
         flexBasis: 0,
         flexGrow: 1,

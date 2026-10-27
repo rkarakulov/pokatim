@@ -135,8 +135,9 @@ function CompactCells({ items }: Pick<StatsProps, 'items'>) {
 }
 
 /**
- * Плитки (Хронометр, Навигация): три равные плитки `surface.raised` с радиусом `shape.card`; значение
- * `displayNumeral36` одной строкой (крупный шрифт — перенос), под ним единица и подпись.
+ * Плитки (Хронометр, Навигация): три равные плитки с радиусом `shape.card` на фоне экрана `surface.default` — шторка,
+ * где они стоят, уже `surface.sheet` (= `surface.raised` у тем); значение `displayNumeral36` одной строкой (крупный
+ * шрифт — перенос), под ним единица и подпись.
  */
 function TileStats({ items }: Pick<StatsProps, 'items'>) {
   const theme = useTheme<AppTheme>();
@@ -151,7 +152,7 @@ function TileStats({ items }: Pick<StatsProps, 'items'>) {
           accessibilityLabel={cellLabel(item)}
           style={[
             styles.tile,
-            { backgroundColor: theme.surface.raised, borderRadius: shapeOf(theme).card },
+            { backgroundColor: theme.surface.default, borderRadius: shapeOf(theme).card },
           ]}
         >
           <Text
@@ -241,7 +242,9 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexBasis: 0,
     minWidth: 0,
-    padding: space.s3,
+    // по горизонтали — уже: подпись «ДИСТАНЦИЯ» в трети ширины телефона
+    paddingHorizontal: space.s2,
+    paddingVertical: space.s3,
   },
   numeralRow: {
     flexDirection: 'row',

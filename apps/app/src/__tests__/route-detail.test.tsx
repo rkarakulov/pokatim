@@ -446,9 +446,9 @@ describe('карточка маршрута: шапка шторки по тем
     await open();
     await screen.findByLabelText(heroLabel);
     const header = within(screen.getByTestId('bottom-sheet-header'));
-    const raised = appThemes.chrono.schemes.dark.surface.raised;
+    const tile = appThemes.chrono.schemes.dark.surface.default;
     await waitFor(() =>
-      expect(header.getAllByTestId('stat-block-cell')[0]).toHaveStyle({ backgroundColor: raised }),
+      expect(header.getAllByTestId('stat-block-cell')[0]).toHaveStyle({ backgroundColor: tile }),
     );
     expect(header.getAllByTestId('stat-block-cell')).toHaveLength(3);
     expect(header.queryByTestId('stat-block-numeral')).toBeNull();
