@@ -168,3 +168,83 @@ describe('каталог маршрутов (routes-01): панель', () => {
     await expect(broken.api.publishRoute(ID, body)).rejects.toThrow();
   });
 });
+
+describe('api-client: мои маршруты (routes-02, Bearer — только явным параметром)', () => {
+  const myRoute = {
+    id: ID,
+    title: 'Кольцо',
+    status: 'processing',
+    failure: null,
+    distanceM: null,
+    elevationGainM: null,
+    isLoop: null,
+    createdAt: '2026-10-27T10:00:00.000Z',
+  };
+
+  it('uploadMyRoute — POST octet-stream, ?title= с кириллицей; myRouteUploadRequest — те же путь и заголовки', async () => {
+    const { calls, api } = app(202, myRoute);
+    const bytes = new Uint8Array([1, 2, 3]);
+    await expect(api.uploadMyRoute('access', bytes, 'Кольцо & ко')).resolves.toEqual(myRoute);
+    expect(calls[0]?.url).toBe(
+      'https://api.test/v1/routes/mine?title=%D0%9A%D0%BE%D0%BB%D1%8C%D1%86%D0%BE+%26+%D0%BA%D0%BE',
+    );
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.headers.get('authorization')).toBe('Bearer access');
+    expect(calls[0]?.headers.get('content-type')).toBe('application/octet-stream');
+    expect(api.myRouteUploadRequest('access', 'a b')).toEqual({
+      url: 'https://api.test/v1/routes/mine?title=a+b',
+      method: 'POST',
+      headers: { authorization: 'Bearer access', 'content-type': 'application/octet-stream' },
+    });
+  });
+
+  it('listMyRoutes, getMyRoute, getMyRouteMap — пути, encodeURIComponent, Bearer вызова', async () => {
+    const list = app(200, { items: [myRoute], nextCursor: null });
+    await list.api.listMyRoutes('access', { limit: 20, cursor: 'c' });
+    expect(list.calls[0]?.url).toBe('https://api.test/v1/routes/mine?limit=20&cursor=c');
+    expect(list.calls[0]?.headers.get('authorization')).toBe('Bearer access');
+
+    const one = app(200, myRoute);
+    await one.api.getMyRoute('access', 'a/b');
+    expect(one.calls[0]?.url).toBe('https://api.test/v1/routes/mine/a%2Fb');
+
+    const map = app(200, {
+      line: [
+        [27.5, 53.9],
+        [27.6, 53.95],
+      ],
+      start: [27.5, 53.9],
+      finish: [27.6, 53.95],
+      bounds: [27.5, 53.9, 27.6, 53.95],
+    });
+    await map.api.getMyRouteMap('access', ID);
+    expect(map.calls[0]?.url).toBe(`https://api.test/v1/routes/mine/${ID}/map`);
+    expect(map.calls[0]?.headers.get('authorization')).toBe('Bearer access');
+  });
+
+  it('renameMyRoute — POST …/rename с телом; deleteMyRoute — POST …/delete → 204; 404 — ApiHttpError', async () => {
+    const rename = app(200, { ...myRoute, title: 'Новое' });
+    await expect(rename.api.renameMyRoute('access', ID, { title: 'Новое' })).resolves.toMatchObject(
+      { title: 'Новое' },
+    );
+    expect(rename.calls[0]).toMatchObject({
+      url: `https://api.test/v1/routes/mine/${ID}/rename`,
+      method: 'POST',
+      body: { title: 'Новое' },
+    });
+    expect(rename.calls[0]?.headers.get('authorization')).toBe('Bearer access');
+
+    const { calls, fetchImpl } = stub(204, undefined);
+    const api = createApiClient({ baseUrl: 'https://api.test', fetchImpl });
+    await expect(api.deleteMyRoute('access', ID)).resolves.toBeUndefined();
+    expect(calls[0]).toMatchObject({
+      url: `https://api.test/v1/routes/mine/${ID}/delete`,
+      method: 'POST',
+    });
+
+    const missing = app(404, { code: 'NOT_FOUND', message: 'x' });
+    const error = await missing.api.getMyRoute('access', ID).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiHttpError);
+    expect((error as ApiHttpError).apiError.code).toBe('NOT_FOUND');
+  });
+});

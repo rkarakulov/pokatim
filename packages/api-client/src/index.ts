@@ -74,6 +74,9 @@ import {
   MyRaceDisputes,
   type DisputeFileRequest,
   type DisputeResponseRequest,
+  MyRoute,
+  MyRoutePage,
+  type RenameRouteInput,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -204,6 +207,8 @@ export function createApiClient({
   /** Путь загрузки заезда: `?name=` — исходное имя файла только для показа. */
   const trackUploadPath = (name?: string) =>
     `/v1/tracks/uploads${name ? queryString({ name }) : ''}`;
+  /** Путь загрузки своего маршрута: `?title=` — название (`RouteTitle`). */
+  const myRoutesUploadPath = (title: string) => `/v1/routes/mine${queryString({ title })}`;
   const octetStream = (accessToken: string) => ({
     authorization: `Bearer ${accessToken}`,
     'content-type': 'application/octet-stream',
@@ -391,6 +396,56 @@ export function createApiClient({
     deleteTrackUpload: (accessToken: string, id: string) =>
       request(
         `/v1/tracks/uploads/${encodeURIComponent(id)}/delete`,
+        z.undefined(),
+        authorized(accessToken, { method: 'POST', body: '{}', ...withCredentials }),
+      ),
+
+    // --- мои маршруты: GPX/KML райдера (вход обязателен, routes-02) ---
+    /** Загрузка файла маршрута сырыми байтами: `202` — в обработке (новый или повтор отказа), `200` — тот же файл. */
+    uploadMyRoute: (accessToken: string, body: Blob | Uint8Array, title: string) =>
+      request(myRoutesUploadPath(title), MyRoute, {
+        method: 'POST',
+        body: body as BodyInit,
+        headers: octetStream(accessToken),
+        ...withCredentials,
+      }),
+    /** Тот же запрос для платформенной отправки с прогрессом: ответ разбирается `MyRoute`. */
+    myRouteUploadRequest: (accessToken: string, title: string) => ({
+      url: `${baseUrl}${myRoutesUploadPath(title)}`,
+      method: 'POST' as const,
+      headers: octetStream(accessToken),
+    }),
+    /** Свои маршруты, новые сверху. */
+    listMyRoutes: (accessToken: string, params: { limit?: number; cursor?: string } = {}) =>
+      request(
+        `/v1/routes/mine${queryString(params)}`,
+        MyRoutePage,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    getMyRoute: (accessToken: string, id: string) =>
+      request(
+        `/v1/routes/mine/${encodeURIComponent(id)}`,
+        MyRoute,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Линия показа своего готового маршрута; не готов, чужой, удалён — 404. */
+    getMyRouteMap: (accessToken: string, id: string) =>
+      request(
+        `/v1/routes/mine/${encodeURIComponent(id)}/map`,
+        RouteMapGeometry,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    renameMyRoute: (accessToken: string, id: string, body: RenameRouteInput) =>
+      postAuthorized(
+        accessToken,
+        `/v1/routes/mine/${encodeURIComponent(id)}/rename`,
+        MyRoute,
+        body,
+      ),
+    /** Удаление насовсем (маршрут, линия, исходник); ответ 204, повтор — 404. */
+    deleteMyRoute: (accessToken: string, id: string) =>
+      request(
+        `/v1/routes/mine/${encodeURIComponent(id)}/delete`,
         z.undefined(),
         authorized(accessToken, { method: 'POST', body: '{}', ...withCredentials }),
       ),
