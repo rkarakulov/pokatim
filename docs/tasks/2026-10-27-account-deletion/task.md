@@ -431,6 +431,24 @@ Mongo DB / Redis db.
 - Повторный проход очистки (sweep + регламент resume) — добавлен по R5 (§8.1 F9).
 - §9: уточнён код N1 (`403 PASSWORD_INCORRECT`), добавлены N8 (живой аккаунт не чистится) и N9 (поздняя запись
   убирается повторным проходом) — architect, 2026-10-27.
+- Решения человека 2026-10-27: F7 — рекомендация (а) (этап 2, app); F8 — рекомендация [ASSUMPTION] (письмо не ушло за
+  24 ч — стирание e-mail без письма); F10 — правила обновлены по §10; F12/F13 — приняты.
+- Coder, этап 1 (backend), 2026-10-27:
+  - Работа разбита на этапы: **этап 1 — backend** (contracts, api-client, admin i18n, apps/api, docs §10); **этап 2 —
+    app** (`apps/app`, app i18n, allowlist возврата, e2e) — по указанию оркестратора.
+  - Общий отзыв подключения вынесен в класс `DeviceRevocation` (`devices/device-revocation.ts`: замок + отзыв +
+    `revoked`/журнал); `Attempt`/`RevokeBusyError` переехали туда (реэкспорт из `devices-sync.service.ts`). Ядро
+    `DevicesCoreModule` экспортирует ещё `DevicesLocks` и `WEARABLES_AGGREGATOR` (нужны `DeviceRevocation`);
+    `DevicesPullQueue` остался в HTTP/worker-модулях (у ядра нет очереди).
+  - `AccountClosure.close`: `lockUserCredentials` вернул «нет учётных данных» (стёртый аккаунт) — `'already'` (не
+    `'changed'`): аккаунт уже удалён.
+  - Текст письма: «Ваш аккаунт в «Покатим» удалён <дата, время> по минскому времени. Если это были не вы — напишите
+    нам.» — **адреса для «напишите нам» в продукте нет** (`MAIL_FROM` — no-reply): вопрос человеку (контакт поддержки).
+  - `migrations.int.test.ts`: проверка «0022 — последняя» перенесена в тест 0023 (новая миграция в конец).
+  - Вариант `DEVICES_ENABLED=false` (`disabled`) отдельным int-тестом не покрыт — та же ветка, что неповторяемая
+    ошибка/финал (`revokeFailed` + журнал), покрыт финалом с 503.
+  - `pokatim-security.md`: строка allowlist возврата уже упоминает `/settings/account/delete` с пометкой «этап 2 app» —
+    сам allowlist меняет этап 2.
 
 # 8.3 Security checklist
 
@@ -636,4 +654,39 @@ app-foundation (F7, follow-up), удаление пользователя OW ч�
 
 # 12. Outcome
 
-Заполняет coder.
+**Этап 1 (backend) — выполнен** (coder, 2026-10-27). Этап 2 (app) — не начат.
+
+Сделано:
+- contracts: `DeleteAccountRequest` (`account/account-deletion.schema.ts`), коды `PASSWORD_INCORRECT` (403),
+  `ACCOUNT_PANEL_MEMBER` (409) в конце `ErrorCode`, `AUDIT_ACTIONS` + `account.deleted`; тексты кодов —
+  `error-messages.ts`; admin i18n `admin.audit.action.account.deleted`. api-client — `deleteAccount(accessToken, body)`.
+- identity: `UserDoc` (`passwordHash`/`birthDate` nullable, `deletionEmail*`, `erasedAt`, `erasureSweptAt`), причина
+  `account_deleted`, `CredentialsCheck.verify`, `erasedEmailMarker`, регистрация по адресу и маркеру,
+  `AccountClosure`, `AccountErasure` + `IdentityErasureModule`, письмо `mail/account-deleted-email.ts`, экспорт
+  `SessionCookie`.
+- порты: `PanelMembership`, `ProfileErasure` (+ `riderSubjectLabel` из `index.ts`), `RideErasure` (`RidesCoreModule`),
+  `RouteErasure`, `TrackErasure` (общий `TrackUploadsService.remove`), `DeviceErasure` (`DevicesCoreModule`,
+  `DeviceRevocation`).
+- модуль `account`: контроллер, `AccountDeletionService`, `AccountErasureService` (шаги, sweep, resume),
+  `AccountErasureProcessor`, `AccountSchedules`, очередь `account-deletion`; регистрация в `app.module`/`worker.module`.
+- миграция `0023_account_deletion`; ADR-0015; runbook `account-deletion.md`; правила `pokatim-{db,security,backend,
+  app,contracts}.md`; `profile.md` P4.
+
+Тесты: `account/account-deletion.int.test.ts` (AC1, AC7, N1, N2, N3, N6, N7, логи, гонка со сбросом + отрицательное
+доказательство), `account/account-erasure.int.test.ts` (AC2–AC5, N4, N5 со сбоем на каждом шаге, N8, N9, sweep,
+resume, устройства: 503 не финал/финал, `not_found`, позднее `upload-deleted`, логи), `identity/account-deletion.int.test.ts`
+(закрытие, письмо один раз, сбой SMTP, чужой захват, F8, AC6, порт панели, `pendingSweeps` по
+`users_erasure_pending_idx`), unit — схема, коды, `deleteAccount`, маркер, шаблон письма, миграция 0023.
+
+**Отрицательное доказательство гонки** («сброс пароля между проверкой и транзакцией»): `lockUserCredentials` подменён
+чтением на момент проверки (без записи и свежего хеша) → удаление проходит со сменённым паролем (`204`, `deletedAt`
+стоит) — постоянный тест рядом с основным (основной: `401`, аккаунт не удалён).
+
+Сторожа append-only (`profile.repository.test.ts`, `device-audit.test.ts`, `panel.repository.test.ts`,
+`results.repository.test.ts`, `disputes.repository.test.ts`, `ride-reports.repository.test.ts`) и
+`admin-routes.test.ts` — зелёные без правок списков.
+
+Гейт: `TURBO_CONCURRENCY=1 pnpm check` на `pokatim_account_deletion_test` / Redis db 1 порта 6479 — см. отчёт coder
+(хвост вывода).
+
+Открыто: контакт для «напишите нам» в письме (§8.2); этап 2 — app.
