@@ -68,6 +68,8 @@ describe('«Удаление аккаунта»: экран (AC8)', () => {
     ]) {
       expect(screen.getByText(consequence)).toBeOnTheScreen();
     }
+    // последствия — список: контейнер list, у пунктов роль listitem (web — ul/li)
+    expect(screen.getAllByRole('listitem')).toHaveLength(7);
     expect(screen.getByLabelText(PASSWORD)).toHaveProp('secureTextEntry', true);
     expect(screen.getByLabelText(PASSWORD)).toHaveProp('autoComplete', 'current-password');
     expect(submit()).toBeDisabled();
@@ -116,8 +118,9 @@ describe('«Удаление аккаунта»: экран (AC8)', () => {
       session: null,
       returning: false,
     });
-    // устройство забыло сессию
+    // устройство забыло сессию; сервер уже отозвал все сессии — отдельного sign-out нет
     expect(await SecureStore.getItemAsync('pokatim.session')).toBeNull();
+    expect(api.signOut).not.toHaveBeenCalled();
   });
 
   it('неверный пароль (403) — ошибка под полем, сессия жива, без баннера', async () => {

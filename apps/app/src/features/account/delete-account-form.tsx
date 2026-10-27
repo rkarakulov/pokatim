@@ -113,7 +113,11 @@ export function DeleteAccountForm() {
       </Text>
       <View accessibilityRole="list" style={styles.list}>
         {CONSEQUENCES.map((key) => (
-          <Text key={key} style={[textStyle('body'), { color: theme.text.primary }]}>
+          <Text
+            key={key}
+            role="listitem"
+            style={[textStyle('body'), { color: theme.text.primary }]}
+          >
             {t(key)}
           </Text>
         ))}

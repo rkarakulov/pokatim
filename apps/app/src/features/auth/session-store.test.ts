@@ -206,6 +206,22 @@ describe('native: выход', () => {
     expect(useSessionStore.getState().notice).toBeNull();
   });
 
+  it('сервер уже завершил сессию (удаление аккаунта) — только память: без запроса отзыва и без замка', async () => {
+    stored().set('pokatim.session', JSON.stringify(session));
+    await useSessionStore.getState().signIn(session);
+
+    await useSessionStore
+      .getState()
+      .signOut({ returning: false, notice: 'accountDeleted', serverEnded: true });
+
+    expect(signOut).not.toHaveBeenCalled();
+    expect(useSessionStore.getState()).toMatchObject({
+      status: 'signedOut',
+      session: null,
+      notice: 'accountDeleted',
+    });
+  });
+
   it('обычный выход — без отметки; отметку снимает экран, показавший её', async () => {
     useSessionStore.setState({ notice: 'accountDeleted' });
     await useSessionStore.getState().signIn(session);

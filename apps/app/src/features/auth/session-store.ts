@@ -24,6 +24,12 @@ export interface SignOutOptions {
   /** гард ведёт на «Вход» (по умолчанию) или, `false`, на «Регистрацию» (аккаунта больше нет) */
   returning?: boolean;
   notice?: SignOutNotice;
+  /**
+   * сервер уже завершил сессию, а устройство её забыло под замком сессии в той же операции (удаление аккаунта,
+   * `forgetEndedSession`): только память, без `clearSession` — запрос отзыва ушёл бы с cookie, которую тем временем
+   * могла выставить другая вкладка
+   */
+  serverEnded?: boolean;
 }
 
 interface SessionState {
@@ -120,8 +126,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       notice: null,
     });
   },
-  signOut: async ({ returning = true, notice }: SignOutOptions = {}) => {
-    await clearSession();
+  signOut: async ({ returning = true, notice, serverEnded = false }: SignOutOptions = {}) => {
+    if (!serverEnded) await clearSession();
     set({
       status: 'signedOut',
       session: null,

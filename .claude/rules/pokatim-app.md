@@ -47,8 +47,9 @@ paths:
 - **Шеринг:** системный share sheet и копирование ссылки; карточку рендерит сервер.
 - **Удаление аккаунта** (A2, A12, ADR-0015): экран `settings/account/delete` за входом на всех платформах —
   последствия, текущий пароль, «Удалить навсегда» (`api.deleteAccount`); ошибки `PASSWORD_INCORRECT` — под полем,
-  `ACCOUNT_PANEL_MEMBER`/`RATE_LIMITED` — баннер; успех — `signOut({ returning: false, notice })` и баннер «Аккаунт
-  удалён» на «Регистрации». Нативный `Alert` не используется (на web не работает).
+  `ACCOUNT_PANEL_MEMBER`/`RATE_LIMITED` — баннер. Запрос и забывание сессии устройством (`forgetEndedSession`) — одна
+  задача `withSessionLock` внутри `withAccessToken` (ответ web стирает cookie); успех — `signOut({ returning: false,
+  notice, serverEnded: true })` без запроса sign-out и баннер «Аккаунт удалён» на «Регистрации». Нативный `Alert` не используется (на web не работает).
 
 ## Публичные экраны по ссылкам (web, ADR-0003)
 
