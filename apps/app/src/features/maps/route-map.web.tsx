@@ -4,21 +4,16 @@ import { space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { cumulativeMeters } from '@pokatim/tracks';
 import { textStyle, useReducedMotion } from '@rkarakulov/ui';
-import type { Map as MapLibreMap } from 'maplibre-gl';
+import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { attributionCss, collapseAttribution } from './attribution.web';
-import {
-  CORRIDOR_LAYER_ID,
-  MAP_FIT_PADDING,
-  ROUTE_SOURCE_ID,
-  routeFeatures,
-  routeLayers,
-} from './corridor-style';
+import { CORRIDOR_LAYER_ID, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
 import { loadMaplibre } from './load-maplibre';
-import { MAP_MAX_ZOOM, MAP_MIN_ZOOM } from './map-camera';
-import { MapControls } from './map-controls';
+import { LOCATE_ZOOM, LOCATION_SOURCE_ID, locationFeature, locationLayers } from './location-style';
+import { cameraPadding, MAP_MAX_ZOOM, MAP_MIN_ZOOM } from './map-camera';
+import { MapOverlayControls } from './map-overlay-controls';
 import { mapLocale } from './map-locale.web';
 import { guardWheelZoom, isMacPlatform, WHEEL_HINT_MS } from './map-wheel.web';
 import { createMapViewStore } from './map-view-store';
@@ -46,7 +41,11 @@ import {
  * контролы. Смена стиля (темы) — пересоздание карты. Ошибка до `load` (стиль, первые тайлы) — сообщение поверх
  * карты; ошибки тайлов после `load` — без сообщения (как native). `scrub` (routes-04) — маркер скраббинга оверлеем:
  * пиксели линии — `map.project` после `load` и на `SCRUB_REPROJECT_EVENTS` в стор вида (подписан только
- * `ScrubLayer`); карта на кадр камеры не перерисовывается и не пересоздаётся.
+ * `ScrubLayer`); карта на кадр камеры не перерисовывается и не пересоздаётся. routes-04d: атрибуция — контрол
+ * `AttributionControl` в `'bottom-left'` (RC-6), над шторкой — CSS-сдвиг на `bottomInset`; `fill` — колесо масштабирует
+ * без модификатора (RC-7); отступ камеры — `cameraPadding` (высота шторки — через ref, эффект создания карты от неё не
+ * зависит); «Моё местоположение» — точка императивно (`addSource`/`setData`), камера — `easeTo` с `offset` (не
+ * `padding`: в maplibre-gl он стал бы постоянным `tr.padding` и прибавлялся бы к отступам `fitBounds`).
  */
 export function RouteMap({
   map,
@@ -58,6 +57,8 @@ export function RouteMap({
   lineWidth,
   track,
   scrub,
+  fill = false,
+  bottomInset = 0,
 }: RouteMapProps) {
   const container = useRef<HTMLDivElement>(null);
   const scope = useId();
@@ -80,11 +81,18 @@ export function RouteMap({
   useEffect(() => {
     animate.current = reduced === false;
   }, [reduced]);
-  // routes-04c: колесо без Ctrl/⌘ — прокрутка страницы; подсказка на `WHEEL_HINT_MS` после последнего прокручивания
+  // routes-04d: высота шторки — для камеры кнопок и начальной рамки (эффект создания от неё не зависит)
+  const inset = useRef(bottomInset);
+  useEffect(() => {
+    inset.current = bottomInset;
+  }, [bottomInset]);
+  const padding = () => cameraPadding(inset.current, container.current?.clientHeight || null);
+  // routes-04c: колесо без Ctrl/⌘ — прокрутка страницы; подсказка на `WHEEL_HINT_MS` после последнего прокручивания.
+  // routes-04d (RC-7): `fill` — страница не прокручивается, колесо масштабирует карту без модификатора
   const [wheelHint, setWheelHint] = useState(false);
   useEffect(() => {
     const node = container.current;
-    if (!node) return;
+    if (!node || fill) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const release = guardWheelZoom(node, () => {
       setWheelHint(true);
@@ -95,7 +103,7 @@ export function RouteMap({
       release();
       clearTimeout(timer);
     };
-  }, []);
+  }, [fill]);
 
   useEffect(() => {
     const node = container.current;
@@ -104,7 +112,7 @@ export function RouteMap({
     let instance: MapLibreMap | null = null;
     setFailed(false);
     loadMaplibre()
-      .then(({ Map, getVersion, setWorkerUrl }) => {
+      .then(({ Map, AttributionControl, getVersion, setWorkerUrl }) => {
         if (cancelled) return;
         setWorkerUrl(`/${MAP_WORKER_FILE}?v=${getVersion()}`);
         const created = new Map({
@@ -121,10 +129,15 @@ export function RouteMap({
           minZoom: MAP_MIN_ZOOM,
           maxZoom: MAP_MAX_ZOOM,
           locale: mapLocale(),
-          attributionControl: { compact: true },
+          // routes-04d (RC-6): атрибуция — слева внизу (справа — колонка кнопок, снизу — шторка)
+          attributionControl: false,
           bounds: unionBounds(map.bounds, track?.line),
-          fitBoundsOptions: { padding: MAP_FIT_PADDING, animate: false },
+          fitBoundsOptions: {
+            padding: cameraPadding(inset.current, node.clientHeight || null),
+            animate: false,
+          },
         });
+        created.addControl(new AttributionControl({ compact: true }), 'bottom-left');
         created.touchZoomRotate.disableRotation();
         created.keyboard.disableRotation();
         instance = created;
@@ -177,17 +190,47 @@ export function RouteMap({
 
   const fit = () =>
     instanceRef.current?.fitBounds(unionBounds(map.bounds, track?.line), {
-      padding: MAP_FIT_PADDING,
+      padding: padding(),
       animate: animate.current,
     });
+  // routes-04d: точка позиции — источник при первой точке, дальше `setData`; до `load` стиля слоя нет — только камера.
+  // Пересоздание карты (тема) — точки нет до следующего нажатия
+  const showPosition = (lngLat: readonly [number, number]) => {
+    const instance = instanceRef.current;
+    if (!instance) return;
+    const data = locationFeature(lngLat);
+    try {
+      const source = instance.getSource<GeoJSONSource>(LOCATION_SOURCE_ID);
+      if (source) source.setData(data);
+      else {
+        instance.addSource(LOCATION_SOURCE_ID, { type: 'geojson', data });
+        for (const layer of locationLayers(theme)) instance.addLayer(layer);
+      }
+    } catch {
+      // стиль ещё не загружен — точка появится при следующем нажатии
+    }
+    // центр видимой части над шторкой: смещение вверх на половину её высоты (не `padding` — RC-5)
+    instance.easeTo({
+      center: [lngLat[0], lngLat[1]],
+      zoom: LOCATE_ZOOM,
+      offset: [0, -inset.current / 2],
+      animate: animate.current,
+    });
+  };
 
   return (
     <RouteMapFrame
       theme={theme}
       accessibilityLabel={accessibilityLabel}
       failedMessage={failed ? failedMessage : null}
+      fill={fill}
+      bottomInset={bottomInset}
     >
       <style>{attributionCss(scope, theme)}</style>
+      {bottomInset > 0 ? (
+        // атрибуция над шторкой (RC-6): угол контролов maplibre-gl — со сдвигом на её высоту
+        <style>{`[data-route-map="${scope}"] .maplibregl-ctrl-bottom-left{bottom:${bottomInset}px}`}</style>
+      ) : null}
       <div
         ref={container}
         data-testid="route-map-canvas"
@@ -215,11 +258,12 @@ export function RouteMap({
         </View>
       ) : null}
       {ready && !failed ? (
-        <MapControls
+        <MapOverlayControls
           theme={theme}
           onZoomIn={() => instanceRef.current?.zoomIn({ animate: animate.current })}
           onZoomOut={() => instanceRef.current?.zoomOut({ animate: animate.current })}
           onFit={fit}
+          onPosition={showPosition}
         />
       ) : null}
     </RouteMapFrame>

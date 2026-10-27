@@ -1,6 +1,6 @@
 import { apiErrorOf } from '@pokatim/api-client';
 import { Uuid, type CatalogRouteDetail } from '@pokatim/contracts';
-import { size, space } from '@pokatim/design-tokens';
+import { size, space, type AppTheme } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
   AsyncContent,
@@ -15,17 +15,25 @@ import {
   useTheme,
 } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ScrollViewProps,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BottomSheet } from '@/components/bottom-sheet';
+import { sheetColors, sheetStyles } from '@/components/bottom-sheet-props';
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
 import { StatBlock } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
-import { MAP_ASPECT_RATIO } from '@/features/maps/corridor-style';
 import { createScrubStore, type ScrubStore } from '@/features/maps/scrub-store';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
@@ -42,41 +50,47 @@ import { useScrubScrollEnabled } from './use-scrub-scroll-lock';
 export const routeDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
 export const routePath = (id: string) => `/routes/${encodeURIComponent(id)}`;
 
-/** «Поделиться» ссылкой на web-карточку: share sheet / Web Share / копирование с «Ссылка скопирована». */
-function ShareAction({ route }: { route: CatalogRouteDetail }) {
-  const [notice, setNotice] = useState<'copied' | 'failed' | null>(null);
+/**
+ * Действия карточки (routes-04d, RC-11): «Поделиться» (primary; share sheet / Web Share / копирование с «Ссылка
+ * скопирована»; нет origin — кнопки нет, появляется после монтирования) и «Скачать GPX» (secondary, только при
+ * `gpxAvailable`; web скачивает в той же вкладке, native открывает системный браузер; адрес не логируется) — в одну
+ * строку поровну, одна кнопка — во всю ширину. Уведомления — во всю ширину под строкой.
+ */
+function RouteActions({ route, mounted }: { route: CatalogRouteDetail; mounted: boolean }) {
+  const [shareNotice, setShareNotice] = useState<'copied' | 'failed' | null>(null);
+  const [gpxFailed, setGpxFailed] = useState(false);
+  const canShare = mounted && shareOrigin() !== null;
+  if (!canShare && !route.gpxAvailable) return null;
   const share = () => {
-    setNotice(null);
+    setShareNotice(null);
     shareLink({ title: route.title, text: routeShareDescription(route), path: routePath(route.id) })
-      .then((outcome) => setNotice(outcome === 'copied' ? 'copied' : null))
-      .catch(() => setNotice('failed'));
+      .then((outcome) => setShareNotice(outcome === 'copied' ? 'copied' : null))
+      .catch(() => setShareNotice('failed'));
+  };
+  const download = () => {
+    setGpxFailed(false);
+    // синхронно в обработчике нажатия (web: клик по ссылке до любого await)
+    downloadFile(api.catalogRouteGpxUrl(route.id)).catch(() => setGpxFailed(true));
   };
   return (
     <View style={styles.stack}>
-      <Button label={t('routes.detail.share')} variant="primary" onPress={share} />
-      {notice === 'copied' ? <Banner message={t('routes.detail.copied')} /> : null}
-      {notice === 'failed' ? (
+      <View testID="route-actions" style={styles.actions}>
+        {canShare ? (
+          <View style={styles.action}>
+            <Button label={t('routes.detail.share')} variant="primary" onPress={share} />
+          </View>
+        ) : null}
+        {route.gpxAvailable ? (
+          <View style={styles.action}>
+            <Button label={t('routes.detail.gpx')} variant="secondary" onPress={download} />
+          </View>
+        ) : null}
+      </View>
+      {shareNotice === 'copied' ? <Banner message={t('routes.detail.copied')} /> : null}
+      {shareNotice === 'failed' ? (
         <Banner tone="warning" message={t('routes.detail.shareFailed')} />
       ) : null}
-    </View>
-  );
-}
-
-/**
- * «Скачать GPX» (routes-03, P5, RC-6): очищенный файл маршрута с API — web скачивает в той же вкладке, native
- * открывает системный браузер. Ошибка (нет браузера) — баннер под кнопкой; адрес не логируется.
- */
-function GpxAction({ route }: { route: CatalogRouteDetail }) {
-  const [failed, setFailed] = useState(false);
-  const download = () => {
-    setFailed(false);
-    // синхронно в обработчике нажатия (web: клик по ссылке до любого await)
-    downloadFile(api.catalogRouteGpxUrl(route.id)).catch(() => setFailed(true));
-  };
-  return (
-    <View style={styles.stack}>
-      <Button label={t('routes.detail.gpx')} variant="secondary" onPress={download} />
-      {failed ? <Banner tone="warning" message={t('routes.detail.gpxFailed')} /> : null}
+      {gpxFailed ? <Banner tone="warning" message={t('routes.detail.gpxFailed')} /> : null}
     </View>
   );
 }
@@ -160,12 +174,21 @@ function RouteRaces({
   );
 }
 
+/** Шапка шторки (routes-04d, L3): компактная строка цифр — видна и в свёрнутой шторке. */
+function RouteSheetHeader({ route }: { route: CatalogRouteDetail }) {
+  return (
+    <View style={styles.sheetHeader}>
+      <StatBlock variant="compact" items={routeStatItems(route)} />
+    </View>
+  );
+}
+
 /**
- * Карточка маршрута каталога (routes-03, P1): карта с толстой линией, название, чипы (покрытия, форма, город;
- * `'unknown'` — без чипа), стат-блок (дистанция, набор, время в пути), профиль высоты, действия («Поделиться» —
- * primary, нет origin — кнопки нет; «Скачать GPX» — secondary, только при `gpxAvailable`), «Гонки на маршруте».
+ * Тело шторки карточки маршрута (routes-03, P1; routes-04d, L3): без названия (оно в шапке экрана), чипы (покрытия,
+ * форма, город; `'unknown'` — без чипа), профиль высоты без заголовка со скраббингом, действия в строку, «Гонки на
+ * маршруте».
  */
-function RouteDetailView({
+function RouteSheetBody({
   route,
   races,
   now,
@@ -178,55 +201,63 @@ function RouteDetailView({
   mounted: boolean;
   scrub: ScrubStore;
 }) {
-  const theme = useTheme();
-  const canShare = mounted && shareOrigin() !== null;
   return (
     <View style={styles.detail}>
-      {/* нет профиля — нет маркера: синхронизировать нечего (routes-04) */}
-      <CatalogRouteMap route={route} scrub={route.elevation ? scrub : undefined} />
-      <Text
-        accessibilityRole="header"
-        style={[textStyle('displaySm'), { color: theme.text.primary }]}
-      >
-        {route.title}
-      </Text>
       <View testID="route-chips" style={styles.chips}>
         {routeChips(route).map((chip) => (
           <Pill key={chip} label={chip} />
         ))}
       </View>
-      <StatBlock items={routeStatItems(route)} equalColumns />
       <ElevationProfile
         elevation={route.elevation}
         distanceM={route.distanceM}
         gainM={route.elevationGainM}
         scrub={scrub}
       />
-      {canShare || route.gpxAvailable ? (
-        <View style={styles.stack}>
-          {canShare ? <ShareAction route={route} /> : null}
-          {route.gpxAvailable ? <GpxAction route={route} /> : null}
-        </View>
-      ) : null}
+      <RouteActions route={route} mounted={mounted} />
       <RouteRaces races={races} now={now} />
     </View>
   );
 }
 
-/** Скелетон карточки — та же раскладка: место карты, название, стат-блок, профиль. */
+/** Прокрутка состояния без карты (404, ошибка без данных) — с pull-to-refresh, как прежде. */
+function StateScroll({
+  refresh,
+  children,
+}: {
+  refresh: ScrollViewProps['refreshControl'];
+  children: ReactNode;
+}) {
+  return (
+    <ScrollView
+      testID="route-detail"
+      contentContainerStyle={styles.content}
+      refreshControl={refresh}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
+/**
+ * Скелетон карточки (RC-18) — та же раскладка: место карты на всю область и шторка-скелетон (строка цифр, место
+ * профиля); без жестов.
+ */
 function RouteDetailSkeleton() {
-  const theme = useTheme();
+  const theme = useTheme<AppTheme>();
   const block = { backgroundColor: theme.surface.skeleton };
   return (
-    <View testID="route-detail-skeleton" style={styles.detail}>
-      <SkeletonGroup>
-        <View style={[styles.mapPlace, block]} />
-      </SkeletonGroup>
-      <SkeletonText variant="displaySm" lines={1} lastLineWidth="70%" />
-      <SkeletonText variant="displayStat" lines={2} lastLineWidth="60%" />
-      <SkeletonGroup>
-        <View style={[styles.profilePlace, block]} />
-      </SkeletonGroup>
+    <View testID="route-detail-skeleton" style={styles.area}>
+      <View style={[StyleSheet.absoluteFill, block]} />
+      <View style={[sheetStyles.sheet, sheetColors(theme)]}>
+        <View style={sheetStyles.grabber} />
+        <View style={[styles.sheetHeader, styles.skeletonSheet]}>
+          <SkeletonGroup>
+            <SkeletonText variant="bodyStrong" lines={2} lastLineWidth="60%" />
+            <View style={[styles.profilePlace, block]} />
+          </SkeletonGroup>
+        </View>
+      </View>
     </View>
   );
 }
@@ -235,7 +266,10 @@ function RouteDetailSkeleton() {
  * Публичная карточка маршрута каталога (`/routes/<id>`, вне гардов: гость и вошедший, RC-9): данные — API через
  * TanStack Query, на web — посев SSR (`seed`). Невалидный id — «Маршрут недоступен» без запроса; 404 (снят, не
  * опубликован, неизвестен — неотличимы) — то же; сеть и сервер — `AsyncContent`. Обновление — фокус и
- * pull-to-refresh (карточка и гонки; геометрия неизменна).
+ * pull-to-refresh (карточка и гонки; геометрия неизменна). routes-04d (RC-4, RC-18): под шапкой — карта на всю область
+ * и шторка поверх (состояние `expanded` — здесь, SSR — развёрнута); видимая высота шторки — отступ камеры; тело
+ * шторки — прокрутка с pull-to-refresh и блокировкой на время скраббинга. 404 и ошибка без данных — без карты и
+ * шторки.
  */
 export function RouteDetailScreen({
   id,
@@ -271,6 +305,18 @@ export function RouteDetailScreen({
     scrub.setState({ fraction: 0, active: false, dragging: null });
   }, [id, scrub]);
   const scrollEnabled = useScrubScrollEnabled(scrub);
+  // routes-04d (RC-2, RC-5): шторка — состояние экрана; высота — после измерения (до неё карта не монтируется)
+  const [expanded, setExpanded] = useState(true);
+  const [sheetHeight, setSheetHeight] = useState<number | undefined>(undefined);
+  const refresh = (
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={() => void onRefresh()}
+      tintColor={theme.text.secondary}
+      colors={[theme.text.primary]}
+      progressBackgroundColor={theme.surface.raised}
+    />
+  );
 
   return (
     <SafeAreaView
@@ -283,25 +329,9 @@ export function RouteDetailScreen({
         )}
       />
       <DetailHeader title={notFound ? undefined : route.data?.title} fallback={home} />
-      <ScrollView
-        testID="route-detail"
-        contentContainerStyle={styles.content}
-        scrollEnabled={scrollEnabled}
-        onScrollBeginDrag={() => {
-          if (scrub.getState().active) scrub.setState({ active: false });
-        }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void onRefresh()}
-            tintColor={theme.text.secondary}
-            colors={[theme.text.primary]}
-            progressBackgroundColor={theme.surface.raised}
-          />
-        }
-      >
-        <OfflineBanner hasData={route.data !== undefined && !notFound} style={styles.offline} />
-        {notFound ? (
+      <OfflineBanner hasData={route.data !== undefined && !notFound} style={styles.offline} />
+      {notFound ? (
+        <StateScroll refresh={refresh}>
           <EmptyState
             title={t('routes.detail.notFound')}
             action={{
@@ -309,20 +339,58 @@ export function RouteDetailScreen({
               onPress: () => router.navigate(home),
             }}
           />
-        ) : (
-          <AsyncContent query={route} skeleton={<RouteDetailSkeleton />}>
-            {(data) => (
-              <RouteDetailView
-                route={data}
-                races={races}
-                now={now}
-                mounted={mounted}
-                scrub={scrub}
-              />
-            )}
+        </StateScroll>
+      ) : route.data !== undefined ? (
+        <View style={styles.area}>
+          <View style={StyleSheet.absoluteFill}>
+            {/* нет профиля — нет маркера: синхронизировать нечего (routes-04) */}
+            <CatalogRouteMap
+              route={route.data}
+              scrub={route.data.elevation ? scrub : undefined}
+              fill
+              bottomInset={sheetHeight}
+            />
+          </View>
+          <BottomSheet
+            expanded={expanded}
+            onExpandedChange={setExpanded}
+            onVisibleHeightChange={setSheetHeight}
+            collapseLabel={t('routes.detail.sheet.collapse')}
+            expandLabel={t('routes.detail.sheet.expand')}
+            header={<RouteSheetHeader route={route.data} />}
+          >
+            <ScrollView
+              testID="route-detail"
+              contentContainerStyle={styles.sheetContent}
+              scrollEnabled={scrollEnabled}
+              onScrollBeginDrag={() => {
+                if (scrub.getState().active) scrub.setState({ active: false });
+              }}
+              refreshControl={refresh}
+            >
+              <AsyncContent query={route} skeleton={null}>
+                {(data) => (
+                  <RouteSheetBody
+                    route={data}
+                    races={races}
+                    now={now}
+                    mounted={mounted}
+                    scrub={scrub}
+                  />
+                )}
+              </AsyncContent>
+            </ScrollView>
+          </BottomSheet>
+        </View>
+      ) : route.isPending && route.fetchStatus !== 'paused' ? (
+        <RouteDetailSkeleton />
+      ) : (
+        <StateScroll refresh={refresh}>
+          <AsyncContent query={route} skeleton={null}>
+            {() => null}
           </AsyncContent>
-        )}
-      </ScrollView>
+        </StateScroll>
+      )}
     </SafeAreaView>
   );
 }
@@ -330,12 +398,18 @@ export function RouteDetailScreen({
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
+  // область карты под шапкой: карта — на всю, шторка — поверх (касания до карты под ней не доходят)
+  area: { flex: 1, overflow: 'hidden' },
+  sheetHeader: { paddingHorizontal: size.gutter, paddingBottom: space.s3 },
+  sheetContent: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
+  skeletonSheet: { gap: space.s4 },
   detail: { gap: space.s4 },
-  offline: { paddingBottom: space.s3 },
-  mapPlace: { width: '100%', aspectRatio: MAP_ASPECT_RATIO },
+  offline: { paddingHorizontal: size.gutter, paddingBottom: space.s3 },
   profilePlace: { width: '100%', aspectRatio: PROFILE_ASPECT_RATIO },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.s2 },
   stack: { gap: space.s3 },
+  actions: { flexDirection: 'row', gap: space.s3 },
+  action: { flex: 1 },
   racesTitle: { marginBottom: space.s2 },
   more: { alignItems: 'flex-start', paddingTop: space.s2 },
   racesNotice: { gap: space.s3, paddingVertical: space.s3 },

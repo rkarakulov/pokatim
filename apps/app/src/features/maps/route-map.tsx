@@ -5,17 +5,16 @@ import { useReducedMotion } from '@rkarakulov/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 
-import {
-  CORRIDOR_LAYER_ID,
-  MAP_FIT_PADDING,
-  ROUTE_SOURCE_ID,
-  routeFeatures,
-  routeLayers,
-} from './corridor-style';
+import { CORRIDOR_LAYER_ID, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
 import { loadMapLibreNative } from './load-maplibre-native';
+import { LocationLayer } from './location-layer';
+import { createLocationStore } from './location-store';
+import { LOCATE_ZOOM } from './location-style';
 import {
   cameraCall,
+  cameraPadding,
   clampZoom,
+  type CameraPadding,
   MAP_CAMERA_ANIMATION_MS,
   MAP_MAX_ZOOM,
   MAP_MIN_ZOOM,
@@ -23,7 +22,7 @@ import {
   type MapViewSize,
   type MapViewSnapshot,
 } from './map-camera';
-import { MapControls } from './map-controls';
+import { MapOverlayControls } from './map-overlay-controls';
 import { createMapViewStore } from './map-view-store';
 import { RouteMapFrame } from './route-map-frame';
 import type { RouteMapProps } from './route-map-props';
@@ -37,8 +36,14 @@ import {
   unionBounds,
 } from './track-style';
 
-/** Кнопка атрибуции «i» — в нижнем правом углу, как на web: отступ камеры снизу её учитывает (B2 maps-02). */
-const ATTRIBUTION_POSITION = { bottom: space.s2, right: space.s2 };
+/**
+ * Кнопка атрибуции «i» — в нижнем левом углу, как на web (routes-04d, RC-6: правая колонка — кнопки камеры), над
+ * шторкой — со сдвигом на её высоту; отступ камеры снизу её учитывает (B2 maps-02).
+ */
+const attributionPosition = (bottomInset: number) => ({
+  bottom: space.s2 + bottomInset,
+  left: space.s2,
+});
 
 const styles = StyleSheet.create({
   // касания мимо маркера проходят к карте (кнопка атрибуции «i»)
@@ -56,7 +61,10 @@ const styles = StyleSheet.create({
  * Начальная камера — по рамке без анимации. Смена стиля (темы) — новая карта (`key` у вызывающего): сброс ошибки и
  * камеры. `scrub` (routes-04) — маркер скраббинга оверлеем над холстом: пиксели линии — `mercatorProjector` по
  * видимой рамке камеры (`onRegionIsChanging`/`onRegionDidChange`) и размеру вида в стор вида (подписан только
- * `ScrubLayer`) — карта на кадр камеры не перерисовывается.
+ * `ScrubLayer`) — карта на кадр камеры не перерисовывается. routes-04d: `fill` — карта на всю область, монтируется
+ * после раскладки (высота нужна начальной камере, `cameraPadding` с `bottomInset`); «Моё местоположение» — кнопка
+ * `MapOverlayControls`, точка — `LocationLayer` (стор позиции на экземпляр, карта при новой точке не
+ * перерисовывается), камера — `easeTo` с явным `padding`.
  */
 export function RouteMap({
   map,
@@ -68,6 +76,8 @@ export function RouteMap({
   lineWidth,
   track,
   scrub,
+  fill = false,
+  bottomInset = 0,
 }: RouteMapProps) {
   const [lib, setLib] = useState<typeof MapLibreNative | null>(null);
   const [failed, setFailed] = useState(false);
@@ -91,6 +101,17 @@ export function RouteMap({
   const viewState = useRef<MapViewSnapshot | null>(null);
   const viewSize = useRef<MapViewSize | null>(null);
   const [view] = useState(createMapViewStore);
+  // routes-04d: точка позиции — в сторе (подписан только `LocationLayer`); высота шторки — в ref для кнопок камеры
+  const [location] = useState(createLocationStore);
+  const inset = useRef(bottomInset);
+  useEffect(() => {
+    inset.current = bottomInset;
+  }, [bottomInset]);
+  // начальная камера; `fill` — ей нужна высота карты: карта монтируется после раскладки области
+  const [initialPadding, setInitialPadding] = useState<CameraPadding | null>(() =>
+    fill ? null : cameraPadding(0, null),
+  );
+  const padding = () => cameraPadding(inset.current, viewSize.current?.height ?? null);
   const reproject = useCallback(() => {
     const state = viewState.current;
     const size = viewSize.current;
@@ -110,6 +131,7 @@ export function RouteMap({
     (event: LayoutChangeEvent) => {
       const { width, height } = event.nativeEvent.layout;
       viewSize.current = { width, height };
+      setInitialPadding((current) => current ?? cameraPadding(inset.current, height));
       reproject();
     },
     [reproject],
@@ -146,61 +168,66 @@ export function RouteMap({
       theme={theme}
       accessibilityLabel={accessibilityLabel}
       failedMessage={failed ? failedMessage : null}
+      fill={fill}
+      bottomInset={bottomInset}
     >
       {lib ? (
         <View testID="map-area" style={StyleSheet.absoluteFill} onLayout={onLayout}>
-          <lib.Map
-            ref={mapRef}
-            style={StyleSheet.absoluteFill}
-            mapStyle={styleUrl}
-            attribution
-            attributionPosition={ATTRIBUTION_POSITION}
-            // B4 maps-02: кнопка атрибуции — в цвете темы
-            tintColor={theme.text.secondary}
-            logo={false}
-            compass={false}
-            scaleBar={false}
-            // routes-04c: нативные жесты — один палец двигает карту, щипок — зум; двойной тап анимирует камеру
-            // нативно — при reduce motion выключен (кнопки «+», «−» — без анимации)
-            dragPan
-            touchZoom
-            doubleTapZoom={!reduceMotion}
-            doubleTapHoldZoom={false}
-            touchRotate={false}
-            touchPitch={false}
-            onDidFailLoadingMap={() => setFailed(true)}
-            onDidFinishLoadingMap={() => {
-              mapRef.current
-                ?.getViewState()
-                .then((state) => {
-                  viewState.current = state;
-                  reproject();
-                })
-                .catch(() => undefined);
-            }}
-            onRegionIsChanging={onRegion}
-            onRegionDidChange={onRegion}
-          >
-            <lib.Camera
-              ref={cameraRef}
-              minZoom={MAP_MIN_ZOOM}
-              maxZoom={MAP_MAX_ZOOM}
-              initialViewState={{ bounds, padding: MAP_FIT_PADDING }}
-            />
-            <lib.GeoJSONSource id={ROUTE_SOURCE_ID} data={features}>
-              {layers.map((layer) => (
-                <lib.Layer key={layer.id} {...layer} />
-              ))}
-            </lib.GeoJSONSource>
-            {trackData ? (
-              // трек — под старт и финиш маршрута; смена трека — новая карта (`key` у вызывающего, RC-5)
-              <lib.GeoJSONSource id={TRACK_SOURCE_ID} data={trackData}>
-                {trackStyle.map((layer) => (
-                  <lib.Layer key={layer.id} {...layer} beforeId={TRACK_BEFORE_LAYER_ID} />
+          {initialPadding ? (
+            <lib.Map
+              ref={mapRef}
+              style={StyleSheet.absoluteFill}
+              mapStyle={styleUrl}
+              attribution
+              attributionPosition={attributionPosition(bottomInset)}
+              // B4 maps-02: кнопка атрибуции — в цвете темы
+              tintColor={theme.text.secondary}
+              logo={false}
+              compass={false}
+              scaleBar={false}
+              // routes-04c: нативные жесты — один палец двигает карту, щипок — зум; двойной тап анимирует камеру
+              // нативно — при reduce motion выключен (кнопки «+», «−» — без анимации)
+              dragPan
+              touchZoom
+              doubleTapZoom={!reduceMotion}
+              doubleTapHoldZoom={false}
+              touchRotate={false}
+              touchPitch={false}
+              onDidFailLoadingMap={() => setFailed(true)}
+              onDidFinishLoadingMap={() => {
+                mapRef.current
+                  ?.getViewState()
+                  .then((state) => {
+                    viewState.current = state;
+                    reproject();
+                  })
+                  .catch(() => undefined);
+              }}
+              onRegionIsChanging={onRegion}
+              onRegionDidChange={onRegion}
+            >
+              <lib.Camera
+                ref={cameraRef}
+                minZoom={MAP_MIN_ZOOM}
+                maxZoom={MAP_MAX_ZOOM}
+                initialViewState={{ bounds, padding: initialPadding }}
+              />
+              <lib.GeoJSONSource id={ROUTE_SOURCE_ID} data={features}>
+                {layers.map((layer) => (
+                  <lib.Layer key={layer.id} {...layer} />
                 ))}
               </lib.GeoJSONSource>
-            ) : null}
-          </lib.Map>
+              {trackData ? (
+                // трек — под старт и финиш маршрута; смена трека — новая карта (`key` у вызывающего, RC-5)
+                <lib.GeoJSONSource id={TRACK_SOURCE_ID} data={trackData}>
+                  {trackStyle.map((layer) => (
+                    <lib.Layer key={layer.id} {...layer} beforeId={TRACK_BEFORE_LAYER_ID} />
+                  ))}
+                </lib.GeoJSONSource>
+              ) : null}
+              <LocationLayer lib={lib} store={location} theme={theme} />
+            </lib.Map>
+          ) : null}
         </View>
       ) : null}
       {lib && scrub ? (
@@ -209,19 +236,31 @@ export function RouteMap({
         </View>
       ) : null}
       {lib && !failed ? (
-        <MapControls
+        <MapOverlayControls
           theme={theme}
           onZoomIn={() => zoomBy(MAP_ZOOM_STEP)}
           onZoomOut={() => zoomBy(-MAP_ZOOM_STEP)}
           onFit={() =>
             cameraCall(() =>
               cameraRef.current?.fitBounds(bounds, {
-                padding: MAP_FIT_PADDING,
+                padding: padding(),
                 duration,
                 easing: 'ease',
               }),
             )
           }
+          onPosition={(lngLat) => {
+            location.setState({ lngLat });
+            cameraCall(() =>
+              cameraRef.current?.easeTo({
+                center: [lngLat[0], lngLat[1]],
+                zoom: LOCATE_ZOOM,
+                padding: padding(),
+                duration,
+                easing: 'ease',
+              }),
+            );
+          }}
         />
       ) : null}
     </RouteMapFrame>

@@ -830,6 +830,34 @@ test.describe('с API', () => {
       await expect(readout).toBeHidden();
       await expect(page).toHaveURL(`${BASE_URL}/routes/${route.id}`);
 
+      // routes-04d: шторка — «чёрточка» сворачивает (профиль скрыт) и разворачивает; на 375 px строка цифр — одна
+      // строка, «Поделиться» и «Скачать GPX» — в одном ряду
+      await page.setViewportSize({ width: 375, height: 812 });
+      const collapse = page.getByRole('button', { name: 'Свернуть панель' });
+      await expect(collapse).toHaveAttribute('aria-expanded', 'true');
+      const values = page.getByTestId('stat-block-value');
+      await expect(values).toHaveCount(3);
+      for (const value of await values.all()) {
+        const box = await value.boundingBox();
+        const lineHeight = await value.evaluate((node) =>
+          parseFloat(getComputedStyle(node).lineHeight),
+        );
+        expect(box?.height ?? 0).toBeLessThanOrEqual(lineHeight * 1.5);
+      }
+      const [shareBox, gpxBox] = await Promise.all([
+        page.getByRole('button', { name: 'Поделиться' }).boundingBox(),
+        page.getByRole('button', { name: 'Скачать GPX' }).boundingBox(),
+      ]);
+      expect(Math.abs((shareBox?.y ?? 0) - (gpxBox?.y ?? -100))).toBeLessThan(2);
+      await collapse.click();
+      const expand = page.getByRole('button', { name: 'Развернуть панель' });
+      await expect(expand).toHaveAttribute('aria-expanded', 'false');
+      await expect(profile).toBeHidden();
+      await expect(page.getByText('Дистанция', { exact: true })).toBeVisible();
+      await expand.click();
+      await expect(profile).toBeVisible();
+      await page.setViewportSize({ width: 1280, height: 720 });
+
       // «Скачать GPX»: скачивание файла, страница остаётся
       const downloaded = page.waitForEvent('download');
       await page.getByRole('button', { name: 'Скачать GPX' }).click();

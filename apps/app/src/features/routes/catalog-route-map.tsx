@@ -15,16 +15,24 @@ import { RouteLineMap } from './route-line-map';
 export function CatalogRouteMap({
   route,
   scrub,
+  fill,
+  bottomInset,
 }: {
   route: CatalogRouteDetail;
   /** routes-04: маркер скраббинга, связанный с профилем высоты */
   scrub?: ScrubStore;
+  /** routes-04d: карта на всю область под шторкой карточки */
+  fill?: boolean;
+  /** видимая высота шторки, px (`undefined` — не измерена) */
+  bottomInset?: number;
 }) {
   return (
     <RouteLineMap
       mapQuery={catalogRouteMapOptions(route.id)}
       lineWidth={ROUTE_CATALOG_LINE_WIDTH}
       scrub={scrub}
+      fill={fill}
+      bottomInset={bottomInset}
       accessibilityLabel={t('routes.detail.map.label', { distance: routeKm(route.distanceM) })}
       failedMessage={t('routes.detail.map.failed')}
       skeletonTestID="catalog-route-map-skeleton"

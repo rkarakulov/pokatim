@@ -1,6 +1,5 @@
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { space, type AppTheme } from '@pokatim/design-tokens';
-import { t } from '@pokatim/i18n';
 import { textStyle, useTheme } from '@rkarakulov/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -16,8 +15,8 @@ export { PROFILE_ASPECT_RATIO } from './profile-style';
 const TICK_ALIGN_END_FROM = 0.85;
 
 /**
- * Профиль высоты маршрута (routes-03, P4, RC-7): заголовок, справа — диапазон «191–267 м» или карточка курсора
- * (routes-04), график `ProfileChart` (web — плавный SVG-путь, native — узкие столбики; без `onLayout` в раскладке —
+ * Профиль высоты маршрута (routes-03, P4, RC-7; routes-04d, RC-10 — без заголовка «Профиль высоты»): строка справа над
+ * графиком — диапазон «191–267 м» или карточка курсора (routes-04), график `ProfileChart` (web — плавный SVG-путь, native — узкие столбики; без `onLayout` в раскладке —
  * SSR и первый клиентский рендер совпадают), подписи оси X в км. Для скринридера — один элемент графика с текстовой
  * альтернативой: без `scrub` — изображение, со `scrub` — `adjustable` / `slider` (S4). Профиля нет — блока нет.
  */
@@ -40,12 +39,6 @@ export function ElevationProfile({
   return (
     <View testID="elevation-profile" style={styles.block}>
       <View style={styles.head}>
-        <Text
-          accessibilityRole="header"
-          style={[textStyle('displaySm'), styles.title, { color: theme.text.primary }]}
-        >
-          {t('routes.detail.profile.title')}
-        </Text>
         <ProfileHeadValue
           elevation={elevation}
           distanceM={distanceM}
@@ -91,13 +84,7 @@ export function ElevationProfile({
 
 const styles = StyleSheet.create({
   block: { gap: space.s2 },
-  head: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    gap: space.s2,
-  },
-  title: { flexShrink: 1 },
+  head: { flexDirection: 'row', justifyContent: 'flex-end' },
   axis: { position: 'relative', width: '100%' },
   tick: { position: 'absolute', top: 0 },
   spacer: { opacity: 0 },

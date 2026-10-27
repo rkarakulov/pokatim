@@ -32,3 +32,47 @@ describe('MapControls (routes-04b, RC-5)', () => {
     expect(onFit).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('MapControls: «Моё местоположение» (routes-04d, RC-6, RC-13)', () => {
+  const noop = () => undefined;
+
+  it('без onLocate — три кнопки; с onLocate — четвёртая с подписью, цель не меньше touchMin', async () => {
+    await render(
+      <MapControls theme={themes.light} onZoomIn={noop} onZoomOut={noop} onFit={noop} />,
+    );
+    expect(screen.queryByRole('button', { name: 'Моё местоположение' })).toBeNull();
+    const onLocate = jest.fn();
+    await render(
+      <MapControls
+        theme={themes.light}
+        onZoomIn={noop}
+        onZoomOut={noop}
+        onFit={noop}
+        onLocate={onLocate}
+      />,
+    );
+    const locate = screen.getByRole('button', { name: 'Моё местоположение' });
+    expect(StyleSheet.flatten(locate.props.style).width).toBeGreaterThanOrEqual(size.touchMin);
+    await fireEvent.press(locate);
+    expect(onLocate).toHaveBeenCalledTimes(1);
+  });
+
+  it('идёт чтение — кнопка недоступна и занята, нажатие не доходит', async () => {
+    const onLocate = jest.fn();
+    await render(
+      <MapControls
+        theme={themes.light}
+        onZoomIn={noop}
+        onZoomOut={noop}
+        onFit={noop}
+        onLocate={onLocate}
+        locating
+      />,
+    );
+    const locate = screen.getByRole('button', { name: 'Моё местоположение' });
+    expect(locate).toBeBusy();
+    expect(locate).toBeDisabled();
+    await fireEvent.press(locate);
+    expect(onLocate).not.toHaveBeenCalled();
+  });
+});

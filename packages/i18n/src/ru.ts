@@ -117,6 +117,12 @@ export const ru = {
   'maps.controls.zoomIn': 'Приблизить',
   'maps.controls.zoomOut': 'Отдалить',
   'maps.controls.fit': 'Показать маршрут целиком',
+  // routes-04d: «Моё местоположение» — одно чтение позиции по нажатию; отказ и ошибка — сообщение над картой
+  'maps.controls.locate': 'Моё местоположение',
+  'maps.location.denied': 'Нет доступа к геопозиции.',
+  'maps.location.deniedSettings': 'Нет доступа к геопозиции. Нажмите, чтобы открыть настройки.',
+  'maps.location.deniedBrowser': 'Нет доступа к геопозиции. Разрешите его в настройках браузера.',
+  'maps.location.unavailable': 'Не удалось определить местоположение.',
   'maps.gestures.wheel': 'Чтобы изменить масштаб, крутите колесо с Ctrl',
   'maps.gestures.wheelMac': 'Чтобы изменить масштаб, крутите колесо с ⌘',
   'maps.canvas': 'Карта: стрелки — сдвиг, плюс и минус — масштаб',
@@ -1586,7 +1592,6 @@ export const ru = {
   'routes.detail.stats.pace': 'при {pace} км/ч',
   'routes.detail.stats.hours': '{hours} ч',
   'routes.detail.stats.minutes': '{minutes} мин',
-  'routes.detail.profile.title': 'Профиль высоты',
   'routes.detail.profile.range': '{min}–{max} м',
   'routes.detail.profile.tick': '{km} км',
   'routes.detail.profile.summary': 'Профиль высоты: от {min} до {max} м, набор {gain} м',
@@ -1600,6 +1605,9 @@ export const ru = {
   'routes.detail.scrub.gain': 'набор {gain} м',
   'routes.detail.scrub.value': '{km} км, высота {m} м, уклон {grade} %',
   'routes.detail.gpx': 'Скачать GPX',
+  // routes-04d: шторка карточки поверх карты — «чёрточка» сворачивает и разворачивает
+  'routes.detail.sheet.collapse': 'Свернуть панель',
+  'routes.detail.sheet.expand': 'Развернуть панель',
   'routes.detail.gpxFailed': 'Не удалось открыть файл GPX.',
   // routes-02: переключатель «Каталог / Мои» и мои маршруты райдера
   'routes.switch.label': 'Раздел маршрутов',

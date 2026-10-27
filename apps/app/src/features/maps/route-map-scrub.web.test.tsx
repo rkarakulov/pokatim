@@ -18,6 +18,7 @@ class FakeMap {
   addSource = jest.fn();
   addLayer = jest.fn();
   remove = jest.fn();
+  addControl = jest.fn();
   touchZoomRotate = { disableRotation: jest.fn() };
   keyboard = { disableRotation: jest.fn() };
   project = jest.fn(([lon, lat]: [number, number]) => ({
@@ -45,6 +46,8 @@ beforeEach(() => {
     async () =>
       ({
         Map: FakeMap,
+        // routes-04d: атрибуция — отдельным контролом слева внизу
+        AttributionControl: class {},
         getVersion: () => '6.16.0',
         setWorkerUrl: () => undefined,
       }) as unknown as Awaited<ReturnType<typeof Loader.loadMaplibre>>,

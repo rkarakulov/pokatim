@@ -28,8 +28,10 @@ jest.mock('expo-secure-store', () => {
 });
 
 // геопозиция: по умолчанию разрешение уже выдано — шаг онбординга пропускается (тесты шага задают своё);
-// getCurrentPositionAsync — сторож: координаты приложение не читает (Q6)
+// getCurrentPositionAsync читает только «Моё местоположение» по нажатию (routes-04d, G1): тесты карты задают ответ,
+// онбординг его не вызывает (сторож в location.test.tsx)
 jest.mock('expo-location', () => ({
+  Accuracy: { Lowest: 1, Low: 2, Balanced: 3, High: 4, Highest: 5, BestForNavigation: 6 },
   getForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   getCurrentPositionAsync: jest.fn(),
