@@ -1,6 +1,8 @@
 /// <reference types="jest" />
 // Дизайн-система с настоящим брендом проекта (темы, шрифты, i18n) — первым, до модулей экранов.
 import './src/theme/design-system';
+// RNGH v3 (routes-04: жесты скраббинга): моки нативного модуля и детектора; события — `fireGestureHandler`
+import 'react-native-gesture-handler/jestSetup';
 // Моки нативных модулей для всех тестов: в jest нет ни NetInfo, ни нативного пикера.
 import { onlineManager } from '@tanstack/react-query';
 
@@ -31,6 +33,18 @@ jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   getCurrentPositionAsync: jest.fn(),
+}));
+
+// RNGH v3 без Reanimated (routes-04: колбэки жестов — `runOnJS`): mock Reanimated 4.7 падает на `setCSSEventHandler`,
+// и `expo-router/testing-library` подменяет пакет пустым объектом — RNGH принимает его за установленный и падает на
+// `isSharedValue`. Обёртка RNGH «Reanimated не установлен» — для src- и lib-сборки пакета.
+jest.mock('react-native-gesture-handler/src/handlers/gestures/reanimatedWrapper', () => ({
+  Reanimated: undefined,
+  Worklets: undefined,
+}));
+jest.mock('react-native-gesture-handler/lib/module/handlers/gestures/reanimatedWrapper', () => ({
+  Reanimated: undefined,
+  Worklets: undefined,
 }));
 
 jest.mock('@react-native-community/netinfo', () =>
@@ -91,14 +105,38 @@ jest.mock('./src/features/maps/load-maplibre-native', () => ({
   loadMapLibreNative: jest.fn(async () => jest.requireMock('@maplibre/maplibre-react-native')),
 }));
 
-// нативные модули MapLibre «установлены» (dev-сборка); тест Expo Go подменяет `get` на null
+// react-native-svg (routes-04 G2): нативного модуля в jest нет — элементы как View с пропсами (testID `svg-<имя>`),
+// загрузчик — сразу мок; модули «установлены» (spy ниже), тест фолбэка подменяет их на null
+jest.mock('react-native-svg', () => {
+  const { createElement } = jest.requireActual('react');
+  const { View } = jest.requireActual('react-native');
+  const stub = (name: string) => {
+    const Component = (props: { children?: unknown }) =>
+      createElement(View, { testID: `svg-${name}`, ...props });
+    Component.displayName = name;
+    return Component;
+  };
+  return {
+    Svg: stub('Svg'),
+    Defs: stub('Defs'),
+    LinearGradient: stub('LinearGradient'),
+    Stop: stub('Stop'),
+    Path: stub('Path'),
+  };
+});
+jest.mock('./src/features/routes/load-svg-native', () => ({
+  loadSvgNative: jest.fn(async () => jest.requireMock('react-native-svg')),
+}));
+
+// нативные модули MapLibre и react-native-svg «установлены» (dev-сборка); тест Expo Go подменяет `get` на null
 const turboModules = jest.requireActual<typeof ReactNative>('react-native').TurboModuleRegistry;
 const turboModuleGet = turboModules.get.bind(turboModules);
 function withMapLibreModules() {
   jest
     .spyOn(turboModules, 'get')
     .mockImplementation(
-      (name: string) => (name.startsWith('MLRN') ? {} : turboModuleGet(name)) as never,
+      (name: string) =>
+        (name.startsWith('MLRN') || name.startsWith('RNSVG') ? {} : turboModuleGet(name)) as never,
     );
 }
 

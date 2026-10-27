@@ -9,3 +9,4 @@ export * from './summary.ts';
 export * from './simplify.ts';
 export * from './plausibility.ts';
 export * from './stream.ts';
+export * from './scrub.ts';

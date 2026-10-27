@@ -206,18 +206,32 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   (`features/maps/use-map-style.ts`), `RouteMap corridor={false}` с `withoutCorridor(geometry)` (слоя коридора нет,
   `widthM` не показывается); ключ `['routes','map',id]` — только клиент. «Гонки на маршруте» — `['routes','races',
   id,'pages']`, `RaceListCard` с датами с годом; пусто, 404, ошибка — блока нет. «Поделиться» — `share-link`.
-- Пропсы `RouteMap.corridor?` (по умолчанию `true`) и `lineWidth?` (routes-03, по умолчанию `stroke.indicator`;
-  каталог — `ROUTE_CATALOG_LINE_WIDTH` = 5) — единственные изменения карты для каталога; существующие пропсы и
-  `race-route-map.tsx` не меняются.
+- Пропсы `RouteMap.corridor?` (по умолчанию `true`), `lineWidth?` (routes-03, по умолчанию `stroke.indicator`;
+  каталог — `ROUTE_CATALOG_LINE_WIDTH` = 5) и `scrub?` (routes-04, стор скраббинга; нет — маркера нет) — единственные
+  изменения карты для каталога; существующие пропсы и `race-route-map.tsx` не меняются.
 - Карточка (routes-03): без `SectionHero`; чипы — `Pill`, стат-блок — `StatBlock` с `note`, подписи и время в пути —
   чистые функции `features/routes/format.ts` (`ROUTE_PACE_KMH`); профиль — `features/routes/elevation-profile.tsx`
-  (`ProfileChart`: web — SVG-путь `profile-chart.web.tsx`: тонкая линия и светлая заливка
-  `PROFILE_FILL_OPACITY`; native — 160 узких столбиков `View`, только светлый силуэт `PROFILE_NATIVE_FILL_OPACITY`
-  (кромка из столбиков ступенчатая); цвет — приглушённый `map.corridor`; график — `aspectRatio`, без `onLayout`: SSR =
-  первый рендер; одно
-  изображение с текстовой альтернативой); «Скачать GPX» — только `src/lib/download-file(.web).ts` (native —
+  (`ProfileChart`: тонкая линия и заливка-градиент `PROFILE_FILL_OPACITY` в приглушённом `map.corridor` — web inline
+  SVG, native `react-native-svg`, фолбэк — столбики `PROFILE_NATIVE_FILL_OPACITY`; график — `aspectRatio`, разметка
+  зависит только от данных: SSR = первый рендер; routes-04 — см. «Скраббинг» ниже); «Скачать GPX» — только `src/lib/download-file(.web).ts` (native —
   `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteGpxUrl(id)`, только при
   `gpxAvailable`.
+- Скраббинг (routes-04): стор на экземпляр экрана — `features/maps/scrub-store.ts` (`zustand/vanilla`,
+  `{ fraction, active, dragging }`, доля длины линии показа; читают только подписчики `useScrub` — карта и экран на
+  кадр не перерисовываются; экран: `scrollEnabled` при `dragging === null`, `onScrollBeginDrag` скрывает курсор).
+  Чистая логика (доля ↔ точка, ближайшая точка с подсказкой для петли, высота/уклон/набор, шаг 1 км, точки профиля) —
+  `@pokatim/tracks` (`src/scrub.ts`, лёгкий вход; её же берёт панель), подписи — `features/routes/scrub.ts`.
+  Маркер — оверлей над холстом (`scrub-marker(.web).tsx`), пиксели линии — одна функция `projectLine` на изменение
+  камеры (web — `map.project` на `load`/`SCRUB_REPROJECT_EVENTS`, native — `mercatorProjector` по `ViewState.bounds` +
+  `onLayout`); перетаскивание — жест маркера, карта статична. Профиль — `ProfileChart` с развилкой файлами
+  `profile-chart(.web).tsx`: web — inline SVG (SSR = первый рендер), `role="slider"`, pointer events, клавиши,
+  `:focus-visible`; native — `react-native-svg` лениво (`load-svg-native.ts` после `svgSupported()`; старый
+  dev-клиент — столбики), `adjustable` с `accessibilityActions`, RNGH v3 `usePanGesture({ activateAfterLongPress:
+  250, runOnJS: true })` (касание без удержания — скрыть). Пути и градиент заливки — `profile-path.ts` (G1). Корень
+  жестов — `components/gesture-root(.web).tsx` в `_layout` (RNGH не в web-бандле). Стат-блок карточки —
+  `StatBlock equalColumns`. Jest: `react-native-gesture-handler/jestSetup`, обёртка RNGH «без Reanimated», мок
+  `react-native-svg` и его загрузчика (`jest.setup.ts`); шаги жеста — `createGestureController` (у
+  `fireGestureHandler` всегда есть ACTIVE).
 - Главная — раздел `routes` (текстовый герой `RouteHero`, RC-8; пустой каталог — `EmptyState`).
 - Мои маршруты (routes-02): переключатель «Каталог / Мои» — `SegmentedControl` в шапке обеих лент, состояние —
   `?view=mine` (`useLocalSearchParams` + `router.setParams`). Лента — `features/routes/my-route-feed.tsx`, ключи

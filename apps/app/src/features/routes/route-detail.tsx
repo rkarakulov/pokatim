@@ -15,7 +15,7 @@ import {
   useTheme,
 } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -26,6 +26,7 @@ import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card'
 import { StatBlock } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { MAP_ASPECT_RATIO } from '@/features/maps/corridor-style';
+import { createScrubStore, useScrub, type ScrubStore } from '@/features/maps/scrub-store';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
@@ -168,17 +169,20 @@ function RouteDetailView({
   races,
   now,
   mounted,
+  scrub,
 }: {
   route: CatalogRouteDetail;
   races: ReturnType<typeof useCatalogRouteRaces>;
   now: Date | null;
   mounted: boolean;
+  scrub: ScrubStore;
 }) {
   const theme = useTheme();
   const canShare = mounted && shareOrigin() !== null;
   return (
     <View style={styles.detail}>
-      <CatalogRouteMap route={route} />
+      {/* нет профиля — нет маркера: синхронизировать нечего (routes-04) */}
+      <CatalogRouteMap route={route} scrub={route.elevation ? scrub : undefined} />
       <Text
         accessibilityRole="header"
         style={[textStyle('displaySm'), { color: theme.text.primary }]}
@@ -190,11 +194,12 @@ function RouteDetailView({
           <Pill key={chip} label={chip} />
         ))}
       </View>
-      <StatBlock items={routeStatItems(route)} />
+      <StatBlock items={routeStatItems(route)} equalColumns />
       <ElevationProfile
         elevation={route.elevation}
         distanceM={route.distanceM}
         gainM={route.elevationGainM}
+        scrub={scrub}
       />
       {canShare || route.gpxAvailable ? (
         <View style={styles.stack}>
@@ -257,6 +262,14 @@ export function RouteDetailScreen({
     !valid || (route.data === undefined && apiErrorOf(route.error)?.code === 'NOT_FOUND');
   // «назад» без истории и «Все маршруты»: вкладки — только для вошедших, гостю — корень (дальше решает гард)
   const home = signedIn ? '/routes' : '/';
+  // routes-04: стор скраббинга профиля и карты — на экземпляр экрана; жест по профилю или маркеру выключает прокрутку
+  // (ре-рендер экрана — в начале и в конце жеста, не на кадр); прокрутка пальцем скрывает курсор (RC-3, RC-8)
+  const [scrub] = useState(createScrubStore);
+  useEffect(() => {
+    // другой маршрут в том же экземпляре экрана — позиция с начала
+    scrub.setState({ fraction: 0, active: false, dragging: null });
+  }, [id, scrub]);
+  const scrollEnabled = useScrub(scrub, (state) => state.dragging === null);
 
   return (
     <SafeAreaView
@@ -272,6 +285,10 @@ export function RouteDetailScreen({
       <ScrollView
         testID="route-detail"
         contentContainerStyle={styles.content}
+        scrollEnabled={scrollEnabled}
+        onScrollBeginDrag={() => {
+          if (scrub.getState().active) scrub.setState({ active: false });
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -293,7 +310,15 @@ export function RouteDetailScreen({
           />
         ) : (
           <AsyncContent query={route} skeleton={<RouteDetailSkeleton />}>
-            {(data) => <RouteDetailView route={data} races={races} now={now} mounted={mounted} />}
+            {(data) => (
+              <RouteDetailView
+                route={data}
+                races={races}
+                now={now}
+                mounted={mounted}
+                scrub={scrub}
+              />
+            )}
           </AsyncContent>
         )}
       </ScrollView>

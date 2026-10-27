@@ -1,0 +1,119 @@
+/// <reference types="jest" />
+import type * as MapLibreNative from '@maplibre/maplibre-react-native';
+import type { RaceRouteMap } from '@pokatim/contracts';
+import { themes } from '@pokatim/design-tokens';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { GestureHandlerRootView, State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
+
+import { RouteMap } from './route-map';
+import { SCRUB_MARKER_PAN_TEST_ID } from './scrub-marker';
+import { createScrubStore, type ScrubStore } from './scrub-store';
+
+// «туда-обратно» по широте 0 (Mercator по Y вырожден — рамка по долготе): 0 → 1° → 0
+const route: RaceRouteMap = {
+  line: [
+    [0, 0],
+    [1, 0],
+    [0, 0],
+  ],
+  start: [0, 0],
+  finish: [0, 0],
+  bounds: [0, 0, 1, 0],
+  widthM: 50,
+};
+// видимая рамка: долгота 0…1 на ширине 200 px, широта −0,5…0,5 на высоте 100 px
+const VIEW_BOUNDS = [0, -0.5, 1, 0.5] as const;
+
+const element = (scrub?: ScrubStore) => (
+  <GestureHandlerRootView>
+    <RouteMap
+      map={route}
+      styleUrl="https://tiles.example/styles/positron"
+      theme={themes.light}
+      accessibilityLabel="Карта маршрута"
+      failedMessage="Карта не загрузилась"
+      corridor={false}
+      scrub={scrub}
+    />
+  </GestureHandlerRootView>
+);
+
+/** Карта загружена, рамка и размер оверлея известны — маркер в пикселях. */
+async function ready() {
+  const map = await screen.findByTestId('maplibre-Map');
+  await fireEvent(map, 'regionDidChange', { nativeEvent: { bounds: VIEW_BOUNDS } });
+  await fireEvent(screen.getByTestId('scrub-overlay'), 'layout', {
+    nativeEvent: { layout: { x: 0, y: 0, width: 200, height: 100 } },
+  });
+}
+const translate = () => {
+  const style = [screen.getByTestId('scrub-marker', { includeHiddenElements: true }).props.style]
+    .flat(Infinity)
+    .find((part: { transform?: unknown }) => part?.transform) as {
+    transform: [{ translateX: number }, { translateY: number }];
+  };
+  return [style.transform[0].translateX, style.transform[1].translateY];
+};
+
+describe('RouteMap native: маркер скраббинга (routes-04, RC-2)', () => {
+  it('без scrub — ни оверлея, ни маркера; обработчиков вида у карты нет (карта гонки)', async () => {
+    await render(element());
+    const map = await screen.findByTestId('maplibre-Map');
+    expect(screen.queryByTestId('scrub-overlay')).toBeNull();
+    expect(map.props.onRegionDidChange).toBeUndefined();
+    expect(map.props.onDidFinishLoadingMap).toBeUndefined();
+  });
+
+  it('после рамки и раскладки — маркер на старте в пикселях, скрыт от скринридера; до них маркера нет', async () => {
+    await render(element(createScrubStore()));
+    await screen.findByTestId('maplibre-Map');
+    expect(screen.queryByTestId('scrub-marker', { includeHiddenElements: true })).toBeNull();
+    await ready();
+    expect(screen.queryByTestId('scrub-marker')).toBeNull();
+    const [x, y] = translate();
+    expect(x).toBeCloseTo(-22, 6);
+    expect(y).toBeCloseTo(50 - 22, 6);
+  });
+
+  it('движение стора двигает маркер, GeoJSONSource и Map не перерисовываются', async () => {
+    const lib = jest.requireMock<typeof MapLibreNative>('@maplibre/maplibre-react-native');
+    const source = jest.spyOn(lib, 'GeoJSONSource');
+    const mapView = jest.spyOn(lib, 'Map');
+    const store = createScrubStore();
+    await render(element(store));
+    await ready();
+    const sourceRenders = source.mock.calls.length;
+    const mapRenders = mapView.mock.calls.length;
+    for (const fraction of [0.1, 0.25, 0.4]) {
+      await act(async () => store.setState({ fraction, active: true }));
+    }
+    const [x] = translate();
+    expect(x).toBeCloseTo(0.8 * 200 - 22, 6);
+    expect(source.mock.calls.length).toBe(sourceRenders);
+    expect(mapView.mock.calls.length).toBe(mapRenders);
+    source.mockRestore();
+    mapView.mockRestore();
+  });
+
+  it('pan маркера: dragging «map» с onBegin, доля прилипает к линии с подсказкой (обратный проход)', async () => {
+    const store = createScrubStore();
+    await render(element(store));
+    await ready();
+    await act(async () => store.setState({ fraction: 0.9 }));
+    // маркер на 0,9 → x = 0,2 × 200 = 40 px; палец сдвигается на +20 px вправо и 7 px вниз → 60 px: обратный проход
+    const seen: (string | null)[] = [];
+    store.subscribe((state) => seen.push(state.dragging));
+    await act(async () =>
+      fireGestureHandler(getByGestureTestId(SCRUB_MARKER_PAN_TEST_ID), [
+        { state: State.BEGAN, translationX: 0, translationY: 0 },
+        { state: State.ACTIVE, translationX: 10, translationY: 0 },
+        { translationX: 20, translationY: 7 },
+        { state: State.END, translationX: 20, translationY: 7 },
+      ]),
+    );
+    expect(seen[0]).toBe('map');
+    expect(store.getState().fraction).toBeCloseTo(0.85, 6);
+    expect(store.getState()).toMatchObject({ dragging: null, active: true });
+  });
+});

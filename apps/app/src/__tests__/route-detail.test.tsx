@@ -5,10 +5,13 @@ import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
 import type { RefreshControlProps } from 'react-native';
+import { createGestureController } from 'react-native-gesture-handler/jest-utils';
 
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
+
+import { PROFILE_PAN_TEST_ID } from '@/features/routes/profile-chart';
 
 import { appRoutes } from './app-routes';
 
@@ -128,9 +131,50 @@ describe('карточка маршрута каталога: гость по с
     expect(screen.getByLabelText('В пути 3 ч 35 мин при 24 км/ч')).toBeOnTheScreen();
     expect(screen.getByRole('header', { name: 'Профиль высоты' })).toBeOnTheScreen();
     expect(
-      screen.getByRole('image', { name: /^Профиль высоты: от 191 до 267 м, набор 1\s240 м$/ }),
+      screen.getByRole('adjustable', { name: /^Профиль высоты: от 191 до 267 м, набор 1\s240 м$/ }),
     ).toBeOnTheScreen();
     expect(getRoute).toHaveBeenCalledWith(ID);
+  });
+
+  it('скраббинг (routes-04): increment профиля — карточка «1 км · …», маркер на карте; стат-блок в три колонки', async () => {
+    await open();
+    const profile = await screen.findByRole('adjustable', { name: /^Профиль высоты/ });
+    await screen.findByTestId('maplibre-Map');
+    expect(screen.getByTestId('scrub-overlay')).toBeOnTheScreen();
+    await fireEvent(profile, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+    expect(
+      screen.getByText(/^1 км · \d+ м · [↗↘→] \d+ % · набор \d+ м$/, {
+        includeHiddenElements: true,
+      }),
+    ).toBeOnTheScreen();
+    expect(profile.props.accessibilityValue.text).toMatch(/^1 км, высота \d+ м, уклон −?\d+ %$/);
+    for (const cell of screen.getAllByTestId('stat-block-cell')) {
+      expect(cell).toHaveStyle({ flexBasis: 0, flexShrink: 1 });
+    }
+  });
+
+  it('скраббинг: жест по профилю (dragging) выключает прокрутку экрана, конец жеста — включает; прокрутка скрывает курсор', async () => {
+    await open();
+    const profile = await screen.findByRole('adjustable', { name: /^Профиль высоты/ });
+    const scroll = () => screen.getByTestId('route-detail');
+    expect(scroll()).toHaveProp('scrollEnabled', true);
+    await fireEvent(profile, 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 340, height: 85 } },
+    });
+    const pan = createGestureController(PROFILE_PAN_TEST_ID);
+    await act(async () => pan.begin({ x: 170 }));
+    await act(async () => pan.activate({ x: 170 }));
+    expect(scroll()).toHaveProp('scrollEnabled', false);
+    await act(async () => pan.update({ x: 85 }));
+    await act(async () => pan.end({ x: 85 }));
+    expect(scroll()).toHaveProp('scrollEnabled', true);
+    expect(
+      screen.getByTestId('elevation-profile-cursor', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    await fireEvent(scroll(), 'scrollBeginDrag');
+    expect(
+      screen.queryByTestId('elevation-profile-cursor', { includeHiddenElements: true }),
+    ).toBeNull();
   });
 
   it('API до routes-03 (без elevation и gpxAvailable): без профиля и без «Скачать GPX», набор без «макс.»', async () => {

@@ -19,7 +19,17 @@ export interface StatItem {
  * шрифте переносится под значение; необязательное пояснение `note` — строкой под подписью. Для скринридера — одна
  * метка на ячейку «Дистанция 100 км» (с пояснением — «Дистанция 68 км круговой»). Кандидат в `@rkarakulov/ui` (§5.1).
  */
-export function StatBlock({ items }: { items: readonly StatItem[] }) {
+export function StatBlock({
+  items,
+  equalColumns = false,
+}: {
+  items: readonly StatItem[];
+  /**
+   * routes-04 (RC-11): ячейки равной ширины в один ряд (карточка маршрута — три колонки на 375 px); значение и подписи
+   * переносятся внутри ячейки. По умолчанию — ширина по содержимому с переносом рядами (календарь, кофе-райд).
+   */
+  equalColumns?: boolean;
+}) {
   const theme = useTheme();
   return (
     <View testID="stat-block" style={[styles.block, { borderTopColor: theme.text.primary }]}>
@@ -34,6 +44,7 @@ export function StatBlock({ items }: { items: readonly StatItem[] }) {
             .join(' ')}
           style={[
             styles.cell,
+            equalColumns ? styles.equal : null,
             index === 0 ? styles.first : [styles.next, { borderLeftColor: theme.border.subtle }],
           ]}
         >
@@ -67,6 +78,8 @@ const styles = StyleSheet.create({
     minWidth: size.rowMin,
     paddingTop: space.s3,
   },
+  // равные колонки: базис 0 и сжатие — три ячейки делят ряд поровну, текст переносится внутри
+  equal: { flexBasis: 0, flexShrink: 1 },
   first: { paddingRight: size.statGap },
   next: { paddingHorizontal: size.statGap, borderLeftWidth: stroke.hairline },
   // крупный шрифт: «км» уходит под значение, а не обрезается

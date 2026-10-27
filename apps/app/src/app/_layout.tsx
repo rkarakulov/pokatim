@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { GestureRoot } from '@/components/gesture-root';
 import { useRegistrationStore } from '@/features/auth/registration-store';
 import { takeReturnPath } from '@/features/auth/return-path';
 import { useReturnTarget } from '@/features/auth/return-target';
@@ -102,7 +103,8 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       {/* широкий экран (web на десктопе, планшет): колонка экранов по центру, не шире токена (B20 смоука dev); фон по
           бокам — тема приложения, а не фон документа по системной схеме */}
-      <View style={[styles.root, { backgroundColor: theme.surface.default }]}>
+      {/* корень жестов (routes-04): native — GestureHandlerRootView, web — View */}
+      <GestureRoot style={[styles.root, { backgroundColor: theme.surface.default }]}>
         <View testID="app-column" style={styles.column}>
           <Stack
             screenOptions={{
@@ -179,7 +181,7 @@ export default function RootLayout() {
             <Stack.Screen name="rides/[id]" />
           </Stack>
         </View>
-      </View>
+      </GestureRoot>
       <StatusBar style="auto" />
     </QueryClientProvider>
   );

@@ -68,4 +68,22 @@ describe('StatBlock: пояснение (routes-03)', () => {
     expect(screen.getByLabelText('Дистанция 68 км круговой')).toBeOnTheScreen();
     expect(screen.getByLabelText('Этапа 3')).toBeOnTheScreen();
   });
+
+  it('equalColumns (routes-04, RC-11): три колонки равной ширины в ряд на 375 — ячейки сжимаются, текст переносится внутри', async () => {
+    await render(
+      <StatBlock
+        equalColumns
+        items={[
+          { value: '68', unit: 'км', label: 'Дистанция', note: 'круговой' },
+          { value: '1 240', unit: 'м', label: 'Набор', note: 'макс. 267 м' },
+          { value: '3 ч 35 мин', label: 'В пути', note: 'при 24 км/ч' },
+        ]}
+      />,
+    );
+    const cells = screen.getAllByTestId('stat-block-cell');
+    expect(cells).toHaveLength(3);
+    for (const cell of cells) {
+      expect(cell).toHaveStyle({ flexBasis: 0, flexGrow: 1, flexShrink: 1, minWidth: size.rowMin });
+    }
+  });
 });
