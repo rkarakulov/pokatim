@@ -3,9 +3,9 @@ import { useRef } from 'react';
 import { Button, type ButtonProps } from './Button';
 
 export interface FileButtonProps extends Omit<ButtonProps, 'onClick' | 'children'> {
-  /** Доступное имя и текст кнопки («Загрузить GPX»). */
+  /** Доступное имя и текст кнопки («Загрузить маршрут»). */
   label: string;
-  /** Фильтр системного окна выбора (`.gpx`); формат проверяет сервер по содержимому. */
+  /** Фильтр системного окна выбора (`.gpx,.kml`); формат проверяет сервер по содержимому. */
   accept: string;
   onFile: (file: File) => void;
 }

@@ -122,7 +122,7 @@ describe('«Маршруты» панели (routes-01)', () => {
     await rowOf('Минское кольцо');
     expect(screen.queryByRole('button', { name: /Опубликовать в каталоге/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Снять с публикации/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Загрузить GPX' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Загрузить маршрут' })).toBeNull();
   });
 
   it('публикация: город и покрытие обязательны, POST с телом, строка обновлена', async () => {
@@ -218,6 +218,23 @@ describe('«Маршруты» панели (routes-01)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
     await waitFor(() => expect(mocked.uploadRoute).toHaveBeenCalledWith(file, 'Кольцо'));
     await waitFor(() => expect(mocked.listRoutes).toHaveBeenCalledTimes(2));
+  });
+
+  it('загрузка KML (upload-limits-kml-panel): выбор .gpx и .kml, файл .kml уходит в загрузку', async () => {
+    await renderApp('/routes');
+    await rowOf('Минское кольцо');
+    expect(screen.getByRole('button', { name: 'Загрузить маршрут' })).toBeTruthy();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.accept).toBe('.gpx,.kml');
+    const file = new File(['<kml/>'], 'Озеро.kml', {
+      type: 'application/vnd.google-earth.kml+xml',
+    });
+    fireEvent.change(input, { target: { files: [file] } });
+    const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
+    mocked.uploadRoute.mockResolvedValue(route({ id: FAILED_ID, status: 'processing', line: [] }));
+    mocked.getRoute.mockResolvedValue(route({ id: FAILED_ID, status: 'processing', line: [] }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
+    await waitFor(() => expect(mocked.uploadRoute).toHaveBeenCalledWith(file, 'Озеро'));
   });
 
   it('опрос загрузки: сбои — баннер «продолжаем проверять»; дольше 5 мин — «проверьте позже» и «Обновить»', async () => {

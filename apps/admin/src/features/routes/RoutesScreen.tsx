@@ -10,7 +10,7 @@ import { isForbidden } from '../../session/errors';
 import { Banner, Button, DataTable, EmptyState, FileButton, PageHeader, StatusTag } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { RouteCatalogDialog, UnpublishRouteDialog } from './RouteCatalogDialog';
-import { RouteUploadDialog, useRouteUpload } from './route-upload';
+import { ROUTE_FILE_ACCEPT, RouteUploadDialog, useRouteUpload } from './route-upload';
 import { routesPagesQuery } from './routes-query';
 
 const column = createColumnHelper<PanelRouteSummary>();
@@ -32,10 +32,10 @@ export function catalogText(catalog: PanelRouteSummary['catalog']): string {
 type Action = { kind: 'publish' | 'unpublish'; route: PanelRouteSummary };
 
 /**
- * «Маршруты» (`races.read`, routes-01): маршруты команды с колонкой «В каталоге»; с `races.manage` — «Загрузить GPX»
- * (та же загрузка, что в поле коридора гонки, RC-15; сбои опроса и «дольше обычного» — баннер над таблицей) и
- * действия готового маршрута: «Опубликовать в каталоге», «Изменить», «Снять с публикации» (подтверждение). Видимость
- * и готовность проверяет сервер.
+ * «Маршруты» (`races.read`, routes-01): маршруты команды с колонкой «В каталоге»; с `races.manage` — «Загрузить
+ * маршрут» (GPX или KML; та же загрузка, что в поле коридора гонки, RC-15; сбои опроса и «дольше обычного» —
+ * баннер над таблицей) и действия готового маршрута: «Опубликовать в каталоге», «Изменить», «Снять с публикации»
+ * (подтверждение). Видимость и готовность проверяет сервер.
  */
 export function RoutesScreen() {
   const canManage = useCan('races.manage');
@@ -160,7 +160,7 @@ export function RoutesScreen() {
             <FileButton
               label={t('admin.routes.upload')}
               variant="primary"
-              accept=".gpx"
+              accept={ROUTE_FILE_ACCEPT}
               onFile={upload.chooseFile}
             />
           ) : null

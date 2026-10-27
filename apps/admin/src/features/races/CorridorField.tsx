@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 
 import { Banner, Button, FileButton, LockMark, ReadonlyField, SelectField } from '../../ui';
 import { RoutePreview } from '../routes/RoutePreview';
-import { RouteUploadDialog, useRouteUpload } from '../routes/route-upload';
+import { ROUTE_FILE_ACCEPT, RouteUploadDialog, useRouteUpload } from '../routes/route-upload';
 import { readyRoutesQuery } from '../routes/routes-query';
 
 export interface CorridorFieldProps {
@@ -21,7 +21,7 @@ export interface CorridorFieldProps {
 }
 
 /**
- * Поле «Эталонный коридор»: выбор готового маршрута платформы или «Без коридора», «Загрузить GPX» → окно «Новый
+ * Поле «Эталонный коридор»: выбор готового маршрута платформы или «Без коридора», «Загрузить маршрут» (GPX или KML) → окно «Новый
  * маршрут» → «Обрабатываем маршрут…» (опрос статуса) → маршрут выбран; отказ — причина под полем. Превью — линия
  * маршрута без карты. Зафиксированный коридор — только чтение с замком. Готовность маршрута проверяет сервер.
  */
@@ -96,7 +96,7 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
         />
         <FileButton
           label={failed ? t('admin.races.corridor.uploadOther') : t('admin.races.corridor.upload')}
-          accept=".gpx"
+          accept={ROUTE_FILE_ACCEPT}
           onFile={upload.chooseFile}
         />
       </div>

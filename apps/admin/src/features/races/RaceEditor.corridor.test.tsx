@@ -182,10 +182,10 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
     expect(corridorSelect().getAttribute('aria-invalid')).toBe('true');
   });
 
-  it('«Загрузить GPX» → окно «Новый маршрут» (название из имени файла) → «Обрабатываем маршрут…» → готов и выбран', async () => {
+  it('«Загрузить маршрут» → окно «Новый маршрут» (название из имени файла) → «Обрабатываем маршрут…» → готов и выбран', async () => {
     const { queryClient } = await newRace();
     await waitFor(() => expect(corridorSelect().options).toHaveLength(2));
-    const upload = screen.getByRole('button', { name: 'Загрузить GPX' });
+    const upload = screen.getByRole('button', { name: 'Загрузить маршрут' });
     upload.focus();
     const file = chooseGpx();
 
@@ -241,6 +241,32 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
     );
   });
 
+  it('KML (upload-limits-kml-panel): выбор .gpx и .kml, подсказка без «только GPX», файл .kml уходит в загрузку', async () => {
+    await newRace();
+    await waitFor(() => expect(corridorSelect().options).toHaveLength(2));
+    const picker = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(picker.accept).toBe('.gpx,.kml');
+    expect(
+      screen.getByText('Маршрут GPX или KML. Старт и финиш — начало и конец маршрута.'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Только маршрут GPX/)).toBeNull();
+
+    const kml = new File(['<kml/>'], 'Кольцо.kml', {
+      type: 'application/vnd.google-earth.kml+xml',
+    });
+    fireEvent.change(picker, { target: { files: [kml] } });
+    const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
+    expect((within(dialog).getByLabelText(/^Название маршрута/) as HTMLInputElement).value).toBe(
+      'Кольцо',
+    );
+    mocked.uploadRoute.mockResolvedValue(
+      route({ id: NEW_ROUTE_ID, status: 'processing', line: [] }),
+    );
+    mocked.getRoute.mockResolvedValue(route({ id: NEW_ROUTE_ID, status: 'processing', line: [] }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
+    await waitFor(() => expect(mocked.uploadRoute).toHaveBeenCalledWith(kml, 'Кольцо'));
+  });
+
   it('отказ разбора — причина под полем и «Загрузить другой файл»; 415 — текст в окне; > 5 МБ — без запроса', async () => {
     const { queryClient } = await newRace();
     await waitFor(() => expect(corridorSelect().options).toHaveLength(2));
@@ -257,7 +283,7 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
     // Enter в названии — та же отправка
     fireEvent.keyDown(within(dialog).getByLabelText(/^Название маршрута/), { key: 'Enter' });
-    expect(await within(dialog).findByText('Выберите файл GPX')).toBeTruthy();
+    expect(await within(dialog).findByText('Выберите файл GPX или KML')).toBeTruthy();
 
     const processing = route({ id: NEW_ROUTE_ID, status: 'processing', line: [] });
     mocked.uploadRoute.mockResolvedValue(processing);
@@ -298,7 +324,7 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
         'Без коридора',
       ]),
     );
-    expect(screen.getByRole('button', { name: 'Загрузить GPX' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Загрузить маршрут' })).toBeTruthy();
   });
 
   it('превью: ошибка обновления при показанной линии — линия остаётся, баннер с повтором', async () => {
@@ -476,7 +502,7 @@ describe('заявки участников (race-results-03, V-12)', () => {
     expect(input(/^Окно: начало/).disabled).toBe(true);
     expect(input(/^Окно: конец/).disabled).toBe(true);
     expect(input(/^Допуск коридора, м/).readOnly).toBe(true);
-    expect(screen.queryByRole('button', { name: 'Загрузить GPX' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Загрузить маршрут' })).toBeNull();
     expect(input(/^Название/).readOnly).toBe(false);
   });
 
@@ -523,7 +549,7 @@ describe('зафиксированный коридор (AC4, V-11)', () => {
     const corridor = screen.getByRole('status', { name: /Эталонный коридор/ });
     expect(corridor.textContent).toBe('Минское кольцо');
     expect(screen.getAllByText('зафиксировано').length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: 'Загрузить GPX' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Загрузить маршрут' })).toBeNull();
     expect(input(/^Допуск коридора, м/).readOnly).toBe(true);
     expect(text(screen.getByRole('status', { name: 'Дистанция, км' }).textContent)).toBe(
       '86,0 км — по маршруту',
