@@ -105,9 +105,14 @@ function CompactStats({ items }: Pick<StatsProps, 'items'>) {
   );
 }
 
-function CompactCells({ items }: Pick<StatsProps, 'items'>) {
+/**
+ * Ячейки строки `compact`: подпись над значением. `wrap` (правая группа `numeral`) — ячейки по содержимому и без
+ * ограничения строк: значение не обрезается многоточием при любом шрифте и ширине.
+ */
+function CompactCells({ items, wrap = false }: Pick<StatsProps, 'items'> & { wrap?: boolean }) {
   const theme = useTheme();
-  const lines = useSingleLine();
+  const singleLine = useSingleLine();
+  const lines = wrap ? undefined : singleLine;
   return (
     <>
       {items.map((item, index) => (
@@ -116,7 +121,7 @@ function CompactCells({ items }: Pick<StatsProps, 'items'>) {
           testID="stat-block-cell"
           accessible
           accessibilityLabel={cellLabel(item)}
-          style={styles.compactCell}
+          style={wrap ? styles.contentCell : styles.compactCell}
         >
           <Text numberOfLines={lines} style={[textStyle('label'), { color: theme.text.secondary }]}>
             {item.label}
@@ -184,8 +189,8 @@ function TileStats({ items }: Pick<StatsProps, 'items'>) {
 }
 
 /**
- * Крупная цифра (Типографика): первая ячейка (дистанция) — `displayNumeral` с единицей, остальные — строкой `compact`
- * справа, а не помещаются — под ней.
+ * Крупная цифра (Типографика): первая ячейка (дистанция) — `displayNumeral` с единицей, остальные — ячейками
+ * `compact` по содержимому справа, а не помещаются — под ней; значения не обрезаются (Codex pass 2).
  */
 function NumeralStats({ items }: Pick<StatsProps, 'items'>) {
   const theme = useTheme();
@@ -207,8 +212,8 @@ function NumeralStats({ items }: Pick<StatsProps, 'items'>) {
         ) : null}
       </View>
       {rest.length > 0 ? (
-        <View style={[styles.compactRow, styles.numeralRest]}>
-          <CompactCells items={rest} />
+        <View testID="stat-block-numeral-rest" style={[styles.compactRow, styles.numeralRest]}>
+          <CompactCells items={rest} wrap />
         </View>
       ) : null}
     </View>
@@ -260,7 +265,7 @@ function NumeralSkeleton() {
       <View style={styles.numeralSkeleton}>
         <SkeletonText variant="displayNumeral" lines={1} />
       </View>
-      <View style={styles.numeralRest}>
+      <View style={[styles.numeralRest, styles.numeralSkeletonRest]}>
         <SkeletonText variant="bodyStrong" lines={2} lastLineWidth="60%" />
       </View>
     </View>
@@ -326,5 +331,22 @@ const styles = StyleSheet.create({
   },
   // строка compact справа от цифры: не уже двух строк списка, иначе — под цифрой
   numeralSkeleton: { width: size.rowMin * 2 },
-  numeralRest: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: size.rowMin * 2 },
+  // у скелетона содержимого нет — ширина группы задана, иначе строки скелетона сжались бы в ноль
+  numeralSkeletonRest: { minWidth: size.rowMin * 2 },
+  // правая группа — по содержимому: не помещается рядом с цифрой — уходит вниз; ячейки переносятся внутри
+  numeralRest: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    flexWrap: 'wrap',
+    rowGap: space.s2,
+  },
+  // ячейка правой группы `numeral` — по содержимому, не уже строки списка
+  contentCell: {
+    flexGrow: 1,
+    flexShrink: 0,
+    flexBasis: 'auto',
+    minWidth: size.rowMin,
+    gap: space.s1,
+  },
 });

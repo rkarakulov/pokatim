@@ -239,3 +239,46 @@ describe('StatBlock tiles: узкий экран (app-themes C, ревью pass 
     },
   );
 });
+
+describe('StatBlock numeral: узкий экран (app-themes C, Codex pass 2)', () => {
+  const window = Dimensions.get('window');
+  afterEach(() => {
+    Dimensions.set({ window, screen: Dimensions.get('screen') });
+  });
+
+  it('Типографика, 360 px, обычный шрифт: значения не ограничены строками, правая группа — по содержимому с переносом вниз', async () => {
+    Dimensions.set({ window: { ...window, fontScale: 1 }, screen: Dimensions.get('screen') });
+    await render(
+      <View style={{ width: 320 }}>
+        <StatBlock
+          variant="numeral"
+          items={[
+            { value: '123,4', unit: 'км', label: 'Дистанция', note: 'круговой' },
+            { value: '1 120', unit: 'м', label: 'Набор' },
+            { value: '5 ч 10 мин', label: 'В пути', note: 'при 24 км/ч' },
+          ]}
+        />
+      </View>,
+      { wrapper: appThemeWrapper('typography') },
+    );
+    expect(screen.getByTestId('stat-block')).toHaveStyle({ flexWrap: 'wrap' });
+    const rest = screen.getByTestId('stat-block-numeral-rest');
+    // ширина группы — по содержимому: не помещается рядом с цифрой — уходит вниз, ячейки переносятся внутри
+    expect(rest).toHaveStyle({ flexBasis: 'auto', flexWrap: 'wrap' });
+    for (const value of screen.getAllByTestId('stat-block-value')) {
+      expect(value.props.numberOfLines).toBeUndefined();
+    }
+    for (const label of ['Набор', 'В пути']) {
+      expect(screen.getByText(label).props.numberOfLines).toBeUndefined();
+    }
+    expect(screen.getByLabelText('В пути 5 ч 10 мин при 24 км/ч')).toBeOnTheScreen();
+  });
+
+  it('отдельный compact («Классика») не меняется: значение — одна строка при обычном шрифте', async () => {
+    Dimensions.set({ window: { ...window, fontScale: 1 }, screen: Dimensions.get('screen') });
+    await render(
+      <StatBlock variant="compact" items={[{ value: '5 ч 10 мин', label: 'В пути' }]} />,
+    );
+    expect(screen.getByTestId('stat-block-value')).toHaveProp('numberOfLines', 1);
+  });
+});
