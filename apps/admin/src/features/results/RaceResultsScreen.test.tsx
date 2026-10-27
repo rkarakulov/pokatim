@@ -845,29 +845,48 @@ describe('«Результаты» гонки — группы, уровни, «
     expect(within(finisher).getByText('Финишёр')).toBeTruthy();
     expect(within(finisher).getByText('1:56:40')).toBeTruthy();
     expect(within(finisher).getByText('Пульс не отвечает на мощность')).toBeTruthy();
+    // метрика HR_POWER_DECOUPLED — расхождение половин или доля рывков: подпись нейтральная
+    expect(within(finisher).getByText('Расхождение 40 %')).toBeTruthy();
     expect(within(finishers).queryByRole('columnheader', { name: 'Место' })).toBeNull();
+  });
+
+  it('финишёры — отдельный запрос finishers=true: за пределом «Участников» не теряются, свой баннер предела', async () => {
+    mocked.getRaceStandings.mockImplementation((_raceId, params = {}) =>
+      Promise.resolve(
+        params.finishers
+          ? { ...standings([FINISHER]), truncated: true }
+          : { ...standings([FLAGGED]), truncated: true },
+      ),
+    );
+    await renderApp(PATH);
+    const finishers = await screen.findByRole('region', { name: 'Финишёры — без места' });
+    expect(await within(finishers).findByText('Участник ·9a0c0c')).toBeTruthy();
+    expect(within(finishers).getByText('Показаны первые 1 финишёров')).toBeTruthy();
+    expect(mocked.getRaceStandings).toHaveBeenCalledWith(RACE_ID, { finishers: 'true' });
+    expect(mocked.getRaceStandings).toHaveBeenCalledWith(RACE_ID, {});
+    const ranked = screen.getByRole('region', { name: 'Участники' });
+    expect(within(ranked).getByText('Показаны первые 1 участников')).toBeTruthy();
   });
 
   it('вкладки групп и фильтр «Требует внимания» — запросы с group и attention, сброс — «Все группы»', async () => {
     await renderApp(PATH);
     const ranked = await screen.findByRole('region', { name: 'Участники' });
     await within(ranked).findByText('Участник ·9a0a01');
-    expect(mocked.getRaceStandings).toHaveBeenLastCalledWith(RACE_ID, {});
+    // «Участники» и «Финишёры» — с одними фильтрами; финишёры — с `finishers`
+    const called = (params: object) => {
+      expect(mocked.getRaceStandings).toHaveBeenCalledWith(RACE_ID, params);
+      expect(mocked.getRaceStandings).toHaveBeenCalledWith(RACE_ID, {
+        ...params,
+        finishers: 'true',
+      });
+    };
+    await waitFor(() => called({}));
     fireEvent.click(within(ranked).getByRole('button', { name: 'Мужчины до 40 · 3' }));
-    await waitFor(() =>
-      expect(mocked.getRaceStandings).toHaveBeenLastCalledWith(RACE_ID, { group: 'm_u40' }),
-    );
+    await waitFor(() => called({ group: 'm_u40' }));
     fireEvent.click(within(ranked).getByRole('button', { name: 'Только «Требует внимания»' }));
-    await waitFor(() =>
-      expect(mocked.getRaceStandings).toHaveBeenLastCalledWith(RACE_ID, {
-        group: 'm_u40',
-        attention: 'true',
-      }),
-    );
+    await waitFor(() => called({ group: 'm_u40', attention: 'true' }));
     fireEvent.click(within(ranked).getByRole('button', { name: 'Все группы' }));
-    await waitFor(() =>
-      expect(mocked.getRaceStandings).toHaveBeenLastCalledWith(RACE_ID, { attention: 'true' }),
-    );
+    await waitFor(() => called({ attention: 'true' }));
     expect(
       within(ranked).getByRole('button', { name: 'Все группы' }).getAttribute('aria-pressed'),
     ).toBe('true');

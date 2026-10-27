@@ -8,7 +8,7 @@ import {
   VerifiedBirthYear,
 } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useId, useState } from 'react';
 
 import { api } from '../../api';
@@ -34,6 +34,8 @@ export interface DemographicsTarget {
 }
 
 const SKELETON_FIELDS = 2;
+/** Ключ мутации окна: окно держит Esc и «Отмена», пока PATCH в процессе (`useIsMutating`). */
+const saveKey = (userId: string) => ['admin', 'profiles', userId, 'verified-demographics', 'save'];
 
 function Actions({
   onClose,
@@ -55,8 +57,9 @@ function Actions({
 }
 
 /**
- * Форма правки: только изменённые поля и причина (в журнал на сервере — имена полей, без значений). Год проверяет
- * схема контракта (`VerifiedBirthYear`); «Сохранить» неактивна без изменений, с неверным годом и без причины.
+ * Форма правки: только изменённые поля и причина (в журнал на сервере — имена полей, без значений; подсказка у поля
+ * причины просит не писать туда пол и год). Год проверяет схема контракта (`VerifiedBirthYear`); «Сохранить» —
+ * `aria-disabled` с причинами (`DisabledReason`) без изменений, с неверным годом и без причины.
  */
 function DemographicsForm({
   userId,
@@ -73,6 +76,7 @@ function DemographicsForm({
   const [year, setYear] = useState(String(current.birthYear));
   const [reason, setReason] = useState('');
   const save = useMutation({
+    mutationKey: saveKey(userId),
     mutationFn: (body: UpdateVerifiedDemographicsRequest) =>
       api.updateVerifiedDemographics(userId, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'audit'] }),
@@ -86,9 +90,14 @@ function DemographicsForm({
     reason: reason.trim(),
   });
   const changed = gender !== current.gender || (yearValid && parsedYear.data !== current.birthYear);
-  const blocked = !changed ? t('admin.results.demographics.unchanged') : undefined;
-  const ready =
-    yearValid && body.success && reason.trim().length >= ACTION_REASON_MIN_LENGTH && !blocked;
+  const blocked = [
+    yearValid && !changed ? t('admin.results.demographics.unchanged') : null,
+    yearValid ? null : t('admin.results.demographics.fixYear'),
+    reason.trim().length >= ACTION_REASON_MIN_LENGTH
+      ? null
+      : t('admin.results.demographics.reasonRequired', { min: ACTION_REASON_MIN_LENGTH }),
+  ].filter((item) => item !== null);
+  const ready = blocked.length === 0 && body.success;
 
   const close = () => {
     if (!save.isPending) onClose();
@@ -122,6 +131,7 @@ function DemographicsForm({
         label={t('admin.dialog.reason')}
         value={reason}
         maxLength={ACTION_REASON_MAX_LENGTH}
+        help={t('admin.results.demographics.reasonHelp')}
         onChange={(event) => setReason(event.target.value)}
       />
       {save.isError ? (
@@ -132,25 +142,28 @@ function DemographicsForm({
       <Actions onClose={close} busy={save.isPending}>
         <Button
           variant="primary"
-          disabled={!ready}
+          aria-disabled={ready ? undefined : true}
           busy={save.isPending}
-          aria-describedby={blocked ? reasonId : undefined}
+          aria-describedby={blocked.length > 0 ? reasonId : undefined}
           onClick={() => {
-            if (!ready || !body.success) return;
+            if (!ready || !body.success || save.isPending) return;
             save.mutate(body.data, { onSuccess: onClose });
           }}
         >
           {t('admin.results.demographics.submit')}
         </Button>
       </Actions>
-      {blocked ? <DisabledReason id={reasonId}>{blocked}</DisabledReason> : null}
+      {blocked.length > 0 ? (
+        <DisabledReason id={reasonId}>{blocked.join('. ')}</DisabledReason>
+      ) : null}
     </>
   );
 }
 
 /**
  * Правка пола и года рождения анкеты Verified (race-results-07, только `profiles.verified_edit`): текущие значения —
- * с сервера при открытии (`gcTime: 0`), вес, рост и FTP панель не получает. Существующие заявки не меняются.
+ * с сервера при открытии (`gcTime: 0`), вес, рост и FTP панель не получает. Существующие заявки не меняются. Пока
+ * идёт сохранение, Esc и «Отмена» окно не закрывают (как `ReasonDialog`).
  */
 export function VerifiedDemographicsDialog({
   target,
@@ -159,11 +172,14 @@ export function VerifiedDemographicsDialog({
   target: DemographicsTarget | null;
   onClose: () => void;
 }) {
+  const saving = useIsMutating({ mutationKey: saveKey(target?.userId ?? '') }) > 0;
   return (
     <Dialog
       open={target !== null}
       title={t('admin.results.demographics.title', { rider: target?.label ?? '' })}
-      onClose={onClose}
+      onClose={() => {
+        if (!saving) onClose();
+      }}
     >
       <p className="dialog__consequences t-body">{t('admin.results.demographics.consequences')}</p>
       {target ? <DemographicsBody userId={target.userId} onClose={onClose} /> : null}
@@ -175,7 +191,24 @@ function DemographicsBody({ userId, onClose }: { userId: string; onClose: () => 
   const current = useQuery(verifiedDemographicsQuery(userId));
   if (current.data) {
     return (
-      <DemographicsForm key={userId} userId={userId} current={current.data} onClose={onClose} />
+      <>
+        {current.isError ? (
+          // ошибка фонового обновления: форма с прежними значениями остаётся (AGENTS.md §4.12)
+          <Banner
+            tone="error"
+            role="alert"
+            title={t('admin.results.demographics.refreshFailed')}
+            actions={
+              <Button size="sm" onClick={() => void current.refetch()}>
+                {t('state.retry')}
+              </Button>
+            }
+          >
+            {t('admin.refreshFailedMessage')}
+          </Banner>
+        ) : null}
+        <DemographicsForm key={userId} userId={userId} current={current.data} onClose={onClose} />
+      </>
     );
   }
   if (current.isError || current.fetchStatus === 'paused') {

@@ -102,7 +102,8 @@ const finisherColumns = [
  * райдера; с `profiles.moderate` при имени — «Сбросить имя» (profile-02).
  *
  * race-results-07: вкладки групп (`groups` ответа) и фильтр «Требует внимания» — на сервере (`group`, `attention`);
- * колонки группы, уровня и флагов; финишёры (`unranked ≠ null`) — отдельным блоком без мест. С
+ * колонки группы, уровня и флагов; финишёры (`unranked ≠ null`) — отдельным блоком без мест и отдельным запросом
+ * (`finishers`: серверный фильтр до предела ответа, свой `truncated`). С
  * `profiles.verified_edit` у Verified в группе пол × возраст — «Пол и год» (окно с причиной).
  */
 export function StandingsTable({
@@ -127,12 +128,16 @@ export function StandingsTable({
   const [group, setGroup] = useState<GroupFilter>(ALL_GROUPS);
   const [attention, setAttention] = useState(false);
   const [demographics, setDemographics] = useState<DemographicsTarget | null>(null);
-  const standings = useQuery(
-    standingsQuery(raceId, {
-      ...(group === ALL_GROUPS ? {} : { group }),
-      ...(attention ? { attention: 'true' } : {}),
-    }),
-  );
+  const filter = {
+    ...(group === ALL_GROUPS ? {} : { group }),
+    ...(attention ? { attention: 'true' as const } : {}),
+  };
+  const standings = useQuery(standingsQuery(raceId, filter));
+  // финишёры — отдельным запросом с серверным фильтром: за пределом строк «Участников» не теряются
+  const finisherRows = useQuery({
+    ...standingsQuery(raceId, { ...filter, finishers: 'true' }),
+    enabled: finishersTotal > 0,
+  });
   // на время смены фильтра — скелетон таблиц (прежний ответ держит только вкладки групп)
   const items = standings.isPlaceholderData ? undefined : standings.data?.items;
   // вкладки групп — из последнего ответа: при загрузке и ошибке другого фильтра остаются на месте
@@ -234,15 +239,17 @@ export function StandingsTable({
         })
       : null;
 
-  const query = (data: PanelStandingRow[] | undefined) => ({
+  const query = (state: typeof standings, data: PanelStandingRow[] | undefined) => ({
     data,
-    isError: standings.isError,
-    error: standings.error,
-    fetchStatus: standings.fetchStatus,
-    refetch: () => standings.refetch(),
+    isError: state.isError,
+    error: state.error,
+    fetchStatus: state.fetchStatus,
+    refetch: () => state.refetch(),
   });
   const filtered = group !== ALL_GROUPS || attention;
-  const finishers = items?.filter((row) => row.unranked !== null);
+  const finishers = finisherRows.isPlaceholderData
+    ? undefined
+    : finisherRows.data?.items.filter((row) => row.unranked !== null);
 
   return (
     <>
@@ -250,7 +257,7 @@ export function StandingsTable({
         <h2 id={titleId} className="section__title t-label">
           {t('admin.results.standings.title')}
         </h2>
-        {standings.data?.truncated ? (
+        {standings.data?.truncated && !standings.isPlaceholderData ? (
           <Banner>
             {t('admin.results.standings.truncated', { count: standings.data.items.length })}
           </Banner>
@@ -258,7 +265,10 @@ export function StandingsTable({
         <DataTable
           caption={t('admin.results.standings.title')}
           columns={actions ? [...rankedColumns, actions] : rankedColumns}
-          query={query(items?.filter((row) => row.unranked === null))}
+          query={query(
+            standings,
+            items?.filter((row) => row.unranked === null),
+          )}
           getRowId={(row) => row.entryId}
           empty={
             <EmptyState
@@ -298,16 +308,21 @@ export function StandingsTable({
           }
         />
       </section>
-      {finishersTotal > 0 || (finishers?.length ?? 0) > 0 ? (
+      {finishersTotal > 0 ? (
         <section className="section" aria-labelledby={finishersTitleId}>
           <h2 id={finishersTitleId} className="section__title t-label">
             {t('admin.results.finishers.title')}
           </h2>
           <p className="page-note t-meta">{t('admin.results.finishers.note')}</p>
+          {finisherRows.data?.truncated && !finisherRows.isPlaceholderData ? (
+            <Banner>
+              {t('admin.results.finishers.truncated', { count: finisherRows.data.items.length })}
+            </Banner>
+          ) : null}
           <DataTable
             caption={t('admin.results.finishers.title')}
             columns={actions ? [...finisherColumns, actions] : finisherColumns}
-            query={query(finishers)}
+            query={query(finisherRows, finishers)}
             getRowId={(row) => row.entryId}
             empty={<EmptyState title={t('admin.results.finishers.empty')} />}
           />

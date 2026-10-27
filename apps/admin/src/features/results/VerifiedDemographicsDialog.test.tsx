@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { PanelRaceResults, PanelStandingRow } from '@pokatim/contracts';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
@@ -25,7 +25,7 @@ const RACE_ID = '01890a5d-ac96-774b-bcce-b302099a8080';
 const ENTRY = '01890a5d-ac96-774b-bcce-b302099a0a01';
 const RIDER = '01890a5d-ac96-774b-bcce-b302099a0d04';
 const PATH = `/races/${RACE_ID}/results`;
-const REASON = 'Райдер прислал документ с годом';
+const REASON = 'Райдер прислал подтверждающий документ';
 
 const SUMMARY = {
   raceId: RACE_ID,
@@ -76,12 +76,15 @@ const ROW: PanelStandingRow = {
   flags: [],
 };
 
-const open = async () => {
-  await renderApp(PATH);
+const openWith = async () => {
+  const app = await renderApp(PATH);
   const standings = await screen.findByRole('region', { name: 'Участники' });
   fireEvent.click(await within(standings).findByRole('button', { name: 'Пол и год' }));
-  return screen.findByRole('dialog');
+  return { ...app, dialog: await screen.findByRole('dialog') };
 };
+const open = async () => (await openWith()).dialog;
+/** «Сохранить» неактивна: `aria-disabled` (остаётся в порядке фокуса), причина — `DisabledReason`. */
+const inactive = (button: HTMLElement) => button.getAttribute('aria-disabled') === 'true';
 const yearField = (dialog: HTMLElement) =>
   within(dialog).getByLabelText('Год рождения') as HTMLInputElement;
 const reasonField = (dialog: HTMLElement) => within(dialog).getByLabelText(/Причина/);
@@ -143,11 +146,24 @@ describe('Окно «Пол и год рождения» (race-results-07, profi
     });
     const dialog = await open();
     await waitFor(() => expect(yearField(dialog).value).toBe('1981'));
+    expect(inactive(submit(dialog))).toBe(true);
+    // причины недоступности — одним текстом под кнопкой
+    expect(within(dialog).getByText(/Измените пол или год рождения/)).toBeTruthy();
+    expect(within(dialog).getByText(/Укажите причину — от 3 символов/)).toBeTruthy();
+    // нажатие неактивной кнопки ничего не отправляет
+    fireEvent.click(submit(dialog));
+    expect(mocked.updateVerifiedDemographics).not.toHaveBeenCalled();
     fireEvent.change(reasonField(dialog), { target: { value: REASON } });
-    expect(submit(dialog).getAttribute('disabled')).not.toBeNull();
-    expect(within(dialog).getByText('Измените пол или год рождения')).toBeTruthy();
-    fireEvent.change(yearField(dialog), { target: { value: '1979' } });
+    expect(within(dialog).queryByText(/Укажите причину/)).toBeNull();
+    expect(inactive(submit(dialog))).toBe(true);
     expect(submit(dialog).getAttribute('disabled')).toBeNull();
+    const describedBy = submit(dialog).getAttribute('aria-describedby')!;
+    expect(document.getElementById(describedBy)?.textContent).toContain(
+      'Измените пол или год рождения',
+    );
+    fireEvent.change(yearField(dialog), { target: { value: '1979' } });
+    expect(inactive(submit(dialog))).toBe(false);
+    expect(submit(dialog).getAttribute('aria-describedby')).toBeNull();
     fireEvent.click(submit(dialog));
     await waitFor(() =>
       expect(mocked.updateVerifiedDemographics).toHaveBeenCalledWith(RIDER, {
@@ -170,7 +186,9 @@ describe('Окно «Пол и год рождения» (race-results-07, profi
     fireEvent.change(reasonField(dialog), { target: { value: REASON } });
     fireEvent.change(yearField(dialog), { target: { value: '1900' } });
     expect(within(dialog).getByText('Год — от 1920, возраст — не меньше 18 лет')).toBeTruthy();
-    expect(submit(dialog).getAttribute('disabled')).not.toBeNull();
+    expect(inactive(submit(dialog))).toBe(true);
+    fireEvent.click(submit(dialog));
+    expect(mocked.updateVerifiedDemographics).not.toHaveBeenCalled();
     fireEvent.change(yearField(dialog), { target: { value: '1981' } });
     fireEvent.click(within(dialog).getByRole('radio', { name: 'Женский' }));
     fireEvent.click(submit(dialog));
@@ -214,5 +232,55 @@ describe('Окно «Пол и год рождения» (race-results-07, profi
     expect(await within(dialog).findByText('Нет соединения')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Повторить' }));
     await waitFor(() => expect(yearField(dialog).value).toBe('1981'));
+  });
+
+  it('подсказка причины: не указывать пол и год — в журнал пишутся только названия полей', async () => {
+    const dialog = await open();
+    await waitFor(() => expect(yearField(dialog).value).toBe('1981'));
+    const help = reasonField(dialog).getAttribute('aria-describedby')!;
+    expect(document.getElementById(help)?.textContent).toBe(
+      'Не указывайте в причине пол и год рождения: причина навсегда остаётся в журнале, туда пишутся только названия полей.',
+    );
+  });
+
+  it('Esc и «Отмена» во время сохранения окно не закрывают; после ответа — закрыто', async () => {
+    let finish: (value: Awaited<ReturnType<typeof api.updateVerifiedDemographics>>) => void = () =>
+      undefined;
+    mocked.updateVerifiedDemographics.mockReturnValue(
+      new Promise((done) => {
+        finish = done;
+      }),
+    );
+    const dialog = await open();
+    await waitFor(() => expect(yearField(dialog).value).toBe('1981'));
+    fireEvent.change(reasonField(dialog), { target: { value: REASON } });
+    fireEvent.change(yearField(dialog), { target: { value: '1979' } });
+    fireEvent.click(submit(dialog));
+    await waitFor(() => expect(mocked.updateVerifiedDemographics).toHaveBeenCalled());
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    finish({ gender: 'm', birthYear: 1979, demographicsLocked: true, changed: true });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('ошибка фонового обновления при показанных данных — форма остаётся, баннер с повтором', async () => {
+    const { dialog, queryClient } = await openWith();
+    await waitFor(() => expect(yearField(dialog).value).toBe('1981'));
+    fireEvent.change(reasonField(dialog), { target: { value: REASON } });
+    mocked.getVerifiedDemographics.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
+    await act(() =>
+      queryClient.refetchQueries({
+        queryKey: ['admin', 'profiles', RIDER, 'verified-demographics'],
+      }),
+    );
+    const banner = await within(dialog).findByRole('alert');
+    expect(within(banner).getByText('Не удалось обновить анкету')).toBeTruthy();
+    // форма и введённое — на месте
+    expect(yearField(dialog).value).toBe('1981');
+    expect((reasonField(dialog) as HTMLTextAreaElement).value).toBe(REASON);
+    fireEvent.click(within(banner).getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(within(dialog).queryByRole('alert')).toBeNull());
+    expect(mocked.getVerifiedDemographics).toHaveBeenCalledTimes(3);
   });
 });

@@ -1811,7 +1811,8 @@ export const ru = {
   'admin.results.sensors.none': 'Нет',
   'admin.results.sensors.declared': '{sensors} (заявлено импортом)',
   'admin.results.flagMetric.SPEED_CLUSTER_HIGH': 'Время ×{value} медианы группы',
-  'admin.results.flagMetric.HR_POWER_DECOUPLED': '{value} % рывков без ответа пульса',
+  // метрика флага — расхождение Pw:HR половин сегмента или доля рывков без ответа пульса: подпись нейтральная
+  'admin.results.flagMetric.HR_POWER_DECOUPLED': 'Расхождение {value} %',
   'admin.results.flagMetric.HR_GAPS': '{value} % сегмента без пульса',
   'admin.results.flags.none': '—',
   'admin.results.standings.groupFilter': 'Группа',
@@ -1823,6 +1824,7 @@ export const ru = {
   'admin.results.finishers.note':
     'START и Verified без пульса: время засчитано, места и спора нет. Флаги не мешают публикации.',
   'admin.results.finishers.empty': 'Нет финишёров по выбранным фильтрам',
+  'admin.results.finishers.truncated': 'Показаны первые {count} финишёров',
   'admin.results.action.editDemographics': 'Пол и год',
   'admin.results.demographics.title': 'Пол и год рождения · {rider}',
   'admin.results.demographics.consequences':
@@ -1835,6 +1837,11 @@ export const ru = {
   'admin.results.demographics.locked': 'Зафиксированы заявкой Verified — райдер сам их не изменит.',
   'admin.results.demographics.unlocked': 'Пока не зафиксированы — райдер может изменить их сам.',
   'admin.results.demographics.unchanged': 'Измените пол или год рождения',
+  'admin.results.demographics.fixYear': 'Исправьте год рождения',
+  'admin.results.demographics.reasonRequired': 'Укажите причину — от {min} символов',
+  'admin.results.demographics.reasonHelp':
+    'Не указывайте в причине пол и год рождения: причина навсегда остаётся в журнале, туда пишутся только названия полей.',
+  'admin.results.demographics.refreshFailed': 'Не удалось обновить анкету',
   'admin.results.demographics.noProfile': 'Анкета Verified не заполнена',
   'admin.results.demographics.conflict':
     'Анкету изменили одновременно с вами. Закройте окно и повторите.',

@@ -234,11 +234,16 @@ export const PanelStandingRow = z.object({
 });
 export type PanelStandingRow = z.infer<typeof PanelStandingRow>;
 
-/** `GET /v1/admin/races/:raceId/standings?group&attention` (race-results-07): группа и «только с флагами». */
+/**
+ * `GET /v1/admin/races/:raceId/standings?group&attention&finishers` (race-results-07): группа, «только с флагами» и
+ * «только финишёры» (`unranked ≠ null`: START и Verified без пульса) — фильтры до предела ответа.
+ */
 export const PanelRaceStandingsQuery = z.strictObject({
   group: z.enum(RESULT_GROUP_KEYS).optional(),
   /** только строки с флагами */
   attention: z.enum(['true']).optional(),
+  /** только финишёры без места (блок «Финишёры» панели — отдельным запросом, не теряется за пределом) */
+  finishers: z.enum(['true']).optional(),
 });
 export type PanelRaceStandingsQuery = z.infer<typeof PanelRaceStandingsQuery>;
 

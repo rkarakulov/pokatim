@@ -1099,3 +1099,36 @@ exit=0
 После слияния 07a и DV-11: `pnpm --filter @pokatim/admin test` — 35 файлов, 300 тестов; `typecheck`, `eslint
 --max-warnings=0` (results, i18n), `prettier --check` изменённых файлов — зелёные; полный `pnpm check` не прогонялся.
 `TURBO_CONCURRENCY=1 pnpm check` (MONGO `pokatim_r07b_test`, Redis db 12) — `exit=0`, `Tasks: 15 successful, 15 total`.
+
+### Фиксы ревью 07b pass 1
+
+Находки — `findings-07b-codex.md` (REQUEST CHANGES), `findings-07b-claude.md` (APPROVE с замечаниями).
+
+- [HIGH codex] Финишёры за пределом 1000 строк: контракт `PanelRaceStandingsQuery.finishers` (`'true'`, необязательный —
+  совместимо), `StandingsFilter.finishers` в репозитории (`status: active`, `best.ranked: false` — как `unrankedOf`),
+  в сервисе строки с местом при `finishers` не берутся — фильтр до предела, `truncated` по отфильтрованному. Панель:
+  блок «Финишёры» — отдельный `useQuery` (`standingsQuery(raceId, { ...filter, finishers: 'true' })`, `enabled` при
+  `counts.finishers > 0`, ключ включает `finishers`), свой баннер «Показаны первые N финишёров»; пустое состояние —
+  только по пустому ответу этого запроса. Это изменение `apps/api` + contracts + api-client в 07b — по решению
+  оркестратора (8.2 не требуется: параметр совместим).
+- [HIGH codex] `VerifiedDemographicsDialog`: ошибка фонового обновления при показанных данных — форма остаётся, над
+  ней баннер «Не удалось обновить анкету» с «Повторить» (`current.refetch()`), AGENTS §4.12.
+- [MEDIUM codex] Подпись `HR_POWER_DECOUPLED` — «Расхождение {value} %» (ветки половин и рывков одним кодом).
+- [MEDIUM claude] Esc/«Отмена» во время PATCH: мутация с `mutationKey`, окно читает `useIsMutating` и не закрывается.
+- [MEDIUM claude] Подсказка у причины (`help`): не указывать пол и год — журнал append-only, только названия полей.
+- [MEDIUM claude] «Сохранить» — `aria-disabled` (в порядке фокуса, клик игнорируется) + `DisabledReason` со всеми
+  причинами: «Измените пол или год рождения», «Исправьте год рождения», «Укажите причину — от 3 символов».
+- [LOW] Исключение «форма на `useState`» — в `.claude/rules/pokatim-web.md`; баннеры предела скрыты при
+  `isPlaceholderData`. Правила `pokatim-web.md`/`pokatim-backend.md` обновлены (фильтр `finishers`).
+
+Тесты: int `results-tiers.int.test.ts` («standingsMax»): 1000 ранжированных + Verified-женщина + START-финишёр →
+`?finishers=true` отдаёт START (`truncated: false`), `?finishers=true&group=m_u40` — пусто (до фикса — красный:
+`truncated: true`, финишёра нет). `RaceResultsScreen.test.tsx` (+1): финишёры — отдельный запрос, при усечённых
+«Участниках» финишёр виден, свой баннер; вкладки/фильтр — пары запросов с `finishers`; подпись «Расхождение 40 %».
+`VerifiedDemographicsDialog.test.tsx` (+3, переписаны 2): `aria-disabled` и причины (в т. ч. пустая причина, клик
+неактивной не шлёт PATCH); подсказка причины; Esc и `cancel` во время PATCH — окно открыто; ошибка фонового
+обновления — форма с введённым, баннер, повтор.
+
+`pnpm --filter @pokatim/admin test` — 35 файлов, 304 теста; `typecheck`, `eslint --max-warnings=0` изменённых,
+`prettier --check` — зелёные. `TURBO_CONCURRENCY=1 pnpm check` (MONGO `pokatim_r07b_test`, Redis db 12) — `exit=0`,
+`Tasks: 15 successful, 15 total` (api 1334, admin 304), флаков не было.

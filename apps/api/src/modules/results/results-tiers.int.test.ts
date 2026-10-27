@@ -661,6 +661,15 @@ describe('панель: фильтры и «Требует внимания» з
     expect(attention.truncated).toBe(false);
     expect(attention.items.map((row) => row.entryId)).toEqual([woman._id, finisher._id]);
 
+    // финишёры — отдельный фильтр до предела: START за пределом всех строк не теряется (07b pass 1)
+    const finishers = await read('?finishers=true');
+    expect(finishers.truncated).toBe(false);
+    expect(finishers.items.map((row) => [row.entryId, row.place, row.unranked])).toEqual([
+      [finisher._id, null, 'start'],
+    ]);
+    const finishersInGroup = await read('?finishers=true&group=m_u40');
+    expect(finishersInGroup.items).toEqual([]);
+
     const summary = await panelCall(h, token, 'GET', raceAdminUrl(raceId, '/results'));
     expect(summary.body).toMatchObject({ counts: { attention: 2, finishers: 1 } });
   });

@@ -41,6 +41,8 @@ export interface RankPosition {
 export interface StandingsFilter {
   group?: ResultGroupKey;
   attention?: boolean;
+  /** только финишёры без места (`unrankedOf`: активная заявка, лучшая без места) */
+  finishers?: boolean;
 }
 
 export type RankedEntry = Pick<RaceEntryDoc, '_id' | 'userId' | 'groupKey' | 'tier'> & {
@@ -934,9 +936,8 @@ export class ResultsRepository {
     return {
       raceId,
       ...(filter.group === undefined ? {} : { groupKey: filter.group }),
-      ...(filter.attention
-        ? { status: 'active', 'best.ranked': false, 'best.flags.0': { $exists: true } }
-        : {}),
+      ...(filter.attention || filter.finishers ? { status: 'active', 'best.ranked': false } : {}),
+      ...(filter.attention ? { 'best.flags.0': { $exists: true } } : {}),
     };
   }
 

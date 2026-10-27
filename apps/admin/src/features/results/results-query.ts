@@ -17,7 +17,7 @@ export const resultsSummaryQuery = (raceId: string) =>
   });
 
 /**
- * «Участники» с фильтрами (race-results-07): группа и «Требует внимания» — в ключе и в запросе. Прежний ответ держится
+ * «Участники» с фильтрами (race-results-07): группа, «Требует внимания» и «только финишёры» — в ключе и в запросе. Прежний ответ держится
  * на время загрузки (`keepPreviousData`), чтобы вкладки групп не пропадали; таблица в это время — скелетон.
  */
 export const standingsQuery = (raceId: string, filter: PanelRaceStandingsQuery = {}) =>
@@ -27,6 +27,7 @@ export const standingsQuery = (raceId: string, filter: PanelRaceStandingsQuery =
       'standings',
       filter.group ?? 'all',
       filter.attention ? 'attention' : 'all',
+      filter.finishers ? 'finishers' : 'all',
     ],
     queryFn: () => api.getRaceStandings(raceId, filter),
     placeholderData: keepPreviousData,
