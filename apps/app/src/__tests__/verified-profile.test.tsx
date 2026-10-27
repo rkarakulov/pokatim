@@ -238,14 +238,17 @@ describe('«Анкета зачёта»: пол и год зафиксирова
   });
 
   it('409 VERIFIED_DEMOGRAPHICS_LOCKED — текст по коду, анкета перезапрошена (блокировка)', async () => {
-    updateVerifiedProfile.mockRejectedValue(
+    updateVerifiedProfile.mockRejectedValueOnce(
       new ApiHttpError(409, { code: 'VERIFIED_DEMOGRAPHICS_LOCKED', message: 'x' }),
     );
+    updateVerifiedProfile.mockResolvedValue(verifiedView({ demographicsLocked: true }));
     await open();
     await screen.findByDisplayValue('72');
     getVerifiedProfile.mockResolvedValue(verifiedView({ demographicsLocked: true }));
 
     await fireEvent.press(screen.getByRole('button', { name: 'Женский' }));
+    await type(YEAR, '1990');
+    await type(WEIGHT, '75');
     await fireEvent.press(save());
 
     expect(
@@ -259,5 +262,36 @@ describe('«Анкета зачёта»: пол и год зафиксирова
         'Пол и год рождения зафиксированы заявкой Verified — изменить их может команда платформы.',
       ),
     ).toBeOnTheScreen();
+
+    // повторное сохранение: пол и год — серверные, правка веса сохранена (ревью pass 1)
+    await fireEvent.press(save());
+    await waitFor(() => expect(updateVerifiedProfile).toHaveBeenCalledTimes(2));
+    expect(updateVerifiedProfile).toHaveBeenLastCalledWith(TOKEN, {
+      gender: 'm',
+      birthYear: 1984,
+      weightKg: 75,
+      heightCm: 180,
+      ftpW: null,
+      consent: true,
+    });
+  });
+
+  it('заблокирована, пол сервера незнаком — понятная ошибка вместо молчания, PUT не уходит', async () => {
+    getVerifiedProfile.mockResolvedValue(
+      verifiedView({
+        demographicsLocked: true,
+        profile: { ...verifiedView().profile!, gender: 'unknown' },
+      }),
+    );
+    await open();
+    await screen.findByDisplayValue('72');
+
+    await fireEvent.press(save());
+    expect(
+      await screen.findByText(
+        'Пол или год рождения в анкете не распознаны — обновите приложение или напишите в поддержку',
+      ),
+    ).toBeOnTheScreen();
+    expect(updateVerifiedProfile).not.toHaveBeenCalled();
   });
 });

@@ -21,12 +21,15 @@ export function VerifiedChoice({
   raceId,
   submitLabel,
   pending,
+  disabled = false,
   onSubmit,
 }: {
   entry: MyRaceEntry;
   raceId: string;
   submitLabel: string;
   pending: boolean;
+  /** занято другим действием (заявка START в `TierPicker`) */
+  disabled?: boolean;
   onSubmit: (groupKey: ResultGroupKey) => void;
 }) {
   const theme = useTheme();
@@ -79,7 +82,12 @@ export function VerifiedChoice({
         </Text>
       )}
       <Text style={meta}>{t('races.tier.groupHint')}</Text>
-      <Button label={submitLabel} loading={pending} onPress={() => onSubmit(selected)} />
+      <Button
+        label={submitLabel}
+        loading={pending}
+        disabled={disabled}
+        onPress={() => onSubmit(selected)}
+      />
     </View>
   );
 }

@@ -1102,3 +1102,33 @@ exit=0
 (app 1491, api 1334, admin 285, api-client 104). Первый прогон упал только в `@pokatim/api` (47 int-тестов на
 лимитах частоты и входе в панель — 429; `apps/api` не менялся), отдельный повтор `api test` — 1334/1334, затем
 полный `check` — зелёный.
+
+### Фиксы ревью 07c pass 1
+
+Findings: `findings-07c-codex.md` (REQUEST CHANGES: 1 HIGH, 2 MEDIUM), `findings-07c-claude.md` (APPROVE: 2 MEDIUM,
+3 LOW). Закрыты все.
+
+- [HIGH codex] Незагруженная вкладка группы или «Финишёры» без сети — бесконечный скелетон. `results-table.tsx`:
+  `TabFailure` принимает запрос и показывает «Нет соединения» с повтором и при `fetchStatus === 'paused'` без данных
+  (как `AsyncContent`); скелетон — только пока загрузка идёт. Сеть вернулась — запрос продолжается сам.
+- [MEDIUM оба] Анкета после 409 `VERIFIED_DEMOGRAPHICS_LOCKED` слала скрытые изменённые пол и год → снова 409.
+  `verified-profile-form.tsx`: при `demographicsLocked` (ответ после 409 или свежий ответ поверх кэша) поля `gender` и
+  `birthYear` формы сбрасываются к серверным (`resetField`), правки веса, роста и FTP остаются. Успешная
+  Verified-заявка (`useEnterRace` с `tier: 'verified'`) инвалидирует `VERIFIED_PROFILE_KEY` — анкета из кэша не
+  открывается редактируемой.
+- [MEDIUM оба] Pull-to-refresh карточки обновлял только группу по умолчанию. `useRaceResultsRefetch(id)` —
+  `refetchQueries({ queryKey: raceResultsKey(id), type: 'active' })`: группа по умолчанию, выбранная вкладка и
+  «Финишёры»; заменяет `results.refetch` в `refetchers` (`race-detail.tsx`).
+- [LOW] `TierPicker`: обе кнопки уровня неактивны на время заявки (`VerifiedChoice` получил `disabled`).
+- [LOW] Анкета заблокирована, пол сервера незнаком: проверка скрытых полей падала молча — теперь баннер
+  `profile.verified.error.lockedUnreadable` («…не распознаны — обновите приложение или напишите в поддержку»), PUT не
+  уходит.
+- [LOW] `VERIFIED_PROFILE_REQUIRED` при заявке или повышении — переход к анкете `/settings/verified?race=<id>`
+  (§11.3; баннер и перезапрос участия остаются). Отклонения в §8.2 нет.
+- [LOW] `epic.md` — статус слайса 07: 07a (#73) и 07b (#75) слиты, 07c — PR на ревью.
+
+Тесты: `race-groups.test.tsx` (+4: вкладка группы и «Финишёры» без сети — «Нет соединения» с повтором, затем
+строки; pull-to-refresh вкладки группы и «Финишёров» через `RefreshControl`); `verified-profile.test.tsx` (+1, 1
+расширен: 409 → повторное сохранение с серверными полом и годом и правкой веса; незнакомый пол в заблокированной
+анкете); `race-tiers.test.tsx` (+2, 2 изменены: START неактивна при заявке Verified и наоборот; 409
+`VERIFIED_PROFILE_REQUIRED` → анкета с `?race`; анкета из кэша после Verified-заявки — зафиксирована).

@@ -1,5 +1,6 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
+import { router as expoRouter } from 'expo-router';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 
 import { useSessionStore } from '@/features/auth/session-store';
@@ -93,7 +94,8 @@ describe('заявка: выбор уровня (07c)', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Участвовать в Verified' })).toBeDisabled(),
     );
-    expect(screen.getByRole('button', { name: 'Участвовать в START' })).toBeEnabled();
+    // вторая кнопка уровня тоже неактивна: параллельной заявки другого уровня нет (ревью pass 1)
+    expect(screen.getByRole('button', { name: 'Участвовать в START' })).toBeDisabled();
 
     await act(async () =>
       resolve(
@@ -140,13 +142,57 @@ describe('заявка: выбор уровня (07c)', () => {
     expect(screen.getByRole('button', { name: 'Вернуться к гонке' })).toBeOnTheScreen();
   });
 
-  it('409 VERIFIED_PROFILE_REQUIRED — текст по коду и перезапрос участия', async () => {
+  it('409 VERIFIED_PROFILE_REQUIRED — переход к анкете с возвратом к гонке (§11.3), участие перезапрошено', async () => {
     enterRace.mockRejectedValue(conflict('VERIFIED_PROFILE_REQUIRED'));
-    await open();
+    jest.mocked(api.getVerifiedProfile).mockResolvedValue(verifiedView({ profile: null }));
+    const router = await open();
 
     await fireEvent.press(await screen.findByRole('button', { name: 'Участвовать в Verified' }));
-    expect(await screen.findByText('Для Verified заполните анкету зачёта')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Анкета зачёта' })).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/settings/verified');
+    expect(router.getSearchParams()).toEqual({ race: RACE_ID });
     await waitFor(() => expect(getMyRaceEntry).toHaveBeenCalledTimes(2));
+  });
+
+  it('START, пока идёт заявка, — обе кнопки уровня неактивны', async () => {
+    enterRace.mockReturnValue(new Promise(() => undefined));
+    await open();
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Участвовать в START' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Участвовать в START' })).toBeDisabled(),
+    );
+    expect(screen.getByRole('button', { name: 'Участвовать в Verified' })).toBeDisabled();
+  });
+
+  it('после Verified-заявки кэш анкеты устаревает: пол и год открываются зафиксированными', async () => {
+    const getVerifiedProfile = jest.mocked(api.getVerifiedProfile);
+    getVerifiedProfile.mockResolvedValue(verifiedView());
+    enterRace.mockResolvedValue(
+      myEntry({
+        groupScheme: 'gender_age',
+        entry: { ...myEntry().entry!, tier: 'verified', groupKey: 'm_u40' },
+        verified: verifiedState(),
+      }),
+    );
+    await open();
+    await screen.findByRole('button', { name: 'Участвовать в Verified' });
+    // анкета открыта до заявки — в кэше свежая незафиксированная
+    await act(() => expoRouter.push(`/settings/verified?race=${RACE_ID}`));
+    expect(await screen.findByRole('button', { name: 'Женский' })).toBeOnTheScreen();
+    await act(() => expoRouter.back());
+
+    getVerifiedProfile.mockResolvedValue(verifiedView({ demographicsLocked: true }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Участвовать в Verified' }));
+    expect(await screen.findByText('Ваше участие')).toBeOnTheScreen();
+
+    await act(() => expoRouter.push(`/settings/verified?race=${RACE_ID}`));
+    expect(
+      await screen.findByText(
+        'Пол и год рождения зафиксированы заявкой Verified — изменить их может команда платформы.',
+      ),
+    ).toBeOnTheScreen();
+    expect(getVerifiedProfile).toHaveBeenCalledTimes(2);
   });
 
   it('422 RESULT_GROUP_NOT_ALLOWED — текст по коду', async () => {

@@ -126,29 +126,39 @@ function RowsSkeleton() {
   );
 }
 
-/** Ошибка вкладки: компактный баннер с повтором — карточка гонки не ломается. */
-function TabFailure({
-  error,
-  message,
-  retry,
-}: {
+/** Запрос вкладки: минимум для состояний загрузки и ошибки. */
+interface TabQuery {
+  data: unknown;
   error: unknown;
-  message: string;
-  retry: () => void;
-}) {
+  isError: boolean;
+  fetchStatus: 'fetching' | 'paused' | 'idle';
+  refetch: () => unknown;
+}
+
+/**
+ * Ошибка вкладки: компактный баннер с повтором — карточка гонки не ломается. Без сети первая загрузка вкладки встаёт
+ * на паузу (`onlineManager`) — сразу «Нет соединения», не вечный скелетон (§4.12, как `AsyncContent`).
+ */
+function TabFailure({ query, message }: { query: TabQuery; message: string }) {
+  const offline = query.data === undefined && query.fetchStatus === 'paused';
+  if (!offline && !query.isError) return null;
+  const network = offline || isNetworkError(query.error);
   return (
     <View style={styles.failure}>
       <Banner
         tone="warning"
-        title={t(isNetworkError(error) ? 'state.errorTitle' : 'state.failedTitle')}
+        title={t(network ? 'state.errorTitle' : 'state.failedTitle')}
         message={message}
       />
       <View style={styles.start}>
-        <TextAction label={t('state.retry')} onPress={retry} />
+        <TextAction label={t('state.retry')} onPress={() => void query.refetch()} />
       </View>
     </View>
   );
 }
+
+/** Первая загрузка вкладки идёт (не ошибка и не пауза без сети) — скелетон. */
+const loading = (query: TabQuery) => !query.isError && query.fetchStatus !== 'paused';
 
 /** «Показать ещё» по курсору страницы. */
 function MoreAction({
@@ -272,17 +282,11 @@ export function RaceResultsTable({
           <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
             {t('races.results.finishersHint')}
           </Text>
-          {finishers.isError ? (
-            <TabFailure
-              error={finishers.error}
-              message={t('races.results.finishersFailed')}
-              retry={() => void finishers.refetch()}
-            />
-          ) : null}
+          <TabFailure query={finishers} message={t('races.results.finishersFailed')} />
           {finishers.data === undefined ? (
-            finishers.isError ? null : (
+            loading(finishers) ? (
               <RowsSkeleton />
-            )
+            ) : null
           ) : finisherRows.length === 0 ? (
             <Text style={[textStyle('body'), { color: theme.text.secondary }]}>
               {t('races.results.finishersEmpty')}
@@ -303,17 +307,11 @@ export function RaceResultsTable({
               {t('races.results.count', { count: page.ranked })}
             </Text>
           ) : null}
-          {shown.isError ? (
-            <TabFailure
-              error={shown.error}
-              message={t('races.results.failed')}
-              retry={() => void shown.refetch()}
-            />
-          ) : null}
+          <TabFailure query={shown} message={t('races.results.failed')} />
           {pages === undefined ? (
-            shown.isError ? null : (
+            loading(shown) ? (
               <RowsSkeleton />
-            )
+            ) : null
           ) : rows.length === 0 ? (
             <Text style={[textStyle('body'), { color: theme.text.secondary }]}>
               {t('races.results.empty')}

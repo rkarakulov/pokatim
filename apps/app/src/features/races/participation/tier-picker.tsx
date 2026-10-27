@@ -1,13 +1,16 @@
-import type { MyRaceEntry } from '@pokatim/contracts';
+import type { MyRaceEntry, ResultGroupKey } from '@pokatim/contracts';
 import { space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { Banner, Button, TextAction, textStyle, useTheme } from '@rkarakulov/ui';
+import { useRouter } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { apiErrorCode } from '@/features/auth/error-messages';
+
 import { raceActionErrorText, tierLabel } from '../participation-format';
 import { useEnterRace } from '../queries';
-import { VerifiedChoice } from './group-picker';
+import { VerifiedChoice, verifiedProfilePath } from './group-picker';
 
 /** Уровень с коротким объяснением: заголовок, что даёт, действие. */
 function TierOption({
@@ -34,14 +37,32 @@ function TierOption({
   );
 }
 
+/** `VERIFIED_PROFILE_REQUIRED` — анкеты нет (удалена или не дошла до клиента): переход к ней с возвратом к гонке (§11.3). */
+function useVerifiedEnter(raceId: string) {
+  const router = useRouter();
+  const enter = useEnterRace(raceId);
+  const submit = (groupKey: ResultGroupKey) =>
+    enter.mutate(
+      { tier: 'verified', groupKey },
+      {
+        onError: (error) => {
+          if (apiErrorCode(error) === 'VERIFIED_PROFILE_REQUIRED') {
+            router.push(verifiedProfilePath(raceId));
+          }
+        },
+      },
+    );
+  return { enter, submit };
+}
+
 /**
  * Заявка с выбором уровня (race-results-07, схема `gender_age`): Verified — анкета (если нет) и группа зачёта; START
- * — сразу. Ответ сервера — в кеш участия; отказ — баннер по коду (`VERIFIED_PROFILE_REQUIRED` перезапрашивает участие
- * — блок покажет «Заполнить анкету»).
+ * — сразу. Ответ сервера — в кеш участия; отказ — баннер по коду (участие перезапрашивается), `VERIFIED_PROFILE_REQUIRED`
+ * — ещё и переход к анкете. Пока идёт заявка, обе кнопки уровня неактивны.
  */
 export function TierPicker({ entry, raceId }: { entry: MyRaceEntry; raceId: string }) {
   const theme = useTheme();
-  const enter = useEnterRace(raceId);
+  const { enter, submit } = useVerifiedEnter(raceId);
   const pendingTier = enter.isPending ? enter.variables?.tier : undefined;
   return (
     <View style={styles.picker}>
@@ -54,7 +75,8 @@ export function TierPicker({ entry, raceId }: { entry: MyRaceEntry; raceId: stri
           raceId={raceId}
           submitLabel={t('races.tier.enterVerified')}
           pending={pendingTier === 'verified'}
-          onSubmit={(groupKey) => enter.mutate({ tier: 'verified', groupKey })}
+          disabled={enter.isPending}
+          onSubmit={submit}
         />
       </TierOption>
       <TierOption tier="start" hint={t('races.tier.startHint')}>
@@ -62,6 +84,7 @@ export function TierPicker({ entry, raceId }: { entry: MyRaceEntry; raceId: stri
           label={t('races.tier.enterStart')}
           variant="secondary"
           loading={pendingTier === 'start'}
+          disabled={enter.isPending}
           onPress={() => enter.mutate({ tier: 'start' })}
         />
       </TierOption>
@@ -76,7 +99,7 @@ export function TierPicker({ entry, raceId }: { entry: MyRaceEntry; raceId: stri
  */
 export function UpgradeAction({ entry, raceId }: { entry: MyRaceEntry; raceId: string }) {
   const theme = useTheme();
-  const enter = useEnterRace(raceId);
+  const { enter, submit } = useVerifiedEnter(raceId);
   const [open, setOpen] = useState(false);
   if (!entry.actions.canUpgrade || entry.verified === null) return null;
   if (!open) {
@@ -102,7 +125,7 @@ export function UpgradeAction({ entry, raceId }: { entry: MyRaceEntry; raceId: s
         raceId={raceId}
         submitLabel={t('races.tier.upgrade')}
         pending={enter.isPending}
-        onSubmit={(groupKey) => enter.mutate({ tier: 'verified', groupKey })}
+        onSubmit={submit}
       />
       {enter.error ? <Banner tone="error" message={raceActionErrorText(enter.error)} /> : null}
       <View style={styles.start}>

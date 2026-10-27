@@ -18,12 +18,14 @@ import {
   useQuery,
   useQueryClient,
   type QueryClient,
+  type QueryKey,
 } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { apiErrorCode } from '@/features/auth/error-messages';
 import { AUTH_MUTATION } from '@/features/auth/queries';
+import { VERIFIED_PROFILE_KEY } from '@/features/profile/queries';
 import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
@@ -304,6 +306,18 @@ export function useRaceFinishers(id: string, enabled: boolean) {
   });
 }
 
+/**
+ * Pull-to-refresh карточки: все активные запросы таблицы (`raceResultsKey`) — группа по умолчанию, выбранная вкладка
+ * группы и «Финишёры» (их запросы живут в `RaceResultsTable`, карточка их не держит).
+ */
+export function useRaceResultsRefetch(id: string) {
+  const client = useQueryClient();
+  return useCallback(
+    () => client.refetchQueries({ queryKey: raceResultsKey(id), type: 'active' }),
+    [client, id],
+  );
+}
+
 /** Свои заезды в окне гонки для «Выбрать свой заезд». */
 export function useAttemptCandidates(id: string, enabled: boolean) {
   return useQuery({
@@ -325,15 +339,27 @@ async function applyEntry(queryClient: QueryClient, entry: MyRaceEntry): Promise
   ]);
 }
 
-/** Мутация участия: ответ — в кеш; отказ 409 участия — `actions` устарели, участие перезапрашивается (F14). */
-function useEntryMutation<V>(id: string, call: (token: string, body: V) => Promise<MyRaceEntry>) {
+/**
+ * Мутация участия: ответ — в кеш; отказ 409 участия — `actions` устарели, участие перезапрашивается (F14).
+ * `staleAfter` — ключи, которые устаревают после успеха (по телу запроса).
+ */
+function useEntryMutation<V>(
+  id: string,
+  call: (token: string, body: V) => Promise<MyRaceEntry>,
+  staleAfter?: (body: V) => readonly QueryKey[],
+) {
   const queryClient = useQueryClient();
   return useMutation({
     ...AUTH_MUTATION,
     // опрос, начатый до мутации, отменяем сразу: его ответ не придёт поверх ответа мутации
     onMutate: () => queryClient.cancelQueries({ queryKey: raceEntryKey(id) }),
     mutationFn: (body: V) => withAccessToken((token) => call(token, body)),
-    onSuccess: (entry) => applyEntry(queryClient, entry),
+    onSuccess: async (entry, body) => {
+      await applyEntry(queryClient, entry);
+      await Promise.all(
+        (staleAfter?.(body) ?? []).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      );
+    },
     onError: (error) => {
       if (isRaceErrorCode(apiErrorCode(error))) {
         void queryClient.invalidateQueries({ queryKey: raceEntryKey(id) });
@@ -347,8 +373,11 @@ function useEntryMutation<V>(id: string, call: (token: string, body: V) => Promi
  * `{ tier, groupKey }` — намерение, правила проверяет сервер.
  */
 export const useEnterRace = (id: string) =>
-  useEntryMutation<NonNullable<RaceEntryRequest> | void>(id, (token, body) =>
-    body ? api.enterRace(token, id, body) : api.enterRace(token, id),
+  useEntryMutation<NonNullable<RaceEntryRequest> | void>(
+    id,
+    (token, body) => (body ? api.enterRace(token, id, body) : api.enterRace(token, id)),
+    // Verified-заявка фиксирует пол и год анкеты — кэш анкеты устарел (иначе откроется редактируемой)
+    (body) => (body && body.tier === 'verified' ? [VERIFIED_PROFILE_KEY] : []),
   );
 
 /** «Отменить участие». */

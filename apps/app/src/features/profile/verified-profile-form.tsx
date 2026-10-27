@@ -12,7 +12,7 @@ import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { Banner, Button, Checkbox, Chip, TextField, textStyle, useTheme } from '@rkarakulov/ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, Text, View } from 'react-native';
 import { z } from 'zod';
@@ -125,33 +125,51 @@ export function VerifiedProfileFormView({
   });
   const { errors } = form.formState;
   const locked = view.demographicsLocked && view.profile !== null;
+  // пол и год зафиксированы (в том числе после 409 или свежего ответа поверх кэша) — поля формы берут значения
+  // сервера: скрытые поля иначе ушли бы в PUT прежними правками (снова 409). Правки веса, роста и FTP не трогаем.
+  const lockedGender = locked ? valuesOf(view).gender : undefined;
+  const lockedBirthYear = locked ? valuesOf(view).birthYear : undefined;
+  useEffect(() => {
+    if (lockedGender === undefined || lockedBirthYear === undefined) return;
+    form.resetField('gender', { defaultValue: lockedGender });
+    form.resetField('birthYear', { defaultValue: lockedBirthYear });
+  }, [form, lockedGender, lockedBirthYear]);
   const meta = [textStyle('meta'), { color: theme.text.secondary }];
   const errorStyle = [textStyle('meta'), { color: theme.status.error }];
 
-  const onSubmit = form.handleSubmit(async (values) => {
-    setSaved(false);
-    setFailure(undefined);
-    try {
-      const next = await update.mutateAsync(values);
-      form.reset(valuesOf(next));
-      setSaved(true);
-      onSaved?.();
-    } catch (error) {
-      const fields = serverFieldErrors(error, FIELDS);
-      if (fields.length > 0) {
-        for (const { field, code } of fields) {
-          form.setError(field, { type: 'server', message: code });
+  const onSubmit = form.handleSubmit(
+    async (values) => {
+      setSaved(false);
+      setFailure(undefined);
+      try {
+        const next = await update.mutateAsync(values);
+        form.reset(valuesOf(next));
+        setSaved(true);
+        onSaved?.();
+      } catch (error) {
+        const fields = serverFieldErrors(error, FIELDS);
+        if (fields.length > 0) {
+          for (const { field, code } of fields) {
+            form.setError(field, { type: 'server', message: code });
+          }
+          return;
         }
-        return;
+        if (apiErrorCode(error) === 'VERIFIED_DEMOGRAPHICS_LOCKED') {
+          setFailure(t('profile.verified.error.VERIFIED_DEMOGRAPHICS_LOCKED'));
+          void queryClient.invalidateQueries({ queryKey: VERIFIED_PROFILE_KEY });
+          return;
+        }
+        setFailure(actionErrorMessage(error));
       }
-      if (apiErrorCode(error) === 'VERIFIED_DEMOGRAPHICS_LOCKED') {
-        setFailure(t('profile.verified.error.VERIFIED_DEMOGRAPHICS_LOCKED'));
-        void queryClient.invalidateQueries({ queryKey: VERIFIED_PROFILE_KEY });
-        return;
+    },
+    (invalid) => {
+      // скрытые зафиксированные поля не прошли проверку (незнакомое значение сервера) — не молчим
+      if (locked && (invalid.gender || invalid.birthYear)) {
+        setSaved(false);
+        setFailure(t('profile.verified.error.lockedUnreadable'));
       }
-      setFailure(actionErrorMessage(error));
-    }
-  });
+    },
+  );
 
   const numberField = (
     name: 'birthYear' | 'weightKg' | 'heightCm' | 'ftpW',

@@ -1843,6 +1843,8 @@ export const ru = {
   'profile.verified.height': 'Рост, см',
   'profile.verified.ftp': 'FTP, Вт (необязательно)',
   'profile.verified.range': 'Целое число от {min} до {max}.',
+  'profile.verified.error.lockedUnreadable':
+    'Пол или год рождения в анкете не распознаны — обновите приложение или напишите в поддержку',
   'profile.verified.locked':
     'Пол и год рождения зафиксированы заявкой Verified — изменить их может команда платформы.',
   'profile.verified.save': 'Сохранить',

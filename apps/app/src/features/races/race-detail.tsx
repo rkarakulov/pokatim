@@ -40,7 +40,13 @@ import { RaceDisputes } from './disputes/race-disputes';
 import { cancelMessage, formatRaceWindow, raceCardLine } from './format';
 import { RaceParticipation } from './participation/race-participation';
 import { showsResultsTable } from './participation-format';
-import { useMyRaceEntry, useRace, useRaceResults, useRaceRouteRefetch } from './queries';
+import {
+  useMyRaceEntry,
+  useRace,
+  useRaceResults,
+  useRaceResultsRefetch,
+  useRaceRouteRefetch,
+} from './queries';
 import { RaceRouteMap } from './race-route-map';
 import { RaceResultsTable } from './results-table';
 
@@ -206,6 +212,8 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
   const now = useMinskClockAfterMount([race.dataUpdatedAt, entry.dataUpdatedAt]);
   // карта коридора (maps-01): правка коридора опубликованной гонки — карта тоже обновляется
   const routeRefetch = useRaceRouteRefetch(id);
+  // таблица: группа по умолчанию, выбранная вкладка и «Финишёры» (race-results-07c)
+  const resultsRefetch = useRaceResultsRefetch(id);
   const hasCorridor = Boolean(race.data?.corridor);
   const refetchers = useMemo(
     () => [
@@ -213,7 +221,7 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
       ...(hasCorridor ? [routeRefetch] : []),
       ...(signedIn ? [entry.refetch] : []),
       ...(entered ? [disputes.refetch] : []),
-      ...(tableShown ? [results.refetch] : []),
+      ...(tableShown ? [resultsRefetch] : []),
     ],
     [
       race.refetch,
@@ -224,7 +232,7 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
       entered,
       disputes.refetch,
       tableShown,
-      results.refetch,
+      resultsRefetch,
     ],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);

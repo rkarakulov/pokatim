@@ -1,7 +1,10 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { RaceResultsPage } from '@pokatim/contracts';
-import { fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
+import { onlineManager } from '@tanstack/react-query';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
+import type { ReactElement } from 'react';
+import type { RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -91,9 +94,18 @@ beforeEach(() => {
   jest.mocked(api.getMyRaceDisputes).mockResolvedValue(myDisputes());
 });
 afterEach(() => {
+  onlineManager.setOnline(true);
   jest.clearAllMocks();
   jest.useRealTimers();
 });
+
+/** Жест pull-to-refresh карточки гонки. */
+const pullToRefresh = () =>
+  act(async () => {
+    const control = screen.getByTestId('race-detail').props
+      .refreshControl as ReactElement<RefreshControlProps>;
+    control.props.onRefresh?.();
+  });
 
 describe('таблица: вкладки групп (07c, RC-11)', () => {
   it('вкладки из groups + «Финишёры»; по умолчанию — группа ответа, без group в запросе', async () => {
@@ -214,5 +226,63 @@ describe('таблица: «Финишёры» (07c)', () => {
     expect(table().getByText('Не удалось загрузить финишёров')).toBeOnTheScreen();
     await fireEvent.press(table().getByRole('button', { name: 'Повторить' }));
     expect(await screen.findByLabelText('Участник, 2:00:00, Финишёр')).toBeOnTheScreen();
+  });
+});
+
+describe('таблица: вкладки без сети и обновление (07c, ревью pass 1)', () => {
+  it.each([['Женщины до 40'], ['Финишёры']])(
+    'незагруженная вкладка «%s» без сети — «Нет соединения» с повтором, не вечный скелетон',
+    async (name) => {
+      await openAsGuest();
+      await screen.findByLabelText('1, Участник, 1:30:00');
+      await act(async () => {
+        onlineManager.setOnline(false);
+      });
+
+      await fireEvent.press(tab(name));
+      expect(await table().findByText('Нет соединения')).toBeOnTheScreen();
+      expect(table().getByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
+      expect(table().queryAllByLabelText('Загрузка')).toHaveLength(0);
+
+      await act(async () => {
+        onlineManager.setOnline(true);
+      });
+      expect(await table().findByText(/Анна К\.|Пётр/)).toBeOnTheScreen();
+      expect(table().queryByText('Нет соединения')).toBeNull();
+    },
+  );
+
+  it('pull-to-refresh перезапрашивает выбранную вкладку группы', async () => {
+    await openAsGuest();
+    await fireEvent.press(await screen.findByRole('tab', { name: 'Женщины до 40' }));
+    await screen.findByLabelText('1, Анна К., 1:31:40');
+    getRaceResults.mockImplementation((_id, params = {}) =>
+      Promise.resolve(
+        params.group === 'w_u40'
+          ? resultsPage([row({ entryId: RIVAL, place: 1, elapsedSec: 5000, riderName: 'Ольга' })], {
+              group: 'w_u40',
+              groups,
+              finishers: 2,
+            })
+          : resultsPage(men, { group: 'm_u40', groups, finishers: 2 }),
+      ),
+    );
+
+    await pullToRefresh();
+    expect(await screen.findByLabelText('1, Ольга, 1:23:20')).toBeOnTheScreen();
+    expect(getRaceResults).toHaveBeenLastCalledWith(RACE_ID, { limit: 50, group: 'w_u40' });
+  });
+
+  it('pull-to-refresh перезапрашивает «Финишёры»', async () => {
+    await openAsGuest();
+    await fireEvent.press(await screen.findByRole('tab', { name: 'Финишёры' }));
+    await screen.findByLabelText('Участник, 2:00:00, Финишёр');
+    getRaceFinishers.mockResolvedValue(
+      finishersPage([finisher({ riderName: 'Ирина', elapsedSec: 6600 })]),
+    );
+
+    await pullToRefresh();
+    expect(await screen.findByLabelText('Ирина, 1:50:00, Финишёр')).toBeOnTheScreen();
+    expect(getRaceFinishers).toHaveBeenCalledTimes(2);
   });
 });
