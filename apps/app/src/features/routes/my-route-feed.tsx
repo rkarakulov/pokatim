@@ -19,7 +19,7 @@ import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { MyRouteUpload } from './my-route-upload';
 import { useMyRoutes } from './my-routes-queries';
-import { useMyRouteUpload } from './use-my-route-upload';
+import type { useMyRouteUpload } from './use-my-route-upload';
 
 const SKELETON_CARDS = [0, 1, 2];
 
@@ -32,11 +32,17 @@ export const myRoutePath = (id: string) => `/routes/mine/${encodeURIComponent(id
  * «У вас пока нет маршрутов» с действием загрузки; ошибка без данных — «Нет соединения» / «Не удалось загрузить» с
  * повтором; при данных — баннер.
  */
-export function MyRouteFeed({ header }: { header: ReactNode }) {
+export function MyRouteFeed({
+  header,
+  upload,
+}: {
+  header: ReactNode;
+  /** загрузка живёт во вкладке (выше переключателя): переход на «Каталог» её не прерывает */
+  upload: ReturnType<typeof useMyRouteUpload>;
+}) {
   const theme = useTheme();
   const router = useRouter();
   const { feed, loadMore } = useMyRoutes();
-  const upload = useMyRouteUpload();
   const refetchers = useMemo(() => [feed.refetch], [feed.refetch]);
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
 

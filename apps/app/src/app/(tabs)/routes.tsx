@@ -11,6 +11,7 @@ import { TopBar } from '@/components/top-bar';
 import { NO_FILTERS, type RouteFilters } from '@/features/routes/filters';
 import { MyRouteFeed } from '@/features/routes/my-route-feed';
 import { RouteFeed } from '@/features/routes/route-feed';
+import { useMyRouteUpload } from '@/features/routes/use-my-route-upload';
 
 const DOCUMENT_TITLE = `${t('routes.title')} — ${t('app.name')}`;
 
@@ -24,7 +25,8 @@ const SEGMENTS = [
 /**
  * Вкладка «Маршруты»: переключатель «Каталог / Мои» (routes-02, M1, RC-13) — состояние в `?view=mine` (возврат с
  * карточки и перезагрузка web сохраняют «Мои»). «Каталог» (routes-01) — маршруты команды с фильтрами города,
- * дистанции и покрытия; «Мои» — свои маршруты райдера с загрузкой GPX/KML, без фильтров каталога. Только для
+ * дистанции и покрытия; «Мои» — свои маршруты райдера с загрузкой GPX/KML, без фильтров каталога (отправка идёт и
+ * при переключении на «Каталог»). Только для
  * вошедших (как все вкладки). Обновление — pull-to-refresh и фокус (`focusManager`).
  */
 export default function RoutesScreen() {
@@ -33,6 +35,8 @@ export default function RoutesScreen() {
   const params = useLocalSearchParams<{ view?: string }>();
   const view: RoutesView = params.view === 'mine' ? 'mine' : 'catalog';
   const [filters, setFilters] = useState<RouteFilters>(NO_FILTERS);
+  // загрузка своего маршрута — выше переключателя: «Каталог» во время отправки её не отменяет (ревью pass 1)
+  const upload = useMyRouteUpload();
 
   const header = (
     <View style={styles.header}>
@@ -60,7 +64,7 @@ export default function RoutesScreen() {
       <DocumentTitle title={DOCUMENT_TITLE} />
       <TopBar />
       {view === 'mine' ? (
-        <MyRouteFeed header={header} />
+        <MyRouteFeed header={header} upload={upload} />
       ) : (
         <RouteFeed filters={filters} onFiltersChange={setFilters} header={header} />
       )}

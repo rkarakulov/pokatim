@@ -16,7 +16,8 @@ import {
   useTheme,
 } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -31,6 +32,7 @@ import { routeKm } from './format';
 import { myRouteStatus, myRouteUploadedAt, routeTitleError } from './my-route-format';
 import {
   myRouteMapOptions,
+  myRoutesKeys,
   useDeleteMyRoute,
   useMyRoute,
   useRenameMyRoute,
@@ -85,7 +87,10 @@ function RenameForm({ route, onDone }: { route: MyRoute; onDone: () => void }) {
   );
 }
 
-/** «Удалить» с подтверждением (как `UploadRow`): после успеха — «Мои маршруты». */
+/**
+ * «Удалить» с подтверждением (как `UploadRow`): после успеха — «Мои маршруты» (`dismissTo`: вкладка уже в стеке —
+ * снять экраны над ней, нет (ссылка) — заменить; `replace` положил бы второй экземпляр вкладок).
+ */
 function DeleteAction({ route }: { route: MyRoute }) {
   const theme = useTheme();
   const router = useRouter();
@@ -117,7 +122,7 @@ function DeleteAction({ route }: { route: MyRoute }) {
       <Button
         label={t('routes.mine.detail.delete')}
         onPress={() =>
-          remove.mutate(undefined, { onSuccess: () => router.replace(MY_ROUTES_HREF) })
+          remove.mutate(undefined, { onSuccess: () => router.dismissTo(MY_ROUTES_HREF) })
         }
         loading={remove.isPending}
       />
@@ -199,10 +204,22 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
   const router = useRouter();
   const valid = Uuid.safeParse(id).success;
   const route = useMyRoute(id, valid);
-  const refetchers = useMemo(() => [route.refetch], [route.refetch]);
+  const queryClient = useQueryClient();
+  // pull-to-refresh — и карточка, и карта (повтор после ошибки геометрии)
+  const refetchers = useMemo(
+    () => [
+      route.refetch,
+      () => queryClient.refetchQueries({ queryKey: myRoutesKeys.map(id), type: 'active' }),
+    ],
+    [route.refetch, queryClient, id],
+  );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
-  const notFound =
-    !valid || (route.data === undefined && apiErrorOf(route.error)?.code === 'NOT_FOUND');
+  // 404 и при показанных данных (удалён на другом устройстве): «Маршрут недоступен», кеш карты — прочь
+  const gone = apiErrorOf(route.error)?.code === 'NOT_FOUND';
+  const notFound = !valid || gone;
+  useEffect(() => {
+    if (gone) queryClient.removeQueries({ queryKey: myRoutesKeys.map(id) });
+  }, [gone, queryClient, id]);
 
   return (
     <SafeAreaView

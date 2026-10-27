@@ -4,6 +4,8 @@ import type { MyRoute, MyRoutePage, RouteMapGeometry } from '@pokatim/contracts'
 import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { getDocumentAsync } from 'expo-document-picker';
+import type { ReactElement } from 'react';
+import type { RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -351,5 +353,78 @@ describe('карточка своего маршрута (AC3, M3)', () => {
     await waitFor(() => expect(deleteMine).toHaveBeenCalledWith(TOKEN, ring.id));
     await waitFor(() => expect(router.getPathname()).toBe('/routes'));
     expect(router.getSearchParams()).toMatchObject({ view: 'mine' });
+  });
+});
+
+describe('фиксы ревью pass 1', () => {
+  const openDetail = (id: string) =>
+    renderRouter(routes, { initialUrl: `/routes/mine/${id}`, wrapper: createQueryWrapper() });
+  const mapLabel = 'Карта моего маршрута: 42 км, старт и финиш отмечены';
+  const pullDetail = async () => {
+    const control = screen.getByTestId('my-route-detail').props
+      .refreshControl as ReactElement<RefreshControlProps>;
+    await act(async () => {
+      await control.props.onRefresh?.();
+    });
+  };
+
+  it('ошибка геометрии — «Не удалось загрузить» с повтором; повтор показывает карту', async () => {
+    getMineMap.mockRejectedValueOnce(http(500, 'INTERNAL'));
+    await openDetail(ring.id);
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.getByText('Длина')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Повторить'));
+    expect(await screen.findByLabelText(mapLabel)).toBeOnTheScreen();
+  });
+
+  it('ошибка геометрии (нет сети) — pull-to-refresh карточки перезапрашивает и карту', async () => {
+    getMineMap.mockRejectedValueOnce(new ApiNetworkError(new TypeError('x')));
+    await openDetail(ring.id);
+    expect(await screen.findByText('Нет соединения')).toBeOnTheScreen();
+    await pullDetail();
+    expect(await screen.findByLabelText(mapLabel)).toBeOnTheScreen();
+    expect(getMineMap).toHaveBeenCalledTimes(2);
+  });
+
+  it('удалён на другом устройстве: обновление с 404 при показанных данных — «Маршрут недоступен», карты нет', async () => {
+    await openDetail(ring.id);
+    expect(await screen.findByLabelText(mapLabel)).toBeOnTheScreen();
+    getMine.mockRejectedValue(http(404, 'NOT_FOUND'));
+    await pullDetail();
+    expect(await screen.findByText('Маршрут недоступен')).toBeOnTheScreen();
+    expect(screen.queryByLabelText(mapLabel)).toBeNull();
+    expect(screen.queryByText('Длина')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Удалить' })).toBeNull();
+  });
+
+  it('удаление из карточки, открытой из ленты, — возврат к той же вкладке (один экземпляр вкладок в стеке)', async () => {
+    deleteMine.mockResolvedValue(undefined);
+    const router = await openTab();
+    await fireEvent.press(await screen.findByRole('link', { name: ringLabel }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Удалить' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Удалить' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/routes'));
+    const root = screen.getRouterState()?.routes[0]?.state;
+    expect(root?.routes.map((route) => route.name)).toEqual(['(tabs)']);
+  });
+
+  it('открытие готовой карточки не перезапрашивает ленту', async () => {
+    await openTab();
+    await fireEvent.press(await screen.findByRole('link', { name: ringLabel }));
+    expect(await screen.findByText('Длина')).toBeOnTheScreen();
+    expect(listMine).toHaveBeenCalledTimes(1);
+  });
+
+  it('отправка не прерывается переключением на «Каталог» и обратно', async () => {
+    picked('route.gpx', 1024);
+    await openTab();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Загрузить маршрут' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Загрузить' }));
+    await waitFor(() => expect(FakeXhr.last).toBeDefined());
+    await act(async () => FakeXhr.last?.progress(40, 100));
+    await fireEvent.press(screen.getByRole('tab', { name: 'Каталог' }));
+    await fireEvent.press(await screen.findByRole('tab', { name: 'Мои' }));
+    expect(await screen.findByText('Загружаем route.gpx: 40%')).toBeOnTheScreen();
+    expect(FakeXhr.last?.aborted).toBe(false);
   });
 });

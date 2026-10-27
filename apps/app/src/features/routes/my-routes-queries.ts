@@ -8,7 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { api } from '@/lib/api';
@@ -67,15 +67,23 @@ export function useMyRoute(id: string, enabled: boolean) {
     queryKey: myRoutesKeys.detail(id),
     queryFn: () => withAccessToken((token) => api.getMyRoute(token, id)),
     staleTime: DEFAULT_STALE_MS,
+    // удалён (404) — опрос прекращается, даже если в кеше остался «Обрабатывается»
     refetchInterval: (query) =>
-      query.state.data && isProcessing(query.state.data) ? MY_ROUTE_POLL_MS : false,
+      query.state.data &&
+      isProcessing(query.state.data) &&
+      apiErrorOf(query.state.error)?.code !== 'NOT_FOUND'
+        ? MY_ROUTE_POLL_MS
+        : false,
     enabled,
   });
+  // список обновляется только при переходе из «Обрабатывается» (открытие готовой карточки его не трогает)
   const status = route.data?.status;
+  const previous = useRef(status);
   useEffect(() => {
-    if (status !== undefined && status !== 'processing') {
+    if (previous.current === 'processing' && status !== undefined && status !== 'processing') {
       void queryClient.invalidateQueries({ queryKey: myRoutesKeys.list });
     }
+    previous.current = status;
   }, [status, queryClient]);
   return route;
 }
