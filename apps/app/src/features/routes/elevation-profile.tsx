@@ -4,16 +4,8 @@ import { t } from '@pokatim/i18n';
 import { textStyle, useTheme } from '@rkarakulov/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
-import {
-  profileBarHeights,
-  profileBars,
-  profileRangeLabel,
-  profileSummary,
-  profileTicks,
-} from './format';
-
-/** Столбиков площади профиля: ~3,6 px при ширине телефона, без зазоров (RC-7). */
-export const PROFILE_BARS = 96;
+import { profileRangeLabel, profileSummary, profileTicks } from './format';
+import { ProfileChart } from './profile-chart';
 
 /** Пропорция графика (раскладка, не px — как `MAP_ASPECT_RATIO`): ≈ 86 при ширине телефона. */
 export const PROFILE_ASPECT_RATIO = 4;
@@ -22,10 +14,10 @@ export const PROFILE_ASPECT_RATIO = 4;
 const TICK_ALIGN_END_FROM = 0.85;
 
 /**
- * Профиль высоты маршрута (routes-03, P4, RC-7): заголовок, диапазон «191–267 м» справа, площадь из столбиков
- * `View` (фиксированное число, `flex: 1`, высота — процент; без `onLayout` — SSR и первый клиентский рендер
- * совпадают), подписи оси X в км. Для скринридера — один элемент-изображение с текстовой альтернативой, столбики
- * скрыты. Профиля нет — блока нет.
+ * Профиль высоты маршрута (routes-03, P4, RC-7): заголовок, диапазон «191–267 м» справа, площадь `ProfileChart`
+ * (web — плавный SVG-путь, native — узкие столбики; тонкая линия и светлая заливка в приглушённом цвете, без
+ * `onLayout` — SSR и первый клиентский рендер совпадают), подписи оси X в км. Для скринридера — один
+ * элемент-изображение с текстовой альтернативой, график скрыт. Профиля нет — блока нет.
  */
 export function ElevationProfile({
   elevation,
@@ -38,11 +30,6 @@ export function ElevationProfile({
 }) {
   const theme = useTheme<AppTheme>();
   if (elevation === null) return null;
-  const heights = profileBarHeights(
-    profileBars(elevation.profile, PROFILE_BARS),
-    elevation.minM,
-    elevation.maxM,
-  );
   const ticks = profileTicks(distanceM);
   const muted = { color: theme.text.secondary };
   return (
@@ -64,18 +51,11 @@ export function ElevationProfile({
         style={[styles.chart, { borderBottomColor: theme.border.subtle }]}
       >
         <View
-          style={styles.bars}
+          style={styles.area}
           importantForAccessibility="no-hide-descendants"
           accessibilityElementsHidden
         >
-          {heights.map((height, index) => (
-            <View
-              // столбики статичны — ключ по позиции
-              key={index}
-              testID="elevation-profile-bar"
-              style={[styles.bar, { height: `${height * 100}%`, backgroundColor: theme.map.route }]}
-            />
-          ))}
+          <ProfileChart elevation={elevation} theme={theme} />
         </View>
       </View>
       <View
@@ -110,8 +90,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   title: { flexShrink: 1 },
   chart: { width: '100%', aspectRatio: PROFILE_ASPECT_RATIO, borderBottomWidth: stroke.hairline },
-  bars: { flex: 1, flexDirection: 'row', alignItems: 'flex-end' },
-  bar: { flex: 1 },
+  area: { flex: 1 },
   axis: { position: 'relative', width: '100%' },
   tick: { position: 'absolute', top: 0 },
   spacer: { opacity: 0 },

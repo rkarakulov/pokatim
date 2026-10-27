@@ -3,7 +3,8 @@ import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { contrastRatio, themes, WCAG } from '@pokatim/design-tokens';
 import { render, screen } from '@testing-library/react-native';
 
-import { ElevationProfile, PROFILE_BARS } from './elevation-profile';
+import { ElevationProfile } from './elevation-profile';
+import { PROFILE_BARS } from './profile-chart';
 
 const elevation: CatalogRouteElevation = {
   minM: 191,
@@ -50,9 +51,11 @@ describe('ElevationProfile (routes-03, P4, RC-7)', () => {
     expect(JSON.stringify(view.toJSON())).toBe(first);
   });
 
-  it('цвет площади (map.route) контрастен фону карточки в обеих темах (WCAG для графики)', () => {
+  it('линия профиля (map.corridor, приглушённая) контрастна фону карточки в обеих темах (WCAG для графики)', () => {
     for (const theme of [themes.light, themes.dark]) {
-      expect(contrastRatio(theme.map.route, theme.surface.default)).toBeGreaterThanOrEqual(WCAG.ui);
+      expect(contrastRatio(theme.map.corridor, theme.surface.default)).toBeGreaterThanOrEqual(
+        WCAG.ui,
+      );
     }
   });
 });

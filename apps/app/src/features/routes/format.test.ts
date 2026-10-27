@@ -3,6 +3,7 @@ import type { CatalogRouteCard, CatalogRouteDetail } from '@pokatim/contracts';
 
 import {
   profileBarHeights,
+  profilePoints,
   profileBars,
   profileRangeLabel,
   profileSummary,
@@ -151,6 +152,23 @@ describe('профиль высоты (routes-03, P4)', () => {
   it('высоты столбиков: мин. — 8 %, макс. — 100 %, ровный — середина', () => {
     expect(profileBarHeights([191, 267], 191, 267)).toEqual([0.08, 1]);
     expect(profileBarHeights([200, 200], 200, 200)).toEqual([0.5, 0.5]);
+    // точки SVG (web): X — доля дистанции, Y — те же доли высоты, что у столбиков
+    expect(
+      profilePoints(
+        [
+          [0, 191],
+          [500, 229],
+          [1000, 267],
+        ],
+        191,
+        267,
+      ),
+    ).toEqual([
+      [0, 0.08],
+      [0.5, 0.54],
+      [1, 1],
+    ]);
+    expect(profilePoints([[0, 200]], 200, 200)).toEqual([]);
   });
 
   it('диапазон и текстовая альтернатива', () => {
