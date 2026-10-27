@@ -55,3 +55,28 @@ describe('шрифты тем приложения', () => {
     },
   );
 });
+
+describe('гарнитуры шести тем (слайс C)', () => {
+  it('Атлас: display 600 — Manrope Bold, текст 400 — Manrope Regular', () => {
+    const { families } = themeFonts(appThemes.atlas);
+    expect(families.display[600]).toBe('Manrope_700Bold');
+    expect(families.text[400]).toBe('Manrope_400Regular');
+  });
+
+  it('Хронометр: display 600 — Roboto Condensed Bold, текст — Inter', () => {
+    const { families } = themeFonts(appThemes.chrono);
+    expect(families.display[600]).toBe('RobotoCondensed_700Bold');
+    expect(families.text[400]).toBe('Inter_400Regular');
+  });
+
+  it('наборы без дублей: у гарнитуры с двумя ролями — 4 файла, у «Inter + заголовочная» — 6', () => {
+    expect(Object.keys(themeFonts(appThemes.atlas).assets)).toHaveLength(4);
+    expect(Object.keys(themeFonts(appThemes.planner).assets)).toHaveLength(4);
+    expect(Object.keys(themeFonts(appThemes.journal).assets)).toHaveLength(4);
+    expect(Object.keys(themeFonts(appThemes.typography).assets)).toHaveLength(6);
+  });
+
+  it('всего подключено 24 файла: 6 прежних + 18 гарнитур тем', () => {
+    expect(Object.keys(fontAssets)).toHaveLength(24);
+  });
+});

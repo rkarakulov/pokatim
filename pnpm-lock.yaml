@@ -339,10 +339,28 @@ importers:
 
   apps/app:
     dependencies:
+      '@expo-google-fonts/golos-text':
+        specifier: ^0.4.2
+        version: 0.4.2
       '@expo-google-fonts/inter':
         specifier: ^0.4.2
         version: 0.4.2
+      '@expo-google-fonts/inter-tight':
+        specifier: ^0.4.2
+        version: 0.4.2
+      '@expo-google-fonts/manrope':
+        specifier: ^0.4.2
+        version: 0.4.2
+      '@expo-google-fonts/onest':
+        specifier: ^0.4.2
+        version: 0.4.2
+      '@expo-google-fonts/oswald':
+        specifier: ^0.4.2
+        version: 0.4.2
       '@expo-google-fonts/playfair-display':
+        specifier: ^0.4.2
+        version: 0.4.2
+      '@expo-google-fonts/roboto-condensed':
         specifier: ^0.4.2
         version: 0.4.2
       '@expo/metro-runtime':
@@ -1409,14 +1427,32 @@ packages:
       '@noble/hashes':
         optional: true
 
+  '@expo-google-fonts/golos-text@0.4.2':
+    resolution: {integrity: sha512-BBGCN2hd8Wof4USWcV3SmUvC2Me5GozHMDEoKPqZeAA4RutKQf+9asG/iSTVsHGXsD6z7RytQgq/VcFqZcXq3Q==}
+
+  '@expo-google-fonts/inter-tight@0.4.2':
+    resolution: {integrity: sha512-/b4YLh8v145nMfrtw0FF2EB8eRhw/SVt/LdhzN1+Faz/uSFvZkF7EtxfipV8iacDSb1PUqyssHd0tZjlzhhf2g==}
+
   '@expo-google-fonts/inter@0.4.2':
     resolution: {integrity: sha512-syfiImMaDmq7cFi0of+waE2M4uSCyd16zgyWxdPOY7fN2VBmSLKEzkfbZgeOjJq61kSqPBNNtXjggiQiSD6gMQ==}
+
+  '@expo-google-fonts/manrope@0.4.2':
+    resolution: {integrity: sha512-BZsKe8d9BJrVnIQIZcTS7/Kac0TbXnqs/+8EBSiQxrmK6GoCO6eTkmr50D1weIk/EoF20pTmAkpWICnovATr/g==}
 
   '@expo-google-fonts/material-symbols@0.4.50':
     resolution: {integrity: sha512-XNSgSfd+1p6wqRAzzhrckGngHJQ1/z+oCMdI5FN+x/VnDeMMFGkXsuRNPYcZTYYff1GwVwx4u6Gqnb30aALysw==}
 
+  '@expo-google-fonts/onest@0.4.2':
+    resolution: {integrity: sha512-BJELCJFIZWmztzxvvzcQ5H6WXXnsdBgN/jhOQZkG4LQ+tYMqAZ6Z3Z7xe9yzbToe+Ul0RJ+hqPzAjkVJqvWVLg==}
+
+  '@expo-google-fonts/oswald@0.4.2':
+    resolution: {integrity: sha512-ZLB8ou0SmSWThyLDCHQdFnbMrj93hRrpkKMLLoPrIs4QTrPxZyOxHoJ4mFoFCs0efZdV1Yd8mULfaggAblX5Mg==}
+
   '@expo-google-fonts/playfair-display@0.4.2':
     resolution: {integrity: sha512-mWhBV59RUjSS3aYpytUb7UyHHTnXcHh7epAn7gq+M4XAEh5PuMKUrP8eiUfkJLb6UwHZCi7EhQpUzxHu5OL96w==}
+
+  '@expo-google-fonts/roboto-condensed@0.4.2':
+    resolution: {integrity: sha512-O4fsLz/61XD6sY9HEmNpjNh0GNOagmEIWh+F7l+CocU0FSBq5MK1Ipzklsec7i4LQk1fWKF7AdOnOn6QhHQowg==}
 
   '@expo/cli@58.1.13':
     resolution: {integrity: sha512-a3FBo818/laj78tmDe8j/oOmxv8XBtA7nYdQQNHjebj1+RbhJjlZNxc2e1SwFXj8pXtruCdrs7fNFQTAFjS6GA==}
@@ -9138,11 +9174,23 @@ snapshots:
 
   '@exodus/bytes@1.16.0': {}
 
+  '@expo-google-fonts/golos-text@0.4.2': {}
+
+  '@expo-google-fonts/inter-tight@0.4.2': {}
+
   '@expo-google-fonts/inter@0.4.2': {}
+
+  '@expo-google-fonts/manrope@0.4.2': {}
 
   '@expo-google-fonts/material-symbols@0.4.50': {}
 
+  '@expo-google-fonts/onest@0.4.2': {}
+
+  '@expo-google-fonts/oswald@0.4.2': {}
+
   '@expo-google-fonts/playfair-display@0.4.2': {}
+
+  '@expo-google-fonts/roboto-condensed@0.4.2': {}
 
   '@expo/cli@58.1.13(@expo/dom-webview@58.0.2)(@expo/metro-runtime@58.0.15)(expo-constants@58.0.12)(expo-font@58.0.9)(expo-router@58.0.24)(expo@58.0.16)(react-dom@19.3.0(react@19.3.0))(react-native@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1)(typescript@6.0.3)':
     dependencies:
