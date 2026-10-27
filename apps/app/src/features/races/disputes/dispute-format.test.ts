@@ -14,6 +14,7 @@ import {
   disputeDate,
   disputeErrorText,
   disputeStatus,
+  inOtherGroup,
   needsDisputePolling,
   responseError,
   rivalAction,
@@ -84,6 +85,29 @@ describe('действие карточки соперника (RC-14, M1)', () 
     ).toBe(true);
     expect(canOpenRival(null, OTHER)).toBe(false);
     expect(canOpenRival(undefined, OTHER)).toBe(false);
+  });
+});
+
+describe('цель в чужой группе зачёта (race-results-07c)', () => {
+  it('разные известные группы — чужая; своя или неизвестная — решает сервер', () => {
+    expect(inOtherGroup('w_u40', 'm_u40')).toBe(true);
+    expect(inOtherGroup('w_u40', 'w_u40')).toBe(false);
+    expect(inOtherGroup(null, 'm_u40')).toBe(false);
+    expect(inOtherGroup(undefined, 'm_u40')).toBe(false);
+    expect(inOtherGroup('unknown', 'm_u40')).toBe(false);
+    expect(inOtherGroup('w_u40', 'unknown')).toBe(false);
+    expect(inOtherGroup('w_u40', undefined)).toBe(false);
+  });
+
+  it('чужая группа — подача не предлагается (ни open, ни closed); мой спор — статус', () => {
+    expect(rivalAction(myDisputes(), RIVAL_ENTRY_ID, true)).toBeNull();
+    expect(
+      rivalAction(myDisputes({ status: 'closed', reason: 'open_limit' }), RIVAL_ENTRY_ID, true),
+    ).toBeNull();
+    expect(canOpenRival(myDisputes(), OTHER, true)).toBe(false);
+    const data = myDisputes({}, { filed: [filed()] });
+    expect(rivalAction(data, RIVAL_ENTRY_ID, true)).toEqual({ kind: 'mine', dispute: filed() });
+    expect(canOpenRival(myDisputes(), OTHER, false)).toBe(true);
   });
 });
 

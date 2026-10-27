@@ -33,13 +33,20 @@ import {
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
-import { canOpenRival } from './disputes/dispute-format';
+import { canOpenRival, inOtherGroup } from './disputes/dispute-format';
+import { rivalPath } from './disputes/dispute-screen';
 import { useMyRaceDisputes } from './disputes/queries';
 import { RaceDisputes } from './disputes/race-disputes';
 import { cancelMessage, formatRaceWindow, raceCardLine } from './format';
 import { RaceParticipation } from './participation/race-participation';
 import { showsResultsTable } from './participation-format';
-import { useMyRaceEntry, useRace, useRaceResults, useRaceRouteRefetch } from './queries';
+import {
+  useMyRaceEntry,
+  useRace,
+  useRaceResults,
+  useRaceResultsRefetch,
+  useRaceRouteRefetch,
+} from './queries';
 import { RaceRouteMap } from './race-route-map';
 import { RaceResultsTable } from './results-table';
 
@@ -166,12 +173,21 @@ function RaceDetailView({
       ) : null}
       {showsResultsTable(race) ? (
         <RaceResultsTable
+          raceId={race.id}
           results={results}
           ownEntryId={signedIn ? (entry.data?.entry?.id ?? null) : null}
-          // карточка соперника — только вошедшему участнику, когда ей есть что показать (RC-14)
-          rowAction={(entryId) =>
-            signedIn && canOpenRival(disputes.data, entryId)
-              ? () => router.push(`/races/result/${race.id}/${entryId}`)
+          // своя группа — вкладка по умолчанию (race-results-07)
+          ownGroup={signedIn ? (entry.data?.entry?.groupKey ?? null) : null}
+          // карточка соперника — только вошедшему участнику, когда ей есть что показать (RC-14); строка чужой группы
+          // зачёта — нет (подачу сервер отклонит); вкладка по умолчанию — группа ответа без `group`
+          rowAction={(entryId, group) =>
+            signedIn &&
+            canOpenRival(
+              disputes.data,
+              entryId,
+              inOtherGroup(entry.data?.entry?.groupKey, group ?? results.data?.pages[0]?.group),
+            )
+              ? () => router.push(rivalPath(race.id, entryId, group))
               : null
           }
         />
@@ -202,6 +218,8 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
   const now = useMinskClockAfterMount([race.dataUpdatedAt, entry.dataUpdatedAt]);
   // карта коридора (maps-01): правка коридора опубликованной гонки — карта тоже обновляется
   const routeRefetch = useRaceRouteRefetch(id);
+  // таблица: группа по умолчанию, выбранная вкладка и «Финишёры» (race-results-07c)
+  const resultsRefetch = useRaceResultsRefetch(id);
   const hasCorridor = Boolean(race.data?.corridor);
   const refetchers = useMemo(
     () => [
@@ -209,7 +227,7 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
       ...(hasCorridor ? [routeRefetch] : []),
       ...(signedIn ? [entry.refetch] : []),
       ...(entered ? [disputes.refetch] : []),
-      ...(tableShown ? [results.refetch] : []),
+      ...(tableShown ? [resultsRefetch] : []),
     ],
     [
       race.refetch,
@@ -220,7 +238,7 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
       entered,
       disputes.refetch,
       tableShown,
-      results.refetch,
+      resultsRefetch,
     ],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);

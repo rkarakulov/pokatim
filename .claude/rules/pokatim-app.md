@@ -232,6 +232,15 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   описание и ответ — однострочный `TextField` базы. Отзыв — `WithdrawConfirm` с `texts`. D-39: причины у
   «Загрузить заезд» (`races.block.*`) и «Отменить участие» (`races.withdrawBlock.*` — только `dispute_open` /
   `disqualified`); 409 — текст по `details.reason`.
+- Уровни и группы (race-results-07c): выбор Verified / START — только `offersTierChoice` (схема `gender_age` и блок
+  `verified` сервера; `overall` и старый API — «Участвовать» без тела, DV-1); группы — готовый `verified.groupOptions`
+  (своя по умолчанию), правил групп в клиенте нет (DV-8); анкеты нет — «Заполнить анкету» →
+  `settings/verified?race=<id>` (после сохранения — `dismissTo` гонки). «Повысить до Verified» — только по
+  `actions.canUpgrade`. Таблица: вкладки — `groups` ответа по умолчанию + «Финишёры» при `finishers > 0`; `group` в
+  запросе — только для вкладки не по умолчанию после ответа с `groups` (RC-11), ключ `[…,'pages',group]`, финишёры —
+  `[…,'finishers']`; карточка соперника и подача спора получают вкладку `?group=` (`rivalPath`, `groupParam`).
+  Анкета `settings/verified` (ссылка из «Профиля»): пол и год при `demographicsLocked` — только чтение; пределы —
+  схемы contracts, текст «Целое число от … до …».
 
 ## Маршруты (routes-01, `docs/product/routes.md`)
 

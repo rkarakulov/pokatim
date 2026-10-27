@@ -17,6 +17,7 @@ import {
   withdrawBlockReason,
 } from '../participation-format';
 import { useAddRaceAttempt, useWithdrawFromRace } from '../queries';
+import { UpgradeAction } from './tier-picker';
 import { WithdrawConfirm } from './withdraw-confirm';
 
 /** Отмена без результата (статус «Нет заездов»): последствий для зачёта нет — без «результат уйдёт» (B7). */
@@ -100,6 +101,7 @@ export function EntryActions({
         </View>
       ) : null}
       {blocked ? <Text style={meta}>{blockReasonText(blocked)}</Text> : null}
+      <UpgradeAction entry={entry} raceId={raceId} />
       {upload.state.phase === 'failed' ? (
         <Banner tone="error" message={upload.state.message} />
       ) : null}

@@ -4,6 +4,7 @@ import {
   Uuid,
   type DisputeCategory,
   type MyRaceDisputes,
+  type ResultGroupKey,
 } from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
@@ -20,16 +21,18 @@ import {
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { useRaceResults } from '../queries';
+import { useMyRaceEntry, useRaceResults } from '../queries';
 import {
   categoryLabel,
   descriptionError,
   disputeErrorText,
   disputeStatus,
+  inOtherGroup,
   rivalAction,
 } from './dispute-format';
 import {
   ActionSkeleton,
+  ActionSkeletonLines,
   BackToRace,
   DisputeNotFound,
   DisputeScreenShell,
@@ -108,24 +111,28 @@ function FileForm({
   );
 }
 
-/** Подать нельзя (срок, лимит, уже подан): статус или причина вместо формы. */
+/** Подать нельзя (срок, лимит, уже подан, чужая группа зачёта): статус или причина вместо формы. */
 function FormGate({
   disputes,
   raceId,
   entryId,
+  otherGroup,
 }: {
   disputes: MyRaceDisputes;
   raceId: string;
   entryId: string;
+  otherGroup: boolean;
 }) {
   const theme = useTheme();
-  const action = rivalAction(disputes, entryId);
+  const action = rivalAction(disputes, entryId, otherGroup);
   if (action?.kind === 'file') {
     return <FileForm raceId={raceId} entryId={entryId} deadline={action.note} />;
   }
   const text =
     action === null
-      ? t(`disputes.filingBlock.${disputes.filing.reason ?? 'unknown'}`)
+      ? otherGroup
+        ? t('disputes.file.otherGroup')
+        : t(`disputes.filingBlock.${disputes.filing.reason ?? 'unknown'}`)
       : action.kind === 'mine'
         ? disputeStatus(action.dispute.status).label
         : action.note;
@@ -138,11 +145,22 @@ function FormGate({
 }
 
 /** «Оспорить результат» (`/races/dispute/<гонка>/<заявка>`, внутри `Stack.Protected`). */
-export function DisputeFormScreen({ raceId, entryId }: { raceId: string; entryId: string }) {
+export function DisputeFormScreen({
+  raceId,
+  entryId,
+  group,
+}: {
+  raceId: string;
+  entryId: string;
+  /** вкладка группы таблицы (race-results-07); нет — группа по умолчанию */
+  group?: ResultGroupKey;
+}) {
   const theme = useTheme();
   const valid = Uuid.safeParse(raceId).success && Uuid.safeParse(entryId).success;
-  const results = useRaceResults(raceId, valid);
+  const results = useRaceResults(raceId, valid, group);
   const disputes = useMyRaceDisputes(raceId, valid);
+  // группа своей заявки — подача только в своей группе зачёта (race-results-07)
+  const entry = useMyRaceEntry(raceId, valid);
 
   return (
     <DisputeScreenShell title={t('disputes.file.title')} raceId={raceId} testID="dispute-form">
@@ -153,14 +171,25 @@ export function DisputeFormScreen({ raceId, entryId }: { raceId: string; entryId
             if (!found) {
               return <DisputeNotFound title={t('disputes.rival.notFound')} raceId={raceId} />;
             }
+            const mine = disputes.data;
             return (
               <View style={styles.form}>
                 <Text style={[textStyle('label'), { color: theme.text.secondary }]}>
                   {t('disputes.file.target')}
                 </Text>
                 <RivalResult row={found.row} page={found.page} />
-                {disputes.data ? (
-                  <FormGate disputes={disputes.data} raceId={raceId} entryId={entryId} />
+                {mine ? (
+                  // участие не загружено — формы нет (ошибка и «Нет соединения» с повтором)
+                  <AsyncContent query={entry} skeleton={<ActionSkeletonLines />}>
+                    {(own) => (
+                      <FormGate
+                        disputes={mine}
+                        raceId={raceId}
+                        entryId={entryId}
+                        otherGroup={inOtherGroup(own?.entry?.groupKey, found.page.group)}
+                      />
+                    )}
+                  </AsyncContent>
                 ) : disputes.isError ? (
                   <DisputesFailure error={disputes.error} retry={() => void disputes.refetch()} />
                 ) : disputes.isPending ? (

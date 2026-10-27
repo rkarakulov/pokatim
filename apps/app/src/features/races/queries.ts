@@ -4,8 +4,11 @@ import type {
   MyAttemptTrack,
   MyRaceEntry,
   RaceDetail,
+  RaceEntryRequest,
+  RaceFinishersPage,
   RacePage,
   RaceResultsPage,
+  ResultGroupKey,
   RaceRouteMap,
   SeasonCard,
 } from '@pokatim/contracts';
@@ -15,12 +18,14 @@ import {
   useQuery,
   useQueryClient,
   type QueryClient,
+  type QueryKey,
 } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { apiErrorCode } from '@/features/auth/error-messages';
 import { AUTH_MUTATION } from '@/features/auth/queries';
+import { VERIFIED_PROFILE_KEY } from '@/features/profile/queries';
 import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
@@ -259,13 +264,18 @@ export function useMyAttemptTrack(raceId: string, attempt: MyAttempt | null, ena
 
 const nextResultsCursor = (page: RaceResultsPage) => page.nextCursor ?? undefined;
 
-/** Предварительная таблица: страницы по 50, «Показать ещё» по `nextCursor`. */
-export function useRaceResults(id: string, enabled: boolean) {
+/**
+ * Предварительная таблица: страницы по 50, «Показать ещё» по `nextCursor`. Без `group` — группа по умолчанию сервера
+ * (ключ `[…, 'pages']`); `group` (race-results-07) — вкладка группы (`[…, 'pages', group]`). `group` передают только
+ * после ответа с непустым `groups` (RC-11: старый сервер ответил бы 400 на лишний ключ).
+ */
+export function useRaceResults(id: string, enabled: boolean, group?: ResultGroupKey) {
   return useInfiniteQuery({
-    queryKey: [...raceResultsKey(id), 'pages'],
+    queryKey: group ? [...raceResultsKey(id), 'pages', group] : [...raceResultsKey(id), 'pages'],
     queryFn: ({ pageParam }) =>
       api.getRaceResults(id, {
         limit: RESULTS_PAGE_LIMIT,
+        ...(group ? { group } : {}),
         ...(pageParam ? { cursor: pageParam } : {}),
       }),
     initialPageParam: null as string | null,
@@ -273,6 +283,39 @@ export function useRaceResults(id: string, enabled: boolean) {
     staleTime: PUBLIC_STALE_MS,
     enabled,
   });
+}
+
+const nextFinishersCursor = (page: RaceFinishersPage) => page.nextCursor ?? undefined;
+
+/**
+ * Финишёры (race-results-07): START и Verified без пульса — без мест, публично. Ключ под префиксом таблицы —
+ * инвалидация таблицы накрывает и его.
+ */
+export function useRaceFinishers(id: string, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: [...raceResultsKey(id), 'finishers'],
+    queryFn: ({ pageParam }) =>
+      api.getRaceFinishers(id, {
+        limit: RESULTS_PAGE_LIMIT,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: nextFinishersCursor,
+    staleTime: PUBLIC_STALE_MS,
+    enabled,
+  });
+}
+
+/**
+ * Pull-to-refresh карточки: все активные запросы таблицы (`raceResultsKey`) — группа по умолчанию, выбранная вкладка
+ * группы и «Финишёры» (их запросы живут в `RaceResultsTable`, карточка их не держит).
+ */
+export function useRaceResultsRefetch(id: string) {
+  const client = useQueryClient();
+  return useCallback(
+    () => client.refetchQueries({ queryKey: raceResultsKey(id), type: 'active' }),
+    [client, id],
+  );
 }
 
 /** Свои заезды в окне гонки для «Выбрать свой заезд». */
@@ -296,15 +339,27 @@ async function applyEntry(queryClient: QueryClient, entry: MyRaceEntry): Promise
   ]);
 }
 
-/** Мутация участия: ответ — в кеш; отказ 409 участия — `actions` устарели, участие перезапрашивается (F14). */
-function useEntryMutation<V>(id: string, call: (token: string, body: V) => Promise<MyRaceEntry>) {
+/**
+ * Мутация участия: ответ — в кеш; отказ 409 участия — `actions` устарели, участие перезапрашивается (F14).
+ * `staleAfter` — ключи, которые устаревают после успеха (по телу запроса).
+ */
+function useEntryMutation<V>(
+  id: string,
+  call: (token: string, body: V) => Promise<MyRaceEntry>,
+  staleAfter?: (body: V) => readonly QueryKey[],
+) {
   const queryClient = useQueryClient();
   return useMutation({
     ...AUTH_MUTATION,
     // опрос, начатый до мутации, отменяем сразу: его ответ не придёт поверх ответа мутации
     onMutate: () => queryClient.cancelQueries({ queryKey: raceEntryKey(id) }),
     mutationFn: (body: V) => withAccessToken((token) => call(token, body)),
-    onSuccess: (entry) => applyEntry(queryClient, entry),
+    onSuccess: async (entry, body) => {
+      await applyEntry(queryClient, entry);
+      await Promise.all(
+        (staleAfter?.(body) ?? []).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      );
+    },
     onError: (error) => {
       if (isRaceErrorCode(apiErrorCode(error))) {
         void queryClient.invalidateQueries({ queryKey: raceEntryKey(id) });
@@ -313,9 +368,17 @@ function useEntryMutation<V>(id: string, call: (token: string, body: V) => Promi
   });
 }
 
-/** «Участвовать». */
+/**
+ * «Участвовать» и «Повысить до Verified» (race-results-07): без тела — прежняя заявка (схема `overall`, старый API);
+ * `{ tier, groupKey }` — намерение, правила проверяет сервер.
+ */
 export const useEnterRace = (id: string) =>
-  useEntryMutation<void>(id, (token) => api.enterRace(token, id));
+  useEntryMutation<NonNullable<RaceEntryRequest> | void>(
+    id,
+    (token, body) => (body ? api.enterRace(token, id, body) : api.enterRace(token, id)),
+    // Verified-заявка фиксирует пол и год анкеты — кэш анкеты устарел (иначе откроется редактируемой)
+    (body) => (body && body.tier === 'verified' ? [VERIFIED_PROFILE_KEY] : []),
+  );
 
 /** «Отменить участие». */
 export const useWithdrawFromRace = (id: string) =>

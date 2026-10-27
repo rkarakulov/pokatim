@@ -6,7 +6,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { minskDateTime } from '@/lib/minsk-format';
 
-import { resultBanner, resultElapsed, resultPill } from '../participation-format';
+import { entryTierLine, resultBanner, resultElapsed, resultPill } from '../participation-format';
 
 /**
  * Результат участника (§7.2): плашка статуса, «Ваше время» крупно (`provisional`), баннер места или «Место появится
@@ -25,6 +25,7 @@ export function EntryResult({
   const theme = useTheme();
   const pill = resultPill(entry.result.status);
   const elapsed = resultElapsed(entry.result);
+  const tierLine = entryTierLine(entry);
   const banner =
     entry.result.status === 'pending' || now !== null
       ? resultBanner(
@@ -35,6 +36,9 @@ export function EntryResult({
 
   return (
     <View style={styles.result}>
+      {tierLine ? (
+        <Text style={[textStyle('label'), { color: theme.text.primary }]}>{tierLine}</Text>
+      ) : null}
       {pill ? (
         <View style={styles.pill}>
           <Pill label={pill.label} tone={pill.tone} />

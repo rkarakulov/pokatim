@@ -1,5 +1,10 @@
 import { isNetworkError } from '@pokatim/api-client';
-import type { RaceResultRow, RaceResultsPage } from '@pokatim/contracts';
+import {
+  RESULT_GROUP_KEYS,
+  type RaceResultRow,
+  type RaceResultsPage,
+  type ResultGroupKey,
+} from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
@@ -25,6 +30,18 @@ import { DocumentTitle } from '@/components/document-title';
 import { resultRow } from '../participation-format';
 
 export const racePath = (raceId: string) => `/races/${raceId}`;
+
+/**
+ * Группа зачёта строки (race-results-07): вкладка таблицы не по умолчанию — `?group=` в путях карточки соперника и
+ * подачи спора, чтобы экран читал ту же страницу таблицы. Незнакомое значение ссылки — без группы.
+ */
+export const groupParam = (value: string | string[] | undefined): ResultGroupKey | undefined =>
+  RESULT_GROUP_KEYS.find((key) => key === value);
+const groupQuery = (group: ResultGroupKey | undefined) => (group ? `?group=${group}` : '');
+export const rivalPath = (raceId: string, entryId: string, group?: ResultGroupKey) =>
+  `/races/result/${raceId}/${entryId}${groupQuery(group)}`;
+export const disputeFilePath = (raceId: string, entryId: string, group?: ResultGroupKey) =>
+  `/races/dispute/${raceId}/${entryId}${groupQuery(group)}`;
 
 /** Строка соперника из кэша таблицы (`useRaceResults`); нет на загруженных страницах — `null`. */
 export function findRow(
@@ -127,10 +144,15 @@ export function DisputesFailure({ error, retry }: { error: unknown; retry: () =>
   );
 }
 
+/** Строки скелетона действия — для `AsyncContent`, который сам оборачивает скелетон в `SkeletonGroup`. */
+export function ActionSkeletonLines() {
+  return <SkeletonText variant="body" lines={2} lastLineWidth="60%" />;
+}
+
 export function ActionSkeleton() {
   return (
     <SkeletonGroup>
-      <SkeletonText variant="body" lines={2} lastLineWidth="60%" />
+      <ActionSkeletonLines />
     </SkeletonGroup>
   );
 }

@@ -1365,6 +1365,7 @@ export const ru = {
   'disputes.file.action': 'Оспорить результат',
   'disputes.file.until': 'Споры принимаются до {date}',
   'disputes.file.closed': 'Приём споров закрыт — протокол будет опубликован {date}',
+  'disputes.file.otherGroup': 'Спор можно подать только в своей группе зачёта',
   'disputes.file.title': 'Оспорить результат',
   'disputes.file.target': 'Оспариваемый результат',
   'disputes.file.category': 'Категория',
@@ -1960,6 +1961,60 @@ export const ru = {
   'disputes.filingBlock.not_ranked': 'Спор может подать только участник Verified с местом в группе',
   'disputes.error.DISPUTE_ACTION_BLOCKED.not_ranked':
     'Спор может подать только участник Verified с местом в группе',
+  // race-results-07c: приложение — уровень заявки, группа, «Повысить до Verified», финишёры, анкета зачёта
+  'races.tier.title': 'Уровень участия',
+  'races.tier.verifiedHint':
+    'Место в своей группе (пол и возраст) и право на спор. Нужны анкета зачёта и пульс в треке.',
+  'races.tier.startHint': 'Без анкеты. Время и отметка «Финишёр», без места в зачёте.',
+  'races.tier.profileRequired':
+    'Для Verified заполните анкету зачёта: пол, год рождения, вес и рост.',
+  'races.tier.fillProfile': 'Заполнить анкету',
+  'races.tier.group': 'Группа зачёта',
+  'races.tier.groupHint':
+    'Своя группа — по анкете. Можно выбрать более молодую группу своего пола. После заявки группа не меняется.',
+  'races.tier.enterVerified': 'Участвовать в Verified',
+  'races.tier.enterStart': 'Участвовать в START',
+  'races.tier.upgrade': 'Повысить до Verified',
+  'races.tier.upgradeHint':
+    'Пока окно открыто, можно перейти на Verified: место в группе и право на спор. Вернуться на START нельзя.',
+  'races.tier.upgradeCancel': 'Не сейчас',
+  'races.entry.tierGroup': '{tier} · {group}',
+  'races.result.placeGroup':
+    'Предварительно {place}-е место в группе «{group}» до публикации протокола {date}.',
+  'races.result.placeGroupTied':
+    'Предварительно {place}-е место (поровну с другими) в группе «{group}» до публикации протокола {date}.',
+  'races.result.unranked.start': 'Уровень START: время без места в зачёте.',
+  'races.result.unranked.no_heart_rate':
+    'Без пульса — вне зачёта. Место в группе — только с пульсом в треке.',
+  'races.result.unranked.unknown': 'Время без места в зачёте.',
+  'races.results.groups': 'Группы зачёта',
+  'races.results.finishers': 'Финишёры',
+  'races.results.finishersHint': 'START и Verified без пульса — время без места.',
+  'races.results.finishersEmpty': 'Пока нет финишёров',
+  'races.results.finishersFailed': 'Не удалось загрузить финишёров',
+  'races.results.finisherA11y': '{who}, {time}, {note}',
+  'profile.verified.link': 'Анкета зачёта',
+  'profile.verified.title': 'Анкета зачёта',
+  'profile.verified.lead':
+    'Нужна для уровня Verified: по полу и году рождения считается группа зачёта. Вес, рост и FTP видите только вы.',
+  'profile.verified.gender': 'Пол',
+  'profile.verified.gender.m': 'Мужской',
+  'profile.verified.gender.w': 'Женский',
+  'profile.verified.gender.unknown': '—',
+  'profile.verified.birthYear': 'Год рождения',
+  'profile.verified.birthYearHint': 'Подставлен из регистрации — проверьте.',
+  'profile.verified.weight': 'Вес, кг',
+  'profile.verified.height': 'Рост, см',
+  'profile.verified.ftp': 'FTP, Вт (необязательно)',
+  'profile.verified.range': 'Целое число от {min} до {max}.',
+  'profile.verified.error.lockedUnreadable':
+    'Пол или год рождения в анкете не распознаны — обновите приложение или напишите в поддержку',
+  'profile.verified.locked':
+    'Пол и год рождения зафиксированы заявкой Verified — изменить их может команда платформы.',
+  'profile.verified.save': 'Сохранить',
+  'profile.verified.saved': 'Анкета сохранена',
+  'profile.verified.back': 'Назад',
+  'profile.verified.backToRace': 'Вернуться к гонке',
   // race-results-07 (07b): панель «Протокол» — группы, уровни, «Требует внимания», финишёры, пол и год анкеты
   'admin.results.kpi.attention': 'Требует внимания',
   'admin.results.kpi.finishers': 'Финишёры',

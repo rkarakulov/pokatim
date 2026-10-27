@@ -1132,3 +1132,141 @@ exit=0
 `pnpm --filter @pokatim/admin test` — 35 файлов, 304 теста; `typecheck`, `eslint --max-warnings=0` изменённых,
 `prettier --check` — зелёные. `TURBO_CONCURRENCY=1 pnpm check` (MONGO `pokatim_r07b_test`, Redis db 12) — `exit=0`,
 `Tasks: 15 successful, 15 total` (api 1334, admin 304), флаков не было.
+
+## 12.3 07c — приложение
+
+### Changes
+
+- Заявка в схеме `gender_age` (`offersTierChoice`: `groupScheme` + блок `verified`): `TierPicker` — Verified и START с
+  объяснением; Verified — анкеты нет → «Заполнить анкету» (`/settings/verified?race=<id>`), есть → группа из
+  `verified.groupOptions` (своя по умолчанию, младшие своего пола) и «Участвовать в Verified» →
+  `enterRace(raceId, { tier: 'verified', groupKey })`; START — `{ tier: 'start' }`. Схема `overall` / старый API —
+  прежняя кнопка без тела (DV-1). Ошибки `VERIFIED_PROFILE_REQUIRED`, `RACE_TIER_LOCKED`, `RESULT_GROUP_NOT_ALLOWED` —
+  тексты i18n 07a, участие перезапрашивается (как прочие коды участия).
+- «Повысить до Verified» (`UpgradeAction`) — только по `actions.canUpgrade`: раскрытие с пояснением, анкета или
+  группа, подтверждение; «Не сейчас».
+- Моё участие: строка «Verified · Мужчины до 40» / «START» (только `gender_age`); место в группе
+  (`races.result.placeGroup[Tied]`); `finisher` — время, плашка «Финишёр» и баннер причины по `result.unranked`
+  (START / «Без пульса — вне зачёта»). Подпись результата учитывает группу и `unranked`.
+- Таблица: вкладки `SegmentedControl` (горизонтальная прокрутка) из `groups` ответа по умолчанию + «Финишёры» при
+  `finishers > 0` (одни START — вкладка группы ответа и «Финишёры»); своя группа — вкладка по умолчанию. `group` в
+  запросе — только для вкладки не по умолчанию и только после ответа с непустым `groups` (RC-11); ключи
+  `['races','results',id,'pages',group]` и `[…,'finishers']` (`useRaceFinishers`, курсор, без мест). Скелетон,
+  «Нет соединения» / «Не удалось загрузить» с повтором, пусто — для каждой вкладки.
+- Карточка соперника и подача спора: вкладка группы передаётся `?group=` (`rivalPath`, `disputeFilePath`,
+  `groupParam` — незнакомое значение игнорируется), иначе строка соперника из группы не по умолчанию не находилась бы.
+- «Анкета зачёта» `settings/verified` (ссылка из «Профиля», гард `useSettingsShell`): пол (чипы), год (подставлен
+  `suggestedBirthYear` с подсказкой), вес, рост, FTP (необязательно), согласие; проверка — схемы contracts
+  (`UpdateVerifiedProfileRequest`, `VerifiedBirthYear`), ошибки пределов — «Целое число от … до …»; `demographicsLocked`
+  — пол и год только чтение с пояснением «меняет команда платформы» (PUT шлёт прежние); `409
+  VERIFIED_DEMOGRAPHICS_LOCKED` — баннер и перезапрос анкеты; 400 по полю — под полем; сеть/429 — баннер. Успех —
+  кэш анкеты, инвалидация `['races','entry']`, с `?race` — возврат к гонке (`dismissTo`).
+- i18n `ru.ts`: `races.tier.*`, `races.result.placeGroup*`, `races.result.unranked.*`, `races.results.{groups,
+  finishers*,finisherA11y}`, `races.entry.tierGroup`, `profile.verified.*` (экранные). Правила — `pokatim-app.md`
+  (уровни и группы).
+
+### Files
+
+- Новые: `apps/app/src/features/races/participation/{tier-picker,group-picker}.tsx`,
+  `apps/app/src/features/profile/verified-profile-form.tsx`, `apps/app/src/app/settings/verified.tsx`.
+- Изменены: `features/races/{participation-format,queries,results-table,race-detail}.ts(x)`,
+  `features/races/participation/{race-participation,entry-actions,entry-result}.tsx`,
+  `features/races/disputes/{dispute-screen,rival-card,dispute-form}.tsx`, `app/races/{result,dispute}/[id]/[entryId].tsx`,
+  `features/profile/queries.ts`, `app/settings/profile.tsx`, `app/_layout.tsx`, `packages/i18n/src/ru.ts`,
+  `.claude/rules/pokatim-app.md`.
+
+### Tests
+
+- `__tests__/race-tiers.test.tsx` (14): выбор уровня и группы, занятая кнопка, START, без анкеты → анкета с
+  `?race`, 409/422 по кодам, схема `overall` без тела; повышение (раскрытие, тело, «Не сейчас», 409, без
+  `canUpgrade`); моё участие — группа и место в группе, `finisher` START / без пульса.
+- `__tests__/race-groups.test.tsx` (11): вкладки из `groups`, `group` только для другой вкладки, скелетон, кэш
+  вкладки по умолчанию, старый API без вкладок и без `group`, своя вкладка по умолчанию и соперник с `?group`;
+  «Финишёры» — строки без мест, одни START, скелетон, пусто, ошибки сети/сервера с повтором.
+- `__tests__/verified-profile.test.tsx` (12): ссылка из «Профиля», скелетон, ошибки загрузки с повтором,
+  подстановка года и тело PUT, кэш и инвалидация участия, пределы и пустые поля, границы пределов, 400 по полю,
+  сеть, возврат к гонке, блокировка пола/года (только чтение, PUT с прежними), 409 `VERIFIED_DEMOGRAPHICS_LOCKED`.
+- `participation-format.test.ts` (+8): `offersTierChoice`, `groupChoices`, строка уровня, `finisher`, место в группе,
+  подпись результата, новые коды, строка финишёров. Фикстуры — `races-fixtures.ts`.
+- Не проверено вручную: симуляторы iOS/Android и web-сборка в браузере (`build:web` + `start:web`) — NOT VERIFIED;
+  шаг e2e-смоука для `settings/verified` (за входом) не добавлен.
+
+`TURBO_CONCURRENCY=1 pnpm check` (Mongo `pokatim_r07c_test`, Redis db 13) — `exit=0`, `Tasks: 15 successful, 15 total`
+(app 1491, api 1334, admin 285, api-client 104). Первый прогон упал только в `@pokatim/api` (47 int-тестов на
+лимитах частоты и входе в панель — 429; `apps/api` не менялся), отдельный повтор `api test` — 1334/1334, затем
+полный `check` — зелёный.
+
+### Фиксы ревью 07c pass 1
+
+Findings: `findings-07c-codex.md` (REQUEST CHANGES: 1 HIGH, 2 MEDIUM), `findings-07c-claude.md` (APPROVE: 2 MEDIUM,
+3 LOW). Закрыты все.
+
+- [HIGH codex] Незагруженная вкладка группы или «Финишёры» без сети — бесконечный скелетон. `results-table.tsx`:
+  `TabFailure` принимает запрос и показывает «Нет соединения» с повтором и при `fetchStatus === 'paused'` без данных
+  (как `AsyncContent`); скелетон — только пока загрузка идёт. Сеть вернулась — запрос продолжается сам.
+- [MEDIUM оба] Анкета после 409 `VERIFIED_DEMOGRAPHICS_LOCKED` слала скрытые изменённые пол и год → снова 409.
+  `verified-profile-form.tsx`: при `demographicsLocked` (ответ после 409 или свежий ответ поверх кэша) поля `gender` и
+  `birthYear` формы сбрасываются к серверным (`resetField`), правки веса, роста и FTP остаются. Успешная
+  Verified-заявка (`useEnterRace` с `tier: 'verified'`) инвалидирует `VERIFIED_PROFILE_KEY` — анкета из кэша не
+  открывается редактируемой.
+- [MEDIUM оба] Pull-to-refresh карточки обновлял только группу по умолчанию. `useRaceResultsRefetch(id)` —
+  `refetchQueries({ queryKey: raceResultsKey(id), type: 'active' })`: группа по умолчанию, выбранная вкладка и
+  «Финишёры»; заменяет `results.refetch` в `refetchers` (`race-detail.tsx`).
+- [LOW] `TierPicker`: обе кнопки уровня неактивны на время заявки (`VerifiedChoice` получил `disabled`).
+- [LOW] Анкета заблокирована, пол сервера незнаком: проверка скрытых полей падала молча — теперь баннер
+  `profile.verified.error.lockedUnreadable` («…не распознаны — обновите приложение или напишите в поддержку»), PUT не
+  уходит.
+- [LOW] `VERIFIED_PROFILE_REQUIRED` при заявке или повышении — переход к анкете `/settings/verified?race=<id>`
+  (§11.3; баннер и перезапрос участия остаются). Отклонения в §8.2 нет.
+- [LOW] `epic.md` — статус слайса 07: 07a (#73) и 07b (#75) слиты, 07c — PR на ревью.
+
+Тесты: `race-groups.test.tsx` (+4: вкладка группы и «Финишёры» без сети — «Нет соединения» с повтором, затем
+строки; pull-to-refresh вкладки группы и «Финишёров» через `RefreshControl`); `verified-profile.test.tsx` (+1, 1
+расширен: 409 → повторное сохранение с серверными полом и годом и правкой веса; незнакомый пол в заблокированной
+анкете); `race-tiers.test.tsx` (+2, 2 изменены: START неактивна при заявке Verified и наоборот; 409
+`VERIFIED_PROFILE_REQUIRED` → анкета с `?race`; анкета из кэша после Verified-заявки — зафиксирована).
+
+### Фиксы ревью 07c pass 2
+
+Findings: `findings-07c-codex-pass2.md` (APPROVE: 2 MEDIUM), `findings-07c-claude-pass2.md` (APPROVE: 1 LOW — тот же
+случай, что первый MEDIUM codex). Закрыты все; сервер не менялся.
+
+- [MEDIUM codex / LOW claude] Анкета, открытая сразу заблокированной, не регистрирует поля пола и года — `resetField`
+  для них no-op, после правки командой PUT уходил со старыми значениями (цикл 409). `verified-profile-form.tsx`: при
+  `demographicsLocked` значения сервера ставятся ещё и через `setValue` (работает без регистрации); проверка скрытых
+  полей схемой (баннер `lockedUnreadable`) сохранена.
+- [MEDIUM codex] Подача спора на участника чужой группы зачёта (сервер — `409 target_not_counted`). `dispute-format.ts`:
+  `inOtherGroup(own, target)` — обе группы известны и различны (`null`/`'unknown'` — решает сервер); `rivalAction` и
+  `canOpenRival` с `otherGroup` не предлагают подачу (свой спор — статус по-прежнему). Группа цели — `page.group`
+  ответа таблицы (вкладка `?group=` или группа по умолчанию), своя — `MyRaceEntry.entry.groupKey`. `race-detail.tsx`:
+  строки чужой группы не нажимаемы; `rival-card.tsx` и `dispute-form.tsx` (прямое открытие): запрос своей заявки,
+  до ответа — скелетон действия, чужая группа — причина `disputes.file.otherGroup` («Спор можно подать только в своей
+  группе зачёта») вместо кнопки и формы. START и Verified без пульса уже закрыты сервером (`filing.status:
+  unavailable`, `not_ranked`) — действия нет.
+
+Тесты: `verified-profile.test.tsx` (+1: открыта заблокированной → 409 → перезапрос с `w`/1990 → PUT с актуальными
+полом и годом и правкой веса); `dispute-format.test.ts` (+2: `inOtherGroup`; `rivalAction`/`canOpenRival` для чужой
+группы); `race-groups.test.tsx` (+5: вкладка чужой группы — строки не нажимаемы; карточка и форма своей группы —
+подача есть; прямое открытие карточки и формы чужой группы — подачи нет, причина).
+
+Проверки: `pnpm --filter @pokatim/app test` — 166 suites / 1506 tests passed; `pnpm --filter @pokatim/app typecheck`
+— ok; `pnpm --filter @pokatim/i18n test` — 6 passed; eslint и `prettier --check` по изменённым — чисто.
+
+### Фиксы ревью 07c pass 3
+
+Findings: `findings-07c-codex-pass3.md` (REQUEST CHANGES: 1 HIGH). Закрыт; сервер не менялся.
+
+- [HIGH codex] Запрос своей заявки на экранах спора проверялся только `isPending`: без сети и без кэша — вечный
+  скелетон действия, при ошибке — подача предлагалась (`inOtherGroup(undefined, …)` = разрешено). `rival-card.tsx` и
+  `dispute-form.tsx`: действие и форма — внутри `AsyncContent` запроса участия (AGENTS.md §4.12): пауза без данных —
+  «Нет соединения» с повтором, ошибка без данных — «Не удалось загрузить» с `refetch`, ошибка обновления при данных —
+  данные и баннер «Данные могли устареть» с повтором. Пока участие не загружено — подачи нет (fail closed).
+  `dispute-screen.tsx`: `ActionSkeletonLines` — строки скелетона без своего `SkeletonGroup` (его даёт `AsyncContent`).
+
+Тесты: `race-groups.test.tsx` (+6, обе формы экрана): отказ запроса участия — «Не удалось загрузить», подачи нет,
+повтор — подача; участие без сети (`pending` + `paused`) — «Нет соединения» с повтором, без скелетона и подачи, сеть
+вернулась — подача; ошибка обновления — данные, баннер и повтор. `query-wrapper.tsx`: `createTestQueryClient` и
+необязательный клиент в `createQueryWrapper` — доступ теста к кэшу.
+
+Проверки: `pnpm --filter @pokatim/app test` — 166 suites / 1512 tests passed; `pnpm --filter @pokatim/app typecheck`
+— ok; eslint и `prettier --check` по изменённым — чисто.
