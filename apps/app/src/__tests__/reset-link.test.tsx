@@ -19,7 +19,6 @@ import {
 import { appRoutes } from './app-routes';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getLink = jest.mocked(api.getPasswordResetLink);
 const confirm = jest.mocked(api.confirmPasswordReset);

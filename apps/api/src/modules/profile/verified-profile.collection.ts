@@ -2,7 +2,7 @@ import type { RiderGender } from '@pokatim/contracts';
 
 /**
  * Анкета зачёта Verified (race-results-07), коллекция `rider_verified_profiles` (`PROFILE_COLLECTIONS.verified`,
- * миграция `0025_entry_tier`, индексов сверх `_id` нет). `_id` — id пользователя. Единственный писатель —
+ * миграция `0028_entry_tier`, индексов сверх `_id` нет). `_id` — id пользователя. Единственный писатель —
  * `VerifiedProfileRepository`. Значения — ПДн и антропометрия: не в логах, outbox, журнале панели; вес, рост и FTP —
  * только владельцу. Удаление аккаунта — `ProfileErasure` удаляет документ.
  */

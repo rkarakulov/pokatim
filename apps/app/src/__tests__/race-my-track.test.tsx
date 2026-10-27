@@ -18,7 +18,6 @@ import { createQueryWrapper } from './query-wrapper';
 import { attempt, corridorRace, myEntry, noEntry, RACE_ID, resultsPage } from './races-fixtures';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getRaceRoute = jest.mocked(api.getRaceRoute);
 const getMyRaceEntry = jest.mocked(api.getMyRaceEntry);

@@ -1,7 +1,9 @@
 /// <reference types="jest" />
-import { size } from '@pokatim/design-tokens';
+import { appThemes, size } from '@pokatim/design-tokens';
 import { render, screen } from '@testing-library/react-native';
 import { Dimensions, View } from 'react-native';
+
+import { appThemeWrapper } from '@/__tests__/app-theme-wrapper';
 
 import { StatBlock } from './stat-block';
 
@@ -137,5 +139,146 @@ describe('StatBlock compact: крупный шрифт (ревью pass 1, M1)',
     expect(value.props.numberOfLines).toBeUndefined();
     expect(screen.getByText('В пути').props.numberOfLines).toBeUndefined();
     expect(screen.getByText('2 ч 30 мин')).toBeOnTheScreen();
+  });
+});
+
+describe('StatBlock: варианты шапки шторки (app-themes C2)', () => {
+  const items = [
+    { value: '68', unit: 'км', label: 'Дистанция', note: 'круговой' },
+    { value: '1 240', unit: 'м', label: 'Набор', note: 'макс. 267 м' },
+    { value: '2 ч 30 мин', label: 'В пути', note: 'при 24 км/ч' },
+  ];
+  const window = Dimensions.get('window');
+  const fontScale = (value: number) =>
+    Dimensions.set({ window: { ...window, fontScale: value }, screen: Dimensions.get('screen') });
+  afterEach(() => {
+    Dimensions.set({ window, screen: Dimensions.get('screen') });
+  });
+
+  it('tiles: три равные плитки surface.default (шторка — surface.sheet = raised) с радиусом shape.card; значение с единицей и подпись; note — только в метке', async () => {
+    fontScale(1);
+    await render(<StatBlock variant="tiles" items={items} />, {
+      wrapper: appThemeWrapper('chrono'),
+    });
+    const { surface, shape } = appThemes.chrono.schemes.dark;
+    const tiles = screen.getAllByTestId('stat-block-cell');
+    expect(tiles).toHaveLength(3);
+    for (const tile of tiles) {
+      // ширина — по содержимому (не уже строки списка), не влезли в ряд — переносятся рядом (ревью pass 1)
+      expect(tile).toHaveStyle({
+        backgroundColor: surface.default,
+        borderRadius: shape.card,
+        flexBasis: 'auto',
+        flexGrow: 1,
+        minWidth: size.rowMin,
+      });
+    }
+    expect(screen.getByLabelText('Дистанция 68 км круговой')).toBeOnTheScreen();
+    expect(screen.getByText('км')).toBeOnTheScreen();
+    expect(screen.queryByText('круговой')).toBeNull();
+  });
+
+  it('numeral: дистанция — крупная цифра, остальные — строкой compact; метки ячеек', async () => {
+    fontScale(1);
+    await render(<StatBlock variant="numeral" items={items} />);
+    const numeral = screen.getByTestId('stat-block-numeral');
+    expect(numeral).toHaveTextContent('68км');
+    expect(screen.getByLabelText('Дистанция 68 км круговой')).toBeOnTheScreen();
+    expect(screen.getByLabelText(/^Набор 1 240 м/)).toBeOnTheScreen();
+    expect(screen.getByLabelText('В пути 2 ч 30 мин при 24 км/ч')).toBeOnTheScreen();
+    // остальные ячейки — compact: подпись над значением
+    expect(screen.getByText('Набор')).toBeOnTheScreen();
+    expect(screen.queryByText('круговой')).toBeNull();
+  });
+});
+
+describe('StatBlock tiles: узкий экран (app-themes C, ревью pass 1)', () => {
+  const items = [
+    { value: '123,4', unit: 'км', label: 'Дистанция', note: 'круговой' },
+    { value: '1 240', unit: 'м', label: 'Набор' },
+    {
+      value: '3 ч 35 мин',
+      parts: [
+        { value: '3', unit: 'ч' },
+        { value: '35', unit: 'мин' },
+      ],
+      label: 'В пути',
+      note: 'при 24 км/ч',
+    },
+  ];
+  const window = Dimensions.get('window');
+  afterEach(() => {
+    Dimensions.set({ window, screen: Dimensions.get('screen') });
+  });
+
+  it.each(['chrono', 'navigation'] as const)(
+    '%s, 360 px, обычный шрифт: длительность — частями с единицами, ничего не усекается многоточием',
+    async (themeId) => {
+      Dimensions.set({ window: { ...window, fontScale: 1 }, screen: Dimensions.get('screen') });
+      await render(
+        <View style={{ width: 320 }}>
+          <StatBlock variant="tiles" items={items} />
+        </View>,
+        { wrapper: appThemeWrapper(themeId) },
+      );
+      const block = screen.getByTestId('stat-block');
+      // плитки переносятся рядами, части значения — строками внутри плитки
+      expect(block).toHaveStyle({ flexWrap: 'wrap' });
+      for (const value of screen.getAllByTestId('stat-block-value')) {
+        expect(value).toHaveStyle({ flexDirection: 'row', flexWrap: 'wrap' });
+      }
+      expect(screen.getByText('3')).toBeOnTheScreen();
+      expect(screen.getByText('35')).toBeOnTheScreen();
+      expect(screen.getByText('мин')).toBeOnTheScreen();
+      // ни один текст плитки не ограничен строками: многоточия нет
+      for (const text of ['123,4', '1 240', '3', '35', 'мин', 'Дистанция', 'В пути']) {
+        expect(screen.getByText(text).props.numberOfLines).toBeUndefined();
+      }
+      expect(block).toBeOnTheScreen();
+      expect(screen.getByLabelText('В пути 3 ч 35 мин при 24 км/ч')).toBeOnTheScreen();
+    },
+  );
+});
+
+describe('StatBlock numeral: узкий экран (app-themes C, Codex pass 2)', () => {
+  const window = Dimensions.get('window');
+  afterEach(() => {
+    Dimensions.set({ window, screen: Dimensions.get('screen') });
+  });
+
+  it('Типографика, 360 px, обычный шрифт: значения не ограничены строками, правая группа — по содержимому с переносом вниз', async () => {
+    Dimensions.set({ window: { ...window, fontScale: 1 }, screen: Dimensions.get('screen') });
+    await render(
+      <View style={{ width: 320 }}>
+        <StatBlock
+          variant="numeral"
+          items={[
+            { value: '123,4', unit: 'км', label: 'Дистанция', note: 'круговой' },
+            { value: '1 120', unit: 'м', label: 'Набор' },
+            { value: '5 ч 10 мин', label: 'В пути', note: 'при 24 км/ч' },
+          ]}
+        />
+      </View>,
+      { wrapper: appThemeWrapper('typography') },
+    );
+    expect(screen.getByTestId('stat-block')).toHaveStyle({ flexWrap: 'wrap' });
+    const rest = screen.getByTestId('stat-block-numeral-rest');
+    // ширина группы — по содержимому: не помещается рядом с цифрой — уходит вниз, ячейки переносятся внутри
+    expect(rest).toHaveStyle({ flexBasis: 'auto', flexWrap: 'wrap' });
+    for (const value of screen.getAllByTestId('stat-block-value')) {
+      expect(value.props.numberOfLines).toBeUndefined();
+    }
+    for (const label of ['Набор', 'В пути']) {
+      expect(screen.getByText(label).props.numberOfLines).toBeUndefined();
+    }
+    expect(screen.getByLabelText('В пути 5 ч 10 мин при 24 км/ч')).toBeOnTheScreen();
+  });
+
+  it('отдельный compact («Классика») не меняется: значение — одна строка при обычном шрифте', async () => {
+    Dimensions.set({ window: { ...window, fontScale: 1 }, screen: Dimensions.get('screen') });
+    await render(
+      <StatBlock variant="compact" items={[{ value: '5 ч 10 мин', label: 'В пути' }]} />,
+    );
+    expect(screen.getByTestId('stat-block-value')).toHaveProp('numberOfLines', 1);
   });
 });

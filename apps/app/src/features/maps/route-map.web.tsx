@@ -1,6 +1,6 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-import { space, stroke, themes } from '@pokatim/design-tokens';
+import { space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
   attributionCss,
@@ -223,7 +223,7 @@ export function RouteMap({
       fill={fill}
       bottomInset={bottomInset}
     >
-      <style>{attributionCss(scope, theme, theme === themes.dark)}</style>
+      <style>{attributionCss(scope, theme, theme.map.basemap === 'dark')}</style>
       {bottomInset > 0 ? (
         // атрибуция над шторкой (RC-6): угол контролов maplibre-gl — со сдвигом на её высоту
         <style>{`[data-route-map="${scope}"] .maplibregl-ctrl-bottom-left{bottom:${bottomInset}px}`}</style>

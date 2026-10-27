@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { createHarness, type Harness, MINUTE } from '../../../test/harness';
 import { call } from '../../../test/identity';
+import { eventsOfType } from '../../../test/notifications';
 import { panel, panelCall } from '../../../test/panel';
 import { staff } from '../../../test/races';
 import {
@@ -264,6 +265,53 @@ describe('«Отклонить жалобы» (AC6)', () => {
       subject: { kind: 'ride', id: ride.id },
       details: { reportCount: 1 },
     });
+  });
+});
+
+describe('событие rides.reports-resolved (notifications, RC-3)', () => {
+  const resolvedEvents = () => eventsOfType(h, 'rides.reports-resolved');
+
+  it('«Скрыть» и «Отклонить» с жалобами — событие { rideId, resolvedAt } действия; без жалоб и «Вернуть» — нет', async () => {
+    const hidden = await createRide(h, organizer, { title: 'Скрываемый' });
+    await reportBy(hidden.id);
+    await mod('POST', `/${hidden.id}/hide`, { version: 0, reason: 'Спам' });
+    const hiddenAt = h.clock.now().toISOString();
+    h.clock.advance(MINUTE);
+    await mod('POST', `/${hidden.id}/restore`, { version: 1, reason: 'Ошибочное скрытие' });
+
+    const dismissed = await createRide(h, organizer, { title: 'Отклонённый' });
+    await reportBy(dismissed.id);
+    const { lastReportAt } = await detailOf(dismissed.id);
+    h.clock.advance(MINUTE);
+    await mod('POST', `/${dismissed.id}/dismiss-reports`, {
+      version: 0,
+      reason: 'Нарушений нет',
+      lastReportAt,
+    });
+    const dismissedAt = h.clock.now().toISOString();
+
+    const clean = await createRide(h, organizer, { title: 'Без жалоб' });
+    await mod('POST', `/${clean.id}/hide`, { version: 0, reason: 'Спам' });
+
+    expect((await resolvedEvents()).map((event) => event.payload)).toEqual([
+      { rideId: hidden.id, resolvedAt: hiddenAt },
+      { rideId: dismissed.id, resolvedAt: dismissedAt },
+    ]);
+  });
+
+  it('откат транзакции (сбой журнала) — события нет', async () => {
+    const ride = await createRide(h, organizer);
+    await reportBy(ride.id);
+    const audit = h.app.get(PanelAudit, { strict: false });
+    const spy = vi.spyOn(audit, 'append').mockRejectedValue(new Error('журнал недоступен'));
+    try {
+      expect((await mod('POST', `/${ride.id}/hide`, { version: 0, reason: 'Спам' })).status).toBe(
+        500,
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await resolvedEvents()).toEqual([]);
   });
 });
 

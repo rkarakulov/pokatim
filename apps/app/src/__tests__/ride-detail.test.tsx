@@ -18,7 +18,6 @@ import { createQueryWrapper } from './query-wrapper';
 
 jest.mock('@/lib/api');
 jest.mock('@/lib/share-link', () => ({ shareLink: jest.fn(), shareOrigin: jest.fn() }));
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getRide = jest.mocked(api.getRide);
 const getRideForViewer = jest.mocked(api.getRideForViewer);

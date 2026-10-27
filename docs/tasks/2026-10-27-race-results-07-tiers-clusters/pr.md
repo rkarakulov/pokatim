@@ -11,7 +11,7 @@
 - `apps/api`: анкета (`profile`), схема групп гонки (`races.admitEntry`), матрица заявки и повышение START → Verified,
   места по группе, финишёры, протокол по группам, флаги в панели и на разборе спора, worker пишет датчики и флаги.
 
-## Миграция `0025_entry_tier` (без транзакции, идемпотентна)
+## Миграция `0028_entry_tier` (без транзакции, идемпотентна)
 
 1. `race_entries.tier: null → 'verified'`, `best.ranked = true` у заявок с `best`.
 2. `races.groupScheme = 'overall'` у гонок с `lockedAt`, явный `null` — остальным.
@@ -34,7 +34,7 @@ db.race_entries.countDocuments({ best: { $type: 'object' }, 'best.ranked': { $ex
 //    `lockedAt`, поэтому `$exists: false` после неё всегда 0); чтение даёт им `overall` (`toRace` / `$ifNull`)
 db.races.find({ lockedAt: { $type: 'date' }, groupScheme: null }, { _id: 1, lockedAt: 1 })
 // 3. засчитанные попытки, проверенные старым worker после миграции (нет `sensors`): в гонке `gender_age` Verified-заявка
-//    с такой лучшей попыткой станет «Без пульса» и потеряет место; <T> — время применения 0025 (журнал миграций)
+//    с такой лучшей попыткой станет «Без пульса» и потеряет место; <T> — время применения 0028 (журнал миграций)
 db.race_attempts.aggregate([
   { $match: { status: 'counted', sensors: { $exists: false }, checkedAt: { $gte: <T> } } },
   { $group: { _id: '$raceId', attempts: { $sum: 1 } } },
@@ -42,7 +42,7 @@ db.race_attempts.aggregate([
 ```
 
 Ненулевой результат (1) — выполнить шаги 1–3 миграции вручную теми же `updateMany` (идемпотентны; журнал миграций
-повтор `0025` не запустит) или перепроверить гонку. Гонки из (3) — перепроверить: панель «Перепроверить треки»
+повтор `0028` не запустит) или перепроверить гонку. Гонки из (3) — перепроверить: панель «Перепроверить треки»
 (`POST /v1/admin/races/:raceId/results/recheck` до публикации, `…/protocol/recheck` после; право `results.manage`) —
 новый worker перепроверит попытки гонки, запишет `sensors`/`flags` и пересчитает `best`. Гонки из (2) остаются
 `overall` (принятый риск RC-7).

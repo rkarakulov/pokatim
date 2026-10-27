@@ -31,8 +31,12 @@ import { routesRider } from './0021_routes_rider';
 import { routesDerived } from './0022_routes_derived';
 import { accountDeletion } from './0023_account_deletion';
 import { platformSettings } from './0024_platform_settings';
-import { entryTier, LEGACY_RANKING_INDEX } from './0025_entry_tier';
+import { entryTier, LEGACY_RANKING_INDEX } from './0028_entry_tier';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
+import { notifications } from './0025_notifications';
+import { attemptLastVerdict } from './0026_attempt_last_verdict';
+import { pushTicketsUser } from './0027_push_tickets_user';
+import { NOTIFICATIONS_COLLECTIONS } from '../../modules/notifications/notifications.collection';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
@@ -99,7 +103,10 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0022_routes_derived',
       '0023_account_deletion',
       '0024_platform_settings',
-      '0025_entry_tier',
+      '0025_notifications',
+      '0026_attempt_last_verdict',
+      '0027_push_tickets_user',
+      '0028_entry_tier',
     ]);
   });
 
@@ -427,13 +434,13 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         }),
       },
     };
-    // индексы 0015 (старый индекс мест удалён 0025_entry_tier; новые индексы 0025 — в своём тесте)
+    // индексы 0015 (старый индекс мест удалён 0028_entry_tier; новые индексы 0028 — в своём тесте)
     const own = async (name: string, indexes: Record<string, unknown>) =>
       Object.fromEntries(Object.entries(await indexesOf(name)).filter(([key]) => key in indexes));
-    const { [LEGACY_RANKING_INDEX]: legacy, ...entriesAfter0025 } =
+    const { [LEGACY_RANKING_INDEX]: legacy, ...entriesAfter0028 } =
       expected[RESULTS_COLLECTIONS.entries];
     expect(await own(RESULTS_COLLECTIONS.entries, expected[RESULTS_COLLECTIONS.entries])).toEqual(
-      entriesAfter0025,
+      entriesAfter0028,
     );
     expect(await own(RESULTS_COLLECTIONS.attempts, expected[RESULTS_COLLECTIONS.attempts])).toEqual(
       expected[RESULTS_COLLECTIONS.attempts],
@@ -454,7 +461,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       expect(await own(name, indexes)).toEqual(indexes);
     }
     expect(legacy).toBeDefined();
-    // …следующая 0025 его снова удаляет
+    // …следующая 0028 его снова удаляет
     await entryTier.up(h.db);
     expect((await indexesOf(RESULTS_COLLECTIONS.entries))[LEGACY_RANKING_INDEX]).toBeUndefined();
   });
@@ -473,7 +480,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       [RESULTS_COLLECTIONS.protocolRows]: {
         race_protocol_rows_unique: index({ raceId: 1, revision: 1, entryId: 1 }, true),
         race_protocol_rows_order_unique: index({ raceId: 1, revision: 1, order: 1 }, true),
-        // 0025_entry_tier (race-results-07): строки протокола по группе
+        // 0028_entry_tier (race-results-07): строки протокола по группе
         race_protocol_rows_group_idx: index({ raceId: 1, revision: 1, groupKey: 1, order: 1 }),
       },
       [RESULTS_COLLECTIONS.recalculations]: {
@@ -799,10 +806,10 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(APPEARANCE_COLLECTIONS.settings)).toEqual({});
   });
 
-  it('0025_entry_tier: бэкфилл уровня, best.ranked и groupScheme; анкеты; индексы мест, финишёров и групп протокола; старый индекс мест удалён; последняя; повторный up — без изменений', async () => {
+  it('0028_entry_tier: бэкфилл уровня, best.ranked и groupScheme; анкеты; индексы мест, финишёров и групп протокола; старый индекс мест удалён; последняя; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0025_entry_tier');
-    expect(ids.indexOf('0025_entry_tier')).toBe(ids.indexOf('0024_platform_settings') + 1);
+    expect(ids.at(-1)).toBe('0028_entry_tier');
+    expect(ids.indexOf('0028_entry_tier')).toBe(ids.indexOf('0027_push_tickets_user') + 1);
     const index = (key: Record<string, unknown>, partial?: Record<string, unknown>) => ({
       key,
       unique: false,
@@ -881,6 +888,130 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await entries.deleteMany(entryIds);
     await races.deleteMany(raceIds);
     expect(await snapshot()).toEqual(before);
+  });
+
+  it('0025_notifications: коллекции и индексы центра уведомлений (unique, partial, TTL); после 0024; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.indexOf('0025_notifications')).toBe(ids.indexOf('0024_platform_settings') + 1);
+    const index = (
+      key: Record<string, 1 | -1>,
+      options: { unique?: boolean; partial?: Record<string, unknown>; ttl?: number } = {},
+    ) => ({
+      key,
+      unique: options.unique ?? false,
+      partialFilterExpression: options.partial,
+      expireAfterSeconds: options.ttl,
+    });
+    const snapshot = async () => ({
+      notifications: await indexesOf(NOTIFICATIONS_COLLECTIONS.notifications),
+      settings: await indexesOf(NOTIFICATIONS_COLLECTIONS.settings),
+      pushTokens: await indexesOf(NOTIFICATIONS_COLLECTIONS.pushTokens),
+      pushTickets: await indexesOf(NOTIFICATIONS_COLLECTIONS.pushTickets),
+    });
+    const due = { $in: ['pending', 'sending'] };
+    const expected = {
+      notifications: {
+        notifications_event_user_unique: index({ sourceEventId: 1, userId: 1 }, { unique: true }),
+        notifications_collapse_unique: index(
+          { userId: 1, collapseKey: 1 },
+          { unique: true, partial: { collapseKey: { $type: 'string' } } },
+        ),
+        notifications_user_list_idx: index({ userId: 1, createdAt: -1, _id: -1 }),
+        notifications_user_unread_idx: index({ userId: 1 }, { partial: { readAt: { $eq: null } } }),
+        notifications_push_due_idx: index(
+          { 'push.state': 1, 'push.notBefore': 1 },
+          { partial: { 'push.state': due } },
+        ),
+        notifications_email_due_idx: index(
+          { 'email.state': 1 },
+          { partial: { 'email.state': due } },
+        ),
+        notifications_expire_ttl: index({ expireAt: 1 }, { ttl: 0 }),
+      },
+      settings: {},
+      pushTokens: {
+        push_tokens_token_unique: index({ token: 1 }, { unique: true }),
+        push_tokens_user_idx: index({ userId: 1, updatedAt: 1 }),
+      },
+      pushTickets: {
+        push_tickets_ticket_unique: index({ ticketId: 1 }, { unique: true }),
+        push_tickets_created_idx: index({ createdAt: 1 }),
+        push_tickets_expire_ttl: index({ expireAt: 1 }, { ttl: 0 }),
+        // 0027_push_tickets_user
+        push_tickets_user_idx: index({ userId: 1 }),
+      },
+    };
+    expect(await snapshot()).toEqual(expected);
+    const names = (await h.db.listCollections({}, { nameOnly: true }).toArray()).map((c) => c.name);
+    expect(names).toEqual(expect.arrayContaining(Object.values(NOTIFICATIONS_COLLECTIONS)));
+    await notifications.up(h.db);
+    await notifications.up(h.db);
+    expect(await snapshot()).toEqual(expected);
+  });
+
+  it('0027_push_tickets_user: индекс владельца тикета; после 0026; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.indexOf('0027_push_tickets_user')).toBe(
+      ids.indexOf('0026_attempt_last_verdict') + 1,
+    );
+    const before = await indexesOf(NOTIFICATIONS_COLLECTIONS.pushTickets);
+    expect(before.push_tickets_user_idx).toEqual({
+      key: { userId: 1 },
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+    await pushTicketsUser.up(h.db);
+    await pushTicketsUser.up(h.db);
+    expect(await indexesOf(NOTIFICATIONS_COLLECTIONS.pushTickets)).toEqual(before);
+  });
+
+  it('0026_attempt_last_verdict: counted/rejected без поля получают lastVisibleVerdict = status, прочие — нет; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.indexOf('0026_attempt_last_verdict')).toBe(ids.indexOf('0025_notifications') + 1);
+    const attemptsDb = h.db.collection<Record<string, unknown> & { _id: string }>(
+      RESULTS_COLLECTIONS.attempts,
+    );
+    await attemptsDb.insertMany([
+      { _id: 'a-counted', raceId: 'r', activityId: 'act-counted', status: 'counted' },
+      { _id: 'a-rejected', raceId: 'r', activityId: 'act-rejected', status: 'rejected' },
+      { _id: 'a-failed', raceId: 'r', activityId: 'act-failed', status: 'failed' },
+      { _id: 'a-queued', raceId: 'r', activityId: 'act-queued', status: 'queued' },
+      { _id: 'a-withdrawn', raceId: 'r', activityId: 'act-withdrawn', status: 'withdrawn' },
+      {
+        _id: 'a-kept',
+        raceId: 'r',
+        activityId: 'act-kept',
+        status: 'counted',
+        lastVisibleVerdict: 'rejected',
+      },
+    ]);
+    await attemptLastVerdict.up(h.db);
+    const snapshot = async () =>
+      Object.fromEntries(
+        (await attemptsDb.find().sort({ _id: 1 }).toArray()).map((doc) => [
+          doc._id,
+          doc.lastVisibleVerdict,
+        ]),
+      );
+    const expected = {
+      'a-counted': 'counted',
+      'a-failed': undefined,
+      'a-kept': 'rejected',
+      'a-queued': undefined,
+      'a-rejected': 'rejected',
+      'a-withdrawn': undefined,
+    };
+    expect(await snapshot()).toEqual(expected);
+    expect(await attemptsDb.findOne({ _id: 'a-failed' })).toEqual({
+      _id: 'a-failed',
+      raceId: 'r',
+      activityId: 'act-failed',
+      status: 'failed',
+    });
+    await attemptLastVerdict.up(h.db);
+    expect(await snapshot()).toEqual(expected);
+    await attemptsDb.deleteMany({ _id: { $regex: '^a-' } });
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

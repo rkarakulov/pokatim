@@ -51,7 +51,7 @@ describe('протокол гонки — append-only', () => {
     expect(users).toEqual([
       'db/migrations/0016_protocol.ts',
       // race-results-07: индекс строк протокола по группе
-      'db/migrations/0025_entry_tier.ts',
+      'db/migrations/0028_entry_tier.ts',
       'modules/results/results.collection.ts',
       'modules/results/results.repository.ts',
     ]);

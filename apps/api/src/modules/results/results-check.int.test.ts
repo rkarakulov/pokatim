@@ -148,6 +148,84 @@ describe('эталоны движка в attempt-check (AC13)', () => {
   });
 });
 
+describe('событие видимого вердикта для уведомлений (notifications RC-2)', () => {
+  const verdictEvents = () =>
+    h.db
+      .collection('outbox')
+      .find({ type: 'results.attempt-verdict-changed' })
+      .sort({ createdAt: 1, _id: 1 })
+      .toArray();
+  const stored = (id: string) => resultsDb(h).attempts.findOne({ _id: id });
+  const recheck = (raceId: string) => h.worker.get(ResultsRecheck).requestRace(raceId, justAfter());
+
+  it('первый видимый вердикт — событие; перепроверка с тем же статусом — без второго', async () => {
+    const { attempt, raceId } = await queuedAttempt();
+    expect(await processor().check(attempt._id, 1)).toBe('counted');
+    expect((await verdictEvents()).map((event) => event.payload)).toEqual([
+      { attemptId: attempt._id, raceId, userId: attempt.userId, status: 'counted' },
+    ]);
+    expect((await stored(attempt._id))?.lastVisibleVerdict).toBe('counted');
+    expect(await recheck(raceId)).toBe(1);
+    // новая ревизия не стирает прежний видимый вердикт
+    expect(await stored(attempt._id)).toMatchObject({
+      status: 'queued',
+      lastVisibleVerdict: 'counted',
+    });
+    expect(await processor().check(attempt._id, 2)).toBe('counted');
+    expect(await verdictEvents()).toHaveLength(1);
+  });
+
+  it('counted → rejected (видимый) — второе событие со статусом rejected', async () => {
+    const { attempt, raceId } = await queuedAttempt();
+    expect(await processor().check(attempt._id, 1)).toBe('counted');
+    // явная попытка: неправдоподобный файл виден райдеру (подготовка — origin в БД)
+    await resultsDb(h).attempts.updateOne({ _id: attempt._id }, { $set: { origin: 'explicit' } });
+    await recheck(raceId);
+    const analyze = vi
+      .spyOn(processor(), 'analyze')
+      .mockResolvedValueOnce({ ok: false, code: 'implausible' });
+    expect(await processor().check(attempt._id, 2)).toBe('rejected');
+    analyze.mockRestore();
+    expect((await verdictEvents()).map((event) => event.payload.status)).toEqual([
+      'counted',
+      'rejected',
+    ]);
+    expect((await stored(attempt._id))?.lastVisibleVerdict).toBe('rejected');
+  });
+
+  it('скрытая авто-попытка (no_start) — без события, видимого вердикта нет', async () => {
+    const { attempt } = await queuedAttempt('mid-start.gpx');
+    expect(await processor().check(attempt._id, 1)).toBe('rejected');
+    expect(await verdictEvents()).toEqual([]);
+    expect((await stored(attempt._id))?.lastVisibleVerdict).toBeNull();
+  });
+
+  it('провал после засчитанной — без события и прежний вердикт не затирается; снова counted — без события', async () => {
+    const { attempt, raceId } = await queuedAttempt();
+    expect(await processor().check(attempt._id, 1)).toBe('counted');
+    await recheck(raceId);
+    const analyze = vi
+      .spyOn(processor(), 'analyze')
+      .mockResolvedValueOnce({ ok: false, code: 'timeout' });
+    expect(await processor().check(attempt._id, 2)).toBe('failed');
+    analyze.mockRestore();
+    expect(await stored(attempt._id)).toMatchObject({
+      status: 'failed',
+      lastVisibleVerdict: 'counted',
+    });
+    await recheck(raceId);
+    expect(await processor().check(attempt._id, 3)).toBe('counted');
+    expect(await verdictEvents()).toHaveLength(1);
+  });
+
+  it('повтор задачи после итога (skipped) — без второго события', async () => {
+    const { attempt } = await queuedAttempt();
+    expect(await processor().check(attempt._id, 1)).toBe('counted');
+    expect(await processor().check(attempt._id, 1)).toBe('skipped');
+    expect(await verdictEvents()).toHaveLength(1);
+  });
+});
+
 describe('разметка трека попытки (maps-02)', () => {
   const stored = (id: string) => resultsDb(h).attempts.findOne({ _id: id });
   const lineOf = async (activityId: string) =>

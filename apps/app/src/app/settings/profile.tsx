@@ -68,6 +68,13 @@ function ProfileContent() {
             {(data) => <ProfileFormView profile={data} />}
           </AsyncContent>
         </View>
+        {/* настройки уведомлений (N4): сразу — не ждёт данных профиля */}
+        <View style={[styles.section, styles.back]}>
+          <TextAction
+            label={t('profile.notifications')}
+            onPress={() => router.push('/settings/notifications')}
+          />
+        </View>
         {/* удаление аккаунта (A2): внизу экрана, сразу — не ждёт данных профиля */}
         <View style={[styles.section, styles.back]}>
           <TextAction

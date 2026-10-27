@@ -27,6 +27,14 @@ jest.mock('expo-secure-store', () => {
   };
 });
 
+// шрифты темы (`useThemeFonts`): в jest нет файлов шрифтов — «уже загружены»; загрузку и её ожидание проверяют
+// use-theme-fonts.test.tsx и root-layout.test.tsx своими моками
+jest.mock('expo-font', () => ({
+  isLoaded: jest.fn(() => true),
+  isLoading: jest.fn(() => false),
+  loadAsync: jest.fn(() => Promise.resolve()),
+}));
+
 // геопозиция: по умолчанию разрешение уже выдано — шаг онбординга пропускается (тесты шага задают своё);
 // getCurrentPositionAsync читает только «Моё местоположение» по нажатию (routes-04d, G1): тесты карты задают ответ,
 // онбординг его не вызывает (сторож в location.test.tsx)
@@ -36,6 +44,23 @@ jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   getCurrentPositionAsync: jest.fn(),
 }));
+
+// push (ADR-0017): разрешение ещё не спрашивали, устройство — не симулятор; тесты push задают ответы сами
+jest.mock('expo-notifications', () => ({
+  AndroidImportance: { DEFAULT: 3 },
+  getPermissionsAsync: jest.fn(async () => ({ status: 'undetermined', canAskAgain: true })),
+  requestPermissionsAsync: jest.fn(async () => ({ status: 'granted', canAskAgain: true })),
+  setNotificationChannelAsync: jest.fn(async () => null),
+  getExpoPushTokenAsync: jest.fn(async () => ({
+    type: 'expo',
+    data: 'ExpoPushToken[test-device-token]',
+  })),
+  setNotificationHandler: jest.fn(),
+  getLastNotificationResponse: jest.fn(() => null),
+  clearLastNotificationResponse: jest.fn(),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+}));
+jest.mock('expo-device', () => ({ isDevice: true }));
 
 // RNGH v3 без Reanimated (routes-04: колбэки жестов — `runOnJS`): mock Reanimated 4.7 падает на `setCSSEventHandler`,
 // и `expo-router/testing-library` подменяет пакет пустым объектом — RNGH принимает его за установленный и падает на
@@ -139,6 +164,7 @@ jest.mock('react-native-svg', () => {
     LinearGradient: stub('LinearGradient'),
     Stop: stub('Stop'),
     Path: stub('Path'),
+    Circle: stub('Circle'),
   };
 });
 jest.mock('./src/features/routes/load-svg-native', () => ({

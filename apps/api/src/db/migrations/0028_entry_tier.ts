@@ -57,7 +57,7 @@ export const ENTRY_TIER_INDEXES: Record<string, IndexDef[]> = {
  * Без транзакции, идемпотентна. Порядок деплоя — миграция → API и worker вместе (RC-7).
  */
 export const entryTier: MongoMigration = {
-  id: '0025_entry_tier',
+  id: '0028_entry_tier',
   async up(db) {
     const entries = db.collection(RESULTS_COLLECTIONS.entries);
     const races = db.collection(RACES_COLLECTIONS.races);

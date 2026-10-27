@@ -65,8 +65,8 @@ export interface RaceDoc {
   entryAdmissions?: number;
   /**
    * Схема групп зачёта (race-results-07): ставит только `admitEntry` первой заявкой — `gender_age`; гонки, получившие
-   * `lockedAt` до `0025_entry_tier` (или первую заявку от старого API, RC-7), — `overall`. Новые гонки — `null`;
-   * документы до 0025 — бэкфилл миграцией, чтение `?? null`.
+   * `lockedAt` до `0028_entry_tier` (или первую заявку от старого API, RC-7), — `overall`. Новые гонки — `null`;
+   * документы до 0028 — бэкфилл миграцией, чтение `?? null`.
    */
   groupScheme?: GroupScheme | null;
   /**

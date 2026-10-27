@@ -1,4 +1,4 @@
-import { size, stroke, type AppTheme } from '@pokatim/design-tokens';
+import { shapeOf, size, stroke, type AppTheme } from '@pokatim/design-tokens';
 import type { ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
 
@@ -24,10 +24,15 @@ export interface BottomSheetProps {
 /** testID жеста шапки (native) — для `createGestureController` в тестах. */
 export const SHEET_PAN_TEST_ID = 'bottom-sheet-pan';
 
-/** Цвета шторки из ролей темы: поверхность шторки, hairline сверху, «чёрточка» — сильная граница. */
-export const sheetColors = (theme: AppTheme) => ({
+/**
+ * Цвета и форма шторки из темы: поверхность шторки, hairline сверху, верхние углы — `shape.sheet` (у «Классики» —
+ * прямые, RC-17).
+ */
+export const sheetSurface = (theme: AppTheme) => ({
   backgroundColor: theme.surface.sheet,
   borderTopColor: theme.border.subtle,
+  borderTopLeftRadius: shapeOf(theme).sheet,
+  borderTopRightRadius: shapeOf(theme).sheet,
 });
 
 export const sheetStyles = StyleSheet.create({
