@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { type APIRequestContext, type Browser, expect, type Page, test } from '@playwright/test';
 
 import { verificationToken } from './mailpit';
-import { API_URL, apiEnv, ORIGIN } from './project';
+import { API_URL, apiEnv, MAP_STYLE_STUB, MAP_STYLE_URL, ORIGIN } from './project';
 
 // Смоук сезонов и гонок (admin-02 AC15): CLI grant-admin первому → админ выдаёт organizer второму → админ создаёт
 // сезон → организатор загружает GPX маршрута (worker из `dist` разбирает его) и создаёт гонку с коридором ±50 м
@@ -45,7 +45,10 @@ async function verifiedUser(request: APIRequestContext, email: string) {
 }
 
 async function openPanel(browser: Browser, errors: string[], email: string) {
-  const page = await (await browser.newContext()).newPage();
+  const context = await browser.newContext();
+  // стиль карты (routes-05) — пустой, без сети: карта, её чанк и воркер поднимаются под CSP панели
+  await context.route(MAP_STYLE_URL, (route) => route.fulfill({ json: MAP_STYLE_STUB }));
+  const page = await context.newPage();
   watchErrors(page, errors);
   await page.goto('/admin/');
   await expect(page.getByRole('heading', { name: 'Вход в панель' })).toBeVisible();
@@ -146,6 +149,12 @@ test('сезон → гонка организатора → публикаци�
   await org.getByRole('link', { name: `Маршрут ${run}` }).click();
   await expect(org.getByRole('heading', { name: `Маршрут ${run}`, level: 1 })).toBeVisible();
   await expect(org.getByRole('group', { name: 'Длина' })).toContainText(/10,6\s?км/);
+  // карта под CSP: стиль загрузился (кнопки камеры — после создания карты), ошибок консоли нет (конец сценария)
+  await expect(
+    org.getByRole('img', { name: new RegExp(`Карта маршрута «Маршрут ${run}»`) }),
+  ).toBeVisible();
+  await org.getByRole('button', { name: 'Приблизить' }).click();
+  await expect(org.getByRole('button', { name: 'Показать маршрут целиком' })).toBeVisible();
   const profile = org.getByRole('slider', { name: /^Профиль высоты/ });
   const before = await profile.getAttribute('aria-valuetext');
   await profile.focus();

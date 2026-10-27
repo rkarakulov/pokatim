@@ -40,11 +40,12 @@ export function RouteScreen({ routeId }: { routeId: string }) {
       query.state.data?.status === 'processing' && !pollExpired ? ROUTE_POLL_MS : false,
   });
   const processing = route.data?.status === 'processing';
+  // окно опроса — не дольше `ROUTE_POLL_MAX_MS`; «Обновить» сбрасывает `pollExpired` — новое окно со своим таймером
   useEffect(() => {
-    if (!processing) return;
+    if (!processing || pollExpired) return;
     const timer = setTimeout(() => setPollExpired(true), ROUTE_POLL_MAX_MS);
     return () => clearTimeout(timer);
-  }, [processing]);
+  }, [processing, pollExpired]);
 
   const crumb = (
     <Link className="link" to="/routes">

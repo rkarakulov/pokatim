@@ -145,7 +145,7 @@ describe('страница маршрута панели (routes-05, AC1–AC3)'
     expect(screen.getByRole('slider')).toBeTruthy();
   });
 
-  it('processing — статус и опрос; готов — карта и профиль; дольше 5 мин — «проверьте позже» и «Обновить»', async () => {
+  it('processing — статус и опрос; дольше 5 мин — «проверьте позже»; «Обновить» — новое окно 5 мин; готов — профиль', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const processing = route({
@@ -176,6 +176,22 @@ describe('страница маршрута панели (routes-05, AC1–AC3)'
         await vi.advanceTimersByTimeAsync(60_000);
       });
       expect(mocked.getRoute.mock.calls.length).toBe(calls);
+
+      // ревью pass 1 (M1): «Обновить», маршрут всё ещё processing — новое окно опроса не дольше 5 мин
+      fireEvent.click(screen.getByRole('button', { name: 'Обновить' }));
+      expect(
+        await screen.findByText('Маршрут обрабатывается — страница обновится сама'),
+      ).toBeTruthy();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      });
+      expect(screen.getByText('Обрабатывается — проверьте позже')).toBeTruthy();
+      const again = mocked.getRoute.mock.calls.length;
+      expect(again).toBeGreaterThan(calls + 100);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(mocked.getRoute.mock.calls.length).toBe(again);
 
       mocked.getRoute.mockResolvedValue(route());
       fireEvent.click(screen.getByRole('button', { name: 'Обновить' }));

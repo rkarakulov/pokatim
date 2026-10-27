@@ -68,7 +68,10 @@ paths:
   Карта — `features/maps/` панели: `RouteMap` (DOM поверх чистых функций `@pokatim/route-view`: `interactiveMapOptions`,
   `guardWheelZoom`, слои `routeLayers(themes.panel …)` без коридора, линия `ROUTE_CATALOG_LINE_WIDTH`), `ScrubMarker`,
   `MapControls`; `maplibre-gl` и CSS — только через `loadMaplibre` (async-чанк, воркер — `maplibre-gl-worker.mjs?url`
-  + `setWorkerUrl`). Стиль — `VITE_MAP_STYLE_LIGHT` (`map-style.ts`); не задан — `LinePreview` (смоук CI идёт по нему).
+  + `setWorkerUrl`). Стиль — `VITE_MAP_STYLE_LIGHT` (`map-style.ts`); не задан — `LinePreview`. Смоук
+  (`e2e/project.ts`) собирает панель со стилем своего origin (`MAP_STYLE_URL`), ответ — пустой стиль через
+  `context.route`: карта, чанк, воркер и CSP проверяются в CI без сети. nginx отдаёт воркер `.mjs` как
+  `application/javascript` (модульный воркер, `nosniff`).
   Профиль — `ElevationProfile` (inline SVG, `role="slider"`, клавиши `scrubKeyTarget`, стор скраббинга —
   `createScrubStore` на экземпляр страницы, `useStore` из `zustand`); подписи — `route-detail-format.ts`. CSP
   (`admin-nginx.conf`): origin провайдера в `connect-src`, `worker-src 'self' blob:`, `img-src blob:`; сторож —

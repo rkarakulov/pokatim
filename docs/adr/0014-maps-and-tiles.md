@@ -204,4 +204,5 @@ Expo SDK 58 (RN 0.88, новая архитектура): iOS, Android, web с S
 
 Альтернативы: копия модулей приложения в панели (дубль, RN-зависимости), CSP через `envsubst` в шаблоне nginx (ломает
 чтение CSP в `vite.config.ts` для `vite preview`). Риски: тайлы под CSP, Ctrl/⌘-колесо и тачпад на стенде —
-проверяются вручную (в CI стиля нет — смоук идёт по `LinePreview`).
+проверяются вручную (смоук CI — стиль-заглушка своего origin через `context.route`: чанк, воркер и CSP без сети).
+Воркер `.mjs` модульный — nginx отдаёт его как `application/javascript` явно (`admin-nginx.conf`).

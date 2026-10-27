@@ -31,4 +31,16 @@ describe('CSP панели и стиль карты (routes-05, RC-4)', () => {
     expect(directive(csp, 'img-src')).toContain('blob:');
     expect(directive(csp, 'script-src')).toEqual(["'self'"]);
   });
+
+  it('воркер .mjs (модульный) отдаётся как application/javascript, с CSP и nosniff (ревью pass 1, M2)', () => {
+    const conf = repo('infra/docker/admin-nginx.conf');
+    const block = /location ~ \^\/admin\/assets\/\.\+\\\.mjs\$ \{([^}]*\{\s*\}[^}]*)\}/.exec(
+      conf,
+    )?.[1];
+    expect(block).toBeDefined();
+    expect(block).toMatch(/types \{\s*\}/);
+    expect(block).toContain('default_type application/javascript;');
+    expect(block).toContain('add_header Content-Security-Policy $panel_csp always;');
+    expect(block).toContain('add_header X-Content-Type-Options "nosniff" always;');
+  });
 });

@@ -365,6 +365,6 @@ StatTile,states}.tsx`, `apps/admin/vite.config.ts`, `infra/docker/admin-nginx.co
 - `pnpm e2e:admin` локально (Mailpit из brew, Mongo :27117, Redis db 13): 2/2 без стиля карты; 2/2 и с
   `VITE_MAP_STYLE_LIGHT=https://tiles.openfreemap.org/styles/positron` — карта под CSP `vite preview`, ошибок консоли
   нет (`expect(errors).toEqual([])`).
-- NOT VERIFIED: ручная проверка на dev-стенде (тайлы под CSP nginx, Ctrl/⌘-колесо и тачпад, перетаскивание мышью,
-  длинный маршрут); смоук со стабом стиля через `page.route` (рекомендация матрицы) не добавлен — CI идёт по
-  `LinePreview`.
+- NOT VERIFIED: ручная проверка на dev-стенде (тайлы и `Content-Type` воркера `.mjs` под nginx, Ctrl/⌘-колесо и
+  тачпад, перетаскивание мышью, длинный маршрут).
+- После ревью pass 1 — см. `findings.md`, «Фиксы после pass 1» (M1, M2, LOW: смоук со стилем-заглушкой).
