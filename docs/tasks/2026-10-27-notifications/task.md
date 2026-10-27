@@ -22,7 +22,7 @@
   для существующих `results.protocol-published`, `results.result-revised`.
 - `disputes`: маршруты для существующих `disputes.dispute-filed|-withdrawn|-responded|-decided`.
 - `rides`: новые `rides.ride-cancelled`, `rides.ride-rescheduled` (по `changesStart`), `rides.participant-joined` —
-  update/cancel/join переводятся на `MongoTransactions` + outbox. `rides.reports-resolved {rideId, resolvedAt}` (RC-5) — в
+  update/cancel/join переводятся на `MongoTransactions` + outbox. `rides.reports-resolved {rideId, resolvedAt}` (RC-3) — в
   транзакции `rides-moderation.service.ts` `act` (закрытые открытые жалобы). Массовая отмена при удалении аккаунта
   (`RideErasure`) тоже пишет `rides.ride-cancelled`.
 - Каждый модуль-источник экспортирует через `index.ts` порт чтения для notifications (получатели и поля текста:
@@ -30,7 +30,7 @@
 
 **Модуль `apps/api/src/modules/notifications`:**
 
-- Коллекции (миграция `0024_notifications`, RC-3): `notifications` (TTL 90 дней по `expireAt`), `notification_settings`, `push_tickets`,
+- Коллекции (миграция `0024_notifications`, RC-5): `notifications` (TTL 90 дней по `expireAt`), `notification_settings`, `push_tickets`,
   `push_tokens`. Уникальность уведомления — `(sourceEventId, userId)`; схлопывание — `collapseKey` (N7).
 - Очередь `notifications-intake`: событие outbox → получатели через порты → настройки → upsert уведомлений; событие
   старше 72 ч — skip. Повтор задачи не создаёт дублей (уникальный ключ).
@@ -225,7 +225,7 @@ Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров �
   вредно (спам за каждую поездку рядом с коридором). Варианты: (а) поле `lastVisibleVerdict` + бэкфилл — **R**;
   (б) сравнивать с `entry.best`/`summary` — теряет отказ при наличии лучшего; (в) уведомлять любой вердикт — спам
   при перепроверке. Детали — §7.
-- **RC-3 Payload `rides.reports-resolved {rideId, resolvedAt}` (RC-5)** — массив не ограничен (жалоб на райд — сколько
+- **RC-3 Payload `rides.reports-resolved {rideId, resolvedAt}`** — массив не ограничен (жалоб на райд — сколько
   угодно пользователей). **R:** `{ rideId, resolvedAt }` (ISO); авторы — `RideNotices.resolvedReporters(rideId,
   resolvedAt)` по `ride_reports_ride_idx` (закрытие пишет один `resolvedAt` на все). Альтернатива — `reportIds` с
   потолком 100 — нет: молча теряет авторов.
