@@ -119,6 +119,21 @@ export function attemptHidden(
   );
 }
 
+/** Вердикт, о котором узнаёт райдер (уведомления, notifications RC-2). */
+export type VisibleVerdict = 'counted' | 'rejected';
+
+/**
+ * Видимый вердикт итога проверки: `counted`/`rejected` и попытка не скрыта (`attemptHidden`) — о скрытой авто-попытке
+ * (без полного сегмента, `implausible`) райдер не узнаёт; провал, снятие и исключение — `null`.
+ */
+export function visibleVerdict(
+  origin: RaceAttemptDoc['origin'],
+  result: Pick<RaceAttemptDoc, 'status' | 'matched' | 'reasons'>,
+): VisibleVerdict | null {
+  if (result.status !== 'counted' && result.status !== 'rejected') return null;
+  return attemptHidden({ origin, ...result }) ? null : result.status;
+}
+
 type RankedAttempt = Pick<RaceAttemptDoc, '_id' | 'status' | 'segment'>;
 
 /** Лучшая засчитанная: минимальные `(elapsedSec, segment.startedAt, _id)`. */

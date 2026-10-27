@@ -17,6 +17,7 @@ const ICONS = {
   zoomOut: { ios: 'minus', material: 'remove' },
   fit: { ios: 'arrow.up.left.and.arrow.down.right', material: 'fit_screen' },
   locate: { ios: 'location', iosFilled: 'location.fill', material: 'my_location' },
+  bell: { ios: 'bell', iosFilled: 'bell.fill', material: 'notifications' },
   // вкладки (вариант таб-бара `icons`, app-themes C2)
   home: { ios: 'house', iosFilled: 'house.fill', material: 'home' },
   races: { ios: 'flag.checkered', material: 'sports_score' },

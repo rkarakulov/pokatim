@@ -149,7 +149,7 @@ paths:
   транзакции удаления маршрута (U6, 8.1 RC-5); жалобы удалённого жалобщика хранятся. Сторож —
   `route-reports.repository.test.ts`. Жалоба — транзакция, **первой** — `recordRouteReport` (`$inc openReportCount` и
   `reportRevision`, `$max lastReportAt`, условия в фильтре): гонка с «Скрыть» — write conflict (отрицательное доказательство — гонка в
-  `route-reports.int.test.ts`). Миграция `0025_routes_publication` (expand-only): `route_reports_route_reporter_unique`,
+  `route-reports.int.test.ts`). Миграция `0028_routes_publication` (expand-only): `route_reports_route_reporter_unique`,
   `route_reports_route_idx`; частичные индексы очередей `routes_publication_pending_idx` (`publication.status:
   'pending'`), `routes_publication_reports_idx` (`publication.openReportCount > 0`), `routes_publication_hidden_idx`
   (`publication.status: 'hidden'`) — запрос очереди содержит условие индекса и `hint`.
@@ -264,7 +264,8 @@ paths:
 
 - `rides` — единственный писатель `RidesRepository`; участники — встроенный массив `participants` (≤ 100, организатор —
   первый) + `goingCount` той же операцией. **Участие — одна атомарная операция над документом райда** (`findOneAndUpdate`
-  с лимитом `$expr`, статусом, временем и членством в фильтре), без транзакций и замков; правка лимита — условие
+  с лимитом `$expr`, статусом, временем и членством в фильтре), без замков и чтения-проверки; с ADR-0017 — в
+  транзакции с outbox-событием (`MongoTransactions`), условие в фильтре по-прежнему обязательно; правка лимита — условие
   `goingCount ≤ limit` в фильтре той же операции. Убрать условие из фильтра — **HIGH** (отрицательное доказательство —
   `rides-participation.int.test.ts`).
 - `version` меняют правки организатора (правка, отмена) и модерация «Скрыть»/«Вернуть» (05b); участие и «Отклонить
@@ -276,7 +277,8 @@ paths:
 - Проекции: публичное чтение без `organizerUserId`, `participants`, `version`; зритель — `participants: { $elemMatch:
   { userId } }` (проекция включающая — остальные поля перечислены явно).
 - **Удаление аккаунта** — `RideErasure.erase` (пакетные `updateMany` с условиями в фильтре, повтор безопасен):
-  будущие `published` свои — `cancelled` (`organizer_unavailable`); скрытые будущие свои из `published` —
+  будущие `published` свои — `cancelled` (`organizer_unavailable`) по одному райду в транзакции с событием
+  `rides.ride-cancelled` (ADR-0017); скрытые будущие свои из `published` —
   `hiddenFromStatus: 'cancelled'` (статус `hidden` не меняется, F6); «Не иду» в чужих будущих `published`/`hidden`
   (`$pull` + `$inc goingCount −1`); `organizerName: null` во всех своих райдах (A6). Прошедшие чужие — без изменений;
   жалобы (`ride_reports`) хранятся (A6).
@@ -300,7 +302,8 @@ paths:
   'deleted-email:'+email)>`, `birthDate: null`, `passwordHash: null`, `erasedAt`; повторный проход — `erasureSweptAt`.
   Поля необязательные (`?? null`); `passwordHash: null` — «учётных данных нет» (вход, порт панели — как неизвестный).
   `users_email_unique` не меняется: регистрация ищет адрес и маркер (`findUserForRegistration`, D-07).
-- Порядок шагов worker (`account-deletion`): профиль → райды → «Мои маршруты» → устройства → заезды → identity. Каждый
+- Порядок шагов worker (`account-deletion`): профиль → райды → «Мои маршруты» → устройства → заезды → уведомления →
+  identity. Push-токены (`push_tokens`) снимаются раньше — в транзакции удаления (`PushTokens.revokeAllOf`). Каждый
   шаг — порт модуля-владельца, идемпотентен; живой аккаунт (`deletedAt: null`) не трогается. Повторный проход через
   15 мин и регламент `account.erasure-resume` (частичный `users_erasure_pending_idx { deletedAt: 1 }`, partial
   `deletedAt: { $type: 'date' }, erasureSweptAt: { $eq: null }`).
@@ -313,3 +316,18 @@ paths:
 - Append-only журналы (`user_consents`, `profile_consent_events`, `panel_audit`, `device_audit`, `dispute_events`,
   `race_recalculations`, `race_protocol_rows`) не меняются (A9); `race_entries`, споры и протоколы — остаются.
 - Новый модуль с данными пользователя обязан дать порт стирания и шаг в `AccountErasureService`.
+
+## Уведомления (ADR-0017, `docs/product/notifications.md`)
+
+- Единственный писатель — `NotificationsRepository`; миграция `0025_notifications` (expand-only): `notifications`
+  (TTL 90 дней по `expireAt`; `notifications_event_user_unique { sourceEventId, userId }`, частичный
+  `notifications_collapse_unique { userId, collapseKey }`, список `{ userId, createdAt: -1, _id: -1 }`, частичные
+  индексы непрочитанных и сроков доставки push/e-mail), `notification_settings` (`_id` = `userId`; нет документа —
+  умолчания), `push_tokens` (`token` уникален, ≤ 10 на пользователя), `push_tickets` (TTL 24 ч; `userId` владельца —
+  стирание аккаунта по нему, индекс `push_tickets_user_idx` из `0027_push_tickets_user`). Чтения сами проверяют
+  `expireAt > now` (TTL — только уборка). Токены при доставке снимаются по снимку `{ _id, userId, sessionId }`, не по
+  одному `_id`.
+- Доставка — состояние в документе уведомления (`push`/`email`: захват `claimId`/`claimedUntil`, `sent`, `skipped`,
+  `limited`, `failed`); захват — условием состояния в фильтре. Убрать условие — дубль push/письма (**HIGH**).
+- `race_attempts.lastVisibleVerdict` (`0026_attempt_last_verdict`, бэкфилл `counted|rejected`) — прежний видимый
+  вердикт: `requeueAttempt` его не сбрасывает; событие вердикта — только при смене.

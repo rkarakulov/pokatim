@@ -18,6 +18,8 @@ import DeviceReturnScreen from '../app/devices/return';
 import DevicesScreen from '../app/settings/devices';
 import DeleteAccountScreen from '../app/settings/account/delete';
 import ProfileScreen from '../app/settings/profile';
+import NotificationsScreen from '../app/notifications';
+import NotificationSettingsScreen from '../app/settings/notifications';
 import VerifyEmailScreen from '../app/auth/verify/[token]';
 import RootLayout from '../app/_layout';
 import CalendarStartRoute from '../app/calendar/[id]';
@@ -68,6 +70,8 @@ export const appRoutes = {
   '(setup)/devices': DevicesStepScreen,
   'settings/devices': DevicesScreen,
   'settings/profile': ProfileScreen,
+  notifications: NotificationsScreen,
+  'settings/notifications': NotificationSettingsScreen,
   'settings/account/delete': DeleteAccountScreen,
   'devices/return': DeviceReturnScreen,
   'auth/verify/[token]': VerifyEmailScreen,

@@ -24,7 +24,10 @@ import { routesRider } from './0021_routes_rider';
 import { routesDerived } from './0022_routes_derived';
 import { accountDeletion } from './0023_account_deletion';
 import { platformSettings } from './0024_platform_settings';
-import { routesPublication } from './0025_routes_publication';
+import { notifications } from './0025_notifications';
+import { attemptLastVerdict } from './0026_attempt_last_verdict';
+import { pushTicketsUser } from './0027_push_tickets_user';
+import { routesPublication } from './0028_routes_publication';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -55,5 +58,8 @@ export const migrations: readonly MongoMigration[] = [
   routesDerived,
   accountDeletion,
   platformSettings,
+  notifications,
+  attemptLastVerdict,
+  pushTicketsUser,
   routesPublication,
 ];

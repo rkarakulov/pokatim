@@ -41,6 +41,12 @@ import {
   travelTo,
   uploadRide,
 } from '../../../test/results';
+import {
+  eventsOfType,
+  expoToken,
+  notificationsDb,
+  seedNotification,
+} from '../../../test/notifications';
 import { createRide, hideInDb, join, ridesDb, startsIn } from '../../../test/rides';
 import {
   publicationDoc,
@@ -413,12 +419,17 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
     expect(await firstPass(w.a.userId)).toBe('erased');
     const once = await snapshotOf(w.a.userId);
     const rides = await ridesDb(h).find().sort({ _id: 1 }).toArray();
+    // отмена будущего опубликованного — событие на райд (ADR-0017); скрытый — без события (RC-8)
+    const cancelled = async () =>
+      (await eventsOfType(h, 'rides.ride-cancelled')).map((event) => event.payload);
+    expect(await cancelled()).toEqual([{ rideId: w.rides.aFuture }]);
 
     expect(await firstPass(w.a.userId)).toBe('erased');
     expect(await sweep(w.a.userId)).toBe('erased');
 
     expect(await snapshotOf(w.a.userId)).toEqual(once);
     expect(await ridesDb(h).find().sort({ _id: 1 }).toArray()).toEqual(rides);
+    expect(await cancelled()).toEqual([{ rideId: w.rides.aFuture }]);
     expect(h.mailer.sent).toHaveLength(1);
   });
 
@@ -479,12 +490,79 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
     await firstPass(w.a.userId);
     const lines = spies.flatMap((spy) => spy.mock.calls.map((args) => args.map(String).join(' ')));
 
-    for (const step of ['profile', 'rides', 'routes', 'devices', 'tracks', 'identity']) {
+    for (const step of [
+      'profile',
+      'rides',
+      'routes',
+      'devices',
+      'tracks',
+      'notifications',
+      'identity',
+    ]) {
       expect(lines.some((line) => line.includes(`user=${w.a.userId} step=${step}`))).toBe(true);
     }
     for (const line of lines) {
       expect(line).not.toMatch(/@example\.com|Анна|Кофе-райд|Мой маршрут/);
     }
+  });
+});
+
+describe('шаг notifications (N11, ADR-0017)', () => {
+  /** Уведомление, настройки, токен устройства и тикет Expo пользователя. */
+  async function notificationData(userId: string, suffix: string) {
+    const db = notificationsDb(h);
+    await seedNotification(h, userId);
+    const now = h.clock.now();
+    await db.settings.insertOne({
+      _id: userId,
+      push: { races: false, disputes: true, rides: true },
+      email: { disputes: true, rides: true },
+      quietHours: { enabled: false, startHour: 22, endHour: 8 },
+      updatedAt: now,
+    });
+    const tokenId = `0190a8c8-0000-7000-8000-0000000000${suffix}`;
+    await db.pushTokens.insertOne({
+      _id: tokenId,
+      token: expoToken(suffix),
+      userId,
+      platform: 'ios',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.pushTickets.insertOne({
+      _id: `0190a8c8-0000-7000-8000-0000000001${suffix}`,
+      ticketId: `ticket-${suffix}`,
+      tokenId,
+      userId,
+      createdAt: now,
+      expireAt: new Date(now.getTime() + DAY),
+    });
+  }
+  const countsOf = async (userId: string) => {
+    const db = notificationsDb(h);
+    return {
+      notifications: await db.notifications.countDocuments({ userId }),
+      settings: await db.settings.countDocuments({ _id: userId }),
+      tokens: await db.pushTokens.countDocuments({ userId }),
+    };
+  };
+
+  it('уведомления, настройки, токены и тикеты A стёрты (токен, записанный после удаления, тоже), B — нет; повтор — без ошибок', async () => {
+    const w = await world();
+    await deleteAccount(w.a.accessToken);
+    // гонка «PUT push-tokens ↔ транзакция удаления»: токен и данные записаны уже после закрытия аккаунта
+    await notificationData(w.a.userId, '01');
+    await notificationData(w.b.userId, '02');
+
+    expect(await firstPass(w.a.userId)).toBe('erased');
+
+    expect(await countsOf(w.a.userId)).toEqual({ notifications: 0, settings: 0, tokens: 0 });
+    expect(await notificationsDb(h).pushTickets.countDocuments({ ticketId: 'ticket-01' })).toBe(0);
+    expect(await countsOf(w.b.userId)).toEqual({ notifications: 1, settings: 1, tokens: 1 });
+    expect(await notificationsDb(h).pushTickets.countDocuments({ ticketId: 'ticket-02' })).toBe(1);
+
+    expect(await sweep(w.a.userId)).toBe('erased');
+    expect(await countsOf(w.b.userId)).toEqual({ notifications: 1, settings: 1, tokens: 1 });
   });
 });
 

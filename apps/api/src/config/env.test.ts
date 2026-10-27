@@ -139,4 +139,40 @@ describe('env', () => {
     expect(value.OW_WEBHOOK_SECRET).toBeUndefined();
     expect(value.DEVICES_ENABLED).toBe(false);
   });
+
+  it('уведомления: push выключен по умолчанию, ключа Expo нет, адрес — exp.host', () => {
+    const value = testEnv();
+    expect(value.PUSH_ENABLED).toBe(false);
+    expect(value.EXPO_ACCESS_TOKEN).toBeUndefined();
+    expect(value.EXPO_PUSH_API_URL).toBe('https://exp.host/--/api/v2/push');
+    expect(testEnv({ PUSH_ENABLED: 'true' }).PUSH_ENABLED).toBe(true);
+    expect(testEnv({ EXPO_ACCESS_TOKEN: '' }).EXPO_ACCESS_TOKEN).toBeUndefined();
+  });
+
+  it('уведомления: ключ Expo — не короче 20 символов, ошибка его не раскрывает; адрес — http(s)', () => {
+    expect(() => testEnv({ EXPO_ACCESS_TOKEN: 'short-expo-key' })).toThrow(
+      expect.objectContaining({ message: expect.not.stringContaining('short-expo-key') }),
+    );
+    expect(testEnv({ EXPO_ACCESS_TOKEN: 'x'.repeat(40) }).EXPO_ACCESS_TOKEN).toHaveLength(40);
+    expect(() => testEnv({ EXPO_PUSH_API_URL: 'ftp://exp.host/--/api/v2/push' })).toThrow();
+    expect(testEnv({ EXPO_PUSH_API_URL: 'http://127.0.0.1:4010/push' }).EXPO_PUSH_API_URL).toBe(
+      'http://127.0.0.1:4010/push',
+    );
+  });
+
+  it('production: адрес Expo Push — только exp.host (dev-стенд — любой)', () => {
+    expect(() =>
+      testEnv({ NODE_ENV: 'production', EXPO_PUSH_API_URL: 'https://push.example.test/push' }),
+    ).toThrow(/EXPO_PUSH_API_URL/);
+    expect(
+      testEnv({
+        NODE_ENV: 'production',
+        DEPLOY_STAGE: 'dev',
+        EXPO_PUSH_API_URL: 'https://push.example.test/push',
+      }).EXPO_PUSH_API_URL,
+    ).toBe('https://push.example.test/push');
+    expect(testEnv({ NODE_ENV: 'production' }).EXPO_PUSH_API_URL).toBe(
+      'https://exp.host/--/api/v2/push',
+    );
+  });
 });

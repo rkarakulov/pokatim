@@ -12,3 +12,13 @@ export {
   type ResultsForDisputes,
   type SeriesSegment,
 } from './results-for-disputes.port';
+/** Порт и события для `notifications` (ADR-0017): получатели уведомлений о результатах и протоколе. */
+export { type AttemptNotice, RESULTS_NOTICES, type ResultsNotices } from './results-notices.port';
+export {
+  RESULTS_ATTEMPT_VERDICT_CHANGED,
+  RESULTS_PROTOCOL_PUBLISHED,
+  RESULTS_RESULT_REVISED,
+  ResultsAttemptVerdictChanged,
+  ResultsProtocolPublished,
+  ResultsResultRevised,
+} from './results.events';

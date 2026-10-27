@@ -13,6 +13,7 @@ import { useRegistrationStore } from '@/features/auth/registration-store';
 import { takeReturnPath } from '@/features/auth/return-path';
 import { useReturnTarget } from '@/features/auth/return-target';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { PushNotifications } from '@/features/notifications/push-registration';
 import { useActiveThemeId } from '@/features/appearance/use-active-theme-id';
 import { onboardingStep, useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { connectFocusManager } from '@/lib/focus-manager';
@@ -107,86 +108,94 @@ function RootShell() {
     <AppThemeProvider themeId={themeId} onFontError={warnFontError}>
       <ThemedRoot hydrated={hydrated}>
         {(background) => (
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: background },
-            }}
-          >
-            {/* вкладки: сессия или онбординг ещё неизвестны (скелетон, повтор) или онбординг пройден */}
-            <Stack.Protected
-              guard={
-                isSessionPending(sessionStatus) ||
-                (signedIn && (step === 'unknown' || step === 'done'))
-              }
-              redirectTo={
-                signedIn
-                  ? step === 'location'
-                    ? '/location'
-                    : step === 'devices'
-                      ? '/devices'
-                      : '/survey'
-                  : returning
-                    ? '/sign-in'
-                    : '/register'
-              }
+          <>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: background },
+              }}
             >
-              <Stack.Screen name="(tabs)" />
-              {/* «Устройства» (вход — иконка верхней панели): тот же гард, что у вкладок; скелетон — в экране
+              {/* вкладки: сессия или онбординг ещё неизвестны (скелетон, повтор) или онбординг пройден */}
+              <Stack.Protected
+                guard={
+                  isSessionPending(sessionStatus) ||
+                  (signedIn && (step === 'unknown' || step === 'done'))
+                }
+                redirectTo={
+                  signedIn
+                    ? step === 'location'
+                      ? '/location'
+                      : step === 'devices'
+                        ? '/devices'
+                        : '/survey'
+                    : returning
+                      ? '/sign-in'
+                      : '/register'
+                }
+              >
+                <Stack.Screen name="(tabs)" />
+                {/* «Устройства» (вход — иконка верхней панели): тот же гард, что у вкладок; скелетон — в экране
               (`useSettingsShell`) */}
-              <Stack.Screen name="settings/devices" />
-              {/* «Профиль» (profile-rider-name, вход — иконка верхней панели): тот же гард и оболочка, что у «Устройств» */}
-              <Stack.Screen name="settings/profile" />
-              {/* кофе-райды (блок 05): форма, правка и отмена — только вошедшим, без таб-бара; гость — «Вход» */}
-              <Stack.Screen name="rides/new" />
-              <Stack.Screen name="rides/edit/[id]" />
-              <Stack.Screen name="rides/cancel/[id]" />
-              {/* жалоба на райд (05b): только вошедшим; гость — «Вход» */}
-              <Stack.Screen name="rides/report/[id]" />
-              {/* свой маршрут (routes-02, M3, RC-11): только вошедшим, без таб-бара; гость — «Вход» */}
-              <Stack.Screen name="routes/mine/[id]" />
-              {/* routes-06: заявка своего маршрута в каталог и жалоба на маршрут райдера — только вошедшим */}
-              <Stack.Screen name="routes/mine/publish/[id]" />
-              <Stack.Screen name="routes/report/[id]" />
-              {/* «Выбрать свой заезд» в гонку (race-results-04): только вошедшим, без таб-бара */}
-              <Stack.Screen name="races/pick/[id]" />
-              {/* споры (race-results-06, RC-14): карточка соперника, подача и ответ — только вошедшим */}
-              <Stack.Screen name="races/result/[id]/[entryId]" />
-              <Stack.Screen name="races/dispute/[id]/[entryId]" />
-              <Stack.Screen name="races/dispute-response/[id]/[disputeId]" />
-            </Stack.Protected>
-            {/* шаги онбординга после входа: опрос → геопозиция → устройства → Главная; пока сессия или шаг неизвестны — скелетон
+                <Stack.Screen name="settings/devices" />
+                {/* «Профиль» (profile-rider-name, вход — иконка верхней панели): тот же гард и оболочка, что у «Устройств» */}
+                <Stack.Screen name="settings/profile" />
+                {/* центр и настройки уведомлений (notifications): тот же гард и оболочка, что у «Профиля» */}
+                <Stack.Screen name="notifications" />
+                <Stack.Screen name="settings/notifications" />
+                {/* кофе-райды (блок 05): форма, правка и отмена — только вошедшим, без таб-бара; гость — «Вход» */}
+                <Stack.Screen name="rides/new" />
+                <Stack.Screen name="rides/edit/[id]" />
+                <Stack.Screen name="rides/cancel/[id]" />
+                {/* жалоба на райд (05b): только вошедшим; гость — «Вход» */}
+                <Stack.Screen name="rides/report/[id]" />
+                {/* свой маршрут (routes-02, M3, RC-11): только вошедшим, без таб-бара; гость — «Вход» */}
+                <Stack.Screen name="routes/mine/[id]" />
+                {/* routes-06: заявка своего маршрута в каталог и жалоба на маршрут райдера — только вошедшим */}
+                <Stack.Screen name="routes/mine/publish/[id]" />
+                <Stack.Screen name="routes/report/[id]" />
+                {/* «Выбрать свой заезд» в гонку (race-results-04): только вошедшим, без таб-бара */}
+                <Stack.Screen name="races/pick/[id]" />
+                {/* споры (race-results-06, RC-14): карточка соперника, подача и ответ — только вошедшим */}
+                <Stack.Screen name="races/result/[id]/[entryId]" />
+                <Stack.Screen name="races/dispute/[id]/[entryId]" />
+                <Stack.Screen name="races/dispute-response/[id]/[disputeId]" />
+              </Stack.Protected>
+              {/* шаги онбординга после входа: опрос → геопозиция → устройства → Главная; пока сессия или шаг неизвестны — скелетон
             (SSR отдаёт HTML оболочки, а не пустую страницу редиректа) */}
-            <Stack.Protected
-              guard={isSessionPending(sessionStatus) || (signedIn && step !== 'done')}
-              redirectTo={(returnTarget.path ?? '/') as Href}
-            >
-              <Stack.Screen name="(setup)" />
-            </Stack.Protected>
-            <Stack.Protected guard={!signedIn} redirectTo="/">
-              <Stack.Screen name="(onboarding)" />
-            </Stack.Protected>
-            {/* публичные экраны вне гардов: ссылка из письма — и до входа, и на другом устройстве */}
-            <Stack.Screen name="auth/verify/[token]" />
-            <Stack.Screen name="auth/reset/[token]" />
-            {/* возврат из авторизации устройства (web — переход страницы, native — холодный старт по ссылке): и из шага
+              <Stack.Protected
+                guard={isSessionPending(sessionStatus) || (signedIn && step !== 'done')}
+                redirectTo={(returnTarget.path ?? '/') as Href}
+              >
+                <Stack.Screen name="(setup)" />
+              </Stack.Protected>
+              <Stack.Protected guard={!signedIn} redirectTo="/">
+                <Stack.Screen name="(onboarding)" />
+              </Stack.Protected>
+              {/* публичные экраны вне гардов: ссылка из письма — и до входа, и на другом устройстве */}
+              <Stack.Screen name="auth/verify/[token]" />
+              <Stack.Screen name="auth/reset/[token]" />
+              {/* возврат из авторизации устройства (web — переход страницы, native — холодный старт по ссылке): и из шага
             онбординга, и из «Устройств»; вход экран проверяет сам */}
-            <Stack.Screen name="devices/return" />
-            {/* удаление аккаунта (A12, адрес для Google Play): гость — «Вход» и возврат, после удаления — «Регистрация»;
+              <Stack.Screen name="devices/return" />
+              {/* удаление аккаунта (A12, адрес для Google Play): гость — «Вход» и возврат, после удаления — «Регистрация»;
             вход экран проверяет сам */}
-            <Stack.Screen name="settings/account/delete" />
-            <Stack.Screen name="ui-kit" />
-            <Stack.Screen name="status" />
-            {/* публичные карточки по ссылке (блок 03, Q8): гость и вошедший; на native — поверх вкладок, без таб-бара */}
-            <Stack.Screen name="races/[id]" />
-            {/* routes-01: публичная карточка маршрута каталога — гость открывает по ссылке (RC-9) */}
-            <Stack.Screen name="routes/[id]" />
-            <Stack.Screen name="seasons/[id]" />
-            {/* публичная карточка старта календаря (блок 04) — так же */}
-            <Stack.Screen name="calendar/[id]" />
-            {/* публичная карточка кофе-райда (блок 05) — так же: ссылка-приглашение открывается без входа */}
-            <Stack.Screen name="rides/[id]" />
-          </Stack>
+              <Stack.Screen name="settings/account/delete" />
+              <Stack.Screen name="ui-kit" />
+              <Stack.Screen name="status" />
+              {/* публичные карточки по ссылке (блок 03, Q8): гость и вошедший; на native — поверх вкладок, без таб-бара */}
+              <Stack.Screen name="races/[id]" />
+              {/* routes-01: публичная карточка маршрута каталога — гость открывает по ссылке (RC-9) */}
+              <Stack.Screen name="routes/[id]" />
+              <Stack.Screen name="seasons/[id]" />
+              {/* публичная карточка старта календаря (блок 04) — так же */}
+              <Stack.Screen name="calendar/[id]" />
+              {/* публичная карточка кофе-райда (блок 05) — так же: ссылка-приглашение открывается без входа */}
+              <Stack.Screen name="rides/[id]" />
+            </Stack>
+            {/* push (ADR-0017): токен устройства и нажатия на push — после входа и онбординга; рядом со `Stack`, чтобы
+          переход по нажатию при холодном старте шёл после монтирования навигатора; web — no-op */}
+            <PushNotifications ready={signedIn && step === 'done'} />
+          </>
         )}
       </ThemedRoot>
     </AppThemeProvider>

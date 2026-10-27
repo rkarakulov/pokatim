@@ -9,6 +9,7 @@ import type {
   RestoreRideRequest,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
+import { MongoOutboxWriter } from '@rkarakulov/api-kit/mongo';
 import { z } from 'zod';
 
 import { type DbSession, MongoTransactions } from '../../db';
@@ -17,6 +18,7 @@ import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { PanelAudit } from '../panel';
 import type { RideReportDoc } from './ride-reports.collection';
 import { RideReportsRepository } from './ride-reports.repository';
+import { RIDES_REPORTS_RESOLVED, type RidesReportsResolved } from './rides.events';
 import { type ModerationAction, moderationTransition, ridePhase } from './rides.policy';
 import { type RideModerationDoc, RidesRepository } from './rides.repository';
 
@@ -72,7 +74,8 @@ function detailOf(
 /**
  * Модерация кофе-райдов в панели (05b, `rides.moderate`): очередь, карточка и действия «Скрыть» / «Вернуть» /
  * «Отклонить жалобы». Действие — одна транзакция: **первой** — условная запись райда (по `version`; 8.1 D2), затем
- * закрытие открытых жалоб и `PanelAudit.append` (откат — ни изменения, ни записи журнала). Порядок проверок — 8.1 D4.
+ * закрытие открытых жалоб, событие `rides.reports-resolved` (закрыта хотя бы одна, ADR-0017) и `PanelAudit.append`
+ * (откат — ни изменения, ни записи журнала, ни события). Порядок проверок — 8.1 D4.
  */
 @Injectable()
 export class RidesModerationService {
@@ -81,6 +84,7 @@ export class RidesModerationService {
     private readonly reports: RideReportsRepository,
     private readonly audit: PanelAudit,
     private readonly transactions: MongoTransactions,
+    private readonly outbox: MongoOutboxWriter,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -173,6 +177,11 @@ export class RidesModerationService {
               actorUserId,
               now,
             );
+      if (closed !== null && closed > 0) {
+        // авторы закрытых жалоб — по `resolvedAt` этого действия (RC-3), id жалоб в событие не идут
+        const payload: RidesReportsResolved = { rideId: id, resolvedAt: now.toISOString() };
+        await this.outbox.append(tx, { type: RIDES_REPORTS_RESOLVED, payload });
+      }
       await this.audit.append(tx, {
         action: AUDIT_ACTION[action],
         actor: { kind: 'user', userId: actorUserId },

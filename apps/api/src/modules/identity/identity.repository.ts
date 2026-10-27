@@ -162,6 +162,15 @@ export class IdentityRepository {
     return new Map(docs.map((doc) => [doc._id, doc.email]));
   }
 
+  /** Живые (не удалённые) аккаунты из `userIds` — проекция `_id`. */
+  async findLiveIds(userIds: readonly string[]): Promise<Set<string>> {
+    if (userIds.length === 0) return new Set();
+    const docs = await this.c.users
+      .find({ _id: { $in: [...userIds] }, deletedAt: null }, { projection: { _id: 1 } })
+      .toArray();
+    return new Set(docs.map((doc) => doc._id));
+  }
+
   private async findUser(userId: string, session?: DbSession): Promise<UserState | undefined> {
     const doc = await this.c.users.findOne(
       { _id: userId },
@@ -459,6 +468,22 @@ export class IdentityRepository {
       { projection: { _id: 1 } },
     );
     return user !== null;
+  }
+
+  /** Живые (не отозванные, не истёкшие) сессии пользователя из `sessionIds`. */
+  async findLiveSessionIds(
+    userId: string,
+    sessionIds: readonly string[],
+    now: Date,
+  ): Promise<Set<string>> {
+    if (sessionIds.length === 0) return new Set();
+    const docs = await this.c.sessions
+      .find(
+        { _id: { $in: [...sessionIds] }, userId, revokedAt: null, expiresAt: { $gt: now } },
+        { projection: { _id: 1 } },
+      )
+      .toArray();
+    return new Set(docs.map((doc) => doc._id));
   }
 
   async insertSession(

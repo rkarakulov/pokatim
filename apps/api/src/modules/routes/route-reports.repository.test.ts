@@ -88,7 +88,7 @@ describe('route_reports — вставка, закрытие и удаление
       .map((file) => relative(SRC, file))
       .sort();
     expect(users).toEqual([
-      'db/migrations/0025_routes_publication.ts',
+      'db/migrations/0028_routes_publication.ts',
       'modules/routes/route-reports.collection.ts',
       'modules/routes/route-reports.repository.ts',
     ]);

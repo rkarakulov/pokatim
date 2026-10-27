@@ -88,3 +88,7 @@ paths:
   `password: SignInPassword`), ответ `204`. Коды — `PASSWORD_INCORRECT` (403, не 401: клиент не уходит в refresh) и
   `ACCOUNT_PANEL_MEMBER` (409) в конце `ErrorCode`; `AUDIT_ACTIONS` + `account.deleted` (admin i18n
   `admin.audit.action.account.deleted`). api-client — `deleteAccount(accessToken, body)`.
+- Уведомления (ADR-0017): `src/notifications/notification.schema.ts` — `kind`/`group` в ответах — `tolerantEnum`,
+  цель — белый список (`NotificationTarget`), незнакомая в ответе — `{ type: 'unknown' }`; запросы (`NotificationSettings`
+  с `startHour ≠ endHour`, `RegisterPushToken`, `RevokePushToken`, `NotificationListQuery`) — `strictObject`. api-client —
+  8 методов `/v1/notifications*`.

@@ -9,6 +9,8 @@ import { RACE_CANCEL_GATE } from '../races';
 import { RESULT_DISPUTE_GATE, ResultsCoreModule } from '../results';
 import { TracksCoreModule } from '../tracks';
 import { DisputeGates } from './dispute-gates';
+import { DisputeNoticesService } from './dispute-notices';
+import { DISPUTE_NOTICES } from './dispute-notices.port';
 import { DisputeSeriesCache } from './dispute-series.cache';
 import { DisputeSeriesProcessor } from './dispute-series.processor';
 import { DisputeSeriesService } from './dispute-series.service';
@@ -19,7 +21,8 @@ import { DisputesRepository } from './disputes.repository';
 import { DisputesService } from './disputes.service';
 
 /**
- * Ядро `disputes` (RC-1): репозиторий и гейты для `results` (`RESULT_DISPUTE_GATE`) и `races` (`RACE_CANCEL_GATE`).
+ * Ядро `disputes` (RC-1): репозиторий и гейты для `results` (`RESULT_DISPUTE_GATE`) и `races` (`RACE_CANCEL_GATE`),
+ * стороны спора для `notifications` (`DISPUTE_NOTICES`, ADR-0017).
  * `@Global`: `results` и `races` о `disputes` не знают (цикла импортов нет), а инъекция гейтов обязательная —
  * модуль импортируют оба корня композиции, `AppModule` и `WorkerModule` (приёму попыток в worker нужен D-39).
  */
@@ -30,8 +33,10 @@ import { DisputesService } from './disputes.service';
     DisputeGates,
     { provide: RESULT_DISPUTE_GATE, useExisting: DisputeGates },
     { provide: RACE_CANCEL_GATE, useExisting: DisputeGates },
+    DisputeNoticesService,
+    { provide: DISPUTE_NOTICES, useExisting: DisputeNoticesService },
   ],
-  exports: [DisputesRepository, RESULT_DISPUTE_GATE, RACE_CANCEL_GATE],
+  exports: [DisputesRepository, RESULT_DISPUTE_GATE, RACE_CANCEL_GATE, DISPUTE_NOTICES],
 })
 export class DisputesCoreModule {}
 

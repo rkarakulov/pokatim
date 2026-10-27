@@ -45,6 +45,23 @@ jest.mock('expo-location', () => ({
   getCurrentPositionAsync: jest.fn(),
 }));
 
+// push (ADR-0017): разрешение ещё не спрашивали, устройство — не симулятор; тесты push задают ответы сами
+jest.mock('expo-notifications', () => ({
+  AndroidImportance: { DEFAULT: 3 },
+  getPermissionsAsync: jest.fn(async () => ({ status: 'undetermined', canAskAgain: true })),
+  requestPermissionsAsync: jest.fn(async () => ({ status: 'granted', canAskAgain: true })),
+  setNotificationChannelAsync: jest.fn(async () => null),
+  getExpoPushTokenAsync: jest.fn(async () => ({
+    type: 'expo',
+    data: 'ExpoPushToken[test-device-token]',
+  })),
+  setNotificationHandler: jest.fn(),
+  getLastNotificationResponse: jest.fn(() => null),
+  clearLastNotificationResponse: jest.fn(),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+}));
+jest.mock('expo-device', () => ({ isDevice: true }));
+
 // RNGH v3 без Reanimated (routes-04: колбэки жестов — `runOnJS`): mock Reanimated 4.7 падает на `setCSSEventHandler`,
 // и `expo-router/testing-library` подменяет пакет пустым объектом — RNGH принимает его за установленный и падает на
 // `isSharedValue`. Обёртка RNGH «Reanimated не установлен» — для src- и lib-сборки пакета.

@@ -4,8 +4,13 @@ import { textStyle, useTheme } from '@rkarakulov/ui';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from './icon';
+import { NotificationBell } from './notification-bell';
 
 interface TopBarProps {
+  /** вход в центр уведомлений — колокольчик первым справа (notifications); без обработчика колокольчика нет */
+  onOpenNotifications?: () => void;
+  /** непрочитанные для счётчика колокольчика; неизвестно — без счётчика */
+  unreadCount?: number;
   /** вход в «Устройства» — иконка справа (место будущего аватара «Личная линия»); без обработчика иконки нет */
   onOpenDevices?: () => void;
   /** вход в «Профиль» (profile-rider-name) — иконка справа после «Устройств»; без обработчика иконки нет */
@@ -14,10 +19,15 @@ interface TopBarProps {
 
 /**
  * Верхняя панель корня вкладки (`.topbar` прототипа): словесный знак продукта, иконки «Устройства» (часы) и «Профиль»
- * (`Icon`: SF Symbols на iOS, Material Symbols на Android и web). Колокольчик и аватар — с блоками уведомлений
- * и профиля; тогда же — кандидат в `@rkarakulov/ui` (R8 блока 02).
+ * (`Icon`: SF Symbols на iOS, Material Symbols на Android и web), колокольчик уведомлений со счётчиком.
+ * Аватар — с блоком профиля; тогда же — кандидат в `@rkarakulov/ui` (R8 блока 02).
  */
-export function TopBar({ onOpenDevices, onOpenProfile }: TopBarProps) {
+export function TopBar({
+  onOpenNotifications,
+  unreadCount,
+  onOpenDevices,
+  onOpenProfile,
+}: TopBarProps) {
   const theme = useTheme();
   return (
     <View testID="top-bar" style={styles.bar}>
@@ -29,6 +39,9 @@ export function TopBar({ onOpenDevices, onOpenProfile }: TopBarProps) {
         {t('home.wordmark')}
       </Text>
       <View style={styles.actions}>
+        {onOpenNotifications ? (
+          <NotificationBell count={unreadCount} onPress={onOpenNotifications} />
+        ) : null}
         {onOpenDevices ? (
           <Pressable
             accessibilityRole="button"

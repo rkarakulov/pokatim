@@ -17,6 +17,7 @@ import { accountOutboxRoutes, AccountWorkerModule } from './modules/account';
 import { identityOutboxRoutes, IdentityWorkerModule } from './modules/identity';
 import { devicesOutboxRoutes, DevicesWorkerModule } from './modules/devices';
 import { DisputesCoreModule, DisputesWorkerModule } from './modules/disputes';
+import { notificationsOutboxRoutes, NotificationsWorkerModule } from './modules/notifications';
 import { resultsOutboxRoutes, ResultsWorkerModule } from './modules/results';
 import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
 import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
@@ -41,6 +42,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
         ...routesOutboxRoutes,
         ...resultsOutboxRoutes,
         ...accountOutboxRoutes,
+        // подписчик чужих типов (results, disputes, rides) — ADR-0017
+        ...notificationsOutboxRoutes,
       },
     }),
     TracksWorkerModule,
@@ -54,6 +57,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     DisputesWorkerModule,
     // фоновая очистка удалённого аккаунта (account-deletion, ADR-0015)
     AccountWorkerModule,
+    // приём событий для центра уведомлений (ADR-0017)
+    NotificationsWorkerModule,
   ],
 })
 export class WorkerModule {}
