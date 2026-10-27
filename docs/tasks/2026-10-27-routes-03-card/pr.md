@@ -38,7 +38,7 @@
 ## Проверки
 
 - `TURBO_CONCURRENCY=1 pnpm check` (изолированные Mongo/Redis) — зелёный.
-- Ревью: pass 1 — Claude independent-reviewer APPROVE (MEDIUM 1, LOW 2) → все три исправлены (`findings.md`).
+- Ревью: pass 1 — Claude independent-reviewer APPROVE (MEDIUM 1, LOW 2) → исправлены; pass 2 (фиксы + слияние с routes-02) — APPROVE, LOW 1 (KML в тесте deriveRoute) → исправлен (`findings.md`).
 
 ## NOT VERIFIED
 

@@ -76,3 +76,60 @@ ASCII-fallback + RFC 5987, `\p{Cc}\p{Cf}` вырезаны, `nosniff`, CSP `sand
 - **LOW (стрелки в a11y):** символы «↑», «↻», «→» убраны из текста чипов и стат-блока (декор, зачитывается
   скринридером).
 - **LOW (класс ошибки):** в лог сбоя окружения добавлен `error.name` без текста сообщения.
+
+# Findings — routes-03-card — pass 2 — reviewer: claude
+base: origin/develop (9332f26)   commits: e603d35 (фиксы pass 1), 41fb4cc (merge develop / routes-02), working tree clean
+verdict: APPROVE
+
+Проверено: `git show e603d35`; `git diff 41fb4cc^1 41fb4cc` и `git diff 41fb4cc^2 41fb4cc`; маркеров конфликтов нет.
+Запущено (изолированные `pokatim_r03rev2_test` / Redis db 13): api `src/db/migrations/migrations.int.test.ts` +
+`src/modules/routes` — 8 файлов, 93/93; `packages/tracks` — 269/269; app jest `features/routes`, `route-detail`,
+`my-routes`, `components` — 123/123; `pnpm typecheck` (8/8), `pnpm lint`, `pnpm arch:check` — зелёные.
+NOT VERIFIED: `pnpm e2e:web` (нужен поднятый web+api стенд), ручная проверка iOS/Android.
+
+Фиксы pass 1 — подтверждены, повторно не репортятся:
+- MEDIUM бэкфилл: продолжение отдельной задачей убрано, пачки в цикле одной задачи до `ROUTES_DERIVE_MAX_BATCHES = 10`,
+  стоп при неполной пачке или без прогресса (`derived + failed === 0`) — горячего цикла нет; остаток — следующий cron.
+  Разбор в `worker_threads`, event loop не блокируется — продление lock BullMQ работает. `ROUTES_DERIVE_MORE_JOB_ID`
+  нигде не используется. Тесты: три пачки подряд, стоп без прогресса, предел пачек.
+- LOW a11y: стрелки удалены из `chip.loop|oneWay`, `stats.gainValue`; тесты обновлены.
+- LOW лог: `error.name` без текста сообщения.
+
+Merge 41fb4cc — по пунктам:
+- `parse.ts`: `loadRoutePoints` содержит `detectRouteFormat` + ветку `parseKml` (routes-02) с `maxPoints`; и
+  `analyzeRoute`, и `deriveRoute` идут через него — KML-маршруты получают профиль/GPX и при разборе, и в бэкфилле.
+- Миграции: `0021_routes_rider` (develop) не тронута, `0022_routes_derived` последней в `index.ts`; тест 0021
+  ослаблен корректно (`toContain` вместо `at(-1)`), тест 0022 проверяет порядок «сразу после 0021», индекс и
+  идемпотентность; ожидаемые индексы `route_geometries` обновлены.
+- Граница приватности: `derivedOf`/`exportGpx` вызываются только после `published()` → `findPublished`
+  (`status: 'ready'` + `IN_CATALOG` с `origin: 'platform'`); int-тест «изоляция маршрутов райдера» проверяет 404 на
+  `''`, `/map`, `/gpx` для маршрута райдера, в т.ч. с подставленным `catalog`. `MyRoute`-ответы профиль/GPX не отдают.
+  Утечки GPX/профиля маршрута райдера не найдено.
+- `deleteOwn` удаляет `route_exports` в той же транзакции. Гонка с бэкфиллом: `recordDerived` пишет экспорт только
+  при `matchedCount === 1` по `route_geometries` (обновление того же документа, который удаляет `deleteOwn`, —
+  write conflict, одна из транзакций повторяется/откатывается); `markDerivedFailed` — `updateOne` без upsert. Осиротевший
+  экспорт не остаётся. Других путей удаления маршрутов в API нет; правило `pokatim-db.md` про будущее удаление аккаунта
+  дополнено `route_exports`.
+- `routes.module.ts`: `IpRateLimitGuard` в провайдерах API, `RouteDerivedBackfill`/`RoutesMaintenanceProcessor`/
+  `RoutesSchedules` и очередь `routesMaintenance` — только в `RoutesWorkerModule`, рядом с `MyRoutesService`.
+- `route-line-map.tsx`: необязательный `lineWidth` проброшен до `RouteMap`; каталог передаёт `ROUTE_CATALOG_LINE_WIDTH`,
+  карточка «Моего маршрута» — дефолт.
+- i18n: `routes.detail.{length,elevation,elevationValue,loop,yes,no}` возвращены и используются
+  `my-route-detail.tsx:173–180`; удалённые `kicker`, `city`, `surface` нигде не используются.
+- e2e: сценарий routes-03 встроен в тест routes-01/02 (опрос `gpxAvailable`, SSR профиля, скачивание, заголовки GPX);
+  блок «Мои» не тронут.
+
+### [LOW] Эквивалентность `deriveRoute` ≡ `analyzeRoute` не проверена на KML
+- **file:** packages/tracks/src/analyze-route.test.ts
+- **location:** тест «deriveRoute ≡ { profile, gpx } из analyzeRoute; отказы — те же коды» (строки ~216–227)
+- **problem:** после слияния `loadRoutePoints` разбирает KML (task.md §13: «бэкфилл считает и KML-маршруты»), но цикл
+  эквивалентности и проверка кодов отказа идут только по GPX-фикстурам; бэкфилл KML-маршрута не покрыт ни здесь, ни в
+  `routes-derived.int.test.ts`.
+- **why_it_matters:** сейчас эквивалентность держится конструкцией (общий `loadRoutePoints`), но заявленное в §13
+  поведение не зафиксировано тестом — регрессия при будущем разделении путей GPX/KML пройдёт незамеченной.
+- **evidence:** `for (const name of ['route-loop.gpx', 'route-rte.gpx', 'zero-points.gpx'])`; отказы — `xxe.gpx`,
+  `route-short.gpx`, `.fit`.
+- **recommended_fix:** добавить в цикл `route-earth-gxtrack.kml` (с высотами) и `route-mymaps.kml` (без высот), в
+  отказы — `xxe.kml` → `unreadable`.
+
+Итог: CRITICAL/HIGH нет — APPROVE.

@@ -213,15 +213,22 @@ describe('analyzeRoute: профиль высоты и очищенный GPX (r
     expect(result.gpx).toContain('<trkpt');
   });
 
-  it('deriveRoute ≡ { profile, gpx } из analyzeRoute; отказы — те же коды', () => {
+  it('deriveRoute ≡ { profile, gpx } из analyzeRoute (GPX и KML); отказы — те же коды', () => {
     expect(ROUTE_DERIVED_VERSION).toBeGreaterThanOrEqual(1);
-    for (const name of ['route-loop.gpx', 'route-rte.gpx', 'zero-points.gpx']) {
+    for (const name of [
+      'route-loop.gpx',
+      'route-rte.gpx',
+      'zero-points.gpx',
+      'route-mymaps.kml',
+      'route-earth-gxtrack.kml',
+    ]) {
       const { profile, gpx } = analyzeRoute(fixture(name));
       const derived = deriveRoute(fixture(name));
       expect(derived).toEqual({ profile, gpx });
       expect(structuredClone(derived)).toEqual(derived);
     }
     expect(failureCode(() => deriveRoute(fixture('xxe.gpx')))).toBe('unreadable');
+    expect(failureCode(() => deriveRoute(fixture('xxe.kml')))).toBe('unreadable');
     expect(failureCode(() => deriveRoute(fixture('route-short.gpx')))).toBe('too_short');
     expect(failureCode(() => deriveRoute(fixture('garmin-edge-ride.fit')))).toBe('unreadable');
   });
