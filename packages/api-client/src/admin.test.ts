@@ -158,6 +158,7 @@ describe('createAdminApiClient: маршруты (race-results-01)', () => {
     createdAt: '2026-10-27T10:00:00.000Z',
     catalog: null,
     line: [],
+    elevation: null,
   };
 
   it('uploadRoute — POST octet-stream с сырыми байтами, название в ?title=, cookie без Authorization', async () => {

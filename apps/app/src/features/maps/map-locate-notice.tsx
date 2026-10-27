@@ -1,11 +1,11 @@
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
+import { MAP_FIT_PADDING } from '@pokatim/route-view';
 import { Banner } from '@rkarakulov/ui';
 import { StyleSheet, View } from 'react-native';
 
 import { locationDeniedMessage, openLocationSettings } from '@/features/location/location-settings';
 
-import { MAP_FIT_PADDING } from './corridor-style';
 import type { LocateState } from './use-locate';
 
 /**

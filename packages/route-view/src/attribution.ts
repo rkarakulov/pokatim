@@ -1,7 +1,7 @@
-import type { AppTheme } from '@pokatim/design-tokens';
+import type { Theme } from '@pokatim/design-tokens';
 
 /*
- * Атрибуция web-карты (`maplibre-gl` 6) — баги ручной проверки maps-01 (B2, B4 maps-02). Атрибуция остаётся
+ * Атрибуция web-карты (`maplibre-gl` 6; приложение и панель) — баги ручной проверки maps-01 (B2, B4 maps-02). Атрибуция остаётся
  * доступной (ADR-0014 п. 3): кнопка «i» раскрывает её.
  */
 
@@ -35,14 +35,17 @@ export function collapseAttribution(
 }
 
 /**
- * B4: контрол атрибуции по теме приложения (по умолчанию — светлая плашка и чёрная «i» в любой теме). Правила —
- * в области `[data-route-map="scope"]` карты, цвета — роли темы; иконка «i» — SVG фона MapLibre (чёрная), в тёмной
- * теме инвертируется. Подсказка кооперативных жестов (routes-04b) — цвета MapLibre (затемнение, нейтрально в обеих
+ * B4: контрол атрибуции по теме (по умолчанию — светлая плашка и чёрная «i» в любой теме). Правила — в области
+ * `[data-route-map="scope"]` карты, цвета — роли темы; иконка «i» — SVG фона MapLibre (чёрная), в тёмной теме
+ * (`dark`) инвертируется. Подсказка кооперативных жестов (routes-04b) — цвета MapLibre (затемнение, нейтрально в обеих
  * темах, RC-10), при reduce motion — без анимации.
  */
-export function attributionCss(scope: string, theme: AppTheme): string {
+export function attributionCss(
+  scope: string,
+  theme: Pick<Theme, 'surface' | 'text'>,
+  dark: boolean,
+): string {
   const root = `[data-route-map="${scope}"]`;
-  const dark = theme.map.basemap === 'dark';
   return [
     `${root} .maplibregl-ctrl.maplibregl-ctrl-attrib{background-color:${theme.surface.raised};color:${theme.text.secondary}}`,
     `${root} .maplibregl-ctrl-attrib a{color:${theme.text.secondary}}`,

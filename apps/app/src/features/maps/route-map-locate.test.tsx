@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 import type { RaceRouteMap } from '@pokatim/contracts';
 import { space, themes } from '@pokatim/design-tokens';
+import { MAP_CAMERA_ANIMATION_MS, MAP_FIT_PADDING } from '@pokatim/route-view';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { AccessibilityInfo, Linking } from 'react-native';
@@ -8,9 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import type * as Position from '@/features/location/current-position';
 
-import { MAP_FIT_PADDING } from './corridor-style';
 import { LOCATE_ZOOM, LOCATION_SOURCE_ID } from './location-style';
-import { MAP_CAMERA_ANIMATION_MS } from './map-camera';
 import { RouteMap } from './route-map';
 
 jest.mock('@/features/location/current-position', () => ({ readCurrentPosition: jest.fn() }));

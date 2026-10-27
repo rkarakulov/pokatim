@@ -1,22 +1,26 @@
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { stroke, type AppTheme } from '@pokatim/design-tokens';
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View, type AccessibilityActionEvent } from 'react-native';
-import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
-
-import { useScrub, type ScrubStore } from '@/features/maps/scrub-store';
-
-import { profileBarHeights, profileBars } from './format';
-import { loadSvgNative } from './load-svg-native';
-import type { ProfileChartProps } from './profile-chart-props';
-import { PROFILE_VIEW_BOX, profileGradientId, profilePaths } from './profile-path';
 import {
   PROFILE_ASPECT_RATIO,
   PROFILE_FILL_OPACITY,
   PROFILE_NATIVE_FILL_OPACITY,
-} from './profile-style';
+  PROFILE_VIEW_BOX,
+  profileGradientId,
+  profilePaths,
+  scrubStep,
+  type ScrubStore,
+} from '@pokatim/route-view';
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { StyleSheet, View, type AccessibilityActionEvent } from 'react-native';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+
+import { useScrub } from '@/features/maps/use-scrub';
+
+import { profileBarHeights, profileBars } from './format';
+import { loadSvgNative } from './load-svg-native';
+import type { ProfileChartProps } from './profile-chart-props';
 import { svgSupported } from './svg-support';
-import { scrubReadout, scrubStep } from './scrub';
+import { scrubReadout } from './scrub';
 
 type SvgLib = Awaited<ReturnType<typeof loadSvgNative>>;
 

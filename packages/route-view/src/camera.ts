@@ -1,6 +1,6 @@
 import { size } from '@pokatim/design-tokens';
 
-import { MAP_FIT_PADDING } from './corridor-style';
+import { MAP_FIT_PADDING } from './route-layers.ts';
 
 /*
  * Камера интерактивной карты (routes-04b, ADR-0014): ограничения зума, шаг и длительность кнопок. Жесты — нативные

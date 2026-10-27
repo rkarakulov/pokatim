@@ -1,8 +1,8 @@
 import type { RaceRouteMap } from '@pokatim/contracts';
 import type { AppTheme } from '@pokatim/design-tokens';
+import { type ScrubStore } from '@pokatim/route-view';
 import type { Planar } from '@pokatim/tracks';
 
-import type { ScrubStore } from './scrub-store';
 import type { RouteMapTrack } from './track-style';
 
 /** Общий API карты маршрута (`route-map.tsx` — native, `route-map.web.tsx` — web). */

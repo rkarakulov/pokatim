@@ -98,6 +98,17 @@ describe('BottomSheet web (routes-04d, L4, L6, RC-1, RC-17)', () => {
     expect(node.getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('«чёрточка» на всю ширину шторки, полоса по центру: <button> в flex-колонке растягивается', async () => {
+    render(<Harness />);
+    await act(async () => undefined);
+    // в блочном потоке <button> сжимается до содержимого (44 px у левого края)
+    const box = grabber().parentElement as HTMLElement;
+    expect(box.style.display).toBe('flex');
+    expect(box.style.flexDirection).toBe('column');
+    expect(['', 'stretch']).toContain(box.style.alignItems);
+    expect(getComputedStyle(grabber()).alignItems).toBe('center');
+  });
+
   it('свернуть, когда фокус в теле — фокус переходит на «чёрточку»', async () => {
     render(
       <SafeAreaProvider initialMetrics={METRICS}>

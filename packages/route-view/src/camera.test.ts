@@ -1,4 +1,5 @@
-import { MAP_ASPECT_RATIO, MAP_FIT_PADDING } from './corridor-style';
+import { describe, expect, it } from 'vitest';
+import { MAP_ASPECT_RATIO, MAP_FIT_PADDING } from './route-layers.ts';
 import {
   CAMERA_MIN_VIEW_PX,
   cameraCall,
@@ -6,7 +7,7 @@ import {
   clampZoom,
   MAP_MAX_ZOOM,
   MAP_MIN_ZOOM,
-} from './map-camera';
+} from './camera.ts';
 
 describe('map-camera: ограничения зума (routes-04b, RC-8)', () => {
   it('clampZoom', () => {

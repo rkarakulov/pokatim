@@ -1,8 +1,7 @@
 import type { CircleLayerSpecification } from '@maplibre/maplibre-gl-style-spec';
 import { size, stroke, type AppTheme } from '@pokatim/design-tokens';
+import { CORRIDOR_OPACITY } from '@pokatim/route-view';
 import type { FeatureCollection, Point } from 'geojson';
-
-import { CORRIDOR_OPACITY } from './corridor-style';
 
 /*
  * Точка «Моё местоположение» (routes-04d, G1, RC-13) — один источник для native (`location-layer.tsx`) и web

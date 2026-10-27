@@ -130,7 +130,7 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
           {t('admin.races.corridor.pollFailed')}
         </Banner>
       ) : null}
-      {value ? <RoutePreview routeId={value} /> : null}
+      {value ? <RoutePreview routeId={value} openLink="new-tab" /> : null}
 
       <RouteUploadDialog upload={upload} />
     </>
