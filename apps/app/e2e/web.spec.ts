@@ -755,7 +755,7 @@ test.describe('с API', () => {
     }
   });
 
-  test('Маршруты (routes-01): карточка маршрута каталога по ссылке без входа (SSR, OG без ПДн), вкладка «Маршруты» после входа', async ({
+  test('Маршруты (routes-01, routes-02): карточка маршрута каталога по ссылке без входа (SSR, OG без ПДн), вкладка «Маршруты» после входа, «Мои» — пусто', async ({
     page,
     request,
   }) => {
@@ -794,6 +794,20 @@ test.describe('с API', () => {
       await expect(card.first()).toBeVisible();
       await card.first().click();
       await expect(page).toHaveURL(`${BASE_URL}/routes/${route.id}`);
+
+      // routes-02: «Мои» — новый райдер без маршрутов; `?view=mine` переживает перезагрузку
+      await page.goto('/routes');
+      await page.getByRole('tab', { name: 'Мои', exact: true }).click();
+      await expect(page).toHaveURL(`${BASE_URL}/routes?view=mine`);
+      await expect(page.getByText('У вас пока нет маршрутов')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Загрузить маршрут' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'до 50 км' })).toHaveCount(0);
+      await page.reload();
+      await expect(page.getByRole('tab', { name: 'Мои', exact: true })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      await expect(page.getByText('У вас пока нет маршрутов')).toBeVisible();
     } finally {
       await route.withdraw();
     }

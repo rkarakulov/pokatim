@@ -4,7 +4,7 @@ import type {
   RacePage,
   RouteMapGeometry,
 } from '@pokatim/contracts';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { queryOptions, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 
@@ -82,15 +82,16 @@ export function useCatalogRoute(
   });
 }
 
-/** Геометрия для карты — только клиент; готовый маршрут неизменен по геометрии (pull-to-refresh её не трогает). */
-export function useCatalogRouteMap(id: string, enabled: boolean) {
-  return useQuery<RouteMapGeometry>({
+/**
+ * Геометрия для карты (`RouteLineMap`) — только клиент; готовый маршрут неизменен по геометрии (pull-to-refresh её не
+ * трогает).
+ */
+export const catalogRouteMapOptions = (id: string) =>
+  queryOptions<RouteMapGeometry>({
     queryKey: ['routes', 'map', id],
     queryFn: () => api.getCatalogRouteMap(id),
     staleTime: PUBLIC_STALE_MS,
-    enabled,
   });
-}
 
 /** «Гонки на маршруте» (RC-12): новые сверху, первая страница — 10, «Показать ещё»; только клиент. */
 export function useCatalogRouteRaces(id: string, enabled: boolean) {

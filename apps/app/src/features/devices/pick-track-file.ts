@@ -3,10 +3,13 @@ import { getDocumentAsync } from 'expo-document-picker';
 import type { PickedTrackFile } from './picked-track-file';
 
 /**
- * Системный picker (native): у `.fit` нет общего MIME-типа iOS/Android — любой тип, расширение проверяет pre-check.
- * Файл копируется в кеш приложения (`copyToCacheDirectory`) — отправка читает его по `uri`. Отмена — `null`.
+ * Системный picker (native): у `.fit`/`.kml` нет общего MIME-типа iOS/Android — любой тип, расширение проверяет
+ * pre-check (список расширений здесь не нужен — параметр для web-варианта). Файл копируется в кеш приложения
+ * (`copyToCacheDirectory`) — отправка читает его по `uri`. Отмена — `null`.
  */
-export async function pickTrackFile(): Promise<PickedTrackFile | null> {
+export async function pickTrackFile(
+  _extensions?: readonly string[],
+): Promise<PickedTrackFile | null> {
   const result = await getDocumentAsync({
     type: '*/*',
     copyToCacheDirectory: true,
