@@ -48,6 +48,9 @@ const PLATFORM = { origin: 'platform' } as const;
 /** Свой маршрут райдера (routes-02): единственное условие чтения и записи «моих». */
 const ownRider = (ownerUserId: string) => ({ ownerUserId, origin: 'rider' }) as const;
 
+/** Частичный индекс каталога (`0020_routes_catalog`). */
+const CATALOG_INDEX = 'routes_catalog_idx';
+
 /**
  * Опубликован в каталоге — условие частичного индекса `routes_catalog_idx` (обязательно в запросе каталога); только
  * маршрут платформы (защита в глубину: у маршрута райдера `catalog` всегда `null`).
@@ -140,11 +143,15 @@ export class RoutesRepository {
         ],
       });
     }
-    return this.c.routes
-      .find({ $and: and })
-      .sort({ 'catalog.publishedAt': -1, _id: -1 })
-      .limit(limit)
-      .toArray();
+    return (
+      this.c.routes
+        .find({ $and: and })
+        .sort({ 'catalog.publishedAt': -1, _id: -1 })
+        // `origin` в фильтре делает кандидатом `routes_list_idx` (сортировка в памяти) — план фиксирован
+        .hint(CATALOG_INDEX)
+        .limit(limit)
+        .toArray()
+    );
   }
 
   /** Коды городов старта опубликованных маршрутов (чипы фильтра). */

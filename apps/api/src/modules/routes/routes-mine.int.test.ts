@@ -223,6 +223,11 @@ describe('список, карточка, карта', () => {
     const first = await get(me.token, `${MY_ROUTES}?limit=2`);
     expect(first.headers['cache-control']).toBe('no-store');
     const seen: string[] = [];
+    // профиль переживает h.reset: записи explain-тестов других файлов не нужны
+    await h.db
+      .collection('system.profile')
+      .drop()
+      .catch(() => undefined);
     await h.db.command({ profile: 2 });
     try {
       let cursor: string | null = null;
@@ -240,10 +245,13 @@ describe('список, карточка, карта', () => {
       await h.db.command({ profile: 0 });
     }
     expect(seen).toEqual(mine);
-    const entries = await h.db
-      .collection<{ planSummary?: string; hasSortStage?: boolean }>('system.profile')
+    const profile = h.db.collection<{ planSummary?: string; hasSortStage?: boolean }>(
+      'system.profile',
+    );
+    const entries = await profile
       .find({ ns: `${h.db.databaseName}.routes`, op: 'query', 'command.sort': { $exists: true } })
       .toArray();
+    await profile.drop();
     expect(entries.length).toBeGreaterThan(0);
     for (const entry of entries) {
       expect(entry.planSummary).toContain('IXSCAN { ownerUserId: 1, origin: 1, _id: -1 }');
