@@ -8,14 +8,21 @@ import { useAppTheme } from '@/theme/use-app-theme';
 
 import { Icon, type IconName } from './icon';
 
-/** Иконки вкладок (вариант `icons`); вкладка без иконки — только подпись. */
-const TAB_ICONS: Partial<Record<string, IconName>> = {
+/** Вкладки приложения (`src/app/(tabs)/_layout.tsx`; равенство сторожит `theme-guards.test.ts`). */
+export const TAB_NAMES = ['index', 'races', 'rides', 'routes', 'calendar'] as const;
+type TabName = (typeof TAB_NAMES)[number];
+
+/** Иконки вкладок (вариант `icons`): полноту по вкладкам проверяет тип. */
+const TAB_ICONS: Record<TabName, IconName> = {
   index: 'home',
   races: 'races',
   rides: 'rides',
   routes: 'routes',
   calendar: 'calendar',
 };
+
+const isTabName = (name: string): name is TabName =>
+  (TAB_NAMES as readonly string[]).includes(name);
 
 interface TabItemProps {
   name: string;
@@ -39,7 +46,8 @@ function ClassicTabItem({ name, label, focused, tabBar }: TabItemProps) {
 
 /** Темы с иконками: иконка над подписью, полосы нет; активная — с заливкой (iOS). Иконка декоративная. */
 function IconTabItem({ name, label, focused, tabBar }: TabItemProps) {
-  const icon = TAB_ICONS[name];
+  // незнакомое имя (тестовый навигатор) — только подпись
+  const icon = isTabName(name) ? TAB_ICONS[name] : null;
   return (
     <View style={styles.iconItem}>
       {icon ? (
