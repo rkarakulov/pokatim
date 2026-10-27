@@ -3,6 +3,8 @@ import { Module } from '@nestjs/common';
 
 import { QUEUE } from '../../queues';
 import { AccessTokenVerifier } from './access-token';
+import { AccountClosure } from './account-closure';
+import { AccountErasure } from './account-erasure';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { CredentialsCheck } from './credentials-check';
@@ -52,11 +54,20 @@ export class IdentityAccountsModule {}
     SignInService,
     PasswordResetService,
     PanelCredentials,
+    AccountClosure,
   ],
   // гард создаётся в модуле-потребителе (`@UseGuards`) — ему нужны и зависимости гарда; сам класс репозитория
   // наружу не экспортируется из `index.ts`: другие модули identity-коллекции не читают
-  // `PanelCredentials` и `IdentityAccounts` — узкий порт для модуля `panel` (ADR-0009)
-  exports: [AuthGuard, AccessTokenVerifier, PanelCredentials, IdentityAccountsModule],
+  // `PanelCredentials` и `IdentityAccounts` — узкий порт для модуля `panel` (ADR-0009); `AccountClosure` и
+  // `SessionCookie` — для удаления аккаунта (модуль `account`, ADR-0015)
+  exports: [
+    AuthGuard,
+    AccessTokenVerifier,
+    PanelCredentials,
+    IdentityAccountsModule,
+    AccountClosure,
+    SessionCookie,
+  ],
 })
 export class IdentityModule {}
 
@@ -75,3 +86,14 @@ export class IdentityModule {}
   ],
 })
 export class IdentityWorkerModule {}
+
+/**
+ * Порт фоновой очистки удалённого аккаунта для worker (`AccountErasure`, модуль `account`, ADR-0015): письмо «Аккаунт
+ * удалён» и стирание ПДн. `MAILER` — из `MailModule` worker.
+ */
+@Module({
+  imports: [IdentityAccountsModule],
+  providers: [AccountErasure],
+  exports: [AccountErasure],
+})
+export class IdentityErasureModule {}

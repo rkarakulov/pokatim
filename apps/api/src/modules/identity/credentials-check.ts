@@ -33,6 +33,20 @@ export class CredentialsCheck implements OnModuleInit {
   }
 
   async check(input: { email: string; password: string }, ip: string): Promise<CheckedCredentials> {
+    const account = await this.verify(input, ip);
+    if (!account) throw invalidCredentials();
+    return account;
+  }
+
+  /**
+   * Та же проверка без решения об ответе: лимиты (429 — `DomainError`) → поиск → argon2 по хешу или пустышке;
+   * неверный пароль, неизвестный, удалённый и стёртый аккаунт — `undefined`. Вызывающий выбирает код отказа (вход —
+   * `401 INVALID_CREDENTIALS`, удаление аккаунта — `403 PASSWORD_INCORRECT`).
+   */
+  async verify(
+    input: { email: string; password: string },
+    ip: string,
+  ): Promise<CheckedCredentials | undefined> {
     const email = normalizeEmail(input.email);
     await this.takeAttempt(email, ip, this.clock.now());
 
@@ -40,8 +54,7 @@ export class CredentialsCheck implements OnModuleInit {
     const known = account !== undefined && account.deletedAt === null;
     const passwordHash = known ? account.passwordHash : await this.hasher.dummyHash();
     const valid = await this.hasher.verify(passwordHash, input.password);
-    if (!known || !valid) throw invalidCredentials();
-    return account;
+    return known && valid ? account : undefined;
   }
 
   /**

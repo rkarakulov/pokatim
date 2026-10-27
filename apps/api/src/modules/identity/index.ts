@@ -1,5 +1,18 @@
 export { identityOutboxRoutes } from './identity.events';
-export { IdentityAccountsModule, IdentityModule, IdentityWorkerModule } from './identity.module';
+export {
+  IdentityAccountsModule,
+  IdentityErasureModule,
+  IdentityModule,
+  IdentityWorkerModule,
+} from './identity.module';
+export { AccountClosure, type AccountCloseOutcome } from './account-closure';
+export {
+  AccountErasure,
+  type AccountEraseOptions,
+  type AccountEraseOutcome,
+} from './account-erasure';
+export type { DeletionState } from './identity.repository';
+export { SessionCookie } from './session-cookie';
 export { type AccountState, IdentityAccounts } from './identity-accounts';
 export {
   PanelCredentials,

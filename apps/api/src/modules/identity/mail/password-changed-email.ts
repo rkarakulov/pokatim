@@ -3,7 +3,7 @@ import type { MailMessage } from '@rkarakulov/api-kit/core';
 import { escapeHtml, htmlEmail } from './html';
 
 /** Время в письмах — по Минску (AGENTS.md §4.7), в БД — UTC. */
-const minskDateTime = new Intl.DateTimeFormat('ru-RU', {
+export const minskDateTime = new Intl.DateTimeFormat('ru-RU', {
   timeZone: 'Europe/Minsk',
   day: 'numeric',
   month: 'long',
