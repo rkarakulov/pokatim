@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import { fetchPublicForSsr, type PublicSsrResult } from '@/lib/public-ssr';
 
-import { refreshSsrTheme, SSR_THEME_PATHS, ssrThemeId } from './ssr-theme';
+import { isSsrThemePage, refreshSsrTheme, SSR_THEME_PATHS, ssrThemeId } from './ssr-theme';
 
 jest.mock('@/lib/public-ssr', () => ({ fetchPublicForSsr: jest.fn() }));
 
@@ -139,4 +139,12 @@ describe('пути middleware темы', () => {
     '/icons/icon-192.png',
     '/assets/__node_modules/font.ttf',
   ])('%s — нет', (path) => expect(runs(path)).toBe(false));
+});
+
+describe('isSsrThemePage — исходный путь запроса', () => {
+  it('страница — да', () => expect(isSsrThemePage('http://web:8080/races/1?x=1')).toBe(true));
+
+  // matcher expo-server совпадает у loader-а по пути без префикса (`/races/1`) — middleware отсекает его сам
+  it('loader /_expo/loaders/races/1 — нет', () =>
+    expect(isSsrThemePage('http://web:8080/_expo/loaders/races/1')).toBe(false));
 });

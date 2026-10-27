@@ -16,6 +16,15 @@ const ATTEMPT_INTERVAL_MS = 60_000;
  */
 export const SSR_THEME_PATHS: RegExp[] = [/^\/(?!_expo\/)[^.]*$/];
 
+/**
+ * Нужна ли странице свежая тема. expo-server сверяет matcher у loader-а `/_expo/loaders/<путь>` и по `<путь>` без
+ * префикса — поэтому middleware проверяет исходный путь запроса ещё раз.
+ */
+export function isSsrThemePage(url: string): boolean {
+  const { pathname } = new URL(url, 'http://localhost');
+  return SSR_THEME_PATHS.some((pattern) => pattern.test(pathname));
+}
+
 interface SsrThemeState {
   /** последняя известная тема процесса */
   themeId?: AppThemeId;
