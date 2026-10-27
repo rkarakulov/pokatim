@@ -61,6 +61,21 @@ routes-02: §8.2 «Follow-up (ревью pass 1, Claude LOW 5)» и RC-10 в
 - Admin: `apps/admin/src/features/routes/{RoutesScreen,route-upload}.tsx`, `apps/admin/src/features/races/CorridorField.tsx`,
   `apps/admin/src/ui/FileButton.tsx`, тесты рядом; i18n — `packages/i18n/src/ru.ts`.
 
+## 8.3 Security checklist
+
+1. **AuthN/AuthZ:** не меняется — заезды и «мои маршруты» под `AuthGuard`, слот берётся по `userId` из
+   сессии сервера; панель — `PanelGuard` + `races.manage`; доступ к объектам — прежние фильтры владельца.
+2. **Входные данные:** формат — по содержимому (`detectRouteFormat` / `detectTrackFormat`), не по `accept` панели
+   (`.gpx,.kml` — только удобство выбора); размер — `readLimited` с обрывом на лимите; новое — таймауты тела
+   (тишина 30 с, всё тело 180 с) → `408`, ничего не сохраняется.
+3. **Данные наружу:** новых полей нет; `408` — конверт `ApiError` без деталей, кроме `fields: body`.
+4. **Злоупотребления:** новое — 1 одновременный приём на пользователя + 4 на процесс (`UploadSlots`, до чтения тела),
+   таймауты против медленной отправки; лимиты частоты Redis (пользователь, IP) — без изменений. Слоты — память
+   процесса (Redis-слоты — out of scope, §3).
+5. **Секреты и логи:** логи не меняются; в слотах — только `userId` в памяти процесса, без записи.
+6. **Аудит:** не затронут — загрузка в панели по-прежнему пишет `route.created`; загрузки райдера журнал панели не
+   пишут (как было).
+
 ## 8.2 Deviations from spec
 
 - `[ASSUMPTION]` таймаутов подтверждены без изменений: `idleMs` 30 с, `totalMs` 180 с, ответ `408 VALIDATION_FAILED`
