@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 import type { CatalogRouteElevation } from '@pokatim/contracts';
-import { contrastRatio, themes, WCAG } from '@pokatim/design-tokens';
+import { appThemes, contrastRatio, themes, WCAG } from '@pokatim/design-tokens';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type * as ReactNative from 'react-native';
 import { GestureHandlerRootView, State } from 'react-native-gesture-handler';
@@ -10,11 +10,16 @@ import {
   getByGestureTestId,
 } from 'react-native-gesture-handler/jest-utils';
 
+import { appThemeWrapper } from '@/__tests__/app-theme-wrapper';
 import { createScrubStore, type ScrubStore } from '@/features/maps/scrub-store';
 
 import { ElevationProfile } from './elevation-profile';
 import { PROFILE_BARS, PROFILE_PAN_TEST_ID } from './profile-chart';
-import { PROFILE_FILL_OPACITY, PROFILE_NATIVE_FILL_OPACITY } from './profile-style';
+import {
+  PROFILE_FILL_OPACITY,
+  PROFILE_NATIVE_FILL_OPACITY,
+  PROFILE_SOLID_OPACITY,
+} from './profile-style';
 
 /** RNGH v3: передача конфига обработчика в натив (эффект `useGesture` по ссылке конфига) — счётчик для M1. */
 const nativeProxy = () =>
@@ -235,5 +240,33 @@ describe('ElevationProfile: скраббинг native (routes-04, S1, S4)', () =
     expect(chart()).toHaveProp('accessibilityValue', { text: expect.stringMatching(/^34 км,/) });
     expect(setConfig.mock.calls.length).toBe(before);
     setConfig.mockRestore();
+  });
+});
+
+describe('ElevationProfile native — заливка по теме (app-themes C2)', () => {
+  const hidden = { includeHiddenElements: true };
+
+  it('solid (Журнал) — стопы PROFILE_SOLID_OPACITY сверху и снизу', async () => {
+    await render(<ElevationProfile elevation={elevation} distanceM={68_000} gainM={620} />, {
+      wrapper: appThemeWrapper('journal'),
+    });
+    await screen.findByTestId('elevation-profile-svg', hidden);
+    const stops = screen.getAllByTestId('svg-Stop', hidden).map((stop) => stop.props);
+    expect(stops.map((stop) => stop.stopOpacity)).toEqual([
+      PROFILE_SOLID_OPACITY,
+      PROFILE_SOLID_OPACITY,
+    ]);
+    expect(stops[0]!.stopColor).toBe(appThemes.journal.schemes.light.profile.fillTop);
+  });
+
+  it('line (Навигация) — без площади и градиента: только линия', async () => {
+    await render(<ElevationProfile elevation={elevation} distanceM={68_000} gainM={620} />, {
+      wrapper: appThemeWrapper('navigation'),
+    });
+    await screen.findByTestId('elevation-profile-svg', hidden);
+    expect(screen.queryByTestId('svg-LinearGradient', hidden)).toBeNull();
+    const paths = screen.getAllByTestId('svg-Path', hidden);
+    expect(paths).toHaveLength(1);
+    expect(paths[0]!.props.stroke).toBe(appThemes.navigation.schemes.dark.profile.line);
   });
 });

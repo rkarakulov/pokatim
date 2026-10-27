@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 import type { CatalogRouteElevation } from '@pokatim/contracts';
-import { themes } from '@pokatim/design-tokens';
+import { appThemes, themes } from '@pokatim/design-tokens';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
@@ -8,7 +8,9 @@ import { renderToString } from 'react-dom/server';
 import { createScrubStore, SCRUB_MARKER_ATTR, type ScrubStore } from '@/features/maps/scrub-store';
 
 import { ProfileArea, ProfileChart } from './profile-chart.web';
-import { PROFILE_FILL_OPACITY } from './profile-style';
+import { appThemeWrapper } from '@/__tests__/app-theme-wrapper';
+
+import { PROFILE_FILL_OPACITY, PROFILE_SOLID_OPACITY } from './profile-style';
 
 const elevation: CatalogRouteElevation = {
   minM: 191,
@@ -246,5 +248,34 @@ describe('ProfileChart web: скраббинг (routes-04, RC-13)', () => {
     expect(store.getState()).toMatchObject({ active: true, dragging: 'profile' });
     await act(async () => pointer(node, 'pointercancel', 20, 'touch'));
     expect(store.getState()).toMatchObject({ active: false, dragging: null });
+  });
+});
+
+describe('ProfileArea web — заливка по теме (app-themes C2)', () => {
+  const areaHtml = (themeId: 'journal' | 'navigation') => {
+    const Theme = appThemeWrapper(themeId);
+    const theme = appThemes[themeId].schemes.light;
+    return renderToString(
+      <Theme>
+        <ProfileArea elevation={elevation} theme={theme} />
+      </Theme>,
+    );
+  };
+
+  it('solid (Журнал) — оба стопа PROFILE_SOLID_OPACITY', () => {
+    const html = areaHtml('journal');
+    expect(html).toContain(
+      `<stop offset="0" stop-color="${appThemes.journal.schemes.light.profile.fillTop}" stop-opacity="${PROFILE_SOLID_OPACITY}"></stop>`,
+    );
+    expect(html).toContain(
+      `<stop offset="1" stop-color="${appThemes.journal.schemes.light.profile.fillBottom}" stop-opacity="${PROFILE_SOLID_OPACITY}"></stop>`,
+    );
+  });
+
+  it('line (Навигация) — без площади: только линия', () => {
+    const html = areaHtml('navigation');
+    expect(html).not.toContain('<linearGradient');
+    expect(html.match(/<path /g)).toHaveLength(1);
+    expect(html).toContain(`stroke="${appThemes.navigation.schemes.dark.profile.line}"`);
   });
 });
