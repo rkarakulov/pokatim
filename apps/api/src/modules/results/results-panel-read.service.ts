@@ -40,7 +40,12 @@ import {
   uploadClosesAt,
 } from './results.policy';
 import { segmentView } from './results-read.service';
-import { type GroupCount, type RankedEntry, ResultsRepository } from './results.repository';
+import {
+  type GroupCount,
+  type RankedEntry,
+  ResultsRepository,
+  type StandingsFilter,
+} from './results.repository';
 
 const notFound = () => domainError('NOT_FOUND', 404);
 /** Курсор попыток панели: только `_id` (новые сверху). */
@@ -72,12 +77,12 @@ export const protocolBaseOf = (entry: RankedEntry, dq: boolean): ProtocolBase =>
 
 type StandingItem = Omit<PanelStandingRow, 'riderName'>;
 
-/** Все строки «Участников» до фильтров (`standingItems`). */
+/** Строки «Участников» после фильтров, не больше `standingsMax` (`standingItems`). */
 interface StandingItems {
   revision: number | null;
   groups: GroupCount[];
   items: StandingItem[];
-  /** строк сверх загруженных заявок (больше `standingsMax`) */
+  /** отфильтрованных строк больше `standingsMax` */
   overflow: boolean;
 }
 
@@ -187,9 +192,7 @@ export class ResultsPanelReadService {
     const counts = await this.repository.panelCounts(race.id, CORRIDOR_ENGINE_VERSION);
     // race-results-07: «Требует внимания» — строки «Участников» с флагами; финишёры — время без места
     const { attention, finishers } = await this.repository.withSnapshot(async (session) => ({
-      attention: (await this.standingItems(race, now, session)).items.filter(
-        (row) => row.flags.length > 0,
-      ).length,
+      attention: await this.attentionCount(race, session),
       finishers: await this.repository.countFinishers(race.id, session),
     }));
     return {
@@ -294,64 +297,89 @@ export class ResultsPanelReadService {
   ): Promise<PanelRaceStandings> {
     const race = await this.race(principal, raceId);
     const now = this.clock.now();
-    const max = RESULTS_POLICY.standingsMax;
+    const filter: StandingsFilter = {
+      ...(query.group === undefined ? {} : { group: query.group }),
+      ...(query.attention === undefined ? {} : { attention: true }),
+    };
     const all = await this.repository.withSnapshot((session) =>
-      this.standingItems(race, now, session),
+      this.standingItems(race, now, session, filter),
     );
-    const filtered = all.items.filter(
-      (row) =>
-        (query.group === undefined || row.groupKey === query.group) &&
-        (query.attention === undefined || row.flags.length > 0),
-    );
-    const items = filtered.slice(0, max);
     // имена — после snapshot-сессии, одним вызовом порта (в снимок не пишутся)
-    const names = await this.names.publicNames(items.map((row) => row.userId));
+    const names = await this.names.publicNames(all.items.map((row) => row.userId));
     return {
       source: all.revision === null ? 'live' : 'protocol',
       revision: all.revision,
       groupScheme: race.groupScheme,
       groups: all.groups,
-      truncated: all.overflow || filtered.length > max,
-      items: items.map((row) => ({ ...row, riderName: names.get(row.userId) ?? null })),
+      truncated: all.overflow,
+      items: all.items.map((row) => ({ ...row, riderName: names.get(row.userId) ?? null })),
     };
   }
 
-  /** Все строки «Участников» гонки без фильтров (чтение «Участников» и счётчик «Требует внимания»). */
+  /**
+   * Строки с местами гонки: до публикации — живые (`buildProtocol` без DQ), после — текущая ревизия протокола. Всегда
+   * полный набор: места и `SPEED_CLUSTER_HIGH` считаются по всем ранжированным, а не по странице ответа.
+   */
+  private async rankedHead(race: RaceForResults, session: DbSession) {
+    const revision =
+      race.protocolPublishedAt !== null
+        ? ((await this.repository.currentRevision(race.id, session)) ?? 1)
+        : null;
+    const head =
+      revision === null
+        ? await this.liveHead(race.id, session)
+        : (await this.repository.protocolRows(race.id, revision, session)).map((row) =>
+            this.protocolHead(row),
+          );
+    return { revision, head };
+  }
+
+  /** «Требует внимания»: строки с местом и флагами + финишёры с флагами — по всей гонке, без предела ответа. */
+  private async attentionCount(race: RaceForResults, session: DbSession): Promise<number> {
+    const { head } = await this.rankedHead(race, session);
+    const headIds = new Set(head.map((row) => row.entryId));
+    const rest = await this.repository.attentionEntryIds(race.id, session);
+    return (
+      head.filter((row) => row.flags.length > 0).length +
+      rest.filter((id) => !headIds.has(id)).length
+    );
+  }
+
+  /**
+   * Строки «Участников» с фильтрами (race-results-07) — фильтры до предела `standingsMax`: сначала строки с местами
+   * (полный набор), затем прочие заявки по времени заявки; `overflow` — по отфильтрованному набору.
+   */
   private async standingItems(
     race: RaceForResults,
     now: Date,
     session: DbSession,
+    filter: StandingsFilter,
   ): Promise<StandingItems> {
     const raceId = race.id;
     const max = RESULTS_POLICY.standingsMax;
-    const revision =
-      race.protocolPublishedAt !== null
-        ? ((await this.repository.currentRevision(raceId, session)) ?? 1)
-        : null;
-    const head =
-      revision === null
-        ? await this.liveHead(raceId, session)
-        : (await this.repository.protocolRows(raceId, revision, session)).map((row) =>
-            this.protocolHead(row),
-          );
+    const { revision, head } = await this.rankedHead(race, session);
     const groups =
       revision === null
         ? countGroups(head)
         : await this.repository.protocolGroups(raceId, revision, session);
+    const matches = (row: Pick<StandingItem, 'groupKey' | 'flags'>) =>
+      (filter.group === undefined || row.groupKey === filter.group) &&
+      (!filter.attention || row.flags.length > 0);
+    const headRows = head.filter(matches);
     const headEntries = new Map(
       (
         await this.repository.entriesByIds(
-          head.slice(0, max).map((row) => row.entryId),
+          headRows.slice(0, max).map((row) => row.entryId),
           session,
         )
       ).map((entry) => [entry._id, entry]),
     );
     const headIds = new Set(head.map((row) => row.entryId));
     const rest = (
-      await this.repository.entriesForStandings(raceId, max + head.length + 1, session)
+      await this.repository.entriesForStandings(raceId, filter, max + head.length + 1, session)
     ).filter((entry) => !headIds.has(entry._id));
     const items: StandingItem[] = [];
-    for (const row of head.slice(0, max)) {
+    for (const row of headRows.slice(0, max)) {
       const entry = headEntries.get(row.entryId);
       if (!entry) continue;
       items.push({
@@ -363,11 +391,12 @@ export class ResultsPanelReadService {
         unranked: null,
       });
     }
-    for (const entry of rest.slice(0, Math.max(0, max - items.length))) {
+    const restRows: StandingItem[] = [];
+    for (const entry of rest) {
       // финишёры (START, без пульса) — время лучшей попытки и причина без места
       const unranked = entry.status === 'active' ? unrankedOf(entry) : null;
       const best = unranked ? entry.best : null;
-      items.push({
+      const row: StandingItem = {
         entryId: entry._id,
         userId: entry.userId,
         entryStatus: entry.status,
@@ -381,9 +410,11 @@ export class ResultsPanelReadService {
         groupKey: entry.groupKey,
         unranked,
         flags: best?.flags ?? [],
-      });
+      };
+      if (matches(row)) restRows.push(row);
     }
-    return { revision, groups, items, overflow: head.length + rest.length > max };
+    items.push(...restRows.slice(0, Math.max(0, max - items.length)));
+    return { revision, groups, items, overflow: headRows.length + restRows.length > max };
   }
 
   /**

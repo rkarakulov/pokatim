@@ -27,13 +27,25 @@
 `tier: null`, старый worker — `best` без `ranked`. Проверка после деплоя (`mongosh`, БД приложения):
 
 ```js
+// 1. заявки старого API без уровня, `best` старого worker без `ranked`
 db.race_entries.countDocuments({ tier: null })
 db.race_entries.countDocuments({ best: { $type: 'object' }, 'best.ranked': { $exists: false } })
-db.races.countDocuments({ lockedAt: { $type: 'date' }, groupScheme: { $exists: false } })
+// 2. информативно: гонки, получившие первую заявку от старого API (миграция ставит `groupScheme: null` всем гонкам без
+//    `lockedAt`, поэтому `$exists: false` после неё всегда 0); чтение даёт им `overall` (`toRace` / `$ifNull`)
+db.races.find({ lockedAt: { $type: 'date' }, groupScheme: null }, { _id: 1, lockedAt: 1 })
+// 3. засчитанные попытки, проверенные старым worker после миграции (нет `sensors`): в гонке `gender_age` Verified-заявка
+//    с такой лучшей попыткой станет «Без пульса» и потеряет место; <T> — время применения 0025 (журнал миграций)
+db.race_attempts.aggregate([
+  { $match: { status: 'counted', sensors: { $exists: false }, checkedAt: { $gte: <T> } } },
+  { $group: { _id: '$raceId', attempts: { $sum: 1 } } },
+])
 ```
 
-Ненулевой результат — выполнить шаги 1–3 миграции вручную теми же `updateMany` (идемпотентны; журнал миграций
-повтор `0025` не запустит) или перепроверить гонку из панели («Перепроверить треки» пересчитает `best`).
+Ненулевой результат (1) — выполнить шаги 1–3 миграции вручную теми же `updateMany` (идемпотентны; журнал миграций
+повтор `0025` не запустит) или перепроверить гонку. Гонки из (3) — перепроверить: панель «Перепроверить треки»
+(`POST /v1/admin/races/:raceId/results/recheck` до публикации, `…/protocol/recheck` после; право `results.manage`) —
+новый worker перепроверит попытки гонки, запишет `sensors`/`flags` и пересчитает `best`. Гонки из (2) остаются
+`overall` (принятый риск RC-7).
 
 ## Env / конфиг
 

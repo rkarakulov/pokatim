@@ -147,10 +147,10 @@ function halvesDecouplingPct(both: readonly ParsedPoint[], mid: number): number 
 
 /**
  * (б) Доля рывков мощности без ответа пульса; `null` — рывков меньше `minSurges`. Рывок — отсчёт мощности `t`, где
- * среднее за `[t − 5 с, t]` > 1,5 × среднего за `[t − 65 с, t − 5 с)`; ответ — `max(hr в (t, t + 90 с]) −
+ * среднее за `[t − 5 с, t]` > 1,5 × среднего за `[t − 65 с, t − 5 с)` (окно базы целиком в сегменте); ответ — `max(hr в (t, t + 90 с]) −
  * mean(hr в [t − 5 с, t]) ≥ 5`. Рывок без отсчётов пульса до или после не оценивается.
  */
-function surgeNonResponseShare(power: Channel, hr: Channel): number | null {
+function surgeNonResponseShare(power: Channel, hr: Channel, from: number): number | null {
   const avgFrom = new Cursor(power.times, true);
   const baseFrom = new Cursor(power.times, true);
   const hrPreFrom = new Cursor(hr.times, true);
@@ -164,6 +164,8 @@ function surgeNonResponseShare(power: Channel, hr: Channel): number | null {
     const baseLo = baseFrom.at(t - P.surgeAvgMs - P.surgeBaseMs);
     const preLo = hrPreFrom.at(t - P.surgeAvgMs);
     const preHi = hrPreTo.at(t);
+    // база — только полное окно 60 с внутри сегмента (иначе разгон со старта — ложный рывок)
+    if (t - P.surgeAvgMs - P.surgeBaseMs < from) continue;
     if (t - lastSurge < P.surgeRefractoryMs || baseLo >= avgLo) continue;
     const avg = power.sum(avgLo, i + 1) / (i + 1 - avgLo);
     const base = power.sum(baseLo, avgLo) / (avgLo - baseLo);
@@ -198,7 +200,7 @@ function decoupling(inside: readonly ParsedPoint[], from: number, to: number): S
     if (point.power !== undefined) power.add(time, point.power);
     if (point.hr !== undefined) hr.add(time, point.hr);
   }
-  const share = surgeNonResponseShare(power, hr);
+  const share = surgeNonResponseShare(power, hr, from);
   if (share !== null && share > P.nonResponseShare) {
     return { code: 'HR_POWER_DECOUPLED', metric: Math.round(share * 100) };
   }

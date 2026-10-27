@@ -36,6 +36,12 @@ export interface RankPosition {
 }
 
 /** Строка таблицы: активная заявка с засчитанным лучшим результатом, её группа и уровень. */
+/** Фильтры «Участников» панели (race-results-07). */
+export interface StandingsFilter {
+  group?: ResultGroupKey;
+  attention?: boolean;
+}
+
 export type RankedEntry = Pick<RaceEntryDoc, '_id' | 'userId' | 'groupKey' | 'tier'> & {
   best: NonNullable<RaceEntryDoc['best']>;
 };
@@ -467,6 +473,19 @@ export class ResultsRepository {
     };
   }
 
+  /** Группа заявки гонки (курсор таблицы без `group`): не заявка этой гонки — `null`. */
+  async entryGroupKey(
+    raceId: string,
+    entryId: string,
+    session?: DbSession,
+  ): Promise<ResultGroupKey | null> {
+    const doc = await this.c.entries.findOne(
+      { raceId, _id: entryId },
+      { session, projection: { groupKey: 1 } },
+    );
+    return doc?.groupKey ?? null;
+  }
+
   /** Позиция строки таблицы гонки (курсор): не строка этой гонки — `null`. */
   async rankedPosition(
     raceId: string,
@@ -852,13 +871,39 @@ export class ResultsRepository {
       .toArray();
   }
 
-  /** Заявки гонки для «Участников» панели — по времени заявки, не больше `limit`. */
-  entriesForStandings(raceId: string, limit: number, session: DbSession): Promise<RaceEntryDoc[]> {
+  /**
+   * Заявки гонки для «Участников» панели — по времени заявки, не больше `limit`. Фильтры (race-results-07) — до
+   * предела: `group` — группа заявки, `attention` — финишёры с флагами лучшей попытки (строки без места с флагами).
+   */
+  entriesForStandings(
+    raceId: string,
+    filter: StandingsFilter,
+    limit: number,
+    session: DbSession,
+  ): Promise<RaceEntryDoc[]> {
     return this.c.entries
-      .find({ raceId }, { session, projection: { requests: 0 } })
+      .find(this.standingsFilter(raceId, filter), { session, projection: { requests: 0 } })
       .sort({ createdAt: 1, _id: 1 })
       .limit(limit)
       .toArray();
+  }
+
+  /** `_id` заявок без места с флагами (счётчик «Требует внимания» — без предела ответа). */
+  async attentionEntryIds(raceId: string, session: DbSession): Promise<string[]> {
+    const docs = await this.c.entries
+      .find(this.standingsFilter(raceId, { attention: true }), { session, projection: { _id: 1 } })
+      .toArray();
+    return docs.map((doc) => doc._id);
+  }
+
+  private standingsFilter(raceId: string, filter: StandingsFilter): Filter<RaceEntryDoc> {
+    return {
+      raceId,
+      ...(filter.group === undefined ? {} : { groupKey: filter.group }),
+      ...(filter.attention
+        ? { status: 'active', 'best.ranked': false, 'best.flags.0': { $exists: true } }
+        : {}),
+    };
   }
 
   /** Ревизия протокола целиком — только вставка (пустой протокол — без записи строк). */

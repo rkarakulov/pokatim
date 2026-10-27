@@ -348,7 +348,12 @@ export class ResultsReadService {
     const unnamed = await this.repository.withSnapshot(async (session): Promise<UnnamedPage> => {
       const entries = await this.repository.countActiveEntries(raceId, session);
       const groups = empty ? [] : await this.repository.rankedGroups(raceId, session);
-      const group = query.group ?? defaultGroup(race, groups);
+      // курсор без `group` (старый клиент) — группа строки курсора: умолчание могло смениться между страницами
+      const cursorGroup =
+        !empty && cursorEntryId && query.group === undefined
+          ? await this.repository.entryGroupKey(raceId, cursorEntryId, session)
+          : null;
+      const group = query.group ?? cursorGroup ?? defaultGroup(race, groups);
       const base = {
         group,
         status: 'provisional' as const,
@@ -479,10 +484,14 @@ export class ResultsReadService {
     const unnamed = await this.repository.withSnapshot(async (session): Promise<UnnamedPage> => {
       const revision = await this.protocolRevision(raceId, session);
       const groups = await this.repository.protocolGroups(raceId, revision, session);
-      const group = requested ?? defaultGroup(race, groups);
+      const at = cursorEntryId
+        ? await this.repository.protocolRow(raceId, revision, cursorEntryId, session)
+        : null;
+      // курсор без `group` — группа строки курсора (умолчание могло смениться с новой ревизией)
+      const group =
+        requested ?? (at ? (at.groupKey ?? 'overall') : null) ?? defaultGroup(race, groups);
       let afterOrder: number | null = null;
       if (cursorEntryId) {
-        const at = await this.repository.protocolRow(raceId, revision, cursorEntryId, session);
         if (!at || at.status === 'dq' || (at.groupKey ?? 'overall') !== group) {
           throw invalidCursor();
         }

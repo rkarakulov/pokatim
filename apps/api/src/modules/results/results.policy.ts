@@ -671,11 +671,15 @@ const median = (values: readonly number[]): number => {
 export function speedClusterFlags(
   rows: readonly { entryId: string; groupKey: ResultGroupKey; elapsedSec: number }[],
 ): Map<string, AttemptFlagDoc> {
+  // времена группы — одним проходом, медиана — один раз на группу
   const byGroup = new Map<ResultGroupKey, number[]>();
-  for (const row of rows)
-    byGroup.set(row.groupKey, [...(byGroup.get(row.groupKey) ?? []), row.elapsedSec]);
+  for (const row of rows) {
+    const values = byGroup.get(row.groupKey);
+    if (values) values.push(row.elapsedSec);
+    else byGroup.set(row.groupKey, [row.elapsedSec]);
+  }
   const medians = new Map([...byGroup].map(([group, values]) => [group, median(values)]));
-  const fastest = rows.length > 0 ? Math.min(...rows.map((row) => row.elapsedSec)) : 0;
+  const fastest = rows.reduce((min, row) => Math.min(min, row.elapsedSec), Infinity);
   const flags = new Map<string, AttemptFlagDoc>();
   for (const row of rows) {
     const groupMedian = medians.get(row.groupKey)!;

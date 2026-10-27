@@ -139,6 +139,14 @@ describe('sensorFlags: HR_POWER_DECOUPLED', () => {
     expect(codes(surges(10, () => true))).toEqual([]);
   });
 
+  it('база рывка — только полные 60 с сегмента: разгон со старта (первые 65 с) — не рывок', () => {
+    // 4 настоящих рывка без ответа + разгон 50 → 150 Вт на 3-й секунде сегмента (неполная база) — флага нет
+    const start = surges(4, () => false).map((point, s) =>
+      s < 3 ? { ...point, power: 50 } : point,
+    );
+    expect(codes(start)).toEqual([]);
+  });
+
   it('доля без ответа: 70 % — нет, 71 % — флаг', () => {
     expect(codes(surges(10, (k) => k >= 7))).toEqual([]);
     expect(run(surges(24, (k) => k >= 17)).flags).toEqual([

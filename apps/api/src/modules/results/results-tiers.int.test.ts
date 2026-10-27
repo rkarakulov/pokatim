@@ -17,6 +17,7 @@ import { racesDb } from '../../../test/races';
 import {
   corridorRace,
   enterRace,
+  entryUrl,
   myEntry,
   protocolAction,
   raceAdminUrl,
@@ -31,7 +32,8 @@ import {
   WINDOW,
 } from '../../../test/results';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
-import type { RaceAttemptDoc } from './results.collection';
+import type { AttemptFlagDoc, RaceAttemptDoc, RaceEntryDoc } from './results.collection';
+import { RESULTS_POLICY } from './results.policy';
 
 /**
  * Уровни заявки и группы зачёта (race-results-07, AC1–AC6, AC8, AC9, AC12): матрица заявки, повышение, места по
@@ -376,13 +378,25 @@ describe('места по группе и финишёры (AC5, AC9)', () => {
       unranked: 'no_heart_rate',
     });
 
-    // AC9: флаги и датчики — только панель; уровень чужих — не в публичных ответах
-    for (const body of [res.body, women, finishers]) {
+    // AC9: флаги и датчики — только панель; уровень чужих — не в публичных ответах. Ключи — сырого тела (до `parse`,
+    // который отбросил бы лишние ключи)
+    const raw = [
+      res.body,
+      (await call(h, 'GET', `/v1/races/${raceId}/results?group=w_u40`)).body,
+      (await call(h, 'GET', `/v1/races/${raceId}/finishers`)).body,
+    ];
+    for (const body of raw) {
       const keys = keysOf(body);
       expect(keys.has('flags') || keys.has('sensors') || keys.has('tier')).toBe(false);
     }
-    const ownKeys = keysOf(await myEntry(h, riders.v4!.auth, raceId));
-    expect(ownKeys.has('flags') || ownKeys.has('sensors')).toBe(false);
+    const own = await call(h, 'GET', entryUrl(raceId), undefined, riders.v4!.auth);
+    expect(own.status).toBe(200);
+    const ownKeys = keysOf(own.body);
+    expect(ownKeys.has('result')).toBe(true);
+    // ни флагов/датчиков, ни значений анкеты (вес, рост, FTP, год рождения)
+    for (const key of ['flags', 'sensors', 'weightKg', 'heightCm', 'ftpW', 'birthYear', 'gender']) {
+      expect(ownKeys.has(key)).toBe(false);
+    }
   });
 
   it('курсор: строка другой группы — 400; финишёры — постранично, курсор строки с местом — 400', async () => {
@@ -412,6 +426,36 @@ describe('места по группе и финишёры (AC5, AC9)', () => {
     expect(
       (await call(h, 'GET', `/v1/races/${raceId}/finishers?cursor=${first.nextCursor}`)).status,
     ).toBe(400);
+  });
+
+  it('курсор без group — группа строки курсора: смена группы по умолчанию между страницами не даёт 400', async () => {
+    const { raceId } = await corridorRace(
+      h,
+      { protocolPlannedAt: DISPUTE_PROTOCOL_PLANNED },
+      { scheme: null },
+    );
+    const women: string[] = [];
+    for (const [index, name] of ['w1', 'w2'].entries()) {
+      const r = await verifiedRider(`${name}@example.com`, { gender: 'w', birthYear: 1995 });
+      const entryId = parsed(await enterRace(h, r.auth, raceId, { tier: 'verified' })).entry!.id;
+      await seedBest(h, entryId, 1000 + index, new Date('2026-10-25T06:00:00Z'));
+      women.push(entryId);
+    }
+    const first = RaceResultsPage.parse(
+      (await call(h, 'GET', `/v1/races/${raceId}/results?limit=1`)).body,
+    );
+    expect([first.group, first.items.map((row) => row.entryId)]).toEqual(['w_u40', [women[0]]]);
+    // между страницами появилась строка m_u40 — группа по умолчанию стала m_u40
+    const man = await verifiedRider('m1@example.com', { gender: 'm', birthYear: 1995 });
+    const manEntry = parsed(await enterRace(h, man.auth, raceId, { tier: 'verified' })).entry!.id;
+    await seedBest(h, manEntry, 900, new Date('2026-10-25T06:00:00Z'));
+    const res = await call(h, 'GET', `/v1/races/${raceId}/results?cursor=${first.nextCursor}`);
+    expect(res.status).toBe(200);
+    const next = RaceResultsPage.parse(res.body);
+    expect([next.group, next.items.map((row) => [row.entryId, row.place])]).toEqual([
+      'w_u40',
+      [[women[1], 2]],
+    ]);
   });
 
   it('гонка gender_age без строк с местом — группа m_u40, пусто (RC-10)', async () => {
@@ -546,6 +590,79 @@ describe('панель: группы и «Требует внимания» (AC8
       groupScheme: 'gender_age',
       counts: { ranked: 5, attention: 2, finishers: 2 },
     });
+  });
+});
+
+describe('панель: фильтры и «Требует внимания» за пределом ответа (standingsMax)', () => {
+  it('group/attention фильтруют до предела; attention считается по всей гонке; truncated — по отфильтрованному', async () => {
+    const { raceId } = await corridorRace(h, {}, { scheme: null });
+    const a = await rider(h, 'a@example.com');
+    const template = await resultsDb(h).entries.findOne({
+      _id: parsed(await enterRace(h, a.auth, raceId)).entry!.id,
+    });
+    await resultsDb(h).entries.deleteMany({});
+    const max = RESULTS_POLICY.standingsMax;
+    const base = h.clock.now().getTime();
+    const startedAt = new Date('2026-10-25T06:00:00Z');
+    const entry = (
+      index: number,
+      groupKey: RaceEntryDoc['groupKey'],
+      tier: 'verified' | 'start',
+      elapsedSec: number,
+      flags: AttemptFlagDoc[],
+    ): RaceEntryDoc => ({
+      ...template!,
+      _id: uuidv7(),
+      userId: uuidv7(),
+      groupKey,
+      tier,
+      best: {
+        attemptId: uuidv7(),
+        elapsedSec,
+        startedAt,
+        finishedAt: new Date(startedAt.getTime() + elapsedSec * 1000),
+        ranked: tier === 'verified',
+        flags,
+      },
+      summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
+      createdAt: new Date(base + index * 1000),
+      updatedAt: new Date(base + index * 1000),
+    });
+    // `max` мужчин m_u40 (равные времена — без SPEED_CLUSTER_HIGH), затем женщина w_u40 с флагом (за пределом строк
+    // с местом) и START-финишёр с флагом (за пределом всех строк)
+    const docs = Array.from({ length: max }, (_, index) =>
+      entry(index, 'm_u40', 'verified', 1000, []),
+    );
+    const woman = entry(max, 'w_u40', 'verified', 1500, [{ code: 'HR_GAPS', metric: 20 }]);
+    const finisher = entry(max + 1, 'overall', 'start', 900, [{ code: 'HR_GAPS', metric: 30 }]);
+    await resultsDb(h).entries.insertMany([...docs, woman, finisher]);
+
+    const token = await panelSession(h, 'admin@example.by');
+    const read = async (query: string) => {
+      const res = await panelCall(h, token, 'GET', raceAdminUrl(raceId, `/standings${query}`));
+      expect(res.status).toBe(200);
+      return PanelRaceStandings.parse(res.body);
+    };
+    const all = await read('');
+    expect(all.items).toHaveLength(max);
+    expect(all.truncated).toBe(true);
+    expect(all.groups).toEqual([
+      { key: 'm_u40', ranked: max },
+      { key: 'w_u40', ranked: 1 },
+    ]);
+
+    const women = await read('?group=w_u40');
+    expect(women.truncated).toBe(false);
+    expect(women.items.map((row) => [row.entryId, row.place, row.flags])).toEqual([
+      [woman._id, 1, [{ code: 'HR_GAPS', metric: 20 }]],
+    ]);
+
+    const attention = await read('?attention=true');
+    expect(attention.truncated).toBe(false);
+    expect(attention.items.map((row) => row.entryId)).toEqual([woman._id, finisher._id]);
+
+    const summary = await panelCall(h, token, 'GET', raceAdminUrl(raceId, '/results'));
+    expect(summary.body).toMatchObject({ counts: { attention: 2, finishers: 1 } });
   });
 });
 
