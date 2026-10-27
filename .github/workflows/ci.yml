@@ -34,16 +34,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  check:
+  # completion gate (format, lint, arch:check, typecheck, test — AGENTS.md §3) — параллельными джобами: статика и
+  # сборка (`static`), тесты API шардами (`test-api`), тесты остальных пакетов (`test-other`); `check` — их сводка
+  # (одна обязательная проверка, как раньше). Локально — тот же `pnpm check`.
+  static:
     runs-on: ubuntu-latest
-    # интеграционные тесты API — на реальных MongoDB (replica set, шаг ниже) и Redis (.claude/rules/tests.md)
-    services:
-      redis:
-        image: redis:8.8
-        ports: ['6379:6379']
-    env:
-      MONGO_URL_TEST: mongodb://127.0.0.1:27017/pokatim_test?directConnection=true
-      REDIS_URL_TEST: redis://127.0.0.1:6379/1
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
@@ -54,12 +49,58 @@ jobs:
           # пользовательский .npmrc с токеном из NODE_AUTH_TOKEN для @rkarakulov/*
           registry-url: https://npm.pkg.github.com
           scope: '@rkarakulov'
-      # MongoDB replica set (services не принимают command): docker run + rs.initiate, ожидание PRIMARY
-      - name: mongodb replica set
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm arch:check
+      - run: pnpm typecheck
+      # все приложения и пакеты (api, admin, packages/*); web-экспорт apps/app — job `web`
+      - run: pnpm build
+      # dist API — CommonJS поверх ESM-пакетов базы (require(esm)): typecheck и vitest
+      # этого не видят, поэтому модули dist загружаются отдельно
+      - name: api dist loads
+        working-directory: apps/api
+        run: node -e "require('reflect-metadata');require('./dist/app.module');require('./dist/worker.module')"
+
+  # тесты API — на реальных MongoDB (replica set, шаг ниже) и Redis (.claude/rules/tests.md). Интеграционные файлы
+  # идут по очереди на общей БД — поэтому шардами по файлам (vitest --shard), у каждого шарда свои MongoDB и Redis
+  test-api:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    name: test-api (${{ matrix.shard }}/3)
+    services:
+      redis:
+        image: redis:8.8
+        ports: ['6379:6379']
+    env:
+      MONGO_URL_TEST: mongodb://127.0.0.1:27017/pokatim_test?directConnection=true
+      REDIS_URL_TEST: redis://127.0.0.1:6379/1
+    steps:
+      # MongoDB стартует до установки зависимостей (параллельно с ней); готовность — шагом replica set ниже
+      - name: mongodb start
+        # ядро раннера ≥ 6.19: mongod 8.0 (TCMalloc + rseq) не стартует — SERVER-121912; обход — rseq glibc
         run: |
-          # ядро раннера ≥ 6.19: mongod 8.0 (TCMalloc + rseq) не стартует — SERVER-121912; обход — rseq glibc
           docker run -d --name mongo -p 127.0.0.1:27017:27017 -e GLIBC_TUNABLES=glibc.pthread.rseq=1 \
             mongo:8.0 --replSet rs0 --bind_ip_all
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@rkarakulov'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # MongoDB replica set (services не принимают command): rs.initiate, ожидание PRIMARY
+      - name: mongodb replica set
+        run: |
           initiate="try { rs.status().myState } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] }); 0 }"
           for _ in $(seq 1 60); do
             if [ "$(docker exec mongo mongosh --quiet --eval "$initiate" 2>/dev/null || true)" = "1" ]; then exit 0; fi
@@ -68,18 +109,37 @@ jobs:
           echo "::error::MongoDB replica set не стал PRIMARY за 60 с"
           docker logs --tail 30 mongo
           exit 1
+      - run: pnpm --filter @pokatim/api exec vitest run --shard=${{ matrix.shard }}/3
+
+  # тесты остальных пакетов (app — jest, admin и packages/* — vitest); БД не нужны
+  test-other:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@rkarakulov'
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # completion gate: format, lint, arch:check, typecheck, test (AGENTS.md §3)
-      - run: pnpm check
-      # все приложения и пакеты (api, admin, packages/*); web-экспорт apps/app — job `web`
-      - run: pnpm build
-      # dist API — CommonJS поверх ESM-пакетов базы (require(esm)): typecheck и vitest
-      # этого не видят, поэтому модули dist загружаются отдельно
-      - name: api dist loads
-        working-directory: apps/api
-        run: node -e "require('reflect-metadata');require('./dist/app.module');require('./dist/worker.module')"
+      - run: pnpm turbo run test --filter='!@pokatim/api'
+
+  # сводная проверка: зелёная, только если зелёные все части (пропуск или отмена части — тоже провал)
+  check:
+    if: always()
+    needs: [static, test-api, test-other]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULTS: ${{ needs.static.result }} ${{ needs.test-api.result }} ${{ needs.test-other.result }}
+        run: |
+          for r in ${RESULTS}; do
+            [ "${r}" = success ] || { echo "::error::часть check не прошла: static test-api test-other = ${RESULTS}"; exit 1; }
+          done
 
   # web/PWA: production-сборка (SSR) и Playwright-смоук в браузере — Google Chrome с ubuntu-latest
   # (без загрузки браузеров Playwright). API шаблон не поднимает: экраны с данными показывают «Нет соединения».
@@ -89,7 +149,7 @@ jobs:
   # через API панели (CLI grant-admin из dist, e2e/home-fixture.ts)
   web:
     runs-on: ubuntu-latest
-    # проект: services (Redis, …; MongoDB — шагом, как в check) для серверов смоука — здесь
+    # проект: services (Redis, …; MongoDB — шагом, как в test-api) для серверов смоука — здесь
     services:
       redis:
         image: redis:8.8
@@ -112,6 +172,11 @@ jobs:
       EMAIL_TOKEN_SECRET: e2e-email-secret-e2e-email-secret-0
       AGREEMENT_VERSION: e2e-agreement
     steps:
+      - name: mongodb start
+        # ядро раннера ≥ 6.19: mongod 8.0 (TCMalloc + rseq) не стартует — SERVER-121912; обход — rseq glibc
+        run: |
+          docker run -d --name mongo -p 127.0.0.1:27017:27017 -e GLIBC_TUNABLES=glibc.pthread.rseq=1 \
+            mongo:8.0 --replSet rs0 --bind_ip_all
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -124,12 +189,9 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # проект: подготовка серверов смоука (сборка API, миграции) — шаги здесь
-      # pokatim: MongoDB replica set для API смоука — тот же шаг, что в check
+      # pokatim: MongoDB replica set для API смоука — как в test-api (старт — до установки зависимостей)
       - name: mongodb replica set
         run: |
-          # ядро раннера ≥ 6.19: mongod 8.0 (TCMalloc + rseq) не стартует — SERVER-121912; обход — rseq glibc
-          docker run -d --name mongo -p 127.0.0.1:27017:27017 -e GLIBC_TUNABLES=glibc.pthread.rseq=1 \
-            mongo:8.0 --replSet rs0 --bind_ip_all
           initiate="try { rs.status().myState } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] }); 0 }"
           for _ in $(seq 1 60); do
             if [ "$(docker exec mongo mongosh --quiet --eval "$initiate" 2>/dev/null || true)" = "1" ]; then exit 0; fi
