@@ -5,27 +5,32 @@ import { Button } from './Button';
 
 /**
  * 409 `CONFLICT` правки по устаревшей версии: «Запись изменили — обновите страницу» с действием «Обновить»
- * (перечитать запись и сбросить форму — решает экран).
+ * (перечитать запись и сбросить форму — решает экран). Свой текст раздела — `title` и `message` (routes-06: «Заявку
+ * уже изменили — обновите страницу»).
  */
 export function ConflictBanner({
   onReload,
   busy = false,
+  title = t('admin.conflict.title'),
+  message = t('admin.conflict.message'),
 }: {
   onReload: () => void;
   busy?: boolean;
+  title?: string;
+  message?: string;
 }) {
   return (
     <Banner
       tone="warning"
       role="alert"
-      title={t('admin.conflict.title')}
+      title={title}
       actions={
         <Button size="sm" busy={busy} onClick={onReload}>
           {t('admin.conflict.reload')}
         </Button>
       }
     >
-      {t('admin.conflict.message')}
+      {message}
     </Banner>
   );
 }

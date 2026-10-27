@@ -20,6 +20,8 @@ const FIELD_LABEL_PREFIX: Record<string, string> = {
   race: 'admin.races.field.',
   season: 'admin.seasons.',
   calendar_start: 'admin.calendar.field.',
+  // routes-06: поправленные модератором город и покрытие (и правка каталога routes-01)
+  route: 'admin.riderRoutes.field.',
 };
 
 /** Подпись изменённого поля (не техническое имя); незнакомое — нейтральная подпись. */
@@ -51,6 +53,13 @@ function details(entry: AuditEntry): string {
   // admin-02: шаблон причины отмены; имена изменённых полей — без значений
   const cancelReason = entry.details?.cancelReason;
   if (cancelReason) return t(`domain.raceCancelReason.${cancelReason}`);
+  // routes-06: отклонение заявки — причина из справочника (комментарий автору — в колонке «Причина»)
+  const rejectionReason = entry.details?.rejectionReason;
+  if (rejectionReason) {
+    return t('admin.audit.details.rejectionReason', {
+      reason: t(`domain.routeRejectionReason.${rejectionReason}`),
+    });
+  }
   // 05b: модерация райдов — число закрытых действием жалоб
   const reportCount = entry.details?.reportCount;
   if (reportCount !== undefined) return t('admin.audit.reportCount', { count: reportCount });

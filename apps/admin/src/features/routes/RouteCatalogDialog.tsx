@@ -29,11 +29,14 @@ const CatalogFormSchema = z.object({
 type CatalogFormValues = z.input<typeof CatalogFormSchema>;
 
 /** Города справочника по алфавиту подписи (свободного текста нет — D2). */
-const CITY_OPTIONS = CITY_CODES.map((code) => ({
+export const CITY_OPTIONS = CITY_CODES.map((code) => ({
   value: code,
   label: t(`domain.city.${code}`),
 })).sort((a, b) => a.label.localeCompare(b.label, 'ru'));
-const SURFACE_OPTIONS = SURFACES.map((value) => ({ value, label: t(`domain.surface.${value}`) }));
+export const SURFACE_OPTIONS = SURFACES.map((value) => ({
+  value,
+  label: t(`domain.surface.${value}`),
+}));
 
 /** Ответ после действия с каталогом: маршрут в кэше, списки маршрутов и журнал — заново. */
 async function afterCatalogChange(queryClient: QueryClient, route: PanelRoute) {

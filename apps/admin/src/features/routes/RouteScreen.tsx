@@ -1,24 +1,16 @@
 import type { PanelRoute } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
-import {
-  createScrubStore,
-  routeDurationMin,
-  routePaceKmh,
-  type ScrubStore,
-} from '@pokatim/route-view';
+import { createScrubStore } from '@pokatim/route-view';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { type ReactNode, useEffect, useState } from 'react';
 
-import { formatKmFromMeters } from '../../format';
 import { Can } from '../../session/can';
 import { httpStatus, isForbidden } from '../../session/errors';
 import { Banner, Button, EmptyState, ErrorState, PageHeader, StatTile, StatusTag } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
-import { ElevationProfile } from './ElevationProfile';
 import { RouteCatalogDialog, UnpublishRouteDialog } from './RouteCatalogDialog';
-import { durationText, metersText, profileSummary } from './route-detail-format';
-import { RouteLine } from './RoutePreview';
+import { RouteReadyView } from './RouteReadyView';
 import { catalogText } from './RoutesScreen';
 import { ROUTE_POLL_MAX_MS, ROUTE_POLL_MS, routeQuery } from './routes-query';
 
@@ -187,7 +179,10 @@ function RouteView({
             {route.failure ? t(`admin.routes.failure.${route.failure}`) : null}
           </Banner>
         ) : null}
-        {ready ? <ReadyRoute route={route} scrub={scrub} /> : null}
+        {ready ? (
+          // покрытие известно только у опубликованного; иначе — как асфальт (RC-11)
+          <RouteReadyView route={route} surfaces={route.catalog?.surfaces ?? []} scrub={scrub} />
+        ) : null}
       </div>
       {action === 'publish' ? (
         <RouteCatalogDialog route={route} openLink={false} onClose={() => setAction(undefined)} />
@@ -195,72 +190,6 @@ function RouteView({
       {action === 'unpublish' ? (
         <UnpublishRouteDialog route={route} onClose={() => setAction(undefined)} />
       ) : null}
-    </>
-  );
-}
-
-/** Готовый маршрут: карта со скраббингом, цифры, профиль высоты. */
-function ReadyRoute({ route, scrub }: { route: PanelRoute; scrub: ScrubStore }) {
-  const distanceM = route.distanceM ?? 0;
-  // покрытие известно только у опубликованного; иначе — как асфальт (RC-11)
-  const pace = routePaceKmh(route.catalog?.surfaces ?? []);
-  const elevation = route.elevation;
-  return (
-    <>
-      <section className="section" aria-labelledby="route-map-title">
-        <h2 id="route-map-title" className="section__title t-label">
-          {t('admin.routes.detail.map')}
-        </h2>
-        <RouteLine route={route} variant="page" scrub={scrub} />
-      </section>
-      <section className="section" aria-labelledby="route-stats-title">
-        <h2 id="route-stats-title" className="section__title t-label">
-          {t('admin.routes.detail.stats')}
-        </h2>
-        <div className="stat-tiles">
-          <StatTile
-            label={t('admin.routes.detail.stats.distance')}
-            value={formatKmFromMeters(distanceM)}
-          />
-          <StatTile
-            label={t('admin.routes.detail.stats.gain')}
-            value={route.elevationGainM === null ? '—' : metersText(route.elevationGainM)}
-          />
-          <StatTile
-            label={t('admin.routes.detail.stats.max')}
-            value={elevation ? metersText(elevation.maxM) : '—'}
-          />
-          <StatTile
-            label={t('admin.routes.detail.stats.min')}
-            value={elevation ? metersText(elevation.minM) : '—'}
-          />
-          <StatTile
-            label={t('admin.routes.detail.stats.shape')}
-            value={t(route.isLoop ? 'routes.detail.chip.loop' : 'routes.detail.chip.oneWay')}
-          />
-          <StatTile
-            label={t('admin.routes.detail.stats.time')}
-            value={durationText(routeDurationMin(distanceM, pace))}
-            hint={t('routes.detail.stats.pace', { pace })}
-          />
-        </div>
-      </section>
-      <section className="section" aria-labelledby="route-profile-title">
-        <h2 id="route-profile-title" className="section__title t-label">
-          {t('admin.routes.detail.profile')}
-        </h2>
-        {elevation ? (
-          <ElevationProfile
-            elevation={elevation}
-            distanceM={distanceM}
-            gainM={route.elevationGainM}
-            scrub={scrub}
-            label={profileSummary(elevation, route.elevationGainM)}
-          />
-        ) : (
-          <p className="muted t-meta">{t('admin.routes.detail.noElevation')}</p>
-        )}
-      </section>
     </>
   );
 }

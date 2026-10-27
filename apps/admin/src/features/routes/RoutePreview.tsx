@@ -12,11 +12,14 @@ import { mapStyleUrl } from '../maps/map-style';
 import { RouteMap } from '../maps/RouteMap';
 import { routeQuery } from './routes-query';
 
-const distanceOf = (route: PanelRoute) =>
+/** Что нужно линии от маршрута (routes-06: и заявке райдера). */
+type RouteLineData = Pick<PanelRoute, 'title' | 'distanceM' | 'elevationGainM' | 'isLoop' | 'line'>;
+
+const distanceOf = (route: RouteLineData) =>
   route.distanceM !== null ? formatKmFromMeters(route.distanceM) : '';
 
 /** Длина, набор и «Круговой» под превью. */
-function routeMeta(route: PanelRoute): string {
+function routeMeta(route: RouteLineData): string {
   const parts = [distanceOf(route)];
   if (route.elevationGainM !== null) {
     parts.push(t('admin.races.corridor.elevation', { gain: route.elevationGainM }));
@@ -34,7 +37,7 @@ export function RouteLine({
   variant,
   scrub,
 }: {
-  route: PanelRoute;
+  route: RouteLineData;
   variant: 'page' | 'compact';
   scrub?: ScrubStore;
 }) {

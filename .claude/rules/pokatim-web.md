@@ -94,6 +94,15 @@ paths:
   `/rides-moderation/$rideId` под `RequirePermission permission="rides.moderate"`, пункт навигации — группа `bottom`
   в конце. Действия — `ReasonDialog`; 409 `CONFLICT` и `RIDE_INVALID_STATE` — `ConflictBanner` с перечитыванием
   карточки; «Отклонить жалобы» отправляет `lastReportAt` карточки.
+- «Маршруты райдеров» (routes-06) — `features/rider-routes/*`, маршруты `/rider-routes` (`?tab=reported|hidden` — в
+  URL, по умолчанию «На проверке») и `/rider-routes/$routeId` под `RequirePermission permission="routes.moderate"`,
+  пункт навигации — группа `bottom` в конце. Автор — только `Райдер ·<хвост id>` (`riderRouteAuthor`), имени нет (N8);
+  жалобы — без автора. Карта, цифры и профиль — общий `features/routes/RouteReadyView.tsx` (тот же блок, что на
+  странице маршрута routes-05; копий нет). «Одобрить» — окно с городом (`SelectField`) и покрытием (`ChipGroup`) из
+  заявки, «Отклонить» — справочник причин (`RadioGroup`, подтверждение неактивно до выбора) и комментарий автору
+  ≤ 500; «Скрыть» / «Вернуть» / «Отклонить жалобы» — `ReasonDialog` («Отклонить жалобы» шлёт `lastReportAt`).
+  409 `CONFLICT` / `ROUTE_INVALID_STATE` и 404 (автор отозвал, RC-10) — `ConflictBanner` «Заявку уже изменили —
+  обновите страницу» с перечитыванием.
 - «Споры» (race-results-06) — `features/disputes/*`, маршруты `/disputes` (`?status=`, `?raceId=` — в URL) и
   `/disputes/$disputeId` под `RequirePermission permission="disputes.read"`; пункт навигации — группа `main` после
   «Гонок». Список: `ChipGroup` статуса (по умолчанию «На рассмотрении»), фильтр гонки — текст «Гонка: {название}» и

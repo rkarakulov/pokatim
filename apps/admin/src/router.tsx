@@ -26,6 +26,9 @@ import { OverviewScreen } from './features/overview/OverviewScreen';
 import { NewRaceScreen, RaceScreen } from './features/races/RaceScreen';
 import { RacesScreen, validateRacesSearch } from './features/races/RacesScreen';
 import { RaceResultsScreen } from './features/results/RaceResultsScreen';
+import { validateRiderRoutesSearch } from './features/rider-routes/rider-routes-format';
+import { RiderRouteScreen } from './features/rider-routes/RiderRouteScreen';
+import { RiderRoutesScreen } from './features/rider-routes/RiderRoutesScreen';
 import { RouteScreen } from './features/routes/RouteScreen';
 import { RoutesScreen } from './features/routes/RoutesScreen';
 import { SeasonsScreen } from './features/seasons/SeasonsScreen';
@@ -280,6 +283,35 @@ const disputeRoute = createRoute({
   },
 });
 
+// routes-06: модерация маршрутов райдеров (admin и moderator)
+const riderRoutesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'rider-routes',
+  validateSearch: validateRiderRoutesSearch,
+  component: function RiderRoutesRoute() {
+    const search = riderRoutesRoute.useSearch();
+    const navigate = riderRoutesRoute.useNavigate();
+    return (
+      <RequirePermission permission="routes.moderate">
+        <RiderRoutesScreen search={search} onSearch={(next) => void navigate({ search: next })} />
+      </RequirePermission>
+    );
+  },
+});
+
+const riderRouteRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'rider-routes/$routeId',
+  component: function RiderRouteRoute() {
+    const { routeId } = riderRouteRoute.useParams();
+    return (
+      <RequirePermission permission="routes.moderate">
+        <RiderRouteScreen key={routeId} routeId={routeId} />
+      </RequirePermission>
+    );
+  },
+});
+
 // app-themes D1: тема приложения райдера (только admin)
 const appearanceRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -316,6 +348,8 @@ const routeTree = rootRoute.addChildren([
     disputesRoute,
     disputeRoute,
     appearanceRoute,
+    riderRoutesRoute,
+    riderRouteRoute,
     notFoundRoute,
   ]),
 ]);

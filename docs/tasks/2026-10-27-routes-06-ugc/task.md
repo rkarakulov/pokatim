@@ -279,6 +279,15 @@ BLOCKERS нет. Находки (решения architect; U1–U9 и A1–A7 н
 - Текст сообщения `ROUTE_INVALID_STATE` в `error-messages.ts` («Маршрут ещё не готов») не менялся — клиенты различают по
   `details.reason`.
 
+Этап B (coder, 2026-10-27):
+- `ConflictBanner` (`src/ui`) — необязательные `title`/`message` (по умолчанию прежний текст): раздел показывает
+  «Заявку уже изменили — обновите страницу». Конфликтом считаются 409 `CONFLICT`, 409 `ROUTE_INVALID_STATE` и 404
+  действия (RC-10: автор отозвал за время просмотра).
+- `RouteCatalogDialog.tsx` экспортирует `CITY_OPTIONS`/`SURFACE_OPTIONS` — окно «Одобрить» берёт тот же справочник.
+- Журнал: префикс подписей полей `route` → `admin.riderRoutes.field.*` («Город старта», «Покрытие»); заодно
+  `route.catalog_updated` routes-01 показывает подписи вместо «другое поле».
+- Пункт навигации — последним в группе `bottom` (после «Оформления приложения», §11 «в конец массива»).
+
 ## 8.3 Security checklist
 
 Затронуто: AuthZ (свой маршрут, право `routes.moderate`), данные наружу (публичный маршрут райдера, имя), злоупотребления
@@ -675,3 +684,40 @@ api 1169 / 116 файлов, admin 282, app 1208 / 137 сьютов).
 
 **Отклонения** — §8.2. **Риск:** один прогон `route-reports.int.test.ts` упал по таймауту хука `beforeEach` (60 с,
 общий MongoDB под нагрузкой других агентов), повтор — зелёный.
+
+### Этап B — admin (coder, 2026-10-27)
+
+**Сделано**
+- `features/routes/RouteReadyView.tsx` — вынесенный `ReadyRoute` (карта со скраббингом, цифры, профиль); тип пропса —
+  `Pick<PanelRoute, title|distanceM|elevationGainM|isLoop|line|elevation>` + `surfaces`; `RouteScreen` использует его,
+  `RouteLine` сужен до `Pick<PanelRoute, …>`. Копий карты/профиля нет.
+- `features/rider-routes/`: `RiderRoutesScreen` (вкладки «На проверке / Жалобы / Скрытые», `?tab=`, курсор,
+  колонки: маршрут + город, `Райдер ·id`, длина, подана / жалобы с главной причиной / скрыт, статус),
+  `RiderRouteScreen` (сводка заявки без имени автора, подпись «Имя из профиля автора» / «Только «От райдера»», город,
+  покрытие, подачи `n из 3`, отклонение с комментарием, `RouteReadyView`, жалобы без автора; действия по статусу),
+  `RiderRouteDecisionDialogs` (одобрить — город/покрытие RHF+zod из контракта; отклонить — справочник `RadioGroup` +
+  комментарий ≤ 500; скрыть/вернуть/отклонить жалобы — `ReasonDialog`, dismiss шлёт `lastReportAt`),
+  `rider-routes-query.ts`, `rider-routes-format.ts`. После действия — ответ в кэш, инвалидация очереди и журнала.
+- `navigation.ts`, `router.tsx` (`rider-routes`, `rider-routes/$routeId` под `RequirePermission routes.moderate`);
+  журнал — `details.rejectionReason` словами, подписи полей маршрута; `test/app.tsx` — `routes.moderate` у admin и
+  moderator (как на сервере).
+- i18n (`packages/i18n/src/ru.ts`, только новые ключи): `admin.nav.riderRoutes`, `admin.riderRoutes.*`,
+  `admin.audit.details.rejectionReason`, `domain.routeRejectionReason.*`, `domain.routeReportReason.*`.
+- правило `.claude/rules/pokatim-web.md` — раздел «Маршруты райдеров».
+
+**Тесты:** `RiderRoutesScreen.test.tsx` (вкладки и URL, колонки, пусто, скелетон, ошибка, 403, organizer — нет пункта
+и «Нет доступа» без запроса на список и карточку), `RiderRouteScreen.test.tsx` (`RouteReadyView` — линия, цифры,
+слайдер профиля; `Райдер ·id`; одобрение с правкой города/покрытия; отклонение — причина обязательна, комментарий
+≤ 500; скрыть/вернуть/отклонить жалобы с `version`/`lastReportAt`; 409 `CONFLICT`, 409 `ROUTE_INVALID_STATE`, 404 —
+баннер и перечитывание; прочая ошибка — в окне; 404/ошибка/скелетон), `AppLayout.test.tsx` (пункт у admin и
+moderator, organizer → `/rider-routes` «Нет доступа»), `AuditScreen.test.tsx` (причина отклонения, поля),
+`RouteScreen.test.tsx` — регрессия после выноса без изменений.
+
+**Отрицательное доказательство (откачено):** `isStaleRiderRoute` без 404 → тест «404 (автор отозвал заявку)» красный.
+
+
+**Проверки:** `MONGO_URL_TEST=…/pokatim_routes06_test REDIS_URL_TEST=…/13 TURBO_CONCURRENCY=1 pnpm check` → `EXIT=0`:
+prettier — «All matched files use Prettier code style!»; eslint — 0; depcruise — «no dependency violations found»;
+typecheck — `Tasks: 9 successful, 9 total`; test — `Tasks: 15 successful, 15 total` (admin 301 / 35 файлов, api 1169,
+contracts 273, api-client 96). `pnpm --filter @pokatim/admin build` отдельно не запускался (typecheck и тесты — в
+`check`).
