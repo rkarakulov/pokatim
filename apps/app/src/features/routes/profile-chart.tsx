@@ -1,13 +1,12 @@
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { stroke, type AppTheme } from '@pokatim/design-tokens';
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useId, useMemo, useRef } from 'react';
 import { StyleSheet, View, type AccessibilityActionEvent } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 
 import { useScrub, type ScrubStore } from '@/features/maps/scrub-store';
 
 import { profileBarHeights, profileBars } from './format';
-import { loadSvgNative } from './load-svg-native';
 import type { ProfileChartProps } from './profile-chart-props';
 import { PROFILE_VIEW_BOX, profileGradientId, profilePaths } from './profile-path';
 import {
@@ -15,10 +14,8 @@ import {
   PROFILE_FILL_OPACITY,
   PROFILE_NATIVE_FILL_OPACITY,
 } from './profile-style';
-import { svgSupported } from './svg-support';
 import { scrubReadout, scrubStep } from './scrub';
-
-type SvgLib = Awaited<ReturnType<typeof loadSvgNative>>;
+import { useSvgLib } from './use-svg-native';
 
 /** Столбиков фолбэка: ≈ 2 px при ширине телефона — ступенек не видно, Yoga округляет к пиксельной сетке. */
 export const PROFILE_BARS = 160;
@@ -65,26 +62,6 @@ const ProfileBars = memo(function ProfileBars({
     </View>
   );
 });
-
-/** `react-native-svg` после монтирования: `null` — грузится, `false` — модуля в сборке нет. */
-function useSvgLib(): SvgLib | false | null {
-  const [lib, setLib] = useState<SvgLib | false | null>(() => (svgSupported() ? null : false));
-  useEffect(() => {
-    if (lib !== null) return;
-    let cancelled = false;
-    loadSvgNative()
-      .then((loaded) => {
-        if (!cancelled) setLib(loaded);
-      })
-      .catch(() => {
-        if (!cancelled) setLib(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [lib]);
-  return lib;
-}
 
 /**
  * Площадь профиля на native (routes-04 G1/G2): тот же SVG, что на web, — плавная линия `profile.line` толщиной
