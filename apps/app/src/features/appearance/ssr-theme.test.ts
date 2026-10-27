@@ -36,7 +36,7 @@ describe('тема процесса SSR', () => {
   it('первое обращение процесса ждёт ответ API; тема — в globalThis под Symbol.for (общая для бандлов)', async () => {
     fetchTheme.mockResolvedValue(found('atlas'));
     await refreshSsrTheme();
-    expect(fetchTheme).toHaveBeenCalledWith('/v1/appearance', expect.anything());
+    expect(fetchTheme).toHaveBeenCalledWith('/v1/appearance', expect.anything(), { cache: false });
     expect(ssrThemeId()).toBe('atlas');
     expect(holder[KEY]).toMatchObject({ themeId: 'atlas' });
   });

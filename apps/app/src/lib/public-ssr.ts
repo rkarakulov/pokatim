@@ -69,12 +69,21 @@ export function publicPath(prefix: string, id: unknown, suffix = ''): string | n
 export const ssrData = <T>(result: PublicSsrResult<T>): T | null =>
   result.status === 'found' ? result.data : null;
 
+export interface PublicSsrOptions {
+  /**
+   * `false` — мимо кэша процесса (не читать и не класть): у вызывающего своё окно обновления (тема процесса,
+   * `ssr-theme.ts`), второе окно кэша удвоило бы задержку.
+   */
+  cache?: boolean;
+}
+
 /** GET `API_INTERNAL_URL + path`, разбор схемой контракта. */
 export async function fetchPublicForSsr<T>(
   path: string,
   schema: z.ZodType<T>,
+  { cache = true }: PublicSsrOptions = {},
 ): Promise<PublicSsrResult<T>> {
-  const hit = cached<T>(path);
+  const hit = cache ? cached<T>(path) : undefined;
   if (hit) return hit;
 
   const base = process.env.API_INTERNAL_URL;
@@ -84,14 +93,14 @@ export async function fetchPublicForSsr<T>(
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (response.status === 404) {
-      remember(notFound, NOT_FOUND_MAX, path, NOT_FOUND);
+      if (cache) remember(notFound, NOT_FOUND_MAX, path, NOT_FOUND);
       return NOT_FOUND;
     }
     if (!response.ok) return UNAVAILABLE;
     const parsed = schema.safeParse(await response.json());
     if (!parsed.success) return UNAVAILABLE;
     const result = { status: 'found' as const, data: parsed.data };
-    remember(found, FOUND_MAX, path, result);
+    if (cache) remember(found, FOUND_MAX, path, result);
     return result;
   } catch {
     // сеть, таймаут, не JSON — без посева; URL и детали не логируем

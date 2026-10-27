@@ -419,7 +419,7 @@ export function appThemeScheme(def: AppThemeDefinition, system: 'light' | 'dark'
 | `use-theme-fonts.ts` — один файл с развилкой по `window` (как `useFonts` expo-font), без `.web.ts`; SSR-тесты — `*.server.test.*` в проекте jest `server` | `.web.ts` не может импортировать общий клиентский хук (Metro разрешит импорт в себя); в jsdom `window` не удалить. Принято оркестратором | 7.2, 9.1 |
 | Мок `expo-font`: 24 копии `useFonts` в `src/__tests__/*` удалены, общий мок «загружены» — в `jest.setup.ts` (ожидания не менялись) | корень больше не вызывает `useFonts`, прежние моки без `isLoaded`/`loadAsync`. Принято | 9 AC2 |
 | `useActiveThemeId` native — `null` до чтения кэша, даже если сервер уже ответил | AC5 «сплэш скрыт только после чтения кэша». Принято | 7.3 |
-| SSR-тема: single-flight, не чаще 1 попытки в 60 с при любом исходе, ждёт только первая страница процесса, дальше — фон; middleware — только страницы (`SSR_THEME_PATHS`) | ревью B (HIGH Claude, MEDIUM Codex): кэш `public-ssr` не хранит сбои — без своего окна каждый GET ждал API до 2 с | 7.3 |
+| SSR-тема: single-flight, не чаще 1 попытки в 60 с (от завершения попытки, мимо кэша `fetchPublicForSsr` — `cache: false`) при любом исходе, ждёт только первая страница процесса, дальше — фон; middleware — только страницы (`SSR_THEME_PATHS`) | ревью B (HIGH Claude, MEDIUM Codex): кэш `public-ssr` не хранит сбои — без своего окна каждый GET ждал API до 2 с | 7.3 |
 
 ## 8.3 Security checklist
 
@@ -601,6 +601,10 @@ OUT OF SCOPE
 matcher middleware — только страницы (тесты: параллельные GET, сбои подряд, истечение окна, пути); `useThemeFonts` —
 возврат к набору, загрузившемуся после отменённого ожидания (регрессионный тест); тесты `initialThemeId` (web: мусор
 → «Классика»; сервер — тема процесса); фолбэк `useAppTheme` — схема по `useColorScheme` базы.
+
+**Исправления по ревью B (Codex pass 2):** `useThemeFonts` — набор не готов, пока его `loadAsync` в полёте
+(`Font.isLoading`: на web `@font-face` регистрируется до скачивания); тема SSR — мимо кэша `fetchPublicForSsr`, окно
+от завершения попытки (тест на настоящем `fetchPublicForSsr`: смена темы на API видна ≤ 61 с).
 
 **Риски / не проверено:** dev-сервер (`expo start --web`) и native-симуляторы — NOT VERIFIED; смена темы на лету в
 браузере проверена только юнит-тестами (6 тем в B совпадают с «Классикой»); `E2E_API=1` не запускался.

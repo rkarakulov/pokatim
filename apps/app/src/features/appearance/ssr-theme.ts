@@ -4,7 +4,10 @@ import { fetchPublicForSsr } from '@/lib/public-ssr';
 
 import { toAppThemeId } from './theme-id';
 
-/** Не чаще одной попытки к API за окно — при любом исходе (успех, сеть, таймаут, 429, 5xx). */
+/**
+ * Окно между попытками к API — при любом исходе (успех, сеть, таймаут, 429, 5xx); отсчёт — от завершения попытки.
+ * Единственное окно: кэш `fetchPublicForSsr` для темы выключен.
+ */
 const ATTEMPT_INTERVAL_MS = 60_000;
 
 /**
@@ -16,7 +19,7 @@ export const SSR_THEME_PATHS: RegExp[] = [/^\/(?!_expo\/)[^.]*$/];
 interface SsrThemeState {
   /** последняя известная тема процесса */
   themeId?: AppThemeId;
-  /** время последней попытки (начала запроса) */
+  /** время завершения последней попытки */
   attemptAt?: number;
   /** запрос в полёте — общий для параллельных страниц (single-flight) */
   inflight?: Promise<void>;
@@ -44,8 +47,8 @@ export function ssrThemeId(): AppThemeId {
 }
 
 /**
- * Обновить тему из API (`+middleware.ts`, перед рендером страницы). Не чаще раза в 60 с при любом исходе, параллельные
- * страницы делят один запрос. Ждёт только первая попытка процесса (таймаут `fetchPublicForSsr` — 2 с; сбой —
+ * Обновить тему из API (`+middleware.ts`, перед рендером страницы). Не чаще раза в 60 с (от завершения прошлой попытки) при
+ * любом исходе, параллельные страницы делят один запрос, кэш публичных данных не используется. Ждёт только первая попытка процесса (таймаут `fetchPublicForSsr` — 2 с; сбой —
  * «Классика»); дальше — обновление в фоне, рендер идёт в последней известной теме, клиент догонит запросом.
  */
 export function refreshSsrTheme(): Promise<void> {
@@ -53,13 +56,13 @@ export function refreshSsrTheme(): Promise<void> {
   const due =
     current.attemptAt === undefined || Date.now() - current.attemptAt >= ATTEMPT_INTERVAL_MS;
   if (!current.inflight && due) {
-    current.attemptAt = Date.now();
-    current.inflight = fetchPublicForSsr('/v1/appearance', AppAppearance)
+    current.inflight = fetchPublicForSsr('/v1/appearance', AppAppearance, { cache: false })
       .then((result) => {
         if (result.status === 'found') current.themeId = toAppThemeId(result.data.themeId);
       })
       .catch(() => undefined)
       .finally(() => {
+        current.attemptAt = Date.now();
         current.inflight = undefined;
         current.settled = true;
       });
