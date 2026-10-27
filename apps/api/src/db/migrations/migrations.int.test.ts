@@ -29,6 +29,7 @@ import { profileConsents } from './0019_profile_consents';
 import { routesCatalog } from './0020_routes_catalog';
 import { routesRider } from './0021_routes_rider';
 import { routesDerived } from './0022_routes_derived';
+import { accountDeletion } from './0023_account_deletion';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
@@ -93,6 +94,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0020_routes_catalog',
       '0021_routes_rider',
       '0022_routes_derived',
+      '0023_account_deletion',
     ]);
   });
 
@@ -301,13 +303,17 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         }),
         device_connections_agg_user_idx: index({ aggUserId: 1 }),
         device_connections_status_idx: index({ status: 1, pendingUntil: 1 }),
+        // 0023_account_deletion: стирание данных устройств пользователя
+        device_connections_user_idx: index({ userId: 1 }),
       },
       [DEVICES_COLLECTIONS.tickets]: {
         device_link_tickets_ttl: index({ expiresAt: 1 }, false, undefined, 0),
+        device_link_tickets_user_idx: index({ userId: 1 }),
       },
       [DEVICES_COLLECTIONS.imports]: {
         device_imports_workout_unique: index({ provider: 1, aggWorkoutId: 1 }, true),
         device_imports_upload_idx: index({ uploadId: 1 }, false, { uploadId: { $type: 'string' } }),
+        device_imports_user_idx: index({ userId: 1 }),
       },
       [DEVICES_COLLECTIONS.audit]: {
         device_audit_user_idx: index({ userId: 1, _id: -1 }),
@@ -708,7 +714,6 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
 
   it('0022_routes_derived: коллекция route_exports, индекс бэкфилла; после 0021; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0022_routes_derived');
     expect(ids.indexOf('0022_routes_derived')).toBe(ids.indexOf('0021_routes_rider') + 1);
     const exists = () =>
       h.db.listCollections({ name: ROUTES_COLLECTIONS.exports }, { nameOnly: true }).toArray();
@@ -727,6 +732,39 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await routesDerived.up(h.db);
     expect(await exists()).toHaveLength(1);
     expect(await indexesOf(ROUTES_COLLECTIONS.geometries)).toEqual(expected);
+  });
+
+  it('0023_account_deletion: индексы userId данных устройств и частичный индекс очистки users; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0023_account_deletion');
+    expect(ids.indexOf('0023_account_deletion')).toBe(ids.indexOf('0022_routes_derived') + 1);
+    const plain = (key: Record<string, 1>) => ({
+      key,
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+    const snapshot = async () => ({
+      connections: (await indexesOf(DEVICES_COLLECTIONS.connections)).device_connections_user_idx,
+      imports: (await indexesOf(DEVICES_COLLECTIONS.imports)).device_imports_user_idx,
+      tickets: (await indexesOf(DEVICES_COLLECTIONS.tickets)).device_link_tickets_user_idx,
+      users: (await indexesOf(IDENTITY_COLLECTIONS.users)).users_erasure_pending_idx,
+    });
+    const expected = {
+      connections: plain({ userId: 1 }),
+      imports: plain({ userId: 1 }),
+      tickets: plain({ userId: 1 }),
+      users: {
+        key: { deletedAt: 1 },
+        unique: false,
+        partialFilterExpression: { deletedAt: { $type: 'date' }, erasureSweptAt: { $eq: null } },
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await snapshot()).toEqual(expected);
+    await accountDeletion.up(h.db);
+    await accountDeletion.up(h.db);
+    expect(await snapshot()).toEqual(expected);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {
@@ -769,6 +807,11 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       users_unverified_created_at_idx: plain({ createdAt: 1 }, false, {
         emailVerifiedAt: { $eq: null },
         deletedAt: { $eq: null },
+      }),
+      // 0023_account_deletion: регламент повторного прохода очистки удалённых
+      users_erasure_pending_idx: plain({ deletedAt: 1 }, false, {
+        deletedAt: { $type: 'date' },
+        erasureSweptAt: { $eq: null },
       }),
     });
     expect(await indexesOf(IDENTITY_COLLECTIONS.userConsents)).toEqual({
