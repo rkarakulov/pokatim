@@ -662,6 +662,7 @@ export const ru = {
   'admin.audit.action.route.published': 'Маршрут опубликован в каталоге',
   'admin.audit.action.route.unpublished': 'Маршрут снят с публикации',
   'admin.audit.action.route.catalog_updated': 'Изменён маршрут в каталоге',
+  'admin.audit.action.account.deleted': 'Райдер удалил аккаунт',
   'admin.audit.action.results.attempt_excluded': 'Исключён трек',
   'admin.audit.action.results.attempt_restored': 'Трек возвращён в обработку',
   'admin.audit.action.results.recheck_requested': 'Запущена перепроверка треков',
