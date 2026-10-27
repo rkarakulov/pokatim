@@ -15,7 +15,6 @@ import { appRoutes } from './app-routes';
 import { actions, noEntry, resultsPage } from './races-fixtures';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 // jest-пресет React Native подменяет useColorScheme на jest.fn(() => 'light')
 const colorScheme = jest.mocked(useColorScheme);

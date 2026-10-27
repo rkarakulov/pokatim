@@ -11,7 +11,6 @@ import { signInForTest } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 beforeEach(() => {
   jest.mocked(api.listRaces).mockResolvedValue({ items: [], nextCursor: null });

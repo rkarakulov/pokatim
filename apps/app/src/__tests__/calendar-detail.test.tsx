@@ -16,7 +16,6 @@ import { createQueryWrapper } from './query-wrapper';
 
 jest.mock('@/lib/api');
 jest.mock('@/lib/open-external-url', () => ({ openExternalUrl: jest.fn() }));
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getCalendarStart = jest.mocked(api.getCalendarStart);
 const listCalendar = jest.mocked(api.listCalendar);

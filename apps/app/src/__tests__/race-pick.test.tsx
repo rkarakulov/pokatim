@@ -27,7 +27,6 @@ import {
 } from './races-fixtures';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
 
 const listCandidates = jest.mocked(api.listAttemptCandidates);

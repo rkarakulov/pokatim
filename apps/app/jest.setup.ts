@@ -27,6 +27,13 @@ jest.mock('expo-secure-store', () => {
   };
 });
 
+// шрифты темы (`useThemeFonts`): в jest нет файлов шрифтов — «уже загружены»; загрузку и её ожидание проверяют
+// use-theme-fonts.test.tsx и root-layout.test.tsx своими моками
+jest.mock('expo-font', () => ({
+  isLoaded: jest.fn(() => true),
+  loadAsync: jest.fn(() => Promise.resolve()),
+}));
+
 // геопозиция: по умолчанию разрешение уже выдано — шаг онбординга пропускается (тесты шага задают своё);
 // getCurrentPositionAsync читает только «Моё местоположение» по нажатию (routes-04d, G1): тесты карты задают ответ,
 // онбординг его не вызывает (сторож в location.test.tsx)

@@ -21,7 +21,6 @@ import { appRoutes } from './app-routes';
 import { useRegistrationStore } from '@/features/auth/registration-store';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getLink = jest.mocked(api.getVerificationLink);
 const confirm = jest.mocked(api.confirmVerification);
