@@ -85,9 +85,12 @@ export function MyRoutePublication({ route }: { route: MyRoute }) {
   const rejectionReason = rejection
     ? domainLabel('domain.routeRejectionReason', rejection.reason)
     : null;
-  // подачи кончились: у отозванного/снятого заявки наружу нет — причину даёт флаг сервера (старый API — `false`)
+  // подачи кончились — пояснение только там, где «Опубликовать» могла бы быть: отклонённый (без canPublish — значит,
+  // лимит) и отозванный/снятый (`publication: null`, причину даёт флаг сервера; старый API — `false`). У заявки
+  // на проверке, в каталоге и скрытой «подать снова нельзя» сбивает с толку (task.md §8.2).
   const exhausted =
-    !route.canPublish && (route.submissionsExhausted || publication?.status === 'rejected');
+    !route.canPublish &&
+    (publication?.status === 'rejected' || (publication === null && route.submissionsExhausted));
   if (!status && !route.canPublish && !exhausted) return null;
   const secondary = { color: theme.text.secondary };
 

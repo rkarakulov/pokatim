@@ -67,6 +67,9 @@ export class MyRoutePublicationService {
         now,
       );
       if (!written) return null;
+      // Исключение из правила «в колбэке транзакции — только операции с session» (pokatim-db.md, второе после R12):
+      // `RateLimiter` не умеет вернуть единицу, поэтому квота — после записи. При повторе колбэка на транзиентной
+      // ошибке коммита одна подача спишет квоту дважды, при сбое коммита — без заявки. Принято как редкое (task.md §8.2).
       const limited = await this.rateLimiter.consume(
         `routes-publication-submit:${userId}`,
         ROUTE_POLICY.publicationSubmitLimit,

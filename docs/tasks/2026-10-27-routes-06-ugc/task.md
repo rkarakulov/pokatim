@@ -321,6 +321,13 @@ BLOCKERS нет. Находки (решения architect; U1–U9 и A1–A7 н
   у всех готовых маршрутов — это сторожит тест «canPublish false (старый API)». Текст — существующий
   `routes.publication.noSubmissionsLeft` (новых ключей нет).
 
+Фиксы ревью pass 2 (coder, 2026-10-27; findings-2.md / findings-codex-2.md):
+- **Пояснение «использованы все 3 подачи»** — только у `rejected` без `canPublish` (у отклонённого «Опубликовать»
+  недоступна только из-за лимита) и у `publication: null` с `submissionsExhausted`. У `pending`/`approved`/`hidden`
+  пояснения нет: «Опубликовать» там недоступна из-за статуса, а не лимита (вариант (а) находки).
+- **Redis-квота подачи в транзакции** — второе разрешённое исключение правила «в колбэке транзакции — только `session`»
+  (`pokatim-db.md`), с комментарием в `submit()` о двойном списании при повторе колбэка.
+
 ## 8.3 Security checklist
 
 Затронуто: AuthZ (свой маршрут, право `routes.moderate`), данные наружу (публичный маршрут райдера, имя), злоупотребления
@@ -838,3 +845,31 @@ prettier — «All matched files use Prettier code style!»; eslint — 0; depcr
 typecheck — `Tasks: 9 successful, 9 total`; test — `Tasks: 15 successful, 15 total` (api 1173 / 116 файлов, admin 304,
 contracts 273, api-client 96, app 1261 / 139 сьютов). NOT VERIFIED: ручная проверка панели и приложения в браузере и
 на симуляторе.
+
+### Фиксы ревью pass 2 (coder, 2026-10-27)
+
+Находки проверены по коду — все четыре подтверждены.
+
+1. **[HIGH] `RouteReportAction` молча скрывал «Пожаловаться» при загрузке и ошибке `me`.** Исправлено: блок — `AsyncContent`
+   (скелетон строки, «Не удалось загрузить» / «Нет соединения» с «Повторить», баннер «Данные могли устареть» поверх
+   действия). Гостю и маршруту команды запрос выключен — в тело шторки передаётся `viewer: null`, блока нет (иначе
+   выключенный запрос `isPending` дал бы вечный скелетон). Тесты `route-detail.test.tsx`: первая загрузка — скелетон;
+   500 без данных — ошибка, повтор возвращает «Пожаловаться»; ошибка pull-to-refresh — действие остаётся, баннер.
+   До фикса — все три красные. Гость и маршрут команды — прежние тесты зелёные.
+2. **[HIGH] Экран жалобы без состояний запроса карточки.** Исправлено: название — свой `AsyncContent` (скелетон
+   `titleSm`, ошибка с повтором, баннер при ошибке обновления), форма показывается по `me` независимо. Тесты
+   `route-report.test.tsx`: «me успешен, карточка 500 → повтор восстанавливает название», первая загрузка — скелетон
+   названия. До фикса — красные.
+3. **[LOW] Исключение R12 для квоты подачи.** Комментарий в `MyRoutePublicationService.submit()` по образцу
+   `registration.service.ts`; `pokatim-db.md` — перечень исключений (регистрация R12 и квота подачи маршрута). §8.2.
+4. **[LOW] Пояснение об исчерпанных подачах у `pending`/`approved`/`hidden`.** Исправлено (вариант (а), §8.2):
+   `exhausted = !canPublish && (rejected || (publication === null && submissionsExhausted))`. Тест `it.each` по трём
+   статусам с `submissionsExhausted: true` — без пояснения (до фикса — 3 красных); прежние тесты `publication: null` и
+   «Отклонён без подач» зелёные. `pokatim-app.md` обновлён.
+
+
+**Проверки:** `MONGO_URL_TEST=…/pokatim_routes06_test REDIS_URL_TEST=…/13 TURBO_CONCURRENCY=1 pnpm check` → `EXIT 0`:
+prettier — «All matched files use Prettier code style!»; depcruise — «no dependency violations found»; typecheck —
+`Tasks: 9 successful, 9 total`; test — `Tasks: 15 successful, 15 total` (api 116 файлов, admin 35, app 1269 тестов).
+Первый прогон упал на `bottom-sheet.test.tsx` (routes-04d, «шторку схватили посреди снапа» — тайминг под нагрузкой; файл
+не менялся): отдельно 3/3 зелёный, повторный полный прогон зелёный. NOT VERIFIED: ручная проверка на симуляторе и в браузере.

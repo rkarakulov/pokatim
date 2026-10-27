@@ -511,5 +511,34 @@ describe('маршрут райдера на карточке каталога (
       expect(screen.queryByText('Пожаловаться')).toBeNull();
       expect(screen.queryByText('Вы пожаловались на этот маршрут')).toBeNull();
     });
+
+    it('первая загрузка права жалобы — скелетон блока', async () => {
+      getViewer.mockReturnValue(new Promise(() => {}));
+      await openSignedIn();
+      expect(await screen.findByText('От райдера · Аня К.')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('route-report-skeleton', { includeHiddenElements: true }),
+      ).toBeOnTheScreen();
+      expect(screen.queryByText('Пожаловаться')).toBeNull();
+    });
+
+    it('ошибка без данных — «Не удалось загрузить» с «Повторить»; повтор возвращает «Пожаловаться»', async () => {
+      getViewer.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+      await openSignedIn();
+      expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+      expect(screen.queryByText('Пожаловаться')).toBeNull();
+      await fireEvent.press(screen.getByText('Повторить'));
+      expect(await screen.findByText('Пожаловаться')).toBeOnTheScreen();
+      expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+    });
+
+    it('ошибка обновления — «Пожаловаться» остаётся, баннер «Данные могли устареть»', async () => {
+      await openSignedIn();
+      expect(await screen.findByText('Пожаловаться')).toBeOnTheScreen();
+      getViewer.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+      await pullToRefresh();
+      expect(await screen.findByText('Данные могли устареть')).toBeOnTheScreen();
+      expect(screen.getByText('Пожаловаться')).toBeOnTheScreen();
+    });
   });
 });

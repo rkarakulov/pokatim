@@ -176,7 +176,8 @@ function RouteRaces({
 
 /**
  * «Пожаловаться» на маршрут райдера (routes-06, A4): только вошедшему и только по `viewer.canReport` сервера (свой и
- * команды — нет); уже жаловался — «Вы пожаловались на этот маршрут». Гостю и до ответа — ничего.
+ * команды — нет); уже жаловался — «Вы пожаловались на этот маршрут». Загрузка, ошибка с повтором и баннер ошибки
+ * обновления — `AsyncContent` (AGENTS.md §4.12). Гостю и маршруту команды (`viewer` нет) — ничего.
  */
 function RouteReportAction({
   id,
@@ -187,21 +188,30 @@ function RouteReportAction({
 }) {
   const theme = useTheme();
   const router = useRouter();
-  if (viewer.data?.reported) {
-    return (
-      <Text style={[textStyle('body'), { color: theme.text.secondary }]}>
-        {t('routes.report.reported')}
-      </Text>
-    );
-  }
-  if (!viewer.data?.canReport) return null;
   return (
-    <View style={styles.start}>
-      <TextAction
-        label={t('routes.report.action')}
-        onPress={() => router.push(`/routes/report/${encodeURIComponent(id)}`)}
-      />
-    </View>
+    <AsyncContent
+      query={viewer}
+      skeleton={
+        <View testID="route-report-skeleton">
+          <SkeletonText variant="body" lines={1} lastLineWidth="40%" />
+        </View>
+      }
+    >
+      {(data) =>
+        data.reported ? (
+          <Text style={[textStyle('body'), { color: theme.text.secondary }]}>
+            {t('routes.report.reported')}
+          </Text>
+        ) : data.canReport ? (
+          <View style={styles.start}>
+            <TextAction
+              label={t('routes.report.action')}
+              onPress={() => router.push(`/routes/report/${encodeURIComponent(id)}`)}
+            />
+          </View>
+        ) : null
+      }
+    </AsyncContent>
   );
 }
 
@@ -229,7 +239,8 @@ function RouteSheetBody({
 }: {
   route: CatalogRouteDetail;
   races: ReturnType<typeof useCatalogRouteRaces>;
-  viewer: ReturnType<typeof useCatalogRouteViewer>;
+  /** запрос права жалобы — только вошедшему на маршруте райдера; иначе `null` (блока нет) */
+  viewer: ReturnType<typeof useCatalogRouteViewer> | null;
   now: Date | null;
   mounted: boolean;
   scrub: ScrubStore;
@@ -254,7 +265,7 @@ function RouteSheetBody({
         scrub={scrub}
       />
       <RouteActions route={route} mounted={mounted} />
-      <RouteReportAction id={route.id} viewer={viewer} />
+      {viewer ? <RouteReportAction id={route.id} viewer={viewer} /> : null}
       <RouteRaces races={races} now={now} />
     </View>
   );
@@ -328,7 +339,8 @@ export function RouteDetailScreen({
   // гонки маршрута — только клиент (в SSR не попадают); маршрут райдера в гонке не бывает — не запрашиваем (RC-1)
   const races = useCatalogRouteRaces(id, valid && authorKind === 'team');
   // routes-06: «Пожаловаться» — только вошедшему на карточке маршрута райдера (клиентский запрос, не SSR)
-  const viewer = useCatalogRouteViewer(id, valid && signedIn && authorKind === 'rider');
+  const viewerEnabled = valid && signedIn && authorKind === 'rider';
+  const viewer = useCatalogRouteViewer(id, viewerEnabled);
   const now = useMinskClockAfterMount([route.dataUpdatedAt, races.dataUpdatedAt]);
   const hasRoute = route.data !== undefined;
   const refetchers = useMemo(
@@ -420,7 +432,7 @@ export function RouteDetailScreen({
                   <RouteSheetBody
                     route={data}
                     races={races}
-                    viewer={viewer}
+                    viewer={viewerEnabled ? viewer : null}
                     now={now}
                     mounted={mounted}
                     scrub={scrub}

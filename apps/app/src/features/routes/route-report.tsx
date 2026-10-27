@@ -15,6 +15,7 @@ import {
   Chip,
   EmptyState,
   SkeletonHeroCard,
+  SkeletonText,
   TextAction,
   TextField,
   textStyle,
@@ -139,7 +140,8 @@ function ReportForm({ id, viewer }: { id: string; viewer: CatalogRouteViewer }) 
 /**
  * «Пожаловаться на маршрут» (`/routes/report/<id>`, routes-06, A4) — внутри `Stack.Protected`. Право жалобы решает
  * сервер (`GET /v1/routes/:id/me` → `canReport`/`reported`); название — из карточки каталога. Невалидный id и 404
- * (снят, скрыт, не в каталоге) — «Маршрут недоступен»; загрузка и ошибки — `AsyncContent`.
+ * (снят, скрыт, не в каталоге) — «Маршрут недоступен»; загрузка и ошибки — `AsyncContent`: права (`me`) — всего
+ * экрана, карточки — своим блоком на месте названия (скелетон, ошибка с повтором, баннер при ошибке обновления).
  */
 export function RouteReportScreen({ id }: { id: string }) {
   const theme = useTheme();
@@ -176,11 +178,20 @@ export function RouteReportScreen({ id }: { id: string }) {
           <AsyncContent query={viewer} skeleton={<SkeletonHeroCard />}>
             {(data: CatalogRouteViewer) => (
               <View style={styles.form}>
-                {route.data ? (
-                  <Text style={[textStyle('titleSm'), { color: theme.text.primary }]}>
-                    {route.data.title}
-                  </Text>
-                ) : null}
+                <AsyncContent
+                  query={route}
+                  skeleton={
+                    <View testID="route-report-title-skeleton">
+                      <SkeletonText variant="titleSm" lines={1} lastLineWidth="60%" />
+                    </View>
+                  }
+                >
+                  {(detail) => (
+                    <Text style={[textStyle('titleSm'), { color: theme.text.primary }]}>
+                      {detail.title}
+                    </Text>
+                  )}
+                </AsyncContent>
                 <ReportForm id={id} viewer={data} />
               </View>
             )}

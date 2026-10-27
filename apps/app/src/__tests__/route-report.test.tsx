@@ -152,6 +152,26 @@ describe('«Пожаловаться на маршрут» (routes-06, A4)', () 
     expect(await screen.findByText('Маршрут недоступен')).toBeOnTheScreen();
   });
 
+  it('me успешен, карточка 500 — «Не удалось загрузить» с повтором; повтор восстанавливает название', async () => {
+    getRoute.mockRejectedValueOnce(http(500, 'INTERNAL'));
+    await open();
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.getByText('Спам')).toBeOnTheScreen();
+    expect(screen.queryByText('Лесная петля')).toBeNull();
+    await fireEvent.press(screen.getByText('Повторить'));
+    expect(await screen.findByText('Лесная петля')).toBeOnTheScreen();
+    expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+  });
+
+  it('первая загрузка карточки — скелетон названия', async () => {
+    getRoute.mockReturnValue(new Promise(() => {}));
+    await open();
+    expect(await screen.findByText('Спам')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('route-report-title-skeleton', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+  });
+
   it('невалидный id — «Маршрут недоступен» без запроса', async () => {
     await open('/routes/report/not-a-uuid');
     expect(await screen.findByText('Маршрут недоступен')).toBeOnTheScreen();

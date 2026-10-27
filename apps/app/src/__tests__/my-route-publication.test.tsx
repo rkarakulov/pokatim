@@ -104,6 +104,24 @@ describe('карточка своего маршрута: публикация �
     expect(screen.queryByRole('button', { name: 'Опубликовать' })).toBeNull();
   });
 
+  it.each([
+    ['pending', 'На проверке'],
+    ['approved', 'В каталоге'],
+    ['hidden', 'Скрыт модератором'],
+  ] as const)(
+    '%s после 3-й подачи — без пояснения «использованы все 3 подачи» (только publication: null и rejected)',
+    async (status, label) => {
+      getMine.mockResolvedValue(
+        mine({ publication: publication({ status }), submissionsExhausted: true }),
+      );
+      await openDetail();
+      expect(await screen.findByText(label)).toBeOnTheScreen();
+      expect(
+        screen.queryByText('Подать маршрут снова нельзя: использованы все 3 подачи.'),
+      ).toBeNull();
+    },
+  );
+
   it('«На проверке»: подсказка, название заморожено; «Отозвать заявку» — с подтверждением', async () => {
     getMine.mockResolvedValue(mine({ publication: publication() }));
     unpublish.mockResolvedValue(mine({ canPublish: true }));
