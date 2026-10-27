@@ -53,7 +53,7 @@ export interface RouteContourProps {
   geometry: Pick<RouteMapGeometry, 'line' | 'bounds'>;
   /** цвет линии маршрута */
   color: string;
-  /** цвет точки старта */
+  /** заливка точки старта (`map.start`, контрастна к линии); обводка — цвет линии */
   startColor: string;
 }
 

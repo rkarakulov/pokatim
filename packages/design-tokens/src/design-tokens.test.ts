@@ -121,6 +121,7 @@ describe('контраст WCAG — темы pokatim', () => {
         'text.accent / surface.raised',
         'tabBar.active / tabBar.background',
         'tabBar.inactive / tabBar.background',
+        'map.start / map.route',
       ]),
     );
   });

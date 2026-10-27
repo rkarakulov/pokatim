@@ -57,6 +57,8 @@ export interface PokatimRoleGroups {
     track: string;
     /** участки трека вне коридора — пунктир, толще (различимы без цвета) */
     offCorridor: string;
+    /** точка старта на контуре маршрута (герой Главной): заливка кружка, контрастная к `route` (обводка — `route`) */
+    start: string;
   };
   surfaceBar: {
     asphalt: string;
@@ -127,6 +129,7 @@ const light: AppTheme = {
     corridor: color.neutral600,
     track: color.orange600,
     offCorridor: color.red700,
+    start: color.orange600,
   },
   surfaceBar: {
     asphalt: color.neutral900,
@@ -199,6 +202,8 @@ const dark: AppTheme = {
     corridor: color.neutral400,
     track: color.orange400,
     offCorridor: color.red400,
+    // светлая линия: старт — тёмный кружок (кольцо цвета линии)
+    start: color.neutral850,
   },
   surfaceBar: {
     asphalt: color.neutral50,

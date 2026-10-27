@@ -144,7 +144,7 @@ function ContourRouteHero({ route, onPress }: RouteHeroProps) {
           routeId={route.id}
           background={theme.map.background}
           color={theme.map.route}
-          startColor={theme.text.accent}
+          startColor={theme.map.start}
         />
         <View style={styles.arrowCorner}>
           <HeroArrow background={theme.action.primary} color={theme.action.onPrimary} />
@@ -191,7 +191,7 @@ function NumeralRouteHero({ route, onPress }: RouteHeroProps) {
           routeId={route.id}
           background={null}
           color={theme.action.onPrimary}
-          startColor={theme.action.onPrimary}
+          startColor={theme.action.primary}
         />
         <View style={styles.arrowCorner}>
           <Icon name="arrowRight" size={size.icon} color={theme.action.onPrimary} />

@@ -41,6 +41,9 @@ export function RouteContour({ geometry, color, startColor }: RouteContourProps)
         cy={contour.start[1]}
         r={CONTOUR_START_RADIUS}
         fill={startColor}
+        stroke={color}
+        strokeWidth={stroke.indicator}
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );

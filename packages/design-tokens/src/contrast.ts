@@ -22,6 +22,8 @@ export function contrastPairsOf(t: Theme<PokatimRoleGroups>): ContrastPair[] {
     contrastPair('map.corridor / map.background', t.map.corridor, t.map.background, WCAG.ui),
     contrastPair('map.track / map.background', t.map.track, t.map.background, WCAG.ui),
     contrastPair('map.offCorridor / map.background', t.map.offCorridor, t.map.background, WCAG.ui),
+    // точка старта на контуре маршрута — отличима от линии
+    contrastPair('map.start / map.route', t.map.start, t.map.route, WCAG.ui),
     // профиль высоты на экране маршрута
     contrastPair('profile.line / surface.default', t.profile.line, t.surface.default, WCAG.ui),
     // профиль высоты в шторке карточки маршрута

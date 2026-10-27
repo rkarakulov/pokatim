@@ -23,8 +23,8 @@ interface Palette {
   action: [Hex, Hex];
   /** success / warning / error / onError / errorTint */
   status: [Hex, Hex, Hex, Hex, Hex];
-  /** background / line / route / corridor / track / offCorridor */
-  map: [Hex, Hex, Hex, Hex, Hex, Hex];
+  /** background / line / route / corridor / track / offCorridor / start */
+  map: [Hex, Hex, Hex, Hex, Hex, Hex, Hex];
   /** line / fillTop */
   profile: [Hex, Hex];
   /** trackOn / thumbOn */
@@ -43,7 +43,7 @@ function appScheme(p: Palette, shape: ShapeRoles): AppTheme {
   const [subtle, strong, input, focus, sheet] = p.border;
   const [actionPrimary, onPrimary] = p.action;
   const [success, warning, error, onError, errorTint] = p.status;
-  const [background, line, route, corridor, track, offCorridor] = p.map;
+  const [background, line, route, corridor, track, offCorridor, start] = p.map;
   const [profileLine, fillTop] = p.profile;
   const [trackOn, thumbOn] = p.control;
   const [tabBackground, tabActive] = p.tabBar;
@@ -67,7 +67,7 @@ function appScheme(p: Palette, shape: ShapeRoles): AppTheme {
     border: { subtle, strong, input, focus, sheet },
     action: { primary: actionPrimary, onPrimary },
     status: { success, warning, error, onError, errorTint },
-    map: { basemap: p.basemap, background, line, route, corridor, track, offCorridor },
+    map: { basemap: p.basemap, background, line, route, corridor, track, offCorridor, start },
     surfaceBar: { asphalt: primary, gravel: subtle, gravelHatch: primary, outline: secondary },
     profile: { line: profileLine, fillTop, fillBottom: fillTop, grid: subtle },
     overlay: { scrim: BLACK },
@@ -94,7 +94,7 @@ export const atlas = {
       border: ['#E3E5E8', '#CDD1D6', '#7D838C', '#15171A', '#E3E5E8'],
       action: ['#15171A', '#FFFFFF'],
       status: ['#1E7A46', '#866C00', '#B0103A', '#FFFFFF', '#FBEDEB'],
-      map: ['#EEF0F2', '#DADDE1', '#D9480F', '#5B616B', '#1D6FD8', '#B0103A'],
+      map: ['#EEF0F2', '#DADDE1', '#D9480F', '#5B616B', '#1D6FD8', '#B0103A', '#15171A'],
       profile: ['#D9480F', '#F76707'],
       control: ['#15171A', '#FFFFFF'],
       tabBar: ['#FFFFFF', '#15171A'],
@@ -109,7 +109,7 @@ export const atlas = {
       border: ['#2A2E33', '#3A3F45', '#6E747D', '#F1F2F4', '#3A3F45'],
       action: ['#F1F2F4', '#111316'],
       status: ['#4CC28A', '#F0CC3C', '#FF5C8A', '#111316', '#2A1A1F'],
-      map: ['#1C1F23', '#2A2E33', '#FF8A4C', '#A3A9B2', '#5AA2FF', '#FF5C8A'],
+      map: ['#1C1F23', '#2A2E33', '#FF8A4C', '#A3A9B2', '#5AA2FF', '#FF5C8A', '#1C1F23'],
       profile: ['#FF8A4C', '#FF8A4C'],
       control: ['#F1F2F4', '#111316'],
       tabBar: ['#1C1F23', '#F1F2F4'],
@@ -128,7 +128,7 @@ export const chrono = appScheme(
     // тёмный текст на ярком оранжевом: белый не проходит WCAG (F6)
     action: ['#FF6A1A', '#0B0B0C'],
     status: ['#4CC28A', '#F0CC3C', '#FF5C8A', '#0B0B0C', '#2A1A1F'],
-    map: ['#161618', '#2C2C2E', '#FF6A1A', '#A1A1A6', '#5AC8FA', '#FF5C8A'],
+    map: ['#161618', '#2C2C2E', '#FF6A1A', '#A1A1A6', '#5AC8FA', '#FF5C8A', '#0B0B0C'],
     profile: ['#FF6A1A', '#FF6A1A'],
     control: ['#FF6A1A', '#0B0B0C'],
     tabBar: ['#0B0B0C', '#FF6A1A'],
@@ -147,7 +147,7 @@ export const planner = {
       border: ['#DCD9D1', '#C9C5BB', '#7A766F', '#141412', '#DCD9D1'],
       action: ['#141412', '#FFFFFF'],
       status: ['#1B6E3F', '#6F5900', '#A50E36', '#FFFFFF', '#F6E6E3'],
-      map: ['#E7E4DC', '#D3CFC5', '#141412', '#57544D', '#B23C0A', '#A50E36'],
+      map: ['#E7E4DC', '#D3CFC5', '#141412', '#57544D', '#B23C0A', '#A50E36', '#B23C0A'],
       profile: ['#141412', '#57544D'],
       control: ['#141412', '#FFFFFF'],
       tabBar: ['#F7F6F2', '#141412'],
@@ -162,7 +162,7 @@ export const planner = {
       border: ['#2E2B26', '#3D3A33', '#76716A', '#F0EEE8', '#3D3A33'],
       action: ['#F0EEE8', '#161512'],
       status: ['#4CC28A', '#F0CC3C', '#FF5C8A', '#161512', '#2A1A1F'],
-      map: ['#211F1B', '#2E2B26', '#F0EEE8', '#A8A398', '#FF8A4C', '#FF5C8A'],
+      map: ['#211F1B', '#2E2B26', '#F0EEE8', '#A8A398', '#FF8A4C', '#FF5C8A', '#211F1B'],
       profile: ['#F0EEE8', '#A8A398'],
       control: ['#F0EEE8', '#161512'],
       tabBar: ['#211F1B', '#F0EEE8'],
@@ -182,7 +182,7 @@ export const journal = {
       border: ['#DDE3D8', '#C8D0C2', '#77827A', '#18201A', '#DDE3D8'],
       action: ['#22702A', '#FFFFFF'],
       status: ['#1B6E3F', '#6F5900', '#A50E36', '#FFFFFF', '#F6E6E3'],
-      map: ['#E6ECE1', '#D2DACB', '#2E7D32', '#525D55', '#C2410C', '#A50E36'],
+      map: ['#E6ECE1', '#D2DACB', '#2E7D32', '#525D55', '#C2410C', '#A50E36', '#18201A'],
       profile: ['#2E7D32', '#43A047'],
       control: ['#22702A', '#FFFFFF'],
       tabBar: ['#FAFBF8', '#18201A'],
@@ -197,7 +197,7 @@ export const journal = {
       border: ['#263027', '#344036', '#6C786D', '#EDF2EA', '#344036'],
       action: ['#6CCB7A', '#101511'],
       status: ['#4CC28A', '#F0CC3C', '#FF5C8A', '#101511', '#2A1A1F'],
-      map: ['#1A211B', '#263027', '#6CCB7A', '#9FAA9F', '#FF8A4C', '#FF5C8A'],
+      map: ['#1A211B', '#263027', '#6CCB7A', '#9FAA9F', '#FF8A4C', '#FF5C8A', '#1A211B'],
       profile: ['#6CCB7A', '#6CCB7A'],
       control: ['#6CCB7A', '#101511'],
       tabBar: ['#1A211B', '#EDF2EA'],
@@ -215,7 +215,7 @@ export const navigation = appScheme(
     border: ['#2A2F36', '#39404A', '#6B727C', '#5BA8FF', '#39404A'],
     action: ['#F2F4F7', '#0F1215'],
     status: ['#4CC28A', '#F0CC3C', '#FF5C8A', '#0F1215', '#2A1A1F'],
-    map: ['#161A1E', '#2A2F36', '#5BA8FF', '#A0A7B1', '#FF8A3D', '#FF5C8A'],
+    map: ['#161A1E', '#2A2F36', '#5BA8FF', '#A0A7B1', '#FF8A3D', '#FF5C8A', '#161A1E'],
     profile: ['#5BA8FF', '#5BA8FF'],
     control: ['#5BA8FF', '#0F1215'],
     tabBar: ['#0F1215', '#F2F4F7'],
@@ -234,7 +234,7 @@ export const typography = {
       border: ['#E6E2DB', '#D2CDC4', '#827D75', '#0D0D0D', '#E6E2DB'],
       action: ['#FF5A1F', '#0D0D0D'],
       status: ['#1B6E3F', '#7A6200', '#A50E36', '#FFFFFF', '#FBEDEB'],
-      map: ['#EFECE6', '#DCD8D0', '#D9480F', '#57534E', '#1D6FD8', '#A50E36'],
+      map: ['#EFECE6', '#DCD8D0', '#D9480F', '#57534E', '#1D6FD8', '#A50E36', '#0D0D0D'],
       profile: ['#D9480F', '#FF5A1F'],
       control: ['#0D0D0D', '#FFFFFF'],
       tabBar: ['#FFFFFF', '#0D0D0D'],
@@ -249,7 +249,7 @@ export const typography = {
       border: ['#2A2826', '#3A3734', '#716C66', '#F6F4F0', '#3A3734'],
       action: ['#FF5A1F', '#0D0D0D'],
       status: ['#4CC28A', '#F0CC3C', '#FF5C8A', '#0D0D0D', '#2A1A1F'],
-      map: ['#1A1918', '#2A2826', '#FF7A45', '#A6A19A', '#5AA2FF', '#FF5C8A'],
+      map: ['#1A1918', '#2A2826', '#FF7A45', '#A6A19A', '#5AA2FF', '#FF5C8A', '#1A1918'],
       profile: ['#FF7A45', '#FF5A1F'],
       control: ['#FF5A1F', '#0D0D0D'],
       tabBar: ['#1A1918', '#F6F4F0'],

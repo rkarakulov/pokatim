@@ -21,7 +21,9 @@ describe('RouteContour web (app-themes C2)', () => {
     const svg = container.querySelector('svg[data-testid="route-contour"]')!;
     expect(svg.getAttribute('aria-hidden')).toBe('true');
     expect(svg.querySelector('path')!.getAttribute('stroke')).toBe('#D9480F');
+    // старт — кружок цвета старта с обводкой цветом линии: виден на линии при любом сочетании
     expect(svg.querySelector('circle')!.getAttribute('fill')).toBe('#C2410C');
+    expect(svg.querySelector('circle')!.getAttribute('stroke')).toBe('#D9480F');
     expect(
       renderToString(<RouteContour geometry={geometry} color="#D9480F" startColor="#C2410C" />),
     ).toContain(`d="${svg.querySelector('path')!.getAttribute('d')}"`);
