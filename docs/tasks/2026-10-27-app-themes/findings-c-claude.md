@@ -62,3 +62,37 @@ verdict: REQUEST CHANGES
 NOT VERIFIED:
 - Визуальная проверка на native (iOS и Android) и вёрстка героя `numeral` на узких экранах: запуска устройства не было.
 - `pnpm check` целиком и `pnpm --filter @pokatim/admin test` не запускались. Запущены design-tokens (551 passed) и app (1376 passed).
+
+# Findings — app-themes slice C — pass 2 — reviewer: claude
+base: origin/develop   commits: origin/develop..784db39 (fix-коммиты af09a2a…784db39, working tree чистый)
+verdict: APPROVE
+
+Прошлые находки закрыты (проверено по коду и прогоном тестов):
+- HIGH pass 1 «tiles обрезают время». Значение разбито на части `StatItem.parts` («3» «ч», «35» «мин»). Плитки — `flexBasis: 'auto'`, `minWidth: size.rowMin` (64), ряд с `flexWrap`. Ни у значения, ни у подписи нет `numberOfLines`, поэтому многоточия нет. На 360 px (внутренняя ширина 320) у Навигации плитки уходят во второй ряд, а не обрезаются. Это отклонение записано в 8.2.
+- HIGH Codex pass 2 «numeral обрезает время». `CompactCells wrap` снимает ограничение строк. `numeralRest` теперь `flexBasis: 'auto'`, `flexShrink: 1`, `flexWrap`, ячейки `contentCell` по содержимому. Если правая группа не помещается рядом с цифрой, она уходит вниз. Считал для сценария Codex: ≈ 130 + 12 + (≈ 64 + 12 + 86) ≈ 304 ≤ 320, то есть группа помещается в ряд, а в худшем случае переносится. «Классика» (`compact`, `wrap=false`) осталась прежней: `compactCell` и одна строка при `fontScale <= 1`, есть тест.
+- MEDIUM скелетоны. `STAT_SKELETONS` выбирается по `STATS_VARIANT[layout.routeStats]` в `RouteDetailSkeleton`. `ROUTE_HERO_SKELETON` передаётся через новый проп `HomeSection.skeleton` (`(tabs)/index.tsx:202`). Для «Классики» по-прежнему рисуются `SkeletonText bodyStrong ×2` и `SkeletonHeroCard`.
+- MEDIUM listGap. `appDensity.regular.listGap` = s2. `ClassicCard` берёт только `cardPadding`, так что строки «Классики» не меняются. `listGap` больше нигде не читается.
+- MEDIUM точка старта. Новая роль `map.start` есть во всех 14 схемах и в `themes.light/dark`. Пара `map.start / map.route` ≥ 3:1 входит в `contrastPairsOf`, цикл тем в тесте зелёный. Кружок с обводкой цвета линии: r = 5 в viewBox 320×200 при масштабе ≈ 1.05, обводка 2 px non-scaling. Заливка видна. «Классика» контур не рисует, поэтому новая роль на неё не влияет.
+- LOW сторож. Шаблоны расширены: обратный порядок, двойные кавычки, `switch`, `=== x.layout.y`, плюс самопроверка шаблонов. `TAB_ICONS` теперь `Record<TabName, IconName>`, а тест сверяет `TAB_NAMES` с `Tabs.Screen` в `(tabs)/_layout.tsx`.
+- Профиль после переезда в `@pokatim/route-view`. `PROFILE_FILL` лежит в пакете. Для `gradient` (у «Классики») стопы {0.28, 0}, как до слайса. Зависимость `@pokatim/design-tokens` у route-view объявлена. native и web ведут себя одинаково, фолбэк столбиками не изменился.
+- Прогоны: design-tokens 568/568, route-view 40/40, admin 285/285, typecheck app/route-view/design-tokens — ок. app: 1367/1367 в трёх прогонах из четырёх, в первом упал 1 тест (см. NOT VERIFIED).
+
+### [LOW] Исправление Codex pass 2 (numeral) не отражено в 8.2 и Outcome
+- **file:** docs/tasks/2026-10-27-app-themes/slice-c-themes.md
+- **location:** таблица отклонений 8.2; раздел «Исправления по ревью pass 1»
+- **problem:** коммит 784db39 меняет раскладку `numeral`: правая группа по содержимому с переносом вниз, значения без ограничения строк. В 8.2 и Outcome про это ни слова, и нет браузерной проверки Типографики на 360 px с «5 ч 10 мин».
+- **why_it_matters:** Documentation Sync. Следующий читатель не узнает, что `numeral` больше не «одна строка compact справа» и что Codex pass 2 закрыт.
+- **evidence:** `grep -n "pass 2\|правая группа" slice-c-themes.md` ничего не находит.
+- **recommended_fix:** добавить строку в 8.2 и пункт в Outcome вместе с итогом проверки в браузере.
+
+### [LOW] Скелетон `tiles` всегда в один ряд, а успешная шапка на узком экране — в два
+- **file:** apps/app/src/components/stat-block.tsx
+- **location:** `TileSkeleton`
+- **problem:** у скелетонных плиток нет содержимого, поэтому три плитки шириной `minWidth` 64 всегда встают в ряд. У Навигации на 360 px реальные плитки переносятся на 2 + 1 (см. Outcome: «5 ч 10 мин» вторым рядом). После загрузки шапка вырастает на ряд плиток, примерно на 80 px.
+- **why_it_matters:** §4.12 соблюдён по сути (раскладка плиток повторена), но высота шторки на первой загрузке у Навигации прыгает. Не блокер.
+- **recommended_fix:** по желанию задать скелетонным плиткам минимальную ширину под типичное содержимое, чтобы перенос совпадал, или принять отклонение в 8.2.
+
+NOT VERIFIED:
+- В первом прогоне `pnpm --filter @pokatim/app test` упал 1 тест из 1367, имя не сохранилось. Три следующих прогона полностью зелёные: похоже на флейк, возможно, из-за параллельной нагрузки. Источник не установлен.
+- Фактическая раскладка Yoga и браузера для tiles и numeral: тесты jest проверяют стили, а не геометрию. Ширины я считал по токенам и замерам pass 1. Native (iOS и Android) не запускал.
+- `pnpm check` целиком не запускался; запускались выборочно тесты и typecheck, перечисленные выше.
