@@ -62,7 +62,8 @@ describe('«Оформление приложения» (app-themes D1, AC6)', (
     await screen.findByRole('group', { name: 'Тема приложения' });
     const atlas = radio('Атлас');
     const describedBy = atlas.getAttribute('aria-describedby') ?? '';
-    expect(document.getElementById(describedBy)?.textContent).toContain('Превью появится позже');
+    // app-themes C: превью у всех тем цветное, в описании — гарнитура темы
+    expect(document.getElementById(describedBy)?.textContent).toContain('Шрифт: Manrope');
     expect(radio('Классика').getAttribute('aria-describedby')).toBeTruthy();
   });
 
