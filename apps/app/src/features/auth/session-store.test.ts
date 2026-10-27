@@ -188,6 +188,35 @@ describe('native: выход', () => {
     });
   });
 
+  it('после удаления аккаунта: выход без «возврата на вход» и с отметкой; новый вход отметку снимает', async () => {
+    stored().set('pokatim.session', JSON.stringify(session));
+    await useSessionStore.getState().signIn(session);
+
+    await useSessionStore.getState().signOut({ returning: false, notice: 'accountDeleted' });
+
+    expect(stored().has('pokatim.session')).toBe(false);
+    expect(useSessionStore.getState()).toMatchObject({
+      status: 'signedOut',
+      session: null,
+      returning: false,
+      notice: 'accountDeleted',
+    });
+
+    await useSessionStore.getState().signIn(session);
+    expect(useSessionStore.getState().notice).toBeNull();
+  });
+
+  it('обычный выход — без отметки; отметку снимает экран, показавший её', async () => {
+    useSessionStore.setState({ notice: 'accountDeleted' });
+    await useSessionStore.getState().signIn(session);
+    await useSessionStore.getState().signOut();
+    expect(useSessionStore.getState()).toMatchObject({ returning: true, notice: null });
+
+    useSessionStore.setState({ notice: 'accountDeleted' });
+    useSessionStore.getState().clearNotice();
+    expect(useSessionStore.getState().notice).toBeNull();
+  });
+
   it('офлайн — локальный выход всё равно', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     signOut.mockRejectedValue(offline());
