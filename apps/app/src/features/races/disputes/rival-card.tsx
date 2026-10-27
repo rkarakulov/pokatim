@@ -15,6 +15,7 @@ import {
 } from './dispute-format';
 import {
   ActionSkeleton,
+  ActionSkeletonLines,
   DisputeNotFound,
   DisputeScreenShell,
   disputeFilePath,
@@ -103,20 +104,26 @@ export function RivalCardScreen({
             const found = findRow(data, entryId);
             if (!found)
               return <DisputeNotFound title={t('disputes.rival.notFound')} raceId={raceId} />;
+            const mine = disputes.data;
             return (
               <View style={styles.card}>
                 <RivalResult row={found.row} page={found.page} />
-                {disputes.data && !entry.isPending ? (
-                  <RivalAction
-                    disputes={disputes.data}
-                    raceId={raceId}
-                    entryId={entryId}
-                    group={group}
-                    otherGroup={inOtherGroup(entry.data?.entry?.groupKey, found.page.group)}
-                  />
+                {mine ? (
+                  // участие не загружено — подача не предлагается (ошибка и «Нет соединения» с повтором)
+                  <AsyncContent query={entry} skeleton={<ActionSkeletonLines />}>
+                    {(own) => (
+                      <RivalAction
+                        disputes={mine}
+                        raceId={raceId}
+                        entryId={entryId}
+                        group={group}
+                        otherGroup={inOtherGroup(own?.entry?.groupKey, found.page.group)}
+                      />
+                    )}
+                  </AsyncContent>
                 ) : disputes.isError ? (
                   <DisputesFailure error={disputes.error} retry={() => void disputes.refetch()} />
-                ) : disputes.isPending || entry.isPending ? (
+                ) : disputes.isPending ? (
                   <ActionSkeleton />
                 ) : null}
               </View>

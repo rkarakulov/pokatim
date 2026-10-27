@@ -1,13 +1,14 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { RaceResultsPage } from '@pokatim/contracts';
-import { onlineManager } from '@tanstack/react-query';
+import { onlineManager, type QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
 import type { RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
+import { raceEntryKey } from '@/features/races/queries';
 import { api } from '@/lib/api';
 
 import RaceRoute from '../app/races/[id]';
@@ -16,7 +17,7 @@ import RivalResultRoute from '../app/races/result/[id]/[entryId]';
 import { appRoutes, tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { myDisputes } from './disputes-fixtures';
-import { createQueryWrapper } from './query-wrapper';
+import { createQueryWrapper, createTestQueryClient } from './query-wrapper';
 import {
   corridorRace,
   ENTRY_ID,
@@ -63,7 +64,7 @@ const table = () => within(screen.getByTestId('race-results'));
 const tab = (name: string) => screen.getByRole('tab', { name });
 
 const openAsGuest = () => renderRouter(appRoutes, { initialUrl: `/races/${RACE_ID}` });
-const openSignedIn = (initialUrl = `/races/${RACE_ID}`) => {
+const openSignedIn = (initialUrl = `/races/${RACE_ID}`, client?: QueryClient) => {
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
   useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
   return renderRouter(
@@ -73,7 +74,7 @@ const openSignedIn = (initialUrl = `/races/${RACE_ID}`) => {
       'races/result/[id]/[entryId]': RivalResultRoute,
       'races/dispute/[id]/[entryId]': FileDisputeRoute,
     },
-    { initialUrl, wrapper: createQueryWrapper() },
+    { initialUrl, wrapper: createQueryWrapper(client) },
   );
 };
 const MAN = men[0]!.entryId;
@@ -238,6 +239,93 @@ describe('споры только в своей группе (07c, ревью pa
     const form = within(await screen.findByTestId('dispute-form'));
     expect(await form.findByRole('button', { name: 'Отправить спор' })).toBeOnTheScreen();
   });
+});
+
+describe('участие на экранах спора: ошибка и без сети (07c, ревью pass 3)', () => {
+  const screens = [
+    [
+      'карточка соперника',
+      `/races/result/${RACE_ID}/${RIVAL}?group=w_u40`,
+      'rival-card',
+      'Оспорить результат',
+    ],
+    [
+      'форма спора',
+      `/races/dispute/${RACE_ID}/${RIVAL}?group=w_u40`,
+      'dispute-form',
+      'Отправить спор',
+    ],
+  ] as const;
+
+  it.each(screens)(
+    '%s: отказ запроса участия — «Не удалось загрузить» с повтором, подача не предлагается',
+    async (_name, url, testID, action) => {
+      getMyRaceEntry.mockRejectedValueOnce(
+        new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }),
+      );
+      enteredWomen();
+      await openSignedIn(url);
+
+      const view = within(await screen.findByTestId(testID));
+      expect(await view.findByText('Не удалось загрузить')).toBeOnTheScreen();
+      expect(view.queryByRole('button', { name: action })).toBeNull();
+
+      await fireEvent.press(view.getByRole('button', { name: 'Повторить' }));
+      expect(await view.findByRole('button', { name: action })).toBeOnTheScreen();
+    },
+  );
+
+  it.each(screens)(
+    '%s: запрос участия без сети — «Нет соединения», не вечный скелетон; сеть — подача',
+    async (_name, url, testID, action) => {
+      const client = createTestQueryClient();
+      getMyRaceEntry.mockRejectedValueOnce(new ApiNetworkError(new TypeError('Failed to fetch')));
+      enteredWomen();
+      await openSignedIn(url, client);
+      const view = within(await screen.findByTestId(testID));
+      expect(await view.findByText('Нет соединения')).toBeOnTheScreen();
+
+      // участия нет в кэше, запрос ждёт сеть (pending + paused)
+      await act(async () => {
+        onlineManager.setOnline(false);
+        void client.resetQueries({ queryKey: raceEntryKey(RACE_ID) });
+      });
+      expect(client.getQueryState(raceEntryKey(RACE_ID))).toMatchObject({
+        status: 'pending',
+        fetchStatus: 'paused',
+      });
+      expect(view.getByText('Нет соединения')).toBeOnTheScreen();
+      expect(view.getByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
+      expect(view.queryAllByLabelText('Загрузка')).toHaveLength(0);
+      expect(view.queryByRole('button', { name: action })).toBeNull();
+
+      await act(async () => {
+        onlineManager.setOnline(true);
+      });
+      expect(await view.findByRole('button', { name: action })).toBeOnTheScreen();
+    },
+  );
+
+  it.each(screens)(
+    '%s: ошибка обновления участия — данные и баннер с повтором',
+    async (_name, url, testID, action) => {
+      const client = createTestQueryClient();
+      enteredWomen();
+      await openSignedIn(url, client);
+      const view = within(await screen.findByTestId(testID));
+      expect(await view.findByRole('button', { name: action })).toBeOnTheScreen();
+
+      getMyRaceEntry.mockRejectedValueOnce(
+        new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }),
+      );
+      await act(async () => {
+        await client.refetchQueries({ queryKey: raceEntryKey(RACE_ID) });
+      });
+      expect(await view.findByText('Данные могли устареть')).toBeOnTheScreen();
+      expect(view.getByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
+      expect(view.getByRole('button', { name: action })).toBeOnTheScreen();
+    },
+  );
 });
 
 describe('таблица: «Финишёры» (07c)', () => {

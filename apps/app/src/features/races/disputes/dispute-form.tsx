@@ -32,6 +32,7 @@ import {
 } from './dispute-format';
 import {
   ActionSkeleton,
+  ActionSkeletonLines,
   BackToRace,
   DisputeNotFound,
   DisputeScreenShell,
@@ -170,22 +171,28 @@ export function DisputeFormScreen({
             if (!found) {
               return <DisputeNotFound title={t('disputes.rival.notFound')} raceId={raceId} />;
             }
+            const mine = disputes.data;
             return (
               <View style={styles.form}>
                 <Text style={[textStyle('label'), { color: theme.text.secondary }]}>
                   {t('disputes.file.target')}
                 </Text>
                 <RivalResult row={found.row} page={found.page} />
-                {disputes.data && !entry.isPending ? (
-                  <FormGate
-                    disputes={disputes.data}
-                    raceId={raceId}
-                    entryId={entryId}
-                    otherGroup={inOtherGroup(entry.data?.entry?.groupKey, found.page.group)}
-                  />
+                {mine ? (
+                  // участие не загружено — формы нет (ошибка и «Нет соединения» с повтором)
+                  <AsyncContent query={entry} skeleton={<ActionSkeletonLines />}>
+                    {(own) => (
+                      <FormGate
+                        disputes={mine}
+                        raceId={raceId}
+                        entryId={entryId}
+                        otherGroup={inOtherGroup(own?.entry?.groupKey, found.page.group)}
+                      />
+                    )}
+                  </AsyncContent>
                 ) : disputes.isError ? (
                   <DisputesFailure error={disputes.error} retry={() => void disputes.refetch()} />
-                ) : disputes.isPending || entry.isPending ? (
+                ) : disputes.isPending ? (
                   <ActionSkeleton />
                 ) : (
                   <BackToRace raceId={raceId} />

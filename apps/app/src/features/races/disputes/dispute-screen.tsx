@@ -144,10 +144,15 @@ export function DisputesFailure({ error, retry }: { error: unknown; retry: () =>
   );
 }
 
+/** Строки скелетона действия — для `AsyncContent`, который сам оборачивает скелетон в `SkeletonGroup`. */
+export function ActionSkeletonLines() {
+  return <SkeletonText variant="body" lines={2} lastLineWidth="60%" />;
+}
+
 export function ActionSkeleton() {
   return (
     <SkeletonGroup>
-      <SkeletonText variant="body" lines={2} lastLineWidth="60%" />
+      <ActionSkeletonLines />
     </SkeletonGroup>
   );
 }

@@ -1251,3 +1251,22 @@ Findings: `findings-07c-codex-pass2.md` (APPROVE: 2 MEDIUM), `findings-07c-claud
 
 Проверки: `pnpm --filter @pokatim/app test` — 166 suites / 1506 tests passed; `pnpm --filter @pokatim/app typecheck`
 — ok; `pnpm --filter @pokatim/i18n test` — 6 passed; eslint и `prettier --check` по изменённым — чисто.
+
+### Фиксы ревью 07c pass 3
+
+Findings: `findings-07c-codex-pass3.md` (REQUEST CHANGES: 1 HIGH). Закрыт; сервер не менялся.
+
+- [HIGH codex] Запрос своей заявки на экранах спора проверялся только `isPending`: без сети и без кэша — вечный
+  скелетон действия, при ошибке — подача предлагалась (`inOtherGroup(undefined, …)` = разрешено). `rival-card.tsx` и
+  `dispute-form.tsx`: действие и форма — внутри `AsyncContent` запроса участия (AGENTS.md §4.12): пауза без данных —
+  «Нет соединения» с повтором, ошибка без данных — «Не удалось загрузить» с `refetch`, ошибка обновления при данных —
+  данные и баннер «Данные могли устареть» с повтором. Пока участие не загружено — подачи нет (fail closed).
+  `dispute-screen.tsx`: `ActionSkeletonLines` — строки скелетона без своего `SkeletonGroup` (его даёт `AsyncContent`).
+
+Тесты: `race-groups.test.tsx` (+6, обе формы экрана): отказ запроса участия — «Не удалось загрузить», подачи нет,
+повтор — подача; участие без сети (`pending` + `paused`) — «Нет соединения» с повтором, без скелетона и подачи, сеть
+вернулась — подача; ошибка обновления — данные, баннер и повтор. `query-wrapper.tsx`: `createTestQueryClient` и
+необязательный клиент в `createQueryWrapper` — доступ теста к кэшу.
+
+Проверки: `pnpm --filter @pokatim/app test` — 166 suites / 1512 tests passed; `pnpm --filter @pokatim/app typecheck`
+— ok; eslint и `prettier --check` по изменённым — чисто.
