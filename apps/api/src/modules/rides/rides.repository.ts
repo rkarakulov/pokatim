@@ -395,4 +395,77 @@ export class RidesRepository {
       .limit(limit)
       .toArray();
   }
+
+  // --- стирание удалённого аккаунта (`RideErasure`, ADR-0015, A6) ---
+  // пакетные версии `cancel`/`leave`: условия — в фильтре, каждый документ меняется атомарно, повтор безопасен
+
+  /** Отмена будущих опубликованных райдов организатора (`organizer_unavailable`), как `cancel`. */
+  async cancelFutureOf(organizerUserId: string, now: Date): Promise<number> {
+    const result = await this.rides.updateMany(
+      { organizerUserId, status: 'published', startsAt: { $gt: now } },
+      {
+        $set: {
+          status: 'cancelled',
+          cancelReason: 'organizer_unavailable',
+          cancelledAt: now,
+          updatedAt: now,
+        },
+        $inc: { version: 1 },
+      },
+    );
+    return result.modifiedCount;
+  }
+
+  /**
+   * Скрытые модерацией будущие райды организатора, скрытые из `published`: прежний статус → `cancelled` с причиной
+   * `organizer_unavailable` (статус `hidden` не меняется): «Вернуть» покажет отменённый райд, а не живой райд
+   * удалённого (F6).
+   */
+  async cancelHiddenFutureOf(organizerUserId: string, now: Date): Promise<number> {
+    const result = await this.rides.updateMany(
+      {
+        organizerUserId,
+        status: 'hidden',
+        hiddenFromStatus: 'published',
+        startsAt: { $gt: now },
+      },
+      {
+        $set: {
+          hiddenFromStatus: 'cancelled',
+          cancelReason: 'organizer_unavailable',
+          cancelledAt: now,
+          updatedAt: now,
+        },
+        $inc: { version: 1 },
+      },
+    );
+    return result.modifiedCount;
+  }
+
+  /** «Не иду» во всех чужих будущих опубликованных и скрытых райдах, как `leave` (участие — без `version`). */
+  async leaveAllFuture(userId: string, now: Date): Promise<number> {
+    const result = await this.rides.updateMany(
+      {
+        'participants.userId': userId,
+        organizerUserId: { $ne: userId },
+        status: { $in: ['published', 'hidden'] },
+        startsAt: { $gt: now },
+      },
+      {
+        $pull: { participants: { userId } },
+        $inc: { goingCount: -1 },
+        $set: { updatedAt: now },
+      },
+    );
+    return result.modifiedCount;
+  }
+
+  /** Подпись организатора стирается во всех его райдах (любой статус, A6). */
+  async clearOrganizerName(organizerUserId: string, now: Date): Promise<number> {
+    const result = await this.rides.updateMany(
+      { organizerUserId, organizerName: { $ne: null } },
+      { $set: { organizerName: null, updatedAt: now } },
+    );
+    return result.modifiedCount;
+  }
 }

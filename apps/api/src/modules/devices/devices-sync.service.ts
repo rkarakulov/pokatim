@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DEVICE_PROVIDERS, type DeviceProvider } from '@pokatim/contracts';
 import { CLOCK, type Clock, ENV } from '@rkarakulov/api-kit/core';
-import { MongoTransactions, uuidv7 } from '@rkarakulov/api-kit/mongo';
+import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { UnrecoverableError } from 'bullmq';
 
 import type { Env } from '../../config/env';
@@ -12,7 +12,7 @@ import {
   TrackSourceDeletedError,
   TrackStorageFullError,
 } from '../tracks';
-import { DeviceAudit } from './device-audit';
+import { type Attempt, DeviceRevocation } from './device-revocation';
 import { DevicesLocks, DevicesPullQueue, pullLockKey } from './devices-jobs';
 import type { DeviceConnectionDoc, DeviceImportDoc } from './devices.collection';
 import type { DevicesRevokeRequested } from './devices.events';
@@ -28,18 +28,7 @@ import {
 
 export type PullOutcome = 'done' | 'partial' | 'busy' | 'inactive';
 
-/** Попытка задачи: последняя — финальный провал виден пользователю (`issue`), а не только в очереди. */
-export interface Attempt {
-  final: boolean;
-}
-
-/** Замок подключения держит текущий pull дольше ожидания отзыва: задача отзыва повторится с экспонентой. */
-export class RevokeBusyError extends Error {
-  constructor() {
-    super('revoke will be retried: connection lock is busy');
-    this.name = 'RevokeBusyError';
-  }
-}
+export { type Attempt, RevokeBusyError } from './device-revocation';
 
 /** Повторяемый сбой pull (агрегатор, хранилище): задача BullMQ повторится с экспонентой. */
 export class PullRetryError extends Error {
@@ -67,10 +56,9 @@ export class DevicesSyncService {
 
   constructor(
     private readonly repository: DevicesRepository,
-    private readonly audit: DeviceAudit,
-    private readonly transactions: MongoTransactions,
     private readonly locks: DevicesLocks,
     private readonly pulls: DevicesPullQueue,
+    private readonly revocation: DeviceRevocation,
     @Inject(TRACK_INGEST) private readonly ingest: TrackIngest,
     @Inject(WEARABLES_AGGREGATOR) private readonly aggregator: WearablesAggregator,
     @Inject(ENV) private readonly env: Env,
@@ -347,57 +335,18 @@ export class DevicesSyncService {
     event: DevicesRevokeRequested,
     attempt: Attempt,
   ): Promise<'revoked' | 'revoke_failed' | 'skipped'> {
-    const key = pullLockKey(event.connectionId);
-    // последняя попытка ждёт весь TTL замка pull: он истекает сам, отзыв не застревает в `disconnecting`
-    const waitMs = attempt.final ? DEVICES_POLICY.pullLockTtlMs : DEVICES_POLICY.revokeLockWaitMs;
-    const token = await this.locks.acquire(key, DEVICES_POLICY.pullLockTtlMs, waitMs);
-    if (!token) throw new RevokeBusyError();
-    try {
-      return await this.revokeLocked(event, attempt);
-    } finally {
-      await this.locks.release(key, token);
-    }
-  }
-
-  private async revokeLocked(
-    event: DevicesRevokeRequested,
-    attempt: Attempt,
-  ): Promise<'revoked' | 'revoke_failed' | 'skipped'> {
-    const connection = await this.repository.findConnection(event.connectionId);
-    if (connection?.status !== 'disconnecting') return 'skipped';
-    let failed = false;
-    try {
-      await this.aggregator.revokeConnection(connection.aggUserId, connection.provider);
-    } catch (error) {
-      const retryable = !(error instanceof AggregatorError) || error.retryable;
-      if (retryable && !attempt.final) throw error;
-      failed = true;
-      const kind = error instanceof AggregatorError ? error.kind : 'error';
-      this.logger.warn(`devices.revoke_failed connection=${connection._id} reason=${kind}`);
-    }
-    if (event.deleteActivities) {
-      const removed = await this.ingest.deleteSourceUploads(connection.userId, connection.provider);
-      this.logger.log(`devices.uploads_deleted connection=${connection._id} count=${removed}`);
-    }
-    const now = this.clock.now();
-    await this.transactions.run(async (session) => {
-      const updated = await this.repository.markRevoked(session, connection._id, 'disconnecting', {
-        reason: event.reason,
-        revokeFailed: failed,
-        now,
+    return this.revocation.locked(event.connectionId, attempt, async () => {
+      const connection = await this.repository.findConnection(event.connectionId);
+      if (connection?.status !== 'disconnecting') return 'skipped';
+      return this.revocation.revokeDisconnecting(connection, event.reason, attempt, async () => {
+        if (!event.deleteActivities) return;
+        const removed = await this.ingest.deleteSourceUploads(
+          connection.userId,
+          connection.provider,
+        );
+        this.logger.log(`devices.uploads_deleted connection=${connection._id} count=${removed}`);
       });
-      if (updated && failed) {
-        await this.audit.append(session, {
-          userId: connection.userId,
-          provider: connection.provider,
-          connectionId: connection._id,
-          action: 'revoke_failed',
-          reason: event.reason,
-        });
-      }
     });
-    this.logger.log(`devices.revoked connection=${connection._id} failed=${failed}`);
-    return failed ? 'revoke_failed' : 'revoked';
   }
 
   /** `tracks.upload-deleted` загрузки провайдера: надгробие импорта — следующий pull её не вернёт. */

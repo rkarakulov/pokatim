@@ -123,6 +123,23 @@ export class TracksRepository {
       .toArray();
   }
 
+  /** Id всех загрузок пользователя (любой источник и статус) — стирание удалённого аккаунта (`TrackErasure`). */
+  listUploadIds(userId: string): Promise<string[]> {
+    return this.c.uploads
+      .find({ userId }, { projection: { _id: 1 } })
+      .map((doc) => doc._id)
+      .toArray();
+  }
+
+  /**
+   * Маркеры пользователя после удаления всех его загрузок (стирание аккаунта, F5): `track_source_refs` нужны, только
+   * пока возможен повторный импорт (подключений устройств уже нет), `activity_meta` — пустой замок активностей.
+   */
+  async deleteUserMarkers(userId: string): Promise<void> {
+    await this.c.sourceRefs.deleteMany({ userId });
+    await this.c.meta.deleteOne({ _id: userId });
+  }
+
   /** Сумма байт исходников, лежащих в хранилище (квота). */
   async storedBytes(): Promise<number> {
     const [row] = await this.c.uploads

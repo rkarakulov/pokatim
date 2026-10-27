@@ -9,3 +9,5 @@ export {
   type RouteGeometry,
   type RouteMatchGeometry,
 } from './route-geometry.port';
+/** Порт стирания «Моих маршрутов» удалённого аккаунта (модуль `account`). */
+export { RouteErasure } from './route-erasure';

@@ -75,6 +75,24 @@ export class DevicesRepository {
     );
   }
 
+  /** Живые подключения пользователя (`pending`/`active`/`disconnecting`) — стирание аккаунта (`DeviceErasure`). */
+  liveConnectionsOf(userId: string): Promise<DeviceConnectionDoc[]> {
+    return this.c.connections
+      .find({ userId, status: { $in: [...LIVE_CONNECTION_STATUSES] } })
+      .toArray();
+  }
+
+  /**
+   * Данные устройств удалённого аккаунта (стирание, ADR-0015): тикеты, импорты, подключения и пользователь агрегатора
+   * (индексы `userId` — миграция 0023). Журнал подключений — append-only, хранится (A9). Повторяемо.
+   */
+  async deleteUserData(userId: string): Promise<void> {
+    await this.c.tickets.deleteMany({ userId });
+    await this.c.imports.deleteMany({ userId });
+    await this.c.connections.deleteMany({ userId });
+    await this.c.accounts.deleteOne({ _id: userId });
+  }
+
   /** Подключения пользователя, новые сверху (`_id` — UUID v7). */
   listUserConnections(userId: string): Promise<DeviceConnectionDoc[]> {
     return this.c.connections.find({ userId }).sort({ _id: -1 }).limit(50).toArray();

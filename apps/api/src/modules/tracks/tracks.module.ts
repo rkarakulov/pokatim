@@ -9,6 +9,7 @@ import { ActivitySourceService } from './activity-source';
 import { ACTIVITY_SOURCE } from './activity-source.port';
 import { FsTrackFileStore } from './fs-track-file-store';
 import { TRACK_FILE_STORE } from './track-file-store';
+import { TrackErasure } from './track-erasure';
 import { TrackIngestService } from './track-ingest';
 import { TRACK_INGEST } from './track-ingest.port';
 import { TrackProcessingProcessor } from './track-processing.processor';
@@ -20,7 +21,8 @@ import { TracksRepository } from './tracks.repository';
 
 /**
  * Ядро `tracks` для API и worker: репозиторий, хранилище исходников (порт, на dev — ФС), приём исходника,
- * удаление, порт `TrackIngest` для модуля `devices` и `ActivitySource` для `results` (только через `index.ts`).
+ * удаление, порт `TrackIngest` для модуля `devices`, `ActivitySource` для `results` и `TrackErasure` для `account`
+ * (только через `index.ts`).
  */
 @Module({
   providers: [
@@ -36,6 +38,7 @@ import { TracksRepository } from './tracks.repository';
     { provide: TRACK_INGEST, useExisting: TrackIngestService },
     ActivitySourceService,
     { provide: ACTIVITY_SOURCE, useExisting: ActivitySourceService },
+    TrackErasure,
   ],
   exports: [
     TRACK_INGEST,
@@ -44,6 +47,7 @@ import { TracksRepository } from './tracks.repository';
     TRACK_FILE_STORE,
     TrackSourcesService,
     TrackUploadsService,
+    TrackErasure,
   ],
 })
 export class TracksCoreModule {}

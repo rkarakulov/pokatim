@@ -180,9 +180,10 @@ export class TrackUploadsService {
   /**
    * Транзакция { замок активностей → загрузка, активность, линия → перевыбор основной группы → outbox
    * `tracks.activity-removed` (была активность); источник провайдера — outbox `tracks.upload-deleted` } → затем файл
-   * (сбой — подберёт уборка «файлы без документа»).
+   * (сбой — подберёт уборка «файлы без документа»). Общая для удаления владельцем, по источнику и стирания аккаунта
+   * (`TrackErasure`).
    */
-  private async remove(userId: string, id: string): Promise<boolean> {
+  async remove(userId: string, id: string): Promise<boolean> {
     const now = this.clock.now();
     const removed = await this.transactions.run(async (session) => {
       await this.repository.lockUserActivities(session, userId);

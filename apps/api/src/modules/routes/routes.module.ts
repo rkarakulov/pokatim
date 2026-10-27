@@ -9,6 +9,7 @@ import { RoutesCatalogService } from './route-catalog';
 import { ROUTE_CATALOG } from './route-catalog.port';
 import { ROUTE_GEOMETRY } from './route-geometry.port';
 import { RouteDerivedBackfill } from './route-derived';
+import { RouteErasure } from './route-erasure';
 import { RouteProcessingProcessor } from './route-processing.processor';
 import { MyRoutesService } from './my-routes.service';
 import { RoutesAdminController } from './routes-admin.controller';
@@ -22,7 +23,7 @@ import { RoutesService } from './routes.service';
 
 /**
  * Ядро `routes` для API и worker: репозиторий, порт `RouteCatalog` для `races` и `RouteGeometry` для `results`
- * (через `index.ts`).
+ * (через `index.ts`), порт стирания `RouteErasure` для `account`.
  */
 @Module({
   providers: [
@@ -30,8 +31,9 @@ import { RoutesService } from './routes.service';
     RoutesCatalogService,
     { provide: ROUTE_CATALOG, useExisting: RoutesCatalogService },
     { provide: ROUTE_GEOMETRY, useExisting: RoutesCatalogService },
+    RouteErasure,
   ],
-  exports: [RoutesRepository, ROUTE_CATALOG, ROUTE_GEOMETRY],
+  exports: [RoutesRepository, ROUTE_CATALOG, ROUTE_GEOMETRY, RouteErasure],
 })
 export class RoutesCoreModule {}
 
