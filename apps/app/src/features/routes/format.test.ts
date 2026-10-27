@@ -9,6 +9,7 @@ import {
   profileRangeLabel,
   profileSummary,
   profileTicks,
+  routeAuthorLabel,
   routeChips,
   routeDuration,
   routeHeroDate,
@@ -28,6 +29,7 @@ const route = (overrides: Partial<CatalogRouteCard> = {}): CatalogRouteCard => (
   city: 'minsk',
   surfaces: ['asphalt', 'gravel'],
   publishedAt: '2026-10-20T10:00:00.000Z',
+  author: { kind: 'team' },
   ...overrides,
 });
 const text = (value: string | null) => value?.replace(/\u00a0/g, ' ');
@@ -52,6 +54,18 @@ describe('подписи маршрута каталога (routes-01)', () => {
 
   it('описание для мета/OG: только цифры и город, без ПДн', () => {
     expect(text(routeShareDescription(route()))).toBe('86 км · набор 1 240 м · петля · Минск');
+  });
+
+  it('routes-06: автор — команда без бейджа; райдер — «От райдера» и имя, только если сервер его дал', () => {
+    expect(routeAuthorLabel(route())).toBeNull();
+    expect(routeAuthorLabel(route({ author: { kind: 'rider', name: null } }))).toBe('От райдера');
+    expect(routeAuthorLabel(route({ author: { kind: 'rider', name: 'Аня К.' } }))).toBe(
+      'От райдера · Аня К.',
+    );
+    // OG и мета — без имени автора (U9)
+    expect(text(routeShareDescription(route({ author: { kind: 'rider', name: 'Аня К.' } })))).toBe(
+      '86 км · набор 1 240 м · петля · Минск',
+    );
   });
 });
 

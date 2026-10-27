@@ -2,9 +2,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   type CityCode,
   isCityCode,
+  type RouteAuthorKind,
   type RouteDistanceBucket,
   type RouteFailureCode,
   type RouteOrigin,
+  type RouteRejectionReason,
   type Surface,
 } from '@pokatim/contracts';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
@@ -16,6 +18,7 @@ import {
   type RouteCatalogDoc,
   type RouteDoc,
   type RouteGeometryDoc,
+  type RoutePublicationDoc,
   type RoutesCollections,
   routesCollections,
 } from './routes.collection';
@@ -34,6 +37,8 @@ export interface CatalogFilter {
   cities?: readonly CityCode[];
   distance?: readonly RouteDistanceBucket[];
   surfaces?: readonly Surface[];
+  /** routes-06: `team` — маршруты платформы, `rider` — одобренные маршруты райдеров. */
+  authors?: readonly RouteAuthorKind[];
 }
 
 /** Позиция курсора каталога: момент публикации и `_id` последнего элемента страницы. */
@@ -57,18 +62,56 @@ const ownRider = (ownerUserId: string) => ({ ownerUserId, origin: 'rider' }) as 
 /** Частичный индекс каталога (`0020_routes_catalog`). */
 const CATALOG_INDEX = 'routes_catalog_idx';
 
+/** Опубликован — условие частичного индекса `routes_catalog_idx` (обязательно в запросе каталога). */
+const CATALOG_PUBLISHED = { 'catalog.publishedAt': { $type: 'date' } } as const;
+
 /**
- * Опубликован в каталоге — условие частичного индекса `routes_catalog_idx` (обязательно в запросе каталога); только
- * маршрут платформы (защита в глубину: у маршрута райдера `catalog` всегда `null`).
+ * Публичный каталог (routes-06) — **единственное** условие списка, городов, карточки, карты и GPX: маршрут платформы
+ * или одобренный маршрут райдера. Защита в глубину: маршрут райдера без `approved` не пройдёт, даже если `catalog`
+ * записан по ошибке.
  */
-const IN_CATALOG = { 'catalog.publishedAt': { $type: 'date' }, ...PLATFORM } as const;
+const IN_CATALOG: Filter<RouteDoc> = {
+  ...CATALOG_PUBLISHED,
+  $or: [{ ...PLATFORM }, { origin: 'rider', 'publication.status': 'approved' }],
+};
+
+/** Опубликованный маршрут **команды** — порт `RouteCatalog.inCatalog` («Гонки на маршруте», U7: только платформа). */
+const PLATFORM_CATALOG = { ...CATALOG_PUBLISHED, ...PLATFORM } as const;
+
+/** Автор фильтра каталога → `origin`. */
+const AUTHOR_ORIGIN: Record<RouteAuthorKind, RouteOrigin> = { team: 'platform', rider: 'rider' };
+
+/** Состояния публикации, в которых маршрут райдера виден модератору (8.1 RC-10; `withdrawn` — нет). */
+const MODERATION_VISIBLE = ['pending', 'approved', 'rejected', 'hidden'] as const;
+
+/** Заявка в каталог (поля формы и согласие на подпись). */
+export interface PublicationSubmission {
+  city: CityCode;
+  surfaces: Surface[];
+  showAuthorName: boolean;
+}
+
+/** Очередь модерации маршрутов райдеров (routes-06, A5). */
+export type PublicationQueue = 'pending' | 'reported' | 'hidden';
+
+/** Позиция курсора очереди: ключ сортировки очереди и `_id` последнего элемента. */
+export interface PublicationQueuePosition {
+  at: Date;
+  id: string;
+}
+
+/** Маршрут райдера с заявкой (модерация, жалобы). */
+export type PublishedRiderRoute = RouteDoc & { publication: RoutePublicationDoc };
 
 /**
  * Единственный писатель `routes`, `route_geometries`, `route_sources` (race-results-01). Правила (`pokatim-db.md`):
  * - переход статуса — только из `processing` (условие в фильтре): повтор задачи после `ready`/`failed` — no-op;
  * - готовый маршрут не меняет линию и длину (геометрия пишется один раз, вместе с переходом в `ready`);
- * - граница приватности (routes-02, RC-2) — здесь: чтения панели, каталога и портов — с `origin: 'platform'` в
- *   фильтре; маршрут райдера — только методы `*Own` с `{ ownerUserId, origin: 'rider' }`;
+ * - граница приватности (routes-02, RC-2) — здесь: чтения панели и портов гонок — с `origin: 'platform'` в фильтре;
+ *   публичный каталог — только `IN_CATALOG` (routes-06: платформа или одобренный маршрут райдера); маршрут райдера
+ *   автору — только методы `*Own` с `{ ownerUserId, origin: 'rider' }`, модератору — `findForModeration`/очереди;
+ * - `catalog` маршрута райдера заполнен ⇔ `publication.status = 'approved'` (пишут одобрение и «Вернуть», снимают
+ *   скрытие, отклонение, отзыв и снятие — одной записью с переходом);
  * - производные данные (`profile`, `derivedVersion`, `route_exports`, routes-03) пишут только `markReady` и
  *   `recordDerived` — обе с экспортом GPX в одной транзакции (инвариант «есть `derivedVersion` ⇒ есть экспорт»);
  * - значения фильтров — только примитивы после zod (id, статус).
@@ -117,10 +160,20 @@ export class RoutesRepository {
   }
 
   /**
-   * Маршрут каталога (routes-01) — единственная точка публичной видимости: готовый и опубликованный. Неизвестный,
-   * не готовый, не опубликованный и снятый — `undefined` (один `404`). Без кэша: каталог изменяем.
+   * Опубликованный маршрут **команды** (routes-01) — порт `RouteCatalog.inCatalog` («Гонки на маршруте»): маршрут
+   * райдера — `undefined` (U7, 8.1 RC-1). Без кэша: каталог изменяем.
    */
   async findPublished(id: string): Promise<RouteDoc | undefined> {
+    return (
+      (await this.c.routes.findOne({ _id: id, status: 'ready', ...PLATFORM_CATALOG })) ?? undefined
+    );
+  }
+
+  /**
+   * Маршрут публичного каталога (routes-06) — карточка, карта, GPX: готовый и опубликованный маршрут команды или
+   * одобренный маршрут райдера (`IN_CATALOG`). Иначе — `undefined` (один `404`). Без кэша.
+   */
+  async findInCatalog(id: string): Promise<RouteDoc | undefined> {
     return (await this.c.routes.findOne({ _id: id, status: 'ready', ...IN_CATALOG })) ?? undefined;
   }
 
@@ -136,6 +189,9 @@ export class RoutesRepository {
     const and: Filter<RouteDoc>[] = [{ status: 'ready', ...IN_CATALOG }];
     if (filter.cities?.length) and.push({ 'catalog.city': { $in: [...filter.cities] } });
     if (filter.surfaces?.length) and.push({ 'catalog.surfaces': { $in: [...filter.surfaces] } });
+    if (filter.authors?.length) {
+      and.push({ origin: { $in: [...new Set(filter.authors.map((a) => AUTHOR_ORIGIN[a]))] } });
+    }
     if (filter.distance?.length) {
       and.push({
         $or: filter.distance.map((bucket) => ({
@@ -162,7 +218,7 @@ export class RoutesRepository {
     );
   }
 
-  /** Коды городов старта опубликованных маршрутов (чипы фильтра). */
+  /** Коды городов старта маршрутов каталога (чипы фильтра), включая одобренные маршруты райдеров. */
   async catalogCities(): Promise<CityCode[]> {
     const cities: unknown[] = await this.c.routes.distinct('catalog.city', {
       status: 'ready',
@@ -242,13 +298,371 @@ export class RoutesRepository {
       .toArray();
   }
 
-  /** Переименование своего маршрута (в любом статусе); `null` — не свой или нет. */
+  /**
+   * Переименование своего маршрута; название заморожено в `pending` и `approved` (routes-06, A3) — условие в фильтре.
+   * Есть заявка (`hidden`, `rejected`, `withdrawn`) — `publication.version + 1` той же записью: «Вернуть» по карточке со
+   * старым названием получит конфликт. Pipeline — поле `publication` может быть `null`. `null` — не свой, нет или
+   * заморожен (вызывающий перечитывает).
+   */
   renameOwn(ownerUserId: string, id: string, title: string, now: Date): Promise<RouteDoc | null> {
     return this.c.routes.findOneAndUpdate(
-      { _id: id, ...ownRider(ownerUserId) },
-      { $set: { title, updatedAt: now } },
+      {
+        _id: id,
+        ...ownRider(ownerUserId),
+        'publication.status': { $nin: ['pending', 'approved'] },
+      },
+      [
+        {
+          $set: {
+            title: { $literal: title },
+            updatedAt: { $literal: now },
+            publication: {
+              $cond: [
+                { $eq: [{ $type: '$publication' }, 'object'] },
+                {
+                  $mergeObjects: [
+                    '$publication',
+                    { version: { $add: ['$publication.version', 1] } },
+                  ],
+                },
+                '$publication',
+              ],
+            },
+          },
+        },
+      ],
       { returnDocument: 'after' },
     );
+  }
+
+  // --- публикация маршрутов райдеров (routes-06): каждый переход — одна условная запись документа `routes` ---
+
+  /**
+   * Заявок райдера на рассмотрении (лимит U8, `routes_owner_origin_idx` + остаток). Счёт до записи — условие по другим
+   * документам: **принятая гонка** (8.1 RC-7) — параллельные подачи превысят лимит не больше чем на их число, их режет
+   * суточный лимит 10 (как квоты `rides`).
+   */
+  countPendingOwn(ownerUserId: string): Promise<number> {
+    return this.c.routes.countDocuments({
+      ...ownRider(ownerUserId),
+      'publication.status': 'pending',
+    });
+  }
+
+  /**
+   * Подача своего готового маршрута: нет заявки / `withdrawn` / `rejected` → `pending`, подач < 3 — всё в фильтре.
+   * Первая запись транзакции подачи (суточная квота списывается после неё, RC-8).
+   * Pipeline-обновление (поле `publication` может быть `null`), значения — `$literal`; счётчики подач и версия — от
+   * прежних, жалобы переживают новую подачу (8.1 RC-4). `null` — условие не выполнено (вызывающий перечитывает).
+   */
+  submitPublication(
+    tx: DbSession,
+    ownerUserId: string,
+    id: string,
+    submission: PublicationSubmission,
+    maxSubmissions: number,
+    now: Date,
+  ): Promise<RouteDoc | null> {
+    return this.c.routes.findOneAndUpdate(
+      {
+        _id: id,
+        ...ownRider(ownerUserId),
+        status: 'ready',
+        $or: [{ publication: null }, { 'publication.status': { $in: ['withdrawn', 'rejected'] } }],
+        'publication.submissionCount': { $not: { $gte: maxSubmissions } },
+      },
+      [
+        {
+          $set: {
+            // `$mergeObjects` — новое значение целиком (поле могло быть `null`); прежние — только счётчики и версия
+            publication: {
+              $mergeObjects: [
+                {
+                  status: { $literal: 'pending' },
+                  city: { $literal: submission.city },
+                  surfaces: { $literal: submission.surfaces },
+                  showAuthorName: { $literal: submission.showAuthorName },
+                  submittedAt: { $literal: now },
+                  submissionCount: {
+                    $add: [{ $ifNull: ['$publication.submissionCount', 0] }, 1],
+                  },
+                  decidedAt: { $literal: null },
+                  approvedAt: { $literal: null },
+                  rejection: { $literal: null },
+                  hiddenAt: { $literal: null },
+                  openReportCount: { $ifNull: ['$publication.openReportCount', 0] },
+                  lastReportAt: { $ifNull: ['$publication.lastReportAt', null] },
+                  reportRevision: { $ifNull: ['$publication.reportRevision', 0] },
+                  version: { $add: [{ $ifNull: ['$publication.version', -1] }, 1] },
+                },
+              ],
+            },
+            updatedAt: { $literal: now },
+          },
+        },
+      ],
+      { session: tx, returnDocument: 'after' },
+    );
+  }
+
+  /**
+   * Отзыв заявки (`pending`) или снятие с публикации (`approved`) автором → `withdrawn`, `catalog: null`, `version + 1`
+   * (действие модератора по увиденной версии получит конфликт). Без транзакции и журнала (правило routes-02).
+   */
+  withdrawPublication(ownerUserId: string, id: string, now: Date): Promise<RouteDoc | null> {
+    return this.c.routes.findOneAndUpdate(
+      {
+        _id: id,
+        ...ownRider(ownerUserId),
+        'publication.status': { $in: ['pending', 'approved'] },
+      },
+      {
+        $set: { 'publication.status': 'withdrawn', catalog: null, updatedAt: now },
+        $inc: { 'publication.version': 1 },
+      },
+      { returnDocument: 'after' },
+    );
+  }
+
+  /**
+   * Маршрут райдера для модерации: заявка в `pending | approved | rejected | hidden` (8.1 RC-10: не подававшийся и
+   * отозванный — `undefined`). В транзакции действия — с её снимком.
+   */
+  async findForModeration(id: string, tx?: DbSession): Promise<PublishedRiderRoute | undefined> {
+    const doc = await this.c.routes.findOne(
+      {
+        _id: id,
+        origin: 'rider',
+        status: 'ready',
+        'publication.status': { $in: [...MODERATION_VISIBLE] },
+      },
+      { session: tx },
+    );
+    return doc?.publication ? (doc as PublishedRiderRoute) : undefined;
+  }
+
+  /** Условная запись перехода модерации по `version` (первая запись транзакции действия). */
+  private moderate(
+    tx: DbSession,
+    id: string,
+    from: RoutePublicationDoc['status'],
+    version: number,
+    extra: Filter<RouteDoc>,
+    set: Record<string, unknown>,
+    bump = true,
+  ): Promise<PublishedRiderRoute | null> {
+    return this.c.routes.findOneAndUpdate(
+      {
+        _id: id,
+        origin: 'rider',
+        status: 'ready',
+        'publication.status': from,
+        'publication.version': version,
+        ...extra,
+      },
+      { $set: set, ...(bump ? { $inc: { 'publication.version': 1 } } : {}) },
+      { session: tx, returnDocument: 'after' },
+    ) as Promise<PublishedRiderRoute | null>;
+  }
+
+  /** Одобрение: `pending` → `approved`, город и покрытие модератора; `catalog` — той же записью (`publishedAt = now`). */
+  approvePublication(
+    tx: DbSession,
+    id: string,
+    version: number,
+    catalog: { city: CityCode; surfaces: Surface[] },
+    now: Date,
+  ): Promise<PublishedRiderRoute | null> {
+    return this.moderate(
+      tx,
+      id,
+      'pending',
+      version,
+      {},
+      {
+        'publication.status': 'approved',
+        'publication.city': catalog.city,
+        'publication.surfaces': catalog.surfaces,
+        'publication.decidedAt': now,
+        'publication.approvedAt': now,
+        'publication.rejection': null,
+        catalog: { city: catalog.city, surfaces: catalog.surfaces, publishedAt: now },
+        updatedAt: now,
+      },
+    );
+  }
+
+  /** Отклонение: `pending` → `rejected` с причиной и комментарием автору. */
+  rejectPublication(
+    tx: DbSession,
+    id: string,
+    version: number,
+    rejection: { reason: RouteRejectionReason; comment: string | null },
+    now: Date,
+  ): Promise<PublishedRiderRoute | null> {
+    return this.moderate(
+      tx,
+      id,
+      'pending',
+      version,
+      {},
+      {
+        'publication.status': 'rejected',
+        'publication.decidedAt': now,
+        'publication.rejection': rejection,
+        catalog: null,
+        updatedAt: now,
+      },
+    );
+  }
+
+  /** «Скрыть»: `approved` → `hidden`, `catalog: null`, открытые жалобы — 0 (их закрывает та же транзакция). */
+  hidePublication(
+    tx: DbSession,
+    id: string,
+    version: number,
+    now: Date,
+  ): Promise<PublishedRiderRoute | null> {
+    return this.moderate(
+      tx,
+      id,
+      'approved',
+      version,
+      {},
+      {
+        'publication.status': 'hidden',
+        'publication.hiddenAt': now,
+        'publication.openReportCount': 0,
+        catalog: null,
+        updatedAt: now,
+      },
+    );
+  }
+
+  /**
+   * «Вернуть»: `hidden` → `approved`, `catalog` — город и покрытие заявки и прежняя дата одобрения (прочитаны в той же
+   * транзакции; `version` в фильтре гарантирует, что они не менялись).
+   */
+  restorePublication(
+    tx: DbSession,
+    id: string,
+    version: number,
+    catalog: RouteCatalogDoc,
+    now: Date,
+  ): Promise<PublishedRiderRoute | null> {
+    return this.moderate(
+      tx,
+      id,
+      'hidden',
+      version,
+      {},
+      {
+        'publication.status': 'approved',
+        'publication.hiddenAt': null,
+        catalog,
+        updatedAt: now,
+      },
+    );
+  }
+
+  /**
+   * «Отклонить жалобы» по `version` и `reportRevision` карточки (новая жалоба — `null`): опубликованный с открытыми
+   * жалобами → `openReportCount = 0`; `version` не меняется (как у райдов).
+   */
+  clearRouteReports(
+    tx: DbSession,
+    id: string,
+    version: number,
+    reportRevision: number,
+  ): Promise<PublishedRiderRoute | null> {
+    return this.moderate(
+      tx,
+      id,
+      'approved',
+      version,
+      {
+        'publication.openReportCount': { $gt: 0 },
+        'publication.reportRevision': reportRevision,
+      },
+      { 'publication.openReportCount': 0 },
+      false,
+    );
+  }
+
+  /**
+   * Жалоба — **первая** запись транзакции жалобы (конкурирующее «Скрыть» пишет тот же документ: write conflict):
+   * опубликованный маршрут райдера, не свой → `$inc openReportCount` и `reportRevision` (маркер «Отклонить жалобы»),
+   * `$max lastReportAt` (только порядок очереди). `null` — условие не выполнено.
+   */
+  recordRouteReport(
+    tx: DbSession,
+    id: string,
+    reporterUserId: string,
+    now: Date,
+  ): Promise<RouteDoc | null> {
+    return this.c.routes.findOneAndUpdate(
+      {
+        _id: id,
+        origin: 'rider',
+        status: 'ready',
+        ownerUserId: { $ne: reporterUserId },
+        'publication.status': 'approved',
+        ...CATALOG_PUBLISHED,
+      },
+      {
+        $inc: { 'publication.openReportCount': 1, 'publication.reportRevision': 1 },
+        $max: { 'publication.lastReportAt': now },
+      },
+      { session: tx, returnDocument: 'after' },
+    );
+  }
+
+  /**
+   * Очереди модерации (A5) по частичным индексам `0029_routes_publication` (запрос содержит условие индекса; план
+   * фиксирован `hint` — `origin` делает кандидатом `routes_list_idx`): «На проверке» — старые сверху; «Жалобы» — новые
+   * жалобы сверху, только опубликованные (8.1 RC-4); «Скрытые» — недавно скрытые сверху.
+   */
+  listPublicationQueue(
+    queue: PublicationQueue,
+    after: PublicationQueuePosition | null,
+    limit: number,
+  ): Promise<PublishedRiderRoute[]> {
+    const spec = {
+      pending: {
+        filter: { 'publication.status': 'pending' },
+        key: 'publication.submittedAt',
+        dir: 1,
+        index: 'routes_publication_pending_idx',
+      },
+      reported: {
+        filter: { 'publication.openReportCount': { $gt: 0 }, 'publication.status': 'approved' },
+        key: 'publication.lastReportAt',
+        dir: -1,
+        index: 'routes_publication_reports_idx',
+      },
+      hidden: {
+        filter: { 'publication.status': 'hidden' },
+        key: 'publication.hiddenAt',
+        dir: -1,
+        index: 'routes_publication_hidden_idx',
+      },
+    }[queue];
+    const and: Filter<RouteDoc>[] = [{ ...spec.filter, origin: 'rider', status: 'ready' }];
+    if (after) {
+      const op = spec.dir === 1 ? '$gt' : '$lt';
+      and.push({
+        $or: [
+          { [spec.key]: { [op]: after.at } },
+          { [spec.key]: after.at, _id: { [op]: after.id } },
+        ],
+      });
+    }
+    return this.c.routes
+      .find({ $and: and })
+      .sort({ [spec.key]: spec.dir as 1 | -1, _id: spec.dir as 1 | -1 })
+      .hint(spec.index)
+      .limit(limit)
+      .toArray() as Promise<PublishedRiderRoute[]>;
   }
 
   /**

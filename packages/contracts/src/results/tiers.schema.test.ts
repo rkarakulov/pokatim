@@ -67,7 +67,9 @@ describe('race-results-07: справочники', () => {
     expect(RESULT_UNRANKED_REASONS).toEqual(['start', 'no_heart_rate']);
     expect(RACE_RESULT_STATUSES.slice(-4)).toEqual(['final', 'dq', 'revised', 'finisher']);
     expect(DISPUTE_FILE_BLOCKS.at(-1)).toBe('not_ranked');
-    expect(ErrorCode.options.slice(-4)).toEqual([
+    // routes-06 добавил свой код после — проверяем блок 07 подряд, а не хвост списка
+    const first = ErrorCode.options.indexOf('VERIFIED_PROFILE_REQUIRED');
+    expect(ErrorCode.options.slice(first, first + 4)).toEqual([
       'VERIFIED_PROFILE_REQUIRED',
       'RACE_TIER_LOCKED',
       'RESULT_GROUP_NOT_ALLOWED',

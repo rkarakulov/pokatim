@@ -144,6 +144,7 @@ describe('PanelGuard — порядок отказов', () => {
         'disputes.read',
         'disputes.decide',
         'profiles.moderate',
+        'routes.moderate',
       ],
     });
     expect(allowed.repository.touchSession).toHaveBeenCalled();

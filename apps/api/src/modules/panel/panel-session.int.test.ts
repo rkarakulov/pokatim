@@ -109,6 +109,7 @@ describe('POST /v1/admin/session/sign-in (AC2)', () => {
           'profiles.moderate',
           'appearance.manage',
           'profiles.verified_edit',
+          'routes.moderate',
         ],
       },
     });

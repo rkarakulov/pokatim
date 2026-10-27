@@ -13,4 +13,10 @@ export class RiderNamesService implements RiderNameDirectory {
     if (unique.length === 0) return new Map();
     return this.repository.findPublicNames(unique);
   }
+
+  async attributionNames(userIds: readonly string[]): Promise<Map<string, string>> {
+    const unique = [...new Set(userIds)];
+    if (unique.length === 0) return new Map();
+    return this.repository.findAttributionNames(unique);
+  }
 }

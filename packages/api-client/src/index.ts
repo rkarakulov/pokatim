@@ -3,6 +3,7 @@ import {
   ApiError,
   CatalogRouteCities,
   CatalogRouteDetail,
+  CatalogRouteViewer,
   CatalogRoutePage,
   type CatalogRouteQuery,
   type CatalogRouteRacesQuery,
@@ -75,6 +76,7 @@ import {
   type CancelRideRequest,
   type CreateRideRequest,
   type CreateRideReportRequest,
+  type CreateRouteReportRequest,
   RideCities,
   RideDetail,
   type RideListQuery,
@@ -89,6 +91,7 @@ import {
   MyRoute,
   MyRoutePage,
   type RenameRouteInput,
+  type SubmitRoutePublicationInput,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -127,8 +130,10 @@ export type RaceListParams = {
   limit?: number;
 };
 
-/** Параметры каталога маршрутов до схемы (`city`, `distance`, `surface` — массивы, повтором ключа). */
+/** Параметры каталога маршрутов до схемы (`city`, `distance`, `surface`, `author` — массивы, повтором ключа). */
 export type CatalogRouteListParams = {
+  /** routes-06: `team` — маршруты команды, `rider` — маршруты райдеров. */
+  author?: NonNullable<CatalogRouteQuery['author']>;
   city?: NonNullable<CatalogRouteQuery['city']>;
   distance?: NonNullable<CatalogRouteQuery['distance']>;
   surface?: NonNullable<CatalogRouteQuery['surface']>;
@@ -497,6 +502,44 @@ export function createApiClient({
         `/v1/routes/mine/${encodeURIComponent(id)}/delete`,
         z.undefined(),
         authorized(accessToken, { method: 'POST', body: '{}', ...withCredentials }),
+      ),
+    /**
+     * Заявка в каталог (routes-06): `409 ROUTE_INVALID_STATE` (`details.reason`), `409 ROUTE_PUBLICATION_LIMIT`
+     * (`details.limit`), 429 — суточный лимит.
+     */
+    submitMyRoutePublication: (
+      accessToken: string,
+      id: string,
+      body: SubmitRoutePublicationInput,
+    ) =>
+      postAuthorized(
+        accessToken,
+        `/v1/routes/mine/${encodeURIComponent(id)}/publish`,
+        MyRoute,
+        body,
+      ),
+    /** Отозвать заявку или снять с публикации (идемпотентно); скрыт модератором — 409 `hidden`. */
+    unpublishMyRoute: (accessToken: string, id: string) =>
+      postAuthorized(
+        accessToken,
+        `/v1/routes/mine/${encodeURIComponent(id)}/unpublish`,
+        MyRoute,
+        {},
+      ),
+    /** Состояние вошедшего зрителя карточки каталога (routes-06): «Пожаловаться» / «Вы пожаловались». */
+    getCatalogRouteViewer: (accessToken: string, id: string) =>
+      request(
+        `/v1/routes/${encodeURIComponent(id)}/me`,
+        CatalogRouteViewer,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Жалоба на маршрут райдера (идемпотентно); свой и команды — 409 `ROUTE_INVALID_STATE`, лимит — 429. */
+    reportCatalogRoute: (accessToken: string, id: string, body: CreateRouteReportRequest) =>
+      postAuthorized(
+        accessToken,
+        `/v1/routes/${encodeURIComponent(id)}/reports`,
+        CatalogRouteViewer,
+        body,
       ),
 
     // --- участие в гонке и результаты (race-results-03) ---

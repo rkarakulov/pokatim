@@ -23,6 +23,7 @@ import { domainLabel } from '@/lib/minsk-format';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import {
+  AUTHOR_CHIPS,
   DISTANCE_CHIPS,
   hasFilters,
   NO_FILTERS,
@@ -105,6 +106,17 @@ export function RouteFeed({ header, filters: selected, onFiltersChange }: RouteF
           selected={filters.surface}
           onToggle={(value) =>
             onFiltersChange({ ...filters, surface: toggle(filters.surface, value) })
+          }
+        />
+        <FilterGroup
+          label={t('routes.filter.author')}
+          options={AUTHOR_CHIPS.map((value) => ({
+            value,
+            label: t(`routes.filter.author.${value}`),
+          }))}
+          selected={filters.author}
+          onToggle={(value) =>
+            onFiltersChange({ ...filters, author: toggle(filters.author, value) })
           }
         />
       </View>

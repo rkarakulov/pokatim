@@ -81,6 +81,7 @@ describe('коды ошибок', () => {
       'RACE_TIER_LOCKED',
       'RESULT_GROUP_NOT_ALLOWED',
       'VERIFIED_DEMOGRAPHICS_LOCKED',
+      'ROUTE_PUBLICATION_LIMIT',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

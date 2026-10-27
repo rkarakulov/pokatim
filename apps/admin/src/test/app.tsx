@@ -34,6 +34,7 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
       'profiles.moderate',
       'appearance.manage',
       'profiles.verified_edit',
+      'routes.moderate',
     ],
   },
   moderator: {
@@ -45,6 +46,7 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
       'disputes.read',
       'disputes.decide',
       'profiles.moderate',
+      'routes.moderate',
     ],
   },
   organizer: {

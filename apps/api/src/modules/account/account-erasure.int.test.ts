@@ -48,7 +48,14 @@ import {
   seedNotification,
 } from '../../../test/notifications';
 import { createRide, hideInDb, join, ridesDb, startsIn } from '../../../test/rides';
-import { routesDb, seedRiderRoute } from '../../../test/routes';
+import {
+  publicationDoc,
+  reportRoute,
+  routeReportsDb,
+  routesDb,
+  seedApprovedRiderRoute,
+  seedRiderRoute,
+} from '../../../test/routes';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
 import { storeUpload, trackFileStore, tracks } from '../../../test/tracks';
 import { QUEUE } from '../../queues';
@@ -375,6 +382,34 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
         .map((r) => [r._id, r.status, r.organizerName]),
     );
     expect((await ride(w.rides.aFuture))?.participants.map((p) => p.userId)).toContain(w.b.userId);
+  });
+
+  it('routes-06 (AC7, U6): опубликованный и поданный маршруты A с жалобами — удалены вместе с жалобами; жалоба A на маршрут B — осталась', async () => {
+    const w = await world();
+    const a = w.a.userId;
+    const aApproved = await seedApprovedRiderRoute(h, a);
+    const aPending = await seedRiderRoute(h, a, { publication: publicationDoc(h, 'pending') });
+    const bApproved = await seedApprovedRiderRoute(h, w.b.userId);
+    expect((await reportRoute(h, w.b.accessToken, aApproved)).status).toBe(200);
+    expect((await reportRoute(h, w.a.accessToken, bApproved)).status).toBe(200);
+    expect((await call(h, 'GET', `/v1/routes/${aApproved}`)).status).toBe(200);
+
+    await deleteAccount(w.a.accessToken);
+    expect(await firstPass(a)).toBe('erased');
+
+    for (const id of [aApproved, aPending]) {
+      expect(await routesDb(h).routes.countDocuments({ _id: id })).toBe(0);
+      expect(await routeReportsDb(h).countDocuments({ routeId: id })).toBe(0);
+    }
+    expect((await call(h, 'GET', `/v1/routes/${aApproved}`)).status).toBe(404);
+    // жалоба удалённого жалобщика на чужой маршрут хранится (как ride_reports, PR #62)
+    expect(await routeReportsDb(h).find({ reporterUserId: a }).toArray()).toEqual([
+      expect.objectContaining({ routeId: bApproved, resolvedAt: null }),
+    ]);
+    expect((await routesDb(h).routes.findOne({ _id: bApproved }))?.publication).toMatchObject({
+      status: 'approved',
+      openReportCount: 1,
+    });
   });
 
   it('повтор задачи — тот же итог, без ошибок и без второго письма (N5)', async () => {

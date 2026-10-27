@@ -34,6 +34,8 @@ export const PERMISSIONS = [
   'appearance.manage',
   // race-results-07: правка пола и года рождения анкеты Verified после фиксации (только admin)
   'profiles.verified_edit',
+  // routes-06: модерация маршрутов райдеров (заявки в каталог и жалобы) — admin и moderator
+  'routes.moderate',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
 export type Permission = z.infer<typeof Permission>;

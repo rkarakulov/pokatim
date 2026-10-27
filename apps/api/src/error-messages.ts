@@ -46,6 +46,7 @@ export const PROJECT_ERROR_MESSAGES = {
   RACE_TIER_LOCKED: 'Уровень и группу заявки уже нельзя изменить',
   RESULT_GROUP_NOT_ALLOWED: 'Можно выбрать свою группу или более молодую своего пола',
   VERIFIED_DEMOGRAPHICS_LOCKED: 'Пол и год рождения уже зафиксированы заявкой Verified',
+  ROUTE_PUBLICATION_LIMIT: 'Достигнут предел заявок в каталог',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

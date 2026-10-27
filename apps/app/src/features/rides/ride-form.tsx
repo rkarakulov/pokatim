@@ -182,15 +182,20 @@ function failureText(error: unknown): string {
   return t('rides.form.failed');
 }
 
-/** Выбор города: одиночный, чипы по алфавиту; свёрнуто до 8 + «Все города» (выбранный — всегда виден). */
-function CityPicker({
+/**
+ * Выбор города: одиночный, чипы по алфавиту; свёрнуто до 8 + «Все города» (выбранный — всегда виден). Им же выбирают
+ * город старта в заявке маршрута в каталог (routes-06, `label`).
+ */
+export function CityPicker({
   value,
   onChange,
   error,
+  label = t('rides.form.city'),
 }: {
   value: CityCode | undefined;
   onChange: (city: CityCode) => void;
   error: string | undefined;
+  label?: string;
 }) {
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
@@ -199,9 +204,7 @@ function CityPicker({
     : SORTED_CITIES.filter((city, index) => index < COLLAPSED_CITIES || city === value);
   return (
     <View style={styles.field}>
-      <Text style={[textStyle('label'), { color: theme.text.secondary }]}>
-        {t('rides.form.city')}
-      </Text>
+      <Text style={[textStyle('label'), { color: theme.text.secondary }]}>{label}</Text>
       <View style={styles.chips}>
         {visible.map((city) => (
           <Chip

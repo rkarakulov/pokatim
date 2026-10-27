@@ -1,12 +1,21 @@
 import type {
   CatalogRouteDetail,
   CatalogRoutePage,
+  CreateRouteReportRequest,
   RacePage,
   RouteMapGeometry,
 } from '@pokatim/contracts';
-import { queryOptions, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  queryOptions,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
+import { withAccessToken } from '@/features/auth/authorized';
 import { api } from '@/lib/api';
+import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
 import type { RouteFilters } from './filters';
 
@@ -22,7 +31,7 @@ export const ROUTE_RACES_LIMIT = 10;
 const nextCursor = (page: CatalogRoutePage | RacePage) => page.nextCursor ?? undefined;
 
 /**
- * Лента вкладки: ключ `['routes','list',{ city, distance, surface, limit },'pages']` — форма `InfiniteData` не
+ * Лента вкладки: ключ `['routes','list',{ city, distance, surface, author, limit },'pages']` — форма `InfiniteData` не
  * совпадает с ключом Главной (`['routes','list',{ limit: 1 }]`), префикс общий. Смена фильтра — новый ключ:
  * скелетон на месте данных (без `keepPreviousData`).
  */
@@ -31,6 +40,7 @@ export function useRouteFeed(filters: RouteFilters) {
     city: filters.city,
     distance: filters.distance,
     surface: filters.surface,
+    author: filters.author,
     limit: PAGE_LIMIT,
   };
   const feed = useInfiniteQuery({
@@ -40,6 +50,7 @@ export function useRouteFeed(filters: RouteFilters) {
         city: [...filters.city],
         distance: [...filters.distance],
         surface: [...filters.surface],
+        author: [...filters.author],
         limit: PAGE_LIMIT,
         ...(pageParam ? { cursor: pageParam } : {}),
       }),
@@ -106,5 +117,30 @@ export function useCatalogRouteRaces(id: string, enabled: boolean) {
     getNextPageParam: nextCursor,
     staleTime: PUBLIC_STALE_MS,
     enabled,
+  });
+}
+
+/**
+ * Состояние вошедшего зрителя карточки маршрута райдера (routes-06): `canReport` / `reported` решает сервер
+ * (`GET /v1/routes/:id/me`). Только клиент и только вошедшему (гостю — без запроса); кеш стирается при выходе.
+ */
+export const catalogRouteViewerKey = (id: string) => ['routes', 'viewer', id] as const;
+
+export function useCatalogRouteViewer(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: catalogRouteViewerKey(id),
+    queryFn: () => withAccessToken((token) => api.getCatalogRouteViewer(token, id)),
+    staleTime: DEFAULT_STALE_MS,
+    enabled,
+  });
+}
+
+/** «Пожаловаться» (routes-06, A4): ответ — новое состояние зрителя (`reported: true`). */
+export function useReportCatalogRoute(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateRouteReportRequest) =>
+      withAccessToken((token) => api.reportCatalogRoute(token, id, body)),
+    onSuccess: (viewer) => queryClient.setQueryData(catalogRouteViewerKey(id), viewer),
   });
 }

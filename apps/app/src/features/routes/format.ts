@@ -50,6 +50,16 @@ export function routePlace(route: Pick<CatalogRouteCard, 'city' | 'surfaces'>): 
   return meta([routeCity(route), routeSurfaces(route) || null]);
 }
 
+/**
+ * Бейдж автора (routes-06, U3): маршрут команды — `null`; райдера — «От райдера» или «От райдера · Имя» (имя — только
+ * если автор подписал заявку и в профиле есть публичное имя; решает сервер).
+ */
+export function routeAuthorLabel(route: Pick<CatalogRouteCard, 'author'>): string | null {
+  const { author } = route;
+  if (author.kind !== 'rider') return null;
+  return author.name ? t('routes.author.by', { name: author.name }) : t('routes.author.rider');
+}
+
 /** Описание для мета и OG (без ПДн): «86 км · набор 1 240 м · петля · Минск». */
 export function routeShareDescription(route: CatalogRouteCard): string {
   return meta([routeStats(route), routeCity(route)]);

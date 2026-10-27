@@ -24,12 +24,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
-import { actionErrorMessage } from '@/features/auth/error-messages';
+import { actionErrorMessage, apiErrorCode } from '@/features/auth/error-messages';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { DetailRow } from './detail-row';
+import { routePublicationErrorMessage } from './error-messages';
 import { routeKm } from './format';
-import { myRouteStatus, myRouteUploadedAt, routeTitleError } from './my-route-format';
+import {
+  myRouteRenameFrozen,
+  myRouteStatus,
+  myRouteUploadedAt,
+  routeTitleError,
+} from './my-route-format';
+import { MyRoutePublication } from './my-route-publication';
 import {
   myRouteMapOptions,
   myRoutesKeys,
@@ -68,7 +75,12 @@ function RenameForm({ route, onDone }: { route: MyRoute; onDone: () => void }) {
         <Banner
           tone="error"
           title={t('routes.mine.detail.renameFailed')}
-          message={actionErrorMessage(rename.error)}
+          message={
+            // routes-06 (N6): заявку подали на другом устройстве — «Заявка уже на проверке» / «уже в каталоге»
+            apiErrorCode(rename.error) === 'ROUTE_INVALID_STATE'
+              ? routePublicationErrorMessage(rename.error, 'routes.mine.detail.renameFailed')
+              : actionErrorMessage(rename.error)
+          }
         />
       ) : null}
       <Button
@@ -112,6 +124,10 @@ function DeleteAction({ route }: { route: MyRoute }) {
       <Text style={[textStyle('body'), { color: theme.text.primary }]}>
         {t('routes.mine.detail.deleteConfirm')}
       </Text>
+      {/* routes-06 (U6): опубликованный маршрут уйдёт и из каталога */}
+      {route.publication?.status === 'approved' ? (
+        <Banner tone="warning" message={t('routes.publication.deleteWarning')} />
+      ) : null}
       {remove.isError ? (
         <Banner
           tone="error"
@@ -182,7 +198,13 @@ function MyRouteView({ route }: { route: MyRoute }) {
         </>
       ) : null}
       <DetailRow label={t('routes.mine.detail.uploadedAt')}>{myRouteUploadedAt(route)}</DetailRow>
-      {renaming ? (
+      <MyRoutePublication route={route} />
+      {/* routes-06 (A3): на проверке и в каталоге название заморожено */}
+      {myRouteRenameFrozen(route) ? (
+        <Text style={[textStyle('body'), { color: theme.text.secondary }]}>
+          {t('routes.publication.renameFrozen')}
+        </Text>
+      ) : renaming ? (
         <RenameForm route={route} onDone={() => setRenaming(false)} />
       ) : (
         <View style={styles.action}>

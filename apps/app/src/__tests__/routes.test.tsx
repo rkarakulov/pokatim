@@ -29,6 +29,7 @@ const route = (overrides: Partial<CatalogRouteCard> = {}): CatalogRouteCard => (
   city: 'minsk',
   surfaces: ['asphalt'],
   publishedAt: '2026-10-20T10:00:00.000Z',
+  author: { kind: 'team' },
   ...overrides,
 });
 const page = (items: CatalogRouteCard[], nextCursor: string | null = null): CatalogRoutePage => ({
@@ -85,7 +86,13 @@ describe('вкладка «Маршруты» (routes-01, AC5)', () => {
     expect(screen.getByText('Брест · асфальт')).toBeOnTheScreen();
     const cityChips = screen.getAllByText(/^(Брест|Минск)$/).map((node) => node.props.children);
     expect(cityChips).toEqual(['Брест', 'Минск']);
-    expect(listRoutes).toHaveBeenCalledWith({ city: [], distance: [], surface: [], limit: 20 });
+    expect(listRoutes).toHaveBeenCalledWith({
+      city: [],
+      distance: [],
+      surface: [],
+      author: [],
+      limit: 20,
+    });
     await fireEvent.press(link);
     expect(router.getPathname()).toBe(`/routes/${ring.id}`);
   });
@@ -104,6 +111,7 @@ describe('вкладка «Маршруты» (routes-01, AC5)', () => {
       city: ['minsk'],
       distance: ['gt100', 'lt50'],
       surface: ['gravel'],
+      author: [],
       limit: 20,
     });
     expect(screen.queryByRole('link', { name: ringLabel })).toBeNull();
@@ -184,5 +192,47 @@ describe('вкладка «Маршруты» (routes-01, AC5)', () => {
     // ключ без города — выдача без фильтров (из свежего кэша); сброса нет
     expect(await screen.findByRole('link', { name: ringLabel })).toBeOnTheScreen();
     expect(screen.queryByText('Сбросить фильтры')).toBeNull();
+  });
+});
+
+describe('маршруты райдеров в каталоге (routes-06, U3, U4)', () => {
+  it('бейдж «От райдера» и имя автора в карточке; у маршрута команды бейджа нет', async () => {
+    const byRider = route({ title: 'Лесная петля', author: { kind: 'rider', name: 'Аня К.' } });
+    const anonymous = route({ title: 'Тихий круг', author: { kind: 'rider', name: null } });
+    listRoutes.mockResolvedValue(page([ring, byRider, anonymous]));
+    await openRoutes();
+    expect(
+      await screen.findByRole('link', {
+        name: 'Лесная петля. 86 км · набор 412 м · петля · Минск · асфальт · От райдера · Аня К.',
+      }),
+    ).toBeOnTheScreen();
+    expect(screen.getByText('От райдера · Аня К.')).toBeOnTheScreen();
+    expect(screen.getByText('От райдера')).toBeOnTheScreen();
+    expect(screen.getByRole('link', { name: ringLabel })).toBeOnTheScreen();
+  });
+
+  it('«Автор: Команда / Райдеры» — в запросе с остальными фильтрами; «Сбросить фильтры» снимает и его', async () => {
+    await openRoutes();
+    await screen.findByRole('link', { name: ringLabel });
+    expect(screen.getByText('Автор')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Райдеры' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Гравий' }));
+    expect(listRoutes).toHaveBeenLastCalledWith({
+      city: [],
+      distance: [],
+      surface: ['gravel'],
+      author: ['rider'],
+      limit: 20,
+    });
+    await fireEvent.press(screen.getByRole('button', { name: 'Команда' }));
+    expect(listRoutes).toHaveBeenLastCalledWith(
+      expect.objectContaining({ author: ['rider', 'team'] }),
+    );
+
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Сбросить фильтры' })[0]!);
+    // ключ без фильтров — из кэша первой выдачи
+    expect(await screen.findByRole('link', { name: ringLabel })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Райдеры' })).not.toBeSelected();
+    expect(screen.getByRole('button', { name: 'Команда' })).not.toBeSelected();
   });
 });

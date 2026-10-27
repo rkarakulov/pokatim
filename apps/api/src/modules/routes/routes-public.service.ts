@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
+  CatalogRouteAuthor,
   CatalogRouteCard,
   CatalogRouteCities,
   CatalogRouteDetail,
@@ -11,6 +12,8 @@ import { z } from 'zod';
 
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
+import { RIDER_NAMES, type RiderNameDirectory } from '../profile';
+import { displayGeometryOf } from './route-catalog';
 import { elevationOf } from './route-elevation';
 import { ROUTE_GEOMETRY, type RouteGeometry } from './route-geometry.port';
 import type { RouteCatalogDoc, RouteDoc } from './routes.collection';
@@ -24,8 +27,24 @@ const notFound = () => domainError('NOT_FOUND', 404);
 const inCatalog = (route: RouteDoc): route is CatalogRoute =>
   route.distanceM !== null && (route.catalog ?? null) !== null;
 
+/**
+ * Подпись автора (routes-06, U3): маршрут команды; маршрут райдера — имя только при галочке заявки и заданном имени
+ * (`names` — `RIDER_NAMES.attributionNames`, читается на каждом запросе — смена имени видна в пределах кэша 60 с).
+ */
+function authorOf(route: RouteDoc, names: ReadonlyMap<string, string>): CatalogRouteAuthor {
+  if (route.origin !== 'rider') return { kind: 'team' };
+  const signed = route.publication?.showAuthorName === true;
+  return { kind: 'rider', name: signed ? (names.get(route.ownerUserId) ?? null) : null };
+}
+
+/** Авторы-райдеры, согласившиеся на подпись (один запрос имён на страницу). */
+const signedAuthors = (routes: readonly RouteDoc[]) =>
+  routes
+    .filter((route) => route.origin === 'rider' && route.publication?.showAuthorName === true)
+    .map((route) => route.ownerUserId);
+
 /** Ответ приложения — явный список полей: без владельца, sha256, статуса, отказа, попыток и линии сверки. */
-function toCatalogCard(route: CatalogRoute): CatalogRouteCard {
+function toCatalogCard(route: CatalogRoute, names: ReadonlyMap<string, string>): CatalogRouteCard {
   return {
     id: route._id,
     title: route.title,
@@ -35,6 +54,7 @@ function toCatalogCard(route: CatalogRoute): CatalogRouteCard {
     city: route.catalog.city,
     surfaces: route.catalog.surfaces,
     publishedAt: route.catalog.publishedAt.toISOString(),
+    author: authorOf(route, names),
   };
 }
 
@@ -45,9 +65,10 @@ function toCatalogCard(route: CatalogRoute): CatalogRouteCard {
 function toCatalogDetail(
   route: CatalogRoute,
   derived: RouteDerivedState | undefined,
+  names: ReadonlyMap<string, string>,
 ): CatalogRouteDetail {
   return {
-    ...toCatalogCard(route),
+    ...toCatalogCard(route, names),
     elevation: elevationOf(derived?.profile ?? null),
     gpxAvailable: (derived?.derivedVersion ?? null) !== null,
   };
@@ -60,9 +81,10 @@ export interface CatalogRouteGpx {
 }
 
 /**
- * Публичный каталог маршрутов команды (routes-01): список с фильтрами и курсором `(publishedAt, _id)`, города,
- * карточка и карта. Видимость — одна точка `RoutesRepository.findPublished` (без кэша: каталог изменяем); кэшируется
- * только неизменная геометрия (`displayGeometry`).
+ * Публичный каталог маршрутов (routes-01; routes-06 — и одобренные маршруты райдеров): список с фильтрами и курсором
+ * `(publishedAt, _id)`, города, карточка, карта и GPX. Видимость — `RoutesRepository.listCatalog`/`findInCatalog`
+ * (условие `IN_CATALOG`, без кэша: каталог изменяем). Кэшируется только неизменная геометрия маршрутов **команды**
+ * (порт `ROUTE_GEOMETRY`); линия маршрута райдера (удаляемого) читается без кэша.
  */
 @Injectable()
 export class RoutesPublicService {
@@ -70,20 +92,27 @@ export class RoutesPublicService {
     private readonly repository: RoutesRepository,
     /** `RoutesCatalogService.displayGeometry` (кэш неизменной геометрии) через тот же порт, что у `races`. */
     @Inject(ROUTE_GEOMETRY) private readonly geometry: RouteGeometry,
+    @Inject(RIDER_NAMES) private readonly names: RiderNameDirectory,
   ) {}
 
   async list(query: CatalogRouteQuery): Promise<CatalogRoutePage> {
     const after = query.cursor ? decodeCursor(query.cursor, z.iso.datetime()) : null;
     const docs = await this.repository.listCatalog(
-      { cities: query.city, distance: query.distance, surfaces: query.surface },
+      {
+        cities: query.city,
+        distance: query.distance,
+        surfaces: query.surface,
+        authors: query.author,
+      },
       after ? { publishedAt: new Date(after.k), id: after.id } : null,
       query.limit + 1,
     );
     const routes = docs.filter(inCatalog);
     const page = routes.slice(0, query.limit);
     const last = page.at(-1);
+    const names = await this.names.attributionNames(signedAuthors(page));
     return {
-      items: page.map(toCatalogCard),
+      items: page.map((route) => toCatalogCard(route, names)),
       nextCursor:
         docs.length > query.limit && last
           ? encodeCursor(last.catalog.publishedAt.toISOString(), last._id)
@@ -98,7 +127,8 @@ export class RoutesPublicService {
   /** Карточка: профиль — чтением по `_id` без кэша в процессе (RC-4: устаревание — только HTTP-кэш, ≤ 60 с). */
   async get(id: string): Promise<CatalogRouteDetail> {
     const route = await this.published(id);
-    return toCatalogDetail(route, await this.repository.derivedOf(id));
+    const names = await this.names.attributionNames(signedAuthors([route]));
+    return toCatalogDetail(route, await this.repository.derivedOf(id), names);
   }
 
   /** Очищенный GPX (routes-03) — только маршрута каталога; нет экспорта — 404. Разбора в API нет. */
@@ -109,10 +139,16 @@ export class RoutesPublicService {
     return { bytes, title: route.title };
   }
 
-  /** Линия показа, старт, финиш и рамка — только маршрута каталога; без коридора и линии сверки. */
+  /**
+   * Линия показа, старт, финиш и рамка — только маршрута каталога; без коридора и линии сверки. Маршрут команды —
+   * через порт (кэш неизменной геометрии), маршрут райдера — чтением без кэша (его можно удалить).
+   */
   async map(id: string): Promise<RouteMapGeometry> {
-    await this.published(id);
-    const geometry = await this.geometry.displayGeometry(id);
+    const route = await this.published(id);
+    const geometry =
+      route.origin === 'platform'
+        ? await this.geometry.displayGeometry(id)
+        : displayGeometryOf(route, await this.repository.displayLine(id));
     if (!geometry) throw notFound();
     return {
       line: geometry.line,
@@ -123,7 +159,7 @@ export class RoutesPublicService {
   }
 
   private async published(id: string): Promise<CatalogRoute> {
-    const route = await this.repository.findPublished(id);
+    const route = await this.repository.findInCatalog(id);
     if (!route || !inCatalog(route)) throw notFound();
     return route;
   }

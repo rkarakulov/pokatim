@@ -43,11 +43,13 @@ export const generateMetadata: GenerateMetadataFunction = async (_request, param
     return result.status === 'notFound' ? { ...neutral, robots: 'noindex' } : neutral;
   }
   const route = result.data;
-  return publicPageMetadata({
+  // OG — без имени автора (U9); маршрут райдера — UGC: не индексируется (RC-6), OG и SSR остаются
+  const metadata = publicPageMetadata({
     title: route.title,
     description: routeShareDescription(route),
     path: routePath(route.id),
   });
+  return route.author.kind === 'rider' ? { ...metadata, robots: 'noindex' } : metadata;
 };
 
 export default function CatalogRouteRoute() {

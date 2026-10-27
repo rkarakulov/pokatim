@@ -145,6 +145,35 @@ describe('«Журнал действий» (AC12)', () => {
     expect(screen.getAllByText('Кофе-райд на море')).toHaveLength(2);
   });
 
+  it('routes-06: решение по заявке — причина отклонения справочником, поправленные поля подписями', async () => {
+    mocked.listAudit.mockResolvedValue({
+      items: [
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8065',
+          action: 'route.submission_rejected',
+          reason: 'Уберите адрес из названия',
+          subject: { kind: 'route', id: signedIn.id, label: 'Вокруг моря' },
+          details: { rejectionReason: 'bad_title' },
+        },
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8066',
+          action: 'route.submission_approved',
+          subject: { kind: 'route', id: signedIn.id, label: 'Вокруг моря' },
+          details: { changedFields: ['city', 'surfaces'] },
+        },
+      ],
+      nextCursor: null,
+    });
+    await renderApp('/audit');
+    expect(
+      await screen.findByText('Маршрут райдера отклонён: причина — Неподходящее название'),
+    ).toBeTruthy();
+    expect(screen.getByText('Уберите адрес из названия')).toBeTruthy();
+    expect(screen.getByText('Маршрут райдера одобрен: Город старта, Покрытие')).toBeTruthy();
+  });
+
   it('app-themes: смена темы приложения — «Классика → Атлас», объект «Оформление приложения»', async () => {
     mocked.listAudit.mockResolvedValue({
       items: [

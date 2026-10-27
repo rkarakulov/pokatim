@@ -101,6 +101,7 @@ const catalogRoute: CatalogRouteCard = {
   city: 'minsk',
   surfaces: ['asphalt', 'gravel'],
   publishedAt: '2026-09-20T10:00:00.000Z',
+  author: { kind: 'team' },
 };
 const routePage = (...items: CatalogRouteCard[]) => ({ items, nextCursor: null });
 

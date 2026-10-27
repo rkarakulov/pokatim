@@ -13,7 +13,8 @@ export interface NavItem {
     | '/audit'
     | '/rides-moderation'
     | '/disputes'
-    | '/appearance';
+    | '/appearance'
+    | '/rider-routes';
   labelKey: MessageKey;
   /** Без права пункт скрыт (сервер всё равно проверит право на каждом запросе). */
   permission?: Permission;
@@ -48,6 +49,13 @@ export const NAVIGATION: readonly NavItem[] = [
     to: '/appearance',
     labelKey: 'admin.nav.appearance',
     permission: 'appearance.manage',
+    group: 'bottom',
+  },
+  // routes-06: в конец массива, группа `bottom` (после «Оформления приложения»)
+  {
+    to: '/rider-routes',
+    labelKey: 'admin.nav.riderRoutes',
+    permission: 'routes.moderate',
     group: 'bottom',
   },
 ];

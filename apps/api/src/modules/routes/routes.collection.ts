@@ -2,6 +2,7 @@ import type {
   CityCode,
   RouteFailureCode,
   RouteOrigin,
+  RouteRejectionReason,
   RouteStatus,
   Surface,
 } from '@pokatim/contracts';
@@ -31,9 +32,41 @@ export interface RouteCatalogDoc {
 }
 
 /**
+ * Публикация маршрута райдера в каталог (routes-06, A1): `pending` → `approved` | `rejected`; `approved` → `hidden` →
+ * `approved`; автор отзывает и снимает (`withdrawn` — наружу `publication: null`). Каждый переход — одна условная
+ * запись документа `routes` (`version` в фильтре); жалоба и «Отклонить жалобы» `version` не меняют, переименование автором
+ * — меняет (модератор не вернёт в каталог название, которого не видел).
+ */
+export interface RoutePublicationDoc {
+  status: 'pending' | 'approved' | 'rejected' | 'hidden' | 'withdrawn';
+  city: CityCode;
+  surfaces: Surface[];
+  /** Согласие подписать маршрут публичным именем профиля (U3, 8.1 RC-2) — доказательство — сама заявка. */
+  showAuthorName: boolean;
+  submittedAt: Date;
+  /** Успешных подач маршрута, ≤ 3 (U8); отзыв и снятие не сбрасывают. */
+  submissionCount: number;
+  decidedAt: Date | null;
+  /** Первое одобрение этой заявки = `catalog.publishedAt` («Вернуть» — прежняя дата). */
+  approvedAt: Date | null;
+  rejection: { reason: RouteRejectionReason; comment: string | null } | null;
+  hiddenAt: Date | null;
+  /** Очередь «Жалобы»: переживают отзыв и новую подачу (8.1 RC-4). */
+  openReportCount: number;
+  lastReportAt: Date | null;
+  /**
+   * Ревизия жалоб: каждая жалоба — `$inc` той же записью (монотонна, в отличие от `lastReportAt`); «Отклонить жалобы»
+   * сверяет увиденную в карточке (N7). Переживает новую подачу.
+   */
+  reportRevision: number;
+  version: number;
+}
+
+/**
  * Маршрут. `platform` — маршрут команды (панель, каталог, коридоры); `rider` (routes-02) — личный маршрут райдера из
- * приложения: виден только автору, `catalog` всегда `null`, меняется только `title`, удаляется автором (транзакция
- * трёх коллекций). Чтение вне «моих» — только с `origin: 'platform'` в фильтре. Уникальны `(ownerUserId, origin,
+ * приложения: виден автору, а в каталоге — только одобренный модератором (routes-06: `catalog` заполнен тогда и
+ * только тогда, когда `publication.status = 'approved'`); удаляется автором (транзакция коллекций маршрута и жалоб).
+ * Порты гонок, панель «Маршруты» и кэши геометрии читают только `origin: 'platform'`. Уникальны `(ownerUserId, origin,
  * sha256)` (`0021_routes_rider`).
  */
 export interface RouteDoc {
@@ -53,6 +86,8 @@ export interface RouteDoc {
   finish: { type: 'Point'; coordinates: [number, number] } | null;
   /** `null` — не в каталоге; документы до `0020_routes_catalog` поля не имеют — чтение `?? null`. */
   catalog: RouteCatalogDoc | null;
+  /** routes-06: заявка в каталог маршрута райдера; документы без поля — `null` (не подавался, чтение `?? null`). */
+  publication?: RoutePublicationDoc | null;
   createdAt: Date;
   updatedAt: Date;
 }

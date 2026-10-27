@@ -189,11 +189,13 @@ paths:
   /v1/admin/routes/:id/publish|unpublish` — `PanelGuard` + `races.manage`, только `ready` (иначе `409
   ROUTE_INVALID_STATE`), журнал панели без координат; окно публикации показывает линию и предупреждение (RC-11).
   Публичное чтение (`GET /v1/routes`, `/cities`, `/:id`, `/:id/map`, `/:id/races`) — `PublicReadGuard`, `public,
-  max-age=60`; видимость — одна точка `RoutesRepository.findPublished` (не опубликованный, снятый, не готовый,
-  неизвестный — один `404 NOT_FOUND`, включая карту и гонки маршрута). Ответы — явный список полей: без
+  max-age=60`; видимость — одна точка `RoutesRepository.findInCatalog` (условие `IN_CATALOG`; с routes-06 — и
+  одобренные маршруты райдеров, раздел ниже; не опубликованный, снятый, не готовый, неизвестный — один `404
+  NOT_FOUND`, включая карту). `findPublished` — только порт гонок `RouteCatalog.inCatalog` («Гонки на маршруте»,
+  маршруты команды). Ответы — явный список полей: без
   `ownerUserId`, `sha256`, статуса, `failure`, `attempts` и линии сверки (int-тест на ключи). Снятый маршрут может
   быть виден до минуты из кэша (RC-13).
-- Очищенный GPX каталога (routes-03): `GET /v1/routes/:id/gpx` — только маршрут каталога (`findPublished`, иначе
+- Очищенный GPX каталога (routes-03): `GET /v1/routes/:id/gpx` — только маршрут каталога (`findInCatalog`, иначе
   один `404 NOT_FOUND`), `PublicReadGuard` + отдельный IP-лимит `route-gpx` 30/мин (`IpRateLimitGuard` +
   `@IpRateLimit`, `consumeIpLimit` в `src/public-read.guard.ts`; 429 + `Retry-After`), `public, max-age=60`. Файл
   посчитан worker'ом (`routeGpx`: только `trkpt lat lon` и `ele` точек линии сверки — без `time`, датчиков,
@@ -215,9 +217,27 @@ paths:
   (`detectRouteFormat`: GPX/KML, `<!DOCTYPE` до корня → 415); квота 100 своих маршрутов — `409 ROUTE_QUOTA_EXCEEDED`
   (мягкая, после дедупа). KML — те же защиты, что GPX (`xml.ts`: отказ на `<!DOCTYPE`/`<!ENTITY`, подсчёт элементов и
   `gx:coord` до дерева, `XMLValidator`, обрыв кортежей `coordinates`), разбор — только `runParseThread` в worker.
-- Наружу — `MyRoute` явным списком полей (без `origin`, `ownerUserId`, `sha256`, `attempts`, `catalog`, линии сверки);
+- Наружу — `MyRoute` явным списком полей (без `origin`, `ownerUserId`, `sha256`, `attempts`, `catalog`, линии сверки;
+  routes-06: `publication` — без счётчиков подач и жалоб и `version`; `canPublish` и `submissionsExhausted` считает
+  сервер);
   карта — только линия показа своего готового маршрута. Логи — `routeId`, `userId`, коды; без названий, имён файлов и
   координат. Действия райдера не пишутся в журнал панели (`PanelAudit`).
+
+## Маршруты райдера в каталоге (routes-06)
+
+- Публикация — только премодерация: автор подаёт (`POST /v1/routes/mine/:id/publish`, свой готовый маршрут, `AuthGuard`,
+  иначе один `404`), публично маршрут виден **только** в `approved` (условие `IN_CATALOG` в `RoutesRepository`:
+  список, города, карточка, карта, GPX; защита в глубину — подставленный `catalog` без `approved` не виден, int-тест
+  N1). Порты гонок, панель «Маршруты», `routesByIds` и LRU-кэши — только `platform` (N3).
+- Модерация — `PanelGuard` + `routes.moderate` (admin, moderator) на классе `RoutesModerationController`; заявка видна
+  модератору только в `pending | approved | rejected | hidden` (отозванная — `404`: автор забрал согласие на показ
+  линии). Ответы панели — автор только `authorUserId`, без имени (N8) и без автора жалобы.
+- Имя автора в каталоге — только при галочке заявки и заданном `publicName` (U3, RC-2); в OG и панели имени нет.
+  Карточка маршрута райдера в приложении — `robots: noindex` (UGC, как райды; 8.1 RC-6).
+- Жалобы — вошедшему не-автору, на маршрут райдера в каталоге; одна на маршрут (уникальный индекс, повтор — успех без
+  записи). Лимиты: подачи 10/сут, ≤ 3 на проверке, ≤ 3 подачи маршрута (`409 ROUTE_PUBLICATION_LIMIT`), жалобы 20/сут.
+- Логи — id маршрута, пользователя, действие, код причины; без названий, комментариев и имён. Событие outbox — только
+  id и решение.
 
 ## Приём тела загрузок (upload-limits-kml-panel)
 

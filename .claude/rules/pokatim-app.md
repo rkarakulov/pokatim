@@ -236,7 +236,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 ## Маршруты (routes-01, `docs/product/routes.md`)
 
 - Вкладка «Маршруты» — `features/routes/route-feed.tsx` (`FlatList`): ключ `['routes','list',{ city, distance,
-  surface, limit },'pages']`, Главная — `['routes','list',{ limit: 1 }]`, чипы «Город» — `['routes','cities']` (до
+  surface, author, limit },'pages']` (`author` — с routes-06), Главная — `['routes','list',{ limit: 1 }]`, чипы «Город» — `['routes','cities']` (до
   ответа — `FilterGroupSkeleton`, ошибка или пусто — группа скрыта, исчезнувший город снимается); всё публичное, без
   `withAccessToken`, `staleTime` 60 с. Карточка списка — `components/route-list-card.tsx`, подписи —
   `features/routes/format.ts`.
@@ -301,6 +301,20 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `Stack.Protected` вкладок (гость — на вход), без `loader`, мета, OG и «Поделиться»; карта — общий `RouteLineMap`
   (`route-line-map.tsx`, им же пользуется `CatalogRouteMap`), строки — `DetailRow`; карточка списка —
   `MyRouteListCard` (общая рамка с `RouteListCard`).
+- Публикация своих маршрутов (routes-06): бейдж рамки карточки — автор в каталоге (`routeAuthorLabel`: «От райдера» /
+  «От райдера · Имя», имя — только с сервера) и статус заявки в «Моих» (`myRoutePublicationStatus`; `'unknown'` — без
+  бейджа). Фильтр «Автор» — группа чипов `AUTHOR_CHIPS` в состоянии экрана, ключ ленты `['routes','list',{ city,
+  distance, surface, author, limit },'pages']`. Блок «Публикация в каталоге» карточки своего маршрута —
+  `my-route-publication.tsx` («Опубликовать» — только по `canPublish` сервера, подачи кончились — пояснение только у
+  `rejected` и у `publication: null` с `submissionsExhausted`; «Отозвать заявку» / «Снять с публикации»
+  — с подтверждением; переименование в `pending`/`approved` скрыто, A3; удаление `approved` — предупреждение). Экраны
+  `routes/mine/publish/[id]` (`my-route-publish.tsx`, город — `CityPicker` формы райда) и `routes/report/[id]`
+  (`route-report.tsx`, образец жалобы на райд) — внутри `Stack.Protected`. Мутации публикации и удаление: ответ — в
+  кеш «Моих», затем инвалидация всего `['routes', …]`, кроме `['routes','mine']`. Ошибки — `error-messages.ts` по
+  `details.reason` / `details.limit`. Карточка каталога маршрута райдера: «Гонки на маршруте» не запрашиваются
+  (RC-1); `['routes','viewer',id]` (`GET /v1/routes/:id/me`) — только вошедшему, только клиент; «Пожаловаться» /
+  «Вы пожаловались…» — по `canReport`/`reported` (блок — `AsyncContent`: скелетон, ошибка с повтором, баннер; экран
+  жалобы — название своим `AsyncContent`); мета — `robots: noindex` (RC-6), OG без имени автора.
 
 ## Календарь стартов (блок 04, `docs/product/races-and-seasons.md`)
 

@@ -10,6 +10,7 @@ import {
   EmptyState,
   Pill,
   SkeletonGroup,
+  SkeletonText,
   TextAction,
   textStyle,
   useTheme,
@@ -43,8 +44,8 @@ import { useAppTheme } from '@/theme/use-app-theme';
 
 import { CatalogRouteMap } from './catalog-route-map';
 import { ElevationProfile } from './elevation-profile';
-import { routeChips, routeShareDescription, routeStatItems } from './format';
-import { useCatalogRoute, useCatalogRouteRaces } from './queries';
+import { routeAuthorLabel, routeChips, routeShareDescription, routeStatItems } from './format';
+import { useCatalogRoute, useCatalogRouteRaces, useCatalogRouteViewer } from './queries';
 import { useScrubScrollEnabled } from './use-scrub-scroll-lock';
 
 export const routeDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
@@ -174,6 +175,47 @@ function RouteRaces({
   );
 }
 
+/**
+ * «Пожаловаться» на маршрут райдера (routes-06, A4): только вошедшему и только по `viewer.canReport` сервера (свой и
+ * команды — нет); уже жаловался — «Вы пожаловались на этот маршрут». Загрузка, ошибка с повтором и баннер ошибки
+ * обновления — `AsyncContent` (AGENTS.md §4.12). Гостю и маршруту команды (`viewer` нет) — ничего.
+ */
+function RouteReportAction({
+  id,
+  viewer,
+}: {
+  id: string;
+  viewer: ReturnType<typeof useCatalogRouteViewer>;
+}) {
+  const theme = useTheme();
+  const router = useRouter();
+  return (
+    <AsyncContent
+      query={viewer}
+      skeleton={
+        <View testID="route-report-skeleton">
+          <SkeletonText variant="body" lines={1} lastLineWidth="40%" />
+        </View>
+      }
+    >
+      {(data) =>
+        data.reported ? (
+          <Text style={[textStyle('body'), { color: theme.text.secondary }]}>
+            {t('routes.report.reported')}
+          </Text>
+        ) : data.canReport ? (
+          <View style={styles.start}>
+            <TextAction
+              label={t('routes.report.action')}
+              onPress={() => router.push(`/routes/report/${encodeURIComponent(id)}`)}
+            />
+          </View>
+        ) : null
+      }
+    </AsyncContent>
+  );
+}
+
 /** Вариант цифр шапки шторки по раскладке темы (`layout.routeStats`, app-themes C2). */
 const STATS_VARIANT: Record<AppThemeLayout['routeStats'], Exclude<StatVariant, 'default'>> = {
   classic: 'compact',
@@ -195,25 +237,34 @@ function RouteSheetHeader({ route }: { route: CatalogRouteDetail }) {
 }
 
 /**
- * Тело шторки карточки маршрута (routes-03, P1; routes-04d, L3): без названия (оно в шапке экрана), чипы (покрытия,
- * форма, город; `'unknown'` — без чипа), профиль высоты без заголовка со скраббингом, действия в строку, «Гонки на
- * маршруте».
+ * Тело шторки карточки маршрута (routes-03, P1; routes-04d, L3): без названия (оно в шапке экрана), бейдж автора
+ * маршрута райдера (routes-06), чипы (покрытия, форма, город; `'unknown'` — без чипа), профиль высоты без заголовка
+ * со скраббингом, действия в строку, «Пожаловаться» (маршрут райдера), «Гонки на маршруте».
  */
 function RouteSheetBody({
   route,
   races,
+  viewer,
   now,
   mounted,
   scrub,
 }: {
   route: CatalogRouteDetail;
   races: ReturnType<typeof useCatalogRouteRaces>;
+  /** запрос права жалобы — только вошедшему на маршруте райдера; иначе `null` (блока нет) */
+  viewer: ReturnType<typeof useCatalogRouteViewer> | null;
   now: Date | null;
   mounted: boolean;
   scrub: ScrubStore;
 }) {
+  const author = routeAuthorLabel(route);
   return (
     <View style={styles.detail}>
+      {author ? (
+        <View style={styles.start}>
+          <Pill label={author} tone="accent" />
+        </View>
+      ) : null}
       <View testID="route-chips" style={styles.chips}>
         {routeChips(route).map((chip) => (
           <Pill key={chip} label={chip} />
@@ -226,6 +277,7 @@ function RouteSheetBody({
         scrub={scrub}
       />
       <RouteActions route={route} mounted={mounted} />
+      {viewer ? <RouteReportAction id={route.id} viewer={viewer} /> : null}
       <RouteRaces races={races} now={now} />
     </View>
   );
@@ -296,13 +348,21 @@ export function RouteDetailScreen({
   const signedIn = useSessionStore(isSignedIn);
   const mounted = useMounted();
   const route = useCatalogRoute(id, seed, valid);
-  // гонки маршрута — только клиент (в SSR не попадают)
-  const races = useCatalogRouteRaces(id, valid && route.data !== undefined);
+  const authorKind = route.data?.author.kind;
+  // гонки маршрута — только клиент (в SSR не попадают); маршрут райдера в гонке не бывает — не запрашиваем (RC-1)
+  const races = useCatalogRouteRaces(id, valid && authorKind === 'team');
+  // routes-06: «Пожаловаться» — только вошедшему на карточке маршрута райдера (клиентский запрос, не SSR)
+  const viewerEnabled = valid && signedIn && authorKind === 'rider';
+  const viewer = useCatalogRouteViewer(id, viewerEnabled);
   const now = useMinskClockAfterMount([route.dataUpdatedAt, races.dataUpdatedAt]);
   const hasRoute = route.data !== undefined;
   const refetchers = useMemo(
-    () => [route.refetch, ...(hasRoute ? [races.refetch] : [])],
-    [route.refetch, hasRoute, races.refetch],
+    () => [
+      route.refetch,
+      ...(hasRoute && authorKind === 'team' ? [races.refetch] : []),
+      ...(hasRoute && signedIn && authorKind === 'rider' ? [viewer.refetch] : []),
+    ],
+    [route.refetch, hasRoute, authorKind, signedIn, races.refetch, viewer.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   const notFound =
@@ -385,6 +445,7 @@ export function RouteDetailScreen({
                   <RouteSheetBody
                     route={data}
                     races={races}
+                    viewer={viewerEnabled ? viewer : null}
                     now={now}
                     mounted={mounted}
                     scrub={scrub}
@@ -425,4 +486,5 @@ const styles = StyleSheet.create({
   racesTitle: { marginBottom: space.s2 },
   more: { alignItems: 'flex-start', paddingTop: space.s2 },
   racesNotice: { gap: space.s3, paddingVertical: space.s3 },
+  start: { alignItems: 'flex-start' },
 });

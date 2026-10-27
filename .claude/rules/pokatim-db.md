@@ -24,8 +24,10 @@ paths:
   ротация и отзыв по токену, захват отправки письма. Условие «по другому документу» — либо в транзакции под
   `lockUser`, либо принятая гонка с комментарием в репозитории (R6: лишнее письмо по мёртвой ссылке).
 - Колбэк транзакции может выполниться повторно: внутри — только операции с `session`, без логов, очередей, Redis,
-  HTTP; argon2 — до транзакции, лог и ответ — после `run`. Исключение — `takeResendAllowance` регистрации (R12,
-  комментарий в коде).
+  HTTP; argon2 — до транзакции, лог и ответ — после `run`. Исключения (комментарий в коде о последствиях повтора):
+  `takeResendAllowance` регистрации (R12) и суточная квота подачи маршрута на публикацию (`MyRoutePublicationService.
+  submit`, routes-06: квота после записи — повтор колбэка может списать её дважды, принято). Новых — не добавлять без
+  записи здесь.
 
 ## Документы
 
@@ -119,14 +121,38 @@ paths:
   из `processing` (условие в фильтре: повтор задачи после `ready`/`failed` — no-op); геометрия пишется один раз вместе
   с переходом в `ready` в одной транзакции. Готовый маршрут **не меняется** (ни линия, ни длина): правка маршрута —
   новый маршрут. Маршрут **платформы** не удаляется — поэтому чтение «маршрут готов» в транзакции гонки — без замка.
-- `routes.origin`: `'platform' | 'rider'` (routes-02), неизменно. Маршрут райдера — `catalog: null`, меняются только
-  `title` (`renameOwn`, один `findOneAndUpdate`) и поля обработки (worker); удаляет автор — `deleteOwn` в
-  `MongoTransactions.run`: `routes` (фильтр `{ _id, ownerUserId, origin: 'rider' }`) → `route_geometries` →
-  `route_sources`, без журнала и outbox; конфликт с `markReady` — write conflict по документу `routes` → повтор.
-  Удалён во время обработки — worker `skipped` (захват `null`; исходника и маршрута нет). **Чтение вне «моих» — только
-  с `origin: 'platform'` в фильтре** (`findReady`, `findPublished`, `routesByIds`, `listVisible`, каталог); «мои» —
-  только методы `*Own` с `{ ownerUserId, origin: 'rider' }`. Запрос каталога — `hint('routes_catalog_idx')` (`origin` в
-  фильтре делает кандидатом `routes_list_idx`).
+- `routes.origin`: `'platform' | 'rider'` (routes-02), неизменно. У маршрута райдера меняются `title` (`renameOwn`,
+  один `findOneAndUpdate`; в `pending`/`approved` — нет, условие в фильтре), поля обработки (worker) и публикация
+  (routes-06, ниже); удаляет автор — `RouteDeletion.deleteOwn` в `MongoTransactions.run`: `routes` (фильтр `{ _id,
+  ownerUserId, origin: 'rider' }`) → `route_geometries` → `route_sources` → `route_exports` → жалобы
+  (`RouteReportsRepository.deleteForRoute`), без журнала и outbox; конфликт с `markReady` — write conflict по документу
+  `routes` → повтор.
+  Удалён во время обработки — worker `skipped` (захват `null`; исходника и маршрута нет). **Порты гонок и панель —
+  только `origin: 'platform'` в фильтре** (`findReady`, `findPublished`, `routesByIds`, `listVisible`); публичный каталог
+  — только условие `IN_CATALOG` (платформа или `publication.status: 'approved'`, routes-06); «мои» — только методы
+  `*Own` с `{ ownerUserId, origin: 'rider' }`. Запрос каталога — `hint('routes_catalog_idx')` (`origin` в фильтре делает
+  кандидатом `routes_list_idx`).
+- Публикация маршрута райдера (routes-06): поле `routes.publication` (`RoutePublicationDoc`: `status` `pending |
+  approved | rejected | hidden | withdrawn`, город, покрытие, `showAuthorName`, `submissionCount` ≤ 3, даты,
+  `rejection`, `openReportCount`/`lastReportAt`, `reportRevision` (`$inc` каждой жалобой — маркер «Отклонить жалобы»,
+  `lastReportAt` — только порядок очереди), `version`); нет поля — «не подавался» (`?? null`, бэкфилла нет).
+  **`catalog` маршрута райдера заполнен ⇔ `publication.status = 'approved'`** — одна запись с переходом (одобрение и
+  «Вернуть» пишут, отклонение, скрытие, отзыв и снятие — снимают). Каждый переход — одна условная запись документа
+  `routes` (`publicationTransition` в `routes.policy.ts`; модерация — `publication.version` в фильтре, `+1` кроме жалобы
+  и «Отклонить жалобы»; переименование автором при заявке — тоже `+1`); подача — pipeline (`$mergeObjects`, значения — `$literal`, счётчики и жалобы — от прежних,
+  `submissionCount < 3` в фильтре). Действия автора — без журнала; подача — транзакция «запись `routes` → суточная
+  квота» (проигравшая параллельная подача квоту не тратит, 429 откатывает запись); действия модератора — транзакция:
+  **первой** — запись `routes`, затем `route_reports.closeOpen`, `PanelAudit.append`, outbox. Лимит «≤ 3 на проверке» —
+  `countDocuments` до записи, **принятая гонка** (8.1 RC-7, комментарий в репозитории).
+- Жалобы на маршруты райдеров — `route_reports` (routes-06), единственный писатель `RouteReportsRepository`: вставка,
+  закрытие открытых (`resolvedAt: null` → дата, как `ride_reports`) и **единственное удаление** — `deleteForRoute` в
+  транзакции удаления маршрута (U6, 8.1 RC-5); жалобы удалённого жалобщика хранятся. Сторож —
+  `route-reports.repository.test.ts`. Жалоба — транзакция, **первой** — `recordRouteReport` (`$inc openReportCount` и
+  `reportRevision`, `$max lastReportAt`, условия в фильтре): гонка с «Скрыть» — write conflict (отрицательное доказательство — гонка в
+  `route-reports.int.test.ts`). Миграция `0029_routes_publication` (expand-only): `route_reports_route_reporter_unique`,
+  `route_reports_route_idx`; частичные индексы очередей `routes_publication_pending_idx` (`publication.status:
+  'pending'`), `routes_publication_reports_idx` (`publication.openReportCount > 0`), `routes_publication_hidden_idx`
+  (`publication.status: 'hidden'`) — запрос очереди содержит условие индекса и `hint`.
 - Исходник GPX — в `route_sources` (BSON Binary ≤ 5 МиБ), **не** в `TrackFileStore`: уборка `tracks-maintenance`
   удаляет файлы без документа `track_uploads` и стёрла бы маршрут. Наружу исходник, sha256 и линия сверки не выходят.
 - Дедуп загрузки — `routes_owner_origin_sha_unique { ownerUserId, origin, sha256 }` (`0021_routes_rider`: создаёт его и
@@ -155,8 +181,9 @@ paths:
   версии), сбой окружения — без метки. Документы до `0022_routes_derived` полей не имеют — чтение `?? null`, выборка
   бэкфилла — `$exists: false` или `$lt` версии по `route_geometries_derived_idx { derivedVersion: 1 }` (IXSCAN, int-тест).
   Миграция `0022_routes_derived` (expand-only): коллекция `route_exports` и индекс; данные досчитывает регламент.
-- **Удаление аккаунта** — `RouteErasure.erase`: все `routes` `origin: 'rider'` автора (`ownIds`) — `deleteOwn` по
-  каждому в своей транзакции (с `route_geometries`/`route_sources`/`route_exports`); маршруты платформы — остаются.
+- **Удаление аккаунта** — `RouteErasure.erase`: все `routes` `origin: 'rider'` автора (`ownIds`) —
+  `RouteDeletion.deleteOwn` по каждому в своей транзакции (с `route_geometries`/`route_sources`/`route_exports`,
+  публикацией и жалобами на маршрут); маршруты платформы и жалобы удалённого на чужие маршруты — остаются.
 
 ## Заявки и попытки (race-results-03)
 

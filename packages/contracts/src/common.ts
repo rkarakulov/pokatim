@@ -75,6 +75,8 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'RACE_TIER_LOCKED',
   'RESULT_GROUP_NOT_ALLOWED',
   'VERIFIED_DEMOGRAPHICS_LOCKED',
+  // routes-06: лимит подач маршрута в каталог (details: limit, max)
+  'ROUTE_PUBLICATION_LIMIT',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

@@ -62,6 +62,23 @@ paths:
   `RoutesService.accept({ userId, origin }, …)`: формат — `detectRouteFormat` (GPX/KML; панель — API и UI,
   `.gpx,.kml`), журнал панели — только `platform`, outbox `routes.route-received` и worker `route-processing` —
   общие. Порты `RouteCatalog`/`RouteGeometry` и `RoutesCatalogService` видят только `platform`. Мутации «моих» — `POST` с глаголом (`rename`, `delete`).
+- Публикация маршрутов райдеров (routes-06): порядок контроллеров `RoutesModule` — `RoutesMineController`,
+  `RoutesViewerController`, `RoutesAdminController`, `RoutesModerationController`, `RoutesPublicController`.
+  `RoutesMineController` + `publish`/`unpublish` → `MyRoutePublicationService` (атомарная запись без журнала;
+  подача — транзакция: условная запись, затем лимит `routes-publication-submit:<uid>` 10/сут — квоту тратят только
+  успешные подачи, отказ 409 и проигравшая параллельная подача — нет, 429 откатывает запись);
+  `RoutesViewerController` (`@Controller('routes')` + `AuthGuard`, `:id/me`, `:id/reports`) → `RouteReportsService`
+  (лимит `routes-report:<uid>` 20/сут); `RoutesModerationController` (`admin/rider-routes`, `PanelGuard` +
+  `routes.moderate`) → `RoutesModerationService`. Публичный каталог — `findInCatalog`/`listCatalog` (`IN_CATALOG`);
+  карта маршрута райдера — `displayGeometryOf` без кэша, маршрута команды — порт `ROUTE_GEOMETRY`; «Гонки на маршруте»
+  (`races`, порт `inCatalog` — только платформа) для маршрута райдера — `404` (U7). Имя автора — порт `profile`
+  `RIDER_NAMES.attributionNames` (только `publicName`, без `showNameInResults`; согласие — `publication.showAuthorName`),
+  один вызов на страницу, читается на каждом запросе; `RoutesModule` импортирует `ProfileCoreModule`.
+  Удаление маршрута (автор и `RouteErasure`) — `RouteDeletion` (маршрут + жалобы). Событие outbox
+  `routes.publication-decided` (`routeId`, `authorUserId`, `decision`, `decidedAt`) — **без маршрута** в
+  `routesOutboxRoutes` (как `results.protocol-published`): лежит `publishedAt: null`. **Правило «хвост» (8.1 RC-3):**
+  слайс уведомлений перед добавлением маршрута события — миграция, помечающая накопленные `publishedAt`, или потребитель
+  пропускает события с `decidedAt` старше 7 дней (иначе авторам уйдут уведомления о давних решениях).
 - Общий код загрузок в `src/`: `raw-body.ts` (`readLimited` — тело `application/octet-stream` после гарда и лимита,
   обрыв на лимите — `413` с кодом модуля, тишина > 30 с или тело > 180 с — `408 VALIDATION_FAILED` (`body`), оба —
   с `Connection: close`), `upload-slots.ts` (`UploadSlots` — слоты приёма заездов и «моих маршрутов»: предел процесса

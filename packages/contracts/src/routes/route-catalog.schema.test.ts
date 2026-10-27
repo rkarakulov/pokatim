@@ -10,6 +10,8 @@ import {
   CatalogRoutePage,
   CatalogRouteQuery,
   CatalogRouteRacesQuery,
+  CatalogRouteAuthor,
+  ROUTE_AUTHOR_KINDS,
   ROUTE_DISTANCE_BUCKETS,
   RouteMapGeometry,
 } from './route-catalog.schema.ts';
@@ -77,16 +79,22 @@ describe('каталог маршрутов (routes-01)', () => {
   });
 
   it('CatalogRouteCard: незнакомые город и покрытие — unknown; лишние поля отбрасываются', () => {
-    expect(CatalogRouteCard.parse(card)).toEqual(card);
+    expect(CatalogRouteCard.parse(card)).toEqual({ ...card, author: { kind: 'team' } });
     expect(
       CatalogRouteCard.parse({ ...card, city: 'kaunas', surfaces: ['asphalt', 'cobbles'] }),
-    ).toEqual({ ...card, city: 'unknown', surfaces: ['asphalt', 'unknown'] });
+    ).toEqual({
+      ...card,
+      city: 'unknown',
+      surfaces: ['asphalt', 'unknown'],
+      author: { kind: 'team' },
+    });
     expect(CatalogRouteCard.parse({ ...card, elevationGainM: null }).elevationGainM).toBeNull();
     expect(Object.keys(CatalogRouteCard.parse({ ...card, ownerUserId: ID })).sort()).toEqual(
-      Object.keys(card).sort(),
+      [...Object.keys(card), 'author'].sort(),
     );
     expect(CatalogRouteDetail.parse(card)).toEqual({
       ...card,
+      author: { kind: 'team' },
       elevation: null,
       gpxAvailable: false,
     });
@@ -103,9 +111,11 @@ describe('каталог маршрутов (routes-01)', () => {
       ],
     };
     const detail = { ...card, elevation, gpxAvailable: true };
-    expect(CatalogRouteDetail.parse(detail)).toEqual(detail);
+    const team = { kind: 'team' };
+    expect(CatalogRouteDetail.parse(detail)).toEqual({ ...detail, author: team });
     expect(CatalogRouteDetail.parse({ ...card, elevation: null, gpxAvailable: true })).toEqual({
       ...card,
+      author: team,
       elevation: null,
       gpxAvailable: true,
     });
@@ -168,5 +178,31 @@ describe('каталог маршрутов (routes-01)', () => {
     });
     expect(CatalogRouteRacesQuery.safeParse({ limit: '51' }).success).toBe(false);
     expect(CatalogRouteRacesQuery.safeParse({ scope: 'past' }).success).toBe(false);
+  });
+});
+
+describe('маршруты райдеров в каталоге (routes-06)', () => {
+  it('автор: команда или райдер с именем/null; нет поля — команда (новый клиент, старый API)', () => {
+    expect(ROUTE_AUTHOR_KINDS).toEqual(['team', 'rider']);
+    for (const author of [
+      { kind: 'team' },
+      { kind: 'rider', name: null },
+      { kind: 'rider', name: 'Аня' },
+    ]) {
+      expect(CatalogRouteCard.parse({ ...card, author }).author).toEqual(author);
+      expect(CatalogRouteDetail.parse({ ...card, author }).author).toEqual(author);
+    }
+    expect(CatalogRouteAuthor.safeParse({ kind: 'rider' }).success).toBe(false);
+    expect(CatalogRouteAuthor.parse({ kind: 'team', name: 'x' })).toEqual({ kind: 'team' });
+  });
+
+  it('CatalogRouteQuery.author: одна строка — массив, обе; неизвестное значение и > 2 — ошибка', () => {
+    expect(CatalogRouteQuery.parse({ author: 'rider' })).toEqual({ limit: 20, author: ['rider'] });
+    expect(CatalogRouteQuery.parse({ author: ['team', 'rider'] }).author).toEqual([
+      'team',
+      'rider',
+    ]);
+    expect(CatalogRouteQuery.safeParse({ author: 'platform' }).success).toBe(false);
+    expect(CatalogRouteQuery.safeParse({ author: ['team', 'rider', 'team'] }).success).toBe(false);
   });
 });

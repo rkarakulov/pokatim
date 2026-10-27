@@ -7,6 +7,7 @@ describe('фильтры каталога маршрутов (routes-01)', () =>
     expect(hasFilters({ ...NO_FILTERS, distance: ['lt50'] })).toBe(true);
     expect(hasFilters({ ...NO_FILTERS, surface: ['gravel'] })).toBe(true);
     expect(hasFilters({ ...NO_FILTERS, city: ['minsk'] })).toBe(true);
+    expect(hasFilters({ ...NO_FILTERS, author: ['rider'] })).toBe(true);
   });
 
   it('исчезнувший город снимается; до ответа — без изменений', () => {
