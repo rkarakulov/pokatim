@@ -4,7 +4,7 @@ import { SkeletonGroup } from '@rkarakulov/ui';
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { MAP_ASPECT_RATIO } from '@/features/maps/corridor-style';
+import { MAP_ASPECT_RATIO, ROUTE_CATALOG_LINE_WIDTH } from '@/features/maps/corridor-style';
 import { RouteMap } from '@/features/maps/route-map';
 import { withoutCorridor } from '@/features/maps/route-geometry';
 import { useMapStyle } from '@/features/maps/use-map-style';
@@ -16,7 +16,7 @@ import { useCatalogRouteMap } from './queries';
  * Карта маршрута каталога (routes-01, RC-5/RC-16): линия, старт и финиш без коридора. SSR и первый клиентский рендер
  * — место карты (скелетон той же пропорции): env стиля и геометрия известны только после монтирования. Затем: env не
  * задан, нативного модуля нет, геометрия 404 или ошибка без данных — блока нет (цифры карточки остаются); иначе —
- * карта по теме приложения. Подпись — текстовая альтернатива без координат.
+ * карта по теме приложения, линия маршрута толще карты гонки (routes-03). Подпись — текстовая альтернатива без координат.
  */
 export function CatalogRouteMap({ route }: { route: CatalogRouteDetail }) {
   const { mounted, styleUrl, theme } = useMapStyle();
@@ -43,6 +43,7 @@ export function CatalogRouteMap({ route }: { route: CatalogRouteDetail }) {
       key={`${styleUrl}|${map.bounds.join(',')}`}
       map={map}
       corridor={false}
+      lineWidth={ROUTE_CATALOG_LINE_WIDTH}
       styleUrl={styleUrl}
       theme={theme}
       accessibilityLabel={t('routes.detail.map.label', { distance: routeKm(route.distanceM) })}

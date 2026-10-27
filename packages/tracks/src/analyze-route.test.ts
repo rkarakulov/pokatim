@@ -3,7 +3,14 @@ import { readFileSync } from 'node:fs';
 import { XMLValidator } from 'fast-xml-parser';
 import { describe, expect, it, vi } from 'vitest';
 
-import { analyzeRoute, ROUTE_MAX_POINTS, TrackParseError } from './parse.ts';
+import {
+  analyzeRoute,
+  deriveRoute,
+  parseGpx,
+  ROUTE_DERIVED_VERSION,
+  ROUTE_MAX_POINTS,
+  TrackParseError,
+} from './parse.ts';
 import { simplifyTrack } from './simplify.ts';
 
 const fixture = (name: string) =>
@@ -59,6 +66,8 @@ describe('analyzeRoute', () => {
         'line',
         'matchLine',
         'sourcePointCount',
+        'profile',
+        'gpx',
       ].sort(),
     );
   });
@@ -147,5 +156,45 @@ describe('analyzeRoute', () => {
     expect(result.line[0]).toEqual([27.5, 53.9]);
     expect(result.line.at(-1)).toEqual(result.finish);
     expect(result.matchLine.at(-1)).toEqual(result.finish);
+  });
+});
+
+describe('analyzeRoute: профиль высоты и очищенный GPX (routes-03)', () => {
+  it.each(['route-loop.gpx', 'route-rte.gpx', 'route-trk-no-time.gpx'])(
+    '%s: профиль от 0 до distanceM, GPX — точки линии сверки',
+    (name) => {
+      const result = analyzeRoute(fixture(name));
+      const profile = result.profile!;
+      expect(profile.length).toBeGreaterThanOrEqual(2);
+      expect(profile.length).toBeLessThanOrEqual(300);
+      expect(profile[0]![0]).toBe(0);
+      expect(profile.at(-1)![0]).toBe(result.distanceM);
+      const gpx = parseGpx(result.gpx, { allowRoute: true });
+      expect(gpx.points.map((p) => [p.lon, p.lat])).toEqual(
+        result.matchLine.map(([lon, lat]) => [Number(lon.toFixed(6)), Number(lat.toFixed(6))]),
+      );
+      expect(result.gpx).not.toContain('<name');
+      expect(result.gpx).not.toContain('<metadata');
+    },
+  );
+
+  it('маршрут без высот — profile: null, GPX без <ele>', () => {
+    const result = analyzeRoute(utf8(trkGpx(straight(20, 0.001))));
+    expect(result.profile).toBeNull();
+    expect(result.gpx).not.toContain('<ele>');
+    expect(result.gpx).toContain('<trkpt');
+  });
+
+  it('deriveRoute ≡ { profile, gpx } из analyzeRoute; отказы — те же коды', () => {
+    expect(ROUTE_DERIVED_VERSION).toBeGreaterThanOrEqual(1);
+    for (const name of ['route-loop.gpx', 'route-rte.gpx', 'zero-points.gpx']) {
+      const { profile, gpx } = analyzeRoute(fixture(name));
+      const derived = deriveRoute(fixture(name));
+      expect(derived).toEqual({ profile, gpx });
+      expect(structuredClone(derived)).toEqual(derived);
+    }
+    expect(failureCode(() => deriveRoute(fixture('xxe.gpx')))).toBe('unreadable');
+    expect(failureCode(() => deriveRoute(fixture('route-short.gpx')))).toBe('too_short');
+    expect(failureCode(() => deriveRoute(fixture('garmin-edge-ride.fit')))).toBe('unreadable');
   });
 });

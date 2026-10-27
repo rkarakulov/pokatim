@@ -27,6 +27,7 @@ import { rideReports } from './0017_ride_reports';
 import { disputes } from './0018_disputes';
 import { profileConsents } from './0019_profile_consents';
 import { routesCatalog } from './0020_routes_catalog';
+import { routesDerived } from './0021_routes_derived';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
@@ -89,6 +90,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0018_disputes',
       '0019_profile_consents',
       '0020_routes_catalog',
+      '0021_routes_derived',
     ]);
   });
 
@@ -352,7 +354,10 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
           partialFilterExpression: { 'catalog.publishedAt': { $type: 'date' } },
         },
       },
-      [ROUTES_COLLECTIONS.geometries]: {},
+      // 0021_routes_derived (routes-03): выборка бэкфилла производных
+      [ROUTES_COLLECTIONS.geometries]: {
+        route_geometries_derived_idx: index({ derivedVersion: 1 }),
+      },
       [ROUTES_COLLECTIONS.sources]: {},
     };
     for (const [name, indexes] of Object.entries(expected)) {
@@ -611,7 +616,6 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
   });
 
   it('0020_routes_catalog: частичный индекс каталога, индекс гонок маршрута, бэкфилл routes.catalog = null; повторный up — без изменений', async () => {
-    expect(migrations.at(-1)?.id).toBe('0020_routes_catalog');
     const routeIndexes = await indexesOf(ROUTES_COLLECTIONS.routes);
     expect(routeIndexes.routes_catalog_idx).toEqual({
       key: { 'catalog.publishedAt': -1, _id: -1 },
@@ -657,6 +661,29 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
 
     expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toEqual(routeIndexes);
     expect(await indexesOf(RACES_COLLECTIONS.races)).toEqual(raceIndexes);
+  });
+
+  it('0021_routes_derived: коллекция route_exports, индекс бэкфилла; после 0020; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0021_routes_derived');
+    expect(ids.indexOf('0021_routes_derived')).toBe(ids.indexOf('0020_routes_catalog') + 1);
+    const exists = () =>
+      h.db.listCollections({ name: ROUTES_COLLECTIONS.exports }, { nameOnly: true }).toArray();
+    const expected = {
+      route_geometries_derived_idx: {
+        key: { derivedVersion: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await exists()).toHaveLength(1);
+    expect(await indexesOf(ROUTES_COLLECTIONS.exports)).toEqual({});
+    expect(await indexesOf(ROUTES_COLLECTIONS.geometries)).toEqual(expected);
+    await routesDerived.up(h.db);
+    await routesDerived.up(h.db);
+    expect(await exists()).toHaveLength(1);
+    expect(await indexesOf(ROUTES_COLLECTIONS.geometries)).toEqual(expected);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

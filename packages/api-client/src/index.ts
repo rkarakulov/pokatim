@@ -300,6 +300,11 @@ export function createApiClient({
     /** Линия показа, старт, финиш, рамка (без коридора). */
     getCatalogRouteMap: (id: string) =>
       getPublic(`/v1/routes/${encodeURIComponent(id)}/map`, RouteMapGeometry),
+    /**
+     * Адрес очищенного GPX маршрута каталога (routes-03) — без запроса: файл скачивает браузер или ОС
+     * (`Content-Disposition: attachment`).
+     */
+    catalogRouteGpxUrl: (id: string) => `${baseUrl}/v1/routes/${encodeURIComponent(id)}/gpx`,
     /** Публичные гонки с коридором по маршруту, новые окна сверху; маршрут не в каталоге — 404. */
     listCatalogRouteRaces: (id: string, params: CatalogRouteRacesParams = {}) =>
       getPublic(`/v1/routes/${encodeURIComponent(id)}/races${queryString(params)}`, RacePage),

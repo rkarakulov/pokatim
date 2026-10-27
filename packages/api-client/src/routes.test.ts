@@ -91,7 +91,12 @@ describe('каталог маршрутов (routes-01): публичные ме
     const cities = app(200, { cities: ['minsk', 'kaunas'] });
     await expect(cities.api.listCatalogRouteCities()).resolves.toEqual({ cities: ['minsk'] });
     const detail = app(200, card);
-    await expect(detail.api.getCatalogRoute('a/b')).resolves.toEqual(card);
+    // API до routes-03 — без elevation и gpxAvailable: дефолты (RC-10)
+    await expect(detail.api.getCatalogRoute('a/b')).resolves.toEqual({
+      ...card,
+      elevation: null,
+      gpxAvailable: false,
+    });
     const map = app(200, geometry);
     await expect(map.api.getCatalogRouteMap('a/b')).resolves.toEqual(geometry);
     const races = app(200, { items: [], nextCursor: null });
@@ -111,6 +116,13 @@ describe('каталог маршрутов (routes-01): публичные ме
       expect(client.calls[0]?.method).toBe('GET');
       expect(client.calls[0]?.headers.has('authorization')).toBe(false);
     }
+  });
+
+  it('catalogRouteGpxUrl — адрес файла GPX без запроса, id экранируется', () => {
+    const client = app(200, {});
+    expect(client.api.catalogRouteGpxUrl('a/b')).toBe('https://api.test/v1/routes/a%2Fb/gpx');
+    expect(client.api.catalogRouteGpxUrl(ID)).toBe(`https://api.test/v1/routes/${ID}/gpx`);
+    expect(client.calls).toHaveLength(0);
   });
 
   it('404 — ApiHttpError; карта с одной точкой — ошибка разбора', async () => {

@@ -755,26 +755,54 @@ test.describe('с API', () => {
     }
   });
 
-  test('Маршруты (routes-01): карточка маршрута каталога по ссылке без входа (SSR, OG без ПДн), вкладка «Маршруты» после входа', async ({
+  test('Маршруты (routes-01, routes-03): карточка маршрута каталога по ссылке без входа (SSR, OG без ПДн, профиль высоты, «Скачать GPX»), вкладка «Маршруты» после входа', async ({
     page,
     request,
   }) => {
     const route = await publishCatalogRoute(request);
     try {
+      // routes-03: производные данные (профиль, GPX) — у нового маршрута сразу, у маршрута до слайса — после бэкфилла
+      // при старте worker; ждём опросом API (SSR-кэш процесса — 60 с, поэтому до первого запроса HTML карточки)
+      await expect
+        .poll(
+          async () =>
+            (
+              (await (await request.get(`${API_URL}/v1/routes/${route.id}`)).json()) as {
+                gpxAvailable?: boolean;
+              }
+            ).gpxAvailable,
+          { timeout: 60_000 },
+        )
+        .toBe(true);
       // SSR карточки: название и OG до JS, og:url — из WEB_ORIGIN, без e-mail и служебных полей
       const html = await (await request.get(`/routes/${route.id}`)).text();
       expect(html).toContain(`<meta property="og:title" content="${route.title}"`);
       expect(html).toContain(`<meta property="og:url" content="${BASE_URL}/routes/${route.id}"`);
       expect(html).toMatch(/<meta property="og:description" content="[^"]*км[^"]*· Минск"/);
       expect(html).not.toMatch(/@pokatim\.test|ownerUserId|sha256|noindex/);
+      // routes-03: SSR рендерит профиль высоты и его текстовую альтернативу
+      expect(html).toContain('Профиль высоты');
+      expect(html).toMatch(/Профиль высоты: от \d+ до \d+ м/);
 
-      // гость открывает карточку по ссылке: цифры, город и покрытие (вне гардов)
+      // гость открывает карточку по ссылке: стат-блок, чипы, профиль (вне гардов); консоль без ошибок гидрации
       await page.goto(`/routes/${route.id}`);
       await expect(page.getByText(route.title, { exact: true }).first()).toBeVisible();
       await expect(page).toHaveTitle(`${route.title} — Покатим`);
-      await expect(page.getByText('Длина', { exact: true })).toBeVisible();
-      await expect(page.getByText('Город старта', { exact: true })).toBeVisible();
+      await expect(page.getByText('Дистанция', { exact: true })).toBeVisible();
+      await expect(page.getByText('В пути', { exact: true })).toBeVisible();
+      await expect(page.getByText('Минск', { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole('img', { name: /^Профиль высоты: от / })).toBeVisible();
       await expect(page).toHaveURL(`${BASE_URL}/routes/${route.id}`);
+
+      // «Скачать GPX»: скачивание файла, страница остаётся
+      const downloaded = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Скачать GPX' }).click();
+      expect((await downloaded).suggestedFilename()).toMatch(/\.gpx$/);
+      await expect(page).toHaveURL(`${BASE_URL}/routes/${route.id}`);
+      const gpx = await request.get(`${API_URL}/v1/routes/${route.id}/gpx`);
+      expect(gpx.status()).toBe(200);
+      expect(gpx.headers()['content-disposition']).toMatch(/^attachment;/);
+      expect(await gpx.text()).not.toMatch(/<time|<metadata|<extensions/);
 
       // вкладка «Маршруты» после входа: маршрут прогона — в каталоге
       const rider = await registerHomeRider(request);
@@ -790,9 +818,9 @@ test.describe('с API', () => {
       await expect(page).toHaveURL(`${BASE_URL}/`);
       await page.getByRole('tab', { name: 'Маршруты' }).click();
       await expect(page).toHaveURL(`${BASE_URL}/routes`);
-      const card = page.getByRole('link', { name: new RegExp(`^${route.title}\\. `) });
-      await expect(card.first()).toBeVisible();
-      await card.first().click();
+      const listCard = page.getByRole('link', { name: new RegExp(`^${route.title}\\. `) });
+      await expect(listCard.first()).toBeVisible();
+      await listCard.first().click();
       await expect(page).toHaveURL(`${BASE_URL}/routes/${route.id}`);
     } finally {
       await route.withdraw();

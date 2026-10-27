@@ -7,14 +7,16 @@ import {
   RouteMapGeometry,
   type Surface,
 } from '@pokatim/contracts';
+import { parseGpx } from '@pokatim/tracks/parse';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
+import { Binary } from 'mongodb';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, type Harness, MINUTE } from '../../../test/harness';
 import { call } from '../../../test/identity';
 import { panelCall } from '../../../test/panel';
 import { staff } from '../../../test/races';
-import { ROUTES, routesDb } from '../../../test/routes';
+import { fixture, ROUTES, readyRoute, routesDb } from '../../../test/routes';
 import type { RouteDoc } from './routes.collection';
 
 /**
@@ -112,6 +114,8 @@ const CARD_KEYS = [
   'surfaces',
   'title',
 ];
+/** Карточка (routes-03): ключи списка + профиль высоты и признак GPX. */
+const DETAIL_KEYS = [...CARD_KEYS, 'elevation', 'gpxAvailable'].sort();
 const HIDDEN =
   /ownerUserId|sha256|"status"|failure|attempts|matchLine|sizeBytes|createdAt|updatedAt/;
 
@@ -277,11 +281,14 @@ describe('GET /v1/routes/:id и /map (AC3)', () => {
     const detail = await get(`/v1/routes/${id}`);
     expect(detail.status).toBe(200);
     expect(detail.headers['cache-control']).toBe('public, max-age=60');
-    expect(Object.keys(detail.body as object).sort()).toEqual(CARD_KEYS);
+    expect(Object.keys(detail.body as object).sort()).toEqual(DETAIL_KEYS);
     expect(CatalogRouteDetail.parse(detail.body)).toMatchObject({
       id,
       city: 'brest',
       surfaces: ['gravel'],
+      // маршрут до routes-03: производных данных нет
+      elevation: null,
+      gpxAvailable: false,
     });
     expect(JSON.stringify(detail.body)).not.toMatch(HIDDEN);
 
@@ -334,5 +341,132 @@ describe('GET /v1/routes/:id и /map (AC3)', () => {
       ).status,
     ).toBe(200);
     expect(CatalogRouteCard.parse((await get(`/v1/routes/${id}`)).body).city).toBe('gomel');
+  });
+});
+
+/** Публичный GET файла (тело — не JSON) с адреса `ip`. */
+const getRaw = (url: string, ip: string) =>
+  h.app.inject({ method: 'GET', url, headers: { 'x-forwarded-for': ip } });
+
+/** Производные данные маршрута (routes-03) — напрямую в БД (подготовка). */
+async function seedDerived(id: string, profile: [number, number][] | null, gpx: string) {
+  await routesDb(h).geometries.updateOne({ _id: id }, { $set: { profile, derivedVersion: 1 } });
+  const bytes = new TextEncoder().encode(gpx);
+  await routesDb(h).exports.insertOne({
+    _id: id,
+    gpx: new Binary(bytes),
+    sizeBytes: bytes.byteLength,
+    derivedVersion: 1,
+  });
+}
+
+const GPX_TEXT =
+  '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Pokatim" xmlns="http://www.topografix.com/GPX/1/1">\n<trk><trkseg>\n<trkpt lat="53.900000" lon="27.550000"><ele>191.0</ele></trkpt>\n<trkpt lat="53.910000" lon="27.560000"><ele>267.0</ele></trkpt>\n</trkseg></trk>\n</gpx>\n';
+
+describe('карточка: профиль высоты и gpxAvailable (routes-03, AC2, AC3)', () => {
+  it('без высот — elevation: null, gpxAvailable: true; с профилем — min/max по профилю', async () => {
+    const flat = await seedRoute();
+    await seedDerived(flat, null, GPX_TEXT);
+    const flatDetail = await get(`/v1/routes/${flat}`);
+    expect(Object.keys(flatDetail.body as object).sort()).toEqual(DETAIL_KEYS);
+    expect(flatDetail.body).toMatchObject({ elevation: null, gpxAvailable: true });
+
+    const hilly = await seedRoute();
+    const profile: [number, number][] = [
+      [0, 200],
+      [21_000, 191],
+      [42_000, 267],
+    ];
+    await seedDerived(hilly, profile, GPX_TEXT);
+    expect(CatalogRouteDetail.parse((await get(`/v1/routes/${hilly}`)).body)).toMatchObject({
+      elevation: { minM: 191, maxM: 267, profile },
+      gpxAvailable: true,
+    });
+  });
+
+  it('новый маршрут после разбора worker: профиль ≤ 300 точек от 0 до distanceM, GPX доступен', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const id = await readyRoute(h, org.token, 'route-trk-no-time.gpx', 'Холмы');
+    expect(
+      (
+        await panelCall(h, org.token, 'POST', `${ROUTES}/${id}/publish`, {
+          city: 'minsk',
+          surfaces: ['asphalt'],
+        })
+      ).status,
+    ).toBe(200);
+    const detail = CatalogRouteDetail.parse((await get(`/v1/routes/${id}`)).body);
+    const elevation = detail.elevation!;
+    expect(detail.gpxAvailable).toBe(true);
+    expect(elevation.minM).toBeLessThanOrEqual(elevation.maxM);
+    expect(elevation.profile.length).toBeLessThanOrEqual(300);
+    expect(elevation.profile[0]![0]).toBe(0);
+    expect(elevation.profile.at(-1)![0]).toBe(detail.distanceM);
+
+    const res = await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.7');
+    expect(res.statusCode).toBe(200);
+    const gpx = res.body;
+    expect(parseGpx(gpx).points.length).toBeGreaterThan(1);
+    for (const hidden of ['<time', '<extensions', '<metadata', '<name', 'Холмы']) {
+      expect(gpx).not.toContain(hidden);
+    }
+    // в исходнике есть metadata и имя трека — в очищенный файл они не попадают
+    const source = fixture('route-trk-no-time.gpx').toString('utf8');
+    expect(source).toContain('<metadata><name>Маршрут планировщика</name></metadata>');
+    expect(gpx).not.toContain('Маршрут планировщика');
+  });
+});
+
+describe('GET /v1/routes/:id/gpx (routes-03, AC4)', () => {
+  it('200: тело — байты экспорта, заголовки файла, кэш, nosniff, CSP sandbox; имя из названия', async () => {
+    const id = await seedRoute({ title: 'Круг (Минск) \u202Eexe.gpx' });
+    await seedDerived(id, null, GPX_TEXT);
+    const res = await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.1');
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe(GPX_TEXT);
+    expect(res.headers['content-type']).toBe('application/gpx+xml; charset=utf-8');
+    expect(res.headers['cache-control']).toBe('public, max-age=60');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
+    expect(res.headers['content-disposition']).toBe(
+      `attachment; filename="pokatim-route.gpx"; filename*=UTF-8''${encodeURIComponent('Круг ')}%28${encodeURIComponent('Минск')}%29%20exe.gpx.gpx`,
+    );
+  });
+
+  it('не опубликован, снят, processing, неизвестный, без экспорта — 404 без Content-Disposition; не UUID — 400', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const hidden = await seedRoute({ publishedAt: null });
+    await seedDerived(hidden, null, GPX_TEXT);
+    const unpublished = await seedRoute();
+    await seedDerived(unpublished, null, GPX_TEXT);
+    expect(
+      (await panelCall(h, org.token, 'POST', `${ROUTES}/${unpublished}/unpublish`, {})).status,
+    ).toBe(200);
+    const processing = await seedRoute({ status: 'processing', publishedAt: null });
+    const noExport = await seedRoute();
+    for (const id of [hidden, unpublished, processing, noExport, uuidv7()]) {
+      const res = await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.2');
+      expect(res.statusCode, id).toBe(404);
+      expect(res.json()).toMatchObject({ code: 'NOT_FOUND' });
+      expect(res.headers['content-disposition']).toBeUndefined();
+      expect(res.headers['content-type']).toContain('application/json');
+    }
+    expect((await getRaw('/v1/routes/not-a-uuid/gpx', '198.51.100.2')).statusCode).toBe(400);
+  });
+
+  it('31-й запрос с адреса — 429 + Retry-After; другой адрес не задет; public-read по-прежнему 300', async () => {
+    const id = await seedRoute();
+    await seedDerived(id, null, GPX_TEXT);
+    for (let i = 0; i < 30; i += 1) {
+      expect((await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.3')).statusCode).toBe(200);
+    }
+    const limited = await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.3');
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json()).toMatchObject({ code: 'RATE_LIMITED' });
+    expect(limited.headers['retry-after']).toBeDefined();
+    expect(limited.headers['content-disposition']).toBeUndefined();
+    expect((await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.4')).statusCode).toBe(200);
+    // карточка с того же адреса — лимит public-read (300) не исчерпан
+    expect((await getRaw(`/v1/routes/${id}`, '198.51.100.3')).statusCode).toBe(200);
   });
 });

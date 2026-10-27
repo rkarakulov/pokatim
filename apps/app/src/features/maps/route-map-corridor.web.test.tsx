@@ -1,10 +1,10 @@
 /// <reference types="jest" />
 import type { RaceRouteMap } from '@pokatim/contracts';
-import { themes } from '@pokatim/design-tokens';
+import { stroke, themes } from '@pokatim/design-tokens';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
-import { CORRIDOR_LAYER_ID } from './corridor-style';
+import { CORRIDOR_LAYER_ID, ROUTE_CATALOG_LINE_WIDTH } from './corridor-style';
 import type * as Loader from './load-maplibre';
 import { RouteMap } from './route-map';
 
@@ -114,5 +114,26 @@ describe('RouteMap без коридора (web, routes-01)', () => {
     const map = state.maps.at(-1)!;
     await act(async () => map.handlers.load!());
     expect(map.addLayer.mock.calls.map(([layer]) => layer.id)[0]).toBe(CORRIDOR_LAYER_ID);
+  });
+});
+
+describe('RouteMap: толщина линии (web, routes-03)', () => {
+  const routeWidth = (map: MockMap) =>
+    map.addLayer.mock.calls.find(([layer]) => layer.id === 'route')![0].paint['line-width'];
+
+  it('lineWidth — в слое route; без пропса — stroke.indicator (карта гонки)', async () => {
+    await render(<RouteMap {...props()} corridor={false} lineWidth={ROUTE_CATALOG_LINE_WIDTH} />);
+    await flush();
+    const catalog = state.maps.at(-1)!;
+    await act(async () => catalog.handlers.load!());
+    expect(routeWidth(catalog)).toBe(5);
+    await act(async () => root?.unmount());
+    root = null;
+
+    await render(<RouteMap {...props()} />);
+    await flush();
+    const race = state.maps.at(-1)!;
+    await act(async () => race.handlers.load!());
+    expect(routeWidth(race)).toBe(stroke.indicator);
   });
 });

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-import type { CorridorMatch, RouteAnalysis } from '@pokatim/tracks/parse';
+import type { CorridorMatch, RouteAnalysis, RouteDerived } from '@pokatim/tracks/parse';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -37,6 +37,22 @@ describe('runParseThread', () => {
     await expect(
       runParseThread('analyzeRoute', [fixture('route-short.gpx')], DEFAULT_PARSE_LIMITS),
     ).resolves.toEqual({ ok: false, code: 'too_short' });
+  });
+
+  it('deriveRoute в потоке (routes-03): профиль и GPX через structured clone; отказ — код', async () => {
+    const ok = await runParseThread<RouteDerived>(
+      'deriveRoute',
+      [fixture('route-loop.gpx')],
+      DEFAULT_PARSE_LIMITS,
+    );
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      expect(ok.result.profile![0]![0]).toBe(0);
+      expect(ok.result.gpx).toContain('creator="Pokatim"');
+    }
+    await expect(
+      runParseThread('deriveRoute', [fixture('xxe.gpx')], DEFAULT_PARSE_LIMITS),
+    ).resolves.toEqual({ ok: false, code: 'unreadable' });
   });
 
   it('дольше лимита — timeout', async () => {

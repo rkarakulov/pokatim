@@ -1,21 +1,21 @@
 import { apiErrorOf } from '@pokatim/api-client';
 import { Uuid, type CatalogRouteDetail } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
-import { i18n, t } from '@pokatim/i18n';
+import { t } from '@pokatim/i18n';
 import {
   AsyncContent,
   Banner,
   Button,
   EmptyState,
+  Pill,
   SkeletonGroup,
-  SkeletonHeroCard,
   SkeletonText,
   TextAction,
   textStyle,
   useTheme,
 } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -23,36 +23,22 @@ import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
-import { SectionHero } from '@/components/section-hero';
+import { StatBlock } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { MAP_ASPECT_RATIO } from '@/features/maps/corridor-style';
+import { api } from '@/lib/api';
+import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
 import { useMinskClockAfterMount, useMounted } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { CatalogRouteMap } from './catalog-route-map';
-import {
-  routeCity,
-  routeHeroDate,
-  routeKm,
-  routePlace,
-  routeShareDescription,
-  routeSurfaces,
-} from './format';
+import { ElevationProfile, PROFILE_ASPECT_RATIO } from './elevation-profile';
+import { routeChips, routeShareDescription, routeStatItems } from './format';
 import { useCatalogRoute, useCatalogRouteRaces } from './queries';
 
 export const routeDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
 export const routePath = (id: string) => `/routes/${encodeURIComponent(id)}`;
-
-/** Строка карточки: подпись и значение. */
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.row}>
-      <Text style={[textStyle('label'), { color: theme.text.secondary }]}>{label}</Text>
-      <Text style={[textStyle('body'), { color: theme.text.primary }]}>{children}</Text>
-    </View>
-  );
-}
 
 /** «Поделиться» ссылкой на web-карточку: share sheet / Web Share / копирование с «Ссылка скопирована». */
 function ShareAction({ route }: { route: CatalogRouteDetail }) {
@@ -65,11 +51,30 @@ function ShareAction({ route }: { route: CatalogRouteDetail }) {
   };
   return (
     <View style={styles.stack}>
-      <Button label={t('routes.detail.share')} variant="secondary" onPress={share} />
+      <Button label={t('routes.detail.share')} variant="primary" onPress={share} />
       {notice === 'copied' ? <Banner message={t('routes.detail.copied')} /> : null}
       {notice === 'failed' ? (
         <Banner tone="warning" message={t('routes.detail.shareFailed')} />
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * «Скачать GPX» (routes-03, P5, RC-6): очищенный файл маршрута с API — web скачивает в той же вкладке, native
+ * открывает системный браузер. Ошибка (нет браузера) — баннер под кнопкой; адрес не логируется.
+ */
+function GpxAction({ route }: { route: CatalogRouteDetail }) {
+  const [failed, setFailed] = useState(false);
+  const download = () => {
+    setFailed(false);
+    // синхронно в обработчике нажатия (web: клик по ссылке до любого await)
+    downloadFile(api.catalogRouteGpxUrl(route.id)).catch(() => setFailed(true));
+  };
+  return (
+    <View style={styles.stack}>
+      <Button label={t('routes.detail.gpx')} variant="secondary" onPress={download} />
+      {failed ? <Banner tone="warning" message={t('routes.detail.gpxFailed')} /> : null}
     </View>
   );
 }
@@ -154,9 +159,9 @@ function RouteRaces({
 }
 
 /**
- * Поля маршрута каталога (D4): типографский герой (длина крупно, название, город и покрытие), карта без коридора,
- * длина, набор, петля, город старта, покрытие, «Поделиться» (нет origin — кнопки нет), «Гонки на маршруте».
- * `'unknown'` в городе и покрытии — без строки (R6).
+ * Карточка маршрута каталога (routes-03, P1): карта с толстой линией, название, чипы (покрытия, форма, город;
+ * `'unknown'` — без чипа), стат-блок (дистанция, набор, время в пути), профиль высоты, действия («Поделиться» —
+ * primary, нет origin — кнопки нет; «Скачать GPX» — secondary, только при `gpxAvailable`), «Гонки на маршруте».
  */
 function RouteDetailView({
   route,
@@ -169,32 +174,53 @@ function RouteDetailView({
   now: Date | null;
   mounted: boolean;
 }) {
-  const city = routeCity(route);
-  const surfaces = routeSurfaces(route);
-  const place = routePlace(route);
+  const theme = useTheme();
   const canShare = mounted && shareOrigin() !== null;
   return (
     <View style={styles.detail}>
-      <SectionHero
-        kicker={t('routes.detail.kicker')}
-        date={routeHeroDate(route)}
-        title={route.title}
-        meta={place ? [place] : undefined}
-      />
       <CatalogRouteMap route={route} />
-      <Row label={t('routes.detail.length')}>{routeKm(route.distanceM)}</Row>
-      {route.elevationGainM !== null ? (
-        <Row label={t('routes.detail.elevation')}>
-          {t('routes.detail.elevationValue', { gain: i18n.formatNumber(route.elevationGainM) })}
-        </Row>
+      <Text
+        accessibilityRole="header"
+        style={[textStyle('displaySm'), { color: theme.text.primary }]}
+      >
+        {route.title}
+      </Text>
+      <View testID="route-chips" style={styles.chips}>
+        {routeChips(route).map((chip) => (
+          <Pill key={chip} label={chip} />
+        ))}
+      </View>
+      <StatBlock items={routeStatItems(route)} />
+      <ElevationProfile
+        elevation={route.elevation}
+        distanceM={route.distanceM}
+        gainM={route.elevationGainM}
+      />
+      {canShare || route.gpxAvailable ? (
+        <View style={styles.stack}>
+          {canShare ? <ShareAction route={route} /> : null}
+          {route.gpxAvailable ? <GpxAction route={route} /> : null}
+        </View>
       ) : null}
-      <Row label={t('routes.detail.loop')}>
-        {route.isLoop ? t('routes.detail.yes') : t('routes.detail.no')}
-      </Row>
-      {city ? <Row label={t('routes.detail.city')}>{city}</Row> : null}
-      {surfaces ? <Row label={t('routes.detail.surface')}>{surfaces}</Row> : null}
-      {canShare ? <ShareAction route={route} /> : null}
       <RouteRaces races={races} now={now} />
+    </View>
+  );
+}
+
+/** Скелетон карточки — та же раскладка: место карты, название, стат-блок, профиль. */
+function RouteDetailSkeleton() {
+  const theme = useTheme();
+  const block = { backgroundColor: theme.surface.skeleton };
+  return (
+    <View testID="route-detail-skeleton" style={styles.detail}>
+      <SkeletonGroup>
+        <View style={[styles.mapPlace, block]} />
+      </SkeletonGroup>
+      <SkeletonText variant="displaySm" lines={1} lastLineWidth="70%" />
+      <SkeletonText variant="displayStat" lines={2} lastLineWidth="60%" />
+      <SkeletonGroup>
+        <View style={[styles.profilePlace, block]} />
+      </SkeletonGroup>
     </View>
   );
 }
@@ -266,15 +292,7 @@ export function RouteDetailScreen({
             }}
           />
         ) : (
-          <AsyncContent
-            query={route}
-            skeleton={
-              <View style={styles.detail}>
-                <SkeletonHeroCard />
-                <SkeletonText variant="body" lines={4} lastLineWidth="60%" />
-              </View>
-            }
-          >
+          <AsyncContent query={route} skeleton={<RouteDetailSkeleton />}>
             {(data) => <RouteDetailView route={data} races={races} now={now} mounted={mounted} />}
           </AsyncContent>
         )}
@@ -288,7 +306,9 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
   detail: { gap: space.s4 },
   offline: { paddingBottom: space.s3 },
-  row: { gap: space.s1 },
+  mapPlace: { width: '100%', aspectRatio: MAP_ASPECT_RATIO },
+  profilePlace: { width: '100%', aspectRatio: PROFILE_ASPECT_RATIO },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.s2 },
   stack: { gap: space.s3 },
   racesTitle: { marginBottom: space.s2 },
   more: { alignItems: 'flex-start', paddingTop: space.s2 },

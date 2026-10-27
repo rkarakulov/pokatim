@@ -3,6 +3,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import { RACE_ROUTE_MAX_POINTS, type RaceRouteMap } from '../races/race-route.schema.ts';
 import {
   CATALOG_ROUTE_LIST_MAX_LIMIT,
+  CATALOG_ROUTE_PROFILE_MAX_POINTS,
   CatalogRouteCard,
   CatalogRouteCities,
   CatalogRouteDetail,
@@ -84,8 +85,57 @@ describe('каталог маршрутов (routes-01)', () => {
     expect(Object.keys(CatalogRouteCard.parse({ ...card, ownerUserId: ID })).sort()).toEqual(
       Object.keys(card).sort(),
     );
-    expect(CatalogRouteDetail.parse(card)).toEqual(card);
+    expect(CatalogRouteDetail.parse(card)).toEqual({
+      ...card,
+      elevation: null,
+      gpxAvailable: false,
+    });
     expect(CatalogRoutePage.parse({ items: [card], nextCursor: null }).items).toHaveLength(1);
+  });
+
+  it('CatalogRouteDetail (routes-03): профиль высоты и gpxAvailable; без полей — дефолты (RC-10)', () => {
+    const elevation = {
+      minM: 191,
+      maxM: 267,
+      profile: [
+        [0, 191],
+        [86_012, 267],
+      ],
+    };
+    const detail = { ...card, elevation, gpxAvailable: true };
+    expect(CatalogRouteDetail.parse(detail)).toEqual(detail);
+    expect(CatalogRouteDetail.parse({ ...card, elevation: null, gpxAvailable: true })).toEqual({
+      ...card,
+      elevation: null,
+      gpxAvailable: true,
+    });
+    expect(CATALOG_ROUTE_PROFILE_MAX_POINTS).toBe(300);
+    const point = [0, 200];
+    for (const broken of [
+      { ...elevation, profile: [[0, 191]] },
+      {
+        ...elevation,
+        profile: Array.from({ length: CATALOG_ROUTE_PROFILE_MAX_POINTS + 1 }, () => point),
+      },
+      {
+        ...elevation,
+        profile: [
+          [0, 191.5],
+          [10, 192],
+        ],
+      },
+      {
+        ...elevation,
+        profile: [
+          [-1, 191],
+          [10, 192],
+        ],
+      },
+      { ...elevation, minM: 1.5 },
+    ]) {
+      expect(CatalogRouteDetail.safeParse({ ...card, elevation: broken }).success).toBe(false);
+    }
+    expect(CatalogRouteDetail.safeParse({ ...card, gpxAvailable: 'yes' }).success).toBe(false);
   });
 
   it('CatalogRouteCities: незнакомые коды отбрасываются', () => {

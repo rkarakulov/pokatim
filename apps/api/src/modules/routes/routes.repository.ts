@@ -41,13 +41,21 @@ export interface CatalogPosition {
   id: string;
 }
 
+/** Производные данные маршрута (routes-03) для карточки: `null` — не посчитаны или нет высот. */
+export interface RouteDerivedState {
+  profile: [number, number][] | null;
+  derivedVersion: number | null;
+}
+
 /** Опубликован в каталоге — условие частичного индекса `routes_catalog_idx` (обязательно в запросе каталога). */
 const IN_CATALOG = { 'catalog.publishedAt': { $type: 'date' } } as const;
 
 /**
  * Единственный писатель `routes`, `route_geometries`, `route_sources` (race-results-01). Правила (`pokatim-db.md`):
  * - переход статуса — только из `processing` (условие в фильтре): повтор задачи после `ready`/`failed` — no-op;
- * - готовый маршрут не меняется (геометрия пишется один раз, вместе с переходом в `ready`);
+ * - готовый маршрут не меняется (линии и длина пишутся один раз, вместе с переходом в `ready`);
+ * - производные данные (`profile`, `derivedVersion`, `route_exports`, routes-03) пишут только `markReady` и
+ *   `recordDerived` — обе с экспортом GPX в одной транзакции (инвариант «есть `derivedVersion` ⇒ есть экспорт»);
  * - значения фильтров — только примитивы после zod (id, статус).
  */
 @Injectable()
@@ -205,14 +213,15 @@ export class RoutesRepository {
   }
 
   /**
-   * Переход `processing → ready` с геометрией — в транзакции. `false` — маршрут уже не `processing` (повтор задачи):
-   * транзакция откатывается вызывающим, геометрия не остаётся.
+   * Переход `processing → ready` с геометрией, производными данными и очищенным GPX — в транзакции. `false` — маршрут
+   * уже не `processing` (повтор задачи): транзакция откатывается вызывающим, геометрия и экспорт не остаются.
    */
   async markReady(
     session: DbSession,
     id: string,
     fields: RouteReadyFields,
-    geometry: Omit<RouteGeometryDoc, '_id'>,
+    geometry: Omit<RouteGeometryDoc, '_id' | 'derivedFailure'> & { derivedVersion: number },
+    gpx: Uint8Array,
     now: Date,
   ): Promise<boolean> {
     const result = await this.c.routes.updateOne(
@@ -233,7 +242,87 @@ export class RoutesRepository {
     );
     if (result.modifiedCount !== 1) return false;
     await this.c.geometries.replaceOne({ _id: id }, geometry, { session, upsert: true });
+    await this.writeExport(session, id, gpx, geometry.derivedVersion);
     return true;
+  }
+
+  private async writeExport(
+    session: DbSession,
+    id: string,
+    gpx: Uint8Array,
+    derivedVersion: number,
+  ): Promise<void> {
+    await this.c.exports.replaceOne(
+      { _id: id },
+      { gpx: new Binary(gpx), sizeBytes: gpx.byteLength, derivedVersion },
+      { session, upsert: true },
+    );
+  }
+
+  /**
+   * Готовые маршруты без производных данных версии `version` (бэкфилл `routes-maintenance`, RC-3): нет поля или
+   * меньше версии (оба плеча — индекс `route_geometries_derived_idx`), без отказа этой версии; только `_id`.
+   */
+  async pendingDerived(version: number, limit: number): Promise<string[]> {
+    const docs = await this.c.geometries
+      .find(
+        {
+          $or: [{ derivedVersion: { $exists: false } }, { derivedVersion: { $lt: version } }],
+          'derivedFailure.version': { $ne: version },
+        },
+        { projection: { _id: 1 } },
+      )
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => doc._id);
+  }
+
+  /**
+   * Производные данные версии `version` и экспорт — в транзакции бэкфилла. `false` — уже посчитаны этой или более
+   * новой версией (условие в фильтре): экспорт не пишется.
+   */
+  async recordDerived(
+    session: DbSession,
+    id: string,
+    version: number,
+    profile: [number, number][] | null,
+    gpx: Uint8Array,
+  ): Promise<boolean> {
+    const result = await this.c.geometries.updateOne(
+      {
+        _id: id,
+        $or: [{ derivedVersion: { $exists: false } }, { derivedVersion: { $lt: version } }],
+      },
+      { $set: { profile, derivedVersion: version }, $unset: { derivedFailure: '' } },
+      { session },
+    );
+    if (result.matchedCount === 0) return false;
+    await this.writeExport(session, id, gpx, version);
+    return true;
+  }
+
+  /** Детерминированный отказ пересчёта версии `version`: маршрут не берётся снова до роста версии (RC-2). */
+  async markDerivedFailed(id: string, version: number, code: string, now: Date): Promise<void> {
+    await this.c.geometries.updateOne(
+      { _id: id },
+      { $set: { derivedFailure: { version, code, at: now } } },
+    );
+  }
+
+  /** Профиль и версия производных — проекцией, без линий (карточка каталога, RC-4: без кэша). */
+  async derivedOf(id: string): Promise<RouteDerivedState | undefined> {
+    const doc = await this.c.geometries.findOne(
+      { _id: id },
+      { projection: { profile: 1, derivedVersion: 1 } },
+    );
+    if (!doc) return undefined;
+    return { profile: doc.profile ?? null, derivedVersion: doc.derivedVersion ?? null };
+  }
+
+  /** Очищенный GPX маршрута; нет экспорта — `undefined`. */
+  async exportGpx(id: string): Promise<Uint8Array | undefined> {
+    const doc = await this.c.exports.findOne({ _id: id }, { projection: { gpx: 1 } });
+    return doc ? new Uint8Array(doc.gpx.buffer) : undefined;
   }
 
   /**

@@ -2,23 +2,27 @@
 import { ApiHttpError } from '@pokatim/api-client';
 import type { CatalogRouteDetail, RaceCard, RouteMapGeometry } from '@pokatim/contracts';
 import { onlineManager } from '@tanstack/react-query';
-import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
 import type { RefreshControlProps } from 'react-native';
 
 import { api } from '@/lib/api';
+import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
 
 import { appRoutes } from './app-routes';
 
 jest.mock('@/lib/api');
 jest.mock('@/lib/share-link', () => ({ shareLink: jest.fn(), shareOrigin: jest.fn() }));
+jest.mock('@/lib/download-file', () => ({ downloadFile: jest.fn() }));
 jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getRoute = jest.mocked(api.getCatalogRoute);
 const getMap = jest.mocked(api.getCatalogRouteMap);
 const listRaces = jest.mocked(api.listCatalogRouteRaces);
 const share = jest.mocked(shareLink);
+const download = jest.mocked(downloadFile);
+const gpxUrl = jest.mocked(api.catalogRouteGpxUrl);
 
 const NOW = new Date('2026-10-01T12:00:00Z');
 const ID = '0190a6f4-0000-7000-8000-000000000001';
@@ -33,6 +37,16 @@ const route: CatalogRouteDetail = {
   city: 'minsk',
   surfaces: ['asphalt', 'gravel'],
   publishedAt: '2026-10-20T10:00:00.000Z',
+  elevation: {
+    minM: 191,
+    maxM: 267,
+    profile: [
+      [0, 191],
+      [43_000, 267],
+      [86_012, 200],
+    ],
+  },
+  gpxAvailable: true,
 };
 const geometry: RouteMapGeometry = {
   line: [
@@ -58,7 +72,8 @@ const race = (overrides: Partial<RaceCard> = {}): RaceCard => ({
   season: null,
   ...overrides,
 });
-const heroLabel = /Маршрут команды/;
+/** Ячейка «Дистанция» стат-блока — карточка показана. */
+const heroLabel = /^Дистанция 86 км/;
 const mapLabel = 'Карта маршрута: 86 км, старт и финиш отмечены';
 const notFound = () => new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' });
 
@@ -71,6 +86,8 @@ beforeEach(() => {
   listRaces.mockResolvedValue({ items: [], nextCursor: null });
   jest.mocked(shareOrigin).mockReturnValue('https://pokatim.by');
   share.mockResolvedValue('shared');
+  download.mockResolvedValue(undefined);
+  gpxUrl.mockImplementation((id) => `https://api.test/v1/routes/${id}/gpx`);
 });
 afterEach(() => {
   delete process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT;
@@ -93,16 +110,66 @@ const failure = () => new ApiHttpError(429, { code: 'RATE_LIMITED', message: 'x'
 const open = (id = ID) => renderRouter(appRoutes, { initialUrl: `/routes/${id}` });
 
 describe('карточка маршрута каталога: гость по ссылке (routes-01, AC6)', () => {
-  it('поля: длина, набор, петля, город, покрытие; гостя не уводит', async () => {
+  it('раскладка routes-03: без героя; название, чипы, стат-блок, профиль; гостя не уводит', async () => {
     const router = await open();
     expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
     expect(router.getPathname()).toBe(`/routes/${ID}`);
-    expect(screen.getByText('Длина')).toBeOnTheScreen();
-    expect(screen.getByText('Набор высоты')).toBeOnTheScreen();
-    expect(screen.getByText('Да — старт и финиш в одном месте')).toBeOnTheScreen();
-    expect(screen.getByText('Город старта')).toBeOnTheScreen();
-    expect(screen.getByText('асфальт, гравий')).toBeOnTheScreen();
+    // типографского героя (SectionHero) нет
+    expect(screen.queryByText('Маршрут команды')).toBeNull();
+    expect(
+      within(screen.getByTestId('route-detail')).getByRole('header', { name: 'Минское кольцо' }),
+    ).toBeOnTheScreen();
+    for (const chip of ['Асфальт', 'Гравий', '↻ Круговой', 'Минск']) {
+      expect(screen.getByText(chip)).toBeOnTheScreen();
+    }
+    expect(screen.getByLabelText('Дистанция 86 км круговой')).toBeOnTheScreen();
+    expect(screen.getByLabelText(/^Набор ↑ 1\s240 м макс\. 267 м$/)).toBeOnTheScreen();
+    // асфальт + гравий — 24 км/ч: 86 км → 3 ч 35 мин
+    expect(screen.getByLabelText('В пути 3 ч 35 мин при 24 км/ч')).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'Профиль высоты' })).toBeOnTheScreen();
+    expect(
+      screen.getByRole('image', { name: /^Профиль высоты: от 191 до 267 м, набор 1\s240 м$/ }),
+    ).toBeOnTheScreen();
     expect(getRoute).toHaveBeenCalledWith(ID);
+  });
+
+  it('API до routes-03 (без elevation и gpxAvailable): без профиля и без «Скачать GPX», набор без «макс.»', async () => {
+    getRoute.mockResolvedValue({ ...route, elevation: null, gpxAvailable: false });
+    await open();
+    await screen.findByLabelText(heroLabel);
+    expect(screen.queryByTestId('elevation-profile')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Скачать GPX' })).toBeNull();
+    expect(screen.getByLabelText(/^Набор ↑ 1\s240 м$/)).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Поделиться' })).toBeOnTheScreen();
+  });
+
+  it('«Поделиться» — primary, «Скачать GPX» — secondary; нажатие — downloadFile(адрес API)', async () => {
+    await open();
+    const gpx = await screen.findByRole('button', { name: 'Скачать GPX' });
+    // primary — заливка, secondary — прозрачная кнопка с рамкой (Button UI-кита)
+    expect(screen.getByRole('button', { name: 'Поделиться' })).not.toHaveStyle({
+      backgroundColor: 'transparent',
+    });
+    expect(gpx).toHaveStyle({ backgroundColor: 'transparent' });
+    await fireEvent.press(gpx);
+    expect(gpxUrl).toHaveBeenCalledWith(ID);
+    expect(download).toHaveBeenCalledWith(`https://api.test/v1/routes/${ID}/gpx`);
+    expect(screen.queryByText('Не удалось открыть файл GPX.')).toBeNull();
+  });
+
+  it('«Скачать GPX»: отказ (нет браузера) — баннер под кнопкой', async () => {
+    download.mockRejectedValue(new Error('no browser'));
+    await open();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Скачать GPX' }));
+    expect(await screen.findByText('Не удалось открыть файл GPX.')).toBeOnTheScreen();
+  });
+
+  it('первая загрузка — скелетон той же раскладки (карта, название, стат-блок, профиль)', async () => {
+    getRoute.mockReturnValue(new Promise(() => undefined));
+    await open();
+    expect(
+      await screen.findByTestId('route-detail-skeleton', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
   });
 
   it('карта без коридора: RouteMap с линией, стартом и финишем; подпись без координат', async () => {
@@ -126,7 +193,7 @@ describe('карточка маршрута каталога: гость по с
     await waitFor(() => expect(screen.queryByTestId('catalog-route-map-skeleton')).toBeNull());
     expect(screen.queryByLabelText(mapLabel)).toBeNull();
     expect(getMap).not.toHaveBeenCalled();
-    expect(screen.getByText('Длина')).toBeOnTheScreen();
+    expect(screen.getByTestId('stat-block')).toBeOnTheScreen();
   });
 
   it('404 — «Маршрут недоступен»; невалидный id — то же без запроса', async () => {
@@ -175,7 +242,7 @@ describe('карточка маршрута каталога: гость по с
     await screen.findByLabelText(heroLabel);
     await waitFor(() => expect(listRaces).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByText('Гонки на маршруте')).toBeNull());
-    expect(screen.getByText('Длина')).toBeOnTheScreen();
+    expect(screen.getByTestId('stat-block')).toBeOnTheScreen();
   });
 
   it('«Поделиться» — ссылка /routes/<id> с описанием без ПДн; нет origin — кнопки нет', async () => {

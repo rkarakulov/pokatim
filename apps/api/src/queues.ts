@@ -7,6 +7,11 @@ export const QUEUE = {
   trackProcessing: 'track-processing',
   /** Разбор GPX маршрута коридора в worker_threads (race-results-01): jobId = id события outbox. */
   routeProcessing: 'route-processing',
+  /**
+   * Регламент маршрутов (routes-03): бэкфилл производных данных готовых маршрутов (профиль высоты, очищенный GPX) по
+   * росту `ROUTE_DERIVED_VERSION` — по расписанию, при старте worker и продолжением полной пачки (RC-13).
+   */
+  routesMaintenance: 'routes-maintenance',
   /** Регламент треков: уборка отбракованных исходников и файлов без документа. */
   tracksMaintenance: 'tracks-maintenance',
   /** Синхронизация устройств через агрегатор: pull, история, отзыв подключения, надгробия удалённых загрузок. */

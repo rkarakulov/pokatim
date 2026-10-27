@@ -128,6 +128,16 @@ paths:
   `'catalog.publishedAt': { $type: 'date' }`), `races_route_idx { 'corridor.routeId': 1, windowStartsAt: -1, _id: -1 }`,
   бэкфилл `catalog: null`; чтение — `?? null`. Город, покрытие, дистанция — остаточный фильтр по скану индекса без
   `SORT`.
+- Производные данные маршрута (routes-03): «готовый маршрут не меняется» — про линии и длину; производные исходника
+  — `route_geometries.profile` (`[distanceM, elevationM][]` ≤ 300 | `null` — нет высот), `derivedVersion`,
+  `derivedFailure { version, code, at }` и коллекция `route_exports { _id: routeId, gpx: Binary, sizeBytes,
+  derivedVersion }` (очищенный GPX, ≤ ~1,2 МБ) — пишут только `RoutesRepository.markReady` (разбор) и `recordDerived`
+  (бэкфилл), обе — с экспортом в одной транзакции: есть `derivedVersion` ⇒ есть экспорт (`gpxAvailable` без чтения
+  `route_exports`). Пересчёт — только регламент `routes-maintenance` по росту `ROUTE_DERIVED_VERSION`
+  (`@pokatim/tracks/parse`); детерминированный отказ разбора — метка `derivedFailure` этой версии (не берётся до роста
+  версии), сбой окружения — без метки. Документы до `0021_routes_derived` полей не имеют — чтение `?? null`, выборка
+  бэкфилла — `$exists: false` или `$lt` версии по `route_geometries_derived_idx { derivedVersion: 1 }` (IXSCAN, int-тест).
+  Миграция `0021_routes_derived` (expand-only): коллекция `route_exports` и индекс; данные досчитывает регламент.
 
 ## Заявки и попытки (race-results-03)
 

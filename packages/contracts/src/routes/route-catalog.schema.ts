@@ -46,8 +46,32 @@ export const CatalogRouteCard = z.object({
 });
 export type CatalogRouteCard = z.infer<typeof CatalogRouteCard>;
 
-/** `GET /v1/routes/:id` — те же поля, что в списке; не опубликован или неизвестен — 404. */
-export const CatalogRouteDetail = CatalogRouteCard;
+/** Предел точек профиля высоты карточки маршрута (routes-03). */
+export const CATALOG_ROUTE_PROFILE_MAX_POINTS = 300;
+
+/**
+ * Профиль высоты маршрута (routes-03): `[distanceM, elevationM]` (целые метры) на равных шагах, первая точка — `0`,
+ * последняя ≈ `distanceM`; мин. и макс. — по профилю.
+ */
+export const CatalogRouteElevation = z.object({
+  minM: z.number().int(),
+  maxM: z.number().int(),
+  profile: z
+    .array(z.tuple([z.number().int().min(0), z.number().int()]))
+    .min(2)
+    .max(CATALOG_ROUTE_PROFILE_MAX_POINTS),
+});
+export type CatalogRouteElevation = z.infer<typeof CatalogRouteElevation>;
+
+/**
+ * `GET /v1/routes/:id` — поля списка + профиль высоты (`null` — нет высот или ещё не посчитан) и признак очищенного
+ * GPX (`GET /v1/routes/:id/gpx` — файл `application/gpx+xml`, не JSON, схемы нет). Не опубликован или неизвестен —
+ * 404. Дефолты новых полей — новый клиент против API до routes-03 (RC-10).
+ */
+export const CatalogRouteDetail = CatalogRouteCard.extend({
+  elevation: CatalogRouteElevation.nullable().default(null),
+  gpxAvailable: z.boolean().default(false),
+});
 export type CatalogRouteDetail = z.infer<typeof CatalogRouteDetail>;
 
 export const CatalogRoutePage = z.object({
