@@ -288,6 +288,20 @@ BLOCKERS нет. Находки (решения architect; U1–U9 и A1–A7 н
   `route.catalog_updated` routes-01 показывает подписи вместо «другое поле».
 - Пункт навигации — последним в группе `bottom` (после «Оформления приложения», §11 «в конец массива»).
 
+Этап C (coder, 2026-10-27):
+- Город старта в заявке — `CityPicker` формы райда (`features/rides/ride-form.tsx`): экспортирован, добавлен
+  необязательный `label` (по умолчанию прежний «Город»). Своей копии выбора города нет.
+- Форма заявки и жалобы — `useState` + `safeParse` схемы контракта (`SubmitRoutePublicationInput`,
+  `CreateRouteReportRequest`), как образец `ride-report.tsx`, без react-hook-form.
+- Фильтр «Автор» — состояние экрана, как остальные группы каталога (в URL фильтры каталога не попадают, routes-01 D3).
+- После подачи, отзыва, снятия и удаления — ответ в кеш «Моих» и инвалидация всех `['routes', …]`, кроме
+  `['routes','mine']` (каталог, города, карточка, `me`).
+- Новые i18n-ключи сверх списка §11: `routes.publication.{title,pendingHint,withdrawConfirm,unpublishConfirm,cancel,
+  actionFailed,rejectedComment}`, `routes.publish.{hint,unavailable,back,rateLimited}`,
+  `routes.report.{action,failed,rateLimited}`. Прочий отказ публикации — текст `auth.error.unknown` под заголовком.
+- Экран жалобы показывает название из публичной карточки (`['routes','detail',id]`), право — из `me`; 404 любого — «Маршрут
+  недоступен».
+
 ## 8.3 Security checklist
 
 Затронуто: AuthZ (свой маршрут, право `routes.moderate`), данные наружу (публичный маршрут райдера, имя), злоупотребления
@@ -721,3 +735,38 @@ prettier — «All matched files use Prettier code style!»; eslint — 0; depcr
 typecheck — `Tasks: 9 successful, 9 total`; test — `Tasks: 15 successful, 15 total` (admin 301 / 35 файлов, api 1169,
 contracts 273, api-client 96). `pnpm --filter @pokatim/admin build` отдельно не запускался (typecheck и тесты — в
 `check`).
+
+### Этап C — приложение (coder, 2026-10-27)
+
+**Сделано**
+- Каталог: бейдж «От райдера» / «От райдера · Имя» (`routeAuthorLabel`, `Pill` рамки `RouteListCard` и шторки
+  карточки); фильтр «Автор: Команда / Райдеры» (`AUTHOR_CHIPS`, `author` в ключе и запросе ленты, «Сбросить фильтры»).
+- Карточка маршрута райдера: «Гонки на маршруте» не запрашиваются (RC-1); `['routes','viewer',id]` — только вошедшему,
+  только клиент; «Пожаловаться» → `routes/report/[id]` по `canReport`, «Вы пожаловались на этот маршрут» по
+  `reported`; мета — `robots: noindex` (RC-6), OG без имени автора.
+- «Мои»: статус заявки бейджем в списке; блок «Публикация в каталоге» карточки (`my-route-publication.tsx`): «На
+  проверке» + «Отозвать заявку», «В каталоге» + «Открыть в каталоге» и «Снять с публикации» (с подтверждением),
+  «Отклонён» — причина `domain.routeRejectionReason.*` и комментарий, «Скрыт модератором» — пояснение; «Опубликовать» —
+  по `canPublish`; переименование заморожено в `pending`/`approved` (409 — текстом по `details.reason`); удаление
+  `approved` — «Маршрут исчезнет из каталога».
+- Экран заявки `routes/mine/publish/[id]` (`my-route-publish.tsx`): предупреждение, город старта, покрытие, «Подписать
+  моим именем», «Отправить на проверку»; отказы — `routePublicationErrorMessage` (лимиты U8 с `max`, состояние, 429,
+  сеть). Экран жалобы `routes/report/[id]` (`route-report.tsx`). Оба — в `Stack.Protected` и `app-routes.ts`.
+- i18n — только новые ключи; правило `.claude/rules/pokatim-app.md` — пункт «Публикация своих маршрутов».
+
+**Тесты:** `my-route-publication.test.tsx` (24: статусы и действия, подтверждения, 409 `hidden`/`in_review`, удаление
+опубликованного, форма заявки, 6 отказов, `canPublish: false`, 404, невалидный id, гость → вход),
+`route-report.test.tsx` (12: форма, ≤ 500, отказы own/team/429/сеть/404, `reported`, `canReport: false`, гость →
+вход), `route-detail.test.tsx` (+5: бейдж, гонки не запрашиваются для райдера, гость — без `me` и «Пожаловаться»,
+команда — без бейджа и `me`, свой — без кнопки), `routes.test.tsx` (+2: бейдж/имя, фильтр «Автор» × покрытие, сброс),
+`route-list-card.test.tsx` (+6), `route-metadata.test.ts` (+2: `noindex` райдера, OG без имени), `format.test.ts`,
+`filters.test.ts`.
+
+**Отрицательное доказательство (откачено):** гонки запрашиваются при любом `author` → 2 теста «routes-06» в
+`route-detail.test.tsx` красные (`listRaces` вызван).
+
+**Проверки:** `MONGO_URL_TEST=…/pokatim_routes06_test REDIS_URL_TEST=…/13 TURBO_CONCURRENCY=1 pnpm check` → `EXIT=0`:
+prettier — «All matched files use Prettier code style!»; eslint — 0; depcruise — «no dependency violations found»;
+typecheck — `Tasks: 9 successful, 9 total`; test — `Tasks: 15 successful, 15 total` (app 1260 / 139 сьютов, admin 301,
+api 116 файлов). NOT VERIFIED: ручная проверка на симуляторе и в браузере (`build:web` + `start:web`) — не делалась;
+новые экраны за входом, шаг Playwright-смоука не добавлялся.

@@ -38,6 +38,27 @@ export function myRouteStatus(route: MyRoute): { label: string; tone: PillTone }
   return { label: t(failure), tone: 'error' };
 }
 
+const PUBLICATION_TONES = {
+  pending: 'neutral',
+  approved: 'success',
+  rejected: 'error',
+  hidden: 'warning',
+} as const satisfies Record<string, PillTone>;
+
+/**
+ * Статус заявки в каталог (routes-06, A1) для `Pill`: «На проверке», «В каталоге», «Отклонён», «Скрыт модератором».
+ * Заявки нет (или отозвана) и незнакомый статус нового API — `null`.
+ */
+export function myRoutePublicationStatus(route: MyRoute): { label: string; tone: PillTone } | null {
+  const status = route.publication?.status;
+  if (status === undefined || status === 'unknown') return null;
+  return { label: t(`routes.publication.status.${status}`), tone: PUBLICATION_TONES[status] };
+}
+
+/** Название заморожено, пока заявка на проверке или маршрут в каталоге (A3). */
+export const myRouteRenameFrozen = (route: MyRoute) =>
+  route.publication?.status === 'pending' || route.publication?.status === 'approved';
+
 /** «42 км · набор 310 м · петля» — только у готового маршрута. */
 export function myRouteStats(route: MyRoute): string | null {
   if (route.status !== 'ready' || route.distanceM === null) return null;

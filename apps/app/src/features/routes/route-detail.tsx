@@ -43,8 +43,8 @@ import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { CatalogRouteMap } from './catalog-route-map';
 import { ElevationProfile } from './elevation-profile';
-import { routeChips, routeShareDescription, routeStatItems } from './format';
-import { useCatalogRoute, useCatalogRouteRaces } from './queries';
+import { routeAuthorLabel, routeChips, routeShareDescription, routeStatItems } from './format';
+import { useCatalogRoute, useCatalogRouteRaces, useCatalogRouteViewer } from './queries';
 import { useScrubScrollEnabled } from './use-scrub-scroll-lock';
 
 export const routeDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
@@ -174,6 +174,37 @@ function RouteRaces({
   );
 }
 
+/**
+ * «Пожаловаться» на маршрут райдера (routes-06, A4): только вошедшему и только по `viewer.canReport` сервера (свой и
+ * команды — нет); уже жаловался — «Вы пожаловались на этот маршрут». Гостю и до ответа — ничего.
+ */
+function RouteReportAction({
+  id,
+  viewer,
+}: {
+  id: string;
+  viewer: ReturnType<typeof useCatalogRouteViewer>;
+}) {
+  const theme = useTheme();
+  const router = useRouter();
+  if (viewer.data?.reported) {
+    return (
+      <Text style={[textStyle('body'), { color: theme.text.secondary }]}>
+        {t('routes.report.reported')}
+      </Text>
+    );
+  }
+  if (!viewer.data?.canReport) return null;
+  return (
+    <View style={styles.start}>
+      <TextAction
+        label={t('routes.report.action')}
+        onPress={() => router.push(`/routes/report/${encodeURIComponent(id)}`)}
+      />
+    </View>
+  );
+}
+
 /** Шапка шторки (routes-04d, L3): компактная строка цифр — видна и в свёрнутой шторке. */
 function RouteSheetHeader({ route }: { route: CatalogRouteDetail }) {
   return (
@@ -184,25 +215,33 @@ function RouteSheetHeader({ route }: { route: CatalogRouteDetail }) {
 }
 
 /**
- * Тело шторки карточки маршрута (routes-03, P1; routes-04d, L3): без названия (оно в шапке экрана), чипы (покрытия,
- * форма, город; `'unknown'` — без чипа), профиль высоты без заголовка со скраббингом, действия в строку, «Гонки на
- * маршруте».
+ * Тело шторки карточки маршрута (routes-03, P1; routes-04d, L3): без названия (оно в шапке экрана), бейдж автора
+ * маршрута райдера (routes-06), чипы (покрытия, форма, город; `'unknown'` — без чипа), профиль высоты без заголовка
+ * со скраббингом, действия в строку, «Пожаловаться» (маршрут райдера), «Гонки на маршруте».
  */
 function RouteSheetBody({
   route,
   races,
+  viewer,
   now,
   mounted,
   scrub,
 }: {
   route: CatalogRouteDetail;
   races: ReturnType<typeof useCatalogRouteRaces>;
+  viewer: ReturnType<typeof useCatalogRouteViewer>;
   now: Date | null;
   mounted: boolean;
   scrub: ScrubStore;
 }) {
+  const author = routeAuthorLabel(route);
   return (
     <View style={styles.detail}>
+      {author ? (
+        <View style={styles.start}>
+          <Pill label={author} tone="accent" />
+        </View>
+      ) : null}
       <View testID="route-chips" style={styles.chips}>
         {routeChips(route).map((chip) => (
           <Pill key={chip} label={chip} />
@@ -215,6 +254,7 @@ function RouteSheetBody({
         scrub={scrub}
       />
       <RouteActions route={route} mounted={mounted} />
+      <RouteReportAction id={route.id} viewer={viewer} />
       <RouteRaces races={races} now={now} />
     </View>
   );
@@ -284,13 +324,20 @@ export function RouteDetailScreen({
   const signedIn = useSessionStore(isSignedIn);
   const mounted = useMounted();
   const route = useCatalogRoute(id, seed, valid);
-  // гонки маршрута — только клиент (в SSR не попадают)
-  const races = useCatalogRouteRaces(id, valid && route.data !== undefined);
+  const authorKind = route.data?.author.kind;
+  // гонки маршрута — только клиент (в SSR не попадают); маршрут райдера в гонке не бывает — не запрашиваем (RC-1)
+  const races = useCatalogRouteRaces(id, valid && authorKind === 'team');
+  // routes-06: «Пожаловаться» — только вошедшему на карточке маршрута райдера (клиентский запрос, не SSR)
+  const viewer = useCatalogRouteViewer(id, valid && signedIn && authorKind === 'rider');
   const now = useMinskClockAfterMount([route.dataUpdatedAt, races.dataUpdatedAt]);
   const hasRoute = route.data !== undefined;
   const refetchers = useMemo(
-    () => [route.refetch, ...(hasRoute ? [races.refetch] : [])],
-    [route.refetch, hasRoute, races.refetch],
+    () => [
+      route.refetch,
+      ...(hasRoute && authorKind === 'team' ? [races.refetch] : []),
+      ...(hasRoute && signedIn && authorKind === 'rider' ? [viewer.refetch] : []),
+    ],
+    [route.refetch, hasRoute, authorKind, signedIn, races.refetch, viewer.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   const notFound =
@@ -373,6 +420,7 @@ export function RouteDetailScreen({
                   <RouteSheetBody
                     route={data}
                     races={races}
+                    viewer={viewer}
                     now={now}
                     mounted={mounted}
                     scrub={scrub}
@@ -413,4 +461,5 @@ const styles = StyleSheet.create({
   racesTitle: { marginBottom: space.s2 },
   more: { alignItems: 'flex-start', paddingTop: space.s2 },
   racesNotice: { gap: space.s3, paddingVertical: space.s3 },
+  start: { alignItems: 'flex-start' },
 });

@@ -46,6 +46,21 @@ describe('RouteListCard (routes-01)', () => {
     expect(screen.getByRole('link', { name: 'Минское кольцо. 86 км' })).toBeOnTheScreen();
   });
 
+  it('routes-06: маршрут райдера — бейдж «От райдера» (с именем по U3) и в подписи ссылки', async () => {
+    await render(
+      <RouteListCard
+        route={route({ author: { kind: 'rider', name: 'Аня К.' } })}
+        onPress={jest.fn()}
+      />,
+    );
+    expect(screen.getByText('От райдера · Аня К.')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('link', {
+        name: 'Минское кольцо. 86 км · набор 412 м · петля · Минск · асфальт, гравий · От райдера · Аня К.',
+      }),
+    ).toBeOnTheScreen();
+  });
+
   it('скелетон — для скринридера «Загрузка» не дублируется ссылкой', async () => {
     await render(<RouteListCardSkeleton />);
     expect(screen.queryByRole('link')).toBeNull();
@@ -102,5 +117,44 @@ describe('MyRouteListCard (routes-02)', () => {
       />,
     );
     expect(screen.getByText('Маршрут короче 1 км')).toBeOnTheScreen();
+  });
+
+  const publication = (status: 'pending' | 'approved' | 'rejected' | 'hidden' | 'unknown') => ({
+    status,
+    city: 'minsk' as const,
+    surfaces: ['asphalt' as const],
+    showAuthorName: false,
+    submittedAt: '2026-10-27T08:00:00.000Z',
+    decidedAt: null,
+    rejection: null,
+  });
+
+  it.each([
+    ['pending', 'На проверке'],
+    ['approved', 'В каталоге'],
+    ['rejected', 'Отклонён'],
+    ['hidden', 'Скрыт модератором'],
+  ] as const)('routes-06: заявка %s — бейдж «%s» и в подписи ссылки', async (status, label) => {
+    await render(
+      <MyRouteListCard route={mine({ publication: publication(status) })} onPress={jest.fn()} />,
+    );
+    expect(screen.getByText(label)).toBeOnTheScreen();
+    expect(screen.getByText('42 км · набор 310 м · петля')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('link', {
+        name: `Вечерний круг. 42 км · набор 310 м · петля · 27 октября 2026 · ${label}`,
+      }),
+    ).toBeOnTheScreen();
+  });
+
+  it('routes-06: незнакомый статус заявки (новый API) — без бейджа', async () => {
+    await render(
+      <MyRouteListCard route={mine({ publication: publication('unknown') })} onPress={jest.fn()} />,
+    );
+    expect(
+      screen.getByRole('link', {
+        name: 'Вечерний круг. 42 км · набор 310 м · петля · 27 октября 2026',
+      }),
+    ).toBeOnTheScreen();
   });
 });

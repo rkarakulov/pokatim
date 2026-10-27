@@ -1,7 +1,13 @@
 import { apiErrorOf } from '@pokatim/api-client';
-import type { MyRoute, MyRoutePage, RouteMapGeometry } from '@pokatim/contracts';
+import type {
+  MyRoute,
+  MyRoutePage,
+  RouteMapGeometry,
+  SubmitRoutePublicationInput,
+} from '@pokatim/contracts';
 import {
   type InfiniteData,
+  type QueryClient,
   queryOptions,
   useInfiniteQuery,
   useMutation,
@@ -109,28 +115,64 @@ export function withRouteOnTop(
   return { ...data, pages };
 }
 
+/** Ответ мутации своего маршрута — в карточку и список (тот же id заменяется на месте). */
+function applyMyRoute(queryClient: QueryClient, route: MyRoute) {
+  queryClient.setQueryData(myRoutesKeys.detail(route.id), route);
+  queryClient.setQueryData<InfiniteData<MyRoutePage, string | null>>(myRoutesKeys.list, (data) =>
+    data
+      ? {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            items: page.items.map((item) => (item.id === route.id ? route : item)),
+          })),
+        }
+      : data,
+  );
+  void queryClient.invalidateQueries({ queryKey: myRoutesKeys.list });
+}
+
+/**
+ * Публичный каталог (routes-06): после подачи, отзыва, снятия и удаления маршрут мог войти в каталог или уйти из него —
+ * перечитать всё `['routes', …]`, кроме «Моих» (их кеш уже обновлён ответом).
+ */
+function invalidateCatalog(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({
+    predicate: (query) => query.queryKey[0] === 'routes' && query.queryKey[1] !== 'mine',
+  });
+}
+
 /** «Переименовать»: ответ — в карточку и список. */
 export function useRenameMyRoute(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (title: string) =>
       withAccessToken((token) => api.renameMyRoute(token, id, { title })),
+    onSuccess: (route) => applyMyRoute(queryClient, route),
+  });
+}
+
+/** «Опубликовать» (routes-06): заявка в каталог; ответ — `MyRoute` со статусом «На проверке». */
+export function useSubmitMyRoutePublication(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SubmitRoutePublicationInput) =>
+      withAccessToken((token) => api.submitMyRoutePublication(token, id, body)),
     onSuccess: (route) => {
-      queryClient.setQueryData(myRoutesKeys.detail(id), route);
-      queryClient.setQueryData<InfiniteData<MyRoutePage, string | null>>(
-        myRoutesKeys.list,
-        (data) =>
-          data
-            ? {
-                ...data,
-                pages: data.pages.map((page) => ({
-                  ...page,
-                  items: page.items.map((item) => (item.id === id ? route : item)),
-                })),
-              }
-            : data,
-      );
-      void queryClient.invalidateQueries({ queryKey: myRoutesKeys.list });
+      applyMyRoute(queryClient, route);
+      invalidateCatalog(queryClient);
+    },
+  });
+}
+
+/** «Отозвать заявку» / «Снять с публикации» (routes-06, идемпотентно): маршрут уходит из очереди и каталога. */
+export function useUnpublishMyRoute(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => withAccessToken((token) => api.unpublishMyRoute(token, id)),
+    onSuccess: (route) => {
+      applyMyRoute(queryClient, route);
+      invalidateCatalog(queryClient);
     },
   });
 }
@@ -163,6 +205,8 @@ export function useDeleteMyRoute(id: string) {
       queryClient.removeQueries({ queryKey: myRoutesKeys.detail(id) });
       queryClient.removeQueries({ queryKey: myRoutesKeys.map(id) });
       void queryClient.invalidateQueries({ queryKey: myRoutesKeys.list });
+      // опубликованный маршрут исчезает из каталога (U6)
+      invalidateCatalog(queryClient);
     },
   });
 }

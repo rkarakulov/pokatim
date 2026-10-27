@@ -7,13 +7,18 @@ import type { ReactElement } from 'react';
 import type { RefreshControlProps } from 'react-native';
 import { createGestureController } from 'react-native-gesture-handler/jest-utils';
 
+import { useSessionStore } from '@/features/auth/session-store';
+import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
 
 import { PROFILE_PAN_TEST_ID } from '@/features/routes/profile-chart';
 
-import { appRoutes } from './app-routes';
+import { appRoutes, tabRoutes } from './app-routes';
+import { liveSession } from './auth-fixtures';
+import { createQueryWrapper } from './query-wrapper';
+import CatalogRouteRoute from '../app/routes/[id]';
 
 jest.mock('@/lib/api');
 jest.mock('@/lib/share-link', () => ({ shareLink: jest.fn(), shareOrigin: jest.fn() }));
@@ -435,5 +440,76 @@ describe('карточка маршрута каталога: гость по с
     await fireEvent.press(screen.getByText('Повторить'));
     expect(await screen.findByText('Весенний коридор')).toBeOnTheScreen();
     expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+  });
+});
+
+describe('маршрут райдера на карточке каталога (routes-06)', () => {
+  const getViewer = jest.mocked(api.getCatalogRouteViewer);
+  const riderRoute: CatalogRouteDetail = { ...route, author: { kind: 'rider', name: 'Аня К.' } };
+  const signedInRoutes = {
+    ...tabRoutes,
+    'routes/[id]': CatalogRouteRoute,
+    'routes/report/[id]': () => null,
+  };
+  const openSignedIn = () =>
+    renderRouter(signedInRoutes, { initialUrl: `/routes/${ID}`, wrapper: createQueryWrapper() });
+  const signIn = () => {
+    useSessionStore.setState({ status: 'signedIn', session: liveSession });
+    useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
+    jest.mocked(api.listCatalogRoutes).mockResolvedValue({ items: [], nextCursor: null });
+    jest.mocked(api.listCatalogRouteCities).mockResolvedValue({ cities: [] });
+  };
+
+  beforeEach(() => {
+    getRoute.mockResolvedValue(riderRoute);
+    getViewer.mockResolvedValue({ canReport: true, reported: false });
+  });
+
+  it('гость: бейдж «От райдера · имя»; «Гонки на маршруте» не запрашиваются (RC-1); без «Пожаловаться» и без me', async () => {
+    await open();
+    expect(await screen.findByText('От райдера · Аня К.')).toBeOnTheScreen();
+    expect(screen.getByTestId('route-actions')).toBeOnTheScreen();
+    expect(listRaces).not.toHaveBeenCalled();
+    expect(getViewer).not.toHaveBeenCalled();
+    expect(screen.queryByText('Пожаловаться')).toBeNull();
+  });
+
+  it('маршрут команды — без бейджа автора; гонки запрашиваются, me — нет (и вошедшему)', async () => {
+    signIn();
+    getRoute.mockResolvedValue(route);
+    await openSignedIn();
+    expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
+    await waitFor(() => expect(listRaces).toHaveBeenCalledWith(ID, { limit: 10 }));
+    expect(screen.queryByText(/^От райдера/)).toBeNull();
+    expect(getViewer).not.toHaveBeenCalled();
+    expect(screen.queryByText('Пожаловаться')).toBeNull();
+  });
+
+  describe('вошедший', () => {
+    beforeEach(signIn);
+
+    it('canReport — «Пожаловаться» ведёт на экран жалобы; гонки не запрашиваются', async () => {
+      const router = await openSignedIn();
+      await fireEvent.press(await screen.findByText('Пожаловаться'));
+      expect(getViewer).toHaveBeenCalledWith(liveSession.accessToken, ID);
+      expect(router.getPathname()).toBe(`/routes/report/${ID}`);
+      expect(listRaces).not.toHaveBeenCalled();
+    });
+
+    it('уже пожаловался — «Вы пожаловались на этот маршрут» вместо действия', async () => {
+      getViewer.mockResolvedValue({ canReport: false, reported: true });
+      await openSignedIn();
+      expect(await screen.findByText('Вы пожаловались на этот маршрут')).toBeOnTheScreen();
+      expect(screen.queryByText('Пожаловаться')).toBeNull();
+    });
+
+    it('свой маршрут (canReport false) — без «Пожаловаться»', async () => {
+      getViewer.mockResolvedValue({ canReport: false, reported: false });
+      await openSignedIn();
+      expect(await screen.findByText('От райдера · Аня К.')).toBeOnTheScreen();
+      await waitFor(() => expect(getViewer).toHaveBeenCalled());
+      expect(screen.queryByText('Пожаловаться')).toBeNull();
+      expect(screen.queryByText('Вы пожаловались на этот маршрут')).toBeNull();
+    });
   });
 });

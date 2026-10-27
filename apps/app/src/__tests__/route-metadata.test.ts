@@ -66,6 +66,30 @@ describe('мета публичной карточки маршрута (SSR, ro
     expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://api.internal:3000/v1/routes/${ID}`);
   });
 
+  it('маршрут команды (author по умолчанию — старый API) — без robots', async () => {
+    respond(200, { ...route, author: { kind: 'team' } });
+    expect(await generateMetadata(undefined, { id: ID })).not.toHaveProperty('robots');
+  });
+
+  it('routes-06: маршрут райдера — noindex (RC-6); OG и описание без имени автора (U9)', async () => {
+    respond(200, { ...route, author: { kind: 'rider', name: 'Аня К.' } });
+    process.env.WEB_ORIGIN = ORIGIN;
+    const metadata = plain(await generateMetadata(undefined, { id: ID }));
+    expect(metadata).toEqual({
+      title: 'Минское кольцо — Покатим',
+      description: '86 км · набор 1 240 м · петля · Минск',
+      openGraph: {
+        title: 'Минское кольцо',
+        description: '86 км · набор 1 240 м · петля · Минск',
+        type: 'website',
+        siteName: 'Покатим',
+        url: `${ORIGIN}/routes/${ID}`,
+      },
+      robots: 'noindex',
+    });
+    expect(JSON.stringify(metadata)).not.toContain('Аня');
+  });
+
   it('404 (снят, не опубликован) — нейтральная мета и noindex', async () => {
     respond(404, { code: 'NOT_FOUND', message: 'x' });
     expect(await generateMetadata(undefined, { id: ID })).toEqual({
