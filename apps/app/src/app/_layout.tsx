@@ -168,6 +168,9 @@ export default function RootLayout() {
             {/* возврат из авторизации устройства (web — переход страницы, native — холодный старт по ссылке): и из шага
             онбординга, и из «Устройств»; вход экран проверяет сам */}
             <Stack.Screen name="devices/return" />
+            {/* удаление аккаунта (A12, адрес для Google Play): гость — «Вход» и возврат, после удаления — «Регистрация»;
+            вход экран проверяет сам */}
+            <Stack.Screen name="settings/account/delete" />
             <Stack.Screen name="ui-kit" />
             <Stack.Screen name="status" />
             {/* публичные карточки по ссылке (блок 03, Q8): гость и вошедший; на native — поверх вкладок, без таб-бара */}

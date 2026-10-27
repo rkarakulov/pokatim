@@ -46,6 +46,7 @@ describe('AuditAction', () => {
       'route.published',
       'route.unpublished',
       'route.catalog_updated',
+      'account.deleted',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',

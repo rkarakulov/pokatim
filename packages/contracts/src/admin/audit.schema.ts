@@ -47,6 +47,8 @@ export const AUDIT_ACTIONS = [
   'route.published',
   'route.unpublished',
   'route.catalog_updated',
+  // account-deletion: райдер удалил свой аккаунт (actor — сам райдер, subject `rider`, без e-mail и имени)
+  'account.deleted',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;

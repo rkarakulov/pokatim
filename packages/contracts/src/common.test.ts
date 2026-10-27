@@ -75,6 +75,8 @@ describe('коды ошибок', () => {
       'DISPUTE_NOT_FOUND',
       'ROUTE_INVALID_STATE',
       'ROUTE_QUOTA_EXCEEDED',
+      'PASSWORD_INCORRECT',
+      'ACCOUNT_PANEL_MEMBER',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

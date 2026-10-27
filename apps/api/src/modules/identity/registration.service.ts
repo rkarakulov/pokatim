@@ -16,7 +16,7 @@ import { IDENTITY_POLICY } from './identity.policy';
 import { IdentityRepository } from './identity.repository';
 import { PasswordHasher } from './password-hasher';
 import { SessionService } from './session.service';
-import { randomToken, rateLimitKeyForIp, sha256 } from './tokens';
+import { erasedEmailMarker, randomToken, rateLimitKeyForIp, sha256 } from './tokens';
 import { VerificationService } from './verification.service';
 
 const emailTaken = () => domainError('EMAIL_TAKEN', 409);
@@ -55,7 +55,12 @@ export class RegistrationService {
       // гонка одного адреса: в транзакции вторая регистрация получает конфликт записи (повтор колбэка видит адрес)
       // или дубликат ключа `users_email_unique` после коммита первой — оба пути дают EMAIL_TAKEN
       return await this.transactions.run(async (tx) => {
-        const existing = await this.repository.findUserByEmail(email, tx);
+        // адрес или маркер его стирания (A4): удалённый аккаунт держит адрес и после очистки ПДн
+        const existing = await this.repository.findUserForRegistration(
+          email,
+          erasedEmailMarker(this.env.EMAIL_TOKEN_SECRET, email),
+          tx,
+        );
         if (existing) {
           // D-07: адрес удалённого аккаунта — нейтральный отказ без причины
           throw existing.deletedAt ? domainError('EMAIL_UNAVAILABLE', 409) : emailTaken();

@@ -4,11 +4,23 @@ import type { ClientSession } from 'mongodb';
 import { onTestFinished, vi } from 'vitest';
 
 import { identityCollections } from '../src/modules/identity/identity.collection';
-import { derivePasswordResetToken, deriveVerificationToken } from '../src/modules/identity/tokens';
+import { IdentityRepository } from '../src/modules/identity/identity.repository';
+import {
+  derivePasswordResetToken,
+  deriveVerificationToken,
+  erasedEmailMarker,
+} from '../src/modules/identity/tokens';
 import type { Harness } from './harness';
 
 /** Коллекции identity тестовой БД стенда. */
 export const collections = (h: Harness) => identityCollections(h.db);
+
+/** Репозиторий identity графа API (spy замков в тестах гонок других модулей). */
+export const identityRepository = (h: Harness) => h.app.get(IdentityRepository, { strict: false });
+
+/** Маркер стёртого e-mail удалённого аккаунта — то, что лежит в `users.email` после очистки. */
+export const erasedEmail = (h: Harness, email: string) =>
+  erasedEmailMarker(h.env.EMAIL_TOKEN_SECRET, email);
 
 /** События outbox по порядку записи. */
 export const outboxEvents = (h: Harness) =>

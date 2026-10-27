@@ -13,6 +13,7 @@ import {
 } from '@rkarakulov/api-kit/mongo';
 
 import { env } from './config/env';
+import { accountOutboxRoutes, AccountWorkerModule } from './modules/account';
 import { identityOutboxRoutes, IdentityWorkerModule } from './modules/identity';
 import { devicesOutboxRoutes, DevicesWorkerModule } from './modules/devices';
 import { DisputesCoreModule, DisputesWorkerModule } from './modules/disputes';
@@ -39,6 +40,7 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
         ...devicesOutboxRoutes,
         ...routesOutboxRoutes,
         ...resultsOutboxRoutes,
+        ...accountOutboxRoutes,
       },
     }),
     TracksWorkerModule,
@@ -50,6 +52,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     DisputesCoreModule,
     // ряды пульса и мощности для разбора спора (race-results-06b)
     DisputesWorkerModule,
+    // фоновая очистка удалённого аккаунта (account-deletion, ADR-0015)
+    AccountWorkerModule,
   ],
 })
 export class WorkerModule {}

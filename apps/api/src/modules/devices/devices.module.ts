@@ -7,6 +7,8 @@ import { QUEUE } from '../../queues';
 import { IdentityModule } from '../identity';
 import { TracksCoreModule } from '../tracks';
 import { DeviceAudit } from './device-audit';
+import { DeviceErasure } from './device-erasure';
+import { DeviceRevocation } from './device-revocation';
 import { DevicesCallbackController } from './devices-callback.controller';
 import { DevicesLocks, DevicesPullQueue } from './devices-jobs';
 import { DevicesLinkService } from './devices-link.service';
@@ -67,13 +69,29 @@ const aggregatorProvider: Provider = {
   },
 };
 
-const core: Provider[] = [
-  DevicesRepository,
-  DeviceAudit,
-  DevicesLocks,
-  DevicesPullQueue,
-  aggregatorProvider,
-];
+/**
+ * Ядро `devices` без очередей и HTTP: репозиторий, журнал, замки, агрегатор, общий отзыв подключения и порт стирания
+ * `DeviceErasure` (модуль `account`, worker). Один экземпляр репозитория и адаптера на приложение.
+ */
+@Module({
+  providers: [
+    DevicesRepository,
+    DeviceAudit,
+    DevicesLocks,
+    aggregatorProvider,
+    DeviceRevocation,
+    DeviceErasure,
+  ],
+  exports: [
+    DevicesRepository,
+    DeviceAudit,
+    DevicesLocks,
+    WEARABLES_AGGREGATOR,
+    DeviceRevocation,
+    DeviceErasure,
+  ],
+})
+export class DevicesCoreModule {}
 
 /**
  * Устройства через агрегатор (ADR-0011), HTTP-часть: экран «Устройства», подключение (connect / callback /
@@ -84,11 +102,12 @@ const core: Provider[] = [
   imports: [
     IdentityModule,
     TracksCoreModule,
+    DevicesCoreModule,
     BullModule.registerQueue({ name: QUEUE.devicesSync }),
   ],
   controllers: [DevicesController, DevicesCallbackController, DevicesWebhookController],
   providers: [
-    ...core,
+    DevicesPullQueue,
     DevicesService,
     DevicesLinkService,
     DevicesWebhookService,
@@ -101,10 +120,11 @@ export class DevicesModule {}
 @Module({
   imports: [
     TracksCoreModule,
+    DevicesCoreModule,
     BullModule.registerQueue({ name: QUEUE.devicesSync }, { name: QUEUE.devicesMaintenance }),
   ],
   providers: [
-    ...core,
+    DevicesPullQueue,
     DevicesSyncService,
     DevicesSyncProcessor,
     DevicesMaintenanceProcessor,

@@ -45,6 +45,7 @@ import {
   type SignOutRequest,
   type SubmitOnboardingSurveyRequest,
   type UpdateProfileRequest,
+  type DeleteAccountRequest,
   TrackUpload,
   TrackUploadPage,
   AttemptCandidates,
@@ -267,6 +268,17 @@ export function createApiClient({
           body: JSON.stringify(body),
           ...withCredentials,
         }),
+      ),
+    /**
+     * Удаление своего аккаунта (вход обязателен), подтверждение — текущий пароль; `204` без тела, все сессии отозваны
+     * (web — cookie сброшена ответом). Отказы — `ApiHttpError`: `403 PASSWORD_INCORRECT`, `409 ACCOUNT_PANEL_MEMBER`,
+     * `429 RATE_LIMITED`.
+     */
+    deleteAccount: (accessToken: string, body: DeleteAccountRequest) =>
+      request(
+        '/v1/account/delete',
+        z.undefined(),
+        authorized(accessToken, { method: 'POST', body: JSON.stringify(body), ...withCredentials }),
       ),
     /** Ответ опроса «Что вас привело?» (вход обязателен); повтор перезаписывает ответ. */
     submitOnboardingSurvey: (accessToken: string, body: SubmitOnboardingSurveyRequest) =>

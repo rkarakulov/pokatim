@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { IdentityAccountsModule } from '../identity';
 import { PanelAudit } from './panel-audit';
 import { PanelDirectory } from './panel-directory';
+import { PanelMembership } from './panel-membership';
 import { PanelMembersService } from './panel-members.service';
 import { PanelRepository } from './panel.repository';
 
@@ -12,7 +13,7 @@ import { PanelRepository } from './panel.repository';
  */
 @Module({
   imports: [IdentityAccountsModule],
-  providers: [PanelRepository, PanelAudit, PanelDirectory, PanelMembersService],
-  exports: [PanelRepository, PanelAudit, PanelDirectory, PanelMembersService],
+  providers: [PanelRepository, PanelAudit, PanelDirectory, PanelMembersService, PanelMembership],
+  exports: [PanelRepository, PanelAudit, PanelDirectory, PanelMembersService, PanelMembership],
 })
 export class PanelCoreModule {}

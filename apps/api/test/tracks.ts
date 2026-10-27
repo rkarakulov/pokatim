@@ -6,6 +6,7 @@ import { TrackUpload } from '@pokatim/contracts';
 
 import { TRACK_FILE_STORE, type TrackFileStore } from '../src/modules/tracks/track-file-store';
 import { TrackProcessingProcessor } from '../src/modules/tracks/track-processing.processor';
+import { TrackSourcesService } from '../src/modules/tracks/track-sources.service';
 import { tracksCollections } from '../src/modules/tracks/tracks.collection';
 import type { Harness } from './harness';
 
@@ -62,3 +63,15 @@ export const processUpload = (h: Harness, uploadId: string) =>
 
 /** Хранилище исходников worker стенда (тесты других модулей: «исходник пропал»). */
 export const trackFileStore = (h: Harness) => h.worker.get<TrackFileStore>(TRACK_FILE_STORE);
+
+/** Приём исходника в обход HTTP (как запрос, прошедший гард до удаления аккаунта и закоммиченный позже). */
+export const storeUpload = (h: Harness, userId: string, bytes: Buffer) =>
+  h.worker.get(TrackSourcesService).store({
+    userId,
+    source: 'upload',
+    via: null,
+    sourceRef: null,
+    format: 'gpx',
+    fileName: null,
+    bytes,
+  });

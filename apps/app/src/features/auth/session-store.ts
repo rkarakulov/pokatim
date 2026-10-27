@@ -17,6 +17,21 @@ import type { AccessRefresh } from './session-revalidation';
  */
 export type SessionStatus = 'unknown' | 'unavailable' | 'signedOut' | 'signedIn';
 
+/** Сообщение гостевому экрану после выхода: `accountDeleted` — «Аккаунт удалён» на «Регистрации». */
+export type SignOutNotice = 'accountDeleted';
+
+export interface SignOutOptions {
+  /** гард ведёт на «Вход» (по умолчанию) или, `false`, на «Регистрацию» (аккаунта больше нет) */
+  returning?: boolean;
+  notice?: SignOutNotice;
+  /**
+   * сервер уже завершил сессию, а устройство её забыло под замком сессии в той же операции (удаление аккаунта,
+   * `forgetEndedSession`): только память, без `clearSession` — запрос отзыва ушёл бы с cookie, которую тем временем
+   * могла выставить другая вкладка
+   */
+  serverEnded?: boolean;
+}
+
 interface SessionState {
   status: SessionStatus;
   /** общая часть native и web: access и сроки; refresh на web — только в httpOnly cookie */
@@ -31,11 +46,14 @@ interface SessionState {
   sessionReceivedAt: number | null;
   /** на устройстве уже входили (явный выход или отзыв сессии сервером): гард ведёт на «Вход», а не «Регистрацию» */
   returning: boolean;
+  /** только память: сообщение после выхода; снимают вход и экран, показавший его (`clearNotice`) */
+  notice: SignOutNotice | null;
   hydrate: (now?: number) => Promise<void>;
   /** фоновая проверка сессии сервером (native: ротация refresh; web — уже при восстановлении) */
   revalidate: (now?: number) => Promise<void>;
   signIn: (session: AnySession) => Promise<void>;
-  signOut: () => Promise<void>;
+  signOut: (options?: SignOutOptions) => Promise<void>;
+  clearNotice: () => void;
   /**
    * Итог обновления access перед авторизованным запросом (`withAccessToken`) для сессии `checked`: новая сессия
    * или локальный выход без запроса отзыва (сервер сессию уже не знает). Выход или новый вход за это время не
@@ -80,6 +98,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   restoreError: null,
   sessionReceivedAt: null,
   returning: false,
+  notice: null,
   hydrate: async (now = Date.now()) => {
     // повтор после «не удалось» — снова «неизвестно» (скелетон)
     set((state) =>
@@ -104,12 +123,20 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       status: 'signedIn',
       session: CookieSession.parse(session),
       sessionReceivedAt: Date.now(),
+      notice: null,
     });
   },
-  signOut: async () => {
-    await clearSession();
-    set({ status: 'signedOut', session: null, sessionReceivedAt: null, returning: true });
+  signOut: async ({ returning = true, notice, serverEnded = false }: SignOutOptions = {}) => {
+    if (!serverEnded) await clearSession();
+    set({
+      status: 'signedOut',
+      session: null,
+      sessionReceivedAt: null,
+      returning,
+      notice: notice ?? null,
+    });
   },
+  clearNotice: () => set({ notice: null }),
   applyAccessRefresh: (checked, result) => {
     set((state) => {
       if (state.session !== checked || state.status !== 'signedIn') return state;
@@ -131,4 +158,5 @@ export const resetSessionStore = () =>
     restoreError: null,
     sessionReceivedAt: null,
     returning: false,
+    notice: null,
   });

@@ -8,6 +8,7 @@ import {
   deriveLinkToken,
   derivePasswordResetToken,
   deriveVerificationToken,
+  erasedEmailMarker,
   passwordResetLimitKeys,
   randomToken,
   rateLimitAddress,
@@ -149,5 +150,20 @@ describe('credentialsStamp (штамп учётных данных панели,
       createHmac('sha256', secret).update(`credentials:${hashA}`).digest('base64url'),
     );
     expect(credentialsStamp('y'.repeat(32), hashA)).not.toBe(credentialsStamp(secret, hashA));
+  });
+
+  it('маркер стёртого e-mail — HMAC с назначением: детерминирован, без «@» и адреса, разные адреса — разные маркеры', () => {
+    const secret = 'x'.repeat(32);
+    const marker = erasedEmailMarker(secret, 'rider@example.com');
+    expect(marker).toBe(erasedEmailMarker(secret, 'rider@example.com'));
+    expect(marker).toMatch(/^erased:[A-Za-z0-9_-]{43}$/);
+    expect(marker).not.toContain('@');
+    expect(marker).not.toContain('rider');
+    expect(erasedEmailMarker(secret, 'other@example.com')).not.toBe(marker);
+    expect(erasedEmailMarker('y'.repeat(32), 'rider@example.com')).not.toBe(marker);
+    // назначение отличает маркер от прочих HMAC того же ключа (ключи лимитов, штамп)
+    expect(marker).not.toContain(
+      createHmac('sha256', secret).update('rider@example.com').digest('base64url'),
+    );
   });
 });

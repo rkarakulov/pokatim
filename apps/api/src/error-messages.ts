@@ -40,6 +40,8 @@ export const PROJECT_ERROR_MESSAGES = {
   DISPUTE_NOT_FOUND: 'Спор не найден',
   ROUTE_INVALID_STATE: 'Маршрут ещё не готов',
   ROUTE_QUOTA_EXCEEDED: 'Достигнут предел маршрутов',
+  PASSWORD_INCORRECT: 'Неверный пароль',
+  ACCOUNT_PANEL_MEMBER: 'Аккаунт сотрудника панели удалить нельзя',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

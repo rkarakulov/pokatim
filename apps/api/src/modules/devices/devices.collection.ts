@@ -47,7 +47,9 @@ export interface DeviceConnectionDoc {
   catchUpUntil: Date | null;
   failedImports: number;
   revokedAt: Date | null;
-  revokedReason: 'user' | 'unconfirmed' | 'foreign_ticket' | 'aggregator' | null;
+  /** `account_deleted` — отзыв при удалении аккаунта (стирание, ADR-0015); новые причины — в конец. */
+  revokedReason:
+    'user' | 'unconfirmed' | 'foreign_ticket' | 'aggregator' | 'account_deleted' | null;
   revokeFailed: boolean;
   version: number;
   /**

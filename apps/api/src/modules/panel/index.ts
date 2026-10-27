@@ -6,4 +6,5 @@ export { Public } from './public.decorator';
 export { CurrentPanelUser, type PanelPrincipal } from './current-panel-user.decorator';
 export { PanelAudit, type AuditRecord } from './panel-audit';
 export { PanelDirectory } from './panel-directory';
+export { PanelMembership } from './panel-membership';
 export { type CliGrantResult, PanelMembersService } from './panel-members.service';

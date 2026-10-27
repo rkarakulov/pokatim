@@ -22,6 +22,21 @@ describe('возврат после входа (native)', () => {
     }
   });
 
+  it('allowlist: экран удаления аккаунта — только точный путь (A12, адрес для Google Play)', () => {
+    expect(isReturnPath('/settings/account/delete')).toBe(true);
+    for (const bad of [
+      '/settings/account/delete?x=1',
+      '/settings/account/delete/',
+      '/settings/account/delete/1',
+      '/settings/account/delete#x',
+      '//evil.example/settings/account/delete',
+      'https://evil.example/settings/account/delete',
+      '/settings/account',
+    ]) {
+      expect(isReturnPath(bad)).toBe(false);
+    }
+  });
+
   it('однократно: второй take — null; путь вне allowlist не запоминается', () => {
     rememberReturnPath(`/rides/${ID}`);
     expect(takeReturnPath()).toBe(`/rides/${ID}`);

@@ -65,6 +65,10 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'ROUTE_INVALID_STATE',
   // routes-02: предел числа своих маршрутов райдера
   'ROUTE_QUOTA_EXCEEDED',
+  // удаление аккаунта: неверный текущий пароль (403 — не 401: клиент не путает с истёкшей сессией); член команды
+  // панели аккаунт не удаляет (409, A11)
+  'PASSWORD_INCORRECT',
+  'ACCOUNT_PANEL_MEMBER',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

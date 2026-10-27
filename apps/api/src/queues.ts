@@ -39,4 +39,10 @@ export const QUEUE = {
    * TTL; дедупликация — ключ постановки в Redis (`DisputeSeriesCache`), не jobId.
    */
   disputeSeries: 'dispute-series',
+  /**
+   * Фоновая очистка удалённого аккаунта (account-deletion, ADR-0015): событие `account.deletion-requested` (jobId = id
+   * события outbox), повторный проход `account.deletion-sweep` (дедупликация `account-sweep:<userId>`) и регламент
+   * `account.erasure-resume`. Один процессор разбирает задачи по имени.
+   */
+  accountDeletion: 'account-deletion',
 } as const;

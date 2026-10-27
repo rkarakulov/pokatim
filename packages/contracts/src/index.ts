@@ -32,3 +32,4 @@ export * from './rides/ride-report.schema.ts';
 export * from './rides/ride-moderation.schema.ts';
 export * from './disputes/disputes.schema.ts';
 export * from './disputes/disputes-admin.schema.ts';
+export * from './account/account-deletion.schema.ts';

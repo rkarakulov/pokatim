@@ -176,4 +176,13 @@ export class ProfileRepository {
       .toArray();
     return new Map(docs.map((doc) => [doc._id, doc.publicName as string]));
   }
+
+  /**
+   * Удаление документа профиля — стирание удалённого аккаунта (`ProfileErasure`, ADR-0015). Только `profiles`: журнал
+   * согласий (`profile_consent_events`) — append-only и хранится (A9). Нет документа — no-op.
+   */
+  async deleteProfile(userId: string): Promise<boolean> {
+    const result = await this.profiles.deleteOne({ _id: userId });
+    return result.deletedCount === 1;
+  }
 }

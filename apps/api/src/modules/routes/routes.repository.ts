@@ -268,6 +268,14 @@ export class RoutesRepository {
     return true;
   }
 
+  /** Id всех своих маршрутов райдера (`routes_owner_origin_idx`) — стирание удалённого аккаунта (`RouteErasure`). */
+  async ownIds(ownerUserId: string): Promise<string[]> {
+    const docs = await this.c.routes
+      .find(ownRider(ownerUserId), { projection: { _id: 1 } })
+      .toArray();
+    return docs.map((doc) => doc._id);
+  }
+
   async geometry(id: string): Promise<RouteGeometryDoc | undefined> {
     return (await this.c.geometries.findOne({ _id: id })) ?? undefined;
   }

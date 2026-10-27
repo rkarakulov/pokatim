@@ -39,7 +39,9 @@ paths:
   регистрации и сессии аккаунта).
 - Pipeline-обновление (`[{ $set: … }]`): значения — только через `{ $literal: … }` — строка, начинающаяся с `$`, в
   pipeline — путь поля.
-- Мягкое удаление пользователя = анонимизация («Удалённый участник»), а не каскадное удаление результатов.
+- Удаление аккаунта (ADR-0015) — не каскад результатов: заявки, попытки, протоколы и споры остаются с псевдонимным
+  `userId`, строка таблиц — «Участник» (A3: документ `profiles` удаляется). Данные модулей стирают **порты стирания**
+  модулей-владельцев из worker `account` (см. «Удаление аккаунта» ниже).
 - Персональные и биометрические данные (пульс, мощность, FTP, вес) — в отдельных полях/коллекциях, чтобы их было
   просто анонимизировать и не выдавать лишнего.
 - Append-only на уровне данных: аудит, история споров (`dispute_events`), пересчёты, модерация — без update/delete
@@ -49,8 +51,8 @@ paths:
   /v1/profile` (profile-02) — транзакция: чтение прежнего флага и запись **того же** документа, затем событие
   согласия — параллельный `PATCH` конфликтует по документу и повторяется на свежем снимке; без `lockUser` (документы
   аккаунта не меняются); гонка первых upsert — `isDuplicateKey(error, '_id_')` и один повтор всей транзакции.
-  Удаление аккаунта (когда появится) обязано удалить документ `profiles` идемпотентно (поздний `PUT`, прошедший
-  `AuthGuard` до отзыва сессий, может его воскресить — удаление повторяемо).
+  Удаление аккаунта — `ProfileErasure.erase` (`deleteOne` `profiles`, идемпотентно; поздний `PUT`/`PATCH`, прошедший
+  `AuthGuard` до отзыва сессий, может его воскресить — убирает повторный проход очистки).
 - Профиль хранит публичное имя и согласие на его показ (`publicName`, `showNameInResults`; profile-rider-name,
   `docs/product/profile.md`): поля необязательные, чтение `?? null` / `?? false`, миграции нет. Удаление документа
   анонимизирует строки таблиц результатов. Снимок протокола (`race_protocol_rows`) имени не хранит: таблица читает
@@ -88,9 +90,13 @@ paths:
 - Биометрия не хранится: ряды пульса/мощности — только в исходнике, в `activities` — флаги `hasHeartRate`/`hasPower`
   (приоритет дублей), наружу не выходят. Исходник — `TrackFileStore` (ключ `randomToken`), не GridFS.
 - `device_audit` — append-only (только `insertOne`, тест-сторож), без идентификаторов агрегатора.
-- **Удаление аккаунта** (когда появится) обязано: отозвать подключения в агрегаторе, удалить `device_*`
-  пользователя, его загрузки, файлы хранилища, активности и линии; пользователя OW удаляет владелец (права
-  разработчика OW, API key этого не может).
+- **Удаление аккаунта** — `DeviceErasure.erase` (до шага треков): каждое живое подключение под замком pull →
+  `disconnecting` + журнал `disconnected` (`account_deleted`) → отзыв в OW (общий `DeviceRevocation`; `not_found` —
+  успех) → `revoked` (`revokedReason: 'account_deleted'`, неудача — `revokeFailed` + `revoke_failed`); затем
+  `deleteMany({ userId })` тикетов, импортов, подключений и `device_accounts` (индексы `userId` — миграция 0023),
+  `device_audit` хранится (A9). Затем `TrackErasure.erase`: все загрузки тем же каскадом, что удаление владельцем
+  (`TrackUploadsService.remove`: активность, линия, файл, outbox `activity-removed`), затем `track_source_refs` и
+  `activity_meta` пользователя. Пользователя OW удаляет владелец вручную (runbook `account-deletion.md`).
 
 ## Панель «Протокол» (ADR-0009)
 
@@ -102,8 +108,10 @@ paths:
 - `panel_audit` — append-only: только `insertOne` через `PanelAudit.append(tx, …)` в транзакции действия (тест-сторож
   `panel.repository.test.ts`); без e-mail, IP, UA. Роль MongoDB без `update`/`remove` — follow-up.
 - `panel_sessions` — токен только sha256; истечение проверяет сервер по `CLOCK`, TTL-индекс — уборка.
-- **Удаление аккаунта** (когда появится) обязано снять роль (`panel_members` → `revoked` или удаление) и отозвать
-  `panel_sessions` пользователя; гард панели уже отказывает удалённому.
+- **Удаление аккаунта** члену команды с активной ролью запрещено (A11, `409 ACCOUNT_PANEL_MEMBER`, порт
+  `PanelMembership.hasActiveRole`) — снимать нечего. Гонка «проверка ↔ выдача роли» принята (R7): гард панели
+  удалённому отказывает, «Сотрудники» показывают «Удалённый участник». Журнал — `account.deleted` (actor — сам райдер,
+  subject `rider`).
 
 ## Маршруты и коридор (ADR-0012 Proposed, race-results-01)
 
@@ -147,8 +155,8 @@ paths:
   версии), сбой окружения — без метки. Документы до `0022_routes_derived` полей не имеют — чтение `?? null`, выборка
   бэкфилла — `$exists: false` или `$lt` версии по `route_geometries_derived_idx { derivedVersion: 1 }` (IXSCAN, int-тест).
   Миграция `0022_routes_derived` (expand-only): коллекция `route_exports` и индекс; данные досчитывает регламент.
-- **Удаление аккаунта** (когда появится) обязано удалить `routes` `origin: 'rider'` автора вместе с
-  `route_geometries`/`route_sources`/`route_exports` (маршруты платформы сотрудника — остаются).
+- **Удаление аккаунта** — `RouteErasure.erase`: все `routes` `origin: 'rider'` автора (`ownIds`) — `deleteOwn` по
+  каждому в своей транзакции (с `route_geometries`/`route_sources`/`route_exports`); маршруты платформы — остаются.
 
 ## Заявки и попытки (race-results-03)
 
@@ -240,9 +248,11 @@ paths:
   гонка (превышение на единицу), комментарий в репозитории.
 - Проекции: публичное чтение без `organizerUserId`, `participants`, `version`; зритель — `participants: { $elemMatch:
   { userId } }` (проекция включающая — остальные поля перечислены явно).
-- **Удаление аккаунта** (когда появится) обязано: отменить будущие свои райды причиной `organizer_unavailable`,
-  снять себя из будущих райдов (`$pull` + `$inc goingCount −1` одной операцией), прошедшие — без изменений; жалобы
-  пользователя (`ride_reports.reporterUserId`) — обезличить или удалить отдельным решением.
+- **Удаление аккаунта** — `RideErasure.erase` (пакетные `updateMany` с условиями в фильтре, повтор безопасен):
+  будущие `published` свои — `cancelled` (`organizer_unavailable`); скрытые будущие свои из `published` —
+  `hiddenFromStatus: 'cancelled'` (статус `hidden` не меняется, F6); «Не иду» в чужих будущих `published`/`hidden`
+  (`$pull` + `$inc goingCount −1`); `organizerName: null` во всех своих райдах (A6). Прошедшие чужие — без изменений;
+  жалобы (`ride_reports`) хранятся (A6).
 - Жалобы (05b): `ride_reports` — единственный писатель `RideReportsRepository`; **исключение из append-only
   модерации**: содержание жалобы неизменно, единственный переход — закрытие `resolvedAt: null → дата` (`updateMany`
   с `resolvedAt: null` в фильтре, `$set` только `resolvedAt/resolution/resolvedBy`), удалений нет; решения и причины —
@@ -254,3 +264,21 @@ paths:
   райда первой — **HIGH** (отрицательное доказательство — гонка в `ride-reports.int.test.ts`).
 - Очереди — частичные индексы `rides_report_queue_idx` (`openReportCount > 0`, запрос обязан содержать это условие)
   и `rides_hidden_queue_idx` (`status: 'hidden'`); публичное чтение и лента — `status ∈ {published, cancelled}`.
+
+## Удаление аккаунта (ADR-0015, `docs/product/account.md`)
+
+- `users`: `deletedAt` — в транзакции удаления под `lockUserCredentials` (с отзывом всех сессий `account_deleted`,
+  гашением ссылок и токена регистрации). Фоновая очистка: письмо «Аккаунт удалён» (`deletionEmailClaimedAt` — захват,
+  `deletionEmailSentAt` — факт), затем одной атомарной записью `email` → маркер `erased:<HMAC(EMAIL_TOKEN_SECRET,
+  'deleted-email:'+email)>`, `birthDate: null`, `passwordHash: null`, `erasedAt`; повторный проход — `erasureSweptAt`.
+  Поля необязательные (`?? null`); `passwordHash: null` — «учётных данных нет» (вход, порт панели — как неизвестный).
+  `users_email_unique` не меняется: регистрация ищет адрес и маркер (`findUserForRegistration`, D-07).
+- Порядок шагов worker (`account-deletion`): профиль → райды → «Мои маршруты» → устройства → заезды → identity. Каждый
+  шаг — порт модуля-владельца, идемпотентен; живой аккаунт (`deletedAt: null`) не трогается. Повторный проход через
+  15 мин и регламент `account.erasure-resume` (частичный `users_erasure_pending_idx { deletedAt: 1 }`, partial
+  `deletedAt: { $type: 'date' }, erasureSweptAt: { $eq: null }`).
+- Миграция `0023_account_deletion` (expand-only): `device_connections_user_idx`, `device_imports_user_idx`,
+  `device_link_tickets_user_idx` (`{ userId: 1 }`), `users_erasure_pending_idx`.
+- Append-only журналы (`user_consents`, `profile_consent_events`, `panel_audit`, `device_audit`, `dispute_events`,
+  `race_recalculations`, `race_protocol_rows`) не меняются (A9); `race_entries`, споры и протоколы — остаются.
+- Новый модуль с данными пользователя обязан дать порт стирания и шаг в `AccountErasureService`.

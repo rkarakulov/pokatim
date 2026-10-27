@@ -93,6 +93,16 @@ export function credentialsStamp(secret: string, passwordHash: string): string {
   return hmacKey(secret, `credentials:${passwordHash}`);
 }
 
+/**
+ * Маркер стёртого e-mail удалённого аккаунта (A4, ADR-0015): `erased:<HMAC(secret, 'deleted-email:' + email)>` в поле
+ * `email` вместо адреса. Без `@` — нормализованный адрес из запроса с ним не совпадёт (вход и сброс по адресу его не
+ * находят), а регистрация ищет и адрес, и его маркер (D-07). Уникальный `users_email_unique` держит и маркеры.
+ * Ротация секрета снимает блок со стёртых адресов (runbook).
+ */
+export function erasedEmailMarker(secret: string, email: string): string {
+  return `erased:${hmacKey(secret, `deleted-email:${email}`)}`;
+}
+
 /** Назначение ссылки — префикс HMAC: токен одной ссылки не годится в другую. */
 export type LinkPurpose = 'email-verify' | 'password-reset';
 

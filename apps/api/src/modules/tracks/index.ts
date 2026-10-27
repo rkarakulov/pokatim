@@ -26,3 +26,5 @@ export {
   TrackSourceDeletedError,
   TrackStorageFullError,
 } from './track-ingest.port';
+/** Порт стирания заездов удалённого аккаунта (модуль `account`). */
+export { TrackErasure } from './track-erasure';

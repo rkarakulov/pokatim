@@ -20,17 +20,28 @@ export const IDENTITY_COLLECTIONS = {
  * Аккаунт райдера. E-mail хранится нормализованным (lower); уникальность — полная, включая удалённые аккаунты:
  * адрес удалённого аккаунта не регистрируется заново (D-07). `version` растёт на каждой транзакции, меняющей
  * документы аккаунта (`lockUser`, R1): две такие транзакции одного аккаунта конфликтуют и идут по очереди.
+ *
+ * Удаление аккаунта (ADR-0015): `deletedAt` — в транзакции удаления; фоновая очистка после письма «Аккаунт удалён»
+ * (`deletionEmailClaimedAt` — захват отправки, `deletionEmailSentAt` — факт) одной записью заменяет `email` маркером
+ * `erased:<HMAC>` (`erasedEmailMarker`), обнуляет `birthDate` и `passwordHash` и ставит `erasedAt`; повторный проход —
+ * `erasureSweptAt`. Новые поля необязательны: документы до удаления их не имеют (чтение — `?? null`).
  */
 export interface UserDoc {
   _id: string;
+  /** Нормализованный адрес; у стёртого аккаунта — маркер `erased:<HMAC>` (без `@`). */
   email: string;
-  passwordHash: string;
-  /** `YYYY-MM-DD` */
-  birthDate: string;
+  /** `null` — стёрт после удаления аккаунта: учётных данных нет, вход — как неизвестный адрес. */
+  passwordHash: string | null;
+  /** `YYYY-MM-DD`; `null` — стёрта после удаления аккаунта. */
+  birthDate: string | null;
   emailVerifiedAt: Date | null;
   createdAt: Date;
   deletedAt: Date | null;
   version: number;
+  deletionEmailClaimedAt?: Date | null;
+  deletionEmailSentAt?: Date | null;
+  erasedAt?: Date | null;
+  erasureSweptAt?: Date | null;
 }
 
 export const CONSENT_KINDS = ['personal_data', 'agreement'] as const;
@@ -74,13 +85,14 @@ export interface RegistrationTokenDoc {
 
 /**
  * Причина отзыва сессии (аудит без журнала входов, слайс 2, R6); `password_reset` — смена пароля по ссылке
- * отзывает все сессии аккаунта (слайс 3).
+ * отзывает все сессии аккаунта (слайс 3); `account_deleted` — удаление аккаунта (все сессии). Только в конец.
  */
 export const SESSION_REVOKED_REASONS = [
   'signed_out',
   'reuse_detected',
   'superseded',
   'password_reset',
+  'account_deleted',
 ] as const;
 export type SessionRevokedReason = (typeof SESSION_REVOKED_REASONS)[number];
 

@@ -129,7 +129,16 @@ paths:
   попытка этой гонки, своя и видимая в «моём участии» (`attemptHidden`), линия — через порт `tracks`; ответ — по
   полям; `marks`: `queued|checking` — `pending`, `trackMap` есть и `linePoints` = точкам линии — `ready`, иначе
   `unavailable`.
-- Анонимизация при удалении аккаунта — «Удалённый участник» (см. `pokatim-db.md`).
+- Удаление аккаунта (ADR-0015) — модуль-оркестратор `account` без своих коллекций: `AccountModule` (HTTP
+  `POST /v1/account/delete`: лимит `account-delete:<uid>` 5/ч → `PanelMembership` → `AccountClosure.verifyPassword` →
+  транзакция `AccountClosure.close` + `PanelAudit` `account.deleted` + outbox `account.deletion-requested`) и
+  `AccountWorkerModule` (очередь `account-deletion`, `AccountErasureProcessor` по имени задачи: событие, sweep,
+  регламент `account.erasure-resume`). Зависимости: `account → identity, panel, profile, rides, routes, tracks,
+  devices` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
+  (`ProfileCoreModule`), `RideErasure` (`RidesCoreModule`), `RouteErasure` (`RoutesCoreModule`), `DeviceErasure`
+  (`DevicesCoreModule`), `TrackErasure` (`TracksCoreModule`), `AccountErasure` (`IdentityErasureModule`). Новый модуль с
+  данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник» (A3). Финальный провал шага — лог
+  `account.erasure_failed user=<uid> step=<s>`, failed-набор BullMQ, регламент; экран в панели — follow-up (F13).
 
 ## Красные флаги pokatim
 

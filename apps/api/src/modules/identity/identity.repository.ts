@@ -53,6 +53,25 @@ const toUserState = (
   deletedAt: doc.deletedAt ?? null,
 });
 
+/**
+ * Учётные данные из документа: стёртый после удаления аккаунт (`passwordHash: null`) — «учётных данных нет»: вход, порт
+ * панели и подтверждение пароля ведут себя как для неизвестного аккаунта.
+ */
+const toCredentials = (
+  doc: Pick<UserDoc, '_id' | 'email' | 'emailVerifiedAt' | 'deletedAt' | 'passwordHash'> | null,
+): CheckedCredentials | undefined =>
+  doc && typeof doc.passwordHash === 'string'
+    ? { ...toUserState(doc), passwordHash: doc.passwordHash }
+    : undefined;
+
+/** Состояние удаления аккаунта для фоновой очистки (ADR-0015). */
+export interface DeletionState {
+  deletedAt: Date | null;
+  erasedAt: Date | null;
+  erasureSweptAt: Date | null;
+  deletionEmailSentAt: Date | null;
+}
+
 const toLinkState = (doc: LinkTokenDoc): VerificationTokenState => ({
   id: doc._id,
   userId: doc.userId,
@@ -104,11 +123,25 @@ export class IdentityRepository {
   }
 
   /** Хеш пароля и состояние аккаунта для входа; только для сравнения на сервере, наружу не уходит. */
-  async findCredentialsByEmail(
-    email: string,
-  ): Promise<(UserState & { passwordHash: string }) | undefined> {
+  async findCredentialsByEmail(email: string): Promise<CheckedCredentials | undefined> {
     const doc = await this.c.users.findOne({ email }, { projection: credentialsProjection });
-    return doc ? { ...toUserState(doc), passwordHash: doc.passwordHash } : undefined;
+    return toCredentials(doc);
+  }
+
+  /**
+   * Аккаунт для проверки адреса при регистрации (D-07): открытый адрес или маркер стёртого адреса удалённого аккаунта
+   * (`erasedEmailMarker`). Гонки со стиранием нет: адрес и маркер меняются одной атомарной записью.
+   */
+  async findUserForRegistration(
+    email: string,
+    marker: string,
+    session: DbSession,
+  ): Promise<UserState | undefined> {
+    const doc = await this.c.users.findOne(
+      { email: { $in: [email, marker] } },
+      { session, projection: userProjection },
+    );
+    return doc ? toUserState(doc) : undefined;
   }
 
   /**
@@ -117,7 +150,7 @@ export class IdentityRepository {
    */
   async findCredentialsById(userId: string): Promise<CheckedCredentials | undefined> {
     const doc = await this.c.users.findOne({ _id: userId }, { projection: credentialsProjection });
-    return doc ? { ...toUserState(doc), passwordHash: doc.passwordHash } : undefined;
+    return toCredentials(doc);
   }
 
   /** Адреса живых (не удалённых) аккаунтов одним запросом `$in` по `_id` (список сотрудников панели). */
@@ -157,13 +190,23 @@ export class IdentityRepository {
   async lockUserCredentials(
     session: DbSession,
     userId: string,
-  ): Promise<(UserState & { passwordHash: string }) | undefined> {
+  ): Promise<CheckedCredentials | undefined> {
     const doc = await this.c.users.findOneAndUpdate(
       { _id: userId },
       { $inc: { version: 1 } },
       { session, returnDocument: 'after', projection: credentialsProjection },
     );
-    return doc ? { ...toUserState(doc), passwordHash: doc.passwordHash } : undefined;
+    return toCredentials(doc);
+  }
+
+  /** Отметка удаления аккаунта — в транзакции удаления под `lockUserCredentials`; уже удалённый не меняется. */
+  async markDeleted(session: DbSession, userId: string, at: Date): Promise<boolean> {
+    const result = await this.c.users.updateOne(
+      { _id: userId, deletedAt: null },
+      { $set: { deletedAt: at } },
+      { session },
+    );
+    return result.modifiedCount === 1;
   }
 
   async updatePasswordHash(session: DbSession, userId: string, passwordHash: string) {
@@ -582,6 +625,137 @@ export class IdentityRepository {
       { $set: { consumedAt: now } },
       { session },
     );
+  }
+
+  // --- стирание удалённого аккаунта (ADR-0015, фоновая очистка) ---
+
+  async deletionState(userId: string): Promise<DeletionState | undefined> {
+    const doc = await this.c.users.findOne(
+      { _id: userId },
+      {
+        projection: { deletedAt: 1, erasedAt: 1, erasureSweptAt: 1, deletionEmailSentAt: 1 },
+      },
+    );
+    if (!doc) return undefined;
+    return {
+      deletedAt: doc.deletedAt ?? null,
+      erasedAt: doc.erasedAt ?? null,
+      erasureSweptAt: doc.erasureSweptAt ?? null,
+      deletionEmailSentAt: doc.deletionEmailSentAt ?? null,
+    };
+  }
+
+  /**
+   * Захват отправки письма «Аккаунт удалён» (как `claimLinkSend`): удалён, не стёрт, письмо не отправлено, чужого
+   * живого захвата нет → `claimed` с адресом и временем удаления; живой чужой захват — `busy`; письмо не нужно
+   * (отправлено, стёрт, не удалён) — `undefined`. Один атомарный `findOneAndUpdate`, SMTP — после него.
+   */
+  async claimDeletionEmail(
+    userId: string,
+    now: Date,
+    leaseMs: number,
+  ): Promise<
+    { status: 'claimed'; email: string; deletedAt: Date } | { status: 'busy' } | undefined
+  > {
+    const sendable: Filter<UserDoc> = {
+      _id: userId,
+      deletedAt: { $ne: null },
+      erasedAt: null,
+      deletionEmailSentAt: null,
+    };
+    const leaseExpired = new Date(now.getTime() - leaseMs);
+    const claimed = await this.c.users.findOneAndUpdate(
+      {
+        ...sendable,
+        $or: [{ deletionEmailClaimedAt: null }, { deletionEmailClaimedAt: { $lte: leaseExpired } }],
+      },
+      { $set: { deletionEmailClaimedAt: now } },
+      { returnDocument: 'after', projection: { email: 1, deletedAt: 1 } },
+    );
+    if (claimed?.deletedAt) {
+      return { status: 'claimed', email: claimed.email, deletedAt: claimed.deletedAt };
+    }
+    const held = await this.c.users.findOne(sendable, { projection: { _id: 1 } });
+    return held ? { status: 'busy' } : undefined;
+  }
+
+  /** SMTP принял письмо «Аккаунт удалён»: факт отправки, свой захват снят. */
+  async completeDeletionEmail(userId: string, claimedAt: Date, sentAt: Date): Promise<void> {
+    await this.c.users.updateOne(
+      { _id: userId, deletionEmailClaimedAt: claimedAt },
+      { $set: { deletionEmailSentAt: sentAt, deletionEmailClaimedAt: null } },
+    );
+  }
+
+  /** Сбой SMTP: свой захват снят — ретрай задачи отправит письмо заново. */
+  async releaseDeletionEmail(userId: string, claimedAt: Date): Promise<void> {
+    await this.c.users.updateOne(
+      { _id: userId, deletionEmailClaimedAt: claimedAt },
+      { $set: { deletionEmailClaimedAt: null } },
+    );
+  }
+
+  /** Открытый адрес удалённого и ещё не стёртого аккаунта — источник маркера стирания. */
+  async openEmailOfDeleted(userId: string): Promise<string | undefined> {
+    const doc = await this.c.users.findOne(
+      { _id: userId, deletedAt: { $ne: null }, erasedAt: null },
+      { projection: { email: 1 } },
+    );
+    return doc?.email;
+  }
+
+  /**
+   * Стирание ПДн удалённого аккаунта одной атомарной записью: `email` → маркер, `birthDate`/`passwordHash` → `null`,
+   * `erasedAt`. Условия — в фильтре: удалён, не стёрт, адрес тот же, что дал маркер, и письмо отправлено либо удалён
+   * раньше `abandonBefore` (письмо не ушло за срок — стирание без письма, F8). Возвращает, состоялось ли стирание.
+   */
+  async eraseDeleted(
+    userId: string,
+    erase: { email: string; marker: string; now: Date; abandonBefore: Date },
+  ): Promise<boolean> {
+    const result = await this.c.users.updateOne(
+      {
+        _id: userId,
+        email: erase.email,
+        deletedAt: { $ne: null },
+        erasedAt: null,
+        $or: [{ deletionEmailSentAt: { $ne: null } }, { deletedAt: { $lt: erase.abandonBefore } }],
+      },
+      {
+        $set: {
+          email: erase.marker,
+          birthDate: null,
+          passwordHash: null,
+          erasedAt: erase.now,
+          deletionEmailClaimedAt: null,
+        },
+      },
+    );
+    return result.modifiedCount === 1;
+  }
+
+  /** Повторный проход очистки удалённого аккаунта завершён. */
+  async markErasureSwept(userId: string, at: Date): Promise<void> {
+    await this.c.users.updateOne(
+      { _id: userId, deletedAt: { $ne: null } },
+      { $set: { erasureSweptAt: at } },
+    );
+  }
+
+  /**
+   * Удалённые раньше `deletedBefore` аккаунты без завершённого повторного прохода — по частичному индексу
+   * `users_erasure_pending_idx` (миграция 0023): фильтр повторяет его `partialFilterExpression`.
+   */
+  async pendingSweeps(deletedBefore: Date, limit: number): Promise<string[]> {
+    const docs = await this.c.users
+      .find(
+        { deletedAt: { $type: 'date', $lt: deletedBefore }, erasureSweptAt: { $eq: null } },
+        { projection: { _id: 1 } },
+      )
+      .sort({ deletedAt: 1 })
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => doc._id);
   }
 
   // --- очистка (V-10) ---

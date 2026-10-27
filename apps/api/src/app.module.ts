@@ -12,6 +12,7 @@ import { MongoModule, MongoOutboxModule } from '@rkarakulov/api-kit/mongo';
 
 import { env } from './config/env';
 import { PROJECT_ERROR_MESSAGES } from './error-messages';
+import { AccountModule } from './modules/account';
 import { CalendarModule } from './modules/calendar';
 import { DevicesModule } from './modules/devices';
 import { DisputesCoreModule, DisputesModule } from './modules/disputes';
@@ -48,6 +49,8 @@ import { TracksModule } from './modules/tracks';
     CalendarModule,
     RidesModule,
     DevicesModule,
+    // удаление аккаунта (оркестратор, ADR-0015)
+    AccountModule,
   ],
   // единый формат ошибок ApiError для всех модулей; тексты кодов проекта — рядом с фильтром
   providers: [

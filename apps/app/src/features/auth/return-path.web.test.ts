@@ -32,6 +32,16 @@ describe('возврат после входа (web)', () => {
     expect(sessionStorage.getItem(RETURN_PATH_KEY)).toBeNull();
   });
 
+  it('экран удаления аккаунта переживает перезагрузку вкладки (вход → возврат, A12)', () => {
+    rememberReturnPath('/settings/account/delete');
+    expect(takeReturnPath()).toBe('/settings/account/delete');
+    sessionStorage.setItem(
+      RETURN_PATH_KEY,
+      JSON.stringify({ path: '/settings/account/delete?x=1', at: Date.now() }),
+    );
+    expect(takeReturnPath()).toBeNull();
+  });
+
   it('хранилище недоступно — только память, без исключения', () => {
     const spy = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('denied');

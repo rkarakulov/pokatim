@@ -118,6 +118,8 @@ const baseEnv = defineCoreEnv({
     .regex(/^[a-z][a-z0-9+.-]*:\/\/(.*\/)?$/i, 'схема://…/ — с завершающим слешем'),
   /** Версия соглашения и согласия на обработку данных, которую принимает пользователь при регистрации. */
   AGREEMENT_VERSION: z.string().min(1),
+  /** Адрес поддержки для писем («Если это были не вы — напишите на …»); не задан — строки в письме нет. */
+  SUPPORT_EMAIL: optional(z.email()),
   CORS_ORIGINS: corsOrigins,
   ...tracksDevicesEnvShape,
 });
