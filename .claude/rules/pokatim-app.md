@@ -41,7 +41,10 @@ paths:
   `components/icon.tsx` (единственный вход `expo-symbols`), шрифты — только `themeFonts` + `useThemeFonts` (не
   `useFonts`); сторож — `__tests__/theme-guards.test.ts`. Доставка — `features/appearance/` (запрос, кэш native
   `pokatim.appTheme`, тема процесса SSR); web — `window.__POKATIM_THEME__` для гидрации. «Классика» = Jersey Aura /
-  Night Ride по системе.
+  Night Ride по системе. Варианты раскладки (`layout.*`) — только таблицами `Record<вариант, компонент | значение>`
+  (`ROUTE_HERO`, `STATS_VARIANT`, `PROFILE_FILL`, `TAB_ITEM`, `ROUTE_CARD`); сравнения с id темы и значением `layout` —
+  нет (сторож). Вкладки — роли `tabBar.*`; отступы карточек — `appDensity[density]`; форма — `shapeOf(theme)`.
+  `react-native-svg` лениво — только `features/routes/use-svg-native.ts` (профиль, контур `route-contour(.web).tsx`).
 - Доступность: `accessibilityActions` вместо единственного drag-жеста; reduce motion — упрощённая анимация
   (вспышка достижения без мерцания).
 - Публичные ключи в бандле — только такие, как Sentry DSN и ключ тайлов.
@@ -278,7 +281,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   выключает прокрутку тела (`useScrubScrollEnabled`): чипы, `ElevationProfile` без заголовка, `RouteActions` в строку,
   «Гонки на маршруте». 404 и ошибка без данных — без карты и шторки. Web: в `fill` колесо масштабирует без Ctrl/⌘.
   «Мой маршрут» — пока прежняя раскладка (follow-up).
-- Главная — раздел `routes` (текстовый герой `RouteHero`, RC-8; пустой каталог — `EmptyState`).
+- Главная — раздел `routes` (герой `RouteHero` по теме: у «Классики» текстовый, RC-8; у тем с `contour`/`numeral` —
+  контур из `catalogRouteMapOptions`, запрос — только в компоненте варианта; пустой каталог — `EmptyState`).
 - Мои маршруты (routes-02): переключатель «Каталог / Мои» — `SegmentedControl` в шапке обеих лент, состояние —
   `?view=mine` (`useLocalSearchParams` + `router.setParams`). Лента — `features/routes/my-route-feed.tsx`, ключи
   `['routes','mine','list','pages']` (опрос 3 с, пока есть `processing`), `['routes','mine','detail',id]`,

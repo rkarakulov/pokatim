@@ -147,6 +147,7 @@ jest.mock('react-native-svg', () => {
     LinearGradient: stub('LinearGradient'),
     Stop: stub('Stop'),
     Path: stub('Path'),
+    Circle: stub('Circle'),
   };
 });
 jest.mock('./src/features/routes/load-svg-native', () => ({

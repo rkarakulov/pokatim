@@ -1,5 +1,6 @@
 import type { IconWeight } from '@pokatim/design-tokens';
 import { SymbolView, type AndroidSymbol, type SFSymbol, type SymbolViewProps } from 'expo-symbols';
+import semiBold from 'expo-symbols/androidWeights/semiBold';
 
 import { useAppTheme } from '@/theme/use-app-theme';
 
@@ -16,6 +17,15 @@ const ICONS = {
   zoomOut: { ios: 'minus', material: 'remove' },
   fit: { ios: 'arrow.up.left.and.arrow.down.right', material: 'fit_screen' },
   locate: { ios: 'location', iosFilled: 'location.fill', material: 'my_location' },
+  // вкладки (вариант таб-бара `icons`, app-themes C2)
+  home: { ios: 'house', iosFilled: 'house.fill', material: 'home' },
+  races: { ios: 'flag.checkered', material: 'sports_score' },
+  rides: { ios: 'cup.and.saucer', iosFilled: 'cup.and.saucer.fill', material: 'local_cafe' },
+  routes: { ios: 'map', iosFilled: 'map.fill', material: 'map' },
+  calendar: { ios: 'calendar', material: 'calendar_month' },
+  // кнопка героя и шеврон карточки списка (варианты раскладки)
+  arrowRight: { ios: 'arrow.right', material: 'arrow_forward' },
+  chevronRight: { ios: 'chevron.right', material: 'chevron_right' },
 } as const satisfies Record<
   string,
   { ios: SFSymbol; iosFilled?: SFSymbol; material: AndroidSymbol }
@@ -27,10 +37,12 @@ type AndroidWeight = Extract<NonNullable<SymbolViewProps['weight']>, object>['an
 
 /**
  * Файлы шрифта Material Symbols по весу для Android/web (`expo-symbols/androidWeights/<вес>`, ~сотни КБ каждый).
- * Импортируются только веса, реально используемые в `appThemes`; в B у всех тем `regular` — пусто. Вес без файла —
- * как `regular` (на iOS тоже: вес одинаков на всех платформах).
+ * Импортируются только веса, реально используемые в `appThemes` (`regular` — встроенный, `semibold` — Хронометр,
+ * Навигация, Типографика). Вес без файла — как `regular` (на iOS тоже: вес одинаков на всех платформах).
  */
-const WEIGHT_FONTS: Partial<Record<Exclude<IconWeight, 'regular'>, AndroidWeight>> = {};
+const WEIGHT_FONTS: Partial<Record<Exclude<IconWeight, 'regular'>, AndroidWeight>> = {
+  semibold: semiBold,
+};
 
 export interface IconProps {
   name: IconName;

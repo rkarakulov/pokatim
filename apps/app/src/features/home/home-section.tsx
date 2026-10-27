@@ -23,6 +23,8 @@ export interface HomeSectionProps<T> {
   all: { label: string; onPress: () => void };
   query: AsyncState<T>;
   empty?: AsyncContentProps<T>['empty'];
+  /** скелетон героя (по умолчанию — `SkeletonHeroCard`; раздел с вариантом героя темы — свой) */
+  skeleton?: ReactNode;
   children: (data: T) => ReactNode;
 }
 
@@ -39,6 +41,7 @@ export function HomeSection<T>({
   all,
   query,
   empty,
+  skeleton = <SkeletonHeroCard />,
   children,
 }: HomeSectionProps<T>) {
   const theme = useTheme();
@@ -54,7 +57,7 @@ export function HomeSection<T>({
         kickerTag={chosen ? t('home.chosenTag') : undefined}
         title={title}
       />
-      <AsyncContent query={query} skeleton={<SkeletonHeroCard />} empty={empty}>
+      <AsyncContent query={query} skeleton={skeleton} empty={empty}>
         {children}
       </AsyncContent>
       <View style={styles.all}>

@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-import { size, themes } from '@pokatim/design-tokens';
+import { appThemes, radius, size, themes } from '@pokatim/design-tokens';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
@@ -74,5 +74,27 @@ describe('MapControls: «Моё местоположение» (routes-04d, RC-6
     expect(locate).toBeDisabled();
     await fireEvent.press(locate);
     expect(onLocate).not.toHaveBeenCalled();
+  });
+});
+
+describe('MapControls: форма темы (app-themes C1)', () => {
+  const noop = () => undefined;
+  const radiusOf = (testID: string) =>
+    StyleSheet.flatten(screen.getByTestId(testID).props.style).borderRadius;
+
+  it('радиус кнопок — shape.button темы: «Классика» — квадрат, Навигация — круг', async () => {
+    const { rerender } = await render(
+      <MapControls theme={themes.light} onZoomIn={noop} onZoomOut={noop} onFit={noop} />,
+    );
+    expect(radiusOf('map-fit')).toBe(0);
+    await rerender(
+      <MapControls
+        theme={appThemes.navigation.schemes.dark}
+        onZoomIn={noop}
+        onZoomOut={noop}
+        onFit={noop}
+      />,
+    );
+    expect(radiusOf('map-fit')).toBe(radius.pill);
   });
 });

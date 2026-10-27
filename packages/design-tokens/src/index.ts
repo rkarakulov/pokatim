@@ -39,6 +39,7 @@ export {
   type ThemeName,
 } from './brand.ts';
 export {
+  appDensity,
   appThemes,
   appThemeScheme,
   DEFAULT_THEME,
@@ -65,5 +66,5 @@ export { designSystemCss, skeletonCss, typographyCss, type DesignSystemCssOption
  */
 export const layout = { contentMaxWidth: 640 } as const;
 
-/** Любая тема набора (у `panel` есть навигация); группы ролей pokatim — `map`, `surfaceBar`, `profile`. */
+/** Любая тема набора (у `panel` есть навигация); группы ролей pokatim — `map`, `surfaceBar`, `profile`, `tabBar`. */
 export type Theme = BaseTheme<PokatimRoleGroups>;

@@ -1554,7 +1554,7 @@ export const ru = {
   'admin.appearance.save': 'Сохранить',
   'admin.appearance.saved': 'Тема сохранена. Приложение применит её в течение минуты.',
   'admin.appearance.saveFailed': 'Не удалось сохранить тему',
-  'admin.appearance.previewPending': 'Превью появится позже',
+  'admin.appearance.font': 'Шрифт: {name}',
   'admin.appearance.theme.classic.name': 'Классика',
   'admin.appearance.theme.classic.description':
     'Нынешний облик: строгие карточки и чёткая типографика',
@@ -1646,6 +1646,8 @@ export const ru = {
   'routes.detail.stats.pace': 'при {pace} км/ч',
   'routes.detail.stats.hours': '{hours} ч',
   'routes.detail.stats.minutes': '{minutes} мин',
+  'routes.detail.stats.hoursUnit': 'ч',
+  'routes.detail.stats.minutesUnit': 'мин',
   'routes.detail.profile.range': '{min}–{max} м',
   'routes.detail.profile.tick': '{km} км',
   'routes.detail.profile.summary': 'Профиль высоты: от {min} до {max} м, набор {gain} м',
