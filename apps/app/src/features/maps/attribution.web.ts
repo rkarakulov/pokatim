@@ -1,4 +1,4 @@
-import { themes, type AppTheme } from '@pokatim/design-tokens';
+import type { AppTheme } from '@pokatim/design-tokens';
 
 /*
  * Атрибуция web-карты (`maplibre-gl` 6) — баги ручной проверки maps-01 (B2, B4 maps-02). Атрибуция остаётся
@@ -42,7 +42,7 @@ export function collapseAttribution(
  */
 export function attributionCss(scope: string, theme: AppTheme): string {
   const root = `[data-route-map="${scope}"]`;
-  const dark = theme === themes.dark;
+  const dark = theme.map.basemap === 'dark';
   return [
     `${root} .maplibregl-ctrl.maplibregl-ctrl-attrib{background-color:${theme.surface.raised};color:${theme.text.secondary}}`,
     `${root} .maplibregl-ctrl-attrib a{color:${theme.text.secondary}}`,

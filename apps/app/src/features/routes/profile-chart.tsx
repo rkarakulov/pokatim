@@ -32,8 +32,8 @@ export const PROFILE_PAN_TEST_ID = 'elevation-profile-pan';
 const ACTIONS = [{ name: 'increment' }, { name: 'decrement' }] as const;
 
 /**
- * Фолбэк площади без `react-native-svg` (старый dev-клиент, routes-04 G2): узкие столбики `View` в приглушённом цвете
- * `map.corridor` — светлый силуэт (`PROFILE_NATIVE_FILL_OPACITY`) без кромки, как routes-03.
+ * Фолбэк площади без `react-native-svg` (старый dev-клиент, routes-04 G2): узкие столбики `View` в цвете
+ * `profile.fillTop` — светлый силуэт (`PROFILE_NATIVE_FILL_OPACITY`) без кромки, как routes-03.
  */
 const ProfileBars = memo(function ProfileBars({
   elevation,
@@ -47,7 +47,7 @@ const ProfileBars = memo(function ProfileBars({
     elevation.minM,
     elevation.maxM,
   );
-  const color = theme.map.corridor;
+  const color = theme.profile.fillTop;
   return (
     <View
       style={[styles.bars, { opacity: PROFILE_NATIVE_FILL_OPACITY }]}
@@ -87,8 +87,8 @@ function useSvgLib(): SvgLib | false | null {
 }
 
 /**
- * Площадь профиля на native (routes-04 G1/G2): тот же SVG, что на web, — плавная линия `map.corridor` толщиной
- * `stroke.input` и заливка-градиент (у линии `PROFILE_FILL_OPACITY`, внизу прозрачно) через `react-native-svg`
+ * Площадь профиля на native (routes-04 G1/G2): тот же SVG, что на web, — плавная линия `profile.line` толщиной
+ * `stroke.input` и заливка-градиент `profile.fillTop` → `profile.fillBottom` (у линии `PROFILE_FILL_OPACITY`, внизу прозрачно) через `react-native-svg`
  * (лениво: пакет требует нативный модуль при импорте). Модуля нет — столбики; пока грузится — пусто (без мигания
  * столбиков). Скрыта от скринридера, при движении курсора не перерисовывается (`memo`).
  */
@@ -104,7 +104,7 @@ const ProfileArea = memo(function ProfileArea({
   if (lib === false) return <ProfileBars elevation={elevation} theme={theme} />;
   const paths = profilePaths(elevation);
   if (lib === null || !paths) return null;
-  const color = theme.map.corridor;
+  const { line, fillTop, fillBottom } = theme.profile;
   return (
     <View
       testID="elevation-profile-svg"
@@ -115,15 +115,15 @@ const ProfileArea = memo(function ProfileArea({
       <lib.Svg viewBox={PROFILE_VIEW_BOX} preserveAspectRatio="none" width="100%" height="100%">
         <lib.Defs>
           <lib.LinearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
-            <lib.Stop offset="0" stopColor={color} stopOpacity={PROFILE_FILL_OPACITY} />
-            <lib.Stop offset="1" stopColor={color} stopOpacity={0} />
+            <lib.Stop offset="0" stopColor={fillTop} stopOpacity={PROFILE_FILL_OPACITY} />
+            <lib.Stop offset="1" stopColor={fillBottom} stopOpacity={0} />
           </lib.LinearGradient>
         </lib.Defs>
         <lib.Path d={paths.area} fill={`url(#${gradient})`} />
         <lib.Path
           d={paths.line}
           fill="none"
-          stroke={color}
+          stroke={line}
           strokeWidth={stroke.input}
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -149,7 +149,7 @@ export function ProfileChart(props: ProfileChartProps) {
         accessible
         accessibilityRole="image"
         accessibilityLabel={label}
-        style={[styles.chart, { borderBottomColor: theme.border.subtle }]}
+        style={[styles.chart, { borderBottomColor: theme.profile.grid }]}
       >
         <ProfileArea elevation={elevation} theme={theme} />
       </View>
@@ -234,7 +234,7 @@ function ScrubbableBody({
       accessibilityActions={ACTIONS}
       onAccessibilityAction={onAction}
       onLayout={(event) => onWidth(event.nativeEvent.layout.width)}
-      style={[styles.chart, { borderBottomColor: theme.border.subtle }]}
+      style={[styles.chart, { borderBottomColor: theme.profile.grid }]}
     >
       <ProfileArea elevation={elevation} theme={theme} />
       {active ? (

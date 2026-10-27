@@ -18,7 +18,7 @@ import { scrubReadout, scrubStep } from './scrub';
 
 /**
  * Площадь профиля на web (routes-03 fix + routes-04 G1): inline SVG — плавная линия по всем точкам профиля в
- * приглушённом `map.corridor` толщиной `stroke.input` и заливка-градиент под ней (у линии `PROFILE_FILL_OPACITY`, внизу
+ * `profile.line` толщиной `stroke.input` и заливка-градиент `profile.fillTop` → `profile.fillBottom` (у линии `PROFILE_FILL_OPACITY`, внизу
  * прозрачно). Inline, а не `react-native-svg`: разметка зависит только от данных — SSR и первый клиентский рендер
  * совпадают, пакет в web-бандл не попадает. Для скринридера скрыт (альтернатива — у контейнера), при движении курсора
  * не перерисовывается (`memo`).
@@ -46,7 +46,7 @@ export const ProfileArea = memo(function ProfileArea({
   const gradient = PROFILE_WEB_GRADIENT_ID;
   const paths = profilePaths(elevation);
   if (!paths) return null;
-  const color = theme.map.corridor;
+  const { line, fillTop, fillBottom } = theme.profile;
   return (
     <svg
       data-testid="elevation-profile-svg"
@@ -60,15 +60,15 @@ export const ProfileArea = memo(function ProfileArea({
     >
       <defs>
         <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={color} stopOpacity={PROFILE_FILL_OPACITY} />
-          <stop offset="1" stopColor={color} stopOpacity={0} />
+          <stop offset="0" stopColor={fillTop} stopOpacity={PROFILE_FILL_OPACITY} />
+          <stop offset="1" stopColor={fillBottom} stopOpacity={0} />
         </linearGradient>
       </defs>
       <path d={paths.area} fill={`url(#${gradient})`} stroke="none" />
       <path
         d={paths.line}
         fill="none"
-        stroke={color}
+        stroke={line}
         strokeWidth={stroke.input}
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -84,7 +84,7 @@ const boxStyle = (theme: AppTheme) =>
     boxSizing: 'border-box',
     width: '100%',
     aspectRatio: String(PROFILE_ASPECT_RATIO),
-    borderBottom: `${stroke.hairline}px solid ${theme.border.subtle}`,
+    borderBottom: `${stroke.hairline}px solid ${theme.profile.grid}`,
   }) as const;
 
 /**
