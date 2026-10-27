@@ -29,15 +29,25 @@ export function mercatorProjector(
   ];
 }
 
-/** Допуск «равных расстояний» петли (`SCRUB_LOOP_TOLERANCE_M`) в единицах вида: по отношению длины линии в px и м. */
+/**
+ * Нижняя граница допуска «равных расстояний», px вида (ревью pass 1, M3): на обзорном зуме 15 м — доли пикселя, а два
+ * прохода одной дороги (упрощение, GPS) расходятся на 20–40 м — визуально одна линия; без границы палец «прыгал» бы
+ * между проходами. Порядок — четверть области касания.
+ */
+export const SCRUB_TOLERANCE_MIN_PX = 12;
+
+/**
+ * Допуск «равных расстояний» петли в единицах вида: `SCRUB_LOOP_TOLERANCE_M` по отношению длины линии в px и м, не
+ * меньше `SCRUB_TOLERANCE_MIN_PX`.
+ */
 export function scrubTolerance(points: readonly Planar[], cumulative: readonly number[]): number {
   const total = cumulative.at(-1) ?? 0;
-  if (points.length < 2 || total <= 0) return 0;
+  if (points.length < 2 || total <= 0) return SCRUB_TOLERANCE_MIN_PX;
   let length = 0;
   for (let i = 1; i < points.length; i += 1) {
     length += Math.hypot(points[i]![0] - points[i - 1]![0], points[i]![1] - points[i - 1]![1]);
   }
-  return (SCRUB_LOOP_TOLERANCE_M * length) / total;
+  return Math.max(SCRUB_TOLERANCE_MIN_PX, (SCRUB_LOOP_TOLERANCE_M * length) / total);
 }
 
 /**

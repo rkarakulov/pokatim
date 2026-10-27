@@ -16,6 +16,12 @@ import { ElevationProfile } from './elevation-profile';
 import { PROFILE_BARS, PROFILE_PAN_TEST_ID } from './profile-chart';
 import { PROFILE_FILL_OPACITY, PROFILE_NATIVE_FILL_OPACITY } from './profile-style';
 
+/** RNGH v3: передача конфига обработчика в натив (эффект `useGesture` по ссылке конфига) — счётчик для M1. */
+const nativeProxy = () =>
+  jest.requireActual<{ NativeProxy: { setGestureHandlerConfig: (...args: unknown[]) => void } }>(
+    'react-native-gesture-handler/lib/module/v3/NativeProxy',
+  ).NativeProxy;
+
 const elevation: CatalogRouteElevation = {
   minM: 191,
   maxM: 267,
@@ -212,5 +218,19 @@ describe('ElevationProfile: скраббинг native (routes-04, S1, S4)', () =
       ]),
     );
     expect(store.getState()).toMatchObject({ fraction: 0, active: false, dragging: null });
+  });
+
+  it('M1: движение курсора не пересоздаёт конфиг жеста — обработчик не перенастраивается в натив на кадр', async () => {
+    const setConfig = jest.spyOn(nativeProxy(), 'setGestureHandlerConfig');
+    const store = createScrubStore();
+    await renderScrub(store);
+    await screen.findByTestId('elevation-profile-svg', { includeHiddenElements: true });
+    const before = setConfig.mock.calls.length;
+    for (const fraction of [0.1, 0.2, 0.3, 0.4, 0.5]) {
+      await act(async () => store.setState({ fraction, active: true }));
+    }
+    expect(chart()).toHaveProp('accessibilityValue', { text: expect.stringMatching(/^34 км,/) });
+    expect(setConfig.mock.calls.length).toBe(before);
+    setConfig.mockRestore();
   });
 });

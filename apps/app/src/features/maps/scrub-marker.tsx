@@ -22,31 +22,40 @@ const HALF = size.touchMin / 2;
  * Для скринридера скрыт: без жеста то же даёт `adjustable` профиля (S4).
  */
 export function ScrubMarker({ store, points, cumulative, theme }: ScrubMarkerProps) {
-  const fraction = useScrub(store, (state) => state.fraction);
-  const tolerance = useMemo(() => scrubTolerance(points, cumulative), [points, cumulative]);
   // точка маркера в начале жеста: позиция пальца = она + смещение жеста (маркер под пальцем двигается)
   const origin = useRef<Planar>([0, 0]);
-  const pan = usePanGesture({
-    testID: SCRUB_MARKER_PAN_TEST_ID,
-    runOnJS: true,
-    onBegin: () => {
-      origin.current = pointAtFraction(points, cumulative, store.getState().fraction);
-      store.setState({ dragging: 'map', active: true });
-    },
-    onUpdate: (event) => {
-      const target: Planar = [
-        origin.current[0] + event.translationX,
-        origin.current[1] + event.translationY,
-      ];
-      store.setState({
-        fraction: nearestFraction(points, cumulative, target, store.getState().fraction, tolerance),
-      });
-    },
-    onFinalize: () => {
-      if (store.getState().dragging === 'map') store.setState({ dragging: null });
-    },
-  });
-  const [x, y] = pointAtFraction(points, cumulative, fraction);
+  // конфиг жеста стабилен на время скраббинга (меняется только при пересчёте проекции): доля — из стора через
+  // getState, на долю носитель жеста не подписан — обработчик не перерегистрируется в натив на кадр (ревью pass 1, M1)
+  const config = useMemo(() => {
+    const tolerance = scrubTolerance(points, cumulative);
+    return {
+      testID: SCRUB_MARKER_PAN_TEST_ID,
+      runOnJS: true,
+      onBegin: () => {
+        origin.current = pointAtFraction(points, cumulative, store.getState().fraction);
+        store.setState({ dragging: 'map', active: true });
+      },
+      onUpdate: (event: { translationX: number; translationY: number }) => {
+        const target: Planar = [
+          origin.current[0] + event.translationX,
+          origin.current[1] + event.translationY,
+        ];
+        store.setState({
+          fraction: nearestFraction(
+            points,
+            cumulative,
+            target,
+            store.getState().fraction,
+            tolerance,
+          ),
+        });
+      },
+      onFinalize: () => {
+        if (store.getState().dragging === 'map') store.setState({ dragging: null });
+      },
+    };
+  }, [store, points, cumulative]);
+  const pan = usePanGesture(config);
   return (
     <View
       style={styles.overlay}
@@ -54,18 +63,27 @@ export function ScrubMarker({ store, points, cumulative, theme }: ScrubMarkerPro
       accessibilityElementsHidden
     >
       <GestureDetector gesture={pan}>
-        <View
-          testID="scrub-marker"
-          style={[styles.hit, { transform: [{ translateX: x - HALF }, { translateY: y - HALF }] }]}
-        >
-          <View
-            style={[
-              styles.dot,
-              { backgroundColor: theme.action.primary, borderColor: theme.map.background },
-            ]}
-          />
-        </View>
+        <MarkerDot store={store} points={points} cumulative={cumulative} theme={theme} />
       </GestureDetector>
+    </View>
+  );
+}
+
+/** Точка маркера: единственный подписчик доли — перерисовывается на кадр только она. */
+function MarkerDot({ store, points, cumulative, theme }: ScrubMarkerProps) {
+  const fraction = useScrub(store, (state) => state.fraction);
+  const [x, y] = pointAtFraction(points, cumulative, fraction);
+  return (
+    <View
+      testID="scrub-marker"
+      style={[styles.hit, { transform: [{ translateX: x - HALF }, { translateY: y - HALF }] }]}
+    >
+      <View
+        style={[
+          styles.dot,
+          { backgroundColor: theme.action.primary, borderColor: theme.map.background },
+        ]}
+      />
     </View>
   );
 }

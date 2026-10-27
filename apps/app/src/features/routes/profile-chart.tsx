@@ -1,6 +1,6 @@
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { stroke, type AppTheme } from '@pokatim/design-tokens';
-import { memo, useEffect, useId, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, type AccessibilityActionEvent } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 
@@ -158,80 +158,97 @@ export function ProfileChart(props: ProfileChartProps) {
   return <ScrubbableChart {...props} scrub={scrub} />;
 }
 
-function ScrubbableChart({
+/**
+ * Носитель жеста: на долю не подписан, конфиг `usePanGesture` стабилен (`useMemo` по стору) — на кадр скраббинга
+ * обработчик не перерегистрируется в натив (ревью pass 1, M1). Подписчик доли — `ScrubbableBody`.
+ */
+function ScrubbableChart(props: ProfileChartProps & { scrub: ScrubStore }) {
+  const { scrub } = props;
+  // ширина — только для перевода X пальца в долю; до раскладки жест игнорируется
+  const width = useRef(0);
+  // жест в этом касании активировался (удержание); нет — касание было тапом или началом прокрутки: курсор скрыть
+  const activated = useRef(false);
+  // один жест вместо композиции «pan + tap»: касание без активации — тап (или начало прокрутки) — скрывает курсор
+  // (RC-8); колбэки читают стор через getState — конфиг не зависит от доли
+  const config = useMemo(() => {
+    const follow = (x: number) => {
+      if (width.current <= 0) return;
+      scrub.setState({ fraction: Math.min(1, Math.max(0, x / width.current)), active: true });
+    };
+    return {
+      testID: PROFILE_PAN_TEST_ID,
+      runOnJS: true,
+      activateAfterLongPress: PROFILE_LONG_PRESS_MS,
+      onBegin: () => {
+        activated.current = false;
+      },
+      onActivate: (event: { x: number }) => {
+        activated.current = true;
+        scrub.setState({ dragging: 'profile' });
+        follow(event.x);
+      },
+      onUpdate: (event: { x: number }) => follow(event.x),
+      onFinalize: () => {
+        if (!activated.current) {
+          if (scrub.getState().active) scrub.setState({ active: false });
+        } else if (scrub.getState().dragging === 'profile') {
+          scrub.setState({ dragging: null });
+        }
+      },
+    };
+  }, [scrub]);
+  const pan = usePanGesture(config);
+  const onWidth = useCallback((next: number) => {
+    width.current = next;
+  }, []);
+  return (
+    <GestureDetector gesture={pan}>
+      <ScrubbableBody {...props} onWidth={onWidth} />
+    </GestureDetector>
+  );
+}
+
+/** Вид графика со скраббингом: подписан на долю (значение для скринридера, курсор) — перерисовывается на кадр. */
+function ScrubbableBody({
   elevation,
   distanceM,
   gainM,
   theme,
   label,
   scrub,
-}: ProfileChartProps & { scrub: ScrubStore }) {
+  onWidth,
+}: ProfileChartProps & { scrub: ScrubStore; onWidth: (width: number) => void }) {
   const fraction = useScrub(scrub, (state) => state.fraction);
   const active = useScrub(scrub, (state) => state.active);
-  // ширина — только для перевода X пальца в долю; до раскладки жест игнорируется
-  const width = useRef(0);
-  // жест в этом касании активировался (удержание); нет — касание было тапом или началом прокрутки: курсор скрыть
-  const activated = useRef(false);
-  const follow = (x: number) => {
-    if (width.current <= 0) return;
-    scrub.setState({ fraction: Math.min(1, Math.max(0, x / width.current)), active: true });
-  };
-  // один жест вместо композиции «pan + tap» (`useExclusiveGestures` требует Reanimated в рантайме жестов): касание без
-  // активации — тап (или начало прокрутки) — скрывает курсор (RC-8)
-  const pan = usePanGesture({
-    testID: PROFILE_PAN_TEST_ID,
-    runOnJS: true,
-    activateAfterLongPress: PROFILE_LONG_PRESS_MS,
-    onBegin: () => {
-      activated.current = false;
-    },
-    onActivate: (event) => {
-      activated.current = true;
-      scrub.setState({ dragging: 'profile' });
-      follow(event.x);
-    },
-    onUpdate: (event) => follow(event.x),
-    onFinalize: () => {
-      if (!activated.current) {
-        if (scrub.getState().active) scrub.setState({ active: false });
-      } else if (scrub.getState().dragging === 'profile') {
-        scrub.setState({ dragging: null });
-      }
-    },
-  });
   const onAction = (event: AccessibilityActionEvent) => {
     const direction = event.nativeEvent.actionName === 'increment' ? 1 : -1;
     scrub.setState({ fraction: scrubStep(fraction, distanceM, direction), active: true });
   };
   return (
-    <GestureDetector gesture={pan}>
-      <View
-        testID="elevation-profile-chart"
-        accessible
-        accessibilityRole="adjustable"
-        accessibilityLabel={label}
-        accessibilityValue={{ text: scrubReadout(elevation, distanceM, gainM, fraction).valueText }}
-        accessibilityActions={ACTIONS}
-        onAccessibilityAction={onAction}
-        onLayout={(event) => {
-          width.current = event.nativeEvent.layout.width;
-        }}
-        style={[styles.chart, { borderBottomColor: theme.border.subtle }]}
-      >
-        <ProfileArea elevation={elevation} theme={theme} />
-        {active ? (
-          <View
-            testID="elevation-profile-cursor"
-            importantForAccessibility="no-hide-descendants"
-            accessibilityElementsHidden
-            style={[
-              styles.cursor,
-              { left: `${fraction * 100}%`, backgroundColor: theme.action.primary },
-            ]}
-          />
-        ) : null}
-      </View>
-    </GestureDetector>
+    <View
+      testID="elevation-profile-chart"
+      accessible
+      accessibilityRole="adjustable"
+      accessibilityLabel={label}
+      accessibilityValue={{ text: scrubReadout(elevation, distanceM, gainM, fraction).valueText }}
+      accessibilityActions={ACTIONS}
+      onAccessibilityAction={onAction}
+      onLayout={(event) => onWidth(event.nativeEvent.layout.width)}
+      style={[styles.chart, { borderBottomColor: theme.border.subtle }]}
+    >
+      <ProfileArea elevation={elevation} theme={theme} />
+      {active ? (
+        <View
+          testID="elevation-profile-cursor"
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+          style={[
+            styles.cursor,
+            { left: `${fraction * 100}%`, backgroundColor: theme.action.primary },
+          ]}
+        />
+      ) : null}
+    </View>
   );
 }
 

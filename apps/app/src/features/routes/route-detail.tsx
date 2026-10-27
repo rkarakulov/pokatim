@@ -26,7 +26,7 @@ import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card'
 import { StatBlock } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { MAP_ASPECT_RATIO } from '@/features/maps/corridor-style';
-import { createScrubStore, useScrub, type ScrubStore } from '@/features/maps/scrub-store';
+import { createScrubStore, type ScrubStore } from '@/features/maps/scrub-store';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
@@ -37,6 +37,7 @@ import { CatalogRouteMap } from './catalog-route-map';
 import { ElevationProfile, PROFILE_ASPECT_RATIO } from './elevation-profile';
 import { routeChips, routeShareDescription, routeStatItems } from './format';
 import { useCatalogRoute, useCatalogRouteRaces } from './queries';
+import { useScrubScrollEnabled } from './use-scrub-scroll-lock';
 
 export const routeDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
 export const routePath = (id: string) => `/routes/${encodeURIComponent(id)}`;
@@ -262,14 +263,14 @@ export function RouteDetailScreen({
     !valid || (route.data === undefined && apiErrorOf(route.error)?.code === 'NOT_FOUND');
   // «назад» без истории и «Все маршруты»: вкладки — только для вошедших, гостю — корень (дальше решает гард)
   const home = signedIn ? '/routes' : '/';
-  // routes-04: стор скраббинга профиля и карты — на экземпляр экрана; жест по профилю или маркеру выключает прокрутку
-  // (ре-рендер экрана — в начале и в конце жеста, не на кадр); прокрутка пальцем скрывает курсор (RC-3, RC-8)
+  // routes-04: стор скраббинга профиля и карты — на экземпляр экрана; native — жест по профилю или маркеру выключает
+  // прокрутку (ре-рендер экрана — в начале и в конце жеста), web — нет (M2); прокрутка скрывает курсор (RC-3, RC-8)
   const [scrub] = useState(createScrubStore);
   useEffect(() => {
     // другой маршрут в том же экземпляре экрана — позиция с начала
     scrub.setState({ fraction: 0, active: false, dragging: null });
   }, [id, scrub]);
-  const scrollEnabled = useScrub(scrub, (state) => state.dragging === null);
+  const scrollEnabled = useScrubScrollEnabled(scrub);
 
   return (
     <SafeAreaView

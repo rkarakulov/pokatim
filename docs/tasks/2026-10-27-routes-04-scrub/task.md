@@ -227,13 +227,17 @@ Architect, 2026-10-27. Сверено по коду ветки и исходни
   (`profile-path.ts`). Курсор native — вертикальная линия-`View` поверх SVG (одинаково с фолбэком).
 - `ScrubReadout.gain` — всегда строка (не `string | null`, §11): при `gainM === null` показывается сырой набор
   профиля (RC-9 a).
-- Native: тап по профилю — не отдельный `useTapGesture` в `useExclusiveGestures` (RC/§11), а «касание без активации
-  pan» (`onFinalize` без `onActivate`): композиция RNGH v3 требует Reanimated в рантайме жестов
-  (`useComposedEventHandler`), а Reanimated в проекте не настроен (RC-4). Поведение то же; начало прокрутки при
-  касании профиля тоже скрывает курсор (как `onScrollBeginDrag`, RC-8).
+- Native: тап по профилю — не отдельный `useTapGesture` в `useExclusiveGestures` (§11), а «касание без активации
+  pan» (`onFinalize` без `onActivate`) — проще и без композиции. Reanimated 4.7.1 и worklets 0.13 в зависимостях
+  есть (на устройстве RNGH их видит), но в jest композиция падает на неполном моке Reanimated
+  (`useComposedEventHandler`). Поведение то же; начало прокрутки при касании профиля тоже скрывает курсор (RC-8).
 - Jest: кроме `react-native-gesture-handler/jestSetup` — мок обёртки RNGH `reanimatedWrapper` («Reanimated не
-  установлен»): mock Reanimated 4.7 падает на `setCSSEventHandler`, `expo-router/testing-library` подменяет пакет
-  пустым объектом, и RNGH v3 падает на `isSharedValue`. Мок `react-native-svg` и `load-svg-native`.
+  установлен», пути `src` и `lib/module`; в jest RNGH резолвится в `lib/module`): mock Reanimated 4.7 падает на
+  `setCSSEventHandler`, `expo-router/testing-library` подменяет пакет пустым объектом, и RNGH v3 падает на
+  `isSharedValue`. Значит, jest исполняет путь RNGH «без Reanimated», а на устройстве — с Reanimated: **путь
+  детектора жестов на устройстве — NOT VERIFIED** (§12). Конфиги жестов — переменные из `useMemo`, не литералы в
+  вызове хука: плагин worklets не превращает колбэки в worklet'ы, с `runOnJS: true` они исполняются на JS.
+  Мок `react-native-svg` и `load-svg-native`.
 - Экран: стор — `useState(createScrubStore)` + сброс состояния эффектом по `id` (не `useMemo(…, [id])` — lint
   `exhaustive-deps`).
 - Готово к интерактивной карте (routes-04b): пересчёт пикселей линии — одна функция `projectLine` на любое изменение
@@ -257,13 +261,16 @@ Architect, 2026-10-27. Сверено по коду ветки и исходни
 `docs/product/routes.md` (раздел «Приложение» — скраббинг профиля и карты, карточка, доступность; из «Что не входит»
 убрать «интерактивный профиль»), `.claude/rules/pokatim-app.md` (маршруты: стор скраббинга, `RouteMap.scrub?` —
 дополнить строку «единственные изменения карты для каталога», оверлей маркера, `gesture-root(.web)`, развилка
-`profile-chart(.web)`, `StatBlock.equalColumns`; jest — `react-native-gesture-handler/jestSetup`). ADR не нужен
-(новых зависимостей и сервисов нет; ADR-0014 RC-4 «статичная карта» сохраняется).
+`profile-chart(.web)`, `StatBlock.equalColumns`; jest — `react-native-gesture-handler/jestSetup`). Новая нативная зависимость —
+`react-native-svg` 15.16.0 (G2, решение пользователя). ADR не нужен: библиотека отрисовки в рамках уже принятых
+решений (не сервис, не хранение данных, не смена архитектуры; версия — из `expo install` под SDK 58, фолбэк без
+модуля есть); ADR-0014 RC-4 «статичная карта» сохраняется.
 
 ## 11. Implementation Context
 
 Architect, 2026-10-27. Решения — §8.1 (RC-1…RC-13). Только `apps/app`, `packages/i18n`, docs; API, контракты,
-`race-route-map.tsx`, `my-route-detail.tsx` — без изменений. Новых зависимостей нет.
+`race-route-map.tsx`, `my-route-detail.tsx` — без изменений. Новых зависимостей нет (после §15 G2 —
+`react-native-svg` 15.16.0, см. §8.2 и §10).
 
 ### ENTRY POINTS
 
@@ -433,7 +440,7 @@ Coder, 2026-10-27. Не закоммичено (коммит и push — орк�
 - **Проверки:** `MONGO_URL_TEST=… REDIS_URL_TEST=… TURBO_CONCURRENCY=1 pnpm check` (Node 24.22.1) — exit 0: format,
   lint, arch (`no dependency violations`), typecheck 8/8, тесты 13/13 задач (app: 128 suites / 1117 tests; tracks 21
   файлов; api 105; admin 26).
-- **NOT VERIFIED:** e2e `pnpm e2e:web` (нужен стенд API, `E2E_API=1`) — шаг написан, не запускался; web-сборка и
+- **NOT VERIFIED:** путь RNGH v3 с Reanimated на устройстве (jest — без Reanimated, §8.2); e2e `pnpm e2e:web` (нужен стенд API, `E2E_API=1`) — шаг написан, не запускался; web-сборка и
   гидрация в браузере; устройство: R1 (long-press-pan в `ScrollView` iOS/Android, pull-to-refresh при жесте), R2
   (проекция маркера по `ViewState.bounds` при `MAP_FIT_PADDING`, перетаскивание маркера), 60 fps, вид
   `react-native-svg` (градиент, `vectorEffect`) и фолбэк в старом dev-клиенте, 3 колонки стат-блока на 375 pt при

@@ -218,12 +218,15 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `gpxAvailable`.
 - Скраббинг (routes-04): стор на экземпляр экрана — `features/maps/scrub-store.ts` (`zustand/vanilla`,
   `{ fraction, active, dragging }`, доля длины линии показа; читают только подписчики `useScrub` — карта и экран на
-  кадр не перерисовываются; экран: `scrollEnabled` при `dragging === null`, `onScrollBeginDrag` скрывает курсор).
+  кадр не перерисовываются; экран: native — `scrollEnabled` при `dragging === null` (`use-scrub-scroll-lock(.web).ts`;
+  web прокрутку не выключает: RN-web дал бы скроллеру `overflow: hidden`), `onScrollBeginDrag` скрывает курсор).
   Чистая логика (доля ↔ точка, ближайшая точка с подсказкой для петли, высота/уклон/набор, шаг 1 км, точки профиля) —
   `@pokatim/tracks` (`src/scrub.ts`, лёгкий вход; её же берёт панель), подписи — `features/routes/scrub.ts`.
   Маркер — оверлей над холстом (`scrub-marker(.web).tsx`), пиксели линии — одна функция `projectLine` на изменение
   камеры (web — `map.project` на `load`/`SCRUB_REPROJECT_EVENTS`, native — `mercatorProjector` по `ViewState.bounds` +
-  `onLayout`); перетаскивание — жест маркера, карта статична. Профиль — `ProfileChart` с развилкой файлами
+  `onLayout`); перетаскивание — жест маркера, карта статична; допуск петли — не меньше `SCRUB_TOLERANCE_MIN_PX`.
+  Носитель жеста на долю не подписан, конфиг `usePanGesture` — из `useMemo` (не литерал: иначе перенастройка
+  обработчика в натив на кадр); подписчик доли — дочерний вид (курсор, точка). Профиль — `ProfileChart` с развилкой файлами
   `profile-chart(.web).tsx`: web — inline SVG (SSR = первый рендер), `role="slider"`, pointer events, клавиши,
   `:focus-visible`; native — `react-native-svg` лениво (`load-svg-native.ts` после `svgSupported()`; старый
   dev-клиент — столбики), `adjustable` с `accessibilityActions`, RNGH v3 `usePanGesture({ activateAfterLongPress:
@@ -231,7 +234,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   жестов — `components/gesture-root(.web).tsx` в `_layout` (RNGH не в web-бандле). Стат-блок карточки —
   `StatBlock equalColumns`. Jest: `react-native-gesture-handler/jestSetup`, обёртка RNGH «без Reanimated», мок
   `react-native-svg` и его загрузчика (`jest.setup.ts`); шаги жеста — `createGestureController` (у
-  `fireGestureHandler` всегда есть ACTIVE).
+  `fireGestureHandler` всегда есть ACTIVE; в jest RNGH резолвится в `lib/module` — шпионы и моки по этому пути).
 - Главная — раздел `routes` (текстовый герой `RouteHero`, RC-8; пустой каталог — `EmptyState`).
 - Мои маршруты (routes-02): переключатель «Каталог / Мои» — `SegmentedControl` в шапке обеих лент, состояние —
   `?view=mine` (`useLocalSearchParams` + `router.setParams`). Лента — `features/routes/my-route-feed.tsx`, ключи

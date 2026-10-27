@@ -10,6 +10,12 @@ import { RouteMap } from './route-map';
 import { SCRUB_MARKER_PAN_TEST_ID } from './scrub-marker';
 import { createScrubStore, type ScrubStore } from './scrub-store';
 
+/** RNGH v3: передача конфига обработчика в натив (эффект `useGesture` по ссылке конфига) — счётчик для M1. */
+const nativeProxy = () =>
+  jest.requireActual<{ NativeProxy: { setGestureHandlerConfig: (...args: unknown[]) => void } }>(
+    'react-native-gesture-handler/lib/module/v3/NativeProxy',
+  ).NativeProxy;
+
 // «туда-обратно» по широте 0 (Mercator по Y вырожден — рамка по долготе): 0 → 1° → 0
 const route: RaceRouteMap = {
   line: [
@@ -115,5 +121,19 @@ describe('RouteMap native: маркер скраббинга (routes-04, RC-2)',
     expect(seen[0]).toBe('map');
     expect(store.getState().fraction).toBeCloseTo(0.85, 6);
     expect(store.getState()).toMatchObject({ dragging: null, active: true });
+  });
+
+  it('M1: движение маркера по стору не перенастраивает жест маркера в натив', async () => {
+    const setConfig = jest.spyOn(nativeProxy(), 'setGestureHandlerConfig');
+    const store = createScrubStore();
+    await render(element(store));
+    await ready();
+    const before = setConfig.mock.calls.length;
+    for (const fraction of [0.1, 0.2, 0.3]) {
+      await act(async () => store.setState({ fraction }));
+    }
+    expect(translate()[0]).toBeCloseTo(0.6 * 200 - 22, 6);
+    expect(setConfig.mock.calls.length).toBe(before);
+    setConfig.mockRestore();
   });
 });
