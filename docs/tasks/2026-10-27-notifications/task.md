@@ -22,7 +22,7 @@
   для существующих `results.protocol-published`, `results.result-revised`.
 - `disputes`: маршруты для существующих `disputes.dispute-filed|-withdrawn|-responded|-decided`.
 - `rides`: новые `rides.ride-cancelled`, `rides.ride-rescheduled` (по `changesStart`), `rides.participant-joined` —
-  update/cancel/join переводятся на `MongoTransactions` + outbox. `rides.reports-resolved {rideId, reportIds}` — в
+  update/cancel/join переводятся на `MongoTransactions` + outbox. `rides.reports-resolved {rideId, resolvedAt}` (RC-5) — в
   транзакции `rides-moderation.service.ts` `act` (закрытые открытые жалобы). Массовая отмена при удалении аккаунта
   (`RideErasure`) тоже пишет `rides.ride-cancelled`.
 - Каждый модуль-источник экспортирует через `index.ts` порт чтения для notifications (получатели и поля текста:
@@ -30,7 +30,7 @@
 
 **Модуль `apps/api/src/modules/notifications`:**
 
-- Коллекции (миграция `0024_notifications`): `notifications` (TTL 90 дней по `expireAt`), `notification_settings`,
+- Коллекции (миграция `0024_notifications`, RC-3): `notifications` (TTL 90 дней по `expireAt`), `notification_settings`, `push_tickets`,
   `push_tokens`. Уникальность уведомления — `(sourceEventId, userId)`; схлопывание — `collapseKey` (N7).
 - Очередь `notifications-intake`: событие outbox → получатели через порты → настройки → upsert уведомлений; событие
   старше 72 ч — skip. Повтор задачи не создаёт дублей (уникальный ключ).
@@ -75,20 +75,53 @@ Web push, e-mail кроме N2, дайджесты, удаление уведо�
 
 ## 5. Architecture Context
 
-- api (модули notifications, results, disputes, rides, account), contracts, api-client, i18n, app.
-- Outbox: один тип → одна очередь (`OutboxRoutes`). Все новые маршруты событий-источников ведут в
-  `notifications-intake`, кроме уже занятых.
-- Миграция `0024_notifications` — expand (новые коллекции и индексы), не деструктивная.
-- Совместимость клиентов: новые эндпоинты; старые приложения их не вызывают.
+Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров нет, решения ниже обязательны для coder.
+
+- Затронуто: api (новый модуль `notifications`; `results`, `disputes`, `rides`, `identity`, `account`; `queues.ts`,
+  `worker.module.ts`, `app.module.ts`, `config/env.ts`, миграции), contracts, api-client, app.
+- Граф модулей (Nest и dependency-cruiser): `notifications → results, disputes, rides, races, identity` — только
+  через их `index.ts`; `account → notifications` (порты `PushTokens`, `NotificationErasure`). `results`, `disputes`,
+  `rides`, `races`, `identity` о `notifications` не знают (циклов нет). Ядро `NotificationsCoreModule` не импортирует
+  модули-источники — `account` не тянет `results`/`rides` транзитивно.
+- Outbox: один тип → одна очередь (`OutboxRoutes` базы — `Record<string, string>`). Маршруты чужих типов объявляет
+  **подписчик** (как `resultsOutboxRoutes` для `tracks.*`): `notificationsOutboxRoutes` в
+  `notifications/notifications.events.ts` — 11 типов → `QUEUE.notificationsIntake`. Ни один из них сейчас не
+  маршрутизирован (проверено: `results.protocol-published`/`result-revised` и `disputes.*` лежат с
+  `publishedAt: null`). После выката публикатор выгрузит накопленные — intake отсечёт их по 72 ч.
+- Очереди: `notifications-intake` (событие → уведомления), `notifications-delivery` (push по пользователю, письмо по
+  уведомлению), `notifications-maintenance` (квитанции Expo, перепостановка зависших доставок).
+- Миграции: `0024_notifications` — expand (коллекции и индексы), `0025_attempt_last_verdict` — бэкфилл нового поля
+  попыток (не деструктивно). Последняя применённая — `0023_account_deletion` (проверено в `migrations/index.ts`).
+- Совместимость клиентов: только новые эндпоинты и поля; старые сборки их не вызывают. Новые enum-ы ответов —
+  `tolerantEnum`, неизвестная цель — `{ type: 'unknown' }` (уведомление без перехода).
+- Rides: `update`/`cancel`/`join` и отмена при стирании переходят на `MongoTransactions` + outbox; инвариант
+  участия не меняется — по-прежнему **одна условная операция над документом райда** (фильтр с лимитом, статусом,
+  временем, членством), транзакция только добавляет событие (поправка ADR-0013 п. 2 — в ADR-0016).
 
 ## 5.1 Placement & Reuse Gate
 
-- Reuse: `MongoOutboxWriter/Reader`, `MongoTransactions`, `RateLimiter` api-kit, `MAILER` и шаблоны писем
-  (`identity/mail/html.ts` — через экспорт или копия разметки решает architect), `page-cursor.ts`,
-  `IdentityAccounts.emailsOf`, `AsyncContent`/`Skeleton*`, компоненты `@rkarakulov/ui`, `expo-symbols` для иконки.
-- Запрещено: чтение чужих коллекций из notifications; userId и тексты в payload событий споров (D-51); свой
-  HTTP-клиент поверх contracts; хардкод стилей в приложении.
-- Контроллеры тонкие, логика — сервисы; чужой модуль — только `index.ts`.
+- **Placement.** `apps/api/src/modules/notifications/` (новый контекст, уже перечислен в `pokatim-backend.md`):
+  `notifications.controller.ts` (тонкий) → `notifications.service.ts` / `notification-settings.service.ts` /
+  `push-tokens.service.ts` → `notifications.repository.ts` (+ `notifications.collection.ts`); worker —
+  `notifications-intake.processor.ts`, `notifications-delivery.processor.ts`, `notifications-maintenance.processor.ts`;
+  чистая логика — `notifications.policy.ts` (тихие часы, группы, правила получателей), тексты —
+  `notification-texts.ts`; Expo — порт `push-sender.ts` + адаптер `expo-push.sender.ts`. Новый пакет не нужен
+  (один потребитель); общий для проектов Expo-клиент — кандидат в app-foundation позже, не в этой задаче.
+- **Reuse (обязательно):** `MongoOutboxWriter/Reader`, `MongoTransactions`, `uuidv7`, `isDuplicateKey`
+  (`api-kit/mongo`); `RateLimiter`, `MAILER`, `CLOCK`, `ENV` (`api-kit/core`); `src/page-cursor.ts`
+  (`encodeCursor/decodeCursor`); `IdentityAccounts.emailsOf` (+ новый `liveUserIds`); `RaceRegistry.get` (название
+  гонки — через `RacesCoreModule`, его реэкспортирует `ResultsCoreModule`); `escapeHtml`/`htmlEmail` из
+  `identity/mail/html.ts` — **экспортом через `identity/index.ts`** (не копия); `PLATFORM_TIME_ZONE` из
+  `@pokatim/contracts`; `tolerantEnum`, `Uuid`, `fieldError` (`contracts/common.ts`); образец адаптера внешнего HTTP —
+  `devices/open-wearables.aggregator.ts` (таймаут, лимит тела, zod-ответ, ключ только из env), образец фейк-сервера
+  для int-тестов — `apps/api/test/fake-ow.ts`; образец идемпотентной доставки — `identity/jobs/link-email.handler.ts`.
+  Приложение: `AsyncContent`, `SkeletonListRow`, `EmptyState`, `Banner`, `Toggle`, `Chip`, `Pill`, `TextAction`,
+  `Button`, `SectionHeader` (`@rkarakulov/ui`), `BottomSheet` (`components/bottom-sheet`), `SymbolView`
+  (`expo-symbols`), `withAccessToken`/`api` (`lib/api.ts`), `minsk-format.ts`.
+- **Запрещено:** чтение чужих коллекций из `notifications` (только порты); `userId`, тексты и массивы id жалоб в
+  payload событий; импорт `@pokatim/i18n` в api (строки сервера — словарь модуля, как `error-messages.ts` и письма
+  identity); свой HTTP-клиент в приложении (только `@pokatim/api-client`); `Platform.OS` в экранах (развилка
+  `push(.web).ts`); hex/px в компонентах колокольчика; `createIndex` вне миграций; `new Date()` в сервисах.
 
 ## 6. Relevant Files
 
@@ -105,16 +138,56 @@ Web push, e-mail кроме N2, дайджесты, удаление уведо�
 
 ## 7. Implementation Notes
 
-- Вердикт: уведомлять только при смене статуса относительно прошлого вердикта попытки (массовая перепроверка не
-  спамит); `failed`/`withdrawn` не уведомляют.
-- `result-revised`: `disqualified`/`disqualification_revoked` — райдеру `entryId`; `recheck_applied` — всем
-  участникам с результатом.
-- `collapseKey`: `ride:<id>:joined`, `ride:<id>:rescheduled` — upsert заменяет текст, сбрасывает `readAt`, обновляет
-  `createdAt` (поднимается наверх).
-- Старые события: время события — из uuidv7 id outbox; > 72 ч — skip с логом.
-- Push payload: `data: {target}` без ПДн сверх текста; `sound: default`; токен — только формат `ExponentPushToken[…]`.
-- Тихие часы: `start/end` — часы 0–23, интервал может переходить через полночь; `start == end` недопустимо.
-- Выход: `POST /v1/notifications/push-tokens/revoke` с токеном устройства, ошибка не блокирует выход.
+- **Вердикт (видимый статус).** Сейчас прошлый вердикт не сохраняется: `requeueAttempt` стирает `status` в `queued`.
+  Новое поле попытки `lastVisibleVerdict?: 'counted' | 'rejected' | null` (чтение `?? null`), **не** сбрасывается
+  `requeueAttempt`. Видимый вердикт итога = `counted`/`rejected` **и** `!attemptHidden({ origin, status, matched,
+  reasons })` (`results.policy.ts`): авто-попытка без полного сегмента и `implausible` скрыты от райдера — о них
+  «не засчитан» не шлём (иначе каждый заезд рядом с коридором = уведомление). В `AttemptCheckProcessor.record`
+  внутри транзакции: `next = visibleVerdict(attempt.origin, result)`; `recordCheck` пишет
+  `lastVisibleVerdict: next ?? attempt.lastVisibleVerdict ?? null` (провал/снятие прежний не затирают); событие
+  `results.attempt-verdict-changed` — только если `next !== null && next !== (attempt.lastVisibleVerdict ?? null)`.
+  Бэкфилл `0025_attempt_last_verdict`: `status ∈ {counted, rejected}` и поля нет → `lastVisibleVerdict = status`
+  (pipeline `$set`), иначе первая же перепроверка старых гонок разошлёт «засчитан» повторно. `failed`, `withdrawn`,
+  `excluded` и `failAttempt` регламента — без события.
+- **`result-revised`:** `disqualified`/`disqualification_revoked` — владельцу `entryId`; `recheck_applied` —
+  `userId` строк ревизии `revision` (участники с результатом). **`protocol-published`** — `userId` активных заявок
+  гонки (`race_entries_race_idx`), включая без результата.
+- **Споры:** получатели — `DisputeNotices.parties(disputeId)`: `filed`, `withdrawn` → `targetUserId`; `responded` →
+  `complainantUserId`; `decided` → оба. Исход: `upheld` → «спор удовлетворён», `rejected` → «спор отклонён»
+  `[ASSUMPTION]`.
+- **Райды:** `ride-cancelled`, `ride-rescheduled` → участники «Иду» без организатора; `participant-joined` →
+  организатор; `reports-resolved` → авторы жалоб, закрытых этим действием. Райд в момент intake не в ожидаемом
+  статусе (`cancelled` для отмены, `published` для переноса и участника) — skip.
+- **`collapseKey`:** `ride:<id>:joined`, `ride:<id>:rescheduled`. Upsert по `{ userId, collapseKey, sourceEventId:
+  { $lt: eventId } }` (uuidv7 упорядочены по времени — устаревшее событие не перетирает новое): `$set` заголовка,
+  текста, `sourceEventId`, `readAt: null`, `createdAt: now`, `expireAt`, push → `pending`. Совпадения нет → вставка →
+  `isDuplicateKey(e, 'notifications_collapse_unique')` = событие устарело или повтор — не ошибка.
+- **Возраст события:** `eventTimeOf(outboxEventId)` — первые 48 бит uuidv7 (своего хелпера в api-kit нет, локальный
+  `notifications/event-time.ts` + unit). `clock.now() − eventTime > 72 ч` → `skipped`, лог
+  `notifications.event_stale type=<t> event=<id>`. `createdAt` уведомления — `clock.now()` при intake (не время
+  события). ⚠ `uuidv7()` берёт `Date.now()`, а не `CLOCK`: в int-тестах `TestClock` стоит в 2026-10-22, события
+  «из будущего» — тест старого события сдвигает часы на `Date.now() − clock.now() + 73 ч` или пишет событие в outbox
+  с id, собранным на нужный момент (хелпер в `test/notifications.ts`).
+- **Получатели живые.** Перед записью — `IdentityAccounts.liveUserIds(ids)` (новый метод: `deletedAt: null`,
+  проекция `_id`): удалённым уведомления не создаются (их заявки и строки протоколов остаются — иначе стирание
+  обгоняли бы новые документы).
+- **Push payload:** `{ to, title, body, sound: 'default', data: { target } }`, сводка — `data: { target: null }`
+  (приложение откроет `/notifications`). Без имён и e-mail. Android — `channelId: 'default'` (канал создаёт
+  приложение). Токен — `^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,200}\]$`.
+- **Тихие часы:** `startHour/endHour` 0–23 по Минску, интервал может переходить через полночь, `start == end` —
+  400 (`fieldError('INVALID')`, путь `quietHours.endHour`). `quietUntil(now, settings): Date | null` — чистая
+  функция (`notifications.policy.ts`) через `PLATFORM_TIME_ZONE`; `notBefore = quietUntil ?? now`. Письма тихие часы
+  не задерживают.
+- **Сводка:** «У вас {N} новых уведомлений» — с русскими формами множественного числа (1 новое уведомление, 2 новых
+  уведомления, 5 новых уведомлений) — `ruPlural` в `notification-texts.ts` `[ASSUMPTION: правка текста продукта]`.
+- **Лимит 20 push/ч:** `RateLimiter.consume('notifications-push:<uid>', { limit: 20, windowSec: 3600 })` **после**
+  захвата (повтор задачи захвата не получит и лимит не тратит); сводка = 1 push; отказ — `push.state: 'limited'`.
+- **Выход:** `POST /v1/notifications/push-tokens/revoke { token }` до `signOut` сессии; ошибка и таймаут (3 с) не
+  блокируют выход; после удаления аккаунта (`notice: 'accountDeleted'`, сессия уже отозвана) — не вызывается: токены
+  сняты сервером в транзакции.
+- **Письма N2** (`ride_cancelled`, `dispute_decided`): тема = заголовок, текст = снимок + «Откройте приложение
+  „Покатим“» — без ссылки (`pokatim://` в почте на десктопе не открывается) `[ASSUMPTION]`; адрес —
+  `IdentityAccounts.emailsOf` в момент отправки (удалённого нет — `skipped`).
 
 ## 8. Risks / Assumptions / Open Questions
 
@@ -125,7 +198,68 @@ Web push, e-mail кроме N2, дайджесты, удаление уведо�
 
 ## 8.1 Requirements Consistency (заполняет architect)
 
-- **Конфликт с инвариантом:** AGENTS §1/§4.9 «нет push» vs N1 → снято решением автора, ADR-0016, правка AGENTS §1.
+Итог: противоречий, требующих человека до старта coder, нет; ниже — конфликты, которые снимает ADR-0016, и
+недоопределённости с принятым решением (`R` — рекомендация architect, реализуется по ней).
+
+- **RC-1 Конфликт с инвариантом (снят автором).** AGENTS §1 и §4.9 «нет push», `pokatim-app.md` (строки «нет push»,
+  «уведомления — только in-app»), `docs/product/account.md` A6 «push в MVP нет» vs N1. Снимает ADR-0016 + правка этих
+  мест в той же PR. Ключевые пункты ADR-0016:
+  1. Push — Expo Push Service (новый внешний сервис, исходящий HTTPS только на `exp.host`); web push — нет.
+  2. Модуль `notifications` — единственный потребитель событий для уведомлений; модули-источники пишут только
+     outbox (payload — id и коды) и дают порт чтения получателей через `index.ts`.
+  3. Текст рендерится сервером при создании и хранится снимком; цель — тип + id из белого списка, адресов нет.
+  4. Доставка at-least-once: захват (lease) в документе уведомления, остаточный риск — дубль push/письма при падении
+     worker между ответом Expo/SMTP и записью факта.
+  5. Outbox «тип → одна очередь»: `results.protocol-published` и `results.result-revised` теперь уходят в
+     `notifications-intake`. Слайсу 08 (рейтинг) нужен fan-out — **задача в app-foundation**: `OutboxRoutes =
+     Record<string, string | readonly string[]>` (jobId = id события в каждой очереди). Альтернативы: (б) intake
+     уведомлений после обработки ставит задачу рейтинга — связывает несвязанные модули, нет; (в) `results` пишет два
+     события (второе — для 08) — дубль источника, допустимо как временная мера. Рекомендация — (а). События, уже
+     опубликованные в `notifications-intake`, слайсу 08 не достанутся — ему нужен бэкфилл по `race_recalculations`.
+  6. Поправка ADR-0013 п. 2: «Я иду», правка и отмена — по-прежнему одна условная операция над документом, но в
+     транзакции с outbox (без замков и чтения-проверки).
+  7. Хранение: 90 дней TTL; токены — до снятия (выход, `DeviceNotRegistered`, удаление аккаунта в транзакции).
+  8. Секрет `EXPO_ACCESS_TOKEN` — только env; `PUSH_ENABLED=false` по умолчанию.
+- **RC-2 Недоопределённость: «смена видимого статуса» не вычислима из данных.** `requeueAttempt` стирает прежний
+  вердикт; кроме того, авто-попытки без полного сегмента скрыты (`attemptHidden`) — уведомлять о них «не засчитан»
+  вредно (спам за каждую поездку рядом с коридором). Варианты: (а) поле `lastVisibleVerdict` + бэкфилл — **R**;
+  (б) сравнивать с `entry.best`/`summary` — теряет отказ при наличии лучшего; (в) уведомлять любой вердикт — спам
+  при перепроверке. Детали — §7.
+- **RC-3 Payload `rides.reports-resolved {rideId, resolvedAt}` (RC-5)** — массив не ограничен (жалоб на райд — сколько
+  угодно пользователей). **R:** `{ rideId, resolvedAt }` (ISO); авторы — `RideNotices.resolvedReporters(rideId,
+  resolvedAt)` по `ride_reports_ride_idx` (закрытие пишет один `resolvedAt` на все). Альтернатива — `reportIds` с
+  потолком 100 — нет: молча теряет авторов.
+- **RC-4 Удалённые получатели.** Заявки, строки протоколов и споры удалённого остаются (A9) → intake создавал бы ему
+  уведомления после стирания. **R:** фильтр `IdentityAccounts.liveUserIds` в intake + проверка в доставке; гонка
+  «`PUT push-tokens` ↔ транзакция удаления» (разные документы) закрывается проверкой живости в доставке и шагом
+  стирания (повтор через 15 мин).
+- **RC-5 Четыре коллекции, а не три.** Квитанции Expo приходят по id тикета через ≥15 мин; хранить их негде.
+  **R:** `push_tickets` (TTL 24 ч). Альтернатива — массив в `push_tokens` — растёт без границы, нет.
+- **RC-6 Отсечка 72 ч по uuidv7.** Хелпера в api-kit нет; `uuidv7` берёт `Date.now()`, не `CLOCK` — тесты (§7).
+  Альтернатива — `createdAt` outbox — `MongoOutboxReader` его не отдаёт, прямое чтение `outbox` — обход базы, нет.
+- **RC-7 Текст сводки** «У вас {N} новых уведомлений» грамматически неверен для 1, 2–4, 21… **R:** формы числа
+  (§7). Не блокер; автор может вернуть одну форму.
+- **RC-8 Отмена скрытых райдов при стирании** (`cancelHiddenFutureOf`, `hiddenFromStatus: 'cancelled'`) — участники
+  скрытый райд не видят, цель вела бы на «Не найдено». **R:** без события. Отмена `published` — событие на каждый
+  райд в своей транзакции.
+- **RC-9 Тексты: i18n или словарь модуля.** `@pokatim/i18n` — строки клиентов (app, admin), api от него не зависит;
+  тексты писем и ошибок сервера уже живут в api. **R:** `notifications/notification-texts.ts` (типизированный
+  словарь по `kind`, unit-тест на каждую строку таблицы продукта). Строки экранов приложения — `packages/i18n`.
+- **RC-10 Подмена Expo в тестах.** `createMongoApiHarness` не умеет `overrideProvider`. **R:** env
+  `EXPO_PUSH_API_URL` (по умолчанию `https://exp.host/--/api/v2/push`; в production+prod — только этот адрес,
+  `envDependencyErrors`) + фейк-сервер `test/fake-expo.ts` по образцу `fake-ow.ts`; сервис доставки дополнительно
+  покрыт unit-тестами с фейком порта `PushSender`.
+- **RC-11 Expo Go и projectId.** Удалённые push в Expo Go на Android не работают (с SDK 53), в `app.json`/`eas.json`
+  нет `extra.eas.projectId`. Регистрация без `projectId` или на симуляторе (`Device.isDevice === false`) не
+  выполняется, строка «Включить push» остаётся (разрешение можно дать) — проверка push только в dev build после
+  runbook. Не блокер.
+- **RC-12 Нагрузка «Я иду» в транзакции.** Параллельные записи на один райд теперь конфликтуют и повторяются
+  драйвером (`withTransaction`) вместо сериализации на документе. Для ≤100 участников приемлемо; регресс-сторож —
+  существующий `rides-participation.int.test.ts` (параллельные записи на последнее место) без правок ожиданий.
+- **RC-13 Настройки не ретроактивны:** выключенная группа не удаляет уже созданные уведомления центра (N4: центр
+  видит всё); push проверяет тумблер и тихие часы ещё раз в момент отправки.
+- Вредных решений и конфликтов с §4 сверх RC-1 не найдено. Серверный авторитет: клиент присылает только намерение
+  (прочитать, настройки, токен); получателей, тексты и цели считает сервер.
 
 ## 8.2 Deviations from spec
 
@@ -152,10 +286,344 @@ rate limit мутаций и регистрации токенов, лимит �
 
 ## 10. Documentation Impact
 
-`docs/product/notifications.md` (новый), ADR-0016 + `docs/adr/README.md`, AGENTS §1 (push), `docs/product/home.md`
-(колокольчик), `docs/product/account.md` A6 (push), `docs/product/README.md`, `docs/runbooks/push.md` (EAS, ключи,
-env), `.claude/rules/pokatim-backend.md` (маршруты notifications), `docs/runbooks/account-deletion.md` (шаг).
+- `docs/adr/0016-notifications-and-push.md` (пункты — §8.1 RC-1) + строка в `docs/adr/README.md`; пометка в
+  `docs/adr/0013-coffee-rides.md` («п. 2 уточнён ADR-0016»).
+- `AGENTS.md` §1 (push через Expo на iOS/Android по ADR-0016; WebSocket/BLE/Strava — по-прежнему нет) и §4.9 (пример
+  «push» убрать из списка запретов).
+- `.claude/rules/pokatim-app.md` — «нет push» и «уведомления — только in-app»; новый абзац «Уведомления»
+  (`features/notifications`, развилка `push(.web).ts`, белый список целей, polling 60 с).
+- `.claude/rules/pokatim-backend.md` — раздел «Уведомления (`notifications`)»: порты источников, маршруты подписчика,
+  очереди, доставка; в «Кофе-райды» — «Outbox-событий в 05a нет» → события и транзакции; в «Протокол» и «Споры» —
+  «без маршрута» → маршрут в `notifications-intake`; `account` — шаг `notifications`.
+- `.claude/rules/pokatim-db.md` — коллекции и индексы `0024`, `race_attempts.lastVisibleVerdict` (`0025`), правка
+  абзаца «Участие — одна атомарная операция… без транзакций» (теперь — в транзакции с outbox, условие в фильтре
+  обязательно), шаг стирания.
+- `.claude/rules/pokatim-contracts.md` — `src/notifications/notification.schema.ts`.
+- `.claude/rules/pokatim-security.md` — push-токены (только свои, снятие при выходе/удалении, не в логах),
+  `EXPO_ACCESS_TOKEN`.
+- `docs/product/home.md` (колокольчик), `docs/product/account.md` A6 и N11, `docs/product/README.md` (ссылка на
+  `notifications.md`).
+- `docs/runbooks/push.md` (новый: EAS `projectId` в `app.json` `extra.eas`, ключи APNs/FCM в EAS, `PUSH_ENABLED`,
+  `EXPO_ACCESS_TOKEN`, проверка квитанций), `docs/runbooks/account-deletion.md` (шаг `notifications`),
+  `docs/runbooks/deploy.md` (миграции 0024–0025), `infra/deploy/env.template`, `apps/api/.env.example`.
 
 ## 11. Implementation Context
+
+Документация библиотек: context7 в сессии architect недоступен — Expo Push API, `expo-notifications` и BullMQ сверены
+по памяти и по `node_modules` (`@rkarakulov/api-kit` 0.4.1: `QueueModule` — `attempts: 5`, exponential 5 с,
+`removeOnComplete: 1000`, `removeOnFail: false`; публикатор outbox — `add(type, { outboxEventId }, { jobId: id })`).
+Coder сверяет через context7: `getExpoPushTokenAsync`, `setNotificationChannelAsync`,
+`addNotificationResponseReceivedListener`/`useLastNotificationResponse`, плагин `expo-notifications` для SDK 58;
+`send`/`getReceipts` Expo Push API; `Queue.add` с `delay` и `jobId`.
+
+### ENTRY POINTS
+
+- Worker: `NotificationsIntakeProcessor` (`@Processor(QUEUE.notificationsIntake, { concurrency: 4 })`, имя задачи =
+  тип события), `NotificationsDeliveryProcessor` (`notifications-delivery`, имена `notifications.push`,
+  `notifications.email`), `NotificationsMaintenanceProcessor` + `NotificationsSchedules` (`notifications-maintenance`:
+  `notifications.receipts` каждые 15 мин, `notifications.redeliver` каждые 10 мин; образец — `account-schedules.ts`).
+- HTTP: `NotificationsController` — `@Controller('notifications')`, `@UseGuards(AuthGuard)`, `@CurrentUser()`,
+  `@Header('Cache-Control', 'no-store')` на чтениях. Статические пути объявлены **до** `:id`:
+  | Метод и путь | Тело / query | Ответ | Лимит (`RateLimiter`, ключ uid) |
+  |---|---|---|---|
+  | `GET /v1/notifications` | `NotificationListQuery { cursor?, limit 1–50 = 20 }` (`strictObject`) | `NotificationPage` | — |
+  | `GET /v1/notifications/unread-count` | — | `UnreadCount { count }` (≤ 100) | — |
+  | `GET /v1/notifications/settings` | — | `NotificationSettings` (нет документа — умолчания) | — |
+  | `PUT /v1/notifications/settings` | `NotificationSettings` (`strictObject`, полный) | `NotificationSettings` | `notifications-settings` 30/ч |
+  | `PUT /v1/notifications/push-tokens` | `RegisterPushToken { token, platform }` | 204 | `notifications-push-token` 30/ч |
+  | `POST /v1/notifications/push-tokens/revoke` | `RevokePushToken { token }` | 204 (чужой/неизвестный — тоже 204) | `notifications-push-token` |
+  | `POST /v1/notifications/read-all` | — | 204 | `notifications-read` 120/мин |
+  | `POST /v1/notifications/:id/read` | pipe `Uuid` | 204; не своё/нет — `404 NOT_FOUND` | `notifications-read` |
+  Отказ лимита — `429 RATE_LIMITED { retryAfterSec }` (как `ride-reports.service.ts`). Новых `ErrorCode` нет.
+- Источники событий (в существующих транзакциях):
+  - `results/attempt-check.processor.ts` `record` — `RESULTS_ATTEMPT_VERDICT_CHANGED` (§7);
+    `MongoOutboxWriter` в конструктор.
+  - `rides/rides.service.ts` — `update`: `transactions.run(tx → repository.update(tx, …) → если
+    updated.rescheduledAt?.getTime() === now.getTime() → outbox RIDES_RIDE_RESCHEDULED)`; `cancel`: `run(tx →
+    repository.cancel(tx, …) → если не null → RIDES_RIDE_CANCELLED)` (повторная отмена — без события); `join`:
+    `run(tx → repository.join(tx, …) → если не null → RIDES_PARTICIPANT_JOINED)` (идемпотентный «уже участник» — без
+    события). Классификация отказов по свежему чтению — после транзакции, как сейчас. `create`/`leave` — без изменений.
+  - `rides/ride-erasure.ts` — `cancelFutureOf` заменить на `futurePublishedIdsOf(organizer, now)` + по каждому
+    `run(tx → cancelOne(tx, id, 'organizer_unavailable', now) (фильтр organizerUserId, status 'published', startsAt >
+    now) → событие)`; повтор безопасен (отменённые фильтр не проходят); `cancelHiddenFutureOf`, `leaveAllFuture`,
+    `clearOrganizerName` — без изменений; `RideErasureResult` тот же.
+  - `rides/rides-moderation.service.ts` `act` — при `closed > 0` (hide/dismiss) в той же транзакции
+    `RIDES_REPORTS_RESOLVED { rideId, resolvedAt: now.toISOString() }`.
+- Удаление аккаунта: `account-deletion.service.ts` — в транзакции после `audit.append`:
+  `await this.pushTokens.revokeAllOf(tx, userId)`; `account-erasure.service.ts` — шаг `notifications` между
+  `tracks` и `identity`: `NotificationErasure.erase(userId)` → `deleted=<n> settings=<0|1> tokens=<n>`.
+
+### FILES TO MODIFY
+
+- `apps/api/src/queues.ts` — `notificationsIntake: 'notifications-intake'`, `notificationsDelivery:
+  'notifications-delivery'`, `notificationsMaintenance: 'notifications-maintenance'` (с doc-комментариями jobId).
+- `apps/api/src/worker.module.ts` — `...notificationsOutboxRoutes`, `NotificationsWorkerModule`.
+- `apps/api/src/app.module.ts` — `NotificationsModule`.
+- `apps/api/src/config/env.ts` — `notificationsEnvShape`: `PUSH_ENABLED: flag(false)`, `EXPO_ACCESS_TOKEN:
+  optional(z.string().min(20))`, `EXPO_PUSH_API_URL: z.url({ protocol: /^https?$/ }).default('https://exp.host/--/api/v2/push')`;
+  в `envDependencyErrors`: production+prod и адрес ≠ умолчанию — ошибка. `apps/api/src/config/env.test.ts`.
+- `apps/api/src/db/migrations/index.ts` — `notifications`, `attemptLastVerdict` в конец.
+- `apps/api/src/modules/results/`: `results.events.ts` (+`RESULTS_ATTEMPT_VERDICT_CHANGED`,
+  `ResultsAttemptVerdictChanged = z.object({ attemptId: z.uuid(), raceId: z.uuid(), userId: z.uuid(), status:
+  z.enum(['counted', 'rejected']) })`), `results.collection.ts` (`lastVisibleVerdict?`), `results.policy.ts`
+  (`visibleVerdict(origin, result)` — поверх `attemptHidden`), `results.repository.ts` (`recordCheck` пишет поле;
+  `activeEntryUserIds(raceId)`, `protocolRowUserIds(raceId, revision)`, `entryUserId(entryId)`,
+  `attemptForNotice(attemptId)` — проекции), `attempt-check.processor.ts`, новые `results-notices.port.ts` +
+  `results-notices.ts`, `results.module.ts` (провайдер в `ResultsCoreModule`, экспорт `RESULTS_NOTICES`), `index.ts`
+  (экспорт порта, типов, констант и схем событий `RESULTS_PROTOCOL_PUBLISHED`, `ResultsProtocolPublished`,
+  `RESULTS_RESULT_REVISED`, `ResultsResultRevised`, `RESULTS_ATTEMPT_VERDICT_CHANGED`, `ResultsAttemptVerdictChanged`).
+- `apps/api/src/modules/disputes/`: новые `dispute-notices.port.ts` + `dispute-notices.ts` (через
+  `DisputesRepository.findById` — проекция без `description/response/decision.note`), `disputes.module.ts`
+  (провайдер и экспорт в `DisputesCoreModule`), `index.ts` (порт + `DISPUTES_DISPUTE_*`, `DisputeEventPayload`,
+  `DisputeDecidedPayload`).
+- `apps/api/src/modules/rides/`: новый `rides.events.ts` (`RIDES_RIDE_CANCELLED`, `RIDES_RIDE_RESCHEDULED`,
+  `RIDES_PARTICIPANT_JOINED` — `RideEventPayload = { rideId }`; `RIDES_REPORTS_RESOLVED` — `{ rideId, resolvedAt:
+  z.iso.datetime() }`), `rides.repository.ts` (`session?: DbSession` в `join`/`update`/`cancel`, `cancelOne`,
+  `futurePublishedIdsOf`, `findForNotice(id)` — `title, startsAt, status, organizerUserId, goingCount,
+  participants.userId`), `ride-reports.repository.ts` (`reportersResolvedAt(rideId, at)`), `rides.service.ts`,
+  `ride-erasure.ts`, `rides-moderation.service.ts`, новые `ride-notices.port.ts` + `ride-notices.ts`,
+  `rides.module.ts` (`RideReportsRepository` и `RideNoticesService` — в `RidesCoreModule`, экспорт; `RidesModule`
+  получает репозиторий жалоб через импорт ядра), `index.ts`.
+- `apps/api/src/modules/identity/`: `identity-accounts.ts` + `identity.repository.ts` (`liveUserIds(ids):
+  Promise<Set<string>>`, `deletedAt: null`, проекция `_id`), `index.ts` (+ `escapeHtml`, `htmlEmail` из
+  `mail/html.ts`).
+- `apps/api/src/modules/account/`: `account-deletion.service.ts`, `account-erasure.service.ts`, `account.module.ts`
+  (`NotificationsCoreModule` в оба модуля), `account-erasure.int.test.ts`, `account-deletion.int.test.ts`.
+- `packages/contracts/src/index.ts`, `packages/api-client/src/index.ts` (+ тест).
+- `apps/app/src/components/top-bar.tsx` (+ `onOpenNotifications?`, `unreadCount?`), `apps/app/src/app/(tabs)/index.tsx`,
+  `apps/app/src/app/_layout.tsx` (экраны `notifications`, `settings/notifications` в первом `Stack.Protected`; хуки
+  `usePushResponses()`, `usePushRegistration()` — только при `signedIn`), `apps/app/src/features/auth/use-sign-out.ts`
+  (снятие токена до `signOut`, кроме `notice: 'accountDeleted'`/`serverEnded`), `apps/app/src/app/settings/profile.tsx`
+  (строка «Уведомления»), `apps/app/app.json` (плагин `"expo-notifications"`), `apps/app/package.json`
+  (`expo-notifications` `~58.0.x` — добавляет человек/coder через `npx expo install expo-notifications`, architect
+  не запускал), `packages/i18n/src/ru.ts` (`notifications.*`: экраны, a11y «Уведомления, {count} непрочитанных»,
+  «99+», настройки, пустое состояние, ошибки).
+
+### NEW FILES
+
+- `apps/api/src/modules/notifications/`: `index.ts` (`NotificationsCoreModule`, `NotificationsModule`,
+  `NotificationsWorkerModule`, `notificationsOutboxRoutes`, `PushTokens`, `NotificationErasure`),
+  `notifications.module.ts`, `notifications.events.ts` (маршруты подписчика, имена задач, `pushJobId(userId,
+  notBefore) = push-<uid>-<ms>`, `emailJobId(id) = email-<id>` — без `:`), `notifications.collection.ts`,
+  `notifications.repository.ts`, `notifications.policy.ts`, `notification-texts.ts`, `event-time.ts`,
+  `notifications.controller.ts`, `notifications.service.ts`, `notification-settings.service.ts`,
+  `push-tokens.service.ts`, `push-tokens.ts` (порт `revokeAllOf(tx, userId)`), `notification-erasure.ts`,
+  `notification-intake.ts` (разбор события → `NoticeDraft[]` через порты), `notifications-intake.processor.ts`,
+  `push-delivery.ts`, `email-delivery.ts`, `notifications-delivery.processor.ts`, `push-receipts.ts`,
+  `notifications-maintenance.processor.ts` (+ `NotificationsSchedules`), `push-sender.ts` (порт `PUSH_SENDER`),
+  `expo-push.sender.ts`.
+- `apps/api/src/db/migrations/0024_notifications.ts`, `0025_attempt_last_verdict.ts`.
+- `packages/contracts/src/notifications/notification.schema.ts` (+ `.test.ts`).
+- `apps/api/test/notifications.ts` (хелперы: событие outbox с id на момент, прогон intake/delivery),
+  `apps/api/test/fake-expo.ts`.
+- `apps/app/src/app/notifications.tsx`, `apps/app/src/app/settings/notifications.tsx`;
+  `apps/app/src/features/notifications/`: `queries.ts` (`useUnreadCount` — `refetchInterval: 60_000`, только
+  `signedIn`; `useNotifications` — `useInfiniteQuery`; мутации read/read-all/settings с инвалидацией счётчика),
+  `notification-target.ts` (цель → `Href` только из белого списка: `race` → `/races/<raceId>`, `ride` →
+  `/rides/<rideId>`, `dispute-response` → `/races/dispute-response/<raceId>/<disputeId>`; `unknown`/`null` →
+  `/notifications`; id — `Uuid.safeParse`), `push.ts` (native: разрешение, канал Android `default`, токен с
+  `projectId` из `Constants.expoConfig?.extra?.eas?.projectId`, без него или не устройство — `null`; хранение
+  последнего токена в SecureStore `pokatim.pushToken`), `push.web.ts` (`pushSupported = false`, no-op),
+  `push-responses.ts`/`push-responses.web.ts` (нажатие на push и холодный старт → `notificationPath(data.target)`;
+  `setNotificationHandler` — показывать баннер, инвалидировать счётчик), `push-registration.ts`/`.web.ts`,
+  `notifications-list.tsx`, `notification-row.tsx`, `quiet-hours-sheet.tsx` (BottomSheet + `Chip` 0–23);
+  `apps/app/src/components/notification-bell.tsx` (SymbolView `{ ios: 'bell', android: 'notifications', web:
+  'notifications' }` + `Pill` счётчика, «99+» при `count > 99`, a11y-лейбл) + тесты.
+
+### FILES TO READ
+
+`AGENTS.md` §4; `.claude/rules/{backend,pokatim-backend,db,pokatim-db,contracts,pokatim-contracts,app,pokatim-app,
+pokatim-security,tests,pokatim-tests}.md`; `docs/adr/0007,0008,0012,0013,0015`; `docs/product/notifications.md`;
+`identity/jobs/link-email.handler.ts` + `identity.repository.ts` (`claimLinkSend/releaseLinkSend/completeLinkSend`);
+`devices/open-wearables.aggregator.ts`, `devices/devices.module.ts` (фабрика адаптера от `ENV`), `test/fake-ow.ts`;
+`results/results-for-disputes(.port).ts` (образец порта); `results/results.policy.ts` (`attemptHidden`);
+`account/account-schedules.ts` (регламент); `src/page-cursor.ts`; `rides/rides-participation.int.test.ts`,
+`rides/ride-reports.int.test.ts`, `rides/rides-moderation.int.test.ts`; `db/migrations/0003_identity_ttl.ts`,
+`0017_ride_reports.ts`, `0023_account_deletion.ts`; `apps/app/src/features/auth/{use-sign-out,session-store}.ts`,
+`features/location/location-permission(.web).ts` (образец развилки разрешения), `features/auth/return-path-allowlist.ts`.
+
+### TYPES & SCHEMAS
+
+Контракты (`packages/contracts/src/notifications/notification.schema.ts`; справочники — только в конец):
+
+```ts
+NOTIFICATION_GROUPS = ['races', 'disputes', 'rides']
+NOTIFICATION_KINDS = ['result_counted', 'result_rejected', 'protocol_published', 'protocol_disqualified',
+  'protocol_restored', 'protocol_rechecked', 'dispute_filed', 'dispute_withdrawn', 'dispute_responded',
+  'dispute_decided', 'ride_cancelled', 'ride_rescheduled', 'ride_joined', 'ride_report_resolved']
+NotificationTarget = discriminatedUnion('type', [
+  { type: 'race', raceId: Uuid }, { type: 'ride', rideId: Uuid },
+  { type: 'dispute-response', raceId: Uuid, disputeId: Uuid } ])
+NotificationTargetView = NotificationTarget | { type: 'unknown' }   // незнакомое → unknown, ответ не падает (тест)
+NotificationView = { id, kind: tolerantEnum, group: tolerantEnum, title, body, createdAt: iso, read: boolean,
+  target: NotificationTargetView | null }
+NotificationPage = { items: NotificationView[], nextCursor: string | null }
+NotificationListQuery = strictObject { cursor?: PageCursor, limit: coerce 1..50 default 20 }
+UnreadCount = { count: int 0..100 }
+NotificationSettings = strictObject { push: { races, disputes, rides: boolean }, email: { disputes, rides: boolean },
+  quietHours: { enabled: boolean, startHour: int 0..23, endHour: int 0..23 } }  // refine start ≠ end → INVALID
+DEFAULT_NOTIFICATION_SETTINGS = всё true, quietHours { enabled: true, startHour: 22, endHour: 8 }
+PUSH_PLATFORMS = ['ios', 'android'];  ExpoPushToken = regex §7, max 220
+RegisterPushToken = strictObject { token: ExpoPushToken, platform: enum(PUSH_PLATFORMS) }
+RevokePushToken = strictObject { token: ExpoPushToken }
+```
+
+api-client: `listNotifications(at, query)`, `getUnreadCount(at)`, `markNotificationRead(at, id)`,
+`markAllNotificationsRead(at)`, `getNotificationSettings(at)`, `updateNotificationSettings(at, body)`,
+`registerPushToken(at, body)`, `revokePushToken(at, body)`.
+
+Порты источников (все — `Symbol` + интерфейс в `*.port.ts`, реализация в ядре модуля, экспорт через `index.ts`):
+
+```ts
+// results/results-notices.port.ts — ResultsCoreModule
+RESULTS_NOTICES; interface ResultsNotices {
+  attempt(attemptId): Promise<{ userId; raceId; activityStartedAt: Date } | null>;
+  protocolAudience(raceId): Promise<string[]>;            // userId активных заявок
+  revisionAudience(raceId, revision): Promise<string[]>;   // userId строк ревизии
+  entryUser(entryId): Promise<string | null>; }
+// disputes/dispute-notices.port.ts — DisputesCoreModule
+DISPUTE_NOTICES; interface DisputeNotices {
+  parties(disputeId): Promise<{ raceId; complainantUserId; targetUserId } | null>; }
+// rides/ride-notices.port.ts — RidesCoreModule
+RIDE_NOTICES; interface RideNotice { id; title; startsAt: Date; status: RideStatus; organizerUserId;
+  goingCount; participantUserIds: string[] /* без организатора */ }
+interface RideNotices { ride(rideId): Promise<RideNotice | null>;
+  resolvedReporters(rideId, resolvedAt: Date): Promise<string[]>; }
+// races — существующий RACE_REGISTRY.get(raceId).title (через RacesCoreModule)
+// identity — IdentityAccounts.liveUserIds(ids): Promise<Set<string>>, emailsOf(ids)
+// notifications (для account): PushTokens.revokeAllOf(tx, userId): Promise<number>;
+//   NotificationErasure.erase(userId): Promise<{ notifications; settings; tokens; tickets }>
+```
+
+Маршруты (`notificationsOutboxRoutes` → `QUEUE.notificationsIntake`): `results.attempt-verdict-changed`,
+`results.protocol-published`, `results.result-revised`, `disputes.dispute-filed|-withdrawn|-responded|-decided`,
+`rides.ride-cancelled`, `rides.ride-rescheduled`, `rides.participant-joined`, `rides.reports-resolved` (11 типов).
+
+Документы (`notifications.collection.ts`):
+
+```ts
+NOTIFICATIONS_COLLECTIONS = { notifications: 'notifications', settings: 'notification_settings',
+  pushTokens: 'push_tokens', pushTickets: 'push_tickets' }
+NotificationDoc { _id: uuidv7; userId; kind; group; title; body; target: NotificationTarget | null;
+  sourceEventId; collapseKey?: string; createdAt: Date; readAt: Date | null; expireAt: Date /* createdAt + 90 д */;
+  push: { state: 'pending' | 'sending' | 'sent' | 'skipped' | 'limited' | 'failed'; notBefore: Date;
+          claimId: string | null; claimedUntil: Date | null; sentAt: Date | null; reason: string | null };
+  email: { state: 'pending' | 'sending' | 'sent' | 'skipped' | 'failed'; claimedUntil: Date | null;
+           sentAt: Date | null } | null }
+NotificationSettingsDoc { _id: userId; push; email; quietHours; updatedAt }   // нет документа — умолчания
+PushTokenDoc { _id: uuidv7; token; userId; platform; createdAt; updatedAt }   // ≤ 10 на userId: 11-й вытесняет старейший
+PushTicketDoc { _id: uuidv7; ticketId; tokenId; createdAt; expireAt /* + 24 ч */ }
+```
+
+Индексы `0024_notifications` (имена — для `isDuplicateKey`):
+`notifications_event_user_unique { sourceEventId: 1, userId: 1 }` unique;
+`notifications_collapse_unique { userId: 1, collapseKey: 1 }` unique, partial `{ collapseKey: { $type: 'string' } }`;
+`notifications_user_list_idx { userId: 1, createdAt: -1, _id: -1 }` (список, курсор, стирание);
+`notifications_user_unread_idx { userId: 1 }` partial `{ readAt: { $eq: null } }` (счётчик, read-all);
+`notifications_push_due_idx { 'push.state': 1, 'push.notBefore': 1 }` partial `{ 'push.state': { $in: ['pending',
+'sending'] } }` (захват по пользователю — `{ userId, 'push.state', 'push.notBefore' }` идёт по `user_list` +
+остаток; регламент — по этому индексу); `notifications_email_due_idx { 'email.state': 1 }` partial
+`{ 'email.state': { $in: ['pending', 'sending'] } }` (`$in` в `partialFilterExpression` — сверить с документацией
+MongoDB 8.0 через context7; не поддерживается — индекс без partial); `notifications_expire_ttl { expireAt: 1 }`
+`expireAfterSeconds: 0`; `push_tokens_token_unique { token: 1 }` unique; `push_tokens_user_idx { userId: 1,
+updatedAt: 1 }`; `push_tickets_ticket_unique { ticketId: 1 }` unique; `push_tickets_created_idx { createdAt: 1 }`;
+`push_tickets_expire_ttl { expireAt: 1 }` `expireAfterSeconds: 0`. Чтения проверяют `expireAt > now` сами (TTL —
+только уборка).
+
+Доставка (образец захвата — `link-email.handler.ts`):
+- intake: черновики по получателям → настройки пачкой (`_id $in`) → `updateOne(upsert)` по `{ sourceEventId, userId }`
+  с `$setOnInsert` (или по `collapseKey`, §7); push `pending` (группа включена и `PUSH_ENABLED`) иначе `skipped`
+  (`reason: 'disabled' | 'push_off'`); email `pending` только для `ride_cancelled`/`dispute_decided` при включённом
+  тумблере. Затем — перечитать уведомления события (`sourceEventId`) в `pending` и поставить задачи с детерминированными
+  jobId (`push-<uid>-<notBeforeMs>` c `delay`, `email-<id>`): повтор intake ставит те же задачи, а не новые.
+  Получателей — пачками по 500.
+- push (задача на пользователя): захват `updateMany({ userId, 'push.state': 'pending', 'push.notBefore': { $lte: now } }
+  ∪ истёкший `sending`) → `$set sending, claimId, claimedUntil = now + 60 с` → чтение по `claimId` → повторно:
+  тумблер группы, тихие часы (сейчас тихо — назад в `pending` с новым `notBefore` и задачей), живость, токены (нет —
+  `skipped/no_tokens`) → лимит 20/ч (`limited`) → одно сообщение на токен (N = 1 — текст уведомления, N > 1 — сводка)
+  → тикеты: `DeviceNotRegistered` — удалить токен сразу, `ok` — `push_tickets` → `sent` по `claimId`. Сбой сети/5xx/429
+  — снять захват (`pending`) и бросить (ретрай BullMQ); последняя попытка — `failed`, лог
+  `notifications.push_failed uid=<uid> count=<n>`.
+- email: захват `findOneAndUpdate({ _id, 'email.state': 'pending' } ∪ истёкший `sending`)` → адрес `emailsOf` (нет —
+  `skipped`) → `MAILER.send` → `sent`; сбой — снять захват и бросить; последняя попытка — `failed`.
+- регламент `redeliver`: `pending` с `notBefore < now − 10 мин` и истёкший `sending` → те же jobId (потерянная
+  задача). `receipts`: тикеты старше 15 мин пачками ≤ 1000 → `getReceipts` → `DeviceNotRegistered` снимает токен,
+  обработанные тикеты удаляются.
+- `ExpoPushSender` (за `PUSH_SENDER`, фабрика от `ENV`): `POST {EXPO_PUSH_API_URL}/send` — массив ≤ 100 сообщений,
+  `POST …/getReceipts { ids ≤ 1000 }`; заголовки `Content-Type`/`Accept: application/json`, `Authorization: Bearer
+  <EXPO_ACCESS_TOKEN>` только если задан; `AbortSignal.timeout(10 с)`, лимит тела 1 МБ, `redirect: 'error'`, ответ —
+  zod (`data[]` тикетов `{ status: 'ok', id } | { status: 'error', message, details?: { error? } }`; квитанции —
+  `data: Record<id, …>`). Токены и тело в логи и ошибки не попадают (лог — `tokenId`, число, код ошибки).
+
+### TESTS
+
+Unit: `notifications.policy.test.ts` (`quietUntil` — через полночь, границы часа, выключено; группы kind→group),
+`notification-texts.test.ts` (каждая строка таблицы продукта, кавычки «», даты по Минску, формы числа сводки),
+`event-time.test.ts`, `notification-target.test.ts` (app: белый список, чужой URL/строка/не-Uuid → `/notifications`),
+`notification.schema.test.ts` (токен, `start == end`, неизвестные kind/target), `expo-push.sender.test.ts` (фейк-
+сервер: чанки 100/1000, ошибки, таймаут, без токена — без заголовка), `results.policy.test.ts` (`visibleVerdict`),
+`env.test.ts`, `notification-bell.test.tsx` («99+», a11y, 0 — без счётчика), `top-bar.test.tsx`.
+
+Int (реальный replica set, `harness`, `fake-expo`):
+- `notifications.int.test.ts` (HTTP): список/курсор/`unread-count` только свои; `POST {чужой id}/read` → 404;
+  read идемпотентен; read-all; settings GET умолчания / PUT / 400 `start == end`; push-tokens: регистрация, тот же
+  токен другим пользователем — переходит к нему, 11-й вытесняет старейший, revoke чужого — 204 без эффекта; 429 на
+  каждый лимит; без сессии — 401; истёкший (`expireAt ≤ now`) не виден.
+- `notifications-intake.int.test.ts`: каждое событие N3 → нужные получатели и текст, посторонним — нет (не участник,
+  удалённый аккаунт); повтор той же задачи и повторная публикация → одно уведомление, одна задача доставки;
+  collapse (два переноса — один документ, снова непрочитан, наверху; старое событие после нового — не перетирает);
+  событие > 72 ч → skip; объект исчез → skip; невалидный payload → skip.
+- `notifications-delivery.int.test.ts`: push уходит один раз при повторе задачи и параллельных двух задачах;
+  выключенная группа — нет push; тихие часы → отложено, два отложенных → одна сводка; 21-й за час — `limited`;
+  `PUSH_ENABLED=false` — `skipped`; `DeviceNotRegistered` в тикете и в квитанции снимает токен; сбой Expo → ретрай,
+  последняя попытка → `failed`; e-mail только `ride_cancelled`/`dispute_decided`, по тумблеру, один раз при повторе,
+  не задерживается тихими часами.
+- Источники: `results-check.int.test.ts` — первый видимый вердикт → событие; перепроверка с тем же статусом — нет;
+  `counted → rejected` — есть; скрытая авто-попытка — нет; `failed` — нет. `rides.int.test.ts` /
+  `rides-participation.int.test.ts` — события `cancel`/`update` (перенос с участниками и без), `join`; повторная отмена
+  и повторный join — без второго события; **существующие тесты гонок без правки ожиданий**. `rides-moderation.int.test.ts`
+  — `reports-resolved` при hide/dismiss с жалобами, restore — нет. `account-erasure.int.test.ts` — отмена будущих
+  райдов пишет событие на каждый, повтор прохода — без новых; шаг `notifications` стирает всё. `account-deletion.int.test.ts`
+  — токены сняты в транзакции (откат при `changed`/`already` — не сняты).
+- Миграции: `migrations.int.test.ts` — индексы 0024 и бэкфилл 0025 (counted/rejected получают поле, прочие — нет,
+  повторный прогон идемпотентен).
+- arch: `pnpm arch:check` — `notifications` только через `index.ts`, циклов нет.
+E2E: web-смоук (`e2e:web`) — колокольчик со счётчиком, центр, «Прочитать все» (опционально, при `E2E_API=1`).
+
+### OUT OF SCOPE
+
+Web push; e-mail кроме N2; дайджесты; ручное удаление уведомлений; уведомления в панели «Протокол» и экран
+failed-доставок (follow-up вместе с F13); WebSocket; fan-out outbox и рейтинг сезона (08) — задача в app-foundation;
+правки `@rkarakulov/*`; EAS `projectId`, ключи APNs/FCM (runbook, ручной шаг); уведомления о скрытии райда
+модерацией и об уходе участника; локализация кроме ru.
+
+### Декомпозиция для coder (последовательно, каждый шаг — зелёный `pnpm check` и коммит)
+
+- **A — ядро notifications + контракты + API.** Контракты и api-client; `queues.ts`; env; миграция 0024;
+  `notifications.collection/repository/policy/texts/event-time`; HTTP (контроллер, сервисы, лимиты);
+  `PushTokens`/`NotificationErasure`; `NotificationsCoreModule`/`NotificationsModule` в `AppModule`. Тесты: unit
+  политики, текстов, схем; int HTTP (чужие не видны, 404, 429, токены). Уведомления в тестах — вставкой репозитория.
+- **B — источники и intake.** `lastVisibleVerdict` + 0025, событие вердикта; порты `ResultsNotices`,
+  `DisputeNotices`, `RideNotices`; события rides и перевод `update/cancel/join`, `RideErasure`, `act` на транзакции;
+  `IdentityAccounts.liveUserIds`; `notificationsOutboxRoutes`, intake-процессор, `NotificationsWorkerModule` (пока
+  без доставки: push `skipped`/`pending` без задач). Тесты: int источников и intake (повтор без дублей, 72 ч, получатели),
+  регресс rides.
+- **C — доставка + account.** `PushSender`/`ExpoPushSender`, `fake-expo`, delivery (push по пользователю, тихие часы,
+  сводка, лимит, e-mail), регламент (квитанции, перепостановка), постановка задач из intake; `account`:
+  `revokeAllOf` в транзакции удаления, шаг стирания. Тесты: int доставки (один push/письмо при повторе и параллели),
+  квитанции, account.
+- **D — приложение.** `expo-notifications` (пакет + плагин), `features/notifications` (запросы, цели, развилки
+  push), колокольчик, экраны центра и настроек, вход из профиля, снятие токена при выходе, обработка нажатия; i18n.
+  Тесты: unit целей, колокольчика, экранов (состояния §4.12: скелетон, пусто, ошибка с повтором, баннер обновления);
+  web-смоук. Затем — документация §10 и ADR-0016.
+
+### Security notes (зона `pokatim-security.md` и `security.md` затронута — чек-лист 8.3 обязателен)
+
+Все выборки и мутации — с `userId` из `@CurrentUser()` в фильтре (`{ _id, userId }`), фильтры только из примитивов
+после zod; токен push — строгий формат, не в логах (лог — id документа); снятие чужого токена невозможно (фильтр по
+`userId`), ответ одинаковый; захват токена другим аккаунтом — переход владельца (устройство одно) — принят;
+исходящий HTTP — один хост из env, в production — только `exp.host`, таймаут, лимит тела, без редиректов;
+`EXPO_ACCESS_TOKEN` — только заголовок; payload push и письма — без чужих ПДн (N12); удаление аккаунта — токены в
+транзакции, уведомления/настройки/тикеты — шагом стирания.
 
 ## 12. Outcome
