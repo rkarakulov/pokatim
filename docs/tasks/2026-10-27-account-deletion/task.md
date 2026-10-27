@@ -449,6 +449,18 @@ Mongo DB / Redis db.
     ошибка/финал (`revokeFailed` + журнал), покрыт финалом с 503.
   - `pokatim-security.md`: строка allowlist возврата уже упоминает `/settings/account/delete` с пометкой «этап 2 app» —
     сам allowlist меняет этап 2.
+- Coder, этап 2 (app), 2026-10-27:
+  - Уход на «Регистрацию» после успеха — не `router.replace` в мутации, а ветка экрана: `signedOut` + отметка
+    `accountDeleted` → `<Redirect href="/register" />` (один путь навигации, без двойного replace).
+  - Гость: `rememberReturnPath` и `router.replace('/sign-in')` — в одном эффекте компонента-перехода (порядок
+    гарантирован; вместо эффекта экрана + `<Redirect>`, у которого эффект ребёнка сработал бы раньше).
+  - Отметку `notice` снимает `clearNotice()` при уходе с «Регистрации» (`useFocusEffect`) и `signIn`; `signOut()` без
+    опций её сбрасывает. `applyAccessRefresh` её не трогает.
+  - В список последствий добавлены A1 (выход на всех устройствах) и A5 (споры решит модератор) — оба из `account.md`.
+  - 429 — как «Вход»: баннер-предупреждение с отсчётом `retryAfterSec`, кнопка выключена до конца паузы.
+  - Фокус в поле при ошибке не переводится (F7: у `TextField` нет `ref`) — объявление через живые регионы: ошибка
+    поля — `polite` (FieldFrame базы), блок баннеров — `assertive`, «Аккаунт удалён» — `polite`.
+  - Ссылка «Удалить аккаунт» в «Профиле» — `TextAction destructive` (вариант есть в базе), видна сразу, не ждёт профиль.
 
 # 8.3 Security checklist
 
@@ -654,7 +666,7 @@ app-foundation (F7, follow-up), удаление пользователя OW ч�
 
 # 12. Outcome
 
-**Этап 1 (backend) — выполнен** (coder, 2026-10-27). Этап 2 (app) — не начат.
+**Этап 1 (backend) — выполнен** (coder, 2026-10-27). **Этап 2 (app) — выполнен** (coder, 2026-10-27), см. ниже.
 
 Сделано:
 - contracts: `DeleteAccountRequest` (`account/account-deletion.schema.ts`), коды `PASSWORD_INCORRECT` (403),
@@ -691,4 +703,38 @@ resume, устройства: 503 не финал/финал, `not_found`, по�
 таймаутами Jest при load average ~28 (код app не менялся, набор упавших менялся между прогонами; `jest --maxWorkers=3`
 — 129/129), повтор гейта — зелёный.
 
-Открыто: контакт для «напишите нам» в письме (§8.2); этап 2 — app.
+Открыто: контакт для «напишите нам» в письме (§8.2).
+
+**Этап 2 (app) — выполнен** (coder, 2026-10-27).
+
+Сделано:
+- экран `src/app/settings/account/delete.tsx` вне `Stack.Protected` (регистрация `Stack.Screen` в `_layout.tsx`):
+  сессия неизвестна — `ShellSkeleton` (SSR — оболочка, без формы и OG); гость — `rememberReturnPath` + «Вход», после
+  входа и онбординга — возврат; после удаления — «Регистрация»; вошёл — форма.
+- `features/account/delete-account-form.tsx`: заголовок, lead, «Что произойдёт» (A1, A3–A8, вкл. «этот e-mail нельзя
+  будет использовать для новой регистрации»), пароль (`secureTextEntry`, `current-password`), «Удалить навсегда»
+  (`Button primary`, F7; выключена без пароля и на паузе 429, `loading` на время запроса), «Назад». Ошибки:
+  `PASSWORD_INCORRECT` и 400 поля — под полем; `ACCOUNT_PANEL_MEMBER`, сеть, сбой — баннер `error`; 429 — баннер с
+  отсчётом. Блок баннеров — `accessibilityLiveRegion="assertive"`.
+- `features/account/queries.ts`: `useDeleteAccount` (`withAccessToken`, `networkMode: 'always'`) → успех —
+  `signOut({ returning: false, notice: 'accountDeleted' })`.
+- `session-store`: `signOut(options)`, `notice`, `clearNotice`; `signIn` снимает отметку. `use-sign-out` пробрасывает
+  опции. `return-path-allowlist`: точный путь `/settings/account/delete`.
+- «Регистрация»: баннер «Аккаунт удалён» (`polite`), снимается при уходе с экрана. «Профиль»: внизу
+  `TextAction destructive` «Удалить аккаунт».
+- i18n `packages/i18n/src/ru.ts`: `account.delete.*`, `profile.deleteAccount`, `auth.register.accountDeleted`.
+
+Тесты (Jest): `__tests__/account-delete.test.tsx` — экран и последствия, «Назад» → «Профиль», скелетон при неизвестной
+сессии, успех (тело запроса, кнопка занята, «Регистрация» с баннером, `returning:false`, сессия забыта), 403 под
+полем без выхода, 409/сеть/500 — баннер с ролью alert и живым регионом, 429 — отсчёт и выключенная кнопка, 400 поля,
+гость → «Вход» → возврат на экран; `profile-screen.test.tsx` — ссылка; `session-store.test.ts` — `returning:false` +
+`notice`, вход и `clearNotice` снимают; `return-path(.web).test.ts` — точный путь, `?x`, `/`, `/1`, `#x`, `//host`.
+Проверка теста успеха: без `notice` в `onSuccess` — тест красный. Смоук `e2e/web.spec.ts`: гость на
+`/settings/account/delete` — HTML без формы и OG; без API — «Нет соединения», с API — «Вход».
+
+Гейт: `TURBO_CONCURRENCY=1 pnpm check` (`pokatim_account_deletion_test`, Redis db 1 порта 6479) — зелёный: 13/13 задач,
+app 130 наборов / 1138 тестов, api 109 файлов.
+Смоук web (локально, `pnpm build:web` с `EXPO_PUBLIC_API_URL=http://127.0.0.1:3000`, без API, `E2E_PORT=8190`):
+новый шаг — passed. Соседний шаг «жалоба на райд /rides/report/<id>» в этом окружении падает (показывает «Не удалось
+загрузить» вместо «Нет соединения»); экран жалобы и гард не менялись, на базовом коммите не перепроверялось.
+NOT VERIFIED: смоук с `E2E_API=1` (полный сценарий удаления в браузере), ручная проверка на iOS/Android.
