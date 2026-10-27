@@ -220,6 +220,25 @@ export function profileBarHeights(bars: readonly number[], minM: number, maxM: n
   );
 }
 
+/**
+ * Точки линии профиля для SVG (web): `[x, y]` в долях 0…1 — X по дистанции (последняя точка — 1), Y — высота от низа
+ * по тем же правилам, что столбики (`profileBarHeights`). Меньше двух точек — `[]`.
+ */
+export function profilePoints(
+  profile: readonly (readonly [number, number])[],
+  minM: number,
+  maxM: number,
+): [number, number][] {
+  const total = profile.at(-1)?.[0] ?? 0;
+  if (profile.length < 2 || total <= 0) return [];
+  const heights = profileBarHeights(
+    profile.map(([, elevation]) => elevation),
+    minM,
+    maxM,
+  );
+  return profile.map(([distance], index) => [distance / total, heights[index]!]);
+}
+
 /** Диапазон высот «191–267 м». */
 export const profileRangeLabel = (elevation: Pick<CatalogRouteElevation, 'minM' | 'maxM'>) =>
   t('routes.detail.profile.range', {

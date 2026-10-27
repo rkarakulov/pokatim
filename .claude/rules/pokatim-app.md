@@ -211,7 +211,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `race-route-map.tsx` не меняются.
 - Карточка (routes-03): без `SectionHero`; чипы — `Pill`, стат-блок — `StatBlock` с `note`, подписи и время в пути —
   чистые функции `features/routes/format.ts` (`ROUTE_PACE_KMH`); профиль — `features/routes/elevation-profile.tsx`
-  (96 столбиков `View`, высота — процент, график — `aspectRatio`, без `onLayout`: SSR = первый рендер; одно
+  (`ProfileChart`: web — SVG-путь `profile-chart.web.tsx`: тонкая линия и светлая заливка
+  `PROFILE_FILL_OPACITY`; native — 160 узких столбиков `View`, только светлый силуэт `PROFILE_NATIVE_FILL_OPACITY`
+  (кромка из столбиков ступенчатая); цвет — приглушённый `map.corridor`; график — `aspectRatio`, без `onLayout`: SSR =
+  первый рендер; одно
   изображение с текстовой альтернативой); «Скачать GPX» — только `src/lib/download-file(.web).ts` (native —
   `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteGpxUrl(id)`, только при
   `gpxAvailable`.
