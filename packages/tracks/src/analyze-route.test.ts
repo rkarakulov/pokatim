@@ -148,4 +148,32 @@ describe('analyzeRoute', () => {
     expect(result.line.at(-1)).toEqual(result.finish);
     expect(result.matchLine.at(-1)).toEqual(result.finish);
   });
+
+  it.each([
+    ['route-mymaps.kml', null, false],
+    ['route-no-alt.kml', null, false],
+    ['route-earth-gxtrack.kml', 40, true],
+    ['route-multigeometry.kml', 0, false],
+  ])('KML %s: длина, набор %s, петля %s по эталону', (name, gain, isLoop) => {
+    const ref = expected[name]!;
+    const result = analyzeRoute(fixture(name));
+    expect(Math.abs(result.distanceM - ref.distanceM)).toBeLessThan(1);
+    expect(result.sourcePointCount).toBe(ref.points);
+    if (gain === null) expect(result.elevationGainM).toBeNull();
+    // гистерезис 3 м: на каждой вершине (их у петли две) теряется меньше 3 м
+    else expect(gain - result.elevationGainM!).toBeGreaterThanOrEqual(0);
+    if (gain !== null) expect(gain - result.elevationGainM!).toBeLessThan(6);
+    expect(result.isLoop).toBe(isLoop);
+    expect(structuredClone(result)).toEqual(result);
+  });
+
+  it.each([
+    ['route-points-only.kml', 'no_track'],
+    ['empty.kml', 'no_track'],
+    ['xxe.kml', 'unreadable'],
+    ['billion-laughs.kml', 'unreadable'],
+    ['route.kmz', 'unreadable'],
+  ])('%s → %s', (name, code) => {
+    expect(failureCode(() => analyzeRoute(fixture(name)))).toBe(code);
+  });
 });

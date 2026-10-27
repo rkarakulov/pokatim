@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { detectTrackFormat } from './format.ts';
-import { precheckTrackFile } from './precheck.ts';
-import { TRACK_FILE_MAX_BYTES } from './track.ts';
+import { detectRouteFormat, detectTrackFormat } from './format.ts';
+import { precheckRouteFile, precheckTrackFile } from './precheck.ts';
+import { ROUTE_FILE_MAX_BYTES, TRACK_FILE_MAX_BYTES } from './track.ts';
 
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url)));
@@ -75,5 +75,55 @@ describe('precheckTrackFile', () => {
     expect(precheckTrackFile({ name: 'a.gpx', size: 0 })).toBe('empty');
     expect(precheckTrackFile({ name: 'a.gpx', size: TRACK_FILE_MAX_BYTES })).toBe('ok');
     expect(precheckTrackFile({ name: 'a.gpx', size: TRACK_FILE_MAX_BYTES + 1 })).toBe('too_large');
+  });
+});
+
+describe('detectRouteFormat', () => {
+  it('GPX и KML: с декларацией, BOM, комментарием и PI, без декларации', () => {
+    expect(detectRouteFormat(fixture('route-rte.gpx'))).toBe('gpx');
+    expect(detectRouteFormat(fixture('route-mymaps.kml'))).toBe('kml');
+    expect(detectRouteFormat(fixture('route-earth-gxtrack.kml'))).toBe('kml');
+    expect(
+      detectRouteFormat(Uint8Array.of(0xef, 0xbb, 0xbf, ...bytes('<?xml version="1.0"?>\n<kml>'))),
+    ).toBe('kml');
+    expect(detectRouteFormat(bytes('  \n<kml xmlns="http://www.opengis.net/kml/2.2">'))).toBe(
+      'kml',
+    );
+    expect(detectRouteFormat(bytes('<?xml version="1.0"?><!-- export --><kml/>'))).toBe('kml');
+    expect(detectRouteFormat(bytes('<gpx version="1.1">'))).toBe('gpx');
+  });
+
+  it('не маршрут: DOCTYPE до корня, `<kmlfoo>`, KMZ, FIT, пусто, текст', () => {
+    expect(detectRouteFormat(fixture('xxe.kml'))).toBeNull();
+    expect(detectRouteFormat(fixture('billion-laughs.kml'))).toBeNull();
+    expect(detectRouteFormat(fixture('xxe.gpx'))).toBeNull();
+    expect(detectRouteFormat(bytes('<kmlfoo>'))).toBeNull();
+    expect(detectRouteFormat(fixture('route.kmz'))).toBeNull();
+    expect(detectRouteFormat(fixture('garmin-edge-ride.fit'))).toBeNull();
+    expect(detectRouteFormat(new Uint8Array())).toBeNull();
+    expect(detectRouteFormat(bytes('hello world'))).toBeNull();
+    expect(detectRouteFormat(bytes('<TrainingCenterDatabase>'))).toBeNull();
+  });
+
+  it('detectTrackFormat не знает KML', () => {
+    expect(detectTrackFormat(fixture('route-mymaps.kml'))).toBeNull();
+  });
+});
+
+describe('precheckRouteFile', () => {
+  it('GPX и KML без учёта регистра; KMZ, FIT, TCX — extension', () => {
+    expect(precheckRouteFile({ name: 'route.gpx', size: 10 })).toBe('ok');
+    expect(precheckRouteFile({ name: 'Кольцо.KML', size: 10 })).toBe('ok');
+    expect(precheckRouteFile({ name: 'route.kmz', size: 10 })).toBe('extension');
+    expect(precheckRouteFile({ name: 'course.fit', size: 10 })).toBe('extension');
+    expect(precheckRouteFile({ name: 'route.tcx', size: 10 })).toBe('extension');
+    expect(precheckRouteFile({ name: 'kml', size: 10 })).toBe('extension');
+  });
+
+  it('пустой и больше 5 МиБ', () => {
+    expect(precheckRouteFile({ name: 'a.kml', size: 0 })).toBe('empty');
+    expect(ROUTE_FILE_MAX_BYTES).toBe(5 * 1024 * 1024);
+    expect(precheckRouteFile({ name: 'a.kml', size: ROUTE_FILE_MAX_BYTES })).toBe('ok');
+    expect(precheckRouteFile({ name: 'a.kml', size: ROUTE_FILE_MAX_BYTES + 1 })).toBe('too_large');
   });
 });
