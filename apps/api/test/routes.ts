@@ -1,4 +1,4 @@
-import { PanelRoute } from '@pokatim/contracts';
+import { MyRoute, PanelRoute } from '@pokatim/contracts';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { Binary } from 'mongodb';
 
@@ -6,6 +6,7 @@ import { RouteProcessingProcessor } from '../src/modules/routes/route-processing
 import { type RouteDoc, routesCollections } from '../src/modules/routes/routes.collection';
 import { RoutesRepository } from '../src/modules/routes/routes.repository';
 import type { Harness } from './harness';
+import { bearer } from './identity';
 import { panelCookie } from './panel';
 import { fixture, type UploadResult } from './tracks';
 
@@ -119,3 +120,35 @@ export async function seedRiderRoute(
   }
   return id;
 }
+
+/** «Мои маршруты» приложения (routes-02). */
+export const MY_ROUTES = '/v1/routes/mine';
+
+/** `POST /v1/routes/mine?title=` сырыми байтами с access JWT приложения (без токена — без входа). */
+export async function uploadMyRoute(
+  h: Harness,
+  accessToken: string | undefined,
+  bytes: Buffer,
+  title: string | null = 'Мой маршрут',
+  ip = '198.51.100.20',
+): Promise<UploadResult> {
+  const query = title === null ? '' : `?title=${encodeURIComponent(title)}`;
+  const response = await h.app.inject({
+    method: 'POST',
+    url: `${MY_ROUTES}${query}`,
+    headers: {
+      'content-type': 'application/octet-stream',
+      'x-forwarded-for': ip,
+      ...(accessToken ? bearer(accessToken) : {}),
+    },
+    payload: bytes,
+  });
+  return {
+    status: response.statusCode,
+    body: response.body ? (JSON.parse(response.body) as unknown) : undefined,
+    headers: response.headers,
+  };
+}
+
+/** Свой маршрут из ответа по контракту приложения. */
+export const parsedMyRoute = (result: { body: unknown }) => MyRoute.parse(result.body);
