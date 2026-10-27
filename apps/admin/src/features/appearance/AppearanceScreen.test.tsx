@@ -165,6 +165,26 @@ describe('«Оформление приложения» (app-themes D1, AC6)', (
     expect(saveButton().disabled).toBe(true);
   });
 
+  it('незавершённый выбор держит исходную версию: данные обновились (другой админ) — Сохранить шлёт старую версию → 409', async () => {
+    mocked.updateAppearance.mockRejectedValue(httpError(409, 'CONFLICT'));
+    const { queryClient } = await open();
+    await screen.findByRole('group', { name: 'Тема приложения' });
+    fireEvent.click(radio('Журнал'));
+
+    mocked.getAppearance.mockResolvedValue(saved({ themeId: 'atlas', version: 1 }));
+    await act(() => queryClient.refetchQueries({ queryKey: ['admin', 'appearance'] }));
+    await waitFor(() =>
+      expect(screen.getByText('Сейчас в приложении').closest('label')).toBe(
+        radio('Атлас').closest('label'),
+      ),
+    );
+    expect((radio('Журнал') as HTMLInputElement).checked).toBe(true);
+
+    fireEvent.click(saveButton());
+    expect(await screen.findByText('Запись изменили — обновите страницу')).toBeTruthy();
+    expect(mocked.updateAppearance).toHaveBeenCalledWith({ themeId: 'journal', version: 0 });
+  });
+
   it('прочая ошибка сохранения — баннер ошибки, выбор сохраняется', async () => {
     mocked.updateAppearance.mockRejectedValue(httpError(500, 'INTERNAL'));
     await open();

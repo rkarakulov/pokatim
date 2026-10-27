@@ -28,14 +28,15 @@ const APPEARANCE_QUERY_KEY = ['admin', 'appearance'] as const;
 export function AppearanceScreen() {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: APPEARANCE_QUERY_KEY, queryFn: () => api.getAppearance() });
-  // выбор пользователя; `undefined` — показывать сохранённую тему
-  const [choice, setChoice] = useState<AppThemeId>();
+  // выбор пользователя и версия, при которой он начат (уходит в PUT до сохранения или сброса: перечитывание данных
+  // не подменяет её — чужая смена даёт 409, а не тихую перезапись); `undefined` — показывать сохранённую тему
+  const [choice, setChoice] = useState<{ themeId: AppThemeId; baseVersion: number }>();
   const [conflict, setConflict] = useState(false);
   const [failure, setFailure] = useState<string>();
   const [savedNotice, setSavedNotice] = useState(false);
 
   const current = query.data;
-  const selected = choice ?? current?.themeId;
+  const selected = choice?.themeId ?? current?.themeId;
 
   const save = useMutation({
     mutationFn: (body: { themeId: AppThemeId; version: number }) => api.updateAppearance(body),
@@ -113,7 +114,10 @@ export function AppearanceScreen() {
             options={options}
             value={selected}
             onChange={(value) => {
-              setChoice(value);
+              setChoice((prev) => ({
+                themeId: value,
+                baseVersion: prev?.baseVersion ?? current.version,
+              }));
               setSavedNotice(false);
             }}
           />
@@ -126,9 +130,9 @@ export function AppearanceScreen() {
             <Button
               variant="primary"
               busy={save.isPending}
-              disabled={!selected || selected === current.themeId}
+              disabled={!choice || choice.themeId === current.themeId}
               onClick={() => {
-                if (selected) save.mutate({ themeId: selected, version: current.version });
+                if (choice) save.mutate({ themeId: choice.themeId, version: choice.baseVersion });
               }}
             >
               {t('admin.appearance.save')}
