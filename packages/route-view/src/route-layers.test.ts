@@ -1,4 +1,4 @@
-/// <reference types="jest" />
+import { describe, expect, it } from 'vitest';
 import type { RaceRouteMap } from '@pokatim/contracts';
 import { size, stroke, themes } from '@pokatim/design-tokens';
 
@@ -12,7 +12,7 @@ import {
   ROUTE_SOURCE_ID,
   routeFeatures,
   routeLayers,
-} from './corridor-style';
+} from './route-layers.ts';
 
 const map: RaceRouteMap = {
   line: [

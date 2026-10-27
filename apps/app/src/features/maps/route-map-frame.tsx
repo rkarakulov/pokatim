@@ -1,9 +1,8 @@
 import type { AppTheme } from '@pokatim/design-tokens';
+import { MAP_ASPECT_RATIO } from '@pokatim/route-view';
 import { textStyle } from '@rkarakulov/ui';
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-
-import { MAP_ASPECT_RATIO } from './corridor-style';
 
 /**
  * Рамка карты для обеих платформ: место фиксированной пропорции на фоне `map.background` (routes-04d: `fill` — вся

@@ -1,15 +1,12 @@
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { space, type AppTheme } from '@pokatim/design-tokens';
+import { type ScrubStore } from '@pokatim/route-view';
 import { textStyle, useTheme } from '@rkarakulov/ui';
 import { StyleSheet, Text, View } from 'react-native';
-
-import type { ScrubStore } from '@/features/maps/scrub-store';
 
 import { profileSummary, profileTicks } from './format';
 import { ProfileChart } from './profile-chart';
 import { ProfileHeadValue } from './scrub-readout';
-
-export { PROFILE_ASPECT_RATIO } from './profile-style';
 
 /** Подпись оси X правее этой доли длины — выравнивание по правому краю (не выходит за край графика). */
 const TICK_ALIGN_END_FROM = 0.85;

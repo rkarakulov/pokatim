@@ -22,6 +22,7 @@ import { z } from 'zod';
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { PanelAudit, PanelDirectory, type PanelPrincipal } from '../panel';
+import { elevationOf } from './route-elevation';
 import type { RouteDoc } from './routes.collection';
 import { ROUTE_RECEIVED } from './routes.events';
 import { ROUTE_POLICY } from './routes.policy';
@@ -223,15 +224,19 @@ export class RoutesService {
     };
   }
 
-  /** Маршрут с линией показа (у необработанного — `[]`); ответ и действий каталога (`RoutesCatalogAdminService`). */
+  /**
+   * Маршрут с линией показа и профилем высоты (routes-05; у необработанного — `[]` и `null`); ответ и действий каталога
+   * (`RoutesCatalogAdminService`).
+   */
   async view(route: RouteDoc): Promise<PanelRoute> {
     const [names, geometry] = await Promise.all([
       this.directory.displayNames([route.ownerUserId]),
-      route.status === 'ready' ? this.repository.geometry(route._id) : undefined,
+      route.status === 'ready' ? this.repository.panelGeometry(route._id) : undefined,
     ]);
     return {
       ...toSummary(route, names.get(route.ownerUserId) ?? ''),
-      line: geometry?.line.coordinates ?? [],
+      line: geometry?.line ?? [],
+      elevation: elevationOf(geometry?.profile ?? null),
     };
   }
 }

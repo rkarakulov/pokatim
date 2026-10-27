@@ -1,15 +1,23 @@
 import { isNetworkError } from '@pokatim/api-client';
 import type { PanelRoute } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
+import { geometryFromLine, type ScrubStore } from '@pokatim/route-view';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
+import { useMemo } from 'react';
 
 import { formatKmFromMeters } from '../../format';
 import { Banner, Button, LinePreview } from '../../ui';
+import { mapStyleUrl } from '../maps/map-style';
+import { RouteMap } from '../maps/RouteMap';
 import { routeQuery } from './routes-query';
+
+const distanceOf = (route: PanelRoute) =>
+  route.distanceM !== null ? formatKmFromMeters(route.distanceM) : '';
 
 /** Длина, набор и «Круговой» под превью. */
 function routeMeta(route: PanelRoute): string {
-  const parts = [route.distanceM !== null ? formatKmFromMeters(route.distanceM) : ''];
+  const parts = [distanceOf(route)];
   if (route.elevationGainM !== null) {
     parts.push(t('admin.races.corridor.elevation', { gain: route.elevationGainM }));
   }
@@ -18,10 +26,54 @@ function routeMeta(route: PanelRoute): string {
 }
 
 /**
- * Превью маршрута (поле коридора гонки, окно публикации в каталог): скелетон блока, ошибка с повтором, линия с длиной
- * (§7 «Состояния»).
+ * Линия маршрута на подложке (routes-05, A1, RC-9): с env стиля — карта MapLibre с толстой линией (`RouteMap`), без
+ * env или без геометрии — прежнее SVG-превью `LinePreview`.
  */
-export function RoutePreview({ routeId }: { routeId: string }) {
+export function RouteLine({
+  route,
+  variant,
+  scrub,
+}: {
+  route: PanelRoute;
+  variant: 'page' | 'compact';
+  scrub?: ScrubStore;
+}) {
+  const geometry = useMemo(() => geometryFromLine(route.line), [route.line]);
+  const styleUrl = mapStyleUrl();
+  const names = { title: route.title, distance: distanceOf(route) };
+  if (!styleUrl || !geometry) {
+    return (
+      <LinePreview points={route.line} label={t('admin.races.corridor.previewLabel', names)} />
+    );
+  }
+  return (
+    <RouteMap
+      geometry={geometry}
+      styleUrl={styleUrl}
+      label={t('admin.routes.detail.mapLabel', names)}
+      variant={variant}
+      {...(scrub ? { scrub } : {})}
+    />
+  );
+}
+
+/**
+ * Куда ведёт «Открыть маршрут» (RC-8): поле коридора — новая вкладка (форма гонки не теряется), окно публикации на
+ * «Маршрутах» — та же вкладка, на самой странице маршрута — без ссылки.
+ */
+export type RouteOpenLink = 'same-tab' | 'new-tab' | false;
+
+/**
+ * Превью маршрута (поле коридора гонки, окно публикации в каталог): скелетон блока, ошибка с повтором, компактная
+ * карта (или линия без env) с длиной и ссылкой «Открыть маршрут» (§7 «Состояния»; routes-05, A1). Скраббинга нет.
+ */
+export function RoutePreview({
+  routeId,
+  openLink = 'same-tab',
+}: {
+  routeId: string;
+  openLink?: RouteOpenLink;
+}) {
   const state = useQuery(routeQuery(routeId));
   const route = state.data;
   if (!route) {
@@ -57,14 +109,26 @@ export function RoutePreview({ routeId }: { routeId: string }) {
           }
         />
       ) : null}
-      <LinePreview
-        points={route.line}
-        label={t('admin.races.corridor.previewLabel', {
-          title: route.title,
-          distance: route.distanceM !== null ? formatKmFromMeters(route.distanceM) : '',
-        })}
-      />
-      <p className="corridor-preview__meta t-meta">{routeMeta(route)}</p>
+      <RouteLine route={route} variant="compact" />
+      <p className="corridor-preview__meta t-meta">
+        {routeMeta(route)}
+        {openLink ? (
+          <>
+            {' · '}
+            <Link
+              className="link"
+              to="/routes/$routeId"
+              params={{ routeId: route.id }}
+              {...(openLink === 'new-tab' ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+            >
+              {t('admin.routes.detail.open')}
+              {openLink === 'new-tab' ? (
+                <span className="visually-hidden"> {t('admin.routes.detail.newTab')}</span>
+              ) : null}
+            </Link>
+          </>
+        ) : null}
+      </p>
     </div>
   );
 }

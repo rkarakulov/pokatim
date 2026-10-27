@@ -1,12 +1,16 @@
 /// <reference types="jest" />
 import type { RaceRouteMap } from '@pokatim/contracts';
 import { themes } from '@pokatim/design-tokens';
+import {
+  MAP_CAMERA_ANIMATION_MS,
+  MAP_FIT_PADDING,
+  MAP_MAX_ZOOM,
+  MAP_MIN_ZOOM,
+} from '@pokatim/route-view';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { AccessibilityInfo } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { MAP_FIT_PADDING } from './corridor-style';
-import { MAP_CAMERA_ANIMATION_MS, MAP_MAX_ZOOM, MAP_MIN_ZOOM } from './map-camera';
 import { RouteMap } from './route-map';
 
 interface CameraMock {

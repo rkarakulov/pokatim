@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 
-import { scrubReadout, scrubStep } from './scrub';
+import { scrubReadout } from './scrub';
 
 // 0 → 1 км подъём 5 %, 1 → 2 км спуск 3 %; профиль короче маршрута не бывает — длина профиля = distanceM
 const elevation: CatalogRouteElevation = {
@@ -55,15 +55,5 @@ describe('scrubReadout (routes-04, S3, RC-10)', () => {
     const readout = scrubReadout(elevation, 12_437, null, 0.0001);
     expect(readout.distance).toBe('0 км');
     expect(scrubReadout(elevation, 12_437, null, 1).distance).toBe('12,4 км');
-  });
-});
-
-describe('scrubStep (adjustable / стрелки: 1 км)', () => {
-  it('доля → следующий/предыдущий целый км → доля; границы 0 и 1', () => {
-    expect(scrubStep(0, 3500, 1)).toBeCloseTo(1000 / 3500, 9);
-    expect(scrubStep(3000 / 3500, 3500, 1)).toBe(1);
-    expect(scrubStep(1, 3500, -1)).toBeCloseTo(3000 / 3500, 9);
-    expect(scrubStep(0, 3500, -1)).toBe(0);
-    expect(scrubStep(0.5, 0, 1)).toBe(0);
   });
 });

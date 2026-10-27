@@ -1,7 +1,8 @@
-/// <reference types="jest" />
+// @vitest-environment jsdom
+import { describe, expect, it } from 'vitest';
 import { themes } from '@pokatim/design-tokens';
 
-import { attributionCss, collapseAttribution } from './attribution.web';
+import { attributionCss, collapseAttribution } from './attribution.ts';
 
 /** Разметка контрола атрибуции maplibre-gl 6 (компактный, раскрытый — как после создания). */
 function control() {
@@ -41,18 +42,18 @@ describe('атрибуция web-карты (B2, B4 maps-02)', () => {
   });
 
   it('B4: цвета контрола — роли темы в области карты; «i» инвертируется только в тёмной', () => {
-    const dark = attributionCss('m1', themes.dark);
+    const dark = attributionCss('m1', themes.dark, true);
     expect(dark).toContain('[data-route-map="m1"] .maplibregl-ctrl.maplibregl-ctrl-attrib');
     expect(dark).toContain(`background-color:${themes.dark.surface.raised}`);
     expect(dark).toContain(`color:${themes.dark.text.secondary}`);
     expect(dark).toContain('filter:invert(1)');
-    const light = attributionCss('m1', themes.light);
+    const light = attributionCss('m1', themes.light, false);
     expect(light).toContain(`background-color:${themes.light.surface.raised}`);
     expect(light).toContain('filter:none');
   });
 
   it('routes-04b (RC-9): подсказка кооперативных жестов — без затухания при reduce motion, в области карты', () => {
-    expect(attributionCss('m1', themes.light)).toContain(
+    expect(attributionCss('m1', themes.light, false)).toContain(
       '@media (prefers-reduced-motion: reduce){[data-route-map="m1"] .maplibregl-cooperative-gesture-screen{transition:none}}',
     );
   });

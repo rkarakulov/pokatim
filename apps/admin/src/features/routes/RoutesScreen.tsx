@@ -2,6 +2,7 @@ import type { PanelRouteSummary, RouteStatus } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { createColumnHelper } from '@tanstack/react-table';
+import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
 import { formatKmFromMeters } from '../../format';
@@ -55,7 +56,16 @@ export function RoutesScreen() {
 
   const columns = useMemo(
     () => [
-      column.accessor('title', { header: t('admin.routes.column.title'), enableSorting: false }),
+      // routes-05: название — ссылка на страницу маршрута (для всех строк: необработанный — статус, отказ — причина)
+      column.accessor('title', {
+        header: t('admin.routes.column.title'),
+        cell: (info) => (
+          <Link className="link" to="/routes/$routeId" params={{ routeId: info.row.original.id }}>
+            {info.getValue()}
+          </Link>
+        ),
+        enableSorting: false,
+      }),
       column.accessor('distanceM', {
         header: t('admin.routes.column.distance'),
         cell: (info) => {

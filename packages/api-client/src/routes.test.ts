@@ -151,6 +151,7 @@ describe('каталог маршрутов (routes-01): панель', () => {
       [27.5, 53.9],
       [27.6, 53.95],
     ],
+    elevation: null,
   };
 
   it('publishRoute и unpublishRoute — POST с телом, cookie панели, строгий разбор', async () => {
