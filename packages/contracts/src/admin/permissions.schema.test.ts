@@ -20,6 +20,7 @@ describe('PanelRole и Permission', () => {
       'disputes.read',
       'disputes.decide',
       'profiles.moderate',
+      'appearance.manage',
     ]);
   });
 

@@ -145,6 +145,28 @@ describe('«Журнал действий» (AC12)', () => {
     expect(screen.getAllByText('Кофе-райд на море')).toHaveLength(2);
   });
 
+  it('app-themes: смена темы приложения — «Классика → Атлас», объект «Оформление приложения»', async () => {
+    mocked.listAudit.mockResolvedValue({
+      items: [
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8065',
+          action: 'appearance.theme_changed',
+          subject: {
+            kind: 'platform',
+            id: '00000000-0000-0000-0000-000000000000',
+            label: 'Оформление приложения',
+          },
+          details: { themeFrom: 'classic', themeTo: 'atlas' },
+        },
+      ],
+      nextCursor: null,
+    });
+    await renderApp('/audit');
+    expect(await screen.findByText('Тема приложения изменена: Классика → Атлас')).toBeTruthy();
+    expect(screen.getByRole('cell', { name: 'Оформление приложения' })).toBeTruthy();
+  });
+
   it('«Показать ещё» — следующая страница по курсору сервера', async () => {
     mocked.listAudit
       .mockResolvedValueOnce({ items: [revoked, granted], nextCursor: granted.id })

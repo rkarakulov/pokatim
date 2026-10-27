@@ -65,6 +65,13 @@ paths:
   причины, источники, провайдеры, проблемы подключения в ответах — `tolerantEnum`; путь `:provider` и запросы —
   строгие; формат `stream` — только сервер. Ответы без идентификаторов агрегатора, ключей хранилища, координат и
   биометрии.
+- Тема приложения (app-themes): `src/appearance/appearance.schema.ts` — `APP_THEME_IDS` — единственный источник id
+  тем для API и панели (только в конец; порядок = порядок карточек панели); реестр `appThemes` в
+  `@pokatim/design-tokens` объявляет тот же состав и порядок, от контрактов не зависит (сторож равенства — в D2).
+  `DEFAULT_APP_THEME_ID`, ответ приложения `AppAppearance` (`themeId` — `tolerantEnum`, ровно один ключ), панели
+  `PanelAppearance` (строгий enum, `version`, `updatedAt` nullable), запрос `UpdateAppearanceRequest`
+  (`strictObject`). Право `appearance.manage`, действие журнала `appearance.theme_changed`, вид объекта `platform`,
+  детали `themeFrom`/`themeTo`. api-client — `getAppearance` (публичный и панели), `updateAppearance` (`PUT`).
 - Удаление аккаунта (ADR-0015): `src/account/account-deletion.schema.ts` — `DeleteAccountRequest` (`strictObject`,
   `password: SignInPassword`), ответ `204`. Коды — `PASSWORD_INCORRECT` (403, не 401: клиент не уходит в refresh) и
   `ACCOUNT_PANEL_MEMBER` (409) в конце `ErrorCode`; `AUDIT_ACTIONS` + `account.deleted` (admin i18n

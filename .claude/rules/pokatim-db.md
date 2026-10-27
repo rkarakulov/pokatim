@@ -279,6 +279,10 @@ paths:
   `deletedAt: { $type: 'date' }, erasureSweptAt: { $eq: null }`).
 - Миграция `0023_account_deletion` (expand-only): `device_connections_user_idx`, `device_imports_user_idx`,
   `device_link_tickets_user_idx` (`{ userId: 1 }`), `users_erasure_pending_idx`.
+- Настройки платформы (app-themes): коллекция `platform_settings` — документы-синглтоны по `_id`; `appearance`
+  (`themeId`, `version`, `updatedAt`) — единственный писатель `AppearanceRepository`, нет документа — `classic`,
+  `version: 0` (seed нет; первая смена — `insertOne`, дубликат `_id` → 409). Кто менял — только `panel_audit` (без
+  `userId` в документе: порт стирания не нужен). Миграция `0024_platform_settings` — только `ensureCollection`.
 - Append-only журналы (`user_consents`, `profile_consent_events`, `panel_audit`, `device_audit`, `dispute_events`,
   `race_recalculations`, `race_protocol_rows`) не меняются (A9); `race_entries`, споры и протоколы — остаются.
 - Новый модуль с данными пользователя обязан дать порт стирания и шаг в `AccountErasureService`.

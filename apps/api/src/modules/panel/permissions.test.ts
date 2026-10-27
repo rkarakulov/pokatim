@@ -63,6 +63,12 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
     expect(ROLE_PERMISSIONS.organizer.has('profiles.moderate')).toBe(false);
   });
 
+  it('app-themes: тема приложения (appearance.manage) — только admin', () => {
+    expect(ROLE_PERMISSIONS.admin.has('appearance.manage')).toBe(true);
+    expect(ROLE_PERMISSIONS.moderator.has('appearance.manage')).toBe(false);
+    expect(ROLE_PERMISSIONS.organizer.has('appearance.manage')).toBe(false);
+  });
+
   it('permissionsOf — в порядке контракта (стабильный ответ PanelMe)', () => {
     expect(permissionsOf('admin')).toEqual([...PERMISSIONS]);
     expect(permissionsOf('moderator')).toEqual([

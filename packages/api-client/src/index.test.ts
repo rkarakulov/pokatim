@@ -27,3 +27,18 @@ describe('api-client: health и классы ошибок (реэкспорт б
     expect(isNetworkError(http)).toBe(false);
   });
 });
+
+describe('api-client: тема приложения (app-themes)', () => {
+  it('GET /v1/appearance — публично, незнакомая тема — unknown', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const fetchImpl = ((url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      return Promise.resolve(new Response(JSON.stringify({ themeId: 'future' }), { status: 200 }));
+    }) as typeof fetch;
+    const api = createApiClient({ baseUrl: 'https://api.test', fetchImpl });
+    await expect(api.getAppearance()).resolves.toEqual({ themeId: 'unknown' });
+    expect(calls[0]?.url).toBe('https://api.test/v1/appearance');
+    expect(calls[0]?.init?.method).toBe('GET');
+    expect(new Headers(calls[0]?.init?.headers).has('authorization')).toBe(false);
+  });
+});

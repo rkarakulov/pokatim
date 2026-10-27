@@ -30,6 +30,8 @@ import { routesCatalog } from './0020_routes_catalog';
 import { routesRider } from './0021_routes_rider';
 import { routesDerived } from './0022_routes_derived';
 import { accountDeletion } from './0023_account_deletion';
+import { platformSettings } from './0024_platform_settings';
+import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
@@ -95,6 +97,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0021_routes_rider',
       '0022_routes_derived',
       '0023_account_deletion',
+      '0024_platform_settings',
     ]);
   });
 
@@ -734,9 +737,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(ROUTES_COLLECTIONS.geometries)).toEqual(expected);
   });
 
-  it('0023_account_deletion: индексы userId данных устройств и частичный индекс очистки users; последняя; повторный up — без изменений', async () => {
+  it('0023_account_deletion: индексы userId данных устройств и частичный индекс очистки users; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0023_account_deletion');
     expect(ids.indexOf('0023_account_deletion')).toBe(ids.indexOf('0022_routes_derived') + 1);
     const plain = (key: Record<string, 1>) => ({
       key,
@@ -765,6 +767,20 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await accountDeletion.up(h.db);
     await accountDeletion.up(h.db);
     expect(await snapshot()).toEqual(expected);
+  });
+
+  it('0024_platform_settings: коллекция platform_settings без индексов сверх _id; последняя; повторный up — без ошибки', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0024_platform_settings');
+    expect(ids.indexOf('0024_platform_settings')).toBe(ids.indexOf('0023_account_deletion') + 1);
+    const exists = () =>
+      h.db.listCollections({ name: APPEARANCE_COLLECTIONS.settings }, { nameOnly: true }).toArray();
+    expect(await exists()).toHaveLength(1);
+    expect(await indexesOf(APPEARANCE_COLLECTIONS.settings)).toEqual({});
+    await platformSettings.up(h.db);
+    await platformSettings.up(h.db);
+    expect(await exists()).toHaveLength(1);
+    expect(await indexesOf(APPEARANCE_COLLECTIONS.settings)).toEqual({});
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

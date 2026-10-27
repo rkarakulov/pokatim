@@ -30,6 +30,8 @@ export const PERMISSIONS = [
   'disputes.decide',
   // profile-02: сброс публичного имени райдера (команда платформы)
   'profiles.moderate',
+  // app-themes: тема приложения райдера (только admin)
+  'appearance.manage',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
 export type Permission = z.infer<typeof Permission>;

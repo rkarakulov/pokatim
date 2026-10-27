@@ -57,6 +57,8 @@ import {
   type PanelDisputeQuery,
   type ResetRiderNameRequest,
   RiderNameResetResult,
+  PanelAppearance,
+  type UpdateAppearanceRequest,
 } from '@pokatim/contracts';
 import { createHttpClient } from '@rkarakulov/api-client-core';
 import { z } from 'zod';
@@ -107,6 +109,12 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
   const post = <S extends z.ZodType>(path: string, schema: S, body: unknown = {}) =>
     request(path, schema, {
       method: 'POST',
+      body: JSON.stringify(body),
+      credentials: 'same-origin',
+    });
+  const put = <S extends z.ZodType>(path: string, schema: S, body: unknown) =>
+    request(path, schema, {
+      method: 'PUT',
       body: JSON.stringify(body),
       credentials: 'same-origin',
     });
@@ -254,6 +262,12 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
         RiderNameResetResult,
         body,
       ),
+
+    // --- оформление приложения (appearance.manage, app-themes): настройка-синглтон, замена по `version` ---
+    getAppearance: () => get('/v1/admin/appearance', PanelAppearance),
+    /** Смена темы приложения: устаревшая `version` — 409 `CONFLICT`. */
+    updateAppearance: (body: UpdateAppearanceRequest) =>
+      put('/v1/admin/appearance', PanelAppearance, body),
   };
 }
 
