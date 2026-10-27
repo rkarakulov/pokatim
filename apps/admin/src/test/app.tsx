@@ -33,6 +33,7 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
       'disputes.decide',
       'profiles.moderate',
       'appearance.manage',
+      'profiles.verified_edit',
       'routes.moderate',
     ],
   },

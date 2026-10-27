@@ -192,7 +192,7 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     getRaceResultsSummary: (raceId: string) => get(`${race(raceId)}/results`, PanelRaceResults),
     listRaceAttempts: (raceId: string, params: Partial<PanelRaceAttemptQuery> = {}) =>
       get(`${race(raceId)}/attempts${queryString(params)}`, PanelRaceAttemptPage),
-    /** Участники: `group` и `attention` (race-results-07) — фильтры. */
+    /** Участники: `group`, `attention` и `finishers` (race-results-07) — фильтры. */
     getRaceStandings: (raceId: string, params: PanelRaceStandingsQuery = {}) =>
       get(`${race(raceId)}/standings${queryString(params)}`, PanelRaceStandings),
     listProtocolRecalculations: (raceId: string) =>
