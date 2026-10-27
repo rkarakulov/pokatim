@@ -4,8 +4,11 @@ import type {
   MyAttemptTrack,
   MyRaceEntry,
   RaceDetail,
+  RaceEntryRequest,
+  RaceFinishersPage,
   RacePage,
   RaceResultsPage,
+  ResultGroupKey,
   RaceRouteMap,
   SeasonCard,
 } from '@pokatim/contracts';
@@ -259,17 +262,43 @@ export function useMyAttemptTrack(raceId: string, attempt: MyAttempt | null, ena
 
 const nextResultsCursor = (page: RaceResultsPage) => page.nextCursor ?? undefined;
 
-/** Предварительная таблица: страницы по 50, «Показать ещё» по `nextCursor`. */
-export function useRaceResults(id: string, enabled: boolean) {
+/**
+ * Предварительная таблица: страницы по 50, «Показать ещё» по `nextCursor`. Без `group` — группа по умолчанию сервера
+ * (ключ `[…, 'pages']`); `group` (race-results-07) — вкладка группы (`[…, 'pages', group]`). `group` передают только
+ * после ответа с непустым `groups` (RC-11: старый сервер ответил бы 400 на лишний ключ).
+ */
+export function useRaceResults(id: string, enabled: boolean, group?: ResultGroupKey) {
   return useInfiniteQuery({
-    queryKey: [...raceResultsKey(id), 'pages'],
+    queryKey: group ? [...raceResultsKey(id), 'pages', group] : [...raceResultsKey(id), 'pages'],
     queryFn: ({ pageParam }) =>
       api.getRaceResults(id, {
         limit: RESULTS_PAGE_LIMIT,
+        ...(group ? { group } : {}),
         ...(pageParam ? { cursor: pageParam } : {}),
       }),
     initialPageParam: null as string | null,
     getNextPageParam: nextResultsCursor,
+    staleTime: PUBLIC_STALE_MS,
+    enabled,
+  });
+}
+
+const nextFinishersCursor = (page: RaceFinishersPage) => page.nextCursor ?? undefined;
+
+/**
+ * Финишёры (race-results-07): START и Verified без пульса — без мест, публично. Ключ под префиксом таблицы —
+ * инвалидация таблицы накрывает и его.
+ */
+export function useRaceFinishers(id: string, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: [...raceResultsKey(id), 'finishers'],
+    queryFn: ({ pageParam }) =>
+      api.getRaceFinishers(id, {
+        limit: RESULTS_PAGE_LIMIT,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: nextFinishersCursor,
     staleTime: PUBLIC_STALE_MS,
     enabled,
   });
@@ -313,9 +342,14 @@ function useEntryMutation<V>(id: string, call: (token: string, body: V) => Promi
   });
 }
 
-/** «Участвовать». */
+/**
+ * «Участвовать» и «Повысить до Verified» (race-results-07): без тела — прежняя заявка (схема `overall`, старый API);
+ * `{ tier, groupKey }` — намерение, правила проверяет сервер.
+ */
 export const useEnterRace = (id: string) =>
-  useEntryMutation<void>(id, (token) => api.enterRace(token, id));
+  useEntryMutation<NonNullable<RaceEntryRequest> | void>(id, (token, body) =>
+    body ? api.enterRace(token, id, body) : api.enterRace(token, id),
+  );
 
 /** «Отменить участие». */
 export const useWithdrawFromRace = (id: string) =>

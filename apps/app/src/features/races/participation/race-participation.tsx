@@ -23,12 +23,14 @@ import {
   blockReasonText,
   enterBlockReason,
   guestCanSeeEnter,
+  offersTierChoice,
   raceActionErrorText,
 } from '../participation-format';
 import { useEnterRace } from '../queries';
 import { AttemptList } from './attempt-list';
 import { EntryActions } from './entry-actions';
 import { EntryResult } from './entry-result';
+import { TierPicker } from './tier-picker';
 
 function Block({ children }: { children: ReactNode }) {
   return (
@@ -49,7 +51,10 @@ function BlockSkeleton() {
   );
 }
 
-/** «Участвовать»: гостю — вход с возвратом к гонке (заявка — повторным нажатием, Q13 блока 05), вошедшему — заявка. */
+/**
+ * «Участвовать»: гостю — вход с возвратом к гонке (заявка — повторным нажатием, Q13 блока 05), вошедшему — заявка без
+ * тела (схема `overall`, старый API; уровень с выбором — `TierPicker`).
+ */
 function EnterAction({ raceId, signedIn }: { raceId: string; signedIn: boolean }) {
   const theme = useTheme();
   const router = useRouter();
@@ -122,7 +127,15 @@ export function RaceParticipation({
   if (data === null) return null;
 
   if (data.entry === null) {
-    if (data.actions.canEnter) return <EnterAction raceId={race.id} signedIn />;
+    if (data.actions.canEnter) {
+      return offersTierChoice(data) ? (
+        <Block>
+          <TierPicker entry={data} raceId={race.id} />
+        </Block>
+      ) : (
+        <EnterAction raceId={race.id} signedIn />
+      );
+    }
     const reason = enterBlockReason(data.actions);
     // отменённая гонка: баннер отмены карточки уже есть (F8)
     if (reason === null || reason === 'cancelled') return null;

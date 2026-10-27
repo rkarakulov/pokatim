@@ -4,6 +4,7 @@ import {
   Uuid,
   type DisputeCategory,
   type MyRaceDisputes,
+  type ResultGroupKey,
 } from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
@@ -138,10 +139,19 @@ function FormGate({
 }
 
 /** «Оспорить результат» (`/races/dispute/<гонка>/<заявка>`, внутри `Stack.Protected`). */
-export function DisputeFormScreen({ raceId, entryId }: { raceId: string; entryId: string }) {
+export function DisputeFormScreen({
+  raceId,
+  entryId,
+  group,
+}: {
+  raceId: string;
+  entryId: string;
+  /** вкладка группы таблицы (race-results-07); нет — группа по умолчанию */
+  group?: ResultGroupKey;
+}) {
   const theme = useTheme();
   const valid = Uuid.safeParse(raceId).success && Uuid.safeParse(entryId).success;
-  const results = useRaceResults(raceId, valid);
+  const results = useRaceResults(raceId, valid, group);
   const disputes = useMyRaceDisputes(raceId, valid);
 
   return (

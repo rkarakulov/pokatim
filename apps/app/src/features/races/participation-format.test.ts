@@ -5,16 +5,26 @@ import {
   actions,
   attempt,
   corridorRace,
+  finisher,
   myEntry,
+  noEntry,
+  noEntryTiers,
   result,
   row,
+  startEntry,
+  verifiedState,
 } from '../../__tests__/races-fixtures';
 import {
   addAttemptBlockReason,
   attemptView,
   blockReasonText,
   enterBlockReason,
+  entryTierLine,
+  finisherRow,
+  groupChoices,
+  groupLabel,
   guestCanSeeEnter,
+  offersTierChoice,
   needsPolling,
   pendingUploadText,
   raceActionErrorText,
@@ -387,5 +397,94 @@ describe('строка таблицы', () => {
       a11y: '1, Анна К., 1:00:00',
     });
     expect(resultRow(row({ riderName: 'Анна К.' }), true).who).toBe('Вы');
+  });
+});
+
+describe('уровни и группы (race-results-07c)', () => {
+  it('выбор уровня — только gender_age с блоком verified (DV-1, старый API)', () => {
+    expect(offersTierChoice(noEntryTiers())).toBe(true);
+    expect(offersTierChoice(noEntry())).toBe(false);
+    expect(offersTierChoice(noEntryTiers({ verified: null }))).toBe(false);
+    expect(offersTierChoice(noEntryTiers({ groupScheme: 'unknown' }))).toBe(false);
+  });
+
+  it('группы — из groupOptions сервера, незнакомые отброшены; анкеты нет — null', () => {
+    expect(groupChoices(noEntryTiers())).toEqual(['m_40_49', 'm_u40']);
+    expect(
+      groupChoices(
+        noEntryTiers({ verified: verifiedState({ groupOptions: ['m_50p', 'unknown', 'm_u40'] }) }),
+      ),
+    ).toEqual(['m_50p', 'm_u40']);
+    expect(
+      groupChoices(
+        noEntryTiers({
+          verified: verifiedState({ profileReady: false, ownGroup: null, groupOptions: null }),
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('строка уровня: Verified · группа; START; схема overall — нет', () => {
+    expect(
+      entryTierLine(
+        startEntry({ entry: { ...startEntry().entry!, tier: 'verified', groupKey: 'w_50p' } }),
+      ),
+    ).toBe('Verified · Женщины 50+');
+    expect(entryTierLine(startEntry())).toBe('START');
+    expect(entryTierLine(myEntry())).toBeNull();
+    expect(groupLabel('unknown')).toBe('Группа');
+  });
+
+  it('finisher: время есть, баннер — почему без места', () => {
+    const start = result({ status: 'finisher', elapsedSec: 6125, unranked: 'start' });
+    expect(resultElapsed(start)).toBe('1:42:05');
+    expect(resultBanner(start, PROTOCOL)?.message).toBe('Уровень START: время без места в зачёте.');
+    expect(resultBanner({ ...start, unranked: 'no_heart_rate' }, PROTOCOL)?.message).toBe(
+      'Без пульса — вне зачёта. Место в группе — только с пульсом в треке.',
+    );
+    expect(resultBanner({ ...start, unranked: null }, PROTOCOL)?.message).toBe(
+      'Время без места в зачёте.',
+    );
+  });
+
+  it('место в группе; ничья в группе', () => {
+    const placed = result({ status: 'provisional', place: 2, elapsedSec: 6125, group: 'm_u40' });
+    expect(resultBanner(placed, PROTOCOL)?.message).toBe(
+      'Предварительно 2-е место в группе «Мужчины до 40» до публикации протокола 14 октября.',
+    );
+    expect(resultBanner({ ...placed, tied: true }, PROTOCOL)?.message).toBe(
+      'Предварительно 2-е место (поровну с другими) в группе «Мужчины до 40» до публикации протокола 14 октября.',
+    );
+  });
+
+  it('подпись результата меняется со сменой группы и причины без места', () => {
+    const base = myEntry({
+      result: result({ status: 'finisher', elapsedSec: 6125, unranked: 'start' }),
+    });
+    expect(resultSignature(base)).not.toBe(
+      resultSignature(myEntry({ result: { ...base.result, unranked: 'no_heart_rate' } })),
+    );
+    expect(resultSignature(base)).not.toBe(
+      resultSignature(myEntry({ result: { ...base.result, group: 'm_u40' } })),
+    );
+  });
+
+  it('новые коды заявки — текст по коду', () => {
+    expect(
+      raceActionErrorText(
+        new ApiHttpError(409, { code: 'VERIFIED_PROFILE_REQUIRED', message: 'x' }),
+      ),
+    ).toBe('Для Verified заполните анкету зачёта');
+  });
+
+  it('строка финишёров: без места, «Вы» для своей', () => {
+    expect(finisherRow(finisher({ riderName: 'Пётр' }), false)).toEqual({
+      who: 'Пётр',
+      time: '2:00:00',
+      note: 'Финишёр',
+      a11y: 'Пётр, 2:00:00, Финишёр',
+    });
+    expect(finisherRow(finisher({ unranked: 'unknown' }), true).who).toBe('Вы');
+    expect(finisherRow(finisher({ unranked: 'unknown' }), true).note).toBe('Без места');
   });
 });

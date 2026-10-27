@@ -68,6 +68,13 @@ function ProfileContent() {
             {(data) => <ProfileFormView profile={data} />}
           </AsyncContent>
         </View>
+        {/* анкета зачёта Verified (race-results-07): сразу — не ждёт данных профиля */}
+        <View style={[styles.section, styles.back]}>
+          <TextAction
+            label={t('profile.verified.link')}
+            onPress={() => router.push('/settings/verified')}
+          />
+        </View>
         {/* настройки уведомлений (N4): сразу — не ждёт данных профиля */}
         <View style={[styles.section, styles.back]}>
           <TextAction

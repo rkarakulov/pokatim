@@ -34,6 +34,7 @@ import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { canOpenRival } from './disputes/dispute-format';
+import { rivalPath } from './disputes/dispute-screen';
 import { useMyRaceDisputes } from './disputes/queries';
 import { RaceDisputes } from './disputes/race-disputes';
 import { cancelMessage, formatRaceWindow, raceCardLine } from './format';
@@ -166,12 +167,15 @@ function RaceDetailView({
       ) : null}
       {showsResultsTable(race) ? (
         <RaceResultsTable
+          raceId={race.id}
           results={results}
           ownEntryId={signedIn ? (entry.data?.entry?.id ?? null) : null}
+          // своя группа — вкладка по умолчанию (race-results-07)
+          ownGroup={signedIn ? (entry.data?.entry?.groupKey ?? null) : null}
           // карточка соперника — только вошедшему участнику, когда ей есть что показать (RC-14)
-          rowAction={(entryId) =>
+          rowAction={(entryId, group) =>
             signedIn && canOpenRival(disputes.data, entryId)
-              ? () => router.push(`/races/result/${race.id}/${entryId}`)
+              ? () => router.push(rivalPath(race.id, entryId, group))
               : null
           }
         />

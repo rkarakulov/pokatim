@@ -2,9 +2,13 @@ import type {
   AttemptCandidates,
   MyAttempt,
   MyRaceEntry,
+  MyVerifiedState,
   RaceDetail,
+  RaceFinisherRow,
+  RaceFinishersPage,
   RaceResultRow,
   RaceResultsPage,
+  VerifiedProfileView,
 } from '@pokatim/contracts';
 
 /** Фикстуры участия и результатов гонки (race-results-04) в форме ответов API (контракты слайса 03). */
@@ -151,3 +155,56 @@ export const candidate = (
 });
 
 export const candidates = (...items: AttemptCandidates['items']): AttemptCandidates => ({ items });
+
+/** Блок Verified (race-results-07): анкета есть, своя группа m_40_49, младшая — m_u40. */
+export const verifiedState = (overrides: Partial<MyVerifiedState> = {}): MyVerifiedState => ({
+  profileReady: true,
+  ownGroup: 'm_40_49',
+  groupOptions: ['m_40_49', 'm_u40'],
+  ...overrides,
+});
+
+/** Не заявлен в гонке схемы `gender_age`: выбор уровня. */
+export const noEntryTiers = (overrides: Partial<MyRaceEntry> = {}): MyRaceEntry =>
+  noEntry({ groupScheme: 'gender_age', verified: verifiedState(), ...overrides });
+
+/** Активная START-заявка в схеме `gender_age`: можно повысить до Verified. */
+export const startEntry = (overrides: Partial<MyRaceEntry> = {}): MyRaceEntry =>
+  myEntry({
+    groupScheme: 'gender_age',
+    entry: { ...myEntry().entry!, tier: 'start', groupKey: 'overall' },
+    verified: verifiedState(),
+    actions: actions({ canWithdraw: true, canAddAttempt: true, canUpgrade: true }),
+    ...overrides,
+  });
+
+export const finisher = (overrides: Partial<RaceFinisherRow> = {}): RaceFinisherRow => ({
+  entryId: '0199d000-0000-7000-8000-0000000000d1',
+  elapsedSec: 7200,
+  riderName: null,
+  unranked: 'start',
+  ...overrides,
+});
+
+export const finishersPage = (
+  items: RaceFinisherRow[] = [],
+  overrides: Partial<RaceFinishersPage> = {},
+): RaceFinishersPage => ({ total: items.length, items, nextCursor: null, ...overrides });
+
+/** Анкета зачёта: заполнена, пол и год не зафиксированы. */
+export const verifiedView = (
+  overrides: Partial<VerifiedProfileView> = {},
+): VerifiedProfileView => ({
+  profile: {
+    gender: 'm',
+    birthYear: 1984,
+    weightKg: 72,
+    heightCm: 180,
+    ftpW: null,
+    consentAt: '2026-10-20T08:00:00Z',
+    updatedAt: '2026-10-20T08:00:00Z',
+  },
+  demographicsLocked: false,
+  suggestedBirthYear: null,
+  ...overrides,
+});

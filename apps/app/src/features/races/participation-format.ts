@@ -1,11 +1,14 @@
 import { apiErrorOf } from '@pokatim/api-client';
 import {
   RaceEntryBlockedDetails,
+  type EntryTier,
   type MyAttempt,
   type MyRaceEntry,
   type PendingUpload,
   type RaceDetail,
   type RaceEntryBlockReason,
+  type ResultGroupKey,
+  type RaceFinisherRow,
   type RaceResultRow,
 } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
@@ -108,6 +111,8 @@ export function resultPill(status: Result['status']): { label: string; tone: Pil
 /** Статусы с временем сегмента: предварительный и протокол (race-results-05); `pending` — сегмента ещё нет (D-37). */
 const TIMED_STATUSES: readonly Result['status'][] = [
   'provisional',
+  // race-results-07: время без места (START, без пульса)
+  'finisher',
   'final',
   'revised',
   'dq',
@@ -120,7 +125,10 @@ export function resultElapsed(result: Result): string | null {
   return TIMED_STATUSES.includes(result.status) ? formatElapsed(result.elapsedSec) : null;
 }
 
-/** Баннер результата: `pending` — «Место появится после проверки.»; `provisional` — место / ничья / примечание. */
+/**
+ * Баннер результата: `pending` — «Место появится после проверки.»; `finisher` — почему без места (START / без
+ * пульса, race-results-07); `provisional` — место (в группе зачёта, если она не `overall`) / ничья / примечание.
+ */
 export function resultBanner(
   result: Result,
   protocolDate: string,
@@ -128,9 +136,22 @@ export function resultBanner(
   if (result.status === 'pending') {
     return { tone: 'warning', message: t('races.result.placeLater') };
   }
+  if (result.status === 'finisher') {
+    return { tone: 'info', message: t(`races.result.unranked.${result.unranked ?? 'unknown'}`) };
+  }
   if (result.status !== 'provisional') return null;
   if (result.place === null) {
     return { tone: 'info', message: t('races.result.provisionalNote', { date: protocolDate }) };
+  }
+  if (result.group !== 'overall') {
+    return {
+      tone: 'info',
+      message: t(result.tied ? 'races.result.placeGroupTied' : 'races.result.placeGroup', {
+        place: result.place,
+        group: groupLabel(result.group),
+        date: protocolDate,
+      }),
+    };
   }
   return {
     tone: 'info',
@@ -139,6 +160,35 @@ export function resultBanner(
       date: protocolDate,
     }),
   };
+}
+
+/** Подпись группы зачёта; `unknown` (сервер новее) — нейтральное «Группа». */
+export const groupLabel = (key: ResultGroupKey | 'unknown'): string => t(`results.group.${key}`);
+
+/** Подпись уровня заявки; `unknown` — «—». */
+export const tierLabel = (tier: EntryTier | 'unknown'): string => t(`results.tier.${tier}`);
+
+/**
+ * Выбор уровня при заявке (race-results-07, DV-1): только в схеме `gender_age` с блоком `verified` сервера; схема
+ * `overall` и старый API — прежняя кнопка «Участвовать» без тела.
+ */
+export const offersTierChoice = (entry: MyRaceEntry): boolean =>
+  entry.groupScheme === 'gender_age' && entry.verified !== null;
+
+/** Группы для выбора: известные ключи из `groupOptions` сервера (своя первой); анкеты нет — `null`. */
+export function groupChoices(entry: MyRaceEntry): ResultGroupKey[] | null {
+  const options = entry.verified?.groupOptions ?? null;
+  if (options === null || !entry.verified?.profileReady) return null;
+  return options.filter((key): key is ResultGroupKey => key !== 'unknown');
+}
+
+/** «Verified · Мужчины до 40» — уровень и группа активной заявки в схеме `gender_age`; иначе `null`. */
+export function entryTierLine(entry: MyRaceEntry): string | null {
+  if (entry.groupScheme !== 'gender_age' || !entry.entry?.tier) return null;
+  const tier = tierLabel(entry.entry.tier);
+  const group = entry.entry.groupKey;
+  if (entry.entry.tier !== 'verified' || group === null || group === 'overall') return tier;
+  return t('races.entry.tierGroup', { tier, group: groupLabel(group) });
 }
 
 const ATTEMPT_TONES: Record<MyAttempt['status'], PillTone> = {
@@ -208,8 +258,8 @@ export function needsPolling(entry: MyRaceEntry | null | undefined): boolean {
 /** Подпись результата: изменилась между ответами — таблица перезапрашивается (место появляется тихо, F13). */
 export function resultSignature(entry: MyRaceEntry | null | undefined): string | null {
   if (!entry) return null;
-  const { status, place, tied, elapsedSec } = entry.result;
-  return `${status}|${place ?? ''}|${tied}|${elapsedSec ?? ''}`;
+  const { status, place, tied, elapsedSec, group, unranked } = entry.result;
+  return `${status}|${place ?? ''}|${tied}|${elapsedSec ?? ''}|${group}|${unranked ?? ''}`;
 }
 
 const RACE_ERROR_CODES = [
@@ -220,6 +270,10 @@ const RACE_ERROR_CODES = [
   'ATTEMPT_UPLOAD_CLOSED',
   'ATTEMPT_LIMIT',
   'ATTEMPT_SOURCE_INVALID',
+  // race-results-07: уровень и группа заявки
+  'VERIFIED_PROFILE_REQUIRED',
+  'RACE_TIER_LOCKED',
+  'RESULT_GROUP_NOT_ALLOWED',
 ] as const;
 type RaceErrorCode = (typeof RACE_ERROR_CODES)[number];
 
@@ -257,4 +311,15 @@ export function resultRow(
   const time = formatElapsed(row.elapsedSec);
   const spoken = row.tied ? t('races.results.tiedA11y', { place: row.place }) : String(row.place);
   return { place, who, time, a11y: t('races.results.rowA11y', { place: spoken, who, time }) };
+}
+
+/** Строка финишёров (race-results-07): без места — кто, время и почему без места («Финишёр» / «Без пульса»). */
+export function finisherRow(
+  row: RaceFinisherRow,
+  own: boolean,
+): { who: string; time: string; note: string; a11y: string } {
+  const who = own ? t('races.results.you') : (row.riderName ?? t('races.results.rider'));
+  const time = formatElapsed(row.elapsedSec);
+  const note = t(`results.unranked.${row.unranked}`);
+  return { who, time, note, a11y: t('races.results.finisherA11y', { who, time, note }) };
 }

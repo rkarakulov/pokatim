@@ -142,6 +142,7 @@ function RootShell() {
                 {/* центр и настройки уведомлений (notifications): тот же гард и оболочка, что у «Профиля» */}
                 <Stack.Screen name="notifications" />
                 <Stack.Screen name="settings/notifications" />
+                <Stack.Screen name="settings/verified" />
                 {/* кофе-райды (блок 05): форма, правка и отмена — только вошедшим, без таб-бара; гость — «Вход» */}
                 <Stack.Screen name="rides/new" />
                 <Stack.Screen name="rides/edit/[id]" />

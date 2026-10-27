@@ -1039,3 +1039,66 @@ exit=0
 
 `TURBO_CONCURRENCY=1 pnpm check` (MONGO `pokatim_r07_test`, Redis db 11) — `exit=0`, `Tasks: 15 successful, 15 total`
 (tracks 307, contracts 277, api 1171, api-client 98, admin 282, app 1208). Первый прогон упал только на фикстуре api-client.
+
+## 12.3 07c — приложение
+
+### Changes
+
+- Заявка в схеме `gender_age` (`offersTierChoice`: `groupScheme` + блок `verified`): `TierPicker` — Verified и START с
+  объяснением; Verified — анкеты нет → «Заполнить анкету» (`/settings/verified?race=<id>`), есть → группа из
+  `verified.groupOptions` (своя по умолчанию, младшие своего пола) и «Участвовать в Verified» →
+  `enterRace(raceId, { tier: 'verified', groupKey })`; START — `{ tier: 'start' }`. Схема `overall` / старый API —
+  прежняя кнопка без тела (DV-1). Ошибки `VERIFIED_PROFILE_REQUIRED`, `RACE_TIER_LOCKED`, `RESULT_GROUP_NOT_ALLOWED` —
+  тексты i18n 07a, участие перезапрашивается (как прочие коды участия).
+- «Повысить до Verified» (`UpgradeAction`) — только по `actions.canUpgrade`: раскрытие с пояснением, анкета или
+  группа, подтверждение; «Не сейчас».
+- Моё участие: строка «Verified · Мужчины до 40» / «START» (только `gender_age`); место в группе
+  (`races.result.placeGroup[Tied]`); `finisher` — время, плашка «Финишёр» и баннер причины по `result.unranked`
+  (START / «Без пульса — вне зачёта»). Подпись результата учитывает группу и `unranked`.
+- Таблица: вкладки `SegmentedControl` (горизонтальная прокрутка) из `groups` ответа по умолчанию + «Финишёры» при
+  `finishers > 0` (одни START — вкладка группы ответа и «Финишёры»); своя группа — вкладка по умолчанию. `group` в
+  запросе — только для вкладки не по умолчанию и только после ответа с непустым `groups` (RC-11); ключи
+  `['races','results',id,'pages',group]` и `[…,'finishers']` (`useRaceFinishers`, курсор, без мест). Скелетон,
+  «Нет соединения» / «Не удалось загрузить» с повтором, пусто — для каждой вкладки.
+- Карточка соперника и подача спора: вкладка группы передаётся `?group=` (`rivalPath`, `disputeFilePath`,
+  `groupParam` — незнакомое значение игнорируется), иначе строка соперника из группы не по умолчанию не находилась бы.
+- «Анкета зачёта» `settings/verified` (ссылка из «Профиля», гард `useSettingsShell`): пол (чипы), год (подставлен
+  `suggestedBirthYear` с подсказкой), вес, рост, FTP (необязательно), согласие; проверка — схемы contracts
+  (`UpdateVerifiedProfileRequest`, `VerifiedBirthYear`), ошибки пределов — «Целое число от … до …»; `demographicsLocked`
+  — пол и год только чтение с пояснением «меняет команда платформы» (PUT шлёт прежние); `409
+  VERIFIED_DEMOGRAPHICS_LOCKED` — баннер и перезапрос анкеты; 400 по полю — под полем; сеть/429 — баннер. Успех —
+  кэш анкеты, инвалидация `['races','entry']`, с `?race` — возврат к гонке (`dismissTo`).
+- i18n `ru.ts`: `races.tier.*`, `races.result.placeGroup*`, `races.result.unranked.*`, `races.results.{groups,
+  finishers*,finisherA11y}`, `races.entry.tierGroup`, `profile.verified.*` (экранные). Правила — `pokatim-app.md`
+  (уровни и группы).
+
+### Files
+
+- Новые: `apps/app/src/features/races/participation/{tier-picker,group-picker}.tsx`,
+  `apps/app/src/features/profile/verified-profile-form.tsx`, `apps/app/src/app/settings/verified.tsx`.
+- Изменены: `features/races/{participation-format,queries,results-table,race-detail}.ts(x)`,
+  `features/races/participation/{race-participation,entry-actions,entry-result}.tsx`,
+  `features/races/disputes/{dispute-screen,rival-card,dispute-form}.tsx`, `app/races/{result,dispute}/[id]/[entryId].tsx`,
+  `features/profile/queries.ts`, `app/settings/profile.tsx`, `app/_layout.tsx`, `packages/i18n/src/ru.ts`,
+  `.claude/rules/pokatim-app.md`.
+
+### Tests
+
+- `__tests__/race-tiers.test.tsx` (14): выбор уровня и группы, занятая кнопка, START, без анкеты → анкета с
+  `?race`, 409/422 по кодам, схема `overall` без тела; повышение (раскрытие, тело, «Не сейчас», 409, без
+  `canUpgrade`); моё участие — группа и место в группе, `finisher` START / без пульса.
+- `__tests__/race-groups.test.tsx` (11): вкладки из `groups`, `group` только для другой вкладки, скелетон, кэш
+  вкладки по умолчанию, старый API без вкладок и без `group`, своя вкладка по умолчанию и соперник с `?group`;
+  «Финишёры» — строки без мест, одни START, скелетон, пусто, ошибки сети/сервера с повтором.
+- `__tests__/verified-profile.test.tsx` (12): ссылка из «Профиля», скелетон, ошибки загрузки с повтором,
+  подстановка года и тело PUT, кэш и инвалидация участия, пределы и пустые поля, границы пределов, 400 по полю,
+  сеть, возврат к гонке, блокировка пола/года (только чтение, PUT с прежними), 409 `VERIFIED_DEMOGRAPHICS_LOCKED`.
+- `participation-format.test.ts` (+8): `offersTierChoice`, `groupChoices`, строка уровня, `finisher`, место в группе,
+  подпись результата, новые коды, строка финишёров. Фикстуры — `races-fixtures.ts`.
+- Не проверено вручную: симуляторы iOS/Android и web-сборка в браузере (`build:web` + `start:web`) — NOT VERIFIED;
+  шаг e2e-смоука для `settings/verified` (за входом) не добавлен.
+
+`TURBO_CONCURRENCY=1 pnpm check` (Mongo `pokatim_r07c_test`, Redis db 13) — `exit=0`, `Tasks: 15 successful, 15 total`
+(app 1491, api 1334, admin 285, api-client 104). Первый прогон упал только в `@pokatim/api` (47 int-тестов на
+лимитах частоты и входе в панель — 429; `apps/api` не менялся), отдельный повтор `api test` — 1334/1334, затем
+полный `check` — зелёный.

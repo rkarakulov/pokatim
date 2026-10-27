@@ -1,4 +1,4 @@
-import { Uuid, type MyRaceDisputes } from '@pokatim/contracts';
+import { Uuid, type MyRaceDisputes, type ResultGroupKey } from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { AsyncContent, Button, Pill, SkeletonHeroCard, textStyle, useTheme } from '@rkarakulov/ui';
@@ -11,6 +11,7 @@ import {
   ActionSkeleton,
   DisputeNotFound,
   DisputeScreenShell,
+  disputeFilePath,
   DisputesFailure,
   findRow,
   RivalResult,
@@ -22,10 +23,12 @@ function RivalAction({
   disputes,
   raceId,
   entryId,
+  group,
 }: {
   disputes: MyRaceDisputes;
   raceId: string;
   entryId: string;
+  group: ResultGroupKey | undefined;
 }) {
   const theme = useTheme();
   const router = useRouter();
@@ -51,7 +54,7 @@ function RivalAction({
         label={t('disputes.file.action')}
         variant="secondary"
         disabled={action.kind === 'closed'}
-        onPress={() => router.push(`/races/dispute/${raceId}/${entryId}`)}
+        onPress={() => router.push(disputeFilePath(raceId, entryId, group))}
       />
       <Text style={meta}>{action.note}</Text>
     </View>
@@ -62,9 +65,18 @@ function RivalAction({
  * Карточка соперника (`/races/result/<гонка>/<заявка>`, RC-14; внутри `Stack.Protected`): место и время — из кэша
  * таблицы (холодный старт — первая страница); строки нет — «Результат не найден». Действие — по «моим спорам».
  */
-export function RivalCardScreen({ raceId, entryId }: { raceId: string; entryId: string }) {
+export function RivalCardScreen({
+  raceId,
+  entryId,
+  group,
+}: {
+  raceId: string;
+  entryId: string;
+  /** вкладка группы таблицы (race-results-07); нет — группа по умолчанию */
+  group?: ResultGroupKey;
+}) {
   const valid = Uuid.safeParse(raceId).success && Uuid.safeParse(entryId).success;
-  const results = useRaceResults(raceId, valid);
+  const results = useRaceResults(raceId, valid, group);
   const disputes = useMyRaceDisputes(raceId, valid);
   const title = t('disputes.rival.title');
 
@@ -80,7 +92,12 @@ export function RivalCardScreen({ raceId, entryId }: { raceId: string; entryId: 
               <View style={styles.card}>
                 <RivalResult row={found.row} page={found.page} />
                 {disputes.data ? (
-                  <RivalAction disputes={disputes.data} raceId={raceId} entryId={entryId} />
+                  <RivalAction
+                    disputes={disputes.data}
+                    raceId={raceId}
+                    entryId={entryId}
+                    group={group}
+                  />
                 ) : disputes.isError ? (
                   <DisputesFailure error={disputes.error} retry={() => void disputes.refetch()} />
                 ) : disputes.isPending ? (
