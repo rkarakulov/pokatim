@@ -18,7 +18,6 @@ import { createQueryWrapper } from './query-wrapper';
 import { actions, noEntry, resultsPage } from './races-fixtures';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getSeason = jest.mocked(api.getSeason);
 const listSeasons = jest.mocked(api.listSeasons);

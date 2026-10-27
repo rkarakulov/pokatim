@@ -55,6 +55,28 @@ describe('ProfileArea web (fix профиля routes-03)', () => {
   });
 });
 
+describe('ProfileChart web — роли профиля темы (app-themes)', () => {
+  it('линия — profile.line, стопы градиента — profile.fillTop/fillBottom, базовая линия — profile.grid', () => {
+    const theme = {
+      ...themes.light,
+      profile: { line: '#000001', fillTop: '#000002', fillBottom: '#000003', grid: '#000004' },
+    };
+    const html = renderToString(
+      <ProfileChart
+        elevation={elevation}
+        distanceM={67_000}
+        gainM={null}
+        theme={theme}
+        label="Профиль"
+      />,
+    );
+    expect(html).toContain('stroke="#000001"');
+    expect(html).toContain('<stop offset="0" stop-color="#000002"');
+    expect(html).toContain('<stop offset="1" stop-color="#000003"');
+    expect(html).toContain('solid #000004');
+  });
+});
+
 // --- routes-04: slider, курсор, pointer и клавиши ---
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

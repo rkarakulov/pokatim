@@ -47,3 +47,4 @@ ADR нужен, когда решение: меняет инвариант `AGEN
 | [0013](0013-coffee-rides.md) | Кофе-райды: модуль `rides`, участники — встроенный массив и одна атомарная операция, лента под входом, публичная карточка `noindex`, город — справочник | Proposed |
 | [0014](0014-maps-and-tiles.md) | Карты: MapLibre (RN + GL JS), тайлы по URL стиля из env (старт — OpenFreeMap), карта только на клиенте, коридор — ширина линии в метрах | Accepted |
 | [0015](0015-account-deletion.md) | Удаление аккаунта: оркестратор `account`, порты стирания модулей, маркер стёртого e-mail (HMAC в `email`), повторный проход и регламент | Accepted |
+| [0016](0016-app-themes.md) | Темы приложения: реестр в `@pokatim/design-tokens`, `AppThemeProvider` поверх базы, доставка — публичный GET, кэш native, SSR через `+middleware.ts` и `globalThis` | Accepted |

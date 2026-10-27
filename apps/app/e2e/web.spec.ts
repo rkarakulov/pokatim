@@ -99,6 +99,24 @@ test('Главная без входа: HTML с сервера (скелетон
   await expectGuestHome(page);
 });
 
+test('тема приложения в HTML до JS (app-themes): id для гидрации, theme-color и шрифты только активной темы', async ({
+  page,
+  request,
+}) => {
+  // без API и с API по умолчанию — «Классика» (тему выбирает панель; смоук её не меняет)
+  const html = await (await request.get('/')).text();
+  expect(html).toContain('window.__POKATIM_THEME__="classic"');
+  expect(html).toMatch(
+    /<meta name="theme-color" media="\(prefers-color-scheme: light\)" content="#FFFFFF"/,
+  );
+  const fonts = /<style id="expo-generated-fonts"[^>]*>([\s\S]*?)<\/style>/.exec(html)?.[1] ?? '';
+  expect(fonts).toContain('Inter_400Regular');
+
+  await page.goto('/');
+  await expectGuestHome(page);
+  expect(await page.evaluate(() => window.__POKATIM_THEME__)).toBe('classic');
+});
+
 test('публичный экран /register: форма, заголовок и OG в HTML до JS', async ({ page, request }) => {
   const html = await (await request.get('/register')).text();
   expect(html).toContain('Создать аккаунт');
