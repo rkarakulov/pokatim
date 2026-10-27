@@ -57,7 +57,9 @@ jobs:
       # MongoDB replica set (services не принимают command): docker run + rs.initiate, ожидание PRIMARY
       - name: mongodb replica set
         run: |
-          docker run -d --name mongo -p 127.0.0.1:27017:27017 mongo:8.0 --replSet rs0 --bind_ip_all
+          # ядро раннера ≥ 6.19: mongod 8.0 (TCMalloc + rseq) не стартует — SERVER-121912; обход — rseq glibc
+          docker run -d --name mongo -p 127.0.0.1:27017:27017 -e GLIBC_TUNABLES=glibc.pthread.rseq=1 \
+            mongo:8.0 --replSet rs0 --bind_ip_all
           initiate="try { rs.status().myState } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] }); 0 }"
           for _ in $(seq 1 60); do
             if [ "$(docker exec mongo mongosh --quiet --eval "$initiate" 2>/dev/null || true)" = "1" ]; then exit 0; fi
@@ -125,7 +127,9 @@ jobs:
       # pokatim: MongoDB replica set для API смоука — тот же шаг, что в check
       - name: mongodb replica set
         run: |
-          docker run -d --name mongo -p 127.0.0.1:27017:27017 mongo:8.0 --replSet rs0 --bind_ip_all
+          # ядро раннера ≥ 6.19: mongod 8.0 (TCMalloc + rseq) не стартует — SERVER-121912; обход — rseq glibc
+          docker run -d --name mongo -p 127.0.0.1:27017:27017 -e GLIBC_TUNABLES=glibc.pthread.rseq=1 \
+            mongo:8.0 --replSet rs0 --bind_ip_all
           initiate="try { rs.status().myState } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] }); 0 }"
           for _ in $(seq 1 60); do
             if [ "$(docker exec mongo mongosh --quiet --eval "$initiate" 2>/dev/null || true)" = "1" ]; then exit 0; fi
