@@ -52,3 +52,51 @@ describe('Icon — обёртка expo-symbols', () => {
     });
   });
 });
+
+describe('Icon — темы слайса C', () => {
+  const themed = (weight: 'regular' | 'semibold') =>
+    activeAppTheme({ ...appThemes.classic, icons: { weight, filled: false } }, 'light');
+
+  it('вес semibold — файл Material Symbols 600 и вес iOS; ключ экземпляра — по весу', async () => {
+    const { rerender } = await render(
+      <AppThemeContext.Provider value={themed('semibold')}>
+        <Icon name="home" size={18} color="#111111" />
+      </AppThemeContext.Provider>,
+    );
+    const props = lastProps();
+    expect(props?.weight).toEqual({
+      ios: 'semibold',
+      android: expect.objectContaining({ name: 'MaterialSymbols_600SemiBold' }),
+    });
+    const mounts = symbol.mock.calls.length;
+    await rerender(
+      <AppThemeContext.Provider value={themed('regular')}>
+        <Icon name="home" size={18} color="#111111" />
+      </AppThemeContext.Provider>,
+    );
+    expect(lastProps()?.weight).toBeUndefined();
+    expect(symbol.mock.calls.length).toBeGreaterThan(mounts);
+  });
+
+  it.each([
+    ['home', { ios: 'house', android: 'home', web: 'home' }],
+    ['races', { ios: 'flag.checkered', android: 'sports_score', web: 'sports_score' }],
+    ['rides', { ios: 'cup.and.saucer', android: 'local_cafe', web: 'local_cafe' }],
+    ['routes', { ios: 'map', android: 'map', web: 'map' }],
+    ['calendar', { ios: 'calendar', android: 'calendar_month', web: 'calendar_month' }],
+    ['arrowRight', { ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }],
+    ['chevronRight', { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }],
+  ] as const)('%s — имена символов', async (name, expected) => {
+    await render(<Icon name={name} size={18} color="#111111" />);
+    expect(lastProps()?.name).toEqual(expected);
+  });
+
+  it('вкладки с заливочным вариантом iOS: home, rides, routes', async () => {
+    await render(<Icon name="rides" size={18} color="#111111" filled />);
+    expect(lastProps()?.name).toMatchObject({ ios: 'cup.and.saucer.fill' });
+    await render(<Icon name="home" size={18} color="#111111" filled />);
+    expect(lastProps()?.name).toMatchObject({ ios: 'house.fill' });
+    await render(<Icon name="routes" size={18} color="#111111" filled />);
+    expect(lastProps()?.name).toMatchObject({ ios: 'map.fill' });
+  });
+});
