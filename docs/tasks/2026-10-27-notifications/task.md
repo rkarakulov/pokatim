@@ -963,3 +963,29 @@ total`. `EXPO_PUBLIC_API_URL=http://127.0.0.1:3000 pnpm --filter @pokatim/app bu
 **Проверки.** `TURBO_CONCURRENCY=1 pnpm check` (`MONGO_URL_TEST=…:27117/pokatim_notifications_test`,
 `REDIS_URL_TEST=…:6479/14`) — зелёный: arch:check «no dependency violations found», api 119 files / 1273 tests, app
 1383 tests, `Tasks: 15 successful, 15 total`.
+
+### Фиксы ревью pass 3
+
+По `findings-codex-pass3.md` (вердикт APPROVE): MEDIUM 2 и LOW исправлены, MEDIUM 1 — follow-up.
+
+- **[MEDIUM] Неготовые квитанции блокировали следующие тикеты.** `NotificationsRepository.dueTickets(…, after)` —
+  курсор обхода `(createdAt, _id)`; `PushReceipts.check` идёт дальше после последнего просмотренного тикета (до
+  `receiptsMaxBatches` пачек за проход), пачка без готовых квитанций обход не останавливает. Без поля и миграции.
+  Int-тест `notifications-delivery.int.test.ts` (+1): 1000 старших тикетов без квитанций, следующий —
+  `DeviceNotRegistered` → в том же проходе `{ checked: 1, unregistered: 1 }`, токен снят, 1000 тикетов ждут.
+- **[LOW] Гонка первой вставки по `collapseKey`.** `writeNotices`: дубль `notifications_collapse_unique` у операции со
+  схлопыванием → повтор условной замены (`sourceEventId $lt`) без upsert; более новое событие заменяет вставленное
+  старшее, устаревшее — без эффекта. Int-тест `notifications-intake.int.test.ts` (+1): старшее событие вставляется
+  перед вставкой нового (подмена `bulkWrite` с настоящей ошибкой E11000) → один документ с `sourceEventId` и текстом
+  нового. Закрывает follow-up «[LOW claude] Схлопывание при одновременной первой вставке» pass 1.
+
+**Проверки.** `TURBO_CONCURRENCY=1 pnpm check` (`MONGO_URL_TEST=…:27117/pokatim_notifications_test`,
+`REDIS_URL_TEST=…:6479/14`) — зелёный: api 119 files / 1275 tests, `Tasks: 15 successful, 15 total`.
+
+**Follow-ups.**
+- [MEDIUM codex pass 3] Поздняя регистрация старой сессии перезаписывает токен нового аккаунта: `registerToken`
+  обновляет документ по `{ token }` без повторной проверки сессии; регистрация A, прошедшая `AuthGuard` до выхода, может
+  записаться после регистрации B того же Expo-токена — владельцем станет A (мёртвая сессия), доставка его снимет, push B
+  пропадут до следующей регистрации. Предлагаемый фикс: сериализовать проверку живой сессии и запись токена с отзывом
+  сессии через порт identity и транзакцию с соответствующим замком; конкурентный тест — один токен, запрос A остановлен
+  перед записью → выход A → регистрация B → продолжение A; владелец — B.

@@ -34,6 +34,7 @@ import { RIDES_RIDE_CANCELLED } from '../rides';
 import type { NotificationDoc } from './notifications.collection';
 import { NotificationErasure } from './notification-erasure';
 import { emailJobId, pushJobId } from './notifications.events';
+import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
 import { PushTokens } from './push-tokens';
 
@@ -515,6 +516,32 @@ describe('квитанции Expo (регламент)', () => {
     h.clock.advance(16 * MINUTE);
     expect(await runReceipts(h)).toEqual({ checked: 0, unregistered: 0 });
     expect(await notificationsDb(h).pushTickets.countDocuments()).toBe(1);
+  });
+
+  it('пачка без готовых квитанций не закрывает следующие: DeviceNotRegistered за ней снимает токен в том же проходе', async () => {
+    const batch = NOTIFICATIONS_POLICY.receiptsBatch;
+    const sentAt = h.clock.now();
+    // полная пачка старших тикетов, квитанции по которым Expo ещё не отдаёт
+    await notificationsDb(h).pushTickets.insertMany(
+      Array.from({ length: batch }, () => ({
+        _id: uuidv7(),
+        ticketId: uuidv7(),
+        tokenId: uuidv7(),
+        userId: b.userId,
+        createdAt: new Date(sentAt.getTime() - MINUTE),
+        expireAt: new Date(sentAt.getTime() + 24 * HOUR),
+      })),
+    );
+    const token = await seedPushToken(h, a.userId, 'a1');
+    await pendingPush(a.userId);
+    expect(await runPush(h, a.userId)).toBe('sent');
+    const [ticket] = expo.delivered;
+    expo.receiptsById.set(ticket!.ticketId, notRegisteredReceipt());
+    h.clock.advance(16 * MINUTE);
+
+    expect(await runReceipts(h)).toEqual({ checked: 1, unregistered: 1 });
+    expect(await notificationsDb(h).pushTokens.countDocuments({ _id: token })).toBe(0);
+    expect(await notificationsDb(h).pushTickets.countDocuments()).toBe(batch);
   });
 });
 

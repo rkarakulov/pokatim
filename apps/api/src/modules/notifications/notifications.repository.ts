@@ -111,11 +111,18 @@ export class NotificationsRepository {
    * `(sourceEventId, userId)` ещё нет (`$setOnInsert`: повтор задачи ничего не меняет). С `collapseKey` (N7) — замена
    * прежнего уведомления объекта только более старым событием (`sourceEventId $lt`: uuidv7 упорядочены по времени):
    * текст, цель, снова непрочитано, наверху (`createdAt`), доставка заново; совпадения нет — вставка. Дубль ключа на
-   * вставке — повтор или устаревшее событие, не ошибка. Возвращает число вставленных и заменённых.
+   * вставке — повтор или устаревшее событие, не ошибка; дубль по `collapseKey` бывает и у более нового события,
+   * проигравшего гонку первой вставки старшему, — для него условная замена повторяется без upsert. Возвращает число
+   * вставленных и заменённых.
    */
   async writeNotices(docs: readonly NotificationDoc[]): Promise<number> {
     if (docs.length === 0) return 0;
-    const operations = docs.map((doc): AnyBulkWriteOperation<NotificationDoc> => {
+    // условная замена по объекту — по позиции операции; без upsert повторяется после гонки первой вставки
+    const collapses = new Map<
+      number,
+      { filter: Filter<NotificationDoc>; set: Partial<NotificationDoc> }
+    >();
+    const operations = docs.map((doc, index): AnyBulkWriteOperation<NotificationDoc> => {
       const { _id, userId, sourceEventId, collapseKey, ...fields } = doc;
       if (collapseKey === undefined) {
         return {
@@ -126,10 +133,15 @@ export class NotificationsRepository {
           },
         };
       }
+      const collapse = {
+        filter: { userId, collapseKey, sourceEventId: { $lt: sourceEventId } },
+        set: { sourceEventId, ...fields },
+      };
+      collapses.set(index, collapse);
       return {
         updateOne: {
-          filter: { userId, collapseKey, sourceEventId: { $lt: sourceEventId } },
-          update: { $set: { sourceEventId, ...fields }, $setOnInsert: { _id } },
+          filter: collapse.filter,
+          update: { $set: collapse.set, $setOnInsert: { _id } },
           upsert: true,
         },
       };
@@ -143,7 +155,18 @@ export class NotificationsRepository {
         ? error.writeErrors
         : [error.writeErrors];
       if (writeErrors.length === 0 || !writeErrors.every(isRepeatOrStale)) throw error;
-      return error.result.upsertedCount + error.result.modifiedCount;
+      let written = error.result.upsertedCount + error.result.modifiedCount;
+      for (const writeError of writeErrors) {
+        const collapse = collapses.get(writeError.index);
+        if (!collapse || !isDuplicateKey(writeError, NOTIFICATIONS_COLLAPSE_UNIQUE_INDEX)) continue;
+        try {
+          const retry = await this.notifications.updateOne(collapse.filter, { $set: collapse.set });
+          written += retry.modifiedCount;
+        } catch (retryError) {
+          if (!isRepeatOrStale(retryError)) throw retryError;
+        }
+      }
+      return written;
     }
   }
 
@@ -501,17 +524,25 @@ export class NotificationsRepository {
     );
   }
 
-  /** Тикеты, отправленные раньше `before` и ещё живые, старые первыми (`push_tickets_created_idx`). */
+  /**
+   * Тикеты, отправленные раньше `before` и ещё живые, старые первыми (`push_tickets_created_idx`); `after` — курсор
+   * обхода `(createdAt, _id)` последнего просмотренного: неготовые квитанции не закрывают следующие.
+   */
   dueTickets(
     before: Date,
     now: Date,
     limit: number,
-  ): Promise<Pick<PushTicketDoc, '_id' | 'ticketId' | 'tokenId' | 'userId'>[]> {
+    after: NotificationPosition | null = null,
+  ): Promise<Pick<PushTicketDoc, '_id' | 'ticketId' | 'tokenId' | 'userId' | 'createdAt'>[]> {
+    const filter: Filter<PushTicketDoc> = { createdAt: { $lte: before }, expireAt: { $gt: now } };
+    if (after) {
+      filter.$or = [
+        { createdAt: { $gt: after.createdAt } },
+        { createdAt: after.createdAt, _id: { $gt: after.id } },
+      ];
+    }
     return this.pushTickets
-      .find(
-        { createdAt: { $lte: before }, expireAt: { $gt: now } },
-        { projection: { _id: 1, ticketId: 1, tokenId: 1, userId: 1 } },
-      )
+      .find(filter, { projection: { _id: 1, ticketId: 1, tokenId: 1, userId: 1, createdAt: 1 } })
       .sort({ createdAt: 1, _id: 1 })
       .limit(limit)
       .toArray();

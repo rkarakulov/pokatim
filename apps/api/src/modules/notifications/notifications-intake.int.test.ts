@@ -1,5 +1,6 @@
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { Collection } from 'mongodb';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { seedDispute } from '../../../test/disputes';
 import { createHarness, DAY, HOUR, type Harness, MINUTE } from '../../../test/harness';
@@ -11,6 +12,7 @@ import {
   notificationsIntake,
   notificationsOf,
   runIntake,
+  uuidv7At,
 } from '../../../test/notifications';
 import { createSeason, publishedRace, staff } from '../../../test/races';
 import { resultsDb } from '../../../test/results';
@@ -25,7 +27,9 @@ import {
   type Rider,
   startsIn,
 } from '../../../test/rides';
+import type { NotificationDoc } from './notifications.collection';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
+import { NotificationsRepository } from './notifications.repository';
 
 /**
  * Приём событий для уведомлений (шаг B, AC1, AC2, AC5 — центр, AC7): каждое событие N3 — нужным получателям с текстом
@@ -47,6 +51,9 @@ beforeEach(async () => {
   a = await rider(h, 'a@example.by');
   b = await rider(h, 'b@example.by');
   stranger = await rider(h, 'c@example.by');
+});
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 afterAll(async () => {
   await h.close();
@@ -434,6 +441,53 @@ describe('идемпотентность и отсечки (AC2, AC7)', () => {
     expect(await notificationsDb(h).notifications.countDocuments({ kind: 'ride_cancelled' })).toBe(
       2,
     );
+  });
+
+  it('гонка первой записи по collapseKey: старшее событие вставилось первым — итог новое (N7)', async () => {
+    const repository = h.worker.get(NotificationsRepository);
+    const at = h.clock.now();
+    const notice = (sourceEventId: string, body: string): NotificationDoc => ({
+      _id: uuidv7(),
+      userId: organizer.userId,
+      kind: 'ride_joined',
+      group: 'rides',
+      title: 'Новый участник',
+      body,
+      target: { type: 'ride', rideId: 'r1' },
+      sourceEventId,
+      collapseKey: 'ride:r1:joined',
+      createdAt: at,
+      readAt: null,
+      expireAt: new Date(at.getTime() + NOTIFICATIONS_POLICY.ttlDays * DAY),
+      push: {
+        state: 'skipped',
+        notBefore: at,
+        claimId: null,
+        claimedUntil: null,
+        sentAt: null,
+        reason: 'disabled',
+      },
+      email: null,
+    });
+    const older = notice(uuidv7At(new Date(at.getTime() - MINUTE)), 'участников — 2.');
+    const newer = notice(uuidv7At(at), 'участников — 3.');
+    // upsert нового события не нашёл документ, а старшее вставилось раньше: вставка нового — дубль collapse-индекса
+    const original = Collection.prototype.bulkWrite;
+    vi.spyOn(Collection.prototype, 'bulkWrite').mockImplementationOnce(async function (
+      this: Collection<NotificationDoc>,
+    ) {
+      await this.insertOne(older);
+      return original.call(this, [{ insertOne: { document: newer } }], { ordered: false });
+    });
+
+    expect(await repository.writeNotices([newer])).toBe(1);
+    const docs = await notificationsOf(h, organizer.userId);
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({
+      _id: older._id,
+      sourceEventId: newer.sourceEventId,
+      body: 'участников — 3.',
+    });
   });
 
   it('удалённый аккаунт — уведомление не создаётся (RC-4)', async () => {
