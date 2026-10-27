@@ -38,9 +38,10 @@ import {
  * тач-экране один палец прокручивает страницу, два — карту; двойной клик — приближение; вращение и наклон выключены;
  * зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM`; кнопки «+», «−», «в рамку» (без анимации при reduce motion). Компактная атрибуция —
  * свёрнута при старте и в цветах темы (B2, B4 maps-02), начальная камера — по рамке без анимации с отступом под
- * контролы. Смена стиля (темы) — пересоздание карты. Ошибка стиля или тайлов — сообщение поверх карты. `scrub`
- * (routes-04) — маркер скраббинга оверлеем: пиксели линии — `map.project` после `load` и на `SCRUB_REPROJECT_EVENTS`
- * в стор вида (подписан только `ScrubLayer`); карта на кадр камеры не перерисовывается и не пересоздаётся.
+ * контролы. Смена стиля (темы) — пересоздание карты. Ошибка до `load` (стиль, первые тайлы) — сообщение поверх
+ * карты; ошибки тайлов после `load` — без сообщения (как native). `scrub` (routes-04) — маркер скраббинга оверлеем:
+ * пиксели линии — `map.project` после `load` и на `SCRUB_REPROJECT_EVENTS` в стор вида (подписан только
+ * `ScrubLayer`); карта на кадр камеры не перерисовывается и не пересоздаётся.
  */
 export function RouteMap({
   map,
@@ -108,7 +109,11 @@ export function RouteMap({
         instanceRef.current = created;
         setReady(true);
         collapseAttribution(created, node);
+        // ревью pass 1 (M2): фатальна только ошибка до `load` (стиль, первые тайлы); ошибка тайла новой области после
+        // `load` (сеть на секунду) не гасит живую карту и кнопки — MapLibre перезапросит тайл, как native
+        let loaded = false;
         created.on('load', () => {
+          loaded = true;
           created.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: routeFeatures(map) });
           for (const layer of routeLayers(theme, map.widthM, map.bounds, lineWidth)) {
             if (corridor || layer.id !== CORRIDOR_LAYER_ID) created.addLayer(layer);
@@ -131,7 +136,9 @@ export function RouteMap({
             for (const event of SCRUB_REPROJECT_EVENTS) created.on(event, reproject);
           }
         });
-        created.on('error', () => setFailed(true));
+        created.on('error', () => {
+          if (!loaded) setFailed(true);
+        });
       })
       .catch(() => {
         if (!cancelled) setFailed(true);

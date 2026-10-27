@@ -73,6 +73,9 @@ export function useMapGestures({
     start: null as MapCamera | null,
     focal0: [0, 0] as Planar,
     translation: [0, 0] as Planar,
+    // смещение пана в момент его активации, если щипок уже шёл (ревью pass 1, L1): `focal0` — фокус щипка, путь
+    // пальцев до активации пана в нём уже учтён — без базы он вошёл бы дважды (рывок на порог пана)
+    translationBase: [0, 0] as Planar,
     scale: 1,
   });
 
@@ -84,6 +87,7 @@ export function useMapGestures({
       state.start = cameraOf(view.current);
       state.focal0 = focal0;
       state.translation = [0, 0];
+      state.translationBase = [0, 0];
       state.scale = 1;
       onActive(true);
     };
@@ -93,6 +97,12 @@ export function useMapGestures({
       if (state.active > 0) return;
       state.start = null;
       onActive(false);
+    };
+    const setTranslation = (event: { translationX: number; translationY: number }) => {
+      state.translation = [
+        event.translationX - state.translationBase[0],
+        event.translationY - state.translationBase[1],
+      ];
     };
     const apply = () => {
       const viewSize = size.current;
@@ -118,11 +128,13 @@ export function useMapGestures({
           translationY: number;
         }) => {
           activate([event.x - event.translationX, event.y - event.translationY]);
-          state.translation = [event.translationX, event.translationY];
+          // пан — второй (щипок уже активен): смещение отсчитывается от этого момента
+          if (state.active > 1) state.translationBase = [event.translationX, event.translationY];
+          setTranslation(event);
           apply();
         },
         onUpdate: (event: { translationX: number; translationY: number }) => {
-          state.translation = [event.translationX, event.translationY];
+          setTranslation(event);
           apply();
         },
         onDeactivate: deactivate,

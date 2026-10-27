@@ -1,5 +1,6 @@
 import type { Planar } from '@pokatim/tracks';
 
+import { MAP_ASPECT_RATIO, MAP_FIT_PADDING } from './corridor-style';
 import {
   cameraAfterGesture,
   clampZoom,
@@ -107,5 +108,26 @@ describe('map-camera: камера жестов двумя пальцами (rou
     const next = zoomAround(start, VIEW, point, 1);
     expect(next.zoom).toBe(13);
     expectPixel(pixelOf(next, under), point);
+  });
+
+  it('ревью pass 1 (M1): рамка маршрута 1000 км с севера на юг вписывается и на узком телефоне — зум рамки выше MAP_MIN_ZOOM', () => {
+    // ≈ 9° широты ≈ 1000 км (предел дистанции гонки), карта 3:2 шириной 320 px, отступы рамки — как у камеры
+    const [west, south, east, north] = [27, 47.5, 28, 56.5];
+    const width = 320;
+    const height = width / MAP_ASPECT_RATIO;
+    const mercator = (lat: number) => {
+      const rad = (lat * Math.PI) / 180;
+      return (1 - Math.log(Math.tan(Math.PI / 4 + rad / 2)) / Math.PI) / 2;
+    };
+    // зум вписывания (как fitBounds MapLibre): мир 512 · 2^z, рамка в долях мира — в поле без отступов
+    const fitZoom = Math.log2(
+      Math.min(
+        (width - MAP_FIT_PADDING.left - MAP_FIT_PADDING.right) / ((east - west) / 360),
+        (height - MAP_FIT_PADDING.top - MAP_FIT_PADDING.bottom) /
+          (mercator(south) - mercator(north)),
+      ) / 512,
+    );
+    expect(fitZoom).toBeGreaterThan(MAP_MIN_ZOOM);
+    expect(clampZoom(fitZoom)).toBe(fitZoom);
   });
 });

@@ -73,7 +73,7 @@ async function renderMap(onMapGesture = jest.fn()) {
 }
 
 describe('RouteMap native: жесты двумя пальцами (routes-04b, RC-2, RC-3)', () => {
-  it('нативные жесты карты выключены, зум камеры ограничен 4–17', async () => {
+  it('нативные жесты карты выключены, зум камеры ограничен 2–17', async () => {
     await renderMap();
     const map = screen.getByTestId('maplibre-Map');
     for (const gesture of ['dragPan', 'touchZoom', 'doubleTapZoom', 'touchRotate', 'touchPitch']) {
@@ -118,6 +118,24 @@ describe('RouteMap native: жесты двумя пальцами (routes-04b, R
     expect(lock.mock.calls).toEqual([[true]]);
     await act(async () => pinch.end({ focalX: 170, focalY: 110, scale: 2 }));
     expect(lock.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('ревью pass 1 (L1): щипок раньше пана — путь пальцев до активации пана не учитывается дважды (без рывка)', async () => {
+    await renderMap();
+    const pinch = createGestureController(MAP_PINCH_TEST_ID);
+    const pan = createGestureController(MAP_PAN_TEST_ID);
+    // пальцы уже сдвинулись на 6 px, когда активировался щипок; пан активируется позже с накопленным смещением 10 px
+    await act(async () => pinch.begin({ focalX: 150, focalY: 100, scale: 1 }));
+    await act(async () => pinch.activate({ focalX: 156, focalY: 100, scale: 1.05 }));
+    await act(async () => pan.begin({ x: 150, y: 100, translationX: 0, translationY: 0 }));
+    await act(async () => pan.activate({ x: 160, y: 100, translationX: 10, translationY: 0 }));
+    expect(camera.jumpTo).toHaveBeenLastCalledWith(
+      cameraAfterGesture(START, VIEW, { focal0: [156, 100], focal: [156, 100], scale: 1.05 }),
+    );
+    await act(async () => pan.update({ x: 180, y: 90, translationX: 30, translationY: -10 }));
+    expect(camera.jumpTo).toHaveBeenLastCalledWith(
+      cameraAfterGesture(START, VIEW, { focal0: [156, 100], focal: [176, 90], scale: 1.05 }),
+    );
   });
 
   it('один палец (пан не активирован) — камера не двигается, прокрутка не блокируется', async () => {

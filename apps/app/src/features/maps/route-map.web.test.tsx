@@ -234,7 +234,7 @@ describe('RouteMap (web): атрибуция и отступы (B2, B4 maps-02)'
 });
 
 describe('RouteMap (web): интерактивная карта (routes-04b, RC-1, RC-9)', () => {
-  it('кооперативные жесты, без вращения и наклона, зум 4–17, строки интерфейса из i18n', async () => {
+  it('кооперативные жесты, без вращения и наклона, зум 2–17, строки интерфейса из i18n', async () => {
     await render(<RouteMap {...props()} />);
     await flush();
     const map = state.maps.at(-1)!;
@@ -306,7 +306,18 @@ describe('RouteMap (web): интерактивная карта (routes-04b, RC-
     reduce.mockRestore();
   });
 
-  it('ошибка стиля — кнопок нет', async () => {
+  it('ревью pass 1 (M2): ошибка тайла после load — карта и кнопки остаются, сообщения нет', async () => {
+    await render(<RouteMap {...props()} />);
+    await flush();
+    const map = state.maps.at(-1)!;
+    await act(async () => map.handlers.load!());
+    await act(async () => map.handlers.error!());
+    expect(text()).not.toContain('Карта не загрузилась');
+    expect(button('map-zoom-in')).not.toBeNull();
+    expect(map.remove).not.toHaveBeenCalled();
+  });
+
+  it('ошибка стиля (до load) — кнопок нет', async () => {
     await render(<RouteMap {...props()} />);
     await flush();
     expect(button('map-zoom-in')).not.toBeNull();

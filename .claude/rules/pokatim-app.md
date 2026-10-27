@@ -147,7 +147,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   (не `pointerEvents` — атрибуция нажимается), жесты двумя пальцами и двойной тап — RNGH поверх карты
   (`map-gestures.ts`, только native-файл; камера — `CameraRef.jumpTo`, математика — чистая `map-camera.ts`), экран не
   прокручивается на время жеста (`map-gesture-lock.tsx`: `MapGestureLockContext` + `useMapGestureLock` на трёх
-  экранах карты; web контекст не вызывает). Зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM` (4–17), без `maxBounds`; кнопки «+», «−»,
+  экранах карты; web контекст не вызывает). Зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM` (2–17: рамка 1000 км вписывается), без `maxBounds`; кнопки «+», «−»,
   «в рамку» — `map-controls.tsx` сверху справа (`MAP_FIT_PADDING.right` — под них), анимация камеры
   `MAP_CAMERA_ANIMATION_MS`, при reduce motion — без анимации (native — длительность всегда явно); начальная камера —
   по рамке без анимации. Сдвиг карты на native — исключение из правила `accessibilityActions` (ADR-0014). Карточка `races/[id]`: блок `race-route-map.tsx` после строки «Коридор» — SSR и первый рендер — место

@@ -206,6 +206,9 @@ drag-жеста». Зум — есть кнопки; сдвиг карты на 
   теперь всегда держит `GestureDetector`.
 - D6: кнопки «+»/«−» native до первого события региона берут зум у карты (`MapRef.getZoom()`), дальше — из последнего
   `ViewState` (§11 — только `ViewState`).
+- D8 (ревью pass 1, M1): `MAP_MIN_ZOOM = 2` вместо 4 (RC-8, §11): на зуме 4 рамка маршрута длиннее ≈ 450 км по
+  вертикали (гонка до 1000 км, свой GPX) не вписывалась — начальная камера и «в рамку» обрезались. Web: ошибка тайла
+  после `load` не гасит карту (M2) — фатальна только ошибка до `load`.
 - D7: размер вида native пишут оба `onLayout` — области жестов (`map-gesture-area`, всегда) и оверлея маркера
   (`scrub-overlay`, как в routes-04): одна рамка `absoluteFill`, тесты routes-04 не переписывались.
 
@@ -362,11 +365,12 @@ e2e с картой (стиль-заглушка + WebGL — отдельная 
 
 ## 12. Outcome (заполняет coder)
 
-**Статус:** реализовано по §11 (TDD-порядок 1–8), отклонения — §8.2 D1–D7. Не закоммичено.
+**Статус:** реализовано по §11 (TDD-порядок 1–8), отклонения — §8.2 D1–D8; коммит 08d5932, фиксы ревью pass 1
+(M1, M2, L1, L2 — `findings.md`, «Фиксы после pass 1») — поверх, не закоммичены.
 
 **Код (`apps/app/src/features/maps/`):**
 
-- новые: `map-camera.ts` (зум 4–17, шаг, 300 мс, `cameraAfterGesture`, `zoomAround` — Web Mercator, тайл 512),
+- новые: `map-camera.ts` (зум 2–17 после ревью pass 1, шаг, 300 мс, `cameraAfterGesture`, `zoomAround` — Web Mercator, тайл 512),
   `map-view-store.ts`, `scrub-layer.tsx`, `map-controls.tsx`, `map-gesture-lock.tsx`, `map-gestures.ts` (только
   native), `map-locale.web.ts`;
 - `route-map.web.tsx` — `interactive` + `cooperativeGestures`, вращение/наклон выключены, `minZoom`/`maxZoom`, `locale`,
