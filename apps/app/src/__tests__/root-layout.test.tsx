@@ -8,7 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { storeSession, storeSurveyCompleted } from './auth-fixtures';
 import { appRoutes } from './app-routes';
 
-jest.mock('expo-font', () => ({ isLoaded: jest.fn(), loadAsync: jest.fn() }));
+jest.mock('expo-font', () => ({ isLoaded: jest.fn(), isLoading: jest.fn(), loadAsync: jest.fn() }));
 jest.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: jest.fn(() => Promise.resolve(true)),
   hideAsync: jest.fn(() => Promise.resolve()),

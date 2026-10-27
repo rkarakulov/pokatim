@@ -11,8 +11,13 @@ export interface ThemeFontsState {
 
 const READY: ThemeFontsState = { ready: true, error: null };
 
+/**
+ * Файлы набора загружены. `isLoading` — обязательно: expo-font на web регистрирует `@font-face` до скачивания файла
+ * (`document.fonts.load`), и `isLoaded` уже `true`, пока загрузка в полёте. `@font-face` из SSR при гидрации —
+ * загруженным (загрузки в полёте нет).
+ */
 const allLoaded = (set: ThemeFontSet) =>
-  Object.keys(set.assets).every((name) => Font.isLoaded(name));
+  Object.keys(set.assets).every((name) => Font.isLoaded(name) && !Font.isLoading(name));
 
 /**
  * native и клиент web: грузит набор при каждой смене (`useFonts` expo-font читает карту один раз — смена темы на

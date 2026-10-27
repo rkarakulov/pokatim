@@ -5,9 +5,10 @@ import * as Font from 'expo-font';
 import type { ThemeFontSet } from './fonts';
 import { useThemeFonts } from './use-theme-fonts';
 
-jest.mock('expo-font', () => ({ isLoaded: jest.fn(), loadAsync: jest.fn() }));
+jest.mock('expo-font', () => ({ isLoaded: jest.fn(), isLoading: jest.fn(), loadAsync: jest.fn() }));
 
 const isLoaded = jest.mocked(Font.isLoaded);
+const isLoading = jest.mocked(Font.isLoading);
 const loadAsync = jest.mocked(Font.loadAsync);
 
 const families = {} as ThemeFontSet['families'];
@@ -85,6 +86,24 @@ describe('useThemeFonts (native и клиент web)', () => {
       loadA.resolve();
     });
     await rerender({ set: setA });
+    expect(result.current).toEqual({ ready: true, error: null });
+  });
+
+  it('web: @font-face уже зарегистрирован, но файл ещё скачивается — повторный рендер не готов', async () => {
+    // expo-font web добавляет правило до `document.fonts.load`: isLoaded уже true, загрузка — в полёте
+    isLoaded.mockReturnValue(true);
+    isLoading.mockReturnValue(true);
+    const load = deferred();
+    loadAsync.mockReturnValue(load.promise);
+    const { result, rerender } = await renderHook(
+      ({ set }: { set: ThemeFontSet }) => useThemeFonts(set),
+      { initialProps: { set: setA } },
+    );
+    await rerender({ set: setA });
+    expect(result.current.ready).toBe(false);
+
+    isLoading.mockReturnValue(false);
+    await act(async () => load.resolve());
     expect(result.current).toEqual({ ready: true, error: null });
   });
 

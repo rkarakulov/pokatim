@@ -31,6 +31,7 @@ jest.mock('expo-secure-store', () => {
 // use-theme-fonts.test.tsx и root-layout.test.tsx своими моками
 jest.mock('expo-font', () => ({
   isLoaded: jest.fn(() => true),
+  isLoading: jest.fn(() => false),
   loadAsync: jest.fn(() => Promise.resolve()),
 }));
 
