@@ -404,8 +404,8 @@ describe('фиксы ревью pass 1', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'Удалить' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Удалить' }));
     await waitFor(() => expect(router.getPathname()).toBe('/routes'));
-    const root = screen.getRouterState()?.routes[0]?.state;
-    expect(root?.routes.map((route) => route.name)).toEqual(['(tabs)']);
+    const root = router.getRouterState()?.routes[0]?.state;
+    expect(root?.routes.map((route: { name: string }) => route.name)).toEqual(['(tabs)']);
   });
 
   it('открытие готовой карточки не перезапрашивает ленту', async () => {
