@@ -53,3 +53,19 @@ describe('StatBlock', () => {
     expect(screen.getByTestId('stat-block')).toHaveStyle({ flexWrap: 'wrap' });
   });
 });
+
+describe('StatBlock: пояснение (routes-03)', () => {
+  it('note — строкой под подписью и в метке ячейки; без note — как прежде', async () => {
+    await render(
+      <StatBlock
+        items={[
+          { value: '68', unit: 'км', label: 'Дистанция', note: 'круговой' },
+          { value: '3', label: 'Этапа' },
+        ]}
+      />,
+    );
+    expect(screen.getByText('круговой')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Дистанция 68 км круговой')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Этапа 3')).toBeOnTheScreen();
+  });
+});

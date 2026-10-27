@@ -9,13 +9,15 @@ export interface StatItem {
   unit?: string;
   /** Подпись под значением: «Дистанция». */
   label: string;
+  /** Пояснение под подписью (routes-03): «круговой», «макс. 267 м», «при 27 км/ч». */
+  note?: string;
 }
 
 /**
  * Стат-блок (`.stats` прототипа): ink-линия сверху, ячейки в ряд с hairline-разделителями, значение `displayStat` с
  * единицей и подпись `label`; ячейка — по содержимому (не уже `size.rowMin`), не влезла — новый ряд; «км» при крупном
- * шрифте переносится под значение. Для скринридера — одна метка на
- * ячейку «Дистанция 100 км». Кандидат в `@rkarakulov/ui` (§5.1).
+ * шрифте переносится под значение; необязательное пояснение `note` — строкой под подписью. Для скринридера — одна
+ * метка на ячейку «Дистанция 100 км» (с пояснением — «Дистанция 68 км круговой»). Кандидат в `@rkarakulov/ui` (§5.1).
  */
 export function StatBlock({ items }: { items: readonly StatItem[] }) {
   const theme = useTheme();
@@ -27,7 +29,9 @@ export function StatBlock({ items }: { items: readonly StatItem[] }) {
           key={index}
           testID="stat-block-cell"
           accessible
-          accessibilityLabel={[item.label, item.value, item.unit].filter(Boolean).join(' ')}
+          accessibilityLabel={[item.label, item.value, item.unit, item.note]
+            .filter(Boolean)
+            .join(' ')}
           style={[
             styles.cell,
             index === 0 ? styles.first : [styles.next, { borderLeftColor: theme.border.subtle }],
@@ -44,6 +48,9 @@ export function StatBlock({ items }: { items: readonly StatItem[] }) {
           <Text style={[textStyle('label'), styles.label, { color: theme.text.secondary }]}>
             {item.label}
           </Text>
+          {item.note ? (
+            <Text style={[textStyle('label'), { color: theme.text.secondary }]}>{item.note}</Text>
+          ) : null}
         </View>
       ))}
     </View>

@@ -8,6 +8,7 @@ import {
   CORRIDOR_OPACITY,
   corridorLineWidth,
   metersPerPixel,
+  ROUTE_CATALOG_LINE_WIDTH,
   ROUTE_SOURCE_ID,
   routeFeatures,
   routeLayers,
@@ -124,5 +125,17 @@ describe('corridor-style (maps-01)', () => {
     expect(routeLayers(themes.dark, map.widthM, map.bounds)[1]).toMatchObject({
       paint: { 'line-color': themes.dark.map.route },
     });
+  });
+});
+
+describe('толщина линии маршрута (routes-03, RC-8)', () => {
+  it('по умолчанию — stroke.indicator; lineWidth — в слое route; каталог — 5 px', () => {
+    expect(ROUTE_CATALOG_LINE_WIDTH).toBe(5);
+    const width = (layers: ReturnType<typeof routeLayers>) =>
+      layers.find((layer) => layer.id === 'route')!.paint!['line-width' as never];
+    expect(width(routeLayers(themes.light, map.widthM, map.bounds))).toBe(stroke.indicator);
+    expect(width(routeLayers(themes.light, map.widthM, map.bounds, ROUTE_CATALOG_LINE_WIDTH))).toBe(
+      5,
+    );
   });
 });

@@ -37,6 +37,7 @@ export function RouteMap({
   accessibilityLabel,
   failedMessage,
   corridor = true,
+  lineWidth,
   track,
 }: RouteMapProps) {
   const container = useRef<HTMLDivElement>(null);
@@ -65,7 +66,7 @@ export function RouteMap({
         collapseAttribution(created, node);
         created.on('load', () => {
           created.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: routeFeatures(map) });
-          for (const layer of routeLayers(theme, map.widthM, map.bounds)) {
+          for (const layer of routeLayers(theme, map.widthM, map.bounds, lineWidth)) {
             if (corridor || layer.id !== CORRIDOR_LAYER_ID) created.addLayer(layer);
           }
           if (track) {
@@ -83,7 +84,7 @@ export function RouteMap({
       cancelled = true;
       instance?.remove();
     };
-  }, [map, styleUrl, theme, corridor, track]);
+  }, [map, styleUrl, theme, corridor, lineWidth, track]);
 
   return (
     <RouteMapFrame

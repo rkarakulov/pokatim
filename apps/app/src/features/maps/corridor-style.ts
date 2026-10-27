@@ -27,6 +27,12 @@ export const CORRIDOR_OPACITY = 0.3;
 /** Пропорция блока карты (раскладка, не px — RC-5): ≈ 220 при ширине телефона, без сдвига вёрстки. */
 export const MAP_ASPECT_RATIO = 3 / 2;
 
+/**
+ * Толщина линии маршрута каталога (routes-03, RC-8): 5 px — читаемая на обзорной карте; токена толщин карты нет
+ * (follow-up — токены карты в app-foundation), поэтому сумма токенов, как `SEGMENT_WIDTH` трека (maps-02).
+ */
+export const ROUTE_CATALOG_LINE_WIDTH = stroke.bannerError + stroke.hairline;
+
 /** Отступ рамки маршрута от краёв карты, px экрана — шаг сетки дизайн-системы. */
 export const MAP_PADDING = size.icon * 2;
 
@@ -111,12 +117,13 @@ const kindIs = (kind: RouteKind): ExpressionSpecification => ['==', ['get', 'kin
 
 /**
  * Слои снизу вверх: коридор, осевая линия, старт и финиш. Старт — заливка цветом маршрута, финиш — фоном с обводкой
- * маршрута: различимы без цвета (RC-5).
+ * маршрута: различимы без цвета (RC-5). `lineWidth` — толщина осевой линии (по умолчанию — карта гонки).
  */
 export function routeLayers(
   theme: AppTheme,
   widthM: number,
   bounds: RaceRouteMap['bounds'],
+  lineWidth: number = stroke.indicator,
 ): RouteLayer[] {
   const round = { 'line-cap': 'round', 'line-join': 'round' } as const;
   const circle = (
@@ -154,7 +161,7 @@ export function routeLayers(
       source: ROUTE_SOURCE_ID,
       filter: kindIs('route'),
       layout: round,
-      paint: { 'line-color': theme.map.route, 'line-width': stroke.indicator },
+      paint: { 'line-color': theme.map.route, 'line-width': lineWidth },
     },
     circle('start', theme.map.route, theme.map.background),
     circle('finish', theme.map.background, theme.map.route),

@@ -6,6 +6,7 @@ export const PARSE_FUNCTIONS = [
   'analyzeRoute',
   'analyzeAttempt',
   'analyzeSeries',
+  'deriveRoute',
 ] as const;
 export type ParseFunction = (typeof PARSE_FUNCTIONS)[number];
 
@@ -26,8 +27,8 @@ export const DEFAULT_PARSE_LIMITS: ParseLimits = {
 };
 
 /**
- * Потоков разбора одновременно на процесс (R4 race-results-03): track-processing, route-processing, attempt-check и
- * dispute-series не
+ * Потоков разбора одновременно на процесс (R4 race-results-03): track-processing, route-processing, attempt-check,
+ * dispute-series и routes-maintenance (бэкфилл производных маршрута, routes-03) не
  * держат несколько потоков по 160 + 32 МБ в worker с лимитом 512 МиБ. Поднять — вместе с лимитом контейнера.
  */
 export const PARSE_THREADS_MAX = 1;

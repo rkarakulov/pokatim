@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { PanelRoutePage, Session } from '@pokatim/contracts';
+import { parseGpx, ROUTE_DERIVED_VERSION } from '@pokatim/tracks/parse';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness, MINUTE } from '../../../test/harness';
@@ -117,6 +118,15 @@ describe('приём и разбор (AC1, AC9, AC10)', () => {
     expect(geometry!.matchLine.length).toBeLessThanOrEqual(20_000);
     expect(geometry!.matchLine[0]).toEqual([27.56, 53.9]);
     expect(geometry!.sourcePointCount).toBe(ref.points);
+    // routes-03: профиль высоты, версия производных и очищенный GPX — в той же транзакции
+    expect(geometry!.derivedVersion).toBe(ROUTE_DERIVED_VERSION);
+    expect(geometry!.profile![0]![0]).toBe(0);
+    expect(geometry!.profile!.at(-1)![0]).toBe(doc!.distanceM);
+    const exported = await routesDb(h).exports.findOne({ _id: route.id });
+    expect(exported).toMatchObject({ derivedVersion: ROUTE_DERIVED_VERSION });
+    const gpx = Buffer.from(exported!.gpx.buffer).toString('utf8');
+    expect(exported!.sizeBytes).toBe(exported!.gpx.buffer.byteLength);
+    expect(parseGpx(gpx).points).toHaveLength(geometry!.matchLine.length);
 
     const read = await panelCall(h, org.token, 'GET', `${ROUTES}/${route.id}`);
     expect(read.status).toBe(200);
@@ -148,9 +158,11 @@ describe('приём и разбор (AC1, AC9, AC10)', () => {
     const id = await readyRoute(h, org.token);
     const before = await routeDoc(id);
     const geometry = await routesDb(h).geometries.findOne({ _id: id });
+    const exported = await routesDb(h).exports.findOne({ _id: id });
     expect(await processRoute(h, id)).toBe('skipped');
     expect(await routeDoc(id)).toEqual(before);
     expect(await routesDb(h).geometries.findOne({ _id: id })).toEqual(geometry);
+    expect(await routesDb(h).exports.find().toArray()).toEqual([exported]);
 
     const short = parsedRoute(await uploadRoute(h, org.token, fixture('route-short.gpx')));
     expect(await processRoute(h, short.id)).toBe('failed');
@@ -299,6 +311,7 @@ describe('повторная обработка (ревью pass 1)', () => {
     write.mockRestore();
     expect(await routeDoc(id)).toMatchObject({ status: 'failed', failure: 'unreadable' });
     expect(await routesDb(h).geometries.countDocuments()).toBe(0);
+    expect(await routesDb(h).exports.countDocuments()).toBe(0);
   });
 
   it('тот же файл после failed — 202, тот же маршрут снова в обработке (новое событие), worker → ready', async () => {

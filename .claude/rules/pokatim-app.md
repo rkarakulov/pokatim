@@ -206,8 +206,15 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   (`features/maps/use-map-style.ts`), `RouteMap corridor={false}` с `withoutCorridor(geometry)` (слоя коридора нет,
   `widthM` не показывается); ключ `['routes','map',id]` — только клиент. «Гонки на маршруте» — `['routes','races',
   id,'pages']`, `RaceListCard` с датами с годом; пусто, 404, ошибка — блока нет. «Поделиться» — `share-link`.
-- Пропс `RouteMap.corridor?` (по умолчанию `true`) — единственное изменение карты для каталога; существующие пропсы
-  и `race-route-map.tsx` не меняются.
+- Пропсы `RouteMap.corridor?` (по умолчанию `true`) и `lineWidth?` (routes-03, по умолчанию `stroke.indicator`;
+  каталог — `ROUTE_CATALOG_LINE_WIDTH` = 5) — единственные изменения карты для каталога; существующие пропсы и
+  `race-route-map.tsx` не меняются.
+- Карточка (routes-03): без `SectionHero`; чипы — `Pill`, стат-блок — `StatBlock` с `note`, подписи и время в пути —
+  чистые функции `features/routes/format.ts` (`ROUTE_PACE_KMH`); профиль — `features/routes/elevation-profile.tsx`
+  (96 столбиков `View`, высота — процент, график — `aspectRatio`, без `onLayout`: SSR = первый рендер; одно
+  изображение с текстовой альтернативой); «Скачать GPX» — только `src/lib/download-file(.web).ts` (native —
+  `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteGpxUrl(id)`, только при
+  `gpxAvailable`.
 - Главная — раздел `routes` (текстовый герой `RouteHero`, RC-8; пустой каталог — `EmptyState`).
 - Мои маршруты (routes-02): переключатель «Каталог / Мои» — `SegmentedControl` в шапке обеих лент, состояние —
   `?view=mine` (`useLocalSearchParams` + `router.setParams`). Лента — `features/routes/my-route-feed.tsx`, ключи

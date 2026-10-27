@@ -21,6 +21,7 @@ import { disputes } from './0018_disputes';
 import { profileConsents } from './0019_profile_consents';
 import { routesCatalog } from './0020_routes_catalog';
 import { routesRider } from './0021_routes_rider';
+import { routesDerived } from './0022_routes_derived';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -48,4 +49,5 @@ export const migrations: readonly MongoMigration[] = [
   profileConsents,
   routesCatalog,
   routesRider,
+  routesDerived,
 ];

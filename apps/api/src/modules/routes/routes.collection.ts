@@ -16,6 +16,8 @@ export const ROUTES_COLLECTIONS = {
   routes: 'routes',
   geometries: 'route_geometries',
   sources: 'route_sources',
+  /** очищенный GPX маршрута для скачивания (routes-03) */
+  exports: 'route_exports',
 } as const;
 
 /**
@@ -55,7 +57,19 @@ export interface RouteDoc {
   updatedAt: Date;
 }
 
-/** Геометрия готового маршрута (`_id` = routeId): пишется один раз при переходе в `ready`. */
+/** Детерминированный отказ пересчёта производных данных версии `version` (routes-03, RC-2). */
+export interface RouteDerivedFailure {
+  version: number;
+  code: string;
+  at: Date;
+}
+
+/**
+ * Геометрия готового маршрута (`_id` = routeId): линии и число точек пишутся один раз при переходе в `ready`.
+ * Производные данные (routes-03) — `profile`, `derivedVersion`, `derivedFailure` — пишет `markReady`, пересчитывает
+ * только регламент `routes-maintenance` по росту `ROUTE_DERIVED_VERSION`; документы до `0022_routes_derived` полей не
+ * имеют — чтение `?? null`. Есть `derivedVersion` ⇒ есть документ `route_exports` (одна транзакция, RC-1).
+ */
 export interface RouteGeometryDoc {
   _id: string;
   /** линия показа, ≤ 1000 точек [lon, lat] */
@@ -63,6 +77,20 @@ export interface RouteGeometryDoc {
   /** линия сверки, ≤ 20 000 точек [lon, lat] (без индекса) */
   matchLine: [number, number][];
   sourcePointCount: number;
+  /** профиль высоты `[distanceM, elevationM]`, ≤ 300 точек; `null` — в маршруте нет высот */
+  profile?: [number, number][] | null;
+  /** версия алгоритма производных; нет поля — не посчитаны */
+  derivedVersion?: number;
+  /** отказ разбора бэкфилла для версии (маршрут не берётся снова до роста версии) */
+  derivedFailure?: RouteDerivedFailure;
+}
+
+/** Очищенный GPX маршрута (`_id` = routeId, ≤ ~1,2 МБ: ≤ 20 000 `trkpt`) — пишется вместе с `derivedVersion`. */
+export interface RouteExportDoc {
+  _id: string;
+  gpx: Binary;
+  sizeBytes: number;
+  derivedVersion: number;
 }
 
 /**
@@ -78,6 +106,7 @@ export interface RoutesCollections {
   routes: Collection<RouteDoc>;
   geometries: Collection<RouteGeometryDoc>;
   sources: Collection<RouteSourceDoc>;
+  exports: Collection<RouteExportDoc>;
 }
 
 export function routesCollections(db: Db): RoutesCollections {
@@ -85,5 +114,6 @@ export function routesCollections(db: Db): RoutesCollections {
     routes: db.collection<RouteDoc>(ROUTES_COLLECTIONS.routes),
     geometries: db.collection<RouteGeometryDoc>(ROUTES_COLLECTIONS.geometries),
     sources: db.collection<RouteSourceDoc>(ROUTES_COLLECTIONS.sources),
+    exports: db.collection<RouteExportDoc>(ROUTES_COLLECTIONS.exports),
   };
 }

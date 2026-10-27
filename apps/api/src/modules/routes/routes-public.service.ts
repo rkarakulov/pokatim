@@ -13,7 +13,7 @@ import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { ROUTE_GEOMETRY, type RouteGeometry } from './route-geometry.port';
 import type { RouteCatalogDoc, RouteDoc } from './routes.collection';
-import { RoutesRepository } from './routes.repository';
+import { type RouteDerivedState, RoutesRepository } from './routes.repository';
 
 /** Маршрут каталога: готовый (длина и петля есть) и опубликованный. */
 type CatalogRoute = RouteDoc & { distanceM: number; catalog: RouteCatalogDoc };
@@ -35,6 +35,31 @@ function toCatalogCard(route: CatalogRoute): CatalogRouteCard {
     surfaces: route.catalog.surfaces,
     publishedAt: route.catalog.publishedAt.toISOString(),
   };
+}
+
+/**
+ * Карточка (routes-03): + профиль высоты (мин./макс. — по профилю) и признак экспорта GPX. Есть `derivedVersion` ⇒
+ * есть экспорт (одна транзакция, RC-1) — без запроса к `route_exports`.
+ */
+function toCatalogDetail(
+  route: CatalogRoute,
+  derived: RouteDerivedState | undefined,
+): CatalogRouteDetail {
+  const profile = derived?.profile ?? null;
+  const elevations = profile?.map(([, elevation]) => elevation) ?? [];
+  return {
+    ...toCatalogCard(route),
+    elevation: profile
+      ? { minM: Math.min(...elevations), maxM: Math.max(...elevations), profile }
+      : null,
+    gpxAvailable: (derived?.derivedVersion ?? null) !== null,
+  };
+}
+
+/** Очищенный GPX маршрута каталога и название (имя файла). */
+export interface CatalogRouteGpx {
+  bytes: Uint8Array;
+  title: string;
 }
 
 /**
@@ -73,8 +98,18 @@ export class RoutesPublicService {
     return { cities: await this.repository.catalogCities() };
   }
 
+  /** Карточка: профиль — чтением по `_id` без кэша в процессе (RC-4: устаревание — только HTTP-кэш, ≤ 60 с). */
   async get(id: string): Promise<CatalogRouteDetail> {
-    return toCatalogCard(await this.published(id));
+    const route = await this.published(id);
+    return toCatalogDetail(route, await this.repository.derivedOf(id));
+  }
+
+  /** Очищенный GPX (routes-03) — только маршрута каталога; нет экспорта — 404. Разбора в API нет. */
+  async gpx(id: string): Promise<CatalogRouteGpx> {
+    const route = await this.published(id);
+    const bytes = await this.repository.exportGpx(id);
+    if (!bytes) throw notFound();
+    return { bytes, title: route.title };
   }
 
   /** Линия показа, старт, финиш и рамка — только маршрута каталога; без коридора и линии сверки. */
