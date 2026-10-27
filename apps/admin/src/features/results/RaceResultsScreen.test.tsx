@@ -245,11 +245,44 @@ describe('«Результаты» гонки — до публикации', ()
     const button = await screen.findByRole('button', { name: 'Опубликовать протокол' });
     expect(button.getAttribute('aria-disabled')).toBe('true');
     const reason = document.getElementById(button.getAttribute('aria-describedby')!)!;
-    expect(reason.textContent).toBe('Сбои проверки — исключите трек: 1');
+    expect(reason.textContent).toBe('Сбои проверки — исключите трек: 1.');
     const list = screen.getByRole('list', { name: 'Публикация протокола' });
     expect(within(list).getAllByRole('listitem')).toHaveLength(5);
     fireEvent.click(button);
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('чек-лист (B14): под кнопкой все блокеры; булево условие без счётчика; нулевые строки — без призыва', async () => {
+    mocked.getRaceResultsSummary.mockResolvedValue(
+      summary({
+        publish: {
+          canPublish: false,
+          blockedBy: null,
+          checklist: CHECKS_EMPTY.map((check) =>
+            check.code === 'open_disputes'
+              ? { ...check, count: 4 }
+              : check.code === 'window_open'
+                ? { ...check, count: 1 }
+                : check,
+          ),
+        },
+      }),
+    );
+    await renderApp(PATH);
+    const button = await screen.findByRole('button', { name: 'Опубликовать протокол' });
+    const reason = document.getElementById(button.getAttribute('aria-describedby')!)!;
+    expect(reason.textContent).toBe('Открытые споры: 4. Срок загрузки заездов ещё не истёк.');
+
+    const items = within(screen.getByRole('list', { name: 'Публикация протокола' }))
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(items).toEqual([
+      '4Открытые споры: 4Открыть споры',
+      '✓ ГотовоНеобработанных треков участников нет',
+      '✓ ГотовоНезавершённых проверок нет',
+      '✓ ГотовоСбоев проверки нет',
+      'Не готовоСрок загрузки заездов ещё не истёк',
+    ]);
   });
 
   it('публикация: причина обязательна → запрос с причиной → обновление гонки и результатов', async () => {
@@ -259,7 +292,10 @@ describe('«Результаты» гонки — до публикации', ()
       )
       .mockResolvedValue(summary(PUBLISHED));
     mocked.publishProtocol.mockResolvedValue(summary(PUBLISHED));
-    await renderApp(PATH);
+    const { queryClient } = await renderApp(PATH);
+    // список гонок (фаза) и журнал, открытые раньше, после действия устарели (staleTime панели — B12)
+    queryClient.setQueryData(['admin', 'races', 'list', 'probe'], 'список');
+    queryClient.setQueryData(['admin', 'audit', 'probe'], 'журнал');
     fireEvent.click(await screen.findByRole('button', { name: 'Опубликовать протокол' }));
     const dialog = await screen.findByRole('dialog');
     const confirm = within(dialog).getByRole('button', { name: 'Опубликовать протокол' });
@@ -273,9 +309,15 @@ describe('«Результаты» гонки — до публикации', ()
       await screen.findByText('Протокол опубликован 27 октября 2026, 12:00, ревизия 2'),
     ).toBeTruthy();
     expect(mocked.getRace.mock.calls.length).toBeGreaterThan(1);
+    for (const key of [
+      ['admin', 'races', 'list', 'probe'],
+      ['admin', 'audit', 'probe'],
+    ]) {
+      expect(queryClient.getQueryState(key)?.isInvalidated, key.join('/')).toBe(true);
+    }
   });
 
-  it('409 RESULTS_PUBLISH_BLOCKED — текст первой причины из details, окно открыто, данные обновлены', async () => {
+  it('409 RESULTS_PUBLISH_BLOCKED — причины из details, окно открыто, данные обновлены', async () => {
     mocked.getRaceResultsSummary.mockResolvedValueOnce(
       summary({ publish: { canPublish: true, blockedBy: null, checklist: CHECKS_EMPTY } }),
     );
@@ -293,7 +335,7 @@ describe('«Результаты» гонки — до публикации', ()
     fireEvent.click(
       within(screen.getByRole('dialog')).getByRole('button', { name: 'Опубликовать протокол' }),
     );
-    expect(await screen.findByText('Необработанные треки участников: 2')).toBeTruthy();
+    expect(await screen.findByText('Необработанные треки участников: 2.')).toBeTruthy();
     await waitFor(() => expect(mocked.getRaceResultsSummary).toHaveBeenCalledTimes(2));
   });
 
@@ -370,6 +412,24 @@ describe('«Результаты» гонки — до публикации', ()
     expect(cells).toEqual(['=2', 'Участник ·9a0a01', '1:42:03', 'Предварительный', '3', '']);
     expect(within(standings).queryByRole('button', { name: 'Дисквалифицировать' })).toBeNull();
     expect(within(standings).queryByRole('button', { name: 'Сбросить имя' })).toBeNull();
+  });
+
+  it('время меньше часа — «0:32:19», как в приложении (B15); источник auto — «Автоматически» (B16)', async () => {
+    mocked.getRaceStandings.mockResolvedValue({
+      source: 'live',
+      revision: null,
+      truncated: false,
+      items: [row({ elapsedSec: 1939 })],
+    });
+    mocked.listRaceAttempts.mockResolvedValue({
+      items: [attempt({ origin: 'auto' })],
+      nextCursor: null,
+    });
+    await renderApp(PATH);
+    const standings = await screen.findByRole('region', { name: 'Участники' });
+    expect(await within(standings).findByText('0:32:19')).toBeTruthy();
+    const attempts = section('Попытки');
+    expect(await within(attempts).findByText('Автоматически')).toBeTruthy();
   });
 
   it('открытые споры (06): ссылка «Открыть споры» на список гонки — при count > 0 и disputes.read', async () => {

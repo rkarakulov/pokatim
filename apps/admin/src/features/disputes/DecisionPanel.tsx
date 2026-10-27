@@ -74,7 +74,7 @@ export function DecisionPanel({
       <h2 id={titleId} className="section__title t-label">
         {t('admin.disputes.decision.title')}
       </h2>
-      <div className="form-column">
+      <div className="form-column form-stack">
         <RadioGroup
           legend={t('admin.disputes.decision.outcome')}
           options={OUTCOME_CHOICES}

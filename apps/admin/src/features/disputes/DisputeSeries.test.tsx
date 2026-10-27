@@ -116,16 +116,21 @@ describe('«Пульс и мощность» на разборе спора (06b
     // курсор: значение под перекрестием во всех графиках
     heart.getBoundingClientRect = () => ({ left: 0, width: 300 }) as DOMRect;
     fireEvent.pointerMove(heart, { clientX: 300 });
-    expect(screen.getByText('3,0 км: 170 уд/мин')).toBeTruthy();
-    expect(screen.getByText('3,0 км: 42,4 км/ч')).toBeTruthy();
+    expect(screen.getByText('3,00 км: 170 уд/мин')).toBeTruthy();
+    expect(screen.getByText('3,00 км: 42,4 км/ч')).toBeTruthy();
     fireEvent.pointerMove(heart, { clientX: 150 });
-    expect(screen.getByText('2,0 км: —')).toBeTruthy();
+    expect(screen.getByText('2,00 км: —')).toBeTruthy();
     fireEvent.pointerLeave(heart);
-    expect(screen.queryByText('2,0 км: —')).toBeNull();
+    expect(screen.queryByText('2,00 км: —')).toBeNull();
 
-    // таблица значений — текстовая альтернатива
-    expect(screen.getByRole('columnheader', { name: 'Дистанция' })).toBeTruthy();
+    // таблица значений — текстовая альтернатива; ряда без данных (мощность) в ней нет (B11)
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Дистанция',
+      'Пульс',
+      'Скорость',
+    ]);
     expect(screen.getAllByRole('row')).toHaveLength(SERIES.distanceM.length + 1);
+    expect(screen.getAllByRole('row')[1]!.textContent).toBe('1,00 км150 уд/мин36,5 км/ч');
   }, 10_000);
 
   it('рядов нет — причина; отказ разбора — «Повторить» запрашивает снова', async () => {
