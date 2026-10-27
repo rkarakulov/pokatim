@@ -1,8 +1,10 @@
 import {
+  defaultShape,
   defineThemes,
-  type ColorRoles as BaseColorRoles,
   type FontStack,
   type NavRoles,
+  type ShapeRoles,
+  type Theme,
 } from '@rkarakulov/design-tokens';
 
 /**
@@ -38,9 +40,14 @@ const color = {
   yellow400: '#F0CC3C',
 } as const;
 
-/** Группы ролей pokatim поверх ролей базы: карта маршрута и полоса покрытия. */
+/** Подложка MapLibre для схемы: URL — `EXPO_PUBLIC_MAP_STYLE_LIGHT|DARK` (ADR-0014). */
+export type Basemap = 'light' | 'dark';
+
+/** Группы ролей pokatim поверх ролей базы: карта маршрута, полоса покрытия, профиль высоты. */
 export interface PokatimRoleGroups {
   map: {
+    /** подложка карты — не цвет: в CSS не выводится (`css.ts`) */
+    basemap: Basemap;
     background: string;
     line: string;
     route: string;
@@ -56,15 +63,24 @@ export interface PokatimRoleGroups {
     gravelHatch: string;
     outline: string;
   };
+  /** профиль высоты: линия, стопы градиента заливки (прозрачность — в приложении), базовая линия */
+  profile: {
+    line: string;
+    fillTop: string;
+    fillBottom: string;
+    grid: string;
+  };
 }
 
-/**
- * Слой 2 — семантика: роли, а не цвета. Роли базы (`text`, `surface`, …) + группы pokatim;
- * значение роли в каждой теме — из CSS прототипов. Порядок ключей задаёт порядок CSS-переменных.
- */
-type ColorRoles = BaseColorRoles & PokatimRoleGroups;
+/** Разрешённая схема темы приложения: роли базы + группы pokatim + форма. `useTheme<AppTheme>()`. */
+export type AppTheme = Theme<PokatimRoleGroups> & { shape: ShapeRoles };
 
-const light: ColorRoles = {
+/**
+ * Слой 2 — семантика: роли, а не цвета. Роли базы (`text`, `surface`, …) + группы pokatim + форма (база);
+ * значение роли в каждой теме — из CSS прототипов. Порядок ключей задаёт порядок CSS-переменных.
+ * `light`/`dark` — схемы темы приложения «Классика» (`app-themes.ts`).
+ */
+const light: AppTheme = {
   text: {
     primary: color.neutral900,
     secondary: color.neutral600,
@@ -97,6 +113,7 @@ const light: ColorRoles = {
     errorTint: color.red50,
   },
   map: {
+    basemap: 'light',
     background: color.neutral25,
     line: color.neutral100,
     route: color.neutral900,
@@ -110,6 +127,13 @@ const light: ColorRoles = {
     gravelHatch: color.neutral900,
     outline: color.neutral600,
   },
+  // как прежде: линия и заливка — цвет коридора, базовая линия — border.subtle
+  profile: {
+    line: color.neutral600,
+    fillTop: color.neutral600,
+    fillBottom: color.neutral600,
+    grid: color.neutral100,
+  },
   overlay: { scrim: color.black },
   // дорожка выкл. — как border.input, а не #CFCFCB прототипа: иначе 1.56:1 < 3:1 (WCAG 1.4.11)
   control: {
@@ -118,9 +142,10 @@ const light: ColorRoles = {
     thumb: color.neutral0,
     thumbOn: color.neutral0,
   },
+  shape: defaultShape,
 };
 
-const dark: ColorRoles = {
+const dark: AppTheme = {
   text: {
     primary: color.neutral50,
     secondary: color.neutral400,
@@ -154,6 +179,7 @@ const dark: ColorRoles = {
     errorTint: color.neutral850,
   },
   map: {
+    basemap: 'dark',
     background: color.neutral850,
     line: color.neutral800,
     route: color.neutral50,
@@ -167,6 +193,12 @@ const dark: ColorRoles = {
     gravelHatch: color.neutral50,
     outline: color.neutral400,
   },
+  profile: {
+    line: color.neutral400,
+    fillTop: color.neutral400,
+    fillBottom: color.neutral400,
+    grid: color.neutral750,
+  },
   overlay: { scrim: color.black },
   // дорожка выкл. — как border.input, а не #474747 прототипа (WCAG 1.4.11)
   control: {
@@ -175,6 +207,7 @@ const dark: ColorRoles = {
     thumb: color.neutral0,
     thumbOn: color.neutral950,
   },
+  shape: defaultShape,
 };
 
 const panelNav: NavRoles = {
