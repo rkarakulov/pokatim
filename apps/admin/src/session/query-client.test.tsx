@@ -8,7 +8,6 @@ import { createQueryClient } from './query-client';
 afterEach(() => {
   cleanup();
   focusManager.setFocused(undefined);
-  vi.useRealTimers();
 });
 
 function List({ queryFn }: { queryFn: () => Promise<string> }) {
@@ -17,15 +16,13 @@ function List({ queryFn }: { queryFn: () => Promise<string> }) {
 }
 
 describe('createQueryClient — без повторных GET (B12)', () => {
-  it('фокус окна и повторный монтаж сразу после загрузки не перезапрашивают; через 30 с — перезапрос', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
+  it('фокус окна не перезапрашивает; заход на экран — один свежий запрос (погасшая сессия видна сразу)', async () => {
     const client = createQueryClient({ onUnauthorized: () => undefined });
     const queryFn = vi.fn().mockResolvedValue('споры');
-    const view = render(
-      <QueryClientProvider client={client}>
-        <List queryFn={queryFn} />
-      </QueryClientProvider>,
+    const screenWith = (content: React.ReactNode) => (
+      <QueryClientProvider client={client}>{content}</QueryClientProvider>
     );
+    const view = render(screenWith(<List queryFn={queryFn} />));
     expect(await screen.findByText('споры')).toBeTruthy();
 
     // клик в окне панели: blur → focus
@@ -33,23 +30,11 @@ describe('createQueryClient — без повторных GET (B12)', () => {
       focusManager.setFocused(false);
       focusManager.setFocused(true);
     });
-    view.rerender(
-      <QueryClientProvider client={client}>
-        <span>другой экран</span>
-      </QueryClientProvider>,
-    );
-    view.rerender(
-      <QueryClientProvider client={client}>
-        <List queryFn={queryFn} />
-      </QueryClientProvider>,
-    );
     expect(queryFn).toHaveBeenCalledTimes(1);
 
-    vi.setSystemTime(Date.now() + 30_001);
-    act(() => {
-      focusManager.setFocused(false);
-      focusManager.setFocused(true);
-    });
+    // уход на другой экран и возврат — данные перечитываются
+    view.rerender(screenWith(<span>другой экран</span>));
+    view.rerender(screenWith(<List queryFn={queryFn} />));
     await vi.waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
   });
 });

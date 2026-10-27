@@ -28,8 +28,9 @@ paths:
 ## Каркас, сессия и права (admin-01, ADR-0009)
 
 - Роутер — TanStack Router (`src/router.tsx`, `basepath` из `import.meta.env.BASE_URL`); защищённая ветка —
-  `beforeLoad` с `ensureQueryData(meQuery)`; «кто я» — `src/session/me.ts`. Свежесть запросов по умолчанию —
-  `QUERY_STALE_MS` (30 с: иначе фокус окна и повторный монтаж дают второй GET), после действия — инвалидация ключа.
+  `beforeLoad` с `ensureQueryData(meQuery)`; «кто я» — `src/session/me.ts`. Запросы не перечитываются по фокусу
+  окна (`refetchOnWindowFocus: false`, иначе второй GET на экране), заход на экран — свежий запрос (так виден 401
+  погасшей сессии); после действия — инвалидация ключа.
   Глобальные 401/403 — `createQueryClient` (`src/session/query-client.ts`): 401 после входа — «Вход» с «Сессия истекла» и `next` (только путь внутри панели —
   `safeNext`), 403 — «Нет доступа к разделу». Мутация, сама обрабатывающая 401 (вход), — `meta.ownsUnauthorized`.
 - Права в UI — только отображение: `Can` / `useCan(permission)`; раздел с правом — `RequirePermission` в маршруте

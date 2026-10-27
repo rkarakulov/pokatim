@@ -13,3 +13,8 @@
 ## Проход 2 — claude (independent-reviewer), APPROVE
 
 Замечания прохода 1 закрыты. LOW — строка JSDoc длиннее 120 в `results-actions.ts` — перенесена.
+
+## После ревью — CI `web` (`pnpm e2e:admin`, AC15)
+
+`staleTime` 30 с отдавал журнал из кэша при заходе на экран: 401 погасшей сессии не приходил, «Сессия истекла» не
+показывалась. **Исправлено:** `staleTime` по умолчанию снова 0, двойной GET убран через `refetchOnWindowFocus: false`.
