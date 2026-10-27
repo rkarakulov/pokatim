@@ -2,7 +2,7 @@ import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { stroke, type AppTheme } from '@pokatim/design-tokens';
 import {
   PROFILE_ASPECT_RATIO,
-  PROFILE_FILL_OPACITY,
+  PROFILE_FILL,
   PROFILE_NATIVE_FILL_OPACITY,
   PROFILE_VIEW_BOX,
   profileGradientId,
@@ -10,19 +10,17 @@ import {
   scrubStep,
   type ScrubStore,
 } from '@pokatim/route-view';
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useId, useMemo, useRef } from 'react';
 import { StyleSheet, View, type AccessibilityActionEvent } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 
 import { useScrub } from '@/features/maps/use-scrub';
+import { useAppTheme } from '@/theme/use-app-theme';
 
 import { profileBarHeights, profileBars } from './format';
-import { loadSvgNative } from './load-svg-native';
 import type { ProfileChartProps } from './profile-chart-props';
-import { svgSupported } from './svg-support';
 import { scrubReadout } from './scrub';
-
-type SvgLib = Awaited<ReturnType<typeof loadSvgNative>>;
+import { useSvgLib } from './use-svg-native';
 
 /** Столбиков фолбэка: ≈ 2 px при ширине телефона — ступенек не видно, Yoga округляет к пиксельной сетке. */
 export const PROFILE_BARS = 160;
@@ -70,29 +68,10 @@ const ProfileBars = memo(function ProfileBars({
   );
 });
 
-/** `react-native-svg` после монтирования: `null` — грузится, `false` — модуля в сборке нет. */
-function useSvgLib(): SvgLib | false | null {
-  const [lib, setLib] = useState<SvgLib | false | null>(() => (svgSupported() ? null : false));
-  useEffect(() => {
-    if (lib !== null) return;
-    let cancelled = false;
-    loadSvgNative()
-      .then((loaded) => {
-        if (!cancelled) setLib(loaded);
-      })
-      .catch(() => {
-        if (!cancelled) setLib(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [lib]);
-  return lib;
-}
-
 /**
  * Площадь профиля на native (routes-04 G1/G2): тот же SVG, что на web, — плавная линия `profile.line` толщиной
- * `stroke.input` и заливка-градиент `profile.fillTop` → `profile.fillBottom` (у линии `PROFILE_FILL_OPACITY`, внизу прозрачно) через `react-native-svg`
+ * `stroke.input` и заливка `profile.fillTop` → `profile.fillBottom` по теме (`PROFILE_FILL[layout.profileFill]`: градиент,
+ * сплошная или без площади) через `react-native-svg`
  * (лениво: пакет требует нативный модуль при импорте). Модуля нет — столбики; пока грузится — пусто (без мигания
  * столбиков). Скрыта от скринридера, при движении курсора не перерисовывается (`memo`).
  */
@@ -105,6 +84,7 @@ const ProfileArea = memo(function ProfileArea({
 }) {
   const lib = useSvgLib();
   const gradient = profileGradientId(useId());
+  const fill = PROFILE_FILL[useAppTheme().layout.profileFill];
   if (lib === false) return <ProfileBars elevation={elevation} theme={theme} />;
   const paths = profilePaths(elevation);
   if (lib === null || !paths) return null;
@@ -117,13 +97,17 @@ const ProfileArea = memo(function ProfileArea({
       accessibilityElementsHidden
     >
       <lib.Svg viewBox={PROFILE_VIEW_BOX} preserveAspectRatio="none" width="100%" height="100%">
-        <lib.Defs>
-          <lib.LinearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
-            <lib.Stop offset="0" stopColor={fillTop} stopOpacity={PROFILE_FILL_OPACITY} />
-            <lib.Stop offset="1" stopColor={fillBottom} stopOpacity={0} />
-          </lib.LinearGradient>
-        </lib.Defs>
-        <lib.Path d={paths.area} fill={`url(#${gradient})`} />
+        {fill ? (
+          <>
+            <lib.Defs>
+              <lib.LinearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
+                <lib.Stop offset="0" stopColor={fillTop} stopOpacity={fill.top} />
+                <lib.Stop offset="1" stopColor={fillBottom} stopOpacity={fill.bottom} />
+              </lib.LinearGradient>
+            </lib.Defs>
+            <lib.Path d={paths.area} fill={`url(#${gradient})`} />
+          </>
+        ) : null}
         <lib.Path
           d={paths.line}
           fill="none"

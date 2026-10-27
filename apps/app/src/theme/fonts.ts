@@ -5,12 +5,30 @@ import {
   type FontRole,
   type FontWeight,
 } from '@pokatim/design-tokens';
+import { GolosText_400Regular } from '@expo-google-fonts/golos-text/400Regular';
+import { GolosText_500Medium } from '@expo-google-fonts/golos-text/500Medium';
+import { GolosText_600SemiBold } from '@expo-google-fonts/golos-text/600SemiBold';
+import { GolosText_700Bold } from '@expo-google-fonts/golos-text/700Bold';
 import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
+import { InterTight_500Medium } from '@expo-google-fonts/inter-tight/500Medium';
+import { InterTight_600SemiBold } from '@expo-google-fonts/inter-tight/600SemiBold';
+import { Manrope_400Regular } from '@expo-google-fonts/manrope/400Regular';
+import { Manrope_500Medium } from '@expo-google-fonts/manrope/500Medium';
+import { Manrope_600SemiBold } from '@expo-google-fonts/manrope/600SemiBold';
+import { Manrope_700Bold } from '@expo-google-fonts/manrope/700Bold';
+import { Onest_400Regular } from '@expo-google-fonts/onest/400Regular';
+import { Onest_500Medium } from '@expo-google-fonts/onest/500Medium';
+import { Onest_600SemiBold } from '@expo-google-fonts/onest/600SemiBold';
+import { Onest_700Bold } from '@expo-google-fonts/onest/700Bold';
+import { Oswald_500Medium } from '@expo-google-fonts/oswald/500Medium';
+import { Oswald_600SemiBold } from '@expo-google-fonts/oswald/600SemiBold';
 import { PlayfairDisplay_500Medium } from '@expo-google-fonts/playfair-display/500Medium';
 import { PlayfairDisplay_600SemiBold } from '@expo-google-fonts/playfair-display/600SemiBold';
+import { RobotoCondensed_500Medium } from '@expo-google-fonts/roboto-condensed/500Medium';
+import { RobotoCondensed_700Bold } from '@expo-google-fonts/roboto-condensed/700Bold';
 import type { FontSource } from 'expo-font';
 
 /**
@@ -18,12 +36,30 @@ import type { FontSource } from 'expo-font';
  * Подключаем только нужные начертания: импорт из корня пакета тянет в бандл все файлы семейства.
  */
 export const fontAssets = {
+  GolosText_400Regular,
+  GolosText_500Medium,
+  GolosText_600SemiBold,
+  GolosText_700Bold,
+  InterTight_500Medium,
+  InterTight_600SemiBold,
   Inter_400Regular,
   Inter_500Medium,
   Inter_600SemiBold,
   Inter_700Bold,
+  Manrope_400Regular,
+  Manrope_500Medium,
+  Manrope_600SemiBold,
+  Manrope_700Bold,
+  Onest_400Regular,
+  Onest_500Medium,
+  Onest_600SemiBold,
+  Onest_700Bold,
+  Oswald_500Medium,
+  Oswald_600SemiBold,
   PlayfairDisplay_500Medium,
   PlayfairDisplay_600SemiBold,
+  RobotoCondensed_500Medium,
+  RobotoCondensed_700Bold,
 };
 
 type FontFamily = keyof typeof fontAssets;
@@ -50,6 +86,44 @@ const FACES: Record<string, { display?: RoleFamilies<'display'>; text?: RoleFami
       600: 'Inter_600SemiBold',
       700: 'Inter_700Bold',
     },
+  },
+  // одна гарнитура на обе роли (одна запись): display 600 — файл 700, заголовок плотнее текста 600
+  Manrope: {
+    display: { 500: 'Manrope_500Medium', 600: 'Manrope_700Bold' },
+    text: {
+      400: 'Manrope_400Regular',
+      500: 'Manrope_500Medium',
+      600: 'Manrope_600SemiBold',
+      700: 'Manrope_700Bold',
+    },
+  },
+  Onest: {
+    display: { 500: 'Onest_500Medium', 600: 'Onest_600SemiBold' },
+    text: {
+      400: 'Onest_400Regular',
+      500: 'Onest_500Medium',
+      600: 'Onest_600SemiBold',
+      700: 'Onest_700Bold',
+    },
+  },
+  'Golos Text': {
+    display: { 500: 'GolosText_500Medium', 600: 'GolosText_600SemiBold' },
+    text: {
+      400: 'GolosText_400Regular',
+      500: 'GolosText_500Medium',
+      600: 'GolosText_600SemiBold',
+      700: 'GolosText_700Bold',
+    },
+  },
+  // сжатые цифры плотнее: display 600 — файл 700
+  'Roboto Condensed': {
+    display: { 500: 'RobotoCondensed_500Medium', 600: 'RobotoCondensed_700Bold' },
+  },
+  'Inter Tight': {
+    display: { 500: 'InterTight_500Medium', 600: 'InterTight_600SemiBold' },
+  },
+  Oswald: {
+    display: { 500: 'Oswald_500Medium', 600: 'Oswald_600SemiBold' },
   },
 };
 

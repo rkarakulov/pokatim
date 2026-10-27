@@ -2,6 +2,8 @@
 import { render, screen } from '@testing-library/react';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 
+import { appThemeWrapper } from '@/__tests__/app-theme-wrapper';
+
 import { TabBar } from './tab-bar';
 
 const routes = [
@@ -38,5 +40,13 @@ describe('панель вкладок в браузере (react-native-web)', (
 
     screen.getByRole('tab', { name: 'Раздел' }).click();
     expect(tabs.navigateToTab).toHaveBeenCalledWith('section-1');
+  });
+});
+
+describe('панель вкладок в браузере: вариант icons (app-themes C2)', () => {
+  it('роли и выбранная вкладка сохраняются; полосы нет', () => {
+    render(<TabBar {...props(0)} />, { wrapper: appThemeWrapper('atlas') });
+    expect(screen.getByRole('tab', { name: 'Главная', selected: true })).toBeTruthy();
+    expect(screen.queryByTestId('tab-indicator-index')).toBeNull();
   });
 });
