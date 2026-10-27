@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
 import type { CatalogRouteDetail, RaceCard, RouteMapGeometry } from '@pokatim/contracts';
+import { appThemes } from '@pokatim/design-tokens';
 import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
@@ -433,5 +434,31 @@ describe('карточка маршрута каталога: гость по с
     await fireEvent.press(screen.getByText('Повторить'));
     expect(await screen.findByText('Весенний коридор')).toBeOnTheScreen();
     expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+  });
+});
+
+describe('карточка маршрута: шапка шторки по теме (app-themes C2)', () => {
+  const themed = (themeId: 'chrono' | 'typography') =>
+    jest.mocked(api.getAppearance).mockResolvedValue({ themeId });
+
+  it('Хронометр — плитки цифр в шапке шторки', async () => {
+    themed('chrono');
+    await open();
+    await screen.findByLabelText(heroLabel);
+    const header = within(screen.getByTestId('bottom-sheet-header'));
+    const raised = appThemes.chrono.schemes.dark.surface.raised;
+    await waitFor(() =>
+      expect(header.getAllByTestId('stat-block-cell')[0]).toHaveStyle({ backgroundColor: raised }),
+    );
+    expect(header.getAllByTestId('stat-block-cell')).toHaveLength(3);
+    expect(header.queryByTestId('stat-block-numeral')).toBeNull();
+  });
+
+  it('Типографика — дистанция крупной цифрой', async () => {
+    themed('typography');
+    await open();
+    await screen.findByLabelText(heroLabel);
+    const header = within(screen.getByTestId('bottom-sheet-header'));
+    expect(await header.findByTestId('stat-block-numeral')).toHaveTextContent('86км');
   });
 });

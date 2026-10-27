@@ -1,6 +1,6 @@
 import { apiErrorOf } from '@pokatim/api-client';
 import { Uuid, type CatalogRouteDetail } from '@pokatim/contracts';
-import { size, space, type AppTheme } from '@pokatim/design-tokens';
+import { size, space, type AppTheme, type AppThemeLayout } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
   AsyncContent,
@@ -32,7 +32,7 @@ import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
-import { StatBlock } from '@/components/stat-block';
+import { StatBlock, type StatVariant } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { createScrubStore, type ScrubStore } from '@/features/maps/scrub-store';
 import { api } from '@/lib/api';
@@ -40,6 +40,7 @@ import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
 import { useMinskClockAfterMount, useMounted } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
+import { useAppTheme } from '@/theme/use-app-theme';
 
 import { CatalogRouteMap } from './catalog-route-map';
 import { ElevationProfile, PROFILE_ASPECT_RATIO } from './elevation-profile';
@@ -174,11 +175,22 @@ function RouteRaces({
   );
 }
 
-/** Шапка шторки (routes-04d, L3): компактная строка цифр — видна и в свёрнутой шторке. */
+/** Вариант цифр шапки шторки по раскладке темы (`layout.routeStats`, app-themes C2). */
+const STATS_VARIANT: Record<AppThemeLayout['routeStats'], StatVariant> = {
+  classic: 'compact',
+  tiles: 'tiles',
+  numeral: 'numeral',
+};
+
+/**
+ * Шапка шторки (routes-04d, L3): строка цифр — видна и в свёрнутой шторке; у тем — плитки или крупная дистанция
+ * (высоту шапки шторка измеряет сама, отступ камеры следует).
+ */
 function RouteSheetHeader({ route }: { route: CatalogRouteDetail }) {
+  const variant = STATS_VARIANT[useAppTheme().layout.routeStats];
   return (
     <View style={styles.sheetHeader}>
-      <StatBlock variant="compact" items={routeStatItems(route)} />
+      <StatBlock variant={variant} items={routeStatItems(route)} />
     </View>
   );
 }

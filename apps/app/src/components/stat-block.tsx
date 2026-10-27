@@ -1,5 +1,6 @@
-import { size, space, stroke } from '@pokatim/design-tokens';
+import { shapeOf, size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
 import { textStyle, useTheme } from '@rkarakulov/ui';
+import type { ComponentType } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 export interface StatItem {
@@ -21,6 +22,7 @@ export interface StatItem {
  * `variant="compact"` (routes-04d, RC-9) — строка шторки карточки маршрута: один ряд равных колонок без ink-линии,
  * подпись над значением, значение `bodyStrong` с единицей в одну строку (без переноса; при крупном системном шрифте —
  * перенос внутри колонки, не многоточие); `note` не показывается, но остаётся в метке ячейки.
+ * `variant="tiles"` / `"numeral"` (app-themes C2) — шапка шторки у тем с плитками и с крупной цифрой.
  */
 export function StatBlock({
   items,
@@ -33,10 +35,28 @@ export function StatBlock({
    * переносятся внутри ячейки. По умолчанию — ширина по содержимому с переносом рядами (календарь, кофе-райд).
    */
   equalColumns?: boolean;
-  variant?: 'default' | 'compact';
+  variant?: StatVariant;
 }) {
+  const Variant = STAT_VARIANTS[variant];
+  return <Variant items={items} equalColumns={equalColumns} />;
+}
+
+export type StatVariant = 'default' | 'compact' | 'tiles' | 'numeral';
+
+interface StatsProps {
+  items: readonly StatItem[];
+  equalColumns: boolean;
+}
+
+/** Метка ячейки для скринридера: «Дистанция 68 км круговой». */
+const cellLabel = (item: StatItem) =>
+  [item.label, item.value, item.unit, item.note].filter(Boolean).join(' ');
+
+/** Крупный системный шрифт — перенос вместо многоточия: текст не теряется (ревью pass 1, M1). */
+const useSingleLine = () => (useWindowDimensions().fontScale > 1 ? undefined : 1);
+
+function DefaultStats({ items, equalColumns }: StatsProps) {
   const theme = useTheme();
-  if (variant === 'compact') return <CompactStats items={items} />;
   return (
     <View testID="stat-block" style={[styles.block, { borderTopColor: theme.text.primary }]}>
       {items.map((item, index) => (
@@ -45,9 +65,7 @@ export function StatBlock({
           key={index}
           testID="stat-block-cell"
           accessible
-          accessibilityLabel={[item.label, item.value, item.unit, item.note]
-            .filter(Boolean)
-            .join(' ')}
+          accessibilityLabel={cellLabel(item)}
           style={[
             styles.cell,
             equalColumns ? styles.equal : null,
@@ -74,20 +92,25 @@ export function StatBlock({
   );
 }
 
-function CompactStats({ items }: { items: readonly StatItem[] }) {
-  const theme = useTheme();
-  // крупный системный шрифт — перенос внутри колонки вместо многоточия: текст не теряется (ревью pass 1, M1)
-  const lines = useWindowDimensions().fontScale > 1 ? undefined : 1;
+function CompactStats({ items }: Pick<StatsProps, 'items'>) {
   return (
     <View testID="stat-block" style={styles.compactRow}>
+      <CompactCells items={items} />
+    </View>
+  );
+}
+
+function CompactCells({ items }: Pick<StatsProps, 'items'>) {
+  const theme = useTheme();
+  const lines = useSingleLine();
+  return (
+    <>
       {items.map((item, index) => (
         <View
           key={index}
           testID="stat-block-cell"
           accessible
-          accessibilityLabel={[item.label, item.value, item.unit, item.note]
-            .filter(Boolean)
-            .join(' ')}
+          accessibilityLabel={cellLabel(item)}
           style={styles.compactCell}
         >
           <Text numberOfLines={lines} style={[textStyle('label'), { color: theme.text.secondary }]}>
@@ -107,9 +130,91 @@ function CompactStats({ items }: { items: readonly StatItem[] }) {
           </Text>
         </View>
       ))}
+    </>
+  );
+}
+
+/**
+ * Плитки (Хронометр, Навигация): три равные плитки `surface.raised` с радиусом `shape.card`; значение
+ * `displayNumeral36` одной строкой (крупный шрифт — перенос), под ним единица и подпись.
+ */
+function TileStats({ items }: Pick<StatsProps, 'items'>) {
+  const theme = useTheme<AppTheme>();
+  const lines = useSingleLine();
+  return (
+    <View testID="stat-block" style={styles.compactRow}>
+      {items.map((item, index) => (
+        <View
+          key={index}
+          testID="stat-block-cell"
+          accessible
+          accessibilityLabel={cellLabel(item)}
+          style={[
+            styles.tile,
+            { backgroundColor: theme.surface.raised, borderRadius: shapeOf(theme).card },
+          ]}
+        >
+          <Text
+            testID="stat-block-value"
+            numberOfLines={lines}
+            style={[textStyle('displayNumeral36'), { color: theme.text.primary }]}
+          >
+            {item.value}
+          </Text>
+          {item.unit ? (
+            <Text style={[textStyle('unit'), { color: theme.text.secondary }]}>{item.unit}</Text>
+          ) : null}
+          <Text
+            numberOfLines={lines}
+            style={[textStyle('label'), styles.label, { color: theme.text.secondary }]}
+          >
+            {item.label}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }
+
+/**
+ * Крупная цифра (Типографика): первая ячейка (дистанция) — `displayNumeral` с единицей, остальные — строкой `compact`
+ * справа, а не помещаются — под ней.
+ */
+function NumeralStats({ items }: Pick<StatsProps, 'items'>) {
+  const theme = useTheme();
+  const [first, ...rest] = items;
+  if (!first) return null;
+  return (
+    <View testID="stat-block" style={styles.numeralRow}>
+      <View
+        testID="stat-block-numeral"
+        accessible
+        accessibilityLabel={cellLabel(first)}
+        style={styles.valueRow}
+      >
+        <Text style={[textStyle('displayNumeral'), { color: theme.text.primary }]}>
+          {first.value}
+        </Text>
+        {first.unit ? (
+          <Text style={[textStyle('unit'), { color: theme.text.secondary }]}>{first.unit}</Text>
+        ) : null}
+      </View>
+      {rest.length > 0 ? (
+        <View style={[styles.compactRow, styles.numeralRest]}>
+          <CompactCells items={rest} />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** Вариант стат-блока (полноту таблицы проверяет тип). */
+const STAT_VARIANTS: Record<StatVariant, ComponentType<StatsProps>> = {
+  default: DefaultStats,
+  compact: CompactStats,
+  tiles: TileStats,
+  numeral: NumeralStats,
+};
 
 const styles = StyleSheet.create({
   compactRow: { flexDirection: 'row', columnGap: size.statGap },
@@ -131,4 +236,20 @@ const styles = StyleSheet.create({
   // крупный шрифт: «км» уходит под значение, а не обрезается
   valueRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: space.s1 },
   label: { marginTop: space.s1 },
+  tile: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    padding: space.s3,
+  },
+  numeralRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    columnGap: size.statGap,
+    rowGap: space.s2,
+  },
+  // строка compact справа от цифры: не уже двух строк списка, иначе — под цифрой
+  numeralRest: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: size.rowMin * 2 },
 });

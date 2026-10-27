@@ -1,7 +1,9 @@
 /// <reference types="jest" />
-import { size } from '@pokatim/design-tokens';
+import { appThemes, size } from '@pokatim/design-tokens';
 import { render, screen } from '@testing-library/react-native';
 import { Dimensions, View } from 'react-native';
+
+import { appThemeWrapper } from '@/__tests__/app-theme-wrapper';
 
 import { StatBlock } from './stat-block';
 
@@ -137,5 +139,62 @@ describe('StatBlock compact: крупный шрифт (ревью pass 1, M1)',
     expect(value.props.numberOfLines).toBeUndefined();
     expect(screen.getByText('В пути').props.numberOfLines).toBeUndefined();
     expect(screen.getByText('2 ч 30 мин')).toBeOnTheScreen();
+  });
+});
+
+describe('StatBlock: варианты шапки шторки (app-themes C2)', () => {
+  const items = [
+    { value: '68', unit: 'км', label: 'Дистанция', note: 'круговой' },
+    { value: '1 240', unit: 'м', label: 'Набор', note: 'макс. 267 м' },
+    { value: '2 ч 30 мин', label: 'В пути', note: 'при 24 км/ч' },
+  ];
+  const window = Dimensions.get('window');
+  const fontScale = (value: number) =>
+    Dimensions.set({ window: { ...window, fontScale: value }, screen: Dimensions.get('screen') });
+  afterEach(() => {
+    Dimensions.set({ window, screen: Dimensions.get('screen') });
+  });
+
+  it('tiles: три равные плитки surface.raised с радиусом shape.card; значение — одна строка, единица и подпись; note — только в метке', async () => {
+    fontScale(1);
+    await render(<StatBlock variant="tiles" items={items} />, {
+      wrapper: appThemeWrapper('chrono'),
+    });
+    const { surface, shape } = appThemes.chrono.schemes.dark;
+    const tiles = screen.getAllByTestId('stat-block-cell');
+    expect(tiles).toHaveLength(3);
+    for (const tile of tiles) {
+      expect(tile).toHaveStyle({
+        backgroundColor: surface.raised,
+        borderRadius: shape.card,
+        flexBasis: 0,
+        flexGrow: 1,
+      });
+    }
+    for (const value of screen.getAllByTestId('stat-block-value')) {
+      expect(value).toHaveProp('numberOfLines', 1);
+    }
+    expect(screen.getByLabelText('Дистанция 68 км круговой')).toBeOnTheScreen();
+    expect(screen.getByText('км')).toBeOnTheScreen();
+    expect(screen.queryByText('круговой')).toBeNull();
+  });
+
+  it('tiles: крупный шрифт — значение переносится', async () => {
+    fontScale(1.6);
+    await render(<StatBlock variant="tiles" items={items} />);
+    expect(screen.getAllByTestId('stat-block-value')[0]!.props.numberOfLines).toBeUndefined();
+  });
+
+  it('numeral: дистанция — крупная цифра, остальные — строкой compact; метки ячеек', async () => {
+    fontScale(1);
+    await render(<StatBlock variant="numeral" items={items} />);
+    const numeral = screen.getByTestId('stat-block-numeral');
+    expect(numeral).toHaveTextContent('68км');
+    expect(screen.getByLabelText('Дистанция 68 км круговой')).toBeOnTheScreen();
+    expect(screen.getByLabelText(/^Набор 1 240 м/)).toBeOnTheScreen();
+    expect(screen.getByLabelText('В пути 2 ч 30 мин при 24 км/ч')).toBeOnTheScreen();
+    // остальные ячейки — compact: подпись над значением
+    expect(screen.getByText('Набор')).toBeOnTheScreen();
+    expect(screen.queryByText('круговой')).toBeNull();
   });
 });
