@@ -63,12 +63,15 @@ const translate = () => {
 };
 
 describe('RouteMap native: маркер скраббинга (routes-04, RC-2)', () => {
-  it('без scrub — ни оверлея, ни маркера; обработчиков вида у карты нет (карта гонки)', async () => {
+  it('без scrub — ни оверлея, ни маркера и после событий камеры (карта гонки)', async () => {
     await render(element());
     const map = await screen.findByTestId('maplibre-Map');
+    await fireEvent(map, 'regionIsChanging', { nativeEvent: { bounds: VIEW_BOUNDS } });
+    await fireEvent(screen.getByTestId('map-area'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 200, height: 100 } },
+    });
     expect(screen.queryByTestId('scrub-overlay')).toBeNull();
-    expect(map.props.onRegionDidChange).toBeUndefined();
-    expect(map.props.onDidFinishLoadingMap).toBeUndefined();
+    expect(screen.queryByTestId('scrub-marker', { includeHiddenElements: true })).toBeNull();
   });
 
   it('после рамки и раскладки — маркер на старте в пикселях, скрыт от скринридера; до них маркера нет', async () => {
@@ -137,5 +140,58 @@ describe('RouteMap native: маркер скраббинга (routes-04, RC-2)',
     expect(translate()[0]).toBeCloseTo(0.6 * 200 - 22, 6);
     expect(setConfig.mock.calls.length).toBe(before);
     setConfig.mockRestore();
+  });
+
+  it('routes-04b (I4, RC-4): движение камеры (regionIsChanging) — маркер на линии, Map и GeoJSONSource не перерисовываются', async () => {
+    const lib = jest.requireMock<typeof MapLibreNative>('@maplibre/maplibre-react-native');
+    const source = jest.spyOn(lib, 'GeoJSONSource');
+    const mapView = jest.spyOn(lib, 'Map');
+    const store = createScrubStore();
+    await render(element(store));
+    await ready();
+    await act(async () => store.setState({ fraction: 0.5 }));
+    const sourceRenders = source.mock.calls.length;
+    const mapRenders = mapView.mock.calls.length;
+    const map = screen.getByTestId('maplibre-Map');
+    // приближение вдвое вокруг центра: долгота 0,25…0,75 на 200 px — разворот (1°) за правым краем
+    await fireEvent(map, 'regionIsChanging', {
+      nativeEvent: { bounds: [0.25, -0.25, 0.75, 0.25] },
+    });
+    expect(translate()[0]).toBeCloseTo(1.5 * 200 - 22, 6);
+    // сдвиг: долгота 0,5…1,5 — разворот на трети ширины
+    await fireEvent(map, 'regionDidChange', { nativeEvent: { bounds: [0.5, -0.5, 1.5, 0.5] } });
+    expect(translate()[0]).toBeCloseTo(0.5 * 200 - 22, 6);
+    expect(source.mock.calls.length).toBe(sourceRenders);
+    expect(mapView.mock.calls.length).toBe(mapRenders);
+    source.mockRestore();
+    mapView.mockRestore();
+  });
+
+  it('routes-04b (M1): движение камеры не перенастраивает жест маркера; перетаскивание — по новым точкам', async () => {
+    const setConfig = jest.spyOn(nativeProxy(), 'setGestureHandlerConfig');
+    const store = createScrubStore();
+    await render(element(store));
+    await ready();
+    const before = setConfig.mock.calls.length;
+    expect(before).toBeGreaterThan(0);
+    const map = screen.getByTestId('maplibre-Map');
+    for (const west of [0.1, 0.2, 0.5]) {
+      await fireEvent(map, 'regionIsChanging', {
+        nativeEvent: { bounds: [west, -0.5, west + 1, 0.5] },
+      });
+    }
+    expect(setConfig.mock.calls.length).toBe(before);
+    setConfig.mockRestore();
+    // вид: долгота 0,5…1,5 на 200 px; маркер на старте (x = −100 px); палец +150 px → x = 50 px — долгота 0,75:
+    // ближайшая точка первого прохода — доля 0,375
+    await act(async () =>
+      fireGestureHandler(getByGestureTestId(SCRUB_MARKER_PAN_TEST_ID), [
+        { state: State.BEGAN, translationX: 0, translationY: 0 },
+        { state: State.ACTIVE, translationX: 10, translationY: 0 },
+        { translationX: 150, translationY: 0 },
+        { state: State.END, translationX: 150, translationY: 0 },
+      ]),
+    );
+    expect(store.getState().fraction).toBeCloseTo(0.375, 6);
   });
 });

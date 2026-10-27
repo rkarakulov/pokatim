@@ -26,6 +26,8 @@ class FakeMap implements MockMap {
   addSource = jest.fn();
   addLayer = jest.fn();
   remove = jest.fn();
+  touchZoomRotate = { disableRotation: jest.fn() };
+  keyboard = { disableRotation: jest.fn() };
   constructor(options: Record<string, unknown>) {
     this.options = options;
     state.maps.push(this);

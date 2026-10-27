@@ -315,6 +315,18 @@ describe('карточка своего маршрута (AC3, M3)', () => {
     expect(screen.queryByText('Поделиться')).toBeNull();
   });
 
+  it('routes-04c: карту двигает один палец нативно — прокрутка карточки не выключается (вне карты — страница)', async () => {
+    await openDetail(ring.id);
+    const map = await screen.findByTestId('maplibre-Map');
+    const scroll = () => screen.getByTestId('my-route-detail');
+    expect(map).toHaveProp('dragPan', true);
+    expect(scroll().props.scrollEnabled).not.toBe(false);
+    await fireEvent(map, 'regionIsChanging', {
+      nativeEvent: { center: [27.6, 53.9], zoom: 12, bounds: [27.5, 53.8, 27.7, 54.0] },
+    });
+    expect(scroll().props.scrollEnabled).not.toBe(false);
+  });
+
   it('обрабатывается — статус без карты; опрос до готовности', async () => {
     const pending = { ...ring, status: 'processing' as const, distanceM: null, isLoop: null };
     getMine.mockResolvedValue(pending);

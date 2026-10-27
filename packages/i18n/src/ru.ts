@@ -113,6 +113,13 @@ export const ru = {
   'races.detail.map.label':
     'Карта маршрута: {distance}, коридор ±{width} м от маршрута, старт и финиш отмечены',
   'races.detail.map.failed': 'Карта не загрузилась',
+  // routes-04b: интерактивная карта — кнопки камеры, подсказка колеса web (routes-04c), подпись холста [ASSUMPTION copy]
+  'maps.controls.zoomIn': 'Приблизить',
+  'maps.controls.zoomOut': 'Отдалить',
+  'maps.controls.fit': 'Показать маршрут целиком',
+  'maps.gestures.wheel': 'Чтобы изменить масштаб, крутите колесо с Ctrl',
+  'maps.gestures.wheelMac': 'Чтобы изменить масштаб, крутите колесо с ⌘',
+  'maps.canvas': 'Карта: стрелки — сдвиг, плюс и минус — масштаб',
   // maps-02: свой трек на карте гонки — текстовая альтернатива подсветки [ASSUMPTION copy]
   'races.detail.myTrack.legendTrack': 'Ваш трек',
   'races.detail.myTrack.legendOff': 'Вне коридора — пунктир',

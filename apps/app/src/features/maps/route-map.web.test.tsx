@@ -5,8 +5,12 @@ import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 
+import { AccessibilityInfo } from 'react-native';
+
 import { CORRIDOR_OPACITY, MAP_FIT_PADDING, ROUTE_SOURCE_ID } from './corridor-style';
 import type * as Loader from './load-maplibre';
+import { MAP_MAX_ZOOM, MAP_MIN_ZOOM } from './map-camera';
+import { WHEEL_HINT_MS } from './map-wheel.web';
 import { RouteMap } from './route-map';
 
 interface MockMap {
@@ -15,6 +19,11 @@ interface MockMap {
   addSource: jest.Mock;
   addLayer: jest.Mock;
   remove: jest.Mock;
+  zoomIn: jest.Mock;
+  zoomOut: jest.Mock;
+  fitBounds: jest.Mock;
+  touchZoomRotate: { disableRotation: jest.Mock };
+  keyboard: { disableRotation: jest.Mock };
 }
 
 // jsdom без WebGL: `maplibre-gl` подменён в точке загрузки (`load-maplibre`): фабрика — только при вызове
@@ -27,6 +36,11 @@ class FakeMap implements MockMap {
   addSource = jest.fn();
   addLayer = jest.fn();
   remove = jest.fn();
+  zoomIn = jest.fn();
+  zoomOut = jest.fn();
+  fitBounds = jest.fn();
+  touchZoomRotate = { disableRotation: jest.fn() };
+  keyboard = { disableRotation: jest.fn() };
   constructor(options: Record<string, unknown>) {
     this.options = options;
     state.maps.push(this);
@@ -110,14 +124,13 @@ describe('RouteMap (web, maplibre-gl)', () => {
     expect(loadMaplibre).not.toHaveBeenCalled();
   });
 
-  it('после монтирования: статичная карта по рамке без анимации, компактная атрибуция, слои после load', async () => {
+  it('после монтирования: карта по рамке без анимации, компактная атрибуция, слои после load', async () => {
     await render(<RouteMap {...props()} />);
     await flush();
     expect(state.maps).toHaveLength(1);
     const [map] = state.maps;
     expect(map!.options).toMatchObject({
       style: LIGHT,
-      interactive: false,
       attributionControl: { compact: true },
       bounds: route.bounds,
       fitBoundsOptions: { padding: MAP_FIT_PADDING, animate: false },
@@ -218,5 +231,162 @@ describe('RouteMap (web): атрибуция и отступы (B2, B4 maps-02)'
     expect(css).toContain(`[data-route-map="${scope}"] .maplibregl-ctrl.maplibregl-ctrl-attrib`);
     expect(css).toContain(themes.dark.surface.raised);
     expect(MAP_FIT_PADDING.bottom).toBeGreaterThan(MAP_FIT_PADDING.top);
+  });
+});
+
+describe('RouteMap (web): интерактивная карта (routes-04b, RC-1, RC-9)', () => {
+  it('routes-04c: без кооперативного режима (один палец и мышь двигают карту), без вращения и наклона, зум 2–17', async () => {
+    await render(<RouteMap {...props()} />);
+    await flush();
+    const map = state.maps.at(-1)!;
+    expect(map.options).toMatchObject({
+      interactive: true,
+      cooperativeGestures: false,
+      dragPan: true,
+      dragRotate: false,
+      pitchWithRotate: false,
+      touchPitch: false,
+      maxPitch: 0,
+      minZoom: MAP_MIN_ZOOM,
+      maxZoom: MAP_MAX_ZOOM,
+      locale: { 'Map.Title': 'Карта: стрелки — сдвиг, плюс и минус — масштаб' },
+    });
+    expect(map.touchZoomRotate.disableRotation).toHaveBeenCalled();
+    expect(map.keyboard.disableRotation).toHaveBeenCalled();
+  });
+
+  describe('колесо мыши (routes-04c): зум только с Ctrl/⌘, без модификатора — прокрутка страницы', () => {
+    const HINT = 'Чтобы изменить масштаб, крутите колесо с Ctrl';
+    /** Узел внутри контейнера карты — как холст maplibre-gl, где слушает колесо `scrollZoom`. */
+    async function mapWithWheelSpy() {
+      await render(<RouteMap {...props()} />);
+      await flush();
+      const canvas = host.querySelector<HTMLElement>('[data-testid="route-map-canvas"]')!;
+      const inner = document.createElement('div');
+      canvas.append(inner);
+      const scrollZoom = jest.fn();
+      inner.addEventListener('wheel', scrollZoom);
+      const wheel = (init: WheelEventInit = {}) => {
+        const event = new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          deltaY: 100,
+          ...init,
+        });
+        act(() => {
+          inner.dispatchEvent(event);
+        });
+        return event;
+      };
+      return { scrollZoom, wheel };
+    }
+
+    it('без модификатора: до зума карты не доходит, прокрутка страницы не отменена, подсказка', async () => {
+      const { scrollZoom, wheel } = await mapWithWheelSpy();
+      expect(text()).not.toContain(HINT);
+      const event = wheel();
+      expect(scrollZoom).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(false);
+      expect(text()).toContain(HINT);
+    });
+
+    it.each([['ctrlKey'], ['metaKey']])(
+      'с %s — зум карты (scrollZoom maplibre-gl), подсказки нет',
+      async (key) => {
+        const { scrollZoom, wheel } = await mapWithWheelSpy();
+        wheel({ [key]: true });
+        expect(scrollZoom).toHaveBeenCalledTimes(1);
+        expect(text()).not.toContain(HINT);
+      },
+    );
+
+    it('подсказка гаснет сама; размонтирование снимает обработчик', async () => {
+      jest.useFakeTimers();
+      try {
+        const { scrollZoom, wheel } = await mapWithWheelSpy();
+        wheel();
+        expect(text()).toContain(HINT);
+        act(() => {
+          jest.advanceTimersByTime(WHEEL_HINT_MS);
+        });
+        expect(text()).not.toContain(HINT);
+        const canvas = host.querySelector<HTMLElement>('[data-testid="route-map-canvas"]')!;
+        await act(async () => root?.unmount());
+        root = null;
+        const inner = document.createElement('div');
+        canvas.append(inner);
+        inner.addEventListener('wheel', scrollZoom);
+        inner.dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+        expect(scrollZoom).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
+  it('серверный рендер (карты ещё нет) — кнопок нет', () => {
+    expect(renderToString(<RouteMap {...props()} />)).not.toContain('map-zoom-in');
+  });
+
+  const button = (id: string) => host.querySelector<HTMLElement>(`[data-testid="${id}"]`)!;
+
+  it('кнопки «+», «−», «в рамку» — методы карты с анимацией; reduce motion — без анимации', async () => {
+    const reduce = jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled');
+    reduce.mockResolvedValue(false);
+    const track = {
+      line: [
+        [27.45, 53.85],
+        [27.65, 54.05],
+      ] as [number, number][],
+      segment: { from: 0, to: 1 },
+      offRuns: [],
+    };
+    await render(<RouteMap {...props()} track={track} />);
+    await flush();
+    const map = state.maps.at(-1)!;
+    await act(async () => button('map-zoom-in').click());
+    expect(map.zoomIn).toHaveBeenLastCalledWith({ animate: true });
+    await act(async () => button('map-zoom-out').click());
+    expect(map.zoomOut).toHaveBeenLastCalledWith({ animate: true });
+    await act(async () => button('map-fit').click());
+    expect(map.fitBounds).toHaveBeenLastCalledWith([27.45, 53.8, 27.65, 54.05], {
+      padding: MAP_FIT_PADDING,
+      animate: true,
+    });
+    await act(async () => root?.unmount());
+    root = null;
+    document.body.innerHTML = '';
+
+    reduce.mockResolvedValue(true);
+    await render(<RouteMap {...props()} />);
+    await flush();
+    const reduced = state.maps.at(-1)!;
+    await act(async () => button('map-zoom-in').click());
+    expect(reduced.zoomIn).toHaveBeenLastCalledWith({ animate: false });
+    await act(async () => button('map-fit').click());
+    expect(reduced.fitBounds).toHaveBeenLastCalledWith(route.bounds, {
+      padding: MAP_FIT_PADDING,
+      animate: false,
+    });
+    reduce.mockRestore();
+  });
+
+  it('ревью pass 1 (M2): ошибка тайла после load — карта и кнопки остаются, сообщения нет', async () => {
+    await render(<RouteMap {...props()} />);
+    await flush();
+    const map = state.maps.at(-1)!;
+    await act(async () => map.handlers.load!());
+    await act(async () => map.handlers.error!());
+    expect(text()).not.toContain('Карта не загрузилась');
+    expect(button('map-zoom-in')).not.toBeNull();
+    expect(map.remove).not.toHaveBeenCalled();
+  });
+
+  it('ошибка стиля (до load) — кнопок нет', async () => {
+    await render(<RouteMap {...props()} />);
+    await flush();
+    expect(button('map-zoom-in')).not.toBeNull();
+    await act(async () => state.maps.at(-1)!.handlers.error!());
+    expect(host.querySelector('[data-testid="map-zoom-in"]')).toBeNull();
   });
 });

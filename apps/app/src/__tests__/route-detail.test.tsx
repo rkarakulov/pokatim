@@ -177,6 +177,28 @@ describe('карточка маршрута каталога: гость по с
     ).toBeNull();
   });
 
+  it('routes-04c: карта двигается одним пальцем нативно — прокрутку выключает только скраббинг', async () => {
+    await open();
+    const profile = await screen.findByRole('adjustable', { name: /^Профиль высоты/ });
+    const map = await screen.findByTestId('maplibre-Map');
+    const scroll = () => screen.getByTestId('route-detail');
+    expect(map).toHaveProp('dragPan', true);
+    // нативный жест карты двигает камеру — прокрутка экрана остаётся
+    await fireEvent(map, 'regionIsChanging', {
+      nativeEvent: { center: [27.6, 53.9], zoom: 12, bounds: [27.5, 53.8, 27.7, 54.0] },
+    });
+    expect(scroll()).toHaveProp('scrollEnabled', true);
+    await fireEvent(profile, 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 340, height: 85 } },
+    });
+    const pan = createGestureController(PROFILE_PAN_TEST_ID);
+    await act(async () => pan.begin({ x: 170 }));
+    await act(async () => pan.activate({ x: 170 }));
+    expect(scroll()).toHaveProp('scrollEnabled', false);
+    await act(async () => pan.end({ x: 170 }));
+    expect(scroll()).toHaveProp('scrollEnabled', true);
+  });
+
   it('API до routes-03 (без elevation и gpxAvailable): без профиля и без «Скачать GPX», набор без «макс.»', async () => {
     getRoute.mockResolvedValue({ ...route, elevation: null, gpxAvailable: false });
     await open();

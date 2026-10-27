@@ -8,6 +8,7 @@ import { type RefreshControlProps, TurboModuleRegistry, useColorScheme } from 'r
 import { centerLat, corridorLineWidth } from '@/features/maps/corridor-style';
 
 import { loadMapLibreNative } from '@/features/maps/load-maplibre-native';
+import { MAP_MAX_ZOOM, MAP_MIN_ZOOM } from '@/features/maps/map-camera';
 import { api } from '@/lib/api';
 
 import { appRoutes } from './app-routes';
@@ -95,12 +96,20 @@ describe('карта маршрута на карточке гонки (maps-01)
     expect(loadMapLibreNative).toHaveBeenCalled();
     expect(map).toHaveProp('mapStyle', LIGHT);
     expect(map).toHaveProp('attribution', true);
-    for (const gesture of ['dragPan', 'touchZoom', 'doubleTapZoom', 'touchRotate', 'touchPitch']) {
-      expect(map).toHaveProp(gesture, false);
-    }
+    // routes-04c: один палец двигает карту, щипок — зум (нативные жесты); вращения и наклона нет
+    expect(map.props).toMatchObject({
+      dragPan: true,
+      touchZoom: true,
+      touchRotate: false,
+      touchPitch: false,
+    });
     const camera = screen.getByTestId('maplibre-Camera');
     expect(camera.props.initialViewState).toMatchObject({ bounds: route.bounds });
-    // RC-4: камера не анимируется
+    // routes-04b (RC-8): зум ограничен; кнопки камеры — сверху справа
+    expect(camera.props).toMatchObject({ minZoom: MAP_MIN_ZOOM, maxZoom: MAP_MAX_ZOOM });
+    expect(screen.getByRole('button', { name: 'Приблизить' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Показать маршрут целиком' })).toBeOnTheScreen();
+    // RC-4: начальная камера не анимируется
     expect(camera.props.duration).toBeUndefined();
     expect(camera.props.animationDuration).toBeUndefined();
     expect(screen.getByTestId('maplibre-GeoJSONSource').props.data.features).toHaveLength(3);
@@ -223,5 +232,18 @@ describe('карта маршрута на карточке гонки (maps-01)
     await openCard();
     expect(getRaceRoute).not.toHaveBeenCalled();
     expect(screen.queryByTestId('maplibre-Map')).toBeNull();
+  });
+
+  it('routes-04c: карту двигает один палец нативно — прокрутка карточки не выключается (вне карты — страница)', async () => {
+    await openCard();
+    const map = await screen.findByTestId('maplibre-Map');
+    const scroll = () => screen.getByTestId('race-detail');
+    expect(map).toHaveProp('dragPan', true);
+    expect(scroll().props.scrollEnabled).not.toBe(false);
+    // нативный жест карты двигает камеру — экран прокрутку не трогает
+    await fireEvent(map, 'regionIsChanging', {
+      nativeEvent: { center: [27.6, 53.9], zoom: 12, bounds: [27.5, 53.8, 27.7, 54.0] },
+    });
+    expect(scroll().props.scrollEnabled).not.toBe(false);
   });
 });

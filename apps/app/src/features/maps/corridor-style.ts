@@ -38,11 +38,12 @@ export const MAP_PADDING = size.icon * 2;
 
 /**
  * Отступы камеры по рамке (B2 maps-02): снизу — место под кнопку атрибуции в нижнем углу (свёрнутая «i» 24 px +
- * поле контрола 10 px) и радиус точки старта/финиша — старт и финиш не уходят под контролы.
+ * поле контрола 10 px) и радиус точки старта/финиша — старт и финиш не уходят под контролы; справа (routes-04b,
+ * RC-6) — колонка кнопок камеры (`size.touchMin` + отступ `space.s2`).
  */
 export const MAP_FIT_PADDING = {
   top: MAP_PADDING,
-  right: MAP_PADDING,
+  right: size.touchMin + space.s2,
   bottom: size.touchMin,
   left: MAP_PADDING,
 } as const;

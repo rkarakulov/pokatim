@@ -32,6 +32,7 @@ module.exports = {
       displayName: 'web',
       preset: 'jest-expo/web',
       testMatch: ['<rootDir>/src/**/*.web.test.{ts,tsx}'],
+      setupFiles: ['<rootDir>/jest.match-media.web.ts'],
       setupFilesAfterEnv: ['<rootDir>/jest.setup.web.ts'],
       transformIgnorePatterns: transpileBase,
       testEnvironmentOptions: {
