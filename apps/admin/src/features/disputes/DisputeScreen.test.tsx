@@ -114,6 +114,30 @@ describe('«Споры» — разбор (06, AC13)', () => {
     }
   });
 
+  it('флаги цели (race-results-07): группа, уровень, «Требует внимания» с метрикой; без флагов — «—»', async () => {
+    mocked.getDispute.mockResolvedValue(
+      dispute({
+        target: {
+          ...dispute().target,
+          tier: 'verified',
+          groupKey: 'w_40_49',
+          flags: [{ code: 'SPEED_CLUSTER_HIGH', metric: 0.75 }],
+        },
+      }),
+    );
+    await open();
+    const result = await screen.findByRole('region', { name: 'Оспоренный результат' });
+    expect(within(result).getByText('Женщины 40–49')).toBeTruthy();
+    expect(within(result).getByText('Verified')).toBeTruthy();
+    expect(within(result).getByText('Скорость выше группы')).toBeTruthy();
+    expect(within(result).getByText('Время ×0,75 медианы группы')).toBeTruthy();
+    cleanup();
+    mocked.getDispute.mockResolvedValue(dispute());
+    await open();
+    const plain = await screen.findByRole('region', { name: 'Оспоренный результат' });
+    expect(within(plain).queryByText('Скорость выше группы')).toBeNull();
+  });
+
   it('без описания и ответа — «Без описания», «Ответа нет»', async () => {
     mocked.getDispute.mockResolvedValue(
       dispute({ description: null, response: null, responded: false }),

@@ -33,6 +33,8 @@ vi.mock('../../api', () => ({
     recheckProtocol: vi.fn(),
     applyProtocolRecheck: vi.fn(),
     resetRiderName: vi.fn(),
+    getVerifiedDemographics: vi.fn(),
+    updateVerifiedDemographics: vi.fn(),
   },
 }));
 
@@ -209,7 +211,7 @@ describe('«Результаты» гонки — загрузка и ошибк
     await renderApp(PATH);
     expect(await screen.findByRole('heading', { name: 'Осенний коридор Заславль' })).toBeTruthy();
     expect(tile('Участники').getAttribute('aria-busy')).toBe('true');
-    expect(screen.getAllByTestId('skeleton-stat')).toHaveLength(6);
+    expect(screen.getAllByTestId('skeleton-stat')).toHaveLength(8);
   });
 
   it('нет сети — «Нет соединения» с повтором; повтор — данные', async () => {
@@ -420,8 +422,18 @@ describe('«Результаты» гонки — до публикации', ()
     const cells = within(rider.closest('tr')!)
       .getAllByRole('cell')
       .map((cell) => cell.textContent);
-    // колонка действий до публикации — только из-за права сброса имени (profile-02); имени нет — кнопки нет
-    expect(cells).toEqual(['=2', 'Участник ·9a0a01', '1:42:03', 'Предварительный', '3', '']);
+    // колонка действий до публикации — права сброса имени (profile-02) и пола/года (07); группа overall — без «Пол и год»
+    expect(cells).toEqual([
+      '=2',
+      'Участник ·9a0a01',
+      'Общий зачёт',
+      'Verified',
+      '1:42:03',
+      'Предварительный',
+      '—',
+      '3',
+      '',
+    ]);
     expect(within(standings).queryByRole('button', { name: 'Дисквалифицировать' })).toBeNull();
     expect(within(standings).queryByRole('button', { name: 'Сбросить имя' })).toBeNull();
   });
@@ -704,7 +716,8 @@ describe('«Результаты» гонки — имя участника (pro
     await renderApp(PATH);
     const standings = await screen.findByRole('region', { name: 'Участники' });
     const rider = await within(standings).findByText('Анна К. ·9a0a01');
-    expect(within(rider.closest('tr')!).getAllByRole('cell')).toHaveLength(5);
+    // место, участник, группа, уровень, время, статус, «Требует внимания», попытки — без действий
+    expect(within(rider.closest('tr')!).getAllByRole('cell')).toHaveLength(8);
     expect(screen.queryByRole('button', { name: 'Сбросить имя' })).toBeNull();
   });
 
@@ -758,5 +771,184 @@ describe('«Результаты» гонки — имя участника (pro
       await within(standings).findByRole('button', { name: 'Дисквалифицировать' }),
     ).toBeTruthy();
     expect(within(standings).getByRole('button', { name: 'Сбросить имя' })).toBeTruthy();
+  });
+});
+
+describe('«Результаты» гонки — группы, уровни, «Требует внимания» (race-results-07)', () => {
+  const ENTRY_C = '01890a5d-ac96-774b-bcce-b302099a0c0c';
+  const USER_C = '01890a5d-ac96-774b-bcce-b302099a0d0c';
+  const standings = (items: PanelStandingRow[], groups = GROUPS) => ({
+    source: 'live' as const,
+    revision: null,
+    groupScheme: 'gender_age' as const,
+    groups,
+    truncated: false,
+    items,
+  });
+  const GROUPS: { key: 'm_u40' | 'w_u40'; ranked: number }[] = [
+    { key: 'm_u40', ranked: 3 },
+    { key: 'w_u40', ranked: 1 },
+  ];
+  const FLAGGED = row({
+    place: 1,
+    tied: false,
+    groupKey: 'm_u40',
+    flags: [
+      { code: 'SPEED_CLUSTER_HIGH', metric: 0.782 },
+      { code: 'HR_GAPS', metric: 18 },
+    ],
+  });
+  const FINISHER = row({
+    entryId: ENTRY_C,
+    userId: USER_C,
+    resultStatus: 'finisher',
+    place: null,
+    tied: false,
+    elapsedSec: 7000,
+    tier: 'start',
+    groupKey: 'overall',
+    unranked: 'start',
+    flags: [{ code: 'HR_POWER_DECOUPLED', metric: 40 }],
+  });
+
+  beforeEach(() => {
+    mocked.getRaceResultsSummary.mockResolvedValue(
+      summary({
+        groupScheme: 'gender_age',
+        counts: { ...summary().counts, attention: 2, finishers: 1 },
+      }),
+    );
+    mocked.getRaceStandings.mockResolvedValue(standings([FLAGGED, FINISHER]));
+  });
+
+  it('KPI «Требует внимания» и «Финишёры» — из counts сервера', async () => {
+    await renderApp(PATH);
+    await waitFor(() => expect(within(tile('Требует внимания')).getByText('2')).toBeTruthy());
+    expect(within(tile('Финишёры')).getByText('1')).toBeTruthy();
+  });
+
+  it('строка с местом: группа, уровень, флаги с метрикой подсказкой; финишёр — отдельным блоком без места', async () => {
+    await renderApp(PATH);
+    const ranked = await screen.findByRole('region', { name: 'Участники' });
+    const leader = (await within(ranked).findByText('Участник ·9a0a01')).closest('tr')!;
+    expect(within(leader).getByText('Мужчины до 40')).toBeTruthy();
+    expect(within(leader).getByText('Verified')).toBeTruthy();
+    expect(within(leader).getByText('Скорость выше группы')).toBeTruthy();
+    expect(within(leader).getByText('Время ×0,782 медианы группы')).toBeTruthy();
+    expect(within(leader).getByText('Пропуски пульса')).toBeTruthy();
+    expect(within(leader).getByText('18 % сегмента без пульса')).toBeTruthy();
+    expect(within(ranked).queryByText('Участник ·9a0c0c')).toBeNull();
+
+    const finishers = section('Финишёры — без места');
+    const finisher = within(finishers).getByText('Участник ·9a0c0c').closest('tr')!;
+    expect(within(finisher).getByText('START')).toBeTruthy();
+    expect(within(finisher).getByText('Финишёр')).toBeTruthy();
+    expect(within(finisher).getByText('1:56:40')).toBeTruthy();
+    expect(within(finisher).getByText('Пульс не отвечает на мощность')).toBeTruthy();
+    expect(within(finishers).queryByRole('columnheader', { name: 'Место' })).toBeNull();
+  });
+
+  it('вкладки групп и фильтр «Требует внимания» — запросы с group и attention, сброс — «Все группы»', async () => {
+    await renderApp(PATH);
+    const ranked = await screen.findByRole('region', { name: 'Участники' });
+    await within(ranked).findByText('Участник ·9a0a01');
+    expect(mocked.getRaceStandings).toHaveBeenLastCalledWith(RACE_ID, {});
+    fireEvent.click(within(ranked).getByRole('button', { name: 'Мужчины до 40 · 3' }));
+    await waitFor(() =>
+      expect(mocked.getRaceStandings).toHaveBeenLastCalledWith(RACE_ID, { group: 'm_u40' }),
+    );
+    fireEvent.click(within(ranked).getByRole('button', { name: 'Только «Требует внимания»' }));
+    await waitFor(() =>
+      expect(mocked.getRaceStandings).toHaveBeenLastCalledWith(RACE_ID, {
+        group: 'm_u40',
+        attention: 'true',
+      }),
+    );
+    fireEvent.click(within(ranked).getByRole('button', { name: 'Все группы' }));
+    await waitFor(() =>
+      expect(mocked.getRaceStandings).toHaveBeenLastCalledWith(RACE_ID, { attention: 'true' }),
+    );
+    expect(
+      within(ranked).getByRole('button', { name: 'Все группы' }).getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('фильтр без строк — «Нет участников по выбранным фильтрам», фильтры остаются', async () => {
+    await renderApp(PATH);
+    const ranked = await screen.findByRole('region', { name: 'Участники' });
+    await within(ranked).findByText('Участник ·9a0a01');
+    mocked.getRaceStandings.mockResolvedValue(standings([]));
+    fireEvent.click(within(ranked).getByRole('button', { name: 'Женщины до 40 · 1' }));
+    expect(await within(ranked).findByText('Нет участников по выбранным фильтрам')).toBeTruthy();
+    expect(within(ranked).getByRole('button', { name: 'Все группы' })).toBeTruthy();
+    expect(
+      within(section('Финишёры — без места')).getByText('Нет финишёров по выбранным фильтрам'),
+    ).toBeTruthy();
+  });
+
+  it('ошибка таблицы при смене фильтра — «Не удалось загрузить» с повтором, фильтры видны', async () => {
+    await renderApp(PATH);
+    const ranked = await screen.findByRole('region', { name: 'Участники' });
+    await within(ranked).findByText('Участник ·9a0a01');
+    mocked.getRaceStandings.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
+    fireEvent.click(within(ranked).getByRole('button', { name: 'Только «Требует внимания»' }));
+    expect(await within(ranked).findByText('Не удалось загрузить')).toBeTruthy();
+    expect(within(ranked).getByRole('button', { name: 'Мужчины до 40 · 3' })).toBeTruthy();
+    fireEvent.click(within(ranked).getByRole('button', { name: 'Повторить' }));
+    expect(await within(ranked).findByText('Участник ·9a0a01')).toBeTruthy();
+  });
+
+  it('гонка без групп (схема overall) — вкладок нет, блока финишёров нет', async () => {
+    mocked.getRaceResultsSummary.mockResolvedValue(summary());
+    mocked.getRaceStandings.mockResolvedValue({
+      ...standings([row()], []),
+      groupScheme: 'overall',
+    });
+    await renderApp(PATH);
+    const ranked = await screen.findByRole('region', { name: 'Участники' });
+    await within(ranked).findByText('Участник ·9a0a01');
+    expect(within(ranked).queryByRole('button', { name: 'Все группы' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Финишёры — без места' })).toBeNull();
+  });
+
+  it('попытки: датчики и флаги датчиков с метрикой', async () => {
+    mocked.listRaceAttempts.mockResolvedValue({
+      items: [
+        attempt({
+          status: 'counted',
+          failure: null,
+          sensors: { hr: true, power: true },
+          flags: [{ code: 'HR_GAPS', metric: 18 }],
+          flagsVersion: 1,
+        }),
+        attempt({
+          id: '01890a5d-ac96-774b-bcce-b302099a0c99',
+          sensors: { hr: false, power: false },
+        }),
+      ],
+      nextCursor: null,
+    });
+    await renderApp(PATH);
+    const attempts = await screen.findByRole('region', { name: 'Попытки' });
+    expect(await within(attempts).findByText('Пульс, мощность')).toBeTruthy();
+    expect(within(attempts).getByText('Нет')).toBeTruthy();
+    expect(within(attempts).getByText('Пропуски пульса')).toBeTruthy();
+    expect(within(attempts).getByText('18 % сегмента без пульса')).toBeTruthy();
+  });
+
+  it('«Пол и год» — только с profiles.verified_edit и только у Verified в группе пол × возраст', async () => {
+    await renderApp(PATH);
+    const ranked = await screen.findByRole('region', { name: 'Участники' });
+    const leader = (await within(ranked).findByText('Участник ·9a0a01')).closest('tr')!;
+    expect(within(leader).getByRole('button', { name: 'Пол и год' })).toBeTruthy();
+    expect(
+      within(section('Финишёры — без места')).queryByRole('button', { name: 'Пол и год' }),
+    ).toBeNull();
+    cleanup();
+    mocked.me.mockResolvedValue(ME.moderator);
+    await renderApp(PATH);
+    const asModerator = await screen.findByRole('region', { name: 'Участники' });
+    await within(asModerator).findByText('Участник ·9a0a01');
+    expect(screen.queryByRole('button', { name: 'Пол и год' })).toBeNull();
   });
 });

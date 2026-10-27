@@ -11,6 +11,7 @@ import { httpStatus, isForbidden } from '../../session/errors';
 import { EmptyState, ErrorState, PageHeader, ReadonlyField, StatusTag } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { raceItemKey } from '../results/results-query';
+import { FlagList } from '../results/FlagList';
 import { placeLabel, RESULT_TONE } from '../results/results-format';
 import { DecisionPanel } from './DecisionPanel';
 import { DisputeSeries } from './DisputeSeries';
@@ -59,6 +60,19 @@ function Review({ dispute }: { dispute: PanelDispute }) {
               {t(`admin.results.resultStatus.${target.resultStatus}`)}
             </StatusTag>
           }
+        />
+        <ReadonlyField
+          label={t('admin.disputes.result.group')}
+          value={t(`results.group.${target.groupKey}`)}
+        />
+        <ReadonlyField
+          label={t('admin.disputes.result.tier')}
+          value={t(`results.tier.${target.tier}`)}
+        />
+        {/* race-results-07: живые флаги цели — сигнал для разбора, не решение */}
+        <ReadonlyField
+          label={t('admin.disputes.result.attention')}
+          value={<FlagList flags={target.flags} />}
         />
       </Section>
       <Section title={t('admin.disputes.claim.title')}>

@@ -1,4 +1,9 @@
-import type { AttemptStatus, RaceResultStatus } from '@pokatim/contracts';
+import type {
+  AttemptSensors,
+  AttemptStatus,
+  PanelAttemptFlag,
+  RaceResultStatus,
+} from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 
 type Tone = 'success' | 'neutral' | 'error' | 'ink';
@@ -23,7 +28,7 @@ export const RESULT_TONE: Record<RaceResultStatus, Tone> = {
   final: 'success',
   dq: 'error',
   revised: 'ink',
-  // race-results-07: время без места (START, без пульса); экран групп и финишёров — 07b
+  // race-results-07: время без места (START, без пульса) — блок «Финишёры»
   finisher: 'neutral',
 };
 
@@ -42,4 +47,25 @@ export function riderLabel(entryId: string, riderName: string | null = null): st
 export function placeLabel(place: number | null, tied: boolean): string {
   if (place === null) return '—';
   return tied ? t('admin.results.tiePlace', { place }) : String(place);
+}
+
+const RATIO = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 });
+const PERCENT = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+
+/**
+ * Метрика флага «Требует внимания» (race-results-07): `SPEED_CLUSTER_HIGH` — отношение времени к медиане группы
+ * («Время ×0,782 медианы группы»), флаги датчиков — целые проценты («18 % сегмента без пульса»).
+ */
+export function flagMetricText(flag: PanelAttemptFlag): string {
+  const value =
+    flag.code === 'SPEED_CLUSTER_HIGH' ? RATIO.format(flag.metric) : PERCENT.format(flag.metric);
+  return t(`admin.results.flagMetric.${flag.code}`, { value });
+}
+
+/** Датчики сегмента попытки: «Пульс, мощность», «Пульс», «Нет»; `null` (до вердикта, сбой) — «—». */
+export function sensorsText(sensors: AttemptSensors | null): string {
+  if (sensors === null) return '—';
+  if (sensors.hr && sensors.power) return t('admin.results.sensors.both');
+  if (sensors.hr) return t('admin.results.sensors.hr');
+  return sensors.power ? t('admin.results.sensors.power') : t('admin.results.sensors.none');
 }
