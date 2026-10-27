@@ -62,9 +62,19 @@ export function flagMetricText(flag: PanelAttemptFlag): string {
   return t(`admin.results.flagMetric.${flag.code}`, { value });
 }
 
-/** Датчики сегмента попытки: «Пульс, мощность», «Пульс», «Нет»; `null` (до вердикта, сбой) — «—». */
+/**
+ * Датчики сегмента попытки: «Пульс, мощность», «Пульс», «Нет»; `null` (до вердикта, сбой) — «—».
+ * Импорт Garmin/Wahoo (`source: 'declared'`, DV-11) — признак тренировки из потока: «Пульс (заявлено импортом)».
+ */
 export function sensorsText(sensors: AttemptSensors | null): string {
   if (sensors === null) return '—';
+  const text = sensorsPresence(sensors);
+  return sensors.source === 'declared'
+    ? t('admin.results.sensors.declared', { sensors: text })
+    : text;
+}
+
+function sensorsPresence(sensors: AttemptSensors): string {
   if (sensors.hr && sensors.power) return t('admin.results.sensors.both');
   if (sensors.hr) return t('admin.results.sensors.hr');
   return sensors.power ? t('admin.results.sensors.power') : t('admin.results.sensors.none');

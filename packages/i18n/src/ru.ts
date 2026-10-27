@@ -1809,6 +1809,7 @@ export const ru = {
   'admin.results.sensors.hr': 'Пульс',
   'admin.results.sensors.power': 'Мощность',
   'admin.results.sensors.none': 'Нет',
+  'admin.results.sensors.declared': '{sensors} (заявлено импортом)',
   'admin.results.flagMetric.SPEED_CLUSTER_HIGH': 'Время ×{value} медианы группы',
   'admin.results.flagMetric.HR_POWER_DECOUPLED': '{value} % рывков без ответа пульса',
   'admin.results.flagMetric.HR_GAPS': '{value} % сегмента без пульса',

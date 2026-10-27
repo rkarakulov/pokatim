@@ -917,13 +917,21 @@ describe('«Результаты» гонки — группы, уровни, «
         attempt({
           status: 'counted',
           failure: null,
-          sensors: { hr: true, power: true },
+          sensors: { hr: true, power: true, source: 'samples' },
           flags: [{ code: 'HR_GAPS', metric: 18 }],
           flagsVersion: 1,
         }),
         attempt({
           id: '01890a5d-ac96-774b-bcce-b302099a0c99',
-          sensors: { hr: false, power: false },
+          sensors: { hr: false, power: false, source: 'samples' },
+        }),
+        attempt({
+          id: '01890a5d-ac96-774b-bcce-b302099a0c9a',
+          status: 'counted',
+          failure: null,
+          sensors: { hr: true, power: false, source: 'declared' },
+          flags: [],
+          flagsVersion: 1,
         }),
       ],
       nextCursor: null,
@@ -932,6 +940,8 @@ describe('«Результаты» гонки — группы, уровни, «
     const attempts = await screen.findByRole('region', { name: 'Попытки' });
     expect(await within(attempts).findByText('Пульс, мощность')).toBeTruthy();
     expect(within(attempts).getByText('Нет')).toBeTruthy();
+    // DV-11: импорт Garmin/Wahoo — датчики заявлены потоком, флаги не считаются
+    expect(within(attempts).getByText('Пульс (заявлено импортом)')).toBeTruthy();
     expect(within(attempts).getByText('Пропуски пульса')).toBeTruthy();
     expect(within(attempts).getByText('18 % сегмента без пульса')).toBeTruthy();
   });
