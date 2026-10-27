@@ -1,4 +1,4 @@
-import type { RacePhase, RaceStatus } from '@pokatim/contracts';
+import type { GroupScheme, RacePhase, RaceStatus } from '@pokatim/contracts';
 
 import type { DbSession } from '../../db';
 import type { PanelPrincipal } from '../panel';
@@ -22,6 +22,11 @@ export interface RaceForResults {
   protocolPlannedAt: Date;
   corridor: RaceCorridor | null;
   lockedAt: Date | null;
+  /**
+   * схема групп зачёта (race-results-07); `null` — заявок ещё не было (первая получит `gender_age`). Документ без
+   * схемы, но с `lockedAt` (RC-7) — `overall`.
+   */
+  groupScheme: GroupScheme | null;
   /** момент публикации протокола (race-results-05); `null` — не опубликован */
   protocolPublishedAt: Date | null;
   /** зафиксированная отсечка приёма споров (race-results-06, RC-7); `null` — от плановой даты протокола */
@@ -30,8 +35,9 @@ export interface RaceForResults {
 
 export interface RaceRegistry {
   /**
-   * Первая операция транзакции заявки: запись `lockedAt ??= now` в документ опубликованной гонки (конфликт записи с
-   * правкой и отменой гонки панелью). Не опубликована или не найдена — `null`.
+   * Первая операция транзакции заявки: запись `lockedAt ??= now` и `groupScheme ??= gender_age` (race-results-07) в
+   * документ опубликованной гонки (конфликт записи с правкой и отменой гонки панелью). Не опубликована или не найдена
+   * — `null`.
    */
   admitEntry(tx: DbSession, raceId: string, now: Date): Promise<RaceForResults | null>;
   /**

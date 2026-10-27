@@ -42,6 +42,10 @@ export const PROJECT_ERROR_MESSAGES = {
   ROUTE_QUOTA_EXCEEDED: 'Достигнут предел маршрутов',
   PASSWORD_INCORRECT: 'Неверный пароль',
   ACCOUNT_PANEL_MEMBER: 'Аккаунт сотрудника панели удалить нельзя',
+  VERIFIED_PROFILE_REQUIRED: 'Для Verified заполните анкету зачёта',
+  RACE_TIER_LOCKED: 'Уровень и группу заявки уже нельзя изменить',
+  RESULT_GROUP_NOT_ALLOWED: 'Можно выбрать свою группу или более молодую своего пола',
+  VERIFIED_DEMOGRAPHICS_LOCKED: 'Пол и год рождения уже зафиксированы заявкой Verified',
   ROUTE_PUBLICATION_LIMIT: 'Достигнут предел заявок в каталог',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 

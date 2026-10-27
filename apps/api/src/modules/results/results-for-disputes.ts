@@ -5,6 +5,7 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { DbSession } from '../../db';
 import type { RaceForResults } from '../races';
 import type { RaceEntryDoc } from './results.collection';
+import { rowFlags, speedClusterFlags } from './results.policy';
 import type {
   DisputeEntry,
   DisputeStanding,
@@ -23,6 +24,9 @@ const toEntry = (doc: RaceEntryDoc): DisputeEntry => ({
   best: doc.best ? { elapsedSec: doc.best.elapsedSec, startedAt: doc.best.startedAt } : null,
   // поле — DQ по спору до публикации; после публикации `disputes` гонку уже отклоняет (RC-3)
   disqualified: (doc.disqualified ?? null) !== null,
+  // race-results-07: заявки до 07 — Verified с местом (RC-7)
+  tier: doc.tier ?? 'verified',
+  ranked: doc.best !== null && (doc.tier ?? 'verified') === 'verified' && (doc.best.ranked ?? true),
 });
 
 /**
@@ -82,11 +86,22 @@ export class ResultsForDisputesService implements ResultsForDisputes {
       const entry = await this.repository.findEntryById(entryId, session);
       if (!entry || entry.raceId !== race.id) return null;
       const result = await this.read.entryResult(race, entry, now, session);
+      // живые флаги цели: датчики лучшей попытки + скорость по строкам с местом всех групп
+      const speed = speedClusterFlags(
+        (await this.repository.rankedEntries(race.id, session)).map((row) => ({
+          entryId: row._id,
+          groupKey: row.groupKey,
+          elapsedSec: row.best.elapsedSec,
+        })),
+      );
       return {
         resultStatus: result.status,
         place: result.place,
         tied: result.tied,
         elapsedSec: result.elapsedSec,
+        tier: entry.tier ?? 'verified',
+        groupKey: entry.groupKey,
+        flags: rowFlags(entry.best?.flags ?? [], speed.get(entry._id)),
       };
     });
   }

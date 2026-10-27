@@ -49,6 +49,7 @@ const race = (overrides: Partial<RaceForResults> = {}): RaceForResults => ({
   protocolPlannedAt: new Date(ENDS.getTime() + 48 * HOUR),
   corridor: { routeId: 'route', widthM: 50, distanceM: 8000 },
   lockedAt: null,
+  groupScheme: null,
   protocolPublishedAt: null,
   disputeFilingClosedAt: null,
   ...overrides,
@@ -251,12 +252,14 @@ describe('pickBest и сводка', () => {
       attempt({ _id: 'a', segment: segment(3600, '2026-10-25T09:00:00Z') }),
       attempt({ _id: '0', status: 'rejected', segment: segment(100, '2026-10-25T07:00:00Z') }),
     ];
-    expect(pickBest(attempts)?.attemptId).toBe('a');
+    expect(pickBest(attempts, 'all')?.attemptId).toBe('a');
     expect(
-      pickBest([...attempts, attempt({ _id: 'z', segment: segment(3600, '2026-10-25T08:30:00Z') })])
-        ?.attemptId,
+      pickBest(
+        [...attempts, attempt({ _id: 'z', segment: segment(3600, '2026-10-25T08:30:00Z') })],
+        'all',
+      )?.attemptId,
     ).toBe('z');
-    expect(pickBest([attempt({ status: 'failed', segment: null })])).toBeNull();
+    expect(pickBest([attempt({ status: 'failed', segment: null })], 'all')).toBeNull();
   });
 
   it('summarize: ожидание, засчитанные, видимые отказы, провалы, всего', () => {
@@ -400,6 +403,7 @@ describe('entryActions — споры (D-39, RC-4, RC-6)', () => {
       canWithdraw: false,
       canAddAttempt: false,
       reasons: ['dispute_open'],
+      canUpgrade: false,
     });
   });
 
@@ -412,6 +416,7 @@ describe('entryActions — споры (D-39, RC-4, RC-6)', () => {
       canWithdraw: false,
       canAddAttempt: false,
       reasons: ['disqualified'],
+      canUpgrade: false,
     });
   });
 
@@ -421,6 +426,7 @@ describe('entryActions — споры (D-39, RC-4, RC-6)', () => {
       canWithdraw: false,
       canAddAttempt: false,
       reasons: ['window_closed', 'dispute_open'],
+      canUpgrade: false,
     });
     expect(entryActions(race(), 'closed', entry(), late, { openDisputes: 1 }).reasons).toEqual([
       'window_closed',
@@ -441,6 +447,7 @@ describe('entryActions (D-37, C1/H2)', () => {
       canWithdraw: false,
       canAddAttempt: false,
       reasons: ['not_entered'],
+      canUpgrade: false,
     });
     expect(entryActions(race(), 'open', null, open, NO_DISPUTES).canEnter).toBe(true);
     expect(entryActions(race({ corridor: null }), 'open', null, open, NO_DISPUTES).reasons).toEqual(
@@ -452,6 +459,7 @@ describe('entryActions (D-37, C1/H2)', () => {
     expect(entryActions(race(), 'closed', null, closed, NO_DISPUTES)).toMatchObject({
       canEnter: false,
       reasons: ['entries_closed', 'not_entered'],
+      canUpgrade: false,
     });
   });
 
@@ -462,6 +470,7 @@ describe('entryActions (D-37, C1/H2)', () => {
         canWithdraw: false,
         canAddAttempt: false,
         reasons: ['withdrawn'],
+        canUpgrade: false,
       },
     );
   });
@@ -472,18 +481,21 @@ describe('entryActions (D-37, C1/H2)', () => {
       canWithdraw: true,
       canAddAttempt: false,
       reasons: ['window_not_open'],
+      canUpgrade: false,
     });
     expect(entryActions(race(), 'open', entry(), open, NO_DISPUTES)).toEqual({
       canEnter: false,
       canWithdraw: true,
       canAddAttempt: true,
       reasons: [],
+      canUpgrade: false,
     });
     expect(entryActions(race(), 'closed', entry(), closed, NO_DISPUTES)).toEqual({
       canEnter: false,
       canWithdraw: false,
       canAddAttempt: true,
       reasons: ['window_closed'],
+      canUpgrade: false,
     });
     expect(entryActions(race(), 'closed', entry(), late, NO_DISPUTES).reasons).toEqual([
       'window_closed',
@@ -654,6 +666,8 @@ describe('протокол (race-results-05)', () => {
       elapsedSec,
       startedAt: t(startedAt),
       dq,
+      groupKey: 'overall',
+      flags: [],
     });
     const view = (rows: ReturnType<typeof buildProtocol>) =>
       rows.map((row) => [row.order, row.entryId, row.place, row.tied, row.status]);

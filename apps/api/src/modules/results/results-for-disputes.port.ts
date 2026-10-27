@@ -1,4 +1,10 @@
-import type { RaceEntryStatus, RaceResultStatus, ResultGroupKey } from '@pokatim/contracts';
+import type {
+  EntryTier,
+  PanelAttemptFlag,
+  RaceEntryStatus,
+  RaceResultStatus,
+  ResultGroupKey,
+} from '@pokatim/contracts';
 
 import type { DbSession } from '../../db';
 import type { RaceForResults } from '../races';
@@ -19,6 +25,10 @@ export interface DisputeEntry {
   status: RaceEntryStatus;
   best: { elapsedSec: number; startedAt: Date } | null;
   disqualified: boolean;
+  /** race-results-07: уровень заявки (до 07 — `verified`) */
+  tier: EntryTier;
+  /** лучший результат даёт место (Verified с местом в группе); без лучшего — `false` */
+  ranked: boolean;
 }
 
 /** Статус и место результата участника — как в «моём участии». */
@@ -27,6 +37,10 @@ export interface DisputeStanding {
   place: number | null;
   tied: boolean;
   elapsedSec: number | null;
+  /** race-results-07: уровень и группа цели, её живые флаги «Требует внимания» (датчики + скорость) */
+  tier: EntryTier;
+  groupKey: ResultGroupKey;
+  flags: PanelAttemptFlag[];
 }
 
 /**

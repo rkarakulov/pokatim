@@ -21,6 +21,7 @@ describe('PanelRole и Permission', () => {
       'disputes.decide',
       'profiles.moderate',
       'appearance.manage',
+      'profiles.verified_edit',
       'routes.moderate',
     ]);
   });

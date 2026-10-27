@@ -29,9 +29,9 @@ import {
   RESULTS_RACE_RECHECK_REQUESTED,
   RESULTS_RESULT_REVISED,
 } from './results.events';
-import { buildProtocol, type ProtocolBase, recheckPending, RESULTS_POLICY } from './results.policy';
-import { ResultsPanelReadService } from './results-panel-read.service';
-import { type RankedEntry, ResultsRepository } from './results.repository';
+import { buildProtocol, recheckPending, RESULTS_POLICY } from './results.policy';
+import { protocolBaseOf, ResultsPanelReadService } from './results-panel-read.service';
+import { ResultsRepository } from './results.repository';
 
 const notFound = () => domainError('NOT_FOUND', 404);
 const blocked = (reason: ResultsActionBlock, count?: number) => {
@@ -50,14 +50,7 @@ const REVISION_AUDIT: Record<Revision, AuditAction> = {
   recheck_applied: 'results.recalculation_applied',
 };
 
-const baseOf = (entry: RankedEntry, dq: boolean): ProtocolBase => ({
-  entryId: entry._id,
-  userId: entry.userId,
-  attemptId: entry.best.attemptId,
-  elapsedSec: entry.best.elapsedSec,
-  startedAt: entry.best.startedAt,
-  dq,
-});
+const baseOf = protocolBaseOf;
 
 /**
  * Действия панели над протоколом гонки (race-results-05, D-22…D-28): исключение и возврат трека, перепроверка,
@@ -302,6 +295,9 @@ export class ResultsProtocolService {
           elapsedSec: candidate.elapsedSec,
           startedAt: candidate.startedAt,
           dq: candidate.entryId === entryId ? dq : candidate.status === 'dq',
+          // race-results-07: строки ревизий до 07 — `overall`; датчики — из снимка, скорость — заново (`buildProtocol`)
+          groupKey: candidate.groupKey ?? 'overall',
+          flags: candidate.flags ?? [],
         })),
         new Map(rows.map((candidate) => [candidate.entryId, candidate])),
       );

@@ -53,6 +53,8 @@ export const AUDIT_ACTIONS = [
   'account.deleted',
   // app-themes: админ сменил тему приложения (subject `platform`, детали themeFrom/themeTo)
   'appearance.theme_changed',
+  // race-results-07: admin изменил пол и/или год анкеты Verified (subject `rider`, `changedFields` без значений)
+  'profile.verified_demographics_changed',
   // routes-06: модерация маршрутов райдеров (subject `route`, без имени автора)
   'route.submission_approved',
   'route.submission_rejected',

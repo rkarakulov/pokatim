@@ -7,6 +7,10 @@ import {
   analyzeAttempt,
   analyzeTrack,
   CORRIDOR_ENGINE_VERSION,
+  encodeTrackStream,
+  FLAGS_VERSION,
+  matchCorridor,
+  prepareCorridor,
   parseTrackFile,
   TrackParseError,
   TRACK_MAX_POINTS,
@@ -212,6 +216,67 @@ describe('analyzeAttempt', () => {
     );
     expect(result).toMatchObject({ verdict: 'counted', engineVersion: CORRIDOR_ENGINE_VERSION });
     expect(structuredClone(result)).toEqual(result);
+  });
+
+  it('race-results-07: датчики и флаги сегмента вне CorridorMatch; без сегмента — null и []', () => {
+    const { corridor, window } = corridorCase('clean.gpx');
+    const result = analyzeAttempt(
+      fixture('corridor/clean.gpx'),
+      'gpx',
+      corridor,
+      windowOf(window),
+      NOW,
+    );
+    expect(result.sensors).toEqual({ hr: false, power: false, source: 'samples' });
+    expect(result.flags).toEqual([]);
+    expect(result.flagsVersion).toBe(FLAGS_VERSION);
+    const midStart = corridorCase('mid-start.gpx');
+    const noStart = analyzeAttempt(
+      fixture('corridor/mid-start.gpx'),
+      'gpx',
+      midStart.corridor,
+      windowOf(midStart.window),
+      NOW,
+    );
+    expect(noStart.segment).toBeNull();
+    expect(noStart).toMatchObject({ sensors: null, flags: [], flagsVersion: FLAGS_VERSION });
+    // ключи результата движка не изменились (AC16): новые поля — только у AttemptAnalysis
+    const { trackMap, sensors, flags, flagsVersion, ...match } = result;
+    void [trackMap, sensors, flags, flagsVersion];
+    expect(Object.keys(match).sort()).toEqual(
+      Object.keys(matchCorridor([], prepareCorridor(corridor), windowOf(window))).sort(),
+    );
+  });
+
+  it('поток агрегатора (Garmin/Wahoo): датчики — заявленные признаки тренировки (declared), флагов нет', () => {
+    const { corridor, window } = corridorCase('clean.gpx');
+    const points = parseTrackFile(fixture('corridor/clean.gpx')).points.map(
+      (point): [number, number, number, number | null] => [
+        point.time!.getTime(),
+        point.lat,
+        point.lon,
+        point.ele ?? null,
+      ],
+    );
+    const stream = (hasHeartRate: boolean, hasPower: boolean) =>
+      encodeTrackStream({
+        v: 1,
+        provider: 'garmin',
+        sport: 'cycling',
+        hasHeartRate,
+        hasPower,
+        points,
+      });
+    const declared = analyzeAttempt(stream(true, false), 'stream', corridor, windowOf(window), NOW);
+    expect(declared).toMatchObject({
+      verdict: 'counted',
+      sensors: { hr: true, power: false, source: 'declared' },
+      flags: [],
+      flagsVersion: FLAGS_VERSION,
+    });
+    expect(
+      analyzeAttempt(stream(false, true), 'stream', corridor, windowOf(window), NOW).sensors,
+    ).toEqual({ hr: false, power: true, source: 'declared' });
   });
 
   it('trackMap: позиции на той же линии, что analyzeTrack пишет в activity_tracks; без координат и времени', () => {

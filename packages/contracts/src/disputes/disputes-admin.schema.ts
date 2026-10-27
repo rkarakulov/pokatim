@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 import { MULTI_LINE, optionalText, PageQuery, Uuid } from '../common.ts';
 import { PageCursor } from '../races/race.schema.ts';
-import { RACE_RESULT_STATUSES } from '../results/results.schema.ts';
+import { PanelAttemptFlag } from '../results/results-admin.schema.ts';
+import { ENTRY_TIERS, RACE_RESULT_STATUSES, RESULT_GROUP_KEYS } from '../results/results.schema.ts';
 import {
   DISPUTE_CATEGORIES,
   DISPUTE_DECISION_TEMPLATES,
@@ -83,6 +84,10 @@ export const PanelDispute = PanelDisputeListItem.extend({
     place: z.number().int().nullable(),
     tied: z.boolean(),
     elapsedSec: z.number().int().nullable(),
+    /** race-results-07: уровень и группа цели, её флаги «Требует внимания» (живые) */
+    tier: z.enum(ENTRY_TIERS),
+    groupKey: z.enum(RESULT_GROUP_KEYS),
+    flags: z.array(PanelAttemptFlag),
   }),
   complainant: z.object({ entryId: Uuid, userId: Uuid }),
   decision: z

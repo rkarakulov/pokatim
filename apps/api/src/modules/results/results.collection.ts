@@ -3,8 +3,10 @@ import type {
   AttemptOrigin,
   AttemptRejection,
   AttemptReviewKind,
+  AttemptSensorSource,
   AttemptStatus,
   AttemptWithdrawReason,
+  EntryTier,
   ProtocolRowStatus,
   RaceEntryStatus,
   RecalculationKind,
@@ -37,11 +39,27 @@ export interface EntryRequest {
   attemptId: string | null;
 }
 
+/**
+ * Флаг «Требует внимания» (race-results-07): код и метрика — целые проценты (`HR_*`) или отношение к медиане группы
+ * (`SPEED_CLUSTER_HIGH`). Без значений пульса и мощности.
+ */
+export interface AttemptFlagDoc {
+  code: 'SPEED_CLUSTER_HIGH' | 'HR_POWER_DECOUPLED' | 'HR_GAPS';
+  metric: number;
+}
+
 export interface EntryBest {
   attemptId: string;
   elapsedSec: number;
   startedAt: Date;
   finishedAt: Date;
+  /**
+   * лучшая даёт место (race-results-07, `pickBest` по `rankRule` заявки): START и Verified без попытки с пульсом —
+   * `false`. Документы до 07 — бэкфилл `0028` (`true`); чтение `?? true` (RC-7)
+   */
+  ranked?: boolean;
+  /** флаги датчиков лучшей попытки (денормализация, DV-9); до 07 — нет поля, чтение `?? []` */
+  flags?: AttemptFlagDoc[];
 }
 
 export interface EntrySummary {
@@ -67,9 +85,16 @@ export interface RaceEntryDoc {
   raceId: string;
   userId: string;
   status: RaceEntryStatus;
-  /** A3: одна группа зачёта v1; кластеры и уровень — слайс 07 */
+  /**
+   * Группа зачёта (race-results-07): `overall` — схема `overall` и START; пол × возраст — Verified в `gender_age`
+   * (фиксируется заявкой или повышением, потом не меняется).
+   */
   groupKey: ResultGroupKey;
-  tier: null;
+  /**
+   * Уровень заявки (race-results-07): Verified — место в группе, START — время без места. Документы до 07 — `null`
+   * (бэкфилл `0028` → `verified`), чтение `?? 'verified'` (RC-7).
+   */
+  tier: EntryTier | null;
   requests: EntryRequest[];
   best: EntryBest | null;
   summary: EntrySummary;
@@ -146,6 +171,16 @@ export interface RaceAttemptDoc {
    */
   trackMap?: AttemptTrackMapDoc | null;
   /**
+   * датчики сегмента (race-results-07, пишет worker с вердиктом): есть ли отсчёты пульса и мощности; `null` — до
+   * вердикта, провал, нет сегмента; документы до 07 поля не имеют. `source: 'declared'` — импорт Garmin/Wahoo:
+   * признаки тренировки потока агрегатора, флаги датчиков не считаются; нет поля (до 07a pass 2) — `samples`
+   */
+  sensors?: { hr: boolean; power: boolean; source?: AttemptSensorSource } | null;
+  /** флаги датчиков сегмента (`HR_*`); до 07 — нет поля → `[]` */
+  flags?: AttemptFlagDoc[];
+  /** `FLAGS_VERSION` движка флагов; `null` — флаги не считались */
+  flagsVersion?: number | null;
+  /**
    * последний видимый райдеру вердикт (`visibleVerdict`, notifications RC-2): `requeueAttempt` его не стирает, провал и
    * снятие не затирают — уведомление «засчитан/не засчитан» только при смене. Документы до `0026_attempt_last_verdict`
    * без поля — чтение `?? null`
@@ -192,6 +227,10 @@ export interface RaceProtocolRowDoc {
   place: number | null;
   tied: boolean;
   status: ProtocolRowStatus;
+  /** группа строки (race-results-07); ревизии до 07 поля не имеют — чтение `?? 'overall'` (RC-8) */
+  groupKey?: ResultGroupKey;
+  /** снимок флагов «Требует внимания» на момент ревизии (датчики + скорость); до 07 — нет поля → `[]` */
+  flags?: AttemptFlagDoc[];
   createdAt: Date;
 }
 

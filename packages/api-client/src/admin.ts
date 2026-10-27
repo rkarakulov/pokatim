@@ -16,6 +16,10 @@ import {
   type PanelRaceAttemptQuery,
   PanelRaceResults,
   PanelRaceStandings,
+  type PanelRaceStandingsQuery,
+  PanelVerifiedDemographics,
+  type UpdateVerifiedDemographicsRequest,
+  VerifiedDemographicsResult,
   type ProtocolEntryActionRequest,
   type ResultsActionRequest,
   PanelRoute,
@@ -128,6 +132,12 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       body: JSON.stringify(body),
       credentials: 'same-origin',
     });
+  const patch = <S extends z.ZodType>(path: string, schema: S, body: unknown) =>
+    request(path, schema, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      credentials: 'same-origin',
+    });
   const member = (userId: string) => `/v1/admin/members/${encodeURIComponent(userId)}`;
   const season = (id: string) => `/v1/admin/seasons/${encodeURIComponent(id)}`;
   const race = (id: string) => `/v1/admin/races/${encodeURIComponent(id)}`;
@@ -182,7 +192,9 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     getRaceResultsSummary: (raceId: string) => get(`${race(raceId)}/results`, PanelRaceResults),
     listRaceAttempts: (raceId: string, params: Partial<PanelRaceAttemptQuery> = {}) =>
       get(`${race(raceId)}/attempts${queryString(params)}`, PanelRaceAttemptPage),
-    getRaceStandings: (raceId: string) => get(`${race(raceId)}/standings`, PanelRaceStandings),
+    /** Участники: `group` и `attention` (race-results-07) — фильтры. */
+    getRaceStandings: (raceId: string, params: PanelRaceStandingsQuery = {}) =>
+      get(`${race(raceId)}/standings${queryString(params)}`, PanelRaceStandings),
     listProtocolRecalculations: (raceId: string) =>
       get(`${race(raceId)}/protocol/recalculations`, PanelProtocolRecalculations),
 
@@ -286,6 +298,18 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       post(
         `/v1/admin/profiles/${encodeURIComponent(userId)}/name-reset`,
         RiderNameResetResult,
+        body,
+      ),
+    // race-results-07: пол и год анкеты Verified (profiles.verified_edit, только admin)
+    getVerifiedDemographics: (userId: string) =>
+      get(
+        `/v1/admin/profiles/${encodeURIComponent(userId)}/verified-demographics`,
+        PanelVerifiedDemographics,
+      ),
+    updateVerifiedDemographics: (userId: string, body: UpdateVerifiedDemographicsRequest) =>
+      patch(
+        `/v1/admin/profiles/${encodeURIComponent(userId)}/verified-demographics`,
+        VerifiedDemographicsResult,
         body,
       ),
 

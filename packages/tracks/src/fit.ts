@@ -49,9 +49,9 @@ export function parseFit(bytes: Uint8Array): ParsedTrack {
   let hasPower = false;
   for (const record of records) {
     const hr = positiveNumber(record.heartRate);
-    const power = positiveNumber(record.power);
+    const power = nonNegativeNumber(record.power);
     if (hr !== undefined) hasHeartRate = true;
-    if (power !== undefined) hasPower = true;
+    if (power !== undefined && power > 0) hasPower = true;
     if (typeof record.positionLat !== 'number' || typeof record.positionLong !== 'number') continue;
 
     const point: ParsedPoint = {
@@ -104,4 +104,10 @@ function finiteNumber(value: unknown): number | undefined {
 function positiveNumber(value: unknown): number | undefined {
   const number = finiteNumber(value);
   return number !== undefined && number > 0 ? number : undefined;
+}
+
+/** Мощность 0 (накат) — отсчёт, не пропуск (race-results-07: флаги датчиков). */
+function nonNegativeNumber(value: unknown): number | undefined {
+  const number = finiteNumber(value);
+  return number !== undefined && number >= 0 ? number : undefined;
 }

@@ -205,6 +205,9 @@ describe('участие и результаты: панель', () => {
     checkedAt: AT,
     review: null,
     riderName: null,
+    sensors: null,
+    flags: [],
+    flagsVersion: null,
   };
 
   it('строгие enum: незнакомое значение — ошибка; excluded — статус попытки и фильтра', () => {
@@ -256,7 +259,10 @@ describe('участие и результаты: панель', () => {
       hidden: 0,
       failed: 1,
       staleEngine: 0,
+      attention: 0,
+      finishers: 0,
     },
+    groupScheme: 'gender_age',
     phase: 'closed',
     uploadClosesAt: AT,
     protocol: null,
@@ -331,7 +337,7 @@ describe('участие и результаты: панель', () => {
       'recheck_applied',
     ]);
     expect(PROTOCOL_ROW_STATUSES).toEqual(['final', 'revised', 'dq']);
-    expect(RACE_RESULT_STATUSES.slice(-3)).toEqual(['final', 'dq', 'revised']);
+    expect(RACE_RESULT_STATUSES.slice(-4, -1)).toEqual(['final', 'dq', 'revised']);
     expect(ATTEMPT_STATUSES.at(-1)).toBe('excluded');
     expect(RACE_RESULTS_STATUSES).toEqual(['provisional', 'final']);
   });
@@ -380,9 +386,15 @@ describe('участие и результаты: панель', () => {
       bestAttemptId: ID,
       summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
       riderName: null,
+      tier: 'verified',
+      groupKey: 'overall',
+      unranked: null,
+      flags: [],
     };
+    const head = { groupScheme: 'overall', groups: [{ key: 'overall', ranked: 1 }] };
     expect(
       PanelRaceStandings.parse({
+        ...head,
         source: 'live',
         revision: null,
         truncated: false,
@@ -392,6 +404,7 @@ describe('участие и результаты: панель', () => {
     const withoutName = { ...row, riderName: undefined };
     expect(
       PanelRaceStandings.safeParse({
+        ...head,
         source: 'live',
         revision: null,
         truncated: false,
@@ -399,11 +412,17 @@ describe('участие и результаты: панель', () => {
       }).success,
     ).toBe(false);
     expect(
-      PanelRaceStandings.parse({ source: 'protocol', revision: 2, truncated: false, items: [row] })
-        .items[0]?.resultStatus,
+      PanelRaceStandings.parse({
+        ...head,
+        source: 'protocol',
+        revision: 2,
+        truncated: false,
+        items: [row],
+      }).items[0]?.resultStatus,
     ).toBe('dq');
     expect(
       PanelRaceStandings.safeParse({
+        ...head,
         source: 'archive',
         revision: null,
         truncated: false,
@@ -412,6 +431,7 @@ describe('участие и результаты: панель', () => {
     ).toBe(false);
     expect(
       PanelRaceStandings.safeParse({
+        ...head,
         source: 'live',
         revision: null,
         truncated: false,

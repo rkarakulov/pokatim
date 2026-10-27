@@ -27,6 +27,7 @@ const race = (overrides: Partial<RaceForResults> = {}): RaceForResults => ({
   protocolPlannedAt: PLANNED,
   corridor: { routeId: 'route', widthM: 50, distanceM: 8000 },
   lockedAt: null,
+  groupScheme: 'gender_age',
   protocolPublishedAt: null,
   disputeFilingClosedAt: null,
   ...overrides,
@@ -40,6 +41,8 @@ const entry = (overrides: Partial<DisputeEntry> = {}): DisputeEntry => ({
   status: 'active',
   best: { elapsedSec: 3600, startedAt: new Date('2026-10-25T06:00:00Z') },
   disqualified: false,
+  tier: 'verified',
+  ranked: true,
   ...overrides,
 });
 
@@ -87,7 +90,14 @@ describe('fileBlock — порядок причин', () => {
     expect(fileBlock({ ...c, complainant: entry({ disqualified: true, best: null }) })).toBe(
       'disqualified',
     );
-    expect(fileBlock({ ...c, complainant: entry({ best: null }) })).toBe('no_counted_result');
+    expect(fileBlock({ ...c, complainant: entry({ best: null, ranked: false }) })).toBe(
+      'no_counted_result',
+    );
+    // race-results-07: START или Verified без пульса — результат без места
+    expect(fileBlock({ ...c, complainant: entry({ ranked: false }) })).toBe('not_ranked');
+    expect(fileBlock({ ...c, complainant: entry({ tier: 'start', ranked: false }) })).toBe(
+      'not_ranked',
+    );
     expect(fileBlock({ ...c, complainant: entry() })).toBe('filing_closed');
     expect(fileBlock({ ...c, now: BEFORE, complainant: entry() })).toBe('open_limit');
     expect(fileBlock({ ...c, now: BEFORE, complainant: entry(), openByComplainant: 2 })).toBeNull();
@@ -106,6 +116,7 @@ describe('filingStatus (RC-10)', () => {
       'no_counted_result',
       'disqualified',
       'cancelled',
+      'not_ranked',
     ] as const) {
       expect(filingStatus(block)).toBe('unavailable');
     }
@@ -128,6 +139,22 @@ describe('targetBlock', () => {
     expect(targetBlock(mine, entry({ id: 'o', status: 'withdrawn' }), 'race')).toBe(
       'target_not_counted',
     );
+  });
+
+  it('race-results-07: цель без места (START, без пульса) и другой группы — target_not_counted', () => {
+    expect(targetBlock(mine, entry({ id: 'o', ranked: false }), 'race')).toBe('target_not_counted');
+    expect(
+      targetBlock(
+        mine,
+        entry({ id: 'o', tier: 'start', groupKey: 'overall', ranked: false }),
+        'race',
+      ),
+    ).toBe('target_not_counted');
+    const group = entry({ groupKey: 'm_40_49' });
+    expect(targetBlock(group, entry({ id: 'o', groupKey: 'm_u40' }), 'race')).toBe(
+      'target_not_counted',
+    );
+    expect(targetBlock(group, entry({ id: 'o', groupKey: 'm_40_49' }), 'race')).toBeNull();
   });
 });
 

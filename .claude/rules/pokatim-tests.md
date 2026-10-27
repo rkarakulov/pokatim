@@ -29,6 +29,12 @@ paths:
   отменённой заявки; без `lockResults` подача и публикация обе коммитятся — открытый спор при опубликованном
   протоколе. С замками побеждает одна операция. Споры для тестов `results`/`races` — прямой вставкой
   (`test/disputes.ts: seedDispute`).
+- Флаги датчиков (race-results-07) — `sensorFlags` unit на синтетических сегментах (границы порогов) + golden
+  `sensor-flags-golden.json` по реальным трекам с пульсом из `__fixtures__` (окно — весь трек), версия в эталоне =
+  `FLAGS_VERSION`, перезапись — `UPDATE_SENSOR_FLAGS_GOLDEN=1`; `corridor-golden.json` не меняется. Int-гонки
+  results по умолчанию — схема `overall` (`corridorRace(h, …, { scheme })`: v1-правила мест); новые гонки — `scheme:
+  null` (схему ставит первая заявка), анкета — `seedVerifiedProfile`. Отрицательные доказательства анкеты —
+  `verified-profile-locks.int.test.ts` (`lockForEntry` подменён чтением; `PUT` без условия фиксации).
 - Ряды споров (06b) — `buildSeries` unit на синтетических точках; int `dispute-series.int.test.ts`: заезд
   `rideGpx(…, { heartRate, power })`, процессор напрямую (`build`), поток разбора настоящий; отрицательные
   доказательства — постановка без ключа NX (вторая задача) и задача без сверки ревизии (кэш старой ревизии).

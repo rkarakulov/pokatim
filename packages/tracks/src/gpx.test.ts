@@ -102,6 +102,25 @@ describe('parseGpx', () => {
     expect(sanitizePoints(track.points).length).toBe(Math.ceil(ref.points / 3));
   });
 
+  it('мощность 0 (накат) — отсчёт; пульс 0 и отрицательная мощность — нет (race-results-07)', () => {
+    const point = (ext: string) =>
+      `<trkpt lat="53.9" lon="27.5"><extensions>${ext}</extensions></trkpt>`;
+    const track = parseGpx(
+      `<gpx><trk><trkseg>${point('<power>0</power><hr>0</hr>')}${point('<power>-5</power>')}</trkseg></trk></gpx>`,
+    );
+    expect(track.points).toEqual([
+      { lat: 53.9, lon: 27.5, power: 0 },
+      { lat: 53.9, lon: 27.5 },
+    ]);
+    // канал из одних нулей — не «есть мощность»: не обгоняет дубль с пульсом при выборе основной активности
+    expect(track).toMatchObject({ hasPower: false, hasHeartRate: false });
+    const withPower = parseGpx(
+      `<gpx><trk><trkseg>${point('<power>0</power>')}${point('<power>120</power>')}</trkseg></trk></gpx>`,
+    );
+    expect(withPower.points.map((p) => p.power)).toEqual([0, 120]);
+    expect(withPower.hasPower).toBe(true);
+  });
+
   it('BOM-строка и разметка внутри значения не ломают разбор', () => {
     const track = parseGpx(
       '﻿<?xml version="1.0"?><gpx><trk><trkseg><trkpt lat="53.9" lon="27.5"><ele>1&amp;2</ele></trkpt></trkseg></trk></gpx>',

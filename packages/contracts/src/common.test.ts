@@ -77,6 +77,10 @@ describe('коды ошибок', () => {
       'ROUTE_QUOTA_EXCEEDED',
       'PASSWORD_INCORRECT',
       'ACCOUNT_PANEL_MEMBER',
+      'VERIFIED_PROFILE_REQUIRED',
+      'RACE_TIER_LOCKED',
+      'RESULT_GROUP_NOT_ALLOWED',
+      'VERIFIED_DEMOGRAPHICS_LOCKED',
       'ROUTE_PUBLICATION_LIMIT',
     ]);
     expect(FieldErrorCode.options).toEqual([

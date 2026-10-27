@@ -23,6 +23,8 @@ export const RESULT_TONE: Record<RaceResultStatus, Tone> = {
   final: 'success',
   dq: 'error',
   revised: 'ink',
+  // race-results-07: время без места (START, без пульса); экран групп и финишёров — 07b
+  finisher: 'neutral',
 };
 
 /**

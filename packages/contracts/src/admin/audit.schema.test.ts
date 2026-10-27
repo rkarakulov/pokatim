@@ -48,6 +48,7 @@ describe('AuditAction', () => {
       'route.catalog_updated',
       'account.deleted',
       'appearance.theme_changed',
+      'profile.verified_demographics_changed',
       'route.submission_approved',
       'route.submission_rejected',
       'route.rider_hidden',

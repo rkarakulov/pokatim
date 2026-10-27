@@ -50,7 +50,7 @@ export const ROUTES_PUBLICATION_INDEXES: Record<string, IndexDef[]> = {
  * Expand-only, без транзакции, идемпотентна; бэкфилла нет — нет `routes.publication` значит «не подавался» (`?? null`).
  */
 export const routesPublication: MongoMigration = {
-  id: '0028_routes_publication',
+  id: '0029_routes_publication',
   async up(db) {
     for (const [name, indexes] of Object.entries(ROUTES_PUBLICATION_INDEXES)) {
       await ensureCollection(db, name);

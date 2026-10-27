@@ -232,7 +232,10 @@ describe('createAdminApiClient: протокол гонки (race-results-05)', 
       hidden: 0,
       failed: 0,
       staleEngine: 0,
+      attention: 0,
+      finishers: 0,
     },
+    groupScheme: null,
     phase: 'final',
     uploadClosesAt: AT,
     protocol: { publishedAt: AT, revision: 1, ranked: 0, disqualified: 0, recheckPending: false },
@@ -259,6 +262,9 @@ describe('createAdminApiClient: протокол гонки (race-results-05)', 
     checkedAt: AT,
     review: { kind: 'excluded', reason: 'Чужой трек', at: AT },
     riderName: 'Анна К.',
+    sensors: { hr: true, power: false, source: 'samples' },
+    flags: [{ code: 'HR_GAPS', metric: 12 }],
+    flagsVersion: 1,
   };
   const reason = { reason: 'Причина действия' };
   const entryAction = { entryId: USER_ID, reason: 'Срезка маршрута' };
@@ -333,7 +339,14 @@ describe('createAdminApiClient: протокол гонки (race-results-05)', 
   });
 
   it('чтения: участники и история пересчётов', async () => {
-    const standings = admin(200, { source: 'live', revision: null, truncated: false, items: [] });
+    const standings = admin(200, {
+      source: 'live',
+      revision: null,
+      truncated: false,
+      groupScheme: null,
+      groups: [],
+      items: [],
+    });
     await standings.api.getRaceStandings(USER_ID);
     expect(standings.calls[0]).toMatchObject({ url: `${RACE}/standings`, method: 'GET' });
 

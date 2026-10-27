@@ -185,6 +185,20 @@ export class RacesRepository {
         {
           $set: {
             lockedAt: { $ifNull: ['$lockedAt', { $literal: now }] },
+            // race-results-07: схема групп — первой заявкой; выражения стадии видят документ до записи: гонка,
+            // уже получившая `lockedAt` без схемы (заявка старого API в окне деплоя, RC-7), — `overall`
+            groupScheme: {
+              $ifNull: [
+                '$groupScheme',
+                {
+                  $cond: [
+                    { $eq: [{ $ifNull: ['$lockedAt', null] }, null] },
+                    { $literal: 'gender_age' },
+                    { $literal: 'overall' },
+                  ],
+                },
+              ],
+            },
             // настоящая запись каждой заявкой: после первой `lockedAt` не меняется, и без счётчика вторая заявка не
             // конфликтовала бы с отменой гонки
             entryAdmissions: { $add: [{ $ifNull: ['$entryAdmissions', 0] }, 1] },

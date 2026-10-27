@@ -2,7 +2,7 @@ import type { RouteReportReason } from '@pokatim/contracts';
 import type { Collection, Db } from 'mongodb';
 
 /**
- * Жалобы на маршруты райдеров в каталоге (routes-06). Создаёт миграция `0028_routes_publication`; единственный
+ * Жалобы на маршруты райдеров в каталоге (routes-06). Создаёт миграция `0029_routes_publication`; единственный
  * писатель — `RouteReportsRepository`.
  */
 export const ROUTE_REPORTS_COLLECTIONS = { reports: 'route_reports' } as const;

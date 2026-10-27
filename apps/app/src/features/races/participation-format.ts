@@ -94,6 +94,8 @@ const RESULT_TONES: Record<Exclude<Result['status'], 'withdrawn'>, PillTone> = {
   final: 'success',
   dq: 'error',
   revised: 'neutral',
+  // race-results-07: время без места (START, без пульса); подробный показ — 07c
+  finisher: 'neutral',
   unknown: 'neutral',
 };
 

@@ -16,6 +16,7 @@ import {
   type MyAttemptTrack,
   type MyRaceEntry,
   Uuid,
+  RaceEntryRequest,
 } from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 import { z } from 'zod';
@@ -61,10 +62,10 @@ export class RaceEntryController {
   async enter(
     @CurrentUser() user: AuthUser,
     @Param('raceId', raceIdPipe) raceId: string,
-    @Body(new ZodValidationPipe(EmptyBody, FieldErrorCode)) _body: unknown,
+    @Body(new ZodValidationPipe(RaceEntryRequest, FieldErrorCode)) body: RaceEntryRequest,
     @Res({ passthrough: true }) reply: StatusReply,
   ): Promise<MyRaceEntry> {
-    const result = await this.entries.enter(user.userId, raceId);
+    const result = await this.entries.enter(user.userId, raceId, body ?? {});
     reply.status(result.created ? 201 : 200);
     return result.entry;
   }

@@ -382,7 +382,7 @@ BLOCKERS нет. Находки (решения architect; U1–U9 и A1–A7 н
 
 Architect (дополнительно): `.claude/rules/pokatim-db.md` — «Маршруты и коридор»: `RouteDoc.publication`, инвариант
 «`catalog` у маршрута райдера ⇔ `approved`», `IN_CATALOG`, `route_reports` (исключение append-only + `deleteForRoute`),
-индексы `0028_routes_publication`; `.claude/rules/pokatim-backend.md` — `RoutesViewerController`,
+индексы `0029_routes_publication`; `.claude/rules/pokatim-backend.md` — `RoutesViewerController`,
 `RoutesModerationController`, порядок контроллеров, `RIDER_NAMES.attributionNames`, событие
 `routes.publication-decided` без маршрута и правило «хвост до модуля уведомлений» (8.1 RC-3);
 `.claude/rules/pokatim-security.md` — «Маршруты райдера»: публикация, жалобы, права `routes.moderate`, `noindex`
@@ -532,7 +532,7 @@ interface RoutePublicationDoc {
 при `true` `RouteReportsRepository.deleteForRoute`; его вызывают `MyRoutesService.delete` и `RouteErasure.erase`
 (вместо прямого `repository.deleteOwn`).
 
-**Миграция `apps/api/src/db/migrations/0028_routes_publication.ts`** (`id: '0028_routes_publication'`, expand-only,
+**Миграция `apps/api/src/db/migrations/0029_routes_publication.ts`** (`id: '0029_routes_publication'`, expand-only,
 без транзакции, идемпотентна, в конец `migrations/index.ts`): `ensureCollection('route_reports')`; индексы
 - `route_reports`: `route_reports_route_reporter_unique { routeId: 1, reporterUserId: 1 }` unique;
   `route_reports_route_idx { routeId: 1, _id: -1 }`;
@@ -551,7 +551,7 @@ interface RoutePublicationDoc {
   (+ `*.schema.test.ts` к каждому).
 - api `modules/routes/`: `my-route-publication.service.ts`, `route-reports.collection.ts`, `route-reports.repository.ts`,
   `route-reports.service.ts`, `routes-viewer.controller.ts`, `routes-moderation.controller.ts`,
-  `routes-moderation.service.ts`, `route-deletion.ts`; тесты (ниже). `db/migrations/0028_routes_publication.ts`.
+  `routes-moderation.service.ts`, `route-deletion.ts`; тесты (ниже). `db/migrations/0029_routes_publication.ts`.
 - admin `features/rider-routes/`: `RiderRoutesScreen.tsx` (вкладки «На проверке / Жалобы / Скрытые», `?tab=`),
   `RiderRouteScreen.tsx` (страница заявки), `RiderRouteDecisionDialogs.tsx` (одобрить с правкой города/покрытия,
   отклонить с причиной и комментарием, скрыть/вернуть/отклонить жалобы с `ActionReason`), `rider-routes-query.ts`,
@@ -692,7 +692,7 @@ App (jest + RNTL): `my-routes.test.tsx` (статусы в списке и ка�
 - contracts: `routes/route-publication.schema.ts`, `route-report.schema.ts`, `route-moderation.schema.ts` (+ тесты);
   `MyRoute.publication`/`canPublish`, `CatalogRouteCard.author` (дефолт `team`), `CatalogRouteQuery.author`; право
   `routes.moderate`, пять действий журнала и `details.rejectionReason`, код `ROUTE_PUBLICATION_LIMIT` — в конце списков.
-- api: миграция `0028_routes_publication`; `RouteDoc.publication` + `publicationTransition`/`canPublish`
+- api: миграция `0029_routes_publication`; `RouteDoc.publication` + `publicationTransition`/`canPublish`
   (`routes.policy.ts`); `RoutesRepository` — `IN_CATALOG` (платформа | `approved`), `findInCatalog`, переходы публикации,
   `recordRouteReport`, очереди с `hint`; `findPublished`/`findReady`/`routesByIds`/`listVisible`/`route-catalog.ts` — без
   изменения поведения; `route_reports` (`RouteReportsRepository`, сторож), `RouteDeletion` (автор и `RouteErasure`);

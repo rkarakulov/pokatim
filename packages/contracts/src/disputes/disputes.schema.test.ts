@@ -71,6 +71,7 @@ describe('справочники споров — состав и порядок
       'protocol_published',
       'filing_closed',
       'open_limit',
+      'not_ranked',
     ]);
     expect(DISPUTE_ACTION_BLOCKS).toEqual([
       ...DISPUTE_FILE_BLOCKS,
@@ -313,6 +314,9 @@ describe('панель — строгие enum', () => {
         place: 1,
         tied: false,
         elapsedSec: 3600,
+        tier: 'verified',
+        groupKey: 'm_u40',
+        flags: [{ code: 'SPEED_CLUSTER_HIGH', metric: 0.75 }],
       },
       complainant: { entryId: ID2, userId: ID },
       decision: null,

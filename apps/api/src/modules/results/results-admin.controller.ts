@@ -6,6 +6,7 @@ import {
   PanelRaceAttemptQuery,
   type PanelRaceResults,
   type PanelRaceStandings,
+  PanelRaceStandingsQuery,
   Uuid,
 } from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
@@ -50,8 +51,10 @@ export class ResultsAdminController {
   standings(
     @CurrentPanelUser() principal: PanelPrincipal,
     @Param('raceId', raceIdPipe) raceId: string,
+    @Query(new ZodValidationPipe(PanelRaceStandingsQuery, FieldErrorCode))
+    query: PanelRaceStandingsQuery,
   ): Promise<PanelRaceStandings> {
-    return this.read.standings(principal, raceId);
+    return this.read.standings(principal, raceId, query);
   }
 
   @Get(':raceId/protocol/recalculations')

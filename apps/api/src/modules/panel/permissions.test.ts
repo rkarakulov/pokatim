@@ -76,6 +76,12 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
     expect(ROLE_PERMISSIONS.organizer.has('appearance.manage')).toBe(false);
   });
 
+  it('race-results-07: правка пола и года анкеты Verified (profiles.verified_edit) — только admin', () => {
+    expect(ROLE_PERMISSIONS.admin.has('profiles.verified_edit')).toBe(true);
+    expect(ROLE_PERMISSIONS.moderator.has('profiles.verified_edit')).toBe(false);
+    expect(ROLE_PERMISSIONS.organizer.has('profiles.verified_edit')).toBe(false);
+  });
+
   it('permissionsOf — в порядке контракта (стабильный ответ PanelMe)', () => {
     expect(permissionsOf('admin')).toEqual([...PERMISSIONS]);
     expect(permissionsOf('moderator')).toEqual([

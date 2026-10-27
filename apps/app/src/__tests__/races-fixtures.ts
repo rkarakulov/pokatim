@@ -39,6 +39,7 @@ export const actions = (overrides: Partial<Actions> = {}): Actions => ({
   canWithdraw: false,
   canAddAttempt: false,
   reasons: [],
+  canUpgrade: false,
   ...overrides,
 });
 
@@ -49,14 +50,17 @@ export const result = (overrides: Partial<Result> = {}): Result => ({
   tied: false,
   ranked: 0,
   group: 'overall',
+  unranked: null,
   ...overrides,
 });
 
 /** Не заявлен: можно «Участвовать». */
 export const noEntry = (overrides: Partial<MyRaceEntry> = {}): MyRaceEntry => ({
   raceId: RACE_ID,
+  groupScheme: 'overall',
   entry: null,
   result: result(),
+  verified: null,
   attempts: [],
   pendingUploads: [],
   // исключающая граница сервера: 13 октября 00:00 по Минску — последняя минута загрузки 12 октября 23:59
@@ -73,6 +77,8 @@ export const myEntry = (overrides: Partial<MyRaceEntry> = {}): MyRaceEntry => ({
     status: 'active',
     createdAt: '2026-10-05T08:00:00Z',
     withdrawnAt: null,
+    tier: 'verified',
+    groupKey: 'overall',
   },
   actions: actions({ canWithdraw: true, canAddAttempt: true }),
   ...overrides,
@@ -126,6 +132,8 @@ export const resultsPage = (
   entries: items.length,
   items,
   nextCursor: null,
+  groups: [],
+  finishers: 0,
   ...overrides,
 });
 
