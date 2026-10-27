@@ -852,6 +852,10 @@ select.field__control option:disabled {
   color: var(--color-text-primary);
 }
 
+.readonly-field--multiline {
+  white-space: pre-line;
+}
+
 .disabled-reason {
   margin-top: var(--space-s2);
   color: var(--color-text-secondary);
@@ -922,6 +926,11 @@ select.field__control option:disabled {
 .form-column {
   width: var(--panel-form-width);
   max-width: 100%;
+}
+
+/* поля формы друг под другом — с отступом (у `.radios` и `.banner` своего нет); кнопки — свой `.form-actions` */
+.form-stack > * + *:not(.form-actions) {
+  margin-top: var(--inset-md);
 }
 
 .form-group + .form-group {

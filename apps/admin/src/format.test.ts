@@ -5,6 +5,7 @@ import {
   formatDateTimeLong,
   formatElapsed,
   formatKmFromMeters,
+  formatKmPrecise,
   formatLocalDate,
 } from './format';
 
@@ -28,12 +29,21 @@ describe('длина маршрута', () => {
     expect(formatKmFromMeters(62_050).replace('\u00a0', ' ')).toBe('62,1 км');
     expect(formatKmFromMeters(1_234_560).replace(/\s/g, ' ')).toBe('1 234,6 км');
   });
+
+  it('точная дистанция ячейки рядов — два знака: соседние ячейки ~45 м различимы (B11)', () => {
+    expect(formatKmPrecise(45).replace('\u00a0', ' ')).toBe('0,05 км');
+    expect(formatKmPrecise(90).replace('\u00a0', ' ')).toBe('0,09 км');
+    expect(formatKmPrecise(135).replace('\u00a0', ' ')).toBe('0,14 км');
+    expect(formatKmPrecise(3000).replace('\u00a0', ' ')).toBe('3,00 км');
+  });
 });
 
 describe('время заезда', () => {
-  it('секунды → «ч:мм:сс»; меньше часа — «м:сс»', () => {
+  it('секунды → всегда «ч:мм:сс», как в приложении (B15)', () => {
     expect(formatElapsed(3723)).toBe('1:02:03');
-    expect(formatElapsed(59)).toBe('0:59');
+    expect(formatElapsed(1939)).toBe('0:32:19');
+    expect(formatElapsed(59)).toBe('0:00:59');
     expect(formatElapsed(36_000)).toBe('10:00:00');
+    expect(formatElapsed(90_061)).toBe('25:01:01');
   });
 });

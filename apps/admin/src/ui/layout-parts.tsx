@@ -8,10 +8,13 @@ export function ReadonlyField({
   label,
   value,
   help,
+  multiline = false,
 }: {
   label: ReactNode;
   value: ReactNode;
   help?: ReactNode;
+  /** Свободный текст пользователя: переносы строк сохраняются. */
+  multiline?: boolean;
 }) {
   const id = useId();
   return (
@@ -20,7 +23,7 @@ export function ReadonlyField({
         {label}
       </div>
       <output
-        className="readonly-field t-body"
+        className={`readonly-field t-body${multiline ? ' readonly-field--multiline' : ''}`}
         aria-labelledby={`${id}-label`}
         aria-describedby={help ? `${id}-help` : undefined}
       >

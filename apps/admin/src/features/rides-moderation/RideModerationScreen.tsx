@@ -129,6 +129,7 @@ function Preview({ ride }: { ride: ModerationRideDetail }) {
         <ReadonlyField
           label={t('admin.ridesModeration.field.description')}
           value={ride.description ?? none}
+          multiline
         />
       </div>
     </div>
