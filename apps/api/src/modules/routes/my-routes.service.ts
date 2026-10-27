@@ -13,6 +13,7 @@ import { z } from 'zod';
 import type { Env } from '../../config/env';
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
+import { type UploadSlot, UploadSlots } from '../../upload-slots';
 import { rateLimitKeyForIp } from '../identity';
 import { displayGeometryOf } from './route-catalog';
 import type { RouteDoc } from './routes.collection';
@@ -47,7 +48,10 @@ export function toMyRoute(route: RouteDoc): MyRoute {
 @Injectable()
 export class MyRoutesService {
   private readonly logger = new Logger(MyRoutesService.name);
-  private inFlight = 0;
+  private readonly slots = new UploadSlots({
+    maxTotal: ROUTE_POLICY.riderMaxConcurrentUploads,
+    maxPerUser: ROUTE_POLICY.riderMaxConcurrentUploadsPerUser,
+  });
 
   constructor(
     private readonly repository: RoutesRepository,
@@ -58,8 +62,8 @@ export class MyRoutesService {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  /** Лимиты райдера и IP (до чтения тела) и семафор приёмов; `release` — после ответа. */
-  async admit(userId: string, ip: string): Promise<{ release: () => void }> {
+  /** Лимиты райдера и IP (до чтения тела) и слот приёма (процесс и райдер); `release` — после ответа. */
+  async admit(userId: string, ip: string): Promise<UploadSlot> {
     const now = this.clock.now();
     await this.consume(`routes-upload-rider:${userId}`, ROUTE_POLICY.riderUploadUserLimit, now);
     await this.consume(
@@ -67,19 +71,12 @@ export class MyRoutesService {
       ROUTE_POLICY.riderUploadIpLimit,
       now,
     );
-    if (this.inFlight >= ROUTE_POLICY.riderMaxConcurrentUploads) {
+    const slot = this.slots.tryAcquire(userId);
+    if (!slot) {
       const details: RateLimitedDetails = { retryAfterSec: 5 };
       throw domainError('RATE_LIMITED', 429, details);
     }
-    this.inFlight += 1;
-    let released = false;
-    return {
-      release: () => {
-        if (released) return;
-        released = true;
-        this.inFlight -= 1;
-      },
-    };
+    return slot;
   }
 
   private async consume(key: string, rule: RateLimitRule, now: Date): Promise<void> {

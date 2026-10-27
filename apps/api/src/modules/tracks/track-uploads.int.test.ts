@@ -25,10 +25,12 @@ import {
   tracks,
   uploadTrack,
 } from '../../../test/tracks';
+import { heldUpload } from '../../../test/uploads';
 import { TrackProcessingProcessor } from './track-processing.processor';
 import { newStorageKey, TRACK_FILE_STORE, type TrackFileStore } from './track-file-store';
 import { TRACK_INGEST, type TrackIngest, TrackSourceDeletedError } from './track-ingest.port';
 import { TracksMaintenanceProcessor } from './tracks-maintenance.processor';
+import { TRACKS_POLICY } from './tracks.policy';
 import { TracksRepository } from './tracks.repository';
 
 let h: Harness;
@@ -673,5 +675,72 @@ describe('ревью pass 1: финальные отказы, маркер уд�
     expect(response.headers.get('connection')).toBe('close');
     expect(await response.json()).toMatchObject({ code: 'TRACK_TOO_LARGE' });
     expect(await tracks(h).uploads.countDocuments()).toBe(0);
+  });
+});
+
+describe('upload-limits-kml-panel: слоты приёма и таймаут тела (AC1–AC3)', () => {
+  const UPLOADS = '/v1/tracks/uploads';
+
+  it('второй одновременный приём того же пользователя — 429 до тела; другого — 202; после ответа слот свободен', async () => {
+    const other = bearer((await signUpSession(h, 'other@example.com')).accessToken);
+    const first = heldUpload(h, UPLOADS, auth);
+    await first.held();
+    first.write(fixture('komoot.gpx').subarray(0, 100));
+
+    const second = await uploadTrack(h, auth, fixture('strava.gpx'));
+    expect(second.status).toBe(429);
+    expect(second.body).toMatchObject({ code: 'RATE_LIMITED', details: { retryAfterSec: 5 } });
+    expect((await uploadTrack(h, other, fixture('strava.gpx'))).status).toBe(202);
+
+    expect((await first.finish(fixture('komoot.gpx').subarray(100))).status).toBe(202);
+    expect((await uploadTrack(h, auth, fixture('strava.gpx'))).status).toBe(202);
+  });
+
+  it('слот освобождается после 413 и 415', async () => {
+    const tooLarge = heldUpload(h, UPLOADS, auth);
+    await tooLarge.held();
+    expect((await tooLarge.finish(Buffer.alloc(17 * 1024 * 1024, 0x20))).status).toBe(413);
+    expect(
+      (await uploadTrack(h, auth, Buffer.from('\x89PNG\r\n\x1a\n0000', 'latin1'))).status,
+    ).toBe(415);
+    expect((await uploadTrack(h, auth, fixture('strava.gpx'))).status).toBe(202);
+  });
+
+  it('предел процесса: пятый одновременный приём разных пользователей — 429', async () => {
+    const held = [];
+    for (let i = 0; i < 4; i += 1) {
+      const user = bearer((await signUpSession(h, `held${i}@example.com`)).accessToken);
+      const upload = heldUpload(h, UPLOADS, user);
+      await upload.held();
+      held.push(upload);
+    }
+    expect((await uploadTrack(h, auth, fixture('strava.gpx'))).status).toBe(429);
+    for (const [i, upload] of held.entries()) {
+      const bytes = Buffer.concat([fixture('komoot.gpx'), Buffer.from(`<!-- ${i} -->`)]);
+      expect((await upload.finish(bytes)).status).toBe(202);
+    }
+    expect((await uploadTrack(h, auth, fixture('strava.gpx'))).status).toBe(202);
+  });
+
+  it('тело молчит дольше idleMs — 408 VALIDATION_FAILED, Connection: close, ничего не сохранено, слот свободен', async () => {
+    const saved = { ...TRACKS_POLICY.bodyTimeouts };
+    Object.assign(TRACKS_POLICY.bodyTimeouts, { idleMs: 200 });
+    try {
+      const silent = heldUpload(h, UPLOADS, auth);
+      await silent.held();
+      silent.write(fixture('komoot.gpx').subarray(0, 100));
+      const timedOut = await silent.response;
+      expect(timedOut.status).toBe(408);
+      expect(timedOut.headers['connection']).toBe('close');
+      expect(timedOut.body).toMatchObject({
+        code: 'VALIDATION_FAILED',
+        details: { fields: [{ path: 'body', code: 'INVALID' }] },
+      });
+    } finally {
+      Object.assign(TRACKS_POLICY.bodyTimeouts, saved);
+    }
+    expect(await tracks(h).uploads.countDocuments()).toBe(0);
+    expect(await storedFiles()).toEqual([]);
+    expect((await uploadTrack(h, auth, fixture('strava.gpx'))).status).toBe(202);
   });
 });

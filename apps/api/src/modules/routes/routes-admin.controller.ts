@@ -61,13 +61,16 @@ export class RoutesAdminController {
     @Res({ passthrough: true }) reply: StatusReply,
   ): Promise<PanelRoute> {
     await this.routes.admit(actor);
-    const bytes = await readLimited(body, ROUTE_POLICY.maxFileBytes, UPLOAD_ERRORS).catch(
-      (error: unknown) => {
-        // тело не дочитано — после ответа соединение закрывается
-        reply.header('Connection', 'close');
-        throw error;
-      },
-    );
+    const bytes = await readLimited(
+      body,
+      ROUTE_POLICY.maxFileBytes,
+      UPLOAD_ERRORS,
+      ROUTE_POLICY.bodyTimeouts,
+    ).catch((error: unknown) => {
+      // тело не дочитано — после ответа соединение закрывается
+      reply.header('Connection', 'close');
+      throw error;
+    });
     const result = await this.routes.accept(
       { userId: actor.userId, origin: 'platform' },
       query.title,

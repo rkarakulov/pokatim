@@ -5,6 +5,7 @@ import {
 } from '@pokatim/contracts';
 
 import { DEFAULT_PARSE_LIMITS } from '../../parse-thread';
+import { DEFAULT_BODY_TIMEOUTS } from '../../raw-body';
 
 /** Лимиты модуля `routes` (`[ASSUMPTION]` race-results-01 §7, §8.3). */
 export const ROUTE_POLICY = {
@@ -16,6 +17,10 @@ export const ROUTE_POLICY = {
   riderUploadIpLimit: { limit: 60, windowSec: 60 * 60 },
   /** Одновременных приёмов райдеров в процессе API (тело до 5 МиБ в памяти): остальным — 429. */
   riderMaxConcurrentUploads: 4,
+  /** Одновременных приёмов одного райдера (upload-limits-kml-panel): второй — 429 до чтения тела. */
+  riderMaxConcurrentUploadsPerUser: 1,
+  /** Тело загрузки (панель и «мои»): тишина и всё тело — `408` (общие таймауты `src/raw-body.ts`). */
+  bodyTimeouts: DEFAULT_BODY_TIMEOUTS,
   /** Квота своих маршрутов райдера (все статусы): больше — `409 ROUTE_QUOTA_EXCEEDED`. */
   riderMaxRoutes: MY_ROUTE_MAX_COUNT,
   /**

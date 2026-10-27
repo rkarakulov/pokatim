@@ -19,7 +19,9 @@ import {
   uploadMyRoute,
   uploadRoute,
 } from '../../../test/routes';
+import { heldUpload } from '../../../test/uploads';
 import { ROUTE_RECEIVED } from './routes.events';
+import { ROUTE_POLICY } from './routes.policy';
 import { RoutesRepository } from './routes.repository';
 
 /**
@@ -387,5 +389,56 @@ describe('доступ (AC4)', () => {
       expect((await post(undefined, url, { title: 'Круг' })).status, url).toBe(401);
     }
     expect(await routesDb(h).routes.countDocuments({ _id: id })).toBe(1);
+  });
+});
+
+describe('upload-limits-kml-panel: слоты приёма и таймаут тела (AC1–AC3)', () => {
+  const url = `${MY_ROUTES}?title=${encodeURIComponent('Мой маршрут')}`;
+
+  it('второй одновременный приём того же райдера — 429 до тела; другого — 202; после ответа слот свободен', async () => {
+    const me = await rider();
+    const other = await rider('other@example.com');
+    const first = heldUpload(h, url, bearer(me.token));
+    await first.held();
+    first.write(fixture('route-rte.gpx').subarray(0, 100));
+
+    const second = await uploadMyRoute(h, me.token, variant('route-rte.gpx', 1));
+    expect(second.status).toBe(429);
+    expect(second.body).toMatchObject({ code: 'RATE_LIMITED', details: { retryAfterSec: 5 } });
+    expect((await uploadMyRoute(h, other.token, variant('route-rte.gpx', 2))).status).toBe(202);
+
+    expect((await first.finish(fixture('route-rte.gpx').subarray(100))).status).toBe(202);
+    expect((await uploadMyRoute(h, me.token, variant('route-rte.gpx', 3))).status).toBe(202);
+  });
+
+  it('слот освобождается после 413 и 415', async () => {
+    const me = await rider();
+    const tooLarge = heldUpload(h, url, bearer(me.token));
+    await tooLarge.held();
+    expect((await tooLarge.finish(Buffer.alloc(5 * 1024 * 1024 + 1, 0x20))).status).toBe(413);
+    expect((await uploadMyRoute(h, me.token, fixture('route.kmz'))).status).toBe(415);
+    expect((await uploadMyRoute(h, me.token, fixture('route-rte.gpx'))).status).toBe(202);
+  });
+
+  it('тело молчит дольше idleMs — 408 VALIDATION_FAILED, Connection: close, маршрута нет, слот свободен', async () => {
+    const me = await rider();
+    const saved = { ...ROUTE_POLICY.bodyTimeouts };
+    Object.assign(ROUTE_POLICY.bodyTimeouts, { idleMs: 200 });
+    try {
+      const silent = heldUpload(h, url, bearer(me.token));
+      await silent.held();
+      silent.write(fixture('route-rte.gpx').subarray(0, 100));
+      const timedOut = await silent.response;
+      expect(timedOut.status).toBe(408);
+      expect(timedOut.headers['connection']).toBe('close');
+      expect(timedOut.body).toMatchObject({
+        code: 'VALIDATION_FAILED',
+        details: { fields: [{ path: 'body', code: 'INVALID' }] },
+      });
+    } finally {
+      Object.assign(ROUTE_POLICY.bodyTimeouts, saved);
+    }
+    expect(await routesDb(h).routes.countDocuments()).toBe(0);
+    expect((await uploadMyRoute(h, me.token, fixture('route-rte.gpx'))).status).toBe(202);
   });
 });

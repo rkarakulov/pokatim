@@ -55,13 +55,16 @@ export class TrackUploadsController {
     const fileName = this.uploads.parseName(rawName);
     const slot = await this.uploads.admit(user.userId, ip);
     try {
-      const bytes = await readLimited(body, TRACKS_POLICY.maxFileBytes, UPLOAD_ERRORS).catch(
-        (error: unknown) => {
-          // тело не дочитано — после ответа соединение закрывается
-          reply.header('Connection', 'close');
-          throw error;
-        },
-      );
+      const bytes = await readLimited(
+        body,
+        TRACKS_POLICY.maxFileBytes,
+        UPLOAD_ERRORS,
+        TRACKS_POLICY.bodyTimeouts,
+      ).catch((error: unknown) => {
+        // тело не дочитано — после ответа соединение закрывается
+        reply.header('Connection', 'close');
+        throw error;
+      });
       const result = await this.uploads.accept(user.userId, fileName, bytes);
       reply.status(result.created ? 202 : 200);
       return result.upload;
