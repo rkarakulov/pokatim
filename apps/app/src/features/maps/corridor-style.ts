@@ -4,13 +4,16 @@ import type {
   LineLayerSpecification,
 } from '@maplibre/maplibre-gl-style-spec';
 import type { RaceRouteMap } from '@pokatim/contracts';
-import { size, stroke, type AppTheme } from '@pokatim/design-tokens';
+import { size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 
 /*
  * Оформление карты коридора гонки (ADR-0014 п. 6) — один источник для native и web: GeoJSON маршрута и спецификации
  * слоёв MapLibre из ролей темы `map.*`. Коридор — линия маршрута шириной 2 × `widthM` в метрах (выражение зума).
  */
+
+/** id слоя коридора — без коридора (`RouteMap corridor={false}`, маршрут каталога) слой не создаётся. */
+export const CORRIDOR_LAYER_ID = 'corridor';
 
 /** id источника GeoJSON маршрута на карте. */
 export const ROUTE_SOURCE_ID = 'race-route';
@@ -27,6 +30,23 @@ export const MAP_ASPECT_RATIO = 3 / 2;
 /** Отступ рамки маршрута от краёв карты, px экрана — шаг сетки дизайн-системы. */
 export const MAP_PADDING = size.icon * 2;
 
+/**
+ * Отступы камеры по рамке (B2 maps-02): снизу — место под кнопку атрибуции в нижнем углу (свёрнутая «i» 24 px +
+ * поле контрола 10 px) и радиус точки старта/финиша — старт и финиш не уходят под контролы.
+ */
+export const MAP_FIT_PADDING = {
+  top: MAP_PADDING,
+  right: MAP_PADDING,
+  bottom: size.touchMin,
+  left: MAP_PADDING,
+} as const;
+
+/**
+ * Минимальная ширина полосы коридора, px (B3 maps-02): на обзорном зуме 2 × 50 м — 2–4 px под осевой, полоса
+ * неотличима; меньше этой ширины полоса не сужается.
+ */
+export const CORRIDOR_MIN_WIDTH_PX = space.s3;
+
 /** Метров на пиксель на экваторе при zoom 0 для тайлов 512 px (MapLibre). */
 const EQUATOR_METERS_PER_PIXEL = 78271.517;
 const MAX_ZOOM = 22;
@@ -41,19 +61,22 @@ export function centerLat(bounds: RaceRouteMap['bounds']): number {
 }
 
 /**
- * Ширина линии коридора в пикселях: 2 × `widthM` метров на широте `lat`. Метры на пиксель при каждом шаге зума
- * делятся на 2 — `interpolate exponential 2` между опорами 0 и 22 точен на всех уровнях.
+ * Ширина линии коридора в пикселях: `max(2 × widthM метров на широте lat, CORRIDOR_MIN_WIDTH_PX)`. Метры на пиксель
+ * при каждом шаге зума делятся на 2 — `interpolate exponential 2` точен на всех уровнях. `max` с `zoom` внутри
+ * выражения MapLibre не допускает (zoom — только вход верхнего `interpolate`), поэтому минимум — опорой: до зума
+ * `zMin`, где метрическая ширина достигает минимума, — постоянная, дальше — метры.
  */
 export function corridorLineWidth(widthM: number, lat: number): ExpressionSpecification {
-  return [
-    'interpolate',
-    ['exponential', 2],
-    ['zoom'],
-    0,
-    (2 * widthM) / metersPerPixel(lat, 0),
-    MAX_ZOOM,
-    (2 * widthM) / metersPerPixel(lat, MAX_ZOOM),
-  ];
+  const metric = (zoom: number) => (2 * widthM) / metersPerPixel(lat, zoom);
+  const min = CORRIDOR_MIN_WIDTH_PX;
+  const zMin = Math.log2(min / metric(0));
+  const stops =
+    zMin <= 0
+      ? [0, metric(0), MAX_ZOOM, metric(MAX_ZOOM)]
+      : zMin >= MAX_ZOOM
+        ? [0, min, MAX_ZOOM, min]
+        : [0, min, zMin, min, MAX_ZOOM, metric(MAX_ZOOM)];
+  return ['interpolate', ['exponential', 2], ['zoom'], ...stops];
 }
 
 type RouteKind = 'route' | 'start' | 'finish';
@@ -114,7 +137,7 @@ export function routeLayers(
   });
   return [
     {
-      id: 'corridor',
+      id: CORRIDOR_LAYER_ID,
       type: 'line',
       source: ROUTE_SOURCE_ID,
       filter: kindIs('route'),

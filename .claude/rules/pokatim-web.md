@@ -54,6 +54,12 @@ paths:
   Превью — `LinePreview` (SVG без карты: `--color-map-route`, `--stroke-indicator`). С коридором дистанция — только
   чтение («… — по маршруту»), допуск — поле с подсказкой «Коридор: ±N м от маршрута». Ошибки сервера
   `corridor.routeId` / `corridor.widthM` — под своими полями формы.
+- «Маршруты» (routes-01) — `features/routes/`, маршрут `/routes` под `RequirePermission permission="races.read"`,
+  пункт навигации — группа `main` после «Календаря». Загрузка GPX — общий `useRouteUpload` + `RouteUploadDialog`
+  (`route-upload.tsx`), превью — `RoutePreview`; `CorridorField` и экран «Маршруты» используют их (копии нет).
+  Таблица с колонкой «В каталоге»; действия готового маршрута (`races.manage`): «Опубликовать в каталоге» / «Изменить»
+  — `RouteCatalogDialog` (линия и предупреждение RC-11, город — `SelectField` справочника, покрытие — `ChipGroup`,
+  ошибки под полями, `409 ROUTE_INVALID_STATE` — баннер), «Снять с публикации» — `Dialog` подтверждения без причины.
 - 409 `CONFLICT` правки по устаревшей версии — `ConflictBanner` «Запись изменили — обновите страницу» с «Обновить».
 - Раздел «Результаты» гонки (race-results-05) — `features/results/` по маршруту `races/$raceId/results`
   (`races.read`), ссылка «Результаты» из `RaceEditor` опубликованной или отменённой гонки. KPI — `StatTile` (`src/ui`).

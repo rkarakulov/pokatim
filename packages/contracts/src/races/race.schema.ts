@@ -17,6 +17,13 @@ export const SURFACES = ['asphalt', 'gravel'] as const;
 export const Surface = z.enum(SURFACES, { error: fieldError('INVALID') });
 export type Surface = z.infer<typeof Surface>;
 
+/** Покрытия во входе панели (гонка, публикация маршрута в каталог): 1–2 значения без повторов. */
+export const SurfaceList = z
+  .array(Surface, { error: fieldError('REQUIRED') })
+  .min(1, { error: 'REQUIRED' })
+  .max(SURFACES.length, { error: 'INVALID' })
+  .refine((list) => new Set(list).size === list.length, { error: 'INVALID' });
+
 /** Хранимый статус. Фаза (`RacePhase`) — вычисляет сервер по окну и `CLOCK`. */
 export const RACE_STATUSES = ['draft', 'published', 'cancelled'] as const;
 export const RaceStatus = z.enum(RACE_STATUSES);
@@ -137,11 +144,7 @@ export const RaceDescription = z
 export const RaceInput = z.strictObject({
   title: RaceTitle,
   bikeClass: BikeClass,
-  surfaces: z
-    .array(Surface, { error: fieldError('REQUIRED') })
-    .min(1, { error: 'REQUIRED' })
-    .max(SURFACES.length, { error: 'INVALID' })
-    .refine((list) => new Set(list).size === list.length, { error: 'INVALID' }),
+  surfaces: SurfaceList,
   distanceKm: DistanceKm.optional(),
   description: RaceDescription,
   windowStartsAt: UtcMinute,

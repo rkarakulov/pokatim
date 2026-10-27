@@ -9,6 +9,7 @@ import { Text } from 'react-native';
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
+import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
 import CancelRideRoute from '../app/rides/cancel/[id]';
 import EditRideRoute from '../app/rides/edit/[id]';
@@ -387,10 +388,11 @@ describe('«Изменить райд» (AC4)', () => {
     expect(screen.queryAllByTestId('ride-detail', { includeHiddenElements: true })).toHaveLength(1);
     await type('Название', 'Моё название');
 
-    // приложение свернули и вернули: карточка (тот же ключ me) обновляется и получает 500
+    // приложение свернули и вернули позже свежести ответа: карточка (тот же ключ me) обновляется и получает 500
     getRideForViewer.mockRejectedValueOnce(
       new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }),
     );
+    await act(() => jest.advanceTimersByTimeAsync(DEFAULT_STALE_MS));
     await act(async () => {
       focusManager.setFocused(false);
       focusManager.setFocused(true);

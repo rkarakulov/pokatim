@@ -1,19 +1,34 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
-import { MAP_PADDING, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
+import { attributionCss, collapseAttribution } from './attribution.web';
+import {
+  CORRIDOR_LAYER_ID,
+  MAP_FIT_PADDING,
+  ROUTE_SOURCE_ID,
+  routeFeatures,
+  routeLayers,
+} from './corridor-style';
 import { loadMaplibre } from './load-maplibre';
 import { MAP_WORKER_FILE } from './map-worker';
 import { RouteMapFrame } from './route-map-frame';
 import type { RouteMapProps } from './route-map-props';
+import {
+  TRACK_BEFORE_LAYER_ID,
+  TRACK_SOURCE_ID,
+  trackFeatures,
+  trackLayers,
+  unionBounds,
+} from './track-style';
 
 /**
  * Web-карта маршрута (`maplibre-gl` 6, ADR-0014 п. 5): модуль грузится динамическим `import()` только после
  * монтирования — в серверный рендер и первый чанк не попадает (статически — только CSS). Статичный вид
- * (`interactive: false`), компактная атрибуция, камера сразу по рамке без анимации (RC-4). Смена стиля (темы) —
- * пересоздание карты. Ошибка стиля или тайлов — сообщение поверх карты.
+ * (`interactive: false`), компактная атрибуция — свёрнута при старте и в цветах темы (B2, B4 maps-02), камера сразу
+ * по рамке без анимации (RC-4) с отступом под контрол атрибуции. Смена стиля (темы) — пересоздание карты. Ошибка
+ * стиля или тайлов — сообщение поверх карты.
  */
 export function RouteMap({
   map,
@@ -21,8 +36,11 @@ export function RouteMap({
   theme,
   accessibilityLabel,
   failedMessage,
+  corridor = true,
+  track,
 }: RouteMapProps) {
   const container = useRef<HTMLDivElement>(null);
+  const scope = useId();
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -40,13 +58,21 @@ export function RouteMap({
           style: styleUrl,
           interactive: false,
           attributionControl: { compact: true },
-          bounds: map.bounds,
-          fitBoundsOptions: { padding: MAP_PADDING, animate: false },
+          bounds: unionBounds(map.bounds, track?.line),
+          fitBoundsOptions: { padding: MAP_FIT_PADDING, animate: false },
         });
         instance = created;
+        collapseAttribution(created, node);
         created.on('load', () => {
           created.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: routeFeatures(map) });
-          for (const layer of routeLayers(theme, map.widthM, map.bounds)) created.addLayer(layer);
+          for (const layer of routeLayers(theme, map.widthM, map.bounds)) {
+            if (corridor || layer.id !== CORRIDOR_LAYER_ID) created.addLayer(layer);
+          }
+          if (track) {
+            // трек — под старт и финиш маршрута
+            created.addSource(TRACK_SOURCE_ID, { type: 'geojson', data: trackFeatures(track) });
+            for (const layer of trackLayers(theme)) created.addLayer(layer, TRACK_BEFORE_LAYER_ID);
+          }
         });
         created.on('error', () => setFailed(true));
       })
@@ -57,7 +83,7 @@ export function RouteMap({
       cancelled = true;
       instance?.remove();
     };
-  }, [map, styleUrl, theme]);
+  }, [map, styleUrl, theme, corridor, track]);
 
   return (
     <RouteMapFrame
@@ -65,7 +91,13 @@ export function RouteMap({
       accessibilityLabel={accessibilityLabel}
       failedMessage={failed ? failedMessage : null}
     >
-      <div ref={container} data-testid="route-map-canvas" style={canvasStyle} />
+      <style>{attributionCss(scope, theme)}</style>
+      <div
+        ref={container}
+        data-testid="route-map-canvas"
+        data-route-map={scope}
+        style={canvasStyle}
+      />
     </RouteMapFrame>
   );
 }

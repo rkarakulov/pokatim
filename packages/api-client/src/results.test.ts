@@ -93,6 +93,28 @@ describe('приложение: участие в гонке и результа
     expect(candidates.calls[0]?.headers.get('authorization')).toBe('Bearer access');
   });
 
+  it('свой трек попытки — путь, Bearer, валидация ответа (незнакомый marks — unknown)', async () => {
+    const track = {
+      attemptId: ID,
+      line: [
+        [27.5, 53.9],
+        [27.6, 53.95],
+      ],
+      segment: { from: 0, to: 1 },
+      offRuns: [],
+      marks: 'later',
+    };
+    const client = app(200, track);
+    await expect(client.api.getMyAttemptTrack('access', ID, ID)).resolves.toMatchObject({
+      marks: 'unknown',
+    });
+    expect(client.calls[0]?.url).toBe(`https://api.test/v1/races/${ID}/entry/attempts/${ID}/track`);
+    expect(client.calls[0]?.method).toBe('GET');
+    expect(client.calls[0]?.headers.get('authorization')).toBe('Bearer access');
+    const invalid = app(200, { ...track, line: [] });
+    await expect(invalid.api.getMyAttemptTrack('access', ID, ID)).rejects.toBeDefined();
+  });
+
   it('незнакомый статус результата — unknown; 409 — ApiHttpError', async () => {
     const future = app(200, { ...myEntry, result: { ...myEntry.result, status: 'appealed' } });
     await expect(future.api.getMyRaceEntry('access', ID)).resolves.toMatchObject({

@@ -1,107 +1,13 @@
-import { apiErrorOf, isNetworkError } from '@pokatim/api-client';
-import { type PanelRace, type PanelRoute, ROUTE_FILE_MAX_BYTES } from '@pokatim/contracts';
-import { type MessageKey, t } from '@pokatim/i18n';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { isNetworkError } from '@pokatim/api-client';
+import type { PanelRace } from '@pokatim/contracts';
+import { t } from '@pokatim/i18n';
+import { useQuery } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 
-import { api } from '../../api';
-import { fieldErrorText, serverFieldErrors } from '../../field-errors';
-import { formatKmFromMeters } from '../../format';
-import {
-  Banner,
-  Button,
-  Dialog,
-  FileButton,
-  LinePreview,
-  LockMark,
-  ReadonlyField,
-  SelectField,
-  TextField,
-} from '../../ui';
-import {
-  readyRoutesQuery,
-  ROUTE_POLL_MAX_MS,
-  ROUTE_POLL_MS,
-  ROUTES_QUERY_KEY,
-  routeQuery,
-} from './routes-query';
-
-/** Ответы загрузки с текстом под полем окна (остальное — «Не удалось сохранить»). */
-const UPLOAD_ERRORS: Partial<Record<string, MessageKey>> = {
-  ROUTE_FORMAT_UNSUPPORTED: 'admin.routes.error.ROUTE_FORMAT_UNSUPPORTED',
-  ROUTE_TOO_LARGE: 'admin.routes.error.ROUTE_TOO_LARGE',
-  RATE_LIMITED: 'admin.routes.error.RATE_LIMITED',
-};
-
-function uploadErrorText(error: unknown): string {
-  if (isNetworkError(error)) return t('error.network');
-  const titleCode = serverFieldErrors(error)?.find((field) => field.path === 'title')?.code;
-  if (titleCode) return fieldErrorText(titleCode) ?? t('admin.saveFailed');
-  const key = UPLOAD_ERRORS[apiErrorOf(error)?.code ?? ''];
-  return key ? t(key) : t('admin.saveFailed');
-}
-
-/** Название по умолчанию — имя файла без расширения (Q4). */
-const titleOf = (file: File) => file.name.replace(/\.[^.]+$/, '').trim();
-
-/** Длина, набор и «Круговой» под превью. */
-function routeMeta(route: PanelRoute): string {
-  const parts = [route.distanceM !== null ? formatKmFromMeters(route.distanceM) : ''];
-  if (route.elevationGainM !== null) {
-    parts.push(t('admin.races.corridor.elevation', { gain: route.elevationGainM }));
-  }
-  if (route.isLoop) parts.push(t('admin.races.corridor.loop'));
-  return parts.filter(Boolean).join(' · ');
-}
-
-/** Превью выбранного маршрута: скелетон блока, ошибка с повтором, линия с длиной (§7 «Состояния»). */
-function RoutePreview({ routeId }: { routeId: string }) {
-  const state = useQuery(routeQuery(routeId));
-  const route = state.data;
-  if (!route) {
-    return state.isError ? (
-      <div className="corridor-preview" role="alert">
-        <p className="t-meta">
-          {isNetworkError(state.error)
-            ? t('state.errorTitle')
-            : t('admin.races.corridor.previewFailed')}
-        </p>
-        <Button size="sm" onClick={() => void state.refetch()}>
-          {t('state.retry')}
-        </Button>
-      </div>
-    ) : (
-      <div className="corridor-preview">
-        <span className="skeleton corridor-preview__skeleton" />
-      </div>
-    );
-  }
-  if (route.status !== 'ready') return null;
-  return (
-    <div className="corridor-preview">
-      {state.isError ? (
-        <Banner
-          tone="error"
-          role="alert"
-          title={t('admin.races.corridor.previewRefreshFailed')}
-          actions={
-            <Button size="sm" onClick={() => void state.refetch()}>
-              {t('state.retry')}
-            </Button>
-          }
-        />
-      ) : null}
-      <LinePreview
-        points={route.line}
-        label={t('admin.races.corridor.previewLabel', {
-          title: route.title,
-          distance: route.distanceM !== null ? formatKmFromMeters(route.distanceM) : '',
-        })}
-      />
-      <p className="corridor-preview__meta t-meta">{routeMeta(route)}</p>
-    </div>
-  );
-}
+import { Banner, Button, FileButton, LockMark, ReadonlyField, SelectField } from '../../ui';
+import { RoutePreview } from '../routes/RoutePreview';
+import { RouteUploadDialog, useRouteUpload } from '../routes/route-upload';
+import { readyRoutesQuery } from '../routes/routes-query';
 
 export interface CorridorFieldProps {
   /** id выбранного маршрута; `''` — без коридора. */
@@ -120,82 +26,11 @@ export interface CorridorFieldProps {
  * маршрута без карты. Зафиксированный коридор — только чтение с замком. Готовность маршрута проверяет сервер.
  */
 export function CorridorField({ value, onChange, locked, current, error }: CorridorFieldProps) {
-  const queryClient = useQueryClient();
   const routes = useQuery({ ...readyRoutesQuery, enabled: !locked });
-  const [file, setFile] = useState<File>();
-  const [title, setTitle] = useState('');
-  const [uploadError, setUploadError] = useState<string>();
-  const [pendingId, setPendingId] = useState<string>();
-  /** Момент начала опроса загруженного маршрута (мс) — предел ожидания `ROUTE_POLL_MAX_MS` по часам, не по ответам. */
-  const [pendingSince, setPendingSince] = useState(0);
-  /** Предел ожидания истёк (таймер): опрос остановлен и при сплошных ошибках запросов. */
-  const [pollExpired, setPollExpired] = useState(false);
-
-  // опрос загруженного маршрута: каждые 2 с, пока `processing`; три сбоя подряд (повторы запроса) — баннер
-  const poll = useQuery({
-    ...routeQuery(pendingId ?? ''),
-    enabled: pendingId !== undefined,
-    retry: 2,
-    retryDelay: ROUTE_POLL_MS,
-    refetchInterval: (query) => {
-      if (query.state.data && query.state.data.status !== 'processing') return false;
-      return Date.now() - pendingSince >= ROUTE_POLL_MAX_MS ? false : ROUTE_POLL_MS;
-    },
-  });
-  const pending = pendingId ? poll.data : undefined;
-  useEffect(() => {
-    if (pendingId === undefined) return;
-    const timer = setTimeout(
-      () => setPollExpired(true),
-      Math.max(pendingSince + ROUTE_POLL_MAX_MS - Date.now(), 0),
-    );
-    return () => clearTimeout(timer);
-  }, [pendingId, pendingSince]);
-  // маршрут готов — один раз выбрать его в поле и обновить список вариантов
-  const selected = useRef<string>(undefined);
-  useEffect(() => {
-    if (pending?.status !== 'ready' || selected.current === pending.id) return;
-    selected.current = pending.id;
-    onChange(pending.id);
-    void queryClient.invalidateQueries({ queryKey: [...ROUTES_QUERY_KEY, 'ready'] });
-  }, [pending, onChange, queryClient]);
+  // готовый загруженный маршрут — один раз выбрать его в поле (список вариантов обновляет загрузка)
+  const upload = useRouteUpload((route) => onChange(route.id));
+  const pending = upload.pending;
   const failed = pending?.status === 'failed' ? pending : undefined;
-
-  const upload = useMutation({
-    mutationFn: ({ bytes, name }: { bytes: File; name: string }) => api.uploadRoute(bytes, name),
-    onSuccess: (route) => {
-      // новый цикл загрузки: тот же файл после «Без коридора» снова выбирает свой маршрут
-      selected.current = undefined;
-      setPendingSince(Date.now());
-      setPollExpired(false);
-      queryClient.setQueryData(routeQuery(route.id).queryKey, route);
-      setFile(undefined);
-      setPendingId(route.id);
-    },
-    onError: (failure) => setUploadError(uploadErrorText(failure)),
-  });
-
-  const chooseFile = (chosen: File) => {
-    setUploadError(
-      chosen.size > ROUTE_FILE_MAX_BYTES ? t('admin.routes.error.ROUTE_TOO_LARGE') : undefined,
-    );
-    setTitle(titleOf(chosen));
-    setFile(chosen);
-  };
-  const submitUpload = () => {
-    if (!file || file.size > ROUTE_FILE_MAX_BYTES || upload.isPending) return;
-    if (title.trim() === '') {
-      setUploadError(fieldErrorText('REQUIRED'));
-      return;
-    }
-    setUploadError(undefined);
-    upload.mutate({ bytes: file, name: title.trim() });
-  };
-  const closeDialog = () => {
-    if (upload.isPending) return;
-    setFile(undefined);
-    setUploadError(undefined);
-  };
 
   const label = t('admin.races.field.corridor');
   const items = routes.data?.items ?? [];
@@ -253,7 +88,7 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
           value={value}
           onChange={(event) => {
             // ручной выбор снимает статус и причину отказа последней загрузки
-            setPendingId(undefined);
+            upload.reset();
             onChange(event.target.value);
           }}
           error={fieldError}
@@ -262,7 +97,7 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
         <FileButton
           label={failed ? t('admin.races.corridor.uploadOther') : t('admin.races.corridor.upload')}
           accept=".gpx"
-          onFile={chooseFile}
+          onFile={upload.chooseFile}
         />
       </div>
     );
@@ -285,45 +120,19 @@ export function CorridorField({ value, onChange, locked, current, error }: Corri
       {picker}
       {pending?.status === 'processing' ? (
         <p className="field__help t-meta" role="status">
-          {pollExpired
+          {upload.pollExpired
             ? t('admin.races.corridor.processingLong')
             : t('admin.races.corridor.processing')}
         </p>
       ) : null}
-      {pendingId && poll.isError && !pollExpired ? (
+      {upload.pollFailed ? (
         <Banner tone="warning" role="status">
           {t('admin.races.corridor.pollFailed')}
         </Banner>
       ) : null}
       {value ? <RoutePreview routeId={value} /> : null}
 
-      <Dialog
-        open={file !== undefined}
-        title={t('admin.routes.dialog.title')}
-        onClose={closeDialog}
-      >
-        {/* без вложенного <form>: окно — внутри формы гонки, отправка вложенной формы перезагрузила бы страницу */}
-        <TextField
-          label={t('admin.routes.field.title')}
-          autoComplete="off"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter') return;
-            event.preventDefault();
-            submitUpload();
-          }}
-          error={uploadError}
-        />
-        <div className="dialog__actions">
-          <Button onClick={closeDialog} disabled={upload.isPending}>
-            {t('admin.dialog.cancel')} <kbd className="kbd t-meta-xs">{t('admin.dialog.esc')}</kbd>
-          </Button>
-          <Button variant="primary" busy={upload.isPending} onClick={submitUpload}>
-            {t('admin.routes.dialog.submit')}
-          </Button>
-        </div>
-      </Dialog>
+      <RouteUploadDialog upload={upload} />
     </>
   );
 }

@@ -43,7 +43,20 @@ function toSummary(route: RouteDoc, ownerName: string): PanelRouteSummary {
     isLoop: route.isLoop,
     owner: { userId: route.ownerUserId, displayName: ownerName },
     createdAt: route.createdAt.toISOString(),
+    catalog: catalogOf(route),
   };
+}
+
+/** Каталожные поля панели; документ до `0020_routes_catalog` — `null`. */
+function catalogOf(route: RouteDoc): PanelRouteSummary['catalog'] {
+  const catalog = route.catalog ?? null;
+  return catalog
+    ? {
+        city: catalog.city,
+        surfaces: catalog.surfaces,
+        publishedAt: catalog.publishedAt.toISOString(),
+      }
+    : null;
 }
 
 /**
@@ -110,6 +123,7 @@ export class RoutesService {
       isLoop: null,
       start: null,
       finish: null,
+      catalog: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -182,8 +196,8 @@ export class RoutesService {
     };
   }
 
-  /** Маршрут с линией показа (у необработанного — `[]`). */
-  private async view(route: RouteDoc): Promise<PanelRoute> {
+  /** Маршрут с линией показа (у необработанного — `[]`); ответ и действий каталога (`RoutesCatalogAdminService`). */
+  async view(route: RouteDoc): Promise<PanelRoute> {
     const [names, geometry] = await Promise.all([
       this.directory.displayNames([route.ownerUserId]),
       route.status === 'ready' ? this.repository.geometry(route._id) : undefined,
@@ -196,6 +210,6 @@ export class RoutesService {
 }
 
 /** Готовый маршрут платформы — всем с `races.read`; необработанный и отказ — только автору. */
-function visible(principal: PanelPrincipal, route: RouteDoc): boolean {
+export function visible(principal: PanelPrincipal, route: RouteDoc): boolean {
   return route.status === 'ready' || route.ownerUserId === principal.userId;
 }

@@ -7,8 +7,9 @@ import { detectTrackFormat } from './format.ts';
 import { parseFit } from './fit.ts';
 import { haversineMeters, trackLengthMeters } from './geo.ts';
 import { parseGpx } from './gpx.ts';
-import { matchCorridor } from './corridor/match.ts';
+import { matchCorridorDetailed } from './corridor/match.ts';
 import { prepareCorridor } from './corridor/prepare.ts';
+import { trackMapOf, type TrackMap } from './corridor/track-map.ts';
 import type { CorridorMatch, MatchWindow } from './corridor/types.ts';
 import { checkPlausibility } from './plausibility.ts';
 import { sanitizePoints } from './points.ts';
@@ -33,7 +34,13 @@ import {
 export { parseFit } from './fit.ts';
 export { parseGpx } from './gpx.ts';
 export { parseStream, TrackStreamV1 } from './stream.ts';
-export { matchCorridor } from './corridor/match.ts';
+export {
+  matchCorridor,
+  matchCorridorDetailed,
+  type CorridorMatchDetailed,
+  type OffRunMs,
+} from './corridor/match.ts';
+export { TRACK_MAP_MAX_RUNS, trackMapOf, type TrackMap } from './corridor/track-map.ts';
 export {
   buildSeries,
   type DisputeSeries,
@@ -221,10 +228,18 @@ export function analyzeRoute(bytes: Uint8Array): RouteAnalysis {
   };
 }
 
+/** Итог сверки попытки для worker: результат движка и разметка трека на линии показа (maps-02). */
+export type AttemptAnalysis = CorridorMatch & {
+  /** позиции сегмента и схода на линии `activity_tracks`; `null` — нет сегмента, нет линии или она не от этого файла */
+  trackMap: TrackMap | null;
+};
+
 /**
- * Сверка попытки для worker (слайс 03 — в потоке разбора): `loadTrack` → `matchCorridor` по исходнику без
- * прореживания. Ошибки файла — `TrackParseError` (как `analyzeTrack`); нарушение инвариантов коридора —
- * `CorridorError`. Результат сериализуем (structured clone), без координат заезда и значений датчиков.
+ * Сверка попытки для worker (слайс 03 — в потоке разбора): `loadTrack` → `matchCorridorDetailed` по исходнику без
+ * прореживания → разметка схода на сохранённой линии показа `line` (`activity_tracks`, читает worker; не
+ * пересчитывается — Дуглас — Пекер на дрожании O(n²)). `line: null` (по умолчанию) — `trackMap: null`.
+ * Ошибки файла — `TrackParseError` (как `analyzeTrack`); нарушение инвариантов коридора — `CorridorError`.
+ * Результат сериализуем (structured clone), без координат заезда, времени точек и значений датчиков.
  */
 export function analyzeAttempt(
   bytes: Uint8Array,
@@ -232,10 +247,12 @@ export function analyzeAttempt(
   corridor: CorridorGeometry,
   window: MatchWindow,
   now: Date,
-): CorridorMatch {
+  line: [number, number][] | null = null,
+): AttemptAnalysis {
   const prepared = prepareCorridor(corridor);
   const { points } = loadTrack(bytes, format, now);
-  return matchCorridor(points, prepared, window);
+  const { match, offRunsMs } = matchCorridorDetailed(points, prepared, window);
+  return { ...match, trackMap: trackMapOf(points, line, match.segment, offRunsMs) };
 }
 
 /**

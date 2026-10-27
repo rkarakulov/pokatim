@@ -5,7 +5,7 @@ import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 
-import { CORRIDOR_OPACITY, MAP_PADDING, ROUTE_SOURCE_ID } from './corridor-style';
+import { CORRIDOR_OPACITY, MAP_FIT_PADDING, ROUTE_SOURCE_ID } from './corridor-style';
 import type * as Loader from './load-maplibre';
 import { RouteMap } from './route-map';
 
@@ -120,7 +120,7 @@ describe('RouteMap (web, maplibre-gl)', () => {
       interactive: false,
       attributionControl: { compact: true },
       bounds: route.bounds,
-      fitBoundsOptions: { padding: MAP_PADDING, animate: false },
+      fitBoundsOptions: { padding: MAP_FIT_PADDING, animate: false },
     });
     expect(state.workerUrl).toBe('/maplibre-gl-worker.mjs?v=6.16.0');
     expect(map!.addLayer).not.toHaveBeenCalled();
@@ -162,5 +162,61 @@ describe('RouteMap (web, maplibre-gl)', () => {
     await view.unmount();
     root = null;
     expect(second.remove).toHaveBeenCalled();
+  });
+});
+
+describe('RouteMap (web): свой трек (maps-02)', () => {
+  const track = {
+    line: [
+      [27.45, 53.85],
+      [27.55, 53.9],
+      [27.65, 54.05],
+    ] as [number, number][],
+    segment: { from: 0.5, to: 1.5 },
+    offRuns: [{ from: 1, to: 1.2 }],
+  };
+
+  it('без track — источник и слои maps-01 без изменений (AC9)', async () => {
+    await render(<RouteMap {...props()} />);
+    await flush();
+    const map = state.maps.at(-1)!;
+    await act(async () => map.handlers.load!());
+    expect(map.addSource).toHaveBeenCalledTimes(1);
+    expect(map.addLayer.mock.calls.every((call) => call.length === 1)).toBe(true);
+    expect(map.options.bounds).toEqual(route.bounds);
+  });
+
+  it('с track — второй источник, слои трека перед start; рамка охватывает маршрут и трек', async () => {
+    await render(<RouteMap {...props()} track={track} />);
+    await flush();
+    const map = state.maps.at(-1)!;
+    expect(map.options.bounds).toEqual([27.45, 53.8, 27.65, 54.05]);
+    await act(async () => map.handlers.load!());
+    expect(map.addSource).toHaveBeenLastCalledWith(
+      'my-track',
+      expect.objectContaining({ type: 'geojson' }),
+    );
+    const trackCalls = map.addLayer.mock.calls.filter(([layer]) => layer.source === 'my-track');
+    expect(trackCalls.map(([layer, before]) => [layer.id, before])).toEqual([
+      ['track-outside', 'start'],
+      ['track', 'start'],
+      ['track-off', 'start'],
+    ]);
+  });
+});
+
+describe('RouteMap (web): атрибуция и отступы (B2, B4 maps-02)', () => {
+  it('атрибуция сворачивается после обновлений стиля и источников; цвета — по теме в области карты; отступ снизу под «i»', async () => {
+    await render(<RouteMap {...props(DARK)} theme={themes.dark} />);
+    await flush();
+    const map = state.maps.at(-1)!;
+    expect(map.handlers.styledata).toBeDefined();
+    expect(map.handlers.sourcedata).toBeDefined();
+    const canvas = host.querySelector<HTMLElement>('[data-testid="route-map-canvas"]')!;
+    const scope = canvas.dataset.routeMap!;
+    const css = host.querySelector('style')!.textContent!;
+    expect(css).toContain(`[data-route-map="${scope}"] .maplibregl-ctrl.maplibregl-ctrl-attrib`);
+    expect(css).toContain(themes.dark.surface.raised);
+    expect(MAP_FIT_PADDING.bottom).toBeGreaterThan(MAP_FIT_PADDING.top);
   });
 });

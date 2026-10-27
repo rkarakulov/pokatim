@@ -64,6 +64,13 @@ export function minskDateTime(iso: string, now: Date | null) {
   };
 }
 
+/**
+ * Исключающая граница UTC (`uploadClosesAt`: сервер считает поздним момент `>=` границы) по Минску — последняя
+ * включённая минута: «до 9 ноября, 23:59», а не «до 10 ноября, 00:00» (B6 смоука dev). Только показ.
+ */
+export const minskLastMinuteBefore = (iso: string, now: Date | null) =>
+  minskDateTime(new Date(Date.parse(iso) - 1).toISOString(), now);
+
 /** День недели календарной даты (0 — воскресенье): арифметика дат, без часового пояса. */
 const weekdayOf = (localDate: string) => new Date(`${localDate}T00:00:00Z`).getUTCDay();
 

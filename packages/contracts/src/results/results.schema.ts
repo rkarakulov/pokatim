@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { tolerantEnum, Uuid } from '../common.ts';
+import { LonLat } from '../races/race-route.schema.ts';
 import { PageCursor } from '../races/race.schema.ts';
 import {
   TRACK_FAILURE_CODES,
@@ -135,6 +136,29 @@ export const MyAttempt = z.object({
   checkedAt: z.iso.datetime().nullable(),
 });
 export type MyAttempt = z.infer<typeof MyAttempt>;
+
+export const MY_ATTEMPT_TRACK_MAX_POINTS = 1000;
+export const MY_ATTEMPT_TRACK_MAX_RUNS = 100;
+/** Разметка трека готова / проверка идёт / разметки нет (провал, попытка до maps-02, линия не совпала). */
+export const ATTEMPT_TRACK_MARKS = ['ready', 'pending', 'unavailable'] as const;
+
+/** Участок линии трека: дробные индексы вершин `i + t` (`0 ≤ t < 1`), `from ≤ to`. */
+export const TrackMapRun = z.object({ from: z.number().min(0), to: z.number().min(0) });
+export type TrackMapRun = z.infer<typeof TrackMapRun>;
+
+/**
+ * `GET /v1/races/:raceId/entry/attempts/:attemptId/track` (maps-02), `no-store`, только владельцу: линия своей
+ * активности (упрощённая, ≤ 1000 точек) и разметка сегмента и схода, посчитанная worker при сверке. Без id
+ * активности, времени точек и датчиков. `pending`/`unavailable` — `segment: null`, `offRuns: []`.
+ */
+export const MyAttemptTrack = z.object({
+  attemptId: Uuid,
+  line: z.array(LonLat).min(2).max(MY_ATTEMPT_TRACK_MAX_POINTS),
+  segment: TrackMapRun.nullable(),
+  offRuns: z.array(TrackMapRun).max(MY_ATTEMPT_TRACK_MAX_RUNS),
+  marks: tolerantEnum(ATTEMPT_TRACK_MARKS),
+});
+export type MyAttemptTrack = z.infer<typeof MyAttemptTrack>;
 
 /** Запрос «загрузить в гонку», файл которого ещё не стал активностью (или не принят). */
 export const PendingUpload = z.object({

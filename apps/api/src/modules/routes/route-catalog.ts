@@ -54,6 +54,10 @@ export class RoutesCatalogService implements RouteCatalog, RouteGeometry {
     return new Map(routes.map((route) => [route._id, { title: route.title }]));
   }
 
+  async inCatalog(id: string): Promise<boolean> {
+    return (await this.repository.findPublished(id)) !== undefined;
+  }
+
   async matchGeometry(routeId: string): Promise<RouteMatchGeometry | null> {
     return (await this.cached(routeId))?.match ?? null;
   }

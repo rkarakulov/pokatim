@@ -106,6 +106,7 @@ export async function corridorRoute(
     isLoop: geometry.isLoop,
     start: { type: 'Point', coordinates: start },
     finish: { type: 'Point', coordinates: finish },
+    catalog: null,
     createdAt: now,
     updatedAt: now,
   });

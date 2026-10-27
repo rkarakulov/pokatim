@@ -104,6 +104,18 @@ export interface AttemptSegmentDoc {
  * Попытка — (гонка, основная активность) уникальна. `checkRevision` — номер проверки: вердикт пишет только своя
  * ревизия. `activity` — снимок сводки активности (неизменяема после разбора) для «моего участия».
  */
+/**
+ * Разметка трека попытки на линии показа своей активности (`activity_tracks.line`, maps-02): позиции — дробные
+ * индексы вершин `i + t`, кратны 0,001; без координат и времени точек. Пишет worker при сверке вместе с вердиктом.
+ */
+export interface AttemptTrackMapDoc {
+  /** число точек линии, по которой посчитаны позиции (чтение сверяет с сохранённой линией) */
+  linePoints: number;
+  segment: [number, number] | null;
+  /** выходы из коридора внутри `segment`, по возрастанию, ≤ 100 */
+  offRuns: [number, number][];
+}
+
 export interface RaceAttemptDoc {
   _id: string;
   raceId: string;
@@ -128,6 +140,11 @@ export interface RaceAttemptDoc {
     geometryLimited: boolean;
   } | null;
   engineVersion: number | null;
+  /**
+   * разметка трека для карты участника (maps-02); `null` — до вердикта, провал, `implausible`, нет сегмента или линии;
+   * документы до maps-02 поля не имеют — чтение `?? null` (бэкфилла нет)
+   */
+  trackMap?: AttemptTrackMapDoc | null;
   /** снимок коридора гонки на момент создания (V-12 — не меняется) */
   corridor: { routeId: string; widthM: number };
   checkRevision: number;

@@ -156,6 +156,7 @@ describe('createAdminApiClient: маршруты (race-results-01)', () => {
     isLoop: null,
     owner: { userId: USER_ID, displayName: 'Ольга' },
     createdAt: '2026-10-27T10:00:00.000Z',
+    catalog: null,
     line: [],
   };
 

@@ -146,6 +146,78 @@ describe('эталоны движка в attempt-check (AC13)', () => {
   });
 });
 
+describe('разметка трека попытки (maps-02)', () => {
+  const stored = (id: string) => resultsDb(h).attempts.findOne({ _id: id });
+  const lineOf = async (activityId: string) =>
+    (await tracks(h).tracks.findOne({ _id: activityId }))!.line.coordinates;
+
+  it('wobble-3pct — trackMap с участками схода на линии activity_tracks; только позиции, без координат и времени', async () => {
+    const { attempt, ride } = await queuedAttempt('wobble-3pct.gpx');
+    expect(await processor().check(attempt._id, 1)).toBe('rejected');
+    const { trackMap } = (await stored(attempt._id))!;
+    expect(Object.keys(trackMap!).sort()).toEqual(['linePoints', 'offRuns', 'segment']);
+    const line = await lineOf(ride.activityId!);
+    expect(trackMap!.linePoints).toBe(line.length);
+    const [from, to] = trackMap!.segment!;
+    expect(trackMap!.offRuns.length).toBeGreaterThan(0);
+    for (const [a, b] of trackMap!.offRuns) {
+      expect(a).toBeGreaterThanOrEqual(from);
+      expect(b).toBeLessThanOrEqual(to);
+      expect(b).toBeGreaterThan(a);
+    }
+    // позиции — индексы линии, не координаты и не время
+    const values = [from, to, ...trackMap!.offRuns.flat()];
+    expect(values.every((value) => typeof value === 'number' && value <= line.length - 1)).toBe(
+      true,
+    );
+  });
+
+  it('clean — сегмент задан, схода нет; mid-start (no_start) — null', async () => {
+    const clean = await queuedAttempt();
+    expect(await processor().check(clean.attempt._id, 1)).toBe('counted');
+    const { trackMap } = (await stored(clean.attempt._id))!;
+    expect(trackMap!.offRuns).toEqual([]);
+    expect(trackMap!.segment).not.toBeNull();
+    await h.reset();
+    const midStart = await queuedAttempt('mid-start.gpx');
+    expect(await processor().check(midStart.attempt._id, 1)).toBe('rejected');
+    expect((await stored(midStart.attempt._id))!.trackMap).toBeNull();
+  });
+
+  it('новая попытка и перепостановка — null до вердикта; провалы (таймаут, implausible, storage) — null', async () => {
+    const { attempt, ride } = await queuedAttempt('wobble-3pct.gpx');
+    expect((await stored(attempt._id))!.trackMap).toBeNull();
+    expect(await processor().check(attempt._id, 1)).toBe('rejected');
+    expect((await stored(attempt._id))!.trackMap).not.toBeNull();
+    await h.worker.get(ResultsRecheck).requestRace(attempt.raceId, justAfter());
+    expect(await stored(attempt._id)).toMatchObject({ status: 'queued', trackMap: null });
+
+    const analyze = vi
+      .spyOn(processor(), 'analyze')
+      .mockResolvedValueOnce({ ok: false, code: 'timeout' })
+      .mockResolvedValueOnce({ ok: false, code: 'implausible' });
+    expect(await processor().check(attempt._id, 2)).toBe('failed');
+    expect((await stored(attempt._id))!.trackMap).toBeNull();
+    await h.worker.get(ResultsRecheck).requestRace(attempt.raceId, justAfter());
+    expect(await processor().check(attempt._id, 3)).toBe('rejected');
+    expect(await stored(attempt._id)).toMatchObject({ reasons: ['implausible'], trackMap: null });
+    analyze.mockRestore();
+
+    await h.worker.get(ResultsRecheck).requestRace(attempt.raceId, justAfter());
+    const upload = await tracks(h).uploads.findOne({ _id: ride.uploadId });
+    await trackFileStore(h).delete(upload!.storageKey!);
+    expect(await processor().check(attempt._id, 4)).toBe('failed');
+    expect(await stored(attempt._id)).toMatchObject({ failure: 'storage', trackMap: null });
+  });
+
+  it('линии активности нет — вердикт есть, trackMap: null', async () => {
+    const { attempt, ride } = await queuedAttempt('wobble-3pct.gpx');
+    await tracks(h).tracks.deleteOne({ _id: ride.activityId! });
+    expect(await processor().check(attempt._id, 1)).toBe('rejected');
+    expect(await stored(attempt._id)).toMatchObject({ reasons: ['off_corridor'], trackMap: null });
+  });
+});
+
 describe('ревизии проверки (AC14)', () => {
   /**
    * Повтор задачи после итога и поздняя задача старой ревизии — no-op. Отрицательное доказательство: без

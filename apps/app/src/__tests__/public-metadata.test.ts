@@ -1,4 +1,5 @@
 /// <reference types="jest" />
+import { generateMetadata as notFoundMetadata } from '../app/+not-found';
 import { generateMetadata as forgotMetadata } from '../app/(onboarding)/forgot-password';
 import { generateMetadata as registerMetadata } from '../app/(onboarding)/register';
 import { generateMetadata as signInMetadata } from '../app/(onboarding)/sign-in';
@@ -25,6 +26,13 @@ afterEach(() => {
 
 // SSR web: мета публичных экранов в первых байтах HTML (превью ссылок), без персональных данных
 describe('мета публичных экранов (generateMetadata)', () => {
+  it('«Страница не найдена»: заголовок вкладки и noindex, без og:url (B1 смоука dev)', async () => {
+    process.env.WEB_ORIGIN = ORIGIN;
+    const meta = await notFoundMetadata(undefined, {});
+    expect(meta).toMatchObject({ title: 'Страница не найдена — Покатим', robots: 'noindex' });
+    expect(meta).not.toHaveProperty('openGraph.url');
+  });
+
   it('регистрация: заголовок, описание и OG; og:url — только из WEB_ORIGIN', async () => {
     expect(await registerMetadata(undefined, {})).toEqual({
       title: 'Регистрация — Покатим',

@@ -327,6 +327,39 @@ export async function publishRaceData(request: APIRequestContext): Promise<Publi
   };
 }
 
+export interface PublishedCatalogRoute {
+  id: string;
+  title: string;
+  /** Снять с публикации, если опубликовала фикстура (повтор безопасен — RC-2). */
+  withdraw: () => Promise<void>;
+}
+
+/**
+ * Маршрут каталога (routes-01): GPX смоука загружается через API панели (тот же файл — тот же маршрут), разбирается
+ * worker и публикуется в каталог (Минск, асфальт). Название — с загрузки (RC-14). Риск: параллельные прогоны смоука на
+ * одном стенде делят маршрут — снятие одним прогоном даёт 404 другому (смоук последовательный).
+ */
+export async function publishCatalogRoute(
+  request: APIRequestContext,
+): Promise<PublishedCatalogRoute> {
+  const panel = await panelSession(request);
+  const id = await panel.readyRoute('Маршрут смоука');
+  // маршрут смоука общий (коридор гонок, засев стенда): снимаем только то, что опубликовала сама фикстура
+  const before = (await panel.get(`/v1/admin/routes/${id}`)) as { catalog: unknown };
+  const publishedHere = before.catalog === null;
+  const route = (await panel.post(`/v1/admin/routes/${id}/publish`, {
+    city: 'minsk',
+    surfaces: ['asphalt'],
+  })) as { id: string; title: string };
+  return {
+    id: route.id,
+    title: route.title,
+    withdraw: async () => {
+      if (publishedHere) await panel.post(`/v1/admin/routes/${id}/unpublish`, {});
+    },
+  };
+}
+
 export interface PublishedCalendarData {
   /** Однодневный со ссылкой регистрации `https://example.com/registration`. */
   start: { id: string; title: string };

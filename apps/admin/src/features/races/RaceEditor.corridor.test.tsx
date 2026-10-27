@@ -53,6 +53,7 @@ const summary = (overrides: Partial<PanelRouteSummary> = {}): PanelRouteSummary 
   isLoop: true,
   owner: { userId: USER_ID, displayName: 'Ольга' },
   createdAt: '2026-10-20T10:00:00.000Z',
+  catalog: null,
   ...overrides,
 });
 const route = (overrides: Partial<PanelRoute> = {}): PanelRoute => ({

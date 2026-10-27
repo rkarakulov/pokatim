@@ -25,6 +25,7 @@ import EditRideRoute from '../app/rides/edit/[id]';
 import CancelRideRoute from '../app/rides/cancel/[id]';
 import ReportRideRoute from '../app/rides/report/[id]';
 import RaceRoute from '../app/races/[id]';
+import CatalogRouteRoute from '../app/routes/[id]';
 import RacePickRoute from '../app/races/pick/[id]';
 import DisputeResponseRoute from '../app/races/dispute-response/[id]/[disputeId]';
 import FileDisputeRoute from '../app/races/dispute/[id]/[entryId]';
@@ -32,6 +33,7 @@ import RivalResultRoute from '../app/races/result/[id]/[entryId]';
 import SeasonRoute from '../app/seasons/[id]';
 import StatusScreen from '../app/status';
 import UiKitScreen from '../app/ui-kit';
+import NotFoundRoute from '../app/+not-found';
 
 /** Маршруты вкладок для renderRouter (корневой layout подключают отдельные тесты). */
 export const tabRoutes = {
@@ -64,12 +66,14 @@ export const appRoutes = {
   'auth/verify/[token]': VerifyEmailScreen,
   'auth/reset/[token]': ResetPasswordScreen,
   'ui-kit': UiKitScreen,
+  '+not-found': NotFoundRoute,
   status: StatusScreen,
   'races/[id]': RaceRoute,
   'races/pick/[id]': RacePickRoute,
   'races/result/[id]/[entryId]': RivalResultRoute,
   'races/dispute/[id]/[entryId]': FileDisputeRoute,
   'races/dispute-response/[id]/[disputeId]': DisputeResponseRoute,
+  'routes/[id]': CatalogRouteRoute,
   'seasons/[id]': SeasonRoute,
   'calendar/[id]': CalendarStartRoute,
   'rides/[id]': RideRoute,

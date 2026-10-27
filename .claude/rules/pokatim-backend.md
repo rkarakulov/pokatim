@@ -32,6 +32,13 @@ paths:
   `races` читает линию показа через порт `RouteGeometry.displayGeometry` (только `ready`, проекция без
   `matchLine`, свой LRU-кэш в процессе отдельно от кэша линии сверки); публичный `GET /v1/races/:id/route` —
   `RacesPublicController`, видимость — общий `publicRace` сервиса (та же, что у `GET /v1/races/:id`).
+- Каталог маршрутов (routes-01): `routes` зависит от `panel` и `src/public-read.guard.ts`. Панель —
+  `RoutesCatalogAdminService` (`POST /v1/admin/routes/:id/publish|unpublish`, транзакция «чтение маршрута → запись →
+  `PanelAudit.append`», повтор с теми же значениями — без записи и журнала); публично — `RoutesPublicController`
+  (`routes`, `routes/cities` **до** `routes/:id`, `routes/:id/map`) → `RoutesPublicService` (геометрия — порт
+  `ROUTE_GEOMETRY`, тот же `RoutesCatalogService`). `GET /v1/routes/:id/races` живёт в `races`
+  (`RacesPublicController`): проверка «в каталоге» — порт `RouteCatalog.inCatalog` (без кэша), 404 — до разбора
+  курсора.
 - Общий код загрузок в `src/`: `raw-body.ts` (`readLimited` — тело `application/octet-stream` после гарда и лимита,
   обрыв на лимите — `413` с кодом модуля и `Connection: close`) и `parse-thread.ts` (`runParseThread` — функция
   `@pokatim/tracks/parse` из белого списка `PARSE_FUNCTIONS` в `worker_threads`, `DEFAULT_PARSE_LIMITS` 160/32 МБ,
@@ -88,6 +95,19 @@ paths:
 - Сверка заезда с коридором гонки — `matchCorridor` / `analyzeAttempt` из `@pokatim/tracks/parse` (ADR-0012 п. 5):
   только worker (`worker_threads`), по исходнику без прореживания; `engineVersion` пишется в попытку, смена версии
   не пересчитывает результаты молча. Лёгкий вход `@pokatim/tracks` движок не экспортирует.
+- Разметка схода на карте участника (maps-02, ADR-0012 «Разметка схода»): считает worker при сверке, не чтение и не
+  клиент. `matchCorridorDetailed` = `matchCorridor` + интервалы схода выбранного сегмента по времени трека (один
+  повторный проход `offCorridor`; golden и `CORRIDOR_ENGINE_VERSION` не меняются); `analyzeAttempt(…, line)`
+  получает **сохранённую** линию показа активности (порт `ActivitySource.trackLine`) и `trackMapOf` переводит
+  интервалы в позиции на ней (дробный индекс вершины): время → путь по исходнику (точки со временем, бинарный поиск;
+  путь — haversine по всем точкам) → отрезок линии. Линия в потоке не пересчитывается: Дуглас — Пекер на дрожании
+  стоянки — O(n²) (71 с на AC14). Точность: поперёк — допуск упрощения (5 м; при удвоении допуска до 1000 точек —
+  больше), вдоль — метры (хорды ≠ отрезки линии); стоянки и точки без времени позицию не сдвигают. Подсветка —
+  иллюстрация, итог — `offCorridorM`/`maxExcursionM` попытки.
+- `GET /v1/races/:raceId/entry/attempts/:attemptId/track` (`RaceEntryController`, `ResultsReadService.myAttemptTrack`):
+  попытка этой гонки, своя и видимая в «моём участии» (`attemptHidden`), линия — через порт `tracks`; ответ — по
+  полям; `marks`: `queued|checking` — `pending`, `trackMap` есть и `linePoints` = точкам линии — `ready`, иначе
+  `unavailable`.
 - Анонимизация при удалении аккаунта — «Удалённый участник» (см. `pokatim-db.md`).
 
 ## Красные флаги pokatim

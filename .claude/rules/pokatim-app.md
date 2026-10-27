@@ -67,6 +67,10 @@ paths:
   `pokatim.session-refresh` (`withSessionLock`, `features/auth/session-lock(.web).ts`): ответ одной операции не
   приходит поверх результата другой. Native — тот же `withSessionLock`, замок в памяти процесса (одна сессионная
   операция за раз: выход ждёт фоновую ротацию).
+- Признак «сессии нет» `pokatim.noSession` (`localStorage`, только под Web Lock): ставят 401 восстановления и
+  обновления access и подтверждённый отзыв, снимают вход и poll (`persistSession`); с признаком запуск не зовёт refresh
+  (гость без 401 на каждой загрузке). Положительного признака нет — после входа хранилища браузера пусты; нет признака
+  (старые сессии, хранилище недоступно) — refresh как раньше; незавершённый выход повторяет отзыв при любом признаке.
 - Восстановление: 401 — «не вошёл»; 429, сеть, сбой API — не выход: повторы (429 — через `retryAfterSec`), затем
   статус `unavailable` — вкладки показывают «Нет соединения» / «Не удалось загрузить» с повтором (`AsyncContent`).
 - Native (ADR-0005): сессия восстанавливается из SecureStore без сети (офлайн-старт — в аккаунте), затем фоновая
@@ -149,14 +153,31 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `MLRNMapViewModule`) — статический импорт бросает `getEnforcing` в Expo Go и старом dev-клиенте; нет модулей —
   блока карты нет, как без env. Jest — мок пакета и загрузчика в `jest.setup.ts` (модули «есть»), web — мок
   `load-maplibre`.
+- Свой трек (maps-02): компонент карты расширен только необязательным пропсом `track` (`RouteMapTrack`); весь код
+  трека — `features/maps/track-style.ts` (`splitTrackLine` по дробным позициям разметки, `trackFeatures`,
+  `trackLayers` — роли `map.track` и `map.offCorridor`: вне сегмента — тоньше и прозрачнее, сход — пунктир и толще;
+  `unionBounds` — камера по маршруту и треку); источник `my-track`, слои — под `start` (старт/финиш поверх трека).
+  Блок `race-route-map.tsx`: вошедшему с попытками — трек выбранной (по умолчанию лучшая, иначе новая; чипы-
+  радиогруппа при нескольких), запрос `['races','entry',raceId,'attempts',attemptId,'track',status,checkedAt]` —
+  маркер ревизии попытки в ключе (опрос участия пишет кеш `setQueryData` без каскада), только клиент, свеж
+  бессрочно; пока впервые грузится — скелетон на месте карты (карта не монтируется дважды; чипы и строки остаются, после первой ошибки — карта маршрута без трека), смена попытки или ревизии — новая карта (`key`).
+  Легенда («пунктир» — только при участках схода) и текстовая альтернатива подсветки (`my-track-format.ts`) — под картой и в подписи a11y; 404 трека — без
+  трека и без строки; сеть/5xx — «Не удалось загрузить трек» с повтором. Гостю и не заявленному — без запроса.
+- Атрибуция и отступы (B2–B4 maps-02): web — компактная атрибуция свёрнута при старте и после обновлений стиля
+  (`attribution.web.ts`, до первого нажатия «i»), цвета контрола — роли темы в области карты (`data-route-map`);
+  native — «i» в нижнем правом углу, `tintColor` темы. Камера — `MAP_FIT_PADDING` (снизу место под «i»). Полоса
+  коридора не уже `CORRIDOR_MIN_WIDTH_PX` (минимум — опорой выражения зума: `max` с `zoom` MapLibre не допускает).
 
 - Участие и результат (race-results-04): блок «Ваше участие» и таблица «Результаты» на карточке `races/[id]` — только
-  клиентские запросы (в SSR не попадают; пока сессия неизвестна — блока нет). Ключи `['races','entry',id]`
+  клиентские запросы (в SSR не попадают; пока сессия неизвестна — скелетон блока там, где его увидит и гость:
+  `guestCanSeeEnter`). Ключи `['races','entry',id]`
   (`no-store`, 404 старого API — `null`), `['races','results',id,'pages']` (публичная, префикс `['races','results',id]`
   для инвалидации), `['races','candidates',id]`. Опрос участия — `needsPolling` раз в 3 с; смена результата —
   тихая инвалидация таблицы (без уведомлений). Права и статусы — только `actions` / `result` сервера; причина
   недоступности — первая из подмножества своего действия (`enterBlockReason` / `addAttemptBlockReason`,
-  `features/races/participation-format.ts`), не `reasons[0]`. `races/pick/[id]` — под гардом вкладок. Загрузка в
+  `features/races/participation-format.ts`), не `reasons[0]`. `races/pick/[id]` — под гардом вкладок; пустой список —
+  «Загрузить заезд» тем же путём, что на карточке. Срок загрузки `uploadClosesAt` — исключающая граница: показ —
+  последняя включённая минута (`minskLastMinuteBefore`, «до 9 ноября, 23:59»). Загрузка в
   гонку — `useTrackFileUpload({ onUploaded })` + `addRaceAttempt({ uploadId })`; прогресс — общий `UploadProgress`.
 
 - Споры (race-results-06) — `features/races/disputes/*`. Экраны внутри `Stack.Protected` (статический сегмент
@@ -172,6 +193,22 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   описание и ответ — однострочный `TextField` базы. Отзыв — `WithdrawConfirm` с `texts`. D-39: причины у
   «Загрузить заезд» (`races.block.*`) и «Отменить участие» (`races.withdrawBlock.*` — только `dispute_open` /
   `disqualified`); 409 — текст по `details.reason`.
+
+## Маршруты (routes-01, `docs/product/routes.md`)
+
+- Вкладка «Маршруты» — `features/routes/route-feed.tsx` (`FlatList`): ключ `['routes','list',{ city, distance,
+  surface, limit },'pages']`, Главная — `['routes','list',{ limit: 1 }]`, чипы «Город» — `['routes','cities']` (до
+  ответа — `FilterGroupSkeleton`, ошибка или пусто — группа скрыта, исчезнувший город снимается); всё публичное, без
+  `withAccessToken`, `staleTime` 60 с. Карточка списка — `components/route-list-card.tsx`, подписи —
+  `features/routes/format.ts`.
+- Карточка `routes/[id]` — в корневом `Stack` вне `Stack.Protected` (гость по ссылке, RC-9), SSR и мета — как
+  `races/[id]` (`publicPath`, `fetchPublicForSsr`, 404 — `noindex`). Карта — `catalog-route-map.tsx`: `useMapStyle`
+  (`features/maps/use-map-style.ts`), `RouteMap corridor={false}` с `withoutCorridor(geometry)` (слоя коридора нет,
+  `widthM` не показывается); ключ `['routes','map',id]` — только клиент. «Гонки на маршруте» — `['routes','races',
+  id,'pages']`, `RaceListCard` с датами с годом; пусто, 404, ошибка — блока нет. «Поделиться» — `share-link`.
+- Пропс `RouteMap.corridor?` (по умолчанию `true`) — единственное изменение карты для каталога; существующие пропсы
+  и `race-route-map.tsx` не меняются.
+- Главная — раздел `routes` (текстовый герой `RouteHero`, RC-8; пустой каталог — `EmptyState`).
 
 ## Календарь стартов (блок 04, `docs/product/races-and-seasons.md`)
 
@@ -213,6 +250,18 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   баннер на месте формы. Кнопка «Пожаловаться» и строка «Вы пожаловались…» — только по `viewer.canReport` /
   `viewer.reported` сервера; скрытый райд (`phase: 'hidden'`, видит только организатор через `me`) — баннер без
   действий.
+
+## Оболочка и неизвестные адреса (смоук dev 2026-10-27)
+
+- Неизвестный адрес — `src/app/+not-found.tsx` (`NotFoundScreen`: «Страница не найдена», «На главную»; SSR — 404).
+  Sitemap выключен опцией плагина `expo-router` (`sitemap: false` в `app.json`); dev-маршруты в production
+  (`/ui-kit`) — тот же экран, а не редирект.
+- Широкий экран: колонка экранов корневого `Stack` — по центру, не шире `layout.contentMaxWidth`
+  (`@pokatim/design-tokens`), фон по бокам — тема приложения.
+- `staleTime` по умолчанию — `DEFAULT_STALE_MS` (10 с, `src/lib/query-client.ts`): возврат фокуса сразу после ответа
+  не повторяет запрос. Данные зрителя без `max-age` (участие, кандидаты, споры, `me` райда) — `DEFAULT_STALE_MS` явно,
+  не 0; `staleTime: 0` — только когда свежесть нужна на каждом фокусе (список устройств после окна авторизации).
+- Стопка идущих на райд — `GoingStack` (`src/components/going-stack.tsx`): квадраты с иконкой человека, имён нет.
 
 ## Проверка
 

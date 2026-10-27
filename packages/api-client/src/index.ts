@@ -1,5 +1,10 @@
 import {
   ApiError,
+  CatalogRouteCities,
+  CatalogRouteDetail,
+  CatalogRoutePage,
+  type CatalogRouteQuery,
+  type CatalogRouteRacesQuery,
   CalendarCities,
   CalendarMonths,
   CalendarPage,
@@ -9,6 +14,7 @@ import {
   RaceDetail,
   RacePage,
   RaceRouteMap,
+  RouteMapGeometry,
   type RaceListQuery,
   SeasonCard,
   SeasonList,
@@ -42,6 +48,7 @@ import {
   TrackUpload,
   TrackUploadPage,
   AttemptCandidates,
+  MyAttemptTrack,
   MyRaceEntry,
   RaceResultsPage,
   type AttemptRequest,
@@ -104,6 +111,18 @@ export type RaceListParams = {
   cursor?: string;
   limit?: number;
 };
+
+/** Параметры каталога маршрутов до схемы (`city`, `distance`, `surface` — массивы, повтором ключа). */
+export type CatalogRouteListParams = {
+  city?: NonNullable<CatalogRouteQuery['city']>;
+  distance?: NonNullable<CatalogRouteQuery['distance']>;
+  surface?: NonNullable<CatalogRouteQuery['surface']>;
+  cursor?: string;
+  limit?: number;
+};
+
+/** Параметры гонок маршрута каталога до схемы (`CatalogRouteRacesQuery`). */
+export type CatalogRouteRacesParams = Partial<Pick<CatalogRouteRacesQuery, 'cursor' | 'limit'>>;
 
 /** Параметры гонок сезона до схемы (`SeasonRaceListQuery`). */
 export type SeasonRaceListParams = Partial<Pick<SeasonRaceListQuery, 'cursor' | 'limit'>>;
@@ -270,6 +289,20 @@ export function createApiClient({
     /** Опубликованные и отменённые гонки сезона по концу окна; неизвестный сезон — 404. */
     listSeasonRaces: (id: string, params: SeasonRaceListParams = {}) =>
       getPublic(`/v1/seasons/${encodeURIComponent(id)}/races${queryString(params)}`, RacePage),
+
+    // --- каталог маршрутов команды (routes-01): публично, без токена ---
+    listCatalogRoutes: (params: CatalogRouteListParams = {}) =>
+      getPublic(`/v1/routes${queryString(params)}`, CatalogRoutePage),
+    listCatalogRouteCities: () => getPublic('/v1/routes/cities', CatalogRouteCities),
+    /** Не опубликован или неизвестен — 404. */
+    getCatalogRoute: (id: string) =>
+      getPublic(`/v1/routes/${encodeURIComponent(id)}`, CatalogRouteDetail),
+    /** Линия показа, старт, финиш, рамка (без коридора). */
+    getCatalogRouteMap: (id: string) =>
+      getPublic(`/v1/routes/${encodeURIComponent(id)}/map`, RouteMapGeometry),
+    /** Публичные гонки с коридором по маршруту, новые окна сверху; маршрут не в каталоге — 404. */
+    listCatalogRouteRaces: (id: string, params: CatalogRouteRacesParams = {}) =>
+      getPublic(`/v1/routes/${encodeURIComponent(id)}/races${queryString(params)}`, RacePage),
     /** Опубликованные старты с `from` (по умолчанию — сегодня по Минску). */
     listCalendar: (params: CalendarListParams = {}) =>
       getPublic(`/v1/calendar${queryString(params)}`, CalendarPage),
@@ -374,6 +407,13 @@ export function createApiClient({
       request(
         `/v1/races/${encodeURIComponent(raceId)}/entry`,
         MyRaceEntry,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Свой трек попытки с разметкой схода (maps-02): чужая, скрытая и неизвестная — `404`. */
+    getMyAttemptTrack: (accessToken: string, raceId: string, attemptId: string) =>
+      request(
+        `/v1/races/${encodeURIComponent(raceId)}/entry/attempts/${encodeURIComponent(attemptId)}/track`,
+        MyAttemptTrack,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
     /** «Участвовать»: `201` — новая заявка, `200` — уже заявлен. */

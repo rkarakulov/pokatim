@@ -9,6 +9,7 @@ const PUBLIC_LIST_STALE_MS = 60_000;
 
 const NEXT_RACE = { scope: 'current', limit: 1 } as const;
 const NEXT_CALENDAR_START = { limit: 1 } as const;
+const LATEST_ROUTE = { limit: 1 } as const;
 
 /**
  * Ближайшая гонка (A1): опубликованная с незакрытым окном, по началу окна — публичный список admin-02 без Bearer.
@@ -27,6 +28,18 @@ export function useNextCalendarStart() {
   return useQuery({
     queryKey: ['calendar', 'list', NEXT_CALENDAR_START],
     queryFn: () => api.listCalendar(NEXT_CALENDAR_START),
+    staleTime: PUBLIC_LIST_STALE_MS,
+  });
+}
+
+/**
+ * Последний опубликованный маршрут каталога (routes-01): публичный список без Bearer, ключ совместим со списком
+ * вкладки «Маршруты» (префикс `['routes', 'list']`).
+ */
+export function useLatestRoute() {
+  return useQuery({
+    queryKey: ['routes', 'list', LATEST_ROUTE],
+    queryFn: () => api.listCatalogRoutes(LATEST_ROUTE),
     staleTime: PUBLIC_LIST_STALE_MS,
   });
 }

@@ -8,7 +8,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { UploadProgress } from '@/features/devices/upload-progress';
 import { useTrackFileUpload } from '@/features/devices/use-track-file-upload';
-import { minskDateTime } from '@/lib/minsk-format';
+import { minskLastMinuteBefore } from '@/lib/minsk-format';
 
 import {
   addAttemptBlockReason,
@@ -18,6 +18,14 @@ import {
 } from '../participation-format';
 import { useAddRaceAttempt, useWithdrawFromRace } from '../queries';
 import { WithdrawConfirm } from './withdraw-confirm';
+
+/** Отмена без результата (статус «Нет заездов»): последствий для зачёта нет — без «результат уйдёт» (B7). */
+const withdrawNoResultTexts = () => ({
+  title: t('races.entry.withdrawTitle'),
+  body: t('races.entry.withdrawBodyNoResult'),
+  confirm: t('races.entry.withdrawConfirm'),
+  keep: t('races.entry.keep'),
+});
 
 /**
  * Действия активной заявки — только по `actions` сервера: «Загрузить заезд» (файл тем же хуком, что «Устройства», затем
@@ -47,7 +55,8 @@ export function EntryActions({
   // D-39 / DQ (RC-4, RC-6): почему нельзя отменить участие; закрытое окно — без текста, как раньше
   const withdrawBlocked = withdrawBlockReason(actions);
   const meta = [textStyle('meta'), { color: theme.text.secondary }];
-  const closes = now === null ? null : minskDateTime(entry.uploadClosesAt, now);
+  // граница исключающая — «до 9 ноября, 23:59», как окно, а не «до 10 ноября, 00:00»
+  const closes = now === null ? null : minskLastMinuteBefore(entry.uploadClosesAt, now);
 
   const uploading = upload.state.phase === 'uploading';
 
@@ -100,6 +109,7 @@ export function EntryActions({
       {actions.canWithdraw ? (
         confirming ? (
           <WithdrawConfirm
+            {...(entry.result.status === 'none' ? { texts: withdrawNoResultTexts() } : {})}
             pending={withdraw.isPending}
             onConfirm={() => withdraw.mutate(undefined, { onSuccess: () => setConfirming(false) })}
             onClose={() => {

@@ -12,7 +12,6 @@ import {
   rideRowTime,
   rideShareDescription,
   rideShareText,
-  stackPeople,
 } from './format';
 
 /** «Сейчас»: 1 октября 2026, 15:00 по Минску. */
@@ -86,14 +85,9 @@ describe('подписи кофе-райда', () => {
     );
   });
 
-  it('стопка — не больше 4 пустых квадратов', () => {
-    expect(stackPeople(2)).toHaveLength(2);
-    expect(stackPeople(12)).toHaveLength(4);
-  });
-
-  it('подпись организатора (D2): введённая или «Организатор»', () => {
+  it('подпись организатора: введённая; без имени — строки нет (B9 смоука dev)', () => {
     expect(organizerLine('Катя Л.')).toBe('Организатор: Катя Л.');
-    expect(organizerLine(null)).toBe('Организатор');
+    expect(organizerLine(null)).toBeNull();
   });
 
   it('шаринг и OG — с годом, без описания и организатора', () => {

@@ -3,8 +3,8 @@ import { textStyle, useTheme } from '@rkarakulov/ui';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export interface SectionHeroProps {
-  /** Кикер героя («Окно гонки», «Ближайший старт»). */
-  kicker: string;
+  /** Кикер героя («Окно гонки», «Ближайший старт»); `null` — без строки кикера. */
+  kicker: string | null;
   /** Дата крупно и подпись рядом: «4–12» + «октября», «14» + «июня 2027». */
   date: { value: string; unit?: string };
   title: string;
@@ -29,11 +29,13 @@ export function SectionHero({ kicker, date, title, meta = [], onPress }: Section
     <View>
       <Block
         accessible
-        accessibilityLabel={`${kicker}. ${title}. ${dateText}`}
+        accessibilityLabel={kicker ? `${kicker}. ${title}. ${dateText}` : `${title}. ${dateText}`}
         {...(onPress ? { accessibilityRole: 'link' as const, onPress } : {})}
         style={[styles.hero, { backgroundColor: theme.surface.raised }]}
       >
-        <Text style={[textStyle('label'), { color: theme.text.primary }]}>{kicker}</Text>
+        {kicker ? (
+          <Text style={[textStyle('label'), { color: theme.text.primary }]}>{kicker}</Text>
+        ) : null}
         <View style={styles.dateRow}>
           <Text style={[textStyle('displayNumeralDate'), { color: theme.text.primary }]}>
             {date.value}

@@ -43,6 +43,10 @@ export const AUDIT_ACTIONS = [
   'disputes.series_viewed',
   // profile-02: сброс публичного имени райдера модератором (имени в записи нет)
   'profile.name_reset',
+  // routes-01: каталог маршрутов (правка города/покрытия опубликованного — `details.changedFields`)
+  'route.published',
+  'route.unpublished',
+  'route.catalog_updated',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;

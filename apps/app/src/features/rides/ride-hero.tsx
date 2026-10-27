@@ -1,12 +1,12 @@
 import type { RideCard } from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { AvatarStack } from '@rkarakulov/ui';
 import { StyleSheet, View } from 'react-native';
 
+import { GoingStack } from '@/components/going-stack';
 import { SectionHero } from '@/components/section-hero';
 
-import { goingCaption, rideHeroDate, rideHeroMeta, stackPeople } from './format';
+import { goingCaption, rideHeroDate, rideHeroMeta } from './format';
 import { RideRsvpAction } from './going-action';
 
 /**
@@ -34,10 +34,7 @@ export function RideHero({
         meta={[rideHeroMeta(ride)]}
         onPress={onPress}
       />
-      <AvatarStack
-        people={stackPeople(ride.goingCount)}
-        caption={goingCaption(ride, ride.viewer)}
-      />
+      <GoingStack count={ride.goingCount} caption={goingCaption(ride, ride.viewer)} />
       <View style={styles.action}>
         <RideRsvpAction ride={ride} variant="hero" />
       </View>

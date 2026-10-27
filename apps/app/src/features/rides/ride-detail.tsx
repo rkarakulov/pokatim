@@ -4,7 +4,6 @@ import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
   AsyncContent,
-  AvatarStack,
   Banner,
   Button,
   EmptyState,
@@ -23,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
+import { GoingStack } from '@/components/going-stack';
 import { OfflineBanner } from '@/components/offline-banner';
 import { RideGoingAction } from '@/components/ride-going-action';
 import { SectionHero } from '@/components/section-hero';
@@ -34,14 +34,7 @@ import { shareLink, shareOrigin } from '@/lib/share-link';
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
-import {
-  cityLabel,
-  goingCaption,
-  organizerLine,
-  paceRange,
-  rideShareText,
-  stackPeople,
-} from './format';
+import { cityLabel, goingCaption, organizerLine, paceRange, rideShareText } from './format';
 import { rideActionErrorText, useRide, useRideForViewer, useRideRsvp } from './queries';
 
 export const rideDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
@@ -160,7 +153,7 @@ function RideDetailView({
           },
         ]}
       />
-      <AvatarStack people={stackPeople(ride.goingCount)} caption={goingCaption(ride, viewer)} />
+      <GoingStack count={ride.goingCount} caption={goingCaption(ride, viewer)} />
       {viewer !== undefined ? (
         <RideGoingAction
           ride={ride}

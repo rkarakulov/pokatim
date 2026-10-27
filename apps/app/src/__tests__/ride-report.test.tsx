@@ -91,7 +91,7 @@ describe('«Пожаловаться на райд» (05b, AC7)', () => {
         comment: 'Такого места нет',
       }),
     );
-    expect(await screen.findByText('Жалоба отправлена — команда проверит райд')).toBeOnTheScreen();
+    expect(await screen.findByText('Жалоба отправлена — команда проверит райд.')).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Отправить' })).toBeNull();
     await fireEvent.press(screen.getByText('К райду'));
     expect(router.getPathname()).toBe(`/rides/${ID}`);

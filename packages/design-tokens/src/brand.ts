@@ -45,6 +45,10 @@ export interface PokatimRoleGroups {
     line: string;
     route: string;
     corridor: string;
+    /** свой трек участника поверх маршрута (maps-02) */
+    track: string;
+    /** участки трека вне коридора — пунктир, толще (различимы без цвета) */
+    offCorridor: string;
   };
   surfaceBar: {
     asphalt: string;
@@ -97,6 +101,8 @@ const light: ColorRoles = {
     line: color.neutral100,
     route: color.neutral900,
     corridor: color.neutral600,
+    track: color.orange600,
+    offCorridor: color.red700,
   },
   surfaceBar: {
     asphalt: color.neutral900,
@@ -152,6 +158,8 @@ const dark: ColorRoles = {
     line: color.neutral800,
     route: color.neutral50,
     corridor: color.neutral400,
+    track: color.orange400,
+    offCorridor: color.red400,
   },
   surfaceBar: {
     asphalt: color.neutral50,

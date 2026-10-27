@@ -12,8 +12,13 @@ import { TopBar } from '@/components/top-bar';
 import { useSignOut } from '@/features/auth/use-sign-out';
 import { HomeSection } from '@/features/home/home-section';
 import { CalendarStartHero } from '@/features/calendar/calendar-hero';
-import { RaceHero } from '@/features/home/heroes';
-import { useNextCalendarStart, useNextRace, useRideReasons } from '@/features/home/queries';
+import { RaceHero, RouteHero } from '@/features/home/heroes';
+import {
+  useLatestRoute,
+  useNextCalendarStart,
+  useNextRace,
+  useRideReasons,
+} from '@/features/home/queries';
 import { useNextRide } from '@/features/rides/queries';
 import { RideHero } from '@/features/rides/ride-hero';
 import {
@@ -41,6 +46,12 @@ const SECTION_COPY: Record<
     all: 'home.rides.all',
     href: '/rides',
   },
+  routes: {
+    kicker: 'home.routes.kicker',
+    title: 'home.routes.title',
+    all: 'home.routes.all',
+    href: '/routes',
+  },
   calendar: {
     kicker: 'home.calendar.kicker',
     title: 'home.calendar.title',
@@ -52,7 +63,7 @@ const SECTION_COPY: Record<
 const DOCUMENT_TITLE = `${t('home.title')} — ${t('app.name')}`;
 
 /**
- * Главная: верхняя панель и лента разделов («Гонки», «Кофе-райды», «Календарь стартов»). Порядок — по ответам опроса (R4):
+ * Главная: верхняя панель и лента разделов («Гонки», «Кофе-райды», «Маршруты», «Календарь стартов»). Порядок — по ответам опроса (R4):
  * отмеченные — первыми с тегом; профиль ещё не пришёл или не загрузился — базовый порядок без ошибки на экране.
  * Обновление — pull-to-refresh (native) и фокус вкладки / возврат из фона (`focusManager`, R7).
  */
@@ -65,15 +76,24 @@ export default function HomeScreen() {
   const races = useNextRace();
   const calendar = useNextCalendarStart();
   const rides = useNextRide();
+  const routes = useLatestRoute();
   const sections = orderHomeSections(AVAILABLE_HOME_SECTIONS, profile.reasons);
   // «сейчас» подписей — на клиенте (Главная без SSR-данных, R6): новые данные, фокус, полночь по Минску
-  const now = useMinskClock([races.dataUpdatedAt, rides.dataUpdatedAt, calendar.dataUpdatedAt]);
+  const now = useMinskClock([
+    races.dataUpdatedAt,
+    rides.dataUpdatedAt,
+    routes.dataUpdatedAt,
+    calendar.dataUpdatedAt,
+  ]);
   // без сети при показанных данных — баннер (§4.12); без данных «Нет соединения» показывает слот раздела
   const hasData =
-    races.data !== undefined || rides.data !== undefined || calendar.data !== undefined;
+    races.data !== undefined ||
+    rides.data !== undefined ||
+    routes.data !== undefined ||
+    calendar.data !== undefined;
   const refetchers = useMemo(
-    () => [races.refetch, rides.refetch, calendar.refetch, profile.refetch],
-    [races.refetch, rides.refetch, calendar.refetch, profile.refetch],
+    () => [races.refetch, rides.refetch, routes.refetch, calendar.refetch, profile.refetch],
+    [races.refetch, rides.refetch, routes.refetch, calendar.refetch, profile.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
 
@@ -170,6 +190,24 @@ export default function HomeScreen() {
                     now={now}
                     onPress={() => router.push(`/rides/${ride.id}`)}
                   />
+                ) : null;
+              }}
+            </HomeSection>
+          ) : id === 'routes' ? (
+            // RC-8: пустой каталог — пустой герой раздела, без скрытия (правило Главной)
+            <HomeSection
+              key={id}
+              {...frame}
+              query={routes}
+              empty={{
+                when: (page) => page.items.length === 0,
+                render: () => <EmptyState title={t('home.routes.empty')} />,
+              }}
+            >
+              {(page) => {
+                const route = page.items[0];
+                return route ? (
+                  <RouteHero route={route} onPress={() => router.push(`/routes/${route.id}`)} />
                 ) : null;
               }}
             </HomeSection>
