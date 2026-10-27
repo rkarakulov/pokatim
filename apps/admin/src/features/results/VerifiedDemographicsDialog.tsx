@@ -72,8 +72,11 @@ function DemographicsForm({
 }) {
   const queryClient = useQueryClient();
   const reasonId = useId();
-  const [gender, setGender] = useState<RiderGender>(current.gender);
-  const [year, setYear] = useState(String(current.birthYear));
+  // `null` — поле не трогали: оно следует за свежим `current` (фоновое обновление не превращает его в «изменение»)
+  const [genderEdit, setGender] = useState<RiderGender | null>(null);
+  const [yearEdit, setYear] = useState<string | null>(null);
+  const gender = genderEdit ?? current.gender;
+  const year = yearEdit ?? String(current.birthYear);
   const [reason, setReason] = useState('');
   const save = useMutation({
     mutationKey: saveKey(userId),

@@ -283,4 +283,35 @@ describe('Окно «Пол и год рождения» (race-results-07, profi
     await waitFor(() => expect(within(dialog).queryByRole('alert')).toBeNull());
     expect(mocked.getVerifiedDemographics).toHaveBeenCalledTimes(3);
   });
+
+  it('фоновое обновление с чужой правкой года: нетронутый год следует за сервером, в PATCH — только пол', async () => {
+    mocked.updateVerifiedDemographics.mockResolvedValue({
+      gender: 'w',
+      birthYear: 1985,
+      demographicsLocked: true,
+      changed: true,
+    });
+    const { dialog, queryClient } = await openWith();
+    await waitFor(() => expect(yearField(dialog).value).toBe('1981'));
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Женский' }));
+    fireEvent.change(reasonField(dialog), { target: { value: REASON } });
+    mocked.getVerifiedDemographics.mockResolvedValue({
+      gender: 'm',
+      birthYear: 1985,
+      demographicsLocked: true,
+    });
+    await act(() =>
+      queryClient.refetchQueries({
+        queryKey: ['admin', 'profiles', RIDER, 'verified-demographics'],
+      }),
+    );
+    await waitFor(() => expect(yearField(dialog).value).toBe('1985'));
+    fireEvent.click(submit(dialog));
+    await waitFor(() =>
+      expect(mocked.updateVerifiedDemographics).toHaveBeenCalledWith(RIDER, {
+        gender: 'w',
+        reason: REASON,
+      }),
+    );
+  });
 });
