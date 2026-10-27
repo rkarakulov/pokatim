@@ -41,6 +41,7 @@ packages/
   contracts/     zod-схемы — источник правды API (DTO, enum-ы, коды ошибок)
   api-client/    тонкий HTTP-клиент поверх contracts (zod-валидация ответов)
   tracks/        парсинг GPX/TCX/FIT/KML, геометрия
+  route-view/    отображение маршрута без React/RN: слои MapLibre, камера, скраббинг, профиль (приложение и панель)
   design-tokens/ бренд: Jersey Aura / Night Ride / «Протокол» (тема panel) поверх @rkarakulov/design-tokens
   i18n/          русские строки поверх словарей @rkarakulov/i18n-core
 infra/        docker-compose (dev — из шаблона; prod), Caddy

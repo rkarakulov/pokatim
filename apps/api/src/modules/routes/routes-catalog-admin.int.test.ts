@@ -60,6 +60,9 @@ describe('публикация в каталог (AC1)', () => {
       publishedAt: now.toISOString(),
     });
     expect(route.line.length).toBeGreaterThanOrEqual(2);
+    // routes-05: ответ публикации — тот же `view()`, с профилем высоты (ключ кэша страницы маршрута)
+    expect(res.body).toHaveProperty('elevation');
+    expect(route.elevation?.profile.length).toBeGreaterThanOrEqual(2);
 
     const list = PanelRoutePage.parse(
       (await panelCall(h, org.token, 'GET', `${ROUTES}?status=ready`)).body,

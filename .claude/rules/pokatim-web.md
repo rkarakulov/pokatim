@@ -52,7 +52,8 @@ paths:
   `<form>`: окно внутри формы гонки) → опрос `routeQuery` каждые 2 с, пока `processing`, не дольше 5 мин по часам — и при сплошных ошибках запросов (дальше —
   «проверьте позже»; статус — `role="status"`, без спиннера; три сбоя подряд — баннер), отказ — причина под полем.
   Ошибка обновления превью при показанной линии — баннер с повтором.
-  Превью — `LinePreview` (SVG без карты: `--color-map-route`, `--stroke-indicator`). С коридором дистанция — только
+  Превью — `RoutePreview` (компактная карта, без env стиля — `LinePreview`: SVG без карты, `--color-map-route`,
+  `--stroke-indicator`). С коридором дистанция — только
   чтение («… — по маршруту»), допуск — поле с подсказкой «Коридор: ±N м от маршрута». Ошибки сервера
   `corridor.routeId` / `corridor.widthM` — под своими полями формы.
 - «Маршруты» (routes-01) — `features/routes/`, маршрут `/routes` под `RequirePermission permission="races.read"`,
@@ -61,6 +62,19 @@ paths:
   Таблица с колонкой «В каталоге»; действия готового маршрута (`races.manage`): «Опубликовать в каталоге» / «Изменить»
   — `RouteCatalogDialog` (линия и предупреждение RC-11, город — `SelectField` справочника, покрытие — `ChipGroup`,
   ошибки под полями, `409 ROUTE_INVALID_STATE` — баннер), «Снять с публикации» — `Dialog` подтверждения без причины.
+- Страница маршрута и карта (routes-05, ADR-0014 поправка routes-05): `/routes/$routeId` (`races.read`) —
+  `features/routes/RouteScreen.tsx` (состояния как у гонки; `processing` — опрос `ROUTE_POLL_MS` не дольше
+  `ROUTE_POLL_MAX_MS`, затем «проверьте позже» с «Обновить»; `failed` — причина), название в «Маршрутах» — ссылка.
+  Карта — `features/maps/` панели: `RouteMap` (DOM поверх чистых функций `@pokatim/route-view`: `interactiveMapOptions`,
+  `guardWheelZoom`, слои `routeLayers(themes.panel …)` без коридора, линия `ROUTE_CATALOG_LINE_WIDTH`), `ScrubMarker`,
+  `MapControls`; `maplibre-gl` и CSS — только через `loadMaplibre` (async-чанк, воркер — `maplibre-gl-worker.mjs?url`
+  + `setWorkerUrl`). Стиль — `VITE_MAP_STYLE_LIGHT` (`map-style.ts`); не задан — `LinePreview` (смоук CI идёт по нему).
+  Профиль — `ElevationProfile` (inline SVG, `role="slider"`, клавиши `scrubKeyTarget`, стор скраббинга —
+  `createScrubStore` на экземпляр страницы, `useStore` из `zustand`); подписи — `route-detail-format.ts`. CSP
+  (`admin-nginx.conf`): origin провайдера в `connect-src`, `worker-src 'self' blob:`, `img-src blob:`; сторож —
+  `src/csp.test.ts` (origin стиля из `deploy-dev.yml`). Превью (`RoutePreview`): компактная карта и «Открыть
+  маршрут» — из поля коридора новая вкладка (`openLink="new-tab"`), из окна публикации — та же, на странице маршрута —
+  без ссылки (`openLink={false}`).
 - 409 `CONFLICT` правки по устаревшей версии — `ConflictBanner` «Запись изменили — обновите страницу» с «Обновить».
 - Раздел «Результаты» гонки (race-results-05) — `features/results/` по маршруту `races/$raceId/results`
   (`races.read`), ссылка «Результаты» из `RaceEditor` опубликованной или отменённой гонки. KPI — `StatTile` (`src/ui`).

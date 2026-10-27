@@ -63,6 +63,7 @@ const route = (overrides: Partial<PanelRoute> = {}): PanelRoute => ({
     [27.6, 53.95],
     [27.5, 53.9001],
   ],
+  elevation: null,
   ...overrides,
 });
 
@@ -150,8 +151,13 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
       'Линия маршрута «Минское кольцо», 86,0 км',
     );
     expect(text(screen.getByText(/набор 412 м/).textContent)).toBe(
-      '86,0 км · набор 412 м · Круговой',
+      '86,0 км · набор 412 м · Круговой · Открыть маршрут (в новой вкладке)',
     );
+    // routes-05 (RC-8): страница маршрута из формы гонки — новая вкладка, форма не теряется
+    const open = screen.getByRole('link', { name: /Открыть маршрут/ });
+    expect(open.getAttribute('href')).toBe(`/admin/routes/${ROUTE_ID}`);
+    expect(open.getAttribute('target')).toBe('_blank');
+    expect(open.getAttribute('rel')).toBe('noopener noreferrer');
 
     fireEvent.change(input(/^Допуск коридора, м/), { target: { value: '100' } });
     expect(screen.getByText('Коридор: ±100 м от маршрута')).toBeTruthy();

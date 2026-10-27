@@ -1,26 +1,34 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-import { space, stroke } from '@pokatim/design-tokens';
+import { space, stroke, themes } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
+import {
+  attributionCss,
+  cameraPadding,
+  collapseAttribution,
+  CORRIDOR_LAYER_ID,
+  createMapViewStore,
+  guardWheelZoom,
+  interactiveMapOptions,
+  isMacPlatform,
+  projectLine,
+  ROUTE_SOURCE_ID,
+  routeFeatures,
+  routeLayers,
+  WHEEL_HINT_MS,
+} from '@pokatim/route-view';
 import { cumulativeMeters } from '@pokatim/tracks';
 import { textStyle, useReducedMotion } from '@rkarakulov/ui';
 import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { attributionCss, collapseAttribution } from './attribution.web';
-import { CORRIDOR_LAYER_ID, ROUTE_SOURCE_ID, routeFeatures, routeLayers } from './corridor-style';
 import { loadMaplibre } from './load-maplibre';
 import { LOCATE_ZOOM, LOCATION_SOURCE_ID, locationFeature, locationLayers } from './location-style';
-import { cameraPadding, MAP_MAX_ZOOM, MAP_MIN_ZOOM } from './map-camera';
 import { MapOverlayControls } from './map-overlay-controls';
-import { mapLocale } from './map-locale.web';
-import { guardWheelZoom, isMacPlatform, WHEEL_HINT_MS } from './map-wheel.web';
-import { createMapViewStore } from './map-view-store';
 import { MAP_WORKER_FILE } from './map-worker';
 import { RouteMapFrame } from './route-map-frame';
 import type { RouteMapProps } from './route-map-props';
-import { projectLine } from './scrub-line';
 import { ScrubLayer } from './scrub-layer';
 import {
   TRACK_BEFORE_LAYER_ID,
@@ -119,23 +127,12 @@ export function RouteMap({
           container: node,
           style: styleUrl,
           // routes-04c: один палец и мышь двигают карту; колесо без Ctrl/⌘ — странице (`guardWheelZoom`)
-          interactive: true,
-          cooperativeGestures: false,
-          dragPan: true,
-          dragRotate: false,
-          pitchWithRotate: false,
-          touchPitch: false,
-          maxPitch: 0,
-          minZoom: MAP_MIN_ZOOM,
-          maxZoom: MAP_MAX_ZOOM,
-          locale: mapLocale(),
+          ...interactiveMapOptions({
+            bounds: unionBounds(map.bounds, track?.line),
+            padding: cameraPadding(inset.current, node.clientHeight || null),
+          }),
           // routes-04d (RC-6): атрибуция — слева внизу (справа — колонка кнопок, снизу — шторка)
           attributionControl: false,
-          bounds: unionBounds(map.bounds, track?.line),
-          fitBoundsOptions: {
-            padding: cameraPadding(inset.current, node.clientHeight || null),
-            animate: false,
-          },
         });
         created.addControl(new AttributionControl({ compact: true }), 'bottom-left');
         created.touchZoomRotate.disableRotation();
@@ -226,7 +223,7 @@ export function RouteMap({
       fill={fill}
       bottomInset={bottomInset}
     >
-      <style>{attributionCss(scope, theme)}</style>
+      <style>{attributionCss(scope, theme, theme === themes.dark)}</style>
       {bottomInset > 0 ? (
         // атрибуция над шторкой (RC-6): угол контролов maplibre-gl — со сдвигом на её высоту
         <style>{`[data-route-map="${scope}"] .maplibregl-ctrl-bottom-left{bottom:${bottomInset}px}`}</style>

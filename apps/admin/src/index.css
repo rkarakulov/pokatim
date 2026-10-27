@@ -1099,3 +1099,183 @@ select.field__control option:disabled {
 .series__table summary {
   cursor: pointer;
 }
+
+/* ---------- routes-05: карта маршрута (MapLibre), профиль высоты, страница маршрута ---------- */
+.route-map {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: var(--color-map-background);
+  border: var(--stroke-hairline) solid var(--color-border-strong);
+}
+
+.route-map--page {
+  aspect-ratio: 2 / 1;
+}
+
+.route-map__canvas,
+.route-map__label,
+.route-map__overlay,
+.route-map__hint,
+.route-map__failed {
+  position: absolute;
+  inset: 0;
+}
+
+.route-map__label,
+.route-map__overlay,
+.route-map__hint,
+.route-map__failed {
+  pointer-events: none;
+}
+
+.route-map__hint,
+.route-map__failed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-s4);
+}
+
+.route-map__failed {
+  color: var(--color-text-secondary);
+}
+
+.route-map__hint-text {
+  padding: var(--space-s2) var(--space-s3);
+  color: var(--color-text-primary);
+  background: var(--color-surface-raised);
+  border: var(--stroke-hairline) solid var(--color-border-subtle);
+}
+
+/* маркер скраббинга: область касания touch-min, точка — icon с обводкой фона карты; позиция — transform (данные) */
+.scrub-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-touch-min);
+  height: var(--size-touch-min);
+  margin: calc(var(--size-touch-min) / -2) 0 0 calc(var(--size-touch-min) / -2);
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+}
+
+.scrub-marker__dot {
+  box-sizing: border-box;
+  width: var(--size-icon);
+  height: var(--size-icon);
+  background: var(--color-action-primary);
+  border: var(--stroke-indicator) solid var(--color-map-background);
+  border-radius: var(--radius-pill);
+}
+
+/* кнопки камеры — колонка сверху справа */
+.map-controls {
+  position: absolute;
+  top: var(--space-s2);
+  right: var(--space-s2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s1);
+}
+
+.map-controls__button {
+  min-width: var(--density-control-height-sm);
+  padding: 0;
+  justify-content: center;
+  background: var(--color-surface-raised);
+}
+
+.map-controls__icon {
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--stroke-input);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* профиль высоты: inline SVG, курсор и подписи оси X */
+.elevation-profile__readout {
+  min-height: var(--size-icon);
+  margin-bottom: var(--space-s1);
+  color: var(--color-text-secondary);
+}
+
+.elevation-profile__plot {
+  position: relative;
+  aspect-ratio: 4 / 1;
+  border-bottom: var(--stroke-hairline) solid var(--color-border-subtle);
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+
+.elevation-profile__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.elevation-profile__stop {
+  stop-color: var(--color-map-corridor);
+}
+
+.elevation-profile__line {
+  fill: none;
+  stroke: var(--color-map-corridor);
+  stroke-width: var(--stroke-input);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.elevation-profile__cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--stroke-indicator);
+  margin-left: calc(var(--stroke-indicator) / -2);
+  background: var(--color-action-primary);
+  pointer-events: none;
+}
+
+.elevation-profile__axis {
+  position: relative;
+  height: var(--size-icon);
+  margin-top: var(--space-s1);
+  color: var(--color-text-secondary);
+}
+
+.elevation-profile__tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.elevation-profile__tick:first-child {
+  transform: none;
+}
+
+.elevation-profile__tick:last-child {
+  transform: translateX(-100%);
+}
+
+.route-page__status {
+  margin-bottom: var(--space-s3);
+}
+
+.route-page__map-skeleton {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+}
+
+.route-page__stats {
+  margin-top: var(--space-s5);
+}

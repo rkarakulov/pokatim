@@ -1,16 +1,9 @@
 /// <reference types="jest" />
+import { createScrubStore } from '@pokatim/route-view';
 import { act, renderHook } from '@testing-library/react-native';
+import { useScrub } from './use-scrub';
 
-import { createScrubStore, useScrub } from './scrub-store';
-
-describe('scrub-store (routes-04, RC-5)', () => {
-  it('начальное состояние — старт, курсор скрыт, жеста нет; экземпляры независимы', () => {
-    const store = createScrubStore();
-    expect(store.getState()).toEqual({ fraction: 0, active: false, dragging: null });
-    store.setState({ fraction: 0.5 });
-    expect(createScrubStore().getState().fraction).toBe(0);
-  });
-
+describe('useScrub (routes-04, RC-5)', () => {
   it('setState сливает поля; подписчик по селектору видит только своё поле', async () => {
     const store = createScrubStore();
     const { result } = await renderHook(() => useScrub(store, (state) => state.active));

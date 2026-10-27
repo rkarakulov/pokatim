@@ -1,10 +1,10 @@
 import { size, stroke } from '@pokatim/design-tokens';
+import { SCRUB_MARKER_ATTR, scrubTolerance } from '@pokatim/route-view';
 import { nearestFraction, pointAtFraction } from '@pokatim/tracks';
 import { useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 
 import type { ScrubMarkerProps } from './route-map-props';
-import { scrubTolerance } from './scrub-line';
-import { SCRUB_MARKER_ATTR, useScrub } from './scrub-store';
+import { useScrub } from './use-scrub';
 
 const HALF = size.touchMin / 2;
 

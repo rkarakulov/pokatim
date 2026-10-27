@@ -30,6 +30,7 @@ COPY apps/admin/package.json apps/admin/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/api-client/package.json packages/api-client/
 COPY packages/tracks/package.json packages/tracks/
+COPY packages/route-view/package.json packages/route-view/
 COPY packages/design-tokens/package.json packages/design-tokens/
 COPY packages/i18n/package.json packages/i18n/
 # @rkarakulov/* — GitHub Packages: токен только из secret на время этого RUN; ~/.npmrc содержит ссылку на
@@ -96,7 +97,10 @@ CMD ["node", "server/main.ts"]
 # ---------- admin: статика под /admin/ ----------
 FROM deps AS build-admin
 ARG ADMIN_BASE=/admin/
-RUN ADMIN_BASE="$ADMIN_BASE" pnpm --filter @pokatim/admin build
+# стиль карты маршрута (routes-05, ADR-0014) вшивается в бандл; пусто — без карты (превью линии). Origin провайдера —
+# в CSP infra/docker/admin-nginx.conf (connect-src), смена провайдера = этот build-arg + CSP
+ARG VITE_MAP_STYLE_LIGHT=
+RUN ADMIN_BASE="$ADMIN_BASE" VITE_MAP_STYLE_LIGHT="$VITE_MAP_STYLE_LIGHT" pnpm --filter @pokatim/admin build
 
 FROM ${NGINX_IMAGE} AS admin
 LABEL org.opencontainers.image.source="https://github.com/rkarakulov/pokatim" \

@@ -9,7 +9,7 @@ import { API_URL, apiEnv, ORIGIN } from './project';
 // Смоук сезонов и гонок (admin-02 AC15): CLI grant-admin первому → админ выдаёт organizer второму → админ создаёт
 // сезон → организатор загружает GPX маршрута (worker из `dist` разбирает его) и создаёт гонку с коридором ±50 м
 // (race-results-01) → после перезагрузки — коридор и дистанция по маршруту → публикует → публичный `GET /v1/races` её
-// видит, карточка — допуск коридора → админ отменяет с шаблонной причиной → «Журнал действий» содержит сезон и гонку. Ошибки страницы — только согласованный 401 «кто я».
+// видит, карточка — допуск коридора; страница маршрута — цифры и профиль-слайдер (routes-05) → админ отменяет с шаблонной причиной → «Журнал действий» содержит сезон и гонку. Ошибки страницы — только согласованный 401 «кто я».
 // Даты — далёкий год, свой на каждый прогон: сезоны dev-БД не пересекаются с прошлыми прогонами.
 
 const PASSWORD = 'e2e-long-enough';
@@ -119,7 +119,8 @@ test('сезон → гонка организатора → публикаци�
     /^10,6\s?км — по маршруту$/,
   );
   await expect(
-    org.getByRole('img', { name: new RegExp(`Линия маршрута «Маршрут ${run}»`) }),
+    // без стиля карты — SVG-линия, со стилем (VITE_MAP_STYLE_LIGHT, routes-05) — карта
+    org.getByRole('img', { name: new RegExp(`(Линия|Карта) маршрута «Маршрут ${run}»`) }),
   ).toBeVisible();
   await org.getByLabel(/^Окно: начало/).fill(`${year}-06-01T00:00`);
   await org.getByLabel(/^Окно: конец/).fill(`${year}-06-03T23:59`);
@@ -139,6 +140,18 @@ test('сезон → гонка организатора → публикаци�
   await org.getByRole('button', { name: 'Опубликовать' }).click();
   await org.getByRole('dialog').getByRole('button', { name: 'Опубликовать' }).click();
   await expect(org.getByText(/^Скоро · протокол по плану/)).toBeVisible();
+
+  // routes-05: «Маршруты» → название → страница маршрута: цифры и профиль высоты — slider с клавишами
+  await nav.getByRole('link', { name: 'Маршруты' }).click();
+  await org.getByRole('link', { name: `Маршрут ${run}` }).click();
+  await expect(org.getByRole('heading', { name: `Маршрут ${run}`, level: 1 })).toBeVisible();
+  await expect(org.getByRole('group', { name: 'Длина' })).toContainText(/10,6\s?км/);
+  const profile = org.getByRole('slider', { name: /^Профиль высоты/ });
+  const before = await profile.getAttribute('aria-valuetext');
+  await profile.focus();
+  await profile.press('ArrowRight');
+  await expect(profile).not.toHaveAttribute('aria-valuetext', before ?? '');
+  await expect(profile).toHaveAttribute('aria-valuetext', /^1 км, высота/);
 
   // публичное чтение видит гонку (без входа)
   const list = await request.get(`${API_URL}/v1/races`, {
