@@ -408,6 +408,10 @@ routeCard: 'classic' | 'tile' | 'numeral';
 | Контур маршрута на Главной у тем `contour`/`numeral`, RC-8 — только у «Классики» | F1 принят (T4), `routes.md`/`home.md` обновлены | 7.7 |
 | Хелпер тестов `appThemeWrapper(themeId)` — `ThemeProvider` + контекст темы без `AppThemeProvider` | web-проект jest без мока `expo-font`: провайдер ждал бы загрузку шрифтов; загрузку проверяют тесты провайдера | `src/__tests__/app-theme-wrapper.tsx` |
 | `sheetColors` → `sheetSurface` (цвета + радиус верхних углов) | форма шторки — в одном месте для native, web и скелетона карточки | `bottom-sheet-props.ts` |
+| Плитки `tiles` — ширина по содержимому с переносом рядами (не «три равные»), значение частями `StatItem.parts` («5 ч» «10 мин»), зазор s1 | ревью pass 1 HIGH: «В пути» и «123,4» в Inter Tight не помещались в треть 360 px; в `routeStatItems` добавлено поле `parts` (ожидание теста формата дополнено) | `stat-block.tsx`, `format.ts` |
+| `appDensity.regular.listGap` = s2, а не 0 | ревью pass 1 MEDIUM: плитки списка Хронометра и Навигации стояли вплотную; строки «Классики» зазор не берут | `app-themes.ts` |
+| Роль `map.start` (точка старта контура) + пара `map.start / map.route` ≥ 3:1; кружок с обводкой цветом линии | ревью pass 1 MEDIUM: `text.accent` совпадал с линией у Атласа и Навигации | `brand.ts`, `app-theme-palettes.ts`, `contrast.ts` |
+| Скелетоны шапки шторки и героя «Маршрутов» по вариантам (`STAT_SKELETONS`, `ROUTE_HERO_SKELETON`) | ревью pass 1 HIGH/MEDIUM, §4.12 | `stat-block.tsx`, `heroes.tsx` |
 | Плитки `tiles` шапки шторки — фон `surface.default`, а не `surface.raised` | шторка — `surface.sheet` = `surface.raised` (правило 7.1): на ней плитки `raised` не видны (найдено в браузере, Хронометр); `text.*` / `surface.default` — пары базы | `stat-block.tsx` |
 | `packages/design-tokens/README.md` не обновлён | файла нет в пакете; описание — в комментариях `app-theme-palettes.ts`/`brand.ts` и ADR-0016 | — |
 
@@ -580,3 +584,23 @@ NOT VERIFIED:
 - Native-клиент (iOS/Android): иконки `semibold`, заливка iOS, шрифты в бандле, контур через `react-native-svg`.
 - Панель «Протокол» в браузере (превью) — покрыто vitest.
 - Подтверждение палитр человеком (F8) и сжатых гарнитур глазами (R2).
+
+### Исправления по ревью pass 1 (`findings-c-claude.md`, `findings-c-codex.md`)
+
+- Влит `origin/develop` (D1, B, routes-05, фикс грабера): профиль высоты переехал в `@pokatim/route-view` —
+  `PROFILE_FILL`/`PROFILE_SOLID_OPACITY` перенесены туда, `useSvgLib` снова вынесен; lockfile — `pnpm install
+  --frozen-lockfile` проходит.
+- HIGH плитки: значение частями с единицами, плитки по содержимому с переносом рядами, без многоточия; тест 360 px для
+  Хронометра и Навигации. В браузере на 360 px: Хронометр и Навигация — «123,4 км», «1 120 м» в ряд, «5 ч 10 мин»
+  вторым рядом.
+- HIGH/MEDIUM скелетоны: шапка шторки (`compact`/`tiles`/`numeral`) и герой Главной (`classic`/`contour`/`numeral`)
+  — таблицами; тесты первой загрузки под Хронометром, Типографикой, Атласом.
+- MEDIUM зазор плиток списка (s2 в `regular`): в браузере список Хронометра — плитки раздельно.
+- MEDIUM точка старта: роль `map.start`, пара контраста; в браузере видна у Атласа и Типографики.
+- LOW сторож: `themeId`, обратный порядок, двойные кавычки, `switch`, `=== layout.x` (+ самопроверка шаблонов);
+  `TAB_ICONS` — `Record<TabName, IconName>`, равенство `TAB_NAMES` и вкладок `(tabs)/_layout` — тест.
+- После слияния D1 тест описания радио панели ждёт «Шрифт: Manrope» вместо «Превью появится позже» (7.6).
+- Проверки: `TURBO_CONCURRENCY=1 pnpm check` → 15/15 (app 1365, admin 285, design-tokens 568); `build:web` →
+  успешно; браузер (заглушка API с тестовой сессией): карточка маршрута Хронометр/Навигация 360 px, Типографика 375,
+  список маршрутов Хронометра с таб-баром `icons`, герой Главной Атлас и Типографика.
+- NOT VERIFIED: native-клиент; e2e:web не перезапускался (падение «жалоба на райд» до слайса).
