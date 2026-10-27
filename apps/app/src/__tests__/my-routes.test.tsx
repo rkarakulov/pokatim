@@ -6,10 +6,8 @@ import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testi
 import { getDocumentAsync } from 'expo-document-picker';
 import type { ReactElement } from 'react';
 import type { RefreshControlProps } from 'react-native';
-import { createGestureController } from 'react-native-gesture-handler/jest-utils';
 
 import { useSessionStore } from '@/features/auth/session-store';
-import { MAP_PAN_TEST_ID } from '@/features/maps/map-gestures';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
 
@@ -317,17 +315,16 @@ describe('карточка своего маршрута (AC3, M3)', () => {
     expect(screen.queryByText('Поделиться')).toBeNull();
   });
 
-  it('routes-04b (RC-12): жест карты двумя пальцами выключает прокрутку карточки, конец — включает', async () => {
+  it('routes-04c: карту двигает один палец нативно — прокрутка карточки не выключается (вне карты — страница)', async () => {
     await openDetail(ring.id);
-    await screen.findByTestId('maplibre-Map');
+    const map = await screen.findByTestId('maplibre-Map');
     const scroll = () => screen.getByTestId('my-route-detail');
-    expect(scroll()).toHaveProp('scrollEnabled', true);
-    const pan = createGestureController(MAP_PAN_TEST_ID);
-    await act(async () => pan.begin({ x: 100, y: 80, translationX: 0, translationY: 0 }));
-    await act(async () => pan.activate({ x: 110, y: 80, translationX: 10, translationY: 0 }));
-    expect(scroll()).toHaveProp('scrollEnabled', false);
-    await act(async () => pan.end({ x: 110, y: 80, translationX: 10, translationY: 0 }));
-    expect(scroll()).toHaveProp('scrollEnabled', true);
+    expect(map).toHaveProp('dragPan', true);
+    expect(scroll().props.scrollEnabled).not.toBe(false);
+    await fireEvent(map, 'regionIsChanging', {
+      nativeEvent: { center: [27.6, 53.9], zoom: 12, bounds: [27.5, 53.8, 27.7, 54.0] },
+    });
+    expect(scroll().props.scrollEnabled).not.toBe(false);
   });
 
   it('обрабатывается — статус без карты; опрос до готовности', async () => {

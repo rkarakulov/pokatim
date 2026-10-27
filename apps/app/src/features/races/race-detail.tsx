@@ -23,7 +23,6 @@ import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { SectionHero } from '@/components/section-hero';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
-import { MapGestureLockContext, useMapGestureLock } from '@/features/maps/map-gesture-lock';
 import {
   domainLabel,
   formatDistances,
@@ -229,8 +228,6 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
     !valid || (race.data === undefined && apiErrorOf(race.error)?.code === 'NOT_FOUND');
   // «назад» без истории и «Все гонки»: вкладки — только для вошедших, гостю — корень (дальше решает гард)
   const home = signedIn ? '/races' : '/';
-  // routes-04b (RC-3): жест карты двумя пальцами (native) — экран не прокручивается; web контекст не вызывает
-  const [scrollEnabled, onMapGesture] = useMapGestureLock();
 
   return (
     <SafeAreaView
@@ -243,55 +240,52 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
         )}
       />
       <DetailHeader title={notFound ? undefined : race.data?.title} fallback={home} />
-      <MapGestureLockContext value={onMapGesture}>
-        <ScrollView
-          testID="race-detail"
-          contentContainerStyle={styles.content}
-          scrollEnabled={scrollEnabled}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void onRefresh()}
-              tintColor={theme.text.secondary}
-              colors={[theme.text.primary]}
-              progressBackgroundColor={theme.surface.raised}
-            />
-          }
-        >
-          <OfflineBanner hasData={race.data !== undefined && !notFound} style={styles.offline} />
-          {notFound ? (
-            <EmptyState
-              title={t('races.detail.notFound')}
-              action={{
-                label: t('races.detail.allRaces'),
-                onPress: () => router.navigate(home),
-              }}
-            />
-          ) : (
-            <AsyncContent
-              query={race}
-              skeleton={
-                <View style={styles.detail}>
-                  <SkeletonHeroCard />
-                  <SkeletonText variant="body" lines={4} lastLineWidth="60%" />
-                </View>
-              }
-            >
-              {(data) => (
-                <RaceDetailView
-                  race={data}
-                  now={now}
-                  entry={entry}
-                  disputes={disputes}
-                  results={results}
-                  signedIn={signedIn}
-                  sessionPending={sessionPending}
-                />
-              )}
-            </AsyncContent>
-          )}
-        </ScrollView>
-      </MapGestureLockContext>
+      <ScrollView
+        testID="race-detail"
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={theme.text.secondary}
+            colors={[theme.text.primary]}
+            progressBackgroundColor={theme.surface.raised}
+          />
+        }
+      >
+        <OfflineBanner hasData={race.data !== undefined && !notFound} style={styles.offline} />
+        {notFound ? (
+          <EmptyState
+            title={t('races.detail.notFound')}
+            action={{
+              label: t('races.detail.allRaces'),
+              onPress: () => router.navigate(home),
+            }}
+          />
+        ) : (
+          <AsyncContent
+            query={race}
+            skeleton={
+              <View style={styles.detail}>
+                <SkeletonHeroCard />
+                <SkeletonText variant="body" lines={4} lastLineWidth="60%" />
+              </View>
+            }
+          >
+            {(data) => (
+              <RaceDetailView
+                race={data}
+                now={now}
+                entry={entry}
+                disputes={disputes}
+                results={results}
+                signedIn={signedIn}
+                sessionPending={sessionPending}
+              />
+            )}
+          </AsyncContent>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }

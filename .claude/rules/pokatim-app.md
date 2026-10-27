@@ -142,12 +142,13 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   метрах выражением зума, роли `map.*`, `CORRIDOR_OPACITY`), рамка — `route-map-frame.tsx` (пропорция
   `MAP_ASPECT_RATIO`, доступное изображение с подписью без координат, сообщение «Карта не загрузилась» поверх). URL
   стилей — только `EXPO_PUBLIC_MAP_STYLE_LIGHT/DARK` (`map-style.ts`, прямое обращение к `process.env`); не заданы —
-  карты нет. Интерактивная карта (routes-04b, дополнение ADR-0014): web — `cooperativeGestures` `maplibre-gl` +
-  `locale` (`map-locale.web.ts`), вращение и наклон выключены; native — нативные жесты MapLibre выключены пропсами
-  (не `pointerEvents` — атрибуция нажимается), жесты двумя пальцами и двойной тап — RNGH поверх карты
-  (`map-gestures.ts`, только native-файл; камера — `CameraRef.jumpTo`, математика — чистая `map-camera.ts`), экран не
-  прокручивается на время жеста (`map-gesture-lock.tsx`: `MapGestureLockContext` + `useMapGestureLock` на трёх
-  экранах карты; web контекст не вызывает). Зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM` (2–17: рамка 1000 км вписывается), без `maxBounds`; кнопки «+», «−»,
+  карты нет. Интерактивная карта (routes-04b, поправка routes-04c ADR-0014 — одним пальцем): web — без
+  `cooperativeGestures` (мышь и один палец тащат карту), колесо — зум только с Ctrl/⌘, без модификатора — прокрутка
+  страницы и своя подсказка (`map-wheel.web.ts`: слушатель `wheel` в фазе перехвата, без `preventDefault`), подпись
+  холста — `locale` (`map-locale.web.ts`), вращение и наклон выключены; native — нативные жесты MapLibre RN
+  (`dragPan`, `touchZoom`, `doubleTapZoom` — выкл при reduce motion; `doubleTapHoldZoom`, `touchRotate`,
+  `touchPitch` — выкл), прокрутку карточки на время жеста блокирует натив (Android `requestDisallowInterceptTouchEvent`),
+  своей блокировки и RNGH-оверлея нет. Зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM` (2–17: рамка 1000 км вписывается), без `maxBounds`; кнопки «+», «−»,
   «в рамку» — `map-controls.tsx` сверху справа (`MAP_FIT_PADDING.right` — под них), анимация камеры
   `MAP_CAMERA_ANIMATION_MS`, при reduce motion — без анимации (native — длительность всегда явно); начальная камера —
   по рамке без анимации. Сдвиг карты на native — исключение из правила `accessibilityActions` (ADR-0014). Карточка `races/[id]`: блок `race-route-map.tsx` после строки «Коридор» — SSR и первый рендер — место

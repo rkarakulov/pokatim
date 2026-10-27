@@ -67,7 +67,7 @@ describe('RouteMap native: маркер скраббинга (routes-04, RC-2)',
     await render(element());
     const map = await screen.findByTestId('maplibre-Map');
     await fireEvent(map, 'regionIsChanging', { nativeEvent: { bounds: VIEW_BOUNDS } });
-    await fireEvent(screen.getByTestId('map-gesture-area'), 'layout', {
+    await fireEvent(screen.getByTestId('map-area'), 'layout', {
       nativeEvent: { layout: { x: 0, y: 0, width: 200, height: 100 } },
     });
     expect(screen.queryByTestId('scrub-overlay')).toBeNull();
