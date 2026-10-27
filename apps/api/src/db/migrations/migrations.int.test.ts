@@ -30,6 +30,8 @@ import { routesCatalog } from './0020_routes_catalog';
 import { routesRider } from './0021_routes_rider';
 import { routesDerived } from './0022_routes_derived';
 import { accountDeletion } from './0023_account_deletion';
+import { notifications } from './0024_notifications';
+import { NOTIFICATIONS_COLLECTIONS } from '../../modules/notifications/notifications.collection';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
 import { RESULTS_COLLECTIONS } from '../../modules/results/results.collection';
@@ -95,6 +97,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0021_routes_rider',
       '0022_routes_derived',
       '0023_account_deletion',
+      '0024_notifications',
     ]);
   });
 
@@ -734,9 +737,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(ROUTES_COLLECTIONS.geometries)).toEqual(expected);
   });
 
-  it('0023_account_deletion: индексы userId данных устройств и частичный индекс очистки users; последняя; повторный up — без изменений', async () => {
+  it('0023_account_deletion: индексы userId данных устройств и частичный индекс очистки users; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0023_account_deletion');
     expect(ids.indexOf('0023_account_deletion')).toBe(ids.indexOf('0022_routes_derived') + 1);
     const plain = (key: Record<string, 1>) => ({
       key,
@@ -764,6 +766,64 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await snapshot()).toEqual(expected);
     await accountDeletion.up(h.db);
     await accountDeletion.up(h.db);
+    expect(await snapshot()).toEqual(expected);
+  });
+
+  it('0024_notifications: коллекции и индексы центра уведомлений (unique, partial, TTL); последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0024_notifications');
+    expect(ids.indexOf('0024_notifications')).toBe(ids.indexOf('0023_account_deletion') + 1);
+    const index = (
+      key: Record<string, 1 | -1>,
+      options: { unique?: boolean; partial?: Record<string, unknown>; ttl?: number } = {},
+    ) => ({
+      key,
+      unique: options.unique ?? false,
+      partialFilterExpression: options.partial,
+      expireAfterSeconds: options.ttl,
+    });
+    const snapshot = async () => ({
+      notifications: await indexesOf(NOTIFICATIONS_COLLECTIONS.notifications),
+      settings: await indexesOf(NOTIFICATIONS_COLLECTIONS.settings),
+      pushTokens: await indexesOf(NOTIFICATIONS_COLLECTIONS.pushTokens),
+      pushTickets: await indexesOf(NOTIFICATIONS_COLLECTIONS.pushTickets),
+    });
+    const due = { $in: ['pending', 'sending'] };
+    const expected = {
+      notifications: {
+        notifications_event_user_unique: index({ sourceEventId: 1, userId: 1 }, { unique: true }),
+        notifications_collapse_unique: index(
+          { userId: 1, collapseKey: 1 },
+          { unique: true, partial: { collapseKey: { $type: 'string' } } },
+        ),
+        notifications_user_list_idx: index({ userId: 1, createdAt: -1, _id: -1 }),
+        notifications_user_unread_idx: index({ userId: 1 }, { partial: { readAt: { $eq: null } } }),
+        notifications_push_due_idx: index(
+          { 'push.state': 1, 'push.notBefore': 1 },
+          { partial: { 'push.state': due } },
+        ),
+        notifications_email_due_idx: index(
+          { 'email.state': 1 },
+          { partial: { 'email.state': due } },
+        ),
+        notifications_expire_ttl: index({ expireAt: 1 }, { ttl: 0 }),
+      },
+      settings: {},
+      pushTokens: {
+        push_tokens_token_unique: index({ token: 1 }, { unique: true }),
+        push_tokens_user_idx: index({ userId: 1, updatedAt: 1 }),
+      },
+      pushTickets: {
+        push_tickets_ticket_unique: index({ ticketId: 1 }, { unique: true }),
+        push_tickets_created_idx: index({ createdAt: 1 }),
+        push_tickets_expire_ttl: index({ expireAt: 1 }, { ttl: 0 }),
+      },
+    };
+    expect(await snapshot()).toEqual(expected);
+    const names = (await h.db.listCollections({}, { nameOnly: true }).toArray()).map((c) => c.name);
+    expect(names).toEqual(expect.arrayContaining(Object.values(NOTIFICATIONS_COLLECTIONS)));
+    await notifications.up(h.db);
+    await notifications.up(h.db);
     expect(await snapshot()).toEqual(expected);
   });
 

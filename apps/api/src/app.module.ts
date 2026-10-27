@@ -18,6 +18,7 @@ import { DevicesModule } from './modules/devices';
 import { DisputesCoreModule, DisputesModule } from './modules/disputes';
 import { HealthModule } from './modules/health';
 import { IdentityModule } from './modules/identity';
+import { NotificationsModule } from './modules/notifications';
 import { PanelModule } from './modules/panel';
 import { ProfileModule } from './modules/profile';
 import { RacesModule } from './modules/races';
@@ -51,6 +52,8 @@ import { TracksModule } from './modules/tracks';
     DevicesModule,
     // удаление аккаунта (оркестратор, ADR-0015)
     AccountModule,
+    // центр уведомлений (ADR-0016)
+    NotificationsModule,
   ],
   // единый формат ошибок ApiError для всех модулей; тексты кодов проекта — рядом с фильтром
   providers: [

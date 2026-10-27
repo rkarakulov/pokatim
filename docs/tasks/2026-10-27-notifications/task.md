@@ -263,6 +263,15 @@ Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров �
 
 ## 8.2 Deviations from spec
 
+- **A-1 (шаг A).** Уведомления в int-тестах шага A вставляются хелпером `test/notifications.ts` прямо в коллекцию
+  (`notificationsCollections(h.db)`), а не методом репозитория: метода вставки «только для тестов» в репозитории нет,
+  запись уведомлений появится в intake (шаг B). Причина — не держать мёртвый код в единственном писателе.
+- **A-2 (шаг A).** `NotificationsCoreModule` экспортирует ещё и `NotificationsRepository` (его внедряют сервисы
+  `NotificationsModule` и будущие процессоры worker). Наружу через `index.ts` репозиторий не выходит — только порты.
+- **A-3 (шаг A, недоопределённость текстов).** Формат дат в текстах: заезд — «14 июня» (день и месяц), райд — «14
+  июня, 10:00» (по Минску). Исход спора — дословно §7: «спор рассмотрен — спор удовлетворён / спор отклонён»; повтор
+  слова «спор» в одной фразе — вопрос к автору, заменить можно одной строкой `OUTCOME` в `notification-texts.ts`.
+
 ## 8.3 Security checklist
 
 AuthN/AuthZ: все эндпоинты под AuthGuard, выборки только по `userId` из сессии; чужое уведомление → 404.
@@ -627,3 +636,46 @@ failed-доставок (follow-up вместе с F13); WebSocket; fan-out outb
 транзакции, уведомления/настройки/тикеты — шагом стирания.
 
 ## 12. Outcome
+
+### Шаг A — ядро notifications, контракты, HTTP API
+
+**Changes.**
+- Контракты `src/notifications/notification.schema.ts`: справочники `NOTIFICATION_GROUPS`/`NOTIFICATION_KINDS`/
+  `PUSH_PLATFORMS`, `NotificationTarget` (белый список) и `NotificationTargetView` (незнакомое → `{ type: 'unknown' }`),
+  `NotificationView` (`tolerantEnum`), `NotificationPage`, `NotificationListQuery` (`strictObject`, limit 1–50),
+  `UnreadCount` (0–100), `NotificationSettings` (`strictObject`, `start ≠ end` → `INVALID` на `quietHours.endHour`),
+  `DEFAULT_NOTIFICATION_SETTINGS`, `ExpoPushToken`, `RegisterPushToken`, `RevokePushToken`. api-client — 8 методов §11.
+- api: `queues.ts` (+3 очереди, процессоров ещё нет — шаги B/C), env `PUSH_ENABLED`/`EXPO_ACCESS_TOKEN`/
+  `EXPO_PUSH_API_URL` (+ `envDependencyErrors`: в production+prod — только `exp.host`), миграция `0024_notifications`
+  (4 коллекции, 12 индексов; `$in` в `partialFilterExpression` на MongoDB 8 работает — проверено int-тестом).
+- Модуль `notifications`: `notifications.collection.ts`, `notifications.repository.ts` (единственный писатель; все
+  выборки с `userId` и `expireAt > now`), `notifications.policy.ts` (`groupOf`, `EMAIL_KINDS`, `quietUntil`, лимиты),
+  `notification-texts.ts` (`renderNotification` по таблице продукта, `renderPushSummary` с формами числа),
+  `event-time.ts` (`eventTimeOf`, `isEventStale` 72 ч), сервисы списка/прочтения, настроек и токенов (лимиты
+  `notifications-read` 120/мин, `notifications-settings` 30/ч, `notifications-push-token` 30/ч → `429
+  RATE_LIMITED`), контроллер `/v1/notifications` (`AuthGuard`, статические пути до `:id/read`, `no-store`),
+  порты `PushTokens.revokeAllOf(tx, userId)` и `NotificationErasure.erase(userId)`; `NotificationsCoreModule` /
+  `NotificationsModule` в `AppModule`. Подключение портов в `account` — шаг C.
+
+**Files.** `packages/contracts/src/notifications/notification.schema{,.test}.ts`, `packages/contracts/src/index.ts`,
+`packages/api-client/src/{index,notifications.test}.ts`, `apps/api/src/{queues,app.module}.ts`,
+`apps/api/src/config/env{,.test}.ts`, `apps/api/src/db/migrations/{0024_notifications,index,migrations.int.test}.ts`,
+`apps/api/src/modules/notifications/*` (index, module, collection, repository, policy, texts, event-time,
+controller, 3 сервиса, push-tokens, notification-erasure + тесты), `apps/api/test/notifications.ts`.
+
+**Tests.** Unit: `notification.schema.test.ts` (20), `notifications.test.ts` api-client (6), `env.test.ts` (+3),
+`event-time.test.ts` (8), `notifications.policy.test.ts` (9), `notification-texts.test.ts` (29: каждая строка таблицы,
+даты по Минску, формы числа). Int: `notifications.int.test.ts` (29: 401 на каждом пути; только свои в списке и
+счётчике; курсор; истёкшее не видно; потолок 100; чужой id → 404 без изменений; read идемпотентен; read-all только
+свои; настройки умолчания/PUT/400; токены — переход владельца, параллельная регистрация → один документ, 11-й
+вытесняет старейший, revoke чужого — 204 без эффекта; 429 на каждый лимит; порты — откат транзакции оставляет токены,
+стирание и повтор), `migrations.int.test.ts` (+1, 0024 — индексы и идемпотентность).
+Отрицательное доказательство: убран `userId` из фильтров `list`/`markRead` → красные «только свои…» и «чужое — 404…»
+(2 failed), восстановлено.
+`TURBO_CONCURRENCY=1 pnpm check` (изолированные `MONGO_URL_TEST`/`REDIS_URL_TEST`) — зелёный: arch:check «no
+dependency violations found», api 113 files / 1177 tests passed, contracts 270, api-client 96, admin 240;
+`Tasks: 13 successful, 13 total`.
+
+**Follow-ups.** Шаг B: intake, порты источников, `notificationsOutboxRoutes`, `NotificationsWorkerModule`, хелпер
+события outbox «на момент» в `test/notifications.ts`. Шаг C: доставка, `revokeAllOf`/`NotificationErasure` в
+`account`. Вопрос автору — формулировка исхода спора (8.2 A-3).

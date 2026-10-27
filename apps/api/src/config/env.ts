@@ -105,6 +105,20 @@ const tracksDevicesEnvShape = {
   DEPLOY_STAGE: z.enum(['dev', 'prod']).default('prod'),
 };
 
+/** Адрес Expo Push API по умолчанию — единственный разрешённый в production (ADR-0016). */
+export const EXPO_PUSH_API_DEFAULT_URL = 'https://exp.host/--/api/v2/push';
+
+/**
+ * Уведомления (ADR-0016): push через Expo Push Service. Выключен по умолчанию (`PUSH_ENABLED=false` — push помечается
+ * `skipped`, центр работает). Ключ Expo — только env, необязательный. Адрес меняют только тесты (фейк-сервер) и
+ * dev-стенд; в production — только `exp.host`.
+ */
+const notificationsEnvShape = {
+  PUSH_ENABLED: flag(false),
+  EXPO_ACCESS_TOKEN: optional(z.string().min(20, 'EXPO_ACCESS_TOKEN: не короче 20 символов')),
+  EXPO_PUSH_API_URL: z.url({ protocol: /^https?$/ }).default(EXPO_PUSH_API_DEFAULT_URL),
+};
+
 const baseEnv = defineCoreEnv({
   ...mongoEnvShape,
   ...mailEnvShape,
@@ -122,13 +136,14 @@ const baseEnv = defineCoreEnv({
   SUPPORT_EMAIL: optional(z.email()),
   CORS_ORIGINS: corsOrigins,
   ...tracksDevicesEnvShape,
+  ...notificationsEnvShape,
 });
 type BaseEnv = ReturnType<typeof baseEnv.load>;
 
 /**
  * Зависимости переменных (проверка на старте, §8.3 п. 5): включённые устройства без адреса и ключа OW, без
- * `PUBLIC_API_ORIGIN` и `DEVICE_RETURN_URLS`; общий инстанс OW или `exp://` в production (не dev-стенд) — отказ
- * запуска.
+ * `PUBLIC_API_ORIGIN` и `DEVICE_RETURN_URLS`; общий инстанс OW, `exp://` или чужой адрес Expo Push в production (не
+ * dev-стенд) — отказ запуска.
  */
 export function envDependencyErrors(value: BaseEnv): string[] {
   const errors: string[] = [];
@@ -147,6 +162,9 @@ export function envDependencyErrors(value: BaseEnv): string[] {
   }
   if (production && value.DEVICE_RETURN_URLS.some((url) => url.startsWith('exp://'))) {
     errors.push('DEVICE_RETURN_URLS: exp:// запрещён в production');
+  }
+  if (production && value.EXPO_PUSH_API_URL !== EXPO_PUSH_API_DEFAULT_URL) {
+    errors.push(`EXPO_PUSH_API_URL: в production только ${EXPO_PUSH_API_DEFAULT_URL}`);
   }
   return errors;
 }
