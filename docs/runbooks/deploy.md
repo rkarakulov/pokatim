@@ -15,9 +15,11 @@ workflow и сервер позже (не настроен; `infra/docker-compos
 push develop ─► deploy-dev.yml
                  ├─ preflight   environment dev: секреты DEV_SSH_*, DEV_PUBLIC_HOST, тег sha-<7>
                  ├─ ci          ci.yml (reusable): format, lint, arch, typecheck, test, сборка, web-смоук
-                 ├─ build       infra/docker/Dockerfile → GHCR: pokatim-api, pokatim-web, pokatim-admin
-                 │              теги sha-<7> и develop, linux/amd64
-                 └─ deploy      environment dev; SSH: файлы стека → ~/pokatim, deploy.sh (токен GHCR — stdin)
+                 ├─ build       параллельно с ci, матрица из трёх джобов: infra/docker/Dockerfile → GHCR:
+                 │              pokatim-api, pokatim-web, pokatim-admin, тег sha-<7>, linux/amd64
+                 ├─ promote     после зелёных ci и build: тег develop на те же образы (без пересборки)
+                 └─ deploy      после зелёных ci и build; environment dev; SSH: файлы стека → ~/pokatim,
+                                deploy.sh (токен GHCR — stdin)
 
 Сервер — общий (на нём живут другие проекты: их сайты, контейнеры, тома и порты не трогаем):
   nginx хоста :80/:443 ─ /etc/nginx/sites-available/pokatim (server_name = <хост>)
@@ -378,7 +380,8 @@ MongoDB → новый `deploy.sh` поверх (новые миграции п�
 
 Actions → `deploy-dev` → Run workflow, `image_tag` = прошлый тег `sha-<7>` (теги — в Summary прошлых прогонов или
 GHCR → Packages → `pokatim-api`). CI и сборка пропускаются, разворачиваются образы этого тега (из GHCR; локальные
-старые образы прочищаются). Workflow тянет образы токеном `GITHUB_TOKEN` сам.
+старые образы прочищаются). Workflow тянет образы токеном `GITHUB_TOKEN` сам. Образы собираются параллельно с CI,
+поэтому тег `sha-<7>` есть и у коммита с красным CI — для отката берите тег из Summary успешного деплоя (или `develop`).
 
 - **Через границу БД откат невозможен:** образы до перехода на MongoDB ждут PostgreSQL (`DATABASE_URL`), а деплой
   кладёт compose с MongoDB — для них только «Ручной возврат на PostgreSQL» (раздел выше).
