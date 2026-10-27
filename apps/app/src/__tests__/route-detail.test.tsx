@@ -119,11 +119,11 @@ describe('карточка маршрута каталога: гость по с
     expect(
       within(screen.getByTestId('route-detail')).getByRole('header', { name: 'Минское кольцо' }),
     ).toBeOnTheScreen();
-    for (const chip of ['Асфальт', 'Гравий', '↻ Круговой', 'Минск']) {
+    for (const chip of ['Асфальт', 'Гравий', 'Круговой', 'Минск']) {
       expect(screen.getByText(chip)).toBeOnTheScreen();
     }
     expect(screen.getByLabelText('Дистанция 86 км круговой')).toBeOnTheScreen();
-    expect(screen.getByLabelText(/^Набор ↑ 1\s240 м макс\. 267 м$/)).toBeOnTheScreen();
+    expect(screen.getByLabelText(/^Набор 1\s240 м макс\. 267 м$/)).toBeOnTheScreen();
     // асфальт + гравий — 24 км/ч: 86 км → 3 ч 35 мин
     expect(screen.getByLabelText('В пути 3 ч 35 мин при 24 км/ч')).toBeOnTheScreen();
     expect(screen.getByRole('header', { name: 'Профиль высоты' })).toBeOnTheScreen();
@@ -139,7 +139,7 @@ describe('карточка маршрута каталога: гость по с
     await screen.findByLabelText(heroLabel);
     expect(screen.queryByTestId('elevation-profile')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Скачать GPX' })).toBeNull();
-    expect(screen.getByLabelText(/^Набор ↑ 1\s240 м$/)).toBeOnTheScreen();
+    expect(screen.getByLabelText(/^Набор 1\s240 м$/)).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Поделиться' })).toBeOnTheScreen();
   });
 

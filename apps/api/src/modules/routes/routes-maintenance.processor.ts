@@ -7,10 +7,11 @@ import { RouteDerivedBackfill, type RouteDerivedRun } from './route-derived';
 
 export const ROUTES_DERIVE_JOB = 'derive';
 
-/** Разовые задачи без дублей (jobId): прогон при старте worker и продолжение полной пачки (RC-13). */
+/** Разовая задача без дублей (jobId): прогон при старте worker (RC-13). */
 const ONE_SHOT = { removeOnComplete: true, removeOnFail: true } as const;
 export const ROUTES_DERIVE_BOOT_JOB_ID = 'routes.derive.boot';
-export const ROUTES_DERIVE_MORE_JOB_ID = 'routes.derive.more';
+/** Пачек за одну задачу не больше (≤ 200 маршрутов): остаток — следующим прогоном по расписанию. */
+export const ROUTES_DERIVE_MAX_BATCHES = 10;
 
 /** Расписание регламента маршрутов; upsert идемпотентен — несколько worker не плодят дубли. */
 export const ROUTES_SCHEDULES = [
@@ -23,14 +24,13 @@ export const ROUTES_SCHEDULES = [
 
 /**
  * Регламент маршрутов (`routes-maintenance`, routes-03): бэкфилл производных данных готовых маршрутов (каждые 10 мин,
- * при старте worker). Полная пачка — продолжение сразу (каждый маршрут отпускает семафор потоков разбора).
+ * при старте worker). Полная пачка с прогрессом — следующая пачка в той же задаче (каждый маршрут отпускает семафор
+ * потоков разбора), не больше `ROUTES_DERIVE_MAX_BATCHES`. Продолжение отдельной задачей с постоянным `jobId` BullMQ
+ * отбросил бы как дубль ещё не удалённой текущей (ревью pass 1, F1); пачка без прогресса (одни пропуски) — стоп.
  */
 @Processor(QUEUE.routesMaintenance)
 export class RoutesMaintenanceProcessor extends WorkerHost {
-  constructor(
-    private readonly backfill: RouteDerivedBackfill,
-    @InjectQueue(QUEUE.routesMaintenance) private readonly queue: Queue,
-  ) {
+  constructor(private readonly backfill: RouteDerivedBackfill) {
     super();
   }
 
@@ -38,15 +38,16 @@ export class RoutesMaintenanceProcessor extends WorkerHost {
     if (job.name !== ROUTES_DERIVE_JOB) {
       throw new Error(`unknown job ${job.name} in queue ${QUEUE.routesMaintenance}`);
     }
-    const run = await this.backfill.run();
-    if (run.more) {
-      await this.queue.add(
-        ROUTES_DERIVE_JOB,
-        {},
-        { jobId: ROUTES_DERIVE_MORE_JOB_ID, ...ONE_SHOT },
-      );
+    const total: RouteDerivedRun = { derived: 0, failed: 0, skipped: 0, more: false };
+    for (let batch = 0; batch < ROUTES_DERIVE_MAX_BATCHES; batch += 1) {
+      const run = await this.backfill.run();
+      total.derived += run.derived;
+      total.failed += run.failed;
+      total.skipped += run.skipped;
+      total.more = run.more;
+      if (!run.more || run.derived + run.failed === 0) break;
     }
-    return run;
+    return total;
   }
 }
 

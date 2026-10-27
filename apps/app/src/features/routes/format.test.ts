@@ -95,23 +95,23 @@ describe('время в пути (routes-03, P3)', () => {
 
 describe('карточка: чипы и стат-блок (routes-03, P1, P2)', () => {
   it('чипы: покрытия, форма, город; unknown — без чипа', () => {
-    expect(routeChips(route())).toEqual(['Асфальт', 'Гравий', '↻ Круговой', 'Минск']);
+    expect(routeChips(route())).toEqual(['Асфальт', 'Гравий', 'Круговой', 'Минск']);
     expect(routeChips(route({ isLoop: false, city: 'unknown', surfaces: ['unknown'] }))).toEqual([
-      '→ В одну сторону',
+      'В одну сторону',
     ]);
   });
 
   it('три колонки: дистанция с формой, набор с макс., время с темпом', () => {
     expect(routeStatItems(detail())).toEqual([
       { value: '68', unit: 'км', label: 'Дистанция', note: 'круговой' },
-      { value: '↑ 620', unit: 'м', label: 'Набор', note: 'макс. 267 м' },
+      { value: '620', unit: 'м', label: 'Набор', note: 'макс. 267 м' },
       { value: '2 ч 30 мин', label: 'В пути', note: 'при 27 км/ч' },
     ]);
   });
 
   it('нет профиля — набор без «макс.»; нет набора — две колонки; в одну сторону', () => {
     const [, gain] = routeStatItems(detail({ elevation: null }));
-    expect(gain).toEqual({ value: '↑ 620', unit: 'м', label: 'Набор' });
+    expect(gain).toEqual({ value: '620', unit: 'м', label: 'Набор' });
     const items = routeStatItems(detail({ elevationGainM: null, elevation: null, isLoop: false }));
     expect(items.map((item) => item.label)).toEqual(['Дистанция', 'В пути']);
     expect(items[0]!.note).toBe('в одну сторону');

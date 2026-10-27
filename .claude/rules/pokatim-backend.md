@@ -48,7 +48,8 @@ paths:
 - Очередь `routes-maintenance` (routes-03, `RoutesWorkerModule`): `RoutesSchedules` — расписание `routes.maintenance`
   каждые 10 мин + разовая `routes.derive.boot` при старте worker; `RoutesMaintenanceProcessor` → `RouteDerivedBackfill.run`
   (≤ `ROUTE_POLICY.deriveBatch` маршрутов, `runParseThread('deriveRoute')` по одному — семафор отпускается между ними;
-  полная пачка — продолжение `routes.derive.more`). `deriveRoute` и `analyzeRoute` разбирают исходник одним
+  полная пачка с прогрессом — следующая пачка в той же задаче, ≤ `ROUTES_DERIVE_MAX_BATCHES`; продолжение отдельной
+  задачей с постоянным `jobId` BullMQ отбросил бы как дубль ещё не удалённой текущей). `deriveRoute` и `analyzeRoute` разбирают исходник одним
   `loadRoutePoints` (`@pokatim/tracks/parse`) — новый формат маршрута добавляется туда.
 - Общий код загрузок в `src/`: `raw-body.ts` (`readLimited` — тело `application/octet-stream` после гарда и лимита,
   обрыв на лимите — `413` с кодом модуля и `Connection: close`) и `parse-thread.ts` (`runParseThread` — функция

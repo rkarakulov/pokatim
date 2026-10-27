@@ -53,8 +53,10 @@ export class RouteDerivedBackfill {
       try {
         const outcome = await this.deriveOne(id, version);
         run[outcome] += 1;
-      } catch {
-        this.logger.warn(`route ${id} derive skipped: environment error`);
+      } catch (error) {
+        // класс ошибки без текста: в сообщении драйвера могут быть данные документа
+        const kind = error instanceof Error ? error.name : typeof error;
+        this.logger.warn(`route ${id} derive skipped: environment error (${kind})`);
         run.skipped += 1;
       }
     }

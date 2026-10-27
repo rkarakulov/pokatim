@@ -8,7 +8,11 @@ import { createHarness, type Harness } from '../../../test/harness';
 import { staff } from '../../../test/races';
 import { fixture, readyRoute, routesDb } from '../../../test/routes';
 import { RouteDerivedBackfill } from './route-derived';
-import { ROUTES_DERIVE_JOB, RoutesMaintenanceProcessor } from './routes-maintenance.processor';
+import {
+  ROUTES_DERIVE_JOB,
+  ROUTES_DERIVE_MAX_BATCHES,
+  RoutesMaintenanceProcessor,
+} from './routes-maintenance.processor';
 import { RoutesRepository } from './routes.repository';
 
 /**
@@ -213,26 +217,47 @@ describe('RouteDerivedBackfill.run (routes-03)', () => {
 });
 
 describe('RoutesMaintenanceProcessor (routes-03, RC-13)', () => {
-  it('derive — прогон; полная пачка ставит продолжение routes.derive.more; неизвестное имя — ошибка', async () => {
+  it('derive — пачки подряд в одной задаче, пока полная пачка с прогрессом; неизвестное имя — ошибка', async () => {
     const processor = h.worker.get(RoutesMaintenanceProcessor);
-    const queue = (processor as unknown as { queue: { add: (...args: unknown[]) => unknown } })
-      .queue;
-    const add = vi.spyOn(queue, 'add').mockResolvedValue(undefined);
     const run = vi
       .spyOn(backfill(), 'run')
       .mockResolvedValueOnce({ derived: 20, failed: 0, skipped: 0, more: true })
+      .mockResolvedValueOnce({ derived: 19, failed: 1, skipped: 0, more: true })
       .mockResolvedValueOnce({ derived: 3, failed: 0, skipped: 0, more: false });
 
-    await processor.process({ name: ROUTES_DERIVE_JOB } as Job);
-    expect(add).toHaveBeenCalledWith(
-      ROUTES_DERIVE_JOB,
-      {},
-      { jobId: 'routes.derive.more', removeOnComplete: true, removeOnFail: true },
-    );
-    await processor.process({ name: ROUTES_DERIVE_JOB } as Job);
-    expect(add).toHaveBeenCalledTimes(1);
-    expect(run).toHaveBeenCalledTimes(2);
+    await expect(processor.process({ name: ROUTES_DERIVE_JOB } as Job)).resolves.toEqual({
+      derived: 42,
+      failed: 1,
+      skipped: 0,
+      more: false,
+    });
+    expect(run).toHaveBeenCalledTimes(3);
 
     await expect(processor.process({ name: 'other' } as Job)).rejects.toThrow(/unknown job other/);
+  });
+
+  it('полная пачка без прогресса (одни пропуски) — стоп, без горячего цикла', async () => {
+    const processor = h.worker.get(RoutesMaintenanceProcessor);
+    const run = vi
+      .spyOn(backfill(), 'run')
+      .mockResolvedValue({ derived: 0, failed: 0, skipped: 20, more: true });
+
+    await expect(processor.process({ name: ROUTES_DERIVE_JOB } as Job)).resolves.toEqual({
+      derived: 0,
+      failed: 0,
+      skipped: 20,
+      more: true,
+    });
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it(`полные пачки с прогрессом — не больше ${ROUTES_DERIVE_MAX_BATCHES} за задачу`, async () => {
+    const processor = h.worker.get(RoutesMaintenanceProcessor);
+    const run = vi
+      .spyOn(backfill(), 'run')
+      .mockResolvedValue({ derived: 20, failed: 0, skipped: 0, more: true });
+
+    await processor.process({ name: ROUTES_DERIVE_JOB } as Job);
+    expect(run).toHaveBeenCalledTimes(ROUTES_DERIVE_MAX_BATCHES);
   });
 });
