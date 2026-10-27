@@ -7,7 +7,7 @@ import { requestSignIn } from '@/features/auth/queries';
 import { resetSessionStore, useSessionStore } from '@/features/auth/session-store';
 import { api } from '@/lib/api';
 
-import { requestAccountDeletion } from './queries';
+import { endDeletedSession, requestAccountDeletion } from './queries';
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -114,6 +114,39 @@ describe('удаление аккаунта (web): под замком сесс�
 
     expect(deleteAccount).toHaveBeenCalledTimes(2);
     expect(localStorage.getItem('pokatim.noSession')).toBe('1');
+  });
+
+  it('завершение: в памяти уже другой аккаунт (вход после ответа удаления) — его сессия не сбрасывается', async () => {
+    deleteAccount.mockResolvedValue(undefined);
+    const owner = await requestAccountDeletion({ password: 'velo-secret' });
+    useSessionStore.setState({
+      status: 'signedIn',
+      session: cookieSession('b1', 15, { sub: USER_B, sid: SID_B }),
+    });
+    const signOut = jest.fn(async () => undefined);
+
+    await endDeletedSession(owner, signOut);
+
+    expect(signOut).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().status).toBe('signedIn');
+  });
+
+  it('завершение: в памяти удалённый аккаунт или уже никого — выход с отметкой «Аккаунт удалён» без sign-out', async () => {
+    deleteAccount.mockResolvedValue(undefined);
+    const owner = await requestAccountDeletion({ password: 'velo-secret' });
+    expect(owner).toBeDefined();
+    const signOut = jest.fn(async () => undefined);
+
+    await endDeletedSession(owner, signOut);
+    useSessionStore.setState({ status: 'signedOut', session: null });
+    await endDeletedSession(owner, signOut);
+
+    expect(signOut).toHaveBeenCalledTimes(2);
+    expect(signOut).toHaveBeenCalledWith({
+      returning: false,
+      notice: 'accountDeleted',
+      serverEnded: true,
+    });
   });
 
   it('отказ (403) — устройство ничего не забывает', async () => {
