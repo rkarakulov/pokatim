@@ -87,6 +87,14 @@ paths:
   решения — инвалидация `['admin','disputes']`, ключа гонки и журнала. Чек-лист «Результатов»: строка
   `open_disputes` — ссылка «Открыть споры» (`/disputes?raceId=`) при `count > 0` и `disputes.read`;
   `RecalculationsList` — запись `dispute:<id>` ссылкой на спор; `RaceEditor` — причина `disputes_open` (D-19).
+- «Оформление приложения» (app-themes D1) — `features/appearance/*`, маршрут `/appearance` под
+  `RequirePermission permission="appearance.manage"`, пункт навигации — группа `bottom` в конце. 7 карточек
+  `CardRadioGroup` (`src/ui`: нативные радио, карточка — `label` с произвольным содержимым) в порядке `APP_THEME_IDS`,
+  текущая — бейдж; выбор — `useState`, «Сохранить» активна только при смене, тело `{ themeId, version }`; 409 —
+  `ConflictBanner` с перечитыванием и сбросом выбора; после сохранения — инвалидация журнала. Превью — `ThemePreview`
+  (CSS-переменные `--preview-*` из токенов); палитры — только через шов `theme-previews.ts` (сейчас «Классика» из
+  `themes.light`, остальные — «Превью появится позже», TODO D2 — из реестра `appThemes`). Hex в панели — нет. Панель
+  остаётся в теме `panel`.
 
 ## Проверка
 

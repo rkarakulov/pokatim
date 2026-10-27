@@ -392,3 +392,44 @@ OUT OF SCOPE
   равенства id — D2.
 - Личная тема райдера, предпросмотр в приложении, смена темы админки, outbox-событие смены темы, отдельный rate-limit
   записи, `updatedBy` в ответе панели.
+
+## 12. Outcome
+
+Coder, 2026-10-27. Ветка `feature/app-themes-api` (worktree `app-themes-api`) от `origin/develop` `fa22eef`.
+
+### Сделано
+
+- **contracts:** `src/appearance/appearance.schema.ts` (`APP_THEME_IDS`, `AppThemeId`, `DEFAULT_APP_THEME_ID`,
+  `AppAppearance` с `tolerantEnum`, `PanelAppearance`, `UpdateAppearanceRequest`); `appearance.manage` — в конец
+  `PERMISSIONS`; `appearance.theme_changed` и `platform` — в конец `AUDIT_ACTIONS` / `AUDIT_SUBJECT_KINDS`;
+  `AuditEntry.details.themeFrom/themeTo`.
+- **api-client:** публичный `getAppearance`; панель — хелпер `put`, `getAppearance`, `updateAppearance`.
+- **api:** модуль `appearance` (два контроллера, сервис, репозиторий, коллекция `platform_settings`), регистрация в
+  `AppModule` после `CalendarModule`; миграция `0024_platform_settings` (только `ensureCollection`; последняя на
+  `origin/develop` — `0023_account_deletion`); `AuditDetailsDoc` + `themeFrom/themeTo`; JSDoc карты прав.
+- **admin:** раздел `/appearance` (`RequirePermission appearance.manage`, пункт `bottom` последним),
+  `AppearanceScreen`, `ThemePreview`, шов `theme-previews.ts` («Классика» из `themes.light`, остальные — `null`,
+  `TODO(app-themes D2)`), `ui/CardRadioGroup`; журнал — «Тема приложения изменена: Классика → Атлас».
+- **i18n:** блок `// app-themes D1`.
+- **docs:** `.claude/rules/pokatim-{backend,db,contracts,web}.md`, `docs/product/admin-panel.md`.
+
+### Отклонения от плана (мелкие)
+
+- Успех сохранения — `Banner` с `role="status"` нейтрального тона: варианта `tone="success"` у `Banner` панели нет,
+  новый тон не вводили (вне scope).
+- Тест «клавиатура (стрелки по радио)»: jsdom не реализует стрелочную навигацию нативных радио — проверено, что радио
+  нативные, в одной группе (`name`) и фокусируемые (`CardRadioGroup.test.tsx`); стрелки — браузер.
+- Тестовая БД — `pokatim_app_themes_api_test`: `@rkarakulov/test-kit` требует имя `*_test`.
+- В фикстуру `ME.admin` (`apps/admin/src/test/app.tsx`) добавлено `appearance.manage` — у admin все права.
+
+### Проверки
+
+- `MONGO_URL_TEST=mongodb://127.0.0.1:27117/pokatim_app_themes_api_test?replicaSet=rs0&directConnection=true
+  REDIS_URL_TEST=redis://127.0.0.1:6479/7 TURBO_CONCURRENCY=1 pnpm check` — **зелёный** (exit 0): prettier — «All
+  matched files use Prettier code style!»; eslint — 0 предупреждений; depcruise — «no dependency violations found
+  (1244 modules)»; typecheck — все пакеты; тесты: contracts 258, api-client 93, i18n 6, design-tokens 120, tracks 288,
+  api 1110 (111 файлов, вкл. int на MongoDB/Redis), admin 253, app 1231; turbo «13 successful, 13 total».
+- Первый прогон упал на снимке прав admin в `panel/panel-session.int.test.ts` (все права контракта) — добавлено
+  `appearance.manage` в конец снимка, повторный прогон зелёный.
+- `pnpm --filter @pokatim/admin build` — зелёный (предупреждение о размере чанка > 500 kB — как до изменения).
+- e2e — не требуется в D1 (9.1).

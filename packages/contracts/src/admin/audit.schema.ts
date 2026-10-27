@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { AppThemeId } from '../appearance/appearance.schema.ts';
 import { PageQuery, Uuid } from '../common.ts';
 import { RaceCancelReason } from '../races/race.schema.ts';
 import { PanelRole } from './permissions.schema.ts';
@@ -49,6 +50,8 @@ export const AUDIT_ACTIONS = [
   'route.catalog_updated',
   // account-deletion: райдер удалил свой аккаунт (actor — сам райдер, subject `rider`, без e-mail и имени)
   'account.deleted',
+  // app-themes: админ сменил тему приложения (subject `platform`, детали themeFrom/themeTo)
+  'appearance.theme_changed',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -76,6 +79,8 @@ export const AUDIT_SUBJECT_KINDS = [
   'ride',
   // profile-02: райдер (`id` — userId, `label` — «Участник ·<id>», без имени)
   'rider',
+  // app-themes: настройка платформы (`id` — фиксированный nil UUID, `label` — название настройки)
+  'platform',
 ] as const;
 export const AuditSubjectKind = z.enum(AUDIT_SUBJECT_KINDS);
 export type AuditSubjectKind = z.infer<typeof AuditSubjectKind>;
@@ -111,6 +116,9 @@ export const AuditEntry = z.object({
       reportCount: z.number().int().nonnegative().optional(),
       /** race-results-06: спор, по которому принято решение */
       disputeId: Uuid.optional(),
+      /** app-themes: смена темы приложения */
+      themeFrom: AppThemeId.optional(),
+      themeTo: AppThemeId.optional(),
     })
     .nullable(),
 });
