@@ -68,6 +68,14 @@ function ProfileContent() {
             {(data) => <ProfileFormView profile={data} />}
           </AsyncContent>
         </View>
+        {/* удаление аккаунта (A2): внизу экрана, сразу — не ждёт данных профиля */}
+        <View style={[styles.section, styles.back]}>
+          <TextAction
+            label={t('profile.deleteAccount')}
+            destructive
+            onPress={() => router.push('/settings/account/delete')}
+          />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

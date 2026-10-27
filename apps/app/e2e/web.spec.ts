@@ -331,6 +331,27 @@ test('жалоба на райд /rides/report/<id> без сессии (05b): H
   }
 });
 
+test('удаление аккаунта /settings/account/delete без сессии (A12, адрес для Google Play): HTML без формы и OG, после гидрации — «Вход»', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get('/settings/account/delete');
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  // экран не публичный: без формы удаления и без OG
+  expect(html).not.toContain('Удалить навсегда');
+  expect(html).not.toContain('og:title');
+
+  await page.goto('/settings/account/delete');
+  if (WITH_API) {
+    // гость — на «Вход» (путь запомнен: после входа — снова экран удаления)
+    await expect(page).toHaveURL(`${BASE_URL}/sign-in`);
+    await expect(page.getByRole('heading', { name: 'Вход' })).toBeVisible();
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+});
+
 test('неизвестный адрес, /_sitemap и витрина /ui-kit в production — «Страница не найдена»', async ({
   page,
 }) => {

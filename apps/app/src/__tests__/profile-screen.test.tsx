@@ -44,7 +44,7 @@ async function openProfile() {
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   return renderRouter(
-    { 'settings/profile': ProfileScreen },
+    { 'settings/profile': ProfileScreen, 'settings/account/delete': () => null },
     { initialUrl: '/settings/profile', wrapper },
   );
 }
@@ -83,6 +83,15 @@ describe('«Профиль»: загрузка (AC9)', () => {
     expect(await screen.findByText(title)).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
     expect(await screen.findByLabelText(NAME)).toBeOnTheScreen();
+  });
+});
+
+describe('«Профиль»: удаление аккаунта (account-deletion AC8)', () => {
+  it('внизу — «Удалить аккаунт» → экран удаления; видна и пока профиль грузится', async () => {
+    getProfile.mockReturnValue(never());
+    const router = await openProfile();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Удалить аккаунт' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/settings/account/delete'));
   });
 });
 

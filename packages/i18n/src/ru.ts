@@ -330,6 +330,7 @@ export const ru = {
     'Нажимая «Зарегистрироваться», вы принимаете пользовательское соглашение. В нём сказано, что другой участник может оспорить ваш результат, а уведомление об этом появится только в центре уведомлений приложения.',
   'auth.register.submit': 'Зарегистрироваться',
   'auth.register.haveAccount': 'Уже есть аккаунт?',
+  'auth.register.accountDeleted': 'Аккаунт удалён',
   // вход по паролю (онбординг, слайс 2)
   'auth.signIn.action': 'Войти',
   'auth.signIn.title': 'Вход',
@@ -493,6 +494,28 @@ export const ru = {
     'Имя увидят все в таблицах результатов гонок. Выключите — вы будете «Участник».',
   'profile.save': 'Сохранить',
   'profile.saved': 'Сохранено',
+  'profile.deleteAccount': 'Удалить аккаунт',
+  // удаление аккаунта (account-deletion, A1–A12 `docs/product/account.md`): последствия — A1, A3–A8
+  'account.delete.title': 'Удаление аккаунта',
+  'account.delete.lead': 'Аккаунт удаляется сразу. Восстановить его нельзя.',
+  'account.delete.consequencesTitle': 'Что произойдёт',
+  'account.delete.consequence.sessions': 'Вы выйдете из аккаунта на всех устройствах.',
+  'account.delete.consequence.data': 'Заезды, треки, исходные файлы и «Мои маршруты» удалятся.',
+  'account.delete.consequence.results':
+    'Ваше имя пропадёт из таблиц результатов — там вы станете «Участник». Опубликованные протоколы не изменятся.',
+  'account.delete.consequence.disputes': 'Открытые споры решит модератор без вашего ответа.',
+  'account.delete.consequence.rides':
+    'Ваши будущие кофе-райды отменятся, отметки «Иду» в чужих райдах снимутся.',
+  'account.delete.consequence.devices': 'Подключения Garmin и Wahoo будут отозваны.',
+  'account.delete.consequence.email':
+    'Этот e-mail нельзя будет использовать для новой регистрации.',
+  'account.delete.passwordPrompt': 'Чтобы подтвердить удаление, введите текущий пароль.',
+  'account.delete.password': 'Текущий пароль',
+  'account.delete.submit': 'Удалить навсегда',
+  'account.delete.back': 'Назад',
+  'account.delete.errors.passwordIncorrect': 'Неверный пароль.',
+  'account.delete.errors.panelMember': 'Вы в команде панели — попросите администратора снять роль.',
+  'account.delete.errors.rateLimited': 'Слишком много попыток. Попробуйте через {time}.',
   'tracks.upload.kicker': 'Файл',
   'tracks.upload.title': 'Загрузить файл',
   'tracks.upload.hint': 'FIT или GPX, до 16 МБ',

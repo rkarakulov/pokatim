@@ -6,6 +6,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import type { GenerateMetadataFunction } from 'expo-router/server';
 import { useCallback, useEffect } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
+import { View } from 'react-native';
 import type { z } from 'zod';
 
 import { DocumentTitle } from '@/components/document-title';
@@ -24,6 +25,7 @@ import {
 } from '@/features/auth/error-messages';
 import { useRegister } from '@/features/auth/queries';
 import { useRegistrationStore } from '@/features/auth/registration-store';
+import { useSessionStore } from '@/features/auth/session-store';
 import { publicPageMetadata } from '@/lib/page-metadata';
 
 /** Значения формы до проверки: согласие может быть не отмечено, дата — не выбрана. */
@@ -50,6 +52,8 @@ export default function RegisterScreen() {
   const draft = useRegistrationStore((state) => state.draft);
   const resumeOnLaunch = useRegistrationStore((state) => state.resumeOnLaunch);
   const today = minskToday();
+  // «Аккаунт удалён» (account-deletion): отметка выхода — до ухода с экрана
+  const accountDeleted = useSessionStore((state) => state.notice === 'accountDeleted');
 
   const {
     control,
@@ -80,6 +84,9 @@ export default function RegisterScreen() {
       if (email !== undefined && email !== getValues('email')) setValue('email', email);
     }, [getValues, setValue]),
   );
+
+  // сообщение показано — при уходе с экрана снимается (одно объявление, без повтора при возврате)
+  useFocusEffect(useCallback(() => () => useSessionStore.getState().clearNotice(), []));
 
   // приложение перезапущено, пока жив токен регистрации, — сразу к «Подтвердите e-mail»
   useEffect(() => {
@@ -127,6 +134,12 @@ export default function RegisterScreen() {
     <AuthScreen title={t('auth.register.title')} lead={t('auth.register.lead')}>
       {/* заголовок вкладки после клиентской навигации (web); при SSR — из generateMetadata */}
       <DocumentTitle title={`${t('auth.kicker')} — ${t('app.name')}`} />
+      {/* объявление результата удаления скринридеру (вежливо: экран только что сменился) */}
+      {accountDeleted ? (
+        <View accessibilityLiveRegion="polite">
+          <Banner message={t('auth.register.accountDeleted')} />
+        </View>
+      ) : null}
       <Controller
         control={control}
         name="email"
