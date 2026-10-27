@@ -31,6 +31,7 @@ import { routesRider } from './0021_routes_rider';
 import { routesDerived } from './0022_routes_derived';
 import { accountDeletion } from './0023_account_deletion';
 import { notifications } from './0024_notifications';
+import { attemptLastVerdict } from './0025_attempt_last_verdict';
 import { NOTIFICATIONS_COLLECTIONS } from '../../modules/notifications/notifications.collection';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
@@ -98,6 +99,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0022_routes_derived',
       '0023_account_deletion',
       '0024_notifications',
+      '0025_attempt_last_verdict',
     ]);
   });
 
@@ -769,9 +771,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await snapshot()).toEqual(expected);
   });
 
-  it('0024_notifications: коллекции и индексы центра уведомлений (unique, partial, TTL); последняя; повторный up — без изменений', async () => {
+  it('0024_notifications: коллекции и индексы центра уведомлений (unique, partial, TTL); после 0023; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0024_notifications');
     expect(ids.indexOf('0024_notifications')).toBe(ids.indexOf('0023_account_deletion') + 1);
     const index = (
       key: Record<string, 1 | -1>,
@@ -825,6 +826,55 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await notifications.up(h.db);
     await notifications.up(h.db);
     expect(await snapshot()).toEqual(expected);
+  });
+
+  it('0025_attempt_last_verdict: counted/rejected без поля получают lastVisibleVerdict = status, прочие — нет; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0025_attempt_last_verdict');
+    expect(ids.indexOf('0025_attempt_last_verdict')).toBe(ids.indexOf('0024_notifications') + 1);
+    const attemptsDb = h.db.collection<Record<string, unknown> & { _id: string }>(
+      RESULTS_COLLECTIONS.attempts,
+    );
+    await attemptsDb.insertMany([
+      { _id: 'a-counted', raceId: 'r', activityId: 'act-counted', status: 'counted' },
+      { _id: 'a-rejected', raceId: 'r', activityId: 'act-rejected', status: 'rejected' },
+      { _id: 'a-failed', raceId: 'r', activityId: 'act-failed', status: 'failed' },
+      { _id: 'a-queued', raceId: 'r', activityId: 'act-queued', status: 'queued' },
+      { _id: 'a-withdrawn', raceId: 'r', activityId: 'act-withdrawn', status: 'withdrawn' },
+      {
+        _id: 'a-kept',
+        raceId: 'r',
+        activityId: 'act-kept',
+        status: 'counted',
+        lastVisibleVerdict: 'rejected',
+      },
+    ]);
+    await attemptLastVerdict.up(h.db);
+    const snapshot = async () =>
+      Object.fromEntries(
+        (await attemptsDb.find().sort({ _id: 1 }).toArray()).map((doc) => [
+          doc._id,
+          doc.lastVisibleVerdict,
+        ]),
+      );
+    const expected = {
+      'a-counted': 'counted',
+      'a-failed': undefined,
+      'a-kept': 'rejected',
+      'a-queued': undefined,
+      'a-rejected': 'rejected',
+      'a-withdrawn': undefined,
+    };
+    expect(await snapshot()).toEqual(expected);
+    expect(await attemptsDb.findOne({ _id: 'a-failed' })).toEqual({
+      _id: 'a-failed',
+      raceId: 'r',
+      activityId: 'act-failed',
+      status: 'failed',
+    });
+    await attemptLastVerdict.up(h.db);
+    expect(await snapshot()).toEqual(expected);
+    await attemptsDb.deleteMany({ _id: { $regex: '^a-' } });
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

@@ -1,9 +1,16 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
-import { IdentityModule } from '../identity';
+import { QUEUE } from '../../queues';
+import { DisputesCoreModule } from '../disputes';
+import { IdentityAccountsModule, IdentityModule } from '../identity';
+import { ResultsCoreModule } from '../results';
+import { RidesCoreModule } from '../rides';
+import { NotificationIntake } from './notification-intake';
 import { NotificationErasure } from './notification-erasure';
 import { NotificationSettingsService } from './notification-settings.service';
 import { NotificationsController } from './notifications.controller';
+import { NotificationsIntakeProcessor } from './notifications-intake.processor';
 import { NotificationsRepository } from './notifications.repository';
 import { NotificationsService } from './notifications.service';
 import { PushTokens } from './push-tokens';
@@ -27,3 +34,21 @@ export class NotificationsCoreModule {}
   providers: [NotificationsService, NotificationSettingsService, PushTokensService],
 })
 export class NotificationsModule {}
+
+/**
+ * Задачи `notifications` в worker (ADR-0016): приём событий источников (`notifications-intake`). Источники — только
+ * порты через их `index.ts`: `RESULTS_NOTICES` и `RACE_REGISTRY` (`ResultsCoreModule` реэкспортирует `RacesCoreModule`),
+ * `DISPUTE_NOTICES`, `RIDE_NOTICES`, `IdentityAccounts`. Доставка и регламент — шаг C.
+ */
+@Module({
+  imports: [
+    NotificationsCoreModule,
+    ResultsCoreModule,
+    DisputesCoreModule,
+    RidesCoreModule,
+    IdentityAccountsModule,
+    BullModule.registerQueue({ name: QUEUE.notificationsIntake }),
+  ],
+  providers: [NotificationIntake, NotificationsIntakeProcessor],
+})
+export class NotificationsWorkerModule {}

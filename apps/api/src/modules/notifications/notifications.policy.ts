@@ -8,6 +8,8 @@ import {
   utcToMinskWallTime,
 } from '@pokatim/contracts';
 
+import type { EmailDelivery, PushDelivery } from './notifications.collection';
+
 /**
  * Сроки и лимиты центра уведомлений (`docs/product/notifications.md`, task §11): хранение 90 дней (N8), ≤ 10 токенов
  * на пользователя (11-й вытесняет старейший), лимиты мутаций по `uid` (`RateLimiter` базы).
@@ -70,4 +72,36 @@ export function quietUntil(now: Date, quietHours: NotificationSettings['quietHou
   const today = wall.slice(0, 10);
   const day = hour < endHour ? today : addLocalDays(today, 1);
   return new Date(minskWallTimeToUtc(`${day}T${pad(endHour)}:00`));
+}
+
+/**
+ * Доставка нового уведомления (intake): push `pending` с `notBefore` = конец тихих часов или сейчас — при включённой
+ * группе и `PUSH_ENABLED`, иначе `skipped` (`disabled` / `push_off`); письмо — только N2 (`EMAIL_KINDS`) по тумблеру
+ * группы (`skipped`, если выключен), прочим — `null`. В центр уведомление пишется всегда (N4, RC-13).
+ */
+export function initialDelivery(
+  kind: NotificationKind,
+  settings: NotificationSettings,
+  now: Date,
+  pushEnabled: boolean,
+): { push: PushDelivery; email: EmailDelivery | null } {
+  const group = groupOf(kind);
+  const reason = !pushEnabled ? 'push_off' : settings.push[group] ? null : 'disabled';
+  const push: PushDelivery = {
+    state: reason === null ? 'pending' : 'skipped',
+    notBefore: reason === null ? (quietUntil(now, settings.quietHours) ?? now) : now,
+    claimId: null,
+    claimedUntil: null,
+    sentAt: null,
+    reason,
+  };
+  if (!EMAIL_KINDS.has(kind) || group === RACES) return { push, email: null };
+  return {
+    push,
+    email: {
+      state: settings.email[group] ? 'pending' : 'skipped',
+      claimedUntil: null,
+      sentAt: null,
+    },
+  };
 }

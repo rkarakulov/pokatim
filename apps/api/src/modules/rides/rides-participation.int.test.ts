@@ -2,6 +2,7 @@ import { RideView } from '@pokatim/contracts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, type Harness, MINUTE } from '../../../test/harness';
+import { eventsOfType } from '../../../test/notifications';
 import {
   authed,
   createRide,
@@ -195,5 +196,30 @@ describe('гонка на последнее место (AC-T1)', () => {
       join(h, b, ride.id),
     ]);
     await expectConsistent(ride.id);
+  });
+});
+
+describe('событие rides.participant-joined (notifications, ADR-0016)', () => {
+  it('новый участник — событие { rideId }; повтор, организатор, полный и «Не иду» — без события', async () => {
+    const ride = await createRide(h, organizer, { limit: 2 });
+    const a = await rider(h, 'a@example.by');
+    const b = await rider(h, 'b@example.by');
+    expect((await join(h, a, ride.id)).status).toBe(200);
+    expect((await join(h, a, ride.id)).status).toBe(200);
+    expect((await join(h, organizer, ride.id)).status).toBe(200);
+    expect((await join(h, b, ride.id)).status).toBe(409);
+    expect((await leave(h, a, ride.id)).status).toBe(200);
+    const events = await eventsOfType(h, 'rides.participant-joined');
+    expect(events.map((event) => event.payload)).toEqual([{ rideId: ride.id }]);
+  });
+
+  it('параллельные «Я иду» на последнее место — одно событие на одну успешную запись', async () => {
+    const ride = await createRide(h, organizer, { limit: 2 });
+    const riders: Rider[] = [];
+    for (let i = 0; i < 5; i++) riders.push(await rider(h, `p${i}@example.by`));
+    const results = await Promise.all(riders.map((who) => join(h, who, ride.id)));
+    expect(results.filter((res) => res.status === 200)).toHaveLength(1);
+    await expectConsistent(ride.id);
+    expect(await eventsOfType(h, 'rides.participant-joined')).toHaveLength(1);
   });
 });

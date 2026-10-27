@@ -2,6 +2,7 @@ import { RideView } from '@pokatim/contracts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, DAY, type Harness, MINUTE } from '../../../test/harness';
+import { eventsOfType } from '../../../test/notifications';
 import {
   authed,
   createRide,
@@ -404,5 +405,44 @@ describe('отмена', () => {
     });
     expect(limited.status).toBe(429);
     expect(limited.headers['retry-after']).toBeDefined();
+  });
+});
+
+describe('события для уведомлений (notifications, ADR-0016)', () => {
+  const payloads = async (type: string) => (await eventsOfType(h, type)).map((e) => e.payload);
+
+  it('отмена — rides.ride-cancelled { rideId }; повторная отмена — без второго события', async () => {
+    const ride = await createRide(h, organizer);
+    await authed(h, organizer, 'POST', `${RIDES}/${ride.id}/cancel`, { reason: 'weather' });
+    await authed(h, organizer, 'POST', `${RIDES}/${ride.id}/cancel`, { reason: 'other' });
+    expect(await payloads('rides.ride-cancelled')).toEqual([{ rideId: ride.id }]);
+  });
+
+  it('перенос при участниках — rides.ride-rescheduled; без участников и правка не старта — без события', async () => {
+    const solo = await createRide(h, organizer);
+    await authed(h, organizer, 'POST', `${RIDES}/${solo.id}`, {
+      version: 0,
+      startsAt: startsIn(h, 2 * DAY),
+    });
+    const ride = await createRide(h, organizer);
+    await join(h, await rider(h, 'a@example.by'), ride.id);
+    await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, {
+      version: 0,
+      place: 'Новое место старта',
+    });
+    // правка названия после переноса в тот же момент часов стенда — не перенос
+    await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, { version: 1, title: 'Новое' });
+    expect(await payloads('rides.ride-rescheduled')).toEqual([{ rideId: ride.id }]);
+  });
+
+  it('отказ записи (устаревшая version, после старта) — без события', async () => {
+    const ride = await createRide(h, organizer);
+    await join(h, await rider(h, 'a@example.by'), ride.id);
+    const stale = await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, {
+      version: 5,
+      startsAt: startsIn(h, 2 * DAY),
+    });
+    expect(stale.status).toBe(409);
+    expect(await payloads('rides.ride-rescheduled')).toEqual([]);
   });
 });

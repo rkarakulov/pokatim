@@ -85,9 +85,10 @@ export type RidePatch = Partial<
 
 /**
  * Единственный писатель `rides`. Все инварианты участия и правок — одной атомарной операцией над **одним**
- * документом с условием в фильтре (`findOneAndUpdate`, без транзакций и замков, `pokatim-db.md`): лимит мест,
+ * документом с условием в фильтре (`findOneAndUpdate`, без замков и чтения-проверки, `pokatim-db.md`): лимит мест,
  * статус, время, членство, владение, `version`. `null` — условие не выполнено; причину классифицирует сервис по
- * свежему чтению. Значения фильтров — примитивы после zod.
+ * свежему чтению. «Я иду», правка и отмена идут в транзакции сервиса только ради события outbox (ADR-0016 п. 6) —
+ * `session` передаётся в операцию. Значения фильтров — примитивы после zod.
  */
 @Injectable()
 export class RidesRepository {
@@ -108,6 +109,28 @@ export class RidesRepository {
     );
   }
 
+  /** Поля уведомления о райде (`RideNotices`): название, старт, статус, организатор, участники — только `userId`. */
+  findForNotice(
+    id: string,
+  ): Promise<Pick<
+    RideDoc,
+    '_id' | 'title' | 'startsAt' | 'status' | 'organizerUserId' | 'goingCount' | 'participants'
+  > | null> {
+    return this.rides.findOne(
+      { _id: id },
+      {
+        projection: {
+          title: 1,
+          startsAt: 1,
+          status: 1,
+          organizerUserId: 1,
+          goingCount: 1,
+          'participants.userId': 1,
+        },
+      },
+    );
+  }
+
   /** Публичная карточка: опубликованный, отменённый и прошедший райд; скрытый — нет; без служебных полей. */
   async findPublic(id: string): Promise<RidePublicDoc | undefined> {
     return (
@@ -122,7 +145,7 @@ export class RidesRepository {
    * «Я иду»: будущий опубликованный райд, ещё не участник, есть место (`goingCount < limit ?? 100`) — всё в фильтре
    * одной операции: параллельные нажатия на последнее место не переберут лимит.
    */
-  join(id: string, userId: string, now: Date): Promise<RideDoc | null> {
+  join(id: string, userId: string, now: Date, session?: DbSession): Promise<RideDoc | null> {
     return this.rides.findOneAndUpdate(
       {
         _id: id,
@@ -136,7 +159,7 @@ export class RidesRepository {
         $inc: { goingCount: 1 },
         $set: { updatedAt: now },
       },
-      { returnDocument: 'after' },
+      { session, returnDocument: 'after' },
     );
   }
 
@@ -172,6 +195,7 @@ export class RidesRepository {
     now: Date,
     patch: RidePatch,
     reschedule: boolean,
+    session?: DbSession,
   ): Promise<RideDoc | null> {
     const filter: Filter<RideDoc> = {
       _id: id,
@@ -192,18 +216,30 @@ export class RidesRepository {
         $cond: [{ $gt: ['$goingCount', 1] }, { $literal: now }, '$rescheduledAt'],
       };
     }
-    return this.rides.findOneAndUpdate(filter, [{ $set: set }], { returnDocument: 'after' });
+    return this.rides.findOneAndUpdate(filter, [{ $set: set }], {
+      session,
+      returnDocument: 'after',
+    });
   }
 
-  /** Отмена организатором до старта, причина — из справочника. */
-  cancel(id: string, userId: string, reason: RideCancelReason, now: Date): Promise<RideDoc | null> {
+  /**
+   * Отмена организатором до старта, причина — из справочника (и при стирании аккаунта — `organizer_unavailable`,
+   * `RideErasure`: та же операция по одному райду, событие — в её транзакции).
+   */
+  cancel(
+    id: string,
+    userId: string,
+    reason: RideCancelReason,
+    now: Date,
+    session?: DbSession,
+  ): Promise<RideDoc | null> {
     return this.rides.findOneAndUpdate(
       { _id: id, organizerUserId: userId, status: 'published', startsAt: { $gt: now } },
       {
         $set: { status: 'cancelled', cancelReason: reason, cancelledAt: now, updatedAt: now },
         $inc: { version: 1 },
       },
-      { returnDocument: 'after' },
+      { session, returnDocument: 'after' },
     );
   }
 
@@ -399,21 +435,15 @@ export class RidesRepository {
   // --- стирание удалённого аккаунта (`RideErasure`, ADR-0015, A6) ---
   // пакетные версии `cancel`/`leave`: условия — в фильтре, каждый документ меняется атомарно, повтор безопасен
 
-  /** Отмена будущих опубликованных райдов организатора (`organizer_unavailable`), как `cancel`. */
-  async cancelFutureOf(organizerUserId: string, now: Date): Promise<number> {
-    const result = await this.rides.updateMany(
-      { organizerUserId, status: 'published', startsAt: { $gt: now } },
-      {
-        $set: {
-          status: 'cancelled',
-          cancelReason: 'organizer_unavailable',
-          cancelledAt: now,
-          updatedAt: now,
-        },
-        $inc: { version: 1 },
-      },
-    );
-    return result.modifiedCount;
+  /** id будущих опубликованных райдов организатора — по одному отменяет `cancel` в своей транзакции с событием. */
+  async futurePublishedIdsOf(organizerUserId: string, now: Date): Promise<string[]> {
+    const docs = await this.rides
+      .find(
+        { organizerUserId, status: 'published', startsAt: { $gt: now } },
+        { projection: { _id: 1 } },
+      )
+      .toArray();
+    return docs.map((doc) => doc._id);
   }
 
   /**

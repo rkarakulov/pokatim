@@ -65,6 +65,17 @@ export class RideReportsRepository {
     return result.modifiedCount;
   }
 
+  /**
+   * Авторы жалоб, закрытых одним действием модерации (`resolvedAt` — время действия, одно на все; `ride_reports_ride_idx`)
+   * — получатели «Жалоба рассмотрена» (`RideNotices`, RC-3).
+   */
+  async reportersResolvedAt(rideId: string, resolvedAt: Date): Promise<string[]> {
+    const docs = await this.reports
+      .find({ rideId, resolvedAt }, { projection: { _id: 0, reporterUserId: 1 } })
+      .toArray();
+    return docs.map((doc) => doc.reporterUserId);
+  }
+
   /** Последние жалобы райда, новые сверху (`_id` — uuidv7), не больше 100. */
   latest(rideId: string, tx?: DbSession): Promise<RideReportDoc[]> {
     return this.reports

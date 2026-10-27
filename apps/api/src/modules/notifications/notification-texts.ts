@@ -48,8 +48,8 @@ const dayTime = (at: Date) => `${dayMonth.format(at)}, ${hourMinute.format(at)}`
 const quoted = (name: string) => `«${name.replace(/\s+/g, ' ').trim()}»`;
 
 const OUTCOME: Record<DisputeOutcome, string> = {
-  upheld: 'спор удовлетворён',
-  rejected: 'спор отклонён',
+  upheld: 'удовлетворён',
+  rejected: 'отклонён',
 };
 
 const TITLES: Record<NotificationKind, string> = {

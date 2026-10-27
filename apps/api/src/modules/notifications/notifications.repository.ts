@@ -1,7 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { type NotificationSettings, type PushPlatform, UNREAD_COUNT_MAX } from '@pokatim/contracts';
 import { isDuplicateKey, MONGO_DB, uuidv7 } from '@rkarakulov/api-kit/mongo';
-import type { Collection, Db, Filter } from 'mongodb';
+import {
+  type AnyBulkWriteOperation,
+  type Collection,
+  type Db,
+  type Filter,
+  MongoBulkWriteError,
+} from 'mongodb';
 
 import type { DbSession } from '../../db';
 import {
@@ -14,6 +20,15 @@ import {
 
 /** Уникальность токена устройства — гонка двух первых регистраций одного токена (`isDuplicateKey`). */
 export const PUSH_TOKENS_TOKEN_UNIQUE_INDEX = 'push_tokens_token_unique';
+
+/** Одно уведомление на `(sourceEventId, userId)` — повтор события (`isDuplicateKey`). */
+export const NOTIFICATIONS_EVENT_USER_UNIQUE_INDEX = 'notifications_event_user_unique';
+/** Одно уведомление на `(userId, collapseKey)` — устаревшее или повторное событие по объекту (N7). */
+export const NOTIFICATIONS_COLLAPSE_UNIQUE_INDEX = 'notifications_collapse_unique';
+
+const isRepeatOrStale = (error: unknown) =>
+  isDuplicateKey(error, NOTIFICATIONS_EVENT_USER_UNIQUE_INDEX) ||
+  isDuplicateKey(error, NOTIFICATIONS_COLLAPSE_UNIQUE_INDEX);
 
 /** Позиция курсора списка: `(createdAt, _id)` последнего показанного. */
 export interface NotificationPosition {
@@ -75,6 +90,47 @@ export class NotificationsRepository {
       .toArray();
   }
 
+  /**
+   * Запись уведомлений события (intake), одна пачка — один `bulkWrite` без порядка. Без `collapseKey` — вставка, если
+   * `(sourceEventId, userId)` ещё нет (`$setOnInsert`: повтор задачи ничего не меняет). С `collapseKey` (N7) — замена
+   * прежнего уведомления объекта только более старым событием (`sourceEventId $lt`: uuidv7 упорядочены по времени):
+   * текст, цель, снова непрочитано, наверху (`createdAt`), доставка заново; совпадения нет — вставка. Дубль ключа на
+   * вставке — повтор или устаревшее событие, не ошибка. Возвращает число вставленных и заменённых.
+   */
+  async writeNotices(docs: readonly NotificationDoc[]): Promise<number> {
+    if (docs.length === 0) return 0;
+    const operations = docs.map((doc): AnyBulkWriteOperation<NotificationDoc> => {
+      const { _id, userId, sourceEventId, collapseKey, ...fields } = doc;
+      if (collapseKey === undefined) {
+        return {
+          updateOne: {
+            filter: { sourceEventId, userId },
+            update: { $setOnInsert: { _id, ...fields } },
+            upsert: true,
+          },
+        };
+      }
+      return {
+        updateOne: {
+          filter: { userId, collapseKey, sourceEventId: { $lt: sourceEventId } },
+          update: { $set: { sourceEventId, ...fields }, $setOnInsert: { _id } },
+          upsert: true,
+        },
+      };
+    });
+    try {
+      const result = await this.notifications.bulkWrite(operations, { ordered: false });
+      return result.upsertedCount + result.modifiedCount;
+    } catch (error) {
+      if (!(error instanceof MongoBulkWriteError)) throw error;
+      const writeErrors = Array.isArray(error.writeErrors)
+        ? error.writeErrors
+        : [error.writeErrors];
+      if (writeErrors.length === 0 || !writeErrors.every(isRepeatOrStale)) throw error;
+      return error.result.upsertedCount + error.result.modifiedCount;
+    }
+  }
+
   /** Непрочитанные живые, не больше `UNREAD_COUNT_MAX` (`notifications_user_unread_idx`). */
   unreadCount(userId: string, now: Date): Promise<number> {
     return this.notifications.countDocuments(
@@ -112,6 +168,20 @@ export class NotificationsRepository {
       { projection: { _id: 0, push: 1, email: 1, quietHours: 1 } },
     );
     return doc ?? null;
+  }
+
+  /** Сохранённые настройки пользователей пачкой (`_id $in`); нет документа — нет в карте (умолчания). */
+  async findSettingsMany(userIds: readonly string[]): Promise<Map<string, NotificationSettings>> {
+    if (userIds.length === 0) return new Map();
+    const docs = await this.settings
+      .find({ _id: { $in: [...userIds] } }, { projection: { push: 1, email: 1, quietHours: 1 } })
+      .toArray();
+    return new Map(
+      docs.map((doc) => [
+        doc._id,
+        { push: doc.push, email: doc.email, quietHours: doc.quietHours },
+      ]),
+    );
   }
 
   /** Полная замена настроек (один документ, `_id = userId`). */

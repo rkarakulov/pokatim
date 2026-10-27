@@ -41,6 +41,7 @@ import {
   travelTo,
   uploadRide,
 } from '../../../test/results';
+import { eventsOfType } from '../../../test/notifications';
 import { createRide, hideInDb, join, ridesDb, startsIn } from '../../../test/rides';
 import { routesDb, seedRiderRoute } from '../../../test/routes';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
@@ -378,12 +379,17 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
     expect(await firstPass(w.a.userId)).toBe('erased');
     const once = await snapshotOf(w.a.userId);
     const rides = await ridesDb(h).find().sort({ _id: 1 }).toArray();
+    // отмена будущего опубликованного — событие на райд (ADR-0016); скрытый — без события (RC-8)
+    const cancelled = async () =>
+      (await eventsOfType(h, 'rides.ride-cancelled')).map((event) => event.payload);
+    expect(await cancelled()).toEqual([{ rideId: w.rides.aFuture }]);
 
     expect(await firstPass(w.a.userId)).toBe('erased');
     expect(await sweep(w.a.userId)).toBe('erased');
 
     expect(await snapshotOf(w.a.userId)).toEqual(once);
     expect(await ridesDb(h).find().sort({ _id: 1 }).toArray()).toEqual(rides);
+    expect(await cancelled()).toEqual([{ rideId: w.rides.aFuture }]);
     expect(h.mailer.sent).toHaveLength(1);
   });
 

@@ -271,6 +271,18 @@ Architecture Review (architect, 2026-10-27): **CONCERNS** — блокеров �
 - **A-3 (шаг A, недоопределённость текстов).** Формат дат в текстах: заезд — «14 июня» (день и месяц), райд — «14
   июня, 10:00» (по Минску). Исход спора — дословно §7: «спор рассмотрен — спор удовлетворён / спор отклонён»; повтор
   слова «спор» в одной фразе — вопрос к автору, заменить можно одной строкой `OUTCOME` в `notification-texts.ts`.
+  **Решено (шаг B, оркестратор):** `OUTCOME = { upheld: 'удовлетворён', rejected: 'отклонён' }` — «{гонка}: спор
+  рассмотрен — удовлетворён.»
+- **B-1 (шаг B, reuse).** Отмена при стирании (`RideErasure`) — существующий `RidesRepository.cancel(id,
+  organizerUserId, 'organizer_unavailable', now, tx)` (тот же фильтр: организатор, `published`, `startsAt > now`)
+  вместо нового `cancelOne`; получатели «Протокол опубликован» — существующий `activeEntryUserIds` репозитория.
+- **B-2 (шаг B).** «Жалоба рассмотрена» по скрытому модерацией райду — `target: null` (райд автору не виден, переход
+  вёл бы на «Не найдено»); по отклонённым жалобам — цель `ride`.
+- **B-3 (шаг B).** Письмо N2 при выключенном тумблере e-mail группы — `email.state: 'skipped'` (а не `null`): видно,
+  что письмо было положено и не ушло по настройке; прочим событиям — `null`.
+- **B-4 (шаг B, недоопределённость).** `rides.ride-rescheduled` пишется, только если правка меняет старт
+  (`changesStart`) **и** `rescheduledAt` поставлен этой записью: правка не старта в тот же миллисекундный момент
+  (`TestClock`) события не даёт.
 
 ## 8.3 Security checklist
 
@@ -679,3 +691,57 @@ dependency violations found», api 113 files / 1177 tests passed, contracts 270,
 **Follow-ups.** Шаг B: intake, порты источников, `notificationsOutboxRoutes`, `NotificationsWorkerModule`, хелпер
 события outbox «на момент» в `test/notifications.ts`. Шаг C: доставка, `revokeAllOf`/`NotificationErasure` в
 `account`. Вопрос автору — формулировка исхода спора (8.2 A-3).
+
+### Шаг B — источники событий и intake
+
+**Changes.**
+- `results`: поле попытки `lastVisibleVerdict` (не стирается `requeueAttempt`), `visibleVerdict(origin, result)` поверх
+  `attemptHidden`; `AttemptCheckProcessor.record` пишет поле (`next ?? previous`) и событие
+  `results.attempt-verdict-changed` в транзакции вердикта только при смене на видимый `counted`/`rejected`; миграция
+  `0025_attempt_last_verdict` (pipeline-бэкфилл `counted|rejected` без поля); порт `RESULTS_NOTICES`
+  (`ResultsCoreModule`), экспорт событий протокола.
+- `disputes`: порт `DISPUTE_NOTICES` (проекция сторон без описания/ответа/решения) в `DisputesCoreModule`, экспорт
+  событий. `identity`: `IdentityAccounts.liveUserIds`.
+- `rides`: `rides.events.ts` (4 события); `update`/`cancel`/`join` — та же условная операция в `MongoTransactions` +
+  outbox (повтор/«уже участник»/отказ — без события); `RideErasure` — отмена опубликованных по одному райду в
+  транзакции с событием (скрытые — без события, RC-8); `act` — `rides.reports-resolved { rideId, resolvedAt }` при
+  закрытых жалобах; порт `RIDE_NOTICES`; `RideReportsRepository` перенесён в `RidesCoreModule`.
+- `notifications`: `notificationsOutboxRoutes` (11 типов → `notifications-intake`) в `worker.module.ts`,
+  `NotificationIntake` (событие → черновики через порты), `NotificationsIntakeProcessor` (72 ч → черновики → живые →
+  настройки пачкой → `writeNotices`), `initialDelivery` (push `pending`/`skipped: disabled|push_off`, `notBefore` —
+  тихие часы; письмо N2 по тумблеру), `NotificationsWorkerModule`. Постановка доставки — точка расширения шага C
+  (комментарий в процессоре после записи; push остаётся `pending` без задач). Текст исхода спора — §8.2 A-3.
+
+**Files.** `apps/api/src/db/migrations/{0025_attempt_last_verdict,index,migrations.int.test}.ts`,
+`apps/api/src/modules/results/{attempt-check.processor,results.events,results.collection,results.policy(.test),
+results.repository,results-notices(.port),results.module,index,results-check.int.test}.ts`,
+`apps/api/src/modules/disputes/{dispute-notices(.port),disputes.repository,disputes.module,disputes.events,index}.ts`,
+`apps/api/src/modules/rides/{rides.events,rides.repository,rides.service,ride-erasure,rides-moderation.service,
+ride-reports.repository,ride-notices(.port),rides.module,index}.ts` + int-тесты rides,
+`apps/api/src/modules/identity/{identity-accounts,identity.repository}.ts`, `apps/api/src/modules/account/
+account-erasure.int.test.ts`, `apps/api/src/modules/notifications/{notifications.events,notification-intake,
+notifications-intake.processor,notifications.repository,notifications.policy(.test),notifications.module,index,
+notification-texts(.test),notifications-intake.int.test}.ts`, `apps/api/src/worker.module.ts`,
+`apps/api/test/notifications.ts`.
+
+**Tests.** Unit: `visibleVerdict` (2), `initialDelivery` (3), тексты исхода спора. Int: `results-check` (+5: первый
+видимый → событие, перепроверка тем же статусом — нет, `counted → rejected` — есть, скрытая — нет, провал не
+затирает, повтор задачи — нет); `migrations` (+1: бэкфилл 0025 и идемпотентность); `rides.int` (+3: отмена/повтор,
+перенос с участниками/без/правка не старта, отказ записи), `rides-participation` (+2: повтор/организатор/полный/leave
+без события; параллельные «Я иду» — одно событие), `rides-moderation` (+2: hide/dismiss — событие, без жалоб и restore
+— нет; откат — нет), `account-erasure` (+событие на райд, повтор прохода — без новых);
+`notifications-intake.int.test.ts` (16: получатели и тексты каждого события N3, посторонним/снятым/организатору —
+нет; схлопывание «Новый участник» и переноса, старое после нового не перетирает; статус райда не тот — skip;
+повтор задачи, повторная публикация и 4 параллельные задачи — одно уведомление; удалённый аккаунт — нет; > 72 ч —
+stale, ровно 72 ч — принят; объект исчез, невалидный payload — skip; выключенная группа push — запись в центр есть,
+`push: skipped/disabled`). Существующие тесты rides (в т.ч. `rides-participation`) — без правки ожиданий.
+Отрицательные доказательства (вернул после): без `liveUserIds` — красный «удалённый аккаунт»; без отсечки 72 ч —
+красный «старше 72 ч»; без `sourceEventId $lt` в схлопывании — красный «старое событие не перетирает»; событие
+переноса без условия — красный тест rides; событие вердикта без сравнения с прежним — 2 красных в `results-check`.
+
+`TURBO_CONCURRENCY=1 pnpm check` (изолированные `MONGO_URL_TEST`/`REDIS_URL_TEST`) — зелёный: arch:check «no
+dependency violations found», api 114 files / 1211 tests passed, contracts 270, api-client 96, admin 240.
+
+**Follow-ups.** Шаг C: постановка задач доставки из intake (точка — `NotificationsIntakeProcessor.process`),
+доставка, регламент, `account`. Документация §10 (правила «rides без outbox», «без маршрута» у протокола и споров) —
+шаг D.

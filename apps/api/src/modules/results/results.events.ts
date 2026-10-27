@@ -28,8 +28,21 @@ export const ResultsRaceRecheckRequested = z.object({
 export type ResultsRaceRecheckRequested = z.infer<typeof ResultsRaceRecheckRequested>;
 
 /**
- * Протокол гонки опубликован (D-22) — для рейтинга сезона (слайс 08). **Без маршрута** (RC-4): издатель outbox берёт
- * только типы из маршрутов, событие ждёт `publishedAt: null`, пока маршрут подписчика не заберёт накопленные.
+ * Видимый вердикт попытки сменился (notifications, RC-2): пишет `AttemptCheckProcessor.record` в транзакции вердикта,
+ * только при смене `lastVisibleVerdict` на `counted`/`rejected`. Маршрут — у подписчика (`notificationsOutboxRoutes`).
+ */
+export const RESULTS_ATTEMPT_VERDICT_CHANGED = 'results.attempt-verdict-changed';
+export const ResultsAttemptVerdictChanged = z.object({
+  attemptId: z.uuid(),
+  raceId: z.uuid(),
+  userId: z.uuid(),
+  status: z.enum(['counted', 'rejected']),
+});
+export type ResultsAttemptVerdictChanged = z.infer<typeof ResultsAttemptVerdictChanged>;
+
+/**
+ * Протокол гонки опубликован (D-22): маршрут — у подписчика `notifications` (`notificationsOutboxRoutes`, ADR-0016);
+ * рейтингу сезона (слайс 08) нужен fan-out outbox (ADR-0016 п. 5).
  */
 export const RESULTS_PROTOCOL_PUBLISHED = 'results.protocol-published';
 export const ResultsProtocolPublished = z.object({
@@ -38,7 +51,7 @@ export const ResultsProtocolPublished = z.object({
 });
 export type ResultsProtocolPublished = z.infer<typeof ResultsProtocolPublished>;
 
-/** Новая ревизия опубликованного протокола (D-27, D-28) — для рейтинга (08); без маршрута, как `protocol-published`. */
+/** Новая ревизия опубликованного протокола (D-27, D-28): маршрут — у `notifications`, как `protocol-published`. */
 export const RESULTS_RESULT_REVISED = 'results.result-revised';
 export const ResultsResultRevised = z.object({
   raceId: z.uuid(),

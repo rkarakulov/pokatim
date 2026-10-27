@@ -110,6 +110,16 @@ export class DisputesRepository {
     return this.disputes.findOne({ _id: id }, { session });
   }
 
+  /** Стороны спора для уведомлений (`DisputeNotices`): проекция без описания, ответа и решения. */
+  findParties(
+    id: string,
+  ): Promise<Pick<DisputeDoc, 'raceId' | 'complainantUserId' | 'targetUserId'> | null> {
+    return this.disputes.findOne(
+      { _id: id },
+      { projection: { _id: 0, raceId: 1, complainantUserId: 1, targetUserId: 1 } },
+    );
+  }
+
   /** Мои споры как заявителя в гонке, новые сверху (префикс `disputes_pair_unique`). */
   listFiledBy(raceId: string, complainantUserId: string): Promise<DisputeDoc[]> {
     return this.disputes
