@@ -1554,7 +1554,7 @@ export const ru = {
   'admin.appearance.save': 'Сохранить',
   'admin.appearance.saved': 'Тема сохранена. Приложение применит её в течение минуты.',
   'admin.appearance.saveFailed': 'Не удалось сохранить тему',
-  'admin.appearance.previewPending': 'Превью появится позже',
+  'admin.appearance.font': 'Шрифт: {name}',
   'admin.appearance.theme.classic.name': 'Классика',
   'admin.appearance.theme.classic.description':
     'Нынешний облик: строгие карточки и чёткая типографика',
