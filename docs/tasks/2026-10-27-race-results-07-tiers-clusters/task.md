@@ -1225,3 +1225,29 @@ Findings: `findings-07c-codex.md` (REQUEST CHANGES: 1 HIGH, 2 MEDIUM), `findings
 расширен: 409 → повторное сохранение с серверными полом и годом и правкой веса; незнакомый пол в заблокированной
 анкете); `race-tiers.test.tsx` (+2, 2 изменены: START неактивна при заявке Verified и наоборот; 409
 `VERIFIED_PROFILE_REQUIRED` → анкета с `?race`; анкета из кэша после Verified-заявки — зафиксирована).
+
+### Фиксы ревью 07c pass 2
+
+Findings: `findings-07c-codex-pass2.md` (APPROVE: 2 MEDIUM), `findings-07c-claude-pass2.md` (APPROVE: 1 LOW — тот же
+случай, что первый MEDIUM codex). Закрыты все; сервер не менялся.
+
+- [MEDIUM codex / LOW claude] Анкета, открытая сразу заблокированной, не регистрирует поля пола и года — `resetField`
+  для них no-op, после правки командой PUT уходил со старыми значениями (цикл 409). `verified-profile-form.tsx`: при
+  `demographicsLocked` значения сервера ставятся ещё и через `setValue` (работает без регистрации); проверка скрытых
+  полей схемой (баннер `lockedUnreadable`) сохранена.
+- [MEDIUM codex] Подача спора на участника чужой группы зачёта (сервер — `409 target_not_counted`). `dispute-format.ts`:
+  `inOtherGroup(own, target)` — обе группы известны и различны (`null`/`'unknown'` — решает сервер); `rivalAction` и
+  `canOpenRival` с `otherGroup` не предлагают подачу (свой спор — статус по-прежнему). Группа цели — `page.group`
+  ответа таблицы (вкладка `?group=` или группа по умолчанию), своя — `MyRaceEntry.entry.groupKey`. `race-detail.tsx`:
+  строки чужой группы не нажимаемы; `rival-card.tsx` и `dispute-form.tsx` (прямое открытие): запрос своей заявки,
+  до ответа — скелетон действия, чужая группа — причина `disputes.file.otherGroup` («Спор можно подать только в своей
+  группе зачёта») вместо кнопки и формы. START и Verified без пульса уже закрыты сервером (`filing.status:
+  unavailable`, `not_ranked`) — действия нет.
+
+Тесты: `verified-profile.test.tsx` (+1: открыта заблокированной → 409 → перезапрос с `w`/1990 → PUT с актуальными
+полом и годом и правкой веса); `dispute-format.test.ts` (+2: `inOtherGroup`; `rivalAction`/`canOpenRival` для чужой
+группы); `race-groups.test.tsx` (+5: вкладка чужой группы — строки не нажимаемы; карточка и форма своей группы —
+подача есть; прямое открытие карточки и формы чужой группы — подачи нет, причина).
+
+Проверки: `pnpm --filter @pokatim/app test` — 166 suites / 1506 tests passed; `pnpm --filter @pokatim/app typecheck`
+— ok; `pnpm --filter @pokatim/i18n test` — 6 passed; eslint и `prettier --check` по изменённым — чисто.

@@ -33,7 +33,7 @@ import {
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
-import { canOpenRival } from './disputes/dispute-format';
+import { canOpenRival, inOtherGroup } from './disputes/dispute-format';
 import { rivalPath } from './disputes/dispute-screen';
 import { useMyRaceDisputes } from './disputes/queries';
 import { RaceDisputes } from './disputes/race-disputes';
@@ -178,9 +178,15 @@ function RaceDetailView({
           ownEntryId={signedIn ? (entry.data?.entry?.id ?? null) : null}
           // своя группа — вкладка по умолчанию (race-results-07)
           ownGroup={signedIn ? (entry.data?.entry?.groupKey ?? null) : null}
-          // карточка соперника — только вошедшему участнику, когда ей есть что показать (RC-14)
+          // карточка соперника — только вошедшему участнику, когда ей есть что показать (RC-14); строка чужой группы
+          // зачёта — нет (подачу сервер отклонит); вкладка по умолчанию — группа ответа без `group`
           rowAction={(entryId, group) =>
-            signedIn && canOpenRival(disputes.data, entryId)
+            signedIn &&
+            canOpenRival(
+              disputes.data,
+              entryId,
+              inOtherGroup(entry.data?.entry?.groupKey, group ?? results.data?.pages[0]?.group),
+            )
               ? () => router.push(rivalPath(race.id, entryId, group))
               : null
           }

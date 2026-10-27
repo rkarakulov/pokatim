@@ -5,8 +5,14 @@ import { AsyncContent, Button, Pill, SkeletonHeroCard, textStyle, useTheme } fro
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { useRaceResults } from '../queries';
-import { categoryLabel, disputeStatus, filedDecisionText, rivalAction } from './dispute-format';
+import { useMyRaceEntry, useRaceResults } from '../queries';
+import {
+  categoryLabel,
+  disputeStatus,
+  filedDecisionText,
+  inOtherGroup,
+  rivalAction,
+} from './dispute-format';
 import {
   ActionSkeleton,
   DisputeNotFound,
@@ -18,23 +24,30 @@ import {
 } from './dispute-screen';
 import { useMyRaceDisputes } from './queries';
 
-/** Действие карточки по `filing` сервера (§7.8, M1): подать, выключенное с причиной, статус моего спора, ничего. */
+/**
+ * Действие карточки по `filing` сервера (§7.8, M1): подать, выключенное с причиной, статус моего спора, ничего.
+ * Соперник в чужой группе зачёта (`otherGroup`) — причина вместо подачи.
+ */
 function RivalAction({
   disputes,
   raceId,
   entryId,
   group,
+  otherGroup,
 }: {
   disputes: MyRaceDisputes;
   raceId: string;
   entryId: string;
   group: ResultGroupKey | undefined;
+  otherGroup: boolean;
 }) {
   const theme = useTheme();
   const router = useRouter();
-  const action = rivalAction(disputes, entryId);
+  const action = rivalAction(disputes, entryId, otherGroup);
   const meta = [textStyle('meta'), { color: theme.text.secondary }];
-  if (action === null) return null;
+  if (action === null) {
+    return otherGroup ? <Text style={meta}>{t('disputes.file.otherGroup')}</Text> : null;
+  }
   if (action.kind === 'mine') {
     const status = disputeStatus(action.dispute.status);
     const decision = filedDecisionText(action.dispute);
@@ -78,6 +91,8 @@ export function RivalCardScreen({
   const valid = Uuid.safeParse(raceId).success && Uuid.safeParse(entryId).success;
   const results = useRaceResults(raceId, valid, group);
   const disputes = useMyRaceDisputes(raceId, valid);
+  // группа своей заявки — подача только в своей группе зачёта (race-results-07)
+  const entry = useMyRaceEntry(raceId, valid);
   const title = t('disputes.rival.title');
 
   return (
@@ -91,16 +106,17 @@ export function RivalCardScreen({
             return (
               <View style={styles.card}>
                 <RivalResult row={found.row} page={found.page} />
-                {disputes.data ? (
+                {disputes.data && !entry.isPending ? (
                   <RivalAction
                     disputes={disputes.data}
                     raceId={raceId}
                     entryId={entryId}
                     group={group}
+                    otherGroup={inOtherGroup(entry.data?.entry?.groupKey, found.page.group)}
                   />
                 ) : disputes.isError ? (
                   <DisputesFailure error={disputes.error} retry={() => void disputes.refetch()} />
-                ) : disputes.isPending ? (
+                ) : disputes.isPending || entry.isPending ? (
                   <ActionSkeleton />
                 ) : null}
               </View>

@@ -7,6 +7,7 @@ import {
   type DisputeAgainstMe,
   type MyDispute,
   type MyRaceDisputes,
+  type ResultGroupKey,
 } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import type { PillTone } from '@rkarakulov/ui';
@@ -58,13 +59,30 @@ export type RivalAction =
   | { kind: 'closed'; note: string }
   | { kind: 'mine'; dispute: MyDispute };
 
+type GroupKey = ResultGroupKey | 'unknown' | null | undefined;
+
 /**
- * Действие карточки соперника по `filing` (§7.8, M1): мой спор по строке — его статус; `open` — «Оспорить результат» и
- * срок; `closed` — выключенное действие с причиной (срок — с датой протокола); `unavailable` / `unknown` — ничего.
+ * Цель — в чужой группе зачёта (race-results-07): сервер отклонит подачу (`409 target_not_counted`). Группа своей заявки
+ * или строки неизвестна (`null`, `'unknown'`, старый API) — не чужая, решает сервер.
  */
-export function rivalAction(disputes: MyRaceDisputes, entryId: string): RivalAction | null {
+export function inOtherGroup(own: GroupKey, target: GroupKey): boolean {
+  const known = (key: GroupKey): key is ResultGroupKey => key != null && key !== 'unknown';
+  return known(own) && known(target) && own !== target;
+}
+
+/**
+ * Действие карточки соперника по `filing` (§7.8, M1): мой спор по строке — его статус; цель в чужой группе
+ * (`otherGroup`) — ничего; `open` — «Оспорить результат» и срок; `closed` — выключенное действие с причиной (срок —
+ * с датой протокола); `unavailable` / `unknown` — ничего.
+ */
+export function rivalAction(
+  disputes: MyRaceDisputes,
+  entryId: string,
+  otherGroup = false,
+): RivalAction | null {
   const mine = disputes.filed.find((dispute) => dispute.targetEntryId === entryId);
   if (mine) return { kind: 'mine', dispute: mine };
+  if (otherGroup) return null;
   const { filing } = disputes;
   if (filing.status === 'open') {
     return { kind: 'file', note: t('disputes.file.until', { date: disputeDate(filing.closesAt) }) };
@@ -80,12 +98,16 @@ export function rivalAction(disputes: MyRaceDisputes, entryId: string): RivalAct
   };
 }
 
-/** Строка таблицы нажимаема, только когда карточке есть что показать (RC-14): гостю и неучастнику — нет. */
+/**
+ * Строка таблицы нажимаема, только когда карточке есть что показать (RC-14): гостю, неучастнику и на чужую группу
+ * зачёта — нет.
+ */
 export function canOpenRival(
   disputes: MyRaceDisputes | null | undefined,
   entryId: string,
+  otherGroup = false,
 ): boolean {
-  return disputes ? rivalAction(disputes, entryId) !== null : false;
+  return disputes ? rivalAction(disputes, entryId, otherGroup) !== null : false;
 }
 
 /** Опрос споров — пока есть открытый спор (решение, отзыв). */

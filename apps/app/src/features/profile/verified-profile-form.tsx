@@ -127,12 +127,16 @@ export function VerifiedProfileFormView({
   const locked = view.demographicsLocked && view.profile !== null;
   // пол и год зафиксированы (в том числе после 409 или свежего ответа поверх кэша) — поля формы берут значения
   // сервера: скрытые поля иначе ушли бы в PUT прежними правками (снова 409). Правки веса, роста и FTP не трогаем.
+  // `resetField` — для полей, зарегистрированных до блокировки; анкета, открытая заблокированной, их не регистрирует
+  // (`resetField` — no-op), поэтому значение — ещё и через `setValue` (ревью pass 2).
   const lockedGender = locked ? valuesOf(view).gender : undefined;
   const lockedBirthYear = locked ? valuesOf(view).birthYear : undefined;
   useEffect(() => {
     if (lockedGender === undefined || lockedBirthYear === undefined) return;
     form.resetField('gender', { defaultValue: lockedGender });
     form.resetField('birthYear', { defaultValue: lockedBirthYear });
+    form.setValue('gender', lockedGender);
+    form.setValue('birthYear', lockedBirthYear);
   }, [form, lockedGender, lockedBirthYear]);
   const meta = [textStyle('meta'), { color: theme.text.secondary }];
   const errorStyle = [textStyle('meta'), { color: theme.status.error }];

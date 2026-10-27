@@ -11,6 +11,7 @@ import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
 
 import RaceRoute from '../app/races/[id]';
+import FileDisputeRoute from '../app/races/dispute/[id]/[entryId]';
 import RivalResultRoute from '../app/races/result/[id]/[entryId]';
 import { appRoutes, tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
@@ -62,7 +63,7 @@ const table = () => within(screen.getByTestId('race-results'));
 const tab = (name: string) => screen.getByRole('tab', { name });
 
 const openAsGuest = () => renderRouter(appRoutes, { initialUrl: `/races/${RACE_ID}` });
-const openSignedIn = () => {
+const openSignedIn = (initialUrl = `/races/${RACE_ID}`) => {
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
   useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
   return renderRouter(
@@ -70,10 +71,22 @@ const openSignedIn = () => {
       ...tabRoutes,
       'races/[id]': RaceRoute,
       'races/result/[id]/[entryId]': RivalResultRoute,
+      'races/dispute/[id]/[entryId]': FileDisputeRoute,
     },
-    { initialUrl: `/races/${RACE_ID}`, wrapper: createQueryWrapper() },
+    { initialUrl, wrapper: createQueryWrapper() },
   );
 };
+const MAN = men[0]!.entryId;
+/** Вошедший с Verified-заявкой в группе `w_u40`. */
+const enteredWomen = () =>
+  getMyRaceEntry.mockResolvedValue(
+    myEntry({
+      groupScheme: 'gender_age',
+      entry: { ...myEntry().entry!, tier: 'verified', groupKey: 'w_u40' },
+      verified: verifiedState({ ownGroup: 'w_u40', groupOptions: ['w_u40'] }),
+      result: result({ status: 'provisional', place: 2, elapsedSec: 6125, group: 'w_u40' }),
+    }),
+  );
 
 beforeEach(() => {
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
@@ -174,6 +187,56 @@ describe('таблица: вкладки групп (07c, RC-11)', () => {
     expect(await card.findByText('Анна К.')).toBeOnTheScreen();
     expect(card.queryByText('Результат не найден')).toBeNull();
     expect(getRaceResults).toHaveBeenLastCalledWith(RACE_ID, { limit: 50, group: 'w_u40' });
+  });
+});
+
+describe('споры только в своей группе (07c, ревью pass 2)', () => {
+  it('вкладка чужой группы — строки не нажимаемы; своя — нажимаемы', async () => {
+    enteredWomen();
+    await openSignedIn();
+
+    expect(await screen.findByRole('button', { name: /Анна К\./ })).toBeOnTheScreen();
+    await fireEvent.press(tab('Мужчины до 40'));
+    expect(await screen.findByLabelText('1, Участник, 1:30:00')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: /Участник/ })).toBeNull();
+  });
+
+  it('карточка соперника своей группы — «Оспорить результат»', async () => {
+    enteredWomen();
+    await openSignedIn(`/races/result/${RACE_ID}/${RIVAL}?group=w_u40`);
+
+    const card = within(await screen.findByTestId('rival-card'));
+    expect(await card.findByRole('button', { name: 'Оспорить результат' })).toBeOnTheScreen();
+  });
+
+  it('прямое открытие карточки соперника чужой группы — подача не предлагается', async () => {
+    enteredWomen();
+    await openSignedIn(`/races/result/${RACE_ID}/${MAN}?group=m_u40`);
+
+    const card = within(await screen.findByTestId('rival-card'));
+    expect(
+      await card.findByText('Спор можно подать только в своей группе зачёта'),
+    ).toBeOnTheScreen();
+    expect(card.queryByRole('button', { name: 'Оспорить результат' })).toBeNull();
+  });
+
+  it('прямое открытие формы спора на чужую группу — формы нет, причина', async () => {
+    enteredWomen();
+    await openSignedIn(`/races/dispute/${RACE_ID}/${MAN}?group=m_u40`);
+
+    const form = within(await screen.findByTestId('dispute-form'));
+    expect(
+      await form.findByText('Спор можно подать только в своей группе зачёта'),
+    ).toBeOnTheScreen();
+    expect(form.queryByRole('button', { name: 'Отправить спор' })).toBeNull();
+  });
+
+  it('форма спора на свою группу — форма', async () => {
+    enteredWomen();
+    await openSignedIn(`/races/dispute/${RACE_ID}/${RIVAL}?group=w_u40`);
+
+    const form = within(await screen.findByTestId('dispute-form'));
+    expect(await form.findByRole('button', { name: 'Отправить спор' })).toBeOnTheScreen();
   });
 });
 

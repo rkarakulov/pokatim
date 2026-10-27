@@ -276,6 +276,38 @@ describe('«Анкета зачёта»: пол и год зафиксирова
     });
   });
 
+  it('открыта заблокированной, команда сменила пол и год — PUT шлёт актуальные (ревью pass 2)', async () => {
+    const locked = verifiedView({ demographicsLocked: true });
+    const changed = verifiedView({
+      demographicsLocked: true,
+      profile: { ...locked.profile!, gender: 'w', birthYear: 1990 },
+    });
+    getVerifiedProfile.mockResolvedValue(locked);
+    updateVerifiedProfile.mockRejectedValueOnce(
+      new ApiHttpError(409, { code: 'VERIFIED_DEMOGRAPHICS_LOCKED', message: 'x' }),
+    );
+    updateVerifiedProfile.mockResolvedValue(changed);
+    await open();
+    await screen.findByDisplayValue('72');
+    getVerifiedProfile.mockResolvedValue(changed);
+
+    await type(WEIGHT, '75');
+    await fireEvent.press(save());
+    expect(await screen.findByText('Женский')).toBeOnTheScreen();
+    expect(screen.getByText('1990')).toBeOnTheScreen();
+
+    await fireEvent.press(save());
+    await waitFor(() => expect(updateVerifiedProfile).toHaveBeenCalledTimes(2));
+    expect(updateVerifiedProfile).toHaveBeenLastCalledWith(TOKEN, {
+      gender: 'w',
+      birthYear: 1990,
+      weightKg: 75,
+      heightCm: 180,
+      ftpW: null,
+      consent: true,
+    });
+  });
+
   it('заблокирована, пол сервера незнаком — понятная ошибка вместо молчания, PUT не уходит', async () => {
     getVerifiedProfile.mockResolvedValue(
       verifiedView({

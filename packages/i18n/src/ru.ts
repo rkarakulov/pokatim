@@ -1359,6 +1359,7 @@ export const ru = {
   'disputes.file.action': 'Оспорить результат',
   'disputes.file.until': 'Споры принимаются до {date}',
   'disputes.file.closed': 'Приём споров закрыт — протокол будет опубликован {date}',
+  'disputes.file.otherGroup': 'Спор можно подать только в своей группе зачёта',
   'disputes.file.title': 'Оспорить результат',
   'disputes.file.target': 'Оспариваемый результат',
   'disputes.file.category': 'Категория',

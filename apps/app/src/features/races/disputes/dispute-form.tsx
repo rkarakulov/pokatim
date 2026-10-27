@@ -21,12 +21,13 @@ import {
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { useRaceResults } from '../queries';
+import { useMyRaceEntry, useRaceResults } from '../queries';
 import {
   categoryLabel,
   descriptionError,
   disputeErrorText,
   disputeStatus,
+  inOtherGroup,
   rivalAction,
 } from './dispute-format';
 import {
@@ -109,24 +110,28 @@ function FileForm({
   );
 }
 
-/** Подать нельзя (срок, лимит, уже подан): статус или причина вместо формы. */
+/** Подать нельзя (срок, лимит, уже подан, чужая группа зачёта): статус или причина вместо формы. */
 function FormGate({
   disputes,
   raceId,
   entryId,
+  otherGroup,
 }: {
   disputes: MyRaceDisputes;
   raceId: string;
   entryId: string;
+  otherGroup: boolean;
 }) {
   const theme = useTheme();
-  const action = rivalAction(disputes, entryId);
+  const action = rivalAction(disputes, entryId, otherGroup);
   if (action?.kind === 'file') {
     return <FileForm raceId={raceId} entryId={entryId} deadline={action.note} />;
   }
   const text =
     action === null
-      ? t(`disputes.filingBlock.${disputes.filing.reason ?? 'unknown'}`)
+      ? otherGroup
+        ? t('disputes.file.otherGroup')
+        : t(`disputes.filingBlock.${disputes.filing.reason ?? 'unknown'}`)
       : action.kind === 'mine'
         ? disputeStatus(action.dispute.status).label
         : action.note;
@@ -153,6 +158,8 @@ export function DisputeFormScreen({
   const valid = Uuid.safeParse(raceId).success && Uuid.safeParse(entryId).success;
   const results = useRaceResults(raceId, valid, group);
   const disputes = useMyRaceDisputes(raceId, valid);
+  // группа своей заявки — подача только в своей группе зачёта (race-results-07)
+  const entry = useMyRaceEntry(raceId, valid);
 
   return (
     <DisputeScreenShell title={t('disputes.file.title')} raceId={raceId} testID="dispute-form">
@@ -169,11 +176,16 @@ export function DisputeFormScreen({
                   {t('disputes.file.target')}
                 </Text>
                 <RivalResult row={found.row} page={found.page} />
-                {disputes.data ? (
-                  <FormGate disputes={disputes.data} raceId={raceId} entryId={entryId} />
+                {disputes.data && !entry.isPending ? (
+                  <FormGate
+                    disputes={disputes.data}
+                    raceId={raceId}
+                    entryId={entryId}
+                    otherGroup={inOtherGroup(entry.data?.entry?.groupKey, found.page.group)}
+                  />
                 ) : disputes.isError ? (
                   <DisputesFailure error={disputes.error} retry={() => void disputes.refetch()} />
-                ) : disputes.isPending ? (
+                ) : disputes.isPending || entry.isPending ? (
                   <ActionSkeleton />
                 ) : (
                   <BackToRace raceId={raceId} />
