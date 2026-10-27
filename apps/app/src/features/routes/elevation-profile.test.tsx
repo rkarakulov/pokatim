@@ -226,6 +226,8 @@ describe('ElevationProfile: скраббинг native (routes-04, S1, S4)', () =
     await renderScrub(store);
     await screen.findByTestId('elevation-profile-svg', { includeHiddenElements: true });
     const before = setConfig.mock.calls.length;
+    // шпион на том же экземпляре RNGH, что и компонент (иначе тест — тавтология)
+    expect(before).toBeGreaterThan(0);
     for (const fraction of [0.1, 0.2, 0.3, 0.4, 0.5]) {
       await act(async () => store.setState({ fraction, active: true }));
     }

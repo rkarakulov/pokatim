@@ -150,6 +150,11 @@ function ScrubbableChart({
   const release = () => {
     if (scrub.getState().dragging === 'profile') scrub.setState({ dragging: null });
   };
+  // браузер отменил касание (началась прокрутка, `pan-y`) — курсор скрыт, как на native (ревью pass 2)
+  const cancel = (event: ReactPointerEvent<HTMLDivElement>) => {
+    release();
+    if (event.pointerType !== 'mouse') scrub.setState({ active: false });
+  };
   const onPointerLeave = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && scrub.getState().dragging === null) {
       scrub.setState({ active: false });
@@ -187,7 +192,7 @@ function ScrubbableChart({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={release}
-      onPointerCancel={release}
+      onPointerCancel={cancel}
       onPointerLeave={onPointerLeave}
       onKeyDown={onKeyDown}
       style={{ ...boxStyle(theme), touchAction: 'pan-y', cursor: 'crosshair' }}

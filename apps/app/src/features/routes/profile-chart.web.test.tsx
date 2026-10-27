@@ -206,4 +206,15 @@ describe('ProfileChart web: скраббинг (routes-04, RC-13)', () => {
     await act(async () => pointer(document.body, 'pointerdown', 0, 'touch'));
     expect(store.getState().active).toBe(false);
   });
+
+  it('касание отменено браузером (началась прокрутка, pan-y) — курсор скрыт, как на native', async () => {
+    const store = createScrubStore();
+    const host = await mount(chart(store));
+    const node = slider(host);
+    layout(node);
+    await act(async () => pointer(node, 'pointerdown', 20, 'touch'));
+    expect(store.getState()).toMatchObject({ active: true, dragging: 'profile' });
+    await act(async () => pointer(node, 'pointercancel', 20, 'touch'));
+    expect(store.getState()).toMatchObject({ active: false, dragging: null });
+  });
 });

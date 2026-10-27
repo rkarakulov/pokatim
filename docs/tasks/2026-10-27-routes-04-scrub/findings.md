@@ -154,3 +154,78 @@ SSR slider — детерминирован (`useSyncExternalStore` с initial s
 Проверка: `PATH=~/.nvm/versions/node/v24.22.1/bin:$PATH MONGO_URL_TEST=… REDIS_URL_TEST=… TURBO_CONCURRENCY=1 pnpm check`
 — exit 0 (format, lint, arch, typecheck, тесты 13/13; app: 129 suites / 1121 tests). Устройство и браузер — NOT
 VERIFIED, как в §12.
+
+---
+
+# Findings — routes-04-scrub — pass 2 — reviewer: claude
+base: origin/develop   commits: f120d76, fb8c671 (фиксы pass 1); рабочее дерево по задаче чистое
+verdict: APPROVE
+
+Проверено самостоятельно: `apps/app: pnpm exec jest routes maps route-detail use-scrub` — 129 suites / 1121 tests
+passed (native + web + server проекты); `tsc --noEmit -p apps/app` — exit 0.
+
+Сверка фиксов pass 1:
+- **M1 — исправлено.** `ScrubbableChart` (profile-chart.tsx) и `ScrubMarker` (scrub-marker.tsx) больше не подписаны на
+  долю; конфиг `usePanGesture` — `useMemo` по `[scrub]` / `[store, points, cumulative]`, колбэки читают стор через
+  `getState`, ширина и «активирован» — ref. Подписчики доли — `ScrubbableBody` / `MarkerDot` (дети `GestureDetector`).
+  `linePoints`/`cumulative` в `route-map.tsx` — `useMemo` по `viewBounds/viewSize` и `map`: на статичной карте конфиг
+  маркера не меняется во время жеста. RNGH `lib/module/v3/hooks/useGesture.js:49–59` — `setGestureHandlerConfig` в
+  эффекте по `[handlerTag, config, type, gesture]`, т. е. шпион теста бьёт ровно в механизм из M1; `ProfileChart` и
+  `ElevationProfile` на долю не подписаны (ре-рендер носителя жеста на кадр не возникает выше по дереву).
+- **M2 — исправлено.** `use-scrub-scroll-lock.ts` (native: `dragging === null`) / `.web.ts` (всегда `true`) — развилка
+  файлами по правилу проекта; `route-detail.tsx` — единственный потребитель. Web-тест в проекте `web` (jest-expo/web
+  резолвит `.web.ts`) рендерит настоящий RN-web `ScrollView` и проверяет computed `overflowY`/`touchAction` — ловит
+  ровно регрессию из M2. Native-тест блокировки прокрутки не тронут и зелёный.
+- **M3 — исправлено.** `scrubTolerance = max(15 м в px, SCRUB_TOLERANCE_MIN_PX = 12)`, вход `nearestFraction` не
+  менялся, обе платформы берут `scrubTolerance`. Тест `scrub-line.test.ts` — проходы в ≈ 0,33 px, палец ближе к
+  обратному; с нижней границей — 4 шага по своему проходу, с допуском только в метрах — прыжок `> 0,5` (отрицательная
+  проверка внутри теста). Побочный эффект «липкости» в пределах 12 px (серпантин на обзорном зуме: маркер остаётся на
+  текущей ветке, пока соседняя не ближе на 12 px) — это и есть требуемая S2 непрерывность; 12 px < половины маркера.
+- **LOW 1–3 — исправлены.** §8.2 (Reanimated есть, композиция не используется, путь RNGH с Reanimated — NOT VERIFIED
+  в §12), §10/§11 (`react-native-svg` 15.16.0 по G2, обоснование без ADR), комментарий `load-svg-native.ts`;
+  `.claude/rules/pokatim-app.md` синхронизирован (блокировка только native, нижняя граница допуска).
+
+Без замечаний по измерениям: контракты/API/миграции/очереди/аудит/безопасность — не затронуты; i18n — новых строк нет;
+дизайн-система — без изменений вида; placement — новые файлы в `features/routes`, развилка `.web` по правилу.
+
+### [LOW] M1-тесты не проверяют, что шпион вообще видит вызовы — при смене пути резолва RNGH станут тавтологией
+- **file:** apps/app/src/features/routes/elevation-profile.test.tsx; apps/app/src/features/maps/route-map-scrub.test.tsx
+- **location:** тесты «M1: …» (шпион `NativeProxy.setGestureHandlerConfig` через `jest.requireActual('…/lib/module/v3/NativeProxy')`)
+- **problem:** утверждается только `calls.length === before`. Если RNGH в jest начнёт резолвиться в другой вход
+  (`lib/commonjs`, `src` — смена `customExportConditions`/версии пакета) или `NativeProxy` окажется замокан
+  `jestSetup`, шпион будет висеть на другом экземпляре модуля: `before = 0`, после — `0`, тест зелёный при
+  вернувшейся регрессии. Сейчас путь верный (coder показал красный прогон `Expected: 1, Received: 4`), но защита
+  держится на неявном факте.
+- **why_it_matters:** тесты — единственная автоматическая защита M1 (на устройстве не проверяется).
+- **evidence:** тела тестов — нет `expect(before).toBeGreaterThan(0)`; монтирование вызывает
+  `setGestureHandlerConfig` (useGesture.js:49–51), т. е. `before ≥ 1` при правильном пути.
+- **recommended_fix:** добавить `expect(before).toBeGreaterThan(0)` в оба теста.
+
+### [LOW] Web-касание: вертикальный свайп с профиля теперь прокручивает страницу, но оставляет курсор и карточку активными
+- **file:** apps/app/src/features/routes/profile-chart.web.tsx
+- **location:** `onPointerDown` (стр. 139–146), `release` по `onPointerCancel` (стр. 150–152)
+- **problem:** после M2 свайп с профиля пальцем прокручивает страницу (как и требует RC-13), но `onPointerDown`
+  сразу делает `follow` → `active: true` в точке касания, а `pointercancel` (браузер забрал жест в `pan-y`) снимает
+  только `dragging`. Итог: страница прокручивается с курсором и карточкой значения, «застрявшими» в случайной точке
+  касания, до следующего касания вне профиля. На native то же действие курсор скрывает (§8.2: «начало прокрутки при
+  касании профиля тоже скрывает курсор», `onScrollBeginDrag`). RC-8 для web-касания явно требует только
+  `pointerdown` вне профиля, поэтому это не нарушение спеки, а расхождение платформ, открытое фиксом M2.
+- **why_it_matters:** UX на мобильном web — случайный курсор после обычной прокрутки; паритет с native.
+- **evidence:** `release` — `if (dragging === 'profile') setState({ dragging: null })`, `active` не трогается;
+  `touchAction: 'pan-y'` на том же `div`.
+- **recommended_fix:** на `pointercancel` касания (не мыши) ставить `active: false` (браузер отменяет указатель как раз
+  при начале прокрутки), отдельный обработчик вместо общего `release`; web-тест: `pointerdown` (touch) →
+  `pointercancel` → курсор скрыт. Можно отложить в routes-04b.
+
+## NOT VERIFIED (pass 2)
+- Как в pass 1: устройство (R1, R2, 60 fps, путь RNGH v3 с Reanimated, отсутствие `setGestureHandlerConfig` на кадр
+  на реальном натив-модуле), браузер (e2e, touch-прокрутка с профиля, полоса прокрутки при перетаскивании маркера).
+- Отрицательные прогоны coder (M1 `Expected: 1, Received: 4`, M2 `Expected: "auto", Received: "hidden"`) не
+  воспроизводились (правка кода запрещена ревью); по коду тестов и RNGH они согласуются с механизмом.
+
+## Фиксы после pass 2
+
+- LOW 1: в тестах M1 (`elevation-profile.test.tsx`, `route-map-scrub.test.tsx`) — `expect(before).toBeGreaterThan(0)`:
+  шпион на том же экземпляре RNGH, что и компонент.
+- LOW 2: web — `pointercancel` касания (браузер начал прокрутку, `pan-y`) скрывает курсор, как native. Тест
+  `profile-chart.web.test.tsx`; отрицательное доказательство — с прежним `release` тест красный (1 failed).
