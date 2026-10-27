@@ -24,6 +24,11 @@ import {
   ConfirmVerificationResponse,
   type ErrorCode,
   HealthResponse,
+  NotificationPage,
+  NotificationSettings,
+  type RegisterPushToken,
+  type RevokePushToken,
+  UnreadCount,
   OnboardingStatus,
   PasswordResetLinkInfo,
   ProfileView,
@@ -141,6 +146,9 @@ export type CalendarListParams = {
   cursor?: string;
   limit?: number;
 };
+
+/** Параметры центра уведомлений до схемы (`NotificationListQuery`). */
+export type NotificationListParams = { cursor?: string; limit?: number };
 
 /** Параметры ленты кофе-райдов до схемы (`city` — массив кодов справочника). */
 export type RideListParams = {
@@ -550,6 +558,57 @@ export function createApiClient({
         DisputeAgainstMe,
         body,
       ),
+
+    // --- центр уведомлений (вход обязателен, ADR-0017): только свои ---
+    /** Новые сверху, курсор; незнакомая цель — `{ type: 'unknown' }` (без перехода). */
+    listNotifications: (accessToken: string, params: NotificationListParams = {}) =>
+      request(
+        `/v1/notifications${queryString(params)}`,
+        NotificationPage,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Непрочитанные (не больше 100 — колокольчик показывает «99+»). */
+    getUnreadCount: (accessToken: string) =>
+      request(
+        '/v1/notifications/unread-count',
+        UnreadCount,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Отметить прочитанным (повтор — тоже 204); чужое или неизвестное — `404 NOT_FOUND`. */
+    markNotificationRead: (accessToken: string, id: string) =>
+      postAuthorized(
+        accessToken,
+        `/v1/notifications/${encodeURIComponent(id)}/read`,
+        z.undefined(),
+        {},
+      ),
+    /** «Прочитать все»; `204`. */
+    markAllNotificationsRead: (accessToken: string) =>
+      postAuthorized(accessToken, '/v1/notifications/read-all', z.undefined(), {}),
+    /** Настройки: нет сохранённых — умолчания сервера. */
+    getNotificationSettings: (accessToken: string) =>
+      request(
+        '/v1/notifications/settings',
+        NotificationSettings,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Полная замена настроек; ответ — сохранённые. */
+    updateNotificationSettings: (accessToken: string, body: NotificationSettings) =>
+      request(
+        '/v1/notifications/settings',
+        NotificationSettings,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
+    /** Регистрация или обновление push-токена этого устройства; `204`. */
+    registerPushToken: (accessToken: string, body: RegisterPushToken) =>
+      request(
+        '/v1/notifications/push-tokens',
+        z.undefined(),
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
+    /** Снять push-токен этого устройства (до выхода); `204` и для чужого/неизвестного. */
+    revokePushToken: (accessToken: string, body: RevokePushToken) =>
+      postAuthorized(accessToken, '/v1/notifications/push-tokens/revoke', z.undefined(), body),
 
     // --- устройства через агрегатор (вход обязателен, tracks-devices) ---
     listDevices: (accessToken: string) =>

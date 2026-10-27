@@ -26,3 +26,5 @@ export { CurrentUser } from './current-user.decorator';
 export { randomToken, sha256 } from './tokens';
 /** Ключ IP-лимита (HMAC адреса, IPv6 — /64) — публичное чтение (`public-read.guard.ts`). */
 export { rateLimitKeyForIp } from './tokens';
+/** Каркас HTML-письма и экранирование — письма `notifications` (N2, ADR-0017). */
+export { escapeHtml, htmlEmail } from './mail/html';

@@ -27,6 +27,7 @@ import {
   summarize,
   uploadClosesAt,
   verdictFields,
+  visibleVerdict,
 } from './results.policy';
 
 const MIN = 60_000;
@@ -739,5 +740,42 @@ describe('протокол (race-results-05)', () => {
     expect(recheckPending({ startedAt: later(1), appliedAt: later(2) }, published)).toBe(false);
     expect(recheckPending({ startedAt: later(3), appliedAt: later(2) }, published)).toBe(true);
     expect(recheckPending({ startedAt: later(1), appliedAt: null }, null)).toBe(false);
+  });
+});
+
+describe('visibleVerdict — видимый вердикт для уведомлений (notifications, RC-2)', () => {
+  const result = (overrides: Partial<Pick<RaceAttemptDoc, 'status' | 'matched' | 'reasons'>>) => ({
+    status: 'counted' as RaceAttemptDoc['status'],
+    matched: true,
+    reasons: [] as RaceAttemptDoc['reasons'],
+    ...overrides,
+  });
+
+  it('засчитана и видимый отказ — статус; явная попытка без полного сегмента — видна', () => {
+    expect(visibleVerdict('auto', result({}))).toBe('counted');
+    expect(visibleVerdict('auto', result({ status: 'rejected', reasons: ['off_corridor'] }))).toBe(
+      'rejected',
+    );
+    expect(
+      visibleVerdict(
+        'explicit',
+        result({ status: 'rejected', matched: false, reasons: ['no_start'] }),
+      ),
+    ).toBe('rejected');
+  });
+
+  it('скрытые авто-попытки (без полного сегмента, implausible), провал и снятие — null', () => {
+    expect(
+      visibleVerdict('auto', result({ status: 'rejected', matched: false, reasons: ['no_start'] })),
+    ).toBeNull();
+    expect(
+      visibleVerdict(
+        'auto',
+        result({ status: 'rejected', matched: false, reasons: ['implausible'] }),
+      ),
+    ).toBeNull();
+    expect(visibleVerdict('auto', result({ status: 'failed', matched: null }))).toBeNull();
+    expect(visibleVerdict('explicit', result({ status: 'withdrawn' }))).toBeNull();
+    expect(visibleVerdict('auto', result({ status: 'excluded' }))).toBeNull();
   });
 });

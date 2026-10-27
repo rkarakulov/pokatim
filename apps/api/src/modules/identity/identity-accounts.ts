@@ -13,8 +13,9 @@ export interface AccountState {
 }
 
 /**
- * Чтения аккаунтов приложения для модуля `panel` (ADR-0009): коллекции identity читает только identity. Без
- * лимитера и Redis — порт годится и для CLI. Значения фильтров — id после zod и нормализованный e-mail.
+ * Чтения аккаунтов приложения для модулей `panel` (ADR-0009) и `notifications` (ADR-0017): коллекции identity читает
+ * только identity. Без лимитера и Redis — порт годится и для CLI. Значения фильтров — id после zod и нормализованный
+ * e-mail.
  */
 @Injectable()
 export class IdentityAccounts {
@@ -44,5 +45,18 @@ export class IdentityAccounts {
   /** E-mail живых аккаунтов по id; удалённых в карте нет («Удалённый участник» — у вызывающего). */
   emailsOf(userIds: readonly string[]): Promise<Map<string, string>> {
     return this.repository.findEmailsByIds(userIds);
+  }
+
+  /** Живые (не удалённые) аккаунты из `userIds` — получатели уведомлений (`notifications`, RC-4). */
+  liveUserIds(userIds: readonly string[]): Promise<Set<string>> {
+    return this.repository.findLiveIds(userIds);
+  }
+
+  /**
+   * Живые сессии пользователя из `sessionIds` (не отозваны выходом, сбросом пароля или reuse detection, не истекли) —
+   * push-токены `notifications` уходят только под живой сессией.
+   */
+  liveSessionIds(userId: string, sessionIds: readonly string[], now: Date): Promise<Set<string>> {
+    return this.repository.findLiveSessionIds(userId, sessionIds, now);
   }
 }

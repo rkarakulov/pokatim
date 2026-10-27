@@ -136,6 +136,8 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
   `TRACK_STORAGE_MIN_FREE_BYTES` (1 GiB), `DEVICES_ENABLED=false`, `OW_API_URL`, `OW_API_KEY`, `OW_WEBHOOK_SECRET`,
   `OW_SHARED_INSTANCE=true`, `OW_DOCKER_NETWORK` — пустые ключи OW дописывает шаблон, значения вписывает владелец
   руками (как `MAIL_RELAY_*`).
+- Push через Expo (ADR-0017, runbook [`push.md`](push.md)): `PUSH_ENABLED=false` дописывает шаблон (push выключен —
+  уведомления только в центре), `EXPO_ACCESS_TOKEN` — необязательный секрет, вписывает владелец руками.
 
 Потеря `.env` при живом томе `mongodata`: новый `MONGO_ROOT_PASSWORD` не совпадёт с root в базе — `mongo-init.js`
 упадёт с сообщением «MONGO_ROOT_PASSWORD из .env не подходит к root в томе mongodata».

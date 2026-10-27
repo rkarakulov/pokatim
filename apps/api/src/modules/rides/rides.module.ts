@@ -4,6 +4,8 @@ import { IdentityModule } from '../identity';
 import { PanelModule } from '../panel';
 import { PublicReadGuard } from '../../public-read.guard';
 import { RideErasure } from './ride-erasure';
+import { RideNoticesService } from './ride-notices';
+import { RIDE_NOTICES } from './ride-notices.port';
 import { RideReportsRepository } from './ride-reports.repository';
 import { RideReportsService } from './ride-reports.service';
 import { RidesModerationController } from './rides-moderation.controller';
@@ -15,11 +17,18 @@ import { RidesRepository } from './rides.repository';
 import { RidesService } from './rides.service';
 
 /**
- * Ядро `rides` без HTTP: единственный писатель `rides` и порт стирания `RideErasure` (модуль `account`, worker).
+ * Ядро `rides` без HTTP: единственные писатели райдов и жалоб, порт стирания `RideErasure` (модуль
+ * `account`, worker) и порт получателей уведомлений `RIDE_NOTICES` (`notifications`, ADR-0017).
  */
 @Module({
-  providers: [RidesRepository, RideErasure],
-  exports: [RidesRepository, RideErasure],
+  providers: [
+    RidesRepository,
+    RideReportsRepository,
+    RideErasure,
+    RideNoticesService,
+    { provide: RIDE_NOTICES, useExisting: RideNoticesService },
+  ],
+  exports: [RidesRepository, RideReportsRepository, RideErasure, RIDE_NOTICES],
 })
 export class RidesCoreModule {}
 
@@ -32,7 +41,6 @@ export class RidesCoreModule {}
   imports: [IdentityModule, PanelModule, RidesCoreModule],
   controllers: [RidesController, RidesPublicController, RidesModerationController],
   providers: [
-    RideReportsRepository,
     RideReportsService,
     RidesService,
     RidesFeedService,

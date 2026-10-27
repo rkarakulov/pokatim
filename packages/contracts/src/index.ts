@@ -34,3 +34,4 @@ export * from './disputes/disputes.schema.ts';
 export * from './disputes/disputes-admin.schema.ts';
 export * from './account/account-deletion.schema.ts';
 export * from './appearance/appearance.schema.ts';
+export * from './notifications/notification.schema.ts';

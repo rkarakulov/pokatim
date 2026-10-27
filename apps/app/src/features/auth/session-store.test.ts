@@ -118,6 +118,7 @@ describe('native: фоновая проверка сессии после лок
   it('401 (отозвана, reuse, выход на другом устройстве) — локальный выход, SecureStore пуст, гард ведёт на «Вход»', async () => {
     refresh.mockRejectedValue(unauthorized());
     stored().set('pokatim.session', JSON.stringify(session));
+    stored().set('pokatim.pushToken', 'ExpoPushToken[test-device-token]');
 
     await useSessionStore.getState().hydrate(NOW.getTime());
     await settle();
@@ -128,6 +129,9 @@ describe('native: фоновая проверка сессии после лок
       returning: true,
     });
     expect(stored().has('pokatim.session')).toBe(false);
+    // выход мимо `useSignOut`: устройство забывает push-токен (сервер его не шлёт — сессия мертва)
+    await settle();
+    expect(stored().has('pokatim.pushToken')).toBe(false);
   });
 
   it('офлайн-старт — остаёмся в аккаунте; одна немедленная повторная попытка', async () => {
