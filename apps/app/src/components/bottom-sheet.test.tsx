@@ -5,6 +5,8 @@ import { AccessibilityInfo, Animated, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { createGestureController } from 'react-native-gesture-handler/jest-utils';
 
+import { appThemeWrapper } from '@/__tests__/app-theme-wrapper';
+
 import { BottomSheet } from './bottom-sheet';
 import { SHEET_PAN_TEST_ID } from './bottom-sheet-props';
 import { SHEET_ANIMATION_MS, SHEET_FLING_VELOCITY } from './bottom-sheet-snap';
@@ -180,5 +182,18 @@ describe('BottomSheet native (routes-04d, L2, L4, RC-2, RC-17)', () => {
       setValue.mockRestore();
       stop.mockRestore();
     }
+  });
+});
+
+describe('BottomSheet native: форма темы (app-themes C1)', () => {
+  it('верхние углы — shape.sheet: «Классика» — прямые, Атлас — 24', async () => {
+    const { unmount } = await render(<Harness />);
+    expect(screen.getByTestId('bottom-sheet')).toHaveStyle({ borderTopLeftRadius: 0 });
+    await unmount();
+    await render(<Harness />, { wrapper: appThemeWrapper('atlas') });
+    expect(screen.getByTestId('bottom-sheet')).toHaveStyle({
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+    });
   });
 });

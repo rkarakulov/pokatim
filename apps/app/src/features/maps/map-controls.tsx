@@ -1,4 +1,4 @@
-import { motion, size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
+import { motion, shapeOf, size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -84,6 +84,8 @@ export function MapControls({
             {
               backgroundColor: theme.surface.raised,
               borderColor: theme.border.subtle,
+              // форма темы: у «Классики» — квадрат, у Навигации и Планировщика — круг (pill)
+              borderRadius: shapeOf(theme).button,
               opacity: pressed ? motion.pressedOpacity : 1,
             },
           ]}

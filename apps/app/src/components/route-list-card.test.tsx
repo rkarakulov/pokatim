@@ -1,6 +1,9 @@
 /// <reference types="jest" />
 import type { CatalogRouteCard, MyRoute } from '@pokatim/contracts';
+import { space } from '@pokatim/design-tokens';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+
+import { appThemeWrapper } from '@/__tests__/app-theme-wrapper';
 
 import { MyRouteListCard, RouteListCard, RouteListCardSkeleton } from './route-list-card';
 
@@ -99,5 +102,17 @@ describe('MyRouteListCard (routes-02)', () => {
       />,
     );
     expect(screen.getByText('Маршрут короче 1 км')).toBeOnTheScreen();
+  });
+});
+
+describe('RouteListCard: плотность темы (app-themes C1)', () => {
+  it('«Классика» (regular) — прежний отступ s4; Планировщик (comfortable) — s5', async () => {
+    const { unmount } = await render(<RouteListCard route={route()} onPress={jest.fn()} />);
+    expect(screen.getByRole('link')).toHaveStyle({ paddingVertical: space.s4 });
+    await unmount();
+    await render(<RouteListCard route={route()} onPress={jest.fn()} />, {
+      wrapper: appThemeWrapper('planner'),
+    });
+    expect(screen.getByRole('link')).toHaveStyle({ paddingVertical: space.s5 });
   });
 });

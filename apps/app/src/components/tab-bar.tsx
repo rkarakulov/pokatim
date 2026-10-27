@@ -1,14 +1,14 @@
-import { size, space, stroke } from '@pokatim/design-tokens';
+import { size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
 import { textStyle, useTheme } from '@rkarakulov/ui';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 /**
- * Панель вкладок по прототипу: активная — метка 600 и 2 px полоса text.primary по верхнему краю,
- * неактивная — метка 500 text.secondary. Accent во вкладках не используется.
+ * Панель вкладок по прототипу: активная — метка 600 и 2 px полоса по верхнему краю, неактивная — метка 500. Цвета —
+ * группа ролей темы `tabBar` (у «Классики» — прежние surface.default / text.primary / text.secondary).
  */
 export function TabBar({ state, descriptors, emitter, navigateToTab, insets }: BottomTabBarProps) {
-  const theme = useTheme();
+  const { tabBar, border } = useTheme<AppTheme>();
 
   return (
     <View
@@ -17,8 +17,8 @@ export function TabBar({ state, descriptors, emitter, navigateToTab, insets }: B
       style={[
         styles.bar,
         {
-          backgroundColor: theme.surface.default,
-          borderTopColor: theme.border.subtle,
+          backgroundColor: tabBar.background,
+          borderTopColor: border.subtle,
           paddingBottom: insets.bottom,
         },
       ]}
@@ -51,14 +51,14 @@ export function TabBar({ state, descriptors, emitter, navigateToTab, insets }: B
               testID={`tab-indicator-${route.name}`}
               style={[
                 styles.indicator,
-                { backgroundColor: focused ? theme.text.primary : 'transparent' },
+                { backgroundColor: focused ? tabBar.active : 'transparent' },
               ]}
             />
             <Text
               numberOfLines={1}
               style={[
                 textStyle(focused ? 'tabLabelActive' : 'tabLabel'),
-                { color: focused ? theme.text.primary : theme.text.secondary },
+                { color: focused ? tabBar.active : tabBar.inactive },
               ]}
             >
               {label}

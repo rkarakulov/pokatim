@@ -27,7 +27,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/bottom-sheet';
-import { sheetColors, sheetStyles } from '@/components/bottom-sheet-props';
+import { sheetSurface, sheetStyles } from '@/components/bottom-sheet-props';
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
@@ -249,7 +249,7 @@ function RouteDetailSkeleton() {
   return (
     <View testID="route-detail-skeleton" style={styles.area}>
       <View style={[StyleSheet.absoluteFill, block]} />
-      <View style={[sheetStyles.sheet, sheetColors(theme)]}>
+      <View style={[sheetStyles.sheet, sheetSurface(theme)]}>
         <View style={sheetStyles.grabber} />
         <View style={[styles.sheetHeader, styles.skeletonSheet]}>
           <SkeletonGroup>

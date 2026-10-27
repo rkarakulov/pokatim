@@ -13,7 +13,7 @@ import {
 import { Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { sheetColors, sheetStyles as styles, type BottomSheetProps } from './bottom-sheet-props';
+import { sheetSurface, sheetStyles as styles, type BottomSheetProps } from './bottom-sheet-props';
 import {
   clampSheetOffset,
   SHEET_ANIMATION_MS,
@@ -228,6 +228,7 @@ export function BottomSheet({
     return () => observer.disconnect();
   }, [moving, expanded, report]);
 
+  const surface = sheetSurface(theme);
   const containerStyle: CSSProperties = {
     position: 'absolute',
     left: 0,
@@ -237,8 +238,10 @@ export function BottomSheet({
     display: 'flex',
     flexDirection: 'column',
     boxSizing: 'border-box',
-    borderTop: `${stroke.hairline}px solid ${sheetColors(theme).borderTopColor}`,
-    backgroundColor: sheetColors(theme).backgroundColor,
+    borderTop: `${stroke.hairline}px solid ${surface.borderTopColor}`,
+    borderTopLeftRadius: surface.borderTopLeftRadius,
+    borderTopRightRadius: surface.borderTopRightRadius,
+    backgroundColor: surface.backgroundColor,
     transform: offset ? `translateY(${offset}px)` : undefined,
     transition: instant || !animate ? undefined : `transform ${SHEET_ANIMATION_MS}ms ease`,
   };

@@ -1,5 +1,5 @@
 import type { CatalogRouteCard, MyRoute } from '@pokatim/contracts';
-import { space, stroke } from '@pokatim/design-tokens';
+import { appDensity, space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { Pill, SkeletonText, textStyle, useTheme, type PillTone } from '@rkarakulov/ui';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { routePlace, routeStats } from '@/features/routes/format';
 import { myRouteStats, myRouteStatus, myRouteUploadedAt } from '@/features/routes/my-route-format';
 import { meta } from '@/lib/minsk-format';
+import { useAppTheme } from '@/theme/use-app-theme';
 
 /**
  * Общая рамка карточки маршрута в списке: название, строка цифр (или статус `Pill` вместо неё), вторая строка.
@@ -28,12 +29,13 @@ function RouteCardFrame({
   onPress: () => void;
 }) {
   const theme = useTheme();
+  const { cardPadding } = appDensity[useAppTheme().density];
   return (
     <Pressable
       accessibilityRole="link"
       accessibilityLabel={label}
       onPress={onPress}
-      style={[styles.card, { borderTopColor: theme.border.subtle }]}
+      style={[styles.card, { borderTopColor: theme.border.subtle, paddingVertical: cardPadding }]}
     >
       <Text style={[textStyle('displaySm'), { color: theme.text.primary }]}>{title}</Text>
       {status ? (
@@ -104,8 +106,15 @@ export function MyRouteListCard({ route, onPress }: { route: MyRoute; onPress: (
 /** Скелетон карточки (первая загрузка, догрузка страницы): название, цифры, место — раскладка карточки. */
 export function RouteListCardSkeleton() {
   const theme = useTheme();
+  const { cardPadding } = appDensity[useAppTheme().density];
   return (
-    <View style={[styles.card, styles.skeleton, { borderTopColor: theme.border.subtle }]}>
+    <View
+      style={[
+        styles.card,
+        styles.skeleton,
+        { borderTopColor: theme.border.subtle, paddingVertical: cardPadding },
+      ]}
+    >
       <SkeletonText variant="displaySm" lines={1} lastLineWidth="70%" />
       <SkeletonText variant="titleSm" lines={1} lastLineWidth="55%" />
       <SkeletonText variant="meta" lines={1} lastLineWidth="40%" />
@@ -115,7 +124,8 @@ export function RouteListCardSkeleton() {
 
 const styles = StyleSheet.create({
   skeleton: { gap: space.s2 },
-  card: { borderTopWidth: stroke.hairline, paddingVertical: space.s4 },
+  // отступ по вертикали — плотность темы (`appDensity`)
+  card: { borderTopWidth: stroke.hairline },
   line: { marginTop: space.s1 },
   pill: { alignItems: 'flex-start' },
 });

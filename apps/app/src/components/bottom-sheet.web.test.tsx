@@ -5,6 +5,8 @@ import { renderToString } from 'react-dom/server';
 import { AccessibilityInfo, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { appThemeWrapper } from '@/__tests__/app-theme-wrapper';
+
 import { BottomSheet } from './bottom-sheet';
 import { SHEET_ANIMATION_MS } from './bottom-sheet-snap';
 
@@ -278,3 +280,12 @@ function FocusHarness() {
     </BottomSheet>
   );
 }
+
+describe('BottomSheet web: форма темы (app-themes C1)', () => {
+  it('верхние углы — shape.sheet темы (Атлас — 24 px)', () => {
+    render(<Harness />, { wrapper: appThemeWrapper('atlas') });
+    const sheet = screen.getByTestId('bottom-sheet');
+    expect(sheet.style.borderTopLeftRadius).toBe('24px');
+    expect(sheet.style.borderTopRightRadius).toBe('24px');
+  });
+});

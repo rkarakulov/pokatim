@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   SHEET_PAN_TEST_ID,
-  sheetColors,
+  sheetSurface,
   sheetStyles as styles,
   type BottomSheetProps,
 } from './bottom-sheet-props';
@@ -176,7 +176,7 @@ export function BottomSheet({
     <Animated.View
       testID={testID}
       onLayout={onSheetLayout}
-      style={[styles.sheet, sheetColors(theme), { transform: [{ translateY: translate }] }]}
+      style={[styles.sheet, sheetSurface(theme), { transform: [{ translateY: translate }] }]}
     >
       <SafeAreaView edges={['bottom']} style={styles.body}>
         <GestureDetector gesture={pan}>
