@@ -6,8 +6,10 @@ import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testi
 import { getDocumentAsync } from 'expo-document-picker';
 import type { ReactElement } from 'react';
 import type { RefreshControlProps } from 'react-native';
+import { createGestureController } from 'react-native-gesture-handler/jest-utils';
 
 import { useSessionStore } from '@/features/auth/session-store';
+import { MAP_PAN_TEST_ID } from '@/features/maps/map-gestures';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
 
@@ -313,6 +315,19 @@ describe('карточка своего маршрута (AC3, M3)', () => {
     expect(screen.getByText('Загружен')).toBeOnTheScreen();
     expect(screen.getByText('27 октября 2026')).toBeOnTheScreen();
     expect(screen.queryByText('Поделиться')).toBeNull();
+  });
+
+  it('routes-04b (RC-12): жест карты двумя пальцами выключает прокрутку карточки, конец — включает', async () => {
+    await openDetail(ring.id);
+    await screen.findByTestId('maplibre-Map');
+    const scroll = () => screen.getByTestId('my-route-detail');
+    expect(scroll()).toHaveProp('scrollEnabled', true);
+    const pan = createGestureController(MAP_PAN_TEST_ID);
+    await act(async () => pan.begin({ x: 100, y: 80, translationX: 0, translationY: 0 }));
+    await act(async () => pan.activate({ x: 110, y: 80, translationX: 10, translationY: 0 }));
+    expect(scroll()).toHaveProp('scrollEnabled', false);
+    await act(async () => pan.end({ x: 110, y: 80, translationX: 10, translationY: 0 }));
+    expect(scroll()).toHaveProp('scrollEnabled', true);
   });
 
   it('обрабатывается — статус без карты; опрос до готовности', async () => {

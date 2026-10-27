@@ -11,6 +11,7 @@ import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
 
+import { MAP_PINCH_TEST_ID } from '@/features/maps/map-gestures';
 import { PROFILE_PAN_TEST_ID } from '@/features/routes/profile-chart';
 
 import { appRoutes } from './app-routes';
@@ -175,6 +176,28 @@ describe('карточка маршрута каталога: гость по с
     expect(
       screen.queryByTestId('elevation-profile-cursor', { includeHiddenElements: true }),
     ).toBeNull();
+  });
+
+  it('routes-04b (RC-3): щипок карты выключает прокрутку экрана вместе со скраббингом (оба условия)', async () => {
+    await open();
+    const profile = await screen.findByRole('adjustable', { name: /^Профиль высоты/ });
+    await screen.findByTestId('maplibre-Map');
+    const scroll = () => screen.getByTestId('route-detail');
+    await fireEvent(profile, 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 340, height: 85 } },
+    });
+    const pinch = createGestureController(MAP_PINCH_TEST_ID);
+    const pan = createGestureController(PROFILE_PAN_TEST_ID);
+    await act(async () => pinch.begin({ focalX: 100, focalY: 80, scale: 1 }));
+    await act(async () => pinch.activate({ focalX: 100, focalY: 80, scale: 1.2 }));
+    expect(scroll()).toHaveProp('scrollEnabled', false);
+    // скраббинг начался и закончился во время щипка — прокрутка всё ещё выключена картой
+    await act(async () => pan.begin({ x: 170 }));
+    await act(async () => pan.activate({ x: 170 }));
+    await act(async () => pan.end({ x: 170 }));
+    expect(scroll()).toHaveProp('scrollEnabled', false);
+    await act(async () => pinch.end({ focalX: 100, focalY: 80, scale: 1.2 }));
+    expect(scroll()).toHaveProp('scrollEnabled', true);
   });
 
   it('API до routes-03 (без elevation и gpxAvailable): без профиля и без «Скачать GPX», набор без «макс.»', async () => {

@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 
 import type * as Loader from './load-maplibre';
 import { RouteMap } from './route-map';
+import * as Frame from './route-map-frame';
 import { createScrubStore, type ScrubStore } from './scrub-store';
 
 jest.mock('./load-maplibre', () => ({ loadMaplibre: jest.fn() }));
@@ -17,6 +18,8 @@ class FakeMap {
   addSource = jest.fn();
   addLayer = jest.fn();
   remove = jest.fn();
+  touchZoomRotate = { disableRotation: jest.fn() };
+  keyboard = { disableRotation: jest.fn() };
   project = jest.fn(([lon, lat]: [number, number]) => ({
     x: (lon - 27.5) * state.scale,
     y: (54.0 - lat) * state.scale,
@@ -167,5 +170,28 @@ describe('RouteMap web: маркер скраббинга (routes-04, RC-2)', ()
     // без нажатия движение не двигает
     await act(async () => pointer(marker()!, 'pointermove', 90, 0));
     expect(store.getState().fraction).toBeCloseTo(0.85, 6);
+  });
+
+  it('routes-04b (I4, RC-4): move (перетаскивание и зум) — маркер на линии без ре-рендера RouteMap и addLayer', async () => {
+    const frame = jest.spyOn(Frame, 'RouteMapFrame');
+    const store = createScrubStore();
+    await render(element(store));
+    await flush();
+    const map = state.maps[0]!;
+    await act(async () => map.emit('load'));
+    await act(async () => store.setState({ fraction: 0.5 }));
+    const frameRenders = frame.mock.calls.length;
+    const layers = map.addLayer.mock.calls.length;
+    for (const scale of [1500, 2500, 3000]) {
+      state.scale = scale;
+      await act(async () => map.emit('move'));
+      // доля 0,5 — разворот на 27,6: x = 0,1 × scale
+      expectMarkerAt(0.1 * scale - 22, -22);
+    }
+    expect(frame.mock.calls.length).toBe(frameRenders);
+    expect(map.addLayer.mock.calls.length).toBe(layers);
+    expect(map.addSource).toHaveBeenCalledTimes(1);
+    expect(state.maps).toHaveLength(1);
+    frame.mockRestore();
   });
 });

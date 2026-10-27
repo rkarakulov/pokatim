@@ -142,8 +142,15 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   метрах выражением зума, роли `map.*`, `CORRIDOR_OPACITY`), рамка — `route-map-frame.tsx` (пропорция
   `MAP_ASPECT_RATIO`, доступное изображение с подписью без координат, сообщение «Карта не загрузилась» поверх). URL
   стилей — только `EXPO_PUBLIC_MAP_STYLE_LIGHT/DARK` (`map-style.ts`, прямое обращение к `process.env`); не заданы —
-  карты нет. Статичный вид: жесты выключены пропсами (не `pointerEvents` — атрибуция нажимается), камера по рамке
-  без анимации. Карточка `races/[id]`: блок `race-route-map.tsx` после строки «Коридор» — SSR и первый рендер — место
+  карты нет. Интерактивная карта (routes-04b, дополнение ADR-0014): web — `cooperativeGestures` `maplibre-gl` +
+  `locale` (`map-locale.web.ts`), вращение и наклон выключены; native — нативные жесты MapLibre выключены пропсами
+  (не `pointerEvents` — атрибуция нажимается), жесты двумя пальцами и двойной тап — RNGH поверх карты
+  (`map-gestures.ts`, только native-файл; камера — `CameraRef.jumpTo`, математика — чистая `map-camera.ts`), экран не
+  прокручивается на время жеста (`map-gesture-lock.tsx`: `MapGestureLockContext` + `useMapGestureLock` на трёх
+  экранах карты; web контекст не вызывает). Зум `MAP_MIN_ZOOM…MAP_MAX_ZOOM` (4–17), без `maxBounds`; кнопки «+», «−»,
+  «в рамку» — `map-controls.tsx` сверху справа (`MAP_FIT_PADDING.right` — под них), анимация камеры
+  `MAP_CAMERA_ANIMATION_MS`, при reduce motion — без анимации (native — длительность всегда явно); начальная камера —
+  по рамке без анимации. Сдвиг карты на native — исключение из правила `accessibilityActions` (ADR-0014). Карточка `races/[id]`: блок `race-route-map.tsx` после строки «Коридор» — SSR и первый рендер — место
   карты (скелетон той же пропорции), после монтирования: env не задан, геометрия 404/ошибка — блок схлопывается
   (строки остаются; ошибка обновления при показанной карте — карта остаётся); запрос `['races','route',id]` — только
   клиент, pull-to-refresh карточки перезапрашивает его, когда коридор есть (`useRaceRouteRefetch`: коридор
@@ -223,17 +230,20 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   Чистая логика (доля ↔ точка, ближайшая точка с подсказкой для петли, высота/уклон/набор, шаг 1 км, точки профиля) —
   `@pokatim/tracks` (`src/scrub.ts`, лёгкий вход; её же берёт панель), подписи — `features/routes/scrub.ts`.
   Маркер — оверлей над холстом (`scrub-marker(.web).tsx`), пиксели линии — одна функция `projectLine` на изменение
-  камеры (web — `map.project` на `load`/`SCRUB_REPROJECT_EVENTS`, native — `mercatorProjector` по `ViewState.bounds` +
-  `onLayout`); перетаскивание — жест маркера, карта статична; допуск петли — не меньше `SCRUB_TOLERANCE_MIN_PX`.
-  Носитель жеста на долю не подписан, конфиг `usePanGesture` — из `useMemo` (не литерал: иначе перенастройка
-  обработчика в натив на кадр); подписчик доли — дочерний вид (курсор, точка). Профиль — `ProfileChart` с развилкой файлами
+  камеры (web — `map.project` на `load`/`SCRUB_REPROJECT_EVENTS` = `resize`, `move`; native — `mercatorProjector` по
+  `ViewState.bounds` событий региона + `onLayout`) в стор вида карты (`map-view-store.ts`, на экземпляр; подписан
+  только `ScrubLayer` — `RouteMap` на кадр камеры не перерисовывается); перетаскивание — жест маркера; допуск петли —
+  не меньше `SCRUB_TOLERANCE_MIN_PX`. Носитель жеста на долю и на точки камеры не подписан (точки и допуск — из ref),
+  конфиг `usePanGesture` — из `useMemo` (не литерал: иначе перенастройка обработчика в натив на кадр); подписчик доли
+  — дочерний вид (курсор, точка). Профиль — `ProfileChart` с развилкой файлами
   `profile-chart(.web).tsx`: web — inline SVG (SSR = первый рендер), `role="slider"`, pointer events, клавиши,
   `:focus-visible`; native — `react-native-svg` лениво (`load-svg-native.ts` после `svgSupported()`; старый
   dev-клиент — столбики), `adjustable` с `accessibilityActions`, RNGH v3 `usePanGesture({ activateAfterLongPress:
   250, runOnJS: true })` (касание без удержания — скрыть). Пути и градиент заливки — `profile-path.ts` (G1). Корень
   жестов — `components/gesture-root(.web).tsx` в `_layout` (RNGH не в web-бандле). Стат-блок карточки —
   `StatBlock equalColumns`. Jest: `react-native-gesture-handler/jestSetup`, обёртка RNGH «без Reanimated», мок
-  `react-native-svg` и его загрузчика (`jest.setup.ts`); шаги жеста — `createGestureController` (у
+  `react-native-svg` и его загрузчика, `Map`/`Camera` MapLibre с `ref` (методы — `__camera`/`__map` мока) в
+  `jest.setup.ts`, web — заглушка `matchMedia` (`jest.match-media.web.ts`, `useReducedMotion` в jsdom); шаги жеста — `createGestureController` (у
   `fireGestureHandler` всегда есть ACTIVE; в jest RNGH резолвится в `lib/module` — шпионы и моки по этому пути).
 - Главная — раздел `routes` (текстовый герой `RouteHero`, RC-8; пустой каталог — `EmptyState`).
 - Мои маршруты (routes-02): переключатель «Каталог / Мои» — `SegmentedControl` в шапке обеих лент, состояние —

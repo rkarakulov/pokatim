@@ -82,19 +82,34 @@ jest.mock('@react-native-community/datetimepicker', () => {
 });
 
 // MapLibre (ADR-0014): нативного модуля в jest нет — компоненты карты как View с пропсами (тесты читают их через
-// UNSAFE_getByType или testID); дети источника рендерятся
+// UNSAFE_getByType или testID); дети источника рендерятся. `Map` и `Camera` (routes-04b) — с `ref`: методы — общие
+// `jest.fn` модуля (`__camera`, `__map`; тесты чистят их сами), до нативного вида `getViewState`/`getZoom` отклоняются
 jest.mock('@maplibre/maplibre-react-native', () => {
-  const { createElement } = jest.requireActual('react');
+  const { createElement, useImperativeHandle } = jest.requireActual('react');
   const { View } = jest.requireActual('react-native');
-  const stub = (name: string) => {
-    const Component = (props: { children?: unknown }) =>
-      createElement(View, { testID: `maplibre-${name}`, ...props });
+  const notReady = () => Promise.reject(new Error('jest: нативной карты нет'));
+  const camera = {
+    jumpTo: jest.fn(),
+    easeTo: jest.fn(),
+    flyTo: jest.fn(),
+    zoomTo: jest.fn(),
+    fitBounds: jest.fn(),
+    setStop: jest.fn(async () => undefined),
+  };
+  const map = { getViewState: jest.fn(notReady), getZoom: jest.fn(notReady) };
+  const stub = (name: string, methods?: object) => {
+    const Component = ({ ref, ...props }: { ref?: unknown; children?: unknown }) => {
+      useImperativeHandle(ref, () => methods ?? null, []);
+      return createElement(View, { testID: `maplibre-${name}`, ...props });
+    };
     Component.displayName = name;
     return Component;
   };
   return {
-    Map: stub('Map'),
-    Camera: stub('Camera'),
+    __camera: camera,
+    __map: map,
+    Map: stub('Map', map),
+    Camera: stub('Camera', camera),
     GeoJSONSource: stub('GeoJSONSource'),
     Layer: stub('Layer'),
   };

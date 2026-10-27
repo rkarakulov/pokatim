@@ -26,6 +26,7 @@ import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card'
 import { StatBlock } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { MAP_ASPECT_RATIO } from '@/features/maps/corridor-style';
+import { MapGestureLockContext, useMapGestureLock } from '@/features/maps/map-gesture-lock';
 import { createScrubStore, type ScrubStore } from '@/features/maps/scrub-store';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
@@ -270,7 +271,10 @@ export function RouteDetailScreen({
     // другой маршрут в том же экземпляре экрана — позиция с начала
     scrub.setState({ fraction: 0, active: false, dragging: null });
   }, [id, scrub]);
-  const scrollEnabled = useScrubScrollEnabled(scrub);
+  const scrubScrollEnabled = useScrubScrollEnabled(scrub);
+  // routes-04b (RC-3): жест карты двумя пальцами (native) — экран не прокручивается; web контекст не вызывает
+  const [mapScrollEnabled, onMapGesture] = useMapGestureLock();
+  const scrollEnabled = scrubScrollEnabled && mapScrollEnabled;
 
   return (
     <SafeAreaView
@@ -301,27 +305,29 @@ export function RouteDetailScreen({
         }
       >
         <OfflineBanner hasData={route.data !== undefined && !notFound} style={styles.offline} />
-        {notFound ? (
-          <EmptyState
-            title={t('routes.detail.notFound')}
-            action={{
-              label: t('routes.detail.allRoutes'),
-              onPress: () => router.navigate(home),
-            }}
-          />
-        ) : (
-          <AsyncContent query={route} skeleton={<RouteDetailSkeleton />}>
-            {(data) => (
-              <RouteDetailView
-                route={data}
-                races={races}
-                now={now}
-                mounted={mounted}
-                scrub={scrub}
-              />
-            )}
-          </AsyncContent>
-        )}
+        <MapGestureLockContext value={onMapGesture}>
+          {notFound ? (
+            <EmptyState
+              title={t('routes.detail.notFound')}
+              action={{
+                label: t('routes.detail.allRoutes'),
+                onPress: () => router.navigate(home),
+              }}
+            />
+          ) : (
+            <AsyncContent query={route} skeleton={<RouteDetailSkeleton />}>
+              {(data) => (
+                <RouteDetailView
+                  route={data}
+                  races={races}
+                  now={now}
+                  mounted={mounted}
+                  scrub={scrub}
+                />
+              )}
+            </AsyncContent>
+          )}
+        </MapGestureLockContext>
       </ScrollView>
     </SafeAreaView>
   );

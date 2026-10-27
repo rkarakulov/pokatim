@@ -50,4 +50,10 @@ describe('атрибуция web-карты (B2, B4 maps-02)', () => {
     expect(light).toContain(`background-color:${themes.light.surface.raised}`);
     expect(light).toContain('filter:none');
   });
+
+  it('routes-04b (RC-9): подсказка кооперативных жестов — без затухания при reduce motion, в области карты', () => {
+    expect(attributionCss('m1', themes.light)).toContain(
+      '@media (prefers-reduced-motion: reduce){[data-route-map="m1"] .maplibregl-cooperative-gesture-screen{transition:none}}',
+    );
+  });
 });
