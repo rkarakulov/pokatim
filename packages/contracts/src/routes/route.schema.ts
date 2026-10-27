@@ -6,11 +6,22 @@ import { PageCursor, RaceTitle, SURFACES, SurfaceList } from '../races/race.sche
 
 /*
  * Маршрут команды платформы — эталон коридора гонки (race-results-01, ADR-0012 п. 1). Загружается в панели файлом
- * GPX, разбирается в worker; готовый маршрут не меняется. Только панель (строгие схемы: SPA деплоится с API).
+ * GPX, разбирается в worker; готовый маршрут не меняется. Схемы этого файла — панель (строгие: SPA деплоится с API);
+ * приложение (свои маршруты райдера, routes-02) — `my-route.schema.ts`.
  */
 
 /** Лимит файла маршрута: сервер отвечает `413 ROUTE_TOO_LARGE`, панель проверяет до отправки. */
 export const ROUTE_FILE_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Происхождение маршрута (routes-02): `platform` — маршрут команды (панель, каталог, коридоры); `rider` — личный
+ * маршрут райдера из приложения, виден только автору. Только в конец.
+ */
+export const ROUTE_ORIGINS = ['platform', 'rider'] as const;
+export type RouteOrigin = (typeof ROUTE_ORIGINS)[number];
+
+/** Расширения файла маршрута (routes-02): совпадают с `ROUTE_FILE_EXTENSIONS` пакета `@pokatim/tracks`. */
+export const ROUTE_FILE_EXTENSIONS = ['gpx', 'kml'] as const;
 
 export const ROUTE_STATUSES = ['processing', 'ready', 'failed'] as const;
 export type RouteStatus = (typeof ROUTE_STATUSES)[number];
@@ -29,7 +40,10 @@ export type RouteFailureCode = (typeof ROUTE_FAILURE_CODES)[number];
 /** Название маршрута — как у гонки: 3–120 символов, одна строка. */
 export const RouteTitle = RaceTitle;
 
-/** `POST /v1/admin/routes?title=…` (`races.manage`), тело — байты GPX (`application/octet-stream`). */
+/**
+ * `POST /v1/admin/routes?title=…` (`races.manage`) и `POST /v1/routes/mine?title=…` (вход, routes-02); тело — байты
+ * GPX или KML (`application/octet-stream`).
+ */
 export const UploadRouteQuery = z.strictObject({ title: RouteTitle });
 export type UploadRouteQuery = z.infer<typeof UploadRouteQuery>;
 

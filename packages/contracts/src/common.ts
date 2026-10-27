@@ -38,7 +38,7 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'DEVICE_PROVIDER_UNAVAILABLE',
   'DEVICE_LINK_INVALID',
   'DEVICE_PROVIDER_ERROR',
-  // маршруты (race-results-01): формат не GPX по содержимому; файл больше 5 МиБ
+  // маршруты (race-results-01): формат не GPX (routes-02: и не KML) по содержимому; файл больше 5 МиБ
   'ROUTE_FORMAT_UNSUPPORTED',
   'ROUTE_TOO_LARGE',
   // кофе-райды (app-05): мест нет; райд начался или отменён; квота будущих райдов или отметок
@@ -63,6 +63,8 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'DISPUTE_NOT_FOUND',
   // routes-01: действие с маршрутом недоступно в его статусе (публикация в каталог не готового)
   'ROUTE_INVALID_STATE',
+  // routes-02: предел числа своих маршрутов райдера
+  'ROUTE_QUOTA_EXCEEDED',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;
