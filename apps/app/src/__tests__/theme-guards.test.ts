@@ -42,4 +42,11 @@ describe('темы приложения — сторож кода', () => {
   it('шрифты — только useThemeFonts (useFonts expo-font не перезагружает карту при смене темы)', () => {
     expect(offenders(/\buseFonts\s*\(|import \{[^}]*\buseFonts\b/)).toEqual([]);
   });
+
+  it('варианты раскладки — таблицами Record, без сравнений id темы и значения layout (app-themes C2)', () => {
+    expect(
+      offenders(/\bid\s*===\s*'(classic|atlas|chrono|planner|journal|navigation|typography)'/),
+    ).toEqual([]);
+    expect(offenders(/layout\.\w+\s*[!=]==/)).toEqual([]);
+  });
 });
