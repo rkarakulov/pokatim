@@ -13,6 +13,7 @@ paths:
   - "apps/api/src/modules/devices/**"
   - "apps/app/src/features/devices/**"
   - "packages/tracks/src/parse*"
+  - "packages/tracks/src/{gpx,kml,xml,format}.ts"
   - "apps/api/src/modules/routes/**"
   - "apps/api/src/raw-body.ts"
   - "apps/api/src/parse-thread.ts"
@@ -168,6 +169,22 @@ paths:
   неизвестный — один `404 NOT_FOUND`, включая карту и гонки маршрута). Ответы — явный список полей: без
   `ownerUserId`, `sha256`, статуса, `failure`, `attempts` и линии сверки (int-тест на ключи). Снятый маршрут может
   быть виден до минуты из кэша (RC-13).
+
+## Маршруты райдера (routes-02)
+
+- Личный маршрут райдера (`origin: 'rider'`) — приватные данные автора: `/v1/routes/mine*` (загрузка, список,
+  карточка, карта, `rename`, `delete`) — только `AuthGuard`, `no-store`, пользователь — `@CurrentUser()`; id — `Uuid`.
+  Видимость — фильтр `{ ownerUserId, origin: 'rider' }` в `RoutesRepository`; чужой, маршрут платформы и неизвестный —
+  один `404 NOT_FOUND` (без различия). Панель, каталог, публичные ручки и порты `RouteCatalog`/`RouteGeometry` (коридор,
+  сверка, карта гонки, LRU-кэш) читают только `origin: 'platform'` — отрицательные int-тесты на каждую точку.
+- Загрузка: лимиты `routes-upload-rider:<uid>` 20/ч и `routes-upload-ip:<hmac>` 60/ч и семафор 4 приёма — **до** чтения
+  тела; тело — `application/octet-stream` (`readLimited`, 5 МиБ → 413 + `Connection: close`); формат — по сигнатуре
+  (`detectRouteFormat`: GPX/KML, `<!DOCTYPE` до корня → 415); квота 100 своих маршрутов — `409 ROUTE_QUOTA_EXCEEDED`
+  (мягкая, после дедупа). KML — те же защиты, что GPX (`xml.ts`: отказ на `<!DOCTYPE`/`<!ENTITY`, подсчёт элементов и
+  `gx:coord` до дерева, `XMLValidator`, обрыв кортежей `coordinates`), разбор — только `runParseThread` в worker.
+- Наружу — `MyRoute` явным списком полей (без `origin`, `ownerUserId`, `sha256`, `attempts`, `catalog`, линии сверки);
+  карта — только линия показа своего готового маршрута. Логи — `routeId`, `userId`, коды; без названий, имён файлов и
+  координат. Действия райдера не пишутся в журнал панели (`PanelAudit`).
 
 ## Кофе-райды (блок 05, ADR-0013 Proposed)
 
