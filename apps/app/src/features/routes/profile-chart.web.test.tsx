@@ -24,7 +24,7 @@ describe('ProfileArea web (fix профиля routes-03)', () => {
     expect(html).toContain('preserveAspectRatio="none"');
     // G1: заливка — вертикальный градиент цвета линии: у линии PROFILE_FILL_OPACITY, внизу прозрачно
     const gradient = /<linearGradient id="([^"]+)" x1="0" y1="0" x2="0" y2="1">/.exec(html)?.[1];
-    expect(gradient).toMatch(/^profile-fill-[A-Za-z0-9_-]+$/);
+    expect(gradient).toBe('elevation-profile-fill');
     expect(html).toContain(`fill="url(#${gradient})"`);
     expect(html).toContain(
       `<stop offset="0" stop-color="${themes.light.map.corridor}" stop-opacity="${PROFILE_FILL_OPACITY}"></stop>`,
@@ -130,10 +130,18 @@ describe('ProfileChart web: скраббинг (routes-04, RC-13)', () => {
     expect(html).toContain('aria-valuenow="0"');
     expect(html).toContain('aria-valuetext="0 км, высота 200 м, уклон 5 %"');
     expect(html).toContain('touch-action:pan-y');
-    expect(html).toContain(':focus-visible');
+    // без `<style>` и `useId` в разметке: текст и id не зависят от положения в дереве (React #418 смоука web)
+    expect(html).not.toContain('<style');
+    expect(html).toContain('url(#elevation-profile-fill)');
     expect(html).toContain('<svg');
     expect(html).toContain('display:none');
     expect(renderToString(chart(createScrubStore()))).toBe(html);
+    const nested = renderToString(
+      <section>
+        <div>{chart(createScrubStore())}</div>
+      </section>,
+    );
+    expect(nested).toBe(`<section><div>${html}</div></section>`);
   });
 
   it('клавиши: → и ↑ +1 км, ← и ↓ −1 км, Home/End — концы; курсор появляется', async () => {

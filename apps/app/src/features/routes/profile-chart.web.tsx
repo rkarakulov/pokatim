@@ -3,8 +3,8 @@ import { stroke, type AppTheme } from '@pokatim/design-tokens';
 import {
   memo,
   useEffect,
-  useId,
   useRef,
+  useState,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
@@ -12,7 +12,7 @@ import {
 import { SCRUB_MARKER_ATTR, useScrub, type ScrubStore } from '@/features/maps/scrub-store';
 
 import type { ProfileChartProps } from './profile-chart-props';
-import { PROFILE_VIEW_BOX, profileGradientId, profilePaths } from './profile-path';
+import { PROFILE_VIEW_BOX, profilePaths } from './profile-path';
 import { PROFILE_ASPECT_RATIO, PROFILE_FILL_OPACITY } from './profile-style';
 import { scrubReadout, scrubStep } from './scrub';
 
@@ -23,6 +23,18 @@ import { scrubReadout, scrubStep } from './scrub';
  * совпадают, пакет в web-бандл не попадает. Для скринридера скрыт (альтернатива — у контейнера), при движении курсора
  * не перерисовывается (`memo`).
  */
+/** Фокус с клавиатуры (`:focus-visible`); браузер без селектора — считаем видимым (обводка лучше её отсутствия). */
+function keyboardFocus(element: Element): boolean {
+  try {
+    return element.matches(':focus-visible');
+  } catch {
+    return true;
+  }
+}
+
+/** id градиента web — постоянный: один профиль на экране, цвет одинаков (у native — `useId`). */
+const PROFILE_WEB_GRADIENT_ID = 'elevation-profile-fill';
+
 export const ProfileArea = memo(function ProfileArea({
   elevation,
   theme,
@@ -30,7 +42,8 @@ export const ProfileArea = memo(function ProfileArea({
   elevation: CatalogRouteElevation;
   theme: AppTheme;
 }) {
-  const gradient = profileGradientId(useId());
+  // постоянный id (не `useId`): разметка SSR и гидрации совпадает при любом дереве выше (смоук web routes-04)
+  const gradient = PROFILE_WEB_GRADIENT_ID;
   const paths = profilePaths(elevation);
   if (!paths) return null;
   const color = theme.map.corridor;
@@ -78,7 +91,7 @@ const boxStyle = (theme: AppTheme) =>
  * График профиля на web. Без `scrub` — изображение с текстовой альтернативой (routes-03). Со `scrub` (routes-04,
  * RC-13) — `role="slider"`: ←/↓ и →/↑ — ±1 км, Home/End — старт и финиш; мышь — hover ведёт курсор, уход мыши —
  * скрыть; касание — ведёт после `pointerdown` (вертикальная прокрутка пальцем сохраняется: `touch-action: pan-y`),
- * касание вне графика и маркера карты — скрыть. Видимый фокус — `:focus-visible` в scoped `<style>`. SSR: стор
+ * касание вне графика и маркера карты — скрыть. Видимый фокус — `:focus-visible` (inline-обводка по фокусу). SSR: стор
  * стартует с доли 0 — `aria-valuenow` и текст одинаковы на сервере и клиенте; `document` — только в эффекте.
  */
 export function ProfileChart(props: ProfileChartProps) {
@@ -114,7 +127,7 @@ function ScrubbableChart({
   scrub,
 }: ProfileChartProps & { scrub: ScrubStore }) {
   const node = useRef<HTMLDivElement>(null);
-  const scope = useId();
+  const [focusVisible, setFocusVisible] = useState(false);
   const fraction = useScrub(scrub, (state) => state.fraction);
   const active = useScrub(scrub, (state) => state.active);
 
@@ -175,13 +188,10 @@ function ScrubbableChart({
     scrub.setState({ fraction: next, active: true });
   };
 
-  const root = `[data-scrub-profile="${scope}"]`;
-  const focusCss = `${root}{outline:none}${root}:focus-visible{outline:${stroke.indicator}px solid ${theme.border.focus};outline-offset:${stroke.indicator}px}`;
   return (
     <div
       ref={node}
       data-testid="elevation-profile-chart"
-      data-scrub-profile={scope}
       role="slider"
       tabIndex={0}
       aria-label={label}
@@ -195,9 +205,18 @@ function ScrubbableChart({
       onPointerCancel={cancel}
       onPointerLeave={onPointerLeave}
       onKeyDown={onKeyDown}
-      style={{ ...boxStyle(theme), touchAction: 'pan-y', cursor: 'crosshair' }}
+      // видимый фокус — только клавиатурный (`:focus-visible`), обводкой inline: без `<style>` и `useId` в тексте
+      // разметки (расхождение SSR и гидрации, React #418 в смоуке web)
+      onFocus={(event) => setFocusVisible(keyboardFocus(event.currentTarget))}
+      onBlur={() => setFocusVisible(false)}
+      style={{
+        ...boxStyle(theme),
+        touchAction: 'pan-y',
+        cursor: 'crosshair',
+        outline: focusVisible ? `${stroke.indicator}px solid ${theme.border.focus}` : 'none',
+        outlineOffset: stroke.indicator,
+      }}
     >
-      <style>{focusCss}</style>
       <ProfileArea elevation={elevation} theme={theme} />
       <div
         data-testid="elevation-profile-cursor"
