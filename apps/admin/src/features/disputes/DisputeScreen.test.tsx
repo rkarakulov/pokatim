@@ -4,7 +4,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
-import { httpError, ME, networkError, renderApp, USER_ID } from '../../test/app';
+import { httpError, ME, networkError, mountPanelCss, renderApp, USER_ID } from '../../test/app';
 
 vi.mock('../../api', () => ({
   api: {
@@ -163,6 +163,20 @@ describe('«Споры» — разбор (06, AC13)', () => {
     expect(await screen.findByText('Решение принял Марк, 27 октября 2026, 10:30')).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.queryByRole('button', { name: 'Принять решение' })).toBeNull();
+  });
+
+  it('форма решения: у шаблона и заметки отступ от поля выше (B18)', async () => {
+    mountPanelCss();
+    await open();
+    await screen.findByRole('heading', { name: 'Похоже на помощь транспорта' });
+    fireEvent.click(screen.getByLabelText('Отклонить'));
+    const template = screen.getByRole('group', { name: 'Причина для участников (обязательно)' });
+    const note = screen
+      .getByLabelText('Внутренняя заметка — видит только команда')
+      .closest('.field')!;
+    for (const block of [template, note]) {
+      expect(getComputedStyle(block).marginTop).toBe('var(--inset-md)');
+    }
   });
 
   it('пустая заметка не отправляется', async () => {

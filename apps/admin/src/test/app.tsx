@@ -3,6 +3,9 @@ import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { act, render } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { onTestFinished } from 'vitest';
 
 import { type AppRouter, createAppRouter } from '../router';
 import { expiredRedirect } from '../session/expired';
@@ -85,3 +88,13 @@ export async function renderApp(path: string) {
 
 /** Путь в «адресной строке» (с basepath). */
 export const currentHref = (router: AppRouter) => router.state.location.publicHref;
+
+/**
+ * Стили панели (`index.css`) в документ на время теста — для проверок вида через `getComputedStyle` (Vitest
+ * CSS-импорты не загружает). Снимаются по окончании теста, и упавшего тоже.
+ */
+export function mountPanelCss(): void {
+  const style = document.head.appendChild(document.createElement('style'));
+  style.textContent = readFileSync(resolve(__dirname, '../index.css'), 'utf8');
+  onTestFinished(() => style.remove());
+}

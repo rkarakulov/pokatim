@@ -51,6 +51,9 @@ export function createQueryClient(handlers: SessionHandlers): QueryClient {
     }),
     defaultOptions: {
       queries: {
+        // фокус окна (клик во встроенном браузере, смена вкладки) давал второй такой же GET на экране (B12); заход на
+        // экран по-прежнему перечитывает данные — так панель и узнаёт о погашенной сессии (401 → «Сессия истекла»)
+        refetchOnWindowFocus: false,
         retry: (failures, error) => {
           const status = httpStatus(error);
           return (status === undefined || status >= 500) && failures < 2;

@@ -1,4 +1,4 @@
-import type { PanelRaceResults } from '@pokatim/contracts';
+import type { PanelRaceResults, PublishCheck } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import { Link } from '@tanstack/react-router';
 import { useId } from 'react';
@@ -10,9 +10,12 @@ import { Banner, Button, DisabledReason, StatusTag } from '../../ui';
 import type { OpenResultsDialog } from './results-actions';
 import { publishBlockText } from './results-errors';
 
+/** Условия «да/нет» (сервер шлёт 0 или 1): счётчик для них не показывается. */
+const FLAG_CHECKS: ReadonlySet<PublishCheck> = new Set(['window_open']);
+
 /**
- * Протокол гонки. До публикации — чек-лист сервера (D-23) и «Опубликовать протокол» (`results.manage`): неактивна с
- * первой причиной и количеством; «Требует внимания» не блокирует (D-22). После — баннер ревизии и экстренный
+ * Протокол гонки. До публикации — чек-лист сервера (D-23) и «Опубликовать протокол» (`results.manage`): неактивна со
+ * всеми причинами; «Требует внимания» не блокирует (D-22). После — баннер ревизии и экстренный
  * пересчёт (`results.revise`, D-27/D-28): перепроверка треков и «Применить пересчёт», пока проверки не завершены —
  * неактивна. Строка «Открытые споры» — ссылка на споры гонки (`disputes.read`, race-results-06).
  */
@@ -115,9 +118,17 @@ export function PublishBlock({
         {publish.checklist.map((check) => (
           <li key={check.code} className="checklist__item t-body">
             <StatusTag tone={check.count === 0 ? 'success' : 'error'}>
-              {check.count === 0 ? `✓ ${t('admin.results.check.done')}` : check.count}
+              {check.count === 0
+                ? `✓ ${t('admin.results.check.done')}`
+                : FLAG_CHECKS.has(check.code)
+                  ? t('admin.results.check.pending')
+                  : check.count}
             </StatusTag>
-            <span>{t(`admin.results.check.${check.code}`, { count: check.count })}</span>
+            <span>
+              {check.count === 0
+                ? t(`admin.results.check.${check.code}.ok`)
+                : t(`admin.results.check.${check.code}`, { count: check.count })}
+            </span>
             {check.code === 'open_disputes' && check.count > 0 && canReadDisputes ? (
               <Link className="link" to="/disputes" search={{ raceId }}>
                 {t('admin.results.check.open_disputes.link')}

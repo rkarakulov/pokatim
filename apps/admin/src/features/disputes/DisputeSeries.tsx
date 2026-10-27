@@ -3,7 +3,7 @@ import { t } from '@pokatim/i18n';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useId, useState } from 'react';
 
-import { formatKmFromMeters } from '../../format';
+import { formatKmFromMeters, formatKmPrecise } from '../../format';
 import { Button, ErrorState } from '../../ui';
 import { disputeSeriesQuery } from './disputes-query';
 import { formatValue, SeriesChart, type SeriesKind } from './SeriesChart';
@@ -48,6 +48,11 @@ function Charts({ data }: { data: PanelDisputeSeriesData }) {
     return <p className="t-body">{t('admin.disputes.series.empty')}</p>;
   }
   const total = data.distanceM.at(-1)!;
+  // ряд без единого значения в таблице не нужен — над графиками уже сказано «Нет данных»
+  const columns = SERIES.flatMap(({ kind, values }) => {
+    const series = values(data);
+    return series?.some((value) => value !== null) ? [{ kind, values: series }] : [];
+  });
   return (
     <div className="series">
       <p className="t-meta muted">
@@ -86,7 +91,7 @@ function Charts({ data }: { data: PanelDisputeSeriesData }) {
           <thead>
             <tr>
               <th scope="col">{t('admin.disputes.series.column.distance')}</th>
-              {SERIES.map(({ kind }) => (
+              {columns.map(({ kind }) => (
                 <th key={kind} scope="col">
                   {t(`admin.disputes.series.${kind}`)}
                 </th>
@@ -96,9 +101,9 @@ function Charts({ data }: { data: PanelDisputeSeriesData }) {
           <tbody>
             {data.distanceM.map((distance, k) => (
               <tr key={distance}>
-                <td>{formatKmFromMeters(distance)}</td>
-                {SERIES.map(({ kind, values }) => (
-                  <td key={kind}>{formatValue(values(data)?.[k] ?? null, kind)}</td>
+                <td>{formatKmPrecise(distance)}</td>
+                {columns.map(({ kind, values }) => (
+                  <td key={kind}>{formatValue(values[k] ?? null, kind)}</td>
                 ))}
               </tr>
             ))}
