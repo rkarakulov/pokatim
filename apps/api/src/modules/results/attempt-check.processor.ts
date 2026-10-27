@@ -46,6 +46,9 @@ const emptyResult = (now: Date): CheckResult => ({
   diagnostics: null,
   engineVersion: null,
   trackMap: null,
+  sensors: null,
+  flags: [],
+  flagsVersion: null,
   checkedAt: now,
 });
 
@@ -190,6 +193,10 @@ export class AttemptCheckProcessor extends WorkerHost {
       diagnostics: match.diagnostics,
       engineVersion: match.engineVersion,
       trackMap: match.trackMap,
+      // race-results-07: датчики и флаги сегмента (наличие каналов и проценты, без значений)
+      sensors: match.sensors,
+      flags: match.flags,
+      flagsVersion: match.flagsVersion,
     };
   }
 

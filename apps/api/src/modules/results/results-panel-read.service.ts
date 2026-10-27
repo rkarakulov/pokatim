@@ -6,6 +6,7 @@ import type {
   PanelRaceAttemptQuery,
   PanelRaceResults,
   PanelRaceStandings,
+  PanelRaceStandingsQuery,
   PanelStandingRow,
   PublishChecklist,
 } from '@pokatim/contracts';
@@ -29,15 +30,17 @@ import type {
 } from './results.collection';
 import {
   attemptHidden,
+  buildProtocol,
+  type ProtocolBase,
   publishChecklist,
-  rankRows,
   recheckPending,
   RESULTS_POLICY,
   resultStatus,
+  unrankedOf,
   uploadClosesAt,
 } from './results.policy';
 import { segmentView } from './results-read.service';
-import { ResultsRepository } from './results.repository';
+import { type GroupCount, type RankedEntry, ResultsRepository } from './results.repository';
 
 const notFound = () => domainError('NOT_FOUND', 404);
 /** Курсор попыток панели: только `_id` (новые сверху). */
@@ -53,6 +56,42 @@ export interface ProtocolChecks {
   pending: number;
   failed: number;
 }
+
+/** Строка с местом → база протокола (общая для живых «Участников» и ревизий протокола). */
+export const protocolBaseOf = (entry: RankedEntry, dq: boolean): ProtocolBase => ({
+  entryId: entry._id,
+  userId: entry.userId,
+  attemptId: entry.best.attemptId,
+  elapsedSec: entry.best.elapsedSec,
+  startedAt: entry.best.startedAt,
+  dq,
+  // race-results-07: группа заявки и флаги датчиков лучшей попытки (DV-9); скорость считает `buildProtocol`
+  groupKey: entry.groupKey,
+  flags: entry.best.flags ?? [],
+});
+
+type StandingItem = Omit<PanelStandingRow, 'riderName'>;
+
+/** Все строки «Участников» до фильтров (`standingItems`). */
+interface StandingItems {
+  revision: number | null;
+  groups: GroupCount[];
+  items: StandingItem[];
+  /** строк сверх загруженных заявок (больше `standingsMax`) */
+  overflow: boolean;
+}
+
+/** Непустые группы живых строк с местом по порядку строк (`buildProtocol` — порядок справочника). */
+const countGroups = (head: readonly { groupKey: GroupCount['key']; place: number | null }[]) => {
+  const groups: GroupCount[] = [];
+  for (const row of head) {
+    if (row.place === null) continue;
+    const last = groups.at(-1);
+    if (last?.key === row.groupKey) last.ranked += 1;
+    else groups.push({ key: row.groupKey, ranked: 1 });
+  }
+  return groups;
+};
 
 const summaryView = (summary: RaceEntryDoc['summary']): PanelStandingRow['summary'] => ({
   total: summary.total,
@@ -133,7 +172,7 @@ export class ResultsPanelReadService {
     let protocol: PanelRaceResults['protocol'] = null;
     if (race.protocolPublishedAt !== null) {
       const revision = (await this.repository.currentRevision(race.id)) ?? 1;
-      const rows = await this.repository.countProtocolRows(race.id, revision);
+      const rows = await this.repository.countProtocolRows(race.id, revision, null);
       protocol = {
         publishedAt: race.protocolPublishedAt.toISOString(),
         revision,
@@ -145,11 +184,20 @@ export class ResultsPanelReadService {
         ),
       };
     }
+    const counts = await this.repository.panelCounts(race.id, CORRIDOR_ENGINE_VERSION);
+    // race-results-07: «Требует внимания» — строки «Участников» с флагами; финишёры — время без места
+    const { attention, finishers } = await this.repository.withSnapshot(async (session) => ({
+      attention: (await this.standingItems(race, now, session)).items.filter(
+        (row) => row.flags.length > 0,
+      ).length,
+      finishers: await this.repository.countFinishers(race.id, session),
+    }));
     return {
       raceId: race.id,
       lockedAt: race.lockedAt?.toISOString() ?? null,
+      groupScheme: race.groupScheme,
       engineVersion: CORRIDOR_ENGINE_VERSION,
-      counts: await this.repository.panelCounts(race.id, CORRIDOR_ENGINE_VERSION),
+      counts: { ...counts, attention, finishers },
       phase: this.races.phase(race, now),
       uploadClosesAt: uploadClosesAt(race).toISOString(),
       protocol,
@@ -226,93 +274,136 @@ export class ResultsPanelReadService {
         ? { kind: review.kind, reason: review.reason, at: review.at.toISOString() }
         : null,
       riderName,
+      // race-results-07: датчики и флаги датчиков попытки (попытки до 07 — `null` / `[]`)
+      sensors: attempt.sensors ?? null,
+      flags: attempt.flags ?? [],
+      flagsVersion: attempt.flagsVersion ?? null,
     };
   }
 
   /**
-   * «Участники» (§7.6) в одной snapshot-сессии: до публикации — строки с местами по таблице (`rankRows`), затем прочие
-   * заявки по времени заявки; после — строки текущей ревизии протокола, затем прочие заявки без места (RC-5).
+   * «Участники» (§7.6) в одной snapshot-сессии: до публикации — строки с местами по группам (`buildProtocol` без DQ —
+   * те же места и флаги, что даст публикация), затем прочие заявки по времени заявки (финишёры — с временем и
+   * причиной); после — строки текущей ревизии протокола, затем прочие заявки без места (RC-5). Фильтры
+   * (race-results-07): `group` — строки группы, `attention` — только с флагами.
    */
-  async standings(principal: PanelPrincipal, raceId: string): Promise<PanelRaceStandings> {
+  async standings(
+    principal: PanelPrincipal,
+    raceId: string,
+    query: PanelRaceStandingsQuery = {},
+  ): Promise<PanelRaceStandings> {
     const race = await this.race(principal, raceId);
     const now = this.clock.now();
     const max = RESULTS_POLICY.standingsMax;
-    const standings = await this.repository.withSnapshot(async (session) => {
-      const revision =
-        race.protocolPublishedAt !== null
-          ? ((await this.repository.currentRevision(raceId, session)) ?? 1)
-          : null;
-      const head =
-        revision === null
-          ? await this.liveHead(raceId, session)
-          : (await this.repository.protocolRows(raceId, revision, session)).map((row) =>
-              this.protocolHead(row),
-            );
-      const headEntries = new Map(
-        (
-          await this.repository.entriesByIds(
-            head.slice(0, max).map((row) => row.entryId),
-            session,
-          )
-        ).map((entry) => [entry._id, entry]),
-      );
-      const headIds = new Set(head.map((row) => row.entryId));
-      const rest = (
-        await this.repository.entriesForStandings(raceId, max + head.length + 1, session)
-      ).filter((entry) => !headIds.has(entry._id));
-      const items: Omit<PanelStandingRow, 'riderName'>[] = [];
-      for (const row of head.slice(0, max)) {
-        const entry = headEntries.get(row.entryId);
-        if (!entry) continue;
-        items.push({
-          ...row,
-          userId: entry.userId,
-          entryStatus: entry.status,
-          summary: summaryView(entry.summary),
-        });
-      }
-      for (const entry of rest.slice(0, Math.max(0, max - items.length))) {
-        items.push({
-          entryId: entry._id,
-          userId: entry.userId,
-          entryStatus: entry.status,
-          resultStatus: resultStatus(entry, race, now, { ignoreBest: revision !== null }),
-          place: null,
-          tied: false,
-          elapsedSec: null,
-          bestAttemptId: null,
-          summary: summaryView(entry.summary),
-        });
-      }
-      return {
-        source: revision === null ? ('live' as const) : ('protocol' as const),
-        revision,
-        truncated: head.length + rest.length > max,
-        items,
-      };
-    });
+    const all = await this.repository.withSnapshot((session) =>
+      this.standingItems(race, now, session),
+    );
+    const filtered = all.items.filter(
+      (row) =>
+        (query.group === undefined || row.groupKey === query.group) &&
+        (query.attention === undefined || row.flags.length > 0),
+    );
+    const items = filtered.slice(0, max);
     // имена — после snapshot-сессии, одним вызовом порта (в снимок не пишутся)
-    const names = await this.names.publicNames(standings.items.map((row) => row.userId));
+    const names = await this.names.publicNames(items.map((row) => row.userId));
     return {
-      ...standings,
-      items: standings.items.map((row) => ({ ...row, riderName: names.get(row.userId) ?? null })),
+      source: all.revision === null ? 'live' : 'protocol',
+      revision: all.revision,
+      groupScheme: race.groupScheme,
+      groups: all.groups,
+      truncated: all.overflow || filtered.length > max,
+      items: items.map((row) => ({ ...row, riderName: names.get(row.userId) ?? null })),
     };
   }
 
-  /** Живые строки с местами: вся таблица гонки по порядку `(elapsedSec, startedAt, _id)`. */
+  /** Все строки «Участников» гонки без фильтров (чтение «Участников» и счётчик «Требует внимания»). */
+  private async standingItems(
+    race: RaceForResults,
+    now: Date,
+    session: DbSession,
+  ): Promise<StandingItems> {
+    const raceId = race.id;
+    const max = RESULTS_POLICY.standingsMax;
+    const revision =
+      race.protocolPublishedAt !== null
+        ? ((await this.repository.currentRevision(raceId, session)) ?? 1)
+        : null;
+    const head =
+      revision === null
+        ? await this.liveHead(raceId, session)
+        : (await this.repository.protocolRows(raceId, revision, session)).map((row) =>
+            this.protocolHead(row),
+          );
+    const groups =
+      revision === null
+        ? countGroups(head)
+        : await this.repository.protocolGroups(raceId, revision, session);
+    const headEntries = new Map(
+      (
+        await this.repository.entriesByIds(
+          head.slice(0, max).map((row) => row.entryId),
+          session,
+        )
+      ).map((entry) => [entry._id, entry]),
+    );
+    const headIds = new Set(head.map((row) => row.entryId));
+    const rest = (
+      await this.repository.entriesForStandings(raceId, max + head.length + 1, session)
+    ).filter((entry) => !headIds.has(entry._id));
+    const items: StandingItem[] = [];
+    for (const row of head.slice(0, max)) {
+      const entry = headEntries.get(row.entryId);
+      if (!entry) continue;
+      items.push({
+        ...row,
+        userId: entry.userId,
+        entryStatus: entry.status,
+        summary: summaryView(entry.summary),
+        tier: entry.tier ?? 'verified',
+        unranked: null,
+      });
+    }
+    for (const entry of rest.slice(0, Math.max(0, max - items.length))) {
+      // финишёры (START, без пульса) — время лучшей попытки и причина без места
+      const unranked = entry.status === 'active' ? unrankedOf(entry) : null;
+      const best = unranked ? entry.best : null;
+      items.push({
+        entryId: entry._id,
+        userId: entry.userId,
+        entryStatus: entry.status,
+        resultStatus: resultStatus(entry, race, now, { ignoreBest: revision !== null }),
+        place: null,
+        tied: false,
+        elapsedSec: best?.elapsedSec ?? null,
+        bestAttemptId: best?.attemptId ?? null,
+        summary: summaryView(entry.summary),
+        tier: entry.tier ?? 'verified',
+        groupKey: entry.groupKey,
+        unranked,
+        flags: best?.flags ?? [],
+      });
+    }
+    return { revision, groups, items, overflow: head.length + rest.length > max };
+  }
+
+  /**
+   * Живые строки с местами: все группы гонки, места внутри группы и флаги (датчики + скорость) — `buildProtocol` над
+   * строками с местом без DQ (DQ по спору до публикации в таблицу не входят).
+   */
   private async liveHead(raceId: string, session: DbSession) {
     const ranked = await this.repository.rankedEntries(raceId, session);
-    const places = rankRows(
-      ranked.map((entry) => ({ elapsedSec: entry.best.elapsedSec })),
-      { lessThanFirst: 0, firstIndex: 0, equalCounts: new Map() },
-    );
-    return ranked.map((entry, index) => ({
-      entryId: entry._id,
+    return buildProtocol(
+      ranked.map((entry) => protocolBaseOf(entry, false)),
+      null,
+    ).map((row) => ({
+      entryId: row.entryId,
       resultStatus: 'provisional' as const,
-      place: places[index]!.place,
-      tied: places[index]!.tied,
-      elapsedSec: entry.best.elapsedSec,
-      bestAttemptId: entry.best.attemptId,
+      place: row.place,
+      tied: row.tied,
+      elapsedSec: row.elapsedSec,
+      bestAttemptId: row.attemptId,
+      groupKey: row.groupKey ?? 'overall',
+      flags: row.flags ?? [],
     }));
   }
 
@@ -324,6 +415,9 @@ export class ResultsPanelReadService {
       tied: row.tied,
       elapsedSec: row.elapsedSec,
       bestAttemptId: row.attemptId,
+      // ревизии до race-results-07 — `overall` без флагов (RC-8)
+      groupKey: row.groupKey ?? 'overall',
+      flags: row.flags ?? [],
     };
   }
 

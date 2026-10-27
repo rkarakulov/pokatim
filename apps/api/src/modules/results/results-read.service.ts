@@ -4,10 +4,13 @@ import type {
   MyAttemptTrack,
   MyRaceEntry,
   PendingUpload,
+  RaceFinishersPage,
+  RaceFinishersQuery,
   RaceResultRow,
   RaceResultStatus,
   RaceResultsPage,
   RaceResultsQuery,
+  ResultGroupKey,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import { z } from 'zod';
@@ -15,7 +18,12 @@ import { z } from 'zod';
 import type { DbSession } from '../../db';
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
-import { RIDER_NAMES, type RiderNameDirectory } from '../profile';
+import {
+  RIDER_NAMES,
+  type RiderNameDirectory,
+  VERIFIED_PROFILES,
+  type VerifiedProfiles,
+} from '../profile';
 import { RACE_REGISTRY, type RaceForResults, type RaceRegistry } from '../races';
 import { ACTIVITY_SOURCE, type ActivitySource } from '../tracks';
 import { RESULT_DISPUTE_GATE, type ResultDisputeGate } from './result-dispute-gate.port';
@@ -26,22 +34,35 @@ import type {
   RaceProtocolRowDoc,
 } from './results.collection';
 import {
+  allowedGroups,
   attemptHidden,
   disqualifiedBeforePublication,
   entryActions,
+  ownGroup,
   rankRows,
-  RESULTS_POLICY,
   resultStatus,
+  unrankedOf,
   uploadClosesAt,
 } from './results.policy';
-import { ResultsRepository } from './results.repository';
+import { type GroupCount, ResultsRepository } from './results.repository';
 
 const notFound = () => domainError('NOT_FOUND', 404);
 
 /** Статус, время и место участника (без группы) — «моё участие» и место цели спора. */
-export type EntryResult = Omit<MyRaceEntry['result'], 'group' | 'status'> & {
+export type EntryResult = Omit<MyRaceEntry['result'], 'group' | 'status' | 'unranked'> & {
   status: RaceResultStatus;
+  unranked: ReturnType<typeof unrankedOf>;
 };
+
+/** Группа строк участника: заявки нет — `overall`. */
+const groupOfEntry = (entry: Pick<RaceEntryDoc, 'groupKey'> | null): ResultGroupKey =>
+  entry?.groupKey ?? 'overall';
+
+/**
+ * Группа публичной таблицы по умолчанию (RC-10): `overall` в схеме `overall`, иначе первая непустая, иначе `m_u40`.
+ */
+const defaultGroup = (race: RaceForResults, groups: readonly GroupCount[]): ResultGroupKey =>
+  race.groupScheme === 'overall' ? 'overall' : (groups[0]?.key ?? 'm_u40');
 const invalidCursor = () =>
   domainError('VALIDATION_FAILED', 400, { fields: [{ path: 'cursor', code: 'INVALID' }] });
 
@@ -50,6 +71,8 @@ const invalidCursor = () =>
  * (AC21), позицию сортировки сервер берёт из самой строки.
  */
 const RankCursorKey = z.literal('e');
+/** Курсор финишёров — `entryId` последней строки (race-results-07). */
+const FinisherCursorKey = z.literal('f');
 /** Строка таблицы до подстановки имени: `userId` — только для порта имён, наружу не выходит. */
 interface UnnamedRow {
   userId: string;
@@ -85,6 +108,7 @@ export class ResultsReadService {
     @Inject(RESULT_DISPUTE_GATE) private readonly disputes: ResultDisputeGate,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(RIDER_NAMES) private readonly names: RiderNameDirectory,
+    @Inject(VERIFIED_PROFILES) private readonly profiles: VerifiedProfiles,
   ) {}
 
   /** Опубликованная или отменённая гонка; черновик и неизвестная — 404. */
@@ -110,17 +134,23 @@ export class ResultsReadService {
         };
       },
     );
+    // схема гонки без заявок — `gender_age`: её получит первая заявка (`admitEntry`)
+    const groupScheme = race.groupScheme ?? 'gender_age';
     return {
       raceId,
+      groupScheme,
       entry: entry
         ? {
             id: entry._id,
             status: entry.status,
             createdAt: entry.createdAt.toISOString(),
             withdrawnAt: entry.withdrawnAt?.toISOString() ?? null,
+            tier: entry.tier ?? 'verified',
+            groupKey: entry.groupKey,
           }
         : null,
-      result: { ...result, group: RESULTS_POLICY.groupKey },
+      result: { ...result, group: groupOfEntry(entry) },
+      verified: groupScheme === 'overall' ? null : await this.verifiedState(userId, race),
       attempts: attempts
         .filter((attempt) => !attemptHidden(attempt))
         .map((attempt) => this.myAttempt(attempt, entry)),
@@ -128,6 +158,20 @@ export class ResultsReadService {
       uploadClosesAt: uploadClosesAt(race).toISOString(),
       actions: entryActions(race, this.races.phase(race, now), entry, now, { openDisputes }),
     };
+  }
+
+  /**
+   * Блок «Verified» участия (race-results-07): своя группа и разрешённые группы — по анкете (пол, год) и году гонки;
+   * анкеты нет — `null`. Вес, рост и FTP через порт не читаются.
+   */
+  private async verifiedState(
+    userId: string,
+    race: RaceForResults,
+  ): Promise<NonNullable<MyRaceEntry['verified']>> {
+    const profile = await this.profiles.demographicsOf(userId);
+    if (!profile) return { profileReady: false, ownGroup: null, groupOptions: null };
+    const own = ownGroup(profile.gender, profile.birthYear, race);
+    return { profileReady: true, ownGroup: own, groupOptions: allowedGroups(own) };
   }
 
   /**
@@ -187,16 +231,28 @@ export class ResultsReadService {
     now: Date,
     session: DbSession,
   ): Promise<EntryResult> {
-    const ranked = await this.repository.countRanked(race.id, session);
+    const group = groupOfEntry(entry);
+    const ranked = await this.repository.countRanked(race.id, group, session);
     const status = resultStatus(entry, race, now);
     const best = entry?.status === 'active' ? entry.best : null;
-    if (!best) return { status, elapsedSec: null, place: null, tied: false, ranked };
-    if (entry && disqualifiedBeforePublication(entry, race)) {
-      return { status, elapsedSec: best.elapsedSec, place: null, tied: false, ranked };
+    const none = { place: null, tied: false, ranked, unranked: null };
+    if (!entry || !best) return { status, elapsedSec: null, ...none };
+    if (disqualifiedBeforePublication(entry, race)) {
+      return { status, elapsedSec: best.elapsedSec, ...none };
     }
-    const less = await this.repository.countRankedLess(race.id, best.elapsedSec, session);
-    const equal = await this.repository.countRankedEqual(race.id, best.elapsedSec, session);
-    return { status, elapsedSec: best.elapsedSec, place: less + 1, tied: equal >= 2, ranked };
+    // race-results-07: START и Verified без пульса — время без места (таблица финишёров)
+    const unranked = unrankedOf(entry);
+    if (unranked) return { status, elapsedSec: best.elapsedSec, ...none, unranked };
+    const less = await this.repository.countRankedLess(race.id, group, best.elapsedSec, session);
+    const equal = await this.repository.countRankedEqual(race.id, group, best.elapsedSec, session);
+    return {
+      status,
+      elapsedSec: best.elapsedSec,
+      place: less + 1,
+      tied: equal >= 2,
+      ranked,
+      unranked: null,
+    };
   }
 
   /**
@@ -210,17 +266,21 @@ export class ResultsReadService {
     session: DbSession,
   ): Promise<EntryResult> {
     const revision = await this.protocolRevision(race.id, session);
-    const { ranked } = await this.repository.countProtocolRows(race.id, revision, session);
     const row = entry
       ? await this.repository.protocolRow(race.id, revision, entry._id, session)
       : undefined;
+    const group = row ? (row.groupKey ?? 'overall') : groupOfEntry(entry);
+    const { ranked } = await this.repository.countProtocolRows(race.id, revision, group, session);
     if (!row) {
+      // race-results-07: START и Verified без пульса в снимок не входят — время без места из заявки (DV-10)
+      const unranked = entry?.status === 'active' ? unrankedOf(entry) : null;
       return {
         status: resultStatus(entry, race, now, { ignoreBest: true }),
-        elapsedSec: null,
+        elapsedSec: unranked && entry?.best ? entry.best.elapsedSec : null,
         place: null,
         tied: false,
         ranked,
+        unranked,
       };
     }
     return {
@@ -229,6 +289,7 @@ export class ResultsReadService {
       place: row.place,
       tied: row.tied,
       ranked,
+      unranked: null,
     };
   }
 
@@ -282,37 +343,44 @@ export class ResultsReadService {
     const cursorEntryId = query.cursor ? decodeCursor(query.cursor, RankCursorKey).id : null;
     const empty = race.status === 'cancelled' || race.corridor === null;
     if (!empty && race.protocolPublishedAt !== null) {
-      return this.protocolResults(raceId, cursorEntryId, query.limit);
+      return this.protocolResults(race, query.group, cursorEntryId, query.limit);
     }
     const unnamed = await this.repository.withSnapshot(async (session): Promise<UnnamedPage> => {
       const entries = await this.repository.countActiveEntries(raceId, session);
+      const groups = empty ? [] : await this.repository.rankedGroups(raceId, session);
+      const group = query.group ?? defaultGroup(race, groups);
       const base = {
-        group: RESULTS_POLICY.groupKey,
+        group,
         status: 'provisional' as const,
         entries,
+        groups,
+        finishers: empty ? 0 : await this.repository.countFinishers(raceId, session),
       };
       if (empty) return { ...base, ranked: 0, items: [], nextCursor: null };
       const after = cursorEntryId
-        ? await this.repository.rankedPosition(raceId, cursorEntryId, session)
+        ? await this.repository.rankedPosition(raceId, group, cursorEntryId, session)
         : null;
       if (cursorEntryId && !after) throw invalidCursor();
-      const ranked = await this.repository.countRanked(raceId, session);
-      const rows = await this.repository.rankedPage(raceId, after, query.limit + 1, session);
+      const ranked = await this.repository.countRanked(raceId, group, session);
+      const rows = await this.repository.rankedPage(raceId, group, after, query.limit + 1, session);
       const page = rows.slice(0, query.limit);
       const first = page[0];
       const last = page.at(-1);
       if (!first || !last) return { ...base, ranked, items: [], nextCursor: null };
       const lessThanFirst = await this.repository.countRankedLess(
         raceId,
+        group,
         first.best.elapsedSec,
         session,
       );
-      const firstIndex = after ? await this.repository.countRankedUpTo(raceId, after, session) : 0;
+      const firstIndex = after
+        ? await this.repository.countRankedUpTo(raceId, group, after, session)
+        : 0;
       const equalCounts = new Map<number, number>();
       for (const elapsedSec of new Set([first.best.elapsedSec, last.best.elapsedSec])) {
         equalCounts.set(
           elapsedSec,
-          await this.repository.countRankedEqual(raceId, elapsedSec, session),
+          await this.repository.countRankedEqual(raceId, group, elapsedSec, session),
         );
       }
       const places = rankRows(
@@ -338,13 +406,55 @@ export class ResultsReadService {
   }
 
   /**
+   * Финишёры гонки (race-results-07, DV-10): START и Verified без пульса — время без места, по `(время, старт, id)`;
+   * читаются из заявок и после публикации (в снимок протокола не входят). Имя — по правилам таблицы (P1). Курсор —
+   * `entryId` строки финишёров; выбыла или чужая — `400` на поле `cursor`.
+   */
+  async finishers(raceId: string, query: RaceFinishersQuery): Promise<RaceFinishersPage> {
+    const race = await this.race(raceId);
+    const cursorEntryId = query.cursor ? decodeCursor(query.cursor, FinisherCursorKey).id : null;
+    if (race.status === 'cancelled' || race.corridor === null) {
+      if (cursorEntryId) throw invalidCursor();
+      return { total: 0, items: [], nextCursor: null };
+    }
+    const page = await this.repository.withSnapshot(async (session) => {
+      const after = cursorEntryId
+        ? await this.repository.finisherPosition(raceId, cursorEntryId, session)
+        : null;
+      if (cursorEntryId && !after) throw invalidCursor();
+      const total = await this.repository.countFinishers(raceId, session);
+      const rows = await this.repository.finishersPage(raceId, after, query.limit + 1, session);
+      return { total, rows };
+    });
+    const rows = page.rows.slice(0, query.limit);
+    const last = rows.at(-1);
+    const names = await this.names.publicNames(rows.map((row) => row.userId));
+    return {
+      total: page.total,
+      items: rows.map((row) => ({
+        entryId: row._id,
+        elapsedSec: row.best.elapsedSec,
+        riderName: names.get(row.userId) ?? null,
+        unranked: unrankedOf(row) ?? 'no_heart_rate',
+      })),
+      nextCursor: page.rows.length > query.limit && last ? encodeCursor('f', last._id) : null,
+    };
+  }
+
+  /**
    * Имена строк страницы (profile-rider-name, P1/P3): один вызов порта после snapshot-сессии — имя не участвует в
    * согласованности мест и в снимок протокола не пишется. Строка — явным списком полей: `userId` наружу не выходит.
    */
   private async withRiderNames(page: UnnamedPage): Promise<RaceResultsPage> {
     const names = await this.names.publicNames(page.items.map((item) => item.userId));
     return {
-      ...page,
+      group: page.group,
+      status: page.status,
+      ranked: page.ranked,
+      entries: page.entries,
+      nextCursor: page.nextCursor,
+      groups: page.groups.map((group) => ({ key: group.key, ranked: group.ranked })),
+      finishers: page.finishers,
       items: page.items.map(({ userId, row }) => ({
         entryId: row.entryId,
         place: row.place,
@@ -360,23 +470,31 @@ export class ResultsReadService {
    * `entryId` строки (позиция — её `order`); строка DQ или не из ревизии — `400` на поле `cursor`.
    */
   private async protocolResults(
-    raceId: string,
+    race: RaceForResults,
+    requested: ResultGroupKey | undefined,
     cursorEntryId: string | null,
     limit: number,
   ): Promise<RaceResultsPage> {
+    const raceId = race.id;
     const unnamed = await this.repository.withSnapshot(async (session): Promise<UnnamedPage> => {
       const revision = await this.protocolRevision(raceId, session);
+      const groups = await this.repository.protocolGroups(raceId, revision, session);
+      const group = requested ?? defaultGroup(race, groups);
       let afterOrder: number | null = null;
       if (cursorEntryId) {
         const at = await this.repository.protocolRow(raceId, revision, cursorEntryId, session);
-        if (!at || at.status === 'dq') throw invalidCursor();
+        if (!at || at.status === 'dq' || (at.groupKey ?? 'overall') !== group) {
+          throw invalidCursor();
+        }
         afterOrder = at.order;
       }
       const entries = await this.repository.countActiveEntries(raceId, session);
-      const { ranked } = await this.repository.countProtocolRows(raceId, revision, session);
+      const finishers = await this.repository.countFinishers(raceId, session);
+      const { ranked } = await this.repository.countProtocolRows(raceId, revision, group, session);
       const rows = await this.repository.protocolRowsPage(
         raceId,
         revision,
+        group,
         afterOrder,
         limit + 1,
         session,
@@ -384,10 +502,12 @@ export class ResultsReadService {
       const page = rows.slice(0, limit);
       const last = page.at(-1);
       return {
-        group: RESULTS_POLICY.groupKey,
+        group,
         status: 'final' as const,
         entries,
         ranked,
+        groups,
+        finishers,
         items: page.flatMap((row: RaceProtocolRowDoc) =>
           row.place === null
             ? []

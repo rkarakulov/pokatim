@@ -4,7 +4,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Job, Queue } from 'bullmq';
 
 import { PanelRaceAttemptPage, PanelRaceResults } from '@pokatim/contracts';
-import { CORRIDOR_ENGINE_VERSION } from '@pokatim/tracks/parse';
+import { CORRIDOR_ENGINE_VERSION, FLAGS_VERSION } from '@pokatim/tracks/parse';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, MINUTE, type Harness } from '../../../test/harness';
@@ -22,6 +22,7 @@ import {
   resultsWorker,
   rideGpx,
   rider,
+  seedVerifiedProfile,
   signIn,
   travelTo,
   uploadRide,
@@ -469,5 +470,63 @@ describe('лучший результат (AC17)', () => {
     const entry = await resultsDb(h).entries.findOne();
     expect(entry?.best).toMatchObject({ attemptId: fast!._id, elapsedSec: checked.get(fast!._id) });
     expect(entry?.summary).toMatchObject({ counted: 2, pending: 0 });
+  });
+});
+
+describe('датчики и флаги попытки (race-results-07, AC7)', () => {
+  /** Verified `m_u40` в новой гонке (`gender_age`): место — только с пульсом. */
+  async function verifiedQueued(heartRate: number | undefined) {
+    const race = await corridorRace(h, {}, { scheme: null });
+    const r = await rider(h);
+    await seedVerifiedProfile(h, r.userId, { gender: 'm', birthYear: 1995 });
+    expect((await enterRace(h, r.auth, race.raceId, { tier: 'verified' })).status).toBe(201);
+    const worker = resultsWorker(h);
+    await worker.drain();
+    travelTo(h, AFTER_RIDE);
+    const auth = await signIn(h, r.email);
+    await uploadRide(h, auth, rideGpx('clean.gpx', RIDE, { heartRate, power: true }));
+    await worker.intake();
+    const [attempt] = await attempts();
+    return { ...race, auth, attempt: attempt! };
+  }
+
+  it('с пульсом: sensors, flags, flagsVersion записаны; лучший — с местом; в «моём участии» флагов нет', async () => {
+    const { attempt, raceId, auth } = await verifiedQueued(140);
+    expect(await processor().check(attempt._id, 1)).toBe('counted');
+    const checked = await resultsDb(h).attempts.findOne({ _id: attempt._id });
+    expect(checked).toMatchObject({
+      sensors: { hr: true, power: true },
+      flagsVersion: FLAGS_VERSION,
+    });
+    expect(Array.isArray(checked?.flags)).toBe(true);
+    for (const flag of checked!.flags!) expect(Number.isInteger(flag.metric)).toBe(true);
+    const entry = await resultsDb(h).entries.findOne();
+    expect(entry?.best).toMatchObject({ attemptId: attempt._id, ranked: true });
+    const view = await myEntry(h, auth, raceId);
+    expect(view.result).toMatchObject({ status: 'provisional', place: 1, group: 'm_u40' });
+    expect(JSON.stringify(view)).not.toMatch(/"(flags|sensors)"/);
+  });
+
+  it('без пульса: Verified — лучший без места (finisher, no_heart_rate); перепостановка сбрасывает поля', async () => {
+    const { attempt, raceId, auth } = await verifiedQueued(undefined);
+    expect(await processor().check(attempt._id, 1)).toBe('counted');
+    expect(await resultsDb(h).attempts.findOne({ _id: attempt._id })).toMatchObject({
+      sensors: { hr: false, power: true },
+      flags: [],
+      flagsVersion: FLAGS_VERSION,
+    });
+    expect((await resultsDb(h).entries.findOne())?.best).toMatchObject({ ranked: false });
+    expect((await myEntry(h, auth, raceId)).result).toMatchObject({
+      status: 'finisher',
+      place: null,
+      unranked: 'no_heart_rate',
+    });
+    await h.worker.get(ResultsRecheck).requestRace(raceId, justAfter());
+    expect(await resultsDb(h).attempts.findOne({ _id: attempt._id })).toMatchObject({
+      status: 'queued',
+      sensors: null,
+      flags: [],
+      flagsVersion: null,
+    });
   });
 });

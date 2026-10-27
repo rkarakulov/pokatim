@@ -16,6 +16,12 @@ import { checkPlausibility } from './plausibility.ts';
 import { sanitizePoints } from './points.ts';
 import { simplifyTrack } from './simplify.ts';
 import { buildSeries, type DisputeSeries, type SeriesWindow } from './series.ts';
+import {
+  FLAGS_VERSION,
+  sensorFlags,
+  type SensorFlag,
+  type SensorPresence,
+} from './sensor-flags.ts';
 import { routeGpx } from './route-gpx.ts';
 import { elevationProfile } from './route-profile.ts';
 import { parseStream, type TrackStreamV1 } from './stream.ts';
@@ -52,6 +58,15 @@ export {
   type SeriesSummary,
   type SeriesWindow,
 } from './series.ts';
+export {
+  FLAGS_VERSION,
+  SENSOR_FLAG_CODES,
+  SENSOR_FLAGS_POLICY,
+  sensorFlags,
+  type SensorFlag,
+  type SensorFlagCode,
+  type SensorPresence,
+} from './sensor-flags.ts';
 export { CORRIDOR_ENGINE_VERSION, CORRIDOR_POLICY } from './corridor/policy.ts';
 export { ROUTE_PROFILE_MAX_POINTS, elevationProfile } from './route-profile.ts';
 export { routeGpx } from './route-gpx.ts';
@@ -281,10 +296,18 @@ export function deriveRoute(bytes: Uint8Array): RouteDerived {
   return { profile: elevationProfile(points), gpx: routeGpx(matchPointsOf(points)) };
 }
 
-/** Итог сверки попытки для worker: результат движка и разметка трека на линии показа (maps-02). */
+/**
+ * Итог сверки попытки для worker: результат движка, разметка трека на линии показа (maps-02), датчики и флаги
+ * сегмента (race-results-07; вне `CorridorMatch` — golden коридора и версия движка не меняются).
+ */
 export type AttemptAnalysis = CorridorMatch & {
   /** позиции сегмента и схода на линии `activity_tracks`; `null` — нет сегмента, нет линии или она не от этого файла */
   trackMap: TrackMap | null;
+  /** каналы в сегменте; `null` — сегмента нет */
+  sensors: SensorPresence | null;
+  /** флаги датчиков сегмента (целые проценты) */
+  flags: SensorFlag[];
+  flagsVersion: number;
 };
 
 /**
@@ -305,7 +328,14 @@ export function analyzeAttempt(
   const prepared = prepareCorridor(corridor);
   const { points } = loadTrack(bytes, format, now);
   const { match, offRunsMs } = matchCorridorDetailed(points, prepared, window);
-  return { ...match, trackMap: trackMapOf(points, line, match.segment, offRunsMs) };
+  const sensors = match.segment ? sensorFlags(points, match.segment) : null;
+  return {
+    ...match,
+    trackMap: trackMapOf(points, line, match.segment, offRunsMs),
+    sensors: sensors?.sensors ?? null,
+    flags: sensors?.flags ?? [],
+    flagsVersion: FLAGS_VERSION,
+  };
 }
 
 /**

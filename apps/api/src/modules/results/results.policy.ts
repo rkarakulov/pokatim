@@ -1,5 +1,9 @@
 import {
   type AttemptRejection,
+  type EntryTier,
+  type ErrorCode,
+  type GroupScheme,
+  minskToday,
   type MyRaceEntry,
   PUBLISH_CHECKS,
   PUBLISH_STATE_BLOCKS,
@@ -9,12 +13,17 @@ import {
   type RaceEntryBlockReason,
   type RacePhase,
   type RaceResultStatus,
+  RESULT_GROUP_KEYS,
+  type ResultGroupKey,
+  type ResultUnrankedReason,
+  type RiderGender,
 } from '@pokatim/contracts';
 import { type Bounds, boundsNear } from '@pokatim/tracks';
 
 import type { RaceForResults } from '../races';
 import type { ActivityRef } from '../tracks';
 import type {
+  AttemptFlagDoc,
   EntryBest,
   EntrySummary,
   RaceAttemptDoc,
@@ -48,8 +57,6 @@ export const RESULTS_POLICY = {
   stuckScanBatches: 20,
   resultsPageDefault: 50,
   resultsPageMax: 100,
-  /** A3: одна группа зачёта v1 */
-  groupKey: 'overall',
   /** race-results-05: строк «Участников» панели за ответ; больше — `truncated` */
   standingsMax: 1000,
   /** мутации протокола на сотрудника */
@@ -119,14 +126,40 @@ export function attemptHidden(
   );
 }
 
-type RankedAttempt = Pick<RaceAttemptDoc, '_id' | 'status' | 'segment'>;
+type RankedAttempt = Pick<RaceAttemptDoc, '_id' | 'status' | 'segment' | 'sensors' | 'flags'>;
 
-/** Лучшая засчитанная: минимальные `(elapsedSec, segment.startedAt, _id)`. */
-export function pickBest(attempts: readonly RankedAttempt[]): EntryBest | null {
-  let best: RankedAttempt | null = null;
-  for (const attempt of attempts) {
-    if (attempt.status !== 'counted' || !attempt.segment) continue;
-    if (best === null || compareCounted(attempt, best) < 0) best = attempt;
+/**
+ * Правило мест заявки (race-results-07): START — места нет (`none`); группа `overall` (схема `overall`, гонки до 07)
+ * — любая засчитанная (`all`, как v1); группа пол × возраст — только попытка с пульсом (`heart_rate`). Verified в
+ * `gender_age` никогда не `overall` (держит `allowedGroups`) — правило выводится из заявки без чтения гонки.
+ */
+export type RankRule = 'all' | 'heart_rate' | 'none';
+
+export function rankRule(entry: Pick<RaceEntryDoc, 'tier' | 'groupKey'>): RankRule {
+  if ((entry.tier ?? 'verified') === 'start') return 'none';
+  return entry.groupKey === 'overall' ? 'all' : 'heart_rate';
+}
+
+/**
+ * Лучшая засчитанная: минимальные `(elapsedSec, segment.startedAt, _id)`. `heart_rate` — лучшая с пульсом (RC-14:
+ * хотя бы один отсчёт в сегменте), если такая есть (`ranked: true`), иначе лучшая вообще (`ranked: false`); `none` —
+ * лучшая, `ranked: false`; `all` — лучшая, `ranked: true`. Флаги датчиков лучшей — в заявку (DV-9).
+ */
+export function pickBest(attempts: readonly RankedAttempt[], rule: RankRule): EntryBest | null {
+  const counted = attempts.filter((attempt) => attempt.status === 'counted' && attempt.segment);
+  const min = (xs: readonly RankedAttempt[]) =>
+    xs.reduce<RankedAttempt | null>(
+      (best, attempt) => (best === null || compareCounted(attempt, best) < 0 ? attempt : best),
+      null,
+    );
+  let best = min(counted);
+  let ranked = rule === 'all';
+  if (rule === 'heart_rate') {
+    const withHeartRate = min(counted.filter((attempt) => attempt.sensors?.hr === true));
+    if (withHeartRate) {
+      best = withHeartRate;
+      ranked = true;
+    }
   }
   if (!best?.segment) return null;
   return {
@@ -134,6 +167,8 @@ export function pickBest(attempts: readonly RankedAttempt[]): EntryBest | null {
     elapsedSec: best.segment.elapsedSec,
     startedAt: best.segment.startedAt,
     finishedAt: best.segment.finishedAt,
+    ranked,
+    flags: best.flags ?? [],
   };
 }
 
@@ -172,7 +207,8 @@ export function summarize(
 
 /**
  * Статус результата участника (§7.4, по порядку) — считается при чтении: отменил → DQ по спору до публикации
- * (race-results-06, D-43) → есть лучший → идёт проверка → видимые отказы, провалы и исключённые → срок загрузки истёк
+ * (race-results-06, D-43) → лучший без места — `finisher` (race-results-07: START, Verified без пульса; и после
+ * публикации — в снимке их нет) → есть лучший → идёт проверка → видимые отказы, провалы и исключённые → срок загрузки истёк
  * → ещё нет попыток. `ignoreBest` (RC-5): протокол опубликован, а строки участника в нём нет — живой лучший результат
  * места не даёт (и поле DQ не читается, RC-3).
  */
@@ -185,6 +221,7 @@ export function resultStatus(
   if (!entry) return 'none';
   if (entry.status === 'withdrawn') return 'withdrawn';
   if (!ignoreBest && disqualifiedBeforePublication(entry, race)) return 'dq';
+  if (entry.best && entry.best.ranked === false) return 'finisher';
   if (entry.best && !ignoreBest) return 'provisional';
   if (entry.summary.pending > 0) return 'pending';
   const { rejectedShown, failed, excluded = 0 } = entry.summary;
@@ -223,9 +260,14 @@ export function entryDisputeBlock(
  * когда действие по прежним правилам было бы доступно (закрытое окно объясняется своей причиной).
  */
 export function entryActions(
-  race: Pick<RaceForResults, 'status' | 'corridor' | 'closesAt' | 'protocolPublishedAt'>,
+  race: Pick<
+    RaceForResults,
+    'status' | 'corridor' | 'closesAt' | 'protocolPublishedAt' | 'groupScheme'
+  >,
   phase: RacePhase,
-  entry: Pick<RaceEntryDoc, 'status' | 'summary' | 'disqualified'> | null,
+  entry:
+    | (Pick<RaceEntryDoc, 'status' | 'summary' | 'disqualified'> & { tier?: EntryTier | null })
+    | null,
   now: Date,
   { openDisputes }: { openDisputes: number },
 ): MyRaceEntry['actions'] {
@@ -242,11 +284,17 @@ export function entryActions(
     else if (race.corridor === null) canEnter = block('no_corridor');
     else if (!enterable) canEnter = block('entries_closed');
     block('not_entered');
-    return { canEnter, canWithdraw: false, canAddAttempt: false, reasons };
+    return { canEnter, canWithdraw: false, canAddAttempt: false, reasons, canUpgrade: false };
   }
   if (entry.status === 'withdrawn') {
     block('withdrawn');
-    return { canEnter: false, canWithdraw: false, canAddAttempt: false, reasons };
+    return {
+      canEnter: false,
+      canWithdraw: false,
+      canAddAttempt: false,
+      reasons,
+      canUpgrade: false,
+    };
   }
 
   let canWithdraw = true;
@@ -264,7 +312,13 @@ export function entryActions(
   const dispute = entryDisputeBlock(entry, openDisputes, race);
   if (dispute && canWithdraw) canWithdraw = block(dispute);
   if (dispute && canAddAttempt) canAddAttempt = block(dispute);
-  return { canEnter: false, canWithdraw, canAddAttempt, reasons };
+  // race-results-07: START → Verified, пока окно открыто (анкету и группу проверяет заявка)
+  const canUpgrade =
+    race.status !== 'cancelled' &&
+    enterable &&
+    race.groupScheme === 'gender_age' &&
+    entry.tier === 'start';
+  return { canEnter: false, canWithdraw, canAddAttempt, reasons, canUpgrade };
 }
 
 /** Почему явную попытку принять нельзя (`ATTEMPT_UPLOAD_CLOSED.details.reason`); `null` — можно. */
@@ -373,7 +427,7 @@ export function publishChecklist(input: {
   };
 }
 
-/** Участник протокола до расчёта мест: лучший результат и признак DQ. */
+/** Участник протокола до расчёта мест: лучший результат, группа, флаги датчиков и признак DQ. */
 export interface ProtocolBase {
   entryId: string;
   userId: string;
@@ -381,6 +435,9 @@ export interface ProtocolBase {
   elapsedSec: number;
   startedAt: Date;
   dq: boolean;
+  groupKey: ResultGroupKey;
+  /** флаги датчиков (без `SPEED_CLUSTER_HIGH` — его считает ревизия) */
+  flags: AttemptFlagDoc[];
 }
 
 type PreviousRow = Pick<RaceProtocolRowDoc, 'place' | 'tied' | 'elapsedSec' | 'status'>;
@@ -393,21 +450,27 @@ const byProtocolOrder = (a: ProtocolBase, b: ProtocolBase): number => {
   return a.entryId < b.entryId ? -1 : a.entryId > b.entryId ? 1 : 0;
 };
 
+/** Флаги строки: скорость (если есть), затем датчики — в порядке `ATTEMPT_FLAG_CODES`. */
+export function rowFlags(
+  sensors: readonly AttemptFlagDoc[],
+  speed: AttemptFlagDoc | undefined,
+): AttemptFlagDoc[] {
+  const sensorOnly = sensors.filter((flag) => flag.code !== 'SPEED_CLUSTER_HIGH');
+  return speed ? [speed, ...sensorOnly] : sensorOnly;
+}
+
 /**
- * Ревизия протокола целиком (D-27, D-28): не-DQ по `(elapsedSec, startedAt, entryId)` с местами `rankRows`, DQ — в
- * конце в том же порядке без места. Статус строки: DQ — `dq`; публикация (`previous: null`) — `final`; место, ничья и
- * время как в прошлой ревизии (и там не DQ) — статус прошлой; иначе — `revised` («Пересчитан»).
+ * Ревизия протокола целиком (D-27, D-28; race-results-07 — по группам): группы по порядку `RESULT_GROUP_KEYS`; внутри
+ * — не-DQ по `(elapsedSec, startedAt, entryId)` с местами `rankRows`, затем DQ группы без места; `order` сквозной
+ * (RC-9). Флаги строки — датчики из базы + `SPEED_CLUSTER_HIGH` по не-DQ строкам ревизии. Статус строки: DQ — `dq`;
+ * публикация (`previous: null`) — `final`; место, ничья и время как в прошлой ревизии (и там не DQ) — статус прошлой;
+ * иначе — `revised` («Пересчитан»).
  */
 export function buildProtocol(
   base: readonly ProtocolBase[],
   previous: ReadonlyMap<string, PreviousRow> | null,
 ): Omit<RaceProtocolRowDoc, '_id' | 'raceId' | 'revision' | 'createdAt'>[] {
-  const ranked = base.filter((row) => !row.dq).sort(byProtocolOrder);
-  const disqualified = base.filter((row) => row.dq).sort(byProtocolOrder);
-  const equalCounts = new Map<number, number>();
-  for (const row of ranked)
-    equalCounts.set(row.elapsedSec, (equalCounts.get(row.elapsedSec) ?? 0) + 1);
-  const places = rankRows(ranked, { lessThanFirst: 0, firstIndex: 0, equalCounts });
+  const speed = speedClusterFlags(base.filter((row) => !row.dq));
   const statusOf = (row: ProtocolBase, place: number | null, tied: boolean) => {
     if (row.dq) return 'dq' as const;
     if (previous === null) return 'final' as const;
@@ -420,10 +483,22 @@ export function buildProtocol(
       prev.elapsedSec === row.elapsedSec;
     return same ? prev.status : ('revised' as const);
   };
-  return [
-    ...ranked.map((row, index) => ({ row, ...places[index]! })),
-    ...disqualified.map((row) => ({ row, place: null, tied: false })),
-  ].map(({ row, place, tied }, order) => ({
+  const ordered: { row: ProtocolBase; place: number | null; tied: boolean }[] = [];
+  for (const group of RESULT_GROUP_KEYS) {
+    const members = base.filter((row) => row.groupKey === group);
+    const ranked = members.filter((row) => !row.dq).sort(byProtocolOrder);
+    const disqualified = members.filter((row) => row.dq).sort(byProtocolOrder);
+    const equalCounts = new Map<number, number>();
+    for (const row of ranked) {
+      equalCounts.set(row.elapsedSec, (equalCounts.get(row.elapsedSec) ?? 0) + 1);
+    }
+    const places = rankRows(ranked, { lessThanFirst: 0, firstIndex: 0, equalCounts });
+    ordered.push(
+      ...ranked.map((row, index) => ({ row, ...places[index]! })),
+      ...disqualified.map((row) => ({ row, place: null, tied: false })),
+    );
+  }
+  return ordered.map(({ row, place, tied }, order) => ({
     order,
     entryId: row.entryId,
     userId: row.userId,
@@ -433,6 +508,8 @@ export function buildProtocol(
     place,
     tied,
     status: statusOf(row, place, tied),
+    groupKey: row.groupKey,
+    flags: rowFlags(row.flags, row.dq ? undefined : speed.get(row.entryId)),
   }));
 }
 
@@ -447,4 +524,176 @@ export function recheckPending(
   if (last.startedAt === null || protocolPublishedAt === null) return false;
   if (last.startedAt < protocolPublishedAt) return false;
   return last.appliedAt === null || last.startedAt > last.appliedAt;
+}
+
+// --- уровни и группы зачёта (race-results-07) ---
+
+/** Год гонки — год конца окна по Минску (возраст — на 31 декабря этого года). */
+export const raceYear = (race: Pick<RaceForResults, 'windowEndsAt'>): number =>
+  Number(minskToday(race.windowEndsAt).slice(0, 4));
+
+const GENDER_GROUPS: Record<RiderGender, readonly ResultGroupKey[]> = {
+  m: ['m_u40', 'm_40_49', 'm_50p'],
+  w: ['w_u40', 'w_40_49', 'w_50p'],
+};
+
+/** Своя группа по анкете: возраст на 31.12 года гонки; `≤ 39` → `u40`, `40–49` → `40_49`, `≥ 50` → `50p`. */
+export function ownGroup(
+  gender: RiderGender,
+  birthYear: number,
+  race: Pick<RaceForResults, 'windowEndsAt'>,
+): ResultGroupKey {
+  const age = raceYear(race) - birthYear;
+  const band = age <= 39 ? 0 : age <= 49 ? 1 : 2;
+  return GENDER_GROUPS[gender][band]!;
+}
+
+/** Разрешённые группы: своя первой, затем младшие того же пола. */
+export function allowedGroups(own: ResultGroupKey): ResultGroupKey[] {
+  for (const groups of Object.values(GENDER_GROUPS)) {
+    const index = groups.indexOf(own);
+    if (index >= 0) return groups.slice(0, index + 1).reverse();
+  }
+  return [own];
+}
+
+/** Намерение клиента по заявке. */
+export interface EntryIntent {
+  tier?: EntryTier;
+  groupKey?: ResultGroupKey;
+}
+
+type ExistingEntry = Pick<RaceEntryDoc, 'status' | 'tier' | 'groupKey'>;
+
+/** Итог матрицы заявки: создать, повысить START → Verified, ничего не менять — или отказ. */
+export type EntryPlan =
+  | { kind: 'create' | 'upgrade'; tier: EntryTier; groupKey: ResultGroupKey }
+  | { kind: 'noop' }
+  | {
+      kind: 'error';
+      code: Extract<
+        ErrorCode,
+        'VERIFIED_PROFILE_REQUIRED' | 'RACE_TIER_LOCKED' | 'RESULT_GROUP_NOT_ALLOWED'
+      >;
+    };
+
+const planError = (code: Extract<EntryPlan, { kind: 'error' }>['code']): EntryPlan => ({
+  kind: 'error',
+  code,
+});
+
+/**
+ * Нужна ли анкета (и её фиксация в транзакции): создание или повышение Verified в схеме `gender_age`. Вызывающий
+ * передаёт `planEntryChange` анкету только тогда (иначе `null`).
+ */
+export function needsVerifiedProfile(input: {
+  scheme: GroupScheme;
+  existing: ExistingEntry | null;
+  request: EntryIntent;
+}): boolean {
+  const { scheme, existing, request } = input;
+  if (scheme !== 'gender_age' || request.tier !== 'verified') return false;
+  return existing === null || (existing.tier ?? 'verified') === 'start';
+}
+
+/**
+ * Вся матрица заявки (race-results-07) — одна чистая функция:
+ * - `overall` (RC-1): уровень не выбирается — `verified`/`overall`; `groupKey` ≠ `overall` — 422; существующая — noop;
+ * - `gender_age`, новая: нет `tier` или `start` → `start`/`overall` (группа ≠ `overall` — 422); `verified` — анкета
+ *   (нет — 409), группа своя или младшая своего пола (иначе 422);
+ * - `gender_age`, существующая активная: нет `tier` — noop (RC-2); Verified: `start` или другая группа — 409 (RC-3),
+ *   та же или без группы — noop; START: `start` — noop, `verified` — только в `upcoming|open` (иначе 409), анкета и
+ *   группа — как у новой → `upgrade`.
+ */
+export function planEntryChange(input: {
+  scheme: GroupScheme;
+  phase: RacePhase;
+  existing: ExistingEntry | null;
+  request: EntryIntent;
+  profile: { gender: RiderGender; birthYear: number } | null;
+  race: Pick<RaceForResults, 'windowEndsAt'>;
+}): EntryPlan {
+  const { scheme, phase, existing, request, profile, race } = input;
+  const groupOf = (): EntryPlan => {
+    if (!profile) return planError('VERIFIED_PROFILE_REQUIRED');
+    const own = ownGroup(profile.gender, profile.birthYear, race);
+    const groupKey = request.groupKey ?? own;
+    if (!allowedGroups(own).includes(groupKey)) return planError('RESULT_GROUP_NOT_ALLOWED');
+    return { kind: existing ? 'upgrade' : 'create', tier: 'verified', groupKey };
+  };
+  const startGroupOk = request.groupKey === undefined || request.groupKey === 'overall';
+
+  if (scheme === 'overall') {
+    if (!startGroupOk) return planError('RESULT_GROUP_NOT_ALLOWED');
+    return existing ? { kind: 'noop' } : { kind: 'create', tier: 'verified', groupKey: 'overall' };
+  }
+  if (!existing) {
+    if (request.tier === 'verified') return groupOf();
+    if (!startGroupOk) return planError('RESULT_GROUP_NOT_ALLOWED');
+    return { kind: 'create', tier: 'start', groupKey: 'overall' };
+  }
+  if (request.tier === undefined) return { kind: 'noop' };
+  const tier = existing.tier ?? 'verified';
+  if (tier === 'verified') {
+    if (request.tier === 'start') return planError('RACE_TIER_LOCKED');
+    const sameGroup = request.groupKey === undefined || request.groupKey === existing.groupKey;
+    return sameGroup ? { kind: 'noop' } : planError('RACE_TIER_LOCKED');
+  }
+  if (request.tier === 'start') {
+    return startGroupOk ? { kind: 'noop' } : planError('RESULT_GROUP_NOT_ALLOWED');
+  }
+  if (phase !== 'upcoming' && phase !== 'open') return planError('RACE_TIER_LOCKED');
+  return groupOf();
+}
+
+/** Почему время без места («моё участие», финишёры, панель): `null` — место есть или результата нет. */
+export function unrankedOf(
+  entry: Pick<RaceEntryDoc, 'best' | 'tier'>,
+): ResultUnrankedReason | null {
+  if (!entry.best || entry.best.ranked !== false) return null;
+  return (entry.tier ?? 'verified') === 'start' ? 'start' : 'no_heart_rate';
+}
+
+/** Пороги `SPEED_CLUSTER_HIGH` (спайк §3.3 (а)/(б)). */
+export const SPEED_CLUSTER_POLICY = { minRows: 5, medianShare: 0.8 } as const;
+
+const median = (values: readonly number[]): number => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+};
+
+/**
+ * Флаг кластера скорости по **ранжированным** строкам гонки без DQ (все группы, RC-12): (а) в группе ≥ 5 строк и
+ * `elapsedSec / медиана группы < 0,80`; (б) в гонке ≥ 5 строк — строки с абсолютно лучшим временем не из `m_u40` и не
+ * `overall`. Метрика — отношение к медиане своей группы (до 0,001); оба правила — один флаг.
+ */
+export function speedClusterFlags(
+  rows: readonly { entryId: string; groupKey: ResultGroupKey; elapsedSec: number }[],
+): Map<string, AttemptFlagDoc> {
+  const byGroup = new Map<ResultGroupKey, number[]>();
+  for (const row of rows)
+    byGroup.set(row.groupKey, [...(byGroup.get(row.groupKey) ?? []), row.elapsedSec]);
+  const medians = new Map([...byGroup].map(([group, values]) => [group, median(values)]));
+  const fastest = rows.length > 0 ? Math.min(...rows.map((row) => row.elapsedSec)) : 0;
+  const flags = new Map<string, AttemptFlagDoc>();
+  for (const row of rows) {
+    const groupMedian = medians.get(row.groupKey)!;
+    const ratio = row.elapsedSec / groupMedian;
+    const clusterA =
+      byGroup.get(row.groupKey)!.length >= SPEED_CLUSTER_POLICY.minRows &&
+      ratio < SPEED_CLUSTER_POLICY.medianShare;
+    const clusterB =
+      rows.length >= SPEED_CLUSTER_POLICY.minRows &&
+      row.elapsedSec === fastest &&
+      row.groupKey !== 'm_u40' &&
+      row.groupKey !== 'overall';
+    if (clusterA || clusterB) {
+      flags.set(row.entryId, {
+        code: 'SPEED_CLUSTER_HIGH',
+        metric: Math.round(ratio * 1000) / 1000,
+      });
+    }
+  }
+  return flags;
 }

@@ -49,6 +49,9 @@ async function seedBest(entryId: string, elapsedSec: number, startedAt: string) 
           elapsedSec,
           startedAt: at,
           finishedAt: new Date(at.getTime() + elapsedSec * 1000),
+          // race-results-07: заявки гонки `overall` — место без правила пульса (как после бэкфилла 0025)
+          ranked: true,
+          flags: [],
         },
         summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
       },
@@ -85,7 +88,8 @@ describe('предварительная таблица (AC18, AC21)', () => {
     ]);
     // ключи ответа — без userId, активности, времени суток, координат
     expect(Object.keys(res.body as object).sort()).toEqual(
-      ['entries', 'group', 'items', 'nextCursor', 'ranked', 'status'].sort(),
+      // race-results-07: вкладки групп и число финишёров
+      ['entries', 'finishers', 'group', 'groups', 'items', 'nextCursor', 'ranked', 'status'].sort(),
     );
     for (const row of (res.body as { items: object[] }).items) {
       expect(Object.keys(row).sort()).toEqual([

@@ -57,6 +57,21 @@ paths:
   `ProfileView.publicName` / `showNameInResults` — новые поля ответа с `.default` (`null` / `false`): новая сборка со
   старым API разбирает ответ. `src/results/results-admin.schema.ts` — панель, строгие `z.enum`;
   `PanelStandingRow.riderName` / `PanelRaceAttempt.riderName` — обязательные `nullable` (панель деплоится с API).
+- Уровни и группы (race-results-07): `ENTRY_TIERS`, `GROUP_SCHEMES`, `RIDER_GENDERS`, `RESULT_GROUP_KEYS` (пол ×
+  возраст), `ATTEMPT_FLAG_CODES`, `RESULT_UNRANKED_REASONS`, `RACE_RESULT_STATUSES` + `finisher`,
+  `DISPUTE_FILE_BLOCKS` + `not_ranked` — только в конец. Запрос заявки `RaceEntryRequest` (`strictObject` `{ tier?,
+  groupKey? }`, пусто — допустимо); ответы приложения — `.default` для старого сервера: `MyRaceEntry.groupScheme`,
+  `entry.tier/groupKey`, `result.unranked`, `verified { profileReady, ownGroup, groupOptions }`, `actions.canUpgrade`;
+  `RaceResultsPage.groups`/`finishers`; `RaceFinishersPage`. **`group` в запросе таблицы клиент шлёт, только если
+  прошлый ответ дал непустой `groups`** (RC-11: старый сервер ответит 400). Анкета —
+  `src/profile/verified-profile.schema.ts` (`UpdateVerifiedProfileRequest`, `VerifiedProfileView`,
+  `VERIFIED_PROFILE_CONSENT_VERSION` — версия текста `profile.verified.consent`, поднимать при смене), панель —
+  `PanelVerifiedDemographics`, `UpdateVerifiedDemographicsRequest`, `VerifiedDemographicsResult`; флаги панели —
+  `PanelAttemptFlag`, `AttemptSensors`, `PanelRaceStandingsQuery`. Коды `VERIFIED_PROFILE_REQUIRED`,
+  `RACE_TIER_LOCKED` (409), `RESULT_GROUP_NOT_ALLOWED` (422), `VERIFIED_DEMOGRAPHICS_LOCKED` (409); право
+  `profiles.verified_edit`, действие `profile.verified_demographics_changed`. api-client — `enterRace(token, raceId,
+  body)`, `getRaceResults(raceId, { group })`, `getRaceFinishers`, `getVerifiedProfile`/`updateVerifiedProfile`;
+  панель — `getRaceStandings(raceId, params)`, `getVerifiedDemographics`/`updateVerifiedDemographics` (`PATCH`).
 - Согласие на показ имени (profile-02): `PUBLIC_NAME_CONSENT_VERSION` (`src/profile/profile.schema.ts`) — версия
   текста `profile.show.label` + `profile.show.hint` (i18n). Сменили формулировку — **подняли версию** (дата), иначе
   журнал согласий ссылается на чужой текст. Версию в событие пишет сервер. Сброс имени —

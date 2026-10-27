@@ -19,6 +19,7 @@ const toRace = (doc: RaceDoc): RaceForResults => ({
   protocolPlannedAt: doc.protocolPlannedAt,
   corridor: doc.corridor ?? null,
   lockedAt: doc.lockedAt ?? null,
+  groupScheme: doc.groupScheme ?? (doc.lockedAt ? 'overall' : null),
   protocolPublishedAt: doc.protocolPublishedAt ?? null,
   disputeFilingClosedAt: doc.disputeFilingClosedAt ?? null,
 });

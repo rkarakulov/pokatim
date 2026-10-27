@@ -44,3 +44,26 @@ describe('profile_consent_events — только вставка', () => {
     ]);
   });
 });
+
+/**
+ * Сторож анкеты Verified (race-results-07): `rider_verified_profiles` пишет только `VerifiedProfileRepository`;
+ * имя коллекции знают только описание коллекций профиля, репозиторий анкеты и миграция.
+ */
+describe('rider_verified_profiles — единственный писатель', () => {
+  it('коллекцию анкет по имени знают только описание коллекций, репозиторий анкеты и миграция', () => {
+    const users = sources(SRC)
+      .filter((file) =>
+        /['"`]rider_verified_profiles['"`]|PROFILE_COLLECTIONS\.verified/.test(
+          readFileSync(file, 'utf8'),
+        ),
+      )
+      .map((file) => relative(SRC, file))
+      .sort();
+    expect(users).toEqual([
+      'db/migrations/0025_entry_tier.ts',
+      'modules/profile/profile.collection.ts',
+      'modules/profile/verified-profile.collection.ts',
+      'modules/profile/verified-profile.repository.ts',
+    ]);
+  });
+});

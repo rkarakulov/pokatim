@@ -174,13 +174,36 @@ paths:
 - Вердикт пишет только своя ревизия: `checkRevision` в фильтре захвата (`queued|checking`) и записи (`checking`);
   поздний повтор — no-op.
 - Лучший результат и сводка — поля заявки (`best`, `summary`), пересчёт `refreshEntry` в той же транзакции (без
-  изменений — без записи); места — при чтении (`race_entries_ranking_idx`), страница и счётчики — в одной
-  snapshot-сессии.
+  изменений — без записи); места — при чтении по группе (`race_entries_ranked_idx`, race-results-07), страница и
+  счётчики — в одной snapshot-сессии.
 - `race_attempts.trackMap` (maps-02) — разметка трека для карты участника: `{ linePoints, segment: [from, to],
   offRuns: [from, to][] ≤ 100 }`, позиции на линии `activity_tracks` (дробные индексы, кратны 0,001), **без координат
   и времени**. Пишет `recordCheck` вместе с вердиктом; новая попытка, перепостановка и перепроверка — `null`; провал,
   `implausible`, нет сегмента или линии — `null`. Документы до maps-02 поля не имеют — чтение `?? null`, бэкфилла и
   миграции нет (разметка появится при перепроверке).
+
+## Уровни и группы зачёта (race-results-07)
+
+- `race_entries.tier: 'verified' | 'start'` (до 07 — `null`, бэкфилл `0025`; чтение `?? 'verified'`), `groupKey` —
+  `overall` (схема `overall`, START) или пол × возраст (Verified в `gender_age`); фиксируются заявкой (или повышением
+  START → Verified `setEntryTier` под `lockEntryOf`), потом не меняются. `best.ranked` (место есть) и `best.flags`
+  (флаги датчиков лучшей попытки, DV-9) пишет только `refreshEntry` по `rankRule(entry)`; чтение `?? true` / `?? []`.
+- `races.groupScheme: 'overall' | 'gender_age' | null` — пишет только `RacesRepository.admitEntry` (первая заявка —
+  `gender_age`; гонка с `lockedAt` без схемы — `overall`, RC-7), новые гонки — `null`.
+- Места — частичный `race_entries_ranked_idx` (`tier: 'verified'`, `best.ranked: true`, ключ с `groupKey`), финишёры —
+  `race_entries_finishers_idx` (`best.ranked: false`); старый `race_entries_ranking_idx` удалён `0025` (решение автора).
+  Строки протокола — `groupKey`, `flags` (снимок на ревизию); ревизии до 07 без полей — `overall`/`[]`, индекс
+  `race_protocol_rows_group_idx (raceId, revision, groupKey, order)`, `order` сквозной.
+- Попытка: `sensors { hr, power } | null`, `flags` (только `HR_*`, целые проценты), `flagsVersion` — пишет worker с
+  вердиктом, перепостановка сбрасывает; значений пульса и мощности нет. `SPEED_CLUSTER_HIGH` не хранится в попытке —
+  считается при чтении панели и в ревизии протокола.
+- Анкета Verified — `rider_verified_profiles` (`_id` = userId; пол, год, вес, рост, FTP, согласие с версией,
+  `demographicsLockedAt`, `version`), единственный писатель `VerifiedProfileRepository` (сторож
+  `profile.repository.test.ts`). Первая Verified-заявка **пишет** документ анкеты в своей транзакции (`lockForEntry`:
+  `demographicsLockedAt ??= now`, `version + 1`); `PUT` райдера — одна операция с условием «не зафиксировано или те же
+  пол и год» в фильтре (отрицательные доказательства — `verified-profile-locks.int.test.ts`). Панель — транзакция:
+  условная запись анкеты первой, затем `PanelAudit` (имена полей без значений). Удаление аккаунта —
+  `ProfileErasure` удаляет анкету.
 
 ## Протокол (race-results-05)
 

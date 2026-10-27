@@ -61,7 +61,7 @@ export function decidableAt(filedAt: Date): Date {
 
 /**
  * Почему заявитель не может подать спор в гонке; `null` — может. Порядок: гонка отменена → протокол опубликован →
- * нет заявки → отменил участие → DQ → нет засчитанного → срок прошёл → лимит открытых.
+ * нет заявки → отменил участие → DQ → нет засчитанного → без места (race-results-07) → срок прошёл → лимит открытых.
  */
 export function fileBlock(input: {
   race: RaceForResults;
@@ -76,6 +76,8 @@ export function fileBlock(input: {
   if (complainant.status === 'withdrawn') return 'withdrawn';
   if (complainant.disqualified) return 'disqualified';
   if (!complainant.best) return 'no_counted_result';
+  // race-results-07: спор — только у Verified с местом (START и «без пульса» — время без места)
+  if (!complainant.ranked) return 'not_ranked';
   if (now >= filingClosesAt(race)) return 'filing_closed';
   if (input.openByComplainant >= DISPUTES_POLICY.openLimit) return 'open_limit';
   return null;
@@ -89,7 +91,10 @@ export function filingStatus(block: DisputeFileBlock | null): DisputeFilingStatu
     : 'unavailable';
 }
 
-/** Цель спора: своя заявка — `own_result`; нет, другой гонки или группы, не активна, без лучшего, DQ — не засчитана. */
+/**
+ * Цель спора: своя заявка — `own_result`; нет, другой гонки или группы, не активна, без лучшего, без места
+ * (race-results-07), DQ — не засчитана.
+ */
 export function targetBlock(
   complainant: DisputeEntry,
   target: DisputeEntry | null,
@@ -101,6 +106,7 @@ export function targetBlock(
     target.groupKey !== complainant.groupKey ||
     target.status !== 'active' ||
     !target.best ||
+    !target.ranked ||
     target.disqualified
   ) {
     return 'target_not_counted';

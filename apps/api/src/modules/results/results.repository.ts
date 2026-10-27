@@ -1,5 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ATTEMPT_STATUSES, type AttemptStatus } from '@pokatim/contracts';
+import {
+  ATTEMPT_STATUSES,
+  type AttemptStatus,
+  type EntryTier,
+  RESULT_GROUP_KEYS,
+  type ResultGroupKey,
+} from '@pokatim/contracts';
 import { MONGO_CLIENT, MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Db, Filter, MongoClient } from 'mongodb';
 
@@ -18,7 +24,7 @@ import {
   attemptHidden,
   EXCLUDABLE_STATUSES,
   pickBest,
-  RESULTS_POLICY,
+  rankRule,
   summarize,
 } from './results.policy';
 
@@ -29,10 +35,32 @@ export interface RankPosition {
   id: string;
 }
 
-/** Строка таблицы: активная заявка с засчитанным лучшим результатом. */
-export type RankedEntry = Pick<RaceEntryDoc, '_id' | 'userId'> & {
+/** Строка таблицы: активная заявка с засчитанным лучшим результатом, её группа и уровень. */
+export type RankedEntry = Pick<RaceEntryDoc, '_id' | 'userId' | 'groupKey' | 'tier'> & {
   best: NonNullable<RaceEntryDoc['best']>;
 };
+
+/** Группа гонки и число строк с местом (вкладки таблицы и панели). */
+export interface GroupCount {
+  key: ResultGroupKey;
+  ranked: number;
+}
+
+const RANKED_PROJECTION = { _id: 1, userId: 1, groupKey: 1, tier: 1, best: 1 } as const;
+
+const toRanked = (docs: Pick<RaceEntryDoc, '_id' | 'userId' | 'groupKey' | 'tier' | 'best'>[]) =>
+  docs.flatMap(({ _id, userId, groupKey, tier, best }) =>
+    best ? [{ _id, userId, groupKey, tier, best }] : [],
+  );
+
+/** Группы по порядку справочника. */
+const byGroupOrder = (rows: GroupCount[]) =>
+  rows.sort((a, b) => RESULT_GROUP_KEYS.indexOf(a.key) - RESULT_GROUP_KEYS.indexOf(b.key));
+
+/** Строки протокола группы: ревизии до race-results-07 без `groupKey` — `overall` (RC-8). */
+const protocolGroupFilter = (group: ResultGroupKey): Filter<RaceProtocolRowDoc>['groupKey'] =>
+  // `null` в `$in` совпадает и с отсутствующим полем; тип поля необязательный — `null` в нём не описан
+  group === 'overall' ? ({ $in: ['overall', null] } as { $in: ResultGroupKey[] }) : group;
 
 export interface PanelCounts {
   entries: number;
@@ -59,6 +87,9 @@ export type CheckResult = Pick<
   | 'diagnostics'
   | 'engineVersion'
   | 'trackMap'
+  | 'sensors'
+  | 'flags'
+  | 'flagsVersion'
   | 'checkedAt'
 >;
 
@@ -176,13 +207,32 @@ export class ResultsRepository {
    */
   async refreshEntry(
     session: DbSession,
-    entry: Pick<RaceEntryDoc, '_id' | 'best' | 'summary'>,
+    entry: Pick<RaceEntryDoc, '_id' | 'best' | 'summary' | 'tier' | 'groupKey'>,
   ): Promise<void> {
     const attempts = await this.attemptsOfEntry(entry._id, session);
-    const best = pickBest(attempts);
+    // race-results-07: правило мест — из уровня и группы заявки (с пульсом в группе пол × возраст)
+    const best = pickBest(attempts, rankRule(entry));
     const summary = summarize(attempts);
     if (sameJson(entry.best, best) && sameJson(entry.summary, summary)) return;
     await this.c.entries.updateOne({ _id: entry._id }, { $set: { best, summary } }, { session });
+  }
+
+  /**
+   * Повышение START → Verified (race-results-07, под `lockEntryOf` в транзакции заявки): только активная START-заявка;
+   * `false` — не совпало. Затем вызывающий пересчитывает лучший результат (`refreshEntry`).
+   */
+  async setEntryTier(
+    session: DbSession,
+    id: string,
+    change: { tier: EntryTier; groupKey: ResultGroupKey },
+    now: Date,
+  ): Promise<boolean> {
+    const updated = await this.c.entries.updateOne(
+      { _id: id, status: 'active', tier: 'start' },
+      { $set: { tier: change.tier, groupKey: change.groupKey, updatedAt: now } },
+      { session },
+    );
+    return updated.matchedCount === 1;
   }
 
   // --- попытки ---
@@ -255,6 +305,9 @@ export class ResultsRepository {
           candidates: null,
           diagnostics: null,
           trackMap: null,
+          sensors: null,
+          flags: [],
+          flagsVersion: null,
           checkedAt: null,
           updatedAt: now,
         },
@@ -375,32 +428,54 @@ export class ResultsRepository {
   }
 
   /**
-   * Строки таблицы: активные заявки группы с лучшим результатом, без DQ по спору до публикации (race-results-06; после
-   * публикации таблица читается из снимка). `disqualified: null` совпадает и с отсутствующим полем (заявки до `0018`);
-   * частичный `race_entries_ranking_idx` остаётся пригодным — условие остаточное, DQ единичны.
+   * Строки с местом группы (race-results-07): активные Verified-заявки группы с лучшим результатом, дающим место
+   * (`best.ranked`), без DQ по спору до публикации (race-results-06; после публикации таблица читается из снимка).
+   * `disqualified: null` совпадает и с отсутствующим полем (заявки до `0018`); частичный `race_entries_ranked_idx`
+   * остаётся пригодным — условие остаточное, DQ единичны.
    */
-  private rankedFilter(raceId: string): Filter<RaceEntryDoc> {
+  private rankedFilter(raceId: string, group: ResultGroupKey): Filter<RaceEntryDoc> {
+    return { ...this.rankedAllFilter(raceId), groupKey: group };
+  }
+
+  /** Строки с местом всех групп гонки (панель, флаги скорости). */
+  private rankedAllFilter(raceId: string): Filter<RaceEntryDoc> {
     return { ...this.countedFilter(raceId), disqualified: null };
   }
 
-  /** Активные заявки группы с лучшим результатом — с DQ по спору и без (база протокола). */
+  /** Verified-заявки с местом всех групп — с DQ по спору и без (база протокола). */
   private countedFilter(raceId: string): Filter<RaceEntryDoc> {
     return {
       raceId,
-      groupKey: RESULTS_POLICY.groupKey,
       status: 'active',
       best: { $type: 'object' },
+      tier: 'verified',
+      'best.ranked': true,
+    };
+  }
+
+  /**
+   * Финишёры (race-results-07): активные заявки с лучшим результатом без места — START и Verified без пульса — без DQ
+   * по спору до публикации (индекс `race_entries_finishers_idx`). После публикации — те же заявки (в снимок не входят).
+   */
+  private finishersFilter(raceId: string): Filter<RaceEntryDoc> {
+    return {
+      raceId,
+      status: 'active',
+      best: { $type: 'object' },
+      'best.ranked': false,
+      disqualified: null,
     };
   }
 
   /** Позиция строки таблицы гонки (курсор): не строка этой гонки — `null`. */
   async rankedPosition(
     raceId: string,
+    group: ResultGroupKey,
     entryId: string,
     session?: DbSession,
   ): Promise<RankPosition | null> {
     const doc = await this.c.entries.findOne(
-      { ...this.rankedFilter(raceId), _id: entryId },
+      { ...this.rankedFilter(raceId, group), _id: entryId },
       { session, projection: { best: 1 } },
     );
     return doc?.best
@@ -408,30 +483,50 @@ export class ResultsRepository {
       : null;
   }
 
-  /** Строки группы (индекс `race_entries_ranking_idx`). */
-  countRanked(raceId: string, session?: DbSession): Promise<number> {
-    return this.c.entries.countDocuments(this.rankedFilter(raceId), { session });
+  /** Строки группы (индекс `race_entries_ranked_idx`). */
+  countRanked(raceId: string, group: ResultGroupKey, session?: DbSession): Promise<number> {
+    return this.c.entries.countDocuments(this.rankedFilter(raceId, group), { session });
   }
 
-  countRankedLess(raceId: string, elapsedSec: number, session?: DbSession): Promise<number> {
+  /** Строки с местом всех групп гонки (сводка панели). */
+  countRankedAll(raceId: string, session?: DbSession): Promise<number> {
+    return this.c.entries.countDocuments(this.rankedAllFilter(raceId), { session });
+  }
+
+  countRankedLess(
+    raceId: string,
+    group: ResultGroupKey,
+    elapsedSec: number,
+    session?: DbSession,
+  ): Promise<number> {
     return this.c.entries.countDocuments(
-      { ...this.rankedFilter(raceId), 'best.elapsedSec': { $lt: elapsedSec } },
+      { ...this.rankedFilter(raceId, group), 'best.elapsedSec': { $lt: elapsedSec } },
       { session },
     );
   }
 
-  countRankedEqual(raceId: string, elapsedSec: number, session?: DbSession): Promise<number> {
+  countRankedEqual(
+    raceId: string,
+    group: ResultGroupKey,
+    elapsedSec: number,
+    session?: DbSession,
+  ): Promise<number> {
     return this.c.entries.countDocuments(
-      { ...this.rankedFilter(raceId), 'best.elapsedSec': elapsedSec },
+      { ...this.rankedFilter(raceId, group), 'best.elapsedSec': elapsedSec },
       { session },
     );
   }
 
   /** Строк до позиции включительно (курсор) — индекс первой строки следующей страницы. */
-  countRankedUpTo(raceId: string, at: RankPosition, session?: DbSession): Promise<number> {
+  countRankedUpTo(
+    raceId: string,
+    group: ResultGroupKey,
+    at: RankPosition,
+    session?: DbSession,
+  ): Promise<number> {
     return this.c.entries.countDocuments(
       {
-        ...this.rankedFilter(raceId),
+        ...this.rankedFilter(raceId, group),
         $or: [
           { 'best.elapsedSec': { $lt: at.elapsedSec } },
           { 'best.elapsedSec': at.elapsedSec, 'best.startedAt': { $lt: at.startedAt } },
@@ -449,11 +544,12 @@ export class ResultsRepository {
   /** Страница таблицы после позиции курсора. */
   async rankedPage(
     raceId: string,
+    group: ResultGroupKey,
     after: RankPosition | null,
     limit: number,
     session?: DbSession,
   ): Promise<RankedEntry[]> {
-    const filter: Filter<RaceEntryDoc> = this.rankedFilter(raceId);
+    const filter: Filter<RaceEntryDoc> = this.rankedFilter(raceId, group);
     if (after) {
       filter.$or = [
         { 'best.elapsedSec': { $gt: after.elapsedSec } },
@@ -466,11 +562,71 @@ export class ResultsRepository {
       ];
     }
     const docs = await this.c.entries
-      .find(filter, { session, projection: { _id: 1, userId: 1, best: 1 } })
+      .find(filter, { session, projection: RANKED_PROJECTION })
       .sort({ 'best.elapsedSec': 1, 'best.startedAt': 1, _id: 1 })
       .limit(limit)
       .toArray();
-    return docs.flatMap(({ _id, userId, best }) => (best ? [{ _id, userId, best }] : []));
+    return toRanked(docs);
+  }
+
+  /** Непустые группы гонки (строки с местом) по порядку справочника. */
+  async rankedGroups(raceId: string, session?: DbSession): Promise<GroupCount[]> {
+    const rows = await this.c.entries
+      .aggregate<{ _id: ResultGroupKey; ranked: number }>(
+        [
+          { $match: this.rankedAllFilter(raceId) },
+          { $group: { _id: '$groupKey', ranked: { $sum: 1 } } },
+        ],
+        { session },
+      )
+      .toArray();
+    return byGroupOrder(rows.map((row) => ({ key: row._id, ranked: row.ranked })));
+  }
+
+  /** Позиция строки финишёров (курсор): не строка финишёров гонки — `null`. */
+  async finisherPosition(
+    raceId: string,
+    entryId: string,
+    session?: DbSession,
+  ): Promise<RankPosition | null> {
+    const doc = await this.c.entries.findOne(
+      { ...this.finishersFilter(raceId), _id: entryId },
+      { session, projection: { best: 1 } },
+    );
+    return doc?.best
+      ? { elapsedSec: doc.best.elapsedSec, startedAt: doc.best.startedAt, id: doc._id }
+      : null;
+  }
+
+  countFinishers(raceId: string, session?: DbSession): Promise<number> {
+    return this.c.entries.countDocuments(this.finishersFilter(raceId), { session });
+  }
+
+  /** Страница финишёров по `(best.elapsedSec, best.startedAt, _id)` после позиции курсора. */
+  async finishersPage(
+    raceId: string,
+    after: RankPosition | null,
+    limit: number,
+    session?: DbSession,
+  ): Promise<RankedEntry[]> {
+    const filter: Filter<RaceEntryDoc> = this.finishersFilter(raceId);
+    if (after) {
+      filter.$or = [
+        { 'best.elapsedSec': { $gt: after.elapsedSec } },
+        { 'best.elapsedSec': after.elapsedSec, 'best.startedAt': { $gt: after.startedAt } },
+        {
+          'best.elapsedSec': after.elapsedSec,
+          'best.startedAt': after.startedAt,
+          _id: { $gt: after.id },
+        },
+      ];
+    }
+    const docs = await this.c.entries
+      .find(filter, { session, projection: RANKED_PROJECTION })
+      .sort({ 'best.elapsedSec': 1, 'best.startedAt': 1, _id: 1 })
+      .limit(limit)
+      .toArray();
+    return toRanked(docs);
   }
 
   /** Активные заявки гонки (индекс `race_entries_race_idx`). */
@@ -489,7 +645,7 @@ export class ResultsRepository {
           { $group: { _id: '$status', count: { $sum: 1 } } },
         ])
         .toArray(),
-      this.countRanked(raceId),
+      this.countRankedAll(raceId),
       this.c.attempts
         .find(
           { raceId },
@@ -646,25 +802,28 @@ export class ResultsRepository {
       .toArray();
   }
 
-  /** Все строки таблицы гонки по порядку `(best.elapsedSec, best.startedAt, _id)` — база протокола. */
-  async rankedEntries(raceId: string, session: DbSession): Promise<RankedEntry[]> {
+  /**
+   * Все строки с местом гонки (все группы) по порядку `(best.elapsedSec, best.startedAt, _id)` — «Участники» панели и
+   * флаги скорости.
+   */
+  async rankedEntries(raceId: string, session?: DbSession): Promise<RankedEntry[]> {
     const docs = await this.c.entries
-      .find(this.rankedFilter(raceId), { session, projection: { _id: 1, userId: 1, best: 1 } })
+      .find(this.rankedAllFilter(raceId), { session, projection: RANKED_PROJECTION })
       .sort({ 'best.elapsedSec': 1, 'best.startedAt': 1, _id: 1 })
       .toArray();
-    return docs.flatMap(({ _id, userId, best }) => (best ? [{ _id, userId, best }] : []));
+    return toRanked(docs);
   }
 
   /**
-   * База протокола (race-results-06, RC-2): активные заявки группы с лучшим результатом, **включая** DQ по спору, по
-   * порядку `(best.elapsedSec, best.startedAt, _id)`. Признак DQ — из журнала (`disqualifiedEntries`).
+   * База протокола (race-results-06, RC-2; race-results-07 — все группы, только Verified с местом): **включая** DQ по
+   * спору, по порядку `(best.elapsedSec, best.startedAt, _id)`. Признак DQ — из журнала (`disqualifiedEntries`).
    */
   async protocolBaseEntries(raceId: string, session: DbSession): Promise<RankedEntry[]> {
     const docs = await this.c.entries
-      .find(this.countedFilter(raceId), { session, projection: { _id: 1, userId: 1, best: 1 } })
+      .find(this.countedFilter(raceId), { session, projection: RANKED_PROJECTION })
       .sort({ 'best.elapsedSec': 1, 'best.startedAt': 1, _id: 1 })
       .toArray();
-    return docs.flatMap(({ _id, userId, best }) => (best ? [{ _id, userId, best }] : []));
+    return toRanked(docs);
   }
 
   /**
@@ -728,29 +887,60 @@ export class ResultsRepository {
     );
   }
 
-  /** Публичная страница протокола: строки без DQ после позиции `afterOrder`. */
+  /**
+   * Публичная страница протокола группы: строки без DQ после позиции `afterOrder` (индекс
+   * `race_protocol_rows_group_idx`; `overall` — и строки ревизий до 07 без группы, RC-8).
+   */
   protocolRowsPage(
     raceId: string,
     revision: number,
+    group: ResultGroupKey,
     afterOrder: number | null,
     limit: number,
     session: DbSession,
   ): Promise<RaceProtocolRowDoc[]> {
-    const filter: Filter<RaceProtocolRowDoc> = { raceId, revision, status: { $ne: 'dq' } };
+    const filter: Filter<RaceProtocolRowDoc> = {
+      raceId,
+      revision,
+      groupKey: protocolGroupFilter(group),
+      status: { $ne: 'dq' },
+    };
     if (afterOrder !== null) filter.order = { $gt: afterOrder };
     return this.c.protocolRows.find(filter, { session }).sort({ order: 1 }).limit(limit).toArray();
   }
 
+  /** Строки ревизии (вся или группы `group`): с местом и DQ. */
   async countProtocolRows(
     raceId: string,
     revision: number,
+    group: ResultGroupKey | null,
     session?: DbSession,
   ): Promise<{ ranked: number; disqualified: number }> {
+    const filter: Filter<RaceProtocolRowDoc> = { raceId, revision };
+    if (group !== null) filter.groupKey = protocolGroupFilter(group);
     const [total, disqualified] = [
-      await this.c.protocolRows.countDocuments({ raceId, revision }, { session }),
-      await this.c.protocolRows.countDocuments({ raceId, revision, status: 'dq' }, { session }),
+      await this.c.protocolRows.countDocuments(filter, { session }),
+      await this.c.protocolRows.countDocuments({ ...filter, status: 'dq' }, { session }),
     ];
     return { ranked: total - disqualified, disqualified };
+  }
+
+  /** Непустые группы ревизии (строки без DQ) по порядку справочника; строки до 07 — `overall`. */
+  async protocolGroups(
+    raceId: string,
+    revision: number,
+    session?: DbSession,
+  ): Promise<GroupCount[]> {
+    const rows = await this.c.protocolRows
+      .aggregate<{ _id: ResultGroupKey; ranked: number }>(
+        [
+          { $match: { raceId, revision, status: { $ne: 'dq' } } },
+          { $group: { _id: { $ifNull: ['$groupKey', 'overall'] }, ranked: { $sum: 1 } } },
+        ],
+        { session },
+      )
+      .toArray();
+    return byGroupOrder(rows.map((row) => ({ key: row._id, ranked: row.ranked })));
   }
 
   /** Запись журнала пересчётов — только вставка; ревизию держит уникальный `(raceId, revision)`. */

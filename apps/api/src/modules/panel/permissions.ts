@@ -18,8 +18,9 @@ export function defineRoles<R extends string, P extends string>(
  * отменить); чужие гонки (`races.manage_any`), сезоны и календарь — только admin. 05b: модерация райдов
  * (`rides.moderate`) — admin и moderator. race-results-06 (R1, `[ASSUMPTION]`): споры (`disputes.read`,
  * `disputes.decide`) — admin и moderator (работа команды платформы); organizer — нет. profile-02: сброс публичного
- * имени райдера (`profiles.moderate`) — admin и moderator. app-themes: `appearance.manage` — только admin. Клиент
- * получает итог в `PanelMe`.
+ * имени райдера (`profiles.moderate`) — admin и moderator. app-themes: `appearance.manage` — только admin.
+ * race-results-07: пол и год анкеты Verified (`profiles.verified_edit`) — только admin. Клиент получает итог в
+ * `PanelMe`.
  */
 export const ROLE_PERMISSIONS = defineRoles<PanelRole, Permission>({
   admin: PERMISSIONS,

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "results": {
+    "garmin-connect.gpx": {
+      "sensors": {
+        "hr": true,
+        "power": false
+      },
+      "flags": []
+    },
+    "garmin-edge-ride.fit": {
+      "sensors": {
+        "hr": true,
+        "power": true
+      },
+      "flags": []
+    },
+    "strava.gpx": {
+      "sensors": {
+        "hr": true,
+        "power": true
+      },
+      "flags": []
+    },
+    "wahoo-elemnt-ride.fit": {
+      "sensors": {
+        "hr": true,
+        "power": false
+      },
+      "flags": []
+    }
+  }
+}

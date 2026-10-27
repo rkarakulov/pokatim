@@ -7,6 +7,9 @@ import {
   analyzeAttempt,
   analyzeTrack,
   CORRIDOR_ENGINE_VERSION,
+  FLAGS_VERSION,
+  matchCorridor,
+  prepareCorridor,
   parseTrackFile,
   TrackParseError,
   TRACK_MAX_POINTS,
@@ -212,6 +215,36 @@ describe('analyzeAttempt', () => {
     );
     expect(result).toMatchObject({ verdict: 'counted', engineVersion: CORRIDOR_ENGINE_VERSION });
     expect(structuredClone(result)).toEqual(result);
+  });
+
+  it('race-results-07: датчики и флаги сегмента вне CorridorMatch; без сегмента — null и []', () => {
+    const { corridor, window } = corridorCase('clean.gpx');
+    const result = analyzeAttempt(
+      fixture('corridor/clean.gpx'),
+      'gpx',
+      corridor,
+      windowOf(window),
+      NOW,
+    );
+    expect(result.sensors).toEqual({ hr: false, power: false });
+    expect(result.flags).toEqual([]);
+    expect(result.flagsVersion).toBe(FLAGS_VERSION);
+    const midStart = corridorCase('mid-start.gpx');
+    const noStart = analyzeAttempt(
+      fixture('corridor/mid-start.gpx'),
+      'gpx',
+      midStart.corridor,
+      windowOf(midStart.window),
+      NOW,
+    );
+    expect(noStart.segment).toBeNull();
+    expect(noStart).toMatchObject({ sensors: null, flags: [], flagsVersion: FLAGS_VERSION });
+    // ключи результата движка не изменились (AC16): новые поля — только у AttemptAnalysis
+    const { trackMap, sensors, flags, flagsVersion, ...match } = result;
+    void [trackMap, sensors, flags, flagsVersion];
+    expect(Object.keys(match).sort()).toEqual(
+      Object.keys(matchCorridor([], prepareCorridor(corridor), windowOf(window))).sort(),
+    );
   });
 
   it('trackMap: позиции на той же линии, что analyzeTrack пишет в activity_tracks; без координат и времени', () => {

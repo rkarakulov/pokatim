@@ -48,6 +48,7 @@ describe('AuditAction', () => {
       'route.catalog_updated',
       'account.deleted',
       'appearance.theme_changed',
+      'profile.verified_demographics_changed',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',

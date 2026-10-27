@@ -13,7 +13,7 @@ export interface AccountState {
 }
 
 /**
- * Чтения аккаунтов приложения для модуля `panel` (ADR-0009): коллекции identity читает только identity. Без
+ * Чтения аккаунтов приложения для модулей `panel` (ADR-0009) и `profile` (год рождения, race-results-07): коллекции identity читает только identity. Без
  * лимитера и Redis — порт годится и для CLI. Значения фильтров — id после zod и нормализованный e-mail.
  */
 @Injectable()
@@ -39,6 +39,15 @@ export class IdentityAccounts {
     const user = await this.repository.findUserByEmail(normalizeEmail(email));
     if (!user || user.deletedAt) return undefined;
     return { userId: user.id, verified: user.emailVerifiedAt !== null };
+  }
+
+  /**
+   * Год рождения из регистрации (race-results-07): подсказка формы анкеты Verified, источник правды — анкета.
+   * Удалённый, стёртый или без даты — `null`.
+   */
+  async birthYearOf(userId: string): Promise<number | null> {
+    const birthDate = await this.repository.findBirthDate(userId);
+    return birthDate ? Number(birthDate.slice(0, 4)) : null;
   }
 
   /** E-mail живых аккаунтов по id; удалённых в карте нет («Удалённый участник» — у вызывающего). */

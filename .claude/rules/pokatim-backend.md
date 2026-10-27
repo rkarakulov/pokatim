@@ -150,6 +150,26 @@ paths:
 Клиентское время в расчёте результата · UPDATE/DELETE аудита и истории споров, переход спора не из `open` ·
 биометрия или e-mail в логах · разбор трека или рендер в HTTP-обработчике.
 
+## Уровни и группы зачёта (`results`, `profile`, race-results-07)
+
+- Анкета Verified — модуль `profile`: `VerifiedProfileController` (`GET|PUT /v1/profile/verified`, `AuthGuard`),
+  `VerifiedProfileService` (лимит, атомарная запись с условием фиксации, подсказка года — `identity.IdentityAccounts.
+  birthYearOf`), панель — `ProfileVerifiedAdminController` (`/v1/admin/profiles/:userId/verified-demographics`,
+  отдельный класс с `profiles.verified_edit`) → `ProfileVerifiedAdminService` (транзакция: запись анкеты →
+  `PanelAudit`). Порт `VERIFIED_PROFILES` (`demographicsOf`, `lockForEntry`) — в `ProfileCoreModule`, `results` читает
+  анкету только через него; стирание — `ProfileErasure`.
+- Заявка (`EntriesService.enter`, тело `RaceEntryRequest`): `admitEntry` (схема групп) → `lockEntryOf` → чистая
+  `planEntryChange` (вся матрица RC-1…RC-3) → для Verified `lockForEntry` анкеты в той же транзакции → вставка или
+  `setEntryTier` + `refreshEntry`. Группа и возраст — `ownGroup`/`allowedGroups` (`results.policy.ts`, сервер —
+  источник правды); правило мест — `rankRule`, лучший — `pickBest(attempts, rule)`.
+- Чтения — по группе заявки: «моё участие» (`verified`, `canUpgrade`, `unranked`), публичная таблица
+  `GET /v1/races/:id/results?group` (`groups`, `finishers`), таблица финишёров `GET /v1/races/:id/finishers`
+  (`ResultsPublicController`, курсор `f`); протокол — `buildProtocol` по группам (флаг скорости — по строкам
+  ревизии), «Участники» панели — тот же `buildProtocol` на живых строках, фильтры `group`/`attention`,
+  `counts.attention`/`finishers`. `SPEED_CLUSTER_HIGH` — `speedClusterFlags`; флаги датчиков — worker
+  (`analyzeAttempt` → `sensorFlags`), outbox-событий нет (R4). Споры — `not_ranked` / `target_not_counted` по
+  `DisputeEntry.ranked`, флаги цели — в `DisputeStanding`.
+
 ## Протокол (`results`, race-results-05)
 
 - Мутации панели — `results-protocol.controller.ts` → `ResultsProtocolService` (транзакция под `lockResults`, журнал

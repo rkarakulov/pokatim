@@ -52,6 +52,8 @@ export const AUDIT_ACTIONS = [
   'account.deleted',
   // app-themes: админ сменил тему приложения (subject `platform`, детали themeFrom/themeTo)
   'appearance.theme_changed',
+  // race-results-07: admin изменил пол и/или год анкеты Verified (subject `rider`, `changedFields` без значений)
+  'profile.verified_demographics_changed',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;

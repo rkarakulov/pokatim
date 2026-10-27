@@ -1,12 +1,19 @@
 import { Controller, Get, Header, Param, Query, UseGuards } from '@nestjs/common';
-import { FieldErrorCode, type RaceResultsPage, RaceResultsQuery, Uuid } from '@pokatim/contracts';
+import {
+  FieldErrorCode,
+  type RaceFinishersPage,
+  RaceFinishersQuery,
+  type RaceResultsPage,
+  RaceResultsQuery,
+  Uuid,
+} from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
 import { PUBLIC_READ_CACHE_CONTROL, PublicReadGuard } from '../../public-read.guard';
 import { ResultsReadService } from './results-read.service';
 
 /**
- * Публичная предварительная таблица гонки (race-results-03): без входа, имя райдера — только с
+ * Публичная предварительная таблица гонки (race-results-03; race-results-07 — по группе и финишёры): без входа, имя райдера — только с
  * его согласием (profile-rider-name), иначе `riderName: null`; места при чтении,
  * `Cache-Control: public, max-age=60`, IP-лимит `public-read`. Черновик и неизвестная гонка — 404.
  */
@@ -22,5 +29,15 @@ export class ResultsPublicController {
     @Query(new ZodValidationPipe(RaceResultsQuery, FieldErrorCode)) query: RaceResultsQuery,
   ): Promise<RaceResultsPage> {
     return this.read.publicResults(raceId, query);
+  }
+
+  /** Финишёры (race-results-07): START и Verified без пульса — время без места. */
+  @Get(':raceId/finishers')
+  @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
+  finishers(
+    @Param('raceId', new ZodValidationPipe(Uuid, FieldErrorCode)) raceId: string,
+    @Query(new ZodValidationPipe(RaceFinishersQuery, FieldErrorCode)) query: RaceFinishersQuery,
+  ): Promise<RaceFinishersPage> {
+    return this.read.finishers(raceId, query);
   }
 }

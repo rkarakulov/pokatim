@@ -64,6 +64,8 @@ export const RACE_RESULT_STATUSES = [
   'final',
   'dq',
   'revised',
+  // race-results-07: время засчитано, места нет (START или Verified без пульса)
+  'finisher',
 ] as const;
 /** Причины недоступности действий участия (`MyRaceEntry.actions.reasons`). */
 export const RACE_ENTRY_BLOCK_REASONS = [
@@ -80,8 +82,29 @@ export const RACE_ENTRY_BLOCK_REASONS = [
   'dispute_open',
   'disqualified',
 ] as const;
-/** Группа зачёта (A3): одна в v1; кластеры — слайс 07. */
-export const RESULT_GROUP_KEYS = ['overall'] as const;
+/**
+ * Группа зачёта (A3). `overall` — гонки до race-results-07 и START; пол × возраст (race-results-07) — Verified.
+ * Подписи — `results.group.*`.
+ */
+export const RESULT_GROUP_KEYS = [
+  'overall',
+  'm_u40',
+  'm_40_49',
+  'm_50p',
+  'w_u40',
+  'w_40_49',
+  'w_50p',
+] as const;
+/** Уровень заявки (race-results-07): Verified — анкета и место в группе; START — время без места. */
+export const ENTRY_TIERS = ['verified', 'start'] as const;
+/** Схема групп гонки: `overall` — гонки до race-results-07 (одна группа), `gender_age` — пол × возраст. */
+export const GROUP_SCHEMES = ['overall', 'gender_age'] as const;
+/** Пол анкеты Verified (только для группы зачёта). */
+export const RIDER_GENDERS = ['m', 'w'] as const;
+/** Флаги «Требует внимания» (только панель): кластер скорости, развязка мощности и пульса, пропуски пульса. */
+export const ATTEMPT_FLAG_CODES = ['SPEED_CLUSTER_HIGH', 'HR_POWER_DECOUPLED', 'HR_GAPS'] as const;
+/** Почему засчитанное время без места: заявка START или у Verified нет попытки с пульсом. */
+export const RESULT_UNRANKED_REASONS = ['start', 'no_heart_rate'] as const;
 
 export type RaceEntryStatus = (typeof RACE_ENTRY_STATUSES)[number];
 export type AttemptOrigin = (typeof ATTEMPT_ORIGINS)[number];
@@ -92,6 +115,24 @@ export type AttemptWithdrawReason = (typeof ATTEMPT_WITHDRAW_REASONS)[number];
 export type RaceResultStatus = (typeof RACE_RESULT_STATUSES)[number];
 export type RaceEntryBlockReason = (typeof RACE_ENTRY_BLOCK_REASONS)[number];
 export type ResultGroupKey = (typeof RESULT_GROUP_KEYS)[number];
+export type EntryTier = (typeof ENTRY_TIERS)[number];
+export type GroupScheme = (typeof GROUP_SCHEMES)[number];
+export type RiderGender = (typeof RIDER_GENDERS)[number];
+export type AttemptFlagCode = (typeof ATTEMPT_FLAG_CODES)[number];
+export type ResultUnrankedReason = (typeof RESULT_UNRANKED_REASONS)[number];
+
+/**
+ * `POST /v1/races/:raceId/entry` (race-results-07): уровень и группа — намерение, правила проверяет сервер. Пусто/нет
+ * тела — новая заявка START в схеме `gender_age` (v1-поведение `verified`/`overall` в схеме `overall`); на
+ * существующей заявке отсутствие `tier` — без изменений. `tier: 'verified'` на активной START — повышение.
+ */
+export const RaceEntryRequest = z
+  .strictObject({
+    tier: z.enum(ENTRY_TIERS).optional(),
+    groupKey: z.enum(RESULT_GROUP_KEYS).optional(),
+  })
+  .optional();
+export type RaceEntryRequest = z.infer<typeof RaceEntryRequest>;
 
 /**
  * `POST /v1/races/:raceId/attempts`: «выбрать свой заезд» (`activityId`) или «загрузить в гонку» после
@@ -172,14 +213,29 @@ export type PendingUpload = z.infer<typeof PendingUpload>;
  * `GET /v1/races/:raceId/entry` (и ответ мутаций участия), `no-store`. `entry: null` — не заявлен. Место до
  * публикации протокола — предварительное (считается при чтении), после — из текущей ревизии протокола.
  */
+/** Блок «Verified» участия (race-results-07); `null` — схема `overall` (уровень не выбирается). */
+export const MyVerifiedState = z.object({
+  /** анкета заполнена (и согласие дано) */
+  profileReady: z.boolean(),
+  /** своя группа по анкете для этой гонки; `null` — анкеты нет */
+  ownGroup: tolerantEnum(RESULT_GROUP_KEYS).nullable(),
+  /** разрешённые группы: своя первой, затем младшие своего пола; `null` — анкеты нет */
+  groupOptions: z.array(tolerantEnum(RESULT_GROUP_KEYS)).nullable(),
+});
+export type MyVerifiedState = z.infer<typeof MyVerifiedState>;
+
 export const MyRaceEntry = z.object({
   raceId: Uuid,
+  /** схема групп гонки (race-results-07); гонка без заявок — `gender_age` (её получит первая заявка) */
+  groupScheme: tolerantEnum(GROUP_SCHEMES).default('overall'),
   entry: z
     .object({
       id: Uuid,
       status: tolerantEnum(RACE_ENTRY_STATUSES),
       createdAt: z.iso.datetime(),
       withdrawnAt: z.iso.datetime().nullable(),
+      tier: tolerantEnum(ENTRY_TIERS).nullable().default(null),
+      groupKey: tolerantEnum(RESULT_GROUP_KEYS).nullable().default(null),
     })
     .nullable(),
   result: z.object({
@@ -189,8 +245,12 @@ export const MyRaceEntry = z.object({
     tied: z.boolean(),
     /** строк в группе зачёта */
     ranked: z.number().int(),
+    /** группа заявки (нет заявки — `overall`) */
     group: tolerantEnum(RESULT_GROUP_KEYS),
+    /** почему время без места (`finisher`); `null` — место есть или результата нет */
+    unranked: tolerantEnum(RESULT_UNRANKED_REASONS).nullable().default(null),
   }),
+  verified: MyVerifiedState.nullable().default(null),
   /** видимые, новые сверху, ≤ 30 */
   attempts: z.array(MyAttempt),
   pendingUploads: z.array(PendingUpload),
@@ -200,6 +260,8 @@ export const MyRaceEntry = z.object({
     canWithdraw: z.boolean(),
     canAddAttempt: z.boolean(),
     reasons: z.array(tolerantEnum(RACE_ENTRY_BLOCK_REASONS)),
+    /** START → Verified: активная START-заявка, окно `upcoming|open`, схема `gender_age` (анкета — `verified`) */
+    canUpgrade: z.boolean().default(false),
   }),
 });
 export type MyRaceEntry = z.infer<typeof MyRaceEntry>;
@@ -229,6 +291,11 @@ export const RACE_RESULTS_PAGE_MAX = 100;
 export const RaceResultsQuery = z.strictObject({
   limit: z.coerce.number().int().min(1).max(RACE_RESULTS_PAGE_MAX).default(50),
   cursor: PageCursor.optional(),
+  /**
+   * Группа зачёта (race-results-07); нет — `overall` в схеме `overall`, иначе первая непустая. Клиент шлёт только
+   * если прошлый ответ дал непустой `groups` (старый сервер ответит 400 на лишний ключ).
+   */
+  group: z.enum(RESULT_GROUP_KEYS).optional(),
 });
 export type RaceResultsQuery = z.infer<typeof RaceResultsQuery>;
 
@@ -257,5 +324,34 @@ export const RaceResultsPage = z.object({
   entries: z.number().int(),
   items: z.array(RaceResultRow),
   nextCursor: z.string().nullable(),
+  /** непустые группы гонки по порядку справочника (вкладки); старый сервер — `[]` */
+  groups: z
+    .array(z.object({ key: tolerantEnum(RESULT_GROUP_KEYS), ranked: z.number().int() }))
+    .default([]),
+  /** строк таблицы финишёров (вкладка видна при > 0) */
+  finishers: z.number().int().default(0),
 });
 export type RaceResultsPage = z.infer<typeof RaceResultsPage>;
+
+/** `GET /v1/races/:raceId/finishers` (race-results-07): START и Verified без пульса — время без места. */
+export const RaceFinishersQuery = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(RACE_RESULTS_PAGE_MAX).default(50),
+  cursor: PageCursor.optional(),
+});
+export type RaceFinishersQuery = z.infer<typeof RaceFinishersQuery>;
+
+/** Строка финишёров: без места; имя — по правилам `RaceResultRow` (P1). */
+export const RaceFinisherRow = z.object({
+  entryId: Uuid,
+  elapsedSec: z.number().int(),
+  riderName: z.string().nullable().default(null),
+  unranked: tolerantEnum(RESULT_UNRANKED_REASONS),
+});
+export type RaceFinisherRow = z.infer<typeof RaceFinisherRow>;
+
+export const RaceFinishersPage = z.object({
+  total: z.number().int(),
+  items: z.array(RaceFinisherRow),
+  nextCursor: z.string().nullable(),
+});
+export type RaceFinishersPage = z.infer<typeof RaceFinishersPage>;
