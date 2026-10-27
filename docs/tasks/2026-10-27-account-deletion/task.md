@@ -686,7 +686,9 @@ resume, устройства: 503 не финал/финал, `not_found`, по�
 `results.repository.test.ts`, `disputes.repository.test.ts`, `ride-reports.repository.test.ts`) и
 `admin-routes.test.ts` — зелёные без правок списков.
 
-Гейт: `TURBO_CONCURRENCY=1 pnpm check` на `pokatim_account_deletion_test` / Redis db 1 порта 6479 — см. отчёт coder
-(хвост вывода).
+Гейт: `TURBO_CONCURRENCY=1 pnpm check` на `pokatim_account_deletion_test` / Redis db 1 порта 6479 — зелёный
+(13/13 задач; api 1096 тестов, app 1122, `arch:check` без нарушений). Предыдущий прогон падал на `@pokatim/app#test`
+таймаутами Jest при load average ~28 (код app не менялся, набор упавших менялся между прогонами; `jest --maxWorkers=3`
+— 129/129), повтор гейта — зелёный.
 
 Открыто: контакт для «напишите нам» в письме (§8.2); этап 2 — app.
