@@ -1,7 +1,6 @@
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import type { AppTheme } from '@pokatim/design-tokens';
-
-import type { ScrubStore } from '@/features/maps/scrub-store';
+import { type ScrubStore } from '@pokatim/route-view';
 
 /** Общий API графика профиля (`profile-chart.tsx` — native, `profile-chart.web.tsx` — web). */
 export interface ProfileChartProps {

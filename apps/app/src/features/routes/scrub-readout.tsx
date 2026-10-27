@@ -1,10 +1,11 @@
 import type { CatalogRouteElevation } from '@pokatim/contracts';
 import { space, stroke, type AppTheme } from '@pokatim/design-tokens';
+import { type ScrubStore } from '@pokatim/route-view';
 import { textStyle } from '@rkarakulov/ui';
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { useScrub, type ScrubStore } from '@/features/maps/scrub-store';
+import { useScrub } from '@/features/maps/use-scrub';
 
 import { profileRangeLabel } from './format';
 import { scrubReadout } from './scrub';

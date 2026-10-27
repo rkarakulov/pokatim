@@ -30,6 +30,7 @@ const route = {
     [27.5, 53.9],
     [27.6, 53.95],
   ],
+  elevation: null,
 };
 
 describe('маршрут', () => {
@@ -65,6 +66,22 @@ describe('маршрут', () => {
     ).toBe(false);
     const summary = { ...route, line: undefined };
     expect(PanelRoutePage.parse({ items: [summary], nextCursor: null }).items).toHaveLength(1);
+  });
+
+  it('PanelRoute.elevation (routes-05): профиль высоты или null; ответ без поля — null; профиль из 1 точки — ошибка', () => {
+    const elevation = {
+      minM: 191,
+      maxM: 267,
+      profile: [
+        [0, 200],
+        [86_000, 191],
+      ],
+    };
+    expect(PanelRoute.parse({ ...route, elevation }).elevation).toEqual(elevation);
+    expect(PanelRoute.parse({ ...route, elevation: undefined }).elevation).toBeNull();
+    expect(
+      PanelRoute.safeParse({ ...route, elevation: { ...elevation, profile: [[0, 200]] } }).success,
+    ).toBe(false);
   });
 
   it('PanelRouteQuery: limit по умолчанию 50, максимум 100; status — только ready; лишние ключи — ошибка', () => {

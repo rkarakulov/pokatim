@@ -4,6 +4,7 @@ import type {
   CatalogRouteElevation,
 } from '@pokatim/contracts';
 import { i18n, t } from '@pokatim/i18n';
+import { profileTickValues, routeDurationMin, routePaceKmh } from '@pokatim/route-view';
 
 import type { StatItem } from '@/components/stat-block';
 import type { HeroDate } from '@/lib/minsk-format';
@@ -63,30 +64,6 @@ export function routeHeroDate(route: Pick<CatalogRouteCard, 'distanceM'>): HeroD
 }
 
 // --- routes-03: карточка маршрута — стат-блок, время в пути, чипы, профиль высоты ---
-
-/**
- * Средняя скорость по покрытию для оценки времени в пути, км/ч (`[ASSUMPTION]` P3 routes-03): асфальт 27, гравий 20,
- * асфальт + гравий 24; покрытие неизвестно — как асфальт. Набор высоты не учитывается (v1).
- */
-export const ROUTE_PACE_KMH = { asphalt: 27, gravel: 20, mixed: 24 } as const;
-
-/** Шаг округления времени в пути, мин (и минимум). */
-const DURATION_STEP_MIN = 5;
-
-/** Скорость по известным покрытиям маршрута; ни одного известного — асфальт. */
-export function routePaceKmh(surfaces: CatalogRouteCard['surfaces']): number {
-  const asphalt = surfaces.includes('asphalt');
-  const gravel = surfaces.includes('gravel');
-  if (asphalt && gravel) return ROUTE_PACE_KMH.mixed;
-  if (gravel) return ROUTE_PACE_KMH.gravel;
-  return ROUTE_PACE_KMH.asphalt;
-}
-
-/** Время в пути, мин: дистанция ÷ скорость, до 5 мин, не меньше 5 мин. */
-export function routeDurationMin(distanceM: number, paceKmh: number): number {
-  const minutes = (distanceM / 1000 / paceKmh) * 60;
-  return Math.max(DURATION_STEP_MIN, Math.round(minutes / DURATION_STEP_MIN) * DURATION_STEP_MIN);
-}
 
 /** «2 ч 30 мин», «45 мин», «3 ч». */
 export function routeDuration(minutes: number): string {
@@ -156,11 +133,6 @@ export function routeStatItems(
   return items;
 }
 
-/** Шаги подписей оси X профиля, км: 1/2/5 × 10ⁿ. */
-const TICK_MULTIPLIERS = [1, 2, 5] as const;
-/** Подписей оси X не больше (с «0»). */
-const PROFILE_TICKS_MAX = 5;
-
 /** Подпись оси X профиля: км от старта, доля длины оси (0…1) и текст («0», «20», «60 км» — единица у последней). */
 export interface ProfileTick {
   km: number;
@@ -168,31 +140,14 @@ export interface ProfileTick {
   label: string;
 }
 
-/**
- * Подписи оси X профиля (RC-15): шаг — наименьший из 1/2/5 × 10ⁿ км, при котором подписей (с «0») ≤ 5; единица «км»
- * — у последней. 68 км → 0, 20, 40, 60 км.
- */
+/** Подписи оси X профиля (RC-15): тики — `profileTickValues` (`@pokatim/route-view`), единица «км» — у последней. */
 export function profileTicks(distanceM: number): ProfileTick[] {
-  const totalKm = distanceM / 1000;
-  if (totalKm <= 0) return [];
-  let step = 0;
-  for (let exponent = -2; step === 0 && exponent <= 4; exponent += 1) {
-    for (const multiplier of TICK_MULTIPLIERS) {
-      const candidate = multiplier * 10 ** exponent;
-      if (Math.floor(totalKm / candidate + 1e-9) + 1 <= PROFILE_TICKS_MAX) {
-        step = candidate;
-        break;
-      }
-    }
-  }
-  const count = Math.floor(totalKm / step + 1e-9) + 1;
-  return Array.from({ length: count }, (_, index) => {
-    const value = Math.round(index * step * 1000) / 1000;
-    const number = i18n.formatNumber(value, { maximumFractionDigits: 2 });
+  const ticks = profileTickValues(distanceM);
+  return ticks.map((tick, index) => {
+    const number = i18n.formatNumber(tick.km, { maximumFractionDigits: 2 });
     return {
-      km: value,
-      position: Math.min(1, (value * 1000) / distanceM),
-      label: index === count - 1 ? t('routes.detail.profile.tick', { km: number }) : number,
+      ...tick,
+      label: index === ticks.length - 1 ? t('routes.detail.profile.tick', { km: number }) : number,
     };
   });
 }

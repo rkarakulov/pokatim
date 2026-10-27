@@ -1,0 +1,10 @@
+{
+  "extends": "@rkarakulov/config/tsconfig.library.json",
+  // исходники workspace-пакетов (@pokatim/*) — без сборки dist
+  "compilerOptions": {
+    "customConditions": ["@pokatim/source"],
+    // DOM: фильтр колеса и атрибуция карты (maplibre-gl на web) — без React
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src"]
+}

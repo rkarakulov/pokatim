@@ -286,6 +286,20 @@ export class RoutesRepository {
     return doc?.line.coordinates;
   }
 
+  /**
+   * Линия показа и профиль высоты страницы маршрута панели (routes-05, RC-6): одним запросом с проекцией — без
+   * `matchLine` (≤ 20 000 точек).
+   */
+  async panelGeometry(
+    id: string,
+  ): Promise<{ line: [number, number][]; profile: [number, number][] | null } | undefined> {
+    const doc = await this.c.geometries.findOne(
+      { _id: id },
+      { projection: { line: 1, profile: 1 } },
+    );
+    return doc ? { line: doc.line.coordinates, profile: doc.profile ?? null } : undefined;
+  }
+
   /** Захват задачи разбора: только `processing` (терминальный статус — `null`, повтор — no-op). */
   claim(id: string, now: Date): Promise<RouteDoc | null> {
     return this.c.routes.findOneAndUpdate(

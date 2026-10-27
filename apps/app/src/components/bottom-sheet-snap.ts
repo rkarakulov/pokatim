@@ -1,4 +1,4 @@
-import { MAP_CAMERA_ANIMATION_MS } from '@/features/maps/map-camera';
+import { MAP_CAMERA_ANIMATION_MS } from '@pokatim/route-view';
 
 /*
  * Чистая логика шторки (routes-04d, RC-2) — обе платформы: `bottom-sheet.tsx` (native, RNGH + `Animated`) и

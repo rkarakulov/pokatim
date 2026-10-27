@@ -2,13 +2,13 @@
 import type * as MapLibreNative from '@maplibre/maplibre-react-native';
 import type { RaceRouteMap } from '@pokatim/contracts';
 import { themes } from '@pokatim/design-tokens';
+import { createScrubStore, type ScrubStore } from '@pokatim/route-view';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { GestureHandlerRootView, State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
 import { RouteMap } from './route-map';
 import { SCRUB_MARKER_PAN_TEST_ID } from './scrub-marker';
-import { createScrubStore, type ScrubStore } from './scrub-store';
 
 /** RNGH v3: передача конфига обработчика в натив (эффект `useGesture` по ссылке конфига) — счётчик для M1. */
 const nativeProxy = () =>

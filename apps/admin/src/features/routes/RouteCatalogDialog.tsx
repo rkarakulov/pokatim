@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { api } from '../../api';
 import { fieldErrorText, serverFieldErrors } from '../../field-errors';
 import { Banner, Button, ChipGroup, Dialog, SelectField } from '../../ui';
-import { RoutePreview } from './RoutePreview';
+import { RoutePreview, type RouteOpenLink } from './RoutePreview';
 import { ROUTES_QUERY_KEY, routeQuery } from './routes-query';
 
 type Path = 'city' | 'surfaces';
@@ -60,9 +60,12 @@ function failureText(error: unknown): string {
 export function RouteCatalogDialog({
   route,
   onClose,
+  openLink = 'same-tab',
 }: {
   route: PanelRouteSummary;
   onClose: () => void;
+  /** «Открыть маршрут» под превью (routes-05, RC-8): на самой странице маршрута — `false` */
+  openLink?: RouteOpenLink;
 }) {
   const queryClient = useQueryClient();
   const [failure, setFailure] = useState<string>();
@@ -112,7 +115,7 @@ export function RouteCatalogDialog({
           })(event)
         }
       >
-        <RoutePreview routeId={route.id} />
+        <RoutePreview routeId={route.id} openLink={openLink} />
         <Banner tone="warning">{t('admin.routes.catalog.dialog.hint')}</Banner>
         <Controller
           control={form.control}

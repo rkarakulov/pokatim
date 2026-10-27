@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { PageQuery, Uuid } from '../common.ts';
 import { CITY_CODES, CityCode } from '../geo/city.schema.ts';
 import { PageCursor, RaceTitle, SURFACES, SurfaceList } from '../races/race.schema.ts';
+import { CatalogRouteElevation } from './route-catalog.schema.ts';
 
 /*
  * Маршрут команды платформы — эталон коридора гонки (race-results-01, ADR-0012 п. 1). Загружается в панели файлом
@@ -78,9 +79,13 @@ export const PanelRouteSummary = z.object({
 });
 export type PanelRouteSummary = z.infer<typeof PanelRouteSummary>;
 
-/** `GET /v1/admin/routes/:id`, ответ загрузки: + линия показа [lon, lat] (≤ 1000 точек; `[]`, пока не готов). */
+/**
+ * `GET /v1/admin/routes/:id`, ответ загрузки: + линия показа [lon, lat] (≤ 1000 точек; `[]`, пока не готов) и профиль
+ * высоты (routes-05, A4: `null` — нет высот или маршрут не готов; ответ без поля — `null`).
+ */
 export const PanelRoute = PanelRouteSummary.extend({
   line: z.array(z.tuple([z.number(), z.number()])).max(1000),
+  elevation: CatalogRouteElevation.nullable().default(null),
 });
 export type PanelRoute = z.infer<typeof PanelRoute>;
 

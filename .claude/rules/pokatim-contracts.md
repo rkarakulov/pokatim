@@ -33,7 +33,9 @@ paths:
   (справочники — `tolerantEnum`), `CatalogRoutePage`, `CatalogRouteCities` (незнакомые коды отбрасываются),
   `RouteMapGeometry` (как `RaceRouteMap` без `widthM`; `race-route.schema.ts` не меняется — совместимость держит тест
   типов), `CatalogRouteRacesQuery`. Панель — `PublishRouteInput` (`city`, `surfaces: SurfaceList`), обязательное
-  `PanelRouteSummary.catalog` (`null` | `{ city, surfaces, publishedAt }`); код `ROUTE_INVALID_STATE` (409).
+  `PanelRouteSummary.catalog` (`null` | `{ city, surfaces, publishedAt }`); код `ROUTE_INVALID_STATE` (409). `PanelRoute.elevation`
+  (routes-05) — `CatalogRouteElevation.nullable().default(null)` (решение A4: старый ответ без поля — `null`); собирает
+  `elevationOf` API (общая с карточкой каталога).
 - Мои маршруты (routes-02): `src/routes/route.schema.ts` — `ROUTE_ORIGINS` (`platform`, `rider`; только в конец),
   `ROUTE_FILE_EXTENSIONS` (`gpx`, `kml` = пакет `@pokatim/tracks`), `UploadRouteQuery` — общий для панели и
   `POST /v1/routes/mine`; `src/routes/my-route.schema.ts` — ответы приложения `MyRoute` (`status`, `failure` —
