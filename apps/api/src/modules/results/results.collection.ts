@@ -3,6 +3,7 @@ import type {
   AttemptOrigin,
   AttemptRejection,
   AttemptReviewKind,
+  AttemptSensorSource,
   AttemptStatus,
   AttemptWithdrawReason,
   EntryTier,
@@ -54,7 +55,7 @@ export interface EntryBest {
   finishedAt: Date;
   /**
    * лучшая даёт место (race-results-07, `pickBest` по `rankRule` заявки): START и Verified без попытки с пульсом —
-   * `false`. Документы до 07 — бэкфилл `0025` (`true`); чтение `?? true` (RC-7)
+   * `false`. Документы до 07 — бэкфилл `0028` (`true`); чтение `?? true` (RC-7)
    */
   ranked?: boolean;
   /** флаги датчиков лучшей попытки (денормализация, DV-9); до 07 — нет поля, чтение `?? []` */
@@ -91,7 +92,7 @@ export interface RaceEntryDoc {
   groupKey: ResultGroupKey;
   /**
    * Уровень заявки (race-results-07): Verified — место в группе, START — время без места. Документы до 07 — `null`
-   * (бэкфилл `0025` → `verified`), чтение `?? 'verified'` (RC-7).
+   * (бэкфилл `0028` → `verified`), чтение `?? 'verified'` (RC-7).
    */
   tier: EntryTier | null;
   requests: EntryRequest[];
@@ -171,13 +172,20 @@ export interface RaceAttemptDoc {
   trackMap?: AttemptTrackMapDoc | null;
   /**
    * датчики сегмента (race-results-07, пишет worker с вердиктом): есть ли отсчёты пульса и мощности; `null` — до
-   * вердикта, провал, нет сегмента; документы до 07 поля не имеют
+   * вердикта, провал, нет сегмента; документы до 07 поля не имеют. `source: 'declared'` — импорт Garmin/Wahoo:
+   * признаки тренировки потока агрегатора, флаги датчиков не считаются; нет поля (до 07a pass 2) — `samples`
    */
-  sensors?: { hr: boolean; power: boolean } | null;
+  sensors?: { hr: boolean; power: boolean; source?: AttemptSensorSource } | null;
   /** флаги датчиков сегмента (`HR_*`); до 07 — нет поля → `[]` */
   flags?: AttemptFlagDoc[];
   /** `FLAGS_VERSION` движка флагов; `null` — флаги не считались */
   flagsVersion?: number | null;
+  /**
+   * последний видимый райдеру вердикт (`visibleVerdict`, notifications RC-2): `requeueAttempt` его не стирает, провал и
+   * снятие не затирают — уведомление «засчитан/не засчитан» только при смене. Документы до `0026_attempt_last_verdict`
+   * без поля — чтение `?? null`
+   */
+  lastVisibleVerdict?: 'counted' | 'rejected' | null;
   /** снимок коридора гонки на момент создания (V-12 — не меняется) */
   corridor: { routeId: string; widthM: number };
   checkRevision: number;

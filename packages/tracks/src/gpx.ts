@@ -114,7 +114,7 @@ export function parseGpx(text: string, options: ParseGpxOptions = {}): ParsedTra
     const point = gpxPoint(node);
     if (point === null) continue;
     if (point.hr !== undefined) hasHeartRate = true;
-    if (point.power !== undefined) hasPower = true;
+    if (point.power !== undefined && point.power > 0) hasPower = true;
     points.push(point);
   }
 
@@ -137,7 +137,7 @@ function gpxPoint(node: XmlNode): ParsedPoint | null {
   if (isNode(extensions)) {
     const hr = positive(findValue(extensions, 'hr', 3));
     const cadence = positive(findValue(extensions, 'cad', 3));
-    const power = positive(findValue(extensions, 'power', 3));
+    const power = nonNegative(findValue(extensions, 'power', 3));
     if (hr !== undefined) point.hr = hr;
     if (cadence !== undefined) point.cadence = cadence;
     if (power !== undefined) point.power = power;
@@ -195,4 +195,10 @@ function toNumber(value: unknown): number | undefined {
 function positive(value: unknown): number | undefined {
   const number = toNumber(value);
   return number !== undefined && number > 0 ? number : undefined;
+}
+
+/** Мощность 0 (накат) — отсчёт, не пропуск (race-results-07: флаги датчиков). */
+function nonNegative(value: unknown): number | undefined {
+  const number = toNumber(value);
+  return number !== undefined && number >= 0 ? number : undefined;
 }

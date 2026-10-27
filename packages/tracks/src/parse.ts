@@ -19,8 +19,8 @@ import { buildSeries, type DisputeSeries, type SeriesWindow } from './series.ts'
 import {
   FLAGS_VERSION,
   sensorFlags,
+  type AttemptSensors,
   type SensorFlag,
-  type SensorPresence,
 } from './sensor-flags.ts';
 import { routeGpx } from './route-gpx.ts';
 import { elevationProfile } from './route-profile.ts';
@@ -62,10 +62,13 @@ export {
   FLAGS_VERSION,
   SENSOR_FLAG_CODES,
   SENSOR_FLAGS_POLICY,
+  SENSOR_SOURCES,
   sensorFlags,
+  type AttemptSensors,
   type SensorFlag,
   type SensorFlagCode,
   type SensorPresence,
+  type SensorSource,
 } from './sensor-flags.ts';
 export { CORRIDOR_ENGINE_VERSION, CORRIDOR_POLICY } from './corridor/policy.ts';
 export { ROUTE_PROFILE_MAX_POINTS, elevationProfile } from './route-profile.ts';
@@ -303,8 +306,11 @@ export function deriveRoute(bytes: Uint8Array): RouteDerived {
 export type AttemptAnalysis = CorridorMatch & {
   /** позиции сегмента и схода на линии `activity_tracks`; `null` — нет сегмента, нет линии или она не от этого файла */
   trackMap: TrackMap | null;
-  /** каналы в сегменте; `null` — сегмента нет */
-  sensors: SensorPresence | null;
+  /**
+   * каналы в сегменте; `null` — сегмента нет. Поток агрегатора — заявленные признаки тренировки (`declared`) без
+   * флагов: рядов датчиков в нём нет (ADR-0011)
+   */
+  sensors: AttemptSensors | null;
   /** флаги датчиков сегмента (целые проценты) */
   flags: SensorFlag[];
   flagsVersion: number;
@@ -326,14 +332,22 @@ export function analyzeAttempt(
   line: [number, number][] | null = null,
 ): AttemptAnalysis {
   const prepared = prepareCorridor(corridor);
-  const { points } = loadTrack(bytes, format, now);
+  const { track, points } = loadTrack(bytes, format, now);
   const { match, offRunsMs } = matchCorridorDetailed(points, prepared, window);
-  const sensors = match.segment ? sensorFlags(points, match.segment) : null;
+  let sensors: AttemptSensors | null = null;
+  let flags: SensorFlag[] = [];
+  if (match.segment && track.format === 'stream') {
+    sensors = { hr: track.hasHeartRate, power: track.hasPower, source: 'declared' };
+  } else if (match.segment) {
+    const sampled = sensorFlags(points, match.segment);
+    sensors = { ...sampled.sensors, source: 'samples' };
+    flags = sampled.flags;
+  }
   return {
     ...match,
     trackMap: trackMapOf(points, line, match.segment, offRunsMs),
-    sensors: sensors?.sensors ?? null,
-    flags: sensors?.flags ?? [],
+    sensors,
+    flags,
     flagsVersion: FLAGS_VERSION,
   };
 }

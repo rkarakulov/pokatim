@@ -26,6 +26,7 @@ import {
   pickBest,
   rankRule,
   summarize,
+  type VisibleVerdict,
 } from './results.policy';
 
 /** Позиция строки таблицы в порядке `(best.elapsedSec, best.startedAt, _id)`. */
@@ -356,17 +357,21 @@ export class ResultsRepository {
     );
   }
 
-  /** Итог проверки своей ревизией (под `lockEntry`); `false` — попытку сняли или перепоставили. */
+  /**
+   * Итог проверки своей ревизией (под `lockEntry`) и последний видимый вердикт (`lastVisibleVerdict`, notifications
+   * RC-2 — вызывающий передаёт новый или прежний); `false` — попытку сняли или перепоставили.
+   */
   async recordCheck(
     session: DbSession,
     id: string,
     checkRevision: number,
     result: CheckResult,
     now: Date,
+    lastVisibleVerdict: VisibleVerdict | null,
   ): Promise<boolean> {
     const updated = await this.c.attempts.updateOne(
       { _id: id, checkRevision, status: 'checking' },
-      { $set: { ...result, updatedAt: now } },
+      { $set: { ...result, lastVisibleVerdict, updatedAt: now } },
       { session },
     );
     return updated.matchedCount === 1;
@@ -648,6 +653,35 @@ export class ResultsRepository {
     return toRanked(docs);
   }
 
+  // --- получатели уведомлений (порт `ResultsNotices`, notifications) — проекции без результатов ---
+
+  /** Райдер, гонка и начало заезда попытки. */
+  attemptForNotice(
+    attemptId: string,
+  ): Promise<Pick<RaceAttemptDoc, 'userId' | 'raceId' | 'activity'> | null> {
+    return this.c.attempts.findOne(
+      { _id: attemptId },
+      { projection: { _id: 0, userId: 1, raceId: 1, 'activity.startedAt': 1 } },
+    );
+  }
+
+  /** `userId` строк ревизии протокола (`race_protocol_rows_unique`). */
+  async protocolRowUserIds(raceId: string, revision: number): Promise<string[]> {
+    const docs = await this.c.protocolRows
+      .find({ raceId, revision }, { projection: { _id: 0, userId: 1 } })
+      .toArray();
+    return docs.map((doc) => doc.userId);
+  }
+
+  /** Владелец заявки. */
+  async entryUserId(entryId: string): Promise<string | null> {
+    const doc = await this.c.entries.findOne(
+      { _id: entryId },
+      { projection: { _id: 0, userId: 1 } },
+    );
+    return doc?.userId ?? null;
+  }
+
   /** Активные заявки гонки (индекс `race_entries_race_idx`). */
   countActiveEntries(raceId: string, session?: DbSession): Promise<number> {
     return this.c.entries.countDocuments({ raceId, status: 'active' }, { session });
@@ -754,7 +788,7 @@ export class ResultsRepository {
     return latest;
   }
 
-  /** Райдеры активных заявок гонки (строка чек-листа «необработанные треки»). */
+  /** Райдеры активных заявок гонки (чек-лист «необработанные треки», получатели «Протокол опубликован»). */
   async activeEntryUserIds(raceId: string, session?: DbSession): Promise<string[]> {
     const docs = await this.c.entries
       .find({ raceId, status: 'active' }, { session, projection: { userId: 1 } })

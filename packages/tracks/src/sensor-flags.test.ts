@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
+import { parseGpx } from './gpx.ts';
 import { parseTrackFile } from './parse.ts';
 import { sanitizePoints } from './points.ts';
 import { FLAGS_VERSION, SENSOR_FLAGS_POLICY, sensorFlags } from './sensor-flags.ts';
@@ -152,6 +153,24 @@ describe('sensorFlags: HR_POWER_DECOUPLED', () => {
     expect(run(surges(24, (k) => k >= 17)).flags).toEqual([
       { code: 'HR_POWER_DECOUPLED', metric: 71 },
     ]);
+  });
+
+  it('через разбор GPX: мощность 0 — отсчёт, а не пропуск (накат 0/100 Вт во второй половине)', () => {
+    const points = ride(40 * MIN, (s) => ({
+      hr: 140,
+      power: s < 20 * MIN ? 200 : s % 2 === 0 ? 0 : 100,
+    }));
+    const trkpts = points
+      .map(
+        (point) =>
+          `<trkpt lat="${point.lat}" lon="${point.lon}"><time>${point.time!.toISOString()}</time>` +
+          `<extensions><hr>${point.hr}</hr><power>${point.power}</power></extensions></trkpt>`,
+      )
+      .join('');
+    const parsed = sanitizePoints(
+      parseGpx(`<gpx><trk><trkseg>${trkpts}</trkseg></trk></gpx>`).points,
+    );
+    expect(run(parsed).flags).toEqual([{ code: 'HR_POWER_DECOUPLED', metric: 75 }]);
   });
 
   it('сработали оба правила — один флаг с метрикой развязки половин', () => {

@@ -124,8 +124,10 @@ jobs:
       packages: read
       pull-requests: read
 
+  # образы собираются параллельно с CI (матрица — три образа одновременно); в GHCR уходит только тег sha-…,
+  # деплой и тег develop — только после зелёного CI (джобы deploy и promote)
   build:
-    needs: [preflight, ci]
+    needs: preflight
     if: needs.preflight.outputs.build == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -133,6 +135,26 @@ jobs:
       # публикация образов в GHCR. @rkarakulov/* читаются тем же GITHUB_TOKEN (build secret): токена «только
       # read» в джобе с push нет — принятый риск, task.md §8.3.5
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # api: api, worker и миграции
+          - image: api
+            build-args: ''
+          # web (SSR): публичный адрес API вшивается в клиентский бандл — образ привязан к DEV_PUBLIC_HOST;
+          # стили карты — OpenFreeMap (ADR-0014, публичные URL без ключа)
+          - image: web
+            build-args: |
+              EXPO_PUBLIC_API_URL=https://${{ needs.preflight.outputs.host }}
+              EXPO_PUBLIC_MAP_STYLE_LIGHT=https://tiles.openfreemap.org/styles/positron
+              EXPO_PUBLIC_MAP_STYLE_DARK=https://tiles.openfreemap.org/styles/dark
+          # admin (статика /admin/): стиль карты маршрута панели (routes-05) — OpenFreeMap, только светлый;
+          # origin — в CSP admin-nginx.conf
+          - image: admin
+            build-args: |
+              VITE_MAP_STYLE_LIGHT=https://tiles.openfreemap.org/styles/positron
+    name: build (${{ matrix.image }})
     env:
       TAG: ${{ needs.preflight.outputs.tag }}
       # у build нет environment (нужен только GITHUB_TOKEN) — хост приходит выходом preflight
@@ -152,60 +174,50 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: api (api, worker, миграции)
+      - name: ${{ matrix.image }}
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: infra/docker/Dockerfile
-          target: api
+          target: ${{ matrix.image }}
           platforms: linux/amd64
           push: true
-          tags: ${{ env.IMAGE_PREFIX }}-api:${{ env.TAG }},${{ env.IMAGE_PREFIX }}-api:develop
+          tags: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}:${{ env.TAG }}
+          build-args: ${{ matrix.build-args }}
           secrets: NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
-          cache-from: type=gha,scope=pokatim-api
-          cache-to: type=gha,mode=max,scope=pokatim-api
-      - name: web (SSR)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+          cache-from: type=gha,scope=pokatim-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=pokatim-${{ matrix.image }}
+
+  # тег develop (откат image_tag=develop) — на образы, прошедшие CI; без пересборки (манифест тот же)
+  promote:
+    needs: [preflight, ci, build]
+    if: needs.ci.result == 'success' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    env:
+      TAG: ${{ needs.preflight.outputs.tag }}
+    steps:
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          context: .
-          file: infra/docker/Dockerfile
-          target: web
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.IMAGE_PREFIX }}-web:${{ env.TAG }},${{ env.IMAGE_PREFIX }}-web:develop
-          # публичный адрес API вшивается в клиентский бандл: образ web привязан к DEV_PUBLIC_HOST;
-          # стили карты — OpenFreeMap (ADR-0014, публичные URL без ключа)
-          build-args: |
-            EXPO_PUBLIC_API_URL=https://${{ env.DEV_PUBLIC_HOST }}
-            EXPO_PUBLIC_MAP_STYLE_LIGHT=https://tiles.openfreemap.org/styles/positron
-            EXPO_PUBLIC_MAP_STYLE_DARK=https://tiles.openfreemap.org/styles/dark
-          secrets: NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
-          cache-from: type=gha,scope=pokatim-web
-          cache-to: type=gha,mode=max,scope=pokatim-web
-      - name: admin (статика /admin/)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: infra/docker/Dockerfile
-          target: admin
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.IMAGE_PREFIX }}-admin:${{ env.TAG }},${{ env.IMAGE_PREFIX }}-admin:develop
-          # стиль карты маршрута панели (routes-05) — OpenFreeMap, только светлый; origin — в CSP admin-nginx.conf
-          build-args: |
-            VITE_MAP_STYLE_LIGHT=https://tiles.openfreemap.org/styles/positron
-          secrets: NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
-          cache-from: type=gha,scope=pokatim-admin
-          cache-to: type=gha,mode=max,scope=pokatim-admin
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          set -euo pipefail
+          for image in api web admin; do
+            docker buildx imagetools create -t "${IMAGE_PREFIX}-${image}:develop" "${IMAGE_PREFIX}-${image}:${TAG}"
+          done
 
   deploy:
     needs: [preflight, ci, build]
-    # сборка обязательна, если она была нужна; откат (image_tag) идёт без CI и сборки
-    # !cancelled(): Cancel прогона останавливает и деплой
+    # CI и сборка обязательны, если они были нужны (build больше не ждёт CI — проверяются оба); откат (image_tag)
+    # идёт без CI и сборки. !cancelled(): Cancel прогона останавливает и деплой
     if: >-
       !cancelled() && needs.preflight.result == 'success' &&
-      (needs.build.result == 'success' ||
-       (needs.preflight.outputs.build == 'false' && needs.build.result == 'skipped'))
+      ((needs.ci.result == 'success' && needs.build.result == 'success') ||
+       (needs.preflight.outputs.build == 'false' && needs.ci.result == 'skipped' && needs.build.result == 'skipped'))
     runs-on: ubuntu-latest
     environment: dev
     permissions:

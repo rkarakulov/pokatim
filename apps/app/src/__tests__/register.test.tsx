@@ -10,7 +10,6 @@ import { EMAIL, REGISTRATION_TOKEN, registerResponse, storedValue } from './auth
 import { appRoutes } from './app-routes';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const register = jest.mocked(api.register);
 const submitButton = () => screen.getByRole('button', { name: 'Зарегистрироваться' });

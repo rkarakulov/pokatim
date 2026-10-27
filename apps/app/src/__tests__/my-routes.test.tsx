@@ -18,7 +18,6 @@ import { FakeXhr } from './fake-xhr';
 import { createQueryWrapper } from './query-wrapper';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
 
 const listMine = jest.mocked(api.listMyRoutes);

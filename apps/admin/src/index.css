@@ -1371,6 +1371,7 @@ select.field__control option:disabled {
   --preview-text: var(--color-border-strong);
   --preview-accent: var(--color-border-strong);
   --preview-route: var(--color-border-strong);
+  --preview-radius: 0;
 }
 
 .theme-preview__mock {
@@ -1387,6 +1388,7 @@ select.field__control option:disabled {
   gap: var(--space-s1);
   height: 100%;
   padding: var(--space-s2);
+  border-radius: var(--preview-radius);
   background: var(--preview-card);
 }
 
@@ -1422,6 +1424,6 @@ select.field__control option:disabled {
   background: var(--preview-accent);
 }
 
-.theme-preview__pending {
+.theme-preview__font {
   color: var(--color-text-secondary);
 }

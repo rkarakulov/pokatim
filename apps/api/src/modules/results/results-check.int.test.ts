@@ -17,6 +17,7 @@ import {
   corridorExpected,
   corridorRace,
   enterRace,
+  importRide,
   myEntry,
   resultsDb,
   resultsWorker,
@@ -144,6 +145,84 @@ describe('эталоны движка в attempt-check (AC13)', () => {
     expect((await myEntry(h, auth, raceId)).attempts).toMatchObject([
       { origin: 'explicit', reasons: ['no_start'] },
     ]);
+  });
+});
+
+describe('событие видимого вердикта для уведомлений (notifications RC-2)', () => {
+  const verdictEvents = () =>
+    h.db
+      .collection('outbox')
+      .find({ type: 'results.attempt-verdict-changed' })
+      .sort({ createdAt: 1, _id: 1 })
+      .toArray();
+  const stored = (id: string) => resultsDb(h).attempts.findOne({ _id: id });
+  const recheck = (raceId: string) => h.worker.get(ResultsRecheck).requestRace(raceId, justAfter());
+
+  it('первый видимый вердикт — событие; перепроверка с тем же статусом — без второго', async () => {
+    const { attempt, raceId } = await queuedAttempt();
+    expect(await processor().check(attempt._id, 1)).toBe('counted');
+    expect((await verdictEvents()).map((event) => event.payload)).toEqual([
+      { attemptId: attempt._id, raceId, userId: attempt.userId, status: 'counted' },
+    ]);
+    expect((await stored(attempt._id))?.lastVisibleVerdict).toBe('counted');
+    expect(await recheck(raceId)).toBe(1);
+    // новая ревизия не стирает прежний видимый вердикт
+    expect(await stored(attempt._id)).toMatchObject({
+      status: 'queued',
+      lastVisibleVerdict: 'counted',
+    });
+    expect(await processor().check(attempt._id, 2)).toBe('counted');
+    expect(await verdictEvents()).toHaveLength(1);
+  });
+
+  it('counted → rejected (видимый) — второе событие со статусом rejected', async () => {
+    const { attempt, raceId } = await queuedAttempt();
+    expect(await processor().check(attempt._id, 1)).toBe('counted');
+    // явная попытка: неправдоподобный файл виден райдеру (подготовка — origin в БД)
+    await resultsDb(h).attempts.updateOne({ _id: attempt._id }, { $set: { origin: 'explicit' } });
+    await recheck(raceId);
+    const analyze = vi
+      .spyOn(processor(), 'analyze')
+      .mockResolvedValueOnce({ ok: false, code: 'implausible' });
+    expect(await processor().check(attempt._id, 2)).toBe('rejected');
+    analyze.mockRestore();
+    expect((await verdictEvents()).map((event) => event.payload.status)).toEqual([
+      'counted',
+      'rejected',
+    ]);
+    expect((await stored(attempt._id))?.lastVisibleVerdict).toBe('rejected');
+  });
+
+  it('скрытая авто-попытка (no_start) — без события, видимого вердикта нет', async () => {
+    const { attempt } = await queuedAttempt('mid-start.gpx');
+    expect(await processor().check(attempt._id, 1)).toBe('rejected');
+    expect(await verdictEvents()).toEqual([]);
+    expect((await stored(attempt._id))?.lastVisibleVerdict).toBeNull();
+  });
+
+  it('провал после засчитанной — без события и прежний вердикт не затирается; снова counted — без события', async () => {
+    const { attempt, raceId } = await queuedAttempt();
+    expect(await processor().check(attempt._id, 1)).toBe('counted');
+    await recheck(raceId);
+    const analyze = vi
+      .spyOn(processor(), 'analyze')
+      .mockResolvedValueOnce({ ok: false, code: 'timeout' });
+    expect(await processor().check(attempt._id, 2)).toBe('failed');
+    analyze.mockRestore();
+    expect(await stored(attempt._id)).toMatchObject({
+      status: 'failed',
+      lastVisibleVerdict: 'counted',
+    });
+    await recheck(raceId);
+    expect(await processor().check(attempt._id, 3)).toBe('counted');
+    expect(await verdictEvents()).toHaveLength(1);
+  });
+
+  it('повтор задачи после итога (skipped) — без второго события', async () => {
+    const { attempt } = await queuedAttempt();
+    expect(await processor().check(attempt._id, 1)).toBe('counted');
+    expect(await processor().check(attempt._id, 1)).toBe('skipped');
+    expect(await verdictEvents()).toHaveLength(1);
   });
 });
 
@@ -495,7 +574,7 @@ describe('датчики и флаги попытки (race-results-07, AC7)', (
     expect(await processor().check(attempt._id, 1)).toBe('counted');
     const checked = await resultsDb(h).attempts.findOne({ _id: attempt._id });
     expect(checked).toMatchObject({
-      sensors: { hr: true, power: true },
+      sensors: { hr: true, power: true, source: 'samples' },
       flagsVersion: FLAGS_VERSION,
     });
     expect(Array.isArray(checked?.flags)).toBe(true);
@@ -511,7 +590,7 @@ describe('датчики и флаги попытки (race-results-07, AC7)', (
     const { attempt, raceId, auth } = await verifiedQueued(undefined);
     expect(await processor().check(attempt._id, 1)).toBe('counted');
     expect(await resultsDb(h).attempts.findOne({ _id: attempt._id })).toMatchObject({
-      sensors: { hr: false, power: true },
+      sensors: { hr: false, power: true, source: 'samples' },
       flags: [],
       flagsVersion: FLAGS_VERSION,
     });
@@ -527,6 +606,71 @@ describe('датчики и флаги попытки (race-results-07, AC7)', (
       sensors: null,
       flags: [],
       flagsVersion: null,
+    });
+  });
+});
+
+describe('импорт Garmin/Wahoo: пульс по признаку тренировки (race-results-07, решение автора 2026-10-27)', () => {
+  /** Verified `m_u40`: заезд только импортом агрегатора (без рядов датчиков), проверка до итога. */
+  async function verifiedImported(hasHeartRate: boolean) {
+    const race = await corridorRace(h, {}, { scheme: null });
+    const r = await rider(h);
+    await seedVerifiedProfile(h, r.userId, { gender: 'm', birthYear: 1995 });
+    expect((await enterRace(h, r.auth, race.raceId, { tier: 'verified' })).status).toBe(201);
+    const worker = resultsWorker(h);
+    await worker.drain();
+    travelTo(h, AFTER_RIDE);
+    const auth = await signIn(h, r.email);
+    const ride = await importRide(h, r.userId, rideGpx('clean.gpx', RIDE), {
+      hasHeartRate,
+      hasPower: false,
+    });
+    expect(ride.outcome).toBe('ready');
+    await worker.drain();
+    const [attempt] = await attempts();
+    return { ...race, auth, attempt: attempt! };
+  }
+
+  it('hasHeartRate: true — sensors заявлены импортом, флагов нет; Verified-заявка получает место', async () => {
+    const { attempt, raceId, auth } = await verifiedImported(true);
+    expect(attempt).toMatchObject({
+      status: 'counted',
+      sensors: { hr: true, power: false, source: 'declared' },
+      flags: [],
+      flagsVersion: FLAGS_VERSION,
+    });
+    expect((await resultsDb(h).entries.findOne())?.best).toMatchObject({
+      attemptId: attempt._id,
+      ranked: true,
+    });
+    expect((await myEntry(h, auth, raceId)).result).toMatchObject({
+      status: 'provisional',
+      place: 1,
+      group: 'm_u40',
+    });
+    const token = await panelSession(h, 'admin@example.by');
+    const res = await panelCall(h, token, 'GET', `${RACES}/${raceId}/attempts`);
+    expect(res.status).toBe(200);
+    // сырой ответ (не через `.default` схемы): источник пишет сервер
+    expect((res.body as PanelRaceAttemptPage).items[0]?.sensors).toEqual({
+      hr: true,
+      power: false,
+      source: 'declared',
+    });
+  });
+
+  it('hasHeartRate: false — «без пульса»: лучший без места (finisher, no_heart_rate)', async () => {
+    const { attempt, raceId, auth } = await verifiedImported(false);
+    expect(attempt).toMatchObject({
+      status: 'counted',
+      sensors: { hr: false, power: false, source: 'declared' },
+      flags: [],
+    });
+    expect((await resultsDb(h).entries.findOne())?.best).toMatchObject({ ranked: false });
+    expect((await myEntry(h, auth, raceId)).result).toMatchObject({
+      status: 'finisher',
+      place: null,
+      unranked: 'no_heart_rate',
     });
   });
 });

@@ -72,8 +72,19 @@ export type AttemptReviewKind = (typeof ATTEMPT_REVIEW_KINDS)[number];
 export const PanelAttemptFlag = z.object({ code: z.enum(ATTEMPT_FLAG_CODES), metric: z.number() });
 export type PanelAttemptFlag = z.infer<typeof PanelAttemptFlag>;
 
-/** Какие датчики есть в сегменте попытки (без значений). */
-export const AttemptSensors = z.object({ hr: z.boolean(), power: z.boolean() });
+/**
+ * Источник наличия датчиков попытки: `samples` — отсчёты сегмента в файле; `declared` — признаки тренировки импорта
+ * Garmin/Wahoo (поток агрегатора без рядов, ADR-0011), флаги датчиков не считаются — панель показывает «заявлен импортом».
+ */
+export const ATTEMPT_SENSOR_SOURCES = ['samples', 'declared'] as const;
+export type AttemptSensorSource = (typeof ATTEMPT_SENSOR_SOURCES)[number];
+
+/** Какие датчики есть в сегменте попытки (без значений); `source` нет у попыток до 07a pass 2 — `samples`. */
+export const AttemptSensors = z.object({
+  hr: z.boolean(),
+  power: z.boolean(),
+  source: z.enum(ATTEMPT_SENSOR_SOURCES).default('samples'),
+});
 export type AttemptSensors = z.infer<typeof AttemptSensors>;
 
 /** Группа гонки и число строк с местом (вкладки панели). */

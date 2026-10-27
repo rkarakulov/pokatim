@@ -1,5 +1,6 @@
-import { size, space, stroke } from '@pokatim/design-tokens';
-import { textStyle, useTheme } from '@rkarakulov/ui';
+import { shapeOf, size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
+import { SkeletonText, textStyle, useTheme } from '@rkarakulov/ui';
+import type { ComponentType } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 export interface StatItem {
@@ -11,6 +12,11 @@ export interface StatItem {
   label: string;
   /** Пояснение под подписью (routes-03): «круговой», «макс. 267 м», «при 27 км/ч». */
   note?: string;
+  /**
+   * Значение по частям с единицами («3» «ч», «35» «мин»): плитки (`tiles`) переносят его частями, а не обрезают.
+   * Нет — одна часть `value` + `unit`.
+   */
+  parts?: readonly { value: string; unit: string }[];
 }
 
 /**
@@ -21,6 +27,7 @@ export interface StatItem {
  * `variant="compact"` (routes-04d, RC-9) — строка шторки карточки маршрута: один ряд равных колонок без ink-линии,
  * подпись над значением, значение `bodyStrong` с единицей в одну строку (без переноса; при крупном системном шрифте —
  * перенос внутри колонки, не многоточие); `note` не показывается, но остаётся в метке ячейки.
+ * `variant="tiles"` / `"numeral"` (app-themes C2) — шапка шторки у тем с плитками и с крупной цифрой.
  */
 export function StatBlock({
   items,
@@ -33,10 +40,28 @@ export function StatBlock({
    * переносятся внутри ячейки. По умолчанию — ширина по содержимому с переносом рядами (календарь, кофе-райд).
    */
   equalColumns?: boolean;
-  variant?: 'default' | 'compact';
+  variant?: StatVariant;
 }) {
+  const Variant = STAT_VARIANTS[variant];
+  return <Variant items={items} equalColumns={equalColumns} />;
+}
+
+export type StatVariant = 'default' | 'compact' | 'tiles' | 'numeral';
+
+interface StatsProps {
+  items: readonly StatItem[];
+  equalColumns: boolean;
+}
+
+/** Метка ячейки для скринридера: «Дистанция 68 км круговой». */
+const cellLabel = (item: StatItem) =>
+  [item.label, item.value, item.unit, item.note].filter(Boolean).join(' ');
+
+/** Крупный системный шрифт — перенос вместо многоточия: текст не теряется (ревью pass 1, M1). */
+const useSingleLine = () => (useWindowDimensions().fontScale > 1 ? undefined : 1);
+
+function DefaultStats({ items, equalColumns }: StatsProps) {
   const theme = useTheme();
-  if (variant === 'compact') return <CompactStats items={items} />;
   return (
     <View testID="stat-block" style={[styles.block, { borderTopColor: theme.text.primary }]}>
       {items.map((item, index) => (
@@ -45,9 +70,7 @@ export function StatBlock({
           key={index}
           testID="stat-block-cell"
           accessible
-          accessibilityLabel={[item.label, item.value, item.unit, item.note]
-            .filter(Boolean)
-            .join(' ')}
+          accessibilityLabel={cellLabel(item)}
           style={[
             styles.cell,
             equalColumns ? styles.equal : null,
@@ -74,21 +97,31 @@ export function StatBlock({
   );
 }
 
-function CompactStats({ items }: { items: readonly StatItem[] }) {
-  const theme = useTheme();
-  // крупный системный шрифт — перенос внутри колонки вместо многоточия: текст не теряется (ревью pass 1, M1)
-  const lines = useWindowDimensions().fontScale > 1 ? undefined : 1;
+function CompactStats({ items }: Pick<StatsProps, 'items'>) {
   return (
     <View testID="stat-block" style={styles.compactRow}>
+      <CompactCells items={items} />
+    </View>
+  );
+}
+
+/**
+ * Ячейки строки `compact`: подпись над значением. `wrap` (правая группа `numeral`) — ячейки по содержимому и без
+ * ограничения строк: значение не обрезается многоточием при любом шрифте и ширине.
+ */
+function CompactCells({ items, wrap = false }: Pick<StatsProps, 'items'> & { wrap?: boolean }) {
+  const theme = useTheme();
+  const singleLine = useSingleLine();
+  const lines = wrap ? undefined : singleLine;
+  return (
+    <>
       {items.map((item, index) => (
         <View
           key={index}
           testID="stat-block-cell"
           accessible
-          accessibilityLabel={[item.label, item.value, item.unit, item.note]
-            .filter(Boolean)
-            .join(' ')}
-          style={styles.compactCell}
+          accessibilityLabel={cellLabel(item)}
+          style={wrap ? styles.contentCell : styles.compactCell}
         >
           <Text numberOfLines={lines} style={[textStyle('label'), { color: theme.text.secondary }]}>
             {item.label}
@@ -107,8 +140,148 @@ function CompactStats({ items }: { items: readonly StatItem[] }) {
           </Text>
         </View>
       ))}
+    </>
+  );
+}
+
+/**
+ * Плитки (Хронометр, Навигация): три равные плитки с радиусом `shape.card` на фоне экрана `surface.default` — шторка,
+ * где они стоят, уже `surface.sheet` (= `surface.raised` у тем). Значение `displayNumeral36` частями с единицами
+ * (`parts`: «3 ч» / «35 мин»); плитки — по содержимому и переносятся рядами, части и подпись — строками: без
+ * многоточия при любой ширине и размере шрифта.
+ */
+function TileStats({ items }: Pick<StatsProps, 'items'>) {
+  const theme = useTheme<AppTheme>();
+  return (
+    <View testID="stat-block" style={[styles.compactRow, styles.tileRow]}>
+      {items.map((item, index) => (
+        <View
+          key={index}
+          testID="stat-block-cell"
+          accessible
+          accessibilityLabel={cellLabel(item)}
+          style={[
+            styles.tile,
+            { backgroundColor: theme.surface.default, borderRadius: shapeOf(theme).card },
+          ]}
+        >
+          <View testID="stat-block-value" style={styles.tileValue}>
+            {(item.parts ?? [{ value: item.value, unit: item.unit }]).map((part, partIndex) => (
+              <View key={partIndex} style={styles.valueRow}>
+                <Text style={[textStyle('displayNumeral36'), { color: theme.text.primary }]}>
+                  {part.value}
+                </Text>
+                {part.unit ? (
+                  <Text style={[textStyle('unit'), { color: theme.text.secondary }]}>
+                    {part.unit}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+          <Text style={[textStyle('label'), styles.label, { color: theme.text.secondary }]}>
+            {item.label}
+          </Text>
+        </View>
+      ))}
     </View>
   );
+}
+
+/**
+ * Крупная цифра (Типографика): первая ячейка (дистанция) — `displayNumeral` с единицей, остальные — ячейками
+ * `compact` по содержимому справа, а не помещаются — под ней; значения не обрезаются (Codex pass 2).
+ */
+function NumeralStats({ items }: Pick<StatsProps, 'items'>) {
+  const theme = useTheme();
+  const [first, ...rest] = items;
+  if (!first) return null;
+  return (
+    <View testID="stat-block" style={styles.numeralRow}>
+      <View
+        testID="stat-block-numeral"
+        accessible
+        accessibilityLabel={cellLabel(first)}
+        style={styles.valueRow}
+      >
+        <Text style={[textStyle('displayNumeral'), { color: theme.text.primary }]}>
+          {first.value}
+        </Text>
+        {first.unit ? (
+          <Text style={[textStyle('unit'), { color: theme.text.secondary }]}>{first.unit}</Text>
+        ) : null}
+      </View>
+      {rest.length > 0 ? (
+        <View testID="stat-block-numeral-rest" style={[styles.compactRow, styles.numeralRest]}>
+          <CompactCells items={rest} wrap />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** Вариант стат-блока (полноту таблицы проверяет тип). */
+const STAT_VARIANTS: Record<StatVariant, ComponentType<StatsProps>> = {
+  default: DefaultStats,
+  compact: CompactStats,
+  tiles: TileStats,
+  numeral: NumeralStats,
+};
+
+/** Скелетон строки цифр шторки (`compact`) — как прежде: две строки. */
+function CompactSkeleton() {
+  return (
+    <View testID="stat-skeleton-compact">
+      <SkeletonText variant="bodyStrong" lines={2} lastLineWidth="60%" />
+    </View>
+  );
+}
+
+/** Скелетон плиток: три плитки той же формы, внутри — значение и подпись. */
+function TileSkeleton() {
+  const theme = useTheme<AppTheme>();
+  return (
+    <View testID="stat-skeleton-tiles" style={[styles.compactRow, styles.tileRow]}>
+      {[0, 1, 2].map((index) => (
+        <View
+          key={index}
+          style={[
+            styles.tile,
+            { backgroundColor: theme.surface.default, borderRadius: shapeOf(theme).card },
+          ]}
+        >
+          <SkeletonText variant="displayNumeral36" lines={1} lastLineWidth="70%" />
+          <SkeletonText variant="label" lines={1} lastLineWidth="80%" />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Скелетон крупной цифры: дистанция и строка `compact` справа. */
+function NumeralSkeleton() {
+  return (
+    <View testID="stat-skeleton-numeral" style={styles.numeralRow}>
+      <View style={styles.numeralSkeleton}>
+        <SkeletonText variant="displayNumeral" lines={1} />
+      </View>
+      <View style={[styles.numeralRest, styles.numeralSkeletonRest]}>
+        <SkeletonText variant="bodyStrong" lines={2} lastLineWidth="60%" />
+      </View>
+    </View>
+  );
+}
+
+/** Скелетон стат-блока по варианту (первая загрузка шторки повторяет раскладку шапки). */
+const STAT_SKELETONS: Record<Exclude<StatVariant, 'default'>, ComponentType> = {
+  compact: CompactSkeleton,
+  tiles: TileSkeleton,
+  numeral: NumeralSkeleton,
+};
+
+export function StatBlockSkeleton({ variant }: { variant: Exclude<StatVariant, 'default'> }) {
+  const Skeleton = STAT_SKELETONS[variant];
+  return <Skeleton />;
 }
 
 const styles = StyleSheet.create({
@@ -131,4 +304,49 @@ const styles = StyleSheet.create({
   // крупный шрифт: «км» уходит под значение, а не обрезается
   valueRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: space.s1 },
   label: { marginTop: space.s1 },
+  // ширина — по содержимому, не уже строки списка; не влезли в ряд (широкая гарнитура, длинное время) — новый ряд
+  tile: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    minWidth: size.rowMin,
+    // по горизонтали — уже: подпись «ДИСТАНЦИЯ» и «123,4» в трети ширины телефона 360 px
+    paddingHorizontal: space.s2,
+    paddingVertical: space.s3,
+  },
+  // плитки — с узким зазором (s1), переносятся рядами
+  tileRow: { flexWrap: 'wrap', columnGap: space.s1, rowGap: space.s1 },
+  tileValue: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    columnGap: space.s2,
+  },
+  numeralRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    columnGap: size.statGap,
+    rowGap: space.s2,
+  },
+  // строка compact справа от цифры: не уже двух строк списка, иначе — под цифрой
+  numeralSkeleton: { width: size.rowMin * 2 },
+  // у скелетона содержимого нет — ширина группы задана, иначе строки скелетона сжались бы в ноль
+  numeralSkeletonRest: { minWidth: size.rowMin * 2 },
+  // правая группа — по содержимому: не помещается рядом с цифрой — уходит вниз; ячейки переносятся внутри
+  numeralRest: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    flexWrap: 'wrap',
+    rowGap: space.s2,
+  },
+  // ячейка правой группы `numeral` — по содержимому, не уже строки списка
+  contentCell: {
+    flexGrow: 1,
+    flexShrink: 0,
+    flexBasis: 'auto',
+    minWidth: size.rowMin,
+    gap: space.s1,
+  },
 });

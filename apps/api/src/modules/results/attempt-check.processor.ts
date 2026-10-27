@@ -8,7 +8,7 @@ import type {
   TrackFormat,
 } from '@pokatim/tracks/parse';
 import { CLOCK, type Clock, type OutboxJobData } from '@rkarakulov/api-kit/core';
-import { MongoOutboxReader, MongoTransactions } from '@rkarakulov/api-kit/mongo';
+import { MongoOutboxReader, MongoOutboxWriter, MongoTransactions } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
 
 import {
@@ -22,8 +22,13 @@ import { RACE_REGISTRY, type RaceRegistry } from '../races';
 import { ROUTE_GEOMETRY, type RouteGeometry } from '../routes';
 import { ACTIVITY_SOURCE, type ActivitySource } from '../tracks';
 import type { RaceAttemptDoc } from './results.collection';
-import { RESULTS_ATTEMPT_CHECK_REQUESTED, ResultsAttemptCheckRequested } from './results.events';
-import { verdictFields } from './results.policy';
+import {
+  RESULTS_ATTEMPT_CHECK_REQUESTED,
+  RESULTS_ATTEMPT_VERDICT_CHANGED,
+  ResultsAttemptCheckRequested,
+  type ResultsAttemptVerdictChanged,
+} from './results.events';
+import { verdictFields, visibleVerdict } from './results.policy';
 import { type CheckResult, ResultsRepository } from './results.repository';
 
 export type AttemptCheckOutcome = 'counted' | 'rejected' | 'failed' | 'withdrawn' | 'skipped';
@@ -73,6 +78,7 @@ export class AttemptCheckProcessor extends WorkerHost {
   constructor(
     private readonly repository: ResultsRepository,
     private readonly outbox: MongoOutboxReader,
+    private readonly outboxWriter: MongoOutboxWriter,
     private readonly transactions: MongoTransactions,
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
     @Inject(ROUTE_GEOMETRY) private readonly routes: RouteGeometry,
@@ -200,19 +206,38 @@ export class AttemptCheckProcessor extends WorkerHost {
     };
   }
 
-  /** Итог своей ревизией под замком заявки; попытку сняли или перепоставили — ничего не пишем. */
+  /**
+   * Итог своей ревизией под замком заявки; попытку сняли или перепоставили — ничего не пишем. Смена видимого вердикта
+   * (`lastVisibleVerdict`, notifications RC-2) — событие `results.attempt-verdict-changed` в той же транзакции; провал
+   * и снятие прежний вердикт не затирают.
+   */
   private async record(attempt: RaceAttemptDoc, result: CheckResult): Promise<AttemptCheckOutcome> {
+    const previous = attempt.lastVisibleVerdict ?? null;
+    const next = visibleVerdict(attempt.origin, result);
     try {
       await this.transactions.run(async (tx) => {
         const now = this.clock.now();
         const entry = await this.repository.lockEntry(tx, attempt.entryId, now);
         if (!entry) throw new StaleRevision();
-        if (
-          !(await this.repository.recordCheck(tx, attempt._id, attempt.checkRevision, result, now))
-        ) {
-          throw new StaleRevision();
-        }
+        const recorded = await this.repository.recordCheck(
+          tx,
+          attempt._id,
+          attempt.checkRevision,
+          result,
+          now,
+          next ?? previous,
+        );
+        if (!recorded) throw new StaleRevision();
         await this.repository.refreshEntry(tx, entry);
+        if (next !== null && next !== previous) {
+          const payload: ResultsAttemptVerdictChanged = {
+            attemptId: attempt._id,
+            raceId: attempt.raceId,
+            userId: attempt.userId,
+            status: next,
+          };
+          await this.outboxWriter.append(tx, { type: RESULTS_ATTEMPT_VERDICT_CHANGED, payload });
+        }
       });
     } catch (error) {
       if (error instanceof StaleRevision) return 'skipped';

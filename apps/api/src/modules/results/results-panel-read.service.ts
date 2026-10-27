@@ -278,7 +278,10 @@ export class ResultsPanelReadService {
         : null,
       riderName,
       // race-results-07: датчики и флаги датчиков попытки (попытки до 07 — `null` / `[]`)
-      sensors: attempt.sensors ?? null,
+      // источник датчиков — с 07a pass 2; раньше только отсчёты файла (`samples`)
+      sensors: attempt.sensors
+        ? { ...attempt.sensors, source: attempt.sensors.source ?? 'samples' }
+        : null,
       flags: attempt.flags ?? [],
       flagsVersion: attempt.flagsVersion ?? null,
     };

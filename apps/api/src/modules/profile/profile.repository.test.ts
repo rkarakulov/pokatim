@@ -60,7 +60,7 @@ describe('rider_verified_profiles — единственный писатель'
       .map((file) => relative(SRC, file))
       .sort();
     expect(users).toEqual([
-      'db/migrations/0025_entry_tier.ts',
+      'db/migrations/0028_entry_tier.ts',
       'modules/profile/profile.collection.ts',
       'modules/profile/verified-profile.collection.ts',
       'modules/profile/verified-profile.repository.ts',

@@ -1,6 +1,6 @@
-import type { Theme as BaseTheme, ThemeOf } from '@rkarakulov/design-tokens';
+import type { Theme as BaseTheme } from '@rkarakulov/design-tokens';
 
-import type { PokatimRoleGroups, themes } from './brand.ts';
+import type { PokatimRoleGroups } from './brand.ts';
 
 /**
  * Дизайн-система проекта поверх базы `@rkarakulov/design-tokens`: бренд (`brand.ts`) + структурные токены
@@ -9,11 +9,13 @@ import type { PokatimRoleGroups, themes } from './brand.ts';
  */
 export {
   autofillCss,
+  defaultShape,
   density,
   fontWeights,
   inset,
   motion,
   radius,
+  shapeOf,
   size,
   space,
   stroke,
@@ -23,11 +25,39 @@ export {
   type FontRole,
   type FontWeight,
   type NavRoles,
+  type ShapeRoles,
   type TextStyleName,
   type TextStyleToken,
 } from '@rkarakulov/design-tokens';
-export { font, fontStack, themes, type PokatimRoleGroups, type ThemeName } from './brand.ts';
-export { contrastPairs, contrastRatio, WCAG, type ContrastPair } from './contrast.ts';
+export {
+  font,
+  fontStack,
+  themes,
+  type AppTheme,
+  type Basemap,
+  type PokatimRoleGroups,
+  type ThemeName,
+} from './brand.ts';
+export {
+  appDensity,
+  appThemes,
+  appThemeScheme,
+  DEFAULT_THEME,
+  type AppColorScheme,
+  type AppDensity,
+  type AppThemeDefinition,
+  type AppThemeFonts,
+  type AppThemeId,
+  type AppThemeLayout,
+  type IconWeight,
+} from './app-themes.ts';
+export {
+  contrastPairs,
+  contrastPairsOf,
+  contrastRatio,
+  WCAG,
+  type ContrastPair,
+} from './contrast.ts';
 export { designSystemCss, skeletonCss, typographyCss, type DesignSystemCssOptions } from './css.ts';
 
 /**
@@ -36,7 +66,5 @@ export { designSystemCss, skeletonCss, typographyCss, type DesignSystemCssOption
  */
 export const layout = { contentMaxWidth: 640 } as const;
 
-/** Тема проекта для `useTheme<AppTheme>()`: роли базы (+ свои группы ролей бренда). */
-export type AppTheme = ThemeOf<typeof themes>;
-/** Любая тема набора (у `panel` есть навигация); группы ролей pokatim — `map`, `surfaceBar`. */
+/** Любая тема набора (у `panel` есть навигация); группы ролей pokatim — `map`, `surfaceBar`, `profile`, `tabBar`. */
 export type Theme = BaseTheme<PokatimRoleGroups>;

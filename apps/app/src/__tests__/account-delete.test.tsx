@@ -11,7 +11,6 @@ import { EMAIL, liveSession, session, storeSession, storeSurveyCompleted } from 
 import { appRoutes } from './app-routes';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const deleteAccount = jest.mocked(api.deleteAccount);
 const PATH = '/settings/account/delete';

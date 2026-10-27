@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { contrastPairs, contrastRatio } from './contrast.ts';
+import { appThemes } from './app-themes.ts';
+import { contrastPairs, contrastPairsOf, contrastRatio } from './contrast.ts';
 import { designSystemCss } from './css.ts';
 import { themes, type ThemeName } from './brand.ts';
 
@@ -102,6 +103,33 @@ describe('контраст WCAG — темы pokatim', () => {
     );
   });
 
+  for (const def of Object.values(appThemes)) {
+    for (const scheme of ['light', 'dark'] as const) {
+      it.each(contrastPairsOf(def.schemes[scheme]))(
+        `тема ${def.id}, ${scheme}: $name ≥ $min`,
+        ({ foreground, background, min }) => {
+          expect(contrastRatio(foreground, background)).toBeGreaterThanOrEqual(min);
+        },
+      );
+    }
+  }
+
+  it('пары слайса C: профиль в шторке, акцент на карточке, подписи вкладок', () => {
+    expect(contrastPairs('light').map((p) => p.name)).toEqual(
+      expect.arrayContaining([
+        'profile.line / surface.sheet',
+        'text.accent / surface.raised',
+        'tabBar.active / tabBar.background',
+        'tabBar.inactive / tabBar.background',
+        'map.start / map.route',
+      ]),
+    );
+  });
+
+  it('к парам добавлена линия профиля высоты', () => {
+    expect(contrastPairs('light').map((p) => p.name)).toContain('profile.line / surface.default');
+  });
+
   it('пары навигации — только у panel', () => {
     expect(contrastPairs('light').some((p) => p.name.startsWith('nav.'))).toBe(false);
     expect(contrastPairs('panel').some((p) => p.name.startsWith('nav.'))).toBe(true);
@@ -122,6 +150,19 @@ describe('CSS для веба (обёртка с брендом pokatim)', () =>
     expect(light).not.toContain('--nav-');
     expect(designSystemCss({ theme: 'dark' })).toContain('color-scheme: dark;');
     expect(designSystemCss({ theme: 'panel' })).toContain('--nav-background: #111111;');
+  });
+
+  it('подложка карты — не цвет: в CSS нет; профиль высоты — переменные --color-profile-*', () => {
+    const panel = designSystemCss({ theme: 'panel' });
+    expect(panel).not.toContain('--color-map-basemap');
+    expect(panel).toContain('--color-profile-line: #5C5C5C;');
+  });
+
+  it('вкладки — переменные --color-tab-bar-* (роли «Классики»)', () => {
+    const light = designSystemCss({ theme: 'light' });
+    expect(light).toContain('--color-tab-bar-background: #FFFFFF;');
+    expect(light).toContain('--color-tab-bar-active: #111111;');
+    expect(light).toContain('--color-tab-bar-inactive: #5C5C5C;');
   });
 
   it('плотность — только у темы panel', () => {

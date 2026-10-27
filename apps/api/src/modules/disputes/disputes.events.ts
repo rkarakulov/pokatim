@@ -2,9 +2,8 @@ import { DISPUTE_OUTCOMES } from '@pokatim/contracts';
 import { z } from 'zod';
 
 /*
- * События споров (race-results-06) — в outbox **без маршрута** (A11): потребитель — модуль `notifications` позже;
- * издатель базы берёт только типы из маршрутов, события ждут `publishedAt: null`. Только id и коды — без описания,
- * ответа, заметки и `userId` райдеров.
+ * События споров (race-results-06): потребитель — модуль `notifications` (A11, ADR-0017), маршрут объявляет он
+ * (`notificationsOutboxRoutes`). Только id и коды — без описания, ответа, заметки и `userId` райдеров.
  */
 
 export const DisputeEventPayload = z.object({ disputeId: z.uuid(), raceId: z.uuid() });

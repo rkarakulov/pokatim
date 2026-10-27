@@ -94,7 +94,7 @@
 
 ## 3.4 07a — `apps/api`
 
-- **Миграция `0025_entry_tier`** (идемпотентная): `race_entries.tier: null → 'verified'`; `best.ranked = true` у
+- **Миграция `0028_entry_tier`** (идемпотентная): `race_entries.tier: null → 'verified'`; `best.ranked = true` у
   заявок с `best`; `races.groupScheme = 'overall'` у гонок с `lockedAt`; коллекция `rider_verified_profiles`; новый
   частичный индекс мест (`tier: 'verified'`, `best.ranked: true`), затем удаление старого
   `race_entries_ranking_idx` в той же миграции (решение автора 2026-10-27, образец `0021`); индекс строк протокола
@@ -180,7 +180,7 @@
 - `apps/api/src/modules/profile/{profile.module,profile-admin.controller,profile-moderation.service,profile-erasure}.ts`
 - `apps/api/src/modules/races/{race-registry.port,races.repository,races.collection}.ts`
 - `apps/api/src/modules/disputes/disputes.policy.ts`
-- `apps/api/src/db/migrations/{0015_results,0021_routes_rider,0025_entry_tier}.ts`
+- `apps/api/src/db/migrations/{0015_results,0021_routes_rider,0028_entry_tier}.ts`
 - `apps/admin/src/features/results/*`, `features/disputes/*`
 - `apps/app/src/features/races/{results-table,participation/*}.tsx`, `features/profile/*`
 
@@ -207,7 +207,7 @@
   для 08 хватает `protocol-published`/`result-revised`. Если «Центр уведомлений» попросит — отдельной задачей.
 - A1. Старое приложение (пустое тело заявки) в новой гонке получает START — места не теряет, т.к. Verified без
   анкеты невозможен.
-- Решения автора 2026-10-27 (вне спайка): год — анкета с подстановкой из регистрации; старый индекс удаляется в 0025;
+- Решения автора 2026-10-27 (вне спайка): год — анкета с подстановкой из регистрации; старый индекс удаляется в 0028;
   правка пола/года — новое право, только admin.
 
 ## 8.1 Requirements Consistency (заполняет architect)
@@ -270,7 +270,7 @@ architect и действуют, пока автор не скажет инач�
   существующий `target_not_counted`.
 - **RC-17. Индекс с тем же ключом и другим частичным фильтром** (новый `race_entries_ranked_idx` рядом со старым до
   удаления) допустим в MongoDB ≥ 5.0 (у нас 8.0); доказательство — `migrations.int.test.ts` (повтор `0015` воссоздаёт
-  старый, `0025` снова удаляет).
+  старый, `0028` снова удаляет).
 - Конфликтов с инвариантами §4 нет: группа, уровень-правило, место и флаги считает сервер; клиент шлёт намерение
   (`tier`, `groupKey`); биометрия не хранится (только `sensors` — наличие канала, метрики — проценты/отношения).
 
@@ -290,6 +290,14 @@ architect и действуют, пока автор не скажет инач�
 - DV-9: флаги лучшей попытки денормализованы в `race_entries.best.flags` (пишет `refreshEntry` под `lockEntry`):
   протокол, панель и счётчик «Требует внимания» не читают попытки.
 - DV-10: таблица финишёров читается из заявок и после публикации (в снимок START/«без пульса» не входят).
+- DV-11 (ревью pass 2, решение автора 2026-10-27): пульс импорта — по признаку тренировки. Попытка из потока
+  агрегатора (`pokatim.stream.v1`, рядов нет — ADR-0011): `sensors = { hr: hasHeartRate, power: hasPower,
+  source: 'declared' }` из самого потока, `flags: []` (`HR_*` не считаются). Файл FIT/GPX — `source: 'samples'`.
+  Признак — тренировки целиком, не сегмента: принятое ослабление правила пульса для импорта.
+- DV-12 (ревью Claude pass 2, оркестратор): мощность 0 (накат) — отсчёт в точках, но `hasPower` файла — только при
+  мощности > 0: канал из одних нулей не обгоняет дубль с пульсом при выборе основной активности. Ряды 06b на разборе
+  спора: средняя мощность теперь включает накат (корректнее); файл из одних нулей даёт ряд нулей вместо `null` —
+  принято, версия рядов не вводится (кэш Redis 15 мин).
 
 ## 8.3 Security checklist
 
@@ -338,7 +346,7 @@ AuthN/AuthZ: анкета — только своя (`userId` из сессии)
   порт `VERIFIED_PROFILES` для `results`), публичный `GET /v1/races/:id/finishers`, `identity.IdentityAccounts.birthYearOf`;
   `pokatim-contracts.md` — `RaceEntryRequest`, `MyRaceEntry.verified/canUpgrade`, `groups`/`finishers`, анкета,
   `VERIFIED_PROFILE_CONSENT_VERSION`, правило «`group` в запросе — только при `groups` в ответе» (RC-11).
-- `pr.md` 07a — миграция `0025` (удаляет индекс — решение автора), порядок деплоя «миграция → API+worker», проверочные
+- `pr.md` 07a — миграция `0028` (удаляет индекс — решение автора), порядок деплоя «миграция → API+worker», проверочные
   запросы RC-7 после деплоя.
 
 # 11. Implementation Context (заполняет architect)
@@ -359,7 +367,7 @@ AuthN/AuthZ: анкета — только своя (`userId` из сессии)
 - Worker: `AttemptCheckProcessor.check` → `runParseThread('analyzeAttempt')` (новые поля результата).
 - `POST /v1/admin/races/:raceId/protocol/{publish,disqualify,revoke-disqualification,recheck/apply}` — `buildProtocol`
   по группам, снимок `groupKey`/`flags`.
-- Миграция `0025_entry_tier` (`db:migrate`).
+- Миграция `0028_entry_tier` (`db:migrate`).
 
 ### TYPES & SCHEMAS (точные формы)
 
@@ -695,7 +703,7 @@ flagsVersion: null`. Значения в лог не пишутся (тольк�
   группа по умолчанию — `overall` в схеме `overall`, иначе первая из `groups`, иначе `m_u40` (RC-10); `groups` и
   `finishers` — в той же snapshot-сессии.
 
-### Миграция `0025_entry_tier` (без транзакции, идемпотентна; образец `0021`)
+### Миграция `0028_entry_tier` (без транзакции, идемпотентна; образец `0021`)
 
 1. `race_entries.updateMany({ tier: null }, { $set: { tier: 'verified' } })`.
 2. `race_entries.updateMany({ best: { $type: 'object' }, 'best.ranked': { $exists: false } }, { $set: { 'best.ranked': true } })`.
@@ -752,7 +760,7 @@ flagsVersion: null`. Значения в лог не пишутся (тольк�
 | `apps/api/src/modules/results/attempt-check.processor.ts` | поля вердикта |
 | `apps/api/src/modules/results/results-for-disputes{,.port}.ts`, `results.module.ts` | порт споров, импорт порта анкеты |
 | `apps/api/src/modules/disputes/{disputes.policy,disputes-panel.service}.ts` | `not_ranked`, флаги цели |
-| `apps/api/src/db/migrations/0025_entry_tier.ts` (новый), `index.ts`, `migrations.int.test.ts` | миграция |
+| `apps/api/src/db/migrations/0028_entry_tier.ts` (новый), `index.ts`, `migrations.int.test.ts` | миграция |
 | `apps/api/test/results.ts` | хелперы: анкета (`seedVerifiedProfile`), заявка с телом |
 
 ### FILES TO READ
@@ -785,7 +793,7 @@ flagsVersion: null`. Значения в лог не пишутся (тольк�
 | int | удаление аккаунта стирает анкету (`ProfileErasure`), повтор — идемпотентно | `profile.int.test.ts` / account-тест |
 | int | споры: START/без пульса — `not_ranked` подать нельзя, цель — `target_not_counted`; другая группа — нельзя; разбор показывает флаги цели | `results-disputes.int.test.ts`, `disputes-panel.int.test.ts` |
 | int | панель: `standings?group&attention`, `counts.attention`, флаги скорости (а)/(б) на живом чтении | `results-protocol.int.test.ts` или новый `results-panel-flags.int.test.ts` |
-| int | миграция: бэкфилл `tier`, `best.ranked`, `groupScheme` (`overall` / `null`), коллекция, новые индексы, старого нет; повторный `up` — без изменений; повтор `0015` → `0025` снова удаляет | `migrations.int.test.ts` |
+| int | миграция: бэкфилл `tier`, `best.ranked`, `groupScheme` (`overall` / `null`), коллекция, новые индексы, старого нет; повторный `up` — без изменений; повтор `0015` → `0028` снова удаляет | `migrations.int.test.ts` |
 | int | `admitEntry`: первая заявка — `gender_age`; гонка с `lockedAt` без схемы — `overall` (RC-7); отрицательное доказательство «запись без счётчика» — как было | `results-entries.int.test.ts` |
 
 ### Порядок реализации (TDD)
@@ -793,7 +801,7 @@ flagsVersion: null`. Значения в лог не пишутся (тольк�
 1. contracts + тесты схем; `api-client` + тесты; i18n-ключи (сборка зелёная, сервер ещё старый — новые поля `default`).
 2. `packages/tracks`: `sensor-flags.test.ts` (синтетика, красный) → `sensorFlags` → golden (`UPDATE_SENSOR_FLAGS_GOLDEN=1`
    один раз, проверить руками метрики) → `analyzeAttempt` + `parse.test.ts`.
-3. Миграция `0025` + `migrations.int.test.ts` (красный → зелёный).
+3. Миграция `0028` + `migrations.int.test.ts` (красный → зелёный).
 4. `races`: `groupScheme` в документе/порте, `admitEntry` (int).
 5. `profile`: коллекция, репозиторий, порт, сервис/контроллер анкеты (int + лог-сторож), `ProfileErasure`; identity
    `birthYearOf`.
@@ -880,7 +888,7 @@ flagsVersion: null`. Значения в лог не пишутся (тольк�
   группе, `GET /v1/races/:raceId/finishers`; панель — `standings?group&attention`, `counts.attention/finishers`,
   флаги попыток; worker пишет `sensors/flags/flagsVersion`; порт споров — `tier/ranked`, флаги цели.
 - **api / disputes**: `fileBlock` → `not_ranked`, `targetBlock` → без места — `target_not_counted`.
-- **Миграция `0025_entry_tier`**: бэкфилл `tier`, `best.ranked`, `groupScheme`; коллекция анкет; индексы
+- **Миграция `0028_entry_tier`**: бэкфилл `tier`, `best.ranked`, `groupScheme`; коллекция анкет; индексы
   `race_entries_ranked_idx`, `race_entries_finishers_idx`, `race_protocol_rows_group_idx`; удаление
   `race_entries_ranking_idx`.
 - **apps/admin, apps/app** (минимально, чтобы typecheck был зелёным после contracts): тон статуса `finisher` в
@@ -897,7 +905,7 @@ contracts: `packages/contracts/src/{common.ts,common.test.ts,index.ts}`,
 api-client: `packages/api-client/src/{index.ts,admin.ts,tiers.test.ts,admin.test.ts,results.test.ts,disputes.test.ts}`.
 i18n: `packages/i18n/src/ru.ts`. tracks: `packages/tracks/src/{sensor-flags.ts,sensor-flags.test.ts,parse.ts,
 parse.test.ts,__fixtures__/sensor-flags-golden.json}`.
-api: `src/error-messages.ts`, `src/db/migrations/{0025_entry_tier.ts,index.ts,migrations.int.test.ts}`,
+api: `src/error-messages.ts`, `src/db/migrations/{0028_entry_tier.ts,index.ts,migrations.int.test.ts}`,
 `modules/identity/{identity.repository.ts,identity-accounts.ts}`, `modules/panel/{permissions.ts,permissions.test.ts,
 panel-session.int.test.ts}`, `modules/races/{races.collection.ts,race-registry.port.ts,race-registry.ts,
 races.repository.ts,races.service.ts}`, `modules/profile/{profile.collection.ts,profile.module.ts,index.ts,
@@ -992,7 +1000,7 @@ exit=0
   протокола), а не пересчитанное умолчание; тест «курсор без group — группа строки курсора…» (был `400`).
 - **[LOW] pr.md:** запрос по `groupScheme: null` (информативно), агрегат попыток `counted` без `sensors` после
   миграции по гонкам и действие — «Перепроверить треки».
-- **RC-3** — подтверждено оркестратором (§8.1); golden флагов на реальных треках — в Open follow-ups.
+- **RC-3** — решение автора: спайк §3.2 «Группу ... фиксирует в заявке» и §5 S4 «группа фиксируется в заявке» (§8.1); golden флагов на реальных треках — в Open follow-ups.
 
 
 `TURBO_CONCURRENCY=1 pnpm check` (MONGO `pokatim_r07_test`, Redis db 11) — `exit=0`, хвост:
@@ -1008,6 +1016,29 @@ exit=0
 
 Предыдущий прогон упал на нетронутом `track-uploads.int.test.ts` «MEDIUM-6: > 16 МиБ через настоящий сокет»
 (`fetch failed`, флак сокета под нагрузкой). Отдельно файл прошёл дважды (34/34), повторный `pnpm check` зелёный.
+
+### Фиксы ревью pass 2
+
+По `findings-07a-codex-pass2.md`:
+
+- **[HIGH] импорт Garmin/Wahoo без пульса** (DV-11, решение автора 2026-10-27). `analyzeAttempt`: исходник
+  `stream` — `sensors = { hr: hasHeartRate, power: hasPower, source: 'declared' }` из самого потока (граница модулей
+  не нарушается: признак уже в `pokatim.stream.v1`), `flags: []`; файл — `source: 'samples'` и флаги как раньше.
+  `SENSOR_SOURCES` (tracks) = `ATTEMPT_SENSOR_SOURCES` (contracts, сторож в `results-tiers.policy.test.ts`);
+  `AttemptSensors.source` — `.default('samples')`; документ попытки `source?`, панель отдаёт `?? 'samples'`.
+  Тесты: `parse.test.ts` «поток агрегатора…» (был красным), int `results-check.int.test.ts` «импорт Garmin/Wahoo…»:
+  `hasHeartRate: true` → место 1 в `m_u40`, панель `source: 'declared'`; `false` → finisher `no_heart_rate`
+  (оба были красными без фикса tracks), `tiers.schema.test.ts` — источник и default.
+- **[MEDIUM] мощность 0.** `gpx.ts`/`fit.ts` сохраняют конечную неотрицательную мощность (пульс 0 — по-прежнему не
+  отсчёт; TCX-парсера нет). Тесты: `gpx.test.ts`, `fit.test.ts` (FIT собран `Encoder` SDK), `sensor-flags.test.ts`
+  «через разбор GPX: мощность 0…» (40 мин, 200 Вт → 0/100 Вт ⇒ `HR_POWER_DECOUPLED` 75; был красным). Golden флагов,
+  рядов 06b (`series`) и `expected.json` не изменились — `FLAGS_VERSION` остаётся 1. Побочно: файл только с нулевой
+  мощностью теперь `hasPower: true` (приоритет основной в группе дублей).
+- Фикстура ответа `packages/api-client/src/admin.test.ts`: `sensors.source: 'samples'` (сервер отдаёт поле всегда).
+- Документы: §8.2 DV-11, `pokatim-db.md` (попытка `sensors.source`), `races-and-seasons.md` (строка про импорт).
+
+`TURBO_CONCURRENCY=1 pnpm check` (MONGO `pokatim_r07_test`, Redis db 11) — `exit=0`, `Tasks: 15 successful, 15 total`
+(tracks 307, contracts 277, api 1171, api-client 98, admin 282, app 1208). Первый прогон упал только на фикстуре api-client.
 
 ## 12.2 07b — панель «Протокол»
 

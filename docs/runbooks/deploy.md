@@ -15,9 +15,11 @@ workflow и сервер позже (не настроен; `infra/docker-compos
 push develop ─► deploy-dev.yml
                  ├─ preflight   environment dev: секреты DEV_SSH_*, DEV_PUBLIC_HOST, тег sha-<7>
                  ├─ ci          ci.yml (reusable): format, lint, arch, typecheck, test, сборка, web-смоук
-                 ├─ build       infra/docker/Dockerfile → GHCR: pokatim-api, pokatim-web, pokatim-admin
-                 │              теги sha-<7> и develop, linux/amd64
-                 └─ deploy      environment dev; SSH: файлы стека → ~/pokatim, deploy.sh (токен GHCR — stdin)
+                 ├─ build       параллельно с ci, матрица из трёх джобов: infra/docker/Dockerfile → GHCR:
+                 │              pokatim-api, pokatim-web, pokatim-admin, тег sha-<7>, linux/amd64
+                 ├─ promote     после зелёных ci и build: тег develop на те же образы (без пересборки)
+                 └─ deploy      после зелёных ci и build; environment dev; SSH: файлы стека → ~/pokatim,
+                                deploy.sh (токен GHCR — stdin)
 
 Сервер — общий (на нём живут другие проекты: их сайты, контейнеры, тома и порты не трогаем):
   nginx хоста :80/:443 ─ /etc/nginx/sites-available/pokatim (server_name = <хост>)
@@ -136,6 +138,8 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
   `TRACK_STORAGE_MIN_FREE_BYTES` (1 GiB), `DEVICES_ENABLED=false`, `OW_API_URL`, `OW_API_KEY`, `OW_WEBHOOK_SECRET`,
   `OW_SHARED_INSTANCE=true`, `OW_DOCKER_NETWORK` — пустые ключи OW дописывает шаблон, значения вписывает владелец
   руками (как `MAIL_RELAY_*`).
+- Push через Expo (ADR-0017, runbook [`push.md`](push.md)): `PUSH_ENABLED=false` дописывает шаблон (push выключен —
+  уведомления только в центре), `EXPO_ACCESS_TOKEN` — необязательный секрет, вписывает владелец руками.
 
 Потеря `.env` при живом томе `mongodata`: новый `MONGO_ROOT_PASSWORD` не совпадёт с root в базе — `mongo-init.js`
 упадёт с сообщением «MONGO_ROOT_PASSWORD из .env не подходит к root в томе mongodata».
@@ -378,7 +382,8 @@ MongoDB → новый `deploy.sh` поверх (новые миграции п�
 
 Actions → `deploy-dev` → Run workflow, `image_tag` = прошлый тег `sha-<7>` (теги — в Summary прошлых прогонов или
 GHCR → Packages → `pokatim-api`). CI и сборка пропускаются, разворачиваются образы этого тега (из GHCR; локальные
-старые образы прочищаются). Workflow тянет образы токеном `GITHUB_TOKEN` сам.
+старые образы прочищаются). Workflow тянет образы токеном `GITHUB_TOKEN` сам. Образы собираются параллельно с CI,
+поэтому тег `sha-<7>` есть и у коммита с красным CI — для отката берите тег из Summary успешного деплоя (или `develop`).
 
 - **Через границу БД откат невозможен:** образы до перехода на MongoDB ждут PostgreSQL (`DATABASE_URL`), а деплой
   кладёт compose с MongoDB — для них только «Ручной возврат на PostgreSQL» (раздел выше).

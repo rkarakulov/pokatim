@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
 import type { CatalogRouteDetail, RaceCard, RouteMapGeometry } from '@pokatim/contracts';
+import { appThemes } from '@pokatim/design-tokens';
 import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
@@ -18,7 +19,6 @@ import { appRoutes } from './app-routes';
 jest.mock('@/lib/api');
 jest.mock('@/lib/share-link', () => ({ shareLink: jest.fn(), shareOrigin: jest.fn() }));
 jest.mock('@/lib/download-file', () => ({ downloadFile: jest.fn() }));
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getRoute = jest.mocked(api.getCatalogRoute);
 const getMap = jest.mocked(api.getCatalogRouteMap);
@@ -434,5 +434,59 @@ describe('карточка маршрута каталога: гость по с
     await fireEvent.press(screen.getByText('Повторить'));
     expect(await screen.findByText('Весенний коридор')).toBeOnTheScreen();
     expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+  });
+});
+
+describe('карточка маршрута: шапка шторки по теме (app-themes C2)', () => {
+  // тема — из ответа /v1/appearance: не переносить в следующие тесты (clearAllMocks реализацию не сбрасывает)
+  afterEach(() => jest.mocked(api.getAppearance).mockReset());
+
+  const themed = (themeId: 'chrono' | 'typography') =>
+    jest.mocked(api.getAppearance).mockResolvedValue({ themeId });
+
+  it('Хронометр — плитки цифр в шапке шторки', async () => {
+    themed('chrono');
+    await open();
+    await screen.findByLabelText(heroLabel);
+    const header = within(screen.getByTestId('bottom-sheet-header'));
+    const tile = appThemes.chrono.schemes.dark.surface.default;
+    await waitFor(() =>
+      expect(header.getAllByTestId('stat-block-cell')[0]).toHaveStyle({ backgroundColor: tile }),
+    );
+    expect(header.getAllByTestId('stat-block-cell')).toHaveLength(3);
+    expect(header.queryByTestId('stat-block-numeral')).toBeNull();
+  });
+
+  it('Типографика — дистанция крупной цифрой', async () => {
+    themed('typography');
+    await open();
+    await screen.findByLabelText(heroLabel);
+    const header = within(screen.getByTestId('bottom-sheet-header'));
+    expect(await header.findByTestId('stat-block-numeral')).toHaveTextContent('86км');
+  });
+});
+
+describe('карточка маршрута: скелетон шапки по теме (app-themes C, ревью pass 1)', () => {
+  // тема — из ответа /v1/appearance: не переносить в следующие тесты (clearAllMocks реализацию не сбрасывает)
+  afterEach(() => jest.mocked(api.getAppearance).mockReset());
+
+  const hidden = { includeHiddenElements: true };
+
+  it.each([
+    ['chrono', 'stat-skeleton-tiles'],
+    ['typography', 'stat-skeleton-numeral'],
+  ] as const)('%s — первая загрузка: скелетон шапки варианта', async (themeId, testID) => {
+    jest.mocked(api.getAppearance).mockResolvedValue({ themeId });
+    getRoute.mockReturnValue(new Promise(() => undefined));
+    await open();
+    const skeleton = within(await screen.findByTestId('route-detail-skeleton', hidden));
+    expect(await skeleton.findByTestId(testID, hidden)).toBeOnTheScreen();
+  });
+
+  it('«Классика» — прежний скелетон строки цифр', async () => {
+    getRoute.mockReturnValue(new Promise(() => undefined));
+    await open();
+    const skeleton = within(await screen.findByTestId('route-detail-skeleton', hidden));
+    expect(skeleton.getByTestId('stat-skeleton-compact', hidden)).toBeOnTheScreen();
   });
 });

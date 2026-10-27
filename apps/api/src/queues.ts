@@ -45,4 +45,17 @@ export const QUEUE = {
    * `account.erasure-resume`. Один процессор разбирает задачи по имени.
    */
   accountDeletion: 'account-deletion',
+  /**
+   * Приём событий для уведомлений (ADR-0017): события outbox модулей-источников → уведомления получателям; jobId = id
+   * события outbox, повтор не дублирует (уникальный `(sourceEventId, userId)`).
+   */
+  notificationsIntake: 'notifications-intake',
+  /**
+   * Доставка уведомлений: `notifications.push` — по пользователю (jobId `push-<userId>-<notBeforeMs>`, с задержкой до
+   * конца тихих часов), `notifications.email` — по уведомлению (jobId `email-<id>`). Состояние доставки — в документе
+   * уведомления (захват), повтор не шлёт второй push или письмо.
+   */
+  notificationsDelivery: 'notifications-delivery',
+  /** Регламент уведомлений: квитанции Expo (`DeviceNotRegistered` снимает токен), перепостановка зависших доставок. */
+  notificationsMaintenance: 'notifications-maintenance',
 } as const;

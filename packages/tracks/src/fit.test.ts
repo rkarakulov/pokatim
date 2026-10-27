@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
+import { Encoder, Profile, type FileIdMesg, type RecordMesg } from '@garmin/fitsdk';
+
 import { parseFit } from './fit.ts';
 import { sanitizePoints } from './points.ts';
 import { summarizeTrack } from './summary.ts';
@@ -97,6 +99,33 @@ describe('parseFit', () => {
     expect(track.points).toEqual([]);
     expect(track.hasPower).toBe(true);
     expect(track.hasHeartRate).toBe(true);
+  });
+
+  it('мощность 0 (накат) — отсчёт; пульс 0 — нет (race-results-07)', () => {
+    const encoder = new Encoder();
+    const start = new Date('2026-10-25T06:00:00Z');
+    const fileId: FileIdMesg = {
+      manufacturer: 'development',
+      product: 1,
+      timeCreated: start,
+      type: 'activity',
+    };
+    encoder.onMesg(Profile.MesgNum.FILE_ID!, fileId);
+    const semicircles = (deg: number) => Math.round((deg * 2 ** 31) / 180);
+    for (const [i, power] of [0, 100].entries()) {
+      const record: RecordMesg = {
+        timestamp: new Date(start.getTime() + i * 1000),
+        positionLat: semicircles(53.9),
+        positionLong: semicircles(27.5),
+        heartRate: 0,
+        power,
+      };
+      encoder.onMesg(Profile.MesgNum.RECORD!, record);
+    }
+    const track = parseFit(encoder.close());
+    expect(track.points.map((point) => point.power)).toEqual([0, 100]);
+    expect(track.points.every((point) => point.hr === undefined)).toBe(true);
+    expect(track).toMatchObject({ hasPower: true, hasHeartRate: false });
   });
 
   it('сжатые метки времени: декодер SDK их не поддерживает — unreadable', () => {

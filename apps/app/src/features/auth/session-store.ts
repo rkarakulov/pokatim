@@ -1,6 +1,8 @@
 import { type AnySession, CookieSession } from '@pokatim/contracts';
 import { create } from 'zustand';
 
+import { forgetPushToken } from '@/features/notifications/push';
+
 import { isSessionAlive } from './session-expiry';
 import { sessionOwner } from './session-identity';
 import {
@@ -138,6 +140,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   },
   clearNotice: () => set({ notice: null }),
   applyAccessRefresh: (checked, result) => {
+    const before = get().status;
     set((state) => {
       if (state.session !== checked || state.status !== 'signedIn') return state;
       // web: cookie одна на браузер — другая вкладка могла войти другим аккаунтом, и refresh вернул его сессию.
@@ -147,6 +150,9 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       }
       return { status: 'signedOut', session: null, sessionReceivedAt: null, returning: true };
     });
+    // выход мимо `useSignOut` (401, reuse, чужой аккаунт в cookie): устройство забывает push-токен; на сервере токен
+    // мёртвой сессии push не получает и снимается при доставке (ADR-0017)
+    if (before === 'signedIn' && get().status === 'signedOut') void forgetPushToken();
   },
 }));
 
