@@ -41,9 +41,10 @@ function useClientThemeFonts(set: ThemeFontSet): ThemeFontsState {
     };
   }, [set]);
 
-  // набор сменился, эффект ещё не отработал — состояние прежнего набора не годится
-  if (state.set !== set) return allLoaded(set) ? READY : { ready: false, error: null };
-  return { ready: state.ready, error: state.error };
+  if (state.set === set && state.ready) return { ready: true, error: state.error };
+  // набор сменился (эффект ещё не отработал) или его ожидание отменила смена набора, а файлы тем временем загрузились
+  // (возврат к набору) — готовность по факту загрузки, а не по состоянию прежнего ожидания
+  return allLoaded(set) ? READY : { ready: false, error: null };
 }
 
 /**

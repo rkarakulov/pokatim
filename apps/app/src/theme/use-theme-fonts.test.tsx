@@ -66,6 +66,28 @@ describe('useThemeFonts (native и клиент web)', () => {
     expect(result.current).toEqual({ ready: true, error: null });
   });
 
+  it('A грузится → выбран загруженный B → загрузка A завершилась → возврат к A — готово', async () => {
+    const loaded = new Set(['PlayfairDisplay_500Medium']);
+    isLoaded.mockImplementation((name) => loaded.has(name));
+    const loadA = deferred();
+    loadAsync.mockReturnValue(loadA.promise);
+    const { result, rerender } = await renderHook(
+      ({ set }: { set: ThemeFontSet }) => useThemeFonts(set),
+      { initialProps: { set: setA } },
+    );
+    expect(result.current.ready).toBe(false);
+
+    await rerender({ set: setB });
+    expect(result.current.ready).toBe(true);
+
+    await act(async () => {
+      loaded.add('Inter_400Regular');
+      loadA.resolve();
+    });
+    await rerender({ set: setA });
+    expect(result.current).toEqual({ ready: true, error: null });
+  });
+
   it('ошибка загрузки — готово (системные шрифты) + ошибка', async () => {
     isLoaded.mockReturnValue(false);
     const load = deferred();
