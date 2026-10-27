@@ -3,10 +3,11 @@
 // стираемый синтаксис TS.
 import { gzipSync, gunzipSync } from 'node:zlib';
 
-import { detectTrackFormat } from './format.ts';
+import { detectRouteFormat, detectTrackFormat } from './format.ts';
 import { parseFit } from './fit.ts';
 import { haversineMeters, trackLengthMeters } from './geo.ts';
 import { parseGpx } from './gpx.ts';
+import { parseKml } from './kml.ts';
 import { matchCorridorDetailed } from './corridor/match.ts';
 import { prepareCorridor } from './corridor/prepare.ts';
 import { trackMapOf, type TrackMap } from './corridor/track-map.ts';
@@ -33,6 +34,7 @@ import {
 
 export { parseFit } from './fit.ts';
 export { parseGpx } from './gpx.ts';
+export { parseKml } from './kml.ts';
 export { parseStream, TrackStreamV1 } from './stream.ts';
 export {
   matchCorridor,
@@ -198,16 +200,19 @@ export interface RouteAnalysis {
 const lonLat = (point: { lon: number; lat: number }): [number, number] => [point.lon, point.lat];
 
 /**
- * Маршрут GPX (`trk` или, без `trkpt`, `rte`) одним вызовом для worker: сигнатура → разбор → лимит точек → очистка
- * → длина → линии показа и сверки. Время в точках не нужно. Отказ — `TrackParseError` с `RouteFailureCode`.
+ * Маршрут GPX (`trk` или, без `trkpt`, `rte`) или KML (`LineString`/`gx:Track`, routes-02) одним вызовом для
+ * worker: сигнатура → разбор → лимит точек → очистка → длина → линии показа и сверки. Время в точках не нужно.
+ * Отказ — `TrackParseError` с `RouteFailureCode`.
  */
 export function analyzeRoute(bytes: Uint8Array): RouteAnalysis {
-  if (detectTrackFormat(bytes) !== 'gpx') throw new TrackParseError('unreadable');
+  const format = detectRouteFormat(bytes);
+  if (format === null) throw new TrackParseError('unreadable');
+  const text = new TextDecoder('utf-8').decode(bytes);
   // предел точек маршрута — подсчётом до разбора XML (память потока worker)
-  const track = parseGpx(new TextDecoder('utf-8').decode(bytes), {
-    allowRoute: true,
-    maxPoints: ROUTE_MAX_POINTS,
-  });
+  const track =
+    format === 'gpx'
+      ? parseGpx(text, { allowRoute: true, maxPoints: ROUTE_MAX_POINTS })
+      : parseKml(text, { maxPoints: ROUTE_MAX_POINTS });
   const points = sanitizePoints(track.points);
   if (points.length < 2) throw new TrackParseError('no_track');
   const lengthM = trackLengthMeters(points);

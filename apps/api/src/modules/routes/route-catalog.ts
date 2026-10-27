@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { boundsOf, haversineMeters, type Bounds } from '@pokatim/tracks';
 
 import type { DbSession } from '../../db';
+import type { RouteDoc } from './routes.collection';
 import type { ReadyRoute, RouteCatalog } from './route-catalog.port';
 import type {
   RouteDisplayGeometry,
@@ -21,8 +22,23 @@ interface CachedGeometry {
 }
 
 /**
- * Реализация портов `RouteCatalog` и `RouteGeometry`: читает только `routes`/`route_geometries`. Кэш геометрии
- * безопасен: готовый маршрут не меняется и не удаляется (`pokatim-db.md`).
+ * Линия показа, старт, финиш и рамка готового маршрута; `null` — нет концов или линии (< 2 точек). Общая для портов
+ * (маршрут платформы) и карты своего маршрута райдера (`MyRoutesService.map`, routes-02).
+ */
+export function displayGeometryOf(
+  route: RouteDoc,
+  line: [number, number][] | undefined,
+): RouteDisplayGeometry | null {
+  if (!route.start || !route.finish) return null;
+  const bounds = line ? boundsOf(line) : null;
+  if (!line || line.length < 2 || !bounds) return null;
+  return { line, start: route.start.coordinates, finish: route.finish.coordinates, bounds };
+}
+
+/**
+ * Реализация портов `RouteCatalog` и `RouteGeometry`: читает только маршруты платформы (`findReady`, `routesByIds`,
+ * `findPublished` — с `origin: 'platform'`, routes-02). Кэш геометрии безопасен: готовый маршрут платформы не
+ * меняется и не удаляется (`pokatim-db.md`); маршрут райдера (удаляемый) в кэш не попадает.
  */
 @Injectable()
 export class RoutesCatalogService implements RouteCatalog, RouteGeometry {
@@ -75,15 +91,8 @@ export class RoutesCatalogService implements RouteCatalog, RouteGeometry {
     }
     const route = await this.repository.findReady(routeId);
     if (!route?.start || !route.finish) return null;
-    const line = await this.repository.displayLine(routeId);
-    const bounds = line ? boundsOf(line) : null;
-    if (!line || line.length < 2 || !bounds) return null;
-    const entry: RouteDisplayGeometry = {
-      line,
-      start: route.start.coordinates,
-      finish: route.finish.coordinates,
-      bounds,
-    };
+    const entry = displayGeometryOf(route, await this.repository.displayLine(routeId));
+    if (!entry) return null;
     this.displayCache.set(routeId, entry);
     if (this.displayCache.size > DISPLAY_CACHE_MAX) {
       const oldest = this.displayCache.keys().next().value;

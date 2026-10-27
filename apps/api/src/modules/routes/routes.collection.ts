@@ -1,10 +1,16 @@
-import type { CityCode, RouteFailureCode, RouteStatus, Surface } from '@pokatim/contracts';
+import type {
+  CityCode,
+  RouteFailureCode,
+  RouteOrigin,
+  RouteStatus,
+  Surface,
+} from '@pokatim/contracts';
 import type { Binary, Collection, Db } from 'mongodb';
 
 /**
- * Коллекции модуля `routes` — эталонные маршруты коридора гонки (race-results-01, ADR-0012 п. 1). Создаёт миграция
- * `0013_routes`; единственный писатель — `RoutesRepository`. Готовый маршрут (`ready`) не меняется: ни линия, ни
- * длина (гонки хранят `routeId` и снимок длины). Время — BSON `Date` (UTC) из `CLOCK`, nullable — явным `null`.
+ * Коллекции модуля `routes` — эталонные маршруты коридора гонки (race-results-01, ADR-0012 п. 1) и личные маршруты
+ * райдеров (routes-02). Создаёт миграция `0013_routes`; единственный писатель — `RoutesRepository`. Готовый маршрут
+ * (`ready`) не меняет линию и длину (гонки хранят `routeId` и снимок длины); маршрут платформы не удаляется. Время — BSON `Date` (UTC) из `CLOCK`, nullable — явным `null`.
  */
 export const ROUTES_COLLECTIONS = {
   routes: 'routes',
@@ -22,10 +28,15 @@ export interface RouteCatalogDoc {
   publishedAt: Date;
 }
 
-/** Маршрут: v1 — только маршруты команды платформы (`origin: 'platform'`). Уникальны `(ownerUserId, sha256)`. */
+/**
+ * Маршрут. `platform` — маршрут команды (панель, каталог, коридоры); `rider` (routes-02) — личный маршрут райдера из
+ * приложения: виден только автору, `catalog` всегда `null`, меняется только `title`, удаляется автором (транзакция
+ * трёх коллекций). Чтение вне «моих» — только с `origin: 'platform'` в фильтре. Уникальны `(ownerUserId, origin,
+ * sha256)` (`0021_routes_rider`).
+ */
 export interface RouteDoc {
   _id: string;
-  origin: 'platform';
+  origin: RouteOrigin;
   ownerUserId: string;
   title: string;
   status: RouteStatus;
@@ -55,7 +66,7 @@ export interface RouteGeometryDoc {
 }
 
 /**
- * Исходник GPX (`_id` = routeId, ≤ 5 МиБ) — в БД, не в `TrackFileStore`: уборка `tracks-maintenance` удаляет файлы
+ * Исходник GPX/KML (`_id` = routeId, ≤ 5 МиБ) — в БД, не в `TrackFileStore`: уборка `tracks-maintenance` удаляет файлы
  * без документа `track_uploads`. Хранится для пересчёта линии сверки новой версией движка.
  */
 export interface RouteSourceDoc {

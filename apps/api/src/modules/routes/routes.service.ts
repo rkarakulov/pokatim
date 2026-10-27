@@ -7,8 +7,9 @@ import type {
   PanelRouteQuery,
   PanelRouteSummary,
   RateLimitedDetails,
+  RouteOrigin,
 } from '@pokatim/contracts';
-import { detectTrackFormat } from '@pokatim/tracks';
+import { detectRouteFormat } from '@pokatim/tracks';
 import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
 import {
   isDuplicateKey,
@@ -25,6 +26,15 @@ import type { RouteDoc } from './routes.collection';
 import { ROUTE_RECEIVED } from './routes.events';
 import { ROUTE_POLICY } from './routes.policy';
 import { RoutesRepository } from './routes.repository';
+
+/** Владелец принимаемого маршрута: сотрудник панели (`platform`) или райдер приложения (`rider`). */
+export interface RouteOwner {
+  userId: string;
+  origin: RouteOrigin;
+}
+
+/** Уникальный индекс дедупа приёма (`0021_routes_rider`). */
+const ROUTES_DEDUP_INDEX = 'routes_owner_origin_sha_unique';
 
 /** Курсор списка маршрутов: ключ — константа (сортировка только по `_id`). */
 const RouteCursorKey = z.literal('r');
@@ -60,9 +70,10 @@ function catalogOf(route: RouteDoc): PanelRouteSummary['catalog'] {
 }
 
 /**
- * Маршруты команды платформы (race-results-01): приём GPX (лимит частоты, формат по сигнатуре, дедуп по sha256 в
- * пределах сотрудника, транзакция «маршрут + исходник + журнал + outbox»), список и чтение. Разбор — только worker.
- * Видимость (Q2): готовые — всем с `races.read`; необработанные — только автору (чужой — 404).
+ * Маршруты команды платформы (race-results-01): приём GPX/KML (лимит частоты, формат по сигнатуре, дедуп по sha256 в
+ * пределах владельца и происхождения, транзакция «маршрут + исходник + журнал + outbox»), список и чтение. Приём —
+ * общий и для маршрутов райдера (`MyRoutesService`, routes-02). Разбор — только worker. Видимость (Q2): готовые —
+ * всем с `races.read`; необработанные — только автору (чужой — 404); маршрут райдера — никому.
  */
 @Injectable()
 export class RoutesService {
@@ -91,27 +102,40 @@ export class RoutesService {
     }
   }
 
-  /** Приём GPX: `created` — маршрут поставлен в обработку (`202`: новый или повтор отказа), иначе тот же (`200`). */
+  /**
+   * Приём файла маршрута (GPX/KML) для владельца `owner` — сотрудника (`platform`, панель) или райдера (`rider`,
+   * routes-02): `created` — маршрут поставлен в обработку (`202`: новый или повтор отказа), иначе тот же (`200`).
+   * Порядок: пусто → размер → формат по сигнатуре → дедуп в пределах `(origin, userId)` → квота (`maxRoutes`, только
+   * после дедупа: тот же файл при полной квоте — `200`) → транзакция «маршрут + исходник (+ журнал панели для
+   * `platform`) + outbox». Квота мягкая (счёт вне транзакции). Лог — без названия.
+   */
   async accept(
-    principal: PanelPrincipal,
+    owner: RouteOwner,
     title: string,
     bytes: Uint8Array,
-  ): Promise<{ created: boolean; route: PanelRoute }> {
+    options: { maxRoutes?: number } = {},
+  ): Promise<{ created: boolean; route: RouteDoc }> {
     if (bytes.byteLength === 0) {
       throw domainError('VALIDATION_FAILED', 400, { fields: [{ path: 'body', code: 'INVALID' }] });
     }
     if (bytes.byteLength > ROUTE_POLICY.maxFileBytes) throw domainError('ROUTE_TOO_LARGE', 413);
-    // FIT-курс, KML и прочее — 415: v1 принимает только GPX (Q3)
-    if (detectTrackFormat(bytes) !== 'gpx') throw domainError('ROUTE_FORMAT_UNSUPPORTED', 415);
+    // KMZ, FIT-курс, TCX и прочее — 415 (GPX и KML — по содержимому, routes-02)
+    if (detectRouteFormat(bytes) === null) throw domainError('ROUTE_FORMAT_UNSUPPORTED', 415);
     const sha256 = createHash('sha256').update(bytes).digest('hex');
-    const existing = await this.repository.findByOwnerSha(principal.userId, sha256);
+    const existing = await this.repository.findByOwnerSha(owner.origin, owner.userId, sha256);
     if (existing) return this.again(existing);
+    if (
+      options.maxRoutes !== undefined &&
+      (await this.repository.countOwned(owner.origin, owner.userId)) >= options.maxRoutes
+    ) {
+      throw domainError('ROUTE_QUOTA_EXCEEDED', 409);
+    }
 
     const now = this.clock.now();
     const route: RouteDoc = {
       _id: uuidv7(),
-      origin: 'platform',
-      ownerUserId: principal.userId,
+      origin: owner.origin,
+      ownerUserId: owner.userId,
       title,
       status: 'processing',
       failure: null,
@@ -130,35 +154,38 @@ export class RoutesService {
     try {
       await this.transactions.run(async (tx) => {
         await this.repository.insertRoute(tx, route, bytes);
-        await this.audit.append(tx, {
-          action: 'route.created',
-          actor: { kind: 'user', userId: principal.userId },
-          subject: { kind: 'route', id: route._id, label: route.title },
-        });
+        // журнал панели — только маршруты команды: действия райдера и его названия туда не пишутся
+        if (owner.origin === 'platform') {
+          await this.audit.append(tx, {
+            action: 'route.created',
+            actor: { kind: 'user', userId: owner.userId },
+            subject: { kind: 'route', id: route._id, label: route.title },
+          });
+        }
         await this.outbox.append(tx, { type: ROUTE_RECEIVED, payload: { routeId: route._id } });
       });
     } catch (error) {
       // две одинаковые загрузки одновременно: проигравшая получает маршрут победившей
-      const winner = isDuplicateKey(error, 'routes_owner_sha_unique')
-        ? await this.repository.findByOwnerSha(principal.userId, sha256)
+      const winner = isDuplicateKey(error, ROUTES_DEDUP_INDEX)
+        ? await this.repository.findByOwnerSha(owner.origin, owner.userId, sha256)
         : undefined;
       if (winner) return this.again(winner);
       throw error;
     }
-    this.logger.log(`route ${route._id} queued by ${principal.userId}`);
-    return { created: true, route: await this.view(route) };
+    this.logger.log(`route ${route._id} (${owner.origin}) queued by ${owner.userId}`);
+    return { created: true, route };
   }
 
   /**
-   * Тот же файл того же сотрудника: готовый или обрабатываемый маршрут — как есть (`200`); отказ или зависшая
+   * Тот же файл того же владельца: готовый или обрабатываемый маршрут — как есть (`200`); отказ или зависшая
    * обработка — снова в обработку новым событием outbox (`202`): сбой окружения не закрывает файл навсегда.
    */
-  private async again(route: RouteDoc): Promise<{ created: boolean; route: PanelRoute }> {
+  private async again(route: RouteDoc): Promise<{ created: boolean; route: RouteDoc }> {
     const now = this.clock.now();
     const staleBefore = new Date(now.getTime() - ROUTE_POLICY.stuckAfterMs);
     const retry =
       route.status === 'failed' || (route.status === 'processing' && route.updatedAt < staleBefore);
-    if (!retry) return { created: false, route: await this.view(route) };
+    if (!retry) return { created: false, route };
     const requeued = await this.transactions.run(async (tx) => {
       const doc = await this.repository.requeue(tx, route._id, staleBefore, now);
       if (doc)
@@ -167,10 +194,10 @@ export class RoutesService {
     });
     if (!requeued) {
       const current = await this.repository.findRoute(route._id);
-      return { created: false, route: await this.view(current ?? route) };
+      return { created: false, route: current ?? route };
     }
     this.logger.log(`route ${route._id} requeued by ${requeued.ownerUserId}`);
-    return { created: true, route: await this.view(requeued) };
+    return { created: true, route: requeued };
   }
 
   async get(principal: PanelPrincipal, id: string): Promise<PanelRoute> {
@@ -209,7 +236,13 @@ export class RoutesService {
   }
 }
 
-/** Готовый маршрут платформы — всем с `races.read`; необработанный и отказ — только автору. */
+/**
+ * Панель видит только маршруты платформы (routes-02, RC-2): готовый — всем с `races.read`; необработанный и отказ —
+ * только автору. Маршрут райдера — никому (404).
+ */
 export function visible(principal: PanelPrincipal, route: RouteDoc): boolean {
-  return route.status === 'ready' || route.ownerUserId === principal.userId;
+  return (
+    route.origin === 'platform' &&
+    (route.status === 'ready' || route.ownerUserId === principal.userId)
+  );
 }

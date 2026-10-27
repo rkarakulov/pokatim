@@ -15,7 +15,7 @@ import {
   useTheme,
 } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -30,6 +30,7 @@ import { useMinskClockAfterMount, useMounted } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { CatalogRouteMap } from './catalog-route-map';
+import { DetailRow } from './detail-row';
 import {
   routeCity,
   routeHeroDate,
@@ -42,17 +43,6 @@ import { useCatalogRoute, useCatalogRouteRaces } from './queries';
 
 export const routeDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
 export const routePath = (id: string) => `/routes/${encodeURIComponent(id)}`;
-
-/** Строка карточки: подпись и значение. */
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.row}>
-      <Text style={[textStyle('label'), { color: theme.text.secondary }]}>{label}</Text>
-      <Text style={[textStyle('body'), { color: theme.text.primary }]}>{children}</Text>
-    </View>
-  );
-}
 
 /** «Поделиться» ссылкой на web-карточку: share sheet / Web Share / копирование с «Ссылка скопирована». */
 function ShareAction({ route }: { route: CatalogRouteDetail }) {
@@ -182,17 +172,17 @@ function RouteDetailView({
         meta={place ? [place] : undefined}
       />
       <CatalogRouteMap route={route} />
-      <Row label={t('routes.detail.length')}>{routeKm(route.distanceM)}</Row>
+      <DetailRow label={t('routes.detail.length')}>{routeKm(route.distanceM)}</DetailRow>
       {route.elevationGainM !== null ? (
-        <Row label={t('routes.detail.elevation')}>
+        <DetailRow label={t('routes.detail.elevation')}>
           {t('routes.detail.elevationValue', { gain: i18n.formatNumber(route.elevationGainM) })}
-        </Row>
+        </DetailRow>
       ) : null}
-      <Row label={t('routes.detail.loop')}>
+      <DetailRow label={t('routes.detail.loop')}>
         {route.isLoop ? t('routes.detail.yes') : t('routes.detail.no')}
-      </Row>
-      {city ? <Row label={t('routes.detail.city')}>{city}</Row> : null}
-      {surfaces ? <Row label={t('routes.detail.surface')}>{surfaces}</Row> : null}
+      </DetailRow>
+      {city ? <DetailRow label={t('routes.detail.city')}>{city}</DetailRow> : null}
+      {surfaces ? <DetailRow label={t('routes.detail.surface')}>{surfaces}</DetailRow> : null}
       {canShare ? <ShareAction route={route} /> : null}
       <RouteRaces races={races} now={now} />
     </View>
@@ -288,7 +278,6 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
   detail: { gap: space.s4 },
   offline: { paddingBottom: space.s3 },
-  row: { gap: space.s1 },
   stack: { gap: space.s3 },
   racesTitle: { marginBottom: space.s2 },
   more: { alignItems: 'flex-start', paddingTop: space.s2 },

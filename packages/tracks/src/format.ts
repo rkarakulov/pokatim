@@ -1,7 +1,10 @@
 import type { TrackFormat } from './track.ts';
 
-/** Сколько байт начала файла смотрим в поисках корня `<gpx`. */
-const GPX_SNIFF_BYTES = 4096;
+/** Сколько байт начала файла смотрим в поисках корня XML (`<gpx`, `<kml`). */
+const XML_SNIFF_BYTES = 4096;
+
+/** Формат файла маршрута по содержимому (routes-02): GPX или KML; `detectTrackFormat` KML не знает. */
+export type RouteFileFormat = 'gpx' | 'kml';
 
 /**
  * Формат по содержимому (не по расширению).
@@ -12,7 +15,17 @@ const GPX_SNIFF_BYTES = 4096;
  */
 export function detectTrackFormat(bytes: Uint8Array): Exclude<TrackFormat, 'stream'> | null {
   if (isFitHeader(bytes)) return 'fit';
-  if (isGpxHead(bytes)) return 'gpx';
+  if (xmlRootAfterProlog(bytes, 'gpx')) return 'gpx';
+  return null;
+}
+
+/**
+ * Формат маршрута по содержимому (не по расширению): тот же сканер пролога, что у GPX, корень `<gpx` или `<kml`
+ * в первых 4 КБ. `<!DOCTYPE` перед корнем, KMZ (zip), FIT, TCX — `null`.
+ */
+export function detectRouteFormat(bytes: Uint8Array): RouteFileFormat | null {
+  if (xmlRootAfterProlog(bytes, 'gpx')) return 'gpx';
+  if (xmlRootAfterProlog(bytes, 'kml')) return 'kml';
   return null;
 }
 
@@ -23,10 +36,11 @@ function isFitHeader(bytes: Uint8Array): boolean {
   return bytes[8] === 0x2e && bytes[9] === 0x46 && bytes[10] === 0x49 && bytes[11] === 0x54;
 }
 
-function isGpxHead(bytes: Uint8Array): boolean {
+/** После BOM, пробелов, `<?…?>` и комментариев — корень `<name` (за ним пробел, `>` или `/`). */
+function xmlRootAfterProlog(bytes: Uint8Array, name: string): boolean {
   let start = 0;
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) start = 3;
-  const end = Math.min(bytes.length, GPX_SNIFF_BYTES);
+  const end = Math.min(bytes.length, XML_SNIFF_BYTES);
   // только ASCII-префикс: всё до корня — разметка; не-ASCII байты дают символы, которых нет в шаблонах ниже
   let head = '';
   for (let i = start; i < end; i += 1) head += String.fromCharCode(bytes[i]!);
@@ -46,8 +60,8 @@ function isGpxHead(bytes: Uint8Array): boolean {
       break;
     }
   }
-  if (!head.startsWith('<gpx', pos)) return false;
-  const next = head.charCodeAt(pos + 4);
+  if (!head.startsWith(`<${name}`, pos)) return false;
+  const next = head.charCodeAt(pos + 1 + name.length);
   return isXmlSpace(next) || next === 0x3e || next === 0x2f; // пробел, '>' или '/'
 }
 

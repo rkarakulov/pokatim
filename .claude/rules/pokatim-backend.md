@@ -26,7 +26,7 @@ paths:
   ADR-0011), `devices` (Garmin/Wahoo через агрегатор Open Wearables), `routes` (маршруты команды платформы —
   эталон коридора гонки, ADR-0012 Proposed) и `rides` (кофе-райды, ADR-0013 Proposed: зависит только от `identity`;
   панель — с модерацией 05b).
-- `routes` о гонках не знает и зависит только от `panel`; `races → routes` — только порт `RouteCatalog`
+- `routes` о гонках не знает и зависит от `panel` и `identity` (routes-02: `AuthGuard` «моих маршрутов», как `rides`); `races → routes` — только порт `RouteCatalog`
   (`modules/routes/index.ts`, `RoutesCoreModule`): готовый маршрут по id в транзакции правки гонки и названия
   маршрутов списка. Записи `routes`/`route_*` из `races` (и наоборот) — нет. Карта коридора (maps-01, ADR-0014):
   `races` читает линию показа через порт `RouteGeometry.displayGeometry` (только `ready`, проекция без
@@ -39,6 +39,13 @@ paths:
   `ROUTE_GEOMETRY`, тот же `RoutesCatalogService`). `GET /v1/routes/:id/races` живёт в `races`
   (`RacesPublicController`): проверка «в каталоге» — порт `RouteCatalog.inCatalog` (без кэша), 404 — до разбора
   курсора.
+- Мои маршруты (routes-02): `RoutesMineController` (`@Controller('routes/mine')`, `AuthGuard`) — **первым** в
+  `RoutesModule.controllers` (статический сегмент до публичного `routes/:id`, иначе pipe `Uuid` → 400) →
+  `MyRoutesService` (лимиты и семафор до тела, квота, список, карточка, карта через `displayGeometryOf` — не через
+  порт и кэш, `rename`, `delete` в транзакции). Приём — общий `RoutesService.accept({ userId, origin }, …)`: формат —
+  `detectRouteFormat` (GPX/KML; API панели принимает KML тоже, UI панели — GPX), журнал панели — только `platform`,
+  outbox `routes.route-received` и worker `route-processing` — общие. Порты `RouteCatalog`/`RouteGeometry` и
+  `RoutesCatalogService` видят только `platform`. Мутации «моих» — `POST` с глаголом (`rename`, `delete`).
 - Общий код загрузок в `src/`: `raw-body.ts` (`readLimited` — тело `application/octet-stream` после гарда и лимита,
   обрыв на лимите — `413` с кодом модуля и `Connection: close`) и `parse-thread.ts` (`runParseThread` — функция
   `@pokatim/tracks/parse` из белого списка `PARSE_FUNCTIONS` в `worker_threads`, `DEFAULT_PARSE_LIMITS` 160/32 МБ,

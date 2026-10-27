@@ -34,6 +34,12 @@ paths:
   `RouteMapGeometry` (как `RaceRouteMap` без `widthM`; `race-route.schema.ts` не меняется — совместимость держит тест
   типов), `CatalogRouteRacesQuery`. Панель — `PublishRouteInput` (`city`, `surfaces: SurfaceList`), обязательное
   `PanelRouteSummary.catalog` (`null` | `{ city, surfaces, publishedAt }`); код `ROUTE_INVALID_STATE` (409).
+- Мои маршруты (routes-02): `src/routes/route.schema.ts` — `ROUTE_ORIGINS` (`platform`, `rider`; только в конец),
+  `ROUTE_FILE_EXTENSIONS` (`gpx`, `kml` = пакет `@pokatim/tracks`), `UploadRouteQuery` — общий для панели и
+  `POST /v1/routes/mine`; `src/routes/my-route.schema.ts` — ответы приложения `MyRoute` (`status`, `failure` —
+  `tolerantEnum`; без `origin`, владельца, sha256, попыток, каталога и линий), `MyRoutePage`, `MyRouteQuery`
+  (`strictObject`, limit ≤ 50), `RenameRouteInput` (`RouteTitle` 3–120), `MY_ROUTE_MAX_COUNT` (100); карта —
+  `RouteMapGeometry`. Код `ROUTE_QUOTA_EXCEEDED` (409) — в конце `ErrorCode`.
 - Свой трек (maps-02): `src/results/results.schema.ts` — `MyAttemptTrack` (`attemptId`, `line` — `LonLat` 2–1000,
   `segment: TrackMapRun | null`, `offRuns` ≤ 100, `marks` — `tolerantEnum(ATTEMPT_TRACK_MARKS)`: незнакомое клиент
   трактует как `unavailable`); позиции — дробные индексы вершин `{ from, to }`. Клиент — `getMyAttemptTrack`.
