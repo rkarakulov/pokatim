@@ -656,4 +656,13 @@ describe('Главная: герой «Маршрутов» по теме (app-t
     expect(await within(hero).findByTestId('route-contour', hidden)).toBeOnTheScreen();
     expect(within(hero).queryByTestId('section-hero-rule', hidden)).toBeNull();
   });
+
+  it.each([
+    ['atlas', 'route-hero-skeleton-contour'],
+    ['typography', 'route-hero-skeleton-numeral'],
+  ] as const)('%s — первая загрузка раздела: скелетон героя варианта', async (themeId, testID) => {
+    listRoutes.mockReturnValue(never());
+    await openThemed(themeId);
+    expect(await screen.findByTestId(testID, hidden)).toBeOnTheScreen();
+  });
 });

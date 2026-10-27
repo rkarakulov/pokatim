@@ -10,7 +10,6 @@ import {
   EmptyState,
   Pill,
   SkeletonGroup,
-  SkeletonText,
   TextAction,
   textStyle,
   useTheme,
@@ -33,7 +32,7 @@ import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
-import { StatBlock, type StatVariant } from '@/components/stat-block';
+import { StatBlock, StatBlockSkeleton, type StatVariant } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
@@ -176,7 +175,7 @@ function RouteRaces({
 }
 
 /** Вариант цифр шапки шторки по раскладке темы (`layout.routeStats`, app-themes C2). */
-const STATS_VARIANT: Record<AppThemeLayout['routeStats'], StatVariant> = {
+const STATS_VARIANT: Record<AppThemeLayout['routeStats'], Exclude<StatVariant, 'default'>> = {
   classic: 'compact',
   tiles: 'tiles',
   numeral: 'numeral',
@@ -257,6 +256,7 @@ function StateScroll({
  */
 function RouteDetailSkeleton() {
   const theme = useTheme<AppTheme>();
+  const variant = STATS_VARIANT[useAppTheme().layout.routeStats];
   const block = { backgroundColor: theme.surface.skeleton };
   return (
     <View testID="route-detail-skeleton" style={styles.area}>
@@ -265,7 +265,7 @@ function RouteDetailSkeleton() {
         <View style={sheetStyles.grabber} />
         <View style={[styles.sheetHeader, styles.skeletonSheet]}>
           <SkeletonGroup>
-            <SkeletonText variant="bodyStrong" lines={2} lastLineWidth="60%" />
+            <StatBlockSkeleton variant={variant} />
             <View style={[styles.profilePlace, block]} />
           </SkeletonGroup>
         </View>

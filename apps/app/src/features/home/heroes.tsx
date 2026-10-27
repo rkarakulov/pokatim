@@ -8,7 +8,7 @@ import {
   type AppThemeLayout,
 } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { textStyle, useTheme } from '@rkarakulov/ui';
+import { SkeletonHeroCard, SkeletonText, textStyle, useTheme } from '@rkarakulov/ui';
 import { useQuery } from '@tanstack/react-query';
 import type { ComponentType } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -230,6 +230,54 @@ export function RouteHero(props: RouteHeroProps) {
   return <Hero {...props} />;
 }
 
+/** Скелетон героя «Контур»: панель той же высоты и формы, название, мета. */
+function ContourHeroSkeleton() {
+  const theme = useTheme<AppTheme>();
+  return (
+    <View testID="route-hero-skeleton-contour">
+      <View
+        style={[
+          styles.panel,
+          { borderRadius: shapeOf(theme).card, backgroundColor: theme.surface.skeleton },
+        ]}
+      />
+      <View style={styles.title}>
+        <SkeletonText variant="displayTitle" lines={1} lastLineWidth="70%" />
+      </View>
+      <View style={styles.meta}>
+        <SkeletonText variant="meta" lines={2} lastLineWidth="50%" />
+      </View>
+    </View>
+  );
+}
+
+/** Скелетон героя «Крупная цифра»: цифра, название, мета слева; блок справа. */
+function NumeralHeroSkeleton() {
+  const theme = useTheme<AppTheme>();
+  return (
+    <View testID="route-hero-skeleton-numeral" style={styles.numeralRow}>
+      <View style={[styles.numeralText, styles.skeletonGap]}>
+        <SkeletonText variant="displayNumeral" lines={1} lastLineWidth="60%" />
+        <SkeletonText variant="displaySm" lines={1} lastLineWidth="80%" />
+        <SkeletonText variant="meta" lines={2} lastLineWidth="50%" />
+      </View>
+      <View style={[styles.diagonal, { backgroundColor: theme.surface.skeleton }]} />
+    </View>
+  );
+}
+
+/** Скелетон героя «Маршрутов» по раскладке темы (первая загрузка раздела). */
+const ROUTE_HERO_SKELETON: Record<AppThemeLayout['home'], ComponentType> = {
+  classic: SkeletonHeroCard,
+  contour: ContourHeroSkeleton,
+  numeral: NumeralHeroSkeleton,
+};
+
+export function RouteHeroSkeleton() {
+  const Skeleton = ROUTE_HERO_SKELETON[useAppTheme().layout.home];
+  return <Skeleton />;
+}
+
 /** Наклон кромки диагонального блока Типографики (раскладка, не размер). */
 const DIAGONAL_SKEW = '-12deg';
 
@@ -250,6 +298,7 @@ const styles = StyleSheet.create({
   numeralValue: { flexDirection: 'row', alignItems: 'baseline', columnGap: space.s1 },
   caps: { textTransform: 'uppercase', marginTop: space.s1 },
   diagonal: { flex: 1, overflow: 'hidden' },
+  skeletonGap: { gap: space.s2 },
   // наклонная левая кромка: заливка шире блока и скошена, лишнее обрезает `overflow`
   diagonalFill: {
     position: 'absolute',

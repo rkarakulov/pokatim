@@ -1,5 +1,5 @@
 import { shapeOf, size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
-import { textStyle, useTheme } from '@rkarakulov/ui';
+import { SkeletonText, textStyle, useTheme } from '@rkarakulov/ui';
 import type { ComponentType } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
@@ -222,6 +222,62 @@ const STAT_VARIANTS: Record<StatVariant, ComponentType<StatsProps>> = {
   numeral: NumeralStats,
 };
 
+/** Скелетон строки цифр шторки (`compact`) — как прежде: две строки. */
+function CompactSkeleton() {
+  return (
+    <View testID="stat-skeleton-compact">
+      <SkeletonText variant="bodyStrong" lines={2} lastLineWidth="60%" />
+    </View>
+  );
+}
+
+/** Скелетон плиток: три плитки той же формы, внутри — значение и подпись. */
+function TileSkeleton() {
+  const theme = useTheme<AppTheme>();
+  return (
+    <View testID="stat-skeleton-tiles" style={[styles.compactRow, styles.tileRow]}>
+      {[0, 1, 2].map((index) => (
+        <View
+          key={index}
+          style={[
+            styles.tile,
+            { backgroundColor: theme.surface.default, borderRadius: shapeOf(theme).card },
+          ]}
+        >
+          <SkeletonText variant="displayNumeral36" lines={1} lastLineWidth="70%" />
+          <SkeletonText variant="label" lines={1} lastLineWidth="80%" />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Скелетон крупной цифры: дистанция и строка `compact` справа. */
+function NumeralSkeleton() {
+  return (
+    <View testID="stat-skeleton-numeral" style={styles.numeralRow}>
+      <View style={styles.numeralSkeleton}>
+        <SkeletonText variant="displayNumeral" lines={1} />
+      </View>
+      <View style={styles.numeralRest}>
+        <SkeletonText variant="bodyStrong" lines={2} lastLineWidth="60%" />
+      </View>
+    </View>
+  );
+}
+
+/** Скелетон стат-блока по варианту (первая загрузка шторки повторяет раскладку шапки). */
+const STAT_SKELETONS: Record<Exclude<StatVariant, 'default'>, ComponentType> = {
+  compact: CompactSkeleton,
+  tiles: TileSkeleton,
+  numeral: NumeralSkeleton,
+};
+
+export function StatBlockSkeleton({ variant }: { variant: Exclude<StatVariant, 'default'> }) {
+  const Skeleton = STAT_SKELETONS[variant];
+  return <Skeleton />;
+}
+
 const styles = StyleSheet.create({
   compactRow: { flexDirection: 'row', columnGap: size.statGap },
   // равные колонки в один ряд; при обычном шрифте — одна строка, при крупном — перенос внутри колонки
@@ -267,5 +323,6 @@ const styles = StyleSheet.create({
     rowGap: space.s2,
   },
   // строка compact справа от цифры: не уже двух строк списка, иначе — под цифрой
+  numeralSkeleton: { width: size.rowMin * 2 },
   numeralRest: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: size.rowMin * 2 },
 });
