@@ -22,7 +22,7 @@ export const PROJECT_ERROR_MESSAGES = {
   DEVICE_PROVIDER_UNAVAILABLE: 'Подключение временно недоступно',
   DEVICE_LINK_INVALID: 'Ссылка подключения недействительна',
   DEVICE_PROVIDER_ERROR: 'Сервис подключения устройств не ответил',
-  ROUTE_FORMAT_UNSUPPORTED: 'Выберите файл GPX',
+  ROUTE_FORMAT_UNSUPPORTED: 'Выберите файл GPX или KML',
   ROUTE_TOO_LARGE: 'Файл больше 5 МБ',
   RIDE_FULL: 'Мест нет',
   RIDE_INVALID_STATE: 'Райд уже начался или отменён',
@@ -39,6 +39,7 @@ export const PROJECT_ERROR_MESSAGES = {
   DISPUTE_ACTION_BLOCKED: 'Действие со спором сейчас недоступно',
   DISPUTE_NOT_FOUND: 'Спор не найден',
   ROUTE_INVALID_STATE: 'Маршрут ещё не готов',
+  ROUTE_QUOTA_EXCEEDED: 'Достигнут предел маршрутов',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

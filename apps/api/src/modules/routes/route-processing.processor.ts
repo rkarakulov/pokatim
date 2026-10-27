@@ -20,6 +20,8 @@ export type RouteProcessingOutcome = 'ready' | 'failed' | 'skipped';
  * { геометрия + `processing → ready` }. Сбой окружения (исходник, поток, запись результата) — исключение и ретрай
  * BullMQ; последняя попытка — `failed: unreadable` (панель показывает причину, маршрут не висит в «Обрабатываем…»;
  * если и эта запись не удалась — повторная загрузка того же файла вернёт маршрут в обработку). Параллелизм — 1.
+ * Маршрут райдера, удалённый автором во время обработки (routes-02), — `skipped`: захвата нет, исходника и маршрута
+ * нет, `markReady` не находит документ (геометрия не пишется).
  */
 @Processor(QUEUE.routeProcessing, { concurrency: 1 })
 export class RouteProcessingProcessor extends WorkerHost {
@@ -74,7 +76,14 @@ export class RouteProcessingProcessor extends WorkerHost {
 
   private async analyzeAndRecord(routeId: string): Promise<RouteProcessingOutcome> {
     const bytes = await this.repository.sourceBytes(routeId);
-    if (!bytes) throw new Error(`route ${routeId}: source is missing`);
+    if (!bytes) {
+      // маршрут райдера удалён автором после захвата (routes-02, RC-8) — no-op без ретрая
+      if (!(await this.repository.findRoute(routeId))) {
+        this.logger.log(`route ${routeId} deleted during processing`);
+        return 'skipped';
+      }
+      throw new Error(`route ${routeId}: source is missing`);
+    }
     const outcome = await this.analyze(bytes);
     if (!outcome.ok) {
       const failure = outcome.code as RouteFailureCode;
