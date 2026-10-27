@@ -99,6 +99,15 @@ describe('fetchPublicForSsr (R5)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it('cache: false — мимо кэша процесса: не читает и не кладёт (своё окно у вызывающего)', async () => {
+    fetchMock.mockImplementation(() => json(200, season));
+    await fetchPublicForSsr(path, SeasonCard);
+    await fetchPublicForSsr(path, SeasonCard, { cache: false });
+    await fetchPublicForSsr('/v1/appearance-like', SeasonCard, { cache: false });
+    await fetchPublicForSsr('/v1/appearance-like', SeasonCard, { cache: false });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it('поток 404 по разным id (перебор ссылок) не вытесняет успешные ответы: отдельный пул отказов', async () => {
     fetchMock.mockImplementation(() => json(200, season));
     await fetchPublicForSsr(path, SeasonCard);

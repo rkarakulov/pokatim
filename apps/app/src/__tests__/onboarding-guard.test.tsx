@@ -22,7 +22,6 @@ import { USER_A, USER_B } from './jwt';
 import { appRoutes } from './app-routes';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const status = jest.mocked(api.getOnboardingStatus);
 const submit = jest.mocked(api.submitOnboardingSurvey);

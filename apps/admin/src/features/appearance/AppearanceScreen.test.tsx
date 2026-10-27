@@ -62,7 +62,8 @@ describe('«Оформление приложения» (app-themes D1, AC6)', (
     await screen.findByRole('group', { name: 'Тема приложения' });
     const atlas = radio('Атлас');
     const describedBy = atlas.getAttribute('aria-describedby') ?? '';
-    expect(document.getElementById(describedBy)?.textContent).toContain('Превью появится позже');
+    // app-themes C: превью у всех тем цветное, в описании — гарнитура темы
+    expect(document.getElementById(describedBy)?.textContent).toContain('Шрифт: Manrope');
     expect(radio('Классика').getAttribute('aria-describedby')).toBeTruthy();
   });
 
@@ -93,13 +94,17 @@ describe('«Оформление приложения» (app-themes D1, AC6)', (
     expect(saveButton().disabled).toBe(true);
   });
 
-  it('превью: у «Классики» — цветной мини-макет, у остальных — «Превью появится позже»', async () => {
+  it('превью: у всех 7 тем — цветной мини-макет и подпись шрифта; «Превью появится позже» нет (app-themes C1)', async () => {
     await open();
     await screen.findByRole('group', { name: 'Тема приложения' });
+    expect(document.querySelectorAll('.theme-preview--palette')).toHaveLength(7);
+    expect(screen.queryByText('Превью появится позже')).toBeNull();
+    const atlas = radio('Атлас').closest('label') as HTMLElement;
+    expect(within(atlas).getByText('Шрифт: Manrope')).toBeTruthy();
     const classic = radio('Классика').closest('label') as HTMLElement;
-    expect(classic.querySelector('.theme-preview--palette')).toBeTruthy();
-    expect(within(classic).queryByText('Превью появится позже')).toBeNull();
-    expect(screen.getAllByText('Превью появится позже')).toHaveLength(6);
+    expect(within(classic).getByText('Шрифт: Playfair Display')).toBeTruthy();
+    const mock = atlas.querySelector('.theme-preview') as HTMLElement;
+    expect(mock.style.getPropertyValue('--preview-radius')).toBe('16px');
   });
 
   it('выбор и сохранение: тело { themeId, version }, баннер успеха, новая тема — текущая, журнал перечитывается', async () => {

@@ -19,6 +19,7 @@ import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
 
+import { appThemeWrapper } from './app-theme-wrapper';
 import { tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
@@ -30,6 +31,7 @@ const listRaces = jest.mocked(api.listRaces);
 const listCalendar = jest.mocked(api.listCalendar);
 const listRides = jest.mocked(api.listRides);
 const listRoutes = jest.mocked(api.listCatalogRoutes);
+const getRouteMap = jest.mocked(api.getCatalogRouteMap);
 const joinRide = jest.mocked(api.joinRide);
 
 /** «Сейчас»: 1 октября 2026, 15:00 по Минску. */
@@ -576,5 +578,92 @@ describe('Главная: раздел «Маршруты» (routes-01, AC7)', (
     expect(sectionTitles()).toContain('Маршруты команды');
     await fireEvent.press(screen.getByText('Все маршруты'));
     expect(router.getPathname()).toBe('/routes');
+  });
+});
+
+describe('Главная: герой «Маршрутов» по теме (app-themes C2, F1)', () => {
+  const geometry = {
+    line: [
+      [27.5, 53.9],
+      [27.6, 53.95],
+      [27.7, 53.9],
+    ] as [number, number][],
+    start: [27.5, 53.9] as [number, number],
+    finish: [27.7, 53.9] as [number, number],
+    bounds: [27.5, 53.9, 27.7, 53.95] as [number, number, number, number],
+  };
+
+  const hidden = { includeHiddenElements: true };
+
+  /** Главная под темой: QueryClient + тема приложения. */
+  async function openThemed(themeId: 'classic' | 'atlas' | 'typography') {
+    const Query = createQueryWrapper();
+    const Theme = appThemeWrapper(themeId);
+    return renderRouter(
+      { ...tabRoutes, 'routes/[id]': () => null },
+      {
+        initialUrl: '/',
+        wrapper: ({ children }: { children: ReactElement }) => (
+          <Query>
+            <Theme>{children}</Theme>
+          </Query>
+        ),
+      },
+    );
+  }
+
+  it('«Классика» — текстовый герой без запроса карты (RC-8)', async () => {
+    await openThemed('classic');
+    const hero = await screen.findByLabelText(/^Маршрут команды\. Минское кольцо/);
+    expect(within(hero).getByTestId('section-hero-rule', hidden)).toBeOnTheScreen();
+    expect(getRouteMap).not.toHaveBeenCalled();
+  });
+
+  it('Атлас — контур: пока геометрия грузится — скелетон панели; затем путь; ссылка в карточку', async () => {
+    let resolve: (value: typeof geometry) => void = () => undefined;
+    getRouteMap.mockReturnValue(new Promise((r) => (resolve = r)));
+    const router = await openThemed('atlas');
+    const hero = await screen.findByLabelText(/^Маршрут команды\. Минское кольцо/);
+    expect(screen.getByTestId('route-hero-contour-skeleton', hidden)).toBeOnTheScreen();
+    expect(getRouteMap).toHaveBeenCalledTimes(1);
+    expect(getRouteMap).toHaveBeenCalledWith(catalogRoute.id);
+    await act(async () => resolve(geometry));
+    expect(await screen.findByTestId('route-contour', hidden)).toBeOnTheScreen();
+    expect(screen.queryByTestId('route-hero-contour-skeleton', hidden)).toBeNull();
+    expect(screen.getByText('86 км · набор 412 м · петля')).toBeOnTheScreen();
+    // кнопка-стрелка декоративная: второй цели нажатия нет
+    expect(screen.getAllByRole('link', { name: /Минское кольцо/ })).toHaveLength(1);
+    await fireEvent.press(hero);
+    expect(router.getPathname()).toBe(`/routes/${catalogRoute.id}`);
+  });
+
+  it('Атлас — ошибка /map: панель без контура, тихо', async () => {
+    getRouteMap.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'нет' }));
+    await openThemed('atlas');
+    await screen.findByLabelText(/^Маршрут команды\. Минское кольцо/);
+    await waitFor(() =>
+      expect(screen.queryByTestId('route-hero-contour-skeleton', hidden)).toBeNull(),
+    );
+    expect(screen.getByTestId('route-hero-panel', hidden)).toBeOnTheScreen();
+    expect(screen.queryByTestId('route-contour', hidden)).toBeNull();
+    expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+  });
+
+  it('Типографика — крупная дистанция и контур на диагональном блоке', async () => {
+    getRouteMap.mockResolvedValue(geometry);
+    await openThemed('typography');
+    const hero = await screen.findByLabelText(/^Маршрут команды\. Минское кольцо/);
+    expect(within(hero).getByTestId('route-hero-numeral', hidden)).toHaveTextContent('86км');
+    expect(await within(hero).findByTestId('route-contour', hidden)).toBeOnTheScreen();
+    expect(within(hero).queryByTestId('section-hero-rule', hidden)).toBeNull();
+  });
+
+  it.each([
+    ['atlas', 'route-hero-skeleton-contour'],
+    ['typography', 'route-hero-skeleton-numeral'],
+  ] as const)('%s — первая загрузка раздела: скелетон героя варианта', async (themeId, testID) => {
+    listRoutes.mockReturnValue(never());
+    await openThemed(themeId);
+    expect(await screen.findByTestId(testID, hidden)).toBeOnTheScreen();
   });
 });

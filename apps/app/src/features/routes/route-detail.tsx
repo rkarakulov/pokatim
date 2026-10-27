@@ -1,6 +1,6 @@
 import { apiErrorOf } from '@pokatim/api-client';
 import { Uuid, type CatalogRouteDetail } from '@pokatim/contracts';
-import { size, space, type AppTheme } from '@pokatim/design-tokens';
+import { size, space, type AppTheme, type AppThemeLayout } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { createScrubStore, PROFILE_ASPECT_RATIO, type ScrubStore } from '@pokatim/route-view';
 import {
@@ -28,18 +28,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/bottom-sheet';
-import { sheetColors, sheetStyles } from '@/components/bottom-sheet-props';
+import { sheetSurface, sheetStyles } from '@/components/bottom-sheet-props';
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
-import { StatBlock } from '@/components/stat-block';
+import { StatBlock, StatBlockSkeleton, type StatVariant } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
 import { useMinskClockAfterMount, useMounted } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
+import { useAppTheme } from '@/theme/use-app-theme';
 
 import { CatalogRouteMap } from './catalog-route-map';
 import { ElevationProfile } from './elevation-profile';
@@ -215,11 +216,22 @@ function RouteReportAction({
   );
 }
 
-/** Шапка шторки (routes-04d, L3): компактная строка цифр — видна и в свёрнутой шторке. */
+/** Вариант цифр шапки шторки по раскладке темы (`layout.routeStats`, app-themes C2). */
+const STATS_VARIANT: Record<AppThemeLayout['routeStats'], Exclude<StatVariant, 'default'>> = {
+  classic: 'compact',
+  tiles: 'tiles',
+  numeral: 'numeral',
+};
+
+/**
+ * Шапка шторки (routes-04d, L3): строка цифр — видна и в свёрнутой шторке; у тем — плитки или крупная дистанция
+ * (высоту шапки шторка измеряет сама, отступ камеры следует).
+ */
 function RouteSheetHeader({ route }: { route: CatalogRouteDetail }) {
+  const variant = STATS_VARIANT[useAppTheme().layout.routeStats];
   return (
     <View style={styles.sheetHeader}>
-      <StatBlock variant="compact" items={routeStatItems(route)} />
+      <StatBlock variant={variant} items={routeStatItems(route)} />
     </View>
   );
 }
@@ -296,15 +308,16 @@ function StateScroll({
  */
 function RouteDetailSkeleton() {
   const theme = useTheme<AppTheme>();
+  const variant = STATS_VARIANT[useAppTheme().layout.routeStats];
   const block = { backgroundColor: theme.surface.skeleton };
   return (
     <View testID="route-detail-skeleton" style={styles.area}>
       <View style={[StyleSheet.absoluteFill, block]} />
-      <View style={[sheetStyles.sheet, sheetColors(theme)]}>
+      <View style={[sheetStyles.sheet, sheetSurface(theme)]}>
         <View style={sheetStyles.grabber} />
         <View style={[styles.sheetHeader, styles.skeletonSheet]}>
           <SkeletonGroup>
-            <SkeletonText variant="bodyStrong" lines={2} lastLineWidth="60%" />
+            <StatBlockSkeleton variant={variant} />
             <View style={[styles.profilePlace, block]} />
           </SkeletonGroup>
         </View>

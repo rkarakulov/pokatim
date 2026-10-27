@@ -12,7 +12,7 @@ import { TopBar } from '@/components/top-bar';
 import { useSignOut } from '@/features/auth/use-sign-out';
 import { HomeSection } from '@/features/home/home-section';
 import { CalendarStartHero } from '@/features/calendar/calendar-hero';
-import { RaceHero, RouteHero } from '@/features/home/heroes';
+import { RaceHero, RouteHero, RouteHeroSkeleton } from '@/features/home/heroes';
 import {
   useLatestRoute,
   useNextCalendarStart,
@@ -199,6 +199,7 @@ export default function HomeScreen() {
               key={id}
               {...frame}
               query={routes}
+              skeleton={<RouteHeroSkeleton />}
               empty={{
                 when: (page) => page.items.length === 0,
                 render: () => <EmptyState title={t('home.routes.empty')} />,

@@ -76,6 +76,18 @@ export function routeHeroDate(route: Pick<CatalogRouteCard, 'distanceM'>): HeroD
 // --- routes-03: карточка маршрута — стат-блок, время в пути, чипы, профиль высоты ---
 
 /** «2 ч 30 мин», «45 мин», «3 ч». */
+/** Части длительности для плиток: число и единица («2» «ч», «30» «мин»), как км/м. */
+function durationParts(minutes: number): { value: string; unit: string }[] {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return [
+    hours > 0 ? { value: String(hours), unit: t('routes.detail.stats.hoursUnit') } : null,
+    rest > 0 || hours === 0
+      ? { value: String(rest), unit: t('routes.detail.stats.minutesUnit') }
+      : null,
+  ].filter((part) => part !== null);
+}
+
 export function routeDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
@@ -113,6 +125,7 @@ export function routeStatItems(
   >,
 ): StatItem[] {
   const pace = routePaceKmh(route.surfaces);
+  const duration = routeDurationMin(route.distanceM, pace);
   const items: StatItem[] = [
     {
       value: i18n.formatNumber(km(route.distanceM), { maximumFractionDigits: 1 }),
@@ -136,7 +149,8 @@ export function routeStatItems(
     });
   }
   items.push({
-    value: routeDuration(routeDurationMin(route.distanceM, pace)),
+    value: routeDuration(duration),
+    parts: durationParts(duration),
     label: t('routes.detail.stats.time'),
     note: t('routes.detail.stats.pace', { pace }),
   });

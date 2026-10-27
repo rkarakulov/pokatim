@@ -1,13 +1,16 @@
 import {
+  defaultShape,
   defineThemes,
-  type ColorRoles as BaseColorRoles,
   type FontStack,
   type NavRoles,
+  type ShapeRoles,
+  type Theme,
 } from '@rkarakulov/design-tokens';
 
 /**
- * Палитра pokatim из CSS прототипов («Воздух», визуальный слой «Ателье»). Только внутри этого файла:
- * компоненты и приложения используют роли тем (`useTheme()` / CSS-переменные), не палитру.
+ * Палитра pokatim из CSS прототипов («Воздух», визуальный слой «Ателье»). Палитры живут только внутри design-tokens
+ * (`brand.ts`, `app-theme-palettes.ts`): компоненты и приложения используют роли тем (`useTheme()` / CSS-переменные),
+ * не палитру.
  */
 const color = {
   neutral0: '#FFFFFF',
@@ -38,9 +41,14 @@ const color = {
   yellow400: '#F0CC3C',
 } as const;
 
-/** Группы ролей pokatim поверх ролей базы: карта маршрута и полоса покрытия. */
+/** Подложка MapLibre для схемы: URL — `EXPO_PUBLIC_MAP_STYLE_LIGHT|DARK` (ADR-0014). */
+export type Basemap = 'light' | 'dark';
+
+/** Группы ролей pokatim поверх ролей базы: карта маршрута, полоса покрытия, профиль высоты, вкладки. */
 export interface PokatimRoleGroups {
   map: {
+    /** подложка карты — не цвет: в CSS не выводится (`css.ts`) */
+    basemap: Basemap;
     background: string;
     line: string;
     route: string;
@@ -49,6 +57,8 @@ export interface PokatimRoleGroups {
     track: string;
     /** участки трека вне коридора — пунктир, толще (различимы без цвета) */
     offCorridor: string;
+    /** точка старта на контуре маршрута (герой Главной): заливка кружка, контрастная к `route` (обводка — `route`) */
+    start: string;
   };
   surfaceBar: {
     asphalt: string;
@@ -56,15 +66,30 @@ export interface PokatimRoleGroups {
     gravelHatch: string;
     outline: string;
   };
+  /** профиль высоты: линия, стопы градиента заливки (прозрачность — в приложении), базовая линия */
+  profile: {
+    line: string;
+    fillTop: string;
+    fillBottom: string;
+    grid: string;
+  };
+  /** панель вкладок: фон, активная и неактивная вкладка (подпись и иконка; полоса «Классики» — `active`) */
+  tabBar: {
+    background: string;
+    active: string;
+    inactive: string;
+  };
 }
 
-/**
- * Слой 2 — семантика: роли, а не цвета. Роли базы (`text`, `surface`, …) + группы pokatim;
- * значение роли в каждой теме — из CSS прототипов. Порядок ключей задаёт порядок CSS-переменных.
- */
-type ColorRoles = BaseColorRoles & PokatimRoleGroups;
+/** Разрешённая схема темы приложения: роли базы + группы pokatim + форма. `useTheme<AppTheme>()`. */
+export type AppTheme = Theme<PokatimRoleGroups> & { shape: ShapeRoles };
 
-const light: ColorRoles = {
+/**
+ * Слой 2 — семантика: роли, а не цвета. Роли базы (`text`, `surface`, …) + группы pokatim + форма (база);
+ * значение роли в каждой теме — из CSS прототипов. Порядок ключей задаёт порядок CSS-переменных.
+ * `light`/`dark` — схемы темы приложения «Классика» (`app-themes.ts`).
+ */
+const light: AppTheme = {
   text: {
     primary: color.neutral900,
     secondary: color.neutral600,
@@ -97,18 +122,27 @@ const light: ColorRoles = {
     errorTint: color.red50,
   },
   map: {
+    basemap: 'light',
     background: color.neutral25,
     line: color.neutral100,
     route: color.neutral900,
     corridor: color.neutral600,
     track: color.orange600,
     offCorridor: color.red700,
+    start: color.orange600,
   },
   surfaceBar: {
     asphalt: color.neutral900,
     gravel: color.neutral100,
     gravelHatch: color.neutral900,
     outline: color.neutral600,
+  },
+  // как прежде: линия и заливка — цвет коридора, базовая линия — border.subtle
+  profile: {
+    line: color.neutral600,
+    fillTop: color.neutral600,
+    fillBottom: color.neutral600,
+    grid: color.neutral100,
   },
   overlay: { scrim: color.black },
   // дорожка выкл. — как border.input, а не #CFCFCB прототипа: иначе 1.56:1 < 3:1 (WCAG 1.4.11)
@@ -118,9 +152,16 @@ const light: ColorRoles = {
     thumb: color.neutral0,
     thumbOn: color.neutral0,
   },
+  // как прежде: фон — surface.default, активная — text.primary, неактивная — text.secondary
+  tabBar: {
+    background: color.neutral0,
+    active: color.neutral900,
+    inactive: color.neutral600,
+  },
+  shape: defaultShape,
 };
 
-const dark: ColorRoles = {
+const dark: AppTheme = {
   text: {
     primary: color.neutral50,
     secondary: color.neutral400,
@@ -154,18 +195,27 @@ const dark: ColorRoles = {
     errorTint: color.neutral850,
   },
   map: {
+    basemap: 'dark',
     background: color.neutral850,
     line: color.neutral800,
     route: color.neutral50,
     corridor: color.neutral400,
     track: color.orange400,
     offCorridor: color.red400,
+    // светлая линия: старт — тёмный кружок (кольцо цвета линии)
+    start: color.neutral850,
   },
   surfaceBar: {
     asphalt: color.neutral50,
     gravel: color.neutral800,
     gravelHatch: color.neutral50,
     outline: color.neutral400,
+  },
+  profile: {
+    line: color.neutral400,
+    fillTop: color.neutral400,
+    fillBottom: color.neutral400,
+    grid: color.neutral750,
   },
   overlay: { scrim: color.black },
   // дорожка выкл. — как border.input, а не #474747 прототипа (WCAG 1.4.11)
@@ -175,6 +225,12 @@ const dark: ColorRoles = {
     thumb: color.neutral0,
     thumbOn: color.neutral950,
   },
+  tabBar: {
+    background: color.neutral950,
+    active: color.neutral50,
+    inactive: color.neutral400,
+  },
+  shape: defaultShape,
 };
 
 const panelNav: NavRoles = {

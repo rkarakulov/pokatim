@@ -1,7 +1,8 @@
 import { inset, size, stroke } from '@pokatim/design-tokens';
 import { textStyle, useTheme } from '@rkarakulov/ui';
-import { SymbolView } from 'expo-symbols';
 import { StyleSheet, Text, View } from 'react-native';
+
+import { Icon } from './icon';
 
 /** Квадратов в стопке не больше: остальное — в подписи («идут 8 из 12»). */
 const MAX_AVATARS = 4;
@@ -31,11 +32,12 @@ export function GoingStack({ count, caption }: { count: number; caption: string 
               { borderColor: theme.text.primary, backgroundColor: theme.surface.raised },
             ]}
           >
-            <SymbolView
+            <Icon
               testID="going-avatar-icon"
-              name={{ ios: 'person.fill', android: 'person', web: 'person' }}
+              name="person"
               size={size.iconSm}
-              tintColor={theme.text.secondary}
+              color={theme.text.secondary}
+              filled
             />
           </View>
         </View>

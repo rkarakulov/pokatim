@@ -1,15 +1,18 @@
-import { themes } from '@pokatim/design-tokens';
+import { appThemes } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
+
+import { ssrThemeId } from '@/features/appearance/ssr-theme';
+import { manifestColor } from '@/theme/document-theme';
 
 const ICONS = '/icons';
 
 /**
- * Web App Manifest (PWA: «На экран Домой»): имя — из словаря, цвета — из темы бренда.
+ * Web App Manifest (PWA: «На экран Домой»): имя — из словаря, цвета — из активной темы процесса (`+middleware.ts`).
  * API-маршрут, а не файл в public/: цвета и имя не дублируются вручную.
  */
 export function GET(): Response {
   const name = t('app.name');
-  const color = themes.light.surface.default;
+  const color = manifestColor(appThemes[ssrThemeId()]);
   const manifest = {
     name,
     short_name: name,

@@ -16,7 +16,6 @@ import { liveSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
 
 jest.mock('@/lib/api');
-jest.mock('expo-font', () => ({ useFonts: jest.fn(() => [true, null]) }));
 
 const getMine = jest.mocked(api.getMyRoute);
 const listMine = jest.mocked(api.listMyRoutes);

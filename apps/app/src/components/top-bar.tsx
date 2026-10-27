@@ -1,8 +1,9 @@
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { textStyle, useTheme } from '@rkarakulov/ui';
-import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { Icon } from './icon';
 
 interface TopBarProps {
   /** вход в «Устройства» — иконка справа (место будущего аватара «Личная линия»); без обработчика иконки нет */
@@ -13,7 +14,7 @@ interface TopBarProps {
 
 /**
  * Верхняя панель корня вкладки (`.topbar` прототипа): словесный знак продукта, иконки «Устройства» (часы) и «Профиль»
- * (SF Symbols на iOS, Material Symbols на Android и web — `expo-symbols`). Колокольчик и аватар — с блоками уведомлений
+ * (`Icon`: SF Symbols на iOS, Material Symbols на Android и web). Колокольчик и аватар — с блоками уведомлений
  * и профиля; тогда же — кандидат в `@rkarakulov/ui` (R8 блока 02).
  */
 export function TopBar({ onOpenDevices, onOpenProfile }: TopBarProps) {
@@ -36,11 +37,7 @@ export function TopBar({ onOpenDevices, onOpenProfile }: TopBarProps) {
             hitSlop={space.s2}
             style={styles.action}
           >
-            <SymbolView
-              name={{ ios: 'applewatch', android: 'watch', web: 'watch' }}
-              size={size.icon}
-              tintColor={theme.text.primary}
-            />
+            <Icon name="watch" size={size.icon} color={theme.text.primary} />
           </Pressable>
         ) : null}
         {onOpenProfile ? (
@@ -51,11 +48,7 @@ export function TopBar({ onOpenDevices, onOpenProfile }: TopBarProps) {
             hitSlop={space.s2}
             style={styles.action}
           >
-            <SymbolView
-              name={{ ios: 'person.crop.circle', android: 'account_circle', web: 'account_circle' }}
-              size={size.icon}
-              tintColor={theme.text.primary}
-            />
+            <Icon name="profile" size={size.icon} color={theme.text.primary} />
           </Pressable>
         ) : null}
       </View>

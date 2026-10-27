@@ -35,7 +35,16 @@ paths:
   Router; возврат к объекту после регистрации.
 - Локальное состояние — минимальный zustand (сессия, регистрация); формы — react-hook-form + zod-схема из contracts.
 - Строки — формальное «вы».
-- Темы: светлая Jersey Aura, тёмная Night Ride, системная.
+- Темы приложения (ADR-0016): реестр `appThemes` (`@pokatim/design-tokens`), активная — `AppThemeProvider` в корне
+  (`src/theme/`); компоненты читают `useTheme<AppTheme>()` / `useAppTheme()` (иконки, раскладка, схема). Подложка
+  карты — `theme.map.basemap`, профиль высоты — `theme.profile.*`; сравнений с `themes.light|dark` нет. Иконки — только
+  `components/icon.tsx` (единственный вход `expo-symbols`), шрифты — только `themeFonts` + `useThemeFonts` (не
+  `useFonts`); сторож — `__tests__/theme-guards.test.ts`. Доставка — `features/appearance/` (запрос, кэш native
+  `pokatim.appTheme`, тема процесса SSR); web — `window.__POKATIM_THEME__` для гидрации. «Классика» = Jersey Aura /
+  Night Ride по системе. Варианты раскладки (`layout.*`) — только таблицами `Record<вариант, компонент | значение>`
+  (`ROUTE_HERO`, `STATS_VARIANT`, `PROFILE_FILL`, `TAB_ITEM`, `ROUTE_CARD`); сравнения с id темы и значением `layout` —
+  нет (сторож). Вкладки — роли `tabBar.*`; отступы карточек — `appDensity[density]`; форма — `shapeOf(theme)`.
+  `react-native-svg` лениво — только `features/routes/use-svg-native.ts` (профиль, контур `route-contour(.web).tsx`).
 - Доступность: `accessibilityActions` вместо единственного drag-жеста; reduce motion — упрощённая анимация
   (вспышка достижения без мерцания).
 - Публичные ключи в бандле — только такие, как Sentry DSN и ключ тайлов.
@@ -132,7 +141,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   месте данных. Ошибка догрузки страницы — баннер в подвале (не «Данные могли устареть» над героем).
 - Публичные экраны `races/[id]`, `seasons/[id]` — в корневом `Stack` вне `Stack.Protected` (гость и вошедший; на
   native поверх вкладок). «Назад» — `DetailHeader`: история есть — назад, нет — вошедшему вкладка, гостю `/`.
-- SSR-данные (`loader`, `generateMetadata`) — только `src/lib/public-ssr.ts` (`publicPath` — `Uuid` до запроса,
+- SSR-данные (`loader`, `generateMetadata`, а также `src/app/+middleware.ts` — тема процесса) — только `src/lib/public-ssr.ts` (`publicPath` — `Uuid` до запроса,
   `fetchPublicForSsr` — таймаут, `found` / `notFound` / `unavailable`, кэш процесса публичных данных 60 с, 404 — в
   отдельном пуле); свой `fetch` в экранах нет. Не найдено — нейтральная мета и `robots: noindex` (HTML 200); API
   недоступен — нейтральная мета без `robots`. Без сети при показанных данных — `OfflineBanner`.
@@ -233,7 +242,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   изменения карты для каталога; существующие пропсы и `race-route-map.tsx` не меняются.
 - Карточка (routes-03): без `SectionHero`; чипы — `Pill`, стат-блок — `StatBlock` с `note`, подписи и время в пути —
   чистые функции `features/routes/format.ts` (`ROUTE_PACE_KMH`); профиль — `features/routes/elevation-profile.tsx`
-  (`ProfileChart`: тонкая линия и заливка-градиент `PROFILE_FILL_OPACITY` в приглушённом `map.corridor` — web inline
+  (`ProfileChart`: тонкая линия `profile.line` и заливка-градиент `PROFILE_FILL_OPACITY` `profile.fillTop` → `profile.fillBottom` — web inline
   SVG, native `react-native-svg`, фолбэк — столбики `PROFILE_NATIVE_FILL_OPACITY`; график — `aspectRatio`, разметка
   зависит только от данных: SSR = первый рендер; routes-04 — см. «Скраббинг» ниже); «Скачать GPX» — только `src/lib/download-file(.web).ts` (native —
   `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteGpxUrl(id)`, только при
@@ -272,7 +281,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   выключает прокрутку тела (`useScrubScrollEnabled`): чипы, `ElevationProfile` без заголовка, `RouteActions` в строку,
   «Гонки на маршруте». 404 и ошибка без данных — без карты и шторки. Web: в `fill` колесо масштабирует без Ctrl/⌘.
   «Мой маршрут» — пока прежняя раскладка (follow-up).
-- Главная — раздел `routes` (текстовый герой `RouteHero`, RC-8; пустой каталог — `EmptyState`).
+- Главная — раздел `routes` (герой `RouteHero` по теме: у «Классики» текстовый, RC-8; у тем с `contour`/`numeral` —
+  контур из `catalogRouteMapOptions`, запрос — только в компоненте варианта; пустой каталог — `EmptyState`).
 - Мои маршруты (routes-02): переключатель «Каталог / Мои» — `SegmentedControl` в шапке обеих лент, состояние —
   `?view=mine` (`useLocalSearchParams` + `router.setParams`). Лента — `features/routes/my-route-feed.tsx`, ключи
   `['routes','mine','list','pages']` (опрос 3 с, пока есть `processing`), `['routes','mine','detail',id]`,

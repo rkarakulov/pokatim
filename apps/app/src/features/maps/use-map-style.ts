@@ -1,4 +1,4 @@
-import { themes, type AppTheme } from '@pokatim/design-tokens';
+import type { AppTheme } from '@pokatim/design-tokens';
 import { useTheme } from '@rkarakulov/ui';
 
 import { useMounted } from '@/lib/use-minsk-clock';
@@ -21,6 +21,6 @@ export interface MapStyle {
 export function useMapStyle(): MapStyle {
   const theme = useTheme<AppTheme>();
   const mounted = useMounted();
-  const styleUrl = mounted && mapSupported() ? mapStyleUrl(theme === themes.dark) : null;
+  const styleUrl = mounted && mapSupported() ? mapStyleUrl(theme.map.basemap === 'dark') : null;
   return { mounted, styleUrl, theme };
 }
