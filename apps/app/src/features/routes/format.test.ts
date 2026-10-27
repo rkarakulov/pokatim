@@ -104,8 +104,23 @@ describe('карточка: чипы и стат-блок (routes-03, P1, P2)', 
     expect(routeStatItems(detail())).toEqual([
       { value: '68', unit: 'км', label: 'Дистанция', note: 'круговой' },
       { value: '620', unit: 'м', label: 'Набор', note: 'макс. 267 м' },
-      { value: '2 ч 30 мин', label: 'В пути', note: 'при 27 км/ч' },
+      {
+        value: '2 ч 30 мин',
+        // app-themes C (ревью pass 1): по частям — плитки переносят «2 ч / 30 мин», а не обрезают
+        parts: [
+          { value: '2', unit: 'ч' },
+          { value: '30', unit: 'мин' },
+        ],
+        label: 'В пути',
+        note: 'при 27 км/ч',
+      },
     ]);
+  });
+
+  it('длительность по частям: без часов — только минуты, ровно часы — без минут', () => {
+    const time = (distanceM: number) => routeStatItems(detail({ distanceM })).at(-1)!.parts;
+    expect(time(9_000)).toEqual([{ value: '20', unit: 'мин' }]);
+    expect(time(54_000)).toEqual([{ value: '2', unit: 'ч' }]);
   });
 
   it('нет профиля — набор без «макс.»; нет набора — две колонки; в одну сторону', () => {

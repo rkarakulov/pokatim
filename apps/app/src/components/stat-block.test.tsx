@@ -155,7 +155,7 @@ describe('StatBlock: варианты шапки шторки (app-themes C2)', 
     Dimensions.set({ window, screen: Dimensions.get('screen') });
   });
 
-  it('tiles: три равные плитки surface.default (шторка — surface.sheet = raised) с радиусом shape.card; значение — одна строка, единица и подпись; note — только в метке', async () => {
+  it('tiles: три равные плитки surface.default (шторка — surface.sheet = raised) с радиусом shape.card; значение с единицей и подпись; note — только в метке', async () => {
     fontScale(1);
     await render(<StatBlock variant="tiles" items={items} />, {
       wrapper: appThemeWrapper('chrono'),
@@ -171,18 +171,9 @@ describe('StatBlock: варианты шапки шторки (app-themes C2)', 
         flexGrow: 1,
       });
     }
-    for (const value of screen.getAllByTestId('stat-block-value')) {
-      expect(value).toHaveProp('numberOfLines', 1);
-    }
     expect(screen.getByLabelText('Дистанция 68 км круговой')).toBeOnTheScreen();
     expect(screen.getByText('км')).toBeOnTheScreen();
     expect(screen.queryByText('круговой')).toBeNull();
-  });
-
-  it('tiles: крупный шрифт — значение переносится', async () => {
-    fontScale(1.6);
-    await render(<StatBlock variant="tiles" items={items} />);
-    expect(screen.getAllByTestId('stat-block-value')[0]!.props.numberOfLines).toBeUndefined();
   });
 
   it('numeral: дистанция — крупная цифра, остальные — строкой compact; метки ячеек', async () => {
@@ -197,4 +188,51 @@ describe('StatBlock: варианты шапки шторки (app-themes C2)', 
     expect(screen.getByText('Набор')).toBeOnTheScreen();
     expect(screen.queryByText('круговой')).toBeNull();
   });
+});
+
+describe('StatBlock tiles: узкий экран (app-themes C, ревью pass 1)', () => {
+  const items = [
+    { value: '123,4', unit: 'км', label: 'Дистанция', note: 'круговой' },
+    { value: '1 240', unit: 'м', label: 'Набор' },
+    {
+      value: '3 ч 35 мин',
+      parts: [
+        { value: '3', unit: 'ч' },
+        { value: '35', unit: 'мин' },
+      ],
+      label: 'В пути',
+      note: 'при 24 км/ч',
+    },
+  ];
+  const window = Dimensions.get('window');
+  afterEach(() => {
+    Dimensions.set({ window, screen: Dimensions.get('screen') });
+  });
+
+  it.each(['chrono', 'navigation'] as const)(
+    '%s, 360 px, обычный шрифт: длительность — частями с единицами, ничего не усекается многоточием',
+    async (themeId) => {
+      Dimensions.set({ window: { ...window, fontScale: 1 }, screen: Dimensions.get('screen') });
+      await render(
+        <View style={{ width: 320 }}>
+          <StatBlock variant="tiles" items={items} />
+        </View>,
+        { wrapper: appThemeWrapper(themeId) },
+      );
+      const block = screen.getByTestId('stat-block');
+      // части переносятся строками внутри плитки
+      for (const value of screen.getAllByTestId('stat-block-value')) {
+        expect(value).toHaveStyle({ flexDirection: 'row', flexWrap: 'wrap' });
+      }
+      expect(screen.getByText('3')).toBeOnTheScreen();
+      expect(screen.getByText('35')).toBeOnTheScreen();
+      expect(screen.getByText('мин')).toBeOnTheScreen();
+      // ни один текст плитки не ограничен строками: многоточия нет
+      for (const text of ['123,4', '1 240', '3', '35', 'мин', 'Дистанция', 'В пути']) {
+        expect(screen.getByText(text).props.numberOfLines).toBeUndefined();
+      }
+      expect(block).toBeOnTheScreen();
+      expect(screen.getByLabelText('В пути 3 ч 35 мин при 24 км/ч')).toBeOnTheScreen();
+    },
+  );
 });

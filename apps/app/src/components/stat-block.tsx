@@ -12,6 +12,11 @@ export interface StatItem {
   label: string;
   /** Пояснение под подписью (routes-03): «круговой», «макс. 267 м», «при 27 км/ч». */
   note?: string;
+  /**
+   * Значение по частям с единицами («3» «ч», «35» «мин»): плитки (`tiles`) переносят его частями, а не обрезают.
+   * Нет — одна часть `value` + `unit`.
+   */
+  parts?: readonly { value: string; unit: string }[];
 }
 
 /**
@@ -136,14 +141,13 @@ function CompactCells({ items }: Pick<StatsProps, 'items'>) {
 
 /**
  * Плитки (Хронометр, Навигация): три равные плитки с радиусом `shape.card` на фоне экрана `surface.default` — шторка,
- * где они стоят, уже `surface.sheet` (= `surface.raised` у тем); значение `displayNumeral36` одной строкой (крупный
- * шрифт — перенос), под ним единица и подпись.
+ * где они стоят, уже `surface.sheet` (= `surface.raised` у тем). Значение `displayNumeral36` частями с единицами
+ * (`parts`: «3 ч» / «35 мин»), части и подпись переносятся строками — без многоточия при любом размере шрифта.
  */
 function TileStats({ items }: Pick<StatsProps, 'items'>) {
   const theme = useTheme<AppTheme>();
-  const lines = useSingleLine();
   return (
-    <View testID="stat-block" style={styles.compactRow}>
+    <View testID="stat-block" style={[styles.compactRow, styles.tileRow]}>
       {items.map((item, index) => (
         <View
           key={index}
@@ -155,20 +159,21 @@ function TileStats({ items }: Pick<StatsProps, 'items'>) {
             { backgroundColor: theme.surface.default, borderRadius: shapeOf(theme).card },
           ]}
         >
-          <Text
-            testID="stat-block-value"
-            numberOfLines={lines}
-            style={[textStyle('displayNumeral36'), { color: theme.text.primary }]}
-          >
-            {item.value}
-          </Text>
-          {item.unit ? (
-            <Text style={[textStyle('unit'), { color: theme.text.secondary }]}>{item.unit}</Text>
-          ) : null}
-          <Text
-            numberOfLines={lines}
-            style={[textStyle('label'), styles.label, { color: theme.text.secondary }]}
-          >
+          <View testID="stat-block-value" style={styles.tileValue}>
+            {(item.parts ?? [{ value: item.value, unit: item.unit }]).map((part, partIndex) => (
+              <View key={partIndex} style={styles.valueRow}>
+                <Text style={[textStyle('displayNumeral36'), { color: theme.text.primary }]}>
+                  {part.value}
+                </Text>
+                {part.unit ? (
+                  <Text style={[textStyle('unit'), { color: theme.text.secondary }]}>
+                    {part.unit}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+          <Text style={[textStyle('label'), styles.label, { color: theme.text.secondary }]}>
             {item.label}
           </Text>
         </View>
@@ -242,9 +247,17 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexBasis: 0,
     minWidth: 0,
-    // по горизонтали — уже: подпись «ДИСТАНЦИЯ» в трети ширины телефона
+    // по горизонтали — уже: подпись «ДИСТАНЦИЯ» и «123,4» в трети ширины телефона 360 px
     paddingHorizontal: space.s2,
     paddingVertical: space.s3,
+  },
+  // плитки — с узким зазором (s1): ширина плитки важнее воздуха между ними
+  tileRow: { columnGap: space.s1 },
+  tileValue: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    columnGap: space.s2,
   },
   numeralRow: {
     flexDirection: 'row',
