@@ -16,6 +16,7 @@ paths:
   - "packages/tracks/src/{gpx,kml,xml,format}.ts"
   - "apps/api/src/modules/routes/**"
   - "apps/api/src/raw-body.ts"
+  - "apps/api/src/upload-slots.ts"
   - "apps/api/src/parse-thread.ts"
   - "apps/api/src/modules/rides/**"
   - "apps/app/src/features/rides/**"
@@ -149,8 +150,9 @@ paths:
 
 - `POST /v1/admin/routes` — `PanelGuard` + `races.manage`, лимит 20/ч на сотрудника до чтения тела; тело — только
   `application/octet-stream` (`readLimited`, обрыв на 5 МиБ — `413 ROUTE_TOO_LARGE` + `Connection: close`); формат —
-  по сигнатуре (не GPX, в т. ч. `<!DOCTYPE` до корня и FIT — `415 ROUTE_FORMAT_UNSUPPORTED`); разбор — только worker
-  через `runParseThread` (отказ на `<!DOCTYPE`/`<!ENTITY`, подсчёт элементов и `rtept` до дерева, `XMLValidator`).
+  по сигнатуре (не GPX/KML, в т. ч. `<!DOCTYPE` до корня и FIT — `415 ROUTE_FORMAT_UNSUPPORTED`; UI панели выбирает
+  `.gpx,.kml`); разбор — только worker через `runParseThread` (отказ на `<!DOCTYPE`/`<!ENTITY`, подсчёт элементов и
+  `rtept` до дерева, `XMLValidator`). Слотов приёма у панели нет (сотрудники), таймаут тела — общий (ниже).
 - Чтение — `races.read`; чужой необработанный маршрут — 404. Публично в карточке `GET /v1/races/:id` — только
   `corridor.widthM`: `routeId` и координаты не выходят. Логи — `routeId`, код отказа, id сотрудника; без названий
   файлов и координат.
@@ -177,14 +179,25 @@ paths:
   Видимость — фильтр `{ ownerUserId, origin: 'rider' }` в `RoutesRepository`; чужой, маршрут платформы и неизвестный —
   один `404 NOT_FOUND` (без различия). Панель, каталог, публичные ручки и порты `RouteCatalog`/`RouteGeometry` (коридор,
   сверка, карта гонки, LRU-кэш) читают только `origin: 'platform'` — отрицательные int-тесты на каждую точку.
-- Загрузка: лимиты `routes-upload-rider:<uid>` 20/ч и `routes-upload-ip:<hmac>` 60/ч и семафор 4 приёма — **до** чтения
-  тела; тело — `application/octet-stream` (`readLimited`, 5 МиБ → 413 + `Connection: close`); формат — по сигнатуре
+- Загрузка: лимиты `routes-upload-rider:<uid>` 20/ч и `routes-upload-ip:<hmac>` 60/ч и слот приёма (4 на процесс,
+  1 на райдера, `UploadSlots`) — **до** чтения тела; тело — `application/octet-stream` (`readLimited`, 5 МиБ → 413 + `Connection: close`); формат — по сигнатуре
   (`detectRouteFormat`: GPX/KML, `<!DOCTYPE` до корня → 415); квота 100 своих маршрутов — `409 ROUTE_QUOTA_EXCEEDED`
   (мягкая, после дедупа). KML — те же защиты, что GPX (`xml.ts`: отказ на `<!DOCTYPE`/`<!ENTITY`, подсчёт элементов и
   `gx:coord` до дерева, `XMLValidator`, обрыв кортежей `coordinates`), разбор — только `runParseThread` в worker.
 - Наружу — `MyRoute` явным списком полей (без `origin`, `ownerUserId`, `sha256`, `attempts`, `catalog`, линии сверки);
   карта — только линия показа своего готового маршрута. Логи — `routeId`, `userId`, коды; без названий, имён файлов и
   координат. Действия райдера не пишутся в журнал панели (`PanelAudit`).
+
+## Приём тела загрузок (upload-limits-kml-panel)
+
+- Заезды (`/v1/tracks/uploads`) и «мои маршруты» (`/v1/routes/mine`): слот приёма `src/upload-slots.ts` — не больше
+  4 приёмов на процесс API и **1 на пользователя** (второй одновременный — `429 RATE_LIMITED`, `retryAfterSec: 5`, до
+  чтения тела); слот освобождается в `finally` обработчика при любом исходе (успех, 4xx, таймаут, обрыв). Слоты — в
+  памяти процесса (Redis-слоты между процессами — нет).
+- `readLimited` (все три загрузки, включая панель): тишина между порциями тела дольше 30 с или всё тело дольше 180 с —
+  `408 VALIDATION_FAILED` `{ fields: [{ path: 'body', code: 'INVALID' }] }`; остаток тела сливается без хранения,
+  ответ — `Connection: close`. Таймауты — `DEFAULT_BODY_TIMEOUTS` (`raw-body.ts`), в политиках модулей —
+  `bodyTimeouts`.
 
 ## Кофе-райды (блок 05, ADR-0013 Proposed)
 

@@ -41,13 +41,15 @@ paths:
   курсора.
 - Мои маршруты (routes-02): `RoutesMineController` (`@Controller('routes/mine')`, `AuthGuard`) — **первым** в
   `RoutesModule.controllers` (статический сегмент до публичного `routes/:id`, иначе pipe `Uuid` → 400) →
-  `MyRoutesService` (лимиты и семафор до тела, квота, список, карточка, карта через `displayGeometryOf` — не через
-  порт и кэш, `rename`, `delete` в транзакции). Приём — общий `RoutesService.accept({ userId, origin }, …)`: формат —
-  `detectRouteFormat` (GPX/KML; API панели принимает KML тоже, UI панели — GPX), журнал панели — только `platform`,
-  outbox `routes.route-received` и worker `route-processing` — общие. Порты `RouteCatalog`/`RouteGeometry` и
-  `RoutesCatalogService` видят только `platform`. Мутации «моих» — `POST` с глаголом (`rename`, `delete`).
+  `MyRoutesService` (лимиты и слот приёма `UploadSlots` до тела, квота, список, карточка, карта через
+  `displayGeometryOf` — не через порт и кэш, `rename`, `delete` в транзакции). Приём — общий
+  `RoutesService.accept({ userId, origin }, …)`: формат — `detectRouteFormat` (GPX/KML; панель — API и UI,
+  `.gpx,.kml`), журнал панели — только `platform`, outbox `routes.route-received` и worker `route-processing` —
+  общие. Порты `RouteCatalog`/`RouteGeometry` и `RoutesCatalogService` видят только `platform`. Мутации «моих» — `POST` с глаголом (`rename`, `delete`).
 - Общий код загрузок в `src/`: `raw-body.ts` (`readLimited` — тело `application/octet-stream` после гарда и лимита,
-  обрыв на лимите — `413` с кодом модуля и `Connection: close`) и `parse-thread.ts` (`runParseThread` — функция
+  обрыв на лимите — `413` с кодом модуля, тишина > 30 с или тело > 180 с — `408 VALIDATION_FAILED` (`body`), оба —
+  с `Connection: close`), `upload-slots.ts` (`UploadSlots` — слоты приёма заездов и «моих маршрутов»: предел процесса
+  и 1 на пользователя, отказ — `429` до тела; панель — без слотов) и `parse-thread.ts` (`runParseThread` — функция
   `@pokatim/tracks/parse` из белого списка `PARSE_FUNCTIONS` в `worker_threads`, `DEFAULT_PARSE_LIMITS` 160/32 МБ,
   30 с; таймаут — `timeout`, OOM — `unreadable`, сбой загрузчика — исключение и ретрай). Свой поток разбора в модуле —
   нет.
