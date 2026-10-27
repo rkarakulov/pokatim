@@ -5,6 +5,9 @@ services:
   # на 127.0.0.1; член набора объявлен как 127.0.0.1:27017 — адрес приложения с directConnection=true
   mongo:
     image: mongo:8.0
+    # ядро хоста ≥ 6.19: mongod 8.0 не стартует — SERVER-121912; обход — rseq glibc
+    environment:
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
     command: ['--replSet', 'rs0', '--bind_ip_all']
     ports: ['127.0.0.1:27017:27017']
     volumes: [mongodata:/data/db]
