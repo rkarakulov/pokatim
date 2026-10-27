@@ -698,6 +698,12 @@ export const ru = {
   'admin.audit.action.route.published': 'Маршрут опубликован в каталоге',
   'admin.audit.action.route.unpublished': 'Маршрут снят с публикации',
   'admin.audit.action.route.catalog_updated': 'Изменён маршрут в каталоге',
+  // routes-06: модерация маршрутов райдеров
+  'admin.audit.action.route.submission_approved': 'Маршрут райдера одобрен',
+  'admin.audit.action.route.submission_rejected': 'Маршрут райдера отклонён',
+  'admin.audit.action.route.rider_hidden': 'Маршрут райдера скрыт',
+  'admin.audit.action.route.rider_restored': 'Маршрут райдера возвращён',
+  'admin.audit.action.route.rider_reports_dismissed': 'Жалобы на маршрут отклонены',
   'admin.audit.action.account.deleted': 'Райдер удалил аккаунт',
   'admin.audit.action.results.attempt_excluded': 'Исключён трек',
   'admin.audit.action.results.attempt_restored': 'Трек возвращён в обработку',

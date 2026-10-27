@@ -77,6 +77,7 @@ describe('коды ошибок', () => {
       'ROUTE_QUOTA_EXCEEDED',
       'PASSWORD_INCORRECT',
       'ACCOUNT_PANEL_MEMBER',
+      'ROUTE_PUBLICATION_LIMIT',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

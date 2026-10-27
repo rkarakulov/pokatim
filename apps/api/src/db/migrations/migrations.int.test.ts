@@ -31,6 +31,8 @@ import { routesRider } from './0021_routes_rider';
 import { routesDerived } from './0022_routes_derived';
 import { accountDeletion } from './0023_account_deletion';
 import { platformSettings } from './0024_platform_settings';
+import { routesPublication } from './0025_routes_publication';
+import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
 import { DISPUTES_COLLECTIONS } from '../../modules/disputes/disputes.collection';
 import { RIDE_REPORTS_COLLECTIONS } from '../../modules/rides/ride-reports.collection';
@@ -39,6 +41,28 @@ import { ROUTES_COLLECTIONS } from '../../modules/routes/routes.collection';
 import { TRACKS_COLLECTIONS } from '../../modules/tracks/tracks.collection';
 import { DEVICES_COLLECTIONS } from '../../modules/devices/devices.collection';
 import { migrations } from './index';
+
+/** Частичные индексы очередей модерации маршрутов райдеров (`0025_routes_publication`). */
+const ROUTES_PUBLICATION_QUEUES = {
+  routes_publication_pending_idx: {
+    key: { 'publication.submittedAt': 1, _id: 1 },
+    unique: false,
+    partialFilterExpression: { 'publication.status': 'pending' },
+    expireAfterSeconds: undefined,
+  },
+  routes_publication_reports_idx: {
+    key: { 'publication.lastReportAt': -1, _id: -1 },
+    unique: false,
+    partialFilterExpression: { 'publication.openReportCount': { $gt: 0 } },
+    expireAfterSeconds: undefined,
+  },
+  routes_publication_hidden_idx: {
+    key: { 'publication.hiddenAt': -1, _id: -1 },
+    unique: false,
+    partialFilterExpression: { 'publication.status': 'hidden' },
+    expireAfterSeconds: undefined,
+  },
+};
 
 let h: Harness;
 beforeAll(async () => {
@@ -98,6 +122,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0022_routes_derived',
       '0023_account_deletion',
       '0024_platform_settings',
+      '0025_routes_publication',
     ]);
   });
 
@@ -367,6 +392,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         // 0021_routes_rider (routes-02): дедуп в пределах происхождения, список своих маршрутов
         routes_owner_origin_sha_unique: index({ ownerUserId: 1, origin: 1, sha256: 1 }, true),
         routes_owner_origin_idx: index({ ownerUserId: 1, origin: 1, _id: -1 }),
+        // 0025_routes_publication (routes-06): очереди модерации маршрутов райдеров
+        ...ROUTES_PUBLICATION_QUEUES,
       },
       // 0022_routes_derived (routes-03): выборка бэкфилла производных
       [ROUTES_COLLECTIONS.geometries]: {
@@ -771,7 +798,6 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
 
   it('0024_platform_settings: коллекция platform_settings без индексов сверх _id; последняя; повторный up — без ошибки', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0024_platform_settings');
     expect(ids.indexOf('0024_platform_settings')).toBe(ids.indexOf('0023_account_deletion') + 1);
     const exists = () =>
       h.db.listCollections({ name: APPEARANCE_COLLECTIONS.settings }, { nameOnly: true }).toArray();
@@ -781,6 +807,32 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await platformSettings.up(h.db);
     expect(await exists()).toHaveLength(1);
     expect(await indexesOf(APPEARANCE_COLLECTIONS.settings)).toEqual({});
+  });
+
+  it('0025_routes_publication: жалобы на маршруты (unique), очереди модерации (partial); последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0025_routes_publication');
+    expect(ids.indexOf('0025_routes_publication')).toBe(ids.indexOf('0024_platform_settings') + 1);
+    const reports = {
+      route_reports_route_reporter_unique: {
+        key: { routeId: 1, reporterUserId: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+      route_reports_route_idx: {
+        key: { routeId: 1, _id: -1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(ROUTE_REPORTS_COLLECTIONS.reports)).toEqual(reports);
+    expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toMatchObject(ROUTES_PUBLICATION_QUEUES);
+    await routesPublication.up(h.db);
+    await routesPublication.up(h.db);
+    expect(await indexesOf(ROUTE_REPORTS_COLLECTIONS.reports)).toEqual(reports);
+    expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toMatchObject(ROUTES_PUBLICATION_QUEUES);
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

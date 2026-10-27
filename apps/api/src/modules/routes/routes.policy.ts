@@ -1,11 +1,14 @@
 import {
   MY_ROUTE_MAX_COUNT,
   ROUTE_FILE_MAX_BYTES,
+  ROUTE_PUBLICATION_MAX_PENDING,
+  ROUTE_PUBLICATION_MAX_SUBMISSIONS,
   type RouteDistanceBucket,
 } from '@pokatim/contracts';
 
 import { DEFAULT_PARSE_LIMITS } from '../../parse-thread';
 import { DEFAULT_BODY_TIMEOUTS } from '../../raw-body';
+import type { RouteDoc, RoutePublicationDoc } from './routes.collection';
 
 /** Лимиты модуля `routes` (`[ASSUMPTION]` race-results-01 §7, §8.3). */
 export const ROUTE_POLICY = {
@@ -34,7 +37,80 @@ export const ROUTE_POLICY = {
   gpxIpLimit: { limit: 30, windowSec: 60 },
   /** Маршрутов за прогон бэкфилла производных (`routes-maintenance`); полная пачка ставит продолжение. */
   deriveBatch: 20,
+  /** routes-06 (U8, 8.1 RC-8): успешных подач в каталог на райдера в сутки — списывается прямо перед записью. */
+  publicationSubmitLimit: { limit: 10, windowSec: 24 * 60 * 60 },
+  /** Жалоб на маршруты на райдера в сутки (U8, как `rides-report`). */
+  reportLimit: { limit: 20, windowSec: 24 * 60 * 60 },
+  /** Заявок на рассмотрении одновременно и подач одного маршрута (U8). */
+  maxPendingPublications: ROUTE_PUBLICATION_MAX_PENDING,
+  maxSubmissionsPerRoute: ROUTE_PUBLICATION_MAX_SUBMISSIONS,
 } as const;
+
+/** Состояние публикации маршрута райдера; `null` — не подавался. */
+export type PublicationState = RoutePublicationDoc['status'] | null;
+
+/** Действия автора (`submit`, `withdraw`) и модератора над публикацией (routes-06, A1, A5). */
+export type PublicationAction =
+  'submit' | 'withdraw' | 'approve' | 'reject' | 'hide' | 'restore' | 'dismiss';
+
+/** Причина отказа перехода для `details` (`RouteStateDetails`); `null` — без подробностей. */
+export type PublicationRefusal = 'in_review' | 'published' | 'hidden' | null;
+
+export type PublicationTransition =
+  | { result: 'ok'; to: RoutePublicationDoc['status'] }
+  | { result: 'noop' }
+  | { result: 'invalid'; reason: PublicationRefusal };
+
+/** Откуда разрешено действие и куда ведёт (A1, A5); `dismiss` статус не меняет. */
+const TRANSITIONS: Record<
+  PublicationAction,
+  { from: readonly PublicationState[]; to: RoutePublicationDoc['status'] }
+> = {
+  submit: { from: [null, 'withdrawn', 'rejected'], to: 'pending' },
+  withdraw: { from: ['pending', 'approved'], to: 'withdrawn' },
+  approve: { from: ['pending'], to: 'approved' },
+  reject: { from: ['pending'], to: 'rejected' },
+  hide: { from: ['approved'], to: 'hidden' },
+  restore: { from: ['hidden'], to: 'approved' },
+  dismiss: { from: ['approved'], to: 'approved' },
+};
+
+const REFUSAL: Partial<Record<RoutePublicationDoc['status'], PublicationRefusal>> = {
+  pending: 'in_review',
+  approved: 'published',
+  hidden: 'hidden',
+};
+
+/**
+ * Переход публикации — чистая функция (запись повторяет условие в фильтре `RoutesRepository`). Отзыв без активной
+ * заявки (нет, `withdrawn`, `rejected`) — `noop` (успех без записи); `hidden` для автора терминален (только удалить).
+ */
+export function publicationTransition(
+  from: PublicationState,
+  action: PublicationAction,
+): PublicationTransition {
+  const rule = TRANSITIONS[action];
+  if (rule.from.includes(from)) return { result: 'ok', to: rule.to };
+  if (action === 'withdraw' && from !== 'hidden') return { result: 'noop' };
+  return { result: 'invalid', reason: from === null ? null : (REFUSAL[from] ?? null) };
+}
+
+/**
+ * Можно ли подать маршрут (`MyRoute.canPublish`): готовый, заявки нет / отозвана / отклонена и подач меньше 3. Лимит
+ * «≤ 3 на рассмотрении» и суточный — проверяет подача (зависят от других документов).
+ */
+export function canPublish(
+  route: Pick<RouteDoc, 'status'> & {
+    publication?: Pick<RoutePublicationDoc, 'status' | 'submissionCount'> | null;
+  },
+): boolean {
+  if (route.status !== 'ready') return false;
+  const publication = route.publication ?? null;
+  return (
+    publicationTransition(publication?.status ?? null, 'submit').result === 'ok' &&
+    (publication?.submissionCount ?? 0) < ROUTE_POLICY.maxSubmissionsPerRoute
+  );
+}
 
 /** Предел имени файла GPX, кодовых точек (без `.gpx`). */
 const GPX_FILE_NAME_MAX = 80;

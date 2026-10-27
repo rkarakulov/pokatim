@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AppThemeId } from '../appearance/appearance.schema.ts';
 import { PageQuery, Uuid } from '../common.ts';
 import { RaceCancelReason } from '../races/race.schema.ts';
+import { RouteRejectionReason } from '../routes/route-publication.schema.ts';
 import { PanelRole } from './permissions.schema.ts';
 
 /** Действия журнала панели (append-only). Значения только добавляются в конец (R6). */
@@ -52,6 +53,12 @@ export const AUDIT_ACTIONS = [
   'account.deleted',
   // app-themes: админ сменил тему приложения (subject `platform`, детали themeFrom/themeTo)
   'appearance.theme_changed',
+  // routes-06: модерация маршрутов райдеров (subject `route`, без имени автора)
+  'route.submission_approved',
+  'route.submission_rejected',
+  'route.rider_hidden',
+  'route.rider_restored',
+  'route.rider_reports_dismissed',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -119,6 +126,8 @@ export const AuditEntry = z.object({
       /** app-themes: смена темы приложения */
       themeFrom: AppThemeId.optional(),
       themeTo: AppThemeId.optional(),
+      /** routes-06: код причины отклонения заявки (комментарий автору — в `reason`) */
+      rejectionReason: RouteRejectionReason.optional(),
     })
     .nullable(),
 });

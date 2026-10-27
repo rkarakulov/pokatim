@@ -40,6 +40,7 @@ const route: CatalogRouteDetail = {
   city: 'minsk',
   surfaces: ['asphalt', 'gravel'],
   publishedAt: '2026-10-20T10:00:00.000Z',
+  author: { kind: 'team' },
   elevation: {
     minM: 191,
     maxM: 267,

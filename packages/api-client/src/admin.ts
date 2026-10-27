@@ -49,6 +49,14 @@ import {
   ModerationRideDetail,
   ModerationRidePage,
   type ModerationRideQuery,
+  type ApproveRiderRouteRequest,
+  type DismissRiderRouteReportsRequest,
+  type HideRiderRouteRequest,
+  type RejectRiderRouteRequest,
+  type RestoreRiderRouteRequest,
+  RiderRouteModerationDetail,
+  RiderRouteModerationPage,
+  type RiderRouteModerationQuery,
   type RestoreRideRequest,
   type DisputeDecisionRequest,
   PanelDispute,
@@ -82,6 +90,8 @@ export type PanelRouteListParams = Partial<PanelRouteQuery>;
 export type PanelCalendarListParams = Partial<PanelCalendarQuery>;
 /** Параметры очереди модерации райдов до схемы. */
 export type ModerationRideListParams = Partial<ModerationRideQuery>;
+/** Параметры очереди модерации маршрутов райдеров до схемы (routes-06). */
+export type RiderRouteListParams = Partial<RiderRouteModerationQuery>;
 /** Параметры списка споров панели до схемы. */
 export type PanelDisputeListParams = Partial<PanelDisputeQuery>;
 
@@ -124,6 +134,7 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
   const calendar = (id: string) => `/v1/admin/calendar/${encodeURIComponent(id)}`;
   const route = (id: string) => `/v1/admin/routes/${encodeURIComponent(id)}`;
   const moderationRide = (id: string) => `/v1/admin/rides/${encodeURIComponent(id)}`;
+  const riderRoute = (id: string) => `/v1/admin/rider-routes/${encodeURIComponent(id)}`;
   const dispute = (id: string) => `/v1/admin/disputes/${encodeURIComponent(id)}`;
 
   return {
@@ -245,6 +256,21 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       post(`${moderationRide(id)}/restore`, ModerationRideDetail, body),
     dismissRideReports: (id: string, body: DismissRideReportsRequest) =>
       post(`${moderationRide(id)}/dismiss-reports`, ModerationRideDetail, body),
+
+    // --- модерация маршрутов райдеров (routes.moderate, routes-06): конфликт версии — 409 CONFLICT ---
+    listRiderRoutes: (params: RiderRouteListParams = {}) =>
+      get(`/v1/admin/rider-routes${queryString(params)}`, RiderRouteModerationPage),
+    getRiderRoute: (id: string) => get(riderRoute(id), RiderRouteModerationDetail),
+    approveRiderRoute: (id: string, body: ApproveRiderRouteRequest) =>
+      post(`${riderRoute(id)}/approve`, RiderRouteModerationDetail, body),
+    rejectRiderRoute: (id: string, body: RejectRiderRouteRequest) =>
+      post(`${riderRoute(id)}/reject`, RiderRouteModerationDetail, body),
+    hideRiderRoute: (id: string, body: HideRiderRouteRequest) =>
+      post(`${riderRoute(id)}/hide`, RiderRouteModerationDetail, body),
+    restoreRiderRoute: (id: string, body: RestoreRiderRouteRequest) =>
+      post(`${riderRoute(id)}/restore`, RiderRouteModerationDetail, body),
+    dismissRiderRouteReports: (id: string, body: DismissRiderRouteReportsRequest) =>
+      post(`${riderRoute(id)}/dismiss-reports`, RiderRouteModerationDetail, body),
 
     // --- споры по результатам (disputes.read / disputes.decide, race-results-06) ---
     listDisputes: (params: PanelDisputeListParams = {}) =>

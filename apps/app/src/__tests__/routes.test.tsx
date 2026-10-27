@@ -29,6 +29,7 @@ const route = (overrides: Partial<CatalogRouteCard> = {}): CatalogRouteCard => (
   city: 'minsk',
   surfaces: ['asphalt'],
   publishedAt: '2026-10-20T10:00:00.000Z',
+  author: { kind: 'team' },
   ...overrides,
 });
 const page = (items: CatalogRouteCard[], nextCursor: string | null = null): CatalogRoutePage => ({

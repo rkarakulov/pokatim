@@ -42,6 +42,18 @@ paths:
   `tolerantEnum`; без `origin`, владельца, sha256, попыток, каталога и линий), `MyRoutePage`, `MyRouteQuery`
   (`strictObject`, limit ≤ 50), `RenameRouteInput` (`RouteTitle` 3–120), `MY_ROUTE_MAX_COUNT` (100); карта —
   `RouteMapGeometry`. Код `ROUTE_QUOTA_EXCEEDED` (409) — в конце `ErrorCode`.
+- Публикация маршрутов райдеров (routes-06): `src/routes/route-publication.schema.ts` — `ROUTE_PUBLICATION_STATUSES`,
+  `ROUTE_REJECTION_REASONS`, `ROUTE_STATE_REASONS` (`details` у `409 ROUTE_INVALID_STATE`, `RouteStateDetails`),
+  `ROUTE_PUBLICATION_LIMITS` (`409 ROUTE_PUBLICATION_LIMIT`, `RoutePublicationLimitDetails`), заявка
+  `SubmitRoutePublicationInput` (`strictObject`), ответ `MyRoutePublication` (`tolerantEnum`); `MyRoute.publication`
+  (`.nullable().default(null)`) и `canPublish` (`.default(false)`). `src/routes/route-report.schema.ts` —
+  `ROUTE_REPORT_REASONS`, `CreateRouteReportRequest`, `CatalogRouteViewer`. `src/routes/route-moderation.schema.ts` —
+  панель, строгие `z.enum`, без имени автора. Каталог: `CatalogRouteCard.author` (`{ kind: 'team' } | { kind: 'rider',
+  name }`, `.default({ kind: 'team' })`), `CatalogRouteQuery.author` (`queryArray`). Право `routes.moderate`, пять
+  действий журнала `route.submission_*`/`route.rider_*`, деталь `rejectionReason`, код `ROUTE_PUBLICATION_LIMIT` — в
+  конце списков. api-client: `submitMyRoutePublication`, `unpublishMyRoute`, `getCatalogRouteViewer`,
+  `reportCatalogRoute`, `listCatalogRoutes({ author })`; панель — `listRiderRoutes`, `getRiderRoute`,
+  `approveRiderRoute`, `rejectRiderRoute`, `hideRiderRoute`, `restoreRiderRoute`, `dismissRiderRouteReports`.
 - Свой трек (maps-02): `src/results/results.schema.ts` — `MyAttemptTrack` (`attemptId`, `line` — `LonLat` 2–1000,
   `segment: TrackMapRun | null`, `offRuns` ≤ 100, `marks` — `tolerantEnum(ATTEMPT_TRACK_MARKS)`: незнакомое клиент
   трактует как `unavailable`); позиции — дробные индексы вершин `{ from, to }`. Клиент — `getMyAttemptTrack`.

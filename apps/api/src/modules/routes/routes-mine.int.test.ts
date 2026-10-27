@@ -6,7 +6,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { createHarness, type Harness, MINUTE } from '../../../test/harness';
 import { bearer, call, outboxEvents, signUpSession, userIdByEmail } from '../../../test/identity';
-import { panel, panelSession, seedMember } from '../../../test/panel';
+import { panel, panelCall, panelSession, seedMember } from '../../../test/panel';
+import { staff } from '../../../test/races';
 import {
   fixture,
   expectedFixtures,
@@ -15,7 +16,10 @@ import {
   parsedRoute,
   processRoute,
   routesDb,
+  reportRoute,
+  routeReportsDb,
   routesRepository,
+  seedApprovedRiderRoute,
   seedRiderRoute,
   uploadMyRoute,
   uploadRoute,
@@ -339,6 +343,37 @@ describe('переименование и удаление (AC3)', () => {
     expect((await post(me.token, `${MY_ROUTES}/${id}/delete`)).status).toBe(404);
     expect((await get(me.token, `${MY_ROUTES}/${id}`)).status).toBe(404);
     expect(await panel(h).audit.countDocuments()).toBe(0);
+  });
+
+  it('routes-06 (AC7, U6): удаление опубликованного с жалобами — нет в каталоге, очереди модерации; жалоб на него нет, на другие — остались', async () => {
+    const me = await rider();
+    const reporter = await rider('reporter@example.com');
+    const id = await seedApprovedRiderRoute(h, me.userId);
+    const other = await seedApprovedRiderRoute(h, reporter.userId);
+    expect((await reportRoute(h, reporter.token, id)).status).toBe(200);
+    expect((await reportRoute(h, me.token, other)).status).toBe(200);
+    expect(await routeReportsDb(h).countDocuments({ routeId: id })).toBe(1);
+
+    expect((await post(me.token, `${MY_ROUTES}/${id}/delete`)).status).toBe(204);
+    expect(await routesDb(h).routes.countDocuments({ _id: id })).toBe(0);
+    expect(await routeReportsDb(h).countDocuments({ routeId: id })).toBe(0);
+    expect(await routeReportsDb(h).countDocuments({ routeId: other })).toBe(1);
+    expect((await call(h, 'GET', `/v1/routes/${id}`)).status).toBe(404);
+    const list = (await call(h, 'GET', '/v1/routes')).body as { items: { id: string }[] };
+    expect(list.items.map((item) => item.id)).toEqual([other]);
+    const moderator = await staff(h, 'moderator@example.com', 'moderator');
+    const queue = await panelCall(
+      h,
+      moderator.token,
+      'GET',
+      '/v1/admin/rider-routes?state=reported',
+    );
+    expect((queue.body as { items: { id: string }[] }).items.map((item) => item.id)).toEqual([
+      other,
+    ]);
+    expect(
+      (await panelCall(h, moderator.token, 'GET', `/v1/admin/rider-routes/${id}`)).status,
+    ).toBe(404);
   });
 
   it('удаление в обработке: после удаления задача — skipped; захват до удаления — skipped без исключения, сирот нет', async () => {

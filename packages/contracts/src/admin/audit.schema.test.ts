@@ -48,6 +48,11 @@ describe('AuditAction', () => {
       'route.catalog_updated',
       'account.deleted',
       'appearance.theme_changed',
+      'route.submission_approved',
+      'route.submission_rejected',
+      'route.rider_hidden',
+      'route.rider_restored',
+      'route.rider_reports_dismissed',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',
@@ -264,6 +269,29 @@ describe('AuditEntry — смена темы приложения (app-themes)',
     expect(
       AuditPage.safeParse({
         items: [{ ...entry, details: { themeFrom: 'classic', themeTo: 'neon' } }],
+        nextCursor: null,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('AuditEntry — модерация маршрутов райдеров (routes-06)', () => {
+  const entry = {
+    id: ID,
+    at: '2026-10-27T10:00:00.000Z',
+    action: 'route.submission_rejected',
+    actor: { kind: 'user', userId: ID, displayName: 'Ольга' },
+    target: null,
+    reason: 'Старт у дома',
+    subject: { kind: 'route', id: ID, label: 'Кольцо' },
+    details: { rejectionReason: 'dangerous' },
+  };
+
+  it('причина отклонения — код справочника; неизвестная — ошибка', () => {
+    expect(AuditPage.parse({ items: [entry], nextCursor: null }).items[0]).toEqual(entry);
+    expect(
+      AuditPage.safeParse({
+        items: [{ ...entry, details: { rejectionReason: 'boring' } }],
         nextCursor: null,
       }).success,
     ).toBe(false);

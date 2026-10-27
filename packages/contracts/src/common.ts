@@ -69,6 +69,8 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   // панели аккаунт не удаляет (409, A11)
   'PASSWORD_INCORRECT',
   'ACCOUNT_PANEL_MEMBER',
+  // routes-06: лимит подач маршрута в каталог (details: limit, max)
+  'ROUTE_PUBLICATION_LIMIT',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

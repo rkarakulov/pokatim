@@ -10,13 +10,21 @@ import {
 import { parseGpx } from '@pokatim/tracks/parse';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { Binary } from 'mongodb';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness, MINUTE } from '../../../test/harness';
 import { call } from '../../../test/identity';
 import { panelCall } from '../../../test/panel';
 import { staff } from '../../../test/races';
-import { fixture, ROUTES, readyRoute, routesDb, seedRiderRoute } from '../../../test/routes';
+import {
+  fixture,
+  publicationDoc,
+  ROUTES,
+  readyRoute,
+  routesDb,
+  seedApprovedRiderRoute,
+  seedRiderRoute,
+} from '../../../test/routes';
 import { ROUTE_CATALOG, type RouteCatalog } from './route-catalog.port';
 import { ROUTE_GEOMETRY, type RouteGeometry } from './route-geometry.port';
 import type { RouteDoc } from './routes.collection';
@@ -107,6 +115,7 @@ const page = async (query = '') => {
 const ids = async (query = '') => (await page(query)).items.map((item) => item.id);
 
 const CARD_KEYS = [
+  'author',
   'city',
   'distanceM',
   'elevationGainM',
@@ -147,6 +156,7 @@ describe('GET /v1/routes (AC2)', () => {
       city: 'minsk',
       surfaces: ['asphalt'],
       publishedAt: new Date(t - MINUTE).toISOString(),
+      author: { kind: 'team' },
     });
   });
 
@@ -509,5 +519,219 @@ describe('изоляция маршрутов райдера (routes-02, RC-2)',
     expect(await geometry.matchGeometry(rider)).toBeNull();
     expect(await geometry.bounds(rider)).toBeNull();
     expect(await geometry.displayGeometry(rider)).toBeNull();
+  });
+});
+
+describe('маршруты райдеров в каталоге (routes-06)', () => {
+  const RIDER_HIDDEN = /ownerUserId|"origin"|publication|showAuthorName|submissionCount|version/;
+
+  it('N1: pending, rejected, hidden, withdrawn, без заявки — нет в списке и городах; карточка, карта, GPX, гонки — 404 (даже с подставленным catalog)', async () => {
+    const platform = await seedRoute({ city: 'minsk' });
+    const catalog = {
+      city: 'brest' as const,
+      surfaces: ['gravel' as const],
+      publishedAt: h.clock.now(),
+    };
+    const owner = uuidv7();
+    const states = await Promise.all(
+      (['pending', 'rejected', 'hidden', 'withdrawn'] as const).map((status) =>
+        seedRiderRoute(h, owner, { publication: publicationDoc(h, status), catalog }),
+      ),
+    );
+    const never = await seedRiderRoute(h, owner, { catalog });
+    for (const id of [...states, never]) {
+      await seedDerived(id, null, GPX_TEXT);
+    }
+
+    expect(await ids()).toEqual([platform]);
+    expect(await ids('?author=rider')).toEqual([]);
+    expect(CatalogRouteCities.parse((await get('/v1/routes/cities')).body).cities).toEqual([
+      'minsk',
+    ]);
+    for (const id of [...states, never]) {
+      for (const suffix of ['', '/map', '/gpx', '/races']) {
+        const res = await get(`/v1/routes/${id}${suffix}`);
+        expect(res.status, `${id}${suffix}`).toBe(404);
+        expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
+      }
+    }
+  });
+
+  it('approved — в списке, городах, карточке, карте и GPX с author rider; «Гонки на маршруте» — 404 (RC-1); ключи — контрактные', async () => {
+    const t = h.clock.now().getTime();
+    const platform = await seedRoute({ city: 'minsk', publishedAt: new Date(t - MINUTE) });
+    const rider = await seedApprovedRiderRoute(h, uuidv7(), {
+      city: 'gomel',
+      surfaces: ['gravel'],
+    });
+    await seedDerived(rider, null, GPX_TEXT);
+
+    const list = await get('/v1/routes');
+    expect(
+      (list.body as { items: object[] }).items.map((item) => Object.keys(item).sort()),
+    ).toEqual([CARD_KEYS, CARD_KEYS]);
+    expect(JSON.stringify(list.body)).not.toMatch(RIDER_HIDDEN);
+    expect(JSON.stringify(list.body)).not.toMatch(HIDDEN);
+    const items = CatalogRoutePage.parse(list.body).items;
+    expect(items.map((item) => [item.id, item.author])).toEqual([
+      [rider, { kind: 'rider', name: null }],
+      [platform, { kind: 'team' }],
+    ]);
+    expect(CatalogRouteCities.parse((await get('/v1/routes/cities')).body).cities.sort()).toEqual([
+      'gomel',
+      'minsk',
+    ]);
+
+    const detail = await get(`/v1/routes/${rider}`);
+    expect(detail.status).toBe(200);
+    expect(Object.keys(detail.body as object).sort()).toEqual(DETAIL_KEYS);
+    expect(JSON.stringify(detail.body)).not.toMatch(RIDER_HIDDEN);
+    expect(CatalogRouteDetail.parse(detail.body)).toMatchObject({
+      id: rider,
+      city: 'gomel',
+      surfaces: ['gravel'],
+      author: { kind: 'rider', name: null },
+      gpxAvailable: true,
+    });
+    const map = await get(`/v1/routes/${rider}/map`);
+    expect(map.status).toBe(200);
+    expect(Object.keys(map.body as object).sort()).toEqual(['bounds', 'finish', 'line', 'start']);
+    expect((await getRaw(`/v1/routes/${rider}/gpx`, '198.51.100.9')).statusCode).toBe(200);
+    expect((await get(`/v1/routes/${rider}/races`)).status).toBe(404);
+    expect((await get(`/v1/routes/${platform}/races`)).status).toBe(200);
+  });
+
+  it('карта маршрута райдера — без кэша геометрии портов (порт не вызывается; после удаления — 404 сразу)', async () => {
+    const owner = uuidv7();
+    const rider = await seedApprovedRiderRoute(h, owner);
+    const port = h.app.get<RouteGeometry>(ROUTE_GEOMETRY, { strict: false });
+    const spy = vi.spyOn(port, 'displayGeometry');
+    try {
+      expect((await get(`/v1/routes/${rider}/map`)).status).toBe(200);
+      expect(spy).not.toHaveBeenCalled();
+      await routesDb(h).routes.deleteOne({ _id: rider });
+      await routesDb(h).geometries.deleteOne({ _id: rider });
+      expect((await get(`/v1/routes/${rider}/map`)).status).toBe(404);
+      // маршрут команды по-прежнему через порт (кэш)
+      const platform = await seedRoute();
+      expect((await get(`/v1/routes/${platform}/map`)).status).toBe(200);
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await port.displayGeometry(rider)).toBeNull();
+  });
+
+  it('фильтр «Автор» × город × дистанция × покрытие × курсор (AC6); IXSCAN routes_catalog_idx без SORT', async () => {
+    const t = h.clock.now().getTime();
+    let n = 0;
+    const at = () => new Date(t - ++n * MINUTE);
+    const owner = uuidv7();
+    const team1 = await seedRoute({ city: 'minsk', surfaces: ['asphalt'], publishedAt: at() });
+    const rider1 = await seedApprovedRiderRoute(h, owner, {
+      city: 'minsk',
+      surfaces: ['asphalt'],
+      approvedAt: at(),
+    });
+    const team2 = await seedRoute({ city: 'brest', surfaces: ['gravel'], publishedAt: at() });
+    const rider2 = await seedApprovedRiderRoute(h, owner, {
+      city: 'minsk',
+      surfaces: ['gravel'],
+      approvedAt: at(),
+    });
+    const rider3 = await seedApprovedRiderRoute(h, owner, {
+      city: 'minsk',
+      surfaces: ['asphalt'],
+      approvedAt: at(),
+    });
+
+    expect(await ids()).toEqual([team1, rider1, team2, rider2, rider3]);
+    expect(await ids('?author=team')).toEqual([team1, team2]);
+    expect(await ids('?author=rider')).toEqual([rider1, rider2, rider3]);
+    expect(await ids('?author=team&author=rider')).toEqual([team1, rider1, team2, rider2, rider3]);
+    expect(await ids('?author=rider&city=minsk&surface=asphalt')).toEqual([rider1, rider3]);
+    expect(await ids('?author=team&city=minsk')).toEqual([team1]);
+    expect(await ids('?author=rider&distance=gt100')).toEqual([]);
+    expect(await ids('?author=rider&distance=lt50')).toEqual([rider1, rider2, rider3]);
+
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    await h.db.command({ profile: 2 });
+    try {
+      do {
+        const next: CatalogRoutePage = await page(
+          `?author=rider&city=minsk&limit=1${cursor ? `&cursor=${cursor}` : ''}`,
+        );
+        seen.push(...next.items.map((item) => item.id));
+        cursor = next.nextCursor;
+      } while (cursor && seen.length < 10);
+    } finally {
+      await h.db.command({ profile: 0 });
+    }
+    expect(seen).toEqual([rider1, rider2, rider3]);
+    const entries = await h.db
+      .collection<{ planSummary?: string; hasSortStage?: boolean }>('system.profile')
+      .find({ ns: `${h.db.databaseName}.routes`, op: 'query', 'command.sort': { $exists: true } })
+      .toArray();
+    expect(entries.length).toBeGreaterThanOrEqual(3);
+    for (const entry of entries) {
+      expect(entry.planSummary).toContain('IXSCAN { catalog.publishedAt: -1, _id: -1 }');
+      expect(entry.hasSortStage ?? false).toBe(false);
+    }
+    for (const broken of ['author=platform', 'author=team&author=rider&author=team']) {
+      expect((await get(`/v1/routes?${broken}`)).status, broken).toBe(400);
+    }
+  });
+
+  it('N8: имя — только с галочкой и публичным именем (без условия согласия «в результатах»); без галочки или без имени — null', async () => {
+    const profiles = h.db.collection<Record<string, unknown> & { _id: string }>('profiles');
+    const [unsigned, nameless, signed] = [uuidv7(), uuidv7(), uuidv7()];
+    await profiles.insertMany([
+      { _id: unsigned, rideReasons: [], surveyCompletedAt: null, publicName: 'Скрытый' },
+      { _id: nameless, rideReasons: [], surveyCompletedAt: null, publicName: null },
+      {
+        _id: signed,
+        rideReasons: [],
+        surveyCompletedAt: null,
+        publicName: 'Анна К.',
+        showNameInResults: false,
+      },
+    ]);
+    const t = h.clock.now().getTime();
+    const a = await seedApprovedRiderRoute(h, unsigned, {
+      showAuthorName: false,
+      approvedAt: new Date(t - MINUTE),
+    });
+    const b = await seedApprovedRiderRoute(h, nameless, {
+      showAuthorName: true,
+      approvedAt: new Date(t - 2 * MINUTE),
+    });
+    const c = await seedApprovedRiderRoute(h, signed, {
+      showAuthorName: true,
+      approvedAt: new Date(t - 3 * MINUTE),
+    });
+
+    const items = (await page()).items;
+    expect(items.map((item) => [item.id, item.author])).toEqual([
+      [a, { kind: 'rider', name: null }],
+      [b, { kind: 'rider', name: null }],
+      [c, { kind: 'rider', name: 'Анна К.' }],
+    ]);
+    expect(CatalogRouteDetail.parse((await get(`/v1/routes/${a}`)).body).author).toEqual({
+      kind: 'rider',
+      name: null,
+    });
+    expect(CatalogRouteDetail.parse((await get(`/v1/routes/${c}`)).body).author).toEqual({
+      kind: 'rider',
+      name: 'Анна К.',
+    });
+    expect(JSON.stringify((await get('/v1/routes')).body)).not.toContain('Скрытый');
+
+    // сброс имени — виден на следующем запросе (не снимок)
+    await profiles.updateOne({ _id: signed }, { $set: { publicName: null } });
+    expect(CatalogRouteDetail.parse((await get(`/v1/routes/${c}`)).body).author).toEqual({
+      kind: 'rider',
+      name: null,
+    });
   });
 });

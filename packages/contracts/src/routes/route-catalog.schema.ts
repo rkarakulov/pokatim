@@ -7,8 +7,8 @@ import { LonLat, RACE_ROUTE_MAX_POINTS } from '../races/race-route.schema.ts';
 import { PageCursor, SURFACES, Surface } from '../races/race.schema.ts';
 
 /*
- * Каталог маршрутов команды (routes-01): публичное чтение без входа — только маршруты, опубликованные сотрудником
- * в панели. Ответы приложения — `tolerantEnum` справочников (R6); без владельца, sha256, статуса, отказа, попыток и
+ * Каталог маршрутов (routes-01): публичное чтение без входа — только маршруты, опубликованные сотрудником в панели, и
+ * (routes-06) одобренные модератором маршруты райдеров. Ответы приложения — `tolerantEnum` справочников (R6); без владельца, sha256, статуса, отказа, попыток и
  * линии сверки.
  */
 
@@ -18,6 +18,21 @@ export const RouteDistanceBucket = z.enum(ROUTE_DISTANCE_BUCKETS, { error: field
 export type RouteDistanceBucket = z.infer<typeof RouteDistanceBucket>;
 
 export const CATALOG_ROUTE_LIST_MAX_LIMIT = 50;
+
+/** Автор маршрута каталога (routes-06, U4): команда платформы или райдер (одобренная заявка). Только в конец. */
+export const ROUTE_AUTHOR_KINDS = ['team', 'rider'] as const;
+export const RouteAuthorKind = z.enum(ROUTE_AUTHOR_KINDS, { error: fieldError('INVALID') });
+export type RouteAuthorKind = z.infer<typeof RouteAuthorKind>;
+
+/**
+ * Подпись маршрута в каталоге (U3): у райдера `name` — публичное имя профиля, только если при подаче отмечено
+ * «Подписать моим именем» и имя задано; иначе `null` (только бейдж «От райдера»).
+ */
+export const CatalogRouteAuthor = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('team') }),
+  z.object({ kind: z.literal('rider'), name: z.string().nullable() }),
+]);
+export type CatalogRouteAuthor = z.infer<typeof CatalogRouteAuthor>;
 
 /**
  * `GET /v1/routes?city&distance&surface&cursor&limit` → `CatalogRoutePage`: новые публикации сверху. Внутри фильтра —
@@ -30,6 +45,8 @@ export const CatalogRouteQuery = z.strictObject({
   city: queryArray(CityCode, CITY_CODES.length).optional(),
   distance: queryArray(RouteDistanceBucket, ROUTE_DISTANCE_BUCKETS.length).optional(),
   surface: queryArray(Surface, SURFACES.length).optional(),
+  /** routes-06: `team` — маршруты команды, `rider` — райдеров (ИЛИ внутри, И с остальными фильтрами). */
+  author: queryArray(RouteAuthorKind, ROUTE_AUTHOR_KINDS.length).optional(),
 });
 export type CatalogRouteQuery = z.infer<typeof CatalogRouteQuery>;
 
@@ -43,6 +60,8 @@ export const CatalogRouteCard = z.object({
   city: tolerantEnum(CITY_CODES),
   surfaces: z.array(tolerantEnum(SURFACES)),
   publishedAt: z.iso.datetime(),
+  /** routes-06; ответ без поля (старый API) — маршрут команды. */
+  author: CatalogRouteAuthor.default({ kind: 'team' }),
 });
 export type CatalogRouteCard = z.infer<typeof CatalogRouteCard>;
 

@@ -42,6 +42,7 @@ export const PROJECT_ERROR_MESSAGES = {
   ROUTE_QUOTA_EXCEEDED: 'Достигнут предел маршрутов',
   PASSWORD_INCORRECT: 'Неверный пароль',
   ACCOUNT_PANEL_MEMBER: 'Аккаунт сотрудника панели удалить нельзя',
+  ROUTE_PUBLICATION_LIMIT: 'Достигнут предел заявок в каталог',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

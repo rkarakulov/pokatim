@@ -178,6 +178,22 @@ export class ProfileRepository {
   }
 
   /**
+   * Имена авторов маршрутов каталога (routes-06, порт `RIDER_NAMES.attributionNames`): только наличие имени — согласие
+   * на подпись даёт заявка маршрута (`publication.showAuthorName`, 8.1 RC-2), не `showNameInResults`.
+   */
+  async findAttributionNames(userIds: readonly string[]): Promise<Map<string, string>> {
+    const docs = await this.profiles
+      .find(
+        { _id: { $in: [...userIds] }, publicName: { $type: 'string' } },
+        {
+          projection: { publicName: 1 },
+        },
+      )
+      .toArray();
+    return new Map(docs.map((doc) => [doc._id, doc.publicName as string]));
+  }
+
+  /**
    * Удаление документа профиля — стирание удалённого аккаунта (`ProfileErasure`, ADR-0015). Только `profiles`: журнал
    * согласий (`profile_consent_events`) — append-only и хранится (A9). Нет документа — no-op.
    */

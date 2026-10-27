@@ -16,9 +16,12 @@ import {
   readyRoute,
   ROUTES,
   routesDb,
+  seedApprovedRiderRoute,
   seedRiderRoute,
   uploadRoute,
 } from '../../../test/routes';
+import { ROUTE_CATALOG, type RouteCatalog } from './route-catalog.port';
+import { ROUTE_GEOMETRY, type RouteGeometry } from './route-geometry.port';
 import { RouteProcessingProcessor } from './route-processing.processor';
 import { ROUTE_RECEIVED } from './routes.events';
 import { RoutesRepository } from './routes.repository';
@@ -433,6 +436,43 @@ describe('изоляция маршрутов райдера (routes-02, RC-2)',
     expect(route.id).not.toBe(rider);
     expect(await routeDoc(route.id)).toMatchObject({ origin: 'platform', sha256 });
     expect(await routeDoc(rider)).toMatchObject({ origin: 'rider', title: 'Мой маршрут' });
+  });
+});
+
+describe('одобренный маршрут райдера — вне панели «Маршруты» и портов гонок (routes-06, N3, U7)', () => {
+  it('нет в списке (оба режима), GET :id, publish и unpublish — 404; порты: не коридор, нет названия, геометрии и inCatalog', async () => {
+    const admin = await staff(h, 'admin@example.by', 'admin');
+    const platform = await readyRoute(h, admin.token, 'route-loop.gpx', 'Круг админа');
+    const approved = await seedApprovedRiderRoute(h, admin.userId);
+    expect((await routeDoc(approved))?.catalog).not.toBeNull();
+
+    const ids = async (query: string) =>
+      PanelRoutePage.parse(
+        (await panelCall(h, admin.token, 'GET', `${ROUTES}${query}`)).body,
+      ).items.map((item) => item.id);
+    expect(await ids('')).toEqual([platform]);
+    expect(await ids('?status=ready')).toEqual([platform]);
+    expect((await panelCall(h, admin.token, 'GET', `${ROUTES}/${approved}`)).status).toBe(404);
+    for (const action of ['publish', 'unpublish']) {
+      const res = await panelCall(h, admin.token, 'POST', `${ROUTES}/${approved}/${action}`, {
+        city: 'minsk',
+        surfaces: ['asphalt'],
+      });
+      expect(res.status, action).toBe(404);
+    }
+    expect(await routeDoc(approved)).toMatchObject({ publication: { status: 'approved' } });
+
+    const catalog = h.app.get<RouteCatalog>(ROUTE_CATALOG, { strict: false });
+    const geometry = h.app.get<RouteGeometry>(ROUTE_GEOMETRY, { strict: false });
+    expect(await catalog.findReady(approved)).toBeNull();
+    expect(await catalog.inCatalog(approved)).toBe(false);
+    expect([...(await catalog.summaries([approved, platform])).keys()]).toEqual([platform]);
+    expect(await geometry.matchGeometry(approved)).toBeNull();
+    expect(await geometry.bounds(approved)).toBeNull();
+    expect(await geometry.displayGeometry(approved)).toBeNull();
+    const repository = h.app.get(RoutesRepository, { strict: false });
+    expect(await repository.findPublished(approved)).toBeUndefined();
+    expect((await repository.routesByIds([approved])).length).toBe(0);
   });
 });
 

@@ -5,6 +5,7 @@ import type {
   MemberStatus,
   PanelRole,
   RaceCancelReason,
+  RouteRejectionReason,
 } from '@pokatim/contracts';
 import type { Collection, Db } from 'mongodb';
 
@@ -88,6 +89,8 @@ export interface AuditDetailsDoc {
   /** app-themes: смена темы приложения */
   themeFrom?: AppThemeId;
   themeTo?: AppThemeId;
+  /** routes-06: код причины отклонения заявки маршрута райдера */
+  rejectionReason?: RouteRejectionReason;
 }
 
 /**

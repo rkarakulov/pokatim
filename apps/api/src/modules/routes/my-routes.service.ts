@@ -2,9 +2,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   type MyRoute,
   type MyRoutePage,
+  type MyRoutePublication,
   type MyRouteQuery,
   type RateLimitedDetails,
   type RouteMapGeometry,
+  type RouteStateDetails,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock, ENV, RateLimiter, type RateLimitRule } from '@rkarakulov/api-kit/core';
 import { MongoTransactions } from '@rkarakulov/api-kit/mongo';
@@ -16,8 +18,9 @@ import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { type UploadSlot, UploadSlots } from '../../upload-slots';
 import { rateLimitKeyForIp } from '../identity';
 import { displayGeometryOf } from './route-catalog';
-import type { RouteDoc } from './routes.collection';
-import { ROUTE_POLICY } from './routes.policy';
+import { RouteDeletion } from './route-deletion';
+import type { RouteDoc, RoutePublicationDoc } from './routes.collection';
+import { canPublish, ROUTE_POLICY } from './routes.policy';
 import { RoutesRepository } from './routes.repository';
 import { RoutesService } from './routes.service';
 
@@ -25,6 +28,23 @@ import { RoutesService } from './routes.service';
 const MyRouteCursorKey = z.literal('m');
 
 const notFound = () => domainError('NOT_FOUND', 404);
+
+/**
+ * Заявка в каталог для автора (routes-06): отозванная/снятая — `null`; без счётчиков подач и жалоб, версии и даты
+ * одобрения/скрытия.
+ */
+function publicationOf(publication: RoutePublicationDoc | null): MyRoutePublication | null {
+  if (!publication || publication.status === 'withdrawn') return null;
+  return {
+    status: publication.status,
+    city: publication.city,
+    surfaces: publication.surfaces,
+    showAuthorName: publication.showAuthorName,
+    submittedAt: publication.submittedAt.toISOString(),
+    decidedAt: publication.decidedAt?.toISOString() ?? null,
+    rejection: publication.status === 'rejected' ? publication.rejection : null,
+  };
+}
 
 /** Ответ приложения — явный список полей: без origin, владельца, sha256, попыток, каталога и линий. */
 export function toMyRoute(route: RouteDoc): MyRoute {
@@ -37,7 +57,17 @@ export function toMyRoute(route: RouteDoc): MyRoute {
     elevationGainM: route.elevationGainM,
     isLoop: route.isLoop,
     createdAt: route.createdAt.toISOString(),
+    publication: publicationOf(route.publication ?? null),
+    canPublish: canPublish(route),
   };
+}
+
+/** Название заморожено, пока заявка на проверке или маршрут в каталоге (A3); иначе — `null`. */
+export function renameRefusal(route: RouteDoc): RouteStateDetails | null {
+  const status = route.publication?.status;
+  if (status === 'pending') return { reason: 'in_review' };
+  if (status === 'approved') return { reason: 'published' };
+  return null;
 }
 
 /**
@@ -56,6 +86,7 @@ export class MyRoutesService {
   constructor(
     private readonly repository: RoutesRepository,
     private readonly routes: RoutesService,
+    private readonly deletion: RouteDeletion,
     private readonly transactions: MongoTransactions,
     private readonly rateLimiter: RateLimiter,
     @Inject(ENV) private readonly env: Env,
@@ -127,18 +158,31 @@ export class MyRoutesService {
     };
   }
 
-  /** Переименование в любом статусе; то же название — без записи. */
+  /**
+   * Переименование в любом статусе обработки; то же название — без записи. На проверке и в каталоге — `409
+   * ROUTE_INVALID_STATE` (A3, условие и в фильтре записи: заявка, поданная между чтением и записью, тоже отказ).
+   */
   async rename(userId: string, id: string, title: string): Promise<MyRoute> {
     const route = await this.own(userId, id);
     if (route.title === title) return toMyRoute(route);
+    this.assertRenamable(route);
     const renamed = await this.repository.renameOwn(userId, id, title, this.clock.now());
-    if (!renamed) throw notFound();
-    return toMyRoute(renamed);
+    if (renamed) return toMyRoute(renamed);
+    this.assertRenamable(await this.own(userId, id));
+    throw notFound();
   }
 
-  /** Удаление насовсем: маршрут, геометрия, исходник — одной транзакцией; повтор — 404. Лог — после коммита. */
+  private assertRenamable(route: RouteDoc): void {
+    const refusal = renameRefusal(route);
+    if (refusal) throw domainError('ROUTE_INVALID_STATE', 409, refusal);
+  }
+
+  /**
+   * Удаление насовсем: маршрут, геометрия, исходник, публикация и жалобы на него — одной транзакцией (U6); повтор —
+   * 404. Лог — после коммита.
+   */
   async delete(userId: string, id: string): Promise<void> {
-    const deleted = await this.transactions.run((tx) => this.repository.deleteOwn(tx, userId, id));
+    const deleted = await this.transactions.run((tx) => this.deletion.deleteOwn(tx, userId, id));
     if (!deleted) throw notFound();
     this.logger.log(`route ${id} deleted by ${userId}`);
   }

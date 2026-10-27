@@ -13,6 +13,7 @@ const route = (overrides: Partial<CatalogRouteCard> = {}): CatalogRouteCard => (
   city: 'minsk',
   surfaces: ['asphalt', 'gravel'],
   publishedAt: '2026-10-20T10:00:00.000Z',
+  author: { kind: 'team' },
   ...overrides,
 });
 
@@ -61,6 +62,8 @@ describe('MyRouteListCard (routes-02)', () => {
     elevationGainM: 310,
     isLoop: true,
     createdAt: '2026-10-26T21:30:00.000Z',
+    publication: null,
+    canPublish: false,
     ...overrides,
   });
 

@@ -18,6 +18,7 @@ import {
   MyRouteQuery,
   RenameRouteInput,
   type RouteMapGeometry,
+  SubmitRoutePublicationInput,
   UploadRouteQuery,
   Uuid,
 } from '@pokatim/contracts';
@@ -25,6 +26,7 @@ import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
 import { readLimited } from '../../raw-body';
 import { AuthGuard, type AuthUser, CurrentUser } from '../identity';
+import { MyRoutePublicationService } from './my-route-publication.service';
 import { MyRoutesService } from './my-routes.service';
 import { ROUTE_POLICY } from './routes.policy';
 
@@ -48,7 +50,10 @@ const UPLOAD_ERRORS = {
 @Controller('routes/mine')
 @UseGuards(AuthGuard)
 export class RoutesMineController {
-  constructor(private readonly routes: MyRoutesService) {}
+  constructor(
+    private readonly routes: MyRoutesService,
+    private readonly publication: MyRoutePublicationService,
+  ) {}
 
   @Post()
   @Header('Cache-Control', 'no-store')
@@ -109,6 +114,27 @@ export class RoutesMineController {
     @Body(new ZodValidationPipe(RenameRouteInput, FieldErrorCode)) body: RenameRouteInput,
   ): Promise<MyRoute> {
     return this.routes.rename(user.userId, id, body.title);
+  }
+
+  /** routes-06: заявка в каталог (премодерация). */
+  @Post(':id/publish')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  publish(
+    @CurrentUser() user: AuthUser,
+    @Param('id', idPipe) id: string,
+    @Body(new ZodValidationPipe(SubmitRoutePublicationInput, FieldErrorCode))
+    body: SubmitRoutePublicationInput,
+  ): Promise<MyRoute> {
+    return this.publication.submit(user.userId, id, body);
+  }
+
+  /** routes-06: отозвать заявку или снять с публикации. */
+  @Post(':id/unpublish')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  unpublish(@CurrentUser() user: AuthUser, @Param('id', idPipe) id: string): Promise<MyRoute> {
+    return this.publication.withdraw(user.userId, id);
   }
 
   @Post(':id/delete')

@@ -19,6 +19,8 @@ const route = (overrides: Partial<MyRoute> = {}): MyRoute => ({
   elevationGainM: 310,
   isLoop: true,
   createdAt: '2026-10-26T21:30:00.000Z',
+  publication: null,
+  canPublish: false,
   ...overrides,
 });
 

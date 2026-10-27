@@ -17,6 +17,7 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
       'profiles.moderate',
       'races.read',
       'rides.moderate',
+      'routes.moderate',
     ]);
     expect([...ROLE_PERMISSIONS.organizer].sort()).toEqual([
       'races.manage',
@@ -41,6 +42,12 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
     expect(ROLE_PERMISSIONS.organizer.has('results.revise')).toBe(false);
     expect(ROLE_PERMISSIONS.moderator.has('results.manage')).toBe(false);
     expect(ROLE_PERMISSIONS.moderator.has('results.revise')).toBe(false);
+  });
+
+  it('routes-06: модерация маршрутов райдеров — admin и moderator, не organizer', () => {
+    expect(ROLE_PERMISSIONS.admin.has('routes.moderate')).toBe(true);
+    expect(ROLE_PERMISSIONS.moderator.has('routes.moderate')).toBe(true);
+    expect(ROLE_PERMISSIONS.organizer.has('routes.moderate')).toBe(false);
   });
 
   it('05b: модерация райдов — admin и moderator, не organizer', () => {
@@ -78,6 +85,7 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
       'disputes.read',
       'disputes.decide',
       'profiles.moderate',
+      'routes.moderate',
     ]);
     expect(permissionsOf('organizer')).toEqual(['races.read', 'races.manage', 'results.manage']);
   });

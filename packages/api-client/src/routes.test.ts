@@ -74,7 +74,10 @@ describe('каталог маршрутов (routes-01): публичные ме
         cursor: 'c 1',
         limit: 10,
       }),
-    ).resolves.toEqual({ items: [{ ...card, city: 'unknown' }], nextCursor: null });
+    ).resolves.toEqual({
+      items: [{ ...card, city: 'unknown', author: { kind: 'team' } }],
+      nextCursor: null,
+    });
     const empty = app(200, { items: [], nextCursor: null });
     await empty.api.listCatalogRoutes();
     expect([list, empty].map((client) => client.calls[0]?.url)).toEqual([
@@ -94,6 +97,7 @@ describe('каталог маршрутов (routes-01): публичные ме
     // API до routes-03 — без elevation и gpxAvailable: дефолты (RC-10)
     await expect(detail.api.getCatalogRoute('a/b')).resolves.toEqual({
       ...card,
+      author: { kind: 'team' },
       elevation: null,
       gpxAvailable: false,
     });
@@ -197,7 +201,12 @@ describe('api-client: мои маршруты (routes-02, Bearer — тольк�
   it('uploadMyRoute — POST octet-stream, ?title= с кириллицей; myRouteUploadRequest — те же путь и заголовки', async () => {
     const { calls, api } = app(202, myRoute);
     const bytes = new Uint8Array([1, 2, 3]);
-    await expect(api.uploadMyRoute('access', bytes, 'Кольцо & ко')).resolves.toEqual(myRoute);
+    // API до routes-06 — без publication и canPublish: дефолты
+    await expect(api.uploadMyRoute('access', bytes, 'Кольцо & ко')).resolves.toEqual({
+      ...myRoute,
+      publication: null,
+      canPublish: false,
+    });
     expect(calls[0]?.url).toBe(
       'https://api.test/v1/routes/mine?title=%D0%9A%D0%BE%D0%BB%D1%8C%D1%86%D0%BE+%26+%D0%BA%D0%BE',
     );
@@ -259,5 +268,164 @@ describe('api-client: мои маршруты (routes-02, Bearer — тольк�
     const error = await missing.api.getMyRoute('access', ID).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiHttpError);
     expect((error as ApiHttpError).apiError.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('api-client: публикация маршрутов райдеров (routes-06)', () => {
+  const publication = {
+    status: 'pending',
+    city: 'minsk',
+    surfaces: ['asphalt'],
+    showAuthorName: true,
+    submittedAt: '2026-10-27T10:00:00.000Z',
+    decidedAt: null,
+    rejection: null,
+  };
+  const myRoute = {
+    id: ID,
+    title: 'Кольцо',
+    status: 'ready',
+    failure: null,
+    distanceM: 1300,
+    elevationGainM: null,
+    isLoop: false,
+    createdAt: '2026-10-27T10:00:00.000Z',
+    publication,
+    canPublish: false,
+  };
+
+  it('submitMyRoutePublication и unpublishMyRoute — POST с Bearer вызова, тело заявки, MyRoute', async () => {
+    const submit = app(200, myRoute);
+    const body = { city: 'minsk' as const, surfaces: ['asphalt' as const], showAuthorName: true };
+    await expect(submit.api.submitMyRoutePublication('access', 'a/b', body)).resolves.toEqual(
+      myRoute,
+    );
+    expect(submit.calls[0]).toMatchObject({
+      url: 'https://api.test/v1/routes/mine/a%2Fb/publish',
+      method: 'POST',
+      body,
+    });
+    expect(submit.calls[0]?.headers.get('authorization')).toBe('Bearer access');
+
+    const unpublish = app(200, { ...myRoute, publication: null, canPublish: true });
+    await expect(unpublish.api.unpublishMyRoute('access', ID)).resolves.toMatchObject({
+      publication: null,
+      canPublish: true,
+    });
+    expect(unpublish.calls[0]).toMatchObject({
+      url: `https://api.test/v1/routes/mine/${ID}/unpublish`,
+      method: 'POST',
+    });
+    expect(unpublish.calls[0]?.headers.get('authorization')).toBe('Bearer access');
+  });
+
+  it('getCatalogRouteViewer и reportCatalogRoute — Bearer вызова; listCatalogRoutes — author повтором ключа', async () => {
+    const viewer = app(200, { canReport: true, reported: false });
+    await expect(viewer.api.getCatalogRouteViewer('access', 'a/b')).resolves.toEqual({
+      canReport: true,
+      reported: false,
+    });
+    expect(viewer.calls[0]).toMatchObject({
+      url: 'https://api.test/v1/routes/a%2Fb/me',
+      method: 'GET',
+    });
+    expect(viewer.calls[0]?.headers.get('authorization')).toBe('Bearer access');
+
+    const report = app(200, { canReport: false, reported: true });
+    const body = { reason: 'private_area' as const, comment: 'Через двор' };
+    await expect(report.api.reportCatalogRoute('access', ID, body)).resolves.toEqual({
+      canReport: false,
+      reported: true,
+    });
+    expect(report.calls[0]).toMatchObject({
+      url: `https://api.test/v1/routes/${ID}/reports`,
+      method: 'POST',
+      body,
+    });
+    expect(report.calls[0]?.headers.get('authorization')).toBe('Bearer access');
+
+    const list = app(200, {
+      items: [{ ...card, author: { kind: 'rider', name: null } }],
+      nextCursor: null,
+    });
+    await expect(
+      list.api.listCatalogRoutes({ author: ['team', 'rider'], city: ['minsk'] }),
+    ).resolves.toMatchObject({ items: [{ author: { kind: 'rider', name: null } }] });
+    expect(list.calls[0]?.url).toBe(
+      'https://api.test/v1/routes?author=team&author=rider&city=minsk',
+    );
+    expect(list.calls[0]?.headers.has('authorization')).toBe(false);
+  });
+
+  it('панель: очередь, карточка и пять действий — пути, тела, cookie; строгий разбор', async () => {
+    const base = {
+      id: ID,
+      title: 'Кольцо',
+      authorUserId: ID,
+      status: 'pending',
+      city: 'minsk',
+      surfaces: ['asphalt'],
+      distanceM: 1300,
+      submittedAt: '2026-10-27T10:00:00.000Z',
+      openReportCount: 0,
+      lastReportAt: null,
+      hiddenAt: null,
+    };
+    const row = { ...base, topReason: null };
+    const detail = {
+      ...base,
+      showAuthorName: false,
+      submissionCount: 1,
+      decidedAt: null,
+      approvedAt: null,
+      rejection: null,
+      version: 0,
+      elevationGainM: null,
+      isLoop: false,
+      line: [],
+      elevation: null,
+      reports: [],
+    };
+    const list = admin(200, { items: [row], nextCursor: null });
+    await expect(list.api.listRiderRoutes({ state: 'reported', cursor: 'c' })).resolves.toEqual({
+      items: [row],
+      nextCursor: null,
+    });
+    expect(list.calls[0]).toMatchObject({
+      url: '/v1/admin/rider-routes?state=reported&cursor=c',
+      method: 'GET',
+      credentials: 'same-origin',
+    });
+    const one = admin(200, detail);
+    await expect(one.api.getRiderRoute('a/b')).resolves.toEqual(detail);
+    expect(one.calls[0]?.url).toBe('/v1/admin/rider-routes/a%2Fb');
+
+    const at = '2026-10-27T10:00:00.000Z';
+    const actions = [
+      ['approveRiderRoute', 'approve', { version: 0, city: 'minsk', surfaces: ['asphalt'] }],
+      ['rejectRiderRoute', 'reject', { version: 0, reason: 'duplicate', comment: 'Есть такой' }],
+      ['hideRiderRoute', 'hide', { version: 1, reason: 'Опасно' }],
+      ['restoreRiderRoute', 'restore', { version: 2, reason: 'Исправлено' }],
+      [
+        'dismissRiderRouteReports',
+        'dismiss-reports',
+        { version: 1, reason: 'Ложные', lastReportAt: at },
+      ],
+    ] as const;
+    for (const [method, path, body] of actions) {
+      const client = admin(200, detail);
+      await expect(
+        (client.api[method] as (id: string, body: unknown) => Promise<unknown>)(ID, body),
+      ).resolves.toEqual(detail);
+      expect(client.calls[0], method).toMatchObject({
+        url: `/v1/admin/rider-routes/${ID}/${path}`,
+        method: 'POST',
+        credentials: 'same-origin',
+        body,
+      });
+      expect(client.calls[0]?.headers.has('authorization')).toBe(false);
+    }
+    const broken = admin(200, { ...detail, status: 'withdrawn' });
+    await expect(broken.api.getRiderRoute(ID)).rejects.toThrow();
   });
 });

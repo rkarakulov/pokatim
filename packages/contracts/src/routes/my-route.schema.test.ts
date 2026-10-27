@@ -23,8 +23,8 @@ const route = {
 };
 
 describe('мои маршруты', () => {
-  it('MyRoute: готовый и в обработке', () => {
-    expect(MyRoute.parse(route)).toEqual(route);
+  it('MyRoute: готовый и в обработке; без publication/canPublish — null/false (старый API)', () => {
+    expect(MyRoute.parse(route)).toEqual({ ...route, publication: null, canPublish: false });
     expect(
       MyRoute.parse({
         ...route,
@@ -67,5 +67,41 @@ describe('мои маршруты', () => {
 
   it('квота своих маршрутов — 100', () => {
     expect(MY_ROUTE_MAX_COUNT).toBe(100);
+  });
+});
+
+describe('публикация в «Моих» (routes-06)', () => {
+  const publication = {
+    status: 'rejected',
+    city: 'minsk',
+    surfaces: ['asphalt'],
+    showAuthorName: true,
+    submittedAt: '2026-10-27T10:00:00.000Z',
+    decidedAt: '2026-10-27T11:00:00.000Z',
+    rejection: { reason: 'dangerous', comment: 'Старт у дома' },
+  };
+
+  it('статус, причина, город и покрытие — tolerantEnum; canPublish', () => {
+    expect(MyRoute.parse({ ...route, publication, canPublish: true })).toEqual({
+      ...route,
+      publication,
+      canPublish: true,
+    });
+    const future = MyRoute.parse({
+      ...route,
+      publication: {
+        ...publication,
+        status: 'archived',
+        city: 'kaunas',
+        surfaces: ['cobbles'],
+        rejection: { reason: 'boring', comment: null },
+      },
+    }).publication;
+    expect(future).toMatchObject({
+      status: 'unknown',
+      city: 'unknown',
+      surfaces: ['unknown'],
+      rejection: { reason: 'unknown', comment: null },
+    });
   });
 });

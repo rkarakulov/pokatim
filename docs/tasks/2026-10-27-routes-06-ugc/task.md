@@ -263,10 +263,38 @@ BLOCKERS нет. Находки (решения architect; U1–U9 и A1–A7 н
 
 ## 8.2 Deviations from spec
 
+Этап A (coder, 2026-10-27):
+- **Правки вне зоны этапа A ради typecheck контрактов:** `packages/i18n/src/ru.ts` — пять ключей
+  `admin.audit.action.route.submission_approved|submission_rejected|rider_hidden|rider_restored|rider_reports_dismissed`
+  (`AuditScreen` панели строит ключ из `AUDIT_ACTIONS`); фикстуры тестов приложения (7 файлов `apps/app/src/**/*.test.*`) —
+  поля `author: { kind: 'team' }` и `publication: null`, `canPublish: false` (выходные типы схем стали обязательными).
+  Поведение приложения и панели не менялось; прочие ключи i18n — этапы B и C.
+- `publication.version` первой подачи — `0` (дальше `+1` на каждый переход, включая повторную подачу и отзыв).
+- 409 `ROUTE_INVALID_STATE` действий **панели** — без `details` (как routes-01); `details.reason` — у действий автора и
+  жалобы. «Отклонить жалобы» без открытых жалоб — 409 `ROUTE_INVALID_STATE` (§11).
+- Гонка «одобрение ↔ отзыв»: оба запроса могут закончиться успехом последовательно (одобрение, затем снятие) — тест
+  проверяет согласованный исход (`withdrawn`, `catalog: null`, журнал одобрения только при 200), а не «ровно один 200».
+- N3 — в `routes-admin.int.test.ts` (список в обоих режимах, `GET :id`, `publish`/`unpublish` панели, порты);
+  `routes-catalog-admin.int.test.ts` не менялся.
+- Текст сообщения `ROUTE_INVALID_STATE` в `error-messages.ts` («Маршрут ещё не готов») не менялся — клиенты различают по
+  `details.reason`.
+
 ## 8.3 Security checklist
 
 Затронуто: AuthZ (свой маршрут, право `routes.moderate`), данные наружу (публичный маршрут райдера, имя), злоупотребления
 (лимиты U8), аудит (журнал панели). Заполняет coder.
+
+- [x] AuthZ: «мои» — `AuthGuard` + фильтр `{ ownerUserId, origin: 'rider' }`, чужой/команды/неизвестный — один 404 (N2);
+  панель — `PanelGuard` + `@RequirePermission('routes.moderate')` на классе (N4: 401/403 на 7 путей, `admin-routes.test.ts`);
+  жалоба/`me` — `AuthGuard`.
+- [x] Публичная видимость — только `IN_CATALOG` (отрицательное доказательство: без условия `approved` N1 красный).
+- [x] Порты гонок, панель «Маршруты», `routesByIds`, LRU-кэши — без изменений (N3); карта маршрута райдера — без кэша.
+- [x] Наружу — явные списки полей (int-тесты ключей): без `ownerUserId`, `origin`, `version`, счётчиков; имя автора —
+  только по галочке и `publicName` (N8); в панели имени нет.
+- [x] Лимиты U8 (N5), идемпотентная жалоба (уникальный индекс, параллельные дубли).
+- [x] Журнал панели — пять действий в транзакции с записью маршрута (откат при сбое журнала — тест); outbox — только id.
+- [x] Логи — id, действие, код причины; без названий, комментариев, имён (тест лога жалобы).
+
 
 ## 9. Acceptance Criteria
 
@@ -608,3 +636,42 @@ App (jest + RNTL): `my-routes.test.tsx` (статусы в списке и ка�
 (RC-12); правка подписи поля имени в профиле (RC-2); лимит частоты действий модератора (как в 05b — нет).
 
 ## 12. Outcome (заполняет coder)
+
+### Этап A — contracts + api + api-client (coder, 2026-10-27)
+
+**Сделано**
+- contracts: `routes/route-publication.schema.ts`, `route-report.schema.ts`, `route-moderation.schema.ts` (+ тесты);
+  `MyRoute.publication`/`canPublish`, `CatalogRouteCard.author` (дефолт `team`), `CatalogRouteQuery.author`; право
+  `routes.moderate`, пять действий журнала и `details.rejectionReason`, код `ROUTE_PUBLICATION_LIMIT` — в конце списков.
+- api: миграция `0025_routes_publication`; `RouteDoc.publication` + `publicationTransition`/`canPublish`
+  (`routes.policy.ts`); `RoutesRepository` — `IN_CATALOG` (платформа | `approved`), `findInCatalog`, переходы публикации,
+  `recordRouteReport`, очереди с `hint`; `findPublished`/`findReady`/`routesByIds`/`listVisible`/`route-catalog.ts` — без
+  изменения поведения; `route_reports` (`RouteReportsRepository`, сторож), `RouteDeletion` (автор и `RouteErasure`);
+  `MyRoutePublicationService` (`publish`/`unpublish`), заморозка названия; `RoutesViewerController` + `RouteReportsService`;
+  `RoutesModerationController` + `RoutesModerationService` (транзакция: маршрут → жалобы → журнал → outbox
+  `routes.publication-decided` без маршрута); публичный каталог — автор, фильтр, карта райдера без кэша; порт
+  `RIDER_NAMES.attributionNames`; `routes.moderate` → moderator.
+- api-client: `submitMyRoutePublication`, `unpublishMyRoute`, `getCatalogRouteViewer`, `reportCatalogRoute`,
+  `listCatalogRoutes({ author })`; панель — `listRiderRoutes`, `getRiderRoute`, `approveRiderRoute`, `rejectRiderRoute`,
+  `hideRiderRoute`, `restoreRiderRoute`, `dismissRiderRouteReports`.
+- правила и доки: `.claude/rules/pokatim-{db,backend,security,contracts}.md` (в т. ч. правило «хвост» RC-3),
+  `docs/product/{admin-panel,account,profile}.md`.
+
+**Тесты (новые/расширенные):** unit — `routes.policy.test.ts` (все пары статус × действие, `canPublish`, лимиты),
+`route-reports.repository.test.ts` (сторож), `rider-names.test.ts`, права панели; int — `routes-publication`
+(AC1, AC3, AC4, N2, N5, N6), `routes-moderation` (AC2, AC3, AC5, N4, N7, N8, outbox без публикации, гонка approve ↔
+withdraw, откат), `route-reports` (AC5, N5, `me`, гонки «жалоба ↔ скрыть»), `routes-public` (N1, N8, автор × фильтры ×
+курсор + IXSCAN, карта без кэша), `routes-admin` (N3), `routes-mine` (AC7), `account-erasure` (AC7), миграции `0025`.
+
+**Отрицательные доказательства (временная правка, откачена):**
+- `recordRouteReport` без условий `publication.status: 'approved'` + `catalog` → гонка «удерживаемое скрытие ↔ жалоба»:
+  `AssertionError: expected 200 to be 404`.
+- `IN_CATALOG` без `'publication.status': 'approved'` → N1: `expected [ …(6) ] to deeply equal [ Array(1) ]`.
+
+**Проверки:** `MONGO_URL_TEST=…/pokatim_routes06_test REDIS_URL_TEST=…/13 TURBO_CONCURRENCY=1 pnpm check` → `EXIT=0`:
+prettier — «All matched files use Prettier code style!»; eslint — 0; depcruise — «no dependency violations found»;
+typecheck — `Tasks: 9 successful, 9 total`; test — `Tasks: 15 successful, 15 total` (contracts 273, api-client 96,
+api 1169 / 116 файлов, admin 282, app 1208 / 137 сьютов).
+
+**Отклонения** — §8.2. **Риск:** один прогон `route-reports.int.test.ts` упал по таймауту хука `beforeEach` (60 с,
+общий MongoDB под нагрузкой других агентов), повтор — зелёный.

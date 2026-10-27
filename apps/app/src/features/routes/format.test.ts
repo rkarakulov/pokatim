@@ -28,6 +28,7 @@ const route = (overrides: Partial<CatalogRouteCard> = {}): CatalogRouteCard => (
   city: 'minsk',
   surfaces: ['asphalt', 'gravel'],
   publishedAt: '2026-10-20T10:00:00.000Z',
+  author: { kind: 'team' },
   ...overrides,
 });
 const text = (value: string | null) => value?.replace(/\u00a0/g, ' ');

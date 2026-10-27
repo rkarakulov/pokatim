@@ -24,6 +24,7 @@ import { routesRider } from './0021_routes_rider';
 import { routesDerived } from './0022_routes_derived';
 import { accountDeletion } from './0023_account_deletion';
 import { platformSettings } from './0024_platform_settings';
+import { routesPublication } from './0025_routes_publication';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -54,4 +55,5 @@ export const migrations: readonly MongoMigration[] = [
   routesDerived,
   accountDeletion,
   platformSettings,
+  routesPublication,
 ];
