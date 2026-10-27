@@ -5,6 +5,7 @@ import { render, screen } from '@testing-library/react-native';
 
 import { ElevationProfile } from './elevation-profile';
 import { PROFILE_BARS } from './profile-chart';
+import { PROFILE_NATIVE_FILL_OPACITY } from './profile-style';
 
 const elevation: CatalogRouteElevation = {
   minM: 191,
@@ -26,6 +27,10 @@ describe('ElevationProfile (routes-03, P4, RC-7)', () => {
     expect(bars).toHaveLength(PROFILE_BARS);
     expect(bars[0]).toHaveStyle({ height: '8%' });
     expect(bars.at(-1)).toHaveStyle({ height: '100%' });
+    // светлый силуэт в приглушённом цвете, без кромки (не чёрная сплошная заливка map.route)
+    expect(bars[0]).toHaveStyle({ backgroundColor: themes.light.map.corridor });
+    expect(bars[0]).not.toHaveStyle({ borderTopWidth: expect.anything() });
+    expect(bars[0]!.parent).toHaveStyle({ opacity: PROFILE_NATIVE_FILL_OPACITY });
     for (const label of ['0', '20', '40', '60 км']) {
       expect(screen.getByText(label, { includeHiddenElements: true })).toBeOnTheScreen();
     }
