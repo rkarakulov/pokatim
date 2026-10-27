@@ -209,35 +209,11 @@ export function profileBars(profile: readonly (readonly [number, number])[], n: 
   });
 }
 
-/** Нижняя граница высоты столбика, доля: самая низкая точка профиля не пропадает. */
-const PROFILE_BAR_FLOOR = 0.08;
-
-/** Высоты столбиков, доля 0…1 высоты графика: мин. профиля — 8 %, макс. — 100 %; ровный профиль — середина. */
-export function profileBarHeights(bars: readonly number[], minM: number, maxM: number): number[] {
-  if (maxM <= minM) return bars.map(() => 0.5);
-  return bars.map(
-    (value) => PROFILE_BAR_FLOOR + ((1 - PROFILE_BAR_FLOOR) * (value - minM)) / (maxM - minM),
-  );
-}
-
 /**
- * Точки линии профиля для SVG (web): `[x, y]` в долях 0…1 — X по дистанции (последняя точка — 1), Y — высота от низа
- * по тем же правилам, что столбики (`profileBarHeights`). Меньше двух точек — `[]`.
+ * Высоты графика (доля 0…1, пол — `PROFILE_FLOOR`) и точки линии профиля — общий пакет (routes-04 §14: панель
+ * переиспользует ту же логику профиля).
  */
-export function profilePoints(
-  profile: readonly (readonly [number, number])[],
-  minM: number,
-  maxM: number,
-): [number, number][] {
-  const total = profile.at(-1)?.[0] ?? 0;
-  if (profile.length < 2 || total <= 0) return [];
-  const heights = profileBarHeights(
-    profile.map(([, elevation]) => elevation),
-    minM,
-    maxM,
-  );
-  return profile.map(([distance], index) => [distance / total, heights[index]!]);
-}
+export { profileHeights as profileBarHeights, profilePoints } from '@pokatim/tracks';
 
 /** Диапазон высот «191–267 м». */
 export const profileRangeLabel = (elevation: Pick<CatalogRouteElevation, 'minM' | 'maxM'>) =>

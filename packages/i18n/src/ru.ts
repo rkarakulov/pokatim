@@ -1560,6 +1560,14 @@ export const ru = {
   'routes.detail.profile.tick': '{km} км',
   'routes.detail.profile.summary': 'Профиль высоты: от {min} до {max} м, набор {gain} м',
   'routes.detail.profile.summaryNoGain': 'Профиль высоты: от {min} до {max} м',
+  // routes-04: скраббинг профиля и карты — карточка у курсора и значение slider/adjustable (без стрелок)
+  'routes.detail.scrub.distance': '{km} км',
+  'routes.detail.scrub.elevation': '{m} м',
+  'routes.detail.scrub.gradeUp': '↗ {grade} %',
+  'routes.detail.scrub.gradeDown': '↘ {grade} %',
+  'routes.detail.scrub.gradeFlat': '→ 0 %',
+  'routes.detail.scrub.gain': 'набор {gain} м',
+  'routes.detail.scrub.value': '{km} км, высота {m} м, уклон {grade} %',
   'routes.detail.gpx': 'Скачать GPX',
   'routes.detail.gpxFailed': 'Не удалось открыть файл GPX.',
   // routes-02: переключатель «Каталог / Мои» и мои маршруты райдера

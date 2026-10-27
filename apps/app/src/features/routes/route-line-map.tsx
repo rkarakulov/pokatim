@@ -7,6 +7,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { MAP_ASPECT_RATIO } from '@/features/maps/corridor-style';
 import { RouteMap } from '@/features/maps/route-map';
+import type { ScrubStore } from '@/features/maps/scrub-store';
 import { withoutCorridor } from '@/features/maps/route-geometry';
 import { useMapStyle } from '@/features/maps/use-map-style';
 
@@ -20,6 +21,8 @@ export interface RouteLineMapProps {
   skeletonTestID: string;
   /** толщина линии маршрута, px (routes-03: каталог — `ROUTE_CATALOG_LINE_WIDTH`); по умолчанию — как у карты гонки */
   lineWidth?: number;
+  /** routes-04: стор скраббинга экрана — маркер на линии, связанный с профилем; нет — без маркера */
+  scrub?: ScrubStore;
 }
 
 /**
@@ -35,6 +38,7 @@ export function RouteLineMap({
   failedMessage,
   skeletonTestID,
   lineWidth,
+  scrub,
 }: RouteLineMapProps) {
   const { mounted, styleUrl, theme } = useMapStyle();
   const geometry = useQuery({ ...mapQuery, enabled: styleUrl !== null });
@@ -60,6 +64,7 @@ export function RouteLineMap({
           accessibilityLabel={accessibilityLabel}
           failedMessage={failedMessage}
           lineWidth={lineWidth}
+          scrub={scrub}
         />
       )}
     </AsyncContent>
@@ -73,6 +78,7 @@ function LineMap({
   accessibilityLabel,
   failedMessage,
   lineWidth,
+  scrub,
 }: {
   geometry: RouteMapGeometry;
   styleUrl: string;
@@ -80,6 +86,7 @@ function LineMap({
   accessibilityLabel: string;
   failedMessage: string;
   lineWidth: number | undefined;
+  scrub: ScrubStore | undefined;
 }) {
   const map = useMemo(() => withoutCorridor(geometry), [geometry]);
   return (
@@ -89,6 +96,7 @@ function LineMap({
       map={map}
       corridor={false}
       lineWidth={lineWidth}
+      scrub={scrub}
       styleUrl={styleUrl}
       theme={theme}
       accessibilityLabel={accessibilityLabel}

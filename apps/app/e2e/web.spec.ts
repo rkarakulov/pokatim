@@ -791,7 +791,22 @@ test.describe('с API', () => {
       await expect(page.getByText('Дистанция', { exact: true })).toBeVisible();
       await expect(page.getByText('В пути', { exact: true })).toBeVisible();
       await expect(page.getByText('Минск', { exact: true }).first()).toBeVisible();
-      await expect(page.getByRole('img', { name: /^Профиль высоты: от / })).toBeVisible();
+      // routes-04: профиль — slider (клавиши ±1 км), hover — карточка «км · м · %», уход мыши — скрыта
+      const profile = page.getByRole('slider', { name: /^Профиль высоты: от / });
+      await expect(profile).toBeVisible();
+      await profile.focus();
+      await page.keyboard.press('ArrowRight');
+      await expect(profile).toHaveAttribute(
+        'aria-valuetext',
+        /^1 км, высота \d+ м, уклон \u2212?\d+ %$/,
+      );
+      const readout = page.getByText(/км · \d+ м · /);
+      const box = await profile.boundingBox();
+      if (!box) throw new Error('профиль без раскладки');
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(readout).toBeVisible();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height + 200);
+      await expect(readout).toBeHidden();
       await expect(page).toHaveURL(`${BASE_URL}/routes/${route.id}`);
 
       // «Скачать GPX»: скачивание файла, страница остаётся

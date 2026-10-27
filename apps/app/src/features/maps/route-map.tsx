@@ -1,7 +1,8 @@
 import type * as MapLibreNative from '@maplibre/maplibre-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { space } from '@pokatim/design-tokens';
-import { StyleSheet } from 'react-native';
+import { cumulativeMeters } from '@pokatim/tracks';
+import { StyleSheet, View } from 'react-native';
 
 import {
   CORRIDOR_LAYER_ID,
@@ -13,6 +14,8 @@ import {
 import { loadMapLibreNative } from './load-maplibre-native';
 import { RouteMapFrame } from './route-map-frame';
 import type { RouteMapProps } from './route-map-props';
+import { ScrubMarker } from './scrub-marker';
+import { mercatorProjector, projectLine } from './scrub-line';
 import {
   TRACK_BEFORE_LAYER_ID,
   TRACK_SOURCE_ID,
@@ -24,11 +27,20 @@ import {
 /** Кнопка атрибуции «i» — в нижнем правом углу, как на web: отступ камеры снизу её учитывает (B2 maps-02). */
 const ATTRIBUTION_POSITION = { bottom: space.s2, right: space.s2 };
 
+/** Видимая рамка карты `[запад, юг, восток, север]` (`ViewState.bounds` MapLibre RN 11). */
+type ViewBounds = readonly [west: number, south: number, east: number, north: number];
+
+const styles = StyleSheet.create({
+  // касания мимо маркера проходят к карте (кнопка атрибуции «i»)
+  overlay: { ...StyleSheet.absoluteFill, pointerEvents: 'box-none' },
+});
+
 /**
  * Native-карта маршрута (`@maplibre/maplibre-react-native` 11, ADR-0014): пакет грузится лениво (`loadMapLibreNative`,
  * вызывающий проверяет `mapSupported()`). Статичный вид — жесты выключены пропсами (не `pointerEvents`: кнопка
  * атрибуции остаётся нажимаемой, RC-6), камера сразу по рамке без анимации (RC-4). Смена стиля (темы) — новая
- * карта (`key` у вызывающего): сброс ошибки прошлого стиля.
+ * карта (`key` у вызывающего): сброс ошибки прошлого стиля. `scrub` (routes-04) — маркер скраббинга оверлеем над
+ * холстом: пиксели линии — `mercatorProjector` по видимой рамке камеры и размеру оверлея; карта на стор не подписана.
  */
 export function RouteMap({
   map,
@@ -39,6 +51,7 @@ export function RouteMap({
   corridor = true,
   lineWidth,
   track,
+  scrub,
 }: RouteMapProps) {
   const [lib, setLib] = useState<typeof MapLibreNative | null>(null);
   const [failed, setFailed] = useState(false);
@@ -54,6 +67,16 @@ export function RouteMap({
   const trackData = useMemo(() => (track ? trackFeatures(track) : null), [track]);
   const trackStyle = useMemo(() => trackLayers(theme), [theme]);
   const bounds = useMemo(() => unionBounds(map.bounds, track?.line), [map, track]);
+  // routes-04 (RC-2): маркер скраббинга — оверлей в пикселях; проекция по видимой рамке статичной камеры и размеру
+  const mapRef = useRef<MapLibreNative.MapRef>(null);
+  const [viewBounds, setViewBounds] = useState<ViewBounds | null>(null);
+  const [viewSize, setViewSize] = useState<{ width: number; height: number } | null>(null);
+  const cumulative = useMemo(() => cumulativeMeters(map.line), [map]);
+  const linePoints = useMemo(() => {
+    if (!viewBounds || !viewSize) return null;
+    // одна функция пересчёта: рамка камеры или размер изменились (routes-04b добавит onRegionIsChanging)
+    return projectLine(map.line, mercatorProjector(viewBounds, viewSize.width, viewSize.height));
+  }, [map, viewBounds, viewSize]);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +116,19 @@ export function RouteMap({
           touchRotate={false}
           touchPitch={false}
           onDidFailLoadingMap={() => setFailed(true)}
+          {...(scrub
+            ? {
+                ref: mapRef,
+                onDidFinishLoadingMap: () => {
+                  mapRef.current
+                    ?.getViewState()
+                    .then((state) => setViewBounds(state.bounds))
+                    .catch(() => undefined);
+                },
+                onRegionDidChange: (event: { nativeEvent: { bounds: ViewBounds } }) =>
+                  setViewBounds(event.nativeEvent.bounds),
+              }
+            : {})}
         >
           <lib.Camera initialViewState={{ bounds, padding: MAP_FIT_PADDING }} />
           <lib.GeoJSONSource id={ROUTE_SOURCE_ID} data={features}>
@@ -109,6 +145,20 @@ export function RouteMap({
             </lib.GeoJSONSource>
           ) : null}
         </lib.Map>
+      ) : null}
+      {lib && scrub ? (
+        <View
+          testID="scrub-overlay"
+          style={styles.overlay}
+          onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            setViewSize({ width, height });
+          }}
+        >
+          {linePoints ? (
+            <ScrubMarker store={scrub} points={linePoints} cumulative={cumulative} theme={theme} />
+          ) : null}
+        </View>
       ) : null}
     </RouteMapFrame>
   );
