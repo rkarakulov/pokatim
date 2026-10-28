@@ -30,17 +30,17 @@ describe('TopBar', () => {
     expect(open).toHaveBeenCalledTimes(1);
   });
 
-  it('иконка «Профиль» после «Устройств» — кнопка с доступной подписью (profile-rider-name)', async () => {
+  it('иконка «Настройки» после «Устройств» — кнопка с доступной подписью (settings-hub)', async () => {
     const openDevices = jest.fn();
-    const openProfile = jest.fn();
-    await render(<TopBar onOpenDevices={openDevices} onOpenProfile={openProfile} />);
+    const openSettings = jest.fn();
+    await render(<TopBar onOpenDevices={openDevices} onOpenSettings={openSettings} />);
 
     expect(screen.getAllByRole('button').map((button) => button.props.accessibilityLabel)).toEqual([
       'Устройства',
-      'Профиль',
+      'Настройки',
     ]);
-    await fireEvent.press(screen.getByRole('button', { name: 'Профиль' }));
-    expect(openProfile).toHaveBeenCalledTimes(1);
+    await fireEvent.press(screen.getByRole('button', { name: 'Настройки' }));
+    expect(openSettings).toHaveBeenCalledTimes(1);
     expect(openDevices).not.toHaveBeenCalled();
   });
 
@@ -51,14 +51,14 @@ describe('TopBar', () => {
         onOpenNotifications={openNotifications}
         unreadCount={3}
         onOpenDevices={jest.fn()}
-        onOpenProfile={jest.fn()}
+        onOpenSettings={jest.fn()}
       />,
     );
 
     expect(screen.getAllByRole('button').map((button) => button.props.accessibilityLabel)).toEqual([
       'Уведомления, 3 непрочитанных',
       'Устройства',
-      'Профиль',
+      'Настройки',
     ]);
     await fireEvent.press(screen.getByRole('button', { name: 'Уведомления, 3 непрочитанных' }));
     expect(openNotifications).toHaveBeenCalledTimes(1);

@@ -26,4 +26,11 @@ describe('openExternalUrl (web)', () => {
     await expect(openExternalUrl(URL)).rejects.toThrow();
     expect(log.mock.calls.flat().join(' ')).not.toContain(URL);
   });
+
+  it('mailto: — почтовый клиент в той же вкладке, без пустой новой вкладки', async () => {
+    const open = jest.spyOn(window, 'open').mockReturnValue(null);
+    // jsdom не переходит по mailto: (`location` не подменить) — проверяем, что новой вкладки нет и ошибки нет
+    await expect(openExternalUrl('mailto:help@pokatim.by')).resolves.toBeUndefined();
+    expect(open).not.toHaveBeenCalled();
+  });
 });

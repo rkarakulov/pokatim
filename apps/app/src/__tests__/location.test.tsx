@@ -144,7 +144,9 @@ describe('выход и другой аккаунт (AC8)', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'Не сейчас' }));
     await home();
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Выйти' }));
+    // «Выйти» — в «Настройках» (settings-hub)
+    await fireEvent.press(screen.getByRole('button', { name: 'Настройки' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Выйти' }));
     await screen.findByRole('header', { name: 'Вход' });
     await waitFor(() => expect(storedValue('pokatim.onboarding')).toBeUndefined());
     expect(locationFlag()).toBeDefined();
