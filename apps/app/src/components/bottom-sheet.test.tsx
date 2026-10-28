@@ -186,14 +186,14 @@ describe('BottomSheet native (routes-04d, L2, L4, RC-2, RC-17)', () => {
 });
 
 describe('BottomSheet native: форма темы (app-themes C1)', () => {
-  it('верхние углы — shape.sheet: «Классика» — прямые, Атлас — 12', async () => {
+  it('верхние углы — shape.sheet: прямые у «Классики» и Атласа', async () => {
     const { unmount } = await render(<Harness />);
     expect(screen.getByTestId('bottom-sheet')).toHaveStyle({ borderTopLeftRadius: 0 });
     await unmount();
     await render(<Harness />, { wrapper: appThemeWrapper('atlas') });
     expect(screen.getByTestId('bottom-sheet')).toHaveStyle({
-      borderTopLeftRadius: 12,
-      borderTopRightRadius: 12,
+      borderTopLeftRadius: 0,
+      borderTopRightRadius: 0,
     });
   });
 });

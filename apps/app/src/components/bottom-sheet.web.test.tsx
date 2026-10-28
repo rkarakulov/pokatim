@@ -293,10 +293,10 @@ function FocusHarness() {
 }
 
 describe('BottomSheet web: форма темы (app-themes C1)', () => {
-  it('верхние углы — shape.sheet темы (Атлас — 12 px)', () => {
+  it('верхние углы — shape.sheet темы (Атлас — прямые, 0)', () => {
     render(<Harness />, { wrapper: appThemeWrapper('atlas') });
     const sheet = screen.getByTestId('bottom-sheet');
-    expect(sheet.style.borderTopLeftRadius).toBe('12px');
-    expect(sheet.style.borderTopRightRadius).toBe('12px');
+    expect(sheet.style.borderTopLeftRadius).toBe('0');
+    expect(sheet.style.borderTopRightRadius).toBe('0');
   });
 });

@@ -106,7 +106,7 @@ describe('«Оформление приложения» (app-themes D1, AC6)', (
     expect(within(classic).getByText(/Шрифт: Playfair Display/)).toBeTruthy();
     const mocks = atlas.querySelectorAll<HTMLElement>('.theme-preview__mock');
     expect(mocks).toHaveLength(2);
-    expect(mocks[0]?.style.getPropertyValue('--preview-radius')).toBe('8px');
+    expect(mocks[0]?.style.getPropertyValue('--preview-radius')).toBe('0px');
     expect(within(atlas).getByText(/Светлая и тёмная — по системе/)).toBeTruthy();
     const chrono = radio('Хронометр').closest('label') as HTMLElement;
     expect(chrono.querySelectorAll('.theme-preview__mock')).toHaveLength(1);

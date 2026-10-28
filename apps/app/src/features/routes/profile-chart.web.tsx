@@ -3,7 +3,7 @@ import { stroke, type AppTheme } from '@pokatim/design-tokens';
 import {
   fractionAt,
   PROFILE_ASPECT_RATIO,
-  PROFILE_FILL,
+  PROFILE_FILL_OPACITY,
   PROFILE_VIEW_BOX,
   profilePaths,
   SCRUB_MARKER_ATTR,
@@ -20,15 +20,14 @@ import {
 } from 'react';
 
 import { useScrub } from '@/features/maps/use-scrub';
-import { useAppTheme } from '@/theme/use-app-theme';
 
 import type { ProfileChartProps } from './profile-chart-props';
 import { scrubReadout } from './scrub';
 
 /**
  * Площадь профиля на web (routes-03 fix + routes-04 G1): inline SVG — плавная линия по всем точкам профиля в
- * `profile.line` толщиной `stroke.input` и заливка `profile.fillTop` → `profile.fillBottom` по теме
- * (`PROFILE_FILL[layout.profileFill]`: градиент, сплошная или без площади). Inline, а не `react-native-svg`: разметка зависит только от данных — SSR и первый клиентский рендер
+ * `profile.line` толщиной `stroke.input` и заливка `profile.fillTop` → `profile.fillBottom` градиентом
+ * (`PROFILE_FILL_OPACITY` → 0, у всех тем). Inline, а не `react-native-svg`: разметка зависит только от данных — SSR и первый клиентский рендер
  * совпадают, пакет в web-бандл не попадает. Для скринридера скрыт (альтернатива — у контейнера), при движении курсора
  * не перерисовывается (`memo`).
  */
@@ -53,7 +52,6 @@ export const ProfileArea = memo(function ProfileArea({
 }) {
   // постоянный id (не `useId`): разметка SSR и гидрации совпадает при любом дереве выше (смоук web routes-04)
   const gradient = PROFILE_WEB_GRADIENT_ID;
-  const fill = PROFILE_FILL[useAppTheme().layout.profileFill];
   const paths = profilePaths(elevation);
   if (!paths) return null;
   const { line, fillTop, fillBottom } = theme.profile;
@@ -68,17 +66,13 @@ export const ProfileArea = memo(function ProfileArea({
       focusable="false"
       style={{ display: 'block' }}
     >
-      {fill ? (
-        <>
-          <defs>
-            <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor={fillTop} stopOpacity={fill.top} />
-              <stop offset="1" stopColor={fillBottom} stopOpacity={fill.bottom} />
-            </linearGradient>
-          </defs>
-          <path d={paths.area} fill={`url(#${gradient})`} stroke="none" />
-        </>
-      ) : null}
+      <defs>
+        <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={fillTop} stopOpacity={PROFILE_FILL_OPACITY} />
+          <stop offset="1" stopColor={fillBottom} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <path d={paths.area} fill={`url(#${gradient})`} stroke="none" />
       <path
         d={paths.line}
         fill="none"
