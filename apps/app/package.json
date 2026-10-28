@@ -63,6 +63,7 @@
     "zustand": "5.0.15"
   },
   "devDependencies": {
+    "@expo/router-server": "58.0.15",
     "@maplibre/maplibre-gl-style-spec": "26.2.1",
     "@playwright/test": "catalog:",
     "@react-native/jest-preset": "~0.88.0",

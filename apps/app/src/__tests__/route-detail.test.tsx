@@ -19,6 +19,7 @@ import { PROFILE_PAN_TEST_ID } from '@/features/routes/profile-chart';
 import { appRoutes, tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
+import { ridesPage } from './route-rides-fixtures';
 import CatalogRouteRoute from '../app/routes/[id]';
 
 jest.mock('@/lib/api');
@@ -92,6 +93,8 @@ beforeEach(() => {
   process.env.EXPO_PUBLIC_MAP_STYLE_DARK = LIGHT;
   getRoute.mockResolvedValue(route);
   getMap.mockResolvedValue(geometry);
+  // route-rides-02 (RC-12): «Мои заезды» вошедшего — по умолчанию пусто (автомок вернул бы undefined)
+  jest.mocked(api.listRouteRides).mockResolvedValue(ridesPage());
   listRaces.mockResolvedValue({ items: [], nextCursor: null });
   jest.mocked(shareOrigin).mockReturnValue('https://pokatim.by');
   share.mockResolvedValue('shared');

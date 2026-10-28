@@ -1,5 +1,5 @@
 import { Uuid, type AttemptCandidates } from '@pokatim/contracts';
-import { motion, size, space, stroke } from '@pokatim/design-tokens';
+import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
   AsyncContent,
@@ -7,13 +7,13 @@ import {
   EmptyState,
   SkeletonGroup,
   SkeletonListRow,
-  textStyle,
   useTheme,
 } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ActivityPickRow } from '@/components/activity-pick-row';
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { formatKm, formatMinskDateTime } from '@/features/devices/format';
@@ -39,7 +39,6 @@ function CandidateRow({
   busy: boolean;
   onPick: () => void;
 }) {
-  const theme = useTheme();
   const source = candidate.source === 'unknown' ? 'upload' : candidate.source;
   const when = formatMinskDateTime(candidate.startedAt, now);
   const details = meta([
@@ -47,38 +46,17 @@ function CandidateRow({
     formatKm(candidate.distanceM),
     formatElapsed(candidate.elapsedSec),
   ]);
-  const disabled = candidate.attempted || busy;
+  const note = candidate.attempted ? t('races.pick.attempted') : null;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={meta([
-        when,
-        details,
-        candidate.attempted ? t('races.pick.attempted') : null,
-      ])}
-      accessibilityState={{ disabled, busy }}
-      disabled={disabled}
+    <ActivityPickRow
+      title={when}
+      details={details}
+      note={note}
+      disabled={candidate.attempted}
+      busy={busy}
       onPress={onPick}
-      style={({ pressed }) => [
-        styles.row,
-        { borderTopColor: theme.border.subtle, opacity: pressed ? motion.pressedOpacity : 1 },
-      ]}
-    >
-      <Text
-        style={[
-          textStyle('titleSm'),
-          { color: candidate.attempted ? theme.text.disabled : theme.text.primary },
-        ]}
-      >
-        {when}
-      </Text>
-      <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>{details}</Text>
-      {candidate.attempted ? (
-        <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
-          {t('races.pick.attempted')}
-        </Text>
-      ) : null}
-    </Pressable>
+      accessibilityLabel={meta([when, details, note])}
+    />
   );
 }
 
@@ -186,5 +164,4 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
   list: { gap: space.s3 },
-  row: { gap: space.s1, paddingVertical: space.s3, borderTopWidth: stroke.hairline },
 });

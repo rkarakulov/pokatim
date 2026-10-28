@@ -16,6 +16,7 @@ import { appRoutes, tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { FakeXhr } from './fake-xhr';
 import { createQueryWrapper } from './query-wrapper';
+import { ridesPage } from './route-rides-fixtures';
 
 jest.mock('@/lib/api');
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
@@ -81,6 +82,8 @@ beforeEach(() => {
   jest.mocked(api.listCatalogRouteCities).mockResolvedValue({ cities: [] });
   getMine.mockResolvedValue(ring);
   getMineMap.mockResolvedValue(geometry);
+  // route-rides-02 (RC-12): «Мои заезды» вошедшего — по умолчанию пусто (автомок вернул бы undefined)
+  jest.mocked(api.listRouteRides).mockResolvedValue(ridesPage());
   jest.mocked(api.myRouteUploadRequest).mockReturnValue({
     url: UPLOAD_URL,
     method: 'POST',
