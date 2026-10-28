@@ -38,7 +38,7 @@ async function openSettings() {
     {
       'settings/index': SettingsScreen,
       'settings/language': LanguageScreen,
-      'settings/profile': stub,
+      profile: stub,
       'settings/verified': stub,
       'settings/devices': stub,
       'settings/notifications': stub,
@@ -72,7 +72,8 @@ describe('«Настройки»: разделы (AC2)', () => {
   });
 
   it.each([
-    ['Профиль', '/settings/profile'],
+    // rider-profile (D-B3): «Профиль» — свой профиль; «Редактировать профиль» — оттуда
+    ['Профиль', '/profile'],
     ['Анкета Verified', '/settings/verified'],
     ['Устройства', '/settings/devices'],
     ['Уведомления', '/settings/notifications'],

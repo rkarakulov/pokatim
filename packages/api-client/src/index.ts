@@ -695,6 +695,16 @@ export function createApiClient({
         StoryCardStatus,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
+    /**
+     * Карточка-приглашение кофе-райда (ADR-0018): статусы — как у `getStoryCard`; скрытый и неизвестный райд — 404,
+     * не будущий — 409 `STORY_CARD_UNAVAILABLE`. Картинка — тем же `storyCardImageUrl`.
+     */
+    getRideInviteCard: (accessToken: string, rideId: string, query: StoryCardQuery) =>
+      request(
+        `/v1/rides/${encodeURIComponent(rideId)}/invite-card${queryString(query)}`,
+        StoryCardStatus,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
     /** Адрес PNG карточки по токену (капабилити-ссылка без входа, живёт ≤ 24 ч); без запроса. */
     storyCardImageUrl: (token: string) =>
       `${baseUrl}/v1/story-cards/${encodeURIComponent(token)}.png`,

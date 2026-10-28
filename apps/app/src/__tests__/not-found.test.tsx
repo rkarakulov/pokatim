@@ -40,12 +40,12 @@ const setDev = (value: boolean) => Object.assign(globalThis, { __DEV__: value })
 describe('неизвестный адрес (B1 смоука dev)', () => {
   it('гость: «Страница не найдена» по-русски и «На главную»', async () => {
     useSessionStore.setState({ status: 'signedOut', session: null });
-    const router = await renderRouter(appRoutes, { initialUrl: '/profile' });
+    const router = await renderRouter(appRoutes, { initialUrl: '/no-such-page' });
 
     expect(await screen.findByRole('header', { name: 'Страница не найдена' })).toBeOnTheScreen();
     expect(screen.queryByText(/Unmatched Route/)).toBeNull();
     expect(screen.queryByText('Sitemap')).toBeNull();
-    expect(router.getPathname()).toBe('/profile');
+    expect(router.getPathname()).toBe('/no-such-page');
   });
 
   it('вошедший: «На главную» ведёт на Главную', async () => {

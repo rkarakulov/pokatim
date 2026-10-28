@@ -382,6 +382,32 @@ describe('Главная: разделы (S4)', () => {
     expect(router.getPathname()).toBe('/settings');
   });
 
+  it('аватар верхней панели — последним, из кэша профиля (без второго запроса); ведёт на /profile (rider-profile, AC12)', async () => {
+    const AVATAR_ID = 'r'.repeat(43);
+    getProfile.mockResolvedValue({
+      rideReasons: [],
+      publicName: 'Анна К.',
+      showNameInResults: true,
+      club: null,
+      avatar: { id: AVATAR_ID },
+      publicId: null,
+    });
+    jest.mocked(api.avatarUrl).mockImplementation((id) => `https://api.test/v1/avatars/${id}`);
+    const router = await renderRouter(
+      { ...tabRoutes, profile: () => null },
+      { initialUrl: '/', wrapper: createQueryWrapper() },
+    );
+    const bar = within(await screen.findByTestId('top-bar'));
+    expect(await bar.findByTestId('rider-avatar-photo')).toHaveProp('source', {
+      uri: `https://api.test/v1/avatars/${AVATAR_ID}`,
+    });
+    expect(bar.getAllByRole('button').at(-1)).toHaveProp('accessibilityLabel', 'Профиль');
+    expect(getProfile).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(bar.getByRole('button', { name: 'Профиль' }));
+    expect(router.getPathname()).toBe('/profile');
+  });
+
   it('многодневный старт без ссылки регистрации — диапазон, строки регистрации нет', async () => {
     listCalendar.mockResolvedValue(
       calendarPage({

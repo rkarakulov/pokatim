@@ -38,6 +38,7 @@ import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { cityLabel, goingCaption, organizerLine, paceRange, rideShareText } from './format';
 import { rideActionErrorText, useRide, useRideForViewer, useRideRsvp } from './queries';
+import { rideInvitePath } from './invite/ride-invite';
 import { RideRouteBlock } from './ride-route-block';
 
 export const rideDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
@@ -200,6 +201,13 @@ function RideDetailView({
         </View>
       ) : null}
       {canShare ? <ShareAction ride={ride} /> : null}
+      {signedIn && mounted && upcoming ? (
+        <Button
+          label={t('rideInvite.open')}
+          variant="secondary"
+          onPress={() => router.push(rideInvitePath(ride.id))}
+        />
+      ) : null}
       {ride.phase === 'past' ? (
         <View style={styles.start}>
           <TextAction

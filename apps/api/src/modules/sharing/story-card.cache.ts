@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 import { STORY_CARD_POLICY } from './sharing.policy';
 
-/** Задача очереди `story-card`: только id и хэш входов — данные карточки worker перечитывает сам. */
+/** Задачи очереди `story-card`: только id и хэш входов — данные карточки worker перечитывает сам. */
 export const STORY_CARD_RENDER_JOB = 'story-card.render';
 export const StoryCardJob = z.object({
   userId: z.string(),
@@ -18,13 +18,23 @@ export const StoryCardJob = z.object({
 });
 export type StoryCardJob = z.infer<typeof StoryCardJob>;
 
+/** Задача приглашения кофе-райда в той же очереди: id райда и зрителя (видимость), хэш входов. */
+export const RIDE_INVITE_RENDER_JOB = 'ride-invite.render';
+export const RideInviteJob = z.object({
+  userId: z.string(),
+  rideId: z.string(),
+  template: StoryCardTemplate,
+  hash: z.string(),
+});
+export type RideInviteJob = z.infer<typeof RideInviteJob>;
+
 const tokenKey = (hash: string) => `story-card:token:${hash}`;
 const pngKey = (token: string) => `story-card:png:${token}`;
 const pendingKey = (hash: string) => `story-card:pending:${hash}`;
 const failedKey = (hash: string) => `story-card:failed:${hash}`;
 
 /**
- * Кэш карточек для сторис (story-cards): PNG по капабилити-токену и ключ «хэш входов → токен» — Redis с TTL 24 ч, не
+ * Кэш карточек (сторис гонки, приглашение райда — ADR-0018; хэш входов включает вид карточки): PNG по капабилити-токену и ключ «хэш входов → токен» — Redis с TTL 24 ч, не
  * MongoDB; ключ постановки рендера (NX) и отметка провала. Ключи — хэш и токен, без `userId` и имени.
  */
 @Injectable()

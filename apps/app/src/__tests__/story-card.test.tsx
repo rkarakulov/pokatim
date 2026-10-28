@@ -349,6 +349,13 @@ describe('экран карточки (R9)', () => {
     expect(getStoryCard).toHaveBeenCalledTimes(1);
   });
 
+  it('404 — ошибка с повтором, не «Карточки пока нет» (поведение до общей панели)', async () => {
+    getStoryCard.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+    await open(storyUrl);
+    expect(await screen.findByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
+    expect(screen.queryByText('Карточки пока нет')).toBeNull();
+  });
+
   it('смена шаблона — запрос с другим шаблоном', async () => {
     getStoryCard.mockResolvedValue({ status: 'ready', token: TOKEN });
     await open(storyUrl);

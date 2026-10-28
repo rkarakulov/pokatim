@@ -9,6 +9,7 @@ import { STORY_CARD_POLICY } from './sharing.policy';
 import { type StoryCardFont, storyCardFonts } from './story-card.fonts';
 import type { StoryCardInput } from './story-card.inputs';
 import {
+  type StoryCardNode,
   type StoryCardRenderInput,
   type StoryCardTrack,
   storyCardTrackView,
@@ -16,10 +17,13 @@ import {
 } from './story-card.render';
 import { storyCardTexts } from './story-card.texts';
 
-/** Линия → координаты яруса шаблона (`contourPath`: локальная проекция, север вверху); > лимита точек — упрощение. */
+/**
+ * Линия → координаты яруса (`view` — `storyCardTrackView` шаблона или плитка приглашения; `contourPath`: локальная
+ * проекция, север вверху); > лимита точек — упрощение.
+ */
 export function storyCardTrack(
   line: readonly LonLat[],
-  template: StoryCardInput['template'],
+  view: { width: number; height: number; padding: number },
 ): StoryCardTrack | null {
   const points =
     line.length > storyCard.trackMaxPoints
@@ -31,7 +35,6 @@ export function storyCardTrack(
       : [...line];
   const bounds = boundsOf(points);
   if (!bounds || points.length < 2) return null;
-  const view = storyCardTrackView(template);
   const contour = contourPath(points, bounds, view);
   return contour
     ? {
@@ -56,7 +59,7 @@ export function storyCardRenderInput(
     template: input.template,
     colors: storyCardColors(scheme),
     texts: storyCardTexts(input),
-    track: line ? storyCardTrack(line, input.template) : null,
+    track: line ? storyCardTrack(line, storyCardTrackView(input.template)) : null,
   };
 }
 
@@ -78,8 +81,13 @@ export function renderStoryCardSvg(
   input: StoryCardRenderInput,
   fonts: StoryCardFont[],
 ): Promise<string> {
+  return renderCardSvg(storyCardTree(input), fonts);
+}
+
+/** Любое дерево карточки 1080×1920 → SVG (сторис гонки, приглашение райда). */
+export function renderCardSvg(tree: StoryCardNode, fonts: StoryCardFont[]): Promise<string> {
   // satori принимает React-подобные узлы `{ type, props }`; React в API не нужен — приведение в одном месте
-  const element = storyCardTree(input) as unknown as Parameters<typeof satori>[0];
+  const element = tree as unknown as Parameters<typeof satori>[0];
   return satori(element, { width: storyCard.size.width, height: storyCard.size.height, fonts });
 }
 

@@ -24,7 +24,7 @@ export interface StoryCardNode {
     [attribute: string]: unknown;
   };
 }
-type StoryCardChild = StoryCardNode | string | null;
+export type StoryCardChild = StoryCardNode | string | null;
 
 /** Линия трека в координатах `viewBox` яруса (уже вписана — `contourPath`); старт — первая точка. */
 export interface StoryCardTrack {
@@ -40,14 +40,14 @@ export interface StoryCardRenderInput {
   track: StoryCardTrack | null;
 }
 
-const node = (
+export const node = (
   type: string,
   style: Record<string, string | number>,
   children?: StoryCardChild | StoryCardChild[],
   attributes: Record<string, unknown> = {},
 ): StoryCardNode => ({ type, props: { ...attributes, style, children } });
 
-const box = (style: Record<string, string | number>, children?: StoryCardChild[]) =>
+export const box = (style: Record<string, string | number>, children?: StoryCardChild[]) =>
   node(
     'div',
     { display: 'flex', ...style },
@@ -55,7 +55,7 @@ const box = (style: Record<string, string | number>, children?: StoryCardChild[]
   );
 
 /** Текст стилем токена: семейство — роль (`display`/`text`, шрифты регистрирует `renderStoryCardSvg`). */
-function text(
+export function text(
   token: StoryCardText,
   color: string,
   value: string,
@@ -78,8 +78,8 @@ function text(
   );
 }
 
-/** Название гонки: перенос satori, не больше `titleMaxLines` строк с многоточием. */
-const title = (texts: StoryCardTexts, colors: StoryCardColors) =>
+/** Название (гонки, райда): перенос satori, не больше `titleMaxLines` строк с многоточием. */
+export const titleText = (value: string, colors: StoryCardColors) =>
   node(
     'div',
     {
@@ -91,7 +91,7 @@ const title = (texts: StoryCardTexts, colors: StoryCardColors) =>
       color: colors.ink,
       lineClamp: storyCard.titleMaxLines,
     },
-    texts.title,
+    value,
   );
 
 /** Ступень кегля времени по длине строки (RC-11: табличных цифр у satori нет). */
@@ -102,7 +102,7 @@ export function timeToken(time: string): StoryCardText {
 }
 
 /** Трек: `<svg viewBox>` с ломаной и точкой старта (круг с кольцом цвета фона); растягивается по блоку с пропорцией. */
-function trackSvg(
+export function trackSvg(
   track: StoryCardTrack,
   colors: StoryCardColors,
   strokeWidth: number,
@@ -181,7 +181,7 @@ function heading(
   const { texts, colors } = input;
   return [
     kicker,
-    box({ flexDirection: 'column', marginTop: gaps.titleGap }, [title(texts, colors)]),
+    box({ flexDirection: 'column', marginTop: gaps.titleGap }, [titleText(texts.title, colors)]),
     texts.riderName === null
       ? null
       : text(storyCard.text.date, colors.ink, texts.riderName, {
@@ -194,7 +194,7 @@ function heading(
 }
 
 /** Фон на весь кадр и колонка контента шириной `width − 2 × insetX` по центру (линии ярусов — по колонке). */
-const page = (colors: StoryCardColors, children: StoryCardChild[]) =>
+export const page = (colors: StoryCardColors, children: StoryCardChild[]) =>
   box(
     {
       flexDirection: 'column',

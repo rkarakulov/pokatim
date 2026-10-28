@@ -1,5 +1,6 @@
 /**
- * Превью карточек для сторис (story-cards) на синтетических данных: все темы × оба шаблона → PNG в каталог.
+ * Превью карточек для сторис (story-cards) и приглашений кофе-райда на синтетических данных: все темы × оба шаблона →
+ * PNG в каталог.
  * Запуск: `pnpm --filter @pokatim/api preview:story-cards <каталог>` (файлы не коммитятся — артефакты ревью вёрстки).
  */
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -7,6 +8,8 @@ import { join } from 'node:path';
 
 import { APP_THEME_IDS, STORY_CARD_TEMPLATES, type LonLat } from '@pokatim/contracts';
 
+import type { RideInviteInput } from '../src/modules/sharing/ride-invite.inputs';
+import { renderRideInvite } from '../src/modules/sharing/ride-invite.png';
 import type { StoryCardInput } from '../src/modules/sharing/story-card.inputs';
 import { renderStoryCard } from '../src/modules/sharing/story-card.png';
 
@@ -49,6 +52,33 @@ const cases: { name: string; facts: Partial<StoryCardInput['facts']>; riderName:
     },
   ];
 
+const inviteFacts: RideInviteInput['facts'] = {
+  rideId: 'preview',
+  title: 'Кофе-райд на Минское море',
+  startsAt: new Date('2026-10-04T07:00:00Z'),
+  place: 'у Дворца спорта, пр. Победителей',
+  distanceKm: 42,
+  paceMinKmh: 22,
+  paceMaxKmh: 24,
+  routeId: 'route',
+};
+
+const inviteCases: { name: string; facts: Partial<RideInviteInput['facts']>; line: boolean }[] = [
+  { name: 'base', facts: {}, line: true },
+  {
+    name: 'long',
+    facts: {
+      title: 'Длинный кофе-райд через три озера, два леса и обратно к кофейне на берегу моря',
+      place: 'парковка у главного входа в Парк Победы со стороны проспекта Победителей, у фонтана',
+      distanceKm: 112.5,
+      paceMinKmh: 27,
+      paceMaxKmh: 27,
+      routeId: null,
+    },
+    line: false,
+  },
+];
+
 async function main() {
   const dir = process.argv[2];
   if (!dir) throw new Error('usage: story-card-preview <out dir>');
@@ -83,6 +113,13 @@ async function main() {
         const file = join(dir, `${themeId}-${template}-${c.name}.png`);
         await writeFile(file, png);
         process.stdout.write(`${file} ${png.byteLength} B ${Date.now() - started} ms\n`);
+      }
+      for (const c of inviteCases) {
+        const input: RideInviteInput = { template, themeId, facts: { ...inviteFacts, ...c.facts } };
+        const png = await renderRideInvite(input, c.line ? syntheticLine() : null);
+        const file = join(dir, `${themeId}-${template}-invite-${c.name}.png`);
+        await writeFile(file, png);
+        process.stdout.write(`${file} ${png.byteLength} B\n`);
       }
     }
   }
