@@ -163,7 +163,7 @@ const mineQuery = (mine: boolean) => (mine ? '?mine=1' : '');
 
 /** Выбор своего заезда (A3); `?mine=1` — свой маршрут (A5). */
 export const routeRidePickPath = (routeId: string, mine: boolean): Href =>
-  `/routes/rides/pick/${encodeURIComponent(routeId)}${mineQuery(mine)}` as Href;
+  `/routes/pick/${encodeURIComponent(routeId)}${mineQuery(mine)}` as Href;
 
 /** Результат заезда (A4). */
 export const routeRidePath = (routeId: string, rideId: string, mine: boolean): Href =>

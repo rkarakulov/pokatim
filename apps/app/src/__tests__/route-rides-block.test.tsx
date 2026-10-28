@@ -12,7 +12,7 @@ import { api } from '@/lib/api';
 import CatalogRouteRoute from '../app/routes/[id]';
 import MyRouteRoute from '../app/routes/mine/[id]';
 import RouteRideRoute from '../app/routes/rides/[routeId]/[rideId]';
-import RouteRidePickRoute from '../app/routes/rides/pick/[routeId]';
+import RouteRidePickRoute from '../app/routes/pick/[routeId]';
 import { tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
@@ -68,7 +68,7 @@ const routes = {
   ...tabRoutes,
   'routes/[id]': CatalogRouteRoute,
   'routes/mine/[id]': MyRouteRoute,
-  'routes/rides/pick/[routeId]': RouteRidePickRoute,
+  'routes/pick/[routeId]': RouteRidePickRoute,
   'routes/rides/[routeId]/[rideId]': RouteRideRoute,
 };
 const signIn = () => {
@@ -187,7 +187,7 @@ describe('«Мои заезды» на карточке маршрута кат�
     const router = await openCatalog();
     expect(await screen.findByText(emptyHint)).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Проверить свой заезд' }));
-    expect(router.getPathname()).toBe(`/routes/rides/pick/${ROUTE_ID}`);
+    expect(router.getPathname()).toBe(`/routes/pick/${ROUTE_ID}`);
     expect(router.getSearchParams()).not.toHaveProperty('mine');
   });
 
@@ -245,7 +245,7 @@ describe('«Мои заезды» на карточке своего маршр�
     expect(await screen.findByText(emptyHint)).toBeOnTheScreen();
     expect(listRides).toHaveBeenCalledWith(TOKEN, ROUTE_ID);
     await fireEvent.press(screen.getByRole('button', { name: 'Проверить свой заезд' }));
-    expect(router.getPathname()).toBe(`/routes/rides/pick/${ROUTE_ID}`);
+    expect(router.getPathname()).toBe(`/routes/pick/${ROUTE_ID}`);
     expect(router.getSearchParams()).toMatchObject({ mine: '1' });
   });
 

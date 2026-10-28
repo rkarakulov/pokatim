@@ -9,7 +9,7 @@ import { routeRidesKeys } from '@/features/route-rides/queries';
 import { api } from '@/lib/api';
 
 import RouteRideRoute from '../app/routes/rides/[routeId]/[rideId]';
-import RouteRidePickRoute from '../app/routes/rides/pick/[routeId]';
+import RouteRidePickRoute from '../app/routes/pick/[routeId]';
 import { appRoutes, tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { FakeXhr } from './fake-xhr';
@@ -45,12 +45,12 @@ const signedIn = () => {
 };
 const routes = {
   ...tabRoutes,
-  'routes/rides/pick/[routeId]': RouteRidePickRoute,
+  'routes/pick/[routeId]': RouteRidePickRoute,
   'routes/rides/[routeId]/[rideId]': RouteRideRoute,
 };
 const openPick = (id = ROUTE_ID, client = createTestQueryClient()) =>
   renderRouter(routes, {
-    initialUrl: `/routes/rides/pick/${id}`,
+    initialUrl: `/routes/pick/${id}`,
     wrapper: createQueryWrapper(client),
   });
 
@@ -108,15 +108,15 @@ afterEach(() => {
 
 describe('«Выбрать свой заезд» для маршрута (route-rides-02, A3)', () => {
   it('гость по прямой ссылке — гард ведёт на регистрацию, без запросов', async () => {
-    const router = await renderRouter(appRoutes, { initialUrl: `/routes/rides/pick/${ROUTE_ID}` });
+    const router = await renderRouter(appRoutes, { initialUrl: `/routes/pick/${ROUTE_ID}` });
     expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/register');
     expect(listCandidates).not.toHaveBeenCalled();
   });
 
-  it('RC-3: /routes/rides/pick/<uuid> в полном приложении — экран выбора, не «Заезд не найден»', async () => {
+  it('RC-3: /routes/pick/<uuid> в полном приложении — экран выбора, не «Заезд не найден»', async () => {
     signedIn();
-    await renderRouter(appRoutes, { initialUrl: `/routes/rides/pick/${ROUTE_ID}` });
+    await renderRouter(appRoutes, { initialUrl: `/routes/pick/${ROUTE_ID}` });
     expect(await screen.findByRole('header', { name: 'Выбрать свой заезд' })).toBeOnTheScreen();
     expect(await screen.findByRole('button', { name: freeLabel })).toBeOnTheScreen();
     expect(screen.queryByText('Заезд не найден')).toBeNull();
@@ -166,7 +166,7 @@ describe('«Выбрать свой заезд» для маршрута (route-
   it('свой маршрут (?mine=1) — результат тоже с ?mine=1', async () => {
     signedIn();
     const router = await renderRouter(routes, {
-      initialUrl: `/routes/rides/pick/${ROUTE_ID}?mine=1`,
+      initialUrl: `/routes/pick/${ROUTE_ID}?mine=1`,
       wrapper: createQueryWrapper(),
     });
     await fireEvent.press(await screen.findByRole('button', { name: freeLabel }));
@@ -196,7 +196,7 @@ describe('«Выбрать свой заезд» для маршрута (route-
 
     await fireEvent.press(await screen.findByRole('button', { name: freeLabel }));
     expect(await screen.findByText(text)).toBeOnTheScreen();
-    expect(router.getPathname()).toBe(`/routes/rides/pick/${ROUTE_ID}`);
+    expect(router.getPathname()).toBe(`/routes/pick/${ROUTE_ID}`);
   });
 
   it('пусто — «Подходящих заездов нет» и «Загрузить заезд»', async () => {

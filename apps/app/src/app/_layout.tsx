@@ -163,7 +163,7 @@ function RootShell() {
                 <Stack.Screen name="routes/mine/publish/[id]" />
                 <Stack.Screen name="routes/report/[id]" />
                 {/* заезд по маршруту (route-rides-02): выбор и результат — только вошедшим */}
-                <Stack.Screen name="routes/rides/pick/[routeId]" />
+                <Stack.Screen name="routes/pick/[routeId]" />
                 <Stack.Screen name="routes/rides/[routeId]/[rideId]" />
                 {/* «Выбрать свой заезд» в гонку (race-results-04): только вошедшим, без таб-бара */}
                 <Stack.Screen name="races/pick/[id]" />

@@ -213,8 +213,8 @@ describe('текстовая альтернатива трека (RC-9)', () => 
 
 describe('адреса (A5)', () => {
   it('выбор, результат и карточка — с ?mine=1 для своего маршрута', () => {
-    expect(routeRidePickPath(ROUTE_ID, false)).toBe(`/routes/rides/pick/${ROUTE_ID}`);
-    expect(routeRidePickPath(ROUTE_ID, true)).toBe(`/routes/rides/pick/${ROUTE_ID}?mine=1`);
+    expect(routeRidePickPath(ROUTE_ID, false)).toBe(`/routes/pick/${ROUTE_ID}`);
+    expect(routeRidePickPath(ROUTE_ID, true)).toBe(`/routes/pick/${ROUTE_ID}?mine=1`);
     expect(routeRidePath(ROUTE_ID, RIDE_ID, false)).toBe(`/routes/rides/${ROUTE_ID}/${RIDE_ID}`);
     expect(routeRidePath(ROUTE_ID, RIDE_ID, true)).toBe(
       `/routes/rides/${ROUTE_ID}/${RIDE_ID}?mine=1`,

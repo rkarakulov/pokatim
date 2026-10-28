@@ -368,20 +368,23 @@ test('выбор маршрута райда /rides/route-pick без сесси
   }
 });
 
-for (const [name, path] of [
-  ['выбор своего заезда', `/routes/rides/pick/${UNKNOWN_ROUTE_ID}`],
-  ['результат заезда', `/routes/rides/${UNKNOWN_ROUTE_ID}/${UNKNOWN_ROUTE_ID}`],
+for (const [name, path, pickScreen] of [
+  ['выбор своего заезда', `/routes/pick/${UNKNOWN_ROUTE_ID}`, true],
+  ['результат заезда', `/routes/rides/${UNKNOWN_ROUTE_ID}/${UNKNOWN_ROUTE_ID}`, false],
 ] as const) {
-  test(`заезд по маршруту (route-rides-02): ${name} без сессии — HTML без экрана и OG, после гидрации — гард входа`, async ({
+  test(`заезд по маршруту (route-rides-02): ${name} без сессии — HTML без данных и OG, после гидрации — гард входа`, async ({
     page,
     request,
   }) => {
     const response = await request.get(path);
     expect(response.status()).toBe(200);
     const html = await response.text();
-    // экран не публичный: без «Мои заезды» / «Выбрать свой заезд» и без OG
-    expect(html).not.toContain('Мои заезды');
-    expect(html).not.toContain('Выбрать свой заезд');
+    // RC-3: SSR отдаёт свой экран (шапка «Выбрать свой заезд» — только у выбора; сторож порядка манифеста — jest)
+    if (pickScreen) expect(html).toContain('Выбрать свой заезд');
+    else expect(html).not.toContain('Выбрать свой заезд');
+    // экран не публичный: без данных заездов и без OG
+    expect(html).not.toContain('Подходящих заездов нет');
+    expect(html).not.toContain('Заезд не найден');
     expect(html).not.toContain('og:title');
 
     await page.goto(path);
@@ -972,7 +975,7 @@ test.describe('с API', () => {
         page.getByText('Проверьте свой заезд — покажем, пройден ли маршрут и за сколько'),
       ).toBeVisible();
       await page.getByRole('button', { name: 'Проверить свой заезд' }).click();
-      await expect(page).toHaveURL(`${BASE_URL}/routes/rides/pick/${route.id}`);
+      await expect(page).toHaveURL(`${BASE_URL}/routes/pick/${route.id}`);
       await expect(page.getByText('Подходящих заездов нет')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Загрузить заезд' })).toBeVisible();
 

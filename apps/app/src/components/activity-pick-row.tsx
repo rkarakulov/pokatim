@@ -3,7 +3,7 @@ import { textStyle, useTheme } from '@rkarakulov/ui';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
 /**
- * Строка выбора своего заезда (гонка — `races/pick`, маршрут — `routes/rides/pick`): заголовок-дата, мета (источник,
+ * Строка выбора своего заезда (гонка — `races/pick`, маршрут — `routes/pick`): заголовок-дата, мета (источник,
  * дистанция, время), примечание («Уже в гонке», «Уже проверен»). Только разметка: тексты и действие — у экрана.
  */
 export function ActivityPickRow({
