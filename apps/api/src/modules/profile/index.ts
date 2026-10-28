@@ -10,3 +10,9 @@ export {
 /** Порт стирания профиля удалённого аккаунта и подпись субъекта `rider` в журнале панели (модуль `account`). */
 export { ProfileErasure } from './profile-erasure';
 export { riderSubjectLabel } from './profile-moderation.service';
+/** Порт для модуля `riders` (rider-profile): публичный профиль по `publicId` — только при имени и согласии. */
+export {
+  type PublicRiderRecord,
+  RIDER_PROFILES,
+  type RiderProfileDirectory,
+} from './rider-profiles.port';

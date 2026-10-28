@@ -35,7 +35,15 @@ const profiles = () => h.db.collection<ProfileDoc>(PROFILE_COLLECTIONS.profiles)
 const consentEvents = () =>
   h.db.collection<ProfileConsentEventDoc>(PROFILE_COLLECTIONS.consentEvents);
 const userIdOf = (session: Session) => String(decodeJwt(session.accessToken).sub);
-const EMPTY = { rideReasons: [], publicName: null, showNameInResults: false };
+const EMPTY = {
+  rideReasons: [],
+  publicName: null,
+  showNameInResults: false,
+  club: null,
+  avatar: null,
+  publicId: null,
+};
+const PUBLIC_ID = expect.stringMatching(/^[A-Za-z0-9_-]{43}$/);
 
 describe('GET /v1/profile (AC2)', () => {
   it('документа нет → пустой профиль без имени и согласия (AC1), no-store', async () => {
@@ -96,6 +104,7 @@ describe('PATCH /v1/profile — имя и согласие (AC2–AC4)', () => {
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.body).toEqual({
+      ...EMPTY,
       rideReasons: ['races'],
       publicName: 'Анна К.',
       showNameInResults: false,
@@ -108,6 +117,8 @@ describe('PATCH /v1/profile — имя и согласие (AC2–AC4)', () => {
       devicesStepCompletedAt: first,
       publicName: 'Анна К.',
       showNameInResults: false,
+      club: null,
+      publicId: null,
       updatedAt: h.clock.now(),
     });
     const onboarding = await call(
@@ -131,6 +142,8 @@ describe('PATCH /v1/profile — имя и согласие (AC2–AC4)', () => {
       surveyCompletedAt: null,
       publicName: null,
       showNameInResults: true,
+      club: null,
+      publicId: null,
       updatedAt: h.clock.now(),
     });
     const onboarding = await call(
@@ -155,7 +168,7 @@ describe('PATCH /v1/profile — имя и согласие (AC2–AC4)', () => {
       showNameInResults: false,
     });
     await submit(session, ['routes']);
-    expect((await getProfile(session)).body).toEqual({
+    expect((await getProfile(session)).body).toMatchObject({
       rideReasons: ['routes'],
       publicName: 'Ян',
       showNameInResults: false,
@@ -259,10 +272,66 @@ describe('PATCH /v1/profile — имя и согласие (AC2–AC4)', () => {
 
     expect(res.status).toBe(200);
     expect(spy).toHaveBeenCalledTimes(2);
-    expect(res.body).toEqual({ ...EMPTY, publicName: 'Анна К.', showNameInResults: true });
+    expect(res.body).toEqual({
+      ...EMPTY,
+      publicName: 'Анна К.',
+      showNameInResults: true,
+      publicId: PUBLIC_ID,
+    });
     expect(await profiles().countDocuments()).toBe(1);
     expect(await consentEvents().countDocuments({ action: 'granted' })).toBe(1);
     spy.mockRestore();
+  });
+});
+
+describe('PATCH /v1/profile — клуб и publicId (rider-profile, AC4/AC5)', () => {
+  it('клуб обрезается, null и "" очищают; валидация как у имени; ответ содержит club', async () => {
+    const session = await signUpSession(h);
+    const set = await patch(session, { club: '  Velo Club Minsk ' });
+    expect(set.status).toBe(200);
+    expect(set.body).toMatchObject({ club: 'Velo Club Minsk', publicName: null });
+    expect((await getProfile(session)).body).toMatchObject({ club: 'Velo Club Minsk' });
+    // имя без ключа club — клуб не меняется
+    expect((await patch(session, { publicName: 'Анна К.' })).body).toMatchObject({
+      club: 'Velo Club Minsk',
+    });
+    const invalid = await patch(session, { club: 'Участник' });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body).toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: { fields: [{ path: 'club', code: 'INVALID' }] },
+    });
+    expect((await patch(session, { club: 'V' })).status).toBe(400);
+    expect((await patch(session, { club: 'Velo\nClub' })).status).toBe(400);
+    expect((await patch(session, { club: null })).body).toMatchObject({ club: null });
+    await patch(session, { club: 'Velo' });
+    expect((await patch(session, { club: '' })).body).toMatchObject({ club: null });
+  });
+
+  it('publicId — только при имени и согласии; стабилен при отзыве и повторном согласии', async () => {
+    const session = await signUpSession(h);
+    expect((await patch(session, { publicName: 'Анна К.' })).body).toMatchObject({
+      publicId: null,
+    });
+    const granted = await patch(session, { showNameInResults: true });
+    expect(granted.body).toMatchObject({ publicId: PUBLIC_ID });
+    const publicId = (granted.body as { publicId: string }).publicId;
+
+    expect((await patch(session, { showNameInResults: false })).body).toMatchObject({
+      publicId: null,
+    });
+    expect((await patch(session, { showNameInResults: true })).body).toMatchObject({ publicId });
+    expect((await patch(session, { publicName: null })).body).toMatchObject({ publicId: null });
+    expect((await patch(session, { publicName: 'Анна' })).body).toMatchObject({ publicId });
+    expect(await profiles().findOne({ _id: userIdOf(session) })).toMatchObject({ publicId });
+  });
+
+  it('согласие без имени — publicId не выдаётся и не создаётся', async () => {
+    const session = await signUpSession(h);
+    expect((await patch(session, { showNameInResults: true })).body).toMatchObject({
+      publicId: null,
+    });
+    expect(await profiles().findOne({ _id: userIdOf(session) })).toMatchObject({ publicId: null });
   });
 });
 

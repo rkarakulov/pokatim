@@ -10,21 +10,21 @@ import { isDuplicateKey, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
+import { randomToken } from '../identity';
 import type { ProfileDoc } from './profile.collection';
-import { PROFILE_POLICY } from './profile.policy';
+import { PROFILE_POLICY, profileViewOf as viewOf } from './profile.policy';
 import { ProfileRepository } from './profile.repository';
 
-const viewOf = (
-  doc: Pick<ProfileDoc, 'rideReasons' | 'publicName' | 'showNameInResults'> | null,
-): ProfileView => ({
-  rideReasons: doc?.rideReasons ?? [],
-  publicName: doc?.publicName ?? null,
-  showNameInResults: doc?.showNameInResults ?? false,
-});
+type ProfilePatch = {
+  publicName?: string | null;
+  showNameInResults?: boolean;
+  club?: string | null;
+};
 
 /**
  * Профиль своего пользователя: ответы опроса для порядка разделов Главной, публичное имя и согласие на показ в
- * таблицах результатов (profile-rider-name). Документа нет — пустой профиль. Имя — ПДн: здесь ничего не логируется.
+ * таблицах результатов (profile-rider-name), клуб (rider-profile). Документа нет — пустой профиль. Имя и клуб — ПДн:
+ * здесь ничего не логируется.
  */
 @Injectable()
 export class ProfileService {
@@ -56,25 +56,32 @@ export class ProfileService {
       const details: RateLimitedDetails = { retryAfterSec: limited.retryAfterSec };
       throw domainError('RATE_LIMITED', 429, details);
     }
-    const patch = { publicName: body.publicName, showNameInResults: body.showNameInResults };
+    const patch: ProfilePatch = {
+      publicName: body.publicName,
+      showNameInResults: body.showNameInResults,
+      club: body.club,
+    };
+    // кандидат id публичного профиля — до транзакции (rider-profile, R-3): пригодится только при первом «имя + согласие»
+    const publicId = randomToken();
     try {
-      return viewOf(await this.writeProfile(userId, patch, now));
+      return viewOf(await this.writeProfile(userId, patch, publicId, now));
     } catch (error) {
       // гонка двух первых upsert: документ уже вставлен — повтор всей транзакции его найдёт и обновит
       if (!isDuplicateKey(error, '_id_')) throw error;
-      return viewOf(await this.writeProfile(userId, patch, now));
+      return viewOf(await this.writeProfile(userId, patch, publicId, now));
     }
   }
 
   private writeProfile(
     userId: string,
-    patch: { publicName?: string | null; showNameInResults?: boolean },
+    patch: ProfilePatch,
+    publicId: string,
     now: Date,
   ): Promise<ProfileDoc> {
     return this.transactions.run(async (tx) => {
       const before = await this.repository.findProfile(userId, tx);
       const wasShown = before?.showNameInResults ?? false;
-      const after = await this.repository.updatePublicName(tx, userId, patch, now);
+      const after = await this.repository.updatePublicName(tx, userId, patch, publicId, now);
       const shown = after.showNameInResults ?? false;
       if (shown !== wasShown) {
         await this.repository.insertConsentEvent(tx, {
