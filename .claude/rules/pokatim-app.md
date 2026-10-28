@@ -36,6 +36,13 @@ paths:
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
   `serverEnded`: токены снял сервер), последний токен — `secureStorage` `pokatim.pushToken`.
+- Настройки (settings-hub): хаб `settings/index` внутри `Stack.Protected` вкладок (оболочка `useSettingsShell`), вход —
+  иконка «Настройки» `TopBar` Главной (иконка «Устройства» — быстрый вход рядом); «Выйти» — только здесь. Строки —
+  `features/settings/settings-row.tsx`; «О приложении» — `app-info.ts` (версия `expoConfig.version`, ссылки —
+  `EXPO_PUBLIC_PRIVACY_URL`/`TERMS_URL`/`SUPPORT_EMAIL`, не заданы — строки нет; открытие — `openExternalUrl`).
+  Пункта «Тема» нет (тему выбирает панель, ADR-0016). Язык — `settings/language` из `i18n.locales` (имя —
+  `localeNames`), выбор — устройства, не аккаунта: `locale-preference(.web).ts` (`pokatim.locale`: native
+  SecureStore, web `localStorage`), применяется после монтирования корня (SSR — базовый язык).
 
 ## Правила pokatim
 

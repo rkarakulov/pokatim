@@ -7,7 +7,9 @@
 #   docker build --platform linux/amd64 -f infra/docker/Dockerfile --target api \
 #     --secret id=NODE_AUTH_TOKEN,env=NODE_AUTH_TOKEN -t ghcr.io/rkarakulov/pokatim-api:<тег> .
 #   web дополнительно: --build-arg EXPO_PUBLIC_API_URL=https://<домен> (публичный адрес, вшивается в бандл);
-#   необязательно — EXPO_PUBLIC_MAP_STYLE_LIGHT/DARK (URL стилей карты, ADR-0014; не заданы — карты нет).
+#   необязательно — EXPO_PUBLIC_MAP_STYLE_LIGHT/DARK (URL стилей карты, ADR-0014; не заданы — карты нет),
+#   EXPO_PUBLIC_PRIVACY_URL / EXPO_PUBLIC_TERMS_URL (https) и EXPO_PUBLIC_SUPPORT_EMAIL — «О приложении» в «Настройках»
+#   (не заданы — строк нет).
 
 ARG NODE_IMAGE=node:24.22-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
 ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6
@@ -71,10 +73,17 @@ ARG EXPO_PUBLIC_API_URL
 # URL стилей карты MapLibre (ADR-0014, публичные): необязательные — пусто, карты на карточке гонки нет
 ARG EXPO_PUBLIC_MAP_STYLE_LIGHT=
 ARG EXPO_PUBLIC_MAP_STYLE_DARK=
+# «О приложении» в «Настройках» (публичные): необязательные — пусто, строки политики, условий и поддержки нет
+ARG EXPO_PUBLIC_PRIVACY_URL=
+ARG EXPO_PUBLIC_TERMS_URL=
+ARG EXPO_PUBLIC_SUPPORT_EMAIL=
 RUN test -n "$EXPO_PUBLIC_API_URL" || { echo 'нужен --build-arg EXPO_PUBLIC_API_URL' >&2; exit 1; }; \
     EXPO_PUBLIC_API_URL="$EXPO_PUBLIC_API_URL" \
     EXPO_PUBLIC_MAP_STYLE_LIGHT="$EXPO_PUBLIC_MAP_STYLE_LIGHT" \
     EXPO_PUBLIC_MAP_STYLE_DARK="$EXPO_PUBLIC_MAP_STYLE_DARK" \
+    EXPO_PUBLIC_PRIVACY_URL="$EXPO_PUBLIC_PRIVACY_URL" \
+    EXPO_PUBLIC_TERMS_URL="$EXPO_PUBLIC_TERMS_URL" \
+    EXPO_PUBLIC_SUPPORT_EMAIL="$EXPO_PUBLIC_SUPPORT_EMAIL" \
     pnpm --filter @pokatim/app build:web \
     && node infra/docker/runtime-deps.mjs /repo /out express expo-server \
     && mkdir -p /out/apps/app/server \
