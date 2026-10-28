@@ -96,4 +96,12 @@ TESTS: `notification-texts.test.ts`, `notifications.policy.test.ts`, контр�
 
 ## 12. Outcome
 
-Заполняется после реализации.
+- **Changes:** `routes` — порт `RouteNotices` (`ROUTE_NOTICES`, `findForNotice`), экспорт события; `notifications` —
+  маршрут события в `notifications-intake`, разбор `routePublication` (`gone`/`state`), тексты с подписями причин,
+  группа «Райды»; `contracts` — виды `route_published`/`route_rejected`, цель `my-route`; `app` — путь цели.
+- **Docs updated:** ADR-0017, `docs/product/notifications.md`, `docs/product/routes.md`, `pokatim-backend.md`.
+- **Tests:** `TURBO_CONCURRENCY=1 pnpm check` (изолированные `MONGO_URL_TEST`/`REDIS_URL_TEST`) — зелёный; unit
+  `notification-intake.test.ts`, тексты, политика, контракты, цель app; int — приём (одобрение, отклонение,
+  схлопывание, пересмотр, удаление, хвост > 72 ч) и публикация события модерацией.
+- **Review:** independent-reviewer pass 1 — APPROVE, 3 LOW исправлены (`findings.md`).
+- **Open follow-ups:** группа «Маршруты» в настройках — если автор продукта решит иначе, чем `[ASSUMPTION]`.
