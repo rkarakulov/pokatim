@@ -28,3 +28,11 @@ export {
   type ResultsForStandings,
   type StandingsSourceRow,
 } from './results-for-standings.port';
+/** Порт для `sharing` (story-cards): факты своего результата и линия карточки для сторис. */
+export {
+  RESULTS_FOR_SHARING,
+  type ResultsForSharing,
+  type StoryCardFacts,
+  type StoryCardLine,
+  type StoryCardResultStatus,
+} from './results-for-sharing.port';

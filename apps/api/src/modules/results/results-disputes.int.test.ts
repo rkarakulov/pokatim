@@ -76,6 +76,7 @@ describe('D-39: открытый спор по своему результату
       canAddAttempt: false,
       reasons: ['dispute_open'],
       canUpgrade: false,
+      canShareStory: false,
     });
     expect(failure(await withdraw(h, auth, raceId))).toEqual([
       409,
@@ -193,6 +194,7 @@ describe('DQ по спору до публикации (D-43, RC-6, RC-16)', () 
       canAddAttempt: false,
       reasons: ['disqualified'],
       canUpgrade: false,
+      canShareStory: false,
     });
     expect(failure(await withdraw(h, auth, raceId))).toEqual([
       409,

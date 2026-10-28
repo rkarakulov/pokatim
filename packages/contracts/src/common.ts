@@ -77,6 +77,8 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'VERIFIED_DEMOGRAPHICS_LOCKED',
   // routes-06: лимит подач маршрута в каталог (details: limit, max)
   'ROUTE_PUBLICATION_LIMIT',
+  // story-cards: карточки нет (нет заявки, времени, снята, DQ) — 409
+  'STORY_CARD_UNAVAILABLE',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;
