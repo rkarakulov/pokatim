@@ -1,4 +1,4 @@
-import type { AppThemeId } from '@pokatim/contracts';
+import type { AppDecorId, AppThemeId } from '@pokatim/contracts';
 import type { Collection, Db } from 'mongodb';
 
 /**
@@ -18,6 +18,8 @@ export const APPEARANCE_SETTINGS_ID = 'appearance' as const;
 export interface AppearanceSettingsDoc {
   _id: typeof APPEARANCE_SETTINGS_ID;
   themeId: AppThemeId;
+  /** halloween-decor: сезонный декор; нет поля (документ до декора, менялась только тема) — `none`. */
+  decor?: AppDecorId;
   version: number;
   updatedAt: Date;
 }

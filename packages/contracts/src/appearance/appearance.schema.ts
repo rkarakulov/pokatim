@@ -21,19 +21,42 @@ export type AppThemeId = z.infer<typeof AppThemeId>;
 /** Тема по умолчанию: нет настройки, незнакомый id, нет сети. */
 export const DEFAULT_APP_THEME_ID = 'classic' satisfies AppThemeId;
 
-/** `GET /v1/appearance` — ответ приложения: только тема; незнакомая — `'unknown'` (клиент → «Классика»). */
-export const AppAppearance = z.object({ themeId: tolerantEnum(APP_THEME_IDS) });
+/**
+ * Сезонный декор (halloween-decor): слой поверх активной темы, не тема. Только в конец; `none` — без декора.
+ */
+export const APP_DECOR_IDS = ['none', 'halloween'] as const;
+export const AppDecorId = z.enum(APP_DECOR_IDS, { error: fieldError('INVALID') });
+export type AppDecorId = z.infer<typeof AppDecorId>;
+
+/** Декор по умолчанию: нет настройки, незнакомый id, нет сети. */
+export const DEFAULT_APP_DECOR_ID = 'none' satisfies AppDecorId;
+
+/**
+ * `GET /v1/appearance` — ответ приложения: тема и декор; незнакомые — `'unknown'` (клиент → «Классика», без декора).
+ * `decor` нет у ответа API до halloween-decor — поле необязательное.
+ */
+export const AppAppearance = z.object({
+  themeId: tolerantEnum(APP_THEME_IDS),
+  decor: tolerantEnum(APP_DECOR_IDS).optional(),
+});
 export type AppAppearance = z.infer<typeof AppAppearance>;
 
 /** `GET|PUT /v1/admin/appearance` — ответ панели (строгий enum: панель деплоится с API). */
 export const PanelAppearance = z.object({
   themeId: AppThemeId,
+  decor: AppDecorId,
   version: Version,
   /** `null` — настройку ещё не меняли (действует «Классика»). */
   updatedAt: z.iso.datetime().nullable(),
 });
 export type PanelAppearance = z.infer<typeof PanelAppearance>;
 
-/** `PUT /v1/admin/appearance` — намерение: тема из списка и ожидаемая версия. Лишние ключи — 400. */
-export const UpdateAppearanceRequest = z.strictObject({ themeId: AppThemeId, version: Version });
+/**
+ * `PUT /v1/admin/appearance` — намерение: тема и/или декор (хотя бы одно) и ожидаемая версия. Лишние ключи — 400.
+ */
+export const UpdateAppearanceRequest = z
+  .strictObject({ themeId: AppThemeId.optional(), decor: AppDecorId.optional(), version: Version })
+  .refine((body) => body.themeId !== undefined || body.decor !== undefined, {
+    error: fieldError('INVALID'),
+  });
 export type UpdateAppearanceRequest = z.infer<typeof UpdateAppearanceRequest>;

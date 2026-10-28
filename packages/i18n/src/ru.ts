@@ -1680,6 +1680,21 @@ export const ru = {
     'Оранжевый диагональный блок, огромные сжатые цифры километров и заглавные подписи кнопок',
   'admin.audit.action.appearance.theme_changed': 'Тема приложения изменена',
   'admin.audit.themeChange': '{from} → {to}',
+  'admin.audit.action.appearance.decor_changed': 'Сезонный декор изменён',
+  'admin.appearance.decor.title': 'Сезонный декор',
+  'admin.appearance.decor.hint':
+    'Слой поверх текущей темы: паутина, пауки, тыквы и ведьма на Главной. Не перехватывает нажатия и скрыт от скринридеров.',
+  'admin.appearance.decor.state.none': 'Хеллоуинский декор выключен',
+  'admin.appearance.decor.state.halloween': 'Хеллоуинский декор включён',
+  'admin.appearance.decor.toggle.none': 'Включить хеллоуинский декор',
+  'admin.appearance.decor.toggle.halloween': 'Выключить хеллоуинский декор',
+  'admin.appearance.decor.saved.none': 'Декор выключен. Приложение уберёт его в течение минуты.',
+  'admin.appearance.decor.saved.halloween':
+    'Декор включён. Приложение покажет его в течение минуты.',
+  'admin.appearance.decor.saveFailed': 'Не удалось переключить декор',
+  'admin.audit.decorChange': '{from} → {to}',
+  'admin.appearance.decor.name.none': 'Без декора',
+  'admin.appearance.decor.name.halloween': 'Хеллоуин',
   // routes-05: страница маршрута панели — карта, цифры, профиль высоты со скраббингом
   'admin.routes.detail.notFound': 'Маршрут не найден',
   'admin.routes.detail.processing': 'Маршрут обрабатывается — страница обновится сама',

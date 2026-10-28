@@ -1,8 +1,13 @@
 import { isNetworkError } from '@pokatim/api-client';
-import { APP_THEME_IDS, type AppThemeId, type PanelAppearance } from '@pokatim/contracts';
+import {
+  APP_THEME_IDS,
+  type AppThemeId,
+  type PanelAppearance,
+  type UpdateAppearanceRequest,
+} from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { api } from '../../api';
 import { isConflict } from '../../session/errors';
@@ -23,7 +28,7 @@ const APPEARANCE_QUERY_KEY = ['admin', 'appearance'] as const;
 /**
  * «Оформление приложения» (`appearance.manage`, только admin): 7 карточек тем, текущая — с бейджем; «Сохранить»
  * отправляет выбранную тему и версию последнего ответа. Форма из одного поля — `useState`, тело проверяет сервер.
- * Панель остаётся в теме `panel` (T6).
+ * Сезонный декор (halloween-decor) — одна кнопка: включает или выключает сразу. Панель остаётся в теме `panel` (T6).
  */
 export function AppearanceScreen() {
   const queryClient = useQueryClient();
@@ -33,27 +38,39 @@ export function AppearanceScreen() {
   const [choice, setChoice] = useState<{ themeId: AppThemeId; baseVersion: number }>();
   const [conflict, setConflict] = useState(false);
   const [failure, setFailure] = useState<string>();
-  const [savedNotice, setSavedNotice] = useState(false);
+  const [notice, setNotice] = useState<string>();
+  const decorTitleId = useId();
 
   const current = query.data;
   const selected = choice?.themeId ?? current?.themeId;
 
   const save = useMutation({
-    mutationFn: (body: { themeId: AppThemeId; version: number }) => api.updateAppearance(body),
+    mutationFn: (body: UpdateAppearanceRequest) => api.updateAppearance(body),
     onMutate: () => {
       setFailure(undefined);
       setConflict(false);
-      setSavedNotice(false);
+      setNotice(undefined);
     },
-    onSuccess: async (next: PanelAppearance) => {
+    onSuccess: async (next: PanelAppearance, body) => {
       queryClient.setQueryData(APPEARANCE_QUERY_KEY, next);
-      setChoice(undefined);
-      setSavedNotice(true);
+      if (body.themeId) {
+        setChoice(undefined);
+        setNotice(t('admin.appearance.saved'));
+      } else {
+        // своё переключение декора не устаревает незавершённый выбор темы, начатый при той же версии
+        setChoice((prev) =>
+          prev?.baseVersion === body.version ? { ...prev, baseVersion: next.version } : prev,
+        );
+        setNotice(t(`admin.appearance.decor.saved.${next.decor}`));
+      }
       await queryClient.invalidateQueries({ queryKey: ['admin', 'audit'] });
     },
-    onError: (error) => {
+    onError: (error, body) => {
       if (isConflict(error)) return setConflict(true);
-      setFailure(isNetworkError(error) ? t('error.network') : t('admin.appearance.saveFailed'));
+      const failed = body.themeId
+        ? 'admin.appearance.saveFailed'
+        : 'admin.appearance.decor.saveFailed';
+      setFailure(isNetworkError(error) ? t('error.network') : t(failed));
     },
   });
 
@@ -108,7 +125,7 @@ export function AppearanceScreen() {
           {conflict ? (
             <ConflictBanner busy={query.isFetching} onReload={() => void reload()} />
           ) : null}
-          {savedNotice ? <Banner role="status">{t('admin.appearance.saved')}</Banner> : null}
+          {notice ? <Banner role="status">{notice}</Banner> : null}
           <CardRadioGroup
             legend={t('admin.appearance.legend')}
             options={options}
@@ -118,7 +135,7 @@ export function AppearanceScreen() {
                 themeId: value,
                 baseVersion: prev?.baseVersion ?? current.version,
               }));
-              setSavedNotice(false);
+              setNotice(undefined);
             }}
           />
           {failure ? (
@@ -138,6 +155,26 @@ export function AppearanceScreen() {
               {t('admin.appearance.save')}
             </Button>
           </div>
+          <section className="section" aria-labelledby={decorTitleId}>
+            <h2 id={decorTitleId} className="section__title t-label">
+              {t('admin.appearance.decor.title')}
+            </h2>
+            <p className="muted t-meta">{t('admin.appearance.decor.hint')}</p>
+            <p>{t(`admin.appearance.decor.state.${current.decor}`)}</p>
+            <div className="form-actions">
+              <Button
+                busy={save.isPending}
+                onClick={() =>
+                  save.mutate({
+                    decor: current.decor === 'halloween' ? 'none' : 'halloween',
+                    version: current.version,
+                  })
+                }
+              >
+                {t(`admin.appearance.decor.toggle.${current.decor}`)}
+              </Button>
+            </div>
+          </section>
         </div>
       ) : query.isError || paused ? (
         <ErrorState error={query.error} offline={paused} onRetry={() => void query.refetch()} />
