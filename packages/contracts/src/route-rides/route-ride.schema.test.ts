@@ -1,0 +1,160 @@
+import { describe, expect, it } from 'vitest';
+
+import { ErrorCode } from '../common.ts';
+import {
+  ROUTE_RIDE_CANDIDATES_MAX,
+  ROUTE_RIDE_MAX_PER_ROUTE,
+  ROUTE_RIDE_STATUSES,
+  RouteRideCandidates,
+  RouteRideDetail,
+  RouteRidePage,
+  RouteRideRequest,
+  RouteRideTrack,
+} from './route-ride.schema.ts';
+
+const ID = '01890a5d-ac96-774b-bcce-b302099a8057';
+const AT = '2026-10-27T10:00:00.000Z';
+
+const activity = { startedAt: AT, source: 'upload', elapsedSec: 900, distanceM: 8000 };
+const route = { id: ID, title: 'Эталонный коридор', distanceM: 8000 };
+const row = {
+  id: ID,
+  status: 'passed',
+  reason: null,
+  elapsedSec: 790,
+  isBest: true,
+  activity,
+  createdAt: AT,
+};
+const detail = {
+  id: ID,
+  route,
+  status: 'not_passed',
+  reason: 'off_corridor',
+  failure: null,
+  elapsedSec: null,
+  routeDistanceM: null,
+  activity,
+  comparison: {
+    best: { id: ID, elapsedSec: 790, rideStartedAt: AT },
+    isBest: false,
+    deltaToBestSec: null,
+    previous: null,
+    deltaToPreviousSec: null,
+  },
+  createdAt: AT,
+  checkedAt: AT,
+};
+const candidate = {
+  activityId: ID,
+  startedAt: AT,
+  source: 'garmin',
+  elapsedSec: 900,
+  distanceM: 8000,
+  rideId: null,
+};
+const track = {
+  rideId: ID,
+  line: [
+    [27.5, 53.9],
+    [27.6, 53.95],
+  ],
+  segment: { from: 0, to: 1 },
+  offRuns: [],
+  marks: 'ready',
+};
+
+describe('заезд по маршруту (route-rides-01): контракты', () => {
+  it('статусы — в порядке ТЗ (только в конец)', () => {
+    expect(ROUTE_RIDE_STATUSES).toEqual(['queued', 'checking', 'passed', 'not_passed', 'failed']);
+    expect(ROUTE_RIDE_MAX_PER_ROUTE).toBe(100);
+    expect(ROUTE_RIDE_CANDIDATES_MAX).toBe(30);
+  });
+
+  it('ответы — tolerantEnum: незнакомые статус, причина, провал, источник и разметка → unknown', () => {
+    const parsed = RouteRideDetail.parse({
+      ...detail,
+      status: 'future',
+      reason: 'new_reason',
+      failure: 'new_failure',
+      activity: { ...activity, source: 'strava' },
+    });
+    expect(parsed.status).toBe('unknown');
+    expect(parsed.reason).toBe('unknown');
+    expect(parsed.failure).toBe('unknown');
+    expect(parsed.activity.source).toBe('unknown');
+    expect(
+      RouteRidePage.parse({
+        route,
+        summary: { count: 1, passedCount: 0, best: null },
+        items: [{ ...row, status: 'future', reason: 'x' }],
+      }).items[0],
+    ).toMatchObject({ status: 'unknown', reason: 'unknown' });
+    expect(RouteRideTrack.parse({ ...track, marks: 'future' }).marks).toBe('unknown');
+    expect(
+      RouteRideCandidates.parse({ items: [{ ...candidate, source: 'x' }] }).items[0]?.source,
+    ).toBe('unknown');
+  });
+
+  it('запрос — ровно одно поле: activityId или uploadId (UUID)', () => {
+    expect(RouteRideRequest.parse({ activityId: ID })).toEqual({ activityId: ID });
+    expect(RouteRideRequest.parse({ uploadId: ID })).toEqual({ uploadId: ID });
+    for (const bad of [
+      {},
+      { activityId: ID, uploadId: ID },
+      { activityId: ID, extra: 1 },
+      { activityId: 'not-a-uuid' },
+      { uploadId: 42 },
+      null,
+    ]) {
+      expect(RouteRideRequest.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  it('пределы массивов: строки ≤ 100, кандидаты ≤ 30, линия 2–1000, offRuns ≤ 100', () => {
+    const page = (n: number) => ({
+      route,
+      summary: { count: n, passedCount: 0, best: null },
+      items: Array.from({ length: n }, () => row),
+    });
+    expect(RouteRidePage.safeParse(page(100)).success).toBe(true);
+    expect(RouteRidePage.safeParse(page(101)).success).toBe(false);
+    const candidates = (n: number) => ({ items: Array.from({ length: n }, () => candidate) });
+    expect(RouteRideCandidates.safeParse(candidates(30)).success).toBe(true);
+    expect(RouteRideCandidates.safeParse(candidates(31)).success).toBe(false);
+    const line = (n: number) => Array.from({ length: n }, (_, i) => [27.5 + i * 1e-5, 53.9]);
+    expect(RouteRideTrack.safeParse({ ...track, line: line(1) }).success).toBe(false);
+    expect(RouteRideTrack.safeParse({ ...track, line: line(1000) }).success).toBe(true);
+    expect(RouteRideTrack.safeParse({ ...track, line: line(1001) }).success).toBe(false);
+    const runs = (n: number) => Array.from({ length: n }, () => ({ from: 0, to: 1 }));
+    expect(RouteRideTrack.safeParse({ ...track, offRuns: runs(100) }).success).toBe(true);
+    expect(RouteRideTrack.safeParse({ ...track, offRuns: runs(101) }).success).toBe(false);
+  });
+
+  it('деталь: знаковые целые дельты (отрицательная — быстрее), даты ISO', () => {
+    const parsed = RouteRideDetail.parse({
+      ...detail,
+      status: 'passed',
+      reason: null,
+      elapsedSec: 780,
+      routeDistanceM: 8010,
+      comparison: { ...detail.comparison, deltaToBestSec: -10, deltaToPreviousSec: 5 },
+    });
+    expect(parsed.comparison.deltaToBestSec).toBe(-10);
+    expect(RouteRideDetail.safeParse({ ...detail, createdAt: 'вчера' }).success).toBe(false);
+    expect(
+      RouteRideDetail.safeParse({
+        ...detail,
+        comparison: { ...detail.comparison, deltaToBestSec: 1.5 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('коды ошибок route-rides — в конце списка', () => {
+    expect(ErrorCode.options.slice(-3)).toEqual([
+      'ROUTE_RIDE_NOT_READY',
+      'ROUTE_RIDE_UPLOAD_FAILED',
+      'ROUTE_RIDE_QUOTA_EXCEEDED',
+    ]);
+  });
+});

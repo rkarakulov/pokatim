@@ -47,6 +47,9 @@ export const PROJECT_ERROR_MESSAGES = {
   RESULT_GROUP_NOT_ALLOWED: 'Можно выбрать свою группу или более молодую своего пола',
   VERIFIED_DEMOGRAPHICS_LOCKED: 'Пол и год рождения уже зафиксированы заявкой Verified',
   ROUTE_PUBLICATION_LIMIT: 'Достигнут предел заявок в каталог',
+  ROUTE_RIDE_NOT_READY: 'Заезд ещё обрабатывается, попробуйте чуть позже',
+  ROUTE_RIDE_UPLOAD_FAILED: 'Файл заезда не удалось обработать',
+  ROUTE_RIDE_QUOTA_EXCEEDED: 'Достигнут предел заездов по маршруту',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */
