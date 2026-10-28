@@ -1,8 +1,13 @@
 import type { RideRoute } from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { ROUTE_CATALOG_LINE_WIDTH, type ScrubStore } from '@pokatim/route-view';
-import { Banner, TextAction } from '@rkarakulov/ui';
+import { apiErrorOf } from '@pokatim/api-client';
+import {
+  PROFILE_ASPECT_RATIO,
+  ROUTE_CATALOG_LINE_WIDTH,
+  type ScrubStore,
+} from '@pokatim/route-view';
+import { AsyncContent, Banner, TextAction, useTheme } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
@@ -27,10 +32,13 @@ export const rideRoutePath = (route: Pick<RideRoute, 'id' | 'access'>) =>
  */
 export function RideRouteBlock({ route, scrub }: { route: RideRoute; scrub: ScrubStore }) {
   const router = useRouter();
+  const theme = useTheme();
   const isPublic = route.access === 'public';
   const detail = useCatalogRoute(route.id, undefined, isPublic);
-  const data = isPublic ? detail.data : undefined;
-  const elevation = data?.elevation ?? null;
+  const elevation = detail.data?.elevation ?? null;
+  // профиль — данные карточки каталога: загрузка — место профиля, ошибка — с повтором, ошибка обновления — профиль и
+  // баннер (`AsyncContent`, ревью pass 1); 404 (снят между запросами) — без блока профиля
+  const profileGone = !detail.data && apiErrorOf(detail.error)?.code === 'NOT_FOUND';
   if (route.access !== 'public' && route.access !== 'private') return null;
   const label = t('rides.detail.routeMap', {
     title: route.title,
@@ -59,13 +67,27 @@ export function RideRouteBlock({ route, scrub }: { route: RideRoute; scrub: Scru
           <Banner message={t('rides.detail.routePrivate')} />
         </>
       )}
-      {data && elevation ? (
-        <ElevationProfile
-          elevation={elevation}
-          distanceM={data.distanceM}
-          gainM={data.elevationGainM}
-          scrub={scrub}
-        />
+      {isPublic && !profileGone ? (
+        <AsyncContent
+          query={detail}
+          skeleton={
+            <View
+              testID="ride-route-profile-skeleton"
+              style={[styles.profilePlace, { backgroundColor: theme.surface.skeleton }]}
+            />
+          }
+        >
+          {(data) =>
+            data.elevation ? (
+              <ElevationProfile
+                elevation={data.elevation}
+                distanceM={data.distanceM}
+                gainM={data.elevationGainM}
+                scrub={scrub}
+              />
+            ) : null
+          }
+        </AsyncContent>
       ) : null}
       <View style={styles.start}>
         <TextAction
@@ -80,4 +102,5 @@ export function RideRouteBlock({ route, scrub }: { route: RideRoute; scrub: Scru
 const styles = StyleSheet.create({
   block: { gap: space.s3 },
   start: { alignItems: 'flex-start' },
+  profilePlace: { width: '100%', aspectRatio: PROFILE_ASPECT_RATIO },
 });

@@ -347,6 +347,7 @@ export const ru = {
   'rides.view.list': 'Список',
   'rides.view.map': 'Карта',
   'rides.near': 'Рядом',
+  'rides.more': 'Показать ещё',
   'rides.nearDistance': 'в {distance} км от вас',
   'rides.nearUnderKm': 'меньше 1 км от вас',
   'rides.nearEmpty.title': 'Включите геопозицию, чтобы видеть райды рядом',

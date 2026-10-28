@@ -17,6 +17,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { retryAfterSec } from '@/features/auth/error-messages';
@@ -57,7 +58,7 @@ const nearParams = (near: NearQuery | null) =>
  * префикс общий с Главной (`['rides','list',{ limit: 1 }]`). «Рядом» (05c) — в ключе только счётчик нажатия, позиция —
  * в замыкании запроса. Подгрузка у конца — `loadMore` (не во время обновления).
  */
-export function useRideFeed(filters: RideFilters, near: NearQuery | null = null) {
+export function useRideFeed(filters: RideFilters, near: NearQuery | null = null, enabled = true) {
   const params = { city: filters.city, limit: PAGE_LIMIT, near: near?.seq ?? null };
   const feed = useInfiniteQuery({
     queryKey: ['rides', 'list', params, 'pages'],
@@ -73,14 +74,46 @@ export function useRideFeed(filters: RideFilters, near: NearQuery | null = null)
     initialPageParam: null as string | null,
     getNextPageParam: nextCursor,
     staleTime: FEED_STALE_MS,
+    enabled,
   });
   const loadMore = () => {
     if (feed.hasNextPage && !feed.isFetching && !feed.isFetchNextPageError) {
       void feed.fetchNextPage({ cancelRefetch: false });
     }
   };
-  return { feed, loadMore };
+  // сервер отбирает пачками: пустая страница с курсором — не конец (ревью pass 1). Пустая последняя — дочитываем
+  // сразу (контент не растёт, `onEndReached` не придёт), но не больше `EMPTY_PAGES_MAX` подряд — дальше «Показать ещё»
+  const emptyTail = trailingEmptyPages(feed.data?.pages);
+  const stalled = feed.hasNextPage && emptyTail >= EMPTY_PAGES_MAX;
+  const autoContinue =
+    enabled &&
+    emptyTail > 0 &&
+    !stalled &&
+    feed.hasNextPage &&
+    !feed.isFetching &&
+    !feed.isFetchNextPageError;
+  const fetchNextPage = feed.fetchNextPage;
+  // `emptyTail` в зависимостях: новая пустая страница может прийти без промежуточного рендера с `isFetching`
+  useEffect(() => {
+    if (autoContinue) void fetchNextPage({ cancelRefetch: false });
+  }, [autoContinue, emptyTail, fetchNextPage]);
+  /** Райдов ещё нет, но выдача не кончилась: дочитываем (скелетон) или стоим на пределе («Показать ещё»). */
+  const scanning =
+    feed.data !== undefined && emptyTail === feed.data.pages.length && feed.hasNextPage;
+  return { feed, loadMore, stalled, scanning };
 }
+
+/** Пустых страниц подряд, после которых дочитывание ждёт нажатия «Показать ещё». */
+export const EMPTY_PAGES_MAX = 5;
+
+const trailingEmptyPages = (pages: readonly RidePage[] | undefined) => {
+  let count = 0;
+  for (let index = (pages?.length ?? 0) - 1; index >= 0; index -= 1) {
+    if (pages![index]!.items.length > 0) break;
+    count += 1;
+  }
+  return count;
+};
 
 /**
  * Карта ленты (05c): точки старта будущих райдов с видимым маршрутом; ключ `['rides','map',{ city, near: seq | null }]`

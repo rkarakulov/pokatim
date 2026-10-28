@@ -11,7 +11,7 @@ import {
   useTheme,
 } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -50,6 +50,9 @@ const catalogChoice = (route: CatalogRouteCard): RideRoute => ({
   elevationGainM: route.elevationGainM,
   access: 'public',
 });
+
+/** Свой маршрут можно прикрепить: готов и с длиной (одно условие — для строк и для «пусто»). */
+const pickable = (route: MyRoute) => route.status === 'ready' && route.distanceM !== null;
 
 /** Свой маршрут виден участникам, только пока он в каталоге (одобрен). */
 const publicMine = (route: MyRoute) => route.publication?.status === 'approved';
@@ -121,9 +124,15 @@ function CatalogList({
 function MineList({ header, onPick }: { header: ReactNode; onPick: (route: RideRoute) => void }) {
   const router = useRouter();
   const { feed, loadMore } = useMyRoutes();
-  const items = (feed.data?.pages ?? [])
-    .flatMap((page) => page.items)
-    .filter((route) => route.status === 'ready' && route.distanceM !== null);
+  const items = (feed.data?.pages ?? []).flatMap((page) => page.items).filter(pickable);
+  // страница без готовых, но с курсором — не «пусто»: дочитываем (контент не растёт, `onEndReached` не придёт)
+  const scanning = feed.data !== undefined && items.length === 0 && feed.hasNextPage;
+  const fetchNextPage = feed.fetchNextPage;
+  const pages = feed.data?.pages.length ?? 0;
+  const autoContinue = scanning && !feed.isFetching && !feed.isFetchNextPageError;
+  useEffect(() => {
+    if (autoContinue) void fetchNextPage({ cancelRefetch: false });
+  }, [autoContinue, pages, fetchNextPage]);
   return (
     <FlatList
       testID="route-pick-mine"
@@ -137,8 +146,7 @@ function MineList({ header, onPick }: { header: ReactNode; onPick: (route: RideR
             query={feed}
             skeleton={SKELETON}
             empty={{
-              when: (data) =>
-                !data.pages.some((page) => page.items.some((route) => route.status === 'ready')),
+              when: () => items.length === 0 && !feed.hasNextPage,
               render: () => (
                 <EmptyState
                   title={t('rides.routePick.mineEmpty')}
@@ -151,7 +159,7 @@ function MineList({ header, onPick }: { header: ReactNode; onPick: (route: RideR
               ),
             }}
           >
-            {() => null}
+            {() => (scanning ? SKELETON : null)}
           </AsyncContent>
         </>
       }

@@ -520,6 +520,32 @@ describe('карточка райда: маршрут (05c)', () => {
     expect(router.getPathname()).toBe(`/routes/${ROUTE_ID}`);
   });
 
+  it('профиль: загрузка — место профиля; ошибка — «Не удалось загрузить» с повтором; повтор — профиль (ревью pass 1)', async () => {
+    signedIn();
+    getRideForViewer.mockResolvedValue(
+      view({ route: publicRoute, start: [27.5, 53.8] }, viewer('none', { canJoin: true })),
+    );
+    let fail: (error: unknown) => void = () => undefined;
+    jest.mocked(api.getCatalogRoute).mockReturnValueOnce(
+      new Promise((_, reject) => {
+        fail = reject;
+      }),
+    );
+    await openSignedIn();
+    expect(
+      await screen.findByTestId('ride-route-profile-skeleton', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+
+    await act(async () => fail(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' })));
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.queryByTestId('elevation-profile')).toBeNull();
+    // ссылка «Маршрут райда» и цифры остаются
+    expect(screen.getByRole('button', { name: 'Маршрут райда' })).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByTestId('elevation-profile')).toBeOnTheScreen();
+  });
+
   it('свой непубличный (организатор): карта «Моего маршрута» без профиля, баннер «опубликуйте», ссылка на /routes/mine/<id>', async () => {
     signedIn();
     getRideForViewer.mockResolvedValue(

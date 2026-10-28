@@ -39,7 +39,7 @@ import { cityLabel, rideDayLabel } from './format';
 import { RideRsvpAction } from './going-action';
 import { distanceLabel } from './near';
 import { NearEmpty } from './near-empty';
-import { useRideCities, useRideFeed } from './queries';
+import { useRideCities, useRideFeed, useRideMap } from './queries';
 import { RideHero } from './ride-hero';
 import { RideMapView } from './ride-map-view';
 import type { NearState } from './use-near';
@@ -115,14 +115,22 @@ export function RideFeed({
   );
   const filters = withinAvailable(selected, available);
   const near = nearState.near;
-  const { feed, loadMore } = useRideFeed(filters, near);
-  const now = useMinskClock([feed.dataUpdatedAt]);
-  const filtered = hasFilters(filters) || nearState.active;
-  const me = near?.lngLat ?? null;
   // отказ или ошибка чтения позиции — пустое состояние вместо выдачи (шапка и фильтры остаются)
   const locate = nearState.locate;
   const nearBlocked =
     nearState.active && (locate.status === 'denied' || locate.status === 'unavailable');
+  // позиция ещё читается — скелетон, а не выдача без near под чипом «Рядом» (ревью pass 1)
+  const nearPending = nearState.active && near === null && !nearBlocked;
+  // запрос — только активного режима: в «Карте» near уходит лишь в запрос карты (лимит `rides-near`)
+  const { feed, loadMore, stalled, scanning } = useRideFeed(
+    filters,
+    near,
+    view === 'list' && !nearPending,
+  );
+  const map = useRideMap(filters, near, view === 'map' && !nearPending);
+  const now = useMinskClock([feed.dataUpdatedAt]);
+  const filtered = hasFilters(filters) || nearState.active;
+  const me = near?.lngLat ?? null;
   const chooseCity = () => {
     nearState.off();
     list.current?.scrollToOffset({ offset: 0, animated: false });
@@ -136,7 +144,8 @@ export function RideFeed({
   const all = (feed.data?.pages ?? []).flatMap((page) => page.items);
   const rows = groupByDay(all.slice(1));
   const items: FeedItem[] = rows.length > 0 ? [{ kind: 'all' }, ...rows] : [];
-  const empty = feed.data !== undefined && all.length === 0;
+  // пустая страница с курсором — не конец выдачи: пусто — только когда страниц больше нет
+  const empty = feed.data !== undefined && all.length === 0 && !feed.hasNextPage;
 
   const feedState = { ...feed, isError: feed.isError && !feed.isFetchNextPageError };
   const resetFilters = () => {
@@ -144,6 +153,15 @@ export function RideFeed({
     onFiltersChange(NO_FILTERS);
   };
   const citiesLoading = cities.isPending && cities.fetchStatus === 'fetching';
+
+  const feedSkeleton = (
+    <View style={styles.skeleton}>
+      <SkeletonHeroCard />
+      {SKELETON_ROWS.map((index) => (
+        <RideListRowSkeleton key={index} />
+      ))}
+    </View>
+  );
 
   const listHeader = (
     <View style={styles.gutter}>
@@ -155,7 +173,10 @@ export function RideFeed({
           <Button label={t('rides.create')} variant="secondary" onPress={create} />
         )}
       </View>
-      <OfflineBanner hasData={feed.data !== undefined} style={styles.offline} />
+      <OfflineBanner
+        hasData={view === 'list' ? feed.data !== undefined : map.data !== undefined}
+        style={styles.offline}
+      />
       <View style={styles.controls}>
         <View accessibilityLabel={t('rides.view.label')}>
           <SegmentedControl<RideFeedView>
@@ -192,7 +213,11 @@ export function RideFeed({
           <TextAction label={t('rides.resetFilters')} onPress={resetFilters} />
         </View>
       ) : null}
-      {view === 'map' ? null : nearBlocked ? (
+      {view === 'map' ? null : nearPending ? (
+        <View style={styles.hero}>
+          <SkeletonGroup>{feedSkeleton}</SkeletonGroup>
+        </View>
+      ) : nearBlocked ? (
         <View style={styles.hero}>
           <NearEmpty
             canOpenSettings={locate.status === 'denied' && locate.canOpenSettings}
@@ -204,16 +229,9 @@ export function RideFeed({
         <View style={styles.hero}>
           <AsyncContent
             query={feedState}
-            skeleton={
-              <View style={styles.skeleton}>
-                <SkeletonHeroCard />
-                {SKELETON_ROWS.map((index) => (
-                  <RideListRowSkeleton key={index} />
-                ))}
-              </View>
-            }
+            skeleton={feedSkeleton}
             empty={{
-              when: (data) => (data.pages[0]?.items.length ?? 0) === 0,
+              when: () => empty,
               render: () =>
                 filtered ? (
                   <EmptyState
@@ -229,9 +247,10 @@ export function RideFeed({
                 ),
             }}
           >
-            {(data) => {
-              const ride = data.pages[0]?.items[0];
-              return ride ? (
+            {() => {
+              const ride = all[0];
+              if (!ride) return scanning && !stalled ? feedSkeleton : null;
+              return (
                 <RideHero
                   ride={ride}
                   now={now}
@@ -239,7 +258,7 @@ export function RideFeed({
                   distance={distanceLabel(me, ride.start)}
                   onPress={() => openRide(ride.id)}
                 />
-              ) : null;
+              );
             }}
           </AsyncContent>
         </View>
@@ -262,6 +281,13 @@ export function RideFeed({
         <SkeletonGroup>
           <RideListRowSkeleton />
         </SkeletonGroup>
+      ) : stalled ? (
+        <View style={styles.reset}>
+          <TextAction
+            label={t('rides.more')}
+            onPress={() => void feed.fetchNextPage({ cancelRefetch: false })}
+          />
+        </View>
       ) : null}
     </View>
   );
@@ -281,6 +307,8 @@ export function RideFeed({
         ) : (
           <View style={[styles.mapMode, styles.hero]}>
             <RideMapView
+              map={map}
+              pending={nearPending}
               filters={filters}
               near={near}
               onOpen={openRide}
@@ -296,7 +324,7 @@ export function RideFeed({
     <FlatList
       ref={list}
       testID="rides-feed"
-      data={feed.data && !nearBlocked ? items : []}
+      data={feed.data && !nearBlocked && !nearPending ? items : []}
       keyExtractor={itemKey}
       ListHeaderComponent={listHeader}
       ListFooterComponent={footer}

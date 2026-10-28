@@ -10,7 +10,7 @@ import { useMinskClock } from '@/lib/use-minsk-clock';
 
 import type { RideFilters } from './filters';
 import type { NearQuery } from './near';
-import { useRideMap } from './queries';
+import type { useRideMap } from './queries';
 import { RidePointsMap } from './ride-points-map';
 import { pointsBounds } from './ride-points-style';
 
@@ -80,15 +80,21 @@ function PointsMap({
 
 /**
  * Режим «Карта» ленты райдов (05c): точки старта будущих райдов с видимым маршрутом в том же фильтре (город,
- * «Рядом»). Запрос — только в этом режиме. Карта недоступна (env, нет нативного модуля) — сообщение и «Список»;
+ * «Рядом»). Запрос — только в этом режиме (`useRideMap` в ленте). Карта недоступна (env, нет нативного модуля) — сообщение и «Список»;
  * загрузка — место карты; ошибка — `AsyncContent` с повтором; точек нет — `EmptyState` и путь в «Список».
  */
 export function RideMapView({
+  map,
+  pending,
   filters,
   near,
   onOpen,
   onList,
 }: {
+  /** запрос карты (`useRideMap` ленты — офлайн-баннер шапки от него же) */
+  map: ReturnType<typeof useRideMap>;
+  /** «Рядом» читает позицию — место карты, без точек */
+  pending: boolean;
   filters: RideFilters;
   near: NearQuery | null;
   onOpen: (rideId: string) => void;
@@ -96,7 +102,6 @@ export function RideMapView({
 }) {
   const theme = useTheme();
   const { mounted, styleUrl } = useMapStyle();
-  const map = useRideMap(filters, near, true);
   const now = useMinskClock([map.dataUpdatedAt]);
   if (mounted && styleUrl === null) {
     return (
@@ -116,7 +121,7 @@ export function RideMapView({
       />
     </SkeletonGroup>
   );
-  if (styleUrl === null) return place;
+  if (styleUrl === null || pending) return place;
   return (
     <View style={styles.fill}>
       <AsyncContent query={map} skeleton={place}>

@@ -4,6 +4,12 @@ import { useLocate, type LocateState } from '@/features/maps/use-locate';
 
 import { roundNear, type NearQuery } from './near';
 
+/**
+ * Номер чтения позиции — на весь процесс (не на экземпляр экрана): после перемонтирования вкладки новое чтение не
+ * совпадёт с ключом кэша прежней позиции того же `QueryClient` (ревью pass 1). Непрозрачный, без координат.
+ */
+let lastRead = 0;
+
 export interface NearState {
   /** чип «Рядом» включён */
   active: boolean;
@@ -22,18 +28,17 @@ export interface NearState {
 /**
  * «Рядом» вкладки «Райды» (05c, ADR-0014 поправка 05c): нажатие — одно foreground-чтение позиции через `useLocate`
  * (`readCurrentPosition` синхронно в обработчике — web), позиция сразу округляется до 0,01° и живёт только в состоянии
- * экрана; `seq` растёт на каждое успешное чтение — он, а не координаты, идёт в ключ запроса. Повторное нажатие
+ * экрана; `seq` (номер чтения на процесс) растёт на каждое успешное чтение — он, а не координаты, идёт в ключ запроса. Повторное нажатие
  * выключает и стирает позицию; ответ чтения после выключения отбрасывается.
  */
 export function useNear(): NearState {
   const [active, setActive] = useState(false);
   const [near, setNear] = useState<NearQuery | null>(null);
   const activeRef = useRef(false);
-  const seq = useRef(0);
   const onPosition = useCallback((lngLat: readonly [number, number]) => {
     if (!activeRef.current) return;
-    seq.current += 1;
-    setNear({ seq: seq.current, lngLat: roundNear(lngLat) });
+    lastRead += 1;
+    setNear({ seq: lastRead, lngLat: roundNear(lngLat) });
   }, []);
   const { state, locate, dismiss } = useLocate(onPosition);
 

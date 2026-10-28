@@ -562,3 +562,129 @@ describe('«Рядом», «Список / Карта» (05c)', () => {
     expect(await screen.findByRole('link', { name: heroLabel })).toBeOnTheScreen();
   });
 });
+
+describe('ревью pass 1: пустые и короткие страницы, «Рядом» в ожидании, карта (05c)', () => {
+  const never = () => new Promise<never>(() => undefined);
+  beforeEach(() => {
+    readPosition.mockReset();
+    process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT = LIGHT;
+    process.env.EXPO_PUBLIC_MAP_STYLE_DARK = LIGHT;
+  });
+  afterEach(() => {
+    delete process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT;
+    delete process.env.EXPO_PUBLIC_MAP_STYLE_DARK;
+  });
+
+  it('пустая первая страница с курсором — дочитывание: герой и все строки, без «Ничего не найдено»', async () => {
+    listRides
+      .mockResolvedValueOnce(page([], 'c1'))
+      .mockResolvedValueOnce(page([hero, going, open]));
+    await openRides();
+    expect(await screen.findByRole('link', { name: heroLabel })).toBeOnTheScreen();
+    expect(rowOf('Участник')).toBeTruthy();
+    expect(rowOf('Свободный')).toBeTruthy();
+    expect(listRides).toHaveBeenLastCalledWith(liveSession.accessToken, {
+      city: [],
+      limit: 20,
+      cursor: 'c1',
+    });
+    expect(screen.queryByText('Ничего не найдено')).toBeNull();
+    expect(screen.queryByText('Пока нет кофе-райдов — создайте первый')).toBeNull();
+  });
+
+  it('короткая первая страница — герой из первой страницы, строки — со следующих', async () => {
+    listRides.mockResolvedValueOnce(page([hero], 'c1')).mockResolvedValueOnce(page([going]));
+    await openRides();
+    expect(await screen.findByRole('link', { name: heroLabel })).toBeOnTheScreen();
+    const list = feed().props as { onEndReached: () => void };
+    await act(async () => list.onEndReached());
+    expect(await screen.findByRole('link', { name: /^Участник\. / })).toBeOnTheScreen();
+  });
+
+  it('пустая страница в середине — дочитывание следующей сразу', async () => {
+    listRides
+      .mockResolvedValueOnce(page([hero, going], 'c1'))
+      .mockResolvedValueOnce(page([], 'c2'))
+      .mockResolvedValueOnce(page([open]));
+    await openRides();
+    await screen.findByRole('link', { name: heroLabel });
+    const list = feed().props as { onEndReached: () => void };
+    await act(async () => list.onEndReached());
+    expect(await screen.findByRole('link', { name: /^Свободный\. / })).toBeOnTheScreen();
+    expect(listRides).toHaveBeenLastCalledWith(liveSession.accessToken, {
+      city: [],
+      limit: 20,
+      cursor: 'c2',
+    });
+  });
+
+  it('много пустых страниц подряд — дочитывание останавливается, «Показать ещё» продолжает', async () => {
+    listRides.mockImplementation(async (_token, params) =>
+      page([], `c${Number(String(params?.cursor ?? 'c0').slice(1)) + 1}`),
+    );
+    await openRides();
+    const more = await screen.findByRole('button', { name: 'Показать ещё' });
+    const calls = listRides.mock.calls.length;
+    expect(calls).toBe(5);
+    await act(() => jest.advanceTimersByTimeAsync(100));
+    expect(listRides).toHaveBeenCalledTimes(calls);
+    listRides.mockResolvedValueOnce(page([hero]));
+    await fireEvent.press(more);
+    expect(await screen.findByRole('link', { name: heroLabel })).toBeOnTheScreen();
+  });
+
+  it('«Рядом»: пока позиция читается — скелетон, а не выдача без near', async () => {
+    readPosition.mockReturnValue(never());
+    await openRides();
+    await screen.findByRole('link', { name: heroLabel });
+    await fireEvent.press(screen.getByRole('button', { name: 'Рядом' }));
+    expect(screen.queryByRole('link', { name: heroLabel })).toBeNull();
+    expect(screen.getAllByLabelText('Загрузка').length).toBeGreaterThan(0);
+  });
+
+  it('«Карта» + «Рядом» — near уходит только в запрос карты, не в ленту', async () => {
+    readPosition.mockResolvedValue({ status: 'ok', lngLat: HERE });
+    listRideMap.mockResolvedValue({ items: [], withoutStart: 0 });
+    await openRides();
+    await screen.findByRole('link', { name: heroLabel });
+    await fireEvent.press(screen.getByRole('tab', { name: 'Карта' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Рядом' }));
+    await waitFor(() =>
+      expect(listRideMap).toHaveBeenLastCalledWith(liveSession.accessToken, {
+        city: [],
+        near: '53.90,27.56',
+        radiusKm: 25,
+      }),
+    );
+    expect(listRides.mock.calls.some(([, params]) => params?.near !== undefined)).toBe(false);
+  });
+
+  it('карточка точки большой группы — прокручиваемый список и «Закрыть» вне него', async () => {
+    const items = Array.from({ length: 30 }, (_, index) => ({
+      id: `0190a6f4-0000-7000-8000-00000000b${String(index).padStart(3, '0')}`,
+      title: `Группа ${index}`,
+      startsAt: '2026-10-03T06:00:00Z',
+      start: [27.5615, 53.9023] as [number, number],
+      goingCount: 1,
+      limit: null,
+      full: false,
+    }));
+    listRideMap.mockResolvedValue({ items, withoutStart: 0 });
+    await openRides();
+    await screen.findByRole('link', { name: heroLabel });
+    await fireEvent.press(screen.getByRole('tab', { name: 'Карта' }));
+    const area = await screen.findByTestId('map-area');
+    await fireEvent(area, 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 375, height: 500 } },
+    });
+    const source = await screen.findByTestId('maplibre-GeoJSONSource');
+    await act(async () => {
+      source.props.onPress({ nativeEvent: { features: [source.props.data.features[0]] } });
+    });
+    const list = screen.getByTestId('ride-point-card-list');
+    expect(within(list).getAllByRole('link')).toHaveLength(30);
+    expect(within(list).queryByRole('button', { name: 'Закрыть' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Закрыть' })).toBeOnTheScreen();
+    expect(screen.getByTestId('ride-point-card')).toHaveStyle({ maxHeight: '70%' });
+  });
+});

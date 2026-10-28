@@ -133,6 +133,28 @@ describe('выбор маршрута райда (05c)', () => {
     await waitFor(() => expect(router.getPathname()).toBe('/routes'));
   });
 
+  it('«Мои»: первая страница без готовых, но с курсором — дочитывание, а не «пусто» (ревью pass 1)', async () => {
+    listMine
+      .mockResolvedValueOnce({ items: [processing], nextCursor: 'c1' })
+      .mockResolvedValueOnce({ items: [own], nextCursor: null });
+    await open();
+    await fireEvent.press(screen.getByRole('tab', { name: 'Мои' }));
+    expect(await screen.findByRole('link', { name: /^Вечерний круг\. / })).toBeOnTheScreen();
+    expect(screen.queryByText('Нет готовых маршрутов')).toBeNull();
+    expect(listMine).toHaveBeenLastCalledWith(liveSession.accessToken, { limit: 20, cursor: 'c1' });
+  });
+
+  it('«Мои»: готовый без дистанции — не строка и не повод «не пусто»', async () => {
+    listMine.mockResolvedValue({
+      items: [mine('Без длины', { distanceM: null })],
+      nextCursor: null,
+    });
+    await open();
+    await fireEvent.press(screen.getByRole('tab', { name: 'Мои' }));
+    expect(await screen.findByText('Нет готовых маршрутов')).toBeOnTheScreen();
+    expect(screen.queryByText('Без длины')).toBeNull();
+  });
+
   it('каталог пуст — пустое состояние, «Без маршрута» остаётся', async () => {
     listCatalog.mockResolvedValue({ items: [], nextCursor: null });
     await open();
