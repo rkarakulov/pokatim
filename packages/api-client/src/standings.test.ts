@@ -10,6 +10,7 @@ interface Call {
   url: string;
   method: string | undefined;
   credentials: RequestCredentials | undefined;
+  cache: RequestCache | undefined;
   headers: Headers;
 }
 
@@ -20,6 +21,7 @@ function stub(status: number, response: unknown) {
       url,
       method: init?.method,
       credentials: init?.credentials,
+      cache: init?.cache,
       headers: new Headers(init?.headers),
     });
     return Promise.resolve(new Response(JSON.stringify(response), { status }));
@@ -72,6 +74,20 @@ describe('приложение: рейтинг сезона (race-results-08)', 
       expect(client.calls[0]?.method).toBe('GET');
       expect(client.calls[0]?.headers.has('authorization')).toBe(false);
     }
+  });
+
+  it('таблица: по умолчанию — HTTP-кэш как обычно; fresh — в обход (`cache: no-cache`), URL тот же', async () => {
+    const plain = app(200, table);
+    await plain.api.getSeasonStandingsTable(ID, { bikeClass: 'road', group: 'm_u40' });
+    const fresh = app(200, table);
+    await fresh.api.getSeasonStandingsTable(
+      ID,
+      { bikeClass: 'road', group: 'm_u40' },
+      { fresh: true },
+    );
+    expect(plain.calls[0]?.cache).toBeUndefined();
+    expect(fresh.calls[0]?.cache).toBe('no-cache');
+    expect(fresh.calls[0]?.url).toBe(plain.calls[0]?.url);
   });
 
   it('свои строки — с access-токеном', async () => {

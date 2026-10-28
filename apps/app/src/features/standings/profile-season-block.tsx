@@ -1,5 +1,5 @@
 import type { MySeasonStandings, SeasonCard, SeasonStandingCell } from '@pokatim/contracts';
-import { space, stroke } from '@pokatim/design-tokens';
+import { size, space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { TextAction, textStyle, useTheme } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
@@ -125,7 +125,8 @@ function SeasonSection({
 }
 
 const styles = StyleSheet.create({
-  block: { gap: space.s2 },
+  // отступ секции «Профиля» — у самого блока: скрытый блок места не оставляет
+  block: { paddingTop: size.sectionGap, gap: space.s2 },
   own: { flexDirection: 'row', alignItems: 'center', gap: space.s3 },
   ownText: { flex: 1, gap: space.s1 },
   start: { alignItems: 'flex-start' },

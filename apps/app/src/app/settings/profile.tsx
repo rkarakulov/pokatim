@@ -69,10 +69,8 @@ function ProfileContent() {
             {(data) => <ProfileFormView profile={data} />}
           </AsyncContent>
         </View>
-        {/* блок «Сезон» (race-results-08c): своя строка таблицы сезона; своих строк нет — блока нет */}
-        <View style={styles.section}>
-          <ProfileSeasonBlock />
-        </View>
+        {/* блок «Сезон» (race-results-08c): своя строка таблицы сезона; своих строк нет — блока и отступа нет */}
+        <ProfileSeasonBlock />
         {/* анкета зачёта Verified (race-results-07): сразу — не ждёт данных профиля */}
         <View style={[styles.section, styles.back]}>
           <TextAction

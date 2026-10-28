@@ -174,6 +174,7 @@ export const ru = {
   'season.standings.rowA11y': '{place}, {who}, {points}',
   'season.standings.empty': 'В этой таблице пока нет участников',
   'season.standings.failed': 'Не удалось загрузить таблицу сезона',
+  'season.standings.meFailed': 'Не удалось загрузить ваше место в сезоне',
   'season.standings.emptyTitle': 'Сезон только начался',
   'season.standings.emptyMessage': 'Результаты появятся после первого протокола.',
   'season.standings.toRaces': 'К гонкам',
@@ -544,7 +545,6 @@ export const ru = {
   // блок «Сезон» (race-results-08c): своя строка таблицы сезона и гонки таблицы
   'profile.season.title': 'Сезон',
   'profile.season.all': 'Вся таблица',
-  'profile.season.line': '{group} · {class}',
   'profile.season.ownA11y': '{place}, {points}, {table}',
   'profile.season.raceA11y': '{race}: {result}, {status}',
   'profile.season.counted': 'в зачёте',

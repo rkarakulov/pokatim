@@ -201,8 +201,8 @@ export function createApiClient({
     errorSchema: ApiError,
   });
   const withCredentials = credentials ? { credentials } : {};
-  const getPublic = <S extends z.ZodType>(path: string, schema: S) =>
-    requestPublic(path, schema, { method: 'GET', ...withCredentials });
+  const getPublic = <S extends z.ZodType>(path: string, schema: S, init: RequestInit = {}) =>
+    requestPublic(path, schema, { method: 'GET', ...withCredentials, ...init });
   const get = <S extends z.ZodType>(path: string, schema: S) =>
     request(path, schema, { method: 'GET', ...withCredentials });
   const post = <S extends z.ZodType>(path: string, schema: S, body: unknown) =>
@@ -347,11 +347,20 @@ export function createApiClient({
     /** Рейтинг сезона (race-results-08) — публично: таблицы «класс × группа»; неизвестный сезон — 404. */
     getSeasonStandings: (id: string) =>
       getPublic(`/v1/seasons/${encodeURIComponent(id)}/standings`, SeasonStandingsSummary),
-    /** Таблица сезона (без `userId`); таблицы нет в снимке — пустая страница. */
-    getSeasonStandingsTable: (id: string, params: SeasonStandingsTableParams) =>
+    /**
+     * Таблица сезона (без `userId`); таблицы нет в снимке — пустая страница. `fresh` — в обход HTTP-кэша
+     * (`public, max-age=60`): перезапрос после расхождения снимков (08c, RC-11). Не для React Native: `whatwg-fetch`
+     * дописывает `_=` в URL, а query таблицы строгий (400).
+     */
+    getSeasonStandingsTable: (
+      id: string,
+      params: SeasonStandingsTableParams,
+      options: { fresh?: boolean } = {},
+    ) =>
       getPublic(
         `/v1/seasons/${encodeURIComponent(id)}/standings/table${queryString(params)}`,
         SeasonStandingsTable,
+        options.fresh ? { cache: 'no-cache' } : {},
       ),
     /** Свои строки во всех таблицах сезона (вход обязателен, `no-store`). */
     getMySeasonStandings: (accessToken: string, id: string) =>

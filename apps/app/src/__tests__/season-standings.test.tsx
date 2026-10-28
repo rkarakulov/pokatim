@@ -1,5 +1,6 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
+import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
 import type { RefreshControlProps } from 'react-native';
@@ -77,6 +78,7 @@ beforeEach(() => {
 afterEach(() => {
   jest.clearAllMocks();
   jest.useRealTimers();
+  onlineManager.setOnline(true);
 });
 
 describe('таблица сезона на экране сезона (08c)', () => {
@@ -174,6 +176,77 @@ describe('таблица сезона на экране сезона (08c)', () 
     expect(await block().findByText('Вы')).toBeOnTheScreen();
   });
 
+  it('таблица новее /me (RC-11, обратное направление) — один перезапрос /me, таблица не перезапрашивается', async () => {
+    signedIn();
+    getTable.mockResolvedValue(standingsTable(menRows, { computedAt: NEWER_AT }));
+    getMine.mockResolvedValue(mine([myStanding({ order: 2 })], COMPUTED_AT));
+    await openSeason();
+    await block().findByText('Анна К.');
+
+    await waitFor(() => expect(getMine).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(100);
+    });
+    expect(getMine).toHaveBeenCalledTimes(2);
+    expect(getTable).toHaveBeenCalledTimes(1);
+    expect(block().queryByText('Вы')).toBeNull();
+  });
+
+  it('первая ошибка /me — свой баннер с повтором, публичная таблица остаётся', async () => {
+    signedIn();
+    getMine
+      .mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }))
+      .mockResolvedValue(mine([myStanding({ order: 1 })]));
+    await openSeason();
+
+    expect(await block().findByText('Не удалось загрузить ваше место в сезоне')).toBeOnTheScreen();
+    expect(block().getByText('Анна К.')).toBeOnTheScreen();
+    expect(block().queryByText('Вы')).toBeNull();
+    await fireEvent.press(block().getByRole('button', { name: 'Повторить' }));
+    expect(await block().findByText('Вы')).toBeOnTheScreen();
+    expect(block().queryByText('Не удалось загрузить ваше место в сезоне')).toBeNull();
+  });
+
+  it('ошибка обновления /me при данных — «Вы» остаётся, баннер с повтором', async () => {
+    signedIn();
+    getMine.mockResolvedValue(mine([myStanding({ order: 1 })]));
+    await openSeason();
+    expect(await block().findByText('Вы')).toBeOnTheScreen();
+
+    getMine.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    const list = screen.getByTestId('season-detail');
+    await act(async () => {
+      (list.props.refreshControl as ReactElement<RefreshControlProps>).props.onRefresh?.();
+    });
+    expect(await block().findByText('Не удалось загрузить ваше место в сезоне')).toBeOnTheScreen();
+    expect(block().getByText('Вы')).toBeOnTheScreen();
+  });
+
+  it('вошедший без сети — «Нет соединения» один раз, не вечный скелетон', async () => {
+    signedIn();
+    onlineManager.setOnline(false);
+    await openSeason();
+
+    expect(await block().findByText('Нет соединения')).toBeOnTheScreen();
+    expect(block().getAllByText('Нет соединения')).toHaveLength(1);
+    expect(block().queryByLabelText('Загрузка')).toBeNull();
+  });
+
+  it('заметка N из M и число участников — из первой страницы таблицы, не из сводки', async () => {
+    getTable.mockResolvedValue(
+      standingsTable(menRows, { riders: 4, racesTotal: 4, racesCounted: 3 }),
+    );
+    await openSeason();
+    await block().findByText('Анна К.');
+
+    expect(block().getByText('Мужчины до 40 · Шоссе · 4 участника')).toBeOnTheScreen();
+    expect(
+      block().getByText(
+        'В зачёт идут финальные результаты Verified: лучшие 3 из 4 гонок. DQ — 0 очков и не выбрасывается.',
+      ),
+    ).toBeOnTheScreen();
+  });
+
   it('«Показать ещё» — следующая страница по курсору', async () => {
     getTable
       .mockResolvedValueOnce(standingsTable(menRows.slice(0, 2), { riders: 3, nextCursor: 'c2' }))
@@ -220,6 +293,9 @@ describe('таблица сезона на экране сезона (08c)', () 
 
     expect(await block().findByText('В этой таблице пока нет участников')).toBeOnTheScreen();
     expect(block().queryByText('Не удалось загрузить')).toBeNull();
+    // счётчики — из пустой страницы, а не из сводки (там 3 участника)
+    expect(block().getByText('Мужчины до 40 · Шоссе · 0 участников')).toBeOnTheScreen();
+    expect(block().queryByText(/В зачёт идут/)).toBeNull();
   });
 
   it('пустой сезон — «Сезон только начался», «К гонкам» ведёт во вкладку', async () => {

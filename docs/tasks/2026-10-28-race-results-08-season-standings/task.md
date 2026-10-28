@@ -982,3 +982,37 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
 
 - Ручная проверка на iOS/Android/web (симулятор, `build:web` + `start:web`, Playwright-смоук) — NOT VERIFIED в этой
   сессии: только jest (native-проект) и typecheck.
+- Native: перезапрос таблицы после расхождения снимков (RC-11, «Курсор и снимок») идёт обычным GET — обход
+  HTTP-кэша невозможен без изменения сервера: `fetch` RN — `whatwg-fetch`, при `cache: 'no-cache'` дописывает `_=` в
+  URL, а `SeasonStandingsTableQuery` строгий (400). Android (OkHttp RN без кэша) не затронут; iOS (`NSURLCache`)
+  может вернуть кэшированный ответ до 60 с — «Вы» появится при pull-to-refresh или следующем открытии. Варианты:
+  разрешить `_` в query на сервере или отдавать таблицу с `no-cache`/`ETag` — отдельной задачей.
+
+### Фиксы ревью 08c pass 1
+
+Ревью: Codex — REQUEST CHANGES (`findings-08c-codex.md`), Claude — APPROVE с замечаниями (`findings-08c-claude.md`).
+
+- HIGH (Codex): ошибка `/me` у вошедшего — свой баннер «Не удалось загрузить ваше место в сезоне» с повтором
+  (`me.refetch`, `TabFailure`), публичная таблица остаётся; ошибка обновления — данные и «Вы» остаются + баннер; до
+  ответа сводки баннера нет (её состояние — `AsyncContent`, «Нет соединения» один раз). Тесты: первая ошибка `/me`,
+  ошибка обновления, вошедший без сети.
+- MEDIUM (Codex): заметка «лучшие N из M» и число участников — из первой страницы таблицы (`pages[0]`), сводка —
+  переключатели и до ответа; M = 0 (RC-12) — заметки нет, «0 участников». Тесты: разные счётчики сводки и таблицы,
+  RC-12.
+- MEDIUM (Claude): `api-client` `getSeasonStandingsTable(id, params, { fresh })` — необязательный параметр, `fresh` →
+  `cache: 'no-cache'` (остальные вызовы без изменений). Приложение: `refetchFresh` (RC-11) и сброс «Курсор и снимок»
+  — fresh только при `BYPASS_HTTP_CACHE` (`features/standings/http-cache(.web).ts`: web — да, native — нет, см.
+  follow-ups). Тесты: `api-client` (fresh → `no-cache`, URL тот же), `season-standings-cache.test.tsx` (первый запрос
+  обычный, перезапрос RC-11 и сброс — `{ fresh: true }`), `http-cache(.web).test.ts`.
+- LOW (Claude): удалён `profile.season.line`; отступ секции — внутри `ProfileSeasonBlock` (скрытый блок места не
+  оставляет; скелетон — только пока `/me` грузится); тест обратного RC-11 (таблица новее `/me` → один перезапрос
+  `/me`, таблица — нет).
+- TDD: новые тесты красные до кода — `Tests: 4 failed, 27 passed` + `Cannot find module './http-cache'`; после —
+  `Test Suites: 10 passed`, `Tests: 100 passed` (standings, profile, season), web `http-cache` — 1 passed,
+  `api-client` `standings.test.ts` — 4 passed.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08c_test REDIS_URL_TEST=redis://127.0.0.1:6611/1 pnpm check`
+  (временный свой `redis-server`) → `EXIT=0`: Prettier и dependency-cruiser (1505 modules) — ок, typecheck `9/9`;
+  contracts `315`, api-client `111`, api `Test Files 135 passed`, `Tests 1453 passed`, admin `327`, app
+  `Test Suites: 174 passed`, `Tests: 1623 passed`; `Tasks: 15 successful, 15 total`. Предыдущий прогон упал на двух
+  нетронутых тестах API под нагрузкой (таймаут семафора `parse-thread.test.ts`, `ECONNRESET` в
+  `track-uploads.int.test.ts`); отдельно — `42 passed`, повторный полный — зелёный.

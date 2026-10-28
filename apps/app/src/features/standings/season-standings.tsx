@@ -58,8 +58,9 @@ function StandingRowView({ row, own }: { row: SeasonStandingRow; own: boolean })
 
 /**
  * Выбранная таблица: переключатели класса и группы (только таблицы сводки), заметка «лучшие N из M», подпись,
- * строки, «Показать ещё». «Вы» — по `order` из `/me` только при одном снимке (RC-11); снимки разошлись — один раз
- * перезапрашивается более старый ответ.
+ * строки, «Показать ещё». Счётчики (N, M, участники) — из первой страницы таблицы (её снимок), сводка — только для
+ * переключателей и до ответа. «Вы» — по `order` из `/me` только при одном снимке (RC-11); снимки разошлись — один
+ * раз перезапрашивается более старый ответ (таблица — в обход HTTP-кэша, где можно).
  */
 function StandingsTables({
   seasonId,
@@ -77,9 +78,10 @@ function StandingsTables({
   const pages = query.data?.pages;
   const first = pages?.[0];
   const own = ownOrder(first, me.data);
-  useSnapshotSync(first?.computedAt, me.data, query.refetch, me.refetch);
+  useSnapshotSync(first?.computedAt, me.data, query.refetchFresh, me.refetch);
 
   if (!table) return null;
+  const counts = first ?? table;
   const rows = pages?.flatMap((page) => page.items) ?? [];
   const pickClass = (bikeClass: BikeClass) => setPicked((prev) => ({ ...prev, bikeClass }));
   const pickGroup = (groupKey: ResultGroupKey) =>
@@ -110,13 +112,16 @@ function StandingsTables({
           onChange={pickGroup}
         />
       </ScrollView>
-      <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
-        {t('season.standings.note', { count: table.racesTotal, counted: table.racesCounted })}
-      </Text>
+      {/* таблицы нет в снимке (RC-12) — M = 0, заметки нет */}
+      {counts.racesTotal > 0 ? (
+        <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+          {t('season.standings.note', { count: counts.racesTotal, counted: counts.racesCounted })}
+        </Text>
+      ) : null}
       <Text style={[textStyle('label'), { color: theme.text.primary }]}>
         {t('season.standings.caption', {
           table: tableLabel(table.groupKey, table.bikeClass),
-          count: table.riders,
+          count: counts.riders,
         })}
       </Text>
       <TabFailure query={query} message={t('season.standings.failed')} />
@@ -200,6 +205,10 @@ export function SeasonStandings({
           </Text>
         ) : null}
       </View>
+      {/* «моё» — свой баннер с повтором; публичная таблица остаётся. Сводки ещё нет — её состояние покажет блок ниже */}
+      {signedIn && summary.data !== undefined ? (
+        <TabFailure query={me} message={t('season.standings.meFailed')} />
+      ) : null}
       <AsyncContent
         query={state}
         skeleton={<RowsSkeleton />}
