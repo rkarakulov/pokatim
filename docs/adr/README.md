@@ -49,3 +49,4 @@ ADR нужен, когда решение: меняет инвариант `AGEN
 | [0015](0015-account-deletion.md) | Удаление аккаунта: оркестратор `account`, порты стирания модулей, маркер стёртого e-mail (HMAC в `email`), повторный проход и регламент | Accepted |
 | [0016](0016-app-themes.md) | Темы приложения: реестр в `@pokatim/design-tokens`, `AppThemeProvider` поверх базы, доставка — публичный GET, кэш native, SSR через `+middleware.ts` и `globalThis` | Accepted |
 | [0017](0017-notifications-and-push.md) | Уведомления: модуль `notifications` (события outbox источников, порты получателей), push через Expo на iOS/Android (без web push), текст — снимок сервера, тихие часы, fan-out outbox для слайса 08 — в app-foundation | Accepted |
+| [0018](0018-story-cards.md) | Карточки для сторис: серверный рендер satori + resvg в worker, PNG в Redis по capability-URL, шаринг — системный лист native и Web Share API | Accepted |

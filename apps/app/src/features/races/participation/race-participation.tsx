@@ -27,6 +27,7 @@ import {
   raceActionErrorText,
 } from '../participation-format';
 import { useEnterRace } from '../queries';
+import { ShareStoryButton } from '../story/share-story-button';
 import { AttemptList } from './attempt-list';
 import { EntryActions } from './entry-actions';
 import { EntryResult } from './entry-result';
@@ -166,6 +167,7 @@ export function RaceParticipation({
     <Block>
       <Kicker label={t('races.entry.title')} />
       <EntryResult entry={data} race={race} now={now} />
+      {data.actions.canShareStory ? <ShareStoryButton raceId={race.id} /> : null}
       <EntryActions entry={data} raceId={race.id} now={now} />
       <AttemptList attempts={data.attempts} pendingUploads={data.pendingUploads} now={now} />
     </Block>

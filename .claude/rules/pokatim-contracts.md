@@ -123,3 +123,9 @@ paths:
   цель — белый список (`NotificationTarget`), незнакомая в ответе — `{ type: 'unknown' }`; запросы (`NotificationSettings`
   с `startHour ≠ endHour`, `RegisterPushToken`, `RevokePushToken`, `NotificationListQuery`) — `strictObject`. api-client —
   8 методов `/v1/notifications*`.
+- Карточка для сторис (story-cards, ADR-0018): `src/sharing/story-card.schema.ts` — `STORY_CARD_TEMPLATES`
+  (`line | night`, только в конец), запрос `StoryCardQuery` (`strictObject`), ответ `StoryCardStatus` —
+  `discriminatedUnion` `pending | ready (token) | failed` (незнакомый статус — ошибка разбора), `StoryCardToken`
+  (22 символа base64url). `MyRaceEntry.actions.canShareStory` — `.default(false)` (старый сервер — кнопки нет). Код
+  `STORY_CARD_UNAVAILABLE` (409) в конце `ErrorCode`. api-client — `getStoryCard`, `storyCardImageUrl(token)` (адрес
+  без запроса: сервер свой публичный origin не знает).

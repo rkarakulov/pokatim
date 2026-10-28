@@ -215,6 +215,7 @@ export function RaceResultsTable({
   ownEntryId,
   ownGroup,
   rowAction,
+  ownRowAction = null,
 }: {
   raceId: string;
   /** таблица группы по умолчанию сервера (запрос без `group`) */
@@ -224,6 +225,8 @@ export function RaceResultsTable({
   ownGroup?: ResultGroupKey | 'unknown' | null;
   /** нажатие на чужую строку (карточка соперника); `group` — вкладка не по умолчанию; `null` — не нажимаема */
   rowAction?: (entryId: string, group: ResultGroupKey | undefined) => (() => void) | null;
+  /** нажатие на свою строку (story-cards: «Ваш результат» и «Поделиться в сторис»); `null` — не нажимаема */
+  ownRowAction?: (() => void) | null;
 }) {
   const theme = useTheme();
   const first = results.data?.pages[0];
@@ -325,7 +328,7 @@ export function RaceResultsTable({
                     key={row.entryId}
                     row={row}
                     own={own}
-                    onPress={own ? null : (rowAction?.(row.entryId, group) ?? null)}
+                    onPress={own ? ownRowAction : (rowAction?.(row.entryId, group) ?? null)}
                   />
                 );
               })}

@@ -166,6 +166,7 @@ function RootShell() {
                 <Stack.Screen name="races/pick/[id]" />
                 {/* споры (race-results-06, RC-14): карточка соперника, подача и ответ — только вошедшим */}
                 <Stack.Screen name="races/result/[id]/[entryId]" />
+                <Stack.Screen name="races/story/[id]" />
                 <Stack.Screen name="races/dispute/[id]/[entryId]" />
                 <Stack.Screen name="races/dispute-response/[id]/[disputeId]" />
               </Stack.Protected>

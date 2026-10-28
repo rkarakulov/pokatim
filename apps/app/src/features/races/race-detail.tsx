@@ -180,6 +180,12 @@ function RaceDetailView({
           ownGroup={signedIn ? (entry.data?.entry?.groupKey ?? null) : null}
           // карточка соперника — только вошедшему участнику, когда ей есть что показать (RC-14); строка чужой группы
           // зачёта — нет (подачу сервер отклонит); вкладка по умолчанию — группа ответа без `group`
+          // своя строка — «Ваш результат» и «Поделиться в сторис», когда карточка есть (story-cards, право — сервер)
+          ownRowAction={
+            signedIn && entry.data?.entry && entry.data.actions.canShareStory
+              ? () => router.push(rivalPath(race.id, entry.data!.entry!.id))
+              : null
+          }
           rowAction={(entryId, group) =>
             signedIn &&
             canOpenRival(
