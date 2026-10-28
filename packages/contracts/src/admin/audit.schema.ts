@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { AppThemeId } from '../appearance/appearance.schema.ts';
+import { AppDecorId, AppThemeId } from '../appearance/appearance.schema.ts';
 import { PageQuery, Uuid } from '../common.ts';
 import { RaceCancelReason } from '../races/race.schema.ts';
 import { RouteRejectionReason } from '../routes/route-publication.schema.ts';
@@ -61,6 +61,8 @@ export const AUDIT_ACTIONS = [
   'route.rider_hidden',
   'route.rider_restored',
   'route.rider_reports_dismissed',
+  // halloween-decor: админ включил или выключил сезонный декор (subject `platform`, детали decorFrom/decorTo)
+  'appearance.decor_changed',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -128,6 +130,9 @@ export const AuditEntry = z.object({
       /** app-themes: смена темы приложения */
       themeFrom: AppThemeId.optional(),
       themeTo: AppThemeId.optional(),
+      /** halloween-decor: смена сезонного декора */
+      decorFrom: AppDecorId.optional(),
+      decorTo: AppDecorId.optional(),
       /** routes-06: код причины отклонения заявки (комментарий автору — в `reason`) */
       rejectionReason: RouteRejectionReason.optional(),
     })

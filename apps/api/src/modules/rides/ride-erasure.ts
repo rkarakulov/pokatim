@@ -6,6 +6,9 @@ import { RIDE_ROUTES, type RideRoutes } from '../routes';
 import { RIDES_RIDE_CANCELLED, type RideEventPayload } from './rides.events';
 import { RidesRepository } from './rides.repository';
 
+/** Пачка поиска висячих `routeId` (≤ 200 id маршрутов в запросе порта — с запасом на повторы). */
+const DANGLING_BATCH = 200;
+
 export interface RideErasureResult {
   cancelled: number;
   left: number;
@@ -21,7 +24,8 @@ export interface RideErasureResult {
  * Отмена опубликованного — по одному райду: та же условная операция, что у организатора, в транзакции с событием
  * `rides.ride-cancelled` (ADR-0017); повтор фильтр не проходит — второго события нет. Скрытые — без события (RC-8).
  * Точки райдов на маршрутах удалённого (05c, 8.1 RC-1) — центр города: шаг `rides` идёт до шага `routes`, id
- * маршрутов ещё есть.
+ * маршрутов ещё есть. Маршруты, удалённые автором раньше (и гонка с удалением во время шага), — отдельный шаг
+ * `resetDanglingStarts` после шага `routes`.
  */
 @Injectable()
 export class RideErasure {
@@ -45,6 +49,28 @@ export class RideErasure {
       now,
     );
     return { cancelled, left, unsigned, restarted };
+  }
+
+  /**
+   * Точные точки райдов (любых организаторов) на висячих `routeId` (маршрут уже удалён) — центр города (05c, RC-1).
+   * Глобальный проход пачками по `_id` (`DANGLING_BATCH`), существование маршрутов — порт `RideRoutes.existing`.
+   * Повтор — no-op: сброшенные уже не `startPrecise`.
+   */
+  async resetDanglingStarts(now: Date): Promise<number> {
+    let reset = 0;
+    let afterId: string | null = null;
+    for (;;) {
+      const page = await this.repository.precisePage(afterId, DANGLING_BATCH);
+      const routeIds = [
+        ...new Set(page.map((doc) => doc.routeId).filter((id): id is string => id !== null)),
+      ];
+      const existing = await this.rideRoutes.existing(routeIds);
+      const dangling = routeIds.filter((id) => !existing.has(id));
+      if (dangling.length > 0) reset += await this.repository.resetStartsForRoutes(dangling, now);
+      const last = page.at(-1);
+      if (page.length < DANGLING_BATCH || !last) return reset;
+      afterId = last._id;
+    }
   }
 
   private cancelOne(userId: string, rideId: string, now: Date): Promise<boolean> {

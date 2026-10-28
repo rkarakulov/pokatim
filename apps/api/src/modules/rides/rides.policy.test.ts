@@ -4,11 +4,14 @@ import { describe, expect, it } from 'vitest';
 import type { RideRouteRef } from '../routes';
 import {
   changesStart,
+  citiesNear,
+  distanceKm,
   moderationTransition,
   rideFull,
   ridePhase,
   RIDES_POLICY,
   rideStartOf,
+  ridePointNow,
   rideViewer,
   validateStartsAt,
   visibleTo,
@@ -257,6 +260,51 @@ describe('rideStartOf (05c)', () => {
     const start = rideStartOf(null, 'gomel');
     start.geo.coordinates[0] = 0;
     expect(CITY_CENTERS.gomel[0]).not.toBe(0);
+  });
+});
+
+describe('точка «Рядом» на чтении (05c, фиксы ревью RC-1)', () => {
+  const ref = (access: RideRouteRef['access']): RideRouteRef => ({
+    id: 'r1',
+    title: 'Кольцо',
+    distanceM: 42_000,
+    elevationGainM: 300,
+    start: [27.61, 53.95],
+    access,
+  });
+  const doc = (startPrecise: boolean, routeId: string | null = 'r1') => ({
+    cityCode: 'borisov' as const,
+    routeId,
+    geo: point(27.62, 53.96),
+    startPrecise,
+  });
+
+  it('distanceKm: Минск — Борисов ≈ 72 км, точка до себя — 0', () => {
+    const km = distanceKm(CITY_CENTERS.minsk, CITY_CENTERS.borisov);
+    expect(km).toBeGreaterThan(65);
+    expect(km).toBeLessThan(80);
+    expect(distanceKm(CITY_CENTERS.minsk, CITY_CENTERS.minsk)).toBe(0);
+  });
+
+  it('citiesNear: города, чей центр в радиусе', () => {
+    expect(citiesNear(CITY_CENTERS.minsk, 25)).toEqual(['minsk']);
+    expect(citiesNear(CITY_CENTERS.minsk, 100)).toEqual(
+      expect.arrayContaining(['minsk', 'borisov']),
+    );
+    expect(citiesNear([0, 0], 25)).toEqual([]);
+  });
+
+  it('точная — только пока маршрут в каталоге, и это старт маршрута сейчас (не сохранённая точка); иначе центр города', () => {
+    expect(ridePointNow(doc(true), ref('public'))).toEqual({
+      coordinates: [27.61, 53.95],
+      precise: true,
+    });
+    const center = { coordinates: CITY_CENTERS.borisov, precise: false };
+    expect(ridePointNow(doc(true), ref('private'))).toEqual(center);
+    expect(ridePointNow(doc(true), undefined)).toEqual(center);
+    expect(ridePointNow(doc(false), ref('public'))).toEqual(center);
+    expect(ridePointNow(doc(true, null), ref('public'))).toEqual(center);
+    expect(ridePointNow({ cityCode: 'borisov', routeId: 'r1' }, ref('public'))).toEqual(center);
   });
 });
 

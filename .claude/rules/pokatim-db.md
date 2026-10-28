@@ -247,6 +247,24 @@ paths:
 - Порядок «запуск ↔ публикация ↔ применение» и «устаревший вердикт» — по `at`/`checkedAt` из `CLOCK`, не по `_id`
   (`uuidv7` не монотонен внутри миллисекунды).
 
+## Рейтинг сезона (race-results-08)
+
+- `season_standings` (заголовок снимка, `_id` = seasonId: `formulaVersion`, `sourceVersion`, `fingerprint`,
+  `computedAt`, гонки и таблицы) и `season_standing_rows` (строка таблицы: `seasonId`, `bikeClass`, `groupKey`,
+  `order`, `userId`, место, очки, ячейки по гонкам) — **производная проекция** протоколов, не append-only. Единственный
+  писатель — `StandingsRepository`. Снимок сезона заменяется целиком одной транзакцией: **первая** операция —
+  `claimSeason` (условный upsert заголовка: `formulaVersion` меньше или та же формула и `sourceVersion` меньше), затем
+  `deleteMany` + `insertMany` строк. Сохранённый не старше — upsert вставляет тот же `_id` → `isDuplicateKey(_id_)` →
+  `stale`, откат (RC-5; отрицательное доказательство — `standings-locks.int.test.ts`).
+- `sourceVersion` = Σ текущих ревизий гонок сезона с протоколом — монотонна: набор гонок с протоколом и ревизии только
+  растут (сезон, класс, окно и название гонки в фазе `final` не меняются, RC-1).
+- Чтение — снимок в одной snapshot-сессии; `races`/`race_protocol_rows` из `standings` не читаются (порты
+  `SeasonRaces`, `ResultsForStandings`).
+- Миграция `0030_standings` (expand-only): коллекции, `season_standing_rows_order_unique` `(seasonId, bikeClass,
+  groupKey, order)`, `season_standing_rows_user_idx` `(seasonId, userId)`, частичный `races_protocol_idx` `(seasonId,
+  windowEndsAt, _id)` при `protocolPublishedAt: { $type: 'date' }` — запрос порта `protocolRaces` содержит ровно это
+  условие (RC-4). Бэкфилла нет: первый прогон регламента строит снимки.
+
 ## Споры (race-results-06)
 
 - `disputes`, `dispute_events` — единственный писатель `DisputesRepository` (модуль `disputes`). `dispute_events` —
@@ -317,15 +335,21 @@ paths:
   райда первой — **HIGH** (отрицательное доказательство — гонка в `ride-reports.int.test.ts`).
 - Очереди — частичные индексы `rides_report_queue_idx` (`openReportCount > 0`, запрос обязан содержать это условие)
   и `rides_hidden_queue_idx` (`status: 'hidden'`); публичное чтение и лента — `status ∈ {published, cancelled}`.
-- Маршрут и точка «Рядом» (05c, миграция `0030_rides_geo`: бэкфилл `routeId: null`, `geo` — центр города,
+- Маршрут и точка «Рядом» (05c, миграция `0031_rides_geo`: бэкфилл `routeId: null`, `geo` — центр города,
   `startPrecise: false`; индекс `rides_geo_feed_idx` `{ geo: '2dsphere', startsAt: 1 }`): `routeId` — только ссылка
   (название, длина, старт — порт `RideRoutes` на каждом чтении, снимка нет); `geo` пишут создание и правка
   (`rideStartOf`: маршрут виден публично — его старт и `startPrecise: true`, иначе `CITY_CENTERS[cityCode]`).
   Правка пересчитывает точку при смене маршрута или города и при прикреплённом маршруте с `startPrecise: false`
-  (RC-3); перенос (`changesStart`) — и смена точной точки на другую точную (RC-4). «Рядом» — `$geoWithin
-  $centerSphere` в `$and` ленты (не `$near`: курсор по времени). `geo`/`startPrecise` наружу не уходят
+  (RC-3); перенос (`changesStart`) — и смена точной точки на другую точную (RC-4). «Рядом» — условие в `$and` ленты
+  (не `$near`: курсор по времени), кандидаты только по публичным данным: `$or` [`cityCode` ∈ городов, чей центр в
+  круге (без требования `geo`/`startPrecise` — документы старого API); `startPrecise: true` + `routeId` ∈
+  `RideRoutes.publicStartsWithin` (маршруты каталога со стартом в круге, `$geoWithin $centerSphere` по
+  `routes_start_2dsphere`, ≤ 500) + `geo` в круге]. Сохранённая `geo` райда на снятом маршруте в выбор не входит —
+  курсор после пачек не оракул. Окончательная точка — `ridePointNow` сервиса (старт маршрута каталога сейчас или
+  центр города). `geo`/`startPrecise` наружу не уходят
   (`PUBLIC_PROJECTION`). Стирание — `resetStartsForRoutes`: точные точки райдов любых организаторов на маршрутах
-  удалённого → центр города (одна pipeline-операция, `version` не меняется, повтор — no-op).
+  удалённого → центр города (одна pipeline-операция, `version` не меняется, повтор — no-op); висячие `routeId`
+  (маршрут удалён раньше) — `precisePage` пачками по `_id` + порт `existing`.
 
 ## Удаление аккаунта (ADR-0015, `docs/product/account.md`)
 
@@ -343,11 +367,15 @@ paths:
 - Миграция `0023_account_deletion` (expand-only): `device_connections_user_idx`, `device_imports_user_idx`,
   `device_link_tickets_user_idx` (`{ userId: 1 }`), `users_erasure_pending_idx`.
 - Настройки платформы (app-themes): коллекция `platform_settings` — документы-синглтоны по `_id`; `appearance`
-  (`themeId`, `version`, `updatedAt`) — единственный писатель `AppearanceRepository`, нет документа — `classic`,
+  (`themeId`, `decor?` — halloween-decor, нет поля — `none`, пишется только при смене, `version`, `updatedAt`) — единственный писатель `AppearanceRepository`, нет документа — `classic`,
   `version: 0` (seed нет; первая смена — `insertOne`, дубликат `_id` → 409). Кто менял — только `panel_audit` (без
   `userId` в документе: порт стирания не нужен). Миграция `0024_platform_settings` — только `ensureCollection`.
 - Append-only журналы (`user_consents`, `profile_consent_events`, `panel_audit`, `device_audit`, `dispute_events`,
   `race_recalculations`, `race_protocol_rows`) не меняются (A9); `race_entries`, споры и протоколы — остаются.
+- Рейтинг сезона (race-results-08): **порт стирания не нужен** — снимок `season_standing_rows` — проекция
+  `race_protocol_rows` (A9: протоколы с псевдонимным `userId` остаются), без имён, e-mail и биометрии; имя читается
+  при каждом запросе через `RIDER_NAMES` — удалённый становится «Участник». Стирание снимка разошлось бы с
+  протоколом, а следующий пересчёт вернул бы строки (RC-6).
 - Новый модуль с данными пользователя обязан дать порт стирания и шаг в `AccountErasureService`.
 
 ## Уведомления (ADR-0017, `docs/product/notifications.md`)

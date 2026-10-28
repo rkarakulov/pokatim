@@ -29,7 +29,8 @@ import { attemptLastVerdict } from './0026_attempt_last_verdict';
 import { pushTicketsUser } from './0027_push_tickets_user';
 import { entryTier } from './0028_entry_tier';
 import { routesPublication } from './0029_routes_publication';
-import { ridesGeo } from './0030_rides_geo';
+import { standings } from './0030_standings';
+import { ridesGeo } from './0031_rides_geo';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -65,5 +66,6 @@ export const migrations: readonly MongoMigration[] = [
   pushTicketsUser,
   entryTier,
   routesPublication,
+  standings,
   ridesGeo,
 ];

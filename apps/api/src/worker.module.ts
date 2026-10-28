@@ -20,6 +20,7 @@ import { DisputesCoreModule, DisputesWorkerModule } from './modules/disputes';
 import { notificationsOutboxRoutes, NotificationsWorkerModule } from './modules/notifications';
 import { resultsOutboxRoutes, ResultsWorkerModule } from './modules/results';
 import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
+import { StandingsWorkerModule } from './modules/standings';
 import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
 
 /** Отдельный процесс: задачи очередей (письма, тяжёлая обработка) не блокируют API. */
@@ -59,6 +60,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     AccountWorkerModule,
     // приём событий для центра уведомлений (ADR-0017)
     NotificationsWorkerModule,
+    // регламент рейтинга сезона (race-results-08, DV-1: сверка отпечатков, без событий)
+    StandingsWorkerModule,
   ],
 })
 export class WorkerModule {}

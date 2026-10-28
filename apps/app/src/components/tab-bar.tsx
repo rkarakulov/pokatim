@@ -12,7 +12,7 @@ import { Icon, type IconName } from './icon';
 export const TAB_NAMES = ['index', 'races', 'rides', 'routes', 'calendar'] as const;
 type TabName = (typeof TAB_NAMES)[number];
 
-/** Иконки вкладок (вариант `icons`): полноту по вкладкам проверяет тип. */
+/** Иконки вкладок (оба варианта): полноту по вкладкам проверяет тип. */
 const TAB_ICONS: Record<TabName, IconName> = {
   index: 'home',
   races: 'races',
@@ -31,7 +31,7 @@ interface TabItemProps {
   tabBar: AppTheme['tabBar'];
 }
 
-/** «Классика»: 2 px полоса по верхнему краю у активной и подпись. */
+/** «Классика»: 2 px полоса по верхнему краю у активной, под ней — иконка и подпись. */
 function ClassicTabItem({ name, label, focused, tabBar }: TabItemProps) {
   return (
     <>
@@ -39,27 +39,35 @@ function ClassicTabItem({ name, label, focused, tabBar }: TabItemProps) {
         testID={`tab-indicator-${name}`}
         style={[styles.indicator, { backgroundColor: focused ? tabBar.active : 'transparent' }]}
       />
-      <TabLabel label={label} focused={focused} tabBar={tabBar} />
+      <View style={styles.classicItem}>
+        <TabIcon name={name} focused={focused} tabBar={tabBar} />
+        <TabLabel label={label} focused={focused} tabBar={tabBar} />
+      </View>
     </>
   );
 }
 
-/** Темы с иконками: иконка над подписью, полосы нет; активная — с заливкой (iOS). Иконка декоративная. */
+/** Темы с иконками: иконка над подписью, полосы нет. */
 function IconTabItem({ name, label, focused, tabBar }: TabItemProps) {
-  // незнакомое имя (тестовый навигатор) — только подпись
-  const icon = isTabName(name) ? TAB_ICONS[name] : null;
   return (
     <View style={styles.iconItem}>
-      {icon ? (
-        <Icon
-          name={icon}
-          size={size.icon}
-          color={focused ? tabBar.active : tabBar.inactive}
-          filled={focused}
-        />
-      ) : null}
+      <TabIcon name={name} focused={focused} tabBar={tabBar} />
       <TabLabel label={label} focused={focused} tabBar={tabBar} />
     </View>
+  );
+}
+
+/** Иконка вкладки: активная — с заливкой (iOS); декоративная — имя вкладки даёт подпись. */
+function TabIcon({ name, focused, tabBar }: Omit<TabItemProps, 'label'>) {
+  // незнакомое имя (тестовый навигатор) — только подпись
+  if (!isTabName(name)) return null;
+  return (
+    <Icon
+      name={TAB_ICONS[name]}
+      size={size.icon}
+      color={focused ? tabBar.active : tabBar.inactive}
+      filled={focused}
+    />
   );
 }
 
@@ -84,8 +92,8 @@ const TAB_ITEM: Record<AppThemeLayout['tabBar'], ComponentType<TabItemProps>> = 
 };
 
 /**
- * Панель вкладок по прототипу: активная — метка 600, неактивная — метка 500; у «Классики» — 2 px полоса по верхнему
- * краю, у тем — иконка над подписью. Цвета — группа ролей темы `tabBar` (у «Классики» — прежние surface.default /
+ * Панель вкладок по прототипу: активная — метка 600, неактивная — метка 500; иконка над подписью у всех тем, у
+ * «Классики» — ещё 2 px полоса по верхнему краю. Цвета — группа ролей темы `tabBar` (у «Классики» — прежние surface.default /
  * text.primary / text.secondary).
  */
 export function TabBar({ state, descriptors, emitter, navigateToTab, insets }: BottomTabBarProps) {
@@ -147,5 +155,6 @@ const styles = StyleSheet.create({
     gap: space.s2,
   },
   indicator: { alignSelf: 'stretch', height: stroke.indicator },
+  classicItem: { alignItems: 'center', gap: space.s1 },
   iconItem: { alignItems: 'center', paddingTop: space.s2, gap: space.s1 },
 });

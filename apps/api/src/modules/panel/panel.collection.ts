@@ -1,4 +1,5 @@
 import type {
+  AppDecorId,
   AppThemeId,
   AuditAction,
   AuditSubjectKind,
@@ -89,6 +90,9 @@ export interface AuditDetailsDoc {
   /** app-themes: смена темы приложения */
   themeFrom?: AppThemeId;
   themeTo?: AppThemeId;
+  /** halloween-decor: смена сезонного декора */
+  decorFrom?: AppDecorId;
+  decorTo?: AppDecorId;
   /** routes-06: код причины отклонения заявки маршрута райдера */
   rejectionReason?: RouteRejectionReason;
 }

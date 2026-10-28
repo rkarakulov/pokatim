@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import type { RideRouteRef, RideRoutes } from './ride-routes.port';
+import { PUBLIC_STARTS_CAP, type RideRouteRef, type RideRoutes } from './ride-routes.port';
 import { type RideRouteFields, RoutesRepository } from './routes.repository';
 
 /** Ссылка на маршрут; документ без старта или длины (у `ready` их нет только по ошибке) — `null`. */
@@ -57,7 +57,16 @@ export class RideRoutesService implements RideRoutes {
     return result;
   }
 
+  publicStartsWithin(center: readonly [number, number], radiusKm: number): Promise<string[]> {
+    return this.repository.inCatalogStartsWithin(center, radiusKm, PUBLIC_STARTS_CAP);
+  }
+
   ownedRouteIds(userId: string): Promise<string[]> {
     return this.repository.ownIds(userId);
+  }
+
+  async existing(routeIds: readonly string[]): Promise<Set<string>> {
+    const ids = [...new Set(routeIds)];
+    return new Set(ids.length === 0 ? [] : await this.repository.existingIds(ids));
   }
 }

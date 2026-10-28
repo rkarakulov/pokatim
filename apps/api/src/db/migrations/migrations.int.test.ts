@@ -34,7 +34,9 @@ import { accountDeletion } from './0023_account_deletion';
 import { platformSettings } from './0024_platform_settings';
 import { entryTier, LEGACY_RANKING_INDEX } from './0028_entry_tier';
 import { routesPublication } from './0029_routes_publication';
-import { ridesGeo } from './0030_rides_geo';
+import { standings } from './0030_standings';
+import { STANDINGS_COLLECTIONS } from '../../modules/standings/standings.collection';
+import { ridesGeo } from './0031_rides_geo';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
 import { notifications } from './0025_notifications';
@@ -134,7 +136,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0027_push_tickets_user',
       '0028_entry_tier',
       '0029_routes_publication',
-      '0030_rides_geo',
+      '0030_standings',
+      '0031_rides_geo',
     ]);
   });
 
@@ -194,6 +197,11 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       races_season_public_idx: plain({ seasonId: 1, windowEndsAt: 1, _id: 1 }),
       // 0020_routes_catalog (routes-01): гонки маршрута каталога
       races_route_idx: plain({ 'corridor.routeId': 1, windowStartsAt: -1, _id: -1 }),
+      // 0030_standings (race-results-08, RC-4): гонки с опубликованным протоколом для регламента рейтинга
+      races_protocol_idx: {
+        ...plain({ seasonId: 1, windowEndsAt: 1, _id: 1 }),
+        partialFilterExpression: { protocolPublishedAt: { $type: 'date' } },
+      },
     });
     const meta = h.db.collection<{ _id: string; version: number }>(RACES_COLLECTIONS.meta);
     await meta.deleteMany({});
@@ -406,6 +414,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         routes_owner_origin_idx: index({ ownerUserId: 1, origin: 1, _id: -1 }),
         // 0029_routes_publication (routes-06): очереди модерации маршрутов райдеров
         ...ROUTES_PUBLICATION_QUEUES,
+        // 0031_rides_geo (05c): старты маршрутов каталога в круге «Рядом»
+        routes_start_2dsphere: index({ start: '2dsphere' }),
       },
       // 0022_routes_derived (routes-03): выборка бэкфилла производных
       [ROUTES_COLLECTIONS.geometries]: {
@@ -1043,7 +1053,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await attemptsDb.deleteMany({ _id: { $regex: '^a-' } });
   });
 
-  it('0029_routes_publication: жалобы на маршруты (unique), очереди модерации (partial); после 0028; повторный up — без изменений', async () => {
+  it('0029_routes_publication: жалобы на маршруты (unique), очереди модерации (partial); повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
     expect(ids.indexOf('0029_routes_publication')).toBe(ids.indexOf('0028_entry_tier') + 1);
     const reports = {
@@ -1068,10 +1078,48 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toMatchObject(ROUTES_PUBLICATION_QUEUES);
   });
 
-  it('0030_rides_geo: бэкфилл точки «Рядом» (центр города) и routeId; индекс 2dsphere; последняя; повторный up — без изменений', async () => {
+  it('0030_standings: снимок рейтинга сезона (unique страницы, /me) и частичный индекс гонок с протоколом; повторный up — без изменений (AC11)', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0030_rides_geo');
-    expect(ids.indexOf('0030_rides_geo')).toBe(ids.indexOf('0029_routes_publication') + 1);
+    expect(ids.indexOf('0030_standings')).toBe(ids.indexOf('0029_routes_publication') + 1);
+    const exists = async (name: string) =>
+      (await h.db.listCollections({ name }, { nameOnly: true }).toArray()).length === 1;
+    expect(await exists(STANDINGS_COLLECTIONS.seasons)).toBe(true);
+    const rows = {
+      season_standing_rows_order_unique: {
+        key: { seasonId: 1, bikeClass: 1, groupKey: 1, order: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+      season_standing_rows_user_idx: {
+        key: { seasonId: 1, userId: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    const protocolIdx = {
+      races_protocol_idx: {
+        key: { seasonId: 1, windowEndsAt: 1, _id: 1 },
+        unique: false,
+        partialFilterExpression: { protocolPublishedAt: { $type: 'date' } },
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(STANDINGS_COLLECTIONS.seasons)).toEqual({});
+    expect(await indexesOf(STANDINGS_COLLECTIONS.rows)).toEqual(rows);
+    expect(await indexesOf(RACES_COLLECTIONS.races)).toMatchObject(protocolIdx);
+    await standings.up(h.db);
+    await standings.up(h.db);
+    expect(await exists(STANDINGS_COLLECTIONS.seasons)).toBe(true);
+    expect(await indexesOf(STANDINGS_COLLECTIONS.rows)).toEqual(rows);
+    expect(await indexesOf(RACES_COLLECTIONS.races)).toMatchObject(protocolIdx);
+  });
+
+  it('0031_rides_geo: бэкфилл точки «Рядом» (центр города) и routeId; индексы 2dsphere (rides.geo, routes.start); последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0031_rides_geo');
+    expect(ids.indexOf('0031_rides_geo')).toBe(ids.indexOf('0030_standings') + 1);
     const geoIndex = {
       rides_geo_feed_idx: {
         key: { geo: '2dsphere', startsAt: 1 },
@@ -1081,6 +1129,14 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       },
     };
     expect(await indexesOf(RIDES_COLLECTIONS.rides)).toMatchObject(geoIndex);
+    expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toMatchObject({
+      routes_start_2dsphere: {
+        key: { start: '2dsphere' },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    });
 
     // райд до 05c (без полей) и райд с точной точкой — бэкфилл трогает только отсутствующие поля
     const ridesDb = h.db.collection<Record<string, unknown> & { _id: string }>(
@@ -1110,10 +1166,12 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     });
     expect(await ridesDb.findOne({ _id: 'precise-ride' })).toEqual(precise);
     const indexes = await indexesOf(RIDES_COLLECTIONS.rides);
+    const routeIndexes = await indexesOf(ROUTES_COLLECTIONS.routes);
     await ridesGeo.up(h.db);
     expect(await ridesDb.findOne({ _id: 'old-ride' })).toEqual(backfilled);
     expect(await ridesDb.findOne({ _id: 'precise-ride' })).toEqual(precise);
     expect(await indexesOf(RIDES_COLLECTIONS.rides)).toEqual(indexes);
+    expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toEqual(routeIndexes);
     await ridesDb.deleteMany({ _id: { $in: ['old-ride', 'precise-ride'] } });
   });
 

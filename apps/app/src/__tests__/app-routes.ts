@@ -18,6 +18,8 @@ import DeviceReturnScreen from '../app/devices/return';
 import DevicesScreen from '../app/settings/devices';
 import DeleteAccountScreen from '../app/settings/account/delete';
 import ProfileScreen from '../app/settings/profile';
+import SettingsScreen from '../app/settings/index';
+import LanguageScreen from '../app/settings/language';
 import NotificationsScreen from '../app/notifications';
 import NotificationSettingsScreen from '../app/settings/notifications';
 import VerifiedProfileScreen from '../app/settings/verified';
@@ -71,6 +73,8 @@ export const appRoutes = {
   '(setup)/location': LocationScreen,
   '(setup)/devices': DevicesStepScreen,
   'settings/devices': DevicesScreen,
+  'settings/index': SettingsScreen,
+  'settings/language': LanguageScreen,
   'settings/profile': ProfileScreen,
   notifications: NotificationsScreen,
   'settings/notifications': NotificationSettingsScreen,

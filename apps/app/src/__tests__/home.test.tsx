@@ -166,8 +166,8 @@ describe('Главная: каркас (S3)', () => {
     expect(screen.getAllByLabelText('Загрузка')).toHaveLength(4);
     expect(screen.queryByText('Маршруты рядом с вами')).toBeNull();
     expect(screen.queryByText('по вашему выбору')).toBeNull();
-    // временно внизу Главной (Q8)
-    expect(screen.getByText('Выйти')).toBeOnTheScreen();
+    // «Выйти» — в «Настройках» (settings-hub), не на Главной
+    expect(screen.queryByText('Выйти')).toBeNull();
   });
 
   it('профиль — Bearer access сессии; «Календарь» в опросе → «Ближайшие старты» первыми с тегом (AC4)', async () => {
@@ -295,6 +295,28 @@ describe('Главная: каркас (S3)', () => {
   });
 });
 
+describe('Главная: сезонный декор (halloween-decor AC4)', () => {
+  it('декор включён в панели — слой поверх ленты, касаний не перехватывает', async () => {
+    const getAppearance = jest.mocked(api.getAppearance);
+    getAppearance.mockResolvedValue({ themeId: 'classic', decor: 'halloween' });
+    await openHome();
+    const decor = await screen.findByTestId('halloween-decor', { includeHiddenElements: true });
+    expect(decor.props.pointerEvents).toBe('none');
+    expect(await screen.findByText('Гравийный коридор Логойск')).toBeOnTheScreen();
+    getAppearance.mockReset();
+  });
+
+  it('decor: none — слоя нет', async () => {
+    const getAppearance = jest.mocked(api.getAppearance);
+    getAppearance.mockResolvedValue({ themeId: 'classic', decor: 'none' });
+    await openHome();
+    await waitFor(() => expect(getAppearance).toHaveBeenCalled());
+    await screen.findByText('Гравийный коридор Логойск');
+    expect(screen.queryByTestId('halloween-decor', { includeHiddenElements: true })).toBeNull();
+    getAppearance.mockReset();
+  });
+});
+
 describe('Главная: разделы (S4)', () => {
   it('гонка: герой — одна метка, даты окна по Минску, мета, строка фазы; публичный запрос без токена (AC3)', async () => {
     await openHome();
@@ -335,15 +357,15 @@ describe('Главная: разделы (S4)', () => {
     expect(router.getPathname()).toBe(`/calendar/${start.id}`);
   });
 
-  it('иконка «Профиль» верхней панели ведёт на /settings/profile (profile-rider-name)', async () => {
+  it('иконка «Настройки» верхней панели ведёт на /settings (settings-hub)', async () => {
     const router = await renderRouter(
-      { ...tabRoutes, 'settings/profile': () => null },
+      { ...tabRoutes, 'settings/index': () => null },
       { initialUrl: '/', wrapper: createQueryWrapper() },
     );
     const bar = within(await screen.findByTestId('top-bar'));
     expect(bar.getByRole('button', { name: 'Устройства' })).toBeOnTheScreen();
-    await fireEvent.press(bar.getByRole('button', { name: 'Профиль' }));
-    expect(router.getPathname()).toBe('/settings/profile');
+    await fireEvent.press(bar.getByRole('button', { name: 'Настройки' }));
+    expect(router.getPathname()).toBe('/settings');
   });
 
   it('многодневный старт без ссылки регистрации — диапазон, строки регистрации нет', async () => {

@@ -54,6 +54,7 @@ describe('AuditAction', () => {
       'route.rider_hidden',
       'route.rider_restored',
       'route.rider_reports_dismissed',
+      'appearance.decor_changed',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',

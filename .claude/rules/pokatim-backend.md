@@ -27,9 +27,10 @@ paths:
   эталон коридора гонки, ADR-0012 Proposed) и `rides` (кофе-райды, ADR-0013 Proposed: зависит от `identity` и порта `routes` `RideRoutes` (05c);
   панель — с модерацией 05b), `appearance` (app-themes: тема приложения — глобальная настройка платформы,
   `platform_settings/appearance`; импортирует только `panel/index.ts` и `public-read.guard.ts`; публичное
-  `GET /v1/appearance` — ровно `{ themeId }`; панель `GET|PUT /v1/admin/appearance` — `appearance.manage`, замена по
-  `version` (409), журнал `appearance.theme_changed` с `subject.kind = 'platform'` (nil UUID) в транзакции; повтор той
-  же темы — без записи).
+  `GET /v1/appearance` — ровно `{ themeId, decor }`, `Cache-Control: no-cache`; панель `GET|PUT /v1/admin/appearance` — `appearance.manage`, замена по
+  `version` (409), тело — `themeId` и/или `decor` (halloween-decor: сезонный декор `none | halloween`), журнал
+  `appearance.theme_changed` / `appearance.decor_changed` с `subject.kind = 'platform'` (nil UUID) в транзакции — своя
+  запись на каждое изменённое поле; повтор тех же значений — без записи).
 - `routes` о гонках не знает и зависит от `panel` и `identity` (routes-02: `AuthGuard` «моих маршрутов», как `rides`); `races → routes` — только порт `RouteCatalog`
   (`modules/routes/index.ts`, `RoutesCoreModule`): готовый маршрут по id в транзакции правки гонки и названия
   маршрутов списка. Записи `routes`/`route_*` из `races` (и наоборот) — нет. Карта коридора (maps-01, ADR-0014):
@@ -199,9 +200,34 @@ paths:
   `lockEntry`, идемпотентно по `checkedAt < requestedAt`). Пока есть незавершённые проверки — публикация и
   «Применить пересчёт» отвечают 409.
 - `results.protocol-published` / `results.result-revised` / `results.attempt-verdict-changed` — маршрут в
-  `notifications-intake` (объявляет подписчик, ADR-0017); слайсу 08 нужен fan-out outbox — задача в app-foundation.
+  `notifications-intake` (объявляет подписчик, ADR-0017). Рейтинг сезона (08) событий не слушает — регламент сверки
+  (DV-1); fan-out outbox в app-foundation — follow-up.
 - Отказы состояния — `409 RESULTS_ACTION_BLOCKED { reason, count? }`, `409 RESULTS_PUBLISH_BLOCKED { blockedBy,
   checklist }`.
+
+## Рейтинг сезона (`standings`, race-results-08)
+
+- Модуль `standings` (`results ──► standings`): `StandingsCoreModule` (репозиторий снимка, `StandingsSource`,
+  `StandingsRecalc`; imports `RacesCoreModule`, `ResultsCoreModule`), `StandingsModule` (API: + `IdentityModule`,
+  `PanelModule`, `ProfileCoreModule`), `StandingsWorkerModule` (`WorkerModule`). Порты — только через `index.ts`:
+  `SEASON_RACES` (`races`: гонки с протоколом, `seasonExists`, `seesAllRaces`), `RESULTS_FOR_STANDINGS` (`results`:
+  `currentRevisions` одним `aggregate`, `protocolRows` ревизии), `RIDER_NAMES` (`profile`). `races`/`results` о
+  `standings` не знают.
+- Правила зачёта — чистые функции `standings.policy.ts` (`pointsForPlace`, `racesCounted`, `selectCounted`,
+  `compareRiders`, `buildSeasonStandings`, `sourceFingerprint`), версия `STANDINGS_FORMULA_VERSION` в снимке: смена —
+  полный пересчёт всех сезонов. Клиент ничего не считает.
+- Пересчёт — **регламент** вместо событий (DV-1): очередь `standings-recalc`, `StandingsSchedules` — `standings.sync`
+  каждую минуту (Минск) + разовая `standings.sync.boot` при старте worker; `StandingsRecalc.sync` сверяет отпечаток
+  источника сезона (гонки, ревизии, класс, схема, формула) с отпечатком снимка и пересчитывает изменившиеся сезоны
+  целиком. Отказ сезона — лог `standings.recompute_failed`, остальные идут; после прохода — исключение
+  (`standings.sync_failed`, failed-набор BullMQ), следующий прогон повторяет. Гонка с протоколом без ревизии —
+  пропуск с логом `standings.revision_missing`. Сохранённый снимок не старше источника, а отпечаток другой (откат
+  деплоя) — пропуск с логом `standings.version_conflict`, без пересчёта. **Изменил вход отпечатка или правила
+  зачёта — подними `STANDINGS_FORMULA_VERSION`**, иначе старые снимки не пересчитаются.
+- HTTP читает только снимок: `StandingsPublicController` (`seasons/:id/standings`, `/table`), `StandingsMeController`
+  (`/me`, `AuthGuard`), `StandingsAdminController` (`admin/seasons/:id/standings`, `/table`, `races.read`) →
+  `StandingsReadService`. Таблица, которой нет в снимке, — пустая страница (RC-12); сводка панели — `sync:
+  pending|current` тем же `StandingsSource`.
 
 ## Споры (`disputes`, race-results-06)
 
@@ -243,12 +269,15 @@ paths:
   в `MongoTransactions` с outbox (`ride-cancelled`, `ride-rescheduled` по смене старта, `participant-joined`,
   `reports-resolved`); повтор и отказ — без события.
 - Маршрут райда и «Рядом» (05c): `rides → routes` — только порт `RIDE_ROUTES` (`RideRoutes`: `attachable`, `visible`,
-  `ownedRouteIds`; реализация `RideRoutesService` в `RoutesCoreModule`, без кэша, условия — только `IN_CATALOG` и
+  `publicStartsWithin`, `ownedRouteIds`, `existing`; реализация `RideRoutesService` в `RoutesCoreModule`, без кэша, условия — только `IN_CATALOG` и
   `ownRider` репозитория; `RouteCatalog` не расширяется). `RidesCoreModule` импортирует и реэкспортирует
   `RoutesCoreModule`. Видимость маршрута — `lookupRoutes` + `routeOf` в `rides-feed.service.ts` на каждом чтении и
   ответе мутации (одним вызовом порта на страницу); `private` — только организатору. `GET /v1/rides/map` (статический
   путь до `:id`, `no-store`) — `RidesFeedService.map`; `near` в ленте. Лимит `rides-near:<uid>` 60/мин — лента с
-  `near` и карта. `RideErasure` сбрасывает точки райдов на маршрутах удалённого (`restarted`).
+  `near` и карта. Точка «Рядом» и карты — на чтении `ridePointNow` (`rides.policy`): точная — старт маршрута, пока он в
+  каталоге, иначе центр города; кандидаты — только по публичным данным (города круга | маршруты каталога со стартом в
+  круге, `publicStartsWithin`), отбор после чтения пачками (≤ 5). `RideErasure` сбрасывает точки райдов на маршрутах
+  удалённого (`restarted`), шаг `ride-starts` после `routes` — на висячих маршрутах (`resetDanglingStarts`).
 
 ## Уведомления (`notifications`, ADR-0017)
 
