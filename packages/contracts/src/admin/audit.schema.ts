@@ -63,6 +63,10 @@ export const AUDIT_ACTIONS = [
   'route.rider_reports_dismissed',
   // halloween-decor: админ включил или выключил сезонный декор (subject `platform`, детали decorFrom/decorTo)
   'appearance.decor_changed',
+  // profile-moderation: сброс фото и клуба райдера, отклонение жалоб на профиль (subject `rider`, без имени и клуба)
+  'profile.avatar_reset',
+  'profile.club_reset',
+  'profile.reports_dismissed',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;

@@ -12,6 +12,8 @@ export * from './profile/profile-admin.schema.ts';
 export * from './profile/verified-profile.schema.ts';
 export * from './profile/rider-avatar.schema.ts';
 export * from './profile/rider-profile.schema.ts';
+export * from './profile/profile-report.schema.ts';
+export * from './profile/profile-moderation.schema.ts';
 export * from './admin/permissions.schema.ts';
 export * from './admin/session.schema.ts';
 export * from './admin/members.schema.ts';

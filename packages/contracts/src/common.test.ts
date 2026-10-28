@@ -89,6 +89,7 @@ describe('коды ошибок', () => {
       'AVATAR_FORMAT_UNSUPPORTED',
       'AVATAR_TOO_LARGE',
       'AVATAR_INVALID',
+      'PROFILE_INVALID_STATE',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

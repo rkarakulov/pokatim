@@ -55,6 +55,9 @@ describe('AuditAction', () => {
       'route.rider_restored',
       'route.rider_reports_dismissed',
       'appearance.decor_changed',
+      'profile.avatar_reset',
+      'profile.club_reset',
+      'profile.reports_dismissed',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',

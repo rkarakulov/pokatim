@@ -72,6 +72,13 @@ import {
   type PanelDisputeQuery,
   type ResetRiderNameRequest,
   RiderNameResetResult,
+  type DismissRiderProfileReportsRequest,
+  RiderProfileModerationDetail,
+  RiderProfileModerationPage,
+  type RiderProfileModerationQuery,
+  RiderProfileReportsDismissResult,
+  type RiderProfileResetRequest,
+  RiderProfileResetResult,
   PanelAppearance,
   type UpdateAppearanceRequest,
 } from '@pokatim/contracts';
@@ -99,6 +106,8 @@ export type PanelCalendarListParams = Partial<PanelCalendarQuery>;
 export type ModerationRideListParams = Partial<ModerationRideQuery>;
 /** Параметры очереди модерации маршрутов райдеров до схемы (routes-06). */
 export type RiderRouteListParams = Partial<RiderRouteModerationQuery>;
+/** Параметры очереди модерации профилей райдеров до схемы (profile-moderation). */
+export type RiderProfileListParams = Partial<RiderProfileModerationQuery>;
 /** Параметры списка споров панели до схемы. */
 export type PanelDisputeListParams = Partial<PanelDisputeQuery>;
 /** Таблица рейтинга сезона (race-results-08): класс и группа обязательны, `limit`/`cursor` — по желанию. */
@@ -151,6 +160,7 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
   const route = (id: string) => `/v1/admin/routes/${encodeURIComponent(id)}`;
   const moderationRide = (id: string) => `/v1/admin/rides/${encodeURIComponent(id)}`;
   const riderRoute = (id: string) => `/v1/admin/rider-routes/${encodeURIComponent(id)}`;
+  const riderProfile = (userId: string) => `/v1/admin/rider-profiles/${encodeURIComponent(userId)}`;
   const dispute = (id: string) => `/v1/admin/disputes/${encodeURIComponent(id)}`;
 
   return {
@@ -311,6 +321,19 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
         RiderNameResetResult,
         body,
       ),
+    // profile-moderation: очередь жалоб на профили, карточка, сбросы фото и клуба, «Отклонить жалобы»
+    listRiderProfiles: (params: RiderProfileListParams = {}) =>
+      get(`/v1/admin/rider-profiles${queryString(params)}`, RiderProfileModerationPage),
+    getRiderProfile: (userId: string) => get(riderProfile(userId), RiderProfileModerationDetail),
+    resetRiderAvatar: (userId: string, body: RiderProfileResetRequest) =>
+      post(`${riderProfile(userId)}/avatar-reset`, RiderProfileResetResult, body),
+    resetRiderClub: (userId: string, body: RiderProfileResetRequest) =>
+      post(`${riderProfile(userId)}/club-reset`, RiderProfileResetResult, body),
+    /** Устаревший `reportRevision` (пришла новая жалоба) — 409 `CONFLICT`. */
+    dismissRiderProfileReports: (userId: string, body: DismissRiderProfileReportsRequest) =>
+      post(`${riderProfile(userId)}/dismiss-reports`, RiderProfileReportsDismissResult, body),
+    /** Адрес фото райдера для карточки (тот же origin, без запроса). */
+    riderAvatarUrl: (id: string) => `${baseUrl}/v1/avatars/${encodeURIComponent(id)}`,
     // race-results-07: пол и год анкеты Verified (profiles.verified_edit, только admin)
     getVerifiedDemographics: (userId: string) =>
       get(

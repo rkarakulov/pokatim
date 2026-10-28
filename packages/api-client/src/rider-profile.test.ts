@@ -168,3 +168,42 @@ describe('api-client: статистика, истории и публичный
     });
   });
 });
+
+describe('api-client: жалоба на профиль райдера (profile-moderation)', () => {
+  it('getRiderViewer — GET …/me с Bearer; id кодируется', async () => {
+    const { calls, api } = client(200, { canReport: true, reported: false });
+    await expect(api.getRiderViewer('access.jwt.x', 'a/b')).resolves.toEqual({
+      canReport: true,
+      reported: false,
+    });
+    expect(calls[0]).toMatchObject({
+      url: 'https://api.test/v1/riders/a%2Fb/me',
+      method: 'GET',
+      authorization: 'Bearer access.jwt.x',
+    });
+  });
+
+  it('reportRider — POST …/reports с телом; 409 PROFILE_INVALID_STATE — ApiHttpError', async () => {
+    const ok = client(200, { canReport: false, reported: true });
+    await expect(
+      ok.api.reportRider('access.jwt.x', TOKEN, { reason: 'photo', comment: 'x' }),
+    ).resolves.toEqual({ canReport: false, reported: true });
+    expect(ok.calls[0]).toMatchObject({
+      url: `https://api.test/v1/riders/${TOKEN}/reports`,
+      method: 'POST',
+      authorization: 'Bearer access.jwt.x',
+    });
+    expect(JSON.parse(ok.calls[0]?.body as string)).toEqual({ reason: 'photo', comment: 'x' });
+
+    const own = client(409, {
+      code: 'PROFILE_INVALID_STATE',
+      message: 'x',
+      details: { reason: 'own_profile' },
+    });
+    const error = await own.api
+      .reportRider('t', TOKEN, { reason: 'spam' })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiHttpError);
+    expect((error as ApiHttpError).apiError.code).toBe('PROFILE_INVALID_STATE');
+  });
+});

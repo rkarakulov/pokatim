@@ -433,6 +433,81 @@ describe('createAdminApiClient: сброс имени райдера (profile-02
   });
 });
 
+describe('createAdminApiClient: модерация профилей райдеров (profile-moderation)', () => {
+  const TOKEN = 'a'.repeat(43);
+  const detail = {
+    userId: USER_ID,
+    name: null,
+    club: 'Velo',
+    avatar: { id: TOKEN },
+    isPublic: true,
+    openReportCount: 1,
+    lastReportAt: '2026-10-28T10:00:00.000Z',
+    reportRevision: 1,
+    reports: [],
+  };
+
+  it('listRiderProfiles — очередь с курсором и лимитом', async () => {
+    const { calls, api } = admin(200, { items: [], nextCursor: null });
+    await expect(api.listRiderProfiles({ cursor: 'c1', limit: 10 })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    });
+    expect(calls[0]).toMatchObject({
+      url: '/v1/admin/rider-profiles?cursor=c1&limit=10',
+      method: 'GET',
+      credentials: 'same-origin',
+    });
+  });
+
+  it('getRiderProfile — карточка; ответ не по схеме — ошибка', async () => {
+    const one = admin(200, detail);
+    await expect(one.api.getRiderProfile(USER_ID)).resolves.toEqual(detail);
+    expect(one.calls[0]).toMatchObject({ url: `/v1/admin/rider-profiles/${USER_ID}` });
+    const broken = admin(200, { ...detail, reports: [{ id: 'x' }] });
+    await expect(broken.api.getRiderProfile(USER_ID)).rejects.toThrow();
+  });
+
+  it('сбросы фото и клуба, «Отклонить жалобы» — POST с телом и cookie панели', async () => {
+    const avatar = admin(200, { reset: true });
+    await expect(
+      avatar.api.resetRiderAvatar(USER_ID, { reason: 'Неприличное фото' }),
+    ).resolves.toEqual({ reset: true });
+    expect(avatar.calls[0]).toMatchObject({
+      url: `/v1/admin/rider-profiles/${USER_ID}/avatar-reset`,
+      method: 'POST',
+      credentials: 'same-origin',
+      body: { reason: 'Неприличное фото' },
+    });
+    const club = admin(200, { reset: false });
+    await expect(club.api.resetRiderClub(USER_ID, { reason: 'Мат в клубе' })).resolves.toEqual({
+      reset: false,
+    });
+    expect(club.calls[0]).toMatchObject({
+      url: `/v1/admin/rider-profiles/${USER_ID}/club-reset`,
+      method: 'POST',
+    });
+    const dismiss = admin(200, { dismissed: true });
+    await expect(
+      dismiss.api.dismissRiderProfileReports(USER_ID, {
+        reason: 'Всё в порядке',
+        reportRevision: 2,
+      }),
+    ).resolves.toEqual({ dismissed: true });
+    expect(dismiss.calls[0]).toMatchObject({
+      url: `/v1/admin/rider-profiles/${USER_ID}/dismiss-reports`,
+      method: 'POST',
+      body: { reason: 'Всё в порядке', reportRevision: 2 },
+    });
+  });
+
+  it('riderAvatarUrl — адрес фото без запроса', () => {
+    const { calls, api } = admin(200, null);
+    expect(api.riderAvatarUrl('a/b')).toBe('/v1/avatars/a%2Fb');
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe('createAdminApiClient: оформление приложения (app-themes)', () => {
   const appearance = {
     themeId: 'atlas',
