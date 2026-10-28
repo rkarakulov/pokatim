@@ -30,6 +30,7 @@ import {
   validRegistration,
 } from '../../../test/identity';
 import { panel } from '../../../test/panel';
+import { profileReportsDb, reportRider } from '../../../test/profiles';
 import {
   corridorRace,
   enterRace,
@@ -697,6 +698,48 @@ describe('аватары профиля (rider-profile, AC10)', () => {
 
     expect(await sweep(a.userId)).toBe('erased');
     expect(await avatars().countDocuments({ userId: b.userId })).toBe(1);
+  });
+});
+
+describe('жалобы на профиль (profile-moderation, AC9)', () => {
+  const publicIdOf = async (accessToken: string) =>
+    (
+      (await call(h, 'GET', '/v1/profile', undefined, bearer(accessToken))).body as {
+        publicId: string;
+      }
+    ).publicId;
+
+  it('стирание удаляет жалобы на удалённого; его жалобы на других остаются; повтор безопасен', async () => {
+    const a = await deviceRider(h, 'a@example.com');
+    const b = await deviceRider(h, 'b@example.com');
+    const c = await deviceRider(h, 'c@example.com');
+    await namedProfile(a.accessToken, 'Анна');
+    await namedProfile(b.accessToken, 'Борис');
+    const aPublic = await publicIdOf(a.accessToken);
+    const bPublic = await publicIdOf(b.accessToken);
+    expect((await reportRider(h, b.accessToken, aPublic, { reason: 'name' })).status).toBe(200);
+    expect((await reportRider(h, c.accessToken, aPublic, { reason: 'photo' })).status).toBe(200);
+    expect((await reportRider(h, a.accessToken, bPublic, { reason: 'club' })).status).toBe(200);
+    expect((await reportRider(h, c.accessToken, bPublic, { reason: 'spam' })).status).toBe(200);
+
+    await deleteAccount(a.accessToken);
+    expect(await firstPass(a.userId)).toBe('erased');
+
+    expect(await profileReportsDb(h).countDocuments({ targetUserId: a.userId })).toBe(0);
+    expect(
+      await profileReportsDb(h)
+        .find({ targetUserId: b.userId })
+        .project({ _id: 0, reporterUserId: 1, resolvedAt: 1 })
+        .sort({ _id: 1 })
+        .toArray(),
+    ).toEqual([
+      { reporterUserId: a.userId, resolvedAt: null },
+      { reporterUserId: c.userId, resolvedAt: null },
+    ]);
+
+    expect(await sweep(a.userId)).toBe('erased');
+    expect(await profileReportsDb(h).countDocuments({ targetUserId: b.userId })).toBe(2);
+    expect(await profileReportsDb(h).countDocuments({ targetUserId: a.userId })).toBe(0);
   });
 });
 

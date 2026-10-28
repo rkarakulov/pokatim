@@ -33,6 +33,7 @@ import { standings } from './0030_standings';
 import { ridesGeo } from './0031_rides_geo';
 import { routeRides } from './0032_route_rides';
 import { riderProfile } from './0033_rider_profile';
+import { profileReports } from './0034_profile_reports';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -72,4 +73,5 @@ export const migrations: readonly MongoMigration[] = [
   ridesGeo,
   routeRides,
   riderProfile,
+  profileReports,
 ];

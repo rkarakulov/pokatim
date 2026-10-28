@@ -11,8 +11,9 @@ import { isDuplicateKey, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { randomToken } from '../identity';
+import { AvatarReissue } from './avatar-reissue';
 import type { ProfileDoc } from './profile.collection';
-import { PROFILE_POLICY, profileViewOf as viewOf } from './profile.policy';
+import { isPublicProfile, PROFILE_POLICY, profileViewOf as viewOf } from './profile.policy';
 import { ProfileRepository } from './profile.repository';
 
 type ProfilePatch = {
@@ -32,6 +33,7 @@ export class ProfileService {
     private readonly repository: ProfileRepository,
     private readonly rateLimiter: RateLimiter,
     private readonly transactions: MongoTransactions,
+    private readonly reissue: AvatarReissue,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -61,27 +63,32 @@ export class ProfileService {
       showNameInResults: body.showNameInResults,
       club: body.club,
     };
-    // кандидат id публичного профиля — до транзакции (rider-profile, R-3): пригодится только при первом «имя + согласие»
-    const publicId = randomToken();
+    // кандидат id публичного профиля — до транзакции (rider-profile, R-3): пригодится только при первом «имя + согласие»;
+    // новый id фото (profile-moderation, RC-A2 (b)) — только при уходе профиля из публичного доступа
+    const ids = { publicId: randomToken(), avatarId: randomToken() };
     try {
-      return viewOf(await this.writeProfile(userId, patch, publicId, now));
+      return viewOf(await this.writeProfile(userId, patch, ids, now));
     } catch (error) {
       // гонка двух первых upsert: документ уже вставлен — повтор всей транзакции его найдёт и обновит
       if (!isDuplicateKey(error, '_id_')) throw error;
-      return viewOf(await this.writeProfile(userId, patch, publicId, now));
+      return viewOf(await this.writeProfile(userId, patch, ids, now));
     }
   }
 
+  /**
+   * Транзакция `PATCH`: прежний профиль → запись профиля (первая запись) → событие согласия → перевыпуск id фото, если
+   * профиль был публичен и перестал (отзыв согласия или очистка имени; profile-moderation, RC-A2 (b)).
+   */
   private writeProfile(
     userId: string,
     patch: ProfilePatch,
-    publicId: string,
+    ids: { publicId: string; avatarId: string },
     now: Date,
   ): Promise<ProfileDoc> {
     return this.transactions.run(async (tx) => {
       const before = await this.repository.findProfile(userId, tx);
       const wasShown = before?.showNameInResults ?? false;
-      const after = await this.repository.updatePublicName(tx, userId, patch, publicId, now);
+      const after = await this.repository.updatePublicName(tx, userId, patch, ids.publicId, now);
       const shown = after.showNameInResults ?? false;
       if (shown !== wasShown) {
         await this.repository.insertConsentEvent(tx, {
@@ -92,6 +99,10 @@ export class ProfileService {
           version: PUBLIC_NAME_CONSENT_VERSION,
           at: now,
         });
+      }
+      if (isPublicProfile(before) && !isPublicProfile(after) && after.avatarId) {
+        const avatarId = await this.reissue.reissue(tx, userId, after.avatarId, ids.avatarId, now);
+        return { ...after, avatarId };
       }
       return after;
     });

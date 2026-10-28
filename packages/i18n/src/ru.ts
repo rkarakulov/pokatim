@@ -1712,6 +1712,10 @@ export const ru = {
   'admin.results.dialog.resetNameConsequences':
     'Имя исчезнет из таблиц результатов — участник будет показан как «Участник». Он сможет задать новое имя в профиле. Не повторяйте имя в причине: она навсегда остаётся в журнале действий.',
   'admin.audit.action.profile.name_reset': 'Сброшено имя участника',
+  // profile-moderation: сброс фото и клуба, отклонение жалоб на профиль
+  'admin.audit.action.profile.avatar_reset': 'Сброшено фото участника',
+  'admin.audit.action.profile.club_reset': 'Сброшен клуб участника',
+  'admin.audit.action.profile.reports_dismissed': 'Жалобы на профиль отклонены',
   // routes-01: экран «Маршруты» панели и публикация в каталог
   'admin.nav.routes': 'Маршруты',
   'admin.routes.title': 'Маршруты',

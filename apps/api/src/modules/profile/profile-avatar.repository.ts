@@ -27,6 +27,14 @@ export class ProfileAvatarRepository {
     await this.avatars.deleteOne({ _id: id, userId }, { session });
   }
 
+  /**
+   * Полный документ фото пользователя для копии под новым id (перевыпуск, RC-A2 (b)) — в транзакции записи профиля;
+   * нет (удалено параллельно) — `null`. ≤ 90 КБ.
+   */
+  findForCopy(session: DbSession, id: string, userId: string): Promise<ProfileAvatarDoc | null> {
+    return this.avatars.findOne({ _id: id, userId }, { session });
+  }
+
   /** Байты для отдачи `GET /v1/avatars/:id`; нет — `null`. */
   async findBytes(id: string): Promise<Uint8Array | null> {
     const doc = await this.avatars.findOne({ _id: id }, { projection: { bytes: 1 } });
