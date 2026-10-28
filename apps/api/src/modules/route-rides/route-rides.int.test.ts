@@ -170,6 +170,25 @@ describe('AC3: видимость маршрута на всех пяти руч
     }
     expect(await routeRidesDb(h).rides.countDocuments()).toBe(0);
   });
+
+  it('чужой заезд по видимому маршруту — 404 на деталь и track, в списке и кандидатах чужого его нет', async () => {
+    const a = await rider(h);
+    const b = await rider(h, 'other-rider@example.com');
+    const routeId = await catalogCorridorRoute(h, OTHER);
+    const ride = await checked(a.auth, routeId, rideGpx('clean.gpx', dayAt(0)));
+    await routeRidesWorker(h).drain();
+    for (const res of [
+      await get(b.auth, ridesUrl(routeId, `/${ride.rideId}`)),
+      await get(b.auth, ridesUrl(routeId, `/${ride.rideId}/track`)),
+      await post(b.auth, routeId, { activityId: ride.activityId }),
+    ]) {
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
+    }
+    expect(await page(b.auth, routeId)).toMatchObject({ summary: { count: 0 }, items: [] });
+    const candidates = await get(b.auth, ridesUrl(routeId, '/candidates'));
+    expect(RouteRideCandidates.parse(candidates.body).items).toEqual([]);
+  });
 });
 
 describe('AC4: сравнение со своими заездами', () => {
@@ -387,11 +406,13 @@ describe('AC7: удалённая активность и недоступный
     expect((await call(h, 'POST', `/v1/routes/mine/${own}/delete`, {}, r.auth)).status).toBe(204);
     expect((await get(r.auth, ridesUrl(own))).status).toBe(404);
     expect((await get(r.auth, ridesUrl(own, `/${ownRide.rideId}`))).status).toBe(404);
+    expect((await get(r.auth, ridesUrl(own, `/${ownRide.rideId}/track`))).status).toBe(404);
 
     const published = await routesDb(h).routes.findOne({ _id: catalog });
     await routesDb(h).routes.updateOne({ _id: catalog }, { $set: { catalog: null } });
     expect((await get(r.auth, ridesUrl(catalog))).status).toBe(404);
     expect((await get(r.auth, ridesUrl(catalog, `/${catalogRide.rideId}`))).status).toBe(404);
+    expect((await get(r.auth, ridesUrl(catalog, `/${catalogRide.rideId}/track`))).status).toBe(404);
     await routesDb(h).routes.updateOne({ _id: catalog }, { $set: { catalog: published!.catalog } });
     expect((await page(r.auth, catalog)).items.map((item) => item.id)).toEqual([
       catalogRide.rideId,

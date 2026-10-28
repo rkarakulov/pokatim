@@ -70,10 +70,6 @@ export class RouteRidesRepository {
     return (await this.c.rides.findOne({ userId, routeId, activityId })) ?? undefined;
   }
 
-  async findById(id: string): Promise<RouteRideDoc | undefined> {
-    return (await this.c.rides.findOne({ _id: id })) ?? undefined;
-  }
-
   async insert(session: DbSession, doc: RouteRideDoc): Promise<void> {
     await this.c.rides.insertOne(doc, { session });
   }

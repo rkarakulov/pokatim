@@ -31,7 +31,6 @@ const DAY_MS = 86_400_000;
 interface Visible {
   route: RideableRoute;
   rides: RouteRideFacts[];
-  now: Date;
 }
 
 const routeRef = (route: RideableRoute) => ({
@@ -165,7 +164,7 @@ export class RouteRidesReadService {
     const rides = own
       .filter((ride) => heads.has(ride.activityId))
       .map((ride) => ({ ...ride, ...effectiveStatus(ride, now) }));
-    return { route, rides, now };
+    return { route, rides };
   }
 
   /** Вердикт наружу: причина — только `not_passed`, провал — только `failed`, время — только `passed`. */

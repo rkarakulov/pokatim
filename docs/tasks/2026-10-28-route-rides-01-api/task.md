@@ -637,3 +637,13 @@ controller; providers `RouteRidesService`, `RouteRidesReadService`), `RouteRides
 **Отклонения** — 8.2. **Риски:** квота мягкая (RC-11); производные данные удалённого заезда хранятся до следующего
 нового заезда по маршруту или удаления аккаунта (RC-1 a); у райдера с > 200 заездами за год старые совпадения не в
 кандидатах (RC-6). Push не делался.
+
+### Ревью pass 1 (claude + codex) — исправления автора
+
+Codex — APPROVE без находок; Claude — APPROVE (MEDIUM 1, LOW 4, `findings.md`). Исправлено: MEDIUM — тест «чужой
+заезд по видимому маршруту → 404 на деталь, track и POST; в списке и кандидатах чужого нет» и `/track` на удалённом и
+снятом маршруте (AC7); отрицательное доказательство — без `this.route(...)` в `RouteRidesReadService.track` AC7
+краснеет. LOW — удалены `RouteRidesRepository.findById` и `Visible.now`; `docs/product/routes.md` — сироты удаляются
+при проверке нового заезда, случай удалённой основной активности группы описан. Не исправлено (LOW, принято):
+параллельный POST одной группы (ветка `isDuplicateKey`) без int-теста. Модуль: `vitest run src/modules/route-rides`
+— 34/34.
