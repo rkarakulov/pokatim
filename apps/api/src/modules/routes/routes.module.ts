@@ -12,6 +12,8 @@ import { ROUTE_GEOMETRY } from './route-geometry.port';
 import { RouteDerivedBackfill } from './route-derived';
 import { RouteDeletion } from './route-deletion';
 import { RouteErasure } from './route-erasure';
+import { RouteNoticesService } from './route-notices';
+import { ROUTE_NOTICES } from './route-notices.port';
 import { RouteReportsRepository } from './route-reports.repository';
 import { RouteReportsService } from './route-reports.service';
 import { RouteProcessingProcessor } from './route-processing.processor';
@@ -31,8 +33,8 @@ import { RoutesViewerController } from './routes-viewer.controller';
 
 /**
  * Ядро `routes` для API и worker: репозиторий, порт `RouteCatalog` для `races` и `RouteGeometry` для `results`
- * (через `index.ts`), порт стирания `RouteErasure` для `account`; удаление маршрута с жалобами (`RouteDeletion`,
- * routes-06) — общее для «Моих» и стирания.
+ * (через `index.ts`), порт стирания `RouteErasure` для `account`, порт `RouteNotices` для `notifications`; удаление
+ * маршрута с жалобами (`RouteDeletion`, routes-06) — общее для «Моих» и стирания.
  */
 @Module({
   providers: [
@@ -43,6 +45,8 @@ import { RoutesViewerController } from './routes-viewer.controller';
     { provide: ROUTE_CATALOG, useExisting: RoutesCatalogService },
     { provide: ROUTE_GEOMETRY, useExisting: RoutesCatalogService },
     RouteErasure,
+    RouteNoticesService,
+    { provide: ROUTE_NOTICES, useExisting: RouteNoticesService },
   ],
   exports: [
     RoutesRepository,
@@ -51,6 +55,7 @@ import { RoutesViewerController } from './routes-viewer.controller';
     ROUTE_CATALOG,
     ROUTE_GEOMETRY,
     RouteErasure,
+    ROUTE_NOTICES,
   ],
 })
 export class RoutesCoreModule {}

@@ -55,6 +55,8 @@ describe('справочники уведомлений (только в кон�
       'ride_rescheduled',
       'ride_joined',
       'ride_report_resolved',
+      'route_published',
+      'route_rejected',
     ]);
     expect(PUSH_PLATFORMS).toEqual(['ios', 'android']);
   });
@@ -69,6 +71,10 @@ describe('ответы (tolerantEnum, неизвестная цель)', () => {
     expect(
       NotificationTargetView.parse({ type: 'dispute-response', raceId: ID, disputeId: ID2 }),
     ).toEqual({ type: 'dispute-response', raceId: ID, disputeId: ID2 });
+    expect(NotificationTargetView.parse({ type: 'my-route', routeId: ID })).toEqual({
+      type: 'my-route',
+      routeId: ID,
+    });
   });
 
   it('незнакомый тип цели или битый id — unknown, ответ не падает', () => {

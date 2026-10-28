@@ -1,9 +1,14 @@
-import { type DisputeOutcome, type NotificationKind, PLATFORM_TIME_ZONE } from '@pokatim/contracts';
+import {
+  type DisputeOutcome,
+  type NotificationKind,
+  PLATFORM_TIME_ZONE,
+  type RouteRejectionReason,
+} from '@pokatim/contracts';
 
 /**
  * Словарь текстов уведомлений (RC-9, «Тексты v1» `docs/product/notifications.md`). Строки сервера живут в модуле, как
  * письма identity и `error-messages.ts`: api от `@pokatim/i18n` не зависит. Текст рендерится при создании и хранится
- * снимком. Только название гонки или райда, дата, число — без имён и текстов других райдеров (N12). Даты — по Минску.
+ * снимком. Только название гонки, райда или маршрута, дата, число, код причины — без имён и текстов других райдеров (N12). Даты — по Минску.
  */
 export type NoticeText =
   | { kind: 'result_counted' | 'result_rejected'; race: string; activityAt: Date }
@@ -21,7 +26,9 @@ export type NoticeText =
   | { kind: 'dispute_decided'; race: string; outcome: DisputeOutcome }
   | { kind: 'ride_cancelled' | 'ride_rescheduled'; ride: string; startsAt: Date }
   | { kind: 'ride_joined'; ride: string; goingCount: number }
-  | { kind: 'ride_report_resolved'; ride: string };
+  | { kind: 'ride_report_resolved'; ride: string }
+  | { kind: 'route_published'; route: string }
+  | { kind: 'route_rejected'; route: string; reason: RouteRejectionReason };
 
 export interface RenderedText {
   title: string;
@@ -52,6 +59,16 @@ const OUTCOME: Record<DisputeOutcome, string> = {
   rejected: 'отклонён',
 };
 
+/** Причина отклонения заявки маршрута; «Другое» — без подписи: комментарий модератора — только на карточке (N12). */
+const REJECTION: Record<RouteRejectionReason, string> = {
+  dangerous: 'Причина — опасный маршрут.',
+  impassable: 'Причина — непроезжий или неточный.',
+  duplicate: 'Причина — такой маршрут уже есть в каталоге.',
+  bad_title: 'Причина — неподходящее название.',
+  not_cycling: 'Причина — не велосипедный маршрут.',
+  other: 'Подробности — в карточке маршрута.',
+};
+
 const TITLES: Record<NotificationKind, string> = {
   result_counted: 'Результат засчитан',
   result_rejected: 'Результат не засчитан',
@@ -67,6 +84,8 @@ const TITLES: Record<NotificationKind, string> = {
   ride_rescheduled: 'Райд перенесён',
   ride_joined: 'Новый участник',
   ride_report_resolved: 'Жалоба рассмотрена',
+  route_published: 'Маршрут опубликован',
+  route_rejected: 'Маршрут отклонён',
 };
 
 function bodyOf(input: NoticeText): string {
@@ -99,6 +118,10 @@ function bodyOf(input: NoticeText): string {
       return `${quoted(input.ride)}: участников — ${input.goingCount}.`;
     case 'ride_report_resolved':
       return `Модератор рассмотрел вашу жалобу на райд ${quoted(input.ride)}. Спасибо.`;
+    case 'route_published':
+      return `${quoted(input.route)} теперь в каталоге маршрутов.`;
+    case 'route_rejected':
+      return `${quoted(input.route)} не опубликован. ${REJECTION[input.reason]}`;
   }
 }
 

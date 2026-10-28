@@ -33,6 +33,12 @@ import {
   RIDES_RIDE_RESCHEDULED,
   RidesReportsResolved,
 } from '../rides';
+import {
+  ROUTE_NOTICES,
+  ROUTE_PUBLICATION_DECIDED,
+  RoutePublicationDecided,
+  type RouteNotices,
+} from '../routes';
 import type { NoticeText } from './notification-texts';
 import type { NotificationSourceEvent } from './notifications.events';
 
@@ -56,7 +62,7 @@ const REVISION_KINDS = {
 
 /**
  * Разбор события источника → черновики уведомлений через порты модулей (`ResultsNotices`, `DisputeNotices`,
- * `RideNotices`, `RaceRegistry`): получатели и поля текста считает сервер, payload — только id и коды (RC-1).
+ * `RideNotices`, `RouteNotices`, `RaceRegistry`): получатели и поля текста считает сервер, payload — только id и коды (RC-1).
  * Правила получателей — task §7: споры — стороны, райды — участники «Иду» без организатора, «Новый участник» —
  * организатору; райд не в ожидаемом статусе (`cancelled` для отмены, `published` для переноса и участника) — skip.
  */
@@ -66,6 +72,7 @@ export class NotificationIntake {
     @Inject(RESULTS_NOTICES) private readonly results: ResultsNotices,
     @Inject(DISPUTE_NOTICES) private readonly disputes: DisputeNotices,
     @Inject(RIDE_NOTICES) private readonly rides: RideNotices,
+    @Inject(ROUTE_NOTICES) private readonly routes: RouteNotices,
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
   ) {}
 
@@ -91,6 +98,8 @@ export class NotificationIntake {
         return this.ride(type, payload);
       case RIDES_REPORTS_RESOLVED:
         return this.reportsResolved(payload);
+      case ROUTE_PUBLICATION_DECIDED:
+        return this.routePublication(payload);
     }
   }
 
@@ -267,6 +276,37 @@ export class NotificationIntake {
         // скрытый модерацией райд авторам не виден — без перехода («Не найдено» не показываем)
         target: ride.status === 'hidden' ? null : { type: 'ride', rideId: ride.id },
         recipients: reporters,
+      },
+    ];
+  }
+
+  /**
+   * Решение по заявке маршрута — автору. Решение сменилось к приёму (новая подача, скрытие, отзыв, другое решение —
+   * статус или `decidedAt` не совпали) — `state`: о прежнем решении не сообщаем. Новое решение по маршруту заменяет
+   * прежнее уведомление (N7).
+   */
+  private async routePublication(payload: unknown): Promise<NoticeDraft[] | IntakeSkip> {
+    const event = RoutePublicationDecided.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    const route = await this.routes.publication(event.data.routeId);
+    if (!route) return 'gone';
+    const { decision, decidedAt } = event.data;
+    if (route.status !== decision || route.decidedAt?.getTime() !== Date.parse(decidedAt)) {
+      return 'state';
+    }
+    let text: NoticeText;
+    if (decision === 'approved') {
+      text = { kind: 'route_published', route: route.title };
+    } else {
+      if (!route.rejectionReason) return 'state';
+      text = { kind: 'route_rejected', route: route.title, reason: route.rejectionReason };
+    }
+    return [
+      {
+        text,
+        target: { type: 'my-route', routeId: route.id },
+        collapseKey: `route:${route.id}:publication`,
+        recipients: [route.ownerUserId],
       },
     ];
   }

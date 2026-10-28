@@ -4,6 +4,7 @@ import { type NoticeText, renderNotification, renderPushSummary } from './notifi
 
 const RACE = 'Гран-при «Минское море»';
 const RIDE = 'Кофе-райд на Минское море';
+const ROUTE = 'Вокруг Минского моря';
 /** 14 июня 2027, 10:00 по Минску (UTC+3). */
 const AT = new Date('2027-06-14T07:00:00Z');
 
@@ -99,6 +100,18 @@ const TABLE: [string, NoticeText, string, string][] = [
     'Жалоба рассмотрена',
     `Модератор рассмотрел вашу жалобу на райд «${RIDE}». Спасибо.`,
   ],
+  [
+    'Маршрут опубликован',
+    { kind: 'route_published', route: ROUTE },
+    'Маршрут опубликован',
+    `«${ROUTE}» теперь в каталоге маршрутов.`,
+  ],
+  [
+    'Маршрут отклонён',
+    { kind: 'route_rejected', route: ROUTE, reason: 'impassable' },
+    'Маршрут отклонён',
+    `«${ROUTE}» не опубликован. Причина — непроезжий или неточный.`,
+  ],
 ];
 
 describe('renderNotification: таблица «Тексты v1»', () => {
@@ -107,7 +120,7 @@ describe('renderNotification: таблица «Тексты v1»', () => {
   });
 
   it('каждый kind контракта покрыт строкой таблицы', () => {
-    expect(new Set(TABLE.map(([, input]) => input.kind)).size).toBe(14);
+    expect(new Set(TABLE.map(([, input]) => input.kind)).size).toBe(16);
   });
 
   it('даты — по Минску, не по поясу процесса: 23:30 UTC — уже следующий день', () => {
@@ -123,6 +136,21 @@ describe('renderNotification: таблица «Тексты v1»', () => {
   it('пробелы и переводы строк в названии схлопываются (снимок — одна строка)', () => {
     expect(renderNotification({ kind: 'protocol_published', race: '  Гонка \n  дня ' }).body).toBe(
       '«Гонка дня»: итоговый протокол готов.',
+    );
+  });
+});
+
+describe('route_rejected: подпись каждой причины (без комментария модератора, N12)', () => {
+  it.each([
+    ['dangerous', 'Причина — опасный маршрут.'],
+    ['impassable', 'Причина — непроезжий или неточный.'],
+    ['duplicate', 'Причина — такой маршрут уже есть в каталоге.'],
+    ['bad_title', 'Причина — неподходящее название.'],
+    ['not_cycling', 'Причина — не велосипедный маршрут.'],
+    ['other', 'Подробности — в карточке маршрута.'],
+  ] as const)('%s', (reason, tail) => {
+    expect(renderNotification({ kind: 'route_rejected', route: 'М', reason }).body).toBe(
+      `«М» не опубликован. ${tail}`,
     );
   });
 });
