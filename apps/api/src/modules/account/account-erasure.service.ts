@@ -29,7 +29,8 @@ export interface ErasureRun {
 
 /**
  * Фоновая очистка удалённого аккаунта (worker, ADR-0015). Шаги — по порядку, только через порты модулей-владельцев;
- * каждый повторяем, ретрай задачи повторяет все шаги с начала. Порядок: подпись в райдах пропадает первой (R4),
+ * каждый повторяем, ретрай задачи повторяет все шаги с начала. Порядок: подпись в райдах пропадает первой (R4), после
+ * маршрутов — точки райдов на висячих маршрутах (`ride-starts`, 05c RC-1),
  * устройства — до треков (новых приёмов нет, F4), уведомления, настройки и токены — после треков, письмо и стирание e-mail — последними (A10). Живой аккаунт не
  * трогается (N8). Логи — uid, шаг, исход, счётчики.
  */
@@ -63,10 +64,14 @@ export class AccountErasureService {
     });
     await this.step(userId, 'rides', run, async () => {
       const result = await this.rides.erase(userId, this.clock.now());
-      return `cancelled=${result.cancelled} left=${result.left} unsigned=${result.unsigned}`;
+      return `cancelled=${result.cancelled} left=${result.left} unsigned=${result.unsigned} restarted=${result.restarted}`;
     });
     await this.step(userId, 'routes', run, async () => {
       return `deleted=${await this.routes.erase(userId)}`;
+    });
+    // после удаления маршрутов: точки райдов на висячих маршрутах (удалённых автором раньше) — центр города (05c, RC-1)
+    await this.step(userId, 'ride-starts', run, async () => {
+      return `restarted=${await this.rides.resetDanglingStarts(this.clock.now())}`;
     });
     await this.step(userId, 'devices', run, async () => {
       const result = await this.devices.erase(userId, { final: run.final });

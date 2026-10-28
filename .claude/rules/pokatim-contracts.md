@@ -62,6 +62,14 @@ paths:
   (`CITY_CODES` — единственный справочник городов). Справочники (`RIDE_STATUSES`, `RIDE_PHASES`,
   `RIDE_CANCEL_REASONS`, `RIDE_VIEWER_ROLES`, `CITY_CODES`) — только в конец. `version` — только в
   `RideDetailForOrganizer`.
+  Маршрут и «Рядом» (05c): `RideRoute` (`id`, `title`, `distanceM`, `elevationGainM`, `access` — `tolerantEnum
+  (RIDE_ROUTE_ACCESS)`), `route`/`start` в `RideSummary` (`.nullable().default(null)`); `routeId` — `Uuid.nullable()`:
+  в `RideFields` с `.default(null)` (старые сборки не шлют), в `UpdateRideRequest` **только `.optional()`** (default
+  под `.partial()` снял бы маршрут у правки старой сборки), в `CreateRideForm` — обязательный; `near=<lat>,<lon>` →
+  `[lon, lat]` с округлением до 0,01° и `radiusKm` 5–100 (`RIDE_NEAR_RADIUS_KM`, без `near` — 400) в `RideListQuery` и
+  `RideMapQuery`; `RideMap` (`items` ≤ `RIDE_MAP_MAX_POINTS`, `withoutStart` `.default(0)`); `CITY_CENTERS`
+  (`geo/city.schema.ts`, `Record<CityCode, [lon, lat]>`); код поля `RIDE_ROUTE_UNAVAILABLE` — в конце
+  `FieldErrorCode` (`RIDE_ROUTE_FIELD_ERROR_CODES`). api-client — `listRides({ near, radiusKm })`, `listRideMap`.
 - Участие и результаты (race-results-03): `src/results/results.schema.ts` — ответы приложения и публичная таблица,
   `tolerantEnum`; `ATTEMPT_REJECTIONS` = коды движка (`CORRIDOR_REJECTIONS`) + `implausible`, совпадение держит
   сторож в `apps/api`; публичная строка — `entryId`, место, ничья, время сегмента (без `userId`, активности, времени

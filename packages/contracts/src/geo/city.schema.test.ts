@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CITY_CODES, CityCode, isCityCode } from './city.schema.ts';
+import { CITY_CENTERS, CITY_CODES, CityCode, isCityCode } from './city.schema.ts';
 
 describe('справочник городов', () => {
   it('коды уникальны, латиница в нижнем регистре; Минск — первый (только в конец)', () => {
@@ -16,5 +16,15 @@ describe('справочник городов', () => {
     expect(CityCode.safeParse('atlantis').success).toBe(false);
     expect(isCityCode('brest')).toBe(true);
     expect(isCityCode('atlantis')).toBe(false);
+  });
+
+  it('центры городов (05c): по одному на каждый код, все точки внутри рамки Беларуси', () => {
+    expect(Object.keys(CITY_CENTERS).sort()).toEqual([...CITY_CODES].sort());
+    for (const [lon, lat] of Object.values(CITY_CENTERS)) {
+      expect(lon).toBeGreaterThanOrEqual(23);
+      expect(lon).toBeLessThanOrEqual(33);
+      expect(lat).toBeGreaterThanOrEqual(51);
+      expect(lat).toBeLessThanOrEqual(56.5);
+    }
   });
 });

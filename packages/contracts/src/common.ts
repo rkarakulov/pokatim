@@ -121,6 +121,13 @@ export const CORRIDOR_FIELD_ERROR_CODES = ['CORRIDOR_GATES_OVERLAP'] as const;
 export type CorridorFieldErrorCode = (typeof CORRIDOR_FIELD_ERROR_CODES)[number];
 
 /**
+ * Код поля «Маршрут» райда (05c): маршрут нельзя прикрепить — нет, чужой непубличный или не готов (один код: без
+ * оракула существования).
+ */
+export const RIDE_ROUTE_FIELD_ERROR_CODES = ['RIDE_ROUTE_UNAVAILABLE'] as const;
+export type RideRouteFieldErrorCode = (typeof RIDE_ROUTE_FIELD_ERROR_CODES)[number];
+
+/**
  * Коды ошибок полей: коды базы (`REQUIRED`, `INVALID`, …) + коды проекта. Сообщение zod-схемы = код,
  * текст для человека выбирает клиент (i18n). `fieldError` — с кодами проекта, не базовый.
  */
@@ -130,6 +137,7 @@ export const { FieldErrorCode, ValidationErrorDetails, fieldError } = defineFiel
   ...SCHEDULE_FIELD_ERROR_CODES,
   ...RIDE_FIELD_ERROR_CODES,
   ...CORRIDOR_FIELD_ERROR_CODES,
+  ...RIDE_ROUTE_FIELD_ERROR_CODES,
 ]);
 export type FieldErrorCode = z.infer<typeof FieldErrorCode>;
 export type ValidationErrorDetails = z.infer<typeof ValidationErrorDetails>;

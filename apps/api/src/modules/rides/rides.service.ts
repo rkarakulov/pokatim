@@ -14,8 +14,9 @@ import { MongoOutboxWriter, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import { type DbSession, MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
+import { RIDE_ROUTES, type RideRouteRef, type RideRoutes } from '../routes';
 import { RideReportsRepository } from './ride-reports.repository';
-import { rideViewOf } from './rides-feed.service';
+import { lookupRoutes, rideViewOf } from './rides-feed.service';
 import type { RideDoc } from './rides.collection';
 import {
   RIDES_PARTICIPANT_JOINED,
@@ -23,13 +24,22 @@ import {
   RIDES_RIDE_RESCHEDULED,
   type RideEventPayload,
 } from './rides.events';
-import { changesStart, ridePhase, RIDES_POLICY, validateStartsAt, visibleTo } from './rides.policy';
+import {
+  changesStart,
+  ridePhase,
+  RIDES_POLICY,
+  rideStartOf,
+  validateStartsAt,
+  visibleTo,
+} from './rides.policy';
 import { type RidePatch, RidesRepository } from './rides.repository';
 
 const fieldFailure = (path: string, code: FieldErrorCode) => {
   const details: ValidationErrorDetails = { fields: [{ path, code }] };
   return domainError('VALIDATION_FAILED', 400, details);
 };
+
+const samePoint = (a: [number, number], b: [number, number]) => a[0] === b[0] && a[1] === b[1];
 
 const quotaExceeded = (quota: RideQuotaDetails['quota'], limit: number) => {
   const details: RideQuotaDetails = { quota, limit };
@@ -64,8 +74,19 @@ export class RidesService {
     private readonly rateLimiter: RateLimiter,
     private readonly transactions: MongoTransactions,
     private readonly outbox: MongoOutboxWriter,
+    @Inject(RIDE_ROUTES) private readonly rideRoutes: RideRoutes,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
+
+  /**
+   * Маршрут для прикрепления (05c, 8.3 п. 1): в каталоге или свой готовый. Иначе — один ответ на «нет», «чужой
+   * непубличный» и «не готов» (без оракула существования).
+   */
+  private async attachable(routeId: string, userId: string): Promise<RideRouteRef> {
+    const route = await this.rideRoutes.attachable(routeId, userId);
+    if (!route) throw fieldFailure('routeId', 'RIDE_ROUTE_UNAVAILABLE');
+    return route;
+  }
 
   /**
    * Условная запись райда (одна операция над документом, как раньше) в транзакции с событием outbox (ADR-0017 п. 6):
@@ -110,6 +131,7 @@ export class RidesService {
     ) {
       throw quotaExceeded('organized', RIDES_POLICY.maxUpcomingOrganized);
     }
+    const route = body.routeId === null ? null : await this.attachable(body.routeId, userId);
     const doc: RideDoc = {
       _id: uuidv7(),
       status: 'published',
@@ -136,10 +158,12 @@ export class RidesService {
       hiddenFromStatus: null,
       openReportCount: 0,
       lastReportAt: null,
+      routeId: body.routeId,
+      ...rideStartOf(route, body.cityCode),
     };
     await this.repository.insert(doc);
     this.logger.log(`rides.created ride=${doc._id} uid=${userId}`);
-    return rideViewOf(doc, userId, now);
+    return this.viewOf(doc, userId, now, false);
   }
 
   async update(userId: string, id: string, body: UpdateRideRequest): Promise<RideView> {
@@ -168,6 +192,7 @@ export class RidesService {
     if (patch.limit !== undefined && patch.limit !== null && patch.limit < current.goingCount) {
       throw fieldFailure('limit', 'RIDE_LIMIT_BELOW_GOING');
     }
+    await this.patchStart(userId, current, body, patch);
     const reschedule = changesStart(current, patch);
     // перенос при других участниках: `rescheduledAt` поставила именно эта запись
     const updated = await this.writeWithEvent(
@@ -183,7 +208,7 @@ export class RidesService {
       throw fieldFailure('limit', 'RIDE_LIMIT_BELOW_GOING');
     }
     this.logger.log(`rides.updated ride=${id} uid=${userId}`);
-    return rideViewOf(updated, userId, now);
+    return this.viewOf(updated, userId, now, false);
   }
 
   async cancel(userId: string, id: string, body: CancelRideRequest): Promise<RideView> {
@@ -195,11 +220,11 @@ export class RidesService {
     );
     if (cancelled) {
       this.logger.log(`rides.cancelled ride=${id} uid=${userId}`);
-      return rideViewOf(cancelled, userId, now);
+      return this.viewOf(cancelled, userId, now, false);
     }
     const fresh = await this.ownRide(userId, id);
     // повторная отмена — идемпотентный успех (прежняя причина остаётся)
-    if (fresh.status === 'cancelled') return rideViewOf(fresh, userId, now);
+    if (fresh.status === 'cancelled') return this.viewOf(fresh, userId, now, false);
     throw domainError('RIDE_INVALID_STATE', 409);
   }
 
@@ -251,9 +276,56 @@ export class RidesService {
     if (doc.status === 'hidden') throw domainError('RIDE_INVALID_STATE', 409);
   }
 
-  /** Ответ участия: `reported` — по жалобам зрителя. */
-  private async viewOf(doc: RideDoc, userId: string, now: Date): Promise<RideView> {
-    return rideViewOf(doc, userId, now, await this.reports.exists(doc._id, userId));
+  /**
+   * Маршрут и точка «Рядом» правки (05c, §7.3): смена `routeId` — проверка прикрепления; точка пересчитывается при
+   * смене маршрута или города и при прикреплённом маршруте без точной точки (свой маршрут стал публичным —
+   * «повышение» любой правкой, RC-3). Прежний маршрут, ставший недоступным, не отклоняется — точка центра города.
+   * В `patch` — только изменённое.
+   */
+  private async patchStart(
+    userId: string,
+    current: RideDoc,
+    body: UpdateRideRequest,
+    patch: RidePatch,
+  ): Promise<void> {
+    const currentRouteId = current.routeId ?? null;
+    const currentPrecise = current.startPrecise ?? false;
+    let route: RideRouteRef | null | undefined;
+    if (body.routeId !== undefined && body.routeId !== currentRouteId) {
+      route = body.routeId === null ? null : await this.attachable(body.routeId, userId);
+      patch.routeId = body.routeId;
+    }
+    const nextRouteId = patch.routeId !== undefined ? patch.routeId : currentRouteId;
+    const recompute =
+      patch.routeId !== undefined ||
+      patch.cityCode !== undefined ||
+      (nextRouteId !== null && !currentPrecise) ||
+      current.geo === undefined;
+    if (!recompute) return;
+    if (route === undefined) {
+      route = nextRouteId === null ? null : await this.rideRoutes.attachable(nextRouteId, userId);
+    }
+    const next = rideStartOf(route, patch.cityCode ?? current.cityCode);
+    if (!current.geo || !samePoint(current.geo.coordinates, next.geo.coordinates)) {
+      patch.geo = next.geo;
+    }
+    if (next.startPrecise !== currentPrecise || current.startPrecise === undefined) {
+      patch.startPrecise = next.startPrecise;
+    }
+  }
+
+  /** Ответ мутации: маршрут — видимый организатору сейчас; `reported` — по жалобам зрителя (если не задан). */
+  private async viewOf(
+    doc: RideDoc,
+    userId: string,
+    now: Date,
+    reported?: boolean,
+  ): Promise<RideView> {
+    const [isReported, routes] = await Promise.all([
+      reported ?? this.reports.exists(doc._id, userId),
+      lookupRoutes(this.rideRoutes, [doc], userId),
+    ]);
+    return rideViewOf(doc, userId, now, routes, isReported);
   }
 
   /** Свой райд организатора; чужой и неизвестный — 404 (не 403: существование чужого не раскрывается). */

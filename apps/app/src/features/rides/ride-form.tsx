@@ -85,6 +85,7 @@ const emptyForm = (): CreateRideFormValues => ({
   paceMaxKmh: '',
   limit: '',
   description: '',
+  routeId: null,
 });
 
 /** Значения формы правки из карточки организатора. */
@@ -102,6 +103,7 @@ export function rideFormOf(ride: RideDetailForOrganizer): CreateRideFormValues {
     paceMaxKmh: String(ride.paceMaxKmh),
     limit: ride.limit === null ? '' : String(ride.limit),
     description: ride.description ?? '',
+    routeId: ride.route?.id ?? null,
   };
 }
 
@@ -148,6 +150,7 @@ function requestOfRide(ride: RideDetailForOrganizer): RideRequestFields {
     paceMaxKmh: ride.paceMaxKmh,
     limit: ride.limit,
     description: ride.description,
+    routeId: ride.route?.id ?? null,
   };
 }
 

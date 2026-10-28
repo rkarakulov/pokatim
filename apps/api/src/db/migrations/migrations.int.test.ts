@@ -1,3 +1,4 @@
+import { CITY_CENTERS } from '@pokatim/contracts';
 import { MIGRATIONS_COLLECTION, runMongoMigrations } from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -35,6 +36,7 @@ import { entryTier, LEGACY_RANKING_INDEX } from './0028_entry_tier';
 import { routesPublication } from './0029_routes_publication';
 import { standings } from './0030_standings';
 import { STANDINGS_COLLECTIONS } from '../../modules/standings/standings.collection';
+import { CITY_CENTERS_0031, ridesGeo } from './0031_rides_geo';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
 import { notifications } from './0025_notifications';
@@ -135,6 +137,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0028_entry_tier',
       '0029_routes_publication',
       '0030_standings',
+      '0031_rides_geo',
     ]);
   });
 
@@ -411,6 +414,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         routes_owner_origin_idx: index({ ownerUserId: 1, origin: 1, _id: -1 }),
         // 0029_routes_publication (routes-06): очереди модерации маршрутов райдеров
         ...ROUTES_PUBLICATION_QUEUES,
+        // 0031_rides_geo (05c): старты маршрутов каталога в круге «Рядом»
+        routes_start_2dsphere: index({ start: '2dsphere' }),
       },
       // 0022_routes_derived (routes-03): выборка бэкфилла производных
       [ROUTES_COLLECTIONS.geometries]: {
@@ -1073,9 +1078,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toMatchObject(ROUTES_PUBLICATION_QUEUES);
   });
 
-  it('0030_standings: снимок рейтинга сезона (unique страницы, /me) и частичный индекс гонок с протоколом; последняя; повторный up — без изменений (AC11)', async () => {
+  it('0030_standings: снимок рейтинга сезона (unique страницы, /me) и частичный индекс гонок с протоколом; повторный up — без изменений (AC11)', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0030_standings');
     expect(ids.indexOf('0030_standings')).toBe(ids.indexOf('0029_routes_publication') + 1);
     const exists = async (name: string) =>
       (await h.db.listCollections({ name }, { nameOnly: true }).toArray()).length === 1;
@@ -1110,6 +1114,67 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await exists(STANDINGS_COLLECTIONS.seasons)).toBe(true);
     expect(await indexesOf(STANDINGS_COLLECTIONS.rows)).toEqual(rows);
     expect(await indexesOf(RACES_COLLECTIONS.races)).toMatchObject(protocolIdx);
+  });
+
+  it('0031_rides_geo: бэкфилл точки «Рядом» (центр города) и routeId; индексы 2dsphere (rides.geo, routes.start); последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0031_rides_geo');
+    expect(ids.indexOf('0031_rides_geo')).toBe(ids.indexOf('0030_standings') + 1);
+    // снимок центров в миграции = справочник контрактов на момент миграции (все 25 кодов)
+    expect(CITY_CENTERS_0031).toEqual(CITY_CENTERS);
+    const geoIndex = {
+      rides_geo_feed_idx: {
+        key: { geo: '2dsphere', startsAt: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(RIDES_COLLECTIONS.rides)).toMatchObject(geoIndex);
+    expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toMatchObject({
+      routes_start_2dsphere: {
+        key: { start: '2dsphere' },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    });
+
+    // райд до 05c (без полей) и райд с точной точкой — бэкфилл трогает только отсутствующие поля
+    const ridesDb = h.db.collection<Record<string, unknown> & { _id: string }>(
+      RIDES_COLLECTIONS.rides,
+    );
+    const precise = {
+      _id: 'precise-ride',
+      cityCode: 'minsk',
+      startsAt: new Date('2027-06-14T07:00:00Z'),
+      routeId: 'route-1',
+      geo: { type: 'Point', coordinates: [27.61, 53.95] },
+      startPrecise: true,
+    };
+    await ridesDb.insertMany([
+      { _id: 'old-ride', cityCode: 'brest', startsAt: new Date('2027-06-14T07:00:00Z') },
+      precise,
+    ]);
+    await ridesGeo.up(h.db);
+    const backfilled = await ridesDb.findOne({ _id: 'old-ride' });
+    expect(backfilled).toEqual({
+      _id: 'old-ride',
+      cityCode: 'brest',
+      startsAt: new Date('2027-06-14T07:00:00Z'),
+      geo: { type: 'Point', coordinates: [...CITY_CENTERS.brest] },
+      startPrecise: false,
+      routeId: null,
+    });
+    expect(await ridesDb.findOne({ _id: 'precise-ride' })).toEqual(precise);
+    const indexes = await indexesOf(RIDES_COLLECTIONS.rides);
+    const routeIndexes = await indexesOf(ROUTES_COLLECTIONS.routes);
+    await ridesGeo.up(h.db);
+    expect(await ridesDb.findOne({ _id: 'old-ride' })).toEqual(backfilled);
+    expect(await ridesDb.findOne({ _id: 'precise-ride' })).toEqual(precise);
+    expect(await indexesOf(RIDES_COLLECTIONS.rides)).toEqual(indexes);
+    expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toEqual(routeIndexes);
+    await ridesDb.deleteMany({ _id: { $in: ['old-ride', 'precise-ride'] } });
   });
 
   it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {

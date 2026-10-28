@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { IdentityModule } from '../identity';
 import { PanelModule } from '../panel';
+import { RoutesCoreModule } from '../routes';
 import { PublicReadGuard } from '../../public-read.guard';
 import { RideErasure } from './ride-erasure';
 import { RideNoticesService } from './ride-notices';
@@ -18,9 +19,12 @@ import { RidesService } from './rides.service';
 
 /**
  * Ядро `rides` без HTTP: единственные писатели райдов и жалоб, порт стирания `RideErasure` (модуль
- * `account`, worker) и порт получателей уведомлений `RIDE_NOTICES` (`notifications`, ADR-0017).
+ * `account`, worker) и порт получателей уведомлений `RIDE_NOTICES` (`notifications`, ADR-0017). Импортирует и
+ * реэкспортирует `RoutesCoreModule` (05c): порт `RIDE_ROUTES` нужен `RideErasure` здесь и сервисам `RidesModule`
+ * (транзитивного импорта в Nest нет); routes от rides не зависит — цикла нет.
  */
 @Module({
+  imports: [RoutesCoreModule],
   providers: [
     RidesRepository,
     RideReportsRepository,
@@ -28,7 +32,7 @@ import { RidesService } from './rides.service';
     RideNoticesService,
     { provide: RIDE_NOTICES, useExisting: RideNoticesService },
   ],
-  exports: [RidesRepository, RideReportsRepository, RideErasure, RIDE_NOTICES],
+  exports: [RidesRepository, RideReportsRepository, RideErasure, RIDE_NOTICES, RoutesCoreModule],
 })
 export class RidesCoreModule {}
 

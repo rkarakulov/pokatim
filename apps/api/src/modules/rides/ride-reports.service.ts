@@ -5,8 +5,9 @@ import { isDuplicateKey, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
+import { RIDE_ROUTES, type RideRoutes } from '../routes';
 import { RIDE_REPORTS_UNIQUE_INDEX, RideReportsRepository } from './ride-reports.repository';
-import { rideViewOf } from './rides-feed.service';
+import { lookupRoutes, rideViewOf } from './rides-feed.service';
 import type { RideDoc } from './rides.collection';
 import { RIDES_POLICY, visibleTo } from './rides.policy';
 import { RidesRepository } from './rides.repository';
@@ -26,6 +27,7 @@ export class RideReportsService {
     private readonly reports: RideReportsRepository,
     private readonly transactions: MongoTransactions,
     private readonly rateLimiter: RateLimiter,
+    @Inject(RIDE_ROUTES) private readonly rideRoutes: RideRoutes,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -41,7 +43,7 @@ export class RideReportsService {
     }
     const now = this.clock.now();
     const doc = this.assertReportable(await this.rides.findForViewer(id, userId), userId);
-    if (await this.reports.exists(id, userId)) return rideViewOf(doc, userId, now, true);
+    if (await this.reports.exists(id, userId)) return this.viewOf(doc, userId, now);
 
     let recorded = false;
     try {
@@ -69,7 +71,12 @@ export class RideReportsService {
     // условие записи не выполнено между чтением и транзакцией: причину — по свежему документу
     if (!recorded) this.assertReportable(fresh, userId);
     else this.logger.log(`rides.reported ride=${id} uid=${userId} reason=${body.reason}`);
-    return rideViewOf(fresh ?? doc, userId, now, true);
+    return this.viewOf(fresh ?? doc, userId, now);
+  }
+
+  /** Ответ жалобы: `reported = true`, маршрут — видимый жалующемуся (05c). */
+  private async viewOf(doc: RideDoc, userId: string, now: Date): Promise<RideView> {
+    return rideViewOf(doc, userId, now, await lookupRoutes(this.rideRoutes, [doc], userId), true);
   }
 
   /** Нет или скрыт (чужому) — 404; свой — 409 `RIDE_INVALID_STATE`. */

@@ -1,4 +1,7 @@
 import {
+  CITY_CENTERS,
+  CITY_CODES,
+  type CityCode,
   type FieldErrorCode,
   RIDE_MAX_PARTICIPANTS,
   RIDE_START_MAX_AHEAD_DAYS,
@@ -7,7 +10,8 @@ import {
   type RideViewer,
 } from '@pokatim/contracts';
 
-import type { RideDoc } from './rides.collection';
+import type { RideRouteRef } from '../routes';
+import type { GeoPoint, RideDoc } from './rides.collection';
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
@@ -26,6 +30,8 @@ export const RIDES_POLICY = {
   rsvpLimit: { limit: 60, windowSec: 3600 },
   /** Жалобы (05b): 20 в сутки на пользователя (`[ASSUMPTION]`), ключ `rides-report:<uid>`. */
   reportLimit: { limit: 20, windowSec: 24 * 3600 },
+  /** «Рядом» и карта ленты (05c, 8.3 п. 4): 60 в минуту, ключ `rides-near:<uid>` — ограничение перебора центров. */
+  nearLimit: { limit: 60, windowSec: 60 },
 } as const;
 
 type PhaseInput = Pick<RideDoc, 'status' | 'startsAt'>;
@@ -121,17 +127,88 @@ export function validateStartsAt(
 }
 
 /**
- * Правка меняет время, город или место старта. «Перенос» (`rescheduledAt`) — только если при этом идут другие
- * участники: это условие проверяет сама запись по счётчику документа в момент операции (репозиторий), а не
- * прочитанный заранее `goingCount` — первый участник мог записаться между чтением и правкой.
+ * Точка «Рядом» райда (05c): маршрут виден публично — его старт (`startPrecise`); иначе (нет маршрута или свой
+ * непубличный — его старт не раскрывается) — центр города. Координаты — копия (справочник не меняется).
+ */
+export function rideStartOf(
+  route: RideRouteRef | null,
+  cityCode: CityCode,
+): { geo: GeoPoint; startPrecise: boolean } {
+  const precise = route?.access === 'public';
+  const [lon, lat] = precise ? route.start : CITY_CENTERS[cityCode];
+  return { geo: { type: 'Point', coordinates: [lon, lat] }, startPrecise: precise };
+}
+
+/** Радиус Земли — тот же, что у `$centerSphere` фильтра «Рядом» (радианы = км / радиус), км. */
+export const EARTH_RADIUS_KM = 6378.1;
+
+const RAD = Math.PI / 180;
+
+/** Расстояние по сфере (haversine) между `[lon, lat]`, км — та же метрика, что `$centerSphere`. */
+export function distanceKm(a: readonly [number, number], b: readonly [number, number]): number {
+  const dLat = (b[1] - a[1]) * RAD;
+  const dLon = (b[0] - a[0]) * RAD;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * RAD) * Math.cos(b[1] * RAD) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Города, чей центр — в круге «Рядом» (кандидаты райдов, точка которых сейчас — центр города). */
+export function citiesNear(center: readonly [number, number], radiusKm: number): CityCode[] {
+  return CITY_CODES.filter((code) => distanceKm(CITY_CENTERS[code], center) <= radiusKm);
+}
+
+/**
+ * Точка райда **сейчас** (05c, RC-1, единое правило ленты «Рядом» и карты): сохранённая точная (`startPrecise`) —
+ * только пока маршрут райда в каталоге (`route.access === 'public'` порта `RideRoutes`); маршрут снят, скрыт, удалён
+ * или стал непубличным — центр города, как у райда без маршрута. `precise` — точка карты ленты. Координаты точной
+ * точки — старт маршрута сейчас (публичные данные порта), не сохранённая `geo` (фиксы ревью pass 2).
+ */
+export function ridePointNow(
+  doc: Pick<RideDoc, 'cityCode' | 'routeId'> & Partial<Pick<RideDoc, 'geo' | 'startPrecise'>>,
+  route: RideRouteRef | null | undefined,
+): { coordinates: readonly [number, number]; precise: boolean } {
+  const precise =
+    doc.startPrecise === true &&
+    doc.geo !== undefined &&
+    doc.routeId !== null &&
+    route?.id === doc.routeId &&
+    route.access === 'public';
+  return precise && route
+    ? { coordinates: route.start, precise: true }
+    : { coordinates: CITY_CENTERS[doc.cityCode], precise: false };
+}
+
+const samePoint = (a: GeoPoint, b: GeoPoint) =>
+  a.coordinates[0] === b.coordinates[0] && a.coordinates[1] === b.coordinates[1];
+
+/**
+ * Правка меняет время, город или место старта — или точную точку старта на другую точную (05c, RC-4: прикрепить
+ * маршрут к райду без точки или снять его — уточнение, не перенос). «Перенос» (`rescheduledAt`) — только если при
+ * этом идут другие участники: это условие проверяет сама запись по счётчику документа в момент операции
+ * (репозиторий), а не прочитанный заранее `goingCount` — первый участник мог записаться между чтением и правкой.
+ * Документ до `0031_rides_geo` (без `geo`) — без точной точки.
  */
 export function changesStart(
-  ride: Pick<RideDoc, 'startsAt' | 'cityCode' | 'place'>,
-  patch: { startsAt?: Date; cityCode?: RideDoc['cityCode']; place?: string },
+  ride: Pick<RideDoc, 'startsAt' | 'cityCode' | 'place'> &
+    Partial<Pick<RideDoc, 'geo' | 'startPrecise'>>,
+  patch: {
+    startsAt?: Date;
+    cityCode?: RideDoc['cityCode'];
+    place?: string;
+    geo?: GeoPoint;
+    startPrecise?: boolean;
+  },
 ): boolean {
   return (
     (patch.startsAt !== undefined && patch.startsAt.getTime() !== ride.startsAt.getTime()) ||
     (patch.cityCode !== undefined && patch.cityCode !== ride.cityCode) ||
-    (patch.place !== undefined && patch.place !== ride.place)
+    (patch.place !== undefined && patch.place !== ride.place) ||
+    // неизменённый флаг правка не пишет: точность новой точки — `patch.startPrecise ?? ride.startPrecise`
+    (ride.startPrecise === true &&
+      ride.geo !== undefined &&
+      (patch.startPrecise ?? ride.startPrecise) &&
+      patch.geo !== undefined &&
+      !samePoint(ride.geo, patch.geo))
   );
 }

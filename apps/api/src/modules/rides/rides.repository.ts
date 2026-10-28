@@ -1,10 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { type CityCode, RIDE_MAX_PARTICIPANTS, type RideCancelReason } from '@pokatim/contracts';
+import {
+  CITY_CENTERS,
+  CITY_CODES,
+  type CityCode,
+  RIDE_MAX_PARTICIPANTS,
+  type RideCancelReason,
+} from '@pokatim/contracts';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Collection, Db, Filter } from 'mongodb';
 
 import type { DbSession } from '../../db';
 import { type RideDoc, type RidePublicDoc, ridesCollections } from './rides.collection';
+import { EARTH_RADIUS_KM } from './rides.policy';
 
 /** Документ для зрителя: из участников — только он сам (`$elemMatch` своего id), чужие id не читаются. */
 export type RideViewerDoc = RideDoc;
@@ -37,13 +44,16 @@ const VIEWER_FIELDS = {
   hiddenFromStatus: 1,
   openReportCount: 1,
   lastReportAt: 1,
+  routeId: 1,
+  geo: 1,
+  startPrecise: 1,
 } as const satisfies Record<Exclude<keyof RideDoc, '_id' | 'participants'>, 1>;
 const viewerProjection = (userId: string) => ({
   ...VIEWER_FIELDS,
   participants: { $elemMatch: { userId } },
 });
 
-/** Публичная проекция: без организатора, участников, `version` и полей модерации. */
+/** Публичная проекция: без организатора, участников, `version`, полей модерации и точки «Рядом» (05c). */
 const PUBLIC_PROJECTION = {
   organizerUserId: 0,
   participants: 0,
@@ -52,7 +62,65 @@ const PUBLIC_PROJECTION = {
   hiddenFromStatus: 0,
   openReportCount: 0,
   lastReportAt: 0,
+  geo: 0,
+  startPrecise: 0,
 } as const;
+
+/**
+ * Фильтр «Рядом» (05c): центр `[lon, lat]` (округлён схемой), радиус, км, города, чей центр в круге (`citiesNear`), и
+ * маршруты каталога со стартом в круге (`RideRoutes.publicStartsWithin`) — только публичные данные.
+ */
+export interface NearFilter {
+  center: [number, number];
+  radiusKm: number;
+  cities: readonly CityCode[];
+  publicRouteIds: readonly string[];
+}
+
+const geoWithin = (near: NearFilter): Filter<RideDoc> => ({
+  geo: { $geoWithin: { $centerSphere: [near.center, near.radiusKm / EARTH_RADIUS_KM] } },
+});
+
+/** Точная точка «Рядом»: райд на маршруте каталога, чей старт в круге (сохранённая точка — тот же старт). */
+const preciseNear = (near: NearFilter): Filter<RideDoc> => ({
+  startPrecise: true,
+  routeId: { $in: [...near.publicRouteIds] },
+  ...geoWithin(near),
+});
+
+/**
+ * Кандидаты «Рядом» (фиксы ревью pass 2) — **только по публичным данным**: райд города, чей центр в круге (любой формы,
+ * и без `geo`/`startPrecise`/`routeId` — документ старого API), или точная точка на маршруте каталога со стартом в
+ * круге. Сохранённая точка райда на снятом маршруте в выбор не входит (иначе курсор после пачек — оракул старого
+ * старта). Окончательно точку сейчас решает сервис (`ridePointNow`).
+ */
+const nearCondition = (near: NearFilter): Filter<RideDoc> =>
+  near.cities.length === 0
+    ? preciseNear(near)
+    : { $or: [{ cityCode: { $in: [...near.cities] } }, preciseNear(near)] };
+
+/** Курсор `(startsAt, _id)` ленты и карты: строго после. */
+const afterCondition = (after: { startsAt: Date; id: string }): Filter<RideDoc> => ({
+  $or: [
+    { startsAt: { $gt: after.startsAt } },
+    { startsAt: after.startsAt, _id: { $gt: after.id } },
+  ],
+});
+
+/** Точка карты ленты (05c): поля строки, маршрут и точка для `ridePointNow`. */
+export type RideMapDoc = Pick<
+  RideDoc,
+  | '_id'
+  | 'title'
+  | 'startsAt'
+  | 'routeId'
+  | 'goingCount'
+  | 'limit'
+  | 'organizerUserId'
+  | 'cityCode'
+  | 'geo'
+  | 'startPrecise'
+>;
 
 /** Статусы, видимые не только организатору (скрытый — 05b — нет). */
 const VISIBLE_STATUSES = ['published', 'cancelled'] as const;
@@ -80,6 +148,9 @@ export type RidePatch = Partial<
     | 'paceMinKmh'
     | 'paceMaxKmh'
     | 'limit'
+    | 'routeId'
+    | 'geo'
+    | 'startPrecise'
   >
 >;
 
@@ -245,14 +316,21 @@ export class RidesRepository {
 
   /**
    * Видимые зрителю будущие райды: опубликованные и отменённые, где он участник или организатор (организатор —
-   * всегда участник). Внутри фильтра города — ИЛИ.
+   * всегда участник). Внутри фильтра города — ИЛИ; «Рядом» (05c) — точка райда в круге (`$geoWithin`, не `$near`:
+   * сортировка по времени и курсор не меняются).
    */
-  private visible(userId: string, now: Date, cities?: readonly CityCode[]): Filter<RideDoc>[] {
+  private visible(
+    userId: string,
+    now: Date,
+    cities?: readonly CityCode[],
+    near?: NearFilter | null,
+  ): Filter<RideDoc>[] {
     const and: Filter<RideDoc>[] = [
       { startsAt: { $gt: now } },
       { $or: [{ status: 'published' }, { status: 'cancelled', 'participants.userId': userId }] },
     ];
     if (cities?.length) and.push({ cityCode: { $in: [...cities] } });
+    if (near) and.push(nearCondition(near));
     return and;
   }
 
@@ -263,21 +341,119 @@ export class RidesRepository {
     cities: readonly CityCode[] | undefined,
     after: { startsAt: Date; id: string } | null,
     limit: number,
+    near: NearFilter | null = null,
   ): Promise<RideViewerDoc[]> {
-    const and = this.visible(userId, now, cities);
-    if (after) {
-      and.push({
-        $or: [
-          { startsAt: { $gt: after.startsAt } },
-          { startsAt: after.startsAt, _id: { $gt: after.id } },
-        ],
-      });
-    }
+    const and = this.visible(userId, now, cities, near);
+    if (after) and.push(afterCondition(after));
     return this.rides
       .find({ $and: and }, { projection: viewerProjection(userId) })
       .sort({ startsAt: 1, _id: 1 })
       .limit(limit)
       .toArray();
+  }
+
+  /** Карта ленты (05c, 8.1 RC-12): будущие опубликованные райды города и «Рядом» (отменённые — шум). */
+  private mapFilter(
+    now: Date,
+    cities: readonly CityCode[] | undefined,
+    near: NearFilter | null,
+  ): Filter<RideDoc>[] {
+    const and: Filter<RideDoc>[] = [{ startsAt: { $gt: now } }, { status: 'published' }];
+    if (cities?.length) and.push({ cityCode: { $in: [...cities] } });
+    if (near) and.push(nearCondition(near));
+    return and;
+  }
+
+  /**
+   * Кандидаты точек карты ленты: с сохранённой точной точкой (с «Рядом» — только на маршруте каталога со стартом в
+   * круге, `preciseNear`), по `(startsAt, _id)` после `after`, не больше `limit` (пачка; видимость маршрута сейчас и
+   * точку решает сервис).
+   */
+  listMapPoints(
+    now: Date,
+    cities: readonly CityCode[] | undefined,
+    near: NearFilter | null,
+    after: { startsAt: Date; id: string } | null,
+    limit: number,
+  ): Promise<RideMapDoc[]> {
+    const and = [
+      ...this.mapFilter(now, cities, null),
+      near ? preciseNear(near) : { startPrecise: true },
+    ];
+    if (after) and.push(afterCondition(after));
+    return this.rides
+      .find<RideMapDoc>(
+        { $and: and },
+        {
+          projection: {
+            title: 1,
+            startsAt: 1,
+            routeId: 1,
+            goingCount: 1,
+            limit: 1,
+            organizerUserId: 1,
+            cityCode: 1,
+            geo: 1,
+            startPrecise: 1,
+          },
+        },
+      )
+      .sort({ startsAt: 1, _id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  /**
+   * Маршруты точных точек райдов карты в городах круга (`distinct`, без сохранённой точки в условии) — какие из них в
+   * каталоге (точка сейчас — их старт, а не центр города), решает порт.
+   */
+  async cityPreciseRouteIds(
+    now: Date,
+    cities: readonly CityCode[] | undefined,
+    near: NearFilter,
+  ): Promise<string[]> {
+    if (near.cities.length === 0) return [];
+    const ids = await this.rides.distinct('routeId', {
+      $and: [
+        ...this.mapFilter(now, cities, null),
+        { cityCode: { $in: [...near.cities] }, startPrecise: true },
+      ],
+    });
+    return ids.filter((id): id is string => typeof id === 'string');
+  }
+
+  /**
+   * Все райды фильтра карты (с точкой и без) — для `withoutStart`. С «Рядом» — по точке сейчас (RC-1), только по
+   * публичным данным: точная — на маршруте каталога со стартом в круге (`preciseNear`); иначе — центр города в круге,
+   * если точка не точная сейчас (маршрут райда не из `cityPublicRouteIds` — маршрутов каталога райдов этих городов).
+   */
+  countMap(
+    now: Date,
+    cities: readonly CityCode[] | undefined,
+    near: NearFilter | null,
+    cityPublicRouteIds: readonly string[] = [],
+  ): Promise<number> {
+    if (!near) return this.rides.countDocuments({ $and: this.mapFilter(now, cities, null) });
+    return this.rides.countDocuments({
+      $and: [
+        ...this.mapFilter(now, cities, null),
+        {
+          $or: [
+            preciseNear(near),
+            {
+              cityCode: { $in: [...near.cities] },
+              $nor: [
+                {
+                  startPrecise: true,
+                  routeId: { $in: [...cityPublicRouteIds] },
+                  geo: { $exists: true },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
   }
 
   /** Коды городов, где у зрителя есть видимые будущие райды. */
@@ -495,6 +671,44 @@ export class RidesRepository {
     const result = await this.rides.updateMany(
       { organizerUserId, organizerName: { $ne: null } },
       { $set: { organizerName: null, updatedAt: now } },
+    );
+    return result.modifiedCount;
+  }
+
+  /**
+   * Сброс точных точек райдов (любых организаторов) на маршрутах удаляемого райдера (05c, ADR-0015, 8.1 RC-1): `geo`
+   * — центр города, `startPrecise: false`; `routeId` остаётся (маршрута нет — чтение даёт `null`), `version` не
+   * меняется (не правка организатора). Одна pipeline-операция: центр — по `cityCode` документа. Повтор — no-op.
+   */
+  /**
+   * Пачка райдов с точной точкой по `_id` после `afterId` (только `_id` и `routeId`) — поиск висячих `routeId` при
+   * стирании (`RideErasure.resetDanglingStarts`).
+   */
+  precisePage(afterId: string | null, limit: number): Promise<Pick<RideDoc, '_id' | 'routeId'>[]> {
+    return this.rides
+      .find<Pick<RideDoc, '_id' | 'routeId'>>(
+        { startPrecise: true, ...(afterId ? { _id: { $gt: afterId } } : {}) },
+        { projection: { routeId: 1 } },
+      )
+      .sort({ _id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  async resetStartsForRoutes(routeIds: readonly string[], now: Date): Promise<number> {
+    if (routeIds.length === 0) return 0;
+    const center = {
+      $switch: {
+        branches: CITY_CODES.map((code) => ({
+          case: { $eq: ['$cityCode', code] },
+          then: { $literal: { type: 'Point', coordinates: [...CITY_CENTERS[code]] } },
+        })),
+        default: '$geo',
+      },
+    };
+    const result = await this.rides.updateMany(
+      { routeId: { $in: [...routeIds] }, startPrecise: true },
+      [{ $set: { geo: center, startPrecise: { $literal: false }, updatedAt: { $literal: now } } }],
     );
     return result.modifiedCount;
   }

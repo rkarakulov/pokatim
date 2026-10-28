@@ -53,6 +53,16 @@ export interface RouteDerivedState {
   derivedVersion: number | null;
 }
 
+/** Поля маршрута для райда (05c, порт `RideRoutes`): без линии, владельца и публикации. */
+export type RideRouteFields = Pick<
+  RouteDoc,
+  '_id' | 'title' | 'distanceM' | 'elevationGainM' | 'start'
+>;
+const RIDE_ROUTE_PROJECTION = { title: 1, distanceM: 1, elevationGainM: 1, start: 1 } as const;
+
+/** Радиус Земли для `$centerSphere`, км — тот же, что у «Рядом» райдов (`rides.policy`, 05c). */
+const EARTH_RADIUS_KM = 6378.1;
+
 /** Маршрут команды платформы (routes-02, RC-2): условие каждого чтения панели, каталога и портов. */
 const PLATFORM = { origin: 'platform' } as const;
 
@@ -156,6 +166,41 @@ export class RoutesRepository {
     return (
       (await this.c.routes.findOne({ _id: id, status: 'ready', ...PLATFORM }, { session })) ??
       undefined
+    );
+  }
+
+  /**
+   * Маршруты райдов (05c, порт `RideRoutes`): готовые и в публичном каталоге (`IN_CATALOG`) по id, ≤ 200 (вызывающий
+   * дедуплицирует). Без кэша.
+   */
+  inCatalogByIds(ids: readonly string[]): Promise<RideRouteFields[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.c.routes
+      .find<RideRouteFields>(
+        { _id: { $in: [...ids] }, status: 'ready', ...IN_CATALOG },
+        { projection: RIDE_ROUTE_PROJECTION },
+      )
+      .toArray();
+  }
+
+  /** Свои готовые маршруты райдера по id (05c, `ownRider`): чужие, платформы и не готовые — нет. */
+  ownReadyByIds(ownerUserId: string, ids: readonly string[]): Promise<RideRouteFields[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.c.routes
+      .find<RideRouteFields>(
+        { _id: { $in: [...ids] }, status: 'ready', ...ownRider(ownerUserId) },
+        { projection: RIDE_ROUTE_PROJECTION },
+      )
+      .toArray();
+  }
+
+  /** Свой готовый маршрут райдера (05c, прикрепление к райду). */
+  async findOwnReady(ownerUserId: string, id: string): Promise<RideRouteFields | undefined> {
+    return (
+      (await this.c.routes.findOne<RideRouteFields>(
+        { _id: id, status: 'ready', ...ownRider(ownerUserId) },
+        { projection: RIDE_ROUTE_PROJECTION },
+      )) ?? undefined
     );
   }
 
@@ -700,6 +745,14 @@ export class RoutesRepository {
     return docs.map((doc) => doc._id);
   }
 
+  /** Какие из id маршрутов есть в `routes` (любой статус) — висячие `routeId` райдов (05c, порт `RideRoutes`). */
+  async existingIds(ids: readonly string[]): Promise<string[]> {
+    const docs = await this.c.routes
+      .find({ _id: { $in: [...ids] } }, { projection: { _id: 1 } })
+      .toArray();
+    return docs.map((doc) => doc._id);
+  }
+
   async geometry(id: string): Promise<RouteGeometryDoc | undefined> {
     return (await this.c.geometries.findOne({ _id: id })) ?? undefined;
   }
@@ -742,6 +795,32 @@ export class RoutesRepository {
    * Переход `processing → ready` с геометрией, производными данными и очищенным GPX — в транзакции. `false` — маршрут
    * уже не `processing` (повтор задачи): транзакция откатывается вызывающим, геометрия и экспорт не остаются.
    */
+  /**
+   * Id готовых маршрутов в каталоге (`IN_CATALOG`), чей старт в круге (`$geoWithin $centerSphere`, индекс
+   * `routes_start_2dsphere`), по `_id`, не больше `limit` (05c, порт `RideRoutes.publicStartsWithin`). Без кэша.
+   */
+  async inCatalogStartsWithin(
+    center: readonly [number, number],
+    radiusKm: number,
+    limit: number,
+  ): Promise<string[]> {
+    const docs = await this.c.routes
+      .find<{ _id: string }>(
+        {
+          status: 'ready',
+          ...IN_CATALOG,
+          start: {
+            $geoWithin: { $centerSphere: [[center[0], center[1]], radiusKm / EARTH_RADIUS_KM] },
+          },
+        },
+        { projection: { _id: 1 } },
+      )
+      .sort({ _id: 1 })
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => doc._id);
+  }
+
   async markReady(
     session: DbSession,
     id: string,

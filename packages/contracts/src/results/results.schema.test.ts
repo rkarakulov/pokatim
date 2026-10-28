@@ -159,7 +159,11 @@ describe('участие и результаты: приложение', () => {
     }
     expect(ErrorCode.options).toContain('RESULTS_ACTION_BLOCKED');
     expect(ErrorCode.options).toContain('RESULTS_PUBLISH_BLOCKED');
-    expect(FieldErrorCode.options.at(-1)).toBe('CORRIDOR_GATES_OVERLAP');
+    // после коридора — код маршрута райда (05c)
+    expect(FieldErrorCode.options.slice(-2)).toEqual([
+      'CORRIDOR_GATES_OVERLAP',
+      'RIDE_ROUTE_UNAVAILABLE',
+    ]);
     expect(RaceEditBlockReason.options.slice(-3)).toEqual([
       'entries_locked',
       'results_final',

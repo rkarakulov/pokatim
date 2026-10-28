@@ -3,6 +3,7 @@ import { type CreateRideRequest, RideView } from '@pokatim/contracts';
 import { ridesCollections } from '../src/modules/rides/rides.collection';
 import { DAY, type Harness } from './harness';
 import { bearer, call, type CallResult, signUpSession, userIdByEmail } from './identity';
+import { routesDb, seedApprovedRiderRoute, seedRiderRoute } from './routes';
 
 export const RIDES = '/v1/rides';
 
@@ -41,8 +42,13 @@ export const rideBody = (
   paceMaxKmh: 24,
   limit: 12,
   description: 'Едем спокойно',
+  routeId: null,
   ...overrides,
 });
+
+/** Query «Рядом» (05c): `near=<lat>,<lon>` (как шлёт клиент) и радиус. */
+export const nearQuery = (lat: number, lon: number, radiusKm?: number) =>
+  `near=${lat},${lon}${radiusKm === undefined ? '' : `&radiusKm=${radiusKm}`}`;
 
 export const authed = (
   h: Harness,
@@ -108,3 +114,48 @@ export async function hideInDb(h: Harness, id: string): Promise<() => Promise<vo
 }
 
 export const MODERATION = '/v1/admin/rides';
+
+// --- маршрут райда и «Рядом» (05c) ---
+
+/** Владелец маршрутов команды прямой вставкой (маршрут платформы — не райдера). */
+const TEAM_OWNER = '01890a5d-0000-7000-8000-000000000001';
+
+/** Старт маршрута `[lon, lat]` прямой записью (точка «Рядом» и `start` ответа). */
+export async function setRouteStart(h: Harness, id: string, start: [number, number]) {
+  await routesDb(h).routes.updateOne(
+    { _id: id },
+    { $set: { start: { type: 'Point', coordinates: start } } },
+  );
+}
+
+/** Маршрут команды в каталоге (`origin: 'platform'`, `catalog` заполнен) прямой вставкой. */
+export async function seedTeamRoute(
+  h: Harness,
+  start: [number, number] = [27.6, 53.95],
+  title = 'Кольцо команды',
+): Promise<string> {
+  const id = await seedRiderRoute(h, TEAM_OWNER, { title });
+  await routesDb(h).routes.updateOne(
+    { _id: id },
+    {
+      $set: {
+        origin: 'platform',
+        elevationGainM: 120,
+        catalog: { city: 'minsk', surfaces: ['asphalt'], publishedAt: h.clock.now() },
+      },
+    },
+  );
+  await setRouteStart(h, id, start);
+  return id;
+}
+
+/** Одобренный маршрут райдера в каталоге со своим стартом. */
+export async function seedApprovedRoute(
+  h: Harness,
+  ownerUserId: string,
+  start: [number, number] = [27.62, 53.96],
+): Promise<string> {
+  const id = await seedApprovedRiderRoute(h, ownerUserId);
+  await setRouteStart(h, id, start);
+  return id;
+}

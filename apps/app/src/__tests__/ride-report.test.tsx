@@ -37,6 +37,8 @@ const ride: RideDetail = {
   phase: 'upcoming',
   cancelReason: null,
   rescheduledAt: null,
+  route: null,
+  start: null,
   description: null,
 };
 const viewer = { role: 'none', canJoin: true, canLeave: false, canManage: false } as const;
