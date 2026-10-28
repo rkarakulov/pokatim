@@ -424,6 +424,16 @@ export class RoutesRepository {
     );
   }
 
+  /** Поля уведомления о решении по заявке (`RouteNotices`): маршрут райдера — название, автор, заявка. */
+  findForNotice(
+    id: string,
+  ): Promise<Pick<RouteDoc, '_id' | 'title' | 'ownerUserId' | 'publication'> | null> {
+    return this.c.routes.findOne(
+      { _id: id, origin: 'rider' },
+      { projection: { title: 1, ownerUserId: 1, publication: 1 } },
+    );
+  }
+
   /**
    * Маршрут райдера для модерации: заявка в `pending | approved | rejected | hidden` (8.1 RC-10: не подававшийся и
    * отозванный — `undefined`). В транзакции действия — с её снимком.

@@ -12,6 +12,7 @@ import { DisputesCoreModule } from '../disputes';
 import { IdentityAccountsModule, IdentityModule } from '../identity';
 import { ResultsCoreModule } from '../results';
 import { RidesCoreModule } from '../rides';
+import { RoutesCoreModule } from '../routes';
 import { NotificationIntake } from './notification-intake';
 import { NotificationErasure } from './notification-erasure';
 import { NotificationSettingsService } from './notification-settings.service';
@@ -64,7 +65,7 @@ export class NotificationsModule {}
  * Задачи `notifications` в worker (ADR-0017): приём событий источников (`notifications-intake`), доставка push и писем
  * (`notifications-delivery`), регламент квитанций и перепостановки (`notifications-maintenance`). Источники — только
  * порты через их `index.ts`: `RESULTS_NOTICES` и `RACE_REGISTRY` (`ResultsCoreModule` реэкспортирует `RacesCoreModule`),
- * `DISPUTE_NOTICES`, `RIDE_NOTICES`, `IdentityAccounts`.
+ * `DISPUTE_NOTICES`, `RIDE_NOTICES`, `ROUTE_NOTICES`, `IdentityAccounts`.
  */
 @Module({
   imports: [
@@ -72,6 +73,7 @@ export class NotificationsModule {}
     ResultsCoreModule,
     DisputesCoreModule,
     RidesCoreModule,
+    RoutesCoreModule,
     IdentityAccountsModule,
     BullModule.registerQueue(
       { name: QUEUE.notificationsIntake },

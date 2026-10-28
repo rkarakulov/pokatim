@@ -43,7 +43,7 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
         ...routesOutboxRoutes,
         ...resultsOutboxRoutes,
         ...accountOutboxRoutes,
-        // подписчик чужих типов (results, disputes, rides) — ADR-0017
+        // подписчик чужих типов (results, disputes, rides, routes) — ADR-0017
         ...notificationsOutboxRoutes,
       },
     }),

@@ -52,6 +52,9 @@ const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   ride_rescheduled: RIDES,
   ride_joined: RIDES,
   ride_report_resolved: RIDES,
+  // [ASSUMPTION] решение по заявке маршрута — в группе «Райды» (N4: три группы)
+  route_published: RIDES,
+  route_rejected: RIDES,
 };
 
 /** Группа настроек события (N4). */

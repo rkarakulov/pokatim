@@ -13,7 +13,7 @@ import type {
 import { focusManager, onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
-import type { RefreshControlProps } from 'react-native';
+import { StyleSheet, type RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -635,6 +635,13 @@ describe('Главная: герой «Маршрутов» по теме (app-t
     expect(screen.getAllByRole('link', { name: /Минское кольцо/ })).toHaveLength(1);
     await fireEvent.press(hero);
     expect(router.getPathname()).toBe(`/routes/${catalogRoute.id}`);
+  });
+
+  it('Атлас — кнопка-стрелка героя с прямыми углами: радиус shape.button, как у «Классики»', async () => {
+    getRouteMap.mockResolvedValue(geometry);
+    await openThemed('atlas');
+    const arrow = await screen.findByTestId('route-hero-arrow', hidden);
+    expect(StyleSheet.flatten(arrow.props.style).borderRadius).toBe(0);
   });
 
   it('Атлас — ошибка /map: панель без контура, тихо', async () => {

@@ -35,6 +35,8 @@ describe('groupOf: kind → группа настроек (N4)', () => {
       ride_rescheduled: 'rides',
       ride_joined: 'rides',
       ride_report_resolved: 'rides',
+      route_published: 'rides',
+      route_rejected: 'rides',
     });
   });
 
