@@ -75,7 +75,8 @@ export function useRouteRideUpload(
     queryFn: () => withAccessToken((token) => api.getTrackUpload(token, uploadId)),
     initialData: sent?.upload,
     refetchInterval: (query) => (isFinal(query.state.data) ? false : UPLOAD_READY_POLL_MS),
-    enabled: processing,
+    // ответ загрузки уже финальный (`200`: тот же файл) — без опроса, сразу POST
+    enabled: processing && !isFinal(sent.upload),
   });
 
   const { mutate, reset } = check;
