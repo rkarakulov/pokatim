@@ -8,16 +8,20 @@ import { HALLOWEEN_LAYOUT as L, HALLOWEEN_MOTION as M } from './halloween-layout
 
 const FLY_SHARE = Math.round((M.flyMs / (M.flyMs + M.flyPauseMs)) * 100);
 
+/** Сдвиг дорожки ведьмы вниз на время пролёта (статично она у луны). */
+const FLY_DY = L.witch.flyTop - L.witch.top;
+const FLY_END = -(L.witch.width * 1.5 + L.witch.left);
+
 /**
- * Анимации — CSS: паук покачивается, ведьма пролетает справа налево (`left` от правого края за левый) и ждёт. Reduce
- * motion — `prefers-reduced-motion`: анимаций нет, ведьма стоит у луны (базовый `left`/`top`).
+ * Анимации — CSS и только `transform` (без пересчёта раскладки): паук покачивается, дорожка ведьмы (от её места до
+ * правого края) едет справа налево за левый край и ждёт. Reduce motion — `prefers-reduced-motion`: анимаций нет,
+ * ведьма стоит у луны.
  */
 const CSS = `
 @keyframes pokatim-decor-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(${L.spider.bob}px); } }
 @keyframes pokatim-decor-fly {
-  0% { left: 100%; top: ${L.witch.flyTop}px; }
-  ${FLY_SHARE}% { left: -${L.witch.width * 1.5}px; top: ${L.witch.flyTop}px; }
-  100% { left: -${L.witch.width * 1.5}px; top: ${L.witch.flyTop}px; }
+  0% { transform: translate(100%, ${FLY_DY}px); }
+  ${FLY_SHARE}%, 100% { transform: translate(${FLY_END}px, ${FLY_DY}px); }
 }
 .pokatim-decor-bob { animation: pokatim-decor-bob ${M.bobMs * 2}ms ease-in-out infinite; }
 .pokatim-decor-fly { animation: pokatim-decor-fly ${M.flyMs + M.flyPauseMs}ms linear infinite; }
@@ -114,12 +118,14 @@ export function HalloweenDecor() {
         style={box({
           top: L.witch.top,
           left: L.witch.left,
-          width: L.witch.width,
+          right: 0,
           height: L.witch.height,
           opacity: L.witch.opacity,
         })}
       >
-        <DecorSvg art={WITCH} colors={colors} />
+        <div style={box({ top: 0, left: 0, width: L.witch.width, height: L.witch.height })}>
+          <DecorSvg art={WITCH} colors={colors} />
+        </div>
       </div>
       {L.pumpkins.map((pumpkin, index) => (
         <div

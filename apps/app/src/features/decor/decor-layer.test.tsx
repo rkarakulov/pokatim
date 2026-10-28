@@ -73,15 +73,20 @@ describe('HalloweenDecor native (AC5)', () => {
   });
 
   it('reduce motion — без анимаций; выключен — паук и ведьма анимируются', async () => {
-    const loop = jest.spyOn(Animated, 'loop');
+    // циклы — без реальных таймеров (кадр анимации после теста бил бы в разобранное окружение)
+    const start = jest.fn();
+    const stop = jest.fn();
+    const loop = jest.spyOn(Animated, 'loop').mockReturnValue({ start, stop, reset: jest.fn() });
     const view = await render(<HalloweenDecor />, { wrapper: wrapper() });
     await waitFor(() => expect(reduceMotion).toHaveBeenCalled());
     expect(loop).not.toHaveBeenCalled();
-    view.unmount();
+    await view.unmount();
 
     reduceMotion.mockResolvedValue(false);
-    await render(<HalloweenDecor />, { wrapper: wrapper() });
-    await waitFor(() => expect(loop).toHaveBeenCalledTimes(2));
+    const animated = await render(<HalloweenDecor />, { wrapper: wrapper() });
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+    await animated.unmount();
+    expect(stop).toHaveBeenCalledTimes(2);
     loop.mockRestore();
   });
 });
