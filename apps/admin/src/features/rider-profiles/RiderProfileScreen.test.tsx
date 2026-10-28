@@ -4,7 +4,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
-import { httpError, ME, renderApp } from '../../test/app';
+import { httpError, ME, networkError, renderApp } from '../../test/app';
 
 vi.mock('../../api', () => ({
   api: {
@@ -183,6 +183,72 @@ describe('карточка профиля райдера (profile-moderation, AC
     await open();
     await confirmWith('Сбросить клуб', 'Реклама в клубе');
     expect(await within(dialog()).findByRole('alert')).toBeTruthy();
+  });
+
+  it('404 при действии (профиль удалён) — окно закрыто, карточка перечитана: «Профиль не найден» без действий', async () => {
+    mocked.resetRiderClub.mockRejectedValue(httpError(404, 'NOT_FOUND'));
+    await open();
+    await screen.findByRole('heading', { name: 'Анна К. ·9a8090' });
+    mocked.getRiderProfile.mockRejectedValue(httpError(404, 'NOT_FOUND'));
+    await confirmWith('Сбросить клуб', 'Реклама в клубе');
+    expect(await screen.findByText('Профиль не найден')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByText('Не удалось сохранить')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Сбросить фото' })).toBeNull();
+  });
+
+  it.each([
+    ['500', () => httpError(500, 'INTERNAL')],
+    ['сбой сети', networkError],
+  ])(
+    'ошибка перечитывания (%s) при показанной карточке — данные остаются, баннер с повтором',
+    async (_, error) => {
+      await open();
+      await screen.findByRole('heading', { name: 'Анна К. ·9a8090' });
+      mocked.getRiderProfile.mockRejectedValue(error());
+      mocked.dismissRiderProfileReports.mockResolvedValue({ dismissed: true });
+      await confirmWith('Отклонить жалобы', 'Нарушений нет');
+      expect(await screen.findByText('Не удалось обновить данные')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Анна К. ·9a8090' })).toBeTruthy();
+      expect(screen.getByText('Клуб с рекламой')).toBeTruthy();
+
+      mocked.getRiderProfile.mockResolvedValue(detail({ openReportCount: 0, club: null }));
+      fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+      await waitFor(() => expect(screen.queryByText('Не удалось обновить данные')).toBeNull());
+      expect(screen.queryByRole('button', { name: 'Отклонить жалобы' })).toBeNull();
+    },
+  );
+
+  it('сброс выполнен, перечитывание упало 500 — баннер с повтором поверх прежней карточки', async () => {
+    mocked.resetRiderAvatar.mockResolvedValue({ reset: true });
+    await open();
+    await screen.findByRole('heading', { name: 'Анна К. ·9a8090' });
+    mocked.getRiderProfile.mockRejectedValue(httpError(500, 'INTERNAL'));
+    await confirmWith('Сбросить фото', 'Фото с рекламой');
+    expect(await screen.findByText('Не удалось обновить данные')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Анна К. ·9a8090' })).toBeTruthy();
+  });
+
+  it('карточка загружена, перечитывание — 404: «Профиль не найден» вместо старой карточки и действий', async () => {
+    mocked.resetRiderName.mockResolvedValue({ reset: true });
+    await open();
+    await screen.findByRole('heading', { name: 'Анна К. ·9a8090' });
+    mocked.getRiderProfile.mockRejectedValue(httpError(404, 'NOT_FOUND'));
+    await confirmWith('Сбросить имя', 'Имя оскорбительное');
+    expect(await screen.findByText('Профиль не найден')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Анна К. ·9a8090' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Сбросить клуб' })).toBeNull();
+  });
+
+  it('карточка загружена, перечитывание — 403: «Нет доступа»', async () => {
+    mocked.resetRiderClub.mockResolvedValue({ reset: true });
+    await open();
+    await screen.findByRole('heading', { name: 'Анна К. ·9a8090' });
+    mocked.getRiderProfile.mockRejectedValue(httpError(403, 'FORBIDDEN'));
+    await confirmWith('Сбросить клуб', 'Реклама в клубе');
+    expect(await screen.findByText(/Нет доступа/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Сбросить клуб' })).toBeNull();
   });
 
   it('404 — «Профиль не найден»; ошибка — с повтором; загрузка — скелетон', async () => {

@@ -106,7 +106,8 @@ function Preview({ profile, label }: { profile: RiderProfileModerationDetail; la
  * Карточка модерации профиля райдера (`profiles.moderate`, profile-moderation): фото (и у скрытого профиля, S-2),
  * подпись (имя — по Q2), клуб, статус публичности, жалобы без автора. «Сбросить фото / клуб / имя» неактивны, когда
  * сбрасывать нечего; «Отклонить жалобы» — при открытых, шлёт `reportRevision`. Каждое действие — `ReasonDialog` с
- * предупреждением не повторять имя и клуб (D11); 409 `CONFLICT` — `ConflictBanner` с перечитыванием карточки.
+ * предупреждением не повторять имя и клуб (D11); 409 `CONFLICT` — `ConflictBanner` с перечитыванием карточки; 404
+ * (профиль стёрт) — перечитывание и «Профиль не найден». Ошибка перечитывания при показанных данных — баннер с повтором.
  */
 export function RiderProfileScreen({ userId }: { userId: string }) {
   const queryClient = useQueryClient();
@@ -121,14 +122,17 @@ export function RiderProfileScreen({ userId }: { userId: string }) {
     </Link>
   );
 
-  if (!profile.data) {
+  // ошибка перечитывания при показанной карточке: 403 и 404 (профиль стёрт) — как при первой загрузке, карточка и
+  // действия убираются; прочее — баннер с повтором поверх последних данных (AGENTS.md §4.12), как в `rider-routes`
+  if (profile.isError && isForbidden(profile.error)) return <NoAccessScreen />;
+  const notFound = profile.isError && httpStatus(profile.error) === 404;
+  if (!profile.data || notFound) {
     if (profile.isError || profile.fetchStatus === 'paused') {
-      if (isForbidden(profile.error)) return <NoAccessScreen />;
       return (
         <>
           <PageHeader crumb={crumb} title={t('admin.riderProfiles.title')} />
           <div className="page-body">
-            {httpStatus(profile.error) === 404 ? (
+            {notFound ? (
               <EmptyState title={t('admin.riderProfiles.notFound')} />
             ) : (
               <ErrorState
@@ -181,6 +185,11 @@ export function RiderProfileScreen({ userId }: { userId: string }) {
         });
       }
     } catch (error) {
+      // 404 — профиль стёрт между открытием карточки и действием: перечитывание покажет «Профиль не найден»
+      if (httpStatus(error) === 404) {
+        await refresh();
+        return;
+      }
       if (!isConflict(error)) throw error;
       setStale(true);
       return;
@@ -218,6 +227,20 @@ export function RiderProfileScreen({ userId }: { userId: string }) {
       <div className="page-body">
         {blocked ? (
           <DisabledReason id={reasonId}>{t('admin.riderProfiles.nothingToReset')}</DisabledReason>
+        ) : null}
+        {profile.isError ? (
+          <Banner
+            tone="error"
+            role="alert"
+            title={t('admin.refreshFailed')}
+            actions={
+              <Button size="sm" busy={profile.isFetching} onClick={() => void reload()}>
+                {t('state.retry')}
+              </Button>
+            }
+          >
+            {t('admin.refreshFailedMessage')}
+          </Banner>
         ) : null}
         {stale ? (
           <ConflictBanner

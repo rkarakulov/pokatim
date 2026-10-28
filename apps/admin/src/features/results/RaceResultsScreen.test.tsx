@@ -746,6 +746,8 @@ describe('«Результаты» гонки — имя участника (pro
     fireEvent.click(await within(standings).findByRole('button', { name: 'Сбросить имя' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/Не повторяйте имя в причине/)).toBeTruthy();
+    // сброс закрывает все открытые жалобы на профиль (§3 п. 5, findings MEDIUM-1) — модератор их здесь не видит
+    expect(within(dialog).getByText(/Открытые жалобы на профиль участника закроются/)).toBeTruthy();
     fireEvent.change(reasonField(), { target: { value: 'Оскорбительное имя' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Сбросить имя' }));
     await waitFor(() =>
