@@ -139,7 +139,7 @@ export class ProfileModerationService {
     });
   }
 
-  /** Сброс фото: документ `profile_avatars` удаляется — прежний URL отдаёт 404. */
+  /** Сброс фото: документ фото удаляется — прежний URL отдаёт 404. */
   resetAvatar(
     actorUserId: string,
     userId: string,

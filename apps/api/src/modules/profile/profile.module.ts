@@ -36,7 +36,7 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
 /**
  * Ядро `profile` для API и worker: единственные писатели `profiles` и анкет Verified, порты
  * `RiderNameDirectory` и `VerifiedProfiles` (race-results-07) для `results` (через `index.ts`), `RiderProfileDirectory`
- * (rider-profile) для `riders`, единственный писатель `profile_reports` (profile-moderation) и порт стирания
+ * (rider-profile) для `riders`, единственный писатель жалоб на профиль (profile-moderation) и порт стирания
  * `ProfileErasure` (`account`) — без контроллеров и без импортов. Репозитории объявлены только здесь (один экземпляр).
  */
 @Module({

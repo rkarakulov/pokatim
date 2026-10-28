@@ -47,7 +47,7 @@ export interface ProfileDoc {
    */
   publicId?: string | null;
   /**
-   * profile-moderation: число открытых жалоб на профиль (= числу документов `profile_reports` с `resolvedAt: null`;
+   * profile-moderation: число открытых жалоб на профиль (= числу открытых документов жалоб, `resolvedAt: null`;
    * транзакция жалобы и действий модерации — запись профиля первой). Нет поля — 0. Наружу в `ProfileView` и
    * публичный профиль не выходит.
    */
