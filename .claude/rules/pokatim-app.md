@@ -367,8 +367,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   односторонняя: карточки `routes/route-detail.tsx`, `my-route-detail.tsx` → `route-rides-block.tsx`; `route-rides/*` →
   `routes/{route-line-map,queries,my-routes-queries,format,detail-row}`). Ключи `['route-rides', routeId, …]` (`list`,
   `candidates`, `ride`, `track` с ревизией, `upload`) — через `withAccessToken`, только клиент; блок «Мои заезды» —
-  только `signedIn` (SSR без блока), запрос списка — в экране карточки (pull-to-refresh). Адреса `routes/rides/pick/
-  [routeId]`, `routes/rides/[routeId]/[rideId]` — в `Stack.Protected`; `?mine=1` — только выбор геометрии карты и
+  только `signedIn` (SSR без блока), запрос списка — в экране карточки (pull-to-refresh). Адреса `routes/pick/
+  [routeId]`, `routes/rides/[routeId]/[rideId]` — в `Stack.Protected` (выбор — не под `routes/rides/`: манифест SSR
+  ставит маршрут с бо́льшим числом динамических сегментов раньше статического, в отличие от клиента; новый адрес той же
+  глубины — строка в сторож `src/app-routes-manifest.server.test.ts`); `?mine=1` — только выбор геометрии карты и
   ссылки «К маршруту» (права — сервер). Загрузка файла — опрос `getTrackUpload` до финала (≤ 60 с) и один POST
   `{ uploadId }` (`use-route-ride-upload.ts`), не повторы POST: лимит 30/ч списывается до проверки готовности (RC-1);
   `NOT_READY` — один повтор. Карта — `RouteLineMap` с пропсом `track` (`RouteMapTrack`); строка кандидата — общий

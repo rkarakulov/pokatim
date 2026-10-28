@@ -216,16 +216,16 @@ TDD: чистая логика показа (`route-ride-format.ts`: стату�
 
 ## 8.2 Deviations from spec
 
-- **ОТКРЫТО — RC-3 опровергнут на web-сервере (блокер AC2/AC7).** Клиентский роутер (`getStateFromPath`) ставит
-  `routes/rides/pick/[routeId]` выше `routes/rides/[routeId]/[rideId]` (jest-сторож RC-3 зелёный), но серверный
+- **RC-3 опровергнут на web-сервере → адрес выбора изменён (решение оркестратора, вариант (a)).** Клиентский роутер
+  (`getStateFromPath`) ставит `routes/rides/pick/[routeId]` выше `routes/rides/[routeId]/[rideId]`, но серверный
   манифест SSR (`@expo/router-server` `getServerManifest`: `sortRoutes(b, a)` + `reverse` — маршрут с бо́льшим числом
-  динамических сегментов идёт раньше) кладёт `[routeId]/[rideId]` (индекс 25 в `dist/server/_expo/routes.json`) перед
-  `pick/[routeId]` (индекс 30); `expo-server` берёт первое совпадение. Итог: SSR `/routes/rides/pick/<uuid>`
-  отдаёт HTML и чанк экрана результата (`[rideId]-….js`), e2e «выбор своего заезда без сессии» красный. Решение —
-  за оркестратором (адреса A3/A4 — продуктовые): (a) **рекомендация** — выбор на `/routes/pick/<routeId>` (вне
-  `routes/rides/*`; `routes/[id]` — один сегмент, конфликтов нет), результат остаётся; (b) результат на
-  `/routes/rides/<routeId>/ride/<rideId>`; (c) выбор на `/routes/rides/<routeId>/pick` — не годится (тот же
-  конфликт). Плюс сторож: тест порядка `htmlRoutes` серверного манифеста или e2e (уже есть).
+  динамических сегментов раньше) ставил `[routeId]/[rideId]` первым, а `expo-server` берёт первое совпадение: SSR
+  `/routes/rides/pick/<uuid>` отдавал экран результата. Решение: выбор — **`/routes/pick/<routeId>[?mine=1]`**
+  (`src/app/routes/pick/[routeId].tsx`, как `routes/report/[id]`), результат — без изменений
+  `/routes/rides/<routeId>/<rideId>`. A3, §5.1, §11 (адрес выбора) читать с этой поправкой. Сторож —
+  `src/app-routes-manifest.server.test.ts` (jest `server`): манифест той же функцией, что у `expo export`
+  (`createRoutesManifest` по файлам `src/app`), первое совпадение для адресов выбора, результата, `routes/[id]`,
+  `routes/mine/[id]`, `routes/report/[id]`, `races/pick/[id]`; до переноса — красный.
 - RC-2 follow-up (`activityId` в `RouteRideDetail`) — в `pr.md` на шаге FINISH (pr.md этой задачей не создавался).
 - Коммиты по шагам §11 слиты: «`RouteLineMap.track` + `RouteRideMap`» и «экраны выбора и результата + `_layout`» —
   один коммит (тест карты открывает экран результата).
@@ -549,10 +549,9 @@ follow-up); шторка «Моего маршрута»; обобщение `At
 
 ## 12. Outcome (заполняет coder)
 
-**Статус: реализация по §11 готова, AC2/AC7 — НЕ закрыты: открытый вопрос RC-3 (§8.2) — SSR web-сервера отдаёт
-экран результата на адресе выбора.**
+**Статус: реализовано по §11 с поправкой RC-3 (§8.2: выбор — `/routes/pick/<routeId>`); `pnpm check` зелёный.**
 
-Сделано (ветка `feature/route-rides-app`, коммиты 7110677…039c593):
+Сделано (ветка `feature/route-rides-app`, коммиты 7110677…):
 - `packages/i18n` — ключи `routes.rides.*` (§11).
 - `features/route-rides/`: `route-ride-format.ts` (пилюли, причины RC-8, сбои, сводка, строки, дельты RC-7, сравнение,
   строки трека RC-9, адреса с `?mine=1`), `error-messages.ts` (`routeRideErrorMessage`, 429 в минутах RC-10),
@@ -565,22 +564,28 @@ follow-up); шторка «Моего маршрута»; обобщение `At
 - `features/routes/route-line-map.tsx` — необязательный `track`; блок на карточках каталога (шторка, после
   действий/«Пожаловаться», до «Гонок») и своего готового маршрута (после «Загружен»), запрос списка — в экранах
   (pull-to-refresh).
-- Экраны `app/routes/rides/pick/[routeId].tsx`, `app/routes/rides/[routeId]/[rideId].tsx` в `Stack.Protected`.
-- e2e: гард входа на обоих адресах, SSR карточки без «Мои заезды», гость без блока, после входа — блок → выбор → пусто.
+- Экраны `app/routes/pick/[routeId].tsx`, `app/routes/rides/[routeId]/[rideId].tsx` в `Stack.Protected`; сторож
+  порядка манифеста SSR — `src/app-routes-manifest.server.test.ts` (до переноса адреса выбора — красный).
+- e2e: гард входа на обоих адресах (SSR отдаёт свой экран: у выбора — шапка «Выбрать свой заезд», без данных и OG),
+  SSR карточки без «Мои заезды», гость без блока, после входа — блок → выбор → пусто.
 - Документы: `docs/product/routes.md` («Экран в приложении (route-rides-02)»), `.claude/rules/pokatim-app.md`.
 
-Тесты (jest, native): `route-ride-format.test.ts` (17), `error-messages.test.ts` (7), `activity-pick-row.test.tsx` (2),
+Тесты (jest): `route-ride-format.test.ts` (17), `error-messages.test.ts` (7), `activity-pick-row.test.tsx` (2),
 `route-rides-block.test.tsx` (14), `route-ride-pick.test.tsx` (18, вкл. RC-1 и RC-3 клиента), `route-ride.test.tsx`
-(12, вкл. RC-6), `route-ride-map.test.tsx` (6); `route-detail.test.tsx`, `my-routes.test.tsx` — дефолт
-`listRouteRides` (RC-12); `race-pick.test.tsx` без изменений — зелёный (итого по затронутым набором — 87 passed).
+(12, вкл. RC-6), `route-ride-map.test.tsx` (6), `app-routes-manifest.server.test.ts` (6, RC-3 сервера);
+`route-detail.test.tsx`, `my-routes.test.tsx` — дефолт `listRouteRides` (RC-12); `race-pick.test.tsx` без изменений —
+зелёный.
 
 Проверки:
-- `TURBO_CONCURRENCY=1 pnpm check` (env `MONGO_URL_TEST`/`REDIS_URL_TEST` изолированные): format, lint, arch:check,
-  typecheck, тесты API — зелёные; `@pokatim/app#test` — 1 failed / 1824 passed: `not-found.test.tsx` «вошедший: «На
-  главную»…» — таймаут 5 с под нагрузкой (файл задачей не затронут). Отдельно: `not-found` — 3/3 passed;
-  `pnpm --filter @pokatim/app test` повторно — `Tests: 1825 passed, 1825 total`.
-- `pnpm e2e:web` без API (`EXPO_PUBLIC_API_URL=http://127.0.0.1:3000`, без сервера API): 17 passed, 7 skipped,
-  4 failed — 2 старых шага (`/rides/report/<id>`, `/rides/route-pick` — «Нет соединения» не видно без API; задачей
-  не затронуты) + 2 новых: выбор — SSR отдаёт экран результата (§8.2 RC-3), результат — та же причина, что у старых
-  шагов (без API). Режим CI (`E2E_API=1`, API + worker + MongoDB + Mailpit) — NOT VERIFIED: локально не поднимался.
-- Проверка на dev, устройстве (native-карта) и 7 темах вручную — NOT VERIFIED.
+- `TURBO_CONCURRENCY=1 pnpm check` (env `MONGO_URL_TEST`/`REDIS_URL_TEST` изолированные) — `Tasks: 15 successful, 15
+  total`, EXIT 0 (`@pokatim/app:test: Tests: 1831 passed`, `@pokatim/api:test: Test Files 152 passed`). Флаки по
+  дороге: 1-й прогон — `not-found.test.tsx` (таймаут 5 с под нагрузкой; отдельно 3/3), 2-й — интеграционные API на
+  лимитерах Redis (429/200; `pnpm --filter @pokatim/api test` отдельно — 152/152, 1643 tests); 3-й прогон — зелёный
+  (app-тесты — из кэша turbo 2-го прогона, где они прошли).
+- `pnpm e2e:web` без API (CI такого шага нет: job `web` всегда `E2E_API=1`; локально — `EXPO_PUBLIC_API_URL=
+  http://127.0.0.1:3000` без сервера API): 17 passed, 7 skipped, 4 failed — шаги гарда `/rides/report/<id>`,
+  `/rides/route-pick` и два новых route-rides-02 падают одинаково: без API экран показывает «Не удалось загрузить»
+  вместо «Нет соединения». Старые два шага так же красные на `origin/develop` (aa857ba, отдельная сборка) — не
+  регрессия; HTML-проверки новых шагов (в т. ч. RC-3: SSR выбора — свой экран) проходят.
+- Режим CI (`E2E_API=1`: API + worker + MongoDB + Mailpit) — NOT VERIFIED локально.
+- Проверка на dev, устройстве (native-карта), 7 темах и 375 px вручную — NOT VERIFIED.
