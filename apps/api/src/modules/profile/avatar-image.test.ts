@@ -2,7 +2,14 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
 import { cropRect, detectImageFormat, processAvatar } from './avatar-image';
-import { avatarPixel, brokenJpeg, GIF_BYTES, hugePng, twoToneImage } from '../../../test/avatars';
+import {
+  avatarPixel,
+  brokenJpeg,
+  GIF_BYTES,
+  hasGpsIfd,
+  hugePng,
+  twoToneImage,
+} from '../../../test/avatars';
 
 describe('detectImageFormat — по сигнатуре', () => {
   it('JPEG, PNG, WebP', () => {
@@ -74,6 +81,7 @@ describe('processAvatar', () => {
     const before = await sharp(input).metadata();
     expect(before.orientation).toBe(6);
     expect(before.exif).toBeDefined();
+    expect(hasGpsIfd(before.exif)).toBe(true);
 
     const result = await processAvatar(input, null);
     if (!result.ok) throw new Error(result.error);
@@ -115,7 +123,7 @@ describe('processAvatar', () => {
     expect((await processAvatar(forged, null)).ok).toBe(false);
   });
 
-  it('больше 40 Мп (поддельный IHDR) и битый JPEG — invalid', async () => {
+  it('больше 25 Мп (поддельный IHDR 5001×5000) и битый JPEG — invalid', async () => {
     expect(await processAvatar(hugePng(), null)).toMatchObject({ ok: false, error: 'invalid' });
     expect(await processAvatar(brokenJpeg(), null)).toMatchObject({ ok: false, error: 'invalid' });
   });

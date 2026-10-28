@@ -52,14 +52,24 @@ export async function avatarPixel(bytes: Uint8Array, x: number, y: number): Prom
   return 'other';
 }
 
+/**
+ * Во входе есть GPS (LOW-3 ревью): в EXIF записан указатель на GPS IFD (тег 0x8825) в порядке байт TIFF-заголовка.
+ */
+export function hasGpsIfd(exif: Buffer | undefined): boolean {
+  if (!exif) return false;
+  const tiff = exif.indexOf('II*\0', 0, 'latin1') >= 0 ? 'II' : 'MM';
+  const tag = tiff === 'II' ? Buffer.from([0x25, 0x88]) : Buffer.from([0x88, 0x25]);
+  return exif.includes(tag);
+}
+
 /** GIF89a — формат вне белого списка. */
 export const GIF_BYTES = Buffer.from(
   '474946383961010001008000000000ffffff21f90401000000002c00000000010001000002024401003b',
   'hex',
 );
 
-/** PNG c подделанным `IHDR` 8000×5001 (> 40 Мп) — без реального декодирования. */
-export function hugePng(): Buffer {
+/** PNG c подделанным `IHDR` (по умолчанию 5001×5000 — чуть больше 25 Мп) — без реального декодирования. */
+export function hugePng(width = 5001, height = 5000): Buffer {
   const chunk = (type: string, data: Buffer) => {
     const length = Buffer.alloc(4);
     length.writeUInt32BE(data.length);
@@ -69,8 +79,8 @@ export function hugePng(): Buffer {
     return Buffer.concat([length, body, crc]);
   };
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(8000, 0);
-  ihdr.writeUInt32BE(5001, 4);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8; // глубина
   ihdr[9] = 2; // RGB
   return Buffer.concat([

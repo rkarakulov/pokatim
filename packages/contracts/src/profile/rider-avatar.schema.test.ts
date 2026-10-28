@@ -13,10 +13,10 @@ import {
 const TOKEN = 'Ab0_-'.repeat(8) + 'xyz';
 
 describe('rider-avatar: пределы', () => {
-  it('10 МиБ, 512 px, 40 Мп, обрезка от 64 px', () => {
+  it('10 МиБ, 512 px, 25 Мп (память API, ADR-0018), обрезка от 64 px', () => {
     expect(AVATAR_MAX_BYTES).toBe(10 * 1024 * 1024);
     expect(AVATAR_SIZE_PX).toBe(512);
-    expect(AVATAR_MAX_INPUT_PIXELS).toBe(40_000_000);
+    expect(AVATAR_MAX_INPUT_PIXELS).toBe(25_000_000);
     expect(AVATAR_MIN_CROP_PX).toBe(64);
   });
 });

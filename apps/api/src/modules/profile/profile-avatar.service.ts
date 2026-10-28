@@ -24,8 +24,8 @@ const limited = (retryAfterSec: number) => {
 };
 
 /**
- * Аватар своего профиля (rider-profile, ADR-0018): лимит `profile-avatar:<uid>` 20/ч и слот приёма (2 на процесс, 1 на
- * пользователя) — до тела; перекодирование `processAvatar`; замена — транзакция «новый документ → профиль → прежний
+ * Аватар своего профиля (rider-profile, ADR-0018): слот приёма (1 на процесс и на пользователя) и лимит
+ * `profile-avatar:<uid>` 20/ч — до тела; перекодирование `processAvatar`; замена — транзакция «новый документ → профиль → прежний
  * удалён»; удаление — транзакция «профиль → прежний удалён». В логах — `uid`, размер, формат и исход (без имени,
  * клуба и сообщений libvips).
  */
@@ -42,11 +42,19 @@ export class ProfileAvatarService {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  /** Лимит частоты и слот приёма — до чтения тела; `release` — после ответа. */
+  /**
+   * Слот приёма, затем лимит частоты — до чтения тела; `release` — после ответа. Слот первым (LOW-1 ревью): отказ «слот
+   * занят» не списывает часовую квоту; отказ квоты освобождает слот.
+   */
   async admit(userId: string): Promise<UploadSlot> {
-    await this.consume(`profile-avatar:${userId}`, PROFILE_POLICY.avatarUploadLimit);
     const slot = this.slots.tryAcquire(userId);
     if (!slot) throw limited(5);
+    try {
+      await this.consume(`profile-avatar:${userId}`, PROFILE_POLICY.avatarUploadLimit);
+    } catch (error) {
+      slot.release();
+      throw error;
+    }
     return slot;
   }
 

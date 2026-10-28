@@ -6,8 +6,11 @@ import { fieldError } from '../common.ts';
 export const AVATAR_MAX_BYTES = 10 * 1024 * 1024;
 /** Сторона сохранённого аватара: квадрат 512×512 JPEG без метаданных. */
 export const AVATAR_SIZE_PX = 512;
-/** Предел пикселей входа (после декодирования заголовка); больше — `422 AVATAR_INVALID`. */
-export const AVATAR_MAX_INPUT_PIXELS = 40_000_000;
+/**
+ * Предел пикселей входа (по заголовку); больше — `422 AVATAR_INVALID`. 25 Мп (MEDIUM-1 ревью): пик памяти libvips —
+ * ADR-0018; кадры 48 Мп нужно уменьшить на клиенте (системная обрезка native и web-экран обрезки дают меньше).
+ */
+export const AVATAR_MAX_INPUT_PIXELS = 25_000_000;
 /** Минимальная сторона обрезки в пикселях исходника; меньше — `422 AVATAR_INVALID`. */
 export const AVATAR_MIN_CROP_PX = 64;
 
