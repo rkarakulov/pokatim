@@ -192,15 +192,10 @@ describe('текстовая альтернатива трека (RC-9)', () => 
     expect(routeRideTrackLines(rideDetail(), 'pending', 0)).toEqual([pending]);
   });
 
-  it('не пройден: причина и «Где сход», если участки есть', () => {
+  it('не пройден: «Где сход», если участки есть; причины здесь нет — она в вердикте экрана (ревью pass 1)', () => {
     const detail = rideDetail({ status: 'not_passed', reason: 'off_corridor', elapsedSec: null });
-    const lines = routeRideTrackLines(detail, 'ready', 2);
-    expect(lines).toHaveLength(2);
-    expect(lines[1]).toBe('Где сход — пунктиром на карте');
-    expect(routeRideTrackLines(detail, 'ready', 0)).toHaveLength(1);
-    expect(
-      routeRideTrackLines(rideDetail({ status: 'not_passed', reason: 'unknown' }), 'ready', 0),
-    ).toEqual([]);
+    expect(routeRideTrackLines(detail, 'ready', 2)).toEqual(['Где сход — пунктиром на карте']);
+    expect(routeRideTrackLines(detail, 'ready', 0)).toEqual([]);
   });
 
   it('разметка недоступна — отдельная строка; пройден с разметкой — ничего', () => {

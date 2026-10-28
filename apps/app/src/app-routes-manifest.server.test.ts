@@ -2,6 +2,7 @@
 import { readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
+// внутренний путь пакета (публичного входа у функции нет); версия закреплена в devDependencies — как у expo-router
 import { createRoutesManifest } from '@expo/router-server/build/routes-manifest';
 
 /**

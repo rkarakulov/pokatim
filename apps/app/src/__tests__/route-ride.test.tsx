@@ -1,6 +1,8 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import type { ReactElement } from 'react';
+import type { RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -217,6 +219,19 @@ describe('«Заезд по маршруту» (route-rides-02, A4)', () => {
     expect(
       await screen.findByText('Слишком много проверок за час. Попробуйте через 1 мин.'),
     ).toBeOnTheScreen();
+  });
+
+  it('pull-to-refresh — деталь перезапрашивается (ревью pass 1)', async () => {
+    signedIn();
+    await open();
+    expect(await screen.findByText('2:04:37')).toBeOnTheScreen();
+    expect(getRide).toHaveBeenCalledTimes(1);
+    const control = screen.getByTestId('route-ride').props
+      .refreshControl as ReactElement<RefreshControlProps>;
+    await act(async () => {
+      await control.props.onRefresh?.();
+    });
+    expect(getRide).toHaveBeenCalledTimes(2);
   });
 
   it('незнакомый статус — «Статус неизвестен» без действий', async () => {

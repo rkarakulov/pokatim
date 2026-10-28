@@ -5,7 +5,8 @@ import {
   type TrackUploadStatus,
 } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
-import { useQuery } from '@tanstack/react-query';
+import { isNetworkError } from '@pokatim/api-client';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { apiErrorCode } from '@/features/auth/error-messages';
@@ -31,9 +32,11 @@ export type RouteRideUploadPhase =
   | { phase: 'checking' }
   /** 60 с без финала или `NOT_READY` после повтора */
   | { phase: 'timeout' }
+  /** опрос статуса файла не удался (сеть, 5xx, 404) — баннер с повтором опроса; файл заново не отправляется */
+  | { phase: 'pollFailed'; network: boolean }
   | { phase: 'failed'; message: string };
 
-type OwnPhase = Exclude<RouteRideUploadPhase, { phase: 'uploading' }>;
+type OwnPhase = Exclude<RouteRideUploadPhase, { phase: 'uploading' } | { phase: 'pollFailed' }>;
 
 const isFinal = (upload: TrackUpload | undefined) =>
   upload !== undefined && TRACK_UPLOAD_FINAL_STATUSES.includes(upload.status as TrackUploadStatus);
@@ -50,6 +53,7 @@ export function useRouteRideUpload(
   routeId: string,
   { onChecked }: { onChecked: (ride: RouteRideDetail) => void },
 ) {
+  const queryClient = useQueryClient();
   const check = useCheckRouteRide(routeId);
   const [own, setOwn] = useState<OwnPhase>({ phase: 'idle' });
   const [sent, setSent] = useState<{ upload: TrackUpload; at: number } | null>(null);
@@ -62,6 +66,9 @@ export function useRouteRideUpload(
 
   const file = useTrackFileUpload({
     onUploaded: (upload) => {
+      // ответ загрузки — свежее кэша: повтор того же файла (тот же id) после таймаута уже `ready`, а `initialData`
+      // существующий запрос не перезаписывает
+      queryClient.setQueryData(routeRidesKeys.upload(routeId, upload.id), upload);
       submitted.current = null;
       setSent({ upload, at: Date.now() });
       setOwn({ phase: 'processing' });
@@ -109,6 +116,7 @@ export function useRouteRideUpload(
   // финальный статус загрузки: принят — ровно один POST (сторож — `submitted`); отказ обработки — без POST
   const data = processing ? upload.data : undefined;
   const rejected = data !== undefined && isFinal(data) && !isAccepted(data) ? data : null;
+  const pollFailed = processing && upload.isError && !isFinal(data);
   useEffect(() => {
     if (!data || !isFinal(data) || !isAccepted(data) || submitted.current === data.id) return;
     submitted.current = data.id;
@@ -118,13 +126,20 @@ export function useRouteRideUpload(
   // 60 с от отправки без финала — «откройте выбор позже» (заезд позже появится в кандидатах)
   const sentAt = sent?.at;
   useEffect(() => {
-    if (!processing || sentAt === undefined || rejected) return;
+    if (!processing || sentAt === undefined || rejected || pollFailed) return;
     const timer = setTimeout(
       () => setOwn({ phase: 'timeout' }),
       Math.max(0, sentAt + UPLOAD_READY_TIMEOUT_MS - Date.now()),
     );
     return () => clearTimeout(timer);
-  }, [processing, sentAt, rejected]);
+  }, [processing, sentAt, rejected, pollFailed]);
+
+  // повтор опроса после ошибки: окно 60 с — заново, файл не отправляется
+  const { refetch } = upload;
+  const retryPoll = useCallback(() => {
+    setSent((current) => (current ? { ...current, at: Date.now() } : current));
+    void refetch();
+  }, [refetch]);
 
   useEffect(
     () => () => {
@@ -152,15 +167,17 @@ export function useRouteRideUpload(
       ? file.state
       : file.state.phase === 'failed'
         ? { phase: 'failed', message: file.state.message }
-        : rejected
-          ? {
-              phase: 'failed',
-              message: t('routes.rides.pick.uploadRejected', {
-                reason: uploadStatus(rejected).label,
-              }),
-            }
-          : own;
+        : pollFailed
+          ? { phase: 'pollFailed', network: isNetworkError(upload.error) }
+          : rejected
+            ? {
+                phase: 'failed',
+                message: t('routes.rides.pick.uploadRejected', {
+                  reason: uploadStatus(rejected).label,
+                }),
+              }
+            : own;
   const busy =
     state.phase === 'uploading' || state.phase === 'processing' || state.phase === 'checking';
-  return { state, choose, cancel, busy };
+  return { state, choose, cancel, retryPoll, busy };
 }

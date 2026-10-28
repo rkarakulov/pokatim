@@ -2044,6 +2044,7 @@ export const ru = {
   'routes.rides.pick.checked': 'Уже проверен',
   'routes.rides.pick.processing': 'Обрабатываем файл…',
   'routes.rides.pick.uploadRejected': 'Файл не принят: {reason}',
+  'routes.rides.pick.statusFailed': 'Не удалось узнать статус файла',
   'routes.rides.result.title': 'Заезд по маршруту',
   'routes.rides.result.checking': 'Проверяем заезд…',
   'routes.rides.result.notFound': 'Заезд не найден',

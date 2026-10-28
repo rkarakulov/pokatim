@@ -1,3 +1,4 @@
+import { apiErrorOf } from '@pokatim/api-client';
 import { Uuid, type RouteRideCandidate } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
 import { formatElapsed, t } from '@pokatim/i18n';
@@ -77,6 +78,8 @@ export function RouteRidePickScreen({ routeId, mine }: { routeId: string; mine: 
   const toResult = (rideId: string) => router.replace(routeRidePath(routeId, rideId, mine));
   const upload = useRouteRideUpload(routeId, { onChecked: (ride) => toResult(ride.id) });
   const busy = check.isPending || upload.busy;
+  // маршрут стал невидим (снят, удалён) — как невалидный id: «Маршрут недоступен» без бесполезного повтора
+  const gone = candidates.data === undefined && apiErrorOf(candidates.error)?.code === 'NOT_FOUND';
   const refetchers = useMemo(() => [candidates.refetch], [candidates.refetch]);
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
 
@@ -114,7 +117,7 @@ export function RouteRidePickScreen({ routeId, mine }: { routeId: string; mine: 
           ) : undefined
         }
       >
-        {valid ? (
+        {valid && !gone ? (
           <View style={styles.list}>
             {state.phase === 'uploading' ? (
               <UploadProgress
@@ -126,6 +129,18 @@ export function RouteRidePickScreen({ routeId, mine }: { routeId: string; mine: 
             {state.phase === 'processing' || state.phase === 'checking' ? (
               <View accessibilityLiveRegion="polite">
                 <Banner message={t('routes.rides.pick.processing')} />
+              </View>
+            ) : null}
+            {state.phase === 'pollFailed' ? (
+              <View style={styles.notice}>
+                <Banner
+                  tone="warning"
+                  title={t(state.network ? 'state.errorTitle' : 'state.failedTitle')}
+                  message={t('routes.rides.pick.statusFailed')}
+                />
+                <View style={styles.start}>
+                  <TextAction label={t('state.retry')} onPress={upload.retryPoll} />
+                </View>
               </View>
             ) : null}
             {state.phase === 'timeout' ? (
@@ -196,4 +211,6 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
   list: { gap: space.s3 },
   upload: { alignItems: 'flex-start', paddingBottom: space.s3 },
+  notice: { gap: space.s2 },
+  start: { alignItems: 'flex-start' },
 });

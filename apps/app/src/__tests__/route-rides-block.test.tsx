@@ -3,10 +3,11 @@ import { ApiHttpError } from '@pokatim/api-client';
 import type { CatalogRouteDetail, MyRoute, RouteMapGeometry } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
-import type { RefreshControlProps } from 'react-native';
+import { Text, type RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
+import { useRouteRides } from '@/features/route-rides/queries';
 import { api } from '@/lib/api';
 
 import CatalogRouteRoute from '../app/routes/[id]';
@@ -227,6 +228,20 @@ describe('«Мои заезды» на карточке маршрута кат�
     expect(listRides).toHaveBeenCalledTimes(calls);
   });
 
+  it('ошибка обновления при показанных строках — строки и баннер «Данные могли устареть» с повтором', async () => {
+    signIn();
+    await openCatalog();
+    expect(await screen.findByRole('link', { name: bestLabel })).toBeOnTheScreen();
+    listRides.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await pullToRefresh('route-detail');
+    expect(await screen.findByText('Данные могли устареть')).toBeOnTheScreen();
+    expect(screen.getByRole('link', { name: bestLabel })).toBeOnTheScreen();
+    await fireEvent.press(
+      within(screen.getByTestId('route-rides')).getByRole('button', { name: 'Повторить' }),
+    );
+    await waitFor(() => expect(screen.queryByText('Данные могли устареть')).toBeNull());
+  });
+
   it('pull-to-refresh карточки перезапрашивает список', async () => {
     signIn();
     await openCatalog();
@@ -277,5 +292,26 @@ describe('«Мои заезды» на карточке своего маршр�
     expect(await screen.findByTestId('route-rides')).toBeOnTheScreen();
     await pullToRefresh('my-route-detail');
     expect(listRides).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('опрос списка «Мои заезды» (ревью pass 1)', () => {
+  /** Экран-зонд только с запросом списка: в карточках анимации скелетонов делают 2 мин фейкового времени медленными. */
+  function Probe() {
+    const rides = useRouteRides(ROUTE_ID, true);
+    return <Text>{rides.data?.items[0]?.status ?? '—'}</Text>;
+  }
+
+  it('3 с первые 2 мин, затем 15 с (как у детали, RC-6)', async () => {
+    signIn();
+    listRides.mockResolvedValue(ridesPage([rideRow({ status: 'queued', elapsedSec: null })]));
+    await renderRouter({ index: Probe }, { initialUrl: '/', wrapper: createQueryWrapper() });
+    expect(await screen.findByText('queued')).toBeOnTheScreen();
+    await advance(120_000);
+    expect(listRides).toHaveBeenCalledTimes(41);
+    await advance(14_000);
+    expect(listRides).toHaveBeenCalledTimes(41);
+    await advance(1_000);
+    expect(listRides).toHaveBeenCalledTimes(42);
   });
 });

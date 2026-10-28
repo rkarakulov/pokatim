@@ -223,6 +223,15 @@ describe('«Выбрать свой заезд» для маршрута (route-
     expect(await screen.findByRole('button', { name: freeLabel })).toBeOnTheScreen();
   });
 
+  it('404 кандидатов (маршрут стал невидим) — «Маршрут недоступен» без «Повторить»', async () => {
+    signedIn();
+    listCandidates.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+    await openPick();
+    expect(await screen.findByText('Маршрут недоступен')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Повторить' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Загрузить заезд' })).toBeNull();
+  });
+
   it('невалидный routeId — «Маршрут недоступен» без запросов', async () => {
     signedIn();
     await openPick('nope');
@@ -314,6 +323,50 @@ describe('загрузка файла для проверки по маршру�
     ).toBeOnTheScreen();
     await advance(10_000);
     expect(checkRide).toHaveBeenCalledTimes(2);
+  });
+
+  it('повтор того же файла после таймаута: загрузка уже готова — один POST и результат (ревью pass 1)', async () => {
+    signedIn();
+    pickFile();
+    getUpload.mockResolvedValue(trackUpload({ status: 'processing' }));
+    const router = await openPick();
+
+    await uploadFile(202, trackUpload({ status: 'queued' }));
+    await advance(60_000);
+    expect(
+      await screen.findByText('Файл ещё обрабатывается — откройте выбор позже'),
+    ).toBeOnTheScreen();
+    expect(checkRide).not.toHaveBeenCalled();
+
+    // сервер дообработал файл; повтор того же файла — тот же uploadId уже `ready`
+    FakeXhr.last = undefined;
+    await uploadFile(200, trackUpload({ status: 'ready' }));
+    await waitFor(() =>
+      expect(checkRide).toHaveBeenCalledWith(TOKEN, ROUTE_ID, { uploadId: UPLOAD_ID }),
+    );
+    await waitFor(() => expect(router.getPathname()).toBe(`/routes/rides/${ROUTE_ID}/${RIDE_ID}`));
+    expect(checkRide).toHaveBeenCalledTimes(1);
+  });
+
+  it('ошибка опроса статуса файла — баннер с повтором; повтор без новой отправки доводит до POST', async () => {
+    signedIn();
+    pickFile();
+    getUpload
+      .mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }))
+      .mockResolvedValue(trackUpload({ status: 'ready' }));
+    const router = await openPick();
+
+    await uploadFile(202, trackUpload({ status: 'queued' }));
+    await advance(2000);
+    expect(await screen.findByText('Не удалось узнать статус файла')).toBeOnTheScreen();
+    expect(screen.getByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.queryByText('Обрабатываем файл…')).toBeNull();
+    const xhr = FakeXhr.last;
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(router.getPathname()).toBe(`/routes/rides/${ROUTE_ID}/${RIDE_ID}`));
+    expect(checkRide).toHaveBeenCalledTimes(1);
+    expect(FakeXhr.last).toBe(xhr);
   });
 
   it('уход с экрана во время опроса — запросов больше нет', async () => {

@@ -1,7 +1,9 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
 import type { RouteMapGeometry } from '@pokatim/contracts';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import type { ReactElement } from 'react';
+import type { RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -98,6 +100,9 @@ describe('карта заезда по маршруту (route-rides-02, A4)', (
       await screen.findByLabelText(new RegExp(`^${catalogLabel}\\. Ваш трек: .*Где сход`)),
     ).toBeOnTheScreen();
     await waitFor(() => expect(kinds()).toContain('off'));
+    // причина — в вердикте экрана и в подписи карты, видимым текстом — один раз (ревью pass 1)
+    expect(screen.getAllByText(/^Сход с коридора/)).toHaveLength(1);
+    expect(screen.getByLabelText(/Ваш трек: Сход с коридора/)).toBeOnTheScreen();
   });
 
   it('404 трека — карта маршрута без трека и без строки ошибки', async () => {
@@ -117,6 +122,24 @@ describe('карта заезда по маршруту (route-rides-02, A4)', (
     await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
     await waitFor(() => expect(trackSource()).toBeDefined());
     expect(screen.queryByTestId('route-ride-track-error')).toBeNull();
+  });
+
+  it('ошибка обновления показанного трека — карта и трек остаются, баннер с повтором (ревью pass 1)', async () => {
+    await open();
+    await waitFor(() => expect(trackSource()).toBeDefined());
+    getTrack.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    const control = screen.getByTestId('route-ride').props
+      .refreshControl as ReactElement<RefreshControlProps>;
+    await act(async () => {
+      await control.props.onRefresh?.();
+    });
+    expect(await screen.findByText('Данные могли устареть')).toBeOnTheScreen();
+    expect(trackSource()).toBeDefined();
+    expect(screen.getByText('Ваш трек')).toBeOnTheScreen();
+    const calls = getTrack.mock.calls.length;
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(screen.queryByText('Данные могли устареть')).toBeNull());
+    expect(getTrack).toHaveBeenCalledTimes(calls + 1);
   });
 
   it('env стиля не задан — карты и запроса трека нет, текст экрана цел', async () => {

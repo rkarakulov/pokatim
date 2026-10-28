@@ -5,6 +5,7 @@ import type {
   RouteRideTrack,
 } from '@pokatim/contracts';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFocused } from 'expo-router';
 import { useEffect, useRef } from 'react';
 
 import { apiErrorCode } from '@/features/auth/error-messages';
@@ -43,10 +44,31 @@ export const UPLOAD_READY_TIMEOUT_MS = 60_000;
 const isNotFound = (error: unknown) => apiErrorCode(error) === 'NOT_FOUND';
 
 /**
- * Свои заезды по маршруту: 404 (маршрут стал невидим) — `null` (блока нет); опрос раз в 3 с, пока есть строки
- * `queued | checking` (RC-5).
+ * Интервал опроса незавершённой проверки (RC-6): 3 с первые 2 мин от первого показа, затем 15 с; проверка завершилась
+ * — опроса нет и отсчёт сбрасывается. Состояние — на экземпляр запроса (ref владельца).
+ */
+function useCheckPollInterval() {
+  const pendingSince = useRef<number | null>(null);
+  return (pending: boolean): number | false => {
+    if (!pending) {
+      pendingSince.current = null;
+      return false;
+    }
+    pendingSince.current ??= Date.now();
+    return Date.now() - pendingSince.current < ROUTE_RIDE_FAST_POLL_FOR_MS
+      ? ROUTE_RIDE_POLL_MS
+      : ROUTE_RIDE_SLOW_POLL_MS;
+  };
+}
+
+/**
+ * Свои заезды по маршруту: 404 (маршрут стал невидим) — `null` (блока нет); опрос, пока есть строки `queued | checking`
+ * (RC-5), по схеме RC-6 и только пока карточка в фокусе (под экраном результата в стеке — нет: результат сам
+ * инвалидирует список на финальном статусе).
  */
 export function useRouteRides(routeId: string, enabled: boolean) {
+  const pollInterval = useCheckPollInterval();
+  const focused = useIsFocused();
   return useQuery({
     queryKey: routeRidesKeys.list(routeId),
     queryFn: async (): Promise<RouteRidePage | null> => {
@@ -59,9 +81,9 @@ export function useRouteRides(routeId: string, enabled: boolean) {
     },
     staleTime: DEFAULT_STALE_MS,
     refetchInterval: (query) =>
-      query.state.data?.items.some((row) => isPendingCheck(row.status))
-        ? ROUTE_RIDE_POLL_MS
-        : false,
+      pollInterval(query.state.data?.items.some((row) => isPendingCheck(row.status)) ?? false),
+    // экран не в фокусе — наблюдатель отписан: опроса нет, данные — при возврате
+    subscribed: focused,
     enabled,
   });
 }
@@ -85,22 +107,17 @@ export function useRouteRideCandidates(routeId: string, enabled: boolean) {
  */
 export function useRouteRide(routeId: string, rideId: string, enabled: boolean) {
   const queryClient = useQueryClient();
-  const pendingSince = useRef<number | null>(null);
+  const pollInterval = useCheckPollInterval();
   const query = useQuery({
     queryKey: routeRidesKeys.detail(routeId, rideId),
     queryFn: () => withAccessToken((token) => api.getRouteRide(token, routeId, rideId)),
     staleTime: DEFAULT_STALE_MS,
-    refetchInterval: (q) => {
-      const data = q.state.data;
-      if (!data || !isPendingCheck(data.status) || isNotFound(q.state.error)) {
-        pendingSince.current = null;
-        return false;
-      }
-      pendingSince.current ??= Date.now();
-      return Date.now() - pendingSince.current < ROUTE_RIDE_FAST_POLL_FOR_MS
-        ? ROUTE_RIDE_POLL_MS
-        : ROUTE_RIDE_SLOW_POLL_MS;
-    },
+    refetchInterval: (q) =>
+      pollInterval(
+        q.state.data !== undefined &&
+          isPendingCheck(q.state.data.status) &&
+          !isNotFound(q.state.error),
+      ),
     enabled,
   });
 

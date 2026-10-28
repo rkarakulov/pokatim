@@ -138,8 +138,9 @@ export function routeRideComparisonLines(detail: RouteRideDetail, now: Date | nu
 }
 
 /**
- * Текстовая альтернатива трека (RC-9): метров схода в детали нет. Проверка идёт или разметка `pending` —
- * «проверяется»; не пройден — причина и «Где сход», если участки есть; разметка недоступна — отдельная строка.
+ * Текстовая альтернатива трека под картой (RC-9): метров схода в детали нет. Проверка идёт или разметка `pending` —
+ * «проверяется»; не пройден — «Где сход», если участки есть (причина — в вердикте экрана, второй раз видимым текстом не
+ * повторяется; в подпись карты её добавляет `RouteRideMap`); разметка недоступна — отдельная строка.
  */
 export function routeRideTrackLines(
   detail: RouteRideDetail,
@@ -150,10 +151,8 @@ export function routeRideTrackLines(
     return [t('races.detail.myTrack.pending')];
   }
   const lines: string[] = [];
-  if (detail.status === 'not_passed') {
-    const reason = routeRideReasonText(detail.reason);
-    if (reason) lines.push(reason);
-    if (marks === 'ready' && offRuns > 0) lines.push(t('races.detail.myTrack.whereOff'));
+  if (detail.status === 'not_passed' && marks === 'ready' && offRuns > 0) {
+    lines.push(t('races.detail.myTrack.whereOff'));
   }
   if (marks === 'unavailable') lines.push(t('routes.rides.track.unavailable'));
   return lines;

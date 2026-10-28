@@ -2,7 +2,7 @@ import type { RouteRideDetail } from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { MAP_ASPECT_RATIO, ROUTE_CATALOG_LINE_WIDTH } from '@pokatim/route-view';
-import { SkeletonGroup, TextAction, textStyle } from '@rkarakulov/ui';
+import { Banner, SkeletonGroup, TextAction, textStyle } from '@rkarakulov/ui';
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -15,7 +15,7 @@ import { catalogRouteMapOptions } from '@/features/routes/queries';
 import { RouteLineMap } from '@/features/routes/route-line-map';
 
 import { useRouteRideTrack } from './queries';
-import { routeRideTrackLines } from './route-ride-format';
+import { routeRideReasonText, routeRideTrackLines } from './route-ride-format';
 
 /**
  * Карта маршрута со своим треком заезда (route-rides-02, A4): общий `RouteLineMap` (геометрия и кэш — как у карточки:
@@ -47,6 +47,9 @@ export function RouteRideMap({
     ? t('routes.mine.detail.map.label', { distance: routeKm(ride.route.distanceM) })
     : t('routes.detail.map.label', { distance: routeKm(ride.route.distanceM) });
   const lines = data ? routeRideTrackLines(ride, data.marks, data.offRuns.length) : [];
+  // подпись карты — полная текстовая альтернатива: причина «Не пройден» (видимым текстом она в вердикте экрана)
+  const reason = data && ride.status === 'not_passed' ? routeRideReasonText(ride.reason) : null;
+  const labelLines = reason ? [reason, ...lines] : lines;
   const secondary = [textStyle('meta'), { color: theme.text.secondary }];
   return (
     <View style={styles.block}>
@@ -64,7 +67,7 @@ export function RouteRideMap({
           mapQuery={mine ? myRouteMapOptions(routeId) : catalogRouteMapOptions(routeId)}
           lineWidth={mine ? undefined : ROUTE_CATALOG_LINE_WIDTH}
           track={track}
-          accessibilityLabel={lines.length > 0 ? myTrackMapLabel(base, lines) : base}
+          accessibilityLabel={labelLines.length > 0 ? myTrackMapLabel(base, labelLines) : base}
           failedMessage={mine ? t('routes.mine.detail.map.failed') : t('routes.detail.map.failed')}
           skeletonTestID="route-ride-map-skeleton"
         />
@@ -81,6 +84,15 @@ export function RouteRideMap({
           {line}
         </Text>
       ))}
+      {trackQuery.isError && data ? (
+        // ошибка обновления при показанном треке — карта и трек остаются, баннер с повтором (§4.12)
+        <View testID="route-ride-track-stale" style={styles.error}>
+          <Banner tone="warning" title={t('state.staleTitle')} message={t('state.staleMessage')} />
+          <View style={styles.start}>
+            <TextAction label={t('state.retry')} onPress={() => void trackQuery.refetch()} />
+          </View>
+        </View>
+      ) : null}
       {trackQuery.isError && !data ? (
         <View testID="route-ride-track-error" style={styles.error}>
           <Text style={secondary}>{t('races.detail.myTrack.failed')}</Text>

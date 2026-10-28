@@ -373,7 +373,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   глубины — строка в сторож `src/app-routes-manifest.server.test.ts`); `?mine=1` — только выбор геометрии карты и
   ссылки «К маршруту» (права — сервер). Загрузка файла — опрос `getTrackUpload` до финала (≤ 60 с) и один POST
   `{ uploadId }` (`use-route-ride-upload.ts`), не повторы POST: лимит 30/ч списывается до проверки готовности (RC-1);
-  `NOT_READY` — один повтор. Карта — `RouteLineMap` с пропсом `track` (`RouteMapTrack`); строка кандидата — общий
+  `NOT_READY` — один повтор; ответ загрузки — в кэш опроса; ошибка опроса — баннер с повтором. Опрос списка и детали —
+  3 с первые 2 мин, затем 15 с; список — только в фокусе карточки (`subscribed`). Карта — `RouteLineMap` с пропсом `track` (`RouteMapTrack`); строка кандидата — общий
   `components/activity-pick-row.tsx` (`ActivityPickRow`, и в `races/pick`). Тексты ошибок — `routeRideErrorMessage`.
 
 ## Календарь стартов (блок 04, `docs/product/races-and-seasons.md`)
