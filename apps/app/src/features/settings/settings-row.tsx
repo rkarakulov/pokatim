@@ -50,7 +50,8 @@ export function SettingsRow({ label, value, onPress, selected }: SettingsRowProp
     <Pressable
       accessibilityRole={choice ? 'radio' : 'link'}
       accessibilityLabel={a11yLabel}
-      accessibilityState={choice ? { checked: selected } : undefined}
+      // `aria-checked`, как у `Checkbox` базы: `accessibilityState` в RN-web не даёт состояния радио
+      aria-checked={choice ? selected : undefined}
       onPress={onPress}
       style={rowStyle}
     >
