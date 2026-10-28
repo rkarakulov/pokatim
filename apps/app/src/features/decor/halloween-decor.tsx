@@ -92,7 +92,7 @@ export function HalloweenDecor() {
           style={[
             styles.abs,
             {
-              top: bat.top,
+              bottom: bat.bottom,
               left: bat.left,
               width: bat.size,
               height: bat.size / 2,
@@ -120,7 +120,7 @@ export function HalloweenDecor() {
                   },
                 ],
               }
-            : { top: L.witch.top, left: L.witch.left },
+            : { bottom: L.witch.bottom, left: L.witch.left },
         ]}
       >
         <DecorSvg art={WITCH} colors={colors} />
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   spiderBody: { width: L.spider.size, height: L.spider.size },
   moon: {
     position: 'absolute',
-    top: L.moon.top,
+    bottom: L.moon.bottom,
     left: L.moon.left,
     width: L.moon.size,
     height: L.moon.size,

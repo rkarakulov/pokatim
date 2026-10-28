@@ -8,25 +8,26 @@ import { HALLOWEEN_LAYOUT as L, HALLOWEEN_MOTION as M } from './halloween-layout
 
 const FLY_SHARE = Math.round((M.flyMs / (M.flyMs + M.flyPauseMs)) * 100);
 
-/** Сдвиг дорожки ведьмы вниз на время пролёта (статично она у луны). */
-const FLY_DY = L.witch.flyTop - L.witch.top;
-const FLY_END = -(L.witch.width * 1.5 + L.witch.left);
+const FLY_END = -L.witch.width * 1.5;
 
 /**
- * Анимации — CSS и только `transform` (без пересчёта раскладки): паук покачивается, дорожка ведьмы (от её места до
- * правого края) едет справа налево за левый край и ждёт. Reduce motion — `prefers-reduced-motion`: анимаций нет,
- * ведьма стоит у луны.
+ * Анимации — CSS и только `transform` (без пересчёта раскладки): паук покачивается, дорожка ведьмы (во всю ширину)
+ * едет справа налево за левый край и ждёт. Reduce motion — `prefers-reduced-motion`: анимаций нет, вместо пролёта —
+ * ведьма у луны внизу слева.
  */
 const CSS = `
 @keyframes pokatim-decor-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(${L.spider.bob}px); } }
 @keyframes pokatim-decor-fly {
-  0% { transform: translate(100%, ${FLY_DY}px); }
-  ${FLY_SHARE}%, 100% { transform: translate(${FLY_END}px, ${FLY_DY}px); }
+  0% { transform: translateX(100%); }
+  ${FLY_SHARE}%, 100% { transform: translateX(${FLY_END}px); }
 }
 .pokatim-decor-bob { animation: pokatim-decor-bob ${M.bobMs * 2}ms ease-in-out infinite; }
 .pokatim-decor-fly { animation: pokatim-decor-fly ${M.flyMs + M.flyPauseMs}ms linear infinite; }
+.pokatim-decor-still { display: none; }
 @media (prefers-reduced-motion: reduce) {
-  .pokatim-decor-bob, .pokatim-decor-fly { animation: none; }
+  .pokatim-decor-bob { animation: none; }
+  .pokatim-decor-fly { display: none; }
+  .pokatim-decor-still { display: block; }
 }
 `;
 
@@ -89,7 +90,7 @@ export function HalloweenDecor() {
       </div>
       <div
         style={box({
-          top: L.moon.top,
+          bottom: L.moon.bottom,
           left: L.moon.left,
           width: L.moon.size,
           height: L.moon.size,
@@ -102,7 +103,7 @@ export function HalloweenDecor() {
         <div
           key={index}
           style={box({
-            top: bat.top,
+            bottom: bat.bottom,
             left: bat.left,
             width: bat.size,
             height: bat.size / 2,
@@ -113,11 +114,24 @@ export function HalloweenDecor() {
         </div>
       ))}
       <div
+        data-testid="halloween-witch-still"
+        className="pokatim-decor-still"
+        style={box({
+          bottom: L.witch.bottom,
+          left: L.witch.left,
+          width: L.witch.width,
+          height: L.witch.height,
+          opacity: L.witch.opacity,
+        })}
+      >
+        <DecorSvg art={WITCH} colors={colors} />
+      </div>
+      <div
         data-testid="halloween-witch"
         className="pokatim-decor-fly"
         style={box({
-          top: L.witch.top,
-          left: L.witch.left,
+          top: L.witch.flyTop,
+          left: 0,
           right: 0,
           height: L.witch.height,
           opacity: L.witch.opacity,
