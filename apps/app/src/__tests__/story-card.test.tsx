@@ -19,6 +19,8 @@ import {
   actions,
   corridorRace,
   ENTRY_ID,
+  finisher,
+  finishersPage,
   myEntry,
   RACE_ID,
   result,
@@ -30,6 +32,7 @@ jest.mock('@/lib/api');
 jest.mock('@/lib/share-story', () => ({
   prepareStory: jest.fn((url: string) => Promise.resolve({ url, uri: 'file:///cache/story.png' })),
   storyShareMode: jest.fn(() => 'share'),
+  storyPreviewSource: jest.fn((file: { uri: string }) => ({ uri: file.uri, release: jest.fn() })),
   shareStory: jest.fn(() => Promise.resolve('shared')),
 }));
 
@@ -144,6 +147,32 @@ describe('своя строка в группе не по умолчанию (р
   });
 });
 
+describe('финишёры (ревью pass 2, §8.2)', () => {
+  it('своя строка во вкладке «Финишёры» не нажимается (вход — только «Ваше участие»)', async () => {
+    jest
+      .mocked(api.getRaceFinishers)
+      .mockResolvedValue(finishersPage([finisher({ entryId: ENTRY_ID, elapsedSec: 6125 })]));
+    getRaceResults.mockResolvedValue(
+      resultsPage([row({ entryId: RIVAL_ENTRY_ID, place: 1, elapsedSec: 5400 })], {
+        group: 'm_u40',
+        groups: [{ key: 'm_u40', ranked: 1 }],
+        finishers: 1,
+      }),
+    );
+    getMyRaceEntry.mockResolvedValue(
+      myEntry({
+        result: result({ status: 'finisher', elapsedSec: 6125, unranked: 'start' }),
+        actions: actions({ canWithdraw: true, canAddAttempt: true, canShareStory: true }),
+      }),
+    );
+    await open(`/races/${RACE_ID}`);
+    expect(await screen.findByRole('button', { name: SHARE })).toBeOnTheScreen();
+    await fireEvent.press(await screen.findByRole('tab', { name: 'Финишёры' }));
+    expect(await screen.findByLabelText(/^Вы, 1:42:05/)).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: /^Вы, .*Открыть карточку$/ })).toBeNull();
+  });
+});
+
 describe('экран карточки: ошибки при показанных данных (ревью pass 1)', () => {
   it('ready → ошибка обновления: превью остаётся, сверху баннер с повтором', async () => {
     getStoryCard.mockResolvedValue({ status: 'ready', token: TOKEN });
@@ -171,6 +200,52 @@ describe('экран карточки: ошибки при показанных 
       expect(screen.getByRole('button', { name: 'Поделиться' })).not.toBeDisabled(),
     );
     expect(screen.queryByText('Нет соединения')).toBeNull();
+  });
+});
+
+describe('превью — подготовленный локальный файл (ревью pass 2)', () => {
+  it('файл ещё готовится — скелетон, превью нет; готов — превью локального файла', async () => {
+    getStoryCard.mockResolvedValue({ status: 'ready', token: TOKEN });
+    let resolve: (file: { url: string; uri: string }) => void = () => undefined;
+    jest.mocked(prepareStory).mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    await open(storyUrl);
+    expect(await screen.findByLabelText('Загрузка')).toBeOnTheScreen();
+    expect(screen.queryByTestId('story-preview')).toBeNull();
+    await act(async () => {
+      resolve({ url: 'https://api.test/x.png', uri: 'file:///cache/story-local.png' });
+    });
+    const preview = await screen.findByTestId('story-preview');
+    expect(JSON.stringify(preview.props.source)).toContain('file:///cache/story-local.png');
+  });
+
+  it('превью не отрисовалось — баннер с «Повторить» (выключена на время повтора) → превью', async () => {
+    getStoryCard.mockResolvedValue({ status: 'ready', token: TOKEN });
+    await open(storyUrl);
+    const preview = await screen.findByTestId('story-preview');
+    await act(async () => {
+      // загрузчик изображения не прочитал файл (нативное событие `onError` expo-image)
+      fireEvent(preview, 'error', { nativeEvent: { error: 'decode' } });
+    });
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.queryByTestId('story-preview')).toBeNull();
+
+    let resolve: (file: { url: string; uri: string }) => void = () => undefined;
+    jest.mocked(prepareStory).mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Повторить' })).toBeDisabled());
+    await act(async () => {
+      resolve({ url: 'https://api.test/x.png', uri: 'file:///cache/story-again.png' });
+    });
+    expect(await screen.findByTestId('story-preview')).toBeOnTheScreen();
+    expect(screen.queryByText('Не удалось загрузить')).toBeNull();
   });
 });
 

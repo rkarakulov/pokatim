@@ -10,6 +10,11 @@ import { renderStoryCard } from './story-card.png';
 
 export type StoryCardOutcome = 'ready' | 'failed' | 'skipped';
 
+/** Предел сообщения ошибки рендера в логе, символов. */
+const LOG_MESSAGE_MAX = 200;
+const clip = (message: string) =>
+  message.length > LOG_MESSAGE_MAX ? `${message.slice(0, LOG_MESSAGE_MAX)}…` : message;
+
 /**
  * Рендер карточки для сторис (`story-card`, story-cards): входы перечитываются и сверяются с хэшем задачи (место,
  * тема, имя сменились — `skipped`, PNG не пишется) → линия (порт `results`: отрезок между воротами или маршрут) →
@@ -67,8 +72,9 @@ export class StoryCardProcessor extends WorkerHost {
     } catch (error) {
       if (!finalAttempt) throw error;
       await this.cache.storeFailed(job.hash);
-      // тип и сообщение — диагностика (шрифт, размер PNG, resvg); входы и ПДн в сообщения рендера не попадают
-      const reason = error instanceof Error ? `${error.name}: ${error.message}` : 'unknown';
+      // тип и начало сообщения — диагностика (шрифт, размер PNG, resvg); сообщение satori/resvg может цитировать
+      // разметку (название, имя с согласием) — в лог только первые `LOG_MESSAGE_MAX` символов
+      const reason = error instanceof Error ? `${error.name}: ${clip(error.message)}` : 'unknown';
       this.logger.warn(
         `entry ${entry} ${job.template}: failed (${reason}) in ${Date.now() - started} ms`,
       );

@@ -14,13 +14,11 @@ import {
   textStyle,
   useTheme,
 } from '@rkarakulov/ui';
-import type { UseQueryResult } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { api } from '@/lib/api';
-import { shareStory, storyShareMode, type StoryFile } from '@/lib/share-story';
+import { shareStory, storyPreviewSource, storyShareMode, type StoryFile } from '@/lib/share-story';
 
 import { DisputeScreenShell, useBackToRace } from '../disputes/dispute-screen';
 import { useRace } from '../queries';
@@ -43,10 +41,18 @@ function PreviewSkeleton() {
 }
 
 /**
- * Файл карточки не скачался: «Нет соединения» (сеть) / «Не удалось загрузить» (ответ сервера) и «Повторить» —
- * повтор подготовки PNG (AGENTS §4.12).
+ * Файл карточки не скачался или превью не отрисовалось: «Нет соединения» (сеть) / «Не удалось загрузить» (ответ
+ * сервера, файл не читается) и «Повторить» — повтор подготовки PNG; на время повтора действие выключено (AGENTS §4.12).
  */
-function FileFailure({ error, retry }: { error: unknown; retry: () => void }) {
+function FileFailure({
+  error,
+  retrying,
+  retry,
+}: {
+  error: unknown;
+  retrying: boolean;
+  retry: () => void;
+}) {
   return (
     <View style={styles.stack}>
       <Banner
@@ -55,17 +61,16 @@ function FileFailure({ error, retry }: { error: unknown; retry: () => void }) {
         message={t('story.shareFailed')}
       />
       <View style={styles.start}>
-        <TextAction label={t('state.retry')} onPress={retry} />
+        <TextAction label={t('state.retry')} onPress={retry} disabled={retrying} />
       </View>
     </View>
   );
 }
 
 /** «Поделиться» (системный лист / Web Share с файлом) или «Скачать PNG»; ошибка — баннер, закрытие окна — тихо. */
-function ShareAction({ file }: { file: UseQueryResult<StoryFile> }) {
+function ShareAction({ story }: { story: StoryFile | undefined }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const story = file.data;
   const mode = story ? storyShareMode(story) : 'share';
   const press = () => {
     if (!story) return;
@@ -76,14 +81,12 @@ function ShareAction({ file }: { file: UseQueryResult<StoryFile> }) {
       .catch(() => setFailed(true))
       .finally(() => setBusy(false));
   };
-  const fileFailed = file.isError && !story;
   return (
     <View style={styles.stack}>
-      {fileFailed ? <FileFailure error={file.error} retry={() => void file.refetch()} /> : null}
       {failed ? <Banner tone="warning" message={t('story.shareFailed')} /> : null}
       <Button
         label={t(mode === 'share' ? 'story.share' : 'story.download')}
-        loading={busy || (!story && !fileFailed)}
+        loading={busy}
         disabled={!story}
         onPress={press}
       />
@@ -91,7 +94,17 @@ function ShareAction({ file }: { file: UseQueryResult<StoryFile> }) {
   );
 }
 
-/** Готовая карточка: превью PNG по капабилити-ссылке и действие. */
+/** Источник превью подготовленного файла (web — object URL, отзыв при смене файла и размонтировании). */
+function usePreviewUri(story: StoryFile | undefined): string | null {
+  const source = useMemo(() => (story ? storyPreviewSource(story) : null), [story]);
+  useEffect(() => () => source?.release(), [source]);
+  return source?.uri ?? null;
+}
+
+/**
+ * Готовая карточка: превью — уже подготовленный локальный PNG (тот же файл, что уйдёт в «Поделиться»), до готовности —
+ * скелетон; ошибка подготовки или отрисовки — одно место с повтором (`FileFailure`).
+ */
 function ReadyCard({
   raceId,
   template,
@@ -104,17 +117,34 @@ function ReadyCard({
   title: string;
 }) {
   const file = useStoryFile(raceId, template, token);
+  const story = file.data;
+  const uri = usePreviewUri(story);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  // баннер остаётся до конца повтора (действие выключено), затем — превью нового файла или снова ошибка
+  const retry = () => {
+    void file.refetch().then((result) => {
+      if (!result.isError) setPreviewFailed(false);
+    });
+  };
+  const failure = (file.isError && !story) || previewFailed;
   return (
     <View style={styles.stack}>
-      <Image
-        source={{ uri: api.storyCardImageUrl(token) }}
-        style={styles.preview}
-        contentFit="contain"
-        accessibilityLabel={t('story.preview', { race: title })}
-        accessible
-        testID="story-preview"
-      />
-      <ShareAction file={file} />
+      {failure ? (
+        <FileFailure error={file.error} retrying={file.isFetching} retry={retry} />
+      ) : uri ? (
+        <Image
+          source={{ uri }}
+          style={styles.preview}
+          contentFit="contain"
+          accessibilityLabel={t('story.preview', { race: title })}
+          accessible
+          testID="story-preview"
+          onError={() => setPreviewFailed(true)}
+        />
+      ) : (
+        <PreviewSkeleton />
+      )}
+      <ShareAction story={failure ? undefined : story} />
     </View>
   );
 }

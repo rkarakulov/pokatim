@@ -1,5 +1,7 @@
 /// <reference types="jest" />
-import { prepareStory, shareStory, storyShareMode } from './share-story.web';
+import { isNetworkError } from '@pokatim/api-client';
+
+import { prepareStory, shareStory, storyPreviewSource, storyShareMode } from './share-story.web';
 
 type ShareNavigator = {
   share?: (data: ShareData) => Promise<void>;
@@ -28,6 +30,34 @@ describe('share-story (web)', () => {
     expect(global.fetch).toHaveBeenCalledWith(URL_PNG);
     expect(prepared.file.name).toBe('pokatim-story.png');
     expect(prepared.file.type).toBe('image/png');
+  });
+
+  it('обрыв сети (fetch / чтение тела) — ApiNetworkError; ответ сервера с ошибкой — не сетевая', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    const offline = await prepareStory(URL_PNG).catch((error: unknown) => error);
+    expect(isNetworkError(offline)).toBe(true);
+
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, blob: () => Promise.reject(new TypeError('network')) });
+    expect(isNetworkError(await prepareStory(URL_PNG).catch((error: unknown) => error))).toBe(true);
+
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 500 });
+    const server = await prepareStory(URL_PNG).catch((error: unknown) => error);
+    expect(server).toBeInstanceOf(Error);
+    expect(isNetworkError(server)).toBe(false);
+  });
+
+  it('превью — object URL подготовленного файла; release отзывает его', () => {
+    const created = jest.fn().mockReturnValue('blob:preview');
+    const revoked = jest.fn();
+    Object.assign(URL, { createObjectURL: created, revokeObjectURL: revoked });
+    const s = story();
+    const preview = storyPreviewSource(s);
+    expect(preview.uri).toBe('blob:preview');
+    expect(created).toHaveBeenCalledWith(s.file);
+    preview.release();
+    expect(revoked).toHaveBeenCalledWith('blob:preview');
   });
 
   it('canShare с файлами — navigator.share({ files }); AbortError — dismissed', async () => {

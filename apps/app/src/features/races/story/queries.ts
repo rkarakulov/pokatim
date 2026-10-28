@@ -54,8 +54,9 @@ export function useStoryCard(raceId: string, template: StoryCardTemplate, enable
     started.current.delete(template);
     return refetch();
   }, [refetch, template]);
-  // готовая карточка остаётся и при ошибке обновления (AGENTS §4.12: данные + баннер с повтором): ошибки
-  // «не готова» и 409 бывают только когда новый ответ — не `ready`, тогда в кэше уже нет готовой
+  // готовая карточка остаётся при ошибке обновления (AGENTS §4.12: данные + баннер с повтором) — TanStack при броске
+  // из `queryFn` хранит прежние `data`. Ответ `pending`/`failed` нового хэша приходит успешным ответом `pending`,
+  // который заменяет `data`; 409 показывает «Карточки пока нет» до `AsyncContent` (`unavailable`)
   const ready = query.data?.status === 'ready' ? query.data : undefined;
   return {
     /** состояние для `AsyncContent`: данные — только готовая карточка, `pending` — загрузка */

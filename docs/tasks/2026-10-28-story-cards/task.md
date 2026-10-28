@@ -284,6 +284,12 @@ Coder (отклонения и уточнения при реализации):
   preview:story-cards <каталог>`), в CI не запускается.
 - D17: `appearance.service.ts` не менялся — порт реализует отдельный `AppAppearanceService`.
 - D18: `expo-sharing` в `package.json` — `~58.0.19` (bundledNativeModules), установилась 58.0.20 (в пределах `~`).
+- D19 (ревью pass 2): вход 2 (своя строка таблицы) — только для райдеров с местом. Строка финишёра (START, Verified
+  без пульса) во вкладке «Финишёры» не нажимается: экран результата ищет строку в таблице мест. Финишёр делится
+  карточкой через «Ваше участие» (вход 1, `canShareStory`). Тест: своя строка финишёра — не кнопка.
+- D20 (ревью pass 2): превью экрана — уже подготовленный локальный PNG (`useStoryFile`: native — файл кэша, web —
+  object URL `File` с отзывом при размонтировании), а не отдельная загрузка удалённой картинки. До готовности файла —
+  скелетон; ошибка подготовки или отрисовки (`onError`) — один баннер с «Повторить».
 
 ## 8.3 Security checklist
 
@@ -943,5 +949,47 @@ All matched files use Prettier code style!
 @pokatim/app:test: Tests:       1739 passed, 1739 total
 @pokatim/api:test:  Test Files  141 passed (141)
 @pokatim/api:test:       Tests  1548 passed (1548)
+ Tasks:    15 successful, 15 total
+```
+
+## Фиксы ревью pass 2
+
+Источники: `findings-codex-pass2.md`, `findings-claude-pass2.md`. Каждый фикс начинался с падающего теста.
+
+1. **HIGH (codex), сетевой сбой PNG определялся как ошибка сервера.** Подготовка PNG теперь отличает обрыв сети от
+   ответа сервера:
+   - web — отказ `fetch` и чтения тела превращается в `ApiNetworkError`, HTTP-статус — обычная ошибка;
+   - native — ошибка `File.downloadFileAsync` с HTTP-статусом в тексте (iOS: `response has status N`; Android:
+     `status: N` / `HTTP N`) остаётся ошибкой сервера, остальное — `ApiNetworkError`.
+
+   Тесты: на web `fetch` отклонён с `TypeError('Failed to fetch')` → `isNetworkError`, `ok: false` → не сетевая; на
+   native обрыв → сеть, 404/500/502 → не сеть.
+2. **HIGH (codex), превью без скелетона и обработки ошибки.**
+   - Превью — уже подготовленный локальный PNG (`storyPreviewSource`): native — файл кэша, web — object URL `File` с
+     отзывом при смене файла и размонтировании.
+   - Пока файл не готов — скелетон.
+   - Ошибка подготовки или отрисовки (`onError` у `Image`) — одно место с «Повторить» (`FileFailure`).
+
+   Тесты: подготовка задержана → скелетон, превью нет, затем превью локального файла; `onError` → баннер →
+   «Повторить» → превью.
+3. **LOW (claude):**
+   - На время повтора «Повторить» выключена, баннер держится до конца повтора (тест: кнопка disabled).
+   - Сообщение ошибки рендера в логе worker обрезается до 200 символов с «…» (int-тест на сообщении в 500 символов).
+   - Исправлен неточный комментарий в `queries.ts`.
+4. **MEDIUM (claude), финишёры.** Вход 2 для финишёров не делаем: отклонение D19 в §8.2, вход — через «Ваше участие».
+   Тест: своя строка во вкладке «Финишёры» — не кнопка, «Результат не найден» недостижим. Решение по превью
+   записано в D20.
+
+Перегенерированы 42 PNG в scratchpad `cards/`; рендер в этом проходе не менялся.
+
+`TURBO_CONCURRENCY=1 MONGO_URL_TEST=… REDIS_URL_TEST=redis://127.0.0.1:6491/1 pnpm check` → EXIT 0:
+
+```
+All matched files use Prettier code style!
+✔ no dependency violations found (1624 modules, 5956 dependencies cruised)
+@pokatim/api:test:  Test Files  141 passed (141)
+@pokatim/api:test:       Tests  1548 passed (1548)
+@pokatim/app:test: Test Suites: 191 passed, 191 total
+@pokatim/app:test: Tests:       1746 passed, 1746 total
  Tasks:    15 successful, 15 total
 ```

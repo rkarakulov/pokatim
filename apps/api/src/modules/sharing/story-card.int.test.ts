@@ -237,7 +237,8 @@ describe('провал, лимит, отрицательные доказате�
     const { raceId, auth } = await timedEntry();
     await status(auth, raceId);
     const results = h.worker.get<ResultsForSharing>(RESULTS_FOR_SHARING);
-    vi.spyOn(results, 'storyCardLine').mockRejectedValue(new Error('boom'));
+    // длинное сообщение (фрагменты разметки satori/resvg) — в лог только начало
+    vi.spyOn(results, 'storyCardLine').mockRejectedValue(new Error(`boom ${'x'.repeat(500)}`));
     const [job] = await jobs();
     await job!.remove();
     await expect(processor().build(job!.data)).rejects.toThrow('boom');
@@ -248,7 +249,8 @@ describe('провал, лимит, отрицательные доказате�
     expect(await processor().build(job!.data, { finalAttempt: true })).toBe('failed');
     vi.restoreAllMocks();
     // причина провала видна эксплуатации: тип и сообщение ошибки, без userId
-    expect(warnings.join('\n')).toMatch(/failed .*Error: boom/);
+    expect(warnings.join('\n')).toMatch(/failed \(Error: boom x+…\)/);
+    expect(warnings.join('\n')).not.toContain('x'.repeat(250));
     expect(await status(auth, raceId)).toEqual({ status: 'failed' });
     expect(await status(auth, raceId)).toEqual({ status: 'pending' });
     expect(await jobs()).toHaveLength(1);

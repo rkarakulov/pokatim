@@ -4,7 +4,9 @@ import { File } from 'expo-file-system';
 import { shareAsync } from 'expo-sharing';
 
 import { downloadFile } from './download-file';
-import { prepareStory, shareStory, storyShareMode } from './share-story';
+import { isNetworkError } from '@pokatim/api-client';
+
+import { prepareStory, shareStory, storyPreviewSource, storyShareMode } from './share-story';
 
 jest.mock('./download-file', () => ({ downloadFile: jest.fn() }));
 jest.mock('./load-expo-sharing', () => ({
@@ -39,6 +41,23 @@ describe('share-story (native)', () => {
       UTI: 'public.png',
       dialogTitle: 'Карточка',
     });
+  });
+
+  it('обрыв сети при скачивании — ApiNetworkError; HTTP-статус (iOS / Android) — не сетевая', async () => {
+    download.mockRejectedValueOnce(new Error('The Internet connection appears to be offline.'));
+    expect(isNetworkError(await prepareStory(URL).catch((error: unknown) => error))).toBe(true);
+    download.mockRejectedValueOnce(new Error('response has status 404'));
+    expect(isNetworkError(await prepareStory(URL).catch((error: unknown) => error))).toBe(false);
+    download.mockRejectedValueOnce(new Error('response has status: 500'));
+    expect(isNetworkError(await prepareStory(URL).catch((error: unknown) => error))).toBe(false);
+    download.mockRejectedValueOnce(new Error('HTTP 502'));
+    expect(isNetworkError(await prepareStory(URL).catch((error: unknown) => error))).toBe(false);
+  });
+
+  it('превью — локальный файл кэша', () => {
+    const preview = storyPreviewSource({ url: URL, uri: 'file:///cache/story.png' });
+    expect(preview.uri).toBe('file:///cache/story.png');
+    expect(() => preview.release()).not.toThrow();
   });
 
   it('нет ExpoSharing (старая сборка) — режим download и downloadFile', async () => {

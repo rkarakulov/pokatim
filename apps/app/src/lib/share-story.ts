@@ -1,3 +1,4 @@
+import { ApiNetworkError } from '@pokatim/api-client';
 import { requireOptionalNativeModule } from 'expo';
 import { File, Paths } from 'expo-file-system';
 
@@ -25,10 +26,25 @@ const fileName = (url: string) =>
  * Готовится заранее, как только карточка готова: системный лист открывается сразу по нажатию.
  */
 export async function prepareStory(url: string): Promise<StoryFile> {
-  const file = await File.downloadFileAsync(url, new File(Paths.cache, fileName(url)), {
-    idempotent: true,
-  });
-  return { url, uri: file.uri };
+  try {
+    const file = await File.downloadFileAsync(url, new File(Paths.cache, fileName(url)), {
+      idempotent: true,
+    });
+    return { url, uri: file.uri };
+  } catch (error) {
+    // загрузчик ОС: ответ сервера — «response has status N» (iOS), «… status: N» / «HTTP N» (Android);
+    // остальное — обрыв сети (экран — «Нет соединения»)
+    if (error instanceof Error && HTTP_STATUS.test(error.message)) throw error;
+    throw new ApiNetworkError(error);
+  }
+}
+
+/** Текст ошибки загрузчика `expo-file-system` с HTTP-статусом ответа. */
+const HTTP_STATUS = /status:? \d{3}|HTTP \d{3}/;
+
+/** Источник превью: native — файл кэша (освобождать нечего). */
+export function storyPreviewSource(file: StoryFile): { uri: string; release: () => void } {
+  return { uri: file.uri, release: () => undefined };
 }
 
 /** Нативного модуля `ExpoSharing` нет (сборка до story-cards, Expo Go) — режим «Скачать PNG» (RC-12). */
