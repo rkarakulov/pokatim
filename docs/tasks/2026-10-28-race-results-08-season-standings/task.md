@@ -1132,3 +1132,26 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
   `Test Suites: 174 passed`, `Tests: 1623 passed`; `Tasks: 15 successful, 15 total`. Предыдущий прогон упал на двух
   нетронутых тестах API под нагрузкой (таймаут семафора `parse-thread.test.ts`, `ECONNRESET` в
   `track-uploads.int.test.ts`); отдельно — `42 passed`, повторный полный — зелёный.
+
+### Фиксы ревью 08c pass 2
+
+Ревью: Claude — APPROVE (`findings-08c-claude-pass2.md`, LOW), Codex — REQUEST CHANGES
+(`findings-08c-codex-pass2.md`, HIGH). Ветка слита с `origin/develop` координатором (`8a5c9f9`).
+
+- HIGH (Codex): блок «Сезон» «Профиля» — `useHeaderSeasonState` (`features/races/queries.ts`: тот же запрос и кэш
+  `['seasons','current']` / `['seasons','list']`, что у `useHeaderSeason`, плюс состояния; `useHeaderSeason` не
+  менялся). Определение сезона: первая загрузка — скелетон, ошибка без данных — баннер «Не удалось определить сезон»
+  с повтором, ошибка обновления — сезон и рейтинг остаются + баннер. `/me`: скрытие по пустому ответу — только без
+  ошибок `/me` и сезона; ошибка обновления после пустого ответа — блок с баннером и повтором. Тесты
+  (`profile-season-block.test.tsx`): отказ определения сезона → повтор → рейтинг; отказ обновления сезона после
+  рейтинга; отказ обновления `/me` после пустого ответа. `profile-screen.test.tsx`: в `beforeEach` — «сезонов нет»
+  (раньше незамоканный `getCurrentSeason` молча скрывал блок, теперь ошибка видна), «скелетон сразу» — первый из
+  скелетонов (блок «Сезон» при первой загрузке тоже показывает скелетон).
+- LOW (Claude): `.claude/rules/pokatim-app.md` — `BYPASS_HTTP_CACHE` / `refetchFresh`, запрет `cache: 'no-cache'` на
+  native (`whatwg-fetch` → `_=` → 400 строгого query), баннер ошибки `/me`, состояния блока «Профиля».
+- TDD: новые тесты красные до кода — `Tests: 3 failed, 6 passed`; после — `profile|season|standings|tabs|races`:
+  `Test Suites: 17 passed`, `Tests: 271 passed`.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08c_test REDIS_URL_TEST=redis://127.0.0.1:6611/1 pnpm check`
+  (свой временный `redis-server`) → `EXIT=0`: Prettier и dependency-cruiser (1538 modules) — ок, typecheck `9/9`;
+  contracts `319`, api-client `111`, api `Test Files 135 passed`, `Tests 1457 passed`, admin `Test Files 38 passed`,
+  `Tests 357 passed`, app `Test Suites: 182 passed`, `Tests: 1678 passed`; `Tasks: 15 successful, 15 total`.

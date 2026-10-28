@@ -5,7 +5,7 @@ import { TextAction, textStyle, useTheme } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { useHeaderSeason } from '@/features/races/queries';
+import { useHeaderSeasonState } from '@/features/races/queries';
 import { loading, RowsSkeleton, TabFailure } from '@/features/races/results-table';
 
 import { useMySeasonStandings } from './queries';
@@ -83,27 +83,39 @@ function SeasonContent({ season, data }: { season: SeasonCard; data: MySeasonSta
   );
 }
 
+type SeasonState = ReturnType<typeof useHeaderSeasonState>;
+type MeQuery = ReturnType<typeof useMySeasonStandings>;
+
 /**
- * Блок «Сезон» «Профиля» (race-results-08c, RC-18): сезон — тот же, что кнопка вкладки «Гонки» (`useHeaderSeason`).
- * Своя строка (место, очки, «{группа} · {класс}»), «Вся таблица» → экран сезона, гонки своей таблицы. Сезона нет или
- * своих строк нет — блок скрыт; ошибка без данных — компактный баннер с повтором (§4.12).
+ * Блок «Сезон» «Профиля» (race-results-08c, RC-18): сезон — тот же, что кнопка вкладки «Гонки» (тот же кэш,
+ * `useHeaderSeasonState`). Своя строка (место, очки, «{группа} · {класс}»), «Вся таблица» → экран сезона, гонки своей
+ * таблицы. Состояния §4.12 — и для определения сезона, и для `/me`: первая загрузка — скелетон, ошибка без данных —
+ * баннер с повтором, ошибка обновления — данные остаются + баннер. Скрыт, только когда без ошибок известно, что
+ * сезона нет или своих строк нет.
  */
 export function ProfileSeasonBlock() {
-  const season = useHeaderSeason();
+  const state = useHeaderSeasonState();
+  const { season, current, all, between } = state;
   const me = useMySeasonStandings(season?.id ?? '', season !== null);
-  if (!season) return null;
-  if (me.data !== undefined && me.data.items.length === 0) return null;
-  return <SeasonSection season={season} me={me} />;
+  const seasonFailed = current.isError || (between && all.isError);
+  // ещё определяется: нет данных текущего сезона или (между сезонами) списка
+  const resolving = current.data === undefined || (between && all.data === undefined);
+  if (season === null) {
+    if (!resolving && !seasonFailed) return null;
+    return <SeasonSection state={state} me={null} />;
+  }
+  if (me.data !== undefined && me.data.items.length === 0 && !me.isError && !seasonFailed) {
+    return null;
+  }
+  return <SeasonSection state={state} me={me} />;
 }
 
-function SeasonSection({
-  season,
-  me,
-}: {
-  season: SeasonCard;
-  me: ReturnType<typeof useMySeasonStandings>;
-}) {
+function SeasonSection({ state, me }: { state: SeasonState; me: MeQuery | null }) {
   const theme = useTheme();
+  const { season, current, all, between } = state;
+  // запрос, который определяет сезон сейчас: между сезонами — список
+  const seasonQuery = between ? all : current;
+  const own = me?.data;
   return (
     <View testID="profile-season" style={styles.block}>
       <Text
@@ -112,13 +124,19 @@ function SeasonSection({
       >
         {t('profile.season.title')}
       </Text>
-      <TabFailure query={me} message={t('profile.season.failed')} />
-      {me.data === undefined ? (
+      <TabFailure query={current} message={t('profile.season.seasonFailed')} />
+      {between ? <TabFailure query={all} message={t('profile.season.seasonFailed')} /> : null}
+      {me ? <TabFailure query={me} message={t('profile.season.failed')} /> : null}
+      {season === null || me === null ? (
+        seasonQuery.data === undefined && loading(seasonQuery) ? (
+          <RowsSkeleton />
+        ) : null
+      ) : own === undefined ? (
         loading(me) ? (
           <RowsSkeleton />
         ) : null
       ) : (
-        <SeasonContent season={season} data={me.data} />
+        <SeasonContent season={season} data={own} />
       )}
     </View>
   );

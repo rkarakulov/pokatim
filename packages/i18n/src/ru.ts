@@ -566,6 +566,7 @@ export const ru = {
   'profile.season.dq': 'DQ · 0',
   'profile.season.none': 'нет результата',
   'profile.season.failed': 'Не удалось загрузить сезон',
+  'profile.season.seasonFailed': 'Не удалось определить сезон',
   // центр уведомлений (notifications, `docs/product/notifications.md` N1–N12): колокольчик, центр, настройки
   'notifications.title': 'Уведомления',
   'notifications.back': 'Назад',

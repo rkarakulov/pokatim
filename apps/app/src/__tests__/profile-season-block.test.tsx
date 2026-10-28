@@ -1,28 +1,34 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
-import { fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
+import type { QueryClient } from '@tanstack/react-query';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { api } from '@/lib/api';
 
 import ProfileScreen from '../app/settings/profile';
 import { liveSession, signInForTest } from './auth-fixtures';
-import { createQueryWrapper } from './query-wrapper';
+import { createQueryWrapper, createTestQueryClient } from './query-wrapper';
 import { mine, myStanding, SEASON_ID, season2026 } from './standings-fixtures';
 
 jest.mock('@/lib/api');
 
 const getMine = jest.mocked(api.getMySeasonStandings);
 
-const openProfile = () =>
+const openProfile = (client: QueryClient = createTestQueryClient()) =>
   renderRouter(
     {
       'settings/profile': ProfileScreen,
       'seasons/[id]': () => null,
       'settings/account/delete': () => null,
     },
-    { initialUrl: '/settings/profile', wrapper: createQueryWrapper() },
+    { initialUrl: '/settings/profile', wrapper: createQueryWrapper(client) },
   );
+const failure = () => new ApiHttpError(500, { code: 'INTERNAL', message: 'x' });
+const refetch = (client: QueryClient, queryKey: readonly unknown[]) =>
+  act(async () => {
+    await client.refetchQueries({ queryKey });
+  });
 const block = () => within(screen.getByTestId('profile-season'));
 
 beforeEach(() => {
@@ -107,5 +113,42 @@ describe('«Профиль»: блок «Сезон» (08c, RC-18)', () => {
     expect(await screen.findByText('Не удалось загрузить сезон')).toBeOnTheScreen();
     await fireEvent.press(block().getByRole('button', { name: 'Повторить' }));
     expect(await block().findByText('185 очков')).toBeOnTheScreen();
+  });
+
+  it('отказ определения сезона — баннер с повтором в блоке, повтор показывает рейтинг', async () => {
+    jest.mocked(api.getCurrentSeason).mockRejectedValueOnce(failure());
+    await openProfile();
+
+    expect(await screen.findByText('Не удалось определить сезон')).toBeOnTheScreen();
+    expect(block().getByRole('header', { name: 'Сезон' })).toBeOnTheScreen();
+    expect(getMine).not.toHaveBeenCalled();
+    await fireEvent.press(block().getByRole('button', { name: 'Повторить' }));
+    expect(await block().findByText('185 очков')).toBeOnTheScreen();
+  });
+
+  it('отказ обновления сезона после показанного рейтинга — рейтинг остаётся, баннер с повтором', async () => {
+    const client = createTestQueryClient();
+    await openProfile(client);
+    expect(await screen.findByText('185 очков')).toBeOnTheScreen();
+
+    jest.mocked(api.getCurrentSeason).mockRejectedValue(failure());
+    await refetch(client, ['seasons', 'current']);
+    expect(await block().findByText('Не удалось определить сезон')).toBeOnTheScreen();
+    expect(block().getByText('185 очков')).toBeOnTheScreen();
+    expect(block().getByText('Сезон 2026')).toBeOnTheScreen();
+  });
+
+  it('пустой /me, затем отказ его обновления — блок с баннером и повтором, без строк', async () => {
+    const client = createTestQueryClient();
+    getMine.mockResolvedValue(mine([]));
+    await openProfile(client);
+    await waitFor(() => expect(getMine).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId('profile-season')).toBeNull());
+
+    getMine.mockRejectedValue(failure());
+    await refetch(client, ['seasons', 'standings', SEASON_ID, 'me']);
+    expect(await screen.findByText('Не удалось загрузить сезон')).toBeOnTheScreen();
+    expect(block().getByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
+    expect(block().queryByText('Вся таблица')).toBeNull();
   });
 });
