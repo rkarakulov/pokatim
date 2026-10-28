@@ -5,11 +5,13 @@ import type {
   PanelSeasonStandingsSummary,
   PanelSeasonStandingsTable,
 } from '@pokatim/contracts';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { onlineManager } from '@tanstack/react-query';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
-import { httpError, ME, renderApp } from '../../test/app';
+import { httpError, ME, networkError, renderApp } from '../../test/app';
+import { seasonStandingsKey } from './standings-query';
 
 vi.mock('../../api', () => ({
   api: {
@@ -422,5 +424,46 @@ describe('Сезон: «Рейтинг» (08b)', () => {
     mocked.getSeasonStandings.mockRejectedValue(httpError(403, 'FORBIDDEN'));
     await renderApp(PATH);
     expect(await screen.findByRole('heading', { name: 'Нет доступа к разделу' })).toBeTruthy();
+  });
+
+  it('шапка: сезоны ждут сети (paused) — «Нет соединения» с повтором, рейтинг из кэша виден', async () => {
+    onlineManager.setOnline(false);
+    try {
+      const { queryClient } = await renderApp(PATH);
+      act(() => {
+        queryClient.setQueryData(seasonStandingsKey(SEASON_ID), summary());
+        queryClient.setQueryData([...seasonStandingsKey(SEASON_ID), 'table', 'road', 'm_u40'], {
+          pages: [table()],
+          pageParams: [undefined],
+        });
+      });
+      expect(await screen.findByRole('cell', { name: 'Анна К. ·a1b2c3' })).toBeTruthy();
+      const banner = screen.getByText('Нет соединения').closest('.banner')!;
+      expect(within(banner as HTMLElement).getByRole('button', { name: 'Повторить' })).toBeTruthy();
+      expect(mocked.listSeasons).not.toHaveBeenCalled();
+    } finally {
+      act(() => onlineManager.setOnline(true));
+    }
+    expect(await screen.findByRole('heading', { name: 'Сезон 2026', level: 1 })).toBeTruthy();
+    expect(screen.queryByText('Нет соединения')).toBeNull();
+  });
+
+  it('шапка: сетевой отказ сезонов — «Нет соединения» с повтором, рейтинг виден', async () => {
+    mocked.listSeasons.mockRejectedValueOnce(networkError());
+    await renderApp(PATH);
+    expect(await screen.findByRole('cell', { name: 'Анна К. ·a1b2c3' })).toBeTruthy();
+    const banner = (await screen.findByText('Нет соединения')).closest('.banner')!;
+    fireEvent.click(within(banner as HTMLElement).getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('heading', { name: 'Сезон 2026', level: 1 })).toBeTruthy();
+  });
+
+  it('шапка: фоновое обновление сезонов упало при показанных данных — без баннера шапки', async () => {
+    const { queryClient } = await renderApp(PATH);
+    await screen.findByRole('heading', { name: 'Сезон 2026', level: 1 });
+    mocked.listSeasons.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
+    await act(() => queryClient.refetchQueries({ queryKey: ['admin', 'seasons'], exact: true }));
+    expect(queryClient.getQueryState(['admin', 'seasons'])?.status).toBe('error');
+    expect(screen.getByRole('heading', { name: 'Сезон 2026', level: 1 })).toBeTruthy();
+    expect(screen.queryByText('Не удалось загрузить название и даты сезона')).toBeNull();
   });
 });

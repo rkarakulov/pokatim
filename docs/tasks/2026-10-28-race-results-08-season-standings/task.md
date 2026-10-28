@@ -987,3 +987,23 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
   cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Tests 348 passed (348)`, api `1453 passed`
   (кэш turbo: входы api не менялись с прогона выше), app `1582 passed`, contracts `315 passed`, api-client
   `110 passed`, i18n `6 passed`, `Tasks: 15 successful, 15 total`.
+
+### Фиксы ревью 08b pass 2
+
+Ревью: Claude — APPROVE (LOW-1), Codex — REQUEST CHANGES (HIGH). Findings — `findings-08b-claude-pass2.md`,
+`findings-08b-codex-pass2.md`.
+
+- HIGH (Codex): шапка без данных при `seasons.fetchStatus === 'paused'` или сетевом отказе — баннер «Нет соединения»
+  (`state.errorTitle` / `state.errorMessage`, как `ErrorState` offline) с повтором `seasons.refetch()`; рейтинг
+  остаётся. Прочий отказ без данных — прежний «Не удалось загрузить название и даты сезона».
+- LOW-1 (Claude): баннер шапки — только без `seasons.data`; ошибка фонового обновления при показанной шапке его не
+  даёт.
+- Тесты (до кода, были красными: `Tests 3 failed | 20 passed (23)`): `SeasonScreen.test.tsx` +3 — сезоны на паузе без
+  сети при рейтинге из кэша (баннер, повтор; после возврата сети — название); сетевой отказ сезонов → «Нет соединения»
+  → повтор; фоновое обновление сезонов упало при показанной шапке — баннера нет. `vitest run src/features/seasons` →
+  `Tests 31 passed (31)`.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08b_test REDIS_URL_TEST=…/15 pnpm check` → `EXIT=0`:
+  `All matched files use Prettier code style!`, `✔ no dependency violations found (1491 modules, 5517 dependencies
+  cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Tests 351 passed (351)`, api `1453 passed`,
+  app `1582 passed`, contracts `315 passed`, api-client `110 passed`, i18n `6 passed`, `Tasks: 15 successful, 15
+  total` (`Cached: 14 cached` — менялся только `apps/admin`).

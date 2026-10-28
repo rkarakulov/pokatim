@@ -1,4 +1,5 @@
 import type { PanelSeasonStandingsSummary } from '@pokatim/contracts';
+import { isNetworkError } from '@pokatim/api-client';
 import { t } from '@pokatim/i18n';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -77,18 +78,23 @@ export function SeasonScreen({ seasonId }: { seasonId: string }) {
     />
   );
 
-  // ошибка шапки не прячет рейтинг: свой баннер с повтором запроса сезонов
-  const seasonsBanner = seasons.isError ? (
-    <Banner
-      tone="warning"
-      title={t('admin.seasons.headerFailed')}
-      actions={
-        <Button size="sm" onClick={() => void seasons.refetch()}>
-          {t('state.retry')}
-        </Button>
-      }
-    />
-  ) : null;
+  // шапки нет (отказ или ожидание сети) — свой баннер с повтором запроса сезонов, рейтинг не прячется; ошибка
+  // фонового обновления при показанной шапке баннера не даёт — название и даты верные
+  const seasonsOffline = seasons.fetchStatus === 'paused' || isNetworkError(seasons.error);
+  const seasonsBanner =
+    !seasons.data && (seasons.isError || seasons.fetchStatus === 'paused') ? (
+      <Banner
+        tone="warning"
+        title={t(seasonsOffline ? 'state.errorTitle' : 'admin.seasons.headerFailed')}
+        actions={
+          <Button size="sm" onClick={() => void seasons.refetch()}>
+            {t('state.retry')}
+          </Button>
+        }
+      >
+        {seasonsOffline ? t('state.errorMessage') : null}
+      </Banner>
+    ) : null;
 
   if (summary.isError && !summary.data && httpStatus(summary.error) === 404) {
     return (
