@@ -101,7 +101,8 @@ describe('список и счётчик', () => {
   it('курсор: страницы по limit без пропусков и повторов (одинаковое время — по id)', async () => {
     const ids: string[] = [];
     for (let i = 0; i < 5; i++) ids.push((await seedNotification(h, a.userId))._id);
-    const expected = [...ids].reverse();
+    // порядок сервера — _id по убыванию; uuidv7 в пределах одной миллисекунды не монотонен, порядок вставки не тот
+    const expected = [...ids].sort().reverse();
     const first = await listOf(a, '?limit=2');
     expect(first.items.map((item) => item.id)).toEqual(expected.slice(0, 2));
     const second = await listOf(a, `?limit=2&cursor=${first.nextCursor}`);
