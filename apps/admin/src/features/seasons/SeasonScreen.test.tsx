@@ -163,7 +163,7 @@ describe('Сезон: «Рейтинг» (08b)', () => {
       group: 'm_u40',
     });
     expect(
-      screen.getByText('Мужчины до 40 · Шоссе: лучшие 2 из 3 гонок · участников: 2'),
+      screen.getByText('Мужчины до 40 · Шоссе · 3 гонки, в зачёте 2 · 2 участника'),
     ).toBeTruthy();
 
     fireEvent.click(within(groups).getByRole('button', { name: 'Женщины до 40' }));
@@ -272,7 +272,21 @@ describe('Сезон: «Рейтинг» (08b)', () => {
       table({ riders: 0, racesTotal: 0, racesCounted: 0, races: [], items: [] }),
     );
     await renderApp(PATH);
-    expect(await screen.findByText('Таблиц сезона пока нет')).toBeTruthy();
+    expect(await screen.findByText('В таблице пока нет участников')).toBeTruthy();
+    expect(screen.queryByText('Таблиц сезона пока нет')).toBeNull();
+    expect(
+      screen.getByText('Мужчины до 40 · Шоссе · 0 гонок, в зачёте 0 · 0 участников'),
+    ).toBeTruthy();
+  });
+
+  it('подпись таблицы — из ответа таблицы, не из сводки; плюрали', async () => {
+    mocked.getSeasonStandingsTable.mockResolvedValue(
+      table({ racesTotal: 1, racesCounted: 1, riders: 5, races: RACES.slice(0, 1) }),
+    );
+    await renderApp(PATH);
+    expect(
+      await screen.findByText('Мужчины до 40 · Шоссе · 1 гонка, в зачёте 1 · 5 участников'),
+    ).toBeTruthy();
   });
 
   it('загрузка — скелетон сводки и таблицы', async () => {
@@ -359,5 +373,54 @@ describe('Сезон: «Рейтинг» (08b)', () => {
       group: 'm_u40',
     });
     expect(mocked.getSeasonStandingsTable).toHaveBeenCalledTimes(3);
+  });
+
+  it('ошибка обновления сводки — данные остаются, баннер с повтором', async () => {
+    mocked.getSeasonStandings
+      .mockResolvedValueOnce(summary())
+      .mockRejectedValueOnce(httpError(500, 'INTERNAL'))
+      .mockResolvedValueOnce(summary({ sync: 'pending' }));
+    // смена снимка между страницами инвалидирует сводку — её обновление падает
+    mocked.getSeasonStandingsTable
+      .mockResolvedValueOnce(table({ items: [row({})], nextCursor: 'c1' }))
+      .mockResolvedValue(table({ computedAt: '2026-10-25T10:31:00.000Z' }));
+    await renderApp(PATH);
+    await screen.findByRole('cell', { name: 'Анна К. ·a1b2c3' });
+    fireEvent.click(screen.getByRole('button', { name: 'Показать ещё' }));
+
+    const banner = await screen.findByRole('alert');
+    expect(within(banner).getByText('Не удалось обновить рейтинг')).toBeTruthy();
+    expect(screen.getByText('Актуален')).toBeTruthy();
+    fireEvent.click(within(banner).getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByText('Ждёт пересчёта')).toBeTruthy();
+    expect(screen.queryByText('Не удалось обновить рейтинг')).toBeNull();
+  });
+
+  it('шапка: пока грузятся сезоны — скелетон заголовка, рейтинг уже виден', async () => {
+    mocked.listSeasons.mockReturnValue(new Promise(() => undefined));
+    await renderApp(PATH);
+    expect(await screen.findByRole('cell', { name: 'Анна К. ·a1b2c3' })).toBeTruthy();
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading.querySelector('.skeleton')).not.toBeNull();
+    expect(heading.textContent?.trim()).toBe('');
+  });
+
+  it('шапка: ошибка загрузки сезонов — баннер с повтором, рейтинг показан', async () => {
+    mocked.listSeasons.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
+    await renderApp(PATH);
+    expect(await screen.findByText('Не удалось загрузить название и даты сезона')).toBeTruthy();
+    expect(await screen.findByRole('cell', { name: 'Анна К. ·a1b2c3' })).toBeTruthy();
+    const banner = screen
+      .getByText('Не удалось загрузить название и даты сезона')
+      .closest('.banner')!;
+    fireEvent.click(within(banner as HTMLElement).getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('heading', { name: 'Сезон 2026', level: 1 })).toBeTruthy();
+    expect(screen.queryByText('Не удалось загрузить название и даты сезона')).toBeNull();
+  });
+
+  it('403 — «Нет доступа к разделу»', async () => {
+    mocked.getSeasonStandings.mockRejectedValue(httpError(403, 'FORBIDDEN'));
+    await renderApp(PATH);
+    expect(await screen.findByRole('heading', { name: 'Нет доступа к разделу' })).toBeTruthy();
   });
 });

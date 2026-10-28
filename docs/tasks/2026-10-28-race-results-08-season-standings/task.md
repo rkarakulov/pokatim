@@ -962,3 +962,28 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
   cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Test Files 38 passed (38)`, `Tests 343 passed
   (343)`, api `1453 passed`, app `1582 passed`, contracts `315 passed`, api-client `110 passed`, i18n `6 passed`,
   `Tasks: 15 successful, 15 total`.
+
+### Фиксы ревью 08b pass 1
+
+Ревью: Claude и Codex — REQUEST CHANGES. Findings — `findings-08b-claude.md`, `findings-08b-codex.md`. LOW-2
+(Claude) принят без правки (решение оркестратора).
+
+- HIGH-1: ошибка обновления сводки при показанных данных — данные остаются, сверху `Banner` (`role="alert"`,
+  «Не удалось обновить рейтинг») с «Повторить» → `summary.refetch()`, как `RaceResultsScreen`.
+- HIGH-2: шапка — `.skeleton` заголовка, пока грузится `seasonsQuery`; отказ — `Banner` «Не удалось загрузить
+  название и даты сезона» с повтором `seasons.refetch()`, рейтинг показывается (и на 404 сводки); ответ без сезона —
+  общее название.
+- MEDIUM-1: «N гонок, в зачёте K · M участников» — из ответа таблицы (`pages[0]`), пока она грузится — из сводки.
+- LOW-1: пустая таблица из сводки (RC-12) — «В таблице пока нет участников».
+- LOW-3: `admin.standings.tableMeta` = `{group} · {bikeClass} · {races} · {riders}`, плюрали `admin.standings.races`
+  («1 гонка / 3 гонки / 5 гонок, в зачёте K») и `admin.standings.riders` («1 участник / 2 участника / 5 участников»).
+- LOW-4: тест 403 → «Нет доступа к разделу».
+- Тесты (до кода, были красными: `Tests 6 failed | 14 passed (20)`; тест 403 сразу зелёный — ветка уже была):
+  `SeasonScreen.test.tsx` +5 — ошибка обновления сводки → баннер → повтор; скелетон заголовка; отказ сезонов →
+  баннер → повтор; подпись из ответа таблицы и плюрали; 403. Обновлены: подпись в тесте переключателей, RC-12.
+  `vitest run src/features/seasons` → `Tests 28 passed (28)`.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08b_test REDIS_URL_TEST=…/15 pnpm check` → `EXIT=0`:
+  `All matched files use Prettier code style!`, `✔ no dependency violations found (1491 modules, 5515 dependencies
+  cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Tests 348 passed (348)`, api `1453 passed`
+  (кэш turbo: входы api не менялись с прогона выше), app `1582 passed`, contracts `315 passed`, api-client
+  `110 passed`, i18n `6 passed`, `Tasks: 15 successful, 15 total`.

@@ -6,7 +6,7 @@ import { useId } from 'react';
 
 import { formatDateTimeLong, formatLocalDate } from '../../format';
 import { httpStatus, isForbidden } from '../../session/errors';
-import { DataTable, EmptyState, ErrorState, PageHeader, StatusTag } from '../../ui';
+import { Banner, Button, DataTable, EmptyState, ErrorState, PageHeader, StatusTag } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { seasonsQuery } from './seasons-query';
 import { SeasonStandingsTable, STANDINGS_BASE_COLUMNS } from './SeasonStandingsTable';
@@ -39,7 +39,8 @@ function SnapshotLine({ summary }: { summary: PanelSeasonStandingsSummary }) {
 /**
  * Экран сезона панели `/seasons/:id` (`races.read`, race-results-08b): шапка — название и даты из «Сезонов», раздел
  * «Рейтинг» без компонента вкладок (RC-19). Только чтение: таблицы, места и очки считает сервер. Состояния — скелетон
- * под шапкой, 403 — «Нет доступа», 404 — «Сезон не найден», ошибка — с повтором, таблиц нет — пустое состояние.
+ * под шапкой (и заголовка, пока грузятся сезоны), ошибка обновления сводки или сезонов — баннер с повтором,
+ * 403 — «Нет доступа», 404 — «Сезон не найден», ошибка — с повтором, таблиц нет — пустое состояние.
  */
 export function SeasonScreen({ seasonId }: { seasonId: string }) {
   const titleId = useId();
@@ -56,7 +57,15 @@ export function SeasonScreen({ seasonId }: { seasonId: string }) {
           {t('admin.seasons.title')}
         </Link>
       }
-      title={season?.name ?? t('admin.seasons.title')}
+      title={
+        season?.name ??
+        // сезоны ещё грузятся — скелетон заголовка; ответ без сезона или отказ — общее название
+        (seasons.data || seasons.isError || seasons.fetchStatus === 'paused' ? (
+          t('admin.seasons.title')
+        ) : (
+          <span className="skeleton"> </span>
+        ))
+      }
       meta={
         season
           ? t('admin.seasons.range', {
@@ -68,11 +77,25 @@ export function SeasonScreen({ seasonId }: { seasonId: string }) {
     />
   );
 
+  // ошибка шапки не прячет рейтинг: свой баннер с повтором запроса сезонов
+  const seasonsBanner = seasons.isError ? (
+    <Banner
+      tone="warning"
+      title={t('admin.seasons.headerFailed')}
+      actions={
+        <Button size="sm" onClick={() => void seasons.refetch()}>
+          {t('state.retry')}
+        </Button>
+      }
+    />
+  ) : null;
+
   if (summary.isError && !summary.data && httpStatus(summary.error) === 404) {
     return (
       <>
         {header}
         <div className="page-body">
+          {seasonsBanner}
           <EmptyState title={t('admin.seasons.notFound')} />
         </div>
       </>
@@ -85,6 +108,21 @@ export function SeasonScreen({ seasonId }: { seasonId: string }) {
   if (data) {
     body = (
       <>
+        {summary.isError ? (
+          // ошибка обновления: прежняя сводка остаётся, сверху — баннер с повтором (§4.12)
+          <Banner
+            tone="error"
+            role="alert"
+            title={t('admin.standings.refreshFailed')}
+            actions={
+              <Button size="sm" onClick={() => void summary.refetch()}>
+                {t('state.retry')}
+              </Button>
+            }
+          >
+            {t('admin.refreshFailedMessage')}
+          </Banner>
+        ) : null}
         <SnapshotLine summary={data} />
         {first ? (
           <SeasonStandingsTable seasonId={seasonId} tables={[first, ...rest]} />
@@ -119,6 +157,7 @@ export function SeasonScreen({ seasonId }: { seasonId: string }) {
     <>
       {header}
       <div className="page-body">
+        {seasonsBanner}
         <section className="section" aria-labelledby={titleId}>
           <h2 id={titleId} className="section__title t-label">
             {t('admin.standings.title')}

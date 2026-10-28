@@ -875,6 +875,7 @@ export const ru = {
   'admin.seasons.empty': 'Сезонов пока нет',
   'admin.seasons.range': '{from} — {to}',
   'admin.seasons.notFound': 'Сезон не найден',
+  'admin.seasons.headerFailed': 'Не удалось загрузить название и даты сезона',
   // Рейтинг сезона (race-results-08b): только чтение, считает сервер
   'admin.standings.title': 'Рейтинг',
   'admin.standings.computedAt': 'Пересчёт: {date}',
@@ -884,11 +885,24 @@ export const ru = {
   'admin.standings.sync.pending': 'Ждёт пересчёта',
   'admin.standings.classFilter': 'Класс',
   'admin.standings.groupFilter': 'Группа',
-  'admin.standings.tableMeta':
-    '{group} · {bikeClass}: лучшие {counted} из {total} гонок · участников: {riders}',
+  'admin.standings.tableMeta': '{group} · {bikeClass} · {races} · {riders}',
+  'admin.standings.races': {
+    one: '{count} гонка, в зачёте {counted}',
+    few: '{count} гонки, в зачёте {counted}',
+    many: '{count} гонок, в зачёте {counted}',
+    other: '{count} гонки, в зачёте {counted}',
+  },
+  'admin.standings.riders': {
+    one: '{count} участник',
+    few: '{count} участника',
+    many: '{count} участников',
+    other: '{count} участника',
+  },
   'admin.standings.empty': 'Таблиц сезона пока нет',
   'admin.standings.emptyHint':
     'Таблицы появятся после публикации первого протокола гонки сезона; пересчёт — в течение минуты.',
+  'admin.standings.tableEmpty': 'В таблице пока нет участников',
+  'admin.standings.refreshFailed': 'Не удалось обновить рейтинг',
   'admin.standings.column.place': 'Место',
   'admin.standings.column.rider': 'Участник',
   'admin.standings.column.points': 'Очки',

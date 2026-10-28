@@ -98,6 +98,8 @@ export function SeasonStandingsTable({
   const loaded = pages.data?.pages;
   const items = loaded?.flatMap((page) => page.items);
   const races = loaded?.[0]?.races;
+  // числа подписи — из ответа таблицы (тот же снимок, что строки и колонки); пока грузится — из сводки
+  const counts = loaded?.[0] ?? selected;
   const columns = useMemo(
     () => (races ? [...STANDINGS_BASE_COLUMNS, ...raceColumns(races)] : STANDINGS_BASE_COLUMNS),
     [races],
@@ -139,7 +141,8 @@ export function SeasonStandingsTable({
       }}
       getRowId={(row) => String(row.order)}
       empty={
-        <EmptyState title={t('admin.standings.empty')}>{t('admin.standings.emptyHint')}</EmptyState>
+        // таблица есть в сводке, а в снимке страницы — пусто (RC-12)
+        <EmptyState title={t('admin.standings.tableEmpty')} />
       }
       toolbar={
         <>
@@ -166,9 +169,11 @@ export function SeasonStandingsTable({
             {t('admin.standings.tableMeta', {
               group: t(`results.group.${selected.groupKey}`),
               bikeClass: t(`domain.bikeClass.${selected.bikeClass}`),
-              counted: selected.racesCounted,
-              total: selected.racesTotal,
-              riders: selected.riders,
+              races: t('admin.standings.races', {
+                count: counts.racesTotal,
+                counted: counts.racesCounted,
+              }),
+              riders: t('admin.standings.riders', { count: counts.riders }),
             })}
           </p>
         </>
