@@ -36,7 +36,7 @@ import { entryTier, LEGACY_RANKING_INDEX } from './0028_entry_tier';
 import { routesPublication } from './0029_routes_publication';
 import { standings } from './0030_standings';
 import { STANDINGS_COLLECTIONS } from '../../modules/standings/standings.collection';
-import { ridesGeo } from './0031_rides_geo';
+import { CITY_CENTERS_0031, ridesGeo } from './0031_rides_geo';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
 import { notifications } from './0025_notifications';
@@ -1120,6 +1120,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     const ids = migrations.map((migration) => migration.id);
     expect(ids.at(-1)).toBe('0031_rides_geo');
     expect(ids.indexOf('0031_rides_geo')).toBe(ids.indexOf('0030_standings') + 1);
+    // снимок центров в миграции = справочник контрактов на момент миграции (все 25 кодов)
+    expect(CITY_CENTERS_0031).toEqual(CITY_CENTERS);
     const geoIndex = {
       rides_geo_feed_idx: {
         key: { geo: '2dsphere', startsAt: 1 },
