@@ -32,7 +32,8 @@ paths:
   Главной (`components/notification-bell.tsx`, «99+»); всё — `features/notifications/` (ключи `['notifications', …]`,
   счётчик — polling `refetchInterval` 60 с, не сокеты; статусы обработки — так же). Переход по цели — только
   `notification-target.ts` (белый список типов с `Uuid`; незнакомое — без перехода, из push — центр). Push — развилка
-  `push(.web).ts` (`expo-notifications` только в native-файле; web — no-op): разрешение — только по нажатию строки
+  `push(.web).ts` (`expo-notifications` только в native-файле; web — no-op, `pushSupported = false`: в настройках
+  уведомлений только письма — без push-тумблеров, тихих часов и группы без писем): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
   `serverEnded`: токены снял сервер), последний токен — `secureStorage` `pokatim.pushToken`.
