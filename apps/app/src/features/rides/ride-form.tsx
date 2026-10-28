@@ -16,23 +16,25 @@ import {
   type CreateRideFormValues,
   type CreateRideRequest,
   type RideDetailForOrganizer,
+  type RideRoute,
 } from '@pokatim/contracts';
-import { size, space } from '@pokatim/design-tokens';
+import { motion, size, space, stroke } from '@pokatim/design-tokens';
 import { t, type MessageKey } from '@pokatim/i18n';
 import {
   Banner,
   Button,
   Chip,
   DateField,
+  Pill,
   TextAction,
   TextField,
   textStyle,
   useTheme,
 } from '@rkarakulov/ui';
-import { useRouter } from 'expo-router';
-import { useState, type ComponentProps } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState, type ComponentProps } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DetailHeader } from '@/components/detail-header';
@@ -43,6 +45,7 @@ import { sortCitiesByLabel } from './filters';
 import { cityLabel } from './format';
 import { RefreshFailedBanner, type RefreshFailure } from './ride-manage';
 import { useCreateRide, useUpdateRide } from './queries';
+import { routeChoice } from './route-choice-store';
 
 type FieldName = keyof CreateRideFormValues;
 
@@ -60,8 +63,8 @@ const FORM_FIELDS = [
   'description',
 ] as const satisfies readonly FieldName[];
 
-/** Поля ответа сервера → поля формы (`startsAt` — под «Дата»). */
-const SERVER_FIELDS = [...FORM_FIELDS, 'startsAt'] as const;
+/** Поля ответа сервера → поля формы (`startsAt` — под «Дата», `routeId` — под «Маршрут»). */
+const SERVER_FIELDS = [...FORM_FIELDS, 'routeId', 'startsAt'] as const;
 const formFieldOf = (path: (typeof SERVER_FIELDS)[number]): FieldName =>
   path === 'startsAt' ? 'date' : path;
 
@@ -230,6 +233,56 @@ export function CityPicker({
   );
 }
 
+/** Подпись выбранного маршрута в поле формы: название и доступ (свой непубличный — «Виден только вам»). */
+type RouteLabel = Pick<RideRoute, 'title' | 'access'> | null;
+
+/**
+ * Поле «Маршрут» (05c): строка-кнопка с названием или «Без маршрута» → пикер `/rides/route-pick?form=…`; свой
+ * непубличный маршрут — «Виден только вам»; ошибка сервера (`RIDE_ROUTE_UNAVAILABLE`) — под полем.
+ */
+function RouteField({
+  route,
+  error,
+  onPress,
+}: {
+  route: RouteLabel;
+  error: string | undefined;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  const value = route ? route.title : t('rides.form.routeNone');
+  return (
+    <View style={styles.field}>
+      <Text style={[textStyle('label'), { color: theme.text.secondary }]}>
+        {t('rides.form.route')}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('rides.form.routeLabel', { title: value })}
+        accessibilityHint={t('rides.form.routeChoose')}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.routeBox,
+          {
+            borderColor: error ? theme.status.error : theme.border.subtle,
+            opacity: pressed ? motion.pressedOpacity : 1,
+          },
+        ]}
+      >
+        <Text style={[textStyle('body'), { color: theme.text.primary }]}>{value}</Text>
+        {route?.access === 'private' ? (
+          <View style={styles.start}>
+            <Pill label={t('rides.route.private')} />
+          </View>
+        ) : null}
+      </Pressable>
+      {error ? (
+        <Text style={[textStyle('meta'), { color: theme.status.error }]}>{error}</Text>
+      ) : null}
+    </View>
+  );
+}
+
 /**
  * Форма «Новый райд» / «Изменить райд» (§3): react-hook-form + `zodResolver(CreateRideForm)` (та же схема
  * contracts); дата в прошлом — ошибка под датой и выключенная «Опубликовать» с причиной; ошибки полей сервера —
@@ -259,6 +312,9 @@ export function RideFormScreen({
   const [reloadError, setReloadError] = useState<unknown>();
   const [reloading, setReloading] = useState(false);
   const [failure, setFailure] = useState<string>();
+  // 05c: подпись выбранного маршрута и «дистанция из маршрута» (значение `routeId` — в форме)
+  const [routeLabel, setRouteLabel] = useState<RouteLabel>(ride?.route ?? null);
+  const [distanceFromRoute, setDistanceFromRoute] = useState(false);
   const today = minskToday();
   const title = t(ride ? 'rides.form.editTitle' : 'rides.form.newTitle');
 
@@ -277,6 +333,27 @@ export function RideFormScreen({
       name === 'organizerName' ? RIDE_ORGANIZER_NAME_MIN : RIDE_TITLE_MIN,
     );
   const dateError = dateInPast ? t('field.error.RIDE_START_IN_PAST_DATE') : errorOf('date');
+  const formKey = ride?.id ?? 'new';
+
+  // выбор пикера маршрута — при возврате фокуса на форму, только свой (`take` очищает); дистанция — из маршрута
+  // (целые км; вне 5…300 — обычная ошибка схемы, RC-8)
+  useFocusEffect(
+    useCallback(() => {
+      const choice = routeChoice.take(formKey);
+      if (!choice) return;
+      const { route } = choice;
+      form.clearErrors('routeId');
+      form.setValue('routeId', route?.id ?? null, { shouldDirty: true });
+      setRouteLabel(route);
+      if (route) {
+        form.setValue('distanceKm', String(Math.round(route.distanceM / 1000)), {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+      }
+      setDistanceFromRoute(route !== null);
+    }, [form, formKey]),
+  );
 
   const onSubmit = form.handleSubmit(async (values) => {
     setFailure(undefined);
@@ -315,6 +392,8 @@ export function RideFormScreen({
       const fresh = await onReload();
       setLoaded(fresh);
       form.reset(rideFormOf(fresh));
+      setRouteLabel(fresh.route);
+      setDistanceFromRoute(false);
       setConflict(false);
       setReloadError(undefined);
     } catch (error) {
@@ -325,7 +404,7 @@ export function RideFormScreen({
   };
 
   const text = (
-    name: Exclude<FieldName, 'date' | 'cityCode'>,
+    name: Exclude<FieldName, 'date' | 'cityCode' | 'routeId'>,
     label: MessageKey,
     extra: Partial<ComponentProps<typeof TextField>> = {},
   ) => (
@@ -409,7 +488,15 @@ export function RideFormScreen({
           )}
         />
         {text('place', 'rides.form.place', { helper: t('rides.form.placeHelper') })}
-        {text('distanceKm', 'rides.form.distance', { keyboardType: 'number-pad' })}
+        <RouteField
+          route={routeLabel}
+          error={errorOf('routeId')}
+          onPress={() => router.push(`/rides/route-pick?form=${encodeURIComponent(formKey)}`)}
+        />
+        {text('distanceKm', 'rides.form.distance', {
+          keyboardType: 'number-pad',
+          ...(distanceFromRoute ? { helper: t('rides.form.routeDistanceHelper') } : {}),
+        })}
         <View style={styles.row}>
           <View style={styles.cell}>
             {text('paceMinKmh', 'rides.form.paceMin', { keyboardType: 'number-pad' })}
@@ -456,4 +543,12 @@ const styles = StyleSheet.create({
   stack: { gap: space.s2 },
   row: { flexDirection: 'row', gap: space.s3 },
   cell: { flex: 1 },
+  routeBox: {
+    gap: space.s2,
+    minHeight: size.touchMin,
+    justifyContent: 'center',
+    paddingHorizontal: space.s3,
+    paddingVertical: space.s2,
+    borderWidth: stroke.hairline,
+  },
 });

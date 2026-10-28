@@ -153,6 +153,8 @@ function RootShell() {
                 <Stack.Screen name="rides/new" />
                 <Stack.Screen name="rides/edit/[id]" />
                 <Stack.Screen name="rides/cancel/[id]" />
+                {/* 05c: выбор маршрута райда для формы — только вошедшим */}
+                <Stack.Screen name="rides/route-pick" />
                 {/* жалоба на райд (05b): только вошедшим; гость — «Вход» */}
                 <Stack.Screen name="rides/report/[id]" />
                 {/* свой маршрут (routes-02, M3, RC-11): только вошедшим, без таб-бара; гость — «Вход» */}

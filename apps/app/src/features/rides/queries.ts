@@ -17,6 +17,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { retryAfterSec } from '@/features/auth/error-messages';
@@ -24,6 +25,7 @@ import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
 import type { RideFilters } from './filters';
+import { NEAR_RADIUS_KM, nearParam, type NearQuery } from './near';
 
 /**
  * Данные кофе-райдов. Лента, города и `me` зависят от зрителя (роль, отменённые свои) — только через
@@ -45,11 +47,19 @@ const NEXT_RIDE = { limit: 1 } as const;
 const nextCursor = (page: RidePage) => page.nextCursor ?? undefined;
 
 /**
- * Страницы ленты вкладки: ключ `['rides','list',{ city, limit },'pages']` — форма `InfiniteData`, префикс общий с
- * Главной (`['rides','list',{ limit: 1 }]`). Подгрузка у конца — `loadMore` (не во время обновления).
+ * Параметры «Рядом» запроса — только в `queryFn` (замыкание): в ключе — счётчик нажатия `near.seq` (RC-7, ADR-0014
+ * поправка 05c), координаты — нет.
  */
-export function useRideFeed(filters: RideFilters) {
-  const params = { city: filters.city, limit: PAGE_LIMIT };
+const nearParams = (near: NearQuery | null) =>
+  near ? { near: nearParam(near.lngLat), radiusKm: NEAR_RADIUS_KM } : {};
+
+/**
+ * Страницы ленты вкладки: ключ `['rides','list',{ city, limit, near: seq | null },'pages']` — форма `InfiniteData`,
+ * префикс общий с Главной (`['rides','list',{ limit: 1 }]`). «Рядом» (05c) — в ключе только счётчик нажатия, позиция —
+ * в замыкании запроса. Подгрузка у конца — `loadMore` (не во время обновления).
+ */
+export function useRideFeed(filters: RideFilters, near: NearQuery | null = null, enabled = true) {
+  const params = { city: filters.city, limit: PAGE_LIMIT, near: near?.seq ?? null };
   const feed = useInfiniteQuery({
     queryKey: ['rides', 'list', params, 'pages'],
     queryFn: ({ pageParam }) =>
@@ -57,19 +67,68 @@ export function useRideFeed(filters: RideFilters) {
         api.listRides(accessToken, {
           city: [...filters.city],
           limit: PAGE_LIMIT,
+          ...nearParams(near),
           ...(pageParam ? { cursor: pageParam } : {}),
         }),
       ),
     initialPageParam: null as string | null,
     getNextPageParam: nextCursor,
     staleTime: FEED_STALE_MS,
+    enabled,
   });
   const loadMore = () => {
     if (feed.hasNextPage && !feed.isFetching && !feed.isFetchNextPageError) {
       void feed.fetchNextPage({ cancelRefetch: false });
     }
   };
-  return { feed, loadMore };
+  // сервер отбирает пачками: пустая страница с курсором — не конец (ревью pass 1). Пустая последняя — дочитываем
+  // сразу (контент не растёт, `onEndReached` не придёт), но не больше `EMPTY_PAGES_MAX` подряд — дальше «Показать ещё»
+  const emptyTail = trailingEmptyPages(feed.data?.pages);
+  const stalled = feed.hasNextPage && emptyTail >= EMPTY_PAGES_MAX;
+  const autoContinue =
+    enabled &&
+    emptyTail > 0 &&
+    !stalled &&
+    feed.hasNextPage &&
+    !feed.isFetching &&
+    !feed.isFetchNextPageError;
+  const fetchNextPage = feed.fetchNextPage;
+  // `emptyTail` в зависимостях: новая пустая страница может прийти без промежуточного рендера с `isFetching`
+  useEffect(() => {
+    if (autoContinue) void fetchNextPage({ cancelRefetch: false });
+  }, [autoContinue, emptyTail, fetchNextPage]);
+  /** Райдов ещё нет, но выдача не кончилась: дочитываем (скелетон) или стоим на пределе («Показать ещё»). */
+  const scanning =
+    feed.data !== undefined && emptyTail === feed.data.pages.length && feed.hasNextPage;
+  return { feed, loadMore, stalled, scanning };
+}
+
+/** Пустых страниц подряд, после которых дочитывание ждёт нажатия «Показать ещё». */
+export const EMPTY_PAGES_MAX = 5;
+
+const trailingEmptyPages = (pages: readonly RidePage[] | undefined) => {
+  let count = 0;
+  for (let index = (pages?.length ?? 0) - 1; index >= 0; index -= 1) {
+    if (pages![index]!.items.length > 0) break;
+    count += 1;
+  }
+  return count;
+};
+
+/**
+ * Карта ленты (05c): точки старта будущих райдов с видимым маршрутом; ключ `['rides','map',{ city, near: seq | null }]`
+ * (без координат), запрос — только в режиме «Карта» (`enabled`).
+ */
+export function useRideMap(filters: RideFilters, near: NearQuery | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['rides', 'map', { city: filters.city, near: near?.seq ?? null }],
+    queryFn: () =>
+      withAccessToken((accessToken) =>
+        api.listRideMap(accessToken, { city: [...filters.city], ...nearParams(near) }),
+      ),
+    staleTime: FEED_STALE_MS,
+    enabled,
+  });
 }
 
 /** Города с видимыми будущими райдами — чипы «Город». */

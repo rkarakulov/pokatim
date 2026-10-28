@@ -18,11 +18,14 @@ export function RideHero({
   ride,
   now,
   kicker = t('rides.heroKicker'),
+  distance = null,
   onPress,
 }: {
   ride: RideCard;
   now: Date;
   kicker?: string;
+  /** «в 12 км от вас» (05c, «Рядом» и точный старт) */
+  distance?: string | null;
   onPress: () => void;
 }) {
   return (
@@ -31,7 +34,7 @@ export function RideHero({
         kicker={kicker}
         date={{ value: rideHeroDate(ride.startsAt, now) }}
         title={ride.title}
-        meta={[rideHeroMeta(ride)]}
+        meta={distance ? [rideHeroMeta(ride), distance] : [rideHeroMeta(ride)]}
         onPress={onPress}
       />
       <GoingStack count={ride.goingCount} caption={goingCaption(ride, ride.viewer)} />

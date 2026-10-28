@@ -870,3 +870,83 @@ total`; api — 131 файлов тестов, app — 1582/1582. Первый �
   «no user»/«no active verification token») → `Tasks: 15 successful, 15 total`; api — 136 файлов, 1496 тестов. Первый
   прогон упал гонкой `account-deletion.int.test.ts` N6 (`[204, 401]` против 403, под нагрузкой; не связан, отдельно
   3/3 зелёный).
+
+# 12. Outcome (coder, PR B — приложение)
+
+**Сделано (apps/app, i18n, правило app):**
+- i18n: строки формы («Маршрут», «Без маршрута», «Из маршрута. Можно изменить.»), пикера, блока маршрута («Набор»,
+  «Маршрут райда», баннер «Маршрут виден только вам — опубликуйте его…»), ленты («Список / Карта», «Рядом», «в N км
+  от вас»), пустого состояния без геопозиции, карты («На карте N райдов», «Ещё N райдов без точки старта — в списке»),
+  `field.error.RIDE_ROUTE_UNAVAILABLE`.
+- «Рядом»: `near.ts` (округление 0,01°, параметр `"lat,lon"`, `distanceLabel` через `haversineMeters`), `use-near.ts`
+  (одно чтение через `useLocate`, позиция — только состояние вкладки, `seq` — в ключе), `near-empty.tsx`
+  («Открыть настройки» / «Разрешить» + «Выбрать город»). `queries.ts`: `useRideFeed(filters, near)` — ключ
+  `['rides','list',{ city, limit, near: seq|null },'pages']`, `useRideMap(filters, near, enabled)` — ключ
+  `['rides','map',{ city, near: seq|null }]`; координаты — только в замыкании `queryFn`.
+- Пикер: `route-choice-store.ts`, `ride-route-pick.tsx` + `app/rides/route-pick.tsx` (+ `_layout` внутри
+  `Stack.Protected`, `app-routes`, шаг смоука `e2e/web.spec.ts`): «Каталог / Мои», «Без маршрута», в «Моих» только
+  `ready`, не в каталоге — «Виден только вам»; пусто — «Загрузите маршрут» → `/routes?view=mine`.
+- Форма: поле «Маршрут» (строка-кнопка, «Виден только вам» для `private`), выбор — `useFocusEffect` + `take(form)`,
+  дистанция `Math.round(distanceM / 1000)` с подсказкой, `RIDE_ROUTE_UNAVAILABLE` под полем; `routeId` в
+  `SERVER_FIELDS`; правка без смены маршрута `routeId` не шлёт (`changedFields`).
+- Карточка: `ride-route-block.tsx` под шапкой — `public`: `RouteLineMap` каталога (3:2) с маркером + `ElevationProfile`
+  (общий `createScrubStore` экрана, `useScrubScrollEnabled` + сброс курсора на прокрутке); `private`: карта «Моего
+  маршрута» без профиля + баннер; ссылка «Маршрут райда» → `/routes/<id>` | `/routes/mine/<id>`; «Набор» в `StatBlock`.
+- Лента: «Список / Карта» (`SegmentedControl`) и чип «Рядом» над «Городом» (`(tabs)/rides.tsx` держит режим и
+  `useNear`); «в N км от вас» в `RideListRow` (`distance`) и `RideHero`; отказ — `NearEmpty` вместо выдачи; «Сбросить
+  фильтры» выключает и «Рядом». Карта: `ride-map-view.tsx` → `ride-points-map.tsx` (native, `GeoJSONSource onPress`,
+  `nativeEvent.features` — сигнатура v11.5 проверена по типам пакета) / `ride-points-map.web.tsx` (`on('click', layer)`,
+  курсор), `ride-points-style.ts` (группы одинакового старта, круг + число на ролях `theme.map.*`, шрифт глифов
+  OpenFreeMap `Noto Sans Regular` — проверен запросом `fonts/Noto Sans Regular/0-255.pbf` → 200), `ride-point-card.tsx`.
+- `app.json` — строка iOS `locationWhenInUsePermission` (RC-10, нужна новая нативная сборка). `pokatim-app.md` —
+  раздел 05c.
+
+**Тесты:** `near.test.ts`, `route-choice-store.test.ts`, `ride-points-style.test.ts` (группы, слои во всех 7 темах ×
+схемы, рамка одной точки и пустая — центр города), `ride-points-map.web.test.tsx` (SSR без координат, источник/слои,
+точка «Рядом», клик → карточка → `onOpen`, курсор, ошибка до `load`), `ride-route-pick.test.tsx` (вкладки, «Без
+маршрута», только `ready`, пометка, пусто), `ride-form.test.tsx` (+4: выбор → дистанция и подсказка → `routeId` в
+запросе; «Без маршрута» снимает; `RIDE_ROUTE_UNAVAILABLE` под полем; правка с `private`), `ride-detail.test.tsx` (+3:
+без маршрута; `public` — карта, профиль, «Набор», ссылка; `private` — баннер, без профиля, ссылка на «Мои»),
+`rides.test.tsx` (+6: «Рядом» → `near: '53.90,27.56'`, `radiusKm: 25`, ключи кэша и `console.*` без координат (AC9),
+«в 12 км от вас»; выключение; `denied` + `canOpenSettings` → «Открыть настройки»; `unavailable` → «Разрешить» и
+«Выбрать город»; «Карта» — точки, группа, `GeoJSONSource onPress` → карточка → райд, «Ещё 3 райда…»; пустая карта).
+
+**Отклонения (8.2):**
+- `route-choice-store` — переменная модуля с `set/take/clear`, не zustand: подписчиков нет, нужна только передача.
+- Блок маршрута использует `RouteLineMap` + `catalogRouteMapOptions` напрямую (это и есть содержимое `CatalogRouteMap`)
+  — карта не ждёт ответа карточки каталога; подпись карты — из `ride.route`.
+- Карточка точки карты — `RidePointCard` (название, дата, «идут N из M»), а не `RideListRow`: у `RideMapPoint` нет
+  места, темпа, `viewer`.
+- `RidePointsMapProps` + `bounds` и `now` (рамка считается в `RideMapView`, `useMemo` — карта не пересоздаётся на
+  рендер).
+- Сообщение пустого состояния «Рядом» одно для native и web (без отдельного текста про настройки браузера).
+
+**Не проверено (NOT VERIFIED):** native-карта мультимаркеров, нажатие на точку и системный запрос геопозиции на
+устройстве; web-смоук `e2e/web.spec.ts` (новый шаг `/rides/route-pick`) локально не запускался — в CI/на dev.
+
+**Ревью PR B pass 1 (REQUEST CHANGES) — исправлено:**
+1. Лента: герой — `all[0]`, строки — остальные; «пусто» — только `all.length === 0 && !hasNextPage`. Пустая последняя
+   страница с курсором дочитывается сразу (`useRideFeed`, эффект с `emptyTail` в зависимостях), не больше
+   `EMPTY_PAGES_MAX = 5` подряд — дальше «Показать ещё» в подвале; пока всё пусто и идёт дочитывание — скелетон.
+2. Профиль высоты блока маршрута — `AsyncContent` по карточке каталога: место профиля, ошибка с «Повторить», баннер
+   при ошибке обновления; 404 — без профиля.
+3. `RidePointCard`: `maxHeight: '70%'` области карты, список группы — `ScrollView`, «Закрыть» — в шапке над списком.
+4. `useNear`: номер чтения — счётчик модуля (на процесс), а не экземпляра: после перемонтирования новый ключ.
+5. «Рядом» в ожидании позиции — скелетон (лента и карта), запросы без near не показываются как «рядом».
+6. Запросы — только активного режима: `useRideFeed(..., view === 'list')`, `useRideMap(..., view === 'map')` (поднят в
+   ленту, офлайн-баннер — от активного запроса).
+7. Пикер «Мои»: одно условие `ready && distanceM !== null` для строк и пустоты; пусто — только без следующей страницы,
+   иначе дочитывание со скелетоном.
+Тесты: `rides.test.tsx` (+7: пустая первая страница, короткая, пустая середина, предел пустых и «Показать ещё»,
+ожидание позиции, «Карта» + «Рядом» без near в ленте, большая группа), `use-near.test.tsx` (перемонтирование,
+выключение до ответа), `ride-detail.test.tsx` (+1: загрузка/ошибка/повтор профиля), `ride-route-pick.test.tsx` (+2).
+
+**Ревью PR B pass 2 (Codex, REQUEST CHANGES) — исправлено:**
+1. `RideMapView`: при данных карта — в постоянном контейнере `flex: 1` (`ride-map-area`), ошибка обновления — баннер
+   «Данные могли устареть» с «Повторить» соседним блоком (не stale-обёртка `AsyncContent`); без данных — состояния
+   `AsyncContent`.
+2. Место карты на загрузке — полноразмерный блок `flex: 1` без `SkeletonGroup`, подпись «Загрузка» у самого места.
+3. Пикер: подвал обеих вкладок — скелетон карточки при догрузке, ошибка следующей страницы — баннер с повтором
+   `fetchNextPage`, строки остаются (ошибка догрузки не уходит в `AsyncContent`).
+Проверено: в `ride-feed.tsx` `AsyncContent` оборачивает только героя в шапке списка (без flex-контента); режим «Карта» —
+`RideMapView` в контейнере `flex: 1`. Тесты: `rides.test.tsx` (+2), `ride-route-pick.test.tsx` (+2).
