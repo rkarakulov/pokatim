@@ -24,11 +24,12 @@ const get = () =>
   });
 
 describe('GET /v1/appearance (AC1)', () => {
-  it('без входа и без документа — classic; кэш 60 с; без cookie', async () => {
+  it('без входа и без документа — classic; без кэша браузера (no-cache); без cookie', async () => {
     const res = await get();
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ themeId: 'classic' });
-    expect(res.headers['cache-control']).toBe('public, max-age=60');
+    // кэш 60 с давал перекраску новой SSR-страницы в прежнюю тему после смены в панели
+    expect(res.headers['cache-control']).toBe('no-cache');
     expect(setCookies(res)).toEqual([]);
   });
 

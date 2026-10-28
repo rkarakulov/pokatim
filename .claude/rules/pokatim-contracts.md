@@ -84,6 +84,14 @@ paths:
   `profiles.verified_edit`, действие `profile.verified_demographics_changed`. api-client — `enterRace(token, raceId,
   body)`, `getRaceResults(raceId, { group })`, `getRaceFinishers`, `getVerifiedProfile`/`updateVerifiedProfile`;
   панель — `getRaceStandings(raceId, params)`, `getVerifiedDemographics`/`updateVerifiedDemographics` (`PATCH`).
+- Рейтинг сезона (race-results-08): `src/standings/standings.schema.ts` — `STANDING_OUTCOMES`, `STANDINGS_SYNC_STATES`
+  (только в конец), `STANDINGS_PAGE_SIZE`/`MAX`; ответы приложения `SeasonStandingsSummary`, `SeasonStandingsTable`,
+  `MySeasonStandings` — `tolerantEnum` класса, группы и итога, без `userId`; запрос `SeasonStandingsTableQuery`
+  (`strictObject`: `bikeClass`, `group` обязательны, `limit`, `cursor` — курсор по `order` строки); панель
+  `PanelSeasonStandingsSummary` (`formulaVersion`, `sync`) и `PanelSeasonStandingsTable` (`userId` nullable) — строгие.
+  Имена `PanelRaceStandings*` заняты «Участниками» гонки (07). api-client — `getSeasonStandings`,
+  `getSeasonStandingsTable`, `getMySeasonStandings(token, id)`; панель — `getSeasonStandings`,
+  `getSeasonStandingsTable`.
 - Согласие на показ имени (profile-02): `PUBLIC_NAME_CONSENT_VERSION` (`src/profile/profile.schema.ts`) — версия
   текста `profile.show.label` + `profile.show.hint` (i18n). Сменили формулировку — **подняли версию** (дата), иначе
   журнал согласий ссылается на чужой текст. Версию в событие пишет сервер. Сброс имени —

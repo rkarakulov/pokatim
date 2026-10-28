@@ -1,5 +1,8 @@
 import {
   ApiError,
+  PanelSeasonStandingsSummary,
+  PanelSeasonStandingsTable,
+  type SeasonStandingsTableQuery,
   AuditPage,
   type CalendarStartInput,
   type CancelRaceRequest,
@@ -98,6 +101,9 @@ export type ModerationRideListParams = Partial<ModerationRideQuery>;
 export type RiderRouteListParams = Partial<RiderRouteModerationQuery>;
 /** Параметры списка споров панели до схемы. */
 export type PanelDisputeListParams = Partial<PanelDisputeQuery>;
+/** Таблица рейтинга сезона (race-results-08): класс и группа обязательны, `limit`/`cursor` — по желанию. */
+export type SeasonStandingsTableParams = Pick<SeasonStandingsTableQuery, 'bikeClass' | 'group'> &
+  Partial<Pick<SeasonStandingsTableQuery, 'limit' | 'cursor'>>;
 
 /** Query-строка: пустые значения не уходят, массив — повтором ключа (`k=a&k=b`). */
 export function queryString(params: object): string {
@@ -173,6 +179,11 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     listSeasons: () => get('/v1/admin/seasons', PanelSeasonList),
     createSeason: (body: SeasonInput) => post('/v1/admin/seasons', PanelSeason, body),
     updateSeason: (id: string, body: UpdateSeasonRequest) => post(season(id), PanelSeason, body),
+    /** Рейтинг сезона (race-results-08, `races.read`): сводка с версией формулы и «ждёт пересчёта». */
+    getSeasonStandings: (id: string) => get(`${season(id)}/standings`, PanelSeasonStandingsSummary),
+    /** Таблица «класс × группа»; `userId` строки — только сотруднику, видящему все гонки. */
+    getSeasonStandingsTable: (id: string, params: SeasonStandingsTableParams) =>
+      get(`${season(id)}/standings/table${queryString(params)}`, PanelSeasonStandingsTable),
 
     // --- гонки (races.read / races.manage; чужие — races.manage_any, иначе 404) ---
     listRaces: (params: PanelRaceListParams = {}) =>
