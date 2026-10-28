@@ -256,6 +256,21 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `[…,'finishers']`; карточка соперника и подача спора получают вкладку `?group=` (`rivalPath`, `groupParam`).
   Анкета `settings/verified` (ссылка из «Профиля»): пол и год при `demographicsLocked` — только чтение; пределы —
   схемы contracts, текст «Целое число от … до …».
+- Рейтинг сезона (race-results-08c) — `features/standings/*`: блок `season-standings.tsx` в шапке списка экрана
+  сезона (RC-17; подгрузка — «Показать ещё», не `onEndReached`), блок «Сезон» «Профиля» (`profile-season-block.tsx`,
+  сезон — `useHeaderSeason`, RC-18), действие «Таблица сезона» вкладки «Гонки». Ключи под `['seasons','standings',id]`
+  (`summary`, `table`+класс+группа, `me` — только вошедшему); pull-to-refresh экрана — `useStandingsRefetch`. Логика
+  показа — только `standings-format.ts` (выбор таблицы: своя из `/me`, иначе первая сводки; `'unknown'` — не
+  показывается). «Вы» — по `order` из `/me` только при равном `computedAt` (RC-11; иначе один перезапрос более
+  старого ответа); страница другого снимка — подгруженное сбрасывается (`resetQueries`), таблица — с первой страницы.
+  Очки, места, N из M и «в зачёте» — только с сервера. Перезапрос после расхождения снимков (RC-11 и сброс) —
+  `refetchFresh` / `getSeasonStandingsTable(…, { fresh: true })` только при `BYPASS_HTTP_CACHE`
+  (`features/standings/http-cache(.web).ts`: web — да, native — нет). На native `cache: 'no-cache'` нельзя:
+  `fetch` RN — `whatwg-fetch`, он дописывает `_=` в URL, и строгий query (`strictObject`) отвечает 400 — только на
+  iOS/Android, jest (замоканный `api`) этого не поймает. Ошибка `/me` — свой `TabFailure` над таблицей (публичная
+  таблица остаётся). Блок «Профиля» — `useHeaderSeasonState` (тот же кэш, что `useHeaderSeason`, с состояниями):
+  ошибки определения сезона и `/me` — баннеры с повтором, данные при ошибке обновления остаются; скрыт только без
+  ошибок (сезона нет или своих строк нет).
 
 ## Маршруты (routes-01, `docs/product/routes.md`)
 

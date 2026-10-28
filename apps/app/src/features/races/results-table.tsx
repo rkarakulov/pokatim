@@ -116,7 +116,7 @@ function FinisherRowView({ row, own }: { row: RaceFinisherRow; own: boolean }) {
 }
 
 /** Скелетон строк таблицы. */
-function RowsSkeleton() {
+export function RowsSkeleton() {
   return (
     <SkeletonGroup>
       <SkeletonListRow />
@@ -127,7 +127,7 @@ function RowsSkeleton() {
 }
 
 /** Запрос вкладки: минимум для состояний загрузки и ошибки. */
-interface TabQuery {
+export interface TabQuery {
   data: unknown;
   error: unknown;
   isError: boolean;
@@ -139,7 +139,7 @@ interface TabQuery {
  * Ошибка вкладки: компактный баннер с повтором — карточка гонки не ломается. Без сети первая загрузка вкладки встаёт
  * на паузу (`onlineManager`) — сразу «Нет соединения», не вечный скелетон (§4.12, как `AsyncContent`).
  */
-function TabFailure({ query, message }: { query: TabQuery; message: string }) {
+export function TabFailure({ query, message }: { query: TabQuery; message: string }) {
   const offline = query.data === undefined && query.fetchStatus === 'paused';
   if (!offline && !query.isError) return null;
   const network = offline || isNetworkError(query.error);
@@ -158,10 +158,10 @@ function TabFailure({ query, message }: { query: TabQuery; message: string }) {
 }
 
 /** Первая загрузка вкладки идёт (не ошибка и не пауза без сети) — скелетон. */
-const loading = (query: TabQuery) => !query.isError && query.fetchStatus !== 'paused';
+export const loading = (query: TabQuery) => !query.isError && query.fetchStatus !== 'paused';
 
 /** «Показать ещё» по курсору страницы. */
-function MoreAction({
+export function MoreAction({
   query,
 }: {
   query: {

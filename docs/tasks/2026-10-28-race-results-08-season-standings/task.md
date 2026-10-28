@@ -1024,3 +1024,134 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
   cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Tests 351 passed (351)`, api `1453 passed`,
   app `1582 passed`, contracts `315 passed`, api-client `110 passed`, i18n `6 passed`, `Tasks: 15 successful, 15
   total`.
+
+## 12.3 08c — приложение
+
+### Changes
+
+- `features/standings/` (новый): `queries.ts` — `useSeasonStandings`, `useSeasonStandingsTable` (infinite по курсору;
+  страница другого снимка — `resetQueries`, таблица с первой страницы — правило «Курсор и снимок»),
+  `useMySeasonStandings` (`withAccessToken`, только вошедшему), `useStandingsRefetch`; ключи под
+  `['seasons','standings',id]`. `standings-format.ts` — место «=N» и a11y (`races.results.tiePlace`/`tiedA11y`), очки
+  (плюрали), подпись таблицы, выбор таблицы (своя из `/me`, иначе первая сводки; `'unknown'` не показывается), «Вы»
+  только при равном `computedAt` (RC-11), итог и статус гонки («DQ · 0» — в зачёте, S11).
+- `season-standings.tsx` — блок «Таблица сезона» в шапке списка экрана сезона над «Гонками сезона» (RC-17):
+  подзаголовок «{даты} · по последнему пересчёту», `SegmentedControl` класса и группы в горизонтальном `ScrollView`,
+  заметка N из M (плюраль по M), «{группа} · {класс} · N участников», строки (место, имя / «Участник» / «Вы» с полосой
+  `border.strong`, очки), «Показать ещё», RC-12 — пустая таблица без ошибки, пусто — `EmptyState` «Сезон только
+  начался» + «К гонкам»; скелетон, ошибка сводки (`AsyncContent`) и таблицы (компактный баннер с повтором). Вошедшему
+  таблица ждёт `/me` (чтобы открыться на своей). Снимки таблицы и `/me` разошлись — один перезапрос более старого.
+- `profile-season-block.tsx` — блок «Сезон» в «Профиле» (RC-18, `useHeaderSeason`): своя строка, «Вся таблица»,
+  гонки своей таблицы; нет сезона или строк — блока нет; ошибка без данных — баннер с повтором.
+- `season-detail.tsx` — блок и `useStandingsRefetch` в pull-to-refresh; вкладка «Гонки» — действие «Таблица сезона»;
+  `results-table.tsx` — экспорт `RowsSkeleton`/`TabFailure`/`MoreAction`/`loading` (переиспользование);
+  `races/queries.ts` — экспорт `PUBLIC_STALE_MS`.
+- i18n: `season.standings.*` (note, caption, points — плюрали), `races.seasonTable`, `profile.season.*`.
+- Только `@rkarakulov/ui` и роли темы `useTheme()`, токены `@pokatim/design-tokens`; без hex и `Platform.OS`. Web —
+  тот же код; SSR экрана сезона не менялся (таблица — клиентский запрос, `loader` не расширялся).
+- Docs: `docs/product/races-and-seasons.md` (экран сезона и профиль, убрано «скрыто до FR-4»),
+  `.claude/rules/pokatim-app.md` (раздел рейтинга сезона).
+
+### Files touched
+
+- Создано: `apps/app/src/features/standings/{queries,standings-format,standings-format.test}.ts`,
+  `apps/app/src/features/standings/{season-standings,profile-season-block}.tsx`,
+  `apps/app/src/__tests__/{season-standings.test,profile-season-block.test}.tsx`,
+  `apps/app/src/__tests__/standings-fixtures.ts`.
+- Изменено: `apps/app/src/features/races/{season-detail,results-table}.tsx`, `apps/app/src/features/races/queries.ts`,
+  `apps/app/src/app/(tabs)/races.tsx`, `apps/app/src/app/settings/profile.tsx`, `apps/app/src/__tests__/season.test.tsx`,
+  `packages/i18n/src/ru.ts`, `docs/product/races-and-seasons.md`, `.claude/rules/pokatim-app.md`.
+
+### Tests
+
+- `standings-format.test.ts` (13): «=6» и «6-е место поровну», плюрали очков, подпись таблицы, строка («Участник»,
+  «Вы», a11y), выбор таблицы (своя / первая / смена класса / исчезнувший выбор / `unknown`), «Вы» при равном и разном
+  `computedAt`, итог и статус гонки (DQ · 0, «—», в зачёте / не в зачёте).
+- `season-standings.test.tsx` (13): гость — подписи, заметка, «=1», a11y, без `/me`; переключатели и запросы таблиц;
+  вошедший — своя таблица и «Вы»; RC-11 — без метки и ровно один перезапрос, после нового снимка — «Вы»; «Показать
+  ещё»; смена снимка между страницами — сброс и первая страница; RC-12; пустой сезон и «К гонкам»; скелетон; ошибка
+  сводки с повтором; ошибка таблицы с повтором; pull-to-refresh (сводка, таблица, `/me`); вкладка «Гонки» — действие.
+- `profile-season-block.test.tsx` (6): строка, гонки (в зачёте / не в зачёте / DQ · 0), «Вся таблица», нет строк,
+  нет сезона, первая из нескольких таблиц, ошибка с повтором. `season.test.tsx` — первый тест обновлён (таблица
+  теперь есть).
+- TDD: `standings-format.test.ts` красный до модуля («Cannot find module»), экранные тесты написаны до компонентов.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08c_test REDIS_URL_TEST=redis://127.0.0.1:6599/1 pnpm check` →
+  `EXIT=0`: `All matched files use Prettier code style!`, `✔ no dependency violations found (1500 modules, 5539
+  dependencies cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — contracts `315 passed`, api-client
+  `110 passed`, api `Test Files 135 passed (135)`, `Tests 1453 passed (1453)`, admin `327 passed`, app
+  `Test Suites: 171 passed, 171 total`, `Tests: 1614 passed, 1614 total`; `Tasks: 15 successful, 15 total`.
+- Окружение: Redis `6479/12` (из брифа) одновременно использовали агенты других worktree (db 12, затем 15 — два
+  агента) — прогоны API падали массово (401/403/429, пропавшие данные); финальный прогон — на временном собственном
+  `redis-server` (порт 6599, db 1, без персистентности). Промежуточный прогон упал на тайминговом
+  `bottom-sheet.test.tsx` под нагрузкой (отдельно — 8 passed); повторный полный прогон — зелёный, как выше.
+
+### Deviations
+
+- Блок «Профиля»: заголовок — «Сезон», название сезона — строкой ниже (вместо «Сезон {название}»): названия сезонов
+  уже содержат слово «Сезон» («Сезон 2026») — иначе «Сезон Сезон 2026».
+- «К гонкам» пустого сезона ведёт туда же, что «Все гонки» экрана: вошедшему — вкладка «Гонки», гостю — `/`.
+- a11y ничьей — существующая строка `races.results.tiedA11y` («6-е место поровну») по §11.3, а не дословно «шестое
+  место, ничья».
+- Переключатели класса и группы показываются и при одном варианте (единообразие; только существующие таблицы).
+
+### Open follow-ups
+
+- Ручная проверка на iOS/Android/web (симулятор, `build:web` + `start:web`, Playwright-смоук) — NOT VERIFIED в этой
+  сессии: только jest (native-проект) и typecheck.
+- Native: перезапрос таблицы после расхождения снимков (RC-11, «Курсор и снимок») идёт обычным GET — обход
+  HTTP-кэша невозможен без изменения сервера: `fetch` RN — `whatwg-fetch`, при `cache: 'no-cache'` дописывает `_=` в
+  URL, а `SeasonStandingsTableQuery` строгий (400). Android (OkHttp RN без кэша) не затронут; iOS (`NSURLCache`)
+  может вернуть кэшированный ответ до 60 с — «Вы» появится при pull-to-refresh или следующем открытии. Варианты:
+  разрешить `_` в query на сервере или отдавать таблицу с `no-cache`/`ETag` — отдельной задачей.
+
+### Фиксы ревью 08c pass 1
+
+Ревью: Codex — REQUEST CHANGES (`findings-08c-codex.md`), Claude — APPROVE с замечаниями (`findings-08c-claude.md`).
+
+- HIGH (Codex): ошибка `/me` у вошедшего — свой баннер «Не удалось загрузить ваше место в сезоне» с повтором
+  (`me.refetch`, `TabFailure`), публичная таблица остаётся; ошибка обновления — данные и «Вы» остаются + баннер; до
+  ответа сводки баннера нет (её состояние — `AsyncContent`, «Нет соединения» один раз). Тесты: первая ошибка `/me`,
+  ошибка обновления, вошедший без сети.
+- MEDIUM (Codex): заметка «лучшие N из M» и число участников — из первой страницы таблицы (`pages[0]`), сводка —
+  переключатели и до ответа; M = 0 (RC-12) — заметки нет, «0 участников». Тесты: разные счётчики сводки и таблицы,
+  RC-12.
+- MEDIUM (Claude): `api-client` `getSeasonStandingsTable(id, params, { fresh })` — необязательный параметр, `fresh` →
+  `cache: 'no-cache'` (остальные вызовы без изменений). Приложение: `refetchFresh` (RC-11) и сброс «Курсор и снимок»
+  — fresh только при `BYPASS_HTTP_CACHE` (`features/standings/http-cache(.web).ts`: web — да, native — нет, см.
+  follow-ups). Тесты: `api-client` (fresh → `no-cache`, URL тот же), `season-standings-cache.test.tsx` (первый запрос
+  обычный, перезапрос RC-11 и сброс — `{ fresh: true }`), `http-cache(.web).test.ts`.
+- LOW (Claude): удалён `profile.season.line`; отступ секции — внутри `ProfileSeasonBlock` (скрытый блок места не
+  оставляет; скелетон — только пока `/me` грузится); тест обратного RC-11 (таблица новее `/me` → один перезапрос
+  `/me`, таблица — нет).
+- TDD: новые тесты красные до кода — `Tests: 4 failed, 27 passed` + `Cannot find module './http-cache'`; после —
+  `Test Suites: 10 passed`, `Tests: 100 passed` (standings, profile, season), web `http-cache` — 1 passed,
+  `api-client` `standings.test.ts` — 4 passed.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08c_test REDIS_URL_TEST=redis://127.0.0.1:6611/1 pnpm check`
+  (временный свой `redis-server`) → `EXIT=0`: Prettier и dependency-cruiser (1505 modules) — ок, typecheck `9/9`;
+  contracts `315`, api-client `111`, api `Test Files 135 passed`, `Tests 1453 passed`, admin `327`, app
+  `Test Suites: 174 passed`, `Tests: 1623 passed`; `Tasks: 15 successful, 15 total`. Предыдущий прогон упал на двух
+  нетронутых тестах API под нагрузкой (таймаут семафора `parse-thread.test.ts`, `ECONNRESET` в
+  `track-uploads.int.test.ts`); отдельно — `42 passed`, повторный полный — зелёный.
+
+### Фиксы ревью 08c pass 2
+
+Ревью: Claude — APPROVE (`findings-08c-claude-pass2.md`, LOW), Codex — REQUEST CHANGES
+(`findings-08c-codex-pass2.md`, HIGH). Ветка слита с `origin/develop` координатором (`8a5c9f9`).
+
+- HIGH (Codex): блок «Сезон» «Профиля» — `useHeaderSeasonState` (`features/races/queries.ts`: тот же запрос и кэш
+  `['seasons','current']` / `['seasons','list']`, что у `useHeaderSeason`, плюс состояния; `useHeaderSeason` не
+  менялся). Определение сезона: первая загрузка — скелетон, ошибка без данных — баннер «Не удалось определить сезон»
+  с повтором, ошибка обновления — сезон и рейтинг остаются + баннер. `/me`: скрытие по пустому ответу — только без
+  ошибок `/me` и сезона; ошибка обновления после пустого ответа — блок с баннером и повтором. Тесты
+  (`profile-season-block.test.tsx`): отказ определения сезона → повтор → рейтинг; отказ обновления сезона после
+  рейтинга; отказ обновления `/me` после пустого ответа. `profile-screen.test.tsx`: в `beforeEach` — «сезонов нет»
+  (раньше незамоканный `getCurrentSeason` молча скрывал блок, теперь ошибка видна), «скелетон сразу» — первый из
+  скелетонов (блок «Сезон» при первой загрузке тоже показывает скелетон).
+- LOW (Claude): `.claude/rules/pokatim-app.md` — `BYPASS_HTTP_CACHE` / `refetchFresh`, запрет `cache: 'no-cache'` на
+  native (`whatwg-fetch` → `_=` → 400 строгого query), баннер ошибки `/me`, состояния блока «Профиля».
+- TDD: новые тесты красные до кода — `Tests: 3 failed, 6 passed`; после — `profile|season|standings|tabs|races`:
+  `Test Suites: 17 passed`, `Tests: 271 passed`.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08c_test REDIS_URL_TEST=redis://127.0.0.1:6611/1 pnpm check`
+  (свой временный `redis-server`) → `EXIT=0`: Prettier и dependency-cruiser (1538 modules) — ок, typecheck `9/9`;
+  contracts `319`, api-client `111`, api `Test Files 135 passed`, `Tests 1457 passed`, admin `Test Files 38 passed`,
+  `Tests 357 passed`, app `Test Suites: 182 passed`, `Tests: 1678 passed`; `Tasks: 15 successful, 15 total`.

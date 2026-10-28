@@ -34,7 +34,7 @@ import { isRaceErrorCode, needsPolling, resultSignature } from './participation-
 import { pickSeason } from './season-pick';
 
 /** Сервер отдаёт публичное чтение с `public, max-age=60` — чаще перезапрашивать незачем. */
-const PUBLIC_STALE_MS = 60_000;
+export const PUBLIC_STALE_MS = 60_000;
 const PAGE_LIMIT = 20;
 
 const nextCursor = (page: RacePage) => page.nextCursor ?? undefined;
@@ -162,17 +162,35 @@ export function useSeasons(enabled = true) {
  * Сезон для кнопки в шапке вкладки (Q3, R10): текущий; между сезонами — из списка (ближайший предстоящий, иначе
  * последний завершённый). Пока не известен или не загрузился — `null` (кнопки нет, ошибка на экране не нужна).
  */
+const currentSeasonQuery = {
+  queryKey: ['seasons', 'current'],
+  queryFn: () => api.getCurrentSeason(),
+  staleTime: PUBLIC_STALE_MS,
+};
+
 export function useHeaderSeason(): SeasonCard | null {
-  const current = useQuery({
-    queryKey: ['seasons', 'current'],
-    queryFn: () => api.getCurrentSeason(),
-    staleTime: PUBLIC_STALE_MS,
-  });
+  const current = useQuery(currentSeasonQuery);
   const between = current.isSuccess && current.data.season === null;
   const all = useSeasons(between);
   if (!current.isSuccess) return null;
   if (current.data.season) return current.data.season;
   return all.data ? pickSeason(null, all.data.items) : null;
+}
+
+/**
+ * Тот же выбор сезона, что `useHeaderSeason` (тот же кэш), но с состоянием запросов — для блока со своими
+ * состояниями §4.12 («Сезон» «Профиля», 08c): сохранённые данные не теряются при ошибке обновления. `between` — текущего
+ * нет, сезон выбирается из списка (`all`).
+ */
+export function useHeaderSeasonState() {
+  const current = useQuery(currentSeasonQuery);
+  const between = current.data !== undefined && current.data.season === null;
+  const all = useSeasons(between);
+  const season =
+    current.data === undefined
+      ? null
+      : (current.data.season ?? (all.data ? pickSeason(null, all.data.items) : null));
+  return { season, current, all, between };
 }
 
 /*

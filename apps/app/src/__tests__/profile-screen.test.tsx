@@ -33,6 +33,9 @@ beforeEach(() => {
   signInForTest();
   useSessionStore.setState({ session: liveSession });
   getProfile.mockResolvedValue(profile());
+  // блок «Сезон» (08c) — сезонов нет, блок скрыт; сам блок — `profile-season-block.test.tsx`
+  jest.mocked(api.getCurrentSeason).mockResolvedValue({ season: null });
+  jest.mocked(api.listSeasons).mockResolvedValue({ items: [] });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
 afterEach(() => {
@@ -56,7 +59,8 @@ describe('«Профиль»: загрузка (AC9)', () => {
     getProfile.mockReturnValue(never());
     await openProfile();
     expect(await screen.findByRole('header', { name: 'Профиль' })).toBeOnTheScreen();
-    expect(screen.getByLabelText('Загрузка')).toBeOnTheScreen();
+    // первый скелетон — поля профиля (ниже, пока определяется сезон, — скелетон блока «Сезон», 08c)
+    expect(screen.getAllByLabelText('Загрузка')[0]).toBeOnTheScreen();
     expect(screen.queryByLabelText(NAME)).toBeNull();
     expect(getProfile).toHaveBeenCalledWith(liveSession.accessToken);
   });

@@ -1,6 +1,6 @@
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { Button, textStyle, useTheme } from '@rkarakulov/ui';
+import { Button, TextAction, textStyle, useTheme } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -17,7 +17,7 @@ const DOCUMENT_TITLE = `${t('races.title')} — ${t('app.name')}`;
 /**
  * Вкладка «Гонки» (блок 03): список гонок платформы с фильтрами, герой, группы «Скоро» / «Завершённые», курсорная
  * подгрузка. Только для вошедших (как все вкладки); карточка гонки — публичный маршрут `/races/<id>`. Участие,
- * результаты и таблица сезона скрыты (§4). Обновление — pull-to-refresh и фокус (`focusManager`).
+ * результаты скрыты (§4); «Таблица сезона» (race-results-08c) — на экран сезона кнопки шапки. Обновление — pull-to-refresh и фокус (`focusManager`).
  */
 export default function RacesScreen() {
   const theme = useTheme();
@@ -51,6 +51,14 @@ export default function RacesScreen() {
                 onPress={() => router.push(`/seasons/${season.id}`)}
               />
             ) : null}
+            {season ? (
+              <View style={styles.table}>
+                <TextAction
+                  label={t('races.seasonTable')}
+                  onPress={() => router.push(`/seasons/${season.id}`)}
+                />
+              </View>
+            ) : null}
           </View>
         }
       />
@@ -68,4 +76,5 @@ const styles = StyleSheet.create({
     gap: space.s3,
   },
   title: { flexShrink: 1 },
+  table: { flexBasis: '100%', alignItems: 'flex-start' },
 });
