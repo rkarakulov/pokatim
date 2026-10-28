@@ -77,6 +77,16 @@ export class ActivitySourceService implements ActivitySource {
     return (await this.repository.ownTrackLine(userId, activityId)) ?? null;
   }
 
+  async liveActivities(
+    userId: string,
+    ids: readonly string[],
+  ): Promise<Map<string, { primaryId: string }>> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return new Map();
+    const heads = await this.repository.ownActivityHeads(userId, unique);
+    return new Map(heads.map((head) => [head._id, { primaryId: head.duplicateOf ?? head._id }]));
+  }
+
   async readSource(activityId: string): Promise<{ bytes: Uint8Array; format: TrackFormat } | null> {
     const activity = await this.repository.findActivity(activityId);
     const upload = activity ? await this.repository.findUpload(activity.uploadId) : undefined;

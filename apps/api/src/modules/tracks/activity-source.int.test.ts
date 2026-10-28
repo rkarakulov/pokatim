@@ -1,7 +1,7 @@
 import { rm } from 'node:fs/promises';
 
 import { TrackStreamV1 } from '@pokatim/tracks';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
 import { bearer, call, outboxEvents, signUpSession, userIdByEmail } from '../../../test/identity';
@@ -10,6 +10,7 @@ import { fixture, parsedUpload, processUpload, tracks, uploadTrack } from '../..
 import { ACTIVITY_SOURCE, type ActivitySource } from './activity-source.port';
 import { TRACK_FILE_STORE, type TrackFileStore } from './track-file-store';
 import { TRACK_INGEST, type TrackIngest } from './track-ingest.port';
+import { TracksRepository } from './tracks.repository';
 
 /** События `tracks.activity-ready/-removed` и порт `ActivitySource` (race-results-03). */
 
@@ -191,6 +192,36 @@ describe('порт ActivitySource', () => {
     await h.worker.get<TrackFileStore>(TRACK_FILE_STORE).delete(upload!.storageKey!);
     expect(await source().readSource(fileActivity._id)).toBeNull();
     expect(await source().readSource('01890a5d-ac96-774b-bcce-b302099a8057')).toBeNull();
+  });
+});
+
+describe('liveActivities (route-rides-01, RC-2)', () => {
+  it('свои живые — основная группы (дубль → id основной); чужие, удалённые, неизвестные — нет; пустой вход — без запроса', async () => {
+    const { streamed, fileActivity, streamActivity } = await fileAndStream();
+    const unknown = '01890a5d-ac96-774b-bcce-b302099a8057';
+    const ids = [fileActivity._id, streamActivity._id, unknown, fileActivity._id];
+    expect(await source().liveActivities(userId, ids)).toEqual(
+      new Map([
+        [fileActivity._id, { primaryId: streamActivity._id }],
+        [streamActivity._id, { primaryId: streamActivity._id }],
+      ]),
+    );
+    expect(await source().liveActivities('01890a5d-ac96-774b-bcce-b302099a8099', ids)).toEqual(
+      new Map(),
+    );
+
+    // основная удалена — дубль стал основной, удалённой в карте нет
+    expect(
+      (await call(h, 'POST', `/v1/tracks/uploads/${streamed.uploadId}/delete`, {}, auth)).status,
+    ).toBe(204);
+    expect(await source().liveActivities(userId, ids)).toEqual(
+      new Map([[fileActivity._id, { primaryId: fileActivity._id }]]),
+    );
+
+    const heads = vi.spyOn(h.worker.get(TracksRepository), 'ownActivityHeads');
+    expect(await source().liveActivities(userId, [])).toEqual(new Map());
+    expect(heads).not.toHaveBeenCalled();
+    heads.mockRestore();
   });
 });
 
