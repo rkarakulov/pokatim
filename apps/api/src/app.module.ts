@@ -26,6 +26,7 @@ import { RacesModule } from './modules/races';
 import { RidesModule } from './modules/rides';
 import { ResultsModule } from './modules/results';
 import { RoutesModule } from './modules/routes';
+import { StandingsModule } from './modules/standings';
 import { TracksModule } from './modules/tracks';
 
 @Module({
@@ -48,6 +49,8 @@ import { TracksModule } from './modules/tracks';
     // гейты споров для `results` и `races` (@Global, RC-1)
     DisputesCoreModule,
     DisputesModule,
+    // рейтинг сезона (race-results-08)
+    StandingsModule,
     CalendarModule,
     AppearanceModule,
     RidesModule,

@@ -810,3 +810,80 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
   `standings-format.test.ts`.
 
 # 12. Outcome (заполняет coder)
+
+## 12.1 08a — модель, API, worker
+
+### Changes
+
+- Контракты `packages/contracts/src/standings/standings.schema.ts` — формы §11.1 без изменений (ответы приложения —
+  `tolerantEnum`, панель — строгие, `SeasonStandingsTableQuery` — `strictObject`).
+- `apps/api`: новый модуль `standings` — политика `standings.policy.ts` (Ф1, N из M, DQ-слоты, RC-10, разбивка ничьей,
+  отпечаток и `sourceVersion`), коллекции снимка `season_standings` / `season_standing_rows`, `StandingsRepository`
+  (`claimSeason` — условный upsert первой операцией транзакции, RC-5), `StandingsSource`, `StandingsRecalc` (`sync`,
+  `recompute`, `writeSnapshot` → `written | stale`), регламент `standings-recalc` (`* * * * *` Минск +
+  `standings.sync.boot`), `StandingsReadService` и три контроллера (публичный, `/me`, панель).
+- Порты: `races` — `SEASON_RACES` (`SeasonRacesService`, `RacesRepository.listProtocolRaces` с условием частичного
+  индекса, RC-2: `groupScheme: null` → `gender_age`); `results` — `RESULTS_FOR_STANDINGS` (`currentRevisions` одним
+  `aggregate` с предикатом `revision: { $type: 'number' }`, `standingsRows` с проекцией). `races`/`results` о
+  `standings` не знают.
+- Миграция `0030_standings` (expand-only, идемпотентна, без бэкфилла); `QUEUE.standingsRecalc`; `StandingsModule` в
+  `AppModule`, `StandingsWorkerModule` в `WorkerModule`.
+- `packages/api-client`: `getSeasonStandings`, `getSeasonStandingsTable`, `getMySeasonStandings`; панель —
+  `getSeasonStandings`, `getSeasonStandingsTable`; тип `SeasonStandingsTableParams`.
+- `packages/i18n` — без изменений: серверу строки не нужны, строки экранов — в PR 08b/08c (§11.1 «FILES TO MODIFY»).
+
+### Files touched
+
+- Создано: `packages/contracts/src/standings/{standings.schema,standings.schema.test}.ts`;
+  `apps/api/src/modules/standings/{index,standings.module,standings.collection,standings.repository,standings.policy,
+  standings.policy.test,standings-source,standings-recalc,standings-sync.processor,standings-schedules.test,
+  standings-read.service,standings-public.controller,standings-me.controller,standings-admin.controller,
+  standings-sync.int.test,standings-locks.int.test,standings-read.int.test}.ts`;
+  `apps/api/src/modules/races/{season-races.port,season-races}.ts`;
+  `apps/api/src/modules/results/{results-for-standings.port,results-for-standings}.ts`;
+  `apps/api/src/db/migrations/0030_standings.ts`; `apps/api/test/standings.ts`; `packages/api-client/src/standings.test.ts`.
+- Изменено: `packages/contracts/src/index.ts`; `packages/api-client/src/{index,admin}.ts`;
+  `apps/api/src/modules/races/{index,races.module,races.repository}.ts`;
+  `apps/api/src/modules/results/{index,results.module,results.repository}.ts`;
+  `apps/api/src/{queues,app.module,worker.module}.ts`; `apps/api/src/db/migrations/{index,migrations.int.test}.ts`.
+
+### Docs updated
+
+- `.claude/rules/pokatim-backend.md` (раздел «Рейтинг сезона», отметка о fan-out в «Протоколе»), `pokatim-db.md`
+  (коллекции снимка, RC-5, `0030_standings`, исключение из правила порта стирания — RC-6), `pokatim-security.md`
+  (публичные таблицы без `userId`, `/me`, `userId` в панели только при `!ownScope`), `pokatim-contracts.md`
+  (раздел `standings`).
+- `docs/product/races-and-seasons.md` — серверные правила 08a (экран и «скрыто до FR-4» — 08c);
+  `docs/product/notifications.md`, `docs/adr/0017-notifications-and-push.md` п. 5 — отметка: 08 — регламент, fan-out
+  — follow-up; `docs/tasks/2026-10-27-race-results/epic.md` — статус слайса 08 и очередь `standings-recalc`.
+
+### Tests
+
+- unit: `standings.policy.test.ts` (14: golden спайка §4.1, AC2–AC6, RC-2, RC-10, отпечаток, `sourceVersion`),
+  `standings-schedules.test.ts` (2), `standings.schema.test.ts` (4), `api-client/src/standings.test.ts` (3);
+  `admin-routes.test.ts` (существующий) покрывает новые `admin/seasons/:id/standings*` автоматически.
+- int: `standings-sync.int.test.ts` (4: публикация → снимок, DQ → ревизия 2 → обновлён, повтор — `claimSeason` не
+  вызван и `computedAt` тот же; две схемы и RC-2; гонка без ревизии и сезон без протоколов; отказ сезона не блокирует
+  другой, задача падает), `standings-locks.int.test.ts` (5), `standings-read.int.test.ts` (9: ключи ответов без
+  `userId`, имя по согласию, `Cache-Control`, 404/400, курсор, RC-12, `/me` 401 и свои строки, панель 401 без сессии и
+  с токеном райдера, admin/moderator — `userId`, organizer — `null`, `sync: pending → current`), `migrations.int.test.ts`
+  (`0030` повторно, индексы с `unique` / `partialFilterExpression`).
+- Отрицательное доказательство RC-5 (постоянный тест «без условия версии … откатывается к 1» + ручной прогон): условие
+  `$or` убрано из фильтра `claimSeason` → `standings-locks.int.test.ts`: `Tests 3 failed | 2 passed (5)` —
+  «версия 2 коммитится раньше … версии 1» — `expected 'written' to be 'stale'`; «первый снимок двумя транзакциями» —
+  `expected [ 'written', 'written' ] to deeply equal [ 'stale', 'written' ]`; «повтор той же версии» — `expected
+  'written' to be 'stale'`. Условие возвращено — `Tests 5 passed (5)`.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08_test REDIS_URL_TEST=…/14 pnpm check` → `EXIT=0`:
+  `All matched files use Prettier code style!`, `✔ no dependency violations found (1484 modules, 5477 dependencies
+  cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — contracts `315 passed`, api-client `110 passed`, api
+  `Test Files 134 passed (134)`, `Tests 1430 passed (1430)`, admin `327 passed`, app `Tests: 1573 passed`,
+  `Tasks: 15 successful, 15 total`.
+- Первый прогон `pnpm check` был красным: сторож `results.repository.test.ts` (коллекции протокола по имени) поймал
+  имя `race_protocol_rows` в комментарии `standings.collection.ts` — комментарий переписан, сторож не менялся.
+
+### Open follow-ups
+
+- Fan-out outbox в app-foundation и подписка `standings` на события протокола вместо регламента (DV-1).
+- Пакетная запись поколений снимка, если сезон превысит ~10 000 строк (RC-16; сейчас лог `rows=<n>`).
+- 08b (панель) и 08c (приложение) — отдельными PR; i18n-строки экранов — там же.
+- Номер миграции `0030` свободен в `origin/develop` на момент коммита; при слиянии после чужой `0030` — перенумеровать.

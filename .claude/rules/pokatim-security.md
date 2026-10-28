@@ -147,6 +147,16 @@ paths:
 - Причина исключения, DQ и пересчёта — только панели и append-only журналу (`panel_audit`, `race_recalculations`),
   райдеру не уходит; логи — без причины и без `userId` райдера.
 
+## Рейтинг сезона (race-results-08)
+
+- Публично (`GET /v1/seasons/:id/standings`, `/table`) — `PublicReadGuard`, `public, max-age=60`, строки без
+  `userId` (ключи держит `standings-read.int.test.ts`), имя — только с согласием (`RIDER_NAMES.publicNames`);
+  неизвестный сезон — 404 до разбора курсора, курсор чужого сезона — 400.
+- `GET /v1/seasons/:id/standings/me` — `AuthGuard`, пользователь из access, `no-store`, только свои строки.
+- Панель (`/v1/admin/seasons/:id/standings*`) — `PanelGuard` + `races.read`; `userId` строки — только сотруднику,
+  видящему все гонки (`SeasonRaces.seesAllRaces`, не `ownScope`): организатору — `null` (сезон сквозной по гонкам
+  разных организаторов, RC-8). Логи регламента — id сезона, число таблиц и строк, длительность; без имён и `userId`.
+
 ## Споры (race-results-06)
 
 - D-51: в ответах приложения цель (`against`) видит категорию, статус, срок, свой ответ и исход — без заявителя и

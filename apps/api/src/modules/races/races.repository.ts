@@ -343,6 +343,40 @@ export class RacesRepository {
     return this.c.races.find(query).sort({ windowStartsAt: -1, _id: -1 }).limit(limit).toArray();
   }
 
+  /**
+   * Гонки с опубликованным протоколом для рейтинга сезона (race-results-08): сезона `seasonId` или всех сезонов, по
+   * `(seasonId, windowEndsAt, _id)`. Условие `protocolPublishedAt: { $type: 'date' }` — ровно частичный фильтр
+   * `races_protocol_idx` (RC-4); статус — защита (протокол есть только у опубликованной, D-19).
+   */
+  listProtocolRaces(
+    seasonId?: string,
+  ): Promise<
+    Pick<
+      RaceDoc,
+      '_id' | 'seasonId' | 'bikeClass' | 'groupScheme' | 'lockedAt' | 'title' | 'windowEndsAt'
+    >[]
+  > {
+    const query: Filter<RaceDoc> = {
+      protocolPublishedAt: { $type: 'date' },
+      status: 'published',
+      seasonId: seasonId ?? { $type: 'string' },
+    };
+    return this.c.races
+      .find(query, {
+        projection: {
+          _id: 1,
+          seasonId: 1,
+          bikeClass: 1,
+          groupScheme: 1,
+          lockedAt: 1,
+          title: 1,
+          windowEndsAt: 1,
+        },
+      })
+      .sort({ seasonId: 1, windowEndsAt: 1, _id: 1 })
+      .toArray();
+  }
+
   /** Страница панели: новые окна сверху (`windowStartsAt desc, _id desc`), `limit + 1` — признак продолжения. */
   listPanel(
     filter: PanelRaceFilter,
