@@ -124,7 +124,9 @@ describe('гард онбординга: шаг устройств (AC11)', () =
     await home();
     expect(cache()).toMatchObject({ devicesStepCompleted: true });
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Выйти' }));
+    // «Выйти» — в «Настройках» (settings-hub)
+    await fireEvent.press(screen.getByRole('button', { name: 'Настройки' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Выйти' }));
     expect(await screen.findByRole('header', { name: 'Вход' })).toBeOnTheScreen();
     expect(storedValue('pokatim.onboarding')).toBeUndefined();
   });

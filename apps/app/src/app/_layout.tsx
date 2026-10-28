@@ -140,7 +140,8 @@ function RootShell() {
                 {/* «Устройства» (вход — иконка верхней панели): тот же гард, что у вкладок; скелетон — в экране
               (`useSettingsShell`) */}
                 <Stack.Screen name="settings/devices" />
-                {/* «Профиль» (profile-rider-name, вход — иконка верхней панели): тот же гард и оболочка, что у «Устройств» */}
+                {/* «Настройки» и «Язык» (settings-hub, вход — иконка верхней панели), «Профиль» (вход — из «Настроек»): тот
+                же гард и оболочка, что у «Устройств» */}
                 <Stack.Screen name="settings/index" />
                 <Stack.Screen name="settings/language" />
                 <Stack.Screen name="settings/profile" />

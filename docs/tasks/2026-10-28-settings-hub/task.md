@@ -127,10 +127,31 @@ Security boundary не затронут: новых запросов нет, я�
 - FILES TO READ: `app/settings/profile.tsx`, `features/devices/settings-shell.tsx`, `features/onboarding/device-flags(.web).ts`,
   `lib/open-external-url(.web).ts`, `features/auth/use-sign-out.ts`.
 - TYPES & SCHEMAS: без изменений contracts.
-- TESTS: `__tests__/settings-screen.test.tsx`, `__tests__/language-screen.test.tsx`, `features/settings/*.test.ts`,
-  правки `home.test.tsx`, `top-bar.test.tsx`, `sign-in.test.tsx` (выход — из хаба), `packages/i18n/src/index.test.ts`.
+- TESTS: `__tests__/settings-screen.test.tsx` (хаб, «Язык», выход, восстановление языка, гость),
+  `features/settings/locale-preference(.web).test.ts`, `lib/open-external-url.web.test.ts` (`mailto:`), правки
+  `home.test.tsx`, `top-bar.test.tsx`, `sign-in.test.tsx`, `onboarding-guard.test.tsx`, `location.test.tsx`,
+  `devices-step.test.tsx` (выход — из хаба), `packages/i18n/src/index.test.ts`, e2e `web.spec.ts`.
 - OUT OF SCOPE: раздел 4.
 
 ## 12. Outcome
 
-_заполняется после реализации_
+- **Changes**
+  - `apps/app`: хаб `settings/index`, экран `settings/language`, `features/settings/` (строка, «О приложении», язык
+    устройства native/web), иконки `settings`/`check`, ключ `pokatim.locale`; вход «Настройки» в `TopBar` вместо
+    «Профиль»; «Выйти» убран с Главной; корневой layout восстанавливает язык; `openExternalUrl` (web) открывает
+    `mailto:` в текущей вкладке.
+  - `packages/i18n`: `localeNames`, строки `settings.*`.
+  - `infra/docker/Dockerfile`: необязательные `EXPO_PUBLIC_PRIVACY_URL`, `EXPO_PUBLIC_TERMS_URL`,
+    `EXPO_PUBLIC_SUPPORT_EMAIL`.
+- **Docs updated:** `.claude/rules/pokatim-app.md`, `docs/runbooks/deploy.md`.
+- **Tests:** jest `@pokatim/app` (native + web) и vitest `@pokatim/i18n` — зелёные; `format:check`, `lint`,
+  `arch:check`, `typecheck` — см. PR. `@pokatim/api` локально не стартует (Startup Error vitest в среде агента; API в
+  задаче не менялся) — проверка в CI. Визуальная проверка тем — на dev после выкатки (отчёт в pr.md).
+- **Review:** Codex pass 1 — APPROVE без замечаний; Claude pass 1 — APPROVE, 5 LOW — все исправлены (mailto на web,
+  тест недоступности «Выйти», тест восстановления языка корнем, комментарий layout, раздел 11).
+- **Open follow-ups**
+  - Второй язык: словарь en проекта (`translations` в `createI18n`), подписка экранов на смену языка (`t()` и
+    константы модулей считаются один раз), `<html lang>` и SSR по выбору, язык писем и push на сервере.
+  - Поле языка в профиле (`ProfileView`/`PATCH /v1/profile`) — когда язык понадобится серверу.
+  - Адреса политики, условий и поддержки: задать в `deploy-dev.yml`/EAS env, когда появятся страницы.
+  - `SettingsRow` — кандидат в `@rkarakulov/ui` (app-foundation).

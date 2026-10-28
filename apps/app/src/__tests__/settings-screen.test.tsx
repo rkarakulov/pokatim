@@ -1,12 +1,13 @@
 /// <reference types="jest" />
 import { i18n } from '@pokatim/i18n';
-import { fireEvent, renderRouter, screen, within } from 'expo-router/testing-library';
+import { fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 
 import { openExternalUrl } from '@/lib/open-external-url';
 import { resetSessionStore } from '@/features/auth/session-store';
+import { api } from '@/lib/api';
 
 import { appRoutes } from './app-routes';
-import { signInForTest } from './auth-fixtures';
+import { signInForTest, storeSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
 import LanguageScreen from '../app/settings/language';
 import SettingsScreen from '../app/settings/index';
@@ -125,6 +126,15 @@ describe('«Настройки»: о приложении (AC3)', () => {
   });
 });
 
+describe('«Настройки»: выход (AC4)', () => {
+  it('пока идёт выход, «Выйти» недоступна', async () => {
+    jest.mocked(api.signOut).mockReturnValue(new Promise<never>(() => undefined));
+    await openSettings();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Выйти' }));
+    expect(screen.getByRole('button', { name: 'Выйти' })).toBeDisabled();
+  });
+});
+
 describe('«Язык» (AC5)', () => {
   it('список языков интерфейса, текущий выбран; выбор сохраняется на устройстве', async () => {
     const setLocale = jest.spyOn(i18n, 'setLocale');
@@ -142,6 +152,19 @@ describe('«Язык» (AC5)', () => {
     const store = jest.requireMock<{ __store: Map<string, string> }>('expo-secure-store').__store;
     expect(store.get('pokatim.locale')).toBe('"ru"');
     expect(router.getPathname()).toBe('/settings/language');
+    setLocale.mockRestore();
+  });
+});
+
+describe('язык при запуске (AC5)', () => {
+  it('корневой layout применяет сохранённый язык устройства', async () => {
+    const setLocale = jest.spyOn(i18n, 'setLocale');
+    storeSession();
+    jest
+      .requireMock<{ __store: Map<string, string> }>('expo-secure-store')
+      .__store.set('pokatim.locale', '"ru"');
+    await renderRouter(appRoutes, { initialUrl: '/settings' });
+    await waitFor(() => expect(setLocale).toHaveBeenCalledWith('ru'));
     setLocale.mockRestore();
   });
 });
