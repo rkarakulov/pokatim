@@ -37,7 +37,7 @@ describe('StandingsSchedules (race-results-08, DV-1)', () => {
   });
 
   it('процессор: незнакомое имя задачи — ошибка, sync — прогон регламента', async () => {
-    const run = { seasons: 1, recomputed: 1, stale: 0, failed: 0 };
+    const run = { seasons: 1, recomputed: 1, stale: 0, conflicts: 0, failed: 0 };
     const processor = new StandingsSyncProcessor({
       sync: () => Promise.resolve(run),
     } as unknown as StandingsRecalc);

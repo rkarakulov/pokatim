@@ -47,10 +47,22 @@ describe('регламент standings.sync (AC7)', () => {
     const [first, second] = race.riders;
     const seasonId = (await racesDb(h).races.findOne({ _id: race.raceId }))!.seasonId!;
     // до публикации — снимка нет
-    expect(await syncStandings(h)).toEqual({ seasons: 0, recomputed: 0, stale: 0, failed: 0 });
+    expect(await syncStandings(h)).toEqual({
+      seasons: 0,
+      recomputed: 0,
+      stale: 0,
+      conflicts: 0,
+      failed: 0,
+    });
     expect((await protocolAction(h, race.token, race.raceId, '/protocol')).status).toBe(200);
 
-    expect(await syncStandings(h)).toEqual({ seasons: 1, recomputed: 1, stale: 0, failed: 0 });
+    expect(await syncStandings(h)).toEqual({
+      seasons: 1,
+      recomputed: 1,
+      stale: 0,
+      conflicts: 0,
+      failed: 0,
+    });
     const header = await standingsDb(h).seasons.findOne({ _id: seasonId });
     expect(header).toMatchObject({
       formulaVersion: STANDINGS_FORMULA_VERSION,
@@ -95,7 +107,13 @@ describe('регламент standings.sync (AC7)', () => {
     const before = (await standingsDb(h).seasons.findOne({ _id: seasonId }))!.computedAt;
     const claim = vi.spyOn(h.worker.get(StandingsRepository, { strict: false }), 'claimSeason');
     h.clock.advance(60_000);
-    expect(await syncStandings(h)).toEqual({ seasons: 1, recomputed: 0, stale: 0, failed: 0 });
+    expect(await syncStandings(h)).toEqual({
+      seasons: 1,
+      recomputed: 0,
+      stale: 0,
+      conflicts: 0,
+      failed: 0,
+    });
     expect(claim).not.toHaveBeenCalled();
     expect((await standingsDb(h).seasons.findOne({ _id: seasonId }))!.computedAt).toEqual(before);
   });
@@ -133,10 +151,36 @@ describe('регламент standings.sync (AC7)', () => {
     const broken = await seedProtocolRace(h, seasonId, [], { recalculations: false });
     const quiet = await seedSeason(h, 'Сезон без протоколов');
     await seedProtocolRace(h, quiet, [placedRow('b', 1)], { protocol: false });
-    expect(await syncStandings(h)).toEqual({ seasons: 1, recomputed: 1, stale: 0, failed: 0 });
+    expect(await syncStandings(h)).toEqual({
+      seasons: 1,
+      recomputed: 1,
+      stale: 0,
+      conflicts: 0,
+      failed: 0,
+    });
     const header = (await standingsDb(h).seasons.findOne({ _id: seasonId }))!;
     expect(header.races.map((race) => race.raceId)).not.toContain(broken);
     expect(await standingsDb(h).seasons.findOne({ _id: quiet })).toBeNull();
+  });
+
+  it('снимок не старше источника, а отпечаток другой — пропуск без пересчёта (version_conflict, ревью LOW-1)', async () => {
+    const seasonId = await seedSeason(h);
+    await seedProtocolRace(h, seasonId, [placedRow('a', 1)]);
+    await syncStandings(h);
+    // как после отката деплоя: сохранённый снимок «новее» источника и с другим отпечатком
+    await standingsDb(h).seasons.updateOne(
+      { _id: seasonId },
+      { $set: { fingerprint: 'from-newer-release' }, $inc: { sourceVersion: 5 } },
+    );
+    const claim = vi.spyOn(h.worker.get(StandingsRepository, { strict: false }), 'claimSeason');
+    expect(await syncStandings(h)).toEqual({
+      seasons: 1,
+      recomputed: 0,
+      stale: 0,
+      conflicts: 1,
+      failed: 0,
+    });
+    expect(claim).not.toHaveBeenCalled();
   });
 
   it('отказ пересчёта одного сезона не блокирует другой; задача падает, следующий прогон повторяет', async () => {
@@ -156,7 +200,13 @@ describe('регламент standings.sync (AC7)', () => {
     expect(await standingsDb(h).seasons.findOne({ _id: failing })).toBeNull();
 
     spy.mockRestore();
-    expect(await syncStandings(h)).toEqual({ seasons: 2, recomputed: 1, stale: 0, failed: 0 });
+    expect(await syncStandings(h)).toEqual({
+      seasons: 2,
+      recomputed: 1,
+      stale: 0,
+      conflicts: 0,
+      failed: 0,
+    });
     expect(await rowsOf(failing)).toEqual([['m_u40', 'a', 1, 100]]);
   });
 });

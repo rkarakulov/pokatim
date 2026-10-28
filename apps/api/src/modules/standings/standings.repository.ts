@@ -17,6 +17,13 @@ import {
  * RC-5), затем `replaceRows`. Более новый (или равный) заголовок — фильтр не совпал, upsert вставляет тот же `_id` —
  * ошибка `_id_`: вызывающий откатывает транзакцию (`stale`). Чтения страницы — в одной snapshot-сессии.
  */
+/** Состояние сохранённого снимка для решения регламента «пересчитывать ли». */
+export interface SnapshotState {
+  fingerprint: string;
+  formulaVersion: number;
+  sourceVersion: number;
+}
+
 @Injectable()
 export class StandingsRepository {
   private readonly c: StandingsCollections;
@@ -53,13 +60,22 @@ export class StandingsRepository {
     if (rows.length > 0) await this.c.rows.insertMany(rows, { session: tx });
   }
 
-  /** Отпечатки снимков сезонов (регламент): без `ids` — все. */
-  async fingerprints(ids?: readonly string[]): Promise<Map<string, string>> {
+  /** Отпечаток и версии снимков сезонов (регламент): без `ids` — все. */
+  async snapshotStates(ids?: readonly string[]): Promise<Map<string, SnapshotState>> {
     const filter: Filter<SeasonStandingsDoc> = ids ? { _id: { $in: [...ids] } } : {};
     const docs = await this.c.seasons
-      .find(filter, { projection: { _id: 1, fingerprint: 1 } })
+      .find(filter, { projection: { _id: 1, fingerprint: 1, formulaVersion: 1, sourceVersion: 1 } })
       .toArray();
-    return new Map(docs.map((doc) => [doc._id, doc.fingerprint]));
+    return new Map(
+      docs.map((doc) => [
+        doc._id,
+        {
+          fingerprint: doc.fingerprint,
+          formulaVersion: doc.formulaVersion,
+          sourceVersion: doc.sourceVersion,
+        },
+      ]),
+    );
   }
 
   async header(seasonId: string, session?: DbSession): Promise<SeasonStandingsDoc | undefined> {

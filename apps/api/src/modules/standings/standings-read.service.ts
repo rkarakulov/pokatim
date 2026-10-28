@@ -2,9 +2,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import type {
   MySeasonStanding,
   MySeasonStandings,
+  PanelSeasonStandingCell,
   PanelSeasonStandingsSummary,
   PanelSeasonStandingsTable,
-  SeasonStandingCell,
   SeasonStandingsRace,
   SeasonStandingsSummary,
   SeasonStandingsTable,
@@ -34,7 +34,8 @@ const OrderCursorKey = z.string().regex(/^\d{1,7}$/);
 
 const iso = (at: Date | undefined) => at?.toISOString() ?? null;
 
-const toCell = (cell: StandingCellDoc): SeasonStandingCell => ({
+/** Строгий тип (панели): снимок пишет только известные значения — он же подходит tolerant-ответам приложения. */
+const toCell = (cell: StandingCellDoc): PanelSeasonStandingCell => ({
   raceId: cell.raceId,
   place: cell.place,
   tied: cell.tied,
@@ -177,7 +178,7 @@ export class StandingsReadService {
   private summaryOf(
     seasonId: string,
     header: SeasonStandingsDoc | undefined,
-  ): SeasonStandingsSummary {
+  ): Omit<PanelSeasonStandingsSummary, 'formulaVersion' | 'sync'> {
     return {
       seasonId,
       computedAt: iso(header?.computedAt),

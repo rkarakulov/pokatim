@@ -112,5 +112,30 @@ describe('рейтинг сезона — контракты (race-results-08)',
       items: [{ ...row, userId: null }],
     });
     expect(panelTable.items[0]!.userId).toBeNull();
+    // неизвестные класс, группа и исход в панели — ошибка, а не `unknown`
+    for (const bad of [
+      { ...panelTable, bikeClass: 'future-class' },
+      { ...panelTable, groupKey: 'future-group' },
+      {
+        ...panelTable,
+        items: [{ ...panelTable.items[0]!, cells: [{ ...row.cells[0]!, outcome: 'future' }] }],
+      },
+    ]) {
+      expect(PanelSeasonStandingsTable.safeParse(bad).success).toBe(false);
+    }
+    expect(
+      PanelSeasonStandingsSummary.safeParse({
+        ...summary,
+        tables: [
+          {
+            bikeClass: 'future-class',
+            groupKey: 'm_u40',
+            riders: 1,
+            racesTotal: 1,
+            racesCounted: 1,
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 });

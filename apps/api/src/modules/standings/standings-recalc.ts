@@ -14,6 +14,8 @@ export interface StandingsSyncRun {
   seasons: number;
   recomputed: number;
   stale: number;
+  /** снимок не старше источника, а отпечаток другой (откат деплоя, вход отпечатка без версии формулы) — пропуск */
+  conflicts: number;
   failed: number;
 }
 
@@ -37,10 +39,25 @@ export class StandingsRecalc {
   /** Один проход регламента; отказ сезона не останавливает остальные, после прохода при отказах — исключение. */
   async sync(): Promise<StandingsSyncRun> {
     const sources = await this.source.load();
-    const fingerprints = await this.repository.fingerprints([...sources.keys()]);
-    const run: StandingsSyncRun = { seasons: sources.size, recomputed: 0, stale: 0, failed: 0 };
+    const states = await this.repository.snapshotStates([...sources.keys()]);
+    const run: StandingsSyncRun = {
+      seasons: sources.size,
+      recomputed: 0,
+      stale: 0,
+      conflicts: 0,
+      failed: 0,
+    };
     for (const [seasonId, source] of sources) {
-      if (fingerprints.get(seasonId) === source.fingerprint) continue;
+      const state = states.get(seasonId);
+      if (state?.fingerprint === source.fingerprint) continue;
+      // запись всё равно была бы `stale` (RC-5): без пропуска регламент пересчитывал бы сезон каждую минуту
+      if (state && !isOlder(state, source.sourceVersion)) {
+        run.conflicts += 1;
+        this.logger.warn(
+          `standings.version_conflict season=${seasonId} formula=${state.formulaVersion} source=${state.sourceVersion}`,
+        );
+        continue;
+      }
       try {
         const outcome = await this.recompute(seasonId, source);
         if (outcome === 'stale') run.stale += 1;
@@ -139,4 +156,15 @@ export class StandingsRecalc {
       return 'stale';
     }
   }
+}
+
+/** Сохранённый снимок старше текущего источника — то же условие, что фильтр `claimSeason`. */
+function isOlder(
+  state: { formulaVersion: number; sourceVersion: number },
+  sourceVersion: number,
+): boolean {
+  return (
+    state.formulaVersion < STANDINGS_FORMULA_VERSION ||
+    (state.formulaVersion === STANDINGS_FORMULA_VERSION && state.sourceVersion < sourceVersion)
+  );
 }

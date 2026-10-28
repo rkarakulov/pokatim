@@ -120,18 +120,37 @@ export const MySeasonStandings = z.object({
 });
 export type MySeasonStandings = z.infer<typeof MySeasonStandings>;
 
+/*
+ * Панель — строгие справочники (`pokatim-contracts.md`: SPA деплоится с API, неизвестное значение — ошибка, не
+ * `unknown`); публичные схемы выше — tolerant.
+ */
+const PanelTableKey = { bikeClass: z.enum(BIKE_CLASSES), groupKey: z.enum(RESULT_GROUP_KEYS) };
+
+export const PanelSeasonStandingsTableRef = SeasonStandingsTableRef.extend(PanelTableKey);
+export type PanelSeasonStandingsTableRef = z.infer<typeof PanelSeasonStandingsTableRef>;
+
 /** Панель: сводка с версией формулы и свежестью снимка. */
 export const PanelSeasonStandingsSummary = SeasonStandingsSummary.extend({
+  tables: z.array(PanelSeasonStandingsTableRef),
   formulaVersion: z.number().int().nullable(),
   sync: z.enum(STANDINGS_SYNC_STATES),
 });
 export type PanelSeasonStandingsSummary = z.infer<typeof PanelSeasonStandingsSummary>;
 
+export const PanelSeasonStandingCell = SeasonStandingCell.extend({
+  outcome: z.enum(STANDING_OUTCOMES),
+});
+export type PanelSeasonStandingCell = z.infer<typeof PanelSeasonStandingCell>;
+
 /** Строка панели: `userId` — только сотруднику, видящему все гонки (RC-8), организатору — `null`. */
-export const PanelSeasonStandingRow = SeasonStandingRow.extend({ userId: Uuid.nullable() });
+export const PanelSeasonStandingRow = SeasonStandingRow.extend({
+  userId: Uuid.nullable(),
+  cells: z.array(PanelSeasonStandingCell),
+});
 export type PanelSeasonStandingRow = z.infer<typeof PanelSeasonStandingRow>;
 
 export const PanelSeasonStandingsTable = SeasonStandingsTable.extend({
+  ...PanelTableKey,
   items: z.array(PanelSeasonStandingRow),
 });
 export type PanelSeasonStandingsTable = z.infer<typeof PanelSeasonStandingsTable>;

@@ -765,6 +765,8 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
 
 ## 11.2 08b — панель (потребляет 08a)
 
+- **Курсор и снимок (ревью 08a LOW-2):** курсор не привязан к снимку — если `computedAt` следующей страницы отличается от первой, подгруженные строки сбрасываются и таблица грузится заново с первой страницы.
+
 - API: `getSeasonStandings(id)` → `PanelSeasonStandingsSummary`, `getSeasonStandingsTable(id, { bikeClass, group,
   cursor })` → `PanelSeasonStandingsTable` (`packages/api-client/src/admin.ts`).
 - Маршрут `seasons/$seasonId` в `apps/admin/src/router.tsx` под `RequirePermission permission="races.read"`;
@@ -783,6 +785,8 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
   «Ждёт пересчёта», пусто / скелетон / ошибка с повтором, organizer без id; ссылка из `SeasonsScreen.test.tsx`.
 
 ## 11.3 08c — приложение (потребляет 08a)
+
+- **Курсор и снимок (ревью 08a LOW-2):** курсор не привязан к снимку — если `computedAt` следующей страницы отличается от первой, подгруженные строки сбрасываются и таблица грузится заново с первой страницы.
 
 - API: `getSeasonStandings`, `getSeasonStandingsTable` (публичные, `PUBLIC_STALE_MS`), `getMySeasonStandings`
   (`withAccessToken`, только вошедшему, кэш очищается при выходе — как «моё участие»).
@@ -887,3 +891,20 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
 - Пакетная запись поколений снимка, если сезон превысит ~10 000 строк (RC-16; сейчас лог `rows=<n>`).
 - 08b (панель) и 08c (приложение) — отдельными PR; i18n-строки экранов — там же.
 - Номер миграции `0030` свободен в `origin/develop` на момент коммита; при слиянии после чужой `0030` — перенумеровать.
+
+### Фиксы ревью 08a pass 1
+
+Ревью: Claude — APPROVE (LOW-1, LOW-2), Codex — APPROVE (MEDIUM-1). Findings — `findings-08a-claude.md`,
+`findings-08a-codex.md`.
+
+- MEDIUM-1 (Codex): схемы панели — строгие `z.enum` класса, группы (сводка и таблица) и исхода ячейки
+  (`PanelSeasonStandingsTableRef`, `PanelSeasonStandingCell`); тест отказа неизвестных значений в
+  `standings.schema.test.ts`. Публичные схемы — tolerant, как были.
+- LOW-1 (Claude): регламент читает `snapshotStates` (отпечаток + `formulaVersion` + `sourceVersion`); снимок не старше
+  источника при другом отпечатке — пропуск (`conflicts`, лог `standings.version_conflict`) вместо пересчёта каждую
+  минуту с итогом `stale`. Int-тест в `standings-sync.int.test.ts` (без пропуска — `claimSeason` вызывается, итог
+  `stale: 1`). Правило «изменил вход отпечатка — подними `STANDINGS_FORMULA_VERSION`» — `pokatim-backend.md`.
+- LOW-2 (Claude): курсор не привязан к снимку — правило для клиентов 08b/08c (§11.2, §11.3): при смене `computedAt`
+  между страницами подгруженное сбрасывается и таблица грузится с первой страницы.
+- Проверка: `vitest run src/standings` (contracts) — 4 passed; `vitest run src/modules/standings` (api) — 35 passed;
+  полный `pnpm check` — перед PR.
