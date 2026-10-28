@@ -39,6 +39,10 @@ Expo SDK 58 (RN 0.88, новая архитектура): iOS, Android, web с S
    сменой URL. Пересмотреть до публичного запуска в сторах.
 3. **Атрибуция** — штатный контрол MapLibre (компактный, `customAttribution` не убираем), на native — кнопка
    атрибуции карты. Данные OSM (ODbL) не храним и не перераспространяем — только показ.
+   Поправка 2026-10-28: в приложении кнопка «i» — своя (`MapAttributionButton`: иконка `info` дизайн-системы, подпись
+   «Об источниках карты», стиль кнопок камеры) — кнопка MapLibre читалась точкой. Текст атрибуции — по-прежнему из
+   стиля: native — диалог `MapRef.showAttribution()` (`attribution={false}`), web — плашка `AttributionControl`
+   (своя кнопка её переключает, кнопка контрола скрыта). Панель — без изменений.
 4. **Библиотеки:** native — `@maplibre/maplibre-react-native` 11.x (только новая архитектура, RN ≥ 0.80, peer
    `expo ≥ 54`, config plugin `@maplibre/maplibre-react-native` в `app.json`; Expo Go не поддерживается — нужна
    dev-сборка `eas build --profile development`). Web — `maplibre-gl` 6.x в платформенном файле `*.web.tsx`.

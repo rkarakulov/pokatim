@@ -1,5 +1,4 @@
 import type * as MapLibreNative from '@maplibre/maplibre-react-native';
-import { space } from '@pokatim/design-tokens';
 import {
   cameraCall,
   cameraPadding,
@@ -28,6 +27,7 @@ import { loadMapLibreNative } from './load-maplibre-native';
 import { LocationLayer } from './location-layer';
 import { createLocationStore } from './location-store';
 import { LOCATE_ZOOM } from './location-style';
+import { MapAttributionButton } from './map-attribution-button';
 import { MapOverlayControls } from './map-overlay-controls';
 import { RouteMapFrame } from './route-map-frame';
 import type { RouteMapProps } from './route-map-props';
@@ -40,17 +40,8 @@ import {
   unionBounds,
 } from './track-style';
 
-/**
- * Кнопка атрибуции «i» — в нижнем левом углу, как на web (routes-04d, RC-6: правая колонка — кнопки камеры), над
- * шторкой — со сдвигом на её высоту; отступ камеры снизу её учитывает (B2 maps-02).
- */
-const attributionPosition = (bottomInset: number) => ({
-  bottom: space.s2 + bottomInset,
-  left: space.s2,
-});
-
 const styles = StyleSheet.create({
-  // касания мимо маркера проходят к карте (кнопка атрибуции «i»)
+  // касания мимо маркера проходят к карте
   overlay: { ...StyleSheet.absoluteFill, pointerEvents: 'box-none' },
 });
 
@@ -182,10 +173,8 @@ export function RouteMap({
               ref={mapRef}
               style={StyleSheet.absoluteFill}
               mapStyle={styleUrl}
-              attribution
-              attributionPosition={attributionPosition(bottomInset)}
-              // B4 maps-02: кнопка атрибуции — в цвете темы
-              tintColor={theme.text.secondary}
+              // атрибуция «i» — своя кнопка `MapAttributionButton` (нижний левый угол, над шторкой — RC-6)
+              attribution={false}
               logo={false}
               compass={false}
               scaleBar={false}
@@ -238,6 +227,13 @@ export function RouteMap({
         <View testID="scrub-overlay" style={styles.overlay} onLayout={onLayout}>
           <ScrubLayer view={view} store={scrub} cumulative={cumulative} theme={theme} />
         </View>
+      ) : null}
+      {lib ? (
+        <MapAttributionButton
+          theme={theme}
+          bottomInset={bottomInset}
+          onPress={() => mapRef.current?.showAttribution().catch(() => undefined)}
+        />
       ) : null}
       {lib && !failed ? (
         <MapOverlayControls
