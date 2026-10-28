@@ -82,6 +82,9 @@ describe('коды ошибок', () => {
       'RESULT_GROUP_NOT_ALLOWED',
       'VERIFIED_DEMOGRAPHICS_LOCKED',
       'ROUTE_PUBLICATION_LIMIT',
+      'ROUTE_RIDE_NOT_READY',
+      'ROUTE_RIDE_UPLOAD_FAILED',
+      'ROUTE_RIDE_QUOTA_EXCEEDED',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',
