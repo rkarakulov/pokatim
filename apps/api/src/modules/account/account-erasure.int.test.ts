@@ -3,6 +3,7 @@ import { rm } from 'node:fs/promises';
 import { getQueueToken } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { CITY_CENTERS, MyRaceEntry, RaceResultsPage } from '@pokatim/contracts';
+import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job, Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -65,12 +66,14 @@ import {
   seedApprovedRiderRoute,
   seedRiderRoute,
 } from '../../../test/routes';
+import { routeRidesDb } from '../../../test/route-rides';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
 import { storeUpload, trackFileStore, tracks } from '../../../test/tracks';
 import { QUEUE } from '../../queues';
 import { DeviceErasure } from '../devices';
 import { ProfileErasure } from '../profile';
 import { RideErasure } from '../rides';
+import { RouteRideErasure } from '../route-rides';
 import { RouteErasure } from '../routes';
 import { TrackErasure } from '../tracks';
 import { AccountErasure } from '../identity';
@@ -506,6 +509,7 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
       'ride-starts',
       'devices',
       'tracks',
+      'route-rides',
       'notifications',
       'identity',
     ]) {
@@ -607,6 +611,46 @@ describe('шаг notifications (N11, ADR-0017)', () => {
 
     expect(await sweep(w.a.userId)).toBe('erased');
     expect(await countsOf(w.b.userId)).toEqual({ notifications: 1, settings: 1, tokens: 1 });
+  });
+});
+
+describe('шаг route-rides (route-rides-01)', () => {
+  /** Заезд по маршруту прямой вставкой (порт стирания читает только userId). */
+  async function seedRouteRide(userId: string) {
+    const now = h.clock.now();
+    await routeRidesDb(h).rides.insertOne({
+      _id: uuidv7(),
+      userId,
+      routeId: uuidv7(),
+      activityId: uuidv7(),
+      activity: { startedAt: now, endedAt: now, source: 'upload', elapsedSec: 60, distanceM: 100 },
+      corridorWidthM: 50,
+      status: 'queued',
+      checkRevision: 1,
+      checkAttempts: 0,
+      reasons: [],
+      failure: null,
+      segment: null,
+      touchedCorridor: null,
+      engineVersion: null,
+      trackMap: null,
+      createdAt: now,
+      updatedAt: now,
+      checkedAt: null,
+    });
+  }
+
+  it('заезды удалённого стёрты (после tracks), чужие целы; повтор — 0', async () => {
+    const w = await world();
+    await seedRouteRide(w.a.userId);
+    await seedRouteRide(w.a.userId);
+    await seedRouteRide(w.b.userId);
+    await deleteAccount(w.a.accessToken);
+    expect(await firstPass(w.a.userId)).toBe('erased');
+
+    expect(await routeRidesDb(h).rides.countDocuments({ userId: w.a.userId })).toBe(0);
+    expect(await routeRidesDb(h).rides.countDocuments({ userId: w.b.userId })).toBe(1);
+    expect(await h.worker.get(RouteRideErasure).erase(w.a.userId)).toBe(0);
   });
 });
 
