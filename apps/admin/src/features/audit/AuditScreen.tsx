@@ -48,6 +48,15 @@ function details(entry: AuditEntry): string {
       to: t(`admin.appearance.theme.${themeTo}.name`),
     });
   }
+  // halloween-decor: включение и выключение сезонного декора
+  const decorFrom = entry.details?.decorFrom;
+  const decorTo = entry.details?.decorTo;
+  if (decorFrom && decorTo) {
+    return t('admin.audit.decorChange', {
+      from: t(`admin.appearance.decor.name.${decorFrom}`),
+      to: t(`admin.appearance.decor.name.${decorTo}`),
+    });
+  }
   const role = to ?? from;
   if (role) return t(`admin.role.${role}`);
   // admin-02: шаблон причины отмены; имена изменённых полей — без значений

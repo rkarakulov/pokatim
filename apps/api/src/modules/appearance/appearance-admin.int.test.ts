@@ -33,6 +33,8 @@ const write = (token: string | undefined, body: unknown) =>
 const settings = () => appearanceCollections(h.db).settings;
 const themeAudit = () =>
   panel(h).audit.find({ action: 'appearance.theme_changed' }).sort({ _id: 1 }).toArray();
+const decorAudit = () =>
+  panel(h).audit.find({ action: 'appearance.decor_changed' }).sort({ _id: 1 }).toArray();
 
 describe('права на тему приложения (AC2, AC3)', () => {
   it('moderator и organizer — 403 на GET и PUT; без сессии — 401', async () => {
@@ -55,6 +57,7 @@ describe('чтение настройки (AC2)', () => {
     expect(res.headers['cache-control']).toBe('no-store');
     expect(PanelAppearance.parse(res.body)).toEqual({
       themeId: 'classic',
+      decor: 'none',
       version: 0,
       updatedAt: null,
     });
@@ -69,6 +72,7 @@ describe('смена темы (AC3)', () => {
     const now = h.clock.now().toISOString();
     expect(PanelAppearance.parse(first.body)).toEqual({
       themeId: 'atlas',
+      decor: 'none',
       version: 1,
       updatedAt: now,
     });
@@ -148,6 +152,9 @@ describe('смена темы (AC3)', () => {
       { themeId: 'atlas', version: { $ne: null } },
       { themeId: { $ne: null }, version: 0 },
       { themeId: 'atlas' },
+      { version: 0 },
+      { decor: 'new-year', version: 0 },
+      { decor: { $ne: null }, version: 0 },
     ]) {
       expect((await write(admin.token, body)).status, JSON.stringify(body)).toBe(400);
     }
@@ -161,6 +168,7 @@ describe('смена темы (AC3)', () => {
     expect(same.status).toBe(200);
     expect(PanelAppearance.parse(same.body)).toEqual({
       themeId: 'classic',
+      decor: 'none',
       version: 0,
       updatedAt: null,
     });
@@ -192,5 +200,66 @@ describe('параллельные смены (AC4)', () => {
     expect(updates.map((res) => res.status).sort()).toEqual([200, 409]);
     expect(await themeAudit()).toHaveLength(2);
     expect(winner.version).toBe(1);
+  });
+});
+
+describe('сезонный декор (halloween-decor AC1, AC2)', () => {
+  it('включить и выключить — по версии, тема не меняется, журнал decorFrom/decorTo', async () => {
+    const admin = await staff(h, 'admin@example.by', 'admin');
+    const on = await write(admin.token, { decor: 'halloween', version: 0 });
+    expect(on.status).toBe(200);
+    expect(PanelAppearance.parse(on.body)).toMatchObject({
+      themeId: 'classic',
+      decor: 'halloween',
+      version: 1,
+    });
+    expect(await settings().findOne({ _id: 'appearance' })).toMatchObject({
+      themeId: 'classic',
+      decor: 'halloween',
+      version: 1,
+    });
+
+    await write(admin.token, { themeId: 'atlas', version: 1 });
+    const off = await write(admin.token, { decor: 'none', version: 2 });
+    expect(PanelAppearance.parse(off.body)).toMatchObject({
+      themeId: 'atlas',
+      decor: 'none',
+      version: 3,
+    });
+
+    expect((await decorAudit()).map((entry) => [entry.subject, entry.details])).toEqual([
+      [
+        { kind: 'platform', id: NIL_UUID, label: 'Оформление приложения' },
+        { decorFrom: 'none', decorTo: 'halloween' },
+      ],
+      [
+        { kind: 'platform', id: NIL_UUID, label: 'Оформление приложения' },
+        { decorFrom: 'halloween', decorTo: 'none' },
+      ],
+    ]);
+    expect(await themeAudit()).toHaveLength(1);
+  });
+
+  it('тема и декор в одном запросе — одна версия, две записи журнала', async () => {
+    const admin = await staff(h, 'admin@example.by', 'admin');
+    const both = await write(admin.token, { themeId: 'chrono', decor: 'halloween', version: 0 });
+    expect(PanelAppearance.parse(both.body)).toMatchObject({
+      themeId: 'chrono',
+      decor: 'halloween',
+      version: 1,
+    });
+    expect(await themeAudit()).toHaveLength(1);
+    expect(await decorAudit()).toHaveLength(1);
+  });
+
+  it('тот же декор — 200 без записи; устаревшая версия — 409', async () => {
+    const admin = await staff(h, 'admin@example.by', 'admin');
+    expect((await write(admin.token, { decor: 'none', version: 0 })).status).toBe(200);
+    expect(await settings().countDocuments()).toBe(0);
+
+    await write(admin.token, { decor: 'halloween', version: 0 });
+    const stale = await write(admin.token, { decor: 'none', version: 0 });
+    expect(stale.status).toBe(409);
+    expect(await decorAudit()).toHaveLength(1);
   });
 });

@@ -43,6 +43,15 @@ export function riderLabel(entryId: string, riderName: string | null = null): st
     : t('admin.results.riderNamed', { name: riderName, id });
 }
 
+/**
+ * Участник рейтинга сезона (race-results-08b): короткий id — по `userId` (заявки нет), как `riderLabel`; без `userId`
+ * (организатор, RC-8) — имя или «Участник» без id.
+ */
+export function seasonRiderLabel(userId: string | null, riderName: string | null): string {
+  if (userId !== null) return riderLabel(userId, riderName);
+  return riderName ?? t('admin.standings.rider');
+}
+
 /** «1», «=2» (ничья), «—» (без места). */
 export function placeLabel(place: number | null, tied: boolean): string {
   if (place === null) return '—';

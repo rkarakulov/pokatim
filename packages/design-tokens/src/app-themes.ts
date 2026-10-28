@@ -40,8 +40,6 @@ export interface AppThemeLayout {
   home: 'classic' | 'contour' | 'numeral';
   /** шапка шторки карточки маршрута: строка, плитки, крупная дистанция */
   routeStats: 'classic' | 'tiles' | 'numeral';
-  /** заливка профиля высоты: градиент, сплошная, без заливки */
-  profileFill: 'gradient' | 'solid' | 'line';
   /** таб-бар: полоса и подпись / иконка над подписью */
   tabBar: 'classic' | 'icons';
   /** карточка маршрута в списке: строка с hairline, карточка-плитка, крупная дистанция */
@@ -81,7 +79,6 @@ const classic = defineAppTheme({
   layout: {
     home: 'classic',
     routeStats: 'classic',
-    profileFill: 'gradient',
     tabBar: 'classic',
     routeCard: 'classic',
   },
@@ -108,7 +105,6 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     layout: {
       home: 'contour',
       routeStats: 'classic',
-      profileFill: 'gradient',
       tabBar: 'icons',
       routeCard: 'tile',
     },
@@ -130,7 +126,6 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     layout: {
       home: 'classic',
       routeStats: 'tiles',
-      profileFill: 'gradient',
       tabBar: 'icons',
       routeCard: 'tile',
     },
@@ -149,7 +144,6 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     layout: {
       home: 'contour',
       routeStats: 'classic',
-      profileFill: 'solid',
       tabBar: 'icons',
       routeCard: 'classic',
     },
@@ -168,7 +162,6 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     layout: {
       home: 'classic',
       routeStats: 'classic',
-      profileFill: 'solid',
       tabBar: 'icons',
       routeCard: 'tile',
     },
@@ -187,7 +180,6 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     layout: {
       home: 'contour',
       routeStats: 'tiles',
-      profileFill: 'line',
       tabBar: 'icons',
       routeCard: 'tile',
     },
@@ -206,7 +198,6 @@ export const appThemes: Readonly<Record<AppThemeId, AppThemeDefinition>> = {
     layout: {
       home: 'numeral',
       routeStats: 'numeral',
-      profileFill: 'solid',
       tabBar: 'icons',
       routeCard: 'numeral',
     },

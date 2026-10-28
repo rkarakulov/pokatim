@@ -518,6 +518,16 @@ test.describe('с API', () => {
     expect((await refreshed).status()).toBe(200);
     await expect(page.getByRole('heading', { name: 'Покатим' })).toBeVisible();
 
+    // «Настройки» (settings-hub): вход — иконка верхней панели; язык — имя на самом языке; темы нет
+    await page.getByRole('button', { name: 'Настройки' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/settings`);
+    await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
+    await page.getByRole('link', { name: 'Язык, Русский' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/settings/language`);
+    await expect(page.getByRole('radio', { name: 'Русский' })).toBeChecked();
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/settings`);
+
     // выход: сервер отзывает сессию и стирает cookie, гард ведёт на «Вход» (на устройстве уже входили)
     await page.getByRole('button', { name: 'Выйти' }).click();
     await expect(page).toHaveURL(`${BASE_URL}/sign-in`);
@@ -550,7 +560,8 @@ test.describe('с API', () => {
     expect((await restored).status()).toBe(200);
     await expect(page.getByRole('heading', { name: 'Покатим' })).toBeVisible();
 
-    // сброс пароля: выход → «Забыли пароль?» (e-mail переносится из формы входа) → письмо со ссылкой
+    // сброс пароля: выход («Настройки») → «Забыли пароль?» (e-mail переносится из формы входа) → письмо со ссылкой
+    await page.getByRole('button', { name: 'Настройки' }).click();
     await page.getByRole('button', { name: 'Выйти' }).click();
     await expect(page).toHaveURL(`${BASE_URL}/sign-in`);
     await page.getByRole('textbox', { name: 'E-mail' }).fill(email);

@@ -7,7 +7,8 @@ export type SecureKey =
   | 'pokatim.onboarding'
   | 'pokatim.locationPrompt'
   | 'pokatim.appTheme'
-  | 'pokatim.pushToken';
+  | 'pokatim.pushToken'
+  | 'pokatim.locale';
 
 /**
  * Единственная точка доступа к защищённому хранилищу: экраны и сторы не знают о нативном модуле;

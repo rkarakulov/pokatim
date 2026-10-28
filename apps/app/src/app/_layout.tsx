@@ -16,6 +16,7 @@ import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/s
 import { PushNotifications } from '@/features/notifications/push-registration';
 import { useActiveThemeId } from '@/features/appearance/use-active-theme-id';
 import { onboardingStep, useOnboardingStore } from '@/features/onboarding/onboarding-store';
+import { restoreLocale } from '@/features/settings/locale-preference';
 import { connectFocusManager } from '@/lib/focus-manager';
 import { connectOnlineManager } from '@/lib/online-manager';
 import { createQueryClient } from '@/lib/query-client';
@@ -57,6 +58,8 @@ function RootShell() {
   useEffect(() => {
     void useSessionStore.getState().hydrate();
     void useRegistrationStore.getState().hydrate();
+    // язык устройства (settings-hub): SSR и первый рендер — базовый, сохранённый — после монтирования
+    void restoreLocale();
   }, []);
 
   // тема приложения (T1): сервер, до ответа — кэш native / SSR web; `null` — кэш ещё читается
@@ -137,7 +140,10 @@ function RootShell() {
                 {/* «Устройства» (вход — иконка верхней панели): тот же гард, что у вкладок; скелетон — в экране
               (`useSettingsShell`) */}
                 <Stack.Screen name="settings/devices" />
-                {/* «Профиль» (profile-rider-name, вход — иконка верхней панели): тот же гард и оболочка, что у «Устройств» */}
+                {/* «Настройки» и «Язык» (settings-hub, вход — иконка верхней панели), «Профиль» (вход — из «Настроек»): тот
+                же гард и оболочка, что у «Устройств» */}
+                <Stack.Screen name="settings/index" />
+                <Stack.Screen name="settings/language" />
                 <Stack.Screen name="settings/profile" />
                 {/* центр и настройки уведомлений (notifications): тот же гард и оболочка, что у «Профиля» */}
                 <Stack.Screen name="notifications" />

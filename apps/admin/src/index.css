@@ -1374,10 +1374,17 @@ select.field__control option:disabled {
   --preview-radius: 0;
 }
 
+.theme-preview__mocks {
+  display: flex;
+  gap: var(--space-s1);
+  aspect-ratio: 2 / 1;
+}
+
 .theme-preview__mock {
   display: block;
+  flex: 1;
+  min-width: 0;
   padding: var(--space-s2);
-  aspect-ratio: 2 / 1;
   background: var(--preview-canvas);
   border: var(--stroke-hairline) solid var(--color-border-subtle);
 }

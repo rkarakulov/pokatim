@@ -32,10 +32,18 @@ paths:
   Главной (`components/notification-bell.tsx`, «99+»); всё — `features/notifications/` (ключи `['notifications', …]`,
   счётчик — polling `refetchInterval` 60 с, не сокеты; статусы обработки — так же). Переход по цели — только
   `notification-target.ts` (белый список типов с `Uuid`; незнакомое — без перехода, из push — центр). Push — развилка
-  `push(.web).ts` (`expo-notifications` только в native-файле; web — no-op): разрешение — только по нажатию строки
+  `push(.web).ts` (`expo-notifications` только в native-файле; web — no-op, `pushSupported = false`: в настройках
+  уведомлений только письма — без push-тумблеров, тихих часов и группы без писем): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
   `serverEnded`: токены снял сервер), последний токен — `secureStorage` `pokatim.pushToken`.
+- Настройки (settings-hub): хаб `settings/index` внутри `Stack.Protected` вкладок (оболочка `useSettingsShell`), вход —
+  иконка «Настройки» `TopBar` Главной (иконка «Устройства» — быстрый вход рядом); «Выйти» — только здесь. Строки —
+  `features/settings/settings-row.tsx`; «О приложении» — `app-info.ts` (версия `expoConfig.version`, ссылки —
+  `EXPO_PUBLIC_PRIVACY_URL`/`TERMS_URL`/`SUPPORT_EMAIL`, не заданы — строки нет; открытие — `openExternalUrl`).
+  Пункта «Тема» нет (тему выбирает панель, ADR-0016). Язык — `settings/language` из `i18n.locales` (имя —
+  `localeNames`), выбор — устройства, не аккаунта: `locale-preference(.web).ts` (`pokatim.locale`: native
+  SecureStore, web `localStorage`), применяется после монтирования корня (SSR — базовый язык).
 
 ## Правила pokatim
 
@@ -50,9 +58,16 @@ paths:
   `useFonts`); сторож — `__tests__/theme-guards.test.ts`. Доставка — `features/appearance/` (запрос, кэш native
   `pokatim.appTheme`, тема процесса SSR); web — `window.__POKATIM_THEME__` для гидрации. «Классика» = Jersey Aura /
   Night Ride по системе. Варианты раскладки (`layout.*`) — только таблицами `Record<вариант, компонент | значение>`
-  (`ROUTE_HERO`, `STATS_VARIANT`, `PROFILE_FILL`, `TAB_ITEM`, `ROUTE_CARD`); сравнения с id темы и значением `layout` —
+  (`ROUTE_HERO`, `STATS_VARIANT`, `TAB_ITEM`, `ROUTE_CARD`; профиль высоты — всегда градиент); сравнения с id темы и значением `layout` —
   нет (сторож). Вкладки — роли `tabBar.*`; отступы карточек — `appDensity[density]`; форма — `shapeOf(theme)`.
-  `react-native-svg` лениво — только `features/routes/use-svg-native.ts` (профиль, контур `route-contour(.web).tsx`).
+  `react-native-svg` лениво — только `features/routes/use-svg-native.ts` (профиль, контур `route-contour(.web).tsx`,
+  фигуры декора `features/decor/decor-svg(.web).tsx`).
+- Сезонный декор (halloween-decor) — слой поверх темы, не тема: `decor` ответа `GET /v1/appearance` (тот же запрос
+  `['appearance']`, `useDecorQuery`), включает и выключает команда в панели без релиза. `features/decor/`: таблица
+  `DECOR_LAYER: Record<AppDecorId, слой | null>` (`DecorLayer`), показ — только после монтирования (`useMounted`: SSR
+  и гидрация web без декора), кэша на native нет. Слой — `pointerEvents="none"`, скрыт от скринридеров, цвета — роли
+  темы (`halloweenColors`), анимации — только при `useReducedMotion() === false` (web — CSS с
+  `prefers-reduced-motion`). Опора — область ленты Главной (`View flex: 1` вокруг `ScrollView`), шапка не перекрыта.
 - Доступность: `accessibilityActions` вместо единственного drag-жеста; reduce motion — упрощённая анимация
   (вспышка достижения без мерцания).
 - Публичные ключи в бандле — только такие, как Sentry DSN и ключ тайлов.

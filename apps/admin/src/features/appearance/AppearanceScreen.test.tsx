@@ -29,6 +29,7 @@ const NAMES = [
 
 const saved = (overrides: Partial<PanelAppearance> = {}): PanelAppearance => ({
   themeId: 'classic',
+  decor: 'none',
   version: 0,
   updatedAt: null,
   ...overrides,
@@ -100,11 +101,16 @@ describe('«Оформление приложения» (app-themes D1, AC6)', (
     expect(document.querySelectorAll('.theme-preview--palette')).toHaveLength(7);
     expect(screen.queryByText('Превью появится позже')).toBeNull();
     const atlas = radio('Атлас').closest('label') as HTMLElement;
-    expect(within(atlas).getByText('Шрифт: Manrope')).toBeTruthy();
+    expect(within(atlas).getByText(/Шрифт: Manrope/)).toBeTruthy();
     const classic = radio('Классика').closest('label') as HTMLElement;
-    expect(within(classic).getByText('Шрифт: Playfair Display')).toBeTruthy();
-    const mock = atlas.querySelector('.theme-preview') as HTMLElement;
-    expect(mock.style.getPropertyValue('--preview-radius')).toBe('16px');
+    expect(within(classic).getByText(/Шрифт: Playfair Display/)).toBeTruthy();
+    const mocks = atlas.querySelectorAll<HTMLElement>('.theme-preview__mock');
+    expect(mocks).toHaveLength(2);
+    expect(mocks[0]?.style.getPropertyValue('--preview-radius')).toBe('0px');
+    expect(within(atlas).getByText(/Светлая и тёмная — по системе/)).toBeTruthy();
+    const chrono = radio('Хронометр').closest('label') as HTMLElement;
+    expect(chrono.querySelectorAll('.theme-preview__mock')).toHaveLength(1);
+    expect(within(chrono).getByText(/Всегда тёмная/)).toBeTruthy();
   });
 
   it('выбор и сохранение: тело { themeId, version }, баннер успеха, новая тема — текущая, журнал перечитывается', async () => {
@@ -206,5 +212,60 @@ describe('«Оформление приложения» (app-themes D1, AC6)', (
     fireEvent.click(await screen.findByRole('button', { name: 'Повторить' }));
     expect(await screen.findByRole('group', { name: 'Тема приложения' })).toBeTruthy();
     expect(mocked.getAppearance).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('сезонный декор (halloween-decor AC3)', () => {
+  const toggle = (name: RegExp) => screen.getByRole('button', { name }) as HTMLButtonElement;
+
+  it('выключен — одна кнопка включает: тело { decor, version }, состояние и журнал обновляются', async () => {
+    mocked.updateAppearance.mockResolvedValue(saved({ decor: 'halloween', version: 1 }));
+    const { queryClient } = await open();
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const region = await screen.findByRole('region', { name: 'Сезонный декор' });
+    expect(within(region).getByText('Хеллоуинский декор выключен')).toBeTruthy();
+
+    fireEvent.click(toggle(/Включить хеллоуинский декор/));
+    expect(
+      await screen.findByText('Декор включён. Приложение покажет его в течение минуты.'),
+    ).toBeTruthy();
+    expect(mocked.updateAppearance).toHaveBeenCalledWith({ decor: 'halloween', version: 0 });
+    expect(within(region).getByText('Хеллоуинский декор включён')).toBeTruthy();
+    expect(toggle(/Выключить хеллоуинский декор/)).toBeTruthy();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['admin', 'audit'] });
+  });
+
+  it('включён — кнопка выключает', async () => {
+    mocked.getAppearance.mockResolvedValue(saved({ decor: 'halloween', version: 4 }));
+    mocked.updateAppearance.mockResolvedValue(saved({ decor: 'none', version: 5 }));
+    await open();
+    fireEvent.click(await screen.findByRole('button', { name: /Выключить хеллоуинский декор/ }));
+    expect(
+      await screen.findByText('Декор выключен. Приложение уберёт его в течение минуты.'),
+    ).toBeTruthy();
+    expect(mocked.updateAppearance).toHaveBeenCalledWith({ decor: 'none', version: 4 });
+  });
+
+  it('незавершённый выбор темы после своего переключения декора — сохраняется со свежей версией', async () => {
+    mocked.updateAppearance
+      .mockResolvedValueOnce(saved({ decor: 'halloween', version: 1 }))
+      .mockResolvedValueOnce(saved({ themeId: 'journal', decor: 'halloween', version: 2 }));
+    await open();
+    await screen.findByRole('group', { name: 'Тема приложения' });
+    fireEvent.click(radio('Журнал'));
+    fireEvent.click(toggle(/Включить хеллоуинский декор/));
+    await screen.findByText('Хеллоуинский декор включён');
+    expect((radio('Журнал') as HTMLInputElement).checked).toBe(true);
+
+    fireEvent.click(saveButton());
+    await screen.findByText('Тема сохранена. Приложение применит её в течение минуты.');
+    expect(mocked.updateAppearance).toHaveBeenLastCalledWith({ themeId: 'journal', version: 1 });
+  });
+
+  it('409 — ConflictBanner', async () => {
+    mocked.updateAppearance.mockRejectedValue(httpError(409, 'CONFLICT'));
+    await open();
+    fireEvent.click(await screen.findByRole('button', { name: /Включить хеллоуинский декор/ }));
+    expect(await screen.findByText('Запись изменили — обновите страницу')).toBeTruthy();
   });
 });

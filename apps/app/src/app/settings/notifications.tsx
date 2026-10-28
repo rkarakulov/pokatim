@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DocumentTitle } from '@/components/document-title';
 import { useSettingsShell } from '@/features/devices/settings-shell';
+import { pushSupported } from '@/features/notifications/push';
 import { PushPermissionRow } from '@/features/notifications/push-permission-row';
 import {
   useNotificationSettings,
@@ -30,17 +31,20 @@ const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 type PushGroup = keyof NotificationSettings['push'];
 type EmailGroup = keyof NotificationSettings['email'];
 
-const GROUPS: readonly { id: PushGroup; email: EmailGroup | null }[] = [
+const ALL_GROUPS: readonly { id: PushGroup; email: EmailGroup | null }[] = [
   { id: 'races', email: null },
   { id: 'disputes', email: 'disputes' },
   { id: 'rides', email: 'rides' },
 ];
+/** Без push (web, ADR-0017) — только группы с письмами. */
+const GROUPS = pushSupported ? ALL_GROUPS : ALL_GROUPS.filter((group) => group.email !== null);
 
 /**
  * «Настройки уведомлений» (N4, N6; вход — из центра и из «Профиля»): push по трём группам, e-mail — только у
  * «Споры» и «Райды» (события N2), тихие часы (вкл/выкл, начало и конец по часам Минска). Каждое изменение сразу
  * сохраняет полный объект (`PUT`); пока идёт запрос, видно новое значение, а тумблеры и часы недоступны (§4.12: два
- * полных `PUT` подряд затёрли бы друг друга); ошибка — баннер и прежнее значение.
+ * полных `PUT` подряд затёрли бы друг друга); ошибка — баннер и прежнее значение. Платформа без push (web) — только
+ * письма: без push-тумблеров, тихих часов (они откладывают только push) и группы без писем; push-значения не меняются.
  */
 export default function NotificationSettingsScreen() {
   const shell = useSettingsShell();
@@ -70,7 +74,7 @@ function SettingsContent() {
           {t('notifications.settings.title')}
         </Text>
         <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
-          {t('notifications.settings.lead')}
+          {t(pushSupported ? 'notifications.settings.lead' : 'notifications.settings.leadEmail')}
         </Text>
         <PushPermissionRow />
         <AsyncContent
@@ -117,12 +121,14 @@ function SettingsForm({ saved }: { saved: NotificationSettings }) {
       {GROUPS.map((group) => (
         <View key={group.id} style={[styles.group, { borderTopColor: theme.border.subtle }]}>
           {groupTitle(t(`notifications.settings.group.${group.id}` as MessageKey))}
-          <Toggle
-            label={t('notifications.settings.push')}
-            value={value.push[group.id]}
-            disabled={busy}
-            onChange={(on) => save({ ...value, push: { ...value.push, [group.id]: on } })}
-          />
+          {pushSupported ? (
+            <Toggle
+              label={t('notifications.settings.push')}
+              value={value.push[group.id]}
+              disabled={busy}
+              onChange={(on) => save({ ...value, push: { ...value.push, [group.id]: on } })}
+            />
+          ) : null}
           {group.email ? (
             <>
               <Toggle
@@ -140,36 +146,38 @@ function SettingsForm({ saved }: { saved: NotificationSettings }) {
           ) : null}
         </View>
       ))}
-      <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
-        {groupTitle(t('notifications.settings.quiet.title'))}
-        <Toggle
-          label={t('notifications.settings.quiet.toggle')}
-          value={quiet.enabled}
-          disabled={busy}
-          onChange={(enabled) => setQuiet({ enabled })}
-        />
-        <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
-          {t('notifications.settings.quiet.hint')}
-        </Text>
-        {quiet.enabled ? (
-          <>
-            <HourPicker
-              label={t('notifications.settings.quiet.start')}
-              selected={quiet.startHour}
-              excluded={quiet.endHour}
-              disabled={busy}
-              onSelect={(startHour) => setQuiet({ startHour })}
-            />
-            <HourPicker
-              label={t('notifications.settings.quiet.end')}
-              selected={quiet.endHour}
-              excluded={quiet.startHour}
-              disabled={busy}
-              onSelect={(endHour) => setQuiet({ endHour })}
-            />
-          </>
-        ) : null}
-      </View>
+      {pushSupported ? (
+        <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
+          {groupTitle(t('notifications.settings.quiet.title'))}
+          <Toggle
+            label={t('notifications.settings.quiet.toggle')}
+            value={quiet.enabled}
+            disabled={busy}
+            onChange={(enabled) => setQuiet({ enabled })}
+          />
+          <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+            {t('notifications.settings.quiet.hint')}
+          </Text>
+          {quiet.enabled ? (
+            <>
+              <HourPicker
+                label={t('notifications.settings.quiet.start')}
+                selected={quiet.startHour}
+                excluded={quiet.endHour}
+                disabled={busy}
+                onSelect={(startHour) => setQuiet({ startHour })}
+              />
+              <HourPicker
+                label={t('notifications.settings.quiet.end')}
+                selected={quiet.endHour}
+                excluded={quiet.startHour}
+                disabled={busy}
+                onSelect={(endHour) => setQuiet({ endHour })}
+              />
+            </>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }

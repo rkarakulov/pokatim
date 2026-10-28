@@ -909,6 +909,122 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
 - Проверка: `vitest run src/standings` (contracts) — 4 passed; `vitest run src/modules/standings` (api) — 35 passed;
   полный `pnpm check` — перед PR.
 
+## 12.2 08b — панель
+
+### Changes
+
+- Экран сезона `/seasons/$seasonId` (`RequirePermission permission="races.read"`): `SeasonScreen` — шапка
+  `PageHeader` (крошка «Сезоны», название и даты из `seasonsQuery`), раздел «Рейтинг» без компонента вкладок (RC-19);
+  403 — «Нет доступа», 404 — «Сезон не найден», ошибка сводки — `ErrorState` с повтором, загрузка — скелетон
+  `DataTable`, таблиц нет — `EmptyState` с подсказкой.
+- Строка снимка: `StatusTag` «Актуален» / «Ждёт пересчёта» (RC-14), «Пересчёт: {дата Минска}» / «Пересчёта ещё не
+  было», «Формула v{N}».
+- `SeasonStandingsTable`: `ChipGroup` класса и группы — только таблицы сводки (по умолчанию первая; смена класса —
+  первая группа класса), подпись «{группа} · {класс}: лучшие N из M гонок · участников: K», `DataTable` (место
+  `placeLabel` «=N», участник, очки, колонка на гонку: «1 · 100», «=2 · 85», «DQ · 0», «—»; незасчитанная ячейка —
+  `.muted` + `visually-hidden` «, не в зачёте»), «Показать ещё» по курсору (`useInfiniteQuery`), RC-12 — пустое
+  состояние.
+- Курсор и снимок (§11.2): после подгрузки, если `computedAt` страниц различается, — `resetQueries` таблицы (заново
+  с первой страницы) и инвалидация сводки.
+- Подпись участника — `seasonRiderLabel(userId, riderName)` рядом с `riderLabel` (`results-format.ts`): с `userId`
+  — «Анна К. ·a1b2c3» / «Участник ·a1b2c3», без (организатор, RC-8) — имя или «Участник».
+- `SeasonsScreen` — название сезона ссылкой на экран сезона.
+- i18n: `admin.seasons.notFound`, `admin.standings.*`.
+
+### Files touched
+
+- Создано: `apps/admin/src/features/seasons/{SeasonScreen,SeasonStandingsTable}.tsx`,
+  `apps/admin/src/features/seasons/standings-query.ts`, `apps/admin/src/features/seasons/SeasonScreen.test.tsx`.
+- Изменено: `apps/admin/src/router.tsx`, `apps/admin/src/features/seasons/{SeasonsScreen.tsx,SeasonsScreen.test.tsx}`,
+  `apps/admin/src/features/results/results-format.ts`, `packages/i18n/src/ru.ts`, `.claude/rules/pokatim-web.md`.
+- Сервер, приложение, api-client — без изменений.
+
+### Отклонения от §11.2
+
+- «Показать ещё» — существующий `admin.more` (вместо нового `admin.standings.more` с тем же текстом).
+- `admin.seasons.open` не добавлен: ссылка — само название сезона (доступное имя = видимый текст, существующие
+  проверки строк «Сезонов» не меняются).
+- Добавлены ключи, которых не было в списке: `admin.standings.{neverComputed,classFilter,groupFilter,tableMeta,rider}`,
+  `admin.seasons.notFound`.
+
+### Tests
+
+- `SeasonScreen.test.tsx` (15): шапка, время пересчёта, формула, «Актуален»; переключатели — только таблицы сводки,
+  смена группы и класса — запрос с новым ключом; строки и ячейки (`=2 · 85`, DQ, «—», не в зачёте — `.muted` и
+  скрытый текст); ничья «=1»; организатор без id; «Ждёт пересчёта»; пусто (нет таблиц; RC-12); скелетон сводки и
+  таблицы; ошибка сводки и таблицы с повтором; 404; «Показать ещё» по курсору; смена `computedAt` между страницами —
+  таблица заново с первой страницы.
+- `SeasonsScreen.test.tsx` (+1): название — ссылка `/admin/seasons/<id>`.
+- Отрицательная проверка правила курсора: условие сброса заменено на `false` → `Tests 1 failed | 14 passed (15)`
+  («курсор и снимок …»); возвращено → `15 passed (15)`.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08b_test REDIS_URL_TEST=…/15 pnpm check` → `EXIT=0`:
+  `All matched files use Prettier code style!`, `✔ no dependency violations found (1491 modules, 5515 dependencies
+  cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Test Files 38 passed (38)`, `Tests 343 passed
+  (343)`, api `1453 passed`, app `1582 passed`, contracts `315 passed`, api-client `110 passed`, i18n `6 passed`,
+  `Tasks: 15 successful, 15 total`.
+
+### Фиксы ревью 08b pass 1
+
+Ревью: Claude и Codex — REQUEST CHANGES. Findings — `findings-08b-claude.md`, `findings-08b-codex.md`. LOW-2
+(Claude) принят без правки (решение оркестратора).
+
+- HIGH-1: ошибка обновления сводки при показанных данных — данные остаются, сверху `Banner` (`role="alert"`,
+  «Не удалось обновить рейтинг») с «Повторить» → `summary.refetch()`, как `RaceResultsScreen`.
+- HIGH-2: шапка — `.skeleton` заголовка, пока грузится `seasonsQuery`; отказ — `Banner` «Не удалось загрузить
+  название и даты сезона» с повтором `seasons.refetch()`, рейтинг показывается (и на 404 сводки); ответ без сезона —
+  общее название.
+- MEDIUM-1: «N гонок, в зачёте K · M участников» — из ответа таблицы (`pages[0]`), пока она грузится — из сводки.
+- LOW-1: пустая таблица из сводки (RC-12) — «В таблице пока нет участников».
+- LOW-3: `admin.standings.tableMeta` = `{group} · {bikeClass} · {races} · {riders}`, плюрали `admin.standings.races`
+  («1 гонка / 3 гонки / 5 гонок, в зачёте K») и `admin.standings.riders` («1 участник / 2 участника / 5 участников»).
+- LOW-4: тест 403 → «Нет доступа к разделу».
+- Тесты (до кода, были красными: `Tests 6 failed | 14 passed (20)`; тест 403 сразу зелёный — ветка уже была):
+  `SeasonScreen.test.tsx` +5 — ошибка обновления сводки → баннер → повтор; скелетон заголовка; отказ сезонов →
+  баннер → повтор; подпись из ответа таблицы и плюрали; 403. Обновлены: подпись в тесте переключателей, RC-12.
+  `vitest run src/features/seasons` → `Tests 28 passed (28)`.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08b_test REDIS_URL_TEST=…/15 pnpm check` → `EXIT=0`:
+  `All matched files use Prettier code style!`, `✔ no dependency violations found (1491 modules, 5515 dependencies
+  cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Tests 348 passed (348)`, api `1453 passed`
+  (кэш turbo: входы api не менялись с прогона выше), app `1582 passed`, contracts `315 passed`, api-client
+  `110 passed`, i18n `6 passed`, `Tasks: 15 successful, 15 total`.
+
+### Фиксы ревью 08b pass 2
+
+Ревью: Claude — APPROVE (LOW-1), Codex — REQUEST CHANGES (HIGH). Findings — `findings-08b-claude-pass2.md`,
+`findings-08b-codex-pass2.md`.
+
+- HIGH (Codex): шапка без данных при `seasons.fetchStatus === 'paused'` или сетевом отказе — баннер «Нет соединения»
+  (`state.errorTitle` / `state.errorMessage`, как `ErrorState` offline) с повтором `seasons.refetch()`; рейтинг
+  остаётся. Прочий отказ без данных — прежний «Не удалось загрузить название и даты сезона».
+- LOW-1 (Claude): баннер шапки — только без `seasons.data`; ошибка фонового обновления при показанной шапке его не
+  даёт.
+- Тесты (до кода, были красными: `Tests 3 failed | 20 passed (23)`): `SeasonScreen.test.tsx` +3 — сезоны на паузе без
+  сети при рейтинге из кэша (баннер, повтор; после возврата сети — название); сетевой отказ сезонов → «Нет соединения»
+  → повтор; фоновое обновление сезонов упало при показанной шапке — баннера нет. `vitest run src/features/seasons` →
+  `Tests 31 passed (31)`.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08b_test REDIS_URL_TEST=…/15 pnpm check` → `EXIT=0`:
+  `All matched files use Prettier code style!`, `✔ no dependency violations found (1491 modules, 5517 dependencies
+  cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Tests 351 passed (351)`, api `1453 passed`,
+  app `1582 passed`, contracts `315 passed`, api-client `110 passed`, i18n `6 passed`, `Tasks: 15 successful, 15
+  total` (`Cached: 14 cached` — менялся только `apps/admin`).
+
+### Фиксы ревью 08b pass 3
+
+Ревью: Codex — HIGH (`findings-08b-codex-pass3.md`).
+
+- HIGH: шапка с данными и ошибка обновления `seasonsQuery` — название и даты остаются, сверху баннер «Не удалось
+  обновить название и даты сезона» (`admin.seasons.headerRefreshFailed`) с повтором `seasons.refetch()` (§4.12;
+  вариант, допустимый по LOW-1 Claude pass 2). Без данных — как в pass 2: «Нет соединения» / «Не удалось загрузить
+  название и даты сезона».
+- Тест (до кода, был красным: `Tests 1 failed | 22 passed (23)`): «обновление сезонов упало при показанных данных» —
+  успех → отказ обновления → шапка и даты на месте, баннер (без текста «не удалось загрузить») → повтор → баннер
+  исчез. `vitest run src/features/seasons` → `Tests 31 passed (31)`.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08b_test REDIS_URL_TEST=…/15 pnpm check` → `EXIT=0`:
+  `All matched files use Prettier code style!`, `✔ no dependency violations found (1491 modules, 5517 dependencies
+  cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Tests 351 passed (351)`, api `1453 passed`,
+  app `1582 passed`, contracts `315 passed`, api-client `110 passed`, i18n `6 passed`, `Tasks: 15 successful, 15
+  total`.
+
 ## 12.3 08c — приложение
 
 ### Changes

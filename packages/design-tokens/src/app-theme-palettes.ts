@@ -1,4 +1,4 @@
-import { defaultShape, radius, type ShapeRoles } from '@rkarakulov/design-tokens';
+import { defaultShape, type ShapeRoles } from '@rkarakulov/design-tokens';
 
 import type { AppTheme, Basemap } from './brand.ts';
 
@@ -81,13 +81,17 @@ function appScheme(p: Palette, shape: ShapeRoles): AppTheme {
  * Форма темы: радиусы field / chip / card / sheet (px) и регистр подписи кнопки. Радиус кнопки у всех тем — как у
  * «Классики» (`defaultShape.button`, прямые углы): решение пользователя после слайса C.
  */
-const shape = (
-  [field, chip, card, sheet]: [number, number, number, number],
-  buttonCase: ShapeRoles['buttonCase'] = 'none',
-): ShapeRoles => ({ button: defaultShape.button, field, chip, card, sheet, buttonCase });
+/**
+ * Форма темы: радиусы — как у «Классики» (`defaultShape`, все 0: без скруглений во всех темах — решение пользователя),
+ * своё у темы — только регистр подписи кнопки. Круглое — только по смыслу (точки карты, маркер скраббинга).
+ */
+const shape = (buttonCase: ShapeRoles['buttonCase'] = 'none'): ShapeRoles => ({
+  ...defaultShape,
+  buttonCase,
+});
 
 /** Атлас: светло-серый экран, белые карточки, оранжевый акцент карты и профиля, чёрная кнопка. */
-const atlasShape = shape([12, radius.pill, 16, 24]);
+const atlasShape = shape();
 export const atlas = {
   light: appScheme(
     {
@@ -136,11 +140,11 @@ export const chrono = appScheme(
     control: ['#FF6A1A', '#0B0B0C'],
     tabBar: ['#0B0B0C', '#FF6A1A'],
   },
-  shape([10, radius.pill, 12, 20]),
+  shape(),
 );
 
 /** Планировщик: тёплый бежево-серый фон, чёрные линии маршрута и профиля, оранжевый — только трек. */
-const plannerShape = shape([12, radius.pill, 14, 24]);
+const plannerShape = shape();
 export const planner = {
   light: appScheme(
     {
@@ -174,8 +178,8 @@ export const planner = {
   ),
 };
 
-/** Журнал: светлый зеленоватый фон; кнопка, маршрут и профиль — зелёные. */
-const journalShape = shape([10, radius.pill, 14, 20]);
+/** Журнал: зеленоватый фон — светлый или тёмно-зелёный (не графит Навигации); кнопка, маршрут, профиль и вкладка — зелёные. */
+const journalShape = shape();
 export const journal = {
   light: appScheme(
     {
@@ -195,15 +199,16 @@ export const journal = {
   dark: appScheme(
     {
       basemap: 'dark',
-      text: ['#EDF2EA', '#9FAA9F', '#6CCB7A', '#66706A'],
-      surface: ['#101511', '#1A211B', '#263027', '#1A211B'],
-      border: ['#263027', '#344036', '#6C786D', '#EDF2EA', '#344036'],
-      action: ['#6CCB7A', '#101511'],
-      status: ['#4CC28A', '#F0CC3C', '#FF5C8A', '#101511', '#2A1A1F'],
-      map: ['#1A211B', '#263027', '#6CCB7A', '#9FAA9F', '#FF8A4C', '#FF5C8A', '#1A211B'],
+      text: ['#EDF5EC', '#A3B8A6', '#6CCB7A', '#66806B'],
+      surface: ['#0D1D12', '#15301D', '#21402A', '#15301D'],
+      border: ['#21402A', '#2E5238', '#6A8A70', '#EDF5EC', '#2E5238'],
+      action: ['#6CCB7A', '#0D1D12'],
+      status: ['#4CC28A', '#F0CC3C', '#FF5C8A', '#0D1D12', '#2A1A1F'],
+      map: ['#15301D', '#21402A', '#6CCB7A', '#A3B8A6', '#FF8A4C', '#FF5C8A', '#15301D'],
       profile: ['#6CCB7A', '#6CCB7A'],
-      control: ['#6CCB7A', '#101511'],
-      tabBar: ['#1A211B', '#EDF2EA'],
+      control: ['#6CCB7A', '#0D1D12'],
+      // активная вкладка — зелёная: тёмный Журнал не путается с Навигацией (графит, белая вкладка)
+      tabBar: ['#15301D', '#6CCB7A'],
     },
     journalShape,
   ),
@@ -223,11 +228,11 @@ export const navigation = appScheme(
     control: ['#5BA8FF', '#0F1215'],
     tabBar: ['#0F1215', '#F2F4F7'],
   },
-  shape([12, radius.pill, 16, 24]),
+  shape(),
 );
 
 /** Типографика: тёплый светлый фон, оранжевая кнопка с тёмным текстом (F6), заглавные подписи кнопок. */
-const typographyShape = shape([4, 4, 0, 16], 'upper');
+const typographyShape = shape('upper');
 export const typography = {
   light: appScheme(
     {

@@ -13,12 +13,12 @@ interface TopBarProps {
   unreadCount?: number;
   /** вход в «Устройства» — иконка справа (место будущего аватара «Личная линия»); без обработчика иконки нет */
   onOpenDevices?: () => void;
-  /** вход в «Профиль» (profile-rider-name) — иконка справа после «Устройств»; без обработчика иконки нет */
-  onOpenProfile?: () => void;
+  /** вход в «Настройки» (settings-hub) — иконка справа после «Устройств»; без обработчика иконки нет */
+  onOpenSettings?: () => void;
 }
 
 /**
- * Верхняя панель корня вкладки (`.topbar` прототипа): словесный знак продукта, иконки «Устройства» (часы) и «Профиль»
+ * Верхняя панель корня вкладки (`.topbar` прототипа): словесный знак продукта, иконки «Устройства» (часы) и «Настройки»
  * (`Icon`: SF Symbols на iOS, Material Symbols на Android и web), колокольчик уведомлений со счётчиком.
  * Аватар — с блоком профиля; тогда же — кандидат в `@rkarakulov/ui` (R8 блока 02).
  */
@@ -26,7 +26,7 @@ export function TopBar({
   onOpenNotifications,
   unreadCount,
   onOpenDevices,
-  onOpenProfile,
+  onOpenSettings,
 }: TopBarProps) {
   const theme = useTheme();
   return (
@@ -53,15 +53,15 @@ export function TopBar({
             <Icon name="watch" size={size.icon} color={theme.text.primary} />
           </Pressable>
         ) : null}
-        {onOpenProfile ? (
+        {onOpenSettings ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={t('profile.title')}
-            onPress={onOpenProfile}
+            accessibilityLabel={t('settings.title')}
+            onPress={onOpenSettings}
             hitSlop={space.s2}
             style={styles.action}
           >
-            <Icon name="profile" size={size.icon} color={theme.text.primary} />
+            <Icon name="settings" size={size.icon} color={theme.text.primary} />
           </Pressable>
         ) : null}
       </View>
