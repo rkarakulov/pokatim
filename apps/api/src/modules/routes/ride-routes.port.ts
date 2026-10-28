@@ -46,4 +46,9 @@ export interface RideRoutes {
    * висячих `routeId` (маршрут удалён раньше, 05c, RC-1).
    */
   existing(routeIds: readonly string[]): Promise<Set<string>>;
+  /**
+   * Линия показа `[lon, lat]` маршрута **в каталоге** (без кэша; карточка-приглашение райда, ADR-0018): не в каталоге,
+   * не готов, без линии — `null`. Свой непубличный маршрут организатора не отдаётся никогда — картинка уходит наружу.
+   */
+  catalogLine(routeId: string): Promise<[number, number][] | null>;
 }

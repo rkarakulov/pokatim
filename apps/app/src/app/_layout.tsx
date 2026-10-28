@@ -157,6 +157,8 @@ function RootShell() {
                 <Stack.Screen name="rides/route-pick" />
                 {/* жалоба на райд (05b): только вошедшим; гость — «Вход» */}
                 <Stack.Screen name="rides/report/[id]" />
+                {/* карточка-приглашение кофе-райда (ADR-0018): только вошедшим; гость — «Вход» */}
+                <Stack.Screen name="rides/invite/[id]" />
                 {/* свой маршрут (routes-02, M3, RC-11): только вошедшим, без таб-бара; гость — «Вход» */}
                 <Stack.Screen name="routes/mine/[id]" />
                 {/* routes-06: заявка своего маршрута в каталог и жалоба на маршрут райдера — только вошедшим */}

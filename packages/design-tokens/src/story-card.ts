@@ -76,6 +76,15 @@ export const storyCard = {
       tracking: 0.14,
       uppercase: true,
     },
+    /** карточка-приглашение (4a/4b): дата «4 октября» (`card-dnum` 52/58) */
+    inviteDate: { role: 'display', weight: 600, size: 156, lineHeight: 174, tracking: -0.01 },
+    /** «Воскресенье, 10:00» (`card-stime` 18/22) */
+    inviteTime: { role: 'display', weight: 600, size: 54, lineHeight: 66 },
+    /** «Старт: …» (`card-start` 12.5/17; 4a — 13/17 600) */
+    inviteStart: { role: 'text', weight: 500, size: 37.5, lineHeight: 51 },
+    inviteStartNight: { role: 'text', weight: 600, size: 39, lineHeight: 51 },
+    /** единица у цифры пары «42 км» (`.u` 13/16) */
+    statUnit: { role: 'text', weight: 500, size: 39, lineHeight: 48 },
   } satisfies Record<string, StoryCardText>,
   night: {
     mastheadTop: 48,
@@ -90,6 +99,13 @@ export const storyCard = {
     statsGap: 24,
     statPadTop: 24,
     statDividerPad: 36,
+  },
+  /** карточка-приглашение кофе-райда (4a/4b): отступы верхнего блока и плитка линии `night` (`card-maptile.short`) */
+  invite: {
+    dateGap: 18,
+    timeGap: 6,
+    startGap: 12,
+    tileHeight: 252,
   },
   line: {
     tier1Top: 72,
