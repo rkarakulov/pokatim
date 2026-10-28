@@ -5,6 +5,7 @@ import { PanelModule } from '../panel';
 import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
 import { PublicReadGuard } from '../../public-read.guard';
+import { AvatarProcessing } from './avatar-processing-gate';
 import { AvatarsPublicController } from './avatars-public.controller';
 import { ProfileAdminController } from './profile-admin.controller';
 import { ProfileAvatarRepository } from './profile-avatar.repository';
@@ -82,6 +83,7 @@ export class ProfileCoreModule {}
     VerifiedProfileService,
     ProfileVerifiedAdminService,
     ProfileAvatarService,
+    AvatarProcessing,
     PublicReadGuard,
   ],
 })

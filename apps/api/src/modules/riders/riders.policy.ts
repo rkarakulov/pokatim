@@ -33,9 +33,11 @@ export function summarize(rows: readonly RiderProtocolRow[]): RiderSummary {
   };
 }
 
-/** Позиция курсора истории: момент старта сегмента (ISO) и id гонки. */
+/**
+ * Позиция курсора публичной истории — только id гонки последней строки (HIGH-1 ревью): время старта сегмента (время
+ * суток заезда) в курсор не попадает — курсор публичный и декодируется любым посетителем.
+ */
 export interface RowCursor {
-  k: string;
   id: string;
 }
 
@@ -43,27 +45,24 @@ const newerFirst = (a: RiderProtocolRow, b: RiderProtocolRow) =>
   b.startedAt.getTime() - a.startedAt.getTime() || (a.raceId < b.raceId ? 1 : -1);
 
 /**
- * Страница публичной истории в памяти (строк райдера — десятки–сотни): старт сегмента лежит в окне гонки — порядок
- * «по дате гонки», новые сверху; при равенстве — id гонки ↓. Курсор — после строки `(k, id)`.
+ * Страница публичной истории в памяти (строк райдера — десятки–сотни, одна строка на гонку): старт сегмента лежит в
+ * окне гонки — порядок «по дате гонки», новые сверху; при равенстве — id гонки ↓. Курсор — после строки гонки `id`;
+ * гонки нет в списке (чужой курсор, строка выпала из ревизии) — `null`, вызывающий отвечает 400.
  */
 export function pageRows(
   rows: readonly RiderProtocolRow[],
   cursor: RowCursor | null,
   limit: number,
-): { page: RiderProtocolRow[]; next: RowCursor | null } {
+): { page: RiderProtocolRow[]; next: RowCursor | null } | null {
   const sorted = [...rows].sort(newerFirst);
-  const after = cursor
-    ? sorted.filter((row) => {
-        const at = row.startedAt.getTime();
-        const k = new Date(cursor.k).getTime();
-        return at < k || (at === k && row.raceId < cursor.id);
-      })
-    : sorted;
+  let start = 0;
+  if (cursor) {
+    const at = sorted.findIndex((row) => row.raceId === cursor.id);
+    if (at < 0) return null;
+    start = at + 1;
+  }
+  const after = sorted.slice(start);
   const page = after.slice(0, limit);
   const last = page.at(-1);
-  return {
-    page,
-    next:
-      after.length > limit && last ? { k: last.startedAt.toISOString(), id: last.raceId } : null,
-  };
+  return { page, next: after.length > limit && last ? { id: last.raceId } : null };
 }

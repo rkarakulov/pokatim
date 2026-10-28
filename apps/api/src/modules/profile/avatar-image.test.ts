@@ -2,7 +2,14 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
 import { cropRect, detectImageFormat, processAvatar } from './avatar-image';
-import { avatarPixel, brokenJpeg, GIF_BYTES, hugePng, twoToneImage } from '../../../test/avatars';
+import {
+  avatarPixel,
+  brokenJpeg,
+  GIF_BYTES,
+  hasGpsIfd,
+  hugePng,
+  twoToneImage,
+} from '../../../test/avatars';
 
 describe('detectImageFormat — по сигнатуре', () => {
   it('JPEG, PNG, WebP', () => {
@@ -74,6 +81,7 @@ describe('processAvatar', () => {
     const before = await sharp(input).metadata();
     expect(before.orientation).toBe(6);
     expect(before.exif).toBeDefined();
+    expect(hasGpsIfd(before.exif)).toBe(true);
 
     const result = await processAvatar(input, null);
     if (!result.ok) throw new Error(result.error);
@@ -115,9 +123,24 @@ describe('processAvatar', () => {
     expect((await processAvatar(forged, null)).ok).toBe(false);
   });
 
-  it('больше 40 Мп (поддельный IHDR) и битый JPEG — invalid', async () => {
+  it('PNG больше 25 Мп (поддельный IHDR 5001×5000; у PNG нет shrink-on-load) и битый JPEG — invalid', async () => {
     expect(await processAvatar(hugePng(), null)).toMatchObject({ ok: false, error: 'invalid' });
     expect(await processAvatar(brokenJpeg(), null)).toMatchObject({ ok: false, error: 'invalid' });
+  });
+
+  it('MEDIUM-A ревью: 48 Мп JPEG (8000×6000, ориентация 6) принимается; обрезка по долям ориентированного кадра', async () => {
+    const input = await twoToneImage('jpeg', { orientation: 6, width: 8000, height: 6000 });
+    // ориентированный кадр 6000×8000: верхняя половина красная, нижняя синяя
+    const bottom = await processAvatar(input, { x: 0, y: 1, size: 0.5 });
+    if (!bottom.ok) throw new Error(bottom.error);
+    expect(await sharp(bottom.bytes).metadata()).toMatchObject({ width: 512, height: 512 });
+    expect(await avatarPixel(bottom.bytes, 20, 20)).toBe('blue');
+    expect(await avatarPixel(bottom.bytes, 490, 490)).toBe('blue');
+    // квадрат 6000 с отступом 2000 сверху: верхняя треть — красная (строки 2000…4000)
+    const straddle = await processAvatar(input, { x: 0, y: 1, size: 1 });
+    if (!straddle.ok) throw new Error(straddle.error);
+    expect(await avatarPixel(straddle.bytes, 256, 60)).toBe('red');
+    expect(await avatarPixel(straddle.bytes, 256, 300)).toBe('blue');
   });
 
   it('мелкая обрезка — invalid', async () => {

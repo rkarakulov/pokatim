@@ -43,20 +43,17 @@ describe('summarize', () => {
 describe('pageRows', () => {
   const rows = [row(1, 1), row(2, 2), row(3, 3), row(4, null, { status: 'dq', day: 3 })];
 
-  it('новые сверху (startedAt ↓, raceId ↓); курсор — после последней строки страницы', () => {
+  it('новые сверху (startedAt ↓, raceId ↓); курсор — только id гонки последней строки (без времени заезда)', () => {
     const first = pageRows(rows, null, 2);
-    expect(first.page.map((r) => r.raceId)).toEqual([id(4), id(3)]);
-    expect(first.next).toEqual({ k: rows[2]!.startedAt.toISOString(), id: id(3) });
-    // одинаковая дата (день 3) у id(3) и id(4): порядок по raceId ↓, курсор не теряет строку
-    const second = pageRows(rows, { k: rows[2]!.startedAt.toISOString(), id: id(3) }, 2);
-    expect(second.page.map((r) => r.raceId)).toEqual([id(2), id(1)]);
-    expect(second.next).toBeNull();
+    expect(first?.page.map((r) => r.raceId)).toEqual([id(4), id(3)]);
+    expect(first?.next).toEqual({ id: id(3) });
+    const second = pageRows(rows, { id: id(3) }, 2);
+    expect(second?.page.map((r) => r.raceId)).toEqual([id(2), id(1)]);
+    expect(second?.next).toBeNull();
   });
 
-  it('курсор после последней — пусто', () => {
-    expect(pageRows(rows, { k: rows[0]!.startedAt.toISOString(), id: id(1) }, 5)).toEqual({
-      page: [],
-      next: null,
-    });
+  it('курсор после последней — пусто; гонки курсора нет в списке — null (400 у вызывающего)', () => {
+    expect(pageRows(rows, { id: id(1) }, 5)).toEqual({ page: [], next: null });
+    expect(pageRows(rows, { id: id(99) }, 5)).toBeNull();
   });
 });

@@ -17,9 +17,10 @@ import {
 } from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
-import { DEFAULT_BODY_TIMEOUTS, readLimited } from '../../raw-body';
+import { readLimited } from '../../raw-body';
 import { AuthGuard, type AuthUser, CurrentUser } from '../identity';
 import { ProfileAvatarService } from './profile-avatar.service';
+import { PROFILE_POLICY } from './profile.policy';
 
 /** Ответ Fastify: заголовок закрытия соединения при недочитанном теле. */
 interface HeaderReply {
@@ -55,7 +56,7 @@ export class ProfileAvatarsController {
         body,
         AVATAR_MAX_BYTES,
         AVATAR_ERRORS,
-        DEFAULT_BODY_TIMEOUTS,
+        PROFILE_POLICY.avatarBodyTimeouts,
       ).catch((error: unknown) => {
         // тело не дочитано — после ответа соединение закрывается
         reply.header('Connection', 'close');

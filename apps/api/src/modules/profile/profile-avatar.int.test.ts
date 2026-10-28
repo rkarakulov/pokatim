@@ -2,11 +2,20 @@ import { ProfileView, type Session } from '@pokatim/contracts';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { avatarPixel, brokenJpeg, GIF_BYTES, hugePng, twoToneImage } from '../../../test/avatars';
+import {
+  avatarPixel,
+  brokenJpeg,
+  GIF_BYTES,
+  hasGpsIfd,
+  hugePng,
+  twoToneImage,
+} from '../../../test/avatars';
 import { createHarness, type Harness } from '../../../test/harness';
 import { bearer, call, signUpSession } from '../../../test/identity';
 import { heldUpload } from '../../../test/uploads';
 import { PROFILE_COLLECTIONS } from './profile.collection';
+import { AvatarProcessing } from './avatar-processing-gate';
+import { PROFILE_POLICY } from './profile.policy';
 
 let h: Harness;
 beforeAll(async () => {
@@ -71,7 +80,11 @@ const avatars = () => h.db.collection(PROFILE_COLLECTIONS.avatars);
 describe('PUT /v1/profile/avatar — приём и обработка (AC1)', () => {
   it('JPEG с EXIF (GPS, ориентация 6) → 200; GET отдаёт 512×512 JPEG без EXIF, развёрнутый, с заголовками', async () => {
     const session = await signUpSession(h);
-    const res = await upload(session, await twoToneImage('jpeg', { orientation: 6 }));
+    const input = await twoToneImage('jpeg', { orientation: 6 });
+    // во входе действительно есть GPS и производитель (LOW-3 ревью)
+    expect(hasGpsIfd((await sharp(input).metadata()).exif)).toBe(true);
+    expect(input.includes(Buffer.from('PokatimTest'))).toBe(true);
+    const res = await upload(session, input);
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
     const id = avatarIdOf(res);
@@ -153,7 +166,7 @@ describe('ошибки загрузки (AC2)', () => {
     expect(await avatars().countDocuments()).toBe(0);
   });
 
-  it('больше 40 Мп и битый файл — 422; без входа — 401', async () => {
+  it('больше 25 Мп и битый файл — 422; без входа — 401', async () => {
     const session = await signUpSession(h);
     const huge = await upload(session, hugePng());
     expect(huge.status).toBe(422);
@@ -182,6 +195,77 @@ describe('ошибки загрузки (AC2)', () => {
     expect(second.status).toBe(429);
     expect(second.body).toMatchObject({ code: 'RATE_LIMITED', details: { retryAfterSec: 5 } });
     expect((await first.finish(await twoToneImage('png'))).status).toBe(200);
+    expect((await upload(session, await twoToneImage('png'))).status).toBe(200);
+  });
+
+  it('MEDIUM-B ревью: медленное тело одного пользователя не блокирует другого (чтение — 4 слота на процесс)', async () => {
+    const first = await signUpSession(h, 'first@example.com');
+    const second = await signUpSession(h, 'second@example.com');
+    const held = heldUpload(h, AVATAR, bearer(first.accessToken), 'PUT');
+    await held.held();
+    expect((await upload(second, await twoToneImage('png'))).status).toBe(200);
+    expect((await held.finish(await twoToneImage('png'))).status).toBe(200);
+  });
+
+  it('MEDIUM-B ревью: обработка занята дольше ожидания — 429 retryAfterSec 5; освободилась — 200', async () => {
+    expect(PROFILE_POLICY.avatarProcessing).toEqual({ concurrency: 1, waitMs: 5_000 });
+    const saved = { ...PROFILE_POLICY.avatarProcessing };
+    Object.assign(PROFILE_POLICY.avatarProcessing, { waitMs: 100 });
+    const session = await signUpSession(h);
+    const permit = await h.app.get(AvatarProcessing, { strict: false }).acquire();
+    try {
+      const busy = await upload(session, await twoToneImage('png'));
+      expect(busy.status).toBe(429);
+      expect(busy.body).toMatchObject({ code: 'RATE_LIMITED', details: { retryAfterSec: 5 } });
+    } finally {
+      permit?.release();
+      Object.assign(PROFILE_POLICY.avatarProcessing, saved);
+    }
+    expect((await upload(session, await twoToneImage('png'))).status).toBe(200);
+  });
+
+  it('MEDIUM-A ревью: 48 Мп JPEG с телефона (ориентация 6) — 200, квадрат обрезки верный', async () => {
+    const session = await signUpSession(h);
+    const input = await twoToneImage('jpeg', { orientation: 6, width: 8000, height: 6000 });
+    const res = await upload(session, input, { query: '?x=0&y=1&size=0.5' });
+    expect(res.status).toBe(200);
+    const image = await fetchAvatar(avatarIdOf(res));
+    expect(await sharp(image.raw).metadata()).toMatchObject({ width: 512, height: 512 });
+    expect(await avatarPixel(image.raw, 256, 256)).toBe('blue');
+  });
+
+  it('LOW-1 ревью: отказ «слот занят» не списывает часовую квоту', async () => {
+    const session = await signUpSession(h);
+    const png = await twoToneImage('png');
+    const held = heldUpload(h, AVATAR, bearer(session.accessToken), 'PUT');
+    await held.held();
+    for (let i = 0; i < 5; i += 1) expect((await upload(session, png)).status).toBe(429);
+    expect((await held.finish(png)).status).toBe(200);
+    // квота 20/ч: 1 принятая + 19 — без 5 отказов по слоту
+    for (let i = 0; i < 19; i += 1) expect((await upload(session, png)).status).toBe(200);
+    expect((await upload(session, png)).status).toBe(429);
+  });
+
+  it('MEDIUM-2 ревью: свои короткие таймауты тела (10 с тишины, 60 с всего); тишина — 408 и Connection: close', async () => {
+    expect(PROFILE_POLICY.avatarBodyTimeouts).toEqual({ idleMs: 10_000, totalMs: 60_000 });
+    const saved = { ...PROFILE_POLICY.avatarBodyTimeouts };
+    Object.assign(PROFILE_POLICY.avatarBodyTimeouts, { idleMs: 200 });
+    const session = await signUpSession(h);
+    try {
+      const silent = heldUpload(h, AVATAR, bearer(session.accessToken), 'PUT');
+      await silent.held();
+      silent.write((await twoToneImage('png')).subarray(0, 100));
+      const timedOut = await silent.response;
+      expect(timedOut.status).toBe(408);
+      expect(timedOut.headers['connection']).toBe('close');
+      expect(timedOut.body).toMatchObject({
+        code: 'VALIDATION_FAILED',
+        details: { fields: [{ path: 'body', code: 'INVALID' }] },
+      });
+    } finally {
+      Object.assign(PROFILE_POLICY.avatarBodyTimeouts, saved);
+    }
+    expect(await avatars().countDocuments()).toBe(0);
     expect((await upload(session, await twoToneImage('png'))).status).toBe(200);
   });
 });

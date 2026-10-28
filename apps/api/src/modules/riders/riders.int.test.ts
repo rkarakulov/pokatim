@@ -19,6 +19,7 @@ import {
   seedProtocolRace,
   seedSeason,
 } from '../../../test/standings';
+import { resultsDb } from '../../../test/results';
 import { tracks } from '../../../test/tracks';
 
 /** Документ активности стенда (тип — из коллекции `test/tracks`: модуль `tracks` — только через `index.ts`). */
@@ -248,6 +249,14 @@ describe('GET /v1/riders/:publicId/races (AC9)', () => {
 
     const first = PublicRiderRacePage.parse((await call(h, 'GET', `${url}?limit=1`)).body);
     expect(first.items.map((item) => item.race.id)).toEqual([july]);
+    // HIGH-1 ревью: курсор публичной истории — только id гонки, без времени заезда
+    const decoded = Buffer.from(first.nextCursor ?? '', 'base64url').toString('utf8');
+    expect(JSON.parse(decoded)).toEqual({ k: 'r', id: july });
+    const startedAt = (await resultsDb(h).protocolRows.find({ userId }).toArray()).map((r) =>
+      r.startedAt.toISOString(),
+    );
+    for (const at of startedAt) expect(decoded).not.toContain(at.slice(0, 16));
+    expect(decoded).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
     const second = PublicRiderRacePage.parse(
       (await call(h, 'GET', `${url}?limit=1&cursor=${first.nextCursor}`)).body,
     );
@@ -255,6 +264,9 @@ describe('GET /v1/riders/:publicId/races (AC9)', () => {
     expect(second.nextCursor).toBeNull();
 
     expect((await call(h, 'GET', `${url}?cursor=garbage`)).status).toBe(400);
+    // курсор с гонкой не из истории райдера — 400
+    const foreign = Buffer.from(JSON.stringify({ k: 'r', id: uuidv7() })).toString('base64url');
+    expect((await call(h, 'GET', `${url}?cursor=${foreign}`)).status).toBe(400);
     expect((await call(h, 'GET', `/v1/riders/${'z'.repeat(43)}/races?cursor=garbage`)).status).toBe(
       404,
     );

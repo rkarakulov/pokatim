@@ -294,9 +294,10 @@ paths:
 - Свои эндпоинты (`/v1/profile/avatar`, `…/avatar/delete`, `/v1/profile/{stats,races,rides}`) — `AuthGuard`,
   `no-store`, пользователь — `@CurrentUser()`.
 - Аватар: тело — только `application/octet-stream` ≤ 10 МиБ (`readLimited`, 413 + `Connection: close`); формат — по
-  сигнатуре (JPEG/PNG/WebP) и совпадению с декодером; ≤ 40 Мп, `failOn: 'error'`, таймаут; вывод — только
-  перекодированный JPEG без метаданных (EXIF/GPS стираются, исходник не хранится). Лимиты: 20 загрузок/ч, слоты 2 на
-  процесс и 1 на пользователя. Отдача `GET /v1/avatars/:id` — `PublicReadGuard`, ключ — `randomToken`, `nosniff`,
+  сигнатуре (JPEG/PNG/WebP) и совпадению с декодером; JPEG/WebP ≤ 100 Мп, PNG ≤ 25 Мп, `failOn: 'error'`, таймаут; вывод — только
+  перекодированный JPEG без метаданных (EXIF/GPS стираются, исходник не хранится). Лимиты: 20 загрузок/ч, слот чтения 4 на
+  процесс и 1 на пользователя (отказ слота квоту не списывает), обработка — 1 на процесс (ожидание ≤ 5 с), тело — тишина 10 с, всё 60 с. Курсор публичной
+  истории — только id гонки (без времени заезда). Отдача `GET /v1/avatars/:id` — `PublicReadGuard`, ключ — `randomToken`, `nosniff`,
   `Content-Security-Policy: default-src 'none'; sandbox`, `immutable` только у 200. Согласие на отдаче не
   проверяется (RC-A2, принятый риск: URL после отзыва согласия работает до замены или удаления фото).
 - Публичный профиль `GET /v1/riders/:publicId` и `/races` — `PublicReadGuard`, `public, max-age=60`; доступ — по
