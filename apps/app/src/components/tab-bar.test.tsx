@@ -59,10 +59,33 @@ describe('TabBar: роли tabBar (app-themes C1)', () => {
 });
 
 describe('TabBar: варианты (app-themes C2)', () => {
-  it('classic — полоса сверху и подпись, без иконок', async () => {
+  it('classic — полоса сверху у активной, иконка над подписью у 5 вкладок; цвета — роли tabBar', async () => {
     await render(<TabBar {...props(0)} />);
-    expect(screen.getByTestId('tab-indicator-index')).toBeOnTheScreen();
-    expect(symbol).not.toHaveBeenCalled();
+    const { tabBar } = themes.light;
+    expect(screen.getByTestId('tab-indicator-index')).toHaveStyle({
+      backgroundColor: tabBar.active,
+    });
+    expect(screen.getByTestId('tab-indicator-routes')).toHaveStyle({
+      backgroundColor: 'transparent',
+    });
+    const calls = symbol.mock.calls.map(([p]) => p);
+    expect(calls.map((p) => p.name)).toEqual([
+      { ios: 'house.fill', android: 'home', web: 'home' },
+      { ios: 'flag.checkered', android: 'sports_score', web: 'sports_score' },
+      { ios: 'cup.and.saucer', android: 'local_cafe', web: 'local_cafe' },
+      { ios: 'map', android: 'map', web: 'map' },
+      { ios: 'calendar', android: 'calendar_month', web: 'calendar_month' },
+    ]);
+    expect(calls.map((p) => p.tintColor)).toEqual([
+      tabBar.active,
+      tabBar.inactive,
+      tabBar.inactive,
+      tabBar.inactive,
+      tabBar.inactive,
+    ]);
+    // имя вкладки — подпись, иконка его не меняет
+    expect(screen.getByRole('tab', { name: 'Главная', selected: true })).toBeOnTheScreen();
+    expect(screen.getByRole('tab', { name: 'Маршруты', selected: false })).toBeOnTheScreen();
   });
 
   it('icons — иконка над подписью у 5 вкладок, полосы нет; активная — tabBar.active и заливка', async () => {
