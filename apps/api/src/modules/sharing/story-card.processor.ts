@@ -30,6 +30,13 @@ interface BuildOptions {
 }
 
 /**
+ * Причина провала в логе: тип и начало сообщения — диагностика (шрифт, размер PNG, resvg). Сообщение satori/resvg
+ * может цитировать разметку: у сторис это имя с согласием и название гонки (принято, ADR-0018) — только первые
+ * `LOG_MESSAGE_MAX` символов; у приглашения — название и место райда, которых в логах быть не должно, — только тип.
+ */
+type ReasonDetail = 'clipped' | 'name-only';
+
+/**
  * Рендер карточек очереди `story-card` (ADR-0018): сторис своего результата (`story-card.render`) и приглашение
  * кофе-райда (`ride-invite.render`). Входы перечитываются и сверяются с хэшем задачи (изменились — `skipped`, PNG не
  * пишется) → линия (порт `results`: отрезок между воротами или маршрут; порт `rides`: маршрут каталога) → satori +
@@ -76,6 +83,7 @@ export class StoryCardProcessor extends WorkerHost {
       job.hash,
       () => `${label} ${job.template}`,
       options,
+      'clipped',
       async () => {
         const resolved = await this.inputs.resolve(job.userId, job.raceId, job.template);
         label = `entry ${resolved?.input.facts.entryId ?? '-'}`;
@@ -95,7 +103,7 @@ export class StoryCardProcessor extends WorkerHost {
    */
   buildRideInvite(job: RideInviteJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
     const label = () => `ride ${job.rideId} ${job.template}`;
-    return this.run(job.hash, label, options, async () => {
+    return this.run(job.hash, label, options, 'name-only', async () => {
       const resolved = await this.invites
         .resolve(job.userId, job.rideId, job.template)
         .catch((error: unknown) => {
@@ -117,6 +125,7 @@ export class StoryCardProcessor extends WorkerHost {
     hash: string,
     label: () => string,
     { finalAttempt = false }: BuildOptions,
+    detail: ReasonDetail,
     render: () => Promise<{ png: Buffer; note: string } | null>,
   ): Promise<StoryCardOutcome> {
     const started = Date.now();
@@ -135,9 +144,12 @@ export class StoryCardProcessor extends WorkerHost {
     } catch (error) {
       if (!finalAttempt) throw error;
       await this.cache.storeFailed(hash);
-      // тип и начало сообщения — диагностика (шрифт, размер PNG, resvg); сообщение satori/resvg может цитировать
-      // разметку (название, имя с согласием) — в лог только первые `LOG_MESSAGE_MAX` символов
-      const reason = error instanceof Error ? `${error.name}: ${clip(error.message)}` : 'unknown';
+      const reason =
+        error instanceof Error
+          ? detail === 'clipped'
+            ? `${error.name}: ${clip(error.message)}`
+            : error.name
+          : 'unknown';
       this.logger.warn(`${label()}: failed (${reason}) in ${Date.now() - started} ms`);
       return 'failed';
     }

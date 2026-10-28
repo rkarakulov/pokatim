@@ -171,6 +171,14 @@ story-cards дополняется приглашением; `docs/product/rides
 - Codex (REQUEST CHANGES, `findings-codex.md`): HIGH — отступ единицы — токен `storyCard.invite.unitGap`; M — «К
   райду» — `dismissTo` детали; M — шаг web-smoke `/rides/invite/<id>` без сессии.
 
+## Фиксы ревью pass 2
+
+- Codex (APPROVE, `findings-codex-pass2.md`): M — сообщение ошибки рендера могло процитировать название и место в
+  логе worker — у приглашения в лог только тип ошибки (`ReasonDetail = 'name-only'`), int-тест; отрицательное
+  доказательство: с `'clipped'` тест красный (название в `warn`).
+
 ## Open follow-ups
 
 - Фото организатора на 4a (модуль `media`), шит «Райд опубликован» после создания, OG-картинка райда тем же рендером.
+- Флак `apps/app/src/components/bottom-sheet.test.tsx` (L1, «шторку схватили посреди снапа») — ~1 из 3 прогонов
+  на develop без изменений этой задачи; не трогался.

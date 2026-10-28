@@ -177,9 +177,20 @@ describe('pending → ready → PNG (AC2)', () => {
     const rides = h.worker.get<RidesForSharing>(RIDES_FOR_SHARING);
     vi.spyOn(rides, 'inviteFacts').mockRejectedValueOnce(new Error('boom'));
     await expect(processor().buildRideInvite(job.data)).rejects.toThrow('boom');
-    vi.spyOn(rides, 'inviteFacts').mockRejectedValueOnce(new Error('boom'));
+    // сообщение рендера может цитировать разметку — в лог приглашения только тип ошибки
+    vi.spyOn(rides, 'inviteFacts').mockRejectedValueOnce(
+      new TypeError(`boom: ${ride.title}, ${ride.place}`),
+    );
+    const warnings: string[] = [];
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation((message: unknown) => {
+      warnings.push(String(message));
+    });
     expect(await processor().buildRideInvite(job.data, { finalAttempt: true })).toBe('failed');
     vi.restoreAllMocks();
+    const warned = warnings.join('\n');
+    expect(warned).toContain(`ride ${ride.id} line: failed (TypeError)`);
+    expect(warned).not.toContain(ride.title);
+    expect(warned).not.toContain(ride.place);
     expect(await status(other, ride.id)).toEqual({ status: 'failed' });
     expect(await status(other, ride.id)).toEqual({ status: 'pending' });
   });
