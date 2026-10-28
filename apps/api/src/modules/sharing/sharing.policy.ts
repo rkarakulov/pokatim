@@ -4,7 +4,7 @@
  * иначе до 24 ч отдаётся старая картинка (ключ кэша — хэш входов с версией).
  */
 export const STORY_CARD_POLICY = {
-  renderVersion: 1,
+  renderVersion: 2,
   /** PNG и ключ хэш → токен, с */
   pngTtlSec: 86_400,
   /** ключ постановки рендера (NX), с */

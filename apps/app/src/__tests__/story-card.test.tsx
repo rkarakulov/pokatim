@@ -1,10 +1,12 @@
 /// <reference types="jest" />
-import { ApiHttpError } from '@pokatim/api-client';
+import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
+import type { RaceResultsPage } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
+import { prepareStory } from '@/lib/share-story';
 
 import RaceRoute from '../app/races/[id]';
 import RivalResultRoute from '../app/races/result/[id]/[entryId]';
@@ -12,7 +14,7 @@ import StoryCardRoute from '../app/races/story/[id]';
 import { tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { myDisputes, RIVAL_ENTRY_ID } from './disputes-fixtures';
-import { createQueryWrapper } from './query-wrapper';
+import { createQueryWrapper, createTestQueryClient } from './query-wrapper';
 import {
   actions,
   corridorRace,
@@ -55,10 +57,10 @@ const routes = {
   'races/result/[id]/[entryId]': RivalResultRoute,
   'races/story/[id]': StoryCardRoute,
 };
-const open = (url: string) => {
+const open = (url: string, client = createTestQueryClient()) => {
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
   useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
-  return renderRouter(routes, { initialUrl: url, wrapper: createQueryWrapper() });
+  return renderRouter(routes, { initialUrl: url, wrapper: createQueryWrapper(client) });
 };
 
 beforeEach(() => {
@@ -105,6 +107,70 @@ describe('входы (R8)', () => {
     expect(screen.queryByText('Оспорить результат')).toBeNull();
     // чужая строка — по-прежнему карточка соперника
     expect(getMyRaceDisputes).toHaveBeenCalled();
+  });
+});
+
+describe('своя строка в группе не по умолчанию (ревью pass 1)', () => {
+  it('своя заявка в w_u40 при группе сервера m_u40 — «Ваш результат» с кнопкой, путь с ?group', async () => {
+    const groups: RaceResultsPage['groups'] = [
+      { key: 'm_u40', ranked: 1 },
+      { key: 'w_u40', ranked: 1 },
+    ];
+    getRaceResults.mockImplementation((_id, params = {}) =>
+      Promise.resolve(
+        params.group === 'w_u40'
+          ? resultsPage([row({ entryId: ENTRY_ID, place: 1, elapsedSec: 6125 })], {
+              group: 'w_u40',
+              groups,
+            })
+          : resultsPage([row({ entryId: RIVAL_ENTRY_ID, place: 1, elapsedSec: 5400 })], {
+              group: 'm_u40',
+              groups,
+            }),
+      ),
+    );
+    getMyRaceEntry.mockResolvedValue({
+      ...timed(true),
+      entry: { ...timed(true).entry!, groupKey: 'w_u40' },
+    });
+    const router = await open(`/races/${RACE_ID}`);
+    await fireEvent.press(
+      await screen.findByRole('button', { name: 'Вы, 1 место, 1:42:05. Открыть карточку' }),
+    );
+    expect(router.getPathname()).toBe(`/races/result/${RACE_ID}/${ENTRY_ID}`);
+    expect(router.getSearchParams()).toMatchObject({ group: 'w_u40' });
+    expect(await screen.findByRole('button', { name: SHARE })).toBeOnTheScreen();
+    expect(screen.queryByText('Результат не найден')).toBeNull();
+  });
+});
+
+describe('экран карточки: ошибки при показанных данных (ревью pass 1)', () => {
+  it('ready → ошибка обновления: превью остаётся, сверху баннер с повтором', async () => {
+    getStoryCard.mockResolvedValue({ status: 'ready', token: TOKEN });
+    const client = createTestQueryClient();
+    await open(storyUrl, client);
+    await screen.findByTestId('story-preview');
+    getStoryCard.mockRejectedValue(new ApiNetworkError(new TypeError('offline')));
+    await act(async () => {
+      void client.refetchQueries({ queryKey: ['races', 'story', RACE_ID, 'line'], exact: true });
+      // сетевая ошибка повторяется с паузами (ретраи TanStack), затем — ошибка обновления
+      await jest.advanceTimersByTimeAsync(10_000);
+    });
+    expect(await screen.findByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
+    expect(screen.getByTestId('story-preview')).toBeOnTheScreen();
+  });
+
+  it('PNG не скачался — баннер с «Повторить»; повтор готовит файл и включает «Поделиться»', async () => {
+    getStoryCard.mockResolvedValue({ status: 'ready', token: TOKEN });
+    jest.mocked(prepareStory).mockRejectedValueOnce(new ApiNetworkError(new TypeError('offline')));
+    await open(storyUrl);
+    expect(await screen.findByText('Нет соединения')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(prepareStory).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Поделиться' })).not.toBeDisabled(),
+    );
+    expect(screen.queryByText('Нет соединения')).toBeNull();
   });
 });
 

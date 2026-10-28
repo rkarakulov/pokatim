@@ -28,6 +28,9 @@ describe('share-story (native)', () => {
     optional.mockReturnValue({});
     const story = await prepareStory(URL);
     expect(download).toHaveBeenCalledWith(URL, expect.anything(), { idempotent: true });
+    expect(download.mock.calls[0]![1]).toMatchObject({
+      uri: 'file:///cache/story-AbCdEfGhIjKlMnOpQrSt_-.png',
+    });
     expect(story).toEqual({ url: URL, uri: 'file:///cache/story.png' });
     expect(storyShareMode(story)).toBe('share');
     await expect(shareStory(story, 'Карточка')).resolves.toBe('shared');

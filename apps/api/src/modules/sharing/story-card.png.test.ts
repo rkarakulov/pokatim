@@ -18,6 +18,7 @@ const input: StoryCardInput = {
       routeId: null,
     },
     status: 'final',
+    provisional: false,
     elapsedSec: 9_754,
     place: 3,
     tied: false,

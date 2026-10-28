@@ -183,7 +183,7 @@ function RaceDetailView({
           // своя строка — «Ваш результат» и «Поделиться в сторис», когда карточка есть (story-cards, право — сервер)
           ownRowAction={
             signedIn && entry.data?.entry && entry.data.actions.canShareStory
-              ? () => router.push(rivalPath(race.id, entry.data!.entry!.id))
+              ? (group) => () => router.push(rivalPath(race.id, entry.data!.entry!.id, group))
               : null
           }
           rowAction={(entryId, group) =>

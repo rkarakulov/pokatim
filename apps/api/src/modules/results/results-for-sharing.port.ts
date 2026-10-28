@@ -14,10 +14,13 @@ export interface StoryCardFacts {
   entryId: string;
   race: { title: string; windowStartsAt: Date; windowEndsAt: Date; routeId: string | null };
   status: StoryCardResultStatus;
+  /** протокол ещё не опубликован — результат предварительный (и у `finisher`) */
+  provisional: boolean;
   elapsedSec: number;
   /** `null` — без места (`finisher`) */
   place: number | null;
   tied: boolean;
+  /** группа места: строка протокола (опубликован), иначе — заявка */
   group: ResultGroupKey;
   /**
    * Попытка результата: строка текущей ревизии протокола (опубликован) или `best` заявки. Разметка — для ключа кэша

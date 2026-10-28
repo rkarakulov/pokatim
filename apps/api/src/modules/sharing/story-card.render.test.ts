@@ -28,6 +28,7 @@ function input(
         routeId: null,
       },
       status: 'final',
+      provisional: false,
       elapsedSec: 9_754,
       place: 3,
       tied: false,
@@ -124,10 +125,40 @@ describe('тексты', () => {
     );
     const provisional = texts(
       storyCardTree(
-        storyCardRenderInput(input({}, { status: 'provisional', place: 2, tied: true }), null),
+        storyCardRenderInput(
+          input({}, { status: 'provisional', provisional: true, place: 2, tied: true }),
+          null,
+        ),
       ),
     );
     expect(provisional).toEqual(expect.arrayContaining(['Гонка · Предварительный', '=2']));
+  });
+
+  it('финишёр до публикации протокола — «Гонка · Предварительный», после — «Гонка»', () => {
+    const kicker = (provisional: boolean) =>
+      texts(
+        storyCardTree(
+          storyCardRenderInput(input({}, { status: 'finisher', place: null, provisional }), null),
+        ),
+      );
+    expect(kicker(true)).toContain('Гонка · Предварительный');
+    expect(kicker(false)).toContain('Гонка');
+    expect(kicker(false)).not.toContain('Гонка · Предварительный');
+  });
+
+  it('эмодзи и символы вне шрифта темы в названии и имени — рендер не падает', async () => {
+    const theme = appThemes.classic;
+    const svg = await renderStoryCardSvg(
+      storyCardRenderInput(
+        input(
+          { riderName: 'Аня 🚴‍♀️ 漢字' },
+          { race: { ...input().facts.race, title: 'Гонка 🏁 ✨ «Осень» 🍂' } },
+        ),
+        null,
+      ),
+      await storyCardFonts(theme),
+    );
+    expect(svg.startsWith('<svg')).toBe(true);
   });
 
   it('без места (финишёр) — только группа', () => {

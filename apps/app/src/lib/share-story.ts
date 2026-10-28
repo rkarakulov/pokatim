@@ -16,8 +16,9 @@ export interface StoryFile {
   uri: string;
 }
 
+/** `story-<токен>.png`: расширение снимается до очистки имени (иначе точка пропадала — `…png.png`). */
 const fileName = (url: string) =>
-  `story-${(url.split('/').pop() ?? 'card').replace(/[^A-Za-z0-9_-]/g, '')}.png`;
+  `story-${(url.split('/').pop() ?? 'card').replace(/\.png$/, '').replace(/[^A-Za-z0-9_-]/g, '')}.png`;
 
 /**
  * PNG карточки → файл в кэше приложения (`expo-file-system`, уже в сборке как зависимость `expo`); повтор перезаписывает.

@@ -50,10 +50,15 @@ export class ResultsForSharingService implements ResultsForSharing {
       const result = await this.read.entryResult(race, entry, now, session);
       if (!storyCardEligible(entry, result) || result.elapsedSec === null) return null;
       let attemptId = entry.best?.attemptId ?? null;
+      let group = entry.groupKey ?? 'overall';
       if (race.protocolPublishedAt !== null) {
         const revision = (await this.repository.currentRevision(race.id, session)) ?? 1;
         const row = await this.repository.protocolRow(race.id, revision, entry._id, session);
-        if (row) attemptId = row.attemptId;
+        // место — из строки снимка, подпись группы — из той же строки (группа заявки могла смениться)
+        if (row) {
+          attemptId = row.attemptId;
+          group = row.groupKey ?? 'overall';
+        }
       }
       const attempt = attemptId ? await this.repository.findAttempt(attemptId, session) : undefined;
       return {
@@ -65,10 +70,11 @@ export class ResultsForSharingService implements ResultsForSharing {
           routeId: race.corridor?.routeId ?? null,
         },
         status: result.status as StoryCardResultStatus,
+        provisional: race.protocolPublishedAt === null,
         elapsedSec: result.elapsedSec,
         place: result.place,
         tied: result.tied,
-        group: entry.groupKey ?? 'overall',
+        group,
         attempt: attempt?.entryId === entry._id ? attemptFacts(attempt) : null,
       };
     });

@@ -5,7 +5,7 @@ import { useCallback, useRef } from 'react';
 import { withAccessToken } from '@/features/auth/authorized';
 import { apiErrorCode } from '@/features/auth/error-messages';
 import { api } from '@/lib/api';
-import { DEFAULT_STALE_MS } from '@/lib/query-client';
+import { DEFAULT_STALE_MS, shouldRetry } from '@/lib/query-client';
 import { prepareStory } from '@/lib/share-story';
 
 import { STORY_POLL_LIMIT_MS, STORY_POLL_MS, StoryCardNotReady } from './story-format';
@@ -19,11 +19,9 @@ import { STORY_POLL_LIMIT_MS, STORY_POLL_MS, StoryCardNotReady } from './story-f
 export const storyCardKey = (raceId: string, template: StoryCardTemplate) =>
   ['races', 'story', raceId, template] as const;
 
-const MAX_RETRIES = 2;
+/** Повтор — как у проекта (`shouldRetry`: без 4xx, в т.ч. 409 и 429); не готова / провал — без повторов. */
 const retryable = (count: number, error: unknown) =>
-  count < MAX_RETRIES &&
-  !(error instanceof StoryCardNotReady) &&
-  apiErrorCode(error) !== 'STORY_CARD_UNAVAILABLE';
+  !(error instanceof StoryCardNotReady) && shouldRetry(count, error);
 
 /** Готовая карточка (`ready` с токеном); `pending` — `isPending` до готовности, ошибки — без данных (повтор). */
 export function useStoryCard(raceId: string, template: StoryCardTemplate, enabled: boolean) {
@@ -56,7 +54,9 @@ export function useStoryCard(raceId: string, template: StoryCardTemplate, enable
     started.current.delete(template);
     return refetch();
   }, [refetch, template]);
-  const ready = !query.isError && query.data?.status === 'ready' ? query.data : undefined;
+  // готовая карточка остаётся и при ошибке обновления (AGENTS §4.12: данные + баннер с повтором): ошибки
+  // «не готова» и 409 бывают только когда новый ответ — не `ready`, тогда в кэше уже нет готовой
+  const ready = query.data?.status === 'ready' ? query.data : undefined;
   return {
     /** состояние для `AsyncContent`: данные — только готовая карточка, `pending` — загрузка */
     state: {

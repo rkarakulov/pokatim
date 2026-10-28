@@ -37,11 +37,16 @@ const cases: { name: string; facts: Partial<StoryCardInput['facts']>; riderName:
         place: 12,
         tied: true,
         status: 'provisional',
+        provisional: true,
         group: 'w_40_49',
       },
       riderName: 'Александра Константинопольская-Вишневецкая',
     },
-    { name: 'finisher', facts: { place: null, status: 'finisher' }, riderName: null },
+    {
+      name: 'finisher',
+      facts: { place: null, status: 'finisher', provisional: true },
+      riderName: null,
+    },
   ];
 
 async function main() {
@@ -64,6 +69,7 @@ async function main() {
               routeId: null,
             },
             status: 'final',
+            provisional: false,
             elapsedSec: 9_754,
             place: 3,
             tied: false,

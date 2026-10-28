@@ -67,7 +67,11 @@ export class StoryCardProcessor extends WorkerHost {
     } catch (error) {
       if (!finalAttempt) throw error;
       await this.cache.storeFailed(job.hash);
-      this.logger.warn(`entry ${entry} ${job.template}: failed in ${Date.now() - started} ms`);
+      // тип и сообщение — диагностика (шрифт, размер PNG, resvg); входы и ПДн в сообщения рендера не попадают
+      const reason = error instanceof Error ? `${error.name}: ${error.message}` : 'unknown';
+      this.logger.warn(
+        `entry ${entry} ${job.template}: failed (${reason}) in ${Date.now() - started} ms`,
+      );
       return 'failed';
     }
   }

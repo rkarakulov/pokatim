@@ -903,3 +903,45 @@ All matched files use Prettier code style!
 - PNG превью (не в git): все 7 тем × 2 шаблона × 3 случая — сверить с прототипом на ревью (RC-10: точка старта,
   отступ мастхеда, ширина плитки — [ASSUMPTION]).
 - Группа зачёта длинной подписью («Мужчины до 40») в паре — одна строка при 66 px; более длинные подписи переносятся.
+
+## Фиксы ревью pass 1
+
+Источники: `findings-codex.md`, `findings-claude.md`. Каждый фикс — сначала падающий тест.
+
+1. HIGH (оба ревьюера), своя строка в группе не по умолчанию. `ownRowAction` теперь функция от группы вкладки:
+   `(group) => () => router.push(rivalPath(race.id, ownEntryId, group))`, как у `rowAction`. Тест: заявка в `w_u40` при
+   группе сервера по умолчанию `m_u40` — путь `?group=w_u40`, экран «Ваш результат» с кнопкой.
+2. HIGH (оба), ошибка обновления прятала готовую карточку. `useStoryCard` отдаёт `ready` из кэша при `isError`: данные
+   остаются, `AsyncContent` показывает над ними баннер с повтором (AGENTS §4.12). Тест: `ready`, затем refetch с
+   сетевой ошибкой — превью на месте, «Повторить» видна.
+3. HIGH/MEDIUM, PNG не скачался. `FileFailure`: заголовок «Нет соединения» (сеть) или «Не удалось загрузить»
+   (сервер), действие «Повторить» → `file.refetch()`. Тест: первая подготовка упала, повтор успешен, «Поделиться»
+   включена.
+4. MEDIUM (codex), финишёр без «Предварительный». В `StoryCardFacts` добавлено поле
+   `provisional = protocolPublishedAt === null`; оно выбирает метку и входит в хэш. Тексты карточки изменились, поэтому
+   `renderVersion` поднят до 2. Тесты: unit (метка финишёра до и после публикации, хэш); int (финишёр до публикации —
+   `provisional: true`; после публикации — `false`).
+5. MEDIUM (claude), причина провала рендера. На последней попытке worker пишет `warn` с `error.name: error.message`.
+   Тест: int, в логе `failed (Error: boom)`.
+6. LOW:
+   - `retryable` построен на `shouldRetry` проекта и не повторяет 4xx, включая 429.
+   - После публикации подпись группы берётся из строки протокола — той же, что и место. Int: группа заявки изменена
+     на `m_u40`, на карточке `overall` из строки снимка.
+   - Web: `revokeObjectURL` вызывается через 1 с после `click()` (`setTimeout`); тест на фейковых таймерах.
+   - Имя файла в кэше native — `story-<токен>.png`; тест.
+7. Эмодзи и CJK в названии гонки и имени: satori не падает, глифов нет в шрифте — они просто не рисуются. Фильтр не
+   понадобился. Unit-тест рендера с `🏁 ✨ 🍂` и `🚴‍♀️ 漢字`.
+
+PNG перегенерированы (42 файла, scratchpad `cards/`).
+
+`TURBO_CONCURRENCY=1 MONGO_URL_TEST=… REDIS_URL_TEST=redis://127.0.0.1:6491/1 pnpm check` → EXIT 0:
+
+```
+All matched files use Prettier code style!
+✔ no dependency violations found (1624 modules, 5953 dependencies cruised)
+@pokatim/app:test: Test Suites: 191 passed, 191 total
+@pokatim/app:test: Tests:       1739 passed, 1739 total
+@pokatim/api:test:  Test Files  141 passed (141)
+@pokatim/api:test:       Tests  1548 passed (1548)
+ Tasks:    15 successful, 15 total
+```

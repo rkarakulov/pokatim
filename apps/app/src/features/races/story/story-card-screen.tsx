@@ -1,3 +1,4 @@
+import { isNetworkError } from '@pokatim/api-client';
 import { Uuid, type StoryCardTemplate } from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
@@ -9,9 +10,11 @@ import {
   EmptyState,
   Skeleton,
   SkeletonGroup,
+  TextAction,
   textStyle,
   useTheme,
 } from '@rkarakulov/ui';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -39,27 +42,49 @@ function PreviewSkeleton() {
   );
 }
 
+/**
+ * Файл карточки не скачался: «Нет соединения» (сеть) / «Не удалось загрузить» (ответ сервера) и «Повторить» —
+ * повтор подготовки PNG (AGENTS §4.12).
+ */
+function FileFailure({ error, retry }: { error: unknown; retry: () => void }) {
+  return (
+    <View style={styles.stack}>
+      <Banner
+        tone="warning"
+        title={t(isNetworkError(error) ? 'state.errorTitle' : 'state.failedTitle')}
+        message={t('story.shareFailed')}
+      />
+      <View style={styles.start}>
+        <TextAction label={t('state.retry')} onPress={retry} />
+      </View>
+    </View>
+  );
+}
+
 /** «Поделиться» (системный лист / Web Share с файлом) или «Скачать PNG»; ошибка — баннер, закрытие окна — тихо. */
-function ShareAction({ file, error }: { file: StoryFile | undefined; error: boolean }) {
+function ShareAction({ file }: { file: UseQueryResult<StoryFile> }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const mode = file ? storyShareMode(file) : 'share';
+  const story = file.data;
+  const mode = story ? storyShareMode(story) : 'share';
   const press = () => {
-    if (!file) return;
+    if (!story) return;
     setFailed(false);
     setBusy(true);
     // web: `navigator.share` вызывается синхронно в обработчике — файл подготовлен заранее (RC-13)
-    shareStory(file, t('story.title'))
+    shareStory(story, t('story.title'))
       .catch(() => setFailed(true))
       .finally(() => setBusy(false));
   };
+  const fileFailed = file.isError && !story;
   return (
     <View style={styles.stack}>
-      {failed || error ? <Banner tone="warning" message={t('story.shareFailed')} /> : null}
+      {fileFailed ? <FileFailure error={file.error} retry={() => void file.refetch()} /> : null}
+      {failed ? <Banner tone="warning" message={t('story.shareFailed')} /> : null}
       <Button
         label={t(mode === 'share' ? 'story.share' : 'story.download')}
-        loading={busy || (!file && !error)}
-        disabled={!file}
+        loading={busy || (!story && !fileFailed)}
+        disabled={!story}
         onPress={press}
       />
     </View>
@@ -89,7 +114,7 @@ function ReadyCard({
         accessible
         testID="story-preview"
       />
-      <ShareAction file={file.data} error={file.isError} />
+      <ShareAction file={file} />
     </View>
   );
 }
@@ -161,4 +186,5 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.s2 },
   preview: { width: '100%', aspectRatio: STORY_ASPECT },
   full: { width: '100%' },
+  start: { alignItems: 'flex-start' },
 });

@@ -18,7 +18,7 @@ export interface StoryCardInput {
 }
 
 /**
- * Ключ кэша карточки: sha256 hex канонического JSON входов (версия рендера, шаблон, тема, имя, заявка, статус, время,
+ * Ключ кэша карточки: sha256 hex канонического JSON входов (версия рендера, шаблон, тема, имя, заявка, статус и предварительность, время,
  * место, ничья, группа, название и окно гонки, маршрут, попытка и её ревизия проверки и разметка). Смена любого —
  * новая картинка; `renderVersion` — смена разметки или текстов.
  */
@@ -31,6 +31,7 @@ export function storyCardHash(input: StoryCardInput): string {
     input.riderName,
     facts.entryId,
     facts.status,
+    facts.provisional,
     facts.elapsedSec,
     facts.place,
     facts.tied,

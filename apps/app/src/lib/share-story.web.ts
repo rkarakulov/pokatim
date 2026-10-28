@@ -9,6 +9,8 @@ export interface StoryFile {
 }
 
 const FILE_NAME = 'pokatim-story.png';
+/** Пауза перед отзывом blob-ссылки скачивания, мс. */
+const REVOKE_DELAY_MS = 1000;
 
 /**
  * PNG карточки → `File` заранее, как только карточка готова (RC-13): Safari требует `navigator.share` в пределах
@@ -48,7 +50,8 @@ export async function shareStory(
       link.click();
       link.remove();
     } finally {
-      URL.revokeObjectURL(href);
+      // синхронный отзыв после `click()` в части браузеров обрывает скачивание — после старта
+      setTimeout(() => URL.revokeObjectURL(href), REVOKE_DELAY_MS);
     }
     return 'downloaded';
   }

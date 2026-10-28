@@ -15,6 +15,7 @@ const story = () => ({
 
 describe('share-story (web)', () => {
   afterEach(() => {
+    jest.useRealTimers();
     delete nav.share;
     delete nav.canShare;
     jest.restoreAllMocks();
@@ -44,6 +45,7 @@ describe('share-story (web)', () => {
   });
 
   it('нет canShare — скачивание <a download> по blob', async () => {
+    jest.useFakeTimers();
     const created = jest.fn().mockReturnValue('blob:story');
     const revoked = jest.fn();
     Object.assign(URL, { createObjectURL: created, revokeObjectURL: revoked });
@@ -56,6 +58,9 @@ describe('share-story (web)', () => {
     expect(created).toHaveBeenCalledWith(s.file);
     expect(click).toHaveBeenCalled();
     expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe('pokatim-story.png');
+    // отзыв ссылки — после старта скачивания (синхронный отзыв обрывает его в части браузеров)
+    expect(revoked).not.toHaveBeenCalled();
+    jest.runOnlyPendingTimers();
     expect(revoked).toHaveBeenCalledWith('blob:story');
   });
 });

@@ -14,6 +14,8 @@ import {
   corridorRace,
   enterRace,
   myEntry,
+  protocolAction,
+  protocolRace,
   resultsDb,
   resultsWorker,
   rideGpx,
@@ -239,8 +241,14 @@ describe('провал, лимит, отрицательные доказате�
     const [job] = await jobs();
     await job!.remove();
     await expect(processor().build(job!.data)).rejects.toThrow('boom');
+    const warnings: string[] = [];
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation((message: unknown) => {
+      warnings.push(String(message));
+    });
     expect(await processor().build(job!.data, { finalAttempt: true })).toBe('failed');
     vi.restoreAllMocks();
+    // причина провала видна эксплуатации: тип и сообщение ошибки, без userId
+    expect(warnings.join('\n')).toMatch(/failed .*Error: boom/);
     expect(await status(auth, raceId)).toEqual({ status: 'failed' });
     expect(await status(auth, raceId)).toEqual({ status: 'pending' });
     expect(await jobs()).toHaveLength(1);
@@ -289,6 +297,36 @@ describe('провал, лимит, отрицательные доказате�
     await status(auth, raceId);
     expect(add).toHaveBeenCalledTimes(2);
     vi.restoreAllMocks();
+  });
+});
+
+describe('предварительность и группа (ревью pass 1)', () => {
+  it('финишёр до публикации протокола — provisional', async () => {
+    const race = await corridorRace(h);
+    const me = await rider(h);
+    const entry = MyRaceEntry.parse((await enterRace(h, me.auth, race.raceId)).body).entry!;
+    await seedBest(h, entry.id, 3600, new Date('2026-10-25T06:00:00Z'), { ranked: false });
+    const results = h.app.get<ResultsForSharing>(RESULTS_FOR_SHARING);
+    expect(await results.storyCardFacts(me.userId, race.raceId)).toMatchObject({
+      status: 'finisher',
+      provisional: true,
+    });
+  });
+
+  it('после публикации — не provisional, группа — из строки протокола (как место)', async () => {
+    const published = await protocolRace(h, [3600]);
+    const [winner] = published.riders;
+    const publish = await protocolAction(h, published.token, published.raceId, '/protocol');
+    expect(publish.status).toBe(200);
+    // группа заявки разошлась со строкой снимка: место и подпись группы — из одной строки протокола
+    await resultsDb(h).entries.updateOne({ _id: winner!.entryId }, { $set: { groupKey: 'm_u40' } });
+    const results = h.app.get<ResultsForSharing>(RESULTS_FOR_SHARING);
+    expect(await results.storyCardFacts(winner!.userId, published.raceId)).toMatchObject({
+      status: 'final',
+      provisional: false,
+      place: 1,
+      group: 'overall',
+    });
   });
 });
 

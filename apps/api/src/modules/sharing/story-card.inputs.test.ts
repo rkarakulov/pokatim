@@ -16,6 +16,7 @@ const base: StoryCardInput = {
       routeId: 'route',
     },
     status: 'provisional',
+    provisional: true,
     elapsedSec: 9_754,
     place: 3,
     tied: false,
@@ -41,6 +42,7 @@ describe('storyCardHash — ключ кэша карточки', () => {
     ['место', withFacts({ place: 2 })],
     ['ничья', withFacts({ tied: true })],
     ['статус', withFacts({ status: 'final' })],
+    ['предварительность', withFacts({ provisional: false })],
     ['ревизия проверки', withFacts({ attempt: { ...base.facts.attempt!, checkRevision: 2 } })],
     ['разметка', withFacts({ attempt: { ...base.facts.attempt!, segment: [3, 40] } })],
   ])('меняется от: %s', (_, changed) => {
@@ -49,7 +51,7 @@ describe('storyCardHash — ключ кэша карточки', () => {
 
   it('меняется от версии рендера', () => {
     const before = storyCardHash(base);
-    vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(2 as 1);
+    vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(3 as 2);
     expect(storyCardHash(base)).not.toBe(before);
   });
 });
