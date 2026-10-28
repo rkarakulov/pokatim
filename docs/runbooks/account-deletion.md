@@ -4,7 +4,8 @@
 `users.deletedAt`), данные модулей чистит worker в очереди `account-deletion`; через 15 мин — повторный проход, раз в
 час регламент `account.erasure-resume` перезапускает незавершённые. Логи — только `user=<uid>`, без e-mail.
 
-Шаги стирания по порядку: профиль (анкета Verified, фото `profile_avatars` по `userId`, затем документ `profiles`) → райды → «Мои маршруты» → устройства → заезды → `notifications` (уведомления,
+Шаги стирания по порядку: профиль (жалобы на пользователя `profile_reports` по `targetUserId`, анкета Verified, фото
+`profile_avatars` по `userId`, затем документ `profiles`) → райды → «Мои маршруты» → устройства → заезды → `notifications` (уведомления,
 настройки, push-токены, квитанции Expo; лог `deleted=<n> settings=<0|1> tokens=<n>`, ADR-0017) → identity. Push-токены
 снимаются ещё раньше — в транзакции удаления: push удалённому не уходят с момента подтверждения.
 

@@ -77,6 +77,27 @@ paths:
   `ProfileAvatarRepository` (сторож `profile.repository.test.ts`). Замена — транзакция: чтение профиля → вставка →
   `setAvatar` (upsert) → удаление прежнего (один документ на пользователя); удаление — `clearAvatar` (`returnDocument:
   'before'`) → удаление прежнего. Стирание аккаунта — `deleteAllOf(userId)` до документа профиля.
+- Жалобы на профиль (profile-moderation, миграция `0034_profile_reports`) — `profile_reports`: `{ _id: uuidv7,
+  targetUserId, reporterUserId, reason, comment, createdAt, resolvedAt, resolution: 'actioned' | 'dismissed' | null,
+  resolvedBy }` (`resolved*` — явный `null`). Единственный писатель — `ProfileReportsRepository` (сторож
+  `profile-reports.repository.test.ts`): `insertOne`; переход — только закрытие открытых `updateMany({ targetUserId,
+  resolvedAt: null })`; единственное удаление — `deleteForTarget` (жалобы **на** удалённого, `ProfileErasure` первым
+  шагом); жалобы удалённого жалобщика остаются. Индексы: `profile_reports_open_unique` `{ targetUserId, reporterUserId }`
+  — `unique` + `partialFilterExpression: { resolvedAt: { $eq: null } }` (одна открытая; закрытая выходит из индекса —
+  повторная жалоба вставляется; запрос «есть открытая» обязан содержать `resolvedAt: null`), `profile_reports_target_idx`
+  `{ targetUserId, _id: -1 }` (карточка, закрытие, `topReasons`, стирание).
+- `profiles.{openReportCount, reportRevision, lastReportAt}` (profile-moderation) — необязательные (`?? 0` / `?? null`),
+  без бэкфилла, наружу (`ProfileView`, публичный профиль) не выходят, pipeline-upsert'ы их не трогают. Очередь панели —
+  частичный индекс `profiles_report_queue_idx` `{ lastReportAt: -1, _id: -1 }` по `openReportCount: { $gt: 0 }`: запрос
+  обязан содержать условие и `hint`. **Порядок записи — профиль первым:** жалоба (`recordReport`: `$inc
+  openReportCount, reportRevision`, `$max lastReportAt`, фильтр публичности и «не свой», `updatedAt` не трогается) →
+  вставка жалобы; сбросы фото/клуба/имени — условная запись профиля (`openReportCount: 0`) → побочное → `closeOpen` →
+  журнал; «Отклонить» — `clearReports` по `reportRevision` и `openReportCount > 0` (без `updatedAt`) → `closeOpen` →
+  журнал. Параллельные транзакции конфликтуют по документу профиля — `openReportCount` = числу открытых жалоб.
+- Перевыпуск id фото (profile-moderation, RC-A2 (b), ADR-0019 п. 6) — в транзакции `PATCH /v1/profile` и сброса
+  имени, после записи профиля, при переходе «публичен → нет» (флаг до/после из той же транзакции): копия документа
+  `profile_avatars` под новым `randomToken` (выдан до транзакции) → `replaceAvatarId` (условие — прежний id) →
+  удаление старого.
 
 ## Геометрия (R11, Q3)
 
