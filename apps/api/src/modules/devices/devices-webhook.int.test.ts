@@ -177,10 +177,12 @@ describe('безопасность ответов и логов (AC13)', () => {
 
     const start = new Date(h.clock.now().getTime() - 5 * 3_600_000);
     const points = rideTrack(start, 50);
+    // дробный пульс: целое «151» случайно встречалось в UUID ответов (state в authorizeUrl) — флак проверки ниже
+    const avgHeartRate = 151.379;
     const workout = ow.addWorkout(aggUserId, {
       start_time: start.toISOString(),
       duration_seconds: 50,
-      avg_heart_rate_bpm: 151,
+      avg_heart_rate_bpm: avgHeartRate,
     });
     ow.addTrack(aggUserId, 'garmin', points);
     const connection = await devices(h).connections.findOne({ userId: bob.userId });
@@ -204,7 +206,7 @@ describe('безопасность ответов и логов (AC13)', () => {
       workout.id,
       ticket,
       String(points[0]?.[1]),
-      '151',
+      String(avgHeartRate),
     ]) {
       expect(responses).not.toContain(secret);
     }
