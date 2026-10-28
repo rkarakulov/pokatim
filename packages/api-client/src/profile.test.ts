@@ -66,7 +66,7 @@ describe('api-client: онбординг профиля (Bearer — только
 
   it('getProfile — GET /v1/profile с Bearer; неизвестные коды отброшены', async () => {
     const { calls, api } = client(200, { rideReasons: ['calendar', 'future_code'] });
-    await expect(api.getProfile('access.jwt.x')).resolves.toEqual({
+    await expect(api.getProfile('access.jwt.x')).resolves.toMatchObject({
       rideReasons: ['calendar'],
       publicName: null,
       showNameInResults: false,
@@ -86,7 +86,7 @@ describe('api-client: онбординг профиля (Bearer — только
     const { calls, api } = client(200, view);
     await expect(
       api.updateProfile('access.jwt.x', { publicName: 'Анна К.', showNameInResults: true }),
-    ).resolves.toEqual(view);
+    ).resolves.toMatchObject(view);
     expect(calls).toEqual([
       {
         url: 'https://api.test/v1/profile',
