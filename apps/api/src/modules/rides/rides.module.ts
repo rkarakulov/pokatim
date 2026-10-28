@@ -4,6 +4,7 @@ import { IdentityModule } from '../identity';
 import { PanelModule } from '../panel';
 import { RoutesCoreModule } from '../routes';
 import { PublicReadGuard } from '../../public-read.guard';
+import { ProfileRidesController } from './profile-rides.controller';
 import { RideErasure } from './ride-erasure';
 import { RideNoticesService } from './ride-notices';
 import { RIDE_NOTICES } from './ride-notices.port';
@@ -14,6 +15,7 @@ import { RidesModerationService } from './rides-moderation.service';
 import { RidesPublicController } from './rides-public.controller';
 import { RidesController } from './rides.controller';
 import { RidesFeedService } from './rides-feed.service';
+import { RidesHistoryService } from './rides-history.service';
 import { RidesRepository } from './rides.repository';
 import { RidesService } from './rides.service';
 
@@ -43,11 +45,17 @@ export class RidesCoreModule {}
  */
 @Module({
   imports: [IdentityModule, PanelModule, RidesCoreModule],
-  controllers: [RidesController, RidesPublicController, RidesModerationController],
+  controllers: [
+    RidesController,
+    RidesPublicController,
+    RidesModerationController,
+    ProfileRidesController,
+  ],
   providers: [
     RideReportsService,
     RidesService,
     RidesFeedService,
+    RidesHistoryService,
     RidesModerationService,
     PublicReadGuard,
   ],

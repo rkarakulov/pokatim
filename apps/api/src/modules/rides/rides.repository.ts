@@ -475,6 +475,38 @@ export class RidesRepository {
     });
   }
 
+  /**
+   * История своего профиля (rider-profile): прошедшие опубликованные райды, где пользователь — участник (организатор —
+   * первый участник), новые сверху; keyset по `(startsAt, _id)`, индекс `rides_participant_idx`. Отменённые и скрытые —
+   * вне `status`. Проекция — только поля строки истории. `limit + 1` — признак продолжения.
+   */
+  pastOf(
+    userId: string,
+    now: Date,
+    before: { startsAt: Date; id: string } | null,
+    limit: number,
+  ): Promise<Pick<RideDoc, '_id' | 'title' | 'startsAt' | 'distanceKm' | 'organizerUserId'>[]> {
+    const and: Filter<RideDoc>[] = [
+      { 'participants.userId': userId, status: 'published', startsAt: { $lt: now } },
+    ];
+    if (before) {
+      and.push({
+        $or: [
+          { startsAt: { $lt: before.startsAt } },
+          { startsAt: before.startsAt, _id: { $lt: before.id } },
+        ],
+      });
+    }
+    return this.rides
+      .find(
+        { $and: and },
+        { projection: { title: 1, startsAt: 1, distanceKm: 1, organizerUserId: 1 } },
+      )
+      .sort({ startsAt: -1, _id: -1 })
+      .limit(limit)
+      .toArray();
+  }
+
   /** Будущие отметки «Я иду» в чужих райдах (принятая гонка, как `countUpcomingOrganized`). */
   countUpcomingJoined(userId: string, now: Date): Promise<number> {
     return this.rides.countDocuments({
