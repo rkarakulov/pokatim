@@ -35,6 +35,8 @@ import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
 import { StatBlock, StatBlockSkeleton, type StatVariant } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { useRouteRides } from '@/features/route-rides/queries';
+import { RouteRidesBlock } from '@/features/route-rides/route-rides-block';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
@@ -239,12 +241,14 @@ function RouteSheetHeader({ route }: { route: CatalogRouteDetail }) {
 /**
  * Тело шторки карточки маршрута (routes-03, P1; routes-04d, L3): без названия (оно в шапке экрана), бейдж автора
  * маршрута райдера (routes-06), чипы (покрытия, форма, город; `'unknown'` — без чипа), профиль высоты без заголовка
- * со скраббингом, действия в строку, «Пожаловаться» (маршрут райдера), «Гонки на маршруте».
+ * со скраббингом, действия в строку, «Пожаловаться» (маршрут райдера), «Мои заезды» (вошедшему, route-rides-02),
+ * «Гонки на маршруте».
  */
 function RouteSheetBody({
   route,
   races,
   viewer,
+  rides,
   now,
   mounted,
   scrub,
@@ -253,6 +257,8 @@ function RouteSheetBody({
   races: ReturnType<typeof useCatalogRouteRaces>;
   /** запрос права жалобы — только вошедшему на маршруте райдера; иначе `null` (блока нет) */
   viewer: ReturnType<typeof useCatalogRouteViewer> | null;
+  /** «Мои заезды» (route-rides-02) — только вошедшему на клиенте; иначе `null` (блока нет) */
+  rides: ReturnType<typeof useRouteRides> | null;
   now: Date | null;
   mounted: boolean;
   scrub: ScrubStore;
@@ -278,6 +284,7 @@ function RouteSheetBody({
       />
       <RouteActions route={route} mounted={mounted} />
       {viewer ? <RouteReportAction id={route.id} viewer={viewer} /> : null}
+      <RouteRidesBlock routeId={route.id} mine={false} rides={rides} now={now} />
       <RouteRaces races={races} now={now} />
     </View>
   );
@@ -354,15 +361,23 @@ export function RouteDetailScreen({
   // routes-06: «Пожаловаться» — только вошедшему на карточке маршрута райдера (клиентский запрос, не SSR)
   const viewerEnabled = valid && signedIn && authorKind === 'rider';
   const viewer = useCatalogRouteViewer(id, viewerEnabled);
-  const now = useMinskClockAfterMount([route.dataUpdatedAt, races.dataUpdatedAt]);
   const hasRoute = route.data !== undefined;
+  // route-rides-02: «Мои заезды» — только вошедшему и только клиент (SSR: сессия `unknown`), после карточки
+  const ridesEnabled = valid && signedIn && hasRoute;
+  const rides = useRouteRides(id, ridesEnabled);
+  const now = useMinskClockAfterMount([
+    route.dataUpdatedAt,
+    races.dataUpdatedAt,
+    rides.dataUpdatedAt,
+  ]);
   const refetchers = useMemo(
     () => [
       route.refetch,
       ...(hasRoute && authorKind === 'team' ? [races.refetch] : []),
       ...(hasRoute && signedIn && authorKind === 'rider' ? [viewer.refetch] : []),
+      ...(hasRoute && signedIn ? [rides.refetch] : []),
     ],
-    [route.refetch, hasRoute, authorKind, signedIn, races.refetch, viewer.refetch],
+    [route.refetch, hasRoute, authorKind, signedIn, races.refetch, viewer.refetch, rides.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   const notFound =
@@ -446,6 +461,7 @@ export function RouteDetailScreen({
                     route={data}
                     races={races}
                     viewer={viewerEnabled ? viewer : null}
+                    rides={ridesEnabled ? rides : null}
                     now={now}
                     mounted={mounted}
                     scrub={scrub}
