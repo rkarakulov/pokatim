@@ -25,6 +25,8 @@ import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { useStandingsRefetch } from '@/features/standings/queries';
+import { SeasonStandings } from '@/features/standings/season-standings';
 import { domainLabel, formatLocalRange, heroDateText, meta } from '@/lib/minsk-format';
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
@@ -138,9 +140,9 @@ function OtherSeasonRows({
 }
 
 /**
- * Публичный экран сезона (`/seasons/<id>`, вне гардов, Q1): название, даты, фаза, гонки сезона (по концу окна,
- * курсор), «Другие сезоны». Таблицы сезона, мест и зачёта нет — модуль рейтинга (FR-4, Q2). Невалидный id и 404 —
- * «Сезон не найден»; сеть и сервер — `AsyncContent`.
+ * Публичный экран сезона (`/seasons/<id>`, вне гардов, Q1): название, даты, фаза, «Таблица сезона» (race-results-08c,
+ * клиентские запросы; RC-17 — блок в шапке списка, подгрузка «Показать ещё»), гонки сезона (по концу окна, курсор,
+ * `onEndReached`), «Другие сезоны». Невалидный id и 404 — «Сезон не найден»; сеть и сервер — `AsyncContent`.
  */
 export function SeasonDetailScreen({ id, seed }: { id: string; seed: SeasonCard | undefined }) {
   const theme = useTheme();
@@ -151,9 +153,10 @@ export function SeasonDetailScreen({ id, seed }: { id: string; seed: SeasonCard 
   const races = useSeasonRaces(id, valid);
   const seasons = useSeasons(valid);
   const now = useMinskClockAfterMount([races.dataUpdatedAt]);
+  const refetchStandings = useStandingsRefetch(id);
   const refetchers = useMemo(
-    () => [season.refetch, races.refetch, seasons.refetch],
-    [season.refetch, races.refetch, seasons.refetch],
+    () => [season.refetch, races.refetch, seasons.refetch, refetchStandings],
+    [season.refetch, races.refetch, seasons.refetch, refetchStandings],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   const notFound =
@@ -182,6 +185,12 @@ export function SeasonDetailScreen({ id, seed }: { id: string; seed: SeasonCard 
       >
         {(data) => <SeasonHead season={data} />}
       </AsyncContent>
+      <SeasonStandings
+        seasonId={id}
+        dates={season.data ? seasonDates(season.data) : null}
+        signedIn={signedIn}
+        onToRaces={() => router.navigate(home)}
+      />
       <Text
         accessibilityRole="header"
         style={[textStyle('displaySm'), styles.racesTitle, { color: theme.text.primary }]}

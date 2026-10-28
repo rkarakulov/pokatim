@@ -34,7 +34,7 @@ import { isRaceErrorCode, needsPolling, resultSignature } from './participation-
 import { pickSeason } from './season-pick';
 
 /** Сервер отдаёт публичное чтение с `public, max-age=60` — чаще перезапрашивать незачем. */
-const PUBLIC_STALE_MS = 60_000;
+export const PUBLIC_STALE_MS = 60_000;
 const PAGE_LIMIT = 20;
 
 const nextCursor = (page: RacePage) => page.nextCursor ?? undefined;

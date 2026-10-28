@@ -908,3 +908,77 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
   между страницами подгруженное сбрасывается и таблица грузится с первой страницы.
 - Проверка: `vitest run src/standings` (contracts) — 4 passed; `vitest run src/modules/standings` (api) — 35 passed;
   полный `pnpm check` — перед PR.
+
+## 12.3 08c — приложение
+
+### Changes
+
+- `features/standings/` (новый): `queries.ts` — `useSeasonStandings`, `useSeasonStandingsTable` (infinite по курсору;
+  страница другого снимка — `resetQueries`, таблица с первой страницы — правило «Курсор и снимок»),
+  `useMySeasonStandings` (`withAccessToken`, только вошедшему), `useStandingsRefetch`; ключи под
+  `['seasons','standings',id]`. `standings-format.ts` — место «=N» и a11y (`races.results.tiePlace`/`tiedA11y`), очки
+  (плюрали), подпись таблицы, выбор таблицы (своя из `/me`, иначе первая сводки; `'unknown'` не показывается), «Вы»
+  только при равном `computedAt` (RC-11), итог и статус гонки («DQ · 0» — в зачёте, S11).
+- `season-standings.tsx` — блок «Таблица сезона» в шапке списка экрана сезона над «Гонками сезона» (RC-17):
+  подзаголовок «{даты} · по последнему пересчёту», `SegmentedControl` класса и группы в горизонтальном `ScrollView`,
+  заметка N из M (плюраль по M), «{группа} · {класс} · N участников», строки (место, имя / «Участник» / «Вы» с полосой
+  `border.strong`, очки), «Показать ещё», RC-12 — пустая таблица без ошибки, пусто — `EmptyState` «Сезон только
+  начался» + «К гонкам»; скелетон, ошибка сводки (`AsyncContent`) и таблицы (компактный баннер с повтором). Вошедшему
+  таблица ждёт `/me` (чтобы открыться на своей). Снимки таблицы и `/me` разошлись — один перезапрос более старого.
+- `profile-season-block.tsx` — блок «Сезон» в «Профиле» (RC-18, `useHeaderSeason`): своя строка, «Вся таблица»,
+  гонки своей таблицы; нет сезона или строк — блока нет; ошибка без данных — баннер с повтором.
+- `season-detail.tsx` — блок и `useStandingsRefetch` в pull-to-refresh; вкладка «Гонки» — действие «Таблица сезона»;
+  `results-table.tsx` — экспорт `RowsSkeleton`/`TabFailure`/`MoreAction`/`loading` (переиспользование);
+  `races/queries.ts` — экспорт `PUBLIC_STALE_MS`.
+- i18n: `season.standings.*` (note, caption, points — плюрали), `races.seasonTable`, `profile.season.*`.
+- Только `@rkarakulov/ui` и роли темы `useTheme()`, токены `@pokatim/design-tokens`; без hex и `Platform.OS`. Web —
+  тот же код; SSR экрана сезона не менялся (таблица — клиентский запрос, `loader` не расширялся).
+- Docs: `docs/product/races-and-seasons.md` (экран сезона и профиль, убрано «скрыто до FR-4»),
+  `.claude/rules/pokatim-app.md` (раздел рейтинга сезона).
+
+### Files touched
+
+- Создано: `apps/app/src/features/standings/{queries,standings-format,standings-format.test}.ts`,
+  `apps/app/src/features/standings/{season-standings,profile-season-block}.tsx`,
+  `apps/app/src/__tests__/{season-standings.test,profile-season-block.test}.tsx`,
+  `apps/app/src/__tests__/standings-fixtures.ts`.
+- Изменено: `apps/app/src/features/races/{season-detail,results-table}.tsx`, `apps/app/src/features/races/queries.ts`,
+  `apps/app/src/app/(tabs)/races.tsx`, `apps/app/src/app/settings/profile.tsx`, `apps/app/src/__tests__/season.test.tsx`,
+  `packages/i18n/src/ru.ts`, `docs/product/races-and-seasons.md`, `.claude/rules/pokatim-app.md`.
+
+### Tests
+
+- `standings-format.test.ts` (13): «=6» и «6-е место поровну», плюрали очков, подпись таблицы, строка («Участник»,
+  «Вы», a11y), выбор таблицы (своя / первая / смена класса / исчезнувший выбор / `unknown`), «Вы» при равном и разном
+  `computedAt`, итог и статус гонки (DQ · 0, «—», в зачёте / не в зачёте).
+- `season-standings.test.tsx` (13): гость — подписи, заметка, «=1», a11y, без `/me`; переключатели и запросы таблиц;
+  вошедший — своя таблица и «Вы»; RC-11 — без метки и ровно один перезапрос, после нового снимка — «Вы»; «Показать
+  ещё»; смена снимка между страницами — сброс и первая страница; RC-12; пустой сезон и «К гонкам»; скелетон; ошибка
+  сводки с повтором; ошибка таблицы с повтором; pull-to-refresh (сводка, таблица, `/me`); вкладка «Гонки» — действие.
+- `profile-season-block.test.tsx` (6): строка, гонки (в зачёте / не в зачёте / DQ · 0), «Вся таблица», нет строк,
+  нет сезона, первая из нескольких таблиц, ошибка с повтором. `season.test.tsx` — первый тест обновлён (таблица
+  теперь есть).
+- TDD: `standings-format.test.ts` красный до модуля («Cannot find module»), экранные тесты написаны до компонентов.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08c_test REDIS_URL_TEST=redis://127.0.0.1:6599/1 pnpm check` →
+  `EXIT=0`: `All matched files use Prettier code style!`, `✔ no dependency violations found (1500 modules, 5539
+  dependencies cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — contracts `315 passed`, api-client
+  `110 passed`, api `Test Files 135 passed (135)`, `Tests 1453 passed (1453)`, admin `327 passed`, app
+  `Test Suites: 171 passed, 171 total`, `Tests: 1614 passed, 1614 total`; `Tasks: 15 successful, 15 total`.
+- Окружение: Redis `6479/12` (из брифа) одновременно использовали агенты других worktree (db 12, затем 15 — два
+  агента) — прогоны API падали массово (401/403/429, пропавшие данные); финальный прогон — на временном собственном
+  `redis-server` (порт 6599, db 1, без персистентности). Промежуточный прогон упал на тайминговом
+  `bottom-sheet.test.tsx` под нагрузкой (отдельно — 8 passed); повторный полный прогон — зелёный, как выше.
+
+### Deviations
+
+- Блок «Профиля»: заголовок — «Сезон», название сезона — строкой ниже (вместо «Сезон {название}»): названия сезонов
+  уже содержат слово «Сезон» («Сезон 2026») — иначе «Сезон Сезон 2026».
+- «К гонкам» пустого сезона ведёт туда же, что «Все гонки» экрана: вошедшему — вкладка «Гонки», гостю — `/`.
+- a11y ничьей — существующая строка `races.results.tiedA11y` («6-е место поровну») по §11.3, а не дословно «шестое
+  место, ничья».
+- Переключатели класса и группы показываются и при одном варианте (единообразие; только существующие таблицы).
+
+### Open follow-ups
+
+- Ручная проверка на iOS/Android/web (симулятор, `build:web` + `start:web`, Playwright-смоук) — NOT VERIFIED в этой
+  сессии: только jest (native-проект) и typecheck.

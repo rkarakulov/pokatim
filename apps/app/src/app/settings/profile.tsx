@@ -16,6 +16,7 @@ import { DocumentTitle } from '@/components/document-title';
 import { useSettingsShell } from '@/features/devices/settings-shell';
 import { ProfileFormView } from '@/features/profile/profile-form';
 import { useProfile } from '@/features/profile/queries';
+import { ProfileSeasonBlock } from '@/features/standings/profile-season-block';
 
 const DOCUMENT_TITLE = `${t('profile.title')} — ${t('app.name')}`;
 
@@ -67,6 +68,10 @@ function ProfileContent() {
           >
             {(data) => <ProfileFormView profile={data} />}
           </AsyncContent>
+        </View>
+        {/* блок «Сезон» (race-results-08c): своя строка таблицы сезона; своих строк нет — блока нет */}
+        <View style={styles.section}>
+          <ProfileSeasonBlock />
         </View>
         {/* анкета зачёта Verified (race-results-07): сразу — не ждёт данных профиля */}
         <View style={[styles.section, styles.back]}>

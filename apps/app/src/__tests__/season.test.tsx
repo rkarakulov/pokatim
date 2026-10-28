@@ -91,6 +91,10 @@ beforeEach(() => {
     .mocked(api.getMyRaceEntry)
     .mockResolvedValue(noEntry({ actions: actions({ reasons: ['no_corridor', 'not_entered'] }) }));
   jest.mocked(api.getRaceResults).mockResolvedValue(resultsPage());
+  // таблица сезона (race-results-08c) — пустой сезон; сам блок — `season-standings.test.tsx`
+  jest
+    .mocked(api.getSeasonStandings)
+    .mockResolvedValue({ seasonId: ID, computedAt: null, tables: [] });
 });
 afterEach(() => {
   jest.clearAllMocks();
@@ -99,7 +103,7 @@ afterEach(() => {
 });
 
 describe('экран сезона (AC7)', () => {
-  it('гость по ссылке: название, даты с годом, фаза, гонки сезона, «Другие сезоны»; таблицы и мест нет', async () => {
+  it('гость по ссылке: название, даты с годом, фаза, гонки сезона, «Другие сезоны»; своих строк сезона нет', async () => {
     const router = await renderRouter(appRoutes, { initialUrl: `/seasons/${ID}` });
 
     expect(await screen.findByRole('header', { name: 'Сезон 2026' })).toBeOnTheScreen();
@@ -119,9 +123,10 @@ describe('экран сезона (AC7)', () => {
       screen.getByRole('link', { name: 'Сезон 2025. 1 апреля–31 октября 2025. Завершён' }),
     ).toBeOnTheScreen();
     expect(screen.queryByRole('link', { name: /^Сезон 2026/ })).toBeNull();
-    for (const hidden of ['Таблица сезона', 'Вы', /место/i, /В зачёт/, /Сезон только начался/]) {
-      expect(screen.queryByText(hidden)).toBeNull();
-    }
+    expect(screen.getByRole('header', { name: 'Таблица сезона' })).toBeOnTheScreen();
+    expect(await screen.findByText('Сезон только начался')).toBeOnTheScreen();
+    expect(screen.queryByText('Вы')).toBeNull();
+    expect(api.getMySeasonStandings).not.toHaveBeenCalled();
   });
 
   it('«Другие сезоны» → экран того сезона; карточка гонки сезона → /races/<id>', async () => {
