@@ -79,7 +79,7 @@ export function useCardStatus(source: CardSource, template: StoryCardTemplate, e
   }, [refetch, template]);
   // готовая карточка остаётся при ошибке обновления (AGENTS §4.12: данные + баннер с повтором) — TanStack при броске
   // из `queryFn` хранит прежние `data`. Ответ `pending`/`failed` нового хэша приходит успешным ответом `pending`,
-  // который заменяет `data`; 409/404 показывают пустое состояние до `AsyncContent`
+  // который заменяет `data`; 409 (и 404 — по выбору экрана) показывают пустое состояние до `AsyncContent`
   const ready = query.data?.status === 'ready' ? query.data : undefined;
   const code = apiErrorCode(query.error);
   return {

@@ -25,10 +25,8 @@ export function RideInviteScreen({ rideId }: { rideId: string }) {
   const valid = Uuid.safeParse(rideId).success;
   const ride = useRide(rideId, undefined, valid);
   const source = useMemo(() => rideInviteSource(rideId), [rideId]);
-  const back = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(valid ? ridePath(rideId) : '/rides');
-  };
+  // «К райду» — к детали этого райда в стеке (как «К гонке»), не на произвольный предыдущий экран
+  const back = () => (valid ? router.dismissTo(ridePath(rideId)) : router.navigate('/rides'));
   const empty = (
     <EmptyState
       title={t('rideInvite.empty.title')}
@@ -55,6 +53,7 @@ export function RideInviteScreen({ rideId }: { rideId: string }) {
             shareTitle={t('rideInvite.title')}
             hint={t('rideInvite.hint')}
             empty={empty}
+            emptyOnNotFound
           />
         ) : (
           empty

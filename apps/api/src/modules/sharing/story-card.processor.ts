@@ -1,6 +1,6 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
-import { DomainError } from '@rkarakulov/api-kit/core';
+import { isDomainError } from '@rkarakulov/api-kit/core';
 import type { Job } from 'bullmq';
 
 import { QUEUE } from '../../queues';
@@ -145,4 +145,4 @@ export class StoryCardProcessor extends WorkerHost {
 }
 
 /** 404 домена (`domainError('NOT_FOUND', 404)` порта `rides`): райд скрыт или удалён. */
-const isNotFound = (error: unknown) => error instanceof DomainError && error.status === 404;
+const isNotFound = (error: unknown) => isDomainError(error) && error.status === 404;

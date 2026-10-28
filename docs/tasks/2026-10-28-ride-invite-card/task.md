@@ -109,8 +109,8 @@ ADR-0018 (рендер satori + resvg в worker, PNG в Redis по капаби�
 
 ## 8.3 Security checklist
 
-- **AuthN/AuthZ:** статус — `AuthGuard`, пользователь — `@CurrentUser()`; видимость — `visibleTo` (скрытый — 404
-  всем, и организатору — 409 после видимости); право — будущий опубликованный райд.
+- **AuthN/AuthZ:** статус — `AuthGuard`, пользователь — `@CurrentUser()`; скрытый и неизвестный — 404 всем, включая
+  организатора; право — будущий опубликованный райд (иначе 409).
 - **Входные данные:** `rideId` — `Uuid` pipe, query — `StoryCardQuery` (`strictObject`), job data — zod.
 - **Данные наружу:** ответ — только `StoryCardStatus`. Картинка — публичные поля райда (как публичная карточка
   `GET /v1/rides/:id`) и линия только маршрута каталога; `private`-маршрут организатора, описание, подпись
@@ -130,7 +130,7 @@ ADR-0018 (рендер satori + resvg в worker, PNG в Redis по капаби�
   подписи организатора и описания.
 - AC4. Worker: факты изменились (правка, отмена) — `skipped`; провал на последней попытке — `failed` один раз.
 - AC5. Приложение: кнопка «Карточка-приглашение» у вошедшего на будущем райде; экран — чипы, превью, «Поделиться»;
-  409 — «Карточки пока нет» и «К райду»; экран гонки работает как раньше.
+  409 и 404 — «Приглашение недоступно» и «К райду»; экран гонки работает как раньше (404 там — ошибка с повтором).
 - AC6. `TURBO_CONCURRENCY=1 pnpm check` зелёный; картинка проверена на dev.
 
 # 10. Documentation Impact
@@ -140,4 +140,37 @@ story-cards дополняется приглашением; `docs/product/rides
 
 # 12. Outcome (заполняет coder)
 
-_(заполняется после реализации)_
+## Changes
+
+- API: `GET /v1/rides/:rideId/invite-card` (`RideInviteController` → `RideInviteService` → `RideInviteInputs`), общий
+  поток статуса `CardRequests` (вынесен из `StoryCardService` без смены поведения), задача `ride-invite.render` в
+  очереди `story-card` (`StoryCardProcessor.process` — диспетчер по имени, `buildRideInvite`), разметка
+  `rideInviteTree` (4b `line`, 4a `night` без фото), тексты по Минску. Порт `rides` `RIDES_FOR_SHARING`, метод порта
+  `routes` `RideRoutes.catalogLine` (только `IN_CATALOG`).
+- Пакеты: токены `storyCard.text.invite*`/`statUnit`, `storyCard.invite`; строки `rideInvite.*`; api-client
+  `getRideInviteCard`.
+- Приложение: `features/sharing` (`useCardStatus`, `useCardFile`, `CardPanel`) — общая часть экранов карточек; экран
+  гонки на ней без смены поведения (404 — ошибка с повтором, тест); экран `rides/invite/[id]` (404/409 — «Приглашение
+  недоступно»), кнопка «Карточка-приглашение» на детали будущего райда; web-smoke маршрута.
+- Превью: `pnpm --filter @pokatim/api preview:story-cards <каталог>` рисует и приглашения (`*-invite-*.png`).
+
+## Tests
+
+- api unit: `ride-invite.render.test.ts` (тексты, хэш, разметка, satori), `story-card.processor.test.ts` (диспетчер:
+  обе задачи, чужая схема — `skipped`, незнакомое имя — ошибка).
+- api int: `ride-invite.int.test.ts` — AC1 (401/400/404 скрытого и организатору/409), AC2 (одна задача, общий токен
+  для зрителей, PNG 1080×1920), AC3 (каталог команды и райдера — линия; `private` у организатора и снятый с каталога —
+  нет, `catalogLine` → `null`), AC4 (правка → `skipped`, скрытие → `skipped`, `failed` один раз), логи без ПДн.
+- app: `ride-invite.test.tsx` (кнопка, pending → ready → «Поделиться», «Ночь», 409/404, кривой id),
+  `story-card.test.tsx` (+404 — повтор).
+
+## Фиксы ревью pass 1
+
+- Claude (APPROVE, `findings-claude.md`): M1 — 404 → пустое состояние только у приглашения (`emptyOnNotFound`), тест
+  экрана гонки; M2 — unit-тест диспетчера; L — текст §8.3 и AC5, `isDomainError`, отметка `failed` общая — в ADR.
+- Codex (REQUEST CHANGES, `findings-codex.md`): HIGH — отступ единицы — токен `storyCard.invite.unitGap`; M — «К
+  райду» — `dismissTo` детали; M — шаг web-smoke `/rides/invite/<id>` без сессии.
+
+## Open follow-ups
+
+- Фото организатора на 4a (модуль `media`), шит «Райд опубликован» после создания, OG-картинка райда тем же рендером.

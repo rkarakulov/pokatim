@@ -105,6 +105,8 @@ export const storyCard = {
     dateGap: 18,
     timeGap: 6,
     startGap: 12,
+    /** отступ единицы от цифры пары «42 км» (`.u` margin-left 4) */
+    unitGap: 12,
     tileHeight: 252,
   },
   line: {

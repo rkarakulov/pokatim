@@ -157,8 +157,8 @@ function ReadyCard({
 
 /**
  * Карточка сервера (ADR-0018) на экране: чипы шаблонов «Линия» / «Ночь», превью 9:16 (рендер сервера — скелетон,
- * пока `pending`), «Поделиться» или «Скачать PNG», подсказка. Карточки нет (409) или источник не найден (404) —
- * `empty` вызывающего. Права — только сервер.
+ * пока `pending`), «Поделиться» или «Скачать PNG», подсказка. Карточки нет (409) — `empty` вызывающего; 404 — тоже
+ * `empty`, только при `emptyOnNotFound` (приглашение: скрытый райд), иначе — ошибка с повтором. Права — только сервер.
  */
 export function CardPanel({
   source,
@@ -167,6 +167,7 @@ export function CardPanel({
   shareTitle,
   hint,
   empty,
+  emptyOnNotFound = false,
 }: {
   source: CardSource;
   enabled: boolean;
@@ -174,6 +175,7 @@ export function CardPanel({
   shareTitle: string;
   hint: string;
   empty: ReactNode;
+  emptyOnNotFound?: boolean;
 }) {
   const theme = useTheme();
   const [template, setTemplate] = useState<StoryCardTemplate>('line');
@@ -194,7 +196,7 @@ export function CardPanel({
           />
         ))}
       </View>
-      {card.unavailable || card.notFound ? (
+      {card.unavailable || (emptyOnNotFound && card.notFound) ? (
         empty
       ) : (
         <AsyncContent query={card.state} skeleton={<PreviewSkeleton />}>

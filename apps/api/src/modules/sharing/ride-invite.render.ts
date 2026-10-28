@@ -41,7 +41,9 @@ function stats(
     box({ flexDirection: 'column', flexBasis: 0, flexGrow: 1, flexShrink: 1, ...style }, [
       box({ flexDirection: 'row', alignItems: 'baseline' }, [
         text(storyCard.text.statValue, colors.ink, item.value),
-        text(storyCard.text.statUnit, colors.muted, item.unit, { marginLeft: 12 }),
+        text(storyCard.text.statUnit, colors.muted, item.unit, {
+          marginLeft: storyCard.invite.unitGap,
+        }),
       ]),
       text(storyCard.text.statLabel, colors.muted, item.label),
     ]);
