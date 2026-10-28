@@ -199,9 +199,34 @@ paths:
   `lockEntry`, идемпотентно по `checkedAt < requestedAt`). Пока есть незавершённые проверки — публикация и
   «Применить пересчёт» отвечают 409.
 - `results.protocol-published` / `results.result-revised` / `results.attempt-verdict-changed` — маршрут в
-  `notifications-intake` (объявляет подписчик, ADR-0017); слайсу 08 нужен fan-out outbox — задача в app-foundation.
+  `notifications-intake` (объявляет подписчик, ADR-0017). Рейтинг сезона (08) событий не слушает — регламент сверки
+  (DV-1); fan-out outbox в app-foundation — follow-up.
 - Отказы состояния — `409 RESULTS_ACTION_BLOCKED { reason, count? }`, `409 RESULTS_PUBLISH_BLOCKED { blockedBy,
   checklist }`.
+
+## Рейтинг сезона (`standings`, race-results-08)
+
+- Модуль `standings` (`results ──► standings`): `StandingsCoreModule` (репозиторий снимка, `StandingsSource`,
+  `StandingsRecalc`; imports `RacesCoreModule`, `ResultsCoreModule`), `StandingsModule` (API: + `IdentityModule`,
+  `PanelModule`, `ProfileCoreModule`), `StandingsWorkerModule` (`WorkerModule`). Порты — только через `index.ts`:
+  `SEASON_RACES` (`races`: гонки с протоколом, `seasonExists`, `seesAllRaces`), `RESULTS_FOR_STANDINGS` (`results`:
+  `currentRevisions` одним `aggregate`, `protocolRows` ревизии), `RIDER_NAMES` (`profile`). `races`/`results` о
+  `standings` не знают.
+- Правила зачёта — чистые функции `standings.policy.ts` (`pointsForPlace`, `racesCounted`, `selectCounted`,
+  `compareRiders`, `buildSeasonStandings`, `sourceFingerprint`), версия `STANDINGS_FORMULA_VERSION` в снимке: смена —
+  полный пересчёт всех сезонов. Клиент ничего не считает.
+- Пересчёт — **регламент** вместо событий (DV-1): очередь `standings-recalc`, `StandingsSchedules` — `standings.sync`
+  каждую минуту (Минск) + разовая `standings.sync.boot` при старте worker; `StandingsRecalc.sync` сверяет отпечаток
+  источника сезона (гонки, ревизии, класс, схема, формула) с отпечатком снимка и пересчитывает изменившиеся сезоны
+  целиком. Отказ сезона — лог `standings.recompute_failed`, остальные идут; после прохода — исключение
+  (`standings.sync_failed`, failed-набор BullMQ), следующий прогон повторяет. Гонка с протоколом без ревизии —
+  пропуск с логом `standings.revision_missing`. Сохранённый снимок не старше источника, а отпечаток другой (откат
+  деплоя) — пропуск с логом `standings.version_conflict`, без пересчёта. **Изменил вход отпечатка или правила
+  зачёта — подними `STANDINGS_FORMULA_VERSION`**, иначе старые снимки не пересчитаются.
+- HTTP читает только снимок: `StandingsPublicController` (`seasons/:id/standings`, `/table`), `StandingsMeController`
+  (`/me`, `AuthGuard`), `StandingsAdminController` (`admin/seasons/:id/standings`, `/table`, `races.read`) →
+  `StandingsReadService`. Таблица, которой нет в снимке, — пустая страница (RC-12); сводка панели — `sync:
+  pending|current` тем же `StandingsSource`.
 
 ## Споры (`disputes`, race-results-06)
 

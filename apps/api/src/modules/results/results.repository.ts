@@ -956,6 +956,22 @@ export class ResultsRepository {
     return this.c.protocolRows.find({ raceId, revision }, { session }).sort({ order: 1 }).toArray();
   }
 
+  /** Строки ревизии для зачёта сезона (race-results-08): проекция без времени, попыток и флагов. */
+  standingsRows(
+    raceId: string,
+    revision: number,
+  ): Promise<
+    Pick<RaceProtocolRowDoc, '_id' | 'userId' | 'place' | 'tied' | 'status' | 'groupKey'>[]
+  > {
+    return this.c.protocolRows
+      .find(
+        { raceId, revision },
+        { projection: { _id: 1, userId: 1, place: 1, tied: 1, status: 1, groupKey: 1 } },
+      )
+      .sort({ order: 1 })
+      .toArray();
+  }
+
   async protocolRow(
     raceId: string,
     revision: number,
@@ -1038,6 +1054,22 @@ export class ResultsRepository {
       { session, sort: { revision: -1 }, projection: { revision: 1 } },
     );
     return doc?.revision ?? null;
+  }
+
+  /**
+   * Текущие ревизии протоколов гонок (race-results-08, RC-3): максимальная числовая `revision` журнала — один
+   * `aggregate`; предикат совпадает с частичным фильтром `race_recalculations_revision_unique`. Нет ревизии — нет
+   * ключа; пустой вход — без запроса.
+   */
+  async currentRevisions(raceIds: readonly string[]): Promise<Map<string, number>> {
+    if (raceIds.length === 0) return new Map();
+    const rows = await this.c.recalculations
+      .aggregate<{ _id: string; revision: number }>([
+        { $match: { raceId: { $in: [...raceIds] }, revision: { $type: 'number' } } },
+        { $group: { _id: '$raceId', revision: { $max: '$revision' } } },
+      ])
+      .toArray();
+    return new Map(rows.map((row) => [row._id, row.revision]));
   }
 
   /** Моменты последнего запуска и последнего применения перепроверки гонки. */

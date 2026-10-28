@@ -22,3 +22,9 @@ export {
   ResultsProtocolPublished,
   ResultsResultRevised,
 } from './results.events';
+/** Порт для `standings` (race-results-08): текущие ревизии протоколов и строки снимка ревизии. */
+export {
+  RESULTS_FOR_STANDINGS,
+  type ResultsForStandings,
+  type StandingsSourceRow,
+} from './results-for-standings.port';

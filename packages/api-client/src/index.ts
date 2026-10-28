@@ -18,7 +18,10 @@ import {
   RaceRouteMap,
   RouteMapGeometry,
   type RaceListQuery,
+  MySeasonStandings,
   SeasonCard,
+  SeasonStandingsSummary,
+  SeasonStandingsTable,
   SeasonList,
   type SeasonRaceListQuery,
   ConfirmPasswordResetResponse,
@@ -101,7 +104,7 @@ import {
 } from '@rkarakulov/api-client-core';
 import { z } from 'zod';
 
-import { queryString } from './admin.ts';
+import { queryString, type SeasonStandingsTableParams } from './admin.ts';
 
 export {
   ApiHttpError,
@@ -341,6 +344,22 @@ export function createApiClient({
     /** Опубликованные и отменённые гонки сезона по концу окна; неизвестный сезон — 404. */
     listSeasonRaces: (id: string, params: SeasonRaceListParams = {}) =>
       getPublic(`/v1/seasons/${encodeURIComponent(id)}/races${queryString(params)}`, RacePage),
+    /** Рейтинг сезона (race-results-08) — публично: таблицы «класс × группа»; неизвестный сезон — 404. */
+    getSeasonStandings: (id: string) =>
+      getPublic(`/v1/seasons/${encodeURIComponent(id)}/standings`, SeasonStandingsSummary),
+    /** Таблица сезона (без `userId`); таблицы нет в снимке — пустая страница. */
+    getSeasonStandingsTable: (id: string, params: SeasonStandingsTableParams) =>
+      getPublic(
+        `/v1/seasons/${encodeURIComponent(id)}/standings/table${queryString(params)}`,
+        SeasonStandingsTable,
+      ),
+    /** Свои строки во всех таблицах сезона (вход обязателен, `no-store`). */
+    getMySeasonStandings: (accessToken: string, id: string) =>
+      request(
+        `/v1/seasons/${encodeURIComponent(id)}/standings/me`,
+        MySeasonStandings,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
 
     // --- каталог маршрутов команды (routes-01): публично, без токена ---
     listCatalogRoutes: (params: CatalogRouteListParams = {}) =>
@@ -727,4 +746,5 @@ export {
   type AuditListParams,
   type PanelCalendarListParams,
   type PanelRaceListParams,
+  type SeasonStandingsTableParams,
 } from './admin.ts';
