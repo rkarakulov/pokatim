@@ -82,19 +82,16 @@ function appScheme(p: Palette, shape: ShapeRoles): AppTheme {
  * «Классики» (`defaultShape.button`, прямые углы): решение пользователя после слайса C.
  */
 /**
- * Мягкая форма тем со скруглёнными углами (px): поля / чипы / карточки / шторка — одна шкала на все такие темы,
- * небольшие радиусы без «колбасок» (`radius.pill` в форме тем нет: круглое — только по смыслу, точки карты и
- * индикаторы). Кнопки — прямые, как у «Классики».
+ * Форма темы: радиусы — как у «Классики» (`defaultShape`, все 0: без скруглений во всех темах — решение пользователя),
+ * своё у темы — только регистр подписи кнопки. Круглое — только по смыслу (точки карты, маркер скраббинга).
  */
-const SOFT: [number, number, number, number] = [6, 4, 8, 12];
-
-const shape = (
-  [field, chip, card, sheet]: [number, number, number, number],
-  buttonCase: ShapeRoles['buttonCase'] = 'none',
-): ShapeRoles => ({ button: defaultShape.button, field, chip, card, sheet, buttonCase });
+const shape = (buttonCase: ShapeRoles['buttonCase'] = 'none'): ShapeRoles => ({
+  ...defaultShape,
+  buttonCase,
+});
 
 /** Атлас: светло-серый экран, белые карточки, оранжевый акцент карты и профиля, чёрная кнопка. */
-const atlasShape = shape(SOFT);
+const atlasShape = shape();
 export const atlas = {
   light: appScheme(
     {
@@ -143,11 +140,11 @@ export const chrono = appScheme(
     control: ['#FF6A1A', '#0B0B0C'],
     tabBar: ['#0B0B0C', '#FF6A1A'],
   },
-  shape(SOFT),
+  shape(),
 );
 
 /** Планировщик: тёплый бежево-серый фон, чёрные линии маршрута и профиля, оранжевый — только трек. */
-const plannerShape = shape(SOFT);
+const plannerShape = shape();
 export const planner = {
   light: appScheme(
     {
@@ -182,7 +179,7 @@ export const planner = {
 };
 
 /** Журнал: зеленоватый фон — светлый или тёмно-зелёный (не графит Навигации); кнопка, маршрут, профиль и вкладка — зелёные. */
-const journalShape = shape(SOFT);
+const journalShape = shape();
 export const journal = {
   light: appScheme(
     {
@@ -231,11 +228,11 @@ export const navigation = appScheme(
     control: ['#5BA8FF', '#0F1215'],
     tabBar: ['#0F1215', '#F2F4F7'],
   },
-  shape(SOFT),
+  shape(),
 );
 
 /** Типографика: тёплый светлый фон, оранжевая кнопка с тёмным текстом (F6), заглавные подписи кнопок. */
-const typographyShape = shape([4, 4, 0, 16], 'upper');
+const typographyShape = shape('upper');
 export const typography = {
   light: appScheme(
     {

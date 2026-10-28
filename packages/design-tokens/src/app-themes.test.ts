@@ -1,4 +1,4 @@
-import { defaultShape, radius, space } from '@rkarakulov/design-tokens';
+import { defaultShape, space } from '@rkarakulov/design-tokens';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -96,32 +96,32 @@ const FORM: Record<
   }
 > = {
   atlas: {
-    shape: [6, 4, 8, 12, 'none'],
+    shape: [0, 0, 0, 0, 'none'],
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
   },
   chrono: {
-    shape: [6, 4, 8, 12, 'none'],
+    shape: [0, 0, 0, 0, 'none'],
     density: 'regular',
     icons: { weight: 'semibold', filled: true },
   },
   planner: {
-    shape: [6, 4, 8, 12, 'none'],
+    shape: [0, 0, 0, 0, 'none'],
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
   },
   journal: {
-    shape: [6, 4, 8, 12, 'none'],
+    shape: [0, 0, 0, 0, 'none'],
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
   },
   navigation: {
-    shape: [6, 4, 8, 12, 'none'],
+    shape: [0, 0, 0, 0, 'none'],
     density: 'regular',
     icons: { weight: 'semibold', filled: true },
   },
   typography: {
-    shape: [4, 4, 0, 16, 'upper'],
+    shape: [0, 0, 0, 0, 'upper'],
     density: 'regular',
     icons: { weight: 'semibold', filled: false },
   },
@@ -225,13 +225,11 @@ describe('шесть тем слайса C', () => {
     expect(themes.light.shape.button).toBe(0);
   });
 
-  it('без «колбасок»: в форме тем нет radius.pill, чипы — не круглее 4 px, карточки — 8 px', () => {
+  it('без скруглений: во всех темах все радиусы формы — 0, как у «Классики»', () => {
     for (const def of definitions) {
       for (const s of [def.schemes.light, def.schemes.dark]) {
         const { button, field, chip, card, sheet } = s.shape;
-        expect([button, field, chip, card, sheet]).not.toContain(radius.pill);
-        expect(chip).toBeLessThanOrEqual(4);
-        expect(card).toBeLessThanOrEqual(8);
+        expect([button, field, chip, card, sheet]).toEqual([0, 0, 0, 0, 0]);
       }
     }
   });
@@ -275,14 +273,14 @@ describe('«Классика»: группа tabBar = прежние роли в
 
 describe('варианты раскладки (7.7 плана C)', () => {
   it.each([
-    ['classic', 'classic', 'classic', 'gradient', 'classic', 'classic'],
-    ['atlas', 'contour', 'classic', 'gradient', 'icons', 'tile'],
-    ['chrono', 'classic', 'tiles', 'gradient', 'icons', 'tile'],
-    ['planner', 'contour', 'classic', 'solid', 'icons', 'classic'],
-    ['journal', 'classic', 'classic', 'solid', 'icons', 'tile'],
-    ['navigation', 'contour', 'tiles', 'line', 'icons', 'tile'],
-    ['typography', 'numeral', 'numeral', 'solid', 'icons', 'numeral'],
-  ] as const)('%s', (id, home, routeStats, profileFill, tabBar, routeCard) => {
-    expect(appThemes[id].layout).toEqual({ home, routeStats, profileFill, tabBar, routeCard });
+    ['classic', 'classic', 'classic', 'classic', 'classic'],
+    ['atlas', 'contour', 'classic', 'icons', 'tile'],
+    ['chrono', 'classic', 'tiles', 'icons', 'tile'],
+    ['planner', 'contour', 'classic', 'icons', 'classic'],
+    ['journal', 'classic', 'classic', 'icons', 'tile'],
+    ['navigation', 'contour', 'tiles', 'icons', 'tile'],
+    ['typography', 'numeral', 'numeral', 'icons', 'numeral'],
+  ] as const)('%s', (id, home, routeStats, tabBar, routeCard) => {
+    expect(appThemes[id].layout).toEqual({ home, routeStats, tabBar, routeCard });
   });
 });

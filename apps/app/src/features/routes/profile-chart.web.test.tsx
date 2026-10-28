@@ -1,10 +1,9 @@
 /// <reference types="jest" />
 import type { CatalogRouteElevation } from '@pokatim/contracts';
-import { appThemes, themes } from '@pokatim/design-tokens';
+import { appThemes, appThemeScheme, themes } from '@pokatim/design-tokens';
 import {
   createScrubStore,
   PROFILE_FILL_OPACITY,
-  PROFILE_SOLID_OPACITY,
   SCRUB_MARKER_ATTR,
   type ScrubStore,
 } from '@pokatim/route-view';
@@ -255,31 +254,24 @@ describe('ProfileChart web: скраббинг (routes-04, RC-13)', () => {
   });
 });
 
-describe('ProfileArea web — заливка по теме (app-themes C2)', () => {
-  const areaHtml = (themeId: 'journal' | 'navigation') => {
-    const Theme = appThemeWrapper(themeId);
-    const theme = appThemes[themeId].schemes.light;
-    return renderToString(
-      <Theme>
-        <ProfileArea elevation={elevation} theme={theme} />
-      </Theme>,
-    );
-  };
-
-  it('solid (Журнал) — оба стопа PROFILE_SOLID_OPACITY', () => {
-    const html = areaHtml('journal');
-    expect(html).toContain(
-      `<stop offset="0" stop-color="${appThemes.journal.schemes.light.profile.fillTop}" stop-opacity="${PROFILE_SOLID_OPACITY}"></stop>`,
-    );
-    expect(html).toContain(
-      `<stop offset="1" stop-color="${appThemes.journal.schemes.light.profile.fillBottom}" stop-opacity="${PROFILE_SOLID_OPACITY}"></stop>`,
-    );
-  });
-
-  it('line (Навигация) — без площади: только линия', () => {
-    const html = areaHtml('navigation');
-    expect(html).not.toContain('<linearGradient');
-    expect(html.match(/<path /g)).toHaveLength(1);
-    expect(html).toContain(`stroke="${appThemes.navigation.schemes.dark.profile.line}"`);
-  });
+describe('ProfileArea web — заливка во всех темах — градиент', () => {
+  it.each(Object.values(appThemes))(
+    '$id — градиент profile.fillTop → fillBottom темы и площадь',
+    (def) => {
+      const Theme = appThemeWrapper(def.id);
+      const theme = appThemeScheme(def, 'light') === 'dark' ? def.schemes.dark : def.schemes.light;
+      const html = renderToString(
+        <Theme>
+          <ProfileArea elevation={elevation} theme={theme} />
+        </Theme>,
+      );
+      expect(html).toContain(
+        `<stop offset="0" stop-color="${theme.profile.fillTop}" stop-opacity="${PROFILE_FILL_OPACITY}"></stop>`,
+      );
+      expect(html).toContain(
+        `<stop offset="1" stop-color="${theme.profile.fillBottom}" stop-opacity="0"></stop>`,
+      );
+      expect(html.match(/<path /g)).toHaveLength(2);
+    },
+  );
 });

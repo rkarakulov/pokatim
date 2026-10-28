@@ -1659,10 +1659,10 @@ export const ru = {
   'admin.appearance.scheme.dark': 'Всегда тёмная',
   'admin.appearance.theme.classic.name': 'Классика',
   'admin.appearance.theme.classic.description':
-    'Нынешний облик: серифные заголовки, строгие карточки без скруглений, иконки и полоса над активной вкладкой',
+    'Нынешний облик: серифные заголовки, строгие карточки, иконки и полоса над активной вкладкой',
   'admin.appearance.theme.atlas.name': 'Атлас',
   'admin.appearance.theme.atlas.description':
-    'Серые тона, карточки со скруглёнными углами, оранжевый акцент и герой маршрута с контуром',
+    'Серые тона, крупные карточки-плитки, оранжевый акцент и герой маршрута с контуром',
   'admin.appearance.theme.chrono.name': 'Хронометр',
   'admin.appearance.theme.chrono.description':
     'Почти чёрный фон, ярко-оранжевые кнопки и линии, крупные цифры плитками',

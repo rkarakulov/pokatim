@@ -58,7 +58,7 @@ paths:
   `useFonts`); сторож — `__tests__/theme-guards.test.ts`. Доставка — `features/appearance/` (запрос, кэш native
   `pokatim.appTheme`, тема процесса SSR); web — `window.__POKATIM_THEME__` для гидрации. «Классика» = Jersey Aura /
   Night Ride по системе. Варианты раскладки (`layout.*`) — только таблицами `Record<вариант, компонент | значение>`
-  (`ROUTE_HERO`, `STATS_VARIANT`, `PROFILE_FILL`, `TAB_ITEM`, `ROUTE_CARD`); сравнения с id темы и значением `layout` —
+  (`ROUTE_HERO`, `STATS_VARIANT`, `TAB_ITEM`, `ROUTE_CARD`; профиль высоты — всегда градиент); сравнения с id темы и значением `layout` —
   нет (сторож). Вкладки — роли `tabBar.*`; отступы карточек — `appDensity[density]`; форма — `shapeOf(theme)`.
   `react-native-svg` лениво — только `features/routes/use-svg-native.ts` (профиль, контур `route-contour(.web).tsx`).
 - Доступность: `accessibilityActions` вместо единственного drag-жеста; reduce motion — упрощённая анимация
