@@ -100,11 +100,16 @@ describe('«Оформление приложения» (app-themes D1, AC6)', (
     expect(document.querySelectorAll('.theme-preview--palette')).toHaveLength(7);
     expect(screen.queryByText('Превью появится позже')).toBeNull();
     const atlas = radio('Атлас').closest('label') as HTMLElement;
-    expect(within(atlas).getByText('Шрифт: Manrope')).toBeTruthy();
+    expect(within(atlas).getByText(/Шрифт: Manrope/)).toBeTruthy();
     const classic = radio('Классика').closest('label') as HTMLElement;
-    expect(within(classic).getByText('Шрифт: Playfair Display')).toBeTruthy();
-    const mock = atlas.querySelector('.theme-preview') as HTMLElement;
-    expect(mock.style.getPropertyValue('--preview-radius')).toBe('16px');
+    expect(within(classic).getByText(/Шрифт: Playfair Display/)).toBeTruthy();
+    const mocks = atlas.querySelectorAll<HTMLElement>('.theme-preview__mock');
+    expect(mocks).toHaveLength(2);
+    expect(mocks[0]?.style.getPropertyValue('--preview-radius')).toBe('16px');
+    expect(within(atlas).getByText(/Светлая и тёмная — по системе/)).toBeTruthy();
+    const chrono = radio('Хронометр').closest('label') as HTMLElement;
+    expect(chrono.querySelectorAll('.theme-preview__mock')).toHaveLength(1);
+    expect(within(chrono).getByText(/Всегда тёмная/)).toBeTruthy();
   });
 
   it('выбор и сохранение: тело { themeId, version }, баннер успеха, новая тема — текущая, журнал перечитывается', async () => {

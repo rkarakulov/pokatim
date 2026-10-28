@@ -1640,27 +1640,29 @@ export const ru = {
   'admin.appearance.saved': 'Тема сохранена. Приложение применит её в течение минуты.',
   'admin.appearance.saveFailed': 'Не удалось сохранить тему',
   'admin.appearance.font': 'Шрифт: {name}',
+  'admin.appearance.scheme.system': 'Светлая и тёмная — по системе',
+  'admin.appearance.scheme.dark': 'Всегда тёмная',
   'admin.appearance.theme.classic.name': 'Классика',
   'admin.appearance.theme.classic.description':
-    'Нынешний облик: строгие карточки и чёткая типографика',
+    'Нынешний облик: серифные заголовки, строгие карточки без скруглений, иконки и полоса над активной вкладкой',
   'admin.appearance.theme.atlas.name': 'Атлас',
   'admin.appearance.theme.atlas.description':
-    'Светло-серый фон, белые скруглённые карточки, оранжевый акцент и герой маршрута с картой',
+    'Серые тона, карточки со скруглёнными углами, оранжевый акцент и герой маршрута с контуром',
   'admin.appearance.theme.chrono.name': 'Хронометр',
   'admin.appearance.theme.chrono.description':
-    'Всегда тёмная: почти чёрный фон, ярко-оранжевые линии и крупные цифры плитками',
+    'Почти чёрный фон, ярко-оранжевые кнопки и линии, крупные цифры плитками',
   'admin.appearance.theme.planner.name': 'Планировщик',
   'admin.appearance.theme.planner.description':
-    'Тёплый бежево-серый фон, чёрные линии маршрутов и плитки рекомендаций с мини-картами',
+    'Тёплые бежево-серые тона, монохромные линии маршрута и профиля, герой маршрута с контуром',
   'admin.appearance.theme.journal.name': 'Журнал',
   'admin.appearance.theme.journal.description':
-    'Светлый фон с зеленоватым оттенком, зелёные контуры и профиль высоты',
+    'Зелёные тона — светлые или тёмно-зелёные, зелёные кнопки, контуры, профиль высоты и активная вкладка',
   'admin.appearance.theme.navigation.name': 'Навигация',
   'admin.appearance.theme.navigation.description':
-    'Всегда тёмная: карта во весь блок, круглые кнопки и крупные цифры',
+    'Графитовый фон, синий маршрут, светлая кнопка и крупные цифры плитками',
   'admin.appearance.theme.typography.name': 'Типографика',
   'admin.appearance.theme.typography.description':
-    'Светлый фон, оранжевый диагональный блок и огромные сжатые цифры километров',
+    'Оранжевый диагональный блок, огромные сжатые цифры километров и заглавные подписи кнопок',
   'admin.audit.action.appearance.theme_changed': 'Тема приложения изменена',
   'admin.audit.themeChange': '{from} → {to}',
   // routes-05: страница маршрута панели — карта, цифры, профиль высоты со скраббингом

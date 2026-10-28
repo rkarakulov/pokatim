@@ -96,27 +96,27 @@ const FORM: Record<
   }
 > = {
   atlas: {
-    shape: [12, radius.pill, 16, 24, 'none'],
+    shape: [12, 8, 16, 24, 'none'],
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
   },
   chrono: {
-    shape: [10, radius.pill, 12, 20, 'none'],
+    shape: [10, 8, 12, 20, 'none'],
     density: 'regular',
     icons: { weight: 'semibold', filled: true },
   },
   planner: {
-    shape: [12, radius.pill, 14, 24, 'none'],
+    shape: [12, 8, 14, 24, 'none'],
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
   },
   journal: {
-    shape: [10, radius.pill, 14, 20, 'none'],
+    shape: [10, 8, 14, 20, 'none'],
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
   },
   navigation: {
-    shape: [12, radius.pill, 16, 24, 'none'],
+    shape: [12, 8, 16, 24, 'none'],
     density: 'regular',
     icons: { weight: 'semibold', filled: true },
   },
@@ -223,6 +223,16 @@ describe('шесть тем слайса C', () => {
       }
     }
     expect(themes.light.shape.button).toBe(0);
+  });
+
+  it('без «колбасок»: в форме тем нет radius.pill, чипы — не круглее 8 px', () => {
+    for (const def of definitions) {
+      for (const s of [def.schemes.light, def.schemes.dark]) {
+        const { button, field, chip, card, sheet } = s.shape;
+        expect([button, field, chip, card, sheet]).not.toContain(radius.pill);
+        expect(chip).toBeLessThanOrEqual(8);
+      }
+    }
   });
 
   it.each(Object.entries(FONTS))('%s: гарнитуры display/text и CSS-стек', (id, [display, text]) => {

@@ -27,7 +27,7 @@ paths:
   эталон коридора гонки, ADR-0012 Proposed) и `rides` (кофе-райды, ADR-0013 Proposed: зависит только от `identity`;
   панель — с модерацией 05b), `appearance` (app-themes: тема приложения — глобальная настройка платформы,
   `platform_settings/appearance`; импортирует только `panel/index.ts` и `public-read.guard.ts`; публичное
-  `GET /v1/appearance` — ровно `{ themeId }`; панель `GET|PUT /v1/admin/appearance` — `appearance.manage`, замена по
+  `GET /v1/appearance` — ровно `{ themeId }`, `Cache-Control: no-cache`; панель `GET|PUT /v1/admin/appearance` — `appearance.manage`, замена по
   `version` (409), журнал `appearance.theme_changed` с `subject.kind = 'platform'` (nil UUID) в транзакции; повтор той
   же темы — без записи).
 - `routes` о гонках не знает и зависит от `panel` и `identity` (routes-02: `AuthGuard` «моих маршрутов», как `rides`); `races → routes` — только порт `RouteCatalog`
