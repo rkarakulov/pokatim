@@ -200,6 +200,20 @@ Status: **CONCERNS** — блокеров нет. RC-P1…RC-P7 — рекоме
 - **Документы панели** (`docs/product/admin-panel.md`, `.claude/rules/pokatim-web.md`) — не тронуты: их обновляет
   исполнитель панели.
 
+### Панель (coder, 2026-10-28)
+
+- **RC-P4, RC-P5** — приняты: `'avatar-preview': 128` в `panel-tokens.ts` (класс `.avatar-preview` в `index.css`);
+  экраны собраны из `src/ui` (`DataTable`, `ReasonDialog`, `ConflictBanner`, `PageHeader`, `EmptyState`, `StatusTag`,
+  `DisabledReason`), подпись — `riderLabel` из `features/results/results-format.ts`.
+- **Предупреждение D11** — `Banner tone="warning"` в слоте `extraFields` `ReasonDialog` (над полем причины), во всех
+  четырёх действиях; общий компонент не менялся.
+- **Неактивные сбросы** — `disabled` + `aria-describedby` на одну строку `DisabledReason` «Сбросить можно только то,
+  что есть в профиле.» под шапкой. «Сбросить имя» неактивна при `name: null` (сервер отдаёт имя только при согласии,
+  Q2 — как «Сбросить имя» в «Результатах»: имя скрытого профиля нигде не показывается).
+- **«Отклонить жалобы»** скрыта при `openReportCount === 0` (как у райдов), а не заблокирована.
+- **Колонка «В профиле»** очереди — признаки фото и клуба одной ячейкой («Фото, клуб» / «Фото» / «Клуб» / «—»).
+- **Тест `design-system.test.ts`** — добавлена проверка `--panel-avatar-preview: 128px;` (не в списке 11.9).
+
 ## 9. Acceptance Criteria
 
 1. `POST /v1/riders/:publicId/reports`: 200 `{ canReport: false, reported: true }`; повтор — 200 без второй записи;
@@ -569,3 +583,19 @@ closed }` (RC-P3). Ни клуба, ни имени, ни id фото в жур�
 - **Не сделано (часть панели):** `apps/admin` (раздел «Профили райдеров»), `admin.riderProfiles.*`,
   `domain.profileReportReason.*`, `admin.nav.riderProfiles`, `--panel-avatar-preview`, `csp.test.ts`,
   `docs/product/admin-panel.md`, `.claude/rules/pokatim-web.md`.
+
+### Часть панели (coder, 2026-10-28)
+
+- **Панель:** `features/rider-profiles/` — `RiderProfilesScreen` (очередь «Открытые жалобы», `useInfiniteQuery` +
+  «Показать ещё», пусто «Жалоб нет», скелетон и ошибка — `DataTable`), `RiderProfileScreen` (фото 128 px или пустой
+  квадрат, подпись Q2, «Публичный» / «Скрыт райдером», клуб, жалобы без автора; четыре действия через `ReasonDialog`
+  с предупреждением D11; 409 `CONFLICT` — `ConflictBanner` «Пришли новые жалобы, обновите карточку»; 404 — «Профиль не
+  найден»), `rider-profiles-query.ts`, `rider-profiles-format.ts`; маршруты в `router.tsx` под `profiles.moderate`,
+  пункт `NAVIGATION` в конце группы `bottom`; токен `--panel-avatar-preview`.
+- **i18n:** `admin.nav.riderProfiles`, `admin.riderProfiles.*`, `domain.profileReportReason.*` (6 причин).
+- **Тесты:** `RiderProfilesScreen.test.tsx` (6), `RiderProfileScreen.test.tsx` (10), `AppLayout.test.tsx` (меню
+  admin/moderator, прямой URL организатора), `csp.test.ts` (`img-src 'self'`), `design-system.test.ts` (токен).
+- **Документы:** `docs/product/admin-panel.md` (право, журнал, карта разделов, раздел «Профили райдеров»),
+  `.claude/rules/pokatim-web.md` (раздел «Профили райдеров»).
+- **Проверка:** `TURBO_CONCURRENCY=1 pnpm check` (Mongo `pokatim_profmod_test`, Redis db 11) — зелёный с первого
+  прогона: 15/15 задач, admin 40 файлов / 375 тестов, api 1693, app 1749.

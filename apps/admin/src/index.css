@@ -922,6 +922,17 @@ select.field__control option:disabled {
   margin-bottom: var(--space-s3);
 }
 
+/* фото райдера в карточке модерации профиля (profile-moderation): квадрат --panel-avatar-preview; нет фото — пустой
+   квадрат той же раскладки */
+.avatar-preview {
+  display: block;
+  width: var(--panel-avatar-preview);
+  height: var(--panel-avatar-preview);
+  object-fit: cover;
+  border: var(--stroke-hairline) solid var(--color-border-strong);
+  background: var(--color-surface-disabled);
+}
+
 /* форма одной колонкой с группами */
 .form-column {
   width: var(--panel-form-width);

@@ -128,6 +128,17 @@ paths:
   `ConflictBanner` «Заявку уже изменили — обновите страницу» с перечитыванием; баннер снимается только после
   успешного перечитывания. Ошибка перечитывания при показанной заявке: 404 — «Заявка не найдена» без линии и
   действий, 403 — «Нет доступа», прочее — баннер «Не удалось обновить данные» с повтором поверх последних данных.
+- «Профили райдеров» (profile-moderation) — `features/rider-profiles/*`, маршруты `/rider-profiles` (одна очередь
+  открытых жалоб, «Показать ещё» по курсору) и `/rider-profiles/$userId` под `RequirePermission
+  permission="profiles.moderate"`, пункт навигации — группа `bottom` в конце. Подпись — `riderLabel(userId, name)` из
+  `features/results/results-format.ts` (имя сервер отдаёт только при согласии, Q2); жалобы — без автора. Фото —
+  `<img src={api.riderAvatarUrl(id)}>` (тот же origin, `img-src 'self'` — сторож `csp.test.ts`) в квадрате
+  `.avatar-preview` (`--panel-avatar-preview`, `panel-tokens.ts`), без фото — пустой квадрат той же раскладки.
+  «Сбросить фото / клуб / имя» — `disabled` + `DisabledReason`, когда сбрасывать нечего (по карточке); «Отклонить
+  жалобы» — при `openReportCount > 0`, шлёт `reportRevision`. Все четыре — `ReasonDialog` с предупреждением «Не
+  повторяйте имя или клуб в причине» (`extraFields`); 409 `CONFLICT` — `ConflictBanner` «Пришли новые жалобы,
+  обновите карточку», снимается после успешного перечитывания; после действия — инвалидация
+  `['admin','rider-profiles']` и журнала.
 - «Споры» (race-results-06) — `features/disputes/*`, маршруты `/disputes` (`?status=`, `?raceId=` — в URL) и
   `/disputes/$disputeId` под `RequirePermission permission="disputes.read"`; пункт навигации — группа `main` после
   «Гонок». Список: `ChipGroup` статуса (по умолчанию «На рассмотрении»), фильтр гонки — текст «Гонка: {название}» и
