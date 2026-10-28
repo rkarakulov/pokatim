@@ -1,0 +1,30 @@
+import type { LonLat } from '@pokatim/contracts';
+
+/**
+ * Порт `rides` для модуля `sharing` (карточка-приглашение, ADR-0018, через `modules/rides/index.ts`): публичные факты
+ * будущего райда и линия его маршрута из каталога. `sharing` коллекций `rides`/`routes` не читает.
+ */
+export const RIDES_FOR_SHARING = Symbol('RIDES_FOR_SHARING');
+
+/** Факты карточки — только публичные поля райда (как `GET /v1/rides/:id`), без организатора и участников. */
+export interface RideInviteFacts {
+  rideId: string;
+  title: string;
+  startsAt: Date;
+  place: string;
+  distanceKm: number;
+  paceMinKmh: number;
+  paceMaxKmh: number;
+  /** маршрут, который **сейчас в каталоге** (`public`); свой маршрут организатора (`private`) и висячий — `null` */
+  routeId: string | null;
+}
+
+export interface RidesForSharing {
+  /**
+   * Факты карточки для зрителя `userId`. Райда нет или он скрыт (и организатору) — 404 `NOT_FOUND`; не будущий
+   * опубликованный (отменён, прошёл) — `null`.
+   */
+  inviteFacts(userId: string, rideId: string): Promise<RideInviteFacts | null>;
+  /** Линия показа маршрута, пока он в каталоге (только worker); иначе `null`. */
+  inviteLine(routeId: string): Promise<LonLat[] | null>;
+}

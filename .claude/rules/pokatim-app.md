@@ -275,11 +275,16 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 - Карточка для сторис (story-cards, ADR-0018) — `features/races/story/*`: экран `races/story/[id]` внутри
   `Stack.Protected` (рядом с `races/result/[id]/[entryId]`; в `app/_layout.tsx` и `__tests__/app-routes.ts`). Входы —
   `ShareStoryButton` только по `actions.canShareStory` сервера: «Ваше участие» и своя строка таблицы
-  (`ownRowAction` → `rivalPath` своей заявки: «Ваш результат», без подачи спора). Статус — `useStoryCard`
+  (`ownRowAction` → `rivalPath` своей заявки: «Ваш результат», без подачи спора). Статус — `useCardStatus` (`raceStorySource`)
   (`['races','story',raceId,template]`, опрос 1 с, не дольше 30 с от первого `pending`, `failed`/таймаут — ошибка с
-  повтором, 409 — «Карточки пока нет»); PNG — `useStoryFile` заранее (RC-13). Шаринг — только
+  повтором, 409 — «Карточки пока нет»); PNG — `useCardFile` заранее (RC-13). Шаринг — только
   `src/lib/share-story(.web).ts`: native — `expo-file-system` (кэш) + `expo-sharing` лениво (`load-expo-sharing.ts`;
   нет `ExpoSharing` — «Скачать PNG» через `downloadFile`), web — `navigator.share({ files })`, иначе `<a download>`.
+- Общая часть экранов карточек — `features/sharing/` (`card-status.ts`: `useCardStatus` по `CardSource` — ключ и
+  запрос статуса, `useCardFile`; `card-panel.tsx`: `CardPanel` — чипы, превью, «Поделиться», пустое состояние на
+  409/404). Приглашение кофе-райда — `features/rides/invite/*`, экран `rides/invite/[id]` внутри `Stack.Protected`
+  (ключ `['rides','invite',rideId,template]`); кнопка «Карточка-приглашение» на детали — вошедшему, `phase ===
+  'upcoming'` (право — сервер: 409 → «Приглашение недоступно»).
 
 ## Маршруты (routes-01, `docs/product/routes.md`)
 

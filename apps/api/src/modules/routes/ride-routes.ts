@@ -69,4 +69,11 @@ export class RideRoutesService implements RideRoutes {
     const ids = [...new Set(routeIds)];
     return new Set(ids.length === 0 ? [] : await this.repository.existingIds(ids));
   }
+
+  async catalogLine(routeId: string): Promise<[number, number][] | null> {
+    const [inCatalog] = await this.repository.inCatalogByIds([routeId]);
+    if (!inCatalog) return null;
+    const line = await this.repository.displayLine(routeId);
+    return line && line.length >= 2 ? line : null;
+  }
 }
