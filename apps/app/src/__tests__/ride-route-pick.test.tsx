@@ -197,6 +197,17 @@ describe('выбор маршрута райда (05c)', () => {
     expect(screen.getByRole('link', { name: /^Вечерний круг\. / })).toBeOnTheScreen();
   });
 
+  it.each(['unknown', 'signedOut'] as const)(
+    'сессия %s (SSR, гость) — скелетон оболочки, без статичной части экрана и запросов (CI web)',
+    async (status) => {
+      useSessionStore.setState({ status, session: null });
+      await open();
+      expect(screen.queryByText('Без маршрута')).toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Каталог' })).toBeNull();
+      expect(listCatalog).not.toHaveBeenCalled();
+    },
+  );
+
   it('каталог пуст — пустое состояние, «Без маршрута» остаётся', async () => {
     listCatalog.mockResolvedValue({ items: [], nextCursor: null });
     await open();
