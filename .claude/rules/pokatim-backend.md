@@ -24,7 +24,7 @@ paths:
   `races` (сезоны и гонки по коридору — одна граница, ADR-0010: определение сезона живёт здесь, отдельного модуля
   `seasons` нет), `calendar` (календарь стартов, с гонками не связан), `tracks` (загрузки, разбор, активности —
   ADR-0011), `devices` (Garmin/Wahoo через агрегатор Open Wearables), `routes` (маршруты команды платформы —
-  эталон коридора гонки, ADR-0012 Proposed) и `rides` (кофе-райды, ADR-0013 Proposed: зависит только от `identity`;
+  эталон коридора гонки, ADR-0012 Proposed) и `rides` (кофе-райды, ADR-0013 Proposed: зависит от `identity` и порта `routes` `RideRoutes` (05c);
   панель — с модерацией 05b), `appearance` (app-themes: тема приложения — глобальная настройка платформы,
   `platform_settings/appearance`; импортирует только `panel/index.ts` и `public-read.guard.ts`; публичное
   `GET /v1/appearance` — ровно `{ themeId }`; панель `GET|PUT /v1/admin/appearance` — `appearance.manage`, замена по
@@ -242,6 +242,13 @@ paths:
   `update`/`cancel`/`join`, отмена при стирании и `act` модерации — та же одна условная операция над документом, но
   в `MongoTransactions` с outbox (`ride-cancelled`, `ride-rescheduled` по смене старта, `participant-joined`,
   `reports-resolved`); повтор и отказ — без события.
+- Маршрут райда и «Рядом» (05c): `rides → routes` — только порт `RIDE_ROUTES` (`RideRoutes`: `attachable`, `visible`,
+  `ownedRouteIds`; реализация `RideRoutesService` в `RoutesCoreModule`, без кэша, условия — только `IN_CATALOG` и
+  `ownRider` репозитория; `RouteCatalog` не расширяется). `RidesCoreModule` импортирует и реэкспортирует
+  `RoutesCoreModule`. Видимость маршрута — `lookupRoutes` + `routeOf` в `rides-feed.service.ts` на каждом чтении и
+  ответе мутации (одним вызовом порта на страницу); `private` — только организатору. `GET /v1/rides/map` (статический
+  путь до `:id`, `no-store`) — `RidesFeedService.map`; `near` в ленте. Лимит `rides-near:<uid>` 60/мин — лента с
+  `near` и карта. `RideErasure` сбрасывает точки райдов на маршрутах удалённого (`restarted`).
 
 ## Уведомления (`notifications`, ADR-0017)
 

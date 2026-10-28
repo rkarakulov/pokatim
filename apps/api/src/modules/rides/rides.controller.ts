@@ -16,6 +16,8 @@ import {
   FieldErrorCode,
   type RideCities,
   RideListQuery,
+  type RideMap,
+  RideMapQuery,
   type RidePage,
   type RideView,
   UpdateRideRequest,
@@ -34,8 +36,8 @@ const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
  * «Я иду» / «Не иду» — без тела (как `devices/:provider/sync`): действие задаёт путь, пользователь — access.
  *
  * Кофе-райды вошедшего райдера (ADR-0008): лента, города, состояние зрителя и все мутации. Пользователь — только
- * `@CurrentUser()`. Регистрируется до публичного контроллера; `rides/cities` — статический путь и не уходит в pipe
- * `Uuid` публичного `rides/:id`.
+ * `@CurrentUser()`. Регистрируется до публичного контроллера; `rides/cities` и `rides/map` — статические пути и не
+ * уходят в pipe `Uuid` публичного `rides/:id`.
  */
 @Controller('rides')
 @UseGuards(AuthGuard)
@@ -59,6 +61,16 @@ export class RidesController {
   @Header('Cache-Control', 'no-store')
   cities(@CurrentUser() user: AuthUser): Promise<RideCities> {
     return this.feed.cities(user.userId);
+  }
+
+  /** Карта ленты (05c): точки старта с видимым маршрутом; координаты «Рядом» не логируются. */
+  @Get('map')
+  @Header('Cache-Control', 'no-store')
+  map(
+    @CurrentUser() user: AuthUser,
+    @Query(new ZodValidationPipe(RideMapQuery, FieldErrorCode)) query: RideMapQuery,
+  ): Promise<RideMap> {
+    return this.feed.map(user.userId, query);
   }
 
   @Get(':id/me')

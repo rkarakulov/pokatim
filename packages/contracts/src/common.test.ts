@@ -108,6 +108,7 @@ describe('коды ошибок', () => {
       'RIDE_PACE_ORDER',
       'RIDE_LIMIT_BELOW_GOING',
       'CORRIDOR_GATES_OVERLAP',
+      'RIDE_ROUTE_UNAVAILABLE',
     ]);
   });
 

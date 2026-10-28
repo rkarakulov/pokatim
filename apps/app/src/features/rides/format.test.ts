@@ -33,6 +33,8 @@ const ride: RideCard = {
   phase: 'upcoming',
   cancelReason: null,
   rescheduledAt: null,
+  route: null,
+  start: null,
   viewer: {
     role: 'none',
     canJoin: true,

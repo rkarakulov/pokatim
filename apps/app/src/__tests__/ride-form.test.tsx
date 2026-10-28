@@ -45,6 +45,8 @@ const ride: RideDetailForOrganizer = {
   phase: 'upcoming',
   cancelReason: null,
   rescheduledAt: null,
+  route: null,
+  start: null,
   description: 'Едем',
   version: 2,
 };
@@ -144,6 +146,8 @@ describe('форма «Новый райд» (S5, AC10)', () => {
         paceMaxKmh: 24,
         limit: null,
         description: null,
+        // 05c: без маршрута (пикер — PR B)
+        routeId: null,
       }),
     );
     await waitFor(() => expect(router.getPathname()).toBe(`/rides/${ID}`));

@@ -1,11 +1,14 @@
+import { CITY_CENTERS } from '@pokatim/contracts';
 import { describe, expect, it } from 'vitest';
 
+import type { RideRouteRef } from '../routes';
 import {
   changesStart,
   moderationTransition,
   rideFull,
   ridePhase,
   RIDES_POLICY,
+  rideStartOf,
   rideViewer,
   validateStartsAt,
   visibleTo,
@@ -193,5 +196,72 @@ describe('changesStart', () => {
     const base = ride();
     expect(changesStart(base, { startsAt: at(DAY), place: 'Парк Победы' })).toBe(false);
     expect(changesStart(base, {})).toBe(false);
+  });
+});
+
+const point = (lon: number, lat: number) => ({
+  type: 'Point' as const,
+  coordinates: [lon, lat] as [number, number],
+});
+
+describe('changesStart: точка старта (05c, RC-4)', () => {
+  const precise = ride({ geo: point(27.6, 53.95), startPrecise: true });
+
+  it('точная → другая точная — перенос; та же точка — нет', () => {
+    expect(changesStart(precise, { geo: point(27.7, 53.95), startPrecise: true })).toBe(true);
+    expect(changesStart(precise, { geo: point(27.6, 53.95), startPrecise: true })).toBe(false);
+    // правка пишет только изменённое: флаг тот же — только geo
+    expect(changesStart(precise, { geo: point(27.7, 53.95) })).toBe(true);
+  });
+
+  it('без точки → точная (маршрут прикреплён) и точная → центр города (маршрут снят) — не перенос', () => {
+    const center = ride({ geo: point(...CITY_CENTERS.minsk), startPrecise: false });
+    expect(changesStart(center, { geo: point(27.7, 53.95), startPrecise: true })).toBe(false);
+    expect(changesStart(precise, { geo: point(...CITY_CENTERS.minsk), startPrecise: false })).toBe(
+      false,
+    );
+  });
+
+  it('документ до 0030 (без geo/startPrecise) — прежние правила', () => {
+    expect(changesStart(ride(), { geo: point(27.7, 53.95), startPrecise: true })).toBe(false);
+    expect(changesStart(ride(), { place: 'Другое место' })).toBe(true);
+  });
+});
+
+describe('rideStartOf (05c)', () => {
+  const route = (access: RideRouteRef['access']): RideRouteRef => ({
+    id: 'r1',
+    title: 'Кольцо',
+    distanceM: 42_000,
+    elevationGainM: 300,
+    start: [27.61, 53.95],
+    access,
+  });
+
+  it('публичный маршрут — его старт, точная; свой непубличный и без маршрута — центр города', () => {
+    expect(rideStartOf(route('public'), 'brest')).toEqual({
+      geo: point(27.61, 53.95),
+      startPrecise: true,
+    });
+    expect(rideStartOf(route('private'), 'brest')).toEqual({
+      geo: point(...CITY_CENTERS.brest),
+      startPrecise: false,
+    });
+    expect(rideStartOf(null, 'minsk')).toEqual({
+      geo: point(...CITY_CENTERS.minsk),
+      startPrecise: false,
+    });
+  });
+
+  it('точка — копия: правка результата не меняет справочник центров', () => {
+    const start = rideStartOf(null, 'gomel');
+    start.geo.coordinates[0] = 0;
+    expect(CITY_CENTERS.gomel[0]).not.toBe(0);
+  });
+});
+
+describe('RIDES_POLICY.nearLimit (05c)', () => {
+  it('60 запросов «Рядом» в минуту', () => {
+    expect(RIDES_POLICY.nearLimit).toEqual({ limit: 60, windowSec: 60 });
   });
 });

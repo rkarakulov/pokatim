@@ -80,6 +80,7 @@ import {
   RideCities,
   RideDetail,
   type RideListQuery,
+  RideMap,
   RidePage,
   RideView,
   type UpdateRideRequest,
@@ -160,12 +161,20 @@ export type CalendarListParams = {
 /** Параметры центра уведомлений до схемы (`NotificationListQuery`). */
 export type NotificationListParams = { cursor?: string; limit?: number };
 
-/** Параметры ленты кофе-райдов до схемы (`city` — массив кодов справочника). */
+/**
+ * Параметры ленты кофе-райдов до схемы (`city` — массив кодов справочника). `near` — `"<lat>,<lon>"`, клиент
+ * округляет до 0,01° (05c, ADR-0014); `radiusKm` — 5…100, без него сервер берёт 25.
+ */
 export type RideListParams = {
   city?: NonNullable<RideListQuery['city']>;
   cursor?: string;
   limit?: number;
+  near?: string;
+  radiusKm?: number;
 };
+
+/** Параметры карты ленты (05c): как у ленты, без курсора и лимита. */
+export type RideMapParams = Pick<RideListParams, 'city' | 'near' | 'radiusKm'>;
 
 export interface ApiClientOptions {
   baseUrl: string;
@@ -377,6 +386,13 @@ export function createApiClient({
       request(
         `/v1/rides${queryString(params)}`,
         RidePage,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Карта ленты (05c): точки старта будущих райдов с видимым маршрутом + число райдов без точки. */
+    listRideMap: (accessToken: string, params: RideMapParams = {}) =>
+      request(
+        `/v1/rides/map${queryString(params)}`,
+        RideMap,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
     /** Города, где есть видимые зрителю будущие райды. */

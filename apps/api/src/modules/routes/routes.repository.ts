@@ -53,6 +53,13 @@ export interface RouteDerivedState {
   derivedVersion: number | null;
 }
 
+/** Поля маршрута для райда (05c, порт `RideRoutes`): без линии, владельца и публикации. */
+export type RideRouteFields = Pick<
+  RouteDoc,
+  '_id' | 'title' | 'distanceM' | 'elevationGainM' | 'start'
+>;
+const RIDE_ROUTE_PROJECTION = { title: 1, distanceM: 1, elevationGainM: 1, start: 1 } as const;
+
 /** Маршрут команды платформы (routes-02, RC-2): условие каждого чтения панели, каталога и портов. */
 const PLATFORM = { origin: 'platform' } as const;
 
@@ -156,6 +163,41 @@ export class RoutesRepository {
     return (
       (await this.c.routes.findOne({ _id: id, status: 'ready', ...PLATFORM }, { session })) ??
       undefined
+    );
+  }
+
+  /**
+   * Маршруты райдов (05c, порт `RideRoutes`): готовые и в публичном каталоге (`IN_CATALOG`) по id, ≤ 200 (вызывающий
+   * дедуплицирует). Без кэша.
+   */
+  inCatalogByIds(ids: readonly string[]): Promise<RideRouteFields[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.c.routes
+      .find<RideRouteFields>(
+        { _id: { $in: [...ids] }, status: 'ready', ...IN_CATALOG },
+        { projection: RIDE_ROUTE_PROJECTION },
+      )
+      .toArray();
+  }
+
+  /** Свои готовые маршруты райдера по id (05c, `ownRider`): чужие, платформы и не готовые — нет. */
+  ownReadyByIds(ownerUserId: string, ids: readonly string[]): Promise<RideRouteFields[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.c.routes
+      .find<RideRouteFields>(
+        { _id: { $in: [...ids] }, status: 'ready', ...ownRider(ownerUserId) },
+        { projection: RIDE_ROUTE_PROJECTION },
+      )
+      .toArray();
+  }
+
+  /** Свой готовый маршрут райдера (05c, прикрепление к райду). */
+  async findOwnReady(ownerUserId: string, id: string): Promise<RideRouteFields | undefined> {
+    return (
+      (await this.c.routes.findOne<RideRouteFields>(
+        { _id: id, status: 'ready', ...ownRider(ownerUserId) },
+        { projection: RIDE_ROUTE_PROJECTION },
+      )) ?? undefined
     );
   }
 

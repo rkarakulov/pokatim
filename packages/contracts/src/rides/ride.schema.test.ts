@@ -5,13 +5,18 @@ import {
   CreateRideForm,
   CreateRideRequest,
   RIDE_CANCEL_REASONS,
+  RIDE_MAP_MAX_POINTS,
+  RIDE_NEAR_RADIUS_KM,
   RIDE_PHASES,
+  RIDE_ROUTE_ACCESS,
   RIDE_STATUSES,
   RIDE_VIEWER_ROLES,
   RideCard,
   RideCities,
   RideDetail,
   RideListQuery,
+  RideMap,
+  RideMapQuery,
   RideQuotaDetails,
   RideView,
   UpdateRideRequest,
@@ -47,12 +52,13 @@ describe('справочники райдов (только в конец)', () 
       'other',
     ]);
     expect(RIDE_VIEWER_ROLES).toEqual(['organizer', 'participant', 'none']);
+    expect(RIDE_ROUTE_ACCESS).toEqual(['public', 'private']);
   });
 });
 
 describe('CreateRideRequest', () => {
   it('валидный райд; пустые описание и подпись — null; без лимита — null', () => {
-    expect(CreateRideRequest.parse(ride)).toEqual(ride);
+    expect(CreateRideRequest.parse(ride)).toEqual({ ...ride, routeId: null });
     expect(
       CreateRideRequest.parse({ ...ride, description: '  ', organizerName: '', limit: null }),
     ).toMatchObject({ description: null, organizerName: null, limit: null });
@@ -155,6 +161,44 @@ describe('CreateRideRequest', () => {
   });
 });
 
+describe('маршрут райда (05c)', () => {
+  it('создание: без routeId (старая сборка) — null; uuid и null — как есть; не uuid — ошибка поля', () => {
+    expect(CreateRideRequest.parse(ride).routeId).toBeNull();
+    expect(CreateRideRequest.parse({ ...ride, routeId: ID }).routeId).toBe(ID);
+    expect(CreateRideRequest.parse({ ...ride, routeId: null }).routeId).toBeNull();
+    const invalid = CreateRideRequest.safeParse({ ...ride, routeId: 'route-1' });
+    expect(invalid.error?.issues.map((issue) => issue.path)).toEqual([['routeId']]);
+  });
+
+  it('правка: без routeId — поля нет в выходе (маршрут не снимается); null — снять; uuid — сменить', () => {
+    const parsed = UpdateRideRequest.parse({ version: 1, title: 'Новый райд' });
+    expect(parsed).not.toHaveProperty('routeId');
+    expect(parsed.routeId).toBeUndefined();
+    expect(UpdateRideRequest.parse({ version: 1, routeId: null }).routeId).toBeNull();
+    expect(UpdateRideRequest.parse({ version: 1, routeId: ID }).routeId).toBe(ID);
+    expect(UpdateRideRequest.safeParse({ version: 1, routeId: 'x' }).success).toBe(false);
+  });
+
+  it('форма: routeId — uuid или null', () => {
+    const form = {
+      title: 'Кофе-райд',
+      organizerName: '',
+      date: '2027-06-14',
+      time: '10:00',
+      cityCode: 'minsk',
+      place: 'Парк Победы',
+      distanceKm: '42',
+      paceMinKmh: '22',
+      paceMaxKmh: '24',
+      limit: '',
+      description: '',
+    };
+    expect(CreateRideForm.parse({ ...form, routeId: null }).routeId).toBeNull();
+    expect(CreateRideForm.parse({ ...form, routeId: ID }).routeId).toBe(ID);
+    expect(CreateRideForm.safeParse({ ...form, routeId: 'x' }).success).toBe(false);
+  });
+});
+
 describe('UpdateRideRequest, CancelRideRequest', () => {
   it('правка: часть полей + version; без version — ошибка; темп проверяется, когда есть оба', () => {
     expect(UpdateRideRequest.parse({ version: 2, title: 'Новый райд' })).toEqual({
@@ -194,6 +238,7 @@ describe('CreateRideForm', () => {
     paceMaxKmh: '24',
     limit: '',
     description: '',
+    routeId: null,
   };
 
   it('строки полей → числа; пустой лимит — null; дата и время — отдельно', () => {
@@ -289,6 +334,45 @@ describe('ответы (tolerantEnum, без служебных полей)', ()
     });
   });
 
+  it('05c: старый ответ без route/start — null; незнакомый доступ — unknown; маршрут без геометрии', () => {
+    const old = RideCard.parse({ ...summary, viewer });
+    expect(old.route).toBeNull();
+    expect(old.start).toBeNull();
+    const route = { id: ID, title: 'Кольцо', distanceM: 42000, elevationGainM: null };
+    const card = RideCard.parse({
+      ...summary,
+      viewer,
+      route: { ...route, access: 'shared', ownerUserId: ID, line: [] },
+      start: [27.56, 53.9],
+    });
+    expect(card.route).toEqual({ ...route, access: 'unknown' });
+    expect(card.start).toEqual([27.56, 53.9]);
+    const detail = RideDetail.parse({
+      ...summary,
+      description: null,
+      route: { ...route, access: 'private' },
+      start: null,
+    });
+    expect(detail.route?.access).toBe('private');
+  });
+
+  it('карта ленты: без withoutStart — 0; точек больше 200 — ошибка', () => {
+    const point = {
+      id: ID,
+      title: 'Кофе-райд',
+      startsAt: '2027-06-14T07:00:00Z',
+      start: [27.56, 53.9],
+      goingCount: 2,
+      limit: null,
+      full: false,
+    };
+    expect(RideMap.parse({ items: [point] })).toEqual({ items: [point], withoutStart: 0 });
+    expect(RideMap.safeParse({ items: Array(RIDE_MAP_MAX_POINTS + 1).fill(point) }).success).toBe(
+      false,
+    );
+    expect(RideMap.safeParse({ items: [{ ...point, start: [200, 0] }] }).success).toBe(false);
+  });
+
   it('квота: вид и размер', () => {
     expect(RideQuotaDetails.parse({ quota: 'organized', limit: 5 })).toEqual({
       quota: 'organized',
@@ -308,5 +392,50 @@ describe('RideListQuery', () => {
     expect(RideListQuery.safeParse({ city: 'Минск' }).success).toBe(false);
     expect(RideListQuery.safeParse({ city: Array(13).fill('minsk') }).success).toBe(false);
     expect(RideListQuery.safeParse({ from: '2027-01-01' }).success).toBe(false);
+  });
+});
+
+describe('«Рядом» (05c): near и radiusKm', () => {
+  it('near=<lat>,<lon> → [lon, lat], округление до 0,01°; radiusKm 5–100, целое', () => {
+    expect(RideListQuery.parse({ near: '53.9,27.56' })).toEqual({ limit: 20, near: [27.56, 53.9] });
+    expect(RideListQuery.parse({ near: '53.9049,27.5612', radiusKm: '25' })).toEqual({
+      limit: 20,
+      near: [27.56, 53.9],
+      radiusKm: 25,
+    });
+    expect(RideListQuery.parse({ near: '-89.996,179.996' }).near).toEqual([180, -90]);
+    expect(RIDE_NEAR_RADIUS_KM).toEqual({ min: 5, max: 100, default: 25 });
+    for (const radiusKm of ['5', '100']) {
+      expect(RideListQuery.safeParse({ near: '53.9,27.56', radiusKm }).success).toBe(true);
+    }
+  });
+
+  it('невалидные near и radiusKm — ошибка; radiusKm без near — INVALID на radiusKm', () => {
+    for (const near of ['91,0', 'abc', '53.9', '53.9,27.56,1', '53.9;27.56', '53.9,181']) {
+      const result = RideListQuery.safeParse({ near });
+      expect(result.success, near).toBe(false);
+      expect(result.error?.issues[0]?.path).toEqual(['near']);
+    }
+    for (const radiusKm of ['4', '101', '2.5', 'abc']) {
+      expect(RideListQuery.safeParse({ near: '53.9,27.56', radiusKm }).success, radiusKm).toBe(
+        false,
+      );
+    }
+    const alone = RideListQuery.safeParse({ radiusKm: '25' });
+    expect(alone.error?.issues).toEqual([
+      expect.objectContaining({ path: ['radiusKm'], message: 'INVALID' }),
+    ]);
+  });
+
+  it('карта ленты: город, near, radiusKm; строгий; без курсора и лимита', () => {
+    expect(RideMapQuery.parse({})).toEqual({});
+    expect(RideMapQuery.parse({ city: 'minsk', near: '53.9,27.56', radiusKm: '10' })).toEqual({
+      city: ['minsk'],
+      near: [27.56, 53.9],
+      radiusKm: 10,
+    });
+    expect(RideMapQuery.safeParse({ limit: '20' }).success).toBe(false);
+    expect(RideMapQuery.safeParse({ cursor: 'c' }).success).toBe(false);
+    expect(RideMapQuery.safeParse({ radiusKm: '10' }).success).toBe(false);
   });
 });

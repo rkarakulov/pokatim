@@ -74,6 +74,34 @@ describe('api-client: кофе-райды', () => {
     expect(cities.calls[0]?.authorization).toBe('Bearer t');
   });
 
+  it('05c: listRides с near/radiusKm; listRideMap — Bearer, город и «Рядом» в query, withoutStart по умолчанию 0', async () => {
+    const page = client(200, { items: [], nextCursor: null });
+    await page.api.listRides('t', { near: '53.90,27.56', radiusKm: 25 });
+    expect(page.calls[0]?.url).toBe('https://api.test/v1/rides?near=53.90%2C27.56&radiusKm=25');
+    const point = {
+      id: ID,
+      title: 'Кофе-райд',
+      startsAt: '2027-06-14T07:00:00Z',
+      start: [27.56, 53.9],
+      goingCount: 2,
+      limit: null,
+      full: false,
+    };
+    const map = client(200, { items: [point] });
+    await expect(
+      map.api.listRideMap('t', { city: ['minsk'], near: '53.90,27.56', radiusKm: 10 }),
+    ).resolves.toEqual({ items: [point], withoutStart: 0 });
+    expect(map.calls[0]).toEqual({
+      url: 'https://api.test/v1/rides/map?city=minsk&near=53.90%2C27.56&radiusKm=10',
+      method: 'GET',
+      authorization: 'Bearer t',
+      body: undefined,
+    });
+    const all = client(200, { items: [], withoutStart: 3 });
+    await all.api.listRideMap('t');
+    expect(all.calls[0]?.url).toBe('https://api.test/v1/rides/map');
+  });
+
   it('getRideForViewer и мутации — Bearer, пути и тела', async () => {
     const { calls, api } = client(200, view);
     await api.getRideForViewer('t', ID);
@@ -120,6 +148,7 @@ describe('api-client: кофе-райды', () => {
         paceMaxKmh: 24,
         limit: 12,
         description: null,
+        routeId: null,
       }),
     ).resolves.toMatchObject({ ride: { version: 0 } });
     expect(created.calls[0]?.url).toBe('https://api.test/v1/rides');

@@ -317,6 +317,15 @@ paths:
   райда первой — **HIGH** (отрицательное доказательство — гонка в `ride-reports.int.test.ts`).
 - Очереди — частичные индексы `rides_report_queue_idx` (`openReportCount > 0`, запрос обязан содержать это условие)
   и `rides_hidden_queue_idx` (`status: 'hidden'`); публичное чтение и лента — `status ∈ {published, cancelled}`.
+- Маршрут и точка «Рядом» (05c, миграция `0030_rides_geo`: бэкфилл `routeId: null`, `geo` — центр города,
+  `startPrecise: false`; индекс `rides_geo_feed_idx` `{ geo: '2dsphere', startsAt: 1 }`): `routeId` — только ссылка
+  (название, длина, старт — порт `RideRoutes` на каждом чтении, снимка нет); `geo` пишут создание и правка
+  (`rideStartOf`: маршрут виден публично — его старт и `startPrecise: true`, иначе `CITY_CENTERS[cityCode]`).
+  Правка пересчитывает точку при смене маршрута или города и при прикреплённом маршруте с `startPrecise: false`
+  (RC-3); перенос (`changesStart`) — и смена точной точки на другую точную (RC-4). «Рядом» — `$geoWithin
+  $centerSphere` в `$and` ленты (не `$near`: курсор по времени). `geo`/`startPrecise` наружу не уходят
+  (`PUBLIC_PROJECTION`). Стирание — `resetStartsForRoutes`: точные точки райдов любых организаторов на маршрутах
+  удалённого → центр города (одна pipeline-операция, `version` не меняется, повтор — no-op).
 
 ## Удаление аккаунта (ADR-0015, `docs/product/account.md`)
 
