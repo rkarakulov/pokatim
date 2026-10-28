@@ -123,7 +123,11 @@ jest.mock('@maplibre/maplibre-react-native', () => {
     fitBounds: jest.fn(),
     setStop: jest.fn(async () => undefined),
   };
-  const map = { getViewState: jest.fn(notReady), getZoom: jest.fn(notReady) };
+  const map = {
+    getViewState: jest.fn(notReady),
+    getZoom: jest.fn(notReady),
+    showAttribution: jest.fn(async () => undefined),
+  };
   const stub = (name: string, methods?: object) => {
     const Component = ({ ref, ...props }: { ref?: unknown; children?: unknown }) => {
       useImperativeHandle(ref, () => methods ?? null, []);

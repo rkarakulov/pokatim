@@ -120,6 +120,8 @@ export const ru = {
   'maps.controls.fit': 'Показать маршрут целиком',
   // routes-04d: «Моё местоположение» — одно чтение позиции по нажатию; отказ и ошибка — сообщение над картой
   'maps.controls.locate': 'Моё местоположение',
+  // кнопка «i» атрибуции карты (OSM, тайлы) — свой значок вместо кнопки MapLibre [ASSUMPTION copy]
+  'maps.controls.attribution': 'Об источниках карты',
   'maps.location.denied': 'Нет доступа к геопозиции.',
   'maps.location.deniedSettings': 'Нет доступа к геопозиции. Нажмите, чтобы открыть настройки.',
   'maps.location.deniedBrowser': 'Нет доступа к геопозиции. Разрешите его в настройках браузера.',
