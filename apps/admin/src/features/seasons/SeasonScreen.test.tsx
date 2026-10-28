@@ -457,13 +457,22 @@ describe('Сезон: «Рейтинг» (08b)', () => {
     expect(await screen.findByRole('heading', { name: 'Сезон 2026', level: 1 })).toBeTruthy();
   });
 
-  it('шапка: фоновое обновление сезонов упало при показанных данных — без баннера шапки', async () => {
+  it('шапка: обновление сезонов упало при показанных данных — шапка остаётся, баннер с повтором', async () => {
     const { queryClient } = await renderApp(PATH);
     await screen.findByRole('heading', { name: 'Сезон 2026', level: 1 });
     mocked.listSeasons.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
     await act(() => queryClient.refetchQueries({ queryKey: ['admin', 'seasons'], exact: true }));
     expect(queryClient.getQueryState(['admin', 'seasons'])?.status).toBe('error');
     expect(screen.getByRole('heading', { name: 'Сезон 2026', level: 1 })).toBeTruthy();
+    expect(screen.getByText('1 апреля 2026 — 31 октября 2026')).toBeTruthy();
     expect(screen.queryByText('Не удалось загрузить название и даты сезона')).toBeNull();
+    const banner = screen
+      .getByText('Не удалось обновить название и даты сезона')
+      .closest('.banner')!;
+    fireEvent.click(within(banner as HTMLElement).getByRole('button', { name: 'Повторить' }));
+    await waitFor(() =>
+      expect(screen.queryByText('Не удалось обновить название и даты сезона')).toBeNull(),
+    );
+    expect(screen.getByRole('heading', { name: 'Сезон 2026', level: 1 })).toBeTruthy();
   });
 });

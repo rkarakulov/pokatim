@@ -876,6 +876,7 @@ export const ru = {
   'admin.seasons.range': '{from} — {to}',
   'admin.seasons.notFound': 'Сезон не найден',
   'admin.seasons.headerFailed': 'Не удалось загрузить название и даты сезона',
+  'admin.seasons.headerRefreshFailed': 'Не удалось обновить название и даты сезона',
   // Рейтинг сезона (race-results-08b): только чтение, считает сервер
   'admin.standings.title': 'Рейтинг',
   'admin.standings.computedAt': 'Пересчёт: {date}',

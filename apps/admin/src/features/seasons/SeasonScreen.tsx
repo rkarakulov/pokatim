@@ -78,23 +78,29 @@ export function SeasonScreen({ seasonId }: { seasonId: string }) {
     />
   );
 
-  // шапки нет (отказ или ожидание сети) — свой баннер с повтором запроса сезонов, рейтинг не прячется; ошибка
-  // фонового обновления при показанной шапке баннера не даёт — название и даты верные
+  // баннер шапки с повтором запроса сезонов, рейтинг не прячется: без данных — «Нет соединения» (ожидание сети,
+  // сетевой отказ) или «Не удалось загрузить»; при показанной шапке ошибка обновления — шапка остаётся (§4.12)
   const seasonsOffline = seasons.fetchStatus === 'paused' || isNetworkError(seasons.error);
-  const seasonsBanner =
-    !seasons.data && (seasons.isError || seasons.fetchStatus === 'paused') ? (
-      <Banner
-        tone="warning"
-        title={t(seasonsOffline ? 'state.errorTitle' : 'admin.seasons.headerFailed')}
-        actions={
-          <Button size="sm" onClick={() => void seasons.refetch()}>
-            {t('state.retry')}
-          </Button>
-        }
-      >
-        {seasonsOffline ? t('state.errorMessage') : null}
-      </Banner>
-    ) : null;
+  const seasonsBannerTitle = seasons.data
+    ? seasons.isError
+      ? t('admin.seasons.headerRefreshFailed')
+      : null
+    : seasons.isError || seasons.fetchStatus === 'paused'
+      ? t(seasonsOffline ? 'state.errorTitle' : 'admin.seasons.headerFailed')
+      : null;
+  const seasonsBanner = seasonsBannerTitle ? (
+    <Banner
+      tone="warning"
+      title={seasonsBannerTitle}
+      actions={
+        <Button size="sm" onClick={() => void seasons.refetch()}>
+          {t('state.retry')}
+        </Button>
+      }
+    >
+      {!seasons.data && seasonsOffline ? t('state.errorMessage') : null}
+    </Banner>
+  ) : null;
 
   if (summary.isError && !summary.data && httpStatus(summary.error) === 404) {
     return (

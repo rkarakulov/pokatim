@@ -1007,3 +1007,20 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
   cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Tests 351 passed (351)`, api `1453 passed`,
   app `1582 passed`, contracts `315 passed`, api-client `110 passed`, i18n `6 passed`, `Tasks: 15 successful, 15
   total` (`Cached: 14 cached` — менялся только `apps/admin`).
+
+### Фиксы ревью 08b pass 3
+
+Ревью: Codex — HIGH (`findings-08b-codex-pass3.md`).
+
+- HIGH: шапка с данными и ошибка обновления `seasonsQuery` — название и даты остаются, сверху баннер «Не удалось
+  обновить название и даты сезона» (`admin.seasons.headerRefreshFailed`) с повтором `seasons.refetch()` (§4.12;
+  вариант, допустимый по LOW-1 Claude pass 2). Без данных — как в pass 2: «Нет соединения» / «Не удалось загрузить
+  название и даты сезона».
+- Тест (до кода, был красным: `Tests 1 failed | 22 passed (23)`): «обновление сезонов упало при показанных данных» —
+  успех → отказ обновления → шапка и даты на месте, баннер (без текста «не удалось загрузить») → повтор → баннер
+  исчез. `vitest run src/features/seasons` → `Tests 31 passed (31)`.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08b_test REDIS_URL_TEST=…/15 pnpm check` → `EXIT=0`:
+  `All matched files use Prettier code style!`, `✔ no dependency violations found (1491 modules, 5517 dependencies
+  cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Tests 351 passed (351)`, api `1453 passed`,
+  app `1582 passed`, contracts `315 passed`, api-client `110 passed`, i18n `6 passed`, `Tasks: 15 successful, 15
+  total`.
