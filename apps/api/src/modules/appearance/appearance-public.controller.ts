@@ -1,17 +1,21 @@
 import { Controller, Get, Header, UseGuards } from '@nestjs/common';
 import type { AppAppearance } from '@pokatim/contracts';
 
-import { PUBLIC_READ_CACHE_CONTROL, PublicReadGuard } from '../../public-read.guard';
+import { PublicReadGuard } from '../../public-read.guard';
 import { AppearanceService } from './appearance.service';
 
-/** Тема приложения (app-themes): без входа, одинакова для всех, кэш 60 с, IP-лимит `public-read`. */
+/**
+ * Тема приложения (app-themes): без входа, одинакова для всех, IP-лимит `public-read`. Кэш браузера — `no-cache`, не
+ * общие 60 с публичного чтения: после смены темы в панели закэшированный ответ перекрашивал свежую SSR-страницу в
+ * прежнюю тему. Запрос — раз на загрузку и на возврат фокуса, ответ — один ключ.
+ */
 @Controller('appearance')
 @UseGuards(PublicReadGuard)
 export class AppearancePublicController {
   constructor(private readonly appearance: AppearanceService) {}
 
   @Get()
-  @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
+  @Header('Cache-Control', 'no-cache')
   get(): Promise<AppAppearance> {
     return this.appearance.getPublic();
   }

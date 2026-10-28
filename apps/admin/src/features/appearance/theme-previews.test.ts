@@ -10,20 +10,33 @@ describe('превью тем в панели (app-themes C1, AC8)', () => {
     for (const id of APP_THEME_IDS) expect(THEME_PREVIEWS[id]).toEqual(previewOf(appThemes[id]));
   });
 
-  it('превью — роли светлой схемы темы из реестра (у «всегда тёмных» — их единственная)', () => {
+  it('превью — роли схем темы из реестра: «по системе» — светлая и тёмная, «всегда тёмная» — одна', () => {
     for (const def of Object.values(appThemes)) {
-      const scheme = def.schemes.light;
+      const schemes =
+        def.colorScheme === 'dark' ? [def.schemes.dark] : [def.schemes.light, def.schemes.dark];
       expect(previewOf(def)).toEqual({
-        canvas: scheme.surface.default,
-        card: scheme.surface.raised,
-        text: scheme.text.primary,
-        accent: scheme.action.primary,
-        route: scheme.map.route,
-        radius: scheme.shape.card,
+        colorScheme: def.colorScheme,
+        mocks: schemes.map((scheme) => ({
+          canvas: scheme.surface.default,
+          card: scheme.surface.raised,
+          text: scheme.text.primary,
+          accent: scheme.action.primary,
+          route: scheme.map.route,
+          radius: scheme.shape.card,
+        })),
         font: def.fonts.display,
       });
     }
-    expect(THEME_PREVIEWS.chrono.canvas).toBe(appThemes.chrono.schemes.dark.surface.default);
+    expect(THEME_PREVIEWS.chrono.mocks).toHaveLength(1);
+    expect(THEME_PREVIEWS.journal.mocks).toHaveLength(2);
+  });
+
+  it('тёмный Журнал не совпадает с Навигацией: фон, карточка и акцент разные', () => {
+    const [, journalDark] = THEME_PREVIEWS.journal.mocks;
+    const [navigation] = THEME_PREVIEWS.navigation.mocks;
+    expect(journalDark?.canvas).not.toBe(navigation?.canvas);
+    expect(journalDark?.card).not.toBe(navigation?.card);
+    expect(journalDark?.accent).not.toBe(navigation?.accent);
   });
 
   it('у тем разные превью', () => {
