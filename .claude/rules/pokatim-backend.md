@@ -123,9 +123,9 @@ paths:
   `processAvatar`; `POST delete` — лимит `profile-update`), отдача — `AvatarsPublicController` (`avatars/:id`,
   `PublicReadGuard`, заголовки через `HttpAdapterHost` после чтения). Порт `RIDER_PROFILES`
   (`RiderProfileDirectory.findPublic`) — в `ProfileCoreModule`.
-- **Исключение RC-A1 (ADR-0018):** перекодирование аватара `sharp` (`avatar-image.ts`) — в HTTP-обработчике: вход
+- **Исключение RC-A1 (ADR-0019):** перекодирование аватара `sharp` (`avatar-image.ts`) — в HTTP-обработчике: вход
   ≤ 10 МиБ, JPEG/WebP ≤ 100 Мп (две стадии: shrink-on-load до 2048 px, затем квадрат), PNG ≤ 25 Мп, `failOn: 'error'`,
-  `timeout` 10 с, 1 обработка на процесс (память — ADR-0018), пул libvips вне event loop. «Рендер в HTTP-обработчике»
+  `timeout` 10 с, 1 обработка на процесс (память — ADR-0019), пул libvips вне event loop. «Рендер в HTTP-обработчике»
   красных флагов — Skia, ffmpeg, OG; другие изображения — только по этому образцу и с ADR.
 - Истории своего профиля — в модулях-владельцах: `results` — `ProfileRacesController` (`profile/races`) →
   `ResultsHistoryService` (`entriesOfUserPage` + `ResultsReadService.entryResult` в одной snapshot-сессии, места не
@@ -190,11 +190,27 @@ paths:
   данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник» (A3). Финальный провал шага — лог
   `account.erasure_failed user=<uid> step=<s>`, failed-набор BullMQ, регламент; экран в панели — follow-up (F13).
 
+## Карточки для сторис (`sharing`, story-cards, ADR-0018)
+
+- Модуль `sharing`: `SharingModule` (`AppModule`: `StoryCardController` — `GET races/:raceId/entry/story-card`,
+  `AuthGuard`, `no-store`; `StoryCardImageController` — `GET story-cards/:file`, `IpRateLimitGuard`) и
+  `SharingWorkerModule` (`WorkerModule`: очередь `story-card`, `StoryCardProcessor`, `concurrency: 1`). Зависит от
+  `results` (порт `RESULTS_FOR_SHARING`: `storyCardFacts` — как «моё участие», `storyCardLine` — `sliceLine` по
+  `trackMap.segment` или линия маршрута), `appearance` (`AppearanceCoreModule`, порт `APP_APPEARANCE`), `profile`
+  (`RIDER_NAMES`), `identity` — только `index.ts`; на `sharing` не ссылается никто.
+- Входы — `StoryCardInputs.resolve` (одна реализация для HTTP и worker), ключ — `storyCardHash`; кэш — Redis
+  (`StoryCardCache`: `token:<hash>`, `png:<token>`, `pending:<hash>` NX, `failed:<hash>` `GETDEL`). Worker сверяет
+  хэш (не совпал — `skipped`). Рендер — чистые `storyCardTree` (satori-узлы, только flex) → `renderStoryCardSvg`
+  (шрифты темы по ролям) → `renderStoryCardPng` (resvg). Изменил разметку, тексты или токены карточки — подними
+  `STORY_CARD_POLICY.renderVersion`. Превью — `pnpm --filter @pokatim/api preview:story-cards <каталог>`.
+- Общий код карточки — пакеты: форматтеры `@pokatim/i18n` (`format.ts`), геометрия линии `@pokatim/route-view`
+  (`line-geometry.ts`), таблица начертаний `appFontFaces` и токены `storyCard` — `@pokatim/design-tokens`.
+
 ## Красные флаги pokatim
 
 Клиентское время в расчёте результата · UPDATE/DELETE аудита и истории споров, переход спора не из `open` ·
 биометрия или e-mail в логах · разбор трека или рендер в HTTP-обработчике (перекодирование аватара — исключение
-RC-A1, ADR-0018).
+RC-A1, ADR-0019).
 
 ## Уровни и группы зачёта (`results`, `profile`, race-results-07)
 

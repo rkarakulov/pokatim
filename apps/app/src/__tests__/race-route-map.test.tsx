@@ -92,7 +92,9 @@ describe('карта маршрута на карточке гонки (maps-01)
     const map = await screen.findByTestId('maplibre-Map');
     expect(loadMapLibreNative).toHaveBeenCalled();
     expect(map).toHaveProp('mapStyle', LIGHT);
-    expect(map).toHaveProp('attribution', true);
+    // атрибуция «i» — своя кнопка вместо кнопки MapLibre
+    expect(map).toHaveProp('attribution', false);
+    expect(screen.getByRole('button', { name: 'Об источниках карты' })).toBeOnTheScreen();
     // routes-04c: один палец двигает карту, щипок — зум (нативные жесты); вращения и наклона нет
     expect(map.props).toMatchObject({
       dragPan: true,

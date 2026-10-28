@@ -77,7 +77,9 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'VERIFIED_DEMOGRAPHICS_LOCKED',
   // routes-06: лимит подач маршрута в каталог (details: limit, max)
   'ROUTE_PUBLICATION_LIMIT',
-  // rider-profile: фото не JPEG/PNG/WebP (415); больше 10 МиБ (413); не декодируется, больше 25 Мп, мелкая обрезка (422)
+  // story-cards: карточки нет (нет заявки, времени, снята, DQ) — 409
+  'STORY_CARD_UNAVAILABLE',
+  // rider-profile: фото не JPEG/PNG/WebP (415); больше 10 МиБ (413); не декодируется, больше предела пикселей, мелкая обрезка (422)
   'AVATAR_FORMAT_UNSUPPORTED',
   'AVATAR_TOO_LARGE',
   'AVATAR_INVALID',

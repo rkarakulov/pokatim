@@ -7,7 +7,7 @@ import type {
   SeasonStandingsTable,
   SeasonStandingsTableRef,
 } from '@pokatim/contracts';
-import { t } from '@pokatim/i18n';
+import { formatPlace, t } from '@pokatim/i18n';
 
 import { groupLabel } from '@/features/races/participation-format';
 import { domainLabel } from '@/lib/minsk-format';
@@ -22,12 +22,10 @@ type Key = { bikeClass: BikeClass | 'unknown'; groupKey: ResultGroupKey | 'unkno
 
 /** Место «=6» при ничьей; для скринридера — «6-е место поровну» (как таблица гонки). */
 export function placeView(place: number, tied: boolean): { text: string; a11y: string } {
-  return tied
-    ? {
-        text: t('races.results.tiePlace', { place }),
-        a11y: t('races.results.tiedA11y', { place }),
-      }
-    : { text: String(place), a11y: String(place) };
+  return {
+    text: formatPlace(place, tied),
+    a11y: tied ? t('races.results.tiedA11y', { place }) : String(place),
+  };
 }
 
 export const pointsText = (points: number) => t('season.standings.points', { count: points });

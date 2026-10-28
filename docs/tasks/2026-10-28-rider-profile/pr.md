@@ -4,7 +4,7 @@
 R1–R10 — `docs/product/profile.md`). Приложение — следующим PR (B).
 
 ### Что сделано
-- **Аватар** (ADR-0018):
+- **Аватар** (ADR-0019):
   - `PUT /v1/profile/avatar` — тело `octet-stream` до 10 МиБ, обрезка по query `x, y, size`;
   - `POST /v1/profile/avatar/delete`;
   - `GET /v1/avatars/:id` — публичный, `immutable`, `nosniff`, `CSP sandbox`.

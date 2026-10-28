@@ -120,6 +120,8 @@ export const ru = {
   'maps.controls.fit': 'Показать маршрут целиком',
   // routes-04d: «Моё местоположение» — одно чтение позиции по нажатию; отказ и ошибка — сообщение над картой
   'maps.controls.locate': 'Моё местоположение',
+  // кнопка «i» атрибуции карты (OSM, тайлы) — свой значок вместо кнопки MapLibre [ASSUMPTION copy]
+  'maps.controls.attribution': 'Об источниках карты',
   'maps.location.denied': 'Нет доступа к геопозиции.',
   'maps.location.deniedSettings': 'Нет доступа к геопозиции. Нажмите, чтобы открыть настройки.',
   'maps.location.deniedBrowser': 'Нет доступа к геопозиции. Разрешите его в настройках браузера.',
@@ -2242,4 +2244,23 @@ export const ru = {
   'admin.disputes.result.group': 'Группа',
   'admin.disputes.result.tier': 'Уровень',
   'admin.disputes.result.attention': 'Требует внимания',
+  // story-cards: карточка для сторис своего результата (экран, кнопки, тексты PNG — рендер в API)
+  'races.result.shareStory': 'Поделиться в сторис',
+  'races.result.ownTitle': 'Ваш результат',
+  'story.title': 'Карточка для сторис',
+  'story.templates': 'Шаблон карточки',
+  'story.template.line': 'Линия',
+  'story.template.night': 'Ночь',
+  'story.share': 'Поделиться',
+  'story.download': 'Скачать PNG',
+  'story.hint': 'Имя на карточке — только с вашим согласием в профиле',
+  'story.empty.title': 'Карточки пока нет',
+  'story.empty.action': 'К гонке',
+  'story.preview': 'Карточка для сторис: {race}',
+  'story.shareFailed': 'Не удалось поделиться карточкой.',
+  'storyCard.kicker': 'Гонка',
+  'storyCard.kickerProvisional': 'Гонка · Предварительный',
+  'storyCard.place': 'Место',
+  'storyCard.group': 'Группа',
+  'storyCard.brand': 'Покатим',
 } as const;

@@ -3,7 +3,6 @@ import { ApiHttpError } from '@pokatim/api-client';
 import type { MyAttemptTrack, RaceRouteMap } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 
-import { themes } from '@pokatim/design-tokens';
 import { MAP_FIT_PADDING } from '@pokatim/route-view';
 
 import { useSessionStore } from '@/features/auth/session-store';
@@ -128,10 +127,12 @@ describe('свой трек на карте гонки (maps-02)', () => {
     expect(
       screen.getByLabelText(new RegExp(`^${mapLabel}\\. Ваш трек: ${summary}`)),
     ).toBeOnTheScreen();
-    // B2/B4: «i» атрибуции — в цвете темы, камера с отступом под неё; routes-04d (RC-6) — в нижнем левом углу
-    const map = screen.getByTestId('maplibre-Map');
-    expect(map.props.attributionPosition).toEqual({ bottom: 8, left: 8 });
-    expect(map.props.tintColor).toBe(themes.light.text.secondary);
+    // «i» атрибуции — своя кнопка в нижнем левом углу (routes-04d, RC-6), камера с отступом под неё
+    expect(screen.getByTestId('maplibre-Map').props.attribution).toBe(false);
+    expect(screen.getByRole('button', { name: 'Об источниках карты' })).toHaveStyle({
+      bottom: 8,
+      left: 8,
+    });
     expect(screen.getByTestId('maplibre-Camera').props.initialViewState.padding).toEqual(
       MAP_FIT_PADDING,
     );

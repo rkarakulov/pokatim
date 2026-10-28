@@ -11,7 +11,7 @@ import {
   type RaceFinisherRow,
   type RaceResultRow,
 } from '@pokatim/contracts';
-import { t } from '@pokatim/i18n';
+import { formatPlace, t } from '@pokatim/i18n';
 import type { PillTone } from '@rkarakulov/ui';
 
 import { actionErrorMessage, apiErrorCode } from '@/features/auth/error-messages';
@@ -306,7 +306,7 @@ export function resultRow(
   row: RaceResultRow,
   own: boolean,
 ): { place: string; who: string; time: string; a11y: string } {
-  const place = row.tied ? t('races.results.tiePlace', { place: row.place }) : String(row.place);
+  const place = formatPlace(row.place, row.tied);
   const who = own ? t('races.results.you') : (row.riderName ?? t('races.results.rider'));
   const time = formatElapsed(row.elapsedSec);
   const spoken = row.tied ? t('races.results.tiedA11y', { place: row.place }) : String(row.place);

@@ -1,6 +1,7 @@
 import type { LineLayerSpecification } from '@maplibre/maplibre-gl-style-spec';
 import type { LonLat, MyAttemptTrack, RaceRouteMap } from '@pokatim/contracts';
 import { stroke, type AppTheme } from '@pokatim/design-tokens';
+import { sliceLine as slice } from '@pokatim/route-view';
 import { boundsOf } from '@pokatim/tracks';
 import type { FeatureCollection, LineString } from 'geojson';
 
@@ -32,28 +33,6 @@ const OFF_DASH = [1.5, 1];
 
 type Run = MyAttemptTrack['segment'];
 type TrackKind = 'outside' | 'segment' | 'off';
-
-/** Точка линии в дробной позиции `i + t`. */
-function pointAt(line: readonly LonLat[], position: number): LonLat {
-  const i = Math.floor(position);
-  const a = line[i]!;
-  const b = line[i + 1];
-  const t = position - i;
-  if (b === undefined || t === 0) return a;
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-}
-
-/** Участок линии между позициями (зажаты в `[0, n − 1]`); пустой — `null`. */
-function slice(line: readonly LonLat[], from: number, to: number): LonLat[] | null {
-  const last = line.length - 1;
-  const a = Math.max(0, Math.min(last, from));
-  const b = Math.max(0, Math.min(last, to));
-  if (!(b > a)) return null;
-  const result: LonLat[] = [pointAt(line, a)];
-  for (let i = Math.floor(a) + 1; i < b; i += 1) result.push(line[i]!);
-  result.push(pointAt(line, b));
-  return result;
-}
 
 /**
  * Разрез линии трека: «вне сегмента» (до выхода из ворот старта, после входа в ворота финиша), «сегмент», «сход».
