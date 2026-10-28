@@ -52,7 +52,21 @@
 ## 8. Статус
 
 - [x] UNDERSTAND / SPEC / PLAN
-- [x] IMPLEMENT  - [ ] VERIFY  - [ ] REVIEW  - [ ] FINISH
+- [x] IMPLEMENT  - [x] VERIFY  - [x] REVIEW  - [ ] FINISH
+
+## 10. Documentation Sync
+
+`.claude/rules/pokatim-app.md` (декор, `react-native-svg` в `decor-svg`), `pokatim-backend.md` (ответ `{ themeId, decor }`,
+тело PUT, журнал), `pokatim-db.md` (поле `decor?`), `pokatim-web.md` (блок «Сезонный декор»).
+
+## 12. Evidence
+
+- `TURBO_CONCURRENCY=1 pnpm check` (изолированные Mongo/Redis): 12/13 задач зелёные; `@pokatim/api#test` — 3 таймаута
+  в `results-revisions.int.test.ts` под нагрузкой (параллельно шли jest-прогоны); файл отдельно — 6/6. Остальные
+  1454 теста API зелёные, включая `appearance-*.int.test.ts`.
+- Ревью `independent-reviewer` pass 1 — APPROVE (CRITICAL 0 / HIGH 0 / LOW 3): LOW-1 (живые таймеры анимации в тесте)
+  и LOW-2 (ведьма на web через `left`) исправлены, LOW-3 — этот раздел.
+- Не проверено: живой вид на iOS/Android-устройстве (симулятор не запускался).
 
 ## 9. Не делаем
 
