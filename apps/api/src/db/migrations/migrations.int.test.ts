@@ -37,7 +37,9 @@ import { routesPublication } from './0029_routes_publication';
 import { standings } from './0030_standings';
 import { STANDINGS_COLLECTIONS } from '../../modules/standings/standings.collection';
 import { CITY_CENTERS_0031, ridesGeo } from './0031_rides_geo';
-import { RIDER_PROFILE_INDEXES, riderProfile } from './0032_rider_profile';
+import { routeRides } from './0032_route_rides';
+import { ROUTE_RIDES_COLLECTIONS } from '../../modules/route-rides/route-rides.collection';
+import { RIDER_PROFILE_INDEXES, riderProfile } from './0033_rider_profile';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
 import { notifications } from './0025_notifications';
@@ -139,7 +141,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0029_routes_publication',
       '0030_standings',
       '0031_rides_geo',
-      '0032_rider_profile',
+      '0032_route_rides',
+      '0033_rider_profile',
     ]);
   });
 
@@ -524,7 +527,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         race_protocol_rows_order_unique: index({ raceId: 1, revision: 1, order: 1 }, true),
         // 0028_entry_tier (race-results-07): строки протокола по группе
         race_protocol_rows_group_idx: index({ raceId: 1, revision: 1, groupKey: 1, order: 1 }),
-        // 0032_rider_profile: строки райдера по всем ревизиям
+        // 0033_rider_profile: строки райдера по всем ревизиям
         race_protocol_rows_user_idx: index({ userId: 1, raceId: 1, revision: -1 }),
       },
       [RESULTS_COLLECTIONS.recalculations]: {
@@ -1120,6 +1123,31 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(RACES_COLLECTIONS.races)).toMatchObject(protocolIdx);
   });
 
+  it('0032_route_rides: коллекция заездов по маршруту и уникальный индекс (userId, routeId, activityId); после 0031; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.indexOf('0032_route_rides')).toBe(ids.indexOf('0031_rides_geo') + 1);
+    const exists = async () =>
+      (
+        await h.db
+          .listCollections({ name: ROUTE_RIDES_COLLECTIONS.rides }, { nameOnly: true })
+          .toArray()
+      ).length === 1;
+    const expected = {
+      route_rides_user_route_activity_unique: {
+        key: { userId: 1, routeId: 1, activityId: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await exists()).toBe(true);
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
+    await routeRides.up(h.db);
+    await routeRides.up(h.db);
+    expect(await exists()).toBe(true);
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
+  });
+
   it('0031_rides_geo: бэкфилл точки «Рядом» (центр города) и routeId; индексы 2dsphere (rides.geo, routes.start); повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
     expect(ids.indexOf('0031_rides_geo')).toBe(ids.indexOf('0030_standings') + 1);
@@ -1180,7 +1208,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await ridesDb.deleteMany({ _id: { $in: ['old-ride', 'precise-ride'] } });
   });
 
-  it('0004_profile: коллекция profiles (индексов сверх _id нет до 0032); повторный up — без ошибки', async () => {
+  it('0004_profile: коллекция profiles (индексов сверх _id нет до 0033); повторный up — без ошибки', async () => {
     const exists = () =>
       h.db.listCollections({ name: PROFILE_COLLECTIONS.profiles }, { nameOnly: true }).toArray();
     expect(await exists()).toHaveLength(1);
@@ -1193,14 +1221,14 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await profile.up(h.db);
     expect(await exists()).toHaveLength(1);
     expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toEqual({});
-    // индекс publicId (0032) — обратно: следующие файлы стенда работают с той же базой
+    // индекс publicId (0033) — обратно: следующие файлы стенда работают с той же базой
     await riderProfile.up(h.db);
   });
 
-  it('0032_rider_profile: бэкфилл publicId (имя + согласие) и raceWindowStartsAt; profile_avatars; индексы; последняя; повторный up — без изменений', async () => {
+  it('0033_rider_profile: бэкфилл publicId (имя + согласие) и raceWindowStartsAt; profile_avatars; индексы; последняя; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0032_rider_profile');
-    expect(ids.indexOf('0032_rider_profile')).toBe(ids.indexOf('0031_rides_geo') + 1);
+    expect(ids.at(-1)).toBe('0033_rider_profile');
+    expect(ids.indexOf('0033_rider_profile')).toBe(ids.indexOf('0032_route_rides') + 1);
 
     const avatarsExist = await h.db
       .listCollections({ name: PROFILE_COLLECTIONS.avatars }, { nameOnly: true })
@@ -1245,9 +1273,9 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       { _id: 'nameless', publicName: null, showNameInResults: true },
       { _id: 'kept', publicName: 'Вера', showNameInResults: true, publicId: 'k'.repeat(43) },
     ]);
-    await racesDb.insertOne({ _id: 'race-0032', windowStartsAt });
+    await racesDb.insertOne({ _id: 'race-0033', windowStartsAt });
     await entries.insertMany([
-      { _id: 'entry-old', raceId: 'race-0032', userId: 'u1' },
+      { _id: 'entry-old', raceId: 'race-0033', userId: 'u1' },
       { _id: 'entry-orphan', raceId: 'race-missing', userId: 'u1' },
     ]);
 
@@ -1272,7 +1300,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(RESULTS_COLLECTIONS.entries)).toEqual(before.entries);
     await profiles.deleteMany({ _id: { $in: ['shown', 'hidden', 'nameless', 'kept'] } });
     await entries.deleteMany({ _id: { $in: ['entry-old', 'entry-orphan'] } });
-    await racesDb.deleteOne({ _id: 'race-0032' });
+    await racesDb.deleteOne({ _id: 'race-0033' });
   });
 
   it('индексы identity: имена, ключи, unique, partialFilterExpression; TTL 30 дней (Q2)', async () => {

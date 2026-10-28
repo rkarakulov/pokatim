@@ -100,6 +100,11 @@ import {
   type DisputeResponseRequest,
   MyRoute,
   MyRoutePage,
+  RouteRideCandidates,
+  RouteRideDetail,
+  RouteRidePage,
+  type RouteRideRequest,
+  RouteRideTrack,
   type RenameRouteInput,
   type SubmitRoutePublicationInput,
   StoryCardStatus,
@@ -731,6 +736,44 @@ export function createApiClient({
       request(
         `/v1/races/${encodeURIComponent(raceId)}/attempt-candidates`,
         AttemptCandidates,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+
+    // --- заезд по маршруту (route-rides-01): только свои, вход обязателен ---
+    /** Свои заезды по маршруту (каталог или свой готовый): сводка и строки; маршрут не виден — `404`. */
+    listRouteRides: (accessToken: string, routeId: string) =>
+      request(
+        `/v1/routes/${encodeURIComponent(routeId)}/rides`,
+        RouteRidePage,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Свои заезды за 365 дней у рамки маршрута (≤ 30) с отметкой уже проверенного заезда группы. */
+    listRouteRideCandidates: (accessToken: string, routeId: string) =>
+      request(
+        `/v1/routes/${encodeURIComponent(routeId)}/rides/candidates`,
+        RouteRideCandidates,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** «Проверить заезд» (`201` — новый, `200` — уже есть); загрузка в обработке — `409 ROUTE_RIDE_NOT_READY`. */
+    checkRouteRide: (accessToken: string, routeId: string, body: RouteRideRequest) =>
+      postAuthorized(
+        accessToken,
+        `/v1/routes/${encodeURIComponent(routeId)}/rides`,
+        RouteRideDetail,
+        body,
+      ),
+    /** Заезд по маршруту: статус, вердикт, время, сравнение со своими пройденными. */
+    getRouteRide: (accessToken: string, routeId: string, rideId: string) =>
+      request(
+        `/v1/routes/${encodeURIComponent(routeId)}/rides/${encodeURIComponent(rideId)}`,
+        RouteRideDetail,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Своя линия заезда и разметка схода (как `getMyAttemptTrack`). */
+    getRouteRideTrack: (accessToken: string, routeId: string, rideId: string) =>
+      request(
+        `/v1/routes/${encodeURIComponent(routeId)}/rides/${encodeURIComponent(rideId)}/track`,
+        RouteRideTrack,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
 

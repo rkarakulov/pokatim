@@ -134,7 +134,7 @@ describe('GET /v1/profile/races (AC7)', () => {
     expect(item?.result).toMatchObject({ status: 'final', place: 2 });
   });
 
-  it('заявка без raceWindowStartsAt (до 0032) — в конце, без падения', async () => {
+  it('заявка без raceWindowStartsAt (до 0033) — в конце, без падения', async () => {
     const w = await world();
     await resultsDb(h).entries.updateOne(
       { raceId: w.raceB, userId: w.me.userId },

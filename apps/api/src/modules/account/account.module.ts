@@ -8,6 +8,7 @@ import { NotificationsCoreModule } from '../notifications';
 import { PanelCoreModule } from '../panel';
 import { ProfileCoreModule } from '../profile';
 import { RidesCoreModule } from '../rides';
+import { RouteRidesCoreModule } from '../route-rides';
 import { RoutesCoreModule } from '../routes';
 import { TracksCoreModule } from '../tracks';
 import { AccountDeletionService } from './account-deletion.service';
@@ -39,6 +40,7 @@ export class AccountModule {}
     RidesCoreModule,
     RoutesCoreModule,
     TracksCoreModule,
+    RouteRidesCoreModule,
     DevicesCoreModule,
     NotificationsCoreModule,
     BullModule.registerQueue({ name: QUEUE.accountDeletion }),

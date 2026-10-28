@@ -19,6 +19,7 @@ import { devicesOutboxRoutes, DevicesWorkerModule } from './modules/devices';
 import { DisputesCoreModule, DisputesWorkerModule } from './modules/disputes';
 import { notificationsOutboxRoutes, NotificationsWorkerModule } from './modules/notifications';
 import { resultsOutboxRoutes, ResultsWorkerModule } from './modules/results';
+import { routeRidesOutboxRoutes, RouteRidesWorkerModule } from './modules/route-rides';
 import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
 import { SharingWorkerModule } from './modules/sharing';
 import { StandingsWorkerModule } from './modules/standings';
@@ -43,6 +44,7 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
         ...devicesOutboxRoutes,
         ...routesOutboxRoutes,
         ...resultsOutboxRoutes,
+        ...routeRidesOutboxRoutes,
         ...accountOutboxRoutes,
         // подписчик чужих типов (results, disputes, rides, routes) — ADR-0017
         ...notificationsOutboxRoutes,
@@ -65,6 +67,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     StandingsWorkerModule,
     // рендер карточек для сторис (story-cards, ADR-0018)
     SharingWorkerModule,
+    // сверка заезда по маршруту вне гонки (route-rides-01)
+    RouteRidesWorkerModule,
   ],
 })
 export class WorkerModule {}

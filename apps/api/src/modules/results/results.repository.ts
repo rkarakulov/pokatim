@@ -197,7 +197,7 @@ export class ResultsRepository {
 
   /**
    * История своего профиля (rider-profile): активные заявки пользователя, новые гонки сверху — keyset по
-   * `(raceWindowStartsAt, _id)` целиком по индексу `race_entries_user_history_idx`. Заявки без поля (до `0032`) — в
+   * `(raceWindowStartsAt, _id)` целиком по индексу `race_entries_user_history_idx`. Заявки без поля (до `0033`) — в
    * конце: курсор после них не продолжается (R-A2). `limit + 1` — признак продолжения.
    */
   entriesOfUserPage(

@@ -31,7 +31,8 @@ import { entryTier } from './0028_entry_tier';
 import { routesPublication } from './0029_routes_publication';
 import { standings } from './0030_standings';
 import { ridesGeo } from './0031_rides_geo';
-import { riderProfile } from './0032_rider_profile';
+import { routeRides } from './0032_route_rides';
+import { riderProfile } from './0033_rider_profile';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -69,5 +70,6 @@ export const migrations: readonly MongoMigration[] = [
   routesPublication,
   standings,
   ridesGeo,
+  routeRides,
   riderProfile,
 ];

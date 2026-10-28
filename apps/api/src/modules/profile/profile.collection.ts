@@ -10,7 +10,7 @@ export const PROFILE_COLLECTIONS = {
   profiles: 'profiles',
   consentEvents: 'profile_consent_events',
   verified: 'rider_verified_profiles',
-  /** rider-profile: аватары (`0032_rider_profile`, индекс `{ userId }`); единственный писатель — `ProfileAvatarRepository` */
+  /** rider-profile: аватары (`0033_rider_profile`, индекс `{ userId }`); единственный писатель — `ProfileAvatarRepository` */
   avatars: 'profile_avatars',
 } as const;
 
@@ -43,7 +43,7 @@ export interface ProfileDoc {
   avatarId?: string | null;
   /**
    * Id публичного профиля (rider-profile, R-3): случайный токен, создаётся при первом «имя + согласие» и больше не
-   * меняется (отзыв согласия его не стирает — наружу он не выдаётся). Уникальный частичный индекс (`0032`).
+   * меняется (отзыв согласия его не стирает — наружу он не выдаётся). Уникальный частичный индекс (`0033`).
    */
   publicId?: string | null;
   /** Время последней записи (`CLOCK`). */

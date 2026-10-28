@@ -110,7 +110,7 @@ export interface RaceEntryDoc {
   disqualified: { at: Date; disputeId: string } | null;
   /**
    * Начало окна гонки (rider-profile): денормализация для истории своего профиля по дате гонки. Окно зафиксировано
-   * первой заявкой (V-12) — копия не устаревает. Пишет `EntriesService.enter`; заявки до `0032` — бэкфилл миграции,
+   * первой заявкой (V-12) — копия не устаревает. Пишет `EntriesService.enter`; заявки до `0033` — бэкфилл миграции,
    * чтение — поле может отсутствовать.
    */
   raceWindowStartsAt?: Date;

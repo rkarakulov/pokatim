@@ -28,6 +28,7 @@ import { ResultsModule } from './modules/results';
 import { RidersModule } from './modules/riders';
 import { RoutesModule } from './modules/routes';
 import { SharingModule } from './modules/sharing';
+import { RouteRidesModule } from './modules/route-rides';
 import { StandingsModule } from './modules/standings';
 import { TracksModule } from './modules/tracks';
 
@@ -46,6 +47,8 @@ import { TracksModule } from './modules/tracks';
     ProfileModule,
     PanelModule,
     RoutesModule,
+    // заезд по маршруту вне гонки (route-rides-01)
+    RouteRidesModule,
     RacesModule,
     ResultsModule,
     // гейты споров для `results` и `races` (@Global, RC-1)

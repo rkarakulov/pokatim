@@ -79,6 +79,14 @@ export interface ActivitySource {
    * схода (maps-02); чужая, неизвестная или без линии — `null`.
    */
   trackLine(userId: string, activityId: string): Promise<[number, number][] | null>;
+  /**
+   * Какие из активностей пользователя живы сейчас и основная их группы (route-rides-01, RC-2): ≤ 200 id одним
+   * запросом; чужие, удалённые и неизвестные — нет в карте; пустой вход — пустая карта без запроса.
+   */
+  liveActivities(
+    userId: string,
+    ids: readonly string[],
+  ): Promise<Map<string, { primaryId: string }>>;
   /** Исходник активности для worker; активности, файла или ключа нет — `null`. Сбой хранилища — исключение. */
   readSource(activityId: string): Promise<{ bytes: Uint8Array; format: TrackFormat } | null>;
 }

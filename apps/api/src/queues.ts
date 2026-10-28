@@ -68,4 +68,9 @@ export const QUEUE = {
    * дедупликация — ключ постановки NX по хэшу входов (`StoryCardCache`), jobId `story-card-<hash>` — вторая линия.
    */
   storyCard: 'story-card',
+  /**
+   * Сверка заезда по маршруту вне гонки (route-rides-01, `analyzeAttempt` в потоке разбора): jobId = id события outbox
+   * `route-rides.check-requested`, параллелизм 1.
+   */
+  routeRideCheck: 'route-ride-check',
 } as const;

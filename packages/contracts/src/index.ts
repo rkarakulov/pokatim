@@ -43,3 +43,4 @@ export * from './account/account-deletion.schema.ts';
 export * from './appearance/appearance.schema.ts';
 export * from './notifications/notification.schema.ts';
 export * from './sharing/story-card.schema.ts';
+export * from './route-rides/route-ride.schema.ts';

@@ -139,3 +139,10 @@ paths:
   (22 символа base64url). `MyRaceEntry.actions.canShareStory` — `.default(false)` (старый сервер — кнопки нет). Код
   `STORY_CARD_UNAVAILABLE` (409) в конце `ErrorCode`. api-client — `getStoryCard`, `storyCardImageUrl(token)` (адрес
   без запроса: сервер свой публичный origin не знает).
+- Заезд по маршруту (route-rides-01): `src/route-rides/route-ride.schema.ts` — `ROUTE_RIDE_STATUSES` (только в конец),
+  `ROUTE_RIDE_MAX_PER_ROUTE` (100), `ROUTE_RIDE_CANDIDATES_MAX` (30); запрос `RouteRideRequest` (ровно одно поле
+  `activityId | uploadId`, `strictObject`); ответы `RouteRidePage`, `RouteRideCandidates`, `RouteRideDetail`,
+  `RouteRideTrack` — `tolerantEnum`, причины и провалы — `ATTEMPT_REJECTIONS`/`ATTEMPT_FAILURES`, разметка —
+  `TrackMapRun`/`ATTEMPT_TRACK_MARKS` (импорт, не копии); дельты — знаковые целые. Коды `ROUTE_RIDE_NOT_READY`,
+  `ROUTE_RIDE_UPLOAD_FAILED`, `ROUTE_RIDE_QUOTA_EXCEEDED` (409) — в конце `ErrorCode`. api-client — `listRouteRides`,
+  `listRouteRideCandidates`, `checkRouteRide`, `getRouteRide`, `getRouteRideTrack` (явный access-токен).

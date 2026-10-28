@@ -79,6 +79,10 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'ROUTE_PUBLICATION_LIMIT',
   // story-cards: карточки нет (нет заявки, времени, снята, DQ) — 409
   'STORY_CARD_UNAVAILABLE',
+  // route-rides-01: заезд ещё обрабатывается (409); файл заезда с отказом разбора (409); квота заездов на маршрут (409)
+  'ROUTE_RIDE_NOT_READY',
+  'ROUTE_RIDE_UPLOAD_FAILED',
+  'ROUTE_RIDE_QUOTA_EXCEEDED',
   // rider-profile: фото не JPEG/PNG/WebP (415); больше 10 МиБ (413); не декодируется, больше предела пикселей, мелкая обрезка (422)
   'AVATAR_FORMAT_UNSUPPORTED',
   'AVATAR_TOO_LARGE',
