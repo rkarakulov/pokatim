@@ -15,6 +15,11 @@ import { ACTIVITY_TOTALS, type ActivityTotals } from '../tracks';
 import { pageRows, summarize } from './riders.policy';
 
 const notFound = () => domainError('NOT_FOUND', 404);
+const invalidCursor = () =>
+  domainError('VALIDATION_FAILED', 400, { fields: [{ path: 'cursor', code: 'INVALID' }] });
+/** Курсор публичной истории — только id гонки (ключ-константа): без времени заезда (HIGH-1 ревью). */
+const RACE_CURSOR_KEY = 'r';
+const RaceCursorKey = z.literal(RACE_CURSOR_KEY);
 
 /**
  * Профиль райдера — композиция портов (rider-profile): `profile` (публичный профиль по `publicId`), `results` (строки
@@ -84,12 +89,10 @@ export class RidersService {
   async publicRaces(publicId: string, query: RiderHistoryQuery): Promise<PublicRiderRacePage> {
     const rider = await this.profiles.findPublic(publicId);
     if (!rider) throw notFound();
-    const cursor = query.cursor ? decodeCursor(query.cursor, z.iso.datetime()) : null;
-    const { page, next } = pageRows(
-      await this.results.publishedRows(rider.userId),
-      cursor,
-      query.limit,
-    );
+    const cursor = query.cursor ? decodeCursor(query.cursor, RaceCursorKey) : null;
+    const paged = pageRows(await this.results.publishedRows(rider.userId), cursor, query.limit);
+    if (!paged) throw invalidCursor();
+    const { page, next } = paged;
     const races = await this.results.racesOf(page.map((row) => row.raceId));
     return {
       items: page.flatMap((row) => {
@@ -110,7 +113,7 @@ export class RidersService {
           },
         ];
       }),
-      nextCursor: next ? encodeCursor(next.k, next.id) : null,
+      nextCursor: next ? encodeCursor(RACE_CURSOR_KEY, next.id) : null,
     };
   }
 }
