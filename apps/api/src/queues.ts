@@ -63,4 +63,9 @@ export const QUEUE = {
    * worker, без событий outbox; пересчёт изменившихся сезонов целиком (запись снимка под условием версии).
    */
   standingsRecalc: 'standings-recalc',
+  /**
+   * Сверка заезда по маршруту вне гонки (route-rides-01, `analyzeAttempt` в потоке разбора): jobId = id события outbox
+   * `route-rides.check-requested`, параллелизм 1.
+   */
+  routeRideCheck: 'route-ride-check',
 } as const;

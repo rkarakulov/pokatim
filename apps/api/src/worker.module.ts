@@ -19,6 +19,7 @@ import { devicesOutboxRoutes, DevicesWorkerModule } from './modules/devices';
 import { DisputesCoreModule, DisputesWorkerModule } from './modules/disputes';
 import { notificationsOutboxRoutes, NotificationsWorkerModule } from './modules/notifications';
 import { resultsOutboxRoutes, ResultsWorkerModule } from './modules/results';
+import { routeRidesOutboxRoutes, RouteRidesWorkerModule } from './modules/route-rides';
 import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
 import { StandingsWorkerModule } from './modules/standings';
 import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
@@ -42,6 +43,7 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
         ...devicesOutboxRoutes,
         ...routesOutboxRoutes,
         ...resultsOutboxRoutes,
+        ...routeRidesOutboxRoutes,
         ...accountOutboxRoutes,
         // подписчик чужих типов (results, disputes, rides, routes) — ADR-0017
         ...notificationsOutboxRoutes,
@@ -62,6 +64,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     NotificationsWorkerModule,
     // регламент рейтинга сезона (race-results-08, DV-1: сверка отпечатков, без событий)
     StandingsWorkerModule,
+    // сверка заезда по маршруту вне гонки (route-rides-01)
+    RouteRidesWorkerModule,
   ],
 })
 export class WorkerModule {}

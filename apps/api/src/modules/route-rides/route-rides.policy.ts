@@ -37,11 +37,12 @@ export function matchWindowOf(activity: { startedAt: Date; endedAt: Date }) {
   };
 }
 
-/** Граница зависания статуса (`updatedAt` раньше — зависший); `null` — статус не зависает. */
-export function stuckBefore(status: RouteRideStatus, now: Date): Date | null {
-  if (status === 'queued') return new Date(now.getTime() - ROUTE_RIDE_POLICY.stuckQueuedMs);
-  if (status === 'checking') return new Date(now.getTime() - ROUTE_RIDE_POLICY.stuckCheckingMs);
-  return null;
+/** Границы зависания (`updatedAt` раньше — зависший): `queued` > 2 ч, `checking` > 15 мин. */
+export function stuckBounds(now: Date): { queuedBefore: Date; checkingBefore: Date } {
+  return {
+    queuedBefore: new Date(now.getTime() - ROUTE_RIDE_POLICY.stuckQueuedMs),
+    checkingBefore: new Date(now.getTime() - ROUTE_RIDE_POLICY.stuckCheckingMs),
+  };
 }
 
 /** Статус наружу: зависшие `queued` > 2 ч и `checking` > 15 мин (строго больше) — `failed: error` (RC-5). */
@@ -49,7 +50,9 @@ export function effectiveStatus(
   ride: Pick<RouteRideDoc, 'status' | 'failure' | 'updatedAt'>,
   now: Date,
 ): { status: RouteRideStatus; failure: AttemptFailure | null } {
-  const before = stuckBefore(ride.status, now);
+  const { queuedBefore, checkingBefore } = stuckBounds(now);
+  const before =
+    ride.status === 'queued' ? queuedBefore : ride.status === 'checking' ? checkingBefore : null;
   if (before && ride.updatedAt < before) return { status: 'failed', failure: 'error' };
   return { status: ride.status, failure: ride.failure };
 }

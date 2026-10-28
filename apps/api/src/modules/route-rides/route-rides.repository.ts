@@ -27,7 +27,7 @@ export type RouteRideResult = Pick<
 >;
 
 /** Сброс итога при новой ревизии проверки. */
-const CLEARED = {
+const cleared = (): RouteRideResult => ({
   status: 'queued',
   reasons: [],
   failure: null,
@@ -36,7 +36,7 @@ const CLEARED = {
   engineVersion: null,
   trackMap: null,
   checkedAt: null,
-} as const;
+});
 
 /**
  * Единственный писатель `route_rides` (route-rides-01). Каждое чтение — с `userId` в фильтре (свои заезды); итог
@@ -99,7 +99,7 @@ export class RouteRidesRepository {
           { status: 'checking', updatedAt: { $lt: stuck.checkingBefore } },
         ],
       },
-      { $set: { ...CLEARED, checkAttempts: 0, updatedAt: now }, $inc: { checkRevision: 1 } },
+      { $set: { ...cleared(), checkAttempts: 0, updatedAt: now }, $inc: { checkRevision: 1 } },
       { session },
     );
     return result.modifiedCount === 1;
