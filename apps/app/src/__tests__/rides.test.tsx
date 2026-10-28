@@ -688,3 +688,60 @@ describe('ревью pass 1: пустые и короткие страницы, 
     expect(screen.getByTestId('ride-point-card')).toHaveStyle({ maxHeight: '70%' });
   });
 });
+
+describe('ревью pass 2: раскладка режима «Карта» (05c)', () => {
+  const point = {
+    id: '0190a6f4-0000-7000-8000-00000000c001',
+    title: 'Море',
+    startsAt: '2026-10-03T06:00:00Z',
+    start: [27.5615, 53.9023] as [number, number],
+    goingCount: 3,
+    limit: 10,
+    full: false,
+  };
+  beforeEach(() => {
+    process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT = LIGHT;
+    process.env.EXPO_PUBLIC_MAP_STYLE_DARK = LIGHT;
+  });
+  afterEach(() => {
+    delete process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT;
+    delete process.env.EXPO_PUBLIC_MAP_STYLE_DARK;
+  });
+
+  it('загрузка карты — место на всю область (flex: 1), без SkeletonGroup', async () => {
+    listRideMap.mockReturnValue(new Promise<never>(() => undefined));
+    await openRides();
+    await screen.findByRole('link', { name: heroLabel });
+    await fireEvent.press(screen.getByRole('tab', { name: 'Карта' }));
+    const place = screen.getByTestId('ride-map-skeleton', { includeHiddenElements: true });
+    expect(place).toHaveStyle({ flex: 1 });
+    // не внутри SkeletonGroup (его обёртка не растягивается): место само несёт «Загрузка»
+    let node = place.parent;
+    while (node) {
+      expect(node.props.testID).not.toBe('skeleton-group');
+      node = node.parent;
+    }
+    expect(place).toHaveAccessibleName('Загрузка');
+  });
+
+  it('ошибка обновления карты — карта остаётся в контейнере flex: 1, рядом баннер с повтором', async () => {
+    const client = createTestQueryClient();
+    listRideMap.mockResolvedValue({ items: [point], withoutStart: 0 });
+    await renderRouter(routes, { initialUrl: '/rides', wrapper: createQueryWrapper(client) });
+    await screen.findByRole('link', { name: heroLabel });
+    await fireEvent.press(screen.getByRole('tab', { name: 'Карта' }));
+    expect(await screen.findByTestId('map-area')).toBeOnTheScreen();
+
+    listRideMap.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['rides', 'map'] });
+    });
+    expect(await screen.findByText('Повторить')).toBeOnTheScreen();
+    expect(screen.getByTestId('map-area')).toBeOnTheScreen();
+    expect(screen.getByTestId('ride-map-area')).toHaveStyle({ flex: 1 });
+
+    await fireEvent.press(screen.getByText('Повторить'));
+    await waitFor(() => expect(screen.queryByText('Повторить')).toBeNull());
+    expect(screen.getByTestId('map-area')).toBeOnTheScreen();
+  });
+});

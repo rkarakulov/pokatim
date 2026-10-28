@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 import type { CatalogRouteCard, MyRoute, MyRoutePublication } from '@pokatim/contracts';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { ApiNetworkError } from '@pokatim/api-client';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { Stack } from 'expo-router';
 import { Text } from 'react-native';
 
@@ -153,6 +154,47 @@ describe('выбор маршрута райда (05c)', () => {
     await fireEvent.press(screen.getByRole('tab', { name: 'Мои' }));
     expect(await screen.findByText('Нет готовых маршрутов')).toBeOnTheScreen();
     expect(screen.queryByText('Без длины')).toBeNull();
+  });
+
+  it('подгрузка: медленная вторая страница — скелетон в подвале; ошибка — баннер с повтором, строки остаются (ревью pass 2)', async () => {
+    const lake = team('Озеро');
+    let fail: (error: unknown) => void = () => undefined;
+    listCatalog
+      .mockResolvedValueOnce({ items: [sea], nextCursor: 'c1' })
+      .mockReturnValueOnce(
+        new Promise((_, reject) => {
+          fail = reject;
+        }),
+      )
+      .mockResolvedValueOnce({ items: [lake], nextCursor: null });
+    await open();
+    await screen.findByRole('link', { name: /^Минское море\. / });
+    const list = screen.getByTestId('route-pick-catalog').props as { onEndReached: () => void };
+    await act(async () => list.onEndReached());
+    expect(
+      await screen.findByTestId('route-pick-more', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+
+    await act(async () => fail(new ApiNetworkError(new Error('offline'))));
+    expect(await screen.findByText('Повторить')).toBeOnTheScreen();
+    expect(screen.getByRole('link', { name: /^Минское море\. / })).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Повторить'));
+    expect(await screen.findByRole('link', { name: /^Озеро\. / })).toBeOnTheScreen();
+  });
+
+  it('«Мои»: ошибка следующей страницы — баннер с повтором (ревью pass 2)', async () => {
+    listMine
+      .mockResolvedValueOnce({ items: [own], nextCursor: 'c1' })
+      .mockRejectedValueOnce(new ApiNetworkError(new Error('offline')))
+      .mockResolvedValueOnce({ items: [approved], nextCursor: null });
+    await open();
+    await fireEvent.press(screen.getByRole('tab', { name: 'Мои' }));
+    await screen.findByRole('link', { name: /^Вечерний круг\. / });
+    const list = screen.getByTestId('route-pick-mine').props as { onEndReached: () => void };
+    await act(async () => list.onEndReached());
+    await fireEvent.press(await screen.findByText('Повторить'));
+    expect(await screen.findByRole('link', { name: /^В каталоге\. / })).toBeOnTheScreen();
+    expect(screen.getByRole('link', { name: /^Вечерний круг\. / })).toBeOnTheScreen();
   });
 
   it('каталог пуст — пустое состояние, «Без маршрута» остаётся', async () => {

@@ -3,10 +3,12 @@ import { motion, size, space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
   AsyncContent,
+  Banner,
   EmptyState,
   Pill,
   SegmentedControl,
   SkeletonGroup,
+  TextAction,
   textStyle,
   useTheme,
 } from '@rkarakulov/ui';
@@ -57,6 +59,39 @@ const pickable = (route: MyRoute) => route.status === 'ready' && route.distanceM
 /** Свой маршрут виден участникам, только пока он в каталоге (одобрен). */
 const publicMine = (route: MyRoute) => route.publication?.status === 'approved';
 
+/** Подвал списка (обе вкладки, ревью pass 2): догрузка — скелетон карточки; ошибка следующей страницы — баннер с повтором, строки остаются. */
+function PickFooter({
+  feed,
+}: {
+  feed: {
+    data: unknown;
+    isFetchingNextPage: boolean;
+    isFetchNextPageError: boolean;
+    fetchNextPage: (options?: { cancelRefetch?: boolean }) => Promise<unknown>;
+  };
+}) {
+  if (feed.isFetchNextPageError && feed.data) {
+    return (
+      <View style={styles.footer}>
+        <Banner tone="warning" title={t('state.failedTitle')} message={t('state.failedMessage')} />
+        <View style={styles.start}>
+          <TextAction label={t('state.retry')} onPress={() => void feed.fetchNextPage()} />
+        </View>
+      </View>
+    );
+  }
+  if (feed.isFetchingNextPage) {
+    return (
+      <View testID="route-pick-more">
+        <SkeletonGroup>
+          <RouteListCardSkeleton />
+        </SkeletonGroup>
+      </View>
+    );
+  }
+  return null;
+}
+
 /** «Без маршрута» — первая строка обеих вкладок. */
 function NoneRow({ onPick }: { onPick: () => void }) {
   const theme = useTheme();
@@ -100,7 +135,7 @@ function CatalogList({
         <>
           {header}
           <AsyncContent
-            query={feed}
+            query={{ ...feed, isError: feed.isError && !feed.isFetchNextPageError }}
             skeleton={SKELETON}
             empty={{
               when: (data) => (data.pages[0]?.items.length ?? 0) === 0,
@@ -111,6 +146,7 @@ function CatalogList({
           </AsyncContent>
         </>
       }
+      ListFooterComponent={<PickFooter feed={feed} />}
       onEndReached={loadMore}
       onEndReachedThreshold={0.5}
       renderItem={({ item }) => (
@@ -143,7 +179,7 @@ function MineList({ header, onPick }: { header: ReactNode; onPick: (route: RideR
         <>
           {header}
           <AsyncContent
-            query={feed}
+            query={{ ...feed, isError: feed.isError && !feed.isFetchNextPageError }}
             skeleton={SKELETON}
             empty={{
               when: () => items.length === 0 && !feed.hasNextPage,
@@ -163,6 +199,7 @@ function MineList({ header, onPick }: { header: ReactNode; onPick: (route: RideR
           </AsyncContent>
         </>
       }
+      ListFooterComponent={<PickFooter feed={feed} />}
       onEndReached={loadMore}
       onEndReachedThreshold={0.5}
       renderItem={({ item }) => (
@@ -239,4 +276,6 @@ const styles = StyleSheet.create({
   header: { gap: space.s3, paddingBottom: space.s3 },
   none: { gap: space.s1, paddingVertical: space.s3, borderBottomWidth: stroke.hairline },
   private: { alignItems: 'flex-start', paddingBottom: space.s3 },
+  footer: { gap: space.s3, paddingVertical: space.s3 },
+  start: { alignItems: 'flex-start' },
 });

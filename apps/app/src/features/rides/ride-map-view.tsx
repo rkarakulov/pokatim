@@ -1,7 +1,7 @@
 import { CITY_CENTERS, type RideMap } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { AsyncContent, EmptyState, SkeletonGroup, TextAction, useTheme } from '@rkarakulov/ui';
+import { AsyncContent, Banner, EmptyState, TextAction, useTheme } from '@rkarakulov/ui';
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -113,29 +113,53 @@ export function RideMapView({
       </View>
     );
   }
+  // место карты на всю область — без `SkeletonGroup` (его обёртка не растягивается), подпись «Загрузка» — у самого
+  // места (как `RouteLineMap` в режиме `fill`, ревью pass 2)
   const place = (
-    <SkeletonGroup>
-      <View
-        testID="ride-map-skeleton"
-        style={[styles.place, { backgroundColor: theme.surface.skeleton }]}
-      />
-    </SkeletonGroup>
+    <View
+      testID="ride-map-skeleton"
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={t('state.loading')}
+      style={[styles.place, { backgroundColor: theme.surface.skeleton }]}
+    />
   );
   if (styleUrl === null || pending) return place;
+  if (map.data !== undefined) {
+    // данные есть: карта — в постоянном контейнере `flex: 1`; ошибка обновления — баннер с повтором соседним блоком
+    // (stale-обёртка `AsyncContent` без flex схлопнула бы карту)
+    return (
+      <View testID="ride-map-area" style={styles.fill}>
+        {map.isError ? (
+          <View style={[styles.gutter, styles.stale]}>
+            <Banner
+              tone="warning"
+              title={t('state.staleTitle')}
+              message={t('state.staleMessage')}
+            />
+            <View style={styles.start}>
+              <TextAction label={t('state.retry')} onPress={() => void map.refetch()} />
+            </View>
+          </View>
+        ) : null}
+        <PointsMap
+          data={map.data}
+          filters={filters}
+          near={near}
+          styleUrl={styleUrl}
+          now={now}
+          onOpen={onOpen}
+          onList={onList}
+        />
+      </View>
+    );
+  }
+  if (map.isPending && map.fetchStatus !== 'paused') return place;
+  // ошибка без данных, офлайн-старт — состояния `AsyncContent` с повтором
   return (
-    <View style={styles.fill}>
-      <AsyncContent query={map} skeleton={place}>
-        {(data) => (
-          <PointsMap
-            data={data}
-            filters={filters}
-            near={near}
-            styleUrl={styleUrl}
-            now={now}
-            onOpen={onOpen}
-            onList={onList}
-          />
-        )}
+    <View style={styles.gutter}>
+      <AsyncContent query={map} skeleton={null}>
+        {() => null}
       </AsyncContent>
     </View>
   );
@@ -146,4 +170,6 @@ const styles = StyleSheet.create({
   gutter: { paddingHorizontal: size.gutter },
   without: { alignItems: 'flex-start', paddingBottom: space.s2 },
   place: { flex: 1, minHeight: size.touchMin * 4 },
+  stale: { gap: space.s2, paddingBottom: space.s2 },
+  start: { alignItems: 'flex-start' },
 });
