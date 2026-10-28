@@ -86,42 +86,42 @@ describe('реестр тем приложения', () => {
 
 type NewThemeId = Exclude<AppThemeId, 'classic'>;
 
-/** 7.5 плана C: радиусы (button / field / chip / card / sheet), регистр, плотность, иконки. */
+/** 7.5 плана C: радиусы (field / chip / card / sheet), регистр, плотность, иконки; радиус кнопки — как у «Классики». */
 const FORM: Record<
   NewThemeId,
   {
-    shape: [number, number, number, number, number, 'upper' | 'none'];
+    shape: [number, number, number, number, 'upper' | 'none'];
     density: 'regular' | 'comfortable';
     icons: { weight: 'regular' | 'semibold'; filled: boolean };
   }
 > = {
   atlas: {
-    shape: [14, 12, radius.pill, 16, 24, 'none'],
+    shape: [12, radius.pill, 16, 24, 'none'],
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
   },
   chrono: {
-    shape: [12, 10, radius.pill, 12, 20, 'none'],
+    shape: [10, radius.pill, 12, 20, 'none'],
     density: 'regular',
     icons: { weight: 'semibold', filled: true },
   },
   planner: {
-    shape: [radius.pill, 12, radius.pill, 14, 24, 'none'],
+    shape: [12, radius.pill, 14, 24, 'none'],
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
   },
   journal: {
-    shape: [12, 10, radius.pill, 14, 20, 'none'],
+    shape: [10, radius.pill, 14, 20, 'none'],
     density: 'comfortable',
     icons: { weight: 'regular', filled: false },
   },
   navigation: {
-    shape: [radius.pill, 12, radius.pill, 16, 24, 'none'],
+    shape: [12, radius.pill, 16, 24, 'none'],
     density: 'regular',
     icons: { weight: 'semibold', filled: true },
   },
   typography: {
-    shape: [8, 4, 4, 0, 16, 'upper'],
+    shape: [4, 4, 0, 16, 'upper'],
     density: 'regular',
     icons: { weight: 'semibold', filled: false },
   },
@@ -208,11 +208,21 @@ describe('шесть тем слайса C', () => {
 
   it.each(Object.entries(FORM))('%s: форма, плотность, иконки — по 7.5', (id, form) => {
     const def = appThemes[id as NewThemeId];
-    const [button, field, chip, card, sheet, buttonCase] = form.shape;
+    const [field, chip, card, sheet, buttonCase] = form.shape;
+    const button = defaultShape.button;
     expect(def.schemes.light.shape).toEqual({ button, field, chip, card, sheet, buttonCase });
     expect(def.schemes.dark.shape).toBe(def.schemes.light.shape);
     expect(def.density).toBe(form.density);
     expect(def.icons).toEqual(form.icons);
+  });
+
+  it('кнопки всех тем — с прямыми углами, как у «Классики»', () => {
+    for (const def of definitions) {
+      for (const s of [def.schemes.light, def.schemes.dark]) {
+        expect(s.shape.button).toBe(themes.light.shape.button);
+      }
+    }
+    expect(themes.light.shape.button).toBe(0);
   });
 
   it.each(Object.entries(FONTS))('%s: гарнитуры display/text и CSS-стек', (id, [display, text]) => {
