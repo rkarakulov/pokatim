@@ -1,0 +1,29 @@
+import type { Bounds } from '@pokatim/tracks';
+
+import type { RouteMatchGeometry } from './route-geometry.port';
+
+/**
+ * Порт `routes` для модуля `route-rides` (route-rides-01, через `modules/routes/index.ts`): маршрут, видимый райдеру
+ * **сейчас** — в каталоге (`IN_CATALOG`) или свой готовый (`ownRider`), — и его линия сверки для worker. Без кэша:
+ * публикация изменяема, маршрут райдера удаляем (`pokatim-security.md`). `RouteCatalog`/`RouteGeometry` видят только
+ * маршруты платформы и не меняются.
+ */
+export const ROUTE_RIDE_ROUTES = Symbol('ROUTE_RIDE_ROUTES');
+
+export interface RideableRoute {
+  id: string;
+  title: string;
+  distanceM: number;
+  isLoop: boolean;
+  /** рамка линии показа `[west, south, east, north]` */
+  bounds: Bounds;
+  /** `own` — свой маршрут райдера, иначе — каталог */
+  access: 'catalog' | 'own';
+}
+
+export interface RouteRideRoutes {
+  /** `IN_CATALOG` или свой готовый (`ownRider`), без кэша; иначе (нет, чужой непубличный, не готов) — `null`. */
+  rideable(routeId: string, userId: string): Promise<RideableRoute | null>;
+  /** Те же условия видимости; линия сверки для worker; нет геометрии — `null`. */
+  matchGeometry(routeId: string, userId: string): Promise<RouteMatchGeometry | null>;
+}

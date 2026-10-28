@@ -37,6 +37,8 @@ import { routesPublication } from './0029_routes_publication';
 import { standings } from './0030_standings';
 import { STANDINGS_COLLECTIONS } from '../../modules/standings/standings.collection';
 import { CITY_CENTERS_0031, ridesGeo } from './0031_rides_geo';
+import { routeRides } from './0032_route_rides';
+import { ROUTE_RIDES_COLLECTIONS } from '../../modules/route-rides/route-rides.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
 import { notifications } from './0025_notifications';
@@ -138,6 +140,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0029_routes_publication',
       '0030_standings',
       '0031_rides_geo',
+      '0032_route_rides',
     ]);
   });
 
@@ -1116,9 +1119,34 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(RACES_COLLECTIONS.races)).toMatchObject(protocolIdx);
   });
 
-  it('0031_rides_geo: бэкфилл точки «Рядом» (центр города) и routeId; индексы 2dsphere (rides.geo, routes.start); последняя; повторный up — без изменений', async () => {
+  it('0032_route_rides: коллекция заездов по маршруту и уникальный индекс (userId, routeId, activityId); последняя, после 0031; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0031_rides_geo');
+    expect(ids.at(-1)).toBe('0032_route_rides');
+    expect(ids.indexOf('0032_route_rides')).toBe(ids.indexOf('0031_rides_geo') + 1);
+    const exists = async () =>
+      (
+        await h.db
+          .listCollections({ name: ROUTE_RIDES_COLLECTIONS.rides }, { nameOnly: true })
+          .toArray()
+      ).length === 1;
+    const expected = {
+      route_rides_user_route_activity_unique: {
+        key: { userId: 1, routeId: 1, activityId: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await exists()).toBe(true);
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
+    await routeRides.up(h.db);
+    await routeRides.up(h.db);
+    expect(await exists()).toBe(true);
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
+  });
+
+  it('0031_rides_geo: бэкфилл точки «Рядом» (центр города) и routeId; индексы 2dsphere (rides.geo, routes.start); повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
     expect(ids.indexOf('0031_rides_geo')).toBe(ids.indexOf('0030_standings') + 1);
     // снимок центров в миграции = справочник контрактов на момент миграции (все 25 кодов)
     expect(CITY_CENTERS_0031).toEqual(CITY_CENTERS);
