@@ -30,6 +30,7 @@ function renderCrop(width = 1200, height = 800) {
   const onConfirm = jest.fn();
   const onCancel = jest.fn();
   const onTooSmall = jest.fn();
+  const onUnreadable = jest.fn();
   const view = render(
     <AvatarCrop
       file={file}
@@ -37,17 +38,18 @@ function renderCrop(width = 1200, height = 800) {
       onConfirm={onConfirm}
       onCancel={onCancel}
       onTooSmall={onTooSmall}
+      onUnreadable={onUnreadable}
     />,
   );
   const image = view.container.querySelector('img');
   if (!image) throw new Error('нет фото');
-  Object.defineProperty(image, 'naturalWidth', { value: width });
-  Object.defineProperty(image, 'naturalHeight', { value: height });
-  fireEvent.load(image);
-  const area = screen.getByRole('group', {
-    name: 'Область фото. Стрелки — сдвиг, плюс и минус — масштаб',
-  });
-  return { view, area, onConfirm, onCancel, onTooSmall };
+  if (width > 0) {
+    Object.defineProperty(image, 'naturalWidth', { value: width });
+    Object.defineProperty(image, 'naturalHeight', { value: height });
+    fireEvent.load(image);
+  }
+  const area = screen.getByRole('group', { name: 'Область фото' });
+  return { view, image, area, onConfirm, onCancel, onTooSmall, onUnreadable };
 }
 
 const save = () => fireEvent.click(screen.getByRole('button', { name: 'Сохранить фото' }));
@@ -58,7 +60,9 @@ describe('AvatarCrop (web, rider-profile AC14)', () => {
   it('окно — группа с меткой и подсказкой, фокус клавиатурой; начало — центральный квадрат', () => {
     const { area, onConfirm } = renderCrop();
     expect(area.getAttribute('tabindex')).toBe('0');
-    expect(area.getAttribute('aria-describedby')).toBeTruthy();
+    // описание — подсказка про клавиши, не повтор метки
+    const hint = document.getElementById(area.getAttribute('aria-describedby') ?? '');
+    expect(hint?.textContent).toBe('Стрелки — сдвиг, плюс и минус — масштаб');
     expect(createObjectURL).toHaveBeenCalledWith(file);
     expect(disabled(zoomOut())).toBe(true);
     save();
@@ -114,6 +118,14 @@ describe('AvatarCrop (web, rider-profile AC14)', () => {
   it('фото меньше 64 × 64 — onTooSmall без отправки', () => {
     const { onTooSmall, onConfirm } = renderCrop(40, 600);
     expect(onTooSmall).toHaveBeenCalledTimes(1);
+    save();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('файл не декодируется браузером — onUnreadable, сохранить нельзя', () => {
+    const { image, onUnreadable, onConfirm } = renderCrop(0, 0);
+    fireEvent.error(image);
+    expect(onUnreadable).toHaveBeenCalledTimes(1);
     save();
     expect(onConfirm).not.toHaveBeenCalled();
   });

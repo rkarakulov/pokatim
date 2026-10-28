@@ -47,7 +47,7 @@ function RiderBody({
           <HistoryList
             testID="rider-races"
             query={races}
-            failure={t('state.failedMessage')}
+            failure={t('riders.racesFailed')}
             empty={{ title: t('riders.racesEmpty') }}
             renderRow={(item) => {
               const row = publicRaceRow(item);
@@ -78,15 +78,15 @@ export function RiderScreen({ id, seed }: { id: string; seed: PublicRiderProfile
   const router = useRouter();
   const valid = RiderPublicId.safeParse(id).success;
   const rider = useRider(id, seed, valid);
-  const found = rider.data !== undefined;
+  const found = rider.data !== undefined && apiErrorOf(rider.error)?.code !== 'NOT_FOUND';
   const races = useRiderRaces(id, valid && found);
   const refetchers = useMemo(
     () => [rider.refetch, ...(found ? [races.refetch] : [])],
     [rider.refetch, found, races.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
-  const notFound =
-    !valid || (rider.data === undefined && apiErrorOf(rider.error)?.code === 'NOT_FOUND');
+  // 404 — «райдер скрыл профиль», а не сбой обновления: показанные данные убираются (отзыв согласия, R-3)
+  const notFound = !valid || apiErrorOf(rider.error)?.code === 'NOT_FOUND';
 
   return (
     <SafeAreaView

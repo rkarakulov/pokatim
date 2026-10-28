@@ -77,6 +77,8 @@ describe('подписи профиля райдера (rider-profile)', () => {
       }),
     );
     expect(row).toMatchObject({ place: '—', time: null, details: '' });
+    // без места — без части «место …» в метке
+    expect(row.a11y).toBe(`Гонка у озера, ${row.date}, Проверка трека`);
   });
 
   it('публичная гонка — статус протокола и время', () => {

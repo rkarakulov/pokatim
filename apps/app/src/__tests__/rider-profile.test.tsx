@@ -1,7 +1,9 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { PublicRiderProfile, PublicRiderRace } from '@pokatim/contracts';
-import { fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
+import type { ReactElement } from 'react';
+import type { RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { RiderScreen } from '@/features/riders/rider-screen';
@@ -93,6 +95,20 @@ describe('публичный профиль /riders/[id] (rider-profile, AC15)',
     expect(listRaces).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByRole('button', { name: 'На главную' }));
     await waitFor(() => expect(router.getPathname()).toBe('/'));
+  });
+
+  it('показанный профиль, затем 404 (райдер скрыл профиль) — «Профиль недоступен», данные убраны', async () => {
+    await openRider();
+    expect(await screen.findByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
+    getRider.mockRejectedValue(notFound());
+    const control = screen.getByTestId('rider-profile').props
+      .refreshControl as ReactElement<RefreshControlProps>;
+    await act(async () => {
+      await control.props.onRefresh?.();
+    });
+    expect(await screen.findByText('Профиль недоступен')).toBeOnTheScreen();
+    expect(screen.queryByText('Анна К.')).toBeNull();
+    expect(screen.queryByText('Velo Club Minsk')).toBeNull();
   });
 
   it('нет сети — «Нет соединения» с повтором', async () => {

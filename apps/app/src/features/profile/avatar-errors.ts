@@ -12,18 +12,18 @@ const CODE_MESSAGES = {
   AVATAR_INVALID: 'profile.avatar.error.AVATAR_INVALID',
 } as const;
 
-/** Короткая пауза 429 — занята обработка фото на сервере (секунды), а не исчерпан часовой лимит загрузок. */
-const BUSY_MAX_RETRY_SEC = 60;
+/** Пауза 429 занятой обработки фото на сервере (`profile-avatar.service.ts`, `limited(5)`); часовой лимит — дольше. */
+const BUSY_RETRY_SEC = 5;
 
 const isKnownCode = (code: string | undefined): code is keyof typeof CODE_MESSAGES =>
   code !== undefined && code in CODE_MESSAGES;
 
 /**
  * Текст баннера блока «Фото» (выбор, загрузка, удаление): старый dev-клиент — «Обновите приложение»; проверка до
- * отправки — тот же текст, что у ответа сервера; 429 с короткой паузой — обработка занята («через минуту»), с долгой —
- * лимит загрузок и когда повторить; сеть и прочее — `actionErrorMessage`.
+ * отправки — тот же текст, что у ответа сервера; 429 загрузки с паузой занятой обработки — «через минуту», иначе — лимит
+ * загрузок и когда повторить; удаление, сеть и прочее — `actionErrorMessage`.
  */
-export function avatarErrorMessage(error: unknown): string {
+export function avatarErrorMessage(error: unknown, action: 'upload' | 'delete' = 'upload'): string {
   if (error instanceof AvatarPickerUnavailableError) return t('profile.avatar.error.updateApp');
   if (error instanceof AvatarPrecheckError) {
     return error.reason === 'tooSmall'
@@ -32,8 +32,10 @@ export function avatarErrorMessage(error: unknown): string {
   }
   const code = apiErrorCode(error);
   if (isKnownCode(code)) return t(CODE_MESSAGES[code]);
+  // удаление — лимит изменений профиля, не загрузок: общий текст действия
+  if (action === 'delete') return actionErrorMessage(error);
   const wait = retryAfterSec(error);
-  if (wait !== undefined && wait <= BUSY_MAX_RETRY_SEC) return t('profile.avatar.error.busy');
+  if (wait !== undefined && wait <= BUSY_RETRY_SEC) return t('profile.avatar.error.busy');
   if (wait !== undefined) {
     return t('profile.avatar.error.rateLimited', { time: formatCountdown(wait) });
   }

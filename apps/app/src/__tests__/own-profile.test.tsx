@@ -248,10 +248,14 @@ describe('свой профиль /profile: история (AC13)', () => {
     await waitFor(() => expect(router.getPathname()).toBe('/races'));
   });
 
-  it('ошибка без данных — баннер с повтором', async () => {
+  it('ошибка без данных — баннер с текстом блока и повтором; без сети — «Нет соединения» с тем же текстом', async () => {
+    listRaces.mockRejectedValueOnce(new ApiNetworkError(new TypeError('Network request failed')));
     listRaces.mockRejectedValueOnce(failure());
     await openProfile();
     const races = within(await screen.findByTestId('profile-history-races'));
+    expect(await races.findByText('Нет соединения')).toBeOnTheScreen();
+    expect(races.getByText('Не удалось загрузить историю')).toBeOnTheScreen();
+    await fireEvent.press(races.getByRole('button', { name: 'Повторить' }));
     expect(await races.findByText('Не удалось загрузить')).toBeOnTheScreen();
     await fireEvent.press(races.getByRole('button', { name: 'Повторить' }));
     expect(await history().findByText('=6')).toBeOnTheScreen();

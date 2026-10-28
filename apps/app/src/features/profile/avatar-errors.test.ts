@@ -23,7 +23,17 @@ describe('тексты ошибок фото профиля (AC14)', () => {
     expect(avatarErrorMessage(http(429, 'RATE_LIMITED', { retryAfterSec: 1800 }))).toBe(
       'Слишком много загрузок фото. Повторите через 30:00',
     );
+    // почти истёкший часовой лимит — не «обработка занята»
+    expect(avatarErrorMessage(http(429, 'RATE_LIMITED', { retryAfterSec: 40 }))).toBe(
+      'Слишком много загрузок фото. Повторите через 0:40',
+    );
     expect(avatarErrorMessage(http(429, 'RATE_LIMITED'))).not.toContain('фото');
+  });
+
+  it('удаление фото: 429 — общий текст лимита, не «обработка занята»', () => {
+    const text = avatarErrorMessage(http(429, 'RATE_LIMITED', { retryAfterSec: 5 }), 'delete');
+    expect(text).not.toContain('фото');
+    expect(text).toBe(avatarErrorMessage(http(429, 'RATE_LIMITED')));
   });
 
   it('проверка до отправки — тот же текст, что у ответа сервера; мелкое фото — 64 × 64', () => {

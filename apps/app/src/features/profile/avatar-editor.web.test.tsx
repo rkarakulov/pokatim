@@ -98,6 +98,20 @@ describe('AvatarEditor (web, rider-profile AC14)', () => {
     expect(screen.getByRole('button', { name: 'Сохранить фото' })).toBeTruthy();
   });
 
+  it('фото не декодируется браузером — панель закрыта, текст «Не удалось обработать фото», без запроса', async () => {
+    const { view } = renderEditor();
+    fireEvent.click(screen.getByRole('button', { name: 'Выбрать фото' }));
+    const image = await waitFor(() => {
+      const element = view.container.querySelector('img[alt=""]');
+      if (!element) throw new Error('нет фото');
+      return element;
+    });
+    fireEvent.error(image);
+    expect(await screen.findByText('Не удалось обработать фото — выберите другое')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Сохранить фото' })).toBeNull();
+    expect(api.uploadAvatar).not.toHaveBeenCalled();
+  });
+
   it('HEIC — текст формата без панели обрезки и без запроса', async () => {
     jest.mocked(getDocumentAsync).mockResolvedValue({
       canceled: false,

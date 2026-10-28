@@ -45,7 +45,7 @@ function DeleteAvatar({ onFailure }: { onFailure: (message: string | undefined) 
         onPress={() =>
           remove.mutate(undefined, {
             onSuccess: () => setConfirming(false),
-            onError: (error) => onFailure(avatarErrorMessage(error)),
+            onError: (error) => onFailure(avatarErrorMessage(error, 'delete')),
           })
         }
       />

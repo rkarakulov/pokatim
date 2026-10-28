@@ -13,9 +13,12 @@ export class AvatarPickerUnavailableError extends Error {
   }
 }
 
-/** Фото не прошло проверку до отправки: размер, формат, мелкое — тот же текст, что у ответа сервера. */
+/** Фото не прошло проверку до отправки: размер, формат, не декодируется, мелкое — тот же текст, что у ответа сервера. */
 export class AvatarPrecheckError extends Error {
-  constructor(readonly reason: 'AVATAR_TOO_LARGE' | 'AVATAR_FORMAT_UNSUPPORTED' | 'tooSmall') {
+  constructor(
+    readonly reason:
+      'AVATAR_TOO_LARGE' | 'AVATAR_FORMAT_UNSUPPORTED' | 'AVATAR_INVALID' | 'tooSmall',
+  ) {
     super(reason);
     this.name = 'AvatarPrecheckError';
   }

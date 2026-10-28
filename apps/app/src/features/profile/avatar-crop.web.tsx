@@ -43,7 +43,7 @@ interface Drag {
  * захватом указателя), масштаб кнопками «−»/«+» и клавишами (колесо не используем — прокрутка страницы). Клавиатура
  * на окне: стрелки — сдвиг (Shift — крупнее), `+`/`=` и `-` — масштаб. Размеры — `naturalWidth/Height` после
  * загрузки (браузер уже применил EXIF-ориентацию, как сервер); на сервер — только доли (`onConfirm`). Фото меньше
- * 64 × 64 — `onTooSmall` без отправки. Переходов нет — положение задаётся напрямую (reduce motion не нужен).
+ * 64 × 64 — `onTooSmall`, файл не декодируется — `onUnreadable` (оба без отправки). Переходов нет — положение задаётся напрямую (reduce motion не нужен).
  */
 export function AvatarCrop({
   file,
@@ -51,12 +51,15 @@ export function AvatarCrop({
   onConfirm,
   onCancel,
   onTooSmall,
+  onUnreadable,
 }: {
   file: File;
   saving: boolean;
   onConfirm: (crop: CropQuery) => void;
   onCancel: () => void;
   onTooSmall: () => void;
+  /** браузер не смог декодировать файл (битый, HEIC под видом JPEG) — сервер ответил бы 422 */
+  onUnreadable: () => void;
 }) {
   const theme = useTheme();
   const hintId = useId();
@@ -183,11 +186,12 @@ export function AvatarCrop({
           alt=""
           draggable={false}
           onLoad={(event) => onLoad(event.currentTarget)}
+          onError={onUnreadable}
           style={photoStyle}
         />
       </div>
       <Text nativeID={hintId} style={[textStyle('meta'), { color: theme.text.secondary }]}>
-        {t('profile.avatar.crop.area')}
+        {t('profile.avatar.crop.keys')}
       </Text>
       <View style={styles.zoom}>
         <ZoomButton

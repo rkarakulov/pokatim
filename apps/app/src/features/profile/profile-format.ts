@@ -30,9 +30,9 @@ import { formatMinskDateTime, meta } from '@/lib/minsk-format';
 const number = (value: number) => i18n.formatNumber(value, { maximumFractionDigits: 1 });
 const none = () => t('profile.stats.none');
 
-/** Место «=6» / «6»; места нет — «—». */
-const placeText = (place: number | null, tied: boolean) =>
-  place === null ? { text: none(), a11y: none() } : placeView(place, tied);
+/** Место «=6» / «6»; места нет — «—» на экране и ничего в метке скринридера. */
+const placeText = (place: number | null, tied: boolean): { text: string; a11y: string | null } =>
+  place === null ? { text: none(), a11y: null } : placeView(place, tied);
 
 /** Ячейки статистики своего профиля: заезды, км (одна десятая), набор, гонки в зачёте, подиумы, лучшее место. */
 export function ownStatItems(stats: RiderStats): StatItem[] {
@@ -87,11 +87,11 @@ const historyDate = (iso: string) => formatMinskDateTime(iso, null).date;
 const groupText = (key: RiderRaceHistoryItem['groupKey']) =>
   key === 'unknown' ? null : groupLabel(key);
 
-function raceA11y(view: Omit<RaceRowView, 'a11y' | 'raceId'>, placeA11y: string): string {
+function raceA11y(view: Omit<RaceRowView, 'a11y' | 'raceId'>, placeA11y: string | null): string {
   return [
     view.title,
     view.date,
-    t('profile.history.place', { place: placeA11y }),
+    placeA11y === null ? null : t('profile.history.place', { place: placeA11y }),
     view.pill?.label ?? null,
     view.time === null ? null : t('profile.history.time', { time: view.time }),
   ]

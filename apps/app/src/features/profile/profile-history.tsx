@@ -48,7 +48,7 @@ export function ProfileHistory({
         <HistoryList
           testID="profile-history-races"
           query={races}
-          failure={t('state.failedMessage')}
+          failure={t('profile.history.failed')}
           empty={{
             title: t('profile.history.racesEmpty'),
             action: {
@@ -71,7 +71,7 @@ export function ProfileHistory({
         <HistoryList
           testID="profile-history-rides"
           query={rides}
-          failure={t('state.failedMessage')}
+          failure={t('profile.history.failed')}
           empty={{
             title: t('profile.history.ridesEmpty'),
             action: {

@@ -36,6 +36,10 @@ export function AvatarEditor({ avatarId }: { avatarId: string | null }) {
           file={file}
           saving={upload.isPending}
           onCancel={() => setFile(undefined)}
+          onUnreadable={() => {
+            setFile(undefined);
+            setFailure(avatarErrorMessage(new AvatarPrecheckError('AVATAR_INVALID')));
+          }}
           onTooSmall={() => {
             setFile(undefined);
             setFailure(avatarErrorMessage(new AvatarPrecheckError('tooSmall')));
