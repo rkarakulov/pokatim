@@ -162,6 +162,9 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
   `default_server`) должен быть не `pokatim`. Если всё же он — согласовать с владельцами сервера явный
   `default_server` у их сайта; переименовывать свой файл «в конец алфавита» — крайняя мера (имя меняет и откат).
 - Dev-стенд отдаёт `X-Robots-Tag: noindex, nofollow` — поисковики его не индексируют.
+- Журнал доступа pokatim — `/var/log/nginx/access.log` в своём формате `log_format pokatim_noquery` (как `combined`,
+  но путь `$uri` без query-строки): в query бывают координаты «Рядом» (05c, ADR-0014) и токены. Имя формата своё —
+  `log_format` общий для всех сайтов сервера; формат соседей не меняется.
 - `/mail/` (UI Mailpit) — только в https-блоке, с WebSocket (`map $http_upgrade $pokatim_mail_connection` — своё имя
   переменной: `map` общий для всех сайтов сервера). Без сертификата `/mail/` → 404.
 - `/ow/` — прокси на Open Wearables этого хоста (ADR-0011), только если в `.env` задан

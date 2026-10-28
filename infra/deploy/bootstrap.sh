@@ -290,6 +290,13 @@ render_vhost() {
     ow_proxy=""
   fi
   printf '# pokatim dev: генерирует infra/deploy/bootstrap.sh на каждом деплое — правки руками перезапишутся\n'
+  cat <<EOF
+# журнал доступа без query-строки: в ней бывают координаты «Рядом» (05c, ADR-0014) и токены ссылок; формат как
+# combined, но путь — \$uri вместо \$request; имя своё — log_format общий для http{} всех сайтов сервера
+log_format pokatim_noquery '\$remote_addr - \$remote_user [\$time_local] "\$request_method \$uri \$server_protocol" '
+                           '\$status \$body_bytes_sent "\$http_referer" "\$http_user_agent"';
+
+EOF
   if [[ "${mode}" == "https" ]]; then
     cat <<EOF
 # WebSocket UI Mailpit (/mail/api/events); имя переменной своё — map общий для http{} всех сайтов сервера
@@ -301,6 +308,7 @@ map \$http_upgrade \$pokatim_mail_connection {
 server {
     listen 80;
     server_name ${PUBLIC_HOST};
+    access_log /var/log/nginx/access.log pokatim_noquery;
 
     location ^~ /.well-known/acme-challenge/ {
         root ${WEBROOT};
@@ -316,6 +324,7 @@ server {
     # сокету *:443 — http2 здесь включил бы HTTP/2 всем соседним сайтам
     listen 443 ssl;
     server_name ${PUBLIC_HOST};
+    access_log /var/log/nginx/access.log pokatim_noquery;
 
     ssl_certificate ${cert_dir}/fullchain.pem;
     ssl_certificate_key ${cert_dir}/privkey.pem;
@@ -331,6 +340,7 @@ EOF
 server {
     listen 80;
     server_name ${PUBLIC_HOST};
+    access_log /var/log/nginx/access.log pokatim_noquery;
 
     location ^~ /.well-known/acme-challenge/ {
         root ${WEBROOT};
