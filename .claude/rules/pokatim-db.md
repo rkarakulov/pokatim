@@ -323,9 +323,11 @@ paths:
   (`rideStartOf`: маршрут виден публично — его старт и `startPrecise: true`, иначе `CITY_CENTERS[cityCode]`).
   Правка пересчитывает точку при смене маршрута или города и при прикреплённом маршруте с `startPrecise: false`
   (RC-3); перенос (`changesStart`) — и смена точной точки на другую точную (RC-4). «Рядом» — `$geoWithin
-  $centerSphere` в `$and` ленты (не `$near`: курсор по времени). `geo`/`startPrecise` наружу не уходят
+  $centerSphere` в `$and` ленты (не `$near`: курсор по времени) — кандидаты `$or` с точной точкой города, чей центр
+  в круге; окончательная точка — `ridePointNow` сервиса (снятый маршрут — центр города). `geo`/`startPrecise` наружу не уходят
   (`PUBLIC_PROJECTION`). Стирание — `resetStartsForRoutes`: точные точки райдов любых организаторов на маршрутах
-  удалённого → центр города (одна pipeline-операция, `version` не меняется, повтор — no-op).
+  удалённого → центр города (одна pipeline-операция, `version` не меняется, повтор — no-op); висячие `routeId`
+  (маршрут удалён раньше) — `precisePage` пачками по `_id` + порт `existing`.
 
 ## Удаление аккаунта (ADR-0015, `docs/product/account.md`)
 

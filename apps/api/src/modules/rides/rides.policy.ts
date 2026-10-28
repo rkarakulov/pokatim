@@ -1,5 +1,6 @@
 import {
   CITY_CENTERS,
+  CITY_CODES,
   type CityCode,
   type FieldErrorCode,
   RIDE_MAX_PARTICIPANTS,
@@ -136,6 +137,45 @@ export function rideStartOf(
   const precise = route?.access === 'public';
   const [lon, lat] = precise ? route.start : CITY_CENTERS[cityCode];
   return { geo: { type: 'Point', coordinates: [lon, lat] }, startPrecise: precise };
+}
+
+/** Радиус Земли — тот же, что у `$centerSphere` фильтра «Рядом» (радианы = км / радиус), км. */
+export const EARTH_RADIUS_KM = 6378.1;
+
+const RAD = Math.PI / 180;
+
+/** Расстояние по сфере (haversine) между `[lon, lat]`, км — та же метрика, что `$centerSphere`. */
+export function distanceKm(a: readonly [number, number], b: readonly [number, number]): number {
+  const dLat = (b[1] - a[1]) * RAD;
+  const dLon = (b[0] - a[0]) * RAD;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * RAD) * Math.cos(b[1] * RAD) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Города, чей центр — в круге «Рядом» (кандидаты райдов, точка которых сейчас — центр города). */
+export function citiesNear(center: readonly [number, number], radiusKm: number): CityCode[] {
+  return CITY_CODES.filter((code) => distanceKm(CITY_CENTERS[code], center) <= radiusKm);
+}
+
+/**
+ * Точка райда **сейчас** (05c, RC-1, единое правило ленты «Рядом» и карты): сохранённая точная (`startPrecise`) —
+ * только пока маршрут райда в каталоге (`route.access === 'public'` порта `RideRoutes`); маршрут снят, скрыт, удалён
+ * или стал непубличным — центр города, как у райда без маршрута. `precise` — точка карты ленты.
+ */
+export function ridePointNow(
+  doc: Pick<RideDoc, 'cityCode' | 'routeId'> & Partial<Pick<RideDoc, 'geo' | 'startPrecise'>>,
+  route: RideRouteRef | null | undefined,
+): { coordinates: readonly [number, number]; precise: boolean } {
+  const precise =
+    doc.startPrecise === true &&
+    doc.geo !== undefined &&
+    doc.routeId !== null &&
+    route?.id === doc.routeId &&
+    route.access === 'public';
+  return precise && doc.geo
+    ? { coordinates: doc.geo.coordinates, precise: true }
+    : { coordinates: CITY_CENTERS[doc.cityCode], precise: false };
 }
 
 const samePoint = (a: GeoPoint, b: GeoPoint) =>

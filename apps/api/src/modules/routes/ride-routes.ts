@@ -60,4 +60,9 @@ export class RideRoutesService implements RideRoutes {
   ownedRouteIds(userId: string): Promise<string[]> {
     return this.repository.ownIds(userId);
   }
+
+  async existing(routeIds: readonly string[]): Promise<Set<string>> {
+    const ids = [...new Set(routeIds)];
+    return new Set(ids.length === 0 ? [] : await this.repository.existingIds(ids));
+  }
 }

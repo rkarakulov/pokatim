@@ -2,7 +2,7 @@ import { rm } from 'node:fs/promises';
 
 import { getQueueToken } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
-import { MyRaceEntry, RaceResultsPage } from '@pokatim/contracts';
+import { CITY_CENTERS, MyRaceEntry, RaceResultsPage } from '@pokatim/contracts';
 import type { Job, Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -47,10 +47,19 @@ import {
   notificationsDb,
   seedNotification,
 } from '../../../test/notifications';
-import { createRide, hideInDb, join, ridesDb, startsIn } from '../../../test/rides';
 import {
+  createRide,
+  hideInDb,
+  join,
+  ridesDb,
+  seedApprovedRoute,
+  startsIn,
+} from '../../../test/rides';
+import {
+  MY_ROUTES,
   publicationDoc,
   reportRoute,
+  riderCall,
   routeReportsDb,
   routesDb,
   seedApprovedRiderRoute,
@@ -494,6 +503,7 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
       'profile',
       'rides',
       'routes',
+      'ride-starts',
       'devices',
       'tracks',
       'notifications',
@@ -504,6 +514,40 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
     for (const line of lines) {
       expect(line).not.toMatch(/@example\.com|Анна|Кофе-райд|Мой маршрут/);
     }
+  });
+});
+
+describe('точки райдов на удалённых раньше маршрутах (05c, RC-1, фиксы ревью pass 1)', () => {
+  it('автор удалил публичный маршрут, потом аккаунт — точка чужого райда сброшена на центр города; повтор — no-op', async () => {
+    const author = await deviceRider(h, 'a@example.com');
+    const org = await deviceRider(h, 'b@example.com');
+    const routeId = await seedApprovedRoute(h, author.userId, [27.62, 53.96]);
+    const ride = await createRide(
+      h,
+      { token: org.accessToken, userId: org.userId },
+      { routeId, cityCode: 'borisov' },
+    );
+    const removed = await riderCall(
+      h,
+      author.accessToken,
+      'POST',
+      `${MY_ROUTES}/${routeId}/delete`,
+      {},
+    );
+    expect(removed.status).toBe(204);
+    expect(await ridesDb(h).findOne({ _id: ride.id })).toMatchObject({ startPrecise: true });
+
+    await deleteAccount(author.accessToken);
+    expect(await firstPass(author.userId)).toBe('erased');
+    const after = await ridesDb(h).findOne({ _id: ride.id });
+    expect(after).toMatchObject({
+      routeId,
+      geo: { type: 'Point', coordinates: [...CITY_CENTERS.borisov] },
+      startPrecise: false,
+      version: 0,
+    });
+    expect(await sweep(author.userId)).toBe('erased');
+    expect(await ridesDb(h).findOne({ _id: ride.id })).toEqual(after);
   });
 });
 

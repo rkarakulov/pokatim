@@ -742,6 +742,14 @@ export class RoutesRepository {
     return docs.map((doc) => doc._id);
   }
 
+  /** Какие из id маршрутов есть в `routes` (любой статус) — висячие `routeId` райдов (05c, порт `RideRoutes`). */
+  async existingIds(ids: readonly string[]): Promise<string[]> {
+    const docs = await this.c.routes
+      .find({ _id: { $in: [...ids] } }, { projection: { _id: 1 } })
+      .toArray();
+    return docs.map((doc) => doc._id);
+  }
+
   async geometry(id: string): Promise<RouteGeometryDoc | undefined> {
     return (await this.c.geometries.findOne({ _id: id })) ?? undefined;
   }

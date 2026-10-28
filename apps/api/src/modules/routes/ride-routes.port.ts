@@ -32,4 +32,9 @@ export interface RideRoutes {
   ): Promise<Map<string, RideRouteRef>>;
   /** Id маршрутов райдера — стирание аккаунта сбрасывает точки райдов на них (ADR-0015). */
   ownedRouteIds(userId: string): Promise<string[]>;
+  /**
+   * Какие из id маршрутов ещё существуют (любой статус и происхождение) — стирание аккаунта сбрасывает точки райдов на
+   * висячих `routeId` (маршрут удалён раньше, 05c, RC-1).
+   */
+  existing(routeIds: readonly string[]): Promise<Set<string>>;
 }

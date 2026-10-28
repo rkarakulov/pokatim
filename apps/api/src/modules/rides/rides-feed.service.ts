@@ -22,8 +22,17 @@ import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { RIDE_ROUTES, type RideRouteRef, type RideRoutes } from '../routes';
 import { RideReportsRepository } from './ride-reports.repository';
 import type { RideDoc, RidePublicDoc } from './rides.collection';
-import { rideFull, ridePhase, RIDES_POLICY, rideViewer, visibleTo } from './rides.policy';
-import { type NearFilter, RidesRepository } from './rides.repository';
+import {
+  citiesNear,
+  distanceKm,
+  rideFull,
+  ridePhase,
+  ridePointNow,
+  RIDES_POLICY,
+  rideViewer,
+  visibleTo,
+} from './rides.policy';
+import { type NearFilter, type RideMapDoc, RidesRepository } from './rides.repository';
 
 /** Видимые зрителю маршруты райдов страницы (порт `RideRoutes`, одним вызовом, без кэша). */
 export type RouteLookup = ReadonlyMap<string, RideRouteRef>;
@@ -125,11 +134,32 @@ export function rideViewOf(
 
 const CursorKey = z.iso.datetime();
 
-/** Фильтр «Рядом» запроса: `near` уже округлён схемой, без `radiusKm` — 25 км. */
-const nearOf = (query: { near?: [number, number]; radiusKm?: number }): NearFilter | null =>
-  query.near
-    ? { center: query.near, radiusKm: query.radiusKm ?? RIDE_NEAR_RADIUS_KM.default }
-    : null;
+/** Фильтр «Рядом» запроса: `near` уже округлён схемой, без `radiusKm` — 25 км; города с центром в круге. */
+function nearOf(query: { near?: [number, number]; radiusKm?: number }): NearFilter | null {
+  if (!query.near) return null;
+  const radiusKm = query.radiusKm ?? RIDE_NEAR_RADIUS_KM.default;
+  return { center: query.near, radiusKm, cities: citiesNear(query.near, radiusKm) };
+}
+
+/**
+ * Пачек выборки не больше (лента «Рядом» и карта, 05c RC-1): строки с точкой, которой сейчас нет в круге (маршрут
+ * снят), отбрасываются после чтения; короче страница — допустима, курсор — по последней прочитанной строке.
+ */
+const MAX_SCAN_BATCHES = 5;
+
+/** Id маршрутов в запросе порта `RideRoutes.visible` (контракт порта — ≤ 200). */
+const ROUTE_LOOKUP_CHUNK = 200;
+
+/** Точка райда сейчас (`ridePointNow`) — в круге «Рядом»; без «Рядом» — всегда. */
+function inNear(
+  doc: Pick<RideDoc, 'cityCode' | 'routeId'> & Partial<Pick<RideDoc, 'geo' | 'startPrecise'>>,
+  routes: RouteLookup,
+  near: NearFilter | null,
+): boolean {
+  if (!near) return true;
+  const point = ridePointNow(doc, doc.routeId ? routes.get(doc.routeId) : undefined);
+  return distanceKm(point.coordinates, near.center) <= near.radiusKm;
+}
 
 /**
  * Чтение кофе-райдов: лента, карта ленты и города зависят от зрителя (роль, отменённые свои, свой маршрут) — под
@@ -159,37 +189,53 @@ export class RidesFeedService {
     }
   }
 
+  /**
+   * Лента по `(startsAt, _id)`. С «Рядом» — по точке райда сейчас (`ridePointNow`, RC-1): строка, чья точка вне круга
+   * (маршрут снят — точка центр города), отбрасывается после чтения, страница добирается пачками (≤ `MAX_SCAN_BATCHES`).
+   * Курсор — по последней строке страницы; упёрлись в предел пачек — по последней прочитанной (страница короче или
+   * пустая, продолжение не теряется).
+   */
   async list(userId: string, query: RideListQuery): Promise<RidePage> {
     const cursor = query.cursor ? decodeCursor(query.cursor, CursorKey) : null;
     const near = nearOf(query);
     if (near) await this.limitNear(userId);
     const now = this.clock.now();
-    const docs = await this.repository.listFeed(
+    // принятые строки: `limit + 1`-я — признак продолжения (как раньше `limit + 1` выборки)
+    const accepted: RideDoc[] = [];
+    const routes = new Map<string, RideRouteRef>();
+    let after = cursor ? { startsAt: new Date(cursor.k), id: cursor.id } : null;
+    let exhausted = false;
+    for (let batch = 0; batch < MAX_SCAN_BATCHES && accepted.length <= query.limit; batch++) {
+      const need = query.limit + 1 - accepted.length;
+      const docs = await this.repository.listFeed(userId, now, query.city, after, need, near);
+      for (const [id, ref] of await lookupRoutes(this.rideRoutes, docs, userId)) {
+        routes.set(id, ref);
+      }
+      accepted.push(...docs.filter((doc) => inNear(doc, routes, near)));
+      const last = docs.at(-1);
+      if (last) after = { startsAt: last.startsAt, id: last._id };
+      exhausted = docs.length < need;
+      if (exhausted) break;
+    }
+    const page = accepted.slice(0, query.limit);
+    const lastItem = page.at(-1);
+    // страница полна и есть следующая — курсор по последней строке; предел пачек — по последней прочитанной
+    const next =
+      accepted.length > query.limit && lastItem
+        ? { startsAt: lastItem.startsAt, id: lastItem._id }
+        : exhausted
+          ? null
+          : after;
+    const reported = await this.reports.reportedRideIds(
       userId,
-      now,
-      query.city,
-      cursor ? { startsAt: new Date(cursor.k), id: cursor.id } : null,
-      query.limit + 1,
-      near,
+      page.map((doc) => doc._id),
     );
-    const page = docs.slice(0, query.limit);
-    const last = page.at(-1);
-    const [reported, routes] = await Promise.all([
-      this.reports.reportedRideIds(
-        userId,
-        page.map((doc) => doc._id),
-      ),
-      lookupRoutes(this.rideRoutes, page, userId),
-    ]);
     return {
       items: page.map((doc): RideCard => ({
         ...summaryOf(doc, now, routeOf(doc, routes, userId)),
         viewer: viewerOf(doc, userId, now, reported.has(doc._id)),
       })),
-      nextCursor:
-        docs.length > query.limit && last
-          ? encodeCursor(last.startsAt.toISOString(), last._id)
-          : null,
+      nextCursor: next ? encodeCursor(next.startsAt.toISOString(), next.id) : null,
     };
   }
 
@@ -199,34 +245,70 @@ export class RidesFeedService {
   }
 
   /**
-   * Карта ленты (05c): будущие опубликованные райды с точной точкой, у которых маршрут виден зрителю сейчас (точка —
-   * старт маршрута); `withoutStart` — остальные райды того же фильтра (без точки, снятый маршрут, сверх предела).
+   * Карта ленты (05c): будущие опубликованные райды, чья точка сейчас точная (`ridePointNow`: маршрут в каталоге, RC-1;
+   * свой непубличный маршрут организатора — тоже не точка) и в круге «Рядом»; точка — старт маршрута. Кандидаты —
+   * пачками по `(startsAt, _id)` до 200 точек (≤ `MAX_SCAN_BATCHES`). `withoutStart` — остальные райды того же фильтра
+   * (без точки, снятый маршрут — по центру города, сверх предела).
    */
   async map(userId: string, query: RideMapQuery): Promise<RideMap> {
     // карта считается всегда (и без «Рядом»): тот же ключ, что у ленты с `near`
     await this.limitNear(userId);
     const near = nearOf(query);
     const now = this.clock.now();
-    const [docs, total] = await Promise.all([
-      this.repository.listMapPoints(now, query.city, near, RIDE_MAP_MAX_POINTS),
-      this.repository.countMap(now, query.city, near),
+    const [items, total] = await Promise.all([
+      this.mapPoints(now, query, near),
+      this.countMap(now, query, near),
     ]);
-    const routes = await lookupRoutes(this.rideRoutes, docs, userId);
-    const items: RideMap['items'] = [];
-    for (const doc of docs) {
-      const route = routeOf(doc, routes, userId);
-      if (!route) continue;
-      items.push({
-        id: doc._id,
-        title: doc.title,
-        startsAt: doc.startsAt.toISOString(),
-        start: route.start,
-        goingCount: doc.goingCount,
-        limit: doc.limit,
-        full: rideFull(doc),
-      });
-    }
     return { items, withoutStart: Math.max(0, total - items.length) };
+  }
+
+  private async mapPoints(
+    now: Date,
+    query: RideMapQuery,
+    near: NearFilter | null,
+  ): Promise<RideMap['items']> {
+    const items: RideMap['items'] = [];
+    let after: { startsAt: Date; id: string } | null = null;
+    for (let batch = 0; batch < MAX_SCAN_BATCHES; batch++) {
+      const docs: RideMapDoc[] = await this.repository.listMapPoints(
+        now,
+        query.city,
+        near,
+        after,
+        RIDE_MAP_MAX_POINTS,
+      );
+      const routes = await lookupRoutes(this.rideRoutes, docs, null);
+      for (const doc of docs) {
+        const route = doc.routeId ? routes.get(doc.routeId) : undefined;
+        if (!route || !ridePointNow(doc, route).precise || !inNear(doc, routes, near)) continue;
+        items.push({
+          id: doc._id,
+          title: doc.title,
+          startsAt: doc.startsAt.toISOString(),
+          start: route.start,
+          goingCount: doc.goingCount,
+          limit: doc.limit,
+          full: rideFull(doc),
+        });
+        if (items.length === RIDE_MAP_MAX_POINTS) return items;
+      }
+      const last = docs.at(-1);
+      if (docs.length < RIDE_MAP_MAX_POINTS || !last) return items;
+      after = { startsAt: last.startsAt, id: last._id };
+    }
+    return items;
+  }
+
+  /** Райды фильтра карты; с «Рядом» — по точке сейчас: какие маршруты точных точек в каталоге — порт, пачками. */
+  private async countMap(now: Date, query: RideMapQuery, near: NearFilter | null): Promise<number> {
+    if (!near) return this.repository.countMap(now, query.city, null);
+    const ids = await this.repository.mapPreciseRouteIds(now, query.city, near);
+    const publicIds: string[] = [];
+    for (let i = 0; i < ids.length; i += ROUTE_LOOKUP_CHUNK) {
+      const visible = await this.rideRoutes.visible(ids.slice(i, i + ROUTE_LOOKUP_CHUNK), null);
+      publicIds.push(...visible.keys());
+    }
+    return this.repository.countMap(now, query.city, near, publicIds);
   }
 
   /** Публичная (кэшируемая) карточка без зрителя: маршрут — только из каталога (`public`, RC-13). */
