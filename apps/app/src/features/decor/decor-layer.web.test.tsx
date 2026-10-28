@@ -56,9 +56,14 @@ describe('HalloweenDecor web (AC5)', () => {
     expect(layer.style.pointerEvents).toBe('none');
     expect(layer.querySelectorAll('svg').length).toBeGreaterThan(5);
     expect(layer.querySelector('style')?.textContent).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.pokatim-decor-bob, \.pokatim-decor-fly \{ animation: none; \}/,
+      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.pokatim-decor-bob \{ animation: none; \}/,
     );
     expect(screen.getByTestId('halloween-spider').className).toBe('pokatim-decor-bob');
     expect(screen.getByTestId('halloween-witch').className).toBe('pokatim-decor-fly');
+    // reduce motion: вместо пролёта — ведьма у луны внизу слева (верх с заголовком свободен)
+    expect(screen.getByTestId('halloween-witch-still').className).toBe('pokatim-decor-still');
+    expect(layer.querySelector('style')?.textContent).toMatch(
+      /\.pokatim-decor-fly \{ display: none; \}/,
+    );
   });
 });
