@@ -82,10 +82,11 @@ function appScheme(p: Palette, shape: ShapeRoles): AppTheme {
  * «Классики» (`defaultShape.button`, прямые углы): решение пользователя после слайса C.
  */
 /**
- * Радиус чипов и плашек тем со скруглёнными карточками: небольшой, не «колбаска» (`radius.pill` в форме тем не
- * используется — круглое только то, что круглое по смыслу: точки карты, индикаторы).
+ * Мягкая форма тем со скруглёнными углами (px): поля / чипы / карточки / шторка — одна шкала на все такие темы,
+ * небольшие радиусы без «колбасок» (`radius.pill` в форме тем нет: круглое — только по смыслу, точки карты и
+ * индикаторы). Кнопки — прямые, как у «Классики».
  */
-const CHIP_RADIUS = 8;
+const SOFT: [number, number, number, number] = [6, 4, 8, 12];
 
 const shape = (
   [field, chip, card, sheet]: [number, number, number, number],
@@ -93,7 +94,7 @@ const shape = (
 ): ShapeRoles => ({ button: defaultShape.button, field, chip, card, sheet, buttonCase });
 
 /** Атлас: светло-серый экран, белые карточки, оранжевый акцент карты и профиля, чёрная кнопка. */
-const atlasShape = shape([12, CHIP_RADIUS, 16, 24]);
+const atlasShape = shape(SOFT);
 export const atlas = {
   light: appScheme(
     {
@@ -142,11 +143,11 @@ export const chrono = appScheme(
     control: ['#FF6A1A', '#0B0B0C'],
     tabBar: ['#0B0B0C', '#FF6A1A'],
   },
-  shape([10, CHIP_RADIUS, 12, 20]),
+  shape(SOFT),
 );
 
 /** Планировщик: тёплый бежево-серый фон, чёрные линии маршрута и профиля, оранжевый — только трек. */
-const plannerShape = shape([12, CHIP_RADIUS, 14, 24]);
+const plannerShape = shape(SOFT);
 export const planner = {
   light: appScheme(
     {
@@ -181,7 +182,7 @@ export const planner = {
 };
 
 /** Журнал: зеленоватый фон — светлый или тёмно-зелёный (не графит Навигации); кнопка, маршрут, профиль и вкладка — зелёные. */
-const journalShape = shape([10, CHIP_RADIUS, 14, 20]);
+const journalShape = shape(SOFT);
 export const journal = {
   light: appScheme(
     {
@@ -230,7 +231,7 @@ export const navigation = appScheme(
     control: ['#5BA8FF', '#0F1215'],
     tabBar: ['#0F1215', '#F2F4F7'],
   },
-  shape([12, CHIP_RADIUS, 16, 24]),
+  shape(SOFT),
 );
 
 /** Типографика: тёплый светлый фон, оранжевая кнопка с тёмным текстом (F6), заглавные подписи кнопок. */

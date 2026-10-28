@@ -2,14 +2,13 @@ import { size, space } from '@pokatim/design-tokens';
 import { t, type MessageKey } from '@pokatim/i18n';
 import { EmptyState, TextAction, useTheme } from '@rkarakulov/ui';
 import { useRouter, type Href } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { TopBar } from '@/components/top-bar';
-import { useSignOut } from '@/features/auth/use-sign-out';
 import { DecorLayer } from '@/features/decor/decor-layer';
 import { HomeSection } from '@/features/home/home-section';
 import { useUnreadCount } from '@/features/notifications/queries';
@@ -72,8 +71,6 @@ const DOCUMENT_TITLE = `${t('home.title')} — ${t('app.name')}`;
 export default function HomeScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const signOut = useSignOut();
-  const [signingOut, setSigningOut] = useState(false);
   const profile = useRideReasons();
   const races = useNextRace();
   const calendar = useNextCalendarStart();
@@ -100,12 +97,6 @@ export default function HomeScreen() {
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
 
-  const onSignOut = async () => {
-    setSigningOut(true);
-    // экран уйдёт по гарду; неудачи нет — офлайн выход локальный
-    await signOut();
-  };
-
   return (
     <SafeAreaView
       edges={['top']}
@@ -116,7 +107,7 @@ export default function HomeScreen() {
         onOpenNotifications={() => router.push('/notifications')}
         unreadCount={unread.data?.count}
         onOpenDevices={() => router.push('/settings/devices')}
-        onOpenProfile={() => router.push('/settings/profile')}
+        onOpenSettings={() => router.push('/settings')}
       />
       {/* область ленты — опора сезонного декора (halloween-decor): слой поверх ленты, без шапки */}
       <View style={styles.feed}>
@@ -242,17 +233,12 @@ export default function HomeScreen() {
               </HomeSection>
             );
           })}
-          {/* временно на «Главной» (Q8) — до экрана профиля */}
-          <View style={styles.footer}>
-            {__DEV__ ? (
+          {/* витрина компонентов — только в dev; «Выйти» — в «Настройках» (settings-hub) */}
+          {__DEV__ ? (
+            <View style={styles.footer}>
               <TextAction label={t('uiKit.open')} onPress={() => router.push('/ui-kit')} />
-            ) : null}
-            <TextAction
-              label={t('auth.signOut')}
-              onPress={() => void onSignOut()}
-              disabled={signingOut}
-            />
-          </View>
+            </View>
+          ) : null}
         </ScrollView>
         <DecorLayer />
       </View>

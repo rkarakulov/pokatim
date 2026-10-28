@@ -164,8 +164,8 @@ describe('Главная: каркас (S3)', () => {
     expect(screen.getAllByLabelText('Загрузка')).toHaveLength(4);
     expect(screen.queryByText('Маршруты рядом с вами')).toBeNull();
     expect(screen.queryByText('по вашему выбору')).toBeNull();
-    // временно внизу Главной (Q8)
-    expect(screen.getByText('Выйти')).toBeOnTheScreen();
+    // «Выйти» — в «Настройках» (settings-hub), не на Главной
+    expect(screen.queryByText('Выйти')).toBeNull();
   });
 
   it('профиль — Bearer access сессии; «Календарь» в опросе → «Ближайшие старты» первыми с тегом (AC4)', async () => {
@@ -355,15 +355,15 @@ describe('Главная: разделы (S4)', () => {
     expect(router.getPathname()).toBe(`/calendar/${start.id}`);
   });
 
-  it('иконка «Профиль» верхней панели ведёт на /settings/profile (profile-rider-name)', async () => {
+  it('иконка «Настройки» верхней панели ведёт на /settings (settings-hub)', async () => {
     const router = await renderRouter(
-      { ...tabRoutes, 'settings/profile': () => null },
+      { ...tabRoutes, 'settings/index': () => null },
       { initialUrl: '/', wrapper: createQueryWrapper() },
     );
     const bar = within(await screen.findByTestId('top-bar'));
     expect(bar.getByRole('button', { name: 'Устройства' })).toBeOnTheScreen();
-    await fireEvent.press(bar.getByRole('button', { name: 'Профиль' }));
-    expect(router.getPathname()).toBe('/settings/profile');
+    await fireEvent.press(bar.getByRole('button', { name: 'Настройки' }));
+    expect(router.getPathname()).toBe('/settings');
   });
 
   it('многодневный старт без ссылки регистрации — диапазон, строки регистрации нет', async () => {
