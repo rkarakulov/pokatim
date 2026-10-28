@@ -77,6 +77,8 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'VERIFIED_DEMOGRAPHICS_LOCKED',
   // routes-06: лимит подач маршрута в каталог (details: limit, max)
   'ROUTE_PUBLICATION_LIMIT',
+  // story-cards: карточки нет (нет заявки, времени, снята, DQ) — 409
+  'STORY_CARD_UNAVAILABLE',
   // route-rides-01: заезд ещё обрабатывается (409); файл заезда с отказом разбора (409); квота заездов на маршрут (409)
   'ROUTE_RIDE_NOT_READY',
   'ROUTE_RIDE_UPLOAD_FAILED',

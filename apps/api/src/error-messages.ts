@@ -47,6 +47,7 @@ export const PROJECT_ERROR_MESSAGES = {
   RESULT_GROUP_NOT_ALLOWED: 'Можно выбрать свою группу или более молодую своего пола',
   VERIFIED_DEMOGRAPHICS_LOCKED: 'Пол и год рождения уже зафиксированы заявкой Verified',
   ROUTE_PUBLICATION_LIMIT: 'Достигнут предел заявок в каталог',
+  STORY_CARD_UNAVAILABLE: 'Карточки для этой гонки пока нет',
   ROUTE_RIDE_NOT_READY: 'Заезд ещё обрабатывается, попробуйте чуть позже',
   ROUTE_RIDE_UPLOAD_FAILED: 'Файл заезда не удалось обработать',
   ROUTE_RIDE_QUOTA_EXCEEDED: 'Достигнут предел заездов по маршруту',

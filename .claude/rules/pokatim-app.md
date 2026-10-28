@@ -272,6 +272,15 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   ошибки определения сезона и `/me` — баннеры с повтором, данные при ошибке обновления остаются; скрыт только без
   ошибок (сезона нет или своих строк нет).
 
+- Карточка для сторис (story-cards, ADR-0018) — `features/races/story/*`: экран `races/story/[id]` внутри
+  `Stack.Protected` (рядом с `races/result/[id]/[entryId]`; в `app/_layout.tsx` и `__tests__/app-routes.ts`). Входы —
+  `ShareStoryButton` только по `actions.canShareStory` сервера: «Ваше участие» и своя строка таблицы
+  (`ownRowAction` → `rivalPath` своей заявки: «Ваш результат», без подачи спора). Статус — `useStoryCard`
+  (`['races','story',raceId,template]`, опрос 1 с, не дольше 30 с от первого `pending`, `failed`/таймаут — ошибка с
+  повтором, 409 — «Карточки пока нет»); PNG — `useStoryFile` заранее (RC-13). Шаринг — только
+  `src/lib/share-story(.web).ts`: native — `expo-file-system` (кэш) + `expo-sharing` лениво (`load-expo-sharing.ts`;
+  нет `ExpoSharing` — «Скачать PNG» через `downloadFile`), web — `navigator.share({ files })`, иначе `<a download>`.
+
 ## Маршруты (routes-01, `docs/product/routes.md`)
 
 - Вкладка «Маршруты» — `features/routes/route-feed.tsx` (`FlatList`): ключ `['routes','list',{ city, distance,

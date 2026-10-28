@@ -3,7 +3,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
-  attributionCss,
+  attributionPanelCss,
   cameraPadding,
   collapseAttribution,
   CORRIDOR_LAYER_ID,
@@ -25,6 +25,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { loadMaplibre } from './load-maplibre';
 import { LOCATE_ZOOM, LOCATION_SOURCE_ID, locationFeature, locationLayers } from './location-style';
+import { MapAttributionButton } from './map-attribution-button';
 import { MapOverlayControls } from './map-overlay-controls';
 import { MAP_WORKER_FILE } from './map-worker';
 import { RouteMapFrame } from './route-map-frame';
@@ -50,8 +51,8 @@ import {
  * карты; ошибки тайлов после `load` — без сообщения (как native). `scrub` (routes-04) — маркер скраббинга оверлеем:
  * пиксели линии — `map.project` после `load` и на `SCRUB_REPROJECT_EVENTS` в стор вида (подписан только
  * `ScrubLayer`); карта на кадр камеры не перерисовывается и не пересоздаётся. routes-04d: атрибуция — контрол
- * `AttributionControl` в `'bottom-left'` (RC-6), над шторкой — CSS-сдвиг на `bottomInset`; `fill` — колесо масштабирует
- * без модификатора (RC-7); отступ камеры — `cameraPadding` (высота шторки — через ref, эффект создания карты от неё не
+ * `AttributionControl` в `'bottom-left'` (RC-6) с кнопкой «i» `MapAttributionButton`, над шторкой — сдвиг на
+ * `bottomInset`; `fill` — колесо масштабирует без модификатора (RC-7); отступ камеры — `cameraPadding` (высота шторки — через ref, эффект создания карты от неё не
  * зависит); «Моё местоположение» — точка императивно (`addSource`/`setData`), камера — `easeTo` с `offset` (не
  * `padding`: в maplibre-gl он стал бы постоянным `tr.padding` и прибавлялся бы к отступам `fitBounds`).
  */
@@ -82,6 +83,8 @@ export function RouteMap({
   const cumulative = useMemo(() => cumulativeMeters(map.line), [map]);
   // экземпляр карты для кнопок; кнопки — только когда карта создана
   const instanceRef = useRef<MapLibreMap | null>(null);
+  // своя кнопка «i» раскрывает и сворачивает плашку контрола атрибуции MapLibre
+  const toggleAttribution = useRef<(() => void) | null>(null);
   const [ready, setReady] = useState(false);
   // reduce motion — через ref: в зависимостях эффекта создания нет; `null` (ответа ещё нет) — как «уменьшить»
   const reduced = useReducedMotion();
@@ -140,7 +143,7 @@ export function RouteMap({
         instance = created;
         instanceRef.current = created;
         setReady(true);
-        collapseAttribution(created, node);
+        toggleAttribution.current = collapseAttribution(created, node);
         // ревью pass 1 (M2): фатальна только ошибка до `load` (стиль, первые тайлы); ошибка тайла новой области после
         // `load` (сеть на секунду) не гасит живую карту и кнопки — MapLibre перезапросит тайл, как native
         let loaded = false;
@@ -223,7 +226,7 @@ export function RouteMap({
       fill={fill}
       bottomInset={bottomInset}
     >
-      <style>{attributionCss(scope, theme, theme.map.basemap === 'dark')}</style>
+      <style>{attributionPanelCss(scope, theme)}</style>
       {bottomInset > 0 ? (
         // атрибуция над шторкой (RC-6): угол контролов maplibre-gl — со сдвигом на её высоту
         <style>{`[data-route-map="${scope}"] .maplibregl-ctrl-bottom-left{bottom:${bottomInset}px}`}</style>
@@ -253,6 +256,13 @@ export function RouteMap({
             {t(isMacPlatform() ? 'maps.gestures.wheelMac' : 'maps.gestures.wheel')}
           </Text>
         </View>
+      ) : null}
+      {ready ? (
+        <MapAttributionButton
+          theme={theme}
+          bottomInset={bottomInset}
+          onPress={() => toggleAttribution.current?.()}
+        />
       ) : null}
       {ready && !failed ? (
         <MapOverlayControls

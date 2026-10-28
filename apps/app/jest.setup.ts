@@ -62,6 +62,26 @@ jest.mock('expo-notifications', () => ({
 }));
 jest.mock('expo-device', () => ({ isDevice: true }));
 
+// story-cards: системный лист с файлом и кэш файлов — в jest нет нативных модулей
+jest.mock('expo-sharing', () => ({
+  shareAsync: jest.fn(() => Promise.resolve()),
+  isAvailableAsync: jest.fn(() => Promise.resolve(true)),
+}));
+jest.mock('expo-file-system', () => {
+  class File {
+    uri: string;
+    constructor(...parts: { uri?: string }[] | string[]) {
+      this.uri = parts
+        .map((part) => (typeof part === 'string' ? part : (part.uri ?? '')))
+        .join('/');
+    }
+    static downloadFileAsync = jest.fn((_url: string, destination: { uri: string }) =>
+      Promise.resolve(destination),
+    );
+  }
+  return { File, Paths: { cache: { uri: 'file:///cache' } } };
+});
+
 // RNGH v3 без Reanimated (routes-04: колбэки жестов — `runOnJS`): mock Reanimated 4.7 падает на `setCSSEventHandler`,
 // и `expo-router/testing-library` подменяет пакет пустым объектом — RNGH принимает его за установленный и падает на
 // `isSharedValue`. Обёртка RNGH «Reanimated не установлен» — для src- и lib-сборки пакета.
@@ -123,7 +143,11 @@ jest.mock('@maplibre/maplibre-react-native', () => {
     fitBounds: jest.fn(),
     setStop: jest.fn(async () => undefined),
   };
-  const map = { getViewState: jest.fn(notReady), getZoom: jest.fn(notReady) };
+  const map = {
+    getViewState: jest.fn(notReady),
+    getZoom: jest.fn(notReady),
+    showAttribution: jest.fn(async () => undefined),
+  };
   const stub = (name: string, methods?: object) => {
     const Component = ({ ref, ...props }: { ref?: unknown; children?: unknown }) => {
       useImperativeHandle(ref, () => methods ?? null, []);

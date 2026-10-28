@@ -1,7 +1,7 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 import {
-  attributionCss,
+  attributionPanelCss,
   cameraPadding,
   collapseAttribution,
   interactiveMapOptions,
@@ -18,6 +18,7 @@ import {
   locationFeature,
   locationLayers,
 } from '@/features/maps/location-style';
+import { MapAttributionButton } from '@/features/maps/map-attribution-button';
 import { MapOverlayControls } from '@/features/maps/map-overlay-controls';
 import { MAP_WORKER_FILE } from '@/features/maps/map-worker';
 import { RouteMapFrame } from '@/features/maps/route-map-frame';
@@ -54,8 +55,8 @@ function showLocation(
 /**
  * Web-карта точек старта ленты райдов (05c, `maplibre-gl` 6): модуль — динамическим `import()` после монтирования
  * (как `route-map.web.tsx`), карта на всю область — колесо масштабирует (страница под картой не прокручивается), атрибуция
- * — `AttributionControl` слева внизу, свёрнута. После `load` — источник и слои точек (одинаковый старт — одна точка
- * с числом, RC-11) и точка позиции «Рядом» (`me`); клик по точке — выбор группы и карточка под картой, курсор `pointer`
+ * — `AttributionControl` слева внизу, свёрнута, раскрывает её своя кнопка «i» (`MapAttributionButton`). После `load` —
+ * источник и слои точек (одинаковый старт — одна точка с числом, RC-11) и точка позиции «Рядом» (`me`); клик по точке — выбор группы и карточка под картой, курсор `pointer`
  * над точкой. Смена стиля, точек или рамки — пересоздание карты (ключ у вызывающего не нужен). Ошибка до `load` —
  * сообщение поверх карты.
  */
@@ -77,6 +78,8 @@ export function RidePointsMap({
   const groups = useMemo(() => rideGroups(points), [points]);
   const group = selected ? groups.get(selected) : undefined;
   const instanceRef = useRef<MapLibreMap | null>(null);
+  // своя кнопка «i» раскрывает и сворачивает плашку контрола атрибуции MapLibre
+  const toggleAttribution = useRef<(() => void) | null>(null);
   const [ready, setReady] = useState(false);
   const reduced = useReducedMotion();
   const animate = useRef(false);
@@ -118,7 +121,7 @@ export function RidePointsMap({
         instance = created;
         instanceRef.current = created;
         setReady(true);
-        collapseAttribution(created, node);
+        toggleAttribution.current = collapseAttribution(created, node);
         let loaded = false;
         created.on('load', () => {
           loaded = true;
@@ -162,13 +165,16 @@ export function RidePointsMap({
         failedMessage={failed ? failedMessage : null}
         fill
       >
-        <style>{attributionCss(scope, theme, theme.map.basemap === 'dark')}</style>
+        <style>{attributionPanelCss(scope, theme)}</style>
         <div
           ref={container}
           data-testid="ride-points-canvas"
           data-route-map={scope}
           style={canvasStyle}
         />
+        {ready ? (
+          <MapAttributionButton theme={theme} onPress={() => toggleAttribution.current?.()} />
+        ) : null}
         {ready && !failed ? (
           <MapOverlayControls
             theme={theme}

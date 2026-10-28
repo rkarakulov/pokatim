@@ -1,6 +1,6 @@
 import { motion, shapeOf, size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Icon, type IconName } from '@/components/icon';
 
@@ -70,30 +70,56 @@ export function MapControls({
   return (
     <View testID="map-controls" style={styles.column}>
       {buttons.map((button) => (
-        <Pressable
-          key={button.testID}
-          testID={button.testID}
-          accessibilityRole="button"
-          accessibilityLabel={button.label}
-          // aria-*: RN переводит в accessibilityState, RN-web — в атрибуты
-          aria-busy={button.busy}
-          disabled={button.busy}
-          onPress={button.onPress}
-          style={({ pressed }) => [
-            styles.button,
-            {
-              backgroundColor: theme.surface.raised,
-              borderColor: theme.border.subtle,
-              // форма темы: у «Классики» — квадрат, у Навигации и Планировщика — круг (pill)
-              borderRadius: shapeOf(theme).button,
-              opacity: pressed ? motion.pressedOpacity : 1,
-            },
-          ]}
-        >
-          <Icon name={button.icon} size={size.icon} color={theme.text.primary} />
-        </Pressable>
+        <MapIconButton key={button.testID} theme={theme} {...button} />
       ))}
     </View>
+  );
+}
+
+/**
+ * Кнопка-иконка поверх карты (кнопки камеры, «i» атрибуции): фон `surface.raised`, рамка `border.subtle`, форма темы,
+ * цель `size.touchMin`.
+ */
+export function MapIconButton({
+  theme,
+  testID,
+  label,
+  icon,
+  onPress,
+  busy,
+  style,
+}: {
+  theme: AppTheme;
+  testID: string;
+  label: string;
+  icon: IconName;
+  onPress: () => void;
+  busy?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      // aria-*: RN переводит в accessibilityState, RN-web — в атрибуты
+      aria-busy={busy}
+      disabled={busy}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.button,
+        {
+          backgroundColor: theme.surface.raised,
+          borderColor: theme.border.subtle,
+          // форма темы: у «Классики» — квадрат, у Навигации и Планировщика — круг (pill)
+          borderRadius: shapeOf(theme).button,
+          opacity: pressed ? motion.pressedOpacity : 1,
+        },
+        style,
+      ]}
+    >
+      <Icon name={icon} size={size.icon} color={theme.text.primary} />
+    </Pressable>
   );
 }
 

@@ -64,6 +64,11 @@ export const QUEUE = {
    */
   standingsRecalc: 'standings-recalc',
   /**
+   * Рендер карточки для сторис (story-cards, satori + resvg): итог — PNG в Redis с TTL 24 ч по капабилити-токену;
+   * дедупликация — ключ постановки NX по хэшу входов (`StoryCardCache`), jobId `story-card-<hash>` — вторая линия.
+   */
+  storyCard: 'story-card',
+  /**
    * Сверка заезда по маршруту вне гонки (route-rides-01, `analyzeAttempt` в потоке разбора): jobId = id события outbox
    * `route-rides.check-requested`, параллелизм 1.
    */

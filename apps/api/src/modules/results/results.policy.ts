@@ -245,6 +245,29 @@ export function resultStatus(
   return 'none';
 }
 
+/** Статусы результата, при которых есть карточка для сторис (story-cards, RC-2): время засчитано, не DQ/не снято. */
+const STORY_CARD_STATUSES: readonly RaceResultStatus[] = [
+  'provisional',
+  'finisher',
+  'final',
+  'revised',
+];
+
+/**
+ * Карточка для сторис доступна (story-cards, RC-1/RC-2) — одна функция для `actions.canShareStory` «моего участия» и
+ * для `409 STORY_CARD_UNAVAILABLE` эндпоинта карточки: заявка активна, время есть, статус — с засчитанным временем.
+ */
+export function storyCardEligible(
+  entry: Pick<RaceEntryDoc, 'status'> | null,
+  result: { status: RaceResultStatus; elapsedSec: number | null },
+): boolean {
+  return (
+    entry?.status === 'active' &&
+    result.elapsedSec !== null &&
+    STORY_CARD_STATUSES.includes(result.status)
+  );
+}
+
 /**
  * DQ по спору до публикации (RC-3): поле заявки — проекция, читается только пока протокол не опубликован; после —
  * истина в журнале пересчётов и снимке. Документы до `0018_disputes` поля не имеют — `?? null`.
@@ -285,7 +308,7 @@ export function entryActions(
     | null,
   now: Date,
   { openDisputes }: { openDisputes: number },
-): MyRaceEntry['actions'] {
+): Omit<MyRaceEntry['actions'], 'canShareStory'> {
   const reasons: RaceEntryBlockReason[] = [];
   const block = (reason: RaceEntryBlockReason) => {
     if (!reasons.includes(reason)) reasons.push(reason);

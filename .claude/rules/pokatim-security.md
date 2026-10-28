@@ -313,3 +313,17 @@ paths:
 - Исходящий HTTP — только `EXPO_PUSH_API_URL` (в production — `exp.host`), таймаут, лимит тела, без редиректов;
   `EXPO_ACCESS_TOKEN` — только env и заголовок. Тексты push и писем — без чужих ПДн (N12); цель — тип и id из белого
   списка, приложение адресов из push не принимает.
+
+## Карточки для сторис (story-cards, ADR-0018)
+
+- Статус карточки — только вошедшему (`AuthGuard`, `userId` из access), только своя заявка `(raceId, userId)`; чужая
+  гонка без заявки — 409 без утечки. Права — один предикат `storyCardEligible` (`actions.canShareStory` и 409).
+- PNG по капабилити-токену (`randomBytes(16)`, base64url, regex до Redis; кривое имя и неизвестный — один 404 JSON),
+  без входа, TTL 24 ч, `private, max-age=86400, immutable`, `nosniff`, `CSP: default-src 'none'; sandbox`,
+  `Referrer-Policy: no-referrer`. Токен в пути попадает в access-лог nginx dev — принято (ADR-0018, как
+  `auth/verify/<token>`).
+- Содержимое картинки — публичные данные таблицы; имя — только через `RIDER_NAMES` (согласие); линия — только отрезок
+  между воротами (`sliceLine` по `trackMap.segment`) или линия маршрута; без e-mail, `userId`, времени суток заезда.
+- Лимиты: `story-card-read:<uid>` 120/мин, `story-card-render:<uid>` 30/ч (только при захвате ключа постановки),
+  IP `story-card-image` 120/мин; PNG ≤ 2 МБ. Логи worker — заявка, шаблон, итог, байты, мс (без `userId`, имени,
+  токена).
