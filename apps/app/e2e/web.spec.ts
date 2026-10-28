@@ -728,7 +728,9 @@ test.describe('с API', () => {
       await expect(page).toHaveURL(`${BASE_URL}/seasons/${seasonId}`);
       await expect(page.getByRole('heading', { name: season.name })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Гонки сезона' })).toBeVisible();
-      await expect(page.getByText('Таблица сезона')).toHaveCount(0);
+      // рейтинг сезона (race-results-08c): у сезона смоука протоколов нет — пустое состояние таблицы, гостю без `/me`
+      await expect(page.getByText('Таблица сезона', { exact: true }).first()).toBeVisible();
+      await expect(page.getByText('Сезон только начался')).toBeVisible();
 
       // гонка с эталонным коридором (race-results-01): допуск и дистанция по маршруту
       await page.goto(`/races/${corridorRace.id}`);
