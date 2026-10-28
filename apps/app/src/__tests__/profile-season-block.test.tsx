@@ -38,6 +38,9 @@ beforeEach(() => {
     rideReasons: [],
     publicName: null,
     showNameInResults: false,
+    club: null,
+    avatar: null,
+    publicId: null,
   });
   jest.mocked(api.getCurrentSeason).mockResolvedValue({ season: season2026 });
   getMine.mockResolvedValue(mine());

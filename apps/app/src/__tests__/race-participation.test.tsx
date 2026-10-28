@@ -124,9 +124,14 @@ describe('гость (AC1)', () => {
     jest.mocked(api.pollRegistration).mockResolvedValue({ state: 'pending' });
     jest.mocked(api.listCalendar).mockResolvedValue({ items: [], nextCursor: null });
     jest.mocked(api.listRides).mockResolvedValue({ items: [], nextCursor: null });
-    jest
-      .mocked(api.getProfile)
-      .mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
+    jest.mocked(api.getProfile).mockResolvedValue({
+      rideReasons: [],
+      publicName: null,
+      showNameInResults: false,
+      club: null,
+      avatar: null,
+      publicId: null,
+    });
     const router = await renderRouter(appRoutes, { initialUrl: `/races/${RACE_ID}` });
 
     await fireEvent.press(await screen.findByRole('button', { name: 'Участвовать' }));
