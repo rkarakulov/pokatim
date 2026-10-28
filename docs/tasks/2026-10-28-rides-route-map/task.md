@@ -576,6 +576,16 @@ elevationGainM, access } | null })` и `router.back()` (без истории �
   (свой непубличный маршрут организатора — не точка), `withoutStart` с «Рядом» — по точке сейчас (порт `visible` для
   `distinct routeId`). Стирание — новый шаг `ride-starts` после `routes`: `RideErasure.resetDanglingStarts` (порт
   `RideRoutes.existing`, пачки по `_id`, повтор — no-op).
+- **Фиксы ревью pass 2 (HIGH, оракул курсора).** Кандидат «Рядом» по сохранённой `geo` (`$geoWithin`) оставлял
+  оракул: райд на снятом маршруте со старой точкой в круге читался и отбрасывался, и наличие или значение `nextCursor`
+  после предела пачек выдавало, лежит ли старый старт в круге. Решение: кандидаты — только по публичным данным,
+  `$or` [`cityCode` ∈ городов круга; `startPrecise: true` + `routeId` ∈ `RideRoutes.publicStartsWithin(center,
+  radiusKm)` + `geo` в круге]. Новый метод порта — id маршрутов каталога (`ready`, `IN_CATALOG`) со стартом в круге,
+  до 500 (`PUBLIC_STARTS_CAP`, принятое ограничение: сверх него райд виден по городу), индекс `routes_start_2dsphere`
+  в той же `0031_rides_geo` (миграция ещё не выкатывалась). `ridePointNow` отдаёт координаты точной точки из старта
+  маршрута сейчас, не из `geo`. Карта: точки — только `preciseNear`; `withoutStart` — `preciseNear` | город круга без
+  точной точки на маршруте каталога (`cityPreciseRouteIds` + порт `visible`). Ветка города не требует
+  `geo`/`startPrecise` — документ старого API (MEDIUM) находится по городу.
 - **Карта (MEDIUM).** Предел 200 применялся до проверки видимости — теперь пачки по `(startsAt, _id)` до 200 видимых
   точек, не больше 5 пачек.
 
@@ -840,3 +850,23 @@ total`; api — 131 файлов тестов, app — 1582/1582. Первый �
   центр города, повтор — no-op; лог шага `ride-starts`).
 - **Проверки:** red → green по каждому новому тесту (9 красных до правки); `TURBO_CONCURRENCY=1 pnpm check` (Mongo
   `pokatim_rides05c_test`, Redis db 6) → `Tasks: 15 successful, 15 total`; api — 131 файл, 1453 теста.
+
+## 12.2 Fixes pass 2 (ревью PR A)
+
+- **HIGH (оракул курсора):** порт `RideRoutes.publicStartsWithin` + `RoutesRepository.inCatalogStartsWithin`
+  (`PUBLIC_STARTS_CAP = 500`); `0031_rides_geo` — индекс `routes_start_2dsphere`; `NearFilter.publicRouteIds`;
+  `RidesRepository` — `preciseNear`, `nearCondition` = город круга | `preciseNear`, `listMapPoints` с «Рядом» —
+  `preciseNear`, `cityPreciseRouteIds` (вместо `mapPreciseRouteIds`), `countMap(cityPublicRouteIds)`;
+  `ridePointNow` — координаты точной точки = старт маршрута порта; `RidesFeedService.nearOf` — асинхронный (порт).
+- **MEDIUM (документ старой формы):** ветка города без условий на `geo`/`startPrecise`/`routeId`.
+- **Docs:** ADR-0014 05c п. 4 (оракул закрыт, предел 500), `pokatim-db.md`, `pokatim-backend.md`, 8.2.
+- **Тесты:** unit `rides.policy.test.ts` (точная точка — старт маршрута сейчас); int `rides-route.int.test.ts` (+3:
+  два набора, различающиеся только `geo` райдов на снятом маршруте, — побайтно одинаковые ответы полного обхода
+  `limit=1` через предел пачек, `limit=20` и карты; документ старой формы — в «Рядом» по городу и в `withoutStart`;
+  порт `publicStartsWithin`; тест «предел пачек» переписан на публичный старт вне круга — снятый маршрут больше не
+  кандидат); `migrations.int.test.ts` — индекс `routes_start_2dsphere`, идемпотентность.
+- **Проверки:** red → green (3 новых int и 1 unit красные до правки); `TURBO_CONCURRENCY=1 pnpm check` (Mongo
+  `pokatim_rides05c_p2_test`, Redis db 11: `pokatim_rides05c_test` одновременно использовал другой прогон — флаки
+  «no user»/«no active verification token») → `Tasks: 15 successful, 15 total`; api — 136 файлов, 1496 тестов. Первый
+  прогон упал гонкой `account-deletion.int.test.ts` N6 (`[204, 401]` против 403, под нагрузкой; не связан, отдельно
+  3/3 зелёный).

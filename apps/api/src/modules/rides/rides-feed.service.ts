@@ -134,11 +134,22 @@ export function rideViewOf(
 
 const CursorKey = z.iso.datetime();
 
-/** Фильтр «Рядом» запроса: `near` уже округлён схемой, без `radiusKm` — 25 км; города с центром в круге. */
-function nearOf(query: { near?: [number, number]; radiusKm?: number }): NearFilter | null {
+/**
+ * Фильтр «Рядом» запроса: `near` уже округлён схемой, без `radiusKm` — 25 км; города с центром в круге и маршруты
+ * каталога со стартом в круге (порт, ≤ `PUBLIC_STARTS_CAP`) — кандидаты только по публичным данным (pass 2).
+ */
+async function nearOf(
+  port: RideRoutes,
+  query: { near?: [number, number]; radiusKm?: number },
+): Promise<NearFilter | null> {
   if (!query.near) return null;
   const radiusKm = query.radiusKm ?? RIDE_NEAR_RADIUS_KM.default;
-  return { center: query.near, radiusKm, cities: citiesNear(query.near, radiusKm) };
+  return {
+    center: query.near,
+    radiusKm,
+    cities: citiesNear(query.near, radiusKm),
+    publicRouteIds: await port.publicStartsWithin(query.near, radiusKm),
+  };
 }
 
 /**
@@ -197,8 +208,8 @@ export class RidesFeedService {
    */
   async list(userId: string, query: RideListQuery): Promise<RidePage> {
     const cursor = query.cursor ? decodeCursor(query.cursor, CursorKey) : null;
-    const near = nearOf(query);
-    if (near) await this.limitNear(userId);
+    if (query.near) await this.limitNear(userId);
+    const near = await nearOf(this.rideRoutes, query);
     const now = this.clock.now();
     // принятые строки: `limit + 1`-я — признак продолжения (как раньше `limit + 1` выборки)
     const accepted: RideDoc[] = [];
@@ -253,7 +264,7 @@ export class RidesFeedService {
   async map(userId: string, query: RideMapQuery): Promise<RideMap> {
     // карта считается всегда (и без «Рядом»): тот же ключ, что у ленты с `near`
     await this.limitNear(userId);
-    const near = nearOf(query);
+    const near = await nearOf(this.rideRoutes, query);
     const now = this.clock.now();
     const [items, total] = await Promise.all([
       this.mapPoints(now, query, near),
@@ -299,10 +310,13 @@ export class RidesFeedService {
     return items;
   }
 
-  /** Райды фильтра карты; с «Рядом» — по точке сейчас: какие маршруты точных точек в каталоге — порт, пачками. */
+  /**
+   * Райды фильтра карты; с «Рядом» — по точке сейчас: какие маршруты точных точек райдов городов круга в каталоге —
+   * порт, пачками (точка такого райда — старт маршрута, не центр города).
+   */
   private async countMap(now: Date, query: RideMapQuery, near: NearFilter | null): Promise<number> {
     if (!near) return this.repository.countMap(now, query.city, null);
-    const ids = await this.repository.mapPreciseRouteIds(now, query.city, near);
+    const ids = await this.repository.cityPreciseRouteIds(now, query.city, near);
     const publicIds: string[] = [];
     for (let i = 0; i < ids.length; i += ROUTE_LOOKUP_CHUNK) {
       const visible = await this.rideRoutes.visible(ids.slice(i, i + ROUTE_LOOKUP_CHUNK), null);

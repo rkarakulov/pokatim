@@ -19,6 +19,9 @@ export interface RideRouteRef {
  */
 export const RIDE_ROUTES = Symbol('RIDE_ROUTES');
 
+/** Предел id маршрутов `publicStartsWithin` (принятое ограничение «Рядом», ADR-0014, 05c). */
+export const PUBLIC_STARTS_CAP = 500;
+
 export interface RideRoutes {
   /** Можно ли прикрепить: в каталоге → `public`; иначе свой готовый маршрут организатора → `private`; иначе `null`. */
   attachable(routeId: string, organizerUserId: string): Promise<RideRouteRef | null>;
@@ -30,6 +33,12 @@ export interface RideRoutes {
     routeIds: readonly string[],
     ownerUserId: string | null,
   ): Promise<Map<string, RideRouteRef>>;
+  /**
+   * Id маршрутов **в каталоге** (готовых), чей старт в круге (`center` — `[lon, lat]`, км), не больше
+   * `PUBLIC_STARTS_CAP` (по `_id`): кандидаты «Рядом» с точной точкой (05c, фиксы ревью pass 2) — только по публичным
+   * данным. Сверх предела маршруты в кандидаты не попадают (принятое ограничение: райд виден в «Рядом» по городу).
+   */
+  publicStartsWithin(center: readonly [number, number], radiusKm: number): Promise<string[]>;
   /** Id маршрутов райдера — стирание аккаунта сбрасывает точки райдов на них (ADR-0015). */
   ownedRouteIds(userId: string): Promise<string[]>;
   /**

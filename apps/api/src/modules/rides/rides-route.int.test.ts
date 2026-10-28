@@ -512,11 +512,9 @@ describe('точка «Рядом» после снятия маршрута (RC
   });
 
   it('предел пачек: пустая страница с курсором, продолжение не теряется', async () => {
-    const withdrawn = await seedApprovedRoute(h, other.userId, [27.62, 53.96]);
-    const template = await stored(
-      (await createRide(h, organizer, { routeId: withdrawn, cityCode: 'borisov' })).id,
-    );
-    await withdrawPublication(h, other.token, withdrawn);
+    // кандидаты по городу (Минск в круге), чья точка сейчас — публичный старт вне круга: отбрасываются после чтения
+    const far = await seedTeamRoute(h, [28.2, 53.9], 'Далеко');
+    const template = await stored((await createRide(h, organizer, { routeId: far })).id);
     await ridesDb(h).deleteMany({});
     const at = (i: number) => new Date(h.clock.now().getTime() + DAY + i * MINUTE);
     await ridesDb(h).insertMany(
@@ -530,6 +528,83 @@ describe('точка «Рядом» после снятия маршрута (RC
     const second = await feed(organizer, `${minsk}&limit=1&cursor=${first.nextCursor}`);
     expect(ids(second)).toEqual([kept.id]);
     expect(second.nextCursor).toBeNull();
+  });
+
+  it('оракул курсора закрыт (pass 2): сохранённая точка райда на снятом маршруте не меняет ни страниц, ни курсоров', async () => {
+    const withdrawn = await seedApprovedRoute(h, other.userId, [27.62, 53.96]);
+    const far = await seedTeamRoute(h, [28.2, 53.9], 'Далеко');
+    const hiddenTpl = await stored(
+      (await createRide(h, organizer, { routeId: withdrawn, cityCode: 'borisov' })).id,
+    );
+    const farTpl = await stored((await createRide(h, organizer, { routeId: far })).id);
+    const plainTpl = await stored((await createRide(h, organizer, {})).id);
+    await withdrawPublication(h, other.token, withdrawn);
+    const at = (i: number) => new Date(h.clock.now().getTime() + DAY + i * MINUTE);
+    const hiddenIds = Array.from({ length: 12 }, () => uuidv7());
+    const farIds = Array.from({ length: 12 }, () => uuidv7());
+    const plainIds = [uuidv7(), uuidv7()];
+
+    /** Тот же набор райдов; различается только сохранённая точка райдов на снятом маршруте. */
+    const seed = async (hiddenGeo: readonly [number, number]) => {
+      await ridesDb(h).deleteMany({});
+      await ridesDb(h).insertMany([
+        ...farIds.map((_id, i) => ({ ...farTpl, _id, startsAt: at(3 * i) })),
+        ...hiddenIds.map((_id, i) => ({
+          ...hiddenTpl,
+          _id,
+          startsAt: at(3 * i + 1),
+          geo: {
+            type: 'Point' as const,
+            coordinates: [hiddenGeo[0], hiddenGeo[1]] as [number, number],
+          },
+          startPrecise: true,
+        })),
+        ...plainIds.map((_id, i) => ({ ...plainTpl, _id, startsAt: at(40 + i) })),
+      ]);
+    };
+    const get = async (url: string) => {
+      const res = await authed(h, other, 'GET', url);
+      expect(res.status).toBe(200);
+      return res.body as { nextCursor?: string | null };
+    };
+    /** Полный обход «Рядом» по одному (путь предела пачек), страница 20 и карта — сырые ответы. */
+    const responses = async () => {
+      const bodies: unknown[] = [];
+      let cursor: string | null | undefined = null;
+      for (let page = 0; page < 15; page++) {
+        const body = await get(`${RIDES}?${minsk}&limit=1${cursor ? `&cursor=${cursor}` : ''}`);
+        bodies.push(body);
+        cursor = body.nextCursor;
+        if (!cursor) break;
+      }
+      expect(cursor).toBeNull();
+      bodies.push(await get(`${RIDES}?${minsk}&limit=20`));
+      bodies.push(await get(`${RIDES}/map?${minsk}`));
+      return JSON.stringify(bodies);
+    };
+
+    await seed([27.56, 53.9]);
+    const inside = await responses();
+    await seed(CITY_CENTERS.borisov);
+    const outside = await responses();
+    expect(inside).toBe(outside);
+    expect(ids(await feed(other, `${minsk}&limit=20`))).toEqual(plainIds);
+  });
+
+  it('документ старой формы (без geo, startPrecise, routeId) — в «Рядом» по городу и в withoutStart карты', async () => {
+    const template = await stored((await createRide(h, organizer, {})).id);
+    await ridesDb(h).deleteMany({});
+    const id = uuidv7();
+    const old: Partial<RideDoc> = { ...template, _id: id };
+    delete old.geo;
+    delete old.startPrecise;
+    delete old.routeId;
+    await ridesDb(h).insertOne(old as RideDoc);
+    expect(ids(await feed(other, minsk))).toEqual([id]);
+    expect(ids(await feed(other, borisov))).toEqual([]);
+    expect(await mapOf(minsk)).toEqual({ items: [], withoutStart: 1 });
+    expect(await mapOf(borisov)).toEqual({ items: [], withoutStart: 0 });
+    expect(await mapOf()).toEqual({ items: [], withoutStart: 1 });
   });
 
   it('карта: недоступные маршруты раньше доступных — пачки до 200 видимых точек', async () => {
@@ -629,6 +704,19 @@ describe('порт RideRoutes (routes)', () => {
     expect((await port().visible([forged], other.userId)).get(forged)?.access).toBe('private');
     expect(await port().attachable(forged, organizer.userId)).toBeNull();
     expect(await port().visible([], null)).toEqual(new Map());
+  });
+
+  it('publicStartsWithin: только маршруты в каталоге со стартом в круге', async () => {
+    const inside = await seedTeamRoute(h, TEAM_START);
+    const outside = await seedTeamRoute(h, [28.2, 53.9], 'Далеко');
+    const approved = await seedApprovedRoute(h, other.userId, [27.62, 53.96]);
+    const withdrawn = await seedApprovedRoute(h, other.userId, [27.6, 53.92]);
+    await withdrawPublication(h, other.token, withdrawn);
+    const own = await seedRiderRoute(h, other.userId);
+    const found = await port().publicStartsWithin([27.56, 53.9], 25);
+    expect(new Set(found)).toEqual(new Set([inside, approved]));
+    expect(found).not.toContain(outside);
+    expect(found).not.toContain(own);
   });
 
   it('без кэша: снятие с публикации видно следующим вызовом', async () => {

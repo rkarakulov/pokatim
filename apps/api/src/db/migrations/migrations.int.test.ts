@@ -414,6 +414,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         routes_owner_origin_idx: index({ ownerUserId: 1, origin: 1, _id: -1 }),
         // 0029_routes_publication (routes-06): очереди модерации маршрутов райдеров
         ...ROUTES_PUBLICATION_QUEUES,
+        // 0031_rides_geo (05c): старты маршрутов каталога в круге «Рядом»
+        routes_start_2dsphere: index({ start: '2dsphere' }),
       },
       // 0022_routes_derived (routes-03): выборка бэкфилла производных
       [ROUTES_COLLECTIONS.geometries]: {
@@ -1114,7 +1116,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(RACES_COLLECTIONS.races)).toMatchObject(protocolIdx);
   });
 
-  it('0031_rides_geo: бэкфилл точки «Рядом» (центр города) и routeId; индекс 2dsphere; последняя; повторный up — без изменений', async () => {
+  it('0031_rides_geo: бэкфилл точки «Рядом» (центр города) и routeId; индексы 2dsphere (rides.geo, routes.start); последняя; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
     expect(ids.at(-1)).toBe('0031_rides_geo');
     expect(ids.indexOf('0031_rides_geo')).toBe(ids.indexOf('0030_standings') + 1);
@@ -1127,6 +1129,14 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       },
     };
     expect(await indexesOf(RIDES_COLLECTIONS.rides)).toMatchObject(geoIndex);
+    expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toMatchObject({
+      routes_start_2dsphere: {
+        key: { start: '2dsphere' },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    });
 
     // райд до 05c (без полей) и райд с точной точкой — бэкфилл трогает только отсутствующие поля
     const ridesDb = h.db.collection<Record<string, unknown> & { _id: string }>(
@@ -1156,10 +1166,12 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     });
     expect(await ridesDb.findOne({ _id: 'precise-ride' })).toEqual(precise);
     const indexes = await indexesOf(RIDES_COLLECTIONS.rides);
+    const routeIndexes = await indexesOf(ROUTES_COLLECTIONS.routes);
     await ridesGeo.up(h.db);
     expect(await ridesDb.findOne({ _id: 'old-ride' })).toEqual(backfilled);
     expect(await ridesDb.findOne({ _id: 'precise-ride' })).toEqual(precise);
     expect(await indexesOf(RIDES_COLLECTIONS.rides)).toEqual(indexes);
+    expect(await indexesOf(ROUTES_COLLECTIONS.routes)).toEqual(routeIndexes);
     await ridesDb.deleteMany({ _id: { $in: ['old-ride', 'precise-ride'] } });
   });
 

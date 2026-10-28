@@ -269,13 +269,14 @@ paths:
   в `MongoTransactions` с outbox (`ride-cancelled`, `ride-rescheduled` по смене старта, `participant-joined`,
   `reports-resolved`); повтор и отказ — без события.
 - Маршрут райда и «Рядом» (05c): `rides → routes` — только порт `RIDE_ROUTES` (`RideRoutes`: `attachable`, `visible`,
-  `ownedRouteIds`, `existing`; реализация `RideRoutesService` в `RoutesCoreModule`, без кэша, условия — только `IN_CATALOG` и
+  `publicStartsWithin`, `ownedRouteIds`, `existing`; реализация `RideRoutesService` в `RoutesCoreModule`, без кэша, условия — только `IN_CATALOG` и
   `ownRider` репозитория; `RouteCatalog` не расширяется). `RidesCoreModule` импортирует и реэкспортирует
   `RoutesCoreModule`. Видимость маршрута — `lookupRoutes` + `routeOf` в `rides-feed.service.ts` на каждом чтении и
   ответе мутации (одним вызовом порта на страницу); `private` — только организатору. `GET /v1/rides/map` (статический
   путь до `:id`, `no-store`) — `RidesFeedService.map`; `near` в ленте. Лимит `rides-near:<uid>` 60/мин — лента с
-  `near` и карта. Точка «Рядом» и карты — на чтении `ridePointNow` (`rides.policy`): точная — только пока маршрут в
-  каталоге, иначе центр города; отбор после чтения пачками (≤ 5). `RideErasure` сбрасывает точки райдов на маршрутах
+  `near` и карта. Точка «Рядом» и карты — на чтении `ridePointNow` (`rides.policy`): точная — старт маршрута, пока он в
+  каталоге, иначе центр города; кандидаты — только по публичным данным (города круга | маршруты каталога со стартом в
+  круге, `publicStartsWithin`), отбор после чтения пачками (≤ 5). `RideErasure` сбрасывает точки райдов на маршрутах
   удалённого (`restarted`), шаг `ride-starts` после `routes` — на висячих маршрутах (`resetDanglingStarts`).
 
 ## Уведомления (`notifications`, ADR-0017)

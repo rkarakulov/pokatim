@@ -294,9 +294,9 @@ describe('точка «Рядом» на чтении (05c, фиксы ревь�
     expect(citiesNear([0, 0], 25)).toEqual([]);
   });
 
-  it('точная — только пока маршрут в каталоге; иначе центр города', () => {
+  it('точная — только пока маршрут в каталоге, и это старт маршрута сейчас (не сохранённая точка); иначе центр города', () => {
     expect(ridePointNow(doc(true), ref('public'))).toEqual({
-      coordinates: [27.62, 53.96],
+      coordinates: [27.61, 53.95],
       precise: true,
     });
     const center = { coordinates: CITY_CENTERS.borisov, precise: false };

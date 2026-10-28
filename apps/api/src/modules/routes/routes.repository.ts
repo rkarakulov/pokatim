@@ -60,6 +60,9 @@ export type RideRouteFields = Pick<
 >;
 const RIDE_ROUTE_PROJECTION = { title: 1, distanceM: 1, elevationGainM: 1, start: 1 } as const;
 
+/** Радиус Земли для `$centerSphere`, км — тот же, что у «Рядом» райдов (`rides.policy`, 05c). */
+const EARTH_RADIUS_KM = 6378.1;
+
 /** Маршрут команды платформы (routes-02, RC-2): условие каждого чтения панели, каталога и портов. */
 const PLATFORM = { origin: 'platform' } as const;
 
@@ -792,6 +795,32 @@ export class RoutesRepository {
    * Переход `processing → ready` с геометрией, производными данными и очищенным GPX — в транзакции. `false` — маршрут
    * уже не `processing` (повтор задачи): транзакция откатывается вызывающим, геометрия и экспорт не остаются.
    */
+  /**
+   * Id готовых маршрутов в каталоге (`IN_CATALOG`), чей старт в круге (`$geoWithin $centerSphere`, индекс
+   * `routes_start_2dsphere`), по `_id`, не больше `limit` (05c, порт `RideRoutes.publicStartsWithin`). Без кэша.
+   */
+  async inCatalogStartsWithin(
+    center: readonly [number, number],
+    radiusKm: number,
+    limit: number,
+  ): Promise<string[]> {
+    const docs = await this.c.routes
+      .find<{ _id: string }>(
+        {
+          status: 'ready',
+          ...IN_CATALOG,
+          start: {
+            $geoWithin: { $centerSphere: [[center[0], center[1]], radiusKm / EARTH_RADIUS_KM] },
+          },
+        },
+        { projection: { _id: 1 } },
+      )
+      .sort({ _id: 1 })
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => doc._id);
+  }
+
   async markReady(
     session: DbSession,
     id: string,

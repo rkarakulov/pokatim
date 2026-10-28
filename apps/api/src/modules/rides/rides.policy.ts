@@ -161,7 +161,8 @@ export function citiesNear(center: readonly [number, number], radiusKm: number):
 /**
  * Точка райда **сейчас** (05c, RC-1, единое правило ленты «Рядом» и карты): сохранённая точная (`startPrecise`) —
  * только пока маршрут райда в каталоге (`route.access === 'public'` порта `RideRoutes`); маршрут снят, скрыт, удалён
- * или стал непубличным — центр города, как у райда без маршрута. `precise` — точка карты ленты.
+ * или стал непубличным — центр города, как у райда без маршрута. `precise` — точка карты ленты. Координаты точной
+ * точки — старт маршрута сейчас (публичные данные порта), не сохранённая `geo` (фиксы ревью pass 2).
  */
 export function ridePointNow(
   doc: Pick<RideDoc, 'cityCode' | 'routeId'> & Partial<Pick<RideDoc, 'geo' | 'startPrecise'>>,
@@ -173,8 +174,8 @@ export function ridePointNow(
     doc.routeId !== null &&
     route?.id === doc.routeId &&
     route.access === 'public';
-  return precise && doc.geo
-    ? { coordinates: doc.geo.coordinates, precise: true }
+  return precise && route
+    ? { coordinates: route.start, precise: true }
     : { coordinates: CITY_CENTERS[doc.cityCode], precise: false };
 }
 
