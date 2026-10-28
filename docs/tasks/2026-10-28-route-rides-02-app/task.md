@@ -623,3 +623,9 @@ TDD: сначала тесты (7 красных), затем код; комми
 Проверки: `TURBO_CONCURRENCY=1 pnpm check` (изолированные `MONGO_URL_TEST`/`REDIS_URL_TEST`) — EXIT 0, `Tasks: 15
 successful, 15 total`; `@pokatim/app:test` — cache miss, выполнено: `Tests: 1838 passed, 1838 total`; `@pokatim/api:test`
 — `Test Files 152 passed`. e2e после правок не перезапускался (маршруты и SSR не менялись).
+
+**Ревью pass 2 (Codex — APPROVE, findings-codex-2.md, MEDIUM):** ошибка опроса статуса файла теперь останавливает опрос —
+запрос выключен (`stalled` по состоянию кэша), окно 60 с стоит, без «Повторить» нет ни GET, ни POST; «Повторить» —
+ручной `refetch` и новое окно 60 с, успех возобновляет опрос; первый GET — через интервал (`staleTime` опроса). Тест
+красный без правки (3 GET вместо 1). Затронутые наборы jest — зелёные, `pnpm --filter @pokatim/app typecheck` и eslint
+`apps/app` — без ошибок.

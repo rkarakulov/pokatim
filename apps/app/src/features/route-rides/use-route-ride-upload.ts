@@ -77,13 +77,19 @@ export function useRouteRideUpload(
 
   const uploadId = sent?.upload.id ?? '';
   const processing = own.phase === 'processing' && sent !== null;
+  const uploadKey = routeRidesKeys.upload(routeId, uploadId);
+  // ошибка опроса (после ретраев запроса) — внутренняя остановка: запрос выключен (ни интервала, ни фокуса), окно 60 с
+  // стоит; «Повторить» (`retryPoll`) — ручной `refetch`, успех снимает ошибку и опрос продолжается с новым окном
+  const stalled = queryClient.getQueryState(uploadKey)?.status === 'error';
   const upload = useQuery({
-    queryKey: routeRidesKeys.upload(routeId, uploadId),
+    queryKey: uploadKey,
     queryFn: () => withAccessToken((token) => api.getTrackUpload(token, uploadId)),
     initialData: sent?.upload,
     refetchInterval: (query) => (isFinal(query.state.data) ? false : UPLOAD_READY_POLL_MS),
+    // ответ загрузки только что пришёл — первый GET через интервал, не сразу при включении запроса
+    staleTime: UPLOAD_READY_POLL_MS,
     // ответ загрузки уже финальный (`200`: тот же файл) — без опроса, сразу POST
-    enabled: processing && !isFinal(sent.upload),
+    enabled: processing && !isFinal(sent.upload) && !stalled,
   });
 
   const { mutate, reset } = check;
