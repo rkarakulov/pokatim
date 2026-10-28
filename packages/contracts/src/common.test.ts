@@ -82,6 +82,7 @@ describe('коды ошибок', () => {
       'RESULT_GROUP_NOT_ALLOWED',
       'VERIFIED_DEMOGRAPHICS_LOCKED',
       'ROUTE_PUBLICATION_LIMIT',
+      'STORY_CARD_UNAVAILABLE',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

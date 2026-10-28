@@ -24,6 +24,7 @@ import {
   rankRows,
   RESULTS_POLICY,
   resultStatus,
+  storyCardEligible,
   summarize,
   uploadClosesAt,
   verdictFields,
@@ -791,5 +792,31 @@ describe('visibleVerdict — видимый вердикт для уведомл
     expect(visibleVerdict('auto', result({ status: 'failed', matched: null }))).toBeNull();
     expect(visibleVerdict('explicit', result({ status: 'withdrawn' }))).toBeNull();
     expect(visibleVerdict('auto', result({ status: 'excluded' }))).toBeNull();
+  });
+});
+
+describe('storyCardEligible — карточка для сторис (story-cards)', () => {
+  const active = { status: 'active' as const };
+
+  it.each(['provisional', 'finisher', 'final', 'revised'] as const)(
+    '%s с временем — да',
+    (status) => {
+      expect(storyCardEligible(active, { status, elapsedSec: 3600 })).toBe(true);
+    },
+  );
+
+  it.each(['dq', 'withdrawn', 'pending', 'not_counted', 'dns', 'none'] as const)(
+    '%s — нет',
+    (status) => {
+      expect(storyCardEligible(active, { status, elapsedSec: 3600 })).toBe(false);
+    },
+  );
+
+  it('без времени, без заявки, снятая заявка — нет', () => {
+    expect(storyCardEligible(active, { status: 'final', elapsedSec: null })).toBe(false);
+    expect(storyCardEligible(null, { status: 'final', elapsedSec: 3600 })).toBe(false);
+    expect(storyCardEligible({ status: 'withdrawn' }, { status: 'final', elapsedSec: 3600 })).toBe(
+      false,
+    );
   });
 });

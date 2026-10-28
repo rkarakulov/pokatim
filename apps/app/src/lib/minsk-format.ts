@@ -1,5 +1,4 @@
-import { minskToday, utcToMinskWallTime } from '@pokatim/contracts';
-import { i18n, t, type MessageKey } from '@pokatim/i18n';
+import { i18n, minskDateTime, t, type MessageKey } from '@pokatim/i18n';
 
 /**
  * Общие подписи дат и списков (Главная, вкладка «Гонки», публичные карточки) — чистые функции. Время — только
@@ -9,60 +8,8 @@ import { i18n, t, type MessageKey } from '@pokatim/i18n';
  * рендер публичного экрана) — год всегда: текст не зависит от «сейчас», HTML сервера совпадает с гидрацией.
  */
 
-/** Дата крупно и подпись рядом («4–12» + «октября»); без подписи — вся строка крупно. */
-export interface HeroDate {
-  value: string;
-  unit?: string;
-}
-
-interface LocalDateParts {
-  year: number;
-  month: number;
-  day: number;
-}
-
-function parts(localDate: string): LocalDateParts {
-  const [year, month, day] = localDate.split('-').map(Number) as [number, number, number];
-  return { year, month, day };
-}
-
-const monthName = (month: number) => t(`date.month.${month}` as MessageKey);
-const dayMonth = ({ day, month }: LocalDateParts) =>
-  t('format.dayMonth', { day, month: monthName(month) });
-const dateWithYear = (date: string, year: number) => t('format.dateWithYear', { date, year });
-const currentYear = (now: Date | null) => (now === null ? null : parts(minskToday(now)).year);
-const withYear = (text: string, year: number, now: Date | null) =>
-  year === currentYear(now) ? text : dateWithYear(text, year);
-const range = (from: string | number, to: string | number) => t('format.range', { from, to });
-
-/** Диапазон календарных дат Минска: один день, один месяц, разные месяцы, разные годы (тире без пробелов). */
-export function formatLocalRange(from: string, to: string, now: Date | null): HeroDate {
-  const a = parts(from);
-  const b = parts(to);
-  if (a.year !== b.year) {
-    return { value: range(dateWithYear(dayMonth(a), a.year), dateWithYear(dayMonth(b), b.year)) };
-  }
-  if (a.month !== b.month) {
-    return { value: withYear(range(dayMonth(a), dayMonth(b)), a.year, now) };
-  }
-  const value = a.day === b.day ? `${a.day}` : range(a.day, b.day);
-  return { value, unit: withYear(monthName(a.month), a.year, now) };
-}
-
-/** Дата героя одной строкой: «4–12 октября», «28 сентября–3 октября». */
-export const heroDateText = (date: HeroDate) =>
-  date.unit ? `${date.value} ${date.unit}` : date.value;
-
-/** Момент UTC по Минску: календарная дата, «4 октября» (год — по правилу `now`) и время «HH:mm». */
-export function minskDateTime(iso: string, now: Date | null) {
-  const wall = utcToMinskWallTime(iso);
-  const date = parts(wall.slice(0, 10));
-  return {
-    localDate: wall.slice(0, 10),
-    date: withYear(dayMonth(date), date.year, now),
-    time: wall.slice(11, 16),
-  };
-}
+// диапазон дат, дата героя и момент по Минску — общий код `@pokatim/i18n` (приложение, API: карточка для сторис)
+export { formatLocalRange, heroDateText, minskDateTime, type HeroDate } from '@pokatim/i18n';
 
 /**
  * Исключающая граница UTC (`uploadClosesAt`: сервер считает поздним момент `>=` границы) по Минску — последняя

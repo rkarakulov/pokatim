@@ -2,6 +2,7 @@
 export * from './attribution.ts';
 export * from './camera.ts';
 export * from './geometry.ts';
+export * from './line-geometry.ts';
 export * from './map-locale.ts';
 export * from './map-options.ts';
 export * from './pace.ts';

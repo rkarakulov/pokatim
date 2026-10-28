@@ -63,4 +63,9 @@ export const QUEUE = {
    * worker, без событий outbox; пересчёт изменившихся сезонов целиком (запись снимка под условием версии).
    */
   standingsRecalc: 'standings-recalc',
+  /**
+   * Рендер карточки для сторис (story-cards, satori + resvg): итог — PNG в Redis с TTL 24 ч по капабилити-токену;
+   * дедупликация — ключ постановки NX по хэшу входов (`StoryCardCache`), jobId `story-card-<hash>` — вторая линия.
+   */
+  storyCard: 'story-card',
 } as const;

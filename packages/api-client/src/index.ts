@@ -96,6 +96,8 @@ import {
   MyRoutePage,
   type RenameRouteInput,
   type SubmitRoutePublicationInput,
+  StoryCardStatus,
+  type StoryCardQuery,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -607,6 +609,20 @@ export function createApiClient({
         MyAttemptTrack,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
+    /**
+     * Карточка для сторис своего результата (story-cards): `pending` — рендер в очереди (опрашивать), `ready` — токен
+     * картинки (`storyCardImageUrl`), `failed` — рендер не удался (повтор ставит заново); карточки нет — 409
+     * `STORY_CARD_UNAVAILABLE`.
+     */
+    getStoryCard: (accessToken: string, raceId: string, query: StoryCardQuery) =>
+      request(
+        `/v1/races/${encodeURIComponent(raceId)}/entry/story-card${queryString(query)}`,
+        StoryCardStatus,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Адрес PNG карточки по токену (капабилити-ссылка без входа, живёт ≤ 24 ч); без запроса. */
+    storyCardImageUrl: (token: string) =>
+      `${baseUrl}/v1/story-cards/${encodeURIComponent(token)}.png`,
     /**
      * «Участвовать» (`201` — новая заявка, `200` — уже заявлен) и «Повысить до Verified» (race-results-07):
      * `tier`/`groupKey` — намерение; без тела — новая заявка START (в старой гонке — как v1).
