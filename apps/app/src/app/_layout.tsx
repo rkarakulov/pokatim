@@ -145,6 +145,9 @@ function RootShell() {
                 <Stack.Screen name="settings/index" />
                 <Stack.Screen name="settings/language" />
                 <Stack.Screen name="settings/profile" />
+                {/* профиль райдера (rider-profile): вход — аватар верхней панели Главной; гард и оболочка — как у
+                «Настроек» */}
+                <Stack.Screen name="profile" />
                 {/* центр и настройки уведомлений (notifications): тот же гард и оболочка, что у «Профиля» */}
                 <Stack.Screen name="notifications" />
                 <Stack.Screen name="settings/notifications" />
@@ -203,6 +206,8 @@ function RootShell() {
               <Stack.Screen name="calendar/[id]" />
               {/* публичная карточка кофе-райда (блок 05) — так же: ссылка-приглашение открывается без входа */}
               <Stack.Screen name="rides/[id]" />
+              {/* публичный профиль райдера (rider-profile) — так же: открывается гостем по ссылке «Как вас видят другие» */}
+              <Stack.Screen name="riders/[id]" />
             </Stack>
             {/* push (ADR-0017): токен устройства и нажатия на push — после входа и онбординга; рядом со `Stack`, чтобы
           переход по нажатию при холодном старте шёл после монтирования навигатора; web — no-op */}

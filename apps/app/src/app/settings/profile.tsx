@@ -14,16 +14,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DocumentTitle } from '@/components/document-title';
 import { useSettingsShell } from '@/features/devices/settings-shell';
+import { AvatarEditor } from '@/features/profile/avatar-editor';
 import { ProfileFormView } from '@/features/profile/profile-form';
 import { useProfile } from '@/features/profile/queries';
-import { ProfileSeasonBlock } from '@/features/standings/profile-season-block';
 
-const DOCUMENT_TITLE = `${t('profile.title')} — ${t('app.name')}`;
+const DOCUMENT_TITLE = `${t('profile.edit.title')} — ${t('app.name')}`;
 
 /**
- * «Профиль» (profile-rider-name; вход — иконка верхней панели Главной): публичное имя и согласие на показ в таблицах
- * результатов. Гард и оболочка — как у «Устройств» (`useSettingsShell`). Заголовок — сразу; поля — `AsyncContent`
- * (скелетон, «Нет соединения» / «Не удалось загрузить» с повтором).
+ * «Редактировать профиль» (profile-rider-name, rider-profile; вход — со своего профиля `/profile`): фото, публичное
+ * имя, клуб и согласие на показ в таблицах результатов. Гард и оболочка — как у «Устройств» (`useSettingsShell`).
+ * Заголовок — сразу; фото и поля — `AsyncContent` (скелетон, «Нет соединения» / «Не удалось загрузить» с повтором).
+ * Блок «Сезон» переехал в `/profile`.
  */
 export default function ProfileScreen() {
   const shell = useSettingsShell();
@@ -54,7 +55,7 @@ function ProfileContent() {
           accessibilityRole="header"
           style={[textStyle('displayTitle'), { color: theme.text.primary }]}
         >
-          {t('profile.title')}
+          {t('profile.edit.title')}
         </Text>
         <View style={styles.section}>
           <AsyncContent
@@ -66,11 +67,15 @@ function ProfileContent() {
               </SkeletonGroup>
             }
           >
-            {(data) => <ProfileFormView profile={data} />}
+            {(data) => (
+              <View style={styles.form}>
+                {/* фото — своя мутация, вне формы имени и клуба */}
+                <AvatarEditor avatarId={data.avatar?.id ?? null} />
+                <ProfileFormView profile={data} />
+              </View>
+            )}
           </AsyncContent>
         </View>
-        {/* блок «Сезон» (race-results-08c): своя строка таблицы сезона; своих строк нет — блока и отступа нет */}
-        <ProfileSeasonBlock />
         {/* анкета зачёта Verified (race-results-07): сразу — не ждёт данных профиля */}
         <View style={[styles.section, styles.back]}>
           <TextAction
@@ -103,4 +108,5 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6, gap: space.s3 },
   back: { alignItems: 'flex-start' },
   section: { paddingTop: size.sectionGap },
+  form: { gap: size.sectionGap },
 });

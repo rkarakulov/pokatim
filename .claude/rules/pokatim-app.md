@@ -164,7 +164,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   месте данных. Ошибка догрузки страницы — баннер в подвале (не «Данные могли устареть» над героем).
 - Публичные экраны `races/[id]`, `seasons/[id]` — в корневом `Stack` вне `Stack.Protected` (гость и вошедший; на
   native поверх вкладок). «Назад» — `DetailHeader`: история есть — назад, нет — вошедшему вкладка, гостю `/`.
-- SSR-данные (`loader`, `generateMetadata`, а также `src/app/+middleware.ts` — тема процесса) — только `src/lib/public-ssr.ts` (`publicPath` — `Uuid` до запроса,
+- SSR-данные (`loader`, `generateMetadata`, а также `src/app/+middleware.ts` — тема процесса) — только `src/lib/public-ssr.ts` (`publicPath` — `Uuid` или схема токена из contracts, например `RiderPublicId`, до запроса,
   `fetchPublicForSsr` — таймаут, `found` / `notFound` / `unavailable`, кэш процесса публичных данных 60 с, 404 — в
   отдельном пуле); свой `fetch` в экранах нет. Не найдено — нейтральная мета и `robots: noindex` (HTML 200); API
   недоступен — нейтральная мета без `robots`. Без сети при показанных данных — `OfflineBanner`.
@@ -254,10 +254,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `actions.canUpgrade`. Таблица: вкладки — `groups` ответа по умолчанию + «Финишёры» при `finishers > 0`; `group` в
   запросе — только для вкладки не по умолчанию после ответа с `groups` (RC-11), ключ `[…,'pages',group]`, финишёры —
   `[…,'finishers']`; карточка соперника и подача спора получают вкладку `?group=` (`rivalPath`, `groupParam`).
-  Анкета `settings/verified` (ссылка из «Профиля»): пол и год при `demographicsLocked` — только чтение; пределы —
+  Анкета `settings/verified` (ссылка из «Редактировать профиль»): пол и год при `demographicsLocked` — только чтение; пределы —
   схемы contracts, текст «Целое число от … до …».
 - Рейтинг сезона (race-results-08c) — `features/standings/*`: блок `season-standings.tsx` в шапке списка экрана
-  сезона (RC-17; подгрузка — «Показать ещё», не `onEndReached`), блок «Сезон» «Профиля» (`profile-season-block.tsx`,
+  сезона (RC-17; подгрузка — «Показать ещё», не `onEndReached`), блок «Сезон» своего профиля `/profile` (`profile-season-block.tsx`,
   сезон — `useHeaderSeason`, RC-18), действие «Таблица сезона» вкладки «Гонки». Ключи под `['seasons','standings',id]`
   (`summary`, `table`+класс+группа, `me` — только вошедшему); pull-to-refresh экрана — `useStandingsRefetch`. Логика
   показа — только `standings-format.ts` (выбор таблицы: своя из `/me`, иначе первая сводки; `'unknown'` — не
@@ -285,6 +285,33 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   409/404). Приглашение кофе-райда — `features/rides/invite/*`, экран `rides/invite/[id]` внутри `Stack.Protected`
   (ключ `['rides','invite',rideId,template]`); кнопка «Карточка-приглашение» на детали — вошедшему, `phase ===
   'upcoming'` (право — сервер: 409 → «Приглашение недоступно»).
+
+## Профиль райдера (rider-profile, `docs/product/profile.md`)
+
+- Маршруты: `/profile` — свой профиль в первом `Stack.Protected` (`useSettingsShell`; вход — аватар последним справа
+  в `TopBar` Главной, `useOwnAvatarId` — тот же кэш `['profile']`, что порядок разделов, без второго запроса);
+  `/settings/profile` — «Редактировать профиль» (фото, имя, клуб, согласие); строка «Профиль» хаба «Настроек» ведёт в
+  `/profile`. `/riders/[id]` — публичный, в корневом `Stack` вне гардов: SSR (`loader` — посев), мета **всегда**
+  нейтральная «Профиль райдера» + `noindex`, без `og:url` и без имени/клуба/фото (и в `DocumentTitle`); невалидный id —
+  «Профиль недоступен» без запроса, 404 — то же; «Гонки» запрашиваются только после найденного профиля.
+- Ключи: свои — `['profile','stats']`, `['profile','races'|'rides','pages']` (запрос — только у выбранной вкладки
+  «Истории»); публичные — `['riders','detail',id]`, `['riders','races',id,'pages']`. Мутации фото — только
+  `setQueryData(['profile'])` (без префиксной инвалидации `['profile']`: перезапросились бы анкета, статистика и
+  история) + `invalidateQueries(['riders'])`; `PATCH /v1/profile` — тоже `['riders']`. «Показать ещё» — без
+  `onEndReached`; состояния истории — `HistoryList` (`features/profile/history-rows.tsx`). Публичная история: 400 на
+  курсор (строка выпала из новой ревизии протокола) — `resetQueries` к первой странице, не вечная ошибка догрузки.
+- Аватар — только `components/rider-avatar.tsx` (`expo-image`, `cachePolicy: memory-disk` — URL `immutable`; нет фото
+  или ошибка — иконка человека); размер шапки — `layout.avatarProfile` (`@pokatim/design-tokens`, follow-up
+  `size.avatarLg` в базе), верхней панели — `size.avatarTopBar`.
+- Выбор фото — развилка `features/profile/pick-avatar(.web).ts`: native — `expo-image-picker` лениво
+  (`load-image-picker.ts`) после `imagePickerSupported()` (`requireOptionalNativeModule('ExponentImagePicker')`; нет —
+  «Обновите приложение»), системная обрезка 1:1, без `crop`; web — `expo-document-picker` (JPEG/PNG/WebP, пре-чек
+  формата и 10 МиБ) + `avatar-crop.web.tsx` (pointer events, кнопки и клавиши масштаба, без колеса; доли `x, y, size` в
+  ориентированном изображении — `avatar-crop-math.ts`). Блок «Фото» — `avatar-editor(.web).tsx` поверх
+  `avatar-section.tsx`; удаление — инлайн-подтверждение. Загрузка — `api.uploadAvatar` в `withAccessToken`, без XHR и
+  прогресса; тексты 413/415/422/429 — `avatar-errors.ts` (429 загрузки с паузой занятой обработки, 5 с, — «через
+  минуту»; удаление — общий текст; файл, который браузер не декодировал, — текст 422). Исходник не перекодируется и не
+  уменьшается (JPEG/WebP до 100 Мп, PNG до 25 Мп — решает сервер, ADR-0019): EXIF/GPS стирает сервер.
 
 ## Маршруты (routes-01, `docs/product/routes.md`)
 

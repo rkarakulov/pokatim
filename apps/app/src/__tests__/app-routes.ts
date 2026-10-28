@@ -18,6 +18,8 @@ import DeviceReturnScreen from '../app/devices/return';
 import DevicesScreen from '../app/settings/devices';
 import DeleteAccountScreen from '../app/settings/account/delete';
 import ProfileScreen from '../app/settings/profile';
+import OwnProfileRoute from '../app/profile';
+import RiderRoute from '../app/riders/[id]';
 import SettingsScreen from '../app/settings/index';
 import LanguageScreen from '../app/settings/language';
 import NotificationsScreen from '../app/notifications';
@@ -78,6 +80,7 @@ export const appRoutes = {
   'settings/index': SettingsScreen,
   'settings/language': LanguageScreen,
   'settings/profile': ProfileScreen,
+  profile: OwnProfileRoute,
   notifications: NotificationsScreen,
   'settings/notifications': NotificationSettingsScreen,
   'settings/verified': VerifiedProfileScreen,
@@ -107,4 +110,5 @@ export const appRoutes = {
   'rides/report/[id]': ReportRideRoute,
   'rides/invite/[id]': RideInviteRoute,
   'rides/route-pick': RideRoutePickRoute,
+  'riders/[id]': RiderRoute,
 };

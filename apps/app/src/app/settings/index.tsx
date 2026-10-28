@@ -16,7 +16,7 @@ import { openExternalUrl } from '@/lib/open-external-url';
 const DOCUMENT_TITLE = `${t('settings.title')} — ${t('app.name')}`;
 
 const ACCOUNT_ROWS: readonly { label: () => string; href: Href }[] = [
-  { label: () => t('profile.title'), href: '/settings/profile' },
+  { label: () => t('profile.title'), href: '/profile' },
   { label: () => t('settings.verified'), href: '/settings/verified' },
   { label: () => t('devices.title'), href: '/settings/devices' },
   { label: () => t('profile.notifications'), href: '/settings/notifications' },

@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-import { SeasonCard } from '@pokatim/contracts';
+import { RiderPublicId, SeasonCard } from '@pokatim/contracts';
 
 import { fetchPublicForSsr, publicPath, resetPublicSsrCache } from './public-ssr';
 
@@ -34,6 +34,14 @@ describe('publicPath', () => {
     expect(publicPath('/v1/seasons', ID, '/races')).toBe(`/v1/seasons/${ID}/races`);
     for (const bad of ['abc', '../admin', `${ID}/../x`, ['a'], undefined]) {
       expect(publicPath('/v1/races', bad)).toBeNull();
+    }
+  });
+
+  it('схема токена (rider-profile): 43 символа base64url — путь; короче, длиннее и `../` — null', () => {
+    const token = 'r'.repeat(43);
+    expect(publicPath('/v1/riders', token, '', RiderPublicId)).toBe(`/v1/riders/${token}`);
+    for (const bad of [token.slice(1), `${token}x`, '../x', ID]) {
+      expect(publicPath('/v1/riders', bad, '', RiderPublicId)).toBeNull();
     }
   });
 });
