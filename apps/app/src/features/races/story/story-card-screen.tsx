@@ -46,10 +46,13 @@ function PreviewSkeleton() {
  */
 function FileFailure({
   error,
+  offline,
   retrying,
   retry,
 }: {
   error: unknown;
+  /** запрос файла на паузе без сети (`fetchStatus: 'paused'`) — «Нет соединения» без ошибки запроса */
+  offline: boolean;
   retrying: boolean;
   retry: () => void;
 }) {
@@ -57,7 +60,7 @@ function FileFailure({
     <View style={styles.stack}>
       <Banner
         tone="warning"
-        title={t(isNetworkError(error) ? 'state.errorTitle' : 'state.failedTitle')}
+        title={t(offline || isNetworkError(error) ? 'state.errorTitle' : 'state.failedTitle')}
         message={t('story.shareFailed')}
       />
       <View style={styles.start}>
@@ -126,11 +129,18 @@ function ReadyCard({
       if (!result.isError) setPreviewFailed(false);
     });
   };
-  const failure = (file.isError && !story) || previewFailed;
+  // без сети запрос файла встаёт на паузу без ошибки — без сообщения остался бы вечный скелетон
+  const offline = !story && file.fetchStatus === 'paused';
+  const failure = (file.isError && !story) || offline || previewFailed;
   return (
     <View style={styles.stack}>
       {failure ? (
-        <FileFailure error={file.error} retrying={file.isFetching} retry={retry} />
+        <FileFailure
+          error={file.error}
+          offline={offline}
+          retrying={file.fetchStatus === 'fetching'}
+          retry={retry}
+        />
       ) : uri ? (
         <Image
           source={{ uri }}
@@ -192,6 +202,8 @@ export function StoryCardScreen({ raceId }: { raceId: string }) {
             <AsyncContent query={card.state} skeleton={<PreviewSkeleton />}>
               {(ready) => (
                 <ReadyCard
+                  // состояние превью (ошибка отрисовки) — своё у каждой карточки, не переносится на другой шаблон
+                  key={`${template}:${ready.token}`}
                   raceId={raceId}
                   template={template}
                   token={ready.token}

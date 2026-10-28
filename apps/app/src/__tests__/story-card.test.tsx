@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { RaceResultsPage } from '@pokatim/contracts';
+import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 import { useSessionStore } from '@/features/auth/session-store';
@@ -244,6 +245,44 @@ describe('превью — подготовленный локальный фа�
     await act(async () => {
       resolve({ url: 'https://api.test/x.png', uri: 'file:///cache/story-again.png' });
     });
+    expect(await screen.findByTestId('story-preview')).toBeOnTheScreen();
+    expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+  });
+});
+
+describe('превью: сеть и смена шаблона (ревью pass 3)', () => {
+  afterEach(() => onlineManager.setOnline(true));
+
+  it('ready из кэша, файла нет, сети нет — «Нет соединения» с повтором; сеть вернулась — превью', async () => {
+    const client = createTestQueryClient();
+    client.setQueryData(['races', 'story', RACE_ID, 'line'], { status: 'ready', token: TOKEN });
+    onlineManager.setOnline(false);
+    await open(storyUrl, client);
+    expect(await screen.findByText('Нет соединения')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
+    expect(screen.queryByTestId('story-preview')).toBeNull();
+    await act(async () => {
+      onlineManager.setOnline(true);
+    });
+    expect(await screen.findByTestId('story-preview')).toBeOnTheScreen();
+    expect(screen.queryByText('Нет соединения')).toBeNull();
+  });
+
+  it('ошибка превью одного шаблона не переносится на другой, уже готовый (оба в кэше)', async () => {
+    const OTHER = 'ZyXwVuTsRqPoNmLkJiHg_-';
+    getStoryCard.mockImplementation((_token, _race, { template }) =>
+      Promise.resolve({ status: 'ready', token: template === 'night' ? OTHER : TOKEN }),
+    );
+    const client = createTestQueryClient();
+    client.setQueryData(['races', 'story', RACE_ID, 'line'], { status: 'ready', token: TOKEN });
+    client.setQueryData(['races', 'story', RACE_ID, 'night'], { status: 'ready', token: OTHER });
+    await open(storyUrl, client);
+    const preview = await screen.findByTestId('story-preview');
+    await act(async () => {
+      fireEvent(preview, 'error', { nativeEvent: { error: 'decode' } });
+    });
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Ночь'));
     expect(await screen.findByTestId('story-preview')).toBeOnTheScreen();
     expect(screen.queryByText('Не удалось загрузить')).toBeNull();
   });

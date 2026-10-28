@@ -993,3 +993,10 @@ All matched files use Prettier code style!
 @pokatim/app:test: Tests:       1746 passed, 1746 total
  Tasks:    15 successful, 15 total
 ```
+
+### Фиксы ревью pass 3 (codex, `findings-codex-pass3.md`)
+
+- HIGH: без сети запрос PNG встаёт на паузу (`fetchStatus: 'paused'`) без ошибки — экран показывал вечный скелетон.
+  Теперь пауза без файла — «Нет соединения» с «Повторить» (`FileFailure` `offline`); вернулась сеть — превью.
+- MEDIUM: ошибка превью переносилась на другой готовый шаблон — `ReadyCard` получил `key` из шаблона и токена.
+- Тесты `story-card.test.tsx` («ревью pass 3»): оба красные без фикса, зелёные с ним (отрицательное доказательство).
