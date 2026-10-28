@@ -10,6 +10,7 @@ import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { TopBar } from '@/components/top-bar';
 import { useSignOut } from '@/features/auth/use-sign-out';
+import { DecorLayer } from '@/features/decor/decor-layer';
 import { HomeSection } from '@/features/home/home-section';
 import { useUnreadCount } from '@/features/notifications/queries';
 import { CalendarStartHero } from '@/features/calendar/calendar-hero';
@@ -117,146 +118,151 @@ export default function HomeScreen() {
         onOpenDevices={() => router.push('/settings/devices')}
         onOpenProfile={() => router.push('/settings/profile')}
       />
-      <ScrollView
-        testID="home-feed"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void onRefresh()}
-            tintColor={theme.text.secondary}
-            colors={[theme.text.primary]}
-            progressBackgroundColor={theme.surface.raised}
-          />
-        }
-      >
-        <OfflineBanner hasData={hasData} style={styles.banner} />
-        {sections.map(({ id, chosen }, index) => {
-          const copy = SECTION_COPY[id];
-          const frame = {
-            kicker: t(copy.kicker),
-            title: t(copy.title),
-            chosen,
-            first: index === 0,
-            all: { label: t(copy.all), onPress: () => router.navigate(copy.href) },
-          };
-          return id === 'races' ? (
-            <HomeSection
-              key={id}
-              {...frame}
-              query={races}
-              empty={{
-                when: (page) => page.items.length === 0,
-                render: () => (
-                  <EmptyState
-                    title={t('home.races.empty')}
-                    action={{
-                      label: t('home.races.emptyAction'),
-                      onPress: () => router.navigate('/calendar'),
-                    }}
-                  />
-                ),
-              }}
-            >
-              {(page) => {
-                const race = page.items[0];
-                return race ? (
-                  <RaceHero
-                    race={race}
-                    now={now}
-                    onPress={() => router.push(`/races/${race.id}`)}
-                  />
-                ) : null;
-              }}
-            </HomeSection>
-          ) : id === 'rides' ? (
-            <HomeSection
-              key={id}
-              {...frame}
-              query={rides}
-              empty={{
-                when: (page) => page.items.length === 0,
-                render: () => (
-                  <EmptyState
-                    title={t('home.rides.empty')}
-                    action={{
-                      label: t('home.rides.emptyAction'),
-                      onPress: () => router.push('/rides/new'),
-                    }}
-                  />
-                ),
-              }}
-            >
-              {(page) => {
-                const ride = page.items[0];
-                return ride ? (
-                  <RideHero
-                    ride={ride}
-                    now={now}
-                    onPress={() => router.push(`/rides/${ride.id}`)}
-                  />
-                ) : null;
-              }}
-            </HomeSection>
-          ) : id === 'routes' ? (
-            // RC-8: пустой каталог — пустой герой раздела, без скрытия (правило Главной)
-            <HomeSection
-              key={id}
-              {...frame}
-              query={routes}
-              skeleton={<RouteHeroSkeleton />}
-              empty={{
-                when: (page) => page.items.length === 0,
-                render: () => <EmptyState title={t('home.routes.empty')} />,
-              }}
-            >
-              {(page) => {
-                const route = page.items[0];
-                return route ? (
-                  <RouteHero route={route} onPress={() => router.push(`/routes/${route.id}`)} />
-                ) : null;
-              }}
-            </HomeSection>
-          ) : (
-            <HomeSection
-              key={id}
-              {...frame}
-              query={calendar}
-              empty={{
-                when: (page) => page.items.length === 0,
-                render: () => <EmptyState title={t('calendar.empty')} />,
-              }}
-            >
-              {(page) => {
-                const start = page.items[0];
-                return start ? (
-                  <CalendarStartHero
-                    start={start}
-                    now={now}
-                    onPress={() => router.push(`/calendar/${start.id}`)}
-                  />
-                ) : null;
-              }}
-            </HomeSection>
-          );
-        })}
-        {/* временно на «Главной» (Q8) — до экрана профиля */}
-        <View style={styles.footer}>
-          {__DEV__ ? (
-            <TextAction label={t('uiKit.open')} onPress={() => router.push('/ui-kit')} />
-          ) : null}
-          <TextAction
-            label={t('auth.signOut')}
-            onPress={() => void onSignOut()}
-            disabled={signingOut}
-          />
-        </View>
-      </ScrollView>
+      {/* область ленты — опора сезонного декора (halloween-decor): слой поверх ленты, без шапки */}
+      <View style={styles.feed}>
+        <ScrollView
+          testID="home-feed"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void onRefresh()}
+              tintColor={theme.text.secondary}
+              colors={[theme.text.primary]}
+              progressBackgroundColor={theme.surface.raised}
+            />
+          }
+        >
+          <OfflineBanner hasData={hasData} style={styles.banner} />
+          {sections.map(({ id, chosen }, index) => {
+            const copy = SECTION_COPY[id];
+            const frame = {
+              kicker: t(copy.kicker),
+              title: t(copy.title),
+              chosen,
+              first: index === 0,
+              all: { label: t(copy.all), onPress: () => router.navigate(copy.href) },
+            };
+            return id === 'races' ? (
+              <HomeSection
+                key={id}
+                {...frame}
+                query={races}
+                empty={{
+                  when: (page) => page.items.length === 0,
+                  render: () => (
+                    <EmptyState
+                      title={t('home.races.empty')}
+                      action={{
+                        label: t('home.races.emptyAction'),
+                        onPress: () => router.navigate('/calendar'),
+                      }}
+                    />
+                  ),
+                }}
+              >
+                {(page) => {
+                  const race = page.items[0];
+                  return race ? (
+                    <RaceHero
+                      race={race}
+                      now={now}
+                      onPress={() => router.push(`/races/${race.id}`)}
+                    />
+                  ) : null;
+                }}
+              </HomeSection>
+            ) : id === 'rides' ? (
+              <HomeSection
+                key={id}
+                {...frame}
+                query={rides}
+                empty={{
+                  when: (page) => page.items.length === 0,
+                  render: () => (
+                    <EmptyState
+                      title={t('home.rides.empty')}
+                      action={{
+                        label: t('home.rides.emptyAction'),
+                        onPress: () => router.push('/rides/new'),
+                      }}
+                    />
+                  ),
+                }}
+              >
+                {(page) => {
+                  const ride = page.items[0];
+                  return ride ? (
+                    <RideHero
+                      ride={ride}
+                      now={now}
+                      onPress={() => router.push(`/rides/${ride.id}`)}
+                    />
+                  ) : null;
+                }}
+              </HomeSection>
+            ) : id === 'routes' ? (
+              // RC-8: пустой каталог — пустой герой раздела, без скрытия (правило Главной)
+              <HomeSection
+                key={id}
+                {...frame}
+                query={routes}
+                skeleton={<RouteHeroSkeleton />}
+                empty={{
+                  when: (page) => page.items.length === 0,
+                  render: () => <EmptyState title={t('home.routes.empty')} />,
+                }}
+              >
+                {(page) => {
+                  const route = page.items[0];
+                  return route ? (
+                    <RouteHero route={route} onPress={() => router.push(`/routes/${route.id}`)} />
+                  ) : null;
+                }}
+              </HomeSection>
+            ) : (
+              <HomeSection
+                key={id}
+                {...frame}
+                query={calendar}
+                empty={{
+                  when: (page) => page.items.length === 0,
+                  render: () => <EmptyState title={t('calendar.empty')} />,
+                }}
+              >
+                {(page) => {
+                  const start = page.items[0];
+                  return start ? (
+                    <CalendarStartHero
+                      start={start}
+                      now={now}
+                      onPress={() => router.push(`/calendar/${start.id}`)}
+                    />
+                  ) : null;
+                }}
+              </HomeSection>
+            );
+          })}
+          {/* временно на «Главной» (Q8) — до экрана профиля */}
+          <View style={styles.footer}>
+            {__DEV__ ? (
+              <TextAction label={t('uiKit.open')} onPress={() => router.push('/ui-kit')} />
+            ) : null}
+            <TextAction
+              label={t('auth.signOut')}
+              onPress={() => void onSignOut()}
+              disabled={signingOut}
+            />
+          </View>
+        </ScrollView>
+        <DecorLayer />
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
+  feed: { flex: 1 },
   banner: { paddingHorizontal: size.gutter, paddingBottom: space.s3 },
   footer: {
     paddingHorizontal: size.gutter,

@@ -52,7 +52,14 @@ paths:
   Night Ride по системе. Варианты раскладки (`layout.*`) — только таблицами `Record<вариант, компонент | значение>`
   (`ROUTE_HERO`, `STATS_VARIANT`, `PROFILE_FILL`, `TAB_ITEM`, `ROUTE_CARD`); сравнения с id темы и значением `layout` —
   нет (сторож). Вкладки — роли `tabBar.*`; отступы карточек — `appDensity[density]`; форма — `shapeOf(theme)`.
-  `react-native-svg` лениво — только `features/routes/use-svg-native.ts` (профиль, контур `route-contour(.web).tsx`).
+  `react-native-svg` лениво — только `features/routes/use-svg-native.ts` (профиль, контур `route-contour(.web).tsx`,
+  фигуры декора `features/decor/decor-svg(.web).tsx`).
+- Сезонный декор (halloween-decor) — слой поверх темы, не тема: `decor` ответа `GET /v1/appearance` (тот же запрос
+  `['appearance']`, `useDecorQuery`), включает и выключает команда в панели без релиза. `features/decor/`: таблица
+  `DECOR_LAYER: Record<AppDecorId, слой | null>` (`DecorLayer`), показ — только после монтирования (`useMounted`: SSR
+  и гидрация web без декора), кэша на native нет. Слой — `pointerEvents="none"`, скрыт от скринридеров, цвета — роли
+  темы (`halloweenColors`), анимации — только при `useReducedMotion() === false` (web — CSS с
+  `prefers-reduced-motion`). Опора — область ленты Главной (`View flex: 1` вокруг `ScrollView`), шапка не перекрыта.
 - Доступность: `accessibilityActions` вместо единственного drag-жеста; reduce motion — упрощённая анимация
   (вспышка достижения без мерцания).
 - Публичные ключи в бандле — только такие, как Sentry DSN и ключ тайлов.
