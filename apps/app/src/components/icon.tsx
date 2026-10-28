@@ -27,6 +27,9 @@ const ICONS = {
   // кнопка героя и шеврон карточки списка (варианты раскладки)
   arrowRight: { ios: 'arrow.right', material: 'arrow_forward' },
   chevronRight: { ios: 'chevron.right', material: 'chevron_right' },
+  // вход в «Настройки» и выбранный пункт списка (settings-hub)
+  settings: { ios: 'gearshape', iosFilled: 'gearshape.fill', material: 'settings' },
+  check: { ios: 'checkmark', material: 'check' },
 } as const satisfies Record<
   string,
   { ios: SFSymbol; iosFilled?: SFSymbol; material: AndroidSymbol }

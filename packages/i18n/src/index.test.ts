@@ -1,7 +1,7 @@
 import { baseMessages } from '@rkarakulov/i18n-core';
 import { describe, expect, it } from 'vitest';
 
-import { messages, t } from './index.ts';
+import { i18n, localeNames, messages, t } from './index.ts';
 import { ru } from './ru.ts';
 
 describe('t', () => {
@@ -36,5 +36,11 @@ describe('словарь pokatim', () => {
     expect(Object.keys(messages)).toEqual(
       expect.arrayContaining([...Object.keys(baseMessages.ru), ...Object.keys(ru)]),
     );
+  });
+});
+
+describe('языки интерфейса', () => {
+  it('у каждого языка есть имя на самом языке (экран «Язык»)', () => {
+    expect(i18n.locales.map((locale) => localeNames[locale])).toEqual(['Русский']);
   });
 });

@@ -45,7 +45,7 @@
   хранятся, не логируются (проверить логгер), округляются клиентом до 0,01°.
 - Карта ленты: `GET /v1/rides/map?near&radiusKm&city` → `{ items: [{ id, title, startsAt, start, goingCount, limit,
   full }] }` — только `startPrecise`, будущие видимые зрителю, ≤ 200, сорт. по времени; `no-store`, `AuthGuard`.
-- Миграция `0030_rides_geo` (номер — следующий свободный на момент слияния): бэкфилл `routeId: null`,
+- Миграция `0031_rides_geo` (номер — следующий свободный на момент слияния): бэкфилл `routeId: null`,
   `geo` = центр города, `startPrecise: false`; индекс `rides_geo_feed_idx` `{ geo: '2dsphere', startsAt: 1 }`.
 - Порт routes для rides: отдельный порт `RIDE_ROUTES` (`RideRoutes`, 8.1 RC-2; `RouteCatalog` не расширяется) — чтение
   маршрута райда по правилам выше (публичный через `IN_CATALOG`, свой — по `ownerUserId`); `rides → routes` только через
@@ -152,7 +152,7 @@ spec (8.1 RC-1…RC-6). Они уже внесены в план ниже; §3/�
   `listRideMap`.
 - `apps/api/src/modules/routes/{ride-routes.port.ts (new), ride-routes.ts (new), routes.repository.ts, routes.module.ts, index.ts}`.
 - `apps/api/src/modules/rides/{rides.collection.ts, rides.repository.ts, rides.policy.ts, rides.service.ts, rides-feed.service.ts, rides.controller.ts, rides.module.ts, ride-erasure.ts}`.
-- `apps/api/src/db/migrations/{0030_rides_geo.ts (new), index.ts, migrations.int.test.ts}`.
+- `apps/api/src/db/migrations/{0031_rides_geo.ts (new), index.ts, migrations.int.test.ts}`.
 - `apps/api/test/rides.ts` — хелперы `rideBody({ routeId })`, `nearQuery`.
 - `apps/api/src/error-messages.ts` — только если `RIDE_ROUTE_UNAVAILABLE` нужен текст (коды полей текст не несут —
   проверить).
@@ -351,7 +351,7 @@ coder. `version` не меняется (не правка организатор
 Контроллер: `@Get('map')` в `RidesController` рядом с `cities` (`no-store`, `ZodValidationPipe(RideMapQuery)`).
 Логи сервиса — без `near` (в `rides.*` логах только id и uid; новых логов не добавлять).
 
-## 7.4 Миграция `0030_rides_geo` (PR A)
+## 7.4 Миграция `0031_rides_geo` (PR A)
 
 ```ts
 export const RIDES_GEO_INDEX = {
@@ -360,7 +360,7 @@ export const RIDES_GEO_INDEX = {
 } as const;
 /** Точка «Рядом» райдов до 05c: центр города, без маршрута. Expand-only, без транзакции, идемпотентна; после 0029. */
 export const ridesGeo: MongoMigration = {
-  id: '0030_rides_geo',
+  id: '0031_rides_geo',
   async up(db) {
     const rides = db.collection(RIDES_COLLECTIONS.rides);
     for (const code of CITY_CODES) {
@@ -637,7 +637,7 @@ elevationGainM, access } | null })` и `router.back()` (без истории �
   вам», баннер опубликовать.
 - `.claude/rules/pokatim-backend.md` (rides) — `GET /v1/rides/map`, `near`, `rides-near`, порт `RIDE_ROUTES`,
   `RidesCoreModule → RoutesCoreModule`. В routes — порт `RideRoutes` (без кэша, `IN_CATALOG`/`ownRider`).
-- `.claude/rules/pokatim-db.md` (rides) — `routeId`, `geo`, `startPrecise`, `rides_geo_feed_idx`, `0030_rides_geo`,
+- `.claude/rules/pokatim-db.md` (rides) — `routeId`, `geo`, `startPrecise`, `rides_geo_feed_idx`, `0031_rides_geo`,
   пересчёт точки, сброс при стирании.
 - `.claude/rules/pokatim-contracts.md` (rides) — `RideRoute`, `RideMap`, `RideMapQuery`, `near`/`radiusKm`,
   `RIDE_ROUTE_ACCESS`, `CITY_CENTERS`, `RIDE_ROUTE_UNAVAILABLE`, `routeId` в правке без default.
@@ -645,7 +645,7 @@ elevationGainM, access } | null })` и `router.back()` (без истории �
   `RideRoutes` в перечне точек «не кэшировать маршрут райдера», `rides-near`.
 - `.claude/rules/pokatim-app.md` (rides) — «Рядом», ключ-счётчик, карта ленты, пикер, блок маршрута.
 - `docs/runbooks/deploy.md` — если человек одобрит RC-6 (a): формат access-лога.
-- `pr.md` PR A — миграция `0030_rides_geo` (expand-only, бэкфилл, индекс); env нет. PR B — новая нативная сборка
+- `pr.md` PR A — миграция `0031_rides_geo` (expand-only, бэкфилл, индекс); env нет. PR B — новая нативная сборка
   (строка iOS).
 
 # 11. Implementation Context
@@ -653,7 +653,7 @@ elevationGainM, access } | null })` и `router.back()` (без истории �
 ```
 ENTRY POINTS   PR A: packages/contracts/src/rides/ride.schema.ts → apps/api/src/modules/routes/ride-routes.ts →
                apps/api/src/modules/rides/rides.service.ts / rides-feed.service.ts / rides.controller.ts →
-               apps/api/src/db/migrations/0030_rides_geo.ts
+               apps/api/src/db/migrations/0031_rides_geo.ts
                PR B: apps/app/src/app/(tabs)/rides.tsx, src/app/rides/route-pick.tsx, features/rides/ride-detail.tsx,
                features/rides/ride-form.tsx
 FILES TO MODIFY  §6
@@ -678,7 +678,7 @@ OUT OF SCOPE     §4 + новые эндпоинты геометрии/проф
    `countMap`, `resetStartsForRoutes`; `@Get('map')`.
 7. `RideErasure`: `ownedRouteIds(userId)` → `resetStartsForRoutes`; результат + `restarted`.
    Проверить потребителя `RideErasureResult` в `account`.
-8. Миграция `0030_rides_geo` + `index.ts` + `migrations.int.test.ts`.
+8. Миграция `0031_rides_geo` + `index.ts` + `migrations.int.test.ts`.
 9. Документы §10 (кроме `pokatim-app.md` — в PR B), ADR-поправки, `pr.md` (миграция, RC-6 на подтверждение).
 10. `pnpm check`.
 
@@ -789,7 +789,7 @@ OUT OF SCOPE     §4 + новые эндпоинты геометрии/проф
   `rides-near:<uid>`; `RidesRepository` — `near` в ленте (`$geoWithin $centerSphere`), `listMapPoints`, `countMap`,
   `resetStartsForRoutes` (одна pipeline-операция с `$switch`); `@Get('map')`; `RidesCoreModule` импортирует и
   реэкспортирует `RoutesCoreModule`; `RideErasure` → `restarted` (лог шага `account` дополнен).
-- Миграция `0030_rides_geo` (бэкфилл → индекс `rides_geo_feed_idx`), `migrations/index.ts`.
+- Миграция `0031_rides_geo` (бэкфилл → индекс `rides_geo_feed_idx`), `migrations/index.ts`.
 - Документы: поправка ADR-0014 «2026-10-28 (05c)», ADR-0013 п. 4 — ссылка; `docs/product/rides.md` (раздел «Маршрут
   райда и «Рядом» (05c)», таблица «Скрыто»), `docs/product/routes.md` («Маршрут в райде»); правила
   `pokatim-backend/db/contracts/security.md`.
@@ -803,7 +803,7 @@ OUT OF SCOPE     §4 + новые эндпоинты геометрии/проф
 `listRideMap`. API unit — `rides.policy.test.ts` (`changesStart` RC-4, `rideStartOf`, `nearLimit`). Int (реальная
 MongoDB) — новый `rides-route.int.test.ts` (20 тестов: AC1–AC6, RC-3, RC-4/A4, правка без `routeId`, смена города,
 лимит `rides-near`, ключи публичной карточки, стирание, порт `RideRoutes` без кэша и защита в глубину);
-`migrations.int.test.ts` — `0030_rides_geo` (бэкфилл, индекс, идемпотентность, последняя).
+`migrations.int.test.ts` — `0031_rides_geo` (бэкфилл, индекс, идемпотентность, последняя).
 
 **Отрицательные доказательства (мутации, тест краснеет по результату):** убрать проверку «`private` — только
 организатору» в `routeOf` → 1 красный (AC4: автор маршрута видел бы `private` в чужом райде); убрать `$geoWithin` из

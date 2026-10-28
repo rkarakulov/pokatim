@@ -434,7 +434,12 @@ describe('createAdminApiClient: сброс имени райдера (profile-02
 });
 
 describe('createAdminApiClient: оформление приложения (app-themes)', () => {
-  const appearance = { themeId: 'atlas', version: 2, updatedAt: '2026-10-27T10:00:00.000Z' };
+  const appearance = {
+    themeId: 'atlas',
+    decor: 'none',
+    version: 2,
+    updatedAt: '2026-10-27T10:00:00.000Z',
+  };
 
   it('GET appearance: путь, cookie панели, разбор PanelAppearance', async () => {
     const { calls, api } = admin(200, appearance);

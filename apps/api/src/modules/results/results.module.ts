@@ -16,6 +16,8 @@ import { EntriesService } from './entries.service';
 import { RaceEntryController } from './race-entry.controller';
 import { ResultsAdminController } from './results-admin.controller';
 import { ResultsForDisputesService } from './results-for-disputes';
+import { ResultsForStandingsService } from './results-for-standings';
+import { RESULTS_FOR_STANDINGS } from './results-for-standings.port';
 import { RESULTS_FOR_DISPUTES } from './results-for-disputes.port';
 import { ResultsNoticesService } from './results-notices';
 import { RESULTS_NOTICES } from './results-notices.port';
@@ -34,7 +36,8 @@ import { ResultsRepository } from './results.repository';
  * их `index.ts` (порты `RaceRegistry`, `RouteGeometry`, `ActivitySource`, `RiderNameDirectory` (`profile`));
  * `races`, `routes`, `tracks`, `profile` о `results` не знают. Для `disputes` (race-results-06) — порт
  * `RESULTS_FOR_DISPUTES`; гейт споров `RESULT_DISPUTE_GATE` даёт `@Global DisputesCoreModule`. Для `notifications` —
- * порт `RESULTS_NOTICES` (получатели уведомлений, ADR-0017).
+ * порт `RESULTS_NOTICES` (получатели уведомлений, ADR-0017). Для `standings` (race-results-08) — порт
+ * `RESULTS_FOR_STANDINGS` (текущие ревизии и строки снимка протокола).
  */
 @Module({
   imports: [RacesCoreModule, RoutesCoreModule, TracksCoreModule, ProfileCoreModule],
@@ -47,6 +50,8 @@ import { ResultsRepository } from './results.repository';
     { provide: RESULTS_FOR_DISPUTES, useExisting: ResultsForDisputesService },
     ResultsNoticesService,
     { provide: RESULTS_NOTICES, useExisting: ResultsNoticesService },
+    ResultsForStandingsService,
+    { provide: RESULTS_FOR_STANDINGS, useExisting: ResultsForStandingsService },
   ],
   exports: [
     RacesCoreModule,
@@ -58,6 +63,7 @@ import { ResultsRepository } from './results.repository';
     ResultsRecheck,
     RESULTS_FOR_DISPUTES,
     RESULTS_NOTICES,
+    RESULTS_FOR_STANDINGS,
   ],
 })
 export class ResultsCoreModule {}

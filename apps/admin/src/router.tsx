@@ -31,6 +31,7 @@ import { RiderRouteScreen } from './features/rider-routes/RiderRouteScreen';
 import { RiderRoutesScreen } from './features/rider-routes/RiderRoutesScreen';
 import { RouteScreen } from './features/routes/RouteScreen';
 import { RoutesScreen } from './features/routes/RoutesScreen';
+import { SeasonScreen } from './features/seasons/SeasonScreen';
 import { SeasonsScreen } from './features/seasons/SeasonsScreen';
 import { SignInScreen } from './features/sign-in/SignInScreen';
 import { AppLayout, ShellError, ShellSkeleton } from './layout/AppLayout';
@@ -190,6 +191,20 @@ const seasonsRoute = createRoute({
   ),
 });
 
+// race-results-08b: экран сезона с разделом «Рейтинг» (только чтение)
+const seasonRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'seasons/$seasonId',
+  component: function SeasonRoute() {
+    const { seasonId } = seasonRoute.useParams();
+    return (
+      <RequirePermission permission="races.read">
+        <SeasonScreen key={seasonId} seasonId={seasonId} />
+      </RequirePermission>
+    );
+  },
+});
+
 const calendarRoute = createRoute({
   getParentRoute: () => appRoute,
   path: 'calendar',
@@ -338,6 +353,7 @@ const routeTree = rootRoute.addChildren([
     raceRoute,
     raceResultsRoute,
     seasonsRoute,
+    seasonRoute,
     calendarRoute,
     routesRoute,
     routeRoute,

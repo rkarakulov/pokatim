@@ -10,20 +10,24 @@ import { RacesPublicController } from './races-public.controller';
 import { RacesPublicService } from './races-public.service';
 import { RacesRepository } from './races.repository';
 import { RacesService } from './races.service';
+import { SeasonRacesService } from './season-races';
+import { SEASON_RACES } from './season-races.port';
 import { SeasonsAdminController } from './seasons-admin.controller';
 import { SeasonsService } from './seasons.service';
 
 /**
- * Ядро `races` для API и worker: репозиторий и порт `RaceRegistry` для модуля `results` (через `index.ts`) — без
- * контроллеров.
+ * Ядро `races` для API и worker: репозиторий, порт `RaceRegistry` для модуля `results` и порт `SeasonRaces` для
+ * `standings` (race-results-08) — через `index.ts`, без контроллеров.
  */
 @Module({
   providers: [
     RacesRepository,
     RaceRegistryService,
     { provide: RACE_REGISTRY, useExisting: RaceRegistryService },
+    SeasonRacesService,
+    { provide: SEASON_RACES, useExisting: SeasonRacesService },
   ],
-  exports: [RacesRepository, RACE_REGISTRY],
+  exports: [RacesRepository, RACE_REGISTRY, SEASON_RACES],
 })
 export class RacesCoreModule {}
 

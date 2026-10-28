@@ -196,6 +196,27 @@ describe('«Журнал действий» (AC12)', () => {
     expect(screen.getByRole('cell', { name: 'Оформление приложения' })).toBeTruthy();
   });
 
+  it('halloween-decor: включение декора — «Без декора → Хеллоуин»', async () => {
+    mocked.listAudit.mockResolvedValue({
+      items: [
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8066',
+          action: 'appearance.decor_changed',
+          subject: {
+            kind: 'platform',
+            id: '00000000-0000-0000-0000-000000000000',
+            label: 'Оформление приложения',
+          },
+          details: { decorFrom: 'none', decorTo: 'halloween' },
+        },
+      ],
+      nextCursor: null,
+    });
+    await renderApp('/audit');
+    expect(await screen.findByText('Сезонный декор изменён: Без декора → Хеллоуин')).toBeTruthy();
+  });
+
   it('«Показать ещё» — следующая страница по курсору сервера', async () => {
     mocked.listAudit
       .mockResolvedValueOnce({ items: [revoked, granted], nextCursor: granted.id })

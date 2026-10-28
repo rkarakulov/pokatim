@@ -40,7 +40,8 @@ export class AppearanceRepository {
   update(
     session: DbSession,
     expectedVersion: number,
-    set: Pick<AppearanceSettingsDoc, 'themeId' | 'updatedAt'>,
+    set: Partial<Pick<AppearanceSettingsDoc, 'themeId' | 'decor'>> &
+      Pick<AppearanceSettingsDoc, 'updatedAt'>,
   ): Promise<AppearanceSettingsDoc | null> {
     return this.settings.findOneAndUpdate(
       { _id: APPEARANCE_SETTINGS_ID, version: expectedVersion },

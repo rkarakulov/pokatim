@@ -234,11 +234,11 @@ describe('«Создать аккаунт» со входа — всегда р�
 });
 
 describe('выход', () => {
-  it('«Выйти» на Главной → сервер отзывает сессию, SecureStore и кеш запросов пусты, экран «Вход» (не регистрация)', async () => {
+  it('«Выйти» в «Настройках» → сервер отзывает сессию, SecureStore и кеш запросов пусты, экран «Вход» (не регистрация)', async () => {
     const clear = jest.spyOn(QueryClient.prototype, 'clear');
     storeSession();
-    const router = await renderRouter(appRoutes, { initialUrl: '/' });
-    expect(await screen.findByRole('header', { name: 'Покатим' })).toBeOnTheScreen();
+    const router = await renderRouter(appRoutes, { initialUrl: '/settings' });
+    expect(await screen.findByRole('header', { name: 'Настройки' })).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Выйти' }));
 
@@ -256,8 +256,8 @@ describe('выход', () => {
       .mocked(api.signOut)
       .mockRejectedValue(new ApiNetworkError(new TypeError('Network request failed')));
     storeSession();
-    await renderRouter(appRoutes, { initialUrl: '/' });
-    await screen.findByRole('header', { name: 'Покатим' });
+    await renderRouter(appRoutes, { initialUrl: '/settings' });
+    await screen.findByRole('header', { name: 'Настройки' });
 
     await fireEvent.press(screen.getByRole('button', { name: 'Выйти' }));
 

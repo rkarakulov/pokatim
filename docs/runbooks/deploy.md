@@ -511,6 +511,9 @@ ADR-0011, `docs/product/tracks-and-devices.md`.
 - **«Поделиться» в native** — сборке EAS нужен `EXPO_PUBLIC_WEB_ORIGIN` (`https://<хост>`, публичный адрес web-
   карточек; задаётся в EAS env профиля вместе с `EXPO_PUBLIC_API_URL`): без него кнопки «Поделиться» нет. Web берёт
   адрес страницы.
+- **«О приложении» в «Настройках»** — сборкам web (build-arg Dockerfile) и EAS (env профиля) задать
+  `EXPO_PUBLIC_PRIVACY_URL`, `EXPO_PUBLIC_TERMS_URL` (https) и `EXPO_PUBLIC_SUPPORT_EMAIL`: без них строк «Политика
+  конфиденциальности», «Условия использования» и «Поддержка» нет (сторы требуют ссылку на политику).
 
 ## Проверка
 
