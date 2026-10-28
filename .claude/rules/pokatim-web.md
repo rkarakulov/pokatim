@@ -103,6 +103,13 @@ paths:
   панель не получает; ошибка фонового обновления — баннер с повтором над формой; Esc и «Отмена» во время сохранения
   заблокированы; «Сохранить» — `aria-disabled` + `DisabledReason`; подсказка у причины — не писать пол и год, журнал
   append-only). Разбор спора — группа, уровень и флаги цели.
+- Экран сезона (race-results-08b) — `features/seasons/SeasonScreen.tsx`, маршрут `/seasons/$seasonId` под
+  `RequirePermission permission="races.read"`, вход — название сезона ссылкой в «Сезонах». Раздел «Рейтинг» без
+  компонента вкладок (RC-19), только чтение: сводка (`StatusTag` «Актуален» / «Ждёт пересчёта», время пересчёта,
+  версия формулы), `ChipGroup` класса и группы — только таблицы сводки, `DataTable` (место `placeLabel`, участник —
+  `seasonRiderLabel`: без `userId` у организатора — имя или «Участник» без id; ячейки гонок «1 · 100» / «=2 · 85» /
+  «DQ · 0» / «—», не в зачёте — приглушена с текстом для скринридера), «Показать ещё» по курсору. Курсор не привязан
+  к снимку: другая `computedAt` следующей страницы — `resetQueries` таблицы (заново с первой страницы).
 - «Модерация райдов» (05b) — `features/rides-moderation/*`, маршруты `/rides-moderation` (`?state=hidden` — в URL) и
   `/rides-moderation/$rideId` под `RequirePermission permission="rides.moderate"`, пункт навигации — группа `bottom`
   в конце. Действия — `ReasonDialog`; 409 `CONFLICT` и `RIDE_INVALID_STATE` — `ConflictBanner` с перечитыванием

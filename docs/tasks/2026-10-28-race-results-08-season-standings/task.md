@@ -908,3 +908,57 @@ Golden (`standings.policy.test.ts`): спайк §4.1 — M = 3, N = 2 → Ан�
   между страницами подгруженное сбрасывается и таблица грузится с первой страницы.
 - Проверка: `vitest run src/standings` (contracts) — 4 passed; `vitest run src/modules/standings` (api) — 35 passed;
   полный `pnpm check` — перед PR.
+
+## 12.2 08b — панель
+
+### Changes
+
+- Экран сезона `/seasons/$seasonId` (`RequirePermission permission="races.read"`): `SeasonScreen` — шапка
+  `PageHeader` (крошка «Сезоны», название и даты из `seasonsQuery`), раздел «Рейтинг» без компонента вкладок (RC-19);
+  403 — «Нет доступа», 404 — «Сезон не найден», ошибка сводки — `ErrorState` с повтором, загрузка — скелетон
+  `DataTable`, таблиц нет — `EmptyState` с подсказкой.
+- Строка снимка: `StatusTag` «Актуален» / «Ждёт пересчёта» (RC-14), «Пересчёт: {дата Минска}» / «Пересчёта ещё не
+  было», «Формула v{N}».
+- `SeasonStandingsTable`: `ChipGroup` класса и группы — только таблицы сводки (по умолчанию первая; смена класса —
+  первая группа класса), подпись «{группа} · {класс}: лучшие N из M гонок · участников: K», `DataTable` (место
+  `placeLabel` «=N», участник, очки, колонка на гонку: «1 · 100», «=2 · 85», «DQ · 0», «—»; незасчитанная ячейка —
+  `.muted` + `visually-hidden` «, не в зачёте»), «Показать ещё» по курсору (`useInfiniteQuery`), RC-12 — пустое
+  состояние.
+- Курсор и снимок (§11.2): после подгрузки, если `computedAt` страниц различается, — `resetQueries` таблицы (заново
+  с первой страницы) и инвалидация сводки.
+- Подпись участника — `seasonRiderLabel(userId, riderName)` рядом с `riderLabel` (`results-format.ts`): с `userId`
+  — «Анна К. ·a1b2c3» / «Участник ·a1b2c3», без (организатор, RC-8) — имя или «Участник».
+- `SeasonsScreen` — название сезона ссылкой на экран сезона.
+- i18n: `admin.seasons.notFound`, `admin.standings.*`.
+
+### Files touched
+
+- Создано: `apps/admin/src/features/seasons/{SeasonScreen,SeasonStandingsTable}.tsx`,
+  `apps/admin/src/features/seasons/standings-query.ts`, `apps/admin/src/features/seasons/SeasonScreen.test.tsx`.
+- Изменено: `apps/admin/src/router.tsx`, `apps/admin/src/features/seasons/{SeasonsScreen.tsx,SeasonsScreen.test.tsx}`,
+  `apps/admin/src/features/results/results-format.ts`, `packages/i18n/src/ru.ts`, `.claude/rules/pokatim-web.md`.
+- Сервер, приложение, api-client — без изменений.
+
+### Отклонения от §11.2
+
+- «Показать ещё» — существующий `admin.more` (вместо нового `admin.standings.more` с тем же текстом).
+- `admin.seasons.open` не добавлен: ссылка — само название сезона (доступное имя = видимый текст, существующие
+  проверки строк «Сезонов» не меняются).
+- Добавлены ключи, которых не было в списке: `admin.standings.{neverComputed,classFilter,groupFilter,tableMeta,rider}`,
+  `admin.seasons.notFound`.
+
+### Tests
+
+- `SeasonScreen.test.tsx` (15): шапка, время пересчёта, формула, «Актуален»; переключатели — только таблицы сводки,
+  смена группы и класса — запрос с новым ключом; строки и ячейки (`=2 · 85`, DQ, «—», не в зачёте — `.muted` и
+  скрытый текст); ничья «=1»; организатор без id; «Ждёт пересчёта»; пусто (нет таблиц; RC-12); скелетон сводки и
+  таблицы; ошибка сводки и таблицы с повтором; 404; «Показать ещё» по курсору; смена `computedAt` между страницами —
+  таблица заново с первой страницы.
+- `SeasonsScreen.test.tsx` (+1): название — ссылка `/admin/seasons/<id>`.
+- Отрицательная проверка правила курсора: условие сброса заменено на `false` → `Tests 1 failed | 14 passed (15)`
+  («курсор и снимок …»); возвращено → `15 passed (15)`.
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_s08b_test REDIS_URL_TEST=…/15 pnpm check` → `EXIT=0`:
+  `All matched files use Prettier code style!`, `✔ no dependency violations found (1491 modules, 5515 dependencies
+  cruised)`, typecheck `Tasks: 9 successful, 9 total`; тесты — admin `Test Files 38 passed (38)`, `Tests 343 passed
+  (343)`, api `1453 passed`, app `1582 passed`, contracts `315 passed`, api-client `110 passed`, i18n `6 passed`,
+  `Tasks: 15 successful, 15 total`.

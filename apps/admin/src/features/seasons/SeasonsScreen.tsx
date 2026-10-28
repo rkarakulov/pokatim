@@ -1,6 +1,7 @@
 import type { PanelSeason, SeasonPhase } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { createColumnHelper } from '@tanstack/react-table';
 import { useMemo, useState } from 'react';
 
@@ -33,7 +34,18 @@ export function SeasonsScreen() {
 
   const columns = useMemo(
     () => [
-      column.accessor('name', { header: t('admin.seasons.column.name') }),
+      column.accessor('name', {
+        header: t('admin.seasons.column.name'),
+        cell: (info) => (
+          <Link
+            className="link"
+            to="/seasons/$seasonId"
+            params={{ seasonId: info.row.original.id }}
+          >
+            {info.getValue()}
+          </Link>
+        ),
+      }),
       column.accessor('startsOn', {
         header: t('admin.seasons.column.startsOn'),
         cell: (info) => formatLocalDate(info.getValue()),

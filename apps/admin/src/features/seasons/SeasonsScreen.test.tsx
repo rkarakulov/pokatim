@@ -75,6 +75,12 @@ describe('«Сезоны» (AC10)', () => {
     expect(within(form()).getAllByText('Europe/Minsk')).toHaveLength(2);
   });
 
+  it('название сезона — ссылка на экран сезона (08b)', async () => {
+    await renderApp('/seasons');
+    const link = await screen.findByRole('link', { name: 'Сезон 2026' });
+    expect(link.getAttribute('href')).toBe(`/admin/seasons/${S2026}`);
+  });
+
   it('пересечение — ошибка под полем с названием и датами сезона, «Создать сезон» неактивна с причиной', async () => {
     await renderApp('/seasons');
     await screen.findByRole('cell', { name: 'Сезон 2026' });
