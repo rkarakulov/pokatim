@@ -76,9 +76,11 @@ export { designSystemCss, skeletonCss, typographyCss, type DesignSystemCssOption
 
 /**
  * Раскладка приложения райдера (px): колонка контента на широком экране (web на десктопе, планшет) — не шире
- * `contentMaxWidth`, по центру; на телефоне ограничение не срабатывает. В базе (`size`) готового значения нет.
+ * `contentMaxWidth`, по центру; на телефоне ограничение не срабатывает. `avatarProfile` — аватар шапки профиля
+ * (`.phead-name .ava` прототипа, rider-profile). В базе (`size`) готовых значений нет; follow-up — `size.avatarLg` в
+ * app-foundation.
  */
-export const layout = { contentMaxWidth: 640 } as const;
+export const layout = { contentMaxWidth: 640, avatarProfile: 56 } as const;
 
 /** Любая тема набора (у `panel` есть навигация); группы ролей pokatim — `map`, `surfaceBar`, `profile`, `tabBar`. */
 export type Theme = BaseTheme<PokatimRoleGroups>;

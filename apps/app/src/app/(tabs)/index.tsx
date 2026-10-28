@@ -20,6 +20,7 @@ import {
   useNextRace,
   useRideReasons,
 } from '@/features/home/queries';
+import { useOwnAvatarId } from '@/features/profile/queries';
 import { useNextRide } from '@/features/rides/queries';
 import { RideHero } from '@/features/rides/ride-hero';
 import {
@@ -77,6 +78,8 @@ export default function HomeScreen() {
   const rides = useNextRide();
   const routes = useLatestRoute();
   const unread = useUnreadCount();
+  // аватар верхней панели (rider-profile): тот же кэш `['profile']`, что порядок разделов — без второго запроса
+  const avatarId = useOwnAvatarId();
   const sections = orderHomeSections(AVAILABLE_HOME_SECTIONS, profile.reasons);
   // «сейчас» подписей — на клиенте (Главная без SSR-данных, R6): новые данные, фокус, полночь по Минску
   const now = useMinskClock([
@@ -108,6 +111,8 @@ export default function HomeScreen() {
         unreadCount={unread.data?.count}
         onOpenDevices={() => router.push('/settings/devices')}
         onOpenSettings={() => router.push('/settings')}
+        onOpenProfile={() => router.push('/profile')}
+        avatarId={avatarId}
       />
       {/* область ленты — опора сезонного декора (halloween-decor): слой поверх ленты, без шапки */}
       <View style={styles.feed}>

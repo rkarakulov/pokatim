@@ -18,6 +18,8 @@ import DeviceReturnScreen from '../app/devices/return';
 import DevicesScreen from '../app/settings/devices';
 import DeleteAccountScreen from '../app/settings/account/delete';
 import ProfileScreen from '../app/settings/profile';
+import OwnProfileRoute from '../app/profile';
+import RiderRoute from '../app/riders/[id]';
 import SettingsScreen from '../app/settings/index';
 import LanguageScreen from '../app/settings/language';
 import NotificationsScreen from '../app/notifications';
@@ -30,6 +32,7 @@ import RideRoute from '../app/rides/[id]';
 import NewRideRoute from '../app/rides/new';
 import EditRideRoute from '../app/rides/edit/[id]';
 import CancelRideRoute from '../app/rides/cancel/[id]';
+import RideInviteRoute from '../app/rides/invite/[id]';
 import ReportRideRoute from '../app/rides/report/[id]';
 import RideRoutePickRoute from '../app/rides/route-pick';
 import RaceRoute from '../app/races/[id]';
@@ -77,6 +80,7 @@ export const appRoutes = {
   'settings/index': SettingsScreen,
   'settings/language': LanguageScreen,
   'settings/profile': ProfileScreen,
+  profile: OwnProfileRoute,
   notifications: NotificationsScreen,
   'settings/notifications': NotificationSettingsScreen,
   'settings/verified': VerifiedProfileScreen,
@@ -104,5 +108,7 @@ export const appRoutes = {
   'rides/edit/[id]': EditRideRoute,
   'rides/cancel/[id]': CancelRideRoute,
   'rides/report/[id]': ReportRideRoute,
+  'rides/invite/[id]': RideInviteRoute,
   'rides/route-pick': RideRoutePickRoute,
+  'riders/[id]': RiderRoute,
 };

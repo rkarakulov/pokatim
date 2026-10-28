@@ -28,6 +28,14 @@ describe('гард сессии (Stack.Protected)', () => {
     expect(screen.queryByRole('tab', { name: 'Главная' })).toBeNull();
   });
 
+  it('свой профиль /profile без сессии — регистрация (rider-profile: экран под гардом)', async () => {
+    const router = await renderRouter(appRoutes, { initialUrl: '/profile' });
+
+    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/register');
+    expect(api.getProfileStats).not.toHaveBeenCalled();
+  });
+
   it('пока сессия не прочитана — на месте вкладок скелетон оболочки, без редиректа (SSR, R2)', async () => {
     // и сессия, и регистрация ещё читаются из хранилища
     const never = new Promise<string | null>(() => undefined);

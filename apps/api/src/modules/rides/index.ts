@@ -10,3 +10,9 @@ export {
   RideEventPayload,
   RidesReportsResolved,
 } from './rides.events';
+/** Порт карточки-приглашения для `sharing` (ADR-0018): публичные факты будущего райда и линия маршрута каталога. */
+export {
+  type RideInviteFacts,
+  RIDES_FOR_SHARING,
+  type RidesForSharing,
+} from './rides-for-sharing.port';

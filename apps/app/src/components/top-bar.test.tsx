@@ -2,7 +2,11 @@
 import { size, themes } from '@pokatim/design-tokens';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { api } from '@/lib/api';
+
 import { TopBar } from './top-bar';
+
+jest.mock('@/lib/api');
 
 describe('TopBar', () => {
   it('словесный знак — заголовок с меткой «Покатим», шрифт brand, высота панели — токен', async () => {
@@ -62,5 +66,42 @@ describe('TopBar', () => {
     ]);
     await fireEvent.press(screen.getByRole('button', { name: 'Уведомления, 3 непрочитанных' }));
     expect(openNotifications).toHaveBeenCalledTimes(1);
+  });
+
+  it('аватар профиля — последним справа, кнопка «Профиль»; нажатие открывает профиль (rider-profile, AC12)', async () => {
+    const openProfile = jest.fn();
+    await render(
+      <TopBar
+        onOpenNotifications={jest.fn()}
+        onOpenDevices={jest.fn()}
+        onOpenSettings={jest.fn()}
+        onOpenProfile={openProfile}
+      />,
+    );
+
+    expect(screen.getAllByRole('button').map((button) => button.props.accessibilityLabel)).toEqual([
+      'Уведомления',
+      'Устройства',
+      'Настройки',
+      'Профиль',
+    ]);
+    // фото нет — пустой квадрат 30 px с иконкой человека; метку несёт кнопка
+    expect(screen.getByTestId('rider-avatar-empty')).toBeOnTheScreen();
+    expect(screen.getByTestId('rider-avatar')).toHaveStyle({
+      width: size.avatarTopBar,
+      height: size.avatarTopBar,
+    });
+    expect(screen.queryByRole('image')).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Профиль' }));
+    expect(openProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it('с id аватара — фото по публичному адресу', async () => {
+    jest.mocked(api.avatarUrl).mockReturnValue('https://api.test/v1/avatars/a1');
+    await render(<TopBar onOpenProfile={jest.fn()} avatarId="a1" />);
+    expect(screen.getByTestId('rider-avatar-photo')).toHaveProp('source', {
+      uri: 'https://api.test/v1/avatars/a1',
+    });
+    expect(api.avatarUrl).toHaveBeenCalledWith('a1');
   });
 });

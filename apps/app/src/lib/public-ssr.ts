@@ -59,9 +59,17 @@ function cached<T>(path: string): PublicSsrResult<T> | undefined {
   return undefined;
 }
 
-/** Путь публичного ресурса по id из URL: не `Uuid` — `null` (без запроса и без инъекции пути во внутренний API). */
-export function publicPath(prefix: string, id: unknown, suffix = ''): string | null {
-  const parsed = Uuid.safeParse(id);
+/**
+ * Путь публичного ресурса по id из URL: не проходит схему (по умолчанию `Uuid`; токен — схема из contracts, например
+ * `RiderPublicId`) — `null` (без запроса и без инъекции пути во внутренний API).
+ */
+export function publicPath(
+  prefix: string,
+  id: unknown,
+  suffix = '',
+  idSchema: z.ZodType<string> = Uuid,
+): string | null {
+  const parsed = idSchema.safeParse(id);
   return parsed.success ? `${prefix}/${encodeURIComponent(parsed.data)}${suffix}` : null;
 }
 

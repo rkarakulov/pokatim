@@ -42,3 +42,15 @@ describe('карточка для сторис', () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe('карточка-приглашение райда', () => {
+  it('статус — GET приглашения с шаблоном и токеном доступа', async () => {
+    const { api, calls } = client(200, { status: 'pending' });
+    await expect(api.getRideInviteCard('jwt', ID, { template: 'line' })).resolves.toEqual({
+      status: 'pending',
+    });
+    expect(calls[0]!.url).toBe(`https://api.test/v1/rides/${ID}/invite-card?template=line`);
+    expect(calls[0]!.method).toBe('GET');
+    expect(calls[0]!.headers.get('authorization')).toBe('Bearer jwt');
+  });
+});

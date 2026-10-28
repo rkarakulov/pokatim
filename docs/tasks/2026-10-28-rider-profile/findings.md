@@ -233,3 +233,222 @@ Mongo стенда недоступна ревьюеру).
 
 Изоляция тестов: Redis db 9 параллельно использовала другая сессия (случайные 429 в тестах лимитов профиля) —
 прогоны прохода 2 на `pokatim_riderprofileb_test` и Redis db 13.
+
+## PR B, проход 1
+
+# Findings — rider-profile (PR B) — pass 1 — reviewer: claude
+base: feature/rider-profile (ef494df)   commits: a32ba38..f77ea08 (ветка feature/rider-profile-app, рабочее дерево чистое)
+verdict: APPROVE
+
+Проверено самостоятельно: `pnpm --filter @pokatim/app typecheck` — зелёный; jest по затронутым наборам (own-profile,
+rider-profile, profile-screen, home, public-metadata, features/profile/*, rider-avatar, top-bar, public-ssr,
+not-found, auth-guard, theme-guards) — 18 наборов, 186 тестов, зелёные. `playwright` без API (сборка `dist` ветки,
+`EXPO_PUBLIC_API_URL=http://127.0.0.1:3000`, порт 8190): новые шаги «неизвестный райдер» и «`/profile` без сессии» и
+шаг A12 — зелёные; 05b и 05c — красные (разбор ниже).
+
+### [MEDIUM] Web-обрезка: файл, который браузер не смог декодировать, — тупик без сообщения
+- **file:** apps/app/src/features/profile/avatar-crop.web.tsx
+- **location:** `<img … onLoad=…>` (стр. 181–187), `ready`/«Сохранить фото» (стр. 88, 206–213)
+- **problem:** у `<img>` нет `onError`. Если файл прошёл пре-чек по `file.type`, но не декодируется (битый файл,
+  HEIC/AVIF с подписью `image/jpeg`, обрезанная загрузка из облака), `onLoad` не наступит: окно пустое,
+  «Сохранить фото» и масштаб навсегда выключены, текста ошибки нет. Помогает только «Отмена».
+- **why_it_matters:** AC14 («ошибки — понятные тексты») и §4.12 (ошибка с действием, а не немое состояние). Сервер
+  на такой файл ответил бы 422 с понятным текстом, но клиент до него не доходит.
+- **evidence:** `grep -c onError avatar-crop.web.tsx` → 0. В `avatar-crop.web.test.tsx` нет сценария ошибки
+  загрузки картинки.
+- **recommended_fix:** `onError` на `<img>` → колбэк вроде `onTooSmall` (например `onUnreadable`). Редактор закрывает
+  панель и показывает `profile.avatar.error.AVATAR_INVALID`. Добавить тест: `fireEvent.error(img)` → баннер.
+
+### [LOW] Публичный профиль после отзыва согласия продолжает показывать имя и фото из кэша вкладки
+- **file:** apps/app/src/features/riders/rider-screen.tsx
+- **location:** `notFound` (стр. 88–89)
+- **problem:** «Профиль недоступен» показывается только при `rider.data === undefined`. Если данные уже были (посев
+  SSR или первый ответ), а refetch (фокус после 60 с, pull-to-refresh, инвалидация `['riders']`) вернул 404, на
+  экране остаются имя, клуб и фото с баннером «Данные могли устареть».
+- **why_it_matters:** 404 здесь означает «райдер скрыл профиль», а не сбой обновления. Отзыв согласия (R-3) не
+  скрывает данные в открытой вкладке зрителя, пока её не перезагрузят. Это шире 60 с серверного кэша (R-4), хотя и
+  ограничено памятью вкладки.
+- **evidence:** `const notFound = !valid || (rider.data === undefined && apiErrorOf(rider.error)?.code === 'NOT_FOUND');`
+- **recommended_fix:** считать `NOT_FOUND` в `rider.error` «недоступен» при любом `data` (или на 404 вызывать
+  `removeQueries(riderKey(id))`). Добавить тест: данные → refetch 404 → «Профиль недоступен».
+
+### [LOW] 429 с короткой паузой всегда считается «обработка занята», в том числе для удаления и почти истёкшего лимита
+- **file:** apps/app/src/features/profile/avatar-errors.ts
+- **location:** `BUSY_MAX_RETRY_SEC`, стр. 35–36
+- **problem:** «Фото сейчас обрабатываются…» выбирается только по `retryAfterSec <= 60`. Часовой лимит 20/ч, у
+  которого до сброса < 60 с, и 429 удаления (`profile-update`, 30/ч, `DeleteAvatar` тоже вызывает
+  `avatarErrorMessage`) дадут тот же текст про обработку.
+- **why_it_matters:** неверная причина в тексте. Вреда нет, повтор через минуту всё равно сработает.
+- **evidence:** `profile-avatar.service.ts`: занятость — `limited(5)`, квоты — `limited(result.retryAfterSec)`;
+  `avatar-section.tsx:48` — `onError: (error) => onFailure(avatarErrorMessage(error))`.
+- **recommended_fix:** для удаления — `actionErrorMessage`/текст лимита. Для загрузки — «занято» только при
+  `retryAfterSec <= 5` (константа сервера), либо отдельный код/деталь в ответе (follow-up контракта).
+
+### [LOW] Ошибка истории без сети: заголовок «Нет соединения» с текстом «Сервис временно недоступен»
+- **file:** apps/app/src/features/profile/profile-history.tsx; apps/app/src/features/riders/rider-screen.tsx
+- **location:** `failure={t('state.failedMessage')}` (profile-history.tsx стр. 51, 74; rider-screen.tsx стр. 50)
+- **problem:** `TabFailure` сам выбирает заголовок (сеть → «Нет соединения»), а текст берёт из `message`. Сюда передан
+  серверный текст из базы, поэтому офлайн баннер противоречит сам себе. Остальные вызовы `TabFailure` передают
+  нейтральный текст блока («Не удалось загрузить результаты»).
+- **why_it_matters:** §4.12 — понятный текст ошибки, разный для сети и сервера.
+- **evidence:** `results-table.tsx:145–151`; `@rkarakulov/i18n-core` `state.failedMessage` = «Сервис временно
+  недоступен. Попробуйте ещё раз.»
+- **recommended_fix:** ключ блока, например `profile.history.failed` «Не удалось загрузить историю», как у
+  `races.results.failed`.
+
+### [LOW] Окно обрезки: `aria-describedby` повторяет `aria-label` — скринридер читает одну фразу дважды
+- **file:** apps/app/src/features/profile/avatar-crop.web.tsx
+- **location:** стр. 155–156 и 189–191
+- **problem:** у метки и описания один ключ `profile.avatar.crop.area` («Область фото. Стрелки — сдвиг, плюс и
+  минус — масштаб»).
+- **why_it_matters:** a11y web-кропа (AC14): лишний повтор при каждом фокусе.
+- **recommended_fix:** `aria-label` — «Область фото», описание (видимая подсказка) — про клавиши (два ключа).
+
+### [LOW] A11y строки гонки без места: «место —»
+- **file:** apps/app/src/features/profile/profile-format.ts
+- **location:** `placeText` (стр. 34–35), `raceA11y` (стр. 94)
+- **problem:** без места `a11y` = `profile.stats.none` («—»), и строка читается как «…, место —, …».
+- **recommended_fix:** без места не добавлять часть «место …» в метку (или отдельный ключ «без места»).
+
+### [LOW] (вне зоны PR B) e2e 05b/05c падают без API — давний дефект, к PR B не относится
+- **file:** apps/app/e2e/web.spec.ts (стр. 375–411); apps/app/src/app/rides/route-pick.tsx;
+  apps/app/src/features/rides/ride-report*
+- **problem:** воспроизведено (см. шапку). 05c: на странице только `progressbar "Загрузка"`. `route-pick.tsx`
+  рисует `<ShellSkeleton />` без `failure`, поэтому заголовка ошибки не будет никогда. 05b: экран
+  `RideReportScreen` открыт (status `unavailable` — гард его пропускает) и показывает свою ошибку запроса «Не
+  удалось загрузить», а не «Нет соединения».
+- **why_it_matters / связь с PR B:** не связано. В diff PR B нет ни одного файла на этих путях: `rides/*`,
+  `features/rides/*`, `features/auth/*`, `features/onboarding/*`, `shell-skeleton.tsx`, `AsyncContent`. `_layout.tsx`
+  меняется только двумя `Stack.Screen`, `public-ssr.ts` — необязательным параметром `publicPath` (вызовы по
+  умолчанию те же, тест зелёный). Ветка «без API» этих шагов в CI не исполняется: `ci.yml` задаёт `E2E_API: '1'`.
+  Поэтому дефект латентный с 62c7b0d (05c PR B). Аналогичный новый шаг `/profile` без сессии (`useSettingsShell` →
+  `ShellSkeleton failure=…`) зелёный.
+- **recommended_fix:** отдельной задачей зоны райдов: `route-pick.tsx` и `rides/report/[id].tsx` — через
+  `useSettingsShell()` (или `ShellSkeleton failure={useShellFailure()}`); либо поправить ожидание шага. В PR B — не
+  трогать.
+
+### NOT VERIFIED
+- `E2E_API=1` (шаг «имя/клуб через API → гость на `/riders/<publicId>`» и ветки WITH_API новых шагов) не запускался
+  ни мной, ни кодером. Проверит CI, merge — только на зелёном.
+- iOS/Android вживую: системная обрезка 1:1, `fetch(file://).blob()` → `PUT` с `octet-stream` через fetch RN (XHR RN
+  с Blob, заголовок задан явно), старый dev-клиент без `ExponentImagePicker` («Обновите приложение» покрыто только
+  jest), HEIC → JPEG при `allowsEditing`.
+- Совпадение `naturalWidth/Height` браузера с ориентацией `autoOrient` сервера для EXIF 5–8 — по спецификации
+  `image-orientation: from-image` по умолчанию; живого замера нет.
+
+### Без находок по измерениям
+- **Placement / reuse:** соответствует plan-b §1–2. `public-ssr.ts` расширен, не продублирован. `StatBlock`,
+  `SegmentedControl`, `AsyncContent`, `TabFailure`/`RowsSkeleton`, `placeView`, `resultPill`, `DetailHeader`,
+  `DocumentTitle`, `OfflineBanner` переиспользованы. DTO не копируются, свой `fetch` в экранах только для `file://`
+  на native (как у треков).
+- **Все платформы:** развилки только файлами (`pick-avatar(.web)`, `avatar-editor(.web)`, `avatar-crop.web`).
+  `Platform.OS`, `Alert`, `onEndReached` нет. `expo-image-picker` загружается лениво после
+  `requireOptionalNativeModule`, в web-бандл не попадает.
+- **SSR / публичный экран:** `loader` — посев и `null`; `generateMetadata` всегда нейтральная, `noindex`, без
+  `og:url` и ПДн (unit + e2e); `DocumentTitle` нейтральный; `publicPath` проверяет `RiderPublicId` до запроса;
+  невалидный id — без запроса; «Гонки» запрашиваются только после найденного профиля.
+- **Приватность:** публичный экран показывает только поля `PublicRiderProfile` (без км, райдов, `userId`). Ссылка
+  «Как вас видят другие» — только при `publicId !== null`.
+- **Ключи и инвалидации:** как в `pokatim-app.md`. `useOwnAvatarId` использует тот же кэш `['profile']` и
+  `staleTime: Infinity` (тест «без второго запроса»). Мутации фото — `setQueryData` + `['riders']`, `PATCH` — плюс
+  `['races','results']`. Свои запросы — через `withAccessToken`, публичные — без него.
+- **Состояния §4.12:** шапка, статистика, сезон и история — скелетоны, ошибки с повтором, пусто с действием, баннер
+  устаревших данных, «Показать ещё» с блокировкой во время запроса и баннером ошибки догрузки. 400 курсора публичной
+  истории → `resetQueries` (тест).
+- **Дизайн-система:** hex и px-литералов в стилях нет. Новый токен `layout.avatarProfile` — с тестом в
+  `design-tokens`. Продуктовый `RiderAvatar` обоснован, follow-up в app-foundation записан.
+- **Формы:** клуб — схема `RiderClub` из contracts, ошибки по коду с `RIDER_CLUB_MIN`.
+- **i18n:** все строки в `packages/i18n`, формальное «вы».
+- **Тесты:** честные, по AC 12–16 (навигация TopBar → `/profile`, вкладки и «Показать ещё», ссылки строк,
+  413/415/422/429, удаление с подтверждением, web-кроп клавишами и кнопками, мета `/riders`). e2e-шаги
+  `/riders/[id]` и `/profile` добавлены, `NOT_FOUND_PATHS` перенесён на `/no-such-page`.
+- **Documentation Sync:** `pokatim-app.md` (раздел «Профиль райдера», `publicPath`), `docs/product/profile.md`,
+  `docs/product/home.md`, отчёт PR B в task.md.
+- **Контракты / сервер / миграции / очереди / аудит:** PR B их не меняет. Клиент шлёт только файл и доли обрезки,
+  места и суммы приходят с сервера.
+
+Итог: CRITICAL/HIGH нет → **APPROVE**. MEDIUM (немой отказ декодирования в web-кропе) желательно закрыть до merge.
+
+## PR B, проход 2
+
+# Findings — rider-profile (PR B) — pass 2 — reviewer: claude
+base: origin/develop (aa857ba, входит в HEAD)   commits: a32ba38..44e7e83 (фиксы 3b8dcad, f77ea08; мержи 0ca8ee3, 5e0ed2d, 23cbb9e, 44e7e83)
+verdict: APPROVE
+
+Проверено самостоятельно на HEAD 44e7e83: `pnpm install --frozen-lockfile` — «Already up to date» (lockfile согласован с
+`apps/app/package.json`); `pnpm format:check`, `pnpm arch:check` (depcruise, 0 нарушений), `eslint` по затронутым
+путям, `typecheck` `@pokatim/app` и `@pokatim/i18n` — зелёные; jest `apps/app` целиком — 201 набор, 1834 теста,
+зелёные; vitest `@pokatim/i18n` (14) и `@pokatim/design-tokens` (578) — зелёные. Маркеров конфликта в дереве нет.
+`HEAD..origin/develop` пуст. Плагин `expo-image-picker@58.0.10` прочитан из опубликованного пакета (`npm pack`).
+
+### Статус находок прохода 1
+| Находка | Статус | Где |
+|---|---|---|
+| MEDIUM web-кроп: недекодируемый файл — тупик без сообщения | **fixed** | `avatar-crop.web.tsx:189` `onError={onUnreadable}`; `avatar-editor.web.tsx:39–42` — панель закрыта, текст `AVATAR_INVALID`; `picked-avatar.ts` — причина `AVATAR_INVALID`. Тесты: `avatar-crop.web.test.tsx` («не декодируется — onUnreadable, сохранить нельзя»), `avatar-editor.web.test.tsx` (текст, без запроса). |
+| LOW публичный профиль после 404 показывает данные из кэша | **fixed** | `rider-screen.tsx:81, 89` — `NOT_FOUND` в `rider.error` → «Профиль недоступен» при любом `data`, «Гонки» выключены, `OfflineBanner` без данных. Тест в `rider-profile.test.tsx` (данные → pull-to-refresh 404 → имя и клуб исчезли). |
+| LOW 429 «обработка занята» для удаления и почти истёкшего лимита | **fixed** | `avatar-errors.ts:16, 36–38` — порог 5 с (константа сервера `limited(5)`), удаление → `actionErrorMessage`; `avatar-section.tsx:48` передаёт `'delete'`. Тесты: 40 с → текст лимита, удаление → общий текст. |
+| LOW «Нет соединения» + «Сервис временно недоступен» в истории | **fixed** | `profile-history.tsx:51, 74` — `profile.history.failed`; `rider-screen.tsx:50` — `riders.racesFailed`. Тест в `own-profile.test.tsx` (офлайн → «Нет соединения» + «Не удалось загрузить историю»). |
+| LOW `aria-describedby` повторяет `aria-label` | **fixed** | `avatar-crop.web.tsx:158, 194`; ключи `profile.avatar.crop.area` / `.keys` в `ru.ts`; тест сверяет текст описания. |
+| LOW a11y «место —» | **fixed** | `profile-format.ts:35, 90–94`; тест в `profile-format.test.ts`. |
+| LOW (вне зоны) e2e 05b/05c без API | **open, accepted** | `apps/app/src/app/rides/route-pick.tsx:16` по-прежнему `<ShellSkeleton />` без `failure`; к PR B не относится, в CI ветка без API не исполняется. Нужна отдельная задача зоны райдов. |
+
+### Мержи (route-rides, story cards, develop) — без находок
+- `_layout.tsx`: `profile` — в группе экранов под гардом (рядом с `settings/*`), `riders/[id]` — в публичной группе
+  рядом с `rides/[id]`. Экраны develop (`rides/route-pick`, `rides/report/[id]` и др.) на месте.
+- `app-routes.ts`: `profile` и `riders/[id]` добавлены, маршруты develop не потеряны; полный jest зелёный.
+- `ru.ts`: новые ключи `profile.*` / `riders.*` без дублей (tsc на объекте-литерале упал бы); ключи develop целы.
+- `e2e/web.spec.ts` / `project.ts`: `UNKNOWN_RIDER_ID` в импортах и в `expectedResourceErrors`; `NOT_FOUND_PATHS`
+  без `/profile`; шаг «с API» использует существующие `registerHomeRider`/`HOME_FIXTURE_PASSWORD`.
+- `pnpm-lock.yaml`: добавлены только `expo-image-picker@58.0.10` и транзитивный `expo-image-loader@58.0.3`.
+- `app.json`: плагин `expo-image-picker` добавлен после `expo-notifications`, остальные плагины не тронуты.
+
+### [LOW] iOS: `cameraPermission: false` при коде камеры в бинарнике — риск ITMS-90683 при выгрузке в App Store
+- **file:** apps/app/app.json
+- **location:** стр. 57–64 (плагин `expo-image-picker`)
+- **problem:** `false` убирает `NSCameraUsageDescription` и `NSMicrophoneUsageDescription` из Info.plist — это то, что
+  нужно по продукту (камера и микрофон не используются). Но нативный модуль всё равно содержит вызовы камеры
+  (`ios/ImagePickerPermissionRequesters.swift:13` — `AVCaptureDevice.requestAccess(for: .video)`, `launchCameraAsync`).
+  Статический анализ App Store Connect для таких бинарников может прислать ITMS-90683 «Missing purpose string»
+  (исторически — предупреждение, иногда отказ выгрузки).
+- **why_it_matters:** сборка для стора может не пройти выгрузку или потребовать срочной правки конфигурации. На
+  dev-клиент и Android не влияет.
+- **evidence:** код плагина `plugin/build/withImagePicker.js` (`createPermissionsPlugin` с `false` → ключа нет);
+  исходники iOS пакета 58.0.10.
+- **recommended_fix:** код не менять. Добавить шаг в `pr.md`/чек-лист первой выгрузки в TestFlight: проверить письмо
+  App Store Connect. Если придёт ITMS-90683 — задать нейтральную строку камеры (код камеру не вызывает, системный
+  запрос не появится) и зафиксировать это в ADR-0019.
+
+### [LOW] Android: в манифесте остаются READ/WRITE_EXTERNAL_STORAGE (API ≤ 32) из пакета
+- **file:** apps/app/app.json
+- **location:** стр. 57–64; манифест пакета `expo-image-picker/android/src/main/AndroidManifest.xml`
+- **problem:** камера и микрофон закрыты правильно: `cameraPermission: false` → `withBlockedPermissions(CAMERA)`
+  (`tools:node="remove"`), `microphonePermission: false` → `RECORD_AUDIO` не добавляется и заблокирован. (README
+  пакета утверждает, что `false` камеру на Android не убирает, но код плагина 58.0.10 её блокирует.) Однако манифест
+  пакета приносит `READ_EXTERNAL_STORAGE`/`WRITE_EXTERNAL_STORAGE` с `maxSdkVersion="32"`. Выбор через Photo Picker /
+  `ACTION_OPEN_DOCUMENT` (`pick-avatar.ts` не запрашивает разрешений) их не требует.
+- **why_it_matters:** лишние разрешения на Android 12 и ниже (карточка магазина, Data safety). Приватность пользователя
+  не нарушена: системный запрос не показывается, пока код его не вызывает.
+- **evidence:** манифест пакета 58.0.10; в `app.json` нет `android.blockedPermissions`.
+- **recommended_fix:** по желанию — `"android": { "blockedPermissions": ["android.permission.READ_EXTERNAL_STORAGE",
+  "android.permission.WRITE_EXTERNAL_STORAGE"] }`, после проверки на устройстве с Android ≤ 12, что галерея
+  открывается. Если это делать не стоит (другим пакетам могут понадобиться разрешения), записать в ADR-0019 как
+  принятое.
+
+### NOT VERIFIED
+- `E2E_API=1` и playwright в этом проходе не запускались — проверит CI (merge только на зелёном).
+- Сгенерированные Info.plist и AndroidManifest (`expo prebuild`) не собирались. Вывод о разрешениях — по коду плагина
+  и манифесту пакета.
+- iOS/Android вживую — как в проходе 1.
+- Ложный `onError` при повторном эффекте в StrictMode (ревок первого blob-URL): по спецификации HTML смена `src`
+  отменяет прежний запрос без события `error`. Живого замера в dev-режиме не было.
+
+### Без находок по измерениям (дельта прохода 2)
+- **Correctness фиксов:** `found`/`notFound` в `rider-screen.tsx` согласованы. После 404 успешный повтор очищает
+  `error` и профиль возвращается. `onUnreadable` срабатывает только до `ready`: «Сохранить» недоступна, запроса нет.
+- **Тесты:** новые сценарии честные, без тавтологий (проверяют текст на экране и отсутствие запроса/данных).
+- **i18n / a11y / дизайн-система:** новые строки — в `packages/i18n`, формальное «вы». Литералов цвета и размера нет.
+- **Контракты / сервер / миграции / очереди / аудит:** фиксы и мержи их не меняют.
+- **Documentation Sync:** `pokatim-app.md` и task.md обновлены в 3b8dcad. Две LOW выше — в ADR-0019/`pr.md`.
+
+Итог: MEDIUM и 5 LOW прохода 1 закрыты, LOW вне зоны принят. Новые находки — 2 LOW (нативные разрешения),
+CRITICAL/HIGH/MEDIUM нет → **APPROVE**.
