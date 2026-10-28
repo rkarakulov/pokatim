@@ -27,7 +27,8 @@ ADR-0010), `calendar` (календарь стартов), `tracks` (загру�
 Proposed; `races → routes` только через порт `RouteCatalog`) и `rides` (кофе-райды, ADR-0013 Proposed: зависит
 только от `identity`). CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js grant-admin`).
 Proposed; `races → routes` только через порт `RouteCatalog`); `results` (заявки и попытки гонок, race-results-03:
-порты `RaceRegistry`, `RouteGeometry`, `ActivitySource`). CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js
+порты `RaceRegistry`, `RouteGeometry`, `ActivitySource`); `route-rides` (заезд по маршруту вне гонки, route-rides-01:
+порты `RouteRideRoutes`, `ActivitySource`; `account → route-rides` — порт стирания). CLI сервера — `apps/api/src/cli` (`dist/cli/panel.js
 grant-admin`).
 
 Межмодульные вызовы — через `index.ts` модуля; события — outbox → BullMQ.
@@ -312,6 +313,18 @@ worker: очередь identity-email ─► письмо «Пароль изм�
   `results-maintenance` (каждые 10 мин) перепоставляет зависшие.
 - **Чтение:** `GET /v1/races/:raceId/entry` (своё, `no-store`), `GET /v1/races/:raceId/results` (публично, кэш 60 с,
   места при чтении в snapshot-сессии), панель — `GET /v1/admin/races/:raceId/{results,attempts}` (`races.read`).
+
+### Заезд по маршруту (модуль `route-rides`, route-rides-01)
+
+- **Проверить:** `POST /v1/routes/:routeId/rides { activityId | uploadId }` (`AuthGuard`, лимит 30/ч) → видимость
+  маршрута (`RouteRideRoutes.rideable`, каталог или свой готовый, без кэша) → основная активность группы
+  (`ActivitySource`) → существующий заезд группы (тот же; `failed`/зависший — новая ревизия) или транзакция
+  { удаление сирот → `route_rides` `queued` → outbox `route-rides.check-requested` } → `201`/`200`.
+- **Сверка:** очередь `route-ride-check` (параллелизм 1) → `RouteRideRoutes.matchGeometry` (видимость снова) →
+  исходник и линия показа (`ActivitySource`) → `analyzeAttempt` в `runParseThread` (±50 м, окно — время заезда ± 1 мин)
+  → итог своей ревизией одной записью.
+- **Чтение:** список, кандидаты, заезд, `/track` — только свои, `no-store`; заезды фильтруются по живым активностям
+  (`ActivitySource.liveActivities`), сравнение и «зависшие» — при чтении (`route-rides.policy.ts`).
 
 ### Web (SSR, PWA)
 

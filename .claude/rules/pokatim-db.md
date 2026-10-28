@@ -351,6 +351,20 @@ paths:
   удалённого → центр города (одна pipeline-операция, `version` не меняется, повтор — no-op); висячие `routeId`
   (маршрут удалён раньше) — `precisePage` пачками по `_id` + порт `existing`.
 
+## Заезды по маршруту (route-rides-01)
+
+- `route_rides` — единственный писатель `RouteRidesRepository`; миграция `0032_route_rides` (expand-only): уникальный
+  `route_rides_user_route_activity_unique { userId, routeId, activityId }` (дедуп параллельного POST группы; префикс —
+  список, квота и стирание). `activityId` — основная группы на момент POST, `activity` — снимок сводки,
+  `corridorWidthM` — ширина на момент создания (RC-15).
+- Итог пишет только своя ревизия: `claim` (`checkRevision`, `queued|checking` в фильтре), `record` (`checking` в
+  фильтре), без транзакции; `requeue` — `$inc checkRevision` только из `failed` или зависшего статуса прежней ревизии
+  (условие в фильтре) + outbox в транзакции. `trackMap` — позиции на линии `activity_tracks`, без координат;
+  датчиков, флагов и диагностики нет.
+- Сироты (RC-1, RC-8): удалённая активность и недоступный маршрут — заезды не видны (фильтр на чтении по
+  `ActivitySource.liveActivities` и `RouteRideRoutes`); заезды с удалёнными активностями удаляются в транзакции
+  следующего нового заезда по маршруту. Не append-only.
+
 ## Удаление аккаунта (ADR-0015, `docs/product/account.md`)
 
 - `users`: `deletedAt` — в транзакции удаления под `lockUserCredentials` (с отзывом всех сессий `account_deleted`,
@@ -359,8 +373,8 @@ paths:
   'deleted-email:'+email)>`, `birthDate: null`, `passwordHash: null`, `erasedAt`; повторный проход — `erasureSweptAt`.
   Поля необязательные (`?? null`); `passwordHash: null` — «учётных данных нет» (вход, порт панели — как неизвестный).
   `users_email_unique` не меняется: регистрация ищет адрес и маркер (`findUserForRegistration`, D-07).
-- Порядок шагов worker (`account-deletion`): профиль → райды → «Мои маршруты» → устройства → заезды → уведомления →
-  identity. Push-токены (`push_tokens`) снимаются раньше — в транзакции удаления (`PushTokens.revokeAllOf`). Каждый
+- Порядок шагов worker (`account-deletion`): профиль → райды → «Мои маршруты» → устройства → заезды → заезды по
+  маршрутам (`RouteRideErasure`, `deleteMany({ userId })`) → уведомления → identity. Push-токены (`push_tokens`) снимаются раньше — в транзакции удаления (`PushTokens.revokeAllOf`). Каждый
   шаг — порт модуля-владельца, идемпотентен; живой аккаунт (`deletedAt: null`) не трогается. Повторный проход через
   15 мин и регламент `account.erasure-resume` (частичный `users_erasure_pending_idx { deletedAt: 1 }`, partial
   `deletedAt: { $type: 'date' }, erasureSweptAt: { $eq: null }`).
