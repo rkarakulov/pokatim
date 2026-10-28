@@ -142,15 +142,5 @@ export function raceShareDescription(race: RaceCard): string {
   ]);
 }
 
-const pad2 = (value: number) => String(value).padStart(2, '0');
-
-/**
- * Длительность «1:02:05» — всегда h:mm:ss, часы без ведущего нуля и без ограничения («25:01:01»). Время результата и
- * попыток (race-results-04, F4); цифры — стилями с `tabularNums` (`displayNumeral36`, `time`).
- */
-export function formatElapsed(sec: number): string {
-  const total = Math.max(0, Math.trunc(sec));
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  return `${hours}:${pad2(minutes)}:${pad2(total % 60)}`;
-}
+/** Длительность «1:02:05» (h:mm:ss) — общий код `@pokatim/i18n`; цифры — стилями с `tabularNums`. */
+export { formatElapsed } from '@pokatim/i18n';
