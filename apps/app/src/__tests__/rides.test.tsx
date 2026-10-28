@@ -1,10 +1,12 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
-import type { RideCard, RidePage } from '@pokatim/contracts';
-import { onlineManager } from '@tanstack/react-query';
+import type { RideCard, RideMap, RidePage } from '@pokatim/contracts';
+import { onlineManager, type QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
-import { Text, type FlatList } from 'react-native';
+import { Linking, Text, type FlatList } from 'react-native';
+
+import type * as Position from '@/features/location/current-position';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -12,9 +14,15 @@ import { api } from '@/lib/api';
 
 import { tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
-import { createQueryWrapper } from './query-wrapper';
+import { createQueryWrapper, createTestQueryClient } from './query-wrapper';
 
 jest.mock('@/lib/api');
+// 05c «Рядом»: одно чтение позиции — мок модуля (Geolocation и expo-location — тесты current-position)
+jest.mock('@/features/location/current-position', () => ({ readCurrentPosition: jest.fn() }));
+const readPosition = jest.mocked(
+  jest.requireMock<typeof Position>('@/features/location/current-position').readCurrentPosition,
+);
+const listRideMap = jest.mocked(api.listRideMap);
 
 const listRides = jest.mocked(api.listRides);
 const listRideCities = jest.mocked(api.listRideCities);
@@ -377,5 +385,180 @@ describe('вкладка «Райды» (S3)', () => {
     await screen.findByRole('link', { name: heroLabel });
     expect(within(rowOf('Новое')).queryByRole('button')).toBeNull();
     expect(within(rowOf('Новое')).getByText('10:00')).toBeOnTheScreen();
+  });
+});
+
+// позиция до округления: в запрос и память уходит только 53.90,27.56
+const HERE = [27.56123, 53.90491] as const;
+const LIGHT = 'https://tiles.example/styles/positron';
+
+describe('«Рядом», «Список / Карта» (05c)', () => {
+  const near = ride({ title: 'Близкий', start: [27.56, 54.008] });
+  let client: QueryClient;
+  const openWithClient = () => {
+    client = createTestQueryClient();
+    return renderRouter(routes, { initialUrl: '/rides', wrapper: createQueryWrapper(client) });
+  };
+  const nearChip = () => screen.getByRole('button', { name: 'Рядом' });
+
+  beforeEach(() => {
+    readPosition.mockReset();
+    process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT = LIGHT;
+    process.env.EXPO_PUBLIC_MAP_STYLE_DARK = LIGHT;
+  });
+  afterEach(() => {
+    delete process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT;
+    delete process.env.EXPO_PUBLIC_MAP_STYLE_DARK;
+  });
+
+  it('«Рядом» — одно чтение, запрос с округлённым near и радиусом 25; «в N км» у строки; координат нет в ключах и console (AC9)', async () => {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const warn = jest.spyOn(console, 'warn');
+    const error = jest.spyOn(console, 'error');
+    readPosition.mockResolvedValue({ status: 'ok', lngLat: HERE });
+    await openWithClient();
+    await screen.findByRole('link', { name: heroLabel });
+    listRides.mockResolvedValue(page([hero, near]));
+
+    await fireEvent.press(nearChip());
+    expect(readPosition).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(listRides).toHaveBeenLastCalledWith(liveSession.accessToken, {
+        city: [],
+        limit: 20,
+        near: '53.90,27.56',
+        radiusKm: 25,
+      }),
+    );
+    expect(nearChip()).toBeSelected();
+    expect(await screen.findByText('в 12 км от вас')).toBeOnTheScreen();
+    expect(screen.getByRole('link', { name: /^Близкий\. .*в 12 км от вас/ })).toBeOnTheScreen();
+
+    const keys = JSON.stringify(
+      client
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.queryKey),
+    );
+    expect(keys).not.toMatch(/27\.56|53\.9/);
+    for (const spy of [log, warn, error]) {
+      expect(JSON.stringify(spy.mock.calls)).not.toMatch(/27\.56|53\.9/);
+    }
+    log.mockRestore();
+    warn.mockRestore();
+    error.mockRestore();
+  });
+
+  it('повторное нажатие выключает «Рядом»: выдача без near (из кеша), позиция стёрта', async () => {
+    readPosition.mockResolvedValue({ status: 'ok', lngLat: HERE });
+    await openRides();
+    await screen.findByRole('link', { name: heroLabel });
+    listRides.mockResolvedValue(page([near]));
+    await fireEvent.press(nearChip());
+    expect(await screen.findByText('в 12 км от вас')).toBeOnTheScreen();
+    await waitFor(() =>
+      expect(listRides).toHaveBeenLastCalledWith(
+        liveSession.accessToken,
+        expect.objectContaining({ near: '53.90,27.56' }),
+      ),
+    );
+    await fireEvent.press(nearChip());
+    expect(nearChip()).not.toBeSelected();
+    expect(await screen.findByRole('link', { name: heroLabel })).toBeOnTheScreen();
+    expect(screen.queryByText(/км от вас/)).toBeNull();
+  });
+
+  it('отказ навсегда (native) — пустое состояние с «Открыть настройки» и «Выбрать город»', async () => {
+    const settings = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined);
+    readPosition.mockResolvedValue({ status: 'denied', canOpenSettings: true });
+    await openRides();
+    await screen.findByRole('link', { name: heroLabel });
+    await fireEvent.press(nearChip());
+
+    expect(
+      await screen.findByText('Включите геопозицию, чтобы видеть райды рядом'),
+    ).toBeOnTheScreen();
+    expect(screen.queryByRole('link', { name: heroLabel })).toBeNull();
+    expect(screen.getByText('Город')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Открыть настройки' }));
+    expect(settings).toHaveBeenCalled();
+    expect(screen.getByText('Выбрать город')).toBeOnTheScreen();
+    settings.mockRestore();
+  });
+
+  it('ошибка чтения / web без геолокации — «Разрешить» (повтор) и «Выбрать город» (выключить «Рядом»)', async () => {
+    readPosition.mockResolvedValue({ status: 'unavailable' });
+    await openRides();
+    await screen.findByRole('link', { name: heroLabel });
+    await fireEvent.press(nearChip());
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Разрешить' }));
+    expect(readPosition).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'Открыть настройки' })).toBeNull();
+
+    await fireEvent.press(await screen.findByText('Выбрать город'));
+    expect(nearChip()).not.toBeSelected();
+    expect(await screen.findByRole('link', { name: heroLabel })).toBeOnTheScreen();
+    expect(screen.queryByText('Включите геопозицию, чтобы видеть райды рядом')).toBeNull();
+  });
+
+  it('«Карта»: точки старта, «Ещё N райдов без точки», нажатие на точку — карточка → райд; «Список» — обратно', async () => {
+    const first = '0190a6f4-0000-7000-8000-00000000a001';
+    const second = '0190a6f4-0000-7000-8000-00000000a002';
+    const data: RideMap = {
+      items: [
+        {
+          id: first,
+          title: 'Море',
+          startsAt: '2026-10-03T06:00:00Z',
+          start: [27.5615, 53.9023],
+          goingCount: 3,
+          limit: 10,
+          full: false,
+        },
+        {
+          id: second,
+          title: 'Море-2',
+          startsAt: '2026-10-04T06:00:00Z',
+          start: [27.5615, 53.9023],
+          goingCount: 1,
+          limit: null,
+          full: false,
+        },
+      ],
+      withoutStart: 3,
+    };
+    listRideMap.mockResolvedValue(data);
+    const router = await openRides();
+    await screen.findByRole('link', { name: heroLabel });
+    expect(listRideMap).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole('tab', { name: 'Карта' }));
+    expect(listRideMap).toHaveBeenCalledWith(liveSession.accessToken, { city: [] });
+    expect(await screen.findByText('Ещё 3 райда без точки старта — в списке')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Карта точек старта: на карте 2 райда')).toBeOnTheScreen();
+    const area = await screen.findByTestId('map-area');
+    await fireEvent(area, 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 375, height: 500 } },
+    });
+    const source = await screen.findByTestId('maplibre-GeoJSONSource');
+    expect(source.props.data.features).toHaveLength(1);
+    expect(source.props.data.features[0].properties.count).toBe(2);
+    await act(async () => {
+      source.props.onPress({ nativeEvent: { features: [source.props.data.features[0]] } });
+    });
+    expect(screen.getByText('В этой точке 2 райда')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('link', { name: /^Море-2 · / }));
+    expect(router.getPathname()).toBe(`/rides/${second}`);
+  });
+
+  it('«Карта» без точек — пусто и путь в «Список»', async () => {
+    listRideMap.mockResolvedValue({ items: [], withoutStart: 0 });
+    await openRides();
+    await screen.findByRole('link', { name: heroLabel });
+    await fireEvent.press(screen.getByRole('tab', { name: 'Карта' }));
+    expect(await screen.findByText('Нет райдов с точкой старта')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Список' }));
+    expect(await screen.findByRole('link', { name: heroLabel })).toBeOnTheScreen();
   });
 });

@@ -360,6 +360,26 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   действие после возврата не выполняется автоматически.
 - Форма — `react-hook-form` + `zodResolver(CreateRideForm)` из contracts; до релиза `TimeField` и многострочного поля
   базы — фолбэк (`TextField` с маской `ЧЧ:ММ`, однострочное описание, единицы в подписи).
+- Маршрут райда и «Рядом» (05c, ADR-0014 поправка 05c):
+  - Форма — поле «Маршрут» (строка-кнопка) → `rides/route-pick?form=new|<rideId>` (`ride-route-pick.tsx`, внутри
+    `Stack.Protected`): «Каталог / Мои» — `SegmentedControl`, «Без маршрута» сверху, в «Моих» только `ready`, не в
+    каталоге — `Pill` «Виден только вам». Выбор — `route-choice-store.ts` (память, `take(form)` один раз), форма
+    забирает его в `useFocusEffect`: `routeId` и дистанция `Math.round(distanceM / 1000)` с подсказкой «Из маршрута.
+    Можно изменить.»; `RIDE_ROUTE_UNAVAILABLE` — под полем «Маршрут».
+  - Карточка — `RideRouteBlock` под шапкой (только `ride.route` сервера): `public` — `RouteLineMap` каталога (3:2 в
+    прокрутке) с маркером и `ElevationProfile` (общий `createScrubStore` экрана, `useScrubScrollEnabled` у
+    `ScrollView`); `private` (организатор) — карта «Моего маршрута» без профиля (RC-9) и баннер «опубликуйте»; «Набор»
+    — в `StatBlock`; ссылка «Маршрут райда» → `/routes/<id>` или `/routes/mine/<id>`.
+  - Лента — «Список / Карта» (`SegmentedControl`) и чип «Рядом» — состояние вкладки `(tabs)/rides.tsx` (`useNear`):
+    одно чтение позиции через `useLocate`, округление до 0,01° (`near.ts`), координаты — только в памяти экрана и в
+    замыкании `queryFn`; в ключах `['rides','list',{ city, limit, near: seq|null },'pages']` и
+    `['rides','map',{ city, near: seq|null }]` — счётчик нажатия, не координаты (не в URL, `console.*`, подписях a11y).
+    «в N км от вас» — `distanceLabel` (`haversineMeters`) только при `start`. Отказ / ошибка / web без геолокации —
+    `NearEmpty` («Открыть настройки» при `canOpenSettings`, иначе «Разрешить»; «Выбрать город» выключает «Рядом»).
+  - Карта ленты — `RideMapView` → `RidePointsMap` (`ride-points-map(.web).tsx`, слои и группировка одинакового
+    старта — `ride-points-style.ts`, только роли `theme.map.*`); native — `GeoJSONSource onPress`
+    (`nativeEvent.features`), web — `on('click', layer)`; выбор точки — `RidePointCard` под картой; «Ещё N райдов без
+    точки старта — в списке» → режим «Список». Запрос карты — только в режиме «Карта».
 - Жалоба (05b) — экран `rides/report/[id]` (`features/rides/ride-report.tsx`) внутри `Stack.Protected`: причина —
   `Chip` из `RIDE_REPORT_REASONS`, комментарий — однострочный `TextField` (фолбэк до многострочного поля базы), успех —
   баннер на месте формы. Кнопка «Пожаловаться» и строка «Вы пожаловались…» — только по `viewer.canReport` /

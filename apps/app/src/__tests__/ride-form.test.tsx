@@ -15,12 +15,14 @@ import CancelRideRoute from '../app/rides/cancel/[id]';
 import EditRideRoute from '../app/rides/edit/[id]';
 import RideRoute from '../app/rides/[id]';
 import NewRideRoute from '../app/rides/new';
+import RideRoutePickRoute from '../app/rides/route-pick';
 import { liveSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
 
 jest.mock('@/lib/api');
 
 const createRide = jest.mocked(api.createRide);
+const listCatalogRoutes = jest.mocked(api.listCatalogRoutes);
 const updateRide = jest.mocked(api.updateRide);
 const cancelRide = jest.mocked(api.cancelRide);
 const getRideForViewer = jest.mocked(api.getRideForViewer);
@@ -471,5 +473,121 @@ describe('«Отменить райд» (AC5)', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'другое' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Отменить райд' }));
     expect(await screen.findByText('Райд уже начался или отменён.')).toBeOnTheScreen();
+  });
+});
+
+/** Маршрут каталога в пикере: 62,4 км — в поле «Дистанция» 62. */
+const ROUTE_ID = '0190a6f4-0000-7000-8000-000000000201';
+const catalogRoute = {
+  id: ROUTE_ID,
+  title: 'Минское море',
+  distanceM: 62_400,
+  elevationGainM: 310,
+  isLoop: false,
+  city: 'minsk' as const,
+  surfaces: ['asphalt' as const],
+  publishedAt: '2026-09-01T00:00:00Z',
+  author: { kind: 'team' as const },
+};
+const stackRoutes = {
+  _layout: () => <Stack screenOptions={{ headerShown: false }} />,
+  ...routes,
+  'rides/route-pick': RideRoutePickRoute,
+};
+
+describe('поле «Маршрут» формы (05c)', () => {
+  beforeEach(() => {
+    listCatalogRoutes.mockResolvedValue({ items: [catalogRoute], nextCursor: null });
+    jest.mocked(api.listMyRoutes).mockResolvedValue({ items: [], nextCursor: null });
+  });
+
+  it('выбор маршрута в пикере — название в поле, дистанция из маршрута с подсказкой; публикация — routeId', async () => {
+    const router = await renderRouter(stackRoutes, {
+      initialUrl: '/rides/new',
+      wrapper: createQueryWrapper(),
+    });
+    await fireEvent.press(screen.getByRole('button', { name: 'Маршрут: Без маршрута' }));
+    expect(router.getPathname()).toBe('/rides/route-pick');
+    await fireEvent.press(await screen.findByRole('link', { name: /^Минское море\. / }));
+
+    expect(router.getPathname()).toBe('/rides/new');
+    expect(await screen.findByRole('button', { name: 'Маршрут: Минское море' })).toBeOnTheScreen();
+    expect(screen.getByDisplayValue('62')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Из маршрута. Можно изменить.', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+
+    await type('Название', 'Кофе-райд на море');
+    await pickDate(new Date(2026, 9, 4));
+    await type('Время старта', '1000');
+    await fireEvent.press(screen.getByRole('button', { name: 'Минск' }));
+    await type('Место старта', 'Парк Победы');
+    await type('Темп от, км/ч', '22');
+    await type('Темп до, км/ч', '24');
+    await fireEvent.press(publish());
+    await waitFor(() =>
+      expect(createRide).toHaveBeenCalledWith(
+        liveSession.accessToken,
+        expect.objectContaining({ routeId: ROUTE_ID, distanceKm: 62 }),
+      ),
+    );
+  });
+
+  it('«Без маршрута» в пикере снимает маршрут и подсказку', async () => {
+    const router = await renderRouter(stackRoutes, {
+      initialUrl: '/rides/new',
+      wrapper: createQueryWrapper(),
+    });
+    await fireEvent.press(screen.getByRole('button', { name: 'Маршрут: Без маршрута' }));
+    await fireEvent.press(await screen.findByRole('link', { name: /^Минское море\. / }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Маршрут: Минское море' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Без маршрута' }));
+    expect(router.getPathname()).toBe('/rides/new');
+    expect(await screen.findByRole('button', { name: 'Маршрут: Без маршрута' })).toBeOnTheScreen();
+    expect(
+      screen.queryByText('Из маршрута. Можно изменить.', { includeHiddenElements: true }),
+    ).toBeNull();
+  });
+
+  it('RIDE_ROUTE_UNAVAILABLE сервера — под полем «Маршрут»', async () => {
+    createRide.mockRejectedValue(
+      new ApiHttpError(400, {
+        code: 'VALIDATION_FAILED',
+        message: 'x',
+        details: { fields: [{ path: 'routeId', code: 'RIDE_ROUTE_UNAVAILABLE' }] },
+      }),
+    );
+    await open('/rides/new');
+    await fillValid();
+    await fireEvent.press(publish());
+    expect(await screen.findByText('Маршрут недоступен — выберите другой.')).toBeOnTheScreen();
+  });
+
+  it('правка со своим непубличным маршрутом — название и «Виден только вам»; без смены маршрута routeId не уходит', async () => {
+    getRideForViewer.mockResolvedValue({
+      ...organizerView,
+      ride: {
+        ...ride,
+        route: {
+          id: ROUTE_ID,
+          title: 'Мой круг',
+          distanceM: 42_000,
+          elevationGainM: null,
+          access: 'private',
+        },
+        start: [27.56, 53.9],
+      },
+    });
+    await open(`/rides/edit/${ID}`);
+    expect(await screen.findByRole('button', { name: 'Маршрут: Мой круг' })).toBeOnTheScreen();
+    expect(screen.getByText('Виден только вам')).toBeOnTheScreen();
+    await type('Максимум участников (необязательно)', '20');
+    await fireEvent.press(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(updateRide).toHaveBeenCalledWith(liveSession.accessToken, ID, {
+        limit: 20,
+        version: 2,
+      }),
+    );
   });
 });

@@ -15,14 +15,17 @@ export interface RideListRowProps {
   onPress: () => void;
   /** Действие справа — `RideGoingAction` строки. */
   action?: ReactNode;
+  /** «в 12 км от вас» (05c, «Рядом» и точный старт); нет — без строки */
+  distance?: string | null;
 }
 
 /**
- * Строка райда в ленте: «10:00 · Минск», название, мета «42 км · темп 22–24 км/ч · старт: …», стопка «идут 5 из 12»
+ * Строка райда в ленте: «10:00 · Минск», название, мета «42 км · темп 22–24 км/ч · старт: …», «в 12 км от вас» (05c),
+ * стопка «идут 5 из 12»
  * (пустые квадраты по числу — без имён и фото, Q4); действие участия — справа, вне ссылки. Hairline сверху,
  * `minHeight: size.rowMin`. Для скринридера — ссылка «название. время. мета. стопка».
  */
-export function RideListRow({ ride, now, onPress, action }: RideListRowProps) {
+export function RideListRow({ ride, now, onPress, action, distance = null }: RideListRowProps) {
   const theme = useTheme();
   const time = rideRowTime(ride, now);
   const details = rideRowMeta(ride);
@@ -32,7 +35,9 @@ export function RideListRow({ ride, now, onPress, action }: RideListRowProps) {
     <View testID="ride-row" style={[styles.row, { borderTopColor: theme.border.subtle }]}>
       <Pressable
         accessibilityRole="link"
-        accessibilityLabel={[ride.title, time, details, caption].join('. ')}
+        accessibilityLabel={[ride.title, time, details, distance, caption]
+          .filter(Boolean)
+          .join('. ')}
         onPress={onPress}
         style={styles.main}
       >
@@ -43,6 +48,11 @@ export function RideListRow({ ride, now, onPress, action }: RideListRowProps) {
         <Text style={[textStyle('meta'), styles.meta, { color: theme.text.secondary }]}>
           {details}
         </Text>
+        {distance ? (
+          <Text style={[textStyle('meta'), styles.meta, { color: theme.text.secondary }]}>
+            {distance}
+          </Text>
+        ) : null}
         <View style={styles.stack}>
           <GoingStack count={ride.goingCount} caption={caption} />
         </View>

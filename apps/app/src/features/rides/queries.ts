@@ -24,6 +24,7 @@ import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
 import type { RideFilters } from './filters';
+import { NEAR_RADIUS_KM, nearParam, type NearQuery } from './near';
 
 /**
  * Данные кофе-райдов. Лента, города и `me` зависят от зрителя (роль, отменённые свои) — только через
@@ -45,11 +46,19 @@ const NEXT_RIDE = { limit: 1 } as const;
 const nextCursor = (page: RidePage) => page.nextCursor ?? undefined;
 
 /**
- * Страницы ленты вкладки: ключ `['rides','list',{ city, limit },'pages']` — форма `InfiniteData`, префикс общий с
- * Главной (`['rides','list',{ limit: 1 }]`). Подгрузка у конца — `loadMore` (не во время обновления).
+ * Параметры «Рядом» запроса — только в `queryFn` (замыкание): в ключе — счётчик нажатия `near.seq` (RC-7, ADR-0014
+ * поправка 05c), координаты — нет.
  */
-export function useRideFeed(filters: RideFilters) {
-  const params = { city: filters.city, limit: PAGE_LIMIT };
+const nearParams = (near: NearQuery | null) =>
+  near ? { near: nearParam(near.lngLat), radiusKm: NEAR_RADIUS_KM } : {};
+
+/**
+ * Страницы ленты вкладки: ключ `['rides','list',{ city, limit, near: seq | null },'pages']` — форма `InfiniteData`,
+ * префикс общий с Главной (`['rides','list',{ limit: 1 }]`). «Рядом» (05c) — в ключе только счётчик нажатия, позиция —
+ * в замыкании запроса. Подгрузка у конца — `loadMore` (не во время обновления).
+ */
+export function useRideFeed(filters: RideFilters, near: NearQuery | null = null) {
+  const params = { city: filters.city, limit: PAGE_LIMIT, near: near?.seq ?? null };
   const feed = useInfiniteQuery({
     queryKey: ['rides', 'list', params, 'pages'],
     queryFn: ({ pageParam }) =>
@@ -57,6 +66,7 @@ export function useRideFeed(filters: RideFilters) {
         api.listRides(accessToken, {
           city: [...filters.city],
           limit: PAGE_LIMIT,
+          ...nearParams(near),
           ...(pageParam ? { cursor: pageParam } : {}),
         }),
       ),
@@ -70,6 +80,22 @@ export function useRideFeed(filters: RideFilters) {
     }
   };
   return { feed, loadMore };
+}
+
+/**
+ * Карта ленты (05c): точки старта будущих райдов с видимым маршрутом; ключ `['rides','map',{ city, near: seq | null }]`
+ * (без координат), запрос — только в режиме «Карта» (`enabled`).
+ */
+export function useRideMap(filters: RideFilters, near: NearQuery | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['rides', 'map', { city: filters.city, near: near?.seq ?? null }],
+    queryFn: () =>
+      withAccessToken((accessToken) =>
+        api.listRideMap(accessToken, { city: [...filters.city], ...nearParams(near) }),
+      ),
+    staleTime: FEED_STALE_MS,
+    enabled,
+  });
 }
 
 /** Города с видимыми будущими райдами — чипы «Город». */

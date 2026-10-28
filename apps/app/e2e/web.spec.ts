@@ -349,6 +349,25 @@ test('жалоба на райд /rides/report/<id> без сессии (05b): H
   }
 });
 
+test('выбор маршрута райда /rides/route-pick без сессии (05c): HTML без списка и OG, после гидрации — гард входа', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get('/rides/route-pick?form=new');
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  // экран не публичный: без «Без маршрута» и без OG
+  expect(html).not.toContain('Без маршрута');
+  expect(html).not.toContain('og:title');
+
+  await page.goto('/rides/route-pick?form=new');
+  if (WITH_API) {
+    await expect(page).toHaveURL(`${BASE_URL}/register`);
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+});
+
 test('удаление аккаунта /settings/account/delete без сессии (A12, адрес для Google Play): HTML без формы и OG, после гидрации — «Вход»', async ({
   page,
   request,

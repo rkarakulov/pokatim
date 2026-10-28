@@ -2,6 +2,7 @@ import { apiErrorOf, isNetworkError } from '@pokatim/api-client';
 import { Uuid, type RideDetail, type RideViewer } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
+import { createScrubStore, type ScrubStore } from '@pokatim/route-view';
 import {
   AsyncContent,
   Banner,
@@ -16,7 +17,7 @@ import {
   type AsyncState,
 } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -29,6 +30,7 @@ import { SectionHero } from '@/components/section-hero';
 import { StatBlock } from '@/components/stat-block';
 import { rememberReturnPath } from '@/features/auth/return-path';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { useScrubScrollEnabled } from '@/features/routes/use-scrub-scroll-lock';
 import { domainLabel, formatMinskDateTime } from '@/lib/minsk-format';
 import { shareLink, shareOrigin } from '@/lib/share-link';
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
@@ -36,6 +38,7 @@ import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { cityLabel, goingCaption, organizerLine, paceRange, rideShareText } from './format';
 import { rideActionErrorText, useRide, useRideForViewer, useRideRsvp } from './queries';
+import { RideRouteBlock } from './ride-route-block';
 
 export const rideDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
 
@@ -64,7 +67,8 @@ function ShareAction({ ride }: { ride: RideDetail }) {
 /**
  * Поля и действия карточки (§3): метка «Кофе-райд» / «… · вы организатор», подпись организатора (D2), типографская
  * шапка (дата всегда с годом), «Старт: город, место», `StatBlock` дистанции и темпа, стопка, действия по `viewer`
- * сервера, баннеры отмены / прошедшего / переноса, «Об этом райде» как текст. Карты, «Набора», имён и фото нет (§4).
+ * сервера, баннеры отмены / прошедшего / переноса, «Об этом райде» как текст. Имён и фото нет (§4). 05c: маршрут,
+ * видимый зрителю, — карта и профиль под шапкой (`RideRouteBlock`), «Набор» в `StatBlock`.
  * 05b: «Пожаловаться» — по `viewer.canReport`, строка «Вы пожаловались…» — по `viewer.reported`; скрытый
  * (`phase: 'hidden'`, видит только организатор) — баннер, действий нет (права сервера выключены).
  */
@@ -74,8 +78,11 @@ function RideDetailView({
   signedIn,
   published,
   mounted,
+  scrub,
 }: {
   ride: RideDetail;
+  /** 05c: стор скраббинга профиля и карты маршрута — на экземпляр экрана */
+  scrub: ScrubStore;
   /** `null` — гость; `undefined` — вошедший, состояние ещё грузится (без действия). */
   viewer: RideViewer | null | undefined;
   signedIn: boolean;
@@ -127,6 +134,7 @@ function RideDetailView({
         date={{ value: when.full }}
         title={ride.title}
       />
+      {ride.route ? <RideRouteBlock route={ride.route} scrub={scrub} /> : null}
       <Text style={[textStyle('body'), { color: theme.text.primary }]}>
         {city
           ? t('rides.detail.start', { city, place: ride.place })
@@ -151,6 +159,15 @@ function RideDetailView({
             unit: t('rides.detail.kmh'),
             label: t('rides.detail.pace'),
           },
+          ...(ride.route?.elevationGainM != null
+            ? [
+                {
+                  value: String(ride.route.elevationGainM),
+                  unit: t('rides.detail.m'),
+                  label: t('rides.detail.gain'),
+                },
+              ]
+            : []),
         ]}
       />
       <GoingStack count={ride.goingCount} caption={goingCaption(ride, viewer)} />
@@ -244,6 +261,12 @@ export function RideDetailScreen({
     [signedIn, pub.refetch, me.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
+  // 05c: скраббинг профиля и карты маршрута — стор на экземпляр экрана; native — жест выключает прокрутку
+  const [scrub] = useState(createScrubStore);
+  useEffect(() => {
+    scrub.setState({ fraction: 0, active: false, dragging: null });
+  }, [id, scrub]);
+  const scrollEnabled = useScrubScrollEnabled(scrub);
 
   const ride = (signedIn ? me.data?.ride : undefined) ?? pub.data;
   const viewer = signedIn ? me.data?.viewer : null;
@@ -267,6 +290,10 @@ export function RideDetailScreen({
       <ScrollView
         testID="ride-detail"
         contentContainerStyle={styles.content}
+        scrollEnabled={scrollEnabled}
+        onScrollBeginDrag={() => {
+          if (scrub.getState().active) scrub.setState({ active: false });
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -313,6 +340,7 @@ export function RideDetailScreen({
                   signedIn={signedIn}
                   published={published}
                   mounted={mounted}
+                  scrub={scrub}
                 />
               ) : null
             }

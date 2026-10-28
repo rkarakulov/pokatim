@@ -1,6 +1,13 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
-import type { RideDetail, RideView, RideViewer } from '@pokatim/contracts';
+import type {
+  CatalogRouteDetail,
+  RideDetail,
+  RideRoute as RideRouteRef,
+  RideView,
+  RideViewer,
+  RouteMapGeometry,
+} from '@pokatim/contracts';
 import { onlineManager } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
@@ -421,5 +428,122 @@ describe('карточка райда: жалоба и скрытый (05b, AC7)
       await openSignedIn();
       expect(await screen.findByText('Райд не найден')).toBeOnTheScreen();
     });
+  });
+});
+
+describe('карточка райда: маршрут (05c)', () => {
+  const ROUTE_ID = '0190a6f4-0000-7000-8000-000000000301';
+  const LIGHT = 'https://tiles.example/styles/positron';
+  const publicRoute: RideRouteRef = {
+    id: ROUTE_ID,
+    title: 'Минское море',
+    distanceM: 62_400,
+    elevationGainM: 310,
+    access: 'public',
+  };
+  const catalog: CatalogRouteDetail = {
+    id: ROUTE_ID,
+    title: 'Минское море',
+    distanceM: 62_400,
+    elevationGainM: 310,
+    isLoop: false,
+    city: 'minsk',
+    surfaces: ['asphalt'],
+    publishedAt: '2026-09-01T00:00:00Z',
+    author: { kind: 'team' },
+    elevation: {
+      minM: 190,
+      maxM: 260,
+      profile: [
+        [0, 190],
+        [31_200, 260],
+        [62_400, 200],
+      ],
+    },
+    gpxAvailable: false,
+  };
+  const geometry: RouteMapGeometry = {
+    line: [
+      [27.5, 53.8],
+      [27.6, 54.0],
+    ],
+    start: [27.5, 53.8],
+    finish: [27.6, 54.0],
+    bounds: [27.5, 53.8, 27.6, 54.0],
+  };
+  const routesWithLinks = {
+    ...signedInRoutes,
+    'routes/[id]': () => null,
+    'routes/mine/[id]': () => null,
+  };
+
+  beforeEach(() => {
+    process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT = LIGHT;
+    process.env.EXPO_PUBLIC_MAP_STYLE_DARK = LIGHT;
+    jest.mocked(api.getCatalogRoute).mockResolvedValue(catalog);
+    jest.mocked(api.getCatalogRouteMap).mockResolvedValue(geometry);
+    jest.mocked(api.getMyRouteMap).mockResolvedValue(geometry);
+  });
+  afterEach(() => {
+    delete process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT;
+    delete process.env.EXPO_PUBLIC_MAP_STYLE_DARK;
+  });
+
+  it('без маршрута — блока, «Набора» и запросов маршрута нет', async () => {
+    signedIn();
+    await openSignedIn();
+    expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
+    expect(screen.queryByTestId('ride-route')).toBeNull();
+    expect(screen.queryByText('Набор')).toBeNull();
+    expect(api.getCatalogRoute).not.toHaveBeenCalled();
+  });
+
+  it('публичный маршрут: карта каталога, профиль высоты, «Набор» в цифрах, ссылка на /routes/<id>', async () => {
+    signedIn();
+    getRideForViewer.mockResolvedValue(
+      view({ route: publicRoute, start: [27.5, 53.8] }, viewer('none', { canJoin: true })),
+    );
+    const router = await renderRouter(routesWithLinks, {
+      initialUrl: `/rides/${ID}`,
+      wrapper: createQueryWrapper(),
+    });
+    expect(await screen.findByTestId('ride-route')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Набор 310 м')).toBeOnTheScreen();
+    expect(await screen.findByTestId('elevation-profile')).toBeOnTheScreen();
+    expect(
+      await screen.findByLabelText('Карта маршрута райда «Минское море», 62,4 км'),
+    ).toBeOnTheScreen();
+    expect(api.getCatalogRouteMap).toHaveBeenCalledWith(ROUTE_ID);
+    expect(screen.queryByText(/Маршрут виден только вам/)).toBeNull();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Маршрут райда' }));
+    expect(router.getPathname()).toBe(`/routes/${ROUTE_ID}`);
+  });
+
+  it('свой непубличный (организатор): карта «Моего маршрута» без профиля, баннер «опубликуйте», ссылка на /routes/mine/<id>', async () => {
+    signedIn();
+    getRideForViewer.mockResolvedValue(
+      view(
+        { route: { ...publicRoute, access: 'private' }, start: [27.5, 53.8] },
+        viewer('organizer', { canManage: true }),
+      ),
+    );
+    const router = await renderRouter(routesWithLinks, {
+      initialUrl: `/rides/${ID}`,
+      wrapper: createQueryWrapper(),
+    });
+    expect(
+      await screen.findByText(
+        'Маршрут виден только вам — опубликуйте его, чтобы участники увидели карту',
+      ),
+    ).toBeOnTheScreen();
+    await waitFor(() =>
+      expect(api.getMyRouteMap).toHaveBeenCalledWith(liveSession.accessToken, ROUTE_ID),
+    );
+    expect(api.getCatalogRoute).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('elevation-profile')).toBeNull();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Маршрут райда' }));
+    expect(router.getPathname()).toBe(`/routes/mine/${ROUTE_ID}`);
   });
 });

@@ -42,7 +42,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Покатим показывает ваше местоположение на карте, когда вы нажимаете кнопку «Моё местоположение». Координаты не сохраняются и не отправляются.",
+          "locationWhenInUsePermission": "Покатим показывает ваше местоположение на карте и ищет райды рядом, когда вы нажимаете «Моё местоположение» или «Рядом». Для поиска на сервер уходят округлённые координаты, они не сохраняются.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
           "motionUsagePermission": false,
