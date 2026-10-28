@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-import { appThemes, radius, size, themes } from '@pokatim/design-tokens';
+import { appThemes, size, themes } from '@pokatim/design-tokens';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
@@ -82,19 +82,14 @@ describe('MapControls: форма темы (app-themes C1)', () => {
   const radiusOf = (testID: string) =>
     StyleSheet.flatten(screen.getByTestId(testID).props.style).borderRadius;
 
-  it('радиус кнопок — shape.button темы: «Классика» — квадрат, Навигация — круг', async () => {
-    const { rerender } = await render(
-      <MapControls theme={themes.light} onZoomIn={noop} onZoomOut={noop} onFit={noop} />,
-    );
-    expect(radiusOf('map-fit')).toBe(0);
-    await rerender(
-      <MapControls
-        theme={appThemes.navigation.schemes.dark}
-        onZoomIn={noop}
-        onZoomOut={noop}
-        onFit={noop}
-      />,
-    );
-    expect(radiusOf('map-fit')).toBe(radius.pill);
-  });
+  it.each(Object.values(appThemes))(
+    '$id: радиус кнопок — shape.button темы, прямые углы, как у «Классики»',
+    async (def) => {
+      await render(
+        <MapControls theme={def.schemes.dark} onZoomIn={noop} onZoomOut={noop} onFit={noop} />,
+      );
+      expect(radiusOf('map-fit')).toBe(def.schemes.dark.shape.button);
+      expect(radiusOf('map-fit')).toBe(0);
+    },
+  );
 });

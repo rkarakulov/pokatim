@@ -1,12 +1,5 @@
 import type { CatalogRouteCard, RaceCard } from '@pokatim/contracts';
-import {
-  radius,
-  shapeOf,
-  size,
-  space,
-  type AppTheme,
-  type AppThemeLayout,
-} from '@pokatim/design-tokens';
+import { shapeOf, size, space, type AppTheme, type AppThemeLayout } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { SkeletonHeroCard, SkeletonText, textStyle, useTheme } from '@rkarakulov/ui';
 import { useQuery } from '@tanstack/react-query';
@@ -112,13 +105,17 @@ function ContourPanel({
   );
 }
 
-/** Круглая кнопка-стрелка героя: декоративная (вся карточка — одна ссылка), скрыта от скринридера. */
+/**
+ * Кнопка-стрелка героя: декоративная (вся карточка — одна ссылка), скрыта от скринридера; углы — `shape.button`.
+ */
 function HeroArrow({ background, color }: { background: string; color: string }) {
+  const theme = useTheme<AppTheme>();
   return (
     <View
+      testID="route-hero-arrow"
       importantForAccessibility="no-hide-descendants"
       accessibilityElementsHidden
-      style={[styles.arrow, { backgroundColor: background }]}
+      style={[styles.arrow, { backgroundColor: background, borderRadius: shapeOf(theme).button }]}
     >
       <Icon name="arrowRight" size={size.icon} color={color} />
     </View>
@@ -287,7 +284,6 @@ const styles = StyleSheet.create({
   arrow: {
     width: size.buttonHeight,
     height: size.buttonHeight,
-    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
