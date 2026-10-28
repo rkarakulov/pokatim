@@ -150,8 +150,11 @@ describe('заезд по маршруту (route-rides-01): контракты'
     ).toBe(false);
   });
 
-  it('коды ошибок route-rides — в конце списка', () => {
-    expect(ErrorCode.options.slice(-3)).toEqual([
+  it('коды ошибок route-rides — подряд, после кодов story-cards (дальше — только новые)', () => {
+    const codes = ErrorCode.options;
+    const start = codes.indexOf('ROUTE_RIDE_NOT_READY');
+    expect(start).toBeGreaterThan(codes.indexOf('STORY_CARD_UNAVAILABLE'));
+    expect(codes.slice(start, start + 3)).toEqual([
       'ROUTE_RIDE_NOT_READY',
       'ROUTE_RIDE_UPLOAD_FAILED',
       'ROUTE_RIDE_QUOTA_EXCEEDED',

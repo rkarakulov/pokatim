@@ -10,13 +10,18 @@ import type { UploadResult } from './tracks';
  * Загрузка с удерживаемым телом (upload-limits-kml-panel): тело — поток, обработчик читает его, пока тест не вызовет
  * `finish` (или `abort`). `held` — дождаться, что этот запрос занял слот приёма (spy `UploadSlots.tryAcquire`).
  */
-export function heldUpload(h: Harness, url: string, headers: Record<string, string>) {
+export function heldUpload(
+  h: Harness,
+  url: string,
+  headers: Record<string, string>,
+  method: 'POST' | 'PUT' = 'POST',
+) {
   const acquire = vi.spyOn(UploadSlots.prototype, 'tryAcquire');
   const calls = acquire.mock.results.length;
   const body = new PassThrough();
   const response = h.app
     .inject({
-      method: 'POST',
+      method,
       url,
       headers: { 'content-type': 'application/octet-stream', ...headers },
       payload: body,

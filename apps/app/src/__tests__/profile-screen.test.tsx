@@ -23,6 +23,9 @@ const profile = (overrides: Partial<ProfileView> = {}): ProfileView => ({
   rideReasons: [],
   publicName: null,
   showNameInResults: false,
+  club: null,
+  avatar: null,
+  publicId: null,
   ...overrides,
 });
 const RESULTS_KEY = ['races', 'results', 'race-1', 'page'];

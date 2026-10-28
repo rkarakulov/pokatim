@@ -35,9 +35,14 @@ beforeEach(() => {
   signInForTest();
   useSessionStore.setState({ session: liveSession });
   getVerifiedProfile.mockResolvedValue(verifiedView());
-  jest
-    .mocked(api.getProfile)
-    .mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
+  jest.mocked(api.getProfile).mockResolvedValue({
+    rideReasons: [],
+    publicName: null,
+    showNameInResults: false,
+    club: null,
+    avatar: null,
+    publicId: null,
+  });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
 afterEach(() => {

@@ -19,6 +19,7 @@ import {
   syncService,
 } from '../../../test/devices';
 import { type FakeOw, startFakeOw } from '../../../test/fake-ow';
+import { twoToneImage } from '../../../test/avatars';
 import { DAY, HOUR, type Harness } from '../../../test/harness';
 import {
   bearer,
@@ -651,6 +652,51 @@ describe('шаг route-rides (route-rides-01)', () => {
     expect(await routeRidesDb(h).rides.countDocuments({ userId: w.a.userId })).toBe(0);
     expect(await routeRidesDb(h).rides.countDocuments({ userId: w.b.userId })).toBe(1);
     expect(await h.worker.get(RouteRideErasure).erase(w.a.userId)).toBe(0);
+  });
+});
+
+describe('аватары профиля (rider-profile, AC10)', () => {
+  /** Аватар по HTTP (как приложение); ответ — id аватара. */
+  async function uploadAvatar(accessToken: string): Promise<string> {
+    const res = await h.app.inject({
+      method: 'PUT',
+      url: '/v1/profile/avatar',
+      headers: { 'content-type': 'application/octet-stream', ...bearer(accessToken) },
+      payload: await twoToneImage('png'),
+    });
+    if (res.statusCode !== 200) throw new Error(`avatar: ${res.statusCode} ${res.body}`);
+    return (JSON.parse(res.body) as { avatar: { id: string } }).avatar.id;
+  }
+  const avatarStatus = async (id: string) =>
+    (await h.app.inject({ method: 'GET', url: `/v1/avatars/${id}` })).statusCode;
+  const avatars = () => h.db.collection('profile_avatars');
+
+  it('стирание удаляет аватары пользователя и профиль; чужие целы; старый id → 404; повтор безопасен', async () => {
+    const a = await deviceRider(h, 'a@example.com');
+    const b = await deviceRider(h, 'b@example.com');
+    await namedProfile(a.accessToken, 'Анна');
+    const aAvatar = await uploadAvatar(a.accessToken);
+    const bAvatar = await uploadAvatar(b.accessToken);
+    // поздний «осиротевший» документ того же пользователя тоже стирается (deleteMany по userId)
+    await avatars().insertOne({ _id: 'orphan' as never, userId: a.userId, createdAt: new Date() });
+    const publicId = (
+      (await call(h, 'GET', '/v1/profile', undefined, bearer(a.accessToken))).body as {
+        publicId: string;
+      }
+    ).publicId;
+    expect((await call(h, 'GET', `/v1/riders/${publicId}`)).status).toBe(200);
+
+    await deleteAccount(a.accessToken);
+    expect(await firstPass(a.userId)).toBe('erased');
+
+    expect(await avatars().countDocuments({ userId: a.userId })).toBe(0);
+    expect(await avatarStatus(aAvatar)).toBe(404);
+    expect(await avatarStatus(bAvatar)).toBe(200);
+    expect(await avatars().countDocuments({ userId: b.userId })).toBe(1);
+    expect((await call(h, 'GET', `/v1/riders/${publicId}`)).status).toBe(404);
+
+    expect(await sweep(a.userId)).toBe('erased');
+    expect(await avatars().countDocuments({ userId: b.userId })).toBe(1);
   });
 });
 

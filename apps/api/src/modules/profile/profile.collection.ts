@@ -1,4 +1,5 @@
 import type { RideReason } from '@pokatim/contracts';
+import type { Binary } from 'mongodb';
 
 /**
  * Коллекции профиля (MongoDB, ADR-0007). `profiles` создаёт миграция `0004_profile` (индексов сверх `_id` нет),
@@ -9,6 +10,8 @@ export const PROFILE_COLLECTIONS = {
   profiles: 'profiles',
   consentEvents: 'profile_consent_events',
   verified: 'rider_verified_profiles',
+  /** rider-profile: аватары (`0033_rider_profile`, индекс `{ userId }`); единственный писатель — `ProfileAvatarRepository` */
+  avatars: 'profile_avatars',
 } as const;
 
 /**
@@ -34,6 +37,15 @@ export interface ProfileDoc {
   publicName?: string | null;
   /** Согласие на показ имени в таблицах результатов (P1, opt-in); нет поля — `false`. */
   showNameInResults?: boolean;
+  /** Клуб (rider-profile): 2–60 символов после zod; `null`/нет поля — не задан. */
+  club?: string | null;
+  /** Текущий аватар (rider-profile) — `_id` документа `profile_avatars`; `null`/нет поля — нет фото. */
+  avatarId?: string | null;
+  /**
+   * Id публичного профиля (rider-profile, R-3): случайный токен, создаётся при первом «имя + согласие» и больше не
+   * меняется (отзыв согласия его не стирает — наружу он не выдаётся). Уникальный частичный индекс (`0033`).
+   */
+  publicId?: string | null;
   /** Время последней записи (`CLOCK`). */
   updatedAt: Date;
 }
@@ -57,4 +69,20 @@ export interface ProfileConsentEventDoc {
   version: string;
   /** Время события (`CLOCK`). */
   at: Date;
+}
+
+/**
+ * Аватар райдера (rider-profile, ADR-0019): перекодированный JPEG 512×512 без метаданных (исходник не хранится).
+ * `_id` — `randomToken` (непредсказуемый, новый при каждой замене). Единственный писатель —
+ * `ProfileAvatarRepository`; один документ на пользователя (замена удаляет прежний в той же транзакции).
+ */
+export interface ProfileAvatarDoc {
+  _id: string;
+  userId: string;
+  bytes: Binary;
+  contentType: 'image/jpeg';
+  width: number;
+  height: number;
+  bytesLength: number;
+  createdAt: Date;
 }

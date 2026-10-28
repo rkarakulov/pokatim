@@ -15,6 +15,12 @@ export {
   type ActivitySource,
   type UploadState,
 } from './activity-source.port';
+/** Порт сумм заездов для модуля `riders` (rider-profile): статистика своего профиля. */
+export {
+  ACTIVITY_TOTALS,
+  type ActivityTotals,
+  type ActivityTotalsResult,
+} from './activity-totals.port';
 /** Порт приёма заездов от модуля `devices` (§5): поток агрегатора → тот же разбор, что ручная загрузка. */
 export {
   type IngestProviderStreamInput,

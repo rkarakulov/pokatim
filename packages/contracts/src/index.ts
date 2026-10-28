@@ -10,6 +10,8 @@ export * from './profile/onboarding.schema.ts';
 export * from './profile/profile.schema.ts';
 export * from './profile/profile-admin.schema.ts';
 export * from './profile/verified-profile.schema.ts';
+export * from './profile/rider-avatar.schema.ts';
+export * from './profile/rider-profile.schema.ts';
 export * from './admin/permissions.schema.ts';
 export * from './admin/session.schema.ts';
 export * from './admin/members.schema.ts';

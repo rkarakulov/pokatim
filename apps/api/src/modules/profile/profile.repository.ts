@@ -10,6 +10,34 @@ import {
   type ProfileDoc,
 } from './profile.collection';
 
+/** Поля профиля для `ProfileView` (rider-profile: + клуб, аватар, публичный id). */
+export type ProfileViewDoc = Pick<
+  ProfileDoc,
+  'rideReasons' | 'publicName' | 'showNameInResults' | 'club' | 'avatarId' | 'publicId'
+>;
+const VIEW_PROJECTION = {
+  _id: 0,
+  rideReasons: 1,
+  publicName: 1,
+  showNameInResults: 1,
+  club: 1,
+  avatarId: 1,
+  publicId: 1,
+} as const;
+
+/**
+ * Поля документа при upsert без ответа опроса (как у шага устройств): прежние значения или пустые. `publicId` не
+ * создаётся (его выдаёт только запись имени и согласия).
+ */
+const KEEP_PROFILE_FIELDS = {
+  rideReasons: { $ifNull: ['$rideReasons', { $literal: [] }] },
+  surveyCompletedAt: { $ifNull: ['$surveyCompletedAt', null] },
+  publicName: { $ifNull: ['$publicName', null] },
+  showNameInResults: { $ifNull: ['$showNameInResults', false] },
+  club: { $ifNull: ['$club', null] },
+  publicId: { $ifNull: ['$publicId', null] },
+} as const;
+
 /**
  * Единственный писатель `profiles` и `profile_consent_events`. Опрос и шаг устройств — одна атомарная операция над
  * одним документом вне транзакции. `PATCH /v1/profile` (имя и согласие) и сброс имени модератором — транзакции
@@ -87,14 +115,8 @@ export class ProfileRepository {
    * Профиль для `GET /v1/profile` и прежний флаг согласия в транзакции `PATCH`; `null` — документа нет. Поля до
    * этого слайса могут отсутствовать.
    */
-  async findProfile(
-    userId: string,
-    session?: DbSession,
-  ): Promise<Pick<ProfileDoc, 'rideReasons' | 'publicName' | 'showNameInResults'> | null> {
-    return this.profiles.findOne(
-      { _id: userId },
-      { session, projection: { _id: 0, rideReasons: 1, publicName: 1, showNameInResults: 1 } },
-    );
+  async findProfile(userId: string, session?: DbSession): Promise<ProfileViewDoc | null> {
+    return this.profiles.findOne({ _id: userId }, { session, projection: VIEW_PROJECTION });
   }
 
   /**
@@ -106,7 +128,8 @@ export class ProfileRepository {
   async updatePublicName(
     session: DbSession,
     userId: string,
-    patch: { publicName?: string | null; showNameInResults?: boolean },
+    patch: { publicName?: string | null; showNameInResults?: boolean; club?: string | null },
+    publicIdCandidate: string,
     now: Date,
   ): Promise<ProfileDoc> {
     const doc = await this.profiles.findOneAndUpdate(
@@ -114,17 +137,40 @@ export class ProfileRepository {
       [
         {
           $set: {
-            rideReasons: { $ifNull: ['$rideReasons', { $literal: [] }] },
-            surveyCompletedAt: { $ifNull: ['$surveyCompletedAt', null] },
+            ...KEEP_PROFILE_FIELDS,
             publicName:
               patch.publicName === undefined
-                ? { $ifNull: ['$publicName', null] }
+                ? KEEP_PROFILE_FIELDS.publicName
                 : { $literal: patch.publicName },
             showNameInResults:
               patch.showNameInResults === undefined
-                ? { $ifNull: ['$showNameInResults', false] }
+                ? KEEP_PROFILE_FIELDS.showNameInResults
                 : { $literal: patch.showNameInResults },
+            club: patch.club === undefined ? KEEP_PROFILE_FIELDS.club : { $literal: patch.club },
             updatedAt: { $literal: now },
+          },
+        },
+        {
+          // rider-profile (R-3): id публичного профиля — один раз, при первом «имя + согласие» (второй этап видит
+          // значения первого); потом не меняется, отзыв согласия его не стирает
+          $set: {
+            publicId: {
+              $ifNull: [
+                '$publicId',
+                {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: [{ $type: '$publicName' }, 'string'] },
+                        { $eq: ['$showNameInResults', true] },
+                      ],
+                    },
+                    { $literal: publicIdCandidate },
+                    null,
+                  ],
+                },
+              ],
+            },
           },
         },
       ],
@@ -133,6 +179,58 @@ export class ProfileRepository {
     // upsert с `returnDocument: 'after'` документ возвращает всегда
     if (!doc) throw new Error('profile upsert returned no document');
     return doc;
+  }
+
+  /**
+   * Новый аватар (rider-profile) — в транзакции замены: upsert по `_id` (документа нет — создаётся без ответа опроса),
+   * ответ — документ после записи. Прежний `avatarId` вызывающий прочитал в той же транзакции до записи.
+   */
+  async setAvatar(
+    session: DbSession,
+    userId: string,
+    avatarId: string,
+    now: Date,
+  ): Promise<ProfileViewDoc> {
+    const doc = await this.profiles.findOneAndUpdate(
+      { _id: userId },
+      [
+        {
+          $set: {
+            ...KEEP_PROFILE_FIELDS,
+            avatarId: { $literal: avatarId },
+            updatedAt: { $literal: now },
+          },
+        },
+      ],
+      { upsert: true, returnDocument: 'after', session, projection: VIEW_PROJECTION },
+    );
+    if (!doc) throw new Error('profile upsert returned no document');
+    return doc;
+  }
+
+  /**
+   * Удаление фото (rider-profile) — в транзакции: `avatarId: null` (документ не создаётся), ответ — документ **до**
+   * записи (прежний `avatarId` для удаления байтов); документа нет — `null`.
+   */
+  async clearAvatar(session: DbSession, userId: string, now: Date): Promise<ProfileViewDoc | null> {
+    return this.profiles.findOneAndUpdate(
+      { _id: userId },
+      { $set: { avatarId: null, updatedAt: now } },
+      { session, returnDocument: 'before', projection: VIEW_PROJECTION },
+    );
+  }
+
+  /**
+   * Публичный профиль по id (порт `RIDER_PROFILES`, rider-profile): имя и согласие — в фильтре (индекс
+   * `profiles_public_id_unique`). Нет, отозвано или имени нет — `null`.
+   */
+  async findPublic(
+    publicId: string,
+  ): Promise<Pick<ProfileDoc, '_id' | 'publicName' | 'club' | 'avatarId'> | null> {
+    return this.profiles.findOne(
+      { publicId, showNameInResults: true, publicName: { $type: 'string' } },
+      { projection: { publicName: 1, club: 1, avatarId: 1 } },
+    );
   }
 
   /** Событие журнала согласий (append-only: только вставка) — в транзакции `PATCH` вместе с документом профиля. */

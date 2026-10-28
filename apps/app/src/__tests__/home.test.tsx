@@ -116,7 +116,14 @@ beforeEach(() => {
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
   useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
-  getProfile.mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
+  getProfile.mockResolvedValue({
+    rideReasons: [],
+    publicName: null,
+    showNameInResults: false,
+    club: null,
+    avatar: null,
+    publicId: null,
+  });
   listRaces.mockResolvedValue(racePage(race));
   listCalendar.mockResolvedValue(calendarPage(start));
   listRides.mockResolvedValue(ridePage(ride));
@@ -128,7 +135,14 @@ afterEach(() => {
 });
 
 const profile = (rideReasons: ProfileView['rideReasons']) =>
-  getProfile.mockResolvedValue({ rideReasons, publicName: null, showNameInResults: false });
+  getProfile.mockResolvedValue({
+    rideReasons,
+    publicName: null,
+    showNameInResults: false,
+    club: null,
+    avatar: null,
+    publicId: null,
+  });
 
 async function openHome() {
   return renderRouter(tabRoutes, { initialUrl: '/', wrapper: createQueryWrapper() });

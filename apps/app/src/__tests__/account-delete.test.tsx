@@ -28,9 +28,14 @@ beforeEach(() => {
   jest.mocked(api.listRaces).mockResolvedValue({ items: [], nextCursor: null });
   jest.mocked(api.listCalendar).mockResolvedValue({ items: [], nextCursor: null });
   jest.mocked(api.listRides).mockResolvedValue({ items: [], nextCursor: null });
-  jest
-    .mocked(api.getProfile)
-    .mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
+  jest.mocked(api.getProfile).mockResolvedValue({
+    rideReasons: [],
+    publicName: null,
+    showNameInResults: false,
+    club: null,
+    avatar: null,
+    publicId: null,
+  });
 });
 afterEach(() => {
   jest.clearAllMocks();

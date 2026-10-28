@@ -100,6 +100,16 @@ paths:
   Имена `PanelRaceStandings*` заняты «Участниками» гонки (07). api-client — `getSeasonStandings`,
   `getSeasonStandingsTable`, `getMySeasonStandings(token, id)`; панель — `getSeasonStandings`,
   `getSeasonStandingsTable`.
+- Профиль райдера (rider-profile): `src/profile/profile.schema.ts` — `RiderClub` (2–60, общий конструктор
+  `riderLine` с `RiderPublicName`), `ProfileView.club`/`avatar`/`publicId` (`.nullable().default(null)`),
+  `UpdateProfileRequest.club`; `src/profile/rider-avatar.schema.ts` — пределы `AVATAR_*`, `AvatarId`/`RiderPublicId`
+  (43 символа base64url), `AvatarCropQuery` (`{}` или все три доли `x, y, size`); `src/profile/rider-profile.schema.ts`
+  — `RiderHistoryQuery` (limit 1–20, по умолчанию 10), `RiderStats`, `RiderRaceHistoryPage`, `RiderRideHistoryPage`
+  (`RIDER_RIDE_ROLES`), `PublicRiderProfile` (без `userId`, км, набора), `PublicRiderRacePage`; статусы, группы и
+  роли в ответах — `tolerantEnum`. Коды `AVATAR_FORMAT_UNSUPPORTED` (415), `AVATAR_TOO_LARGE` (413),
+  `AVATAR_INVALID` (422) — в конце `ErrorCode`. api-client — `uploadAvatar(token, body, crop?)`,
+  `avatarUploadRequest`, `deleteAvatar`, `avatarUrl`, `getProfileStats`, `listProfileRaces`, `listProfileRides`,
+  `getRider`, `listRiderRaces`.
 - Согласие на показ имени (profile-02): `PUBLIC_NAME_CONSENT_VERSION` (`src/profile/profile.schema.ts`) — версия
   текста `profile.show.label` + `profile.show.hint` (i18n). Сменили формулировку — **подняли версию** (дата), иначе
   журнал согласий ссылается на чужой текст. Версию в событие пишет сервер. Сброс имени —

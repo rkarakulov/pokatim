@@ -66,6 +66,17 @@ paths:
   юристом до прода, `docs/product/profile.md`).
 - Сброс имени модератором (profile-02) — транзакция: **первой** — условная запись профиля (`publicName` — строка),
   затем `PanelAudit.append` без имени; имени нет — без записи. Согласие и журнал согласий не трогаются.
+- Профиль райдера (rider-profile, миграция `0033_rider_profile`): `profiles.club` (2–60 после zod), `avatarId` (`_id`
+  аватара), `publicId` (`randomToken`) — необязательные, чтение `?? null`. `publicId` создаётся **один раз** вторым
+  этапом pipeline `updatePublicName` (`$ifNull` + «имя — строка и согласие»; кандидат-токен — сервис до транзакции) и
+  не меняется (отзыв согласия и сброс имени его не трогают); наружу — только при имени и согласии. Индекс
+  `profiles_public_id_unique` — `unique` + `partialFilterExpression: { publicId: { $type: 'string' } }` (не `sparse`:
+  `null` в индекс не попадает). Бэкфилл миграции — профили с именем и согласием.
+- Аватары — `profile_avatars` (ADR-0019): `{ _id: randomToken, userId, bytes: Binary JPEG 512×512, contentType,
+  width, height, bytesLength, createdAt }`, индекс `profile_avatars_user_idx` `{ userId }`; единственный писатель —
+  `ProfileAvatarRepository` (сторож `profile.repository.test.ts`). Замена — транзакция: чтение профиля → вставка →
+  `setAvatar` (upsert) → удаление прежнего (один документ на пользователя); удаление — `clearAvatar` (`returnDocument:
+  'before'`) → удаление прежнего. Стирание аккаунта — `deleteAllOf(userId)` до документа профиля.
 
 ## Геометрия (R11, Q3)
 
@@ -208,6 +219,13 @@ paths:
   и времени**. Пишет `recordCheck` вместе с вердиктом; новая попытка, перепостановка и перепроверка — `null`; провал,
   `implausible`, нет сегмента или линии — `null`. Документы до maps-02 поля не имеют — чтение `?? null`, бэкфилла и
   миграции нет (разметка появится при перепроверке).
+
+- История профиля (rider-profile): `race_entries.raceWindowStartsAt` — денормализация начала окна гонки (окно
+  зафиксировано первой заявкой, V-12; пишет `EntriesService.enter`, бэкфилл — `0033`); индекс
+  `race_entries_user_history_idx` `{ userId, status, raceWindowStartsAt: -1, _id: -1 }` — keyset истории своих заявок
+  (`race_entries_user_idx` остаётся). Строки протокола райдера — `race_protocol_rows_user_idx` `{ userId, raceId,
+  revision: -1 }` (статистика и публичная история; текущая ревизия — `currentRevisions`). Суммы заездов — агрегация
+  `activities` по `activities_user_started_idx` без нового индекса (равенство с `null` индекс не покрывает).
 
 ## Уровни и группы зачёта (race-results-07)
 

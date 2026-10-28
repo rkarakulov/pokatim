@@ -21,9 +21,14 @@ afterEach(() => colorScheme.mockReturnValue('light'));
 beforeEach(() => {
   signInForTest();
   useSessionStore.setState({ session: liveSession });
-  jest
-    .mocked(api.getProfile)
-    .mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
+  jest.mocked(api.getProfile).mockResolvedValue({
+    rideReasons: [],
+    publicName: null,
+    showNameInResults: false,
+    club: null,
+    avatar: null,
+    publicId: null,
+  });
 });
 
 describe('нижние вкладки', () => {

@@ -13,12 +13,16 @@ import { AttemptCheckProcessor } from './attempt-check.processor';
 import { AttemptIntake } from './attempt-intake';
 import { AttemptsService } from './attempts.service';
 import { EntriesService } from './entries.service';
+import { ProfileRacesController } from './profile-races.controller';
 import { RaceEntryController } from './race-entry.controller';
+import { RiderResultsService } from './rider-results';
+import { RIDER_RESULTS } from './rider-results.port';
 import { ResultsAdminController } from './results-admin.controller';
 import { ResultsForDisputesService } from './results-for-disputes';
 import { ResultsForSharingService } from './results-for-sharing';
 import { RESULTS_FOR_SHARING } from './results-for-sharing.port';
 import { ResultsForStandingsService } from './results-for-standings';
+import { ResultsHistoryService } from './results-history.service';
 import { RESULTS_FOR_STANDINGS } from './results-for-standings.port';
 import { RESULTS_FOR_DISPUTES } from './results-for-disputes.port';
 import { ResultsNoticesService } from './results-notices';
@@ -40,7 +44,8 @@ import { ResultsRepository } from './results.repository';
  * `RESULTS_FOR_DISPUTES`; гейт споров `RESULT_DISPUTE_GATE` даёт `@Global DisputesCoreModule`. Для `notifications` —
  * порт `RESULTS_NOTICES` (получатели уведомлений, ADR-0017). Для `standings` (race-results-08) — порт
  * `RESULTS_FOR_STANDINGS` (текущие ревизии и строки снимка протокола). Для `sharing` (story-cards) — порт
- * `RESULTS_FOR_SHARING` (факты и линия карточки для сторис).
+ * `RESULTS_FOR_SHARING` (факты и линия карточки для сторис). Для `riders` (rider-profile) — порт `RIDER_RESULTS`
+ * (строки райдера в текущих ревизиях опубликованных протоколов).
  */
 @Module({
   imports: [RacesCoreModule, RoutesCoreModule, TracksCoreModule, ProfileCoreModule],
@@ -57,6 +62,8 @@ import { ResultsRepository } from './results.repository';
     { provide: RESULTS_FOR_STANDINGS, useExisting: ResultsForStandingsService },
     ResultsForSharingService,
     { provide: RESULTS_FOR_SHARING, useExisting: ResultsForSharingService },
+    RiderResultsService,
+    { provide: RIDER_RESULTS, useExisting: RiderResultsService },
   ],
   exports: [
     RacesCoreModule,
@@ -70,6 +77,7 @@ import { ResultsRepository } from './results.repository';
     RESULTS_NOTICES,
     RESULTS_FOR_STANDINGS,
     RESULTS_FOR_SHARING,
+    RIDER_RESULTS,
   ],
 })
 export class ResultsCoreModule {}
@@ -82,6 +90,7 @@ export class ResultsCoreModule {}
 @Module({
   imports: [IdentityModule, PanelModule, ProfileCoreModule, ResultsCoreModule],
   controllers: [
+    ProfileRacesController,
     RaceEntryController,
     ResultsPublicController,
     ResultsAdminController,
@@ -90,6 +99,7 @@ export class ResultsCoreModule {}
   providers: [
     EntriesService,
     AttemptsService,
+    ResultsHistoryService,
     ResultsPanelReadService,
     ResultsProtocolService,
     PublicReadGuard,

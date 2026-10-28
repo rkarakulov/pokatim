@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { fieldError, optionalText } from '../common.ts';
 import { RIDE_REASONS, type RideReason } from './onboarding.schema.ts';
+import { AvatarId, RiderPublicId } from './rider-avatar.schema.ts';
 
 const isRideReason = (code: string): code is RideReason =>
   (RIDE_REASONS as readonly string[]).includes(code);
@@ -21,40 +22,59 @@ const RESERVED_RIDER_NAMES = new Set(['вы', 'участник', 'удален�
 const reservedKey = (value: string) => value.toLowerCase().replaceAll('ё', 'е');
 
 /**
+ * Публичная строка райдера (имя, клуб): необязательно, пусто — `null`; `min`–`max` символов одной строкой без `\p{Cc}`
+ * и `\p{Cf}`, не повторяет служебные подписи таблицы результатов.
+ */
+const riderLine = (min: number, max: number) =>
+  optionalText(max, RIDER_NAME_LINE)
+    .refine((value) => value === null || value.length >= min, { error: 'TOO_SHORT' })
+    .refine((value) => value === null || !RESERVED_RIDER_NAMES.has(reservedKey(value)), {
+      error: 'INVALID',
+    });
+
+/**
  * «Как вас показывать в результатах» (profile-rider-name, P2): необязательно, пусто — `null`; 2–80 символов одной
  * строкой. Конструктор — как у подписи организатора райда (D2), плюс запрет `\p{Cf}` и служебных подписей таблицы.
  */
-export const RiderPublicName = optionalText(RIDER_PUBLIC_NAME_MAX, RIDER_NAME_LINE)
-  .refine((value) => value === null || value.length >= RIDER_PUBLIC_NAME_MIN, {
-    error: 'TOO_SHORT',
-  })
-  .refine((value) => value === null || !RESERVED_RIDER_NAMES.has(reservedKey(value)), {
-    error: 'INVALID',
-  });
+export const RiderPublicName = riderLine(RIDER_PUBLIC_NAME_MIN, RIDER_PUBLIC_NAME_MAX);
+
+export const RIDER_CLUB_MIN = 2;
+export const RIDER_CLUB_MAX = 60;
+/** Клуб райдера (rider-profile): свободный текст одной строкой, 2–60 символов, правила — как у имени. */
+export const RiderClub = riderLine(RIDER_CLUB_MIN, RIDER_CLUB_MAX);
 
 /**
  * `GET /v1/profile` и ответ `PATCH /v1/profile` (под `AuthGuard`, `no-store`) — профиль своего пользователя: ответы
  * опроса для порядка разделов Главной, публичное имя и согласие на его показ в таблицах результатов. Неизвестные коды
  * опроса новых версий отбрасываются, а не ломают разбор старыми сборками (R5 блока 02); запрос `PUT …/survey` остаётся
- * строгим. Имя и согласие — с `.default`: ответ старого сервера без них — `null` / `false`.
+ * строгим. Имя и согласие — с `.default`: ответ старого сервера без них — `null` / `false`. Клуб, аватар и
+ * `publicId` (rider-profile) — тоже с `.default(null)`; `publicId` не `null` только при имени и согласии.
  */
 export const ProfileView = z.object({
   rideReasons: z.array(z.string()).transform((codes) => codes.filter(isRideReason)),
   publicName: z.string().nullable().default(null),
   showNameInResults: z.boolean().default(false),
+  club: z.string().nullable().default(null),
+  avatar: z.object({ id: AvatarId }).nullable().default(null),
+  publicId: RiderPublicId.nullable().default(null),
 });
 export type ProfileView = z.output<typeof ProfileView>;
 
 /**
  * `PATCH /v1/profile` — частичное обновление: ключа нет — поле не меняется; `publicName: null` или `""` — имя
- * очищено. Нужен хотя бы один ключ (`REQUIRED` на корне), лишние ключи — ошибка.
+ * очищено; так же `club` (rider-profile). Нужен хотя бы один ключ (`REQUIRED` на корне), лишние ключи — ошибка.
  */
 export const UpdateProfileRequest = z
   .strictObject({
     publicName: RiderPublicName.optional(),
     showNameInResults: z.boolean({ error: fieldError('INVALID') }).optional(),
+    club: RiderClub.optional(),
   })
-  .refine((body) => body.publicName !== undefined || body.showNameInResults !== undefined, {
-    error: 'REQUIRED',
-  });
+  .refine(
+    (body) =>
+      body.publicName !== undefined ||
+      body.showNameInResults !== undefined ||
+      body.club !== undefined,
+    { error: 'REQUIRED' },
+  );
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequest>;

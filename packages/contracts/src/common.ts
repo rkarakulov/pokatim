@@ -83,6 +83,10 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'ROUTE_RIDE_NOT_READY',
   'ROUTE_RIDE_UPLOAD_FAILED',
   'ROUTE_RIDE_QUOTA_EXCEEDED',
+  // rider-profile: фото не JPEG/PNG/WebP (415); больше 10 МиБ (413); не декодируется, больше предела пикселей, мелкая обрезка (422)
+  'AVATAR_FORMAT_UNSUPPORTED',
+  'AVATAR_TOO_LARGE',
+  'AVATAR_INVALID',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

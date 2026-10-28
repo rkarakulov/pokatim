@@ -36,6 +36,12 @@ import {
   OnboardingStatus,
   PasswordResetLinkInfo,
   ProfileView,
+  PublicRiderProfile,
+  PublicRiderRacePage,
+  type RiderHistoryQuery,
+  RiderRaceHistoryPage,
+  RiderRideHistoryPage,
+  RiderStats,
   RefreshSessionResponse,
   RegisterResponse,
   RegistrationPollResponse,
@@ -186,6 +192,16 @@ export type RideListParams = {
 /** Параметры карты ленты (05c): как у ленты, без курсора и лимита. */
 export type RideMapParams = Pick<RideListParams, 'city' | 'near' | 'radiusKm'>;
 
+/** Обрезка аватара — доли ориентированного изображения (`AvatarCropQuery`). */
+export interface AvatarCrop {
+  x: number;
+  y: number;
+  size: number;
+}
+
+/** Параметры историй профиля (`RiderHistoryQuery`). */
+export type RiderHistoryParams = Partial<Pick<RiderHistoryQuery, 'cursor' | 'limit'>>;
+
 export interface ApiClientOptions {
   baseUrl: string;
   getAccessToken?: () => string | undefined;
@@ -248,6 +264,8 @@ export function createApiClient({
     `/v1/tracks/uploads${name ? queryString({ name }) : ''}`;
   /** Путь загрузки своего маршрута: `?title=` — название (`RouteTitle`). */
   const myRoutesUploadPath = (title: string) => `/v1/routes/mine${queryString({ title })}`;
+  /** Путь загрузки аватара: обрезка — доли `x, y, size` ориентированного изображения (без них — центр). */
+  const avatarPath = (crop?: AvatarCrop) => `/v1/profile/avatar${crop ? queryString(crop) : ''}`;
   const octetStream = (accessToken: string) => ({
     authorization: `Bearer ${accessToken}`,
     'content-type': 'application/octet-stream',
@@ -322,6 +340,58 @@ export function createApiClient({
         '/v1/profile/verified',
         VerifiedProfileView,
         authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
+    /**
+     * Фото профиля (rider-profile): сырые байты JPEG/PNG/WebP ≤ 10 МиБ (`application/octet-stream`), обрезка —
+     * намерение (доли), квадрат 512 px считает сервер. Ответ — профиль; отказы — `ApiHttpError` (413, 415, 422, 429).
+     */
+    uploadAvatar: (accessToken: string, body: Blob | Uint8Array, crop?: AvatarCrop) =>
+      request(avatarPath(crop), ProfileView, {
+        method: 'PUT',
+        body: body as BodyInit,
+        headers: octetStream(accessToken),
+        ...withCredentials,
+      }),
+    /** Тот же запрос для платформенной отправки (upload task в native): ответ разбирается `ProfileView`. */
+    avatarUploadRequest: (accessToken: string, crop?: AvatarCrop) => ({
+      url: `${baseUrl}${avatarPath(crop)}`,
+      method: 'PUT' as const,
+      headers: octetStream(accessToken),
+    }),
+    /** Удалить фото профиля (идемпотентно); ответ — профиль с `avatar: null`. */
+    deleteAvatar: (accessToken: string) =>
+      postAuthorized(accessToken, '/v1/profile/avatar/delete', ProfileView, {}),
+    /** Адрес картинки аватара (публичный, без запроса). */
+    avatarUrl: (id: string) => `${baseUrl}/v1/avatars/${encodeURIComponent(id)}`,
+    /** Статистика своего профиля (вход обязателен). */
+    getProfileStats: (accessToken: string) =>
+      request(
+        '/v1/profile/stats',
+        RiderStats,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** «Гонки» своего профиля: свои заявки без снятых, новые гонки сверху. */
+    listProfileRaces: (accessToken: string, params: RiderHistoryParams = {}) =>
+      request(
+        `/v1/profile/races${queryString(params)}`,
+        RiderRaceHistoryPage,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** «Райды» своего профиля: прошедшие с «Иду» или организацией. */
+    listProfileRides: (accessToken: string, params: RiderHistoryParams = {}) =>
+      request(
+        `/v1/profile/rides${queryString(params)}`,
+        RiderRideHistoryPage,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Публичный профиль райдера по `publicId` (без входа); нет или нет согласия — 404. */
+    getRider: (publicId: string) =>
+      getPublic(`/v1/riders/${encodeURIComponent(publicId)}`, PublicRiderProfile),
+    /** Публичная история гонок райдера — только опубликованные протоколы. */
+    listRiderRaces: (publicId: string, params: RiderHistoryParams = {}) =>
+      getPublic(
+        `/v1/riders/${encodeURIComponent(publicId)}/races${queryString(params)}`,
+        PublicRiderRacePage,
       ),
     /**
      * Удаление своего аккаунта (вход обязателен), подтверждение — текущий пароль; `204` без тела, все сессии отозваны

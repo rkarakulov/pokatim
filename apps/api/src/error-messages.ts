@@ -51,6 +51,9 @@ export const PROJECT_ERROR_MESSAGES = {
   ROUTE_RIDE_NOT_READY: 'Заезд ещё обрабатывается, попробуйте чуть позже',
   ROUTE_RIDE_UPLOAD_FAILED: 'Файл заезда не удалось обработать',
   ROUTE_RIDE_QUOTA_EXCEEDED: 'Достигнут предел заездов по маршруту',
+  AVATAR_FORMAT_UNSUPPORTED: 'Выберите фото JPEG, PNG или WebP',
+  AVATAR_TOO_LARGE: 'Фото больше 10 МБ',
+  AVATAR_INVALID: 'Не удалось обработать фото',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

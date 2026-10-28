@@ -36,3 +36,11 @@ export {
   type StoryCardLine,
   type StoryCardResultStatus,
 } from './results-for-sharing.port';
+/** Порт для `riders` (rider-profile): строки райдера в текущих ревизиях опубликованных протоколов, названия гонок. */
+export {
+  RIDER_RESULTS,
+  RIDER_RESULTS_MAX_ROWS,
+  type RiderProtocolRow,
+  type RiderRaceInfo,
+  type RiderResults,
+} from './rider-results.port';

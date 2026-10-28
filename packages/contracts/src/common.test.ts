@@ -86,6 +86,9 @@ describe('коды ошибок', () => {
       'ROUTE_RIDE_NOT_READY',
       'ROUTE_RIDE_UPLOAD_FAILED',
       'ROUTE_RIDE_QUOTA_EXCEEDED',
+      'AVATAR_FORMAT_UNSUPPORTED',
+      'AVATAR_TOO_LARGE',
+      'AVATAR_INVALID',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

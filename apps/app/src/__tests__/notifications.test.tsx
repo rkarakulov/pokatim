@@ -59,7 +59,14 @@ beforeEach(() => {
   markAll.mockResolvedValue(undefined);
   getSettings.mockResolvedValue(DEFAULT_NOTIFICATION_SETTINGS);
   updateSettings.mockImplementation(async (_token, body) => body);
-  getProfile.mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
+  getProfile.mockResolvedValue({
+    rideReasons: [],
+    publicName: null,
+    showNameInResults: false,
+    club: null,
+    avatar: null,
+    publicId: null,
+  });
 });
 afterEach(() => jest.clearAllMocks());
 

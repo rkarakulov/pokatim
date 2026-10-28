@@ -6,6 +6,8 @@ import type { Env } from '../../config/env';
 import { QUEUE } from '../../queues';
 import { IdentityModule } from '../identity';
 import { ActivitySourceService } from './activity-source';
+import { ActivityTotalsService } from './activity-totals';
+import { ACTIVITY_TOTALS } from './activity-totals.port';
 import { ACTIVITY_SOURCE } from './activity-source.port';
 import { FsTrackFileStore } from './fs-track-file-store';
 import { TRACK_FILE_STORE } from './track-file-store';
@@ -38,11 +40,14 @@ import { TracksRepository } from './tracks.repository';
     { provide: TRACK_INGEST, useExisting: TrackIngestService },
     ActivitySourceService,
     { provide: ACTIVITY_SOURCE, useExisting: ActivitySourceService },
+    ActivityTotalsService,
+    { provide: ACTIVITY_TOTALS, useExisting: ActivityTotalsService },
     TrackErasure,
   ],
   exports: [
     TRACK_INGEST,
     ACTIVITY_SOURCE,
+    ACTIVITY_TOTALS,
     TracksRepository,
     TRACK_FILE_STORE,
     TrackSourcesService,

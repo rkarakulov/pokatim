@@ -67,3 +67,23 @@ describe('rider_verified_profiles — единственный писатель'
     ]);
   });
 });
+
+/**
+ * Сторож аватаров (rider-profile): `profile_avatars` пишет только `ProfileAvatarRepository`; имя коллекции знают
+ * только описание коллекций профиля, этот репозиторий и миграция.
+ */
+describe('profile_avatars — единственный писатель', () => {
+  it('коллекцию аватаров по имени знают только описание коллекций, репозиторий аватаров и миграция', () => {
+    const users = sources(SRC)
+      .filter((file) =>
+        /['"`]profile_avatars['"`]|PROFILE_COLLECTIONS\.avatars/.test(readFileSync(file, 'utf8')),
+      )
+      .map((file) => relative(SRC, file))
+      .sort();
+    expect(users).toEqual([
+      'db/migrations/0033_rider_profile.ts',
+      'modules/profile/profile-avatar.repository.ts',
+      'modules/profile/profile.collection.ts',
+    ]);
+  });
+});

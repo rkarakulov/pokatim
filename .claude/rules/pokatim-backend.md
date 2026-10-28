@@ -114,6 +114,32 @@ paths:
 - Append-only (только INSERT): история споров (`dispute_events`), исключения треков, пересчёты, модерация, решения
   организатора. Проекция `disputes` — переходы только из `open` (`pokatim-db.md`, «Споры»).
 
+## Профиль райдера (`profile`, `riders`, rider-profile)
+
+- `profile`: клуб и `publicId` — `PATCH /v1/profile` (`club`), аватар — `ProfileAvatarsController`
+  (`@Controller('profile/avatar')`, `AuthGuard`: `PUT` сырыми байтами — query `AvatarCropQuery` до слота и тела,
+  `ProfileAvatarService.admit` (лимит `profile-avatar:<uid>` 20/ч, свои `UploadSlots` чтения 4/1 — слот до лимита) → `readLimited` 10 МиБ (таймауты 10/60 с) → место обработки
+  `AvatarProcessingGate` (1 на процесс, ожидание ≤ 5 с, иначе 429) →
+  `processAvatar`; `POST delete` — лимит `profile-update`), отдача — `AvatarsPublicController` (`avatars/:id`,
+  `PublicReadGuard`, заголовки через `HttpAdapterHost` после чтения). Порт `RIDER_PROFILES`
+  (`RiderProfileDirectory.findPublic`) — в `ProfileCoreModule`.
+- **Исключение RC-A1 (ADR-0019):** перекодирование аватара `sharp` (`avatar-image.ts`) — в HTTP-обработчике: вход
+  ≤ 10 МиБ, JPEG/WebP ≤ 100 Мп (две стадии: shrink-on-load до 2048 px, затем квадрат), PNG ≤ 25 Мп, `failOn: 'error'`,
+  `timeout` 10 с, 1 обработка на процесс (память — ADR-0019), пул libvips вне event loop. «Рендер в HTTP-обработчике»
+  красных флагов — Skia, ffmpeg, OG; другие изображения — только по этому образцу и с ADR.
+- Истории своего профиля — в модулях-владельцах: `results` — `ProfileRacesController` (`profile/races`) →
+  `ResultsHistoryService` (`entriesOfUserPage` + `ResultsReadService.entryResult` в одной snapshot-сессии, места не
+  дублируются); `rides` — `ProfileRidesController` (`profile/rides`) → `RidesHistoryService` (`pastOf`,
+  `rides_participant_idx`). Пути `/v1/profile/{avatar,races,rides,stats}` — статические сегменты, у
+  `ProfileController` только `GET /` и `PATCH /`.
+- `riders` — модуль-композиция (образец `standings`, своих коллекций нет): `riders → profile, results, tracks,
+  identity` только через `index.ts`; `riders` не импортирует никто, кроме `AppModule`. Порты: `RIDER_PROFILES`
+  (`profile`), `RIDER_RESULTS` (`results`: `publishedRows` — строки текущих ревизий, `racesOf`), `ACTIVITY_TOTALS`
+  (`tracks`, отдельный порт — `ActivitySource` не расширяется; реэкспорт через `ResultsCoreModule`). HTTP:
+  `ProfileStatsController` (`profile/stats`, `AuthGuard`, `no-store`) и `RidersPublicController` (`riders/:publicId`,
+  `/races` — `PublicReadGuard`, `PUBLIC_READ_CACHE_CONTROL`, 404 профиля до разбора курсора). Правила —
+  `riders.policy.ts` (`summarize`, `pageRows`). `profile` не импортирует `results`: цикл `results → profile`.
+
 ## Очереди (worker)
 
 - Брокер — BullMQ на Redis; RabbitMQ не используем (переход — только через ADR; outbox оставляет к нему путь).
@@ -184,7 +210,8 @@ paths:
 ## Красные флаги pokatim
 
 Клиентское время в расчёте результата · UPDATE/DELETE аудита и истории споров, переход спора не из `open` ·
-биометрия или e-mail в логах · разбор трека или рендер в HTTP-обработчике.
+биометрия или e-mail в логах · разбор трека или рендер в HTTP-обработчике (перекодирование аватара — исключение
+RC-A1, ADR-0019).
 
 ## Уровни и группы зачёта (`results`, `profile`, race-results-07)
 

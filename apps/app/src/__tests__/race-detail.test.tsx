@@ -54,7 +54,14 @@ beforeEach(() => {
   getRace.mockResolvedValue(race);
   listRaces.mockResolvedValue({ items: [race], nextCursor: null });
   listCalendar.mockResolvedValue({ items: [], nextCursor: null });
-  getProfile.mockResolvedValue({ rideReasons: [], publicName: null, showNameInResults: false });
+  getProfile.mockResolvedValue({
+    rideReasons: [],
+    publicName: null,
+    showNameInResults: false,
+    club: null,
+    avatar: null,
+    publicId: null,
+  });
   jest.mocked(api.getCurrentSeason).mockResolvedValue({ season: null });
   jest.mocked(api.listSeasons).mockResolvedValue({ items: [] });
   // участие и таблица (race-results-04): гонка фикстуры без коридора — сервер отвечает «нет коридора»
