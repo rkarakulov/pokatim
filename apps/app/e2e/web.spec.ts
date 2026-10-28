@@ -356,8 +356,8 @@ test('карточка-приглашение /rides/invite/<id> без сесс
   const response = await request.get(`/rides/invite/${UNKNOWN_RIDE_ID}`);
   expect(response.status()).toBe(200);
   const html = await response.text();
-  // экран не публичный: без панели карточки и без OG
-  expect(html).not.toContain('Шаблон карточки');
+  // экран не публичный: без превью карточки (данных сервера в SSR нет — только оболочка экрана) и без OG
+  expect(html).not.toContain('story-preview');
   expect(html).not.toContain('og:title');
 
   await page.goto(`/rides/invite/${UNKNOWN_RIDE_ID}`);
