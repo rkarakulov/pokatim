@@ -19,6 +19,7 @@ const readPosition = jest.mocked(
 
 interface MapLibreMock {
   __camera: { easeTo: jest.Mock; fitBounds: jest.Mock };
+  __map: { showAttribution: jest.Mock };
   Map: (props: object) => ReactNode;
 }
 const maplibre = jest.requireMock<MapLibreMock>('@maplibre/maplibre-react-native');
@@ -42,6 +43,7 @@ beforeEach(() => {
   readPosition.mockReset();
   camera.easeTo.mockClear();
   camera.fitBounds.mockClear();
+  maplibre.__map.showAttribution.mockClear();
 });
 
 async function renderMap(extra: { fill?: boolean; bottomInset?: number } = {}) {
@@ -152,11 +154,15 @@ describe('RouteMap native: «Моё местоположение» (routes-04d, 
 });
 
 describe('RouteMap native: fill и шторка (routes-04d, RC-5, RC-6)', () => {
-  it('атрибуция «i» — слева внизу; в fill — со сдвигом на высоту шторки', async () => {
+  it('атрибуция «i» — своя кнопка слева внизу, в fill — со сдвигом на высоту шторки; нажатие — диалог MapLibre', async () => {
     const map = await renderMap();
-    expect(map.props.attributionPosition).toEqual({ bottom: space.s2, left: space.s2 });
-    const filled = await renderMap({ fill: true, bottomInset: 300 });
-    expect(filled.props.attributionPosition).toEqual({ bottom: space.s2 + 300, left: space.s2 });
+    expect(map.props.attribution).toBe(false);
+    const button = () => screen.getByRole('button', { name: 'Об источниках карты' });
+    expect(button()).toHaveStyle({ position: 'absolute', bottom: space.s2, left: space.s2 });
+    await fireEvent.press(button());
+    expect(maplibre.__map.showAttribution).toHaveBeenCalledTimes(1);
+    await renderMap({ fill: true, bottomInset: 300 });
+    expect(button()).toHaveStyle({ bottom: space.s2 + 300, left: space.s2 });
   });
 
   it('fill: рамка на всю область; карта монтируется после раскладки — начальная камера и «в рамку» с отступом шторки', async () => {

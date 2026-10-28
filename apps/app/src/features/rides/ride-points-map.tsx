@@ -1,5 +1,4 @@
 import type * as MapLibreNative from '@maplibre/maplibre-react-native';
-import { space } from '@pokatim/design-tokens';
 import {
   cameraCall,
   cameraPadding,
@@ -18,6 +17,7 @@ import { loadMapLibreNative } from '@/features/maps/load-maplibre-native';
 import { LocationLayer } from '@/features/maps/location-layer';
 import { createLocationStore } from '@/features/maps/location-store';
 import { LOCATE_ZOOM } from '@/features/maps/location-style';
+import { MapAttributionButton } from '@/features/maps/map-attribution-button';
 import { MapOverlayControls } from '@/features/maps/map-overlay-controls';
 import { RouteMapFrame } from '@/features/maps/route-map-frame';
 
@@ -29,8 +29,6 @@ import {
   ridePointFeatures,
   ridePointLayers,
 } from './ride-points-style';
-
-const ATTRIBUTION = { bottom: space.s2, left: space.s2 };
 
 /**
  * Native-карта точек старта ленты райдов (05c, `@maplibre/maplibre-react-native` 11; вызывающий проверяет
@@ -113,9 +111,7 @@ export function RidePointsMap({
                 ref={mapRef}
                 style={StyleSheet.absoluteFill}
                 mapStyle={styleUrl}
-                attribution
-                attributionPosition={ATTRIBUTION}
-                tintColor={theme.text.secondary}
+                attribution={false}
                 logo={false}
                 compass={false}
                 scaleBar={false}
@@ -152,6 +148,12 @@ export function RidePointsMap({
               </lib.Map>
             ) : null}
           </View>
+        ) : null}
+        {lib ? (
+          <MapAttributionButton
+            theme={theme}
+            onPress={() => mapRef.current?.showAttribution().catch(() => undefined)}
+          />
         ) : null}
         {lib && !failed ? (
           <MapOverlayControls

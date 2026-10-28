@@ -1,6 +1,8 @@
 import {
   appThemes,
+  fontFilesOf,
   type AppThemeDefinition,
+  type FontFileId,
   type AppThemeId,
   type FontRole,
   type FontWeight,
@@ -35,7 +37,7 @@ import type { FontSource } from 'expo-font';
  * Все файлы гарнитур всех тем (native бандлит всё; грузится — только набор активной темы, `useThemeFonts`).
  * Подключаем только нужные начертания: импорт из корня пакета тянет в бандл все файлы семейства.
  */
-export const fontAssets = {
+export const fontAssets: Record<FontFileId, FontSource> = {
   GolosText_400Regular,
   GolosText_500Medium,
   GolosText_600SemiBold,
@@ -62,7 +64,7 @@ export const fontAssets = {
   RobotoCondensed_700Bold,
 };
 
-type FontFamily = keyof typeof fontAssets;
+type FontFamily = FontFileId;
 type RoleFamilies<R extends FontRole> = Record<FontWeight<R>, FontFamily>;
 
 /** Шрифты темы: семейства ролей (`FontFamilies` базы) и файлы, которые нужно загрузить. */
@@ -71,72 +73,11 @@ export interface ThemeFontSet {
   assets: Partial<Record<FontFamily, FontSource>>;
 }
 
-/**
- * Гарнитура (`AppThemeFonts.display|text` темы) → семейства по весам роли. Android не синтезирует вес: у каждого
- * веса своё семейство. Новая гарнитура темы — файлы в `fontAssets` и строка здесь.
- */
-const FACES: Record<string, { display?: RoleFamilies<'display'>; text?: RoleFamilies<'text'> }> = {
-  'Playfair Display': {
-    display: { 500: 'PlayfairDisplay_500Medium', 600: 'PlayfairDisplay_600SemiBold' },
-  },
-  Inter: {
-    text: {
-      400: 'Inter_400Regular',
-      500: 'Inter_500Medium',
-      600: 'Inter_600SemiBold',
-      700: 'Inter_700Bold',
-    },
-  },
-  // одна гарнитура на обе роли (одна запись): display 600 — файл 700, заголовок плотнее текста 600
-  Manrope: {
-    display: { 500: 'Manrope_500Medium', 600: 'Manrope_700Bold' },
-    text: {
-      400: 'Manrope_400Regular',
-      500: 'Manrope_500Medium',
-      600: 'Manrope_600SemiBold',
-      700: 'Manrope_700Bold',
-    },
-  },
-  Onest: {
-    display: { 500: 'Onest_500Medium', 600: 'Onest_600SemiBold' },
-    text: {
-      400: 'Onest_400Regular',
-      500: 'Onest_500Medium',
-      600: 'Onest_600SemiBold',
-      700: 'Onest_700Bold',
-    },
-  },
-  'Golos Text': {
-    display: { 500: 'GolosText_500Medium', 600: 'GolosText_600SemiBold' },
-    text: {
-      400: 'GolosText_400Regular',
-      500: 'GolosText_500Medium',
-      600: 'GolosText_600SemiBold',
-      700: 'GolosText_700Bold',
-    },
-  },
-  // сжатые цифры плотнее: display 600 — файл 700
-  'Roboto Condensed': {
-    display: { 500: 'RobotoCondensed_500Medium', 600: 'RobotoCondensed_700Bold' },
-  },
-  'Inter Tight': {
-    display: { 500: 'InterTight_500Medium', 600: 'InterTight_600SemiBold' },
-  },
-  Oswald: {
-    display: { 500: 'Oswald_500Medium', 600: 'Oswald_600SemiBold' },
-  },
-};
-
-function face<R extends FontRole>(role: R, name: string): RoleFamilies<R> {
-  const families = FACES[name]?.[role] as RoleFamilies<R> | undefined;
-  if (!families) throw new Error(`theme fonts: no ${role} faces for "${name}" in fonts.ts`);
-  return families;
-}
-
 function buildFontSet(def: AppThemeDefinition): ThemeFontSet {
+  // гарнитура → файлы по весам роли — `appFontFaces` (`@pokatim/design-tokens`, общая с API: карточка для сторис)
   const families = {
-    display: face('display', def.fonts.display),
-    text: face('text', def.fonts.text),
+    display: fontFilesOf('display', def.fonts.display),
+    text: fontFilesOf('text', def.fonts.text),
   };
   const names = [...Object.values(families.display), ...Object.values(families.text)];
   return { families, assets: Object.fromEntries(names.map((name) => [name, fontAssets[name]])) };

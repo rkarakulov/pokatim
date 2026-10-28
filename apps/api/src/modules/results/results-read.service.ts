@@ -41,6 +41,7 @@ import {
   ownGroup,
   rankRows,
   resultStatus,
+  storyCardEligible,
   unrankedOf,
   uploadClosesAt,
 } from './results.policy';
@@ -156,7 +157,10 @@ export class ResultsReadService {
         .map((attempt) => this.myAttempt(attempt, entry)),
       pendingUploads: entry ? await this.pendingUploads(entry) : [],
       uploadClosesAt: uploadClosesAt(race).toISOString(),
-      actions: entryActions(race, this.races.phase(race, now), entry, now, { openDisputes }),
+      actions: {
+        ...entryActions(race, this.races.phase(race, now), entry, now, { openDisputes }),
+        canShareStory: storyCardEligible(entry, result),
+      },
     };
   }
 

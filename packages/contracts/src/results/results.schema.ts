@@ -262,6 +262,8 @@ export const MyRaceEntry = z.object({
     reasons: z.array(tolerantEnum(RACE_ENTRY_BLOCK_REASONS)),
     /** START → Verified: активная START-заявка, окно `upcoming|open`, схема `gender_age` (анкета — `verified`) */
     canUpgrade: z.boolean().default(false),
+    /** story-cards: карточка для сторис доступна — `storyCardEligible` сервера (старый сервер — `false`) */
+    canShareStory: z.boolean().default(false),
   }),
 });
 export type MyRaceEntry = z.infer<typeof MyRaceEntry>;

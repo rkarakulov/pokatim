@@ -272,6 +272,15 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   ошибки определения сезона и `/me` — баннеры с повтором, данные при ошибке обновления остаются; скрыт только без
   ошибок (сезона нет или своих строк нет).
 
+- Карточка для сторис (story-cards, ADR-0018) — `features/races/story/*`: экран `races/story/[id]` внутри
+  `Stack.Protected` (рядом с `races/result/[id]/[entryId]`; в `app/_layout.tsx` и `__tests__/app-routes.ts`). Входы —
+  `ShareStoryButton` только по `actions.canShareStory` сервера: «Ваше участие» и своя строка таблицы
+  (`ownRowAction` → `rivalPath` своей заявки: «Ваш результат», без подачи спора). Статус — `useStoryCard`
+  (`['races','story',raceId,template]`, опрос 1 с, не дольше 30 с от первого `pending`, `failed`/таймаут — ошибка с
+  повтором, 409 — «Карточки пока нет»); PNG — `useStoryFile` заранее (RC-13). Шаринг — только
+  `src/lib/share-story(.web).ts`: native — `expo-file-system` (кэш) + `expo-sharing` лениво (`load-expo-sharing.ts`;
+  нет `ExpoSharing` — «Скачать PNG» через `downloadFile`), web — `navigator.share({ files })`, иначе `<a download>`.
+
 ## Профиль райдера (rider-profile, `docs/product/profile.md`)
 
 - Маршруты: `/profile` — свой профиль в первом `Stack.Protected` (`useSettingsShell`; вход — аватар последним справа
@@ -295,10 +304,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   формата и 10 МиБ) + `avatar-crop.web.tsx` (pointer events, кнопки и клавиши масштаба, без колеса; доли `x, y, size` в
   ориентированном изображении — `avatar-crop-math.ts`). Блок «Фото» — `avatar-editor(.web).tsx` поверх
   `avatar-section.tsx`; удаление — инлайн-подтверждение. Загрузка — `api.uploadAvatar` в `withAccessToken`, без XHR и
-  прогресса; тексты 413/415/422/429 — `avatar-errors.ts` (429 загрузки с паузой занятой обработки, 5 с, — «через минуту»; удаление — общий текст; файл, который браузер не
-  декодировал, — текст 422).
-  Исходник не перекодируется и не уменьшается (JPEG/WebP до 100 Мп, PNG до 25 Мп — решает сервер): EXIF/GPS стирает
-  сервер.
+  прогресса; тексты 413/415/422/429 — `avatar-errors.ts` (429 загрузки с паузой занятой обработки, 5 с, — «через
+  минуту»; удаление — общий текст; файл, который браузер не декодировал, — текст 422). Исходник не перекодируется и не
+  уменьшается (JPEG/WebP до 100 Мп, PNG до 25 Мп — решает сервер, ADR-0019): EXIF/GPS стирает сервер.
 
 ## Маршруты (routes-01, `docs/product/routes.md`)
 

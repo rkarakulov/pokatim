@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useMyRaceEntry, useRaceResults } from '../queries';
+import { ShareStoryButton } from '../story/share-story-button';
 import {
   categoryLabel,
   disputeStatus,
@@ -94,7 +95,9 @@ export function RivalCardScreen({
   const disputes = useMyRaceDisputes(raceId, valid);
   // группа своей заявки — подача только в своей группе зачёта (race-results-07)
   const entry = useMyRaceEntry(raceId, valid);
-  const title = t('disputes.rival.title');
+  // своя строка (story-cards): «Ваш результат» и «Поделиться в сторис», без подачи спора
+  const own = entry.data?.entry?.id === entryId;
+  const title = t(own ? 'races.result.ownTitle' : 'disputes.rival.title');
 
   return (
     <DisputeScreenShell title={title} raceId={raceId} testID="rival-card">
@@ -108,7 +111,11 @@ export function RivalCardScreen({
             return (
               <View style={styles.card}>
                 <RivalResult row={found.row} page={found.page} />
-                {mine ? (
+                {own ? (
+                  entry.data?.actions.canShareStory ? (
+                    <ShareStoryButton raceId={raceId} />
+                  ) : null
+                ) : mine ? (
                   // участие не загружено — подача не предлагается (ошибка и «Нет соединения» с повтором)
                   <AsyncContent query={entry} skeleton={<ActionSkeletonLines />}>
                     {(own) => (

@@ -10,7 +10,7 @@ import { ProfileAvatarService } from './profile-avatar.service';
 export const AVATAR_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
 /**
- * Отдача аватара (rider-profile, ADR-0018): без входа, IP-лимит `public-read`; доступ — по непредсказуемому id
+ * Отдача аватара (rider-profile, ADR-0019): без входа, IP-лимит `public-read`; доступ — по непредсказуемому id
  * (согласие не проверяется — RC-A2). Заголовки файла ставятся после чтения: Nest пишет `@Header` до обработчика, а 404
  * должен уйти JSON-ом и без `immutable`. `sandbox` и `nosniff` — байты не исполняются и не угадываются.
  */

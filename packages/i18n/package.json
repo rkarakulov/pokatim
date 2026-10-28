@@ -20,6 +20,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@pokatim/contracts": "workspace:*",
     "@rkarakulov/i18n-core": "catalog:"
   },
   "devDependencies": {

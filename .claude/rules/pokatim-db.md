@@ -72,7 +72,7 @@ paths:
   не меняется (отзыв согласия и сброс имени его не трогают); наружу — только при имени и согласии. Индекс
   `profiles_public_id_unique` — `unique` + `partialFilterExpression: { publicId: { $type: 'string' } }` (не `sparse`:
   `null` в индекс не попадает). Бэкфилл миграции — профили с именем и согласием.
-- Аватары — `profile_avatars` (ADR-0018): `{ _id: randomToken, userId, bytes: Binary JPEG 512×512, contentType,
+- Аватары — `profile_avatars` (ADR-0019): `{ _id: randomToken, userId, bytes: Binary JPEG 512×512, contentType,
   width, height, bytesLength, createdAt }`, индекс `profile_avatars_user_idx` `{ userId }`; единственный писатель —
   `ProfileAvatarRepository` (сторож `profile.repository.test.ts`). Замена — транзакция: чтение профиля → вставка →
   `setAvatar` (upsert) → удаление прежнего (один документ на пользователя); удаление — `clearAvatar` (`returnDocument:

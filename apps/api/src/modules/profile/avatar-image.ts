@@ -7,7 +7,7 @@ import {
 import sharp from 'sharp';
 
 /**
- * Обработка аватара (rider-profile, ADR-0018): ограниченное перекодирование в HTTP-обработчике (RC-A1) — вход до
+ * Обработка аватара (rider-profile, ADR-0019): ограниченное перекодирование в HTTP-обработчике (RC-A1) — вход до
  * 10 МиБ, JPEG/WebP до 100 Мп с shrink-on-load, PNG до 25 Мп, таймаут 10 с, одна обработка на процесс;
  * декодирование — в пуле libvips, не в event loop. Вывод — только JPEG 512×512 без метаданных (EXIF, GPS, XMP и ICC не пишутся: `keepMetadata`/`withMetadata`/`withExif` не вызываются).
  * Кэш операций sharp выключен (байты чужих фото не держатся в памяти), один поток libvips на операцию.
@@ -73,7 +73,7 @@ export function cropRect(width: number, height: number, crop: CropIntent | null)
 
 /**
  * Длинная сторона промежуточного кадра: JPEG и WebP декодируются с уменьшением при загрузке (shrink-on-load) — пик
- * памяти libvips не растёт с мегапикселями входа (замер — ADR-0018). Обрезка 512 px из кадра 2048 px: квадрат от
+ * памяти libvips не растёт с мегапикселями входа (замер — ADR-0019). Обрезка 512 px из кадра 2048 px: квадрат от
  * трети короткой стороны — без увеличения.
  */
 export const AVATAR_DECODE_EDGE_PX = 2048;

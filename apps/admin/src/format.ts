@@ -69,11 +69,5 @@ export function formatLocalDate(date: string): string {
   return `${part('day')} ${part('month')} ${part('year')}`;
 }
 
-/** Всегда «ч:мм:сс» из секунд («0:32:19», «25:01:01») — как в приложении: время заезда, сегмента. */
-export function formatElapsed(totalSec: number): string {
-  const hours = Math.floor(totalSec / 3600);
-  const minutes = Math.floor((totalSec % 3600) / 60);
-  const seconds = totalSec % 60;
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${hours}:${pad(minutes)}:${pad(seconds)}`;
-}
+/** Всегда «ч:мм:сс» из секунд («0:32:19», «25:01:01») — общий код `@pokatim/i18n`, как в приложении. */
+export { formatElapsed } from '@pokatim/i18n';

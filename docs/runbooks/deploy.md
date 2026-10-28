@@ -456,6 +456,12 @@ ADR-0011, `docs/product/tracks-and-devices.md`.
 **Переход на свой OW (prod):** свой инстанс (пин версии), свои приложения Garmin/Wahoo, `OW_SHARED_INSTANCE=false`;
 подключения dev не переносятся.
 
+## Карточки для сторис
+
+ADR-0018. Образ api вырос: нативный бинарь `@resvg/resvg-js-linux-x64-gnu` (~6 МБ) и TTF гарнитур тем
+`@expo-google-fonts/*` (~29 МБ, `runtime-deps.mjs` копирует пакеты целиком). PNG — в Redis (≤ 2 МБ на картинку,
+TTL 24 ч); память Redis — учитывать при росте числа карточек. Рендер — worker (`concurrency: 1`).
+
 ## Диск
 
 Порог деплоя — 1,5 ГБ свободно (`MIN_FREE_MB`), иначе `::error::` без изменений на сервере. Освобождать только своё:

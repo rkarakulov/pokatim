@@ -43,6 +43,7 @@ import RacePickRoute from '../app/races/pick/[id]';
 import DisputeResponseRoute from '../app/races/dispute-response/[id]/[disputeId]';
 import FileDisputeRoute from '../app/races/dispute/[id]/[entryId]';
 import RivalResultRoute from '../app/races/result/[id]/[entryId]';
+import StoryCardRoute from '../app/races/story/[id]';
 import SeasonRoute from '../app/seasons/[id]';
 import StatusScreen from '../app/status';
 import UiKitScreen from '../app/ui-kit';
@@ -92,6 +93,7 @@ export const appRoutes = {
   'races/[id]': RaceRoute,
   'races/pick/[id]': RacePickRoute,
   'races/result/[id]/[entryId]': RivalResultRoute,
+  'races/story/[id]': StoryCardRoute,
   'races/dispute/[id]/[entryId]': FileDisputeRoute,
   'races/dispute-response/[id]/[disputeId]': DisputeResponseRoute,
   'routes/[id]': CatalogRouteRoute,

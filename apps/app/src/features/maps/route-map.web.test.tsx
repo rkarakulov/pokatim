@@ -188,6 +188,26 @@ describe('RouteMap (web, maplibre-gl)', () => {
     expect(text()).not.toContain('Карта не загрузилась');
   });
 
+  it('атрибуция: своя кнопка «i» с подписью раскрывает контрол MapLibre, его кнопка скрыта', async () => {
+    await render(<RouteMap {...props()} />);
+    await flush();
+    // разметка контрола maplibre-gl в углу карты (мок контрола DOM не строит)
+    const canvas = host.querySelector<HTMLElement>('[data-testid="route-map-canvas"]')!;
+    canvas.innerHTML =
+      '<details class="maplibregl-ctrl maplibregl-ctrl-attrib maplibregl-compact">' +
+      '<summary class="maplibregl-ctrl-attrib-button"></summary></details>';
+    const summary = canvas.querySelector<HTMLElement>('.maplibregl-ctrl-attrib-button')!;
+    const toggle = jest.fn();
+    summary.addEventListener('click', toggle);
+    const button = host.querySelector<HTMLElement>('[aria-label="Об источниках карты"]')!;
+    expect(button.getAttribute('role')).toBe('button');
+    await act(async () => button.click());
+    expect(toggle).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('style')!.textContent).toContain(
+      '.maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button{display:none}',
+    );
+  });
+
   it('ошибка стиля или тайлов — сообщение поверх карты', async () => {
     await render(<RouteMap {...props()} />);
     await flush();

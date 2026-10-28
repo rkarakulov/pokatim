@@ -18,7 +18,7 @@ export const PROFILE_POLICY = {
    */
   avatarSlots: { maxTotal: 4, maxPerUser: 1 },
   /**
-   * rider-profile: обработка sharp — одна на процесс (пик памяти — ADR-0018, лимит контейнера API 512 МБ); занято —
+   * rider-profile: обработка sharp — одна на процесс (пик памяти — ADR-0019, лимит контейнера API 512 МБ); занято —
    * ожидание до 5 с, затем `429`.
    */
   avatarProcessing: { concurrency: 1, waitMs: 5_000 },

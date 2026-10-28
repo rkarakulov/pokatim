@@ -27,6 +27,7 @@ import { RidesModule } from './modules/rides';
 import { ResultsModule } from './modules/results';
 import { RidersModule } from './modules/riders';
 import { RoutesModule } from './modules/routes';
+import { SharingModule } from './modules/sharing';
 import { StandingsModule } from './modules/standings';
 import { TracksModule } from './modules/tracks';
 
@@ -52,6 +53,7 @@ import { TracksModule } from './modules/tracks';
     DisputesModule,
     // рейтинг сезона (race-results-08)
     StandingsModule,
+    SharingModule,
     // профиль райдера: статистика и публичный профиль (rider-profile, модуль-композиция)
     RidersModule,
     CalendarModule,

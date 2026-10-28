@@ -47,6 +47,7 @@ export const PROJECT_ERROR_MESSAGES = {
   RESULT_GROUP_NOT_ALLOWED: 'Можно выбрать свою группу или более молодую своего пола',
   VERIFIED_DEMOGRAPHICS_LOCKED: 'Пол и год рождения уже зафиксированы заявкой Verified',
   ROUTE_PUBLICATION_LIMIT: 'Достигнут предел заявок в каталог',
+  STORY_CARD_UNAVAILABLE: 'Карточки для этой гонки пока нет',
   AVATAR_FORMAT_UNSUPPORTED: 'Выберите фото JPEG, PNG или WebP',
   AVATAR_TOO_LARGE: 'Фото больше 10 МБ',
   AVATAR_INVALID: 'Не удалось обработать фото',

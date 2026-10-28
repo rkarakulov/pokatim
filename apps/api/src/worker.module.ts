@@ -20,6 +20,7 @@ import { DisputesCoreModule, DisputesWorkerModule } from './modules/disputes';
 import { notificationsOutboxRoutes, NotificationsWorkerModule } from './modules/notifications';
 import { resultsOutboxRoutes, ResultsWorkerModule } from './modules/results';
 import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
+import { SharingWorkerModule } from './modules/sharing';
 import { StandingsWorkerModule } from './modules/standings';
 import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
 
@@ -62,6 +63,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     NotificationsWorkerModule,
     // регламент рейтинга сезона (race-results-08, DV-1: сверка отпечатков, без событий)
     StandingsWorkerModule,
+    // рендер карточек для сторис (story-cards, ADR-0018)
+    SharingWorkerModule,
   ],
 })
 export class WorkerModule {}

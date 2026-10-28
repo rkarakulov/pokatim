@@ -44,6 +44,7 @@ export const actions = (overrides: Partial<Actions> = {}): Actions => ({
   canAddAttempt: false,
   reasons: [],
   canUpgrade: false,
+  canShareStory: false,
   ...overrides,
 });
 
