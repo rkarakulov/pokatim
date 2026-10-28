@@ -9,6 +9,7 @@ import {
   REFRESH_URL,
   SIGN_IN_URL,
   UNKNOWN_RACE_ID,
+  UNKNOWN_RIDER_ID,
   UNKNOWN_RIDE_ID,
   UNKNOWN_ROUTE_ID,
   UNKNOWN_START_ID,
@@ -328,6 +329,47 @@ test('публичная карточка неизвестного маршру�
   }
   // публичный экран вне гардов: гостя не уводит на регистрацию
   await expect(page).toHaveURL(`${BASE_URL}/routes/${UNKNOWN_ROUTE_ID}`);
+});
+
+test('публичный профиль неизвестного райдера (rider-profile): HTML 200 + noindex всегда, мета без ПДн и og:url, после гидрации — «Профиль недоступен» (без API — «Нет соединения»)', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get(`/riders/${UNKNOWN_RIDER_ID}`);
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(html).toMatch(/<meta property="og:title" content="Профиль райдера"/);
+  expect(html).toMatch(/<meta name="robots" content="noindex"/);
+  expect(html).not.toContain('og:url');
+
+  await page.goto(`/riders/${UNKNOWN_RIDER_ID}`);
+  if (WITH_API) {
+    await expect(page.getByText('Профиль недоступен', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'На главную' })).toBeVisible();
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+  // публичный экран вне гардов: гостя не уводит на регистрацию
+  await expect(page).toHaveURL(`${BASE_URL}/riders/${UNKNOWN_RIDER_ID}`);
+});
+
+test('свой профиль /profile без сессии (rider-profile): HTML без данных и OG, после гидрации — гард входа', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get('/profile');
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  // экран не публичный: без шапки профиля и без OG
+  expect(html).not.toContain('Редактировать профиль');
+  expect(html).not.toContain('og:title');
+
+  await page.goto('/profile');
+  if (WITH_API) {
+    await expect(page).toHaveURL(`${BASE_URL}/register`);
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
 });
 
 test('жалоба на райд /rides/report/<id> без сессии (05b): HTML без формы и OG, после гидрации — гард входа', async ({
@@ -1116,5 +1158,44 @@ test.describe('с API', () => {
     } finally {
       if (rideId) await cancelRideByApi(request, organizer, rideId);
     }
+  });
+
+  test('Профиль райдера (rider-profile): имя, клуб и согласие через API → гость открывает /riders/<publicId>, имя видно на странице, но не в мета', async ({
+    page,
+    request,
+  }) => {
+    const email = await registerHomeRider(request);
+    const signIn = await request.post(`${API_URL}/v1/auth/session/sign-in`, {
+      data: { email, password: HOME_FIXTURE_PASSWORD },
+    });
+    expect(signIn.status()).toBe(200);
+    const token = ((await signIn.json()) as { session?: { accessToken: string } }).session
+      ?.accessToken;
+    expect(token, 'access райдера смоука').toBeDefined();
+    const name = `Смоук ${Date.now() % 100_000}`;
+    const updated = await request.patch(`${API_URL}/v1/profile`, {
+      headers: { authorization: `Bearer ${token}` },
+      data: { publicName: name, showNameInResults: true, club: 'Смоук Вело' },
+    });
+    expect(updated.status()).toBe(200);
+    const { publicId } = (await updated.json()) as { publicId: string | null };
+    expect(publicId).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    // SSR: посев loader-а — имя в HTML страницы, но не в <title> и не в OG; без og:url
+    const html = await (await request.get(`/riders/${publicId}`)).text();
+    expect(html).toMatch(/<meta name="robots" content="noindex"/);
+    expect(html).toMatch(/<meta property="og:title" content="Профиль райдера"/);
+    expect(html).not.toContain('og:url');
+    const head = html.slice(0, html.indexOf('</head>'));
+    expect(head).not.toContain(name);
+    expect(head).not.toContain('Смоук Вело');
+
+    await page.goto(`/riders/${publicId}`);
+    await expect(page.getByRole('heading', { name })).toBeVisible();
+    await expect(page.getByText('Смоук Вело', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText('Пока нет опубликованных результатов', { exact: true }),
+    ).toBeVisible();
+    await expect(page).toHaveTitle('Профиль райдера — Покатим');
   });
 });

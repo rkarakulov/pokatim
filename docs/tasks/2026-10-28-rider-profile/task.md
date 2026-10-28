@@ -606,3 +606,41 @@ PR A. Architecture Review — **Status: CONCERNS** (блокеров нет; RC-
 - `test/uploads.ts` `heldUpload` получил параметр метода (`PUT` для аватара).
 - `ProfileView` из `setAvatar`/`clearAvatar`: замена — чтение профиля в транзакции до записи (вместо
   `returnDocument: 'before'` у upsert), удаление — `returnDocument: 'before'` как в 11.3.
+
+### PR B (ветка `feature/rider-profile-app` от `feature/rider-profile`, 2026-10-28)
+
+**Изменения** (по `plan-b.md`, D-B1…D-B4 — по рекомендациям).
+
+- `/profile` (`app/profile.tsx` → `features/profile/own-profile-screen.tsx`, под гардом, `useSettingsShell`): шапка
+  `ProfileHead` (аватар 56, имя / «Имя не указано», клуб в личной линии, высота по содержимому — D-B1), «Редактировать
+  профиль», «Как вас видят другие» / подсказка, `ProfileStats` (+ «Лучшие места»), блок «Сезон» (перенесён),
+  «История» (`SegmentedControl`, `HistoryList` со всеми состояниями §4.12, «Показать ещё»), pull-to-refresh.
+- `TopBar`: квадратный аватар последним справа (`onOpenProfile`, `avatarId`; `useOwnAvatarId` — кэш `['profile']`).
+  Хаб «Настроек»: «Профиль» → `/profile` (D-B3).
+- `/settings/profile` → «Редактировать профиль»: блок «Фото» (`avatar-editor(.web).tsx` поверх `avatar-section.tsx`;
+  native — `expo-image-picker` лениво после `imagePickerSupported()`, web — `expo-document-picker` + `avatar-crop.web.tsx`
+  на чистой `avatar-crop-math.ts`), удаление с инлайн-подтверждением, поле «Клуб»; тексты 413/415/422/429 —
+  `avatar-errors.ts`.
+- `/riders/[id]` (вне гардов, SSR-посев, мета всегда нейтральная + `noindex`, без `og:url` — D-B2) →
+  `features/riders/{rider-screen.tsx,queries.ts}`; `publicPath` принимает схему id (`RiderPublicId`).
+- `components/rider-avatar.tsx` (`expo-image`, пусто/ошибка — иконка человека); `layout.avatarProfile = 56`
+  (`@pokatim/design-tokens`, D-B4); строки — `packages/i18n` (формальное «вы»); `expo-image-picker@~58.0.10` + config
+  plugin (`cameraPermission`/`microphonePermission: false`).
+- Документы: `pokatim-app.md` (раздел «Профиль райдера»), `docs/product/profile.md`, `docs/product/home.md`.
+
+**Тесты.** Новые: `own-profile`, `rider-profile`, `rider-avatar`, `avatar-crop-math`, `avatar-errors`,
+`profile-format`, `pick-avatar` (native и web), `avatar-crop.web`, `avatar-editor.web`; дополнены: `top-bar`, `home`,
+`profile-screen` (клуб, фото native, 413/415/422/429, удаление), `profile-season-block` (теперь `/profile`),
+`auth-guard`, `settings-screen`, `not-found` (`/no-such-page`), `public-metadata`, `public-ssr`, `design-tokens`.
+e2e: шаги «неизвестный райдер», «`/profile` без сессии», с API — «имя/клуб через API → гость на `/riders/<publicId>`».
+
+**Проверки.** `TURBO_CONCURRENCY=1 pnpm check` (`…/pokatim_riderprofile_app_test`, Redis `:6479/10`) — зелёный
+(`@pokatim/app` 1806/1806, API 142 файла, `Tasks: 15 successful`). `pnpm build:web` — зелёный. `pnpm e2e:web` (без
+API): 19 passed, 8 skipped, 2 failed — `rides/report/<id>` (05b) и `rides/route-pick` (05c): ждут «Нет соединения»,
+экран показывает «Не удалось загрузить»; падают и в одиночном прогоне, зона не затронута PR B — вынесено как
+находка. Новые шаги rider-profile — зелёные. `E2E_API=1`, iOS/Android вживую (системная обрезка, старый dev-клиент,
+формат HEIC) — NOT VERIFIED.
+
+**Отклонения.** `image-picker-support.web.ts` не создан: web-вариант `pick-avatar.web.ts` модуль не импортирует.
+Ячейки статистики «км»/«м» — ключи `profile.stats.km|m`; a11y строк — ключи `profile.history.place|time` вместо
+`raceA11y/rideA11y`. `resultElapsed` получает строку истории с `ranked/group`-заглушками (тип «моего участия»).

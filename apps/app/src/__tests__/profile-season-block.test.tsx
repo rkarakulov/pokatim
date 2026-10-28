@@ -6,7 +6,7 @@ import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-rout
 import { useSessionStore } from '@/features/auth/session-store';
 import { api } from '@/lib/api';
 
-import ProfileScreen from '../app/settings/profile';
+import OwnProfileRoute from '../app/profile';
 import { liveSession, signInForTest } from './auth-fixtures';
 import { createQueryWrapper, createTestQueryClient } from './query-wrapper';
 import { mine, myStanding, SEASON_ID, season2026 } from './standings-fixtures';
@@ -17,12 +17,8 @@ const getMine = jest.mocked(api.getMySeasonStandings);
 
 const openProfile = (client: QueryClient = createTestQueryClient()) =>
   renderRouter(
-    {
-      'settings/profile': ProfileScreen,
-      'seasons/[id]': () => null,
-      'settings/account/delete': () => null,
-    },
-    { initialUrl: '/settings/profile', wrapper: createQueryWrapper(client) },
+    { profile: OwnProfileRoute, 'seasons/[id]': () => null },
+    { initialUrl: '/profile', wrapper: createQueryWrapper(client) },
   );
 const failure = () => new ApiHttpError(500, { code: 'INTERNAL', message: 'x' });
 const refetch = (client: QueryClient, queryKey: readonly unknown[]) =>
@@ -42,6 +38,9 @@ beforeEach(() => {
     avatar: null,
     publicId: null,
   });
+  // статистика и история своего профиля (rider-profile) — свои тесты в `own-profile.test.tsx`
+  jest.mocked(api.getProfileStats).mockReturnValue(new Promise(() => undefined));
+  jest.mocked(api.listProfileRaces).mockReturnValue(new Promise(() => undefined));
   jest.mocked(api.getCurrentSeason).mockResolvedValue({ season: season2026 });
   getMine.mockResolvedValue(mine());
 });
@@ -49,7 +48,7 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
-describe('«Профиль»: блок «Сезон» (08c, RC-18)', () => {
+describe('«Профиль»: блок «Сезон» (08c, RC-18; с rider-profile — на /profile)', () => {
   it('своя строка: место «=1», очки, «{группа} · {класс}»; гонки таблицы — место, очки, в зачёте / не в зачёте / DQ · 0', async () => {
     await openProfile();
 
@@ -80,7 +79,7 @@ describe('«Профиль»: блок «Сезон» (08c, RC-18)', () => {
   it('нет своих строк — блок скрыт', async () => {
     getMine.mockResolvedValue(mine([]));
     await openProfile();
-    await screen.findByRole('header', { name: 'Профиль' });
+    await screen.findByText('Имя не указано');
     await waitFor(() => expect(getMine).toHaveBeenCalled());
 
     await waitFor(() => expect(screen.queryByTestId('profile-season')).toBeNull());

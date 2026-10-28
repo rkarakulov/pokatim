@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { appThemes } from './app-themes.ts';
 import { contrastPairs, contrastPairsOf, contrastRatio } from './contrast.ts';
 import { designSystemCss } from './css.ts';
+import { layout } from './index.ts';
 import { themes, type ThemeName } from './brand.ts';
 
 /** CSS-переменные прототипов (`:root,[data-theme=light]` / `[data-theme=dark]`) → семантические роли. */
@@ -178,5 +179,11 @@ describe('CSS для веба (обёртка с брендом pokatim)', () =>
     expect(css).toMatch(
       /@media \(prefers-color-scheme: dark\) \{\s*:root \{[^}]*--color-surface-default: #0E0E0E;[^}]*color-scheme: dark;/,
     );
+  });
+});
+
+describe('раскладка приложения (layout)', () => {
+  it('аватар шапки профиля — 56 px (`.phead-name .ava` прототипа, rider-profile)', () => {
+    expect(layout).toEqual({ contentMaxWidth: 640, avatarProfile: 56 });
   });
 });

@@ -11,6 +11,7 @@ import {
 } from '../app/calendar/[id]';
 import { generateMetadata as raceMetadata, loader as raceLoader } from '../app/races/[id]';
 import { generateMetadata as rideMetadata, loader as rideLoader } from '../app/rides/[id]';
+import { generateMetadata as riderMetadata, loader as riderLoader } from '../app/riders/[id]';
 import { generateMetadata as seasonMetadata, loader as seasonLoader } from '../app/seasons/[id]';
 import { resetPublicSsrCache } from '@/lib/public-ssr';
 
@@ -453,5 +454,64 @@ describe('мета публичной карточки кофе-райда (SSR,
     resetPublicSsrCache();
     fetchMock.mockRejectedValue(new TypeError('fetch failed'));
     expect(await rideMetadata(undefined, { id: ID })).toEqual(neutral);
+  });
+});
+
+describe('мета публичного профиля райдера (SSR, rider-profile AC15)', () => {
+  const PUBLIC_ID = 'r'.repeat(43);
+  const rider = {
+    publicId: PUBLIC_ID,
+    name: 'Анна Ковальчук',
+    club: 'Velo Club Minsk',
+    avatar: { id: PUBLIC_ID },
+    stats: { races: 4, podiums: 2, bestPlace: 1 },
+  };
+  const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
+  const respond = (status: number, body: unknown) =>
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(body), { status })),
+    );
+  const neutral = {
+    title: 'Профиль райдера — Покатим',
+    description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
+    openGraph: {
+      title: 'Профиль райдера',
+      description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
+      type: 'website',
+      siteName: 'Покатим',
+    },
+    robots: 'noindex',
+  };
+
+  beforeEach(() => {
+    resetPublicSsrCache();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    process.env.API_INTERNAL_URL = 'http://api.internal:3000';
+  });
+  afterEach(() => {
+    fetchMock.mockReset();
+    delete process.env.API_INTERNAL_URL;
+  });
+
+  it('найден — посев loader, но мета всегда нейтральная: noindex, без имени, клуба и og:url (D-B2)', async () => {
+    respond(200, rider);
+    process.env.WEB_ORIGIN = ORIGIN;
+
+    expect(await riderLoader(undefined, { id: PUBLIC_ID })).toMatchObject({ name: rider.name });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://api.internal:3000/v1/riders/${PUBLIC_ID}`);
+    const meta = await riderMetadata(undefined, { id: PUBLIC_ID });
+    expect(meta).toEqual(neutral);
+    const text = JSON.stringify(meta);
+    expect(text).not.toContain('Анна');
+    expect(text).not.toContain('Velo');
+    expect(text).not.toContain(PUBLIC_ID);
+  });
+
+  it('невалидный id — loader без запроса; 404 — null', async () => {
+    expect(await riderLoader(undefined, { id: '../admin' })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    respond(404, { code: 'NOT_FOUND', message: 'x' });
+    expect(await riderLoader(undefined, { id: PUBLIC_ID })).toBeNull();
+    expect(await riderMetadata(undefined, { id: PUBLIC_ID })).toEqual(neutral);
   });
 });

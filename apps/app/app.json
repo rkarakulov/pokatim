@@ -53,7 +53,15 @@
         }
       ],
       "@maplibre/maplibre-react-native",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Покатим открывает выбранное вами фото, чтобы поставить его на аватар профиля. Фото обрезается и сохраняется без геометок.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

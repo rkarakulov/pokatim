@@ -142,6 +142,24 @@ jest.mock('@maplibre/maplibre-react-native', () => {
   };
 });
 
+// expo-image (аватар райдера, rider-profile): нативный вид в jest не передаёт пропсы — View с пропсами (`source`,
+// `onError`), как карта выше
+jest.mock('expo-image', () => {
+  const { createElement } = jest.requireActual('react');
+  const { View } = jest.requireActual('react-native');
+  const Image = (props: object) => createElement(View, props);
+  Image.displayName = 'ExpoImage';
+  return { Image };
+});
+
+// выбор фото профиля (rider-profile): модуль «установлен», ленивый загрузчик — мок пакета; тесты задают ответ галереи
+jest.mock('./src/features/profile/image-picker-support', () => ({
+  imagePickerSupported: jest.fn(() => true),
+}));
+jest.mock('./src/features/profile/load-image-picker', () => ({
+  loadImagePicker: jest.fn(async () => ({ launchImageLibraryAsync: jest.fn() })),
+}));
+
 // ленивый загрузчик карты (`import()` jest не исполняет) — сразу мок пакета выше
 jest.mock('./src/features/maps/load-maplibre-native', () => ({
   loadMapLibreNative: jest.fn(async () => jest.requireMock('@maplibre/maplibre-react-native')),

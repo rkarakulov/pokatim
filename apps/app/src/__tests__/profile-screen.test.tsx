@@ -6,6 +6,8 @@ import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-li
 import type { ReactNode } from 'react';
 
 import { useSessionStore } from '@/features/auth/session-store';
+import { imagePickerSupported } from '@/features/profile/image-picker-support';
+import { loadImagePicker } from '@/features/profile/load-image-picker';
 import { api } from '@/lib/api';
 
 import { liveSession, signInForTest } from './auth-fixtures';
@@ -17,6 +19,8 @@ const getProfile = jest.mocked(api.getProfile);
 const updateProfile = jest.mocked(api.updateProfile);
 
 const NAME = 'Как вас показывать в результатах';
+const CLUB = 'Клуб';
+const AVATAR_ID = 'r'.repeat(43);
 const SHOW = 'Показывать имя в таблицах результатов';
 const never = () => new Promise<never>(() => undefined);
 const profile = (overrides: Partial<ProfileView> = {}): ProfileView => ({
@@ -29,6 +33,7 @@ const profile = (overrides: Partial<ProfileView> = {}): ProfileView => ({
   ...overrides,
 });
 const RESULTS_KEY = ['races', 'results', 'race-1', 'page'];
+const RIDER_KEY = ['riders', 'detail', 'x'];
 
 let client: QueryClient;
 
@@ -39,6 +44,7 @@ beforeEach(() => {
   // блок «Сезон» (08c) — сезонов нет, блок скрыт; сам блок — `profile-season-block.test.tsx`
   jest.mocked(api.getCurrentSeason).mockResolvedValue({ season: null });
   jest.mocked(api.listSeasons).mockResolvedValue({ items: [] });
+  jest.mocked(api.avatarUrl).mockImplementation((id) => `https://api.test/v1/avatars/${id}`);
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
 afterEach(() => {
@@ -57,11 +63,11 @@ async function openProfile() {
 
 const save = () => screen.getByRole('button', { name: 'Сохранить' });
 
-describe('«Профиль»: загрузка (AC9)', () => {
+describe('«Редактировать профиль»: загрузка (AC9, rider-profile AC14)', () => {
   it('заголовок сразу, на месте полей — скелетон', async () => {
     getProfile.mockReturnValue(never());
     await openProfile();
-    expect(await screen.findByRole('header', { name: 'Профиль' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Редактировать профиль' })).toBeOnTheScreen();
     // первый скелетон — поля профиля (ниже, пока определяется сезон, — скелетон блока «Сезон», 08c)
     expect(screen.getAllByLabelText('Загрузка')[0]).toBeOnTheScreen();
     expect(screen.queryByLabelText(NAME)).toBeNull();
@@ -112,6 +118,7 @@ describe('«Профиль»: сохранение (AC9)', () => {
       }),
     );
     client.setQueryData(RESULTS_KEY, { items: [] });
+    client.setQueryData(RIDER_KEY, { name: 'x' });
     await openProfile();
 
     await fireEvent.changeText(await screen.findByLabelText(NAME), '  Анна К. ');
@@ -121,6 +128,7 @@ describe('«Профиль»: сохранение (AC9)', () => {
     await waitFor(() =>
       expect(updateProfile).toHaveBeenCalledWith(liveSession.accessToken, {
         publicName: 'Анна К.',
+        club: null,
         showNameInResults: true,
       }),
     );
@@ -131,6 +139,8 @@ describe('«Профиль»: сохранение (AC9)', () => {
     expect(save()).not.toBeDisabled();
     expect(client.getQueryData(['profile'])).toEqual(saved);
     expect(client.getQueryState(RESULTS_KEY)?.isInvalidated).toBe(true);
+    // публичный профиль (rider-profile): имя и клуб — инвалидация `['riders']`
+    expect(client.getQueryState(RIDER_KEY)?.isInvalidated).toBe(true);
   });
 
   it('пустое имя при включённом переключателе — допустимо (null)', async () => {
@@ -142,6 +152,7 @@ describe('«Профиль»: сохранение (AC9)', () => {
     await waitFor(() =>
       expect(updateProfile).toHaveBeenCalledWith(liveSession.accessToken, {
         publicName: null,
+        club: null,
         showNameInResults: true,
       }),
     );
@@ -182,5 +193,144 @@ describe('«Профиль»: сохранение (AC9)', () => {
       await screen.findByText('Нет соединения. Проверьте подключение к интернету и повторите.'),
     ).toBeOnTheScreen();
     expect(screen.getByDisplayValue('Анна К.')).toBeOnTheScreen();
+  });
+});
+
+describe('«Редактировать профиль»: клуб (rider-profile, AC14)', () => {
+  it('клуб в поле; сохранение — в теле PATCH; пустой — null', async () => {
+    getProfile.mockResolvedValue(profile({ club: 'Velo Club Minsk' }));
+    updateProfile.mockResolvedValue(profile({ club: 'Минск Вело' }));
+    await openProfile();
+    expect(await screen.findByDisplayValue('Velo Club Minsk')).toBeOnTheScreen();
+    expect(screen.getByLabelText(CLUB)).toHaveProp(
+      'accessibilityHint',
+      'Например, Velo Club Minsk. Виден в публичном профиле вместе с именем',
+    );
+
+    await fireEvent.changeText(screen.getByLabelText(CLUB), ' Минск Вело ');
+    await fireEvent.press(save());
+    await waitFor(() =>
+      expect(updateProfile).toHaveBeenCalledWith(liveSession.accessToken, {
+        publicName: null,
+        club: 'Минск Вело',
+        showNameInResults: false,
+      }),
+    );
+  });
+
+  it('одна буква — «Не короче 2 символов.» без запроса; ошибка сервера — под полем клуба', async () => {
+    await openProfile();
+    await fireEvent.changeText(await screen.findByLabelText(CLUB), 'В');
+    await fireEvent.press(save());
+    expect(await screen.findByText('Не короче 2 символов.')).toBeOnTheScreen();
+    expect(updateProfile).not.toHaveBeenCalled();
+
+    updateProfile.mockRejectedValue(
+      new ApiHttpError(400, {
+        code: 'VALIDATION_FAILED',
+        message: 'x',
+        details: { fields: [{ path: 'club', code: 'TOO_LONG' }] },
+      }),
+    );
+    await fireEvent.changeText(screen.getByLabelText(CLUB), 'Велоклуб');
+    await fireEvent.press(save());
+    expect(await screen.findByText('Слишком длинное значение.')).toBeOnTheScreen();
+  });
+});
+
+describe('«Редактировать профиль»: фото на iOS и Android (rider-profile, AC14)', () => {
+  const launch = jest.fn();
+  const body = new Blob(['jpeg']);
+  const pickButton = () => screen.getByRole('button', { name: 'Выбрать фото' });
+
+  beforeEach(() => {
+    jest.mocked(loadImagePicker).mockResolvedValue({ launchImageLibraryAsync: launch } as never);
+    launch.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///tmp/me.jpg', fileSize: 1000, width: 512, height: 512 }],
+    });
+    global.fetch = jest.fn(async () => ({ blob: async () => body })) as unknown as typeof fetch;
+  });
+
+  it('нет фото — пустой квадрат и подсказка; «Удалить фото» нет', async () => {
+    await openProfile();
+    expect(await screen.findByRole('image', { name: 'Фото не выбрано' })).toBeOnTheScreen();
+    expect(screen.getByText('Мы уберём из фото геометки и данные камеры')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Удалить фото' })).toBeNull();
+  });
+
+  it('выбор → загрузка без crop; кнопка занята; ответ — в кэш профиля, публичный профиль устаревает', async () => {
+    let resolve: (view: ProfileView) => void = () => undefined;
+    jest.mocked(api.uploadAvatar).mockReturnValue(
+      new Promise<ProfileView>((done) => {
+        resolve = done;
+      }),
+    );
+    client.setQueryData(RIDER_KEY, { name: 'x' });
+    await openProfile();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Выбрать фото' }));
+
+    await waitFor(() =>
+      expect(api.uploadAvatar).toHaveBeenCalledWith(liveSession.accessToken, body, undefined),
+    );
+    expect(pickButton()).toBeDisabled();
+    resolve(profile({ avatar: { id: AVATAR_ID } }));
+
+    expect(await screen.findByRole('image', { name: 'Фото профиля' })).toBeOnTheScreen();
+    expect(client.getQueryData<ProfileView>(['profile'])?.avatar).toEqual({ id: AVATAR_ID });
+    expect(client.getQueryState(RIDER_KEY)?.isInvalidated).toBe(true);
+    expect(pickButton()).not.toBeDisabled();
+  });
+
+  it('отмена выбора — без запроса', async () => {
+    launch.mockResolvedValue({ canceled: true, assets: null });
+    await openProfile();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Выбрать фото' }));
+    await waitFor(() => expect(launch).toHaveBeenCalled());
+    expect(api.uploadAvatar).not.toHaveBeenCalled();
+  });
+
+  it('старый dev-клиент без модуля — «Чтобы выбрать фото, обновите приложение»', async () => {
+    jest.mocked(imagePickerSupported).mockReturnValueOnce(false);
+    await openProfile();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Выбрать фото' }));
+    expect(await screen.findByText('Чтобы выбрать фото, обновите приложение')).toBeOnTheScreen();
+    expect(launch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [415, 'AVATAR_FORMAT_UNSUPPORTED', undefined, 'Выберите фото в формате JPEG, PNG или WebP'],
+    [413, 'AVATAR_TOO_LARGE', undefined, 'Фото больше 10 МБ — выберите фото поменьше'],
+    [422, 'AVATAR_INVALID', undefined, 'Не удалось обработать фото — выберите другое'],
+    [
+      429,
+      'RATE_LIMITED',
+      { retryAfterSec: 5 },
+      'Слишком много загрузок фото. Повторите через 0:05',
+    ],
+  ])('отказ %s %s — понятный текст', async (status, code, details, text) => {
+    jest
+      .mocked(api.uploadAvatar)
+      .mockRejectedValue(new ApiHttpError(status, { code, message: 'x', details }));
+    await openProfile();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Выбрать фото' }));
+    expect(await screen.findByText(text)).toBeOnTheScreen();
+  });
+
+  it('удаление — с подтверждением: «Оставить» без запроса, «Удалить» — запрос и пустой квадрат', async () => {
+    getProfile.mockResolvedValue(profile({ avatar: { id: AVATAR_ID } }));
+    jest.mocked(api.deleteAvatar).mockResolvedValue(profile());
+    await openProfile();
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Удалить фото' }));
+    expect(screen.getByText('Удалить фото?')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Оставить' }));
+    expect(api.deleteAvatar).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Удалить фото' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Удалить' }));
+    await waitFor(() => expect(api.deleteAvatar).toHaveBeenCalledWith(liveSession.accessToken));
+    expect(await screen.findByRole('image', { name: 'Фото не выбрано' })).toBeOnTheScreen();
+    expect(screen.queryByText('Удалить фото?')).toBeNull();
   });
 });
