@@ -532,6 +532,7 @@ export const ru = {
     'Push-уведомления запрещены. Нажмите, чтобы открыть настройки устройства.',
   'notifications.settings.title': 'Настройки уведомлений',
   'notifications.settings.lead': 'В центре уведомлений видно всё. Здесь — push и письма.',
+  'notifications.settings.leadEmail': 'В центре уведомлений видно всё. Здесь — письма на e-mail.',
   'notifications.settings.group.races': 'Гонки и результаты',
   'notifications.settings.group.disputes': 'Споры',
   'notifications.settings.group.rides': 'Райды',
