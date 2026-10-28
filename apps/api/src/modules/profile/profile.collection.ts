@@ -9,6 +9,8 @@ export const PROFILE_COLLECTIONS = {
   profiles: 'profiles',
   consentEvents: 'profile_consent_events',
   verified: 'rider_verified_profiles',
+  /** rider-profile: аватары (`0032_rider_profile`, индекс `{ userId }`); единственный писатель — `ProfileAvatarRepository` */
+  avatars: 'profile_avatars',
 } as const;
 
 /**

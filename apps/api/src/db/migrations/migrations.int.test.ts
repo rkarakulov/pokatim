@@ -37,6 +37,7 @@ import { routesPublication } from './0029_routes_publication';
 import { standings } from './0030_standings';
 import { STANDINGS_COLLECTIONS } from '../../modules/standings/standings.collection';
 import { CITY_CENTERS_0031, ridesGeo } from './0031_rides_geo';
+import { RIDER_PROFILE_INDEXES, riderProfile } from './0032_rider_profile';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
 import { notifications } from './0025_notifications';
@@ -138,6 +139,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0029_routes_publication',
       '0030_standings',
       '0031_rides_geo',
+      '0032_rider_profile',
     ]);
   });
 
@@ -522,6 +524,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         race_protocol_rows_order_unique: index({ raceId: 1, revision: 1, order: 1 }, true),
         // 0028_entry_tier (race-results-07): строки протокола по группе
         race_protocol_rows_group_idx: index({ raceId: 1, revision: 1, groupKey: 1, order: 1 }),
+        // 0032_rider_profile: строки райдера по всем ревизиям
+        race_protocol_rows_user_idx: index({ userId: 1, raceId: 1, revision: -1 }),
       },
       [RESULTS_COLLECTIONS.recalculations]: {
         race_recalculations_race_idx: index({ raceId: 1, _id: 1 }),
@@ -1116,9 +1120,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(RACES_COLLECTIONS.races)).toMatchObject(protocolIdx);
   });
 
-  it('0031_rides_geo: бэкфилл точки «Рядом» (центр города) и routeId; индексы 2dsphere (rides.geo, routes.start); последняя; повторный up — без изменений', async () => {
+  it('0031_rides_geo: бэкфилл точки «Рядом» (центр города) и routeId; индексы 2dsphere (rides.geo, routes.start); повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0031_rides_geo');
     expect(ids.indexOf('0031_rides_geo')).toBe(ids.indexOf('0030_standings') + 1);
     // снимок центров в миграции = справочник контрактов на момент миграции (все 25 кодов)
     expect(CITY_CENTERS_0031).toEqual(CITY_CENTERS);
@@ -1177,16 +1180,99 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await ridesDb.deleteMany({ _id: { $in: ['old-ride', 'precise-ride'] } });
   });
 
-  it('0004_profile: коллекция profiles без индексов сверх _id; повторный up — без ошибки', async () => {
+  it('0004_profile: коллекция profiles (индексов сверх _id нет до 0032); повторный up — без ошибки', async () => {
     const exists = () =>
       h.db.listCollections({ name: PROFILE_COLLECTIONS.profiles }, { nameOnly: true }).toArray();
     expect(await exists()).toHaveLength(1);
-    expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toEqual({});
+    expect(Object.keys(await indexesOf(PROFILE_COLLECTIONS.profiles))).toEqual([
+      RIDER_PROFILE_INDEXES.profilesPublicId.options.name,
+    ]);
 
     await h.db.collection(PROFILE_COLLECTIONS.profiles).drop();
     await profile.up(h.db);
     await profile.up(h.db);
     expect(await exists()).toHaveLength(1);
+    expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toEqual({});
+    // индекс publicId (0032) — обратно: следующие файлы стенда работают с той же базой
+    await riderProfile.up(h.db);
+  });
+
+  it('0032_rider_profile: бэкфилл publicId (имя + согласие) и raceWindowStartsAt; profile_avatars; индексы; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0032_rider_profile');
+    expect(ids.indexOf('0032_rider_profile')).toBe(ids.indexOf('0031_rides_geo') + 1);
+
+    const avatarsExist = await h.db
+      .listCollections({ name: PROFILE_COLLECTIONS.avatars }, { nameOnly: true })
+      .toArray();
+    expect(avatarsExist).toHaveLength(1);
+    expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toEqual({
+      profiles_public_id_unique: {
+        key: { publicId: 1 },
+        unique: true,
+        partialFilterExpression: { publicId: { $type: 'string' } },
+        expireAfterSeconds: undefined,
+      },
+    });
+    expect(await indexesOf(PROFILE_COLLECTIONS.avatars)).toEqual({
+      profile_avatars_user_idx: {
+        key: { userId: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    });
+    expect(await indexesOf(RESULTS_COLLECTIONS.entries)).toMatchObject({
+      race_entries_user_history_idx: {
+        key: { userId: 1, status: 1, raceWindowStartsAt: -1, _id: -1 },
+        unique: false,
+      },
+      // прежний индекс заявок пользователя остаётся (expand-only)
+      race_entries_user_idx: expect.any(Object),
+    });
+    expect(await indexesOf(RESULTS_COLLECTIONS.protocolRows)).toMatchObject({
+      race_protocol_rows_user_idx: { key: { userId: 1, raceId: 1, revision: -1 }, unique: false },
+    });
+
+    type Loose = Record<string, unknown> & { _id: string };
+    const profiles = h.db.collection<Loose>(PROFILE_COLLECTIONS.profiles);
+    const entries = h.db.collection<Loose>(RESULTS_COLLECTIONS.entries);
+    const racesDb = h.db.collection<Loose>(RACES_COLLECTIONS.races);
+    const windowStartsAt = new Date('2026-06-01T05:00:00Z');
+    await profiles.insertMany([
+      { _id: 'shown', publicName: 'Анна', showNameInResults: true },
+      { _id: 'hidden', publicName: 'Борис', showNameInResults: false },
+      { _id: 'nameless', publicName: null, showNameInResults: true },
+      { _id: 'kept', publicName: 'Вера', showNameInResults: true, publicId: 'k'.repeat(43) },
+    ]);
+    await racesDb.insertOne({ _id: 'race-0032', windowStartsAt });
+    await entries.insertMany([
+      { _id: 'entry-old', raceId: 'race-0032', userId: 'u1' },
+      { _id: 'entry-orphan', raceId: 'race-missing', userId: 'u1' },
+    ]);
+
+    await riderProfile.up(h.db);
+    const shown = await profiles.findOne({ _id: 'shown' });
+    expect(shown?.publicId).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect((await profiles.findOne({ _id: 'hidden' }))?.publicId).toBeUndefined();
+    expect((await profiles.findOne({ _id: 'nameless' }))?.publicId).toBeUndefined();
+    expect((await profiles.findOne({ _id: 'kept' }))?.publicId).toBe('k'.repeat(43));
+    expect((await entries.findOne({ _id: 'entry-old' }))?.raceWindowStartsAt).toEqual(
+      windowStartsAt,
+    );
+    expect((await entries.findOne({ _id: 'entry-orphan' }))?.raceWindowStartsAt).toBeUndefined();
+
+    const before = {
+      profiles: await indexesOf(PROFILE_COLLECTIONS.profiles),
+      entries: await indexesOf(RESULTS_COLLECTIONS.entries),
+    };
+    await riderProfile.up(h.db);
+    expect((await profiles.findOne({ _id: 'shown' }))?.publicId).toBe(shown?.publicId);
+    expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toEqual(before.profiles);
+    expect(await indexesOf(RESULTS_COLLECTIONS.entries)).toEqual(before.entries);
+    await profiles.deleteMany({ _id: { $in: ['shown', 'hidden', 'nameless', 'kept'] } });
+    await entries.deleteMany({ _id: { $in: ['entry-old', 'entry-orphan'] } });
+    await racesDb.deleteOne({ _id: 'race-0032' });
   });
 
   it('индексы identity: имена, ключи, unique, partialFilterExpression; TTL 30 дней (Q2)', async () => {
