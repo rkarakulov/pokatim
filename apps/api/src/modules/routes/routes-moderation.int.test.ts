@@ -245,7 +245,7 @@ describe('очереди и карточка (A5)', () => {
 });
 
 describe('одобрение и отклонение (AC2, AC3)', () => {
-  it('одобрить с правкой города — в каталоге и чипах; журнал changedFields; outbox approved — ровно 4 ключа, без маршрута в очередь', async () => {
+  it('одобрить с правкой города — в каталоге и чипах; журнал changedFields; outbox approved — ровно 4 ключа, маршрут в очередь уведомлений', async () => {
     const id = await submitted(submissionBody({ city: 'minsk', surfaces: ['asphalt'] }));
     const res = await mod('POST', `/${id}/approve`, {
       version: 0,
@@ -290,7 +290,7 @@ describe('одобрение и отклонение (AC2, AC3)', () => {
     });
     await h.worker.get(MongoOutboxPublisher).publishBatch();
     const after = (await outboxEvents(h)).find((event) => event.type === ROUTE_PUBLICATION_DECIDED);
-    expect(after?.publishedAt).toBeNull();
+    expect(after?.publishedAt).toEqual(expect.any(Date));
 
     // без правки — details: null
     const plain = await submitted();

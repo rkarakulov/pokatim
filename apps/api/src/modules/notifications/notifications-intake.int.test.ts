@@ -17,6 +17,14 @@ import {
 import { createSeason, publishedRace, staff } from '../../../test/races';
 import { resultsDb } from '../../../test/results';
 import {
+  moderationCall,
+  MY_ROUTES,
+  publicationDoc,
+  riderCall,
+  seedRiderRoute,
+  submitPublication,
+} from '../../../test/routes';
+import {
   authed,
   createRide,
   join,
@@ -207,6 +215,154 @@ describe('райды: получатели, тексты, цели', () => {
     }
     expect(await notificationsOf(h, stranger.userId)).toEqual([]);
     expect(await notificationsOf(h, organizer.userId)).toEqual([]);
+  });
+});
+
+describe('маршруты райдеров: решение по заявке (routes-06 A6)', () => {
+  const ROUTE_TITLE = 'Вокруг Минского моря';
+  const DECIDED = 'routes.publication-decided';
+  let moderator: { userId: string; token: string };
+  beforeEach(async () => {
+    moderator = await staff(h, 'moderator@example.by', 'moderator');
+  });
+
+  /** Маршрут `a`, поданный через API; версия заявки после подачи — 0. */
+  async function submittedRoute(): Promise<string> {
+    const id = await seedRiderRoute(h, a.userId, { title: ROUTE_TITLE });
+    expect((await submitPublication(h, a.token, id)).status).toBe(200);
+    return id;
+  }
+  const decide = async (id: string, path: 'approve' | 'reject', body: object) => {
+    const res = await moderationCall(h, moderator.token, 'POST', `/${id}/${path}`, body);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+  };
+  const approve = (id: string, version = 0) =>
+    decide(id, 'approve', { version, city: 'minsk', surfaces: ['asphalt'] });
+  const reject = (id: string, reason: string, version = 0) =>
+    decide(id, 'reject', { version, reason, comment: 'Мост закрыт на ремонт' });
+
+  it('одобрение — автору «Маршрут опубликован», цель — свой маршрут, группа «Райды»; прочим — нет', async () => {
+    const id = await submittedRoute();
+    await approve(id);
+    expect(await notificationsIntake(h).drain()).toEqual(['written']);
+
+    const [published] = await notificationsOf(h, a.userId);
+    expect(published).toMatchObject({
+      kind: 'route_published',
+      group: 'rides',
+      title: 'Маршрут опубликован',
+      body: `«${ROUTE_TITLE}» теперь в каталоге маршрутов.`,
+      target: { type: 'my-route', routeId: id },
+      collapseKey: `route:${id}:publication`,
+      readAt: null,
+      push: { state: 'pending' },
+      email: null,
+    });
+    for (const who of [b, organizer, stranger])
+      expect(await notificationsOf(h, who.userId)).toEqual([]);
+    expect(await notificationsOf(h, moderator.userId)).toEqual([]);
+  });
+
+  it('отклонение — «Маршрут отклонён» с причиной без комментария модератора; новая подача и одобрение заменяют его', async () => {
+    const id = await submittedRoute();
+    await reject(id, 'impassable');
+    const worker = notificationsIntake(h);
+    expect(await worker.drain()).toEqual(['written']);
+    expect(await texts(a)).toEqual([
+      [
+        'route_rejected',
+        'Маршрут отклонён',
+        `«${ROUTE_TITLE}» не опубликован. Причина — непроезжий или неточный.`,
+      ],
+    ]);
+    expect(JSON.stringify(await notificationsOf(h, a.userId))).not.toContain('Мост');
+
+    h.clock.advance(MINUTE);
+    expect((await submitPublication(h, a.token, id)).status).toBe(200);
+    await approve(id, 2);
+    expect(await worker.drain()).toEqual(['written']);
+    const docs = await notificationsOf(h, a.userId);
+    expect(docs.map((doc) => [doc.kind, doc.title])).toEqual([
+      ['route_published', 'Маршрут опубликован'],
+    ]);
+    // повтор задачи — без дублей
+    const [event] = (await eventsOfType(h, DECIDED)).slice(-1);
+    expect(await runIntake(h, DECIDED, event!._id)).toBe('unchanged');
+    expect(await notificationsDb(h).notifications.countDocuments()).toBe(1);
+  });
+
+  it('причина «Другое» — без подписи, подробности на карточке маршрута', async () => {
+    const id = await submittedRoute();
+    await reject(id, 'other');
+    await notificationsIntake(h).drain();
+    expect((await notificationsOf(h, a.userId))[0]?.body).toBe(
+      `«${ROUTE_TITLE}» не опубликован. Подробности — в карточке маршрута.`,
+    );
+  });
+
+  it('решение пересмотрено до приёма (новая подача) или маршрут удалён — skipped без уведомлений', async () => {
+    const resubmitted = await submittedRoute();
+    await reject(resubmitted, 'dangerous');
+    h.clock.advance(MINUTE);
+    expect((await submitPublication(h, a.token, resubmitted)).status).toBe(200);
+
+    const deleted = await seedRiderRoute(h, a.userId, { title: 'Удалённый' });
+    expect((await submitPublication(h, a.token, deleted)).status).toBe(200);
+    await approve(deleted);
+    expect((await riderCall(h, a.token, 'POST', `${MY_ROUTES}/${deleted}/delete`)).status).toBe(
+      204,
+    );
+
+    expect(await notificationsIntake(h).drain()).toEqual(['skipped', 'skipped']);
+    expect(await total()).toBe(0);
+  });
+
+  it('хвост накопленных решений: событие старше 72 ч — stale, ровно 72 ч — принимается', async () => {
+    const now = h.clock.now().getTime();
+    const tail = async (ageMs: number) => {
+      const decidedAt = new Date(now - ageMs);
+      const id = await seedRiderRoute(h, a.userId, {
+        title: ROUTE_TITLE,
+        publication: publicationDoc(h, 'rejected', { decidedAt }),
+      });
+      return appendEvent(
+        h,
+        DECIDED,
+        {
+          routeId: id,
+          authorUserId: a.userId,
+          decision: 'rejected',
+          decidedAt: decidedAt.toISOString(),
+        },
+        decidedAt,
+      );
+    };
+    expect(await runIntake(h, DECIDED, await tail(30 * DAY))).toBe('stale');
+    expect(await runIntake(h, DECIDED, await tail(72 * HOUR + 1))).toBe('stale');
+    expect(await total()).toBe(0);
+    expect(await runIntake(h, DECIDED, await tail(72 * HOUR))).toBe('written');
+  });
+
+  it('payload без кодов решения или с чужими ключами — skipped', async () => {
+    const id = await seedRiderRoute(h, a.userId, { publication: publicationDoc(h, 'approved') });
+    for (const payload of [
+      {
+        routeId: id,
+        authorUserId: a.userId,
+        decision: 'maybe',
+        decidedAt: new Date().toISOString(),
+      },
+      {
+        routeId: id,
+        authorUserId: a.userId,
+        decision: 'approved',
+        decidedAt: h.clock.now().toISOString(),
+        title: 'x',
+      },
+    ]) {
+      expect(await runIntake(h, DECIDED, await appendEvent(h, DECIDED, payload))).toBe('skipped');
+    }
+    expect(await total()).toBe(0);
   });
 });
 

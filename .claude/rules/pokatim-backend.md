@@ -75,10 +75,9 @@ paths:
   `RIDER_NAMES.attributionNames` (только `publicName`, без `showNameInResults`; согласие — `publication.showAuthorName`),
   один вызов на страницу, читается на каждом запросе; `RoutesModule` импортирует `ProfileCoreModule`.
   Удаление маршрута (автор и `RouteErasure`) — `RouteDeletion` (маршрут + жалобы). Событие outbox
-  `routes.publication-decided` (`routeId`, `authorUserId`, `decision`, `decidedAt`) — **без маршрута** в
-  `routesOutboxRoutes` (как `results.protocol-published`): лежит `publishedAt: null`. **Правило «хвост» (8.1 RC-3):**
-  слайс уведомлений перед добавлением маршрута события — миграция, помечающая накопленные `publishedAt`, или потребитель
-  пропускает события с `decidedAt` старше 7 дней (иначе авторам уйдут уведомления о давних решениях).
+  `routes.publication-decided` (`routeId`, `authorUserId`, `decision`, `decidedAt`) — маршрут объявляет подписчик
+  (`notificationsOutboxRoutes`), поля текста — порт `RouteNotices` (`ROUTE_NOTICES`, `findForNotice`). Хвост давних
+  решений (8.1 RC-3) отсекает intake: события старше 72 ч — `stale`.
 - Общий код загрузок в `src/`: `raw-body.ts` (`readLimited` — тело `application/octet-stream` после гарда и лимита,
   обрыв на лимите — `413` с кодом модуля, тишина > 30 с или тело > 180 с — `408 VALIDATION_FAILED` (`body`), оба —
   с `Connection: close`), `upload-slots.ts` (`UploadSlots` — слоты приёма заездов и «моих маршрутов»: предел процесса
@@ -246,10 +245,10 @@ paths:
 
 ## Уведомления (`notifications`, ADR-0017)
 
-- Источники (`results`, `disputes`, `rides`) пишут только outbox в своих транзакциях (payload — id и коды) и дают
-  порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`; плюс `RaceRegistry`,
+- Источники (`results`, `disputes`, `rides`, `routes`) пишут только outbox в своих транзакциях (payload — id и коды)
+  и дают порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`, `RouteNotices`; плюс `RaceRegistry`,
   `IdentityAccounts.liveUserIds/emailsOf`. Чужих коллекций `notifications` не читает; источники о нём не знают.
-- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (11 типов → `notifications-intake`). Очереди:
+- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (12 типов → `notifications-intake`). Очереди:
   `notifications-intake` (событие → получатели → настройки → upsert; > 72 ч — skip; уникальность `(sourceEventId,
   userId)`, схлопывание `collapseKey`), `notifications-delivery` (`notifications.push` по пользователю — захват,
   тумблер, тихие часы, лимит 20/ч, сводка; `notifications.email` — только N2), `notifications-maintenance`

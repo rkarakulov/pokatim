@@ -4,6 +4,7 @@ import { notificationTargetPath, pushTargetPath } from './notification-target';
 const RACE = '0190a6f4-0000-7000-8000-000000000001';
 const RIDE = '0190a6f4-0000-7000-8000-000000000002';
 const DISPUTE = '0190a6f4-0000-7000-8000-000000000003';
+const ROUTE = '0190a6f4-0000-7000-8000-000000000004';
 
 describe('notificationTargetPath — белый список целей (N10)', () => {
   it.each([
@@ -13,6 +14,7 @@ describe('notificationTargetPath — белый список целей (N10)', 
       { type: 'dispute-response', raceId: RACE, disputeId: DISPUTE },
       `/races/dispute-response/${RACE}/${DISPUTE}`,
     ],
+    [{ type: 'my-route', routeId: ROUTE }, `/routes/mine/${ROUTE}`],
   ])('%j → %s', (target, path) => {
     expect(notificationTargetPath(target)).toBe(path);
   });
@@ -25,6 +27,7 @@ describe('notificationTargetPath — белый список целей (N10)', 
     ['адрес вместо цели', 'https://evil.example/races/1'],
     ['путь строкой', `/races/${RACE}`],
     ['лишний адрес в цели', { type: 'ride', rideId: 'https://evil.example' }],
+    ['маршрут не Uuid', { type: 'my-route', routeId: '../publish/x' }],
   ])('%s — без перехода', (_case, target) => {
     expect(notificationTargetPath(target)).toBeNull();
   });

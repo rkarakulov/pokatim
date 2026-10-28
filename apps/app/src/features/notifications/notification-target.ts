@@ -19,6 +19,8 @@ export function notificationTargetPath(target: unknown): Href | null {
       return `/rides/${value.rideId}`;
     case 'dispute-response':
       return `/races/dispute-response/${value.raceId}/${value.disputeId}`;
+    case 'my-route':
+      return `/routes/mine/${value.routeId}`;
   }
 }
 
