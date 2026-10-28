@@ -648,6 +648,11 @@ API): 19 passed, 8 skipped, 2 failed — `rides/report/<id>` (05b) и `rides/rou
 находка. Новые шаги rider-profile — зелёные. `E2E_API=1`, iOS/Android вживую (системная обрезка, старый dev-клиент,
 формат HEIC) — NOT VERIFIED.
 
+**Уточнения после ревью PR A** (влита `feature/rider-profile` до `ef494df`): 400 на курсор публичной истории —
+`resetQueries` к первой странице (`useRiderRaces`, тест); 429 с паузой до 60 с (обработка занята) — «Попробуйте ещё
+раз через минуту», долгий лимит — «Повторите через {время}»; фото клиент не уменьшает и по пикселям не проверяет
+(пределы 100/25 Мп — сервер, 422 — понятный текст).
+
 **Отклонения.** `image-picker-support.web.ts` не создан: web-вариант `pick-avatar.web.ts` модуль не импортирует.
 Ячейки статистики «км»/«м» — ключи `profile.stats.km|m`; a11y строк — ключи `profile.history.place|time` вместо
 `raceA11y/rideA11y`. `resultElapsed` получает строку истории с `ranked/group`-заглушками (тип «моего участия»).

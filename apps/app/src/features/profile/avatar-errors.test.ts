@@ -16,9 +16,12 @@ describe('тексты ошибок фото профиля (AC14)', () => {
     expect(avatarErrorMessage(http(status, code))).toBe(text);
   });
 
-  it('429 с паузой — «Повторите через …»; без паузы — общий текст лимита', () => {
+  it('429: обработка занята (пауза до минуты) — «через минуту»; лимит загрузок — «Повторите через …»; без паузы — общий текст', () => {
     expect(avatarErrorMessage(http(429, 'RATE_LIMITED', { retryAfterSec: 5 }))).toBe(
-      'Слишком много загрузок фото. Повторите через 0:05',
+      'Фото сейчас обрабатываются. Попробуйте ещё раз через минуту',
+    );
+    expect(avatarErrorMessage(http(429, 'RATE_LIMITED', { retryAfterSec: 1800 }))).toBe(
+      'Слишком много загрузок фото. Повторите через 30:00',
     );
     expect(avatarErrorMessage(http(429, 'RATE_LIMITED'))).not.toContain('фото');
   });

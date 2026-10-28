@@ -284,7 +284,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   «Истории»); публичные — `['riders','detail',id]`, `['riders','races',id,'pages']`. Мутации фото — только
   `setQueryData(['profile'])` (без префиксной инвалидации `['profile']`: перезапросились бы анкета, статистика и
   история) + `invalidateQueries(['riders'])`; `PATCH /v1/profile` — тоже `['riders']`. «Показать ещё» — без
-  `onEndReached`; состояния истории — `HistoryList` (`features/profile/history-rows.tsx`).
+  `onEndReached`; состояния истории — `HistoryList` (`features/profile/history-rows.tsx`). Публичная история: 400 на
+  курсор (строка выпала из новой ревизии протокола) — `resetQueries` к первой странице, не вечная ошибка догрузки.
 - Аватар — только `components/rider-avatar.tsx` (`expo-image`, `cachePolicy: memory-disk` — URL `immutable`; нет фото
   или ошибка — иконка человека); размер шапки — `layout.avatarProfile` (`@pokatim/design-tokens`, follow-up
   `size.avatarLg` в базе), верхней панели — `size.avatarTopBar`.
@@ -294,7 +295,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   формата и 10 МиБ) + `avatar-crop.web.tsx` (pointer events, кнопки и клавиши масштаба, без колеса; доли `x, y, size` в
   ориентированном изображении — `avatar-crop-math.ts`). Блок «Фото» — `avatar-editor(.web).tsx` поверх
   `avatar-section.tsx`; удаление — инлайн-подтверждение. Загрузка — `api.uploadAvatar` в `withAccessToken`, без XHR и
-  прогресса; тексты 413/415/422/429 — `avatar-errors.ts`. Исходник не перекодируется: EXIF/GPS стирает сервер.
+  прогресса; тексты 413/415/422/429 — `avatar-errors.ts` (429 с паузой до минуты — занята обработка: «через минуту»).
+  Исходник не перекодируется и не уменьшается (JPEG/WebP до 100 Мп, PNG до 25 Мп — решает сервер): EXIF/GPS стирает
+  сервер.
 
 ## Маршруты (routes-01, `docs/product/routes.md`)
 

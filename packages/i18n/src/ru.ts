@@ -657,6 +657,7 @@ export const ru = {
   'profile.avatar.error.AVATAR_INVALID': 'Не удалось обработать фото — выберите другое',
   'profile.avatar.error.tooSmall': 'Фото слишком маленькое — нужно хотя бы 64 × 64 пикселя',
   'profile.avatar.error.rateLimited': 'Слишком много загрузок фото. Повторите через {time}',
+  'profile.avatar.error.busy': 'Фото сейчас обрабатываются. Попробуйте ещё раз через минуту',
   'profile.avatar.error.updateApp': 'Чтобы выбрать фото, обновите приложение',
   'profile.stats.activities': 'Заезды',
   'profile.stats.distance': 'Дистанция',

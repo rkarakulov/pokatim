@@ -1,5 +1,7 @@
+import { ApiHttpError } from '@pokatim/api-client';
 import type { PublicRiderProfile, PublicRiderRacePage } from '@pokatim/contracts';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import { api } from '@/lib/api';
 
@@ -25,10 +27,17 @@ export function useRider(id: string, seed: PublicRiderProfile | undefined, enabl
   });
 }
 
-/** Публичная история гонок: только опубликованные протоколы, новые сверху, «Показать ещё»; только клиент. */
+const riderRacesKey = (id: string) => ['riders', 'races', id, 'pages'] as const;
+
+/**
+ * Публичная история гонок: только опубликованные протоколы, новые сверху, «Показать ещё»; только клиент. Курсор —
+ * id гонки: строка выпала из новой ревизии протокола — сервер отвечает 400 на курсор; тогда список сбрасывается к
+ * первой странице (`resetQueries`), а не застревает с ошибкой догрузки.
+ */
 export function useRiderRaces(id: string, enabled: boolean) {
-  return useInfiniteQuery({
-    queryKey: ['riders', 'races', id, 'pages'],
+  const queryClient = useQueryClient();
+  const query = useInfiniteQuery({
+    queryKey: riderRacesKey(id),
     queryFn: ({ pageParam }) =>
       api.listRiderRaces(id, {
         limit: RIDER_RACES_LIMIT,
@@ -39,4 +48,10 @@ export function useRiderRaces(id: string, enabled: boolean) {
     staleTime: PUBLIC_STALE_MS,
     enabled,
   });
+  const staleCursor =
+    query.isFetchNextPageError && query.error instanceof ApiHttpError && query.error.status === 400;
+  useEffect(() => {
+    if (staleCursor) void queryClient.resetQueries({ queryKey: riderRacesKey(id), exact: true });
+  }, [staleCursor, queryClient, id]);
+  return query;
 }

@@ -119,6 +119,18 @@ describe('публичный профиль /riders/[id] (rider-profile, AC15)',
     expect(listRaces).toHaveBeenLastCalledWith(PUBLIC_ID, { limit: 10, cursor: 'c1' });
   });
 
+  it('курсор устарел (400: строка выпала из новой ревизии протокола) — список с первой страницы, без ошибки', async () => {
+    listRaces
+      .mockResolvedValueOnce({ items: [race()], nextCursor: 'c1' })
+      .mockRejectedValueOnce(new ApiHttpError(400, { code: 'VALIDATION_FAILED', message: 'x' }))
+      .mockResolvedValueOnce({ items: [race(RACE_2, 'Кубок осени')], nextCursor: null });
+    await openRider();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Показать ещё' }));
+    expect(await races().findByText('Кубок осени')).toBeOnTheScreen();
+    expect(listRaces).toHaveBeenLastCalledWith(PUBLIC_ID, { limit: 10 });
+    expect(races().queryByText('Не удалось загрузить')).toBeNull();
+  });
+
   it('посев SSR (web) — профиль сразу, без запроса профиля', async () => {
     await renderRouter(
       { 'riders/[id]': () => <RiderScreen id={PUBLIC_ID} seed={rider} /> },

@@ -12,12 +12,16 @@ const CODE_MESSAGES = {
   AVATAR_INVALID: 'profile.avatar.error.AVATAR_INVALID',
 } as const;
 
+/** Короткая пауза 429 — занята обработка фото на сервере (секунды), а не исчерпан часовой лимит загрузок. */
+const BUSY_MAX_RETRY_SEC = 60;
+
 const isKnownCode = (code: string | undefined): code is keyof typeof CODE_MESSAGES =>
   code !== undefined && code in CODE_MESSAGES;
 
 /**
  * Текст баннера блока «Фото» (выбор, загрузка, удаление): старый dev-клиент — «Обновите приложение»; проверка до
- * отправки — тот же текст, что у ответа сервера; 429 — когда повторить; сеть и прочее — `actionErrorMessage`.
+ * отправки — тот же текст, что у ответа сервера; 429 с короткой паузой — обработка занята («через минуту»), с долгой —
+ * лимит загрузок и когда повторить; сеть и прочее — `actionErrorMessage`.
  */
 export function avatarErrorMessage(error: unknown): string {
   if (error instanceof AvatarPickerUnavailableError) return t('profile.avatar.error.updateApp');
@@ -29,6 +33,7 @@ export function avatarErrorMessage(error: unknown): string {
   const code = apiErrorCode(error);
   if (isKnownCode(code)) return t(CODE_MESSAGES[code]);
   const wait = retryAfterSec(error);
+  if (wait !== undefined && wait <= BUSY_MAX_RETRY_SEC) return t('profile.avatar.error.busy');
   if (wait !== undefined) {
     return t('profile.avatar.error.rateLimited', { time: formatCountdown(wait) });
   }
