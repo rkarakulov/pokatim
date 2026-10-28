@@ -60,6 +60,19 @@ export type RideRouteFields = Pick<
 >;
 const RIDE_ROUTE_PROJECTION = { title: 1, distanceM: 1, elevationGainM: 1, start: 1 } as const;
 
+/** Поля маршрута заезда (route-rides-01, порт `RouteRideRoutes`): без линий, публикации и исходника. */
+export type RideableRouteFields = Pick<
+  RouteDoc,
+  '_id' | 'title' | 'distanceM' | 'isLoop' | 'origin' | 'ownerUserId'
+>;
+const RIDEABLE_ROUTE_PROJECTION = {
+  title: 1,
+  distanceM: 1,
+  isLoop: 1,
+  origin: 1,
+  ownerUserId: 1,
+} as const;
+
 /** Радиус Земли для `$centerSphere`, км — тот же, что у «Рядом» райдов (`rides.policy`, 05c). */
 const EARTH_RADIUS_KM = 6378.1;
 
@@ -200,6 +213,19 @@ export class RoutesRepository {
       (await this.c.routes.findOne<RideRouteFields>(
         { _id: id, status: 'ready', ...ownRider(ownerUserId) },
         { projection: RIDE_ROUTE_PROJECTION },
+      )) ?? undefined
+    );
+  }
+
+  /**
+   * Маршрут заезда (route-rides-01, порт `RouteRideRoutes`): готовый и в публичном каталоге (`IN_CATALOG`) или свой
+   * готовый маршрут райдера (`ownRider`). Без кэша, без линий.
+   */
+  async findRideable(userId: string, id: string): Promise<RideableRouteFields | undefined> {
+    return (
+      (await this.c.routes.findOne<RideableRouteFields>(
+        { _id: id, status: 'ready', $or: [IN_CATALOG, ownRider(userId)] },
+        { projection: RIDEABLE_ROUTE_PROJECTION },
       )) ?? undefined
     );
   }

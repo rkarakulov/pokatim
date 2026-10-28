@@ -292,6 +292,19 @@ export class TracksRepository {
     return doc?.line.coordinates;
   }
 
+  /** Свои активности по id — только `_id` и `duplicateOf` (route-rides-01, порт `ActivitySource.liveActivities`). */
+  ownActivityHeads(
+    userId: string,
+    ids: readonly string[],
+  ): Promise<Pick<ActivityDoc, '_id' | 'duplicateOf'>[]> {
+    return this.c.activities
+      .find<Pick<ActivityDoc, '_id' | 'duplicateOf'>>(
+        { _id: { $in: [...ids] }, userId },
+        { projection: { duplicateOf: 1 } },
+      )
+      .toArray();
+  }
+
   /** Линии показа активностей по id (рамка для предфильтра попыток гонки). */
   async trackLines(
     ids: readonly string[],

@@ -42,7 +42,7 @@ export const RIDER_PROFILE_INDEXES = {
  * транзакции, идемпотентна (условия — отсутствие поля). После `0031_rides_geo`.
  */
 export const riderProfile: MongoMigration = {
-  id: '0032_rider_profile',
+  id: '0033_rider_profile',
   async up(db) {
     await ensureCollection(db, PROFILE_COLLECTIONS.avatars);
 

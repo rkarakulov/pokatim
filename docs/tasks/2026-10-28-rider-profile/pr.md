@@ -25,7 +25,7 @@ R1–R10 — `docs/product/profile.md`). Приложение — следующ
 - Новый модуль `riders`, порты `RIDER_PROFILES`, `RIDER_RESULTS`, `ACTIVITY_TOTALS`.
 
 ### Миграция, env, зависимости
-- `0032_rider_profile` только добавляет данные, повторный запуск безопасен:
+- `0033_rider_profile` только добавляет данные, повторный запуск безопасен:
   - коллекция `profile_avatars` и индекс `userId`;
   - уникальный частичный `profiles.publicId`;
   - `race_entries_user_history_idx`, `race_protocol_rows_user_idx`;

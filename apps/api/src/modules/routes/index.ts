@@ -23,3 +23,9 @@ export {
 } from './route-notices.port';
 /** Порт для модуля `rides` (05c): маршрут райда — видимость на каждом чтении, без кэша. */
 export { RIDE_ROUTES, type RideRouteRef, type RideRoutes } from './ride-routes.port';
+/** Порт для модуля `route-rides` (route-rides-01): маршрут, видимый райдеру сейчас, и линия сверки — без кэша. */
+export {
+  ROUTE_RIDE_ROUTES,
+  type RideableRoute,
+  type RouteRideRoutes,
+} from './route-ride-routes.port';

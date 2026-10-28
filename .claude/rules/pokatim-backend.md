@@ -181,10 +181,11 @@ paths:
   `POST /v1/account/delete`: лимит `account-delete:<uid>` 5/ч → `PanelMembership` → `AccountClosure.verifyPassword` →
   транзакция `AccountClosure.close` + `PanelAudit` `account.deleted` + outbox `account.deletion-requested`) и
   `AccountWorkerModule` (очередь `account-deletion`, `AccountErasureProcessor` по имени задачи: событие, sweep,
-  регламент `account.erasure-resume`). Зависимости: `account → identity, panel, profile, rides, routes, tracks,
+  регламент `account.erasure-resume`). Зависимости: `account → identity, panel, profile, rides, routes, route-rides, tracks,
   devices, notifications` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
   (`ProfileCoreModule`), `RideErasure` (`RidesCoreModule`), `RouteErasure` (`RoutesCoreModule`), `DeviceErasure`
-  (`DevicesCoreModule`), `TrackErasure` (`TracksCoreModule`), `NotificationErasure` (`NotificationsCoreModule`, шаг
+  (`DevicesCoreModule`), `TrackErasure` (`TracksCoreModule`), `RouteRideErasure` (`RouteRidesCoreModule`, шаг `route-rides` после `tracks`),
+  `NotificationErasure` (`NotificationsCoreModule`, шаг
   между `tracks` и `identity`), `AccountErasure` (`IdentityErasureModule`); push-токены — `PushTokens.revokeAllOf(tx)`
   в транзакции удаления. Новый модуль с
   данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник» (A3). Финальный провал шага — лог
@@ -321,6 +322,27 @@ RC-A1, ADR-0019).
   каталоге, иначе центр города; кандидаты — только по публичным данным (города круга | маршруты каталога со стартом в
   круге, `publicStartsWithin`), отбор после чтения пачками (≤ 5). `RideErasure` сбрасывает точки райдов на маршрутах
   удалённого (`restarted`), шаг `ride-starts` после `routes` — на висячих маршрутах (`resetDanglingStarts`).
+
+## Заезд по маршруту (`route-rides`, route-rides-01)
+
+- Модуль `route-rides` (`route-rides → routes, tracks, identity`; `account → route-rides`) — только через `index.ts`;
+  `routes`/`tracks` о нём не знают. `RouteRidesCoreModule` (репозиторий, `RouteRideErasure`; imports `RoutesCoreModule`,
+  `TracksCoreModule`), `RouteRidesModule` (HTTP, + `IdentityModule`), `RouteRidesWorkerModule` (очередь
+  `route-ride-check`).
+- Видимость маршрута — порт `routes` `RouteRideRoutes` (`ROUTE_RIDE_ROUTES`: `rideable`, `matchGeometry`; условие —
+  `IN_CATALOG` или `ownRider` в `RoutesRepository.findRideable`, без кэша) на каждой ручке и в worker перед сверкой;
+  `RouteCatalog`/`RouteGeometry` не расширяются. Заезды — `ActivitySource` + `liveActivities(userId, ids)` (живые свои
+  активности и основная группы одним запросом).
+- `RouteRidesController` (`routes/:routeId/rides`, `AuthGuard`, `no-store`; `candidates` до `:rideId`) →
+  `RouteRidesService.check` (лимит `route-rides-user:<uid>` 30/ч до всего → видимость → основная группы → существующий
+  заезд группы или квота 100 → транзакция { сироты → `insert` → outbox `route-rides.check-requested` }; гонка двух POST
+  — `isDuplicateKey` уникального индекса) и `RouteRidesReadService` (фильтр по живым активностям, сравнение —
+  `route-rides.policy.ts`).
+- Сверка — `RouteRideCheckProcessor` (параллелизм 1): `runParseThread('analyzeAttempt')`, коридор
+  `ROUTE_RIDE_POLICY.corridorWidthM` (пишется в документ), окно — время заезда ± 1 мин; итог — одна запись своей
+  ревизией без транзакции и событий. Финальная попытка — `failed: error`; dead-letter в панель неприменим (личные
+  данные, организатора нет): зависшие (`queued` > 2 ч, `checking` > 15 мин) — «ленивый» `failed: error` при чтении,
+  POST перепоставляет (RC-5). Подписки на `tracks.*` нет (outbox — тип в одну очередь, RC-1).
 
 ## Уведомления (`notifications`, ADR-0017)
 

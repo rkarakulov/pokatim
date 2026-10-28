@@ -316,7 +316,7 @@ PR A. Architecture Review — **Status: CONCERNS** (блокеров нет; RC-
   (worker не нужен).
 - Новый пакет — нет (потребитель один — API). В app-foundation — ничего (sharp — доменная зависимость проекта).
 
-### 11.2 Модель данных и миграция `0032_rider_profile`
+### 11.2 Модель данных и миграция `0033_rider_profile`
 
 Последняя применённая — `0031_rides_geo` (`apps/api/src/db/migrations/index.ts`); в ветках `feature/route-ride`,
 `feature/story-cards` миграций 0032+ нет на момент ревью (R-A7: проверить перед PR). Expand-only, без транзакции,
@@ -521,7 +521,7 @@ PR A. Architecture Review — **Status: CONCERNS** (блокеров нет; RC-
   results-history.service,rider-results.port,rider-results}.ts`; `rides/{profile-rides.controller,
   rides-history.service}.ts`; `tracks/{activity-totals.port,activity-totals}.ts`; `riders/{index,riders.module,
   riders.service,riders.policy,profile-stats.controller,riders-public.controller}.ts`;
-  `db/migrations/0032_rider_profile.ts`; `contracts/src/profile/{rider-avatar,rider-profile}.schema.ts`.
+  `db/migrations/0033_rider_profile.ts`; `contracts/src/profile/{rider-avatar,rider-profile}.schema.ts`.
 - **FILES TO READ:** `src/raw-body.ts`, `src/upload-slots.ts`, `src/page-cursor.ts`, `src/public-read.guard.ts`,
   `tracks/track-uploads.controller.ts` (+ `.service.ts` `admit`), `routes/routes-public.controller.ts` (`gpx`:
   заголовки после чтения), `results/results-read.service.ts` (`entryResult`), `results/results-for-standings.ts`,
@@ -568,7 +568,7 @@ PR A. Architecture Review — **Status: CONCERNS** (блокеров нет; RC-
 - `rides`: `GET /v1/profile/rides` (`RidesHistoryService`, `pastOf`). `tracks`: порт `ACTIVITY_TOTALS` (только
   `index.ts`, `tracks.module.ts` + новые файлы).
 - Новый модуль `riders` (композиция): `GET /v1/profile/stats`, `GET /v1/riders/:publicId`, `…/races`; `riders.policy.ts`.
-- Миграция `0032_rider_profile`: `profile_avatars` + `profile_avatars_user_idx`, `profiles_public_id_unique` (partial
+- Миграция `0033_rider_profile`: `profile_avatars` + `profile_avatars_user_idx`, `profiles_public_id_unique` (partial
   `$type: string`), `race_entries_user_history_idx`, `race_protocol_rows_user_idx`; бэкфилл `publicId` и
   `raceWindowStartsAt`. Других 0032+ в ветках `origin` нет (проверено `git fetch` 2026-10-28).
 - api-client: `uploadAvatar`, `avatarUploadRequest`, `deleteAvatar`, `avatarUrl`, `getProfileStats`,

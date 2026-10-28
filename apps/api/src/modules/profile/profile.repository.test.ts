@@ -81,7 +81,7 @@ describe('profile_avatars — единственный писатель', () => 
       .map((file) => relative(SRC, file))
       .sort();
     expect(users).toEqual([
-      'db/migrations/0032_rider_profile.ts',
+      'db/migrations/0033_rider_profile.ts',
       'modules/profile/profile-avatar.repository.ts',
       'modules/profile/profile.collection.ts',
     ]);
