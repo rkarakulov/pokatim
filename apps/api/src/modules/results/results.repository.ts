@@ -195,6 +195,66 @@ export class ResultsRepository {
     );
   }
 
+  /**
+   * История своего профиля (rider-profile): активные заявки пользователя, новые гонки сверху — keyset по
+   * `(raceWindowStartsAt, _id)` целиком по индексу `race_entries_user_history_idx`. Заявки без поля (до `0032`) — в
+   * конце: курсор после них не продолжается (R-A2). `limit + 1` — признак продолжения.
+   */
+  entriesOfUserPage(
+    userId: string,
+    after: { windowStartsAt: Date; id: string } | null,
+    limit: number,
+    session?: DbSession,
+  ): Promise<RaceEntryDoc[]> {
+    const filter: Filter<RaceEntryDoc> = { userId, status: 'active' };
+    if (after) {
+      filter.$or = [
+        { raceWindowStartsAt: { $lt: after.windowStartsAt } },
+        { raceWindowStartsAt: after.windowStartsAt, _id: { $lt: after.id } },
+      ];
+    }
+    return this.c.entries
+      .find(filter, { session })
+      .sort({ raceWindowStartsAt: -1, _id: -1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  /**
+   * Строки протокола пользователя по всем ревизиям (rider-profile, индекс `race_protocol_rows_user_idx`): текущую
+   * ревизию отбирает вызывающий. Проекция — без попыток, флагов и заявки; не больше `limit`.
+   */
+  protocolRowsOfUser(
+    userId: string,
+    limit: number,
+  ): Promise<
+    Pick<
+      RaceProtocolRowDoc,
+      'raceId' | 'revision' | 'place' | 'tied' | 'status' | 'groupKey' | 'elapsedSec' | 'startedAt'
+    >[]
+  > {
+    return this.c.protocolRows
+      .find(
+        { userId },
+        {
+          projection: {
+            _id: 0,
+            raceId: 1,
+            revision: 1,
+            place: 1,
+            tied: 1,
+            status: 1,
+            groupKey: 1,
+            elapsedSec: 1,
+            startedAt: 1,
+          },
+        },
+      )
+      .sort({ raceId: 1, revision: -1 })
+      .limit(limit)
+      .toArray();
+  }
+
   /** Активные заявки пользователя (индекс `(userId, status)`, единицы). */
   activeEntriesOf(userId: string): Promise<RaceEntryDoc[]> {
     return this.c.entries.find({ userId, status: 'active' }).toArray();
