@@ -82,6 +82,9 @@ describe('коды ошибок', () => {
       'RESULT_GROUP_NOT_ALLOWED',
       'VERIFIED_DEMOGRAPHICS_LOCKED',
       'ROUTE_PUBLICATION_LIMIT',
+      'AVATAR_FORMAT_UNSUPPORTED',
+      'AVATAR_TOO_LARGE',
+      'AVATAR_INVALID',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

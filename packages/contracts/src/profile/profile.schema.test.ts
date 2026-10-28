@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ProfileView,
   PUBLIC_NAME_CONSENT_VERSION,
+  RIDER_CLUB_MAX,
   RIDER_PUBLIC_NAME_MAX,
+  RiderClub,
   RiderPublicName,
   UpdateProfileRequest,
 } from './profile.schema.ts';
@@ -37,18 +39,58 @@ describe('ProfileView', () => {
     expect(ProfileView.safeParse({}).success).toBe(false);
   });
 
-  it('ответ старого сервера без имени и согласия — null / false', () => {
+  it('ответ старого сервера без имени, согласия, клуба, аватара и publicId — дефолты', () => {
     expect(ProfileView.parse({ rideReasons: [] })).toEqual({
       rideReasons: [],
       publicName: null,
       showNameInResults: false,
+      club: null,
+      avatar: null,
+      publicId: null,
     });
   });
 
   it('имя и согласие разбираются как есть', () => {
     expect(
       ProfileView.parse({ rideReasons: [], publicName: 'Анна К.', showNameInResults: true }),
-    ).toEqual({ rideReasons: [], publicName: 'Анна К.', showNameInResults: true });
+    ).toMatchObject({ rideReasons: [], publicName: 'Анна К.', showNameInResults: true });
+  });
+
+  it('клуб, аватар и publicId (rider-profile) разбираются как есть', () => {
+    const token = 'a'.repeat(43);
+    expect(
+      ProfileView.parse({
+        rideReasons: [],
+        club: 'Velo Club Minsk',
+        avatar: { id: token },
+        publicId: token.replaceAll('a', 'B'),
+      }),
+    ).toMatchObject({
+      club: 'Velo Club Minsk',
+      avatar: { id: token },
+      publicId: 'B'.repeat(43),
+    });
+    expect(ProfileView.safeParse({ rideReasons: [], avatar: { id: 'короткий' } }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe('RiderClub (rider-profile)', () => {
+  it('обрезка, пусто и null — null; 2–60 символов', () => {
+    expect(RiderClub.parse('  Velo Club Minsk ')).toBe('Velo Club Minsk');
+    expect(RiderClub.parse('')).toBeNull();
+    expect(RiderClub.parse(null)).toBeNull();
+    expect(codesOf(RiderClub.safeParse(' V '))).toEqual(['TOO_SHORT']);
+    expect(RiderClub.parse('к'.repeat(RIDER_CLUB_MAX))).toHaveLength(60);
+    expect(codesOf(RiderClub.safeParse('к'.repeat(RIDER_CLUB_MAX + 1)))).toEqual(['TOO_LONG']);
+  });
+
+  it('одна строка без \\p{Cc}/\\p{Cf} и без служебных подписей таблицы', () => {
+    expect(codesOf(RiderClub.safeParse('Velo\nClub'))).toEqual(['INVALID']);
+    expect(codesOf(RiderClub.safeParse('Velo\u202eClub'))).toEqual(['INVALID']);
+    expect(codesOf(RiderClub.safeParse('Участник'))).toEqual(['INVALID']);
+    expect(codesOf(RiderClub.safeParse(7))).toEqual(['INVALID']);
   });
 });
 
@@ -105,6 +147,15 @@ describe('UpdateProfileRequest', () => {
       showNameInResults: false,
     });
     expect(UpdateProfileRequest.parse({ publicName: null })).toEqual({ publicName: null });
+  });
+
+  it('клуб (rider-profile): только он — допустимо; null и "" очищают', () => {
+    expect(UpdateProfileRequest.parse({ club: ' Velo Club Minsk ' })).toEqual({
+      club: 'Velo Club Minsk',
+    });
+    expect(UpdateProfileRequest.parse({ club: null })).toEqual({ club: null });
+    expect(UpdateProfileRequest.parse({ club: '' })).toEqual({ club: null });
+    expect(codesOf(UpdateProfileRequest.safeParse({ club: 'В' }))).toEqual(['TOO_SHORT']);
   });
 
   it('пустое тело — REQUIRED на корне (RC-7)', () => {
