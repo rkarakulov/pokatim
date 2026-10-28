@@ -118,12 +118,14 @@ paths:
 
 - `profile`: клуб и `publicId` — `PATCH /v1/profile` (`club`), аватар — `ProfileAvatarsController`
   (`@Controller('profile/avatar')`, `AuthGuard`: `PUT` сырыми байтами — query `AvatarCropQuery` до слота и тела,
-  `ProfileAvatarService.admit` (лимит `profile-avatar:<uid>` 20/ч, свои `UploadSlots` 1/1 — слот до лимита) → `readLimited` 10 МиБ (таймауты 10/60 с) →
+  `ProfileAvatarService.admit` (лимит `profile-avatar:<uid>` 20/ч, свои `UploadSlots` чтения 4/1 — слот до лимита) → `readLimited` 10 МиБ (таймауты 10/60 с) → место обработки
+  `AvatarProcessingGate` (1 на процесс, ожидание ≤ 5 с, иначе 429) →
   `processAvatar`; `POST delete` — лимит `profile-update`), отдача — `AvatarsPublicController` (`avatars/:id`,
   `PublicReadGuard`, заголовки через `HttpAdapterHost` после чтения). Порт `RIDER_PROFILES`
   (`RiderProfileDirectory.findPublic`) — в `ProfileCoreModule`.
 - **Исключение RC-A1 (ADR-0018):** перекодирование аватара `sharp` (`avatar-image.ts`) — в HTTP-обработчике: вход
-  ≤ 10 МиБ и 25 Мп, `failOn: 'error'`, `timeout` 10 с, 1 слот на процесс (память — ADR-0018), пул libvips вне event loop. «Рендер в HTTP-обработчике»
+  ≤ 10 МиБ, JPEG/WebP ≤ 100 Мп (две стадии: shrink-on-load до 2048 px, затем квадрат), PNG ≤ 25 Мп, `failOn: 'error'`,
+  `timeout` 10 с, 1 обработка на процесс (память — ADR-0018), пул libvips вне event loop. «Рендер в HTTP-обработчике»
   красных флагов — Skia, ffmpeg, OG; другие изображения — только по этому образцу и с ADR.
 - Истории своего профиля — в модулях-владельцах: `results` — `ProfileRacesController` (`profile/races`) →
   `ResultsHistoryService` (`entriesOfUserPage` + `ResultsReadService.entryResult` в одной snapshot-сессии, места не

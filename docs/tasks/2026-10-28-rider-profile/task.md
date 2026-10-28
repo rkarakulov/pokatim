@@ -40,11 +40,11 @@
      квадрат в ориентированном изображении; без query — центральный квадрат. Формат определяется по сигнатуре:
      JPEG, PNG или WebP.
    - Сервер (`sharp`) поворачивает по EXIF, обрезает квадрат и приводит к 512×512 JPEG без метаданных (EXIF и GPS
-     стираются). Лимит пикселей входа — 40 Мп.
+     стираются). Лимит пикселей входа — JPEG/WebP 100 Мп (уменьшение при загрузке до 2048 px), PNG 25 Мп (§8.2).
    - Байты хранятся в Mongo, коллекция `profile_avatars`, `_id` — `randomToken`. Новый аватар заменяет прежний, и
      старый документ удаляется в той же транзакции.
    - `DELETE /v1/profile/avatar` — идемпотентно. Оба метода отвечают `ProfileView`.
-   - Лимиты: 20 загрузок в час на пользователя, слоты 2 на процесс и 1 на пользователя.
+   - Лимиты: 20 загрузок в час на пользователя, слоты чтения тела 4 на процесс и 1 на пользователя, обработка sharp — 1 на процесс (ожидание ≤ 5 с) (§8.2).
    - `GET /v1/avatars/:id` — публичный, `image/jpeg`, `public, max-age=31536000, immutable`, `nosniff`,
      `CSP sandbox`; нет записи — 404.
 3. **Статистика своего профиля** — `GET /v1/profile/stats` (`no-store`):
@@ -143,7 +143,7 @@ PR A — полный список в 11.8. Ключевые:
 - Обрезка: клиент присылает намерение — прямоугольник. Сервер ограничивает его рамками изображения, а при
   `size·min(w,h) < 64 px` отвечает `422 AVATAR_INVALID`.
 - Ошибки: `AVATAR_FORMAT_UNSUPPORTED` (415), `AVATAR_TOO_LARGE` (413), `AVATAR_INVALID` (422 — не декодируется,
-  больше 40 Мп, мелкая обрезка) — в конец `ErrorCode`.
+  больше предела пикселей (JPEG/WebP 100 Мп, PNG 25 Мп), мелкая обрезка) — в конец `ErrorCode`.
 
 ## 8. Risks / Assumptions / Open Questions
 
@@ -170,7 +170,7 @@ PR A — полный список в 11.8. Ключевые:
 ### Architecture Review (PR A, 2026-10-28)
 
 - **RC-A1. sharp в HTTP-обработчике vs красный флаг «рендер в HTTP-обработчике» (`pokatim-backend.md`) и «тяжёлое —
-  в worker» (AGENTS §4.5).** Перекодирование аватара — синхронное и ограниченное (10 МиБ, 40 Мп, 2 слота на процесс,
+  в worker» (AGENTS §4.5).** Перекодирование аватара — синхронное и ограниченное (10 МиБ, JPEG/WebP 100 Мп / PNG 25 Мп, 1 обработка на процесс — §8.2,
   `timeout` 10 с, пул libvips вне event loop). Варианты: (a) **оставить в HTTP** и зафиксировать исключение в ADR-0018 и
   в `pokatim-backend.md` («рендер» = Skia/ffmpeg/OG; аватар — ограниченное перекодирование); (b) очередь BullMQ +
   опрос статуса — сложнее UX и PR B, хранение исходника до обработки (а исходник с GPS хранить не хотим);
@@ -204,7 +204,11 @@ PR A — полный список в 11.8. Ключевые:
 
 - Блок «Сезон» переезжает из `settings/profile` в `/profile` — по рамке D-43 («Профиль → блок „Сезон 2026“»).
 - Ревью PR A, проход 1 (MEDIUM-1, MEDIUM-2): лимит пикселей аватара — **25 Мп** вместо 40 Мп, слот — **1 на процесс**
-  вместо 2, таймауты тела аватара — 10 с тишины / 60 с всего (замер памяти и выбор — ADR-0018). HIGH-1: курсор
+  вместо 2, таймауты тела аватара — 10 с тишины / 60 с всего (замер памяти и выбор — ADR-0018).
+- Ревью PR A, проход 2 (MEDIUM-A, MEDIUM-B) — итог: конвейер в две стадии (`autoOrient` + уменьшение до 2048 px с
+  shrink-on-load → квадрат в пересчитанных координатах → 512 JPEG); предел пикселей JPEG/WebP — **100 Мп**, PNG —
+  **25 Мп**; слоты разделены: чтение тела 4 на процесс и 1 на пользователя, обработка sharp 1 на процесс (ожидание до
+  5 с, затем 429). Клиент фото не уменьшает. HIGH-1: курсор
   `GET /v1/riders/:publicId/races` — только id гонки (`k: 'r'`), без `startedAt`.
 
 ## 8.3 Security checklist
@@ -229,7 +233,7 @@ PR A — полный список в 11.8. Ключевые:
    - JPEG с EXIF (GPS, ориентация 6) → 200, `avatar.id`;
    - `GET /v1/avatars/:id` отдаёт JPEG 512×512 без EXIF, развёрнутый по ориентации, с заголовками кэша и `nosniff`;
    - обрезка по query даёт заданный квадрат.
-2. Ошибки загрузки: PNG и WebP принимаются; GIF или текст → 415; больше 10 МиБ → 413; больше 40 Мп или битый файл →
+2. Ошибки загрузки: PNG и WebP принимаются; GIF или текст → 415; больше 10 МиБ → 413; больше предела пикселей (JPEG/WebP 100 Мп, PNG 25 Мп — §8.2) или битый файл →
    422; без входа → 401; превышение лимита → 429.
 3. Замена аватара удаляет старый (старый id → 404). `DELETE` → `avatar: null`, повтор — 200.
 4. `PATCH /v1/profile { club }` — валидация как у имени, `null` очищает; ответ содержит `club`.
@@ -360,13 +364,13 @@ PR A. Architecture Review — **Status: CONCERNS** (блокеров нет; RC-
 
 1. `@Query()` → `ZodValidationPipe(AvatarCropQuery)` **до** слота и тела (400 — без чтения тела).
 2. `ProfileAvatarService.admit(userId)`: `RateLimiter.consume('profile-avatar:<uid>', { limit: 20, windowSec: 3600 })`
-   → 429 `RATE_LIMITED` + `retryAfterSec`; слот — свой экземпляр `new UploadSlots({ maxTotal: 2, maxPerUser: 1 })`
+   → 429 `RATE_LIMITED` + `retryAfterSec`; слот — свой экземпляр `new UploadSlots({ maxTotal: 4, maxPerUser: 1 })` (чтение тела; обработка — `AvatarProcessingGate` 1 на процесс, §8.2)
    → 429 `retryAfterSec: 5`. Всё — до тела.
 3. `readLimited(body, AVATAR_MAX_BYTES, { unsupported: 'AVATAR_FORMAT_UNSUPPORTED', tooLarge: 'AVATAR_TOO_LARGE' },
    DEFAULT_BODY_TIMEOUTS)`; ошибка — `Connection: close`; `slot.release()` в `finally`.
 4. `avatar-image.ts`:
    - `detectImageFormat(bytes)`: JPEG `FF D8 FF`, PNG `89 50 4E 47 0D 0A 1A 0A`, WebP `RIFF????WEBP`; иначе 415.
-   - `sharp(bytes, { limitInputPixels: 40_000_000, failOn: 'error', animated: false, sequentialRead: true })`;
+   - `sharp(bytes, { limitInputPixels: 100_000_000 /* PNG — 25_000_000 */, failOn: 'error', animated: false, sequentialRead: true })`;
      `metadata()` → `format` обязан совпасть с сигнатурой (иначе 415); размеры **после** ориентации
      (`autoOrient` в метаданных sharp ≥ 0.34; для `orientation ≥ 5` — `w/h` меняются местами).
    - `cropRect(w, h, crop?)` — чистая: без query — центральный квадрат `min(w,h)`; иначе `side = round(size ·
@@ -446,7 +450,7 @@ PR A. Architecture Review — **Status: CONCERNS** (блокеров нет; RC-
     старые клиенты — `z.object` не строгий, новые ключи игнорируют.
   - `UpdateProfileRequest` + `club: RiderClub.optional()`; `refine` «хотя бы один ключ» — с `club`.
 - `profile/rider-avatar.schema.ts` (новый): `AVATAR_MAX_BYTES = 10 * 1024 * 1024`, `AVATAR_SIZE_PX = 512`,
-  `AVATAR_MAX_INPUT_PIXELS = 40_000_000`, `AVATAR_MIN_CROP_PX = 64`; `OpaqueToken` (43 символа base64url) →
+  `AVATAR_MAX_INPUT_PIXELS = 100_000_000` (JPEG/WebP), `AVATAR_MAX_PNG_PIXELS = 25_000_000`, `AVATAR_MIN_CROP_PX = 64`; `OpaqueToken` (43 символа base64url) →
   `AvatarId`, `RiderPublicId`; `AvatarCropQuery` — `z.union([z.strictObject({}), z.strictObject({ x, y, size })])`
   где `x, y: z.coerce.number().min(0).max(1)`, `size: z.coerce.number().gt(0).max(1)` (все три или ни одного;
   `NaN`/`Infinity` — `INVALID`).
@@ -480,8 +484,8 @@ PR A. Architecture Review — **Status: CONCERNS** (блокеров нет; RC-
 - Тестовые изображения генерирует сам sharp в тесте (фикстур в git нет): `sharp({ create: { width: 400, height:
   200, channels: 3, background } })` с двумя цветными половинами (`composite`) → `.jpeg().withMetadata({ orientation:
   6 })`/`.withExif({ IFD0: {...}, IFD3: { GPSLatitude… } })` — сверить ключи через context7; проверка поворота — по
-  цвету пикселей `raw()` результата, отсутствие EXIF — `metadata()` без `exif`/`orientation`. > 40 Мп — PNG c
-  подделанным `IHDR` (ширина 8000 × высота 5001, CRC — `zlib.crc32`) без реального декода; битый — `FF D8 FF` +
+  цвету пикселей `raw()` результата, отсутствие EXIF — `metadata()` без `exif`/`orientation`. > 25 Мп — PNG c
+  подделанным `IHDR` (ширина 5001 × высота 5000, CRC — `zlib.crc32`) без реального декода; битый — `FF D8 FF` +
   мусор; GIF — `GIF89a`.
 
 ### 11.7 Test matrix
@@ -489,8 +493,8 @@ PR A. Architecture Review — **Status: CONCERNS** (блокеров нет; RC-
 | AC | Тест | Файл |
 |---|---|---|
 | 1 | int: JPEG (EXIF GPS + orientation 6) → 200 `avatar.id`; `GET /v1/avatars/:id` — 512×512 JPEG, без EXIF, поворот по цвету пикселей, заголовки (`Content-Type`, `immutable`, `nosniff`, `CSP sandbox`); обрезка по query — цвет квадрата; без query — центр | `apps/api/src/modules/profile/profile-avatar.int.test.ts` |
-| 1–2 | unit: `detectImageFormat`, `cropRect` (центр, клэмп к рамке, `< 64` → 422), обработка PNG/WebP, 40 Мп, битый, метаданные стёрты | `apps/api/src/modules/profile/avatar-image.test.ts` |
-| 2 | int: PNG, WebP → 200; GIF, текст → 415; не `octet-stream` → 415; > 10 МиБ → 413 + `Connection: close`; > 40 Мп, битый → 422; без входа → 401; 21-я загрузка → 429; второй параллельный приём → 429 | `profile-avatar.int.test.ts` |
+| 1–2 | unit: `detectImageFormat`, `cropRect` (центр, клэмп к рамке, `< 64` → 422), обработка PNG/WebP, 48 Мп JPEG принимается, PNG > 25 Мп, битый, метаданные стёрты | `apps/api/src/modules/profile/avatar-image.test.ts` |
+| 2 | int: PNG, WebP → 200; GIF, текст → 415; не `octet-stream` → 415; > 10 МиБ → 413 + `Connection: close`; PNG > 25 Мп, битый → 422; 48 Мп JPEG → 200; без входа → 401; 21-я загрузка → 429; второй параллельный приём того же пользователя → 429; обработка занята > 5 с → 429 | `profile-avatar.int.test.ts` |
 | 3 | int: замена — старый id → 404, в коллекции один документ; удаление → `avatar: null`, повтор — 200; 404 без `immutable` | `profile-avatar.int.test.ts` |
 | 4 | contracts unit: `RiderClub` (2–60, `\p{Cc}`/`\p{Cf}`, служебные, `""`/`null`); int `PATCH { club }` / `{ club: null }` | `packages/contracts/src/profile/profile.schema.test.ts`, `apps/api/src/modules/profile/profile.int.test.ts` |
 | 5 | int: `publicId` в `ProfileView` только при имени+согласии, стабилен при отзыве/повторе; `GET /v1/riders/:publicId` 200 → отзыв / очистка имени / сброс модератором / удаление аккаунта → 404; **тест ключей** ответа (нет `userId`, `distanceM`, `elevationGainM`, райдов) | `apps/api/src/modules/riders/riders.int.test.ts` |
@@ -554,7 +558,7 @@ PR A. Architecture Review — **Status: CONCERNS** (блокеров нет; RC-
   `AvatarCropQuery`), `rider-profile.schema.ts` (`RiderHistoryQuery`, `RiderStats`, истории, `PublicRiderProfile`,
   `PublicRiderRacePage`); коды `AVATAR_FORMAT_UNSUPPORTED|TOO_LARGE|INVALID` в конце `ErrorCode` + тексты.
 - `profile`: клуб и `publicId` (второй этап pipeline `updatePublicName`, один раз), аватар — `avatar-image.ts` (sharp
-  0.35.5: сигнатура + формат декодера, 40 Мп, `failOn: 'error'`, `autoOrient` → `extract` → 512×512 JPEG без
+  0.35.5: сигнатура + формат декодера, JPEG/WebP 100 Мп и PNG 25 Мп (см. ревью), `failOn: 'error'`, `autoOrient` → `extract` → 512×512 JPEG без
   метаданных, `timeout` 10 с, `cache(false)`, `concurrency(1)`), `ProfileAvatarService` (лимит 20/ч, слоты 2/1,
   транзакции замены и удаления), `ProfileAvatarsController` (`PUT /v1/profile/avatar`, `POST …/avatar/delete`),
   `AvatarsPublicController` (`GET /v1/avatars/:id`), `ProfileAvatarRepository`, порт `RIDER_PROFILES`;
@@ -575,7 +579,7 @@ PR A. Architecture Review — **Status: CONCERNS** (блокеров нет; RC-
   ADR-0015 (шаг `profile`), `.claude/rules/pokatim-{backend,db,security,contracts}.md`.
 
 **Тесты.** Контракты (`profile.schema`, `rider-avatar.schema`, `rider-profile.schema`, порядок `ErrorCode`); unit
-`avatar-image.test.ts` (сигнатура, `cropRect`, EXIF/GPS стёрты, поворот по цвету пикселей, PNG/WebP, 40 Мп, битый),
+`avatar-image.test.ts` (сигнатура, `cropRect`, EXIF/GPS стёрты, поворот по цвету пикселей, PNG/WebP, предел пикселей, битый),
 `riders.policy.test.ts`, сторож `profile_avatars` в `profile.repository.test.ts`; int `profile-avatar.int.test.ts`
 (AC1–AC3), `profile.int.test.ts` (клуб, `publicId`), `results-history.int.test.ts` (AC7, до и после публикации =
 «моё участие»), `rides-history.int.test.ts` (AC8), `riders.int.test.ts` (AC5, AC6, AC9, тест ключей),
