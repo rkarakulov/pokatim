@@ -368,3 +368,87 @@ not-found, auth-guard, theme-guards) — 18 наборов, 186 тестов, з
   места и суммы приходят с сервера.
 
 Итог: CRITICAL/HIGH нет → **APPROVE**. MEDIUM (немой отказ декодирования в web-кропе) желательно закрыть до merge.
+
+## PR B, проход 2
+
+# Findings — rider-profile (PR B) — pass 2 — reviewer: claude
+base: origin/develop (aa857ba, входит в HEAD)   commits: a32ba38..44e7e83 (фиксы 3b8dcad, f77ea08; мержи 0ca8ee3, 5e0ed2d, 23cbb9e, 44e7e83)
+verdict: APPROVE
+
+Проверено самостоятельно на HEAD 44e7e83: `pnpm install --frozen-lockfile` — «Already up to date» (lockfile согласован с
+`apps/app/package.json`); `pnpm format:check`, `pnpm arch:check` (depcruise, 0 нарушений), `eslint` по затронутым
+путям, `typecheck` `@pokatim/app` и `@pokatim/i18n` — зелёные; jest `apps/app` целиком — 201 набор, 1834 теста,
+зелёные; vitest `@pokatim/i18n` (14) и `@pokatim/design-tokens` (578) — зелёные. Маркеров конфликта в дереве нет.
+`HEAD..origin/develop` пуст. Плагин `expo-image-picker@58.0.10` прочитан из опубликованного пакета (`npm pack`).
+
+### Статус находок прохода 1
+| Находка | Статус | Где |
+|---|---|---|
+| MEDIUM web-кроп: недекодируемый файл — тупик без сообщения | **fixed** | `avatar-crop.web.tsx:189` `onError={onUnreadable}`; `avatar-editor.web.tsx:39–42` — панель закрыта, текст `AVATAR_INVALID`; `picked-avatar.ts` — причина `AVATAR_INVALID`. Тесты: `avatar-crop.web.test.tsx` («не декодируется — onUnreadable, сохранить нельзя»), `avatar-editor.web.test.tsx` (текст, без запроса). |
+| LOW публичный профиль после 404 показывает данные из кэша | **fixed** | `rider-screen.tsx:81, 89` — `NOT_FOUND` в `rider.error` → «Профиль недоступен» при любом `data`, «Гонки» выключены, `OfflineBanner` без данных. Тест в `rider-profile.test.tsx` (данные → pull-to-refresh 404 → имя и клуб исчезли). |
+| LOW 429 «обработка занята» для удаления и почти истёкшего лимита | **fixed** | `avatar-errors.ts:16, 36–38` — порог 5 с (константа сервера `limited(5)`), удаление → `actionErrorMessage`; `avatar-section.tsx:48` передаёт `'delete'`. Тесты: 40 с → текст лимита, удаление → общий текст. |
+| LOW «Нет соединения» + «Сервис временно недоступен» в истории | **fixed** | `profile-history.tsx:51, 74` — `profile.history.failed`; `rider-screen.tsx:50` — `riders.racesFailed`. Тест в `own-profile.test.tsx` (офлайн → «Нет соединения» + «Не удалось загрузить историю»). |
+| LOW `aria-describedby` повторяет `aria-label` | **fixed** | `avatar-crop.web.tsx:158, 194`; ключи `profile.avatar.crop.area` / `.keys` в `ru.ts`; тест сверяет текст описания. |
+| LOW a11y «место —» | **fixed** | `profile-format.ts:35, 90–94`; тест в `profile-format.test.ts`. |
+| LOW (вне зоны) e2e 05b/05c без API | **open, accepted** | `apps/app/src/app/rides/route-pick.tsx:16` по-прежнему `<ShellSkeleton />` без `failure`; к PR B не относится, в CI ветка без API не исполняется. Нужна отдельная задача зоны райдов. |
+
+### Мержи (route-rides, story cards, develop) — без находок
+- `_layout.tsx`: `profile` — в группе экранов под гардом (рядом с `settings/*`), `riders/[id]` — в публичной группе
+  рядом с `rides/[id]`. Экраны develop (`rides/route-pick`, `rides/report/[id]` и др.) на месте.
+- `app-routes.ts`: `profile` и `riders/[id]` добавлены, маршруты develop не потеряны; полный jest зелёный.
+- `ru.ts`: новые ключи `profile.*` / `riders.*` без дублей (tsc на объекте-литерале упал бы); ключи develop целы.
+- `e2e/web.spec.ts` / `project.ts`: `UNKNOWN_RIDER_ID` в импортах и в `expectedResourceErrors`; `NOT_FOUND_PATHS`
+  без `/profile`; шаг «с API» использует существующие `registerHomeRider`/`HOME_FIXTURE_PASSWORD`.
+- `pnpm-lock.yaml`: добавлены только `expo-image-picker@58.0.10` и транзитивный `expo-image-loader@58.0.3`.
+- `app.json`: плагин `expo-image-picker` добавлен после `expo-notifications`, остальные плагины не тронуты.
+
+### [LOW] iOS: `cameraPermission: false` при коде камеры в бинарнике — риск ITMS-90683 при выгрузке в App Store
+- **file:** apps/app/app.json
+- **location:** стр. 57–64 (плагин `expo-image-picker`)
+- **problem:** `false` убирает `NSCameraUsageDescription` и `NSMicrophoneUsageDescription` из Info.plist — это то, что
+  нужно по продукту (камера и микрофон не используются). Но нативный модуль всё равно содержит вызовы камеры
+  (`ios/ImagePickerPermissionRequesters.swift:13` — `AVCaptureDevice.requestAccess(for: .video)`, `launchCameraAsync`).
+  Статический анализ App Store Connect для таких бинарников может прислать ITMS-90683 «Missing purpose string»
+  (исторически — предупреждение, иногда отказ выгрузки).
+- **why_it_matters:** сборка для стора может не пройти выгрузку или потребовать срочной правки конфигурации. На
+  dev-клиент и Android не влияет.
+- **evidence:** код плагина `plugin/build/withImagePicker.js` (`createPermissionsPlugin` с `false` → ключа нет);
+  исходники iOS пакета 58.0.10.
+- **recommended_fix:** код не менять. Добавить шаг в `pr.md`/чек-лист первой выгрузки в TestFlight: проверить письмо
+  App Store Connect. Если придёт ITMS-90683 — задать нейтральную строку камеры (код камеру не вызывает, системный
+  запрос не появится) и зафиксировать это в ADR-0019.
+
+### [LOW] Android: в манифесте остаются READ/WRITE_EXTERNAL_STORAGE (API ≤ 32) из пакета
+- **file:** apps/app/app.json
+- **location:** стр. 57–64; манифест пакета `expo-image-picker/android/src/main/AndroidManifest.xml`
+- **problem:** камера и микрофон закрыты правильно: `cameraPermission: false` → `withBlockedPermissions(CAMERA)`
+  (`tools:node="remove"`), `microphonePermission: false` → `RECORD_AUDIO` не добавляется и заблокирован. (README
+  пакета утверждает, что `false` камеру на Android не убирает, но код плагина 58.0.10 её блокирует.) Однако манифест
+  пакета приносит `READ_EXTERNAL_STORAGE`/`WRITE_EXTERNAL_STORAGE` с `maxSdkVersion="32"`. Выбор через Photo Picker /
+  `ACTION_OPEN_DOCUMENT` (`pick-avatar.ts` не запрашивает разрешений) их не требует.
+- **why_it_matters:** лишние разрешения на Android 12 и ниже (карточка магазина, Data safety). Приватность пользователя
+  не нарушена: системный запрос не показывается, пока код его не вызывает.
+- **evidence:** манифест пакета 58.0.10; в `app.json` нет `android.blockedPermissions`.
+- **recommended_fix:** по желанию — `"android": { "blockedPermissions": ["android.permission.READ_EXTERNAL_STORAGE",
+  "android.permission.WRITE_EXTERNAL_STORAGE"] }`, после проверки на устройстве с Android ≤ 12, что галерея
+  открывается. Если это делать не стоит (другим пакетам могут понадобиться разрешения), записать в ADR-0019 как
+  принятое.
+
+### NOT VERIFIED
+- `E2E_API=1` и playwright в этом проходе не запускались — проверит CI (merge только на зелёном).
+- Сгенерированные Info.plist и AndroidManifest (`expo prebuild`) не собирались. Вывод о разрешениях — по коду плагина
+  и манифесту пакета.
+- iOS/Android вживую — как в проходе 1.
+- Ложный `onError` при повторном эффекте в StrictMode (ревок первого blob-URL): по спецификации HTML смена `src`
+  отменяет прежний запрос без события `error`. Живого замера в dev-режиме не было.
+
+### Без находок по измерениям (дельта прохода 2)
+- **Correctness фиксов:** `found`/`notFound` в `rider-screen.tsx` согласованы. После 404 успешный повтор очищает
+  `error` и профиль возвращается. `onUnreadable` срабатывает только до `ready`: «Сохранить» недоступна, запроса нет.
+- **Тесты:** новые сценарии честные, без тавтологий (проверяют текст на экране и отсутствие запроса/данных).
+- **i18n / a11y / дизайн-система:** новые строки — в `packages/i18n`, формальное «вы». Литералов цвета и размера нет.
+- **Контракты / сервер / миграции / очереди / аудит:** фиксы и мержи их не меняют.
+- **Documentation Sync:** `pokatim-app.md` и task.md обновлены в 3b8dcad. Две LOW выше — в ADR-0019/`pr.md`.
+
+Итог: MEDIUM и 5 LOW прохода 1 закрыты, LOW вне зоны принят. Новые находки — 2 LOW (нативные разрешения),
+CRITICAL/HIGH/MEDIUM нет → **APPROVE**.
