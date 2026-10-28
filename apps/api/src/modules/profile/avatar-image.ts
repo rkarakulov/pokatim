@@ -1,10 +1,15 @@
-import { AVATAR_MAX_INPUT_PIXELS, AVATAR_MIN_CROP_PX, AVATAR_SIZE_PX } from '@pokatim/contracts';
+import {
+  AVATAR_MAX_INPUT_PIXELS,
+  AVATAR_MAX_PNG_PIXELS,
+  AVATAR_MIN_CROP_PX,
+  AVATAR_SIZE_PX,
+} from '@pokatim/contracts';
 import sharp from 'sharp';
 
 /**
  * Обработка аватара (rider-profile, ADR-0018): ограниченное перекодирование в HTTP-обработчике (RC-A1) — вход до
- * 10 МиБ и 25 Мп, таймаут 10 с, слоты приёма; декодирование — в пуле libvips, не в event loop. Вывод — только JPEG
- * 512×512 без метаданных (EXIF, GPS, XMP и ICC не пишутся: `keepMetadata`/`withMetadata`/`withExif` не вызываются).
+ * 10 МиБ, JPEG/WebP до 100 Мп с shrink-on-load, PNG до 25 Мп, таймаут 10 с, одна обработка на процесс;
+ * декодирование — в пуле libvips, не в event loop. Вывод — только JPEG 512×512 без метаданных (EXIF, GPS, XMP и ICC не пишутся: `keepMetadata`/`withMetadata`/`withExif` не вызываются).
  * Кэш операций sharp выключен (байты чужих фото не держатся в памяти), один поток libvips на операцию.
  */
 sharp.cache(false);
@@ -67,9 +72,41 @@ export function cropRect(width: number, height: number, crop: CropIntent | null)
 }
 
 /**
+ * Длинная сторона промежуточного кадра: JPEG и WebP декодируются с уменьшением при загрузке (shrink-on-load) — пик
+ * памяти libvips не растёт с мегапикселями входа (замер — ADR-0018). Обрезка 512 px из кадра 2048 px: квадрат от
+ * трети короткой стороны — без увеличения.
+ */
+export const AVATAR_DECODE_EDGE_PX = 2048;
+
+/** Предел пикселей по формату: у PNG shrink-on-load нет. */
+const maxPixels = (format: AvatarFormat) =>
+  format === 'png' ? AVATAR_MAX_PNG_PIXELS : AVATAR_MAX_INPUT_PIXELS;
+
+/**
+ * Квадрат обрезки исходника → в координатах уменьшенного кадра (чистая): масштаб — по ширине; сторона ≥ 1 и в рамках.
+ */
+export function scaleRect(
+  rect: CropRect,
+  from: { width: number; height: number },
+  to: { width: number; height: number },
+): CropRect {
+  const scale = to.width / from.width;
+  const side = Math.max(1, Math.min(to.width, to.height, Math.round(rect.width * scale)));
+  const clamp = (value: number, max: number) => Math.min(Math.max(value, 0), max);
+  return {
+    left: clamp(Math.round(rect.left * scale), to.width - side),
+    top: clamp(Math.round(rect.top * scale), to.height - side),
+    width: side,
+    height: side,
+  };
+}
+
+/**
  * Перекодирование аватара: сигнатура → заголовок (формат декодера = сигнатуре, размеры после ориентации, предел
- * пикселей) → поворот по EXIF, квадрат, 512×512 JPEG. Не тот формат — `unsupported`; не декодируется, больше 25 Мп,
- * мелкая обрезка, таймаут — `invalid` (сообщение libvips наружу и в логи не уходит).
+ * пикселей по формату) → квадрат в координатах ориентированного исходника (сторона ≥ 64 px) → стадия 1: поворот по
+ * EXIF и уменьшение до 2048 px по длинной стороне (`fit: inside`, без увеличения; JPEG/WebP — shrink-on-load) в raw →
+ * стадия 2: квадрат в пересчитанных координатах, 512×512 JPEG без метаданных. Не тот формат — `unsupported`; не
+ * декодируется, больше предела, мелкая обрезка, таймаут — `invalid` (сообщение libvips наружу и в логи не уходит).
  */
 export async function processAvatar(
   bytes: Uint8Array,
@@ -77,31 +114,41 @@ export async function processAvatar(
 ): Promise<AvatarResult> {
   const format = detectImageFormat(bytes);
   if (!format) return { ok: false, error: 'unsupported' };
+  const limit = maxPixels(format);
   const input = () =>
     sharp(bytes, {
-      limitInputPixels: AVATAR_MAX_INPUT_PIXELS,
+      limitInputPixels: limit,
       failOn: 'error',
       animated: false,
       sequentialRead: true,
     });
-  let width: number;
-  let height: number;
+  let oriented: { width: number; height: number };
   try {
     const meta = await input().metadata();
     if (meta.format !== format) return { ok: false, error: 'unsupported', format };
-    if (meta.width * meta.height > AVATAR_MAX_INPUT_PIXELS) {
-      return { ok: false, error: 'invalid', format };
-    }
-    ({ width, height } = meta.autoOrient);
+    if (meta.width * meta.height > limit) return { ok: false, error: 'invalid', format };
+    oriented = meta.autoOrient;
   } catch {
     return { ok: false, error: 'invalid', format };
   }
-  const rect = cropRect(width, height, crop);
+  const rect = cropRect(oriented.width, oriented.height, crop);
   if (!rect) return { ok: false, error: 'invalid', format };
   try {
-    const output = await input()
+    const { data, info } = await input()
       .autoOrient()
-      .extract(rect)
+      .resize({
+        width: AVATAR_DECODE_EDGE_PX,
+        height: AVATAR_DECODE_EDGE_PX,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .raw()
+      .timeout({ seconds: AVATAR_TIMEOUT_SEC })
+      .toBuffer({ resolveWithObject: true });
+    const output = await sharp(data, {
+      raw: { width: info.width, height: info.height, channels: info.channels },
+    })
+      .extract(scaleRect(rect, oriented, info))
       .resize(AVATAR_SIZE_PX, AVATAR_SIZE_PX)
       .jpeg({ quality: AVATAR_JPEG_QUALITY })
       .timeout({ seconds: AVATAR_TIMEOUT_SEC })

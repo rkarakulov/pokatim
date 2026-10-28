@@ -7,10 +7,13 @@ export const AVATAR_MAX_BYTES = 10 * 1024 * 1024;
 /** Сторона сохранённого аватара: квадрат 512×512 JPEG без метаданных. */
 export const AVATAR_SIZE_PX = 512;
 /**
- * Предел пикселей входа (по заголовку); больше — `422 AVATAR_INVALID`. 25 Мп (MEDIUM-1 ревью): пик памяти libvips —
- * ADR-0018; кадры 48 Мп нужно уменьшить на клиенте (системная обрезка native и web-экран обрезки дают меньше).
+ * Предел пикселей входа JPEG и WebP (по заголовку); больше — `422 AVATAR_INVALID`. 100 Мп: сервер декодирует их с
+ * уменьшением при загрузке (shrink-on-load, ADR-0018) — кадры 48–50 Мп телефонов и квадрат системной обрезки (~37 Мп)
+ * клиент шлёт как есть, без уменьшения.
  */
-export const AVATAR_MAX_INPUT_PIXELS = 25_000_000;
+export const AVATAR_MAX_INPUT_PIXELS = 100_000_000;
+/** Предел пикселей PNG: у PNG нет shrink-on-load — память декода растёт с размером (ADR-0018). */
+export const AVATAR_MAX_PNG_PIXELS = 25_000_000;
 /** Минимальная сторона обрезки в пикселях исходника; меньше — `422 AVATAR_INVALID`. */
 export const AVATAR_MIN_CROP_PX = 64;
 

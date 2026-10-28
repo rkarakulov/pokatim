@@ -14,6 +14,7 @@ import { createHarness, type Harness } from '../../../test/harness';
 import { bearer, call, signUpSession } from '../../../test/identity';
 import { heldUpload } from '../../../test/uploads';
 import { PROFILE_COLLECTIONS } from './profile.collection';
+import { AvatarProcessing } from './avatar-processing-gate';
 import { PROFILE_POLICY } from './profile.policy';
 
 let h: Harness;
@@ -197,16 +198,40 @@ describe('ошибки загрузки (AC2)', () => {
     expect((await upload(session, await twoToneImage('png'))).status).toBe(200);
   });
 
-  it('MEDIUM-1 ревью: один приём аватара на процесс — другой пользователь получает 429, пока первый держит слот', async () => {
+  it('MEDIUM-B ревью: медленное тело одного пользователя не блокирует другого (чтение — 4 слота на процесс)', async () => {
     const first = await signUpSession(h, 'first@example.com');
     const second = await signUpSession(h, 'second@example.com');
     const held = heldUpload(h, AVATAR, bearer(first.accessToken), 'PUT');
     await held.held();
-    const refused = await upload(second, await twoToneImage('png'));
-    expect(refused.status).toBe(429);
-    expect(refused.body).toMatchObject({ code: 'RATE_LIMITED', details: { retryAfterSec: 5 } });
-    expect((await held.finish(await twoToneImage('png'))).status).toBe(200);
     expect((await upload(second, await twoToneImage('png'))).status).toBe(200);
+    expect((await held.finish(await twoToneImage('png'))).status).toBe(200);
+  });
+
+  it('MEDIUM-B ревью: обработка занята дольше ожидания — 429 retryAfterSec 5; освободилась — 200', async () => {
+    expect(PROFILE_POLICY.avatarProcessing).toEqual({ concurrency: 1, waitMs: 5_000 });
+    const saved = { ...PROFILE_POLICY.avatarProcessing };
+    Object.assign(PROFILE_POLICY.avatarProcessing, { waitMs: 100 });
+    const session = await signUpSession(h);
+    const permit = await h.app.get(AvatarProcessing, { strict: false }).acquire();
+    try {
+      const busy = await upload(session, await twoToneImage('png'));
+      expect(busy.status).toBe(429);
+      expect(busy.body).toMatchObject({ code: 'RATE_LIMITED', details: { retryAfterSec: 5 } });
+    } finally {
+      permit?.release();
+      Object.assign(PROFILE_POLICY.avatarProcessing, saved);
+    }
+    expect((await upload(session, await twoToneImage('png'))).status).toBe(200);
+  });
+
+  it('MEDIUM-A ревью: 48 Мп JPEG с телефона (ориентация 6) — 200, квадрат обрезки верный', async () => {
+    const session = await signUpSession(h);
+    const input = await twoToneImage('jpeg', { orientation: 6, width: 8000, height: 6000 });
+    const res = await upload(session, input, { query: '?x=0&y=1&size=0.5' });
+    expect(res.status).toBe(200);
+    const image = await fetchAvatar(avatarIdOf(res));
+    expect(await sharp(image.raw).metadata()).toMatchObject({ width: 512, height: 512 });
+    expect(await avatarPixel(image.raw, 256, 256)).toBe('blue');
   });
 
   it('LOW-1 ревью: отказ «слот занят» не списывает часовую квоту', async () => {

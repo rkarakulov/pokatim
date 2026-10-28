@@ -3,21 +3,26 @@ import { crc32 } from 'node:zlib';
 import sharp from 'sharp';
 
 /**
- * Тестовые изображения аватаров (rider-profile): генерирует сам sharp, фикстур в git нет. 400×200 — слева красная
- * половина, справа синяя: поворот и обрезку проверяет цвет пикселя результата.
+ * Тестовые изображения аватаров (rider-profile): генерирует сам sharp, фикстур в git нет. По умолчанию 400×200 — слева
+ * красная половина, справа синяя: поворот и обрезку проверяет цвет пикселя результата.
  */
 export async function twoToneImage(
   format: 'jpeg' | 'png' | 'webp',
-  { orientation }: { orientation?: number } = {},
+  {
+    orientation,
+    width = 400,
+    height = 200,
+  }: { orientation?: number; width?: number; height?: number } = {},
 ): Promise<Buffer> {
   const red = await sharp({
-    create: { width: 200, height: 200, channels: 3, background: { r: 255, g: 0, b: 0 } },
+    create: { width: width / 2, height, channels: 3, background: { r: 255, g: 0, b: 0 } },
   })
-    .png()
+    .png({ compressionLevel: 1 })
     .toBuffer();
   let image = sharp({
-    create: { width: 400, height: 200, channels: 3, background: { r: 0, g: 0, b: 255 } },
-  }).composite([{ input: red, left: 0, top: 0 }]);
+    create: { width, height, channels: 3, background: { r: 0, g: 0, b: 255 } },
+    limitInputPixels: false,
+  }).composite([{ input: red, left: 0, top: 0, limitInputPixels: false }]);
   if (format === 'jpeg') {
     image = image.jpeg({ quality: 90 });
     if (orientation !== undefined) {

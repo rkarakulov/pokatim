@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AVATAR_MAX_BYTES,
   AVATAR_MAX_INPUT_PIXELS,
+  AVATAR_MAX_PNG_PIXELS,
   AVATAR_MIN_CROP_PX,
   AVATAR_SIZE_PX,
   AvatarCropQuery,
@@ -13,10 +14,11 @@ import {
 const TOKEN = 'Ab0_-'.repeat(8) + 'xyz';
 
 describe('rider-avatar: пределы', () => {
-  it('10 МиБ, 512 px, 25 Мп (память API, ADR-0018), обрезка от 64 px', () => {
+  it('10 МиБ, 512 px, JPEG/WebP до 100 Мп, PNG до 25 Мп (память API, ADR-0018), обрезка от 64 px', () => {
     expect(AVATAR_MAX_BYTES).toBe(10 * 1024 * 1024);
     expect(AVATAR_SIZE_PX).toBe(512);
-    expect(AVATAR_MAX_INPUT_PIXELS).toBe(25_000_000);
+    expect(AVATAR_MAX_INPUT_PIXELS).toBe(100_000_000);
+    expect(AVATAR_MAX_PNG_PIXELS).toBe(25_000_000);
     expect(AVATAR_MIN_CROP_PX).toBe(64);
   });
 });

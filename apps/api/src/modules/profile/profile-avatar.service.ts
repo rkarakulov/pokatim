@@ -14,6 +14,7 @@ import { domainError } from '../../error-messages';
 import { type UploadSlot, UploadSlots } from '../../upload-slots';
 import { randomToken } from '../identity';
 import { type CropIntent, processAvatar } from './avatar-image';
+import { AvatarProcessing } from './avatar-processing-gate';
 import { ProfileAvatarRepository } from './profile-avatar.repository';
 import { PROFILE_POLICY, profileViewOf } from './profile.policy';
 import { ProfileRepository } from './profile.repository';
@@ -24,8 +25,8 @@ const limited = (retryAfterSec: number) => {
 };
 
 /**
- * Аватар своего профиля (rider-profile, ADR-0018): слот приёма (1 на процесс и на пользователя) и лимит
- * `profile-avatar:<uid>` 20/ч — до тела; перекодирование `processAvatar`; замена — транзакция «новый документ → профиль → прежний
+ * Аватар своего профиля (rider-profile, ADR-0018): слот чтения тела (4 на процесс, 1 на пользователя) и лимит
+ * `profile-avatar:<uid>` 20/ч — до тела; место обработки sharp (1 на процесс, ожидание до 5 с) — после тела; перекодирование `processAvatar`; замена — транзакция «новый документ → профиль → прежний
  * удалён»; удаление — транзакция «профиль → прежний удалён». В логах — `uid`, размер, формат и исход (без имени,
  * клуба и сообщений libvips).
  */
@@ -39,6 +40,7 @@ export class ProfileAvatarService {
     private readonly avatars: ProfileAvatarRepository,
     private readonly transactions: MongoTransactions,
     private readonly rateLimiter: RateLimiter,
+    private readonly processing: AvatarProcessing,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -62,7 +64,10 @@ export class ProfileAvatarService {
   async replace(userId: string, bytes: Uint8Array, crop: AvatarCropQuery): Promise<ProfileView> {
     const intent: CropIntent | null =
       'size' in crop ? { x: crop.x, y: crop.y, size: crop.size } : null;
-    const result = await processAvatar(bytes, intent);
+    // память libvips — одна обработка на процесс; занято дольше `waitMs` — 429 (тело уже прочитано, квота списана)
+    const permit = await this.processing.acquire();
+    if (!permit) throw limited(5);
+    const result = await processAvatar(bytes, intent).finally(() => permit.release());
     if (!result.ok) {
       this.logger.log(
         `profile.avatar_rejected uid=${userId} bytes=${bytes.byteLength} format=${result.format ?? 'none'} outcome=${result.error}`,
