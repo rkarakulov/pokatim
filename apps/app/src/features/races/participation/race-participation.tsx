@@ -18,6 +18,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { rememberReturnPath } from '@/features/auth/return-path';
+import { OpenTicketButton } from '@/features/tickets/open-ticket-button';
 
 import {
   blockReasonText,
@@ -26,7 +27,7 @@ import {
   offersTierChoice,
   raceActionErrorText,
 } from '../participation-format';
-import { useEnterRace } from '../queries';
+import { useEnterRace, useRaceTicket } from '../queries';
 import { ShareStoryButton } from '../story/share-story-button';
 import { AttemptList } from './attempt-list';
 import { EntryActions } from './entry-actions';
@@ -100,6 +101,9 @@ export function RaceParticipation({
   sessionPending: boolean;
 }) {
   const theme = useTheme();
+  // билет (event-tickets): только при активной заявке; загрузка и ошибка — без кнопки (билет вторичен, блок не ломаем)
+  const activeEntry = signedIn && entry.data?.entry?.status === 'active';
+  const ticket = useRaceTicket(race.id, activeEntry);
   // место держим только там, где блок будет и у гостя: на завершённых гонках гость (SSR, ссылки) блока не видит
   if (sessionPending) return guestCanSeeEnter(race) ? <BlockSkeleton /> : null;
   if (!signedIn) {
@@ -167,6 +171,7 @@ export function RaceParticipation({
     <Block>
       <Kicker label={t('races.entry.title')} />
       <EntryResult entry={data} race={race} now={now} />
+      <OpenTicketButton ticket={ticket.data} />
       {data.actions.canShareStory ? <ShareStoryButton raceId={race.id} /> : null}
       <EntryActions entry={data} raceId={race.id} now={now} />
       <AttemptList attempts={data.attempts} pendingUploads={data.pendingUploads} now={now} />

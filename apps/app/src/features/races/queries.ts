@@ -3,6 +3,7 @@ import type {
   MyAttempt,
   MyAttemptTrack,
   MyRaceEntry,
+  MyTicketRef,
   RaceDetail,
   RaceEntryRequest,
   RaceFinishersPage,
@@ -212,6 +213,8 @@ export const raceEntryKey = (id: string) => ['races', 'entry', id] as const;
 /** Префикс инвалидации таблицы; сами страницы — `[...raceResultsKey(id), 'pages']` (F12). */
 export const raceResultsKey = (id: string) => ['races', 'results', id] as const;
 export const raceCandidatesKey = (id: string) => ['races', 'candidates', id] as const;
+/** Свой билет гонки (event-tickets): под префиксом гонок, инвалидируется мутациями участия. */
+export const raceTicketKey = (id: string) => ['races', 'ticket', id] as const;
 /** Опрос «моего участия», пока трек проверяется или файл обрабатывается (§7.3; polling, не сокеты). */
 export const ENTRY_POLL_MS = 3000;
 const RESULTS_PAGE_LIMIT = 50;
@@ -363,7 +366,30 @@ async function applyEntry(queryClient: QueryClient, entry: MyRaceEntry): Promise
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: raceResultsKey(entry.raceId) }),
     queryClient.invalidateQueries({ queryKey: raceCandidatesKey(entry.raceId) }),
+    // заявка и её отмена выпускают и отменяют билет (event-tickets): билет гонки и «Ваши билеты» устарели
+    queryClient.invalidateQueries({ queryKey: raceTicketKey(entry.raceId) }),
+    queryClient.invalidateQueries({ queryKey: ['tickets'] }),
   ]);
+}
+
+/**
+ * Свой билет гонки (event-tickets, «Открыть билет» в «Ваше участие»): сервер выпускает лениво; нет билетов или
+ * заявки — `null`; старый API без эндпоинта (404) — `null` (кнопки нет).
+ */
+export function useRaceTicket(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: raceTicketKey(id),
+    queryFn: async (): Promise<MyTicketRef | null> => {
+      try {
+        return await withAccessToken((token) => api.getRaceTicket(token, id));
+      } catch (error) {
+        if (apiErrorCode(error) === 'NOT_FOUND') return null;
+        throw error;
+      }
+    },
+    staleTime: DEFAULT_STALE_MS,
+    enabled,
+  });
 }
 
 /**

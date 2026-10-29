@@ -129,6 +129,8 @@ beforeEach(() => {
   listCalendar.mockResolvedValue(calendarPage(start));
   listRides.mockResolvedValue(ridePage(ride));
   listRoutes.mockResolvedValue(routePage(catalogRoute));
+  // «Ваши билеты» (event-tickets): билетов нет — блока нет
+  jest.mocked(api.listTickets).mockResolvedValue({ upcoming: [], past: [] });
 });
 afterEach(() => {
   jest.clearAllMocks();

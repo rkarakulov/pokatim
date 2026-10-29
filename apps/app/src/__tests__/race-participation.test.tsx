@@ -12,6 +12,7 @@ import { api } from '@/lib/api';
 
 import RaceRoute from '../app/races/[id]';
 import RacePickRoute from '../app/races/pick/[id]';
+import TicketRoute from '../app/tickets/[code]';
 import { appRoutes, tabRoutes } from './app-routes';
 import { EMAIL, liveSession, session, storeSurveyCompleted } from './auth-fixtures';
 import { upload } from './devices-fixtures';
@@ -85,6 +86,8 @@ beforeEach(() => {
   // споры (race-results-06): у участника — запрос «моих споров»; здесь их нет
   jest.mocked(api.getMyRaceDisputes).mockResolvedValue(myDisputes());
   jest.mocked(api.listRaces).mockResolvedValue({ items: [], nextCursor: null });
+  // билет гонки (event-tickets): по умолчанию билетов у гонки нет
+  jest.mocked(api.getRaceTicket).mockResolvedValue(null);
   jest.mocked(api.trackUploadRequest).mockReturnValue({
     url: 'https://api.example/v1/tracks/uploads?name=ride.gpx',
     method: 'POST',
@@ -653,6 +656,83 @@ describe('споры: D-39 и DQ (race-results-06, AC12)', () => {
     expect(
       await screen.findAllByText('Отменить участие можно после решения по спору'),
     ).not.toHaveLength(0);
+  });
+});
+
+describe('«Открыть билет» в «Ваше участие» (event-tickets §5.7)', () => {
+  beforeEach(signedIn);
+
+  const ref = (status: 'active' | 'cancelled' = 'active') => ({
+    code: 'ABCDE12345',
+    status,
+    past: false,
+    event: {
+      kind: 'race' as const,
+      id: RACE_ID,
+      title: 'Гонка',
+      startsAt: NOW.toISOString(),
+      endsAt: null,
+      place: null,
+      address: null,
+      city: null,
+    },
+  });
+
+  it('активная заявка и билет — «Открыть билет» ведёт на /tickets/<код>', async () => {
+    getMyRaceEntry.mockResolvedValue(myEntry());
+    jest.mocked(api.getRaceTicket).mockResolvedValue(ref());
+    jest.mocked(api.getTicket).mockReturnValue(never());
+    const router = await renderRouter(
+      { ...signedInRoutes, 'tickets/[code]': TicketRoute },
+      { initialUrl: `/races/${RACE_ID}`, wrapper: createQueryWrapper() },
+    );
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Открыть билет' }));
+    expect(jest.mocked(api.getRaceTicket)).toHaveBeenCalledWith(TOKEN, RACE_ID);
+    await waitFor(() => expect(router.getPathname()).toBe('/tickets/ABCDE12345'));
+  });
+
+  it.each([
+    ['билетов нет (null)', null],
+    ['билет отменён', 'cancelled'],
+    ['старый API (404)', '404'],
+  ] as const)('%s — кнопки нет', async (_name, variant) => {
+    getMyRaceEntry.mockResolvedValue(myEntry());
+    if (variant === '404') {
+      jest
+        .mocked(api.getRaceTicket)
+        .mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+    } else {
+      jest.mocked(api.getRaceTicket).mockResolvedValue(variant ? ref(variant) : null);
+    }
+    await openSignedIn();
+    expect(await screen.findByText('Ваше участие')).toBeOnTheScreen();
+    await waitFor(() => expect(api.getRaceTicket).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Открыть билет' })).toBeNull();
+  });
+
+  it('без заявки билет не запрашивается', async () => {
+    await openSignedIn();
+    expect(await screen.findByRole('button', { name: 'Участвовать' })).toBeOnTheScreen();
+    expect(api.getRaceTicket).not.toHaveBeenCalled();
+  });
+
+  it('заявка и отмена — билет гонки перезапрашивается', async () => {
+    enterRace.mockResolvedValue(myEntry());
+    jest.mocked(api.getRaceTicket).mockResolvedValue(ref());
+    await openSignedIn();
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Участвовать' }));
+    expect(await screen.findByRole('button', { name: 'Открыть билет' })).toBeOnTheScreen();
+    const calls = jest.mocked(api.getRaceTicket).mock.calls.length;
+
+    withdrawFromRace.mockResolvedValue(withdrawnEntry());
+    jest.mocked(api.getRaceTicket).mockResolvedValue(ref('cancelled'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Отменить участие' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Отменить участие' }));
+    expect(await screen.findByText('Участие отменено')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Открыть билет' })).toBeNull();
+    expect(jest.mocked(api.getRaceTicket).mock.calls.length).toBeGreaterThanOrEqual(calls);
   });
 });
 

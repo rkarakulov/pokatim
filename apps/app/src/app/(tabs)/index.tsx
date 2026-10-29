@@ -23,6 +23,9 @@ import {
 } from '@/features/home/queries';
 import { useOwnAvatarId } from '@/features/profile/queries';
 import { InstallBanner } from '@/features/pwa-install/install-banner';
+import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { HomeTickets } from '@/features/tickets/home-tickets';
+import { useMyTickets } from '@/features/tickets/queries';
 import { useNextRide } from '@/features/rides/queries';
 import { RideHero } from '@/features/rides/ride-hero';
 import {
@@ -85,6 +88,9 @@ export default function HomeScreen() {
   const calendar = useNextCalendarStart();
   const rides = useNextRide();
   const routes = useLatestRoute();
+  // «Ваши билеты» (event-tickets): только вошедшему (пока сессия неизвестна, вкладки — скелетон оболочки)
+  const signedIn = useSessionStore(isSignedIn);
+  const tickets = useMyTickets(signedIn);
   const unread = useUnreadCount();
   // аватар верхней панели (rider-profile): тот же кэш `['profile']`, что порядок разделов — без второго запроса
   const avatarId = useOwnAvatarId();
@@ -103,8 +109,22 @@ export default function HomeScreen() {
     routes.data !== undefined ||
     calendar.data !== undefined;
   const refetchers = useMemo(
-    () => [races.refetch, rides.refetch, routes.refetch, calendar.refetch, profile.refetch],
-    [races.refetch, rides.refetch, routes.refetch, calendar.refetch, profile.refetch],
+    () => [
+      races.refetch,
+      rides.refetch,
+      routes.refetch,
+      calendar.refetch,
+      profile.refetch,
+      tickets.refetch,
+    ],
+    [
+      races.refetch,
+      rides.refetch,
+      routes.refetch,
+      calendar.refetch,
+      profile.refetch,
+      tickets.refetch,
+    ],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
 
@@ -137,6 +157,7 @@ export default function HomeScreen() {
           }
         >
           <OfflineBanner hasData={hasData} style={styles.banner} />
+          <HomeTickets query={tickets} />
           {sections.map(({ id, chosen }, index) => {
             const copy = SECTION_COPY[id];
             const frame = {
