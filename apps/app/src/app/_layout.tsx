@@ -12,12 +12,14 @@ import { GestureRoot } from '@/components/gesture-root';
 import { AchievementFlashHost } from '@/features/achievements/achievement-flash-host';
 import { useRegistrationStore } from '@/features/auth/registration-store';
 import { takeReturnPath } from '@/features/auth/return-path';
+import { skipsOnboarding } from '@/features/auth/return-path-allowlist';
 import { useReturnTarget } from '@/features/auth/return-target';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { PushNotifications } from '@/features/notifications/push-registration';
 import { useActiveThemeId } from '@/features/appearance/use-active-theme-id';
 import { onboardingStep, useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { restoreLocale } from '@/features/settings/locale-preference';
+import { clearOfflineTickets } from '@/features/tickets/offline-store';
 import { connectFocusManager } from '@/lib/focus-manager';
 import { connectOnlineManager } from '@/lib/online-manager';
 import { createQueryClient } from '@/lib/query-client';
@@ -77,10 +79,14 @@ function RootShell() {
   }, [signedIn, surveyState]);
 
   // выход из аккаунта (явный, отзыв сессии сервером, refresh 401): кеш запросов и онбординг прежнего аккаунта
-  // стираются — следующий вход спросит сервер о своём опросе. Запуск без сессии (`unknown` → `signedOut`) — не выход
+  // стираются — следующий вход спросит сервер о своём опросе. Запуск без сессии (`unknown` → `signedOut`) — не выход,
+  // но офлайн-копии билетов стираются при любом переходе в «нет сессии» (AC12, RC-B4: копию без сессии не показываем)
   useEffect(
     () =>
       useSessionStore.subscribe((state, previous) => {
+        if (state.status === 'signedOut' && previous.status !== 'signedOut') {
+          void clearOfflineTickets();
+        }
         if (state.status !== 'signedOut' || previous.status !== 'signedIn') return;
         queryClient.clear();
         void useOnboardingStore.getState().reset();
@@ -102,7 +108,9 @@ function RootShell() {
     if (path) useReturnTarget.setState({ path, done: false });
   }, [signedIn]);
   useEffect(() => {
-    if (!signedIn || step !== 'done' || returnTarget.path === null || returnTarget.done) return;
+    if (!signedIn || returnTarget.path === null || returnTarget.done) return;
+    // билет из письма — сразу после входа, без ожидания онбординга (RC-B1)
+    if (step !== 'done' && !skipsOnboarding(returnTarget.path)) return;
     useReturnTarget.setState({ done: true });
     router.replace(returnTarget.path as Href);
   }, [signedIn, step, returnTarget, router]);
@@ -218,6 +226,9 @@ function RootShell() {
               {/* удаление аккаунта (A12, адрес для Google Play): гость — «Вход» и возврат, после удаления — «Регистрация»;
             вход экран проверяет сам */}
               <Stack.Screen name="settings/account/delete" />
+              {/* билет по ссылке из письма (event-tickets T2, RC-B1): гость — «Вход» и возврат, вошедший — билет без
+            онбординга; вход экран проверяет сам */}
+              <Stack.Screen name="tickets/[code]" />
               <Stack.Screen name="ui-kit" />
               <Stack.Screen name="status" />
               {/* публичные карточки по ссылке (блок 03, Q8): гость и вошедший; на native — поверх вкладок, без таб-бара */}

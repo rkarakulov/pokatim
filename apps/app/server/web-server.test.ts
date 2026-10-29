@@ -101,6 +101,8 @@ describe('web-сервер', () => {
     '/auth/reset/x',
     '/auth/verify/x',
     '/devices/return?provider=garmin&result=pending&t=x',
+    // билет: код в адресе не уходит внешним сайтам («Как добраться», «О событии»)
+    '/tickets/ABCDE12345',
   ])(
     'путь с токеном (%s) — Referrer-Policy: no-referrer, остальные заголовки те же',
     async (path) => {
