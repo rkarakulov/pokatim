@@ -4,9 +4,8 @@ import type {
   RaceEntryBlockedDetails,
   RaceEntryRequest,
   RaceEntryBlockReason,
-  RateLimitedDetails,
 } from '@pokatim/contracts';
-import { CLOCK, type Clock, RateLimiter, type RateLimitRule } from '@rkarakulov/api-kit/core';
+import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
 import {
   isDuplicateKey,
   MongoOutboxWriter,
@@ -15,6 +14,7 @@ import {
 } from '@rkarakulov/api-kit/mongo';
 
 import { domainError } from '../../error-messages';
+import { consumeUserLimit } from '../../user-limit';
 import { VERIFIED_PROFILES, type VerifiedProfiles } from '../profile';
 import { RACE_REGISTRY, type RaceRegistry } from '../races';
 import { RESULT_DISPUTE_GATE, type ResultDisputeGate } from './result-dispute-gate.port';
@@ -38,20 +38,6 @@ const PLAN_STATUS: Record<Extract<EntryPlan, { kind: 'error' }>['code'], number>
   RACE_TIER_LOCKED: 409,
   RESULT_GROUP_NOT_ALLOWED: 422,
 };
-
-/** Лимит частоты действия пользователя (`RateLimiter`, ключ — `userId`). */
-export async function consumeUserLimit(
-  rateLimiter: RateLimiter,
-  key: string,
-  rule: RateLimitRule,
-  now: Date,
-): Promise<void> {
-  const result = await rateLimiter.consume(key, rule, now);
-  if (!result.allowed) {
-    const details: RateLimitedDetails = { retryAfterSec: result.retryAfterSec };
-    throw domainError('RATE_LIMITED', 429, details);
-  }
-}
 
 /**
  * Заявка и отмена участия (race-results-03): клиент присылает только намерение. Заявка — транзакция с

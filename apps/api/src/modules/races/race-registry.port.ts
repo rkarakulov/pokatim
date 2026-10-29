@@ -50,6 +50,8 @@ export interface RaceRegistry {
   markProtocolPublished(tx: DbSession, raceId: string, at: Date): Promise<boolean>;
   /** Только `published` и `cancelled`. */
   get(raceId: string, tx?: DbSession): Promise<RaceForResults | null>;
+  /** Пачкой (event-tickets: «Мои билеты», сверка): только `published` и `cancelled`, остальных в карте нет. */
+  getMany(raceIds: readonly string[]): Promise<Map<string, RaceForResults>>;
   /** Гонка, видимая сотруднику (видимость — как в панели гонок); иначе `null`. */
   findForPanel(principal: PanelPrincipal, raceId: string): Promise<RaceForResults | null>;
   phase(race: RaceForResults, now: Date): RacePhase;

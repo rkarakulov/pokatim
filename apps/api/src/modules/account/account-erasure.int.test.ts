@@ -70,6 +70,13 @@ import {
 } from '../../../test/routes';
 import { achievementsDb } from '../../../test/achievements';
 import { routeRidesDb } from '../../../test/route-rides';
+import { staff } from '../../../test/races';
+import {
+  calendarStart,
+  enableCalendarTickets,
+  registerFor,
+  ticketsDb,
+} from '../../../test/tickets';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
 import { storeUpload, trackFileStore, tracks } from '../../../test/tracks';
 import { QUEUE } from '../../queues';
@@ -79,6 +86,7 @@ import { ProfileErasure } from '../profile';
 import { RideErasure } from '../rides';
 import { RouteRideErasure } from '../route-rides';
 import { RouteErasure } from '../routes';
+import { TicketErasure } from '../tickets';
 import { TrackErasure } from '../tracks';
 import { AccountErasure } from '../identity';
 import { AccountErasureProcessor } from './account-erasure.processor';
@@ -515,6 +523,7 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
       'tracks',
       'route-rides',
       'achievements',
+      'tickets',
       'notifications',
       'identity',
     ]) {
@@ -656,6 +665,36 @@ describe('шаг route-rides (route-rides-01)', () => {
     expect(await routeRidesDb(h).rides.countDocuments({ userId: w.a.userId })).toBe(0);
     expect(await routeRidesDb(h).rides.countDocuments({ userId: w.b.userId })).toBe(1);
     expect(await h.worker.get(RouteRideErasure).erase(w.a.userId)).toBe(0);
+  });
+});
+
+describe('шаг tickets (event-tickets, RC-T1)', () => {
+  it('регистрации и билеты удалённого → cancelled, место освобождено; документы остаются; чужие целы; повтор — нули', async () => {
+    const w = await world();
+    const admin = await staff(h, 'admin@example.by', 'admin');
+    const id = await calendarStart(h, admin.token);
+    await enableCalendarTickets(h, admin.token, id, { capacity: 10 });
+    for (const who of [w.a, w.b]) {
+      expect((await registerFor(h, bearer(who.accessToken), id)).status).toBe(201);
+    }
+    expect((await ticketsDb(h).ticketing.findOne({}))?.registeredCount).toBe(2);
+    await deleteAccount(w.a.accessToken);
+    expect(await firstPass(w.a.userId)).toBe('erased');
+
+    expect(await ticketsDb(h).registrations.findOne({ userId: w.a.userId })).toMatchObject({
+      status: 'cancelled',
+    });
+    expect(await ticketsDb(h).tickets.findOne({ userId: w.a.userId })).toMatchObject({
+      status: 'cancelled',
+    });
+    expect(await ticketsDb(h).tickets.findOne({ userId: w.b.userId })).toMatchObject({
+      status: 'active',
+    });
+    expect((await ticketsDb(h).ticketing.findOne({}))?.registeredCount).toBe(1);
+    expect(await h.worker.get(TicketErasure).erase(w.a.userId)).toEqual({
+      registrations: 0,
+      tickets: 0,
+    });
   });
 });
 

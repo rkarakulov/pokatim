@@ -202,10 +202,11 @@ paths:
   транзакция `AccountClosure.close` + `PanelAudit` `account.deleted` + outbox `account.deletion-requested`) и
   `AccountWorkerModule` (очередь `account-deletion`, `AccountErasureProcessor` по имени задачи: событие, sweep,
   регламент `account.erasure-resume`). Зависимости: `account → identity, panel, profile, rides, routes, route-rides, achievements,
-  tracks, devices, notifications` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
+  tickets, tracks, devices, notifications` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
   (`ProfileCoreModule`), `RideErasure` (`RidesCoreModule`), `RouteErasure` (`RoutesCoreModule`), `DeviceErasure`
   (`DevicesCoreModule`), `TrackErasure` (`TracksCoreModule`), `RouteRideErasure` (`RouteRidesCoreModule`, шаг `route-rides` после `tracks`), `AchievementErasure`
-  (`AchievementsCoreModule`, шаг `achievements` после `route-rides`),
+  (`AchievementsCoreModule`, шаг `achievements` после `route-rides`), `TicketErasure` (`TicketsCoreModule`, шаг
+  `tickets` после `achievements`, перед `notifications`),
   `NotificationErasure` (`NotificationsCoreModule`, шаг
   между `tracks` и `identity`), `AccountErasure` (`IdentityErasureModule`); push-токены — `PushTokens.revokeAllOf(tx)`
   в транзакции удаления. Новый модуль с
@@ -223,6 +224,47 @@ paths:
   (`countPublicationQueue`), `ProfilesOverview` (`countReportQueue`), `IdentityOverview` (регистрации, зависшие
   удаления — фильтр `pendingSweeps`), `TracksOverview`, `CalendarOverview` (`CalendarCoreModule`). Пределы —
   `overview.policy.ts`. Новый счётчик — метод порта владельца, не чтение чужой коллекции.
+
+## Билеты (`tickets`, event-tickets, ADR-0023 Proposed)
+
+- Модуль-потребитель: `tickets → results` (`ResultsCoreModule`: порт `RESULTS_FOR_TICKETS` — `entryOf`,
+  `entriesPage`, `lockEntryForTicket` (замок заявки в транзакции check-in); реэкспорт `RacesCoreModule` — `RACE_REGISTRY.get/getMany`), `calendar` (`CalendarCoreModule`: порт
+  `CALENDAR_EVENTS` — `get`, `getMany`), `profile` (`RIDER_NAMES.attributionNames`), `identity`
+  (`IdentityAccounts.liveUserIds/emailsOf`, `AuthGuard`), `panel` — только через `index.ts`. На `tickets` ссылаются
+  только `AppModule` (`TicketsModule`), `WorkerModule` (`TicketsWorkerModule`, `ticketsOutboxRoutes`) и
+  `AccountWorkerModule` (`TicketsCoreModule`, порт `TicketErasure`, шаг `tickets` перед `notifications`).
+- `TicketsCoreModule` — репозиторий, `TicketEvents` (факты событий: гонка — `RACE_REGISTRY` + настройки, календарь —
+  `CALENDAR_EVENTS`, момент старта вычисляется `calendarMoments`, RC-T2), `TicketIssuer` (код, `qrHash`, outbox
+  `tickets.issued`; дубль кода — новая транзакция ≤ 3), `RaceTickets` (сверка), `TicketErasure`. Правила —
+  чистые функции `tickets.policy.ts` (`ticketStatus`, `checkInWindow`, `isPast`, `canIssue`, `raceReconcilePlan`,
+  `registrationGate`, `eventAccess`, `maskEmail`, `TICKETS_POLICY`).
+- Регламент сверки: гонки со стартом позже `now − 61 сут`; выпуск — пока открыто окно check-in, отмены и смена группы —
+  пока открыто окно гонки + сутки.
+- Билет гонки — **сверкой** (`results` о билетах не знает; подписки на `results.*` нет): лениво в
+  `GET /v1/races/:raceId/ticket` и регламентом `tickets.reconcile` (`* * * * *` Минск + `tickets.reconcile.boot`,
+  очередь `tickets-maintenance`); `RaceTickets.refresh` перед показом и check-in отменяет билет снятой заявки. Дубль
+  выпуска — `isDuplicateKey(…, 'tickets_registration_unique')`.
+- Check-in — транзакция с замками: `RACE_REGISTRY.lockResults` (гонка, конфликт с отменой; `status: 'published'`),
+  `lockTicketing` (настройки, конфликт с выключением и переносом; окно check-in
+  пересчитывается по ним и `CLOCK` в каждой попытке), `CALENDAR_EVENTS.lockForAdmission` (старт календаря — им же
+  захватывают старт регистрация и её отмена: снятие, перенос, дистанции конфликтуют), `lockEntryForTicket` (гонка,
+  конфликт с отменой участия) / `lockRegistration` (календарь, конфликт с отменой регистрации), затем `markCheckedIn`;
+  проверки вне транзакции — только для ответа. Отмена регистрации отмеченного — `409 EVENT_REGISTRATION_CLOSED
+  { reason: 'checked_in' }` (проверка в транзакции отмены). Письмо: любой сбой после захвата снимает захват; чужой
+  живой захват — `moveToDelayed` до его конца.
+- Регистрация календаря — транзакция: **первой** `reserveSeat` (условный `$inc registeredCount` документа
+  настроек), затем регистрация и билет; дубль активной — `event_registrations_active_unique` → 200 с ней.
+- QR — `ticket-qr.ts` (HMAC `EMAIL_TOKEN_SECRET`, `ticket-qr:<id>`, в БД `sha256`), не `identity.LinkPurpose`.
+- HTTP: `RaceTicketController`, `CalendarRegistrationController`, `TicketsController` (`AuthGuard`, `no-store`, чужое
+  — 404), `TicketingPublicController` (`events/:kind/:eventId/ticketing`, `PublicReadGuard`),
+  `TicketingAdminController` (`admin/events/:kind/:eventId/{ticketing,tickets}`, `PanelGuard`; право по `kind` —
+  `eventAccess` в сервисе, участники — `@RequirePermission('tickets.checkin')`), `CheckInController`
+  (`admin/tickets/{lookup,check-in}`, `tickets.checkin`). Журнал — `tickets.settings_updated`, `tickets.checked_in`
+  (`details.ticketCode`). Лимиты — `tickets-read:<uid>` 120/мин, `tickets-register:<uid>` 20/ч,
+  `tickets-checkin:<сессия панели>` 120/мин; общий `consumeUserLimit` — `src/user-limit.ts`.
+- Письмо — очередь `tickets-email` (`TicketEmailHandler`, захват `email.state`, RC-T11), шаблон
+  `mail/ticket-email.ts` (`htmlEmail`/`buttonHtml`/`escapeHtml`/`minskDateTime` из `identity`), кнопка — env
+  `APP_WEB_ORIGIN`.
 
 ## Достижения (`achievements`, ADR-0020 Proposed)
 

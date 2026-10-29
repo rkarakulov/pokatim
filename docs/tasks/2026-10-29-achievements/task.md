@@ -399,6 +399,30 @@ consistency, не влияет на `seen`).
 - **D6 — `pokatim-security.md`:** в `paths:` добавлен `apps/api/src/modules/achievements/**` (иначе правило зоны не
   подгружается для нового модуля).
 
+## 8.2 Отклонения при реализации (coder, PR B)
+
+- **B1 — `seen` при показе, а не по кнопке.** Вспышка шлёт `POST seen [code]` сразу при показе элемента (11 «PR B»:
+  «Дальше»/«Закрыть»/«Поделиться» → `seen`). Исход для кнопок тот же, а закрытие жестом «назад» (Android, свайп
+  модалки) тоже помечает показанное — по A5 «просмотренными помечаются показанные». «Закрыть» — только на последнем
+  элементе, на остальных — «Дальше» (AC10).
+- **B2 — показанные в этом запуске (`flash-session.ts`).** Сбой `seen` откатывает `seen: false` в кэше; без набора
+  показанных хост сразу открыл бы вспышку снова. Набор — память процесса, сброс при выходе; после перезапуска
+  непомеченное сервером вспыхнет ещё раз (at-least-once).
+  Ревью pass 1 (MEDIUM-1): вся открытая очередь тоже скрыта до ответа сервера новее снимка — «назад» или «Поделиться»
+  посреди очереди не открывают вспышку сразу снова; остаток вспыхнет после нового ответа (возврат на передний план
+  после `staleTime`, pull-to-refresh).
+- **B3 — иконки.** В наборе приложения (`components/icon.tsx`) не было подходящих для «Подиума» и «Победы» — добавлены
+  `medal` (SF `medal` / Material `military_tech`) и `trophy` (SF `trophy` / Material `emoji_events`); остальные коды —
+  существующие `races`, `routes`, `rides`, `person`. Счётные (`races_5`, `routes_5`, `rides_10`) — число на кольце.
+- **B4 — размер значка — бренд-слой токенов (ревью pass 1, HIGH).** Диаметр — `layout.badgeGrid` (72) /
+  `layout.badgeHero` (152), пропорции кольца, диска и иконки — `badgeShape` в `@pokatim/design-tokens` (образец —
+  `layout.avatarProfile`), тест в `design-tokens.test.ts`; px-литералов в фиче нет. Follow-up — `size.badge*` в
+  app-foundation (`@rkarakulov/design-tokens`). Значок — роли `surface.default`, `text.primary`, `text.accent`,
+  `action.*`, скругление `radius.pill`; дуговой подписи прототипа нет (в RN без SVG-текста) — follow-up при
+  необходимости.
+- **B5 — публичный блок при ошибке** — компактный баннер с повтором (`TabFailure`), как у своего; 404 — блока нет. Только
+  гоночные коды отбираются и на клиенте (`publicItems`, ревью pass 1, LOW-2).
+
 ## 8.3 Security checklist
 
 Затронуты зоны `security.md`: персональные данные, публичные ссылки, удаление аккаунта, `app.module.ts`,
@@ -621,3 +645,101 @@ exit=0
 
 Первый прогон `pnpm check` упал на lint (неиспользуемая переменная в тесте контракта) — исправлено отдельным коммитом,
 повторный прогон выше — зелёный. Независимое ревью — не проводилось (шаг оркестратора).
+
+### PR B — приложение (coder, 2026-10-29)
+
+Сделано по A5–A8, 3 «PR B», 11 «PR B», RC-5, RC-7, RC-8; отклонения — 8.2 (B1–B5). `apps/api` не менялся.
+
+- Фича `apps/app/src/features/achievements/`: `achievement-catalog.ts` (каталог 9 кодов, `knownItems`, `flashQueue`,
+  `shareRaceId`, подписи), `queries.ts` (`['achievements']`, оптимистичный `seen` с откатом своих кодов,
+  `['riders','achievements',id]`), `flash-session.ts`, `achievement-badge.tsx` («Эмаль»), `achievement-card.tsx`
+  (общий макет, появление значка только без «Уменьшить движение»), `achievements-block.tsx`,
+  `achievement-flash-host.tsx`, `achievement-flash-screen.tsx`, `achievement-screen.tsx`.
+- Маршруты `achievements/flash` (`fullScreenModal`) и `achievements/[code]` в `Stack.Protected` вкладок; хост — рядом с
+  `PushNotifications` корневого layout; блок — в `/profile` (вместо комментария rider-profile) и `/riders/[id]` (только
+  клиент, после найденного профиля); pull-to-refresh обоих экранов перезапрашивает блок.
+- Иконки `medal`, `trophy` в `components/icon.tsx`; тексты `achievements.*` в `packages/i18n/src/ru.ts` (en-словаря нет).
+- Правило `.claude/rules/pokatim-app.md` — раздел «Достижения»; смоук `e2e/web.spec.ts` — оба адреса без сессии;
+  сторож порядка SSR-маршрутов — `/achievements/flash` и `/achievements/<code>`.
+
+Тесты: unit `achievement-catalog.test.ts` (`knownItems`, `flashQueue` с порядком и показанными, `shareRaceId`, подписи);
+`__tests__/achievement-flash.test.tsx` — хост (новое → вспышка; «Закрыть» → `seen`, не повторяется; всё просмотрено,
+`unknown`, ошибка запроса, `ready: false`, экран сторис — без вспышки; сбой `seen` — без повтора), экран вспышки
+(«Дальше» от старых к новым, затем «Закрыть»; «Поделиться» → `/races/story/<raceId>`; незнакомый вид — без кнопки;
+reduce motion — без `Animated.timing`; движение — одно появление; прямой адрес без новых — Главная), экран
+`/achievements/[code]`; `__tests__/achievements-blocks.test.tsx` — блоки профиля и публичного профиля (порядок,
+`unknown`, нажатие, пусто — нет блока, ошибка — баннер, профиль на месте, 404, профиль не найден — без запроса).
+Отрицательная проверка: хост без набора показанных — тест «сбой `seen`» краснеет.
+
+Гейт (Node 24.22.1, свой Mongo `pokatim_achv_app_test` на rs0:27117, свой Redis `:6493/1`, `TURBO_CONCURRENCY=1`):
+
+```
+$ pnpm check   # format:check + lint + arch:check + typecheck + test
+All matched files use Prettier code style!
+✔ no dependency violations found (1845 modules, 6940 dependencies cruised)
+ Tasks:    9 successful, 9 total            # typecheck
+@pokatim/contracts:test:   Test Files  43 passed (43)     Tests  370 passed (370)
+@pokatim/api-client:test:  Test Files  20 passed (20)     Tests  136 passed (136)
+@pokatim/api:test:         Test Files  163 passed (163)   Tests  1760 passed (1760)
+@pokatim/admin:test:       Test Files  40 passed (40)     Tests  381 passed (381)
+@pokatim/app:test:         Test Suites: 214 passed        Tests: 1998 passed
+ Tasks:    15 successful, 15 total
+pnpm check  12:29.06 total
+exit=0
+```
+
+Первый прогон упал на typecheck (тип `_layout` в тесте вспышки) — исправлено, повторный выше — зелёный.
+
+NOT VERIFIED: ручная проверка на iOS/Android-симуляторе и в браузере (`build:web` + `start:web`, `e2e:web` — шаг смоука
+добавлен, не запускался); вид значка «Эмаль» в темах приложения глазами не сверялся.
+
+#### PR B — исправления ревью pass 1 (coder, 2026-10-29)
+
+Все находки pass 1 исправлены, подробности — `findings.md` «PR B — исправления pass 1»; 8.2 B2, B4, B5 обновлены.
+Гейт (то же изолированное окружение: Mongo `pokatim_achv_app_test`, Redis `:6493/1`, `TURBO_CONCURRENCY=1`):
+
+```
+$ pnpm check
+All matched files use Prettier code style!
+✔ no dependency violations found (1846 modules, 6942 dependencies cruised)
+ Tasks:    9 successful, 9 total            # typecheck
+@pokatim/design-tokens:test:  Test Files  3 passed (3)       Tests  579 passed (579)
+@pokatim/contracts:test:      Test Files  43 passed (43)     Tests  370 passed (370)
+@pokatim/api-client:test:     Test Files  20 passed (20)     Tests  136 passed (136)
+@pokatim/api:test:            Test Files  163 passed (163)   Tests  1760 passed (1760)
+@pokatim/admin:test:          Test Files  40 passed (40)     Tests  381 passed (381)
+@pokatim/app:test:            Test Suites: 215 passed        Tests: 2010 passed
+ Tasks:    15 successful, 15 total
+pnpm check  9:24.83 total
+exit=0
+```
+
+Два прогона до этого упали в `apps/api` на разных тестах, не связанных с PR B (`apps/api` не менялся): EPIPE в
+`track-uploads.int.test.ts` (413 через сокет) и таймаут 5 с в `avatar-image.test.ts` (48 Мп JPEG) под нагрузкой
+машины; оба файла отдельно — 47/47 зелёные, третий прогон целиком — зелёный (выше; часть задач — из кэша turbo
+прошлых прогонов с тем же кодом). NOT VERIFIED — как выше (симуляторы, браузер, `e2e:web`).
+
+#### PR B — исправления ревью pass 2 (coder, 2026-10-29)
+
+Все находки pass 2 исправлены (после влития `origin/develop`, guest-landing), подробности — `findings.md` «PR B —
+исправления pass 2». Гейт (Mongo `pokatim_achv_app_test`, Redis `:6493/1`, `TURBO_CONCURRENCY=1`):
+
+```
+$ pnpm check
+All matched files use Prettier code style!
+✔ no dependency violations found (1861 modules, 6989 dependencies cruised)
+ Tasks:    9 successful, 9 total            # typecheck
+@pokatim/design-tokens:test:  Test Files  3 passed (3)       Tests  579 passed (579)
+@pokatim/contracts:test:      Test Files  43 passed (43)     Tests  370 passed (370)
+@pokatim/api-client:test:     Test Files  20 passed (20)     Tests  136 passed (136)
+@pokatim/api:test:            Test Files  163 passed (163)   Tests  1760 passed (1760)
+@pokatim/admin:test:          Test Files  40 passed (40)     Tests  381 passed (381)
+@pokatim/app:test:            Test Suites: 217 passed        Tests: 2043 passed
+ Tasks:    15 successful, 15 total
+pnpm check  12:26.67 total
+exit=0
+```
+
+Смоук web (`EXPO_PUBLIC_API_URL=http://127.0.0.1:3999 pnpm build:web`, затем `E2E_PORT=8190 playwright test -g
+"достижения|свой профиль /profile без сессии"`, без API): 3 passed. `E2E_API=1` — NOT VERIFIED (стенд с API, базами и
+mailpit не поднимался: порты `apps/api/.env` общие с другими агентами). iOS/Android — NOT VERIFIED.

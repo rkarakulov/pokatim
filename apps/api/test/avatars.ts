@@ -14,15 +14,13 @@ export async function twoToneImage(
     height = 200,
   }: { orientation?: number; width?: number; height?: number } = {},
 ): Promise<Buffer> {
-  const red = await sharp({
-    create: { width: width / 2, height, channels: 3, background: { r: 255, g: 0, b: 0 } },
-  })
-    .png({ compressionLevel: 1 })
-    .toBuffer();
-  let image = sharp({
-    create: { width, height, channels: 3, background: { r: 0, g: 0, b: 255 } },
-    limitInputPixels: false,
-  }).composite([{ input: red, left: 0, top: 0, limitInputPixels: false }]);
+  // пиксели — сразу в raw: композит с промежуточным PNG вдвое дороже, а 48 Мп кадр кодируется при `sharp.concurrency(1)`
+  // модуля аватара (один поток libvips на весь процесс теста)
+  const row = Buffer.alloc(width * 3);
+  for (let x = 0; x < width; x++) row[x * 3 + (x < width / 2 ? 0 : 2)] = 255;
+  const pixels = Buffer.alloc(width * height * 3);
+  for (let y = 0; y < height; y++) row.copy(pixels, y * row.length);
+  let image = sharp(pixels, { raw: { width, height, channels: 3 }, limitInputPixels: false });
   if (format === 'jpeg') {
     image = image.jpeg({ quality: 90 });
     if (orientation !== undefined) {

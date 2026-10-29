@@ -55,6 +55,9 @@ export const PROJECT_ERROR_MESSAGES = {
   AVATAR_TOO_LARGE: 'Фото больше 10 МБ',
   AVATAR_INVALID: 'Не удалось обработать фото',
   PROFILE_INVALID_STATE: 'На свой профиль пожаловаться нельзя',
+  EVENT_FULL: 'Мест больше нет',
+  EVENT_REGISTRATION_CLOSED: 'Регистрация на это событие закрыта',
+  TICKETING_INVALID_STATE: 'Настройки билетов сейчас нельзя применить',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

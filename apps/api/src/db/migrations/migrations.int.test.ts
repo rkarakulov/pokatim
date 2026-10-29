@@ -45,6 +45,8 @@ import { ACHIEVEMENTS_INDEXES, achievements } from './0035_achievements';
 import { ACHIEVEMENTS_COLLECTIONS } from '../../modules/achievements/achievements.collection';
 import { overviewIndexes } from './0036_overview_indexes';
 import { OG_SYNC_INDEXES, ogSyncIndexes } from './0037_og_sync_indexes';
+import { tickets } from './0038_tickets';
+import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
 import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
@@ -153,6 +155,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0035_achievements',
       '0036_overview_indexes',
       '0037_og_sync_indexes',
+      '0038_tickets',
     ]);
   });
 
@@ -1507,9 +1510,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     });
   });
 
-  it('0037_og_sync_indexes: (status, updatedAt, _id) на 4 коллекциях; последняя; повторный up — без изменений', async () => {
+  it('0037_og_sync_indexes: (status, updatedAt, _id) на 4 коллекциях; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0037_og_sync_indexes');
     expect(ids.indexOf('0037_og_sync_indexes')).toBe(ids.indexOf('0036_overview_indexes') + 1);
     const ogSync = {
       key: { status: 1, updatedAt: 1, _id: 1 },
@@ -1532,5 +1534,71 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await ogSyncIndexes.up(h.db);
     await ogSyncIndexes.up(h.db);
     await check();
+  });
+
+  it('0038_tickets: коллекции и индексы билетов; последняя; уникальности; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0038_tickets');
+    expect(ids.indexOf('0038_tickets')).toBe(ids.indexOf('0037_og_sync_indexes') + 1);
+    const index = (key: Record<string, number>, unique = false, partial?: object) => ({
+      key,
+      unique,
+      partialFilterExpression: partial,
+      expireAfterSeconds: undefined,
+    });
+    const expected = {
+      [TICKETS_COLLECTIONS.tickets]: {
+        tickets_code_unique: index({ code: 1 }, true),
+        tickets_qr_hash_unique: index({ qrHash: 1 }, true),
+        tickets_registration_unique: index({ registrationId: 1 }, true),
+        tickets_user_idx: index({ userId: 1, createdAt: -1 }),
+        tickets_event_idx: index({ kind: 1, eventId: 1, _id: 1 }),
+      },
+      [TICKETS_COLLECTIONS.registrations]: {
+        event_registrations_active_unique: index({ eventId: 1, userId: 1 }, true, {
+          status: 'active',
+        }),
+        event_registrations_user_idx: index({ userId: 1, createdAt: -1 }),
+      },
+      [TICKETS_COLLECTIONS.ticketing]: {
+        event_ticketing_enabled_idx: index({ kind: 1, enabled: 1, startsAt: 1 }),
+      },
+    };
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
+
+    // одна активная регистрация на (событие, пользователь); отменённая выходит из индекса
+    const registrations = h.db.collection<Record<string, unknown> & { _id: string }>(
+      TICKETS_COLLECTIONS.registrations,
+    );
+    await registrations.insertOne({
+      _id: 'r-1',
+      eventId: 'e-0037',
+      userId: 'u-0037',
+      status: 'active',
+    });
+    await expect(
+      registrations.insertOne({
+        _id: 'r-2',
+        eventId: 'e-0037',
+        userId: 'u-0037',
+        status: 'active',
+      }),
+    ).rejects.toThrow(/duplicate key/);
+    await registrations.updateOne({ _id: 'r-1' }, { $set: { status: 'cancelled' } });
+    await registrations.insertOne({
+      _id: 'r-3',
+      eventId: 'e-0037',
+      userId: 'u-0037',
+      status: 'active',
+    });
+    await registrations.deleteMany({ _id: { $in: ['r-1', 'r-3'] } });
+
+    await tickets.up(h.db);
+    await tickets.up(h.db);
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
   });
 });

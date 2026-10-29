@@ -79,4 +79,14 @@ export const QUEUE = {
    * `route-rides.check-requested`, параллелизм 1.
    */
   routeRideCheck: 'route-ride-check',
+  /**
+   * Письмо «Вы зарегистрированы» (event-tickets): событие outbox `tickets.issued` (jobId = id события); одно письмо на
+   * билет — захват состояния письма в документе билета (RC-T11).
+   */
+  ticketsEmail: 'tickets-email',
+  /**
+   * Регламент билетов (event-tickets): сверка билетов гонок с заявками каждую минуту и при старте worker, без событий
+   * outbox (`results.*` маршрутизированы в `results-intake`).
+   */
+  ticketsMaintenance: 'tickets-maintenance',
 } as const;

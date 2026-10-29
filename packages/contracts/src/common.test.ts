@@ -90,6 +90,9 @@ describe('коды ошибок', () => {
       'AVATAR_TOO_LARGE',
       'AVATAR_INVALID',
       'PROFILE_INVALID_STATE',
+      'EVENT_FULL',
+      'EVENT_REGISTRATION_CLOSED',
+      'TICKETING_INVALID_STATE',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

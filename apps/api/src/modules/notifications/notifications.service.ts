@@ -3,31 +3,17 @@ import {
   type NotificationListQuery,
   type NotificationPage,
   type NotificationView,
-  type RateLimitedDetails,
   type UnreadCount,
 } from '@pokatim/contracts';
-import { CLOCK, type Clock, RateLimiter, type RateLimitRule } from '@rkarakulov/api-kit/core';
+import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
 import { z } from 'zod';
 
 import { domainError } from '../../error-messages';
+import { consumeUserLimit } from '../../user-limit';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import type { NotificationDoc } from './notifications.collection';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
-
-/** Лимит мутации по `uid` (`RateLimiter` базы): отказ — `429 RATE_LIMITED { retryAfterSec }`. */
-export async function consumeUserLimit(
-  rateLimiter: RateLimiter,
-  key: string,
-  rule: RateLimitRule,
-  now: Date,
-): Promise<void> {
-  const limited = await rateLimiter.consume(key, rule, now);
-  if (!limited.allowed) {
-    const details: RateLimitedDetails = { retryAfterSec: limited.retryAfterSec };
-    throw domainError('RATE_LIMITED', 429, details);
-  }
-}
 
 type ListedDoc = Pick<
   NotificationDoc,

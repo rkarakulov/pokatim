@@ -89,6 +89,11 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'AVATAR_INVALID',
   // profile-moderation: жалоба на свой профиль (409, details.reason)
   'PROFILE_INVALID_STATE',
+  // event-tickets: мест нет (409); регистрация на старт закрыта (409, details.reason); настройки билетов нельзя
+  // применить в состоянии события (409, details.reason)
+  'EVENT_FULL',
+  'EVENT_REGISTRATION_CLOSED',
+  'TICKETING_INVALID_STATE',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

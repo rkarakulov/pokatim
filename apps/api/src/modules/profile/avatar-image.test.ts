@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import { cropRect, detectImageFormat, processAvatar } from './avatar-image';
 import {
@@ -128,19 +128,33 @@ describe('processAvatar', () => {
     expect(await processAvatar(brokenJpeg(), null)).toMatchObject({ ok: false, error: 'invalid' });
   });
 
-  it('MEDIUM-A ревью: 48 Мп JPEG (8000×6000, ориентация 6) принимается; обрезка по долям ориентированного кадра', async () => {
-    const input = await twoToneImage('jpeg', { orientation: 6, width: 8000, height: 6000 });
-    // ориентированный кадр 6000×8000: верхняя половина красная, нижняя синяя
-    const bottom = await processAvatar(input, { x: 0, y: 1, size: 0.5 });
-    if (!bottom.ok) throw new Error(bottom.error);
-    expect(await sharp(bottom.bytes).metadata()).toMatchObject({ width: 512, height: 512 });
-    expect(await avatarPixel(bottom.bytes, 20, 20)).toBe('blue');
-    expect(await avatarPixel(bottom.bytes, 490, 490)).toBe('blue');
-    // квадрат 6000 с отступом 2000 сверху: верхняя треть — красная (строки 2000…4000)
-    const straddle = await processAvatar(input, { x: 0, y: 1, size: 1 });
-    if (!straddle.ok) throw new Error(straddle.error);
-    expect(await avatarPixel(straddle.bytes, 256, 60)).toBe('red');
-    expect(await avatarPixel(straddle.bytes, 256, 300)).toBe('blue');
+  describe('48 Мп', () => {
+    // фикстура — один раз вне бюджета теста (кодирование 48 Мп JPEG при `sharp.concurrency(1)` модуля)
+    let input: Buffer;
+    beforeAll(async () => {
+      input = await twoToneImage('jpeg', { orientation: 6, width: 8000, height: 6000 });
+    });
+
+    // Таймаут: два полных декодирования 48 Мп JPEG в одном потоке libvips (`sharp.concurrency(1)` модуля, как в
+    // production); на раннере CI рядом идут другие файлы шарда — 4–5 с при 5 с по умолчанию, локально ~0,3 с.
+    // Предел одной обработки — `timeout` конвейера 10 с, двух — 20 с.
+    it(
+      'MEDIUM-A ревью: 48 Мп JPEG (8000×6000, ориентация 6) принимается; обрезка по долям ориентированного кадра',
+      { timeout: 20_000 },
+      async () => {
+        // ориентированный кадр 6000×8000: верхняя половина красная, нижняя синяя
+        const bottom = await processAvatar(input, { x: 0, y: 1, size: 0.5 });
+        if (!bottom.ok) throw new Error(bottom.error);
+        expect(await sharp(bottom.bytes).metadata()).toMatchObject({ width: 512, height: 512 });
+        expect(await avatarPixel(bottom.bytes, 20, 20)).toBe('blue');
+        expect(await avatarPixel(bottom.bytes, 490, 490)).toBe('blue');
+        // квадрат 6000 с отступом 2000 сверху: верхняя треть — красная (строки 2000…4000)
+        const straddle = await processAvatar(input, { x: 0, y: 1, size: 1 });
+        if (!straddle.ok) throw new Error(straddle.error);
+        expect(await avatarPixel(straddle.bytes, 256, 60)).toBe('red');
+        expect(await avatarPixel(straddle.bytes, 256, 300)).toBe('blue');
+      },
+    );
   });
 
   it('мелкая обрезка — invalid', async () => {

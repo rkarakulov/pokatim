@@ -186,6 +186,24 @@ export class ResultsRepository {
     await this.c.entries.insertOne(doc, { session });
   }
 
+  /**
+   * Заявки гонки пачкой для сверки билетов (event-tickets, порт `RESULTS_FOR_TICKETS`): `_id` ↑ после `afterId`,
+   * проекция без попыток и сводки. Фильтр — префикс `raceId` индекса `race_entries_race_user_unique`.
+   */
+  entriesPageOfRace(
+    raceId: string,
+    afterId: string | null,
+    limit: number,
+  ): Promise<Pick<RaceEntryDoc, '_id' | 'raceId' | 'userId' | 'status' | 'tier' | 'groupKey'>[]> {
+    return this.c.entries
+      .find(afterId === null ? { raceId } : { raceId, _id: { $gt: afterId } }, {
+        projection: { raceId: 1, userId: 1, status: 1, tier: 1, groupKey: 1 },
+      })
+      .sort({ _id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+
   /** Отмена участия (под `lockEntry`): только активная. */
   async withdrawEntry(session: DbSession, id: string, now: Date): Promise<void> {
     await this.c.entries.updateOne(

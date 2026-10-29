@@ -67,6 +67,10 @@ export const AUDIT_ACTIONS = [
   'profile.avatar_reset',
   'profile.club_reset',
   'profile.reports_dismissed',
+  // event-tickets: настройки билетов события (subject — гонка или старт календаря, `changedFields`) и отметка участника
+  // (subject — событие, код билета в `details.ticketCode`, без имени и e-mail)
+  'tickets.settings_updated',
+  'tickets.checked_in',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -139,6 +143,8 @@ export const AuditEntry = z.object({
       decorTo: AppDecorId.optional(),
       /** routes-06: код причины отклонения заявки (комментарий автору — в `reason`) */
       rejectionReason: RouteRejectionReason.optional(),
+      /** event-tickets: код отмеченного билета */
+      ticketCode: z.string().optional(),
     })
     .nullable(),
 });
