@@ -542,6 +542,11 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
     старта — `ride-points-style.ts`, только роли `theme.map.*`); native — `GeoJSONSource onPress`
     (`nativeEvent.features`), web — `on('click', layer)`; выбор точки — `RidePointCard` под картой; «Ещё N райдов без
     точки старта — в списке» → режим «Список». Запрос карты — только в режиме «Карта».
+- Шит «Райд опубликован» (ride-published-og): форма создания ведёт на `/rides/<id>?published=1`; шит — только
+  организатору (`viewer.role` сервера) будущего райда после монтирования (`components/modal-sheet.tsx` — модальный
+  шит `Modal` RN поверх экрана: затемнение, `sheetSurface`, heading, `onRequestClose`; не `BottomSheet` карты).
+  Действия — «Карточка-приглашение» (`rides/invite/[id]`), «Ссылка» (`shareLink`; нет origin — кнопки нет),
+  «Закрыть»; закрытие снимает `published` (`router.setParams`).
 - Жалоба (05b) — экран `rides/report/[id]` (`features/rides/ride-report.tsx`) внутри `Stack.Protected`: причина —
   `Chip` из `RIDE_REPORT_REASONS`, комментарий — однострочный `TextField` (фолбэк до многострочного поля базы), успех —
   баннер на месте формы. Кнопка «Пожаловаться» и строка «Вы пожаловались…» — только по `viewer.canReport` /

@@ -1345,7 +1345,7 @@ test.describe('с API', () => {
     const title = `Смоук-райд ${Date.now()}`;
     let rideId: string | undefined;
     try {
-      // A: форма «Новый райд» → карточка с баннером «опубликован»
+      // A: форма «Новый райд» → карточка с шитом «Райд опубликован»
       await signInRider(page, organizer);
       await page.getByRole('tab', { name: 'Райды' }).click();
       await expect(page).toHaveURL(`${BASE_URL}/rides`);
@@ -1365,9 +1365,14 @@ test.describe('с API', () => {
       await page.getByRole('button', { name: 'Опубликовать' }).click();
       await expect(page).toHaveURL(new RegExp(`^${BASE_URL}/rides/[0-9a-f-]{36}\\?published=1$`));
       rideId = new URL(page.url()).pathname.split('/').pop();
-      await expect(
-        card(page).getByText('Райд опубликован. Пригласите друзей ссылкой.'),
-      ).toBeVisible();
+      // шит «Райд опубликован» (ride-published): два пути и «Закрыть»; закрытие снимает ?published
+      const sheet = page.getByRole('dialog', { name: 'Райд опубликован' });
+      await expect(sheet.getByRole('heading', { name: 'Райд опубликован' })).toBeVisible();
+      await expect(sheet.getByRole('button', { name: 'Карточка-приглашение' })).toBeVisible();
+      await expect(sheet.getByRole('button', { name: 'Ссылка' })).toBeVisible();
+      await sheet.getByRole('button', { name: 'Закрыть' }).click();
+      await expect(sheet).toBeHidden();
+      await expect(page).toHaveURL(`${BASE_URL}/rides/${rideId}`);
       await expect(card(page).getByText('Кофе-райд · вы организатор')).toBeVisible();
       await expect(card(page).getByText('идёт 1 из 2 · вы')).toBeVisible();
 

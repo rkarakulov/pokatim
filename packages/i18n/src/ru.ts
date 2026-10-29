@@ -347,7 +347,12 @@ export const ru = {
   'rides.detail.allRides': 'Все райды',
   'rides.detail.rescheduled': 'Время или место старта изменены {date}.',
   'rides.detail.about': 'Об этом райде',
-  'rides.detail.published': 'Райд опубликован. Пригласите друзей ссылкой.',
+  // шит сразу после публикации (ride-published, прототип (d))
+  'rides.published.title': 'Райд опубликован',
+  'rides.published.text': 'Пригласите друзей — карточкой для сторис или ссылкой.',
+  'rides.published.textNoLink': 'Пригласите друзей карточкой для сторис.',
+  'rides.published.link': 'Ссылка',
+  'rides.published.close': 'Закрыть',
   'rides.detail.notFound': 'Райд не найден',
   'rides.shareText': '{title} — {date}, {time}, {city}',
   // форма «Новый райд» / «Изменить райд» [ASSUMPTION copy подсказок]

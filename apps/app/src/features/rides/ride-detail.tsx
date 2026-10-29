@@ -39,6 +39,7 @@ import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 import { cityLabel, goingCaption, organizerLine, paceRange, rideShareText } from './format';
 import { rideActionErrorText, useRide, useRideForViewer, useRideRsvp } from './queries';
 import { rideInvitePath } from './invite/ride-invite';
+import { RidePublishedSheet } from './ride-published-sheet';
 import { RideRouteBlock } from './ride-route-block';
 
 export const rideDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
@@ -98,6 +99,14 @@ function RideDetailView({
   const organizer = viewer?.role === 'organizer';
   const upcoming = ride.phase === 'upcoming';
   const canShare = mounted && upcoming && shareOrigin() !== null;
+  // шит «Райд опубликован» — организатору будущего райда сразу после создания, только после монтирования (не SSR)
+  const [sheetOpen, setSheetOpen] = useState(true);
+  const showPublished = published && sheetOpen && mounted && upcoming && organizer;
+  const closePublished = () => {
+    setSheetOpen(false);
+    // «Назад» с карточки-приглашения и перезагрузка web не открывают шит снова
+    router.setParams({ published: undefined });
+  };
   const reason = ride.cancelReason
     ? domainLabel('domain.rideCancelReason', ride.cancelReason)
     : null;
@@ -118,7 +127,6 @@ function RideDetailView({
       {ride.phase === 'hidden' ? (
         <Banner tone="warning" message={t('rides.detail.hidden')} />
       ) : null}
-      {published && upcoming ? <Banner message={t('rides.detail.published')} /> : null}
       {ride.phase === 'cancelled' ? (
         <Banner
           tone="warning"
@@ -229,6 +237,16 @@ function RideDetailView({
           />
         </View>
       ) : null}
+      {showPublished ? (
+        <RidePublishedSheet
+          ride={ride}
+          onInvite={() => {
+            closePublished();
+            router.push(rideInvitePath(ride.id));
+          }}
+          onClose={closePublished}
+        />
+      ) : null}
       {ride.description ? (
         <View style={styles.about}>
           <Text style={[textStyle('label'), { color: theme.text.secondary }]}>
@@ -246,7 +264,7 @@ function RideDetailView({
 /**
  * Публичная карточка райда (`/rides/<id>`, вне гардов: гость и вошедший). Данные — публичный `GET /v1/rides/:id`
  * (web — посев SSR); вошедшему — ещё `me` (роль и права зрителя, без кэша). Невалидный id и 404 — «Райд не найден»;
- * сеть и сервер — `AsyncContent`. `published` — баннер сразу после публикации.
+ * сеть и сервер — `AsyncContent`. `published` — шит «Райд опубликован» сразу после создания (организатору).
  */
 export function RideDetailScreen({
   id,
