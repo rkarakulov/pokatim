@@ -4,17 +4,17 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
 /**
- * CSP панели — из конфигурации nginx образа admin (infra/docker/admin-nginx.conf, один источник): `vite preview`
+ * CSP и Permissions-Policy (камера check-in, event-tickets PR C) панели — из конфигурации nginx образа admin (infra/docker/admin-nginx.conf, один источник): `vite preview`
  * (e2e панели) отдаёт тот же заголовок, и смоук проверяет сборку под строгой политикой.
  */
-function panelCsp(): string {
+function panelHeader(variable: 'panel_csp' | 'panel_permissions'): string {
   const conf = readFileSync(
     new URL('../../infra/docker/admin-nginx.conf', import.meta.url),
     'utf8',
   );
-  const csp = /set \$panel_csp "([^"]+)";/.exec(conf)?.[1];
-  if (!csp) throw new Error('admin-nginx.conf: нет set $panel_csp');
-  return csp;
+  const value = new RegExp(`set \\$${variable} "([^"]+)";`).exec(conf)?.[1];
+  if (!value) throw new Error(`admin-nginx.conf: нет set $${variable}`);
+  return value;
 }
 
 // API, на который dev-сервер и `vite preview` (e2e админки) проксируют /v1 — панель ходит в API своим origin
@@ -43,7 +43,8 @@ export default defineConfig({
     strictPort: true,
     proxy,
     headers: {
-      'Content-Security-Policy': panelCsp(),
+      'Content-Security-Policy': panelHeader('panel_csp'),
+      'Permissions-Policy': panelHeader('panel_permissions'),
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
     },

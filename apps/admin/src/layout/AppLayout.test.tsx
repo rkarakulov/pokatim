@@ -61,6 +61,7 @@ describe('каркас панели (AC10)', () => {
         'Гонки',
         'Споры',
         'Календарь',
+        'Check-in',
         'Маршруты',
         'Сезоны',
         'Сотрудники',
@@ -74,7 +75,8 @@ describe('каркас панели (AC10)', () => {
       'moderator',
       ['Обзор', 'Гонки', 'Споры', 'Маршруты', 'Сезоны', 'Журнал действий', 'Модерация'],
     ],
-    ['organizer', ['Обзор', 'Гонки', 'Маршруты', 'Сезоны']],
+    // event-tickets PR C: «Check-in» — с правом `tickets.checkin` (admin, organizer)
+    ['organizer', ['Обзор', 'Гонки', 'Check-in', 'Маршруты', 'Сезоны']],
   ] as const)('пункты меню по правам: %s', async (role, items) => {
     mocked.me.mockResolvedValue(ME[role]);
     await renderApp('/');

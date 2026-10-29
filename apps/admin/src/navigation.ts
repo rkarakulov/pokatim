@@ -10,6 +10,7 @@ export interface NavItem {
     | '/'
     | '/races'
     | '/calendar'
+    | '/check-in'
     | '/routes'
     | '/seasons'
     | '/members'
@@ -37,6 +38,13 @@ export const NAVIGATION: readonly NavItem[] = [
   // 06: сразу после «Гонок» (8.1 RC-18)
   { to: '/disputes', labelKey: 'admin.nav.disputes', permission: 'disputes.read', group: 'main' },
   { to: '/calendar', labelKey: 'admin.nav.calendar', permission: 'calendar.manage', group: 'main' },
+  // event-tickets PR C: после «Календаря» — экран без сайдбара (телефон организатора на старте)
+  {
+    to: '/check-in',
+    labelKey: 'admin.nav.checkIn',
+    permission: 'tickets.checkin',
+    group: 'main',
+  },
   // routes-01: после «Календаря», до «Сезонов»
   { to: '/routes', labelKey: 'admin.nav.routes', permission: 'races.read', group: 'main' },
   // «Сезоны» — последним в основной группе (прототип 3c)

@@ -13,7 +13,7 @@ export { DataTable, type DataTableProps, SKELETON_ROWS, type TableQuery } from '
 export { DateField, DateTimeField, LockMark, type ZonedFieldProps } from './DateTimeField';
 export { Dialog } from './Dialog';
 export { FileButton, type FileButtonProps } from './FileButton';
-export { SelectField, TextAreaField, TextField } from './fields';
+export { CheckboxField, SelectField, TextAreaField, TextField } from './fields';
 export { DisabledReason, ReadonlyField, SplitLayout } from './layout-parts';
 export { LinePreview, projectLine } from './LinePreview';
 export { PageHeader } from './PageHeader';

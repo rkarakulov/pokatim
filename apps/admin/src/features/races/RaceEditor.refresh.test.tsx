@@ -18,6 +18,7 @@ vi.mock('../../api', () => ({
     publishRace: vi.fn(),
     cancelRace: vi.fn(),
     discardRace: vi.fn(),
+    getEventTicketing: vi.fn(),
   },
 }));
 
@@ -68,6 +69,8 @@ const race = (overrides: Partial<PanelRace> = {}): PanelRace => ({
 
 beforeEach(() => {
   mocked.me.mockResolvedValue(ME.admin);
+  // блок «Билеты» опубликованной гонки (event-tickets PR C) — не мешает проверкам обновления
+  mocked.getEventTicketing.mockRejectedValue(httpError(404, 'NOT_FOUND'));
   mocked.listSeasons.mockResolvedValue({ items: [SEASON] });
   mocked.listRoutes.mockResolvedValue({ items: [], nextCursor: null });
   mocked.getRace.mockResolvedValue(race());
