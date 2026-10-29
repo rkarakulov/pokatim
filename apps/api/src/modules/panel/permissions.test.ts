@@ -48,6 +48,10 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
     expect(ROLE_PERMISSIONS.admin.has('routes.moderate')).toBe(true);
     expect(ROLE_PERMISSIONS.moderator.has('routes.moderate')).toBe(true);
     expect(ROLE_PERMISSIONS.organizer.has('routes.moderate')).toBe(false);
+    // admin-overview: KPI и зависшие удаления — только admin
+    expect(ROLE_PERMISSIONS.admin.has('platform.stats')).toBe(true);
+    expect(ROLE_PERMISSIONS.moderator.has('platform.stats')).toBe(false);
+    expect(ROLE_PERMISSIONS.organizer.has('platform.stats')).toBe(false);
   });
 
   it('05b: модерация райдов — admin и moderator, не organizer', () => {

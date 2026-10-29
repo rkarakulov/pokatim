@@ -8,7 +8,8 @@ import type { RaceDoc } from './races.collection';
 import { RACE_POLICY, racePhase, raceVisible } from './races.policy';
 import { RacesRepository } from './races.repository';
 
-const toRace = (doc: RaceDoc): RaceForResults => ({
+/** Гонка порта из документа (общий маппинг `RaceRegistry` и `RacesOverview`). */
+export const toRace = (doc: RaceDoc): RaceForResults => ({
   id: doc._id,
   ownerUserId: doc.ownerUserId,
   status: doc.status,

@@ -23,6 +23,7 @@ describe('PanelRole и Permission', () => {
       'appearance.manage',
       'profiles.verified_edit',
       'routes.moderate',
+      'platform.stats',
     ]);
   });
 

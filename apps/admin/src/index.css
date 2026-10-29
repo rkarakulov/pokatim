@@ -984,6 +984,20 @@ select.field__control option:disabled {
   gap: var(--space-s3);
 }
 
+/* admin-overview: «Обзор» — по четыре плитки в ряд (карточки «Требует внимания» и KPI) */
+.stat-tiles--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* admin-overview: подзаголовки таблиц «Сейчас идёт» */
+.overview-live h3 {
+  margin: var(--space-s4) 0 var(--space-s2);
+}
+
+.overview-live h3:first-of-type {
+  margin-top: 0;
+}
+
 /* race-results-07: KPI «Результатов» — восемь плиток в ряд (+ «Требует внимания», «Финишёры») */
 .stat-tiles--8 {
   grid-template-columns: repeat(8, minmax(0, 1fr));
