@@ -1,10 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OG_BRAND, type OgCardKind, type OgCardMeta } from '@pokatim/contracts';
+import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 import { domainError } from '../../error-messages';
 import { type OgCardKindOrBrand, OgCardInputs, type ResolvedOgCard } from './og-card.inputs';
 import { OgCardCache } from './og-card.cache';
 import { OgCardQueue } from './og-card.queue';
+import { OG_CARD_POLICY, ogPrerenderable } from './sharing.policy';
 
 /** Итог выдачи картинки: PNG текущей версии, редирект на текущую версию или бренд-заглушка (PNG или нет). */
 export type OgImage =
@@ -27,6 +29,7 @@ export class OgCardService {
     private readonly inputs: OgCardInputs,
     private readonly cache: OgCardCache,
     private readonly queue: OgCardQueue,
+    @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   async meta(kind: OgCardKind, id: string): Promise<OgCardMeta> {
@@ -56,7 +59,11 @@ export class OgCardService {
     version: string,
   ): Promise<OgImage> {
     if (resolved.version !== version) return { type: 'redirect', version: resolved.version };
-    const png = await this.cache.png({ kind, id, hash: resolved.hash });
+    // продление — тем же TTL, что дал бы worker: вне окна пререндера выдача не делает PNG недельным
+    const ttl = ogPrerenderable(resolved.input, this.clock.now())
+      ? OG_CARD_POLICY.pngTtlSec
+      : OG_CARD_POLICY.pngShortTtlSec;
+    const png = await this.cache.png({ kind, id, hash: resolved.hash }, ttl);
     if (png) return { type: 'png', png };
     await this.enqueue(kind, id, resolved.hash);
     if (kind === OG_BRAND.kind) return { type: 'fallback', png: null };

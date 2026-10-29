@@ -332,6 +332,14 @@ describe('buildOgCard — процессор', () => {
     expect(await ttl(live)).toBeGreaterThan(OG_CARD_POLICY.pngTtlSec - 10);
     expect(await ttl(old)).toBeLessThanOrEqual(OG_CARD_POLICY.pngShortTtlSec);
     expect(await ttl(old)).toBeGreaterThan(OG_CARD_POLICY.pngShortTtlSec - 10);
+
+    // выдача 200 продлевает только на короткий TTL — второй запрос не делает PNG вне окна недельным (ревью pass 2)
+    const served = await image('calendar', old, await version('calendar', old));
+    expect(served.statusCode).toBe(200);
+    expect(await ttl(old)).toBeLessThanOrEqual(OG_CARD_POLICY.pngShortTtlSec);
+    expect(await h.redis.ttl(`og:obj:calendar:${old}`)).toBeLessThanOrEqual(
+      OG_CARD_POLICY.pngShortTtlSec,
+    );
   });
 
   it('хэш устарел или объект скрыт → skipped, PNG не пишется', async () => {

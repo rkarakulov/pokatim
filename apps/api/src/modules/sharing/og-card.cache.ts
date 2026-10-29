@@ -47,9 +47,14 @@ const Cursor = z.object({ at: z.iso.datetime(), id: z.string() });
 export class OgCardCache {
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
-  /** PNG объекта по хэшу с продлением TTL PNG и ключа объекта (картинка, которую спрашивают, живёт); нет — `null`. */
-  async png(target: { kind: string; id: string; hash: string }): Promise<Buffer | null> {
-    const ttl = OG_CARD_POLICY.pngTtlSec;
+  /**
+   * PNG объекта по хэшу с продлением TTL PNG и ключа объекта на `ttl` (картинка, которую спрашивают, живёт; вне окна
+   * пререндера — только `pngShortTtlSec`); нет — `null`.
+   */
+  async png(
+    target: { kind: string; id: string; hash: string },
+    ttl: number = OG_CARD_POLICY.pngTtlSec,
+  ): Promise<Buffer | null> {
     const [png] = await Promise.all([
       this.redis.getexBuffer(pngKey(target.hash), 'EX', ttl),
       this.redis.expire(objKey(target.kind, target.id), ttl),

@@ -510,6 +510,16 @@ OG (`preview:story-cards`); `pr.md` — миграция 0037, новая оче
   линией она другая).
 - Бренд-картинка — без колонтитула «Покатим» (название и есть бренд); `OG_CARD_POLICY.renderVersion` 1 → 2.
 
+## Ревью pass 2 (findings-claude-pass2.md) — APPROVE
+
+- MEDIUM исправлен: продление при выдаче — тем же TTL, что дал бы worker (`ogPrerenderable` → `pngTtlSec`, иначе
+  `pngShortTtlSec`), в `OgCardService.serve` → `OgCardCache.png(target, ttl)`. Int-тест F2 дополнен: выдача 200 старого
+  объекта оставляет TTL PNG и `og:obj` ≤ 1 сут.; отрицательное доказательство — с `pngTtlSec` вместо короткого тест
+  красный (`expected 604800 to be less than or equal to 86400`).
+- LOW (follow-up): запоздавший рендер старой версии может переставить `og:obj` — допущение «один worker,
+  `concurrency: 1`» (сейчас так в compose); LOW (follow-up): сбой всей пачки `og.sync` сдвигает курсор — догоняет
+  самолечение по запросу.
+
 # 12. Outcome (заполняет coder)
 
 ### Changes
