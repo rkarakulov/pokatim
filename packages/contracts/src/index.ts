@@ -48,3 +48,5 @@ export * from './notifications/notification.schema.ts';
 export * from './sharing/story-card.schema.ts';
 export * from './route-rides/route-ride.schema.ts';
 export * from './achievements/achievement.schema.ts';
+export * from './tickets/ticket.schema.ts';
+export * from './tickets/ticketing-admin.schema.ts';

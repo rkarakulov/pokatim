@@ -24,6 +24,7 @@ describe('PanelRole и Permission', () => {
       'profiles.verified_edit',
       'routes.moderate',
       'platform.stats',
+      'tickets.checkin',
     ]);
   });
 
