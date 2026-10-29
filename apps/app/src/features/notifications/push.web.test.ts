@@ -198,6 +198,19 @@ describe('состояние и подписка', () => {
     expect(register).toHaveBeenCalledTimes(1);
   });
 
+  it('два одновременных запроса подписки — одна подписка браузера (запуск и экран настроек)', async () => {
+    browser.permission = 'granted';
+    browser.subscribe.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      browser.current = subscriptionOf(`${ENDPOINT}-${browser.subscribe.mock.calls.length}`);
+      return browser.current;
+    });
+    const push = load();
+    const [first, second] = await Promise.all([push.obtainPushToken(), push.obtainPushToken()]);
+    expect(browser.subscribe).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(first);
+  });
+
   it('другой вход (другая сессия) — подписка снова регистрируется на сервере', async () => {
     browser.permission = 'granted';
     const push = load();
