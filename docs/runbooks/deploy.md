@@ -130,8 +130,9 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
 - `MAIL_RELAY_RECIPIENTS` (адреса или `*`) — из секрета `DEV_MAIL_RELAY_RECIPIENTS` каждого деплоя (нет — очищается);
   `MAILPIT_RELAY_*` и файл `~/pokatim/mailpit-relay.yml` (600) вычисляет `bootstrap.sh` —
   руками не править.
-- `PUBLIC_HOST`, `WEB_ORIGIN` (`https://<хост>`), `APP_LINK_BASE` (`https://<хост>/`), `POKATIM_TAG` — **всегда** из
-  деплоя (переменная окружения `dev` и тег).
+- `PUBLIC_HOST`, `WEB_ORIGIN` (`https://<хост>`), `APP_WEB_ORIGIN` (`https://<хост>` — кнопка «Открыть билет» в
+  письме, event-tickets; пусто — письмо без кнопки), `APP_LINK_BASE` (`https://<хост>/`), `POKATIM_TAG` — **всегда**
+  из деплоя (переменная окружения `dev` и тег). Прод — тот же механизм (`APP_WEB_ORIGIN` = origin web-приложения).
 - `CORS_ORIGINS` пусто (web и API — один origin за nginx), `TRUST_PROXY=1` (один прокси — nginx хоста; он
   перезаписывает `X-Forwarded-For` адресом клиента).
 - Треки и устройства (ADR-0011, раздел «Треки и устройства»): `TRACK_STORAGE_MAX_BYTES` (2 GiB),
@@ -462,6 +463,18 @@ ADR-0018. Образ api вырос: нативный бинарь `@resvg/resvg
 `@expo-google-fonts/*` (~29 МБ, `runtime-deps.mjs` копирует пакеты целиком). PNG — в Redis (≤ 2 МБ на картинку,
 TTL 24 ч); память Redis — учитывать при росте числа карточек. Рендер — worker (`concurrency: 1`).
 
+## Билеты на мероприятия
+
+ADR-0021. Письмо «Вы зарегистрированы» — очередь `tickets-email` (кнопка — `APP_WEB_ORIGIN/tickets/<код>`), сверка
+билетов гонок — регламент `tickets.reconcile` раз в минуту (`tickets-maintenance`). Провал письма — лог
+`tickets.email_failed ticket=<id>`, колонка «Письмо» в списке участников панели; провал сверки — лог
+`tickets.reconcile_failed race=<id>`, следующий прогон повторяет.
+
+**Ротация `EMAIL_TOKEN_SECRET` инвалидирует все QR билетов** (токен — HMAC от id билета, в БД — `qrHash`): после
+ротации сканы старых QR дают «не найдено», код билета (ручной ввод) работает. Если ротация неизбежна — пересчитать
+`qrHash` всех билетов новым ключом одноразовым скриптом (`sha256(HMAC(secret, 'ticket-qr:' + _id))`) до открытия
+check-in; у владельцев QR обновится при следующем открытии билета (офлайн-копия — старая).
+
 ## Диск
 
 Порог деплоя — 1,5 ГБ свободно (`MIN_FREE_MB`), иначе `::error::` без изменений на сервере. Освобождать только своё:
@@ -484,6 +497,9 @@ TTL 24 ч); память Redis — учитывать при росте числ
   `device_connections` (частичный уникальный по живым статусам), `device_link_tickets` (TTL), `device_imports`,
   `device_audit`; expand-only, идемпотентны. `0012_track_source_refs` — маркеры удалённых объектов источника
   (удалённый заезд агрегатора не воскресает); expand-only.
+- `0037_tickets` (event-tickets, ADR-0021) — коллекции `event_ticketing`, `event_registrations` (частичный уникальный
+  по активной регистрации), `tickets` (уникальные код, хэш QR, регистрация); expand-only, без бэкфилла (билеты
+  выпускает сверка), идемпотентна. Номер сверить с `develop` перед мержем.
 
 ## Панель «Протокол»: первый администратор
 

@@ -165,3 +165,17 @@ paths:
   `PublicRiderAchievement(List)` (без `seen`). RC-8: незнакомый код в старой сборке — `'unknown'`; приложение такие
   элементы отбрасывает (пометить `seen` их нельзя). Новых кодов ошибок нет. api-client — `listAchievements(token)`,
   `markAchievementsSeen(token, codes)` (204), `getRiderAchievements(publicId)` (публичный).
+- Билеты (event-tickets, ADR-0021): `src/tickets/ticket.schema.ts` — `TICKET_EVENT_KINDS`, `TICKET_STATUSES`
+  (`event_cancelled` вычисляет сервер), `EVENT_REGISTRATION_CLOSED_REASONS` — только в конец; `TicketCode` (ввод:
+  `normalizeTicketCode` — верхний регистр, без `-`, `I/L→1`, `O→0`; показ — `formatTicketCode`), `TicketQrPayload`
+  (`PKT1.<43>`); ответы приложения (`MyTicketRef`, `MyTickets`, `TicketView`, `CalendarRegistrationState`,
+  `EventTicketingPublic` — `discriminatedUnion` по `enabled`) — `tolerantEnum`; запрос `CalendarRegistrationRequest`
+  (`strictObject`). `src/tickets/ticketing-admin.schema.ts` — панель, строгие `z.enum`: `AdminEventParams`,
+  `EventTicketingSettings`, `EventTicketingUpdate` (`strictObject`, правила по `kind` — сервер), `CheckInRequest`
+  (ровно одно поле `qr | code`), `CHECK_IN_OUTCOMES`, `CheckInView`, `EventTicketsQuery`/`Page` (курсор — `_id`),
+  `TicketingInvalidStateDetails`. Коды `EVENT_FULL`, `EVENT_REGISTRATION_CLOSED`, `TICKETING_INVALID_STATE` (409),
+  право `tickets.checkin`, действия `tickets.settings_updated`/`tickets.checked_in`, деталь `ticketCode` — в конце
+  списков. Материалы (C) и Wallet (E) — будущие необязательные поля `TicketView`. api-client — `getRaceTicket`,
+  `getCalendarRegistration`, `registerForCalendar`, `cancelCalendarRegistration`, `listTickets`, `getTicket`,
+  `getEventTicketing` (публичный); панель — `getEventTicketing`, `updateEventTicketing` (`PUT`), `listEventTickets`,
+  `lookupTicket`, `checkInTicket`.
