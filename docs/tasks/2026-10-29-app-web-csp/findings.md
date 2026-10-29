@@ -7,7 +7,7 @@ Codex — `findings-codex.md` (APPROVE, MEDIUM 1).
 
 | # | Уровень | Находка | Решение |
 |---|---|---|---|
-| C1 | MEDIUM | zod 4 проверяет JIT через `new Function` в try/catch — нарушение `script-src` (eval) на каждой странице | исправлено: `z.config({ jitless: true })` в web (`features/web-security/zod-jitless.web.ts`, импорт первым в `_layout`), тест, ADR-0025 п. 6 |
+| C1 | MEDIUM | zod 4 проверяет JIT через `new Function` в try/catch — нарушение `script-src` (eval) на каждой странице | исправлено: `z.config({ jitless: true })` в web (`features/web-security/zod-jitless.web.ts`, первый импорт `theme/design-system.ts`), тест, ADR-0025 п. 6 |
 | C2 | MEDIUM | смоук не ловит нарушения без `console.error` (eval); runbook утверждал обратное | исправлено: тест «строгий CSP … без нарушений» — `securitypolicyviolation` на 7 ключевых страницах (фикстура базы не меняется — шаблонная); runbook поправлен |
 | C3 | LOW | CSP `connect-src` из runtime env, бандл — из build-arg: разойдутся — API заблокирован | инвариант в `deploy.md` и `pokatim-security.md` |
 | C4 | LOW | `pokatim-web.md` не обновлён | строка про CSP приложения рядом с CSP панели |

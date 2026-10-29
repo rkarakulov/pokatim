@@ -13,7 +13,7 @@
 - `patches/@expo__router-server@58.0.15.patch` (pnpm `patchedDependencies`): `renderToReadableStream({ nonce })` —
   nonce на bootstrap-скрипте React (гидрация, данные `loader`). Expo SDK 58 nonce не поддерживает.
 - `+html.tsx`: nonce на inline-скриптах темы и регистрации service worker (`cspNonce()` из `requestHeaders()`).
-- zod в web — `jitless` (самый первый импорт `_layout`): иначе проверка `new Function` — нарушение `script-src`.
+- zod в web — `jitless` (первый импорт `theme/design-system.ts`): иначе проверка `new Function` — нарушение `script-src`.
 - Docker: `COPY patches/` в слой установки зависимостей.
 
 ## Конфиги и env

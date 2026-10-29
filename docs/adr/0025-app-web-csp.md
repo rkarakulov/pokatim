@@ -40,7 +40,7 @@ nonce не поддерживает: `@expo/router-server` вызывает `ren
    браузера — CSP страницы не касается.
 6. **Без `unsafe-eval`.** zod 4 проверяет JIT через `new Function` (в try/catch — но нарушение фиксируется): в web —
    `z.config({ jitless: true })` до создания первой схемы — zod проверяет JIT уже в конструкторе `z.object`
-   (`zod-jitless.web.ts`, самый первый импорт `_layout`).
+   (`zod-jitless.web.ts`, первый импорт `theme/design-system.ts`, сторож — `design-system-setup.test.ts`).
 7. **Сторожа:** `server/web-server.test.ts` — директивы политики, nonce свой у ответа, входящий не проходит, патч и
    `csp-nonce.ts` читают то же имя заголовка; e2e — nonce всех inline-скриптов SSR, нарушения `securitypolicyviolation`
    на ключевых страницах (часть нарушений `console.error` не пишет) и `console.error` фикстуры.

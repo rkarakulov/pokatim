@@ -397,6 +397,6 @@ paths:
   `JSON.stringify` значений из закрытых списков. Не дописывать nonce постобработкой HTML.
 - Новый внешний источник (API, картинки, карты) — в `contentSecurityPolicy` и тест; провайдер карт — `MAP_ORIGINS`.
 - Патч `@expo/router-server` (`patches/`) — переносить при обновлении Expo; сторож — `web-server.test.ts`.
-- Без `unsafe-eval`: zod в web — `jitless` (`features/web-security/zod-jitless.web.ts`, импорт первым в `_layout`);
+- Без `unsafe-eval`: zod в web — `jitless` (`features/web-security/zod-jitless.web.ts`, первый импорт `theme/design-system.ts`);
   новая библиотека с `eval`/`new Function` — нарушение, смоук «строгий CSP … без нарушений» падает.
 - `EXPO_PUBLIC_API_URL` web-контейнера (runtime, CSP) = build-arg сборки (бандл): разойдутся — CSP заблокирует API.
