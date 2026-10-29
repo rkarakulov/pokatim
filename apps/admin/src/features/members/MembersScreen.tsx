@@ -30,7 +30,7 @@ import { GrantRoleDialog } from './GrantRoleDialog';
 import { memberErrorText } from './member-errors';
 import { membersQuery, MEMBERS_QUERY_KEY } from './members-query';
 
-type Action = { kind: 'change' | 'revoke'; member: PanelMember } | undefined;
+type Action = { kind: 'change' | 'revoke' | 'resetTotp'; member: PanelMember } | undefined;
 
 const ALL = 'all';
 const roleLabel = (role: PanelRole) => t(`admin.role.${role}`);
@@ -39,7 +39,7 @@ const column = createColumnHelper<PanelMember>();
 
 /**
  * «Сотрудники» (`members.read`; действия — `members.manage`, только admin): плотная таблица (имя, e-mail, роль,
- * статус, выдана), фильтры статуса и роли, поиск; «Выдать роль», «Изменить роль», «Снять роль» с причиной. Своя
+ * статус, выдана), фильтры статуса и роли, поиск; «Выдать роль», «Изменить роль», «Снять роль» и «Сбросить 2FA» (ADR-0024) с причиной. Своя
  * строка — без действий (сервер всё равно отказал бы `PANEL_SELF_ACTION`).
  */
 export function MembersScreen() {
@@ -87,6 +87,14 @@ export function MembersScreen() {
           </StatusTag>
         ),
       }),
+      column.accessor('totpEnabled', {
+        header: t('admin.members.column.totp'),
+        cell: (info) => (
+          <StatusTag tone={info.getValue() ? 'success' : 'neutral'}>
+            {t(info.getValue() ? 'admin.members.totpOn' : 'admin.members.totpOff')}
+          </StatusTag>
+        ),
+      }),
       column.accessor('grantedAt', {
         header: t('admin.members.column.grantedAt'),
         cell: (info) => formatDateTime(info.getValue()),
@@ -119,6 +127,15 @@ export function MembersScreen() {
               >
                 {t('admin.members.revoke')}
               </Button>
+              {member.totpEnabled ? (
+                <Button
+                  size="sm"
+                  aria-label={`${t('admin.members.resetTotp')}: ${member.displayName}`}
+                  onClick={() => setAction({ kind: 'resetTotp', member })}
+                >
+                  {t('admin.members.resetTotp')}
+                </Button>
+              ) : null}
             </span>
           );
         },
@@ -137,6 +154,11 @@ export function MembersScreen() {
   const changeRole = useMutation({
     mutationFn: (input: { userId: string; role: PanelRole; reason: string }) =>
       api.changeRole(input.userId, { role: input.role, reason: input.reason }),
+    onSuccess: refresh,
+  });
+  const resetTotp = useMutation({
+    mutationFn: (input: { userId: string; reason: string }) =>
+      api.resetMemberTotp(input.userId, { reason: input.reason }),
     onSuccess: refresh,
   });
   const revokeRole = useMutation({
@@ -238,6 +260,19 @@ export function MembersScreen() {
         onConfirm={async (reason) => {
           if (!action) return;
           await revokeRole.mutateAsync({ userId: action.member.userId, reason });
+        }}
+        onClose={() => setAction(undefined)}
+      />
+      <ReasonDialog
+        open={action?.kind === 'resetTotp'}
+        title={t('admin.members.resetTotpTitle', { name: action?.member.displayName ?? '' })}
+        consequences={t('admin.members.resetTotpConsequences')}
+        confirmLabel={t('admin.members.resetTotp')}
+        destructive
+        errorText={memberErrorText}
+        onConfirm={async (reason) => {
+          if (!action) return;
+          await resetTotp.mutateAsync({ userId: action.member.userId, reason });
         }}
         onClose={() => setAction(undefined)}
       />

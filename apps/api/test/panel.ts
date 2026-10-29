@@ -1,6 +1,10 @@
-import { PANEL_SESSION_COOKIE, type PanelRole } from '@pokatim/contracts';
+import { PANEL_DEVICE_COOKIE, PANEL_SESSION_COOKIE, type PanelRole } from '@pokatim/contracts';
+import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import { panelCollections } from '../src/modules/panel/panel.collection';
+import { generateRecoveryCodes, recoveryCodeHash } from '../src/modules/panel/recovery-codes';
+import { generateTotp, generateTotpSecret, totpStep } from '../src/modules/panel/totp';
+import { sealTotpSecret } from '../src/modules/panel/totp-secret-box';
 import type { Harness } from './harness';
 import {
   activeLinkToken,
@@ -106,3 +110,56 @@ export const panelCall = (
   payload?: unknown,
   headers: Record<string, string> = {},
 ) => call(h, method, url, payload, { ...(token ? panelCookie(token) : {}), ...headers });
+
+/** Ключ 2FA панели тестового стенда (`PANEL_TOTP_KEY`, hex 64) — фиктивный. */
+export const PANEL_TOTP_KEY_TEST = 'ab'.repeat(32);
+const TOTP_KEY = Buffer.from(PANEL_TOTP_KEY_TEST, 'hex');
+
+/** Активная 2FA сотрудника напрямую в БД (подготовка теста): секрет и коды восстановления — тесту. */
+export async function seedTotp(
+  h: Harness,
+  userId: string,
+): Promise<{ secret: Buffer; recoveryCodes: string[]; epoch: string }> {
+  const secret = generateTotpSecret();
+  const recoveryCodes = generateRecoveryCodes();
+  const epoch = uuidv7();
+  await panel(h).totp.insertOne({
+    _id: userId,
+    status: 'active',
+    secretEnc: sealTotpSecret(TOTP_KEY, userId, secret),
+    lastUsedStep: null,
+    recoveryCodes: recoveryCodes.map((code) => ({
+      hash: recoveryCodeHash(TOTP_KEY, code),
+      usedAt: null,
+    })),
+    enabledAt: h.clock.now(),
+    epoch,
+    updatedAt: h.clock.now(),
+  });
+  return { secret, recoveryCodes, epoch };
+}
+
+/** Код TOTP на часах стенда (`offset` — шаги по 30 с). */
+export const totpCode = (h: Harness, secret: Buffer, offset = 0) =>
+  generateTotp(secret, totpStep(h.clock.now()) + offset);
+
+/** Set-Cookie устройства (или undefined) и её значение. */
+export const deviceSetCookie = (res: CallResult) =>
+  setCookies(res).find((value) => value.startsWith(`${PANEL_DEVICE_COOKIE.name}=`));
+export const deviceCookieValue = (res: CallResult) =>
+  deviceSetCookie(res)
+    ?.split(';')[0]
+    ?.slice(PANEL_DEVICE_COOKIE.name.length + 1);
+export const deviceCookie = (token: string) => ({
+  cookie: `${PANEL_DEVICE_COOKIE.name}=${token}`,
+});
+
+/** Второй шаг входа «с IP клиента». */
+export const panelTotpStep = (
+  h: Harness,
+  path: 'totp' | 'totp-setup' | 'totp-setup/confirm',
+  body: Record<string, unknown>,
+  headers: Record<string, string> = {},
+  ip = '198.51.100.20',
+) =>
+  call(h, 'POST', `/v1/admin/session/sign-in/${path}`, body, { 'x-forwarded-for': ip, ...headers });

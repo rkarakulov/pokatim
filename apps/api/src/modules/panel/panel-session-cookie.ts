@@ -1,6 +1,6 @@
 import { type CookieSerializeOptions, Inject, Injectable } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
-import { OpaqueToken, PANEL_SESSION_COOKIE } from '@pokatim/contracts';
+import { OpaqueToken, PANEL_DEVICE_COOKIE, PANEL_SESSION_COOKIE } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 /**
@@ -13,6 +13,9 @@ const ATTRIBUTES = {
   secure: true,
   sameSite: 'strict',
 } as const satisfies CookieSerializeOptions;
+
+/** Cookie доверенного устройства (ADR-0024, D4): те же атрибуты, путь — только вход панели. */
+const DEVICE_ATTRIBUTES = { ...ATTRIBUTES, path: PANEL_DEVICE_COOKIE.path } as const;
 
 /**
  * Значение cookie запроса: `request.cookies`, если его заполнил плагин, иначе — разбор заголовка `Cookie` (адаптер
@@ -64,6 +67,20 @@ export class PanelSessionCookie {
     const remainingMs = expiresAt.getTime() - this.clock.now().getTime();
     this.adapter.setCookie(reply, PANEL_SESSION_COOKIE.name, token, {
       ...ATTRIBUTES,
+      maxAge: Math.max(0, Math.floor(remainingMs / 1000)),
+    });
+  }
+
+  /** Токен доверенного устройства из cookie запроса (мусор — `undefined`). */
+  readDevice(request: unknown): string | undefined {
+    const parsed = OpaqueToken.safeParse(requestCookie(request, PANEL_DEVICE_COOKIE.name));
+    return parsed.success ? parsed.data : undefined;
+  }
+
+  setDevice(reply: unknown, token: string, expiresAt: Date): void {
+    const remainingMs = expiresAt.getTime() - this.clock.now().getTime();
+    this.adapter.setCookie(reply, PANEL_DEVICE_COOKIE.name, token, {
+      ...DEVICE_ATTRIBUTES,
       maxAge: Math.max(0, Math.floor(remainingMs / 1000)),
     });
   }

@@ -71,7 +71,7 @@ export const AUDIT_ACTIONS = [
   // (subject — событие, код билета в `details.ticketCode`, без имени и e-mail)
   'tickets.settings_updated',
   'tickets.checked_in',
-  // panel-2fa (ADR-0023): подключение и отключение 2FA (сам), сброс (admin или cli, причина), перевыпуск кодов
+  // panel-2fa (ADR-0024): подключение и отключение 2FA (сам), сброс (admin или cli, причина), перевыпуск кодов
   // восстановления и вход кодом восстановления
   'panel.totp_enabled',
   'panel.totp_disabled',

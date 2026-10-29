@@ -89,6 +89,16 @@ import {
   RiderProfileResetResult,
   PanelAppearance,
   type UpdateAppearanceRequest,
+  PanelSignedIn,
+  PanelSignedInWithRecoveryCodes,
+  type TotpCodeRequest,
+  type TotpDisableRequest,
+  TotpRecoveryCodes,
+  type TotpResetRequest,
+  TotpSetup,
+  type TotpSetupConfirmRequest,
+  type TotpSignInRequest,
+  TotpStatus,
 } from '@pokatim/contracts';
 import { createHttpClient } from '@rkarakulov/api-client-core';
 import { z } from 'zod';
@@ -181,6 +191,14 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     /** Вход тем же e-mail и паролем, что в приложении: cookie панели или `verificationRequired`. */
     signIn: (body: PanelSignInRequest) =>
       post('/v1/admin/session/sign-in', PanelSignInResponse, body),
+    /** Второй шаг входа (ADR-0024): код TOTP или код восстановления по вызову; «запомнить устройство» — cookie. */
+    signInTotp: (body: z.input<typeof TotpSignInRequest>) =>
+      post('/v1/admin/session/sign-in/totp', PanelSignedIn, body),
+    /** Подключение 2FA на экране входа (`totpSetupRequired`): секрет и otpauth — один раз. */
+    signInTotpSetup: (challenge: string) =>
+      post('/v1/admin/session/sign-in/totp-setup', TotpSetup, { challenge }),
+    signInTotpSetupConfirm: (body: z.input<typeof TotpSetupConfirmRequest>) =>
+      post('/v1/admin/session/sign-in/totp-setup/confirm', PanelSignedInWithRecoveryCodes, body),
     /** Выход: сессия панели отзывается, cookie сбрасывается; 204. */
     signOut: () => post('/v1/admin/session/sign-out', z.undefined()),
     /** «Кто я и что могу»: 401 — сессии нет. */
@@ -194,6 +212,21 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       post(`${member(userId)}/role`, PanelMember, body),
     revokeRole: (userId: string, body: RevokeRoleRequest) =>
       post(`${member(userId)}/revoke`, PanelMember, body),
+    /** Сброс 2FA сотрудника (`members.manage`, причина обязательна): 204. */
+    resetMemberTotp: (userId: string, body: TotpResetRequest) =>
+      post(`${member(userId)}/totp/reset`, z.undefined(), body),
+
+    // --- 2FA своего аккаунта (любая роль, ADR-0024) ---
+    getTotpStatus: () => get('/v1/admin/account/totp', TotpStatus),
+    startTotpSetup: () => post('/v1/admin/account/totp/setup', TotpSetup),
+    confirmTotpSetup: (body: TotpCodeRequest) =>
+      post('/v1/admin/account/totp/confirm', TotpRecoveryCodes, body),
+    regenerateRecoveryCodes: (body: TotpCodeRequest) =>
+      post('/v1/admin/account/totp/recovery-codes', TotpRecoveryCodes, body),
+    /** Отключение — с кодом TOTP или восстановления: 204. */
+    disableTotp: (body: TotpDisableRequest) =>
+      post('/v1/admin/account/totp/disable', z.undefined(), body),
+
     listAudit: (params: AuditListParams = {}) =>
       get(`/v1/admin/audit${queryString(params)}`, AuditPage),
 

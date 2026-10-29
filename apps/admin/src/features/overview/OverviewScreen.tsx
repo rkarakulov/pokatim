@@ -259,11 +259,25 @@ export function OverviewScreen() {
   const data = overview.data;
   const paused = overview.fetchStatus === 'paused';
   const retry = () => void overview.refetch();
+  const me = useMe();
 
   return (
     <>
       <PageHeader title={t('admin.overview.title')} meta={t('admin.timezone')} />
       <div className="page-body">
+        {me && !me.user.totp.enabled ? (
+          <Banner
+            tone="warning"
+            title={t('admin.overview.totpBannerTitle')}
+            actions={
+              <Link to="/account/security" className="link t-meta">
+                {t('admin.overview.totpBannerLink')}
+              </Link>
+            }
+          >
+            {t('admin.overview.totpBannerText')}
+          </Banner>
+        ) : null}
         {data && overview.isError ? (
           <Banner
             tone="error"

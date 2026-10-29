@@ -15,7 +15,11 @@ export const CLI_USAGE = `Панель «Протокол» — команды �
       Роль «администратор» существующему пользователю приложения с подтверждённым e-mail
       (первый и аварийный администратор). Запись журнала — с актором cli.
 
-Коды выхода: 0 — готово (или уже администратор), 2 — неверные аргументы или пользователь не подходит, 1 — сбой.
+  reset-totp --email <e-mail>
+      Аварийный сброс 2FA сотрудника (потерян телефон и коды восстановления): 2FA, доверенные устройства
+      и сессии панели удаляются. Запись журнала — с актором cli.
+
+Коды выхода: 0 — готово (уже администратор; 2FA не подключена), 2 — неверные аргументы или пользователь не подходит, 1 — сбой.
 `;
 
 export interface CliIo {
@@ -40,38 +44,76 @@ export async function runPanelCli(argv: string[], env: () => CliEnv, io: CliIo):
     io.stdout(CLI_USAGE);
     return command === undefined && !parsed.values.help ? 2 : 0;
   }
-  if (command !== 'grant-admin' || parsed.positionals.length > 1) {
+  if (!['grant-admin', 'reset-totp'].includes(command) || parsed.positionals.length > 1) {
     io.stderr(`Неизвестная команда.\n\n${CLI_USAGE}`);
     return 2;
   }
   const email = Email.safeParse(parsed.values.email);
+  if (command === 'reset-totp') {
+    if (!email.success || parsed.values.name !== undefined) {
+      io.stderr('Нужен --email (адрес).\n');
+      return 2;
+    }
+    return withMembers(env, (members) => resetTotp(members, email.data, io));
+  }
   const name = DisplayName.safeParse(parsed.values.name);
   if (!email.success || !name.success) {
     io.stderr('Нужны --email (адрес) и --name (имя в панели, 1–80 символов).\n');
     return 2;
   }
+  return withMembers(env, (members) => grantAdmin(members, email.data, name.data, io));
+}
 
+/** Контекст без HTTP на время одной команды. */
+async function withMembers(
+  env: () => CliEnv,
+  run: (members: PanelMembersService) => Promise<number>,
+): Promise<number> {
   const app = await NestFactory.createApplicationContext(PanelCliModule.forRoot(env()), {
     logger: ['error'],
   });
   try {
-    const result = await app.get(PanelMembersService).grantAdminFromCli(email.data, name.data);
-    switch (result.state) {
-      case 'granted':
-        io.stdout(`Роль «администратор» выдана. Пользователь: ${result.userId}\n`);
-        return 0;
-      case 'alreadyAdmin':
-        io.stdout(`Пользователь уже администратор: ${result.userId}\n`);
-        return 0;
-      case 'notFound':
-        io.stderr('Пользователь не найден: сначала зарегистрируйтесь в приложении.\n');
-        return 2;
-      case 'unverified':
-        io.stderr('E-mail пользователя не подтверждён: откройте ссылку из письма регистрации.\n');
-        return 2;
-    }
+    return await run(app.get(PanelMembersService));
   } finally {
     await app.close();
+  }
+}
+
+async function grantAdmin(
+  members: PanelMembersService,
+  email: string,
+  name: string,
+  io: CliIo,
+): Promise<number> {
+  const result = await members.grantAdminFromCli(email, name);
+  switch (result.state) {
+    case 'granted':
+      io.stdout(`Роль «администратор» выдана. Пользователь: ${result.userId}\n`);
+      return 0;
+    case 'alreadyAdmin':
+      io.stdout(`Пользователь уже администратор: ${result.userId}\n`);
+      return 0;
+    case 'notFound':
+      io.stderr('Пользователь не найден: сначала зарегистрируйтесь в приложении.\n');
+      return 2;
+    case 'unverified':
+      io.stderr('E-mail пользователя не подтверждён: откройте ссылку из письма регистрации.\n');
+      return 2;
+  }
+}
+
+async function resetTotp(members: PanelMembersService, email: string, io: CliIo): Promise<number> {
+  const result = await members.resetTotpFromCli(email);
+  switch (result.state) {
+    case 'reset':
+      io.stdout(`2FA сброшена, сессии панели отозваны. Пользователь: ${result.userId}\n`);
+      return 0;
+    case 'notEnabled':
+      io.stdout(`2FA не подключена: ${result.userId}\n`);
+      return 0;
+    case 'notFound':
+      io.stderr('Пользователь не найден.\n');
+      return 2;
   }
 }
 

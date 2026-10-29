@@ -3,7 +3,7 @@
 - Уровень: task3 (контракты, API, миграция, env/deploy, CLI, админка, безопасность)
 - Ветка: `feature/panel-2fa` от `origin/develop` (один PR)
 - Основание: ADR-0009 «Последствия» (C1, C3), `.claude/rules/pokatim-security.md` («до прода — 2FA для admin»),
-  `docs/product/admin-panel.md` §2FA. Новый ADR-0023.
+  `docs/product/admin-panel.md` §2FA. Новый ADR-0024 (номер 0023 занял event-tickets, см. §8.2).
 
 ## 1. Что было (UNDERSTAND)
 
@@ -144,8 +144,40 @@
 
 Всё — модуль `panel` (2FA — свойство сотрудника панели, не аккаунта приложения; identity не меняется). Контракты —
 `packages/contracts/src/admin`. Админка — `features/sign-in`, новая `features/security`, `features/members`.
-Новый ADR-0023; правки ADR-0009 («Последствия» → ссылка на 0023), `pokatim-security.md`, `docs/product/admin-panel.md`.
+Новый ADR-0024; правки ADR-0009 («Последствия» → ссылка на 0024), `pokatim-security.md`, `docs/product/admin-panel.md`.
 
 ## 7. Outcome
 
-_(заполняется после реализации)_
+См. §12.
+
+## 8.2 Deviations from spec
+
+Решения при реализации (открытые места spec — по его рекомендации):
+
+1. **ADR-0024, а не 0023:** номер 0023 в `origin/develop` занял ADR event-tickets. Ссылки в коде, контрактах и
+   документах — на 0024.
+2. **Миграция `0040_panel_totp`:** последняя в `origin/develop` — `0038_tickets`, номер `0039` занимает
+   `0039_event_materials` параллельного PR #121 (мержится первым). Тест порядка проверяет «последняя и после
+   `0038_tickets`», а не «сразу после»; при слиянии #121 — добавить `0039_event_materials` в список id.
+3. **Себе сбросить 2FA — `409 PANEL_SELF_ACTION`**, а не `CANNOT_CHANGE_SELF`: spec требует «как у роли», а роль
+   использует `PANEL_SELF_ACTION`; нового кода ошибки не вводили.
+4. **Писатель — `PanelRepository`** (не отдельный `PanelTotpRepository`): тест-сторож `panel.repository.test.ts`
+   разрешает `panelCollections(` только описанию коллекций, миграциям и `PanelRepository`.
+5. **TTL вызовов и устройств — `expiresAt` + сутки** (`PANEL_TOTP_TTL_GRACE_SECONDS`), как у сессий: срок проверяет
+   сервер по `CLOCK`, TTL — только уборка.
+6. **Сброс 2FA другим admin** — цель должна быть членом команды (любой статус, иначе 404); 2FA не подключена — `409
+   TOTP_NOT_ENABLED`. Сброс удаляет и незавершённое (`pending`) подключение только вместе с активной 2FA; CLI для
+   неподключённой 2FA — код 0 «2FA не подключена» без записи журнала.
+7. **CLI `reset-totp`** — причина в журнале фиксированная: «Аварийный сброс 2FA (CLI)» (spec аргумента причины не
+   задаёт).
+8. **Подтверждение подключения без начатого `pending`** — в настройках `409 TOTP_NOT_ENABLED`, на входе — `400
+   TOTP_INVALID_CODE` (попытка вызова списывается).
+9. **Админка:** заголовок шага кода — «Подтверждение входа» (поле — «Код из приложения»: иначе доступное имя секции
+   дублировало подпись поля); QR — `src/ui/QrCode.tsx` (без доменных импортов, кандидат в admin-kit); зависимость
+   `qrcode` 1.5.4 + `@types/qrcode` 1.5.6 (точные версии).
+10. **e2e:** отдельного Playwright-сценария 2FA нет — стенд смоука без `PANEL_TOTP_KEY`, вход в нём прежний; поведение
+    покрыто int-тестами API и тестами экранов. Follow-up — сценарий подключения с тестовым ключом в `e2e/project.ts`.
+
+## 8.3 Security checklist
+
+См. §4 — выполнено; проверки — §12.

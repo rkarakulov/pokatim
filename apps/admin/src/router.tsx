@@ -36,6 +36,7 @@ import { RouteScreen } from './features/routes/RouteScreen';
 import { RoutesScreen } from './features/routes/RoutesScreen';
 import { SeasonScreen } from './features/seasons/SeasonScreen';
 import { SeasonsScreen } from './features/seasons/SeasonsScreen';
+import { SecurityScreen } from './features/security/SecurityScreen';
 import { SignInScreen } from './features/sign-in/SignInScreen';
 import { AppLayout, ShellError, ShellSkeleton } from './layout/AppLayout';
 import { Can } from './session/can';
@@ -377,6 +378,13 @@ const appearanceRoute = createRoute({
   ),
 });
 
+// panel-2fa (ADR-0024): 2FA своего аккаунта — любая роль, без права
+const securityRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'account/security',
+  component: SecurityScreen,
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '$',
@@ -398,6 +406,7 @@ const routeTree = rootRoute.addChildren([
     routeRoute,
     membersRoute,
     auditRoute,
+    securityRoute,
     moderationRoute,
     ridesModerationRoute,
     rideModerationRoute,

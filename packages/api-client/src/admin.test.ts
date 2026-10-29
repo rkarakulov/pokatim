@@ -5,7 +5,13 @@ import { createApiClient } from './index.ts';
 
 const USER_ID = '01890a5d-ac96-774b-bcce-b302099a8057';
 const me = {
-  user: { id: USER_ID, displayName: 'Ольга', email: 'olga@example.by', role: 'admin' },
+  user: {
+    id: USER_ID,
+    displayName: 'Ольга',
+    email: 'olga@example.by',
+    role: 'admin',
+    totp: { enabled: false, required: false },
+  },
   permissions: ['members.read', 'members.manage', 'audit.read'],
 };
 const member = {
@@ -16,6 +22,7 @@ const member = {
   status: 'active',
   grantedAt: '2026-10-25T10:00:00.000Z',
   revokedAt: null,
+  totpEnabled: false,
 };
 
 interface Call {
@@ -94,6 +101,64 @@ describe('createAdminApiClient: пути, методы, cookie панели', ()
     expect(revoke.calls[0]).toMatchObject({
       url: `/v1/admin/members/${USER_ID}/revoke`,
       method: 'POST',
+    });
+  });
+
+  it('2FA (ADR-0024): второй шаг входа, подключение на входе, настройки, сброс сотруднику', async () => {
+    const challenge = 'c'.repeat(43);
+    const step = admin(200, { state: 'signedIn', me });
+    await step.api.signInTotp({ challenge, code: '123456', rememberDevice: true });
+    expect(step.calls[0]).toMatchObject({
+      url: '/v1/admin/session/sign-in/totp',
+      method: 'POST',
+      credentials: 'same-origin',
+      body: { challenge, code: '123456', rememberDevice: true },
+    });
+
+    const setup = {
+      secret: 'JBSWY3DPEHPK3PXP',
+      otpauthUri: 'otpauth://totp/x?secret=JBSWY3DPEHPK3PXP',
+    };
+    const start = admin(200, setup);
+    await expect(start.api.signInTotpSetup(challenge)).resolves.toEqual(setup);
+    expect(start.calls[0]).toMatchObject({
+      url: '/v1/admin/session/sign-in/totp-setup',
+      body: { challenge },
+    });
+
+    const codes = Array.from({ length: 10 }, () => 'abcde-fgh23');
+    const confirm = admin(200, { state: 'signedIn', me, recoveryCodes: codes });
+    await expect(
+      confirm.api.signInTotpSetupConfirm({ challenge, code: '123456' }),
+    ).resolves.toMatchObject({ recoveryCodes: codes });
+    expect(confirm.calls[0]?.url).toBe('/v1/admin/session/sign-in/totp-setup/confirm');
+
+    const status = admin(200, {
+      enabled: true,
+      enabledAt: null,
+      required: false,
+      recoveryCodesLeft: 3,
+    });
+    await status.api.getTotpStatus();
+    expect(status.calls[0]).toMatchObject({ url: '/v1/admin/account/totp', method: 'GET' });
+
+    const regenerate = admin(200, { recoveryCodes: codes });
+    await regenerate.api.regenerateRecoveryCodes({ code: '123456' });
+    expect(regenerate.calls[0]?.url).toBe('/v1/admin/account/totp/recovery-codes');
+
+    const disable = admin(204, null);
+    await expect(disable.api.disableTotp({ recoveryCode: 'abcde-fgh23' })).resolves.toBeUndefined();
+    expect(disable.calls[0]).toMatchObject({
+      url: '/v1/admin/account/totp/disable',
+      body: { recoveryCode: 'abcde-fgh23' },
+    });
+
+    const reset = admin(204, null);
+    await reset.api.resetMemberTotp(USER_ID, { reason: 'потерян телефон' });
+    expect(reset.calls[0]).toMatchObject({
+      url: `/v1/admin/members/${USER_ID}/totp/reset`,
+      method: 'POST',
+      body: { reason: 'потерян телефон' },
     });
   });
 

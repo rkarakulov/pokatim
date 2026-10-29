@@ -6,6 +6,7 @@ import type {
   PanelMemberList,
   PanelRole,
   RevokeRoleRequest,
+  TotpResetRequest,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import { isDuplicateKey } from '@rkarakulov/api-kit/mongo';
@@ -23,6 +24,14 @@ export type CliGrantResult =
   | { state: 'alreadyAdmin'; userId: string }
   | { state: 'notFound' }
   | { state: 'unverified' };
+
+export type CliTotpResetResult =
+  | { state: 'reset'; userId: string }
+  | { state: 'notEnabled'; userId: string }
+  | { state: 'notFound' };
+
+/** Причина записи журнала аварийного сброса 2FA через CLI. */
+export const CLI_TOTP_RESET_REASON = 'Аварийный сброс 2FA (CLI)';
 
 /**
  * Члены команды панели: выдача, смена и снятие роли (ADR-0009). Транзакции меняют только документы `panel_*`:
@@ -43,8 +52,15 @@ export class PanelMembersService {
     const cap = PANEL_POLICY.memberListCap;
     const docs = await this.repository.listMembers(cap + 1);
     const items = docs.slice(0, cap);
-    const emails = await this.accounts.emailsOf(items.map((doc) => doc._id));
-    return { items: items.map((doc) => toPanelMember(doc, emails)), truncated: docs.length > cap };
+    const ids = items.map((doc) => doc._id);
+    const [emails, totp] = await Promise.all([
+      this.accounts.emailsOf(ids),
+      this.repository.totpEnabledOf(ids),
+    ]);
+    return {
+      items: items.map((doc) => toPanelMember(doc, emails, totp)),
+      truncated: docs.length > cap,
+    };
   }
 
   /**
@@ -161,7 +177,58 @@ export class PanelMembersService {
   private async member(userId: string): Promise<PanelMember> {
     const [doc] = await this.repository.listMembersByIds([userId]);
     if (!doc) throw domainError('NOT_FOUND', 404);
-    return toPanelMember(doc, await this.accounts.emailsOf([userId]));
+    const [emails, totp] = await Promise.all([
+      this.accounts.emailsOf([userId]),
+      this.repository.totpEnabledOf([userId]),
+    ]);
+    return toPanelMember(doc, emails, totp);
+  }
+
+  /**
+   * Сброс 2FA сотрудника (ADR-0024, D10; `members.manage`, причина обязательна): себе — `409 PANEL_SELF_ACTION`, не
+   * член команды — 404, 2FA не подключена — `409 TOTP_NOT_ENABLED`. Одной транзакцией: удаление 2FA (и незавершённого
+   * подключения), доверенных устройств, отзыв всех сессий панели цели (`totp_reset`), `panel.totp_reset`.
+   */
+  async resetTotp(actorUserId: string, userId: string, input: TotpResetRequest): Promise<void> {
+    if (actorUserId === userId) throw domainError('PANEL_SELF_ACTION', 409);
+    const [member] = await this.repository.listMembersByIds([userId]);
+    if (!member) throw domainError('NOT_FOUND', 404);
+    const reset = await this.transactions.run((tx) =>
+      this.resetIn(tx, userId, { kind: 'user', userId: actorUserId }, input.reason),
+    );
+    if (!reset) throw domainError('TOTP_NOT_ENABLED', 409);
+  }
+
+  /** CLI `reset-totp` (аварийный путь, последний admin): то же действие с актором `cli`. */
+  async resetTotpFromCli(email: string): Promise<CliTotpResetResult> {
+    const account = await this.accounts.findVerifiedByEmail(email);
+    if (!account) return { state: 'notFound' };
+    const { userId } = account;
+    const reset = await this.transactions.run((tx) =>
+      this.resetIn(tx, userId, { kind: 'cli' }, CLI_TOTP_RESET_REASON),
+    );
+    return reset ? { state: 'reset', userId } : { state: 'notEnabled', userId };
+  }
+
+  private async resetIn(
+    tx: DbSession,
+    userId: string,
+    actor: AuditActor,
+    reason: string,
+  ): Promise<boolean> {
+    const current = await this.repository.findTotp(userId, tx);
+    if (current?.status !== 'active') return false;
+    const now = this.clock.now();
+    await this.repository.deleteTotp(tx, userId);
+    await this.repository.deleteTrustedDevices(tx, userId);
+    await this.repository.revokeAllSessions(tx, userId, now, 'totp_reset');
+    await this.audit.append(tx, {
+      action: 'panel.totp_reset',
+      actor,
+      targetUserId: userId,
+      reason,
+    });
+    return true;
   }
 
   /**
@@ -227,7 +294,11 @@ export class PanelMembersService {
   }
 }
 
-function toPanelMember(doc: PanelMemberDoc, emails: Map<string, string>): PanelMember {
+function toPanelMember(
+  doc: PanelMemberDoc,
+  emails: Map<string, string>,
+  totpEnabled: Set<string>,
+): PanelMember {
   return {
     userId: doc._id,
     displayName: doc.displayName,
@@ -236,5 +307,6 @@ function toPanelMember(doc: PanelMemberDoc, emails: Map<string, string>): PanelM
     status: doc.status,
     grantedAt: doc.grantedAt.toISOString(),
     revokedAt: doc.revokedAt?.toISOString() ?? null,
+    totpEnabled: totpEnabled.has(doc._id),
   };
 }

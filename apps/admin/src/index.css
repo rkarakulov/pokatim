@@ -1352,3 +1352,74 @@ select.field__control option:disabled {
   padding: 0 var(--space-s2);
   border: var(--stroke-hairline) solid currentColor;
 }
+
+/* ---------- 2FA панели (panel-2fa, ADR-0024) ---------- */
+.checkbox {
+  display: flex;
+  gap: var(--space-s2);
+  align-items: center;
+  margin-top: var(--space-s3);
+  cursor: pointer;
+}
+
+.totp__switch {
+  margin-top: var(--space-s2);
+}
+
+.qr-code {
+  display: block;
+  width: var(--panel-qr-size);
+  height: var(--panel-qr-size);
+  margin: var(--space-s3) 0;
+}
+
+.qr-code__background {
+  fill: var(--color-surface-default);
+}
+
+.qr-code__modules {
+  fill: var(--color-text-primary);
+}
+
+.totp-enroll__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s3);
+  margin: 0 0 var(--space-s4);
+  padding-left: var(--space-s4);
+}
+
+.totp-enroll__secret {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-s2);
+  align-items: center;
+  margin-top: var(--space-s2);
+  font-variant-numeric: tabular-nums;
+}
+
+.recovery-codes__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-s1) var(--space-s4);
+  margin: var(--space-s3) 0;
+  padding-left: var(--space-s4);
+  font-variant-numeric: tabular-nums;
+}
+
+.recovery-codes__tools,
+.security__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-s2);
+  margin-top: var(--space-s3);
+}
+
+.security__enroll {
+  max-width: var(--panel-form-width);
+}
+
+.sidebar__me .sidebar__account {
+  width: fit-content;
+  color: var(--nav-text);
+}

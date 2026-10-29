@@ -16,7 +16,7 @@ export const PANEL_SESSION_COOKIE = {
 } as const;
 
 /**
- * Cookie доверенного устройства панели (2FA, ADR-0023): «запомнить на 30 дней» пропускает только шаг кода. Путь —
+ * Cookie доверенного устройства панели (2FA, ADR-0024): «запомнить на 30 дней» пропускает только шаг кода. Путь —
  * только сессия панели (вход), `HttpOnly; Secure; SameSite=Strict`, без `Domain`.
  */
 export const PANEL_DEVICE_COOKIE = {

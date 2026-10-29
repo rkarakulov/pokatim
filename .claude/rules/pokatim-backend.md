@@ -110,6 +110,11 @@ paths:
   `@RequirePermission(...)` + `@CurrentPanelUser()`; чувствительное действие пишет `PanelAudit.append(tx, …)` в
   транзакции действия. Всё — из `modules/panel/index.ts`; новое право — в конец `PERMISSIONS` контракта и в
   `ROLE_PERMISSIONS`.
+- 2FA панели (ADR-0024): всё — модуль `panel` (`totp.ts`, `recovery-codes.ts`, `totp-secret-box.ts` — чистые
+  функции и ключ; `PanelTotpCodes` — лимиты и проверка кода; `PanelSessionService` — вызов второго шага;
+  `PanelAccountTotpController` `admin/account/totp` — `PanelGuard` без `@RequirePermission`, свой аккаунт любой роли;
+  сброс — `PanelMembersService.resetTotp`/`resetTotpFromCli`). Новые `@Public()` — только шаги входа с вызовом
+  (`admin-routes.test.ts` перечисляет их явно).
 - Код, нужный ≥2 приложениям (разбор трека для pre-check в приложении и на сервере), — в `packages/tracks`
   (`@pokatim/tracks`): парсинг GPX/TCX/FIT/KML и геометрия; дубли разбора в модулях запрещены.
 

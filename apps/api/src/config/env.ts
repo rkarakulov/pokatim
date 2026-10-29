@@ -107,12 +107,14 @@ const tracksDevicesEnvShape = {
 };
 
 /**
- * 2FA панели «Протокол» (TOTP, ADR-0023): ключ AES-256-GCM секретов TOTP и HMAC кодов восстановления — 32 байта hex
+ * 2FA панели «Протокол» (TOTP, ADR-0024): ключ AES-256-GCM секретов TOTP и HMAC кодов восстановления — 32 байта hex
  * (dev — `@secret` шаблона деплоя), только env. Без ключа подключение и вход сотрудника с 2FA — `503 TOTP_UNAVAILABLE`.
  * `PANEL_TOTP_ENFORCED` — 2FA обязательна для admin (без ключа — отказ запуска).
  */
 const panelTotpEnvShape = {
-  PANEL_TOTP_KEY: optional(z.string().regex(/^[0-9a-fA-F]{64}$/, 'PANEL_TOTP_KEY: hex 64 (32 байта)')),
+  PANEL_TOTP_KEY: optional(
+    z.string().regex(/^[0-9a-fA-F]{64}$/, 'PANEL_TOTP_KEY: hex 64 (32 байта)'),
+  ),
   PANEL_TOTP_ENFORCED: flag(false),
 };
 

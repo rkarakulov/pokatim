@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { apiErrorOf, isNetworkError } from '@pokatim/api-client';
 import {
+  type PanelMe,
   PanelSignInRequest,
   type PanelSignInResponse,
   RateLimitedDetails,
@@ -17,6 +18,7 @@ import { fieldErrorText } from '../../field-errors';
 import { ME_QUERY_KEY } from '../../session/me';
 import { AuthCard, Banner, Button, TextField } from '../../ui';
 import { useNow } from '../../use-now';
+import { TotpSetupStep, TotpStep } from './TotpSignInSteps';
 
 const route = getRouteApi('/sign-in');
 
@@ -25,9 +27,10 @@ type Pending = Extract<PanelSignInResponse, { state: 'verificationRequired' }>;
 type View =
   | { kind: 'form' }
   | { kind: 'denied'; email: string }
-  | { kind: 'unverified'; email: string; registrationToken: string; resendAt: number };
+  | { kind: 'unverified'; email: string; registrationToken: string; resendAt: number }
+  | { kind: 'totp' | 'totpSetup'; email: string; challenge: string };
 
-type FormBanner = 'invalid' | 'network' | 'unknown' | undefined;
+type FormBanner = 'invalid' | 'network' | 'unknown' | 'totpExpired' | 'totpUnavailable' | undefined;
 
 /** Путь внутри панели → публичный путь с basepath (навигация по `href` снимает basepath сама). */
 function publicHref(basepath: string, path: string): string {
@@ -56,6 +59,14 @@ export function SignInScreen() {
   });
   const password = useWatch({ control: form.control, name: 'password' });
 
+  /** Вход завершён (сразу или после второго шага): `me` — в кэш, переход на исходную страницу. */
+  const finish = async (me: PanelMe) => {
+    queryClient.setQueryData(ME_QUERY_KEY, me);
+    const next = search.next;
+    if (next) await router.navigate({ href: publicHref(router.basepath, next) });
+    else await router.navigate({ to: '/' });
+  };
+
   const signIn = useMutation({
     mutationFn: (body: PanelSignInRequest) => api.signIn(body),
     meta: { ownsUnauthorized: true },
@@ -64,10 +75,15 @@ export function SignInScreen() {
         setView(unverifiedView(result, body.email, syncNow()));
         return;
       }
-      queryClient.setQueryData(ME_QUERY_KEY, result.me);
-      const next = search.next;
-      if (next) await router.navigate({ href: publicHref(router.basepath, next) });
-      else await router.navigate({ to: '/' });
+      if (result.state === 'totpRequired' || result.state === 'totpSetupRequired') {
+        setView({
+          kind: result.state === 'totpRequired' ? 'totp' : 'totpSetup',
+          email: body.email.trim(),
+          challenge: result.challenge,
+        });
+        return;
+      }
+      await finish(result.me);
     },
     onError: (error, body) => {
       const code = apiErrorOf(error)?.code;
@@ -80,6 +96,8 @@ export function SignInScreen() {
         setBanner(undefined);
       } else if (code === 'INVALID_CREDENTIALS') {
         setBanner('invalid');
+      } else if (code === 'TOTP_UNAVAILABLE') {
+        setBanner('totpUnavailable');
       } else {
         setBanner(isNetworkError(error) ? 'network' : 'unknown');
       }
@@ -95,6 +113,24 @@ export function SignInScreen() {
     form.reset({ email: view.kind === 'form' ? '' : view.email, password: '' });
     setView({ kind: 'form' });
   };
+
+  if (view.kind === 'totp' || view.kind === 'totpSetup') {
+    const Step = view.kind === 'totp' ? TotpStep : TotpSetupStep;
+    return (
+      <Step
+        challenge={view.challenge}
+        onSignedIn={finish}
+        onExpired={() => {
+          backToForm();
+          setBanner('totpExpired');
+        }}
+        onBack={() => {
+          backToForm();
+          setBanner(undefined);
+        }}
+      />
+    );
+  }
 
   if (view.kind === 'denied') {
     return (
@@ -140,6 +176,14 @@ export function SignInScreen() {
         </Banner>
       ) : banner === 'invalid' ? (
         <Banner tone="error" role="alert" title={t('admin.signIn.invalid')} />
+      ) : banner === 'totpUnavailable' ? (
+        <Banner tone="error" role="alert">
+          {t('admin.totp.error.TOTP_UNAVAILABLE')}
+        </Banner>
+      ) : banner === 'totpExpired' ? (
+        <Banner tone="warning" role="alert" title={t('admin.totp.expiredTitle')}>
+          {t('admin.totp.expiredMessage')}
+        </Banner>
       ) : banner ? (
         <Banner tone="error" role="alert">
           {t(banner === 'network' ? 'error.network' : 'error.unknown')}

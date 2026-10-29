@@ -90,7 +90,13 @@ describe('POST /v1/admin/session/sign-in (AC2)', () => {
     expect(PanelSignInResponse.parse(res.body)).toEqual({
       state: 'signedIn',
       me: {
-        user: { id: userId, displayName: 'Сотрудник admin', email: ADMIN, role: 'admin' },
+        user: {
+          id: userId,
+          displayName: 'Сотрудник admin',
+          email: ADMIN,
+          role: 'admin',
+          totp: { enabled: false, required: false },
+        },
         // admin — все права контракта (admin-02 добавил races.*, seasons.manage, calendar.manage)
         permissions: [
           'members.read',
@@ -134,6 +140,7 @@ describe('POST /v1/admin/session/sign-in (AC2)', () => {
         revokedAt: null,
         idleExpiresAt: new Date(h.clock.now().getTime() + 2 * HOUR),
         expiresAt: new Date(h.clock.now().getTime() + 12 * HOUR),
+        secondFactor: null,
       }),
     ]);
     expect(await collections(h).sessions.countDocuments()).toBe(0);

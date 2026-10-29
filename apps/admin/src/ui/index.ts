@@ -17,6 +17,7 @@ export { SelectField, TextAreaField, TextField } from './fields';
 export { DisabledReason, ReadonlyField, SplitLayout } from './layout-parts';
 export { LinePreview, projectLine } from './LinePreview';
 export { PageHeader } from './PageHeader';
+export { QrCode } from './QrCode';
 export { RadioGroup, type RadioGroupProps } from './RadioGroup';
 export { ReasonDialog, type ReasonDialogProps } from './ReasonDialog';
 export { EmptyState, ErrorState } from './states';

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createHarness, type Harness } from '../../test/harness';
 import { activeLinkToken, confirm, register, userIdByEmail } from '../../test/identity';
 import { panelCollections } from '../modules/panel/panel.collection';
+import { seedMember, seedTotp } from '../../test/panel';
 import { runPanelCli } from './panel-cli';
 
 /** CLI `grant-admin` на тестовой БД (AC1): тот же код, что `node dist/cli/panel.js`, с явным окружением. */
@@ -118,5 +119,55 @@ describe('CLI grant-admin (AC1)', () => {
     expect((await cli('grant-admin', '--email', EMAIL)).code).toBe(2);
     expect((await cli('grant-admin', '--email', EMAIL, '--name', 'О', '--role', 'x')).code).toBe(2);
     expect((await cli('grant-admin', '--email', 'not-an-email', '--name', 'О')).code).toBe(2);
+  });
+});
+
+describe('CLI reset-totp (ADR-0024, D10)', () => {
+  it('сбрасывает 2FA: документ, устройства, сессии (totp_reset), журнал от cli; вывод — id без e-mail', async () => {
+    await register(h, { email: EMAIL });
+    await confirm(h, await activeLinkToken(h, EMAIL));
+    const userId = await userIdByEmail(h, EMAIL);
+    await seedMember(h, userId, 'admin');
+    await seedTotp(h, userId);
+    await panel().sessions.insertOne({
+      _id: 'session-1',
+      userId,
+      tokenHash: 'hash',
+      credentialsStamp: 'stamp',
+      createdAt: h.clock.now(),
+      lastSeenAt: h.clock.now(),
+      idleExpiresAt: h.clock.now(),
+      expiresAt: h.clock.now(),
+      revokedAt: null,
+      revokedReason: null,
+    });
+
+    const result = await cli('reset-totp', '--email', EMAIL);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain(userId);
+    expect(result.stdout + result.stderr).not.toContain('olga@');
+    expect(await panel().totp.countDocuments()).toBe(0);
+    expect(await panel().sessions.findOne({ _id: 'session-1' })).toMatchObject({
+      revokedReason: 'totp_reset',
+    });
+    expect(await panel().audit.find().toArray()).toEqual([
+      expect.objectContaining({
+        action: 'panel.totp_reset',
+        actor: { kind: 'cli' },
+        targetUserId: userId,
+      }),
+    ]);
+
+    const again = await cli('reset-totp', '--email', EMAIL);
+    expect(again.code).toBe(0);
+    expect(again.stdout).toContain('не подключена');
+    expect(await panel().audit.countDocuments()).toBe(1);
+  });
+
+  it('неизвестный адрес — код 2; без --email или с --name — код 2', async () => {
+    expect((await cli('reset-totp', '--email', EMAIL)).code).toBe(2);
+    expect((await cli('reset-totp')).code).toBe(2);
+    expect((await cli('reset-totp', '--email', EMAIL, '--name', 'X')).code).toBe(2);
   });
 });

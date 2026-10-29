@@ -17,6 +17,7 @@ vi.mock('../../api', () => ({
     grantRole: vi.fn(),
     changeRole: vi.fn(),
     revokeRole: vi.fn(),
+    resetMemberTotp: vi.fn(),
     listAudit: vi.fn(),
   },
 }));
@@ -33,6 +34,7 @@ const member = (overrides: Partial<PanelMember>): PanelMember => ({
   status: 'active',
   grantedAt: '2026-10-25T10:00:00.000Z',
   revokedAt: null,
+  totpEnabled: false,
   ...overrides,
 });
 
@@ -218,5 +220,48 @@ describe('«Сотрудники» (AC11)', () => {
     mocked.listMembers.mockResolvedValue({ items: [], truncated: false });
     await renderApp('/members');
     expect(await screen.findByText('Сотрудников пока нет')).toBeTruthy();
+  });
+});
+
+describe('«Сотрудники» — 2FA (ADR-0024, D10)', () => {
+  it('колонка «2FA»; «Сбросить 2FA» — только у подключённой и не у себя; причина обязательна, ошибка — в окне', async () => {
+    mocked.listMembers.mockResolvedValue({
+      items: [
+        member({
+          userId: USER_ID,
+          displayName: 'Ольга',
+          email: 'olga@example.by',
+          role: 'admin',
+          totpEnabled: true,
+        }),
+        member({ totpEnabled: true }),
+        member({ userId: IVAN, displayName: 'Иван', email: 'ivan@example.by' }),
+      ],
+      truncated: false,
+    });
+    await renderApp('/members');
+    await screen.findByText('maria@example.by');
+    expect(screen.getByRole('columnheader', { name: '2FA' })).toBeTruthy();
+    expect(within(rowOf('Мария')).getByText('Подключена')).toBeTruthy();
+    expect(within(rowOf('Иван')).getByText('Нет')).toBeTruthy();
+    expect(within(rowOf('Ольга')).queryByRole('button')).toBeNull();
+    expect(within(rowOf('Иван')).queryByRole('button', { name: /Сбросить 2FA/ })).toBeNull();
+
+    mocked.resetMemberTotp.mockRejectedValueOnce(httpError(409, 'TOTP_NOT_ENABLED'));
+    fireEvent.click(screen.getByRole('button', { name: 'Сбросить 2FA: Мария' }));
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByRole('heading', { name: 'Сбросить 2FA: Мария' })).toBeTruthy();
+    const confirm = dialog.getByRole('button', { name: 'Сбросить 2FA' });
+    expect(confirm).toHaveProperty('disabled', true);
+    fireEvent.change(dialog.getByLabelText('Причина (обязательно)'), {
+      target: { value: 'потерян телефон' },
+    });
+    fireEvent.click(confirm);
+    expect(await dialog.findByText('У сотрудника 2FA уже не подключена.')).toBeTruthy();
+
+    mocked.resetMemberTotp.mockResolvedValueOnce(undefined);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(mocked.resetMemberTotp).toHaveBeenLastCalledWith(MARIA, { reason: 'потерян телефон' });
   });
 });

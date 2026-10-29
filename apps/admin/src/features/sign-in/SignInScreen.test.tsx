@@ -13,6 +13,9 @@ vi.mock('../../api', () => ({
     health: vi.fn(),
     overview: vi.fn(),
     resendVerification: vi.fn(),
+    signInTotp: vi.fn(),
+    signInTotpSetup: vi.fn(),
+    signInTotpSetupConfirm: vi.fn(),
   },
 }));
 
@@ -215,4 +218,152 @@ describe('возврат после входа (AC9)', () => {
       expect(currentHref(router)).toBe('/admin/');
     },
   );
+});
+
+describe('второй шаг входа — 2FA (ADR-0024)', () => {
+  const CHALLENGE = 'c'.repeat(43);
+  const codeField = () => screen.getByLabelText('Код из приложения');
+  const verify = () => screen.getByRole('button', { name: 'Подтвердить' });
+
+  async function toTotpStep() {
+    mocked.signIn.mockResolvedValue({
+      state: 'totpRequired',
+      challenge: CHALLENGE,
+      expiresInSec: 300,
+    });
+    const app = await renderApp('/sign-in');
+    await signInAs();
+    expect(await screen.findByRole('heading', { name: 'Подтверждение входа' })).toBeTruthy();
+    return app;
+  }
+
+  it('код: поле one-time-code с фокусом, пробелы убираются, «запомнить» — в запросе; успех — «Обзор»', async () => {
+    const { router } = await toTotpStep();
+    const field = codeField();
+    expect(field.getAttribute('autocomplete')).toBe('one-time-code');
+    expect(field.getAttribute('inputmode')).toBe('numeric');
+    expect(document.activeElement).toBe(field);
+
+    mocked.signInTotp.mockResolvedValue({ state: 'signedIn', me: ME.admin });
+    mocked.me.mockResolvedValue(ME.admin);
+    fireEvent.change(field, { target: { value: '123 456' } });
+    fireEvent.click(screen.getByLabelText('Запомнить это устройство на 30 дней'));
+    fireEvent.click(verify());
+
+    expect(await screen.findByRole('heading', { name: 'Обзор' })).toBeTruthy();
+    expect(mocked.signInTotp).toHaveBeenCalledWith({
+      challenge: CHALLENGE,
+      code: '123456',
+      rememberDevice: true,
+    });
+    expect(currentHref(router)).toBe('/admin/');
+  });
+
+  it('не 6 цифр — ошибка под полем без запроса; неверный код — сообщение в alert, шаг остаётся', async () => {
+    await toTotpStep();
+    fireEvent.change(codeField(), { target: { value: '12345' } });
+    fireEvent.click(verify());
+    expect(await screen.findByText('Введите 6 цифр')).toBeTruthy();
+    expect(mocked.signInTotp).not.toHaveBeenCalled();
+
+    mocked.signInTotp.mockRejectedValue(httpError(400, 'TOTP_INVALID_CODE'));
+    fireEvent.change(codeField(), { target: { value: '000000' } });
+    fireEvent.click(verify());
+    const alert = await screen.findByText('Неверный код. Проверьте код и попробуйте ещё раз.');
+    expect(alert.closest('[role="alert"]')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Подтверждение входа' })).toBeTruthy();
+  });
+
+  it('код восстановления: переключатель, поле и запрос recoveryCode', async () => {
+    await toTotpStep();
+    fireEvent.click(screen.getByRole('button', { name: 'Использовать код восстановления' }));
+    const field = screen.getByLabelText('Код восстановления');
+    expect(document.activeElement).toBe(field);
+    mocked.signInTotp.mockResolvedValue({ state: 'signedIn', me: ME.admin });
+    mocked.me.mockResolvedValue(ME.admin);
+    fireEvent.change(field, { target: { value: ' ABCDE-FGH23 ' } });
+    fireEvent.click(verify());
+    expect(await screen.findByRole('heading', { name: 'Обзор' })).toBeTruthy();
+    expect(mocked.signInTotp).toHaveBeenCalledWith({
+      challenge: CHALLENGE,
+      recoveryCode: 'ABCDE-FGH23',
+      rememberDevice: false,
+    });
+  });
+
+  it('вызов истёк — обратно к паролю с сообщением, e-mail сохранён; «Назад» — к паролю', async () => {
+    await toTotpStep();
+    mocked.signInTotp.mockRejectedValue(httpError(401, 'TOTP_CHALLENGE_EXPIRED'));
+    fireEvent.change(codeField(), { target: { value: '123456' } });
+    fireEvent.click(verify());
+    expect(await screen.findByText('Время на ввод кода истекло')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Вход в панель' })).toBeTruthy();
+    expect(email()).toHaveProperty('value', 'olga@example.by');
+    expect(password()).toHaveProperty('value', '');
+
+    await signInAs();
+    await screen.findByRole('heading', { name: 'Подтверждение входа' });
+    fireEvent.click(screen.getByRole('button', { name: 'Назад' }));
+    expect(await screen.findByRole('heading', { name: 'Вход в панель' })).toBeTruthy();
+  });
+
+  it('нет ключа на сервере — баннер TOTP_UNAVAILABLE на форме пароля', async () => {
+    mocked.signIn.mockRejectedValue(httpError(503, 'TOTP_UNAVAILABLE'));
+    await renderApp('/sign-in');
+    await signInAs();
+    expect(
+      await screen.findByText(
+        'Двухфакторная защита временно недоступна. Обратитесь к администратору платформы.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('подключение на входе: вступление → QR и ключ → код → коды восстановления → «Я сохранил» → «Обзор»', async () => {
+    mocked.signIn.mockResolvedValue({
+      state: 'totpSetupRequired',
+      challenge: CHALLENGE,
+      expiresInSec: 300,
+    });
+    const setup = {
+      secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+      otpauthUri: 'otpauth://totp/x:olga%40example.by?secret=JBSWY3DPEHPK3PXP',
+    };
+    mocked.signInTotpSetup.mockResolvedValue(setup);
+    const codes = Array.from({ length: 10 }, (_, i) => `abcde-fgh${(i % 6) + 2}${(i % 5) + 2}`);
+    mocked.signInTotpSetupConfirm.mockResolvedValue({
+      state: 'signedIn',
+      me: ME.admin,
+      recoveryCodes: codes,
+    });
+    mocked.me.mockResolvedValue(ME.admin);
+    await renderApp('/sign-in');
+    await signInAs();
+
+    expect(
+      await screen.findByRole('heading', { name: 'Подключите двухфакторную защиту' }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Подключить' }));
+
+    const qr = await screen.findByRole('img', { name: 'QR-код для приложения-аутентификатора' });
+    expect(qr.tagName.toLowerCase()).toBe('svg');
+    expect(qr.querySelector('path')?.getAttribute('d')).toMatch(/^M\d+ \d+h1v1h-1z/);
+    expect(screen.getByText('JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP')).toBeTruthy();
+    expect(mocked.signInTotpSetup).toHaveBeenCalledWith(CHALLENGE);
+
+    fireEvent.change(codeField(), { target: { value: '654321' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Подключить' }));
+    expect(await screen.findByRole('heading', { name: 'Коды восстановления' })).toBeTruthy();
+    expect(mocked.signInTotpSetupConfirm).toHaveBeenCalledWith({
+      challenge: CHALLENGE,
+      code: '654321',
+      rememberDevice: false,
+    });
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual(codes);
+
+    const proceed = screen.getByRole('button', { name: 'Продолжить' });
+    expect(proceed).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByLabelText('Я сохранил коды'));
+    fireEvent.click(proceed);
+    expect(await screen.findByRole('heading', { name: 'Обзор' })).toBeTruthy();
+  });
 });

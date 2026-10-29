@@ -5,7 +5,7 @@ import { OpaqueToken } from '../auth/verification.schema.ts';
 import { ActionReason } from './members.schema.ts';
 
 /**
- * 2FA панели «Протокол» (TOTP, RFC 6238; ADR-0023): шаг кода после пароля, подключение, коды восстановления, сброс.
+ * 2FA панели «Протокол» (TOTP, RFC 6238; ADR-0024): шаг кода после пароля, подключение, коды восстановления, сброс.
  * Параметры приложения-аутентификатора — SHA-1, 6 цифр, 30 с (по умолчанию у всех приложений).
  */
 export const TOTP_DIGITS = 6;

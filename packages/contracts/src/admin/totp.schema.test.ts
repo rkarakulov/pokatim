@@ -28,7 +28,13 @@ describe('TotpCode и RecoveryCode', () => {
       expect(RecoveryCode.safeParse(ok).success, ok).toBe(true);
     }
     // 0 1 8 9 — не base32; длина; лишние дефисы
-    for (const bad of ['abcde-fgh10', 'abcde-fgh89', 'abcd-efgh2', 'abcde--fgh27', 'abcde-fgh277']) {
+    for (const bad of [
+      'abcde-fgh10',
+      'abcde-fgh89',
+      'abcd-efgh2',
+      'abcde--fgh27',
+      'abcde-fgh277',
+    ]) {
       expect(RecoveryCode.safeParse(bad).success, bad).toBe(false);
     }
   });
@@ -45,7 +51,8 @@ describe('TotpSignInRequest (sign-in/totp)', () => {
       TotpSignInRequest.parse({ challenge, recoveryCode: 'abcde-fgh27', rememberDevice: true }),
     ).toEqual({ challenge, recoveryCode: 'abcde-fgh27', rememberDevice: true });
     expect(
-      TotpSignInRequest.safeParse({ challenge, code: '123456', recoveryCode: 'abcde-fgh27' }).success,
+      TotpSignInRequest.safeParse({ challenge, code: '123456', recoveryCode: 'abcde-fgh27' })
+        .success,
     ).toBe(false);
     expect(TotpSignInRequest.safeParse({ challenge }).success).toBe(false);
   });
@@ -74,7 +81,10 @@ describe('подключение и настройки', () => {
   });
 
   it('TotpSetup — base32 и otpauth', () => {
-    const setup = { secret: 'JBSWY3DPEHPK3PXP', otpauthUri: 'otpauth://totp/x?secret=JBSWY3DPEHPK3PXP' };
+    const setup = {
+      secret: 'JBSWY3DPEHPK3PXP',
+      otpauthUri: 'otpauth://totp/x?secret=JBSWY3DPEHPK3PXP',
+    };
     expect(TotpSetup.parse(setup)).toEqual(setup);
     expect(TotpSetup.safeParse({ ...setup, secret: 'jbswy3dp' }).success).toBe(false);
     expect(TotpSetup.safeParse({ ...setup, otpauthUri: 'https://x' }).success).toBe(false);
@@ -101,7 +111,12 @@ describe('подключение и настройки', () => {
   });
 
   it('статус', () => {
-    const status = { enabled: true, enabledAt: '2026-10-29T10:00:00.000Z', required: true, recoveryCodesLeft: 9 };
+    const status = {
+      enabled: true,
+      enabledAt: '2026-10-29T10:00:00.000Z',
+      required: true,
+      recoveryCodesLeft: 9,
+    };
     expect(TotpStatus.parse(status)).toEqual(status);
     expect(TotpStatus.safeParse({ ...status, recoveryCodesLeft: -1 }).success).toBe(false);
   });
