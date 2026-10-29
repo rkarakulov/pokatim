@@ -318,6 +318,29 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   Экран `riders/report/[id]` (`rider-report.tsx`, образец — жалоба на маршрут) — внутри `Stack.Protected`, без имени,
   клуба и фото; ответ жалобы — в кеш зрителя.
 
+## Достижения (achievements, `docs/product/profile.md` A1–A8, ADR-0020)
+
+- Всё — `features/achievements/`. Ключи: свои — `['achievements']` (`useAchievements`, `withAccessToken`, `staleTime`
+  60 с; сервер сверяет выдачи на каждом GET — чаще не запрашивать), публичные — `['riders','achievements',id]`
+  (`useRiderAchievements`, только клиент — RC-5, только после найденного профиля; 404 — блока нет).
+- Каталог — `achievement-catalog.ts` (`ACHIEVEMENT_CATALOG satisfies Record<AchievementCode, …>`: ключи i18n, иконка,
+  число на значке, `shareable` — только `race_*`). Незнакомый код (`'unknown'`, RC-8) — `knownItems` отбрасывает
+  везде (список, вспышка, публичный блок); незнакомый вид объекта — без «Поделиться» (`shareRaceId`). Дата — только
+  `factDate` (день по Минску, RC-7), всегда с годом (`factDateText`).
+- Вспышка: хост `AchievementFlashHost` рядом со `Stack` корневого layout с тем же `ready`, что у push; маршрут
+  `achievements/flash` (`presentation: 'fullScreenModal'`) и `achievements/[code]` — внутри `Stack.Protected`
+  вкладок. Очередь — `flashQueue` (неувиденные, от старых к новым) минус показанные в этом запуске
+  (`flash-session.ts`: сбой `seen` откатывает кэш, но не зацикливает вспышку); снимок — при открытии экрана.
+  Показанное помечается сразу (`useMarkAchievementsSeen`, оптимистично, откат — только своих кодов). Поверх
+  `/achievements`, `/races/story/`, ссылок писем, `devices/return`, удаления аккаунта — не открывается. Ошибка запроса
+  хоста — тишина. «Поделиться» — `replace(storyPath(raceId))`.
+- Значок «Эмаль» — `achievement-badge.tsx` (роли `surface.default`, `text.primary`, `text.accent`, `action.*`;
+  размеры `BADGE_SIZE` — до `size.badge*` в базе). Появление на вспышке — `Animated` только при
+  `useReducedMotion() === false`.
+- Блок `AchievementsBlock` — `/profile` (все, нажатие → `/achievements/<code>`) и `/riders/[id]` (без перехода): пусто
+  без ошибки — блока нет; ошибка — `TabFailure` блока, экран не ломается; pull-to-refresh экранов перезапрашивает
+  блок.
+
 ## Маршруты (routes-01, `docs/product/routes.md`)
 
 - Вкладка «Маршруты» — `features/routes/route-feed.tsx` (`FlatList`): ключ `['routes','list',{ city, distance,

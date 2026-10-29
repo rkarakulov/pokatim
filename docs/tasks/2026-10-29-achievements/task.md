@@ -399,6 +399,24 @@ consistency, не влияет на `seen`).
 - **D6 — `pokatim-security.md`:** в `paths:` добавлен `apps/api/src/modules/achievements/**` (иначе правило зоны не
   подгружается для нового модуля).
 
+## 8.2 Отклонения при реализации (coder, PR B)
+
+- **B1 — `seen` при показе, а не по кнопке.** Вспышка шлёт `POST seen [code]` сразу при показе элемента (11 «PR B»:
+  «Дальше»/«Закрыть»/«Поделиться» → `seen`). Исход для кнопок тот же, а закрытие жестом «назад» (Android, свайп
+  модалки) тоже помечает показанное — по A5 «просмотренными помечаются показанные». «Закрыть» — только на последнем
+  элементе, на остальных — «Дальше» (AC10).
+- **B2 — показанные в этом запуске (`flash-session.ts`).** Сбой `seen` откатывает `seen: false` в кэше; без набора
+  показанных хост сразу открыл бы вспышку снова. Набор — память процесса, сброс при выходе; после перезапуска
+  непомеченное сервером вспыхнет ещё раз (at-least-once).
+- **B3 — иконки.** В наборе приложения (`components/icon.tsx`) не было подходящих для «Подиума» и «Победы» — добавлены
+  `medal` (SF `medal` / Material `military_tech`) и `trophy` (SF `trophy` / Material `emoji_events`); остальные коды —
+  существующие `races`, `routes`, `rides`, `person`. Счётные (`races_5`, `routes_5`, `rides_10`) — число на кольце.
+- **B4 — размер значка без токена.** `BADGE_SIZE` (`grid` 72, `hero` 152) — константа фичи; follow-up — `size.badge*`
+  в app-foundation (`@rkarakulov/design-tokens`). Значок — роли `surface.default`, `text.primary`, `text.accent`,
+  `action.*`, скругление `radius.pill`; дуговой подписи прототипа нет (в RN без SVG-текста) — follow-up при
+  необходимости.
+- **B5 — публичный блок при ошибке** — компактный баннер с повтором (`TabFailure`), как у своего; 404 — блока нет.
+
 ## 8.3 Security checklist
 
 Затронуты зоны `security.md`: персональные данные, публичные ссылки, удаление аккаунта, `app.module.ts`,
@@ -621,3 +639,50 @@ exit=0
 
 Первый прогон `pnpm check` упал на lint (неиспользуемая переменная в тесте контракта) — исправлено отдельным коммитом,
 повторный прогон выше — зелёный. Независимое ревью — не проводилось (шаг оркестратора).
+
+### PR B — приложение (coder, 2026-10-29)
+
+Сделано по A5–A8, 3 «PR B», 11 «PR B», RC-5, RC-7, RC-8; отклонения — 8.2 (B1–B5). `apps/api` не менялся.
+
+- Фича `apps/app/src/features/achievements/`: `achievement-catalog.ts` (каталог 9 кодов, `knownItems`, `flashQueue`,
+  `shareRaceId`, подписи), `queries.ts` (`['achievements']`, оптимистичный `seen` с откатом своих кодов,
+  `['riders','achievements',id]`), `flash-session.ts`, `achievement-badge.tsx` («Эмаль»), `achievement-card.tsx`
+  (общий макет, появление значка только без «Уменьшить движение»), `achievements-block.tsx`,
+  `achievement-flash-host.tsx`, `achievement-flash-screen.tsx`, `achievement-screen.tsx`.
+- Маршруты `achievements/flash` (`fullScreenModal`) и `achievements/[code]` в `Stack.Protected` вкладок; хост — рядом с
+  `PushNotifications` корневого layout; блок — в `/profile` (вместо комментария rider-profile) и `/riders/[id]` (только
+  клиент, после найденного профиля); pull-to-refresh обоих экранов перезапрашивает блок.
+- Иконки `medal`, `trophy` в `components/icon.tsx`; тексты `achievements.*` в `packages/i18n/src/ru.ts` (en-словаря нет).
+- Правило `.claude/rules/pokatim-app.md` — раздел «Достижения»; смоук `e2e/web.spec.ts` — оба адреса без сессии;
+  сторож порядка SSR-маршрутов — `/achievements/flash` и `/achievements/<code>`.
+
+Тесты: unit `achievement-catalog.test.ts` (`knownItems`, `flashQueue` с порядком и показанными, `shareRaceId`, подписи);
+`__tests__/achievement-flash.test.tsx` — хост (новое → вспышка; «Закрыть» → `seen`, не повторяется; всё просмотрено,
+`unknown`, ошибка запроса, `ready: false`, экран сторис — без вспышки; сбой `seen` — без повтора), экран вспышки
+(«Дальше» от старых к новым, затем «Закрыть»; «Поделиться» → `/races/story/<raceId>`; незнакомый вид — без кнопки;
+reduce motion — без `Animated.timing`; движение — одно появление; прямой адрес без новых — Главная), экран
+`/achievements/[code]`; `__tests__/achievements-blocks.test.tsx` — блоки профиля и публичного профиля (порядок,
+`unknown`, нажатие, пусто — нет блока, ошибка — баннер, профиль на месте, 404, профиль не найден — без запроса).
+Отрицательная проверка: хост без набора показанных — тест «сбой `seen`» краснеет.
+
+Гейт (Node 24.22.1, свой Mongo `pokatim_achv_app_test` на rs0:27117, свой Redis `:6493/1`, `TURBO_CONCURRENCY=1`):
+
+```
+$ pnpm check   # format:check + lint + arch:check + typecheck + test
+All matched files use Prettier code style!
+✔ no dependency violations found (1845 modules, 6940 dependencies cruised)
+ Tasks:    9 successful, 9 total            # typecheck
+@pokatim/contracts:test:   Test Files  43 passed (43)     Tests  370 passed (370)
+@pokatim/api-client:test:  Test Files  20 passed (20)     Tests  136 passed (136)
+@pokatim/api:test:         Test Files  163 passed (163)   Tests  1760 passed (1760)
+@pokatim/admin:test:       Test Files  40 passed (40)     Tests  381 passed (381)
+@pokatim/app:test:         Test Suites: 214 passed        Tests: 1998 passed
+ Tasks:    15 successful, 15 total
+pnpm check  12:29.06 total
+exit=0
+```
+
+Первый прогон упал на typecheck (тип `_layout` в тесте вспышки) — исправлено, повторный выше — зелёный.
+
+NOT VERIFIED: ручная проверка на iOS/Android-симуляторе и в браузере (`build:web` + `start:web`, `e2e:web` — шаг смоука
+добавлен, не запускался); вид значка «Эмаль» в темах приложения глазами не сверялся.
