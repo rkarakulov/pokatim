@@ -2,7 +2,7 @@ import type { BikeClass } from '@pokatim/contracts';
 
 /**
  * Порт `races` для модуля `sharing` (OG-картинка гонки, og-images, через `modules/races/index.ts`): публичные факты
- * опубликованной гонки и гонки, изменившиеся после курсора (пререндер `og.sync`). `sharing` коллекций `races` не
+ * опубликованной гонки и гонки, изменившиеся после курсора (пререндер `og.sync`, карта сайта), и сезоны (карта сайта). `sharing` коллекций `races` не
  * читает; линию гонки берёт сам через `ROUTE_GEOMETRY` (`routes`).
  */
 export const RACES_FOR_SHARING = Symbol('RACES_FOR_SHARING');
@@ -27,4 +27,6 @@ export interface RacesForSharing {
     after: { at: Date; id: string } | null,
     limit: number,
   ): Promise<{ id: string; updatedAt: Date }[]>;
+  /** Все сезоны (публичны, их десятки) — карта сайта (landing-seo). */
+  sitemapSeasons(): Promise<{ id: string; updatedAt: Date }[]>;
 }

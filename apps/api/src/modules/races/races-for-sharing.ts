@@ -26,4 +26,11 @@ export class RacesForSharingService implements RacesForSharing {
   ogChanged(after: ChangedCursor | null, limit: number): Promise<ChangedRow[]> {
     return this.repository.changedForOg(after, limit);
   }
+
+  async sitemapSeasons(): Promise<ChangedRow[]> {
+    return (await this.repository.listSeasons()).map((season) => ({
+      id: season._id,
+      updatedAt: season.updatedAt,
+    }));
+  }
 }

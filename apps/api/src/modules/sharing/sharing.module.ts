@@ -1,7 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
-import { IpRateLimitGuard } from '../../public-read.guard';
+import { IpRateLimitGuard, PublicReadGuard } from '../../public-read.guard';
 import { QUEUE } from '../../queues';
 import { AchievementsReadModule } from '../achievements';
 import { CalendarCoreModule } from '../calendar';
@@ -22,6 +22,8 @@ import { OgCardQueue } from './og-card.queue';
 import { OgCardService } from './og-card.service';
 import { OgSync } from './og-sync';
 import { OgSchedules, OgSyncProcessor } from './og-sync.processor';
+import { SitemapController } from './sitemap.controller';
+import { SitemapService } from './sitemap.service';
 import { RideInviteController } from './ride-invite.controller';
 import { RideInviteInputs } from './ride-invite.inputs';
 import { RideInviteService } from './ride-invite.service';
@@ -33,8 +35,9 @@ import { StoryCardProcessor } from './story-card.processor';
 import { StoryCardService } from './story-card.service';
 
 /**
- * Карточки (ADR-0018), HTTP: статус сторис своего результата, приглашения кофе-райда и своего достижения (`AuthGuard`), PNG по
- * капабилити-токену (IP-лимит) и OG-картинки публичных страниц (og-images: версия и PNG без входа). Данные — порты
+ * Карточки (ADR-0018), HTTP: статус сторис своего результата, приглашения кофе-райда и своего достижения
+ * (`AuthGuard`), PNG по капабилити-токену (IP-лимит), OG-картинки публичных страниц (og-images: версия и PNG без
+ * входа) и карта сайта (landing-seo: `GET /v1/sitemap` без входа). Данные — порты
  * `results` (`RESULTS_FOR_SHARING`), `rides` (`RIDES_FOR_SHARING`), `races` (`RACES_FOR_SHARING`), `routes`
  * (`ROUTES_FOR_SHARING`, `ROUTE_GEOMETRY`), `calendar` (`CALENDAR_FOR_SHARING`), `profile` (`RIDER_NAMES`,
  * `RIDER_THEMES`), `achievements` (`ACHIEVEMENTS_FOR_SHARING`) через их `index.ts`; на `sharing` не ссылается никто.
@@ -57,6 +60,7 @@ import { StoryCardService } from './story-card.service';
     AchievementCardController,
     StoryCardImageController,
     OgCardController,
+    SitemapController,
   ],
   providers: [
     CardRequests,
@@ -71,7 +75,9 @@ import { StoryCardService } from './story-card.service';
     OgCardCache,
     OgCardQueue,
     OgCardService,
+    SitemapService,
     IpRateLimitGuard,
+    PublicReadGuard,
   ],
 })
 export class SharingModule {}
