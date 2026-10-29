@@ -118,6 +118,16 @@ describe('регистрация и билет (AC8)', () => {
     });
   });
 
+  it('один райдер, два параллельных POST на последнее место — 201 и 200 с той же регистрацией (ревью pass 1)', async () => {
+    const { id } = await world({ capacity: 1 });
+    const a = await rider(h, 'a@example.com');
+    const results = await Promise.all([registerFor(h, a.auth, id), registerFor(h, a.auth, id)]);
+    expect(results.map((res) => res.status).sort()).toEqual([200, 201]);
+    const [first, second] = results.map((res) => state(res.body).registration?.id);
+    expect(first).toBe(second);
+    expect(await ticketsDb(h).registrations.countDocuments()).toBe(1);
+  });
+
   it('с момента старта — EVENT_REGISTRATION_CLOSED{started}; выключено — not_enabled; снят — unpublished', async () => {
     const { admin, id } = await world();
     const a = await rider(h, 'a@example.com');

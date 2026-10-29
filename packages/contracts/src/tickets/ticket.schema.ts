@@ -167,12 +167,17 @@ export const EventTicketingPublic = z.discriminatedUnion('enabled', [
 ]);
 export type EventTicketingPublic = z.infer<typeof EventTicketingPublic>;
 
-/** Причина `409 EVENT_REGISTRATION_CLOSED` (`details`). Только в конец. */
+/**
+ * Причина `409 EVENT_REGISTRATION_CLOSED` (`details`): регистрация или её отмена недоступна. `checked_in` — участник
+ * уже отмечен, отменить нельзя. Только в конец.
+ */
 export const EVENT_REGISTRATION_CLOSED_REASONS = [
   'not_enabled',
   'unpublished',
   'started',
   'cancelled',
+  // отмена регистрации после отметки на check-in (ревью pass 1)
+  'checked_in',
 ] as const;
 export type EventRegistrationClosedReason = (typeof EVENT_REGISTRATION_CLOSED_REASONS)[number];
 export const EventRegistrationClosedDetails = z.object({

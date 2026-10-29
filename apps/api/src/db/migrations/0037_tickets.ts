@@ -10,7 +10,7 @@ type IndexDef = { key: IndexSpecification; options: CreateIndexesOptions & { nam
  * Индексы билетов (event-tickets, ADR-0023): код, хэш QR и регистрация — уникальны (дубль кода — новый код; дубль
  * регистрации — параллельная сверка выпустила билет); «мои билеты» — `(userId, createdAt)`; сверка гонки и список
  * участников с курсором — `(kind, eventId, _id)`. Регистрации календаря — одна активная на `(eventId, userId)`
- * (частичный), «мои регистрации» и стирание — `(userId, createdAt)`. Настройки — выборка включённых гонок регламентом.
+ * (частичный), «мои регистрации» и стирание — `(userId, createdAt)`. Настройки — выборка включённых гонок регламентом по старту (прошедшие не читаются).
  */
 export const TICKETS_INDEXES = {
   [TICKETS_COLLECTIONS.tickets]: [
@@ -32,7 +32,7 @@ export const TICKETS_INDEXES = {
     { key: { userId: 1, createdAt: -1 }, options: { name: 'event_registrations_user_idx' } },
   ],
   [TICKETS_COLLECTIONS.ticketing]: [
-    { key: { kind: 1, enabled: 1 }, options: { name: 'event_ticketing_enabled_idx' } },
+    { key: { kind: 1, enabled: 1, startsAt: 1 }, options: { name: 'event_ticketing_enabled_idx' } },
   ],
 } as const satisfies Record<string, readonly IndexDef[]>;
 

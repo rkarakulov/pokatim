@@ -136,6 +136,9 @@ describe('гонка (RC-T3, RC-T10)', () => {
     expect(await fields({ ...RACE_BODY, endsAt: '2026-10-24T06:00:00Z' })).toEqual([
       { path: 'endsAt', code: 'DATE_ORDER' },
     ]);
+    expect(await fields({ ...RACE_BODY, endsAt: '2026-11-01T07:00:00Z' })).toEqual([
+      { path: 'endsAt', code: 'INVALID' },
+    ]);
     expect(await fields({ ...RACE_BODY, capacity: 10 })).toEqual([
       { path: 'capacity', code: 'INVALID' },
     ]);

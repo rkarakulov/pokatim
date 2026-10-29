@@ -92,9 +92,12 @@ export class CalendarRegistrationService {
     if (reason) throw closed(reason);
     const distanceKm = distanceOf(event, body.distanceKm);
 
-    let registration: EventRegistrationDoc;
+    let outcome: { created: boolean; registration: EventRegistrationDoc };
     try {
-      registration = await this.issuer.inTransaction(async (tx, issue) => {
+      outcome = await this.issuer.inTransaction(async (tx, issue) => {
+        // параллельный запрос того же райдера мог занять последнее место — его регистрация, не EVENT_FULL
+        const own = await this.repository.activeRegistration(eventId, userId, tx);
+        if (own) return { created: false, registration: own };
         const seat = await this.repository.reserveSeat(tx, eventId);
         if (!seat) {
           const settings = await this.repository.findTicketing('calendar', eventId, tx);
@@ -119,7 +122,7 @@ export class CalendarRegistrationService {
           category: { kind: 'calendar', distanceKm },
           now,
         });
-        return doc;
+        return { created: true, registration: doc };
       });
     } catch (error) {
       // параллельная регистрация того же пользователя уже прошла
@@ -127,11 +130,17 @@ export class CalendarRegistrationService {
       const winner = await this.repository.activeRegistration(eventId, userId);
       return { created: false, state: await this.state(event, winner, now) };
     }
-    this.logger.log(`tickets.registered event=${eventId} registration=${registration._id}`);
-    return { created: true, state: await this.state(event, registration, now) };
+    const { created, registration } = outcome;
+    if (created) {
+      this.logger.log(`tickets.registered event=${eventId} registration=${registration._id}`);
+    }
+    return { created, state: await this.state(event, registration, now) };
   }
 
-  /** Отмена — до момента старта; активной нет — текущее состояние (идемпотентно). */
+  /**
+   * Отмена — до момента старта и до отметки на check-in (`checked_in` — 409); активной нет — текущее состояние
+   * (идемпотентно).
+   */
   async cancel(userId: string, eventId: string): Promise<CalendarRegistrationState> {
     const now = this.clock.now();
     await consumeUserLimit(
@@ -145,7 +154,11 @@ export class CalendarRegistrationService {
     if (!active) return this.state(event, undefined, now);
     if (now.getTime() >= event.startsAt.getTime()) throw closed('started');
     await this.transactions.run(async (tx) => {
+      // запись регистрации первой — конфликт с замком регистрации в транзакции check-in
       if (!(await this.repository.cancelRegistration(tx, active._id, now))) return;
+      const ticket = await this.repository.findByRegistration(active._id, tx);
+      // участник уже отмечен: отмена освободила бы место и дала второй билет (ревью pass 1, HIGH-2)
+      if (ticket?.status === 'checked_in') throw closed('checked_in');
       await this.repository.cancelTicketOfRegistration(tx, active._id, now);
       await this.repository.releaseSeat(tx, eventId);
     });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CalendarRegistrationRequest,
+  EVENT_REGISTRATION_CLOSED_REASONS,
   EventTicketingPublic,
   formatTicketCode,
   MyTickets,
@@ -37,6 +38,13 @@ describe('билеты: код и QR (event-tickets)', () => {
   it('справочники — только в конец', () => {
     expect(TICKET_EVENT_KINDS).toEqual(['race', 'calendar']);
     expect(TICKET_STATUSES).toEqual(['active', 'checked_in', 'cancelled', 'event_cancelled']);
+    expect(EVENT_REGISTRATION_CLOSED_REASONS).toEqual([
+      'not_enabled',
+      'unpublished',
+      'started',
+      'cancelled',
+      'checked_in',
+    ]);
   });
 
   it('код: дефис, строчные, I/L/O — к каноническому виду (Crockford)', () => {

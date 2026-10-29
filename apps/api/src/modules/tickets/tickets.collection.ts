@@ -36,6 +36,8 @@ export interface EventTicketingDoc {
   version: number;
   updatedAt: Date;
   updatedBy: string;
+  /** счётчик-замок транзакций check-in (сериализация с выключением билетов); чтение `?? 0` */
+  checkInLock?: number;
 }
 
 export const ticketingIdOf = (kind: TicketEventKind, eventId: string) => `${kind}:${eventId}`;
@@ -49,6 +51,8 @@ export interface EventRegistrationDoc {
   status: 'active' | 'cancelled';
   createdAt: Date;
   cancelledAt: Date | null;
+  /** замок check-in (`$inc`); документы без поля — как 0 */
+  version?: number;
 }
 
 export type TicketCategoryDoc =

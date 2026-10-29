@@ -6,6 +6,7 @@ import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { consumeUserLimit } from '../../user-limit';
 import { PanelAudit, PanelDirectory, type PanelPrincipal } from '../panel';
+import { RESULTS_FOR_TICKETS, type ResultsForTickets } from '../results';
 import { ParticipantNames } from './participant-names';
 import { RaceTickets } from './race-tickets';
 import { eventSummary, TicketEvents } from './ticket-events';
@@ -35,8 +36,11 @@ function outcomeOf(doc: TicketDoc, event: EventFacts, now: Date): CheckInOutcome
 /**
  * Check-in участника в панели (`tickets.checkin`, event-tickets): лимит `tickets-checkin:<сессия>` 120/мин → билет по
  * хэшу QR или коду → событие и доступ (`eventAccess`; чужое — тот же 404, что «нет билета») → исход. Отметка —
- * транзакция: условный переход `active → checked_in` + журнал `tickets.checked_in` (код, без имени и e-mail);
- * проигравший параллельный скан — `already_checked_in`.
+ * транзакция: замки настроек события и заявки гонки (порт `lockEntryForTicket`) или регистрации календаря — отметка
+ * сериализуется с выключением билетов и отменой участия (ревью pass 1, HIGH-3) → условный переход `active →
+ * checked_in` + журнал `tickets.checked_in` (код, без имени и e-mail); проигравший параллельный скан —
+ * `already_checked_in`. Отмена гонки организатором и снятие старта календаря между проверкой и отметкой — остаточный
+ * риск (замок в `races`/`calendar` не берётся, ADR-0023).
  */
 @Injectable()
 export class CheckInService {
@@ -51,6 +55,7 @@ export class CheckInService {
     private readonly audit: PanelAudit,
     private readonly transactions: MongoTransactions,
     private readonly rateLimiter: RateLimiter,
+    @Inject(RESULTS_FOR_TICKETS) private readonly results: ResultsForTickets,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -81,11 +86,25 @@ export class CheckInService {
       throw domainError('NOT_FOUND', 404);
     }
     let doc = await this.raceTickets.refresh(found);
-    let outcome = outcomeOf(doc, event, now);
+    let facts = event;
+    let outcome = outcomeOf(doc, facts, now);
     if (mark && outcome === 'ready') {
-      const marked = await this.transactions.run(async (tx) => {
-        const updated = await this.repository.markCheckedIn(tx, doc._id, principal.userId, now);
-        if (!updated) return null;
+      const ticket = doc;
+      const result = await this.transactions.run(async (tx) => {
+        // замки: настройки события (выключение билетов) и заявка гонки / регистрация календаря (отмена) — проверки
+        // вне транзакции не защищают от отмены между ними и отметкой (TOCTOU)
+        const settings = await this.repository.lockTicketing(tx, ticket.kind, ticket.eventId);
+        if (settings?.enabled !== true) return 'event_cancelled' as const;
+        const registered =
+          ticket.kind === 'race'
+            ? (await this.results.lockEntryForTicket(tx, ticket.registrationId, now)) === 'active'
+            : await this.repository.lockRegistration(tx, ticket.registrationId);
+        if (!registered) {
+          await this.repository.cancelTicket(ticket._id, now, tx);
+          return 'cancelled' as const;
+        }
+        const updated = await this.repository.markCheckedIn(tx, ticket._id, principal.userId, now);
+        if (!updated) return 'lost' as const;
         await this.audit.append(tx, {
           action: 'tickets.checked_in',
           actor: { kind: 'user', userId: principal.userId },
@@ -94,20 +113,22 @@ export class CheckInService {
             id: event.id,
             label: event.title,
           },
-          details: { ticketCode: doc.code },
+          details: { ticketCode: ticket.code },
         });
         return updated;
       });
-      if (marked) {
-        doc = marked;
+      if (typeof result === 'object') {
+        doc = result;
         outcome = 'checked_in';
         this.logger.log(`tickets.checked_in ticket=${doc._id} event=${event.id}`);
       } else {
         doc = (await this.repository.findTicket(doc._id)) ?? doc;
-        outcome = outcomeOf(doc, event, now);
+        if (result === 'event_cancelled')
+          facts = (await this.events.resolve(doc.kind, doc.eventId)) ?? facts;
+        outcome = outcomeOf(doc, facts, now);
       }
     }
-    return this.view(outcome, doc, event);
+    return this.view(outcome, doc, facts);
   }
 
   private find(body: CheckInRequest): Promise<TicketDoc | undefined> {

@@ -306,9 +306,9 @@ PR A (coder, 2026-10-29). Одобрены architect (§8.1):
   последних 200 билетов — RC-T8.
 - Индекс `tickets_event_idx (kind, eventId, _id)` вместо `(kind, eventId, status)` из §5.2 (сверка и курсор участников).
 - Публичный `GET /v1/events/:kind/:eventId/ticketing` → `EventTicketingPublic` — RC-T7.
-- `APP_WEB_ORIGIN` на dev — `bootstrap.sh` (`MANAGED_KEYS`) + комментарий `env.template` — RC-T13; дополнительно
-  строка `APP_WEB_ORIGIN: ${APP_WEB_ORIGIN:-}` в `infra/deploy/docker-compose.yml` (env API передаётся явным списком —
-  без неё ключ `.env` до контейнера не доходит).
+- `APP_WEB_ORIGIN` на dev (RC-T13, итог после слияния с `develop`): `infra/deploy/docker-compose.yml` передаёт API
+  `APP_WEB_ORIGIN: ${WEB_ORIGIN:?}` (env API — явный список; `WEB_ORIGIN = https://<хост>` выставляет каждый деплой).
+  `bootstrap.sh` и `env.template` не менялись (откатаны к `develop`).
 - Шаг стирания `tickets` в `account` (перед `notifications`) — RC-T1.
 
 Решения coder в рамках spec (без смены поведения AC):
@@ -326,6 +326,19 @@ PR A (coder, 2026-10-29). Одобрены architect (§8.1):
 - Перед показом и check-in билет гонки сверяется с заявкой (`RaceTickets.refresh`): снятая заявка отменяет билет сразу,
   не дожидаясь регламента (AC3 «QR отклоняется»).
 - `TicketErasure.erase(userId)` берёт время из `CLOCK` (без параметра `now`).
+- ADR билетов — `docs/adr/0023-event-tickets.md` (номера 0021/0022 заняты в `develop`).
+
+Ревью pass 1 (coder, 2026-10-29):
+
+- Отмена регистрации календаря после отметки — `409 EVENT_REGISTRATION_CLOSED { reason: 'checked_in' }` (новое
+  значение в конец `EVENT_REGISTRATION_CLOSED_REASONS`); отмена участия в гонке после отметки — разрешена, билет
+  остаётся `checked_in` (ADR-0023 п. 8).
+- Check-in сериализуется с отменой замками в транзакции (настройки, заявка — новый метод порта
+  `ResultsForTickets.lockEntryForTicket`, регистрация); отмена гонки и снятие старта календаря — остаточный риск
+  (ADR-0023 п. 8).
+- Очное событие гонки — не дольше 7 суток (`endsAt` — `400 INVALID`); регламент читает гонки со стартом позже
+  `now − 7 сут`, индекс `event_ticketing_enabled_idx { kind, enabled, startsAt }` (миграция `0037` ещё не в `develop`).
+- Письмо под чужим живым захватом — задача откладывается до конца захвата (`moveToDelayed` + `DelayedError`).
 
 ## 8.3 Security checklist
 
@@ -470,7 +483,7 @@ ADR-0023 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.m
   из §5.2).
 - `event_registrations`: `event_registrations_active_unique {eventId:1, userId:1}` unique, partial `{status:'active'}`;
   `event_registrations_user_idx {userId:1, createdAt:-1}`.
-- `event_ticketing`: `event_ticketing_enabled_idx {kind:1, enabled:1}`.
+- `event_ticketing`: `event_ticketing_enabled_idx {kind:1, enabled:1, startsAt:1}` (ревью pass 1).
 - `_id` настроек — `"<kind>:<eventId>"`; поля календаря `startsAt/endsAt/place` — `null` (RC-T2).
 
 **JOBS & EVENTS**
@@ -522,8 +535,8 @@ ADR-0023 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.m
   гонок, чтение владельцем, публичная сводка, настройки и участники в панели, check-in, письмо, регламент, порт
   стирания. Порты `RESULTS_FOR_TICKETS`, `CALENDAR_EVENTS`, `RaceRegistry.getMany`; экспорт `buttonHtml`,
   `minskDateTime` из `identity`; `consumeUserLimit` вынесен в `src/user-limit.ts` (две копии убраны).
-- Миграция `0037_tickets`, очереди `tickets-email`/`tickets-maintenance`, env `APP_WEB_ORIGIN` (env.ts, `.env.example`,
-  `bootstrap.sh`, `env.template`, `docker-compose.yml`), шаг `tickets` в `account`, organizer + `tickets.checkin`.
+- Миграция `0037_tickets`, очереди `tickets-email`/`tickets-maintenance`, env `APP_WEB_ORIGIN` (env.ts, `.env.example`;
+  на dev — `docker-compose.yml` из `WEB_ORIGIN`), шаг `tickets` в `account`, organizer + `tickets.checkin`.
 - Документы: ADR-0023, `docs/product/tickets.md`, `admin-panel.md`, runbook `deploy.md` (env, ротация секрета → QR,
   миграция), `account-deletion.md`, индексы ADR и продукта, правила `pokatim-{backend,db,contracts}.md`.
 

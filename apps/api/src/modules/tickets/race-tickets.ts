@@ -141,7 +141,9 @@ export class RaceTickets {
   async reconcileAll(): Promise<TicketsReconcileRun> {
     const now = this.clock.now();
     const run: TicketsReconcileRun = { races: 0, issued: 0, failed: 0 };
-    const settings = await this.repository.enabledRaceTicketings();
+    const settings = await this.repository.enabledRaceTicketings(
+      new Date(now.getTime() - TICKETS_POLICY.maxDurationMs),
+    );
     const events = await this.events.resolveMany(
       settings.map((doc) => ({ kind: 'race' as const, id: doc.eventId })),
     );

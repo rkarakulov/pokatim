@@ -12,6 +12,7 @@ import {
   raceTicket,
   raceWorld,
   reconcileAll,
+  RACE_START,
   rider,
   ticketsDb,
 } from '../../../test/tickets';
@@ -138,6 +139,13 @@ describe('включение после заявок и сверка (AC2, RC-T1
     await racesDb(h).races.updateOne({ _id: raceId }, { $set: { status: 'cancelled' } });
     expect(await reconcileAll(h)).toEqual({ races: 0, issued: 0, failed: 0 });
     await racesDb(h).races.updateOne({ _id: raceId }, { $set: { status: 'published' } });
+    // старт раньше `now − 7 сут` — регламент гонку не читает (ревью pass 1, LOW-3)
+    await ticketsDb(h).ticketing.updateOne(
+      {},
+      { $set: { startsAt: new Date(h.clock.now().getTime() - 8 * 24 * 3_600_000) } },
+    );
+    expect(await reconcileAll(h)).toEqual({ races: 0, issued: 0, failed: 0 });
+    await ticketsDb(h).ticketing.updateOne({}, { $set: { startsAt: new Date(RACE_START) } });
     // очный старт 24.10 10:00 Минска + 12 ч
     travelTo(h, new Date('2026-10-24T19:00:00Z'));
     expect(await reconcileAll(h)).toEqual({ races: 0, issued: 0, failed: 0 });

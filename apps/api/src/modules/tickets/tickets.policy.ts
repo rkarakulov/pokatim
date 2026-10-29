@@ -21,6 +21,8 @@ export const TICKETS_POLICY = {
   checkInOpensBeforeMs: 24 * HOUR,
   /** без конца события check-in закрывается через 12 ч после старта */
   defaultDurationMs: 12 * HOUR,
+  /** очное событие гонки — не дольше 7 суток (`endsAt − startsAt`); регламент берёт гонки со стартом не раньше */
+  maxDurationMs: 7 * 24 * HOUR,
   /** «Мои билеты»: предстоящих — до 50, прошедших — последние 20; из БД — последние 200 билетов */
   listMax: 50,
   pastMax: 20,

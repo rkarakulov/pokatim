@@ -228,7 +228,7 @@ paths:
 ## Билеты (`tickets`, event-tickets, ADR-0023 Proposed)
 
 - Модуль-потребитель: `tickets → results` (`ResultsCoreModule`: порт `RESULTS_FOR_TICKETS` — `entryOf`,
-  `entriesPage`; реэкспорт `RacesCoreModule` — `RACE_REGISTRY.get/getMany`), `calendar` (`CalendarCoreModule`: порт
+  `entriesPage`, `lockEntryForTicket` (замок заявки в транзакции check-in); реэкспорт `RacesCoreModule` — `RACE_REGISTRY.get/getMany`), `calendar` (`CalendarCoreModule`: порт
   `CALENDAR_EVENTS` — `get`, `getMany`), `profile` (`RIDER_NAMES.attributionNames`), `identity`
   (`IdentityAccounts.liveUserIds/emailsOf`, `AuthGuard`), `panel` — только через `index.ts`. На `tickets` ссылаются
   только `AppModule` (`TicketsModule`), `WorkerModule` (`TicketsWorkerModule`, `ticketsOutboxRoutes`) и
@@ -242,6 +242,11 @@ paths:
   `GET /v1/races/:raceId/ticket` и регламентом `tickets.reconcile` (`* * * * *` Минск + `tickets.reconcile.boot`,
   очередь `tickets-maintenance`); `RaceTickets.refresh` перед показом и check-in отменяет билет снятой заявки. Дубль
   выпуска — `isDuplicateKey(…, 'tickets_registration_unique')`.
+- Check-in — транзакция с замками: `lockTicketing` (настройки, конфликт с выключением), `lockEntryForTicket` (гонка,
+  конфликт с отменой участия) / `lockRegistration` (календарь, конфликт с отменой регистрации), затем `markCheckedIn`;
+  проверки вне транзакции — только для ответа. Отмена регистрации отмеченного — `409 EVENT_REGISTRATION_CLOSED
+  { reason: 'checked_in' }` (проверка в транзакции отмены). Письмо: любой сбой после захвата снимает захват; чужой
+  живой захват — `moveToDelayed` до его конца.
 - Регистрация календаря — транзакция: **первой** `reserveSeat` (условный `$inc registeredCount` документа
   настроек), затем регистрация и билет; дубль активной — `event_registrations_active_unique` → 200 с ней.
 - QR — `ticket-qr.ts` (HMAC `EMAIL_TOKEN_SECRET`, `ticket-qr:<id>`, в БД `sha256`), не `identity.LinkPurpose`.

@@ -425,7 +425,8 @@ paths:
   `TicketsRepository`; миграция `0037_tickets` (expand-only): `tickets_code_unique`, `tickets_qr_hash_unique`,
   `tickets_registration_unique`, `tickets_user_idx { userId, createdAt: -1 }`, `tickets_event_idx { kind, eventId, _id }`
   (сверка и участники с курсором), частичный `event_registrations_active_unique { eventId, userId }`
-  (`status: 'active'`), `event_registrations_user_idx`, `event_ticketing_enabled_idx { kind, enabled }`.
+  (`status: 'active'`), `event_registrations_user_idx`, `event_ticketing_enabled_idx { kind, enabled, startsAt }`
+  (регламент берёт гонки со стартом позже `now − 7 сут`; очное событие не длиннее 7 суток — правило настроек).
 - Настройки — замена по `version` (вставка при `version: 0`, дубль `_id_` — 409); `registeredCount` пишут только
   `reserveSeat`/`releaseSeat` (без `version`) — первой операцией транзакции регистрации и отмены. Календарь:
   `startsAt/endsAt/place` в настройках — `null` (вычисляются из старта, RC-T2).

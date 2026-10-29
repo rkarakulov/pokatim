@@ -1527,7 +1527,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         event_registrations_user_idx: index({ userId: 1, createdAt: -1 }),
       },
       [TICKETS_COLLECTIONS.ticketing]: {
-        event_ticketing_enabled_idx: index({ kind: 1, enabled: 1 }),
+        event_ticketing_enabled_idx: index({ kind: 1, enabled: 1, startsAt: 1 }),
       },
     };
     for (const [name, indexes] of Object.entries(expected)) {

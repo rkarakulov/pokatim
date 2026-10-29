@@ -90,9 +90,15 @@ export class TicketsRepository {
     return updated.matchedCount === 1;
   }
 
-  /** Включённые настройки гонок (регламент сверки, `event_ticketing_enabled_idx`). */
-  enabledRaceTicketings(): Promise<EventTicketingDoc[]> {
-    return this.c.ticketing.find({ kind: 'race', enabled: true }).toArray();
+  /**
+   * Включённые настройки гонок, чьё окно check-in может быть открыто (регламент сверки): старт не раньше `startsAfter`
+   * (`now − maxDurationMs`, событие не длиннее 7 суток) — диапазон по `event_ticketing_enabled_idx`, прошедшие гонки
+   * не читаются.
+   */
+  enabledRaceTicketings(startsAfter: Date): Promise<EventTicketingDoc[]> {
+    return this.c.ticketing
+      .find({ kind: 'race', enabled: true, startsAt: { $gt: startsAfter } })
+      .toArray();
   }
 
   /**
@@ -162,8 +168,40 @@ export class TicketsRepository {
     return (await this.c.tickets.findOne({ _id: id })) ?? undefined;
   }
 
-  async findByRegistration(registrationId: string): Promise<TicketDoc | undefined> {
-    return (await this.c.tickets.findOne({ registrationId })) ?? undefined;
+  async findByRegistration(
+    registrationId: string,
+    session?: DbSession,
+  ): Promise<TicketDoc | undefined> {
+    return (await this.c.tickets.findOne({ registrationId }, { session })) ?? undefined;
+  }
+
+  /**
+   * Замок настроек события в транзакции check-in: запись в документ настроек (`checkInLock`, без `version`) —
+   * конфликт с выключением билетов (`PUT`). Нет настроек — `null`.
+   */
+  lockTicketing(
+    tx: DbSession,
+    kind: TicketEventKind,
+    eventId: string,
+  ): Promise<EventTicketingDoc | null> {
+    return this.c.ticketing.findOneAndUpdate(
+      { _id: ticketingIdOf(kind, eventId) },
+      { $inc: { checkInLock: 1 } },
+      { session: tx, returnDocument: 'after' },
+    );
+  }
+
+  /**
+   * Замок активной регистрации в транзакции check-in (`$inc version` документа регистрации): конфликт с отменой
+   * регистрации. Не активна или нет — `false`.
+   */
+  async lockRegistration(tx: DbSession, id: string): Promise<boolean> {
+    const updated = await this.c.registrations.updateOne(
+      { _id: id, status: 'active' },
+      { $inc: { version: 1 } },
+      { session: tx },
+    );
+    return updated.matchedCount === 1;
   }
 
   ticketsByRegistrations(registrationIds: readonly string[]): Promise<TicketDoc[]> {
@@ -212,7 +250,7 @@ export class TicketsRepository {
     return { active, checkedIn };
   }
 
-  /** Отмена билета: только `active`; `false` — уже не активен. */
+  /** Отмена билета: только `active`; `false` — уже не активен (в транзакции — с `session`). */
   async cancelTicket(id: string, now: Date, session?: DbSession): Promise<boolean> {
     const updated = await this.c.tickets.updateOne(
       { _id: id, status: 'active' },
@@ -274,7 +312,7 @@ export class TicketsRepository {
     id: string,
     now: Date,
     claimedUntil: Date,
-  ): Promise<{ status: 'claimed'; doc: TicketDoc } | { status: 'busy' } | undefined> {
+  ): Promise<{ status: 'claimed'; doc: TicketDoc } | { status: 'busy'; until: Date } | undefined> {
     const doc = await this.c.tickets.findOneAndUpdate(
       {
         _id: id,
@@ -287,8 +325,11 @@ export class TicketsRepository {
       { returnDocument: 'after' },
     );
     if (doc) return { status: 'claimed', doc };
-    const held = await this.c.tickets.countDocuments({ _id: id, 'email.state': 'sending' });
-    return held > 0 ? { status: 'busy' } : undefined;
+    const held = await this.c.tickets.findOne(
+      { _id: id, 'email.state': 'sending' },
+      { projection: { 'email.claimedUntil': 1 } },
+    );
+    return held ? { status: 'busy', until: held.email.claimedUntil ?? now } : undefined;
   }
 
   /** Итог своего захвата (сверка по `claimedUntil`): `pending` — снять захват после сбоя SMTP. */
