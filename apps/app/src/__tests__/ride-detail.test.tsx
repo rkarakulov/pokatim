@@ -10,7 +10,8 @@ import type {
 } from '@pokatim/contracts';
 import { onlineManager } from '@tanstack/react-query';
 import * as Location from 'expo-location';
-import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
+import { router as expoRouter } from 'expo-router';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -80,6 +81,7 @@ const signedInRoutes = {
   'rides/edit/[id]': () => null,
   'rides/cancel/[id]': () => null,
   'rides/report/[id]': () => null,
+  'rides/invite/[id]': () => null,
 };
 const openSignedIn = (url = `/rides/${ID}`) =>
   renderRouter(signedInRoutes, { initialUrl: url, wrapper: createQueryWrapper() });
@@ -288,7 +290,7 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
     expect(router.getPathname()).toBe('/rides');
   });
 
-  it('перенос — строка с датой; сразу после публикации — баннер «Райд опубликован»', async () => {
+  it('перенос — строка с датой; ?published=1 не организатору — без шита «Райд опубликован»', async () => {
     getRideForViewer.mockResolvedValue(
       view({ rescheduledAt: '2026-10-01T09:30:00Z' }, viewer('participant', { canLeave: true })),
     );
@@ -296,7 +298,7 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
     expect(
       await screen.findByText('Время или место старта изменены Четверг, 1 октября 2026, 12:30.'),
     ).toBeOnTheScreen();
-    expect(screen.getByText('Райд опубликован. Пригласите друзей ссылкой.')).toBeOnTheScreen();
+    expect(screen.queryByText('Райд опубликован')).toBeNull();
   });
 
   it('«Поделиться» — ссылка на web-карточку; web без Web Share — «Ссылка скопирована»', async () => {
@@ -369,6 +371,126 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
       await fireEvent.press(screen.getByText('Повторить'));
     });
     expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
+  });
+});
+
+describe('шит «Райд опубликован» (ride-published)', () => {
+  it('гость с ?published=1 — шита нет', async () => {
+    await renderRouter(appRoutes, { initialUrl: `/rides/${ID}?published=1` });
+    await screen.findByLabelText(heroLabel);
+    expect(screen.queryByTestId('ride-published-sheet')).toBeNull();
+  });
+});
+
+describe('шит «Райд опубликован»: организатор (ride-published)', () => {
+  beforeEach(signedIn);
+
+  const organizerView = (ride: Partial<RideDetail> = {}) =>
+    view(ride, viewer('organizer', { canManage: true }));
+  const openPublished = async () => {
+    getRideForViewer.mockResolvedValue(organizerView());
+    const router = await openSignedIn(`/rides/${ID}?published=1`);
+    expect(await screen.findByRole('heading', { name: 'Райд опубликован' })).toBeOnTheScreen();
+    return router;
+  };
+
+  it('организатор после публикации: заголовок, текст, «Карточка-приглашение», «Ссылка», «Закрыть»; окно — modal', async () => {
+    await openPublished();
+    expect(
+      screen.getByText('Пригласите друзей — карточкой для сторис или ссылкой.'),
+    ).toBeOnTheScreen();
+    const sheet = screen.getByTestId('ride-published-sheet');
+    expect(sheet.props.accessibilityViewIsModal).toBe(true);
+    expect(sheet.props.role).toBe('dialog');
+    expect(sheet.props['aria-label']).toBe('Райд опубликован');
+    expect(screen.getAllByRole('button', { name: 'Карточка-приглашение' })).not.toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Ссылка' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Закрыть' })).toBeOnTheScreen();
+    // прежнего баннера нет
+    expect(screen.queryByText(/Пригласите друзей ссылкой/)).toBeNull();
+  });
+
+  it('«Карточка-приглашение» — экран карточки, шит закрыт, параметр снят', async () => {
+    const router = await openPublished();
+    await fireEvent.press(
+      within(screen.getByTestId('ride-published-sheet')).getByRole('button', {
+        name: 'Карточка-приглашение',
+      }),
+    );
+    expect(router.getPathname()).toBe(`/rides/invite/${ID}`);
+    await act(() => expoRouter.back());
+    expect(router.getPathname()).toBe(`/rides/${ID}`);
+    expect(router.getSearchParams()).not.toHaveProperty('published', '1');
+    expect(screen.queryByTestId('ride-published-sheet')).toBeNull();
+  });
+
+  it('«Ссылка» — системное меню ссылкой на райд; отправлено — шит закрывается', async () => {
+    const router = await openPublished();
+    await fireEvent.press(screen.getByRole('button', { name: 'Ссылка' }));
+    expect(share).toHaveBeenCalledWith({
+      title: detail.title,
+      text: 'Кофе-райд на Минское море — Воскресенье, 4 октября 2026, 10:00, Минск',
+      path: `/rides/${ID}`,
+    });
+    await waitFor(() => expect(screen.queryByTestId('ride-published-sheet')).toBeNull());
+    expect(router.getSearchParams()).not.toHaveProperty('published', '1');
+  });
+
+  it('«Ссылка»: закрыли меню — шит остаётся; web без Web Share — «Ссылка скопирована»; ошибка — баннер', async () => {
+    await openPublished();
+    share.mockResolvedValueOnce('dismissed');
+    await fireEvent.press(screen.getByRole('button', { name: 'Ссылка' }));
+    expect(screen.getByTestId('ride-published-sheet')).toBeOnTheScreen();
+
+    share.mockResolvedValueOnce('copied');
+    await fireEvent.press(screen.getByRole('button', { name: 'Ссылка' }));
+    expect(
+      await within(screen.getByTestId('ride-published-sheet')).findByText('Ссылка скопирована'),
+    ).toBeOnTheScreen();
+
+    share.mockRejectedValueOnce(new Error('boom'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Ссылка' }));
+    expect(
+      await within(screen.getByTestId('ride-published-sheet')).findByText(
+        'Не удалось поделиться ссылкой.',
+      ),
+    ).toBeOnTheScreen();
+  });
+
+  it('«Закрыть» — шит закрыт, параметр снят, деталь организатора на месте', async () => {
+    const router = await openPublished();
+    await fireEvent.press(screen.getByRole('button', { name: 'Закрыть' }));
+    expect(screen.queryByTestId('ride-published-sheet')).toBeNull();
+    expect(router.getSearchParams()).not.toHaveProperty('published', '1');
+    expect(screen.getByText('Кофе-райд · вы организатор')).toBeOnTheScreen();
+  });
+
+  it('«Назад» Android / Esc (onRequestClose) закрывает шит', async () => {
+    await openPublished();
+    // событие поднимается от шита к `Modal` (обработчик `onRequestClose`)
+    await fireEvent(screen.getByTestId('ride-published-sheet'), 'requestClose');
+    expect(screen.queryByTestId('ride-published-sheet')).toBeNull();
+  });
+
+  it('нет web-origin — без «Ссылки», текст только про карточку', async () => {
+    jest.mocked(shareOrigin).mockReturnValue(null);
+    await openPublished();
+    expect(screen.queryByRole('button', { name: 'Ссылка' })).toBeNull();
+    expect(screen.getByText('Пригласите друзей карточкой для сторис.')).toBeOnTheScreen();
+  });
+
+  it('без параметра — шита нет', async () => {
+    getRideForViewer.mockResolvedValue(organizerView());
+    await openSignedIn();
+    await screen.findByText('Кофе-райд · вы организатор');
+    expect(screen.queryByTestId('ride-published-sheet')).toBeNull();
+  });
+
+  it('отменённому — шита нет', async () => {
+    getRideForViewer.mockResolvedValue(organizerView({ phase: 'cancelled' }));
+    await openSignedIn(`/rides/${ID}?published=1`);
+    await screen.findByText('Райд отменён.');
+    expect(screen.queryByTestId('ride-published-sheet')).toBeNull();
   });
 });
 
