@@ -64,6 +64,7 @@ describe('AuditAction', () => {
       'tickets.material_updated',
       'tickets.material_removed',
       'tickets.materials_reordered',
+      'account.erasure_retried',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',

@@ -515,6 +515,47 @@ describe('createAdminApiClient: модерация профилей райдер
   });
 });
 
+describe('createAdminApiClient: сбои удаления аккаунтов (erasure-failures)', () => {
+  const USER = '01890a5d-ac96-774b-bcce-b302099a8057';
+
+  it('listAccountErasures — курсор и лимит; ответ не по схеме — ошибка', async () => {
+    const row = {
+      userId: USER,
+      deletedAt: '2026-10-27T10:00:00.000Z',
+      failedAttempts: 2,
+      lastFailure: { step: 'identity', code: 'ECONNECTION', at: '2026-10-27T11:00:00.000Z' },
+      retryRequestedAt: null,
+    };
+    const { calls, api } = admin(200, { items: [row], nextCursor: null });
+    await expect(api.listAccountErasures({ cursor: 'c1', limit: 10 })).resolves.toEqual({
+      items: [row],
+      nextCursor: null,
+    });
+    expect(calls[0]).toMatchObject({
+      url: '/v1/admin/account-erasures?cursor=c1&limit=10',
+      method: 'GET',
+      credentials: 'same-origin',
+    });
+    const broken = admin(200, {
+      items: [{ ...row, lastFailure: { step: 'x' } }],
+      nextCursor: null,
+    });
+    await expect(broken.api.listAccountErasures()).rejects.toThrow();
+  });
+
+  it('retryAccountErasure — POST с причиной', async () => {
+    const { calls, api } = admin(200, { queued: true });
+    await expect(api.retryAccountErasure(USER, { reason: 'Починили SMTP' })).resolves.toEqual({
+      queued: true,
+    });
+    expect(calls[0]).toMatchObject({
+      url: `/v1/admin/account-erasures/${USER}/retry`,
+      method: 'POST',
+      body: { reason: 'Починили SMTP' },
+    });
+  });
+});
+
 describe('createAdminApiClient: оформление приложения (только декор, user-theme)', () => {
   const appearance = {
     decor: 'halloween',

@@ -17,6 +17,9 @@ paths:
   `UPDATE_CORRIDOR_GOLDEN=1`. Новые выходы движка, не меняющие вердикт (maps-02: интервалы схода
   `matchCorridorDetailed`), — отдельной функцией вне `CorridorMatch`: golden и AC16 (ключи результата) не меняются,
   тест `match` = `matchCorridor` на всех фикстурах.
+- Упрощение линии (`simplifyTrack`) — golden `simplify-golden.json` (sha256 индексов сохранённых точек всех фикстур по
+  профилям вызовов) + сверка с эталонным перебором в тесте; перезапись `UPDATE_SIMPLIFY_GOLDEN=1` — только с решением
+  в task.md (меняются хранимые линии). Стоянка 200 000 точек — в памяти теста.
 - Результаты гонок (race-results-03) — int на реальном MongoDB: заезд эталона сдвигается во времени в окно гонки
   стенда (`rideGpx` из `apps/api/test/results.ts`), маршрут — линия из `corridor-expected.json` в `route_geometries`;
   проверка — `AttemptCheckProcessor.check` напрямую, события — `resultsWorker(h)`. Отрицательные доказательства —

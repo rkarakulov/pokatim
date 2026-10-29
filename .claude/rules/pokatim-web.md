@@ -173,6 +173,12 @@ paths:
   кнопке; `scanner.ts` — выбор декодера (`BarcodeDetector`, иначе `jsqr` динамическим импортом), `parseScan`,
   дедупликация 5 с. Камере нужен `Permissions-Policy: camera=(self)` в `admin-nginx.conf` (каждый `location`) и в
   `vite preview` (`panelHeader` в `vite.config.ts`).
+- «Сбои удаления аккаунтов» (erasure-failures) — `features/account-erasures/AccountErasuresScreen.tsx`, маршрут
+  `/account-erasures` под `RequirePermission permission="platform.stats"`, без пункта навигации — вход ссылкой
+  «Открыть» карточки «Удаления аккаунтов со сбоем» «Обзора». `DataTable` + «Показать ещё» по курсору; аккаунт —
+  `riderLabel(userId)` («Участник ·<id>»), шаг — `admin.accountErasures.step.<step>`. «Повторить удаление» —
+  `ReasonDialog`; итог — баннер над таблицей (поставлен / уже запрошен), 404/409 — баннер «Удаление уже изменилось»
+  без ошибки в окне; затем инвалидация списка, «Обзора» и журнала.
 
 ## Проверка
 

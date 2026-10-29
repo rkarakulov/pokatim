@@ -319,7 +319,7 @@ export type AttemptAnalysis = CorridorMatch & {
 /**
  * Сверка попытки для worker (слайс 03 — в потоке разбора): `loadTrack` → `matchCorridorDetailed` по исходнику без
  * прореживания → разметка схода на сохранённой линии показа `line` (`activity_tracks`, читает worker; не
- * пересчитывается — Дуглас — Пекер на дрожании O(n²)). `line: null` (по умолчанию) — `trackMap: null`.
+ * пересчитывается — позиции по той же линии, что у активности). `line: null` (по умолчанию) — `trackMap: null`.
  * Ошибки файла — `TrackParseError` (как `analyzeTrack`); нарушение инвариантов коридора — `CorridorError`.
  * Результат сериализуем (structured clone), без координат заезда, времени точек и значений датчиков.
  */

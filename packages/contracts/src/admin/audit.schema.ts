@@ -76,6 +76,8 @@ export const AUDIT_ACTIONS = [
   'tickets.material_updated',
   'tickets.material_removed',
   'tickets.materials_reordered',
+  // erasure-failures: admin поставил повтор фоновой очистки удалённого аккаунта (subject `rider`, без e-mail и имени)
+  'account.erasure_retried',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;

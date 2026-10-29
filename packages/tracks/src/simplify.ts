@@ -1,3 +1,4 @@
+import { FarthestPoint } from './farthest-point.ts';
 import { localProjection, type TrackPoint } from './geo.ts';
 
 /**
@@ -22,10 +23,16 @@ export function simplifyTrack(
     ys[i] = unique[i]!.lat * ky;
   }
 
+  const last = unique.length - 1;
   const limit = Math.max(maxPoints, 3);
   let tolerance = Math.max(toleranceM, 0.01);
+  const significance = douglasPeucker(xs, ys, tolerance * tolerance);
   for (;;) {
-    const kept = douglasPeucker(xs, ys, tolerance);
+    const tolerance2 = tolerance * tolerance;
+    const kept: number[] = [];
+    for (let i = 0; i <= last; i += 1) {
+      if (i === 0 || i === last || significance[i]! > tolerance2) kept.push(i);
+    }
     const result = ensureTwoDistinct(kept, xs, ys);
     if (result.length <= limit) return result.map((index) => unique[index]!);
     tolerance *= 2;
@@ -41,37 +48,41 @@ function dropConsecutiveDuplicates(points: readonly TrackPoint[]): TrackPoint[] 
   return result;
 }
 
-/** Индексы сохранённых точек по возрастанию. */
-function douglasPeucker(xs: Float64Array, ys: Float64Array, tolerance: number): number[] {
-  const last = xs.length - 1;
-  const keep = new Uint8Array(xs.length);
-  keep[0] = 1;
-  keep[last] = 1;
-  const stack: number[] = [0, last];
-  const tolerance2 = tolerance * tolerance;
+/**
+ * Дерево делений Дугласа — Пекера при допуске `tolerance2` (квадрат). Дальняя точка диапазона от допуска не зависит,
+ * поэтому при большем допуске сохраняется часть того же дерева: точка `i` сохраняется при `τ`, если
+ * `significance[i] > τ²` — минимум расстояний делений на пути от корня до неё (0 — не делила).
+ */
+function douglasPeucker(xs: Float64Array, ys: Float64Array, tolerance2: number): Float64Array {
+  const significance = new Float64Array(xs.length);
+  const farthest = new FarthestPoint(xs, ys);
+  let scanBudget = SCAN_BUDGET_PER_POINT * xs.length;
+  const stack: number[] = [0, xs.length - 1, Infinity];
 
   while (stack.length > 0) {
+    const parent = stack.pop()!;
     const end = stack.pop()!;
     const start = stack.pop()!;
-    let maxDistance2 = -1;
-    let maxIndex = -1;
-    for (let i = start + 1; i < end; i += 1) {
-      const d2 = segmentDistance2(xs, ys, i, start, end);
-      if (d2 > maxDistance2) {
-        maxDistance2 = d2;
-        maxIndex = i;
-      }
+    scanBudget -= end - start;
+    if (scanBudget < 0) {
+      farthest.buildHulls();
+      scanBudget = Infinity;
     }
-    if (maxIndex >= 0 && maxDistance2 > tolerance2) {
-      keep[maxIndex] = 1;
-      stack.push(start, maxIndex, maxIndex, end);
+    const index = farthest.between(start, end);
+    if (index >= 0 && farthest.distance2 > tolerance2) {
+      const own = Math.min(farthest.distance2, parent);
+      significance[index] = own;
+      stack.push(start, index, own, index, end, own);
     }
   }
-
-  const result: number[] = [];
-  for (let i = 0; i <= last; i += 1) if (keep[i] === 1) result.push(i);
-  return result;
+  return significance;
 }
+
+/**
+ * Перебор диапазонов дешевле построения оболочек, пока деления сбалансированы (обычный трек — ~log n проходов по
+ * точкам); оболочки строятся, когда суммарный перебор превысил столько проходов (ничьи на стоянке).
+ */
+const SCAN_BUDGET_PER_POINT = 64;
 
 /** Замкнутая петля (начало = конец) при большом допуске сводится к двум одинаковым точкам — добавляем дальнюю. */
 function ensureTwoDistinct(kept: number[], xs: Float64Array, ys: Float64Array): number[] {
@@ -88,23 +99,4 @@ function ensureTwoDistinct(kept: number[], xs: Float64Array, ys: Float64Array): 
   }
   if (farthest === first) return [];
   return [...kept, farthest].sort((a, b) => a - b);
-}
-
-function segmentDistance2(
-  xs: Float64Array,
-  ys: Float64Array,
-  i: number,
-  a: number,
-  b: number,
-): number {
-  const ax = xs[a]!;
-  const ay = ys[a]!;
-  const dx = xs[b]! - ax;
-  const dy = ys[b]! - ay;
-  const px = xs[i]! - ax;
-  const py = ys[i]! - ay;
-  const length2 = dx * dx + dy * dy;
-  if (length2 === 0) return px * px + py * py;
-  const t = Math.max(0, Math.min(1, (px * dx + py * dy) / length2));
-  return (px - t * dx) ** 2 + (py - t * dy) ** 2;
 }

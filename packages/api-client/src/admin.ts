@@ -1,4 +1,8 @@
 import {
+  AccountErasurePage,
+  type AccountErasureQuery,
+  RetryAccountErasureResult,
+  type RetryAccountErasureRequest,
   ApiError,
   type CheckInRequest,
   CheckInView,
@@ -122,6 +126,8 @@ export type ModerationRideListParams = Partial<ModerationRideQuery>;
 export type RiderRouteListParams = Partial<RiderRouteModerationQuery>;
 /** Параметры очереди модерации профилей райдеров до схемы (profile-moderation). */
 export type RiderProfileListParams = Partial<RiderProfileModerationQuery>;
+/** Параметры списка сбоев удаления аккаунтов до схемы (erasure-failures). */
+export type AccountErasureListParams = Partial<AccountErasureQuery>;
 /** Параметры списка споров панели до схемы. */
 export type PanelDisputeListParams = Partial<PanelDisputeQuery>;
 /** Таблица рейтинга сезона (race-results-08): класс и группа обязательны, `limit`/`cursor` — по желанию. */
@@ -352,6 +358,16 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       post(`${riderProfile(userId)}/dismiss-reports`, RiderProfileReportsDismissResult, body),
     /** Адрес фото райдера для карточки (тот же origin, без запроса). */
     riderAvatarUrl: (id: string) => `${baseUrl}/v1/avatars/${encodeURIComponent(id)}`,
+    // erasure-failures: зависшие удаления аккаунтов и повтор очистки (platform.stats, только admin)
+    listAccountErasures: (params: AccountErasureListParams = {}) =>
+      get(`/v1/admin/account-erasures${queryString(params)}`, AccountErasurePage),
+    /** Нет удалённого аккаунта — 404; очистка завершена или не зависла — 409 `CONFLICT`. */
+    retryAccountErasure: (userId: string, body: RetryAccountErasureRequest) =>
+      post(
+        `/v1/admin/account-erasures/${encodeURIComponent(userId)}/retry`,
+        RetryAccountErasureResult,
+        body,
+      ),
     // race-results-07: пол и год анкеты Verified (profiles.verified_edit, только admin)
     getVerifiedDemographics: (userId: string) =>
       get(
