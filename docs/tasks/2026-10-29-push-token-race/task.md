@@ -122,3 +122,10 @@ Claude MEDIUM «нет тестов `$inc` в `leave`/`leaveAllFuture`» — с�
 **Ревью pass 3 (Codex — APPROVE).** MEDIUM «события старого формата без `seq` после первой записи становятся
 повторами» — принято: событие без номера пишет документ без `collapseSeq` и сравнивается прежним `sourceEventId $lt`;
 документ с номером событие без номера не заменяет. Тест «события старого формата без seq».
+
+**Ревью pass 4 (Codex).** APPROVE, находок нет.
+
+**Проверки.** `TURBO_CONCURRENCY=1 pnpm check` (`MONGO_URL_TEST=…/pokatim_pushrace_test`, `REDIS_URL_TEST=…/13`) на
+`b513a8f2`: lint, typecheck, arch:check, пакеты и admin — зелёные; api 190/191 файлов, 1986/1988 тестов — 2 таймаута
+`tickets-checkin.int.test.ts` под нагрузкой машины (load ≈ 16, параллельные сессии), отдельно 16/16 зелёные; модуль не
+затронут. Модули `notifications`, `rides`, `routes`, `account`, `results` — зелёные. Окончательно — CI PR.
