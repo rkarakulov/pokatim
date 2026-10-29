@@ -30,6 +30,7 @@ import { RoutesModerationController } from './routes-moderation.controller';
 import { RoutesModerationService } from './routes-moderation.service';
 import { RoutesPublicController } from './routes-public.controller';
 import { RoutesMaintenanceProcessor, RoutesSchedules } from './routes-maintenance.processor';
+import { RoutesOverview } from './routes-overview';
 import { RoutesPublicService } from './routes-public.service';
 import { RoutesRepository } from './routes.repository';
 import { RoutesService } from './routes.service';
@@ -39,7 +40,8 @@ import { RoutesViewerController } from './routes-viewer.controller';
  * Ядро `routes` для API и worker: репозиторий, порт `RouteCatalog` для `races` и `RouteGeometry` для `results`
  * (через `index.ts`), порт стирания `RouteErasure` для `account`, порт `RouteNotices` для `notifications`, порт
  * `RideRoutes` для `rides` (05c, без кэша), порт `RouteRideRoutes` для `route-rides` (route-rides-01, без кэша); удаление
- * маршрута с жалобами (`RouteDeletion`, routes-06) — общее для «Моих» и стирания.
+ * маршрута с жалобами (`RouteDeletion`, routes-06) — общее для «Моих» и стирания; очереди модерации для «Обзора»
+ * панели (`RoutesOverview`, admin-overview).
  */
 @Module({
   providers: [
@@ -56,6 +58,7 @@ import { RoutesViewerController } from './routes-viewer.controller';
     { provide: RIDE_ROUTES, useExisting: RideRoutesService },
     RouteRideRoutesService,
     { provide: ROUTE_RIDE_ROUTES, useExisting: RouteRideRoutesService },
+    RoutesOverview,
   ],
   exports: [
     RoutesRepository,
@@ -67,6 +70,7 @@ import { RoutesViewerController } from './routes-viewer.controller';
     ROUTE_NOTICES,
     RIDE_ROUTES,
     ROUTE_RIDE_ROUTES,
+    RoutesOverview,
   ],
 })
 export class RoutesCoreModule {}

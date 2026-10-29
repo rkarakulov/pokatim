@@ -4,6 +4,7 @@ import {
   PanelSeasonStandingsTable,
   type SeasonStandingsTableQuery,
   AuditPage,
+  PanelOverview,
   type CalendarStartInput,
   type CancelRaceRequest,
   type DiscardRaceRequest,
@@ -166,6 +167,8 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
   return {
     /** Статус API (экран «Обзор»). */
     health: () => get('/v1/health', HealthResponse),
+    /** «Обзор» (admin-overview): блоки по правам сотрудника — нет права, нет поля. */
+    overview: () => get('/v1/admin/overview', PanelOverview),
     /** Вход тем же e-mail и паролем, что в приложении: cookie панели или `verificationRequired`. */
     signIn: (body: PanelSignInRequest) =>
       post('/v1/admin/session/sign-in', PanelSignInResponse, body),

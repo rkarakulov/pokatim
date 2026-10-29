@@ -114,6 +114,13 @@ describe('createAdminApiClient: пути, методы, cookie панели', ()
     expect(calls[0]).toMatchObject({ url: '/v1/health', method: 'GET' });
   });
 
+  it('«Обзор»: GET /v1/admin/overview, блоки без права отсутствуют в ответе', async () => {
+    const body = { attention: { protocols: { awaiting: 1, ready: 1, blockers: 0 } } };
+    const { calls, api } = admin(200, body);
+    await expect(api.overview()).resolves.toEqual(body);
+    expect(calls[0]).toMatchObject({ url: '/v1/admin/overview', method: 'GET' });
+  });
+
   it('ни одного заголовка Authorization: панель — только cookie', async () => {
     const { calls, api } = admin(200, me);
     await api.me();

@@ -16,3 +16,5 @@ export {
   RIDES_FOR_SHARING,
   type RidesForSharing,
 } from './rides-for-sharing.port';
+/** Порт «Обзора» панели (admin-overview): райды с открытыми жалобами и активные райды. */
+export { RidesOverview } from './rides-overview';

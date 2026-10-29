@@ -20,6 +20,7 @@ import { DisputesCoreModule, DisputesModule } from './modules/disputes';
 import { HealthModule } from './modules/health';
 import { IdentityModule } from './modules/identity';
 import { NotificationsModule } from './modules/notifications';
+import { OverviewModule } from './modules/overview';
 import { PanelModule } from './modules/panel';
 import { ProfileModule } from './modules/profile';
 import { RacesModule } from './modules/races';
@@ -60,6 +61,7 @@ import { TracksModule } from './modules/tracks';
     // профиль райдера: статистика и публичный профиль (rider-profile, модуль-композиция)
     RidersModule,
     CalendarModule,
+    OverviewModule,
     AppearanceModule,
     RidesModule,
     DevicesModule,

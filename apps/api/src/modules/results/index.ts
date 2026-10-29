@@ -44,3 +44,5 @@ export {
   type RiderRaceInfo,
   type RiderResults,
 } from './rider-results.port';
+/** Порт «Обзора» панели (admin-overview): готовность протоколов и активность гонок; даёт `ResultsModule`. */
+export { type ProtocolReadiness, ResultsOverview } from './results-overview';

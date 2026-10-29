@@ -39,6 +39,21 @@ export interface InstantRange {
  * - изменение записи — `findOneAndUpdate` с ожидаемой `version` и статусом в фильтре (R3): нет совпадения — `null`;
  * - значения фильтров — только примитивы после zod (id, enum-ы, даты).
  */
+function overviewFilter(
+  phase: 'open' | 'closed',
+  { now, closedBefore, ownerUserId }: { now: Date; closedBefore: Date; ownerUserId?: string },
+): Filter<RaceDoc> {
+  const filter: Filter<RaceDoc> = {
+    status: 'published',
+    protocolPublishedAt: null,
+    ...(phase === 'open'
+      ? { windowStartsAt: { $lte: now }, windowEndsAt: { $gt: closedBefore } }
+      : { windowEndsAt: { $lte: closedBefore } }),
+  };
+  if (ownerUserId !== undefined) filter.ownerUserId = ownerUserId;
+  return filter;
+}
+
 @Injectable()
 export class RacesRepository {
   private readonly c: RacesCollections;
@@ -145,6 +160,25 @@ export class RacesRepository {
 
   async findRace(id: string, session?: DbSession): Promise<RaceDoc | undefined> {
     return (await this.c.races.findOne({ _id: id }, { session })) ?? undefined;
+  }
+
+  /**
+   * Опубликованные гонки без протокола в фазе «Обзора» панели (admin-overview): `open` — окно идёт
+   * (`windowStartsAt ≤ now < closesAt`), `closed` — окно закрыто, протокол ждёт публикации. `closedBefore` —
+   * `now − windowEndGraceMs` (граница `racePhase`); `ownerUserId` — только свои (организатор). Раньше закрывающиеся —
+   * первыми. `protocolPublishedAt: null` ловит и документы до `0016_protocol` без поля.
+   */
+  async overviewRaces(
+    phase: 'open' | 'closed',
+    bounds: { now: Date; closedBefore: Date; ownerUserId?: string },
+    limit: number,
+  ): Promise<{ total: number; docs: RaceDoc[] }> {
+    const filter = overviewFilter(phase, bounds);
+    const [total, docs] = await Promise.all([
+      this.c.races.countDocuments(filter),
+      this.c.races.find(filter).sort({ windowEndsAt: 1, _id: 1 }).limit(limit).toArray(),
+    ]);
+    return { total, docs };
   }
 
   async insertRace(session: DbSession, doc: RaceDoc): Promise<void> {

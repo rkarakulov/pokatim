@@ -139,6 +139,33 @@ export type PublishedRiderRoute = RouteDoc & { publication: RoutePublicationDoc 
  *   `recordDerived` — обе с экспортом GPX в одной транзакции (инвариант «есть `derivedVersion` ⇒ есть экспорт»);
  * - значения фильтров — только примитивы после zod (id, статус).
  */
+/** Очереди модерации маршрутов райдеров (routes-06): условие частичного индекса, ключ сортировки, индекс. */
+const PUBLICATION_QUEUES = {
+  pending: {
+    filter: { 'publication.status': 'pending' },
+    key: 'publication.submittedAt',
+    dir: 1,
+    index: 'routes_publication_pending_idx',
+  },
+  reported: {
+    filter: { 'publication.openReportCount': { $gt: 0 }, 'publication.status': 'approved' },
+    key: 'publication.lastReportAt',
+    dir: -1,
+    index: 'routes_publication_reports_idx',
+  },
+  hidden: {
+    filter: { 'publication.status': 'hidden' },
+    key: 'publication.hiddenAt',
+    dir: -1,
+    index: 'routes_publication_hidden_idx',
+  },
+} as const;
+
+/** Фильтр очереди: условие её частичного индекса и только готовые маршруты райдеров. */
+function publicationQueueFilter(queue: PublicationQueue): Filter<RouteDoc> {
+  return { ...PUBLICATION_QUEUES[queue].filter, origin: 'rider', status: 'ready' };
+}
+
 @Injectable()
 export class RoutesRepository {
   private readonly c: RoutesCollections;
@@ -708,27 +735,8 @@ export class RoutesRepository {
     after: PublicationQueuePosition | null,
     limit: number,
   ): Promise<PublishedRiderRoute[]> {
-    const spec = {
-      pending: {
-        filter: { 'publication.status': 'pending' },
-        key: 'publication.submittedAt',
-        dir: 1,
-        index: 'routes_publication_pending_idx',
-      },
-      reported: {
-        filter: { 'publication.openReportCount': { $gt: 0 }, 'publication.status': 'approved' },
-        key: 'publication.lastReportAt',
-        dir: -1,
-        index: 'routes_publication_reports_idx',
-      },
-      hidden: {
-        filter: { 'publication.status': 'hidden' },
-        key: 'publication.hiddenAt',
-        dir: -1,
-        index: 'routes_publication_hidden_idx',
-      },
-    }[queue];
-    const and: Filter<RouteDoc>[] = [{ ...spec.filter, origin: 'rider', status: 'ready' }];
+    const spec = PUBLICATION_QUEUES[queue];
+    const and: Filter<RouteDoc>[] = [publicationQueueFilter(queue)];
     if (after) {
       const op = spec.dir === 1 ? '$gt' : '$lt';
       and.push({
@@ -744,6 +752,13 @@ export class RoutesRepository {
       .hint(spec.index)
       .limit(limit)
       .toArray() as Promise<PublishedRiderRoute[]>;
+  }
+
+  /** Размер очереди модерации (admin-overview, «Обзор» панели) — тот же фильтр и индекс, что у списка. */
+  countPublicationQueue(queue: PublicationQueue): Promise<number> {
+    return this.c.routes.countDocuments(publicationQueueFilter(queue), {
+      hint: PUBLICATION_QUEUES[queue].index,
+    });
   }
 
   /**
