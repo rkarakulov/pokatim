@@ -321,6 +321,11 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   прогресса; тексты 413/415/422/429 — `avatar-errors.ts` (429 загрузки с паузой занятой обработки, 5 с, — «через
   минуту»; удаление — общий текст; файл, который браузер не декодировал, — текст 422). Исходник не перекодируется и не
   уменьшается (JPEG/WebP до 100 Мп, PNG до 25 Мп — решает сервер, ADR-0019): EXIF/GPS стирает сервер.
+- Жалоба на профиль (profile-report-app): `RiderReportAction` в конце `/riders/[id]` — вошедшему по
+  `canReport`/`reported` сервера (`['riders','viewer',id]`, `GET /v1/riders/:publicId/me`, только после найденного
+  профиля), гостю (`signedOut`) — вход с возвратом (allowlist — `/riders/<RiderPublicId>`), сессия неизвестна — ничего.
+  Экран `riders/report/[id]` (`rider-report.tsx`, образец — жалоба на маршрут) — внутри `Stack.Protected`, без имени,
+  клуба и фото; ответ жалобы — в кеш зрителя.
 
 ## Маршруты (routes-01, `docs/product/routes.md`)
 

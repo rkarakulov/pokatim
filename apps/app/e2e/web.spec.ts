@@ -1317,5 +1317,9 @@ test.describe('с API', () => {
       page.getByText('Пока нет опубликованных результатов', { exact: true }),
     ).toBeVisible();
     await expect(page).toHaveTitle('Профиль райдера — Покатим');
+
+    // profile-report-app: гостю «Пожаловаться» видно после восстановления сессии и ведёт на вход
+    await page.getByRole('button', { name: 'Пожаловаться' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/sign-in`);
   });
 });

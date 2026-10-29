@@ -4,7 +4,7 @@ import type { AppTheme } from '@pokatim/design-tokens';
  * Графика хеллоуинского декора (halloween-decor): пути в своих `viewBox`, цвет — роль, не значение. Роли
  * сопоставляются ролям активной темы (`halloweenColors`): декор — слой поверх темы, палитру не меняет.
  */
-export type DecorRole = 'ink' | 'pumpkin' | 'stem' | 'face' | 'moon';
+export type DecorRole = 'ink' | 'pumpkin' | 'stem' | 'face';
 
 export interface DecorShape {
   d: string;
@@ -20,14 +20,13 @@ export interface DecorArt {
   shapes: DecorShape[];
 }
 
-/** Цвета ролей из темы: силуэты — основной текст, тыква — акцент, хвостик — успех, лицо — фон, луна — внимание. */
+/** Цвета ролей из темы: силуэты — основной текст, тыква — акцент, хвостик — успех, лицо — фон. */
 export function halloweenColors(theme: AppTheme): Record<DecorRole, string> {
   return {
     ink: theme.text.primary,
     pumpkin: theme.text.accent,
     stem: theme.status.success,
     face: theme.surface.default,
-    moon: theme.status.warning,
   };
 }
 
@@ -126,12 +125,6 @@ export const BAT: DecorArt = {
       fill: 'ink',
     },
   ],
-};
-
-/** Луна. */
-export const MOON: DecorArt = {
-  viewBox: '0 0 40 40',
-  shapes: [{ d: circle(20, 20, 18), fill: 'moon' }],
 };
 
 /** Тыква-фонарь: три дольки с тонкой обводкой, хвостик, лицо цвета фона. */

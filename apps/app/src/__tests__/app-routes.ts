@@ -20,6 +20,7 @@ import DeleteAccountScreen from '../app/settings/account/delete';
 import ProfileScreen from '../app/settings/profile';
 import OwnProfileRoute from '../app/profile';
 import RiderRoute from '../app/riders/[id]';
+import ReportRiderRoute from '../app/riders/report/[id]';
 import SettingsScreen from '../app/settings/index';
 import LanguageScreen from '../app/settings/language';
 import NotificationsScreen from '../app/notifications';
@@ -106,6 +107,7 @@ export const appRoutes = {
   'routes/mine/[id]': MyRouteRoute,
   'routes/mine/publish/[id]': MyRoutePublishRoute,
   'routes/report/[id]': ReportRouteRoute,
+  'riders/report/[id]': ReportRiderRoute,
   'routes/pick/[routeId]': RouteRidePickRoute,
   'routes/rides/[routeId]/[rideId]': RouteRideRoute,
   'seasons/[id]': SeasonRoute,

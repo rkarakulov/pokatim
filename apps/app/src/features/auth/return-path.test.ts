@@ -37,6 +37,21 @@ describe('возврат после входа (native)', () => {
     }
   });
 
+  it('allowlist: публичный профиль — /riders/<publicId> (43 символа base64url)', () => {
+    const PUBLIC_ID = 'Ab0_-'.repeat(8) + 'xyz';
+    expect(isReturnPath(`/riders/${PUBLIC_ID}`)).toBe(true);
+    for (const bad of [
+      `/riders/${PUBLIC_ID}x`,
+      '/riders/short',
+      `/riders/${ID}`,
+      `/riders/report/${PUBLIC_ID}`,
+      `/riders/${PUBLIC_ID}?x=1`,
+      `//evil.example/riders/${PUBLIC_ID}`,
+    ]) {
+      expect(isReturnPath(bad)).toBe(false);
+    }
+  });
+
   it('однократно: второй take — null; путь вне allowlist не запоминается', () => {
     rememberReturnPath(`/rides/${ID}`);
     expect(takeReturnPath()).toBe(`/rides/${ID}`);
