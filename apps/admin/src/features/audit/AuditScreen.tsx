@@ -39,13 +39,13 @@ function details(entry: AuditEntry): string {
       to: t(`admin.role.${to}`),
     });
   }
-  // app-themes: смена темы приложения — названия тем словами
+  // app-themes: смена темы приложения (история до user-theme) — названия тем словами, общие ключи `theme.*`
   const themeFrom = entry.details?.themeFrom;
   const themeTo = entry.details?.themeTo;
   if (themeFrom && themeTo) {
     return t('admin.audit.themeChange', {
-      from: t(`admin.appearance.theme.${themeFrom}.name`),
-      to: t(`admin.appearance.theme.${themeTo}.name`),
+      from: t(`theme.${themeFrom}.name`),
+      to: t(`theme.${themeTo}.name`),
     });
   }
   // halloween-decor: включение и выключение сезонного декора
