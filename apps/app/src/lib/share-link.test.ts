@@ -39,4 +39,19 @@ describe('shareLink (native)', () => {
   it('без origin — ошибка (кнопки на экране нет)', async () => {
     await expect(shareLink(input)).rejects.toThrow();
   });
+
+  it('с картинкой (iOS): файл в url, текст со ссылкой — в message', async () => {
+    process.env.EXPO_PUBLIC_WEB_ORIGIN = 'https://pokatim.by';
+    const sheet = jest
+      .spyOn(Share, 'share')
+      .mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
+    await expect(shareLink({ ...input, image: { uri: 'file:///cache/og.png' } })).resolves.toBe(
+      'shared',
+    );
+    expect(sheet).toHaveBeenCalledWith({
+      title: 'Райд',
+      message: `${input.text}\nhttps://pokatim.by/rides/x`,
+      url: 'file:///cache/og.png',
+    });
+  });
 });

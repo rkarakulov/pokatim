@@ -118,6 +118,8 @@ import {
   type SubmitRoutePublicationInput,
   StoryCardStatus,
   type StoryCardQuery,
+  type OgCardKind,
+  OgCardMeta,
   CalendarRegistrationState,
   type CalendarRegistrationRequest,
   EventTicketingPublic,
@@ -842,6 +844,15 @@ export function createApiClient({
     /** Адрес PNG карточки по токену (капабилити-ссылка без входа, живёт ≤ 24 ч); без запроса. */
     storyCardImageUrl: (token: string) =>
       `${baseUrl}/v1/story-cards/${encodeURIComponent(token)}.png`,
+    /**
+     * Текущая версия OG-картинки публичного объекта (og-images, ADR-0018) — для «Поделиться» с картинкой файлом;
+     * непубличный объект — 404.
+     */
+    getOgCard: (kind: OgCardKind, id: string) =>
+      getPublic(`/v1/og/cards/${kind}/${encodeURIComponent(id)}`, OgCardMeta),
+    /** Адрес OG-PNG 1200×630 по версии (`getOgCard`); без запроса. */
+    ogImageUrl: (kind: OgCardKind, id: string, version: string) =>
+      `${baseUrl}/v1/og/images/${kind}/${encodeURIComponent(id)}/${encodeURIComponent(version)}.png`,
     /**
      * «Участвовать» (`201` — новая заявка, `200` — уже заявлен) и «Повысить до Verified» (race-results-07):
      * `tier`/`groupKey` — намерение; без тела — новая заявка START (в старой гонке — как v1).

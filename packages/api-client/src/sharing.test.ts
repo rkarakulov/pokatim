@@ -70,3 +70,26 @@ describe('карточка достижения', () => {
     expect(calls[0]!.headers.get('authorization')).toBe('Bearer jwt');
   });
 });
+
+describe('OG-картинка объекта', () => {
+  it('версия — публичный GET без токена', async () => {
+    const { api, calls } = client(200, { version: '0123456789abcdef' });
+    await expect(api.getOgCard('route', ID)).resolves.toEqual({ version: '0123456789abcdef' });
+    expect(calls[0]!.url).toBe(`https://api.test/v1/og/cards/route/${ID}`);
+    expect(calls[0]!.method).toBe('GET');
+    expect(calls[0]!.headers.get('authorization')).toBeNull();
+  });
+
+  it('ответ не по схеме — ошибка', async () => {
+    const { api } = client(200, { version: 'nope' });
+    await expect(api.getOgCard('ride', ID)).rejects.toThrow();
+  });
+
+  it('адрес PNG по версии — абсолютный, без запроса', () => {
+    const { api, calls } = client(200, {});
+    expect(api.ogImageUrl('ride', ID, '0123456789abcdef')).toBe(
+      `https://api.test/v1/og/images/ride/${ID}/0123456789abcdef.png`,
+    );
+    expect(calls).toEqual([]);
+  });
+});

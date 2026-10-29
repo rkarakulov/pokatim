@@ -37,6 +37,7 @@ import { StatBlock, StatBlockSkeleton, type StatVariant } from '@/components/sta
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { useRouteRides } from '@/features/route-rides/queries';
 import { RouteRidesBlock } from '@/features/route-rides/route-rides-block';
+import { useShareImage } from '@/features/sharing/use-share-image';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
 import { shareLink, shareOrigin } from '@/lib/share-link';
@@ -55,18 +56,27 @@ export const routePath = (id: string) => `/routes/${encodeURIComponent(id)}`;
 
 /**
  * Действия карточки (routes-04d, RC-11): «Поделиться» (primary; share sheet / Web Share / копирование с «Ссылка
- * скопирована»; нет origin — кнопки нет, появляется после монтирования) и «Скачать GPX» (secondary, только при
- * `gpxAvailable`; web скачивает в той же вкладке, native открывает системный браузер; адрес не логируется) — в одну
- * строку поровну, одна кнопка — во всю ширину. Уведомления — во всю ширину под строкой.
+ * скопирована»; с OG-картинкой файлом, когда она готова и платформа умеет; нет origin — кнопки нет, появляется после
+ * монтирования) и «Скачать GPX» (secondary, только при `gpxAvailable`; web скачивает в той же вкладке, native
+ * открывает системный браузер; адрес не логируется) — в одну строку поровну, одна кнопка — во всю ширину. Уведомления
+ * — во всю ширину под строкой.
  */
 function RouteActions({ route, mounted }: { route: CatalogRouteDetail; mounted: boolean }) {
   const [shareNotice, setShareNotice] = useState<'copied' | 'failed' | null>(null);
   const [gpxFailed, setGpxFailed] = useState(false);
   const canShare = mounted && shareOrigin() !== null;
+  // OG-картинка файлом — заранее; не готова — делимся ссылкой
+  const image = useShareImage('route', route.id, canShare);
   if (!canShare && !route.gpxAvailable) return null;
   const share = () => {
     setShareNotice(null);
-    shareLink({ title: route.title, text: routeShareDescription(route), path: routePath(route.id) })
+    // синхронно в обработчике нажатия (web: `navigator.share` до любого await)
+    shareLink({
+      title: route.title,
+      text: routeShareDescription(route),
+      path: routePath(route.id),
+      image,
+    })
       .then((outcome) => setShareNotice(outcome === 'copied' ? 'copied' : null))
       .catch(() => setShareNotice('failed'));
   };

@@ -3,6 +3,7 @@ import { calendarTicket, raceTicket } from './fixtures';
 import {
   directionsQuery,
   eventEndsAtMs,
+  eventOgKind,
   eventPath,
   qrUnavailableText,
   spelledCode,
@@ -103,6 +104,12 @@ describe('подписи билета', () => {
     });
     expect(JSON.stringify(input)).not.toContain(raceTicket.code);
     expect(JSON.stringify(input)).not.toContain('PKT1');
+  });
+
+  it('вид OG-картинки события — гонка и старт календаря; незнакомый вид — без картинки', () => {
+    expect(eventOgKind('race')).toBe('race');
+    expect(eventOgKind('calendar')).toBe('calendar');
+    expect(eventOgKind('unknown')).toBeNull();
   });
 
   it('код для скринридера — посимвольно; конец события — endsAt или старт + 12 ч', () => {

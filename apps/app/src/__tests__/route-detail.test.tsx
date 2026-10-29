@@ -12,6 +12,7 @@ import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
+import { prepareShareImage } from '@/lib/share-image';
 import { shareLink, shareOrigin } from '@/lib/share-link';
 
 import { PROFILE_PAN_TEST_ID } from '@/features/routes/profile-chart';
@@ -24,6 +25,10 @@ import CatalogRouteRoute from '../app/routes/[id]';
 
 jest.mock('@/lib/api');
 jest.mock('@/lib/share-link', () => ({ shareLink: jest.fn(), shareOrigin: jest.fn() }));
+jest.mock('@/lib/share-image', () => ({
+  shareImageSupported: () => true,
+  prepareShareImage: jest.fn(),
+}));
 jest.mock('@/lib/download-file', () => ({ downloadFile: jest.fn() }));
 
 const getRoute = jest.mocked(api.getCatalogRoute);
@@ -395,6 +400,39 @@ describe('карточка маршрута каталога: гость по с
     await open();
     await screen.findByLabelText(heroLabel);
     expect(screen.queryByRole('button', { name: 'Поделиться' })).toBeNull();
+  });
+
+  it('«Поделиться» с OG-картинкой файлом: версия от API, PNG готовится заранее', async () => {
+    const VERSION = '0123456789abcdef';
+    jest.mocked(api.getOgCard).mockResolvedValue({ version: VERSION });
+    jest
+      .mocked(api.ogImageUrl)
+      .mockImplementation(
+        (kind, id, version) => `https://api.test/og/${kind}/${id}/${version}.png`,
+      );
+    const image = { uri: 'file:///cache/og.png' };
+    jest.mocked(prepareShareImage).mockResolvedValue(image);
+    await open();
+    await waitFor(() =>
+      expect(prepareShareImage).toHaveBeenCalledWith(
+        `https://api.test/og/route/${ID}/${VERSION}.png`,
+      ),
+    );
+    expect(api.getOgCard).toHaveBeenCalledWith('route', ID);
+    await act(async () => undefined);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ path: `/routes/${ID}`, image }));
+  });
+
+  it('картинка не загрузилась — «Поделиться» без картинки (ссылка), без ошибки на экране', async () => {
+    jest.mocked(api.getOgCard).mockRejectedValue(notFound());
+    await open();
+    await waitFor(() => expect(api.getOgCard).toHaveBeenCalled());
+    await act(async () => undefined);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ image: undefined }));
+    expect(prepareShareImage).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Не удалось поделиться/)).toBeNull();
   });
 
   it('гонки маршрута грузятся — заголовок блока и скелетон карточек', async () => {
