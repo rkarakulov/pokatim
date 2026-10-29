@@ -104,7 +104,12 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
       'profiles.moderate',
       'routes.moderate',
     ]);
-    expect(permissionsOf('organizer')).toEqual(['races.read', 'races.manage', 'results.manage']);
+    expect(permissionsOf('organizer')).toEqual([
+      'races.read',
+      'races.manage',
+      'results.manage',
+      'tickets.checkin',
+    ]);
   });
 
   it('defineRoles: множества неизменяемы для вызывающего и без дублей', () => {
