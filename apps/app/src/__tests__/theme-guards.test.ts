@@ -90,6 +90,11 @@ describe('темы приложения — сторож кода', () => {
     const appJson = JSON.parse(fs.readFileSync(join(SRC, '..', 'app.json'), 'utf8')) as {
       expo: { experiments?: { reactCompiler?: boolean } };
     };
-    expect(appJson.expo.experiments?.reactCompiler).not.toBe(true);
+    // Expo включает компилятор по истинности значения — только явный `false`
+    expect(appJson.expo.experiments?.reactCompiler).toBe(false);
+    // и не через `babel-preset-expo` (`'react-compiler'`) или директивы файлов
+    const appDir = fs.readdirSync(join(SRC, '..'), { withFileTypes: true });
+    expect(appDir.filter((entry) => /^babel\.config\./.test(entry.name))).toEqual([]);
+    expect(offenders(/['"]use memo['"]/)).toEqual([]);
   });
 });
