@@ -865,7 +865,8 @@ export const ru = {
   'admin.overview.card.riderRoutesReported': 'Маршруты с жалобами',
   'admin.overview.card.riderProfiles': 'Профили с жалобами',
   'admin.overview.card.accountDeletions': 'Удаления аккаунтов со сбоем',
-  'admin.overview.card.accountDeletionsHint': 'Очистка не завершилась за сутки — смотрите логи worker',
+  'admin.overview.card.accountDeletionsHint':
+    'Очистка не завершилась за сутки — смотрите логи worker',
   'admin.overview.open': 'Открыть',
   'admin.overview.races': 'Гонки с открытым окном',
   'admin.overview.racesMore': 'Показаны {shown} из {total}',
