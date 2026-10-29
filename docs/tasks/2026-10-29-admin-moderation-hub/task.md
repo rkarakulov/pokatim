@@ -38,6 +38,12 @@
 - AC5. Число на вкладке — из «Обзора»; скринридер слышит «ждут решения: N»; ноль, загрузка, ошибка «Обзора» — без
   числа, экран очереди работает.
 
+## 5.1 Placement & Reuse Gate
+
+Только `apps/admin`: вкладки — продуктовый компонент `features/moderation` (зависит от роутера, в `ui/` нельзя — см. 8.2);
+счётчики — существующий `overviewQuery` (контракт `PanelOverview`), новых эндпоинтов и контрактов нет; навигация —
+`navigation.ts` (поля `anyPermission`, `sections`).
+
 ## 8.2 Решения
 
 - Имя поля «любое из прав» — `anyPermission` (рядом с `permission`, взаимоисключающие по смыслу); подсветка раздела —
@@ -47,6 +53,16 @@
   («Модерация райдов» остаётся заголовком очереди кофе-райдов).
 - Вкладки — продуктовый компонент в `features/moderation` (ссылки роутера), не `ui/` (там нет зависимостей от роутера);
   стиль — `.tabs*` в `index.css` на токенах.
+
+## 10. Documentation Impact
+
+`docs/product/admin-panel.md` (права и карта разделов), `docs/product/rides.md` (раздел панели), `.claude/rules/pokatim-web.md`
+(форма `NavItem`, раздел «Модерация»).
+
+## 11. Review
+
+Claude independent-reviewer, проход 1 — APPROVE; LOW-1 (`staleTime` 30 с у вкладок), LOW-2 (`rides.md`), LOW-3 (§5.1, §10)
+исправлены.
 
 ## 12. Outcome
 

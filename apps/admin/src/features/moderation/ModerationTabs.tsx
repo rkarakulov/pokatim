@@ -12,7 +12,8 @@ import { allowedModerationTabs } from './moderation-tabs';
  */
 export function ModerationTabs() {
   const me = useMe();
-  const overview = useQuery(overviewQuery());
+  // переключение вкладок в пределах 30 с не перезапрашивает весь «Обзор» (findings LOW-1)
+  const overview = useQuery({ ...overviewQuery(), staleTime: 30_000 });
   const attention = overview.data?.attention;
   return (
     <nav className="tabs t-body" aria-label={t('admin.moderation.tabs')}>
