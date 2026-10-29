@@ -34,7 +34,7 @@ export type PushOutcome = 'sent' | 'none' | 'deferred' | 'skipped' | 'limited' |
  * токен: одно уведомление — его текст и цель, несколько — сводка без цели (N7). Тикет `DeviceNotRegistered` и ответ
  * Web Push 404/410 снимают токен сразу, остальные `ok` Expo — в `push_tickets` (квитанции). Сбой Expo или
  * недоступность push-сервисов браузера, когда никто не принял, — захват снят, ретрай BullMQ; последняя попытка —
- * `failed`. Остаточный риск at-least-once: Expo принял, worker упал до записи `sent`. Токены в логи не
+ * `failed`. Сбой Expo не мешает Web Push: принял хоть кто-то — `sent` без ретрая. Остаточный риск at-least-once: Expo принял, worker упал до записи `sent`. Токены в логи не
  * попадают.
  */
 @Injectable()
@@ -117,25 +117,25 @@ export class PushDelivery {
     const accepted: { ticketId: string; tokenId: string }[] = [];
     let firstError: string | null = null;
 
+    // Expo недоступен — Web Push всё равно уходит; ретрай — только если не принял никто (дублей на ретрае нет)
+    let expoError: unknown = null;
     if (expoTokens.length > 0) {
-      let tickets;
       try {
-        tickets = await this.sender.send(
+        const tickets = await this.sender.send(
           expoTokens.map((token) => ({ to: token.token, ...content })),
         );
+        tickets.forEach((ticket, index) => {
+          const token = expoTokens[index]!;
+          if (ticket.status === 'ok') {
+            accepted.push({ ticketId: ticket.id, tokenId: token._id });
+            return;
+          }
+          firstError ??= ticket.error ?? 'error';
+          if (ticket.error === DEVICE_NOT_REGISTERED) unregistered.push(snapshotOf(userId, token));
+        });
       } catch (error) {
-        await this.sendFailed(claimId, userId, due.length, final, error);
-        throw error;
+        expoError = error;
       }
-      tickets.forEach((ticket, index) => {
-        const token = expoTokens[index]!;
-        if (ticket.status === 'ok') {
-          accepted.push({ ticketId: ticket.id, tokenId: token._id });
-          return;
-        }
-        firstError ??= ticket.error ?? 'error';
-        if (ticket.error === DEVICE_NOT_REGISTERED) unregistered.push(snapshotOf(userId, token));
-      });
     }
 
     let webAccepted = 0;
@@ -162,9 +162,10 @@ export class PushDelivery {
     const removed = await this.repository.deleteTokens(unregistered);
     await this.repository.insertTickets(userId, accepted, now);
     const delivered = accepted.length + webAccepted;
-    // никто не принял, а push-сервис браузера временно недоступен — повтор задачи, как сбой Expo
-    if (delivered === 0 && webUnavailable) {
-      const error = new PushSendError('unavailable', null, 'web push service unavailable');
+    // никто не принял, а Expo или push-сервис браузера временно недоступны — повтор задачи
+    if (delivered === 0 && (expoError !== null || webUnavailable)) {
+      const error =
+        expoError ?? new PushSendError('unavailable', null, 'web push service unavailable');
       await this.sendFailed(claimId, userId, due.length, final, error);
       throw error;
     }

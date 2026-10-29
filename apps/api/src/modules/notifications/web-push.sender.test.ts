@@ -5,7 +5,8 @@ import { decodeJwt } from 'jose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type FakeWebPush, startFakeWebPush } from '../../../test/fake-web-push';
-import { HttpWebPushSender, type WebPushPayload } from './web-push.sender';
+import { WEB_PUSH_MAX_PLAINTEXT } from './web-push.crypto';
+import { encodePayload, HttpWebPushSender, type WebPushPayload } from './web-push.sender';
 
 const RIDE = '0190a8c8-0000-7000-8000-000000000001';
 const NOW = new Date('2026-10-29T09:00:00Z');
@@ -117,14 +118,23 @@ describe('HttpWebPushSender', () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain('/sub/x');
   });
 
-  it('битые ключи подписки — rejected без запроса', async () => {
+  it('экранирование JSON раздувает байты — текст укорачивается до лимита тела', () => {
+    const escaped = { ...payload, title: '\u0001'.repeat(150), body: '\u0001'.repeat(900) };
+    const bytes = encodePayload(escaped);
+    expect(bytes.length).toBeLessThanOrEqual(WEB_PUSH_MAX_PLAINTEXT);
+    const decoded = JSON.parse(bytes.toString('utf8')) as WebPushPayload;
+    expect(decoded.title).toHaveLength(150);
+    expect(decoded.target).toEqual(payload.target);
+  });
+
+  it('битые ключи подписки (не точка P-256) — gone без запроса: подписка непригодна', async () => {
     const subscription = push.subscription('a');
     await expect(
       make().send(
         { endpoint: subscription.endpoint, p256dh: 'AAAA', auth: subscription.keys.auth },
         payload,
       ),
-    ).resolves.toEqual({ status: 'error', kind: 'rejected', code: 'bad_keys' });
+    ).resolves.toEqual({ status: 'gone' });
     expect(push.calls).toHaveLength(0);
   });
 });

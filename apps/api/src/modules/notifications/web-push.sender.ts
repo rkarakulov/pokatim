@@ -2,7 +2,13 @@ import { Logger } from '@nestjs/common';
 import { isWebPushEndpoint, type NotificationTarget } from '@pokatim/contracts';
 
 import type { PushSendErrorKind } from './push-sender';
-import { encryptWebPush, type VapidKeys, VapidSigner, type WebPushKeys } from './web-push.crypto';
+import {
+  encryptWebPush,
+  type VapidKeys,
+  VapidSigner,
+  WEB_PUSH_MAX_PLAINTEXT,
+  type WebPushKeys,
+} from './web-push.crypto';
 
 /** Порт отправки Web Push (ADR-0021): адаптер — `HttpWebPushSender`; тесты доставки — фейковый push-сервис. */
 export const WEB_PUSH_SENDER = Symbol('WEB_PUSH_SENDER');
@@ -20,7 +26,8 @@ export interface WebPushPayload {
 }
 
 /**
- * Итог одной подписки: `ok` — push-сервис принял (201/202); `gone` — подписки больше нет (404/410), снять сразу;
+ * Итог одной подписки: `ok` — push-сервис принял (201/202); `gone` — подписки больше нет (404/410) или её ключи
+ * непригодны для шифрования, снять сразу;
  * `error` — `unavailable` (сеть, таймаут, 429, 5xx — повтор задачи), `rejected` (прочие 4xx, чужой хост) или
  * `protocol` (редирект).
  */
@@ -46,17 +53,14 @@ export interface WebPushConfig {
 
 export const WEB_PUSH_LIMITS = { timeoutMs: 10_000, ttlSec: 24 * 3600 } as const;
 
-/**
- * Тексты в payload обрезаются, чтобы тело уложилось в лимит push-сервиса (`WEB_PUSH_MAX_PLAINTEXT`): 150 + 900
- * символов × ≤ 3 байта UTF-8 + цель и JSON — меньше 3,5 КБ. Снимки уведомлений короче.
- */
+/** Тексты в payload — не длиннее (снимки уведомлений короче); байты тела сверяет `encodePayload`. */
 const TITLE_MAX = 150;
 const BODY_MAX = 900;
 
 /**
  * Адаптер Web Push (RFC 8030/8291/8292) — единственное место, знающее протокол: POST на endpoint подписки, тело —
  * aes128gcm, `Authorization: vapid …`, `TTL`, `Urgency: normal`. Endpoint — только push-сервис из белого списка
- * контракта (повторная проверка перед запросом, SSRF), без редиректов, таймаут 10 с, тело ответа не читается.
+ * контракта (повторная проверка перед запросом, SSRF), редирект не исполняется (`manual` → `protocol`), таймаут 10 с, тело ответа не читается.
  * Endpoint, ключи и JWT в логи и тексты ошибок не попадают: лог — хост, статус.
  */
 export class HttpWebPushSender implements WebPushSender {
@@ -81,9 +85,15 @@ export class HttpWebPushSender implements WebPushSender {
     const url = new URL(subscription.endpoint);
     let body: Buffer;
     try {
-      body = encryptWebPush(Buffer.from(JSON.stringify(trimmed(payload)), 'utf8'), subscription);
-    } catch {
-      return { status: 'error', kind: 'rejected', code: 'bad_keys' };
+      body = encryptWebPush(encodePayload(payload), subscription);
+    } catch (error) {
+      // ключ подписки — не точка P-256: подписка непригодна навсегда, снять; прочее — наша ошибка, подписку не трогаем
+      if ((error as { code?: unknown }).code === 'ERR_CRYPTO_ECDH_INVALID_PUBLIC_KEY') {
+        return { status: 'gone' };
+      }
+      const code = error instanceof RangeError ? 'payload_too_large' : 'encrypt_failed';
+      this.logger.warn(`webpush.${code}`);
+      return { status: 'error', kind: 'rejected', code };
     }
     let response: Response;
     try {
@@ -126,12 +136,18 @@ export class HttpWebPushSender implements WebPushSender {
   }
 }
 
-function trimmed(payload: WebPushPayload): WebPushPayload {
+/**
+ * JSON payload в пределах тела push-сервиса: тексты обрезаются по символам, затем — если экранирование JSON раздуло
+ * байты — текст уведомления укорачивается вдвое, пока не влезет (заголовок ≤ 150 символов влезает всегда).
+ */
+export function encodePayload(payload: WebPushPayload): Buffer {
   const cut = (text: string, max: number) =>
-    text.length > max ? `${text.slice(0, max - 1)}…` : text;
-  return {
-    title: cut(payload.title, TITLE_MAX),
-    body: cut(payload.body, BODY_MAX),
-    target: payload.target,
-  };
+    text.length <= max ? text : max <= 1 ? '' : `${text.slice(0, max - 1)}…`;
+  const title = cut(payload.title, TITLE_MAX);
+  let body = cut(payload.body, BODY_MAX);
+  for (;;) {
+    const bytes = Buffer.from(JSON.stringify({ title, body, target: payload.target }), 'utf8');
+    if (bytes.length <= WEB_PUSH_MAX_PLAINTEXT || body.length === 0) return bytes;
+    body = cut(body, Math.floor(body.length / 2));
+  }
 }

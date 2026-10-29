@@ -42,7 +42,7 @@
 | D5 | Публичный ключ — `GET /v1/notifications/web-push` (`{ publicKey: string \| null }`, `null` — выключено): клиент без пересборки узнаёт ключ и скрывает опцию, если сервер Web Push не шлёт. | Ротация ключа без пересборки web; один источник правды. |
 | D6 | Payload — `{ title, body, target }` (снимок уведомления или сводка; цель — тип + id из белого списка), шифруется ключами подписки. Ни userId, ни e-mail, ни адресов. SW строит путь по цели своей копией белого списка (паритет с `notificationTargetPath` — тест). | ADR-0017 п. 3 «адресов нет». |
 | D7 | 404/410 от push-сервиса → подписка удаляется сразу (как `DeviceNotRegistered`); 429/5xx/сеть → ретрай задачи, если никто не принял; 413/прочие 4xx → `failed` этой подписки. | Требование «очистка при 404/410». |
-| D8 | Подписка привязана к пользователю, endpoint (устройство/профиль браузера) и сессии входа (как токены Expo): после выхода, сброса пароля, отзыва push не уходят. Клиент при каждом запуске с сессией и разрешением повторно отправляет подписку (upsert) — переподписка, смена ключа, истечение (`expirationTime`) и новая сессия обрабатываются этим же путём. | Состояние верно после reload и login; «не к сессии браузера» — запись живёт по endpoint, а не по вкладке. |
+| D8 | Подписка привязана к пользователю, endpoint (устройство/профиль браузера) и сессии входа (как токены Expo): после выхода, сброса пароля, отзыва push не уходят. Клиент при каждом запуске с сессией и разрешением повторно отправляет подписку (upsert) — переподписка, истечение (`expirationTime`) и новая сессия обрабатываются этим же путём; подписка под другим `applicationServerKey` (сервер сменил пару VAPID) — отписка и новая подписка. | Состояние верно после reload и login; «не к сессии браузера» — запись живёт по endpoint, а не по вкладке. |
 | D9 | Выход: `POST …/web-push/subscriptions/revoke` (до `signOut`) + `PushSubscription.unsubscribe()` в браузере. Следующий вход с выданным разрешением подписывает заново без запроса. | «При logout — отписка или отвязка» — обе. |
 | D10 | Поддержка: `serviceWorker` + `PushManager` + `Notification`; iOS/iPadOS — только standalone (`navigator.standalone` / `display-mode: standalone`); сервер вернул `publicKey`. Иначе опции нет (экран — как сейчас на web, только письма). | Платформы из задачи. |
 
@@ -68,8 +68,9 @@
 
 `PushDelivery.deliver`: гейт `push_off` — оба транспорта выключены; токены живых сессий делятся по платформе;
 Expo — `ExpoPushSender` (как было), web — `WebPushSender` по одной подписке (TTL 24 ч, `urgency: normal`).
-Итог: принят хоть одним — `sent`; никто не принял и были временные сбои web или сбой Expo — ретрай (последняя
-попытка — `failed`); иначе `failed` с первой ошибкой. 404/410 — подписка снимается (снимок, как `deleteTokens`).
+Сбой Expo не останавливает Web Push. Итог: принят хоть одним — `sent`; никто не принял и были временные сбои web или
+сбой Expo — ретрай (последняя попытка — `failed`); иначе `failed` с первой ошибкой. 404/410 и ключ подписки не точка
+P-256 — подписка снимается (снимок, как `deleteTokens`).
 Лог: `uid`, счётчики `tokens/web/accepted/unregistered` — без endpoint и ключей.
 
 ### 3.5 Приложение и SW (PR B)
@@ -95,7 +96,7 @@ Expo — `ExpoPushSender` (как было), web — `WebPushSender` по одн
    (p256dh — 65 байт, начинается с `0x04`; auth — 16 байт). Адаптер повторно проверяет endpoint перед отправкой.
 3. **Данные наружу:** `WebPushConfig` — только публичный ключ. Payload — снимок текста и цель (D6), зашифрован.
 4. **Злоупотребления:** лимит 30/ч по uid на регистрацию/снятие, ≤ 10 устройств на пользователя, лимит 20 push/ч.
-   SSRF — allowlist, `redirect: 'error'`, таймаут 10 с, тело ответа не читается сверх 64 КБ.
+   SSRF — allowlist, редирект не исполняется (`redirect: 'manual'` → `protocol`), таймаут 10 с, тело ответа не читается.
 5. **Секреты и логи:** `VAPID_PRIVATE_KEY` — только env сервера (dev — генерируется на сервере `bootstrap.sh`, не
    покидает его); в логах нет endpoint, ключей, JWT. Проверка на старте: ключи — пара (публичный выводится из
    приватного).
@@ -110,9 +111,10 @@ Expo — `ExpoPushSender` (как было), web — `WebPushSender` по одн
 | шифрование aes128gcm — вектор RFC 8291 A, VAPID JWT (aud, exp, sub, подпись ключом) | `web-push.crypto.test.ts` |
 | адаптер: 201 → ok, 404/410 → gone, 429/5xx/сеть → unavailable, 413/4xx → rejected, чужой хост — без запроса | `web-push.sender.test.ts` |
 | env: `WEB_PUSH_ENABLED` без ключей / ключи не пара — отказ | `env.test.ts` |
-| subscribe / resubscribe (смена владельца), unsubscribe чужой — без эффекта, лимит, гард | `notifications.int.test.ts` |
-| доставка: web при включённой группе, выключенная группа — нет, несколько подписок, 410 → удаление, Expo выключен — web идёт, оба выключены — `push_off`, сбой web — ретрай | `notifications-delivery.int.test.ts` |
-| intake: `push_off` только при обоих выключенных | `notifications.policy.test.ts` / intake int |
+| subscribe / resubscribe (смена владельца), unsubscribe чужой — без эффекта, лимит, гард, SSRF — 400 | `web-push.int.test.ts` |
+| доставка: web при включённой группе, выключенная группа — нет, несколько подписок, 404/410 → удаление, отозванная сессия, Expo выключен — web идёт, сбой web — ретрай | `web-push.int.test.ts` |
+| intake: при выключенном Expo и включённом Web Push — `pending`, не `push_off` | `web-push.int.test.ts` |
+| оба транспорта: сбой Expo — web доставлен без ретрая; сбой web — Expo без ретрая; оба — ретрай; `DeviceNotRegistered` + 410 | `web-push-expo.int.test.ts` |
 | SW: `push` показывает уведомление, `notificationclick` фокус + message / openWindow по цели; паритет путей | `scripts/service-worker.test.ts`, `notification-target.test.ts` (PR B) |
 | `push.web.ts`: поддержка, статусы, подписка, снятие | `push.web.test.ts` (PR B) |
 
@@ -123,4 +125,6 @@ Expo — `ExpoPushSender` (как было), web — `WebPushSender` по одн
 
 ## 7. Outcome
 
-(заполняется по ходу)
+- PR A (API, worker, env, deploy, ADR-0021): independent review pass 1 — APPROVE (2 MEDIUM, 4 LOW,
+  `findings-a.md`); исправлены: сбой Expo больше не блокирует Web Push, тесты обоих транспортов, байтовый лимит
+  payload (`encodePayload`), невалидный ключ подписки — `gone`, спека redirect и матрица тестов.
