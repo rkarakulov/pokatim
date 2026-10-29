@@ -52,6 +52,7 @@ import RivalResultRoute from '../app/races/result/[id]/[entryId]';
 import StoryCardRoute from '../app/races/story/[id]';
 import AchievementFlashRoute from '../app/achievements/flash';
 import AchievementRoute from '../app/achievements/[code]';
+import AchievementStoryRoute from '../app/achievements/story/[code]';
 import SeasonRoute from '../app/seasons/[id]';
 import StatusScreen from '../app/status';
 import UiKitScreen from '../app/ui-kit';
@@ -109,6 +110,7 @@ export const appRoutes = {
   'races/story/[id]': StoryCardRoute,
   'achievements/flash': AchievementFlashRoute,
   'achievements/[code]': AchievementRoute,
+  'achievements/story/[code]': AchievementStoryRoute,
   'races/dispute/[id]/[entryId]': FileDisputeRoute,
   'races/dispute-response/[id]/[disputeId]': DisputeResponseRoute,
   'routes/[id]': CatalogRouteRoute,

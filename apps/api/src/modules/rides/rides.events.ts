@@ -5,7 +5,14 @@ import { z } from 'zod';
  * объявляет он (`notificationsOutboxRoutes`). Только id и время — без названий, `userId` и id жалоб (RC-3).
  */
 
-export const RideEventPayload = z.object({ rideId: z.uuid() });
+/**
+ * `seq` — `noticeSeq` райда после записи события (порядок схлопывания уведомлений, N7); у событий до него и у отмены
+ * поля нет.
+ */
+export const RideEventPayload = z.object({
+  rideId: z.uuid(),
+  seq: z.number().int().nonnegative().optional(),
+});
 export type RideEventPayload = z.infer<typeof RideEventPayload>;
 
 /** Райд отменён: организатором или при удалении его аккаунта (`RideErasure`, только опубликованные — RC-8). */

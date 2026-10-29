@@ -200,7 +200,7 @@ describe('гонка на последнее место (AC-T1)', () => {
 });
 
 describe('событие rides.participant-joined (notifications, ADR-0017)', () => {
-  it('новый участник — событие { rideId }; повтор, организатор, полный и «Не иду» — без события', async () => {
+  it('новый участник — событие { rideId, seq }; повтор, организатор, полный и «Не иду» — без события', async () => {
     const ride = await createRide(h, organizer, { limit: 2 });
     const a = await rider(h, 'a@example.by');
     const b = await rider(h, 'b@example.by');
@@ -210,7 +210,7 @@ describe('событие rides.participant-joined (notifications, ADR-0017)', ()
     expect((await join(h, b, ride.id)).status).toBe(409);
     expect((await leave(h, a, ride.id)).status).toBe(200);
     const events = await eventsOfType(h, 'rides.participant-joined');
-    expect(events.map((event) => event.payload)).toEqual([{ rideId: ride.id }]);
+    expect(events.map((event) => event.payload)).toEqual([{ rideId: ride.id, seq: 1 }]);
   });
 
   it('параллельные «Я иду» на последнее место — одно событие на одну успешную запись', async () => {

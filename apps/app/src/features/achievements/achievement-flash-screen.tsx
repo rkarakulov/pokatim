@@ -8,12 +8,11 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DocumentTitle } from '@/components/document-title';
-import { storyPath } from '@/features/races/story/paths';
-
-import { flashQueue, shareRaceId, type KnownAchievement } from './achievement-catalog';
+import { flashQueue, type KnownAchievement } from './achievement-catalog';
 import { AchievementCard, AchievementCardSkeleton } from './achievement-card';
 import { closePresented, hiddenCodes, markShown, openPresented } from './flash-session';
 import { ACHIEVEMENTS_KEY, useAchievements, useMarkAchievementsSeen } from './queries';
+import { achievementStoryPath } from './story/achievement-story';
 
 const DOCUMENT_TITLE = `${t('achievements.flash.kicker')} — ${t('app.name')}`;
 
@@ -35,7 +34,7 @@ function FlashShell({ children }: { children: ReactNode }) {
  * — снимок при открытии (неувиденные, не показанные в этом запуске, от старых к новым): пометки `seen` и перезапросы
  * её не меняют; весь снимок отмечается в `flash-session` — уход «назад» или через «Поделиться» посреди очереди не
  * открывает вспышку снова до нового ответа сервера. Показанное помечается сразу (`POST seen`). «Дальше» — следующее,
- * на последнем — «Закрыть»; у гоночных — «Поделиться» → сторис результата (вместо вспышки).
+ * на последнем — «Закрыть»; «Поделиться» → карточка достижения для сторис (вместо вспышки).
  *
  * Открыта по адресу без данных (обновление страницы web, холодный старт по ссылке): скелетон карточки, ошибка и
  * офлайн — `AsyncContent` с повтором и «Закрыть» сверху (§4.12). Очереди нет — назад или на Главную.
@@ -99,7 +98,6 @@ export function AchievementFlashScreen() {
   }
   if (!current) return router.canGoBack() ? null : <Redirect href="/" />;
 
-  const raceId = shareRaceId(current);
   const last = index === queue.length - 1;
 
   return (
@@ -113,13 +111,11 @@ export function AchievementFlashScreen() {
         ) : null}
       </View>
       <AchievementCard key={current.code} item={current} animated>
-        {raceId !== null ? (
-          <Button
-            variant="secondary"
-            label={t('achievements.share')}
-            onPress={() => router.replace(storyPath(raceId))}
-          />
-        ) : null}
+        <Button
+          variant="secondary"
+          label={t('achievements.share')}
+          onPress={() => router.replace(achievementStoryPath(current.code))}
+        />
         {last ? (
           <Button label={t('achievements.close')} onPress={close} />
         ) : (

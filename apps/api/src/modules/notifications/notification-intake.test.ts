@@ -79,7 +79,7 @@ describe('NotificationIntake: решение по заявке маршрута 
       {
         text: { kind: 'route_rejected', route: 'Вокруг моря', reason: 'duplicate' },
         target: { type: 'my-route', routeId: ROUTE },
-        collapseKey: `route:${ROUTE}:publication`,
+        collapse: { key: `route:${ROUTE}:publication`, seq: DECIDED_AT.getTime() },
         recipients: [AUTHOR],
       },
     ]);
