@@ -59,7 +59,7 @@ paths:
   (`src/theme/`); компоненты читают `useTheme<AppTheme>()` / `useAppTheme()` (иконки, раскладка, схема). Подложка
   карты — `theme.map.basemap`, профиль высоты — `theme.profile.*`; сравнений с `themes.light|dark` нет. Иконки — только
   `components/icon.tsx` (единственный вход `expo-symbols`), шрифты — только `themeFonts` + `useThemeFonts` (не
-  `useFonts`); сторож — `__tests__/theme-guards.test.ts`. Тема — личная, в профиле райдера (ADR-0021): единственный
+  `useFonts`); React Compiler выключен — `textStyle()` читает шрифты темы из модуля, кэш компилятора их не обновил бы; сторож — `__tests__/theme-guards.test.ts`. Тема — личная, в профиле райдера (ADR-0021): единственный
   источник — `useActiveThemeId` (`features/appearance/`): вошёл — `themeId` профиля (`['profile']`), до ответа или при
   ошибке — последняя известная (native — кэш `pokatim.appTheme`, web — SSR); сессия `signedOut` (любой путь) —
   «Классика» и стирание кэша / cookie (в хуке по статусу сессии, не в `useSignOut`). Web: тема профиля — в cookie

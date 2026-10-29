@@ -85,4 +85,11 @@ describe('темы приложения — сторож кода', () => {
     expect(screens.length).toBeGreaterThan(0);
     expect([...TAB_NAMES].sort()).toEqual([...screens].sort());
   });
+
+  it('React Compiler выключен: textStyle() читает шрифты темы из модуля — кэш компилятора оставил бы прежние (user-theme)', () => {
+    const appJson = JSON.parse(fs.readFileSync(join(SRC, '..', 'app.json'), 'utf8')) as {
+      expo: { experiments?: { reactCompiler?: boolean } };
+    };
+    expect(appJson.expo.experiments?.reactCompiler).not.toBe(true);
+  });
 });
