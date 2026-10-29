@@ -10,6 +10,9 @@ import { themes, type PokatimRoleGroups, type ThemeName } from './brand.ts';
 
 export { contrastRatio, WCAG, type ContrastPair } from '@rkarakulov/design-tokens';
 
+/** Минимальный контраст модулей QR к «бумаге» — выше WCAG текста (AAA 7:1). */
+export const QR_CONTRAST = 7;
+
 /**
  * Пары, которые реально встречаются в компонентах схемы (любой темы приложения или набора `themes`). Свои группы
  * ролей бренда добавляйте парами `contrastPair('group.role / group.background', …)` из базы — их проверит тот же тест.
@@ -43,6 +46,8 @@ export function contrastPairsOf(t: Theme<PokatimRoleGroups>): ContrastPair[] {
       t.tabBar.background,
       WCAG.text,
     ),
+    // QR билета (event-tickets, RC-B5): запас для сканеров при бликах и низкой яркости
+    contrastPair('ticket.qrInk / ticket.qrPaper', t.ticket.qrInk, t.ticket.qrPaper, QR_CONTRAST),
   ];
 }
 

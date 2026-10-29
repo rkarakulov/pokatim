@@ -46,6 +46,7 @@ paths:
   `EXPO_PUBLIC_*` — публичные значения: попадают в клиентский бандл, секретов там нет.
 - Service worker (`scripts/service-worker.ts`) кеширует только статику сборки с хешем в имени (версия кеша — от
   содержимого): HTML, данные loader-ов (`/_expo/loaders`), API, manifest и `public/` — мимо, офлайн-данных нет.
+  Исключение pokatim — HTML-оболочка экрана билета (`pokatim-app.md` «Билеты»).
 - Проверка в браузере: `pnpm build:web` + `pnpm --filter @pokatim/app start:web`, смоук — `pnpm e2e:web`
   (`e2e/web.spec.ts`: новый маршрут — шаг смоука; `test`/`expect` — из `e2e/fixtures.ts`, ошибки страницы не
   глушить); серверы, env и ожидаемые отказы смоука проекта — только `e2e/project.ts` (`playwright.config.ts`

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { appThemes } from './app-themes.ts';
-import { contrastPairs, contrastPairsOf, contrastRatio } from './contrast.ts';
+import { contrastPairs, contrastPairsOf, contrastRatio, QR_CONTRAST } from './contrast.ts';
 import { designSystemCss } from './css.ts';
 import { badgeShape, layout } from './index.ts';
 import { themes, type ThemeName } from './brand.ts';
@@ -127,6 +127,20 @@ describe('контраст WCAG — темы pokatim', () => {
     );
   });
 
+  it('QR билета: пара ink/paper ≥ 7:1 во всех темах приложения, «бумага» светлее модулей (RC-B5)', () => {
+    for (const def of Object.values(appThemes)) {
+      for (const scheme of ['light', 'dark'] as const) {
+        const pair = contrastPairsOf(def.schemes[scheme]).find(
+          (p) => p.name === 'ticket.qrInk / ticket.qrPaper',
+        );
+        expect(pair?.min).toBe(QR_CONTRAST);
+        const { qrInk, qrPaper } = def.schemes[scheme].ticket;
+        expect(contrastRatio(qrInk, qrPaper)).toBeGreaterThanOrEqual(QR_CONTRAST);
+        expect(contrastRatio(qrPaper, '#000000')).toBeGreaterThan(contrastRatio(qrInk, '#000000'));
+      }
+    }
+  });
+
   it('к парам добавлена линия профиля высоты', () => {
     expect(contrastPairs('light').map((p) => p.name)).toContain('profile.line / surface.default');
   });
@@ -193,6 +207,7 @@ describe('раскладка приложения (layout)', () => {
       avatarProfile: 56,
       badgeGrid: 72,
       badgeHero: 152,
+      ticketQr: 240,
     });
     // диск не перекрывает кольцо: отступ + толщина кольца с двух сторон + диск ≤ 1
     expect(2 * (badgeShape.ringInset + badgeShape.ringWidth) + badgeShape.disc).toBeLessThanOrEqual(

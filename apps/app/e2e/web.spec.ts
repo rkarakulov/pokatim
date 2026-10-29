@@ -587,6 +587,30 @@ test('удаление аккаунта /settings/account/delete без сесс
   }
 });
 
+test('билет /tickets/<код> без сессии (event-tickets T2): HTML 200 + noindex без кода и данных билета, после гидрации — «Вход»', async ({
+  page,
+  request,
+}) => {
+  const code = 'ABCDE12345';
+  const response = await request.get(`/tickets/${code}`);
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(html).toContain('<title>Билет — Покатим</title>');
+  expect(html).toMatch(/<meta name="robots" content="noindex"/);
+  expect(html).not.toContain('og:url');
+  // оболочка без данных билета (её кеширует service worker для офлайн-старта PWA): кода нет ни в мете, ни в теле
+  expect(html.replace(/<script[^>]*src=[^>]*>/g, '')).not.toContain(code);
+
+  await page.goto(`/tickets/${code}`);
+  if (WITH_API) {
+    // гость — на «Вход» (путь билета запомнен: после входа — снова билет)
+    await expect(page).toHaveURL(`${BASE_URL}/sign-in`);
+    await expect(page.getByRole('heading', { name: 'Вход' })).toBeVisible();
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+});
+
 test('неизвестный адрес, /_sitemap и витрина /ui-kit в production — «Страница не найдена»', async ({
   page,
 }) => {

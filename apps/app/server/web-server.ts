@@ -15,9 +15,10 @@ export const securityHeaders: Readonly<Record<string, string>> = {
 /**
  * Пути с токеном в URL: ссылки из письма (`/auth/verify/<token>`, `/auth/reset/<token>`) и возврат из авторизации
  * устройства (`/devices/return?…&t=<тикет>`): без `Referer` даже к своему origin — запросы страницы к API (прод — тот
- * же origin) иначе несли бы полный URL с токеном.
+ * же origin) иначе несли бы полный URL с токеном. Билет (`/tickets/<код>`, event-tickets): код — запасной ключ входа
+ * на мероприятие, в `Referer` внешним сайтам и API не уходит.
  */
-const TOKEN_PATH_PREFIXES = ['/auth/', '/devices/return'] as const;
+const TOKEN_PATH_PREFIXES = ['/auth/', '/devices/return', '/tickets/'] as const;
 
 const isTokenPath = (path: string) =>
   TOKEN_PATH_PREFIXES.some((prefix) =>

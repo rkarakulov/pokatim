@@ -3,6 +3,7 @@ import type {
   MyAttempt,
   MyAttemptTrack,
   MyRaceEntry,
+  MyTicketRef,
   RaceDetail,
   RaceEntryRequest,
   RaceFinishersPage,
@@ -27,6 +28,7 @@ import { withAccessToken } from '@/features/auth/authorized';
 import { apiErrorCode } from '@/features/auth/error-messages';
 import { AUTH_MUTATION } from '@/features/auth/queries';
 import { VERIFIED_PROFILE_KEY } from '@/features/profile/queries';
+import { forgetCancelledTicket } from '@/features/tickets/queries';
 import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
@@ -212,6 +214,8 @@ export const raceEntryKey = (id: string) => ['races', 'entry', id] as const;
 /** Префикс инвалидации таблицы; сами страницы — `[...raceResultsKey(id), 'pages']` (F12). */
 export const raceResultsKey = (id: string) => ['races', 'results', id] as const;
 export const raceCandidatesKey = (id: string) => ['races', 'candidates', id] as const;
+/** Свой билет гонки (event-tickets): под префиксом гонок, инвалидируется мутациями участия. */
+export const raceTicketKey = (id: string) => ['races', 'ticket', id] as const;
 /** Опрос «моего участия», пока трек проверяется или файл обрабатывается (§7.3; polling, не сокеты). */
 export const ENTRY_POLL_MS = 3000;
 const RESULTS_PAGE_LIMIT = 50;
@@ -360,10 +364,40 @@ async function applyEntry(queryClient: QueryClient, entry: MyRaceEntry): Promise
   // опрос или обновление, ушедшие во время мутации, несут состояние до неё — их ответ не должен затереть этот
   await queryClient.cancelQueries({ queryKey: raceEntryKey(entry.raceId) });
   queryClient.setQueryData(raceEntryKey(entry.raceId), entry);
+  // заявки больше нет — билет отменён: офлайн-копия с QR стирается (event-tickets)
+  if (entry.entry?.status !== 'active') {
+    forgetCancelledTicket(
+      queryClient,
+      queryClient.getQueryData<MyTicketRef | null>(raceTicketKey(entry.raceId))?.code,
+    );
+  }
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: raceResultsKey(entry.raceId) }),
     queryClient.invalidateQueries({ queryKey: raceCandidatesKey(entry.raceId) }),
+    // заявка и её отмена выпускают и отменяют билет (event-tickets): билет гонки и «Ваши билеты» устарели
+    queryClient.invalidateQueries({ queryKey: raceTicketKey(entry.raceId) }),
+    queryClient.invalidateQueries({ queryKey: ['tickets'] }),
   ]);
+}
+
+/**
+ * Свой билет гонки (event-tickets, «Открыть билет» в «Ваше участие»): сервер выпускает лениво; нет билетов или
+ * заявки — `null`; старый API без эндпоинта (404) — `null` (кнопки нет).
+ */
+export function useRaceTicket(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: raceTicketKey(id),
+    queryFn: async (): Promise<MyTicketRef | null> => {
+      try {
+        return await withAccessToken((token) => api.getRaceTicket(token, id));
+      } catch (error) {
+        if (apiErrorCode(error) === 'NOT_FOUND') return null;
+        throw error;
+      }
+    },
+    staleTime: DEFAULT_STALE_MS,
+    enabled,
+  });
 }
 
 /**

@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 
 import { forgetPushToken } from '@/features/notifications/push';
 import { revokeDevicePushToken } from '@/features/notifications/push-registration';
+import { clearOfflineTickets } from '@/features/tickets/offline-store';
 
 import { useRegistrationStore } from './registration-store';
 import { type SignOutOptions, useSessionStore } from './session-store';
@@ -23,6 +24,8 @@ export function useSignOut() {
       await useSessionStore.getState().signOut(options);
       queryClient.clear();
       await useRegistrationStore.getState().clear();
+      // офлайн-копии билетов и их QR (AC12) — и при офлайн-выходе
+      await clearOfflineTickets();
     },
     [queryClient],
   );

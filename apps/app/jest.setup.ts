@@ -78,8 +78,16 @@ jest.mock('expo-file-system', () => {
     static downloadFileAsync = jest.fn((_url: string, destination: { uri: string }) =>
       Promise.resolve(destination),
     );
+    // офлайн-копии билетов (event-tickets): файла нет, запись — без эффекта; тест хранилища мокает модуль сам
+    exists = false;
+    text = jest.fn(async () => '');
+    write = jest.fn(async () => undefined);
+    delete = jest.fn();
   }
-  return { File, Paths: { cache: { uri: 'file:///cache' } } };
+  return {
+    File,
+    Paths: { cache: { uri: 'file:///cache' }, document: { uri: 'file:///document' } },
+  };
 });
 
 // RNGH v3 без Reanimated (routes-04: колбэки жестов — `runOnJS`): mock Reanimated 4.7 падает на `setCSSEventHandler`,

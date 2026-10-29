@@ -500,11 +500,20 @@ export function createApiClient({
         TicketView,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
-    /** Публичная сводка регистрации события (без входа); билеты не включены — `{ enabled: false }`. */
-    getEventTicketing: (kind: TicketEventKind, eventId: string) =>
+    /**
+     * Публичная сводка регистрации события (без входа); билеты не включены — `{ enabled: false }`. `fresh` — в обход
+     * HTTP-кэша (`public, max-age=60`): места после своей регистрации и отказа 409. Query у пути нет — `_=` от
+     * `whatwg-fetch` (React Native) сервер не читает.
+     */
+    getEventTicketing: (
+      kind: TicketEventKind,
+      eventId: string,
+      options: { fresh?: boolean } = {},
+    ) =>
       getPublic(
         `/v1/events/${encodeURIComponent(kind)}/${encodeURIComponent(eventId)}/ticketing`,
         EventTicketingPublic,
+        options.fresh ? { cache: 'no-cache' } : {},
       ),
     /** PR C: материалы события по порядку (без входа); событие не опубликовано — 404. */
     getEventMaterials: (kind: TicketEventKind, eventId: string) =>

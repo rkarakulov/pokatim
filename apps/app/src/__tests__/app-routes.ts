@@ -17,6 +17,7 @@ import ResetPasswordScreen from '../app/auth/reset/[token]';
 import DeviceReturnScreen from '../app/devices/return';
 import DevicesScreen from '../app/settings/devices';
 import DeleteAccountScreen from '../app/settings/account/delete';
+import TicketRoute from '../app/tickets/[code]';
 import ProfileScreen from '../app/settings/profile';
 import OwnProfileRoute from '../app/profile';
 import RiderRoute from '../app/riders/[id]';
@@ -95,6 +96,7 @@ export const appRoutes = {
   'settings/notifications': NotificationSettingsScreen,
   'settings/verified': VerifiedProfileScreen,
   'settings/account/delete': DeleteAccountScreen,
+  'tickets/[code]': TicketRoute,
   'devices/return': DeviceReturnScreen,
   'auth/verify/[token]': VerifyEmailScreen,
   'auth/reset/[token]': ResetPasswordScreen,
