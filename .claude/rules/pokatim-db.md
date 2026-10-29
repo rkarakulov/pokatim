@@ -344,6 +344,10 @@ paths:
 - Публичные гонки сезона (`GET /v1/seasons/:id/races`) — индекс `races_season_public_idx { seasonId, windowEndsAt,
   _id }` (`0009`, курсор без `SORT`, int-тест по `system.profile`); старый `races_season_idx` остаётся (снятие — с
   человеком).
+- Пререндер OG-картинок (`og.sync`, og-images): `{ status, updatedAt, _id }` на `races`, `rides`, `routes`,
+  `calendar_starts` (`0037_og_sync_indexes`, expand-only). Выборка «изменилось после» — только `changedForOg`
+  репозиториев (`changed-since.ts`: keyset `(updatedAt, _id)` + сортировка); каждая запись, меняющая публичное поле,
+  обязана ставить `updatedAt`.
 
 ## Кофе-райды (блок 05, ADR-0013 Proposed)
 
