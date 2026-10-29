@@ -13,7 +13,10 @@ paths:
   seasons, gamification, sharing, notifications, moderation, media (по мере появления).
   Есть: `identity` (учётка, сессии, `AuthGuard`), `profile` (онбординг: опрос, коллекция `profiles`; `GET /v1/profile` — ответы опроса своего
   пользователя для Главной, публичное имя и согласие, `no-store`, документа нет — `[]` / `null` / `false`;
-  `PATCH /v1/profile` — частичное обновление имени и согласия, лимит `profile-update:<uid>` 30/ч; порт `RIDER_NAMES`
+  `PATCH /v1/profile` — частичное обновление имени и согласия, лимит `profile-update:<uid>` 30/ч; user-theme
+  (ADR-0021): `ProfileView.themeId` (нет выбора — `classic`), `PUT /v1/profile/theme` `{ themeId }` — одна атомарная
+  операция вне транзакции, без журнала, свой лимит `profile-theme:<uid>` 60/ч; порт `RIDER_THEMES` (`themeOf`) для
+  `sharing`; порт `RIDER_NAMES`
   (`RiderNameDirectory`) для `results` — через `ProfileCoreModule` (репозиторий + порт, без контроллеров; его
   импортируют `ProfileModule` и `ResultsCoreModule`); авторизация — `AuthGuard` через `modules/identity/index.ts`,
   коллекции identity не читает; `results` берёт имена только через порт после snapshot-сессии, в снимок протокола
@@ -25,12 +28,14 @@ paths:
   `seasons` нет), `calendar` (календарь стартов, с гонками не связан), `tracks` (загрузки, разбор, активности —
   ADR-0011), `devices` (Garmin/Wahoo через агрегатор Open Wearables), `routes` (маршруты команды платформы —
   эталон коридора гонки, ADR-0012 Proposed) и `rides` (кофе-райды, ADR-0013 Proposed: зависит от `identity` и порта `routes` `RideRoutes` (05c);
-  панель — с модерацией 05b), `appearance` (app-themes: тема приложения — глобальная настройка платформы,
-  `platform_settings/appearance`; импортирует только `panel/index.ts` и `public-read.guard.ts`; публичное
-  `GET /v1/appearance` — ровно `{ themeId, decor }`, `Cache-Control: no-cache`; панель `GET|PUT /v1/admin/appearance` — `appearance.manage`, замена по
-  `version` (409), тело — `themeId` и/или `decor` (halloween-decor: сезонный декор `none | halloween`), журнал
-  `appearance.theme_changed` / `appearance.decor_changed` с `subject.kind = 'platform'` (nil UUID) в транзакции — своя
-  запись на каждое изменённое поле; повтор тех же значений — без записи).
+  панель — с модерацией 05b), `appearance` (сезонный декор — глобальная настройка платформы,
+  `platform_settings/appearance`; тема — личная у райдера, `profile`, ADR-0021; импортирует только `panel/index.ts` и
+  `public-read.guard.ts`, потребителей вне модуля нет; публичное `GET /v1/appearance` — ровно `{ themeId, decor }`,
+  `themeId` — константа `classic` для сборок до user-theme, `Cache-Control: no-cache`; панель
+  `GET|PUT /v1/admin/appearance` — `appearance.manage`, замена по `version` (409), тело — `{ decor, version }`
+  (halloween-decor: `none | halloween`; `themeId` — 400), журнал `appearance.decor_changed` с
+  `subject.kind = 'platform'` (nil UUID) в транзакции; повтор того же декора — без записи; старые записи
+  `appearance.theme_changed` — история).
 - `routes` о гонках не знает и зависит от `panel` и `identity` (routes-02: `AuthGuard` «моих маршрутов», как `rides`); `races → routes` — только порт `RouteCatalog`
   (`modules/routes/index.ts`, `RoutesCoreModule`): готовый маршрут по id в транзакции правки гонки и названия
   маршрутов списка. Записи `routes`/`route_*` из `races` (и наоборот) — нет. Карта коридора (maps-01, ADR-0014):
@@ -131,7 +136,7 @@ paths:
   `ResultsHistoryService` (`entriesOfUserPage` + `ResultsReadService.entryResult` в одной snapshot-сессии, места не
   дублируются); `rides` — `ProfileRidesController` (`profile/rides`) → `RidesHistoryService` (`pastOf`,
   `rides_participant_idx`). Пути `/v1/profile/{avatar,races,rides,stats}` — статические сегменты, у
-  `ProfileController` только `GET /` и `PATCH /`.
+  `ProfileController` только `GET /`, `PATCH /` и `PUT theme` (user-theme).
 - `riders` — модуль-композиция (образец `standings`, своих коллекций нет): `riders → profile, results, tracks,
   identity` только через `index.ts`; `riders` не импортирует никто, кроме `AppModule`. Порты: `RIDER_PROFILES`
   (`profile`), `RIDER_RESULTS` (`results`: `publishedRows` — строки текущих ревизий, `racesOf`), `ACTIVITY_TOTALS`
@@ -240,8 +245,9 @@ paths:
   `AuthGuard`, `no-store`; `StoryCardImageController` — `GET story-cards/:file`, `IpRateLimitGuard`) и
   `SharingWorkerModule` (`WorkerModule`: очередь `story-card`, `StoryCardProcessor`, `concurrency: 1`). Зависит от
   `results` (порт `RESULTS_FOR_SHARING`: `storyCardFacts` — как «моё участие», `storyCardLine` — `sliceLine` по
-  `trackMap.segment` или линия маршрута), `appearance` (`AppearanceCoreModule`, порт `APP_APPEARANCE`), `profile`
-  (`RIDER_NAMES`), `identity` — только `index.ts`; на `sharing` не ссылается никто.
+  `trackMap.segment` или линия маршрута), `profile` (`RIDER_NAMES`; `RIDER_THEMES` — тема запрашивающего карточку,
+  user-theme: владелец заявки для сторис, зритель для приглашения), `identity` — только `index.ts`; на `sharing` не
+  ссылается никто.
 - Входы — `StoryCardInputs.resolve` (одна реализация для HTTP и worker), ключ — `storyCardHash`; кэш — Redis
   (`StoryCardCache`: `token:<hash>`, `png:<token>`, `pending:<hash>` NX, `failed:<hash>` `GETDEL`). Worker сверяет
   хэш (не совпал — `skipped`). Рендер — чистые `storyCardTree` (satori-узлы, только flex) → `renderStoryCardSvg`
