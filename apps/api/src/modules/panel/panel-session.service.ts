@@ -73,6 +73,7 @@ export class PanelSessionService {
    * устройство (штамп и эпоха совпали) даёт сессию, иначе вызов `totpRequired`; нет 2FA, admin и обязательность —
    * вызов `totpSetupRequired`; иначе — сессия сразу (+ `panel.signed_in` и отзыв прежней cookie одной транзакцией).
    * Устройство перепроверяется в транзакции сессии (`openByDevice`): сброс 2FA между проверкой и записью — вызов кода.
+   * Сессия без фактора — под замком сотрудника (`openWithoutFactor`): подключение 2FA между чтением и записью — вызов.
    */
   async signIn(
     input: { email: string; password: string },
@@ -100,9 +101,10 @@ export class PanelSessionService {
       this.totp.ensureAvailable();
       return this.issueChallenge(subject, 'setup');
     }
-    return this.transactions.run((tx) =>
-      this.openSession(tx, { ...subject, member, totp, secondFactor: null }, previousToken),
-    );
+    const opened = await this.openWithoutFactor(subject, previousToken);
+    if (opened !== 'totp' && opened !== 'setup') return opened;
+    this.totp.ensureAvailable();
+    return this.issueChallenge(subject, opened);
   }
 
   /**
@@ -192,6 +194,8 @@ export class PanelSessionService {
     const recovery = this.totp.newRecoveryCodes();
 
     const opened = await this.finishChallenge(challenge, 'код подключения', async (tx) => {
+      // замок сотрудника — как у входа без фактора (`openWithoutFactor`)
+      await this.repository.lockMember(tx, challenge.userId);
       const activated = await this.repository.activateTotp(tx, challenge.userId, {
         secretEnc: pending.secretEnc,
         step,
@@ -319,6 +323,25 @@ export class PanelSessionService {
     });
   }
 
+  /**
+   * Сессия без второго фактора: первая операция транзакции — `lockMember` (подтверждение подключения 2FA пишет тот же
+   * документ, конфликт записи их упорядочивает), под замком — член и 2FA перечитываются. 2FA уже активна — `'totp'`,
+   * обязательна для роли — `'setup'` (вызывающий выдаёт вызов); член снят — `403 PANEL_ACCESS_DENIED`.
+   */
+  private openWithoutFactor(
+    subject: { userId: string; credentialsStamp: string },
+    previousToken: string | undefined,
+  ): Promise<OpenedSession | 'totp' | 'setup'> {
+    return this.transactions.run(async (tx) => {
+      const member = await this.repository.lockMember(tx, subject.userId);
+      if (member?.status !== 'active') throw domainError('PANEL_ACCESS_DENIED', 403);
+      const totp = await this.repository.findTotp(subject.userId, tx);
+      if (totp?.status === 'active') return 'totp';
+      if (this.totp.required(member.role)) return 'setup';
+      return this.openSession(tx, { ...subject, member, totp, secondFactor: null }, previousToken);
+    });
+  }
+
   private async issueChallenge(
     subject: { userId: string; credentialsStamp: string },
     purpose: 'totp' | 'setup',
@@ -389,7 +412,12 @@ export class PanelSessionService {
   ): Promise<T> {
     try {
       return await this.transactions.run(async (tx) => {
-        if (!(await this.repository.consumeChallenge(tx, challenge._id))) throw challengeExpired();
+        const consumed = await this.repository.consumeChallenge(
+          tx,
+          challenge._id,
+          this.clock.now(),
+        );
+        if (!consumed) throw challengeExpired();
         return work(tx);
       });
     } catch (error) {

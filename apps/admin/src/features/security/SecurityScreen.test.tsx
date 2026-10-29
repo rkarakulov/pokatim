@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import type { TotpStatus } from '@pokatim/contracts';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { onlineManager } from '@tanstack/react-query';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
 import { httpError, ME, renderApp } from '../../test/app';
+import { TOTP_STATUS_QUERY_KEY } from './SecurityScreen';
 
 vi.mock('../../api', () => ({
   api: {
@@ -41,6 +43,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  onlineManager.setOnline(true);
   vi.resetAllMocks();
 });
 
@@ -182,5 +185,16 @@ describe('«Безопасность» (ADR-0024, D9)', () => {
     await renderApp('/account/security');
     expect(await screen.findByText('Не удалось загрузить')).toBeTruthy();
     expect(screen.queryByText('Данные могли устареть')).toBeNull();
+  });
+
+  it('первое открытие без сети («кто я» в кэше) — «Нет соединения» с повтором, не вечный скелетон (ревью pass 2)', async () => {
+    mocked.getTotpStatus.mockResolvedValue(OFF);
+    const { queryClient } = await renderApp('/account/security');
+    expect(await screen.findByText('Не подключена')).toBeTruthy();
+    onlineManager.setOnline(false);
+    act(() => void queryClient.resetQueries({ queryKey: TOTP_STATUS_QUERY_KEY }));
+    expect(await screen.findByText('Нет соединения')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
+    expect(screen.queryByRole('progressbar')).toBeNull();
   });
 });

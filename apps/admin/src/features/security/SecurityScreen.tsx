@@ -33,7 +33,7 @@ type Flow =
  * «Безопасность» (`/account/security`, любая роль, D9): статус 2FA своего аккаунта, подключение (QR → код → коды
  * восстановления), перевыпуск кодов (с кодом TOTP), отключение (с кодом TOTP или восстановления). При обязательности
  * (admin, `PANEL_TOTP_ENFORCED`) отключение недоступно с пояснением — источник истины сервер (`409 TOTP_REQUIRED`).
- * Ошибка статуса без данных — полноэкранная; при данных — баннер с повтором поверх, начатый flow (коды) сохраняется
+ * Ошибка статуса без данных (и запрос на паузе без сети) — полноэкранная; при данных — баннер с повтором поверх, начатый flow (коды) сохраняется
  * (AGENTS.md §4.12).
  */
 export function SecurityScreen() {
@@ -102,8 +102,12 @@ export function SecurityScreen() {
             </Banner>
           ) : null}
           {!status.data ? (
-            status.isError ? (
-              <ErrorState error={status.error} onRetry={() => void status.refetch()} />
+            status.isError || status.fetchStatus === 'paused' ? (
+              <ErrorState
+                error={status.error}
+                offline={status.fetchStatus === 'paused'}
+                onRetry={() => void status.refetch()}
+              />
             ) : (
               <div role="progressbar" aria-label={t('state.loading')}>
                 <p className="skeleton t-body"> </p>

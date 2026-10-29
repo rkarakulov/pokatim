@@ -421,9 +421,15 @@ export class PanelRepository {
     await this.c.challenges.deleteOne({ _id: id, attempts: { $gte: maxAttempts } });
   }
 
-  /** Погасить вызов атомарно (в транзакции входа): уже погашенный — `false`. */
-  async consumeChallenge(session: DbSession, id: string): Promise<boolean> {
-    const result = await this.c.challenges.deleteOne({ _id: id }, { session });
+  /**
+   * Погасить вызов атомарно (в транзакции входа): с `now` — только живой (`expiresAt > now`); уже погашенный или
+   * истёкший — `false`. Без `now` — уборка негодного вызова.
+   */
+  async consumeChallenge(session: DbSession, id: string, now?: Date): Promise<boolean> {
+    const filter: Filter<PanelSignInChallengeDoc> = now
+      ? { _id: id, expiresAt: { $gt: now } }
+      : { _id: id };
+    const result = await this.c.challenges.deleteOne(filter, { session });
     return result.deletedCount === 1;
   }
 

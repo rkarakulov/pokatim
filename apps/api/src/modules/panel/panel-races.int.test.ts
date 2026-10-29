@@ -120,12 +120,15 @@ describe('вход в панель ↔ снятие роли', () => {
 
     const signing = panelSignIn(h, 'mod@example.by');
     await paused.reached;
-    const revoked = await panelCall(h, adminToken, 'POST', `${MEMBERS}/${userId}/revoke`, {
+    // вход держит замок сотрудника (`lockMember`, ревью 2FA pass 2): снятие роли повторяется до его коммита
+    const lockSpy = vi.spyOn(target, 'lockMember');
+    const revoking = panelCall(h, adminToken, 'POST', `${MEMBERS}/${userId}/revoke`, {
       reason: 'снятие во время входа',
     });
-    expect(revoked.status).toBe(200);
+    await untilBlocked(revoking, () => Promise.resolve(lockSpy.mock.calls.length >= 2));
     paused.open();
-    const res = await signing;
+    const [res, revoked] = await Promise.all([signing, revoking]);
+    expect(revoked.status).toBe(200);
     expect(res.status).toBe(200);
 
     const me = await panelCall(h, panelCookieValue(res), 'GET', '/v1/admin/session/me');

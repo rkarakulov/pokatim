@@ -12,6 +12,7 @@ import {
   gate,
   latestResetToken,
   requestPasswordReset,
+  untilBlocked,
 } from '../../../test/identity';
 import {
   countTotpChecks,
@@ -459,6 +460,132 @@ describe('гонки и отказы второго шага (ревью pass 1)
     expect(res.status).toBe(503);
     expect(res.body).toMatchObject({ code: 'TOTP_UNAVAILABLE' });
     expect(await panel(h).sessions.countDocuments()).toBe(0);
+  });
+});
+
+describe('гонки входа с подключением 2FA и сроком вызова (ревью pass 2)', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness({ TRUST_PROXY: '1', PANEL_TOTP_KEY: PANEL_TOTP_KEY_TEST });
+  });
+  beforeEach(async () => {
+    await h.reset();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  afterAll(async () => {
+    await h.close();
+  });
+
+  const ACCOUNT = '/v1/admin/account/totp';
+  const IP = { 'x-forwarded-for': '198.51.100.20' };
+  const passwordOnly = () => panel(h).sessions.countDocuments({ secondFactor: null });
+
+  /** Сотрудник без 2FA с сессией и начатым подключением (`pending`); `confirm` — подтверждение в настройках. */
+  async function pendingEnrollment() {
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const token = await panelSession(h, MODERATOR);
+    const res = await panelCall(h, token, 'POST', `${ACCOUNT}/setup`, undefined, IP);
+    const secret = base32Decode(TotpSetup.parse(res.body).secret);
+    const confirm = () =>
+      panelCall(h, token, 'POST', `${ACCOUNT}/confirm`, { code: totpCode(h, secret) }, IP);
+    return { userId, confirm };
+  }
+
+  /** Ворота в транзакции входа без фактора: после чтения 2FA под замком сотрудника. */
+  function pauseInSignInTx() {
+    const g = gate();
+    const repository = panelRepository(h);
+    const original = repository.findTotp.bind(repository);
+    let paused = false;
+    vi.spyOn(repository, 'findTotp').mockImplementation(async (userId, session) => {
+      const doc = await original(userId, session);
+      if (session && !paused) {
+        paused = true;
+        await g.wait();
+      }
+      return doc;
+    });
+    return g;
+  }
+
+  it('подключение 2FA между чтением её состояния и сессией — сессии по одному паролю нет, выдан вызов (CRITICAL-1)', async () => {
+    const { userId, confirm } = await pendingEnrollment();
+    const g = pauseAfterTotpRead(h);
+    const signIn = panelSignIn(h, MODERATOR);
+    await g.reached;
+    expect((await confirm()).status).toBe(200);
+    g.open();
+
+    const res = await signIn;
+    expect(PanelSignInResponse.parse(res.body).state).toBe('totpRequired');
+    expect(panelSetCookie(res)).toBeUndefined();
+    expect(await passwordOnly()).toBe(1);
+    expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ status: 'active' });
+  });
+
+  it('с замком: подтверждение подключения ждёт транзакцию входа без фактора, сессия — до активации', async () => {
+    const { userId, confirm } = await pendingEnrollment();
+    const lockSpy = vi.spyOn(panelRepository(h), 'lockMember');
+    const g = pauseInSignInTx();
+    const signIn = panelSignIn(h, MODERATOR);
+    await g.reached;
+    const locksBefore = lockSpy.mock.calls.length;
+    let confirmed = false;
+    const confirming = confirm().finally(() => {
+      confirmed = true;
+    });
+    await untilBlocked(confirming, () =>
+      Promise.resolve(lockSpy.mock.calls.length - locksBefore >= 2),
+    );
+    // активация не закоммитилась, пока открыта транзакция входа
+    expect(confirmed).toBe(false);
+    expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ status: 'pending' });
+    g.open();
+
+    const [res, enabled] = await Promise.all([signIn, confirming]);
+    expect(PanelSignInResponse.parse(res.body).state).toBe('signedIn');
+    expect(enabled.status).toBe(200);
+    expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ status: 'active' });
+  });
+
+  it('отрицательное доказательство: без замка активация коммитится посреди входа — сессия по паролю при активной 2FA', async () => {
+    const { userId, confirm } = await pendingEnrollment();
+    const repository = panelRepository(h);
+    vi.spyOn(repository, 'lockMember').mockImplementation((tx, id) =>
+      repository.findMember(tx, id),
+    );
+    const g = pauseInSignInTx();
+    const signIn = panelSignIn(h, MODERATOR);
+    await g.reached;
+    expect((await confirm()).status).toBe(200);
+    expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ status: 'active' });
+    g.open();
+
+    const res = await signIn;
+    expect(PanelSignInResponse.parse(res.body).state).toBe('signedIn');
+    expect(await passwordOnly()).toBe(2);
+  });
+
+  it('вызов истёк между резервированием попытки и погашением — 401, сессии нет, код не погашен (MEDIUM-3)', async () => {
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const { recoveryCodes } = await seedTotp(h, userId);
+    const { challenge } = await challengeOf(h, MODERATOR);
+    const repository = panelRepository(h);
+    const original = repository.findTotp.bind(repository);
+    vi.spyOn(repository, 'findTotp').mockImplementationOnce(async (...args) => {
+      const doc = await original(...args);
+      h.clock.advance(5 * MINUTE + 1);
+      return doc;
+    });
+
+    const res = await panelTotpStep(h, 'totp', { challenge, recoveryCode: recoveryCodes[0] });
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: 'TOTP_CHALLENGE_EXPIRED' });
+    expect(await panel(h).sessions.countDocuments()).toBe(0);
+    const doc = await panel(h).totp.findOne({ _id: userId });
+    expect(doc?.recoveryCodes.every((code) => code.usedAt === null)).toBe(true);
   });
 });
 

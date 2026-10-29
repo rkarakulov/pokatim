@@ -72,6 +72,8 @@ export class PanelAccountTotpService {
     if (step === null) throw this.rejected(userId, 'подтверждение');
     const recovery = this.totp.newRecoveryCodes();
     await this.transactions.run(async (tx) => {
+      // замок сотрудника: вход без фактора (`PanelSessionService.openWithoutFactor`) не проскочит мимо активации
+      await this.repository.lockMember(tx, userId);
       const activated = await this.repository.activateTotp(tx, userId, {
         secretEnc: pending.secretEnc,
         step,
