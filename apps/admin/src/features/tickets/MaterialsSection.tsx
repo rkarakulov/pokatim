@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
 import { api } from '../../api';
-import { isConflict } from '../../session/errors';
+import { httpStatus, isConflict } from '../../session/errors';
 import {
   Banner,
   Button,
@@ -15,6 +15,7 @@ import {
   EmptyState,
   ErrorState,
   FileButton,
+  RefreshFailedBanner,
   StatusTag,
 } from '../../ui';
 import { MaterialDialog, MaterialUploadDialog } from './MaterialDialogs';
@@ -33,7 +34,8 @@ type Editing = { kind: 'new' } | { kind: 'edit'; material: EventMaterialAdmin };
 
 /**
  * «Материалы» события: список по порядку (тип, название, источник), «Выше»/«Ниже» — полный набор id (без
- * перетаскивания, кнопки неактивны до ответа; 409 — перечитать и «обновите»), «Изменить», «Удалить» (подтверждение);
+ * перетаскивания, кнопки неактивны до ответа; 409 — перечитать и «обновите»), «Изменить», «Удалить» (подтверждение;
+ * 404 — уже удалён, перечитать); сбой перечитывания при загруженном списке — баннер с повтором поверх него;
  * «Добавить материал» и «Загрузить PDF» — с остатком лимитов, на пределе — `aria-disabled` с причиной.
  */
 export function MaterialsSection({ kind, eventId }: { kind: TicketEventKind; eventId: string }) {
@@ -70,7 +72,8 @@ export function MaterialsSection({ kind, eventId }: { kind: TicketEventKind; eve
   const remove = useMutation({
     mutationFn: (id: string) => api.deleteEventMaterial(kind, eventId, id),
     onSuccess: refresh,
-    onError,
+    // 404 — материал уже удалили (другая вкладка, коллега): список устарел, как при конфликте — перечитать
+    onError: (error) => (httpStatus(error) === 404 ? void refresh() : onError(error)),
   });
 
   const data = query.data;
@@ -110,6 +113,9 @@ export function MaterialsSection({ kind, eventId }: { kind: TicketEventKind; eve
 
   return (
     <div className="form-stack">
+      {query.isError ? (
+        <RefreshFailedBanner busy={query.isFetching} onRetry={() => void query.refetch()} />
+      ) : null}
       {conflict ? (
         <ConflictBanner
           onReload={() => {

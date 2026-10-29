@@ -23,7 +23,8 @@ const cameraAvailable = () =>
  * Сканер QR в панели (check-in): камера — только по кнопке (жест пользователя), задняя (`environment`), без звука.
  * Кадры ~5/с (`requestVideoFrameCallback`, иначе таймер), уменьшенные до ≤ 640 px; распознавание — `createDecoder`.
  * `paused` — во время запроса и показа карточки кадры не разбираются. Треки камеры останавливаются при выключении,
- * уходе со страницы и скрытии вкладки. Без камеры экран работает ручным вводом кода.
+ * уходе со страницы и скрытии вкладки; поток, пришедший после них (ожидание `getUserMedia`), — сразу. Без камеры
+ * экран работает ручным вводом кода.
  */
 export function QrScanner({ paused, onScan }: { paused: boolean; onScan: (raw: string) => void }) {
   const [state, setState] = useState<CameraState>('idle');
@@ -36,19 +37,22 @@ export function QrScanner({ paused, onScan }: { paused: boolean; onScan: (raw: s
     onScanRef.current = onScan;
   });
 
+  // номер попытки включения: выключение, уход и скрытие вкладки делают ждущий `getUserMedia` устаревшим
+  const attempt = useRef(0);
+
   const stop = () => {
+    attempt.current += 1;
     for (const track of stream.current?.getTracks() ?? []) track.stop();
     stream.current = null;
     if (video.current) video.current.srcObject = null;
   };
 
-  // уход со страницы и скрытая вкладка — камера выключается
+  // уход со страницы и скрытая вкладка — камера выключается (и включаемая тоже)
   useEffect(() => {
     const onHidden = () => {
-      if (document.visibilityState === 'hidden' && stream.current) {
-        stop();
-        setState('idle');
-      }
+      if (document.visibilityState !== 'hidden') return;
+      stop();
+      setState((current) => (current === 'starting' || current === 'scanning' ? 'idle' : current));
     };
     document.addEventListener('visibilitychange', onHidden);
     return () => {
@@ -104,19 +108,27 @@ export function QrScanner({ paused, onScan }: { paused: boolean; onScan: (raw: s
       setState('unavailable');
       return;
     }
+    stop();
+    const current = attempt.current;
     setState('starting');
     try {
       const media = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
         audio: false,
       });
+      if (current !== attempt.current) {
+        // попытку отменили, пока браузер спрашивал разрешение: поздний поток — сразу выключить
+        for (const track of media.getTracks()) track.stop();
+        return;
+      }
       stream.current = media;
       if (video.current) {
         video.current.srcObject = media;
         await video.current.play().catch(() => undefined);
       }
-      setState('scanning');
+      if (current === attempt.current) setState('scanning');
     } catch (error) {
+      if (current !== attempt.current) return;
       stop();
       const name = error instanceof DOMException ? error.name : '';
       setState(

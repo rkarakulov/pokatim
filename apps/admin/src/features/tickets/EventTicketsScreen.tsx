@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { api } from '../../api';
 import { Can } from '../../session/can';
 import { httpStatus, isForbidden } from '../../session/errors';
-import { EmptyState, ErrorState, PageHeader } from '../../ui';
+import { EmptyState, ErrorState, PageHeader, RefreshFailedBanner } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { raceQuery } from '../races/races-query';
 import { MaterialsSection } from './MaterialsSection';
@@ -48,7 +48,8 @@ function useEventHead(kind: TicketEventKind, eventId: string) {
 /**
  * «Билеты и материалы» события (RC-C1): одна страница для гонки (`/races/:id/tickets`) и старта календаря
  * (`/calendar/:id/tickets`) — настройки билетов, материалы, участники (`tickets.checkin`). Право — по виду события на
- * сервере: 403 — «Нет доступа», 404 — «не найдено». Шапка видна сразу, секции — скелетон.
+ * сервере: 403 — «Нет доступа», 404 — «не найдено». Шапка видна сразу, секции — скелетон; сбой перечитывания при
+ * загруженных настройках — баннер с повтором поверх них.
  */
 export function EventTicketsScreen({ kind, eventId }: { kind: TicketEventKind; eventId: string }) {
   const settings = useQuery(ticketingQuery(kind, eventId));
@@ -83,6 +84,9 @@ export function EventTicketsScreen({ kind, eventId }: { kind: TicketEventKind; e
   if (settings.data) {
     body = (
       <>
+        {settings.isError ? (
+          <RefreshFailedBanner busy={settings.isFetching} onRetry={() => void settings.refetch()} />
+        ) : null}
         <Section title={t('admin.tickets.section.settings')}>
           <TicketingSettingsForm
             key={settings.data.version}

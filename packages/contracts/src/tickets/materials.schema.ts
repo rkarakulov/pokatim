@@ -43,6 +43,11 @@ export const EVENT_MATERIAL_FILES_MAX = 10;
 /** PDF — не больше 10 МиБ (`413 MATERIAL_FILE_TOO_LARGE`). */
 export const EVENT_MATERIAL_FILE_MAX_BYTES = 10 * 1024 * 1024;
 export const EVENT_MATERIAL_FILE_NAME_MAX = 120;
+/**
+ * Описание при загрузке PDF (метаданные — в query) — не больше 500: строка запроса и в худшем UTF-8 (3 байта на символ,
+ * `%XX` на байт) остаётся в 8 КБ буфера заголовков nginx. Длиннее — правкой материала после загрузки (JSON, до 1000).
+ */
+export const EVENT_MATERIAL_UPLOAD_DESCRIPTION_MAX = 500;
 
 /** Темы только со ссылкой; `text` — только текст; `pdf` — только файл (загрузкой). */
 const URL_ONLY_TYPES: readonly EventMaterialType[] = ['link', 'gpx'];
@@ -180,7 +185,7 @@ export const EventMaterialUploadQuery = z.strictObject({
     error: 'INVALID',
   }),
   title: MaterialTitle,
-  description: MaterialDescription.optional(),
+  description: optionalText(EVENT_MATERIAL_UPLOAD_DESCRIPTION_MAX, MULTI_LINE).optional(),
   fileName: z
     .string({ error: fieldError('REQUIRED') })
     .trim()

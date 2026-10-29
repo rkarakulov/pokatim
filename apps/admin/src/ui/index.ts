@@ -8,7 +8,7 @@ export { Banner } from './Banner';
 export { Button, type ButtonProps } from './Button';
 export { ChipGroup, type ChipGroupProps } from './ChipGroup';
 export { ChoiceDialog, type ChoiceDialogProps } from './ChoiceDialog';
-export { ConflictBanner } from './ConflictBanner';
+export { ConflictBanner, RefreshFailedBanner } from './ConflictBanner';
 export { DataTable, type DataTableProps, SKELETON_ROWS, type TableQuery } from './DataTable';
 export { DateField, DateTimeField, LockMark, type ZonedFieldProps } from './DateTimeField';
 export { Dialog } from './Dialog';

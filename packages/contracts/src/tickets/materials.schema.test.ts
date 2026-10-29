@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   EVENT_MATERIAL_TYPES,
+  EVENT_MATERIAL_UPLOAD_DESCRIPTION_MAX,
   EventMaterial,
   EventMaterialFileId,
   EventMaterialInput,
@@ -141,6 +142,28 @@ describe('материалы события (event-tickets PR C)', () => {
         issuesOf(EventMaterialUploadQuery.safeParse({ type, title: 'x', fileName: 'a.pdf' })),
       ).toEqual(['type']);
     }
+  });
+
+  it('загрузка: описание в query — до 500 символов (запрос ≤ 8 КБ буфера nginx и в худшем UTF-8)', () => {
+    const query = { type: 'pdf', title: 'Положение', fileName: 'rules.pdf' };
+    expect(EVENT_MATERIAL_UPLOAD_DESCRIPTION_MAX).toBe(500);
+    expect(
+      EventMaterialUploadQuery.safeParse({ ...query, description: 'ы'.repeat(500) }).success,
+    ).toBe(true);
+    expect(
+      issuesOf(EventMaterialUploadQuery.safeParse({ ...query, description: 'ы'.repeat(501) })),
+    ).toEqual(['description']);
+    // худший случай — 3-байтовые символы во всех полях: query с ключами не длиннее 8 КБ
+    const wide = '中';
+    const search = Object.entries({
+      type: 'what_to_bring',
+      title: wide.repeat(120),
+      description: wide.repeat(500),
+      fileName: wide.repeat(120),
+    })
+      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+      .join('&');
+    expect(search.length).toBeLessThan(8192 - 200);
   });
 
   it('порядок — без повторов, 1–20 id', () => {

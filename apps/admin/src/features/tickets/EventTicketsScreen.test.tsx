@@ -5,7 +5,7 @@ import {
   type PanelRace,
   RACE_FIELDS,
 } from '@pokatim/contracts';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
@@ -231,6 +231,57 @@ describe('«Билеты и материалы»: настройки (RC-T3, RC-
   });
 });
 
+describe('ошибка перечитывания поверх данных (AGENTS.md §4.12)', () => {
+  const settingsKey = ['admin', 'tickets', 'race', RACE_ID, 'settings'];
+  const materialsKey = ['admin', 'tickets', 'race', RACE_ID, 'materials'];
+
+  it('настройки: прежняя форма + баннер «Не удалось обновить данные» → «Повторить» — баннер снят', async () => {
+    const { queryClient } = await renderApp(`/races/${RACE_ID}/tickets`);
+    await screen.findByRole('form', { name: 'Билеты' });
+    mocked.getEventTicketing.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
+    await act(() => queryClient.invalidateQueries({ queryKey: settingsKey }));
+    expect(await screen.findByText('Не удалось обновить данные')).toBeTruthy();
+    expect(screen.getByRole('form', { name: 'Билеты' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(screen.queryByText('Не удалось обновить данные')).toBeNull());
+    expect(screen.getByRole('form', { name: 'Билеты' })).toBeTruthy();
+  });
+
+  it('материалы: прежний список + баннер → «Повторить» — баннер снят', async () => {
+    mocked.listEventMaterials.mockResolvedValue({
+      items: [material(M1)],
+      itemsLeft: 19,
+      filesLeft: 10,
+    });
+    const { queryClient } = await renderApp(`/races/${RACE_ID}/tickets`);
+    expect(await screen.findByText('Положение')).toBeTruthy();
+    mocked.listEventMaterials.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
+    await act(() => queryClient.invalidateQueries({ queryKey: materialsKey }));
+    const region = screen.getByRole('region', { name: 'Материалы' });
+    expect(await within(region).findByText('Не удалось обновить данные')).toBeTruthy();
+    expect(within(region).getByText('Положение')).toBeTruthy();
+    fireEvent.click(within(region).getByRole('button', { name: 'Повторить' }));
+    await waitFor(() =>
+      expect(within(region).queryByText('Не удалось обновить данные')).toBeNull(),
+    );
+    expect(within(region).getByText('Положение')).toBeTruthy();
+  });
+
+  it('блок «Билеты» на странице гонки: прежняя строка + повтор', async () => {
+    mocked.getEventTicketing.mockResolvedValue(settings({ enabled: true, activeTickets: 4 }));
+    const { queryClient } = await renderApp(`/races/${RACE_ID}`);
+    const block = await screen.findByRole('region', { name: 'Билеты' });
+    expect(await within(block).findByText('Билеты включены · участников: 4')).toBeTruthy();
+    mocked.getEventTicketing.mockRejectedValueOnce(httpError(500, 'INTERNAL'));
+    await act(() => queryClient.invalidateQueries({ queryKey: settingsKey }));
+    expect(await within(block).findByRole('alert')).toBeTruthy();
+    expect(within(block).getByText('Билеты включены · участников: 4')).toBeTruthy();
+    fireEvent.click(within(block).getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(within(block).queryByRole('alert')).toBeNull());
+    expect(within(block).getByText('Билеты включены · участников: 4')).toBeTruthy();
+  });
+});
+
 describe('«Материалы» (AC9)', () => {
   it('пусто; добавить ссылку — запрос по контракту, список перечитывается', async () => {
     mocked.createEventMaterial.mockResolvedValue(material(M1));
@@ -278,6 +329,8 @@ describe('«Материалы» (AC9)', () => {
     fireEvent.change(input, { target: { files: [file] } });
     const dialog = await screen.findByRole('dialog', { name: 'Загрузить PDF' });
     expect((within(dialog).getByLabelText('Название') as HTMLInputElement).value).toBe('Схема');
+    // метаданные загрузки — в query: описание короче, чем у правки (EVENT_MATERIAL_UPLOAD_DESCRIPTION_MAX)
+    expect((within(dialog).getByLabelText('Описание') as HTMLTextAreaElement).maxLength).toBe(500);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
     await waitFor(() =>
       expect(mocked.uploadEventMaterial).toHaveBeenCalledWith('race', RACE_ID, file, {
@@ -326,6 +379,40 @@ describe('«Материалы» (AC9)', () => {
     await waitFor(() =>
       expect(mocked.deleteEventMaterial).toHaveBeenCalledWith('race', RACE_ID, M1),
     );
+  });
+
+  it('загрузка: 400 по полю вне формы (fileName) — общий текст ошибки', async () => {
+    mocked.uploadEventMaterial.mockRejectedValue(
+      httpError(400, 'VALIDATION_FAILED', { fields: [{ path: 'fileName', code: 'TOO_LONG' }] }),
+    );
+    await renderApp(`/races/${RACE_ID}/tickets`);
+    await screen.findByText('Материалов пока нет');
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    fireEvent.change(input, {
+      target: { files: [new File(['%PDF-1.7'], 'Схема.pdf', { type: 'application/pdf' })] },
+    });
+    const dialog = await screen.findByRole('dialog', { name: 'Загрузить PDF' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
+    expect(
+      await within(dialog).findByText('Не удалось сохранить. Повторите попытку.'),
+    ).toBeTruthy();
+  });
+
+  it('удаление уже удалённого (404) — список перечитан, без «Не удалось сохранить»', async () => {
+    mocked.listEventMaterials.mockResolvedValue({
+      items: [material(M1)],
+      itemsLeft: 19,
+      filesLeft: 10,
+    });
+    mocked.deleteEventMaterial.mockRejectedValue(httpError(404, 'NOT_FOUND'));
+    await renderApp(`/races/${RACE_ID}/tickets`);
+    const row = (await screen.findByText('Положение')).closest('li')!;
+    mocked.listEventMaterials.mockResolvedValue({ items: [], itemsLeft: 20, filesLeft: 10 });
+    fireEvent.click(within(row).getByRole('button', { name: 'Удалить' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Удалить материал?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Удалить' }));
+    expect(await screen.findByText('Материалов пока нет')).toBeTruthy();
+    expect(screen.queryByText('Не удалось сохранить. Повторите попытку.')).toBeNull();
   });
 
   it('лимит — кнопки aria-disabled с причиной', async () => {

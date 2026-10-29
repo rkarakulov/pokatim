@@ -294,6 +294,41 @@ describe('CRUD, порядок, журнал (RC-C7, RC-C8)', () => {
       details: { reason: 'materials_limit' },
     });
   });
+
+  it('параллельное добавление на границе лимита: 19 + 3 POST → один 201, остальные 409 materials_limit', async () => {
+    const w = await world();
+    const target = url('calendar', w.calendarId);
+    const docs = Array.from({ length: 19 }, (_, order) => ({
+      _id: `00000000-0000-7000-8000-${String(order).padStart(12, '0')}`,
+      kind: 'calendar' as const,
+      eventId: w.calendarId,
+      type: 'text' as const,
+      title: `Т${order}`,
+      description: 'x',
+      url: null,
+      file: null,
+      order,
+      version: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      updatedBy: w.organizerId,
+    }));
+    await materialsCollections(h.db).materials.insertMany(docs);
+    const results = await Promise.all(
+      [0, 1, 2].map(() => panelCall(h, w.tokens.admin, 'POST', target, LINK)),
+    );
+    expect(results.map((res) => res.status).sort()).toEqual([201, 409, 409]);
+    for (const res of results.filter((item) => item.status === 409)) {
+      expect(res.body).toMatchObject({
+        code: 'TICKETING_INVALID_STATE',
+        details: { reason: 'materials_limit' },
+      });
+    }
+    expect(
+      await materialsCollections(h.db).materials.countDocuments({ eventId: w.calendarId }),
+    ).toBe(20);
+    expect(await audit('tickets.material_added')).toHaveLength(1);
+  });
 });
 
 describe('загрузка и отдача PDF (RC-C3, RC-C6)', () => {

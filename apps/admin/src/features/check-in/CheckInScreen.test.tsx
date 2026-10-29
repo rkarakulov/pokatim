@@ -202,6 +202,56 @@ describe('«Check-in» (AC6, RC-C2)', () => {
     expect(camera.stop).toHaveBeenCalled();
   });
 
+  /** `getUserMedia`, отвечающий, когда тест скажет: поздний поток устаревшей попытки. */
+  function deferredCamera() {
+    const camera = fakeCamera(QR);
+    let resolve: (stream: MediaStream) => void = () => undefined;
+    camera.getUserMedia.mockImplementation(
+      () => new Promise<MediaStream>((done) => (resolve = done)),
+    );
+    const stop = vi.fn();
+    const late = { getTracks: () => [{ stop }, { stop }] } as unknown as MediaStream;
+    return { ...camera, lateStop: stop, answer: () => act(async () => resolve(late)) };
+  }
+
+  it('«Выключить» до ответа getUserMedia — поздний поток сразу остановлен, камера не включается', async () => {
+    const camera = deferredCamera();
+    await renderApp('/check-in');
+    fireEvent.click(screen.getByRole('button', { name: 'Включить камеру' }));
+    await waitFor(() => expect(camera.getUserMedia).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Выключить камеру' }));
+    await camera.answer();
+    expect(camera.lateStop).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: 'Включить камеру' })).toBeTruthy();
+    expect(screen.queryByText('Наведите камеру на QR билета')).toBeNull();
+  });
+
+  it('уход со страницы до ответа getUserMedia — поздний поток сразу остановлен', async () => {
+    const camera = deferredCamera();
+    await renderApp('/check-in');
+    fireEvent.click(screen.getByRole('button', { name: 'Включить камеру' }));
+    await waitFor(() => expect(camera.getUserMedia).toHaveBeenCalled());
+    cleanup();
+    await camera.answer();
+    expect(camera.lateStop).toHaveBeenCalledTimes(2);
+  });
+
+  it('скрытие вкладки до ответа getUserMedia — поздний поток сразу остановлен', async () => {
+    const camera = deferredCamera();
+    await renderApp('/check-in');
+    fireEvent.click(screen.getByRole('button', { name: 'Включить камеру' }));
+    await waitFor(() => expect(camera.getUserMedia).toHaveBeenCalled());
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    try {
+      fireEvent(document, new Event('visibilitychange'));
+    } finally {
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    }
+    await camera.answer();
+    expect(camera.lateStop).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: 'Включить камеру' })).toBeTruthy();
+  });
+
   it('чужой QR — «Это не билет «Покатим»» без запроса', async () => {
     fakeCamera('https://example.com/promo');
     await renderApp('/check-in');

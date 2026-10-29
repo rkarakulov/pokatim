@@ -3,6 +3,7 @@ import {
   EVENT_MATERIAL_FILE_MAX_BYTES,
   EVENT_MATERIAL_NON_FILE_TYPES,
   EVENT_MATERIAL_TYPES,
+  EVENT_MATERIAL_UPLOAD_DESCRIPTION_MAX,
   type EventMaterialAdmin,
   type EventMaterialType,
   materialContentIssues,
@@ -243,17 +244,16 @@ export function MaterialUploadDialog({
       if (code === 'MATERIAL_FILE_UNSUPPORTED' || code === 'MATERIAL_FILE_TOO_LARGE') {
         return setFileError(true);
       }
-      const fields = serverFieldErrors(error);
-      if (fields?.length) {
-        for (const field of fields) {
-          const name = formFieldOf(field.path);
-          if (name === 'type' || name === 'title' || name === 'description') {
-            form.setError(name, { type: 'server', message: field.code });
-          }
+      // ошибки полей формы — под полями; поле вне формы (`fileName`) — общий текст, иначе экран молчит
+      let shown = false;
+      for (const field of serverFieldErrors(error) ?? []) {
+        const name = formFieldOf(field.path);
+        if (name === 'type' || name === 'title' || name === 'description') {
+          form.setError(name, { type: 'server', message: field.code });
+          shown = true;
         }
-        return;
       }
-      setFailure(failureText(error));
+      if (!shown) setFailure(failureText(error));
     },
   });
   const errorOf = (field: keyof UploadValues) =>
@@ -309,7 +309,7 @@ export function MaterialUploadDialog({
         <TextAreaField
           label={t('admin.tickets.field.description')}
           rows={3}
-          maxLength={1000}
+          maxLength={EVENT_MATERIAL_UPLOAD_DESCRIPTION_MAX}
           error={errorOf('description')}
           {...form.register('description')}
         />
