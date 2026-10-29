@@ -31,5 +31,6 @@ export function useShareImage(
     // необязательная картинка: без повторов — сразу фолбэк на ссылку
     retry: false,
   });
-  return query.data;
+  // при ошибке перечитывания TanStack Query держит прежние `data` — устаревшую картинку не отдаём, только ссылка
+  return query.isError ? undefined : query.data;
 }
