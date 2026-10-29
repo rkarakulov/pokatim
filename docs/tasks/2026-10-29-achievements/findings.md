@@ -304,3 +304,53 @@ NOT VERIFIED: `pnpm check`, браузерный смоук и iOS/Android са�
   вспышки нет. Проверено от обратного: с `dataUpdatedAt` снимка при уходе тест падает.
 
 Правило `pokatim-app.md` («Достижения») обновлено: `openPresented`/`closePresented`, оболочка маршрутов, `/welcome`.
+
+## PR B — pass 3, claude
+
+# Findings — 2026-10-29-achievements (PR B) — pass 3 — reviewer: claude
+base: origin/develop   commits: origin/develop..2777b89c (021ea0d2, f7b656cb, 31c1002e, merge 0481ff7a, 2777b89c);
+develop новее ветки не ушёл (`git log HEAD..origin/develop` пусто), рабочее дерево чистое
+verdict: APPROVE
+
+Прогон: `jest achievement-flash, achievements-blocks, features/achievements, own-profile, rider-profile,
+app-routes-manifest`: 7 suites, 99 tests passed; `tsc --noEmit` apps/app: 0; `eslint` (`app/achievements`,
+`features/achievements`, `achievement-flash.test.tsx`, `e2e/web.spec.ts`): 0. `pnpm check` целиком и Playwright
+(`E2E_API=1`) не запускал; у coder в Outcome `pnpm check` exit=0, смоук без API 3 passed.
+
+Закрытие pass 2 (проверено по коду):
+- HIGH (codex), прямые ссылки до восстановления сессии: закрыто. `app/achievements/flash.tsx:11-12` и
+  `[code].tsx:12-13` вызывают `useSettingsShell()` безусловно (порядок хуков стабилен), экран монтируется только при
+  `shell === null`, значит `useAchievements` до сессии не включается. Паттерн тот же, что у `/profile`,
+  `/notifications`, `settings/*`. Для хоста регрессии нет: `ready` = `signedIn && step === 'done'`, и при push
+  вспышки оболочка сразу `null`. Тест `unknown → скелетон без запроса → unavailable → «Нет соединения» → «Повторить»
+  → hydrate → достижение` сделан честно: `listAchievements` проверяется на каждом шаге.
+- HIGH (claude), смоук `/welcome`: закрыто. `e2e/web.spec.ts:427` теперь совпадает с соседними гардами (`:409`,
+  `:448`…); `redirectTo` в `_layout.tsx` для гостя без регистрации ведёт на `/welcome`. Ветка `E2E_API=1` — NOT VERIFIED
+  (как в отчёте coder).
+- LOW-1 (claude), ответ при открытой вспышке: закрыто. `openPresented` (`dataUpdatedAt: null`) скрывает снимок при
+  любом ответе, пока экран смонтирован; cleanup эффекта (`achievement-flash-screen.tsx:62-67`, deps не меняются после
+  снимка) вызывает `closePresented(getQueryState(ACHIEVEMENTS_KEY).dataUpdatedAt ?? snapshot.at)` при любом уходе:
+  back, «Закрыть», `replace(storyPath)`. Побочные пути проверены. (1) Выход при открытой вспышке: `resetShown`
+  обнуляет `presented`, `closePresented` при `null` ничего не делает, после `queryClient.clear()` используется
+  запасной `snapshot.at`. Порядок не важен. (2) StrictMode/двойной эффект: open → close → open, итог «открыта».
+  (3) Новый код, выданный за время показа, снимком не скрыт, но хост молчит (путь `/achievements` в `QUIET_PREFIXES`),
+  а после ухода вспыхивает. Это ожидаемо. (4) Хост считает `pending` во время рендера, пока `presented` ещё «открыт»,
+  поэтому до cleanup окна для ложного push нет. Тест не тавтологичен: со старым `markPresented(snapshot.at)`
+  перезапрос даёт `t1 > at`, хост держит `pending`, и после «назад» путь ушёл бы на вспышку.
+
+Новых дефектов исправления не внесли. Без замечаний: correctness, регрессии/call sites (`useSettingsShell` —
+общая оболочка, не меняется), безопасность (API и контракты этим проходом не меняются), placement, i18n,
+состояния данных, Documentation Sync (`pokatim-app.md` «Достижения» описывает `openPresented`/`closePresented`,
+оболочку и `/welcome`; task.md — гейт pass 2 с NOT VERIFIED для `E2E_API=1` и native). Миграции, BullMQ, аудит не затронуты.
+
+NOT VERIFIED: `pnpm check` целиком, `e2e:web` с `E2E_API=1`, iOS/Android.
+
+## PR B — pass 3, codex
+
+verdict: APPROVE
+
+Новых подтверждённых находок нет. Замечания pass 2 закрыты: восстановление сессии в обоих маршрутах, ожидание `/welcome` в смоуке, подавление повторного открытия очереди после ответа сервера во время показа.
+
+Проверены реальные изменения, связанные вызовы и правила: очередь и `seen`, гарды, обработка ошибок, публичная видимость, совместимость `unknown`, токены, i18n, доступность, платформенная совместимость и документация. API, миграции, очереди и аудит этим diff не изменены.
+
+NOT VERIFIED: целевые Jest-тесты не запустились из-за ограничений read-only окружения: Watchman получил `Operation not permitted`; повтор с `--watchman=false --no-cache` завершился `EPERM` при записи haste-map. `pnpm check`, браузер и iOS/Android самостоятельно не проверены; результаты исполнителя независимо не подтверждены.
