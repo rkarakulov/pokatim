@@ -111,7 +111,8 @@ export class NotificationsRepository {
    * Запись уведомлений события (intake), одна пачка — один `bulkWrite` без порядка. Без `collapseKey` — вставка, если
    * `(sourceEventId, userId)` ещё нет (`$setOnInsert`: повтор задачи ничего не меняет). С `collapseKey` (N7) — замена
    * прежнего уведомления объекта только более ранним событием (`collapseSeq $lt` — порядковый номер события в объекте;
-   * не `sourceEventId`: uuidv7 внутри миллисекунды не упорядочен; документ без `collapseSeq` — до номера): текст, цель,
+   * не `sourceEventId`: uuidv7 внутри миллисекунды не упорядочен; документ без `collapseSeq` — записан до номера,
+   * для него прежнее условие `sourceEventId $lt`): текст, цель,
    * снова непрочитано, наверху (`createdAt`), доставка заново; совпадения нет — вставка. Равный номер — повтор того же
    * события, без изменений. Дубль ключа на вставке — повтор или устаревшее событие, не ошибка; дубль по `collapseKey`
    * бывает и у более нового события, проигравшего гонку первой вставки старшему, — для него условная замена
@@ -139,7 +140,11 @@ export class NotificationsRepository {
         filter: {
           userId,
           collapseKey,
-          $or: [{ collapseSeq: { $lt: collapseSeq } }, { collapseSeq: { $exists: false } }],
+          $or: [
+            { collapseSeq: { $lt: collapseSeq } },
+            // документ до номера — прежнее правило: повтор того же события его не трогает
+            { collapseSeq: { $exists: false }, sourceEventId: { $lt: sourceEventId } },
+          ],
         },
         set: { sourceEventId, collapseSeq, ...fields },
       };

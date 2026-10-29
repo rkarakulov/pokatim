@@ -171,6 +171,34 @@ describe('райды: получатели, тексты, цели', () => {
     expect(await notificationsOf(h, organizer.userId)).toEqual(docs);
   });
 
+  it('уведомление без collapseSeq (до номера): повтор его события не трогает, новое событие заменяет', async () => {
+    const ride = await rideWithParticipants();
+    await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, {
+      version: 0,
+      startsAt: startsIn(h, 2 * DAY),
+    });
+    const [rescheduled] = await eventsOfType(h, RIDES_RIDE_RESCHEDULED);
+    expect(await runIntake(h, RIDES_RIDE_RESCHEDULED, rescheduled!._id)).toBe('written');
+    // документ, записанный прежней версией: без номера, прочитан
+    await notificationsDb(h).notifications.updateMany(
+      { kind: 'ride_rescheduled' },
+      { $unset: { collapseSeq: '' }, $set: { readAt: h.clock.now() } },
+    );
+    const before = await notificationsOf(h, a.userId);
+    h.clock.advance(MINUTE);
+    expect(await runIntake(h, RIDES_RIDE_RESCHEDULED, rescheduled!._id)).toBe('unchanged');
+    expect(await notificationsOf(h, a.userId)).toEqual(before);
+    await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, {
+      version: 1,
+      startsAt: startsIn(h, 3 * DAY),
+    });
+    const [, next] = await eventsOfType(h, RIDES_RIDE_RESCHEDULED);
+    expect(await runIntake(h, RIDES_RIDE_RESCHEDULED, next!._id)).toBe('written');
+    expect(
+      (await notificationsOf(h, a.userId)).find((doc) => doc.kind === 'ride_rescheduled'),
+    ).toMatchObject({ sourceEventId: next!._id, readAt: null, collapseSeq: expect.any(Number) });
+  });
+
   it('повтор задачи переноса после «Я иду» — прочитанное уведомление не открывается заново (N7)', async () => {
     const ride = await rideWithParticipants();
     await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, {
