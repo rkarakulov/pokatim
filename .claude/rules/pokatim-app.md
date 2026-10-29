@@ -41,7 +41,11 @@ paths:
   иконка «Настройки» `TopBar` Главной (иконка «Устройства» — быстрый вход рядом); «Выйти» — только здесь. Строки —
   `features/settings/settings-row.tsx`; «О приложении» — `app-info.ts` (версия `expoConfig.version`, ссылки —
   `EXPO_PUBLIC_PRIVACY_URL`/`TERMS_URL`/`SUPPORT_EMAIL`, не заданы — строки нет; открытие — `openExternalUrl`).
-  Пункта «Тема» нет (тему выбирает панель, ADR-0016). Язык — `settings/language` из `i18n.locales` (имя —
+  «Тема» (user-theme, ADR-0021) — `settings/theme` в `Stack.Protected` рядом с «Языком»: 7 тем (`APP_THEME_IDS`) строками
+  `SettingsRow` с `leading` (превью `features/appearance/theme-preview.tsx` из `View`, цвета — `THEME_PREVIEWS`) и
+  `description`; выбор — из `['profile']` (`AsyncContent`), значение строки хаба — активная тема (`useAppTheme().id`).
+  Смена — `useSetTheme` (`theme-mutation.ts`: `PUT /v1/profile/theme`, `scope` `profile-theme` — по очереди,
+  оптимистично в `['profile']`, ошибка — откат к подтверждённой сервером и баннер). Язык — `settings/language` из `i18n.locales` (имя —
   `localeNames`), выбор — устройства, не аккаунта: `locale-preference(.web).ts` (`pokatim.locale`: native
   SecureStore, web `localStorage`), применяется после монтирования корня (SSR — базовый язык).
 
@@ -55,15 +59,21 @@ paths:
   (`src/theme/`); компоненты читают `useTheme<AppTheme>()` / `useAppTheme()` (иконки, раскладка, схема). Подложка
   карты — `theme.map.basemap`, профиль высоты — `theme.profile.*`; сравнений с `themes.light|dark` нет. Иконки — только
   `components/icon.tsx` (единственный вход `expo-symbols`), шрифты — только `themeFonts` + `useThemeFonts` (не
-  `useFonts`); сторож — `__tests__/theme-guards.test.ts`. Доставка — `features/appearance/` (запрос, кэш native
-  `pokatim.appTheme`, тема процесса SSR); web — `window.__POKATIM_THEME__` для гидрации. «Классика» = Jersey Aura /
+  `useFonts`); сторож — `__tests__/theme-guards.test.ts`. Тема — личная, в профиле райдера (ADR-0021): единственный
+  источник — `useActiveThemeId` (`features/appearance/`): вошёл — `themeId` профиля (`['profile']`), до ответа или при
+  ошибке — последняя известная (native — кэш `pokatim.appTheme`, web — SSR); сессия `signedOut` (любой путь) —
+  «Классика» и стирание кэша / cookie (в хуке по статусу сессии, не в `useSignOut`). Web: тема профиля — в cookie
+  `pokatim_theme` своего origin (`appearance-cache.web.ts`: `Path=/; Max-Age=31536000; SameSite=Lax` + `Secure` на
+  https, только в эффекте; «Классика» — стирание); SSR — `ssrThemeId()` (`ssr-theme.ts`: `requestHeaders()` expo-server
+  → cookie → закрытый список, вне запроса — «Классика»); `+html.tsx` и корень (`initialThemeId`) читают её, клиент
+  гидратируется из `window.__POKATIM_THEME__`. `+middleware.ts` и темы процесса нет; manifest — «Классика». «Классика» = Jersey Aura /
   Night Ride по системе. Варианты раскладки (`layout.*`) — только таблицами `Record<вариант, компонент | значение>`
   (`ROUTE_HERO`, `STATS_VARIANT`, `TAB_ITEM`, `ROUTE_CARD`; профиль высоты — всегда градиент); сравнения с id темы и значением `layout` —
   нет (сторож). Вкладки — роли `tabBar.*`; отступы карточек — `appDensity[density]`; форма — `shapeOf(theme)`.
   `react-native-svg` лениво — только `features/routes/use-svg-native.ts` (профиль, контур `route-contour(.web).tsx`,
   фигуры декора `features/decor/decor-svg(.web).tsx`).
-- Сезонный декор (halloween-decor) — слой поверх темы, не тема: `decor` ответа `GET /v1/appearance` (тот же запрос
-  `['appearance']`, `useDecorQuery`), включает и выключает команда в панели без релиза. `features/decor/`: таблица
+- Сезонный декор (halloween-decor) — слой поверх темы, не тема: `decor` ответа `GET /v1/appearance` (запрос
+  `['appearance']`, `useDecorQuery`; `themeId` ответа устарел и не читается), включает и выключает команда в панели без релиза. `features/decor/`: таблица
   `DECOR_LAYER: Record<AppDecorId, слой | null>` (`DecorLayer`), показ — только после монтирования (`useMounted`: SSR
   и гидрация web без декора), кэша на native нет. Слой — `pointerEvents="none"`, скрыт от скринридеров, цвета — роли
   темы (`halloweenColors`), анимации — только при `useReducedMotion() === false` (web — CSS с
@@ -173,7 +183,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   месте данных. Ошибка догрузки страницы — баннер в подвале (не «Данные могли устареть» над героем).
 - Публичные экраны `races/[id]`, `seasons/[id]` — в корневом `Stack` вне `Stack.Protected` (гость и вошедший; на
   native поверх вкладок). «Назад» — `DetailHeader`: история есть — назад, нет — вошедшему вкладка, гостю `/`.
-- SSR-данные (`loader`, `generateMetadata`, а также `src/app/+middleware.ts` — тема процесса) — только `src/lib/public-ssr.ts` (`publicPath` — `Uuid` или схема токена из contracts, например `RiderPublicId`, до запроса,
+- SSR-данные (`loader`, `generateMetadata`) — только `src/lib/public-ssr.ts` (`publicPath` — `Uuid` или схема токена из contracts, например `RiderPublicId`, до запроса,
   `fetchPublicForSsr` — таймаут, `found` / `notFound` / `unavailable`, кэш процесса публичных данных 60 с, 404 — в
   отдельном пуле); свой `fetch` в экранах нет. Не найдено — нейтральная мета и `robots: noindex` (HTML 200); API
   недоступен — нейтральная мета без `robots`. Без сети при показанных данных — `OfflineBanner`.
