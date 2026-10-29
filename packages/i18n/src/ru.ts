@@ -11,6 +11,16 @@ export const ru = {
   'tabs.routes': 'Маршруты',
   'tabs.calendar': 'Календарь',
   'home.title': 'Главная',
+  // установка PWA (web): плашка над вкладками Главной, инструкция для iOS, промо по ссылке `?show-pwa-modal`
+  'pwaInstall.banner': 'Установить приложение',
+  'pwaInstall.close': 'Закрыть',
+  'pwaInstall.ios.title': 'Установите Покатим на iPhone',
+  'pwaInstall.ios.step1': '1. Нажмите «Поделиться» в панели браузера',
+  'pwaInstall.ios.step2': '2. Выберите «На экран „Домой“»',
+  'pwaInstall.promo.title': 'Установите приложение',
+  'pwaInstall.promo.text':
+    'Покатим откроется с экрана «Домой» в один тап — как обычное приложение, без адресной строки.',
+  'pwaInstall.promo.install': 'Установить',
   // гостевой лендинг /welcome (guest-landing, G3): пустые подписи — `home.races.empty`, `home.routes.empty`,
   // `calendar.empty`; знак — `home.wordmark`; описание меты — `app.tagline`
   'landing.title': 'Покатим — гонки, сезон, кофе-райды и маршруты',
