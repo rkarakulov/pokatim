@@ -39,6 +39,8 @@ describe('маршруты web-сервера: первое совпадение
     [`/riders/${'r'.repeat(43)}`, '/riders/[id]'],
     // guest-landing (RC-1): корневой лендинг, корень — Главная
     ['/welcome', '/welcome'],
+    // event-tickets B: билет по ссылке из письма
+    ['/tickets/ABCDE12345', '/tickets/[code]'],
     ['/', '/(tabs)/index'],
   ])('%s → %s', (url, page) => {
     expect(serverPage(url)).toBe(page);

@@ -1,10 +1,16 @@
-import { RiderPublicId, Uuid } from '@pokatim/contracts';
+import { RiderPublicId, TicketCode, Uuid } from '@pokatim/contracts';
 
 /** Объекты, к которым гость возвращается после входа или регистрации (`pokatim-app.md` «Deep links», Q13). */
 const RETURN_PATH = /^\/(rides|races|calendar)\/([^/?#]+)$/;
 
 /** Публичный профиль райдера (profile-report-app: «Пожаловаться» гостя) — id не `Uuid`, а `RiderPublicId`. */
 const RIDER_PATH = /^\/riders\/([^/?#]+)$/;
+
+/**
+ * Билет по ссылке из письма (event-tickets T2): только канонический код (10 символов Crockford, верхний регистр) —
+ * `ABCDE-12345`, строчные и `I/L/O` не проходят: один путь на билет, без двусмысленности.
+ */
+const TICKET_PATH = /^\/tickets\/([^/?#]+)$/;
 
 /** Экраны за входом, открываемые гостем по ссылке, — точным путём без параметров (удаление аккаунта, A12). */
 const RETURN_SCREENS: ReadonlySet<string> = new Set(['/settings/account/delete']);
@@ -15,6 +21,11 @@ const RETURN_SCREENS: ReadonlySet<string> = new Set(['/settings/account/delete']
  */
 export function isReturnPath(path: string): boolean {
   if (RETURN_SCREENS.has(path)) return true;
+  const ticket = TICKET_PATH.exec(path);
+  if (ticket) {
+    const parsed = TicketCode.safeParse(ticket[1]);
+    return parsed.success && parsed.data === ticket[1];
+  }
   const rider = RIDER_PATH.exec(path);
   if (rider) return RiderPublicId.safeParse(rider[1]).success;
   const match = RETURN_PATH.exec(path);

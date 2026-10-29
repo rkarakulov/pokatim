@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 
 import { liveSession, signInForTest } from '@/__tests__/auth-fixtures';
 import { rememberPushToken, storedPushToken } from '@/features/notifications/push';
+import { clearOfflineTickets } from '@/features/tickets/offline-store';
 import { api } from '@/lib/api';
 
 import { useSessionStore } from './session-store';
@@ -12,6 +13,9 @@ import { useSignOut } from './use-sign-out';
 
 jest.mock('@/lib/api', () => ({
   api: { signOut: jest.fn(async () => undefined), revokePushToken: jest.fn() },
+}));
+jest.mock('@/features/tickets/offline-store', () => ({
+  clearOfflineTickets: jest.fn(async () => undefined),
 }));
 
 const revoke = jest.mocked(api.revokePushToken);
@@ -67,5 +71,17 @@ describe('useSignOut — push-токен устройства (ADR-0017)', () =>
     expect(revoke).not.toHaveBeenCalled();
     expect(useSessionStore.getState().status).toBe('signedOut');
     expect(await storedPushToken()).toBeNull();
+  });
+});
+
+describe('useSignOut — офлайн-копии билетов (event-tickets AC12)', () => {
+  it('выход стирает копии и при сбое сети', async () => {
+    jest.mocked(api.signOut).mockRejectedValueOnce(new Error('offline'));
+    const signOut = await renderSignOut();
+
+    await signOut();
+
+    expect(clearOfflineTickets).toHaveBeenCalled();
+    expect(useSessionStore.getState().status).toBe('signedOut');
   });
 });

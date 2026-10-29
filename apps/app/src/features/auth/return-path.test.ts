@@ -37,6 +37,24 @@ describe('возврат после входа (native)', () => {
     }
   });
 
+  it('allowlist: билет — только канонический код /tickets/<10 символов Crockford> (event-tickets T2)', () => {
+    expect(isReturnPath('/tickets/ABCDE12345')).toBe(true);
+    for (const bad of [
+      '/tickets/ABCDE-12345',
+      '/tickets/abcde12345',
+      '/tickets/ABCDE1234O',
+      '/tickets/ABCDE123',
+      '/tickets/ABCDE12345/',
+      '/tickets/ABCDE12345/x',
+      '/tickets/ABCDE12345?x=1',
+      '//evil.example/tickets/ABCDE12345',
+      'https://evil.example/tickets/ABCDE12345',
+      '/tickets/',
+    ]) {
+      expect(isReturnPath(bad)).toBe(false);
+    }
+  });
+
   it('allowlist: публичный профиль — /riders/<publicId> (43 символа base64url)', () => {
     const PUBLIC_ID = 'Ab0_-'.repeat(8) + 'xyz';
     expect(isReturnPath(`/riders/${PUBLIC_ID}`)).toBe(true);
