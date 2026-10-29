@@ -868,7 +868,6 @@ export const ru = {
   'status.description': 'Текущее состояние сервиса и его API.',
   // панель «Протокол» (admin-01): название — решение автора Q9
   'admin.title': 'Панель команды платформы',
-  'admin.apiStatus': 'Статус API',
   // вход в панель (тексты прототипа 3a)
   'admin.signIn.title': 'Вход в панель',
   'admin.signIn.lead': 'Тот же e-mail и пароль, что в приложении Покатим.',
@@ -1608,7 +1607,6 @@ export const ru = {
   'rides.report.back': 'К райду',
   'rides.report.unavailable': 'На этот райд нельзя пожаловаться',
   // --- кофе-райды 05b: «Модерация райдов» в панели ---
-  'admin.nav.ridesModeration': 'Модерация райдов',
   'admin.audit.action.ride.hidden': 'Скрыт кофе-райд',
   'admin.audit.action.ride.restored': 'Возвращён кофе-райд',
   'admin.audit.action.ride.reports_dismissed': 'Отклонены жалобы на кофе-райд',
@@ -2229,7 +2227,6 @@ export const ru = {
   'routes.mine.error.ROUTE_INVALID_STATE.own_route': 'На свой маршрут пожаловаться нельзя',
   'routes.mine.error.ROUTE_INVALID_STATE.team_route': 'На маршрут команды пожаловаться нельзя',
   // routes-06: панель — «Маршруты райдеров» (право routes.moderate); автор — только id, без имени (N8)
-  'admin.nav.riderRoutes': 'Маршруты райдеров',
   'admin.audit.details.rejectionReason': 'причина — {reason}',
   'admin.riderRoutes.title': 'Маршруты райдеров',
   'admin.riderRoutes.lead':
@@ -2466,7 +2463,6 @@ export const ru = {
   'storyCard.group': 'Группа',
   'storyCard.brand': 'Покатим',
   // profile-moderation: панель — «Профили райдеров» (право profiles.moderate); жалобы — без автора, имя — по Q2
-  'admin.nav.riderProfiles': 'Профили райдеров',
   'admin.riderProfiles.title': 'Профили райдеров',
   'admin.riderProfiles.lead': 'Жалобы на фото, клуб и имя в публичных профилях райдеров',
   'admin.riderProfiles.queue': 'Открытые жалобы',
@@ -2537,4 +2533,11 @@ export const ru = {
   'rideInvite.pace': 'Темп',
   'rideInvite.unitKm': 'км',
   'rideInvite.unitKmh': 'км/ч',
+  // admin-moderation-hub: один пункт сайдбара «Модерация» с вкладками по типу контента
+  'admin.nav.moderation': 'Модерация',
+  'admin.moderation.tabs': 'Очереди модерации',
+  'admin.moderation.tab.riderRoutes': 'Маршруты райдеров',
+  'admin.moderation.tab.riderProfiles': 'Профили райдеров',
+  'admin.moderation.tab.rides': 'Кофе-райды',
+  'admin.moderation.tabCount': 'ждут решения: {count}',
 } as const;

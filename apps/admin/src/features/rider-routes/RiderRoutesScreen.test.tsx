@@ -10,6 +10,7 @@ vi.mock('../../api', () => ({
   api: {
     me: vi.fn(),
     health: vi.fn(),
+    overview: vi.fn(),
     listRiderRoutes: vi.fn(),
     getRiderRoute: vi.fn(),
   },
@@ -42,6 +43,7 @@ const cellsOf = (link: HTMLElement) =>
 
 beforeEach(() => {
   mocked.me.mockResolvedValue(ME.moderator);
+  mocked.overview.mockReturnValue(new Promise(() => undefined));
   mocked.listRiderRoutes.mockResolvedValue({ items: [row()], nextCursor: null });
 });
 afterEach(() => {

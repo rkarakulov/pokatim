@@ -19,6 +19,7 @@ import { DisputesScreen } from './features/disputes/DisputesScreen';
 import { validateRidesModerationSearch } from './features/rides-moderation/moderation-format';
 import { RideModerationScreen } from './features/rides-moderation/RideModerationScreen';
 import { RidesModerationScreen } from './features/rides-moderation/RidesModerationScreen';
+import { allowedModerationTabs } from './features/moderation/moderation-tabs';
 import { MembersScreen } from './features/members/MembersScreen';
 import { NoAccessScreen } from './features/no-access/NoAccessScreen';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
@@ -300,6 +301,18 @@ const disputeRoute = createRoute({
   },
 });
 
+// admin-moderation-hub: пункт «Модерация» — на первую доступную по правам вкладку; прав нет — «Нет доступа»
+const moderationRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'moderation',
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.ensureQueryData(meQuery);
+    const [first] = allowedModerationTabs(me.permissions);
+    if (first) throw redirect({ to: first.to, replace: true });
+  },
+  component: NoAccessScreen,
+});
+
 // routes-06: модерация маршрутов райдеров (admin и moderator)
 const riderRoutesRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -385,6 +398,7 @@ const routeTree = rootRoute.addChildren([
     routeRoute,
     membersRoute,
     auditRoute,
+    moderationRoute,
     ridesModerationRoute,
     rideModerationRoute,
     disputesRoute,
