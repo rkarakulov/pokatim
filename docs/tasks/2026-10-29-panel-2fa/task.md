@@ -181,3 +181,44 @@
 ## 8.3 Security checklist
 
 См. §4 — выполнено; проверки — §12.
+
+## 12. Outcome
+
+### Сделано
+
+- Контракты (`admin/totp.schema.ts`, `session.schema.ts`, `members.schema.ts`, `audit.schema.ts`, `common.ts`): коды,
+  вызов, новые состояния входа, `TotpSetup`/`TotpStatus`, `PanelMe.user.totp`, `MemberRow.totpEnabled`, ошибки,
+  пять действий журнала; клиент `api-client/admin.ts`.
+- API, модуль `panel`: `totp.ts` (RFC 6238 + base32 на `node:crypto`), `totp-secret-box.ts` (AES-256-GCM, AAD userId),
+  `recovery-codes.ts` (HMAC), `panel-totp-codes.ts` (проверка кода + лимиты D8), `PanelAccountTotpService` и
+  контроллер `/v1/admin/account/totp/*`, шаги входа `sign-in/totp`, `sign-in/totp-setup(/confirm)` и cookie
+  устройства, сброс `members/:userId/totp/reset`, `secondFactor` сессии, писатель — `PanelRepository`.
+- Миграция `0040_panel_totp` (коллекции `panel_totp`, `panel_sign_in_challenges`, `panel_trusted_devices`, TTL).
+- Env `PANEL_TOTP_KEY` / `PANEL_TOTP_ENFORCED` (+ отказ старта без ключа), `env.template`, `docker-compose.yml`,
+  `.env.example`, `rehearsal.sh`, runbook деплоя; CLI `reset-totp --email`.
+- Админка: шаг кода и подключение на экране входа (`TotpSignInSteps`), общий `TotpEnrollment`, `QrCode` (свой `<svg>`),
+  экран «Безопасность» (`/account/security`), баннер на «Обзоре», колонка и сброс 2FA в «Сотрудниках», i18n
+  `admin.totp.*`/`admin.security.*`.
+- Документы: ADR-0024, ADR-0009 «Последствия», `docs/product/admin-panel.md`, правила `pokatim-security/db/backend`.
+
+### Тесты
+
+Матрица §5 закрыта: `totp.test.ts` (8), `totp-secret-box.test.ts` (3), `recovery-codes.test.ts` (3),
+`totp.schema.test.ts` (9), `session.schema.test.ts` (11), `panel-totp-sign-in.int.test.ts` (13),
+`panel-account-totp.int.test.ts` (7), `panel-members.int.test.ts` (14), `panel-cli.int.test.ts` (7), `env.test.ts` (23),
+`admin-routes.test.ts` (4), `migrations.int.test.ts` (39), `SignInScreen.test.tsx` (21), `SecurityScreen.test.tsx` (5),
+`MembersScreen.test.tsx` (10).
+
+### Проверки
+
+`pnpm check` (format → lint → depcruise → typecheck → test, `TURBO_CONCURRENCY=1`, отдельные Mongo DB / Redis db) после
+слияния `origin/develop` — зелёный, 15/15 задач turbo: api 196 файлов / 2016 тестов, admin 40 / 396, app 239 / 2256,
+contracts 47 / 426, design-tokens 5 / 604, tracks 22 / 307, api-client 21 / 148, route-view 10 / 51, i18n 2 / 15;
+depcruise — 0 нарушений (2079 модулей).
+
+### NOT VERIFIED
+
+- Playwright e2e админки и смоук стенда (вне `pnpm check`; сценария 2FA нет — §8.2 п.10).
+- Ручная проверка в браузере и на реальном приложении-аутентификаторе (сканирование QR).
+- `bootstrap.sh` / деплой с `PANEL_TOTP_KEY` на dev; CI ветки.
+- Независимое ревью (Codex / independent-reviewer) по этой ветке.
