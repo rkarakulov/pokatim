@@ -167,6 +167,8 @@ function RootShell() {
                 {/* routes-06: заявка своего маршрута в каталог и жалоба на маршрут райдера — только вошедшим */}
                 <Stack.Screen name="routes/mine/publish/[id]" />
                 <Stack.Screen name="routes/report/[id]" />
+                {/* жалоба на публичный профиль райдера (profile-report-app): только вошедшим; гость — «Вход» */}
+                <Stack.Screen name="riders/report/[id]" />
                 {/* заезд по маршруту (route-rides-02): выбор и результат — только вошедшим */}
                 <Stack.Screen name="routes/pick/[routeId]" />
                 <Stack.Screen name="routes/rides/[routeId]/[rideId]" />
