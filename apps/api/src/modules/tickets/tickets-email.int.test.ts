@@ -5,6 +5,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createHarness, type Harness } from '../../../test/harness';
 import { collections } from '../../../test/identity';
 import {
+  addLinkMaterial,
+  addPdfMaterial,
   calendarStart,
   enableCalendarTickets,
   enableRaceTickets,
@@ -51,6 +53,21 @@ async function raceWithTicket() {
 }
 
 describe('письмо билета (AC7)', () => {
+  it('материалы события (PR C): ссылка как есть, PDF — через APP_WEB_ORIGIN', async () => {
+    const { admin, raceId } = await raceWorld(h);
+    await addLinkMaterial(h, admin.token, 'race', raceId);
+    const fileId = await addPdfMaterial(h, admin.token, 'race', raceId);
+    await enableRaceTickets(h, admin.token, raceId);
+    const who = await rider(h, 'a@example.com');
+    await enter(h, who.auth, raceId);
+    await raceTicket(h, who.auth, raceId);
+    expect(await sendTicketEmails(h)).toEqual(['sent']);
+    const mail = h.mailer.sent[0]!;
+    expect(mail.text).toContain('Положение: https://pokatim.by/rules');
+    expect(mail.text).toContain(`Схема парковки: ${ORIGIN}/v1/event-files/${fileId}`);
+    expect(mail.html).toContain(`href="${ORIGIN}/v1/event-files/${fileId}"`);
+  });
+
   it('тема, событие, дата Минска, место, категория, код, кнопка на /tickets/<код>; без PKT1 и токена', async () => {
     const { code } = await raceWithTicket();
     expect(await sendTicketEmails(h)).toEqual(['sent']);

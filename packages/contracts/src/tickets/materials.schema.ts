@@ -69,10 +69,13 @@ export interface MaterialContentIssue {
  */
 export function materialContentIssues(content: MaterialContent): MaterialContentIssue[] {
   const { type, url, description, hasFile } = content;
+  // файл есть только у `pdf` и тем «ссылка, файл или текст»
+  if (hasFile && EVENT_MATERIAL_NON_FILE_TYPES.includes(type))
+    return [{ path: 'type', code: 'INVALID' }];
   if (URL_ONLY_TYPES.includes(type)) return url === null ? [{ path: 'url', code: 'REQUIRED' }] : [];
   if (type === 'pdf') return hasFile && url === null ? [] : [{ path: 'type', code: 'INVALID' }];
   if (type === 'text') {
-    if (url !== null || hasFile) return [{ path: 'url', code: 'INVALID' }];
+    if (url !== null) return [{ path: 'url', code: 'INVALID' }];
     return description === null ? [{ path: 'description', code: 'REQUIRED' }] : [];
   }
   if (url !== null && hasFile) return [{ path: 'url', code: 'INVALID' }];

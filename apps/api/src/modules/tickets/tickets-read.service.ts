@@ -6,6 +6,7 @@ import type { Env } from '../../config/env';
 import { domainError } from '../../error-messages';
 import { consumeUserLimit } from '../../user-limit';
 import { RIDER_NAMES, type RiderNameDirectory } from '../profile';
+import { MaterialsRead } from './materials-read';
 import { RaceTickets } from './race-tickets';
 import { TicketEvents } from './ticket-events';
 import { qrPayload, ticketQrToken } from './ticket-qr';
@@ -27,6 +28,7 @@ export class TicketsReadService {
     private readonly repository: TicketsRepository,
     private readonly events: TicketEvents,
     private readonly raceTickets: RaceTickets,
+    private readonly materials: MaterialsRead,
     private readonly rateLimiter: RateLimiter,
     @Inject(RIDER_NAMES) private readonly names: RiderNameDirectory,
     @Inject(ENV) private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET'>,
@@ -77,6 +79,7 @@ export class TicketsReadService {
           : null,
       instructions: event.ticketing?.instructions ?? null,
       checkedInAt: doc.checkedInAt?.toISOString() ?? null,
+      materials: await this.materials.of(doc.kind, doc.eventId),
     };
   }
 

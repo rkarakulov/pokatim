@@ -5,6 +5,7 @@ import { MongoOutboxReader } from '@rkarakulov/api-kit/mongo';
 import type { Env } from '../../../config/env';
 import { IdentityAccounts } from '../../identity';
 import { renderTicketEmail } from '../mail/ticket-email';
+import { MaterialsRead } from '../materials-read';
 import { TicketEvents } from '../ticket-events';
 import { TicketsIssued } from '../tickets.events';
 import { TICKETS_POLICY } from '../tickets.policy';
@@ -37,6 +38,7 @@ export class TicketEmailHandler {
   constructor(
     private readonly repository: TicketsRepository,
     private readonly events: TicketEvents,
+    private readonly materials: MaterialsRead,
     private readonly identity: IdentityAccounts,
     private readonly outbox: MongoOutboxReader,
     @Inject(MAILER) private readonly mailer: Mailer,
@@ -87,6 +89,8 @@ export class TicketEmailHandler {
       category: doc.category,
       instructions: event.ticketing?.instructions ?? null,
       link: this.env.APP_WEB_ORIGIN ? `${this.env.APP_WEB_ORIGIN}/tickets/${doc.code}` : null,
+      materials: await this.materials.of(doc.kind, doc.eventId),
+      fileBase: this.env.APP_WEB_ORIGIN ?? null,
     });
     await this.mailer.send({ to, ...mail });
     await this.repository.settleEmail(doc._id, claimedUntil, {

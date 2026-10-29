@@ -58,6 +58,8 @@ export const PROJECT_ERROR_MESSAGES = {
   EVENT_FULL: 'Мест больше нет',
   EVENT_REGISTRATION_CLOSED: 'Регистрация на это событие закрыта',
   TICKETING_INVALID_STATE: 'Настройки билетов сейчас нельзя применить',
+  MATERIAL_FILE_UNSUPPORTED: 'Можно загрузить только PDF',
+  MATERIAL_FILE_TOO_LARGE: 'PDF больше 10 МБ',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

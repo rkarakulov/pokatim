@@ -49,3 +49,48 @@ describe('письмо «Вы зарегистрированы» (AC7)', () => {
     expect(mail.text).not.toContain('Инструкции');
   });
 });
+
+describe('письмо: материалы события (PR C)', () => {
+  const materials = [
+    {
+      title: 'Положение <гонки>',
+      description: null,
+      url: 'https://pokatim.by/rules?a=1&b=2',
+      file: null,
+    },
+    {
+      title: 'Схема парковки',
+      description: null,
+      url: null,
+      file: { id: 'F'.repeat(43), name: 'p.pdf', size: 10 },
+    },
+    { title: 'Сбор', description: 'В 9:00 у <арки>', url: null, file: null },
+  ];
+
+  it('ссылки и файлы — заголовок ссылкой (экранировано), текстовые — заголовок и описание', () => {
+    const mail = renderTicketEmail({
+      ...input,
+      materials,
+      fileBase: 'https://pokatim.example',
+    });
+    expect(mail.text).toContain('Материалы:');
+    expect(mail.text).toContain('Положение <гонки>: https://pokatim.by/rules?a=1&b=2');
+    expect(mail.text).toContain(
+      `Схема парковки: https://pokatim.example/v1/event-files/${'F'.repeat(43)}`,
+    );
+    expect(mail.text).toContain('Сбор: В 9:00 у <арки>');
+    expect(mail.html).toContain(
+      '<a href="https://pokatim.by/rules?a=1&amp;b=2">Положение &lt;гонки&gt;</a>',
+    );
+    expect(mail.html).toContain(`href="https://pokatim.example/v1/event-files/${'F'.repeat(43)}"`);
+    expect(mail.html).toContain('В 9:00 у &lt;арки&gt;');
+    expect(mail.html).not.toContain('<арки>');
+  });
+
+  it('без origin — файлы не выводятся; без материалов — блока нет', () => {
+    const noOrigin = renderTicketEmail({ ...input, materials, fileBase: null });
+    expect(noOrigin.text).not.toContain('Схема парковки');
+    expect(noOrigin.text).toContain('Положение <гонки>');
+    expect(renderTicketEmail(input).text).not.toContain('Материалы:');
+  });
+});

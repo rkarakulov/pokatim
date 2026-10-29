@@ -60,7 +60,13 @@ describe('материалы события (event-tickets PR C)', () => {
       });
     expect(rule('link', { url: 'https://a.by' })).toEqual([]);
     expect(rule('link', {})).toEqual([{ path: 'url', code: 'REQUIRED' }]);
-    expect(rule('gpx', { hasFile: true })).toEqual([{ path: 'url', code: 'REQUIRED' }]);
+    expect(rule('gpx', { hasFile: true })).toEqual([{ path: 'type', code: 'INVALID' }]);
+    expect(rule('link', { url: 'https://a.by', hasFile: true })).toEqual([
+      { path: 'type', code: 'INVALID' },
+    ]);
+    expect(rule('text', { description: 'x', hasFile: true })).toEqual([
+      { path: 'type', code: 'INVALID' },
+    ]);
     expect(rule('text', { description: 'Сбор в 9:00' })).toEqual([]);
     expect(rule('text', {})).toEqual([{ path: 'description', code: 'REQUIRED' }]);
     expect(rule('text', { url: 'https://a.by', description: 'x' })).toEqual([
