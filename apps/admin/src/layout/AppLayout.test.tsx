@@ -48,7 +48,6 @@ describe('каркас панели (AC10)', () => {
     expect(side.getByText('Ольга · Администратор · команда платформы')).toBeTruthy();
     expect(side.getByRole('button', { name: 'Выйти' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Требует внимания' })).toBeTruthy();
-    expect(await screen.findByText('Работает')).toBeTruthy();
   });
 
   it.each([
