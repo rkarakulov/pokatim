@@ -43,6 +43,7 @@ import { RIDER_PROFILE_INDEXES, riderProfile } from './0033_rider_profile';
 import { PROFILE_REPORTS_INDEXES, profileReports } from './0034_profile_reports';
 import { ACHIEVEMENTS_INDEXES, achievements } from './0035_achievements';
 import { ACHIEVEMENTS_COLLECTIONS } from '../../modules/achievements/achievements.collection';
+import { overviewIndexes } from './0036_overview_indexes';
 import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
@@ -149,6 +150,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0033_rider_profile',
       '0034_profile_reports',
       '0035_achievements',
+      '0036_overview_indexes',
     ]);
   });
 
@@ -290,6 +292,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         }),
         track_uploads_user_created_idx: index({ userId: 1, _id: -1 }),
         track_uploads_cleanup_idx: index({ status: 1, updatedAt: 1 }),
+        // 0036_overview_indexes: KPI «Обзора» панели
+        track_uploads_created_at_idx: index({ createdAt: 1 }),
       },
       [TRACKS_COLLECTIONS.activities]: {
         activities_user_started_idx: index({ userId: 1, startedAt: -1 }),
@@ -1364,9 +1368,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toMatchObject(queueIndex);
   });
 
-  it('0035_achievements: коллекции выдач и маркера, уникальный (userId, code); последняя; повторный up — без изменений', async () => {
+  it('0035_achievements: коллекции выдач и маркера, уникальный (userId, code); повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0035_achievements');
     expect(ids.indexOf('0035_achievements')).toBe(ids.indexOf('0034_profile_reports') + 1);
 
     for (const name of Object.values(ACHIEVEMENTS_COLLECTIONS)) {
@@ -1434,6 +1437,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         deletedAt: { $type: 'date' },
         erasureSweptAt: { $eq: null },
       }),
+      // 0036_overview_indexes: KPI «Обзора» панели
+      users_created_at_idx: plain({ createdAt: 1 }),
     });
     expect(await indexesOf(IDENTITY_COLLECTIONS.userConsents)).toEqual({
       user_consents_user_id_idx: plain({ userId: 1 }),
@@ -1470,5 +1475,28 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     for (const migration of migrations) await migration.up(h.db);
 
     expect(await Promise.all(Object.values(IDENTITY_COLLECTIONS).map(indexesOf))).toEqual(before);
+  });
+
+  it('0036_overview_indexes: индексы createdAt пользователей и загрузок; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0036_overview_indexes');
+    expect(ids.indexOf('0036_overview_indexes')).toBe(ids.indexOf('0035_achievements') + 1);
+    const createdAt = {
+      key: { createdAt: 1 },
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    };
+    expect(await indexesOf(IDENTITY_COLLECTIONS.users)).toMatchObject({
+      users_created_at_idx: createdAt,
+    });
+    expect(await indexesOf(TRACKS_COLLECTIONS.uploads)).toMatchObject({
+      track_uploads_created_at_idx: createdAt,
+    });
+    await overviewIndexes.up(h.db);
+    await overviewIndexes.up(h.db);
+    expect(await indexesOf(IDENTITY_COLLECTIONS.users)).toMatchObject({
+      users_created_at_idx: createdAt,
+    });
   });
 });

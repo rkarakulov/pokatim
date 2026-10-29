@@ -34,3 +34,5 @@ export {
 } from './track-ingest.port';
 /** Порт стирания заездов удалённого аккаунта (модуль `account`). */
 export { TrackErasure } from './track-erasure';
+/** Порт «Обзора» панели (admin-overview): загрузки заездов за период. */
+export { TracksOverview } from './tracks-overview';

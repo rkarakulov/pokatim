@@ -14,6 +14,8 @@ export {
 export type { DeletionState } from './identity.repository';
 export { SessionCookie } from './session-cookie';
 export { type AccountState, IdentityAccounts } from './identity-accounts';
+/** Порт «Обзора» панели (admin-overview): регистрации за период и зависшие удаления аккаунтов. */
+export { IdentityOverview } from './identity-overview';
 export {
   PanelCredentials,
   type PanelCredentialsResult,
