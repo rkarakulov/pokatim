@@ -2,7 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module, type Provider } from '@nestjs/common';
 import { ENV } from '@rkarakulov/api-kit/core';
 
-import type { Env } from '../../config/env';
+import { type Env, webPushVapid } from '../../config/env';
 
 import { QUEUE } from '../../queues';
 import { DeliveryJobs } from './delivery-jobs';
@@ -30,6 +30,7 @@ import { PushReceipts } from './push-receipts';
 import { PUSH_SENDER } from './push-sender';
 import { PushTokens } from './push-tokens';
 import { PushTokensService } from './push-tokens.service';
+import { HttpWebPushSender, WEB_PUSH_SENDER } from './web-push.sender';
 
 /** Адаптер Expo Push API от `ENV` (адрес и ключ — только env). Без `PUSH_ENABLED` доставка его не вызывает. */
 const pushSenderProvider: Provider = {
@@ -40,6 +41,20 @@ const pushSenderProvider: Provider = {
       apiUrl: env.EXPO_PUSH_API_URL,
       accessToken: env.EXPO_ACCESS_TOKEN ?? null,
     }),
+};
+
+/**
+ * Адаптер Web Push (ADR-0021): только при `WEB_PUSH_ENABLED` и ключах VAPID, иначе `null` — доставка шлёт только Expo.
+ */
+const webPushSenderProvider: Provider = {
+  provide: WEB_PUSH_SENDER,
+  inject: [ENV],
+  useFactory: (env: Env) => {
+    const vapid = webPushVapid(env);
+    return vapid
+      ? new HttpWebPushSender({ vapid, testOrigin: env.WEB_PUSH_TEST_ORIGIN ?? null })
+      : null;
+  },
 };
 
 /**
@@ -85,6 +100,7 @@ export class NotificationsModule {}
     NotificationIntake,
     NotificationsIntakeProcessor,
     pushSenderProvider,
+    webPushSenderProvider,
     DeliveryJobs,
     PushDelivery,
     EmailDelivery,

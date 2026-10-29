@@ -135,3 +135,69 @@ export type RegisterPushToken = z.infer<typeof RegisterPushToken>;
 /** `POST /v1/notifications/push-tokens/revoke` — снять токен этого устройства (до выхода); ответ `204` всегда. */
 export const RevokePushToken = z.strictObject({ token: ExpoPushToken });
 export type RevokePushToken = z.infer<typeof RevokePushToken>;
+
+// --- Web Push (ADR-0021): второй транспорт канала push — PWA в браузере ---
+
+/**
+ * Хосты push-сервисов браузеров (FCM — Chrome, Edge на Android, Samsung, Opera; Mozilla; WNS — Edge на Windows;
+ * Apple — Safari и PWA на iOS 16.4+). Сервер шлёт POST на endpoint от клиента — другие адреса не принимаем (SSRF).
+ */
+const WEB_PUSH_HOSTS = [
+  /^fcm\.googleapis\.com$/,
+  /^([a-z0-9-]+\.)*push\.services\.mozilla\.com$/,
+  /^[a-z0-9-]+\.notify\.windows\.com$/,
+  /^([a-z0-9-]+\.)*push\.apple\.com$/,
+];
+
+/** Хост endpoint — push-сервис из белого списка (без порта, учётных данных и не https — нет). */
+export function isWebPushEndpoint(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:' || url.port !== '' || url.username !== '' || url.password !== '') {
+    return false;
+  }
+  return WEB_PUSH_HOSTS.some((re) => re.test(url.hostname));
+}
+
+export const WEB_PUSH_ENDPOINT_MAX = 2048;
+
+/** Адрес подписки `PushSubscription.endpoint`: https, ≤ 2048, хост — push-сервис из белого списка. */
+export const WebPushEndpoint = z
+  .string({ error: fieldError('INVALID') })
+  .max(WEB_PUSH_ENDPOINT_MAX, { error: 'INVALID' })
+  .refine(isWebPushEndpoint, { error: 'INVALID' });
+
+/** base64url без `=` ровно на `bytes` байт. */
+const base64Url = (bytes: number) =>
+  z
+    .string({ error: fieldError('INVALID') })
+    .length(Math.ceil((bytes * 4) / 3), { error: 'INVALID' })
+    .regex(/^[A-Za-z0-9_-]+$/, { error: 'INVALID' });
+
+/**
+ * `PUT /v1/notifications/web-push/subscriptions` — подписка этого браузера (`PushSubscription.toJSON()` без
+ * `expirationTime`); ответ `204`. `p256dh` — несжатая точка P-256 (65 байт, `0x04…`), `auth` — 16 байт.
+ */
+export const RegisterWebPushSubscription = z.strictObject({
+  endpoint: WebPushEndpoint,
+  keys: z.strictObject({
+    p256dh: base64Url(65).refine((key) => key.startsWith('B'), { error: 'INVALID' }),
+    auth: base64Url(16),
+  }),
+});
+export type RegisterWebPushSubscription = z.infer<typeof RegisterWebPushSubscription>;
+
+/** `POST /v1/notifications/web-push/subscriptions/revoke` — снять подписку этого браузера; ответ `204` всегда. */
+export const RevokeWebPushSubscription = z.strictObject({ endpoint: WebPushEndpoint });
+export type RevokeWebPushSubscription = z.infer<typeof RevokeWebPushSubscription>;
+
+/**
+ * `GET /v1/notifications/web-push` — публичный VAPID-ключ (base64url, 65 байт) для `pushManager.subscribe`; `null` —
+ * сервер Web Push не шлёт (опцию не показываем).
+ */
+export const WebPushConfig = z.object({ publicKey: base64Url(65).nullable() });
+export type WebPushConfig = z.infer<typeof WebPushConfig>;

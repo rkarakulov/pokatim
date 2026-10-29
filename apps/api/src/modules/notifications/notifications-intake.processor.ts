@@ -5,7 +5,7 @@ import { CLOCK, type Clock, ENV, type OutboxJobData } from '@rkarakulov/api-kit/
 import { MongoOutboxReader, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
 
-import type { Env } from '../../config/env';
+import { type Env, pushChannelEnabled } from '../../config/env';
 import { QUEUE } from '../../queues';
 import { IdentityAccounts } from '../identity';
 import { DeliveryJobs } from './delivery-jobs';
@@ -41,7 +41,15 @@ export class NotificationsIntakeProcessor extends WorkerHost {
     private readonly identity: IdentityAccounts,
     private readonly repository: NotificationsRepository,
     private readonly jobs: DeliveryJobs,
-    @Inject(ENV) private readonly env: Pick<Env, 'PUSH_ENABLED'>,
+    @Inject(ENV)
+    private readonly env: Pick<
+      Env,
+      | 'PUSH_ENABLED'
+      | 'WEB_PUSH_ENABLED'
+      | 'VAPID_PUBLIC_KEY'
+      | 'VAPID_PRIVATE_KEY'
+      | 'VAPID_SUBJECT'
+    >,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {
     super();
@@ -89,7 +97,7 @@ export class NotificationsIntakeProcessor extends WorkerHost {
           kind,
           settings.get(userId) ?? DEFAULT_NOTIFICATION_SETTINGS,
           now,
-          this.env.PUSH_ENABLED,
+          pushChannelEnabled(this.env),
         );
         return {
           _id: uuidv7(),

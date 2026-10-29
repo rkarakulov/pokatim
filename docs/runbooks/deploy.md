@@ -140,6 +140,10 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
   руками (как `MAIL_RELAY_*`).
 - Push через Expo (ADR-0017, runbook [`push.md`](push.md)): `PUSH_ENABLED=false` дописывает шаблон (push выключен —
   уведомления только в центре), `EXPO_ACCESS_TOKEN` — необязательный секрет, вписывает владелец руками.
+- Web Push в PWA (ADR-0021, runbook [`push.md`](push.md), раздел «Web Push»): шаблон дописывает
+  `WEB_PUSH_ENABLED=true`, `VAPID_SUBJECT` и пару `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` — её генерирует
+  `bootstrap.sh` на сервере один раз (`@vapid-*`, приватный ключ не печатается и не покидает сервер). Секретов в
+  GitHub не нужно.
 
 Потеря `.env` при живом томе `mongodata`: новый `MONGO_ROOT_PASSWORD` не совпадёт с root в базе — `mongo-init.js`
 упадёт с сообщением «MONGO_ROOT_PASSWORD из .env не подходит к root в томе mongodata».

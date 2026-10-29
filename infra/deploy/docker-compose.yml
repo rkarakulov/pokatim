@@ -49,6 +49,11 @@ x-api-env: &api-env
   # EXPO_ACCESS_TOKEN — необязательный секрет, только .env сервера
   PUSH_ENABLED: ${PUSH_ENABLED:-false}
   EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+  # Web Push в PWA (ADR-0021): пара VAPID — из .env сервера (генерирует bootstrap.sh), приватный ключ — только там
+  WEB_PUSH_ENABLED: ${WEB_PUSH_ENABLED:-false}
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-}
 
 x-api-image: &api-image ${POKATIM_IMAGE_PREFIX:-ghcr.io/rkarakulov/pokatim}-api:${POKATIM_TAG:?}
 

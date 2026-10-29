@@ -9,7 +9,7 @@
 |---|---|
 | [`local-dev.md`](local-dev.md) | `pnpm infra:up`, Mailpit, переменные API, ссылки для Expo Go, тестовая БД |
 | [`deploy.md`](deploy.md) | автодеплой dev-стенда (`develop` → общий EC2): секреты, DNS и TLS, логи (по SSH), почта (Mailpit) — `https://<хост>/mail/` под паролем, откат |
-| [`push.md`](push.md) | push через Expo: EAS `projectId`, ключи APNs/FCM в EAS, `PUSH_ENABLED`/`EXPO_ACCESS_TOKEN`, проверка доставки и квитанций |
+| [`push.md`](push.md) | push через Expo: EAS `projectId`, ключи APNs/FCM в EAS, `PUSH_ENABLED`/`EXPO_ACCESS_TOKEN`, проверка доставки и квитанций; Web Push в PWA: VAPID, `WEB_PUSH_ENABLED`, проверка в браузерах |
 | [`account-deletion.md`](account-deletion.md) | удаление аккаунта: ручной шаг Open Wearables, зависшая очистка и её перезапуск, второе письмо, ротация `EMAIL_TOKEN_SECRET` |
 
 Планируемые:

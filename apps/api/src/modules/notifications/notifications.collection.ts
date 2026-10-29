@@ -68,7 +68,9 @@ export interface NotificationSettingsDoc extends NotificationSettings {
 }
 
 /**
- * Push-токен устройства (Expo): уникален глобально (устройство одно — владелец переходит), ≤ 10 на пользователя.
+ * Push-токен устройства: Expo (`ios`/`android`) или подписка Web Push (`web`, ADR-0021: `token` — endpoint
+ * push-сервиса, ключи шифрования — `webPush`). Уникален глобально (устройство одно — владелец переходит), ≤ 10 на
+ * пользователя.
  * `sessionId` — сессия, под которой токен зарегистрирован: push уходит, только пока она жива (выход, сброс пароля,
  * отзыв, reuse detection — токен снимается при доставке). Токены, записанные до привязки, без поля — как мёртвые.
  */
@@ -77,10 +79,15 @@ export interface PushTokenDoc {
   token: string;
   userId: string;
   sessionId?: string;
-  platform: PushPlatform;
+  platform: PushTokenPlatform;
+  /** Ключи подписки Web Push (`PushSubscription.keys`) — только у `web`. */
+  webPush?: { p256dh: string; auth: string };
   createdAt: Date;
   updatedAt: Date;
 }
+
+/** Платформа токена: Expo (`PUSH_PLATFORMS` контракта) или Web Push. */
+export type PushTokenPlatform = PushPlatform | 'web';
 
 /**
  * Тикет Expo Push до проверки квитанции (≥ 15 мин); `expireAt = createdAt + 24 ч`. `userId` — владелец токена на момент

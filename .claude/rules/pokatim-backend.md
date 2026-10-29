@@ -408,3 +408,10 @@ RC-A1, ADR-0019).
   `skipped`.
 - HTTP `/v1/notifications` под `AuthGuard`, только свои (`userId` сессии в фильтре, чужое — 404); лимиты
   `notifications-read` 120/мин, `notifications-settings` 30/ч, `notifications-push-token` 30/ч → `429 RATE_LIMITED`.
+- Web Push (ADR-0021) — второй транспорт того же `notifications.push`, не отдельная система: подписка — `push_tokens`
+  (`platform: 'web'`), HTTP `GET web-push` (публичный ключ или `null`), `PUT web-push/subscriptions`, `POST
+  web-push/subscriptions/revoke` (лимит `notifications-push-token`). Порт `WEB_PUSH_SENDER` (`web-push.sender.ts`,
+  шифрование — `web-push.crypto.ts`, RFC 8291/8292 без пакета `web-push`) — `null`, если `webPushVapid(env)` пуст;
+  endpoint — только хосты `isWebPushEndpoint` контракта (SSRF), повторно в адаптере. 404/410 снимают подписку; канал
+  выключен (`push_off`), только если выключены оба транспорта (`pushChannelEnabled`). Тесты — фейковый push-сервис
+  `test/fake-web-push.ts` (`WEB_PUSH_TEST_ORIGIN`, только `NODE_ENV=test`), тело расшифровывается ключом подписки.
