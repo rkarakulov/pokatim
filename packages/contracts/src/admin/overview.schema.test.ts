@@ -7,7 +7,7 @@ const ID = '01890a5d-ac96-774b-bcce-b302099a8057';
 describe('PanelOverview', () => {
   it('организатор: только протоколы и «Сейчас идёт» — остальных блоков нет', () => {
     const parsed = PanelOverview.parse({
-      attention: { protocols: { awaiting: 1, ready: 0, blockers: 2 } },
+      attention: { protocols: { awaiting: 1, checked: 1, ready: 0, blockers: 2 } },
       live: {
         racesTotal: 1,
         races: [
@@ -31,7 +31,7 @@ describe('PanelOverview', () => {
       PanelOverview.safeParse({
         attention: {
           disputes: { open: 0 },
-          protocols: { awaiting: 0, ready: 0, blockers: 0 },
+          protocols: { awaiting: 0, checked: 0, ready: 0, blockers: 0 },
           rides: { reported: 0 },
           riderRoutes: { pending: 0, reported: 0 },
           riderProfiles: { reported: 0 },
@@ -45,6 +45,8 @@ describe('PanelOverview', () => {
 
   it('отрицательный или дробный счётчик — ошибка формы ответа', () => {
     expect(PanelOverview.safeParse({ attention: { rides: { reported: -1 } } }).success).toBe(false);
-    expect(PanelOverview.safeParse({ attention: { rides: { reported: 1.5 } } }).success).toBe(false);
+    expect(PanelOverview.safeParse({ attention: { rides: { reported: 1.5 } } }).success).toBe(
+      false,
+    );
   });
 });

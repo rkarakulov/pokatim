@@ -33,8 +33,13 @@ export const PanelOverview = z.object({
   attention: z.object({
     /** `disputes.read` — открытые споры */
     disputes: z.object({ open: Count }).optional(),
-    /** `races.read` — гонки, ждущие публикации протокола; из них готовы; сумма невыполненных пунктов чек-листа */
-    protocols: z.object({ awaiting: Count, ready: Count, blockers: Count }).optional(),
+    /**
+     * `races.read` — гонки, ждущие публикации протокола (`awaiting` — все); готовность и сумма невыполненных пунктов
+     * чек-листа — по `checked` недавно закрывшимся (`checked < awaiting` — не по всем)
+     */
+    protocols: z
+      .object({ awaiting: Count, checked: Count, ready: Count, blockers: Count })
+      .optional(),
     /** `rides.moderate` — кофе-райды с открытыми жалобами */
     rides: z.object({ reported: Count }).optional(),
     /** `routes.moderate` — заявки в каталог и маршруты райдеров с жалобами */

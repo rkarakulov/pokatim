@@ -124,7 +124,7 @@ describe('гонки: «Сейчас идёт» и протоколы', () => {
         attempts: 2,
       },
     ]);
-    expect(org.attention.protocols).toEqual({ awaiting: 0, ready: 0, blockers: 0 });
+    expect(org.attention.protocols).toEqual({ awaiting: 0, checked: 0, ready: 0, blockers: 0 });
 
     const all = await overviewOf(tokens.admin);
     expect(all.live?.racesTotal).toBe(2);
@@ -141,10 +141,10 @@ describe('гонки: «Сейчас идёт» и протоколы', () => {
     const org = await overviewOf(tokens.organizer);
     expect(org.live?.racesTotal).toBe(0);
     // без коридора (`no_corridor`) и приём файлов ещё идёт (`window_open`, сутки после окна)
-    expect(org.attention.protocols).toEqual({ awaiting: 1, ready: 0, blockers: 2 });
+    expect(org.attention.protocols).toEqual({ awaiting: 1, checked: 1, ready: 0, blockers: 2 });
 
     const all = await overviewOf(tokens.admin);
-    expect(all.attention.protocols).toEqual({ awaiting: 2, ready: 0, blockers: 4 });
+    expect(all.attention.protocols).toEqual({ awaiting: 2, checked: 2, ready: 0, blockers: 4 });
   });
 });
 
@@ -213,9 +213,24 @@ describe('KPI и удаления аккаунтов (только admin)', () =
     const now = h.clock.now();
     const ago = (ms: number) => new Date(now.getTime() - ms);
     const users = h.db.collection<Doc>(IDENTITY_COLLECTIONS.users);
-    const recent = await users.countDocuments({ createdAt: { $gte: ago(7 * DAY) } });
+    // сотрудники стенда — подтверждённые аккаунты, созданные сейчас
+    const recent = await users.countDocuments({ emailVerifiedAt: { $ne: null }, deletedAt: null });
     await seed(IDENTITY_COLLECTIONS.users, [
-      { email: 'old@example.by', createdAt: ago(8 * DAY), deletedAt: null },
+      {
+        email: 'old@example.by',
+        createdAt: ago(8 * DAY),
+        emailVerifiedAt: ago(8 * DAY),
+        deletedAt: null,
+      },
+      // неподтверждённый и удалённый за неделю — не «новые пользователи»
+      { email: 'new@example.by', createdAt: ago(HOUR), emailVerifiedAt: null, deletedAt: null },
+      {
+        email: 'gone0',
+        createdAt: ago(DAY),
+        emailVerifiedAt: ago(DAY),
+        deletedAt: ago(HOUR),
+        erasureSweptAt: ago(HOUR),
+      },
       // удалён двое суток назад, очистка не завершилась — зависло
       { email: 'gone1', createdAt: ago(30 * DAY), deletedAt: ago(2 * DAY), erasureSweptAt: null },
       // удалён час назад — штатно ещё в работе; давно удалённый с завершённой очисткой

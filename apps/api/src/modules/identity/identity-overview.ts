@@ -3,7 +3,8 @@ import { Injectable } from '@nestjs/common';
 import { IdentityRepository } from './identity.repository';
 
 /**
- * Порт `identity` для «Обзора» панели (admin-overview, модуль `overview`, только admin): регистрации за период и
+ * Порт `identity` для «Обзора» панели (admin-overview, модуль `overview`, только admin): регистрации за период
+ * (подтверждённые, не удалённые) и
  * зависшие удаления аккаунтов — удалённые раньше `deletedBefore`, чья очистка так и не завершилась (повторный проход
  * штатно — через 15 мин, регламент resume — каждый час). Только чтение, без идентификаторов.
  */

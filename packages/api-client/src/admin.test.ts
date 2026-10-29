@@ -115,7 +115,7 @@ describe('createAdminApiClient: пути, методы, cookie панели', ()
   });
 
   it('«Обзор»: GET /v1/admin/overview, блоки без права отсутствуют в ответе', async () => {
-    const body = { attention: { protocols: { awaiting: 1, ready: 1, blockers: 0 } } };
+    const body = { attention: { protocols: { awaiting: 1, checked: 1, ready: 1, blockers: 0 } } };
     const { calls, api } = admin(200, body);
     await expect(api.overview()).resolves.toEqual(body);
     expect(calls[0]).toMatchObject({ url: '/v1/admin/overview', method: 'GET' });

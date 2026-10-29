@@ -860,6 +860,8 @@ export const ru = {
   'admin.overview.card.disputes': 'Открытые споры',
   'admin.overview.card.protocols': 'Ждут протокола',
   'admin.overview.card.protocolsHint': 'Готовы к публикации: {ready} · блокеров: {blockers}',
+  'admin.overview.card.protocolsHintPartial':
+    'По {checked} последним: готовы к публикации — {ready} · блокеров: {blockers}',
   'admin.overview.card.rides': 'Кофе-райды с жалобами',
   'admin.overview.card.riderRoutesPending': 'Заявки в каталог',
   'admin.overview.card.riderRoutesReported': 'Маршруты с жалобами',

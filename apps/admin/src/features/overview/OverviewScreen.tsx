@@ -74,6 +74,8 @@ interface AttentionCard {
   value: (attention: Attention) => number | undefined;
   hint?: (attention: Attention) => ReactNode;
   to?: LinkProps['to'];
+  /** Вкладка раздела, где живёт очередь карточки. */
+  search?: { tab: 'reported' };
 }
 
 const ATTENTION_CARDS: readonly AttentionCard[] = [
@@ -91,10 +93,16 @@ const ATTENTION_CARDS: readonly AttentionCard[] = [
     value: (a) => a.protocols?.awaiting,
     hint: (a) =>
       a.protocols
-        ? t('admin.overview.card.protocolsHint', {
-            ready: String(a.protocols.ready),
-            blockers: String(a.protocols.blockers),
-          })
+        ? t(
+            a.protocols.checked < a.protocols.awaiting
+              ? 'admin.overview.card.protocolsHintPartial'
+              : 'admin.overview.card.protocolsHint',
+            {
+              ready: String(a.protocols.ready),
+              blockers: String(a.protocols.blockers),
+              checked: String(a.protocols.checked),
+            },
+          )
         : null,
     to: '/races',
   },
@@ -118,6 +126,7 @@ const ATTENTION_CARDS: readonly AttentionCard[] = [
     label: 'admin.overview.card.riderRoutesReported',
     value: (a) => a.riderRoutes?.reported,
     to: '/rider-routes',
+    search: { tab: 'reported' },
   },
   {
     key: 'riderProfiles',
@@ -143,7 +152,7 @@ function cardHint(card: AttentionCard, attention: Attention, value: number): Rea
       {card.hint?.(attention)}
       {card.hint && card.to ? <br /> : null}
       {card.to ? (
-        <Link className="link" to={card.to}>
+        <Link className="link" to={card.to} search={card.search}>
           {t('admin.overview.open')}
         </Link>
       ) : null}

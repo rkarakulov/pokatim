@@ -799,9 +799,16 @@ export class IdentityRepository {
     return this.c.users.countDocuments(pendingSweepFilter(deletedBefore));
   }
 
-  /** Аккаунты, созданные с `since` (admin-overview, KPI «Обзора»): индекс `users_created_at_idx` (0036). */
+  /**
+   * Живые подтверждённые аккаунты, созданные с `since` (admin-overview, KPI «Обзора»): диапазон по
+   * `users_created_at_idx` (0036), остальное — остаточный фильтр.
+   */
   countCreatedSince(since: Date): Promise<number> {
-    return this.c.users.countDocuments({ createdAt: { $gte: since } });
+    return this.c.users.countDocuments({
+      createdAt: { $gte: since },
+      emailVerifiedAt: { $ne: null },
+      deletedAt: null,
+    });
   }
 
   // --- очистка (V-10) ---

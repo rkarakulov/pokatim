@@ -16,7 +16,7 @@ const RACE_ID = '01890a5d-ac96-774b-bcce-b302099a8057';
 
 /** Ответ организатору: только протоколы и «Сейчас идёт». */
 const ORGANIZER_OVERVIEW = {
-  attention: { protocols: { awaiting: 0, ready: 0, blockers: 0 } },
+  attention: { protocols: { awaiting: 0, checked: 0, ready: 0, blockers: 0 } },
   live: { racesTotal: 0, races: [], calendar: [] },
 };
 
@@ -24,7 +24,7 @@ const ORGANIZER_OVERVIEW = {
 const ADMIN_OVERVIEW = {
   attention: {
     disputes: { open: 2 },
-    protocols: { awaiting: 1, ready: 0, blockers: 3 },
+    protocols: { awaiting: 1, checked: 1, ready: 0, blockers: 3 },
     rides: { reported: 0 },
     riderRoutes: { pending: 4, reported: 0 },
     riderProfiles: { reported: 1 },
@@ -153,6 +153,11 @@ describe('«Обзор» — блоки по правам', () => {
     expect(tile('Кофе-райды с жалобами').textContent).toContain('Всё разобрано');
     expect(within(tile('Кофе-райды с жалобами')).queryByRole('link')).toBeNull();
     expect(tile('Заявки в каталог').textContent).toContain('4');
+    expect(
+      within(tile('Профили с жалобами'))
+        .getByRole('link', { name: 'Открыть' })
+        .getAttribute('href'),
+    ).toContain('/rider-profiles');
     expect(tile('Удаления аккаунтов со сбоем').textContent).toContain('Всё разобрано');
 
     const race = screen.getByRole('link', { name: 'Минское кольцо' });
@@ -178,6 +183,25 @@ describe('«Обзор» — блоки по правам', () => {
     const kpi = screen.getByRole('heading', { name: 'Платформа' });
     expect(kpi.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(await screen.findByText('Работает')).toBeTruthy();
+  });
+
+  it('ждущих гонок больше проверенных — подсказка «по N последним»; «Маршруты с жалобами» — вкладка жалоб', async () => {
+    mocked.me.mockResolvedValue(ME.admin);
+    mocked.overview.mockResolvedValue({
+      ...ADMIN_OVERVIEW,
+      attention: {
+        ...ADMIN_OVERVIEW.attention,
+        protocols: { awaiting: 25, checked: 20, ready: 2, blockers: 30 },
+        riderRoutes: { pending: 0, reported: 3 },
+      },
+    });
+    await renderApp('/');
+    await vi.waitFor(() => expect(tile('Ждут протокола').textContent).toContain('25'));
+    expect(tile('Ждут протокола').textContent).toContain(
+      'По 20 последним: готовы к публикации — 2 · блокеров: 30',
+    );
+    const link = within(tile('Маршруты с жалобами')).getByRole('link', { name: 'Открыть' });
+    expect(link.getAttribute('href')).toContain('/rider-routes?tab=reported');
   });
 
   it('организатор: только «Ждут протокола» и «Сейчас идёт» — без модерации и KPI; пустые таблицы', async () => {

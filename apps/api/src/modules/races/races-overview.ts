@@ -6,7 +6,7 @@ import type { RaceForResults } from './race-registry.port';
 import { ownScope, RACE_POLICY } from './races.policy';
 import { RacesRepository } from './races.repository';
 
-/** Гонки одной фазы «Обзора»: всего и первые `limit` (раньше закрывающиеся — первыми). */
+/** Гонки одной фазы «Обзора»: всего и первые `limit` (открытые — раньше закрывающиеся, ждущие — недавние). */
 export interface OverviewRaces {
   total: number;
   races: RaceForResults[];

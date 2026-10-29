@@ -73,7 +73,7 @@ export class OverviewService {
   private async protocols(principal: PanelPrincipal, now: Date) {
     const awaiting = await this.races.awaitingProtocol(principal, now, OVERVIEW_POLICY.racesLimit);
     const readiness = await this.results.protocolReadiness(awaiting.races, now);
-    return { awaiting: awaiting.total, ...readiness };
+    return { awaiting: awaiting.total, checked: awaiting.races.length, ...readiness };
   }
 
   private async live(principal: PanelPrincipal, now: Date) {

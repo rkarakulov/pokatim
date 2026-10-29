@@ -73,9 +73,11 @@ Reuse: `racePhase`/`ownScope` (races.policy), `publishChecklist` (results.policy
 
 - «Зависшее удаление» — `deletedAt` старше 24 ч без `erasureSweptAt`: штатно повторный проход идёт через 15 мин, регламент
   resume — каждый час; сутки без завершения = очистка падает. Это прокси сбоя без доступа API к Redis/BullMQ.
-- «Загрузка» — документ `track_uploads` (файл заезда, загруженный райдером), `createdAt >= now − 7 сут`.
+- «Загрузка» — документ `track_uploads` (файл заезда райдера или импорт агрегатора Garmin/Wahoo), `createdAt >= now − 7 сут`.
+- «Новый пользователь» — подтверждённый и не удалённый аккаунт, созданный за 7 сут.
 - «Активный райд» — `published` и `startsAt > now` (фаза `upcoming`, как лента).
-- Гонок с открытым окном и ждущих протокола — не больше 20 (лимит на запрос; гонок мало, лимит — защита).
+- Гонок с открытым окном и ждущих протокола — не больше 20 (лимит на запрос; гонок мало, лимит — защита). Готовность
+  протоколов — по 20 недавно закрывшимся (`checked`), «ждут» — по всем; `checked < awaiting` — подсказка «по N последним».
 - Право `platform.stats` добавляется в конец `PERMISSIONS`; admin получает автоматически (`PERMISSIONS` целиком).
 
 ## 8. Risks / Assumptions / Open Questions
@@ -108,8 +110,22 @@ Reuse: `racePhase`/`ownScope` (races.policy), `publishChecklist` (results.policy
 
 ## 11. Implementation Context
 
-Фаза: SPEC → IMPLEMENT. Base: `origin/develop` 3d2b6fe.
+Фаза: FINISH. Base: `origin/develop` 3d2b6fe.
 
 ## 12. Outcome
 
-_заполняется по итогам_
+- API: модуль `overview` (`GET /v1/admin/overview`), порты-классы в 9 модулях-владельцах, право `platform.stats`
+  (admin), миграция `0036_overview_indexes` (`users_created_at_idx`, `track_uploads_created_at_idx`). Рефакторинг без
+  смены поведения: фильтры очередей маршрутов (`publicationQueueFilter`) и зависших удалений (`pendingSweepFilter`)
+  вынесены для общего списка и счётчика; `CalendarRepository` — в новый `CalendarCoreModule`.
+- Панель: «Требует внимания» (`StatTile`, ссылки в разделы, ноль — «Всё разобрано»), «Сейчас идёт» (`DataTable`),
+  «Платформа» (KPI strip), статус API внизу; скелетоны по правам сессии, `ErrorState`, баннер обновления.
+- Тесты: int `apps/api/test/overview.int.test.ts` (роли и набор ключей, свои/чужие гонки, фазы, блокеры, фильтры
+  очередей с отрицательными случаями, KPI, календарь), миграции, `admin-routes`; экран — 12 тестов; контракт и клиент.
+- Проверки: `pnpm check` зелёный (локально, свой Mongo replset и Redis).
+- Ревью: independent-reviewer pass 1 — APPROVE (CRITICAL 0 / HIGH 0 / MEDIUM 2 / LOW 4). Исправлено: форматирование,
+  готовность протоколов при > 20 гонках (`checked`, сортировка недавних), ссылка на вкладку жалоб маршрутов, «новые
+  пользователи» — подтверждённые и не удалённые. Не исправлено (осознанно): три порта читают коллекции своего модуля
+  напрямую (rides, tracks) — прецедент `ActivityTotalsService`; споры переведены на репозиторий (сторож коллекций); фильтр `RidesOverview.reportedCount` повторяет `listReported` (одно
+  условие частичного индекса).
+- Follow-up: экран сбоев удаления аккаунтов (F13); номер миграции — сверить с «Достижениями» (0035) перед мержем.

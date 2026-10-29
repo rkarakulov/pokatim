@@ -165,8 +165,9 @@ export class RacesRepository {
   /**
    * Опубликованные гонки без протокола в фазе «Обзора» панели (admin-overview): `open` — окно идёт
    * (`windowStartsAt ≤ now < closesAt`), `closed` — окно закрыто, протокол ждёт публикации. `closedBefore` —
-   * `now − windowEndGraceMs` (граница `racePhase`); `ownerUserId` — только свои (организатор). Раньше закрывающиеся —
-   * первыми. `protocolPublishedAt: null` ловит и документы до `0016_protocol` без поля.
+   * `now − windowEndGraceMs` (граница `racePhase`); `ownerUserId` — только свои (организатор). `open` — раньше
+   * закрывающиеся первыми, `closed` — недавно закрывшиеся первыми (давно забытые не вытесняют свежие из лимита).
+   * `protocolPublishedAt: null` ловит и документы до `0016_protocol` без поля.
    */
   async overviewRaces(
     phase: 'open' | 'closed',
@@ -176,7 +177,11 @@ export class RacesRepository {
     const filter = overviewFilter(phase, bounds);
     const [total, docs] = await Promise.all([
       this.c.races.countDocuments(filter),
-      this.c.races.find(filter).sort({ windowEndsAt: 1, _id: 1 }).limit(limit).toArray(),
+      this.c.races
+        .find(filter)
+        .sort(phase === 'open' ? { windowEndsAt: 1, _id: 1 } : { windowEndsAt: -1, _id: -1 })
+        .limit(limit)
+        .toArray(),
     ]);
     return { total, docs };
   }
