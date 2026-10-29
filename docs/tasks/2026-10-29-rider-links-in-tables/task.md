@@ -106,6 +106,11 @@ Follow-ups `docs/tasks/2026-10-28-rider-profile/pr.md`; RC-A3 вариант (b)
 - `publicRiders` возвращает `publicId: null`, если у профиля его ещё нет (до бэкфилла): строка с именем, но без ссылки
   и аватара — как «нет профиля» для ссылки.
 
+# 10. Documentation Sync
+
+- `docs/product/profile.md`: R6 — метрика «Финиши», R9 — финиши в публичной статистике и истории, строки таблиц со
+  ссылкой и аватаром; Follow-up — пункты таблиц и RC-A3 (b) закрыты, добавлены web-`Link` и сброс кеша таблиц.
+
 # 12. Outcome
 
 - Контракты: `RiderRowLink` (`riderPublicId`, `riderAvatar`, `.default(null)`) в `RaceResultRow`, `RaceFinisherRow`,
