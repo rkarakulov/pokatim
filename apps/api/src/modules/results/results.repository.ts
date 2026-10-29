@@ -273,6 +273,29 @@ export class ResultsRepository {
       .toArray();
   }
 
+  /**
+   * Заявки-финишёры пользователя (rider-links-in-tables): условие — как у таблицы финишёров (`finishersFilter`) по
+   * `userId` вместо гонки; индекс `race_entries_user_idx` `(userId, status)`. Публикацию протокола проверяет вызывающий.
+   */
+  finisherEntriesOfUser(
+    userId: string,
+    limit: number,
+  ): Promise<Pick<RaceEntryDoc, 'raceId' | 'groupKey' | 'tier' | 'best'>[]> {
+    return this.c.entries
+      .find(
+        {
+          userId,
+          status: 'active',
+          best: { $type: 'object' },
+          'best.ranked': false,
+          disqualified: null,
+        },
+        { projection: { _id: 0, raceId: 1, groupKey: 1, tier: 1, best: 1 } },
+      )
+      .limit(limit)
+      .toArray();
+  }
+
   /** Активные заявки пользователя (индекс `(userId, status)`, единицы). */
   activeEntriesOf(userId: string): Promise<RaceEntryDoc[]> {
     return this.c.entries.find({ userId, status: 'active' }).toArray();

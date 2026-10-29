@@ -40,6 +40,7 @@ const stats = (overrides: Partial<RiderStats> = {}): RiderStats => ({
   elevationGainM: 900,
   races: 3,
   podiums: 1,
+  finishes: 3,
   bestPlaces: [],
   ...overrides,
 });
@@ -200,6 +201,8 @@ describe('свой профиль /profile: статистика (AC12)', () => 
     expect(block.getByLabelText('Дистанция 345,7 км')).toBeOnTheScreen();
     expect(block.getByLabelText('Набор 900 м')).toBeOnTheScreen();
     expect(block.getByLabelText('В зачёте 3')).toBeOnTheScreen();
+    // rider-links-in-tables: финиши — в зачёте и без места
+    expect(block.getByLabelText('Финиши 3')).toBeOnTheScreen();
     expect(block.getByLabelText('Подиумы 1')).toBeOnTheScreen();
     expect(block.getByLabelText('Лучшее место 2')).toBeOnTheScreen();
 

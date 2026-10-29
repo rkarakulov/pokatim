@@ -9,7 +9,7 @@ import type {
 } from '@pokatim/contracts';
 import { formatPlace, t } from '@pokatim/i18n';
 
-import { groupLabel } from '@/features/races/participation-format';
+import { groupLabel, profileWho } from '@/features/races/participation-format';
 import { domainLabel } from '@/lib/minsk-format';
 
 /*
@@ -43,15 +43,21 @@ export const tableLabel = (
 export function standingRow(
   row: SeasonStandingRow,
   own: boolean,
-): { place: string; who: string; points: string; a11y: string } {
+): { place: string; who: string; points: string; a11y: string; profileA11y: string | null } {
   const place = placeView(row.place, row.tied);
   const who = own ? t('races.results.you') : (row.riderName ?? t('races.results.rider'));
   const points = pointsText(row.points);
+  const named = profileWho(row, who);
   return {
     place: place.text,
     who,
     points,
     a11y: t('season.standings.rowA11y', { place: place.a11y, who, points }),
+    // ссылка на публичный профиль (rider-links-in-tables) — только у публичного райдера
+    profileA11y:
+      named === null
+        ? null
+        : t('season.standings.profileA11y', { who: named, place: place.a11y, points }),
   };
 }
 

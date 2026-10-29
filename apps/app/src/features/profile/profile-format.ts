@@ -34,7 +34,10 @@ const none = () => t('profile.stats.none');
 const placeText = (place: number | null, tied: boolean): { text: string; a11y: string | null } =>
   place === null ? { text: none(), a11y: null } : placeView(place, tied);
 
-/** Ячейки статистики своего профиля: заезды, км (одна десятая), набор, гонки в зачёте, подиумы, лучшее место. */
+/**
+ * Ячейки статистики своего профиля: заезды, км (одна десятая), набор, гонки в зачёте, финиши (в зачёте + без места,
+ * rider-links-in-tables), подиумы, лучшее место.
+ */
 export function ownStatItems(stats: RiderStats): StatItem[] {
   const best = stats.bestPlaces[0];
   return [
@@ -50,6 +53,7 @@ export function ownStatItems(stats: RiderStats): StatItem[] {
       label: t('profile.stats.elevation'),
     },
     { value: number(stats.races), label: t('profile.stats.races') },
+    { value: number(stats.finishes), label: t('profile.stats.finishes') },
     { value: number(stats.podiums), label: t('profile.stats.podiums') },
     {
       value: best ? placeView(best.place, best.tied).text : none(),
@@ -62,6 +66,7 @@ export function ownStatItems(stats: RiderStats): StatItem[] {
 export function publicStatItems(stats: PublicRiderProfile['stats']): StatItem[] {
   return [
     { value: number(stats.races), label: t('profile.stats.races') },
+    { value: number(stats.finishes), label: t('profile.stats.finishes') },
     { value: number(stats.podiums), label: t('profile.stats.podiums') },
     {
       value: stats.bestPlace === null ? none() : placeView(stats.bestPlace, false).text,
@@ -117,7 +122,10 @@ export function ownRaceRow(item: RiderRaceHistoryItem): RaceRowView {
   return { raceId: item.race.id, ...view, a11y: raceA11y(view, place.a11y) };
 }
 
-/** Публичная гонка: только опубликованные протоколы (`final | revised | dq`), без уровня. */
+/**
+ * Публичная гонка: только опубликованные протоколы (`final | revised | dq`), без уровня. Финиш без места (`unranked`,
+ * rider-links-in-tables) — «—» и плашка «Финишёр», как статус в своей истории.
+ */
 export function publicRaceRow(item: PublicRiderRace): RaceRowView {
   const place = placeText(item.place, item.tied);
   const view = {
@@ -125,7 +133,12 @@ export function publicRaceRow(item: PublicRiderRace): RaceRowView {
     title: item.race.title,
     date: historyDate(item.race.windowStartsAt),
     details: meta([groupText(item.groupKey)]),
-    pill: item.status === 'unknown' ? null : resultPill(item.status),
+    pill:
+      item.unranked !== null
+        ? resultPill('finisher')
+        : item.status === 'unknown'
+          ? null
+          : resultPill(item.status),
     time: formatElapsed(item.elapsedSec),
   };
   return { raceId: item.race.id, ...view, a11y: raceA11y(view, place.a11y) };

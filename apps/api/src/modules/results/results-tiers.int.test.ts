@@ -353,11 +353,20 @@ describe('места по группе и финишёры (AC5, AC9)', () => {
     expect(finishers).toEqual({
       total: 2,
       items: [
-        { entryId: riders.s1!.entryId, elapsedSec: 900, riderName: null, unranked: 'start' },
+        {
+          entryId: riders.s1!.entryId,
+          elapsedSec: 900,
+          riderName: null,
+          riderPublicId: null,
+          riderAvatar: null,
+          unranked: 'start',
+        },
         {
           entryId: riders.n1!.entryId,
           elapsedSec: 950,
           riderName: null,
+          riderPublicId: null,
+          riderAvatar: null,
           unranked: 'no_heart_rate',
         },
       ],

@@ -299,27 +299,53 @@ export function raceActionErrorText(error: unknown): string {
 }
 
 /**
+ * Кто в метке ссылки на публичный профиль (rider-links-in-tables): только у публичного райдера (`riderPublicId`), по
+ * имени — и в своей строке («Профиль райдера, Анна К.», не «Вы»). Нет ссылки — `null`.
+ */
+export const profileWho = (
+  row: { riderName: string | null; riderPublicId: string | null },
+  who: string,
+): string | null => (row.riderPublicId === null ? null : (row.riderName ?? who));
+
+/**
  * Строка таблицы: место («=2» при ничьей), кто — своя «Вы», чужая — имя (только с согласием райдера,
- * profile-rider-name) или «Участник», время, подпись для скринридера.
+ * profile-rider-name) или «Участник», время, подпись для скринридера; `profileA11y` — метка строки-ссылки на публичный
+ * профиль (только у публичного райдера, иначе `null`).
  */
 export function resultRow(
   row: RaceResultRow,
   own: boolean,
-): { place: string; who: string; time: string; a11y: string } {
+): { place: string; who: string; time: string; a11y: string; profileA11y: string | null } {
   const place = formatPlace(row.place, row.tied);
   const who = own ? t('races.results.you') : (row.riderName ?? t('races.results.rider'));
   const time = formatElapsed(row.elapsedSec);
   const spoken = row.tied ? t('races.results.tiedA11y', { place: row.place }) : String(row.place);
-  return { place, who, time, a11y: t('races.results.rowA11y', { place: spoken, who, time }) };
+  const named = profileWho(row, who);
+  return {
+    place,
+    who,
+    time,
+    a11y: t('races.results.rowA11y', { place: spoken, who, time }),
+    profileA11y:
+      named === null ? null : t('races.results.profileA11y', { who: named, place: spoken, time }),
+  };
 }
 
 /** Строка финишёров (race-results-07): без места — кто, время и почему без места («Финишёр» / «Без пульса»). */
 export function finisherRow(
   row: RaceFinisherRow,
   own: boolean,
-): { who: string; time: string; note: string; a11y: string } {
+): { who: string; time: string; note: string; a11y: string; profileA11y: string | null } {
   const who = own ? t('races.results.you') : (row.riderName ?? t('races.results.rider'));
   const time = formatElapsed(row.elapsedSec);
   const note = t(`results.unranked.${row.unranked}`);
-  return { who, time, note, a11y: t('races.results.finisherA11y', { who, time, note }) };
+  const named = profileWho(row, who);
+  return {
+    who,
+    time,
+    note,
+    a11y: t('races.results.finisherA11y', { who, time, note }),
+    profileA11y:
+      named === null ? null : t('races.results.finisherProfileA11y', { who: named, time, note }),
+  };
 }

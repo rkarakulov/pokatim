@@ -39,6 +39,9 @@ afterAll(async () => {
   await h.close();
 });
 
+const NAMED_PUBLIC_ID = 'N'.repeat(43);
+const NAMED_AVATAR = 'a'.repeat(43);
+
 const base = (seasonId: string) => `/v1/seasons/${seasonId}/standings`;
 const adminBase = (seasonId: string) => `/v1/admin/seasons/${seasonId}/standings`;
 
@@ -50,8 +53,15 @@ async function season() {
   const me = await rider(h, 'me@example.com');
   const named = uuidv7();
   const hidden = uuidv7();
-  await seedProfile(h, named, 'Анна К.', true);
-  await seedProfile(h, hidden, 'Скрытый', false);
+  await seedProfile(h, named, 'Анна К.', true, {
+    publicId: NAMED_PUBLIC_ID,
+    avatarId: NAMED_AVATAR,
+  });
+  // ссылка и фото без согласия наружу не выходят
+  await seedProfile(h, hidden, 'Скрытый', false, {
+    publicId: 'H'.repeat(43),
+    avatarId: 'h'.repeat(43),
+  });
   const seasonId = await seedSeason(h);
   const g1 = await seedProtocolRace(
     h,
@@ -113,7 +123,9 @@ describe('публичные ответы (AC8)', () => {
         'order',
         'place',
         'points',
+        'riderAvatar',
         'riderName',
+        'riderPublicId',
         'tied',
       ]);
     }
@@ -128,6 +140,12 @@ describe('публичные ответы (AC8)', () => {
       [0, 1, null, 185],
       [1, 2, 'Анна К.', 100],
       [2, 3, null, 75],
+    ]);
+    // ссылка на профиль и фото — только с согласием (rider-links-in-tables)
+    expect(body.items.map((row) => [row.riderPublicId, row.riderAvatar])).toEqual([
+      [null, null],
+      [NAMED_PUBLIC_ID, { id: NAMED_AVATAR }],
+      [null, null],
     ]);
     expect(body.items[1]!.cells.map((cell) => [cell.outcome, cell.points, cell.counted])).toEqual([
       ['placed', 100, true],
