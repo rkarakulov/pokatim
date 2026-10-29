@@ -15,7 +15,7 @@
 
 1. **Push — Expo Push Service** на iOS и Android (`expo-notifications`; токен — `getExpoPushTokenAsync` с EAS
    `projectId`). Новый внешний сервис: исходящий HTTPS только на `exp.host` (в production адрес из env другим быть не
-   может). Web push — нет: в web уведомления видны в центре и на колокольчике. **Снято ADR-0021:** Web Push в PWA —
+   может). Web push — нет: в web уведомления видны в центре и на колокольчике. **Снято ADR-0022:** Web Push в PWA —
    второй транспорт того же канала.
 2. **Модуль `notifications`** — единственный потребитель событий для уведомлений. Модули-источники (`results`,
    `disputes`, `rides`, `routes`) пишут только outbox в своих транзакциях (payload — id и коды, без `userId` и текстов) и дают

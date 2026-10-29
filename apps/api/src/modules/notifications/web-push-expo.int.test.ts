@@ -17,7 +17,7 @@ import { rider, type Rider } from '../../../test/rides';
 import type { NotificationDoc } from './notifications.collection';
 
 /**
- * Оба транспорта включены (ADR-0021): Expo (фейковый Expo Push API) и Web Push (фейковый push-сервис) в одной задаче
+ * Оба транспорта включены (ADR-0022): Expo (фейковый Expo Push API) и Web Push (фейковый push-сервис) в одной задаче
  * `notifications.push`. Сбой одного не мешает другому; ретрай — только если не принял никто (дублей нет).
  */
 function vapid() {

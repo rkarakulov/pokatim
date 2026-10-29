@@ -68,6 +68,7 @@ import {
   type SignOutRequest,
   type SubmitOnboardingSurveyRequest,
   type UpdateProfileRequest,
+  type UpdateProfileThemeRequest,
   type DeleteAccountRequest,
   TrackUpload,
   TrackUploadPage,
@@ -333,6 +334,13 @@ export function createApiClient({
           ...withCredentials,
         }),
       ),
+    /** Личная тема приложения (user-theme, вход обязателен); ответ — профиль после записи. */
+    setProfileTheme: (accessToken: string, body: UpdateProfileThemeRequest) =>
+      request(
+        '/v1/profile/theme',
+        ProfileView,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
     /** Анкета зачёта Verified (race-results-07, вход обязателен); нет анкеты — `profile: null` и подсказка года. */
     getVerifiedProfile: (accessToken: string) =>
       request(
@@ -521,7 +529,10 @@ export function createApiClient({
     listCalendarCities: () => getPublic('/v1/calendar/cities', CalendarCities),
     /** Месяцы будущих опубликованных стартов — чипы «Дата». */
     listCalendarMonths: () => getPublic('/v1/calendar/months', CalendarMonths),
-    /** Тема приложения (app-themes): публично, кэш 60 с; незнакомая тема — `'unknown'` (клиент → «Классика»). */
+    /**
+     * Оформление приложения: публично, `no-cache`; сезонный декор. `themeId` устарел — сервер user-theme всегда
+     * отдаёт `classic` (личная тема — `getProfile().themeId`).
+     */
     getAppearance: () => getPublic('/v1/appearance', AppAppearance),
 
     // --- кофе-райды (блок 05): карточка — публично; лента, города, состояние зрителя и мутации — вход обязателен ---
@@ -909,7 +920,7 @@ export function createApiClient({
     /** Снять push-токен этого устройства (до выхода); `204` и для чужого/неизвестного. */
     revokePushToken: (accessToken: string, body: RevokePushToken) =>
       postAuthorized(accessToken, '/v1/notifications/push-tokens/revoke', z.undefined(), body),
-    /** Публичный VAPID-ключ Web Push (ADR-0021); `publicKey: null` — сервер Web Push не шлёт. */
+    /** Публичный VAPID-ключ Web Push (ADR-0022); `publicKey: null` — сервер Web Push не шлёт. */
     getWebPushConfig: (accessToken: string) =>
       request(
         '/v1/notifications/web-push',

@@ -136,7 +136,7 @@ export type RegisterPushToken = z.infer<typeof RegisterPushToken>;
 export const RevokePushToken = z.strictObject({ token: ExpoPushToken });
 export type RevokePushToken = z.infer<typeof RevokePushToken>;
 
-// --- Web Push (ADR-0021): второй транспорт канала push — PWA в браузере ---
+// --- Web Push (ADR-0022): второй транспорт канала push — PWA в браузере ---
 
 /**
  * Хосты push-сервисов браузеров (FCM — Chrome, Edge на Android, Samsung, Opera; Mozilla; WNS — Edge на Windows;

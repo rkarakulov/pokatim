@@ -139,7 +139,7 @@ env_has() {
 # base64url без «=» (ключи VAPID, RFC 8292)
 b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 
-# Пара VAPID (Web Push, ADR-0021): создаётся один раз за запуск, если в .env нет ни одного ключа; приватный — 32 байта
+# Пара VAPID (Web Push, ADR-0022): создаётся один раз за запуск, если в .env нет ни одного ключа; приватный — 32 байта
 # из DER ECPrivateKey (после 7 байт заголовка), публичный — последние 65 байт SubjectPublicKeyInfo (точка 0x04…).
 VAPID_PAIR_PUBLIC=""
 VAPID_PAIR_PRIVATE=""

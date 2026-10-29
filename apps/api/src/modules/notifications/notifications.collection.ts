@@ -68,7 +68,7 @@ export interface NotificationSettingsDoc extends NotificationSettings {
 }
 
 /**
- * Push-токен устройства: Expo (`ios`/`android`) или подписка Web Push (`web`, ADR-0021: `token` — endpoint
+ * Push-токен устройства: Expo (`ios`/`android`) или подписка Web Push (`web`, ADR-0022: `token` — endpoint
  * push-сервиса, ключи шифрования — `webPush`). Уникален глобально (устройство одно — владелец переходит), ≤ 10 на
  * пользователя.
  * `sessionId` — сессия, под которой токен зарегистрирован: push уходит, только пока она жива (выход, сброс пароля,

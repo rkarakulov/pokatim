@@ -119,7 +119,7 @@ const notificationsEnvShape = {
   EXPO_ACCESS_TOKEN: optional(z.string().min(20, 'EXPO_ACCESS_TOKEN: не короче 20 символов')),
   EXPO_PUSH_API_URL: z.url({ protocol: /^https?$/ }).default(EXPO_PUSH_API_DEFAULT_URL),
   /**
-   * Web Push в PWA (ADR-0021) — второй транспорт канала push, независимый от `PUSH_ENABLED` (Expo). Нужны ключи VAPID:
+   * Web Push в PWA (ADR-0022) — второй транспорт канала push, независимый от `PUSH_ENABLED` (Expo). Нужны ключи VAPID:
    * публичный — несжатая точка P-256 (65 байт), приватный — 32 байта, оба base64url; `VAPID_SUBJECT` — `mailto:` или
    * `https:` (контакт для push-сервисов). Приватный — только env сервера.
    */
@@ -146,7 +146,7 @@ export function webPushVapid(
   return { publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY, subject: VAPID_SUBJECT };
 }
 
-/** Канал push включён: хоть один транспорт — Expo (`PUSH_ENABLED`) или Web Push (ADR-0021). */
+/** Канал push включён: хоть один транспорт — Expo (`PUSH_ENABLED`) или Web Push (ADR-0022). */
 export function pushChannelEnabled(
   value: Pick<
     Env,

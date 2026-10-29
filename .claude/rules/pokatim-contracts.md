@@ -133,10 +133,15 @@ paths:
 - Тема приложения (app-themes): `src/appearance/appearance.schema.ts` — `APP_THEME_IDS` — единственный источник id
   тем для API и панели (только в конец; порядок = порядок карточек панели); реестр `appThemes` в
   `@pokatim/design-tokens` объявляет тот же состав и порядок, от контрактов не зависит (сторож равенства — в D2).
-  `DEFAULT_APP_THEME_ID`, ответ приложения `AppAppearance` (`themeId` — `tolerantEnum`, ровно один ключ), панели
-  `PanelAppearance` (строгий enum, `version`, `updatedAt` nullable), запрос `UpdateAppearanceRequest`
-  (`strictObject`). Право `appearance.manage`, действие журнала `appearance.theme_changed`, вид объекта `platform`,
-  детали `themeFrom`/`themeTo`. api-client — `getAppearance` (публичный и панели), `updateAppearance` (`PUT`).
+  `DEFAULT_APP_THEME_ID`, ответ приложения `AppAppearance` (`themeId` — `tolerantEnum`, устарел: сервер всегда отдаёт
+  `classic` для сборок до user-theme, удаление — только новой версией эндпоинта; `decor` — `tolerantEnum`), панели
+  `PanelAppearance` (только `decor`, `version`, `updatedAt` nullable), запрос `UpdateAppearanceRequest`
+  (`strictObject({ decor, version })`, `themeId` — ошибка). Право `appearance.manage`, действия журнала
+  `appearance.decor_changed` и (история) `appearance.theme_changed`, вид объекта `platform`. api-client —
+  `getAppearance` (публичный и панели), `updateAppearance` (`PUT`).
+- Личная тема (user-theme, ADR-0021): `ProfileView.themeId` — `tolerantEnum(APP_THEME_IDS).default('classic')` (старый
+  сервер без поля — «Классика»), запрос `UpdateProfileThemeRequest` (`strictObject({ themeId: AppThemeId })`);
+  api-client — `setProfileTheme` (`PUT /v1/profile/theme`, ответ `ProfileView`).
 - Удаление аккаунта (ADR-0015): `src/account/account-deletion.schema.ts` — `DeleteAccountRequest` (`strictObject`,
   `password: SignInPassword`), ответ `204`. Коды — `PASSWORD_INCORRECT` (403, не 401: клиент не уходит в refresh) и
   `ACCOUNT_PANEL_MEMBER` (409) в конце `ErrorCode`; `AUDIT_ACTIONS` + `account.deleted` (admin i18n
@@ -145,7 +150,7 @@ paths:
   цель — белый список (`NotificationTarget`), незнакомая в ответе — `{ type: 'unknown' }`; запросы (`NotificationSettings`
   с `startHour ≠ endHour`, `RegisterPushToken`, `RevokePushToken`, `NotificationListQuery`) — `strictObject`. api-client —
   8 методов `/v1/notifications*`.
-- Web Push (ADR-0021): там же — `WebPushEndpoint` (https ≤ 2048, хост — push-сервис из белого списка
+- Web Push (ADR-0022): там же — `WebPushEndpoint` (https ≤ 2048, хост — push-сервис из белого списка
   `isWebPushEndpoint`: FCM, Mozilla, WNS, Apple; адрес вызывает сервер — SSRF), `RegisterWebPushSubscription`
   (`strictObject`: endpoint + `keys.p256dh` 65 байт `B…`/`keys.auth` 16 байт base64url, без `expirationTime`),
   `RevokeWebPushSubscription`, ответ `WebPushConfig` (`publicKey` или `null`). `PUSH_PLATFORMS` не меняется (Expo).
