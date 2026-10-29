@@ -7,7 +7,7 @@ jest.mock('./theme-id', () => ({ toAppThemeId: () => 'classic' }));
 
 // проект jest `server` (Node, без `window`) — как web SSR
 describe('initialThemeId (web, сервер)', () => {
-  it('без window — тема процесса SSR', () => {
+  it('без window — тема SSR из cookie запроса', () => {
     expect(typeof window).toBe('undefined');
     expect(initialThemeId()).toBe('navigation');
   });
