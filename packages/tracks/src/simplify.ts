@@ -82,7 +82,7 @@ function douglasPeucker(xs: Float64Array, ys: Float64Array, tolerance2: number):
  * Перебор диапазонов дешевле построения оболочек, пока деления сбалансированы (обычный трек — ~log n проходов по
  * точкам); оболочки строятся, когда суммарный перебор превысил столько проходов (ничьи на стоянке).
  */
-const SCAN_BUDGET_PER_POINT = 24;
+const SCAN_BUDGET_PER_POINT = 64;
 
 /** Замкнутая петля (начало = конец) при большом допуске сводится к двум одинаковым точкам — добавляем дальнюю. */
 function ensureTwoDistinct(kept: number[], xs: Float64Array, ys: Float64Array): number[] {
