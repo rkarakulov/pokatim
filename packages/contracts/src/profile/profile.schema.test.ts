@@ -8,6 +8,7 @@ import {
   RiderClub,
   RiderPublicName,
   UpdateProfileRequest,
+  UpdateProfileThemeRequest,
 } from './profile.schema.ts';
 import { ResetRiderNameRequest, RiderNameResetResult } from './profile-admin.schema.ts';
 
@@ -47,6 +48,16 @@ describe('ProfileView', () => {
       club: null,
       avatar: null,
       publicId: null,
+      themeId: 'classic',
+    });
+  });
+
+  it('тема (user-theme): известная — как есть, незнакомая будущая — unknown', () => {
+    expect(ProfileView.parse({ rideReasons: [], themeId: 'atlas' })).toMatchObject({
+      themeId: 'atlas',
+    });
+    expect(ProfileView.parse({ rideReasons: [], themeId: 'future-theme' })).toMatchObject({
+      themeId: 'unknown',
     });
   });
 
@@ -198,5 +209,24 @@ describe('ResetRiderNameRequest / RiderNameResetResult (profile-02)', () => {
     expect(
       ResetRiderNameRequest.safeParse({ reason: 'Оскорбительное', publicName: null }).success,
     ).toBe(false);
+  });
+});
+
+describe('UpdateProfileThemeRequest (user-theme)', () => {
+  it('тема из списка — валидна', () => {
+    expect(UpdateProfileThemeRequest.parse({ themeId: 'atlas' })).toEqual({ themeId: 'atlas' });
+  });
+
+  it('незнакомый id, лишний ключ, пусто, не строка — ошибка', () => {
+    const unknown = UpdateProfileThemeRequest.safeParse({ themeId: 'neon' });
+    expect(unknown.error?.issues).toEqual([
+      expect.objectContaining({ path: ['themeId'], message: 'INVALID' }),
+    ]);
+    expect(UpdateProfileThemeRequest.safeParse({ themeId: 'atlas', decor: 'none' }).success).toBe(
+      false,
+    );
+    expect(UpdateProfileThemeRequest.safeParse({}).success).toBe(false);
+    expect(UpdateProfileThemeRequest.safeParse({ themeId: { $ne: null } }).success).toBe(false);
+    expect(UpdateProfileThemeRequest.safeParse({ themeId: 1 }).success).toBe(false);
   });
 });

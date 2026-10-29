@@ -34,6 +34,9 @@ export const DEFAULT_APP_DECOR_ID = 'none' satisfies AppDecorId;
 /**
  * `GET /v1/appearance` — ответ приложения: тема и декор; незнакомые — `'unknown'` (клиент → «Классика», без декора).
  * `decor` нет у ответа API до halloween-decor — поле необязательное.
+ *
+ * `themeId` устарел (user-theme, ADR-0021): тема — личная (`ProfileView.themeId`), сервер всегда отдаёт `'classic'`
+ * для сборок до user-theme, у которых поле обязательное. Удаление — только новой версией эндпоинта.
  */
 export const AppAppearance = z.object({
   themeId: tolerantEnum(APP_THEME_IDS),
@@ -41,22 +44,18 @@ export const AppAppearance = z.object({
 });
 export type AppAppearance = z.infer<typeof AppAppearance>;
 
-/** `GET|PUT /v1/admin/appearance` — ответ панели (строгий enum: панель деплоится с API). */
+/** `GET|PUT /v1/admin/appearance` — ответ панели: только декор (строгий enum: панель деплоится с API). */
 export const PanelAppearance = z.object({
-  themeId: AppThemeId,
   decor: AppDecorId,
   version: Version,
-  /** `null` — настройку ещё не меняли (действует «Классика»). */
+  /** `null` — настройку ещё не меняли (действует «без декора»). */
   updatedAt: z.iso.datetime().nullable(),
 });
 export type PanelAppearance = z.infer<typeof PanelAppearance>;
 
 /**
- * `PUT /v1/admin/appearance` — намерение: тема и/или декор (хотя бы одно) и ожидаемая версия. Лишние ключи — 400.
+ * `PUT /v1/admin/appearance` — намерение: декор и ожидаемая версия. Лишние ключи (в т. ч. `themeId` — тема личная,
+ * user-theme) — 400.
  */
-export const UpdateAppearanceRequest = z
-  .strictObject({ themeId: AppThemeId.optional(), decor: AppDecorId.optional(), version: Version })
-  .refine((body) => body.themeId !== undefined || body.decor !== undefined, {
-    error: fieldError('INVALID'),
-  });
+export const UpdateAppearanceRequest = z.strictObject({ decor: AppDecorId, version: Version });
 export type UpdateAppearanceRequest = z.infer<typeof UpdateAppearanceRequest>;

@@ -28,32 +28,29 @@ describe('AppThemeId', () => {
   });
 });
 
-describe('UpdateAppearanceRequest', () => {
-  it('каждая тема из списка с версией — валидна', () => {
-    for (const themeId of APP_THEME_IDS) {
-      expect(UpdateAppearanceRequest.parse({ themeId, version: 3 })).toEqual({
-        themeId,
-        version: 3,
-      });
+describe('UpdateAppearanceRequest (user-theme: только декор)', () => {
+  it('декор с версией — валиден', () => {
+    for (const decor of APP_DECOR_IDS) {
+      expect(UpdateAppearanceRequest.parse({ decor, version: 3 })).toEqual({ decor, version: 3 });
     }
   });
 
-  it('неизвестная тема — INVALID на поле themeId', () => {
-    const result = UpdateAppearanceRequest.safeParse({ themeId: 'neon', version: 0 });
-    expect(result.success).toBe(false);
-    expect(result.error?.issues).toEqual([
-      expect.objectContaining({ path: ['themeId'], message: 'INVALID' }),
-    ]);
+  it('themeId — лишний ключ (тема — личная, A11); без декора — ошибка', () => {
+    expect(UpdateAppearanceRequest.safeParse({ themeId: 'atlas', version: 0 }).success).toBe(false);
+    expect(
+      UpdateAppearanceRequest.safeParse({ themeId: 'atlas', decor: 'none', version: 0 }).success,
+    ).toBe(false);
+    expect(UpdateAppearanceRequest.safeParse({ version: 0 }).success).toBe(false);
   });
 
   it('лишний ключ, отрицательная, дробная, строковая и объектная версия — ошибка', () => {
     expect(
-      UpdateAppearanceRequest.safeParse({ themeId: 'atlas', version: 0, updatedAt: 'x' }).success,
+      UpdateAppearanceRequest.safeParse({ decor: 'none', version: 0, updatedAt: 'x' }).success,
     ).toBe(false);
     for (const version of [-1, 1.5, '1', { $ne: null }]) {
-      expect(UpdateAppearanceRequest.safeParse({ themeId: 'atlas', version }).success).toBe(false);
+      expect(UpdateAppearanceRequest.safeParse({ decor: 'none', version }).success).toBe(false);
     }
-    expect(UpdateAppearanceRequest.safeParse({ themeId: { $ne: null }, version: 0 }).success).toBe(
+    expect(UpdateAppearanceRequest.safeParse({ decor: { $ne: null }, version: 0 }).success).toBe(
       false,
     );
   });
@@ -87,19 +84,6 @@ describe('AppDecorId (halloween-decor)', () => {
 });
 
 describe('UpdateAppearanceRequest — декор (halloween-decor)', () => {
-  it('только декор, только тема, оба — валидны; ни одного — ошибка', () => {
-    expect(UpdateAppearanceRequest.parse({ decor: 'halloween', version: 2 })).toEqual({
-      decor: 'halloween',
-      version: 2,
-    });
-    expect(UpdateAppearanceRequest.parse({ themeId: 'atlas', decor: 'none', version: 0 })).toEqual({
-      themeId: 'atlas',
-      decor: 'none',
-      version: 0,
-    });
-    expect(UpdateAppearanceRequest.safeParse({ version: 0 }).success).toBe(false);
-  });
-
   it('неизвестный декор — INVALID на поле decor', () => {
     const result = UpdateAppearanceRequest.safeParse({ decor: 'new-year', version: 0 });
     expect(result.error?.issues).toEqual([
@@ -109,17 +93,12 @@ describe('UpdateAppearanceRequest — декор (halloween-decor)', () => {
 });
 
 describe('PanelAppearance (ответ панели)', () => {
-  it('updatedAt — null, пока настройку не меняли; тема — строгий enum', () => {
-    const fresh = { themeId: 'classic', decor: 'none', version: 0, updatedAt: null };
+  it('updatedAt — null, пока настройку не меняли; только декор (user-theme)', () => {
+    const fresh = { decor: 'none', version: 0, updatedAt: null };
     expect(PanelAppearance.parse(fresh)).toEqual(fresh);
-    const changed = {
-      themeId: 'atlas',
-      decor: 'halloween',
-      version: 1,
-      updatedAt: '2026-10-27T10:00:00.000Z',
-    };
+    const changed = { decor: 'halloween', version: 1, updatedAt: '2026-10-27T10:00:00.000Z' };
     expect(PanelAppearance.parse(changed)).toEqual(changed);
-    expect(PanelAppearance.safeParse({ ...fresh, themeId: 'future-theme' }).success).toBe(false);
+    expect(PanelAppearance.parse({ ...fresh, themeId: 'atlas' })).toEqual(fresh);
     expect(PanelAppearance.safeParse({ ...fresh, decor: 'new-year' }).success).toBe(false);
   });
 });
