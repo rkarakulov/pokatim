@@ -10,6 +10,7 @@ import type {
   RaceResultsPage,
   ResultGroupKey,
   RaceRouteMap,
+  CurrentSeasonResponse,
   SeasonCard,
 } from '@pokatim/contracts';
 import {
@@ -167,6 +168,14 @@ const currentSeasonQuery = {
   queryFn: () => api.getCurrentSeason(),
   staleTime: PUBLIC_STALE_MS,
 };
+
+/**
+ * Текущий сезон без подбора между сезонами (гостевой лендинг, RC-10): тот же ключ, что у `useHeaderSeason` (кэш общий);
+ * `seed` — посев SSR (`initialData`).
+ */
+export function useCurrentSeason(seed?: CurrentSeasonResponse) {
+  return useQuery({ ...currentSeasonQuery, initialData: seed });
+}
 
 export function useHeaderSeason(): SeasonCard | null {
   const current = useQuery(currentSeasonQuery);

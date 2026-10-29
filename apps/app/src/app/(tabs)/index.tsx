@@ -10,6 +10,7 @@ import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { TopBar } from '@/components/top-bar';
 import { DecorLayer } from '@/features/decor/decor-layer';
+import { landingMetadata } from '@/features/landing/metadata';
 import { HomeSection } from '@/features/home/home-section';
 import { useUnreadCount } from '@/features/notifications/queries';
 import { CalendarStartHero } from '@/features/calendar/calendar-hero';
@@ -61,6 +62,12 @@ const SECTION_COPY: Record<
     href: '/calendar',
   },
 };
+
+/**
+ * Мета корня сайта (SSR) — мета гостевого лендинга (RC-3): превью ссылки на `/` = превью `/welcome`; тело `/` — скелетон
+ * оболочки до гидрации, затем гард.
+ */
+export const generateMetadata = landingMetadata;
 
 const DOCUMENT_TITLE = `${t('home.title')} — ${t('app.name')}`;
 

@@ -97,6 +97,13 @@ paths:
 - Мета — `publicPageMetadata` (`src/lib/page-metadata.ts`) в `generateMetadata`: без e-mail и других ПДн; путь с
   токеном (ссылки писем) — без `og:url`; `loader` — только для публичных данных (e-mail в HTML не попадает).
   Образцы — `register`, `auth/verify/[token]`. Новый публичный экран — шаг смоука `e2e/web.spec.ts`.
+- Гостевой лендинг `/welcome` (guest-landing, `docs/product/landing.md`) — корневой `src/app/welcome.tsx` в том же
+  `Stack.Protected guard={!signedIn}`, что `(onboarding)` (не в группе: `initialRouteName` группы не трогаем); экран —
+  `features/landing/`. `loader` — четыре публичных списка (`loadLandingSeed`, части `null`, не бросает; маршруты —
+  `author=team`), посев — `initialData` хуков Главной (`useNextRace`, `useNextCalendarStart`, `useCurrentSeason`) и
+  `useLandingRoutes`; мета — `landingMetadata` (`og:url` `/welcome`, без `robots`), она же — мета `/` (`(tabs)/index`).
+  Живые блоки — `LandingSection`: скелетон на первой загрузке, ошибка и `paused` без данных — блок скрыт, без
+  повтора (отступление от §4.12, G5).
 
 ## Сессия в вебе (ADR-0003 п. 4, правила сервера — `pokatim-security.md`)
 
@@ -131,7 +138,9 @@ paths:
 - Запросы, требующие входа, — только `withAccessToken(call)` (`features/auth/authorized.ts`, ADR-0008): access за
   60 с до истечения обновляется заранее, 401 — один refresh и один повтор, single-flight через `refreshAccess`
   (`session-persistence(.web).ts`) под замком сессии; refresh 401 — локальный выход; сеть/429/5xx — ошибка запроса.
-- Мутации онбординга — `networkMode: 'always'`: офлайн даёт сетевую ошибку и баннер с повтором, а не вечную паузу. После выхода или отзыва сессии гард ведёт на «Вход» (`returning`).
+- Мутации онбординга — `networkMode: 'always'`: офлайн даёт сетевую ошибку и баннер с повтором, а не вечную паузу. После выхода или отзыва сессии гард ведёт на «Вход» (`returning`); новый гость — на лендинг `/welcome`, живая
+  регистрация после перезапуска (`resumeOnLaunch`) — на «Регистрацию» (она продолжает к «Подтвердите e-mail»; стор
+  регистрации пришёл позже гарда — `welcome.tsx` уводит туда сам).
 - E-mail между экранами (регистрация → вход, ссылка → вход, «Вход» ↔ «Забыли пароль?», ссылка сброса → вход) —
   через черновик в памяти (`registration-store`), не в URL: query-строка попала бы в историю браузера и логи
   web-сервера. Смонтированная форма «Входа» берёт адрес из черновика при фокусе.

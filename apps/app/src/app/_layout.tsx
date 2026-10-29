@@ -51,6 +51,9 @@ function RootShell() {
   // на устройстве уже входили (выход, отзыв сессии сервером) — без сессии ведём на «Вход», а не «Регистрацию»
   const returning = useSessionStore((state) => state.returning);
   const registrationHydrated = useRegistrationStore((state) => state.hydrated);
+  // живая регистрация после перезапуска — гость идёт на «Регистрацию», она сама продолжит к «Подтвердите e-mail»;
+  // новый гость без неё — на лендинг (guest-landing, G1)
+  const resumeRegistration = useRegistrationStore((state) => state.resumeOnLaunch);
   const hydrated = sessionStatus !== 'unknown' && registrationHydrated;
   const step = useOnboardingStore(onboardingStep);
   const surveyState = useOnboardingStore((state) => state.survey);
@@ -134,7 +137,9 @@ function RootShell() {
                         : '/survey'
                     : returning
                       ? '/sign-in'
-                      : '/register'
+                      : resumeRegistration
+                        ? '/register'
+                        : '/welcome'
                 }
               >
                 <Stack.Screen name="(tabs)" />
@@ -197,6 +202,9 @@ function RootShell() {
                 <Stack.Screen name="(setup)" />
               </Stack.Protected>
               <Stack.Protected guard={!signedIn} redirectTo="/">
+                {/* гостевой лендинг (guest-landing, RC-1): вне группы — под ним не лежит «Регистрация», а под
+                «Регистрацией» — лендинг; «Зарегистрироваться» — push, «назад» — на лендинг */}
+                <Stack.Screen name="welcome" />
                 <Stack.Screen name="(onboarding)" />
               </Stack.Protected>
               {/* публичные экраны вне гардов: ссылка из письма — и до входа, и на другом устройстве */}

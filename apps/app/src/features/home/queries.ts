@@ -1,4 +1,4 @@
-import type { RideReason } from '@pokatim/contracts';
+import type { CalendarPage, RacePage, RideReason } from '@pokatim/contracts';
 import { useQuery } from '@tanstack/react-query';
 
 import { withAccessToken } from '@/features/auth/authorized';
@@ -7,27 +7,32 @@ import { api } from '@/lib/api';
 /** Сервер отдаёт публичные списки с `public, max-age=60` — чаще перезапрашивать незачем. */
 const PUBLIC_LIST_STALE_MS = 60_000;
 
-const NEXT_RACE = { scope: 'current', limit: 1 } as const;
-const NEXT_CALENDAR_START = { limit: 1 } as const;
+/** Параметры списков героев Главной; лендинг (guest-landing) строит из них и пути SSR-посева. */
+export const NEXT_RACE = { scope: 'current', limit: 1 } as const;
+export const NEXT_CALENDAR_START = { limit: 1 } as const;
 const LATEST_ROUTE = { limit: 1 } as const;
 
 /**
  * Ближайшая гонка (A1): опубликованная с незакрытым окном, по началу окна — публичный список admin-02 без Bearer.
- * Ключ совместим со списком вкладки «Гонки» (префикс `['races', 'list']`).
+ * Ключ совместим со списком вкладки «Гонки» (префикс `['races', 'list']`). `seed` — посев SSR лендинга (`initialData`).
  */
-export function useNextRace() {
+export function useNextRace(seed?: RacePage) {
   return useQuery({
     queryKey: ['races', 'list', NEXT_RACE],
     queryFn: () => api.listRaces(NEXT_RACE),
+    initialData: seed,
     staleTime: PUBLIC_LIST_STALE_MS,
   });
 }
 
-/** Ближайший старт календаря (C1): `from` не передаём — «сегодня по Минску» берёт сервер. */
-export function useNextCalendarStart() {
+/**
+ * Ближайший старт календаря (C1): `from` не передаём — «сегодня по Минску» берёт сервер. `seed` — посев SSR лендинга.
+ */
+export function useNextCalendarStart(seed?: CalendarPage) {
   return useQuery({
     queryKey: ['calendar', 'list', NEXT_CALENDAR_START],
     queryFn: () => api.listCalendar(NEXT_CALENDAR_START),
+    initialData: seed,
     staleTime: PUBLIC_LIST_STALE_MS,
   });
 }

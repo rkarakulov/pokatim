@@ -27,7 +27,8 @@ export function RaceHero({
   onPress,
 }: {
   race: RaceCard;
-  now: Date;
+  /** `null` — SSR и гидрация публичного экрана (лендинг): даты с годом, без «сегодня / завтра» */
+  now: Date | null;
   /** Герой ведёт в карточку гонки (Q12 блока 03). */
   onPress: () => void;
 }) {

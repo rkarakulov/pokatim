@@ -107,10 +107,14 @@ afterEach(() => {
 });
 
 describe('«Выбрать свой заезд» для маршрута (route-rides-02, A3)', () => {
-  it('гость по прямой ссылке — гард ведёт на регистрацию, без запросов', async () => {
+  it('гость по прямой ссылке — гард ведёт на лендинг, без запросов', async () => {
     const router = await renderRouter(appRoutes, { initialUrl: `/routes/pick/${ROUTE_ID}` });
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
     expect(listCandidates).not.toHaveBeenCalled();
   });
 

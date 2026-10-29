@@ -13,6 +13,8 @@ import { generateMetadata as raceMetadata, loader as raceLoader } from '../app/r
 import { generateMetadata as rideMetadata, loader as rideLoader } from '../app/rides/[id]';
 import { generateMetadata as riderMetadata, loader as riderLoader } from '../app/riders/[id]';
 import { generateMetadata as seasonMetadata, loader as seasonLoader } from '../app/seasons/[id]';
+import { generateMetadata as homeMetadata } from '../app/(tabs)/index';
+import { generateMetadata as welcomeMetadata, loader as welcomeLoader } from '../app/welcome';
 import { resetPublicSsrCache } from '@/lib/public-ssr';
 
 import { EMAIL, LINK_TOKEN } from './auth-fixtures';
@@ -513,5 +515,91 @@ describe('мета публичного профиля райдера (SSR, ride
     respond(404, { code: 'NOT_FOUND', message: 'x' });
     expect(await riderLoader(undefined, { id: PUBLIC_ID })).toBeNull();
     expect(await riderMetadata(undefined, { id: PUBLIC_ID })).toEqual(neutral);
+  });
+});
+
+describe('мета и посев гостевого лендинга /welcome (guest-landing, G6)', () => {
+  const TAGLINE = 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле';
+  const TITLE = 'Покатим — гонки, сезон, кофе-райды и маршруты';
+  const BASE = 'http://api.internal:3000';
+  const PATHS = {
+    races: '/v1/races?scope=current&limit=1',
+    season: '/v1/seasons/current',
+    routes: '/v1/routes?author=team&limit=3',
+    calendar: '/v1/calendar?limit=1',
+  };
+  const BODIES = {
+    races: { items: [], nextCursor: null },
+    season: { season: null },
+    routes: { items: [], nextCursor: null },
+    calendar: { items: [], nextCursor: null },
+  };
+  const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
+  const respond = (failing: string | null = null) =>
+    fetchMock.mockImplementation((url) => {
+      const entry = Object.entries(PATHS).find(([, path]) => url === `${BASE}${path}`);
+      if (!entry || entry[0] === failing) return Promise.reject(new TypeError('fetch failed'));
+      const body = BODIES[entry[0] as keyof typeof BODIES];
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    });
+
+  beforeEach(() => {
+    resetPublicSsrCache();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    process.env.API_INTERNAL_URL = BASE;
+  });
+  afterEach(() => {
+    fetchMock.mockReset();
+    delete process.env.API_INTERNAL_URL;
+  });
+
+  it('<title> без повтора бренда, description — слоган, og:url — WEB_ORIGIN + /welcome, без robots (RC-2)', async () => {
+    process.env.WEB_ORIGIN = `${ORIGIN}/`;
+    const meta = await welcomeMetadata(undefined, {});
+    expect(meta).toEqual({
+      title: TITLE,
+      description: TAGLINE,
+      openGraph: {
+        title: TITLE,
+        description: TAGLINE,
+        type: 'website',
+        siteName: 'Покатим',
+        url: `${ORIGIN}/welcome`,
+      },
+    });
+    expect(meta).not.toHaveProperty('robots');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('мета корня `/` — мета лендинга (RC-3), без запросов к API', async () => {
+    process.env.WEB_ORIGIN = ORIGIN;
+    expect(await homeMetadata(undefined, {})).toEqual(await welcomeMetadata(undefined, {}));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('loader: четыре публичных списка с API_INTERNAL_URL (маршруты — только команды, RC-5)', async () => {
+    respond();
+    expect(await welcomeLoader(undefined, {})).toEqual(BODIES);
+    expect(fetchMock.mock.calls.map(([url]) => url).sort()).toEqual(
+      Object.values(PATHS)
+        .map((path) => `${BASE}${path}`)
+        .sort(),
+    );
+  });
+
+  it.each(Object.keys(PATHS))('loader: сбой части %s — `null` только у неё', async (failing) => {
+    respond(failing);
+    expect(await welcomeLoader(undefined, {})).toEqual({ ...BODIES, [failing]: null });
+  });
+
+  it('loader без API_INTERNAL_URL — все части `null`, без запросов и без исключения', async () => {
+    delete process.env.API_INTERNAL_URL;
+    expect(await welcomeLoader(undefined, {})).toEqual({
+      races: null,
+      season: null,
+      routes: null,
+      calendar: null,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

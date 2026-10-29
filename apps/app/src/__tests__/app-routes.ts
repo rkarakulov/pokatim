@@ -54,6 +54,7 @@ import SeasonRoute from '../app/seasons/[id]';
 import StatusScreen from '../app/status';
 import UiKitScreen from '../app/ui-kit';
 import NotFoundRoute from '../app/+not-found';
+import WelcomeRoute from '../app/welcome';
 
 /** Маршруты вкладок для renderRouter (корневой layout подключают отдельные тесты). */
 export const tabRoutes = {
@@ -72,6 +73,8 @@ export const tabRoutes = {
 export const appRoutes = {
   _layout: RootLayout,
   ...tabRoutes,
+  // гостевой лендинг (guest-landing, RC-1): корневой экран рядом с группой регистрации
+  welcome: WelcomeRoute,
   '(onboarding)/_layout': OnboardingLayout,
   '(onboarding)/register': RegisterScreen,
   '(onboarding)/check-email': CheckEmailScreen,

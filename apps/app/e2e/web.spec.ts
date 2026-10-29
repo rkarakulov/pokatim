@@ -73,14 +73,19 @@ const card = (page: Page) => page.getByTestId('ride-detail');
 const homeSections = (page: Page) =>
   page.getByRole('heading', { name: /^(Ближайшие (гонки|старты)|Маршруты команды)$/ });
 
+/** Заголовок героя гостевого лендинга `/welcome` (guest-landing). */
+const LANDING_HERO = 'Катайтесь вместе и соревнуйтесь на своих маршрутах';
+/** `<title>` лендинга и корня (RC-2, RC-3). */
+const LANDING_TITLE = 'Покатим — гонки, сезон, кофе-райды и маршруты';
+
 /**
- * Главная гостя после гидрации. С API: восстановление сессии — 401, гард ведёт на регистрацию. Без API: сеть
+ * Главная гостя после гидрации. С API: восстановление сессии — 401, гард ведёт нового гостя на лендинг. Без API: сеть
  * недоступна — это не выход (pokatim-app.md, «Сессия в вебе»): Главная остаётся, «Нет соединения» с повтором.
  */
 async function expectGuestHome(page: Page) {
   if (WITH_API) {
-    await expect(page).toHaveURL(`${BASE_URL}/register`);
-    await expect(page.getByText('Создать аккаунт', { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(`${BASE_URL}/welcome`);
+    await expect(page.getByRole('heading', { name: LANDING_HERO })).toBeVisible();
     return;
   }
   await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
@@ -88,16 +93,51 @@ async function expectGuestHome(page: Page) {
   await expect(page).toHaveURL(`${BASE_URL}/`);
 }
 
-test('Главная без входа: HTML с сервера (скелетон оболочки), после гидрации — регистрация (без API — «Нет соединения»)', async ({
+test('Главная без входа: HTML с сервера (скелетон оболочки) с метой лендинга, после гидрации — лендинг (без API — «Нет соединения»)', async ({
   page,
   request,
 }) => {
   const response = await request.get('/');
   expect(response.status()).toBe(200);
-  expect(await response.text()).toContain('<div id="root"');
+  const html = await response.text();
+  expect(html).toContain('<div id="root"');
+  // мета корня — мета лендинга (одно превью ссылки на сайт, RC-3)
+  expect(html).toContain(`<title>${LANDING_TITLE}</title>`);
+  expect(html).toContain(`<meta property="og:url" content="${BASE_URL}/welcome"`);
 
   await page.goto('/');
   await expectGuestHome(page);
+});
+
+test('гостевой лендинг /welcome (guest-landing): тексты разделов, кнопки и OG в HTML до JS, без noindex; «Войти» — вход', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get('/welcome');
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  for (const text of [
+    LANDING_HERO,
+    'Проезжайте маршрут гонки в любой день окна',
+    'Очки за гонки складываются в общий зачёт сезона',
+    'Соберите покатушку с остановкой на кофе',
+    'Маршруты команды с картой, профилем высоты и GPX',
+    'Массовые велостарты в одном календаре',
+    'Зарегистрироваться',
+    'Войти',
+  ]) {
+    expect(html).toContain(text);
+  }
+  expect(html).toContain(`<title>${LANDING_TITLE}</title>`);
+  expect(html).toMatch(/<meta name="description" content="Гонки, маршруты, кофе-райды/);
+  expect(html).toContain(`<meta property="og:url" content="${BASE_URL}/welcome"`);
+  expect(html).not.toContain('noindex');
+
+  await page.goto('/welcome');
+  await expect(page.getByRole('heading', { name: LANDING_HERO })).toBeVisible();
+  await expect(page).toHaveTitle(LANDING_TITLE);
+  await page.getByRole('button', { name: 'Войти' }).first().click();
+  await expect(page).toHaveURL(`${BASE_URL}/sign-in`);
 });
 
 test('тема приложения в HTML до JS (app-themes): id для гидрации, theme-color и шрифты только активной темы', async ({
@@ -217,7 +257,7 @@ test('шаги онбординга /survey и /location без сессии: HT
 
   await page.goto('/survey');
   if (WITH_API) {
-    await expect(page).toHaveURL(`${BASE_URL}/register`);
+    await expect(page).toHaveURL(`${BASE_URL}/welcome`);
   } else {
     // без API сессия не проверена — не выход: ошибка с повтором на месте шага
     await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
@@ -366,7 +406,7 @@ test('свой профиль /profile без сессии (rider-profile): HTML
 
   await page.goto('/profile');
   if (WITH_API) {
-    await expect(page).toHaveURL(`${BASE_URL}/register`);
+    await expect(page).toHaveURL(`${BASE_URL}/welcome`);
   } else {
     await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
   }
@@ -405,7 +445,7 @@ test('жалоба на райд /rides/report/<id> без сессии (05b): H
 
   await page.goto(`/rides/report/${UNKNOWN_RIDE_ID}`);
   if (WITH_API) {
-    await expect(page).toHaveURL(`${BASE_URL}/register`);
+    await expect(page).toHaveURL(`${BASE_URL}/welcome`);
   } else {
     await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
   }
@@ -424,7 +464,7 @@ test('карточка-приглашение /rides/invite/<id> без сесс
 
   await page.goto(`/rides/invite/${UNKNOWN_RIDE_ID}`);
   if (WITH_API) {
-    await expect(page).toHaveURL(`${BASE_URL}/register`);
+    await expect(page).toHaveURL(`${BASE_URL}/welcome`);
   } else {
     await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
   }
@@ -443,7 +483,7 @@ test('выбор маршрута райда /rides/route-pick без сесси
 
   await page.goto('/rides/route-pick?form=new');
   if (WITH_API) {
-    await expect(page).toHaveURL(`${BASE_URL}/register`);
+    await expect(page).toHaveURL(`${BASE_URL}/welcome`);
   } else {
     await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
   }
@@ -470,7 +510,7 @@ for (const [name, path, pickScreen] of [
 
     await page.goto(path);
     if (WITH_API) {
-      await expect(page).toHaveURL(`${BASE_URL}/register`);
+      await expect(page).toHaveURL(`${BASE_URL}/welcome`);
     } else {
       await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
     }
@@ -553,6 +593,8 @@ test.describe('с API', () => {
     const email = `e2e-${Date.now()}@pokatim.test`;
 
     await page.goto('/');
+    await expect(page).toHaveURL(`${BASE_URL}/welcome`);
+    await page.getByRole('button', { name: 'Зарегистрироваться' }).first().click();
     await expect(page).toHaveURL(`${BASE_URL}/register`);
     await page.getByLabel('E-mail').fill(email);
     await page.getByLabel('Пароль').fill('e2e-пароль-pokatim');
@@ -747,8 +789,25 @@ test.describe('с API', () => {
     page,
     request,
   }) => {
+    // ожидание кэша процесса SSR лендинга (до 60 с)
+    test.setTimeout(240_000);
     const { raceTitle, startTitle, withdraw } = await publishHomeData(request);
     try {
+      // лендинг гостя: ближайшая гонка публичного API — в HTML до JS (посев loader)
+      await expect
+        .poll(
+          async () => {
+            const next = await (
+              await request.get(`${API_URL}/v1/races`, { params: { scope: 'current', limit: 1 } })
+            ).json();
+            const title = next.items[0]?.title as string | undefined;
+            const html = await (await request.get('/welcome')).text();
+            return title !== undefined && html.includes(title);
+          },
+          { timeout: 90_000, intervals: [5_000] },
+        )
+        .toBe(true);
+
       // публичное чтение видит свои записи года смоука (без входа)
       const month = `${HOME_FIXTURE_YEAR}-06`;
       const races = await (

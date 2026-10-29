@@ -80,11 +80,15 @@ afterEach(() => {
 });
 
 describe('«Выбрать свой заезд» (AC8)', () => {
-  it('гость по прямой ссылке — гард ведёт на регистрацию', async () => {
+  it('гость по прямой ссылке — гард ведёт на лендинг', async () => {
     const router = await renderRouter(appRoutes, { initialUrl: `/races/pick/${RACE_ID}` });
 
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
     expect(listCandidates).not.toHaveBeenCalled();
   });
 
