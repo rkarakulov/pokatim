@@ -121,6 +121,7 @@ import {
   CalendarRegistrationState,
   type CalendarRegistrationRequest,
   EventTicketingPublic,
+  EventMaterialList,
   MyTicketRef,
   MyTickets,
   type TicketEventKind,
@@ -514,6 +515,14 @@ export function createApiClient({
         EventTicketingPublic,
         options.fresh ? { cache: 'no-cache' } : {},
       ),
+    /** PR C: материалы события по порядку (без входа); событие не опубликовано — 404. */
+    getEventMaterials: (kind: TicketEventKind, eventId: string) =>
+      getPublic(
+        `/v1/events/${encodeURIComponent(kind)}/${encodeURIComponent(eventId)}/materials`,
+        EventMaterialList,
+      ),
+    /** Адрес PDF материала (без входа, скачивание; удалён — 404) — для `openExternalUrl`, без запроса. */
+    eventFileUrl: (fileId: string) => `${baseUrl}/v1/event-files/${encodeURIComponent(fileId)}`,
     /**
      * Удаление своего аккаунта (вход обязателен), подтверждение — текущий пароль; `204` без тела, все сессии отозваны
      * (web — cookie сброшена ответом). Отказы — `ApiHttpError`: `403 PASSWORD_INCORRECT`, `409 ACCOUNT_PANEL_MEMBER`,

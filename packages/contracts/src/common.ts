@@ -94,6 +94,9 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'EVENT_FULL',
   'EVENT_REGISTRATION_CLOSED',
   'TICKETING_INVALID_STATE',
+  // event-tickets PR C: материал — не PDF по сигнатуре (415); PDF больше 10 МиБ (413)
+  'MATERIAL_FILE_UNSUPPORTED',
+  'MATERIAL_FILE_TOO_LARGE',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

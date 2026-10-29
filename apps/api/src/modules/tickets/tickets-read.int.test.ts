@@ -7,6 +7,8 @@ import { panelCall } from '../../../test/panel';
 import { racesDb } from '../../../test/races';
 import { signIn, travelTo } from '../../../test/results';
 import {
+  addLinkMaterial,
+  addPdfMaterial,
   calendarStart,
   enableCalendarTickets,
   enableRaceTickets,
@@ -41,6 +43,26 @@ async function raceTicketOf(email: string) {
 }
 
 describe('свой билет (AC5)', () => {
+  it('материалы события на билете — по порядку, без версии и дат (PR C, AC9)', async () => {
+    const { admin, raceId, who, code } = await raceTicketOf('m@example.com');
+    expect(TicketView.parse((await ticketView(h, who.auth, code)).body).materials).toEqual([]);
+    await addLinkMaterial(h, admin.token, 'race', raceId);
+    const fileId = await addPdfMaterial(h, admin.token, 'race', raceId);
+    const view = TicketView.parse((await ticketView(h, who.auth, code)).body);
+    expect(view.materials).toMatchObject([
+      { type: 'link', title: 'Положение', url: 'https://pokatim.by/rules', file: null },
+      { type: 'parking', title: 'Схема парковки', url: null, file: { id: fileId } },
+    ]);
+    expect(Object.keys(view.materials?.[0] ?? {}).sort()).toEqual([
+      'description',
+      'file',
+      'id',
+      'title',
+      'type',
+      'url',
+    ]);
+  });
+
   it('владелец: событие, участник, категория, код, QR PKT1, инструкции; no-store', async () => {
     const { who, code } = await raceTicketOf('a@example.com');
     await call(h, 'PATCH', '/v1/profile', { publicName: 'Анна К.' }, who.auth);
@@ -70,6 +92,7 @@ describe('свой билет (AC5)', () => {
         'qr',
         'instructions',
         'checkedInAt',
+        'materials',
       ].sort(),
     );
   });

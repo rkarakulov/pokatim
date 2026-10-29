@@ -8,6 +8,12 @@ import {
   CheckInView,
   EventTicketingSettings,
   type EventTicketingUpdate,
+  EventMaterialAdmin,
+  type EventMaterialInput,
+  EventMaterialsAdmin,
+  type EventMaterialUploadQuery,
+  type ReorderEventMaterialsRequest,
+  type UpdateEventMaterialRequest,
   EventTicketsPage,
   type EventTicketsQuery,
   type TicketEventKind,
@@ -398,6 +404,59 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     lookupTicket: (body: CheckInRequest) => post('/v1/admin/tickets/lookup', CheckInView, body),
     /** Отметка участника: исход — `outcome` (повтор — `already_checked_in`). */
     checkInTicket: (body: CheckInRequest) => post('/v1/admin/tickets/check-in', CheckInView, body),
+
+    // --- материалы события (event-tickets PR C): права — как у настроек билетов (по виду события) ---
+    listEventMaterials: (kind: TicketEventKind, eventId: string) =>
+      get(`${adminEvent(kind, eventId)}/materials`, EventMaterialsAdmin),
+    /** Ссылка или текст; лимит — 409 `TICKETING_INVALID_STATE { reason: 'materials_limit' }`. */
+    createEventMaterial: (kind: TicketEventKind, eventId: string, body: EventMaterialInput) =>
+      post(`${adminEvent(kind, eventId)}/materials`, EventMaterialAdmin, body),
+    /**
+     * PDF сырыми байтами (`application/octet-stream`) — материал создаётся вместе с файлом. Не PDF — 415
+     * `MATERIAL_FILE_UNSUPPORTED`, больше 10 МиБ — 413 `MATERIAL_FILE_TOO_LARGE`, лимиты — 409.
+     */
+    uploadEventMaterial: (
+      kind: TicketEventKind,
+      eventId: string,
+      body: Blob | Uint8Array,
+      query: EventMaterialUploadQuery,
+    ) =>
+      request(
+        `${adminEvent(kind, eventId)}/materials/files${queryString(query)}`,
+        EventMaterialAdmin,
+        {
+          method: 'POST',
+          body: body as BodyInit,
+          headers: { 'content-type': 'application/octet-stream' },
+          credentials: 'same-origin',
+        },
+      ),
+    /** Правка (файл не меняется): устаревшая `version` — 409 `CONFLICT`. */
+    updateEventMaterial: (
+      kind: TicketEventKind,
+      eventId: string,
+      id: string,
+      body: UpdateEventMaterialRequest,
+    ) =>
+      patch(
+        `${adminEvent(kind, eventId)}/materials/${encodeURIComponent(id)}`,
+        EventMaterialAdmin,
+        body,
+      ),
+    /** Удаление материала и его PDF: 204. */
+    deleteEventMaterial: (kind: TicketEventKind, eventId: string, id: string) =>
+      post(
+        `${adminEvent(kind, eventId)}/materials/${encodeURIComponent(id)}/delete`,
+        z.undefined(),
+      ),
+    /** Новый порядок — полный набор id (иначе 409 `CONFLICT`). */
+    reorderEventMaterials: (
+      kind: TicketEventKind,
+      eventId: string,
+      body: ReorderEventMaterialsRequest,
+    ) => put(`${adminEvent(kind, eventId)}/materials/order`, EventMaterialsAdmin, body),
+    /** Адрес PDF материала (публичный, скачивание). */
+    eventFileUrl: (fileId: string) => `${baseUrl}/v1/event-files/${encodeURIComponent(fileId)}`,
   };
 }
 

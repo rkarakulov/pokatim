@@ -25,6 +25,7 @@
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "^1.170.46",
     "@tanstack/react-table": "^8.21.3",
+    "jsqr": "1.4.0",
     "maplibre-gl": "~6.16.0",
     "react": "catalog:",
     "react-dom": "catalog:",

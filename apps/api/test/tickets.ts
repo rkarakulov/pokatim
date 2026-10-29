@@ -6,7 +6,7 @@ import { TICKETS_ISSUED } from '../src/modules/tickets/tickets.events';
 import { ticketsCollections } from '../src/modules/tickets/tickets.collection';
 import type { Harness } from './harness';
 import { call, outboxEvents } from './identity';
-import { panelCall } from './panel';
+import { panelCall, panelCookie } from './panel';
 import { corridorRace, rider } from './results';
 
 /** Коллекции модуля `tickets` тестовой БД. */
@@ -133,3 +133,43 @@ export async function enter(h: Harness, auth: Record<string, string>, raceId: st
 }
 
 export { rider };
+
+/** Минимальный PDF (сигнатура `%PDF-`) для материалов PR C. */
+export const PDF_BYTES = Buffer.from('%PDF-1.7\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF\n', 'latin1');
+
+/** Ссылка-материал события через панель (тест знает, что успешно); id. */
+export async function addLinkMaterial(
+  h: Harness,
+  token: string,
+  kind: 'race' | 'calendar',
+  eventId: string,
+  title = 'Положение',
+): Promise<string> {
+  const res = await panelCall(h, token, 'POST', ticketingUrl(kind, eventId, 'materials'), {
+    type: 'link',
+    title,
+    description: null,
+    url: 'https://pokatim.by/rules',
+  });
+  if (res.status !== 201) throw new Error(`материал: ${res.status} ${JSON.stringify(res.body)}`);
+  return (res.body as { id: string }).id;
+}
+
+/** PDF-материал события через панель; id файла. */
+export async function addPdfMaterial(
+  h: Harness,
+  token: string,
+  kind: 'race' | 'calendar',
+  eventId: string,
+  title = 'Схема парковки',
+): Promise<string> {
+  const query = new URLSearchParams({ type: 'parking', title, fileName: 'parking.pdf' });
+  const response = await h.app.inject({
+    method: 'POST',
+    url: `${ticketingUrl(kind, eventId, 'materials')}/files?${query.toString()}`,
+    headers: { 'content-type': 'application/octet-stream', ...panelCookie(token) },
+    payload: PDF_BYTES,
+  });
+  if (response.statusCode !== 201) throw new Error(`PDF: ${response.statusCode} ${response.body}`);
+  return (JSON.parse(response.body) as { file: { id: string } }).file.id;
+}

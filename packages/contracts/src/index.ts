@@ -53,3 +53,4 @@ export * from './route-rides/route-ride.schema.ts';
 export * from './achievements/achievement.schema.ts';
 export * from './tickets/ticket.schema.ts';
 export * from './tickets/ticketing-admin.schema.ts';
+export * from './tickets/materials.schema.ts';

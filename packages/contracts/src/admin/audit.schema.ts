@@ -71,6 +71,11 @@ export const AUDIT_ACTIONS = [
   // (subject — событие, код билета в `details.ticketCode`, без имени и e-mail)
   'tickets.settings_updated',
   'tickets.checked_in',
+  // event-tickets PR C: материалы события (subject — событие; правка — `changedFields`)
+  'tickets.material_added',
+  'tickets.material_updated',
+  'tickets.material_removed',
+  'tickets.materials_reordered',
   // erasure-failures: admin поставил повтор фоновой очистки удалённого аккаунта (subject `rider`, без e-mail и имени)
   'account.erasure_retried',
 ] as const;

@@ -133,3 +133,41 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(funct
     </Frame>
   );
 });
+
+export type CheckboxFieldProps = Omit<FieldFrameProps, 'labelAside'> &
+  Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>;
+
+/**
+ * Чекбокс панели (event-tickets PR C): нативный `input[type=checkbox]` внутри подписи — нажатие на текст переключает;
+ * строка 36 px как у `.radio`. Ошибка и подсказка — под строкой. Совместимо с `register`.
+ */
+export const CheckboxField = forwardRef<HTMLInputElement, CheckboxFieldProps>(
+  function CheckboxField({ label, error, help, className, ...input }, ref) {
+    const ids = useFieldIds(error, help);
+    return (
+      <div className="field">
+        <label className={`checkbox t-body ${className ?? ''}`} htmlFor={ids.id}>
+          <input
+            ref={ref}
+            id={ids.id}
+            type="checkbox"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={ids.describedBy}
+            {...input}
+          />
+          <span>{label}</span>
+        </label>
+        {help ? (
+          <span id={ids.helpId} className="field__help t-meta">
+            {help}
+          </span>
+        ) : null}
+        {error ? (
+          <p id={ids.errorId} className="field__error t-meta" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
+  },
+);

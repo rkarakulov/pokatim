@@ -18,6 +18,47 @@ export interface TicketEmailInput {
   instructions: string | null;
   /** `${APP_WEB_ORIGIN}/tickets/<код>`; нет origin — `null` (без кнопки) */
   link: string | null;
+  /** PR C: материалы события по порядку */
+  materials?: readonly EmailMaterial[];
+  /** `APP_WEB_ORIGIN` для ссылок на PDF (`/v1/event-files/<id>`); нет — PDF не выводятся */
+  fileBase?: string | null;
+}
+
+export interface EmailMaterial {
+  title: string;
+  description: string | null;
+  url: string | null;
+  file: { id: string } | null;
+}
+
+/** Строки блока «Материалы»: ссылка (URL или PDF через origin) или текст; PDF без origin — пропуск. */
+function materialLines(
+  materials: readonly EmailMaterial[],
+  fileBase: string | null,
+): { text: string; html: string }[] {
+  return materials.flatMap((material) => {
+    const href = material.file
+      ? fileBase
+        ? `${fileBase}/v1/event-files/${encodeURIComponent(material.file.id)}`
+        : null
+      : material.url;
+    if (material.file && href === null) return [];
+    if (href !== null) {
+      return [
+        {
+          text: `${material.title}: ${href}`,
+          html: `<a href="${escapeHtml(href)}">${escapeHtml(material.title)}</a>`,
+        },
+      ];
+    }
+    const description = material.description ?? '';
+    return [
+      {
+        text: `${material.title}: ${description}`,
+        html: `${escapeHtml(material.title)}: ${escapeHtml(description).replaceAll('\n', '<br>')}`,
+      },
+    ];
+  });
 }
 
 const distance = (km: number) => `${String(km).replace('.', ',')} км`;
@@ -33,7 +74,7 @@ function categoryLine(category: TicketCategoryDoc | null): string | null {
 /**
  * Письмо «Вы зарегистрированы» (event-tickets, транзакционное — настройки уведомлений не влияют): событие, дата и
  * время по Минску, место, группа или дистанция, код билета, кнопка «Открыть билет» (только при `APP_WEB_ORIGIN`),
- * инструкции организатора. Без QR и QR-токена: билет открывается после входа (T2).
+ * инструкции организатора, материалы (PR C: ссылки; PDF — через `APP_WEB_ORIGIN`). Без QR и QR-токена: билет открывается после входа (T2).
  */
 export function renderTicketEmail(input: TicketEmailInput): Omit<MailMessage, 'to'> {
   const { event } = input;
@@ -48,6 +89,7 @@ export function renderTicketEmail(input: TicketEmailInput): Omit<MailMessage, 't
   ];
   const noLink = 'Билет — в приложении «Покатим».';
   const instructions = input.instructions ? ['Инструкции организатора:', input.instructions] : [];
+  const materials = materialLines(input.materials ?? [], input.fileBase ?? null);
   const text = [
     'Здравствуйте!',
     '',
@@ -55,6 +97,7 @@ export function renderTicketEmail(input: TicketEmailInput): Omit<MailMessage, 't
     '',
     input.link ? `Открыть билет: ${input.link}` : noLink,
     ...(instructions.length > 0 ? ['', ...instructions] : []),
+    ...(materials.length > 0 ? ['', 'Материалы:', ...materials.map((line) => line.text)] : []),
   ].join('\n');
   const html = htmlEmail([
     'Здравствуйте!',
@@ -65,6 +108,9 @@ export function renderTicketEmail(input: TicketEmailInput): Omit<MailMessage, 't
           escapeHtml('Инструкции организатора:'),
           escapeHtml(input.instructions).replaceAll('\n', '<br>'),
         ]
+      : []),
+    ...(materials.length > 0
+      ? [escapeHtml('Материалы:'), materials.map((line) => line.html).join('<br>')]
       : []),
   ]);
   return { subject, html, text };

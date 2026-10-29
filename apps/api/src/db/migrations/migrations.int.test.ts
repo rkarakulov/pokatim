@@ -46,6 +46,8 @@ import { ACHIEVEMENTS_COLLECTIONS } from '../../modules/achievements/achievement
 import { overviewIndexes } from './0036_overview_indexes';
 import { OG_SYNC_INDEXES, ogSyncIndexes } from './0037_og_sync_indexes';
 import { tickets } from './0038_tickets';
+import { eventMaterials } from './0039_event_materials';
+import { MATERIALS_COLLECTIONS } from '../../modules/tickets/materials.collection';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
 import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
@@ -156,6 +158,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0036_overview_indexes',
       '0037_og_sync_indexes',
       '0038_tickets',
+      '0039_event_materials',
     ]);
   });
 
@@ -1538,7 +1541,6 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
 
   it('0038_tickets: коллекции и индексы билетов; последняя; уникальности; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0038_tickets');
     expect(ids.indexOf('0038_tickets')).toBe(ids.indexOf('0037_og_sync_indexes') + 1);
     const index = (key: Record<string, number>, unique = false, partial?: object) => ({
       key,
@@ -1600,5 +1602,46 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     for (const [name, indexes] of Object.entries(expected)) {
       expect(await indexesOf(name)).toEqual(indexes);
     }
+  });
+
+  it('0039_event_materials: уникальный порядок материалов события; после 0038; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0039_event_materials');
+    expect(ids.indexOf('0039_event_materials')).toBe(ids.indexOf('0038_tickets') + 1);
+    const expected = {
+      event_materials_event_order_unique: {
+        key: { kind: 1, eventId: 1, order: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    const collections = (await h.db.listCollections({}, { nameOnly: true }).toArray()).map(
+      (c) => c.name,
+    );
+    expect(collections).toEqual(
+      expect.arrayContaining([
+        MATERIALS_COLLECTIONS.materials,
+        MATERIALS_COLLECTIONS.files,
+        MATERIALS_COLLECTIONS.locks,
+      ]),
+    );
+    expect(await indexesOf(MATERIALS_COLLECTIONS.materials)).toEqual(expected);
+    expect(await indexesOf(MATERIALS_COLLECTIONS.files)).toEqual({});
+    expect(await indexesOf(MATERIALS_COLLECTIONS.locks)).toEqual({});
+
+    const materials = h.db.collection<Record<string, unknown> & { _id: string }>(
+      MATERIALS_COLLECTIONS.materials,
+    );
+    await materials.insertOne({ _id: 'm-1', kind: 'race', eventId: 'e-0039', order: 0 });
+    await expect(
+      materials.insertOne({ _id: 'm-2', kind: 'race', eventId: 'e-0039', order: 0 }),
+    ).rejects.toThrow(/duplicate key/);
+    await materials.insertOne({ _id: 'm-3', kind: 'calendar', eventId: 'e-0039', order: 0 });
+    await materials.deleteMany({ _id: { $in: ['m-1', 'm-3'] } });
+
+    await eventMaterials.up(h.db);
+    await eventMaterials.up(h.db);
+    expect(await indexesOf(MATERIALS_COLLECTIONS.materials)).toEqual(expected);
   });
 });

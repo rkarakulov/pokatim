@@ -185,7 +185,14 @@ paths:
   (ровно одно поле `qr | code`), `CHECK_IN_OUTCOMES`, `CheckInView`, `EventTicketsQuery`/`Page` (курсор — `_id`),
   `TicketingInvalidStateDetails`. Коды `EVENT_FULL`, `EVENT_REGISTRATION_CLOSED`, `TICKETING_INVALID_STATE` (409),
   право `tickets.checkin`, действия `tickets.settings_updated`/`tickets.checked_in`, деталь `ticketCode` — в конце
-  списков. Материалы (C) и Wallet (E) — будущие необязательные поля `TicketView`. api-client — `getRaceTicket`,
+  списков. `src/tickets/materials.schema.ts` (PR C) — `EVENT_MATERIAL_TYPES` (только в конец; приложение —
+  `tolerantEnum`), `materialContentIssues` (RC-C5 — одно правило для формы, схемы и сервера), `EventMaterial`/`List`,
+  `EventMaterialAdmin`/`EventMaterialsAdmin`, `EventMaterialInput` (`superRefine`), `UpdateEventMaterialRequest`,
+  `EventMaterialUploadQuery`, `ReorderEventMaterialsRequest`, `EventMaterialFileId`; `TicketView.materials` —
+  необязательное; коды `MATERIAL_FILE_UNSUPPORTED` (415), `MATERIAL_FILE_TOO_LARGE` (413), причины
+  `materials_limit`/`files_limit`, действия `tickets.material_*` — в конце. Wallet (E) — будущее поле `TicketView`. api-client — `getRaceTicket`,
   `getCalendarRegistration`, `registerForCalendar`, `cancelCalendarRegistration`, `listTickets`, `getTicket`,
   `getEventTicketing` (публичный); панель — `getEventTicketing`, `updateEventTicketing` (`PUT`), `listEventTickets`,
-  `lookupTicket`, `checkInTicket`.
+  `lookupTicket`, `checkInTicket`; материалы — приложение `getEventMaterials`, `eventFileUrl`; панель
+  `listEventMaterials`, `createEventMaterial`, `uploadEventMaterial` (octet-stream), `updateEventMaterial` (`PATCH`),
+  `deleteEventMaterial` (`POST …/delete`), `reorderEventMaterials` (`PUT …/order`), `eventFileUrl`.

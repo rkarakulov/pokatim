@@ -34,3 +34,32 @@ export function ConflictBanner({
     </Banner>
   );
 }
+
+/**
+ * Перечитывание не удалось, а данные уже на экране (AGENTS.md §4.12): «Не удалось обновить данные» поверх последних
+ * загруженных с «Повторить». Свой заголовок раздела — `title`.
+ */
+export function RefreshFailedBanner({
+  onRetry,
+  busy = false,
+  title = t('admin.refreshFailed'),
+}: {
+  onRetry: () => void;
+  busy?: boolean;
+  title?: string;
+}) {
+  return (
+    <Banner
+      tone="error"
+      role="alert"
+      title={title}
+      actions={
+        <Button size="sm" busy={busy} onClick={onRetry}>
+          {t('state.retry')}
+        </Button>
+      }
+    >
+      {t('admin.refreshFailedMessage')}
+    </Banner>
+  );
+}

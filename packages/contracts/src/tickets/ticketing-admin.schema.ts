@@ -77,6 +77,9 @@ export const TICKETING_INVALID_STATE_REASONS = [
   'start_time_required',
   'capacity_below_registered',
   'event_cancelled',
+  // PR C: предел материалов (20) и PDF (10) события
+  'materials_limit',
+  'files_limit',
 ] as const;
 export type TicketingInvalidStateReason = (typeof TICKETING_INVALID_STATE_REASONS)[number];
 export const TicketingInvalidStateDetails = z.object({

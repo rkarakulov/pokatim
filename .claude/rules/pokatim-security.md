@@ -388,6 +388,16 @@ paths:
   приватный — без строки объекта), дата факта, имя через `RIDER_NAMES`; без id объектов. Логи — код, шаблон, итог;
   причина провала — только тип ошибки.
 
+## Материалы событий (event-tickets PR C, ADR-0023 п. 10)
+
+- PDF организатора — исключение из «подписанных URL», как аватары: `GET /v1/event-files/:id` без входа по
+  `randomToken`, тип — только по сигнатуре `%PDF-` (≤ 10 МиБ, `readLimited`, 413 + `Connection: close`, лимит загрузок
+  до тела), ответ — `application/pdf`, `Content-Disposition: attachment` (ASCII-заглушка + `filename*` UTF-8, имя без
+  `/\"` и управляющих), `default-src 'none'; sandbox`, `nosniff`, `Referrer-Policy: no-referrer`, `immutable` только у
+  200; кривой и неизвестный id — один 404. Ссылки материалов — https без учётных данных (`RegistrationUrl`).
+- Панель: `Permissions-Policy` (`camera=(self)`, остальное выключено) — в каждом `location` `admin-nginx.conf` и в
+  `vite preview`; сторож — `apps/admin/src/csp.test.ts`.
+
 ## CSP web приложения (ADR-0025)
 
 - Политика — `contentSecurityPolicy` в `apps/app/server/web-server.ts`, nonce — на каждый ответ, в рендер — заголовком

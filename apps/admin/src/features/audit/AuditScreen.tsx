@@ -1,4 +1,9 @@
-import { AUDIT_ACTIONS, type AuditAction, type AuditEntry } from '@pokatim/contracts';
+import {
+  AUDIT_ACTIONS,
+  type AuditAction,
+  type AuditEntry,
+  formatTicketCode,
+} from '@pokatim/contracts';
 import { type MessageKey, messages, t } from '@pokatim/i18n';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { createColumnHelper } from '@tanstack/react-table';
@@ -25,8 +30,12 @@ const FIELD_LABEL_PREFIX: Record<string, string> = {
 };
 
 /** Подпись изменённого поля (не техническое имя); незнакомое — нейтральная подпись. */
-function fieldLabel(kind: string | undefined, field: string): string {
-  const key = `${FIELD_LABEL_PREFIX[kind ?? ''] ?? ''}${field}`;
+function fieldLabel(entry: AuditEntry, field: string): string {
+  // event-tickets: поля настроек билетов и материалов — свои подписи, объект — событие
+  const prefix = entry.action.startsWith('tickets.')
+    ? 'admin.tickets.field.'
+    : (FIELD_LABEL_PREFIX[entry.subject?.kind ?? ''] ?? '');
+  const key = `${prefix}${field}`;
   return key in messages ? t(key as MessageKey) : t('admin.audit.field.unknown');
 }
 
@@ -69,14 +78,14 @@ function details(entry: AuditEntry): string {
       reason: t(`domain.routeRejectionReason.${rejectionReason}`),
     });
   }
+  // event-tickets: код отмеченного билета (без имени и e-mail)
+  const ticketCode = entry.details?.ticketCode;
+  if (ticketCode)
+    return t('admin.audit.details.ticketCode', { code: formatTicketCode(ticketCode) });
   // 05b: модерация райдов — число закрытых действием жалоб
   const reportCount = entry.details?.reportCount;
   if (reportCount !== undefined) return t('admin.audit.reportCount', { count: reportCount });
-  return (
-    entry.details?.changedFields
-      ?.map((field) => fieldLabel(entry.subject?.kind, field))
-      .join(', ') ?? ''
-  );
+  return entry.details?.changedFields?.map((field) => fieldLabel(entry, field)).join(', ') ?? '';
 }
 
 const columns = [
