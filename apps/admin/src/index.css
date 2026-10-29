@@ -1459,3 +1459,37 @@ select.field__control option:disabled {
 .theme-preview__font {
   color: var(--color-text-secondary);
 }
+
+/* ---------- вкладки раздела (admin-moderation-hub: «Модерация») ---------- */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-s5);
+  margin-top: var(--space-s4);
+  border-bottom: var(--stroke-hairline) solid var(--color-border-subtle);
+}
+
+.tabs__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-s2);
+  padding: var(--space-s2) 0;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  box-shadow: inset 0 calc(-1 * var(--stroke-indicator)) 0 transparent;
+}
+
+.tabs__link:hover {
+  color: var(--color-text-primary);
+}
+
+.tabs__link[aria-current='page'] {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  box-shadow: inset 0 calc(-1 * var(--stroke-indicator)) 0 var(--color-action-primary);
+}
+
+.tabs__count {
+  padding: 0 var(--space-s2);
+  border: var(--stroke-hairline) solid currentColor;
+}

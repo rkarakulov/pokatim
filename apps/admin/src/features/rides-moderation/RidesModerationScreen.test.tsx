@@ -10,6 +10,7 @@ vi.mock('../../api', () => ({
   api: {
     me: vi.fn(),
     health: vi.fn(),
+    overview: vi.fn(),
     listModerationRides: vi.fn(),
     getModerationRide: vi.fn(),
   },
@@ -35,6 +36,7 @@ const row = (overrides: Partial<ModerationRideRow> = {}): ModerationRideRow => (
 
 beforeEach(() => {
   mocked.me.mockResolvedValue(ME.moderator);
+  mocked.overview.mockReturnValue(new Promise(() => undefined));
   mocked.listModerationRides.mockResolvedValue({ items: [row()], nextCursor: null });
 });
 afterEach(() => {
