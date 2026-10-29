@@ -50,7 +50,7 @@ export interface NoticeDraft {
    * Повтор по объекту заменяет прежнее уведомление (N7): `key` — объект, `seq` — порядковый номер **события** в объекте
    * (из payload, монотонен внутри объекта): заменяет только более позднее событие, повтор задачи — тот же номер.
    */
-  collapse?: { key: string; seq: number };
+  collapse?: { key: string; seq?: number };
   recipients: string[];
 }
 
@@ -241,7 +241,7 @@ export class NotificationIntake {
       return [
         {
           ...this.participantsDraft(ride, 'ride_rescheduled', target),
-          collapse: { key: `ride:${ride.id}:rescheduled`, seq: event.data.seq ?? 0 },
+          collapse: { key: `ride:${ride.id}:rescheduled`, seq: event.data.seq },
         },
       ];
     }
@@ -249,7 +249,7 @@ export class NotificationIntake {
       {
         text: { kind: 'ride_joined', ride: ride.title, goingCount: ride.goingCount },
         target,
-        collapse: { key: `ride:${ride.id}:joined`, seq: event.data.seq ?? 0 },
+        collapse: { key: `ride:${ride.id}:joined`, seq: event.data.seq },
         recipients: [ride.organizerUserId],
       },
     ];

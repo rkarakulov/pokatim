@@ -110,7 +110,10 @@ export class NotificationsIntakeProcessor extends WorkerHost {
           sourceEventId: eventId,
           ...(draft.collapse === undefined
             ? {}
-            : { collapseKey: draft.collapse.key, collapseSeq: draft.collapse.seq }),
+            : {
+                collapseKey: draft.collapse.key,
+                ...(draft.collapse.seq === undefined ? {} : { collapseSeq: draft.collapse.seq }),
+              }),
           createdAt: now,
           readAt: null,
           expireAt: new Date(now.getTime() + NOTIFICATIONS_POLICY.ttlDays * DAY_MS),

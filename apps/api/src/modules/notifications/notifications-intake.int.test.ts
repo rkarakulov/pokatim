@@ -199,6 +199,27 @@ describe('райды: получатели, тексты, цели', () => {
     ).toMatchObject({ sourceEventId: next!._id, readAt: null, collapseSeq: expect.any(Number) });
   });
 
+  it('события старого формата без seq — прежнее правило sourceEventId: позднее заменяет, повтор не трогает', async () => {
+    const ride = await createRide(h, organizer, { title: 'Кофе на море' });
+    await join(h, a, ride.id);
+    const first = await appendEvent(h, RIDES_PARTICIPANT_JOINED, { rideId: ride.id });
+    expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, first)).toBe('written');
+    const [initial] = await notificationsOf(h, organizer.userId);
+    expect(initial).not.toHaveProperty('collapseSeq');
+    await join(h, b, ride.id);
+    const second = await appendEvent(h, RIDES_PARTICIPANT_JOINED, { rideId: ride.id });
+    expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, second)).toBe('written');
+    const docs = await notificationsOf(h, organizer.userId);
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({
+      sourceEventId: second,
+      body: '«Кофе на море»: участников — 3.',
+    });
+    expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, first)).toBe('unchanged');
+    expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, second)).toBe('unchanged');
+    expect(await notificationsOf(h, organizer.userId)).toEqual(docs);
+  });
+
   it('повтор задачи переноса после «Я иду» — прочитанное уведомление не открывается заново (N7)', async () => {
     const ride = await rideWithParticipants();
     await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, {

@@ -112,7 +112,7 @@ export class NotificationsRepository {
    * `(sourceEventId, userId)` ещё нет (`$setOnInsert`: повтор задачи ничего не меняет). С `collapseKey` (N7) — замена
    * прежнего уведомления объекта только более ранним событием (`collapseSeq $lt` — порядковый номер события в объекте;
    * не `sourceEventId`: uuidv7 внутри миллисекунды не упорядочен; документ без `collapseSeq` — записан до номера,
-   * для него прежнее условие `sourceEventId $lt`): текст, цель,
+   * для него прежнее условие `sourceEventId $lt`; событие без номера — тоже только оно): текст, цель,
    * снова непрочитано, наверху (`createdAt`), доставка заново; совпадения нет — вставка. Равный номер — повтор того же
    * события, без изменений. Дубль ключа на вставке — повтор или устаревшее событие, не ошибка; дубль по `collapseKey`
    * бывает и у более нового события, проигравшего гонку первой вставки старшему, — для него условная замена
@@ -126,7 +126,7 @@ export class NotificationsRepository {
       { filter: Filter<NotificationDoc>; set: Partial<NotificationDoc> }
     >();
     const operations = docs.map((doc, index): AnyBulkWriteOperation<NotificationDoc> => {
-      const { _id, userId, sourceEventId, collapseKey, collapseSeq = 0, ...fields } = doc;
+      const { _id, userId, sourceEventId, collapseKey, collapseSeq, ...fields } = doc;
       if (collapseKey === undefined) {
         return {
           updateOne: {
@@ -136,17 +136,14 @@ export class NotificationsRepository {
           },
         };
       }
+      // документ до номера — прежнее правило: повтор того же события его не трогает
+      const legacy = { collapseSeq: { $exists: false }, sourceEventId: { $lt: sourceEventId } };
       const collapse = {
-        filter: {
-          userId,
-          collapseKey,
-          $or: [
-            { collapseSeq: { $lt: collapseSeq } },
-            // документ до номера — прежнее правило: повтор того же события его не трогает
-            { collapseSeq: { $exists: false }, sourceEventId: { $lt: sourceEventId } },
-          ],
-        },
-        set: { sourceEventId, collapseSeq, ...fields },
+        filter:
+          collapseSeq === undefined
+            ? { userId, collapseKey, ...legacy }
+            : { userId, collapseKey, $or: [{ collapseSeq: { $lt: collapseSeq } }, legacy] },
+        set: { sourceEventId, ...(collapseSeq === undefined ? {} : { collapseSeq }), ...fields },
       };
       collapses.set(index, collapse);
       return {
