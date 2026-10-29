@@ -167,6 +167,9 @@ function RootShell() {
                 {/* routes-06: заявка своего маршрута в каталог и жалоба на маршрут райдера — только вошедшим */}
                 <Stack.Screen name="routes/mine/publish/[id]" />
                 <Stack.Screen name="routes/report/[id]" />
+                {/* заезд по маршруту (route-rides-02): выбор и результат — только вошедшим */}
+                <Stack.Screen name="routes/pick/[routeId]" />
+                <Stack.Screen name="routes/rides/[routeId]/[rideId]" />
                 {/* «Выбрать свой заезд» в гонку (race-results-04): только вошедшим, без таб-бара */}
                 <Stack.Screen name="races/pick/[id]" />
                 {/* споры (race-results-06, RC-14): карточка соперника, подача и ответ — только вошедшим */}

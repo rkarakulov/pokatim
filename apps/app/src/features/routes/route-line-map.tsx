@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { RouteMap } from '@/features/maps/route-map';
+import type { RouteMapTrack } from '@/features/maps/track-style';
 import { useMapStyle } from '@/features/maps/use-map-style';
 
 export interface RouteLineMapProps {
@@ -21,6 +22,11 @@ export interface RouteLineMapProps {
   lineWidth?: number;
   /** routes-04: стор скраббинга экрана — маркер на линии, связанный с профилем; нет — без маркера */
   scrub?: ScrubStore;
+  /**
+   * route-rides-02: свой трек заезда поверх линии (сегмент, сход пунктиром); ревизию трека задаёт `key` родителя.
+   * Нет — карта как прежде.
+   */
+  track?: RouteMapTrack;
   /**
    * routes-04d (RC-5, RC-8): карта на всю область под шторкой. Место карты и «карты нет» — ровный фон на всю область
    * (без схлопывания); карта монтируется, когда известна высота шторки `bottomInset`.
@@ -46,6 +52,7 @@ export function RouteLineMap({
   skeletonTestID,
   lineWidth,
   scrub,
+  track,
   fill = false,
   bottomInset,
 }: RouteLineMapProps) {
@@ -69,6 +76,7 @@ export function RouteLineMap({
       failedMessage={failedMessage}
       lineWidth={lineWidth}
       scrub={scrub}
+      track={track}
       fill={fill}
       bottomInset={bottomInset}
     />
@@ -116,6 +124,7 @@ function LineMap({
   failedMessage,
   lineWidth,
   scrub,
+  track,
   fill,
   bottomInset,
 }: {
@@ -126,6 +135,7 @@ function LineMap({
   failedMessage: string;
   lineWidth: number | undefined;
   scrub: ScrubStore | undefined;
+  track: RouteMapTrack | undefined;
   fill: boolean;
   bottomInset: number | undefined;
 }) {
@@ -138,6 +148,7 @@ function LineMap({
       corridor={false}
       lineWidth={lineWidth}
       scrub={scrub}
+      track={track}
       fill={fill}
       bottomInset={bottomInset}
       styleUrl={styleUrl}

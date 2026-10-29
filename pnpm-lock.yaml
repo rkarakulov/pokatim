@@ -568,6 +568,9 @@ importers:
         specifier: 5.0.15
         version: 5.0.15(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.7.0(react@19.3.0))
     devDependencies:
+      '@expo/router-server':
+        specifier: 58.0.15
+        version: 58.0.15(@expo/metro-runtime@58.0.15)(expo-constants@58.0.12)(expo-font@58.0.9)(expo-router@58.0.24)(expo-server@58.0.5)(expo@58.0.16)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@8.1.1)
       '@maplibre/maplibre-gl-style-spec':
         specifier: 26.2.1
         version: 26.2.1

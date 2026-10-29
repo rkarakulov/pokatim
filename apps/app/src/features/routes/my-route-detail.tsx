@@ -25,6 +25,9 @@ import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { actionErrorMessage, apiErrorCode } from '@/features/auth/error-messages';
+import { useRouteRides } from '@/features/route-rides/queries';
+import { RouteRidesBlock } from '@/features/route-rides/route-rides-block';
+import { useMinskClock } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { DetailRow } from './detail-row';
@@ -158,9 +161,19 @@ function DeleteAction({ route }: { route: MyRoute }) {
 
 /**
  * Поля своего маршрута (M4): название, готовый — карта без коридора и строки «Длина», «Набор», «Петля», «Загружен»;
- * «Обрабатывается» и отказ — статус вместо карты. «Переименовать», «Удалить». Без «Поделиться» и OG (M3).
+ * «Обрабатывается» и отказ — статус вместо карты. «Мои заезды» у готового (route-rides-02). «Переименовать», «Удалить».
+ * Без «Поделиться» и OG (M3).
  */
-function MyRouteView({ route }: { route: MyRoute }) {
+function MyRouteView({
+  route,
+  rides,
+  now,
+}: {
+  route: MyRoute;
+  /** «Мои заезды» (route-rides-02) — только у готового маршрута */
+  rides: ReturnType<typeof useRouteRides>;
+  now: Date;
+}) {
   const theme = useTheme();
   const [renaming, setRenaming] = useState(false);
   const status = myRouteStatus(route);
@@ -198,6 +211,9 @@ function MyRouteView({ route }: { route: MyRoute }) {
         </>
       ) : null}
       <DetailRow label={t('routes.mine.detail.uploadedAt')}>{myRouteUploadedAt(route)}</DetailRow>
+      {route.status === 'ready' ? (
+        <RouteRidesBlock routeId={route.id} mine rides={rides} now={now} />
+      ) : null}
       <MyRoutePublication route={route} />
       {/* routes-06 (A3): на проверке и в каталоге название заморожено */}
       {myRouteRenameFrozen(route) ? (
@@ -227,13 +243,18 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
   const valid = Uuid.safeParse(id).success;
   const route = useMyRoute(id, valid);
   const queryClient = useQueryClient();
-  // pull-to-refresh — и карточка, и карта (повтор после ошибки геометрии)
+  // route-rides-02: «Мои заезды» — только у готового маршрута
+  const ready = valid && route.data?.status === 'ready';
+  const rides = useRouteRides(id, ready);
+  const now = useMinskClock([route.dataUpdatedAt, rides.dataUpdatedAt]);
+  // pull-to-refresh — карточка, карта (повтор после ошибки геометрии) и «Мои заезды»
   const refetchers = useMemo(
     () => [
       route.refetch,
       () => queryClient.refetchQueries({ queryKey: myRoutesKeys.map(id), type: 'active' }),
+      ...(ready ? [rides.refetch] : []),
     ],
-    [route.refetch, queryClient, id],
+    [route.refetch, queryClient, id, ready, rides.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   // 404 и при показанных данных (удалён на другом устройстве): «Маршрут недоступен», кеш карты — прочь
@@ -286,7 +307,7 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
               </View>
             }
           >
-            {(data) => <MyRouteView route={data} />}
+            {(data) => <MyRouteView route={data} rides={rides} now={now} />}
           </AsyncContent>
         )}
       </ScrollView>
