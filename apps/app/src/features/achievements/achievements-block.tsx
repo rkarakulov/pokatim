@@ -1,7 +1,7 @@
 import type { PublicRiderAchievement } from '@pokatim/contracts';
-import { motion, size, space } from '@pokatim/design-tokens';
+import { layout, motion, size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { Skeleton, SkeletonGroup, textStyle, useTheme } from '@rkarakulov/ui';
+import { SkeletonGroup, textStyle, useTheme } from '@rkarakulov/ui';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { loading, TabFailure, type TabQuery } from '@/features/races/results-table';
@@ -10,15 +10,17 @@ import {
   achievementA11y,
   achievementTitle,
   knownItems,
+  publicItems,
   type KnownAchievement,
 } from './achievement-catalog';
-import { AchievementBadge, BADGE_SIZE } from './achievement-badge';
+import { AchievementBadge } from './achievement-badge';
+import { BadgeSkeleton } from './achievement-card';
 import { isNotFound } from './queries';
 
 /** Плиток в скелетоне первой загрузки (одна строка сетки). */
 const SKELETON_TILES = 3;
 /** Ширина плитки: значок и подпись в две строки под ним. */
-const TILE_WIDTH = BADGE_SIZE.grid + space.s5;
+const TILE_WIDTH = layout.badgeGrid + space.s5;
 
 function Tile({
   item,
@@ -30,7 +32,7 @@ function Tile({
   const theme = useTheme();
   const body = (
     <>
-      <AchievementBadge code={item.code} size={BADGE_SIZE.grid} />
+      <AchievementBadge code={item.code} size={layout.badgeGrid} />
       <Text
         numberOfLines={2}
         style={[textStyle('meta'), styles.caption, { color: theme.text.primary }]}
@@ -64,7 +66,7 @@ function TilesSkeleton() {
       <View style={styles.grid}>
         {Array.from({ length: SKELETON_TILES }, (_, index) => (
           <View key={index} style={styles.tile}>
-            <Skeleton width={BADGE_SIZE.grid} height={BADGE_SIZE.grid} />
+            <BadgeSkeleton size={layout.badgeGrid} />
           </View>
         ))}
       </View>
@@ -82,15 +84,19 @@ function TilesSkeleton() {
 export function AchievementsBlock({
   query,
   onPress,
+  publicOnly = false,
   testID,
 }: {
   query: TabQuery & { data: { items: readonly PublicRiderAchievement[] } | undefined };
   onPress?: (item: KnownAchievement<PublicRiderAchievement>) => void;
+  /** публичный профиль: только гоночные (A7) */
+  publicOnly?: boolean;
   testID: string;
 }) {
   const theme = useTheme();
   if (isNotFound(query.error)) return null;
-  const items = query.data ? knownItems(query.data.items) : undefined;
+  const known = query.data ? knownItems(query.data.items) : undefined;
+  const items = known && publicOnly ? publicItems(known) : known;
   if (items?.length === 0 && !query.isError) return null;
   return (
     <View testID={testID} style={styles.block}>

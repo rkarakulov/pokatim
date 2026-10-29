@@ -1,5 +1,5 @@
 import type { AchievementCode } from '@pokatim/contracts';
-import { radius, space, stroke } from '@pokatim/design-tokens';
+import { badgeShape, radius, space, stroke } from '@pokatim/design-tokens';
 import { textStyle, useTheme } from '@rkarakulov/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -8,26 +8,14 @@ import { Icon } from '@/components/icon';
 import { catalogEntry } from './achievement-catalog';
 
 /**
- * Размеры значка «Эмаль» (px): в сетке блока и крупно на вспышке. В базе (`size`) готовых значений нет — follow-up
- * `size.badge*` в app-foundation (task.md 8.2).
- */
-export const BADGE_SIZE = { grid: 72, hero: 152 } as const;
-
-/** Доли диаметра: кольцо акцента и диск с иконкой (пропорции эмблемы). */
-const RING_INSET = 0.07;
-const RING_WIDTH = 0.1;
-const DISC = 0.56;
-const ICON = 0.28;
-
-/**
  * Значок достижения «Эмаль» (achievements): круг фона с контуром текста, кольцо акцента, диск основного действия с
- * иконкой кода; у счётных («Пять гонок») — число на кольце снизу. Только роли темы; декоративный — подпись даёт
- * родитель (плитка блока, карточка).
+ * иконкой кода; у счётных («Пять гонок») — число на кольце снизу. Диаметр — `layout.badgeGrid` / `layout.badgeHero`,
+ * пропорции — `badgeShape` (`@pokatim/design-tokens`), цвета — роли темы. Декоративный: подпись даёт родитель.
  */
 export function AchievementBadge({ code, size }: { code: AchievementCode; size: number }) {
   const theme = useTheme();
   const entry = catalogEntry(code);
-  const disc = Math.round(size * DISC);
+  const disc = Math.round(size * badgeShape.disc);
   return (
     <View
       testID={`achievement-badge-${code}`}
@@ -48,11 +36,11 @@ export function AchievementBadge({ code, size }: { code: AchievementCode; size: 
         style={[
           styles.ring,
           {
-            top: size * RING_INSET,
-            left: size * RING_INSET,
-            right: size * RING_INSET,
-            bottom: size * RING_INSET,
-            borderWidth: size * RING_WIDTH,
+            top: size * badgeShape.ringInset,
+            left: size * badgeShape.ringInset,
+            right: size * badgeShape.ringInset,
+            bottom: size * badgeShape.ringInset,
+            borderWidth: size * badgeShape.ringWidth,
             borderColor: theme.text.accent,
           },
         ]}
@@ -60,7 +48,11 @@ export function AchievementBadge({ code, size }: { code: AchievementCode; size: 
       <View
         style={[styles.disc, { width: disc, height: disc, backgroundColor: theme.action.primary }]}
       >
-        <Icon name={entry.icon} size={Math.round(size * ICON)} color={theme.action.onPrimary} />
+        <Icon
+          name={entry.icon}
+          size={Math.round(size * badgeShape.icon)}
+          color={theme.action.onPrimary}
+        />
       </View>
       {entry.count !== undefined ? (
         <View style={[styles.count, { backgroundColor: theme.surface.default }]}>

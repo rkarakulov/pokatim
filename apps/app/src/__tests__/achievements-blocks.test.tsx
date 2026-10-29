@@ -143,6 +143,32 @@ describe('гоночные достижения публичного профи�
     expect(getRiderAchievements).toHaveBeenCalledWith(PUBLIC_ID);
   });
 
+  it('не-гоночные коды в ответе (регресс API) — не показываются (A7)', async () => {
+    getRiderAchievements.mockResolvedValue({
+      items: [
+        pub(),
+        pub({ code: 'route_first', object: { kind: 'route', id: ROUTE_ID, title: 'Петля' } }),
+      ],
+    });
+    await openRider();
+    const block = within(await screen.findByTestId('rider-achievements'));
+    expect(
+      block.getByLabelText('Достижение «Подиум»: Гонка «Гонка у озера», 2 мая 2026'),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Первый маршрут')).toBeNull();
+    expect(screen.queryByText(/Петля/)).toBeNull();
+  });
+
+  it('только не-гоночные — блока нет', async () => {
+    getRiderAchievements.mockResolvedValue({
+      items: [pub({ code: 'ride_first', object: { kind: 'ride', id: ROUTE_ID, title: 'Кофе' } })],
+    });
+    await openRider();
+    expect(await screen.findByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
+    await waitFor(() => expect(getRiderAchievements).toHaveBeenCalled());
+    expect(screen.queryByTestId('rider-achievements')).toBeNull();
+  });
+
   it('пусто — блока нет', async () => {
     getRiderAchievements.mockResolvedValue({ items: [] });
     await openRider();

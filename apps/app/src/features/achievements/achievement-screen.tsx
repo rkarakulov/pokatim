@@ -1,8 +1,8 @@
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { AsyncContent, Button, EmptyState, SkeletonText, useTheme } from '@rkarakulov/ui';
+import { AsyncContent, Button, EmptyState, useTheme } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DetailHeader } from '@/components/detail-header';
@@ -11,8 +11,7 @@ import { storyPath } from '@/features/races/story/paths';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { achievementTitle, knownItems, shareRaceId } from './achievement-catalog';
-import { AchievementCard } from './achievement-card';
-import { BADGE_SIZE } from './achievement-badge';
+import { AchievementCard, AchievementCardSkeleton } from './achievement-card';
 import { useAchievements } from './queries';
 
 const DOCUMENT_TITLE = `${t('achievements.title')} — ${t('app.name')}`;
@@ -51,15 +50,7 @@ export function AchievementScreen({ code }: { code: string }) {
           />
         }
       >
-        <AsyncContent
-          query={query}
-          skeleton={
-            <View style={styles.skeleton}>
-              <SkeletonText variant="displaySm" lines={1} lastLineWidth="60%" />
-              <SkeletonText variant="body" lines={2} lastLineWidth="80%" />
-            </View>
-          }
-        >
+        <AsyncContent query={query} skeleton={<AchievementCardSkeleton />}>
           {() => {
             if (!item) {
               return (
@@ -94,5 +85,4 @@ export function AchievementScreen({ code }: { code: string }) {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   content: { paddingHorizontal: size.gutter, paddingVertical: space.s5 },
-  skeleton: { minHeight: BADGE_SIZE.hero, gap: space.s3 },
 });

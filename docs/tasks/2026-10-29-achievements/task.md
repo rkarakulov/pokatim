@@ -408,14 +408,20 @@ consistency, не влияет на `seen`).
 - **B2 — показанные в этом запуске (`flash-session.ts`).** Сбой `seen` откатывает `seen: false` в кэше; без набора
   показанных хост сразу открыл бы вспышку снова. Набор — память процесса, сброс при выходе; после перезапуска
   непомеченное сервером вспыхнет ещё раз (at-least-once).
+  Ревью pass 1 (MEDIUM-1): вся открытая очередь тоже скрыта до ответа сервера новее снимка — «назад» или «Поделиться»
+  посреди очереди не открывают вспышку сразу снова; остаток вспыхнет после нового ответа (возврат на передний план
+  после `staleTime`, pull-to-refresh).
 - **B3 — иконки.** В наборе приложения (`components/icon.tsx`) не было подходящих для «Подиума» и «Победы» — добавлены
   `medal` (SF `medal` / Material `military_tech`) и `trophy` (SF `trophy` / Material `emoji_events`); остальные коды —
   существующие `races`, `routes`, `rides`, `person`. Счётные (`races_5`, `routes_5`, `rides_10`) — число на кольце.
-- **B4 — размер значка без токена.** `BADGE_SIZE` (`grid` 72, `hero` 152) — константа фичи; follow-up — `size.badge*`
-  в app-foundation (`@rkarakulov/design-tokens`). Значок — роли `surface.default`, `text.primary`, `text.accent`,
+- **B4 — размер значка — бренд-слой токенов (ревью pass 1, HIGH).** Диаметр — `layout.badgeGrid` (72) /
+  `layout.badgeHero` (152), пропорции кольца, диска и иконки — `badgeShape` в `@pokatim/design-tokens` (образец —
+  `layout.avatarProfile`), тест в `design-tokens.test.ts`; px-литералов в фиче нет. Follow-up — `size.badge*` в
+  app-foundation (`@rkarakulov/design-tokens`). Значок — роли `surface.default`, `text.primary`, `text.accent`,
   `action.*`, скругление `radius.pill`; дуговой подписи прототипа нет (в RN без SVG-текста) — follow-up при
   необходимости.
-- **B5 — публичный блок при ошибке** — компактный баннер с повтором (`TabFailure`), как у своего; 404 — блока нет.
+- **B5 — публичный блок при ошибке** — компактный баннер с повтором (`TabFailure`), как у своего; 404 — блока нет. Только
+  гоночные коды отбираются и на клиенте (`publicItems`, ревью pass 1, LOW-2).
 
 ## 8.3 Security checklist
 
@@ -686,3 +692,29 @@ exit=0
 
 NOT VERIFIED: ручная проверка на iOS/Android-симуляторе и в браузере (`build:web` + `start:web`, `e2e:web` — шаг смоука
 добавлен, не запускался); вид значка «Эмаль» в темах приложения глазами не сверялся.
+
+#### PR B — исправления ревью pass 1 (coder, 2026-10-29)
+
+Все находки pass 1 исправлены, подробности — `findings.md` «PR B — исправления pass 1»; 8.2 B2, B4, B5 обновлены.
+Гейт (то же изолированное окружение: Mongo `pokatim_achv_app_test`, Redis `:6493/1`, `TURBO_CONCURRENCY=1`):
+
+```
+$ pnpm check
+All matched files use Prettier code style!
+✔ no dependency violations found (1846 modules, 6942 dependencies cruised)
+ Tasks:    9 successful, 9 total            # typecheck
+@pokatim/design-tokens:test:  Test Files  3 passed (3)       Tests  579 passed (579)
+@pokatim/contracts:test:      Test Files  43 passed (43)     Tests  370 passed (370)
+@pokatim/api-client:test:     Test Files  20 passed (20)     Tests  136 passed (136)
+@pokatim/api:test:            Test Files  163 passed (163)   Tests  1760 passed (1760)
+@pokatim/admin:test:          Test Files  40 passed (40)     Tests  381 passed (381)
+@pokatim/app:test:            Test Suites: 215 passed        Tests: 2010 passed
+ Tasks:    15 successful, 15 total
+pnpm check  9:24.83 total
+exit=0
+```
+
+Два прогона до этого упали в `apps/api` на разных тестах, не связанных с PR B (`apps/api` не менялся): EPIPE в
+`track-uploads.int.test.ts` (413 через сокет) и таймаут 5 с в `avatar-image.test.ts` (48 Мп JPEG) под нагрузкой
+машины; оба файла отдельно — 47/47 зелёные, третий прогон целиком — зелёный (выше; часть задач — из кэша turbo
+прошлых прогонов с тем же кодом). NOT VERIFIED — как выше (симуляторы, браузер, `e2e:web`).

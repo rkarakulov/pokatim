@@ -8,6 +8,7 @@ import {
   factDateText,
   flashQueue,
   knownItems,
+  publicItems,
   shareRaceId,
 } from './achievement-catalog';
 
@@ -106,5 +107,17 @@ describe('подписи', () => {
   it('подпись a11y: название, объект и дата', () => {
     const [known] = knownItems([item({ code: 'race_win' })]);
     expect(achievementA11y(known!)).toBe('Достижение «Победа»: Гонка «Гонка у озера», 2 мая 2026');
+  });
+});
+
+describe('publicItems (A7, LOW-2 ревью)', () => {
+  it('в публичном профиле — только гоночные коды', () => {
+    const items = knownItems([
+      item({ code: 'race_podium' }),
+      item({ code: 'route_first' }),
+      item({ code: 'ride_organizer' }),
+      item({ code: 'races_5' }),
+    ]);
+    expect(publicItems(items).map((a) => a.code)).toEqual(['race_podium', 'races_5']);
   });
 });

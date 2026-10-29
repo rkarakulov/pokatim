@@ -29,15 +29,19 @@ export function useAchievements(enabled = true) {
  */
 export function useMarkAchievementsSeen() {
   const queryClient = useQueryClient();
+  // время ответа сервера не меняется: по нему `flash-session` отличает новый ответ от правки кэша
   const setSeen = (codes: readonly AchievementCode[], seen: boolean) =>
-    queryClient.setQueryData<AchievementList>(ACHIEVEMENTS_KEY, (list) =>
-      list
-        ? {
-            items: list.items.map((item) =>
-              codes.includes(item.code as AchievementCode) ? { ...item, seen } : item,
-            ),
-          }
-        : list,
+    queryClient.setQueryData<AchievementList>(
+      ACHIEVEMENTS_KEY,
+      (list) =>
+        list
+          ? {
+              items: list.items.map((item) =>
+                codes.includes(item.code as AchievementCode) ? { ...item, seen } : item,
+              ),
+            }
+          : list,
+      { updatedAt: queryClient.getQueryState(ACHIEVEMENTS_KEY)?.dataUpdatedAt },
     );
   return useMutation({
     mutationFn: (codes: AchievementCode[]) =>

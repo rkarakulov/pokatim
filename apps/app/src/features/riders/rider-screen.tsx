@@ -115,7 +115,7 @@ function RiderBody({
       <View style={[styles.padded, styles.sections]}>
         <StatBlock items={publicStatItems(rider.stats)} />
         {/* гоночные достижения (achievements, A7): без перехода и без «Поделиться»; пусто — блока нет */}
-        <AchievementsBlock testID="rider-achievements" query={achievements} />
+        <AchievementsBlock testID="rider-achievements" query={achievements} publicOnly />
         <View style={styles.stack}>
           <Text
             accessibilityRole="header"

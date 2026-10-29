@@ -2,7 +2,7 @@ import { usePathname, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 
 import { flashQueue } from './achievement-catalog';
-import { resetShown, shownCodes } from './flash-session';
+import { hiddenCodes, resetShown } from './flash-session';
 import { useAchievements } from './queries';
 
 /** Путь полноэкранной вспышки (внутри `Stack.Protected` вкладок). */
@@ -22,15 +22,16 @@ const QUIET_PREFIXES = [
 
 /**
  * Хост «Вспышки достижения» (A5, AC9): `ready` — вошёл и прошёл онбординг (как у push). Подписан на свои достижения:
- * запрос — на старте и при возврате приложения (`focusManager`, `staleTime` 60 с); есть неувиденное и ещё не
- * показанное в этом запуске — открывает вспышку. Ошибка запроса — тишина (без баннеров и повторов на экране).
+ * запрос — на старте и при возврате приложения (`focusManager`, `staleTime` 60 с); есть неувиденное, не показанное
+ * в этом запуске и не входившее в уже открытую очередь этого ответа сервера (`flash-session`) — открывает вспышку. Ошибка запроса — тишина (без баннеров и повторов на экране).
  * Рядом со `Stack` корневого layout: переход — после монтирования навигатора.
  */
 export function AchievementFlashHost({ ready }: { ready: boolean }): null {
   const router = useRouter();
   const pathname = usePathname();
-  const { data } = useAchievements(ready);
-  const pending = ready && data !== undefined && flashQueue(data.items, shownCodes()).length > 0;
+  const { data, dataUpdatedAt } = useAchievements(ready);
+  const pending =
+    ready && data !== undefined && flashQueue(data.items, hiddenCodes(dataUpdatedAt)).length > 0;
   const quiet = QUIET_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
   useEffect(() => {

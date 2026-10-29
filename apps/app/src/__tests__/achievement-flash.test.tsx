@@ -1,7 +1,8 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
 import type { Achievement } from '@pokatim/contracts';
-import { Stack } from 'expo-router';
+import { focusManager, onlineManager, type QueryClient } from '@tanstack/react-query';
+import { router as expoRouter, Stack } from 'expo-router';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { AccessibilityInfo, Animated, Text } from 'react-native';
 
@@ -13,7 +14,8 @@ import { api } from '@/lib/api';
 import AchievementRoute from '../app/achievements/[code]';
 import AchievementFlashRoute from '../app/achievements/flash';
 import { liveSession, signInForTest } from './auth-fixtures';
-import { createQueryWrapper } from './query-wrapper';
+import { createQueryWrapper, createTestQueryClient } from './query-wrapper';
+import { create } from 'zustand';
 
 jest.mock('@/lib/api');
 
@@ -43,27 +45,32 @@ function Home() {
 function Story() {
   return <Text>Сторис</Text>;
 }
-function layout(ready: boolean) {
-  return function Layout() {
-    return (
-      <>
-        <Stack screenOptions={{ headerShown: false }} />
-        <AchievementFlashHost ready={ready} />
-      </>
-    );
-  };
+/** `ready` хоста (вошёл и прошёл онбординг) — переключается тестом: выход и вход другим аккаунтом. */
+const readyStore = create<{ ready: boolean }>(() => ({ ready: true }));
+function Layout() {
+  const ready = readyStore((state) => state.ready);
+  return (
+    <>
+      <Stack screenOptions={{ headerShown: false }} />
+      <AchievementFlashHost ready={ready} />
+    </>
+  );
 }
 
-const open = (initialUrl = '/', ready = true) =>
-  renderRouter(
+const open = (initialUrl = '/', ready = true, client: QueryClient = createTestQueryClient()) => {
+  readyStore.setState({ ready });
+  return renderRouter(
     {
-      _layout: layout(ready),
+      _layout: Layout,
       index: Home,
       'achievements/flash': AchievementFlashRoute,
       'races/story/[id]': Story,
     },
-    { initialUrl, wrapper: createQueryWrapper() },
+    { initialUrl, wrapper: createQueryWrapper(client) },
   );
+};
+
+const never = () => new Promise<never>(() => undefined);
 
 beforeEach(() => {
   resetShown();
@@ -72,7 +79,11 @@ beforeEach(() => {
   reduceMotion.mockResolvedValue(true);
   markSeen.mockResolvedValue(undefined);
 });
-afterEach(() => jest.clearAllMocks());
+afterEach(() => {
+  jest.clearAllMocks();
+  onlineManager.setOnline(true);
+  focusManager.setFocused(undefined);
+});
 
 describe('хост вспышки (A5, AC9)', () => {
   it('новое достижение → вспышка; «Закрыть» → seen, повторно не открывается', async () => {
@@ -144,6 +155,103 @@ describe('хост вспышки (A5, AC9)', () => {
     await waitFor(() => expect(listAchievements).toHaveBeenCalled());
     await act(async () => undefined);
     expect(router.getPathname()).toBe(`/races/story/${RACE_ID}`);
+  });
+  it('выход и вход другим аккаунтом — показанное прежним снова вспыхивает (`resetShown`)', async () => {
+    const client = createTestQueryClient();
+    listAchievements.mockResolvedValue({ items: [item()] });
+    const router = await open('/', true, client);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Закрыть' }));
+    expect(await screen.findByText('Главная')).toBeOnTheScreen();
+
+    // выход: корневой layout чистит кэш, хост без `ready`; вход другим аккаунтом — тот же код не просмотрен
+    await act(async () => {
+      readyStore.setState({ ready: false });
+      client.clear();
+    });
+    await act(async () => readyStore.setState({ ready: true }));
+    expect(await screen.findByRole('header', { name: 'Победа' })).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/achievements/flash');
+  });
+
+  it('возврат на передний план (`focusManager`) после `staleTime` — новое достижение вспыхивает', async () => {
+    listAchievements.mockResolvedValue({ items: [item({ seen: true })] });
+    const router = await open();
+    await waitFor(() => expect(listAchievements).toHaveBeenCalledTimes(1));
+    expect(router.getPathname()).toBe('/');
+
+    listAchievements.mockResolvedValue({ items: [routeItem, item({ seen: true })] });
+    const now = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now + 61_000);
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    expect(await screen.findByRole('header', { name: 'Первый маршрут' })).toBeOnTheScreen();
+    expect(listAchievements).toHaveBeenCalledTimes(2);
+    clock.mockRestore();
+  });
+
+  it('«назад» посреди очереди (1 из 2) — вспышка не открывается сразу; остаток — после нового ответа сервера', async () => {
+    const client = createTestQueryClient();
+    listAchievements.mockResolvedValue({ items: [item(), routeItem] });
+    const router = await open('/', true, client);
+    expect(await screen.findByText('1 из 2')).toBeOnTheScreen();
+    await act(() => expoRouter.back());
+    expect(await screen.findByText('Главная')).toBeOnTheScreen();
+    await act(async () => undefined);
+    expect(router.getPathname()).toBe('/');
+
+    await act(async () => client.invalidateQueries());
+    expect(await screen.findByRole('header', { name: 'Победа' })).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/achievements/flash');
+    // остаток — одна выдача, без счётчика; показанная раньше не повторяется
+    expect(screen.queryByText(/из 2/)).toBeNull();
+  });
+
+  it('«Поделиться» посреди очереди (1 из 2) → сторис, выход из сторис — вспышка не открывается сразу', async () => {
+    // от новых к старым: гонка старше — показывается первой
+    listAchievements.mockResolvedValue({
+      items: [{ ...routeItem, factDate: '2026-06-01' }, item()],
+    });
+    const router = await open();
+    expect(await screen.findByText('1 из 2')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Поделиться' }));
+    expect(await screen.findByText('Сторис')).toBeOnTheScreen();
+    await act(() => expoRouter.back());
+    expect(await screen.findByText('Главная')).toBeOnTheScreen();
+    await act(async () => undefined);
+    expect(router.getPathname()).toBe('/');
+  });
+});
+
+describe('вспышка открыта по адресу без данных (§4.12)', () => {
+  it('первая загрузка — скелетон карточки и «Закрыть»', async () => {
+    listAchievements.mockReturnValue(never());
+    await open('/achievements/flash');
+    expect(await screen.findByLabelText('Загрузка')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('achievement-card-skeleton', { includeHiddenElements: true }),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Закрыть' })).toBeOnTheScreen();
+  });
+
+  it('ошибка — «Не удалось загрузить» с повтором; повтор показывает вспышку', async () => {
+    listAchievements
+      .mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }))
+      .mockResolvedValue({ items: [item()] });
+    await open('/achievements/flash');
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('header', { name: 'Победа' })).toBeOnTheScreen();
+  });
+
+  it('офлайн — «Нет соединения»; «Закрыть» — на Главную', async () => {
+    onlineManager.setOnline(false);
+    listAchievements.mockResolvedValue({ items: [item()] });
+    const router = await open('/achievements/flash');
+    expect(await screen.findByText('Нет соединения')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Закрыть' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/'));
   });
 });
 

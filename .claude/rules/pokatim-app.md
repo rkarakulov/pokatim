@@ -329,15 +329,20 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `factDate` (день по Минску, RC-7), всегда с годом (`factDateText`).
 - Вспышка: хост `AchievementFlashHost` рядом со `Stack` корневого layout с тем же `ready`, что у push; маршрут
   `achievements/flash` (`presentation: 'fullScreenModal'`) и `achievements/[code]` — внутри `Stack.Protected`
-  вкладок. Очередь — `flashQueue` (неувиденные, от старых к новым) минус показанные в этом запуске
-  (`flash-session.ts`: сбой `seen` откатывает кэш, но не зацикливает вспышку); снимок — при открытии экрана.
+  вкладок. Очередь — `flashQueue` (неувиденные, от старых к новым) минус `hiddenCodes(dataUpdatedAt)`
+  (`flash-session.ts`: показанные в этом запуске — сбой `seen` не зацикливает вспышку; вся открытая очередь — до
+  ответа сервера новее её `dataUpdatedAt`: «назад» или «Поделиться» посреди очереди не открывают её сразу снова);
+  снимок — при открытии экрана; правки кэша (`seen`) `dataUpdatedAt` не меняют (`updatedAt` в `setQueryData`).
+  Открыта по адресу без данных — `AsyncContent` (скелетон карточки, ошибка/офлайн с повтором) и «Закрыть».
   Показанное помечается сразу (`useMarkAchievementsSeen`, оптимистично, откат — только своих кодов). Поверх
   `/achievements`, `/races/story/`, ссылок писем, `devices/return`, удаления аккаунта — не открывается. Ошибка запроса
   хоста — тишина. «Поделиться» — `replace(storyPath(raceId))`.
 - Значок «Эмаль» — `achievement-badge.tsx` (роли `surface.default`, `text.primary`, `text.accent`, `action.*`;
-  размеры `BADGE_SIZE` — до `size.badge*` в базе). Появление на вспышке — `Animated` только при
-  `useReducedMotion() === false`.
-- Блок `AchievementsBlock` — `/profile` (все, нажатие → `/achievements/<code>`) и `/riders/[id]` (без перехода): пусто
+  диаметр — `layout.badgeGrid` / `layout.badgeHero`, пропорции — `badgeShape` из `@pokatim/design-tokens`; follow-up
+  `size.badge*` в базе). Появление на вспышке — `Animated` только при `useReducedMotion() === false`; пока ответ
+  неизвестен — значок скрыт (без мигания), последний ответ процесса кэшируется.
+- Блок `AchievementsBlock` — `/profile` (все, нажатие → `/achievements/<code>`) и `/riders/[id]` (без перехода,
+  `publicOnly` — только гоночные, `publicItems`, защита от регресса API): пусто
   без ошибки — блока нет; ошибка — `TabFailure` блока, экран не ломается; pull-to-refresh экранов перезапрашивает
   блок.
 

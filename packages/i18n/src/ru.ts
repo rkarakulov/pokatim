@@ -711,7 +711,6 @@ export const ru = {
   'achievements.object.route': 'Маршрут «{title}»',
   'achievements.object.ride': 'Кофе-райд «{title}»',
   'achievements.a11y': 'Достижение «{title}»: {object}, {date}',
-  'achievements.badge': 'Значок достижения «{title}»',
   'achievements.failed': 'Не удалось загрузить достижения',
   'achievements.flash.kicker': 'Новое достижение',
   'achievements.flash.counter': '{current} из {total}',

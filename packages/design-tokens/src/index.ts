@@ -78,9 +78,21 @@ export { designSystemCss, skeletonCss, typographyCss, type DesignSystemCssOption
  * Раскладка приложения райдера (px): колонка контента на широком экране (web на десктопе, планшет) — не шире
  * `contentMaxWidth`, по центру; на телефоне ограничение не срабатывает. `avatarProfile` — аватар шапки профиля
  * (`.phead-name .ava` прототипа, rider-profile). В базе (`size`) готовых значений нет; follow-up — `size.avatarLg` в
- * app-foundation.
+ * app-foundation. `badgeGrid` / `badgeHero` — значок достижения «Эмаль» в сетке блока профиля и крупно на вспышке
+ * (achievements); follow-up — `size.badge*` в app-foundation.
  */
-export const layout = { contentMaxWidth: 640, avatarProfile: 56 } as const;
+export const layout = {
+  contentMaxWidth: 640,
+  avatarProfile: 56,
+  badgeGrid: 72,
+  badgeHero: 152,
+} as const;
+
+/**
+ * Пропорции значка «Эмаль» (доли диаметра, achievements): отступ и толщина кольца акцента, диск основного действия,
+ * иконка в диске. Px — из диаметра (`layout.badgeGrid` / `layout.badgeHero`), отдельных литералов нет.
+ */
+export const badgeShape = { ringInset: 0.07, ringWidth: 0.1, disc: 0.56, icon: 0.28 } as const;
 
 /** Любая тема набора (у `panel` есть навигация); группы ролей pokatim — `map`, `surfaceBar`, `profile`, `tabBar`. */
 export type Theme = BaseTheme<PokatimRoleGroups>;

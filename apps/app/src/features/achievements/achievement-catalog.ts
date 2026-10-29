@@ -21,6 +21,8 @@ interface CatalogEntry {
   count?: number;
   /** «Поделиться» → сторис результата гонки объекта (A6) — только гоночные */
   shareable: boolean;
+  /** виден в публичном профиле (A7, R9: публично — только протоколы) — только гоночные */
+  public: boolean;
 }
 
 /** Каталог v1 (A1): ключи i18n, значок, шеринг. Исчерпывающий: новый код contracts без строки — ошибка типов. */
@@ -30,18 +32,21 @@ export const ACHIEVEMENT_CATALOG = {
     condition: 'achievements.race_first_finish.condition',
     icon: 'races',
     shareable: true,
+    public: true,
   },
   race_podium: {
     title: 'achievements.race_podium.title',
     condition: 'achievements.race_podium.condition',
     icon: 'medal',
     shareable: true,
+    public: true,
   },
   race_win: {
     title: 'achievements.race_win.title',
     condition: 'achievements.race_win.condition',
     icon: 'trophy',
     shareable: true,
+    public: true,
   },
   races_5: {
     title: 'achievements.races_5.title',
@@ -49,12 +54,14 @@ export const ACHIEVEMENT_CATALOG = {
     icon: 'races',
     count: 5,
     shareable: true,
+    public: true,
   },
   route_first: {
     title: 'achievements.route_first.title',
     condition: 'achievements.route_first.condition',
     icon: 'routes',
     shareable: false,
+    public: false,
   },
   routes_5: {
     title: 'achievements.routes_5.title',
@@ -62,18 +69,21 @@ export const ACHIEVEMENT_CATALOG = {
     icon: 'routes',
     count: 5,
     shareable: false,
+    public: false,
   },
   ride_first: {
     title: 'achievements.ride_first.title',
     condition: 'achievements.ride_first.condition',
     icon: 'rides',
     shareable: false,
+    public: false,
   },
   ride_organizer: {
     title: 'achievements.ride_organizer.title',
     condition: 'achievements.ride_organizer.condition',
     icon: 'person',
     shareable: false,
+    public: false,
   },
   rides_10: {
     title: 'achievements.rides_10.title',
@@ -81,6 +91,7 @@ export const ACHIEVEMENT_CATALOG = {
     icon: 'rides',
     count: 10,
     shareable: false,
+    public: false,
   },
 } as const satisfies Record<AchievementCode, CatalogEntry>;
 
@@ -107,6 +118,11 @@ export function flashQueue(
     .filter((item) => !item.seen && !shown.has(item.code))
     .reverse();
 }
+
+/** Только достижения публичного профиля (A7): гоночные; прочие — защита от регресса API, сервер их не отдаёт. */
+export const publicItems = <T extends PublicRiderAchievement>(
+  items: readonly KnownAchievement<T>[],
+) => items.filter((item) => catalogEntry(item.code).public);
 
 /** Гонка для «Поделиться» (A6): только гоночный код и объект-гонка; незнакомый вид — без кнопки (RC-8). */
 export const shareRaceId = (item: KnownAchievement<PublicRiderAchievement>): string | null =>
