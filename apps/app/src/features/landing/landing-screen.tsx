@@ -17,6 +17,7 @@ import { RouteListCard, RouteListCardSkeleton } from '@/components/route-list-ca
 import { CalendarStartHero } from '@/features/calendar/calendar-hero';
 import { RaceHero } from '@/features/home/heroes';
 import { useNextCalendarStart, useNextRace } from '@/features/home/queries';
+import { InstallBanner } from '@/features/pwa-install/install-banner';
 import { useCurrentSeason } from '@/features/races/queries';
 import { SeasonLinkRow } from '@/features/races/season-row';
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
@@ -160,6 +161,8 @@ export function LandingScreen({ seed }: { seed?: LandingSeed }) {
           <CallToAction />
         </View>
       </ScrollView>
+      {/* «Установить приложение» (только web) — внизу лендинга, под прокруткой */}
+      <InstallBanner />
     </SafeAreaView>
   );
 }

@@ -42,7 +42,7 @@ const initial: InstallStore = {
   standalone: false,
   installed: null,
   deferredPrompt: null,
-  prompt: { showDialog: false, visitsCountAfterClosing: 0 },
+  prompt: { showDialog: false },
   promoRequested: false,
 };
 
@@ -67,10 +67,7 @@ function savePrompt(state: InstallPromptState): void {
   try {
     globalThis.localStorage?.setItem(
       INSTALL_PROMPT_KEY,
-      JSON.stringify({
-        visitsCountAfterClosing: state.visitsCountAfterClosing,
-        closedTimestamp: state.closedTimestamp,
-      }),
+      JSON.stringify({ closedTimestamp: state.closedTimestamp }),
     );
   } catch (error) {
     console.warn(`localStorage unavailable: ${(error as Error).name}`);
@@ -109,7 +106,7 @@ function takePromoParam(): boolean {
 }
 
 /**
- * Chromium шлёт `beforeinstallprompt` рано, до монтирования Главной: слушатели — при загрузке модуля в браузере
+ * Chromium шлёт `beforeinstallprompt` рано, до монтирования экрана с плашкой: слушатели — при загрузке модуля в браузере
  * (на SSR `window` нет). Событие откладываем (`preventDefault` — без мини-инфобара браузера) и показываем свою плашку.
  */
 function listenInstallEvents(): void {
@@ -125,7 +122,7 @@ function listenInstallEvents(): void {
 if (typeof window !== 'undefined') listenInstallEvents();
 
 /**
- * Первое монтирование плашки за загрузку страницы (Главная — только у вошедшего): читаем браузер, считаем визит,
+ * Первое монтирование плашки за загрузку страницы (Главная вошедшего или лендинг `/welcome` гостя): читаем браузер, визит,
  * спрашиваем `getInstalledRelatedApps`, забираем `?show-pwa-modal`. Повторные монтирования — без визита.
  * Возвращает `true`, если в адресе был параметр промо.
  */
