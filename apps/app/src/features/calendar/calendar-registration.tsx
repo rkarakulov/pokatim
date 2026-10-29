@@ -29,6 +29,7 @@ import {
   useCalendarRegistration,
   useCalendarTicketing,
   useCancelCalendarRegistration,
+  useRefreshTicketing,
   useRegisterForCalendarStart,
 } from '@/features/tickets/queries';
 import { formatDistances } from '@/lib/minsk-format';
@@ -242,6 +243,7 @@ export function CalendarRegistration({
   const status = useSessionStore((state) => state.status);
   const signedIn = useSessionStore((state) => isSignedIn(state));
   const ticketing = useCalendarTicketing(start.id, true);
+  const refreshTicketing = useRefreshTicketing(start.id);
 
   if (ticketing.data === undefined) {
     return ticketing.isError ? fallback : <BlockSkeleton />;
@@ -252,6 +254,8 @@ export function CalendarRegistration({
 
   return (
     <Block>
+      {/* ошибка обновления сводки при показанных данных (§4.12): места остаются, баннер и повтор в обход кэша */}
+      {ticketing.isError ? <LoadFailure error={ticketing.error} retry={refreshTicketing} /> : null}
       {seats ? <Meta>{seats}</Meta> : null}
       {isSessionPending(status) ? (
         <BlockSkeleton />

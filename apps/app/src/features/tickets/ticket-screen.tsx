@@ -15,7 +15,7 @@ import { formatMinskDateTime } from '@/lib/minsk-format';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import type { OfflineTicket } from './offline-model';
-import { useTicket } from './queries';
+import { useGoneTickets, useTicket } from './queries';
 import { TicketDetails } from './ticket-details';
 import { TicketSkeleton } from './ticket-skeleton';
 import { useOfflineTicket } from './use-offline-ticket';
@@ -74,8 +74,10 @@ export function TicketScreen({
   const refetchers = useMemo(() => [ticket.refetch], [ticket.refetch]);
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
 
-  // 404 — авторитетный отказ: и при показанных данных (обновление) прежний билет с QR больше не показываем
-  const notFound = code === null || apiErrorCode(ticket.error) === 'NOT_FOUND';
+  // 404 — авторитетный отказ: прежний билет и копия с QR не показываются до следующего успешного ответа (и после
+  // последующего сбоя сети)
+  const gone = useGoneTickets((state) => (code === null ? false : state.codes[code] === true));
+  const notFound = code === null || gone || apiErrorCode(ticket.error) === 'NOT_FOUND';
   const failedWithoutData =
     ticket.data === undefined && (ticket.isError || ticket.fetchStatus === 'paused');
   const retry = () => void ticket.refetch();

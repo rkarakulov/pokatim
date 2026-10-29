@@ -275,4 +275,26 @@ describe('регистрация на старт календаря (event-ticke
     await waitFor(() => expect(screen.queryByText('Не удалось загрузить')).toBeNull());
     expect(getRegistration).toHaveBeenCalledTimes(3);
   });
+
+  it('ошибка обновления сводки при показанных данных — блок остаётся, баннер с повтором в обход кэша', async () => {
+    guest();
+    getTicketing.mockResolvedValueOnce(ticketing());
+    getTicketing.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    getTicketing.mockResolvedValue(ticketing({ seatsLeft: 3 }));
+    const client = createTestQueryClient();
+    await renderRouter(
+      { 'calendar/[id]': CalendarStartRoute, index: () => null },
+      { initialUrl: `/calendar/${ID}`, wrapper: createQueryWrapper(client) },
+    );
+    expect(await screen.findByText('Осталось мест: 12 из 200')).toBeOnTheScreen();
+
+    await act(() => client.refetchQueries({ queryKey: ['calendar', 'ticketing', ID] }));
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.getByText('Осталось мест: 12 из 200')).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByText('Осталось мест: 3 из 200')).toBeOnTheScreen();
+    expect(getTicketing).toHaveBeenLastCalledWith('calendar', ID, { fresh: true });
+    expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+  });
 });

@@ -4,7 +4,8 @@ import type {
   TicketView,
 } from '@pokatim/contracts';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
+import { create } from 'zustand';
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { apiErrorCode } from '@/features/auth/error-messages';
@@ -34,15 +35,43 @@ const PUBLIC_STALE_MS = 60_000;
 /** Предзагрузка ближайших билетов для офлайн-копии (RC-B8): лимит чтения 120/мин — запас. */
 export const PREFETCH_TICKETS = 3;
 
+/**
+ * Коды, на которые сервер ответил 404 (ревью pass 2): прежние данные запроса и офлайн-копия этого кода не
+ * показываются, пока не придёт следующий успешный ответ — сбой сети после 404 не возвращает билет с QR.
+ */
+export const useGoneTickets = create<{ codes: Readonly<Record<string, true>> }>(() => ({
+  codes: {},
+}));
+const markGone = (code: string, gone: boolean) =>
+  useGoneTickets.setState(({ codes }) => {
+    if ((codes[code] === true) === gone) return { codes };
+    const next = { ...codes };
+    if (gone) next[code] = true;
+    else delete next[code];
+    return { codes: next };
+  });
+
+/**
+ * Поколение отмены билета (снятие заявки, отмена регистрации): ответ `getTicket`, начатый до отмены (предзагрузка
+ * Главной), не сохраняет офлайн-копию — иначе вернулся бы прежний QR.
+ */
+let generation = 0;
+const cancelledAt = new Map<string, number>();
+
 /** Билет по коду; успех — копия владельцу сессии начала запроса (ответ `withAccessToken` — той же сессии). */
 async function fetchTicket(code: string): Promise<TicketView> {
   const owner = sessionOwner(useSessionStore.getState().session);
+  const started = generation;
   try {
     const view = await withAccessToken((token) => api.getTicket(token, code));
-    if (owner) void saveOfflineTicket(owner, view);
+    markGone(code, false);
+    if (owner && (cancelledAt.get(code) ?? 0) <= started) void saveOfflineTicket(owner, view);
     return view;
   } catch (error) {
-    if (apiErrorCode(error) === 'NOT_FOUND') void removeOfflineTicket(code);
+    if (apiErrorCode(error) === 'NOT_FOUND') {
+      markGone(code, true);
+      void removeOfflineTicket(code);
+    }
     throw error;
   }
 }
@@ -112,9 +141,22 @@ async function refreshTicketing(queryClient: QueryClient, id: string): Promise<v
     .catch(() => undefined);
 }
 
-/** Билет перестал действовать (отмена регистрации или заявки): офлайн-копия с QR стирается. */
-export function forgetCancelledTicket(code: string | undefined): void {
-  if (code) void removeOfflineTicket(code);
+/**
+ * Билет перестал действовать (отмена регистрации или заявки): офлайн-копия с QR стирается, данные запроса билета
+ * сбрасываются, ответы, начатые до отмены, копию не восстанавливают.
+ */
+export function forgetCancelledTicket(queryClient: QueryClient, code: string | undefined): void {
+  if (!code) return;
+  generation += 1;
+  cancelledAt.set(code, generation);
+  queryClient.removeQueries({ queryKey: ticketKeys.detail(code) });
+  void removeOfflineTicket(code);
+}
+
+/** «Повторить» сводки регистрации — в обход HTTP-кэша. */
+export function useRefreshTicketing(id: string) {
+  const queryClient = useQueryClient();
+  return useCallback(() => void refreshTicketing(queryClient, id), [queryClient, id]);
 }
 
 async function applyRegistration(
@@ -126,7 +168,7 @@ async function applyRegistration(
   await queryClient.cancelQueries({ queryKey: calendarRegistrationKey(id) });
   queryClient.setQueryData(calendarRegistrationKey(id), state);
   if (state.ticket === null || state.ticket.status === 'cancelled') {
-    forgetCancelledTicket(previous?.ticket?.code ?? state.ticket?.code);
+    forgetCancelledTicket(queryClient, previous?.ticket?.code ?? state.ticket?.code);
   }
   await Promise.all([
     refreshTicketing(queryClient, id),

@@ -367,6 +367,7 @@ async function applyEntry(queryClient: QueryClient, entry: MyRaceEntry): Promise
   // заявки больше нет — билет отменён: офлайн-копия с QR стирается (event-tickets)
   if (entry.entry?.status !== 'active') {
     forgetCancelledTicket(
+      queryClient,
       queryClient.getQueryData<MyTicketRef | null>(raceTicketKey(entry.raceId))?.code,
     );
   }

@@ -181,6 +181,56 @@ describe('экран билета /tickets/<код> (AC12, §5.7)', () => {
     expect(removeOfflineTicket).toHaveBeenCalledWith(TICKET_CODE);
   });
 
+  it('успех → 404 → сеть: билет не возвращается до следующего успешного ответа', async () => {
+    getTicket.mockResolvedValueOnce(raceTicket);
+    getTicket.mockRejectedValueOnce(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+    getTicket.mockRejectedValueOnce(new ApiNetworkError(new Error('offline')));
+    const client = createTestQueryClient();
+    useSessionStore.setState({ status: 'signedIn', session: liveSession });
+    await renderRouter(
+      { 'tickets/[code]': TicketRoute, index: () => null },
+      { initialUrl: PATH, wrapper: createQueryWrapper(client) },
+    );
+    await screen.findByRole('image', { name: 'QR-код билета' });
+    const refetch = () =>
+      act(() => client.refetchQueries({ queryKey: ['tickets', 'detail', TICKET_CODE] }));
+
+    await refetch();
+    expect(await screen.findByText('Билет не найден')).toBeOnTheScreen();
+    await refetch();
+    expect(getTicket).toHaveBeenCalledTimes(3);
+    // уведомления Query приходят после act — ждём: билет с QR не должен вернуться
+    await expect(screen.findByRole('image', { name: 'QR-код билета' })).rejects.toThrow();
+    expect(screen.getByText('Билет не найден')).toBeOnTheScreen();
+
+    getTicket.mockResolvedValue(raceTicket);
+    await refetch();
+    expect(await screen.findByRole('image', { name: 'QR-код билета' })).toBeOnTheScreen();
+  });
+
+  it('копия → 404 → сеть: копия больше не показывается', async () => {
+    readCopy.mockResolvedValue({ view: raceTicket, savedAt: SAVED_AT });
+    getTicket.mockRejectedValueOnce(new ApiNetworkError(new Error('offline')));
+    getTicket.mockRejectedValueOnce(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+    getTicket.mockRejectedValueOnce(new ApiNetworkError(new Error('offline')));
+    const client = createTestQueryClient();
+    useSessionStore.setState({ status: 'signedIn', session: liveSession });
+    await renderRouter(
+      { 'tickets/[code]': TicketRoute, index: () => null },
+      { initialUrl: PATH, wrapper: createQueryWrapper(client) },
+    );
+    expect(await screen.findByTestId('ticket-offline-copy')).toBeOnTheScreen();
+    const refetch = () =>
+      act(() => client.refetchQueries({ queryKey: ['tickets', 'detail', TICKET_CODE] }));
+
+    await refetch();
+    expect(await screen.findByText('Билет не найден')).toBeOnTheScreen();
+    await refetch();
+    expect(getTicket).toHaveBeenCalledTimes(3);
+    await expect(screen.findByTestId('ticket-offline-copy')).rejects.toThrow();
+    expect(screen.getByText('Билет не найден')).toBeOnTheScreen();
+  });
+
   it('адрес не код билета — «не найдено» без запроса', async () => {
     await openSignedIn('/tickets/not-a-code!');
     expect(await screen.findByText('Билет не найден')).toBeOnTheScreen();
