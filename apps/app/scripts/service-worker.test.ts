@@ -1,9 +1,11 @@
 /// <reference types="jest" />
 import {
   cacheVersion,
+  isTicketNavigationPath,
   type PrecacheFile,
   precacheList,
   serviceWorkerSource,
+  TICKET_SHELL_KEY,
 } from './service-worker.ts';
 
 const ENTRY = '/_expo/static/js/web/entry-872592925b2b7e57d14b37108df0c4d9.js';
@@ -86,5 +88,124 @@ describe('service worker: precache', () => {
     expect(source).not.toContain('/v1');
     expect(source).not.toContain('/_expo/loaders');
     expect(source).not.toContain('#v1');
+  });
+});
+
+describe('service worker: оболочка билета для офлайн-старта PWA (event-tickets AC12)', () => {
+  const files = withContent(precacheList(exported));
+  const source = serviceWorkerSource(files);
+
+  it('кеш оболочки — с версией сборки (старая оболочка ссылалась бы на удалённые бандлы)', () => {
+    expect(source).toContain(`tickets-shell-${cacheVersion(files)}`);
+    expect(source).toContain("key.startsWith('tickets-shell-')");
+  });
+
+  it('только навигации на /tickets/<код>: network-first, в кеш — одна общая оболочка (не по коду)', () => {
+    expect(isTicketNavigationPath('/tickets/ABCDE12345')).toBe(true);
+    expect(isTicketNavigationPath('/tickets/abcde-12345')).toBe(true);
+    for (const other of [
+      '/tickets',
+      '/tickets/',
+      '/tickets/A/B',
+      '/races/x',
+      '/',
+      '/v1/tickets/A',
+    ]) {
+      expect(isTicketNavigationPath(other)).toBe(false);
+    }
+    expect(source).toContain("event.request.mode === 'navigate'");
+    expect(source).toContain(`${TICKET_SHELL_KEY}`);
+  });
+});
+
+describe('service worker: поведение оболочки билета (исполнение sw.js)', () => {
+  type Listener = (event: {
+    request: { url: string; method: string; mode: string };
+    respondWith: (response: Promise<unknown>) => void;
+    waitUntil: (promise: Promise<unknown>) => void;
+  }) => void;
+
+  /** sw.js в песочнице: `self`, `caches`, `fetch` — фейки; возвращает обработчик fetch и хранилище кешей. */
+  function load(fetchImpl: (request: unknown) => Promise<unknown>) {
+    const listeners: Record<string, Listener> = {};
+    const stores = new Map<string, Map<string, unknown>>();
+    const caches = {
+      open: async (name: string) => {
+        if (!stores.has(name)) stores.set(name, new Map());
+        const store = stores.get(name)!;
+        return {
+          put: async (key: string, value: unknown) => void store.set(key, value),
+          match: async (key: string) => store.get(key),
+          addAll: async () => undefined,
+        };
+      },
+      match: async () => undefined,
+      keys: async () => [...stores.keys()],
+      delete: async (name: string) => stores.delete(name),
+    };
+    const self = {
+      location: { origin: 'https://pokatim.test' },
+      addEventListener: (type: string, listener: Listener) => (listeners[type] = listener),
+      skipWaiting: () => undefined,
+      clients: { claim: async () => undefined },
+    };
+    new Function('self', 'caches', 'fetch', serviceWorkerSource(withContent([ENTRY])))(
+      self,
+      caches,
+      fetchImpl,
+    );
+    const respond = async (path: string, mode = 'navigate') => {
+      let result: Promise<unknown> | undefined;
+      listeners.fetch!({
+        request: { url: `https://pokatim.test${path}`, method: 'GET', mode },
+        respondWith: (response) => (result = response),
+        waitUntil: () => undefined,
+      });
+      return result;
+    };
+    return { respond, stores };
+  }
+
+  const html = (body: string) => ({
+    ok: true,
+    type: 'basic',
+    redirected: false,
+    body,
+    clone() {
+      return { ...this };
+    },
+  });
+
+  it('онлайн — ответ сети, оболочка сохраняется; офлайн — оболочка для любого кода', async () => {
+    let online = true;
+    const { respond, stores } = load(async () => {
+      if (!online) throw new TypeError('offline');
+      return html('shell');
+    });
+
+    await expect(respond('/tickets/ABCDE12345')).resolves.toMatchObject({ body: 'shell' });
+    await new Promise((done) => setTimeout(done, 0));
+    expect([...stores.keys()].some((key) => key.startsWith('tickets-shell-'))).toBe(true);
+
+    online = false;
+    await expect(respond('/tickets/FGHJK67890')).resolves.toMatchObject({ body: 'shell' });
+  });
+
+  it('офлайн без сохранённой оболочки — ошибка сети; редирект и не-200 не кешируются', async () => {
+    const { respond, stores } = load(async () => ({ ...html('x'), redirected: true }));
+    await respond('/tickets/ABCDE12345');
+    await new Promise((done) => setTimeout(done, 0));
+    expect(stores.size).toBe(0);
+
+    const offline = load(async () => {
+      throw new TypeError('offline');
+    });
+    await expect(offline.respond('/tickets/ABCDE12345')).rejects.toThrow('offline');
+  });
+
+  it('прочие навигации и запросы билета не из навигации — мимо service worker', async () => {
+    const { respond } = load(async () => html('x'));
+    await expect(respond('/races/x')).resolves.toBeUndefined();
+    await expect(respond('/tickets/ABCDE12345', 'cors')).resolves.toBeUndefined();
   });
 });

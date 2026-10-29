@@ -1,5 +1,5 @@
-// Service worker web-сборки: только кеш статики сборки (без офлайн-данных). Чистые функции —
-// генератор scripts/build-service-worker.ts и тесты.
+// Service worker web-сборки: кеш статики сборки и HTML-оболочка экрана билета для офлайн-старта PWA (event-tickets
+// AC12; данных билета в оболочке нет). Чистые функции — генератор scripts/build-service-worker.ts и тесты.
 import { createHash } from 'node:crypto';
 
 /**
@@ -38,12 +38,30 @@ export function cacheVersion(files: readonly PrecacheFile[]): string {
 
 const CACHE_PREFIX = 'static-';
 
+/**
+ * Оболочка экрана билета (event-tickets AC12, RC-B4): SSR `/tickets/<код>` не содержит данных билета — сессия на
+ * сервере неизвестна, разметка — скелетон оболочки и нейтральная мета `noindex`, одинаковые для любого кода. Её можно
+ * отдать из кеша холодному старту PWA без сети: билет показывает офлайн-копия (`localStorage`) после гидрации. В кеше
+ * — одна запись под общим ключом (не по коду), с версией сборки; выход из аккаунта удаляет кеш
+ * (`offline-store.web.ts`, префикс `tickets-shell-`).
+ */
+export const TICKET_SHELL_PREFIX = 'tickets-shell-';
+export const TICKET_SHELL_KEY = '/tickets/__shell';
+const TICKET_PATH = /^\/tickets\/[^/]+$/;
+
+/** Навигация на экран билета — единственная HTML-страница, которую service worker кеширует. */
+export const isTicketNavigationPath = (path: string) => TICKET_PATH.test(path);
+
 /** Текст `sw.js`: install — precache, activate — удаление прошлых версий, fetch — cache-first по списку. */
 export function serviceWorkerSource(files: readonly PrecacheFile[]): string {
-  const cache = `${CACHE_PREFIX}${cacheVersion(files)}`;
+  const version = cacheVersion(files);
+  const cache = `${CACHE_PREFIX}${version}`;
   return `// сгенерирован scripts/build-service-worker.ts — не править
 const CACHE = ${JSON.stringify(cache)};
 const FILES = new Set(${JSON.stringify(files.map(({ path }) => path))});
+const SHELL = ${JSON.stringify(`${TICKET_SHELL_PREFIX}${version}`)};
+const SHELL_KEY = ${JSON.stringify(TICKET_SHELL_KEY)};
+const TICKET_PATH = ${TICKET_PATH.toString()};
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll([...FILES])));
@@ -57,7 +75,11 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key.startsWith(${JSON.stringify(CACHE_PREFIX)}) && key !== CACHE)
+            .filter(
+              (key) =>
+                (key.startsWith(${JSON.stringify(CACHE_PREFIX)}) && key !== CACHE) ||
+                (key.startsWith('${TICKET_SHELL_PREFIX}') && key !== SHELL),
+            )
             .map((key) => caches.delete(key)),
         ),
       )
@@ -65,10 +87,34 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// только GET своей статики из списка; HTML, данные и API — сеть, как без service worker
+// оболочка билета: сеть первой; успешный HTML (200, своя origin, без редиректа) — в кеш под общим ключом; нет сети —
+// оболочка из кеша (нет её — ошибка сети, как без service worker)
+function ticketShell(request) {
+  return fetch(request)
+    .then((response) => {
+      if (response.ok && response.type === 'basic' && !response.redirected) {
+        const copy = response.clone();
+        caches.open(SHELL).then((cache) => cache.put(SHELL_KEY, copy)).catch(() => undefined);
+      }
+      return response;
+    })
+    .catch((error) =>
+      caches
+        .open(SHELL)
+        .then((cache) => cache.match(SHELL_KEY))
+        .then((hit) => hit ?? Promise.reject(error)),
+    );
+}
+
+// только GET своей статики из списка и навигации на экран билета; прочий HTML, данные и API — сеть, как без
+// service worker
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (event.request.mode === 'navigate' && TICKET_PATH.test(url.pathname)) {
+    event.respondWith(ticketShell(event.request));
+    return;
+  }
   if (!FILES.has(url.pathname)) return;
   event.respondWith(caches.match(event.request).then((hit) => hit ?? fetch(event.request)));
 });

@@ -484,6 +484,29 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `viewer.reported` сервера; скрытый райд (`phase: 'hidden'`, видит только организатор через `me`) — баннер без
   действий.
 
+## Билеты (event-tickets, `docs/product/tickets.md`, ADR-0023)
+
+- Экран `/tickets/[code]` — в корневом `Stack` **вне** `Stack.Protected`, гард в самом экране (RC-B1, образец —
+  `settings/account/delete`): `unknown` — скелетон оболочки; `unavailable` — офлайн-копия или ошибка с повтором; гость —
+  `rememberReturnPath('/tickets/<код>')` → «Вход»; вошёл — билет без онбординга. Код из адреса — `canonicalTicketCode`
+  (`TicketCode`); в allowlist возврата — только канонический код. `generateMetadata` — нейтральный `noindex` без кода и
+  `og:url`, без `loader`: SSR-разметка одинакова для любого кода и без данных билета.
+- Ключи: `['tickets','list'|'detail',code]`, `['races','ticket',id]` (мутации участия инвалидируют его и `['tickets']`),
+  `['calendar','ticketing'|'registration',id]`. Хуки — `features/tickets/queries.ts`; мутации регистрации —
+  `networkMode: 'always'`, «мест нет» и «закрыта» — только по ответу сервера (`EVENT_FULL`, `EVENT_REGISTRATION_CLOSED`).
+- Офлайн-копии (`features/tickets/offline-store(.web).ts`, модель `offline-model.ts`): пишет каждый успешный `getTicket`
+  (и предзагрузка ≤ 3 ближайших на Главной), 404 стирает копию кода; ≤ 10, до суток после события; владелец — `sub`
+  сессии (чужой — стирание). Native: QR — только SecureStore `pokatim.ticketQr`, остальное — файл
+  `tickets-offline.json` (документы); web — `localStorage['pokatim.ticketsOffline']`. Стирание — `useSignOut` и подписка
+  корневого layout на переход в `signedOut` (включая запуск без сессии). QR не пишем в логи, URL и подписи a11y.
+- Service worker: навигации на `/tickets/<код>` — сеть первой, успешный HTML — в кеш `tickets-shell-<версия>` под
+  общим ключом, без сети — оттуда (офлайн-старт PWA); выход удаляет кеш (`clearOfflineTickets` web).
+- QR — `features/tickets/qr-matrix.ts` (ядро `qrcode/lib/core/qrcode`, без рендереров canvas/png) → `path`; native —
+  `react-native-svg` лениво (`useSvgLib`), web — inline `<svg>`. Цвета — роли `ticket.qrInk`/`ticket.qrPaper`
+  (`@pokatim/design-tokens`, светлая «бумага» во всех темах, контраст ≥ 7:1).
+- «Поделиться» билетом — только ссылка на событие без кода и QR (RC-B2). «Как добраться» — `maps-link.ts` (https-поиск
+  по адресу, `openExternalUrl`).
+
 ## Оболочка и неизвестные адреса (смоук dev 2026-10-27)
 
 - Неизвестный адрес — `src/app/+not-found.tsx` (`NotFoundScreen`: «Страница не найдена», «На главную»; SSR — 404).
