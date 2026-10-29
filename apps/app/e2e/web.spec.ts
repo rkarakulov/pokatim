@@ -462,13 +462,18 @@ test('свой профиль /profile без сессии (rider-profile): HTML
 });
 
 test.describe('достижения без сессии (achievements): HTML без данных и OG, после гидрации — гард входа', () => {
-  for (const path of ['/achievements/flash', '/achievements/race_win']) {
+  for (const path of [
+    '/achievements/flash',
+    '/achievements/race_win',
+    '/achievements/story/race_win',
+  ]) {
     test(path, async ({ page, request }) => {
       const response = await request.get(path);
       expect(response.status()).toBe(200);
       const html = await response.text();
       // экраны не публичные: без значка, кнопок вспышки и OG
       expect(html).not.toContain('achievement-card');
+      expect(html).not.toContain('story-preview');
       expect(html).not.toContain('og:title');
 
       await page.goto(path);

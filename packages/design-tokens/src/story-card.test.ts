@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { APP_FONT_FILE_IDS, appFontFaces, fontFilesOf } from './app-fonts.ts';
 import { appThemes } from './app-themes.ts';
-import { storyCard, storyCardColors } from './story-card.ts';
+import { storyCard, storyCardBadgeColors, storyCardColors } from './story-card.ts';
 
 describe('storyCard — прототип 360×640 × 3', () => {
   it('экспорт 1080×1920, поле 60, линия 3', () => {
@@ -32,6 +32,25 @@ describe('storyCardColors', () => {
         expect(colors.ink).toBe(scheme.text.primary);
       }
     }
+  });
+});
+
+describe('storyCardBadgeColors', () => {
+  it('диск и иконка — роли действия схемы (как значок приложения)', () => {
+    for (const def of Object.values(appThemes)) {
+      for (const scheme of [def.schemes.light, def.schemes.dark]) {
+        expect(storyCardBadgeColors(scheme)).toEqual({
+          disc: scheme.action.primary,
+          icon: scheme.action.onPrimary,
+        });
+      }
+    }
+  });
+
+  it('значок достижения вписан в ширину колонки', () => {
+    const column = storyCard.size.width - 2 * storyCard.insetX;
+    expect(storyCard.achievement.badge).toBeLessThanOrEqual(column);
+    expect(storyCard.achievement.badgeNight).toBeLessThan(storyCard.achievement.badge);
   });
 });
 
