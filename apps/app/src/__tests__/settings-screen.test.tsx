@@ -38,6 +38,7 @@ async function openSettings() {
     {
       'settings/index': SettingsScreen,
       'settings/language': LanguageScreen,
+      'settings/theme': stub,
       profile: stub,
       'settings/verified': stub,
       'settings/devices': stub,
@@ -52,7 +53,7 @@ const links = () =>
   screen.getAllByRole('link').map((link) => link.props.accessibilityLabel as string);
 
 describe('«Настройки»: разделы (AC2)', () => {
-  it('заголовок, разделы аккаунта, язык, версия; пункта «Тема» нет', async () => {
+  it('заголовок, разделы аккаунта, тема, язык, версия', async () => {
     await openSettings();
     expect(await screen.findByRole('header', { name: 'Настройки' })).toBeOnTheScreen();
     for (const kicker of ['Аккаунт', 'Приложение', 'О приложении']) {
@@ -63,12 +64,12 @@ describe('«Настройки»: разделы (AC2)', () => {
       'Анкета Verified',
       'Устройства',
       'Уведомления',
+      'Тема, Классика',
       'Язык, Русский',
     ]);
     expect(screen.getByLabelText('Версия, 1.0.0')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Выйти' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Удалить аккаунт' })).toBeOnTheScreen();
-    expect(screen.queryByText(/Тема/)).toBeNull();
   });
 
   it.each([
@@ -77,6 +78,7 @@ describe('«Настройки»: разделы (AC2)', () => {
     ['Анкета Verified', '/settings/verified'],
     ['Устройства', '/settings/devices'],
     ['Уведомления', '/settings/notifications'],
+    ['Тема, Классика', '/settings/theme'],
     ['Язык, Русский', '/settings/language'],
   ])('«%s» ведёт на %s', async (label, path) => {
     const router = await openSettings();
@@ -171,7 +173,7 @@ describe('язык при запуске (AC5)', () => {
 });
 
 describe('гость (AC6)', () => {
-  it.each(['/settings', '/settings/language'])(
+  it.each(['/settings', '/settings/language', '/settings/theme'])(
     '%s → лендинг (гард вкладок, guest-landing)',
     async (url) => {
       resetSessionStore();

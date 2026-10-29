@@ -18,4 +18,20 @@ describe('SettingsRow (web)', () => {
       'false',
     );
   });
+
+  it('строка выбора с превью и описанием (user-theme): радио по названию, описание — подсказкой и текстом', () => {
+    render(
+      <SettingsRow
+        label="Атлас"
+        description="Карта и маршрут на первом плане"
+        leading={<span data-testid="preview" />}
+        selected={false}
+        onPress={() => undefined}
+      />,
+    );
+    const radio = screen.getByRole('radio', { name: 'Атлас' });
+    expect(radio.getAttribute('aria-checked')).toBe('false');
+    expect(radio.textContent).toContain('Карта и маршрут на первом плане');
+    expect(screen.getByTestId('preview')).toBeTruthy();
+  });
 });
