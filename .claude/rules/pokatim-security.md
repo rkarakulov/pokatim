@@ -379,3 +379,13 @@ paths:
   будущий — 409; на картинке — только публичные поля райда (как `GET /v1/rides/:id`, без описания, подписи
   организатора, участников); линия — только маршрута в каталоге (`RideRoutes.catalogLine`), `private` — никогда.
   Лимиты — общие с карточками сторис; логи — id райда, шаблон, итог (без `userId`, названия, места, токена).
+
+## Материалы событий (event-tickets PR C, ADR-0023 п. 10)
+
+- PDF организатора — исключение из «подписанных URL», как аватары: `GET /v1/event-files/:id` без входа по
+  `randomToken`, тип — только по сигнатуре `%PDF-` (≤ 10 МиБ, `readLimited`, 413 + `Connection: close`, лимит загрузок
+  до тела), ответ — `application/pdf`, `Content-Disposition: attachment` (ASCII-заглушка + `filename*` UTF-8, имя без
+  `/\"` и управляющих), `default-src 'none'; sandbox`, `nosniff`, `Referrer-Policy: no-referrer`, `immutable` только у
+  200; кривой и неизвестный id — один 404. Ссылки материалов — https без учётных данных (`RegistrationUrl`).
+- Панель: `Permissions-Policy` (`camera=(self)`, остальное выключено) — в каждом `location` `admin-nginx.conf` и в
+  `vite preview`; сторож — `apps/admin/src/csp.test.ts`.

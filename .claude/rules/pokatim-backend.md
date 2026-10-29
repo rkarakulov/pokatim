@@ -265,6 +265,15 @@ paths:
 - Письмо — очередь `tickets-email` (`TicketEmailHandler`, захват `email.state`, RC-T11), шаблон
   `mail/ticket-email.ts` (`htmlEmail`/`buttonHtml`/`escapeHtml`/`minskDateTime` из `identity`), кнопка — env
   `APP_WEB_ORIGIN`.
+- Доступ панели к событию — один класс `PanelEvents.resolve(principal, kind, eventId, purpose)` (403 до чтения, нет
+  или чужое — 404); его зовут `TicketingAdminService` и `MaterialsAdminService`, второй проверки нет.
+- Материалы (PR C): `MaterialsRepository` — единственный писатель `event_materials`/`event_material_files`, фильтры
+  всегда с `kind, eventId`; `MaterialsAdminService` (CRUD, `PUT …/materials/order`, `POST …/materials/:id/delete`,
+  загрузка `POST …/materials/files` — до тела: доступ → лимит `tickets-material-upload:<uid>` 30/ч → счётчики →
+  `readLimited` 10 МиБ → сигнатура `%PDF-` → транзакция; журнал `tickets.material_*`); `MaterialsRead` (публичный
+  список `events/:kind/:eventId/materials`, `TicketView.materials`, письмо); `EventFilesController`
+  (`event-files/:id`, `PublicReadGuard` + `@IpRateLimit('event-file', 60/ч)`, заголовки после чтения). Правила
+  содержимого — `materialContentIssues` контрактов; политика файла — `materials.policy.ts`.
 
 ## Достижения (`achievements`, ADR-0020 Proposed)
 

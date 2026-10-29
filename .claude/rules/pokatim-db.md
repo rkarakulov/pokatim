@@ -441,6 +441,11 @@ paths:
   отмены регистрации и check-in `tickets` через порт `CALENDAR_EVENTS`; наружу не выходит.
 - Удаление аккаунта — `TicketErasure`: активные регистрации → `cancelled` (с билетом и местом, транзакция на
   регистрацию), активные билеты гонок → `cancelled`; документы псевдонимные.
+- Материалы (PR C) — `event_materials` (`file: { id, name, size } | null` — денормализация, список без байтов) и
+  `event_material_files` (`_id` = `randomToken`, `bytes` — Binary ≤ 10 МиБ); писатель — `MaterialsRepository`;
+  миграция `0039_event_materials`: уникальный `event_materials_event_order_unique { kind, eventId, order }`
+  (параллельные добавления конфликтуют — лимиты 20/10 без гонок; перестановка — через временные отрицательные
+  позиции). Файлы — только чтение по `_id`. ПДн нет (`updatedBy`/`createdBy` — сотрудники) — шага стирания нет.
 
 ## Удаление аккаунта (ADR-0015, `docs/product/account.md`)
 

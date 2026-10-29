@@ -163,6 +163,16 @@ paths:
   `{ decor, version }`, сразу, без «Сохранить»); 409 — `ConflictBanner` с перечитыванием; после переключения —
   инвалидация журнала. Журнал — названия тем истории `appearance.theme_changed` из общих ключей `theme.<id>.name`.
   Панель остаётся в теме `panel`.
+- Билеты (event-tickets C) — `features/tickets/*`: `EventTicketsScreen` (маршруты `races/$raceId/tickets`,
+  `calendar/$startId/tickets`; право — по виду события на сервере, 403 — «Нет доступа», 404 — «не найдено»):
+  `TicketingSettingsForm` (выключение при билетах — `Dialog` с числом), `MaterialsSection` + `MaterialDialogs`,
+  `ParticipantsSection` (`Can tickets.checkin`); блок `TicketingSummary` — на опубликованной гонке (`Can
+  races.manage`) и в rail календаря. `CheckboxField` — `src/ui/fields.tsx`.
+- «Check-in» — `features/check-in/*`: отдельная защищённая ветка `checkInLayoutRoute` (тот же `requireSession`) **без
+  сайдбара** — исключение из desktop 1440 (телефон на старте, от 360 px; две колонки — от 900 px). Камера — только по
+  кнопке; `scanner.ts` — выбор декодера (`BarcodeDetector`, иначе `jsqr` динамическим импортом), `parseScan`,
+  дедупликация 5 с. Камере нужен `Permissions-Policy: camera=(self)` в `admin-nginx.conf` (каждый `location`) и в
+  `vite preview` (`panelHeader` в `vite.config.ts`).
 
 ## Проверка
 

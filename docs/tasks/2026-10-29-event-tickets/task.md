@@ -351,6 +351,40 @@ PR A (coder, 2026-10-29). Одобрены architect (§8.1):
 сверяет гонки со стартом позже `now − 61 сут`, выпуск — только в окне check-in, отмены снятых заявок — пока открыто окно
 гонки + сутки (заявку можно снять до закрытия окна гонки; сутки — запас на отставание регламента).
 
+PR C (coder, 2026-10-29, ветка `feature/event-tickets-panel`). Решения RC-C1…RC-C9 `plan-C.md` приняты по умолчанию:
+
+- RC-C1 — одна страница «Билеты и материалы» (`/races/:id/tickets`, `/calendar/:id/tickets`: настройки, материалы,
+  участники) + компактный блок «Билеты» на опубликованной гонке (`Can races.manage`) и в rail календаря.
+- RC-C2 — «Check-in» — отдельная защищённая ветка `checkInLayoutRoute` без сайдбара (тот же `requireSession`), от
+  360 px, две колонки от 900 px; пункт сайдбара после «Календаря».
+- RC-C3 — PDF отдаётся `attachment` + `default-src 'none'; sandbox` + `nosniff` + `no-referrer`.
+- RC-C4 — исключение из «файлы — подписанные URL» записано в ADR-0023 п. 10.
+- RC-C5 — тип — тема, содержимое — одно из: ссылка | PDF | только текст; правило — `materialContentIssues` в
+  контрактах (форма, `superRefine` схемы и сервер). Дополнение coder: файл у `link`/`gpx`/`text` — `type: INVALID`.
+- RC-C6 — `POST …/materials/files` создаёт материал вместе с файлом в одной транзакции (сирот нет).
+- RC-C7 — удаление `POST …/materials/:id/delete` (204), порядок `PUT …/materials/order`, правка `PATCH …/:id` —
+  вместо `DELETE` из §5.5.
+- RC-C8 — `tickets.material_added|updated (changedFields)|removed`, `tickets.materials_reordered` (subject — событие);
+  показ `details.ticketCode` («Участник отмечен: Билет ·XXXXX-XXXXX») в «Журнале действий».
+- RC-C9 — публичный список — для гонки `published|cancelled` и опубликованного старта независимо от `enabled`; файл
+  событие не проверяет.
+
+Отклонения и решения coder (PR C):
+
+- Миграция — `0039_event_materials` (в плане `0038`, занят билетами PR A).
+- Индекс `event_materials_event_order_unique { kind, eventId, order }` — **уникальный** (в плане — обычный):
+  параллельные добавления конфликтуют, лимиты 20/10 считаются без гонки; перестановка — через временные отрицательные
+  позиции. Перестановка версию материалов не меняет (диалог правки не получает ложный 409).
+- Кривой id файла `GET /v1/event-files/:id` — тот же 404 (не 400 ZodValidationPipe).
+- Чтение материалов для участников — `MaterialsRead` (`TicketsCoreModule`: публичный список, `TicketView`, письмо);
+  в письме текстовые материалы — «Название: описание».
+- Путь `…/materials/:materialId` — схема `EventMaterialParams` в контрактах.
+- Подписи изменённых полей в журнале для действий `tickets.*` — `admin.tickets.field.*` (а не полей гонки/старта).
+- **§7 плана (приложение `apps/app`) не сделано**: по указанию оркестратора `apps/app/**` в этой ветке не трогать
+  (параллельно PR B). Готово для него: `api.getEventMaterials(kind, id)`, `api.eventFileUrl(fileId)`,
+  `TicketView.materials`. Компонент `event-materials`, блок на карточках гонки и календаря и на экране билета —
+  в PR B или следующем PR (AC9 «на билете и в карточке события» — серверная часть и письмо готовы, UI приложения нет).
+
 ## 8.3 Security checklist
 
 Затронуто: токены (QR), публичные URL, файлы (PDF), права панели, письма со ссылками. См. §5.3.
@@ -575,3 +609,50 @@ ADR-0023 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.m
 - UI приложения и панели (PR B, C); показ `details.ticketCode` в «Журнале действий» панели — PR C.
 - Номер миграции `0037` сверить с `origin/develop` перед мержем.
 - `apps/admin/src/test/app.tsx` — фикстура прав organizer без `tickets.checkin` (на тесты не влияет, обновить в PR C).
+
+### PR C — материалы, панель билетов, check-in (coder, 2026-10-29, ветка `feature/event-tickets-panel`)
+
+Сделано (по `plan-C.md`, кроме §7 — см. 8.2):
+
+- Контракты: `src/tickets/materials.schema.ts` (+ тест), `TicketView.materials` (необязательное), коды
+  `MATERIAL_FILE_UNSUPPORTED`/`MATERIAL_FILE_TOO_LARGE`, причины `materials_limit`/`files_limit`, 4 действия журнала;
+  api-client — `getEventMaterials`, `eventFileUrl` (приложение), 7 методов панели (+ тест `event-materials.test.ts`).
+- API (`modules/tickets`): `PanelEvents` (вынос проверки доступа из `TicketingAdminService`), `MaterialsRepository`,
+  `MaterialsAdminService`/контроллер (CRUD, порядок, загрузка PDF), `MaterialsRead` + публичный список,
+  `EventFilesController`, `materials.policy.ts`; материалы в `TicketView` и письме. Миграция `0039_event_materials`.
+- Панель: `features/tickets/*` (страница «Билеты и материалы», `TicketingSettingsForm`, `MaterialsSection`,
+  `MaterialDialogs`, `ParticipantsSection`, `TicketingSummary` на гонке и в rail календаря), `features/check-in/*`
+  (`CheckInScreen`, `QrScanner`, `scanner.ts`), layout без сайдбара, пункт «Check-in», `CheckboxField`, журнал —
+  `ticketCode` и подписи действий/полей, фикстура organizer/admin + `tickets.checkin`; зависимость `jsqr@1.4.0`
+  (отдельный чанк `jsQR-*.js`).
+- Инфраструктура: `Permissions-Policy` в `admin-nginx.conf` (сервер + все `location`) и `vite preview`, сторож
+  `csp.test.ts`.
+- Документы: ADR-0023 п. 10–11, `docs/product/tickets.md`, `admin-panel.md`, правила
+  `pokatim-{backend,db,contracts,security,web}.md`.
+
+Тесты: int `tickets-materials.int.test.ts` (11: права на каждую ручку, чужое событие, CRUD/порядок/версия/журнал,
+RC-C5, лимиты 20/10, загрузка 415/413/429, заголовки файла, 404 файла, публичный список RC-C9), дополнены
+`tickets-read`/`tickets-email.int.test.ts`, `migrations.int.test.ts` (`0039`); unit — `materials.policy.test.ts`,
+`mail/ticket-email.test.ts`; RTL — `EventTicketsScreen.test.tsx` (12), `CheckInScreen.test.tsx` + `scanner.test.ts`
+(10), `CheckboxField.test.tsx`, `AuditScreen`, `AppLayout`, `csp.test.ts`; e2e — `apps/admin/e2e/check-in.spec.ts`.
+
+Отрицательные доказательства (механизм убран временно → красный тест, затем восстановлен): без проверки сигнатуры
+`%PDF-` — тест «не PDF — 415» красный; без `kind, eventId` в фильтрах материала — тест «материал чужого события — 404»
+красный.
+
+Проверки:
+
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_tc_test REDIS_URL_TEST=…/3 pnpm check` → `Tasks: 15 successful, 15
+  total`, `EXIT=0`; api — 193 файла / 1993 теста, admin — 43 / 410, api-client — 149.
+- Миграции дважды (своя БД `pokatim_c_e2e`): первый прогон применил `…0038_tickets, 0039_event_materials`, второй —
+  «новых миграций нет».
+- `ADMIN_BASE=/admin/ pnpm --filter @pokatim/admin build` — собрано, `jsQR` — отдельный чанк.
+- `pnpm e2e:admin` (своя БД `pokatim_c_e2e`, Redis db 8, локальный Mailpit, Chrome) → 3 passed (admin, check-in,
+  races).
+
+Не сделано / открыто:
+
+- UI приложения (§7 плана: `event-materials`, карточки гонки/календаря, экран билета) — не трогали `apps/app` по
+  указанию оркестратора (PR B параллельно); API и клиент готовы.
+- Ручная проверка камеры на телефоне (iOS Safari, Android Chrome) и скачивания PDF — не выполнялась.
+- Номер миграции `0039` сверить с `origin/develop` перед мержем.
