@@ -8,6 +8,7 @@ import { AccessibilityInfo } from 'react-native';
 import { takeReturnPath } from '@/features/auth/return-path';
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
+import { removeOfflineTicket } from '@/features/tickets/offline-store';
 import { api } from '@/lib/api';
 
 import RaceRoute from '../app/races/[id]';
@@ -34,6 +35,12 @@ import {
 
 jest.mock('@/lib/api');
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
+jest.mock('@/features/tickets/offline-store', () => ({
+  saveOfflineTicket: jest.fn(async () => undefined),
+  readOfflineTicket: jest.fn(async () => null),
+  removeOfflineTicket: jest.fn(async () => undefined),
+  clearOfflineTickets: jest.fn(async () => undefined),
+}));
 
 const getRace = jest.mocked(api.getRace);
 const getMyRaceEntry = jest.mocked(api.getMyRaceEntry);
@@ -733,6 +740,8 @@ describe('«Открыть билет» в «Ваше участие» (event-ti
     expect(await screen.findByText('Участие отменено')).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Открыть билет' })).toBeNull();
     expect(jest.mocked(api.getRaceTicket).mock.calls.length).toBeGreaterThanOrEqual(calls);
+    // офлайн-копия билета снятой заявки (с QR) стирается
+    expect(removeOfflineTicket).toHaveBeenCalledWith('ABCDE12345');
   });
 });
 

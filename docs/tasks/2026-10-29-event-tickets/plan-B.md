@@ -284,3 +284,14 @@ signIn,registered,cancel,cancelConfirm,full,closed,seatsLeft,distance,distanceRe
 Не проверено (NOT VERIFIED): iOS и Android на устройстве/симуляторе (QR читается сканером, офлайн-копия в авиарежиме,
 холодный старт native), PWA офлайн-старт в реальном браузере (поведение SW покрыто исполнением `sw.js` в jest), e2e с
 API (`E2E_API=1`).
+
+### Фиксы ревью pass 1 (Codex REQUEST CHANGES, Claude APPROVE с замечаниями)
+
+Все замечания подтверждены по коду и исправлены с тестами: возврат к билету после входа — без ожидания онбординга
+(`skipsOnboarding`); сторона QR — токен `layout.ticketQr`; ошибка обновления своей регистрации — баннер с повтором над
+данными; сводка мест после регистрации, отмены и 409 — `getEventTicketing(…, { fresh: true })` (`cache: 'no-cache'`,
+api-client); 404 при обновлении скрывает билет; отмена регистрации и снятие заявки стирают офлайн-копию; native-копия —
+в `Paths.cache` (без бэкапа; ОС может очистить — тогда копии нет); запись оболочки SW — в `event.waitUntil`; web —
+признаки выхода соседней вкладки (`session-markers.ts`) блокируют запись и чтение копий; `/tickets/*` — `Referrer-Policy:
+no-referrer`. Проверки: prettier, eslint, arch, typecheck — зелёные; тесты app 227/2110, admin, api-client,
+design-tokens, i18n — зелёные; `build:web` — ок. API не затронут (тесты API не перезапускались).

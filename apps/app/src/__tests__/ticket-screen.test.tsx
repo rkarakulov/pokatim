@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 import * as returnPath from '@/features/auth/return-path';
 import { useSessionStore } from '@/features/auth/session-store';
@@ -18,7 +18,7 @@ import CalendarStartRoute from '../app/calendar/[id]';
 import RaceRoute from '../app/races/[id]';
 import TicketRoute from '../app/tickets/[code]';
 import { appRoutes } from './app-routes';
-import { createQueryWrapper } from './query-wrapper';
+import { createQueryWrapper, createTestQueryClient } from './query-wrapper';
 import { EMAIL, liveSession, session, storeSession, storeSurveyCompleted } from './auth-fixtures';
 import { USER_A } from './jwt';
 
@@ -152,6 +152,7 @@ describe('экран билета /tickets/<код> (AC12, §5.7)', () => {
       `https://yandex.by/maps/?text=${encodeURIComponent('пр. Победителей, 1, Минск')}`,
     );
     jest.mocked(api.getRace).mockReturnValue(new Promise(() => undefined));
+    jest.mocked(api.getMyRaceEntry).mockReturnValue(new Promise(() => undefined));
     await fireEvent.press(screen.getByRole('button', { name: 'О событии' }));
     await waitFor(() => expect(router.getPathname()).toBe(`/races/${raceTicket.event.id}`));
   });
@@ -160,6 +161,23 @@ describe('экран билета /tickets/<код> (AC12, §5.7)', () => {
     getTicket.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
     await openSignedIn();
     expect(await screen.findByText('Билет не найден')).toBeOnTheScreen();
+    expect(removeOfflineTicket).toHaveBeenCalledWith(TICKET_CODE);
+  });
+
+  it('обновление после показа вернуло 404 — билет и QR скрываются, «Билет не найден»', async () => {
+    getTicket.mockResolvedValueOnce(raceTicket);
+    getTicket.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+    const client = createTestQueryClient();
+    useSessionStore.setState({ status: 'signedIn', session: liveSession });
+    await renderRouter(
+      { 'tickets/[code]': TicketRoute, index: () => null },
+      { initialUrl: PATH, wrapper: createQueryWrapper(client) },
+    );
+    expect(await screen.findByRole('image', { name: 'QR-код билета' })).toBeOnTheScreen();
+
+    await act(() => client.refetchQueries({ queryKey: ['tickets', 'detail', TICKET_CODE] }));
+    expect(await screen.findByText('Билет не найден')).toBeOnTheScreen();
+    expect(screen.queryByRole('image', { name: 'QR-код билета' })).toBeNull();
     expect(removeOfflineTicket).toHaveBeenCalledWith(TICKET_CODE);
   });
 
@@ -262,6 +280,36 @@ describe('экран билета /tickets/<код> (AC12, §5.7)', () => {
     expect(await screen.findByRole('header', { name: raceTicket.event.title })).toBeOnTheScreen();
     remember.mockRestore();
   });
+
+  it.each([
+    [
+      'опрос не пройден',
+      () => jest.mocked(api.getOnboardingStatus).mockResolvedValue({ surveyCompleted: false }),
+    ],
+    [
+      'статус онбординга не загрузился',
+      () =>
+        jest
+          .mocked(api.getOnboardingStatus)
+          .mockRejectedValue(new ApiHttpError(503, { code: 'INTERNAL', message: 'x' })),
+    ],
+  ])(
+    'гость с незавершённым онбордингом (%s) — после входа сразу билет (RC-B1)',
+    async (_name, arrange) => {
+      arrange();
+      jest.mocked(api.signIn).mockResolvedValue({ state: 'signedIn', session });
+      getTicket.mockResolvedValue(raceTicket);
+      const router = await renderRouter(appRoutes, { initialUrl: PATH });
+
+      expect(await screen.findByRole('header', { name: 'Вход' })).toBeOnTheScreen();
+      await fireEvent.changeText(screen.getByLabelText('E-mail'), EMAIL);
+      await fireEvent.changeText(screen.getByLabelText('Пароль'), 'velo-secret');
+      await fireEvent.press(screen.getByRole('button', { name: 'Войти' }));
+
+      await waitFor(() => expect(router.getPathname()).toBe(PATH));
+      expect(await screen.findByRole('header', { name: raceTicket.event.title })).toBeOnTheScreen();
+    },
+  );
 
   it('выход из аккаунта (корневой layout) стирает офлайн-копии билетов', async () => {
     getTicket.mockResolvedValue(raceTicket);

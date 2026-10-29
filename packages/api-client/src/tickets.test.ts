@@ -21,6 +21,7 @@ interface Call {
   method: string | undefined;
   authorization: string | null;
   credentials: RequestCredentials | undefined;
+  cache: RequestCache | undefined;
   body: unknown;
 }
 
@@ -32,6 +33,7 @@ function stub(status: number, response: unknown) {
       method: init?.method,
       authorization: new Headers(init?.headers).get('authorization'),
       credentials: init?.credentials,
+      cache: init?.cache,
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
     });
     return Promise.resolve(new Response(JSON.stringify(response), { status }));
@@ -102,6 +104,16 @@ describe('api-client: билеты приложения (event-tickets)', () => 
       url: `https://api.test/v1/events/calendar/${ID}/ticketing`,
       authorization: null,
     });
+  });
+
+  it('getEventTicketing: fresh — в обход HTTP-кэша (`cache: no-cache`) после регистрации и 409, URL тот же', async () => {
+    const plain = app(200, { enabled: false });
+    await plain.api.getEventTicketing('calendar', ID);
+    const fresh = app(200, { enabled: false });
+    await fresh.api.getEventTicketing('calendar', ID, { fresh: true });
+    expect(plain.calls[0]?.cache).toBeUndefined();
+    expect(fresh.calls[0]?.cache).toBe('no-cache');
+    expect(fresh.calls[0]?.url).toBe(plain.calls[0]?.url);
   });
 });
 

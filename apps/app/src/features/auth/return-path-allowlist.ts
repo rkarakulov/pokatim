@@ -12,6 +12,13 @@ const RIDER_PATH = /^\/riders\/([^/?#]+)$/;
  */
 const TICKET_PATH = /^\/tickets\/([^/?#]+)$/;
 
+/**
+ * Возврат без онбординга (RC-B1): свой билет из письма открывается сразу после входа — шаги настройки (и сбой загрузки
+ * их статуса) не задерживают путь к QR; онбординг продолжится при переходе во вкладки.
+ */
+export const skipsOnboarding = (path: string): boolean =>
+  TICKET_PATH.test(path) && isReturnPath(path);
+
 /** Экраны за входом, открываемые гостем по ссылке, — точным путём без параметров (удаление аккаунта, A12). */
 const RETURN_SCREENS: ReadonlySet<string> = new Set(['/settings/account/delete']);
 

@@ -5,20 +5,27 @@ import type {
   CalendarStartDetail,
   EventTicketingPublic,
 } from '@pokatim/contracts';
-import { fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 
 import * as returnPath from '@/features/auth/return-path';
 import { useSessionStore } from '@/features/auth/session-store';
+import { removeOfflineTicket } from '@/features/tickets/offline-store';
 import { api } from '@/lib/api';
 import { openExternalUrl } from '@/lib/open-external-url';
 
 import CalendarStartRoute from '../app/calendar/[id]';
 import TicketRoute from '../app/tickets/[code]';
 import { liveSession } from './auth-fixtures';
-import { createQueryWrapper } from './query-wrapper';
+import { createQueryWrapper, createTestQueryClient } from './query-wrapper';
 
 jest.mock('@/lib/api');
 jest.mock('@/lib/open-external-url', () => ({ openExternalUrl: jest.fn() }));
+jest.mock('@/features/tickets/offline-store', () => ({
+  saveOfflineTicket: jest.fn(async () => undefined),
+  readOfflineTicket: jest.fn(async () => null),
+  removeOfflineTicket: jest.fn(async () => undefined),
+  clearOfflineTickets: jest.fn(async () => undefined),
+}));
 
 const ID = '0190a6f4-0000-7000-8000-000000000002';
 const TOKEN = liveSession.accessToken;
@@ -157,8 +164,8 @@ describe('регистрация на старт календаря (event-ticke
     expect(register).toHaveBeenCalledWith(TOKEN, ID, { distanceKm: 60 });
     expect(await screen.findByText('Вы зарегистрированы · 60 км')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Открыть билет' })).toBeOnTheScreen();
-    // сводка мест перезапрошена после регистрации
-    await waitFor(() => expect(getTicketing).toHaveBeenCalledTimes(2));
+    // сводка мест перезапрошена после регистрации — в обход HTTP-кэша (max-age=60)
+    await waitFor(() => expect(getTicketing).toHaveBeenCalledWith('calendar', ID, { fresh: true }));
   });
 
   it('одна дистанция — подставляется без выбора; без дистанций — пустое тело', async () => {
@@ -186,7 +193,7 @@ describe('регистрация на старт календаря (event-ticke
     expect(register).toHaveBeenCalledWith(TOKEN, ID, {});
     expect(await screen.findByText('Мест больше нет.')).toBeOnTheScreen();
     expect(await screen.findByText('Мест нет')).toBeOnTheScreen();
-    expect(getTicketing).toHaveBeenCalledTimes(2);
+    expect(getTicketing).toHaveBeenLastCalledWith('calendar', ID, { fresh: true });
   });
 
   it('регистрация закрыта (сервер) — «Регистрация закрыта», без кнопки', async () => {
@@ -213,6 +220,8 @@ describe('регистрация на старт календаря (event-ticke
     expect(cancel).toHaveBeenCalledWith(TOKEN, ID);
     expect(await screen.findByRole('button', { name: 'Зарегистрироваться' })).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Открыть билет' })).toBeNull();
+    // офлайн-копия отменённого билета с QR стирается
+    expect(removeOfflineTicket).toHaveBeenCalledWith('ABCDE12345');
   });
 
   it('«Открыть билет» → /tickets/<код>', async () => {
@@ -242,5 +251,28 @@ describe('регистрация на старт календаря (event-ticke
       await (await block()).findByRole('button', { name: 'Зарегистрироваться' }),
     );
     expect(await screen.findByText('Регистрация закрыта: старт уже начался.')).toBeOnTheScreen();
+  });
+
+  it('ошибка обновления своей регистрации при показанных данных — данные и баннер с повтором', async () => {
+    signIn();
+    getRegistration.mockResolvedValueOnce(registered());
+    getRegistration.mockRejectedValueOnce(
+      new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }),
+    );
+    getRegistration.mockResolvedValue(registered());
+    const client = createTestQueryClient();
+    await renderRouter(
+      { 'calendar/[id]': CalendarStartRoute, index: () => null },
+      { initialUrl: `/calendar/${ID}`, wrapper: createQueryWrapper(client) },
+    );
+    expect(await screen.findByText('Вы зарегистрированы · 100 км')).toBeOnTheScreen();
+
+    await act(() => client.refetchQueries({ queryKey: ['calendar', 'registration', ID] }));
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.getByText('Вы зарегистрированы · 100 км')).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(screen.queryByText('Не удалось загрузить')).toBeNull());
+    expect(getRegistration).toHaveBeenCalledTimes(3);
   });
 });

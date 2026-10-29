@@ -188,28 +188,41 @@ function Registered({
   );
 }
 
+/** Своя регистрация не загрузилась: «Нет соединения» / «Не удалось загрузить» и «Повторить». */
+function LoadFailure({ error, retry }: { error: unknown; retry: () => void }) {
+  return (
+    <>
+      <Banner
+        tone="warning"
+        title={t(isNetworkError(error) ? 'state.errorTitle' : 'state.failedTitle')}
+        message={t('tickets.error.failed')}
+      />
+      <View style={styles.start}>
+        <TextAction label={t('state.retry')} onPress={retry} />
+      </View>
+    </>
+  );
+}
+
 /** Вошедший: своя регистрация (сервер) → форма или «Вы зарегистрированы». */
 function SignedInRegistration({ startId, ticketing }: { startId: string; ticketing: Ticketing }) {
   const registration = useCalendarRegistration(startId, true);
   if (registration.data === undefined) {
     if (!registration.isError) return <BlockSkeleton />;
-    return (
-      <>
-        <Banner
-          tone="warning"
-          title={t(isNetworkError(registration.error) ? 'state.errorTitle' : 'state.failedTitle')}
-          message={t('tickets.error.failed')}
-        />
-        <View style={styles.start}>
-          <TextAction label={t('state.retry')} onPress={() => void registration.refetch()} />
-        </View>
-      </>
-    );
+    return <LoadFailure error={registration.error} retry={() => void registration.refetch()} />;
   }
-  return registration.data.registration ? (
-    <Registered startId={startId} ticketing={ticketing} state={registration.data} />
-  ) : (
-    <RegisterForm startId={startId} ticketing={ticketing} />
+  return (
+    <>
+      {/* ошибка обновления при показанных данных (§4.12): данные остаются, сверху — баннер с повтором */}
+      {registration.isError ? (
+        <LoadFailure error={registration.error} retry={() => void registration.refetch()} />
+      ) : null}
+      {registration.data.registration ? (
+        <Registered startId={startId} ticketing={ticketing} state={registration.data} />
+      ) : (
+        <RegisterForm startId={startId} ticketing={ticketing} />
+      )}
+    </>
   );
 }
 

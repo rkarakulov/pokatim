@@ -1,6 +1,6 @@
 import type { TicketView } from '@pokatim/contracts';
 import { formatTicketCode } from '@pokatim/contracts';
-import { space } from '@pokatim/design-tokens';
+import { layout, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { Kicker, Pill, textStyle, useTheme } from '@rkarakulov/ui';
 import { StyleSheet, Text, View } from 'react-native';
@@ -17,9 +17,6 @@ import {
   ticketStatus,
 } from './ticket-format';
 import { TicketQr } from './ticket-qr';
-
-/** Сторона QR в px (с рамкой): крупно, читается сканером с вытянутой руки. */
-export const TICKET_QR_SIDE = 240;
 
 /**
  * Слоты PR C (материалы) и PR E (Wallet): в `TicketView` полей ещё нет — ничего не рендерят; PR C/E добавят
@@ -60,7 +57,7 @@ export function TicketDetails({ view }: { view: TicketView }) {
       <View style={styles.qrBlock}>
         {view.qr ? (
           <>
-            <TicketQr payload={view.qr} size={TICKET_QR_SIDE} />
+            <TicketQr payload={view.qr} size={layout.ticketQr} />
             <Text style={[textStyle('meta'), styles.center, { color: theme.text.secondary }]}>
               {t('tickets.qrHint')}
             </Text>

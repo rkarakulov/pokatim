@@ -1,8 +1,6 @@
-import { space } from '@pokatim/design-tokens';
+import { layout, space } from '@pokatim/design-tokens';
 import { Skeleton, SkeletonGroup, SkeletonText } from '@rkarakulov/ui';
 import { StyleSheet, View } from 'react-native';
-
-import { TICKET_QR_SIDE } from './ticket-details';
 
 /** Первая загрузка билета: заголовок, статус, QR и код, строки — раскладка `TicketDetails`. */
 export function TicketSkeleton() {
@@ -11,7 +9,7 @@ export function TicketSkeleton() {
       <SkeletonGroup>
         <SkeletonText variant="displaySm" lines={2} lastLineWidth="60%" />
         <View style={styles.qr}>
-          <Skeleton width={TICKET_QR_SIDE} height={TICKET_QR_SIDE} />
+          <Skeleton width={layout.ticketQr} height={layout.ticketQr} />
         </View>
         <SkeletonText variant="body" lines={5} lastLineWidth="40%" />
       </SkeletonGroup>

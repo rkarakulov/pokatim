@@ -87,14 +87,21 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// оболочка билета: сеть первой; успешный HTML (200, своя origin, без редиректа) — в кеш под общим ключом; нет сети —
-// оболочка из кеша (нет её — ошибка сети, как без service worker)
-function ticketShell(request) {
+// оболочка билета: сеть первой; успешный HTML (200, своя origin, без редиректа) — в кеш под общим ключом (запись —
+// в event.waitUntil: иначе браузер может остановить worker раньше); нет сети — оболочка из кеша (нет её — ошибка сети,
+// как без service worker)
+function ticketShell(event) {
+  const request = event.request;
   return fetch(request)
     .then((response) => {
       if (response.ok && response.type === 'basic' && !response.redirected) {
         const copy = response.clone();
-        caches.open(SHELL).then((cache) => cache.put(SHELL_KEY, copy)).catch(() => undefined);
+        event.waitUntil(
+          caches
+            .open(SHELL)
+            .then((cache) => cache.put(SHELL_KEY, copy))
+            .catch(() => undefined),
+        );
       }
       return response;
     })
@@ -112,7 +119,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
   if (event.request.mode === 'navigate' && TICKET_PATH.test(url.pathname)) {
-    event.respondWith(ticketShell(event.request));
+    event.respondWith(ticketShell(event));
     return;
   }
   if (!FILES.has(url.pathname)) return;

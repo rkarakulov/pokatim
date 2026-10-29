@@ -11,6 +11,7 @@ import { StyleSheet, View } from 'react-native';
 import { GestureRoot } from '@/components/gesture-root';
 import { useRegistrationStore } from '@/features/auth/registration-store';
 import { takeReturnPath } from '@/features/auth/return-path';
+import { skipsOnboarding } from '@/features/auth/return-path-allowlist';
 import { useReturnTarget } from '@/features/auth/return-target';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { PushNotifications } from '@/features/notifications/push-registration';
@@ -105,7 +106,9 @@ function RootShell() {
     if (path) useReturnTarget.setState({ path, done: false });
   }, [signedIn]);
   useEffect(() => {
-    if (!signedIn || step !== 'done' || returnTarget.path === null || returnTarget.done) return;
+    if (!signedIn || returnTarget.path === null || returnTarget.done) return;
+    // билет из письма — сразу после входа, без ожидания онбординга (RC-B1)
+    if (step !== 'done' && !skipsOnboarding(returnTarget.path)) return;
     useReturnTarget.setState({ done: true });
     router.replace(returnTarget.path as Href);
   }, [signedIn, step, returnTarget, router]);

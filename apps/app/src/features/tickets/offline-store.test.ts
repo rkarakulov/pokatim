@@ -8,7 +8,7 @@ import {
   saveOfflineTicket,
 } from './offline-store';
 
-// файлы документов приложения — в памяти (общий мок jest.setup не умеет читать и писать)
+// файлы кеша приложения — в памяти (общий мок jest.setup не умеет читать и писать)
 jest.mock('expo-file-system', () => {
   const files = new Map<string, string>();
   class File {
@@ -31,7 +31,11 @@ jest.mock('expo-file-system', () => {
       files.delete(this.uri);
     }
   }
-  return { __files: files, File, Paths: { document: { uri: 'file:///documents' } } };
+  return {
+    __files: files,
+    File,
+    Paths: { cache: { uri: 'file:///caches' }, document: { uri: 'file:///documents' } },
+  };
 });
 
 const files = () => jest.requireMock<{ __files: Map<string, string> }>('expo-file-system').__files;
@@ -46,8 +50,9 @@ const NOW = Date.parse('2027-06-01T10:00:00Z');
 beforeEach(() => files().clear());
 
 describe('офлайн-копии билетов — native (AC12)', () => {
-  it('запись и чтение: QR — только в SecureStore, файл — без QR', async () => {
+  it('запись и чтение: QR — только в SecureStore, файл — без QR, в кеше приложения (без iCloud-бэкапа)', async () => {
     await saveOfflineTicket(OWNER, raceTicket, NOW);
+    expect([...files().keys()]).toEqual(['file:///caches/tickets-offline.json']);
 
     expect(fileText()).toContain(raceTicket.event.title);
     expect(fileText()).not.toContain(QR);
@@ -115,7 +120,7 @@ describe('офлайн-копии билетов — native (AC12)', () => {
   });
 
   it('повреждённый файл — копии нет, без броска', async () => {
-    files().set('file:///documents/tickets-offline.json', '{oops');
+    files().set('file:///caches/tickets-offline.json', '{oops');
     await expect(readOfflineTicket(OWNER, raceTicket.code, NOW)).resolves.toBeNull();
   });
 

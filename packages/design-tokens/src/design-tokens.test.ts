@@ -198,6 +198,6 @@ describe('CSS для веба (обёртка с брендом pokatim)', () =>
 
 describe('раскладка приложения (layout)', () => {
   it('аватар шапки профиля — 56 px (`.phead-name .ava` прототипа, rider-profile)', () => {
-    expect(layout).toEqual({ contentMaxWidth: 640, avatarProfile: 56 });
+    expect(layout).toEqual({ contentMaxWidth: 640, avatarProfile: 56, ticketQr: 240 });
   });
 });

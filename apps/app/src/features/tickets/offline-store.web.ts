@@ -1,5 +1,7 @@
 import type { TicketView } from '@pokatim/contracts';
 
+import { NO_SESSION_KEY, SIGN_OUT_PENDING_KEY } from '@/features/auth/session-markers';
+
 import {
   type OfflineSnapshot,
   type OfflineTicket,
@@ -26,8 +28,28 @@ function storage(): Storage | undefined {
   }
 }
 
+/**
+ * Выход в соседней вкладке (признаки сессии общие для вкладок): эта вкладка ещё «вошла», но копии уже чужие —
+ * не пишем и не отдаём, прежние стираем.
+ */
+function signedOutElsewhere(): boolean {
+  try {
+    const store = storage();
+    return (
+      store !== undefined &&
+      (store.getItem(NO_SESSION_KEY) !== null || store.getItem(SIGN_OUT_PENDING_KEY) !== null)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function read(): OfflineSnapshot | null {
   try {
+    if (signedOutElsewhere()) {
+      storage()?.removeItem(OFFLINE_TICKETS_KEY);
+      return null;
+    }
     return parseSnapshot(storage()?.getItem(OFFLINE_TICKETS_KEY) ?? null);
   } catch {
     return null;
@@ -49,6 +71,10 @@ export async function saveOfflineTicket(
   view: TicketView,
   now = Date.now(),
 ): Promise<void> {
+  if (signedOutElsewhere()) {
+    write(null);
+    return;
+  }
   write(withTicket(read(), owner, view, now));
 }
 

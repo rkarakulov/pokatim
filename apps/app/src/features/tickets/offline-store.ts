@@ -14,8 +14,9 @@ import {
 
 /**
  * Native (plan-B §5): QR-токены — только в SecureStore (`pokatim.ticketQr`: владелец и `{ код: PKT1… }`, ≤ 10 × ~60 Б
- * — в пределах 2 КБ ключа); остальное (`view` с `qr: null`, `savedAt`) — файл `tickets-offline.json` в документах
- * приложения. Копия — склейка; владелец файла и ключа не совпал — стираются оба. Сбой хранилища — тихо (без копии),
+ * — в пределах 2 КБ ключа); остальное (`view` с `qr: null`, `savedAt`) — файл `tickets-offline.json` в кеше
+ * приложения: не уходит в iCloud/Google-бэкап (ПДн участника); ОС может очистить кеш при нехватке места — тогда копии нет,
+ * QR без файла стирается при чтении. Копия — склейка; владелец файла и ключа не совпал — стираются оба. Сбой хранилища — тихо (без копии),
  * в журнал — только имя ошибки (не данные билета).
  */
 const QR_KEY = 'pokatim.ticketQr';
@@ -24,7 +25,7 @@ const FILE_NAME = 'tickets-offline.json';
 const QrStoreSchema = z.object({ owner: z.string().min(1), qr: z.record(z.string(), z.string()) });
 type QrStore = z.infer<typeof QrStoreSchema>;
 
-const ticketsFile = () => new File(Paths.document, FILE_NAME);
+const ticketsFile = () => new File(Paths.cache, FILE_NAME);
 
 const warn = (error: unknown) =>
   console.warn(`Офлайн-копия билета: ${error instanceof Error ? error.name : 'Error'}`);

@@ -98,15 +98,38 @@ export function useCalendarRegistration(id: string, enabled: boolean) {
   });
 }
 
+/**
+ * Сводка мест после своей регистрации и отказа 409 — в обход HTTP-кэша (`public, max-age=60`): обычный перезапрос
+ * браузер отдал бы из кэша со старыми местами. Ошибка — тихо: блок остаётся с прежней сводкой.
+ */
+async function refreshTicketing(queryClient: QueryClient, id: string): Promise<void> {
+  await queryClient
+    .fetchQuery({
+      queryKey: calendarTicketingKey(id),
+      queryFn: () => api.getEventTicketing('calendar', id, { fresh: true }),
+      staleTime: 0,
+    })
+    .catch(() => undefined);
+}
+
+/** Билет перестал действовать (отмена регистрации или заявки): офлайн-копия с QR стирается. */
+export function forgetCancelledTicket(code: string | undefined): void {
+  if (code) void removeOfflineTicket(code);
+}
+
 async function applyRegistration(
   queryClient: QueryClient,
   id: string,
   state: CalendarRegistrationState,
 ): Promise<void> {
+  const previous = queryClient.getQueryData<CalendarRegistrationState>(calendarRegistrationKey(id));
   await queryClient.cancelQueries({ queryKey: calendarRegistrationKey(id) });
   queryClient.setQueryData(calendarRegistrationKey(id), state);
+  if (state.ticket === null || state.ticket.status === 'cancelled') {
+    forgetCancelledTicket(previous?.ticket?.code ?? state.ticket?.code);
+  }
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: calendarTicketingKey(id) }),
+    refreshTicketing(queryClient, id),
     queryClient.invalidateQueries({ queryKey: ticketKeys.all }),
   ]);
 }
@@ -125,9 +148,7 @@ function useRegistrationMutation<V>(
     mutationFn: (body: V) => withAccessToken((token) => call(token, body)),
     onSuccess: (state) => applyRegistration(queryClient, id, state),
     onError: (error) => {
-      if (isStaleTicketingError(error)) {
-        void queryClient.invalidateQueries({ queryKey: calendarTicketingKey(id) });
-      }
+      if (isStaleTicketingError(error)) void refreshTicketing(queryClient, id);
     },
   });
 }

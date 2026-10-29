@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { apiErrorCode, retryAfterSec } from './error-messages';
 import type { AccessRefresh, Revalidation } from './session-revalidation';
 import { withSessionLock } from './session-lock';
+import { NO_SESSION_KEY, SIGN_OUT_PENDING_KEY } from './session-markers';
 
 /**
  * Web (ADR-0003 п. 4, R10 task.md F5b): refresh — только в httpOnly cookie (`SESSION_COOKIE`), его ставит
@@ -105,7 +106,7 @@ export function refreshAccess(_now: number): Promise<AccessRefresh> {
  * подтверждён — httpOnly cookie JS стереть не может, и перезагрузка иначе вернула бы в аккаунт. Не токен и не данные
  * сессии. Хранилище недоступно (приватный режим, запрет) — без признака, не падаем.
  */
-const SIGN_OUT_PENDING = 'pokatim.signOutPending';
+const SIGN_OUT_PENDING = SIGN_OUT_PENDING_KEY;
 
 function setSignOutPending(pending: boolean): void {
   try {
@@ -131,7 +132,7 @@ function isSignOutPending(): boolean {
  * Пишется только отрицательный признак: после входа в хранилищах браузера по-прежнему пусто. Не токен и не данные
  * сессии; хранилище недоступно — признака нет, refresh как раньше. Читается и пишется только под замком сессии.
  */
-const NO_SESSION = 'pokatim.noSession';
+const NO_SESSION = NO_SESSION_KEY;
 
 function setNoSession(none: boolean): void {
   try {

@@ -63,4 +63,17 @@ describe('офлайн-копии билетов — web (AC12, RC-B4)', () => {
     await expect(saveOfflineTicket(OWNER, raceTicket, NOW)).resolves.toBeUndefined();
     await expect(readOfflineTicket(OWNER, raceTicket.code, NOW)).resolves.toBeNull();
   });
+
+  it.each(['pokatim.noSession', 'pokatim.signOutPending'])(
+    'выход в соседней вкладке (%s): копия не пишется и не читается, прежние стираются',
+    async (flag) => {
+      await saveOfflineTicket(OWNER, raceTicket, NOW);
+      localStorage.setItem(flag, '1');
+
+      await saveOfflineTicket(OWNER, calendarTicket, NOW);
+      await expect(readOfflineTicket(OWNER, raceTicket.code, NOW)).resolves.toBeNull();
+      await expect(readOfflineTicket(null, raceTicket.code, NOW)).resolves.toBeNull();
+      expect(localStorage.getItem(OFFLINE_TICKETS_KEY)).toBeNull();
+    },
+  );
 });

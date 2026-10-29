@@ -83,10 +83,11 @@ export { designSystemCss, skeletonCss, typographyCss, type DesignSystemCssOption
 /**
  * Раскладка приложения райдера (px): колонка контента на широком экране (web на десктопе, планшет) — не шире
  * `contentMaxWidth`, по центру; на телефоне ограничение не срабатывает. `avatarProfile` — аватар шапки профиля
- * (`.phead-name .ava` прототипа, rider-profile). В базе (`size`) готовых значений нет; follow-up — `size.avatarLg` в
- * app-foundation.
+ * (`.phead-name .ava` прототипа, rider-profile). `ticketQr` — сторона QR билета с рамкой (event-tickets): крупно, читается
+ * сканером с вытянутой руки и помещается в колонку телефона 320 px. В базе (`size`) готовых значений нет; follow-up —
+ * `size.avatarLg` в app-foundation.
  */
-export const layout = { contentMaxWidth: 640, avatarProfile: 56 } as const;
+export const layout = { contentMaxWidth: 640, avatarProfile: 56, ticketQr: 240 } as const;
 
 /** Любая тема набора (у `panel` есть навигация); группы ролей pokatim — `map`, `surfaceBar`, `profile`, `tabBar`. */
 export type Theme = BaseTheme<PokatimRoleGroups>;

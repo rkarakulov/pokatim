@@ -134,7 +134,14 @@ describe('service worker: поведение оболочки билета (ис
         if (!stores.has(name)) stores.set(name, new Map());
         const store = stores.get(name)!;
         return {
-          put: async (key: string, value: unknown) => void store.set(key, value),
+          // запись в кеш медленнее ответа: без `waitUntil` её не дождаться
+          put: (key: string, value: unknown) =>
+            new Promise<void>((done) =>
+              setTimeout(() => {
+                store.set(key, value);
+                done();
+              }, 20),
+            ),
           match: async (key: string) => store.get(key),
           addAll: async () => undefined,
         };
@@ -154,16 +161,21 @@ describe('service worker: поведение оболочки билета (ис
       caches,
       fetchImpl,
     );
+    const pending: Promise<unknown>[] = [];
     const respond = async (path: string, mode = 'navigate') => {
       let result: Promise<unknown> | undefined;
       listeners.fetch!({
         request: { url: `https://pokatim.test${path}`, method: 'GET', mode },
         respondWith: (response) => (result = response),
-        waitUntil: () => undefined,
+        waitUntil: (promise) => void pending.push(promise),
       });
       return result;
     };
-    return { respond, stores };
+    /** Работа после ответа (запись в кеш) — только через `event.waitUntil`: иначе браузер может остановить worker. */
+    const settled = async () => {
+      await Promise.all(pending);
+    };
+    return { respond, stores, settled };
   }
 
   const html = (body: string) => ({
@@ -178,24 +190,25 @@ describe('service worker: поведение оболочки билета (ис
 
   it('онлайн — ответ сети, оболочка сохраняется; офлайн — оболочка для любого кода', async () => {
     let online = true;
-    const { respond, stores } = load(async () => {
+    const { respond, stores, settled } = load(async () => {
       if (!online) throw new TypeError('offline');
       return html('shell');
     });
 
     await expect(respond('/tickets/ABCDE12345')).resolves.toMatchObject({ body: 'shell' });
-    await new Promise((done) => setTimeout(done, 0));
-    expect([...stores.keys()].some((key) => key.startsWith('tickets-shell-'))).toBe(true);
+    await settled();
+    const shell = [...stores.entries()].find(([key]) => key.startsWith('tickets-shell-'))?.[1];
+    expect(shell?.get(TICKET_SHELL_KEY)).toMatchObject({ body: 'shell' });
 
     online = false;
     await expect(respond('/tickets/FGHJK67890')).resolves.toMatchObject({ body: 'shell' });
   });
 
   it('офлайн без сохранённой оболочки — ошибка сети; редирект и не-200 не кешируются', async () => {
-    const { respond, stores } = load(async () => ({ ...html('x'), redirected: true }));
+    const { respond, stores, settled } = load(async () => ({ ...html('x'), redirected: true }));
     await respond('/tickets/ABCDE12345');
-    await new Promise((done) => setTimeout(done, 0));
-    expect(stores.size).toBe(0);
+    await settled();
+    expect([...stores.values()].every((store) => store.size === 0)).toBe(true);
 
     const offline = load(async () => {
       throw new TypeError('offline');

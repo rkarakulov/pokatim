@@ -74,8 +74,8 @@ export function TicketScreen({
   const refetchers = useMemo(() => [ticket.refetch], [ticket.refetch]);
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
 
-  const notFound =
-    code === null || (ticket.data === undefined && apiErrorCode(ticket.error) === 'NOT_FOUND');
+  // 404 — авторитетный отказ: и при показанных данных (обновление) прежний билет с QR больше не показываем
+  const notFound = code === null || apiErrorCode(ticket.error) === 'NOT_FOUND';
   const failedWithoutData =
     ticket.data === undefined && (ticket.isError || ticket.fetchStatus === 'paused');
   const retry = () => void ticket.refetch();
@@ -116,7 +116,7 @@ export function TicketScreen({
           )
         }
       >
-        <OfflineBanner hasData={ticket.data !== undefined} style={styles.banner} />
+        <OfflineBanner hasData={ticket.data !== undefined && !notFound} style={styles.banner} />
         {body}
       </ScrollView>
     </SafeAreaView>

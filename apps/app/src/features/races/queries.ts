@@ -28,6 +28,7 @@ import { withAccessToken } from '@/features/auth/authorized';
 import { apiErrorCode } from '@/features/auth/error-messages';
 import { AUTH_MUTATION } from '@/features/auth/queries';
 import { VERIFIED_PROFILE_KEY } from '@/features/profile/queries';
+import { forgetCancelledTicket } from '@/features/tickets/queries';
 import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
@@ -363,6 +364,12 @@ async function applyEntry(queryClient: QueryClient, entry: MyRaceEntry): Promise
   // опрос или обновление, ушедшие во время мутации, несут состояние до неё — их ответ не должен затереть этот
   await queryClient.cancelQueries({ queryKey: raceEntryKey(entry.raceId) });
   queryClient.setQueryData(raceEntryKey(entry.raceId), entry);
+  // заявки больше нет — билет отменён: офлайн-копия с QR стирается (event-tickets)
+  if (entry.entry?.status !== 'active') {
+    forgetCancelledTicket(
+      queryClient.getQueryData<MyTicketRef | null>(raceTicketKey(entry.raceId))?.code,
+    );
+  }
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: raceResultsKey(entry.raceId) }),
     queryClient.invalidateQueries({ queryKey: raceCandidatesKey(entry.raceId) }),
