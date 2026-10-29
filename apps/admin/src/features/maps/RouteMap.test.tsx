@@ -2,7 +2,10 @@
 import type { RouteMapGeometry } from '@pokatim/contracts';
 import { themes } from '@pokatim/design-tokens';
 import {
+  centerLat,
   CORRIDOR_LAYER_ID,
+  CORRIDOR_OPACITY,
+  corridorLineWidth,
   createScrubStore,
   MAP_FIT_PADDING,
   ROUTE_CATALOG_LINE_WIDTH,
@@ -117,6 +120,54 @@ describe('RouteMap панели (routes-05, A2)', () => {
       'line-width': ROUTE_CATALOG_LINE_WIDTH,
     });
     expect(ROUTE_CATALOG_LINE_WIDTH).toBe(5);
+  });
+
+  it('с corridorWidthM — слой коридора под линией (ширина по допуску, цвет темы панели); смена допуска — новая карта', async () => {
+    const view = render(
+      <RouteMap
+        geometry={geometry}
+        styleUrl={STYLE}
+        label="Карта гонки"
+        variant="page"
+        corridorWidthM={50}
+      />,
+    );
+    await act(async () => {});
+    const map = state.maps[0]!;
+    act(() => map.handlers.load!());
+    const layers = map.addLayer.mock.calls.map(([layer]) => layer as { id: string; paint: object });
+    expect(layers.map((layer) => layer.id)).toEqual([
+      CORRIDOR_LAYER_ID,
+      'route',
+      'start',
+      'finish',
+    ]);
+    expect(layers[0]!.paint).toEqual({
+      'line-color': themes.panel.map.corridor,
+      'line-opacity': CORRIDOR_OPACITY,
+      'line-width': corridorLineWidth(50, centerLat(geometry.bounds)),
+    });
+    expect(layers[1]!.paint).toMatchObject({ 'line-width': ROUTE_CATALOG_LINE_WIDTH });
+
+    view.rerender(
+      <RouteMap
+        geometry={geometry}
+        styleUrl={STYLE}
+        label="Карта гонки"
+        variant="page"
+        corridorWidthM={100}
+      />,
+    );
+    await act(async () => {});
+    expect(map.remove).toHaveBeenCalled();
+    const next = state.maps[1]!;
+    act(() => next.handlers.load!());
+    const corridor = next.addLayer.mock.calls
+      .map(([layer]) => layer as { id: string; paint: Record<string, unknown> })
+      .find((layer) => layer.id === CORRIDOR_LAYER_ID);
+    expect(corridor?.paint['line-width']).toEqual(
+      corridorLineWidth(100, centerLat(geometry.bounds)),
+    );
   });
 
   it('ошибка до load — «Карта не загрузилась»; после load — без сообщения', async () => {

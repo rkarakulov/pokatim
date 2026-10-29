@@ -77,3 +77,6 @@ allowBuilds:
   esbuild: true
   msgpackr-extract: true
   unrs-resolver: true
+
+patchedDependencies:
+  '@expo/router-server@58.0.15': patches/@expo__router-server@58.0.15.patch

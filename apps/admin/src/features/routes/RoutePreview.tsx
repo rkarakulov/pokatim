@@ -30,32 +30,44 @@ function routeMeta(route: RouteLineData): string {
 
 /**
  * Линия маршрута на подложке (routes-05, A1, RC-9): с env стиля — карта MapLibre с толстой линией (`RouteMap`), без
- * env или без геометрии — прежнее SVG-превью `LinePreview`.
+ * env или без геометрии — прежнее SVG-превью `LinePreview`. `corridorWidthM` — карта гонки с коридором
+ * (panel-race-map): слой коридора на карте и подпись с допуском (в `LinePreview` коридора нет — только в подписи).
  */
 export function RouteLine({
   route,
   variant,
   scrub,
+  corridorWidthM,
 }: {
   route: RouteLineData;
   variant: 'page' | 'compact';
   scrub?: ScrubStore;
+  corridorWidthM?: number;
 }) {
   const geometry = useMemo(() => geometryFromLine(route.line), [route.line]);
   const styleUrl = mapStyleUrl();
   const names = { title: route.title, distance: distanceOf(route) };
+  const race = corridorWidthM !== undefined ? { ...names, width: corridorWidthM } : undefined;
   if (!styleUrl || !geometry) {
     return (
-      <LinePreview points={route.line} label={t('admin.races.corridor.previewLabel', names)} />
+      <LinePreview
+        points={route.line}
+        label={
+          race
+            ? t('admin.races.map.lineLabel', race)
+            : t('admin.races.corridor.previewLabel', names)
+        }
+      />
     );
   }
   return (
     <RouteMap
       geometry={geometry}
       styleUrl={styleUrl}
-      label={t('admin.routes.detail.mapLabel', names)}
+      label={race ? t('admin.races.map.label', race) : t('admin.routes.detail.mapLabel', names)}
       variant={variant}
       {...(scrub ? { scrub } : {})}
+      {...(corridorWidthM !== undefined ? { corridorWidthM } : {})}
     />
   );
 }
@@ -65,6 +77,21 @@ export function RouteLine({
  * «Маршрутах» — та же вкладка, на самой странице маршрута — без ссылки.
  */
 export type RouteOpenLink = 'same-tab' | 'new-tab' | false;
+
+/** «Открыть маршрут» — страница маршрута; `newTab` — в новой вкладке (форма гонки не теряется, RC-8). */
+export function OpenRouteLink({ routeId, newTab }: { routeId: string; newTab: boolean }) {
+  return (
+    <Link
+      className="link"
+      to="/routes/$routeId"
+      params={{ routeId }}
+      {...(newTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+    >
+      {t('admin.routes.detail.open')}
+      {newTab ? <span className="visually-hidden"> {t('admin.routes.detail.newTab')}</span> : null}
+    </Link>
+  );
+}
 
 /**
  * Превью маршрута (поле коридора гонки, окно публикации в каталог): скелетон блока, ошибка с повтором, компактная
@@ -118,17 +145,7 @@ export function RoutePreview({
         {openLink ? (
           <>
             {' · '}
-            <Link
-              className="link"
-              to="/routes/$routeId"
-              params={{ routeId: route.id }}
-              {...(openLink === 'new-tab' ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-            >
-              {t('admin.routes.detail.open')}
-              {openLink === 'new-tab' ? (
-                <span className="visually-hidden"> {t('admin.routes.detail.newTab')}</span>
-              ) : null}
-            </Link>
+            <OpenRouteLink routeId={route.id} newTab={openLink === 'new-tab'} />
           </>
         ) : null}
       </p>

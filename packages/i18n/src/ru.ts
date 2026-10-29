@@ -347,7 +347,12 @@ export const ru = {
   'rides.detail.allRides': 'Все райды',
   'rides.detail.rescheduled': 'Время или место старта изменены {date}.',
   'rides.detail.about': 'Об этом райде',
-  'rides.detail.published': 'Райд опубликован. Пригласите друзей ссылкой.',
+  // шит сразу после публикации (ride-published, прототип (d))
+  'rides.published.title': 'Райд опубликован',
+  'rides.published.text': 'Пригласите друзей — карточкой для сторис или ссылкой.',
+  'rides.published.textNoLink': 'Пригласите друзей карточкой для сторис.',
+  'rides.published.link': 'Ссылка',
+  'rides.published.close': 'Закрыть',
   'rides.detail.notFound': 'Райд не найден',
   'rides.shareText': '{title} — {date}, {time}, {city}',
   // форма «Новый райд» / «Изменить райд» [ASSUMPTION copy подсказок]
@@ -1342,6 +1347,13 @@ export const ru = {
   'admin.races.corridor.previewRefreshFailed': 'Не удалось обновить маршрут',
   'admin.races.corridor.previewLabel': 'Линия маршрута «{title}», {distance}',
   'admin.races.corridor.previewFailed': 'Не удалось загрузить маршрут',
+  // panel-race-map: блок «Карта гонки» под формой гонки с коридором
+  'admin.races.map.title': 'Карта гонки',
+  'admin.races.map.label':
+    'Карта гонки: маршрут «{title}», {distance}, коридор ±{width} м от маршрута, старт и финиш отмечены',
+  'admin.races.map.lineLabel':
+    'Линия гонки: маршрут «{title}», {distance}, коридор ±{width} м от маршрута',
+  'admin.races.map.refreshFailed': 'Не удалось обновить карту гонки',
   'admin.races.corridor.pollFailed': 'Не удаётся получить статус маршрута — продолжаем проверять',
   'admin.routes.dialog.title': 'Новый маршрут',
   'admin.routes.field.title': 'Название маршрута',

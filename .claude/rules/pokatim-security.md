@@ -21,6 +21,10 @@ paths:
   - "apps/api/src/modules/rides/**"
   - "apps/app/src/features/rides/**"
   - "apps/app/src/features/auth/return-path*"
+  - "apps/app/server/**"
+  - "apps/app/src/app/+html.tsx"
+  - "apps/app/src/features/web-security/**"
+  - "patches/**"
   - "apps/api/src/modules/results/**"
   - "apps/api/src/modules/achievements/**"
 ---
@@ -95,7 +99,7 @@ paths:
   Снятие роли отзывает сессии панели в той же транзакции; себя менять нельзя; последнего админа убрать нельзя
   (`lockAdmins`). Логи — `uid`, `sid`, причина; CLI не печатает e-mail.
 - **Принятый риск — тот же домен `/admin/`** (C3): XSS web приложения может действовать от имени открытой в том же
-  браузере сессии панели. Обязательно **до прода**: 2FA (TOTP) для `admin` и строгий CSP web приложения; CSP панели —
+  браузере сессии панели. Обязательно **до прода**: 2FA (TOTP) для `admin`; строгий CSP web приложения — есть (ADR-0025); CSP панели —
   `infra/docker/admin-nginx.conf` (менять только вместе со смоуком `pnpm e2e:admin`, он отдаёт тот же заголовок).
 - Доменные модули панели (`races`, `calendar`): каждый `/v1/admin/*` — `PanelGuard` + `@RequirePermission` (тест
   `src/admin-routes.test.ts` обходит контроллеры всех модулей); владение гонкой — в сервисе по правам сессии (без
@@ -393,3 +397,16 @@ paths:
   200; кривой и неизвестный id — один 404. Ссылки материалов — https без учётных данных (`RegistrationUrl`).
 - Панель: `Permissions-Policy` (`camera=(self)`, остальное выключено) — в каждом `location` `admin-nginx.conf` и в
   `vite preview`; сторож — `apps/admin/src/csp.test.ts`.
+
+## CSP web приложения (ADR-0025)
+
+- Политика — `contentSecurityPolicy` в `apps/app/server/web-server.ts`, nonce — на каждый ответ, в рендер — заголовком
+  запроса `x-pokatim-csp-nonce` (входящий вырезается). `script-src 'self' 'nonce-…'`: без `unsafe-inline`,
+  `unsafe-eval`, `strict-dynamic`; стили — `'unsafe-inline'` (RN-web), nonce в `style-src` не добавлять.
+- Новый inline-скрипт — только в `+html.tsx` с `nonce={cspNonce()}`; `dangerouslySetInnerHTML` — только константы и
+  `JSON.stringify` значений из закрытых списков. Не дописывать nonce постобработкой HTML.
+- Новый внешний источник (API, картинки, карты) — в `contentSecurityPolicy` и тест; провайдер карт — `MAP_ORIGINS`.
+- Патч `@expo/router-server` (`patches/`) — переносить при обновлении Expo; сторож — `web-server.test.ts`.
+- Без `unsafe-eval`: zod в web — `jitless` (`features/web-security/zod-jitless.web.ts`, первый импорт `theme/design-system.ts`);
+  новая библиотека с `eval`/`new Function` — нарушение, смоук «строгий CSP … без нарушений» падает.
+- `EXPO_PUBLIC_API_URL` web-контейнера (runtime, CSP) = build-arg сборки (бандл): разойдутся — CSP заблокирует API.
