@@ -45,6 +45,10 @@ describe('RiderStats', () => {
       bestPlaces: [best],
     });
     expect(parsed.bestPlaces[0]?.groupKey).toBe('unknown');
+    // старый сервер без `finishes` — 0
+    expect(parsed.finishes).toBe(0);
+    expect(RiderStats.parse({ ...parsed, finishes: 5 }).finishes).toBe(5);
+    expect(RiderStats.safeParse({ ...parsed, finishes: 1.5 }).success).toBe(false);
     expect(RiderStats.safeParse({ ...parsed, bestPlaces: [best, best, best, best] }).success).toBe(
       false,
     );
@@ -95,7 +99,11 @@ describe('PublicRiderProfile / PublicRiderRacePage', () => {
       avatar: { id: TOKEN },
       stats: { races: 1, podiums: 0, bestPlace: 4 },
     });
-    expect(profile.stats).toEqual({ races: 1, podiums: 0, bestPlace: 4 });
+    expect(profile.stats).toEqual({ races: 1, podiums: 0, bestPlace: 4, finishes: 0 });
+    expect(
+      PublicRiderProfile.parse({ ...profile, stats: { ...profile.stats, finishes: 3 } }).stats
+        .finishes,
+    ).toBe(3);
     expect(PublicRiderProfile.safeParse({ ...profile, publicId: 'x' }).success).toBe(false);
   });
 
@@ -114,5 +122,25 @@ describe('PublicRiderProfile / PublicRiderRacePage', () => {
       nextCursor: null,
     });
     expect(page.items[0]?.status).toBe('dq');
+    expect(page.items[0]?.unranked).toBeNull();
+  });
+
+  it('финиш без места: unranked — tolerantEnum', () => {
+    const item = {
+      race: { id: ID, title: 'Гонка', windowStartsAt: AT },
+      place: null,
+      tied: false,
+      status: 'final',
+      groupKey: 'overall',
+      elapsedSec: 3600,
+    };
+    const page = PublicRiderRacePage.parse({
+      items: [
+        { ...item, unranked: 'start' },
+        { ...item, unranked: 'x_new' },
+      ],
+      nextCursor: null,
+    });
+    expect(page.items.map((row) => row.unranked)).toEqual(['start', 'unknown']);
   });
 });

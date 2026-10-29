@@ -32,6 +32,7 @@ describe('подписи профиля райдера (rider-profile)', () => {
       elevationGainM: 4200,
       races: 3,
       podiums: 1,
+      finishes: 5,
       bestPlaces: [
         {
           race: { id: RACE_ID, title: 'Гонка', windowStartsAt: '2026-05-01T06:00:00.000Z' },
@@ -46,10 +47,17 @@ describe('подписи профиля райдера (rider-profile)', () => {
       ['Дистанция', '345,7', 'км'],
       ['Набор', expect.stringMatching(/^4\s200$/), 'м'],
       ['В зачёте', '3', undefined],
+      ['Финиши', '5', undefined],
       ['Подиумы', '1', undefined],
       ['Лучшее место', '=6', undefined],
     ]);
-    expect(publicStatItems({ races: 0, podiums: 0, bestPlace: null }).at(-1)?.value).toBe('—');
+    const publicItems = publicStatItems({ races: 0, podiums: 0, bestPlace: null, finishes: 2 });
+    expect(publicItems.map((item) => [item.label, item.value])).toEqual([
+      ['В зачёте', '0'],
+      ['Финиши', '2'],
+      ['Подиумы', '0'],
+      ['Лучшее место', '—'],
+    ]);
   });
 
   it('своя гонка: место, дата с годом, плашка, уровень и группа, время; a11y одной строкой', () => {
@@ -89,6 +97,7 @@ describe('подписи профиля райдера (rider-profile)', () => {
       status: 'dq',
       groupKey: 'overall',
       elapsedSec: 60,
+      unranked: null,
     });
     expect(row).toMatchObject({
       place: '2',
@@ -96,6 +105,24 @@ describe('подписи профиля райдера (rider-profile)', () => {
       time: '0:01:00',
       details: 'Общий зачёт',
     });
+  });
+
+  it('публичный финиш без места (rider-links-in-tables) — «—» и «Финишёр», время', () => {
+    const row = publicRaceRow({
+      race: { id: RACE_ID, title: 'Гонка', windowStartsAt: '2026-05-01T06:00:00.000Z' },
+      place: null,
+      tied: false,
+      status: 'final',
+      groupKey: 'overall',
+      elapsedSec: 3600,
+      unranked: 'start',
+    });
+    expect(row).toMatchObject({
+      place: '—',
+      pill: { label: 'Финишёр', tone: 'neutral' },
+      time: '1:00:00',
+    });
+    expect(row.a11y).toBe(`Гонка, ${row.date}, Финишёр, время 1:00:00`);
   });
 
   it('райд: дата и время старта, км, роль', () => {

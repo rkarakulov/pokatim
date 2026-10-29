@@ -26,7 +26,7 @@ const rider: PublicRiderProfile = {
   name: 'Анна К.',
   club: 'Velo Club Minsk',
   avatar: null,
-  stats: { races: 4, podiums: 2, bestPlace: 1 },
+  stats: { races: 4, podiums: 2, bestPlace: 1, finishes: 5 },
 };
 const race = (id = RACE_ID, title = 'Гонка у озера'): PublicRiderRace => ({
   race: { id, title, windowStartsAt: '2026-05-01T06:00:00.000Z' },
@@ -35,6 +35,7 @@ const race = (id = RACE_ID, title = 'Гонка у озера'): PublicRiderRace
   status: 'final',
   groupKey: 'w_u40',
   elapsedSec: 3600,
+  unranked: null,
 });
 const notFound = () => new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' });
 
@@ -61,11 +62,25 @@ afterEach(() => {
 });
 
 describe('публичный профиль /riders/[id] (rider-profile, AC15)', () => {
+  it('финиш без места (rider-links-in-tables) — «—», «Финишёр» и время', async () => {
+    listRaces.mockResolvedValue({
+      items: [{ ...race(RACE_2, 'START-гонка'), place: null, unranked: 'start' }],
+      nextCursor: null,
+    });
+    await openRider();
+
+    expect(await screen.findByText('START-гонка')).toBeOnTheScreen();
+    expect(races().getByText('Финишёр')).toBeOnTheScreen();
+    expect(races().queryByText('Финальный')).toBeNull();
+    expect(races().getByText('—')).toBeOnTheScreen();
+  });
+
   it('гость: имя, клуб, статистика без км, гонки; без userId и км в разметке', async () => {
     await openRider();
     expect(await screen.findByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
     expect(screen.getByText('Velo Club Minsk')).toBeOnTheScreen();
     expect(screen.getByLabelText('В зачёте 4')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Финиши 5')).toBeOnTheScreen();
     expect(screen.getByLabelText('Подиумы 2')).toBeOnTheScreen();
     expect(screen.getByLabelText('Лучшее место 1')).toBeOnTheScreen();
     expect(screen.queryByText(/км/)).toBeNull();

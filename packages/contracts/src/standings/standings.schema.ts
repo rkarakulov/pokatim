@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { tolerantEnum, Uuid } from '../common.ts';
+import { RiderRowLink } from '../profile/rider-avatar.schema.ts';
 import { BIKE_CLASSES, BikeClass, PageCursor } from '../races/race.schema.ts';
 import { RESULT_GROUP_KEYS } from '../results/results.schema.ts';
 
@@ -73,6 +74,8 @@ export const SeasonStandingRow = z.object({
   place: z.number().int(),
   tied: z.boolean(),
   riderName: z.string().nullable(),
+  /** ссылка на профиль и фото — по правилам имени (P1) */
+  ...RiderRowLink,
   points: z.number().int(),
   /** по порядку `races` */
   cells: z.array(SeasonStandingCell),

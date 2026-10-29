@@ -5,7 +5,7 @@ import type {
   RaceResultsPage,
   ResultGroupKey,
 } from '@pokatim/contracts';
-import { motion, size, space, stroke } from '@pokatim/design-tokens';
+import { size, space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
   Banner,
@@ -18,12 +18,16 @@ import {
   useTheme,
 } from '@rkarakulov/ui';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { finisherRow, groupLabel, resultRow } from './participation-format';
 import { useRaceFinishers, useRaceResults } from './queries';
+import { RiderWho, TableRow, useRowAction } from './table-row';
 
-/** Строка таблицы; `onPress` — карточка соперника (race-results-06, RC-14): строка становится кнопкой. */
+/**
+ * Строка таблицы; `onPress` — карточка соперника (race-results-06, RC-14) или «Ваш результат»: строка — кнопка. Иначе
+ * у публичного райдера — ссылка на его профиль (rider-links-in-tables), у «Участника» — без нажатия.
+ */
 function ResultRow({
   row,
   own,
@@ -35,83 +39,68 @@ function ResultRow({
 }) {
   const theme = useTheme();
   const view = resultRow(row, own);
-  const style = [
-    styles.row,
-    { borderTopColor: theme.border.subtle },
-    // полоса — роль рамки (акцентной рамки в системе нет); «Вы» — текстом, не только цветом
-    own ? [styles.own, { borderLeftColor: theme.border.strong }] : null,
-  ];
-  const cells = (
-    <>
+  const action = useRowAction(
+    onPress && {
+      label: t('disputes.rival.open', { who: view.who, place: view.place, time: view.time }),
+      onPress,
+    },
+    row.riderPublicId,
+    view.profileA11y,
+  );
+  return (
+    <TableRow
+      a11y={view.a11y}
+      action={action}
+      style={[
+        styles.row,
+        { borderTopColor: theme.border.subtle },
+        // полоса — роль рамки (акцентной рамки в системе нет); «Вы» — текстом, не только цветом
+        own ? [styles.own, { borderLeftColor: theme.border.strong }] : null,
+      ]}
+    >
       <Text style={[textStyle('time'), styles.place, { color: theme.text.primary }]}>
         {view.place}
       </Text>
-      <Text
-        numberOfLines={1}
-        style={[
-          textStyle(own ? 'label' : 'body'),
-          styles.who,
-          { color: own ? theme.text.accent : theme.text.primary },
-        ]}
-      >
-        {view.who}
-      </Text>
+      <RiderWho
+        who={view.who}
+        own={own}
+        riderPublicId={row.riderPublicId}
+        avatarId={row.riderAvatar?.id ?? null}
+      />
       <Text style={[textStyle('time'), { color: theme.text.primary }]}>{view.time}</Text>
-    </>
-  );
-  if (onPress) {
-    return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('disputes.rival.open', {
-          who: view.who,
-          place: view.place,
-          time: view.time,
-        })}
-        onPress={onPress}
-        style={({ pressed }) => [...style, { opacity: pressed ? motion.pressedOpacity : 1 }]}
-      >
-        {cells}
-      </Pressable>
-    );
-  }
-  return (
-    <View accessible accessibilityLabel={view.a11y} style={style}>
-      {cells}
-    </View>
+    </TableRow>
   );
 }
 
 type Tab = ResultGroupKey | 'finishers';
 
-/** Строка финишёров: без места и без нажатия (споров у START и «без пульса» нет). */
+/**
+ * Строка финишёров: без места; споров у START и «без пульса» нет — нажатие только у публичного райдера (ссылка на
+ * профиль, rider-links-in-tables).
+ */
 function FinisherRowView({ row, own }: { row: RaceFinisherRow; own: boolean }) {
   const theme = useTheme();
   const view = finisherRow(row, own);
+  const action = useRowAction(null, row.riderPublicId, view.profileA11y);
   return (
-    <View
-      accessible
-      accessibilityLabel={view.a11y}
+    <TableRow
+      a11y={view.a11y}
+      action={action}
       style={[
         styles.row,
         { borderTopColor: theme.border.subtle },
         own ? [styles.own, { borderLeftColor: theme.border.strong }] : null,
       ]}
     >
-      <View style={styles.who}>
-        <Text
-          numberOfLines={1}
-          style={[
-            textStyle(own ? 'label' : 'body'),
-            { color: own ? theme.text.accent : theme.text.primary },
-          ]}
-        >
-          {view.who}
-        </Text>
-        <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>{view.note}</Text>
-      </View>
+      <RiderWho
+        who={view.who}
+        own={own}
+        riderPublicId={row.riderPublicId}
+        avatarId={row.riderAvatar?.id ?? null}
+        note={view.note}
+      />
       <Text style={[textStyle('time'), { color: theme.text.primary }]}>{view.time}</Text>
-    </View>
+    </TableRow>
   );
 }
 
@@ -353,7 +342,9 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.s2 },
   failure: { gap: space.s2 },
   start: { alignItems: 'flex-start' },
+  // строка может быть кнопкой или ссылкой — не ниже минимальной цели касания
   row: {
+    minHeight: size.touchMin,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s3,
@@ -363,5 +354,4 @@ const styles = StyleSheet.create({
   own: { borderLeftWidth: stroke.indicator, paddingLeft: space.s2 },
   // колонка мест одной ширины («1», «12», «=12»): токен ширины короткого числового значения
   place: { minWidth: size.skeletonWord },
-  who: { flex: 1 },
 });

@@ -50,6 +50,8 @@ export const RiderStats = z.object({
   elevationGainM: z.number().int(),
   races: z.number().int(),
   podiums: z.number().int(),
+  /** «в зачёте» + финиши без места (START, Verified без пульса) по опубликованным протоколам; старый сервер — 0 */
+  finishes: z.number().int().default(0),
   bestPlaces: z.array(RiderBestPlace).max(3),
 });
 export type RiderStats = z.infer<typeof RiderStats>;
@@ -113,11 +115,16 @@ export const PublicRiderProfile = z.object({
     races: z.number().int(),
     podiums: z.number().int(),
     bestPlace: z.number().int().nullable(),
+    /** как `RiderStats.finishes` */
+    finishes: z.number().int().default(0),
   }),
 });
 export type PublicRiderProfile = z.infer<typeof PublicRiderProfile>;
 
-/** Строка публичной истории: только опубликованные протоколы (текущая ревизия). */
+/**
+ * Строка публичной истории: только гонки с опубликованным протоколом — строка текущей ревизии или финиш без места
+ * (START, Verified без пульса: `place: null`, `status: 'final'`, `unranked`).
+ */
 export const PublicRiderRace = z.object({
   race: RiderRaceRef,
   place: z.number().int().nullable(),
@@ -125,6 +132,8 @@ export const PublicRiderRace = z.object({
   status: tolerantEnum(PROTOCOL_ROW_STATUSES),
   groupKey: tolerantEnum(RESULT_GROUP_KEYS),
   elapsedSec: z.number().int(),
+  /** финиш без места; строка протокола и старый сервер — `null` */
+  unranked: tolerantEnum(RESULT_UNRANKED_REASONS).nullable().default(null),
 });
 export type PublicRiderRace = z.infer<typeof PublicRiderRace>;
 

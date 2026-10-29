@@ -44,6 +44,7 @@ export {
   isRankedRow,
   RIDER_RESULTS,
   RIDER_RESULTS_MAX_ROWS,
+  type RiderFinishRow,
   type RiderProtocolRow,
   type RiderRaceInfo,
   type RiderResults,
