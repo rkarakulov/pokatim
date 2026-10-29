@@ -16,3 +16,10 @@ export {
   RIDES_FOR_SHARING,
   type RidesForSharing,
 } from './rides-for-sharing.port';
+/** Порт для `achievements`: прошедшие райды райдера (условия R8). */
+export {
+  RIDER_RIDES,
+  RIDER_RIDES_MAX_ROWS,
+  type RiderRideFact,
+  type RiderRides,
+} from './rider-rides.port';
