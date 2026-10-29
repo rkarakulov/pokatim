@@ -130,8 +130,8 @@
 
 # 10. Documentation Impact
 
-ADR-0018 — «Дополнение: карточка достижения»; `docs/product/profile.md` — A6; `.claude/rules/onbike-backend.md` /
-`onbike-security.md` — раздел карточек (если перечисляет виды).
+ADR-0018 — «Дополнение: карточка достижения»; `docs/product/profile.md` — A6; `.claude/rules/pokatim-backend.md` /
+`pokatim-security.md` — раздел карточек (если перечисляет виды).
 
 # 12. Outcome (заполняет coder)
 
@@ -170,3 +170,14 @@ ADR-0018 — «Дополнение: карточка достижения»; `d
 - [ASSUMPTION] Во вспышке — только «Поделиться» карточкой достижения; «Сторис результата» — на экране достижения.
 - [ASSUMPTION] Карточка доступна и при незнакомом виде объекта в ответе старой сборки — код известен, объект решает
   сервер.
+
+## Ревью pass 1
+
+- Codex (`findings-codex.md`): APPROVE, находок нет.
+- Claude (`findings-claude.md`): APPROVE, три LOW — приняты без правок кода:
+  - L1: общие чтения фактов (`achievements.race_missing`, `achievements.rides_truncated`) в редких ветках пишут `uid`
+    — как и в `GET /v1/achievements`; логи самой карточки (HTTP и worker) — без `userId`. Принято.
+  - L2: `cardFacts` читает все три источника фактов ради одного кода — на корректность не влияет, follow-up при росте
+    нагрузки.
+  - L3: тест глифов проверяет наличие глифа, не совпадение с иконкой приложения — точки сверены вручную ревьюером;
+    follow-up — хранить имя Material и сверять с `symbols.json`.

@@ -1,6 +1,5 @@
 import { ACHIEVEMENT_CODES } from '@pokatim/contracts';
 import { appThemes } from '@pokatim/design-tokens';
-import satori from 'satori';
 import { describe, expect, it } from 'vitest';
 
 import { ACHIEVEMENT_BADGE_ICONS } from './achievement-card.icons';
@@ -9,7 +8,8 @@ import { achievementCardRenderInput, renderAchievementCardSvg } from './achievem
 import { achievementCardTree } from './achievement-card.render';
 import { achievementCardTexts } from './achievement-card.texts';
 import { storyCardFonts, symbolsFont } from './story-card.fonts';
-import type { StoryCardNode } from './story-card.render';
+import { renderCardSvg } from './story-card.png';
+import { node, type StoryCardNode } from './story-card.render';
 
 /** Входы по умолчанию (синтетика): «Победа» в гонке 4 октября 2026. */
 function input(
@@ -165,15 +165,10 @@ describe('иконки значка', () => {
     const symbols = await symbolsFont();
     for (const code of ACHIEVEMENT_CODES) {
       const glyph = String.fromCodePoint(ACHIEVEMENT_BADGE_ICONS[code].glyph);
-      const svg = await satori(
-        {
-          type: 'div',
-          props: {
-            style: { display: 'flex', fontFamily: 'symbols', fontSize: 100 },
-            children: glyph,
-          },
-        },
-        { width: 120, height: 120, fonts: [symbols] },
+      const svg = await renderCardSvg(
+        node('div', { display: 'flex', fontFamily: 'symbols', fontSize: 100 }, glyph),
+        [symbols],
+        { width: 120, height: 120 },
       );
       expect(svg, code).toMatch(/<path [^>]*d="M/);
     }
