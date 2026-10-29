@@ -31,6 +31,28 @@ const table = {
 };
 
 describe('рейтинг сезона — контракты (race-results-08)', () => {
+  it('строка: ссылка на профиль и фото — по правилам имени; старый сервер — null', () => {
+    const token = 'A'.repeat(43);
+    expect(SeasonStandingsTable.parse(table).items[0]).toMatchObject({
+      riderPublicId: null,
+      riderAvatar: null,
+    });
+    const linked = {
+      ...row,
+      riderName: 'Анна К.',
+      riderPublicId: token,
+      riderAvatar: { id: token },
+    };
+    expect(SeasonStandingsTable.parse({ ...table, items: [linked] }).items[0]).toMatchObject({
+      riderPublicId: token,
+      riderAvatar: { id: token },
+    });
+    expect(
+      SeasonStandingsTable.safeParse({ ...table, items: [{ ...linked, riderAvatar: { id: 'x' } }] })
+        .success,
+    ).toBe(false);
+  });
+
   it('справочники и пределы страницы', () => {
     expect(STANDING_OUTCOMES).toEqual(['placed', 'dq', 'none']);
     expect(STANDINGS_SYNC_STATES).toEqual(['current', 'pending']);

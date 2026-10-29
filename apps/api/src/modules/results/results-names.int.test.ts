@@ -8,6 +8,7 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
+import { PROFILE_COLLECTIONS, type ProfileDoc } from '../profile/profile.collection';
 import { call } from '../../../test/identity';
 import { panelCall } from '../../../test/panel';
 import {
@@ -71,7 +72,9 @@ describe('имя в публичной таблице (AC5–AC7)', () => {
         'elapsedSec',
         'entryId',
         'place',
+        'riderAvatar',
         'riderName',
+        'riderPublicId',
         'tied',
       ]);
     }
@@ -119,6 +122,44 @@ describe('имя в публичной таблице (AC5–AC7)', () => {
     const final = (await table(raceId)).body;
     expect(final.status).toBe('final');
     expect(final.items.map((row) => row.riderName)).toEqual([null, null, null, null]);
+  });
+});
+
+const profiles = () => h.db.collection<ProfileDoc>(PROFILE_COLLECTIONS.profiles);
+const linksOf = (body: RaceResultsPage) =>
+  body.items.map((row) => [row.riderName, row.riderPublicId, row.riderAvatar]);
+
+describe('ссылка на профиль и фото в публичной таблице (rider-links-in-tables)', () => {
+  it('только с именем и согласием: предварительная, протокол, отзыв согласия', async () => {
+    const { raceId, riders, token } = await namedRace();
+    const named = await profiles().findOne({ _id: riders[0]!.userId });
+    const publicId = named!.publicId!;
+    expect(publicId).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const avatarId = 'a'.repeat(43);
+    await profiles().updateOne({ _id: riders[0]!.userId }, { $set: { avatarId } });
+    // фото у скрытого — наружу не выходит
+    await profiles().updateOne({ _id: riders[1]!.userId }, { $set: { avatarId: 'b'.repeat(43) } });
+
+    const expected = [
+      ['Анна К.', publicId, { id: avatarId }],
+      [null, null, null],
+      [null, null, null],
+      [null, null, null],
+    ];
+    expect(linksOf((await table(raceId)).body)).toEqual(expected);
+    expect((await protocolAction(h, token, raceId, '/protocol')).status).toBe(200);
+    const published = (await table(raceId)).body;
+    expect(published.status).toBe('final');
+    expect(linksOf(published)).toEqual(expected);
+    expect(JSON.stringify(published)).not.toContain('userId');
+
+    await updateProfile(riders[0]!.email, { showNameInResults: false });
+    expect(linksOf((await table(raceId)).body)).toEqual([
+      [null, null, null],
+      [null, null, null],
+      [null, null, null],
+      [null, null, null],
+    ]);
   });
 });
 

@@ -164,6 +164,8 @@ export async function seedProfile(
   userId: string,
   publicName: string | null,
   showNameInResults: boolean,
+  /** ссылка на профиль и фото (rider-links-in-tables) */
+  extra: { publicId?: string; avatarId?: string } = {},
 ): Promise<void> {
   await h.db.collection<ProfileDoc>(PROFILE_COLLECTIONS.profiles).insertOne({
     _id: userId,
@@ -171,6 +173,7 @@ export async function seedProfile(
     surveyCompletedAt: null,
     publicName,
     showNameInResults,
+    ...extra,
     updatedAt: h.clock.now(),
   });
 }

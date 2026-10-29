@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { tolerantEnum, Uuid } from '../common.ts';
+import { RiderRowLink } from '../profile/rider-avatar.schema.ts';
 import { LonLat } from '../races/race-route.schema.ts';
 import { PageCursor } from '../races/race.schema.ts';
 import {
@@ -313,6 +314,7 @@ export const RaceResultRow = z.object({
   elapsedSec: z.number().int(),
   /** публичное имя из профиля; старый сервер поля не знает — `null` */
   riderName: z.string().nullable().default(null),
+  ...RiderRowLink,
 });
 export type RaceResultRow = z.infer<typeof RaceResultRow>;
 
@@ -347,6 +349,7 @@ export const RaceFinisherRow = z.object({
   entryId: Uuid,
   elapsedSec: z.number().int(),
   riderName: z.string().nullable().default(null),
+  ...RiderRowLink,
   unranked: tolerantEnum(RESULT_UNRANKED_REASONS),
 });
 export type RaceFinisherRow = z.infer<typeof RaceFinisherRow>;

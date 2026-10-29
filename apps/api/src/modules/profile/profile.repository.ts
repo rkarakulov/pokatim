@@ -4,6 +4,7 @@ import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Collection, Db, Filter } from 'mongodb';
 
 import type { DbSession } from '../../db';
+import type { PublicRiderCard } from './rider-names.port';
 import {
   PROFILE_COLLECTIONS,
   type ProfileConsentEventDoc,
@@ -468,6 +469,29 @@ export class ProfileRepository {
       )
       .toArray();
     return new Map(docs.map((doc) => [doc._id, doc.publicName as string]));
+  }
+
+  /**
+   * Публичные райдеры строк таблиц (порт `RIDER_NAMES.publicRiders`, rider-links-in-tables): условие — как у
+   * `findPublicNames` (в фильтре); наружу — имя, `publicId` и id фото. Один запрос по `_id`.
+   */
+  async findPublicRiders(userIds: readonly string[]): Promise<Map<string, PublicRiderCard>> {
+    const docs = await this.profiles
+      .find(
+        { _id: { $in: [...userIds] }, showNameInResults: true, publicName: { $type: 'string' } },
+        { projection: { publicName: 1, publicId: 1, avatarId: 1 } },
+      )
+      .toArray();
+    return new Map(
+      docs.map((doc) => [
+        doc._id,
+        {
+          name: doc.publicName as string,
+          publicId: doc.publicId ?? null,
+          avatarId: doc.avatarId ?? null,
+        },
+      ]),
+    );
   }
 
   /**

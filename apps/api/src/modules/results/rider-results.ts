@@ -1,7 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { RACE_REGISTRY, type RaceRegistry } from '../races';
+import { unrankedOf } from './results.policy';
 import {
+  type RiderFinishRow,
   RIDER_RESULTS_MAX_ROWS,
   type RiderProtocolRow,
   type RiderRaceInfo,
@@ -41,6 +43,30 @@ export class RiderResultsService implements RiderResults {
         elapsedSec: row.elapsedSec,
         startedAt: row.startedAt,
       }));
+  }
+
+  async publishedFinishes(userId: string): Promise<RiderFinishRow[]> {
+    const entries = await this.repository.finisherEntriesOfUser(userId, RIDER_RESULTS_MAX_ROWS);
+    if (entries.length === RIDER_RESULTS_MAX_ROWS) {
+      this.logger.warn(`riders.finishes_truncated uid=${userId} limit=${RIDER_RESULTS_MAX_ROWS}`);
+    }
+    // протокол опубликован ⇔ у гонки есть ревизия (журнал `race_recalculations`)
+    const published = await this.repository.currentRevisions([
+      ...new Set(entries.map((entry) => entry.raceId)),
+    ]);
+    return entries.flatMap((entry) => {
+      const unranked = unrankedOf(entry);
+      if (!entry.best || unranked === null || !published.has(entry.raceId)) return [];
+      return [
+        {
+          raceId: entry.raceId,
+          groupKey: entry.groupKey,
+          elapsedSec: entry.best.elapsedSec,
+          startedAt: entry.best.startedAt,
+          unranked,
+        },
+      ];
+    });
   }
 
   async racesOf(raceIds: readonly string[]): Promise<Map<string, RiderRaceInfo>> {

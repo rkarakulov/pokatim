@@ -80,6 +80,47 @@ async function seedActivity(
   return id;
 }
 
+/** Заявка-финишёр без места (START или Verified без пульса) напрямую в БД; `extra` — снятая, DQ по спору. */
+async function seedFinisher(
+  raceId: string,
+  userId: string,
+  {
+    tier = 'start',
+    elapsedSec = 4000,
+    ...extra
+  }: {
+    tier?: 'start' | 'verified';
+    elapsedSec?: number;
+    status?: 'active' | 'withdrawn';
+    disqualified?: { at: Date; disputeId: string } | null;
+  } = {},
+): Promise<void> {
+  const now = h.clock.now();
+  await resultsDb(h).entries.insertOne({
+    _id: uuidv7(),
+    raceId,
+    userId,
+    status: 'active',
+    groupKey: 'overall',
+    tier,
+    requests: [],
+    best: {
+      attemptId: uuidv7(),
+      elapsedSec,
+      startedAt: now,
+      finishedAt: now,
+      ranked: false,
+    },
+    summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
+    createdAt: now,
+    updatedAt: now,
+    withdrawnAt: null,
+    disqualified: null,
+    version: 1,
+    ...extra,
+  });
+}
+
 const FORBIDDEN_KEYS = ['userId', 'distanceM', 'elevationGainM', 'activities', 'rides'];
 /** Все ключи ответа на любой глубине. */
 const keysDeep = (value: unknown): string[] =>
@@ -111,7 +152,7 @@ describe('GET /v1/riders/:publicId (AC5)', () => {
       name: 'Анна К.',
       club: 'Velo',
       avatar: { id: avatarId },
-      stats: { races: 1, podiums: 1, bestPlace: 2 },
+      stats: { races: 1, podiums: 1, bestPlace: 2, finishes: 1 },
     });
     // тест ключей: ровно эти, без userId, км, набора и райдов
     expect(Object.keys(res.body as object).sort()).toEqual(
@@ -183,6 +224,19 @@ describe('GET /v1/profile/stats (AC6)', () => {
     await seedProtocolRace(h, season, [], { protocol: false, title: 'Без протокола' });
     // чужая строка
     await seedProtocolRace(h, season, [placedRow(userIdOf(other), 3)]);
+    // финиши без места (rider-links-in-tables): START и Verified без пульса после публикации — да; до публикации,
+    // снятая заявка, DQ по спору, чужой — нет
+    const startRace = await seedProtocolRace(h, season, [], { title: 'START' });
+    await seedFinisher(startRace, userId);
+    await seedFinisher(await seedProtocolRace(h, season, [], { title: 'Без пульса' }), userId, {
+      tier: 'verified',
+    });
+    await seedFinisher(await seedProtocolRace(h, season, [], { protocol: false }), userId);
+    await seedFinisher(await seedProtocolRace(h, season, []), userId, { status: 'withdrawn' });
+    await seedFinisher(await seedProtocolRace(h, season, []), userId, {
+      disqualified: { at: h.clock.now(), disputeId: uuidv7() },
+    });
+    await seedFinisher(startRace, userIdOf(other));
 
     const res = await call(h, 'GET', '/v1/profile/stats', undefined, auth(session));
     expect(res.status).toBe(200);
@@ -194,6 +248,8 @@ describe('GET /v1/profile/stats (AC6)', () => {
       elevationGainM: 351,
       races: 2,
       podiums: 1,
+      // 2 «в зачёте» + START + без пульса
+      finishes: 4,
     });
     expect(stats.bestPlaces.map((best) => [best.race.title, best.place])).toEqual([
       ['Первая', 1],
@@ -210,6 +266,7 @@ describe('GET /v1/profile/stats (AC6)', () => {
       elevationGainM: 0,
       races: 0,
       podiums: 0,
+      finishes: 0,
       bestPlaces: [],
     });
     expect((await call(h, 'GET', '/v1/profile/stats')).status).toBe(401);
@@ -272,5 +329,44 @@ describe('GET /v1/riders/:publicId/races (AC9)', () => {
     );
     await patch(session, { showNameInResults: false });
     expect((await call(h, 'GET', url)).status).toBe(404);
+  });
+});
+
+describe('финиши без места в публичном профиле (rider-links-in-tables)', () => {
+  it('профиль — finishes; история — финиш START без места, unranked; «в зачёте» не меняется', async () => {
+    const session = await signUpSession(h);
+    const userId = userIdOf(session);
+    const publicId = await publicRider(session);
+    const season = await seedSeason(h);
+    const ranked = await seedProtocolRace(h, season, [placedRow(userId, 2)], { title: 'Место' });
+    h.clock.advance(60_000);
+    const start = await seedProtocolRace(h, season, [], { title: 'START' });
+    await seedFinisher(start, userId, { elapsedSec: 4200 });
+    await seedFinisher(await seedProtocolRace(h, season, [], { protocol: false }), userId);
+
+    const profile = PublicRiderProfile.parse((await call(h, 'GET', `/v1/riders/${publicId}`)).body);
+    expect(profile.stats).toEqual({ races: 1, podiums: 1, bestPlace: 2, finishes: 2 });
+
+    const res = await call(h, 'GET', `/v1/riders/${publicId}/races`);
+    expect(res.status).toBe(200);
+    const page = PublicRiderRacePage.parse(res.body);
+    expect(
+      page.items.map((item) => [
+        item.race.id,
+        item.place,
+        item.status,
+        item.unranked,
+        item.elapsedSec,
+      ]),
+    ).toEqual([
+      [start, null, 'final', 'start', 4200],
+      [ranked, 2, 'final', null, 3600],
+    ]);
+    for (const key of FORBIDDEN_KEYS) expect(keysDeep(res.body)).not.toContain(key);
+    const first = PublicRiderRacePage.parse(
+      (await call(h, 'GET', `/v1/riders/${publicId}/races?limit=1`)).body,
+    );
+    const decoded = Buffer.from(first.nextCursor ?? '', 'base64url').toString('utf8');
+    expect(JSON.parse(decoded)).toEqual({ k: 'r', id: start });
   });
 });

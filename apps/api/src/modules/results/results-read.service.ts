@@ -20,6 +20,7 @@ import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import {
   RIDER_NAMES,
+  riderRowFields,
   type RiderNameDirectory,
   VERIFIED_PROFILES,
   type VerifiedProfiles,
@@ -77,7 +78,7 @@ const FinisherCursorKey = z.literal('f');
 /** Строка таблицы до подстановки имени: `userId` — только для порта имён, наружу не выходит. */
 interface UnnamedRow {
   userId: string;
-  row: Omit<RaceResultRow, 'riderName'>;
+  row: Omit<RaceResultRow, 'riderName' | 'riderPublicId' | 'riderAvatar'>;
 }
 type UnnamedPage = Omit<RaceResultsPage, 'items'> & { items: UnnamedRow[] };
 /** Сегмент попытки наружу: без координат и датчиков (приложение и панель). */
@@ -437,13 +438,13 @@ export class ResultsReadService {
     });
     const rows = page.rows.slice(0, query.limit);
     const last = rows.at(-1);
-    const names = await this.names.publicNames(rows.map((row) => row.userId));
+    const riders = await this.names.publicRiders(rows.map((row) => row.userId));
     return {
       total: page.total,
       items: rows.map((row) => ({
         entryId: row._id,
         elapsedSec: row.best.elapsedSec,
-        riderName: names.get(row.userId) ?? null,
+        ...riderRowFields(riders.get(row.userId)),
         unranked: unrankedOf(row) ?? 'no_heart_rate',
       })),
       nextCursor: page.rows.length > query.limit && last ? encodeCursor('f', last._id) : null,
@@ -455,7 +456,7 @@ export class ResultsReadService {
    * согласованности мест и в снимок протокола не пишется. Строка — явным списком полей: `userId` наружу не выходит.
    */
   private async withRiderNames(page: UnnamedPage): Promise<RaceResultsPage> {
-    const names = await this.names.publicNames(page.items.map((item) => item.userId));
+    const riders = await this.names.publicRiders(page.items.map((item) => item.userId));
     return {
       group: page.group,
       status: page.status,
@@ -469,7 +470,7 @@ export class ResultsReadService {
         place: row.place,
         tied: row.tied,
         elapsedSec: row.elapsedSec,
-        riderName: names.get(userId) ?? null,
+        ...riderRowFields(riders.get(userId)),
       })),
     };
   }

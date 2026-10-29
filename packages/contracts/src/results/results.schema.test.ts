@@ -31,6 +31,7 @@ import {
   MY_ATTEMPT_TRACK_MAX_RUNS,
   MyAttemptTrack,
   MyRaceEntry,
+  RaceFinisherRow,
   RaceResultRow,
   RaceResultsPage,
   RaceResultsQuery,
@@ -138,6 +139,29 @@ describe('участие и результаты: приложение', () => {
     expect(RaceResultRow.parse(row).riderName).toBeNull();
     expect(RaceResultRow.parse({ ...row, riderName: 'Анна К.' }).riderName).toBe('Анна К.');
     expect(RaceResultRow.parse({ ...row, riderName: null }).riderName).toBeNull();
+  });
+
+  it('строка таблицы и финишёров: ссылка на профиль и фото — с согласием; старый сервер — null', () => {
+    const token = 'A'.repeat(43);
+    const row = { entryId: ID, place: 1, tied: false, elapsedSec: 3600 };
+    expect(RaceResultRow.parse(row)).toMatchObject({ riderPublicId: null, riderAvatar: null });
+    const linked = {
+      ...row,
+      riderName: 'Анна К.',
+      riderPublicId: token,
+      riderAvatar: { id: token },
+    };
+    expect(RaceResultRow.parse(linked)).toMatchObject({
+      riderPublicId: token,
+      riderAvatar: { id: token },
+    });
+    expect(RaceResultRow.safeParse({ ...linked, riderPublicId: 'x' }).success).toBe(false);
+    const finisher = { entryId: ID, elapsedSec: 3600, unranked: 'start' };
+    expect(RaceFinisherRow.parse(finisher)).toMatchObject({
+      riderPublicId: null,
+      riderAvatar: null,
+    });
+    expect(RaceFinisherRow.parse({ ...finisher, riderPublicId: token }).riderPublicId).toBe(token);
   });
 
   it('причины отказа — коды движка + implausible в конце', () => {

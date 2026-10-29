@@ -1,4 +1,4 @@
-import type { ProtocolRowStatus, ResultGroupKey } from '@pokatim/contracts';
+import type { ProtocolRowStatus, ResultGroupKey, ResultUnrankedReason } from '@pokatim/contracts';
 
 /**
  * Порт `results` для модуля `riders` (rider-profile, через `modules/results/index.ts`): строки опубликованных
@@ -30,6 +30,19 @@ export interface RiderProtocolRow {
 export const isRankedRow = (row: RiderProtocolRow): row is RiderProtocolRow & { place: number } =>
   row.status !== 'dq' && row.place !== null;
 
+/**
+ * Финиш без места (rider-links-in-tables, RC-A3 (b)): START или Verified без пульса в гонке с опубликованным протоколом —
+ * в снимок протокола не входит, читается из заявки (условие — как у таблицы финишёров).
+ */
+export interface RiderFinishRow {
+  raceId: string;
+  groupKey: ResultGroupKey;
+  elapsedSec: number;
+  /** старт лучшего сегмента — внутри окна гонки */
+  startedAt: Date;
+  unranked: ResultUnrankedReason;
+}
+
 export interface RiderRaceInfo {
   title: string;
   windowStartsAt: Date;
@@ -41,6 +54,8 @@ export interface RiderResults {
    * не задан.
    */
   publishedRows(userId: string): Promise<RiderProtocolRow[]>;
+  /** Финиши без места пользователя по гонкам с опубликованным протоколом (есть ревизия). Порядок не задан. */
+  publishedFinishes(userId: string): Promise<RiderFinishRow[]>;
   /** Названия и окна гонок (опубликованные и отменённые; черновик и неизвестная — нет в карте). */
   racesOf(raceIds: readonly string[]): Promise<Map<string, RiderRaceInfo>>;
 }

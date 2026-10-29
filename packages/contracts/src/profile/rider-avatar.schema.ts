@@ -29,6 +29,15 @@ export type AvatarId = z.infer<typeof AvatarId>;
 export const RiderPublicId = OpaqueToken;
 export type RiderPublicId = z.infer<typeof RiderPublicId>;
 
+/**
+ * Поля строки публичной таблицы (rider-links-in-tables): ссылка на профиль `/riders/<publicId>` и фото — только при
+ * имени и согласии на показ (P1, R3), иначе `null` (вместе с `riderName`). Старый сервер полей не знает — `null`.
+ */
+export const RiderRowLink = {
+  riderPublicId: RiderPublicId.nullable().default(null),
+  riderAvatar: z.object({ id: AvatarId }).nullable().default(null),
+};
+
 const fraction = z.coerce
   .number({ error: fieldError('INVALID') })
   .min(0, { error: 'INVALID' })
