@@ -14,7 +14,7 @@ Follow-up `docs/product/routes.md`: на странице гонки с сохр
 
 Миграций, env, контрактов, CSP — нет.
 
-Проверки: `pnpm check` — зелёный; `ADMIN_BASE=/admin/ pnpm --filter @pokatim/admin build` — проходит. Ревью: Codex
+Проверки: `pnpm check` — зелёный (pre-push, 15/15; до этого под нагрузкой машины — таймауты посторонних API int-тестов, отдельно зелёные); `ADMIN_BASE=/admin/ pnpm --filter @pokatim/admin build` — проходит. Ревью: Codex
 APPROVE, Claude — HIGH-1 исправлен (findings.md).
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
