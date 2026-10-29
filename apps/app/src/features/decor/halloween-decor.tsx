@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { DecorSvg } from './decor-svg';
-import { BAT, COBWEB, halloweenColors, MOON, PUMPKIN, SPIDER, WITCH } from './halloween-art';
+import { BAT, COBWEB, halloweenColors, PUMPKIN, SPIDER, WITCH } from './halloween-art';
 import { HALLOWEEN_LAYOUT as L, HALLOWEEN_MOTION as M } from './halloween-layout';
 
 /**
- * Хеллоуинский декор на native (halloween-decor): слой поверх области ленты — паутина с пауком, луна, летучие мыши,
+ * Хеллоуинский декор на native (halloween-decor): слой поверх области ленты — паутина с пауком, летучие мыши,
  * ведьма на метле и тыквы. Касания не перехватывает, скрыт от скринридеров. Анимации (паук покачивается, ведьма
  * пролетает) — только при выключенном reduce motion; неизвестно или включено — статично. Web — `.web.tsx`.
  */
@@ -83,9 +83,6 @@ export function HalloweenDecor() {
           <DecorSvg art={SPIDER} colors={colors} />
         </View>
       </Animated.View>
-      <View style={[styles.moon, { opacity: L.moon.opacity }]}>
-        <DecorSvg art={MOON} colors={colors} />
-      </View>
       {L.bats.map((bat, index) => (
         <View
           key={index}
@@ -159,13 +156,6 @@ const styles = StyleSheet.create({
   },
   thread: { width: StyleSheet.hairlineWidth },
   spiderBody: { width: L.spider.size, height: L.spider.size },
-  moon: {
-    position: 'absolute',
-    bottom: L.moon.bottom,
-    left: L.moon.left,
-    width: L.moon.size,
-    height: L.moon.size,
-  },
   witch: {
     position: 'absolute',
     width: L.witch.width,

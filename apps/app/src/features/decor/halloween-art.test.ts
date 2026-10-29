@@ -1,16 +1,7 @@
 /// <reference types="jest" />
 import { appThemes, appThemeScheme } from '@pokatim/design-tokens';
 
-import {
-  BAT,
-  COBWEB,
-  cobwebPath,
-  halloweenColors,
-  MOON,
-  PUMPKIN,
-  SPIDER,
-  WITCH,
-} from './halloween-art';
+import { BAT, COBWEB, cobwebPath, halloweenColors, PUMPKIN, SPIDER, WITCH } from './halloween-art';
 
 describe('графика хеллоуинского декора (halloween-decor)', () => {
   it('паутина детерминирована: лучи из правого верхнего угла и кольца-кривые', () => {
@@ -22,7 +13,7 @@ describe('графика хеллоуинского декора (halloween-deco
   });
 
   it('у каждой фигуры — путь и роль цвета, без значений цвета', () => {
-    for (const art of [COBWEB, SPIDER, WITCH, BAT, MOON, PUMPKIN]) {
+    for (const art of [COBWEB, SPIDER, WITCH, BAT, PUMPKIN]) {
       expect(art.viewBox.split(' ')).toHaveLength(4);
       for (const shape of art.shapes) {
         expect(shape.d).not.toMatch(/NaN|undefined/);
@@ -40,7 +31,6 @@ describe('графика хеллоуинского декора (halloween-deco
       pumpkin: theme.text.accent,
       stem: theme.status.success,
       face: theme.surface.default,
-      moon: theme.status.warning,
     });
   });
 });
