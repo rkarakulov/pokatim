@@ -73,6 +73,18 @@ describe('useSetTheme (user-theme A10)', () => {
     );
   });
 
+  it('ответ после выхода (кэш очищен) — профиль прошлого аккаунта в кэш не возвращается', async () => {
+    const response = deferred<ProfileView>();
+    setProfileTheme.mockReturnValue(response.promise);
+    const { hook, client } = await setup();
+    await act(async () => hook.result.current.mutate('atlas'));
+
+    await act(async () => client.clear());
+    await act(async () => response.resolve(profile('atlas')));
+    await waitFor(() => expect(hook.result.current.isPending).toBe(false));
+    expect(client.getQueryData(PROFILE_QUERY_KEY)).toBeUndefined();
+  });
+
   it('ошибка — откат к прежней теме, мутация в ошибке (баннер экрана)', async () => {
     setProfileTheme.mockRejectedValue(new Error('network'));
     const { hook, themeOf } = await setup();

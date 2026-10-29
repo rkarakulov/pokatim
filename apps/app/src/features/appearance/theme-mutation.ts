@@ -37,14 +37,18 @@ export function useSetTheme() {
     networkMode: 'always',
     scope: { id: SCOPE },
     onMutate: async (themeId) => {
+      // считаем до `await`: смены, ставшие `pending` в том же окне, иначе обе видели бы себя не первыми
+      const first = pendingThemeChanges(queryClient) <= 1;
       await queryClient.cancelQueries({ queryKey: PROFILE_QUERY_KEY, exact: true });
       const current = queryClient.getQueryData<ProfileView>(PROFILE_QUERY_KEY);
       // первая смена в очереди — кэш ещё равен подтверждённому
-      if (pendingThemeChanges(queryClient) <= 1) confirmed.current = current?.themeId;
+      if (first) confirmed.current = current?.themeId;
       queryClient.setQueryData<ProfileView | undefined>(PROFILE_QUERY_KEY, withTheme(themeId));
     },
     onSuccess: (view) => {
       confirmed.current = view.themeId;
+      // ответ пришёл после выхода (`queryClient.clear()`): профиль прошлого аккаунта в кэш не возвращаем
+      if (!queryClient.getQueryData(PROFILE_QUERY_KEY)) return;
       if (pendingThemeChanges(queryClient) > 1) {
         // поздняя смена в полёте: свежий профиль, но тема — её оптимистичная
         const optimistic = queryClient.getQueryData<ProfileView>(PROFILE_QUERY_KEY)?.themeId;
