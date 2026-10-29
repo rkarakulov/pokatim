@@ -1,9 +1,15 @@
 import { ApiHttpError } from '@pokatim/api-client';
-import type { PublicRiderProfile, PublicRiderRacePage } from '@pokatim/contracts';
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import type {
+  CreateProfileReportRequest,
+  PublicRiderProfile,
+  PublicRiderRacePage,
+} from '@pokatim/contracts';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
+import { withAccessToken } from '@/features/auth/authorized';
 import { api } from '@/lib/api';
+import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
 /**
  * Публичный профиль райдера (rider-profile) — чтение без `withAccessToken`; сервер отдаёт `public, max-age=60` — чаще
@@ -54,4 +60,29 @@ export function useRiderRaces(id: string, enabled: boolean) {
     if (staleCursor) void queryClient.resetQueries({ queryKey: riderRacesKey(id), exact: true });
   }, [staleCursor, queryClient, id]);
   return query;
+}
+
+/**
+ * Состояние вошедшего зрителя публичного профиля (profile-report-app): `canReport` / `reported` решает сервер
+ * (`GET /v1/riders/:publicId/me`). Только клиент и только вошедшему; кеш стирается при выходе.
+ */
+export const riderViewerKey = (id: string) => ['riders', 'viewer', id] as const;
+
+export function useRiderViewer(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: riderViewerKey(id),
+    queryFn: () => withAccessToken((token) => api.getRiderViewer(token, id)),
+    staleTime: DEFAULT_STALE_MS,
+    enabled,
+  });
+}
+
+/** «Пожаловаться» на профиль: ответ — новое состояние зрителя (`reported: true`). */
+export function useReportRider(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateProfileReportRequest) =>
+      withAccessToken((token) => api.reportRider(token, id, body)),
+    onSuccess: (viewer) => queryClient.setQueryData(riderViewerKey(id), viewer),
+  });
 }
