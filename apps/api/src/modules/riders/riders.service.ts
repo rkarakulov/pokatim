@@ -12,7 +12,7 @@ import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { RIDER_PROFILES, type RiderProfileDirectory } from '../profile';
 import { RIDER_RESULTS, type RiderResults } from '../results';
 import { ACTIVITY_TOTALS, type ActivityTotals } from '../tracks';
-import { pageRows, summarize } from './riders.policy';
+import { historyRows, pageRows, summarize } from './riders.policy';
 
 const notFound = () => domainError('NOT_FOUND', 404);
 const invalidCursor = () =>
@@ -36,11 +36,12 @@ export class RidersService {
 
   /** Своя статистика: заезды и суммы — по основным велоактивностям, гонки — по опубликованным протоколам. */
   async stats(userId: string): Promise<RiderStats> {
-    const [totals, rows] = await Promise.all([
+    const [totals, rows, finishes] = await Promise.all([
       this.totals.of(userId),
       this.results.publishedRows(userId),
+      this.results.publishedFinishes(userId),
     ]);
-    const summary = summarize(rows);
+    const summary = summarize(rows, finishes);
     const races = await this.results.racesOf(summary.bestPlaces.map((row) => row.raceId));
     return {
       activities: totals.activities,
@@ -48,6 +49,7 @@ export class RidersService {
       elevationGainM: Math.round(totals.elevationGainM),
       races: summary.races,
       podiums: summary.podiums,
+      finishes: summary.finishes,
       bestPlaces: summary.bestPlaces.flatMap((row) => {
         const race = races.get(row.raceId);
         if (!race || row.place === null) return [];
@@ -71,7 +73,11 @@ export class RidersService {
   async publicProfile(publicId: string): Promise<PublicRiderProfile> {
     const rider = await this.profiles.findPublic(publicId);
     if (!rider) throw notFound();
-    const summary = summarize(await this.results.publishedRows(rider.userId));
+    const [rows, finishes] = await Promise.all([
+      this.results.publishedRows(rider.userId),
+      this.results.publishedFinishes(rider.userId),
+    ]);
+    const summary = summarize(rows, finishes);
     return {
       publicId,
       name: rider.publicName,
@@ -81,16 +87,24 @@ export class RidersService {
         races: summary.races,
         podiums: summary.podiums,
         bestPlace: summary.bestPlaces[0]?.place ?? null,
+        finishes: summary.finishes,
       },
     };
   }
 
-  /** Публичная история: 404 профиля — до разбора курсора; только строки опубликованных протоколов. */
+  /**
+   * Публичная история: 404 профиля — до разбора курсора; только гонки с опубликованным протоколом — строки текущей
+   * ревизии и финиши без места.
+   */
   async publicRaces(publicId: string, query: RiderHistoryQuery): Promise<PublicRiderRacePage> {
     const rider = await this.profiles.findPublic(publicId);
     if (!rider) throw notFound();
     const cursor = query.cursor ? decodeCursor(query.cursor, RaceCursorKey) : null;
-    const paged = pageRows(await this.results.publishedRows(rider.userId), cursor, query.limit);
+    const [rows, finishes] = await Promise.all([
+      this.results.publishedRows(rider.userId),
+      this.results.publishedFinishes(rider.userId),
+    ]);
+    const paged = pageRows(historyRows(rows, finishes), cursor, query.limit);
     if (!paged) throw invalidCursor();
     const { page, next } = paged;
     const races = await this.results.racesOf(page.map((row) => row.raceId));
@@ -110,6 +124,7 @@ export class RidersService {
             status: row.status,
             groupKey: row.groupKey,
             elapsedSec: row.elapsedSec,
+            unranked: row.unranked,
           },
         ];
       }),

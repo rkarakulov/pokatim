@@ -120,6 +120,12 @@ paths:
   недоступен — бренд; страница не найдена — без картинки); остальные публичные страницы — `brandOgImage()` /
   `brandOgImageFor(page)`. Версию картинки считает только API (`/v1/og/cards/...`), адрес — только от `WEB_ORIGIN`;
   нет `WEB_ORIGIN` — ни запросов, ни картинки. Свой fetch и расчёт версии в приложении — запрещены.
+- `robots.txt` и `sitemap.xml` (landing-seo) — API-маршруты `src/app/{robots.txt,sitemap.xml}+api.ts`, правила —
+  `src/lib/seo.ts`. **Новый экран в `src/app`** — классифицируй: только вошедшим, онбординг, токен в URL — префикс в
+  `SEO_DISALLOW`; публичный — в `PUBLIC` сторожа `__tests__/seo-routes.test.ts`. Страницу с `noindex` в мета не
+  закрывай (краулер не увидит `noindex`), кроме ссылок с токеном. `/v1/` не закрывай: Googlebot при рендере
+  соблюдает robots и для fetch — публичный экран потеряет данные из API. Новый индексируемый вид объекта — `SITEMAP_KINDS` в contracts и
+  `GET /v1/sitemap` (`sharing`, порты владельцев).
 - Гостевой лендинг `/welcome` (guest-landing, `docs/product/landing.md`) — корневой `src/app/welcome.tsx` в том же
   `Stack.Protected guard={!signedIn}`, что `(onboarding)` (не в группе: `initialRouteName` группы не трогаем); экран —
   `features/landing/`. `loader` — четыре публичных списка (`loadLandingSeed`, части `null`, не бросает; маршруты —
@@ -316,7 +322,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   запрос статуса, `useCardFile`; `card-panel.tsx`: `CardPanel` — чипы, превью, «Поделиться», пустое состояние на
   409/404). Приглашение кофе-райда — `features/rides/invite/*`, экран `rides/invite/[id]` внутри `Stack.Protected`
   (ключ `['rides','invite',rideId,template]`); кнопка «Карточка-приглашение» на детали — вошедшему, `phase ===
-  'upcoming'` (право — сервер: 409 → «Приглашение недоступно»).
+  'upcoming'` (право — сервер: 409 → «Приглашение недоступно»). Карточка достижения — `features/achievements/story/*`,
+  экран `achievements/story/[code]` внутри `Stack.Protected` (ключ `['achievements','story',code,template]`; 409 и
+  незнакомый код — «Карточки нет» и «К достижению»).
 
 ## Профиль райдера (rider-profile, `docs/product/profile.md`)
 
@@ -356,8 +364,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   60 с; сервер сверяет выдачи на каждом GET — чаще не запрашивать), публичные — `['riders','achievements',id]`
   (`useRiderAchievements`, только клиент — RC-5, только после найденного профиля; 404 — блока нет).
 - Каталог — `achievement-catalog.ts` (`ACHIEVEMENT_CATALOG satisfies Record<AchievementCode, …>`: ключи i18n, иконка,
-  число на значке, `shareable` — только `race_*`). Незнакомый код (`'unknown'`, RC-8) — `knownItems` отбрасывает
-  везде (список, вспышка, публичный блок); незнакомый вид объекта — без «Поделиться» (`shareRaceId`). Дата — только
+  число на значке, `shareable` — «Сторис результата», только `race_*`). Незнакомый код (`'unknown'`, RC-8) — `knownItems`
+  отбрасывает везде (список, вспышка, публичный блок); «Поделиться» — карточка достижения у любого известного кода;
+  незнакомый вид объекта — без «Сторис результата» (`shareRaceId`). Иконка кода — зеркало в
+  `apps/api/.../achievement-card.icons.ts` (сменил — поменяй там). Дата — только
   `factDate` (день по Минску, RC-7), всегда с годом (`factDateText`).
 - Вспышка: хост `AchievementFlashHost` рядом со `Stack` корневого layout с тем же `ready`, что у push; маршрут
   `achievements/flash` (`presentation: 'fullScreenModal'`) и `achievements/[code]` — внутри `Stack.Protected`
@@ -371,7 +381,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   с повтором `hydrate()`, запроса достижений нет. Смоук без сессии — гард ведёт гостя на `/welcome`.
   Показанное помечается сразу (`useMarkAchievementsSeen`, оптимистично, откат — только своих кодов). Поверх
   `/achievements`, `/races/story/`, ссылок писем, `devices/return`, удаления аккаунта — не открывается. Ошибка запроса
-  хоста — тишина. «Поделиться» — `replace(storyPath(raceId))`.
+  хоста — тишина. «Поделиться» — `replace(achievementStoryPath(code))`.
 - Значок «Эмаль» — `achievement-badge.tsx` (роли `surface.default`, `text.primary`, `text.accent`, `action.*`;
   диаметр — `layout.badgeGrid` / `layout.badgeHero`, пропорции — `badgeShape` из `@pokatim/design-tokens`; follow-up
   `size.badge*` в базе). Появление на вспышке — `Animated` только при `useReducedMotion() === false`; пока ответ

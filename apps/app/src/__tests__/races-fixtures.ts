@@ -124,6 +124,8 @@ export const row = (overrides: Partial<RaceResultRow> = {}): RaceResultRow => ({
   tied: false,
   elapsedSec: 5400,
   riderName: null,
+  riderPublicId: null,
+  riderAvatar: null,
   ...overrides,
 });
 
@@ -183,6 +185,8 @@ export const finisher = (overrides: Partial<RaceFinisherRow> = {}): RaceFinisher
   entryId: '0199d000-0000-7000-8000-0000000000d1',
   elapsedSec: 7200,
   riderName: null,
+  riderPublicId: null,
+  riderAvatar: null,
   unranked: 'start',
   ...overrides,
 });

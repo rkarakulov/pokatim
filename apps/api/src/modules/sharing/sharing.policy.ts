@@ -87,3 +87,16 @@ export function ogPrerenderable(input: OgPrerenderFacts, now: Date): boolean {
       return true;
   }
 }
+
+/**
+ * Карта сайта (landing-seo): `GET /v1/sitemap`. Лимит вида держит файл `sitemap.xml` в пределах 50 000 URL;
+ * мемо процесса — прямые запросы к API не сканируют коллекции чаще раза в окно.
+ */
+export const SITEMAP_POLICY = {
+  /** строк вида за один запрос к порту владельца */
+  scanPage: 1_000,
+  /** записей одного вида в карте */
+  kindLimit: 10_000,
+  /** окно мемо ответа, мс */
+  memoMs: 10 * 60_000,
+} as const;

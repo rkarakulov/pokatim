@@ -838,6 +838,16 @@ export function createApiClient({
         StoryCardStatus,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
+    /**
+     * Карточка своего полученного достижения (achievement-story-card): `pending` | `ready` + токен | `failed`; не
+     * получено или отозвано — 409 `STORY_CARD_UNAVAILABLE`. Картинка — тем же `storyCardImageUrl`.
+     */
+    getAchievementCard: (accessToken: string, code: AchievementCode, query: StoryCardQuery) =>
+      request(
+        `/v1/achievements/${encodeURIComponent(code)}/story-card${queryString(query)}`,
+        StoryCardStatus,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
     /** Адрес PNG карточки по токену (капабилити-ссылка без входа, живёт ≤ 24 ч); без запроса. */
     storyCardImageUrl: (token: string) =>
       `${baseUrl}/v1/story-cards/${encodeURIComponent(token)}.png`,

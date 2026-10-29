@@ -13,6 +13,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { groupLabel } from '@/features/races/participation-format';
 import { loading, MoreAction, RowsSkeleton, TabFailure } from '@/features/races/results-table';
+import { RiderWho, TableRow, useRowAction } from '@/features/races/table-row';
 
 import { useMySeasonStandings, useSeasonStandings, useSeasonStandingsTable } from './queries';
 import {
@@ -24,14 +25,18 @@ import {
   type PickedTable,
 } from './standings-format';
 
-/** Строка таблицы сезона: место («=6»), кто, очки; своя — «Вы» полосой рамки и текстом (не только цветом). */
+/**
+ * Строка таблицы сезона: место («=6»), кто, очки; своя — «Вы» полосой рамки и текстом (не только цветом). Публичный
+ * райдер — аватар и ссылка на профиль (rider-links-in-tables).
+ */
 function StandingRowView({ row, own }: { row: SeasonStandingRow; own: boolean }) {
   const theme = useTheme();
   const view = standingRow(row, own);
+  const action = useRowAction(null, row.riderPublicId, view.profileA11y);
   return (
-    <View
-      accessible
-      accessibilityLabel={view.a11y}
+    <TableRow
+      a11y={view.a11y}
+      action={action}
       style={[
         styles.row,
         { borderTopColor: theme.border.subtle },
@@ -41,18 +46,14 @@ function StandingRowView({ row, own }: { row: SeasonStandingRow; own: boolean })
       <Text style={[textStyle('time'), styles.place, { color: theme.text.primary }]}>
         {view.place}
       </Text>
-      <Text
-        numberOfLines={1}
-        style={[
-          textStyle(own ? 'label' : 'body'),
-          styles.who,
-          { color: own ? theme.text.accent : theme.text.primary },
-        ]}
-      >
-        {view.who}
-      </Text>
+      <RiderWho
+        who={view.who}
+        own={own}
+        riderPublicId={row.riderPublicId}
+        avatarId={row.riderAvatar?.id ?? null}
+      />
       <Text style={[textStyle('time'), { color: theme.text.primary }]}>{view.points}</Text>
-    </View>
+    </TableRow>
   );
 }
 
@@ -233,7 +234,9 @@ const styles = StyleSheet.create({
   block: { marginTop: size.sectionGap, gap: space.s3 },
   head: { gap: space.s1 },
   tables: { gap: space.s3 },
+  // строка-ссылка (публичный профиль) — не ниже минимальной цели касания
   row: {
+    minHeight: size.touchMin,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s3,
@@ -243,5 +246,4 @@ const styles = StyleSheet.create({
   own: { borderLeftWidth: stroke.indicator, paddingLeft: space.s2 },
   // колонка мест одной ширины («1», «12», «=12») — как таблица гонки
   place: { minWidth: size.skeletonWord },
-  who: { flex: 1 },
 });

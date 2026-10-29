@@ -158,12 +158,18 @@ export async function addRevision(
   );
 }
 
+/** Коллекция профилей — для тестов других модулей (модуль `profile` наружу коллекцию не отдаёт). */
+export const profilesCollection = (h: Harness) =>
+  h.db.collection<ProfileDoc>(PROFILE_COLLECTIONS.profiles);
+
 /** Профиль с публичным именем и согласием — напрямую в БД (правила имени проверяет `profile`). */
 export async function seedProfile(
   h: Harness,
   userId: string,
   publicName: string | null,
   showNameInResults: boolean,
+  /** ссылка на профиль и фото (rider-links-in-tables) */
+  extra: { publicId?: string; avatarId?: string } = {},
 ): Promise<void> {
   await h.db.collection<ProfileDoc>(PROFILE_COLLECTIONS.profiles).insertOne({
     _id: userId,
@@ -171,6 +177,7 @@ export async function seedProfile(
     surveyCompletedAt: null,
     publicName,
     showNameInResults,
+    ...extra,
     updatedAt: h.clock.now(),
   });
 }

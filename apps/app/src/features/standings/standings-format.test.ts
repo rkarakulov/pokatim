@@ -96,6 +96,8 @@ describe('строка таблицы', () => {
     place: 6,
     tied: true,
     riderName: null,
+    riderPublicId: null,
+    riderAvatar: null,
     points: 54,
     cells: [],
   };
@@ -106,10 +108,23 @@ describe('строка таблицы', () => {
       who: 'Участник',
       points: '54 очка',
       a11y: '6-е место поровну, Участник, 54 очка',
+      profileA11y: null,
     });
     expect(standingRow({ ...row, riderName: 'Анна К.' }, true).who).toBe('Вы');
     expect(standingRow({ ...row, riderName: 'Анна К.', tied: false }, false).a11y).toBe(
       '6, Анна К., 54 очка',
+    );
+  });
+
+  it('ссылка на профиль (rider-links-in-tables) — только при riderPublicId', () => {
+    expect(standingRow(row, false).profileA11y).toBeNull();
+    const named = { ...row, riderName: 'Анна К.', riderPublicId: 'p'.repeat(43) };
+    expect(standingRow(named, false).profileA11y).toBe(
+      'Профиль райдера, Анна К., 6-е место поровну, 54 очка',
+    );
+    // своя строка — тоже по имени, не «Вы»
+    expect(standingRow(named, true).profileA11y).toBe(
+      'Профиль райдера, Анна К., 6-е место поровну, 54 очка',
     );
   });
 });

@@ -62,6 +62,8 @@ const row = (overrides: Partial<PanelSeasonStandingRow>): PanelSeasonStandingRow
   place: 1,
   tied: false,
   riderName: 'Анна К.',
+  riderPublicId: null,
+  riderAvatar: null,
   userId: USER_A,
   points: 185,
   cells: [],

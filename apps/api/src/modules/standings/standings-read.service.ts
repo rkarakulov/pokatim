@@ -15,7 +15,7 @@ import { z } from 'zod';
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import type { PanelPrincipal } from '../panel';
-import { RIDER_NAMES, type RiderNameDirectory } from '../profile';
+import { RIDER_NAMES, type RiderNameDirectory, riderRowFields } from '../profile';
 import { SEASON_RACES, type SeasonRaces } from '../races';
 import type {
   SeasonStandingRowDoc,
@@ -80,14 +80,14 @@ export class StandingsReadService {
   }
 
   async table(seasonId: string, query: SeasonStandingsTableQuery): Promise<SeasonStandingsTable> {
-    const { header, table, rows, more, names } = await this.page(seasonId, query);
+    const { header, table, rows, more, riders } = await this.page(seasonId, query);
     return {
       ...this.tableHead(header, table, query),
       items: rows.map((row) => ({
         order: row.order,
         place: row.place,
         tied: row.tied,
-        riderName: names.get(row.userId) ?? null,
+        ...riderRowFields(riders.get(row.userId)),
         points: row.points,
         cells: row.cells.map(toCell),
       })),
@@ -155,14 +155,14 @@ export class StandingsReadService {
     query: SeasonStandingsTableQuery,
   ): Promise<PanelSeasonStandingsTable> {
     const showUserId = this.seasons.seesAllRaces(principal);
-    const { header, table, rows, more, names } = await this.page(seasonId, query);
+    const { header, table, rows, more, riders } = await this.page(seasonId, query);
     return {
       ...this.tableHead(header, table, query),
       items: rows.map((row) => ({
         order: row.order,
         place: row.place,
         tied: row.tied,
-        riderName: names.get(row.userId) ?? null,
+        ...riderRowFields(riders.get(row.userId)),
         points: row.points,
         cells: row.cells.map(toCell),
         userId: showUserId ? row.userId : null,
@@ -218,8 +218,8 @@ export class StandingsReadService {
       );
       return { header, table, rows: rows.slice(0, query.limit), more: rows.length > query.limit };
     });
-    const names = await this.names.publicNames(raw.rows.map((row) => row.userId));
-    return { ...raw, names };
+    const riders = await this.names.publicRiders(raw.rows.map((row) => row.userId));
+    return { ...raw, riders };
   }
 
   private tableHead(

@@ -411,11 +411,13 @@ describe('отмена', () => {
 describe('события для уведомлений (notifications, ADR-0017)', () => {
   const payloads = async (type: string) => (await eventsOfType(h, type)).map((e) => e.payload);
 
-  it('отмена — rides.ride-cancelled { rideId }; повторная отмена — без второго события', async () => {
+  it('отмена — rides.ride-cancelled { rideId, seq }; повторная отмена — без второго события', async () => {
     const ride = await createRide(h, organizer);
     await authed(h, organizer, 'POST', `${RIDES}/${ride.id}/cancel`, { reason: 'weather' });
     await authed(h, organizer, 'POST', `${RIDES}/${ride.id}/cancel`, { reason: 'other' });
-    expect(await payloads('rides.ride-cancelled')).toEqual([{ rideId: ride.id }]);
+    expect(await payloads('rides.ride-cancelled')).toEqual([
+      { rideId: ride.id, seq: expect.any(Number) },
+    ]);
   });
 
   it('перенос при участниках — rides.ride-rescheduled; без участников и правка не старта — без события', async () => {
@@ -432,7 +434,9 @@ describe('события для уведомлений (notifications, ADR-0017)
     });
     // правка названия после переноса в тот же момент часов стенда — не перенос
     await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, { version: 1, title: 'Новое' });
-    expect(await payloads('rides.ride-rescheduled')).toEqual([{ rideId: ride.id }]);
+    expect(await payloads('rides.ride-rescheduled')).toEqual([
+      { rideId: ride.id, seq: expect.any(Number) },
+    ]);
   });
 
   it('отказ записи (устаревшая version, после старта) — без события', async () => {

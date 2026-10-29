@@ -1,9 +1,19 @@
 import { Uuid, type MyRaceDisputes, type ResultGroupKey } from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { AsyncContent, Button, Pill, SkeletonHeroCard, textStyle, useTheme } from '@rkarakulov/ui';
+import {
+  AsyncContent,
+  Button,
+  Pill,
+  SkeletonHeroCard,
+  TextAction,
+  textStyle,
+  useTheme,
+} from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
+
+import { riderPath } from '@/features/riders/queries';
 
 import { useMyRaceEntry, useRaceResults } from '../queries';
 import { ShareStoryButton } from '../story/share-story-button';
@@ -98,6 +108,7 @@ export function RivalCardScreen({
   // своя строка (story-cards): «Ваш результат» и «Поделиться в сторис», без подачи спора
   const own = entry.data?.entry?.id === entryId;
   const title = t(own ? 'races.result.ownTitle' : 'disputes.rival.title');
+  const router = useRouter();
 
   return (
     <DisputeScreenShell title={title} raceId={raceId} testID="rival-card">
@@ -111,6 +122,15 @@ export function RivalCardScreen({
             return (
               <View style={styles.card}>
                 <RivalResult row={found.row} page={found.page} />
+                {/* публичный профиль соперника (rider-links-in-tables): только при его имени и согласии */}
+                {!own && found.row.riderPublicId !== null ? (
+                  <View style={styles.start}>
+                    <TextAction
+                      label={t('disputes.rival.profile')}
+                      onPress={() => router.push(riderPath(found.row.riderPublicId!))}
+                    />
+                  </View>
+                ) : null}
                 {own ? (
                   entry.data?.actions.canShareStory ? (
                     <ShareStoryButton raceId={raceId} />

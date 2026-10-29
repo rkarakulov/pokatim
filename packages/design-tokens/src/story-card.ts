@@ -85,6 +85,14 @@ export const storyCard = {
     inviteStartNight: { role: 'text', weight: 600, size: 39, lineHeight: 51 },
     /** единица у цифры пары «42 км» (`.u` 13/16) */
     statUnit: { role: 'text', weight: 500, size: 39, lineHeight: 48 },
+    /** карточка достижения [ASSUMPTION — прототипа нет]: название «Победа» */
+    achievementTitle: { role: 'display', weight: 600, size: 132, lineHeight: 144, tracking: -0.01 },
+    /** условие «Первое место в своей группе» */
+    achievementCondition: { role: 'text', weight: 500, size: 42, lineHeight: 57 },
+    /** объект «Гонка «…»» */
+    achievementObject: { role: 'text', weight: 600, size: 42, lineHeight: 57 },
+    /** число счётного значка «5» на кольце */
+    badgeCount: { role: 'display', weight: 600, size: 60, lineHeight: 66 },
   } satisfies Record<string, StoryCardText>,
   night: {
     mastheadTop: 48,
@@ -108,6 +116,20 @@ export const storyCard = {
     /** отступ единицы от цифры пары «42 км» (`.u` margin-left 4) */
     unitGap: 12,
     tileHeight: 252,
+  },
+  /**
+   * Карточка достижения [ASSUMPTION — прототипа нет; раскладка 3a/3b]: значок «Эмаль» (пропорции — `badgeShape`) —
+   * диаметр `line` (центр яруса 2) и `night` (над нижним блоком), контур значка, отступы нижнего блока.
+   */
+  achievement: {
+    badge: 600,
+    badgeNight: 432,
+    badgeOutline: 9,
+    badgeGap: 60,
+    titleGap: 30,
+    conditionGap: 12,
+    objectGap: 30,
+    metaGap: 12,
   },
   line: {
     tier1Top: 72,
@@ -152,4 +174,14 @@ export function storyCardColors(scheme: AppTheme): StoryCardColors {
     track: scheme.text.primary,
     start: scheme.text.accent,
   };
+}
+
+/** Цвета значка достижения на карточке (как `achievement-badge.tsx`): диск — `action.primary`, иконка — `onPrimary`. */
+export interface StoryCardBadgeColors {
+  disc: string;
+  icon: string;
+}
+
+export function storyCardBadgeColors(scheme: AppTheme): StoryCardBadgeColors {
+  return { disc: scheme.action.primary, icon: scheme.action.onPrimary };
 }
