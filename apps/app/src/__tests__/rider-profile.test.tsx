@@ -3,13 +3,16 @@ import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { PublicRiderProfile, PublicRiderRace } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
-import type { RefreshControlProps } from 'react-native';
+import { Text, type RefreshControlProps } from 'react-native';
 
+import { takeReturnPath } from '@/features/auth/return-path';
 import { useSessionStore } from '@/features/auth/session-store';
+import { useReportRider } from '@/features/riders/queries';
 import { RiderScreen } from '@/features/riders/rider-screen';
 import { api } from '@/lib/api';
 
 import RiderRoute from '../app/riders/[id]';
+import { liveSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
 
 jest.mock('@/lib/api');
@@ -155,5 +158,107 @@ describe('публичный профиль /riders/[id] (rider-profile, AC15)',
     expect(screen.getByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
     expect(getRider).not.toHaveBeenCalled();
     await waitFor(() => expect(listRaces).toHaveBeenCalled());
+  });
+});
+
+describe('«Пожаловаться» на публичном профиле (profile-report-app)', () => {
+  const getViewer = jest.mocked(api.getRiderViewer);
+  const report = jest.mocked(api.reportRider);
+  const openWithReport = () =>
+    renderRouter(
+      {
+        'riders/[id]': RiderRoute,
+        'riders/report/[id]': () => <Text>Экран жалобы</Text>,
+        'sign-in': () => <Text>Вход</Text>,
+        index: stub,
+      },
+      { initialUrl: `/riders/${PUBLIC_ID}`, wrapper: createQueryWrapper() },
+    );
+  const signIn = () => useSessionStore.setState({ status: 'signedIn', session: liveSession });
+
+  beforeEach(() => {
+    getViewer.mockResolvedValue({ canReport: true, reported: false });
+    takeReturnPath();
+  });
+
+  it('вошедший: «Пожаловаться» по canReport → экран жалобы', async () => {
+    signIn();
+    const router = await openWithReport();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Пожаловаться' }));
+    await waitFor(() => expect(router.getPathname()).toBe(`/riders/report/${PUBLIC_ID}`));
+    expect(getViewer).toHaveBeenCalledWith(liveSession.accessToken, PUBLIC_ID);
+  });
+
+  it('вошедший, уже жаловался — «Вы пожаловались на этот профиль», без кнопки', async () => {
+    signIn();
+    getViewer.mockResolvedValue({ canReport: false, reported: true });
+    await openWithReport();
+    expect(await screen.findByText('Вы пожаловались на этот профиль')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Пожаловаться' })).toBeNull();
+  });
+
+  it('свой профиль (canReport false) — ни кнопки, ни строки', async () => {
+    signIn();
+    getViewer.mockResolvedValue({ canReport: false, reported: false });
+    await openWithReport();
+    expect(await screen.findByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
+    await waitFor(() => expect(getViewer).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Пожаловаться' })).toBeNull();
+    expect(screen.queryByText('Вы пожаловались на этот профиль')).toBeNull();
+  });
+
+  it('ошибка me — повтор на месте блока, профиль остаётся', async () => {
+    signIn();
+    getViewer.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await openWithReport();
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Повторить'));
+    expect(await screen.findByRole('button', { name: 'Пожаловаться' })).toBeOnTheScreen();
+  });
+
+  it('жалоба отправлена — кнопка сменяется строкой из кеша зрителя, без перезапроса', async () => {
+    signIn();
+    report.mockResolvedValue({ canReport: false, reported: true });
+    let send: (() => Promise<unknown>) | undefined;
+    const Sender = () => {
+      const mutation = useReportRider(PUBLIC_ID);
+      send = () => mutation.mutateAsync({ reason: 'photo', comment: null });
+      return null;
+    };
+    await renderRouter(
+      {
+        'riders/[id]': () => (
+          <>
+            <RiderRoute />
+            <Sender />
+          </>
+        ),
+        index: stub,
+      },
+      { initialUrl: `/riders/${PUBLIC_ID}`, wrapper: createQueryWrapper() },
+    );
+    expect(await screen.findByRole('button', { name: 'Пожаловаться' })).toBeOnTheScreen();
+    await act(async () => {
+      await send?.();
+    });
+    expect(await screen.findByText('Вы пожаловались на этот профиль')).toBeOnTheScreen();
+    expect(getViewer).toHaveBeenCalledTimes(1);
+  });
+
+  it('гость: «Пожаловаться» → «Вход», путь возврата — профиль; запроса me нет', async () => {
+    const router = await openWithReport();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Пожаловаться' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/sign-in'));
+    expect(takeReturnPath()).toBe(`/riders/${PUBLIC_ID}`);
+    expect(getViewer).not.toHaveBeenCalled();
+  });
+
+  it('сессия неизвестна (SSR, восстановление) — блока нет', async () => {
+    useSessionStore.setState({ status: 'unknown', session: null });
+    await openWithReport();
+    expect(await screen.findByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Пожаловаться' })).toBeNull();
+    expect(getViewer).not.toHaveBeenCalled();
   });
 });

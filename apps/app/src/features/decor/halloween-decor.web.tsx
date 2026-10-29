@@ -3,7 +3,7 @@ import { useTheme } from '@rkarakulov/ui';
 import type { CSSProperties } from 'react';
 
 import { DecorSvg } from './decor-svg';
-import { BAT, COBWEB, halloweenColors, MOON, PUMPKIN, SPIDER, WITCH } from './halloween-art';
+import { BAT, COBWEB, halloweenColors, PUMPKIN, SPIDER, WITCH } from './halloween-art';
 import { HALLOWEEN_LAYOUT as L, HALLOWEEN_MOTION as M } from './halloween-layout';
 
 const FLY_SHARE = Math.round((M.flyMs / (M.flyMs + M.flyPauseMs)) * 100);
@@ -13,7 +13,7 @@ const FLY_END = -L.witch.width * 1.5;
 /**
  * Анимации — CSS и только `transform` (без пересчёта раскладки): паук покачивается, дорожка ведьмы (во всю ширину)
  * едет справа налево за левый край и ждёт. Reduce motion — `prefers-reduced-motion`: анимаций нет, вместо пролёта —
- * ведьма у луны внизу слева.
+ * ведьма внизу слева.
  */
 const CSS = `
 @keyframes pokatim-decor-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(${L.spider.bob}px); } }
@@ -87,17 +87,6 @@ export function HalloweenDecor() {
         >
           <DecorSvg art={SPIDER} colors={colors} />
         </div>
-      </div>
-      <div
-        style={box({
-          bottom: L.moon.bottom,
-          left: L.moon.left,
-          width: L.moon.size,
-          height: L.moon.size,
-          opacity: L.moon.opacity,
-        })}
-      >
-        <DecorSvg art={MOON} colors={colors} />
       </div>
       {L.bats.map((bat, index) => (
         <div
