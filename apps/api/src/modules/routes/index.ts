@@ -29,3 +29,5 @@ export {
   type RideableRoute,
   type RouteRideRoutes,
 } from './route-ride-routes.port';
+/** Порт «Обзора» панели (admin-overview): заявки в каталог и маршруты с жалобами. */
+export { RoutesOverview } from './routes-overview';

@@ -20,6 +20,8 @@ const EXPECTED = [
   { url: `${ORIGIN}/v1/admin/session/me`, status: 401 },
   { url: `${ORIGIN}/v1/admin/session/sign-in`, status: 403 },
   { url: /^http:\/\/localhost:\d+\/v1\/admin\/audit(\?.*)?$/, status: 401 },
+  // admin-overview: первым запросом после снятия роли теперь может быть «Обзор»
+  { url: `${ORIGIN}/v1/admin/overview`, status: 401 },
 ];
 const RESOURCE_ERROR = /^Failed to load resource: the server responded with a status of (\d{3})/;
 
@@ -126,9 +128,9 @@ test('панель: CLI → вход → выдача и снятие роли �
   await expect(revoke).toBeHidden();
   await expect(modRow).toContainText('Роль снята');
 
-  // следующий запрос модератора — «Сессия истекла»; повторный вход — «Нет доступа к панели»
+  // следующий запрос модератора («Обзор» — `GET /v1/admin/overview`) — «Сессия истекла»; повторный вход — «Нет доступа
+  // к панели»
   await moderator.getByRole('link', { name: 'Обзор' }).click();
-  await moderator.getByRole('link', { name: 'Журнал действий' }).click();
   await expect(moderator.getByText('Сессия истекла')).toBeVisible();
   await signIn(moderator, modEmail);
   await expect(moderator.getByRole('heading', { name: 'Нет доступа к панели' })).toBeVisible();

@@ -9,3 +9,5 @@ export {
   DisputeDecidedPayload,
   DisputeEventPayload,
 } from './disputes.events';
+/** Порт «Обзора» панели (admin-overview): число открытых споров. */
+export { DisputesOverview } from './disputes-overview';

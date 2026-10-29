@@ -16,3 +16,5 @@ export {
   RIDER_PROFILES,
   type RiderProfileDirectory,
 } from './rider-profiles.port';
+/** Порт «Обзора» панели (admin-overview): профили с открытыми жалобами. */
+export { ProfilesOverview } from './profiles-overview';
