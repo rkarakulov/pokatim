@@ -515,10 +515,9 @@ describe('createAdminApiClient: модерация профилей райдер
   });
 });
 
-describe('createAdminApiClient: оформление приложения (app-themes)', () => {
+describe('createAdminApiClient: оформление приложения (только декор, user-theme)', () => {
   const appearance = {
-    themeId: 'atlas',
-    decor: 'none',
+    decor: 'halloween',
     version: 2,
     updatedAt: '2026-10-27T10:00:00.000Z',
   };
@@ -535,7 +534,7 @@ describe('createAdminApiClient: оформление приложения (app-t
 
   it('PUT appearance: метод, тело, cookie панели; ответ не по схеме — ошибка', async () => {
     const { calls, api } = admin(200, appearance);
-    await expect(api.updateAppearance({ themeId: 'atlas', version: 1 })).resolves.toEqual(
+    await expect(api.updateAppearance({ decor: 'halloween', version: 1 })).resolves.toEqual(
       appearance,
     );
     expect(calls).toHaveLength(1);
@@ -543,9 +542,9 @@ describe('createAdminApiClient: оформление приложения (app-t
       url: '/v1/admin/appearance',
       method: 'PUT',
       credentials: 'same-origin',
-      body: { themeId: 'atlas', version: 1 },
+      body: { decor: 'halloween', version: 1 },
     });
-    const broken = admin(200, { ...appearance, themeId: 'neon' });
-    await expect(broken.api.updateAppearance({ themeId: 'atlas', version: 1 })).rejects.toThrow();
+    const broken = admin(200, { ...appearance, decor: 'new-year' });
+    await expect(broken.api.updateAppearance({ decor: 'none', version: 1 })).rejects.toThrow();
   });
 });

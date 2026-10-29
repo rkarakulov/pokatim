@@ -1,4 +1,4 @@
-import type { ProfileView } from '@pokatim/contracts';
+import { DEFAULT_APP_THEME_ID, type ProfileView } from '@pokatim/contracts';
 
 import type { ProfileDoc } from './profile.collection';
 
@@ -8,6 +8,11 @@ import type { ProfileDoc } from './profile.collection';
  */
 export const PROFILE_POLICY = {
   updateLimit: { limit: 30, windowSec: 3600 },
+  /**
+   * user-theme: `PUT /v1/profile/theme`, ключ `profile-theme:<uid>` — свой бюджет (RC-3): выбор темы применяется на
+   * каждое нажатие и не съедает лимит правки имени.
+   */
+  themeUpdateLimit: { limit: 60, windowSec: 3600 },
   /** race-results-07: `PUT /v1/profile/verified`, ключ `profile-verified-update:<uid>` */
   verifiedUpdateLimit: { limit: 30, windowSec: 3600 },
   /** rider-profile: `PUT /v1/profile/avatar`, ключ `profile-avatar:<uid>` */
@@ -43,12 +48,18 @@ export function isPublicProfile(
 
 /**
  * Ответ `ProfileView` из документа (нет документа — пустой профиль): поля до слайсов могут отсутствовать. `publicId`
- * наружу — только при имени и согласии (R-3: сам id хранится и после отзыва).
+ * наружу — только при имени и согласии (R-3: сам id хранится и после отзыва). Темы нет — «Классика» (user-theme).
  */
 export function profileViewOf(
   doc: Pick<
     ProfileDoc,
-    'rideReasons' | 'publicName' | 'showNameInResults' | 'club' | 'avatarId' | 'publicId'
+    | 'rideReasons'
+    | 'publicName'
+    | 'showNameInResults'
+    | 'club'
+    | 'avatarId'
+    | 'publicId'
+    | 'themeId'
   > | null,
 ): ProfileView {
   const publicName = doc?.publicName ?? null;
@@ -61,5 +72,6 @@ export function profileViewOf(
     club: doc?.club ?? null,
     avatar: avatarId ? { id: avatarId } : null,
     publicId: publicName !== null && showNameInResults ? (doc?.publicId ?? null) : null,
+    themeId: doc?.themeId ?? DEFAULT_APP_THEME_ID,
   };
 }

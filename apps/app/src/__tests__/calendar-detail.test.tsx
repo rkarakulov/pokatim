@@ -65,6 +65,7 @@ beforeEach(() => {
     club: null,
     avatar: null,
     publicId: null,
+    themeId: 'classic',
   });
   open.mockResolvedValue(undefined);
 });

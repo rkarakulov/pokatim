@@ -36,7 +36,13 @@ paths:
   `safeNext`), 403 — «Нет доступа к разделу». Мутация, сама обрабатывающая 401 (вход), — `meta.ownsUnauthorized`.
 - Права в UI — только отображение: `Can` / `useCan(permission)`; раздел с правом — `RequirePermission` в маршруте
   (прямой URL без права — «Нет доступа к разделу» внутри каркаса). Источник истины — `PanelGuard` сервера.
-- Навигация — один файл `src/navigation.ts` (`{ to, labelKey, permission?, group }`).
+- Навигация — один файл `src/navigation.ts` (`{ to, labelKey, permission?, anyPermission?, sections?, group }`):
+  `anyPermission` — пункт виден при любом из прав, `sections` — пути, на которых (и на вложенных) пункт подсвечен.
+- «Модерация» (admin-moderation-hub) — `features/moderation/*`: один пункт сайдбара (группа `bottom`, после «Журнала
+  действий») при любом из `routes.moderate` / `profiles.moderate` / `rides.moderate`; очереди — вкладки
+  `ModerationTabs` под `PageHeader` списков (`MODERATION_TABS`: «Маршруты райдеров», «Профили райдеров», «Кофе-райды»;
+  только с правом, текущая — `aria-current`), число — из `overviewQuery` (загрузка, ошибка, ноль — без числа). Адреса
+  очередей прежние; `/moderation` — `redirect` на первую доступную вкладку, без прав — «Нет доступа к разделу».
 - Новые экраны — только из `src/ui` (`AppShell`, `PageHeader`, `DataTable`, `Dialog`, `ReasonDialog`, поля, `Button`,
   `Banner`, `StatusTag`, `AuthCard`, `EmptyState`, `ErrorState`): без доменных импортов, кандидаты в
   `@rkarakulov/admin-kit` (F6, явное исключение `AGENTS.md` §4.11 до выноса). Размеры раскладки панели, которых нет в
@@ -114,12 +120,12 @@ paths:
   отказ или нет сети — баннер с повтором (рейтинг виден); ошибка обновления шапки или сводки — баннер с повтором
   над прежними данными.
 - «Модерация райдов» (05b) — `features/rides-moderation/*`, маршруты `/rides-moderation` (`?state=hidden` — в URL) и
-  `/rides-moderation/$rideId` под `RequirePermission permission="rides.moderate"`, пункт навигации — группа `bottom`
-  в конце. Действия — `ReasonDialog`; 409 `CONFLICT` и `RIDE_INVALID_STATE` — `ConflictBanner` с перечитыванием
+  `/rides-moderation/$rideId` под `RequirePermission permission="rides.moderate"`, вкладка «Кофе-райды» раздела
+  «Модерация». Действия — `ReasonDialog`; 409 `CONFLICT` и `RIDE_INVALID_STATE` — `ConflictBanner` с перечитыванием
   карточки; «Отклонить жалобы» отправляет `lastReportAt` карточки.
 - «Маршруты райдеров» (routes-06) — `features/rider-routes/*`, маршруты `/rider-routes` (`?tab=reported|hidden` — в
   URL, по умолчанию «На проверке») и `/rider-routes/$routeId` под `RequirePermission permission="routes.moderate"`,
-  пункт навигации — группа `bottom` в конце. Автор — только `Райдер ·<хвост id>` (`riderRouteAuthor`), имени нет (N8);
+  вкладка «Маршруты райдеров» раздела «Модерация». Автор — только `Райдер ·<хвост id>` (`riderRouteAuthor`), имени нет (N8);
   жалобы — без автора. Карта, цифры и профиль — общий `features/routes/RouteReadyView.tsx` (тот же блок, что на
   странице маршрута routes-05; копий нет). «Одобрить» — окно с городом (`SelectField`) и покрытием (`ChipGroup`) из
   заявки, «Отклонить» — справочник причин (`RadioGroup`, подтверждение неактивно до выбора) и комментарий автору
@@ -130,7 +136,7 @@ paths:
   действий, 403 — «Нет доступа», прочее — баннер «Не удалось обновить данные» с повтором поверх последних данных.
 - «Профили райдеров» (profile-moderation) — `features/rider-profiles/*`, маршруты `/rider-profiles` (одна очередь
   открытых жалоб, «Показать ещё» по курсору) и `/rider-profiles/$userId` под `RequirePermission
-  permission="profiles.moderate"`, пункт навигации — группа `bottom` в конце. Подпись — `riderLabel(userId, name)` из
+  permission="profiles.moderate"`, вкладка «Профили райдеров» раздела «Модерация». Подпись — `riderLabel(userId, name)` из
   `features/results/results-format.ts` (имя сервер отдаёт только при согласии, Q2); жалобы — без автора. Фото —
   `<img src={api.riderAvatarUrl(id)}>` (тот же origin, `img-src 'self'` — сторож `csp.test.ts`) в квадрате
   `.avatar-preview` (`--panel-avatar-preview`, `panel-tokens.ts`), без фото — пустой квадрат той же раскладки.
@@ -150,17 +156,12 @@ paths:
   решения — инвалидация `['admin','disputes']`, ключа гонки и журнала. Чек-лист «Результатов»: строка
   `open_disputes` — ссылка «Открыть споры» (`/disputes?raceId=`) при `count > 0` и `disputes.read`;
   `RecalculationsList` — запись `dispute:<id>` ссылкой на спор; `RaceEditor` — причина `disputes_open` (D-19).
-- «Оформление приложения» (app-themes D1) — `features/appearance/*`, маршрут `/appearance` под
-  `RequirePermission permission="appearance.manage"`, пункт навигации — группа `bottom` в конце. 7 карточек
-  `CardRadioGroup` (`src/ui`: нативные радио, карточка — `label` с произвольным содержимым) в порядке `APP_THEME_IDS`,
-  текущая — бейдж; выбор — `useState`, «Сохранить» активна только при смене, тело `{ themeId, version }`; 409 —
-  `ConflictBanner` с перечитыванием и сбросом выбора; после сохранения — инвалидация журнала. Превью — `ThemePreview`
-  (CSS-переменные `--preview-*` из токенов): все 7 превью — `previewOf(appThemes[id])` в шве `theme-previews.ts`
-  (макеты светлой и тёмной схемы у тем «по системе», одной — у «всегда тёмных»; радиус карточки; подпись — режим
-  схемы и название гарнитуры, без `@fontsource` тем). Hex в панели — нет.
-  Сезонный декор (halloween-decor) — блок «Сезонный декор» под темами: состояние текстом и одна кнопка
-  «Включить/Выключить хеллоуинский декор» (тело `{ decor, version }`, сразу, без «Сохранить»); незавершённый выбор
-  темы, начатый при той же версии, получает новую версию; 409 — тот же `ConflictBanner`.
+- «Оформление приложения» (app-themes D1; user-theme — только декор) — `features/appearance/*`, маршрут
+  `/appearance` под `RequirePermission permission="appearance.manage"`, пункт навигации — группа `bottom` в конце.
+  Выбора тем нет: тему каждый райдер выбирает сам в приложении (ADR-0021). Сезонный декор (halloween-decor) — блок
+  «Сезонный декор»: состояние текстом и одна кнопка «Включить/Выключить хеллоуинский декор» (тело
+  `{ decor, version }`, сразу, без «Сохранить»); 409 — `ConflictBanner` с перечитыванием; после переключения —
+  инвалидация журнала. Журнал — названия тем истории `appearance.theme_changed` из общих ключей `theme.<id>.name`.
   Панель остаётся в теме `panel`.
 
 ## Проверка

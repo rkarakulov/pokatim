@@ -8,16 +8,20 @@ import type { Collection, Db } from 'mongodb';
  */
 export const APPEARANCE_COLLECTIONS = { settings: 'platform_settings' } as const;
 
-/** `_id` документа темы приложения. */
+/** `_id` документа оформления приложения. */
 export const APPEARANCE_SETTINGS_ID = 'appearance' as const;
 
 /**
- * Тема приложения — глобальная настройка (T1). Нет документа — «Классика», `version: 0`. Кто менял — только журнал
- * панели (без `userId` в документе: стирание аккаунта его не касается).
+ * Оформление приложения — глобальная настройка: сезонный декор. Нет документа — без декора, `version: 0`. Кто менял —
+ * только журнал панели (без `userId` в документе: стирание аккаунта его не касается).
  */
 export interface AppearanceSettingsDoc {
   _id: typeof APPEARANCE_SETTINGS_ID;
-  themeId: AppThemeId;
+  /**
+   * Legacy (app-themes, T1): глобальная тема до user-theme (ADR-0021) — не читается и не пишется, новые документы
+   * поля не имеют; в существующем документе остаётся без миграции.
+   */
+  themeId?: AppThemeId;
   /** halloween-decor: сезонный декор; нет поля (документ до декора, менялась только тема) — `none`. */
   decor?: AppDecorId;
   version: number;

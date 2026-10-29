@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  type AppThemeId,
   PUBLIC_NAME_CONSENT_VERSION,
   type ProfileView,
   type RateLimitedDetails,
@@ -72,6 +73,30 @@ export class ProfileService {
       // гонка двух первых upsert: документ уже вставлен — повтор всей транзакции его найдёт и обновит
       if (!isDuplicateKey(error, '_id_')) throw error;
       return viewOf(await this.writeProfile(userId, patch, ids, now));
+    }
+  }
+
+  /**
+   * Личная тема (user-theme): лимит `profile-theme` — до записи; одна атомарная операция над своим документом без
+   * транзакции и журнала (тема — не ПДн и не публичное). Ответ — профиль после записи.
+   */
+  async setTheme(userId: string, themeId: AppThemeId): Promise<ProfileView> {
+    const now = this.clock.now();
+    const limited = await this.rateLimiter.consume(
+      `profile-theme:${userId}`,
+      PROFILE_POLICY.themeUpdateLimit,
+      now,
+    );
+    if (!limited.allowed) {
+      const details: RateLimitedDetails = { retryAfterSec: limited.retryAfterSec };
+      throw domainError('RATE_LIMITED', 429, details);
+    }
+    try {
+      return viewOf(await this.repository.setTheme(userId, themeId, now));
+    } catch (error) {
+      // гонка двух первых upsert: документ уже вставлен — повтор его найдёт и обновит
+      if (!isDuplicateKey(error, '_id_')) throw error;
+      return viewOf(await this.repository.setTheme(userId, themeId, now));
     }
   }
 

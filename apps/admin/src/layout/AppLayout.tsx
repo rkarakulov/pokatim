@@ -1,24 +1,36 @@
 import { t } from '@pokatim/i18n';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type ErrorComponentProps, Link, Outlet, useRouter } from '@tanstack/react-router';
+import {
+  type ErrorComponentProps,
+  Link,
+  Outlet,
+  useMatchRoute,
+  useRouter,
+} from '@tanstack/react-router';
 
 import { api } from '../api';
-import { NAVIGATION, type NavItem } from '../navigation';
+import { isNavItemVisible, NAVIGATION, type NavItem } from '../navigation';
 import { useMe } from '../session/me';
 import { AppShell, Banner, Button, ErrorState } from '../ui';
 
 function NavLinks({ items }: { items: readonly NavItem[] }) {
-  return items.map((item) => (
-    <Link
-      key={item.to}
-      to={item.to}
-      className="sidebar__link"
-      activeOptions={{ exact: item.to === '/' }}
-      activeProps={{ 'aria-current': 'page' }}
-    >
-      {t(item.labelKey)}
-    </Link>
-  ));
+  const matchRoute = useMatchRoute();
+  return items.map((item) => {
+    // раздел с вкладками: `to` только перенаправляет, подсвечен на путях вкладок и их карточек
+    const inSection = item.sections?.some((to) => matchRoute({ to, fuzzy: true }) !== false);
+    return (
+      <Link
+        key={item.to}
+        to={item.to}
+        className="sidebar__link"
+        activeOptions={{ exact: item.to === '/' }}
+        activeProps={{ 'aria-current': 'page' }}
+        {...(inSection ? { 'aria-current': 'page' as const } : {})}
+      >
+        {t(item.labelKey)}
+      </Link>
+    );
+  });
 }
 
 /**
@@ -41,9 +53,7 @@ export function AppLayout() {
   });
   if (!me) return <ShellSkeleton />;
 
-  const visible = NAVIGATION.filter(
-    (item) => !item.permission || me.permissions.includes(item.permission),
-  );
+  const visible = NAVIGATION.filter((item) => isNavItemVisible(item, me.permissions));
   return (
     <AppShell
       nav={<NavLinks items={visible.filter((item) => item.group === 'main')} />}

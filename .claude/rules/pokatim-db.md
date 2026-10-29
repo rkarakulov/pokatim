@@ -55,6 +55,10 @@ paths:
   аккаунта не меняются); гонка первых upsert — `isDuplicateKey(error, '_id_')` и один повтор всей транзакции.
   Удаление аккаунта — `ProfileErasure.erase` (`deleteOne` `profiles`, идемпотентно; поздний `PUT`/`PATCH`, прошедший
   `AuthGuard` до отзыва сессий, может его воскресить — убирает повторный проход очистки).
+- `profiles.themeId?` (user-theme, ADR-0021) — личная тема из закрытого списка `APP_THEME_IDS`; нет поля / `null` —
+  `classic`. Без миграции и индекса; пишет только `PUT /v1/profile/theme` (`ProfileRepository.setTheme` — pipeline-upsert
+  с `KEEP_PROFILE_FIELDS`, вне транзакции, гонка первых upsert — один повтор на `_id_`); другие upsert'ы профиля поле не
+  трогают. Не ПДн, стирается вместе с документом.
 - Профиль хранит публичное имя и согласие на его показ (`publicName`, `showNameInResults`; profile-rider-name,
   `docs/product/profile.md`): поля необязательные, чтение `?? null` / `?? false`, миграции нет. Удаление документа
   анонимизирует строки таблиц результатов. Снимок протокола (`race_protocol_rows`) имени не хранит: таблица читает
@@ -432,8 +436,9 @@ paths:
 - Миграция `0023_account_deletion` (expand-only): `device_connections_user_idx`, `device_imports_user_idx`,
   `device_link_tickets_user_idx` (`{ userId: 1 }`), `users_erasure_pending_idx`.
 - Настройки платформы (app-themes): коллекция `platform_settings` — документы-синглтоны по `_id`; `appearance`
-  (`themeId`, `decor?` — halloween-decor, нет поля — `none`, пишется только при смене, `version`, `updatedAt`) — единственный писатель `AppearanceRepository`, нет документа — `classic`,
-  `version: 0` (seed нет; первая смена — `insertOne`, дубликат `_id` → 409). Кто менял — только `panel_audit` (без
+  (`decor?` — halloween-decor, нет поля — `none`, `version`, `updatedAt`; `themeId?` — legacy до user-theme, не
+  читается и не пишется, новые документы его не имеют, без миграции) — единственный писатель `AppearanceRepository`,
+  нет документа — без декора, `version: 0` (seed нет; первая смена — `insertOne`, дубликат `_id` → 409). Кто менял — только `panel_audit` (без
   `userId` в документе: порт стирания не нужен). Миграция `0024_platform_settings` — только `ensureCollection`.
 - Append-only журналы (`user_consents`, `profile_consent_events`, `panel_audit`, `device_audit`, `dispute_events`,
   `race_recalculations`, `race_protocol_rows`) не меняются (A9); `race_entries`, споры и протоколы — остаются.

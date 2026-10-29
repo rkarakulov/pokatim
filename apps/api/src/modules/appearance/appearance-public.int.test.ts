@@ -4,8 +4,12 @@ import { createHarness, type Harness } from '../../../test/harness';
 import { call } from '../../../test/identity';
 import { panelCookie, setCookies } from '../../../test/panel';
 import { staff } from '../../../test/races';
+import { appearanceCollections } from './appearance.collection';
 
-/** Публичная тема приложения (app-themes D1, AC1): без входа, ровно `{ themeId, decor }`, без кэша браузера. */
+/**
+ * Публичное оформление приложения (app-themes D1, AC1): без входа, ровно `{ themeId, decor }`, без кэша браузера.
+ * user-theme (RC-1): `themeId` — всегда `classic` для сборок до личной темы, документ настройки тему не задаёт.
+ */
 let h: Harness;
 beforeAll(async () => {
   h = await createHarness({ TRUST_PROXY: '1' });
@@ -33,24 +37,20 @@ describe('GET /v1/appearance (AC1)', () => {
     expect(setCookies(res)).toEqual([]);
   });
 
-  it('после смены в панели — новая тема, ровно два ключа', async () => {
-    const admin = await staff(h, 'admin@example.by', 'admin');
-    const put = await call(
-      h,
-      'PUT',
-      '/v1/admin/appearance',
-      { themeId: 'navigation', version: 0 },
-      panelCookie(admin.token),
-    );
-    expect(put.status).toBe(200);
-
+  it('документ с legacy themeId — всё равно classic, ровно два ключа (user-theme RC-1)', async () => {
+    await appearanceCollections(h.db).settings.insertOne({
+      _id: 'appearance',
+      themeId: 'chrono',
+      decor: 'halloween',
+      version: 3,
+      updatedAt: h.clock.now(),
+    });
     const res = await get();
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ themeId: 'navigation', decor: 'none' });
+    expect(res.body).toEqual({ themeId: 'classic', decor: 'halloween' });
     expect(Object.keys(res.body as object)).toEqual(['themeId', 'decor']);
   });
 
-  it('декор включён в панели — halloween при прежней теме (halloween-decor AC1)', async () => {
+  it('декор включён в панели — halloween, тема classic (halloween-decor AC1)', async () => {
     const admin = await staff(h, 'admin@example.by', 'admin');
     const put = await call(
       h,

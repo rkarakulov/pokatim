@@ -102,6 +102,25 @@ describe('api-client: онбординг профиля (Bearer — только
     ).rejects.toThrow();
   });
 
+  it('setProfileTheme — PUT /v1/profile/theme с Bearer и телом; ответ не по схеме — ошибка', async () => {
+    const view = { rideReasons: [], themeId: 'atlas' };
+    const { calls, api } = client(200, view);
+    await expect(api.setProfileTheme('access.jwt.x', { themeId: 'atlas' })).resolves.toMatchObject({
+      themeId: 'atlas',
+    });
+    expect(calls).toEqual([
+      {
+        url: 'https://api.test/v1/profile/theme',
+        method: 'PUT',
+        authorization: 'Bearer access.jwt.x',
+        body: { themeId: 'atlas' },
+      },
+    ]);
+    await expect(
+      client(200, { themeId: 'atlas' }).api.setProfileTheme('t', { themeId: 'atlas' }),
+    ).rejects.toThrow();
+  });
+
   it('публичные методы Bearer не отправляют', async () => {
     const { calls, api } = client(200, { status: 'ok' });
     await api.health().catch(() => undefined);

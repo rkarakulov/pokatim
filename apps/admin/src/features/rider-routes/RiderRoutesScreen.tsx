@@ -13,6 +13,7 @@ import { api } from '../../api';
 import { formatDateTimeLong, formatKmFromMeters } from '../../format';
 import { isForbidden } from '../../session/errors';
 import { Button, DataTable, EmptyState, PageHeader, StatusTag, ToggleChip } from '../../ui';
+import { ModerationTabs } from '../moderation/ModerationTabs';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import {
   RIDER_ROUTE_STATUS_TONE,
@@ -129,6 +130,7 @@ export function RiderRoutesScreen({
   return (
     <>
       <PageHeader title={t('admin.riderRoutes.title')} meta={t('admin.riderRoutes.lead')} />
+      <ModerationTabs />
       <div className="page-body">
         <DataTable
           caption={t('admin.riderRoutes.title')}
