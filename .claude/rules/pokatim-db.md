@@ -433,6 +433,8 @@ paths:
 - Билет: `status` `active | checked_in | cancelled` (`event_cancelled` не хранится); переходы — условием статуса в
   фильтре (`markCheckedIn` — только из `active`); QR — только `qrHash`; `email` — захват письма (`pending → sending →
   sent | skipped | failed`). Не append-only (проекция заявок), журнал отметок — `panel_audit`.
+- `calendar_starts.admissionLock` — счётчик-замок (`lockForAdmission`, без `version`): пишут транзакции регистрации,
+  отмены регистрации и check-in `tickets` через порт `CALENDAR_EVENTS`; наружу не выходит.
 - Удаление аккаунта — `TicketErasure`: активные регистрации → `cancelled` (с билетом и местом, транзакция на
   регистрацию), активные билеты гонок → `cancelled`; документы псевдонимные.
 

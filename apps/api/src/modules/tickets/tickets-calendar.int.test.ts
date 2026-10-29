@@ -2,7 +2,7 @@ import { CalendarRegistrationState, EventTicketingPublic } from '@pokatim/contra
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { call } from '../../../test/identity';
+import { call, gate } from '../../../test/identity';
 import { panelCall } from '../../../test/panel';
 import { staff } from '../../../test/races';
 import { signIn, travelTo } from '../../../test/results';
@@ -17,6 +17,7 @@ import {
   ticketingUrl,
   ticketsDb,
 } from '../../../test/tickets';
+import { TicketIssuer } from './ticket-issuer';
 
 /**
  * Регистрация на старт календаря (AC3, AC8): места — условный `$inc` первой операцией транзакции, одна активная на
@@ -210,5 +211,68 @@ describe('отмена регистрации (AC3, AC8)', () => {
         )
       ).status,
     ).toBe(404);
+  });
+});
+
+describe('изменение старта между проверкой и транзакцией (ревью pass 2, HIGH-2)', () => {
+  /** Ворота перед транзакцией регистрации: предварительные проверки уже прошли. */
+  function pauseBeforeTransaction() {
+    const g = gate();
+    const issuer = h.app.get(TicketIssuer, { strict: false });
+    const original = issuer.inTransaction.bind(issuer);
+    vi.spyOn(issuer, 'inTransaction').mockImplementationOnce(async (work) => {
+      await g.wait();
+      return original(work);
+    });
+    return g;
+  }
+
+  async function editStart(admin: string, id: string, body: Record<string, unknown>, path = '') {
+    const start = await panelCall(h, admin, 'GET', `/v1/admin/calendar/${id}`);
+    const res = await panelCall(h, admin, 'POST', `/v1/admin/calendar/${id}${path}`, {
+      ...body,
+      version: (start.body as { version: number }).version,
+    });
+    if (res.status !== 200) throw new Error(`старт: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+
+  it('снят с публикации — EVENT_REGISTRATION_CLOSED{unpublished}, места и билета нет', async () => {
+    const { admin, id } = await world();
+    const a = await rider(h, 'a@example.com');
+    const g = pauseBeforeTransaction();
+    const pending = registerFor(h, a.auth, id);
+    await g.reached;
+    await editStart(admin.token, id, { reason: 'Отмена' }, '/unpublish');
+    g.open();
+    const res = await pending;
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ details: { reason: 'unpublished' } });
+    expect(await ticketsDb(h).registrations.countDocuments()).toBe(0);
+    expect((await ticketsDb(h).ticketing.findOne({}))?.registeredCount).toBe(0);
+  });
+
+  it('старт перенесён в прошлое — started; дистанция убрана — 400 по полю', async () => {
+    const { admin, id } = await world();
+    const a = await rider(h, 'a@example.com');
+    let g = pauseBeforeTransaction();
+    let pending = registerFor(h, a.auth, id);
+    await g.reached;
+    // стенд: 22.10 12:00 Минска — старт 22.10 08:00 уже прошёл
+    await editStart(admin.token, id, { startsOn: '2026-10-22', startTime: '08:00' });
+    g.open();
+    expect((await pending).body).toMatchObject({ details: { reason: 'started' } });
+
+    await editStart(admin.token, id, { startsOn: '2026-11-01', startTime: '10:00' });
+    g = pauseBeforeTransaction();
+    pending = registerFor(h, a.auth, id, { distanceKm: 42.2 });
+    await g.reached;
+    await editStart(admin.token, id, { distancesKm: [10, 21.1] });
+    g.open();
+    const res = await pending;
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      details: { fields: [{ path: 'distanceKm', code: 'INVALID' }] },
+    });
+    expect(await ticketsDb(h).registrations.countDocuments()).toBe(0);
   });
 });

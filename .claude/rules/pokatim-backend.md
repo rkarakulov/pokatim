@@ -242,7 +242,9 @@ paths:
   `GET /v1/races/:raceId/ticket` и регламентом `tickets.reconcile` (`* * * * *` Минск + `tickets.reconcile.boot`,
   очередь `tickets-maintenance`); `RaceTickets.refresh` перед показом и check-in отменяет билет снятой заявки. Дубль
   выпуска — `isDuplicateKey(…, 'tickets_registration_unique')`.
-- Check-in — транзакция с замками: `lockTicketing` (настройки, конфликт с выключением), `lockEntryForTicket` (гонка,
+- Check-in — транзакция с замками: `lockTicketing` (настройки, конфликт с выключением и переносом; окно check-in
+  пересчитывается по ним и `CLOCK` в каждой попытке), `CALENDAR_EVENTS.lockForAdmission` (старт календаря — им же
+  захватывают старт регистрация и её отмена: снятие, перенос, дистанции конфликтуют), `lockEntryForTicket` (гонка,
   конфликт с отменой участия) / `lockRegistration` (календарь, конфликт с отменой регистрации), затем `markCheckedIn`;
   проверки вне транзакции — только для ответа. Отмена регистрации отмеченного — `409 EVENT_REGISTRATION_CLOSED
   { reason: 'checked_in' }` (проверка в транзакции отмены). Письмо: любой сбой после захвата снимает захват; чужой

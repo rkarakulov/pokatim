@@ -9,7 +9,7 @@ import { PanelAudit, PanelDirectory, type PanelPrincipal } from '../panel';
 import { RESULTS_FOR_TICKETS, type ResultsForTickets } from '../results';
 import { ParticipantNames } from './participant-names';
 import { RaceTickets } from './race-tickets';
-import { eventSummary, TicketEvents } from './ticket-events';
+import { calendarMoments, eventSummary, TicketEvents } from './ticket-events';
 import { parseQrPayload, qrHashOf } from './ticket-qr';
 import { categoryView } from './ticket-views';
 import type { TicketDoc } from './tickets.collection';
@@ -95,6 +95,18 @@ export class CheckInService {
         // вне транзакции не защищают от отмены между ними и отметкой (TOCTOU)
         const settings = await this.repository.lockTicketing(tx, ticket.kind, ticket.eventId);
         if (settings?.enabled !== true) return 'event_cancelled' as const;
+        // окно — по актуальным настройкам (гонка) или старту под замком (календарь) и текущему времени попытки
+        let moments: { startsAt: Date; endsAt: Date | null };
+        if (ticket.kind === 'race') {
+          moments = { startsAt: settings.startsAt ?? event.startsAt, endsAt: settings.endsAt };
+        } else {
+          const start = await this.events.lockCalendarStart(tx, ticket.eventId);
+          if (!start || start.status !== 'published') return 'event_cancelled' as const;
+          moments = calendarMoments(start);
+        }
+        const { opensAt, closesAt } = checkInWindow(moments);
+        const at = this.clock.now();
+        if (at < opensAt || at >= closesAt) return 'outside_window' as const;
         const registered =
           ticket.kind === 'race'
             ? (await this.results.lockEntryForTicket(tx, ticket.registrationId, now)) === 'active'
@@ -123,9 +135,8 @@ export class CheckInService {
         this.logger.log(`tickets.checked_in ticket=${doc._id} event=${event.id}`);
       } else {
         doc = (await this.repository.findTicket(doc._id)) ?? doc;
-        if (result === 'event_cancelled')
-          facts = (await this.events.resolve(doc.kind, doc.eventId)) ?? facts;
-        outcome = outcomeOf(doc, facts, now);
+        if (result !== 'lost') facts = (await this.events.resolve(doc.kind, doc.eventId)) ?? facts;
+        outcome = result === 'outside_window' ? 'outside_window' : outcomeOf(doc, facts, now);
       }
     }
     return this.view(outcome, doc, facts);

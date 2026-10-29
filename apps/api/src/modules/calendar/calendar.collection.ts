@@ -30,6 +30,8 @@ export interface CalendarStartDoc {
   updatedAt: Date;
   unpublishedAt: Date | null;
   version: number;
+  /** счётчик-замок транзакций регистрации и check-in (`lockForAdmission`); наружу не выходит, чтение `?? 0` */
+  admissionLock?: number;
 }
 
 export function calendarCollections(db: Db): { starts: Collection<CalendarStartDoc> } {

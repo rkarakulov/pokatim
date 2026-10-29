@@ -11,7 +11,7 @@ import { isDuplicateKey, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { consumeUserLimit } from '../../user-limit';
-import { TicketEvents } from './ticket-events';
+import { calendarMoments, TicketEvents } from './ticket-events';
 import { TicketIssuer } from './ticket-issuer';
 import { ticketRef } from './ticket-views';
 import type { EventRegistrationDoc } from './tickets.collection';
@@ -27,8 +27,7 @@ const distanceError = (code: 'REQUIRED' | 'INVALID') =>
   domainError('VALIDATION_FAILED', 400, { fields: [{ path: 'distanceKm', code }] });
 
 /** Дистанция регистрации: одна у старта — она; несколько — обязательна и из списка; нет — `null`. */
-function distanceOf(event: EventFacts, requested: number | undefined): number | null {
-  const options = event.distancesKm;
+function distanceOf(options: readonly number[], requested: number | undefined): number | null {
   if (options.length === 0) {
     if (requested !== undefined) throw distanceError('INVALID');
     return null;
@@ -90,7 +89,8 @@ export class CalendarRegistrationService {
     if (existing) return { created: false, state: await this.state(event, existing, now) };
     const reason = registrationGate(event, now);
     if (reason) throw closed(reason);
-    const distanceKm = distanceOf(event, body.distanceKm);
+    // предварительно — для быстрого отказа; правило повторяется в транзакции под замком старта
+    distanceOf(event.distancesKm, body.distanceKm);
 
     let outcome: { created: boolean; registration: EventRegistrationDoc };
     try {
@@ -98,6 +98,13 @@ export class CalendarRegistrationService {
         // параллельный запрос того же райдера мог занять последнее место — его регистрация, не EVENT_FULL
         const own = await this.repository.activeRegistration(eventId, userId, tx);
         if (own) return { created: false, registration: own };
+        // замок старта: снятие с публикации, перенос и правка дистанций не проходят между проверкой и записью
+        const start = await this.events.lockCalendarStart(tx, eventId);
+        if (!start || start.status !== 'published') throw closed('unpublished');
+        if (this.clock.now().getTime() >= calendarMoments(start).startsAt.getTime()) {
+          throw closed('started');
+        }
+        const distanceKm = distanceOf(start.distancesKm, body.distanceKm);
         const seat = await this.repository.reserveSeat(tx, eventId);
         if (!seat) {
           const settings = await this.repository.findTicketing('calendar', eventId, tx);
@@ -156,6 +163,11 @@ export class CalendarRegistrationService {
     await this.transactions.run(async (tx) => {
       // запись регистрации первой — конфликт с замком регистрации в транзакции check-in
       if (!(await this.repository.cancelRegistration(tx, active._id, now))) return;
+      // старт мог быть перенесён после проверки выше — момент старта по замку старта
+      const start = await this.events.lockCalendarStart(tx, eventId);
+      if (start && this.clock.now().getTime() >= calendarMoments(start).startsAt.getTime()) {
+        throw closed('started');
+      }
       const ticket = await this.repository.findByRegistration(active._id, tx);
       // участник уже отмечен: отмена освободила бы место и дала второй билет (ревью pass 1, HIGH-2)
       if (ticket?.status === 'checked_in') throw closed('checked_in');

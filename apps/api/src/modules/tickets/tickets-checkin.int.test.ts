@@ -299,6 +299,49 @@ describe('сериализация check-in с отменой (ревью pass 1
     expect(await checkInAudit()).toHaveLength(0);
   });
 
+  it('перенос очного старта между проверкой и отметкой — outside_window по новым настройкам (pass 2, HIGH-1)', async () => {
+    const w = await world();
+    const g = pauseBeforeMark();
+    const scan = panelCall(h, w.tokens.organizer, 'POST', CHECK_IN, { qr: w.qr });
+    await g.reached;
+    const settings = await panelCall(h, w.tokens.admin, 'GET', ticketingUrl('race', w.raceId));
+    // старт 26.10 10:00 Минска — окно откроется 25.10 10:00, сейчас 24.10 09:00
+    const moved = await panelCall(h, w.tokens.admin, 'PUT', ticketingUrl('race', w.raceId), {
+      enabled: true,
+      startsAt: '2026-10-26T07:00:00Z',
+      version: (settings.body as { version: number }).version,
+    });
+    expect(moved.status).toBe(200);
+    g.open();
+    const res = CheckInView.parse((await scan).body);
+    expect(res).toMatchObject({ outcome: 'outside_window', ticket: { status: 'active' } });
+    expect(res.ticket.event.startsAt).toBe('2026-10-26T07:00:00.000Z');
+    expect(await checkInAudit()).toHaveLength(0);
+  });
+
+  it('календарь: старт перенесён между проверкой и отметкой — outside_window (pass 2)', async () => {
+    const w = await world();
+    const id = await calendarStart(h, w.tokens.admin, {
+      startsOn: '2026-10-25',
+      startTime: '07:00',
+    });
+    await enableCalendarTickets(h, w.tokens.admin, id);
+    const b = await rider(h, 'b@example.com');
+    const code = ((await registerFor(h, b.auth, id)).body as { ticket: { code: string } }).ticket
+      .code;
+    const g = pauseBeforeMark();
+    const scan = panelCall(h, w.tokens.admin, 'POST', CHECK_IN, { code });
+    await g.reached;
+    const start = await panelCall(h, w.tokens.admin, 'GET', `/v1/admin/calendar/${id}`);
+    await panelCall(h, w.tokens.admin, 'POST', `/v1/admin/calendar/${id}`, {
+      startsOn: '2026-10-30',
+      version: (start.body as { version: number }).version,
+    });
+    g.open();
+    expect(CheckInView.parse((await scan).body).outcome).toBe('outside_window');
+    expect(await checkInAudit()).toHaveLength(0);
+  });
+
   it('календарь: отмена регистрации между проверкой и отметкой — cancelled; после отметки отмена — 409', async () => {
     const w = await world();
     const id = await calendarStart(h, w.tokens.admin, {

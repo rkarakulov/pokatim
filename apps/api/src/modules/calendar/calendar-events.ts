@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
+import type { DbSession } from '../../db';
 import type { CalendarStartDoc } from './calendar.collection';
 import type { CalendarEventFacts, CalendarEvents } from './calendar-events.port';
 import { CalendarRepository } from './calendar.repository';
@@ -23,6 +24,11 @@ export class CalendarEventsService implements CalendarEvents {
 
   async get(id: string): Promise<CalendarEventFacts | null> {
     const doc = await this.repository.find(id);
+    return doc ? toFacts(doc) : null;
+  }
+
+  async lockForAdmission(tx: DbSession, id: string): Promise<CalendarEventFacts | null> {
+    const doc = await this.repository.lockForAdmission(tx, id);
     return doc ? toFacts(doc) : null;
   }
 
