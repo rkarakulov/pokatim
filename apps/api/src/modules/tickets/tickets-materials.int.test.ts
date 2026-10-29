@@ -5,14 +5,15 @@ import {
   EventMaterialsAdmin,
   type EventMaterialUploadQuery,
 } from '@pokatim/contracts';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { call } from '../../../test/identity';
+import { call, gate } from '../../../test/identity';
 import { memberUser, panel, panelCall, panelCookie, panelSession } from '../../../test/panel';
 import { racesDb } from '../../../test/races';
 import { calendarStart, raceWorld, ticketingUrl } from '../../../test/tickets';
-import { materialsCollections } from './materials.collection';
+import { type EventMaterialDoc, materialsCollections } from './materials.collection';
+import { MaterialsRepository } from './materials.repository';
 
 /**
  * Материалы события (event-tickets PR C, AC9): права на каждую ручку (RC-T9), CRUD, порядок, версия, правила RC-C5,
@@ -24,6 +25,9 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await h.reset();
+});
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 afterAll(async () => {
   await h.close();
@@ -328,6 +332,110 @@ describe('CRUD, порядок, журнал (RC-C7, RC-C8)', () => {
       await materialsCollections(h.db).materials.countDocuments({ eventId: w.calendarId }),
     ).toBe(20);
     expect(await audit('tickets.material_added')).toHaveLength(1);
+  });
+});
+
+/**
+ * Write skew лимитов (ревью PR C pass 4): добавление A прочитало материалы и стоит перед вставкой; перестановка B
+ * уплотняет порядок, добавление C занимает освободившуюся позицию — без общего замка события A вставляет сверх лимита.
+ * Ворота — пауза первого чтения материалов в транзакции; B, затем C либо завершаются, либо ждут замка (тогда A
+ * открывается через 2 с).
+ */
+describe('лимиты под замком события: добавление, перестановка, добавление', () => {
+  /** Материалы события с порядком 1..count (позиция 0 свободна — как после удаления первого), первые `files` — PDF. */
+  async function seed(eventId: string, updatedBy: string, count: number, files = 0) {
+    const docs: EventMaterialDoc[] = Array.from({ length: count }, (_, index) => ({
+      _id: `00000000-0000-7000-8000-${String(index).padStart(12, '0')}`,
+      kind: 'calendar',
+      eventId,
+      type: 'text',
+      title: `Т${index}`,
+      description: 'x',
+      url: null,
+      file: index < files ? { id: `file-${index}`, name: 'a.pdf', size: 1 } : null,
+      order: index + 1,
+      version: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      updatedBy,
+    }));
+    await materialsCollections(h.db).materials.insertMany(docs);
+    return docs.map((doc) => doc._id);
+  }
+
+  function pauseFirstRead() {
+    const g = gate();
+    const repository = h.app.get(MaterialsRepository, { strict: false });
+    const original = repository.listOf.bind(repository);
+    let paused = false;
+    vi.spyOn(repository, 'listOf').mockImplementation(async (kind, eventId, session) => {
+      const docs = await original(kind, eventId, session);
+      if (session && !paused) {
+        paused = true;
+        await g.wait();
+      }
+      return docs;
+    });
+    return g;
+  }
+
+  async function race(
+    token: string,
+    target: string,
+    ids: string[],
+    add: () => Promise<{ status: number; body: unknown }>,
+  ) {
+    const g = pauseFirstRead();
+    const first = add();
+    await g.reached;
+    // B, затем C (C должен увидеть уплотнённый порядок)
+    const rest = (async () => {
+      const b = await panelCall(h, token, 'PUT', `${target}/order`, { ids: [...ids].reverse() });
+      return [b, await add()] as const;
+    })();
+    await Promise.race([rest, new Promise((resolve) => setTimeout(resolve, 2000))]);
+    g.open();
+    const [a, [b, c]] = await Promise.all([first, rest]);
+    return { a, b, c };
+  }
+
+  it('19 материалов: A, перестановка, C → ровно 20, один 409 materials_limit', async () => {
+    const w = await world();
+    const target = url('calendar', w.calendarId);
+    const ids = await seed(w.calendarId, w.organizerId, 19);
+    const { a, b, c } = await race(w.tokens.admin, target, ids, () =>
+      panelCall(h, w.tokens.admin, 'POST', target, LINK),
+    );
+    expect(
+      await materialsCollections(h.db).materials.countDocuments({ eventId: w.calendarId }),
+    ).toBe(20);
+    expect(a.status).toBe(201);
+    expect(b.status).toBe(409);
+    expect(c).toMatchObject({
+      status: 409,
+      body: { code: 'TICKETING_INVALID_STATE', details: { reason: 'materials_limit' } },
+    });
+  });
+
+  it('9 PDF из 15: загрузка A, перестановка, загрузка C → ровно 10 PDF, один 409 files_limit', async () => {
+    const w = await world();
+    const target = url('calendar', w.calendarId);
+    const ids = await seed(w.calendarId, w.organizerId, 15, 9);
+    const { a, b, c } = await race(w.tokens.admin, target, ids, () =>
+      upload(w.tokens.admin, target, PDF),
+    );
+    expect(
+      await materialsCollections(h.db).materials.countDocuments({
+        eventId: w.calendarId,
+        file: { $ne: null },
+      }),
+    ).toBe(10);
+    expect(a.status).toBe(201);
+    expect(b.status).toBe(409);
+    expect(c).toMatchObject({
+      status: 409,
+      body: { code: 'TICKETING_INVALID_STATE', details: { reason: 'files_limit' } },
+    });
   });
 });
 

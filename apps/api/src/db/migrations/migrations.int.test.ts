@@ -1620,10 +1620,15 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       (c) => c.name,
     );
     expect(collections).toEqual(
-      expect.arrayContaining([MATERIALS_COLLECTIONS.materials, MATERIALS_COLLECTIONS.files]),
+      expect.arrayContaining([
+        MATERIALS_COLLECTIONS.materials,
+        MATERIALS_COLLECTIONS.files,
+        MATERIALS_COLLECTIONS.locks,
+      ]),
     );
     expect(await indexesOf(MATERIALS_COLLECTIONS.materials)).toEqual(expected);
     expect(await indexesOf(MATERIALS_COLLECTIONS.files)).toEqual({});
+    expect(await indexesOf(MATERIALS_COLLECTIONS.locks)).toEqual({});
 
     const materials = h.db.collection<Record<string, unknown> & { _id: string }>(
       MATERIALS_COLLECTIONS.materials,

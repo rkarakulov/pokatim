@@ -444,8 +444,10 @@ paths:
 - Материалы (PR C) — `event_materials` (`file: { id, name, size } | null` — денормализация, список без байтов) и
   `event_material_files` (`_id` = `randomToken`, `bytes` — Binary ≤ 10 МиБ); писатель — `MaterialsRepository`;
   миграция `0039_event_materials`: уникальный `event_materials_event_order_unique { kind, eventId, order }`
-  (параллельные добавления конфликтуют — лимиты 20/10 без гонок; перестановка — через временные отрицательные
-  позиции). Файлы — только чтение по `_id`. ПДн нет (`updatedBy`/`createdBy` — сотрудники) — шага стирания нет.
+  (одна позиция — один материал; перестановка — через временные отрицательные позиции). Лимиты 20/10 — под замком
+  `event_material_locks` (`_id = "<kind>:<eventId>"`, `lockEvent` — upsert `$inc version` первой операцией
+  добавления, перестановки и удаления; уникальный порядок лимиты не защищает — перестановка уплотняет позиции).
+  Файлы — только чтение по `_id`. ПДн нет (`updatedBy`/`createdBy` — сотрудники) — шага стирания нет.
 
 ## Удаление аккаунта (ADR-0015, `docs/product/account.md`)
 

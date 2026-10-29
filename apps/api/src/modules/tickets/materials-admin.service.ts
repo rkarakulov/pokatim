@@ -39,9 +39,9 @@ const EDITABLE = ['type', 'title', 'description', 'url'] as const;
 
 /**
  * Материалы события в панели (event-tickets PR C). Доступ — `PanelEvents.resolve(…, 'manage')` (та же проверка, что у
- * настроек билетов: нет права — 403, чужое — 404); каждый фильтр — с `kind, eventId`. Мутации — транзакция: лимиты
- * (20 материалов, 10 PDF) → запись → журнал. Правила содержимого (RC-C5) — `materialContentIssues` контракта по
- * итоговому документу. PDF — только по сигнатуре, создаётся вместе с материалом (RC-C6).
+ * настроек билетов: нет права — 403, чужое — 404); каждый фильтр — с `kind, eventId`. Мутации — транзакция: замок
+ * события (`lockEvent`, добавление/перестановка/удаление) → лимиты (20 материалов, 10 PDF) → запись → журнал.
+ * Правила содержимого (RC-C5) — `materialContentIssues` контракта по итоговому документу. PDF — только по сигнатуре, создаётся вместе с материалом (RC-C6).
  */
 @Injectable()
 export class MaterialsAdminService {
@@ -187,6 +187,7 @@ export class MaterialsAdminService {
   ): Promise<void> {
     const event = await this.panelEvents.resolve(principal, kind, eventId, 'manage');
     await this.transactions.run(async (tx) => {
+      await this.repository.lockEvent(tx, kind, eventId);
       const removed = await this.repository.delete(tx, kind, eventId, id);
       if (!removed) throw domainError('NOT_FOUND', 404);
       await this.journal(tx, principal, event, 'tickets.material_removed');
@@ -201,6 +202,7 @@ export class MaterialsAdminService {
   ): Promise<EventMaterialsAdmin> {
     const event = await this.panelEvents.resolve(principal, kind, eventId, 'manage');
     await this.transactions.run(async (tx) => {
+      await this.repository.lockEvent(tx, kind, eventId);
       const current = await this.repository.listOf(kind, eventId, tx);
       const known = new Set(current.map((doc) => doc._id));
       // набор id — ровно текущий (кто-то добавил или удалил — перечитать)
@@ -232,8 +234,9 @@ export class MaterialsAdminService {
   }
 
   /**
-   * Добавление в транзакции: лимиты → `order = max + 1` → запись → журнал. Порядок уникален (индекс): параллельное
-   * добавление конфликтует (транзакция повторяется и видит новый счёт) или — `409 CONFLICT`.
+   * Добавление в транзакции: замок события → лимиты → `order = max + 1` → запись → журнал. Замок сериализует
+   * добавление с другими добавлениями, перестановкой и удалением того же события (конфликт записи — повтор с новым
+   * списком); уникальный порядок лимиты не защищает (перестановка уплотняет позиции). Дубль ключа — `409 CONFLICT`.
    */
   private async insert(
     principal: PanelPrincipal,
@@ -244,6 +247,7 @@ export class MaterialsAdminService {
     const { kind, id: eventId } = event.facts;
     try {
       return await this.transactions.run(async (tx) => {
+        await this.repository.lockEvent(tx, kind, eventId);
         const current = await this.repository.listOf(kind, eventId, tx);
         this.checkLimits(current, withFile);
         const order = (current.at(-1)?.order ?? -1) + 1;

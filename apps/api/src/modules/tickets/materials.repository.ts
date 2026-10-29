@@ -10,6 +10,7 @@ import {
   type MaterialsCollections,
   materialsCollections,
 } from './materials.collection';
+import { ticketingIdOf } from './tickets.collection';
 
 /** Материал без служебных полей записи — для правки по версии. */
 export type MaterialChanges = Partial<
@@ -23,9 +24,9 @@ export interface MaterialFileBytes {
 }
 
 /**
- * Единственный писатель `event_materials` и `event_material_files` (event-tickets PR C). Каждый фильтр материала — с
- * `kind, eventId` (материал чужого события — как нет). Порядок уникален в событии (индекс): параллельные добавления
- * конфликтуют, перестановка — в два шага (временные отрицательные позиции).
+ * Единственный писатель `event_materials`, `event_material_files` и `event_material_locks` (event-tickets PR C). Каждый
+ * фильтр материала — с `kind, eventId` (материал чужого события — как нет). Мутации набора материалов — под
+ * `lockEvent`; порядок уникален в событии (индекс), поэтому перестановка — в два шага (временные отрицательные позиции).
  */
 @Injectable()
 export class MaterialsRepository {
@@ -33,6 +34,19 @@ export class MaterialsRepository {
 
   constructor(@Inject(MONGO_DB) db: Db) {
     this.c = materialsCollections(db);
+  }
+
+  /**
+   * Замок материалов события — первая операция транзакции добавления, перестановки и удаления: запись в общий документ
+   * события (upsert, `$inc version`) — параллельная мутация того же события получает конфликт записи и повторяется
+   * после коммита, лимиты 20/10 проверяются по актуальному списку (`.claude/rules/db.md`, write skew).
+   */
+  async lockEvent(session: DbSession, kind: TicketEventKind, eventId: string): Promise<void> {
+    await this.c.locks.updateOne(
+      { _id: ticketingIdOf(kind, eventId) },
+      { $inc: { version: 1 }, $setOnInsert: { kind, eventId } },
+      { session, upsert: true },
+    );
   }
 
   /** Материалы события по порядку (индекс события). */
