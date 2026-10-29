@@ -86,12 +86,16 @@ afterEach(() => {
 });
 
 describe('«Заезд по маршруту» (route-rides-02, A4)', () => {
-  it('гость по прямой ссылке — гард ведёт на регистрацию', async () => {
+  it('гость по прямой ссылке — гард ведёт на лендинг', async () => {
     const router = await renderRouter(appRoutes, {
       initialUrl: `/routes/rides/${ROUTE_ID}/${RIDE_ID}`,
     });
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
     expect(getRide).not.toHaveBeenCalled();
   });
 

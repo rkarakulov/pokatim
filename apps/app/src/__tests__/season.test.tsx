@@ -308,8 +308,12 @@ describe('экран сезона: «Другие сезоны» и сеть (р
     const router = await renderRouter(appRoutes, { initialUrl: '/seasons/current' });
 
     await fireEvent.press(await screen.findByRole('button', { name: 'Все гонки' }));
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
   });
 });
 

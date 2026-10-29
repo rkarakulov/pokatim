@@ -277,11 +277,15 @@ describe('карточка своего маршрута (AC3, M3)', () => {
   const openDetail = (id: string) =>
     renderRouter(routes, { initialUrl: `/routes/mine/${id}`, wrapper: createQueryWrapper() });
 
-  it('гость по ссылке — гард ведёт на регистрацию, запроса нет', async () => {
+  it('гость по ссылке — гард ведёт на лендинг, запроса нет', async () => {
     useSessionStore.setState({ status: 'signedOut', session: null });
     const router = await renderRouter(appRoutes, { initialUrl: `/routes/mine/${ring.id}` });
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
     expect(getMine).not.toHaveBeenCalled();
   });
 

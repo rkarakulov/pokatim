@@ -36,3 +36,16 @@ describe('CalendarStartHero: строка регистрации (ревью pas
     expect(screen.queryByText('Регистрация у организатора.')).toBeNull();
   });
 });
+
+describe('CalendarStartHero без «сейчас» (guest-landing, RC-8: SSR и гидрация)', () => {
+  it('`now={null}` — дата с годом, без строки «До старта N дней»', async () => {
+    await render(<CalendarStartHero start={start()} now={null} />);
+    expect(screen.getByLabelText('Ближайший старт. Минская сотка. 14 июня 2027')).toBeOnTheScreen();
+    expect(screen.queryByText(/До старта/)).toBeNull();
+  });
+
+  it('с `now` — строка «До старта N дней» есть', async () => {
+    await render(<CalendarStartHero start={start()} now={NOW} />);
+    expect(screen.getByText(/До старта/)).toBeOnTheScreen();
+  });
+});

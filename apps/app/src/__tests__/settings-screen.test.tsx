@@ -171,10 +171,17 @@ describe('язык при запуске (AC5)', () => {
 });
 
 describe('гость (AC6)', () => {
-  it.each(['/settings', '/settings/language'])('%s → «Регистрация» (гард вкладок)', async (url) => {
-    resetSessionStore();
-    const router = await renderRouter(appRoutes, { initialUrl: url });
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
-  });
+  it.each(['/settings', '/settings/language'])(
+    '%s → лендинг (гард вкладок, guest-landing)',
+    async (url) => {
+      resetSessionStore();
+      const router = await renderRouter(appRoutes, { initialUrl: url });
+      expect(
+        await screen.findByRole('header', {
+          name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+        }),
+      ).toBeOnTheScreen();
+      expect(router.getPathname()).toBe('/welcome');
+    },
+  );
 });
