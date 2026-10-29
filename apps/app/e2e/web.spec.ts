@@ -207,6 +207,23 @@ test('manifest — всегда «Классика», и при cookie личн�
   });
 });
 
+test('robots.txt: служебное закрыто, Sitemap от WEB_ORIGIN; sitemap.xml с API — лендинг (landing-seo)', async ({
+  request,
+}) => {
+  const robots = await request.get('/robots.txt');
+  expect(robots.headers()['content-type']).toContain('text/plain');
+  const body = await robots.text();
+  expect(body).toContain('Disallow: /settings');
+  expect(body).toContain(`Sitemap: ${BASE_URL}/sitemap.xml`);
+  const sitemap = await request.get('/sitemap.xml');
+  if (WITH_API) {
+    expect(sitemap.status()).toBe(200);
+    expect(await sitemap.text()).toContain(`<loc>${BASE_URL}/welcome</loc>`);
+  } else {
+    expect(sitemap.status()).toBe(503);
+  }
+});
+
 test('публичный экран /register: форма, заголовок и OG в HTML до JS', async ({ page, request }) => {
   const html = await (await request.get('/register')).text();
   expect(html).toContain('Создать аккаунт');
