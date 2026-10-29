@@ -124,6 +124,15 @@ describe('гард сессии (Stack.Protected)', () => {
     expect(router.getPathname()).toBe('/check-email');
   });
 
+  it('живая регистрация, гость уже на лендинге (стор регистрации догидрировался позже) — «Подтвердите e-mail»', async () => {
+    storePendingRegistration();
+    jest.mocked(api.pollRegistration).mockResolvedValue({ state: 'pending' });
+    const router = await renderRouter(appRoutes, { initialUrl: '/welcome' });
+
+    expect(await screen.findByRole('header', { name: 'Подтвердите e-mail' })).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/check-email');
+  });
+
   it('ссылка из письма открывается и без сессии, и с сессией', async () => {
     jest.mocked(api.getVerificationLink).mockResolvedValue({ state: 'valid', email: 'a@b.by' });
     const router = await renderRouter(appRoutes, { initialUrl: `/auth/verify/${LINK_TOKEN}` });

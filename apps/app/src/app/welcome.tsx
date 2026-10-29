@@ -1,4 +1,7 @@
+import { Redirect } from 'expo-router';
 import type { LoaderFunction } from 'expo-router/server';
+
+import { useRegistrationStore } from '@/features/auth/registration-store';
 
 import { LandingScreen } from '@/features/landing/landing-screen';
 import { landingMetadata } from '@/features/landing/metadata';
@@ -15,5 +18,10 @@ export const loader: LoaderFunction<LandingSeed> = () => loadLandingSeed();
 export const generateMetadata = landingMetadata;
 
 export default function WelcomeRoute() {
-  return <LandingScreen seed={useLoaderSeed<LandingSeed>()} />;
+  const seed = useLoaderSeed<LandingSeed>();
+  // живая регистрация (`resumeOnLaunch`): стор регистрации гидрируется отдельно от сессии и может прийти позже гарда
+  // вкладок — тогда гость уже здесь; продолжение к «Подтвердите e-mail» запускает «Регистрация». На SSR стор пуст
+  const resumeRegistration = useRegistrationStore((state) => state.resumeOnLaunch);
+  if (resumeRegistration) return <Redirect href="/register" />;
+  return <LandingScreen seed={seed} />;
 }
