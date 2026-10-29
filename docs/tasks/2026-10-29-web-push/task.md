@@ -134,3 +134,6 @@ P-256 — подписка снимается (снимок, как `deleteToken
 - ADR перенумерован в 0022 (0021 занял user-theme, смержен раньше).
 - PR B (приложение, SW): independent review pass 1 — APPROVE (1 MEDIUM, 7 LOW, `findings-b.md`); исправлены: выход не
   ждёт `serviceWorker.ready` (`getRegistration`), без `badge`, комментарий о цикле импорта, крайние случаи паритета.
+- PR #111 смержен. Живая проверка на dev (Chrome, FCM): подписка, push в SW за ~1 с, снятие при выходе — работает; она
+  же нашла дефект: строка настроек и `PushNotifications` одновременно звали `pushManager.subscribe()` — Chrome выдавал
+  две подписки (на сервере — 2 документа, первый мёртвый). Исправлено single-flight подписки в `push.web.ts` (fix PR).

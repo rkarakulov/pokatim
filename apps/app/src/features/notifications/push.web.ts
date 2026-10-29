@@ -179,9 +179,19 @@ export async function openPushSettings(): Promise<void> {}
 
 /**
  * Подписка этого браузера — только при выданном разрешении: есть свежая под ключом сервера — она, иначе новая
- * (истёкшая или под старым ключом — сначала отписка). Без поддержки, разрешения или при сбое — `null`.
+ * (истёкшая или под старым ключом — сначала отписка). Без поддержки, разрешения или при сбое — `null`. Одна подписка
+ * за раз: два одновременных `pushManager.subscribe()` (запуск приложения и экран настроек) дают в Chrome две разные
+ * подписки, и первая на сервере остаётся мёртвой.
  */
-export async function obtainPushToken(): Promise<DevicePushToken | null> {
+let subscribing: Promise<DevicePushToken | null> | null = null;
+export function obtainPushToken(): Promise<DevicePushToken | null> {
+  subscribing ??= subscribeBrowser().finally(() => {
+    subscribing = null;
+  });
+  return subscribing;
+}
+
+async function subscribeBrowser(): Promise<DevicePushToken | null> {
   const publicKey = await webPushReady();
   if (!publicKey || Notification.permission !== 'granted') return null;
   try {
