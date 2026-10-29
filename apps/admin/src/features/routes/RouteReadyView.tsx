@@ -17,32 +17,43 @@ export type ReadyRouteData = Pick<
 /**
  * Готовый маршрут (routes-05, вынесено в routes-06): карта со скраббингом, цифры, профиль высоты. Страница маршрута
  * команды и страница заявки райдера показывают один и тот же блок. `surfaces` — для времени в пути: неизвестно —
- * пустой список (как асфальт, RC-11).
+ * пустой список (как асфальт, RC-11). Карта гонки (panel-race-map) — тот же блок с коридором `corridorWidthM` и
+ * подзаголовками `h3` внутри секции «Карта гонки».
  */
 export function RouteReadyView({
   route,
   surfaces,
   scrub,
+  corridorWidthM,
+  headingLevel = 2,
 }: {
   route: ReadyRouteData;
   surfaces: readonly Surface[];
   scrub: ScrubStore;
+  corridorWidthM?: number;
+  headingLevel?: 2 | 3;
 }) {
+  const Heading = headingLevel === 3 ? 'h3' : 'h2';
   const distanceM = route.distanceM ?? 0;
   const pace = routePaceKmh(surfaces);
   const elevation = route.elevation;
   return (
     <>
       <section className="section" aria-labelledby="route-map-title">
-        <h2 id="route-map-title" className="section__title t-label">
+        <Heading id="route-map-title" className="section__title t-label">
           {t('admin.routes.detail.map')}
-        </h2>
-        <RouteLine route={route} variant="page" scrub={scrub} />
+        </Heading>
+        <RouteLine
+          route={route}
+          variant="page"
+          scrub={scrub}
+          {...(corridorWidthM !== undefined ? { corridorWidthM } : {})}
+        />
       </section>
       <section className="section" aria-labelledby="route-stats-title">
-        <h2 id="route-stats-title" className="section__title t-label">
+        <Heading id="route-stats-title" className="section__title t-label">
           {t('admin.routes.detail.stats')}
-        </h2>
+        </Heading>
         <div className="stat-tiles">
           <StatTile
             label={t('admin.routes.detail.stats.distance')}
@@ -72,9 +83,9 @@ export function RouteReadyView({
         </div>
       </section>
       <section className="section" aria-labelledby="route-profile-title">
-        <h2 id="route-profile-title" className="section__title t-label">
+        <Heading id="route-profile-title" className="section__title t-label">
           {t('admin.routes.detail.profile')}
-        </h2>
+        </Heading>
         {elevation ? (
           <ElevationProfile
             elevation={elevation}

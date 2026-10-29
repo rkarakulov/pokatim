@@ -342,9 +342,12 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
         .refetchQueries({ queryKey: ['admin', 'routes', 'item', ROUTE_ID] })
         .catch(() => undefined);
     });
-    expect(await screen.findByText('Не удалось обновить маршрут')).toBeTruthy();
+    const banner = (await screen.findByText('Не удалось обновить маршрут')).closest(
+      '[role="alert"]',
+    );
     expect(screen.getByRole('img', { name: /Линия маршрута/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+    // у сохранённого коридора тот же запрос показывает и блок «Карта гонки» (свой баннер)
+    fireEvent.click(within(banner as HTMLElement).getByRole('button', { name: 'Повторить' }));
     await waitFor(() => expect(screen.queryByText('Не удалось обновить маршрут')).toBeNull());
   });
 

@@ -39,6 +39,7 @@ import {
 import { seasonOfDate, seasonRangeText } from '../seasons/season-hints';
 import { seasonsQuery } from '../seasons/seasons-query';
 import { CorridorField } from './CorridorField';
+import { RaceCorridorMap } from './RaceCorridorMap';
 import {
   earliestProtocol,
   emptyRaceForm,
@@ -617,6 +618,13 @@ export function RaceEditor({
             </div>
           ) : null}
         </form>
+        {race?.corridor ? (
+          <RaceCorridorMap
+            key={race.corridor.route.id}
+            corridor={race.corridor}
+            surfaces={race.surfaces}
+          />
+        ) : null}
       </div>
 
       {race ? (

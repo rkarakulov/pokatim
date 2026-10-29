@@ -1341,6 +1341,13 @@ export const ru = {
   'admin.races.corridor.previewRefreshFailed': 'Не удалось обновить маршрут',
   'admin.races.corridor.previewLabel': 'Линия маршрута «{title}», {distance}',
   'admin.races.corridor.previewFailed': 'Не удалось загрузить маршрут',
+  // panel-race-map: блок «Карта гонки» под формой гонки с коридором
+  'admin.races.map.title': 'Карта гонки',
+  'admin.races.map.label':
+    'Карта гонки: маршрут «{title}», {distance}, коридор ±{width} м от маршрута, старт и финиш отмечены',
+  'admin.races.map.lineLabel':
+    'Линия гонки: маршрут «{title}», {distance}, коридор ±{width} м от маршрута',
+  'admin.races.map.refreshFailed': 'Не удалось обновить карту гонки',
   'admin.races.corridor.pollFailed': 'Не удаётся получить статус маршрута — продолжаем проверять',
   'admin.routes.dialog.title': 'Новый маршрут',
   'admin.routes.field.title': 'Название маршрута',
