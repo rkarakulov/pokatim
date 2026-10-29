@@ -7,7 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { appThemeWrapper } from '@/__tests__/app-theme-wrapper';
 
 import { InstallBanner } from './install-banner';
-import { INSTALL_PROMPT_KEY, MS_IN_DAY, VISITS_BEFORE_PROMPT } from './install-prompt-state';
+import { INSTALL_PROMPT_KEY, MS_IN_DAY } from './install-prompt-state';
 import { useInstallStore } from './install-store.web';
 
 const mockSetParams = jest.fn();
@@ -36,10 +36,6 @@ function browser(userAgent: string, { standalone = false, platform = 'iPhone' } 
   jest.spyOn(navigator, 'platform', 'get').mockReturnValue(platform);
   Object.defineProperty(navigator, 'standalone', { value: standalone, configurable: true });
 }
-
-/** Визит, на котором срабатывает счётчик: в хранилище — на один меньше порога. */
-const seedVisits = (visits = VISITS_BEFORE_PROMPT - 1) =>
-  localStorage.setItem(INSTALL_PROMPT_KEY, JSON.stringify({ visitsCountAfterClosing: visits }));
 
 const stored = () => JSON.parse(localStorage.getItem(INSTALL_PROMPT_KEY) ?? 'null');
 
@@ -91,17 +87,24 @@ describe('плашка установки PWA (web)', () => {
     expect(html).not.toContain('pwa-install-banner');
   });
 
-  it('iOS: до 5-го визита плашки нет, визит записан', async () => {
+  it('новый пользователь: плашка с первого визита', async () => {
     browser(UA.safari26);
-    seedVisits(VISITS_BEFORE_PROMPT - 2);
     await renderBanner();
-    expect(screen.queryByTestId('pwa-install-banner')).toBeNull();
-    expect(stored()).toEqual({ visitsCountAfterClosing: VISITS_BEFORE_PROMPT - 1 });
+    expect(screen.getByTestId('pwa-install-banner')).toBeTruthy();
   });
 
-  it('iOS Safari 26: на 5-м визите плашка, нажатие — инструкция с картинками iOS 26', async () => {
+  it('до 7 дней после «×» — плашки нет', async () => {
     browser(UA.safari26);
-    seedVisits();
+    localStorage.setItem(
+      INSTALL_PROMPT_KEY,
+      JSON.stringify({ closedTimestamp: NOW - 7 * MS_IN_DAY + 1 }),
+    );
+    await renderBanner();
+    expect(screen.queryByTestId('pwa-install-banner')).toBeNull();
+  });
+
+  it('iOS Safari 26: нажатие на плашку — инструкция с картинками iOS 26', async () => {
+    browser(UA.safari26);
     await renderBanner();
     fireEvent.click(screen.getByRole('button', { name: 'Установить приложение' }));
     expect(screen.getByTestId('pwa-install-ios')).toBeTruthy();
@@ -110,9 +113,8 @@ describe('плашка установки PWA (web)', () => {
     expect(screen.getByTestId('pwa-install-home-ios26')).toBeTruthy();
   });
 
-  it('iOS Safari 17 — картинки _old; «×» инструкции не трогает счётчик', async () => {
+  it('iOS Safari 17 — картинки _old; «×» инструкции не трогает хранилище', async () => {
     browser(UA.safari17);
-    seedVisits();
     await renderBanner();
     fireEvent.click(screen.getByRole('button', { name: 'Установить приложение' }));
     expect(screen.getByTestId('pwa-install-share-legacy')).toBeTruthy();
@@ -120,23 +122,22 @@ describe('плашка установки PWA (web)', () => {
     fireEvent.click(screen.getByTestId('pwa-install-modal-close'));
     expect(screen.queryByTestId('pwa-install-ios')).toBeNull();
     expect(screen.getByTestId('pwa-install-banner')).toBeTruthy();
-    expect(stored()).toEqual({ visitsCountAfterClosing: VISITS_BEFORE_PROMPT });
+    expect(stored()).toEqual({});
   });
 
-  it('«×» плашки: скрыть, счётчик с нуля, время закрытия', async () => {
+  it('«×» плашки: скрыть и запомнить время закрытия', async () => {
     browser(UA.safari26);
-    seedVisits();
     await renderBanner();
     fireEvent.click(screen.getByTestId('pwa-install-banner-close'));
     expect(screen.queryByTestId('pwa-install-banner')).toBeNull();
-    expect(stored()).toEqual({ visitsCountAfterClosing: 0, closedTimestamp: NOW });
+    expect(stored()).toEqual({ closedTimestamp: NOW });
   });
 
-  it('через 7 дней после «×» — снова на первом визите', async () => {
+  it('через 7 дней после «×» — снова', async () => {
     browser(UA.safari26);
     localStorage.setItem(
       INSTALL_PROMPT_KEY,
-      JSON.stringify({ visitsCountAfterClosing: 0, closedTimestamp: NOW - 7 * MS_IN_DAY }),
+      JSON.stringify({ closedTimestamp: NOW - 7 * MS_IN_DAY }),
     );
     await renderBanner();
     expect(screen.getByTestId('pwa-install-banner')).toBeTruthy();
@@ -144,14 +145,12 @@ describe('плашка установки PWA (web)', () => {
 
   it('standalone (открыто как PWA) — плашки нет', async () => {
     browser(UA.safari26, { standalone: true });
-    seedVisits();
     await renderBanner();
     expect(screen.queryByTestId('pwa-install-banner')).toBeNull();
   });
 
   it('десктоп — плашки нет', async () => {
     browser(UA.desktop, { platform: 'MacIntel' });
-    seedVisits();
     await renderBanner();
     fireBeforeInstallPrompt();
     expect(screen.queryByTestId('pwa-install-banner')).toBeNull();
@@ -159,7 +158,6 @@ describe('плашка установки PWA (web)', () => {
 
   it('Android: плашка только после beforeinstallprompt, нажатие — нативный диалог', async () => {
     browser(UA.android, { platform: 'Linux armv8l' });
-    seedVisits();
     await renderBanner();
     expect(screen.queryByTestId('pwa-install-banner')).toBeNull();
     const { event, prompt } = fireBeforeInstallPrompt();
@@ -178,21 +176,19 @@ describe('плашка установки PWA (web)', () => {
       value: () => Promise.resolve([{ platform: 'webapp' }]),
       configurable: true,
     });
-    seedVisits();
     await renderBanner();
     fireBeforeInstallPrompt();
     expect(screen.queryByTestId('pwa-install-banner')).toBeNull();
     delete (navigator as { getInstalledRelatedApps?: unknown }).getInstalledRelatedApps;
   });
 
-  it('?show-pwa-modal: параметр убран, промо без счётчика; «Установить» — инструкция iOS', async () => {
+  it('?show-pwa-modal: параметр убран, промо; «Установить» — инструкция iOS', async () => {
     browser(UA.safari26);
     window.history.replaceState(null, '', '/?show-pwa-modal&tab=1');
     await renderBanner();
     expect(window.location.search).toBe('?tab=1');
     // и из состояния навигатора: иначе переход на Главную по вкладке вернёт параметр в адрес
     expect(mockSetParams).toHaveBeenCalledWith({ 'show-pwa-modal': undefined });
-    expect(screen.queryByTestId('pwa-install-banner')).toBeNull();
     expect(screen.getByTestId('pwa-install-promo')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Установить' }));
     expect(screen.queryByTestId('pwa-install-promo')).toBeNull();
@@ -201,14 +197,12 @@ describe('плашка установки PWA (web)', () => {
 
   it('без ?show-pwa-modal параметры роутера не трогаем', async () => {
     browser(UA.safari26);
-    seedVisits();
     await renderBanner();
     expect(mockSetParams).not.toHaveBeenCalled();
   });
 
   it('appinstalled до ответа getInstalledRelatedApps — плашки нет', async () => {
     browser(UA.safari26);
-    seedVisits();
     act(() => {
       window.dispatchEvent(new Event('appinstalled'));
     });
