@@ -3,7 +3,7 @@
 #   1. каталог стека ${POKATIM_DIR} (700);
 #   2. .env (600): недостающие ключи из env.template дописываются, @secret генерируется здесь же
 #      (openssl rand) — значения не печатаются и не покидают сервер; существующие значения не меняются,
-#      кроме управляемых деплоем PUBLIC_HOST, WEB_ORIGIN, APP_LINK_BASE, POKATIM_TAG, MAIL_RELAY_RECIPIENTS и
+#      кроме управляемых деплоем PUBLIC_HOST, WEB_ORIGIN, APP_WEB_ORIGIN, APP_LINK_BASE, POKATIM_TAG, MAIL_RELAY_RECIPIENTS и
 #      MAILPIT_RELAY_*;
 #   2b. keyfile replica set MongoDB ${POKATIM_DIR}/mongo-keyfile (600): генерируется здесь же один раз (openssl rand),
 #      не печатается и не покидает сервер (Q1);
@@ -39,7 +39,7 @@ SITE_LINK="/etc/nginx/sites-enabled/${SITE_NAME}"
 WEBROOT="/var/www/html"
 RELAY_FILE="${POKATIM_DIR}/mailpit-relay.yml"
 KEYFILE="${POKATIM_DIR}/mongo-keyfile"
-MANAGED_KEYS="PUBLIC_HOST WEB_ORIGIN APP_LINK_BASE POKATIM_TAG MAIL_RELAY_RECIPIENTS"
+MANAGED_KEYS="PUBLIC_HOST WEB_ORIGIN APP_WEB_ORIGIN APP_LINK_BASE POKATIM_TAG MAIL_RELAY_RECIPIENTS"
 MANAGED_KEYS="${MANAGED_KEYS} MAILPIT_RELAY_CONFIG MAILPIT_RELAY_ALL MAILPIT_RELAY_MATCHING MAILPIT_RELAY_REV"
 
 log() { printf '[bootstrap] %s\n' "$*"; }
@@ -172,6 +172,8 @@ ensure_env() {
   {
     printf 'PUBLIC_HOST=%s\n' "${PUBLIC_HOST}"
     printf 'WEB_ORIGIN=https://%s\n' "${PUBLIC_HOST}"
+    # ссылки писем на страницы web-приложения (event-tickets: «Открыть билет»)
+    printf 'APP_WEB_ORIGIN=https://%s\n' "${PUBLIC_HOST}"
     printf 'APP_LINK_BASE=https://%s/\n' "${PUBLIC_HOST}"
     [[ -z "${tag}" ]] || printf 'POKATIM_TAG=%s\n' "${tag}"
     # одинарные кавычки — без подстановки ${…} в compose (в регулярке бывает «$»)

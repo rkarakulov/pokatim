@@ -3,6 +3,8 @@ import { Module } from '@nestjs/common';
 import { PanelModule } from '../panel';
 import { PublicReadGuard } from '../../public-read.guard';
 import { CalendarAdminController } from './calendar-admin.controller';
+import { CalendarEventsService } from './calendar-events';
+import { CALENDAR_EVENTS } from './calendar-events.port';
 import { CalendarOverview } from './calendar-overview';
 import { CalendarPublicController } from './calendar-public.controller';
 import { CalendarPublicService } from './calendar-public.service';
@@ -10,12 +12,18 @@ import { CalendarRepository } from './calendar.repository';
 import { CalendarService } from './calendar.service';
 
 /**
- * Ядро `calendar` без HTTP: единственный писатель стартов и порт «Обзора» панели `CalendarOverview` (admin-overview,
- * только через `index.ts`). Репозиторий объявлен только здесь (один экземпляр).
+ * Ядро `calendar` без HTTP: единственный писатель стартов, порт «Обзора» панели `CalendarOverview` (admin-overview) и
+ * порт `CALENDAR_EVENTS` для `tickets` (event-tickets) — только через `index.ts`. Репозиторий объявлен только здесь
+ * (один экземпляр).
  */
 @Module({
-  providers: [CalendarRepository, CalendarOverview],
-  exports: [CalendarRepository, CalendarOverview],
+  providers: [
+    CalendarRepository,
+    CalendarOverview,
+    CalendarEventsService,
+    { provide: CALENDAR_EVENTS, useExisting: CalendarEventsService },
+  ],
+  exports: [CalendarRepository, CalendarOverview, CALENDAR_EVENTS],
 })
 export class CalendarCoreModule {}
 

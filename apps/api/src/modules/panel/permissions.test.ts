@@ -23,7 +23,14 @@ describe('карта ролей панели (admin-01 Q2, Q3, Q12; admin-02 §7
       'races.manage',
       'races.read',
       'results.manage',
+      'tickets.checkin',
     ]);
+  });
+
+  it('event-tickets: check-in — admin и organizer, не moderator', () => {
+    expect(ROLE_PERMISSIONS.admin.has('tickets.checkin')).toBe(true);
+    expect(ROLE_PERMISSIONS.organizer.has('tickets.checkin')).toBe(true);
+    expect(ROLE_PERMISSIONS.moderator.has('tickets.checkin')).toBe(false);
   });
 
   it('матрица §7: manage_any, seasons.manage, calendar.manage — только admin', () => {

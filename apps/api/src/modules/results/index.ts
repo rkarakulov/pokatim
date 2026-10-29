@@ -50,3 +50,9 @@ export {
 } from './rider-results.port';
 /** Порт «Обзора» панели (admin-overview): готовность протоколов и активность гонок; даёт `ResultsModule`. */
 export { type ProtocolReadiness, ResultsOverview } from './results-overview';
+/** Порт для `tickets` (event-tickets): заявка райдера и заявки гонки пачками — выпуск и сверка билетов гонки. */
+export {
+  RESULTS_FOR_TICKETS,
+  type ResultsForTickets,
+  type TicketEntry,
+} from './results-for-tickets.port';

@@ -37,6 +37,12 @@ export class CalendarRepository {
     return (await this.starts.findOne({ _id: id }, { session })) ?? undefined;
   }
 
+  /** Старты по id (`_id` — индекс); незнакомых — нет. */
+  findMany(ids: readonly string[]): Promise<CalendarStartDoc[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.starts.find({ _id: { $in: [...new Set(ids)] } }).toArray();
+  }
+
   async insert(session: DbSession, doc: CalendarStartDoc): Promise<void> {
     await this.starts.insertOne(doc, { session });
   }

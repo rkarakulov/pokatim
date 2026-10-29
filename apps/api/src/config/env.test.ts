@@ -140,6 +140,17 @@ describe('env', () => {
     expect(value.DEVICES_ENABLED).toBe(false);
   });
 
+  it('APP_WEB_ORIGIN (event-tickets): необязателен, только https-origin без пути; пусто — как не задан', () => {
+    expect(testEnv().APP_WEB_ORIGIN).toBeUndefined();
+    expect(testEnv({ APP_WEB_ORIGIN: '' }).APP_WEB_ORIGIN).toBeUndefined();
+    expect(testEnv({ APP_WEB_ORIGIN: 'https://pokatim.example' }).APP_WEB_ORIGIN).toBe(
+      'https://pokatim.example',
+    );
+    for (const bad of ['http://pokatim.example', 'https://pokatim.example/app', 'pokatim://']) {
+      expect(() => testEnv({ APP_WEB_ORIGIN: bad }), bad).toThrow();
+    }
+  });
+
   it('уведомления: push выключен по умолчанию, ключа Expo нет, адрес — exp.host', () => {
     const value = testEnv();
     expect(value.PUSH_ENABLED).toBe(false);

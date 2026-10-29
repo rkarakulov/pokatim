@@ -23,6 +23,7 @@ import { routeRidesOutboxRoutes, RouteRidesWorkerModule } from './modules/route-
 import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
 import { SharingWorkerModule } from './modules/sharing';
 import { StandingsWorkerModule } from './modules/standings';
+import { ticketsOutboxRoutes, TicketsWorkerModule } from './modules/tickets';
 import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
 
 /** Отдельный процесс: задачи очередей (письма, тяжёлая обработка) не блокируют API. */
@@ -46,6 +47,7 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
         ...resultsOutboxRoutes,
         ...routeRidesOutboxRoutes,
         ...accountOutboxRoutes,
+        ...ticketsOutboxRoutes,
         // подписчик чужих типов (results, disputes, rides, routes) — ADR-0017
         ...notificationsOutboxRoutes,
       },
@@ -69,6 +71,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     SharingWorkerModule,
     // сверка заезда по маршруту вне гонки (route-rides-01)
     RouteRidesWorkerModule,
+    // письмо «Вы зарегистрированы» и сверка билетов гонок (event-tickets)
+    TicketsWorkerModule,
   ],
 })
 export class WorkerModule {}

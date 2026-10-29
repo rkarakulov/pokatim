@@ -22,6 +22,8 @@ import { ResultsForDisputesService } from './results-for-disputes';
 import { ResultsForSharingService } from './results-for-sharing';
 import { RESULTS_FOR_SHARING } from './results-for-sharing.port';
 import { ResultsForStandingsService } from './results-for-standings';
+import { ResultsForTicketsService } from './results-for-tickets';
+import { RESULTS_FOR_TICKETS } from './results-for-tickets.port';
 import { ResultsHistoryService } from './results-history.service';
 import { RESULTS_FOR_STANDINGS } from './results-for-standings.port';
 import { RESULTS_FOR_DISPUTES } from './results-for-disputes.port';
@@ -46,7 +48,8 @@ import { ResultsRepository } from './results.repository';
  * порт `RESULTS_NOTICES` (получатели уведомлений, ADR-0017). Для `standings` (race-results-08) — порт
  * `RESULTS_FOR_STANDINGS` (текущие ревизии и строки снимка протокола). Для `sharing` (story-cards) — порт
  * `RESULTS_FOR_SHARING` (факты и линия карточки для сторис). Для `riders` (rider-profile) — порт `RIDER_RESULTS`
- * (строки райдера в текущих ревизиях опубликованных протоколов).
+ * (строки райдера в текущих ревизиях опубликованных протоколов). Для `tickets` (event-tickets) — порт
+ * `RESULTS_FOR_TICKETS` (заявка райдера и заявки гонки пачками).
  */
 @Module({
   imports: [RacesCoreModule, RoutesCoreModule, TracksCoreModule, ProfileCoreModule],
@@ -65,6 +68,8 @@ import { ResultsRepository } from './results.repository';
     { provide: RESULTS_FOR_SHARING, useExisting: ResultsForSharingService },
     RiderResultsService,
     { provide: RIDER_RESULTS, useExisting: RiderResultsService },
+    ResultsForTicketsService,
+    { provide: RESULTS_FOR_TICKETS, useExisting: ResultsForTicketsService },
   ],
   exports: [
     RacesCoreModule,
@@ -79,6 +84,7 @@ import { ResultsRepository } from './results.repository';
     RESULTS_FOR_STANDINGS,
     RESULTS_FOR_SHARING,
     RIDER_RESULTS,
+    RESULTS_FOR_TICKETS,
   ],
 })
 export class ResultsCoreModule {}

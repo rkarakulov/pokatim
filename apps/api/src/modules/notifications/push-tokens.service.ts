@@ -4,7 +4,7 @@ import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
 
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
-import { consumeUserLimit } from './notifications.service';
+import { consumeUserLimit } from '../../user-limit';
 
 /**
  * Push-токены устройства (ADR-0017): регистрация и снятие — общий лимит `notifications-push-token` по `uid`. Токен
