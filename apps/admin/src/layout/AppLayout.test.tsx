@@ -12,6 +12,7 @@ vi.mock('../api', () => ({
     signIn: vi.fn(),
     signOut: vi.fn(),
     health: vi.fn(),
+    overview: vi.fn(),
     resendVerification: vi.fn(),
     listMembers: vi.fn(),
     listAudit: vi.fn(),
@@ -25,6 +26,7 @@ const mocked = vi.mocked(api);
 
 beforeEach(() => {
   mocked.health.mockResolvedValue({ status: 'ok', version: 'dev', checks: { database: 'up' } });
+  mocked.overview.mockReturnValue(new Promise(() => undefined));
 });
 
 afterEach(() => {
@@ -45,13 +47,13 @@ describe('каркас панели (AC10)', () => {
     expect(side.getByRole('link', { name: 'Обзор' }).getAttribute('aria-current')).toBe('page');
     expect(side.getByText('Ольга · Администратор · команда платформы')).toBeTruthy();
     expect(side.getByRole('button', { name: 'Выйти' })).toBeTruthy();
-    expect(screen.getByText('Разделы панели появятся здесь')).toBeTruthy();
-    expect(await screen.findByText('Работает')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Требует внимания' })).toBeTruthy();
   });
 
   it.each([
-    // admin-02: Гонки, Календарь, Сезоны (последним в основной группе); 05b: «Модерация райдов» — в конце;
-    // 06: «Споры» — сразу после «Гонок» (8.1 RC-18); app-themes: «Оформление приложения» — последним в bottom
+    // admin-02: Гонки, Календарь, Сезоны (последним в основной группе); 06: «Споры» — сразу после «Гонок» (8.1
+    // RC-18); admin-moderation-hub: «Модерация» (вкладки трёх очередей) — на месте «Модерации райдов», перед
+    // «Оформлением приложения»
     [
       'admin',
       [
@@ -63,27 +65,14 @@ describe('каркас панели (AC10)', () => {
         'Сезоны',
         'Сотрудники',
         'Журнал действий',
-        'Модерация райдов',
+        'Модерация',
         'Оформление приложения',
-        'Маршруты райдеров',
-        'Профили райдеров',
       ],
     ],
-    // routes-06: «Маршруты райдеров» (`routes.moderate`) — в bottom; у организатора права нет
-    // profile-moderation: «Профили райдеров» (`profiles.moderate`) — последним в bottom
+    // «Модерация» — при любом из прав rides/routes/profiles.moderate; у организатора их нет
     [
       'moderator',
-      [
-        'Обзор',
-        'Гонки',
-        'Споры',
-        'Маршруты',
-        'Сезоны',
-        'Журнал действий',
-        'Модерация райдов',
-        'Маршруты райдеров',
-        'Профили райдеров',
-      ],
+      ['Обзор', 'Гонки', 'Споры', 'Маршруты', 'Сезоны', 'Журнал действий', 'Модерация'],
     ],
     ['organizer', ['Обзор', 'Гонки', 'Маршруты', 'Сезоны']],
   ] as const)('пункты меню по правам: %s', async (role, items) => {
@@ -104,6 +93,7 @@ describe('каркас панели (AC10)', () => {
     ['organizer', '/appearance'],
     ['organizer', '/rider-routes'],
     ['organizer', '/rider-profiles'],
+    ['organizer', '/moderation'],
     ['moderator', '/appearance'],
     ['moderator', '/calendar'],
     ['moderator', '/races/new'],

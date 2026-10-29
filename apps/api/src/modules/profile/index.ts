@@ -18,3 +18,5 @@ export {
 } from './rider-profiles.port';
 /** Порт для модуля `sharing` (user-theme): личная тема создателя карточки; нет выбора — «Классика». */
 export { RIDER_THEMES, type RiderThemes } from './rider-themes.port';
+/** Порт «Обзора» панели (admin-overview): профили с открытыми жалобами. */
+export { ProfilesOverview } from './profiles-overview';

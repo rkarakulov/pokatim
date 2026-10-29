@@ -448,6 +448,14 @@ export class ProfileRepository {
       .toArray();
   }
 
+  /** Размер очереди жалоб (admin-overview, «Обзор» панели) — то же условие и индекс, что у `reportQueue`. */
+  countReportQueue(): Promise<number> {
+    return this.profiles.countDocuments(
+      { openReportCount: { $gt: 0 } },
+      { hint: 'profiles_report_queue_idx' },
+    );
+  }
+
   /**
    * Публичные имена для таблиц результатов (порт `RIDER_NAMES`): согласие и наличие имени — в фильтре, не в коде.
    * Один запрос по `_id` (индекс `_id`), только `publicName`.

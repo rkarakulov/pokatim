@@ -751,6 +751,40 @@ export class ResultsRepository {
 
   // --- панель ---
 
+  /**
+   * «Сейчас идёт» на «Обзоре» панели (admin-overview): по гонкам — активные заявки и загруженные попытки (все, кроме
+   * снятых участником). Два агрегата по индексам `race_entries_race_idx` и `race_attempts_race_status_idx`.
+   */
+  async raceActivity(
+    raceIds: readonly string[],
+  ): Promise<Map<string, { participants: number; attempts: number }>> {
+    const activity = new Map(raceIds.map((id) => [id, { participants: 0, attempts: 0 }]));
+    if (raceIds.length === 0) return activity;
+    const [entries, attempts] = await Promise.all([
+      this.c.entries
+        .aggregate<{ _id: string; count: number }>([
+          { $match: { raceId: { $in: [...raceIds] }, status: 'active' } },
+          { $group: { _id: '$raceId', count: { $sum: 1 } } },
+        ])
+        .toArray(),
+      this.c.attempts
+        .aggregate<{ _id: string; count: number }>([
+          { $match: { raceId: { $in: [...raceIds] }, status: { $ne: 'withdrawn' } } },
+          { $group: { _id: '$raceId', count: { $sum: 1 } } },
+        ])
+        .toArray(),
+    ]);
+    for (const row of entries) {
+      const race = activity.get(row._id);
+      if (race) race.participants = row.count;
+    }
+    for (const row of attempts) {
+      const race = activity.get(row._id);
+      if (race) race.attempts = row.count;
+    }
+    return activity;
+  }
+
   /** Сводка панели: заявки по статусам, строки, попытки по статусам, скрытые, провалы, версия движка. */
   async panelCounts(raceId: string, engineVersion: number): Promise<PanelCounts> {
     const [entries, ranked, attempts] = await Promise.all([
