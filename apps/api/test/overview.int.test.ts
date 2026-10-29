@@ -2,18 +2,18 @@ import { PanelOverview } from '@pokatim/contracts';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { createHarness, DAY, type Harness, HOUR, MINUTE } from '../../../test/harness';
-import { panelCall, panelSession } from '../../../test/panel';
-import { createSeason, publishedRace, staff } from '../../../test/races';
-import { travelTo, WINDOW } from '../../../test/results';
-import { CALENDAR_COLLECTIONS } from '../calendar/calendar.collection';
-import { DISPUTES_COLLECTIONS } from '../disputes/disputes.collection';
-import { IDENTITY_COLLECTIONS } from '../identity/identity.collection';
-import { PROFILE_COLLECTIONS } from '../profile/profile.collection';
-import { RESULTS_COLLECTIONS } from '../results/results.collection';
-import { RIDES_COLLECTIONS } from '../rides/rides.collection';
-import { ROUTES_COLLECTIONS } from '../routes/routes.collection';
-import { TRACKS_COLLECTIONS } from '../tracks/tracks.collection';
+import { createHarness, DAY, type Harness, HOUR, MINUTE } from './harness';
+import { panelCall, panelSession } from './panel';
+import { createSeason, publishedRace, staff } from './races';
+import { travelTo, WINDOW } from './results';
+import { CALENDAR_COLLECTIONS } from '../src/modules/calendar/calendar.collection';
+import { DISPUTES_COLLECTIONS } from '../src/modules/disputes/disputes.collection';
+import { IDENTITY_COLLECTIONS } from '../src/modules/identity/identity.collection';
+import { PROFILE_COLLECTIONS } from '../src/modules/profile/profile.collection';
+import { RESULTS_COLLECTIONS } from '../src/modules/results/results.collection';
+import { RIDES_COLLECTIONS } from '../src/modules/rides/rides.collection';
+import { ROUTES_COLLECTIONS } from '../src/modules/routes/routes.collection';
+import { TRACKS_COLLECTIONS } from '../src/modules/tracks/tracks.collection';
 
 /**
  * «Обзор» панели (admin-overview): блоки по правам роли (нет права — нет поля), гонки организатора — только свои,
