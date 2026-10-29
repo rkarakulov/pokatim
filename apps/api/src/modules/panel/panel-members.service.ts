@@ -14,10 +14,13 @@ import { isDuplicateKey } from '@rkarakulov/api-kit/mongo';
 import { type DbSession, MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { IdentityAccounts } from '../identity';
+import type { PanelPrincipal } from './current-panel-user.decorator';
 import { PanelAudit } from './panel-audit';
 import type { AuditActor, PanelMemberDoc } from './panel.collection';
 import { DELETED_MEMBER, PANEL_POLICY } from './panel.policy';
 import { PanelRepository } from './panel.repository';
+import { PanelTotpGuard } from './panel-totp-guard';
+import { permissionsOf } from './permissions';
 
 export type CliGrantResult =
   | { state: 'granted'; userId: string }
@@ -44,6 +47,7 @@ export class PanelMembersService {
     private readonly audit: PanelAudit,
     private readonly accounts: IdentityAccounts,
     private readonly transactions: MongoTransactions,
+    private readonly totpGuard: PanelTotpGuard,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -189,13 +193,24 @@ export class PanelMembersService {
    * член команды — 404, 2FA не подключена — `409 TOTP_NOT_ENABLED`. Одной транзакцией: удаление 2FA (и незавершённого
    * подключения), доверенных устройств, отзыв всех сессий панели цели (`totp_reset`), `panel.totp_reset`.
    */
-  async resetTotp(actorUserId: string, userId: string, input: TotpResetRequest): Promise<void> {
+  async resetTotp(actor: PanelPrincipal, userId: string, input: TotpResetRequest): Promise<void> {
+    const actorUserId = actor.userId;
     if (actorUserId === userId) throw domainError('PANEL_SELF_ACTION', 409);
     const [member] = await this.repository.listMembersByIds([userId]);
     if (!member) throw domainError('NOT_FOUND', 404);
-    const reset = await this.transactions.run((tx) =>
-      this.resetIn(tx, userId, { kind: 'user', userId: actorUserId }, input.reason),
-    );
+    const reset = await this.transactions.run(async (tx) => {
+      // актор — под замками (`PanelTotpGuard`): сессия жива, штамп тот же, член `active` с правом `members.manage` по
+      // роли под замком (понижение между гардом и транзакцией — 403)
+      const current = await this.totpGuard.recheck(
+        tx,
+        { kind: 'session', userId: actorUserId, sessionId: actor.sessionId },
+        () => domainError('UNAUTHORIZED', 401),
+      );
+      if (!permissionsOf(current.role).includes('members.manage')) {
+        throw domainError('FORBIDDEN', 403);
+      }
+      return this.resetIn(tx, userId, { kind: 'user', userId: actorUserId }, input.reason);
+    });
     if (!reset) throw domainError('TOTP_NOT_ENABLED', 409);
   }
 
@@ -216,6 +231,8 @@ export class PanelMembersService {
     actor: AuditActor,
     reason: string,
   ): Promise<boolean> {
+    // замок цели: сброс сериализуется с её подтверждением подключения и входом (они берут `lockMember`)
+    await this.repository.lockMember(tx, userId);
     const current = await this.repository.findTotp(userId, tx);
     if (current?.status !== 'active') return false;
     const now = this.clock.now();

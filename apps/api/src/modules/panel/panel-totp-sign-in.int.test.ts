@@ -760,12 +760,15 @@ describe('подключение на входе ↔ сброс пароля (р
 
   it('с замком аккаунта: сброс пароля ждёт транзакцию активации, 2FA подключена до сброса', async () => {
     const { userId, confirm } = await setupChallenge();
-    const lockSpy = vi.spyOn(identityRepository(h), 'lockUser');
+    // ссылка сброса — заранее: её выдача тоже берёт lockUser и ждала бы удерживаемую транзакцию
+    await requestPasswordReset(h, ADMIN);
+    const token = await latestResetToken(h, ADMIN);
     const g = pauseBeforeActivation();
     const confirming = confirm();
     await g.reached;
+    const lockSpy = vi.spyOn(identityRepository(h), 'lockUser');
     let reset = false;
-    const resetting = resetPassword().finally(() => {
+    const resetting = confirmPasswordReset(h, token, 'brand-new-password').finally(() => {
       reset = true;
     });
     await untilBlocked(resetting, () => Promise.resolve(lockSpy.mock.calls.length >= 2));
@@ -795,5 +798,68 @@ describe('подключение на входе ↔ сброс пароля (р
     const res = await confirming;
     expect(res.status).toBe(200);
     expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ status: 'active' });
+  });
+});
+
+describe('мутации 2FA на входе перепроверяют членство под замком (ревью pass 5)', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness({
+      TRUST_PROXY: '1',
+      PANEL_TOTP_KEY: PANEL_TOTP_KEY_TEST,
+      PANEL_TOTP_ENFORCED: 'true',
+    });
+  });
+  beforeEach(async () => {
+    await h.reset();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  afterAll(async () => {
+    await h.close();
+  });
+
+  const revokeMember = (userId: string) =>
+    panel(h).members.updateOne(
+      { _id: userId },
+      { $set: { status: 'revoked', revokedAt: h.clock.now() }, $inc: { version: 1 } },
+    );
+
+  it('роль снята между чтением и подтверждением подключения — 401, 2FA не активна, сессии нет', async () => {
+    const userId = await memberUser(h, ADMIN, 'admin');
+    const step = await challengeOf(h, ADMIN);
+    const setup = await panelTotpStep(h, 'totp-setup', { challenge: step.challenge });
+    const secret = base32Decode(TotpSetup.parse(setup.body).secret);
+    const g = pauseAfterTotpRead(h);
+    const confirming = panelTotpStep(h, 'totp-setup/confirm', {
+      challenge: step.challenge,
+      code: totpCode(h, secret),
+    });
+    await g.reached;
+    await revokeMember(userId);
+    g.open();
+
+    const res = await confirming;
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: 'TOTP_CHALLENGE_EXPIRED' });
+    expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ status: 'pending' });
+    expect(await panel(h).sessions.countDocuments()).toBe(0);
+  });
+
+  it('роль снята между чтением 2FA и принятием кода на входе — 401, сессии нет, шаг не принят', async () => {
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const { secret } = await seedTotp(h, userId);
+    const { challenge } = await challengeOf(h, MODERATOR);
+    const g = pauseAfterTotpRead(h);
+    const step = panelTotpStep(h, 'totp', { challenge, code: totpCode(h, secret) });
+    await g.reached;
+    await revokeMember(userId);
+    g.open();
+
+    const res = await step;
+    expect(res.status).toBe(401);
+    expect(await panel(h).sessions.countDocuments()).toBe(0);
+    expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ lastUsedStep: null });
   });
 });

@@ -7,16 +7,17 @@ import type {
 } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
-import { MongoTransactions } from '../../db';
+import { type DbSession, MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
-import { IdentityAccounts } from '../identity';
 import type { PanelPrincipal } from './current-panel-user.decorator';
 import { PanelAudit } from './panel-audit';
 import type { PanelTotpDoc } from './panel.collection';
 import { PanelRepository } from './panel.repository';
 import { invalidTotpCode, PanelTotpCodes } from './panel-totp-codes';
+import { PanelTotpGuard } from './panel-totp-guard';
 
 const notEnabled = () => domainError('TOTP_NOT_ENABLED', 409);
+const unauthorized = () => domainError('UNAUTHORIZED', 401);
 
 /**
  * 2FA своего аккаунта в настройках панели (ADR-0024, D9): статус, подключение (setup → confirm), перевыпуск кодов
@@ -31,7 +32,7 @@ export class PanelAccountTotpService {
     private readonly totp: PanelTotpCodes,
     private readonly audit: PanelAudit,
     private readonly transactions: MongoTransactions,
-    private readonly accounts: IdentityAccounts,
+    private readonly guard: PanelTotpGuard,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -74,19 +75,8 @@ export class PanelAccountTotpService {
     if (step === null) throw this.rejected(userId, 'подтверждение');
     const recovery = this.totp.newRecoveryCodes();
     await this.transactions.run(async (tx) => {
-      // замок аккаунта (identity, R1): сброс пароля между гардом и активацией не проскочит — штамп сессии сверяется
-      // под замком (сессия со старым штампом гарду уже не годна); затем замок сотрудника — вход без фактора
-      // (`PanelSessionService.openWithoutFactor`) не проскочит мимо активации
-      const account = await this.accounts.lockAccountState(tx, userId);
-      const session = await this.repository.findSession(tx, principal.sessionId);
-      if (
-        !account?.active ||
-        session?.revokedAt !== null ||
-        account.credentialsStamp !== session.credentialsStamp
-      ) {
-        throw domainError('UNAUTHORIZED', 401);
-      }
-      await this.repository.lockMember(tx, userId);
+      // аккаунт, сессия и член — под замками (`lockMember` сериализует и с входом без фактора, `openWithoutFactor`)
+      await this.recheck(tx, principal);
       const activated = await this.repository.activateTotp(tx, userId, {
         secretEnc: pending.secretEnc,
         step,
@@ -115,6 +105,7 @@ export class PanelAccountTotpService {
     if (step === null) throw this.rejected(userId, 'перевыпуск');
     const recovery = this.totp.newRecoveryCodes();
     await this.transactions.run(async (tx) => {
+      await this.recheck(tx, principal);
       const accepted = await this.repository.acceptTotpStep(tx, userId, {
         epoch: active.epoch,
         step,
@@ -132,7 +123,8 @@ export class PanelAccountTotpService {
 
   /**
    * Отключение — с кодом TOTP или восстановления: 2FA и доверенные устройства удаляются (`panel.totp_disabled`),
-   * свои сессии остаются. admin при обязательности — `409 TOTP_REQUIRED` (до попытки кода).
+   * свои сессии остаются. admin при обязательности — `409 TOTP_REQUIRED`: до попытки кода — по роли гарда, в транзакции —
+   * по роли под замком (повышение до admin между гардом и транзакцией).
    */
   async disable(principal: PanelPrincipal, input: TotpDisableRequest, ip: string): Promise<void> {
     const userId = principal.userId;
@@ -146,6 +138,8 @@ export class PanelAccountTotpService {
     }
     const recoveryHash = 'recoveryCode' in input ? this.totp.recoveryHash(input.recoveryCode) : '';
     await this.transactions.run(async (tx) => {
+      const member = await this.recheck(tx, principal);
+      if (this.totp.required(member.role)) throw domainError('TOTP_REQUIRED', 409);
       const accepted =
         step !== null
           ? await this.repository.acceptTotpStep(tx, userId, { epoch: active.epoch, step, now })
@@ -163,6 +157,15 @@ export class PanelAccountTotpService {
       });
     });
     this.logger.log(`2FA панели отключена uid=${userId}`);
+  }
+
+  /** Перепроверка под замками (`PanelTotpGuard`): аккаунт, штамп и живость сессии, член `active` — иначе 401. */
+  private recheck(tx: DbSession, principal: PanelPrincipal) {
+    return this.guard.recheck(
+      tx,
+      { kind: 'session', userId: principal.userId, sessionId: principal.sessionId },
+      unauthorized,
+    );
   }
 
   /** Подключённая 2FA (иначе 409), ключ на месте (иначе 503), попытка ввода кода списана (иначе 429). */

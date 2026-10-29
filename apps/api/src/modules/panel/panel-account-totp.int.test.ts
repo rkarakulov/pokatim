@@ -5,7 +5,10 @@ import { createHarness, type Harness, MINUTE } from '../../../test/harness';
 import {
   confirmPasswordReset,
   latestResetToken,
+  gate,
+  identityRepository,
   requestPasswordReset,
+  untilBlocked,
 } from '../../../test/identity';
 import {
   deviceCookieValue,
@@ -14,6 +17,7 @@ import {
   PANEL_TOTP_KEY_TEST,
   panelCall,
   panelCookieValue,
+  panelRepository,
   panelSession,
   panelSignIn,
   panelTotpStep,
@@ -21,7 +25,7 @@ import {
   seedTotp,
   totpCode,
 } from '../../../test/panel';
-import { sha256 } from '../identity';
+import { IdentityAccounts, sha256 } from '../identity';
 import { base32Decode } from './totp';
 
 /** 2FA своего аккаунта в настройках панели (ADR-0024, D9). */
@@ -293,6 +297,140 @@ describe('настройки 2FA (PANEL_TOTP_ENFORCED=true)', () => {
       { code: totpCode(h, secret) },
       IP,
     );
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: 'TOTP_REQUIRED' });
+    expect(await panel(h).totp.countDocuments({ _id: userId })).toBe(1);
+  });
+});
+
+/** Сброс пароля сотрудника через приложение (меняет штамп учётных данных). */
+async function resetPassword(h: Harness, email: string) {
+  await requestPasswordReset(h, email);
+  return confirmPasswordReset(h, await latestResetToken(h, email), 'brand-new-password');
+}
+
+describe('настройки 2FA: перевыпуск и отключение перепроверяют сессию под замком (ревью pass 5)', () => {
+  const harness = suite(false);
+
+  /** Сотрудник с сессией и 2FA; запрос ставится на паузу после чтения 2FA, тест сбрасывает пароль. */
+  async function raced(
+    path: string,
+    body: (seeded: { secret: Buffer; recoveryCodes: string[] }) => unknown,
+  ) {
+    const h = harness();
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const token = await panelSession(h, MODERATOR);
+    const seeded = await seedTotp(h, userId);
+    const before = await panel(h).totp.findOne({ _id: userId });
+    const g = pauseAfterTotpRead(h);
+    const pending = panelCall(h, token, 'POST', `${BASE}${path}`, body(seeded), IP);
+    await g.reached;
+    expect((await resetPassword(h, MODERATOR)).status).toBe(200);
+    g.open();
+    return { h, userId, res: await pending, before };
+  }
+
+  it('сброс пароля между гардом и перевыпуском кодов — 401, коды и журнал без изменений', async () => {
+    const { h, userId, res, before } = await raced('/recovery-codes', ({ secret }) => ({
+      code: totpCode(harness(), secret),
+    }));
+    expect(res.status).toBe(401);
+    expect((await panel(h).totp.findOne({ _id: userId }))?.recoveryCodes).toEqual(
+      before?.recoveryCodes,
+    );
+    expect(await panel(h).audit.countDocuments({ action: 'panel.totp_recovery_regenerated' })).toBe(
+      0,
+    );
+  });
+
+  it('сброс пароля между гардом и отключением — 401, 2FA на месте', async () => {
+    const { h, userId, res } = await raced('/disable', ({ recoveryCodes }) => ({
+      recoveryCode: recoveryCodes[0],
+    }));
+    expect(res.status).toBe(401);
+    expect(await panel(h).totp.countDocuments({ _id: userId })).toBe(1);
+    expect(await panel(h).audit.countDocuments({ action: 'panel.totp_disabled' })).toBe(0);
+  });
+
+  /** Отключение кодом TOTP с воротами в транзакции — после перепроверки под замками, до записи. */
+  async function disableHeldInTx() {
+    const h = harness();
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const token = await panelSession(h, MODERATOR);
+    const { secret } = await seedTotp(h, userId);
+    // ссылка сброса — заранее: её выдача тоже берёт lockUser и ждала бы удерживаемую транзакцию
+    await requestPasswordReset(h, MODERATOR);
+    const resetToken = await latestResetToken(h, MODERATOR);
+    const changePassword = () => confirmPasswordReset(h, resetToken, 'brand-new-password');
+    const g = gate();
+    const repository = panelRepository(h);
+    const accept = repository.acceptTotpStep.bind(repository);
+    vi.spyOn(repository, 'acceptTotpStep').mockImplementationOnce(async (...args) => {
+      await g.wait();
+      return accept(...args);
+    });
+    const disabling = panelCall(
+      h,
+      token,
+      'POST',
+      `${BASE}/disable`,
+      { code: totpCode(h, secret) },
+      IP,
+    );
+    await g.reached;
+    return { h, userId, g, disabling, changePassword };
+  }
+
+  it('с замком аккаунта: сброс пароля ждёт транзакцию отключения', async () => {
+    const { h, g, disabling, changePassword } = await disableHeldInTx();
+    const lockSpy = vi.spyOn(identityRepository(h), 'lockUser');
+    const resetting = changePassword();
+    await untilBlocked(resetting, () => Promise.resolve(lockSpy.mock.calls.length >= 2));
+    expect(lockSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    g.open();
+    const [disabled, reset] = await Promise.all([disabling, resetting]);
+    expect(disabled.status).toBe(204);
+    expect(reset.status).toBe(200);
+  });
+
+  it('отрицательное доказательство: без замка аккаунта сброс коммитится посреди отключения — 2FA отключена по старому паролю', async () => {
+    const accounts = harness().app.get(IdentityAccounts, { strict: false });
+    vi.spyOn(accounts, 'lockAccountState').mockImplementation((_tx, id) =>
+      accounts.accountState(id),
+    );
+    const { h, userId, g, disabling, changePassword } = await disableHeldInTx();
+    expect((await changePassword()).status).toBe(200);
+    g.open();
+    expect((await disabling).status).toBe(204);
+    expect(await panel(h).totp.countDocuments({ _id: userId })).toBe(0);
+  });
+});
+
+describe('настройки 2FA: обязательность — по роли под замком (ревью pass 5)', () => {
+  const harness = suite(true);
+
+  it('повышение moderator → admin между гардом и отключением — 409 TOTP_REQUIRED, 2FA на месте', async () => {
+    const h = harness();
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const token = await panelSession(h, MODERATOR);
+    const { recoveryCodes } = await seedTotp(h, userId);
+    const g = pauseAfterTotpRead(h);
+    const disabling = panelCall(
+      h,
+      token,
+      'POST',
+      `${BASE}/disable`,
+      { recoveryCode: recoveryCodes[0] },
+      IP,
+    );
+    await g.reached;
+    await panel(h).members.updateOne(
+      { _id: userId },
+      { $set: { role: 'admin' }, $inc: { version: 1 } },
+    );
+    g.open();
+
+    const res = await disabling;
     expect(res.status).toBe(409);
     expect(res.body).toMatchObject({ code: 'TOTP_REQUIRED' });
     expect(await panel(h).totp.countDocuments({ _id: userId })).toBe(1);

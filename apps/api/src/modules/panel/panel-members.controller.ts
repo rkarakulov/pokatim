@@ -74,6 +74,6 @@ export class PanelMembersController {
     @Param('userId', userIdPipe) userId: string,
     @Body(new ZodValidationPipe(TotpResetRequest, FieldErrorCode)) body: TotpResetRequest,
   ): Promise<void> {
-    return this.members.resetTotp(actor.userId, userId, body);
+    return this.members.resetTotp(actor, userId, body);
   }
 }

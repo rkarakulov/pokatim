@@ -2,11 +2,12 @@ import { PanelMember, PanelMemberList, Session } from '@pokatim/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { bearer, call, register, signUpSession, userIdByEmail } from '../../../test/identity';
+import { bearer, call, gate, register, signUpSession, userIdByEmail } from '../../../test/identity';
 import {
   memberUser,
   panel,
   panelCall,
+  panelRepository,
   panelSession,
   seedMember,
   seedTotp,
@@ -364,6 +365,36 @@ describe('сброс 2FA сотрудника (ADR-0024, D10)', () => {
     await memberUser(h, 'mod@example.by', 'moderator');
     const modToken = await panelSession(h, 'mod@example.by');
     expect((await reset(modToken, target, REASON)).status).toBe(403);
+    expect(await panel(h).totp.countDocuments({ _id: target })).toBe(1);
+    expect(await panel(h).audit.countDocuments({ action: 'panel.totp_reset' })).toBe(0);
+  });
+});
+
+describe('сброс 2FA перепроверяет актора под замком (ревью pass 5)', () => {
+  it('актора понизили до moderator между гардом и сбросом — 403, 2FA цели на месте', async () => {
+    const actor = await admin();
+    const target = await memberUser(h, 'mod@example.by', 'moderator');
+    await seedTotp(h, target);
+    const g = gate();
+    const repository = panelRepository(h);
+    const list = repository.listMembersByIds.bind(repository);
+    vi.spyOn(repository, 'listMembersByIds').mockImplementationOnce(async (...args) => {
+      const docs = await list(...args);
+      await g.wait();
+      return docs;
+    });
+    const resetting = panelCall(h, actor.token, 'POST', `${MEMBERS}/${target}/totp/reset`, {
+      reason: 'потерян телефон',
+    });
+    await g.reached;
+    await panel(h).members.updateOne(
+      { _id: actor.userId },
+      { $set: { role: 'moderator' }, $inc: { version: 1 } },
+    );
+    g.open();
+
+    const res = await resetting;
+    expect(res.status).toBe(403);
     expect(await panel(h).totp.countDocuments({ _id: target })).toBe(1);
     expect(await panel(h).audit.countDocuments({ action: 'panel.totp_reset' })).toBe(0);
   });

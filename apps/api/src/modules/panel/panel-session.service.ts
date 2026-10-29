@@ -26,6 +26,7 @@ import { DELETED_MEMBER, PANEL_POLICY } from './panel.policy';
 import { PanelRepository } from './panel.repository';
 import { PanelSessionCheck } from './panel-session-check';
 import { invalidTotpCode, PanelTotpCodes } from './panel-totp-codes';
+import { PanelTotpGuard } from './panel-totp-guard';
 import { permissionsOf } from './permissions';
 
 /** Новая сессия: токен cookie панели и (при «запомнить устройство») токен cookie устройства. */
@@ -67,6 +68,7 @@ export class PanelSessionService {
     private readonly audit: PanelAudit,
     private readonly totp: PanelTotpCodes,
     private readonly transactions: MongoTransactions,
+    private readonly guard: PanelTotpGuard,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -120,7 +122,7 @@ export class PanelSessionService {
     ip: string,
     previousToken: string | undefined,
   ): Promise<OpenedSession> {
-    const { challenge, member } = await this.liveChallenge(input.challenge, 'totp', ip);
+    const { challenge } = await this.liveChallenge(input.challenge, 'totp', ip);
     const totp = await this.repository.findTotp(challenge.userId);
     if (totp?.status !== 'active') throw await this.expire(challenge);
     this.totp.ensureAvailable();
@@ -137,6 +139,7 @@ export class PanelSessionService {
     const secondFactor: PanelSecondFactor = step === null ? 'recovery' : 'totp';
 
     return this.finishChallenge(challenge, 'код', async (tx) => {
+      const current = await this.recheck(tx, challenge);
       const accepted =
         step !== null
           ? await this.repository.acceptTotpStep(tx, challenge.userId, {
@@ -158,7 +161,7 @@ export class PanelSessionService {
       }
       return this.openSession(
         tx,
-        { ...challenge, member, totp, secondFactor },
+        { ...challenge, member: current, totp, secondFactor },
         previousToken,
         input.rememberDevice,
       );
@@ -188,7 +191,7 @@ export class PanelSessionService {
     ip: string,
     previousToken: string | undefined,
   ): Promise<OpenedSession & { recoveryCodes: string[] }> {
-    const { challenge, member } = await this.liveChallenge(input.challenge, 'setup', ip);
+    const { challenge } = await this.liveChallenge(input.challenge, 'setup', ip);
     const pending = await this.repository.findTotp(challenge.userId);
     if (pending?.status !== 'pending') throw await this.reject(challenge, 'подключение');
     const now = this.clock.now();
@@ -197,13 +200,8 @@ export class PanelSessionService {
     const recovery = this.totp.newRecoveryCodes();
 
     const opened = await this.finishChallenge(challenge, 'код подключения', async (tx) => {
-      // замок аккаунта (identity, R1): сброс пароля между проверкой вызова и активацией не проскочит — штамп сверяется
-      // под замком; затем замок сотрудника — как у входа без фактора (`openWithoutFactor`)
-      const account = await this.accounts.lockAccountState(tx, challenge.userId);
-      if (!account?.active || account.credentialsStamp !== challenge.credentialsStamp) {
-        throw challengeExpired();
-      }
-      await this.repository.lockMember(tx, challenge.userId);
+      // аккаунт, штамп вызова и член — под замками (`lockMember` — как у входа без фактора, `openWithoutFactor`)
+      const current = await this.recheck(tx, challenge);
       const activated = await this.repository.activateTotp(tx, challenge.userId, {
         secretEnc: pending.secretEnc,
         step,
@@ -218,7 +216,7 @@ export class PanelSessionService {
       const totp: PanelTotpDoc = { ...pending, status: 'active' };
       return this.openSession(
         tx,
-        { ...challenge, member, totp, secondFactor: 'totp' },
+        { ...challenge, member: current, totp, secondFactor: 'totp' },
         previousToken,
         input.rememberDevice,
       );
@@ -397,6 +395,22 @@ export class PanelSessionService {
       throw await this.expire(challenge);
     }
     return { challenge, member };
+  }
+
+  /**
+   * Перепроверка второго шага под замками (`PanelTotpGuard`): аккаунт активен, штамп = штамп вызова, член `active` —
+   * иначе `401 TOTP_CHALLENGE_EXPIRED` с откатом транзакции. Возвращает документ члена под замком.
+   */
+  private recheck(tx: DbSession, challenge: PanelSignInChallengeDoc) {
+    return this.guard.recheck(
+      tx,
+      {
+        kind: 'challenge',
+        userId: challenge.userId,
+        credentialsStamp: challenge.credentialsStamp,
+      },
+      challengeExpired,
+    );
   }
 
   /** Вызов больше не годен (штамп, роль, 2FA сменились) — гасится, ответ `401 TOTP_CHALLENGE_EXPIRED`. */
