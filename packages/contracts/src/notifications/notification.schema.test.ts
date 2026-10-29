@@ -198,7 +198,7 @@ describe('push-токены', () => {
   });
 });
 
-describe('web push (ADR-0021)', () => {
+describe('web push (ADR-0022)', () => {
   const P256DH = `B${'A'.repeat(86)}`;
   const AUTH = 'A'.repeat(22);
   const FCM = 'https://fcm.googleapis.com/fcm/send/abc:APA91b-x_y';

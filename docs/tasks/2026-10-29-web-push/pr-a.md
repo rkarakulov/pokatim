@@ -1,6 +1,6 @@
 # Web Push (PR A): API, worker, env и деплой
 
-Задача — `docs/tasks/2026-10-29-web-push/task.md`, решение — ADR-0021 (снимает «web push — нет» из ADR-0017 п. 1 и AGENTS §1/§4.9). Клиент и service worker — PR B.
+Задача — `docs/tasks/2026-10-29-web-push/task.md`, решение — ADR-0022 (снимает «web push — нет» из ADR-0017 п. 1 и AGENTS §1/§4.9). Клиент и service worker — PR B.
 
 ## Что сделано
 

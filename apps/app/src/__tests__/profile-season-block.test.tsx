@@ -37,6 +37,7 @@ beforeEach(() => {
     club: null,
     avatar: null,
     publicId: null,
+    themeId: 'classic',
   });
   // статистика и история своего профиля (rider-profile) — свои тесты в `own-profile.test.tsx`
   jest.mocked(api.getProfileStats).mockReturnValue(new Promise(() => undefined));

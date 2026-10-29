@@ -6,7 +6,7 @@ import type { Job, Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, DAY, type Harness } from '../../../test/harness';
-import { call } from '../../../test/identity';
+import { bearer, call } from '../../../test/identity';
 import { routesDb, seedRiderRoute } from '../../../test/routes';
 import {
   authed,
@@ -210,6 +210,29 @@ describe('pending → ready → PNG (AC2)', () => {
     for (const secret of [other.userId, organizer.userId, ride.title, ride.place, token]) {
       expect(text).not.toContain(secret);
     }
+  });
+});
+
+describe('тема создателя карточки (user-theme AC6)', () => {
+  const setTheme = (who: Rider, themeId: string) =>
+    call(h, 'PUT', '/v1/profile/theme', { themeId }, bearer(who.token));
+
+  it('разные темы зрителей — разные картинки; одна тема — одна картинка', async () => {
+    const third = await rider(h, 'third@example.by');
+    expect((await setTheme(other, 'atlas')).status).toBe(200);
+    const ride = await createRide(h, organizer);
+
+    expect(await status(organizer, ride.id)).toEqual({ status: 'pending' });
+    expect(await runJob()).toBe('ready');
+    const classic = await readyToken(organizer, ride.id);
+    expect(await readyToken(third, ride.id)).toBe(classic);
+
+    expect(await status(other, ride.id)).toEqual({ status: 'pending' });
+    expect(await runJob()).toBe('ready');
+    expect(await readyToken(other, ride.id)).not.toBe(classic);
+
+    expect((await setTheme(third, 'atlas')).status).toBe(200);
+    expect(await readyToken(third, ride.id)).toBe(await readyToken(other, ride.id));
   });
 });
 

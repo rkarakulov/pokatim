@@ -350,9 +350,9 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
         body,
       ),
 
-    // --- оформление приложения (appearance.manage, app-themes): настройка-синглтон, замена по `version` ---
+    // --- оформление приложения (appearance.manage): сезонный декор, настройка-синглтон, замена по `version` ---
     getAppearance: () => get('/v1/admin/appearance', PanelAppearance),
-    /** Смена темы приложения: устаревшая `version` — 409 `CONFLICT`. */
+    /** Смена сезонного декора: устаревшая `version` — 409 `CONFLICT`. */
     updateAppearance: (body: UpdateAppearanceRequest) =>
       put('/v1/admin/appearance', PanelAppearance, body),
   };

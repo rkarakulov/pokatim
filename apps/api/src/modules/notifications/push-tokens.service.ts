@@ -15,7 +15,7 @@ import { NotificationsRepository } from './notifications.repository';
 import { consumeUserLimit } from './notifications.service';
 
 /**
- * Push-токены устройства (ADR-0017) и подписки Web Push (ADR-0021): регистрация и снятие — общий лимит
+ * Push-токены устройства (ADR-0017) и подписки Web Push (ADR-0022): регистрация и снятие — общий лимит
  * `notifications-push-token` по `uid`. Токен (endpoint) чужого аккаунта переходит к вошедшему (устройство одно);
  * снятие чужого или неизвестного — тот же `204` без эффекта. Токены, endpoint и ключи в логи не попадают.
  */

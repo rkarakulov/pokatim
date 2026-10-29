@@ -1,6 +1,6 @@
 # Push: Expo и Web Push
 
-Как устроено — ADR-0017 (Expo, iOS/Android) и ADR-0021 (Web Push в PWA), продукт — `docs/product/notifications.md`.
+Как устроено — ADR-0017 (Expo, iOS/Android) и ADR-0022 (Web Push в PWA), продукт — `docs/product/notifications.md`.
 Центр уведомлений и колокольчик работают всегда; push на iOS и Android — когда есть EAS `projectId`, ключи APNs/FCM в
 EAS и `PUSH_ENABLED=true` на сервере; в PWA — когда включён Web Push (раздел 7). Транспорты независимы.
 
@@ -61,7 +61,7 @@ development`) или preview-сборке на устройстве, не на �
 `PUSH_ENABLED=false` и перезапуск worker: новые уведомления пишутся только в центр, отложенные push уходят в
 `skipped`. Токены остаются; включение обратно не требует действий в приложении.
 
-## 7. Web Push в PWA (ADR-0021)
+## 7. Web Push в PWA (ADR-0022)
 
 Тот же канал: группы, тихие часы, лимит 20/ч и сводка — общие с Expo. Подписка браузера хранится в `push_tokens`
 (`platform: 'web'`, `token` — endpoint push-сервиса) и привязана к сессии входа.

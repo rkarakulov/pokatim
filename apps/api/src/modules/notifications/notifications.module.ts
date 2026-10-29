@@ -44,7 +44,7 @@ const pushSenderProvider: Provider = {
 };
 
 /**
- * Адаптер Web Push (ADR-0021): только при `WEB_PUSH_ENABLED` и ключах VAPID, иначе `null` — доставка шлёт только Expo.
+ * Адаптер Web Push (ADR-0022): только при `WEB_PUSH_ENABLED` и ключах VAPID, иначе `null` — доставка шлёт только Expo.
  */
 const webPushSenderProvider: Provider = {
   provide: WEB_PUSH_SENDER,

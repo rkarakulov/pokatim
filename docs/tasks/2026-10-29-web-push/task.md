@@ -3,7 +3,7 @@
 - Уровень: task3 (контракты, API, worker, env/deploy, приложение, service worker, безопасность)
 - Ветки: `feature/web-push-api` (PR A: контракты, API, worker, env, deploy), `feature/web-push-app` (PR B: приложение, SW)
 - Основание: follow-up «Web push» из `docs/tasks/2026-10-27-notifications/pr.md`; ADR-0017 п. 1 («web push — нет»)
-  снимается новым ADR-0021.
+  снимается новым ADR-0022.
 
 ## 1. Что было (UNDERSTAND)
 
@@ -121,10 +121,10 @@ P-256 — подписка снимается (снимок, как `deleteToken
 ## 6. Placement
 
 Всё в модуле `notifications` (API) и `features/notifications` (приложение); env — `config/env.ts`; deploy —
-`infra/deploy/*`. Новых модулей и пакетов нет. ADR-0021 снимает «web push нет» (AGENTS §1, §4.9, ADR-0017 п. 1).
+`infra/deploy/*`. Новых модулей и пакетов нет. ADR-0022 снимает «web push нет» (AGENTS §1, §4.9, ADR-0017 п. 1).
 
 ## 7. Outcome
 
-- PR A (API, worker, env, deploy, ADR-0021): independent review pass 1 — APPROVE (2 MEDIUM, 4 LOW,
+- PR A (API, worker, env, deploy, ADR-0022): independent review pass 1 — APPROVE (2 MEDIUM, 4 LOW,
   `findings-a.md`); исправлены: сбой Expo больше не блокирует Web Push, тесты обоих транспортов, байтовый лимит
   payload (`encodePayload`), невалидный ключ подписки — `gone`, спека redirect и матрица тестов.

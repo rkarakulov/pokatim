@@ -10,7 +10,7 @@ import {
   type WebPushKeys,
 } from './web-push.crypto';
 
-/** Порт отправки Web Push (ADR-0021): адаптер — `HttpWebPushSender`; тесты доставки — фейковый push-сервис. */
+/** Порт отправки Web Push (ADR-0022): адаптер — `HttpWebPushSender`; тесты доставки — фейковый push-сервис. */
 export const WEB_PUSH_SENDER = Symbol('WEB_PUSH_SENDER');
 
 /** Подписка браузера: endpoint push-сервиса и ключи шифрования. */

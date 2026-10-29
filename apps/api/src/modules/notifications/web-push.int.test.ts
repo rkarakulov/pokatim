@@ -22,7 +22,7 @@ import type { NotificationDoc } from './notifications.collection';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 
 /**
- * Web Push (ADR-0021): подписки браузера — HTTP `/v1/notifications/web-push*` и доставка тем же `notifications.push`
+ * Web Push (ADR-0022): подписки браузера — HTTP `/v1/notifications/web-push*` и доставка тем же `notifications.push`
  * через фейковый push-сервис (тело расшифровывается ключом подписки). Expo на стенде выключен (`PUSH_ENABLED=false`):
  * Web Push — независимый транспорт. Стенд: 2026-10-22 09:00Z = 12:00 по Минску (вне тихих часов).
  */

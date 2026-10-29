@@ -183,19 +183,24 @@ describe('pending → ready → PNG (AC2, AC4)', () => {
     expect(await status(auth, raceId, '?template=night')).toEqual({ status: 'pending' });
   });
 
-  it('смена темы и согласия на имя — новая картинка (pending, другой ключ)', async () => {
+  it('смена своей темы и согласия на имя — новая картинка (pending, другой ключ); тема платформы — нет', async () => {
     const { raceId, auth } = await timedEntry();
     await status(auth, raceId);
     await runJob();
     const first = await status(auth, raceId);
     expect(first.status).toBe('ready');
 
+    // user-theme: legacy-тема документа настройки платформы на карточку не влияет
     await h.db.collection('platform_settings').insertOne({
       _id: 'appearance' as never,
       themeId: 'chrono',
       version: 1,
       updatedAt: h.clock.now(),
     });
+    expect(await status(auth, raceId)).toEqual(first);
+
+    const theme = await call(h, 'PUT', '/v1/profile/theme', { themeId: 'chrono' }, auth);
+    expect(theme.status).toBe(200);
     expect(await status(auth, raceId)).toEqual({ status: 'pending' });
     await runJob();
     const themed = await status(auth, raceId);
