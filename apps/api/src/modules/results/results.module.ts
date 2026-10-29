@@ -29,6 +29,7 @@ import { ResultsNoticesService } from './results-notices';
 import { RESULTS_NOTICES } from './results-notices.port';
 import { ResultsIntakeProcessor } from './results-intake.processor';
 import { ResultsMaintenanceProcessor, ResultsSchedules } from './results-maintenance.processor';
+import { ResultsOverview } from './results-overview';
 import { ResultsPanelReadService } from './results-panel-read.service';
 import { ResultsProtocolController } from './results-protocol.controller';
 import { ResultsProtocolService } from './results-protocol.service';
@@ -103,7 +104,10 @@ export class ResultsCoreModule {}
     ResultsPanelReadService,
     ResultsProtocolService,
     PublicReadGuard,
+    ResultsOverview,
   ],
+  // «Обзор» панели (admin-overview): чек-лист публикации живёт в панельном чтении, поэтому порт — здесь, не в ядре
+  exports: [ResultsOverview],
 })
 export class ResultsModule {}
 

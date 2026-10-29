@@ -150,6 +150,11 @@ export class DisputesRepository {
     return this.disputes.countDocuments({ targetEntryId: entryId, status: 'open' }, { session });
   }
 
+  /** Все открытые споры — очередь «Споров» (admin-overview, индекс `disputes_queue_idx`). */
+  countOpen(): Promise<number> {
+    return this.disputes.countDocuments({ status: 'open' });
+  }
+
   /** Открытые споры гонки (чек-лист публикации, D-19). */
   countOpenInRace(raceId: string, session?: DbSession): Promise<number> {
     return this.disputes.countDocuments({ raceId, status: 'open' }, { session });

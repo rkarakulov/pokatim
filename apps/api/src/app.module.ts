@@ -21,6 +21,7 @@ import { DisputesCoreModule, DisputesModule } from './modules/disputes';
 import { HealthModule } from './modules/health';
 import { IdentityModule } from './modules/identity';
 import { NotificationsModule } from './modules/notifications';
+import { OverviewModule } from './modules/overview';
 import { PanelModule } from './modules/panel';
 import { ProfileModule } from './modules/profile';
 import { RacesModule } from './modules/races';
@@ -63,6 +64,7 @@ import { TracksModule } from './modules/tracks';
     // достижения райдера: выдача сверкой при чтении (achievements, ADR-0020)
     AchievementsModule,
     CalendarModule,
+    OverviewModule,
     AppearanceModule,
     RidesModule,
     DevicesModule,

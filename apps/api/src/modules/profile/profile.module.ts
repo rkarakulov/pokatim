@@ -14,6 +14,7 @@ import { ProfileAvatarService } from './profile-avatar.service';
 import { ProfileAvatarsController } from './profile-avatars.controller';
 import { ProfileController } from './profile.controller';
 import { ProfileErasure } from './profile-erasure';
+import { ProfilesOverview } from './profiles-overview';
 import { ProfileModerationService } from './profile-moderation.service';
 import { ProfileReportsRepository } from './profile-reports.repository';
 import { ProfileReportsService } from './profile-reports.service';
@@ -38,8 +39,10 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
 /**
  * Ядро `profile` для API и worker: единственные писатели `profiles` и анкет Verified, порты
  * `RiderNameDirectory` и `VerifiedProfiles` (race-results-07) для `results` (через `index.ts`), `RiderProfileDirectory`
- * (rider-profile) для `riders`, `RiderThemes` (user-theme) для `sharing`, единственный писатель жалоб на профиль (profile-moderation) и порт стирания
- * `ProfileErasure` (`account`) — без контроллеров и без импортов. Репозитории объявлены только здесь (один экземпляр).
+ * (rider-profile) для `riders`, `RiderThemes` (user-theme) для `sharing`, единственный писатель жалоб на профиль
+ * (profile-moderation) и порт стирания `ProfileErasure` (`account`), очередь жалоб для «Обзора» панели
+ * (`ProfilesOverview`, admin-overview) — без контроллеров и без импортов. Репозитории объявлены только здесь (один
+ * экземпляр).
  */
 @Module({
   providers: [
@@ -56,6 +59,7 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
     VerifiedProfilesService,
     { provide: VERIFIED_PROFILES, useExisting: VerifiedProfilesService },
     ProfileErasure,
+    ProfilesOverview,
   ],
   exports: [
     ProfileRepository,
@@ -67,6 +71,7 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
     RIDER_THEMES,
     VERIFIED_PROFILES,
     ProfileErasure,
+    ProfilesOverview,
   ],
 })
 export class ProfileCoreModule {}
