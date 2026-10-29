@@ -47,7 +47,7 @@ describe('достижения (achievements)', () => {
   });
 
   it('PublicRiderAchievementList: без `seen`', () => {
-    const { seen: _seen, ...publicItem } = item;
+    const publicItem = { code: item.code, object: item.object, factDate: item.factDate };
     expect(PublicRiderAchievementList.parse({ items: [{ ...publicItem, seen: true }] })).toEqual({
       items: [publicItem],
     });
