@@ -10,6 +10,8 @@ import { join } from 'node:path';
 import { APP_THEME_IDS, STORY_CARD_TEMPLATES, type LonLat } from '@pokatim/contracts';
 
 import { OG_FIXTURES, ogFixture } from '../test/og-fixtures';
+import type { AchievementCardInput } from '../src/modules/sharing/achievement-card.inputs';
+import { renderAchievementCard } from '../src/modules/sharing/achievement-card.png';
 import { OG_THEME_ID, type OgCardInput } from '../src/modules/sharing/og-card.inputs';
 import { renderOgCard } from '../src/modules/sharing/og-card.png';
 import type { RideInviteInput } from '../src/modules/sharing/ride-invite.inputs';
@@ -80,6 +82,49 @@ const inviteCases: { name: string; facts: Partial<RideInviteInput['facts']>; lin
       routeId: null,
     },
     line: false,
+  },
+];
+
+/** Карточка достижения: обычная, счётная с длинным объектом и именем, без публичного объекта. */
+const achievementCases: {
+  name: string;
+  input: Omit<AchievementCardInput, 'template' | 'themeId'>;
+}[] = [
+  {
+    name: 'win',
+    input: {
+      facts: {
+        code: 'race_win',
+        object: { kind: 'race', id: 'preview', title: 'Минская сотка' },
+        factDate: '2026-10-04',
+      },
+      objectTitle: 'Минская сотка',
+      riderName: null,
+    },
+  },
+  {
+    name: 'rides-long',
+    input: {
+      facts: {
+        code: 'rides_10',
+        object: { kind: 'ride', id: 'preview', title: 'x' },
+        factDate: '2026-05-02',
+      },
+      objectTitle: 'Длинный кофе-райд через три озера, два леса и обратно к кофейне на берегу моря',
+      riderName: 'Анна Кравченко',
+    },
+  },
+  {
+    name: 'route-private',
+    input: {
+      facts: {
+        code: 'route_first',
+        object: { kind: 'route', id: 'preview', title: 'Свой' },
+        factDate: '2026-06-14',
+      },
+      objectTitle: null,
+      riderName: null,
+    },
   },
 ];
 
@@ -185,6 +230,12 @@ async function main() {
         const file = join(dir, `${themeId}-${template}-${c.name}.png`);
         await writeFile(file, png);
         process.stdout.write(`${file} ${png.byteLength} B ${Date.now() - started} ms\n`);
+      }
+      for (const c of achievementCases) {
+        const png = await renderAchievementCard({ template, themeId, ...c.input });
+        const file = join(dir, `${themeId}-${template}-achievement-${c.name}.png`);
+        await writeFile(file, png);
+        process.stdout.write(`${file} ${png.byteLength} B\n`);
       }
       for (const c of inviteCases) {
         const input: RideInviteInput = { template, themeId, facts: { ...inviteFacts, ...c.facts } };

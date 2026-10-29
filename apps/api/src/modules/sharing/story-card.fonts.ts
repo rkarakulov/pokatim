@@ -22,25 +22,40 @@ export function fontFilePath(id: FontFileId): string {
   return require.resolve(`@expo-google-fonts/${pkg}/${weight}/${id}.ttf`);
 }
 
-/** Начертание для satori: семейство — по роли (`display`/`text`), не по гарнитуре (Manrope в обеих ролях). */
+/**
+ * Начертание для satori: семейство — по роли (`display`/`text`), не по гарнитуре (Manrope в обеих ролях); `symbols` —
+ * иконки (Material Symbols, карточка достижения).
+ */
 export interface StoryCardFont {
-  name: 'display' | 'text';
-  weight: 500 | 600;
+  name: 'display' | 'text' | 'symbols';
+  weight: 400 | 500 | 600;
   data: Buffer;
   style: 'normal';
 }
 
-const files = new Map<FontFileId, Promise<Buffer>>();
+const files = new Map<string, Promise<Buffer>>();
 
-/** Файл начертания — один раз на процесс (лениво, кэш промисов; сбой чтения не кэшируется). */
-function load(id: FontFileId): Promise<Buffer> {
-  let file = files.get(id);
+/** Файл — один раз на процесс (лениво, кэш промисов; сбой чтения не кэшируется). */
+function loadFile(path: string): Promise<Buffer> {
+  let file = files.get(path);
   if (!file) {
-    file = readFile(fontFilePath(id));
-    files.set(id, file);
-    file.catch(() => files.delete(id));
+    file = readFile(path);
+    files.set(path, file);
+    file.catch(() => files.delete(path));
   }
   return file;
+}
+
+const load = (id: FontFileId) => loadFile(fontFilePath(id));
+
+/**
+ * Шрифт иконок — Material Symbols 400 (тот же пакет, которым `expo-symbols` рисует иконки приложения на Android и web);
+ * глиф — по кодовой точке (`achievement-card.icons.ts`), без лигатур.
+ */
+export async function symbolsFont(): Promise<StoryCardFont> {
+  const path =
+    require.resolve('@expo-google-fonts/material-symbols/400Regular/MaterialSymbols_400Regular.ttf');
+  return { name: 'symbols', weight: 400, data: await loadFile(path), style: 'normal' };
 }
 
 /** 4 начертания темы: display 500/600, text 500/600 (`appFontFaces`). */

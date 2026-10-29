@@ -202,6 +202,8 @@ function RootShell() {
                   options={{ presentation: 'fullScreenModal' }}
                 />
                 <Stack.Screen name="achievements/[code]" />
+                {/* карточка своего достижения для сторис (ADR-0018) */}
+                <Stack.Screen name="achievements/story/[code]" />
               </Stack.Protected>
               {/* шаги онбординга после входа: опрос → геопозиция → устройства → Главная; пока сессия или шаг неизвестны — скелетон
             (SSR отдаёт HTML оболочки, а не пустую страницу редиректа) */}

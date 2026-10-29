@@ -74,7 +74,9 @@ export {
 export {
   STORY_CARD_TIME_STEPS,
   storyCard,
+  storyCardBadgeColors,
   storyCardColors,
+  type StoryCardBadgeColors,
   type StoryCardColors,
   type StoryCardText,
 } from './story-card.ts';

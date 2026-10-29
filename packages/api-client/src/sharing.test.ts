@@ -54,3 +54,19 @@ describe('карточка-приглашение райда', () => {
     expect(calls[0]!.headers.get('authorization')).toBe('Bearer jwt');
   });
 });
+
+describe('карточка достижения', () => {
+  it('статус — GET карточки своего достижения по коду с шаблоном и токеном доступа', async () => {
+    const { api, calls } = client(200, { status: 'pending' });
+    await expect(api.getAchievementCard('jwt', 'race_win', { template: 'night' })).resolves.toEqual(
+      {
+        status: 'pending',
+      },
+    );
+    expect(calls[0]!.url).toBe(
+      'https://api.test/v1/achievements/race_win/story-card?template=night',
+    );
+    expect(calls[0]!.method).toBe('GET');
+    expect(calls[0]!.headers.get('authorization')).toBe('Bearer jwt');
+  });
+});

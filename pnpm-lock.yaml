@@ -281,6 +281,9 @@ importers:
       '@expo-google-fonts/manrope':
         specifier: ^0.4.2
         version: 0.4.2
+      '@expo-google-fonts/material-symbols':
+        specifier: ^0.4.50
+        version: 0.4.50
       '@expo-google-fonts/onest':
         specifier: ^0.4.2
         version: 0.4.2
