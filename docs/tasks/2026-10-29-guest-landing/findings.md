@@ -50,3 +50,19 @@ NOT VERIFIED: web-смоук с API (`E2E_API=1`), iOS/Android вживую, 7 �
   `<Redirect href="/register" />` (SSR: стор пуст — лендинг). Тест `auth-guard.test.tsx` «живая регистрация, гость уже
   на лендинге…» — красный до правки, зелёный после.
 - LOW (`initialDataUpdatedAt`) — не меняем: как у остальных публичных экранов.
+
+# Findings — guest-landing — pass 2 — reviewer: claude
+base: origin/develop   commits: origin/develop..c26706f (re-review фикса 4c900ca..c26706f; working tree clean)
+verdict: APPROVE
+
+Проверено: `welcome.tsx` — хуки до условного `<Redirect href="/register" />` (порядок хуков стабилен); SSR —
+`resumeOnLaunch: false` по умолчанию, `hydrate()` только в эффекте `RootShell` → сервер и первый клиентский рендер
+отдают лендинг, расхождения гидрации нет; цикла нет — `(onboarding)/register.tsx:93-95` вызывает `consumeResume()`
+и уводит на «Подтвердите e-mail», после чего `/welcome` снова рисует лендинг; вошедший на `/welcome` по-прежнему
+уходит на `/` гардом `!signedIn`; гард вкладок (`returning` → `/sign-in` раньше `resumeRegistration`) не тронут.
+Новый тест честный (стартует с `/welcome` при живой регистрации, проверяет итоговый путь `/check-email`).
+Правило `.claude/rules/pokatim-app.md` синхронизировано. Остальной diff `origin/develop...HEAD` с прохода 1 не менялся.
+Прогон: `jest auth-guard landing check-email` → 3 suites, 41 passed.
+NOT VERIFIED: web-смоук с API, iOS/Android вживую.
+
+Findings: нет. MEDIUM прохода 1 закрыт; LOW (`initialDataUpdatedAt`) — принят автором как есть, не блокер.
