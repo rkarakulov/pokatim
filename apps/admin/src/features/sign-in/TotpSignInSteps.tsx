@@ -56,7 +56,8 @@ export function TotpStep({ challenge, onSignedIn, onExpired, onBack }: StepProps
         error={verify.isError && !isExpired(verify.error) ? totpErrorText(verify.error) : undefined}
         extra={<RememberDevice value={remember} onChange={setRemember} />}
         actions={
-          <Button full onClick={onBack}>
+          // пока код проверяется, «Назад» неактивна: поздний вход иначе вмешался бы в форму пароля
+          <Button full disabled={verify.isPending} onClick={onBack}>
             {t('admin.totp.back')}
           </Button>
         }
@@ -95,8 +96,9 @@ export function TotpSetupStep({ challenge, onSignedIn, onExpired, onBack }: Step
     onSuccess: (result) => setView({ kind: 'codes', codes: result.recoveryCodes, me: result.me }),
     onError: handleError,
   });
+  // пока идёт запрос секрета или подтверждение, «Назад» неактивна: коды восстановления из ответа иначе потерялись бы
   const back = (
-    <Button full onClick={onBack}>
+    <Button full disabled={start.isPending || confirm.isPending} onClick={onBack}>
       {t('admin.totp.back')}
     </Button>
   );

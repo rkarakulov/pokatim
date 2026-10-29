@@ -35,6 +35,9 @@ export interface OpenedSession {
   token: string;
   expiresAt: Date;
   device: { token: string; expiresAt: Date } | null;
+  /** Для лога входа после коммита (наружу не уходят). */
+  sessionId: string;
+  secondFactor: PanelSecondFactor | null;
 }
 
 export type PanelSignInResult =
@@ -194,7 +197,12 @@ export class PanelSessionService {
     const recovery = this.totp.newRecoveryCodes();
 
     const opened = await this.finishChallenge(challenge, 'код подключения', async (tx) => {
-      // замок сотрудника — как у входа без фактора (`openWithoutFactor`)
+      // замок аккаунта (identity, R1): сброс пароля между проверкой вызова и активацией не проскочит — штамп сверяется
+      // под замком; затем замок сотрудника — как у входа без фактора (`openWithoutFactor`)
+      const account = await this.accounts.lockAccountState(tx, challenge.userId);
+      if (!account?.active || account.credentialsStamp !== challenge.credentialsStamp) {
+        throw challengeExpired();
+      }
       await this.repository.lockMember(tx, challenge.userId);
       const activated = await this.repository.activateTotp(tx, challenge.userId, {
         secretEnc: pending.secretEnc,
@@ -305,7 +313,7 @@ export class PanelSessionService {
     },
     previousToken: string | undefined,
   ): Promise<OpenedSession | null> {
-    return this.transactions.run(async (tx) => {
+    return this.runSignIn(async (tx) => {
       const touched = await this.repository.touchTrustedDevice(
         tx,
         {
@@ -332,7 +340,7 @@ export class PanelSessionService {
     subject: { userId: string; credentialsStamp: string },
     previousToken: string | undefined,
   ): Promise<OpenedSession | 'totp' | 'setup'> {
-    return this.transactions.run(async (tx) => {
+    return this.runSignIn(async (tx) => {
       const member = await this.repository.lockMember(tx, subject.userId);
       if (member?.status !== 'active') throw domainError('PANEL_ACCESS_DENIED', 403);
       const totp = await this.repository.findTotp(subject.userId, tx);
@@ -411,7 +419,7 @@ export class PanelSessionService {
     work: (tx: DbSession) => Promise<T>,
   ): Promise<T> {
     try {
-      return await this.transactions.run(async (tx) => {
+      return await this.runSignIn(async (tx) => {
         const consumed = await this.repository.consumeChallenge(
           tx,
           challenge._id,
@@ -489,9 +497,6 @@ export class PanelSessionService {
         PANEL_POLICY.trustedDeviceMax,
       );
     }
-    this.logger.log(
-      `вход в панель uid=${input.userId} sid=${sessionId} factor=${input.secondFactor ?? 'none'}`,
-    );
     const emails = await this.accounts.emailsOf([input.userId]);
     return {
       state: 'signedIn',
@@ -508,6 +513,25 @@ export class PanelSessionService {
       token,
       expiresAt,
       device,
+      sessionId,
+      secondFactor: input.secondFactor,
     };
   }
+
+  /**
+   * Транзакция входа и лог успешного входа — после коммита (`pokatim-db.md`): колбэк транзакции повторяется при
+   * конфликте записи, лог в нём дублировался бы.
+   */
+  private async runSignIn<T>(work: (tx: DbSession) => Promise<T>): Promise<T> {
+    const result = await this.transactions.run(work);
+    if (isOpenedSession(result)) {
+      this.logger.log(
+        `вход в панель uid=${result.me.user.id} sid=${result.sessionId} factor=${result.secondFactor ?? 'none'}`,
+      );
+    }
+    return result;
+  }
 }
+
+const isOpenedSession = (value: unknown): value is OpenedSession =>
+  typeof value === 'object' && value !== null && 'state' in value && value.state === 'signedIn';

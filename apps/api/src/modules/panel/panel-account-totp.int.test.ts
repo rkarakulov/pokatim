@@ -3,6 +3,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { createHarness, type Harness, MINUTE } from '../../../test/harness';
 import {
+  confirmPasswordReset,
+  latestResetToken,
+  requestPasswordReset,
+} from '../../../test/identity';
+import {
   deviceCookieValue,
   memberUser,
   panel,
@@ -226,6 +231,42 @@ describe('настройки 2FA: гонки с повторным подклю�
     expect(res.status).toBe(400);
     const doc = await panel(h).totp.findOne({ _id: userId });
     expect(doc?.recoveryCodes.every((code) => code.usedAt === null)).toBe(true);
+  });
+});
+
+describe('настройки 2FA: подтверждение ↔ сброс пароля (ревью pass 4, HIGH-1)', () => {
+  const harness = suite(false);
+
+  it('сброс пароля между проверкой сессии и активацией — 401, 2FA не активна', async () => {
+    const h = harness();
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const token = await panelSession(h, MODERATOR);
+    const setup = TotpSetup.parse(
+      (await panelCall(h, token, 'POST', `${BASE}/setup`, undefined, IP)).body,
+    );
+    const g = pauseAfterTotpRead(h);
+    const confirming = panelCall(
+      h,
+      token,
+      'POST',
+      `${BASE}/confirm`,
+      { code: totpCode(h, base32Decode(setup.secret)) },
+      IP,
+    );
+    await g.reached;
+    await requestPasswordReset(h, MODERATOR);
+    const reset = await confirmPasswordReset(
+      h,
+      await latestResetToken(h, MODERATOR),
+      'brand-new-password',
+    );
+    expect(reset.status).toBe(200);
+    g.open();
+
+    const res = await confirming;
+    expect(res.status).toBe(401);
+    expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ status: 'pending' });
+    expect(await panel(h).audit.countDocuments({ action: 'panel.totp_enabled' })).toBe(0);
   });
 });
 

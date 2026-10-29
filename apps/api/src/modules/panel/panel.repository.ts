@@ -34,7 +34,8 @@ export interface AuditFilter {
  * - транзакция, меняющая члена команды, первой операцией вызывает `lockMember` (`$inc version`); если меняется набор
  *   активных администраторов — ещё раньше `lockAdmins` (`$inc version` документа `panel_meta.admins`, R7): условие
  *   «останется ли админ» — по другим документам, без записи в общий документ MongoDB write skew не ловит;
- * - документы identity в транзакциях панели не пишутся — `lockUser` не нужен;
+ * - документы identity панель не пишет; замок аккаунта (`lockUser`, R1) — только через порт
+ *   `IdentityAccounts.lockAccountState` (подтверждение подключения 2FA сверяет штамп учётных данных);
  * - журнал `panel_audit` — append-only: только `insertOne` (тест-сторож `panel.repository.test.ts`);
  * - значения фильтров — только примитивы после zod (id, хеши, enum-ы, даты).
  */
@@ -175,6 +176,12 @@ export class PanelRepository {
 
   async insertSession(session: DbSession, doc: NewPanelSession): Promise<void> {
     await this.c.sessions.insertOne({ ...doc, revokedAt: null, revokedReason: null }, { session });
+  }
+
+  /** Сессия по `_id` в снимке транзакции (штамп и отзыв — сверяет вызывающий). */
+  async findSession(session: DbSession, id: string): Promise<PanelSessionDoc | undefined> {
+    const doc = await this.c.sessions.findOne({ _id: id }, { session });
+    return doc ?? undefined;
   }
 
   /** Живая сессия по хешу токена: не отозвана, не истекла по простою и абсолютному сроку на `now`. */

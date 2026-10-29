@@ -9,6 +9,7 @@ import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
+import { IdentityAccounts } from '../identity';
 import type { PanelPrincipal } from './current-panel-user.decorator';
 import { PanelAudit } from './panel-audit';
 import type { PanelTotpDoc } from './panel.collection';
@@ -30,6 +31,7 @@ export class PanelAccountTotpService {
     private readonly totp: PanelTotpCodes,
     private readonly audit: PanelAudit,
     private readonly transactions: MongoTransactions,
+    private readonly accounts: IdentityAccounts,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -72,7 +74,18 @@ export class PanelAccountTotpService {
     if (step === null) throw this.rejected(userId, 'подтверждение');
     const recovery = this.totp.newRecoveryCodes();
     await this.transactions.run(async (tx) => {
-      // замок сотрудника: вход без фактора (`PanelSessionService.openWithoutFactor`) не проскочит мимо активации
+      // замок аккаунта (identity, R1): сброс пароля между гардом и активацией не проскочит — штамп сессии сверяется
+      // под замком (сессия со старым штампом гарду уже не годна); затем замок сотрудника — вход без фактора
+      // (`PanelSessionService.openWithoutFactor`) не проскочит мимо активации
+      const account = await this.accounts.lockAccountState(tx, userId);
+      const session = await this.repository.findSession(tx, principal.sessionId);
+      if (
+        !account?.active ||
+        session?.revokedAt !== null ||
+        account.credentialsStamp !== session.credentialsStamp
+      ) {
+        throw domainError('UNAUTHORIZED', 401);
+      }
       await this.repository.lockMember(tx, userId);
       const activated = await this.repository.activateTotp(tx, userId, {
         secretEnc: pending.secretEnc,

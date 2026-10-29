@@ -10,6 +10,7 @@ import { createHarness, DAY, type Harness, MINUTE } from '../../../test/harness'
 import {
   confirmPasswordReset,
   gate,
+  identityRepository,
   latestResetToken,
   requestPasswordReset,
   untilBlocked,
@@ -33,7 +34,7 @@ import {
   seedTotp,
   totpCode,
 } from '../../../test/panel';
-import { sha256 } from '../identity';
+import { IdentityAccounts, sha256 } from '../identity';
 import { PanelTotpCodes } from './panel-totp-codes';
 import { generateRecoveryCodes } from './recovery-codes';
 import { base32Decode, generateTotp, generateTotpSecret, totpStep } from './totp';
@@ -687,5 +688,112 @@ describe('2FA без ключа на сервере — fail closed', () => {
     expect(res.status).toBe(503);
     expect(res.body).toMatchObject({ code: 'TOTP_UNAVAILABLE' });
     expect(await panel(h).sessions.countDocuments()).toBe(0);
+  });
+});
+
+describe('подключение на входе ↔ сброс пароля (ревью pass 4, HIGH-1)', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness({
+      TRUST_PROXY: '1',
+      PANEL_TOTP_KEY: PANEL_TOTP_KEY_TEST,
+      PANEL_TOTP_ENFORCED: 'true',
+    });
+  });
+  beforeEach(async () => {
+    await h.reset();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  afterAll(async () => {
+    await h.close();
+  });
+
+  /** admin без 2FA на шаге подключения: вызов и начатый `pending` секрет. */
+  async function setupChallenge() {
+    const userId = await memberUser(h, ADMIN, 'admin');
+    const step = await challengeOf(h, ADMIN);
+    expect(step.state).toBe('totpSetupRequired');
+    const res = await panelTotpStep(h, 'totp-setup', { challenge: step.challenge });
+    const secret = base32Decode(TotpSetup.parse(res.body).secret);
+    const confirm = () =>
+      panelTotpStep(h, 'totp-setup/confirm', {
+        challenge: step.challenge,
+        code: totpCode(h, secret),
+      });
+    return { userId, confirm };
+  }
+
+  async function resetPassword() {
+    await requestPasswordReset(h, ADMIN);
+    const token = await latestResetToken(h, ADMIN);
+    return confirmPasswordReset(h, token, 'brand-new-password');
+  }
+
+  /** Ворота в транзакции активации: штамп уже сверен под замком аккаунта. */
+  function pauseBeforeActivation() {
+    const g = gate();
+    const repository = panelRepository(h);
+    const activate = repository.activateTotp.bind(repository);
+    vi.spyOn(repository, 'activateTotp').mockImplementationOnce(async (...args) => {
+      await g.wait();
+      return activate(...args);
+    });
+    return g;
+  }
+
+  it('сброс пароля между проверкой вызова и активацией — 401, 2FA не активна, сессии нет', async () => {
+    const { userId, confirm } = await setupChallenge();
+    const g = pauseAfterTotpRead(h);
+    const confirming = confirm();
+    await g.reached;
+    expect((await resetPassword()).status).toBe(200);
+    g.open();
+
+    const res = await confirming;
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: 'TOTP_CHALLENGE_EXPIRED' });
+    expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ status: 'pending' });
+    expect(await panel(h).sessions.countDocuments()).toBe(0);
+  });
+
+  it('с замком аккаунта: сброс пароля ждёт транзакцию активации, 2FA подключена до сброса', async () => {
+    const { userId, confirm } = await setupChallenge();
+    const lockSpy = vi.spyOn(identityRepository(h), 'lockUser');
+    const g = pauseBeforeActivation();
+    const confirming = confirm();
+    await g.reached;
+    let reset = false;
+    const resetting = resetPassword().finally(() => {
+      reset = true;
+    });
+    await untilBlocked(resetting, () => Promise.resolve(lockSpy.mock.calls.length >= 2));
+    // сброс упёрся в замок аккаунта (транзакция повторяется) и не закоммитился
+    expect(lockSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(reset).toBe(false);
+    g.open();
+
+    const [res, changed] = await Promise.all([confirming, resetting]);
+    expect(res.status).toBe(200);
+    expect(changed.status).toBe(200);
+    expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ status: 'active' });
+  });
+
+  it('отрицательное доказательство: без замка аккаунта сброс коммитится посреди активации — 2FA по старому паролю', async () => {
+    const { userId, confirm } = await setupChallenge();
+    const accounts = h.app.get(IdentityAccounts, { strict: false });
+    vi.spyOn(accounts, 'lockAccountState').mockImplementation((_tx, id) =>
+      accounts.accountState(id),
+    );
+    const g = pauseBeforeActivation();
+    const confirming = confirm();
+    await g.reached;
+    expect((await resetPassword()).status).toBe(200);
+    g.open();
+
+    const res = await confirming;
+    expect(res.status).toBe(200);
+    expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ status: 'active' });
   });
 });

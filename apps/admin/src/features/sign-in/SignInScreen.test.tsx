@@ -366,4 +366,74 @@ describe('второй шаг входа — 2FA (ADR-0024)', () => {
     fireEvent.click(proceed);
     expect(await screen.findByRole('heading', { name: 'Обзор' })).toBeTruthy();
   });
+
+  /** Отложенный ответ API: тест решает, когда он придёт. */
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => (resolve = done));
+    return { promise, resolve };
+  }
+
+  it('шаг кода: пока проверка идёт, «Назад» неактивна; ответ — вход (ревью pass 4)', async () => {
+    await toTotpStep();
+    const pending = deferred<{ state: 'signedIn'; me: typeof ME.admin }>();
+    mocked.signInTotp.mockReturnValue(pending.promise);
+    mocked.me.mockResolvedValue(ME.admin);
+    fireEvent.change(codeField(), { target: { value: '123456' } });
+    fireEvent.click(verify());
+    const back = screen.getByRole('button', { name: 'Назад' });
+    await waitFor(() => expect(back).toHaveProperty('disabled', true));
+    fireEvent.click(back);
+    expect(screen.getByRole('heading', { name: 'Подтверждение входа' })).toBeTruthy();
+
+    await act(async () => pending.resolve({ state: 'signedIn', me: ME.admin }));
+    expect(await screen.findByRole('heading', { name: 'Обзор' })).toBeTruthy();
+  });
+
+  it('подключение: пока подтверждение идёт, «Назад» неактивна; коды восстановления не теряются (ревью pass 4)', async () => {
+    mocked.signIn.mockResolvedValue({
+      state: 'totpSetupRequired',
+      challenge: CHALLENGE,
+      expiresInSec: 300,
+    });
+    mocked.signInTotpSetup.mockResolvedValue({
+      secret: 'JBSWY3DPEHPK3PXP',
+      otpauthUri: 'otpauth://totp/x:olga%40example.by?secret=JBSWY3DPEHPK3PXP',
+    });
+    const codes = Array.from({ length: 10 }, (_, i) => `abcde-fgh${(i % 6) + 2}${(i % 5) + 2}`);
+    const pending = deferred<{ state: 'signedIn'; me: typeof ME.admin; recoveryCodes: string[] }>();
+    mocked.signInTotpSetupConfirm.mockReturnValue(pending.promise);
+    await renderApp('/sign-in');
+    await signInAs();
+    fireEvent.click(await screen.findByRole('button', { name: 'Подключить' }));
+    await screen.findByRole('img', { name: 'QR-код для приложения-аутентификатора' });
+
+    fireEvent.change(codeField(), { target: { value: '654321' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Подключить' }));
+    const back = screen.getByRole('button', { name: 'Назад' });
+    await waitFor(() => expect(back).toHaveProperty('disabled', true));
+    fireEvent.click(back);
+    expect(screen.queryByRole('heading', { name: 'Вход в панель' })).toBeNull();
+
+    await act(async () =>
+      pending.resolve({ state: 'signedIn', me: ME.admin, recoveryCodes: codes }),
+    );
+    expect(await screen.findByRole('heading', { name: 'Коды восстановления' })).toBeTruthy();
+    expect(screen.getByText(codes[0]!)).toBeTruthy();
+  });
+
+  it('подключение: пока секрет запрашивается, «Назад» неактивна (ревью pass 4)', async () => {
+    mocked.signIn.mockResolvedValue({
+      state: 'totpSetupRequired',
+      challenge: CHALLENGE,
+      expiresInSec: 300,
+    });
+    mocked.signInTotpSetup.mockReturnValue(new Promise(() => undefined));
+    await renderApp('/sign-in');
+    await signInAs();
+    fireEvent.click(await screen.findByRole('button', { name: 'Подключить' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Назад' })).toHaveProperty('disabled', true),
+    );
+  });
 });
