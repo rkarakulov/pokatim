@@ -228,7 +228,7 @@ paths:
 ## Билеты (`tickets`, event-tickets, ADR-0023 Proposed)
 
 - Модуль-потребитель: `tickets → results` (`ResultsCoreModule`: порт `RESULTS_FOR_TICKETS` — `entryOf`,
-  `entriesPage`; реэкспорт `RacesCoreModule` — `RACE_REGISTRY.get/getMany`), `calendar` (`CalendarCoreModule`: порт
+  `entriesPage`, `lockEntryForTicket` (замок заявки в транзакции check-in); реэкспорт `RacesCoreModule` — `RACE_REGISTRY.get/getMany`), `calendar` (`CalendarCoreModule`: порт
   `CALENDAR_EVENTS` — `get`, `getMany`), `profile` (`RIDER_NAMES.attributionNames`), `identity`
   (`IdentityAccounts.liveUserIds/emailsOf`, `AuthGuard`), `panel` — только через `index.ts`. На `tickets` ссылаются
   только `AppModule` (`TicketsModule`), `WorkerModule` (`TicketsWorkerModule`, `ticketsOutboxRoutes`) и
@@ -238,10 +238,20 @@ paths:
   `tickets.issued`; дубль кода — новая транзакция ≤ 3), `RaceTickets` (сверка), `TicketErasure`. Правила —
   чистые функции `tickets.policy.ts` (`ticketStatus`, `checkInWindow`, `isPast`, `canIssue`, `raceReconcilePlan`,
   `registrationGate`, `eventAccess`, `maskEmail`, `TICKETS_POLICY`).
+- Регламент сверки: гонки со стартом позже `now − 61 сут`; выпуск — пока открыто окно check-in, отмены и смена группы —
+  пока открыто окно гонки + сутки.
 - Билет гонки — **сверкой** (`results` о билетах не знает; подписки на `results.*` нет): лениво в
   `GET /v1/races/:raceId/ticket` и регламентом `tickets.reconcile` (`* * * * *` Минск + `tickets.reconcile.boot`,
   очередь `tickets-maintenance`); `RaceTickets.refresh` перед показом и check-in отменяет билет снятой заявки. Дубль
   выпуска — `isDuplicateKey(…, 'tickets_registration_unique')`.
+- Check-in — транзакция с замками: `RACE_REGISTRY.lockResults` (гонка, конфликт с отменой; `status: 'published'`),
+  `lockTicketing` (настройки, конфликт с выключением и переносом; окно check-in
+  пересчитывается по ним и `CLOCK` в каждой попытке), `CALENDAR_EVENTS.lockForAdmission` (старт календаря — им же
+  захватывают старт регистрация и её отмена: снятие, перенос, дистанции конфликтуют), `lockEntryForTicket` (гонка,
+  конфликт с отменой участия) / `lockRegistration` (календарь, конфликт с отменой регистрации), затем `markCheckedIn`;
+  проверки вне транзакции — только для ответа. Отмена регистрации отмеченного — `409 EVENT_REGISTRATION_CLOSED
+  { reason: 'checked_in' }` (проверка в транзакции отмены). Письмо: любой сбой после захвата снимает захват; чужой
+  живой захват — `moveToDelayed` до его конца.
 - Регистрация календаря — транзакция: **первой** `reserveSeat` (условный `$inc registeredCount` документа
   настроек), затем регистрация и билет; дубль активной — `event_registrations_active_unique` → 200 с ней.
 - QR — `ticket-qr.ts` (HMAC `EMAIL_TOKEN_SECRET`, `ticket-qr:<id>`, в БД `sha256`), не `identity.LinkPurpose`.
@@ -290,8 +300,8 @@ paths:
   `SharingWorkerModule` (`WorkerModule`: очередь `story-card`, `StoryCardProcessor`, `concurrency: 1`). Зависит от
   `results` (порт `RESULTS_FOR_SHARING`: `storyCardFacts` — как «моё участие», `storyCardLine` — `sliceLine` по
   `trackMap.segment` или линия маршрута), `profile` (`RIDER_NAMES`; `RIDER_THEMES` — тема запрашивающего карточку,
-  user-theme: владелец заявки для сторис, зритель для приглашения), `identity` — только `index.ts`; на `sharing` не
-  ссылается никто.
+  user-theme: владелец заявки для сторис, зритель для приглашения), `races`, `routes`, `calendar` (OG-картинки),
+  `identity` — только `index.ts`; на `sharing` не ссылается никто.
 - Входы — `StoryCardInputs.resolve` (одна реализация для HTTP и worker), ключ — `storyCardHash`; кэш — Redis
   (`StoryCardCache`: `token:<hash>`, `png:<token>`, `pending:<hash>` NX, `failed:<hash>` `GETDEL`). Worker сверяет
   хэш (не совпал — `skipped`). Рендер — чистые `storyCardTree` (satori-узлы, только flex) → `renderStoryCardSvg`
@@ -303,6 +313,17 @@ paths:
   постановка) → задача `ride-invite.render` той же очереди → `StoryCardProcessor.buildRideInvite` →
   `rideInviteTree` (`ride-invite.render.ts`, узлы и линия — `story-card.render.ts`/`story-card.png.ts`).
   `SharingModule`/`SharingWorkerModule` импортируют `RidesCoreModule`; `rides` о `sharing` не знает.
+- OG-картинки публичных страниц (og-images): `OgCardController` (`og/cards/brand/site`, `og/cards/:kind/:id` →
+  `{ version }`, IP-лимит `og-card`; `og/images/brand/site/:file`, `og/images/:kind/:id/:file` — PNG без входа,
+  IP-лимит `og-image`, старая версия — `302`, нет PNG — бренд `no-store` + постановка) → `OgCardService` →
+  `OgCardInputs` (порты владельцев `RACES_FOR_SHARING`, `RIDES_FOR_SHARING.ogFacts`, `ROUTES_FOR_SHARING`,
+  `CALENDAR_FOR_SHARING`: `ogFacts` — только публичный объект, иначе `null`; `ogChanged` — keyset `changed-since.ts`).
+  Рендер — только worker: `og-card.render` очереди `story-card` (`priority`, `StoryCardProcessor.buildOgCard`,
+  диспетчер по имени задачи), пререндер — `OgSync` (очередь `og-sync`, `og.sync` каждую минуту и при старте). Ключи
+  Redis `og:png:<hash>` (TTL 7 сут., вне окна пререндера — 1 сут.; продление при выдаче), `og:obj:<kind>:<id>` →
+  текущий хэш (новая версия удаляет PNG прежней — Lua `storeReady`), `og:pending:<hash>` (NX; после провала —
+  удержание), `og:cursor:<kind>`, `og:sweep`; сбой строки `og.sync` — лог и пропуск. Тема — «Классика» (`OG_THEME_ID`). **Изменил разметку, тексты или токены `ogCard`
+  — подними `OG_CARD_POLICY.renderVersion`** (новые URL, полный проход `og.sync`).
 - Общий код карточки — пакеты: форматтеры `@pokatim/i18n` (`format.ts`), геометрия линии `@pokatim/route-view`
   (`line-geometry.ts`), таблица начертаний `appFontFaces` и токены `storyCard` — `@pokatim/design-tokens`.
 

@@ -5,6 +5,8 @@ import { PublicReadGuard } from '../../public-read.guard';
 import { CalendarAdminController } from './calendar-admin.controller';
 import { CalendarEventsService } from './calendar-events';
 import { CALENDAR_EVENTS } from './calendar-events.port';
+import { CalendarForSharingService } from './calendar-for-sharing';
+import { CALENDAR_FOR_SHARING } from './calendar-for-sharing.port';
 import { CalendarOverview } from './calendar-overview';
 import { CalendarPublicController } from './calendar-public.controller';
 import { CalendarPublicService } from './calendar-public.service';
@@ -12,18 +14,20 @@ import { CalendarRepository } from './calendar.repository';
 import { CalendarService } from './calendar.service';
 
 /**
- * Ядро `calendar` без HTTP: единственный писатель стартов, порт «Обзора» панели `CalendarOverview` (admin-overview) и
- * порт `CALENDAR_EVENTS` для `tickets` (event-tickets) — только через `index.ts`. Репозиторий объявлен только здесь
- * (один экземпляр).
+ * Ядро `calendar` без HTTP: единственный писатель стартов, порт «Обзора» панели `CalendarOverview` (admin-overview,
+ * только через `index.ts`), порт OG-картинки `CALENDAR_FOR_SHARING` для `sharing` (og-images) и порт `CALENDAR_EVENTS`
+ * для `tickets` (event-tickets). Репозиторий объявлен только здесь (один экземпляр).
  */
 @Module({
   providers: [
     CalendarRepository,
     CalendarOverview,
+    CalendarForSharingService,
+    { provide: CALENDAR_FOR_SHARING, useExisting: CalendarForSharingService },
     CalendarEventsService,
     { provide: CALENDAR_EVENTS, useExisting: CalendarEventsService },
   ],
-  exports: [CalendarRepository, CalendarOverview, CALENDAR_EVENTS],
+  exports: [CalendarRepository, CalendarOverview, CALENDAR_FOR_SHARING, CALENDAR_EVENTS],
 })
 export class CalendarCoreModule {}
 

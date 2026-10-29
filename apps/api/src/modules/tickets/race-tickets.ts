@@ -12,6 +12,7 @@ import { TicketIssuer } from './ticket-issuer';
 import { ticketRef } from './ticket-views';
 import type { TicketDoc } from './tickets.collection';
 import {
+  canIssue,
   type EventFacts,
   isPast,
   type PlanEntry,
@@ -20,6 +21,12 @@ import {
   TICKETS_POLICY,
 } from './tickets.policy';
 import { TicketsRepository } from './tickets.repository';
+
+/** Сверка нужна, пока возможен выпуск (окно check-in) или отмена участия (окно гонки + сутки). */
+const needsReconcile = (event: EventFacts, now: Date) =>
+  !isPast(event, now) ||
+  (event.windowClosesAt !== null &&
+    now.getTime() < event.windowClosesAt.getTime() + TICKETS_POLICY.reconcileAfterWindowMs);
 
 const planEntry = (entry: TicketEntry): PlanEntry => ({
   entryId: entry.entryId,
@@ -135,18 +142,22 @@ export class RaceTickets {
   }
 
   /**
-   * Регламент (`tickets.reconcile`): гонки с включёнными билетами, не отменённые, окно check-in не закрылось. Отказ
+   * Регламент (`tickets.reconcile`): гонки с включёнными билетами, не отменённые, пока не закрылось окно check-in
+   * (выпуск и отмены) или окно гонки + сутки (только отмены снятых заявок и смена группы). Отказ
    * гонки — лог `tickets.reconcile_failed race=<id>`, остальные идут; в конце — исключение (failed-набор BullMQ).
    */
   async reconcileAll(): Promise<TicketsReconcileRun> {
     const now = this.clock.now();
     const run: TicketsReconcileRun = { races: 0, issued: 0, failed: 0 };
-    const settings = await this.repository.enabledRaceTicketings();
+    const settings = await this.repository.enabledRaceTicketings(
+      new Date(now.getTime() - TICKETS_POLICY.reconcileLookbackMs),
+    );
     const events = await this.events.resolveMany(
       settings.map((doc) => ({ kind: 'race' as const, id: doc.eventId })),
     );
     for (const event of events.values()) {
-      if (!event.published || isPast(event, now)) continue;
+      // выпуск ограничен окном check-in (`canIssue` в плане); отмены снятых заявок — пока открыто окно гонки (+ сутки)
+      if (!event.published || !needsReconcile(event, now)) continue;
       run.races += 1;
       try {
         run.issued += (await this.reconcileRace(event.id)).issued;
@@ -166,6 +177,9 @@ export class RaceTickets {
   ): Promise<RaceReconcileRun> {
     const run: RaceReconcileRun = { issued: 0, cancelled: 0, recategorized: 0 };
     for (const entry of plan.issue) {
+      // длинная сверка не выпускает билеты после закрытия окна (ревью Codex pass 4): срок — по текущим часам
+      const issuedAt = this.clock.now();
+      if (!canIssue(event, issuedAt)) break;
       try {
         const ticket = await this.issuer.inTransaction((tx, issue) =>
           issue(tx, {
@@ -174,7 +188,7 @@ export class RaceTickets {
             registrationId: entry.entryId,
             userId: entry.userId,
             category: entry.category,
-            now,
+            now: issuedAt,
           }),
         );
         run.issued += 1;

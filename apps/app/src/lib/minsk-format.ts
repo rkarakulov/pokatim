@@ -1,4 +1,4 @@
-import { i18n, minskDateTime, t, type MessageKey } from '@pokatim/i18n';
+import { minskDateTime, t, type MessageKey } from '@pokatim/i18n';
 
 /**
  * Общие подписи дат и списков (Главная, вкладка «Гонки», публичные карточки) — чистые функции. Время — только
@@ -9,7 +9,13 @@ import { i18n, minskDateTime, t, type MessageKey } from '@pokatim/i18n';
  */
 
 // диапазон дат, дата героя и момент по Минску — общий код `@pokatim/i18n` (приложение, API: карточка для сторис)
-export { formatLocalRange, heroDateText, minskDateTime, type HeroDate } from '@pokatim/i18n';
+export {
+  formatDistances,
+  formatLocalRange,
+  heroDateText,
+  minskDateTime,
+  type HeroDate,
+} from '@pokatim/i18n';
 
 /**
  * Исключающая граница UTC (`uploadClosesAt`: сервер считает поздним момент `>=` границы) по Минску — последняя
@@ -46,21 +52,9 @@ export function formatMinskDateTime(
   return { date, time: clock, full: t('format.dateTime', { date, time: clock }) };
 }
 
-const km = (value: number) => i18n.formatNumber(value, { maximumFractionDigits: 1 });
-
 /** Склейка элементов по шаблону строки (`{head}` + `{next}`); пусто — `null`. */
 const joinWith = (key: MessageKey, items: readonly string[]): string | null =>
   items.length === 0 ? null : items.reduce((head, next) => t(key, { head, next }));
-
-/** «100 км», «80 и 120 км», «40, 80 и 120 км»; пусто — `null`. */
-export function formatDistances(distances: readonly number[]): string | null {
-  const values = distances.map(km);
-  const last = values.pop();
-  if (last === undefined) return null;
-  const head = joinWith('format.listComma', values);
-  const list = head === null ? last : t('format.listAnd', { head, last });
-  return t('format.distanceKm', { distance: list });
-}
 
 /** Подпись значения справочника; `'unknown'` (новое значение у старой сборки) — без подписи (R9). */
 export function domainLabel(prefix: string, value: string): string | null {

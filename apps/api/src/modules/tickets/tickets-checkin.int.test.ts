@@ -3,6 +3,7 @@ import { RateLimiter } from '@rkarakulov/api-kit/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
+import { call, gate } from '../../../test/identity';
 import { memberUser, panel, panelCall, panelSession } from '../../../test/panel';
 import { racesDb } from '../../../test/races';
 import { signIn, travelTo, withdraw } from '../../../test/results';
@@ -19,6 +20,7 @@ import {
   ticketingUrl,
   ticketView,
 } from '../../../test/tickets';
+import { RaceTickets } from './race-tickets';
 
 /**
  * Check-in в панели (AC3, AC4, AC6): право `tickets.checkin`, доступ к событию (чужое — 404), условный переход
@@ -253,5 +255,139 @@ describe('список участников', () => {
       ],
       nextCursor: null,
     });
+  });
+});
+
+describe('сериализация check-in с отменой (ревью pass 1, HIGH-2, HIGH-3)', () => {
+  /** Ворота после проверок check-in вне транзакции: отметка ждёт, пока тест делает отмену. */
+  function pauseBeforeMark() {
+    const g = gate();
+    const tickets = h.app.get(RaceTickets, { strict: false });
+    const original = tickets.refresh.bind(tickets);
+    vi.spyOn(tickets, 'refresh').mockImplementationOnce(async (doc) => {
+      const fresh = await original(doc);
+      await g.wait();
+      return fresh;
+    });
+    return g;
+  }
+
+  it('гонка: отмена участия между проверкой и отметкой — cancelled, без отметки и журнала', async () => {
+    const w = await world();
+    const g = pauseBeforeMark();
+    const scan = panelCall(h, w.tokens.organizer, 'POST', CHECK_IN, { qr: w.qr });
+    await g.reached;
+    expect((await withdraw(h, w.who.auth, w.raceId)).status).toBe(200);
+    g.open();
+    const res = CheckInView.parse((await scan).body);
+    expect(res).toMatchObject({ outcome: 'cancelled', ticket: { status: 'cancelled' } });
+    expect(await checkInAudit()).toHaveLength(0);
+  });
+
+  it('выключение билетов между проверкой и отметкой — event_cancelled', async () => {
+    const w = await world();
+    const settings = await panelCall(h, w.tokens.admin, 'GET', ticketingUrl('race', w.raceId));
+    const g = pauseBeforeMark();
+    const scan = panelCall(h, w.tokens.organizer, 'POST', CHECK_IN, { qr: w.qr });
+    await g.reached;
+    await panelCall(h, w.tokens.admin, 'PUT', ticketingUrl('race', w.raceId), {
+      enabled: false,
+      version: (settings.body as { version: number }).version,
+    });
+    g.open();
+    expect(CheckInView.parse((await scan).body).outcome).toBe('event_cancelled');
+    expect(await checkInAudit()).toHaveLength(0);
+  });
+
+  it('отмена гонки между проверкой и отметкой — event_cancelled без отметки и журнала (pass 3)', async () => {
+    const w = await world();
+    const g = pauseBeforeMark();
+    const scan = panelCall(h, w.tokens.organizer, 'POST', CHECK_IN, { qr: w.qr });
+    await g.reached;
+    await racesDb(h).races.updateOne({ _id: w.raceId }, { $set: { status: 'cancelled' } });
+    g.open();
+    const res = CheckInView.parse((await scan).body);
+    expect(res).toMatchObject({
+      outcome: 'event_cancelled',
+      ticket: { status: 'event_cancelled' },
+    });
+    expect(await checkInAudit()).toHaveLength(0);
+  });
+
+  it('перенос очного старта между проверкой и отметкой — outside_window по новым настройкам (pass 2, HIGH-1)', async () => {
+    const w = await world();
+    const g = pauseBeforeMark();
+    const scan = panelCall(h, w.tokens.organizer, 'POST', CHECK_IN, { qr: w.qr });
+    await g.reached;
+    const settings = await panelCall(h, w.tokens.admin, 'GET', ticketingUrl('race', w.raceId));
+    // старт 26.10 10:00 Минска — окно откроется 25.10 10:00, сейчас 24.10 09:00
+    const moved = await panelCall(h, w.tokens.admin, 'PUT', ticketingUrl('race', w.raceId), {
+      enabled: true,
+      startsAt: '2026-10-26T07:00:00Z',
+      version: (settings.body as { version: number }).version,
+    });
+    expect(moved.status).toBe(200);
+    g.open();
+    const res = CheckInView.parse((await scan).body);
+    expect(res).toMatchObject({ outcome: 'outside_window', ticket: { status: 'active' } });
+    expect(res.ticket.event.startsAt).toBe('2026-10-26T07:00:00.000Z');
+    expect(await checkInAudit()).toHaveLength(0);
+  });
+
+  it('календарь: старт перенесён между проверкой и отметкой — outside_window (pass 2)', async () => {
+    const w = await world();
+    const id = await calendarStart(h, w.tokens.admin, {
+      startsOn: '2026-10-25',
+      startTime: '07:00',
+    });
+    await enableCalendarTickets(h, w.tokens.admin, id);
+    const b = await rider(h, 'b@example.com');
+    const code = ((await registerFor(h, b.auth, id)).body as { ticket: { code: string } }).ticket
+      .code;
+    const g = pauseBeforeMark();
+    const scan = panelCall(h, w.tokens.admin, 'POST', CHECK_IN, { code });
+    await g.reached;
+    const start = await panelCall(h, w.tokens.admin, 'GET', `/v1/admin/calendar/${id}`);
+    await panelCall(h, w.tokens.admin, 'POST', `/v1/admin/calendar/${id}`, {
+      startsOn: '2026-10-30',
+      version: (start.body as { version: number }).version,
+    });
+    g.open();
+    expect(CheckInView.parse((await scan).body).outcome).toBe('outside_window');
+    expect(await checkInAudit()).toHaveLength(0);
+  });
+
+  it('календарь: отмена регистрации между проверкой и отметкой — cancelled; после отметки отмена — 409', async () => {
+    const w = await world();
+    const id = await calendarStart(h, w.tokens.admin, {
+      startsOn: '2026-10-25',
+      startTime: '07:00',
+    });
+    await enableCalendarTickets(h, w.tokens.admin, id, { capacity: 5 });
+    const b = await rider(h, 'b@example.com');
+    const registered = await registerFor(h, b.auth, id);
+    const code = (registered.body as { ticket: { code: string } }).ticket.code;
+    const g = pauseBeforeMark();
+    const scan = panelCall(h, w.tokens.admin, 'POST', CHECK_IN, { code });
+    await g.reached;
+    expect(
+      (await call(h, 'POST', `/v1/calendar/${id}/registration/cancel`, {}, b.auth)).status,
+    ).toBe(200);
+    g.open();
+    expect(CheckInView.parse((await scan).body).outcome).toBe('cancelled');
+
+    // новая регистрация, отметка, затем отмена — 409 checked_in, билет и место остаются
+    const again = await registerFor(h, b.auth, id);
+    const second = (again.body as { ticket: { code: string } }).ticket.code;
+    const marked = await panelCall(h, w.tokens.admin, 'POST', CHECK_IN, { code: second });
+    expect(CheckInView.parse(marked.body).outcome).toBe('checked_in');
+    const cancel = await call(h, 'POST', `/v1/calendar/${id}/registration/cancel`, {}, b.auth);
+    expect(cancel.status).toBe(409);
+    expect(cancel.body).toMatchObject({
+      code: 'EVENT_REGISTRATION_CLOSED',
+      details: { reason: 'checked_in' },
+    });
+    const settings = await panelCall(h, w.tokens.admin, 'GET', ticketingUrl('calendar', id));
+    expect(settings.body).toMatchObject({ registeredCount: 1, checkedIn: 1 });
   });
 });

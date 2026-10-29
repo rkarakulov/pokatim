@@ -3,6 +3,12 @@ import type { CalendarStartStatus, Discipline } from '@pokatim/contracts';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Collection, Db, Filter } from 'mongodb';
 
+import {
+  CHANGED_SORT,
+  type ChangedCursor,
+  changedAfter,
+  type ChangedRow,
+} from '../../changed-since';
 import type { DbSession } from '../../db';
 import { calendarCollections, type CalendarStartDoc } from './calendar.collection';
 
@@ -41,6 +47,18 @@ export class CalendarRepository {
   findMany(ids: readonly string[]): Promise<CalendarStartDoc[]> {
     if (ids.length === 0) return Promise.resolve([]);
     return this.starts.find({ _id: { $in: [...new Set(ids)] } }).toArray();
+  }
+
+  /**
+   * Замок старта в транзакции потребителя (`tickets`: регистрация и check-in): запись `admissionLock` без `version` —
+   * конфликт записи с правкой, снятием и возвратом старта (`update` пишет тот же документ). Нет старта — `null`.
+   */
+  lockForAdmission(session: DbSession, id: string): Promise<CalendarStartDoc | null> {
+    return this.starts.findOneAndUpdate(
+      { _id: id },
+      { $inc: { admissionLock: 1 } },
+      { session, returnDocument: 'after' },
+    );
   }
 
   async insert(session: DbSession, doc: CalendarStartDoc): Promise<void> {
@@ -108,6 +126,19 @@ export class CalendarRepository {
       });
     }
     return this.starts.find({ $and: and }).sort({ startsOn: 1, _id: 1 }).limit(limit).toArray();
+  }
+
+  /** Опубликованные старты, изменившиеся после курсора (`og.sync`), по `(updatedAt, _id)` — индекс `0037_og_sync_indexes`. */
+  async changedForOg(after: ChangedCursor | null, limit: number): Promise<ChangedRow[]> {
+    const docs = await this.starts
+      .find(
+        { status: 'published', ...changedAfter(after) },
+        { projection: { _id: 1, updatedAt: 1 } },
+      )
+      .sort(CHANGED_SORT)
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
   }
 
   /** Опубликованный старт по id (публичная карточка). */

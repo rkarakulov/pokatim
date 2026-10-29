@@ -2,6 +2,15 @@
 import { generateMetadata, loader } from '../app/routes/[id]';
 import { resetPublicSsrCache } from '@/lib/public-ssr';
 
+import {
+  BRAND_ALT,
+  BRAND_VERSION,
+  OG_VERSION,
+  ogImageMeta,
+  pageCalls,
+  respondWithOg,
+} from './og-fetch';
+
 jest.mock('@/lib/api');
 
 const ORIGIN = 'https://pokatim.by';
@@ -17,10 +26,8 @@ const route = {
   publishedAt: '2026-10-20T10:00:00.000Z',
 };
 const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
-const respond = (status: number, body: unknown) =>
-  fetchMock.mockImplementation(() =>
-    Promise.resolve(new Response(JSON.stringify(body), { status })),
-  );
+const respond = (status: number, body: unknown, versions: Record<string, string> = {}) =>
+  respondWithOg(fetchMock, status, body, versions);
 const plain = (value: unknown) => JSON.parse(JSON.stringify(value).replace(/\u00a0/g, ' '));
 
 const neutral = {
@@ -62,8 +69,7 @@ describe('мета публичной карточки маршрута (SSR, ro
         url: `${ORIGIN}/routes/${ID}`,
       },
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://api.internal:3000/v1/routes/${ID}`);
+    expect(pageCalls(fetchMock)).toEqual([`http://api.internal:3000/v1/routes/${ID}`]);
   });
 
   it('маршрут команды (author по умолчанию — старый API) — без robots', async () => {
@@ -110,5 +116,28 @@ describe('мета публичной карточки маршрута (SSR, ro
       robots: 'noindex',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('og-images (AC5): своя картинка маршрута от WEB_ORIGIN; нет версии — бренд; не найден — без картинки', async () => {
+    process.env.WEB_ORIGIN = ORIGIN;
+    respond(200, route, {
+      [`/v1/og/cards/route/${ID}`]: OG_VERSION,
+      '/v1/og/cards/brand/site': BRAND_VERSION,
+    });
+    expect(await generateMetadata(undefined, { id: ID })).toMatchObject({
+      openGraph: ogImageMeta(
+        `${ORIGIN}/v1/og/images/route/${ID}/${OG_VERSION}.png`,
+        'Маршрут «Минское кольцо»',
+      ),
+      twitter: { card: 'summary_large_image' },
+    });
+    resetPublicSsrCache();
+    respond(200, route, { '/v1/og/cards/brand/site': BRAND_VERSION });
+    expect(await generateMetadata(undefined, { id: ID })).toMatchObject({
+      openGraph: ogImageMeta(`${ORIGIN}/v1/og/images/brand/site/${BRAND_VERSION}.png`, BRAND_ALT),
+    });
+    resetPublicSsrCache();
+    respond(404, { code: 'NOT_FOUND', message: 'x' }, { '/v1/og/cards/brand/site': BRAND_VERSION });
+    expect(await generateMetadata(undefined, { id: ID })).not.toHaveProperty('openGraph.images');
   });
 });

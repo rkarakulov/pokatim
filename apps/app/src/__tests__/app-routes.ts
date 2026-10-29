@@ -24,6 +24,7 @@ import RiderRoute from '../app/riders/[id]';
 import ReportRiderRoute from '../app/riders/report/[id]';
 import SettingsScreen from '../app/settings/index';
 import LanguageScreen from '../app/settings/language';
+import ThemeScreen from '../app/settings/theme';
 import NotificationsScreen from '../app/notifications';
 import NotificationSettingsScreen from '../app/settings/notifications';
 import VerifiedProfileScreen from '../app/settings/verified';
@@ -86,6 +87,7 @@ export const appRoutes = {
   'settings/devices': DevicesScreen,
   'settings/index': SettingsScreen,
   'settings/language': LanguageScreen,
+  'settings/theme': ThemeScreen,
   'settings/profile': ProfileScreen,
   profile: OwnProfileRoute,
   notifications: NotificationsScreen,

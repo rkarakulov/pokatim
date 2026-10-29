@@ -1,4 +1,5 @@
 import { MyTicketRef } from '@pokatim/contracts';
+import { DelayedError, type Job } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
@@ -16,6 +17,10 @@ import {
   sendTicketEmails,
   ticketsDb,
 } from '../../../test/tickets';
+import { IdentityAccounts } from '../identity';
+import { TicketsEmailProcessor } from './jobs/tickets-email.processor';
+import { TicketEvents } from './ticket-events';
+import { TICKETS_ISSUED } from './tickets.events';
 
 /**
  * Письмо «Вы зарегистрированы» (AC7, RC-T11): содержимое, кнопка только при `APP_WEB_ORIGIN`, без QR и токена, одно
@@ -108,6 +113,52 @@ describe('письмо билета (AC7)', () => {
     expect(mail?.subject).toBe('Вы зарегистрированы: Минский марафон');
     expect(mail?.text).toContain('Дистанция: 42,2 км');
     expect(mail?.text).toContain('Где: Площадь Независимости, Минск');
+  });
+});
+
+describe('сбои после захвата и чужой захват (ревью pass 1, HIGH-1)', () => {
+  it('чтение события упало — захват снят (pending), следующая попытка отправляет', async () => {
+    await raceWithTicket();
+    vi.spyOn(h.worker.get(TicketEvents), 'resolve').mockRejectedValueOnce(new Error('db down'));
+    await expect(sendTicketEmails(h)).rejects.toThrow('db down');
+    expect((await ticketsDb(h).tickets.findOne({}))?.email).toMatchObject({
+      state: 'pending',
+      claimedUntil: null,
+    });
+    expect(await sendTicketEmails(h, 1)).toEqual(['sent']);
+    expect(h.mailer.sent).toHaveLength(1);
+  });
+
+  it('адрес не прочитан на последней попытке — failed', async () => {
+    await raceWithTicket();
+    vi.spyOn(h.worker.get(IdentityAccounts), 'emailsOf').mockRejectedValueOnce(
+      new Error('db down'),
+    );
+    await expect(sendTicketEmails(h, 4)).rejects.toThrow('db down');
+    expect((await ticketsDb(h).tickets.findOne({}))?.email.state).toBe('failed');
+  });
+
+  it('чужой живой захват — задача отложена до конца захвата, попытка не тратится', async () => {
+    await raceWithTicket();
+    const until = new Date(h.clock.now().getTime() + 60_000);
+    await ticketsDb(h).tickets.updateOne(
+      {},
+      { $set: { 'email.state': 'sending', 'email.claimedUntil': until } },
+    );
+    const [event] = await issuedEvents(h);
+    const moveToDelayed = vi.fn(() => Promise.resolve());
+    const job = {
+      name: TICKETS_ISSUED,
+      data: { outboxEventId: event!._id },
+      attemptsMade: 0,
+      opts: { attempts: 5 },
+      moveToDelayed,
+    } as unknown as Job;
+    await expect(
+      h.worker.get(TicketsEmailProcessor).process(job, 'lock-token'),
+    ).rejects.toBeInstanceOf(DelayedError);
+    expect(moveToDelayed).toHaveBeenCalledWith(until.getTime() + 1000, 'lock-token');
+    expect(h.mailer.sent).toHaveLength(0);
   });
 });
 

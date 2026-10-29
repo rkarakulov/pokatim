@@ -789,6 +789,12 @@ export const ru = {
   'notifications.push.enableHint': 'Нажмите, чтобы разрешить push-уведомления на этом устройстве.',
   'notifications.push.denied':
     'Push-уведомления запрещены. Нажмите, чтобы открыть настройки устройства.',
+  'notifications.push.deniedBrowser':
+    'Push-уведомления запрещены для сайта. Разрешите их в настройках браузера (значок слева от адреса) или в настройках системы для этого приложения.',
+  'notifications.push.subscribeHint':
+    'Уведомления разрешены, но этот браузер не подписан. Нажмите, чтобы подписаться.',
+  'notifications.push.expired':
+    'Подписка на push в этом браузере истекла. Нажмите, чтобы обновить.',
   'notifications.settings.title': 'Настройки уведомлений',
   'notifications.settings.lead': 'В центре уведомлений видно всё. Здесь — push и письма.',
   'notifications.settings.leadEmail': 'В центре уведомлений видно всё. Здесь — письма на e-mail.',
@@ -2535,6 +2541,19 @@ export const ru = {
   'rideInvite.pace': 'Темп',
   'rideInvite.unitKm': 'км',
   'rideInvite.unitKmh': 'км/ч',
+  'ogCard.kicker.race': 'Гонка',
+  'ogCard.kicker.ride': 'Кофе-райд',
+  'ogCard.kicker.route': 'Маршрут',
+  'ogCard.kicker.calendar': 'Старт',
+  'ogCard.loop': 'Кольцо',
+  'ogCard.elevation': 'набор {value} м',
+  'ogCard.pace': 'темп {range} км/ч',
+  'ogCard.facts': '{head} · {next}',
+  'ogCard.alt.race': 'Гонка «{title}»',
+  'ogCard.alt.ride': 'Кофе-райд «{title}»',
+  'ogCard.alt.route': 'Маршрут «{title}»',
+  'ogCard.alt.calendar': 'Старт «{title}»',
+  'ogCard.alt.brand': 'Покатим — {tagline}',
   // admin-moderation-hub: один пункт сайдбара «Модерация» с вкладками по типу контента
   'admin.nav.moderation': 'Модерация',
   'admin.moderation.tabs': 'Очереди модерации',

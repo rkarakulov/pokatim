@@ -5,6 +5,7 @@ import type { GenerateMetadataFunction, LoaderFunction } from 'expo-router/serve
 
 import { SeasonDetailScreen, seasonDates } from '@/features/races/season-detail';
 import { useLoaderSeed } from '@/lib/loader-seed';
+import { brandOgImageFor } from '@/lib/og-image';
 import { publicPageMetadata } from '@/lib/page-metadata';
 import { fetchPublicForSsr, publicPath, ssrData, type PublicSsrResult } from '@/lib/public-ssr';
 
@@ -23,11 +24,19 @@ const seasonForSsr = (
 export const loader: LoaderFunction<SeasonCard | null> = async (_request, params) =>
   ssrData(await seasonForSsr(params));
 
-/** Мета без ПДн; не найден — нейтральная мета и `noindex`, API недоступен — нейтральная без `robots`. */
+/**
+ * Мета без ПДн; не найден — нейтральная мета и `noindex`, API недоступен — нейтральная без `robots`. `og:image` —
+ * бренд-картинка (своя у сезона — следующий слайс og-images); не найден — без картинки.
+ */
 export const generateMetadata: GenerateMetadataFunction = async (_request, params) => {
   const result = await seasonForSsr(params);
+  const image = await brandOgImageFor(result);
   if (result.status !== 'found') {
-    const neutral = publicPageMetadata({ title: t('season.title'), description: t('app.tagline') });
+    const neutral = publicPageMetadata({
+      title: t('season.title'),
+      description: t('app.tagline'),
+      image,
+    });
     return result.status === 'notFound' ? { ...neutral, robots: 'noindex' } : neutral;
   }
   const season = result.data;
@@ -35,6 +44,7 @@ export const generateMetadata: GenerateMetadataFunction = async (_request, param
     title: season.name,
     description: seasonDates(season),
     path: `/seasons/${encodeURIComponent(season.id)}`,
+    image,
   });
 };
 

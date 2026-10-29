@@ -67,7 +67,8 @@ function RootShell() {
     void restoreLocale();
   }, []);
 
-  // тема приложения (T1): сервер, до ответа — кэш native / SSR web; `null` — кэш ещё читается
+  // личная тема (user-theme, ADR-0021): профиль, до ответа — кэш native / SSR web из cookie; гость и после выхода —
+  // «Классика»; `null` — кэш ещё читается
   const themeId = useActiveThemeId();
 
   // онбординг выясняется после входа (опрос — кеш или сервер, геопозиция — устройство); повтор после ошибки —
@@ -153,10 +154,11 @@ function RootShell() {
                 {/* «Устройства» (вход — иконка верхней панели): тот же гард, что у вкладок; скелетон — в экране
               (`useSettingsShell`) */}
                 <Stack.Screen name="settings/devices" />
-                {/* «Настройки» и «Язык» (settings-hub, вход — иконка верхней панели), «Профиль» (вход — из «Настроек»): тот
-                же гард и оболочка, что у «Устройств» */}
+                {/* «Настройки», «Язык» и «Тема» (settings-hub, user-theme; вход — иконка верхней панели), «Профиль» (вход —
+                из «Настроек»): тот же гард и оболочка, что у «Устройств» */}
                 <Stack.Screen name="settings/index" />
                 <Stack.Screen name="settings/language" />
+                <Stack.Screen name="settings/theme" />
                 <Stack.Screen name="settings/profile" />
                 {/* профиль райдера (rider-profile): вход — аватар верхней панели Главной; гард и оболочка — как у
                 «Настроек» */}

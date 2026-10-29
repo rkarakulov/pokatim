@@ -21,6 +21,15 @@ export const TICKETS_POLICY = {
   checkInOpensBeforeMs: 24 * HOUR,
   /** без конца события check-in закрывается через 12 ч после старта */
   defaultDurationMs: 12 * HOUR,
+  /** очное событие гонки — не дольше 7 суток (`endsAt − startsAt`) */
+  maxDurationMs: 7 * 24 * HOUR,
+  /**
+   * Регламент сверяет гонки со стартом позже `now − 61 сут`: очный старт — внутри окна гонки, окно — не длиннее 60 суток
+   * (`RACE_POLICY.windowMaxMs`), +1 сутки запаса — отмена участия до закрытия окна попадает в сверку.
+   */
+  reconcileLookbackMs: 61 * 24 * HOUR,
+  /** после закрытия окна гонки сверка ещё сутки применяет отмены (запас на отставание регламента) */
+  reconcileAfterWindowMs: 24 * HOUR,
   /** «Мои билеты»: предстоящих — до 50, прошедших — последние 20; из БД — последние 200 билетов */
   listMax: 50,
   pastMax: 20,
@@ -57,6 +66,8 @@ export interface EventFacts {
   address: string | null;
   city: string | null;
   distancesKm: number[];
+  /** закрытие окна гонки (отмена участия возможна до него); календарь — `null` */
+  windowClosesAt: Date | null;
   /** владелец гонки (видимость в панели); календарь — `null` */
   ownerUserId: string | null;
   ticketing: EventTicketingDoc | null;

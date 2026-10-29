@@ -18,7 +18,7 @@ import { ParticipantNames } from './participant-names';
 import { TicketEvents } from './ticket-events';
 import { categoryView } from './ticket-views';
 import { type EventTicketingDoc, ticketingIdOf } from './tickets.collection';
-import { type EventFacts, eventAccess, ticketStatus } from './tickets.policy';
+import { type EventFacts, eventAccess, TICKETS_POLICY, ticketStatus } from './tickets.policy';
 import { TicketsRepository } from './tickets.repository';
 
 const invalidState = (reason: TicketingInvalidStateReason) => {
@@ -224,8 +224,12 @@ export class TicketingAdminService {
       ) {
         issues.push({ path: 'startsAt', code: 'INVALID' });
       }
-      if (next.startsAt !== null && next.endsAt !== null && next.endsAt <= next.startsAt) {
-        issues.push({ path: 'endsAt', code: 'DATE_ORDER' });
+      if (next.startsAt !== null && next.endsAt !== null) {
+        if (next.endsAt <= next.startsAt) issues.push({ path: 'endsAt', code: 'DATE_ORDER' });
+        // очное событие — не дольше 7 суток: окно check-in укладывается в выборку регламента по `startsAt` (pass 1)
+        else if (next.endsAt.getTime() - next.startsAt.getTime() > TICKETS_POLICY.maxDurationMs) {
+          issues.push({ path: 'endsAt', code: 'INVALID' });
+        }
       }
     } else {
       // календарь: дата, время и место — из старта (RC-T2)

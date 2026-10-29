@@ -1,11 +1,23 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
-import { isDomainError } from '@rkarakulov/api-kit/core';
+import { CLOCK, type Clock, isDomainError } from '@rkarakulov/api-kit/core';
+import type { LonLat } from '@pokatim/contracts';
 import type { Job } from 'bullmq';
+import type { z } from 'zod';
 
 import { QUEUE } from '../../queues';
 import { RESULTS_FOR_SHARING, type ResultsForSharing } from '../results';
 import { RIDES_FOR_SHARING, type RidesForSharing } from '../rides';
+import {
+  ROUTE_GEOMETRY,
+  type RouteGeometry,
+  ROUTES_FOR_SHARING,
+  type RoutesForSharing,
+} from '../routes';
+import { OG_CARD_RENDER_JOB, OgCardCache, OgCardJob } from './og-card.cache';
+import { type OgCardInput, OgCardInputs } from './og-card.inputs';
+import { renderOgCard } from './og-card.png';
+import { OG_CARD_POLICY, ogPrerenderable } from './sharing.policy';
 import { RideInviteInputs } from './ride-invite.inputs';
 import { renderRideInvite } from './ride-invite.png';
 import {
@@ -36,9 +48,24 @@ interface BuildOptions {
  */
 type ReasonDetail = 'clipped' | 'name-only';
 
+/** Разбор данных задачи своей схемой и рендер; данные не своей схемы — `invalid()` (`skipped`). */
+type JobRoute = (
+  data: unknown,
+  options: BuildOptions,
+  invalid: () => StoryCardOutcome,
+) => Promise<StoryCardOutcome>;
+
+/** Куда записать исход задачи: кэш сторис/приглашений (`StoryCardCache`) или OG-картинок (`OgCardCache`). */
+interface OutcomeSink {
+  release(hash: string): Promise<void>;
+  storeReady(hash: string, png: Buffer): Promise<unknown>;
+  storeFailed(hash: string): Promise<void>;
+}
+
 /**
- * Рендер карточек очереди `story-card` (ADR-0018): сторис своего результата (`story-card.render`) и приглашение
- * кофе-райда (`ride-invite.render`). Входы перечитываются и сверяются с хэшем задачи (изменились — `skipped`, PNG не
+ * Рендер карточек очереди `story-card` (ADR-0018): сторис своего результата (`story-card.render`), приглашение
+ * кофе-райда (`ride-invite.render`) и OG-картинка публичной страницы (`og-card.render`, og-images; диспетчер — по имени
+ * задачи). Входы перечитываются и сверяются с хэшем задачи (изменились — `skipped`, PNG не
  * пишется) → линия (порт `results`: отрезок между воротами или маршрут; порт `rides`: маршрут каталога) → satori +
  * resvg → PNG в Redis под новым токеном. Сбой — ретрай; на последней попытке — видимый `failed`. Лог — заявка или
  * райд, шаблон, итог, байты и время, без `userId`, имени, названия и токена.
@@ -53,33 +80,53 @@ export class StoryCardProcessor extends WorkerHost {
     private readonly invites: RideInviteInputs,
     @Inject(RESULTS_FOR_SHARING) private readonly results: ResultsForSharing,
     @Inject(RIDES_FOR_SHARING) private readonly rides: RidesForSharing,
+    private readonly ogCache: OgCardCache,
+    private readonly ogInputs: OgCardInputs,
+    @Inject(ROUTE_GEOMETRY) private readonly geometry: RouteGeometry,
+    @Inject(ROUTES_FOR_SHARING) private readonly routes: RoutesForSharing,
+    @Inject(CLOCK) private readonly clock: Clock,
   ) {
     super();
   }
 
   async process(job: Job<unknown>): Promise<StoryCardOutcome> {
     const finalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-    const schema =
-      job.name === STORY_CARD_RENDER_JOB
-        ? StoryCardJob
-        : job.name === RIDE_INVITE_RENDER_JOB
-          ? RideInviteJob
-          : null;
-    if (!schema) throw new Error(`unknown job ${job.name} in queue ${QUEUE.storyCard}`);
-    const data = schema.safeParse(job.data);
-    if (!data.success) {
+    const route = this.routeOf(job.name);
+    if (!route) throw new Error(`unknown job ${job.name} in queue ${QUEUE.storyCard}`);
+    return route(job.data, { finalAttempt }, () => {
       this.logger.warn(`job ${job.id}: no valid data, skipped`);
       return 'skipped';
+    });
+  }
+
+  /** Имя задачи → схема данных → метод рендера; незнакомое имя — `null`. */
+  private routeOf(name: string): JobRoute | null {
+    const parsed =
+      <T>(
+        schema: z.ZodType<T>,
+        build: (data: T, options: BuildOptions) => Promise<StoryCardOutcome>,
+      ): JobRoute =>
+      async (data, options, invalid) => {
+        const result = schema.safeParse(data);
+        return result.success ? build(result.data, options) : invalid();
+      };
+    switch (name) {
+      case STORY_CARD_RENDER_JOB:
+        return parsed(StoryCardJob, (data, options) => this.build(data, options));
+      case RIDE_INVITE_RENDER_JOB:
+        return parsed(RideInviteJob, (data, options) => this.buildRideInvite(data, options));
+      case OG_CARD_RENDER_JOB:
+        return parsed(OgCardJob, (data, options) => this.buildOgCard(data, options));
+      default:
+        return null;
     }
-    return 'raceId' in data.data
-      ? this.build(data.data, { finalAttempt })
-      : this.buildRideInvite(data.data as RideInviteJob, { finalAttempt });
   }
 
   /** Рендер сторис своего результата — вызывается и тестами напрямую. */
   build(job: StoryCardJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
     let label = 'entry -';
     return this.run(
+      this.cache,
       job.hash,
       () => `${label} ${job.template}`,
       options,
@@ -103,7 +150,7 @@ export class StoryCardProcessor extends WorkerHost {
    */
   buildRideInvite(job: RideInviteJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
     const label = () => `ride ${job.rideId} ${job.template}`;
-    return this.run(job.hash, label, options, 'name-only', async () => {
+    return this.run(this.cache, job.hash, label, options, 'name-only', async () => {
       const resolved = await this.invites
         .resolve(job.userId, job.rideId, job.template)
         .catch((error: unknown) => {
@@ -120,8 +167,55 @@ export class StoryCardProcessor extends WorkerHost {
     });
   }
 
+  /**
+   * Рендер OG-картинки публичной страницы (og-images) — вызывается и тестами напрямую. Входы перечитываются (объект
+   * больше не публичный или хэш устарел — `skipped`, PNG не пишется). Линия: гонка — линия показа маршрута коридора
+   * (`ROUTE_GEOMETRY`, как на странице), райд — только маршрут каталога (`inviteLine`), маршрут — линия каталога.
+   * Провал на последней попытке — ключ постановки удерживается `failedHoldSec`. В логе — вид и id, без названия.
+   */
+  buildOgCard(job: OgCardJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
+    const label = () => `og ${job.kind} ${job.id}`;
+    let ttlSec: number = OG_CARD_POLICY.pngTtlSec;
+    const sink: OutcomeSink = {
+      release: (hash) => this.ogCache.release(hash),
+      storeReady: (hash, png) =>
+        this.ogCache.storeReady({ kind: job.kind, id: job.id, hash }, png, ttlSec),
+      storeFailed: (hash) => this.ogCache.holdFailed(hash),
+    };
+    return this.run(sink, job.hash, label, options, 'name-only', async () => {
+      const resolved =
+        job.kind === 'brand'
+          ? this.ogInputs.resolveBrand()
+          : await this.ogInputs.resolve(job.kind, job.id);
+      if (!resolved || resolved.hash !== job.hash) return null;
+      // вне окна пререндера (самолечение по запросу) — короткий TTL: обход старых объектов не копит PNG (ревью F2)
+      ttlSec = ogPrerenderable(resolved.input, this.clock.now())
+        ? OG_CARD_POLICY.pngTtlSec
+        : OG_CARD_POLICY.pngShortTtlSec;
+      const line = await this.ogLine(resolved.input);
+      return { png: await renderOgCard(resolved.input, line), note: line ? 'line' : 'no line' };
+    });
+  }
+
+  private async ogLine(input: OgCardInput): Promise<LonLat[] | null> {
+    switch (input.kind) {
+      case 'race':
+        return input.facts.routeId
+          ? ((await this.geometry.displayGeometry(input.facts.routeId))?.line ?? null)
+          : null;
+      case 'ride':
+        return input.facts.routeId ? this.rides.inviteLine(input.facts.routeId) : null;
+      case 'route':
+        return this.routes.ogLine(input.facts.routeId);
+      case 'calendar':
+      case 'brand':
+        return null;
+    }
+  }
+
   /** Общий исход задачи: `null` из рендера — `skipped`; ошибка — ретрай, на последней попытке — `failed`. */
   private async run(
+    sink: OutcomeSink,
     hash: string,
     label: () => string,
     { finalAttempt = false }: BuildOptions,
@@ -132,18 +226,18 @@ export class StoryCardProcessor extends WorkerHost {
     try {
       const result = await render();
       if (!result) {
-        await this.cache.release(hash);
+        await sink.release(hash);
         this.logger.log(`${label()}: skipped`);
         return 'skipped';
       }
-      await this.cache.storeReady(hash, result.png);
+      await sink.storeReady(hash, result.png);
       this.logger.log(
         `${label()}: ready (${result.note}) ${result.png.byteLength} B in ${Date.now() - started} ms`,
       );
       return 'ready';
     } catch (error) {
       if (!finalAttempt) throw error;
-      await this.cache.storeFailed(hash);
+      await sink.storeFailed(hash);
       const reason =
         error instanceof Error
           ? detail === 'clipped'

@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import type { RaceEntryStatus } from '@pokatim/contracts';
 
+import type { DbSession } from '../../db';
 import type { RaceEntryDoc } from './results.collection';
 import type { ResultsForTickets, TicketEntry } from './results-for-tickets.port';
 import { ResultsRepository } from './results.repository';
@@ -23,6 +25,14 @@ export class ResultsForTicketsService implements ResultsForTickets {
   async entryOf(userId: string, raceId: string): Promise<TicketEntry | null> {
     const doc = await this.repository.findEntry(raceId, userId);
     return doc ? toTicketEntry(doc) : null;
+  }
+
+  async lockEntryForTicket(
+    tx: DbSession,
+    entryId: string,
+    now: Date,
+  ): Promise<RaceEntryStatus | null> {
+    return (await this.repository.lockEntry(tx, entryId, now))?.status ?? null;
   }
 
   async entriesPage(raceId: string, afterId: string | null, limit: number): Promise<TicketEntry[]> {

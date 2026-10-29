@@ -8,15 +8,26 @@ import { renderTicketEmail } from '../mail/ticket-email';
 import { TicketEvents } from '../ticket-events';
 import { TicketsIssued } from '../tickets.events';
 import { TICKETS_POLICY } from '../tickets.policy';
+import type { TicketDoc } from '../tickets.collection';
 import { TicketsRepository } from '../tickets.repository';
 
 export type TicketEmailOutcome = 'sent' | 'skipped';
+
+/** Письмо сейчас отправляет другой захват — повторить после `until` (процессор откладывает задачу). */
+export class TicketEmailBusyError extends Error {
+  constructor(
+    ticketId: string,
+    readonly until: Date,
+  ) {
+    super(`ticket email ${ticketId}: send in progress`);
+  }
+}
 
 /**
  * Письмо «Вы зарегистрированы» (RC-T11, по образцу `EmailDelivery`): захват `email.state` `pending` (или истёкшего
  * `sending`) одним `findOneAndUpdate` → адрес `IdentityAccounts.emailsOf` в момент отправки (удалённый — `skipped`) →
  * `MAILER` → `sent`. Повтор отправленного — пропуск; живой чужой захват — ретрай BullMQ; сбой SMTP снимает захват,
- * последняя попытка — `failed` (видно в списке участников панели) и лог `tickets.email_failed`. Отменённый к отправке
+ * любой сбой после захвата снимает свой захват (`pending`), последняя попытка — `failed` (видно в списке участников панели) и лог `tickets.email_failed`. Отменённый к отправке
  * билет и событие — `skipped`. В логах — id, без адреса.
  */
 @Injectable()
@@ -44,10 +55,25 @@ export class TicketEmailHandler {
     const claimedUntil = new Date(now.getTime() + TICKETS_POLICY.emailLeaseMs);
     const claim = await this.repository.claimEmail(ticketId, now, claimedUntil);
     if (!claim) return 'skipped';
-    if (claim.status === 'busy') throw new Error(`ticket email ${ticketId}: send in progress`);
-    const { doc } = claim;
+    // чужой живой захват (параллельная доставка или упавший worker) — повтор после истечения захвата
+    if (claim.status === 'busy') throw new TicketEmailBusyError(ticketId, claim.until);
+    try {
+      const outcome = await this.deliver(claim.doc, claimedUntil);
+      if (outcome === 'sent') this.logger.log(`tickets.email_sent ticket=${ticketId}`);
+      return outcome;
+    } catch (error) {
+      // любой сбой после захвата (чтение события, адреса, SMTP) снимает свой захват: ретрай не ждёт срока захвата
+      await this.repository.settleEmail(ticketId, claimedUntil, {
+        state: final ? 'failed' : 'pending',
+      });
+      if (final) this.logger.error(`tickets.email_failed ticket=${ticketId}`);
+      throw error;
+    }
+  }
+
+  private async deliver(doc: TicketDoc, claimedUntil: Date): Promise<TicketEmailOutcome> {
     const skip = async () => {
-      await this.repository.settleEmail(ticketId, claimedUntil, { state: 'skipped' });
+      await this.repository.settleEmail(doc._id, claimedUntil, { state: 'skipped' });
       return 'skipped' as const;
     };
     if (doc.status === 'cancelled') return skip();
@@ -62,20 +88,11 @@ export class TicketEmailHandler {
       instructions: event.ticketing?.instructions ?? null,
       link: this.env.APP_WEB_ORIGIN ? `${this.env.APP_WEB_ORIGIN}/tickets/${doc.code}` : null,
     });
-    try {
-      await this.mailer.send({ to, ...mail });
-    } catch (error) {
-      await this.repository.settleEmail(ticketId, claimedUntil, {
-        state: final ? 'failed' : 'pending',
-      });
-      if (final) this.logger.error(`tickets.email_failed ticket=${ticketId}`);
-      throw error;
-    }
-    await this.repository.settleEmail(ticketId, claimedUntil, {
+    await this.mailer.send({ to, ...mail });
+    await this.repository.settleEmail(doc._id, claimedUntil, {
       state: 'sent',
       sentAt: this.clock.now(),
     });
-    this.logger.log(`tickets.email_sent ticket=${ticketId}`);
     return 'sent';
   }
 }

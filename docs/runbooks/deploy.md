@@ -474,10 +474,40 @@ ADR-0023. Письмо «Вы зарегистрированы» — очере�
 `tickets.email_failed ticket=<id>`, колонка «Письмо» в списке участников панели; провал сверки — лог
 `tickets.reconcile_failed race=<id>`, следующий прогон повторяет.
 
-**Ротация `EMAIL_TOKEN_SECRET` инвалидирует все QR билетов** (токен — HMAC от id билета, в БД — `qrHash`): после
-ротации сканы старых QR дают «не найдено», код билета (ручной ввод) работает. Если ротация неизбежна — пересчитать
-`qrHash` всех билетов новым ключом одноразовым скриптом (`sha256(HMAC(secret, 'ticket-qr:' + _id))`) до открытия
-check-in; у владельцев QR обновится при следующем открытии билета (офлайн-копия — старая).
+**Ротация `EMAIL_TOKEN_SECRET` ломает QR билетов** (токен — HMAC от id билета ключом, в БД — только `qrHash`;
+check-in ищет билет по `sha256` токена из QR). Два состояния после смены ключа в `.env`:
+
+- **до пересчёта `qrHash`** — проходят только **старые** QR (на руках, в офлайн-копиях приложения, в Wallet), а
+  владельцам, открывшим билет заново, показывается **новый** QR, который check-in не находит («не найдено»);
+- **после пересчёта** — наоборот: проходят новые QR, старые (офлайн-копии, скриншоты) — «не найдено».
+
+Код билета (ручной ввод) работает в обоих состояниях. Процедура, если ротация неизбежна:
+
+1. Предупредить организаторов: на время ротации — только ручной ввод кода, сканы QR не надёжны.
+2. Сменить `EMAIL_TOKEN_SECRET` в `.env` и перезапустить **api и worker одновременно** (`dc up -d api worker`, `dc` — раздел «Логи, почта, состояние»):
+   у них один ключ.
+3. Сразу пересчитать хэши одноразовой командой в контейнере api (новый ключ — из env контейнера, в лог не выводится):
+
+   ```sh
+   dc exec -T api node -e '
+   const { createHash, createHmac } = require("node:crypto");
+   const { MongoClient } = require("mongodb");
+   (async () => {
+     const client = await MongoClient.connect(process.env.MONGO_URL);
+     const tickets = client.db().collection("tickets");
+     let n = 0;
+     for await (const t of tickets.find({}, { projection: { _id: 1 } })) {
+       const token = createHmac("sha256", process.env.EMAIL_TOKEN_SECRET).update("ticket-qr:" + t._id).digest("base64url");
+       await tickets.updateOne({ _id: t._id }, { $set: { qrHash: createHash("sha256").update(token).digest("hex") } });
+       n += 1;
+     }
+     console.log("qrHash updated:", n);
+     await client.close();
+   })();'
+   ```
+
+4. Возобновить check-in. Участникам с офлайн-копией — открыть билет онлайн (QR обновится). Ссылки из уже отправленных
+   писем подтверждения и сброса пароля тоже перестают работать (runbook «Удаление аккаунта», п. 5).
 
 ## Диск
 
@@ -501,7 +531,7 @@ check-in; у владельцев QR обновится при следующе�
   `device_connections` (частичный уникальный по живым статусам), `device_link_tickets` (TTL), `device_imports`,
   `device_audit`; expand-only, идемпотентны. `0012_track_source_refs` — маркеры удалённых объектов источника
   (удалённый заезд агрегатора не воскресает); expand-only.
-- `0037_tickets` (event-tickets, ADR-0023) — коллекции `event_ticketing`, `event_registrations` (частичный уникальный
+- `0038_tickets` (event-tickets, ADR-0023) — коллекции `event_ticketing`, `event_registrations` (частичный уникальный
   по активной регистрации), `tickets` (уникальные код, хэш QR, регистрация); expand-only, без бэкфилла (билеты
   выпускает сверка), идемпотентна. Номер сверить с `develop` перед мержем.
 

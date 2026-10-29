@@ -47,6 +47,7 @@ import { TicketsRepository } from './tickets.repository';
     TicketIssuer,
     RaceTickets,
     TicketErasure,
+    ResultsCoreModule,
     ProfileCoreModule,
     IdentityAccountsModule,
   ],

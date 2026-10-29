@@ -144,7 +144,7 @@ test('тема приложения в HTML до JS (app-themes): id для ги
   page,
   request,
 }) => {
-  // без API и с API по умолчанию — «Классика» (тему выбирает панель; смоук её не меняет)
+  // без cookie темы (гость, вошедший без выбора) — «Классика» (user-theme)
   const html = await (await request.get('/')).text();
   expect(html).toContain('window.__POKATIM_THEME__="classic"');
   expect(html).toMatch(
@@ -156,6 +156,55 @@ test('тема приложения в HTML до JS (app-themes): id для ги
   await page.goto('/');
   await expectGuestHome(page);
   expect(await page.evaluate(() => window.__POKATIM_THEME__)).toBe('classic');
+});
+
+/** HTML страницы с cookie личной темы (user-theme): SSR читает её из запроса (`requestHeaders()` expo-server). */
+const htmlWithTheme = async (request: APIRequestContext, cookie: string, path = '/') =>
+  (await request.get(path, { headers: { cookie } })).text();
+
+test('личная тема в HTML до JS (user-theme AC4): cookie pokatim_theme — тема райдера, мусор — «Классика»', async ({
+  request,
+}) => {
+  const atlas = await htmlWithTheme(request, 'pokatim_theme=atlas');
+  expect(atlas).toContain('window.__POKATIM_THEME__="atlas"');
+  // фон документа и цвет панели браузера — светлая схема «Атласа», шрифты — только его гарнитура
+  expect(atlas).toMatch(
+    /<meta name="theme-color" media="\(prefers-color-scheme: light\)" content="#F2F3F5"/,
+  );
+  expect(atlas).toContain('html, body { background-color: #F2F3F5; }');
+  const fonts = /<style id="expo-generated-fonts"[^>]*>([\s\S]*?)<\/style>/.exec(atlas)?.[1] ?? '';
+  expect(fonts).toContain('Manrope_400Regular');
+  expect(fonts).not.toContain('Inter_400Regular');
+
+  for (const cookie of ['pokatim_theme=neon', 'pokatim_theme=<script>', 'theme=atlas']) {
+    expect(await htmlWithTheme(request, cookie)).toContain('window.__POKATIM_THEME__="classic"');
+  }
+});
+
+test('личная тема SSR — своя у каждого запроса: параллельные загрузки с разными cookie (user-theme A7)', async ({
+  request,
+}) => {
+  const themes = ['atlas', 'chrono', 'journal', 'classic', 'navigation', 'typography'];
+  const pages = await Promise.all(
+    themes.flatMap((id) =>
+      ['/', '/sign-in'].map((path) => htmlWithTheme(request, `pokatim_theme=${id}`, path)),
+    ),
+  );
+  pages.forEach((html, index) =>
+    expect(html).toContain(`window.__POKATIM_THEME__="${themes[Math.floor(index / 2)]}"`),
+  );
+});
+
+test('manifest — всегда «Классика», и при cookie личной темы (user-theme A8)', async ({
+  request,
+}) => {
+  const response = await request.get('/manifest.webmanifest', {
+    headers: { cookie: 'pokatim_theme=chrono' },
+  });
+  expect(await response.json()).toMatchObject({
+    theme_color: '#FFFFFF',
+    background_color: '#FFFFFF',
+  });
 });
 
 test('публичный экран /register: форма, заголовок и OG в HTML до JS', async ({ page, request }) => {
@@ -692,7 +741,7 @@ test.describe('с API', () => {
     expect((await refreshed).status()).toBe(200);
     await expect(page.getByRole('heading', { name: 'Покатим' })).toBeVisible();
 
-    // «Настройки» (settings-hub): вход — иконка верхней панели; язык — имя на самом языке; темы нет
+    // «Настройки» (settings-hub): вход — иконка верхней панели; язык — имя на самом языке
     await page.getByRole('button', { name: 'Настройки' }).click();
     await expect(page).toHaveURL(`${BASE_URL}/settings`);
     await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
@@ -702,13 +751,40 @@ test.describe('с API', () => {
     await page.getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(`${BASE_URL}/settings`);
 
-    // выход: сервер отзывает сессию и стирает cookie, гард ведёт на «Вход» (на устройстве уже входили)
+    // личная тема (user-theme): «Тема, Классика» → выбор «Атласа» сохраняется в профиле и в cookie темы; перезагрузка —
+    // HTML уже в «Атласе» (SSR из cookie)
+    await page.getByRole('link', { name: 'Тема, Классика' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/settings/theme`);
+    await expect(page.getByRole('radio', { name: 'Классика' })).toBeChecked();
+    const themeSaved = page.waitForResponse(
+      (response) =>
+        response.url() === `${API_URL}/v1/profile/theme` && response.request().method() === 'PUT',
+    );
+    await page.getByRole('radio', { name: 'Атлас' }).click();
+    await expect(page.getByRole('radio', { name: 'Атлас' })).toBeChecked();
+    expect((await themeSaved).status()).toBe(200);
+    await expect.poll(() => page.evaluate(() => document.cookie)).toContain('pokatim_theme=atlas');
+    const themeRestored = page.waitForResponse(REFRESH_URL);
+    await page.reload();
+    expect((await themeRestored).status()).toBe(200);
+    expect(await page.evaluate(() => window.__POKATIM_THEME__)).toBe('atlas');
+    await expect(page.getByRole('radio', { name: 'Атлас' })).toBeChecked();
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/settings`);
+    await expect(page.getByRole('link', { name: 'Тема, Атлас' })).toBeVisible();
+
+    // выход: сервер отзывает сессию и стирает cookie, гард ведёт на «Вход» (на устройстве уже входили); cookie темы
+    // стирается — гость снова в «Классике» (user-theme RC-2)
     await page.getByRole('button', { name: 'Выйти' }).click();
     await expect(page).toHaveURL(`${BASE_URL}/sign-in`);
     await expect(page.getByRole('heading', { name: 'Вход' })).toBeVisible();
     expect(
       (await context.cookies()).find(({ name }) => name === SESSION_COOKIE.name),
     ).toBeUndefined();
+    await expect.poll(() => page.evaluate(() => document.cookie)).not.toContain('pokatim_theme');
+    expect(await (await page.request.get('/sign-in')).text()).toContain(
+      'window.__POKATIM_THEME__="classic"',
+    );
 
     // неверный пароль — нейтральный баннер (по роли: скрытая под «Входом» регистрация в стеке тоже имеет поля)
     await page.getByRole('textbox', { name: 'E-mail' }).fill(email);

@@ -8,7 +8,7 @@ import type { Collection, Db } from 'mongodb';
 
 /**
  * Билеты на мероприятия (event-tickets, ADR-0023): настройки билетов события, регистрации на старты календаря,
- * билеты. Создаёт миграция `0037_tickets`; единственный писатель — `TicketsRepository`.
+ * билеты. Создаёт миграция `0038_tickets`; единственный писатель — `TicketsRepository`.
  */
 export const TICKETS_COLLECTIONS = {
   ticketing: 'event_ticketing',
@@ -36,6 +36,8 @@ export interface EventTicketingDoc {
   version: number;
   updatedAt: Date;
   updatedBy: string;
+  /** счётчик-замок транзакций check-in (сериализация с выключением билетов); чтение `?? 0` */
+  checkInLock?: number;
 }
 
 export const ticketingIdOf = (kind: TicketEventKind, eventId: string) => `${kind}:${eventId}`;
@@ -49,6 +51,8 @@ export interface EventRegistrationDoc {
   status: 'active' | 'cancelled';
   createdAt: Date;
   cancelledAt: Date | null;
+  /** замок check-in (`$inc`); документы без поля — как 0 */
+  version?: number;
 }
 
 export type TicketCategoryDoc =
