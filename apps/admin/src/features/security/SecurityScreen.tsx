@@ -75,7 +75,10 @@ export function SecurityScreen() {
     },
   });
 
+  // пока операция идёт, окно не закрывается (Esc и «Отмена»): поздний ответ иначе показал бы устаревшие коды
+  const busy = start.isPending || confirm.isPending || regenerate.isPending || disable.isPending;
   const close = () => {
+    if (busy) return;
     for (const mutation of [start, confirm, regenerate, disable]) mutation.reset();
     setFlow({ kind: 'idle' });
   };
@@ -109,8 +112,11 @@ export function SecurityScreen() {
                 onRetry={() => void status.refetch()}
               />
             ) : (
-              <div role="progressbar" aria-label={t('state.loading')}>
-                <p className="skeleton t-body"> </p>
+              <div role="progressbar" aria-label={t('state.loading')} className="form-stack">
+                {/* неразрывный пробел даёт строке высоту: обычный схлопывается */}
+                <p className="skeleton t-body">{'\u00a0'}</p>
+                <p className="skeleton t-body">{'\u00a0'}</p>
+                <span className="skeleton t-body security__skeleton-action">{'\u00a0'}</span>
               </div>
             )
           ) : flow.kind === 'codes' ? (
@@ -127,7 +133,7 @@ export function SecurityScreen() {
                 busy={confirm.isPending}
                 error={confirm.isError ? totpErrorText(confirm.error) : undefined}
                 actions={
-                  <Button full onClick={close}>
+                  <Button full disabled={busy} onClick={close}>
                     {t('admin.security.cancel')}
                   </Button>
                 }
@@ -158,7 +164,11 @@ export function SecurityScreen() {
           submitLabel={t('admin.security.regenerate')}
           busy={regenerate.isPending}
           error={regenerate.isError ? totpErrorText(regenerate.error) : undefined}
-          actions={<Button onClick={close}>{t('admin.security.cancel')}</Button>}
+          actions={
+            <Button disabled={busy} onClick={close}>
+              {t('admin.security.cancel')}
+            </Button>
+          }
           onSubmit={(input) => {
             if ('code' in input) regenerate.mutate(input.code);
           }}
@@ -175,7 +185,11 @@ export function SecurityScreen() {
           submitLabel={t('admin.security.disable')}
           busy={disable.isPending}
           error={disable.isError ? totpErrorText(disable.error) : undefined}
-          actions={<Button onClick={close}>{t('admin.security.cancel')}</Button>}
+          actions={
+            <Button disabled={busy} onClick={close}>
+              {t('admin.security.cancel')}
+            </Button>
+          }
           onSubmit={(input) => disable.mutate(input)}
         />
       </Dialog>

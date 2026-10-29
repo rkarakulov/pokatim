@@ -104,29 +104,36 @@ export function MembersScreen() {
         header: () => <span className="visually-hidden">{t('admin.members.column.actions')}</span>,
         cell: (info) => {
           const member = info.row.original;
-          if (!canManage || member.userId === me?.user.id || member.status !== 'active') {
-            return null;
-          }
+          if (!canManage || member.userId === me?.user.id) return null;
+          // роль меняют и снимают только у действующих; сброс 2FA — при любом статусе (task.md §8.2 п. 6)
+          const active = member.status === 'active';
+          if (!active && !member.totpEnabled) return null;
           return (
             <span className="table__actions">
-              <Button
-                size="sm"
-                aria-label={`${t('admin.members.change')}: ${member.displayName}`}
-                onClick={() => {
-                  setNewRole(PANEL_ROLES.find((option) => option !== member.role) ?? member.role);
-                  setAction({ kind: 'change', member });
-                }}
-              >
-                {t('admin.members.change')}
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                aria-label={`${t('admin.members.revoke')}: ${member.displayName}`}
-                onClick={() => setAction({ kind: 'revoke', member })}
-              >
-                {t('admin.members.revoke')}
-              </Button>
+              {active ? (
+                <>
+                  <Button
+                    size="sm"
+                    aria-label={`${t('admin.members.change')}: ${member.displayName}`}
+                    onClick={() => {
+                      setNewRole(
+                        PANEL_ROLES.find((option) => option !== member.role) ?? member.role,
+                      );
+                      setAction({ kind: 'change', member });
+                    }}
+                  >
+                    {t('admin.members.change')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    aria-label={`${t('admin.members.revoke')}: ${member.displayName}`}
+                    onClick={() => setAction({ kind: 'revoke', member })}
+                  >
+                    {t('admin.members.revoke')}
+                  </Button>
+                </>
+              ) : null}
               {member.totpEnabled ? (
                 <Button
                   size="sm"

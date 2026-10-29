@@ -180,6 +180,37 @@ describe('«Безопасность» (ADR-0024, D9)', () => {
     expect(screen.getByText(CODES[1]!)).toBeTruthy();
   });
 
+  it('загрузка статуса — видимый скелетон строк и кнопок (ревью pass 3)', async () => {
+    mocked.getTotpStatus.mockReturnValue(new Promise(() => undefined));
+    await renderApp('/account/security');
+    const progress = await screen.findByRole('progressbar', { name: 'Загрузка' });
+    const lines = progress.querySelectorAll('.skeleton');
+    expect(lines.length).toBeGreaterThanOrEqual(3);
+    // неразрывный пробел: обычный схлопывается, строка без высоты
+    for (const line of lines) expect(line.textContent).toBe('\u00a0');
+  });
+
+  it('перевыпуск идёт — окно не закрывается (Esc, «Отмена»): поздний ответ не подменит новые коды (ревью pass 3)', async () => {
+    mocked.getTotpStatus.mockResolvedValue(ON);
+    let answer: (value: { recoveryCodes: string[] }) => void = () => undefined;
+    mocked.regenerateRecoveryCodes.mockReturnValue(new Promise((done) => (answer = done)));
+    await renderApp('/account/security');
+    fireEvent.click(await screen.findByRole('button', { name: 'Перевыпустить коды' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Код из приложения'), {
+      target: { value: '111 222' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Перевыпустить коды' }));
+    await waitFor(() => expect(mocked.regenerateRecoveryCodes).toHaveBeenCalled());
+    const cancel = within(dialog).getByRole('button', { name: 'Отмена' });
+    expect(cancel).toHaveProperty('disabled', true);
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    await act(async () => answer({ recoveryCodes: CODES }));
+    expect(await screen.findByText(CODES[1]!)).toBeTruthy();
+  });
+
   it('статус не загрузился (данных нет) — полноэкранная ошибка с повтором', async () => {
     mocked.getTotpStatus.mockRejectedValue(httpError(500, 'INTERNAL'));
     await renderApp('/account/security');

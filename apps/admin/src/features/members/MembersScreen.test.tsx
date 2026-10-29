@@ -224,6 +224,30 @@ describe('«Сотрудники» (AC11)', () => {
 });
 
 describe('«Сотрудники» — 2FA (ADR-0024, D10)', () => {
+  it('снятая роль с подключённой 2FA — только «Сбросить 2FA», без смены и снятия роли (ревью pass 3)', async () => {
+    mocked.listMembers.mockResolvedValue({
+      items: [
+        member({
+          userId: IVAN,
+          displayName: 'Иван',
+          email: 'ivan@example.by',
+          status: 'revoked',
+          revokedAt: '2026-10-24T09:00:00.000Z',
+          totpEnabled: true,
+        }),
+        member({ status: 'revoked', revokedAt: '2026-10-24T09:00:00.000Z' }),
+      ],
+      truncated: false,
+    });
+    await renderApp('/members');
+    await screen.findByText('ivan@example.by');
+    const ivan = within(rowOf('Иван'));
+    expect(ivan.getByRole('button', { name: 'Сбросить 2FA: Иван' })).toBeTruthy();
+    expect(ivan.queryByRole('button', { name: /Изменить/ })).toBeNull();
+    expect(ivan.queryByRole('button', { name: /Снять/ })).toBeNull();
+    expect(within(rowOf('Мария')).queryByRole('button')).toBeNull();
+  });
+
   it('колонка «2FA»; «Сбросить 2FA» — только у подключённой и не у себя; причина обязательна, ошибка — в окне', async () => {
     mocked.listMembers.mockResolvedValue({
       items: [

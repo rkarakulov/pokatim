@@ -1419,6 +1419,14 @@ select.field__control option:disabled {
   max-width: var(--panel-form-width);
 }
 
+/* скелетон области кнопок «Безопасности»: высота контрола, ширина — под две кнопки */
+.security__skeleton-action {
+  display: block;
+  width: var(--panel-form-width);
+  max-width: 100%;
+  height: var(--density-control-height);
+}
+
 .sidebar__me .sidebar__account {
   width: fit-content;
   color: var(--nav-text);
