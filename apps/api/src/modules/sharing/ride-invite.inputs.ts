@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { AppThemeId, StoryCardTemplate } from '@pokatim/contracts';
 
-import { APP_APPEARANCE, type AppAppearanceSource } from '../appearance';
+import { RIDER_THEMES, type RiderThemes } from '../profile';
 import { type RideInviteFacts, RIDES_FOR_SHARING, type RidesForSharing } from '../rides';
 import { STORY_CARD_POLICY } from './sharing.policy';
 
@@ -16,7 +16,8 @@ export interface RideInviteInput {
 
 /**
  * Ключ кэша приглашения: sha256 hex канонического JSON (вид карточки — ключи кэша общие со сторис гонки, версия
- * рендера, шаблон, тема, поля райда на карточке, публичный маршрут). Зрителя в ключе нет — картинка у всех одна.
+ * рендера, шаблон, тема, поля райда на карточке, публичный маршрут). Зрителя в ключе нет — картинка одна на тему
+ * (тема — запрашивающего карточку, user-theme).
  */
 export function rideInviteHash(input: RideInviteInput): string {
   const { facts } = input;
@@ -39,13 +40,13 @@ export function rideInviteHash(input: RideInviteInput): string {
 
 /**
  * Входы приглашения — одна реализация для HTTP (статус) и worker (сверка «устарело»): факты райда (порт `rides`;
- * скрытый и неизвестный — 404, не будущий — `null`) и активная тема.
+ * скрытый и неизвестный — 404, не будущий — `null`) и тема запрашивающего (`profile`, user-theme).
  */
 @Injectable()
 export class RideInviteInputs {
   constructor(
     @Inject(RIDES_FOR_SHARING) private readonly rides: RidesForSharing,
-    @Inject(APP_APPEARANCE) private readonly appearance: AppAppearanceSource,
+    @Inject(RIDER_THEMES) private readonly themes: RiderThemes,
   ) {}
 
   async resolve(
@@ -57,7 +58,7 @@ export class RideInviteInputs {
     if (!facts) return null;
     const input: RideInviteInput = {
       template,
-      themeId: await this.appearance.activeThemeId(),
+      themeId: await this.themes.themeOf(userId),
       facts,
     };
     return { input, hash: rideInviteHash(input) };

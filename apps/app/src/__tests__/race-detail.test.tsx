@@ -61,6 +61,7 @@ beforeEach(() => {
     club: null,
     avatar: null,
     publicId: null,
+    themeId: 'classic',
   });
   jest.mocked(api.getCurrentSeason).mockResolvedValue({ season: null });
   jest.mocked(api.listSeasons).mockResolvedValue({ items: [] });

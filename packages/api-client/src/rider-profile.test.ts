@@ -20,6 +20,7 @@ const profile = {
   club: 'Velo',
   avatar: { id: TOKEN },
   publicId: TOKEN,
+  themeId: 'classic',
 };
 
 function client(status: number, response?: unknown) {
@@ -99,6 +100,7 @@ describe('api-client: аватар профиля (rider-profile)', () => {
       club: null,
       avatar: null,
       publicId: null,
+      themeId: 'classic',
     });
   });
 

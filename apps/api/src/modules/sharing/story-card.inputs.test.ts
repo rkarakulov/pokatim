@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { STORY_CARD_POLICY } from './sharing.policy';
-import { type StoryCardInput, storyCardHash } from './story-card.inputs';
+import type { RiderNameDirectory, RiderThemes } from '../profile';
+import type { ResultsForSharing } from '../results';
+import { type StoryCardInput, StoryCardInputs, storyCardHash } from './story-card.inputs';
 
 const base: StoryCardInput = {
   template: 'line',
@@ -53,5 +55,29 @@ describe('storyCardHash — ключ кэша карточки', () => {
     const before = storyCardHash(base);
     vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(3 as 2);
     expect(storyCardHash(base)).not.toBe(before);
+  });
+});
+
+describe('StoryCardInputs.resolve — тема владельца заявки (user-theme)', () => {
+  const inputs = (themeId: StoryCardInput['themeId']) => {
+    const themes = { themeOf: vi.fn().mockResolvedValue(themeId) };
+    const results = { storyCardFacts: vi.fn().mockResolvedValue(base.facts) };
+    const names = { publicNames: vi.fn().mockResolvedValue(new Map()) };
+    const service = new StoryCardInputs(
+      results as unknown as ResultsForSharing,
+      themes as unknown as RiderThemes,
+      names as unknown as RiderNameDirectory,
+    );
+    return { service, themes };
+  };
+
+  it('тема берётся из RIDER_THEMES по userId запроса и входит в ключ', async () => {
+    const atlas = inputs('atlas');
+    const resolved = await atlas.service.resolve('user-1', 'race-1', 'line');
+    expect(atlas.themes.themeOf).toHaveBeenCalledWith('user-1');
+    expect(resolved?.input.themeId).toBe('atlas');
+    const classic = await inputs('classic').service.resolve('user-1', 'race-1', 'line');
+    expect(classic?.hash).toBe(storyCardHash(base));
+    expect(resolved?.hash).not.toBe(classic?.hash);
   });
 });

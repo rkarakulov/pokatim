@@ -52,6 +52,12 @@ export {
   type IconWeight,
 } from './app-themes.ts';
 export {
+  previewOf,
+  THEME_PREVIEWS,
+  type ThemePreviewMock,
+  type ThemePreviewPalette,
+} from './app-theme-previews.ts';
+export {
   contrastPairs,
   contrastPairsOf,
   contrastRatio,

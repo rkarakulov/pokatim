@@ -42,6 +42,7 @@ beforeEach(() => {
     club: null,
     avatar: null,
     publicId: null,
+    themeId: 'classic',
   });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });

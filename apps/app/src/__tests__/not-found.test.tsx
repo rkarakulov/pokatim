@@ -23,6 +23,7 @@ beforeEach(() => {
     club: null,
     avatar: null,
     publicId: null,
+    themeId: 'classic',
   });
 });
 afterEach(() => jest.clearAllMocks());
