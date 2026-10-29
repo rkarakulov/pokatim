@@ -38,6 +38,7 @@ import {
 import type { NotificationDoc } from './notifications.collection';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
+import { RIDES_PARTICIPANT_JOINED } from '../rides';
 
 /**
  * Приём событий для уведомлений (шаг B, AC1, AC2, AC5 — центр, AC7): каждое событие N3 — нужным получателям с текстом
@@ -141,6 +142,32 @@ describe('райды: получатели, тексты, цели', () => {
     });
     expect(await notificationsOf(h, a.userId)).toEqual([]);
     expect(await notificationsOf(h, b.userId)).toEqual([]);
+  });
+
+  it('два события райда в одну миллисекунду, у позднего меньший id — побеждает последнее состояние (N7)', async () => {
+    const ride = await createRide(h, organizer, { title: 'Кофе на море' });
+    // uuidv7 внутри миллисекунды не упорядочен: позднее событие может получить меньший id
+    const prefix = uuidv7At(h.clock.now()).slice(0, 19);
+    const first = `${prefix}bfff-ffffffffffff`;
+    const second = `${prefix}8000-000000000000`;
+    await join(h, a, ride.id);
+    await appendEvent(h, RIDES_PARTICIPANT_JOINED, { rideId: ride.id }, first);
+    expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, first)).toBe('written');
+    await notificationsDb(h).notifications.updateMany({}, { $set: { readAt: h.clock.now() } });
+    await join(h, b, ride.id);
+    await appendEvent(h, RIDES_PARTICIPANT_JOINED, { rideId: ride.id }, second);
+    expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, second)).toBe('written');
+    const docs = await notificationsOf(h, organizer.userId);
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({
+      body: '«Кофе на море»: участников — 3.',
+      readAt: null,
+      sourceEventId: second,
+    });
+    // повтор обеих задач — тот же снимок состояния, без изменений
+    expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, first)).toBe('unchanged');
+    expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, second)).toBe('unchanged');
+    expect(await notificationsOf(h, organizer.userId)).toEqual(docs);
   });
 
   it('перенос дважды — один документ с новым временем; старое событие после нового не перетирает', async () => {
@@ -602,7 +629,7 @@ describe('идемпотентность и отсечки (AC2, AC7)', () => {
   it('гонка первой записи по collapseKey: старшее событие вставилось первым — итог новое (N7)', async () => {
     const repository = h.worker.get(NotificationsRepository);
     const at = h.clock.now();
-    const notice = (sourceEventId: string, body: string): NotificationDoc => ({
+    const notice = (sourceEventId: string, collapseSeq: number, body: string): NotificationDoc => ({
       _id: uuidv7(),
       userId: organizer.userId,
       kind: 'ride_joined',
@@ -612,6 +639,7 @@ describe('идемпотентность и отсечки (AC2, AC7)', () => {
       target: { type: 'ride', rideId: 'r1' },
       sourceEventId,
       collapseKey: 'ride:r1:joined',
+      collapseSeq,
       createdAt: at,
       readAt: null,
       expireAt: new Date(at.getTime() + NOTIFICATIONS_POLICY.ttlDays * DAY),
@@ -625,8 +653,8 @@ describe('идемпотентность и отсечки (AC2, AC7)', () => {
       },
       email: null,
     });
-    const older = notice(uuidv7At(new Date(at.getTime() - MINUTE)), 'участников — 2.');
-    const newer = notice(uuidv7At(at), 'участников — 3.');
+    const older = notice(uuidv7At(new Date(at.getTime() - MINUTE)), 1, 'участников — 2.');
+    const newer = notice(uuidv7At(at), 2, 'участников — 3.');
     // upsert нового события не нашёл документ, а старшее вставилось раньше: вставка нового — дубль collapse-индекса
     const original = Collection.prototype.bulkWrite;
     vi.spyOn(Collection.prototype, 'bulkWrite').mockImplementationOnce(async function (

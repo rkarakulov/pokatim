@@ -481,7 +481,13 @@ paths:
   умолчания), `push_tokens` (`token` уникален, ≤ 10 на пользователя; Web Push — `platform: 'web'`, `token` = endpoint, ключи — `webPush`, ADR-0022), `push_tickets` (TTL 24 ч; `userId` владельца —
   стирание аккаунта по нему, индекс `push_tickets_user_idx` из `0027_push_tickets_user`). Чтения сами проверяют
   `expireAt > now` (TTL — только уборка). Токены при доставке снимаются по снимку `{ _id, userId, sessionId }`, не по
-  одному `_id`.
+  одному `_id`. Регистрация переписывает токен только сессией не старше записанной (`sessionId $lte`, uuidv7 входа):
+  поздняя регистрация прежней сессии устройства после выхода — без записи (`token_stale`).
+- Схлопывание (N7) — по счётчику состояния объекта, не по `sourceEventId` (uuidv7 внутри миллисекунды не упорядочен):
+  порт источника отдаёт счётчик вместе с полями текста (`RideNotice.noticeSeq`, `RoutePublicationNotice.version` =
+  `publication.version`), уведомление хранит `collapseSeq`, замена — только при `collapseSeq <` нового (нет поля — до
+  счётчика). `rides.noticeSeq` (`+1` в `join`, `leave`, `update`, `leaveAllFuture`; нет поля — `0`, без миграции) —
+  новое поле текста или получателей уведомления райда обязано его поднимать.
 - Доставка — состояние в документе уведомления (`push`/`email`: захват `claimId`/`claimedUntil`, `sent`, `skipped`,
   `limited`, `failed`); захват — условием состояния в фильтре. Убрать условие — дубль push/письма (**HIGH**).
 - `race_attempts.lastVisibleVerdict` (`0026_attempt_last_verdict`, бэкфилл `counted|rejected`) — прежний видимый

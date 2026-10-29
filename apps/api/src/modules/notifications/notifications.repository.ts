@@ -110,11 +110,13 @@ export class NotificationsRepository {
   /**
    * Запись уведомлений события (intake), одна пачка — один `bulkWrite` без порядка. Без `collapseKey` — вставка, если
    * `(sourceEventId, userId)` ещё нет (`$setOnInsert`: повтор задачи ничего не меняет). С `collapseKey` (N7) — замена
-   * прежнего уведомления объекта только более старым событием (`sourceEventId $lt`: uuidv7 упорядочены по времени):
-   * текст, цель, снова непрочитано, наверху (`createdAt`), доставка заново; совпадения нет — вставка. Дубль ключа на
-   * вставке — повтор или устаревшее событие, не ошибка; дубль по `collapseKey` бывает и у более нового события,
-   * проигравшего гонку первой вставки старшему, — для него условная замена повторяется без upsert. Возвращает число
-   * вставленных и заменённых.
+   * прежнего уведомления объекта только более старым состоянием (`collapseSeq $lt` — счётчик состояния объекта из
+   * порта; не `sourceEventId`: uuidv7 внутри миллисекунды не упорядочен; документ без `collapseSeq` — до счётчика):
+   * текст, цель, снова непрочитано, наверху (`createdAt`), доставка заново; совпадения нет — вставка. Равный счётчик —
+   * тот же снимок (повтор или другое событие того же состояния), без изменений. Дубль ключа на вставке — повтор или
+   * устаревшее состояние, не ошибка; дубль по `collapseKey` бывает и у более нового состояния, проигравшего гонку
+   * первой вставки старшему, — для него условная замена повторяется без upsert. Возвращает число вставленных и
+   * заменённых.
    */
   async writeNotices(docs: readonly NotificationDoc[]): Promise<number> {
     if (docs.length === 0) return 0;
@@ -124,7 +126,7 @@ export class NotificationsRepository {
       { filter: Filter<NotificationDoc>; set: Partial<NotificationDoc> }
     >();
     const operations = docs.map((doc, index): AnyBulkWriteOperation<NotificationDoc> => {
-      const { _id, userId, sourceEventId, collapseKey, ...fields } = doc;
+      const { _id, userId, sourceEventId, collapseKey, collapseSeq = 0, ...fields } = doc;
       if (collapseKey === undefined) {
         return {
           updateOne: {
@@ -135,8 +137,12 @@ export class NotificationsRepository {
         };
       }
       const collapse = {
-        filter: { userId, collapseKey, sourceEventId: { $lt: sourceEventId } },
-        set: { sourceEventId, ...fields },
+        filter: {
+          userId,
+          collapseKey,
+          $or: [{ collapseSeq: { $lt: collapseSeq } }, { collapseSeq: { $exists: false } }],
+        },
+        set: { sourceEventId, collapseSeq, ...fields },
       };
       collapses.set(index, collapse);
       return {
@@ -242,9 +248,14 @@ export class NotificationsRepository {
 
   /**
    * Регистрация токена устройства: токен глобально уникален — уже известный переходит к этому пользователю (устройство
-   * одно), платформа и `updatedAt` обновляются. Гонка двух первых upsert — `isDuplicateKey` и один повтор (второй
-   * найдёт документ). Затем сверх `maxPerUser` вытесняются старейшие по `updatedAt`. Подписка Web Push (ADR-0022) —
-   * тот же документ: `token` — endpoint, ключи `webPush` обновляются при переподписке.
+   * одно), платформа и `updatedAt` обновляются. Подписка Web Push (ADR-0022) — тот же документ: `token` — endpoint,
+   * ключи `webPush` обновляются при переподписке.
+   * Переписывает документ только сессия не старше записанной (`sessionId $lte`; без `sessionId` — до привязки):
+   * текущая сессия устройства — последний вход на нём, `sessionId` — `uuidv7` входа, а входы одного устройства —
+   * последовательные запросы. Поздняя регистрация прежней сессии (прошла `AuthGuard` до выхода, а выход клиента —
+   * с таймаутом) токен новой не перехватит. Документ более новой сессии фильтр не находит — upsert даёт дубль
+   * уникального индекса; дубль бывает и у гонки двух первых upsert, поэтому один повтор: найдёт документ или снова
+   * дубль — регистрация устарела (`false`, без записи). Затем сверх `maxPerUser` вытесняются старейшие по `updatedAt`.
    */
   async registerToken(
     userId: string,
@@ -252,11 +263,11 @@ export class NotificationsRepository {
     device: { token: string; platform: PushTokenPlatform; webPush?: PushTokenDoc['webPush'] },
     now: Date,
     maxPerUser: number,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const { token, platform, webPush } = device;
     const upsert = () =>
       this.pushTokens.updateOne(
-        { token },
+        { token, $or: [{ sessionId: { $lte: sessionId } }, { sessionId: { $exists: false } }] },
         {
           $set: { userId, sessionId, platform, updatedAt: now, ...(webPush ? { webPush } : {}) },
           $setOnInsert: { _id: uuidv7(), token, createdAt: now },
@@ -267,7 +278,12 @@ export class NotificationsRepository {
       await upsert();
     } catch (error) {
       if (!isDuplicateKey(error, PUSH_TOKENS_TOKEN_UNIQUE_INDEX)) throw error;
-      await upsert();
+      try {
+        await upsert();
+      } catch (retryError) {
+        if (!isDuplicateKey(retryError, PUSH_TOKENS_TOKEN_UNIQUE_INDEX)) throw retryError;
+        return false;
+      }
     }
     const excess = await this.pushTokens
       .find({ userId }, { projection: { _id: 1 } })
@@ -277,6 +293,7 @@ export class NotificationsRepository {
     if (excess.length > 0) {
       await this.pushTokens.deleteMany({ userId, _id: { $in: excess.map((doc) => doc._id) } });
     }
+    return true;
   }
 
   /** Снять свой токен; чужой и неизвестный — без эффекта. */

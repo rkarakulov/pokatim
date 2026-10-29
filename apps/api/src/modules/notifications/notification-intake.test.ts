@@ -30,6 +30,7 @@ function intakeWith(notice: Partial<RoutePublicationNotice> | null) {
         status: 'approved',
         decidedAt: DECIDED_AT,
         rejectionReason: null,
+        version: 1,
         ...notice,
       },
   };
@@ -79,7 +80,7 @@ describe('NotificationIntake: решение по заявке маршрута 
       {
         text: { kind: 'route_rejected', route: 'Вокруг моря', reason: 'duplicate' },
         target: { type: 'my-route', routeId: ROUTE },
-        collapseKey: `route:${ROUTE}:publication`,
+        collapse: { key: `route:${ROUTE}:publication`, seq: 1 },
         recipients: [AUTHOR],
       },
     ]);

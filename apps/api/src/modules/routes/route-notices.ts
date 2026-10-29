@@ -18,6 +18,7 @@ export class RouteNoticesService implements RouteNotices {
       status: doc.publication.status,
       decidedAt: doc.publication.decidedAt,
       rejectionReason: doc.publication.rejection?.reason ?? null,
+      version: doc.publication.version,
     };
   }
 }

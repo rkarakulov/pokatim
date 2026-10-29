@@ -60,6 +60,12 @@ export interface RideDoc {
   routeId: string | null;
   geo: GeoPoint;
   startPrecise: boolean;
+  /**
+   * Счётчик состояния полей уведомлений (ADR-0017, N7): `+1` каждой записью, меняющей название, старт, участников или
+   * `goingCount` (правка, «Я иду», «Не иду», «Не иду» при стирании). Порт `RideNotices` читает его вместе с полями
+   * текста — схлопывание заменяет уведомление только более новым состоянием. Нет поля — `0` (без миграции).
+   */
+  noticeSeq?: number;
 }
 
 /** Поля модерации — не в публичном чтении. */
@@ -67,12 +73,18 @@ export type RideModerationField =
   'hiddenAt' | 'hiddenFromStatus' | 'openReportCount' | 'lastReportAt';
 
 /**
- * Публичное чтение: без организатора, участников, `version`, полей модерации и точки «Рядом» (проекция
+ * Публичное чтение: без организатора, участников, `version`, `noticeSeq`, полей модерации и точки «Рядом» (проекция
  * репозитория).
  */
 export type RidePublicDoc = Omit<
   RideDoc,
-  'organizerUserId' | 'participants' | 'version' | 'geo' | 'startPrecise' | RideModerationField
+  | 'organizerUserId'
+  | 'participants'
+  | 'version'
+  | 'noticeSeq'
+  | 'geo'
+  | 'startPrecise'
+  | RideModerationField
 >;
 
 export function ridesCollections(db: Db): { rides: Collection<RideDoc> } {

@@ -53,7 +53,7 @@ const VIEWER_FIELDS = {
   routeId: 1,
   geo: 1,
   startPrecise: 1,
-} as const satisfies Record<Exclude<keyof RideDoc, '_id' | 'participants'>, 1>;
+} as const satisfies Record<Exclude<keyof RideDoc, '_id' | 'participants' | 'noticeSeq'>, 1>;
 const viewerProjection = (userId: string) => ({
   ...VIEWER_FIELDS,
   participants: { $elemMatch: { userId } },
@@ -70,6 +70,7 @@ const PUBLIC_PROJECTION = {
   lastReportAt: 0,
   geo: 0,
   startPrecise: 0,
+  noticeSeq: 0,
 } as const;
 
 /**
@@ -191,7 +192,14 @@ export class RidesRepository {
     id: string,
   ): Promise<Pick<
     RideDoc,
-    '_id' | 'title' | 'startsAt' | 'status' | 'organizerUserId' | 'goingCount' | 'participants'
+    | '_id'
+    | 'title'
+    | 'startsAt'
+    | 'status'
+    | 'organizerUserId'
+    | 'goingCount'
+    | 'participants'
+    | 'noticeSeq'
   > | null> {
     return this.rides.findOne(
       { _id: id },
@@ -203,6 +211,7 @@ export class RidesRepository {
           organizerUserId: 1,
           goingCount: 1,
           'participants.userId': 1,
+          noticeSeq: 1,
         },
       },
     );
@@ -246,7 +255,7 @@ export class RidesRepository {
       },
       {
         $push: { participants: { userId, joinedAt: now } },
-        $inc: { goingCount: 1 },
+        $inc: { goingCount: 1, noticeSeq: 1 },
         $set: { updatedAt: now },
       },
       { session, returnDocument: 'after' },
@@ -265,7 +274,7 @@ export class RidesRepository {
       },
       {
         $pull: { participants: { userId } },
-        $inc: { goingCount: -1 },
+        $inc: { goingCount: -1, noticeSeq: 1 },
         $set: { updatedAt: now },
       },
       { returnDocument: 'after' },
@@ -301,6 +310,7 @@ export class RidesRepository {
     for (const [field, value] of Object.entries(patch)) set[field] = { $literal: value };
     set.updatedAt = { $literal: now };
     set.version = { $add: ['$version', 1] };
+    set.noticeSeq = { $add: [{ $ifNull: ['$noticeSeq', 0] }, 1] };
     if (reschedule) {
       set.rescheduledAt = {
         $cond: [{ $gt: ['$goingCount', 1] }, { $literal: now }, '$rescheduledAt'],
@@ -729,7 +739,7 @@ export class RidesRepository {
       },
       {
         $pull: { participants: { userId } },
-        $inc: { goingCount: -1 },
+        $inc: { goingCount: -1, noticeSeq: 1 },
         $set: { updatedAt: now },
       },
     );
