@@ -10,6 +10,7 @@ import { CALENDAR_COLLECTIONS } from '../src/modules/calendar/calendar.collectio
 import { DISPUTES_COLLECTIONS } from '../src/modules/disputes/disputes.collection';
 import { IDENTITY_COLLECTIONS } from '../src/modules/identity/identity.collection';
 import { PROFILE_COLLECTIONS } from '../src/modules/profile/profile.collection';
+import { RACES_COLLECTIONS } from '../src/modules/races/races.collection';
 import { RESULTS_COLLECTIONS } from '../src/modules/results/results.collection';
 import { RIDES_COLLECTIONS } from '../src/modules/rides/rides.collection';
 import { ROUTES_COLLECTIONS } from '../src/modules/routes/routes.collection';
@@ -145,6 +146,36 @@ describe('гонки: «Сейчас идёт» и протоколы', () => {
 
     const all = await overviewOf(tokens.admin);
     expect(all.attention.protocols).toEqual({ awaiting: 2, checked: 2, ready: 0, blockers: 4 });
+  });
+});
+
+describe('протоколы: ждущих больше лимита', () => {
+  it('готовность — по 20 недавно закрывшимся (`checked`), «ждут» — по всем', async () => {
+    const admin = await staff(h, 'admin@example.by', 'admin');
+    const now = h.clock.now();
+    const at = (ms: number) => new Date(now.getTime() + ms);
+    const race = (windowEndsAt: Date) => ({
+      ownerUserId: admin.userId,
+      status: 'published',
+      title: 'Гонка',
+      windowStartsAt: new Date(windowEndsAt.getTime() - DAY),
+      windowEndsAt,
+      protocolPlannedAt: at(30 * DAY),
+      corridor: null,
+      lockedAt: null,
+      protocolPublishedAt: null,
+    });
+    // старейшая закрылась давно (приём файлов окончен: только `no_corridor`), 20 недавних — ещё и `window_open`
+    await seed(RACES_COLLECTIONS.races, [
+      race(at(-10 * DAY)),
+      ...Array.from({ length: 20 }, (_, index) => race(at(-HOUR - index * MINUTE))),
+    ]);
+    expect((await overviewOf(admin.token)).attention.protocols).toEqual({
+      awaiting: 21,
+      checked: 20,
+      ready: 0,
+      blockers: 40,
+    });
   });
 });
 
