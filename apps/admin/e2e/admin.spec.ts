@@ -20,6 +20,8 @@ const EXPECTED = [
   { url: `${ORIGIN}/v1/admin/session/me`, status: 401 },
   { url: `${ORIGIN}/v1/admin/session/sign-in`, status: 403 },
   { url: /^http:\/\/localhost:\d+\/v1\/admin\/audit(\?.*)?$/, status: 401 },
+  // admin-overview: первым запросом после снятия роли теперь может быть «Обзор»
+  { url: `${ORIGIN}/v1/admin/overview`, status: 401 },
 ];
 const RESOURCE_ERROR = /^Failed to load resource: the server responded with a status of (\d{3})/;
 
