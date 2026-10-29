@@ -150,6 +150,11 @@ paths:
   цель — белый список (`NotificationTarget`), незнакомая в ответе — `{ type: 'unknown' }`; запросы (`NotificationSettings`
   с `startHour ≠ endHour`, `RegisterPushToken`, `RevokePushToken`, `NotificationListQuery`) — `strictObject`. api-client —
   8 методов `/v1/notifications*`.
+- Web Push (ADR-0022): там же — `WebPushEndpoint` (https ≤ 2048, хост — push-сервис из белого списка
+  `isWebPushEndpoint`: FCM, Mozilla, WNS, Apple; адрес вызывает сервер — SSRF), `RegisterWebPushSubscription`
+  (`strictObject`: endpoint + `keys.p256dh` 65 байт `B…`/`keys.auth` 16 байт base64url, без `expirationTime`),
+  `RevokeWebPushSubscription`, ответ `WebPushConfig` (`publicKey` или `null`). `PUSH_PLATFORMS` не меняется (Expo).
+  api-client — `getWebPushConfig`, `registerWebPushSubscription`, `revokeWebPushSubscription`.
 - Карточка для сторис (story-cards, ADR-0018): `src/sharing/story-card.schema.ts` — `STORY_CARD_TEMPLATES`
   (`line | night`, только в конец), запрос `StoryCardQuery` (`strictObject`), ответ `StoryCardStatus` —
   `discriminatedUnion` `pending | ready (token) | failed` (незнакомый статус — ошибка разбора), `StoryCardToken`

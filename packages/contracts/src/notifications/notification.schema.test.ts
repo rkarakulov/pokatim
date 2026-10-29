@@ -11,9 +11,13 @@ import {
   NotificationTargetView,
   NotificationView,
   PUSH_PLATFORMS,
+  isWebPushEndpoint,
   RegisterPushToken,
+  RegisterWebPushSubscription,
   RevokePushToken,
+  RevokeWebPushSubscription,
   UnreadCount,
+  WebPushConfig,
 } from './notification.schema.ts';
 
 const ID = '01890a5d-ac96-774b-bcce-b302099a8057';
@@ -191,5 +195,80 @@ describe('push-токены', () => {
     expect(RevokePushToken.parse({ token: TOKEN })).toEqual({ token: TOKEN });
     expect(RevokePushToken.safeParse({ token: TOKEN, platform: 'ios' }).success).toBe(false);
     expect(RevokePushToken.safeParse({ token: { $ne: null } }).success).toBe(false);
+  });
+});
+
+describe('web push (ADR-0022)', () => {
+  const P256DH = `B${'A'.repeat(86)}`;
+  const AUTH = 'A'.repeat(22);
+  const FCM = 'https://fcm.googleapis.com/fcm/send/abc:APA91b-x_y';
+
+  it.each([
+    FCM,
+    'https://updates.push.services.mozilla.com/wpush/v2/gAAAA',
+    'https://wns2-par02p.notify.windows.com/w/?token=BQYAAA',
+    'https://web.push.apple.com/QGuQyavXutnMH',
+    'https://api.push.apple.com/3/device/x',
+  ])('endpoint push-сервиса %s — ок', (endpoint) => {
+    expect(isWebPushEndpoint(endpoint)).toBe(true);
+  });
+
+  it.each([
+    ['http', 'http://fcm.googleapis.com/fcm/send/x'],
+    ['чужой хост', 'https://evil.example.com/fcm/send/x'],
+    ['хост-приманка', 'https://fcm.googleapis.com.evil.com/x'],
+    ['суффикс без точки', 'https://evilpush.apple.com/x'],
+    ['порт', 'https://fcm.googleapis.com:8443/x'],
+    ['учётные данные', 'https://user:pw@fcm.googleapis.com/x'],
+    ['внутренний адрес', 'https://127.0.0.1/x'],
+    ['не URL', 'fcm.googleapis.com/x'],
+    ['обратный слеш', 'https://fcm.googleapis.com\\@evil.com/x'],
+    ['без пути', 'https://fcm.googleapis.com'],
+    ['пробел в пути', 'https://fcm.googleapis.com/a b'],
+  ])('%s — нет', (_name, endpoint) => {
+    expect(isWebPushEndpoint(endpoint)).toBe(false);
+  });
+
+  it('подписка: endpoint и ключи точной длины; лишние ключи и expirationTime — ошибка', () => {
+    const body = { endpoint: FCM, keys: { p256dh: P256DH, auth: AUTH } };
+    expect(RegisterWebPushSubscription.parse(body)).toEqual(body);
+    expect(RegisterWebPushSubscription.safeParse({ ...body, expirationTime: null }).success).toBe(
+      false,
+    );
+    expect(RegisterWebPushSubscription.safeParse({ ...body, userId: ID }).success).toBe(false);
+    expect(
+      RegisterWebPushSubscription.safeParse({
+        ...body,
+        keys: { p256dh: `A${P256DH.slice(1)}`, auth: AUTH },
+      }).success,
+    ).toBe(false);
+    expect(
+      RegisterWebPushSubscription.safeParse({ ...body, keys: { p256dh: P256DH, auth: `${AUTH}A` } })
+        .success,
+    ).toBe(false);
+    expect(
+      RegisterWebPushSubscription.safeParse({
+        ...body,
+        keys: { p256dh: P256DH, auth: `${AUTH.slice(1)}=` },
+      }).success,
+    ).toBe(false);
+    expect(
+      RegisterWebPushSubscription.safeParse({ ...body, endpoint: `${FCM}/${'x'.repeat(2048)}` })
+        .success,
+    ).toBe(false);
+  });
+
+  it('снятие — только endpoint из белого списка', () => {
+    expect(RevokeWebPushSubscription.parse({ endpoint: FCM })).toEqual({ endpoint: FCM });
+    expect(RevokeWebPushSubscription.safeParse({ endpoint: 'https://x.test/' }).success).toBe(
+      false,
+    );
+    expect(RevokeWebPushSubscription.safeParse({ endpoint: { $ne: null } }).success).toBe(false);
+  });
+
+  it('конфиг: ключ или null', () => {
+    expect(WebPushConfig.parse({ publicKey: P256DH })).toEqual({ publicKey: P256DH });
+    expect(WebPushConfig.parse({ publicKey: null })).toEqual({ publicKey: null });
+    expect(WebPushConfig.safeParse({ publicKey: 'short' }).success).toBe(false);
   });
 });

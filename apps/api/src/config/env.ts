@@ -1,3 +1,4 @@
+import { createECDH } from 'node:crypto';
 import { existsSync } from 'node:fs';
 
 import { DEVICE_PROVIDERS } from '@pokatim/contracts';
@@ -117,7 +118,54 @@ const notificationsEnvShape = {
   PUSH_ENABLED: flag(false),
   EXPO_ACCESS_TOKEN: optional(z.string().min(20, 'EXPO_ACCESS_TOKEN: не короче 20 символов')),
   EXPO_PUSH_API_URL: z.url({ protocol: /^https?$/ }).default(EXPO_PUSH_API_DEFAULT_URL),
+  /**
+   * Web Push в PWA (ADR-0022) — второй транспорт канала push, независимый от `PUSH_ENABLED` (Expo). Нужны ключи VAPID:
+   * публичный — несжатая точка P-256 (65 байт), приватный — 32 байта, оба base64url; `VAPID_SUBJECT` — `mailto:` или
+   * `https:` (контакт для push-сервисов). Приватный — только env сервера.
+   */
+  WEB_PUSH_ENABLED: flag(false),
+  VAPID_PUBLIC_KEY: optional(
+    z.string().regex(/^B[A-Za-z0-9_-]{86}$/, 'VAPID_PUBLIC_KEY: base64url 65 байт (точка P-256)'),
+  ),
+  VAPID_PRIVATE_KEY: optional(
+    z.string().regex(/^[A-Za-z0-9_-]{43}$/, 'VAPID_PRIVATE_KEY: base64url 32 байта'),
+  ),
+  VAPID_SUBJECT: optional(
+    z.string().regex(/^(mailto:\S+@\S+|https:\/\/\S+)$/, 'VAPID_SUBJECT: mailto: или https:'),
+  ),
+  /** Только тесты (`NODE_ENV=test`): origin фейкового push-сервиса вне белого списка хостов. */
+  WEB_PUSH_TEST_ORIGIN: optional(z.url({ protocol: /^http$/ })),
 };
+
+/** Ключи VAPID, если Web Push включён и настроен (проверено на старте), иначе `null`. */
+export function webPushVapid(
+  value: Pick<Env, 'WEB_PUSH_ENABLED' | 'VAPID_PUBLIC_KEY' | 'VAPID_PRIVATE_KEY' | 'VAPID_SUBJECT'>,
+): { publicKey: string; privateKey: string; subject: string } | null {
+  const { WEB_PUSH_ENABLED, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = value;
+  if (!WEB_PUSH_ENABLED || !VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY || !VAPID_SUBJECT) return null;
+  return { publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY, subject: VAPID_SUBJECT };
+}
+
+/** Канал push включён: хоть один транспорт — Expo (`PUSH_ENABLED`) или Web Push (ADR-0022). */
+export function pushChannelEnabled(
+  value: Pick<
+    Env,
+    'PUSH_ENABLED' | 'WEB_PUSH_ENABLED' | 'VAPID_PUBLIC_KEY' | 'VAPID_PRIVATE_KEY' | 'VAPID_SUBJECT'
+  >,
+): boolean {
+  return value.PUSH_ENABLED || webPushVapid(value) !== null;
+}
+
+/** Публичный ключ, выведенный из приватного (несжатая точка, base64url); битый ключ — `null`. */
+function vapidPublicOf(privateKey: string): string | null {
+  try {
+    const ecdh = createECDH('prime256v1');
+    ecdh.setPrivateKey(Buffer.from(privateKey, 'base64url'));
+    return ecdh.getPublicKey().toString('base64url');
+  } catch {
+    return null;
+  }
+}
 
 const baseEnv = defineCoreEnv({
   ...mongoEnvShape,
@@ -165,6 +213,18 @@ export function envDependencyErrors(value: BaseEnv): string[] {
   }
   if (production && value.EXPO_PUSH_API_URL !== EXPO_PUSH_API_DEFAULT_URL) {
     errors.push(`EXPO_PUSH_API_URL: в production только ${EXPO_PUSH_API_DEFAULT_URL}`);
+  }
+  if (value.WEB_PUSH_ENABLED) {
+    if (!value.VAPID_PUBLIC_KEY || !value.VAPID_PRIVATE_KEY || !value.VAPID_SUBJECT) {
+      errors.push(
+        'WEB_PUSH_ENABLED=true: нужны VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY и VAPID_SUBJECT',
+      );
+    } else if (vapidPublicOf(value.VAPID_PRIVATE_KEY) !== value.VAPID_PUBLIC_KEY) {
+      errors.push('VAPID_PUBLIC_KEY и VAPID_PRIVATE_KEY — не пара');
+    }
+  }
+  if (value.WEB_PUSH_TEST_ORIGIN && value.NODE_ENV !== 'test') {
+    errors.push('WEB_PUSH_TEST_ORIGIN — только NODE_ENV=test');
   }
   return errors;
 }

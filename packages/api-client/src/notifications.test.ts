@@ -123,6 +123,32 @@ describe('api-client: уведомления', () => {
     ]);
   });
 
+  it('web push — GET ключа, PUT подписки и POST снятия', async () => {
+    const publicKey = `B${'A'.repeat(86)}`;
+    await expect(client(200, { publicKey }).api.getWebPushConfig('t')).resolves.toEqual({
+      publicKey,
+    });
+    const endpoint = 'https://fcm.googleapis.com/fcm/send/abc';
+    const subscription = { endpoint, keys: { p256dh: publicKey, auth: 'A'.repeat(22) } };
+    const { calls, api } = client(204, null);
+    await api.registerWebPushSubscription('t', subscription);
+    await api.revokeWebPushSubscription('t', { endpoint });
+    expect(calls).toEqual([
+      {
+        url: 'https://api.test/v1/notifications/web-push/subscriptions',
+        method: 'PUT',
+        authorization: 'Bearer t',
+        body: subscription,
+      },
+      {
+        url: 'https://api.test/v1/notifications/web-push/subscriptions/revoke',
+        method: 'POST',
+        authorization: 'Bearer t',
+        body: { endpoint },
+      },
+    ]);
+  });
+
   it('429 RATE_LIMITED — ApiHttpError с кодом', async () => {
     const error = (await client(429, {
       code: 'RATE_LIMITED',
