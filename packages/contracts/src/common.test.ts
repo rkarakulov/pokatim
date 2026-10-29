@@ -93,6 +93,8 @@ describe('коды ошибок', () => {
       'EVENT_FULL',
       'EVENT_REGISTRATION_CLOSED',
       'TICKETING_INVALID_STATE',
+      'MATERIAL_FILE_UNSUPPORTED',
+      'MATERIAL_FILE_TOO_LARGE',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

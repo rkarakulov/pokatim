@@ -60,6 +60,10 @@ describe('AuditAction', () => {
       'profile.reports_dismissed',
       'tickets.settings_updated',
       'tickets.checked_in',
+      'tickets.material_added',
+      'tickets.material_updated',
+      'tickets.material_removed',
+      'tickets.materials_reordered',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',

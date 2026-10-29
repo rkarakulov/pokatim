@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { fieldError, tolerantEnum } from '../common.ts';
 import { ENTRY_TIERS, RESULT_GROUP_KEYS } from '../results/results.schema.ts';
+import { EventMaterial } from './materials.schema.ts';
 
 /**
  * Билеты на мероприятия (event-tickets, ADR-0023). Событие с билетами — гонка с очным стартом (`race`) или старт
@@ -110,7 +111,7 @@ export type MyTickets = z.infer<typeof MyTickets>;
 
 /**
  * `GET /v1/tickets/:code` — свой билет. `qr` — `PKT1.<token>` только у активного билета непрошедшего события, иначе
- * `null`. Материалы (PR C) и Wallet (PR E) — будущие необязательные поля.
+ * `null`. `materials` — PR C, Wallet (PR E) — будущее необязательное поле.
  */
 export const TicketView = MyTicketRef.extend({
   participantName: z.string(),
@@ -118,6 +119,8 @@ export const TicketView = MyTicketRef.extend({
   qr: TicketQrPayload.nullable(),
   instructions: z.string().nullable(),
   checkedInAt: z.iso.datetime().nullable(),
+  /** PR C: материалы события по порядку (старые клиенты поле отбрасывают; сервер шлёт всегда) */
+  materials: z.array(EventMaterial).optional(),
 });
 export type TicketView = z.infer<typeof TicketView>;
 
