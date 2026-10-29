@@ -98,7 +98,7 @@ export class HttpWebPushSender implements WebPushSender {
           ttl: String(this.ttlSec),
           urgency: 'normal',
         },
-        body,
+        body: new Uint8Array(body),
       });
     } catch (error) {
       const reason =

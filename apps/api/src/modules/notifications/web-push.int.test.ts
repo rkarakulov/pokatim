@@ -1,7 +1,7 @@
 import { createECDH } from 'node:crypto';
 
 import { Logger } from '@nestjs/common';
-import { WebPushConfig } from '@pokatim/contracts';
+import { NotificationSettings, WebPushConfig } from '@pokatim/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type FakeWebPush, startFakeWebPush } from '../../../test/fake-web-push';
@@ -231,9 +231,9 @@ describe('доставка Web Push', () => {
 
   it('группа выключена в настройках — не шлётся (disabled)', async () => {
     await seedWebSubscription(a.userId, 'a1');
-    const settings = { ...(await as(a, 'GET', `${NOTIFICATIONS}/settings`)).body } as {
-      push: Record<string, boolean>;
-    };
+    const settings = NotificationSettings.parse(
+      (await as(a, 'GET', `${NOTIFICATIONS}/settings`)).body,
+    );
     settings.push.rides = false;
     expect((await as(a, 'PUT', `${NOTIFICATIONS}/settings`, settings)).status).toBe(200);
     const doc = await pendingPush(a.userId);
