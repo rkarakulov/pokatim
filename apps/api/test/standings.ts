@@ -158,6 +158,10 @@ export async function addRevision(
   );
 }
 
+/** Коллекция профилей — для тестов других модулей (модуль `profile` наружу коллекцию не отдаёт). */
+export const profilesCollection = (h: Harness) =>
+  h.db.collection<ProfileDoc>(PROFILE_COLLECTIONS.profiles);
+
 /** Профиль с публичным именем и согласием — напрямую в БД (правила имени проверяет `profile`). */
 export async function seedProfile(
   h: Harness,

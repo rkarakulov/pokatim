@@ -90,3 +90,44 @@ Follow-ups `docs/tasks/2026-10-28-rider-profile/pr.md`; RC-A3 вариант (b)
 - Развилка RC-A3 (пользователь, 2026-10-29): отдельная метрика «Финиши» в своём и публичном профиле, финиши START —
   в публичной истории; «В зачёте» и достижения не меняются.
 - Приоритет нажатия строки — прежние действия (споры, сторис), профиль — из карточки соперника.
+
+## 8.2 Отклонения и решения реализации
+
+- Метка строки-ссылки: начинается с «Профиль райдера, <имя>» и сохраняет данные строки — «Профиль райдера, Анна К.,
+  2-е место поровну, 1:00:00» (финишёры — время и почему без места, сезон — место и очки): иначе скринридер теряет
+  место и время. В своей строке — по имени, не «Вы».
+- Своя строка без «Ваш результат» у публичного райдера — тоже ссылка на свой публичный профиль (правило «иначе при
+  `riderPublicId`»); аватар — у любой строки с `riderPublicId`, включая «Вы».
+- «Профиль райдера» (`TextAction`) — только в карточке соперника; на своей карточке («Ваш результат») — нет.
+- Строки таблиц (результаты, финишёры, сезон) — `minHeight: size.touchMin`: строка может быть ссылкой.
+- Общие части строки — `apps/app/src/features/races/table-row.tsx` (`TableRow`, `RiderWho`, `useRowAction`); аватар —
+  существующий `RiderAvatar` (декоративный, `size.avatarStack`); без фото — иконка человека.
+- Порядок метрик профиля: «В зачёте», «Финиши», «Подиумы», «Лучшее место».
+- `publicRiders` возвращает `publicId: null`, если у профиля его ещё нет (до бэкфилла): строка с именем, но без ссылки
+  и аватара — как «нет профиля» для ссылки.
+
+# 12. Outcome
+
+- Контракты: `RiderRowLink` (`riderPublicId`, `riderAvatar`, `.default(null)`) в `RaceResultRow`, `RaceFinisherRow`,
+  `SeasonStandingRow` (панельная наследует); `RiderStats.finishes`, `PublicRiderProfile.stats.finishes`
+  (`.default(0)`), `PublicRiderRace.unranked` (`.default(null)`).
+- API: `RIDER_NAMES.publicRiders` (+ `ProfileRepository.findPublicRiders`, условие согласия и имени в фильтре),
+  `riderRowFields` — явный список полей строки; таблицы результатов, финишёров и сезона (публичная и панельная) —
+  через `publicRiders`. `RIDER_RESULTS.publishedFinishes` (заявки-финишёры по `race_entries_user_idx`, только гонки с
+  ревизией, предел 2000 + лог). `riders`: `summarize(rows, finishes)` → `finishes`; публичная история — `historyRows`
+  (строки протокола + финиши без места, одна строка на гонку, курсор прежний).
+- Приложение: ячейка «кто» с аватаром у публичного райдера; строка-ссылка на `/riders/<publicId>` в таблице гонки,
+  финишёрах и таблице сезона (прежние действия строки важнее); «Профиль райдера» в карточке соперника; метрика
+  «Финиши» в своём и публичном профиле; финиш без места в публичной истории — «—» и «Финишёр».
+- Тесты: int — ключи и значения строк с/без согласия, отзыв согласия (`results-names`, `standings-read`,
+  `results-tiers`), финиши и история со START (`riders.int`); unit — `publicRiders`, `summarize`/`historyRows`,
+  форматтеры приложения; contracts — значения по умолчанию; RNTL — `rider-links.test.tsx`, профиль
+  (`own-profile`, `rider-profile`).
+- Проверки (2026-10-29): `pnpm check` (Mongo/Redis db 6 агента) — EXIT 0, 15/15 задач (app 2157, api 1982,
+  admin 383, contracts 426 тестов); `build:web` — EXIT 0; `E2E_API=1 pnpm e2e:web` (своя БД, Redis db 7, свой
+  Mailpit) — 38 passed; `expo export -p android` — EXIT 0. Флейки вне задачи (прошли при повторе):
+  `tickets-email.int.test.ts` (таймаут 20 с), `rides-moderation.int.test.ts`.
+- Слияние `origin/develop` — без конфликтов; после него: фикстура `PanelSeasonStandingRow` в admin, тест модульной
+  границы (`profilesCollection` в `apps/api/test/standings.ts`), комментарий `rider-results.ts` (сторож коллекций
+  протокола по имени).
+- NOT VERIFIED: ручная проверка на iOS/Android-симуляторе и в браузере.

@@ -50,7 +50,7 @@ export class RiderResultsService implements RiderResults {
     if (entries.length === RIDER_RESULTS_MAX_ROWS) {
       this.logger.warn(`riders.finishes_truncated uid=${userId} limit=${RIDER_RESULTS_MAX_ROWS}`);
     }
-    // протокол опубликован ⇔ у гонки есть ревизия (журнал `race_recalculations`)
+    // протокол опубликован ⇔ у гонки есть ревизия (журнал пересчётов)
     const published = await this.repository.currentRevisions([
       ...new Set(entries.map((entry) => entry.raceId)),
     ]);

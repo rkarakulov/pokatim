@@ -53,6 +53,7 @@ describe('блок «Достижения» своего профиля (AC12)',
       elevationGainM: 10,
       races: 1,
       podiums: 1,
+      finishes: 1,
       bestPlaces: [],
     });
     jest.mocked(api.listProfileRaces).mockResolvedValue({ items: [], nextCursor: null });
@@ -126,7 +127,7 @@ describe('гоночные достижения публичного профи�
       name: 'Анна К.',
       club: null,
       avatar: null,
-      stats: { races: 1, podiums: 1, bestPlace: 2 },
+      stats: { races: 1, podiums: 1, bestPlace: 2, finishes: 1 },
     });
     jest.mocked(api.listRiderRaces).mockResolvedValue({ items: [], nextCursor: null });
   });

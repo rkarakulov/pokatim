@@ -377,6 +377,7 @@ describe('строка таблицы', () => {
       who: 'Участник',
       time: '1:02:05',
       a11y: '3, Участник, 1:02:05',
+      profileA11y: null,
     });
   });
 
@@ -386,6 +387,7 @@ describe('строка таблицы', () => {
       who: 'Вы',
       time: '1:30:00',
       a11y: '2-е место поровну, Вы, 1:30:00',
+      profileA11y: null,
     });
   });
 
@@ -395,8 +397,25 @@ describe('строка таблицы', () => {
       who: 'Анна К.',
       time: '1:00:00',
       a11y: '1, Анна К., 1:00:00',
+      profileA11y: null,
     });
     expect(resultRow(row({ riderName: 'Анна К.' }), true).who).toBe('Вы');
+  });
+
+  it('публичный райдер (rider-links-in-tables) — метка ссылки «Профиль райдера, имя»; своя — тоже по имени', () => {
+    const named = row({
+      place: 2,
+      tied: true,
+      elapsedSec: 3600,
+      riderName: 'Анна К.',
+      riderPublicId: 'p'.repeat(43),
+    });
+    expect(resultRow(named, false).profileA11y).toBe(
+      'Профиль райдера, Анна К., 2-е место поровну, 1:00:00',
+    );
+    expect(resultRow(named, true).profileA11y).toBe(
+      'Профиль райдера, Анна К., 2-е место поровну, 1:00:00',
+    );
   });
 });
 
@@ -483,7 +502,12 @@ describe('уровни и группы (race-results-07c)', () => {
       time: '2:00:00',
       note: 'Финишёр',
       a11y: 'Пётр, 2:00:00, Финишёр',
+      profileA11y: null,
     });
+    expect(
+      finisherRow(finisher({ riderName: 'Пётр', riderPublicId: 'p'.repeat(43) }), false)
+        .profileA11y,
+    ).toBe('Профиль райдера, Пётр, 2:00:00, Финишёр');
     expect(finisherRow(finisher({ unranked: 'unknown' }), true).who).toBe('Вы');
     expect(finisherRow(finisher({ unranked: 'unknown' }), true).note).toBe('Без места');
   });

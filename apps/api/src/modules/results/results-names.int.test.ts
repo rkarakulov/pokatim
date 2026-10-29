@@ -8,9 +8,9 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { PROFILE_COLLECTIONS, type ProfileDoc } from '../profile/profile.collection';
 import { call } from '../../../test/identity';
 import { panelCall } from '../../../test/panel';
+import { profilesCollection } from '../../../test/standings';
 import {
   protocolAction,
   protocolRace,
@@ -125,7 +125,7 @@ describe('имя в публичной таблице (AC5–AC7)', () => {
   });
 });
 
-const profiles = () => h.db.collection<ProfileDoc>(PROFILE_COLLECTIONS.profiles);
+const profiles = () => profilesCollection(h);
 const linksOf = (body: RaceResultsPage) =>
   body.items.map((row) => [row.riderName, row.riderPublicId, row.riderAvatar]);
 

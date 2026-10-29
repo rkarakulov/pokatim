@@ -66,6 +66,8 @@ export const standingRow = (overrides: Partial<SeasonStandingRow> = {}): SeasonS
   place: 1,
   tied: false,
   riderName: null,
+  riderPublicId: null,
+  riderAvatar: null,
   points: 100,
   cells: [],
   ...overrides,

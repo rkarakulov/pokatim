@@ -159,7 +159,7 @@ describe('GET /v1/riders/:publicId (AC5)', () => {
       ['avatar', 'club', 'name', 'publicId', 'stats'].sort(),
     );
     expect(Object.keys((res.body as { stats: object }).stats).sort()).toEqual(
-      ['bestPlace', 'podiums', 'races'].sort(),
+      ['bestPlace', 'finishes', 'podiums', 'races'].sort(),
     );
     for (const key of FORBIDDEN_KEYS) expect(keysDeep(res.body)).not.toContain(key);
     expect(JSON.stringify(res.body)).not.toContain(userId);
