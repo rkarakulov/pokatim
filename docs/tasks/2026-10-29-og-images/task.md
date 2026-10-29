@@ -65,6 +65,11 @@ OG-картинки 1200×630 для публичных SSR-страниц: пр
   `ogFacts(id)` → публичные факты карточки или `null` и `ogChanged(since, limit)` → `{ id, updatedAt }[]` по
   `updatedAt` для `races`, `rides` (расширить `RIDES_FOR_SHARING`), `routes`, `calendar`. Линии: гонка —
   `ROUTE_GEOMETRY`, маршрут — линия показа каталога, райд — `RideRoutes.catalogLine`.
+- **R-A1 (решение человека 2026-10-29): вариант A.** PNG в Redis — TTL 7 суток со скользящим продлением при выдаче
+  `200` (`GETEX … EX`); пререндер `og.sync` — только «живые» объекты (`ogPrerenderable`: райд — `startsAt ≥ now − 14 д`,
+  гонка — `windowEndsAt ≥ now − 30 д`, старт — `(endsOn ?? startsOn) ≥ сегодня − 14 д` по Минску, маршрут каталога —
+  все), остальные — самолечением при первом запросе; `OG_CARD_POLICY.maxPngBytes` = 300 КБ. Уточняет D6 (TTL 30 дней →
+  7 дней с продлением).
 
 ## 3.2 Слои
 
@@ -369,8 +374,8 @@ route — `ROUTES_FOR_SHARING.ogLine(id)`; calendar/brand — `null`. → `rende
 
 - [ASSUMPTION] Отменённые гонка и райд — бренд-картинка, без своей (страница видна, но звать некуда).
 - [ASSUMPTION] Прошедшие гонки и райды — своя картинка остаётся (ссылки на результаты гонки шарят и после).
-- [ASSUMPTION] TTL PNG 30 дней; давно не менявшийся объект после TTL получает картинку при первом запросе (бренд →
-  рендер), что приемлемо: краулер увидит бренд один раз.
+- [ASSUMPTION → решено, вариант A R-A1] TTL PNG 7 дней с продлением при выдаче; давно не запрашиваемый объект после
+  TTL получает картинку при первом запросе (бренд → рендер), что приемлемо: краулер увидит бренд один раз.
 - Риск: краулер сначала берёт HTML, потом картинку — до первого прогона `og.sync` (≤ 1 мин после публикации) отдаётся
   бренд. Принято: шарят обычно не в первую минуту.
 - Риск: параллельная сессия «Тема пользователя» меняет SSR тем — картинка берёт глобальную активную тему
@@ -379,7 +384,7 @@ route — `ROUTES_FOR_SHARING.ogLine(id)`; calendar/brand — `null`. → `rende
 
 ### Риски и Requirements Consistency (architect, 2026-10-29)
 
-- **[ARCH-RISK] R-A1. Память Redis (D3 + D6).** Redis dev — `maxmemory 192mb`, `noeviction`: переполнение — OOM на
+- **[ARCH-RISK] R-A1. Память Redis (D3 + D6). Решено человеком 2026-10-29: вариант A** (см. §3.1). Redis dev — `maxmemory 192mb`, `noeviction`: переполнение — OOM на
   запись у очередей BullMQ, лимитов и сессий всего API. D6 хранит PNG 30 дней, D3 при смене темы/`renderVersion`
   пререндерит **все** публичные объекты, включая прошедшие райды и старты; PNG старой темы недостижимы, но живут до
   TTL. Оценка (замерить на шаге 3): ~50–150 КБ × (гонки + райды + маршруты + старты) × число смен темы за 30 дней.
@@ -437,6 +442,20 @@ Unit — vitest/jest без IO; int — реальные MongoDB (replica set) �
 | e2e web | `apps/app/e2e/web.spec.ts` | желательно, под `E2E_API=1`: `/welcome` — `<meta property="og:image" content="${BASE_URL}/v1/og/images/brand/site/<16hex>.png">` и `twitter:card` (картинку не запрашивать: worker в смоуке не гарантирован). Без API — новых проверок нет. Обязательной e2e нет: SSR-мета покрыта unit app, выдача — int api |
 | manual dev | AC6 | `curl -A TelegramBot` / `facebookexternalhit` по 4 видам и `/welcome` — `og:image`; картинка `200 image/png` без входа; скрытый райд — 404 |
 
+## 8.2 Отклонения от плана (coder, 2026-10-29)
+
+- **Тема картинки — «Классика» (`OG_THEME_ID = DEFAULT_APP_THEME_ID`), а не «активная тема» `APP_APPEARANCE`.** Код
+  сверялся по `6fe3a767`; на `develop` @ `0ab5a08a` влит user-theme (ADR-0021): глобальной активной темы больше нет
+  (`appearance` — только декор, `GET /v1/appearance` отдаёт `classic` константой), гость — «Классика». OG видят гости и
+  краулеры → тема гостя. Тема по-прежнему входит в хэш и в отметку `og:sweep`, поэтому смена `OG_THEME_ID` — одна
+  правка с полным проходом. Вопрос оркестратору: подтвердить (альтернатива — тема создателя объекта; у гонок и стартов
+  создателя-райдера нет).
+- `ogCard.tile.startDot/startRing` не заведены: точка старта линии — общий `trackSvg` сторис (`storyCard.line`).
+- Область контента OG — вложенный блок `size − 2 × inset`, а не `padding` корня: у satori `padding` прибавляется к
+  `width` (первое превью вылезало за кадр).
+- Фикстуры OG-тестов и превью — `apps/api/test/og-fixtures.ts`, сиды гонок/стартов — `apps/api/test/og.ts`.
+- `/status` переведён на `publicPageMetadata` (вывод прежний) — как и предполагал план.
+
 ## 8.3 Security checklist
 
 - **AuthN/AuthZ:** эндпоинты публичные; видимость — предикаты владельца в порту (`ogFacts` → `null` для непубличного).
@@ -475,3 +494,56 @@ OG (`preview:story-cards`); `pr.md` — миграция 0037, новая оче
 # 11. Review
 
 # 12. Outcome (заполняет coder)
+
+### Changes
+
+- `packages/contracts`: `sharing/og-card.schema.ts` — `OG_CARD_KINDS`/`OgCardKind`, `OG_BRAND`, `OgCardVersion`,
+  `OgCardMeta`, `OgCardParams`, `OgImageFile`, `OG_CARD_SIZE`.
+- `packages/design-tokens`: `og-card.ts` — `ogCard` (1200×630, поля 72/64, плитка 440×502, кегли) и
+  `OG_CARD_TITLE_STEPS` (34/60 символов).
+- `packages/i18n`: `ogCard.*` (метки, «Кольцо», набор, темп, склейка, alt); `formatDistances` и `formatKm` перенесены
+  в `format.ts` (app — реэкспорт из `minsk-format.ts`).
+- `apps/api`: `changed-since.ts` (keyset `(updatedAt, _id)`); порты `RACES_FOR_SHARING`, `ROUTES_FOR_SHARING`,
+  `CALENDAR_FOR_SHARING` (новые), `RIDES_FOR_SHARING.ogFacts/ogChanged` (+ `changedForOg` в 4 репозиториях,
+  `RacesRepository.findPublished`); миграция `0037_og_sync_indexes`; `sharing`: `OG_CARD_POLICY` (вариант A) +
+  `ogPrerenderable`, `og-card.{inputs,texts,render,png,cache,queue,service,controller}.ts`, `og-sync.ts`,
+  `og-sync.processor.ts` (очередь `og-sync`), `StoryCardProcessor` — диспетчер по имени задачи и `buildOgCard`,
+  `renderCardSvg(size)`/`renderCardPng` (сторис и приглашение — прежние байты, их `renderVersion` не тронут);
+  превью `preview:story-cards <каталог> [og]`.
+- `apps/app`: `lib/og-image.ts`, `publicPageMetadata({ image })` (`og:image` 1200×630 + `twitter:card`); своя
+  картинка — `races|rides|routes|calendar/[id]` (версия параллельно с данными); бренд — `/welcome`, `/`, `sign-in`,
+  `register`, `status` (переведён на `publicPageMetadata`), `seasons/[id]`, `riders/[id]`.
+- Документация: ADR-0018 (дополнение «OG-картинки»), `.claude/rules/pokatim-{backend,db,app}.md`,
+  `docs/product/races-and-seasons.md` (Q14/Q17), `docs/runbooks/local-dev.md` (превью и worker).
+
+### Tests
+
+- unit: `og-card.schema.test.ts`, `design-tokens/og-card.test.ts`, `i18n/format.test.ts` (`formatDistances`),
+  `changed-since.test.ts`, `sharing.policy.test.ts`, `og-card.{inputs,texts,render,png}.test.ts` (PNG 1200×630, замер
+  20–50 КБ), `story-card.processor.test.ts` (+ OG-ветка), `og-sync.processor.test.ts`; `story-card.png.test.ts` и
+  `ride-invite.render.test.ts` — без правок, зелёные.
+- int (MongoDB replica set + Redis): `{races,rides,routes,calendar}/*-for-sharing.int.test.ts`,
+  `og-card.int.test.ts` (AC1, AC2, AC4, процессор, IP-лимиты, продление TTL), `og-sync.int.test.ts` (AC3),
+  `migrations.int.test.ts` (`0037`).
+- app (jest): `lib/og-image.test.ts`, `__tests__/public-metadata.test.ts` и `route-metadata.test.ts` (fetch-мок по
+  URL, AC5; прежние ожидания без `WEB_ORIGIN` не менялись).
+- Превью PNG (11 вариантов: гонка с линией/длинная/анонс, райд без линии/длинный/с линией, маршрут, длинный маршрут,
+  старт, длинный старт, бренд) просмотрены: текст не обрезан и не вылезает, линия в плитке.
+
+### Checks
+
+- `TURBO_CONCURRENCY=1 pnpm check` (изолированные `MONGO_URL_TEST=…/pokatim_og_test`, Redis на своём порту) —
+  **зелёный**: `Tasks: 15 successful, 15 total`; api 177 файлов, app 217 наборов / 2030 тестов, admin 38. Первый прогон
+  упал на таймауте 20 с чужого `results-revisions.int.test.ts` (load average ~15, модуль не тронут) — точечный
+  повтор зелёный, повторный полный прогон — зелёный.
+
+### Open follow-ups
+
+- Подтвердить тему OG «Классика» (§8.2) — до мержа.
+- Утверждение токенов `ogCard` `[ASSUMPTION]` по превью — человек (R-A8).
+- AC6 на dev (`curl -A TelegramBot` / `facebookexternalhit`) — после деплоя; e2e `web.spec.ts` под `E2E_API=1` не
+  добавлялся (необязательный).
+- `pr.md`: миграция `0037_og_sync_indexes` — шаг деплоя; новая очередь `og-sync`; замер PNG 20–50 КБ → память Redis
+  ≈ 50 КБ × («живые» объекты + запрошенные за 7 сут.), × 2 на неделю после смены `renderVersion` (1000 объектов ≈
+  50 МБ — оценка сверху).
+- Своя картинка профиля райдера и сезона, тёмный шаблон — следующий слайс.
