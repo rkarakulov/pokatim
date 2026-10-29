@@ -50,6 +50,9 @@ export function TicketingSummary({ kind, eventId }: { kind: TicketEventKind; eve
         {query.isError ? <> {retry(t('admin.refreshFailed'))}</> : null}
       </>
     );
+  } else if (query.fetchStatus === 'paused') {
+    // без сети и без кэша запрос на паузе (не isError) — «Нет соединения» с повтором, а не вечный скелетон
+    line = retry(t('state.errorTitle'));
   } else if (query.isError) {
     line = retry(t('admin.tickets.summary.failed'));
   } else {

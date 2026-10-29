@@ -122,6 +122,25 @@ describe('«Check-in» (AC6, RC-C2)', () => {
     expect(within(result).queryByText('Минский марафон')).toBeNull();
   });
 
+  it('во время отметки «Следующий» недоступен — поздний ответ не возвращает сброшенную карточку', async () => {
+    mocked.lookupTicket.mockResolvedValue(view());
+    let answer!: (value: CheckInView) => void;
+    mocked.checkInTicket.mockReturnValue(new Promise<CheckInView>((resolve) => (answer = resolve)));
+    await renderApp('/check-in');
+    enterCode('7XK2M9PQRT');
+    const result = screen.getByRole('status', { name: 'Результат проверки' });
+    fireEvent.click(await within(result).findByRole('button', { name: 'Отметить' }));
+    await waitFor(() => expect(mocked.checkInTicket).toHaveBeenCalled());
+    const next = within(result).getByRole('button', { name: 'Следующий' }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    await act(async () => answer(view({ outcome: 'checked_in' }, { status: 'checked_in' })));
+    await waitFor(() =>
+      expect(
+        (within(result).getByRole('button', { name: 'Следующий' }) as HTMLButtonElement).disabled,
+      ).toBe(false),
+    );
+  });
+
   it('кривой код — ошибка под полем без запроса; уже отмечен — время и сотрудник; отказы текстом', async () => {
     await renderApp('/check-in');
     enterCode('123');

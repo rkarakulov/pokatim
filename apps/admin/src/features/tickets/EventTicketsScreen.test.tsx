@@ -5,6 +5,7 @@ import {
   type PanelRace,
   RACE_FIELDS,
 } from '@pokatim/contracts';
+import { onlineManager } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -502,5 +503,27 @@ describe('блок «Билеты» на странице гонки (RC-C1)', (
     expect(await within(block).findByText('Билеты включены · участников: 4')).toBeTruthy();
     fireEvent.click(within(block).getByRole('link', { name: 'Билеты и материалы' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(`/races/${RACE_ID}/tickets`));
+  });
+
+  it('нет сети и кэша (paused) — «Нет соединения» с повтором, а не скелетон', async () => {
+    // первый запрос блока висит; сеть пропала, запрос сброшен — новая загрузка без данных на паузе
+    mocked.getEventTicketing.mockReturnValueOnce(new Promise(() => {}));
+    mocked.getEventTicketing.mockResolvedValue(settings({ enabled: true, activeTickets: 4 }));
+    const { queryClient } = await renderApp(`/races/${RACE_ID}`);
+    const block = await screen.findByRole('region', { name: 'Билеты' });
+    expect(within(block).getByTestId('ticketing-summary-skeleton')).toBeTruthy();
+    onlineManager.setOnline(false);
+    try {
+      await act(() =>
+        queryClient.resetQueries({ queryKey: ['admin', 'tickets', 'race', RACE_ID, 'settings'] }),
+      );
+      const alert = await within(block).findByRole('alert');
+      expect(within(alert).getByText(/Нет соединения/)).toBeTruthy();
+      expect(within(alert).getByRole('button', { name: 'Повторить' })).toBeTruthy();
+      expect(within(block).queryByTestId('ticketing-summary-skeleton')).toBeNull();
+    } finally {
+      act(() => onlineManager.setOnline(true));
+    }
+    expect(await within(block).findByText('Билеты включены · участников: 4')).toBeTruthy();
   });
 });

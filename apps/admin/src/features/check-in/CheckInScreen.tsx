@@ -88,7 +88,10 @@ function ResultCard({
             {t('admin.checkIn.mark')}
           </Button>
         ) : null}
-        <Button onClick={onNext}>{t('admin.checkIn.next')}</Button>
+        {/* до ответа отметки «Следующий» недоступен: поздний ответ иначе вернул бы сброшенную карточку */}
+        <Button disabled={marking} onClick={onNext}>
+          {t('admin.checkIn.next')}
+        </Button>
       </div>
     </div>
   );
