@@ -14,10 +14,21 @@ import { generateMetadata as rideMetadata, loader as rideLoader } from '../app/r
 import { generateMetadata as riderMetadata, loader as riderLoader } from '../app/riders/[id]';
 import { generateMetadata as seasonMetadata, loader as seasonLoader } from '../app/seasons/[id]';
 import { generateMetadata as homeMetadata } from '../app/(tabs)/index';
+import { generateMetadata as statusMetadata } from '../app/status';
 import { generateMetadata as welcomeMetadata, loader as welcomeLoader } from '../app/welcome';
 import { resetPublicSsrCache } from '@/lib/public-ssr';
 
 import { EMAIL, LINK_TOKEN } from './auth-fixtures';
+import {
+  BRAND_ALT,
+  BRAND_VERSION,
+  isOgUrl,
+  OG_VERSION,
+  ogImageMeta,
+  ogResponse,
+  pageCalls,
+  respondWithOg,
+} from './og-fetch';
 
 jest.mock('@/lib/api');
 
@@ -136,10 +147,7 @@ describe('мета публичной карточки гонки (SSR, R5)', ()
     description: 'Описание',
   };
   const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
-  const respond = (status: number, body: unknown) =>
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify(body), { status })),
-    );
+  const respond = (status: number, body: unknown) => respondWithOg(fetchMock, status, body);
 
   beforeEach(() => {
     resetPublicSsrCache();
@@ -167,8 +175,7 @@ describe('мета публичной карточки гонки (SSR, R5)', ()
         url: `${ORIGIN}/races/${ID}`,
       },
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://api.internal:3000/v1/races/${ID}`);
+    expect(pageCalls(fetchMock)).toEqual([`http://api.internal:3000/v1/races/${ID}`]);
   });
 
   const neutral = {
@@ -236,19 +243,21 @@ describe('мета публичного экрана сезона (SSR)', () => 
   });
 
   it('название и даты с годом; og:url — WEB_ORIGIN + /seasons/<id>', async () => {
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({
-            id: ID,
-            name: 'Сезон 2026',
-            startsOn: '2026-04-01',
-            endsOn: '2026-10-31',
-            phase: 'current',
-          }),
-          { status: 200 },
-        ),
-      ),
+    fetchMock.mockImplementation((url) =>
+      isOgUrl(url)
+        ? ogResponse(url, {})
+        : Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: ID,
+                name: 'Сезон 2026',
+                startsOn: '2026-04-01',
+                endsOn: '2026-10-31',
+                phase: 'current',
+              }),
+              { status: 200 },
+            ),
+          ),
     );
     process.env.WEB_ORIGIN = ORIGIN;
 
@@ -264,7 +273,7 @@ describe('мета публичного экрана сезона (SSR)', () => 
         url: `${ORIGIN}/seasons/${ID}`,
       },
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(pageCalls(fetchMock)).toEqual([`http://api.internal:3000/v1/seasons/${ID}`]);
   });
 
   it('не найден — нейтральная мета и noindex; невалидный id — без запроса', async () => {
@@ -305,10 +314,7 @@ describe('мета публичной карточки старта (SSR, бло
     description: 'Описание',
   };
   const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
-  const respond = (status: number, body: unknown) =>
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify(body), { status })),
-    );
+  const respond = (status: number, body: unknown) => respondWithOg(fetchMock, status, body);
   const neutral = {
     title: 'Старт календаря — Покатим',
     description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
@@ -349,8 +355,7 @@ describe('мета публичной карточки старта (SSR, бло
         url: `${ORIGIN}/calendar/${ID}`,
       },
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://api.internal:3000/v1/calendar/${ID}`);
+    expect(pageCalls(fetchMock)).toEqual([`http://api.internal:3000/v1/calendar/${ID}`]);
   });
 
   it('404 — нейтральная мета и noindex; невалидный id — без запроса', async () => {
@@ -395,10 +400,7 @@ describe('мета публичной карточки кофе-райда (SSR,
     description: 'Секретное описание',
   };
   const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
-  const respond = (status: number, body: unknown) =>
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify(body), { status })),
-    );
+  const respond = (status: number, body: unknown) => respondWithOg(fetchMock, status, body);
   const neutral = {
     title: 'Кофе-райд — Покатим',
     description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
@@ -443,7 +445,7 @@ describe('мета публичной карточки кофе-райда (SSR,
     const text = JSON.stringify(meta);
     expect(text).not.toContain('Секретное');
     expect(text).not.toContain('Катя');
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://api.internal:3000/v1/rides/${ID}`);
+    expect(pageCalls(fetchMock)[0]).toBe(`http://api.internal:3000/v1/rides/${ID}`);
   });
 
   it('404, невалидный id (без запроса) и API недоступен — нейтральная мета с noindex', async () => {
@@ -469,10 +471,7 @@ describe('мета публичного профиля райдера (SSR, ride
     stats: { races: 4, podiums: 2, bestPlace: 1 },
   };
   const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
-  const respond = (status: number, body: unknown) =>
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify(body), { status })),
-    );
+  const respond = (status: number, body: unknown) => respondWithOg(fetchMock, status, body);
   const neutral = {
     title: 'Профиль райдера — Покатим',
     description: 'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
@@ -500,7 +499,7 @@ describe('мета публичного профиля райдера (SSR, ride
     process.env.WEB_ORIGIN = ORIGIN;
 
     expect(await riderLoader(undefined, { id: PUBLIC_ID })).toMatchObject({ name: rider.name });
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://api.internal:3000/v1/riders/${PUBLIC_ID}`);
+    expect(pageCalls(fetchMock)[0]).toBe(`http://api.internal:3000/v1/riders/${PUBLIC_ID}`);
     const meta = await riderMetadata(undefined, { id: PUBLIC_ID });
     expect(meta).toEqual(neutral);
     const text = JSON.stringify(meta);
@@ -568,13 +567,14 @@ describe('мета и посев гостевого лендинга /welcome (g
       },
     });
     expect(meta).not.toHaveProperty('robots');
-    expect(fetchMock).not.toHaveBeenCalled();
+    // к API — только версия бренд-картинки (og-images); недоступна — без og:image
+    expect(pageCalls(fetchMock)).toEqual([]);
   });
 
-  it('мета корня `/` — мета лендинга (RC-3), без запросов к API', async () => {
+  it('мета корня `/` — мета лендинга (RC-3), без запросов к API кроме версии бренд-картинки', async () => {
     process.env.WEB_ORIGIN = ORIGIN;
     expect(await homeMetadata(undefined, {})).toEqual(await welcomeMetadata(undefined, {}));
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(pageCalls(fetchMock)).toEqual([]);
   });
 
   it('loader: четыре публичных списка с API_INTERNAL_URL (маршруты — только команды, RC-5)', async () => {
@@ -601,5 +601,176 @@ describe('мета и посев гостевого лендинга /welcome (g
       calendar: null,
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('OG-картинки публичных страниц (og-images, AC5)', () => {
+  const API = 'http://api.internal:3000';
+  const ID = '0190a6f4-0000-7000-8000-000000000061';
+  const fetchMock = jest.fn<Promise<Response>, [string, RequestInit?]>();
+  const brand = ogImageMeta(`${ORIGIN}/v1/og/images/brand/site/${BRAND_VERSION}.png`, BRAND_ALT);
+  const own = (kind: string, alt: string) =>
+    ogImageMeta(`${ORIGIN}/v1/og/images/${kind}/${ID}/${OG_VERSION}.png`, alt);
+  const versions = (kind: string) => ({
+    [`/v1/og/cards/${kind}/${ID}`]: OG_VERSION,
+    '/v1/og/cards/brand/site': BRAND_VERSION,
+  });
+  const brandOnly = { '/v1/og/cards/brand/site': BRAND_VERSION };
+
+  const pages = {
+    race: {
+      metadata: raceMetadata,
+      body: {
+        id: ID,
+        title: 'Минское кольцо',
+        bikeClass: 'road',
+        surfaces: ['asphalt'],
+        distanceKm: 42,
+        windowStartsAt: '2026-10-03T21:00:00Z',
+        windowEndsAt: '2026-10-12T20:59:00Z',
+        protocolPlannedAt: '2026-10-14T09:00:00Z',
+        phase: 'open',
+        cancelReason: null,
+        season: null,
+        description: null,
+      },
+      alt: 'Гонка «Минское кольцо»',
+      path: `/v1/races/${ID}`,
+    },
+    ride: {
+      metadata: rideMetadata,
+      body: {
+        id: ID,
+        title: 'Минское кольцо',
+        organizerName: null,
+        startsAt: '2026-10-04T07:00:00Z',
+        city: 'minsk',
+        place: 'Парк Победы',
+        distanceKm: 42,
+        paceMinKmh: 22,
+        paceMaxKmh: 24,
+        limit: 12,
+        goingCount: 5,
+        full: false,
+        phase: 'upcoming',
+        cancelReason: null,
+        rescheduledAt: null,
+        description: null,
+      },
+      alt: 'Кофе-райд «Минское кольцо»',
+      path: `/v1/rides/${ID}`,
+    },
+    calendar: {
+      metadata: calendarMetadata,
+      body: {
+        id: ID,
+        title: 'Минское кольцо',
+        startsOn: '2027-06-14',
+        endsOn: null,
+        startTime: null,
+        discipline: 'road',
+        city: 'Минск',
+        distancesKm: [100],
+        registrationUrl: null,
+        phase: 'upcoming',
+        place: null,
+        description: null,
+      },
+      alt: 'Старт «Минское кольцо»',
+      path: `/v1/calendar/${ID}`,
+    },
+  } as const;
+
+  beforeEach(() => {
+    resetPublicSsrCache();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    process.env.API_INTERNAL_URL = API;
+    process.env.WEB_ORIGIN = `${ORIGIN}/`;
+  });
+  afterEach(() => {
+    fetchMock.mockReset();
+    delete process.env.API_INTERNAL_URL;
+  });
+
+  it.each(Object.keys(pages) as (keyof typeof pages)[])(
+    '%s: своя картинка 1200×630 от WEB_ORIGIN, twitter:card; версия — параллельно с данными страницы',
+    async (kind) => {
+      const page = pages[kind];
+      respondWithOg(fetchMock, 200, page.body, versions(kind));
+      const meta = await page.metadata(undefined, { id: ID });
+      expect(meta).toMatchObject({
+        openGraph: own(kind, page.alt),
+        twitter: { card: 'summary_large_image' },
+      });
+      expect(fetchMock.mock.calls.map(([url]) => url).sort()).toEqual(
+        [`${API}/v1/og/cards/${kind}/${ID}`, `${API}${page.path}`].sort(),
+      );
+    },
+  );
+
+  it.each(Object.keys(pages) as (keyof typeof pages)[])(
+    '%s: картинки нет (отменён) — бренд; страница не найдена — без og:image',
+    async (kind) => {
+      const page = pages[kind];
+      respondWithOg(fetchMock, 200, page.body, brandOnly);
+      expect(await page.metadata(undefined, { id: ID })).toMatchObject({ openGraph: brand });
+      resetPublicSsrCache();
+      respondWithOg(fetchMock, 404, { code: 'NOT_FOUND', message: 'x' }, versions(kind));
+      const missing = await page.metadata(undefined, { id: ID });
+      expect(missing).not.toHaveProperty('openGraph.images');
+      expect(missing).not.toHaveProperty('twitter');
+    },
+  );
+
+  it('API недоступен — бренд, если доступна его версия', async () => {
+    fetchMock.mockImplementation((url) =>
+      url.endsWith('/v1/og/cards/brand/site')
+        ? ogResponse(url, brandOnly)
+        : Promise.reject(new TypeError('fetch failed')),
+    );
+    expect(await raceMetadata(undefined, { id: ID })).toMatchObject({ openGraph: brand });
+  });
+
+  it('страницы-бренды: /welcome, /, вход, регистрация, /status, сезон и профиль райдера', async () => {
+    fetchMock.mockImplementation((url) =>
+      isOgUrl(url)
+        ? ogResponse(url, brandOnly)
+        : url.includes('/v1/seasons/')
+          ? Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  id: ID,
+                  name: 'Сезон 2026',
+                  startsOn: '2026-04-01',
+                  endsOn: '2026-10-31',
+                  phase: 'current',
+                }),
+                { status: 200 },
+              ),
+            )
+          : Promise.resolve(new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404 })),
+    );
+    for (const meta of [
+      await welcomeMetadata(undefined, {}),
+      await homeMetadata(undefined, {}),
+      await signInMetadata(undefined, {}),
+      await registerMetadata(undefined, {}),
+      await statusMetadata(undefined, {}),
+      await seasonMetadata(undefined, { id: ID }),
+    ]) {
+      expect(meta).toMatchObject({ openGraph: brand, twitter: { card: 'summary_large_image' } });
+    }
+    // профиль райдера не найден — без картинки; невалидный publicId — без запроса
+    expect(await riderMetadata(undefined, { id: 'r'.repeat(43) })).not.toHaveProperty(
+      'openGraph.images',
+    );
+  });
+
+  it('без WEB_ORIGIN — ни картинки, ни OG-запросов', async () => {
+    delete process.env.WEB_ORIGIN;
+    respondWithOg(fetchMock, 200, pages.race.body, versions('race'));
+    expect(await raceMetadata(undefined, { id: ID })).not.toHaveProperty('openGraph.images');
+    expect(await signInMetadata(undefined, {})).not.toHaveProperty('openGraph.images');
+    expect(fetchMock.mock.calls.filter(([url]) => isOgUrl(url))).toEqual([]);
   });
 });

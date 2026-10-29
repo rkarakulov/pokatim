@@ -6,6 +6,7 @@ import type { GenerateMetadataFunction, LoaderFunction } from 'expo-router/serve
 import { routeShareDescription } from '@/features/routes/format';
 import { RouteDetailScreen, routePath } from '@/features/routes/route-detail';
 import { useLoaderSeed } from '@/lib/loader-seed';
+import { ogCardIfOrigin, pageOgImage } from '@/lib/og-image';
 import { publicPageMetadata } from '@/lib/page-metadata';
 import { fetchPublicForSsr, publicPath, ssrData, type PublicSsrResult } from '@/lib/public-ssr';
 
@@ -32,13 +33,19 @@ export const loader: LoaderFunction<CatalogRouteDetail | null> = async (_request
 /**
  * Мета без ПДн (название, «N км · набор M м», город); `og:url` — `WEB_ORIGIN` + `/routes/<id>`. Не найден (снят, не
  * опубликован) — нейтральная мета и `noindex` (мягкий 404: HTML 200); API недоступен — нейтральная мета без `robots`.
+ * `og:image` (og-images): своя картинка маршрута (без автора); API недоступен — бренд; не найден — без картинки.
  */
 export const generateMetadata: GenerateMetadataFunction = async (_request, params) => {
-  const result = await routeForSsr(params);
+  const [result, card] = await Promise.all([
+    routeForSsr(params),
+    ogCardIfOrigin('route', params.id),
+  ]);
+  const image = await pageOgImage({ kind: 'route', page: result, card });
   if (result.status !== 'found') {
     const neutral = publicPageMetadata({
       title: t('routes.detail.title'),
       description: t('app.tagline'),
+      image,
     });
     return result.status === 'notFound' ? { ...neutral, robots: 'noindex' } : neutral;
   }
@@ -48,6 +55,7 @@ export const generateMetadata: GenerateMetadataFunction = async (_request, param
     title: route.title,
     description: routeShareDescription(route),
     path: routePath(route.id),
+    image,
   });
   return route.author.kind === 'rider' ? { ...metadata, robots: 'noindex' } : metadata;
 };
