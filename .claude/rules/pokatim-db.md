@@ -458,7 +458,7 @@ paths:
   (TTL 90 дней по `expireAt`; `notifications_event_user_unique { sourceEventId, userId }`, частичный
   `notifications_collapse_unique { userId, collapseKey }`, список `{ userId, createdAt: -1, _id: -1 }`, частичные
   индексы непрочитанных и сроков доставки push/e-mail), `notification_settings` (`_id` = `userId`; нет документа —
-  умолчания), `push_tokens` (`token` уникален, ≤ 10 на пользователя), `push_tickets` (TTL 24 ч; `userId` владельца —
+  умолчания), `push_tokens` (`token` уникален, ≤ 10 на пользователя; Web Push — `platform: 'web'`, `token` = endpoint, ключи — `webPush`, ADR-0022), `push_tickets` (TTL 24 ч; `userId` владельца —
   стирание аккаунта по нему, индекс `push_tickets_user_idx` из `0027_push_tickets_user`). Чтения сами проверяют
   `expireAt > now` (TTL — только уборка). Токены при доставке снимаются по снимку `{ _id, userId, sessionId }`, не по
   одному `_id`.

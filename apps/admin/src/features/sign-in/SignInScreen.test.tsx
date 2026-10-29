@@ -11,6 +11,7 @@ vi.mock('../../api', () => ({
     signIn: vi.fn(),
     signOut: vi.fn(),
     health: vi.fn(),
+    overview: vi.fn(),
     resendVerification: vi.fn(),
   },
 }));
@@ -21,6 +22,7 @@ const TOKEN = 'r'.repeat(43);
 beforeEach(() => {
   mocked.me.mockRejectedValue(unauthorized());
   mocked.health.mockReturnValue(new Promise(() => undefined));
+  mocked.overview.mockReturnValue(new Promise(() => undefined));
 });
 
 afterEach(() => {
@@ -184,14 +186,14 @@ describe('возврат после входа (AC9)', () => {
 
   it('401 на открытой странице — «Сессия истекла», после входа — возврат на неё', async () => {
     mocked.me.mockResolvedValue(ME.admin);
-    mocked.health.mockRejectedValue(unauthorized());
+    mocked.overview.mockRejectedValue(unauthorized());
     const { router } = await renderApp('/');
 
     expect(await screen.findByText('Сессия истекла')).toBeTruthy();
     expect(screen.getByText('Войдите снова — откроется та же страница.')).toBeTruthy();
     expect(router.state.location.search).toEqual({ reason: 'expired', next: '/' });
 
-    mocked.health.mockReturnValue(new Promise(() => undefined));
+    mocked.overview.mockReturnValue(new Promise(() => undefined));
     mocked.signIn.mockResolvedValue({ state: 'signedIn', me: ME.admin });
     await signInAs();
     expect(await screen.findByRole('heading', { name: 'Обзор' })).toBeTruthy();

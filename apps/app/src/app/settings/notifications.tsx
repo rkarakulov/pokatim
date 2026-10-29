@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DocumentTitle } from '@/components/document-title';
 import { useSettingsShell } from '@/features/devices/settings-shell';
-import { pushSupported } from '@/features/notifications/push';
+import { usePushSupported } from '@/features/notifications/push';
 import { PushPermissionRow } from '@/features/notifications/push-permission-row';
 import {
   useNotificationSettings,
@@ -36,15 +36,24 @@ const ALL_GROUPS: readonly { id: PushGroup; email: EmailGroup | null }[] = [
   { id: 'disputes', email: 'disputes' },
   { id: 'rides', email: 'rides' },
 ];
-/** Без push (web, ADR-0017) — только группы с письмами. */
-const GROUPS = pushSupported ? ALL_GROUPS : ALL_GROUPS.filter((group) => group.email !== null);
+/** Без push (браузер без Web Push, iOS вне установленной PWA, сервер без VAPID) — только группы с письмами. */
+const EMAIL_GROUPS = ALL_GROUPS.filter((group) => group.email !== null);
+
+const SKELETON = (
+  <SkeletonGroup>
+    <SkeletonListRow />
+    <SkeletonListRow />
+    <SkeletonListRow />
+  </SkeletonGroup>
+);
 
 /**
  * «Настройки уведомлений» (N4, N6; вход — из центра и из «Профиля»): push по трём группам, e-mail — только у
  * «Споры» и «Райды» (события N2), тихие часы (вкл/выкл, начало и конец по часам Минска). Каждое изменение сразу
  * сохраняет полный объект (`PUT`); пока идёт запрос, видно новое значение, а тумблеры и часы недоступны (§4.12: два
- * полных `PUT` подряд затёрли бы друг друга); ошибка — баннер и прежнее значение. Платформа без push (web) — только
- * письма: без push-тумблеров, тихих часов (они откладывают только push) и группы без писем; push-значения не меняются.
+ * полных `PUT` подряд затёрли бы друг друга); ошибка — баннер и прежнее значение. Платформа без push (`usePushSupported`:
+ * web — Web Push браузера и сервера, ADR-0022; до проверки — скелетон) — только письма: без push-тумблеров, тихих часов
+ * (они откладывают только push) и группы без писем; push-значения не меняются.
  */
 export default function NotificationSettingsScreen() {
   const shell = useSettingsShell();
@@ -55,6 +64,7 @@ function SettingsContent() {
   const theme = useTheme();
   const router = useRouter();
   const settings = useNotificationSettings();
+  const pushSupported = usePushSupported();
   const back = () => (router.canGoBack() ? router.back() : router.replace('/notifications'));
 
   return (
@@ -73,28 +83,27 @@ function SettingsContent() {
         >
           {t('notifications.settings.title')}
         </Text>
-        <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
-          {t(pushSupported ? 'notifications.settings.lead' : 'notifications.settings.leadEmail')}
-        </Text>
-        <PushPermissionRow />
-        <AsyncContent
-          query={settings}
-          skeleton={
-            <SkeletonGroup>
-              <SkeletonListRow />
-              <SkeletonListRow />
-              <SkeletonListRow />
-            </SkeletonGroup>
-          }
-        >
-          {(saved) => <SettingsForm saved={saved} />}
-        </AsyncContent>
+        {pushSupported === null ? (
+          SKELETON
+        ) : (
+          <>
+            <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+              {t(
+                pushSupported ? 'notifications.settings.lead' : 'notifications.settings.leadEmail',
+              )}
+            </Text>
+            {pushSupported ? <PushPermissionRow /> : null}
+            <AsyncContent query={settings} skeleton={SKELETON}>
+              {(saved) => <SettingsForm saved={saved} push={pushSupported} />}
+            </AsyncContent>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function SettingsForm({ saved }: { saved: NotificationSettings }) {
+function SettingsForm({ saved, push }: { saved: NotificationSettings; push: boolean }) {
   const theme = useTheme();
   const update = useUpdateNotificationSettings();
   // пока запрос идёт — новое значение; ошибка — прежнее (кеш) и баннер
@@ -118,10 +127,10 @@ function SettingsForm({ saved }: { saved: NotificationSettings }) {
       {update.isError ? (
         <Banner tone="error" message={t('notifications.settings.saveFailed')} />
       ) : null}
-      {GROUPS.map((group) => (
+      {(push ? ALL_GROUPS : EMAIL_GROUPS).map((group) => (
         <View key={group.id} style={[styles.group, { borderTopColor: theme.border.subtle }]}>
           {groupTitle(t(`notifications.settings.group.${group.id}` as MessageKey))}
-          {pushSupported ? (
+          {push ? (
             <Toggle
               label={t('notifications.settings.push')}
               value={value.push[group.id]}
@@ -146,7 +155,7 @@ function SettingsForm({ saved }: { saved: NotificationSettings }) {
           ) : null}
         </View>
       ))}
-      {pushSupported ? (
+      {push ? (
         <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
           {groupTitle(t('notifications.settings.quiet.title'))}
           <Toggle

@@ -1,4 +1,3 @@
-import { isNetworkError } from '@pokatim/api-client';
 import type {
   PanelOverview,
   PanelOverviewCalendarStart,
@@ -11,58 +10,11 @@ import { createColumnHelper } from '@tanstack/react-table';
 import { Link, type LinkProps } from '@tanstack/react-router';
 import { type ReactNode, useId } from 'react';
 
-import { api } from '../../api';
 import { formatDateTime, formatLocalDate } from '../../format';
 import { useCan } from '../../session/can';
 import { useMe } from '../../session/me';
 import { Banner, Button, DataTable, EmptyState, ErrorState, PageHeader, StatTile } from '../../ui';
 import { overviewQuery } from './overview-query';
-
-/** Статус API (прежняя заглушка панели): загрузка — скелетон, ошибка — с повтором (AGENTS.md §4.12). */
-function ApiStatus() {
-  const health = useQuery({ queryKey: ['health'], queryFn: () => api.health() });
-  const retry = () => void health.refetch();
-  // «Нет соединения» — сеть и пауза без сети; остальное — сервер
-  const offline = health.fetchStatus === 'paused' || isNetworkError(health.error);
-  return (
-    <section className="api-status" aria-busy={health.isPending}>
-      <span className="t-meta muted">{t('admin.apiStatus')}</span>
-      {health.data !== undefined ? (
-        <>
-          <span className="t-meta">
-            {t(health.data.status === 'ok' ? 'apiStatus.ok' : 'apiStatus.degraded')}
-          </span>
-          {health.isError ? (
-            // ошибка обновления: значение остаётся, сверху — предупреждение с повтором (AGENTS.md §4.12)
-            <span role="status" className="api-status">
-              <span className="t-meta">{t('state.staleTitle')}</span>
-              <Button size="sm" onClick={retry}>
-                {t('state.retry')}
-              </Button>
-            </span>
-          ) : null}
-        </>
-      ) : health.isPending && health.fetchStatus !== 'paused' ? (
-        <span
-          className="skeleton t-meta api-status__value"
-          role="progressbar"
-          aria-label={t('state.loading')}
-        >
-          {' '}
-        </span>
-      ) : (
-        <span role="alert" className="api-status">
-          <span className="t-meta">
-            {t(offline ? 'state.errorMessage' : 'state.failedMessage')}
-          </span>
-          <Button size="sm" onClick={retry}>
-            {t('state.retry')}
-          </Button>
-        </span>
-      )}
-    </section>
-  );
-}
 
 type Attention = PanelOverview['attention'];
 
@@ -335,7 +287,6 @@ export function OverviewScreen() {
             {(data ? data.kpi : canStats) ? <KpiSection kpi={data?.kpi} /> : null}
           </>
         )}
-        <ApiStatus />
       </div>
     </>
   );

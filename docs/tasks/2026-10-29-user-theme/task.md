@@ -239,6 +239,22 @@
 - **PR A, D3 (журнал).** Отдельной правки `AuditScreen.test.tsx` нет: существующий тест «Классика → Атлас» уже
   проверяет подписи, после перехода на `theme.<id>.name` он зелёный без изменений.
 
+- **PR B, D4 (откат мутации темы).** A10 предполагает, что `scope` сам защищает от отката ранней ошибкой: в TanStack
+  Query 5.104 `onMutate` всех мутаций очереди исполняется сразу при `mutate`, `scope` упорядочивает только запросы, —
+  откат к снимку ранней смены перекрасил бы позднюю оптимистичную, а успех ранней — откатил бы её до ответа. Сделано:
+  `useSetTheme` помнит тему, подтверждённую сервером; ответ или ошибка смены, пока в очереди есть более поздние,
+  тему не трогают; ошибка последней — откат к подтверждённой (не к снимку прошлой оптимистичной). Тест — две быстрые
+  смены в обоих порядках исходов.
+- **PR B, D5 (тест `ssr-theme`).** §11 TESTS — проект jest `server`; там workspace-пакеты резолвятся из `dist`
+  (сборки пакетов в тестах нет), поэтому `ssr-theme.test.ts` — в проекте `native` (Node), `expo-server` — мок
+  `requestHeaders` + один случай с настоящим модулем вне запроса. Разбор cookie — `features/appearance/theme-cookie.ts`.
+- **PR B, D6 (web-проект экрана).** Экран `settings/theme` — RNTL в проекте `native` (`settings-theme.test.tsx`, с
+  корнем); в web-проекте — строка выбора с превью и описанием (`settings-row.web.test.tsx`: `radio`, `aria-checked`,
+  описание), рендер экрана целиком — e2e. Cookie на https — отдельный файл `appearance-cache.https.web.test.ts` (jsdom
+  не даёт подменить `location`, адрес — `@jest-environment-options`).
+- **PR B, D7 (RC-10).** `Vary: Cookie` в `web-server.ts` не добавлен (опционально по RC-10; общих кэшей перед `web`
+  нет).
+
 ## 8.3 Security checklist
 
 Затронуто: новый эндпоинт записи (AuthGuard, только свой профиль, `themeId` — закрытый enum, rate limit), cookie темы
@@ -533,3 +549,48 @@ PR B:
   `pnpm e2e:admin` — раздела «Оформление» в смоуке нет, не добавлялся.
 - **Не сделано (PR B):** приложение — экран `settings/theme`, активная тема из профиля, cookie/SSR, удаление
   `+middleware.ts`, e2e, `pokatim-app.md`, `docs/product/` (настройки).
+
+### PR B — приложение (2026-10-29)
+
+- **Активная тема** (`features/appearance/use-active-theme-id.ts`): вошёл — `themeId` профиля (`['profile']`, тот же
+  `queryFn`, `enabled: signedIn`, `select` → `toAppThemeId`); сессия неизвестна / профиль не пришёл или в ошибке —
+  последняя известная (native кэш, web SSR); `signedOut` — «Классика» и стирание кэша / cookie в хуке (RC-2). Запись
+  кэша — в эффекте: тема → `saveCachedThemeId`, «Классика» → `clearCachedThemeId` (RC-8). `useAppearanceQuery`
+  удалён, `appearance-query.ts` — только `useDecorQuery`.
+- **Кэш:** native `clearCachedThemeId` (SecureStore `delete`); web `appearance-cache.web.ts` — cookie `pokatim_theme`
+  (`Path=/; Max-Age=31536000; SameSite=Lax` + `Secure` на https, RC-7), стирание `Max-Age=0`, чтение — `null`.
+- **SSR:** `ssr-theme.ts` — `ssrThemeId()` = `requestHeaders()` expo-server → `themeIdFromCookieHeader`
+  (`theme-cookie.ts`: `split` без регулярок, первая валидная) → иначе / вне запроса «Классика». `+middleware.ts`,
+  `refreshSsrTheme`, тема процесса и `ssr-theme-fetch.test.ts` удалены; manifest — `appThemes[DEFAULT_APP_THEME_ID]`;
+  `web-server.ts`/`main.ts` не менялись.
+- **UI:** экран `src/app/settings/theme.tsx` (`useSettingsShell`, `DocumentTitle`, «Назад», lead, `AsyncContent` со
+  скелетоном 7 строк, радиогруппа `SettingsRow` + `leading` превью + `description`, баннер ошибки — сеть
+  `auth.error.network`, прочее и 429 `settings.theme.saveFailed`); `features/appearance/theme-preview.tsx` (из `View`,
+  цвета `THEME_PREVIEWS`, скрыт от скринридера); `SettingsRow` — необязательные `leading`, `description`
+  (`accessibilityHint`); строка «Тема, <активная>» в хабе перед «Языком»; маршрут в `Stack.Protected` и `app-routes.ts`.
+- **Мутация** `features/appearance/theme-mutation.ts` — `useSetTheme` (A10 + 8.2 D4).
+- **Тесты:** `use-active-theme-id.test.tsx` (11), `appearance-cache.test.ts` (+стирание), `appearance-cache.web.test.ts`,
+  `appearance-cache.https.web.test.ts`, `ssr-theme.test.ts` (16), `theme-mutation.test.tsx` (5),
+  `theme-preview.test.tsx` (8), `settings-theme.test.tsx` (9: список, выбор → PUT и тема корня, ошибки ×3 с откатом,
+  скелетон, ошибки профиля ×2 с повтором, гость), `settings-screen.test.tsx` («Тема, Классика» → `/settings/theme`,
+  гость), `settings-row.web.test.tsx`; `route-detail.test.tsx` — тема из профиля вместо `/v1/appearance`. e2e
+  `web.spec.ts`: тема из cookie в HTML (`atlas`: `theme-color`/фон `#F2F3F5`, шрифты Manrope без Inter; мусор и
+  незнакомые → `classic`), 12 параллельных загрузок с разными cookie, manifest «Классика» при cookie; шаг «Тема» в
+  смоуке с API (выбор «Атласа», cookie, SSR после перезагрузки, выход → cookie нет, SSR `classic`).
+- **Документация:** `.claude/rules/pokatim-app.md` (настройки — «Тема»; доставка темы — профиль, cookie,
+  `requestHeaders()`, без middleware; SSR-данные без middleware), `docs/product/profile.md` (раздел «Тема приложения»),
+  `docs/product/README.md`.
+- **Проверки:**
+  - `EXPO_PUBLIC_API_URL=http://127.0.0.1:3000 pnpm build:web` — зелёный (импорт `expo-server` в web-бандле
+    собирается; без `EXPO_PUBLIC_API_URL` сборка падает по своей проверке переменной — не связано).
+  - SSR вручную (`node server/main.ts`, порт 18731): `Cookie: pokatim_theme=atlas` → `__POKATIM_THEME__="atlas"`,
+    `theme-color` и фон `#F2F3F5`, `#111316` в тёмной схеме, шрифты Manrope; `neon`, `%3Cscript%3E`, без cookie →
+    `classic`; `sid=1; pokatim_theme=chrono` → `chrono`; manifest при `chrono` — `#FFFFFF`; 18 параллельных запросов с
+    тремя темами — каждая в своей (per-request контекст expo-server работает).
+  - `pnpm e2e:web` (без API, `E2E_PORT=18740`): новые 3 теста — зелёные; 23 passed, 8 skipped (с API), 5 failed —
+    гарды `/rides/report`, `/rides/invite`, `/rides/route-pick`, `/routes/pick`, `/routes/rides` без сессии не
+    показывают «Нет соединения» за 5 с; на базе (`apps/app/src` из `HEAD~1`, отдельная сборка) падают те же 5 —
+    не регрессия PR B.
+  - `E2E_API=1` — NOT VERIFIED (локально нет поднятого API/Mailpit для смоука).
+  - `TURBO_CONCURRENCY=1 pnpm check` (изолированные Mongo/Redis) — зелёный с первого прогона: `Tasks: 15 successful,
+    15 total`; app — 217 наборов / 2012 тестов.

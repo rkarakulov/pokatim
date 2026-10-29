@@ -2,7 +2,8 @@
 # Идемпотентная подготовка dev-сервера под pokatim (вызывается deploy.sh на каждом деплое):
 #   1. каталог стека ${POKATIM_DIR} (700);
 #   2. .env (600): недостающие ключи из env.template дописываются, @secret генерируется здесь же
-#      (openssl rand) — значения не печатаются и не покидают сервер; существующие значения не меняются,
+#      (openssl rand), @vapid-public/@vapid-private — пара ключей VAPID Web Push (openssl ecparam, P-256, один раз;
+#      половина пары в .env — отказ) — значения не печатаются и не покидают сервер; существующие значения не меняются,
 #      кроме управляемых деплоем PUBLIC_HOST, WEB_ORIGIN, APP_LINK_BASE, POKATIM_TAG, MAIL_RELAY_RECIPIENTS и
 #      MAILPIT_RELAY_*;
 #   2b. keyfile replica set MongoDB ${POKATIM_DIR}/mongo-keyfile (600): генерируется здесь же один раз (openssl rand),
@@ -135,6 +136,27 @@ env_has() {
   [[ -f "${ENV_FILE}" ]] && grep -q "^$1=" "${ENV_FILE}"
 }
 
+# base64url без «=» (ключи VAPID, RFC 8292)
+b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+
+# Пара VAPID (Web Push, ADR-0022): создаётся один раз за запуск, если в .env нет ни одного ключа; приватный — 32 байта
+# из DER ECPrivateKey (после 7 байт заголовка), публичный — последние 65 байт SubjectPublicKeyInfo (точка 0x04…).
+VAPID_PAIR_PUBLIC=""
+VAPID_PAIR_PRIVATE=""
+vapid_pair() {
+  [[ -z "${VAPID_PAIR_PRIVATE}" ]] || return 0
+  if env_has VAPID_PUBLIC_KEY || env_has VAPID_PRIVATE_KEY; then
+    die "VAPID: в .env только один ключ пары — удалите оба (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY) и передеплойте"
+  fi
+  local pem
+  pem="$(openssl ecparam -name prime256v1 -genkey -noout)" || die "VAPID: openssl не создал ключ"
+  VAPID_PAIR_PRIVATE="$(printf '%s\n' "${pem}" | openssl ec -outform DER 2>/dev/null | tail -c +8 | head -c 32 | b64url)"
+  VAPID_PAIR_PUBLIC="$(printf '%s\n' "${pem}" | openssl ec -pubout -outform DER 2>/dev/null | tail -c 65 | b64url)"
+  unset pem
+  [[ ${#VAPID_PAIR_PRIVATE} -eq 43 && ${#VAPID_PAIR_PUBLIC} -eq 87 && "${VAPID_PAIR_PUBLIC}" == B* ]] ||
+    die "VAPID: ключи не того размера"
+}
+
 ensure_env() {
   mkdir -p "${POKATIM_DIR}"
   chmod 700 "${POKATIM_DIR}"
@@ -151,9 +173,17 @@ ensure_env() {
     key="${line%%=*}"
     value="${line#*=}"
     env_has "${key}" && continue
-    if [[ "${value}" == "@secret" ]]; then
-      value="$(openssl rand -hex 32)"
-    fi
+    case "${value}" in
+      @secret) value="$(openssl rand -hex 32)" ;;
+      @vapid-public)
+        vapid_pair
+        value="${VAPID_PAIR_PUBLIC}"
+        ;;
+      @vapid-private)
+        vapid_pair
+        value="${VAPID_PAIR_PRIVATE}"
+        ;;
+    esac
     printf '%s=%s\n' "${key}" "${value}" >>"${ENV_FILE}"
     added="${added} ${key}"
   done <"${TEMPLATE}"
