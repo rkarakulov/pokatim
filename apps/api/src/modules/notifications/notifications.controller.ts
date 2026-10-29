@@ -16,9 +16,12 @@ import {
   type NotificationPage,
   NotificationSettings,
   RegisterPushToken,
+  RegisterWebPushSubscription,
   RevokePushToken,
+  RevokeWebPushSubscription,
   type UnreadCount,
   Uuid,
+  type WebPushConfig,
 } from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
@@ -31,7 +34,7 @@ const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
 
 /**
  * Центр уведомлений (ADR-0017): только вошедший, только свои (`@CurrentUser()`). Статические пути (`unread-count`,
- * `settings`, `push-tokens`, `read-all`) объявлены до `:id/read`. Чтения — `no-store`.
+ * `settings`, `push-tokens`, `web-push`, `read-all`) объявлены до `:id/read`. Чтения — `no-store`.
  */
 @Controller('notifications')
 @UseGuards(AuthGuard)
@@ -89,6 +92,32 @@ export class NotificationsController {
     @Body(new ZodValidationPipe(RevokePushToken, FieldErrorCode)) body: RevokePushToken,
   ): Promise<void> {
     return this.pushTokens.revoke(user.userId, body);
+  }
+
+  @Get('web-push')
+  @Header('Cache-Control', 'no-store')
+  webPushConfig(): WebPushConfig {
+    return this.pushTokens.webPushConfig();
+  }
+
+  @Put('web-push/subscriptions')
+  @HttpCode(204)
+  registerWebPush(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(RegisterWebPushSubscription, FieldErrorCode))
+    body: RegisterWebPushSubscription,
+  ): Promise<void> {
+    return this.pushTokens.registerWeb(user.userId, user.sessionId, body);
+  }
+
+  @Post('web-push/subscriptions/revoke')
+  @HttpCode(204)
+  revokeWebPush(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(RevokeWebPushSubscription, FieldErrorCode))
+    body: RevokeWebPushSubscription,
+  ): Promise<void> {
+    return this.pushTokens.revokeWeb(user.userId, body);
   }
 
   @Post('read-all')
