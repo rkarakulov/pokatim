@@ -19,9 +19,10 @@ const PLATFORM_SUBJECT_ID = '00000000-0000-0000-0000-000000000000';
 const SUBJECT_LABEL = 'Оформление приложения';
 
 /**
- * Тема приложения (app-themes, T1) и сезонный декор (halloween-decor): глобальная настройка платформы. Приложение
- * читает публично, панель меняет по ожидаемой `version` (`appearance.manage`); каждая фактическая смена темы и декора —
- * своя запись журнала в той же транзакции.
+ * Оформление приложения: сезонный декор (halloween-decor) — глобальная настройка платформы. Тема — личная
+ * (user-theme, ADR-0021: `PUT /v1/profile/theme`); публичный ответ отдаёт `themeId: 'classic'` константой для сборок
+ * до личной темы. Приложение читает публично, панель меняет декор по ожидаемой `version` (`appearance.manage`);
+ * каждая фактическая смена — запись журнала в той же транзакции. Legacy `themeId` документа не читается и не пишется.
  */
 @Injectable()
 export class AppearanceService {
@@ -36,10 +37,7 @@ export class AppearanceService {
 
   async getPublic(): Promise<AppAppearance> {
     const doc = await this.repository.find();
-    return {
-      themeId: doc?.themeId ?? DEFAULT_APP_THEME_ID,
-      decor: doc?.decor ?? DEFAULT_APP_DECOR_ID,
-    };
+    return { themeId: DEFAULT_APP_THEME_ID, decor: doc?.decor ?? DEFAULT_APP_DECOR_ID };
   }
 
   async getPanel(): Promise<PanelAppearance> {
@@ -49,53 +47,32 @@ export class AppearanceService {
   async update(actorUserId: string, input: UpdateAppearanceRequest): Promise<PanelAppearance> {
     const result = await this.transactions.run(async (tx) => {
       const current = await this.repository.find(tx);
-      const themeFrom = current?.themeId ?? DEFAULT_APP_THEME_ID;
       const decorFrom = current?.decor ?? DEFAULT_APP_DECOR_ID;
       if (input.version !== (current?.version ?? 0)) throw domainError('CONFLICT', 409);
-      const themeTo = input.themeId ?? themeFrom;
-      const decorTo = input.decor ?? decorFrom;
-      // повтор тех же значений — без записи и без журнала
-      if (themeTo === themeFrom && decorTo === decorFrom) return { doc: current, changed: false };
+      const decorTo = input.decor;
+      // повтор того же декора — без записи и без журнала
+      if (decorTo === decorFrom) return { doc: current, changed: false };
 
       const updatedAt = this.clock.now();
-      // в документ — только изменённые поля (декор без смены не появляется у документа темы)
-      const set = {
-        ...(themeTo !== themeFrom && { themeId: themeTo }),
-        ...(decorTo !== decorFrom && { decor: decorTo }),
-      };
       let doc: AppearanceSettingsDoc | null;
       if (current) {
-        doc = await this.repository.update(tx, input.version, { ...set, updatedAt });
+        doc = await this.repository.update(tx, input.version, { decor: decorTo, updatedAt });
       } else {
-        doc = { _id: APPEARANCE_SETTINGS_ID, themeId: themeTo, ...set, version: 1, updatedAt };
+        doc = { _id: APPEARANCE_SETTINGS_ID, decor: decorTo, version: 1, updatedAt };
         if (!(await this.repository.insert(tx, doc))) doc = null;
       }
       if (!doc) throw domainError('CONFLICT', 409);
 
-      const entry = {
+      await this.audit.append(tx, {
         actor: { kind: 'user', userId: actorUserId },
         subject: { kind: 'platform', id: PLATFORM_SUBJECT_ID, label: SUBJECT_LABEL },
-      } as const;
-      if (themeTo !== themeFrom) {
-        await this.audit.append(tx, {
-          ...entry,
-          action: 'appearance.theme_changed',
-          details: { themeFrom, themeTo },
-        });
-      }
-      if (decorTo !== decorFrom) {
-        await this.audit.append(tx, {
-          ...entry,
-          action: 'appearance.decor_changed',
-          details: { decorFrom, decorTo },
-        });
-      }
-      return { doc, changed: true, from: `${themeFrom}/${decorFrom}` };
+        action: 'appearance.decor_changed',
+        details: { decorFrom, decorTo },
+      });
+      return { doc, changed: true, from: decorFrom };
     });
     if (result.changed) {
-      this.logger.log(
-        `app appearance ${result.from} → ${result.doc?.themeId}/${result.doc?.decor ?? DEFAULT_APP_DECOR_ID}`,
-      );
+      this.logger.log(`app decor ${result.from} → ${result.doc?.decor ?? DEFAULT_APP_DECOR_ID}`);
     }
     return toPanelAppearance(result.doc);
   }
@@ -104,10 +81,9 @@ export class AppearanceService {
 function toPanelAppearance(doc: AppearanceSettingsDoc | null | undefined): PanelAppearance {
   return doc
     ? {
-        themeId: doc.themeId,
         decor: doc.decor ?? DEFAULT_APP_DECOR_ID,
         version: doc.version,
         updatedAt: doc.updatedAt.toISOString(),
       }
-    : { themeId: DEFAULT_APP_THEME_ID, decor: DEFAULT_APP_DECOR_ID, version: 0, updatedAt: null };
+    : { decor: DEFAULT_APP_DECOR_ID, version: 0, updatedAt: null };
 }

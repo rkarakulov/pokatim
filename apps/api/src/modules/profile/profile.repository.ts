@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { RideReason } from '@pokatim/contracts';
+import type { AppThemeId, RideReason } from '@pokatim/contracts';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Collection, Db, Filter } from 'mongodb';
 
@@ -10,10 +10,10 @@ import {
   type ProfileDoc,
 } from './profile.collection';
 
-/** Поля профиля для `ProfileView` (rider-profile: + клуб, аватар, публичный id). */
+/** Поля профиля для `ProfileView` (rider-profile: + клуб, аватар, публичный id; user-theme: + тема). */
 export type ProfileViewDoc = Pick<
   ProfileDoc,
-  'rideReasons' | 'publicName' | 'showNameInResults' | 'club' | 'avatarId' | 'publicId'
+  'rideReasons' | 'publicName' | 'showNameInResults' | 'club' | 'avatarId' | 'publicId' | 'themeId'
 >;
 const VIEW_PROJECTION = {
   _id: 0,
@@ -23,6 +23,7 @@ const VIEW_PROJECTION = {
   club: 1,
   avatarId: 1,
   publicId: 1,
+  themeId: 1,
 } as const;
 
 /** Поля профиля для панели модерации (profile-moderation): подпись Q2, клуб, фото, счётчики жалоб. */
@@ -237,6 +238,36 @@ export class ProfileRepository {
     );
     if (!doc) throw new Error('profile upsert returned no document');
     return doc;
+  }
+
+  /**
+   * Личная тема (user-theme, `PUT /v1/profile/theme`): одна атомарная операция вне транзакции — upsert по `_id`
+   * (pipeline, значение — `$literal` после zod), ответ — view после записи. Документа нет — создаётся без ответа опроса
+   * (как у шага устройств), остальные поля не трогаются. Гонка двух первых upsert — duplicate key на `_id_` (повтор — у
+   * сервиса).
+   */
+  async setTheme(userId: string, themeId: AppThemeId, now: Date): Promise<ProfileViewDoc> {
+    const doc = await this.profiles.findOneAndUpdate(
+      { _id: userId },
+      [
+        {
+          $set: {
+            ...KEEP_PROFILE_FIELDS,
+            themeId: { $literal: themeId },
+            updatedAt: { $literal: now },
+          },
+        },
+      ],
+      { upsert: true, returnDocument: 'after', projection: VIEW_PROJECTION },
+    );
+    if (!doc) throw new Error('profile upsert returned no document');
+    return doc;
+  }
+
+  /** Тема пользователя для порта `RIDER_THEMES`; нет документа или выбора — `null`. */
+  async findTheme(userId: string): Promise<AppThemeId | null> {
+    const doc = await this.profiles.findOne({ _id: userId }, { projection: { themeId: 1 } });
+    return doc?.themeId ?? null;
   }
 
   /**
