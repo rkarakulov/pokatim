@@ -1893,6 +1893,8 @@ export const ru = {
   'admin.audit.action.profile.avatar_reset': 'Сброшено фото участника',
   'admin.audit.action.profile.club_reset': 'Сброшен клуб участника',
   'admin.audit.action.profile.reports_dismissed': 'Жалобы на профиль отклонены',
+  'admin.audit.action.tickets.settings_updated': 'Настройки билетов изменены',
+  'admin.audit.action.tickets.checked_in': 'Участник отмечен',
   // routes-01: экран «Маршруты» панели и публикация в каталог
   'admin.nav.routes': 'Маршруты',
   'admin.routes.title': 'Маршруты',

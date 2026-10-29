@@ -58,6 +58,8 @@ describe('AuditAction', () => {
       'profile.avatar_reset',
       'profile.club_reset',
       'profile.reports_dismissed',
+      'tickets.settings_updated',
+      'tickets.checked_in',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',

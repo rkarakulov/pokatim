@@ -50,6 +50,13 @@ export class RaceRegistryService implements RaceRegistry {
     return toRace(doc);
   }
 
+  async getMany(raceIds: readonly string[]): Promise<Map<string, RaceForResults>> {
+    const docs = await this.repository.findRaces(raceIds);
+    return new Map(
+      docs.filter((doc) => doc.status !== 'draft').map((doc) => [doc._id, toRace(doc)] as const),
+    );
+  }
+
   async findForPanel(principal: PanelPrincipal, raceId: string): Promise<RaceForResults | null> {
     const doc = await this.repository.findRace(raceId);
     if (!doc || !raceVisible(principal, doc)) return null;

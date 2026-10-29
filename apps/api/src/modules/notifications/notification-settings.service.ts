@@ -4,7 +4,7 @@ import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
 
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
-import { consumeUserLimit } from './notifications.service';
+import { consumeUserLimit } from '../../user-limit';
 
 /**
  * Настройки уведомлений (N4, N6): нет документа — умолчания; `PUT` — полная замена после zod (`start ≠ end` проверяет

@@ -12,6 +12,7 @@ import { ProfileErasure } from '../profile';
 import { RideErasure } from '../rides';
 import { RouteRideErasure } from '../route-rides';
 import { RouteErasure } from '../routes';
+import { TicketErasure } from '../tickets';
 import { TrackErasure } from '../tracks';
 import {
   ACCOUNT_DELETION_SWEEP_JOB,
@@ -33,7 +34,7 @@ export interface ErasureRun {
  * Фоновая очистка удалённого аккаунта (worker, ADR-0015). Шаги — по порядку, только через порты модулей-владельцев;
  * каждый повторяем, ретрай задачи повторяет все шаги с начала. Порядок: подпись в райдах пропадает первой (R4), после
  * маршрутов — точки райдов на висячих маршрутах (`ride-starts`, 05c RC-1),
- * устройства — до треков (новых приёмов нет, F4), заезды по маршрутам (`route-rides`, route-rides-01) — после треков, достижения (`achievements`) — после них,
+ * устройства — до треков (новых приёмов нет, F4), заезды по маршрутам (`route-rides`, route-rides-01) — после треков, достижения (`achievements`) — после них, билеты (`tickets`) — после них,
  * уведомления, настройки и токены — после них, письмо и стирание e-mail — последними (A10). Живой аккаунт не
  * трогается (N8). Логи — uid, шаг, исход, счётчики.
  */
@@ -50,6 +51,7 @@ export class AccountErasureService {
     private readonly tracks: TrackErasure,
     private readonly routeRides: RouteRideErasure,
     private readonly achievements: AchievementErasure,
+    private readonly tickets: TicketErasure,
     private readonly notifications: NotificationErasure,
     @InjectQueue(QUEUE.accountDeletion) private readonly queue: Queue,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -93,6 +95,11 @@ export class AccountErasureService {
     await this.step(userId, 'achievements', run, async () => {
       const result = await this.achievements.erase(userId);
       return `deleted=${result.grants} syncs=${result.syncs}`;
+    });
+    // регистрации календаря и билеты гонок → `cancelled` (документы псевдонимные, RC-T1 event-tickets)
+    await this.step(userId, 'tickets', run, async () => {
+      const result = await this.tickets.erase(userId);
+      return `registrations=${result.registrations} tickets=${result.tickets}`;
     });
     await this.step(userId, 'notifications', run, async () => {
       const result = await this.notifications.erase(userId);

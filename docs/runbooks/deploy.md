@@ -130,8 +130,9 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
 - `MAIL_RELAY_RECIPIENTS` (адреса или `*`) — из секрета `DEV_MAIL_RELAY_RECIPIENTS` каждого деплоя (нет — очищается);
   `MAILPIT_RELAY_*` и файл `~/pokatim/mailpit-relay.yml` (600) вычисляет `bootstrap.sh` —
   руками не править.
-- `PUBLIC_HOST`, `WEB_ORIGIN` (`https://<хост>`), `APP_LINK_BASE` (`https://<хост>/`), `POKATIM_TAG` — **всегда** из
-  деплоя (переменная окружения `dev` и тег).
+- `PUBLIC_HOST`, `WEB_ORIGIN` (`https://<хост>`), `APP_LINK_BASE` (`https://<хост>/`), `POKATIM_TAG` — **всегда**
+  из деплоя (переменная окружения `dev` и тег). API получает `APP_WEB_ORIGIN` = `WEB_ORIGIN` в `docker-compose.yml`
+  (кнопка «Открыть билет» в письме, event-tickets; вне compose пусто — письмо без кнопки).
 - `CORS_ORIGINS` пусто (web и API — один origin за nginx), `TRUST_PROXY=1` (один прокси — nginx хоста; он
   перезаписывает `X-Forwarded-For` адресом клиента).
 - Треки и устройства (ADR-0011, раздел «Треки и устройства»): `TRACK_STORAGE_MAX_BYTES` (2 GiB),
@@ -466,6 +467,48 @@ ADR-0018. Образ api вырос: нативный бинарь `@resvg/resvg
 `@expo-google-fonts/*` (~29 МБ, `runtime-deps.mjs` копирует пакеты целиком). PNG — в Redis (≤ 2 МБ на картинку,
 TTL 24 ч); память Redis — учитывать при росте числа карточек. Рендер — worker (`concurrency: 1`).
 
+## Билеты на мероприятия
+
+ADR-0023. Письмо «Вы зарегистрированы» — очередь `tickets-email` (кнопка — `APP_WEB_ORIGIN/tickets/<код>`), сверка
+билетов гонок — регламент `tickets.reconcile` раз в минуту (`tickets-maintenance`). Провал письма — лог
+`tickets.email_failed ticket=<id>`, колонка «Письмо» в списке участников панели; провал сверки — лог
+`tickets.reconcile_failed race=<id>`, следующий прогон повторяет.
+
+**Ротация `EMAIL_TOKEN_SECRET` ломает QR билетов** (токен — HMAC от id билета ключом, в БД — только `qrHash`;
+check-in ищет билет по `sha256` токена из QR). Два состояния после смены ключа в `.env`:
+
+- **до пересчёта `qrHash`** — проходят только **старые** QR (на руках, в офлайн-копиях приложения, в Wallet), а
+  владельцам, открывшим билет заново, показывается **новый** QR, который check-in не находит («не найдено»);
+- **после пересчёта** — наоборот: проходят новые QR, старые (офлайн-копии, скриншоты) — «не найдено».
+
+Код билета (ручной ввод) работает в обоих состояниях. Процедура, если ротация неизбежна:
+
+1. Предупредить организаторов: на время ротации — только ручной ввод кода, сканы QR не надёжны.
+2. Сменить `EMAIL_TOKEN_SECRET` в `.env` и перезапустить **api и worker одновременно** (`dc up -d api worker`, `dc` — раздел «Логи, почта, состояние»):
+   у них один ключ.
+3. Сразу пересчитать хэши одноразовой командой в контейнере api (новый ключ — из env контейнера, в лог не выводится):
+
+   ```sh
+   dc exec -T api node -e '
+   const { createHash, createHmac } = require("node:crypto");
+   const { MongoClient } = require("mongodb");
+   (async () => {
+     const client = await MongoClient.connect(process.env.MONGO_URL);
+     const tickets = client.db().collection("tickets");
+     let n = 0;
+     for await (const t of tickets.find({}, { projection: { _id: 1 } })) {
+       const token = createHmac("sha256", process.env.EMAIL_TOKEN_SECRET).update("ticket-qr:" + t._id).digest("base64url");
+       await tickets.updateOne({ _id: t._id }, { $set: { qrHash: createHash("sha256").update(token).digest("hex") } });
+       n += 1;
+     }
+     console.log("qrHash updated:", n);
+     await client.close();
+   })();'
+   ```
+
+4. Возобновить check-in. Участникам с офлайн-копией — открыть билет онлайн (QR обновится). Ссылки из уже отправленных
+   писем подтверждения и сброса пароля тоже перестают работать (runbook «Удаление аккаунта», п. 5).
+
 ## Диск
 
 Порог деплоя — 1,5 ГБ свободно (`MIN_FREE_MB`), иначе `::error::` без изменений на сервере. Освобождать только своё:
@@ -488,6 +531,9 @@ TTL 24 ч); память Redis — учитывать при росте числ
   `device_connections` (частичный уникальный по живым статусам), `device_link_tickets` (TTL), `device_imports`,
   `device_audit`; expand-only, идемпотентны. `0012_track_source_refs` — маркеры удалённых объектов источника
   (удалённый заезд агрегатора не воскресает); expand-only.
+- `0038_tickets` (event-tickets, ADR-0023) — коллекции `event_ticketing`, `event_registrations` (частичный уникальный
+  по активной регистрации), `tickets` (уникальные код, хэш QR, регистрация); expand-only, без бэкфилла (билеты
+  выпускает сверка), идемпотентна. Номер сверить с `develop` перед мержем.
 
 ## Панель «Протокол»: первый администратор
 
