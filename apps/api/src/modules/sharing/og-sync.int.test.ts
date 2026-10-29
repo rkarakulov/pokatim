@@ -151,6 +151,20 @@ describe('og.sync (AC3)', () => {
     expect(await cache().cursor('calendar')).toBeNull();
   });
 
+  it('сбой одной строки — строка пропущена, курсор идёт дальше, прогон не падает (ревью F3)', async () => {
+    const a = await seedStart(h, { updatedAt: new Date(h.clock.now().getTime() - 2000) });
+    const b = await seedStart(h, { updatedAt: new Date(h.clock.now().getTime() - 1000) });
+    const port = h.worker.get<CalendarForSharing>(CALENDAR_FOR_SHARING);
+    const ogFacts = port.ogFacts.bind(port);
+    vi.spyOn(port, 'ogFacts').mockImplementation((id) =>
+      id === a ? Promise.reject(new Error('poison')) : ogFacts(id),
+    );
+    const run = await sync().run();
+    expect(run).toMatchObject({ failedKinds: [], scanned: { calendar: 2 } });
+    expect(await queued()).toEqual(['brand:site', `calendar:${b}`].sort());
+    expect(await cache().cursor('calendar')).toMatchObject({ id: b });
+  });
+
   it('скрытие после пререндера — картинка 404 (выдача пересчитывает видимость)', async () => {
     const ride = await createRide(h, organizer);
     await sync().run();

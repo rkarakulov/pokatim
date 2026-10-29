@@ -7,8 +7,12 @@ import { OgSync, type OgSyncRun } from './og-sync';
 
 export const OG_SYNC_JOB = 'sync';
 
+/**
+ * Без ретраев и без хранения итогов (ревью F3): следующий прогон через минуту и так повторит, а failed-набор с
+ * умолчаниями очередей (`removeOnFail: false`) копил бы задачу в минуту.
+ */
+const ONE_SHOT = { attempts: 1, removeOnComplete: true, removeOnFail: true } as const;
 /** Разовая задача без дублей (jobId): прогон при старте worker — картинки после выката ставятся сразу. */
-const ONE_SHOT = { removeOnComplete: true, removeOnFail: true } as const;
 export const OG_SYNC_BOOT_JOB_ID = 'og.sync.boot';
 
 /** Расписание пререндера OG-картинок; upsert идемпотентен — несколько worker не плодят дубли. */
@@ -16,7 +20,7 @@ export const OG_SCHEDULES = [
   {
     id: 'og.sync',
     repeat: { pattern: '* * * * *', tz: 'Europe/Minsk' },
-    job: { name: OG_SYNC_JOB },
+    job: { name: OG_SYNC_JOB, opts: ONE_SHOT },
   },
 ] as const;
 

@@ -56,12 +56,12 @@ export class OgCardService {
     version: string,
   ): Promise<OgImage> {
     if (resolved.version !== version) return { type: 'redirect', version: resolved.version };
-    const png = await this.cache.png(resolved.hash);
+    const png = await this.cache.png({ kind, id, hash: resolved.hash });
     if (png) return { type: 'png', png };
     await this.enqueue(kind, id, resolved.hash);
     if (kind === OG_BRAND.kind) return { type: 'fallback', png: null };
     const brand = this.inputs.resolveBrand();
-    const brandPng = await this.cache.png(brand.hash);
+    const brandPng = await this.cache.png({ ...OG_BRAND, hash: brand.hash });
     if (!brandPng) await this.enqueue(OG_BRAND.kind, OG_BRAND.id, brand.hash);
     return { type: 'fallback', png: brandPng };
   }

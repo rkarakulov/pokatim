@@ -90,12 +90,12 @@ describe('ogCardTree (og-images, D2)', () => {
 });
 
 describe('ogBrandTree', () => {
-  it('название, слоган, бренд; без плитки', () => {
+  it('название и слоган, без колонтитула и плитки', () => {
     const tree = ogTree(OG_FIXTURES.brand, null);
+    // название и есть бренд — без колонтитула «Покатим» (ревью pass 1)
     expect(textsOf(tree)).toEqual([
       'Покатим',
       'Гонки, маршруты, кофе-райды и календарь стартов в одном профиле',
-      'Покатим',
     ]);
     expect(all(tree).some((n) => n.type === 'svg')).toBe(false);
     expect(ogBrandRenderInput(OG_FIXTURES.brand).texts.title).toBe('Покатим');

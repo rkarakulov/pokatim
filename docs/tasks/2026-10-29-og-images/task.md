@@ -493,6 +493,23 @@ OG (`preview:story-cards`); `pr.md` — миграция 0037, новая оче
 
 # 11. Review
 
+## Фиксы ревью pass 1 (findings-claude.md)
+
+- **F1 HIGH** — `OgCardCache.storeReady` атомарно (Lua `EVAL`, а не MULTI: старый хэш читается и удаляется в той же
+  операции) пишет PNG, ключ объекта `og:obj:<kind>:<id>` → текущий хэш и удаляет `og:png:<прежний хэш>`, если он
+  другой; выдача продлевает и ключ объекта. Тест: две версии старта → один `og:png` объекта.
+- **F2 MEDIUM** — `OG_CARD_POLICY.pngShortTtlSec` = 1 сут. для объектов вне `ogPrerenderable` (самолечение);
+  пререндеренные — 7 сут.; продление при выдаче — как было (`GETEX` 7 сут.). Решает процессор (`CLOCK`).
+- **F3 MEDIUM** — `OgSync.prerender`: ошибка строки — лог `og.sync_row_failed kind id` (без названий), строка
+  пропущена, курсор идёт дальше; сбой чтения вида — как раньше. Планировщик и boot-задача — `opts`/`attempts: 1,
+  removeOnComplete: true, removeOnFail: true` (`upsertJobScheduler(id, repeat, { name, opts })` — тип
+  `JobSchedulerTemplateOptions` bullmq 6.4).
+- **F4** — влит `origin/develop` (конфликт `ru.ts`: ключи `ogCard.*` и `admin.moderation.*` сохранены),
+  `pnpm install --frozen-lockfile`.
+- **F5** — AC4-тест сравнивает HTTP-версию райда с `private`-маршрутом с версией тех же фактов без линии (и что с
+  линией она другая).
+- Бренд-картинка — без колонтитула «Покатим» (название и есть бренд); `OG_CARD_POLICY.renderVersion` 1 → 2.
+
 # 12. Outcome (заполняет coder)
 
 ### Changes

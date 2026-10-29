@@ -8,7 +8,7 @@ import { StoryCardProcessor } from './story-card.processor';
 /** Диспетчер очереди `story-card`: имя задачи → схема данных → рендер своей карточки (зависимости не нужны). */
 const processor = () =>
   new StoryCardProcessor(
-    ...(Array.from({ length: 9 }, () => undefined) as unknown as ConstructorParameters<
+    ...(Array.from({ length: 10 }, () => undefined) as unknown as ConstructorParameters<
       typeof StoryCardProcessor
     >),
   );

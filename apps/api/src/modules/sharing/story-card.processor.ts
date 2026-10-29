@@ -1,6 +1,6 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
-import { isDomainError } from '@rkarakulov/api-kit/core';
+import { CLOCK, type Clock, isDomainError } from '@rkarakulov/api-kit/core';
 import type { LonLat } from '@pokatim/contracts';
 import type { Job } from 'bullmq';
 import type { z } from 'zod';
@@ -17,6 +17,7 @@ import {
 import { OG_CARD_RENDER_JOB, OgCardCache, OgCardJob } from './og-card.cache';
 import { type OgCardInput, OgCardInputs } from './og-card.inputs';
 import { renderOgCard } from './og-card.png';
+import { OG_CARD_POLICY, ogPrerenderable } from './sharing.policy';
 import { RideInviteInputs } from './ride-invite.inputs';
 import { renderRideInvite } from './ride-invite.png';
 import {
@@ -83,6 +84,7 @@ export class StoryCardProcessor extends WorkerHost {
     private readonly ogInputs: OgCardInputs,
     @Inject(ROUTE_GEOMETRY) private readonly geometry: RouteGeometry,
     @Inject(ROUTES_FOR_SHARING) private readonly routes: RoutesForSharing,
+    @Inject(CLOCK) private readonly clock: Clock,
   ) {
     super();
   }
@@ -173,9 +175,11 @@ export class StoryCardProcessor extends WorkerHost {
    */
   buildOgCard(job: OgCardJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
     const label = () => `og ${job.kind} ${job.id}`;
+    let ttlSec: number = OG_CARD_POLICY.pngTtlSec;
     const sink: OutcomeSink = {
       release: (hash) => this.ogCache.release(hash),
-      storeReady: (hash, png) => this.ogCache.storeReady(hash, png),
+      storeReady: (hash, png) =>
+        this.ogCache.storeReady({ kind: job.kind, id: job.id, hash }, png, ttlSec),
       storeFailed: (hash) => this.ogCache.holdFailed(hash),
     };
     return this.run(sink, job.hash, label, options, 'name-only', async () => {
@@ -184,6 +188,10 @@ export class StoryCardProcessor extends WorkerHost {
           ? this.ogInputs.resolveBrand()
           : await this.ogInputs.resolve(job.kind, job.id);
       if (!resolved || resolved.hash !== job.hash) return null;
+      // вне окна пререндера (самолечение по запросу) — короткий TTL: обход старых объектов не копит PNG (ревью F2)
+      ttlSec = ogPrerenderable(resolved.input, this.clock.now())
+        ? OG_CARD_POLICY.pngTtlSec
+        : OG_CARD_POLICY.pngShortTtlSec;
       const line = await this.ogLine(resolved.input);
       return { png: await renderOgCard(resolved.input, line), note: line ? 'line' : 'no line' };
     });

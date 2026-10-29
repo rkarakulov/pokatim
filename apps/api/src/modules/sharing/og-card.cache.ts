@@ -15,7 +15,23 @@ export const OgCardJob = z.object({
 });
 export type OgCardJob = z.infer<typeof OgCardJob>;
 
-const pngKey = (hash: string) => `og:png:${hash}`;
+const PNG_PREFIX = 'og:png:';
+const pngKey = (hash: string) => `${PNG_PREFIX}${hash}`;
+const objKey = (kind: string, id: string) => `og:obj:${kind}:${id}`;
+
+/**
+ * Готовый PNG атомарно (Lua): PNG нового хэша, ключ объекта → хэш, снять постановку и удалить PNG прежнего хэша
+ * объекта, если он другой (старая версия по URL недостижима — `302`; иначе правки копили бы PNG до TTL, ревью F1).
+ * KEYS: объект, PNG, постановка; ARGV: PNG, TTL PNG, хэш, TTL объекта, префикс PNG.
+ */
+const STORE_READY = `
+local old = redis.call('GET', KEYS[1])
+redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[2])
+redis.call('SET', KEYS[1], ARGV[3], 'EX', ARGV[4])
+redis.call('DEL', KEYS[3])
+if old and old ~= ARGV[3] then redis.call('DEL', ARGV[5] .. old) end
+return 1
+`;
 const pendingKey = (hash: string) => `og:pending:${hash}`;
 const cursorKey = (kind: OgCardKind) => `og:cursor:${kind}`;
 const SWEEP_KEY = 'og:sweep';
@@ -24,16 +40,21 @@ const Cursor = z.object({ at: z.iso.datetime(), id: z.string() });
 
 /**
  * Кэш OG-картинок (og-images, ADR-0018) — Redis, не MongoDB: PNG по хэшу входов (адрес публичный по смыслу — не
- * капабилити), TTL `pngTtlSec` с продлением при выдаче; ключ постановки рендера (NX); курсоры `og.sync` по видам и
+ * капабилити), TTL с продлением при выдаче, ключ объекта → текущий хэш (одна версия PNG на объект); ключ постановки рендера (NX); курсоры `og.sync` по видам и
  * отметка полного прохода (тема + версия рендера). Ключи — хэш и вид, без названий.
  */
 @Injectable()
 export class OgCardCache {
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
-  /** PNG по хэшу с продлением TTL (картинка, которую спрашивают, живёт); нет — `null`. */
-  png(hash: string): Promise<Buffer | null> {
-    return this.redis.getexBuffer(pngKey(hash), 'EX', OG_CARD_POLICY.pngTtlSec);
+  /** PNG объекта по хэшу с продлением TTL PNG и ключа объекта (картинка, которую спрашивают, живёт); нет — `null`. */
+  async png(target: { kind: string; id: string; hash: string }): Promise<Buffer | null> {
+    const ttl = OG_CARD_POLICY.pngTtlSec;
+    const [png] = await Promise.all([
+      this.redis.getexBuffer(pngKey(target.hash), 'EX', ttl),
+      this.redis.expire(objKey(target.kind, target.id), ttl),
+    ]);
+    return png;
   }
 
   async hasPng(hash: string): Promise<boolean> {
@@ -56,13 +77,27 @@ export class OgCardCache {
     await this.redis.del(pendingKey(hash));
   }
 
-  /** PNG и снятие постановки — одной транзакцией. */
-  async storeReady(hash: string, png: Buffer): Promise<void> {
-    await this.redis
-      .multi()
-      .set(pngKey(hash), png, 'EX', OG_CARD_POLICY.pngTtlSec)
-      .del(pendingKey(hash))
-      .exec();
+  /**
+   * PNG объекта с TTL `ttlSec` (пререндер — `pngTtlSec`, самолечение вне окна — `pngShortTtlSec`), ключ объекта → хэш,
+   * снятие постановки и удаление PNG прежней версии объекта — одной атомарной операцией.
+   */
+  async storeReady(
+    target: { kind: string; id: string; hash: string },
+    png: Buffer,
+    ttlSec: number,
+  ): Promise<void> {
+    await this.redis.eval(
+      STORE_READY,
+      3,
+      objKey(target.kind, target.id),
+      pngKey(target.hash),
+      pendingKey(target.hash),
+      png,
+      ttlSec,
+      target.hash,
+      OG_CARD_POLICY.pngTtlSec,
+      PNG_PREFIX,
+    );
   }
 
   /** После финального провала: ключ постановки удержан `failedHoldSec` — самолечение не ставит рендер каждый запрос. */

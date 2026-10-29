@@ -18,11 +18,10 @@ export interface OgCardTexts {
   brand: string;
 }
 
-/** Тексты бренд-картинки: название, слоган, бренд. */
+/** Тексты бренд-картинки: название (оно же бренд — колонтитула нет) и слоган. */
 export interface OgBrandTexts {
   title: string;
   tagline: string;
-  brand: string;
 }
 
 type OgObjectInput = Exclude<OgCardInput, { kind: 'brand' }>;
@@ -107,7 +106,7 @@ export function ogCardTexts(input: OgObjectInput): OgCardTexts {
 }
 
 export function ogBrandTexts(): OgBrandTexts {
-  return { title: t('app.name'), tagline: t('app.tagline'), brand: t('storyCard.brand') };
+  return { title: t('app.name'), tagline: t('app.tagline') };
 }
 
 /** Alt картинки для SSR и превью: «Гонка «…»», бренд — «Покатим — слоган». */

@@ -278,8 +278,9 @@ paths:
   `CALENDAR_FOR_SHARING`: `ogFacts` — только публичный объект, иначе `null`; `ogChanged` — keyset `changed-since.ts`).
   Рендер — только worker: `og-card.render` очереди `story-card` (`priority`, `StoryCardProcessor.buildOgCard`,
   диспетчер по имени задачи), пререндер — `OgSync` (очередь `og-sync`, `og.sync` каждую минуту и при старте). Ключи
-  Redis `og:png:<hash>` (TTL 7 сут., продление при выдаче), `og:pending:<hash>` (NX; после провала — удержание),
-  `og:cursor:<kind>`, `og:sweep`. Тема — «Классика» (`OG_THEME_ID`). **Изменил разметку, тексты или токены `ogCard`
+  Redis `og:png:<hash>` (TTL 7 сут., вне окна пререндера — 1 сут.; продление при выдаче), `og:obj:<kind>:<id>` →
+  текущий хэш (новая версия удаляет PNG прежней — Lua `storeReady`), `og:pending:<hash>` (NX; после провала —
+  удержание), `og:cursor:<kind>`, `og:sweep`; сбой строки `og.sync` — лог и пропуск. Тема — «Классика» (`OG_THEME_ID`). **Изменил разметку, тексты или токены `ogCard`
   — подними `OG_CARD_POLICY.renderVersion`** (новые URL, полный проход `og.sync`).
 - Общий код карточки — пакеты: форматтеры `@pokatim/i18n` (`format.ts`), геометрия линии `@pokatim/route-view`
   (`line-geometry.ts`), таблица начертаний `appFontFaces` и токены `storyCard` — `@pokatim/design-tokens`.

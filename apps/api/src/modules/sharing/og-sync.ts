@@ -25,8 +25,9 @@ export const ogSweepMark = () => `${OG_THEME_ID}:${OG_CARD_POLICY.renderVersion}
  * Пререндер OG-картинок (og-images, D3, DV-1 — без outbox): по каждому виду — публичные объекты, изменившиеся после
  * курсора `(updatedAt, _id)` в Redis; «живым» без PNG текущего хэша ставится рендер (`og-card.render`, NX). Пачка
  * ограничена (`syncScanLimit` строк вида, `syncRenderLimit` постановок за прогон) — курсор на последней обработанной
- * строке, остаток — следующим прогоном. Смена темы или `renderVersion` — курсоры сброшены, полный проход. Сбой вида —
- * курсор вида не двигается, остальные идут, прогон падает (повтор — следующим). Рендера здесь нет.
+ * строке, остаток — следующим прогоном. Смена темы или `renderVersion` — курсоры сброшены, полный проход. Сбой строки —
+ * лог и пропуск; сбой чтения вида — курсор вида не двигается, остальные идут, прогон падает (повтор — следующим).
+ * Рендера здесь нет.
  */
 @Injectable()
 export class OgSync {
@@ -77,15 +78,7 @@ export class OgSync {
         for (const row of rows) {
           if (enqueued >= OG_CARD_POLICY.syncRenderLimit) break;
           scanned[kind] += 1;
-          const resolved = await this.inputs.resolve(kind, row.id);
-          if (
-            resolved &&
-            ogPrerenderable(resolved.input, now) &&
-            !(await this.cache.hasPng(resolved.hash)) &&
-            (await this.queue.enqueue({ kind, id: row.id, hash: resolved.hash }))
-          ) {
-            enqueued += 1;
-          }
+          if (await this.prerender(kind, row.id, now)) enqueued += 1;
           last = { at: row.updatedAt, id: row.id };
         }
         if (last) await this.cache.setCursor(kind, last);
@@ -104,5 +97,25 @@ export class OgSync {
     }
     if (failedKinds.length > 0) throw new Error(`og.sync failed: ${failedKinds.join(',')}`);
     return run;
+  }
+
+  /**
+   * Пререндер одной строки: `true` — рендер поставлен. Сбой строки — лог без названий и пропуск: «ядовитая» строка не
+   * держит курсор вида (ревью F3); картинка объекта догонит самолечением.
+   */
+  private async prerender(kind: OgCardKind, id: string, now: Date): Promise<boolean> {
+    try {
+      const resolved = await this.inputs.resolve(kind, id);
+      return (
+        resolved !== null &&
+        ogPrerenderable(resolved.input, now) &&
+        !(await this.cache.hasPng(resolved.hash)) &&
+        (await this.queue.enqueue({ kind, id, hash: resolved.hash }))
+      );
+    } catch (error) {
+      const reason = error instanceof Error ? error.name : 'unknown';
+      this.logger.warn(`og.sync_row_failed kind=${kind} id=${id} (${reason})`);
+      return false;
+    }
   }
 }

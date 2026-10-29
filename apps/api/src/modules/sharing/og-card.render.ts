@@ -82,23 +82,25 @@ const frame = (colors: StoryCardColors, children: StoryCardChild[]) =>
     ],
   );
 
-/** Колонка текста: верх (метка, название, факты) и бренд внизу под линией. */
+/** Колонка текста: верх (метка, название, факты) и бренд внизу под линией; `brand: null` — без колонтитула. */
 function column(
   colors: StoryCardColors,
   top: StoryCardChild[],
-  brand: string,
+  brand: string | null,
   width: number,
 ): StoryCardNode {
   return box({ flexDirection: 'column', flexShrink: 0, width }, [
     box({ flexDirection: 'column', flexGrow: 1, flexShrink: 1, minHeight: 0 }, top),
-    box(
-      {
-        flexShrink: 0,
-        paddingTop: ogCard.gaps.brandPadTop,
-        borderTop: `${ogCard.rule}px solid ${colors.rule}`,
-      },
-      [text(ogCard.text.brand, colors.ink, brand)],
-    ),
+    brand === null
+      ? null
+      : box(
+          {
+            flexShrink: 0,
+            paddingTop: ogCard.gaps.brandPadTop,
+            borderTop: `${ogCard.rule}px solid ${colors.rule}`,
+          },
+          [text(ogCard.text.brand, colors.ink, brand)],
+        ),
   ]);
 }
 
@@ -166,7 +168,7 @@ export function ogCardTree(input: OgCardRenderInput): StoryCardNode {
   ]);
 }
 
-/** Бренд-картинка: название крупно, слоган, бренд внизу. */
+/** Бренд-картинка: название крупно и слоган по центру; колонтитула нет — название и есть бренд. */
 export function ogBrandTree(input: OgBrandRenderInput): StoryCardNode {
   const { texts, colors } = input;
   return frame(colors, [
@@ -180,7 +182,7 @@ export function ogBrandTree(input: OgBrandRenderInput): StoryCardNode {
         ]),
         box({ flexGrow: 1 }),
       ],
-      texts.brand,
+      null,
       textWidth(false),
     ),
   ]);

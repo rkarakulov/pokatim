@@ -20,6 +20,7 @@ import { QUEUE } from '../../queues';
 import { ROUTE_GEOMETRY, type RouteGeometry } from '../routes';
 import { RIDES_FOR_SHARING, type RidesForSharing } from '../rides';
 import { OG_CARD_RENDER_JOB, OgCardCache, type OgCardJob } from './og-card.cache';
+import { OG_THEME_ID, ogCardHash, ogCardVersion } from './og-card.inputs';
 import { OG_CARD_POLICY } from './sharing.policy';
 import { StoryCardProcessor } from './story-card.processor';
 
@@ -242,9 +243,18 @@ describe('приватность (AC4)', () => {
   it('райд со своим (private) маршрутом — версия как без линии; маршрут снят с каталога — новая версия, 302', async () => {
     const own = await seedRiderRoute(h, organizer.userId);
     const privateRide = await createRide(h, organizer, { routeId: own });
-    const plainRide = await createRide(h, organizer);
     const rides = h.app.get<RidesForSharing>(RIDES_FOR_SHARING);
-    expect(await rides.ogFacts(privateRide.id)).toMatchObject({ routeId: null });
+    const facts = await rides.ogFacts(privateRide.id);
+    expect(facts).toMatchObject({ routeId: null });
+    // версия HTTP — ровно версия тех же фактов без линии (а не с `routeId` документа)
+    const noLine = ogCardVersion(
+      ogCardHash({ kind: 'ride', themeId: OG_THEME_ID, facts: { ...facts!, routeId: null } }),
+    );
+    const withOwnLine = ogCardVersion(
+      ogCardHash({ kind: 'ride', themeId: OG_THEME_ID, facts: { ...facts!, routeId: own } }),
+    );
+    expect(await version('ride', privateRide.id)).toBe(noLine);
+    expect(noLine).not.toBe(withOwnLine);
 
     const team = await seedTeamRoute(h);
     const ride = await createRide(h, organizer, { routeId: team });
@@ -255,7 +265,6 @@ describe('приватность (AC4)', () => {
     const moved = await image('ride', ride.id, withLine);
     expect(moved.statusCode).toBe(302);
     expect(moved.headers.location).toContain(withoutLine);
-    expect(await version('ride', plainRide.id)).toMatch(/^[0-9a-f]{16}$/);
   });
 
   it('ответы cards и задачи — без организатора и автора', async () => {
@@ -293,6 +302,36 @@ describe('buildOgCard — процессор', () => {
     expect(await h.redis.exists(`og:pending:${job!.data.hash}`)).toBe(0);
     expect(logs.join('\n')).toContain(`og calendar ${calendar}: ready`);
     expect(logs.join('\n')).not.toContain('Гран-фондо');
+  });
+
+  it('новая версия объекта вытесняет прежний PNG: в Redis один og:png этого объекта (ревью F1)', async () => {
+    const start = await seedStart(h);
+    await image('calendar', start, await version('calendar', start));
+    await runJobs();
+    const first = await h.redis.get(`og:obj:calendar:${start}`);
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    await startsDb(h).updateOne({ _id: start }, { $set: { title: 'Вторая версия' } });
+    await image('calendar', start, await version('calendar', start));
+    await runJobs();
+    const second = await h.redis.get(`og:obj:calendar:${start}`);
+    expect(second).not.toBe(first);
+    expect(await h.redis.exists(`og:png:${first}`)).toBe(0);
+    expect(await h.redis.exists(`og:png:${second}`)).toBe(1);
+    // повтор того же хэша — PNG не удаляется
+    await processor().buildOgCard({ kind: 'calendar', id: start, hash: second! });
+    expect(await h.redis.exists(`og:png:${second}`)).toBe(1);
+  });
+
+  it('TTL: «живой» объект — 7 сут., вне окна пререндера (самолечение) — короткий (ревью F2)', async () => {
+    const live = await seedStart(h);
+    const old = await seedStart(h, { startsOn: '2025-06-01', endsOn: '2025-06-02' });
+    for (const id of [live, old]) await image('calendar', id, await version('calendar', id));
+    await runJobs();
+    const ttl = async (id: string) =>
+      h.redis.ttl(`og:png:${await h.redis.get(`og:obj:calendar:${id}`)}`);
+    expect(await ttl(live)).toBeGreaterThan(OG_CARD_POLICY.pngTtlSec - 10);
+    expect(await ttl(old)).toBeLessThanOrEqual(OG_CARD_POLICY.pngShortTtlSec);
+    expect(await ttl(old)).toBeGreaterThan(OG_CARD_POLICY.pngShortTtlSec - 10);
   });
 
   it('хэш устарел или объект скрыт → skipped, PNG не пишется', async () => {

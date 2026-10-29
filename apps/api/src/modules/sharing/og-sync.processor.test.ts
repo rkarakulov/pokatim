@@ -25,9 +25,14 @@ describe('OgSchedules (og-images, DV-1)', () => {
         'upsertJobScheduler',
         'og.sync',
         { pattern: '* * * * *', tz: 'Europe/Minsk' },
-        { name: 'sync' },
+        { name: 'sync', opts: { attempts: 1, removeOnComplete: true, removeOnFail: true } },
       ],
-      ['add', 'sync', {}, { jobId: 'og.sync.boot', removeOnComplete: true, removeOnFail: true }],
+      [
+        'add',
+        'sync',
+        {},
+        { jobId: 'og.sync.boot', attempts: 1, removeOnComplete: true, removeOnFail: true },
+      ],
     ]);
   });
 
