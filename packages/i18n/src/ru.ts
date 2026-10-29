@@ -2559,4 +2559,18 @@ export const ru = {
   'admin.moderation.tab.riderProfiles': 'Профили райдеров',
   'admin.moderation.tab.rides': 'Кофе-райды',
   'admin.moderation.tabCount': 'ждут решения: {count}',
+  // panel-2fa (ADR-0023): журнал и ошибки 2FA панели (экраны — следующим шагом)
+  'admin.audit.action.panel.totp_enabled': 'Подключена 2FA',
+  'admin.audit.action.panel.totp_disabled': 'Отключена 2FA',
+  'admin.audit.action.panel.totp_reset': 'Сброшена 2FA',
+  'admin.audit.action.panel.totp_recovery_regenerated': 'Перевыпущены коды восстановления',
+  'admin.audit.action.panel.totp_recovery_used': 'Вход кодом восстановления',
+  'admin.totp.error.TOTP_INVALID_CODE': 'Неверный код. Проверьте код и попробуйте ещё раз.',
+  'admin.totp.error.TOTP_CHALLENGE_EXPIRED': 'Время на ввод кода истекло. Войдите заново.',
+  'admin.totp.error.TOTP_ALREADY_ENABLED': 'Двухфакторная защита уже подключена.',
+  'admin.totp.error.TOTP_NOT_ENABLED': 'Двухфакторная защита не подключена.',
+  'admin.totp.error.TOTP_REQUIRED':
+    'Для администратора двухфакторная защита обязательна — отключить её нельзя.',
+  'admin.totp.error.TOTP_UNAVAILABLE':
+    'Двухфакторная защита временно недоступна. Обратитесь к администратору платформы.',
 } as const;

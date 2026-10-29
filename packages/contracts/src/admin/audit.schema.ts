@@ -67,6 +67,13 @@ export const AUDIT_ACTIONS = [
   'profile.avatar_reset',
   'profile.club_reset',
   'profile.reports_dismissed',
+  // panel-2fa (ADR-0023): подключение и отключение 2FA (сам), сброс (admin или cli, причина), перевыпуск кодов
+  // восстановления и вход кодом восстановления
+  'panel.totp_enabled',
+  'panel.totp_disabled',
+  'panel.totp_reset',
+  'panel.totp_recovery_regenerated',
+  'panel.totp_recovery_used',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;

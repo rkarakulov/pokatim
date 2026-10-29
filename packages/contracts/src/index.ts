@@ -19,6 +19,7 @@ export * from './admin/session.schema.ts';
 export * from './admin/members.schema.ts';
 export * from './admin/audit.schema.ts';
 export * from './admin/overview.schema.ts';
+export * from './admin/totp.schema.ts';
 export * from './races/season.schema.ts';
 export * from './races/race.schema.ts';
 export * from './races/race-public.schema.ts';

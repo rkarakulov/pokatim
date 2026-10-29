@@ -90,6 +90,12 @@ describe('коды ошибок', () => {
       'AVATAR_TOO_LARGE',
       'AVATAR_INVALID',
       'PROFILE_INVALID_STATE',
+      'TOTP_INVALID_CODE',
+      'TOTP_CHALLENGE_EXPIRED',
+      'TOTP_ALREADY_ENABLED',
+      'TOTP_NOT_ENABLED',
+      'TOTP_REQUIRED',
+      'TOTP_UNAVAILABLE',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

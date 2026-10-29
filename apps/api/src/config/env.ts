@@ -106,6 +106,16 @@ const tracksDevicesEnvShape = {
   DEPLOY_STAGE: z.enum(['dev', 'prod']).default('prod'),
 };
 
+/**
+ * 2FA панели «Протокол» (TOTP, ADR-0023): ключ AES-256-GCM секретов TOTP и HMAC кодов восстановления — 32 байта hex
+ * (dev — `@secret` шаблона деплоя), только env. Без ключа подключение и вход сотрудника с 2FA — `503 TOTP_UNAVAILABLE`.
+ * `PANEL_TOTP_ENFORCED` — 2FA обязательна для admin (без ключа — отказ запуска).
+ */
+const panelTotpEnvShape = {
+  PANEL_TOTP_KEY: optional(z.string().regex(/^[0-9a-fA-F]{64}$/, 'PANEL_TOTP_KEY: hex 64 (32 байта)')),
+  PANEL_TOTP_ENFORCED: flag(false),
+};
+
 /** Адрес Expo Push API по умолчанию — единственный разрешённый в production (ADR-0017). */
 export const EXPO_PUSH_API_DEFAULT_URL = 'https://exp.host/--/api/v2/push';
 
@@ -185,6 +195,7 @@ const baseEnv = defineCoreEnv({
   CORS_ORIGINS: corsOrigins,
   ...tracksDevicesEnvShape,
   ...notificationsEnvShape,
+  ...panelTotpEnvShape,
 });
 type BaseEnv = ReturnType<typeof baseEnv.load>;
 
@@ -222,6 +233,9 @@ export function envDependencyErrors(value: BaseEnv): string[] {
     } else if (vapidPublicOf(value.VAPID_PRIVATE_KEY) !== value.VAPID_PUBLIC_KEY) {
       errors.push('VAPID_PUBLIC_KEY и VAPID_PRIVATE_KEY — не пара');
     }
+  }
+  if (value.PANEL_TOTP_ENFORCED && !value.PANEL_TOTP_KEY) {
+    errors.push('PANEL_TOTP_ENFORCED=true: нужен PANEL_TOTP_KEY');
   }
   if (value.WEB_PUSH_TEST_ORIGIN && value.NODE_ENV !== 'test') {
     errors.push('WEB_PUSH_TEST_ORIGIN — только NODE_ENV=test');

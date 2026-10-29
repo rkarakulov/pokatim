@@ -58,6 +58,11 @@ describe('AuditAction', () => {
       'profile.avatar_reset',
       'profile.club_reset',
       'profile.reports_dismissed',
+      'panel.totp_enabled',
+      'panel.totp_disabled',
+      'panel.totp_reset',
+      'panel.totp_recovery_regenerated',
+      'panel.totp_recovery_used',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',

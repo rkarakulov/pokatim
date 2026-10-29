@@ -79,11 +79,13 @@ describe('PanelMember', () => {
       status: 'revoked',
       grantedAt: '2026-10-25T10:00:00.000Z',
       revokedAt: '2026-10-25T11:00:00.000Z',
+      totpEnabled: false,
     };
     expect(PanelMemberList.parse({ items: [member], truncated: false })).toEqual({
       items: [member],
       truncated: false,
     });
     expect(PanelMember.safeParse({ ...member, status: 'blocked' }).success).toBe(false);
+    expect(PanelMember.safeParse({ ...member, totpEnabled: undefined }).success).toBe(false);
   });
 });
