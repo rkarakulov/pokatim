@@ -47,7 +47,7 @@ describe('pushTargetPath — нажатие на push', () => {
   );
 });
 
-describe('паритет с service worker (Web Push, ADR-0021)', () => {
+describe('паритет с service worker (Web Push, ADR-0022)', () => {
   it.each([
     { type: 'race', raceId: RACE },
     { type: 'ride', rideId: RIDE },

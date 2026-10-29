@@ -1,19 +1,25 @@
 /// <reference types="jest" />
 import { liveSession, liveSessionB } from '@/__tests__/auth-fixtures';
-import { useSessionStore } from '@/features/auth/session-store';
+import type { useSessionStore as SessionStore } from '@/features/auth/session-store';
+
+import type * as PushWeb from './push.web';
 import { api } from '@/lib/api';
 
+// одни и те же функции во всех «загрузках страницы» (`jest.isolateModules`)
+const mockApi = {
+  getWebPushConfig: jest.fn(),
+  registerWebPushSubscription: jest.fn(),
+  revokeWebPushSubscription: jest.fn(),
+};
 jest.mock('@/lib/api', () => ({
-  api: {
-    getWebPushConfig: jest.fn(),
-    registerWebPushSubscription: jest.fn(),
-    revokeWebPushSubscription: jest.fn(),
+  get api() {
+    return mockApi;
   },
 }));
-// access — текущей сессии стора (без refresh): sid подписки — из него
+// access текущей сессии (без refresh): sid подписки — из него
+const mockAccess = { token: '' };
 jest.mock('@/features/auth/authorized', () => ({
-  withAccessToken: <T>(call: (token: string) => Promise<T>) =>
-    call(useSessionStore.getState().session!.accessToken),
+  withAccessToken: <T>(call: (token: string) => Promise<T>) => call(mockAccess.token),
 }));
 
 const config = jest.mocked(api.getWebPushConfig);
@@ -97,17 +103,26 @@ function removeBrowserPush() {
   delete (window as { PushManager?: unknown }).PushManager;
 }
 
-/** Модуль заново: кеш ключа сервера и принятой подписки — на загрузку страницы. */
+/** Сессия стора текущей «загрузки страницы» (`load`). */
+let store!: typeof SessionStore;
+
+/** Модуль заново, как загрузка страницы: кеш ключа сервера и принятой подписки; вошёл — `liveSession`. */
 const load = () => {
-  let module!: typeof import('./push.web');
+  let module!: typeof PushWeb;
   jest.isolateModules(() => {
-    module = require('./push') as typeof import('./push.web');
+    // свежий реестр модулей — только require (import поднимается к началу файла)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    store = (require('@/features/auth/session-store') as { useSessionStore: typeof SessionStore })
+      .useSessionStore;
+    store.setState({ status: 'signedIn', session: { ...liveSession } });
+    mockAccess.token = liveSession.accessToken;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    module = require('./push') as typeof PushWeb;
   });
   return module;
 };
 
 beforeEach(() => {
-  useSessionStore.setState({ status: 'signedIn', session: { ...liveSession } });
   browser.current = null;
   browser.permission = 'default';
   browser.listeners.clear();
@@ -122,7 +137,7 @@ beforeEach(() => {
 });
 afterEach(() => jest.clearAllMocks());
 
-describe('поддержка Web Push (ADR-0021)', () => {
+describe('поддержка Web Push (ADR-0022)', () => {
   it('нет Push API в браузере — unavailable, сервер не спрашивается, подписки нет', async () => {
     removeBrowserPush();
     const push = load();
@@ -184,7 +199,8 @@ describe('состояние и подписка', () => {
     const push = load();
     const device = (await push.obtainPushToken())!;
     await push.sendPushRegistration(liveSession.accessToken, device);
-    useSessionStore.setState({ session: { ...liveSessionB } });
+    store.setState({ session: { ...liveSessionB } });
+    mockAccess.token = liveSessionB.accessToken;
     expect((await push.getPushPermission()).subscription).toBe('missing');
     await push.sendPushRegistration(liveSessionB.accessToken, device);
     expect(register).toHaveBeenCalledTimes(2);

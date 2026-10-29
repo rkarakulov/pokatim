@@ -81,7 +81,8 @@ export function PushPermissionRow() {
       }
       const next = row.action === 'request' ? await requestPushPermission() : permission!;
       if (next.status === 'granted') await registerDevicePush();
-      setPermission(next.status === 'granted' ? await getPushPermission() : next);
+      // web сверяет подписку после регистрации; native при выданном разрешении строки больше нет
+      setPermission(next.subscription ? await getPushPermission() : next);
     } finally {
       setBusy(false);
     }

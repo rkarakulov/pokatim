@@ -9,7 +9,7 @@ import { secureStorage } from '@/features/auth/secure-storage';
 import { api } from '@/lib/api';
 
 /**
- * Push на native (ADR-0017, `expo-notifications`). Web — `push.web.ts` (Web Push в PWA, ADR-0021): экраны и хуки
+ * Push на native (ADR-0017, `expo-notifications`). Web — `push.web.ts` (Web Push в PWA, ADR-0022): экраны и хуки
  * импортируют модуль без расширения и не знают платформы.
  */
 export type PushPermission = 'granted' | 'denied' | 'undetermined' | 'unavailable';
@@ -19,7 +19,7 @@ export interface PushPermissionState {
   /** системный запрос ещё можно показать; `false` при отказе — строка ведёт в настройки ОС (N5) */
   canAskAgain: boolean;
   /**
-   * Подписка этого устройства при `granted` — только web (ADR-0021): `active` — есть и принята сервером, `missing` —
+   * Подписка этого устройства при `granted` — только web (ADR-0022): `active` — есть и принята сервером, `missing` —
    * нет или не принята, `expired` — истекла или выдана под старым ключом. Native — нет поля (токен — всегда).
    */
   subscription?: 'active' | 'missing' | 'expired';

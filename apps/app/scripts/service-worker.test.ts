@@ -92,7 +92,7 @@ describe('service worker: precache', () => {
 
 const RACE = '0190a6f4-0000-7000-8000-000000000001';
 
-describe('service worker: Web Push (ADR-0021)', () => {
+describe('service worker: Web Push (ADR-0022)', () => {
   it('push — системное уведомление с текстом и целью; открытым окнам — сигнал обновить счётчик', async () => {
     const sw = loadServiceWorker();
     sw.windows.push({ url: `${ORIGIN}/`, focused: false });

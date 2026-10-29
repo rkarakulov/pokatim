@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import { withAccessToken } from '@/features/auth/authorized';
 import { accessClaims } from '@/features/auth/session-identity';
 import { useSessionStore } from '@/features/auth/session-store';
+import { isIosDevice, isStandaloneDisplay } from '@/features/pwa-install/install-platform';
 import { api } from '@/lib/api';
 
 import type { DevicePushToken, PushPermission, PushPermissionState } from './push';
 
 /**
- * Web Push в PWA (ADR-0021): подписка браузера (`PushManager`, VAPID) — тот же канал push, что Expo на native.
+ * Web Push в PWA (ADR-0022): подписка браузера (`PushManager`, VAPID) — тот же канал push, что Expo на native.
  * Поддержка — Service Worker + Push API + Notification, на iOS/iPadOS — только установленная PWA (standalone), и
  * сервер шлёт Web Push (`publicKey` не `null`). Всё, что трогает `window`/`navigator`, — только в вызовах после
  * монтирования: модуль грузится и в SSR.
@@ -23,20 +24,12 @@ export const SW_MESSAGE = { push: 'pokatim:push', open: 'pokatim:open' } as cons
 
 const isBrowser = () => typeof window !== 'undefined' && typeof navigator !== 'undefined';
 
-/** iPhone/iPad (iPadOS выдаёт себя за Mac — по сенсорному экрану). */
-function isAppleMobile(): boolean {
-  return (
-    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+/** Запущено как установленная PWA (с экрана «Домой» / из меню приложений) — общий детект плашки установки. */
+const isStandalone = () =>
+  isStandaloneDisplay(
+    (navigator as Navigator & { standalone?: boolean }).standalone,
+    window.matchMedia?.('(display-mode: standalone)').matches ?? false,
   );
-}
-
-/** Запущено как установленная PWA (с экрана «Домой» / из меню приложений). */
-export function isStandalone(): boolean {
-  if (!isBrowser()) return false;
-  const legacy = (navigator as Navigator & { standalone?: boolean }).standalone === true;
-  return legacy || window.matchMedia?.('(display-mode: standalone)').matches === true;
-}
 
 /** Браузер умеет Web Push; iOS/iPadOS — только установленная PWA (16.4+, в обычной вкладке `PushManager` нет). */
 export function browserSupportsPush(): boolean {
@@ -48,7 +41,7 @@ export function browserSupportsPush(): boolean {
   ) {
     return false;
   }
-  return !isAppleMobile() || isStandalone();
+  return !isIosDevice(navigator) || isStandalone();
 }
 
 /** Публичный ключ VAPID сервера: запрос один раз на загрузку страницы; сбой не кешируется. */

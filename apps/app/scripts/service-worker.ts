@@ -1,4 +1,4 @@
-// Service worker web-сборки: кеш статики сборки (без офлайн-данных) и Web Push (ADR-0021: показ уведомления,
+// Service worker web-сборки: кеш статики сборки (без офлайн-данных) и Web Push (ADR-0022: показ уведомления,
 // нажатие — фокус окна или открытие по цели). Чистые функции — генератор scripts/build-service-worker.ts и тесты.
 import { createHash } from 'node:crypto';
 
@@ -77,7 +77,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(caches.match(event.request).then((hit) => hit ?? fetch(event.request)));
 });
 
-// Web Push (ADR-0021): payload — { title, body, target } от сервера (снимок уведомления, цель — тип и id из белого
+// Web Push (ADR-0022): payload — { title, body, target } от сервера (снимок уведомления, цель — тип и id из белого
 // списка); путь — по цели (копия notificationTargetPath приложения, паритет держит тест), иначе центр уведомлений
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NOTIFICATIONS_PATH = '/notifications';
