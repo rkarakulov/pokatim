@@ -23,6 +23,8 @@ import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { SectionHero } from '@/components/section-hero';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { EventMaterialsBlock } from '@/features/tickets/event-materials-block';
+import { useEventMaterialsRefetch } from '@/features/tickets/materials-query';
 import {
   domainLabel,
   formatDistances,
@@ -171,6 +173,8 @@ function RaceDetailView({
           </Text>
         </Row>
       ) : null}
+      {/* материалы события (event-tickets PR C): публичный список, пусто или 404 — блока нет */}
+      <EventMaterialsBlock kind="race" eventId={race.id} />
       {showsResultsTable(race) ? (
         <RaceResultsTable
           raceId={race.id}
@@ -227,9 +231,11 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
   // таблица: группа по умолчанию, выбранная вкладка и «Финишёры» (race-results-07c)
   const resultsRefetch = useRaceResultsRefetch(id);
   const hasCorridor = Boolean(race.data?.corridor);
+  const materialsRefetch = useEventMaterialsRefetch('race', id);
   const refetchers = useMemo(
     () => [
       race.refetch,
+      materialsRefetch,
       ...(hasCorridor ? [routeRefetch] : []),
       ...(signedIn ? [entry.refetch] : []),
       ...(entered ? [disputes.refetch] : []),
@@ -237,6 +243,7 @@ export function RaceDetailScreen({ id, seed }: { id: string; seed: RaceDetail | 
     ],
     [
       race.refetch,
+      materialsRefetch,
       hasCorridor,
       routeRefetch,
       signedIn,

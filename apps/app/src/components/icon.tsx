@@ -36,6 +36,23 @@ const ICONS = {
   trophy: { ios: 'trophy', iosFilled: 'trophy.fill', material: 'emoji_events' },
   // закрыть плашку и шторку установки PWA (pwa-install)
   close: { ios: 'xmark', material: 'close' },
+  // темы материалов события (event-tickets PR C): строка материала на карточке и билете
+  document: { ios: 'doc.text', iosFilled: 'doc.text.fill', material: 'description' },
+  pdf: { ios: 'doc.richtext', iosFilled: 'doc.richtext.fill', material: 'picture_as_pdf' },
+  link: { ios: 'link', material: 'link' },
+  text: { ios: 'text.alignleft', material: 'notes' },
+  bag: { ios: 'bag', iosFilled: 'bag.fill', material: 'backpack' },
+  clothing: { ios: 'tshirt', iosFilled: 'tshirt.fill', material: 'checkroom' },
+  safety: { ios: 'cross.case', iosFilled: 'cross.case.fill', material: 'health_and_safety' },
+  gpx: { ios: 'point.topleft.down.to.point.bottomright.curvepath', material: 'route' },
+  parking: {
+    ios: 'parkingsign.circle',
+    iosFilled: 'parkingsign.circle.fill',
+    material: 'local_parking',
+  },
+  flag: { ios: 'flag', iosFilled: 'flag.fill', material: 'flag' },
+  food: { ios: 'fork.knife', material: 'restaurant' },
+  weather: { ios: 'cloud.sun', iosFilled: 'cloud.sun.fill', material: 'partly_cloudy_day' },
 } as const satisfies Record<
   string,
   { ios: SFSymbol; iosFilled?: SFSymbol; material: AndroidSymbol }

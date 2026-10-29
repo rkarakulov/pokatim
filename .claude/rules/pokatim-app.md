@@ -581,6 +581,12 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   (`@pokatim/design-tokens`, светлая «бумага» во всех темах, контраст ≥ 7:1).
 - «Поделиться» билетом — только ссылка на событие без кода и QR (RC-B2). «Как добраться» — `maps-link.ts` (https-поиск
   по адресу, `openExternalUrl`).
+- Материалы события (PR C, plan-C §7): представление — `components/event-materials.tsx` (иконка темы, название,
+  описание ≤ 2 строк, «PDF · 1,2 МБ» или домен; модель — `features/tickets/materials-format.ts`); ссылка — только после
+  `RegistrationUrl.safeParse` → `openExternalUrl`, PDF — `downloadFile(api.eventFileUrl(id))`, текст — раскрытие
+  описания. Карточки гонки и старта — `EventMaterialsBlock` (`features/tickets/event-materials-block.tsx`, ключ
+  `['events', kind, id, 'materials']`, `staleTime` 60 с; скелетон, пусто/404 — блока нет, ошибка — по месту с повтором);
+  билет — `TicketView.materials` без запроса (входит в офлайн-копию).
 
 ## Оболочка и неизвестные адреса (смоук dev 2026-10-27)
 

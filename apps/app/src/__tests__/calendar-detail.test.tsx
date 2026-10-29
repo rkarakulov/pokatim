@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
-import type { CalendarStartDetail } from '@pokatim/contracts';
+import type { CalendarStartDetail, EventMaterial } from '@pokatim/contracts';
 import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, within } from 'expo-router/testing-library';
 
@@ -52,6 +52,8 @@ const openSignedIn = (url: string) =>
   renderRouter(signedInRoutes, { initialUrl: url, wrapper: createQueryWrapper() });
 
 beforeEach(() => {
+  // материалы события (event-tickets PR C): по умолчанию у события их нет — блока нет
+  jest.mocked(api.getEventMaterials).mockResolvedValue([]);
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   getCalendarStart.mockResolvedValue(detail);
   listCalendar.mockResolvedValue({ items: [detail], nextCursor: null });
@@ -252,5 +254,51 @@ describe('карточка старта (AC4)', () => {
     });
     expect(screen.getByText('Нет соединения')).toBeOnTheScreen();
     expect(screen.getByLabelText(heroLabel)).toBeOnTheScreen();
+  });
+});
+
+describe('материалы события на карточке старта (event-tickets PR C, plan-C §7)', () => {
+  const FILE_ID = 'c'.repeat(43);
+  const pdf: EventMaterial = {
+    id: '0190a6f4-0000-7000-8000-0000000000f2',
+    type: 'route',
+    title: 'Схема трассы',
+    description: null,
+    url: null,
+    file: { id: FILE_ID, name: 'route.pdf', size: 348160 },
+  };
+  const getMaterials = jest.mocked(api.getEventMaterials);
+
+  it('гость: блок «Материалы» после «О старте»; PDF — скачивание по адресу файла (native — системный браузер)', async () => {
+    getMaterials.mockResolvedValue([pdf]);
+    jest
+      .mocked(api.eventFileUrl)
+      .mockImplementation((id) => `https://api.test/v1/event-files/${id}`);
+    await renderRouter(appRoutes, { initialUrl: `/calendar/${ID}` });
+
+    const row = await screen.findByRole('button', { name: 'Схема трассы. PDF · 340 КБ' });
+    expect(getMaterials).toHaveBeenCalledWith('calendar', ID);
+    expect(screen.getByText('О старте')).toBeOnTheScreen();
+    await fireEvent.press(row);
+    expect(open).toHaveBeenCalledWith(`https://api.test/v1/event-files/${FILE_ID}`);
+  });
+
+  it('снятый старт (404) — блока нет, карточка как раньше', async () => {
+    getMaterials.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+    await openSignedIn(`/calendar/${ID}`);
+    await screen.findByLabelText(heroLabel);
+    await act(async () => undefined);
+    expect(screen.queryByTestId('event-materials')).toBeNull();
+  });
+
+  it('ошибка без данных — «Не удалось загрузить» по месту с повтором', async () => {
+    getMaterials
+      .mockRejectedValueOnce(new ApiHttpError(503, { code: 'INTERNAL', message: 'x' }))
+      .mockResolvedValue([pdf]);
+    await openSignedIn(`/calendar/${ID}`);
+
+    const failure = await screen.findByTestId('event-materials-error');
+    await fireEvent.press(within(failure).getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByText('Схема трассы')).toBeOnTheScreen();
   });
 });

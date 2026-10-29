@@ -86,6 +86,8 @@ const realXhr = global.XMLHttpRequest;
 const realFetch = global.fetch;
 
 beforeEach(() => {
+  // материалы события (event-tickets PR C): по умолчанию у события их нет — блока нет
+  jest.mocked(api.getEventMaterials).mockResolvedValue([]);
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   getRace.mockResolvedValue(corridorRace());
   getMyRaceEntry.mockResolvedValue(noEntry());

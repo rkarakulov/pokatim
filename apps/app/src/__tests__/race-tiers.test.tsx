@@ -53,6 +53,8 @@ const verified = () => within(screen.getByTestId('tier-verified'));
 const start = () => within(screen.getByTestId('tier-start'));
 
 beforeEach(() => {
+  // материалы события (event-tickets PR C): по умолчанию у события их нет — блока нет
+  jest.mocked(api.getEventMaterials).mockResolvedValue([]);
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   getRace.mockResolvedValue(corridorRace());
   getMyRaceEntry.mockResolvedValue(noEntryTiers());

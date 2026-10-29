@@ -63,6 +63,22 @@ describe('офлайн-копии билетов — native (AC12)', () => {
     });
   });
 
+  it('материалы события (PR C) входят в копию и читаются обратно', async () => {
+    const materials = [
+      {
+        id: '0190a6f4-0000-7000-8000-0000000000f5',
+        type: 'pdf' as const,
+        title: 'Положение',
+        description: null,
+        url: null,
+        file: { id: 'd'.repeat(43), name: 'rules.pdf', size: 2048 },
+      },
+    ];
+    await saveOfflineTicket(OWNER, { ...raceTicket, materials }, NOW);
+    const copy = await readOfflineTicket(OWNER, raceTicket.code, NOW + 1);
+    expect(copy?.view.materials).toEqual(materials);
+  });
+
   it('другой владелец — копии нет, обе части стираются', async () => {
     await saveOfflineTicket(OWNER, raceTicket, NOW);
 

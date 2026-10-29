@@ -105,6 +105,8 @@ const signIn = () => useSessionStore.setState({ status: 'signedIn', session: liv
 const guest = () => useSessionStore.setState({ status: 'signedOut', session: null });
 
 beforeEach(() => {
+  // материалы события (event-tickets PR C): по умолчанию у события их нет — блока нет
+  jest.mocked(api.getEventMaterials).mockResolvedValue([]);
   jest.mocked(api.getCalendarStart).mockResolvedValue(start);
   getTicketing.mockResolvedValue(ticketing());
   getRegistration.mockResolvedValue(none);
