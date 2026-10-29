@@ -222,6 +222,9 @@ describe('web push (ADR-0021)', () => {
     ['учётные данные', 'https://user:pw@fcm.googleapis.com/x'],
     ['внутренний адрес', 'https://127.0.0.1/x'],
     ['не URL', 'fcm.googleapis.com/x'],
+    ['обратный слеш', 'https://fcm.googleapis.com\\@evil.com/x'],
+    ['без пути', 'https://fcm.googleapis.com'],
+    ['пробел в пути', 'https://fcm.googleapis.com/a b'],
   ])('%s — нет', (_name, endpoint) => {
     expect(isWebPushEndpoint(endpoint)).toBe(false);
   });

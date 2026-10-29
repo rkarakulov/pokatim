@@ -117,7 +117,10 @@ export class HttpWebPushSender implements WebPushSender {
   }
 
   private allowed(endpoint: string): boolean {
-    if (isWebPushEndpoint(endpoint)) return true;
+    // строка и её нормализованный URL — оба на хосте push-сервиса (расхождение разборов не обходит белый список)
+    if (isWebPushEndpoint(endpoint) && URL.canParse(endpoint)) {
+      return isWebPushEndpoint(new URL(endpoint).href);
+    }
     const { testOrigin } = this.config;
     return !!testOrigin && URL.canParse(endpoint) && new URL(endpoint).origin === testOrigin;
   }

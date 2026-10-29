@@ -149,18 +149,16 @@ const WEB_PUSH_HOSTS = [
   /^([a-z0-9-]+\.)*push\.apple\.com$/,
 ];
 
-/** Хост endpoint — push-сервис из белого списка (без порта, учётных данных и не https — нет). */
+/**
+ * `https://<хост>/<путь>`: хост — только буквы, цифры, `.` и `-` (без порта, учётных данных, `\`), путь — без пробелов
+ * и управляющих символов. Разбор строкой: в пакете контрактов нет `URL`; адаптер сервера сверяет и нормализованный URL.
+ */
+const WEB_PUSH_URL = /^https:\/\/([a-z0-9.-]+)\/[^\s\\]*$/i;
+
+/** Endpoint — https на хосте push-сервиса из белого списка. */
 export function isWebPushEndpoint(value: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return false;
-  }
-  if (url.protocol !== 'https:' || url.port !== '' || url.username !== '' || url.password !== '') {
-    return false;
-  }
-  return WEB_PUSH_HOSTS.some((re) => re.test(url.hostname));
+  const host = WEB_PUSH_URL.exec(value)?.[1]?.toLowerCase();
+  return host !== undefined && WEB_PUSH_HOSTS.some((re) => re.test(host));
 }
 
 export const WEB_PUSH_ENDPOINT_MAX = 2048;
