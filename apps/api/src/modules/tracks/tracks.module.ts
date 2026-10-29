@@ -18,13 +18,14 @@ import { TrackProcessingProcessor } from './track-processing.processor';
 import { TrackSourcesService } from './track-sources.service';
 import { TrackUploadsController } from './track-uploads.controller';
 import { TrackUploadsService } from './track-uploads.service';
+import { TracksOverview } from './tracks-overview';
 import { TracksMaintenanceProcessor, TracksSchedules } from './tracks-maintenance.processor';
 import { TracksRepository } from './tracks.repository';
 
 /**
  * Ядро `tracks` для API и worker: репозиторий, хранилище исходников (порт, на dev — ФС), приём исходника,
- * удаление, порт `TrackIngest` для модуля `devices`, `ActivitySource` для `results` и `TrackErasure` для `account`
- * (только через `index.ts`).
+ * удаление, порт `TrackIngest` для модуля `devices`, `ActivitySource` для `results`, `TrackErasure` для `account` и
+ * `TracksOverview` для «Обзора» панели (только через `index.ts`).
  */
 @Module({
   providers: [
@@ -43,6 +44,7 @@ import { TracksRepository } from './tracks.repository';
     ActivityTotalsService,
     { provide: ACTIVITY_TOTALS, useExisting: ActivityTotalsService },
     TrackErasure,
+    TracksOverview,
   ],
   exports: [
     TRACK_INGEST,
@@ -53,6 +55,7 @@ import { TracksRepository } from './tracks.repository';
     TrackSourcesService,
     TrackUploadsService,
     TrackErasure,
+    TracksOverview,
   ],
 })
 export class TracksCoreModule {}

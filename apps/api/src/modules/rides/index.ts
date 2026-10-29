@@ -23,3 +23,5 @@ export {
   type RiderRideFact,
   type RiderRides,
 } from './rider-rides.port';
+/** Порт «Обзора» панели (admin-overview): райды с открытыми жалобами и активные райды. */
+export { RidesOverview } from './rides-overview';

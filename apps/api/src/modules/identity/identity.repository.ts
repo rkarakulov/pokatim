@@ -106,6 +106,11 @@ type NewLink = { id: string; userId: string; tokenHash: string; createdAt: Date;
  *   если документ держит транзакция, такая запись ждёт её конца и перепроверяет фильтр.
  * - Значения фильтров — только примитивы после zod (хеши, id, даты), не объекты запроса.
  */
+/** Удалённые раньше `deletedBefore` без завершённого повторного прохода — `partialFilterExpression` индекса 0023. */
+function pendingSweepFilter(deletedBefore: Date): Filter<UserDoc> {
+  return { deletedAt: { $type: 'date', $lt: deletedBefore }, erasureSweptAt: { $eq: null } };
+}
+
 @Injectable()
 export class IdentityRepository {
   private readonly c: IdentityCollections;
@@ -782,14 +787,28 @@ export class IdentityRepository {
    */
   async pendingSweeps(deletedBefore: Date, limit: number): Promise<string[]> {
     const docs = await this.c.users
-      .find(
-        { deletedAt: { $type: 'date', $lt: deletedBefore }, erasureSweptAt: { $eq: null } },
-        { projection: { _id: 1 } },
-      )
+      .find(pendingSweepFilter(deletedBefore), { projection: { _id: 1 } })
       .sort({ deletedAt: 1 })
       .limit(limit)
       .toArray();
     return docs.map((doc) => doc._id);
+  }
+
+  /** Число таких аккаунтов (admin-overview: зависшие удаления на «Обзоре») — тот же фильтр и индекс. */
+  countPendingSweeps(deletedBefore: Date): Promise<number> {
+    return this.c.users.countDocuments(pendingSweepFilter(deletedBefore));
+  }
+
+  /**
+   * Живые подтверждённые аккаунты, созданные с `since` (admin-overview, KPI «Обзора»): диапазон по
+   * `users_created_at_idx` (0036), остальное — остаточный фильтр.
+   */
+  countCreatedSince(since: Date): Promise<number> {
+    return this.c.users.countDocuments({
+      createdAt: { $gte: since },
+      emailVerifiedAt: { $ne: null },
+      deletedAt: null,
+    });
   }
 
   // --- очистка (V-10) ---

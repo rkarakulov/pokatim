@@ -207,6 +207,18 @@ paths:
   данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник» (A3). Финальный провал шага — лог
   `account.erasure_failed user=<uid> step=<s>`, failed-набор BullMQ, регламент; экран в панели — follow-up (F13).
 
+## «Обзор» панели (`overview`, admin-overview)
+
+- Модуль-композиция `overview` (образец `riders`): `GET /v1/admin/overview` — `OverviewController` под `PanelGuard`
+  без права на маршруте, блоки режет `OverviewService` по `principal.permissions` (нет права — нет поля). Своих
+  коллекций нет; `overview` не импортирует никто, кроме `AppModule` (в `panel` нельзя — цикл).
+- Счётчики — порты-классы модулей-владельцев через `index.ts` (только чтение, фильтры очередей разделов):
+  `DisputesOverview`, `RacesOverview` (фазы `open`/`closed`, `ownScope`), `ResultsOverview` (чек-лист —
+  `ResultsPanelReadService.checks`, поэтому в `ResultsModule`, не в ядре), `RidesOverview`, `RoutesOverview`
+  (`countPublicationQueue`), `ProfilesOverview` (`countReportQueue`), `IdentityOverview` (регистрации, зависшие
+  удаления — фильтр `pendingSweeps`), `TracksOverview`, `CalendarOverview` (`CalendarCoreModule`). Пределы —
+  `overview.policy.ts`. Новый счётчик — метод порта владельца, не чтение чужой коллекции.
+
 ## Достижения (`achievements`, ADR-0020 Proposed)
 
 - Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides`

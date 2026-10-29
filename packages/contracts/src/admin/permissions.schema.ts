@@ -36,6 +36,8 @@ export const PERMISSIONS = [
   'profiles.verified_edit',
   // routes-06: модерация маршрутов райдеров (заявки в каталог и жалобы) — admin и moderator
   'routes.moderate',
+  // admin-overview: KPI платформы и зависшие удаления аккаунтов на «Обзоре» (только admin)
+  'platform.stats',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
 export type Permission = z.infer<typeof Permission>;

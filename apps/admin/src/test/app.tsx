@@ -35,6 +35,7 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
       'appearance.manage',
       'profiles.verified_edit',
       'routes.moderate',
+      'platform.stats',
     ],
   },
   moderator: {

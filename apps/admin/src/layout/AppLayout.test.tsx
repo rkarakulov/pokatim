@@ -12,6 +12,7 @@ vi.mock('../api', () => ({
     signIn: vi.fn(),
     signOut: vi.fn(),
     health: vi.fn(),
+    overview: vi.fn(),
     resendVerification: vi.fn(),
     listMembers: vi.fn(),
     listAudit: vi.fn(),
@@ -25,6 +26,7 @@ const mocked = vi.mocked(api);
 
 beforeEach(() => {
   mocked.health.mockResolvedValue({ status: 'ok', version: 'dev', checks: { database: 'up' } });
+  mocked.overview.mockReturnValue(new Promise(() => undefined));
 });
 
 afterEach(() => {
@@ -45,7 +47,7 @@ describe('каркас панели (AC10)', () => {
     expect(side.getByRole('link', { name: 'Обзор' }).getAttribute('aria-current')).toBe('page');
     expect(side.getByText('Ольга · Администратор · команда платформы')).toBeTruthy();
     expect(side.getByRole('button', { name: 'Выйти' })).toBeTruthy();
-    expect(screen.getByText('Разделы панели появятся здесь')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Требует внимания' })).toBeTruthy();
     expect(await screen.findByText('Работает')).toBeTruthy();
   });
 

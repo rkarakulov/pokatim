@@ -9,6 +9,7 @@ import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { CredentialsCheck } from './credentials-check';
 import { IdentityAccounts } from './identity-accounts';
+import { IdentityOverview } from './identity-overview';
 import { IdentityRepository } from './identity.repository';
 import { CleanupUnverifiedProcessor } from './jobs/cleanup-unverified.processor';
 import { IdentitySchedules } from './jobs/identity-schedules';
@@ -27,11 +28,12 @@ import { VerificationService } from './verification.service';
 
 /**
  * Репозиторий identity и чтения аккаунтов (`IdentityAccounts`) — один экземпляр репозитория на приложение: его
- * импортируют `IdentityModule` и CLI панели (без HTTP-части, лимитера и Redis, `createApplicationContext`).
+ * импортируют `IdentityModule` и CLI панели (без HTTP-части, лимитера и Redis, `createApplicationContext`). Счётчики
+ * «Обзора» панели — `IdentityOverview` (admin-overview).
  */
 @Module({
-  providers: [IdentityRepository, IdentityAccounts],
-  exports: [IdentityRepository, IdentityAccounts],
+  providers: [IdentityRepository, IdentityAccounts, IdentityOverview],
+  exports: [IdentityRepository, IdentityAccounts, IdentityOverview],
 })
 export class IdentityAccountsModule {}
 
