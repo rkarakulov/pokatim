@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { type FakeWebPush, startFakeWebPush } from '../../../test/fake-web-push';
 import { createHarness, type Harness } from '../../../test/harness';
-import { bearer, call, collections } from '../../../test/identity';
+import { bearer, call, collections, gate } from '../../../test/identity';
 import {
   NOTIFICATIONS,
   notificationsDb,
@@ -20,6 +20,7 @@ import { authed, createRide, join, RIDES, rider, type Rider } from '../../../tes
 import { RIDES_RIDE_CANCELLED } from '../rides';
 import type { NotificationDoc } from './notifications.collection';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
+import { NotificationsRepository } from './notifications.repository';
 
 /**
  * Web Push (ADR-0022): подписки браузера — HTTP `/v1/notifications/web-push*` и доставка тем же `notifications.push`
@@ -114,6 +115,31 @@ describe('HTTP подписок', () => {
     await as(a, 'PUT', SUBSCRIPTIONS, { endpoint, keys: KEYS });
     await as(b, 'PUT', SUBSCRIPTIONS, { endpoint, keys: KEYS });
     expect((await tokens()).map((token) => token.userId)).toEqual([b.userId]);
+  });
+
+  it('поздняя подписка старой сессии (выход, вход другим аккаунтом) не перехватывает endpoint новой', async () => {
+    const endpoint = `${FCM}late`;
+    const paused = gate();
+    const original = NotificationsRepository.prototype.registerToken;
+    vi.spyOn(NotificationsRepository.prototype, 'registerToken').mockImplementationOnce(
+      async function (this: NotificationsRepository, ...args) {
+        await paused.wait();
+        return original.apply(this, args);
+      },
+    );
+    const late = as(a, 'PUT', SUBSCRIPTIONS, { endpoint, keys: KEYS });
+    await paused.reached;
+    await collections(h).sessions.updateMany(
+      { userId: a.userId },
+      { $set: { revokedAt: h.clock.now(), revokedReason: 'signed_out' } },
+    );
+    expect((await as(b, 'PUT', SUBSCRIPTIONS, { endpoint, keys: KEYS })).status).toBe(204);
+    paused.open();
+    expect((await late).status).toBe(204);
+    const session = await collections(h).sessions.findOne({ userId: b.userId });
+    expect(await tokens()).toEqual([
+      expect.objectContaining({ userId: b.userId, sessionId: session!._id, platform: 'web' }),
+    ]);
   });
 
   it('несколько подписок на пользователя; снятие своей — удалена, чужой и неизвестной — 204 без эффекта', async () => {

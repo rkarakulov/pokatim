@@ -84,14 +84,14 @@ export function uuidv7At(at: Date): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
-/** Событие outbox прямой вставкой (невалидный payload, событие «на момент»); id. */
+/** Событие outbox прямой вставкой (невалидный payload, событие «на момент» или с заданным id); id. */
 export async function appendEvent(
   h: Harness,
   type: string,
   payload: Record<string, unknown>,
-  at?: Date,
+  at?: Date | string,
 ): Promise<string> {
-  const _id = at ? uuidv7At(at) : uuidv7();
+  const _id = typeof at === 'string' ? at : at ? uuidv7At(at) : uuidv7();
   await h.db.collection<MongoOutboxDoc>(OUTBOX_COLLECTION).insertOne({
     _id,
     type,

@@ -16,7 +16,8 @@ import { consumeUserLimit } from '../../user-limit';
 
 /**
  * Push-токены устройства (ADR-0017) и подписки Web Push (ADR-0022): регистрация и снятие — общий лимит
- * `notifications-push-token` по `uid`. Токен (endpoint) чужого аккаунта переходит к вошедшему (устройство одно);
+ * `notifications-push-token` по `uid`. Токен (endpoint) чужого аккаунта переходит к вошедшему (устройство одно), но
+ * не от более новой сессии к прежней (поздняя регистрация после выхода);
  * снятие чужого или неизвестного — тот же `204` без эффекта. Токены, endpoint и ключи в логи не попадают.
  */
 @Injectable()
@@ -50,14 +51,14 @@ export class PushTokensService {
   ): Promise<void> {
     const now = this.clock.now();
     await this.limit(userId, now);
-    await this.repository.registerToken(
+    const registered = await this.repository.registerToken(
       userId,
       sessionId,
       { token: body.endpoint, platform: 'web', webPush: body.keys },
       now,
       NOTIFICATIONS_POLICY.maxTokensPerUser,
     );
-    this.logger.log(`notifications.token_registered uid=${userId} platform=web`);
+    this.logRegistration(userId, 'web', registered);
   }
 
   async revokeWeb(userId: string, body: RevokeWebPushSubscription): Promise<void> {
@@ -70,20 +71,26 @@ export class PushTokensService {
   async register(userId: string, sessionId: string, body: RegisterPushToken): Promise<void> {
     const now = this.clock.now();
     await this.limit(userId, now);
-    await this.repository.registerToken(
+    const registered = await this.repository.registerToken(
       userId,
       sessionId,
       { token: body.token, platform: body.platform },
       now,
       NOTIFICATIONS_POLICY.maxTokensPerUser,
     );
-    this.logger.log(`notifications.token_registered uid=${userId} platform=${body.platform}`);
+    this.logRegistration(userId, body.platform, registered);
   }
 
   async revoke(userId: string, body: RevokePushToken): Promise<void> {
     await this.limit(userId, this.clock.now());
     const revoked = await this.repository.revokeToken(userId, body.token);
     this.logger.log(`notifications.token_revoked uid=${userId} count=${revoked}`);
+  }
+
+  /** Устаревшая регистрация (токен уже у более новой сессии устройства) — тот же `204`, без записи. */
+  private logRegistration(userId: string, platform: string, registered: boolean): void {
+    const event = registered ? 'token_registered' : 'token_stale';
+    this.logger.log(`notifications.${event} uid=${userId} platform=${platform}`);
   }
 
   private limit(userId: string, now: Date): Promise<void> {
