@@ -62,6 +62,8 @@ const browser = {
   permission: 'default' as NotificationPermission,
   listeners: new Set<(event: MessageEvent) => void>(),
   subscribe: jest.fn(),
+  /** service worker зарегистрирован (dev без `sw.js` — нет: `ready` не наступает никогда) */
+  registered: true,
 };
 
 function installBrowser({ userAgent = 'Chrome', standalone = false } = {}) {
@@ -88,7 +90,8 @@ function installBrowser({ userAgent = 'Chrome', standalone = false } = {}) {
   Object.defineProperty(navigator, 'serviceWorker', {
     configurable: true,
     value: {
-      ready: Promise.resolve({ pushManager }),
+      ready: browser.registered ? Promise.resolve({ pushManager }) : new Promise(() => undefined),
+      getRegistration: async () => (browser.registered ? { pushManager } : undefined),
       addEventListener: (_: string, listener: (event: MessageEvent) => void) =>
         browser.listeners.add(listener),
       removeEventListener: (_: string, listener: (event: MessageEvent) => void) =>
@@ -126,6 +129,7 @@ beforeEach(() => {
   browser.current = null;
   browser.permission = 'default';
   browser.listeners.clear();
+  browser.registered = true;
   browser.subscribe.mockImplementation(async () => {
     browser.current = subscriptionOf();
     return browser.current;
@@ -232,6 +236,16 @@ describe('состояние и подписка', () => {
     await push.forgetPushToken();
     expect(current.unsubscribe).toHaveBeenCalled();
     expect((await push.getPushPermission()).subscription).toBe('missing');
+  });
+
+  it('service worker не зарегистрирован — выход не ждёт его (снимать нечего)', async () => {
+    browser.registered = false;
+    installBrowser();
+    const push = load();
+    const started = Date.now();
+    expect(await push.storedPushToken()).toBeNull();
+    await push.forgetPushToken();
+    expect(Date.now() - started).toBeLessThan(1000);
   });
 
   it('без разрешения подписки нет и системный запрос не показывается (N5)', async () => {

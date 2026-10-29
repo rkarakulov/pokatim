@@ -132,6 +132,7 @@ function toRegistration(subscription: PushSubscription): RegisterWebPushSubscrip
  */
 let registered: { sid: string; endpoint: string } | null = null;
 
+// session-store импортирует этот модуль (выход снимает подписку): стор — только внутри функций, не на уровне модуля
 const currentSid = () => accessClaims(useSessionStore.getState().session?.accessToken)?.sid;
 const isRegistered = (endpoint: string, sid: string | undefined) =>
   sid !== undefined && registered?.sid === sid && registered.endpoint === endpoint;
@@ -222,29 +223,34 @@ export async function sendPushRevoke(accessToken: string, token: string): Promis
   await api.revokeWebPushSubscription(accessToken, { endpoint: token });
 }
 
-/** Подписка — в самом браузере: «запоминать» нечего. */
-export const storedPushToken = async (): Promise<string | null> => {
+/**
+ * Подписка браузера без ожидания service worker: регистрации нет (dev без `sw.js`, сбой регистрации) — `null` сразу;
+ * выход не ждёт `serviceWorker.ready`.
+ */
+async function currentSubscription(): Promise<PushSubscription | null> {
   if (!browserSupportsPush()) return null;
   try {
-    const registration = await swRegistration();
-    return (await registration?.pushManager.getSubscription())?.endpoint ?? null;
+    const registration = await navigator.serviceWorker.getRegistration();
+    return (await registration?.pushManager.getSubscription()) ?? null;
   } catch {
     return null;
   }
-};
+}
+
+/** Подписка — в самом браузере: «запоминать» нечего. */
+export const storedPushToken = async (): Promise<string | null> =>
+  (await currentSubscription())?.endpoint ?? null;
 export async function rememberPushToken(_token: string): Promise<void> {}
 
 /**
  * Выход: подписка браузера снимается и в самом браузере — следующий вошедший на этом устройстве чужих push не
  * получит, даже если запрос снятия на сервер не прошёл. Новый вход с выданным разрешением подписывает заново без
- * запроса. Не бросает.
+ * запроса. Не бросает и не ждёт service worker.
  */
 export async function forgetPushToken(): Promise<void> {
   registered = null;
-  if (!browserSupportsPush()) return;
   try {
-    const registration = await swRegistration();
-    await (await registration?.pushManager.getSubscription())?.unsubscribe();
+    await (await currentSubscription())?.unsubscribe();
   } catch {
     // нечего снимать
   }

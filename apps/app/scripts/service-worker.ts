@@ -114,7 +114,7 @@ self.addEventListener('push', (event) => {
   const target = data.target && typeof data.target === 'object' ? data.target : null;
   event.waitUntil(
     Promise.all([
-      self.registration.showNotification(title, { body, icon: ICON, badge: ICON, lang: 'ru', data: { target } }),
+      self.registration.showNotification(title, { body, icon: ICON, lang: 'ru', data: { target } }),
       windows().then((list) => list.forEach((client) => client.postMessage({ type: 'pokatim:push' }))),
     ]),
   );
