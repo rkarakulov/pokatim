@@ -3,6 +3,12 @@ import type { CalendarStartStatus, Discipline } from '@pokatim/contracts';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Collection, Db, Filter } from 'mongodb';
 
+import {
+  CHANGED_SORT,
+  type ChangedCursor,
+  changedAfter,
+  type ChangedRow,
+} from '../../changed-since';
 import type { DbSession } from '../../db';
 import { calendarCollections, type CalendarStartDoc } from './calendar.collection';
 
@@ -102,6 +108,19 @@ export class CalendarRepository {
       });
     }
     return this.starts.find({ $and: and }).sort({ startsOn: 1, _id: 1 }).limit(limit).toArray();
+  }
+
+  /** Опубликованные старты, изменившиеся после курсора (`og.sync`), по `(updatedAt, _id)` — индекс `0037_og_sync_indexes`. */
+  async changedForOg(after: ChangedCursor | null, limit: number): Promise<ChangedRow[]> {
+    const docs = await this.starts
+      .find(
+        { status: 'published', ...changedAfter(after) },
+        { projection: { _id: 1, updatedAt: 1 } },
+      )
+      .sort(CHANGED_SORT)
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
   }
 
   /** Опубликованный старт по id (публичная карточка). */

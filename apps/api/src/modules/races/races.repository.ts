@@ -3,6 +3,12 @@ import type { BikeClass, RaceStatus } from '@pokatim/contracts';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Db, Filter, UpdateFilter } from 'mongodb';
 
+import {
+  CHANGED_SORT,
+  type ChangedCursor,
+  changedAfter,
+  type ChangedRow,
+} from '../../changed-since';
 import type { DbSession } from '../../db';
 import {
   type RaceDoc,
@@ -327,6 +333,24 @@ export class RacesRepository {
       .sort({ [key]: direction, _id: direction })
       .limit(limit)
       .toArray();
+  }
+
+  /** Только опубликованная гонка (OG-картинка, og-images: отменённая — без своей картинки). */
+  async findPublished(id: string): Promise<RaceDoc | undefined> {
+    return (await this.c.races.findOne({ _id: id, status: 'published' })) ?? undefined;
+  }
+
+  /** Опубликованные гонки, изменившиеся после курсора (`og.sync`), по `(updatedAt, _id)` — индекс `0037_og_sync_indexes`. */
+  async changedForOg(after: ChangedCursor | null, limit: number): Promise<ChangedRow[]> {
+    const docs = await this.c.races
+      .find(
+        { status: 'published', ...changedAfter(after) },
+        { projection: { _id: 1, updatedAt: 1 } },
+      )
+      .sort(CHANGED_SORT)
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
   }
 
   /** Опубликованная или отменённая гонка (публичная карточка); черновик — нет. */

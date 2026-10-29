@@ -9,6 +9,12 @@ import {
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Collection, Db, Filter } from 'mongodb';
 
+import {
+  CHANGED_SORT,
+  type ChangedCursor,
+  changedAfter,
+  type ChangedRow,
+} from '../../changed-since';
 import type { DbSession } from '../../db';
 import { type RideDoc, type RidePublicDoc, ridesCollections } from './rides.collection';
 import { EARTH_RADIUS_KM } from './rides.policy';
@@ -200,6 +206,19 @@ export class RidesRepository {
         },
       },
     );
+  }
+
+  /** Опубликованные райды, изменившиеся после курсора (`og.sync`), по `(updatedAt, _id)` — индекс `0037_og_sync_indexes`. */
+  async changedForOg(after: ChangedCursor | null, limit: number): Promise<ChangedRow[]> {
+    const docs = await this.rides
+      .find(
+        { status: 'published', ...changedAfter(after) },
+        { projection: { _id: 1, updatedAt: 1 } },
+      )
+      .sort(CHANGED_SORT)
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
   }
 
   /** Публичная карточка: опубликованный, отменённый и прошедший райд; скрытый — нет; без служебных полей. */
