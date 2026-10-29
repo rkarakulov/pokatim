@@ -289,6 +289,10 @@ describe('материалы события на карточке гонки (ev
     await screen.findByLabelText(heroLabel);
 
     expect(screen.getByTestId('event-materials-skeleton')).toBeOnTheScreen();
+    // скелетон — строки раскладки материала (скрыты от скринридера, для него — «Загрузка»)
+    expect(
+      screen.getAllByTestId('event-material-skeleton-row', { includeHiddenElements: true }),
+    ).toHaveLength(2);
     expect(screen.getByText('Материалы')).toBeOnTheScreen();
     await act(async () => resolve([material]));
 
@@ -361,5 +365,27 @@ describe('материалы события на карточке гонки (ev
     expect(
       screen.getByRole('link', { name: 'Положение гонки. Правила и зачёт. example.by' }),
     ).toBeOnTheScreen();
+  });
+
+  it('пустой список → ошибка обновления — секция с ошибкой и повтором; «Повторить» — материалы', async () => {
+    const client = createTestQueryClient();
+    await openCard(client);
+    await screen.findByLabelText(heroLabel);
+    await act(async () => undefined);
+    expect(screen.queryByTestId('event-materials')).toBeNull();
+
+    getMaterials.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['events', 'race', ID, 'materials'] });
+    });
+    const failure = await screen.findByTestId('event-materials-error');
+    expect(screen.getByText('Материалы')).toBeOnTheScreen();
+
+    getMaterials.mockResolvedValueOnce([material]);
+    await fireEvent.press(within(failure).getByRole('button', { name: 'Повторить' }));
+    expect(
+      await screen.findByRole('link', { name: 'Положение гонки. Правила и зачёт. example.by' }),
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('event-materials-error')).toBeNull();
   });
 });

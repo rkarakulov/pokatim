@@ -1,11 +1,13 @@
 /// <reference types="jest" />
 import type { EventMaterial } from '@pokatim/contracts';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { size, typography } from '@pokatim/design-tokens';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import { StyleSheet, Text } from 'react-native';
 
 import { downloadFile } from '@/lib/download-file';
 import { openExternalUrl } from '@/lib/open-external-url';
 
-import { EventMaterials } from './event-materials';
+import { EventMaterials, EventMaterialsSkeleton } from './event-materials';
 
 jest.mock('@/lib/api', () => ({
   api: { eventFileUrl: (id: string) => `https://api.test/v1/event-files/${id}` },
@@ -136,5 +138,37 @@ describe('EventMaterials (plan-C §7)', () => {
 
     await fireEvent.press(row);
     expect(screen.queryByText('Не удалось открыть материал.')).toBeNull();
+  });
+
+  it('пустой список с баннером (ошибка обновления) — секция с баннером, без строк', async () => {
+    await render(<EventMaterials materials={[]} notice={<Text>Ошибка обновления</Text>} />);
+    expect(screen.getByText('Материалы')).toBeOnTheScreen();
+    expect(screen.getByText('Ошибка обновления')).toBeOnTheScreen();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+});
+
+describe('EventMaterialsSkeleton', () => {
+  it('две строки раскладки материала: место иконки, название, описание в две строки, подпись; для скринридера — «Загрузка»', async () => {
+    await render(<EventMaterialsSkeleton />);
+    expect(screen.getByLabelText('Загрузка')).toBeOnTheScreen();
+    const rows = screen.getAllByTestId('event-material-skeleton-row', {
+      includeHiddenElements: true,
+    });
+    expect(rows).toHaveLength(2);
+    // в каждой строке: место иконки (квадрат `size.icon`), название, описание в две строки, подпись — по кеглю стиля
+    const heights = [
+      typography.titleSm.size,
+      typography.body.size,
+      typography.body.size,
+      typography.meta.size,
+    ];
+    for (const row of rows) {
+      const [icon, ...lines] = within(row).getAllByTestId('skeleton', {
+        includeHiddenElements: true,
+      });
+      expect(icon).toHaveStyle({ width: size.icon, height: size.icon });
+      expect(lines.map((line) => StyleSheet.flatten(line.props.style).height)).toEqual(heights);
+    }
   });
 });

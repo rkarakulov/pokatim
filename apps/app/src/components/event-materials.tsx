@@ -1,7 +1,15 @@
 import type { EventMaterial } from '@pokatim/contracts';
 import { size, space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { Banner, Kicker, textStyle, useTheme } from '@rkarakulov/ui';
+import {
+  Banner,
+  Kicker,
+  Skeleton,
+  SkeletonGroup,
+  SkeletonText,
+  textStyle,
+  useTheme,
+} from '@rkarakulov/ui';
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -96,7 +104,8 @@ function MaterialRow({
  * двух строк), «PDF · 1,2 МБ» или домен ссылки. Нажатие: ссылка — системный браузер (`openExternalUrl`), PDF —
  * скачивание (`downloadFile`), текст — раскрытие описания. Пусто — блока нет. Ошибка открытия — баннер под списком.
  * Чистое представление: данные — ответ публичного списка или `TicketView.materials` (и офлайн-копия билета);
- * `notice` — баннер над списком (ошибка обновления при показанных данных).
+ * `notice` — баннер над списком (ошибка обновления при показанных данных): с ним секция видна и при пустом списке —
+ * иначе ошибка и «Повторить» пропали бы вместе с блоком.
  */
 export function EventMaterials({
   materials,
@@ -106,17 +115,52 @@ export function EventMaterials({
   notice?: ReactNode;
 }) {
   const [failed, setFailed] = useState(false);
-  if (materials.length === 0) return null;
+  if (materials.length === 0 && notice === null) return null;
   return (
     <EventMaterialsSection>
       {notice}
-      <View>
-        {materials.map((material) => (
-          <MaterialRow key={material.id} material={material} onOpenFailed={setFailed} />
-        ))}
-      </View>
+      {materials.length > 0 ? (
+        <View>
+          {materials.map((material) => (
+            <MaterialRow key={material.id} material={material} onOpenFailed={setFailed} />
+          ))}
+        </View>
+      ) : null}
       {failed ? <Banner tone="warning" message={t('tickets.materials.openFailed')} /> : null}
     </EventMaterialsSection>
+  );
+}
+
+/** Строк в скелетоне блока: у события обычно 1–3 материала. */
+const SKELETON_ROWS = 2;
+
+/**
+ * Скелетон первой загрузки: строки той же раскладки, что `MaterialRow` (место иконки, название, описание, подпись),
+ * под заголовком «Материалы».
+ */
+export function EventMaterialsSkeleton() {
+  const theme = useTheme();
+  return (
+    <View testID="event-materials-skeleton">
+      <SkeletonGroup>
+        {Array.from({ length: SKELETON_ROWS }, (_, index) => (
+          <View
+            key={index}
+            testID="event-material-skeleton-row"
+            style={[styles.row, { borderTopColor: theme.border.subtle }]}
+          >
+            <View style={styles.icon}>
+              <Skeleton width={size.icon} height={size.icon} />
+            </View>
+            <View style={styles.main}>
+              <SkeletonText variant="titleSm" lines={1} lastLineWidth="60%" />
+              <SkeletonText variant="body" lines={2} lastLineWidth="80%" />
+              <SkeletonText variant="meta" lines={1} lastLineWidth="30%" />
+            </View>
+          </View>
+        ))}
+      </SkeletonGroup>
+    </View>
   );
 }
 
