@@ -68,10 +68,12 @@ import {
   seedApprovedRiderRoute,
   seedRiderRoute,
 } from '../../../test/routes';
+import { achievementsDb } from '../../../test/achievements';
 import { routeRidesDb } from '../../../test/route-rides';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
 import { storeUpload, trackFileStore, tracks } from '../../../test/tracks';
 import { QUEUE } from '../../queues';
+import { AchievementErasure } from '../achievements';
 import { DeviceErasure } from '../devices';
 import { ProfileErasure } from '../profile';
 import { RideErasure } from '../rides';
@@ -512,6 +514,7 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
       'devices',
       'tracks',
       'route-rides',
+      'achievements',
       'notifications',
       'identity',
     ]) {
@@ -653,6 +656,47 @@ describe('шаг route-rides (route-rides-01)', () => {
     expect(await routeRidesDb(h).rides.countDocuments({ userId: w.a.userId })).toBe(0);
     expect(await routeRidesDb(h).rides.countDocuments({ userId: w.b.userId })).toBe(1);
     expect(await h.worker.get(RouteRideErasure).erase(w.a.userId)).toBe(0);
+  });
+});
+
+describe('шаг achievements (achievements, AC7)', () => {
+  it('выдачи и маркер сверки удалённого стёрты, чужие целы; повтор — нули', async () => {
+    const w = await world();
+    // маркер первой сверки (и выдачи по фактам мира) — через API, недостижимые в мире коды — прямой вставкой
+    for (const who of [w.a, w.b]) {
+      expect(
+        (await call(h, 'GET', '/v1/achievements', undefined, bearer(who.accessToken))).status,
+      ).toBe(200);
+    }
+    const now = h.clock.now();
+    const grant = (userId: string, code: 'rides_10' | 'routes_5') => ({
+      _id: uuidv7(),
+      userId,
+      code,
+      object: { kind: 'race' as const, id: uuidv7() },
+      factAt: now,
+      grantedAt: now,
+      seenAt: null,
+      revokedAt: null,
+      updatedAt: now,
+    });
+    await achievementsDb(h).grants.insertMany([
+      grant(w.a.userId, 'rides_10'),
+      grant(w.a.userId, 'routes_5'),
+      grant(w.b.userId, 'rides_10'),
+    ]);
+    const bGrants = await achievementsDb(h).grants.find({ userId: w.b.userId }).toArray();
+    await deleteAccount(w.a.accessToken);
+    expect(await firstPass(w.a.userId)).toBe('erased');
+
+    expect(await achievementsDb(h).grants.countDocuments({ userId: w.a.userId })).toBe(0);
+    expect(await achievementsDb(h).syncs.countDocuments({ _id: w.a.userId })).toBe(0);
+    expect(await achievementsDb(h).grants.find({ userId: w.b.userId }).toArray()).toEqual(bGrants);
+    expect(await achievementsDb(h).syncs.countDocuments({ _id: w.b.userId })).toBe(1);
+    expect(await h.worker.get(AchievementErasure).erase(w.a.userId)).toEqual({
+      grants: 0,
+      syncs: 0,
+    });
   });
 });
 

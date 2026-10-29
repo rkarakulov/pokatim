@@ -13,6 +13,7 @@ import { MongoModule, MongoOutboxModule } from '@rkarakulov/api-kit/mongo';
 import { env } from './config/env';
 import { PROJECT_ERROR_MESSAGES } from './error-messages';
 import { AccountModule } from './modules/account';
+import { AchievementsModule } from './modules/achievements';
 import { CalendarModule } from './modules/calendar';
 import { AppearanceModule } from './modules/appearance';
 import { DevicesModule } from './modules/devices';
@@ -59,6 +60,8 @@ import { TracksModule } from './modules/tracks';
     SharingModule,
     // профиль райдера: статистика и публичный профиль (rider-profile, модуль-композиция)
     RidersModule,
+    // достижения райдера: выдача сверкой при чтении (achievements, ADR-0020)
+    AchievementsModule,
     CalendarModule,
     AppearanceModule,
     RidesModule,

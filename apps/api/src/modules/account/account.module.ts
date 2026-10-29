@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
 import { QUEUE } from '../../queues';
+import { AchievementsCoreModule } from '../achievements';
 import { DevicesCoreModule } from '../devices';
 import { IdentityErasureModule, IdentityModule } from '../identity';
 import { NotificationsCoreModule } from '../notifications';
@@ -41,6 +42,7 @@ export class AccountModule {}
     RoutesCoreModule,
     TracksCoreModule,
     RouteRidesCoreModule,
+    AchievementsCoreModule,
     DevicesCoreModule,
     NotificationsCoreModule,
     BullModule.registerQueue({ name: QUEUE.accountDeletion }),
