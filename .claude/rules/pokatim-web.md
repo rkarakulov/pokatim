@@ -85,6 +85,14 @@ paths:
   `src/csp.test.ts` (origin стиля из `deploy-dev.yml`). Превью (`RoutePreview`): компактная карта и «Открыть
   маршрут» — из поля коридора новая вкладка (`openLink="new-tab"`), из окна публикации — та же, на странице маршрута —
   без ссылки (`openLink={false}`).
+- Карта гонки (panel-race-map) — `features/races/RaceCorridorMap.tsx`: секция «Карта гонки» под формой `RaceEditor` у
+  сохранённой гонки с коридором (любой статус; несохранённый выбор — только превью поля). Тот же `RouteReadyView`
+  (`corridorWidthM`, подзаголовки `headingLevel={3}`): `RouteMap corridorWidthM` добавляет слой коридора
+  `routeLayers` (±`widthM`, как в приложении; линия — `ROUTE_CATALOG_LINE_WIDTH`), смена допуска пересоздаёт карту;
+  время в пути — по покрытиям гонки; стор скраббинга — на экземпляр блока (`key` — id маршрута). Данные —
+  `routeQuery` (ключ превью поля). Скелетон карты, ошибка без данных — `ErrorState`, ошибка обновления — свой баннер,
+  маршрут не `ready` — секции нет; без env стиля — `LinePreview`, допуск — в подписи и строке «Коридор: ±N м от
+  маршрута · Открыть маршрут» (новая вкладка, `OpenRouteLink`). CSP — та же карта routes-05.
 - 409 `CONFLICT` правки по устаревшей версии — `ConflictBanner` «Запись изменили — обновите страницу» с «Обновить».
 - Раздел «Результаты» гонки (race-results-05) — `features/results/` по маршруту `races/$raceId/results`
   (`races.read`), ссылка «Результаты» из `RaceEditor` опубликованной или отменённой гонки. KPI — `StatTile` (`src/ui`).
