@@ -103,6 +103,8 @@ beforeEach(() => {
   // блок «Сезон» — сезонов нет, блок скрыт (сам блок — `profile-season-block.test.tsx`)
   jest.mocked(api.getCurrentSeason).mockResolvedValue({ season: null });
   jest.mocked(api.listSeasons).mockResolvedValue({ items: [] });
+  // блок «Достижения» — пусто, блока нет (сам блок — `achievements-blocks.test.tsx`)
+  jest.mocked(api.listAchievements).mockResolvedValue({ items: [] });
 });
 afterEach(() => {
   jest.clearAllMocks();

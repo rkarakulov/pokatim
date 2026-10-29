@@ -372,6 +372,26 @@ test('свой профиль /profile без сессии (rider-profile): HTML
   }
 });
 
+test.describe('достижения без сессии (achievements): HTML без данных и OG, после гидрации — гард входа', () => {
+  for (const path of ['/achievements/flash', '/achievements/race_win']) {
+    test(path, async ({ page, request }) => {
+      const response = await request.get(path);
+      expect(response.status()).toBe(200);
+      const html = await response.text();
+      // экраны не публичные: без значка, кнопок вспышки и OG
+      expect(html).not.toContain('achievement-card');
+      expect(html).not.toContain('og:title');
+
+      await page.goto(path);
+      if (WITH_API) {
+        await expect(page).toHaveURL(`${BASE_URL}/register`);
+      } else {
+        await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+      }
+    });
+  }
+});
+
 test('жалоба на райд /rides/report/<id> без сессии (05b): HTML без формы и OG, после гидрации — гард входа', async ({
   page,
   request,

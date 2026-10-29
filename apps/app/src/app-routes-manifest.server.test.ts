@@ -37,6 +37,8 @@ describe('маршруты web-сервера: первое совпадение
     [`/races/pick/${ID}`, '/races/pick/[id]'],
     [`/riders/report/${'r'.repeat(43)}`, '/riders/report/[id]'],
     [`/riders/${'r'.repeat(43)}`, '/riders/[id]'],
+    ['/achievements/flash', '/achievements/flash'],
+    ['/achievements/race_win', '/achievements/[code]'],
   ])('%s → %s', (url, page) => {
     expect(serverPage(url)).toBe(page);
   });

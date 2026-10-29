@@ -53,6 +53,8 @@ beforeEach(() => {
   useSessionStore.setState({ status: 'signedOut', session: null });
   getRider.mockResolvedValue(rider);
   listRaces.mockResolvedValue({ items: [race()], nextCursor: null });
+  // блок достижений — пусто, блока нет (сам блок — `achievements-blocks.test.tsx`)
+  jest.mocked(api.getRiderAchievements).mockResolvedValue({ items: [] });
 });
 afterEach(() => {
   jest.clearAllMocks();
