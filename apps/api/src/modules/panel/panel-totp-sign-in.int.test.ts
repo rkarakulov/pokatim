@@ -138,9 +138,10 @@ describe('вход с 2FA (ключ задан, обязательность в�
     const audit = await panel(h)
       .audit.find({}, { sort: { _id: 1 } })
       .toArray();
-    expect(audit.map((entry) => entry.action)).toEqual([
-      'panel.totp_recovery_used',
+    // обе записи — в одной транзакции; uuidv7 внутри одной миллисекунды не монотонен — порядок не проверяем
+    expect(audit.map((entry) => entry.action).sort()).toEqual([
       'panel.signed_in',
+      'panel.totp_recovery_used',
     ]);
     expect(JSON.stringify(audit)).not.toContain(first);
 
@@ -644,7 +645,8 @@ describe('обязательная 2FA для admin (PANEL_TOTP_ENFORCED=true)',
         .audit.find({}, { sort: { _id: 1 } })
         .toArray()
     ).map((entry) => entry.action);
-    expect(actions).toEqual(['panel.totp_enabled', 'panel.signed_in']);
+    // обе записи — в одной транзакции; uuidv7 внутри одной миллисекунды не монотонен — порядок не проверяем
+    expect(actions.sort()).toEqual(['panel.signed_in', 'panel.totp_enabled']);
 
     // следующий вход — обычный шаг кода
     h.clock.advance(MINUTE);

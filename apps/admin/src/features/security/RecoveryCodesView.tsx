@@ -2,6 +2,7 @@ import { t } from '@pokatim/i18n';
 import { useId, useState } from 'react';
 
 import { Banner, Button } from '../../ui';
+import { copyText, type CopyState } from './clipboard';
 
 /** Скачивание `.txt` из памяти: ссылка на `Blob` (без `data:` и запросов), ссылка отзывается сразу. */
 function downloadText(fileName: string, text: string): void {
@@ -31,7 +32,7 @@ export function RecoveryCodesView({
 }) {
   const listId = useId();
   const [saved, setSaved] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copy, setCopy] = useState<CopyState>('idle');
   const text = codes.join('\n');
 
   return (
@@ -53,7 +54,7 @@ export function RecoveryCodesView({
           size="sm"
           aria-describedby={listId}
           onClick={() => {
-            void navigator.clipboard?.writeText(text).then(() => setCopied(true));
+            void copyText(text).then((ok) => setCopy(ok ? 'copied' : 'failed'));
           }}
         >
           {t('admin.totp.codesCopy')}
@@ -70,7 +71,12 @@ export function RecoveryCodesView({
           {t('admin.totp.codesDownload')}
         </Button>
       </div>
-      {copied ? <Banner>{t('admin.totp.copied')}</Banner> : null}
+      {copy === 'copied' ? <Banner>{t('admin.totp.copied')}</Banner> : null}
+      {copy === 'failed' ? (
+        <Banner tone="error" role="alert">
+          {t('admin.totp.codesCopyFailed')}
+        </Banner>
+      ) : null}
       <label className="checkbox t-body">
         <input
           type="checkbox"

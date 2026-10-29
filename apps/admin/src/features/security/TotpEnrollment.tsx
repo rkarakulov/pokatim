@@ -3,6 +3,7 @@ import { t } from '@pokatim/i18n';
 import { type ReactNode, useState } from 'react';
 
 import { Button, QrCode } from '../../ui';
+import { copyText, type CopyState } from './clipboard';
 import { groupSecret } from './code-input';
 import { TotpCodeForm } from './TotpCodeForm';
 
@@ -25,7 +26,7 @@ export function TotpEnrollment({
   actions?: ReactNode;
   onConfirm: (code: string) => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copy, setCopy] = useState<CopyState>('idle');
   return (
     <div className="totp-enroll">
       <ol className="totp-enroll__steps t-body">
@@ -40,12 +41,17 @@ export function TotpEnrollment({
             <Button
               size="sm"
               onClick={() => {
-                void navigator.clipboard?.writeText(setup.secret).then(() => setCopied(true));
+                void copyText(setup.secret).then((ok) => setCopy(ok ? 'copied' : 'failed'));
               }}
             >
-              {copied ? t('admin.totp.copied') : t('admin.totp.copy')}
+              {copy === 'copied' ? t('admin.totp.copied') : t('admin.totp.copy')}
             </Button>
           </span>
+          {copy === 'failed' ? (
+            <p className="field__error t-meta" role="alert">
+              {t('admin.totp.secretCopyFailed')}
+            </p>
+          ) : null}
         </li>
         <li>{t('admin.totp.enrollStep3')}</li>
       </ol>

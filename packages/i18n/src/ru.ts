@@ -2647,6 +2647,9 @@ export const ru = {
   'admin.totp.secretLabel': 'Ключ для ручного ввода',
   'admin.totp.copy': 'Скопировать',
   'admin.totp.copied': 'Скопировано',
+  'admin.totp.codesCopyFailed':
+    'Не удалось скопировать — выделите текст вручную или скачайте файл.',
+  'admin.totp.secretCopyFailed': 'Не удалось скопировать — введите ключ вручную.',
   'admin.totp.enrollSubmit': 'Подключить',
   'admin.totp.codesTitle': 'Коды восстановления',
   'admin.totp.codesLead':
