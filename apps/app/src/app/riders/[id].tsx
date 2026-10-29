@@ -5,6 +5,7 @@ import type { GenerateMetadataFunction, LoaderFunction } from 'expo-router/serve
 
 import { RiderScreen } from '@/features/riders/rider-screen';
 import { useLoaderSeed } from '@/lib/loader-seed';
+import { brandOgImageFor, ogOrigin } from '@/lib/og-image';
 import { publicPageMetadata } from '@/lib/page-metadata';
 import { fetchPublicForSsr, publicPath, ssrData, type PublicSsrResult } from '@/lib/public-ssr';
 
@@ -28,9 +29,16 @@ const riderForSsr = (
 export const loader: LoaderFunction<PublicRiderProfile | null> = async (_request, params) =>
   ssrData(await riderForSsr(params));
 
-/** Мета: «Профиль райдера» и слоган, `noindex`; без ПДн и без `og:url` при любом ответе API. */
-export const generateMetadata: GenerateMetadataFunction = () => ({
-  ...publicPageMetadata({ title: t('riders.title'), description: t('app.tagline') }),
+/**
+ * Мета: «Профиль райдера» и слоган, `noindex`; без ПДн и без `og:url` при любом ответе API. `og:image` — только
+ * бренд-картинка (og-images; ответ API — из кэша `loader`): профиль не найден — без картинки.
+ */
+export const generateMetadata: GenerateMetadataFunction = async (_request, params) => ({
+  ...publicPageMetadata({
+    title: t('riders.title'),
+    description: t('app.tagline'),
+    image: ogOrigin() ? await brandOgImageFor(await riderForSsr(params)) : undefined,
+  }),
   robots: 'noindex',
 });
 

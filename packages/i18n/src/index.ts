@@ -10,7 +10,9 @@ export {
 } from './core.ts';
 /** Общие подписи результата и дат (приложение, панель, карточка для сторис в API). */
 export {
+  formatDistances,
   formatElapsed,
+  formatKm,
   formatLocalRange,
   formatPlace,
   heroDateText,

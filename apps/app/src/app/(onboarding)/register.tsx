@@ -26,6 +26,7 @@ import {
 import { useRegister } from '@/features/auth/queries';
 import { useRegistrationStore } from '@/features/auth/registration-store';
 import { useSessionStore } from '@/features/auth/session-store';
+import { brandOgImage } from '@/lib/og-image';
 import { publicPageMetadata } from '@/lib/page-metadata';
 
 /** Значения формы до проверки: согласие может быть не отмечено, дата — не выбрана. */
@@ -39,8 +40,13 @@ const isEmailRefusal = (code: string | undefined): code is (typeof EMAIL_REFUSAL
   EMAIL_REFUSALS.some((refusal) => refusal === code);
 
 /** Публичный экран (SSR web): мета и OG без данных формы. */
-export const generateMetadata: GenerateMetadataFunction = () =>
-  publicPageMetadata({ title: t('auth.kicker'), description: t('app.tagline'), path: '/register' });
+export const generateMetadata: GenerateMetadataFunction = async () =>
+  publicPageMetadata({
+    title: t('auth.kicker'),
+    description: t('app.tagline'),
+    path: '/register',
+    image: await brandOgImage(),
+  });
 
 /** Пикер пустой даты открывается на «ровно 18 лет назад», а не на сегодня. */
 const adultSince = (today: string) =>

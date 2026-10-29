@@ -2,7 +2,7 @@ import type { LonLat } from '@pokatim/contracts';
 
 /**
  * Порт `rides` для модуля `sharing` (карточка-приглашение, ADR-0018, через `modules/rides/index.ts`): публичные факты
- * будущего райда и линия его маршрута из каталога. `sharing` коллекций `rides`/`routes` не читает.
+ * будущего райда и линия его маршрута из каталога; OG-картинка (og-images) — факты опубликованного райда и пререндер. `sharing` коллекций `rides`/`routes` не читает.
  */
 export const RIDES_FOR_SHARING = Symbol('RIDES_FOR_SHARING');
 
@@ -27,4 +27,14 @@ export interface RidesForSharing {
   inviteFacts(userId: string, rideId: string): Promise<RideInviteFacts | null>;
   /** Линия показа маршрута, пока он в каталоге (только worker); иначе `null`. */
   inviteLine(routeId: string): Promise<LonLat[] | null>;
+  /**
+   * Факты OG-картинки (og-images): только опубликованный райд (любая фаза, без зрителя); скрытый, отменённый,
+   * неизвестный — `null` (не 404: решает вызывающий). `routeId` — только маршрут каталога.
+   */
+  ogFacts(rideId: string): Promise<RideInviteFacts | null>;
+  /** Опубликованные райды, изменившиеся строго после курсора, по `(updatedAt, _id)`, не больше `limit`. */
+  ogChanged(
+    after: { at: Date; id: string } | null,
+    limit: number,
+  ): Promise<{ id: string; updatedAt: Date }[]>;
 }

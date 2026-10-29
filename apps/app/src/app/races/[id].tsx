@@ -6,6 +6,7 @@ import type { GenerateMetadataFunction, LoaderFunction } from 'expo-router/serve
 import { raceShareDescription } from '@/features/races/format';
 import { RaceDetailScreen } from '@/features/races/race-detail';
 import { useLoaderSeed } from '@/lib/loader-seed';
+import { ogCardIfOrigin, pageOgImage } from '@/lib/og-image';
 import { publicPageMetadata } from '@/lib/page-metadata';
 import { fetchPublicForSsr, publicPath, ssrData, type PublicSsrResult } from '@/lib/public-ssr';
 
@@ -30,13 +31,16 @@ export const loader: LoaderFunction<RaceDetail | null> = async (_request, params
 /**
  * Мета без ПДн (название, даты окна, класс, дистанция); `og:url` — `WEB_ORIGIN` + `/races/<id>`. Не найдена —
  * нейтральная мета и `noindex` (мягкий 404: HTML с кодом 200, R6); API недоступен — нейтральная мета без `robots`.
+ * `og:image` (og-images): своя картинка гонки; отменённая или API недоступен — бренд; не найдена — без картинки.
  */
 export const generateMetadata: GenerateMetadataFunction = async (_request, params) => {
-  const result = await raceForSsr(params);
+  const [result, card] = await Promise.all([raceForSsr(params), ogCardIfOrigin('race', params.id)]);
+  const image = await pageOgImage({ kind: 'race', page: result, card });
   if (result.status !== 'found') {
     const neutral = publicPageMetadata({
       title: t('races.detail.title'),
       description: t('app.tagline'),
+      image,
     });
     return result.status === 'notFound' ? { ...neutral, robots: 'noindex' } : neutral;
   }
@@ -45,6 +49,7 @@ export const generateMetadata: GenerateMetadataFunction = async (_request, param
     title: race.title,
     description: raceShareDescription(race),
     path: `/races/${encodeURIComponent(race.id)}`,
+    image,
   });
 };
 

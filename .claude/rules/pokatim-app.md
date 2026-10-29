@@ -115,6 +115,11 @@ paths:
 - Мета — `publicPageMetadata` (`src/lib/page-metadata.ts`) в `generateMetadata`: без e-mail и других ПДн; путь с
   токеном (ссылки писем) — без `og:url`; `loader` — только для публичных данных (e-mail в HTML не попадает).
   Образцы — `register`, `auth/verify/[token]`. Новый публичный экран — шаг смоука `e2e/web.spec.ts`.
+- `og:image` (og-images) — `publicPageMetadata({ image })` из `src/lib/og-image.ts`: страница объекта (гонка, райд,
+  маршрут, старт) — `Promise.all([данные, ogCardIfOrigin(kind, id)])` → `pageOgImage` (своя; нет версии или API
+  недоступен — бренд; страница не найдена — без картинки); остальные публичные страницы — `brandOgImage()` /
+  `brandOgImageFor(page)`. Версию картинки считает только API (`/v1/og/cards/...`), адрес — только от `WEB_ORIGIN`;
+  нет `WEB_ORIGIN` — ни запросов, ни картинки. Свой fetch и расчёт версии в приложении — запрещены.
 - Гостевой лендинг `/welcome` (guest-landing, `docs/product/landing.md`) — корневой `src/app/welcome.tsx` в том же
   `Stack.Protected guard={!signedIn}`, что `(onboarding)` (не в группе: `initialRouteName` группы не трогаем); экран —
   `features/landing/`. `loader` — четыре публичных списка (`loadLandingSeed`, части `null`, не бросает; маршруты —

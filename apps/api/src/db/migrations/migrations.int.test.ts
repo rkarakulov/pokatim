@@ -44,6 +44,7 @@ import { PROFILE_REPORTS_INDEXES, profileReports } from './0034_profile_reports'
 import { ACHIEVEMENTS_INDEXES, achievements } from './0035_achievements';
 import { ACHIEVEMENTS_COLLECTIONS } from '../../modules/achievements/achievements.collection';
 import { overviewIndexes } from './0036_overview_indexes';
+import { OG_SYNC_INDEXES, ogSyncIndexes } from './0037_og_sync_indexes';
 import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
@@ -151,6 +152,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0034_profile_reports',
       '0035_achievements',
       '0036_overview_indexes',
+      '0037_og_sync_indexes',
     ]);
   });
 
@@ -215,6 +217,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         ...plain({ seasonId: 1, windowEndsAt: 1, _id: 1 }),
         partialFilterExpression: { protocolPublishedAt: { $type: 'date' } },
       },
+      // 0037_og_sync_indexes (og-images): пререндер OG-картинок
+      races_og_sync_idx: plain({ status: 1, updatedAt: 1, _id: 1 }),
     });
     const meta = h.db.collection<{ _id: string; version: number }>(RACES_COLLECTIONS.meta);
     await meta.deleteMany({});
@@ -270,6 +274,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       calendar_starts_public_idx: plain({ status: 1, startsOn: 1, _id: 1 }),
       calendar_starts_city_idx: plain({ status: 1, cityKey: 1, startsOn: 1 }),
       calendar_starts_panel_idx: plain({ startsOn: -1, _id: -1 }),
+      // 0037_og_sync_indexes (og-images): пререндер OG-картинок
+      calendar_starts_og_sync_idx: plain({ status: 1, updatedAt: 1, _id: 1 }),
     };
     expect(await indexesOf(CALENDAR_COLLECTIONS.starts)).toEqual(expected);
     await calendar.up(h.db);
@@ -431,6 +437,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         ...ROUTES_PUBLICATION_QUEUES,
         // 0031_rides_geo (05c): старты маршрутов каталога в круге «Рядом»
         routes_start_2dsphere: index({ start: '2dsphere' }),
+        // 0037_og_sync_indexes (og-images): пререндер OG-картинок
+        routes_og_sync_idx: index({ status: 1, updatedAt: 1, _id: 1 }),
       },
       // 0022_routes_derived (routes-03): выборка бэкфилла производных
       [ROUTES_COLLECTIONS.geometries]: {
@@ -1477,9 +1485,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await Promise.all(Object.values(IDENTITY_COLLECTIONS).map(indexesOf))).toEqual(before);
   });
 
-  it('0036_overview_indexes: индексы createdAt пользователей и загрузок; последняя; повторный up — без изменений', async () => {
+  it('0036_overview_indexes: индексы createdAt пользователей и загрузок; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0036_overview_indexes');
     expect(ids.indexOf('0036_overview_indexes')).toBe(ids.indexOf('0035_achievements') + 1);
     const createdAt = {
       key: { createdAt: 1 },
@@ -1498,5 +1505,32 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(IDENTITY_COLLECTIONS.users)).toMatchObject({
       users_created_at_idx: createdAt,
     });
+  });
+
+  it('0037_og_sync_indexes: (status, updatedAt, _id) на 4 коллекциях; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0037_og_sync_indexes');
+    expect(ids.indexOf('0037_og_sync_indexes')).toBe(ids.indexOf('0036_overview_indexes') + 1);
+    const ogSync = {
+      key: { status: 1, updatedAt: 1, _id: 1 },
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    };
+    const target = {
+      [RACES_COLLECTIONS.races]: OG_SYNC_INDEXES.races.options.name,
+      [RIDES_COLLECTIONS.rides]: OG_SYNC_INDEXES.rides.options.name,
+      [ROUTES_COLLECTIONS.routes]: OG_SYNC_INDEXES.routes.options.name,
+      [CALENDAR_COLLECTIONS.starts]: OG_SYNC_INDEXES.calendar.options.name,
+    };
+    const check = async () => {
+      for (const [collection, name] of Object.entries(target)) {
+        expect(await indexesOf(collection)).toMatchObject({ [name]: ogSync });
+      }
+    };
+    await check();
+    await ogSyncIndexes.up(h.db);
+    await ogSyncIndexes.up(h.db);
+    await check();
   });
 });

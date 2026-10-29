@@ -6,6 +6,7 @@ import type { GenerateMetadataFunction, LoaderFunction } from 'expo-router/serve
 import { CalendarDetailScreen } from '@/features/calendar/calendar-detail';
 import { calendarShareDescription } from '@/features/calendar/format';
 import { useLoaderSeed } from '@/lib/loader-seed';
+import { ogCardIfOrigin, pageOgImage } from '@/lib/og-image';
 import { publicPageMetadata } from '@/lib/page-metadata';
 import { fetchPublicForSsr, publicPath, ssrData, type PublicSsrResult } from '@/lib/public-ssr';
 
@@ -32,13 +33,19 @@ export const loader: LoaderFunction<CalendarStartDetail | null> = async (_reques
 /**
  * Мета без ПДн (название, дата с годом, дисциплина, город, дистанции); `og:url` — `WEB_ORIGIN` + `/calendar/<id>`.
  * Не найден — нейтральная мета и `noindex` (мягкий 404: HTML 200); API недоступен — нейтральная мета без `robots`.
+ * `og:image` (og-images): своя картинка старта; API недоступен — бренд; не найден — без картинки.
  */
 export const generateMetadata: GenerateMetadataFunction = async (_request, params) => {
-  const result = await startForSsr(params);
+  const [result, card] = await Promise.all([
+    startForSsr(params),
+    ogCardIfOrigin('calendar', params.id),
+  ]);
+  const image = await pageOgImage({ kind: 'calendar', page: result, card });
   if (result.status !== 'found') {
     const neutral = publicPageMetadata({
       title: t('calendar.detail.title'),
       description: t('app.tagline'),
+      image,
     });
     return result.status === 'notFound' ? { ...neutral, robots: 'noindex' } : neutral;
   }
@@ -47,6 +54,7 @@ export const generateMetadata: GenerateMetadataFunction = async (_request, param
     title: start.title,
     description: calendarShareDescription(start),
     path: `/calendar/${encodeURIComponent(start.id)}`,
+    image,
   });
 };
 

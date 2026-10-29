@@ -8,6 +8,8 @@ import { DocumentTitle } from '@/components/document-title';
 import { ScreenPlaceholder } from '@/components/screen-placeholder';
 import { api } from '@/lib/api';
 import { useLoaderSeed } from '@/lib/loader-seed';
+import { brandOgImage } from '@/lib/og-image';
+import { publicPageMetadata } from '@/lib/page-metadata';
 
 // Публичный экран-образец (без входа, вне вкладок). Данные на всех платформах — из API (TanStack Query);
 // на web `loader` — только посев SSR: HTML приходит уже с данными, OG-мета — из `generateMetadata`.
@@ -28,25 +30,16 @@ export const loader: LoaderFunction<HealthResponse | null> = async () => {
 };
 
 /**
- * Мета в первых байтах HTML (превью ссылок). `og:url` — только из WEB_ORIGIN (env сервера), не из Host
- * запроса: подменённый заголовок отравил бы кеш и превью.
+ * Мета в первых байтах HTML (превью ссылок): `og:url` — только из `WEB_ORIGIN` (`publicPageMetadata`), `og:image` —
+ * бренд-картинка (og-images).
  */
-export const generateMetadata: GenerateMetadataFunction = () => {
-  const title = t('status.title');
-  const description = t('status.description');
-  const origin = process.env.WEB_ORIGIN?.replace(/\/$/, '');
-  return {
-    title: `${title} — ${t('app.name')}`,
-    description,
-    openGraph: {
-      title,
-      description,
-      type: 'website',
-      siteName: t('app.name'),
-      ...(origin ? { url: `${origin}/status` } : {}),
-    },
-  };
-};
+export const generateMetadata: GenerateMetadataFunction = async () =>
+  publicPageMetadata({
+    title: t('status.title'),
+    description: t('status.description'),
+    path: '/status',
+    image: await brandOgImage(),
+  });
 
 export default function StatusScreen() {
   const seed = useLoaderSeed<HealthResponse>();

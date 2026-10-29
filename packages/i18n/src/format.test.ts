@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  formatDistances,
   formatElapsed,
   formatLocalRange,
   formatPlace,
@@ -59,5 +60,14 @@ describe('minskDateTime', () => {
       date: '4 октября',
       time: '23:59',
     });
+  });
+});
+
+describe('formatDistances', () => {
+  it('одна, две, три дистанции; пусто — null', () => {
+    expect(formatDistances([100])).toBe('100 км');
+    expect(formatDistances([80, 120])).toBe('80 и 120 км');
+    expect(formatDistances([40, 80.5, 120])).toBe('40, 80,5 и 120 км');
+    expect(formatDistances([])).toBeNull();
   });
 });

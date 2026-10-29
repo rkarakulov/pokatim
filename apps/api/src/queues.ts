@@ -69,6 +69,12 @@ export const QUEUE = {
    */
   storyCard: 'story-card',
   /**
+   * Пререндер OG-картинок публичных страниц (og-images, DV-1): `og.sync` каждую минуту и при старте worker, без
+   * событий outbox — изменившиеся публичные объекты по курсорам `updatedAt` → задачи `og-card.render` очереди
+   * `story-card` (NX по хэшу); параллелизм по умолчанию (1).
+   */
+  ogSync: 'og-sync',
+  /**
    * Сверка заезда по маршруту вне гонки (route-rides-01, `analyzeAttempt` в потоке разбора): jobId = id события outbox
    * `route-rides.check-requested`, параллелизм 1.
    */

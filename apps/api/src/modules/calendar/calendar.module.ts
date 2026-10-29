@@ -3,6 +3,8 @@ import { Module } from '@nestjs/common';
 import { PanelModule } from '../panel';
 import { PublicReadGuard } from '../../public-read.guard';
 import { CalendarAdminController } from './calendar-admin.controller';
+import { CalendarForSharingService } from './calendar-for-sharing';
+import { CALENDAR_FOR_SHARING } from './calendar-for-sharing.port';
 import { CalendarOverview } from './calendar-overview';
 import { CalendarPublicController } from './calendar-public.controller';
 import { CalendarPublicService } from './calendar-public.service';
@@ -11,11 +13,16 @@ import { CalendarService } from './calendar.service';
 
 /**
  * Ядро `calendar` без HTTP: единственный писатель стартов и порт «Обзора» панели `CalendarOverview` (admin-overview,
- * только через `index.ts`). Репозиторий объявлен только здесь (один экземпляр).
+ * только через `index.ts`), порт OG-картинки `CALENDAR_FOR_SHARING` для `sharing` (og-images). Репозиторий объявлен только здесь (один экземпляр).
  */
 @Module({
-  providers: [CalendarRepository, CalendarOverview],
-  exports: [CalendarRepository, CalendarOverview],
+  providers: [
+    CalendarRepository,
+    CalendarOverview,
+    CalendarForSharingService,
+    { provide: CALENDAR_FOR_SHARING, useExisting: CalendarForSharingService },
+  ],
+  exports: [CalendarRepository, CalendarOverview, CALENDAR_FOR_SHARING],
 })
 export class CalendarCoreModule {}
 
