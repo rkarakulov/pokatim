@@ -13,3 +13,10 @@ it('корневой layout первым импортирует настройк
   const firstImport = source.split('\n').find((line) => line.startsWith('import '));
   expect(firstImport).toBe("import '@/theme/design-system';");
 });
+
+// строгий CSP web (ADR-0025): zod `jitless` — до создания любой схемы, иначе проверка `new Function` нарушает CSP
+it('настройка дизайн-системы первым импортирует zod jitless', () => {
+  const source = readFileSync(join(__dirname, '../theme/design-system.ts'), 'utf8');
+  const firstImport = source.split('\n').find((line) => line.startsWith('import '));
+  expect(firstImport).toBe("import '@/features/web-security/zod-jitless';");
+});

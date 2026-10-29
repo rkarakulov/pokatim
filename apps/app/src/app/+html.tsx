@@ -4,6 +4,7 @@ import { ScrollViewStyleReset, useServerDocumentContext } from 'expo-router/html
 import type { ReactNode } from 'react';
 
 import { ssrThemeId } from '@/features/appearance/ssr-theme';
+import { cspNonce } from '@/features/web-security/csp-nonce';
 import { documentCss, themeColors } from '@/theme/document-theme';
 
 // service worker (кеш статики, scripts/service-worker.ts) — только в production: в dev он кешировал бы бандлы Metro
@@ -19,10 +20,12 @@ if ('serviceWorker' in navigator) {
  * гидрации (без белой вспышки в тёмной схеме),
  * автозаполнение, `theme-color` и id для гидрации без мигания (`window.__POKATIM_THEME__` — только id из закрытого
  * списка, `JSON.stringify`).
+ * Inline-скрипты — с nonce CSP запроса (`cspNonce`, ADR-0025): без него браузер их не исполнит.
  */
 export default function RootHtml({ children }: { children: ReactNode }) {
   const { htmlAttributes, headNodes, bodyAttributes, bodyNodes } = useServerDocumentContext();
   const theme = appThemes[ssrThemeId()];
+  const nonce = cspNonce();
 
   return (
     // базовый язык словаря; язык пользователя на сервере (Accept-Language) — вместе с сессией в web
@@ -40,6 +43,7 @@ export default function RootHtml({ children }: { children: ReactNode }) {
         <style dangerouslySetInnerHTML={{ __html: documentCss(theme) }} />
         <ScrollViewStyleReset />
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: `window.__POKATIM_THEME__=${JSON.stringify(theme.id)}`,
           }}
@@ -50,7 +54,7 @@ export default function RootHtml({ children }: { children: ReactNode }) {
         {children}
         {bodyNodes}
         {process.env.NODE_ENV === 'production' ? (
-          <script dangerouslySetInnerHTML={{ __html: registerServiceWorker }} />
+          <script nonce={nonce} dangerouslySetInnerHTML={{ __html: registerServiceWorker }} />
         ) : null}
       </body>
     </html>

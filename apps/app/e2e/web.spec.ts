@@ -207,6 +207,65 @@ test('manifest — всегда «Классика», и при cookie личн�
   });
 });
 
+test('строгий CSP (ADR-0025): nonce свой у ответа, все inline-скрипты SSR — с ним, бандлы — свой origin', async ({
+  request,
+}) => {
+  const nonces = new Set<string>();
+  for (const path of ['/', '/welcome', '/sign-in', '/welcome']) {
+    const response = await request.get(path, {
+      headers: { 'x-pokatim-csp-nonce': 'attacker' },
+    });
+    const csp = response.headers()['content-security-policy'] ?? '';
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).not.toMatch(/unsafe-eval|script-src[^;]*unsafe-inline/);
+    const nonce = /script-src 'self' 'nonce-([A-Za-z0-9+/=]+)'/.exec(csp)?.[1];
+    expect(nonce, path).toBeDefined();
+    nonces.add(nonce!);
+    const html = await response.text();
+    expect(html).not.toContain('attacker');
+    const scripts = [...html.matchAll(/<script\b([^>]*)>/g)].map(([, attrs]) => attrs!);
+    // React-гидрация (патч @expo/router-server), тема и service worker (+html.tsx)
+    expect(scripts.filter((attrs) => !/\bsrc=/.test(attrs)).length).toBeGreaterThanOrEqual(3);
+    for (const attrs of scripts) {
+      if (/\bsrc=/.test(attrs)) expect(attrs).toMatch(/\bsrc="\/_expo\/static\//);
+      else expect(attrs, path).toContain(`nonce="${nonce}"`);
+    }
+  }
+  expect(nonces.size).toBe(4);
+});
+
+test('строгий CSP (ADR-0025): ключевые страницы без нарушений — securitypolicyviolation, в т.ч. без console.error (eval)', async ({
+  page,
+}) => {
+  // часть нарушений (проверка `new Function` в try/catch) не пишет console.error — ловим событие документа
+  await page.addInitScript(() => {
+    (window as unknown as { __cspViolations: string[] }).__cspViolations = [];
+    document.addEventListener('securitypolicyviolation', (event) =>
+      (window as unknown as { __cspViolations: string[] }).__cspViolations.push(
+        `${event.effectiveDirective} ${event.blockedURI} ${event.sourceFile}:${event.lineNumber}`,
+      ),
+    );
+  });
+  for (const path of [
+    '/',
+    '/welcome',
+    '/sign-in',
+    '/status',
+    `/races/${UNKNOWN_RACE_ID}`,
+    `/routes/${UNKNOWN_ROUTE_ID}`,
+    '/tickets/ABCDE12345',
+  ]) {
+    await page.goto(path);
+    await page.waitForLoadState('networkidle');
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __cspViolations: string[] }).__cspViolations,
+      ),
+      path,
+    ).toEqual([]);
+  }
+});
+
 test('robots.txt: служебное закрыто, Sitemap от WEB_ORIGIN; sitemap.xml с API — лендинг (landing-seo)', async ({
   request,
 }) => {

@@ -48,7 +48,8 @@ paths:
   `@rkarakulov/admin-kit` (F6, явное исключение `AGENTS.md` §4.11 до выноса). Размеры раскладки панели, которых нет в
   базе, — `src/panel-tokens.ts` (`--panel-*`, временно до токенов базы, Q17).
 - Время — `src/format.ts` (`Intl` ru-RU, Europe/Minsk); тесты admin — `TZ=Europe/Minsk` (`vite.config.ts`).
-- CSP панели — `infra/docker/admin-nginx.conf`: inline-скриптов нет, inline — только `<style>` дизайн-системы.
+- CSP панели — `infra/docker/admin-nginx.conf`: inline-скриптов нет, inline — только `<style>` дизайн-системы. CSP web
+  приложения — отдельный, с nonce (`apps/app/server/web-server.ts`, ADR-0025); origin карт — там же `MAP_ORIGINS`.
 - Ввод даты и времени — `DateTimeField`/`DateField` (`src/ui`): значение — настенное время Europe/Minsk, в запрос —
   `minskWallTimeToUtc` контрактов (не `new Date(value)`); показ — `src/format.ts`.
 - Что можно менять в записи — `editable` сервера (`PanelRace.editable`): зафиксированные поля — с замком, причина
