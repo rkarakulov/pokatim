@@ -13,7 +13,7 @@ import { domainError } from '../../error-messages';
 import { RACE_REGISTRY, type RaceRegistry } from '../races';
 import { ACTIVITY_SOURCE, type ActivityRef, type ActivitySource } from '../tracks';
 import { AttemptIntake } from './attempt-intake';
-import { consumeUserLimit } from './entries.service';
+import { consumeUserLimit } from '../../user-limit';
 import { RESULT_DISPUTE_GATE, type ResultDisputeGate } from './result-dispute-gate.port';
 import type { EntryRequest } from './results.collection';
 import {

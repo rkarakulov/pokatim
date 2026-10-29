@@ -190,6 +190,15 @@ const baseEnv = defineCoreEnv({
     .regex(/^[a-z][a-z0-9+.-]*:\/\/(.*\/)?$/i, 'схема://…/ — с завершающим слешем'),
   /** Версия соглашения и согласия на обработку данных, которую принимает пользователь при регистрации. */
   AGREEMENT_VERSION: z.string().min(1),
+  /**
+   * Origin web-приложения (`https://<хост>`) для ссылок писем на страницы приложения (event-tickets: «Открыть билет» →
+   * `<origin>/tickets/<код>`). Не задан — письмо без кнопки.
+   */
+  APP_WEB_ORIGIN: optional(
+    z.url({ protocol: /^https$/ }).refine((origin) => new URL(origin).origin === origin, {
+      message: 'APP_WEB_ORIGIN: только https-origin, без пути',
+    }),
+  ),
   /** Адрес поддержки для писем («Если это были не вы — напишите на …»); не задан — строки в письме нет. */
   SUPPORT_EMAIL: optional(z.email()),
   CORS_ORIGINS: corsOrigins,

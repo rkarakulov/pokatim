@@ -58,6 +58,8 @@ describe('AuditAction', () => {
       'profile.avatar_reset',
       'profile.club_reset',
       'profile.reports_dismissed',
+      'tickets.settings_updated',
+      'tickets.checked_in',
       'panel.totp_enabled',
       'panel.totp_disabled',
       'panel.totp_reset',

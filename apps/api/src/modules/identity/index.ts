@@ -29,4 +29,6 @@ export { randomToken, sha256 } from './tokens';
 /** Ключ IP-лимита (HMAC адреса, IPv6 — /64) — публичное чтение (`public-read.guard.ts`). */
 export { rateLimitKeyForIp } from './tokens';
 /** Каркас HTML-письма и экранирование — письма `notifications` (N2, ADR-0017). */
-export { escapeHtml, htmlEmail } from './mail/html';
+export { buttonHtml, escapeHtml, htmlEmail } from './mail/html';
+/** Дата и время по Минску для писем (`ru-RU`, «24 октября 2026 г., 10:00»). */
+export { minskDateTime } from './mail/password-changed-email';

@@ -37,6 +37,8 @@ describe('маршруты web-сервера: первое совпадение
     [`/races/pick/${ID}`, '/races/pick/[id]'],
     [`/riders/report/${'r'.repeat(43)}`, '/riders/report/[id]'],
     [`/riders/${'r'.repeat(43)}`, '/riders/[id]'],
+    ['/achievements/flash', '/achievements/flash'],
+    ['/achievements/race_win', '/achievements/[code]'],
     // guest-landing (RC-1): корневой лендинг, корень — Главная
     ['/welcome', '/welcome'],
     ['/', '/(tabs)/index'],

@@ -31,6 +31,9 @@ const ICONS = {
   // вход в «Настройки» и выбранный пункт списка (settings-hub)
   settings: { ios: 'gearshape', iosFilled: 'gearshape.fill', material: 'settings' },
   check: { ios: 'checkmark', material: 'check' },
+  // значки достижений «Подиум» и «Победа» (achievements)
+  medal: { ios: 'medal', iosFilled: 'medal.fill', material: 'military_tech' },
+  trophy: { ios: 'trophy', iosFilled: 'trophy.fill', material: 'emoji_events' },
   // закрыть плашку и шторку установки PWA (pwa-install)
   close: { ios: 'xmark', material: 'close' },
 } as const satisfies Record<

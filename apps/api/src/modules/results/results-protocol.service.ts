@@ -18,7 +18,7 @@ import { domainError } from '../../error-messages';
 import { PanelAudit, type PanelPrincipal } from '../panel';
 import { RACE_REGISTRY, type RaceForResults, type RaceRegistry } from '../races';
 import { AttemptIntake } from './attempt-intake';
-import { consumeUserLimit } from './entries.service';
+import { consumeUserLimit } from '../../user-limit';
 import type {
   RaceAttemptDoc,
   RaceAttemptReviewDoc,

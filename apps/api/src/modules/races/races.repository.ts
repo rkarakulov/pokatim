@@ -168,6 +168,12 @@ export class RacesRepository {
     return (await this.c.races.findOne({ _id: id }, { session })) ?? undefined;
   }
 
+  /** Гонки по id (`_id` — индекс); незнакомые id — без документа. */
+  findRaces(ids: readonly string[]): Promise<RaceDoc[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.c.races.find({ _id: { $in: [...new Set(ids)] } }).toArray();
+  }
+
   /**
    * Опубликованные гонки без протокола в фазе «Обзора» панели (admin-overview): `open` — окно идёт
    * (`windowStartsAt ≤ now < closesAt`), `closed` — окно закрыто, протокол ждёт публикации. `closedBefore` —

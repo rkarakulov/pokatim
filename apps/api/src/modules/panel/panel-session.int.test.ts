@@ -111,6 +111,7 @@ describe('POST /v1/admin/session/sign-in (AC2)', () => {
           'profiles.verified_edit',
           'routes.moderate',
           'platform.stats',
+          'tickets.checkin',
         ],
       },
     });
