@@ -158,3 +158,10 @@ paths:
   `TrackMapRun`/`ATTEMPT_TRACK_MARKS` (импорт, не копии); дельты — знаковые целые. Коды `ROUTE_RIDE_NOT_READY`,
   `ROUTE_RIDE_UPLOAD_FAILED`, `ROUTE_RIDE_QUOTA_EXCEEDED` (409) — в конце `ErrorCode`. api-client — `listRouteRides`,
   `listRouteRideCandidates`, `checkRouteRide`, `getRouteRide`, `getRouteRideTrack` (явный access-токен).
+- Достижения (achievements, ADR-0020): `src/achievements/achievement.schema.ts` — `ACHIEVEMENT_CODES` (каталог v1, 9
+  кодов, **только в конец**), `ACHIEVEMENT_OBJECT_KINDS` (`race | route | ride`), запрос `AchievementCode` (строгий
+  `z.enum`) и `MarkAchievementsSeenRequest` (`strictObject`, 1–9 кодов без повторов → `INVALID`); ответы `Achievement`
+  / `AchievementList` (`code`, `object.kind` — `tolerantEnum`; `factDate` — `LocalDate`, без времени суток, RC-7) и
+  `PublicRiderAchievement(List)` (без `seen`). RC-8: незнакомый код в старой сборке — `'unknown'`; приложение такие
+  элементы отбрасывает (пометить `seen` их нельзя). Новых кодов ошибок нет. api-client — `listAchievements(token)`,
+  `markAchievementsSeen(token, codes)` (204), `getRiderAchievements(publicId)` (публичный).

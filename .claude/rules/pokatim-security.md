@@ -22,6 +22,7 @@ paths:
   - "apps/app/src/features/rides/**"
   - "apps/app/src/features/auth/return-path*"
   - "apps/api/src/modules/results/**"
+  - "apps/api/src/modules/achievements/**"
 ---
 
 # pokatim — зоны безопасности (дополняет `security.md`)
@@ -320,6 +321,20 @@ paths:
   опубликованные протоколы.
 - Клуб — те же запреты `\p{Cc}`/`\p{Cf}` и служебных подписей, что у имени. Логи — `uid`, размер, формат и исход;
   без имени, клуба, байтов и сообщений libvips. Смена фото и клуба самим райдером не журналируется.
+
+## Достижения (achievements, ADR-0020 Proposed)
+
+- `GET /v1/achievements`, `POST /v1/achievements/seen` — `AuthGuard` на классе, `no-store`, пользователь — только
+  `@CurrentUser()`, `userId` в каждом фильтре репозитория; тело `seen` — `strictObject`, строгий `z.enum`, 1–9 без
+  повторов (400 `VALIDATION_FAILED`); чужие, отозванные и незнакомые коды — без записи и без ошибки. Лимиты
+  `achievements-read:<uid>` 60/мин, `achievements-seen:<uid>` 120/ч (429). GET пишет ≤ 9 документов на пользователя.
+- Публично `GET /v1/riders/:publicId/achievements` — `PublicReadGuard`, `public, max-age=60`, `RiderPublicId` pipe;
+  только при имени и согласии (`RIDER_PROFILES.findPublic`), иначе один 404; без записи. Только `race_*` — маршруты и
+  райды личные (A7).
+- Наружу — явный список полей (ключи держит `achievements.int.test.ts`): `code`, `object { kind, id, title }`,
+  `factDate` (день по Минску, без времени суток — RC-7), свой — ещё `seen`; без `userId`, id выдачи, `grantedAt`,
+  `revokedAt`. Названия маршрутов — только видимых райдеру (RC-4). Логи — `uid`, флаг `first` и счётчики; без кодов
+  объектов, названий и `publicId`.
 
 ## Модерация профиля (profile-moderation)
 

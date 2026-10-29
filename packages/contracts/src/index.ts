@@ -47,3 +47,4 @@ export * from './appearance/appearance.schema.ts';
 export * from './notifications/notification.schema.ts';
 export * from './sharing/story-card.schema.ts';
 export * from './route-rides/route-ride.schema.ts';
+export * from './achievements/achievement.schema.ts';

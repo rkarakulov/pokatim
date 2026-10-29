@@ -34,6 +34,7 @@ import { ridesGeo } from './0031_rides_geo';
 import { routeRides } from './0032_route_rides';
 import { riderProfile } from './0033_rider_profile';
 import { profileReports } from './0034_profile_reports';
+import { achievements } from './0035_achievements';
 import { overviewIndexes } from './0036_overview_indexes';
 
 /**
@@ -75,5 +76,6 @@ export const migrations: readonly MongoMigration[] = [
   routeRides,
   riderProfile,
   profileReports,
+  achievements,
   overviewIndexes,
 ];

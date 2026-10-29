@@ -26,4 +26,9 @@ export interface RouteRideRoutes {
   rideable(routeId: string, userId: string): Promise<RideableRoute | null>;
   /** Те же условия видимости; линия сверки для worker; нет геометрии — `null`. */
   matchGeometry(routeId: string, userId: string): Promise<RouteMatchGeometry | null>;
+  /**
+   * Названия видимых райдеру маршрутов (achievements): то же условие, что `rideable` (без проверки линии показа),
+   * одним запросом, ≤ 500 id; невидимых нет в карте. Пустой вход — пустая карта без запроса.
+   */
+  rideableTitles(routeIds: readonly string[], userId: string): Promise<Map<string, string>>;
 }

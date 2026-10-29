@@ -6,6 +6,8 @@ import { RoutesCoreModule } from '../routes';
 import { PublicReadGuard } from '../../public-read.guard';
 import { ProfileRidesController } from './profile-rides.controller';
 import { RideErasure } from './ride-erasure';
+import { RiderRidesService } from './rider-rides';
+import { RIDER_RIDES } from './rider-rides.port';
 import { RideNoticesService } from './ride-notices';
 import { RidesForSharingService } from './rides-for-sharing';
 import { RIDES_FOR_SHARING } from './rides-for-sharing.port';
@@ -25,7 +27,8 @@ import { RidesService } from './rides.service';
 /**
  * Ядро `rides` без HTTP: единственные писатели райдов и жалоб, порт стирания `RideErasure` (модуль
  * `account`, worker), порт получателей уведомлений `RIDE_NOTICES` (`notifications`, ADR-0017) и порт карточки-приглашения
- * `RIDES_FOR_SHARING` (`sharing`, ADR-0018), счётчики «Обзора» панели `RidesOverview` (`overview`). Импортирует и
+ * `RIDES_FOR_SHARING` (`sharing`, ADR-0018), порт прошедших райдов райдера `RIDER_RIDES` (`achievements`), счётчики
+ * «Обзора» панели `RidesOverview` (`overview`). Импортирует и
  * реэкспортирует `RoutesCoreModule` (05c): порт `RIDE_ROUTES` нужен `RideErasure` здесь и сервисам `RidesModule`
  * (транзитивного импорта в Nest нет); routes от rides не зависит — цикла нет.
  */
@@ -39,6 +42,8 @@ import { RidesService } from './rides.service';
     { provide: RIDE_NOTICES, useExisting: RideNoticesService },
     RidesForSharingService,
     { provide: RIDES_FOR_SHARING, useExisting: RidesForSharingService },
+    RiderRidesService,
+    { provide: RIDER_RIDES, useExisting: RiderRidesService },
     RidesOverview,
   ],
   exports: [
@@ -47,6 +52,7 @@ import { RidesService } from './rides.service';
     RideErasure,
     RIDE_NOTICES,
     RIDES_FOR_SHARING,
+    RIDER_RIDES,
     RidesOverview,
     RoutesCoreModule,
   ],

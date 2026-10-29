@@ -258,6 +258,27 @@ export class RoutesRepository {
   }
 
   /**
+   * Названия маршрутов заезда по id (achievements, порт `RouteRideRoutes.rideableTitles`): условие `findRideable`
+   * (`ready`, `IN_CATALOG` или `ownRider`, длина есть) одним `find` с `$in` (≤ 500 id у вызывающего). Без кэша.
+   */
+  findRideableTitles(
+    userId: string,
+    ids: readonly string[],
+  ): Promise<Pick<RouteDoc, '_id' | 'title'>[]> {
+    return this.c.routes
+      .find<Pick<RouteDoc, '_id' | 'title'>>(
+        {
+          _id: { $in: [...ids] },
+          status: 'ready',
+          distanceM: { $ne: null },
+          $or: [IN_CATALOG, ownRider(userId)],
+        },
+        { projection: { title: 1 } },
+      )
+      .toArray();
+  }
+
+  /**
    * Опубликованный маршрут **команды** (routes-01) — порт `RouteCatalog.inCatalog` («Гонки на маршруте»): маршрут
    * райдера — `undefined` (U7, 8.1 RC-1). Без кэша: каталог изменяем.
    */

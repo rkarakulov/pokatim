@@ -4,6 +4,7 @@ import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import type { Queue } from 'bullmq';
 
 import { QUEUE } from '../../queues';
+import { AchievementErasure } from '../achievements';
 import { DeviceErasure } from '../devices';
 import { AccountErasure } from '../identity';
 import { NotificationErasure } from '../notifications';
@@ -32,7 +33,7 @@ export interface ErasureRun {
  * Фоновая очистка удалённого аккаунта (worker, ADR-0015). Шаги — по порядку, только через порты модулей-владельцев;
  * каждый повторяем, ретрай задачи повторяет все шаги с начала. Порядок: подпись в райдах пропадает первой (R4), после
  * маршрутов — точки райдов на висячих маршрутах (`ride-starts`, 05c RC-1),
- * устройства — до треков (новых приёмов нет, F4), заезды по маршрутам (`route-rides`, route-rides-01) — после треков,
+ * устройства — до треков (новых приёмов нет, F4), заезды по маршрутам (`route-rides`, route-rides-01) — после треков, достижения (`achievements`) — после них,
  * уведомления, настройки и токены — после них, письмо и стирание e-mail — последними (A10). Живой аккаунт не
  * трогается (N8). Логи — uid, шаг, исход, счётчики.
  */
@@ -48,6 +49,7 @@ export class AccountErasureService {
     private readonly devices: DeviceErasure,
     private readonly tracks: TrackErasure,
     private readonly routeRides: RouteRideErasure,
+    private readonly achievements: AchievementErasure,
     private readonly notifications: NotificationErasure,
     @InjectQueue(QUEUE.accountDeletion) private readonly queue: Queue,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -86,6 +88,11 @@ export class AccountErasureService {
     // после треков: активностей нет — заезды по маршрутам (производные данные удалённого) стираются целиком
     await this.step(userId, 'route-rides', run, async () => {
       return `deleted=${await this.routeRides.erase(userId)}`;
+    });
+    // после фактов (протоколы остаются псевдонимными, заезды и райды стёрты): выдачи достижений и маркер сверки
+    await this.step(userId, 'achievements', run, async () => {
+      const result = await this.achievements.erase(userId);
+      return `deleted=${result.grants} syncs=${result.syncs}`;
     });
     await this.step(userId, 'notifications', run, async () => {
       const result = await this.notifications.erase(userId);

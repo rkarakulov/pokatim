@@ -22,8 +22,8 @@ export const OVERVIEW_INDEXES = {
 } as const satisfies Record<string, IndexDef>;
 
 /**
- * Индексы KPI «Обзора» панели (admin-overview). Expand-only, без транзакции и бэкфилла, идемпотентна. Номер 0035 занят
- * параллельной задачей «Достижения»; порядок применения — по массиву `migrations`.
+ * Индексы KPI «Обзора» панели (admin-overview). Expand-only, без транзакции и бэкфилла, идемпотентна. После
+ * `0035_achievements`.
  */
 export const overviewIndexes: MongoMigration = {
   id: '0036_overview_indexes',
