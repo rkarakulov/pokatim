@@ -19,6 +19,8 @@ import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { StatBlock } from '@/components/stat-block';
+import { AchievementsBlock } from '@/features/achievements/achievements-block';
+import { useRiderAchievements } from '@/features/achievements/queries';
 import { rememberReturnPath } from '@/features/auth/return-path';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { HistoryList, RaceHistoryRow } from '@/features/profile/history-rows';
@@ -95,11 +97,13 @@ function RiderReportAction({
 function RiderBody({
   rider,
   races,
+  achievements,
   session,
   viewer,
 }: {
   rider: PublicRiderProfile;
   races: ReturnType<typeof useRiderRaces>;
+  achievements: ReturnType<typeof useRiderAchievements>;
   session: RiderSession;
   viewer: ReturnType<typeof useRiderViewer>;
 }) {
@@ -110,6 +114,8 @@ function RiderBody({
       <ProfileHead name={rider.name} club={rider.club} avatarId={rider.avatar?.id ?? null} />
       <View style={[styles.padded, styles.sections]}>
         <StatBlock items={publicStatItems(rider.stats)} />
+        {/* гоночные достижения (achievements, A7): без перехода и без «Поделиться»; пусто — блока нет */}
+        <AchievementsBlock testID="rider-achievements" query={achievements} publicOnly />
         <View style={styles.stack}>
           <Text
             accessibilityRole="header"
@@ -154,6 +160,8 @@ export function RiderScreen({ id, seed }: { id: string; seed: PublicRiderProfile
   const rider = useRider(id, seed, valid);
   const found = rider.data !== undefined && apiErrorOf(rider.error)?.code !== 'NOT_FOUND';
   const races = useRiderRaces(id, valid && found);
+  // только клиент (RC-5) и только после найденного профиля (без второго 404)
+  const achievements = useRiderAchievements(id, valid && found);
   // состояние зрителя (жалоба) — только вошедшему и только после найденного профиля (без второго 404)
   const signedIn = useSessionStore(isSignedIn);
   const pending = useSessionStore((state) => isSessionPending(state.status));
@@ -163,10 +171,10 @@ export function RiderScreen({ id, seed }: { id: string; seed: PublicRiderProfile
   const refetchers = useMemo(
     () => [
       rider.refetch,
-      ...(found ? [races.refetch] : []),
+      ...(found ? [races.refetch, achievements.refetch] : []),
       ...(viewerEnabled ? [viewer.refetch] : []),
     ],
-    [rider.refetch, found, races.refetch, viewerEnabled, viewer.refetch],
+    [rider.refetch, found, races.refetch, achievements.refetch, viewerEnabled, viewer.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   // 404 — «райдер скрыл профиль», а не сбой обновления: показанные данные убираются (отзыв согласия, R-3)
@@ -204,7 +212,15 @@ export function RiderScreen({ id, seed }: { id: string; seed: PublicRiderProfile
           </View>
         ) : (
           <AsyncContent query={rider} skeleton={<ProfileHeadSkeleton />}>
-            {(data) => <RiderBody rider={data} races={races} session={session} viewer={viewer} />}
+            {(data) => (
+              <RiderBody
+                rider={data}
+                races={races}
+                achievements={achievements}
+                session={session}
+                viewer={viewer}
+              />
+            )}
           </AsyncContent>
         )}
       </ScrollView>

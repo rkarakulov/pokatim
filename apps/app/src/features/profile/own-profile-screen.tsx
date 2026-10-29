@@ -9,6 +9,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
+import { AchievementsBlock } from '@/features/achievements/achievements-block';
+import { useAchievements } from '@/features/achievements/queries';
 import { useHeaderSeasonState } from '@/features/races/queries';
 import { ProfileSeasonBlock } from '@/features/standings/profile-season-block';
 import { useStandingsRefetch } from '@/features/standings/queries';
@@ -50,8 +52,10 @@ function ProfileActions({ profile }: { profile: ProfileView }) {
  */
 export function OwnProfileScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const profile = useProfile();
   const stats = useProfileStats();
+  const achievements = useAchievements();
   const [tab, setTab] = useState<HistoryTab>('races');
   // запрос — только у выбранной вкладки: «Райды» — с первого переключения, загруженное остаётся в кэше
   const races = useProfileRaces(tab === 'races');
@@ -63,12 +67,14 @@ export function OwnProfileScreen() {
     () => [
       profile.refetch,
       stats.refetch,
+      achievements.refetch,
       tab === 'races' ? races.refetch : rides.refetch,
       ...(hasSeason ? [refetchStandings] : []),
     ],
     [
       profile.refetch,
       stats.refetch,
+      achievements.refetch,
       tab,
       races.refetch,
       rides.refetch,
@@ -117,7 +123,12 @@ export function OwnProfileScreen() {
           {/* блок «Сезон» (race-results-08c): своих строк нет — блока нет */}
           <ProfileSeasonBlock />
           <ProfileHistory tab={tab} onTabChange={setTab} races={races} rides={rides} />
-          {/* rider-profile: здесь — «Эмаль» достижений, следующая задача */}
+          {/* достижения (achievements, A7–A8): все свои; нет ни одного — блока нет; нажатие — экран достижения */}
+          <AchievementsBlock
+            testID="own-achievements"
+            query={achievements}
+            onPress={(item) => router.push(`/achievements/${item.code}`)}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>

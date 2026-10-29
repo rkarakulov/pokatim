@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { appThemes } from './app-themes.ts';
 import { contrastPairs, contrastPairsOf, contrastRatio } from './contrast.ts';
 import { designSystemCss } from './css.ts';
-import { layout } from './index.ts';
+import { badgeShape, layout } from './index.ts';
 import { themes, type ThemeName } from './brand.ts';
 
 /** CSS-переменные прототипов (`:root,[data-theme=light]` / `[data-theme=dark]`) → семантические роли. */
@@ -184,6 +184,20 @@ describe('CSS для веба (обёртка с брендом pokatim)', () =>
 
 describe('раскладка приложения (layout)', () => {
   it('аватар шапки профиля — 56 px (`.phead-name .ava` прототипа, rider-profile)', () => {
-    expect(layout).toEqual({ contentMaxWidth: 640, avatarProfile: 56 });
+    expect(layout).toMatchObject({ contentMaxWidth: 640, avatarProfile: 56 });
+  });
+
+  it('значок «Эмаль» (achievements): 72 в сетке, 152 на вспышке; кольцо и диск вписаны в диаметр', () => {
+    expect(layout).toEqual({
+      contentMaxWidth: 640,
+      avatarProfile: 56,
+      badgeGrid: 72,
+      badgeHero: 152,
+    });
+    // диск не перекрывает кольцо: отступ + толщина кольца с двух сторон + диск ≤ 1
+    expect(2 * (badgeShape.ringInset + badgeShape.ringWidth) + badgeShape.disc).toBeLessThanOrEqual(
+      1,
+    );
+    expect(badgeShape.icon).toBeLessThan(badgeShape.disc);
   });
 });
