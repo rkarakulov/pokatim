@@ -49,6 +49,7 @@ const event = (overrides: Partial<EventFacts> = {}): EventFacts => ({
   address: null,
   city: null,
   distancesKm: [],
+  windowClosesAt: null,
   ownerUserId: 'owner',
   ticketing: ticketing(),
   ...overrides,

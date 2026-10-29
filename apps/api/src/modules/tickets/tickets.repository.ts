@@ -91,9 +91,8 @@ export class TicketsRepository {
   }
 
   /**
-   * Включённые настройки гонок, чьё окно check-in может быть открыто (регламент сверки): старт не раньше `startsAfter`
-   * (`now − maxDurationMs`, событие не длиннее 7 суток) — диапазон по `event_ticketing_enabled_idx`, прошедшие гонки
-   * не читаются.
+   * Включённые настройки гонок для регламента сверки: старт позже `startsAfter` (`now − 61 сут`: окно гонки ≤ 60 суток,
+   * очный старт внутри него) — диапазон по `event_ticketing_enabled_idx`, давние гонки не читаются.
    */
   enabledRaceTicketings(startsAfter: Date): Promise<EventTicketingDoc[]> {
     return this.c.ticketing

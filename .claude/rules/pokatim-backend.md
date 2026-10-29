@@ -238,11 +238,14 @@ paths:
   `tickets.issued`; дубль кода — новая транзакция ≤ 3), `RaceTickets` (сверка), `TicketErasure`. Правила —
   чистые функции `tickets.policy.ts` (`ticketStatus`, `checkInWindow`, `isPast`, `canIssue`, `raceReconcilePlan`,
   `registrationGate`, `eventAccess`, `maskEmail`, `TICKETS_POLICY`).
+- Регламент сверки: гонки со стартом позже `now − 61 сут`; выпуск — пока открыто окно check-in, отмены и смена группы —
+  пока открыто окно гонки + сутки.
 - Билет гонки — **сверкой** (`results` о билетах не знает; подписки на `results.*` нет): лениво в
   `GET /v1/races/:raceId/ticket` и регламентом `tickets.reconcile` (`* * * * *` Минск + `tickets.reconcile.boot`,
   очередь `tickets-maintenance`); `RaceTickets.refresh` перед показом и check-in отменяет билет снятой заявки. Дубль
   выпуска — `isDuplicateKey(…, 'tickets_registration_unique')`.
-- Check-in — транзакция с замками: `lockTicketing` (настройки, конфликт с выключением и переносом; окно check-in
+- Check-in — транзакция с замками: `RACE_REGISTRY.lockResults` (гонка, конфликт с отменой; `status: 'published'`),
+  `lockTicketing` (настройки, конфликт с выключением и переносом; окно check-in
   пересчитывается по ним и `CLOCK` в каждой попытке), `CALENDAR_EVENTS.lockForAdmission` (старт календаря — им же
   захватывают старт регистрация и её отмена: снятие, перенос, дистанции конфликтуют), `lockEntryForTicket` (гонка,
   конфликт с отменой участия) / `lockRegistration` (календарь, конфликт с отменой регистрации), затем `markCheckedIn`;

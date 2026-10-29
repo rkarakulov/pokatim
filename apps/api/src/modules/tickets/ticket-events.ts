@@ -54,6 +54,7 @@ function raceFacts(race: RaceForResults, ticketing: EventTicketingDoc | null): E
     address: ticketing?.address ?? null,
     city: null,
     distancesKm: [],
+    windowClosesAt: race.closesAt,
     ownerUserId: race.ownerUserId,
     ticketing,
   };
@@ -72,6 +73,7 @@ function calendarFacts(start: CalendarEventFacts, ticketing: EventTicketingDoc |
     address: ticketing?.address ?? null,
     city: start.city,
     distancesKm: start.distancesKm,
+    windowClosesAt: null,
     ownerUserId: null,
     ticketing,
   };
@@ -133,6 +135,14 @@ export class TicketEvents {
   /** Гонка (для проверок окна в настройках); не опубликована и не отменена — `null`. */
   race(id: string): Promise<RaceForResults | null> {
     return this.races.get(id);
+  }
+
+  /**
+   * Захват гонки в транзакции check-in (`RaceRegistry.lockResults` — запись в документ гонки): отмена гонки
+   * конфликтует с отметкой. Черновик или нет — `null`.
+   */
+  lockRace(tx: DbSession, id: string): Promise<RaceForResults | null> {
+    return this.races.lockResults(tx, id);
   }
 
   /** Захват и чтение старта календаря в транзакции регистрации и check-in (порт `CALENDAR_EVENTS`). */

@@ -226,7 +226,7 @@ export class TicketingAdminService {
       }
       if (next.startsAt !== null && next.endsAt !== null) {
         if (next.endsAt <= next.startsAt) issues.push({ path: 'endsAt', code: 'DATE_ORDER' });
-        // очное событие — не дольше 7 суток: регламент сверки выбирает гонки по `startsAt` (ревью pass 1)
+        // очное событие — не дольше 7 суток: окно check-in укладывается в выборку регламента по `startsAt` (pass 1)
         else if (next.endsAt.getTime() - next.startsAt.getTime() > TICKETS_POLICY.maxDurationMs) {
           issues.push({ path: 'endsAt', code: 'INVALID' });
         }

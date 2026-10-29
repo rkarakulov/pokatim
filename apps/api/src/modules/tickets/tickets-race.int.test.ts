@@ -1,10 +1,11 @@
-import { MyTicketRef } from '@pokatim/contracts';
+import { MyTicketRef, MyTickets } from '@pokatim/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { collections } from '../../../test/identity';
+import { call, collections } from '../../../test/identity';
+import { panelCall, panelSession } from '../../../test/panel';
 import { racesDb } from '../../../test/races';
-import { resultsDb, travelTo, withdraw } from '../../../test/results';
+import { resultsDb, signIn, travelTo, withdraw } from '../../../test/results';
 import {
   enableRaceTickets,
   enter,
@@ -14,6 +15,7 @@ import {
   reconcileAll,
   RACE_START,
   rider,
+  ticketingUrl,
   ticketsDb,
 } from '../../../test/tickets';
 
@@ -139,15 +141,19 @@ describe('включение после заявок и сверка (AC2, RC-T1
     await racesDb(h).races.updateOne({ _id: raceId }, { $set: { status: 'cancelled' } });
     expect(await reconcileAll(h)).toEqual({ races: 0, issued: 0, failed: 0 });
     await racesDb(h).races.updateOne({ _id: raceId }, { $set: { status: 'published' } });
-    // старт раньше `now − 7 сут` — регламент гонку не читает (ревью pass 1, LOW-3)
+    // старт раньше `now − 61 сут` (окно гонки ≤ 60 сут) — регламент гонку не читает (ревью pass 1, LOW-3)
     await ticketsDb(h).ticketing.updateOne(
       {},
-      { $set: { startsAt: new Date(h.clock.now().getTime() - 8 * 24 * 3_600_000) } },
+      { $set: { startsAt: new Date(h.clock.now().getTime() - 62 * 24 * 3_600_000) } },
     );
     expect(await reconcileAll(h)).toEqual({ races: 0, issued: 0, failed: 0 });
     await ticketsDb(h).ticketing.updateOne({}, { $set: { startsAt: new Date(RACE_START) } });
     // очный старт 24.10 10:00 Минска + 12 ч
     travelTo(h, new Date('2026-10-24T19:00:00Z'));
+    // окно гонки открыто — гонка сверяется (отмены), но билеты уже не выпускаются (pass 3)
+    expect(await reconcileAll(h)).toEqual({ races: 1, issued: 0, failed: 0 });
+    // окно гонки + сутки закрыты — гонка не сверяется
+    travelTo(h, new Date('2026-10-27T21:00:00Z'));
     expect(await reconcileAll(h)).toEqual({ races: 0, issued: 0, failed: 0 });
     expect(await ticketsDb(h).tickets.countDocuments()).toBe(0);
   });
@@ -171,6 +177,24 @@ describe('отмена заявки и смена группы (AC3, RC-T5)', ()
     // b — через ленивое чтение (тот же результат, что сверка)
     await ticketsDb(h).tickets.updateOne({ userId: b.userId }, { $set: { status: 'active' } });
     expect(MyTicketRef.parse((await raceTicket(h, b.auth, raceId)).body).status).toBe('cancelled');
+  });
+
+  it('check-in закрыт, окно гонки открыто, заявка снята — сверка отменяет билет; список и участники — cancelled (pass 3)', async () => {
+    const { admin, raceId } = await raceWorld(h);
+    await enableRaceTickets(h, admin.token, raceId);
+    const a = await rider(h, 'a@example.com');
+    await enter(h, a.auth, raceId);
+    const { code } = MyTicketRef.parse((await raceTicket(h, a.auth, raceId)).body);
+    // очный старт 24.10 10:00 + 12 ч прошёл, окно гонки — до 26.10 23:59
+    travelTo(h, new Date('2026-10-25T09:00:00Z'));
+    const auth = await signIn(h, a.email);
+    expect((await withdraw(h, auth, raceId)).status).toBe(200);
+    await reconcileAll(h);
+    const list = MyTickets.parse((await call(h, 'GET', '/v1/tickets', undefined, auth)).body);
+    expect(list.past).toEqual([expect.objectContaining({ code, status: 'cancelled' })]);
+    const token = await panelSession(h, 'admin@example.by');
+    const page = await panelCall(h, token, 'GET', ticketingUrl('race', raceId, 'tickets'));
+    expect(page.body).toMatchObject({ items: [{ code, status: 'cancelled' }] });
   });
 
   it('START → Verified: категория обновлена, код тот же, второго события письма нет', async () => {

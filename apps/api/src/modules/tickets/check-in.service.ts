@@ -98,6 +98,9 @@ export class CheckInService {
         // окно — по актуальным настройкам (гонка) или старту под замком (календарь) и текущему времени попытки
         let moments: { startsAt: Date; endsAt: Date | null };
         if (ticket.kind === 'race') {
+          // замок гонки: отмена гонки организатором не проходит между проверкой и отметкой (pass 3)
+          const race = await this.events.lockRace(tx, ticket.eventId);
+          if (race?.status !== 'published') return 'event_cancelled' as const;
           moments = { startsAt: settings.startsAt ?? event.startsAt, endsAt: settings.endsAt };
         } else {
           const start = await this.events.lockCalendarStart(tx, ticket.eventId);

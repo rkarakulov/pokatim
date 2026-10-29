@@ -299,6 +299,21 @@ describe('сериализация check-in с отменой (ревью pass 1
     expect(await checkInAudit()).toHaveLength(0);
   });
 
+  it('отмена гонки между проверкой и отметкой — event_cancelled без отметки и журнала (pass 3)', async () => {
+    const w = await world();
+    const g = pauseBeforeMark();
+    const scan = panelCall(h, w.tokens.organizer, 'POST', CHECK_IN, { qr: w.qr });
+    await g.reached;
+    await racesDb(h).races.updateOne({ _id: w.raceId }, { $set: { status: 'cancelled' } });
+    g.open();
+    const res = CheckInView.parse((await scan).body);
+    expect(res).toMatchObject({
+      outcome: 'event_cancelled',
+      ticket: { status: 'event_cancelled' },
+    });
+    expect(await checkInAudit()).toHaveLength(0);
+  });
+
   it('перенос очного старта между проверкой и отметкой — outside_window по новым настройкам (pass 2, HIGH-1)', async () => {
     const w = await world();
     const g = pauseBeforeMark();
