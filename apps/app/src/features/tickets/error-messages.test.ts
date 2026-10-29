@@ -25,6 +25,10 @@ describe('ticketErrorMessage', () => {
       http(409, 'EVENT_REGISTRATION_CLOSED', { reason: 'not_enabled' }),
       'Регистрация в «Покатим» на этот старт выключена.',
     ],
+    [
+      http(409, 'EVENT_REGISTRATION_CLOSED', { reason: 'checked_in' }),
+      'Отменить нельзя: вы уже отмечены на старте.',
+    ],
     [http(409, 'EVENT_REGISTRATION_CLOSED', { reason: 'later' }), 'Регистрация закрыта.'],
     [http(409, 'EVENT_REGISTRATION_CLOSED'), 'Регистрация закрыта.'],
     [http(400, 'VALIDATION_FAILED'), 'Выберите дистанцию.'],

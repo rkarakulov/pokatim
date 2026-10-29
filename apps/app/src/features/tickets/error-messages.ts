@@ -7,6 +7,7 @@ const CLOSED: Record<EventRegistrationClosedDetails['reason'], MessageKey> = {
   unpublished: 'tickets.error.closed.unpublished',
   cancelled: 'tickets.error.closed.cancelled',
   not_enabled: 'tickets.error.closed.notEnabled',
+  checked_in: 'tickets.error.closed.checkedIn',
   unknown: 'tickets.error.closed.unknown',
 };
 

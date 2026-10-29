@@ -592,3 +592,35 @@ ADR-0023 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.m
 - UI приложения и панели (PR B, C); показ `details.ticketCode` в «Журнале действий» панели — PR C.
 - Номер миграции `0037` сверить с `origin/develop` перед мержем.
 - `apps/admin/src/test/app.tsx` — фикстура прав organizer без `tickets.checkin` (на тесты не влияет, обновить в PR C).
+
+### PR B — приложение (coder, 2026-10-29, ветка `feature/event-tickets-app`)
+
+Подробности, фиксы ревью pass 1–3 и проверки до слияния — `plan-B.md` §12; отклонения — §8.2 «PR B».
+
+Сделано:
+
+- Экран `/tickets/[code]` (QR, «Как добраться», «О событии», «Поделиться» без кода), гард в экране с возвратом после
+  входа; офлайн-копии (native — QR в SecureStore, остальное — файл в кеше; web — `localStorage`; стирание при выходе,
+  404, отмене; просроченные удаляются при чтении); «Открыть билет» в участии гонки; регистрация на старт календаря;
+  «Ваши билеты» на Главной с предзагрузкой ≤ 3; роли `ticket.qrInk/qrPaper`.
+- Service worker: оболочка `/tickets/*` для офлайн-старта PWA (network-first, кеш `tickets-shell-<версия>`).
+- Ревью: pass 1 и 2 (Codex REQUEST CHANGES) исправлены; pass 3 (Codex APPROVE, 3 MEDIUM) исправлен — запросы web к
+  API без `Referer`, удаление просроченных копий при чтении, место и адрес в блоке регистрации календаря.
+- Слияние `origin/develop` (16517e5b, PR A #114, Web Push #109/#111/#113, OG-карточки): конфликт service worker —
+  обе стороны (оболочка билета + `push`/`notificationclick`), тесты SW — обе группы. После слияния — новая причина
+  `409 EVENT_REGISTRATION_CLOSED { reason: 'checked_in' }` из PR A: текст «Отменить нельзя: вы уже отмечены на
+  старте.» (`tickets.error.closed.checkedIn`), тест в `error-messages.test.ts`.
+
+Проверки (после слияния; Mongo `pokatim_tb_test`, Redis `:6479/2`):
+
+- `TURBO_CONCURRENCY=1 pnpm check` → `Tasks: 15 successful, 15 total`, `EXIT=0`; app 234 suites / 2196 tests, api 191
+  files / 1974 tests, admin 383, contracts 413, api-client 147 — зелёные. Первый прогон был красным (typecheck app:
+  нет текста причины `checked_in`) — исправлено.
+- `EXPO_PUBLIC_API_URL=http://127.0.0.1:3000 pnpm build:web` → exit 0, `sw.js: 105 файлов статики`; `node --check` —
+  ок; в `sw.js` есть оболочка билета и Web Push.
+- `expo export -p android` → exit 0.
+- Офлайн-старт билета в SW — jest (исполнение `sw.js`: онлайн — оболочка в кеш, офлайн — оболочка для любого кода,
+  редирект/не-200 не кешируются, прочие навигации мимо).
+
+Не проверено (NOT VERIFIED): iOS и Android на устройстве/симуляторе (сканер QR, авиарежим, холодный старт native),
+PWA офлайн-старт в реальном браузере, e2e с API (`E2E_API=1`); `pnpm e2e:web` после слияния не запускался.

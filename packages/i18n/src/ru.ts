@@ -2608,6 +2608,7 @@ export const ru = {
   'tickets.error.closed.unpublished': 'Регистрация закрыта: старт снят с публикации.',
   'tickets.error.closed.cancelled': 'Регистрация закрыта: старт отменён.',
   'tickets.error.closed.notEnabled': 'Регистрация в «Покатим» на этот старт выключена.',
+  'tickets.error.closed.checkedIn': 'Отменить нельзя: вы уже отмечены на старте.',
   'tickets.error.closed.unknown': 'Регистрация закрыта.',
   'tickets.error.distance': 'Выберите дистанцию.',
   'tickets.error.rateLimited': 'Слишком много попыток. Повторите через минуту.',
