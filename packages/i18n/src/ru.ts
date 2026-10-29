@@ -2510,7 +2510,7 @@ export const ru = {
   'storyCard.place': 'Место',
   'storyCard.group': 'Группа',
   'storyCard.brand': 'Покатим',
-  // profile-moderation: панель — «Профили райдеров» (право profiles.moderate); жалобы — без автора, имя — по Q2
+  // erasure-failures: «Сбои удаления аккаунтов» (право platform.stats); без ПДн удалённого
   'admin.accountErasures.title': 'Сбои удаления аккаунтов',
   'admin.accountErasures.lead':
     'Удаления, чья фоновая очистка не завершилась за сутки. Все шаги повторяемы — повтор безопасен',
@@ -2546,6 +2546,7 @@ export const ru = {
   'admin.accountErasures.step.tickets': 'Билеты и регистрации',
   'admin.accountErasures.step.notifications': 'Уведомления',
   'admin.accountErasures.step.identity': 'Письмо и учётные данные',
+  // profile-moderation: панель — «Профили райдеров» (право profiles.moderate); жалобы — без автора, имя — по Q2
   'admin.riderProfiles.title': 'Профили райдеров',
   'admin.riderProfiles.lead': 'Жалобы на фото, клуб и имя в публичных профилях райдеров',
   'admin.riderProfiles.queue': 'Открытые жалобы',

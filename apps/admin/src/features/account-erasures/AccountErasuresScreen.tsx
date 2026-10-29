@@ -84,7 +84,14 @@ export function AccountErasuresScreen() {
   const columns = [
     column.accessor('userId', {
       header: t('admin.accountErasures.column.account'),
-      cell: (info) => riderLabel(info.getValue()),
+      // полный id — для сверки с логом worker (`user=<uid>`) и runbook: хвост в подписи не уникален
+      cell: (info) => (
+        <>
+          {riderLabel(info.getValue())}
+          <br />
+          <span className="t-meta">{info.getValue()}</span>
+        </>
+      ),
       enableSorting: false,
     }),
     column.accessor('deletedAt', {

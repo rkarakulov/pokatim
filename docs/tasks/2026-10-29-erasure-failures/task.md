@@ -52,9 +52,35 @@
 | Событие повтора | `account.events.ts` + `accountOutboxRoutes` | outbox (§4.5): журнал и событие — одна транзакция |
 | Экран | `apps/admin/src/features/account-erasures` | `DataTable`, `ReasonDialog`, `EmptyState` из `src/ui` |
 
-Миграция не нужна: выборка — частичный индекс `users_erasure_pending_idx` (0023), новые поля необязательные.
+Миграция не нужна: выборка — частичный индекс `users_erasure_pending_idx` (0023, ключ `deletedAt`), новые поля
+необязательные. Досортировка по `_id` — в памяти по зависшим (их единицы; при росте — составной индекс отдельной
+миграцией).
+
+## 10. Documentation Sync
+
+`docs/product/admin-panel.md` (право, раздел экрана, карточка «Обзора»), `docs/runbooks/account-deletion.md` §3,
+`.claude/rules/pokatim-backend.md`, `.claude/rules/pokatim-web.md`.
 
 ## 8. Risks / Assumptions / Open Questions
+
+- Повтор во время работающего прохода — две задачи очистки параллельно: шаги идемпотентны, письмо — под захватом
+  (`emailClaimMs`), как у штатных sweep и resume.
+- Сбой, записанный до «зависания», виден, когда удаление станет старше суток (строка показывает последний).
+
+## 8.1 Security checklist
+
+- **AuthN/AuthZ**: `PanelGuard` + `@RequirePermission('platform.stats')` на классе контроллера (сторож
+  `admin-routes.test.ts`); moderator и organizer — 403, без сессии — 401.
+- **Входные данные**: `:userId` — `Uuid`, тело — `strictObject` с `ActionReason`, query — `strictObject` (курсор —
+  `decodeCursor`, в фильтр — только `Date` и UUID).
+- **Данные наружу**: только `userId`, время удаления, шаг, код, счётчик, время повтора — без e-mail (даже маркера),
+  имени и текста ошибки (int-тест).
+- **Злоупотребления**: только admin; повтор — окно 15 мин без нового сбоя (иначе `{ queued: false }`), без лимита
+  частоты — каждый повтор журналируется.
+- **Секреты и логи**: в `users` — только безопасный код (`erasureErrorCode`: токены `[A-Z0-9_]`, число, имя класса);
+  ошибка SMTP несёт код свойством, адрес — нет. Лог повтора — uid удалённого, id сотрудника и исход, без причины.
+- **Аудит**: `account.erasure_retried` (append-only, `PanelAudit.append` в транзакции действия), subject `rider`
+  «Участник ·<id>», причина.
 
 ## 8.2 Принятые решения (без доков)
 
@@ -76,3 +102,10 @@
    `erasureSweptAt`; повторный клик в окне — `{ queued: false }` без второй записи.
 5. Провал шага в worker пишет шаг, код и счётчик попыток.
 6. Экран: скелетон, ошибка с повтором, пусто, «Показать ещё», диалог с причиной; «Обзор» ведёт на экран.
+
+## 12. Outcome
+
+- Ревью pass 1: Codex — APPROVE (2 MEDIUM: код SMTP терялся в обёртке; полный `userId` не показан) — исправлено;
+  Claude independent-reviewer — REQUEST CHANGES (HIGH: тест порядка `AUDIT_ACTIONS`; MEDIUM: код SMTP; 5 LOW) —
+  HIGH/MEDIUM исправлены, LOW: тест окна 15 мин, unit `erasureErrorCode`, комментарий i18n, индекс — в §5.1;
+  незнакомый шаг старой записи (`lastFailure: null` при попытках > 0) — принято, шаги типизированы `ErasureStep`.

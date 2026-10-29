@@ -177,6 +177,23 @@ describe('провал шага в worker', () => {
     expect(doc?.erasureLastFailure).toEqual({ step: 'routes', code: 'Error', at: h.clock.now() });
     expect(JSON.stringify(doc?.erasureLastFailure)).not.toContain('@');
   });
+
+  it('сбой SMTP на шаге identity — код почты (ECONNECTION), без адреса', async () => {
+    const userId = await deletedRider();
+    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    vi.spyOn(h.mailer, 'send').mockRejectedValueOnce(
+      Object.assign(new Error(`connect failed for ${EMAIL}`), { code: 'ECONNECTION' }),
+    );
+
+    await expect(runOutbox(ACCOUNT_DELETION_REQUESTED)).rejects.toThrow();
+
+    const doc = await users().findOne({ _id: userId });
+    expect(doc?.erasureLastFailure).toEqual({
+      step: 'identity',
+      code: 'ECONNECTION',
+      at: h.clock.now(),
+    });
+  });
 });
 
 describe('«Повторить удаление»', () => {
@@ -248,6 +265,13 @@ describe('«Повторить удаление»', () => {
     );
     expect((await retry(admin.token, uid(1))).body).toEqual({ queued: true });
     expect(await audits()).toBe(2);
+
+    // без нового сбоя: ровно 15 мин — ещё «уже запрошен», позже — снова
+    h.clock.advance(15 * MINUTE);
+    expect((await retry(admin.token, uid(1))).body).toEqual({ queued: false });
+    h.clock.advance(1);
+    expect((await retry(admin.token, uid(1))).body).toEqual({ queued: true });
+    expect(await audits()).toBe(3);
   });
 
   it('нет аккаунта или живой — 404; ещё не зависло — 409; без причины — 400', async () => {

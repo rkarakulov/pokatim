@@ -29,7 +29,7 @@ const row = (overrides: Partial<AccountErasureRow> = {}): AccountErasureRow => (
   ...overrides,
 });
 
-const rowOf = (text: string) => screen.getByText(text).closest('tr')!;
+const rowOf = (text: string) => screen.getByText(text, { exact: false }).closest('tr')!;
 const cellsOf = (text: string) =>
   within(rowOf(text))
     .getAllByRole('cell')
@@ -63,9 +63,9 @@ describe('«Сбои удаления аккаунтов» (erasure-failures)', 
     });
     await renderApp('/account-erasures');
     expect(await screen.findByRole('heading', { name: 'Сбои удаления аккаунтов' })).toBeTruthy();
-    await screen.findByText('Участник ·9a8090');
+    await screen.findByText(ID);
     expect(cellsOf('Участник ·9a8090').slice(0, 6)).toEqual([
-      'Участник ·9a8090',
+      `Участник ·9a8090${ID}`,
       '1 октября 2026, 13:00',
       'Письмо и учётные данные · ECONNECTION',
       '1 октября 2026, 14:30',
@@ -73,7 +73,7 @@ describe('«Сбои удаления аккаунтов» (erasure-failures)', 
       '—',
     ]);
     expect(cellsOf('Участник ·9a8091').slice(0, 6)).toEqual([
-      'Участник ·9a8091',
+      `Участник ·9a8091${OTHER}`,
       '1 октября 2026, 13:00',
       'Сбоев не записано',
       '—',
@@ -94,7 +94,7 @@ describe('«Сбои удаления аккаунтов» (erasure-failures)', 
       .mockResolvedValueOnce({ items: [row({ userId: OTHER })], nextCursor: null });
     await renderApp('/account-erasures');
     fireEvent.click(await screen.findByRole('button', { name: 'Показать ещё' }));
-    expect(await screen.findByText('Участник ·9a8091')).toBeTruthy();
+    expect(await screen.findByText(OTHER)).toBeTruthy();
     expect(mocked.listAccountErasures).toHaveBeenLastCalledWith({ limit: 50, cursor: 'c1' });
     expect(screen.queryByRole('button', { name: 'Показать ещё' })).toBeNull();
   });
@@ -110,7 +110,7 @@ describe('«Сбои удаления аккаунтов» (erasure-failures)', 
     await renderApp('/account-erasures');
     expect(await screen.findByText('Нет соединения')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
-    expect(await screen.findByText('Участник ·9a8090')).toBeTruthy();
+    expect(await screen.findByText(ID)).toBeTruthy();
   });
 
   it('«Повторить удаление» — причина обязательна, запрос с причиной, сообщение и перечитывание', async () => {

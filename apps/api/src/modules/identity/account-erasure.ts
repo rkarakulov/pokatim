@@ -107,7 +107,11 @@ export class AccountErasure {
       await this.repository.releaseDeletionEmail(userId, now);
       // текст ошибки SMTP содержит адрес получателя, а failedReason и stacktrace задачи BullMQ хранятся в Redis
       // (removeOnFail: false) — наружу только uid и код, без исходного сообщения и cause
-      throw new Error(`account deletion email failed user=${userId} code=${mailErrorCode(error)}`);
+      const code = mailErrorCode(error);
+      // код — и свойством: экран сбоев удаления панели читает его (`erasureErrorCode`), текст не хранится
+      throw Object.assign(new Error(`account deletion email failed user=${userId} code=${code}`), {
+        code,
+      });
     }
     await this.repository.completeDeletionEmail(userId, now, now);
     this.logger.log(`account.deletion_email_sent user=${userId}`);
