@@ -90,6 +90,8 @@ const enteredWomen = () =>
   );
 
 beforeEach(() => {
+  // материалы события (event-tickets PR C): по умолчанию у события их нет — блока нет
+  jest.mocked(api.getEventMaterials).mockResolvedValue([]);
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   getRace.mockResolvedValue(corridorRace());
   getRaceResults.mockImplementation(byGroup);

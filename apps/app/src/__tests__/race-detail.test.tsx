@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import { onlineManager } from '@tanstack/react-query';
-import type { RaceDetail } from '@pokatim/contracts';
+import type { EventMaterial, RaceDetail } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen, within } from 'expo-router/testing-library';
 
 import { useSessionStore } from '@/features/auth/session-store';
@@ -11,7 +11,7 @@ import { api } from '@/lib/api';
 import RaceRoute from '../app/races/[id]';
 import { appRoutes, tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
-import { createQueryWrapper } from './query-wrapper';
+import { createQueryWrapper, createTestQueryClient } from './query-wrapper';
 import { actions, noEntry, resultsPage } from './races-fixtures';
 
 jest.mock('@/lib/api');
@@ -50,6 +50,8 @@ const signedIn = () => {
 const signedInRoutes = { ...tabRoutes, 'races/[id]': RaceRoute };
 
 beforeEach(() => {
+  // материалы события (event-tickets PR C): по умолчанию у события их нет — блока нет
+  jest.mocked(api.getEventMaterials).mockResolvedValue([]);
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   getRace.mockResolvedValue(race);
   listRaces.mockResolvedValue({ items: [race], nextCursor: null });
@@ -261,5 +263,129 @@ describe('карточка гонки (AC5)', () => {
     });
     expect(screen.getByText('Нет соединения')).toBeOnTheScreen();
     expect(screen.getByLabelText(heroLabel)).toBeOnTheScreen();
+  });
+});
+
+describe('материалы события на карточке гонки (event-tickets PR C, plan-C §7)', () => {
+  const material: EventMaterial = {
+    id: '0190a6f4-0000-7000-8000-0000000000f1',
+    type: 'rules',
+    title: 'Положение гонки',
+    description: 'Правила и зачёт',
+    url: 'https://example.by/rules',
+    file: null,
+  };
+  const getMaterials = jest.mocked(api.getEventMaterials);
+  const openCard = (client = createTestQueryClient()) =>
+    renderRouter(signedInRoutes, {
+      initialUrl: `/races/${ID}`,
+      wrapper: createQueryWrapper(client),
+    });
+
+  it('первая загрузка — скелетон под заголовком «Материалы», затем строки; запрос — публичный список гонки', async () => {
+    let resolve: (items: EventMaterial[]) => void = () => undefined;
+    getMaterials.mockReturnValue(new Promise((done) => (resolve = done)));
+    await renderRouter(appRoutes, { initialUrl: `/races/${ID}` });
+    await screen.findByLabelText(heroLabel);
+
+    expect(screen.getByTestId('event-materials-skeleton')).toBeOnTheScreen();
+    // скелетон — строки раскладки материала (скрыты от скринридера, для него — «Загрузка»)
+    expect(
+      screen.getAllByTestId('event-material-skeleton-row', { includeHiddenElements: true }),
+    ).toHaveLength(2);
+    expect(screen.getByText('Материалы')).toBeOnTheScreen();
+    await act(async () => resolve([material]));
+
+    expect(
+      await screen.findByRole('link', { name: 'Положение гонки. Правила и зачёт. example.by' }),
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('event-materials-skeleton')).toBeNull();
+    expect(getMaterials).toHaveBeenCalledWith('race', ID);
+  });
+
+  it('пусто — блока нет', async () => {
+    await openCard();
+    await screen.findByLabelText(heroLabel);
+    await act(async () => undefined);
+    expect(getMaterials).toHaveBeenCalledWith('race', ID);
+    expect(screen.queryByTestId('event-materials')).toBeNull();
+  });
+
+  it('404 (гонка не опубликована) — блока нет, без ошибки', async () => {
+    getMaterials.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+    await openCard();
+    await screen.findByLabelText(heroLabel);
+    await act(async () => undefined);
+    expect(getMaterials).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('event-materials')).toBeNull();
+    expect(screen.queryByText('Материалы')).toBeNull();
+  });
+
+  it('ошибка без данных — «Не удалось загрузить» по месту, карточка видна; «Повторить» — материалы', async () => {
+    getMaterials
+      .mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }))
+      .mockResolvedValue([material]);
+    await openCard();
+
+    const failure = await screen.findByTestId('event-materials-error');
+    expect(within(failure).getByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(within(failure).getByText('Не удалось загрузить материалы события.')).toBeOnTheScreen();
+    expect(screen.getByLabelText(heroLabel)).toBeOnTheScreen();
+
+    await fireEvent.press(within(failure).getByRole('button', { name: 'Повторить' }));
+    expect(
+      await screen.findByRole('link', { name: 'Положение гонки. Правила и зачёт. example.by' }),
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('event-materials-error')).toBeNull();
+  });
+
+  it('сеть без данных — «Нет соединения» по месту с повтором', async () => {
+    getMaterials.mockRejectedValue(new ApiNetworkError(new TypeError('Failed to fetch')));
+    await openCard();
+    await screen.findByLabelText(heroLabel);
+    await act(async () => undefined);
+
+    const failure = await screen.findByTestId('event-materials-error');
+    expect(within(failure).getByText('Нет соединения')).toBeOnTheScreen();
+    expect(within(failure).getByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
+  });
+
+  it('ошибка обновления при показанных материалах — строки остаются, сверху баннер с повтором', async () => {
+    const client = createTestQueryClient();
+    getMaterials.mockResolvedValueOnce([material]);
+    await openCard(client);
+    await screen.findByRole('link', { name: 'Положение гонки. Правила и зачёт. example.by' });
+
+    getMaterials.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['events', 'race', ID, 'materials'] });
+    });
+
+    expect(await screen.findByTestId('event-materials-error')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('link', { name: 'Положение гонки. Правила и зачёт. example.by' }),
+    ).toBeOnTheScreen();
+  });
+
+  it('пустой список → ошибка обновления — секция с ошибкой и повтором; «Повторить» — материалы', async () => {
+    const client = createTestQueryClient();
+    await openCard(client);
+    await screen.findByLabelText(heroLabel);
+    await act(async () => undefined);
+    expect(screen.queryByTestId('event-materials')).toBeNull();
+
+    getMaterials.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['events', 'race', ID, 'materials'] });
+    });
+    const failure = await screen.findByTestId('event-materials-error');
+    expect(screen.getByText('Материалы')).toBeOnTheScreen();
+
+    getMaterials.mockResolvedValueOnce([material]);
+    await fireEvent.press(within(failure).getByRole('button', { name: 'Повторить' }));
+    expect(
+      await screen.findByRole('link', { name: 'Положение гонки. Правила и зачёт. example.by' }),
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('event-materials-error')).toBeNull();
   });
 });

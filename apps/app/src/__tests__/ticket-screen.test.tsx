@@ -1,5 +1,6 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
+import type { EventMaterial } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 import * as returnPath from '@/features/auth/return-path';
@@ -34,9 +35,19 @@ jest.mock('@/features/tickets/offline-store', () => ({
 const getTicket = jest.mocked(api.getTicket);
 const readCopy = jest.mocked(readOfflineTicket);
 const PATH = `/tickets/${TICKET_CODE}`;
+const ticketMaterial: EventMaterial = {
+  id: '0190a6f4-0000-7000-8000-0000000000f4',
+  type: 'what_to_bring',
+  title: 'Что взять с собой',
+  description: 'Шлем, номер, вода',
+  url: 'https://example.by/kit',
+  file: null,
+};
 const SAVED_AT = Date.parse('2027-06-10T09:30:00Z');
 
 beforeEach(() => {
+  // материалы события (event-tickets PR C): по умолчанию у события их нет — блока нет
+  jest.mocked(api.getEventMaterials).mockResolvedValue([]);
   jest.mocked(api.refreshSession).mockResolvedValue(liveSession);
   jest.mocked(api.pollRegistration).mockResolvedValue({ state: 'pending' });
   jest.mocked(api.signOut).mockResolvedValue(undefined);
@@ -259,6 +270,40 @@ describe('экран билета /tickets/<код> (AC12, §5.7)', () => {
     getTicket.mockResolvedValue(raceTicket);
     await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
     await waitFor(() => expect(screen.queryByTestId('ticket-offline-copy')).toBeNull());
+  });
+
+  it('материалы события (PR C): из TicketView без отдельного запроса; ссылка — браузер', async () => {
+    getTicket.mockResolvedValue({ ...raceTicket, materials: [ticketMaterial] });
+    await openSignedIn();
+
+    const row = await screen.findByRole('link', {
+      name: 'Что взять с собой. Шлем, номер, вода. example.by',
+    });
+    expect(screen.getByText('Материалы')).toBeOnTheScreen();
+    expect(api.getEventMaterials).not.toHaveBeenCalled();
+    await fireEvent.press(row);
+    expect(openExternalUrl).toHaveBeenCalledWith('https://example.by/kit');
+  });
+
+  it('старый сервер (до PR C) поля materials не шлёт — блока нет', async () => {
+    getTicket.mockResolvedValue(raceTicket);
+    await openSignedIn();
+    await screen.findByRole('header', { name: raceTicket.event.title });
+    expect(screen.queryByTestId('event-materials')).toBeNull();
+  });
+
+  it('офлайн-копия билета показывает сохранённые материалы', async () => {
+    getTicket.mockRejectedValue(new ApiNetworkError(new Error('offline')));
+    readCopy.mockResolvedValue({
+      view: { ...raceTicket, materials: [ticketMaterial] },
+      savedAt: SAVED_AT,
+    });
+    await openSignedIn();
+
+    expect(await screen.findByTestId('ticket-offline-copy')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('link', { name: 'Что взять с собой. Шлем, номер, вода. example.by' }),
+    ).toBeOnTheScreen();
   });
 
   it('сессия не проверена (web без связи при запуске) — копия своего снимка без запроса (RC-B4)', async () => {

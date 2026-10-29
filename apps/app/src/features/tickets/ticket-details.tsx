@@ -5,6 +5,7 @@ import { t } from '@pokatim/i18n';
 import { Kicker, Pill, textStyle, useTheme } from '@rkarakulov/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { EventMaterials } from '@/components/event-materials';
 import { DetailRow } from '@/features/routes/detail-row';
 
 import { TicketActions } from './ticket-actions';
@@ -18,17 +19,14 @@ import {
 } from './ticket-format';
 import { TicketQr } from './ticket-qr';
 
-/**
- * Слоты PR C (материалы) и PR E (Wallet): в `TicketView` полей ещё нет — ничего не рендерят; PR C/E добавят
- * необязательные поля ответа и наполнят слоты.
- */
-const TicketMaterialsSlot = (_props: { view: TicketView }) => null;
+/** Слот PR E (Wallet): в `TicketView` поля ещё нет — ничего не рендерит; PR E добавит поле ответа и наполнит слот. */
 const TicketWalletSlot = (_props: { view: TicketView }) => null;
 
 /**
  * Билет (plan-B §2): тип и событие, статус, дата и время (Минск, с годом), место и адрес, участник, группа или
- * дистанция, QR и код крупно (или пояснение, почему QR нет), инструкции организатора, действия. Чистое представление —
- * общее для ответа сервера и офлайн-копии.
+ * дистанция, QR и код крупно (или пояснение, почему QR нет), инструкции организатора, действия, материалы события
+ * (`materials` — PR C; старый сервер поля не шлёт — блока нет). Чистое представление — общее для ответа сервера и
+ * офлайн-копии (материалы входят в копию вместе с `TicketView`).
  */
 export function TicketDetails({ view }: { view: TicketView }) {
   const theme = useTheme();
@@ -105,7 +103,7 @@ export function TicketDetails({ view }: { view: TicketView }) {
       ) : null}
 
       <TicketActions event={view.event} />
-      <TicketMaterialsSlot view={view} />
+      <EventMaterials materials={view.materials ?? []} />
       <TicketWalletSlot view={view} />
     </View>
   );

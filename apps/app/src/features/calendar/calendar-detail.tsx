@@ -24,6 +24,8 @@ import { OfflineBanner } from '@/components/offline-banner';
 import { SectionHero } from '@/components/section-hero';
 import { StatBlock } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { EventMaterialsBlock } from '@/features/tickets/event-materials-block';
+import { useEventMaterialsRefetch } from '@/features/tickets/materials-query';
 import { domainLabel } from '@/lib/minsk-format';
 import { openExternalUrl } from '@/lib/open-external-url';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
@@ -124,6 +126,8 @@ function CalendarDetailView({ start }: { start: CalendarStartDetail }) {
           </Text>
         </View>
       ) : null}
+      {/* материалы события (event-tickets PR C): публичный список, пусто или 404 — блока нет */}
+      <EventMaterialsBlock kind="calendar" eventId={start.id} />
     </View>
   );
 }
@@ -145,7 +149,11 @@ export function CalendarDetailScreen({
   const valid = Uuid.safeParse(id).success;
   const signedIn = useSessionStore(isSignedIn);
   const start = useCalendarStart(id, seed, valid);
-  const refetchers = useMemo(() => [start.refetch], [start.refetch]);
+  const materialsRefetch = useEventMaterialsRefetch('calendar', id);
+  const refetchers = useMemo(
+    () => [start.refetch, materialsRefetch],
+    [start.refetch, materialsRefetch],
+  );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   const notFound =
     !valid || (start.data === undefined && apiErrorOf(start.error)?.code === 'NOT_FOUND');

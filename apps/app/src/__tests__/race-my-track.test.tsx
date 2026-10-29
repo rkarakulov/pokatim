@@ -71,6 +71,8 @@ const trackSource = () =>
   screen.getAllByTestId('maplibre-GeoJSONSource').find((node) => node.props.id === 'my-track');
 
 beforeEach(() => {
+  // материалы события (event-tickets PR C): по умолчанию у события их нет — блока нет
+  jest.mocked(api.getEventMaterials).mockResolvedValue([]);
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT = LIGHT;
   process.env.EXPO_PUBLIC_MAP_STYLE_DARK = LIGHT;

@@ -73,6 +73,8 @@ const disputesBlock = () => within(screen.getByTestId('race-disputes'));
 const block = async () => within(await screen.findByTestId('race-disputes'));
 
 beforeEach(() => {
+  // материалы события (event-tickets PR C): по умолчанию у события их нет — блока нет
+  jest.mocked(api.getEventMaterials).mockResolvedValue([]);
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   getRace.mockResolvedValue(corridorRace());
   getRaceResults.mockResolvedValue(resultsPage(rows));
