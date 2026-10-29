@@ -4,27 +4,22 @@ import { z } from 'zod';
 export const INSTALL_PROMPT_KEY = 'pokatim.pwaDialog';
 
 export const MS_IN_DAY = 24 * 60 * 60 * 1000;
-/** Визитов до первого показа и до повторного после «×». */
-export const VISITS_BEFORE_PROMPT = 5;
-/** Через сколько после «×» плашка возвращается, даже если визитов меньше. */
+/** Сколько плашка не показывается после «×» (решение 2026-10-29: с первого визита, без счётчика визитов). */
 export const REMIND_AFTER_CLOSE_MS = 7 * MS_IN_DAY;
 
 export interface InstallPromptState {
-  /** показывать плашку; при старте всегда `false` — решает визит */
+  /** показывать плашку; при старте `false` — решает визит */
   showDialog: boolean;
-  visitsCountAfterClosing: number;
   /** когда нажали «×», мс */
   closedTimestamp?: number;
 }
 
-const StoredInstallPrompt = z.object({
-  visitsCountAfterClosing: z.number().int().nonnegative(),
-  closedTimestamp: z.number().optional(),
-});
+// старое значение со счётчиком `visitsCountAfterClosing` (до 2026-10-29) читается: лишнее поле отбрасывается
+const StoredInstallPrompt = z.object({ closedTimestamp: z.number().optional() });
 
 /** Состояние при старте из сырого значения хранилища: нет или испорчено — как новый пользователь. */
 export function readInstallPromptState(raw: string | null): InstallPromptState {
-  const fresh: InstallPromptState = { showDialog: false, visitsCountAfterClosing: 0 };
+  const fresh: InstallPromptState = { showDialog: false };
   if (!raw) return fresh;
   try {
     const parsed = StoredInstallPrompt.safeParse(JSON.parse(raw));
@@ -34,19 +29,16 @@ export function readInstallPromptState(raw: string | null): InstallPromptState {
   }
 }
 
-/** Визит: +1 к счётчику; плашка — с 5-го визита или через 7 дней после «×». */
+/** Визит: плашка — с первого визита; после «×» — только когда прошло 7 дней. */
 export function registerVisit(state: InstallPromptState, now: number): InstallPromptState {
-  const visitsCountAfterClosing = state.visitsCountAfterClosing + 1;
-  const remind =
-    state.closedTimestamp !== undefined && now - state.closedTimestamp >= REMIND_AFTER_CLOSE_MS;
   return {
     ...state,
-    visitsCountAfterClosing,
-    showDialog: visitsCountAfterClosing >= VISITS_BEFORE_PROMPT || remind,
+    showDialog:
+      state.closedTimestamp === undefined || now - state.closedTimestamp >= REMIND_AFTER_CLOSE_MS,
   };
 }
 
-/** «×» на плашке: скрыть, счётчик с нуля, запомнить время. */
+/** «×» на плашке: скрыть и запомнить время. */
 export function dismissInstallPrompt(now: number): InstallPromptState {
-  return { showDialog: false, visitsCountAfterClosing: 0, closedTimestamp: now };
+  return { showDialog: false, closedTimestamp: now };
 }

@@ -24,7 +24,7 @@ import {
 const APP_ICON = { uri: '/icons/icon-192.png' };
 
 /**
- * Плашка «Установить приложение» внизу Главной, над вкладками (web/PWA): условия — `install-store.web.ts`, счётчик —
+ * Плашка «Установить приложение» внизу Главной (над вкладками) и гостевого лендинга `/welcome` (web/PWA): условия — `install-store.web.ts`, счётчик —
  * `install-prompt-state.ts`. Нажатие: iOS — инструкция (шторка), Chromium — отложенный нативный диалог. До
  * монтирования (SSR, гидрация) — ничего: условия читаются из браузера в эффекте. Промо `?show-pwa-modal` — здесь же.
  */
@@ -35,7 +35,7 @@ export function InstallBanner() {
   const ios = useInstallStore((state) => state.ios === true);
   const [instruction, setInstruction] = useState(false);
 
-  // навигация экрана (Главной): `router.setParams` пишет в фокусный маршрут корня, а параметр живёт у `index`
+  // навигация экрана с плашкой: `router.setParams` пишет в фокусный маршрут корня, а параметр живёт у экрана
   const navigation = useNavigation<{ setParams: (params: Record<string, undefined>) => void }>();
   useEffect(() => {
     // параметр промо снят и в состоянии навигатора: иначе переход на Главную по вкладке вернёт его в адрес

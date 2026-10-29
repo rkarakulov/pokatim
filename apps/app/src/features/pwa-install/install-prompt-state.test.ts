@@ -4,18 +4,7 @@ import {
   readInstallPromptState,
   registerVisit,
   REMIND_AFTER_CLOSE_MS,
-  VISITS_BEFORE_PROMPT,
-  type InstallPromptState,
 } from './install-prompt-state';
-
-const fresh: InstallPromptState = { showDialog: false, visitsCountAfterClosing: 0 };
-
-/** `n` визитов подряд от состояния `from`. */
-const visits = (from: InstallPromptState, n: number): InstallPromptState =>
-  Array.from({ length: n }).reduce<InstallPromptState>(
-    (state) => registerVisit(state, Date.now()),
-    from,
-  );
 
 describe('счётчик плашки установки', () => {
   beforeEach(() => {
@@ -24,57 +13,49 @@ describe('счётчик плашки установки', () => {
   });
   afterEach(() => jest.useRealTimers());
 
-  it('константы: 5 визитов и 7 дней', () => {
-    expect(VISITS_BEFORE_PROMPT).toBe(5);
+  it('отложка после «×» — 7 дней', () => {
     expect(REMIND_AFTER_CLOSE_MS).toBe(7 * MS_IN_DAY);
   });
 
-  it('при старте showDialog всегда false, счётчик и время закрытия — из хранилища', () => {
-    expect(readInstallPromptState(null)).toEqual(fresh);
+  it('при старте showDialog false, время закрытия — из хранилища', () => {
+    expect(readInstallPromptState(null)).toEqual({ showDialog: false });
     expect(
-      readInstallPromptState(
-        JSON.stringify({ showDialog: true, visitsCountAfterClosing: 7, closedTimestamp: 42 }),
-      ),
-    ).toEqual({ showDialog: false, visitsCountAfterClosing: 7, closedTimestamp: 42 });
+      readInstallPromptState(JSON.stringify({ showDialog: true, closedTimestamp: 42 })),
+    ).toEqual({ showDialog: false, closedTimestamp: 42 });
+  });
+
+  it('старое значение со счётчиком визитов читается без него', () => {
+    expect(
+      readInstallPromptState(JSON.stringify({ visitsCountAfterClosing: 3, closedTimestamp: 42 })),
+    ).toEqual({ showDialog: false, closedTimestamp: 42 });
   });
 
   it('испорченное значение хранилища — как новый пользователь', () => {
-    expect(readInstallPromptState('{')).toEqual(fresh);
-    expect(readInstallPromptState(JSON.stringify({ visitsCountAfterClosing: -1 }))).toEqual(fresh);
-    expect(readInstallPromptState(JSON.stringify('x'))).toEqual(fresh);
-  });
-
-  it('новый пользователь видит плашку на 5-м визите, не раньше', () => {
-    const fourth = visits(fresh, 4);
-    expect(fourth).toEqual({ showDialog: false, visitsCountAfterClosing: 4 });
-    expect(registerVisit(fourth, Date.now())).toEqual({
-      showDialog: true,
-      visitsCountAfterClosing: 5,
+    expect(readInstallPromptState('{')).toEqual({ showDialog: false });
+    expect(readInstallPromptState(JSON.stringify({ closedTimestamp: 'x' }))).toEqual({
+      showDialog: false,
     });
+    expect(readInstallPromptState(JSON.stringify('x'))).toEqual({ showDialog: false });
   });
 
-  it('«×» сбрасывает счётчик и запоминает время закрытия', () => {
+  it('новый пользователь видит плашку с первого визита', () => {
+    expect(registerVisit(readInstallPromptState(null), Date.now())).toEqual({ showDialog: true });
+  });
+
+  it('«×» скрывает плашку и запоминает время закрытия', () => {
     expect(dismissInstallPrompt(Date.now())).toEqual({
       showDialog: false,
-      visitsCountAfterClosing: 0,
       closedTimestamp: Date.now(),
     });
   });
 
-  it('после закрытия — снова через 5 визитов', () => {
-    const closed = dismissInstallPrompt(Date.now());
-    expect(visits(closed, 4).showDialog).toBe(false);
-    expect(visits(closed, 5).showDialog).toBe(true);
-  });
-
-  it('после закрытия — снова через 7 дней, даже на первом визите', () => {
+  it('после «×» — не раньше чем через 7 дней, сколько бы ни было визитов', () => {
     const closed = dismissInstallPrompt(Date.now());
     jest.advanceTimersByTime(REMIND_AFTER_CLOSE_MS - 1);
-    expect(registerVisit(closed, Date.now()).showDialog).toBe(false);
+    expect(registerVisit(registerVisit(closed, Date.now()), Date.now()).showDialog).toBe(false);
     jest.advanceTimersByTime(1);
     expect(registerVisit(closed, Date.now())).toEqual({
       showDialog: true,
-      visitsCountAfterClosing: 1,
       closedTimestamp: closed.closedTimestamp,
     });
   });

@@ -9,6 +9,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { GestureRoot } from '@/components/gesture-root';
+import { AchievementFlashHost } from '@/features/achievements/achievement-flash-host';
 import { useRegistrationStore } from '@/features/auth/registration-store';
 import { takeReturnPath } from '@/features/auth/return-path';
 import { skipsOnboarding } from '@/features/auth/return-path-allowlist';
@@ -194,6 +195,13 @@ function RootShell() {
                 <Stack.Screen name="races/story/[id]" />
                 <Stack.Screen name="races/dispute/[id]/[entryId]" />
                 <Stack.Screen name="races/dispute-response/[id]/[disputeId]" />
+                {/* достижения (achievements, A5): вспышка — полноэкранный модальный поверх вкладок; экран своего
+                достижения — из блока «Профиля». Только вошедшим */}
+                <Stack.Screen
+                  name="achievements/flash"
+                  options={{ presentation: 'fullScreenModal' }}
+                />
+                <Stack.Screen name="achievements/[code]" />
               </Stack.Protected>
               {/* шаги онбординга после входа: опрос → геопозиция → устройства → Главная; пока сессия или шаг неизвестны — скелетон
             (SSR отдаёт HTML оболочки, а не пустую страницу редиректа) */}
@@ -238,6 +246,9 @@ function RootShell() {
             {/* push (ADR-0017): токен устройства и нажатия на push — после входа и онбординга; рядом со `Stack`, чтобы
           переход по нажатию при холодном старте шёл после монтирования навигатора; web — no-op */}
             <PushNotifications ready={signedIn && step === 'done'} />
+            {/* «Вспышка достижения» (achievements, A5): тот же `ready`, что у push; рядом со `Stack` — переход после
+          монтирования навигатора */}
+            <AchievementFlashHost ready={signedIn && step === 'done'} />
           </>
         )}
       </ThemedRoot>
