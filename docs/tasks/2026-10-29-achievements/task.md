@@ -718,3 +718,28 @@ exit=0
 `track-uploads.int.test.ts` (413 через сокет) и таймаут 5 с в `avatar-image.test.ts` (48 Мп JPEG) под нагрузкой
 машины; оба файла отдельно — 47/47 зелёные, третий прогон целиком — зелёный (выше; часть задач — из кэша turbo
 прошлых прогонов с тем же кодом). NOT VERIFIED — как выше (симуляторы, браузер, `e2e:web`).
+
+#### PR B — исправления ревью pass 2 (coder, 2026-10-29)
+
+Все находки pass 2 исправлены (после влития `origin/develop`, guest-landing), подробности — `findings.md` «PR B —
+исправления pass 2». Гейт (Mongo `pokatim_achv_app_test`, Redis `:6493/1`, `TURBO_CONCURRENCY=1`):
+
+```
+$ pnpm check
+All matched files use Prettier code style!
+✔ no dependency violations found (1861 modules, 6989 dependencies cruised)
+ Tasks:    9 successful, 9 total            # typecheck
+@pokatim/design-tokens:test:  Test Files  3 passed (3)       Tests  579 passed (579)
+@pokatim/contracts:test:      Test Files  43 passed (43)     Tests  370 passed (370)
+@pokatim/api-client:test:     Test Files  20 passed (20)     Tests  136 passed (136)
+@pokatim/api:test:            Test Files  163 passed (163)   Tests  1760 passed (1760)
+@pokatim/admin:test:          Test Files  40 passed (40)     Tests  381 passed (381)
+@pokatim/app:test:            Test Suites: 217 passed        Tests: 2043 passed
+ Tasks:    15 successful, 15 total
+pnpm check  12:26.67 total
+exit=0
+```
+
+Смоук web (`EXPO_PUBLIC_API_URL=http://127.0.0.1:3999 pnpm build:web`, затем `E2E_PORT=8190 playwright test -g
+"достижения|свой профиль /profile без сессии"`, без API): 3 passed. `E2E_API=1` — NOT VERIFIED (стенд с API, базами и
+mailpit не поднимался: порты `apps/api/.env` общие с другими агентами). iOS/Android — NOT VERIFIED.

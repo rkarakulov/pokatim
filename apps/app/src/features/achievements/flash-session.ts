@@ -3,23 +3,37 @@
  *
  * - `shown` — коды, показанные вспышкой: сбой `POST seen` откатывает `seen: false` в кэше, но вспышка не зацикливается
  *   (после перезапуска непомеченное сервером вспыхнет снова — at-least-once);
- * - `presented` — вся очередь открытой вспышки (снимок) и время ответа сервера, из которого она собрана: уход со вспышки
- *   «назад» или через «Поделиться» посреди очереди не открывает её сразу снова с остатком. Остаток вспыхнет после
- *   нового ответа сервера (возврат на передний план после `staleTime`, pull-to-refresh) — `dataUpdatedAt` больше.
+ * - `presented` — вся очередь вспышки (снимок): пока вспышка открыта — скрыта всегда; после ухода «назад» или через
+ *   «Поделиться» посреди очереди — до ответа сервера новее последнего на момент ухода. Остаток вспыхнет после нового
+ *   ответа (возврат на передний план после `staleTime`, pull-to-refresh).
  */
 const shown = new Set<string>();
-let presented: { codes: ReadonlySet<string>; dataUpdatedAt: number } | null = null;
+/** `dataUpdatedAt: null` — вспышка ещё открыта: её очередь скрыта при любом ответе сервера. */
+let presented: { codes: ReadonlySet<string>; dataUpdatedAt: number | null } | null = null;
 
 export const markShown = (code: string) => void shown.add(code);
 
-/** Очередь вспышки открыта: её коды не открываются снова до ответа сервера новее `dataUpdatedAt`. */
-export function markPresented(codes: readonly string[], dataUpdatedAt: number) {
-  presented = { codes: new Set(codes), dataUpdatedAt };
+/** Вспышка открыта с этой очередью (снимком): пока открыта — её коды не открываются снова ни при каком ответе. */
+export function openPresented(codes: readonly string[]) {
+  presented = { codes: new Set(codes), dataUpdatedAt: null };
+}
+
+/**
+ * Вспышка закрыта (любым путём: «Закрыть», «назад», «Поделиться»): очередь скрыта до ответа сервера новее
+ * `dataUpdatedAt` — последнего ответа на момент ухода (в том числе пришедшего за время показа, ревью pass 2, LOW-1).
+ */
+export function closePresented(dataUpdatedAt: number) {
+  if (presented) presented = { codes: presented.codes, dataUpdatedAt };
 }
 
 /** Коды, исключаемые из очереди для данных с этим `dataUpdatedAt`. */
 export function hiddenCodes(dataUpdatedAt: number): ReadonlySet<string> {
-  if (presented === null || dataUpdatedAt > presented.dataUpdatedAt) return shown;
+  if (
+    presented === null ||
+    (presented.dataUpdatedAt !== null && dataUpdatedAt > presented.dataUpdatedAt)
+  ) {
+    return shown;
+  }
   return new Set([...shown, ...presented.codes]);
 }
 

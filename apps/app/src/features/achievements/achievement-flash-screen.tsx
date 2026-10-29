@@ -1,6 +1,7 @@
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { AsyncContent, Button, Kicker, TextAction, textStyle, useTheme } from '@rkarakulov/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -11,8 +12,8 @@ import { storyPath } from '@/features/races/story/paths';
 
 import { flashQueue, shareRaceId, type KnownAchievement } from './achievement-catalog';
 import { AchievementCard, AchievementCardSkeleton } from './achievement-card';
-import { hiddenCodes, markPresented, markShown } from './flash-session';
-import { useAchievements, useMarkAchievementsSeen } from './queries';
+import { closePresented, hiddenCodes, markShown, openPresented } from './flash-session';
+import { ACHIEVEMENTS_KEY, useAchievements, useMarkAchievementsSeen } from './queries';
 
 const DOCUMENT_TITLE = `${t('achievements.flash.kicker')} — ${t('app.name')}`;
 
@@ -55,13 +56,15 @@ export function AchievementFlashScreen() {
     setSnapshot({ queue: flashQueue(data.items, hiddenCodes(dataUpdatedAt)), at: dataUpdatedAt });
   }
 
+  // очередь скрыта, пока вспышка открыта; при уходе — до ответа новее последнего на этот момент (в том числе
+  // пришедшего за время показа: фокус вкладки, возврат из фона — ревью pass 2, LOW-1)
+  const queryClient = useQueryClient();
   useEffect(() => {
-    if (snapshot)
-      markPresented(
-        snapshot.queue.map((item) => item.code),
-        snapshot.at,
-      );
-  }, [snapshot]);
+    if (!snapshot) return;
+    openPresented(snapshot.queue.map((item) => item.code));
+    return () =>
+      closePresented(queryClient.getQueryState(ACHIEVEMENTS_KEY)?.dataUpdatedAt ?? snapshot.at);
+  }, [snapshot, queryClient]);
 
   const queue = snapshot?.queue ?? null;
   const current = queue?.[index];

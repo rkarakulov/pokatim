@@ -210,3 +210,97 @@ NOT VERIFIED: `pnpm check`, браузерный смоук и запуск на
 
 Правило `.claude/rules/pokatim-app.md` («Достижения») обновлено: токены значка, `hiddenCodes`, прямое открытие,
 `publicOnly`.
+
+## PR B — pass 2, claude
+
+# Findings — 2026-10-29-achievements (PR B) — pass 2 — reviewer: claude
+base: origin/develop   commits: origin/develop..0481ff7a (021ea0d2, f7b656cb, 31c1002e, merge 0481ff7a), working tree clean
+verdict: REQUEST CHANGES (HIGH-1)
+
+Прогон: `jest achievement-flash, achievements-blocks, features/achievements, own-profile, rider-profile,
+app-routes-manifest` — 7 suites, 96 tests passed; `tsc --noEmit` apps/app — 0; `eslint` изменённых файлов — 0;
+`vitest` packages/design-tokens — 579 passed. Playwright (`e2e:web`) не запускал.
+
+Закрытие pass 1 (проверено по коду и тестам):
+- HIGH-1 (оба) — закрыто: `BADGE_SIZE` удалён, `layout.badgeGrid`/`badgeHero` + `badgeShape` в `@pokatim/design-tokens`
+  (`index.ts:84-95`), тест геометрии (2·(0.07+0.1)+0.56 = 0.90 ≤ 1), в фиче px-литералов нет (`achievement-badge.tsx`,
+  `achievements-block.tsx:23` — `layout.badgeGrid + space.s5`).
+- HIGH (codex) прямое открытие — закрыто: `AsyncContent` + `AchievementCardSkeleton` + «Закрыть» (назад или `/`),
+  снимок — с первым ответом; тесты отложенного ответа, 500 → повтор, офлайн → «Закрыть».
+- MEDIUM-1 — закрыто для основного сценария: `markPresented(snapshot, at)` + `hiddenCodes(dataUpdatedAt)`; оптимистичная
+  правка `seen` сохраняет `dataUpdatedAt` (`queries.ts:44`), `cancelQueries` в `onMutate` откатывает гонку перезапроса;
+  `resetShown` чистит и `presented`. Остаток — см. LOW-1 ниже.
+- LOW-1 мигание — закрыто (`knownReduced`, скрытый первый кадр). LOW-2 — `publicItems` + тесты. LOW-3 — скелетон с кругом
+  `badgeHero`. LOW-4 — ключ удалён, тесты выхода/входа и `focusManager` есть.
+- `/welcome` и хост: конфликта нет — гость (`ready=false`) хост не запускает, `/welcome` под `Stack.Protected guard={!signedIn}`,
+  маршруты достижений — в группе вкладок; `QUIET_PREFIXES` гостевых адресов не требует.
+
+### [HIGH] HIGH-1 Смоук web после влития develop ждёт `/register`, а гость теперь уходит на `/welcome`
+- **file:** apps/app/e2e/web.spec.ts
+- **location:** :415-433 (новый `test.describe('достижения без сессии …')`), :427
+- **problem:** для `/achievements/flash` и `/achievements/race_win` без сессии при `WITH_API` ожидается
+  `toHaveURL(`${BASE_URL}/register`)`. После guest-landing (влит в ветку, `_layout.tsx` `redirectTo` → `'/welcome'` для
+  нового гостя без регистрации) все соседние тесты гарда ждут `/welcome` (`:409` — `/profile`, `:448`, `:467`, `:486`, `:513`).
+- **why_it_matters:** job смоука с API в CI (`ci.yml:146-207`, `E2E_API=1`, `pnpm e2e:web`) упадёт на двух тестах —
+  мерж по зелёному CI невозможен; плюс тест закрепляет устаревшее поведение гарда.
+- **evidence:** `if (WITH_API) { await expect(page).toHaveURL(`${BASE_URL}/register`); }` против
+  `:409 await expect(page).toHaveURL(`${BASE_URL}/welcome`);` для `/profile` в том же сценарии.
+- **recommended_fix:** заменить ожидание на `/welcome` (как у `/profile`) и прогнать `pnpm e2e:web` с `E2E_API=1`.
+
+### [LOW] LOW-1 Перезапрос, пришедший пока вспышка открыта, снимает защиту «назад» посреди очереди
+- **file:** apps/app/src/features/achievements/flash-session.ts / achievement-flash-screen.tsx
+- **location:** flash-session.ts:22; achievement-flash-screen.tsx:58-64
+- **problem:** `presented.dataUpdatedAt` фиксируется снимком при открытии и больше не обновляется. Если за время показа
+  пришёл новый ответ (web — фокус вкладки через >60 с, native — возврат из фона), `hiddenCodes(t1)` уже не прячет
+  снимок; непоказанные коды на сервере `seen:false` → хост держит `pending`. Пользователь жмёт «назад» на 1 из N —
+  `quiet` становится `false`, вспышка сразу открывается снова с остатком (ровно симптом MEDIUM-1 pass 1, при условии).
+- **why_it_matters:** редкий, но реальный путь (свернул приложение на вспышке, вернулся, закрыл «назад»). Не цикл —
+  остаток при следующем открытии с новым ответом, но выглядит как «закрыл — открылось снова».
+- **recommended_fix:** пока экран вспышки смонтирован — обновлять `presented.dataUpdatedAt` до текущего `dataUpdatedAt`
+  (эффект по `dataUpdatedAt` с теми же кодами снимка) либо фиксировать момент ухода с экрана; тест — перезапрос при
+  открытой вспышке, затем «назад» → вспышки нет.
+
+Без замечаний: correctness `markPresented`/`hiddenCodes` (одна активная очередь, сброс при выходе, новый ответ
+исключает только `shown`), сохранение `dataUpdatedAt` при оптимистичной правке и откате, вспышка при прямом открытии
+(не открывается повторно хостом — путь тихий; «Закрыть» без истории → `/`), `AsyncContent`-ветка уходит при первом
+`data` (снимок — обновление состояния при рендере), токены значка и их тест, `publicOnly`, скелетоны блока/карточки,
+порядок маршрутов и гарды с `/welcome`, i18n, a11y, reduce motion. Безопасность: изменений API нет; публичный блок —
+только `race_*` и на клиенте. Documentation Sync — `pokatim-app.md` «Достижения» и task.md 8.2 (B2, B4, B5) соответствуют
+коду.
+
+## PR B — pass 2, codex
+
+verdict: REQUEST CHANGES
+
+### [HIGH] Прямые ссылки на достижения не позволяют повторить восстановление сессии
+- **file:** apps/app/src/app/achievements/flash.tsx; apps/app/src/app/achievements/[code].tsx
+- **location:** `AchievementFlashRoute`:7–8; `AchievementRoute`:6–8
+- **problem:** Оба маршрута сразу монтируют экран с активным `useAchievements()`, пока сессия ещё восстанавливается. Корневой `Stack.Protected` намеренно допускает состояния `unknown` и `unavailable`. Если восстановление сессии завершилось сетевой ошибкой, экраны показывают ошибку запроса достижений, а «Повторить» повторяет только этот запрос. Восстановление сессии повторно не запускается.
+- **why_it_matters:** При обновлении страницы `/achievements/flash` или `/achievements/race_win` с временно недоступным API пользователь остаётся на ошибке даже после восстановления соединения: в сторе нет сессии, поэтому каждый повтор снова завершается `UnauthorizedError` до обращения к API. Нарушен §4.12: повтор должен восстанавливать загрузку, а сетевая ошибка должна отображаться как «Нет соединения».
+- **evidence:** `useAchievements()` по умолчанию имеет `enabled = true` (`features/achievements/queries.ts:16–21`). `withAccessToken` немедленно бросает `UnauthorizedError`, если `session === null` (`features/auth/authorized.ts`). После неудачного восстановления `session-store.ts` сохраняет `status: 'unavailable', session: null`. Существующий `/profile` обрабатывает этот случай через `useSettingsShell()`: `useShellFailure()` передаёт исходную ошибку восстановления и повтор `useSessionStore.getState().hydrate()`. В новых маршрутах этой оболочки нет. Тесты прямого открытия заранее устанавливают живую сессию через `signInForTest()`, поэтому сценарий не проверяют.
+- **recommended_fix:** Добавить обоим маршрутам существующую оболочку `useSettingsShell()` до монтирования экранов достижений. Проверить сценарий `unknown → unavailable → повтор hydrate → signedIn`: до восстановления запрос достижений не выполняется, показывается ошибка восстановления с рабочим повтором, после успешного восстановления загружается достижение.
+
+Проверено статически: исправления первого прохода, реальные маршруты и гарды, восстановление сессии, очередь вспышки, оптимистичный `seen`, публичный блок, совместимость `unknown`, i18n, токены, состояния загрузки и документация. API, миграции, очереди и аудит этим diff не изменены.
+
+NOT VERIFIED: `pnpm check`, браузерный смоук и iOS/Android самостоятельно не запускались; результаты исполнителя независимо не подтверждены.
+## PR B — исправления pass 2 (coder, 2026-10-29)
+
+Все находки pass 2 приняты (подтверждены по коду); на каждую — тест.
+
+- **HIGH (codex) — прямые ссылки до восстановления сессии.** `app/achievements/flash.tsx` и `[code].tsx` — за
+  `useSettingsShell()` (как `/profile`): пока сессия `unknown` — скелетон оболочки без запроса достижений;
+  `unavailable` — «Нет соединения» / «Не удалось загрузить» с повтором `hydrate()`. Тест (оба адреса):
+  `unknown` → скелетон, `listAchievements` не вызван → `unavailable` → «Нет соединения» → «Повторить» → `hydrate` →
+  `signedIn` → достижение.
+- **HIGH (claude) — смоук после guest-landing.** `e2e/web.spec.ts` «достижения без сессии»: гость с API уходит на
+  `/welcome` (как `/profile`). Прогон `build:web` + `playwright -g "достижения|свой профиль"` без API (порты 8190/8191) —
+  3 passed (SSR 200 без карточки и OG, после гидрации — «Нет соединения»). Ветка `E2E_API=1` — NOT VERIFIED: стенду
+  нужны собранный API, базы и mailpit на портах `apps/api/.env`, общих с другими агентами.
+- **LOW-1 (claude) — ответ, пришедший при открытой вспышке.** `flash-session`: `openPresented(codes)` — пока экран
+  смонтирован, очередь скрыта при любом ответе; `closePresented(dataUpdatedAt)` при уходе — последнее
+  `dataUpdatedAt` запроса на этот момент (`queryClient.getQueryState`), не снимка. Так не нужна перерисовка экрана на
+  каждый ответ (в тесте экран модалки новый `dataUpdatedAt` не получал — эффект по нему не срабатывал). Тест: 1 из 2,
+  перезапрос при открытой вспышке, «назад» → вспышки нет, переход на другой экран (хост пересчитывает очередь) →
+  вспышки нет. Проверено от обратного: с `dataUpdatedAt` снимка при уходе тест падает.
+
+Правило `pokatim-app.md` («Достижения») обновлено: `openPresented`/`closePresented`, оболочка маршрутов, `/welcome`.

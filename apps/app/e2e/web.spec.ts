@@ -424,7 +424,7 @@ test.describe('достижения без сессии (achievements): HTML б�
 
       await page.goto(path);
       if (WITH_API) {
-        await expect(page).toHaveURL(`${BASE_URL}/register`);
+        await expect(page).toHaveURL(`${BASE_URL}/welcome`);
       } else {
         await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
       }

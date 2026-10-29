@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-import { ApiHttpError } from '@pokatim/api-client';
+import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { Achievement } from '@pokatim/contracts';
 import { focusManager, onlineManager, type QueryClient } from '@tanstack/react-query';
 import { router as expoRouter, Stack } from 'expo-router';
@@ -65,6 +65,7 @@ const open = (initialUrl = '/', ready = true, client: QueryClient = createTestQu
       index: Home,
       'achievements/flash': AchievementFlashRoute,
       'races/story/[id]': Story,
+      other: () => <Text>Другой экран</Text>,
     },
     { initialUrl, wrapper: createQueryWrapper(client) },
   );
@@ -222,6 +223,76 @@ describe('хост вспышки (A5, AC9)', () => {
     await act(async () => undefined);
     expect(router.getPathname()).toBe('/');
   });
+});
+
+describe('ответ сервера, пришедший при открытой вспышке (ревью pass 2, LOW-1)', () => {
+  it('новый ответ во время показа, затем «назад» на 1 из 2 — вспышка не открывается снова', async () => {
+    const client = createTestQueryClient();
+    listAchievements.mockResolvedValue({ items: [item(), routeItem] });
+    const router = await open('/', true, client);
+    expect(await screen.findByText('1 из 2')).toBeOnTheScreen();
+    // возврат из фона / фокус вкладки: перезапрос при открытой вспышке, на сервере остаток всё ещё не просмотрен
+    const before = client.getQueryState(['achievements'])?.dataUpdatedAt ?? 0;
+    await act(async () => client.invalidateQueries());
+    // ответ пришёл, пока вспышка ещё открыта
+    await waitFor(() =>
+      expect(client.getQueryState(['achievements'])?.dataUpdatedAt).toBeGreaterThan(before),
+    );
+    await act(async () => undefined);
+
+    await act(() => expoRouter.back());
+    expect(await screen.findByText('Главная')).toBeOnTheScreen();
+    await act(async () => undefined);
+    expect(router.getPathname()).toBe('/');
+    // переход на другой экран (хост пересчитывает очередь) — ответ, пришедший за время показа, остаток не открывает
+    await act(() => expoRouter.push('/other'));
+    expect(await screen.findByText('Другой экран')).toBeOnTheScreen();
+    await act(async () => undefined);
+    expect(router.getPathname()).toBe('/other');
+  });
+});
+
+describe('прямой адрес до восстановления сессии (ревью pass 2, HIGH codex)', () => {
+  const realHydrate = useSessionStore.getState().hydrate;
+  afterEach(() => useSessionStore.setState({ hydrate: realHydrate }));
+
+  it.each([
+    ['/achievements/flash', 'Победа'],
+    ['/achievements/race_win', 'Победа'],
+  ])(
+    '%s: unknown → скелетон без запроса; unavailable → «Нет соединения»; повтор hydrate → signedIn → достижение',
+    async (path, title) => {
+      const hydrate = jest.fn(async () => {
+        useSessionStore.setState({ status: 'signedIn', session: liveSession, restoreError: null });
+      });
+      useSessionStore.setState({ status: 'unknown', session: null, hydrate });
+      listAchievements.mockResolvedValue({ items: [item()] });
+      await renderRouter(
+        {
+          index: Home,
+          'achievements/flash': AchievementFlashRoute,
+          'achievements/[code]': AchievementRoute,
+        },
+        { initialUrl: path, wrapper: createQueryWrapper() },
+      );
+      expect(await screen.findByLabelText('Загрузка')).toBeOnTheScreen();
+      expect(listAchievements).not.toHaveBeenCalled();
+
+      await act(async () =>
+        useSessionStore.setState({
+          status: 'unavailable',
+          restoreError: new ApiNetworkError(new TypeError('Network request failed')),
+        }),
+      );
+      expect(await screen.findByText('Нет соединения')).toBeOnTheScreen();
+      expect(listAchievements).not.toHaveBeenCalled();
+
+      await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+      expect(hydrate).toHaveBeenCalled();
+      expect(await screen.findByRole('header', { name: title })).toBeOnTheScreen();
+      expect(listAchievements).toHaveBeenCalledWith(liveSession.accessToken);
+    },
+  );
 });
 
 describe('вспышка открыта по адресу без данных (§4.12)', () => {
