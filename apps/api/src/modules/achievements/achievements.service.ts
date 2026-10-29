@@ -135,7 +135,13 @@ export class AchievementsService {
         return;
       case 'restore':
       case 'refresh':
-        await this.repository.restoreOrRefresh(userId, step.code, step.earned, now);
+        await this.repository.restoreOrRefresh(
+          userId,
+          step.code,
+          step.earned,
+          step.type === 'restore',
+          now,
+        );
         return;
     }
   }

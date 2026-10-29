@@ -254,6 +254,27 @@ describe('отзыв и возврат (AC3, A4)', () => {
   });
 });
 
+describe('устаревший план параллельной сверки (ревью PR A, LOW-1)', () => {
+  it('refresh после свежего отзыва не снимает отзыв; restore — только отозванную', async () => {
+    const userId = '01a1b2c3-0000-7000-8000-000000000001';
+    const t = new Date('2026-10-01T10:00:00Z');
+    const earned = { object: { kind: 'race' as const, id: userId }, factAt: t, title: null };
+    await repository().insertGrant(userId, 'race_podium', earned, null, t);
+    expect(await repository().revoke(userId, 'race_podium', t)).toBe(true);
+
+    expect(await repository().restoreOrRefresh(userId, 'race_podium', earned, false, t)).toBe(
+      false,
+    );
+    const revoked = await achievementsDb(h).grants.findOne({ userId, code: 'race_podium' });
+    expect(revoked?.revokedAt).toEqual(t);
+
+    expect(await repository().restoreOrRefresh(userId, 'race_podium', earned, true, t)).toBe(true);
+    expect(await repository().restoreOrRefresh(userId, 'race_podium', earned, true, t)).toBe(false);
+    const restored = await achievementsDb(h).grants.findOne({ userId, code: 'race_podium' });
+    expect(restored).toMatchObject({ revokedAt: null, seenAt: null });
+  });
+});
+
 describe('POST /v1/achievements/seen (AC4)', () => {
   it('помечает только свои видимые; чужие, отозванные и незаработанные — без записи; повтор — 204', async () => {
     const me = await rider(h, 'me@example.com');

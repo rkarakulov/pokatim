@@ -83,15 +83,20 @@ export class AchievementsRepository {
     return result.modifiedCount === 1;
   }
 
-  /** Восстановление или обновление объекта: `seenAt` и `grantedAt` не трогаются (A4: «вернулся — `seen` прежний»). */
+  /**
+   * Восстановление отозванной (`restore`) или обновление объекта видимой (`refresh`): `seenAt` и `grantedAt` не
+   * трогаются (A4: «вернулся — `seen` прежний»). Условие на `revokedAt` — устаревший параллельный план не снимает
+   * свежий отзыв (ревью PR A, LOW-1).
+   */
   async restoreOrRefresh(
     userId: string,
     code: AchievementCode,
     earned: Earned,
+    revoked: boolean,
     now: Date,
   ): Promise<boolean> {
     const result = await this.c.grants.updateOne(
-      { userId, code },
+      { userId, code, revokedAt: revoked ? { $ne: null } : null },
       { $set: { object: earned.object, factAt: earned.factAt, revokedAt: null, updatedAt: now } },
     );
     return result.modifiedCount === 1;

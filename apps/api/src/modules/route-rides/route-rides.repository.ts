@@ -141,7 +141,8 @@ export class RouteRidesRepository {
 
   /**
    * Пройденные заезды райдера для достижений (порт `RIDER_ROUTE_RIDES`): `{ userId, status: 'passed' }` — префикс
-   * уникального индекса; проекция — маршрут, активность и её старт. Порядок не задан.
+   * уникального индекса; проекция — маршрут, активность и её старт. От ранних к поздним: при усечении по пределу
+   * отбрасываются поздние, объект `route_first`/`routes_5` устойчив между сверками (ревью PR A, LOW-2).
    */
   passedOf(
     userId: string,
@@ -152,6 +153,7 @@ export class RouteRidesRepository {
         { userId, status: 'passed' },
         { projection: { _id: 0, routeId: 1, activityId: 1, 'activity.startedAt': 1 } },
       )
+      .sort({ 'activity.startedAt': 1, _id: 1 })
       .limit(limit)
       .toArray();
   }
