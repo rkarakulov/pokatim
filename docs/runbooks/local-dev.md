@@ -100,6 +100,10 @@ Expo Go не открывает схему `pokatim://`. Для проверки
   `client/` — статика и `sw.js`, `server/` — рендер и API-маршруты) и `pnpm --filter @pokatim/app start:web`
   (`http://127.0.0.1:8080`). Кеш, сжатие и TLS — на обратном прокси перед сервером. Прод (`infra/`): Caddy
   `PUBLIC_HOST` отдаёт `/v1/*` → `api:3000`, остальное → `web:8080` — один origin, CORS выключен.
+- **CSP (ADR-0025):** `start:web` ставит строгий `Content-Security-Policy` с nonce на каждый ответ (`connect-src` и
+  `img-src` — origin `EXPO_PUBLIC_API_URL`, карты — `MAP_ORIGINS`); `expo start` — без CSP. Нарушение видно в консоли
+  браузера («Refused to …») и в событии `securitypolicyviolation` — его ловит тест смоука «строгий CSP … без нарушений»
+  (проверка `new Function` в try/catch, например, `console.error` не пишет).
 - **Смоук в браузере:** `pnpm e2e:web` (Playwright, `apps/app/e2e/`): production- и dev-сборка (`dist-dev`, там
   витрина `/ui-kit`). Браузер — установленный Google Chrome; без него — `PW_CHANNEL=chromium` и один раз
   `pnpm --filter @pokatim/app exec playwright install chromium` (~150 МБ). Ошибки страницы проверяет

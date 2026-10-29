@@ -1,3 +1,5 @@
+// web: zod без new Function — самым первым: zod проверяет JIT уже при создании схемы (строгий CSP, ADR-0025)
+import '@/features/web-security/zod-jitless';
 // дизайн-система (бренд, шрифты, i18n pokatim) — до любого модуля, который рендерит компоненты базы
 import '@/theme/design-system';
 import { layout } from '@pokatim/design-tokens';

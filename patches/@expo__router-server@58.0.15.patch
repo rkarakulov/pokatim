@@ -1,0 +1,22 @@
+diff --git a/build/server/renderStreamingContent.js b/build/server/renderStreamingContent.js
+index 4f165f57f253f341b022130780c4ef460ce1439a..dbf97b3b81ce2d607355eeef9d2ad81afc7a0382 100644
+--- a/build/server/renderStreamingContent.js
++++ b/build/server/renderStreamingContent.js
+@@ -217,6 +217,9 @@ async function getStreamingContent(location, options) {
+             ]
+         };
+         const isStatic = options?.output === 'static';
++        // pokatim (ADR-0025): nonce CSP ответа от web-сервера (apps/app/server/web-server.ts) — React ставит его на
++        // bootstrap-скрипт (гидрация, данные loader) и служебные скрипты стриминга
++        const nonce = options?.request?.headers?.get('x-pokatim-csp-nonce') ?? undefined;
+         const renderErrors = [];
+         const stream = await _server2().default.renderToReadableStream(/*#__PURE__*/ (0, _jsxruntime().jsx)(_server1().ServerDocument, {
+             data: serverDocumentData,
+@@ -229,6 +232,7 @@ async function getStreamingContent(location, options) {
+             })
+         }), {
+             progressiveChunkSize: Number.MAX_SAFE_INTEGER,
++            nonce,
+             bootstrapScriptContent: (0, _react1.getBootstrapContents)({
+                 hydrate: options?.hydrate ?? true,
+                 loadedData
