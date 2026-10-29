@@ -423,6 +423,25 @@ paths:
   `seenAt`), объект и `factAt` переписываются сверкой; `seenAt`/`grantedAt` пишут только вставка и «показано».
   Названия объектов не хранятся. Каждая запись — одна условная операция по `{ userId, code, … }` без транзакции.
 
+## Билеты (event-tickets, ADR-0023)
+
+- `event_ticketing` (`_id = "<kind>:<eventId>"`), `event_registrations`, `tickets` — единственный писатель
+  `TicketsRepository`; миграция `0038_tickets` (expand-only): `tickets_code_unique`, `tickets_qr_hash_unique`,
+  `tickets_registration_unique`, `tickets_user_idx { userId, createdAt: -1 }`, `tickets_event_idx { kind, eventId, _id }`
+  (сверка и участники с курсором), частичный `event_registrations_active_unique { eventId, userId }`
+  (`status: 'active'`), `event_registrations_user_idx`, `event_ticketing_enabled_idx { kind, enabled, startsAt }`
+  (регламент берёт гонки со стартом позже `now − 61 сут`: окно гонки ≤ 60 суток, очный старт внутри него).
+- Настройки — замена по `version` (вставка при `version: 0`, дубль `_id_` — 409); `registeredCount` пишут только
+  `reserveSeat`/`releaseSeat` (без `version`) — первой операцией транзакции регистрации и отмены. Календарь:
+  `startsAt/endsAt/place` в настройках — `null` (вычисляются из старта, RC-T2).
+- Билет: `status` `active | checked_in | cancelled` (`event_cancelled` не хранится); переходы — условием статуса в
+  фильтре (`markCheckedIn` — только из `active`); QR — только `qrHash`; `email` — захват письма (`pending → sending →
+  sent | skipped | failed`). Не append-only (проекция заявок), журнал отметок — `panel_audit`.
+- `calendar_starts.admissionLock` — счётчик-замок (`lockForAdmission`, без `version`): пишут транзакции регистрации,
+  отмены регистрации и check-in `tickets` через порт `CALENDAR_EVENTS`; наружу не выходит.
+- Удаление аккаунта — `TicketErasure`: активные регистрации → `cancelled` (с билетом и местом, транзакция на
+  регистрацию), активные билеты гонок → `cancelled`; документы псевдонимные.
+
 ## Удаление аккаунта (ADR-0015, `docs/product/account.md`)
 
 - `users`: `deletedAt` — в транзакции удаления под `lockUserCredentials` (с отзывом всех сессий `account_deleted`,
@@ -433,7 +452,8 @@ paths:
   `users_email_unique` не меняется: регистрация ищет адрес и маркер (`findUserForRegistration`, D-07).
 - Порядок шагов worker (`account-deletion`): профиль → райды → «Мои маршруты» → устройства → заезды → заезды по
   маршрутам (`RouteRideErasure`, `deleteMany({ userId })`) → достижения (`AchievementErasure`: выдачи
-  `deleteMany({ userId })` + маркер `deleteOne({ _id })`) → уведомления → identity. Push-токены (`push_tokens`) снимаются раньше — в транзакции удаления (`PushTokens.revokeAllOf`). Каждый
+  `deleteMany({ userId })` + маркер `deleteOne({ _id })`) → билеты (`TicketErasure`: регистрации и билеты →
+  `cancelled`) → уведомления → identity. Push-токены (`push_tokens`) снимаются раньше — в транзакции удаления (`PushTokens.revokeAllOf`). Каждый
   шаг — порт модуля-владельца, идемпотентен; живой аккаунт (`deletedAt: null`) не трогается. Повторный проход через
   15 мин и регламент `account.erasure-resume` (частичный `users_erasure_pending_idx { deletedAt: 1 }`, partial
   `deletedAt: { $type: 'date' }, erasureSweptAt: { $eq: null }`).

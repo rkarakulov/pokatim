@@ -95,6 +95,8 @@ export interface AuditDetailsDoc {
   decorTo?: AppDecorId;
   /** routes-06: код причины отклонения заявки маршрута райдера */
   rejectionReason?: RouteRejectionReason;
+  /** event-tickets: код отмеченного билета (без имени и e-mail участника) */
+  ticketCode?: string;
 }
 
 /**

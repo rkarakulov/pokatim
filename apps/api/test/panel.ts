@@ -101,7 +101,7 @@ export async function panelSession(h: Harness, email: string): Promise<string> {
 export const panelCall = (
   h: Harness,
   token: string | undefined,
-  method: 'GET' | 'POST' | 'PATCH',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH',
   url: string,
   payload?: unknown,
   headers: Record<string, string> = {},

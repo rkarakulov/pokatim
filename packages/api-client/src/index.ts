@@ -118,6 +118,13 @@ import {
   type SubmitRoutePublicationInput,
   StoryCardStatus,
   type StoryCardQuery,
+  CalendarRegistrationState,
+  type CalendarRegistrationRequest,
+  EventTicketingPublic,
+  MyTicketRef,
+  MyTickets,
+  type TicketEventKind,
+  TicketView,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -439,6 +446,64 @@ export function createApiClient({
       getPublic(
         `/v1/riders/${encodeURIComponent(publicId)}/achievements`,
         PublicRiderAchievementList,
+      ),
+    // --- билеты на мероприятия (event-tickets) ---
+    /** Свой билет гонки — сервер выпускает лениво (зовите после «Участвовать»); нет заявки или билетов — `null`. */
+    getRaceTicket: (accessToken: string, raceId: string) =>
+      request(
+        `/v1/races/${encodeURIComponent(raceId)}/ticket`,
+        MyTicketRef.nullable(),
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Своя активная регистрация на старт календаря и билет; нет — оба `null`. */
+    getCalendarRegistration: (accessToken: string, startId: string) =>
+      request(
+        `/v1/calendar/${encodeURIComponent(startId)}/registration`,
+        CalendarRegistrationState,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /**
+     * Регистрация на старт календаря (201 — новая, 200 — уже была). Отказы — `409 EVENT_FULL`,
+     * `409 EVENT_REGISTRATION_CLOSED { reason }`, `400` (дистанция), `429 RATE_LIMITED`.
+     */
+    registerForCalendar: (
+      accessToken: string,
+      startId: string,
+      body: CalendarRegistrationRequest = {},
+    ) =>
+      postAuthorized(
+        accessToken,
+        `/v1/calendar/${encodeURIComponent(startId)}/registration`,
+        CalendarRegistrationState,
+        body,
+      ),
+    /** Отмена регистрации (до старта; повтор — без ошибки). */
+    cancelCalendarRegistration: (accessToken: string, startId: string) =>
+      postAuthorized(
+        accessToken,
+        `/v1/calendar/${encodeURIComponent(startId)}/registration/cancel`,
+        CalendarRegistrationState,
+        {},
+      ),
+    /** Свои билеты: предстоящие и прошедшие (без курсора). */
+    listTickets: (accessToken: string) =>
+      request(
+        '/v1/tickets',
+        MyTickets,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Свой билет по коду (`XXXXX-XXXXX` или 10 символов); чужой и неизвестный — 404. */
+    getTicket: (accessToken: string, code: string) =>
+      request(
+        `/v1/tickets/${encodeURIComponent(code)}`,
+        TicketView,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Публичная сводка регистрации события (без входа); билеты не включены — `{ enabled: false }`. */
+    getEventTicketing: (kind: TicketEventKind, eventId: string) =>
+      getPublic(
+        `/v1/events/${encodeURIComponent(kind)}/${encodeURIComponent(eventId)}/ticketing`,
+        EventTicketingPublic,
       ),
     /**
      * Удаление своего аккаунта (вход обязателен), подтверждение — текущий пароль; `204` без тела, все сессии отозваны

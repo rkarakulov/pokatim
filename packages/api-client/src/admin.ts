@@ -1,5 +1,12 @@
 import {
   ApiError,
+  type CheckInRequest,
+  CheckInView,
+  EventTicketingSettings,
+  type EventTicketingUpdate,
+  EventTicketsPage,
+  type EventTicketsQuery,
+  type TicketEventKind,
   PanelSeasonStandingsSummary,
   PanelSeasonStandingsTable,
   type SeasonStandingsTableQuery,
@@ -163,6 +170,8 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
   const riderRoute = (id: string) => `/v1/admin/rider-routes/${encodeURIComponent(id)}`;
   const riderProfile = (userId: string) => `/v1/admin/rider-profiles/${encodeURIComponent(userId)}`;
   const dispute = (id: string) => `/v1/admin/disputes/${encodeURIComponent(id)}`;
+  const adminEvent = (kind: TicketEventKind, eventId: string) =>
+    `/v1/admin/events/${encodeURIComponent(kind)}/${encodeURIComponent(eventId)}`;
 
   return {
     /** Статус API (экран «Обзор»). */
@@ -355,6 +364,24 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     /** Смена сезонного декора: устаревшая `version` — 409 `CONFLICT`. */
     updateAppearance: (body: UpdateAppearanceRequest) =>
       put('/v1/admin/appearance', PanelAppearance, body),
+
+    // --- билеты (event-tickets): настройки — права по виду события, check-in и участники — tickets.checkin ---
+    getEventTicketing: (kind: TicketEventKind, eventId: string) =>
+      get(`${adminEvent(kind, eventId)}/ticketing`, EventTicketingSettings),
+    /**
+     * Настройки билетов: устаревшая `version` — 409 `CONFLICT`; `409 TICKETING_INVALID_STATE { reason }`; поля — 400.
+     */
+    updateEventTicketing: (kind: TicketEventKind, eventId: string, body: EventTicketingUpdate) =>
+      put(`${adminEvent(kind, eventId)}/ticketing`, EventTicketingSettings, body),
+    listEventTickets: (
+      kind: TicketEventKind,
+      eventId: string,
+      params: Partial<EventTicketsQuery> = {},
+    ) => get(`${adminEvent(kind, eventId)}/tickets${queryString(params)}`, EventTicketsPage),
+    /** Проверка билета без отметки (QR или код); нет или чужое событие — 404. */
+    lookupTicket: (body: CheckInRequest) => post('/v1/admin/tickets/lookup', CheckInView, body),
+    /** Отметка участника: исход — `outcome` (повтор — `already_checked_in`). */
+    checkInTicket: (body: CheckInRequest) => post('/v1/admin/tickets/check-in', CheckInView, body),
   };
 }
 

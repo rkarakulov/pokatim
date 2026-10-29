@@ -43,6 +43,24 @@ export class CalendarRepository {
     return (await this.starts.findOne({ _id: id }, { session })) ?? undefined;
   }
 
+  /** Старты по id (`_id` — индекс); незнакомых — нет. */
+  findMany(ids: readonly string[]): Promise<CalendarStartDoc[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.starts.find({ _id: { $in: [...new Set(ids)] } }).toArray();
+  }
+
+  /**
+   * Замок старта в транзакции потребителя (`tickets`: регистрация и check-in): запись `admissionLock` без `version` —
+   * конфликт записи с правкой, снятием и возвратом старта (`update` пишет тот же документ). Нет старта — `null`.
+   */
+  lockForAdmission(session: DbSession, id: string): Promise<CalendarStartDoc | null> {
+    return this.starts.findOneAndUpdate(
+      { _id: id },
+      { $inc: { admissionLock: 1 } },
+      { session, returnDocument: 'after' },
+    );
+  }
+
   async insert(session: DbSession, doc: CalendarStartDoc): Promise<void> {
     await this.starts.insertOne(doc, { session });
   }

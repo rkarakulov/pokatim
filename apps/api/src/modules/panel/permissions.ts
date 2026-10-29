@@ -21,7 +21,7 @@ export function defineRoles<R extends string, P extends string>(
  * имени райдера (`profiles.moderate`) — admin и moderator. app-themes: `appearance.manage` — только admin.
  * race-results-07: пол и год анкеты Verified (`profiles.verified_edit`) — только admin. routes-06: модерация маршрутов
  * райдеров (`routes.moderate`) — admin и moderator. admin-overview: KPI и зависшие удаления на «Обзоре»
- * (`platform.stats`) — только admin. Клиент получает итог в `PanelMe`.
+ * (`platform.stats`) — только admin. event-tickets: check-in (`tickets.checkin`) — admin и organizer. Клиент получает итог в `PanelMe`.
  */
 export const ROLE_PERMISSIONS = defineRoles<PanelRole, Permission>({
   admin: PERMISSIONS,
@@ -35,7 +35,8 @@ export const ROLE_PERMISSIONS = defineRoles<PanelRole, Permission>({
     'routes.moderate',
   ],
   // race-results-05 (R1): исключение треков и публикация — организатор (свои гонки); пересчёт после — только admin
-  organizer: ['races.read', 'races.manage', 'results.manage'],
+  // event-tickets: check-in участников своих гонок
+  organizer: ['races.read', 'races.manage', 'results.manage', 'tickets.checkin'],
 });
 
 /** Права роли в порядке контракта. */

@@ -7,3 +7,9 @@ export {
   type CalendarForSharing,
   type CalendarOgFacts,
 } from './calendar-for-sharing.port';
+/** Порт для `tickets` (event-tickets): факты старта для регистрации и билетов. */
+export {
+  CALENDAR_EVENTS,
+  type CalendarEventFacts,
+  type CalendarEvents,
+} from './calendar-events.port';

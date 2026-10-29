@@ -12,7 +12,7 @@ import { type Env, webPushVapid } from '../../config/env';
 
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
-import { consumeUserLimit } from './notifications.service';
+import { consumeUserLimit } from '../../user-limit';
 
 /**
  * Push-токены устройства (ADR-0017) и подписки Web Push (ADR-0022): регистрация и снятие — общий лимит

@@ -32,6 +32,7 @@ import { RoutesModule } from './modules/routes';
 import { SharingModule } from './modules/sharing';
 import { RouteRidesModule } from './modules/route-rides';
 import { StandingsModule } from './modules/standings';
+import { TicketsModule } from './modules/tickets';
 import { TracksModule } from './modules/tracks';
 
 @Module({
@@ -64,6 +65,8 @@ import { TracksModule } from './modules/tracks';
     // достижения райдера: выдача сверкой при чтении (achievements, ADR-0020)
     AchievementsModule,
     CalendarModule,
+    // билеты на мероприятия: регистрация, билет, check-in (event-tickets, ADR-0023)
+    TicketsModule,
     OverviewModule,
     AppearanceModule,
     RidesModule,

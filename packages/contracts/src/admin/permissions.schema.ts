@@ -38,6 +38,8 @@ export const PERMISSIONS = [
   'routes.moderate',
   // admin-overview: KPI платформы и зависшие удаления аккаунтов на «Обзоре» (только admin)
   'platform.stats',
+  // event-tickets: check-in участников и список билетов события — admin и organizer (свои гонки)
+  'tickets.checkin',
 ] as const;
 export const Permission = z.enum(PERMISSIONS);
 export type Permission = z.infer<typeof Permission>;
