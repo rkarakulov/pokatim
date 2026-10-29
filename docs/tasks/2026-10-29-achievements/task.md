@@ -380,6 +380,25 @@ consistency, не влияет на `seen`).
   вариант-рекомендация architect. RC-4 (невидимый маршрут — факта нет) и RC-7 (наружу только дата по Минску)
   уточняют A1/A4; RC-6 — AC8 читать как «импортирует только `AppModule` и `account` (стирание)»; RC-13 — ADR-0020.
 
+## 8.2 Отклонения при реализации (coder, PR A)
+
+- **D1 — `Earned.title: string | null`.** У гоночных правил названия нет (оно приходит из `racesOf` после правил):
+  `null` у гонки, название факта — у маршрута и райда. Форма 7.1 иначе не выполнима без порта в чистой функции.
+- **D2 — гонки нет в `racesOf` (7.2 п. 2).** «Запись не трогается» прочитано как «не отзывать»: план строится по полному
+  набору заработанного, код только не попадает в ответ (лог `achievements.race_missing`). Случай невозможен по
+  инвариантам `races` (отмена после публикации запрещена).
+- **D3 — пачки портов.** `RiderRouteRides.passedOf` вызывает `liveActivities` пачками по 200 id и `rideableTitles` —
+  по 500 (пределы портов при 2000 строк). Лог усечения заездов — `achievements.route_rides_truncated` (7.4: «предел
+  2000 + лог» без имени).
+- **D4 — `rideableTitles` без линии показа.** Условие — как у `findRideable` (+ `distanceM` не `null`), как и записано
+  в 7.4; `rideable` дополнительно требует линию показа (рамку). Готовый маршрут без геометрии не бывает (геометрия
+  пишется вместе с `ready`).
+- **D5 — тестовый стенд.** Изоляция по поручению оркестратора: `test-kit` требует имя БД `*_test` и Redis db ≥ 1 —
+  использованы `pokatim_achievements_test` (вместо `pokatim_test_achievements`) и `redis://127.0.0.1:6491/1`; replica
+  set локально — порт 27117 (на 27017 — standalone).
+- **D6 — `pokatim-security.md`:** в `paths:` добавлен `apps/api/src/modules/achievements/**` (иначе правило зоны не
+  подгружается для нового модуля).
+
 ## 8.3 Security checklist
 
 Затронуты зоны `security.md`: персональные данные, публичные ссылки, удаление аккаунта, `app.module.ts`,
@@ -551,3 +570,54 @@ PR B:
 - **Тесты**: `flashQueue`/`knownItems` unit; хост (новое → открытие; `seen` → не повторяется; ошибка — тишина);
   экран вспышки (Дальше/Закрыть/Поделиться, reduce motion); блоки профиля (пусто — нет блока, ошибка не ломает
   экран); web-тесты `*.web.test.tsx` при платформенных развилках; Playwright-смоук при `E2E_API=1` — по возможности.
+
+## 12. Outcome
+
+### PR A — API (coder, 2026-10-29)
+
+Сделано по 7.1–7.7 и 11 «PR A»; отклонения — 8.2 (D1–D6). PR B не начат.
+
+- Контракты и клиент: `packages/contracts/src/achievements/achievement.schema.ts` (+ тест), методы `listAchievements`,
+  `markAchievementsSeen`, `getRiderAchievements` (+ `packages/api-client/src/achievements.test.ts`).
+- Порты: `RIDER_RIDES` (`rides/rider-rides*.ts`, `RidesRepository.pastFactsOf`), `RIDER_ROUTE_RIDES`
+  (`route-rides/rider-route-rides*.ts`, `RouteRidesRepository.passedOf`), `RouteRideRoutes.rideableTitles`
+  (`RoutesRepository.findRideableTitles`), `isRankedRow` (`results`, им же — `riders.policy.summarize`).
+- Модуль `apps/api/src/modules/achievements/` (policy, repository, service, два контроллера, стирание), миграция
+  `0035_achievements`, `AchievementsModule` в `AppModule`, шаг `achievements` в `AccountErasureService` (после
+  `route-rides`).
+- Документы: ADR-0020 (Proposed) + индекс, `docs/product/profile.md` (A1–A8, эндпоинты, follow-up),
+  `docs/product/account.md`, `.claude/rules/pokatim-{backend,db,security,contracts}.md`.
+
+Тесты: unit `achievements.policy.test.ts` (AC1 — 9 кодов и границы, `reconcilePlan`, `sortForList`); int
+`achievements.int.test.ts` (AC2–AC6, ключи ответов, лог без названий, 401/400/429), `rider-rides.int.test.ts`,
+`rider-route-rides.int.test.ts`, `route-ride-routes.int.test.ts` (`rideableTitles`), `account-erasure.int.test.ts`
+(AC7, шаг в логах), `migrations.int.test.ts` (`0035` — последняя, индекс, повторный `up`).
+
+Отрицательные доказательства (AC5, постоянные тесты в `achievements.int.test.ts`; 5 GET читают состояние до записей —
+ворота на `syncedAt`):
+- вставка без перехвата `isDuplicateKey` → среди 5 параллельных GET есть **500** (с перехватом — все 200, 3 документа);
+- маркер первой сверки до выдач (симуляция в `insertGrant`) → выдача первой сверки у параллельного GET приходит с
+  **`seen: false`** (правильный порядок — все `seen: true`).
+
+AC8: `pnpm arch:check` — без нарушений; на `modules/achievements` ссылаются только `app.module.ts` и `account`
+(`account.module.ts`, `account-erasure.service.ts`), кроме миграции (коллекция) и тестов.
+
+Гейт (Node 24.22.1, свой Mongo `pokatim_achievements_test` на rs0:27117, свой Redis `:6491/1`, `TURBO_CONCURRENCY=1`):
+
+```
+$ pnpm check   # format:check + lint + arch:check + typecheck + test
+All matched files use Prettier code style!
+✔ no dependency violations found (1818 modules, 6838 dependencies cruised)
+ Tasks:    9 successful, 9 total            # typecheck
+@pokatim/contracts:test:   Test Files  43 passed (43)     Tests  370 passed (370)
+@pokatim/api-client:test:  Test Files  20 passed (20)     Tests  136 passed (136)
+@pokatim/api:test:         Test Files  163 passed (163)   Tests  1759 passed (1759)
+@pokatim/admin:test:       Test Files  40 passed (40)     Tests  381 passed (381)
+@pokatim/app:test:         Test Suites: 210 passed        Tests: 1932 passed
+ Tasks:    15 successful, 15 total
+  Time:    11m25.735s
+exit=0
+```
+
+Первый прогон `pnpm check` упал на lint (неиспользуемая переменная в тесте контракта) — исправлено отдельным коммитом,
+повторный прогон выше — зелёный. Независимое ревью — не проводилось (шаг оркестратора).
