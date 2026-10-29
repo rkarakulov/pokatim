@@ -27,8 +27,8 @@ interface InstallStore {
   ios: boolean | null;
   mobile: boolean;
   standalone: boolean;
-  /** PWA установлено; до ответа `getInstalledRelatedApps` — `true`, чтобы плашка не мигала */
-  installed: boolean;
+  /** PWA установлено; до ответа `getInstalledRelatedApps` — `null`, считаем «установлено», чтобы плашка не мигала */
+  installed: boolean | null;
   /** отложенный `beforeinstallprompt` (Android/Chromium): нативный диалог доступен */
   deferredPrompt: BeforeInstallPromptEvent | null;
   prompt: InstallPromptState;
@@ -40,7 +40,7 @@ const initial: InstallStore = {
   ios: null,
   mobile: false,
   standalone: false,
-  installed: true,
+  installed: null,
   deferredPrompt: null,
   prompt: { showDialog: false, visitsCountAfterClosing: 0 },
   promoRequested: false,
@@ -52,7 +52,7 @@ export const useInstallStore = create<InstallStore>(() => initial);
 export const canInstall = (state: InstallStore): boolean =>
   state.ios !== null &&
   !state.standalone &&
-  !state.installed &&
+  state.installed === false &&
   (state.ios || state.deferredPrompt !== null);
 
 /** Плашка: мобильный браузер, установка возможна и сработал счётчик. */
@@ -96,7 +96,10 @@ async function detectInstalled(): Promise<boolean> {
   }
 }
 
-/** Убрать `?show-pwa-modal` из адресной строки (`replaceState`, состояние истории навигатора — как было). */
+/**
+ * Убрать `?show-pwa-modal` из адресной строки сразу (`replaceState`, состояние истории навигатора — как было); из
+ * состояния роутера параметр снимает плашка (`router.setParams`).
+ */
 function takePromoParam(): boolean {
   const url = new URL(window.location.href);
   if (!url.searchParams.has(PROMO_PARAM)) return false;
@@ -124,9 +127,10 @@ if (typeof window !== 'undefined') listenInstallEvents();
 /**
  * Первое монтирование плашки за загрузку страницы (Главная — только у вошедшего): читаем браузер, считаем визит,
  * спрашиваем `getInstalledRelatedApps`, забираем `?show-pwa-modal`. Повторные монтирования — без визита.
+ * Возвращает `true`, если в адресе был параметр промо.
  */
-export function startInstallPrompt(): void {
-  if (useInstallStore.getState().ios !== null) return;
+export function startInstallPrompt(): boolean {
+  if (useInstallStore.getState().ios !== null) return false;
   const info = {
     userAgent: navigator.userAgent,
     platform: navigator.platform,
@@ -134,6 +138,7 @@ export function startInstallPrompt(): void {
   };
   const prompt = registerVisit(loadPrompt(), Date.now());
   savePrompt(prompt);
+  const promoRequested = takePromoParam();
   useInstallStore.setState({
     ios: isIosDevice(info),
     mobile: isMobileBrowser(info),
@@ -142,9 +147,13 @@ export function startInstallPrompt(): void {
       window.matchMedia?.('(display-mode: standalone)').matches ?? false,
     ),
     prompt,
-    promoRequested: takePromoParam(),
+    promoRequested,
   });
-  void detectInstalled().then((installed) => useInstallStore.setState({ installed }));
+  // `appinstalled` мог прийти раньше ответа — его не затираем
+  void detectInstalled().then((installed) =>
+    useInstallStore.setState((state) => ({ installed: state.installed === true || installed })),
+  );
+  return promoRequested;
 }
 
 /** «×» плашки: скрыть, счётчик с нуля, время закрытия. */

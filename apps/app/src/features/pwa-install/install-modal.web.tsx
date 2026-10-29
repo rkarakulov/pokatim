@@ -1,5 +1,4 @@
 import { shapeOf, size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
-import { t } from '@pokatim/i18n';
 import { textStyle, useReducedMotion, useTheme } from '@rkarakulov/ui';
 import type { ReactNode } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -44,9 +43,11 @@ export function InstallModal({ placement, title, onClose, children, testID }: In
       onRequestClose={onClose}
     >
       <View style={[styles.root, sheet ? styles.rootSheet : styles.rootDialog]}>
+        {/* затемнение закрывает касанием; для скринридера и Tab — только «×» и Esc */}
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('pwaInstall.close')}
+          accessible={false}
+          importantForAccessibility="no"
+          tabIndex={-1}
           onPress={onClose}
           style={[
             StyleSheet.absoluteFill,

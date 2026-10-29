@@ -10,6 +10,9 @@ import { InstallBanner } from './install-banner';
 import { INSTALL_PROMPT_KEY, MS_IN_DAY, VISITS_BEFORE_PROMPT } from './install-prompt-state';
 import { useInstallStore } from './install-store.web';
 
+const mockSetParams = jest.fn();
+jest.mock('expo-router', () => ({ useNavigation: () => ({ setParams: mockSetParams }) }));
+
 const UA = {
   safari26:
     'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1',
@@ -72,6 +75,7 @@ beforeEach(() => {
 afterEach(() => {
   jest.useRealTimers();
   jest.restoreAllMocks();
+  mockSetParams.mockReset();
 });
 
 describe('плашка установки PWA (web)', () => {
@@ -186,11 +190,30 @@ describe('плашка установки PWA (web)', () => {
     window.history.replaceState(null, '', '/?show-pwa-modal&tab=1');
     await renderBanner();
     expect(window.location.search).toBe('?tab=1');
+    // и из состояния навигатора: иначе переход на Главную по вкладке вернёт параметр в адрес
+    expect(mockSetParams).toHaveBeenCalledWith({ 'show-pwa-modal': undefined });
     expect(screen.queryByTestId('pwa-install-banner')).toBeNull();
     expect(screen.getByTestId('pwa-install-promo')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Установить' }));
     expect(screen.queryByTestId('pwa-install-promo')).toBeNull();
     expect(screen.getByTestId('pwa-install-ios')).toBeTruthy();
+  });
+
+  it('без ?show-pwa-modal параметры роутера не трогаем', async () => {
+    browser(UA.safari26);
+    seedVisits();
+    await renderBanner();
+    expect(mockSetParams).not.toHaveBeenCalled();
+  });
+
+  it('appinstalled до ответа getInstalledRelatedApps — плашки нет', async () => {
+    browser(UA.safari26);
+    seedVisits();
+    act(() => {
+      window.dispatchEvent(new Event('appinstalled'));
+    });
+    await renderBanner();
+    expect(screen.queryByTestId('pwa-install-banner')).toBeNull();
   });
 
   it('?show-pwa-modal в standalone — промо нет', async () => {

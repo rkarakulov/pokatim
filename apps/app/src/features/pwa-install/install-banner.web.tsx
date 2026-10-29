@@ -1,6 +1,7 @@
 import { size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { Button, textStyle, useTheme } from '@rkarakulov/ui';
+import { useNavigation } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -13,6 +14,7 @@ import {
   closePromo,
   dismissInstallBanner,
   promoVisible,
+  PROMO_PARAM,
   promptInstall,
   startInstallPrompt,
   useInstallStore,
@@ -33,7 +35,12 @@ export function InstallBanner() {
   const ios = useInstallStore((state) => state.ios === true);
   const [instruction, setInstruction] = useState(false);
 
-  useEffect(startInstallPrompt, []);
+  // навигация экрана (Главной): `router.setParams` пишет в фокусный маршрут корня, а параметр живёт у `index`
+  const navigation = useNavigation<{ setParams: (params: Record<string, undefined>) => void }>();
+  useEffect(() => {
+    // параметр промо снят и в состоянии навигатора: иначе переход на Главную по вкладке вернёт его в адрес
+    if (startInstallPrompt()) navigation.setParams({ [PROMO_PARAM]: undefined });
+  }, [navigation]);
 
   const install = () => {
     if (ios) setInstruction(true);
