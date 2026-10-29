@@ -280,4 +280,5 @@ it('golden: все фикстуры = эталону', () => {
   }
   expect(Object.keys(actual).length).toBeGreaterThan(30);
   expect(actual).toEqual(JSON.parse(readFileSync(golden, 'utf8')));
-});
+  // разбор ~45 реальных треков: на раннере CI ~5 с — дефолтных 5 с мало (как у длинных тестов `parse.test.ts`)
+}, 60_000);
