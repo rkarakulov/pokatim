@@ -65,6 +65,21 @@ export function withTicket(
 }
 
 /**
+ * Снимок без просроченных копий (TTL, лимит) — для записи при чтении: копия не только скрывается, но и удаляется из
+ * хранилища (вместе с QR). `null` — менять нечего.
+ */
+export function prunedSnapshot(
+  snapshot: OfflineSnapshot | null,
+  now: number,
+): OfflineSnapshot | null {
+  if (!snapshot) return null;
+  const items = pruneItems(snapshot.items, now);
+  return Object.keys(items).length === Object.keys(snapshot.items).length
+    ? null
+    : { owner: snapshot.owner, items };
+}
+
+/**
  * Копия для показа: владелец совпал (или неизвестен — `null`: web без связи с сервером при запуске, RC-B4), событие
  * не закончилось больше суток назад. QR — только пока событие не прошло по часам устройства.
  */

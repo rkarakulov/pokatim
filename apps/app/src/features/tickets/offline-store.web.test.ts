@@ -33,6 +33,13 @@ describe('офлайн-копии билетов — web (AC12, RC-B4)', () => {
     expect(localStorage.getItem(OFFLINE_TICKETS_KEY)).toBeNull();
   });
 
+  it('просроченная копия при чтении удаляется из localStorage', async () => {
+    await saveOfflineTicket(OWNER, raceTicket, NOW);
+    const expired = Date.parse(raceTicket.event.endsAt!) + 25 * 3_600_000;
+    await expect(readOfflineTicket(OWNER, raceTicket.code, expired)).resolves.toBeNull();
+    expect(localStorage.getItem(OFFLINE_TICKETS_KEY)).toBeNull();
+  });
+
   it('удаление кода и выход: копии и кеш оболочки service worker', async () => {
     const deleted: string[] = [];
     Object.defineProperty(globalThis, 'caches', {

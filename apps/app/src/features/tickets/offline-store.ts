@@ -9,6 +9,7 @@ import {
   type OfflineTicket,
   parseSnapshot,
   pickTicket,
+  prunedSnapshot,
   withTicket,
 } from './offline-model';
 
@@ -110,10 +111,17 @@ export function readOfflineTicket(
   now = Date.now(),
 ): Promise<OfflineTicket | null> {
   return serial(async () => {
-    const snapshot = await readSnapshot();
+    let snapshot = await readSnapshot();
     if (snapshot && owner !== null && snapshot.owner !== owner) {
       await wipe();
       return null;
+    }
+    // просроченные копии удаляются из файла и SecureStore, а не только скрываются
+    const pruned = prunedSnapshot(snapshot, now);
+    if (pruned) {
+      if (Object.keys(pruned.items).length === 0) await wipe();
+      else await writeSnapshot(pruned);
+      snapshot = pruned;
     }
     return pickTicket(snapshot, owner, code, now);
   }, null);

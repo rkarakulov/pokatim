@@ -90,6 +90,26 @@ describe('офлайн-копии билетов — native (AC12)', () => {
     await expect(
       readOfflineTicket(OWNER, raceTicket.code, ended + 25 * 3_600_000),
     ).resolves.toBeNull();
+    // просроченная копия удаляется из хранилищ, а не только скрывается
+    expect(fileText()).not.toContain(raceTicket.event.title);
+    expect(secure().get('pokatim.ticketQr') ?? '').not.toContain(QR);
+  });
+
+  it('чтение другого билета тоже удаляет просроченные копии', async () => {
+    await saveOfflineTicket(OWNER, raceTicket, NOW);
+    await saveOfflineTicket(
+      OWNER,
+      {
+        ...calendarTicket,
+        event: { ...calendarTicket.event, startsAt: '2027-07-20T05:00:00.000Z' },
+      },
+      NOW,
+    );
+    const later = Date.parse('2027-06-16T12:00:00Z');
+
+    await expect(readOfflineTicket(OWNER, calendarTicket.code, later)).resolves.not.toBeNull();
+    expect(fileText()).not.toContain(raceTicket.event.title);
+    expect(fileText()).toContain(calendarTicket.event.title);
   });
 
   it(`не больше ${OFFLINE_TICKETS_LIMIT} копий — остаются свежие`, async () => {

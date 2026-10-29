@@ -7,6 +7,7 @@ import {
   type OfflineTicket,
   parseSnapshot,
   pickTicket,
+  prunedSnapshot,
   withTicket,
 } from './offline-model';
 
@@ -84,10 +85,16 @@ export async function readOfflineTicket(
   code: string,
   now = Date.now(),
 ): Promise<OfflineTicket | null> {
-  const snapshot = read();
+  let snapshot = read();
   if (snapshot && owner !== null && snapshot.owner !== owner) {
     write(null);
     return null;
+  }
+  // просроченные копии удаляются из хранилища, а не только скрываются
+  const pruned = prunedSnapshot(snapshot, now);
+  if (pruned) {
+    write(pruned);
+    snapshot = pruned;
   }
   return pickTicket(snapshot, owner, code, now);
 }

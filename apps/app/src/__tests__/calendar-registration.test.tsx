@@ -297,4 +297,22 @@ describe('регистрация на старт календаря (event-ticke
     expect(getTicketing).toHaveBeenLastCalledWith('calendar', ID, { fresh: true });
     expect(screen.queryByText('Не удалось загрузить')).toBeNull();
   });
+
+  it('место и адрес из сводки билетов — в блоке, без дубля места карточки', async () => {
+    guest();
+    getTicketing.mockResolvedValue(
+      ticketing({ place: 'площадь Независимости', address: 'пр. Независимости, 2' }),
+    );
+    await open();
+    const registration = await block();
+    expect(registration.getByText('пр. Независимости, 2')).toBeOnTheScreen();
+    expect(registration.queryByText(/площадь Независимости/)).toBeNull();
+  });
+
+  it('место из сводки, отличное от карточки, — вместе с адресом', async () => {
+    guest();
+    getTicketing.mockResolvedValue(ticketing({ place: 'Стела', address: 'пр. Победителей, 1' }));
+    await open();
+    expect((await block()).getByText('Стела, пр. Победителей, 1')).toBeOnTheScreen();
+  });
 });

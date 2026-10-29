@@ -71,6 +71,16 @@ const seatsLine = (ticketing: Ticketing) =>
       })
     : null;
 
+/**
+ * Место и адрес очного старта из настроек билетов (plan-B §6): место, уже показанное карточкой старта, не повторяется;
+ * нет ни того, ни другого — `null`.
+ */
+function ticketingPlaceLine(ticketing: Ticketing, start: CalendarStartDetail): string | null {
+  const place = ticketing.place && ticketing.place !== start.place ? ticketing.place : null;
+  const line = [place, ticketing.address].filter((part): part is string => Boolean(part));
+  return line.length > 0 ? line.join(', ') : null;
+}
+
 /** Регистрация закрыта или мест нет — подпись вместо кнопки; открыта — `null`. Решает только сервер. */
 const closedReason = (ticketing: Ticketing) =>
   !ticketing.registrationOpen
@@ -251,11 +261,13 @@ export function CalendarRegistration({
   if (!ticketing.data.enabled) return fallback;
   const data = ticketing.data;
   const seats = seatsLine(data);
+  const where = ticketingPlaceLine(data, start);
 
   return (
     <Block>
       {/* ошибка обновления сводки при показанных данных (§4.12): места остаются, баннер и повтор в обход кэша */}
       {ticketing.isError ? <LoadFailure error={ticketing.error} retry={refreshTicketing} /> : null}
+      {where ? <Meta>{where}</Meta> : null}
       {seats ? <Meta>{seats}</Meta> : null}
       {isSessionPending(status) ? (
         <BlockSkeleton />

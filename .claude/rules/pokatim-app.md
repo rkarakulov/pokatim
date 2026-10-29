@@ -490,7 +490,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `settings/account/delete`): `unknown` — скелетон оболочки; `unavailable` — офлайн-копия или ошибка с повтором; гость —
   `rememberReturnPath('/tickets/<код>')` → «Вход»; вошёл — билет без онбординга (возврат к билету после входа —
   сразу, не дожидаясь шагов настройки: `skipsOnboarding`). Ответ web-сервера на `/tickets/*` — `Referrer-Policy:
-  no-referrer`; 404 при обновлении скрывает показанный билет. Код из адреса — `canonicalTicketCode`
+  no-referrer`; запросы web к API — без `Referer` (`fetchImpl` в `lib/api-platform.web.ts`); 404 при обновлении скрывает показанный билет. Код из адреса — `canonicalTicketCode`
   (`TicketCode`); в allowlist возврата — только канонический код. `generateMetadata` — нейтральный `noindex` без кода и
   `og:url`, без `loader`: SSR-разметка одинакова для любого кода и без данных билета.
 - Ключи: `['tickets','list'|'detail',code]`, `['races','ticket',id]` (мутации участия инвалидируют его и `['tickets']`),
@@ -499,7 +499,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   после регистрации, отмены и 409 сводка перезапрашивается в обход HTTP-кэша (`getEventTicketing(…, { fresh: true })`).
   Отмена регистрации и снятие заявки стирают офлайн-копию билета (`forgetCancelledTicket`).
 - Офлайн-копии (`features/tickets/offline-store(.web).ts`, модель `offline-model.ts`): пишет каждый успешный `getTicket`
-  (и предзагрузка ≤ 3 ближайших на Главной), 404 стирает копию кода; ≤ 10, до суток после события; владелец — `sub`
+  (и предзагрузка ≤ 3 ближайших на Главной), 404 стирает копию кода; ≤ 10, до суток после события (просроченные
+  удаляются и при чтении); владелец — `sub`
   сессии (чужой — стирание). Native: QR — только SecureStore `pokatim.ticketQr`, остальное — файл
   `tickets-offline.json` (кеш приложения, без бэкапа); web — `localStorage['pokatim.ticketsOffline']`. Стирание — `useSignOut` и подписка
   корневого layout на переход в `signedOut` (включая запуск без сессии); web — и признаки выхода соседней вкладки
