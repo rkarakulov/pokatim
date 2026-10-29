@@ -4,6 +4,7 @@ import {
   CatalogRouteCities,
   CatalogRouteDetail,
   CatalogRouteViewer,
+  RiderProfileViewer,
   CatalogRoutePage,
   type CatalogRouteQuery,
   type CatalogRouteRacesQuery,
@@ -86,6 +87,7 @@ import {
   type CreateRideRequest,
   type CreateRideReportRequest,
   type CreateRouteReportRequest,
+  type CreateProfileReportRequest,
   RideCities,
   RideDetail,
   type RideListQuery,
@@ -387,6 +389,21 @@ export function createApiClient({
     /** Публичный профиль райдера по `publicId` (без входа); нет или нет согласия — 404. */
     getRider: (publicId: string) =>
       getPublic(`/v1/riders/${encodeURIComponent(publicId)}`, PublicRiderProfile),
+    /** Состояние вошедшего зрителя публичного профиля (profile-moderation): «Пожаловаться» / «Вы пожаловались». */
+    getRiderViewer: (accessToken: string, publicId: string) =>
+      request(
+        `/v1/riders/${encodeURIComponent(publicId)}/me`,
+        RiderProfileViewer,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Жалоба на публичный профиль (идемпотентно при открытой); свой — 409 `PROFILE_INVALID_STATE`, лимит — 429. */
+    reportRider: (accessToken: string, publicId: string, body: CreateProfileReportRequest) =>
+      postAuthorized(
+        accessToken,
+        `/v1/riders/${encodeURIComponent(publicId)}/reports`,
+        RiderProfileViewer,
+        body,
+      ),
     /** Публичная история гонок райдера — только опубликованные протоколы. */
     listRiderRaces: (publicId: string, params: RiderHistoryParams = {}) =>
       getPublic(

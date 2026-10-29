@@ -27,7 +27,19 @@ export const PROFILE_POLICY = {
    * 2 Мбит/с ≈ 42 с; медленная отправка не держит единственный слот процесса дольше минуты.
    */
   avatarBodyTimeouts: { idleMs: 10_000, totalMs: 60_000 },
+  /** profile-moderation: `POST /v1/riders/:publicId/reports`, ключ `profile-report:<uid>` — 20 жалоб в сутки */
+  reportLimit: { limit: 20, windowSec: 86_400 },
 } as const;
+
+/**
+ * Публичен ли профиль (rider-profile, profile-moderation): имя строкой и согласие на показ. Та же проверка, что в
+ * фильтре `findPublic` и `findPublicNames`; переход «публичен → нет» перевыпускает id фото (RC-A2 (b)).
+ */
+export function isPublicProfile(
+  doc: Pick<ProfileDoc, 'publicName' | 'showNameInResults'> | null | undefined,
+): boolean {
+  return typeof doc?.publicName === 'string' && doc.showNameInResults === true;
+}
 
 /**
  * Ответ `ProfileView` из документа (нет документа — пустой профиль): поля до слайсов могут отсутствовать. `publicId`

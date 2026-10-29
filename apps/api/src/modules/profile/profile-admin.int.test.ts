@@ -6,6 +6,13 @@ import { bearer, call } from '../../../test/identity';
 import { panel, panelCall } from '../../../test/panel';
 import { staff } from '../../../test/races';
 import { rider, type Rider } from '../../../test/rides';
+import {
+  avatarsDb,
+  fetchAvatar,
+  profileReportsDb,
+  reportRider,
+  seedAvatar,
+} from '../../../test/profiles';
 import { PanelAudit } from '../panel';
 import {
   PROFILE_COLLECTIONS,
@@ -76,7 +83,7 @@ describe('POST /v1/admin/profiles/:userId/name-reset (AC6)', () => {
         subject: { kind: 'rider', id: named.userId, label: `Участник ·${named.userId.slice(-6)}` },
         targetUserId: null,
         reason: REASON,
-        details: null,
+        details: { reportCount: 0 },
       });
       expect(JSON.stringify(audit)).not.toContain(NAME);
       expect(await directory().publicNames([named.userId])).toEqual(new Map());
@@ -147,6 +154,49 @@ describe('POST /v1/admin/profiles/:userId/name-reset (AC6)', () => {
     }
     expect(await profiles().findOne({ _id: named.userId })).toMatchObject({ publicName: NAME });
     expect(await resetAudit()).toHaveLength(0);
+  });
+
+  it('закрывает открытые жалобы как actioned; details.reportCount (profile-moderation)', async () => {
+    const view = await call(h, 'GET', '/v1/profile', undefined, bearer(named.token));
+    const publicId = (view.body as { publicId: string }).publicId;
+    for (const email of ['r1@example.by', 'r2@example.by']) {
+      const reporter = await rider(h, email);
+      expect((await reportRider(h, reporter.token, publicId, { reason: 'name' })).status).toBe(200);
+    }
+    expect((await resetBy(moderator.token, named.userId)).body).toEqual({ reset: true });
+    expect(
+      await profileReportsDb(h).countDocuments({
+        targetUserId: named.userId,
+        resolution: 'actioned',
+        resolvedBy: moderator.userId,
+      }),
+    ).toBe(2);
+    expect(await profiles().findOne({ _id: named.userId })).toMatchObject({ openReportCount: 0 });
+    expect((await resetAudit())[0]).toMatchObject({ details: { reportCount: 2 } });
+  });
+
+  it('публичный профиль: перевыпуск id фото — старый 404, новый отдаёт те же байты (RC-A2 (b))', async () => {
+    const avatar = await seedAvatar(h, named.userId);
+    expect((await resetBy(moderator.token, named.userId)).body).toEqual({ reset: true });
+    const own = await call(h, 'GET', '/v1/profile', undefined, bearer(named.token));
+    const newId = (own.body as { avatar: { id: string } | null }).avatar?.id;
+    expect(newId).toEqual(expect.any(String));
+    expect(newId).not.toBe(avatar.id);
+    expect((await fetchAvatar(h, avatar.id)).status).toBe(404);
+    const fetched = await fetchAvatar(h, newId as string);
+    expect(fetched.status).toBe(200);
+    expect(Buffer.compare(fetched.raw, avatar.bytes)).toBe(0);
+    expect(await avatarsDb(h).countDocuments({ userId: named.userId })).toBe(1);
+    expect(JSON.stringify(await resetAudit())).not.toContain(avatar.id);
+  });
+
+  it('имя без согласия (не публичен) — id фото тот же', async () => {
+    const hidden = await rider(h, 'hidden-photo@example.by');
+    await setName(hidden, { publicName: 'Скрытый' });
+    const avatar = await seedAvatar(h, hidden.userId);
+    expect((await resetBy(moderator.token, hidden.userId)).body).toEqual({ reset: true });
+    expect(await profiles().findOne({ _id: hidden.userId })).toMatchObject({ avatarId: avatar.id });
+    expect((await fetchAvatar(h, avatar.id)).status).toBe(200);
   });
 
   it('после сброса райдер задаёт новое имя — оно снова видно (согласие не сброшено)', async () => {

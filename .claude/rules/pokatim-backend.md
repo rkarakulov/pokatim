@@ -139,6 +139,21 @@ paths:
   `ProfileStatsController` (`profile/stats`, `AuthGuard`, `no-store`) и `RidersPublicController` (`riders/:publicId`,
   `/races` — `PublicReadGuard`, `PUBLIC_READ_CACHE_CONTROL`, 404 профиля до разбора курсора). Правила —
   `riders.policy.ts` (`summarize`, `pageRows`). `profile` не импортирует `results`: цикл `results → profile`.
+  `riders/:publicId` и `/races` — публичное чтение `riders`; `riders/:publicId/{me,reports}` — модуль `profile`
+  (RC-P6 profile-moderation): пути различаются статическим сегментом, guard — на классе своего контроллера.
+- **Модерация профиля (profile-moderation)** — всё в `profile` (единственный писатель `profiles`, `profile_avatars`,
+  `profile_reports`), новых рёбер графа нет. `RiderReportsController` (`@Controller('riders')`, `AuthGuard`, `no-store`:
+  `GET :publicId/me`, `POST :publicId/reports`) → `ProfileReportsService` (лимит `profile-report:<uid>` 20/сут до
+  проверок; непубличный и неизвестный — один 404; свой — 409 `PROFILE_INVALID_STATE { reason: 'own_profile' }`; одна
+  открытая — повтор и дубль индекса — идемпотентный успех; лог `profile.reported uid=<uid> reason=<code>` без цели,
+  `publicId` и комментария). `RiderProfilesModerationController` (`admin/rider-profiles`, `PanelGuard` +
+  `profiles.moderate`: очередь, карточка, `avatar-reset`, `club-reset`, `dismiss-reports`) и прежний
+  `ProfileAdminController` (`name-reset`) → `ProfileModerationService`: транзакция «условная запись профиля → побочное
+  (удаление фото / перевыпуск id) → `closeOpen` жалоб → `PanelAudit.append`», журнал `profile.{name,avatar,club}_reset`
+  / `profile.reports_dismissed` с `details.reportCount`, подпись `riderSubjectLabel`; нечего сбрасывать —
+  `{ reset: false }` без журнала; устаревший `reportRevision` — 409 `CONFLICT` (RC-P1), открытых нет —
+  `{ dismissed: false }` (RC-P2). `AvatarReissue` — перевыпуск id фото при переходе «публичен → нет» в транзакциях
+  `PATCH /v1/profile` (`ProfileService.writeProfile`) и сброса имени; публичность — `isPublicProfile` (`profile.policy.ts`).
 
 ## Очереди (worker)
 

@@ -54,6 +54,7 @@ export const PROJECT_ERROR_MESSAGES = {
   AVATAR_FORMAT_UNSUPPORTED: 'Выберите фото JPEG, PNG или WebP',
   AVATAR_TOO_LARGE: 'Фото больше 10 МБ',
   AVATAR_INVALID: 'Не удалось обработать фото',
+  PROFILE_INVALID_STATE: 'На свой профиль пожаловаться нельзя',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

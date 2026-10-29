@@ -26,6 +26,8 @@ import { OverviewScreen } from './features/overview/OverviewScreen';
 import { NewRaceScreen, RaceScreen } from './features/races/RaceScreen';
 import { RacesScreen, validateRacesSearch } from './features/races/RacesScreen';
 import { RaceResultsScreen } from './features/results/RaceResultsScreen';
+import { RiderProfileScreen } from './features/rider-profiles/RiderProfileScreen';
+import { RiderProfilesScreen } from './features/rider-profiles/RiderProfilesScreen';
 import { validateRiderRoutesSearch } from './features/rider-routes/rider-routes-format';
 import { RiderRouteScreen } from './features/rider-routes/RiderRouteScreen';
 import { RiderRoutesScreen } from './features/rider-routes/RiderRoutesScreen';
@@ -327,6 +329,30 @@ const riderRouteRoute = createRoute({
   },
 });
 
+// profile-moderation: жалобы на публичные профили райдеров (admin и moderator)
+const riderProfilesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'rider-profiles',
+  component: () => (
+    <RequirePermission permission="profiles.moderate">
+      <RiderProfilesScreen />
+    </RequirePermission>
+  ),
+});
+
+const riderProfileRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'rider-profiles/$userId',
+  component: function RiderProfileRoute() {
+    const { userId } = riderProfileRoute.useParams();
+    return (
+      <RequirePermission permission="profiles.moderate">
+        <RiderProfileScreen key={userId} userId={userId} />
+      </RequirePermission>
+    );
+  },
+});
+
 // app-themes D1: тема приложения райдера (только admin)
 const appearanceRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -366,6 +392,8 @@ const routeTree = rootRoute.addChildren([
     appearanceRoute,
     riderRoutesRoute,
     riderRouteRoute,
+    riderProfilesRoute,
+    riderProfileRoute,
     notFoundRoute,
   ]),
 ]);

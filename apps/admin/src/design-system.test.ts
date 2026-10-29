@@ -18,5 +18,7 @@ describe('installDesignSystem', () => {
     expect(style.textContent).toContain('.t-panel-title {');
     expect(style.textContent).toContain('--panel-auth-card-width: 400px;');
     expect(style.textContent).toContain('--panel-dialog-width: 420px;');
+    // profile-moderation RC-P4: фото 128 px в карточке модерации профиля
+    expect(style.textContent).toContain('--panel-avatar-preview: 128px;');
   });
 });

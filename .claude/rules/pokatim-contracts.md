@@ -110,6 +110,18 @@ paths:
   `AVATAR_INVALID` (422) — в конце `ErrorCode`. api-client — `uploadAvatar(token, body, crop?)`,
   `avatarUploadRequest`, `deleteAvatar`, `avatarUrl`, `getProfileStats`, `listProfileRaces`, `listProfileRides`,
   `getRider`, `listRiderRaces`.
+- Модерация профиля (profile-moderation): `src/profile/profile-report.schema.ts` — `PROFILE_REPORT_REASONS` (только в
+  конец; подписи `domain.profileReportReason.*`), `CreateProfileReportRequest` (`strictObject`, комментарий —
+  `optionalText(500, MULTI_LINE)`), `RiderProfileViewer` (`z.object`, будущие поля — `.default`),
+  `PROFILE_STATE_REASONS` / `ProfileStateDetails` (`tolerantEnum`, `details` у `409 PROFILE_INVALID_STATE` — только
+  `own_profile`, RC-P1); `src/profile/profile-moderation.schema.ts` — панель, строгие `z.enum`: очередь
+  (`RiderProfileModerationQuery` limit ≤ 50, строка с `name` по Q2), карточка (жалобы ≤ 100 без автора,
+  `reportRevision`), `RiderProfileResetRequest`/`RiderProfileResetResult` — алиасы схем сброса имени (не копии),
+  `DismissRiderProfileReportsRequest` (`reportRevision`; устаревшая — базовый `409 CONFLICT`),
+  `RiderProfileReportsDismissResult`. Код `PROFILE_INVALID_STATE` и действия журнала `profile.avatar_reset`,
+  `profile.club_reset`, `profile.reports_dismissed` — в конце списков. api-client: `getRiderViewer`, `reportRider`;
+  панель — `listRiderProfiles`, `getRiderProfile`, `resetRiderAvatar`, `resetRiderClub`, `dismissRiderProfileReports`,
+  `riderAvatarUrl`.
 - Согласие на показ имени (profile-02): `PUBLIC_NAME_CONSENT_VERSION` (`src/profile/profile.schema.ts`) — версия
   текста `profile.show.label` + `profile.show.hint` (i18n). Сменили формулировку — **подняли версию** (дата), иначе
   журнал согласий ссылается на чужой текст. Версию в событие пишет сервер. Сброс имени —

@@ -66,9 +66,11 @@ describe('каркас панели (AC10)', () => {
         'Модерация райдов',
         'Оформление приложения',
         'Маршруты райдеров',
+        'Профили райдеров',
       ],
     ],
-    // routes-06: «Маршруты райдеров» (`routes.moderate`) — последним в bottom; у организатора права нет
+    // routes-06: «Маршруты райдеров» (`routes.moderate`) — в bottom; у организатора права нет
+    // profile-moderation: «Профили райдеров» (`profiles.moderate`) — последним в bottom
     [
       'moderator',
       [
@@ -80,6 +82,7 @@ describe('каркас панели (AC10)', () => {
         'Журнал действий',
         'Модерация райдов',
         'Маршруты райдеров',
+        'Профили райдеров',
       ],
     ],
     ['organizer', ['Обзор', 'Гонки', 'Маршруты', 'Сезоны']],
@@ -100,6 +103,7 @@ describe('каркас панели (AC10)', () => {
     ['organizer', '/disputes'],
     ['organizer', '/appearance'],
     ['organizer', '/rider-routes'],
+    ['organizer', '/rider-profiles'],
     ['moderator', '/appearance'],
     ['moderator', '/calendar'],
     ['moderator', '/races/new'],

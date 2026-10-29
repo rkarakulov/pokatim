@@ -9,6 +9,7 @@ import {
   type ProfileConsentEventDoc,
   type ProfileDoc,
 } from './profile.collection';
+import { avatarsDb, fetchAvatar, seedAvatar } from '../../../test/profiles';
 import { PROFILE_POLICY } from './profile.policy';
 import { ProfileRepository } from './profile.repository';
 import { RIDER_NAMES, type RiderNameDirectory } from './rider-names.port';
@@ -414,6 +415,70 @@ describe('PATCH /v1/profile — журнал согласий (profile-02, AC1/A
     ]);
     expect(results.map((res) => res.status)).toEqual([200, 200]);
     expect(await consentEvents().countDocuments({ action: 'granted' })).toBe(1);
+  });
+});
+
+describe('PATCH /v1/profile — перевыпуск id фото (profile-moderation, RC-A2 (b), AC8)', () => {
+  /** Публичный профиль с фото: сессия, userId и посеянное фото. */
+  async function publicWithAvatar() {
+    const session = await signUpSession(h);
+    expect(
+      (await patch(session, { publicName: 'Анна', showNameInResults: true, club: 'Velo' })).status,
+    ).toBe(200);
+    const userId = userIdOf(session);
+    return { session, userId, avatar: await seedAvatar(h, userId) };
+  }
+  const avatarIdIn = (body: unknown) => (body as { avatar: { id: string } | null }).avatar?.id;
+
+  it.each([
+    ['отзыв согласия', { showNameInResults: false }],
+    ['очистка имени', { publicName: null }],
+  ])(
+    '%s — старый id 404, новый avatar.id отдаёт те же байты; один документ фото',
+    async (_n, body) => {
+      const { session, userId, avatar } = await publicWithAvatar();
+      const res = await patch(session, body);
+      expect(res.status).toBe(200);
+      const newId = avatarIdIn(res.body);
+      expect(newId).toEqual(expect.any(String));
+      expect(newId).not.toBe(avatar.id);
+      expect(avatarIdIn((await getProfile(session)).body)).toBe(newId);
+      expect((await fetchAvatar(h, avatar.id)).status).toBe(404);
+      const fetched = await fetchAvatar(h, newId as string);
+      expect(fetched.status).toBe(200);
+      expect(Buffer.compare(fetched.raw, avatar.bytes)).toBe(0);
+      expect(await avatarsDb(h).countDocuments({ userId })).toBe(1);
+    },
+  );
+
+  it('включение согласия, смена клуба и имени при согласии — id тот же', async () => {
+    const { session, avatar } = await publicWithAvatar();
+    for (const body of [{ club: 'Другой клуб' }, { publicName: 'Анна К.' }]) {
+      expect(avatarIdIn((await patch(session, body)).body)).toBe(avatar.id);
+    }
+    const hidden = await signUpSession(h, 'hidden@example.com');
+    expect((await patch(hidden, { publicName: 'Борис' })).status).toBe(200);
+    const hiddenAvatar = await seedAvatar(h, userIdOf(hidden));
+    expect(avatarIdIn((await patch(hidden, { showNameInResults: true })).body)).toBe(
+      hiddenAvatar.id,
+    );
+    expect((await fetchAvatar(h, avatar.id)).status).toBe(200);
+  });
+
+  it('непубличный → непубличный (смена имени без согласия) — id тот же', async () => {
+    const session = await signUpSession(h);
+    expect((await patch(session, { publicName: 'Вера' })).status).toBe(200);
+    const avatar = await seedAvatar(h, userIdOf(session));
+    expect(avatarIdIn((await patch(session, { publicName: null })).body)).toBe(avatar.id);
+    expect((await fetchAvatar(h, avatar.id)).status).toBe(200);
+  });
+
+  it('без фото — отзыв согласия не создаёт фото', async () => {
+    const session = await signUpSession(h);
+    await patch(session, { publicName: 'Анна', showNameInResults: true });
+    const res = await patch(session, { showNameInResults: false });
+    expect((res.body as { avatar: unknown }).avatar).toBeNull();
+    expect(await avatarsDb(h).countDocuments({ userId: userIdOf(session) })).toBe(0);
   });
 });
 

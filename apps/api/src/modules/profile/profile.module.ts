@@ -6,6 +6,7 @@ import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
 import { PublicReadGuard } from '../../public-read.guard';
 import { AvatarProcessing } from './avatar-processing-gate';
+import { AvatarReissue } from './avatar-reissue';
 import { AvatarsPublicController } from './avatars-public.controller';
 import { ProfileAdminController } from './profile-admin.controller';
 import { ProfileAvatarRepository } from './profile-avatar.repository';
@@ -14,10 +15,14 @@ import { ProfileAvatarsController } from './profile-avatars.controller';
 import { ProfileController } from './profile.controller';
 import { ProfileErasure } from './profile-erasure';
 import { ProfileModerationService } from './profile-moderation.service';
+import { ProfileReportsRepository } from './profile-reports.repository';
+import { ProfileReportsService } from './profile-reports.service';
 import { ProfileRepository } from './profile.repository';
 import { ProfileService } from './profile.service';
 import { RiderNamesService } from './rider-names';
 import { RIDER_NAMES } from './rider-names.port';
+import { RiderProfilesModerationController } from './rider-profiles-moderation.controller';
+import { RiderReportsController } from './rider-reports.controller';
 import { RiderProfilesService } from './rider-profiles';
 import { RIDER_PROFILES } from './rider-profiles.port';
 import { ProfileVerifiedAdminController } from './profile-verified-admin.controller';
@@ -31,7 +36,7 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
 /**
  * Ядро `profile` для API и worker: единственные писатели `profiles` и анкет Verified, порты
  * `RiderNameDirectory` и `VerifiedProfiles` (race-results-07) для `results` (через `index.ts`), `RiderProfileDirectory`
- * (rider-profile) для `riders` и порт стирания
+ * (rider-profile) для `riders`, единственный писатель жалоб на профиль (profile-moderation) и порт стирания
  * `ProfileErasure` (`account`) — без контроллеров и без импортов. Репозитории объявлены только здесь (один экземпляр).
  */
 @Module({
@@ -39,6 +44,7 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
     ProfileRepository,
     VerifiedProfileRepository,
     ProfileAvatarRepository,
+    ProfileReportsRepository,
     RiderNamesService,
     { provide: RIDER_NAMES, useExisting: RiderNamesService },
     RiderProfilesService,
@@ -51,6 +57,7 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
     ProfileRepository,
     VerifiedProfileRepository,
     ProfileAvatarRepository,
+    ProfileReportsRepository,
     RIDER_NAMES,
     RIDER_PROFILES,
     VERIFIED_PROFILES,
@@ -62,8 +69,9 @@ export class ProfileCoreModule {}
 /**
  * Профиль райдера: онбординг (опрос «Что вас привело?»), чтение своего профиля, публичное имя и согласие на показ
  * (журнал согласий — profile-02), анкета Verified (race-results-07), клуб и аватар (rider-profile; отдача аватара —
- * `PublicReadGuard`). Авторизация — `AuthGuard` identity; сброс имени
- * модератором (`admin/profiles`) — `PanelGuard` + `profiles.moderate`, пол и год анкеты — `profiles.verified_edit`.
+ * `PublicReadGuard`), жалобы на публичный профиль (`riders/:publicId/{me,reports}`, profile-moderation). Авторизация —
+ * `AuthGuard` identity; сброс имени (`admin/profiles`) и модерация профилей (`admin/rider-profiles`) — `PanelGuard` +
+ * `profiles.moderate`, пол и год анкеты — `profiles.verified_edit`.
  */
 @Module({
   imports: [IdentityModule, IdentityAccountsModule, PanelModule, ProfileCoreModule],
@@ -75,6 +83,8 @@ export class ProfileCoreModule {}
     VerifiedProfileController,
     ProfileAdminController,
     ProfileVerifiedAdminController,
+    RiderReportsController,
+    RiderProfilesModerationController,
   ],
   providers: [
     OnboardingService,
@@ -84,6 +94,8 @@ export class ProfileCoreModule {}
     ProfileVerifiedAdminService,
     ProfileAvatarService,
     AvatarProcessing,
+    AvatarReissue,
+    ProfileReportsService,
     PublicReadGuard,
   ],
 })

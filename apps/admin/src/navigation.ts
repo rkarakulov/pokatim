@@ -14,7 +14,8 @@ export interface NavItem {
     | '/rides-moderation'
     | '/disputes'
     | '/appearance'
-    | '/rider-routes';
+    | '/rider-routes'
+    | '/rider-profiles';
   labelKey: MessageKey;
   /** Без права пункт скрыт (сервер всё равно проверит право на каждом запросе). */
   permission?: Permission;
@@ -56,6 +57,13 @@ export const NAVIGATION: readonly NavItem[] = [
     to: '/rider-routes',
     labelKey: 'admin.nav.riderRoutes',
     permission: 'routes.moderate',
+    group: 'bottom',
+  },
+  // profile-moderation: в конец массива, группа `bottom` (после «Маршрутов райдеров»)
+  {
+    to: '/rider-profiles',
+    labelKey: 'admin.nav.riderProfiles',
+    permission: 'profiles.moderate',
     group: 'bottom',
   },
 ];

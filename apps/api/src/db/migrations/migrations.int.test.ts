@@ -40,6 +40,8 @@ import { CITY_CENTERS_0031, ridesGeo } from './0031_rides_geo';
 import { routeRides } from './0032_route_rides';
 import { ROUTE_RIDES_COLLECTIONS } from '../../modules/route-rides/route-rides.collection';
 import { RIDER_PROFILE_INDEXES, riderProfile } from './0033_rider_profile';
+import { PROFILE_REPORTS_INDEXES, profileReports } from './0034_profile_reports';
+import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
 import { notifications } from './0025_notifications';
@@ -143,6 +145,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0031_rides_geo',
       '0032_route_rides',
       '0033_rider_profile',
+      '0034_profile_reports',
     ]);
   });
 
@@ -1212,29 +1215,32 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     const exists = () =>
       h.db.listCollections({ name: PROFILE_COLLECTIONS.profiles }, { nameOnly: true }).toArray();
     expect(await exists()).toHaveLength(1);
-    expect(Object.keys(await indexesOf(PROFILE_COLLECTIONS.profiles))).toEqual([
-      RIDER_PROFILE_INDEXES.profilesPublicId.options.name,
-    ]);
+    expect(Object.keys(await indexesOf(PROFILE_COLLECTIONS.profiles)).sort()).toEqual(
+      [
+        RIDER_PROFILE_INDEXES.profilesPublicId.options.name,
+        PROFILE_REPORTS_INDEXES.profilesReportQueue.options.name,
+      ].sort(),
+    );
 
     await h.db.collection(PROFILE_COLLECTIONS.profiles).drop();
     await profile.up(h.db);
     await profile.up(h.db);
     expect(await exists()).toHaveLength(1);
     expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toEqual({});
-    // индекс publicId (0033) — обратно: следующие файлы стенда работают с той же базой
+    // индексы publicId (0033) и очереди жалоб (0034) — обратно: следующие файлы стенда работают с той же базой
     await riderProfile.up(h.db);
+    await profileReports.up(h.db);
   });
 
-  it('0033_rider_profile: бэкфилл publicId (имя + согласие) и raceWindowStartsAt; profile_avatars; индексы; последняя; повторный up — без изменений', async () => {
+  it('0033_rider_profile: бэкфилл publicId (имя + согласие) и raceWindowStartsAt; profile_avatars; индексы; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0033_rider_profile');
     expect(ids.indexOf('0033_rider_profile')).toBe(ids.indexOf('0032_route_rides') + 1);
 
     const avatarsExist = await h.db
       .listCollections({ name: PROFILE_COLLECTIONS.avatars }, { nameOnly: true })
       .toArray();
     expect(avatarsExist).toHaveLength(1);
-    expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toEqual({
+    expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toMatchObject({
       profiles_public_id_unique: {
         key: { publicId: 1 },
         unique: true,
@@ -1301,6 +1307,59 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await profiles.deleteMany({ _id: { $in: ['shown', 'hidden', 'nameless', 'kept'] } });
     await entries.deleteMany({ _id: { $in: ['entry-old', 'entry-orphan'] } });
     await racesDb.deleteOne({ _id: 'race-0033' });
+  });
+
+  it('0034_profile_reports: коллекция profile_reports, индексы «одна открытая», цели и очереди; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0034_profile_reports');
+    expect(ids.indexOf('0034_profile_reports')).toBe(ids.indexOf('0033_rider_profile') + 1);
+
+    const exists = await h.db
+      .listCollections({ name: PROFILE_REPORTS_COLLECTIONS.reports }, { nameOnly: true })
+      .toArray();
+    expect(exists).toHaveLength(1);
+    const reportIndexes = {
+      profile_reports_open_unique: {
+        key: { targetUserId: 1, reporterUserId: 1 },
+        unique: true,
+        partialFilterExpression: { resolvedAt: { $eq: null } },
+        expireAfterSeconds: undefined,
+      },
+      profile_reports_target_idx: {
+        key: { targetUserId: 1, _id: -1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(PROFILE_REPORTS_COLLECTIONS.reports)).toEqual(reportIndexes);
+    const queueIndex = {
+      profiles_report_queue_idx: {
+        key: { lastReportAt: -1, _id: -1 },
+        unique: false,
+        partialFilterExpression: { openReportCount: { $gt: 0 } },
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toMatchObject(queueIndex);
+
+    // одна открытая жалоба на (цель, жалобщик); закрытая из индекса выходит — новая вставляется
+    const reports = h.db.collection<Record<string, unknown> & { _id: string }>(
+      PROFILE_REPORTS_COLLECTIONS.reports,
+    );
+    const base = { targetUserId: 't-0034', reporterUserId: 'r-0034', resolution: null };
+    await reports.insertOne({ _id: 'rep-1', ...base, resolvedAt: null });
+    await expect(reports.insertOne({ _id: 'rep-2', ...base, resolvedAt: null })).rejects.toThrow(
+      /duplicate key/,
+    );
+    await reports.updateOne({ _id: 'rep-1' }, { $set: { resolvedAt: new Date() } });
+    await reports.insertOne({ _id: 'rep-2', ...base, resolvedAt: null });
+    await reports.deleteMany({ _id: { $in: ['rep-1', 'rep-2'] } });
+
+    await profileReports.up(h.db);
+    await profileReports.up(h.db);
+    expect(await indexesOf(PROFILE_REPORTS_COLLECTIONS.reports)).toEqual(reportIndexes);
+    expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toMatchObject(queueIndex);
   });
 
   it('индексы identity: имена, ключи, unique, partialFilterExpression; TTL 30 дней (Q2)', async () => {

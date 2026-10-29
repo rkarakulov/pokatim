@@ -13,6 +13,8 @@ export const PANEL_LAYOUT_TOKENS = {
   'form-width': 560,
   /** Правая колонка страницы. */
   'rail-width': 330,
+  /** Фото райдера в карточке модерации профиля (profile-moderation, RC-P4). */
+  'avatar-preview': 128,
 } as const;
 
 /** CSS-переменные `--panel-*` для `:root` (ставит `installDesignSystem` рядом с переменными темы). */
