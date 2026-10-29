@@ -59,6 +59,8 @@ export const PanelMember = z.object({
   status: MemberStatus,
   grantedAt: z.iso.datetime(),
   revokedAt: z.iso.datetime().nullable(),
+  /** 2FA подключена (ADR-0024): действие «Сбросить 2FA». */
+  totpEnabled: z.boolean(),
 });
 export type PanelMember = z.infer<typeof PanelMember>;
 

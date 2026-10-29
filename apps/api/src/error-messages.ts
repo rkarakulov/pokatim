@@ -60,6 +60,12 @@ export const PROJECT_ERROR_MESSAGES = {
   TICKETING_INVALID_STATE: 'Настройки билетов сейчас нельзя применить',
   MATERIAL_FILE_UNSUPPORTED: 'Можно загрузить только PDF',
   MATERIAL_FILE_TOO_LARGE: 'PDF больше 10 МБ',
+  TOTP_INVALID_CODE: 'Неверный код',
+  TOTP_CHALLENGE_EXPIRED: 'Время на ввод кода истекло — войдите заново',
+  TOTP_ALREADY_ENABLED: 'Двухфакторная защита уже подключена',
+  TOTP_NOT_ENABLED: 'Двухфакторная защита не подключена',
+  TOTP_REQUIRED: 'Двухфакторная защита обязательна для администратора',
+  TOTP_UNAVAILABLE: 'Двухфакторная защита временно недоступна',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

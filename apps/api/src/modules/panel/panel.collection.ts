@@ -19,6 +19,9 @@ export const PANEL_COLLECTIONS = {
   sessions: 'panel_sessions',
   audit: 'panel_audit',
   meta: 'panel_meta',
+  totp: 'panel_totp',
+  challenges: 'panel_sign_in_challenges',
+  devices: 'panel_trusted_devices',
 } as const;
 
 /**
@@ -43,6 +46,8 @@ export const PANEL_SESSION_REVOKED_REASONS = [
   'role_revoked',
   'credentials_changed',
   'account_inactive',
+  /** 2FA сотрудника сброшена администратором или CLI (ADR-0024). */
+  'totp_reset',
 ] as const;
 export type PanelSessionRevokedReason = (typeof PANEL_SESSION_REVOKED_REASONS)[number];
 
@@ -62,6 +67,63 @@ export interface PanelSessionDoc {
   expiresAt: Date;
   revokedAt: Date | null;
   revokedReason: PanelSessionRevokedReason | null;
+  /** Второй фактор входа (ADR-0024): нет у сессий до 2FA и у входа без 2FA — `null`/отсутствует. */
+  secondFactor?: PanelSecondFactor | null;
+}
+
+export type PanelSecondFactor = 'totp' | 'recovery' | 'device';
+
+/** Код восстановления 2FA: только HMAC нормализованного кода; `usedAt` — погашен. */
+export interface PanelRecoveryCodeDoc {
+  hash: string;
+  usedAt: Date | null;
+}
+
+/**
+ * 2FA сотрудника (ADR-0024): `_id` — userId. `pending` — подключение начато (секрет выдан, кода ещё не было),
+ * `active` — подключена. `secretEnc` — AES-256-GCM (`TotpSecretBox`), `lastUsedStep` — последний принятый шаг TOTP
+ * (повтор закрыт условным обновлением), `epoch` — uuidv7, новый при каждом подключении (гасит доверенные устройства).
+ */
+export interface PanelTotpDoc {
+  _id: string;
+  status: 'pending' | 'active';
+  secretEnc: string;
+  lastUsedStep: number | null;
+  recoveryCodes: PanelRecoveryCodeDoc[];
+  enabledAt: Date | null;
+  epoch: string;
+  updatedAt: Date;
+}
+
+/**
+ * Вызов второго шага входа (ADR-0024, D7): токен — только sha256, 5 минут, ≤ 5 попыток кода (`attempts`
+ * резервируется до проверки); успех удаляет документ атомарно. `purpose: 'setup'` — admin без 2FA при обязательной 2FA.
+ */
+export interface PanelSignInChallengeDoc {
+  _id: string;
+  tokenHash: string;
+  userId: string;
+  credentialsStamp: string;
+  purpose: 'totp' | 'setup';
+  attempts: number;
+  createdAt: Date;
+  expiresAt: Date;
+}
+
+/**
+ * Доверенное устройство (ADR-0024, D4): пропускает только шаг кода. Годно при совпадении штампа учётных данных и
+ * эпохи 2FA и до `expiresAt`; токен — только sha256.
+ */
+export interface PanelTrustedDeviceDoc {
+  _id: string;
+  tokenHash: string;
+  userId: string;
+  credentialsStamp: string;
+  totpEpoch: string;
+  createdAt: Date;
+  expiresAt: Date;
+  /** Замок: вход по устройству пишет `$inc version` в своей транзакции — сброс 2FA (удаление) с ним сериализуется. */
+  version: number;
 }
 
 export type AuditActor = { kind: 'user'; userId: string } | { kind: 'cli' };
@@ -129,6 +191,9 @@ export interface PanelCollections {
   sessions: Collection<PanelSessionDoc>;
   audit: Collection<PanelAuditDoc>;
   meta: Collection<PanelMetaDoc>;
+  totp: Collection<PanelTotpDoc>;
+  challenges: Collection<PanelSignInChallengeDoc>;
+  devices: Collection<PanelTrustedDeviceDoc>;
 }
 
 /** Типизированные коллекции панели — для репозитория, миграции и int-тестов. */
@@ -138,5 +203,8 @@ export function panelCollections(db: Db): PanelCollections {
     sessions: db.collection<PanelSessionDoc>(PANEL_COLLECTIONS.sessions),
     audit: db.collection<PanelAuditDoc>(PANEL_COLLECTIONS.audit),
     meta: db.collection<PanelMetaDoc>(PANEL_COLLECTIONS.meta),
+    totp: db.collection<PanelTotpDoc>(PANEL_COLLECTIONS.totp),
+    challenges: db.collection<PanelSignInChallengeDoc>(PANEL_COLLECTIONS.challenges),
+    devices: db.collection<PanelTrustedDeviceDoc>(PANEL_COLLECTIONS.devices),
   };
 }

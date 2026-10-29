@@ -2,13 +2,15 @@ import { PanelMember, PanelMemberList, Session } from '@pokatim/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { bearer, call, register, signUpSession, userIdByEmail } from '../../../test/identity';
+import { bearer, call, gate, register, signUpSession, userIdByEmail } from '../../../test/identity';
 import {
   memberUser,
   panel,
   panelCall,
+  panelRepository,
   panelSession,
   seedMember,
+  seedTotp,
   verifiedUser,
 } from '../../../test/panel';
 import { PanelMembersService } from './panel-members.service';
@@ -113,6 +115,7 @@ describe('выдача роли (AC6)', () => {
       status: 'active',
       grantedAt: h.clock.now().toISOString(),
       revokedAt: null,
+      totpEnabled: false,
     });
     expect(await panel(h).audit.findOne({ action: 'panel.role_granted' })).toMatchObject({
       actor: { kind: 'user', userId: actor.userId },
@@ -257,11 +260,12 @@ describe('смена и снятие роли (AC7)', () => {
     const staleActor = await memberUser(h, 'stale@example.by', 'moderator');
     const service = h.app.get(PanelMembersService, { strict: false });
 
+    // по очереди: промис второй попытки не создаётся заранее (иначе его отказ — unhandled rejection под нагрузкой)
     for (const attempt of [
-      service.changeRole(staleActor, onlyAdmin, { role: 'moderator', reason: 'понижение' }),
-      service.revoke(staleActor, onlyAdmin, { reason: 'снятие' }),
+      () => service.changeRole(staleActor, onlyAdmin, { role: 'moderator', reason: 'понижение' }),
+      () => service.revoke(staleActor, onlyAdmin, { reason: 'снятие' }),
     ]) {
-      await expect(attempt).rejects.toMatchObject({ code: 'PANEL_LAST_ADMIN', status: 409 });
+      await expect(attempt()).rejects.toMatchObject({ code: 'PANEL_LAST_ADMIN', status: 409 });
     }
     expect(await panel(h).members.findOne({ _id: onlyAdmin })).toMatchObject({
       role: 'admin',
@@ -295,5 +299,103 @@ describe('смена и снятие роли (AC7)', () => {
     expect(
       (await changeRole(actor.token, userId, { role: 'admin', reason: 'причина' })).status,
     ).toBe(404);
+  });
+});
+
+describe('сброс 2FA сотрудника (ADR-0024, D10)', () => {
+  const reset = (token: string, userId: string, body: Record<string, unknown>) =>
+    panelCall(h, token, 'POST', `${MEMBERS}/${userId}/totp/reset`, body);
+  const REASON = { reason: 'потерян телефон' };
+
+  it('admin сбрасывает модератору: 204, 2FA и устройства удалены, сессии цели отозваны, журнал с причиной; список — totpEnabled', async () => {
+    const actor = await admin();
+    const target = await memberUser(h, 'mod@example.by', 'moderator');
+    const targetToken = await panelSession(h, 'mod@example.by');
+    await seedTotp(h, target);
+    await panel(h).devices.insertOne({
+      _id: 'device-1',
+      tokenHash: 'hash',
+      userId: target,
+      credentialsStamp: 'stamp',
+      totpEpoch: 'epoch',
+      createdAt: h.clock.now(),
+      expiresAt: new Date(h.clock.now().getTime() + 86_400_000),
+      version: 0,
+    });
+
+    const list = PanelMemberList.parse((await panelCall(h, actor.token, 'GET', MEMBERS)).body);
+    expect(list.items.find((item) => item.userId === target)?.totpEnabled).toBe(true);
+    expect(list.items.find((item) => item.userId === actor.userId)?.totpEnabled).toBe(false);
+
+    const res = await reset(actor.token, target, REASON);
+    expect(res.status).toBe(204);
+    expect(await panel(h).totp.countDocuments({ _id: target })).toBe(0);
+    expect(await panel(h).devices.countDocuments({ userId: target })).toBe(0);
+    expect(await panel(h).sessions.findOne({ userId: target })).toMatchObject({
+      revokedReason: 'totp_reset',
+    });
+    expect((await panelCall(h, targetToken, 'GET', '/v1/admin/session/me')).status).toBe(401);
+    expect(await panel(h).audit.findOne({ action: 'panel.totp_reset' })).toMatchObject({
+      actor: { kind: 'user', userId: actor.userId },
+      targetUserId: target,
+      reason: 'потерян телефон',
+    });
+    // сессия актора жива
+    expect((await panelCall(h, actor.token, 'GET', '/v1/admin/session/me')).status).toBe(200);
+
+    // повтор — 2FA уже нет
+    const again = await reset(actor.token, target, REASON);
+    expect(again.status).toBe(409);
+    expect(again.body).toMatchObject({ code: 'TOTP_NOT_ENABLED' });
+  });
+
+  it('себе — 409 PANEL_SELF_ACTION; без причины — 400; неизвестный — 404; moderator — 403', async () => {
+    const actor = await admin();
+    await seedTotp(h, actor.userId);
+    const self = await reset(actor.token, actor.userId, REASON);
+    expect(self.status).toBe(409);
+    expect(self.body).toMatchObject({ code: 'PANEL_SELF_ACTION' });
+    expect(await panel(h).totp.countDocuments({ _id: actor.userId })).toBe(1);
+
+    const target = await memberUser(h, 'org@example.by', 'organizer');
+    await seedTotp(h, target);
+    expect((await reset(actor.token, target, {})).status).toBe(400);
+    expect((await reset(actor.token, UNKNOWN_ID, REASON)).status).toBe(404);
+
+    await memberUser(h, 'mod@example.by', 'moderator');
+    const modToken = await panelSession(h, 'mod@example.by');
+    expect((await reset(modToken, target, REASON)).status).toBe(403);
+    expect(await panel(h).totp.countDocuments({ _id: target })).toBe(1);
+    expect(await panel(h).audit.countDocuments({ action: 'panel.totp_reset' })).toBe(0);
+  });
+});
+
+describe('сброс 2FA перепроверяет актора под замком (ревью pass 5)', () => {
+  it('актора понизили до moderator между гардом и сбросом — 403, 2FA цели на месте', async () => {
+    const actor = await admin();
+    const target = await memberUser(h, 'mod@example.by', 'moderator');
+    await seedTotp(h, target);
+    const g = gate();
+    const repository = panelRepository(h);
+    const list = repository.listMembersByIds.bind(repository);
+    vi.spyOn(repository, 'listMembersByIds').mockImplementationOnce(async (...args) => {
+      const docs = await list(...args);
+      await g.wait();
+      return docs;
+    });
+    const resetting = panelCall(h, actor.token, 'POST', `${MEMBERS}/${target}/totp/reset`, {
+      reason: 'потерян телефон',
+    });
+    await g.reached;
+    await panel(h).members.updateOne(
+      { _id: actor.userId },
+      { $set: { role: 'moderator' }, $inc: { version: 1 } },
+    );
+    g.open();
+
+    const res = await resetting;
+    expect(res.status).toBe(403);
+    expect(await panel(h).totp.countDocuments({ _id: target })).toBe(1);
+    expect(await panel(h).audit.countDocuments({ action: 'panel.totp_reset' })).toBe(0);
   });
 });

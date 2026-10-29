@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { AuditAction, PanelRole } from '@pokatim/contracts';
-import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
+import { isDuplicateKey, MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Db, Filter } from 'mongodb';
 
 import type { DbSession } from '../../db';
@@ -9,11 +9,16 @@ import {
   type PanelCollections,
   panelCollections,
   type PanelMemberDoc,
+  type PanelRecoveryCodeDoc,
   type PanelSessionDoc,
   type PanelSessionRevokedReason,
+  type PanelSignInChallengeDoc,
+  type PanelTotpDoc,
+  type PanelTrustedDeviceDoc,
 } from './panel.collection';
 
 export type NewPanelSession = Omit<PanelSessionDoc, 'revokedAt' | 'revokedReason'>;
+export type NewSignInChallenge = Omit<PanelSignInChallengeDoc, 'attempts'>;
 
 /** Фильтры журнала — только примитивы после zod (`AuditQuery`). */
 export interface AuditFilter {
@@ -29,7 +34,8 @@ export interface AuditFilter {
  * - транзакция, меняющая члена команды, первой операцией вызывает `lockMember` (`$inc version`); если меняется набор
  *   активных администраторов — ещё раньше `lockAdmins` (`$inc version` документа `panel_meta.admins`, R7): условие
  *   «останется ли админ» — по другим документам, без записи в общий документ MongoDB write skew не ловит;
- * - документы identity в транзакциях панели не пишутся — `lockUser` не нужен;
+ * - документы identity панель не пишет; замок аккаунта (`lockUser`, R1) — только через порт
+ *   `IdentityAccounts.lockAccountState` (подтверждение подключения 2FA сверяет штамп учётных данных);
  * - журнал `panel_audit` — append-only: только `insertOne` (тест-сторож `panel.repository.test.ts`);
  * - значения фильтров — только примитивы после zod (id, хеши, enum-ы, даты).
  */
@@ -172,6 +178,12 @@ export class PanelRepository {
     await this.c.sessions.insertOne({ ...doc, revokedAt: null, revokedReason: null }, { session });
   }
 
+  /** Сессия по `_id` в снимке транзакции (штамп и отзыв — сверяет вызывающий). */
+  async findSession(session: DbSession, id: string): Promise<PanelSessionDoc | undefined> {
+    const doc = await this.c.sessions.findOne({ _id: id }, { session });
+    return doc ?? undefined;
+  }
+
   /** Живая сессия по хешу токена: не отозвана, не истекла по простою и абсолютному сроку на `now`. */
   async findLiveSession(tokenHash: string, now: Date): Promise<PanelSessionDoc | undefined> {
     const doc = await this.c.sessions.findOne({
@@ -235,6 +247,253 @@ export class PanelRepository {
       { session },
     );
     return result.modifiedCount;
+  }
+
+  // --- 2FA (ADR-0024) ---
+
+  async findTotp(userId: string, session?: DbSession): Promise<PanelTotpDoc | undefined> {
+    const doc = await this.c.totp.findOne({ _id: userId }, { session });
+    return doc ?? undefined;
+  }
+
+  /** 2FA подключена — `Set` userId (колонка «2FA» списка «Сотрудники»). */
+  async totpEnabledOf(userIds: readonly string[]): Promise<Set<string>> {
+    if (userIds.length === 0) return new Set();
+    const docs = await this.c.totp
+      .find({ _id: { $in: [...userIds] }, status: 'active' }, { projection: { _id: 1 } })
+      .toArray();
+    return new Set(docs.map((doc) => doc._id));
+  }
+
+  /**
+   * Начать подключение: новый `pending` секрет (заменяет прежний незавершённый). Активную 2FA не трогает — `false`
+   * (гонку двух стартов при активной ловит `_id`: upsert по фильтру `status ≠ active` пытается вставить дубль).
+   */
+  async startTotpSetup(
+    userId: string,
+    secretEnc: string,
+    epoch: string,
+    now: Date,
+  ): Promise<boolean> {
+    try {
+      await this.c.totp.updateOne(
+        { _id: userId, status: { $ne: 'active' } },
+        {
+          $set: {
+            status: 'pending',
+            secretEnc,
+            lastUsedStep: null,
+            recoveryCodes: [],
+            enabledAt: null,
+            epoch,
+            updatedAt: now,
+          },
+        },
+        { upsert: true },
+      );
+      return true;
+    } catch (error) {
+      if (isDuplicateKey(error, '_id_')) return false;
+      throw error;
+    }
+  }
+
+  /** Подтверждение подключения: только тот же `pending` секрет (условное обновление — двойное подтверждение одно). */
+  async activateTotp(
+    session: DbSession,
+    userId: string,
+    update: { secretEnc: string; step: number; recoveryHashes: string[]; now: Date },
+  ): Promise<boolean> {
+    const result = await this.c.totp.updateOne(
+      { _id: userId, status: 'pending', secretEnc: update.secretEnc },
+      {
+        $set: {
+          status: 'active',
+          lastUsedStep: update.step,
+          recoveryCodes: update.recoveryHashes.map((hash) => ({ hash, usedAt: null })),
+          enabledAt: update.now,
+          updatedAt: update.now,
+        },
+      },
+      { session },
+    );
+    return result.modifiedCount === 1;
+  }
+
+  /**
+   * Принять шаг TOTP: только больше записанного (повтор кода — `false`) и только для той же эпохи 2FA, по документу
+   * которой код проверен (2FA подключена заново — `false`).
+   */
+  async acceptTotpStep(
+    session: DbSession,
+    userId: string,
+    accepted: { epoch: string; step: number; now: Date },
+  ): Promise<boolean> {
+    const { epoch, step, now } = accepted;
+    const result = await this.c.totp.updateOne(
+      {
+        _id: userId,
+        status: 'active',
+        epoch,
+        $or: [{ lastUsedStep: null }, { lastUsedStep: { $lt: step } }],
+      },
+      { $set: { lastUsedStep: step, updatedAt: now } },
+      { session },
+    );
+    return result.modifiedCount === 1;
+  }
+
+  /** Погасить код восстановления (условный `$set usedAt`) той же эпохи 2FA: погашенный, чужой, другая эпоха — `false`. */
+  async useRecoveryCode(
+    session: DbSession,
+    userId: string,
+    used: { epoch: string; hash: string; now: Date },
+  ): Promise<boolean> {
+    const { epoch, hash, now } = used;
+    const result = await this.c.totp.updateOne(
+      {
+        _id: userId,
+        status: 'active',
+        epoch,
+        recoveryCodes: { $elemMatch: { hash, usedAt: null } },
+      },
+      { $set: { 'recoveryCodes.$.usedAt': now, updatedAt: now } },
+      { session },
+    );
+    return result.modifiedCount === 1;
+  }
+
+  async replaceRecoveryCodes(
+    session: DbSession,
+    userId: string,
+    hashes: string[],
+    now: Date,
+  ): Promise<boolean> {
+    const codes: PanelRecoveryCodeDoc[] = hashes.map((hash) => ({ hash, usedAt: null }));
+    const result = await this.c.totp.updateOne(
+      { _id: userId, status: 'active' },
+      { $set: { recoveryCodes: codes, updatedAt: now } },
+      { session },
+    );
+    return result.modifiedCount === 1;
+  }
+
+  /** Удалить 2FA (отключение, сброс); `status` — только активную. */
+  async deleteTotp(session: DbSession, userId: string, status?: 'active'): Promise<boolean> {
+    const result = await this.c.totp.deleteOne(status ? { _id: userId, status } : { _id: userId }, {
+      session,
+    });
+    return result.deletedCount === 1;
+  }
+
+  async insertChallenge(doc: NewSignInChallenge): Promise<void> {
+    await this.c.challenges.insertOne({ ...doc, attempts: 0 });
+  }
+
+  /** Живой вызов без попытки ввода кода (старт подключения): не истёк на `now`, попыток меньше `maxAttempts`. */
+  async findLiveChallenge(
+    tokenHash: string,
+    now: Date,
+    maxAttempts: number,
+  ): Promise<PanelSignInChallengeDoc | undefined> {
+    const doc = await this.c.challenges.findOne({
+      tokenHash,
+      expiresAt: { $gt: now },
+      attempts: { $lt: maxAttempts },
+    });
+    return doc ?? undefined;
+  }
+
+  /**
+   * Попытка ввода кода — атомарно до проверки (`$inc attempts` по условию «живой, того же назначения, попыток меньше
+   * `maxAttempts`»): параллельные попытки не проверят больше `maxAttempts` кодов. Вызова нет, назначение другое или
+   * попытки кончились — `undefined`.
+   */
+  async reserveChallengeAttempt(
+    tokenHash: string,
+    purpose: PanelSignInChallengeDoc['purpose'],
+    now: Date,
+    maxAttempts: number,
+  ): Promise<PanelSignInChallengeDoc | undefined> {
+    const doc = await this.c.challenges.findOneAndUpdate(
+      { tokenHash, purpose, expiresAt: { $gt: now }, attempts: { $lt: maxAttempts } },
+      { $inc: { attempts: 1 } },
+      { returnDocument: 'after' },
+    );
+    return doc ?? undefined;
+  }
+
+  /** Неверный код: вызов с исчерпанными попытками удаляется (попытка уже списана резервированием). */
+  async dropExhaustedChallenge(id: string, maxAttempts: number): Promise<void> {
+    await this.c.challenges.deleteOne({ _id: id, attempts: { $gte: maxAttempts } });
+  }
+
+  /**
+   * Погасить вызов атомарно (в транзакции входа): с `now` — только живой (`expiresAt > now`); уже погашенный или
+   * истёкший — `false`. Без `now` — уборка негодного вызова.
+   */
+  async consumeChallenge(session: DbSession, id: string, now?: Date): Promise<boolean> {
+    const filter: Filter<PanelSignInChallengeDoc> = now
+      ? { _id: id, expiresAt: { $gt: now } }
+      : { _id: id };
+    const result = await this.c.challenges.deleteOne(filter, { session });
+    return result.deletedCount === 1;
+  }
+
+  /** Новое доверенное устройство; сверх `max` у сотрудника — старые вытесняются. */
+  async insertTrustedDevice(
+    session: DbSession,
+    doc: Omit<PanelTrustedDeviceDoc, 'version'>,
+    max: number,
+  ): Promise<void> {
+    await this.c.devices.insertOne({ ...doc, version: 0 }, { session });
+    const stale = await this.c.devices
+      .find({ userId: doc.userId }, { session, projection: { _id: 1 } })
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(max)
+      .toArray();
+    if (stale.length > 0) {
+      await this.c.devices.deleteMany({ _id: { $in: stale.map((d) => d._id) } }, { session });
+    }
+  }
+
+  /** Живое устройство сотрудника по хешу токена (штамп и эпоху сверяет вызывающий). */
+  async findLiveTrustedDevice(
+    tokenHash: string,
+    userId: string,
+    now: Date,
+  ): Promise<PanelTrustedDeviceDoc | undefined> {
+    const doc = await this.c.devices.findOne({ tokenHash, userId, expiresAt: { $gt: now } });
+    return doc ?? undefined;
+  }
+
+  /**
+   * Вход по устройству в транзакции сессии: устройство живо, штамп и эпоха 2FA — те же (условный `$inc version`).
+   * Запись сериализует вход со сбросом и отключением 2FA (они удаляют устройства): конфликт записи MongoDB повторяет
+   * одну из транзакций. Устройства уже нет или оно устарело — `false`.
+   */
+  async touchTrustedDevice(
+    session: DbSession,
+    device: { id: string; userId: string; credentialsStamp: string; totpEpoch: string },
+    now: Date,
+  ): Promise<boolean> {
+    const result = await this.c.devices.updateOne(
+      {
+        _id: device.id,
+        userId: device.userId,
+        credentialsStamp: device.credentialsStamp,
+        totpEpoch: device.totpEpoch,
+        expiresAt: { $gt: now },
+      },
+      { $inc: { version: 1 } },
+      { session },
+    );
+    return result.modifiedCount === 1;
+  }
+
+  async deleteTrustedDevices(session: DbSession, userId: string): Promise<number> {
+    const result = await this.c.devices.deleteMany({ userId }, { session });
+    return result.deletedCount;
   }
 
   // --- журнал (append-only) ---

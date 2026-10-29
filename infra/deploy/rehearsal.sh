@@ -33,7 +33,7 @@ mkdir -p "${POKATIM_DIR}" "${WORK}/base"
 chmod 700 "${POKATIM_DIR}"
 ENV_FILE="${POKATIM_DIR}/.env"
 VOLUME="${POKATIM_PROJECT}_mongodata"
-SECRETS=(MONGO_ROOT_PASSWORD MONGO_PASSWORD JWT_SECRET EMAIL_TOKEN_SECRET MAILPIT_UI_PASSWORD)
+SECRETS=(MONGO_ROOT_PASSWORD MONGO_PASSWORD JWT_SECRET EMAIL_TOKEN_SECRET PANEL_TOTP_KEY MAILPIT_UI_PASSWORD)
 
 step() { printf '\n::group::%s\n' "$*"; }
 endstep() { printf '::endgroup::\n'; }
@@ -43,9 +43,12 @@ fail() {
   exit 1
 }
 line_hash() { grep "^$1=" "${ENV_FILE}" | sha256sum | cut -c1-16; }
+# Сверяются только секреты, что были в .env базовой ветки: обновление их не меняет, а новые (например,
+# PANEL_TOTP_KEY из 2FA) bootstrap дописывает — это норма, их наличие проверяется отдельно после деплоя.
+KEPT_SECRETS=()
 secrets_hash() {
   local name
-  for name in "${SECRETS[@]}"; do printf '%s:%s\n' "${name}" "$(line_hash "${name}")"; done
+  for name in "${KEPT_SECRETS[@]}"; do printf '%s:%s\n' "${name}" "$(line_hash "${name}")"; done
 }
 env_value() { awk -v key="$1" 'index($0, key "=") == 1 { sub(/^[^=]*=/, ""); v = $0 } END { print v }' "${ENV_FILE}"; }
 compose_dir() { docker compose -p "${POKATIM_PROJECT}" -f "${POKATIM_DIR}/docker-compose.yml" --env-file "${ENV_FILE}" "$@"; }
@@ -119,6 +122,7 @@ new_ids="$(comm -13 <(migration_ids "${BASE_REF}") <(migration_ids HEAD) | paste
 if [[ -n "${new_ids}" ]]; then
   mongo_root "db.getCollection('_migrations').deleteMany({ _id: { \$in: '${new_ids}'.split(',') } });" >/dev/null
 fi
+for name in "${SECRETS[@]}"; do grep -q "^${name}=" "${ENV_FILE}" && KEPT_SECRETS+=("${name}"); done
 secrets_before="$(secrets_hash)"
 jwt_before="$(line_hash JWT_SECRET)"
 ok "стек базовой ветки поднят, маркер записан; новые миграции ветки: ${new_ids:-нет}"
@@ -141,6 +145,10 @@ fi
 grep -q 'POKATIM_DEPLOYED=' "${WORK}/deploy-first.log" || fail "деплой не дошёл до конца"
 marker_present || fail "маркер-данные потеряны при обновлении"
 [[ "$(secrets_hash)" == "${secrets_before}" ]] || fail "пароли MongoDB или секреты .env изменились"
+for name in "${SECRETS[@]}"; do
+  [[ " ${KEPT_SECRETS[*]} " == *" ${name} "* ]] && continue
+  [[ -n "$(env_value "${name}")" ]] || fail "новый секрет ${name} не сгенерирован при обновлении"
+done
 [[ "$(stat -c '%a' "${POKATIM_DIR}/mongo-keyfile")" == "600" ]] || fail "mongo-keyfile не 600"
 health="$(curl -fsS "http://127.0.0.1:${POKATIM_API_PORT:-3100}/v1/health")"
 [[ "${health}" == *'"database":"up"'* ]] || fail "health: ${health}"

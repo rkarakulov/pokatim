@@ -146,6 +146,13 @@ paths:
 - `panel_audit` — append-only: только `insertOne` через `PanelAudit.append(tx, …)` в транзакции действия (тест-сторож
   `panel.repository.test.ts`); без e-mail, IP, UA. Роль MongoDB без `update`/`remove` — follow-up.
 - `panel_sessions` — токен только sha256; истечение проверяет сервер по `CLOCK`, TTL-индекс — уборка.
+- 2FA панели (ADR-0024, `0040_panel_totp`): `panel_totp` (`_id` = userId, `secretEnc`, `lastUsedStep`, HMAC кодов
+  восстановления, `epoch`), `panel_sign_in_challenges` и `panel_trusted_devices` (sha256 токена unique, TTL по
+  `expiresAt` + сутки; срок проверяет сервер по `CLOCK`). Писатель — `PanelRepository`; принятие шага, гашение кода (фильтр — с `epoch`)
+  и вызова — условными обновлениями, попытка кода — `$inc attempts` до проверки; вход по устройству — `$inc version`
+  устройства в транзакции сессии (сериализация со сбросом); вход без фактора и активация 2FA — первой операцией
+  `lockMember`; каждая мутация 2FA — через `PanelTotpGuard.recheck` (замок аккаунта через порт
+  `IdentityAccounts.lockAccountState` и штамп, живость сессии, `lockMember` и роль из-под замка); погашение вызова — с `expiresAt > now`; сброс 2FA — одной транзакцией с отзывом сессий.
 - **Удаление аккаунта** члену команды с активной ролью запрещено (A11, `409 ACCOUNT_PANEL_MEMBER`, порт
   `PanelMembership.hasActiveRole`) — снимать нечего. Гонка «проверка ↔ выдача роли» принята (R7): гард панели
   удалённому отказывает, «Сотрудники» показывают «Удалённый участник». Журнал — `account.deleted` (actor — сам райдер,

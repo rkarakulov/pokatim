@@ -97,6 +97,15 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   // event-tickets PR C: материал — не PDF по сигнатуре (415); PDF больше 10 МиБ (413)
   'MATERIAL_FILE_UNSUPPORTED',
   'MATERIAL_FILE_TOO_LARGE',
+  // panel-2fa (ADR-0024): неверный, повторённый или погашенный код (400, одно сообщение); вызов входа неизвестен,
+  // истёк, исчерпан или штамп сменился (401); 2FA уже подключена / не подключена; отключить нельзя — обязательна
+  // (409); нет ключа шифрования на сервере (503)
+  'TOTP_INVALID_CODE',
+  'TOTP_CHALLENGE_EXPIRED',
+  'TOTP_ALREADY_ENABLED',
+  'TOTP_NOT_ENABLED',
+  'TOTP_REQUIRED',
+  'TOTP_UNAVAILABLE',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

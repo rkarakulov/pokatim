@@ -23,6 +23,9 @@ x-api-env: &api-env
   TRUST_PROXY: ${TRUST_PROXY:-1}
   JWT_SECRET: ${JWT_SECRET:?}
   EMAIL_TOKEN_SECRET: ${EMAIL_TOKEN_SECRET:?}
+  # 2FA панели (ADR-0024): ключ — только .env сервера (bootstrap.sh); без ключа вход сотрудника с 2FA — 503
+  PANEL_TOTP_KEY: ${PANEL_TOTP_KEY:-}
+  PANEL_TOTP_ENFORCED: ${PANEL_TOTP_ENFORCED:-false}
   SMTP_URL: smtp://mailpit:1025
   MAIL_FROM: ${MAIL_FROM:?}
   APP_LINK_BASE: ${APP_LINK_BASE:?}

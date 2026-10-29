@@ -6,6 +6,7 @@ import {
   type PanelMember,
   type PanelMemberList,
   RevokeRoleRequest,
+  TotpResetRequest,
   Uuid,
 } from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
@@ -62,5 +63,17 @@ export class PanelMembersController {
     @Body(new ZodValidationPipe(RevokeRoleRequest, FieldErrorCode)) body: RevokeRoleRequest,
   ): Promise<PanelMember> {
     return this.members.revoke(actor.userId, userId, body);
+  }
+
+  /** Сброс 2FA сотрудника (ADR-0024, D10): причина обязательна, себе — 409; сессии цели отзываются. */
+  @Post(':userId/totp/reset')
+  @RequirePermission('members.manage')
+  @HttpCode(204)
+  resetTotp(
+    @CurrentPanelUser() actor: PanelPrincipal,
+    @Param('userId', userIdPipe) userId: string,
+    @Body(new ZodValidationPipe(TotpResetRequest, FieldErrorCode)) body: TotpResetRequest,
+  ): Promise<void> {
+    return this.members.resetTotp(actor, userId, body);
   }
 }

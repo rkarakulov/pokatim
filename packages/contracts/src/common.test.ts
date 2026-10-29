@@ -95,6 +95,12 @@ describe('коды ошибок', () => {
       'TICKETING_INVALID_STATE',
       'MATERIAL_FILE_UNSUPPORTED',
       'MATERIAL_FILE_TOO_LARGE',
+      'TOTP_INVALID_CODE',
+      'TOTP_CHALLENGE_EXPIRED',
+      'TOTP_ALREADY_ENABLED',
+      'TOTP_NOT_ENABLED',
+      'TOTP_REQUIRED',
+      'TOTP_UNAVAILABLE',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

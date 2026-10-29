@@ -3,7 +3,8 @@ import { normalizeEmail } from '@pokatim/contracts';
 import { ENV } from '@rkarakulov/api-kit/core';
 
 import type { Env } from '../../config/env';
-import { IdentityRepository } from './identity.repository';
+import type { DbSession } from '../../db';
+import { type CheckedCredentials, IdentityRepository } from './identity.repository';
 import { credentialsStamp } from './tokens';
 
 /** Состояние аккаунта для гарда панели: `active` — не удалён и подтверждён; штамп — от текущего хеша пароля. */
@@ -13,8 +14,9 @@ export interface AccountState {
 }
 
 /**
- * Чтения аккаунтов приложения для модулей `panel` (ADR-0009), `notifications` (ADR-0017) и `profile` (год рождения,
- * race-results-07): коллекции identity читает только identity. Без лимитера и Redis — порт годится и для CLI.
+ * Чтения аккаунтов приложения (и замок аккаунта — `lockAccountState`) для модулей `panel` (ADR-0009),
+ * `notifications` (ADR-0017) и `profile` (год рождения, race-results-07): коллекции identity читает и пишет только
+ * identity. Без лимитера и Redis — порт годится и для CLI.
  * Значения фильтров — id после zod и нормализованный e-mail.
  */
 @Injectable()
@@ -25,7 +27,19 @@ export class IdentityAccounts {
   ) {}
 
   async accountState(userId: string): Promise<AccountState | undefined> {
-    const account = await this.repository.findCredentialsById(userId);
+    return this.toState(await this.repository.findCredentialsById(userId));
+  }
+
+  /**
+   * Состояние аккаунта под замком (R1) в транзакции вызывающего — единственная запись порта (`$inc version` документа
+   * пользователя): сброс пароля и удаление того же аккаунта конфликтуют с транзакцией вызывающего и идут по очереди.
+   * Модуль `panel`: подтверждение подключения 2FA сверяет штамп учётных данных в своей транзакции (ADR-0024).
+   */
+  async lockAccountState(tx: DbSession, userId: string): Promise<AccountState | undefined> {
+    return this.toState(await this.repository.lockUserCredentials(tx, userId));
+  }
+
+  private toState(account: CheckedCredentials | undefined): AccountState | undefined {
     if (!account) return undefined;
     return {
       active: account.deletedAt === null && account.emailVerifiedAt !== null,

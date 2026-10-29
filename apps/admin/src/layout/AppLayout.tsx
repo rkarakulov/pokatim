@@ -35,7 +35,8 @@ function NavLinks({ items }: { items: readonly NavItem[] }) {
 
 /**
  * Каркас после входа: пункты меню — из `navigation.ts` по правам сотрудника (`me.permissions`, только отображение);
- * внизу — «<Имя> · <Роль> · команда платформы» и «Выйти» (сессия отзывается, кэш очищается, — «Вход»).
+ * внизу — «<Имя> · <Роль> · команда платформы», «Безопасность» (2FA своего аккаунта) и «Выйти» (сессия
+ * отзывается, кэш очищается, — «Вход»).
  */
 export function AppLayout() {
   const me = useMe();
@@ -63,14 +64,19 @@ export function AppLayout() {
         role: t(`admin.role.${me.user.role}`),
       })}
       signOut={
-        <button
-          type="button"
-          className="link-button link t-panel-crumb"
-          disabled={signOut.isPending}
-          onClick={() => signOut.mutate()}
-        >
-          {t('admin.shell.signOut')}
-        </button>
+        <>
+          <Link to="/account/security" className="link sidebar__account t-panel-crumb">
+            {t('admin.security.nav')}
+          </Link>
+          <button
+            type="button"
+            className="link-button link t-panel-crumb"
+            disabled={signOut.isPending}
+            onClick={() => signOut.mutate()}
+          >
+            {t('admin.shell.signOut')}
+          </button>
+        </>
       }
     >
       {signOut.isError ? (

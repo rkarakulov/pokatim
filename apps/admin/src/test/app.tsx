@@ -16,7 +16,13 @@ export const USER_ID = '01890a5d-ac96-774b-bcce-b302099a8057';
 
 export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
   admin: {
-    user: { id: USER_ID, displayName: 'Ольга', email: 'olga@example.by', role: 'admin' },
+    user: {
+      id: USER_ID,
+      displayName: 'Ольга',
+      email: 'olga@example.by',
+      role: 'admin',
+      totp: { enabled: true, required: false },
+    },
     permissions: [
       'members.read',
       'members.manage',
@@ -40,7 +46,13 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
     ],
   },
   moderator: {
-    user: { id: USER_ID, displayName: 'Марк', email: 'mark@example.by', role: 'moderator' },
+    user: {
+      id: USER_ID,
+      displayName: 'Марк',
+      email: 'mark@example.by',
+      role: 'moderator',
+      totp: { enabled: true, required: false },
+    },
     permissions: [
       'audit.read',
       'races.read',
@@ -52,7 +64,13 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
     ],
   },
   organizer: {
-    user: { id: USER_ID, displayName: 'Ира', email: 'ira@example.by', role: 'organizer' },
+    user: {
+      id: USER_ID,
+      displayName: 'Ира',
+      email: 'ira@example.by',
+      role: 'organizer',
+      totp: { enabled: true, required: false },
+    },
     permissions: ['races.read', 'races.manage', 'results.manage', 'tickets.checkin'],
   },
 };

@@ -48,6 +48,7 @@ import { OG_SYNC_INDEXES, ogSyncIndexes } from './0037_og_sync_indexes';
 import { tickets } from './0038_tickets';
 import { eventMaterials } from './0039_event_materials';
 import { MATERIALS_COLLECTIONS } from '../../modules/tickets/materials.collection';
+import { panelTotp, PANEL_TOTP_TTL_GRACE_SECONDS } from './0040_panel_totp';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
 import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
@@ -159,6 +160,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0037_og_sync_indexes',
       '0038_tickets',
       '0039_event_materials',
+      '0040_panel_totp',
     ]);
   });
 
@@ -1606,7 +1608,6 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
 
   it('0039_event_materials: уникальный порядок материалов события; после 0038; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0039_event_materials');
     expect(ids.indexOf('0039_event_materials')).toBe(ids.indexOf('0038_tickets') + 1);
     const expected = {
       event_materials_event_order_unique: {
@@ -1643,5 +1644,41 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await eventMaterials.up(h.db);
     await eventMaterials.up(h.db);
     expect(await indexesOf(MATERIALS_COLLECTIONS.materials)).toEqual(expected);
+  });
+
+  it('0040_panel_totp: коллекции 2FA, уникальные хеши токенов, TTL; последняя, повторный up не меняет индексы', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0040_panel_totp');
+    expect(ids.indexOf('0040_panel_totp')).toBe(ids.indexOf('0039_event_materials') + 1);
+    const index = (key: Record<string, number>, unique = false, ttl?: number) => ({
+      key,
+      unique,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: ttl,
+    });
+    const expected = {
+      [PANEL_COLLECTIONS.totp]: {},
+      [PANEL_COLLECTIONS.challenges]: {
+        panel_challenges_token_hash_unique: index({ tokenHash: 1 }, true),
+        panel_challenges_expires_at_ttl: index(
+          { expiresAt: 1 },
+          false,
+          PANEL_TOTP_TTL_GRACE_SECONDS,
+        ),
+      },
+      [PANEL_COLLECTIONS.devices]: {
+        panel_devices_token_hash_unique: index({ tokenHash: 1 }, true),
+        panel_devices_user_idx: index({ userId: 1, createdAt: -1 }),
+        panel_devices_expires_at_ttl: index({ expiresAt: 1 }, false, PANEL_TOTP_TTL_GRACE_SECONDS),
+      },
+    };
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
+    await panelTotp.up(h.db);
+    await panelTotp.up(h.db);
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
   });
 });

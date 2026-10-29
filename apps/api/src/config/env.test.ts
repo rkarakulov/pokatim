@@ -241,4 +241,27 @@ describe('env', () => {
       testEnv({ NODE_ENV: 'production', WEB_PUSH_TEST_ORIGIN: 'http://127.0.0.1:4011' }),
     ).toThrow(/WEB_PUSH_TEST_ORIGIN/);
   });
+
+  it('2FA панели: по умолчанию ключа нет и 2FA не обязательна', () => {
+    const value = testEnv();
+    expect(value.PANEL_TOTP_KEY).toBeUndefined();
+    expect(value.PANEL_TOTP_ENFORCED).toBe(false);
+    expect(testEnv({ PANEL_TOTP_KEY: '' }).PANEL_TOTP_KEY).toBeUndefined();
+  });
+
+  it('2FA панели: ключ — hex 64 (32 байта), ошибка его не раскрывает', () => {
+    const key = 'ab'.repeat(32);
+    expect(testEnv({ PANEL_TOTP_KEY: key }).PANEL_TOTP_KEY).toBe(key);
+    for (const bad of ['ab'.repeat(31), 'zz'.repeat(32), `${key}00`]) {
+      expect(() => testEnv({ PANEL_TOTP_KEY: bad })).toThrow();
+      expect(() => testEnv({ PANEL_TOTP_KEY: bad })).not.toThrow(bad);
+    }
+  });
+
+  it('PANEL_TOTP_ENFORCED=true без ключа — отказ запуска; с ключом — можно', () => {
+    expect(() => testEnv({ PANEL_TOTP_ENFORCED: 'true' })).toThrow(/PANEL_TOTP_KEY/);
+    expect(
+      testEnv({ PANEL_TOTP_ENFORCED: 'true', PANEL_TOTP_KEY: 'ab'.repeat(32) }).PANEL_TOTP_ENFORCED,
+    ).toBe(true);
+  });
 });

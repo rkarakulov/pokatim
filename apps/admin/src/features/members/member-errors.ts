@@ -9,6 +9,7 @@ const MEMBER_ERROR_KEYS: Partial<Record<string, MessageKey>> = {
   PANEL_ALREADY_MEMBER: 'admin.members.error.PANEL_ALREADY_MEMBER',
   PANEL_LAST_ADMIN: 'admin.members.error.PANEL_LAST_ADMIN',
   PANEL_SELF_ACTION: 'admin.members.error.PANEL_SELF_ACTION',
+  TOTP_NOT_ENABLED: 'admin.members.error.TOTP_NOT_ENABLED',
 };
 
 /** Коды выдачи роли, которые относятся к полю e-mail (ошибка — под полем). */

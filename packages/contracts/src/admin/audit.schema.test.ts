@@ -65,6 +65,11 @@ describe('AuditAction', () => {
       'tickets.material_removed',
       'tickets.materials_reordered',
       'account.erasure_retried',
+      'panel.totp_enabled',
+      'panel.totp_disabled',
+      'panel.totp_reset',
+      'panel.totp_recovery_regenerated',
+      'panel.totp_recovery_used',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',

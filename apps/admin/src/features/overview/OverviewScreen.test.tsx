@@ -67,6 +67,25 @@ describe('«Обзор» — блоки по правам', () => {
     mocked.health.mockResolvedValue(ok);
   });
 
+  it('2FA не подключена — баннер рекомендации со ссылкой на «Безопасность»; подключена — баннера нет', async () => {
+    mocked.me.mockResolvedValue({
+      ...ME.organizer,
+      user: { ...ME.organizer.user, totp: { enabled: false, required: false } },
+    });
+    mocked.overview.mockResolvedValue(ADMIN_OVERVIEW);
+    await renderApp('/');
+    expect(await screen.findByText('Подключите двухфакторную защиту')).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: 'Перейти в «Безопасность»' }).getAttribute('href'),
+    ).toBe('/admin/account/security');
+    cleanup();
+
+    mocked.me.mockResolvedValue(ME.organizer);
+    await renderApp('/');
+    await screen.findByRole('heading', { name: 'Обзор' });
+    expect(screen.queryByText('Подключите двухфакторную защиту')).toBeNull();
+  });
+
   it('admin: карточки со ссылками, ноль — «Всё разобрано», «Сейчас идёт», KPI; статуса API нет', async () => {
     mocked.me.mockResolvedValue(ME.admin);
     mocked.overview.mockResolvedValue(ADMIN_OVERVIEW);
