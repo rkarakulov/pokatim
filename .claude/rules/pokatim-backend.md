@@ -196,15 +196,43 @@ paths:
   `POST /v1/account/delete`: лимит `account-delete:<uid>` 5/ч → `PanelMembership` → `AccountClosure.verifyPassword` →
   транзакция `AccountClosure.close` + `PanelAudit` `account.deleted` + outbox `account.deletion-requested`) и
   `AccountWorkerModule` (очередь `account-deletion`, `AccountErasureProcessor` по имени задачи: событие, sweep,
-  регламент `account.erasure-resume`). Зависимости: `account → identity, panel, profile, rides, routes, route-rides, tracks,
-  devices, notifications` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
+  регламент `account.erasure-resume`). Зависимости: `account → identity, panel, profile, rides, routes, route-rides, achievements,
+  tracks, devices, notifications` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
   (`ProfileCoreModule`), `RideErasure` (`RidesCoreModule`), `RouteErasure` (`RoutesCoreModule`), `DeviceErasure`
-  (`DevicesCoreModule`), `TrackErasure` (`TracksCoreModule`), `RouteRideErasure` (`RouteRidesCoreModule`, шаг `route-rides` после `tracks`),
+  (`DevicesCoreModule`), `TrackErasure` (`TracksCoreModule`), `RouteRideErasure` (`RouteRidesCoreModule`, шаг `route-rides` после `tracks`), `AchievementErasure`
+  (`AchievementsCoreModule`, шаг `achievements` после `route-rides`),
   `NotificationErasure` (`NotificationsCoreModule`, шаг
   между `tracks` и `identity`), `AccountErasure` (`IdentityErasureModule`); push-токены — `PushTokens.revokeAllOf(tx)`
   в транзакции удаления. Новый модуль с
   данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник» (A3). Финальный провал шага — лог
   `account.erasure_failed user=<uid> step=<s>`, failed-набор BullMQ, регламент; экран в панели — follow-up (F13).
+
+## Достижения (`achievements`, ADR-0020 Proposed)
+
+- Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides`
+  только через `index.ts`; на `achievements` ссылаются только `AppModule` (`AchievementsModule`) и
+  `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания). Источники о нём не знают — циклов нет.
+  `AchievementsCoreModule` — `AchievementsRepository` + `AchievementErasure` (модулей не импортирует);
+  `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `RidesCoreModule`,
+  `RouteRidesCoreModule`. Worker-модуля, очередей, outbox и регламента нет.
+- Факты — только порты владельцев: `RIDER_RESULTS` (`publishedRows`, `racesOf` — как у `riders`), `RIDER_ROUTE_RIDES`
+  (`route-rides`: `passedOf` — `passed` + `ActivitySource.liveActivities` + `RouteRideRoutes.rideableTitles`, та же
+  видимость, что у «Заездов по маршруту»; снятый маршрут — факта нет, RC-4), `RIDER_RIDES` (`rides`: `pastOf` —
+  условия R8 в `RidesRepository.pastFactsOf`, порядок ↑), `RIDER_PROFILES` (публичность). Пределы портов — 2000 строк
+  и лог `achievements.{rides,route_rides}_truncated`. Предикат «в зачёте» — общий `isRankedRow` (`results/index.ts`,
+  RC-9: им же считает `riders.policy.summarize`). Копий условий и второго расчёта мест в `achievements` нет.
+- Правила и план — чистые функции `achievements.policy.ts`: `ACHIEVEMENT_RULES` (`satisfies Record<AchievementCode,
+  …>` — новый код без правила не скомпилируется), `earnedAchievements` (факты по времени ↑, при равенстве — id ↑),
+  `raceAchievements` (публичный список — те же правила), `reconcilePlan`, `sortForList` (факт ↓, равенство — каталог
+  ↓), `ACHIEVEMENTS_POLICY` (лимиты).
+- Сверка — в `GET /v1/achievements` (`AchievementsService.sync`): лимит `achievements-read:<uid>` 60/мин → факты
+  параллельно → `reconcilePlan` (insert — первая сверка `seenAt = now`; restore — `seenAt` не трогать; refresh;
+  revoke) → по одной условной операции на код без транзакции (вставка — `isDuplicateKey` уникального индекса) →
+  **только после выдач** — маркер первой сверки (RC-1) → ответ: перечитанные видимые ∩ заработанные (название и дата —
+  из фактов запроса). Лог `achievements.sync uid first granted revoked restored` — только если план не пуст.
+  `POST /v1/achievements/seen` — лимит `achievements-seen:<uid>` 120/ч, `updateMany` своих видимых непросмотренных,
+  сверку не запускает. Публично — `AchievementsPublicController` (`riders/:publicId/achievements`, `PublicReadGuard`)
+  → `publicList`: `findPublic` (нет — 404) → `raceAchievements` → без записи.
 
 ## Карточки для сторис (`sharing`, story-cards, ADR-0018)
 

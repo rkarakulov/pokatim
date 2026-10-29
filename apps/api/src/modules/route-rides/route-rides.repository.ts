@@ -139,6 +139,25 @@ export class RouteRidesRepository {
     return updated.matchedCount === 1;
   }
 
+  /**
+   * Пройденные заезды райдера для достижений (порт `RIDER_ROUTE_RIDES`): `{ userId, status: 'passed' }` — префикс
+   * уникального индекса; проекция — маршрут, активность и её старт. От ранних к поздним: при усечении по пределу
+   * отбрасываются поздние, объект `route_first`/`routes_5` устойчив между сверками (ревью PR A, LOW-2).
+   */
+  passedOf(
+    userId: string,
+    limit: number,
+  ): Promise<(Pick<RouteRideDoc, 'routeId' | 'activityId'> & { activity: { startedAt: Date } })[]> {
+    return this.c.rides
+      .find<Pick<RouteRideDoc, 'routeId' | 'activityId'> & { activity: { startedAt: Date } }>(
+        { userId, status: 'passed' },
+        { projection: { _id: 0, routeId: 1, activityId: 1, 'activity.startedAt': 1 } },
+      )
+      .sort({ 'activity.startedAt': 1, _id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+
   /** Стирание заездов удалённого аккаунта (ADR-0015). */
   async deleteAllOf(userId: string): Promise<number> {
     return (await this.c.rides.deleteMany({ userId })).deletedCount;

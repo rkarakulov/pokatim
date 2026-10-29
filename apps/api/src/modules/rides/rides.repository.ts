@@ -507,6 +507,25 @@ export class RidesRepository {
       .toArray();
   }
 
+  /**
+   * Факты прошедших райдов участника для достижений (порт `RIDER_RIDES`): тот же фильтр, что `pastOf` (R8,
+   * `rides_participant_idx`), порядок `startsAt ↑, _id ↑` — при усечении теряются новые, а не первые.
+   */
+  pastFactsOf(
+    userId: string,
+    now: Date,
+    limit: number,
+  ): Promise<Pick<RideDoc, '_id' | 'title' | 'startsAt' | 'organizerUserId' | 'goingCount'>[]> {
+    return this.rides
+      .find(
+        { 'participants.userId': userId, status: 'published', startsAt: { $lt: now } },
+        { projection: { title: 1, startsAt: 1, organizerUserId: 1, goingCount: 1 } },
+      )
+      .sort({ startsAt: 1, _id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+
   /** Будущие отметки «Я иду» в чужих райдах (принятая гонка, как `countUpcomingOrganized`). */
   countUpcomingJoined(userId: string, now: Date): Promise<number> {
     return this.rides.countDocuments({

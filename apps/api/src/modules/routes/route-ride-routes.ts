@@ -36,4 +36,11 @@ export class RouteRideRoutesService implements RouteRideRoutes {
     if (!geometry) return null;
     return { line: geometry.matchLine, isLoop: route.isLoop === true, distanceM: route.distanceM };
   }
+
+  async rideableTitles(routeIds: readonly string[], userId: string): Promise<Map<string, string>> {
+    const ids = [...new Set(routeIds)];
+    if (ids.length === 0) return new Map();
+    const routes = await this.repository.findRideableTitles(userId, ids);
+    return new Map(routes.map((route) => [route._id, route.title]));
+  }
 }

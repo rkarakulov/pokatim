@@ -1,4 +1,4 @@
-import type { RiderProtocolRow } from '../results';
+import { isRankedRow, type RiderProtocolRow } from '../results';
 
 /** Сводка опубликованных протоколов райдера: строки с местом, подиумы и до трёх лучших мест. */
 export interface RiderSummary {
@@ -13,16 +13,12 @@ export interface RiderSummary {
 const BEST_PLACES = 3;
 const PODIUM_MAX = 3;
 
-/** Строка даёт место: не DQ и место есть. */
-const placed = (row: RiderProtocolRow): row is RiderProtocolRow & { place: number } =>
-  row.status !== 'dq' && row.place !== null;
-
 /**
  * Сводка (rider-profile, RC-A3): считаются только строки текущих ревизий опубликованных протоколов (START и
  * «без пульса» в снимок не входят — у них «В зачёте: 0»). Чистая функция.
  */
 export function summarize(rows: readonly RiderProtocolRow[]): RiderSummary {
-  const ranked = rows.filter(placed);
+  const ranked = rows.filter(isRankedRow);
   const bestPlaces = [...ranked]
     .sort((a, b) => a.place - b.place || b.startedAt.getTime() - a.startedAt.getTime())
     .slice(0, BEST_PLACES);

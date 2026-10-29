@@ -6,6 +6,8 @@ import { IdentityModule } from '../identity';
 import { RoutesCoreModule } from '../routes';
 import { TracksCoreModule } from '../tracks';
 import { RouteRideCheckProcessor } from './route-ride-check.processor';
+import { RiderRouteRidesService } from './rider-route-rides';
+import { RIDER_ROUTE_RIDES } from './rider-route-rides.port';
 import { RouteRideErasure } from './route-ride-erasure';
 import { RouteRidesController } from './route-rides.controller';
 import { RouteRidesReadService } from './route-rides-read.service';
@@ -13,14 +15,26 @@ import { RouteRidesRepository } from './route-rides.repository';
 import { RouteRidesService } from './route-rides.service';
 
 /**
- * Ядро `route-rides` (route-rides-01) для API и worker: репозиторий и порт стирания. Другие модули — только через их
+ * Ядро `route-rides` (route-rides-01) для API и worker: репозиторий, порт стирания и порт пройденных заездов
+ * `RIDER_ROUTE_RIDES` (`achievements`). Другие модули — только через их
  * `index.ts`: порт `routes` `RouteRideRoutes` (видимость маршрута, линия сверки) и порт `tracks` `ActivitySource`;
  * `routes`/`tracks` о `route-rides` не знают.
  */
 @Module({
   imports: [RoutesCoreModule, TracksCoreModule],
-  providers: [RouteRidesRepository, RouteRideErasure],
-  exports: [RoutesCoreModule, TracksCoreModule, RouteRidesRepository, RouteRideErasure],
+  providers: [
+    RouteRidesRepository,
+    RouteRideErasure,
+    RiderRouteRidesService,
+    { provide: RIDER_ROUTE_RIDES, useExisting: RiderRouteRidesService },
+  ],
+  exports: [
+    RoutesCoreModule,
+    TracksCoreModule,
+    RouteRidesRepository,
+    RouteRideErasure,
+    RIDER_ROUTE_RIDES,
+  ],
 })
 export class RouteRidesCoreModule {}
 

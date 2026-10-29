@@ -112,3 +112,35 @@ describe('RouteRideRoutes (route-rides-01)', () => {
     expect(await port().matchGeometry(own, ME)).toBeNull();
   });
 });
+
+describe('RouteRideRoutes.rideableTitles (achievements, RC-3)', () => {
+  it('названия видимых райдеру одним вызовом: каталог и свой готовый; чужой непубличный, не готовый, вне каталога, неизвестный — нет', async () => {
+    const platform = await corridorRoute(h, OTHER);
+    await inCatalog(platform);
+    const approved = await seedApprovedRiderRoute(h, OTHER);
+    const own = await seedRiderRoute(h, ME, { title: 'Свой' });
+    const hidden = [
+      await corridorRoute(h, ME),
+      await seedRiderRoute(h, OTHER),
+      await seedRiderRoute(h, ME, { status: 'processing' }),
+      await seedRiderRoute(h, OTHER, { publication: publicationDoc(h, 'hidden') }),
+      UNKNOWN,
+    ];
+
+    const titles = await port().rideableTitles([platform, approved, own, own, ...hidden], ME);
+    expect(titles).toEqual(
+      new Map([
+        [platform, 'Эталонный коридор'],
+        [approved, 'Мой маршрут'],
+        [own, 'Свой'],
+      ]),
+    );
+    // чужой свой маршрут не виден другому райдеру
+    expect((await port().rideableTitles([own], OTHER)).size).toBe(0);
+    expect(await port().rideableTitles([], ME)).toEqual(new Map());
+
+    // без кэша: снятие с каталога видно следующим вызовом
+    await routesDb(h).routes.updateOne({ _id: platform }, { $set: { catalog: null } });
+    expect((await port().rideableTitles([platform], ME)).has(platform)).toBe(false);
+  });
+});

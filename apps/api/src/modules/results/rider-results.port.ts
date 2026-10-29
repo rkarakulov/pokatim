@@ -23,6 +23,13 @@ export interface RiderProtocolRow {
   startedAt: Date;
 }
 
+/**
+ * Строка «в зачёте» (R6, achievements RC-9): не DQ и место есть. Единый предикат статистики профиля (`riders`) и
+ * гоночных достижений (`achievements`): «Пять гонок» ⇔ `stats.races ≥ 5`.
+ */
+export const isRankedRow = (row: RiderProtocolRow): row is RiderProtocolRow & { place: number } =>
+  row.status !== 'dq' && row.place !== null;
+
 export interface RiderRaceInfo {
   title: string;
   windowStartsAt: Date;

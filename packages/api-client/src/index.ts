@@ -1,4 +1,6 @@
 import {
+  AchievementList,
+  type AchievementCode,
   AppAppearance,
   ApiError,
   CatalogRouteCities,
@@ -37,6 +39,7 @@ import {
   OnboardingStatus,
   PasswordResetLinkInfo,
   ProfileView,
+  PublicRiderAchievementList,
   PublicRiderProfile,
   PublicRiderRacePage,
   type RiderHistoryQuery,
@@ -409,6 +412,22 @@ export function createApiClient({
       getPublic(
         `/v1/riders/${encodeURIComponent(publicId)}/races${queryString(params)}`,
         PublicRiderRacePage,
+      ),
+    /** Свои достижения: сверка с фактами на сервере (A2), от новых к старым; `seen: false` — для вспышки. */
+    listAchievements: (accessToken: string) =>
+      request(
+        '/v1/achievements',
+        AchievementList,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Отметить показанные вспышкой (идемпотентно; чужие, незнакомые и отозванные — без ошибки); `204`. */
+    markAchievementsSeen: (accessToken: string, codes: AchievementCode[]) =>
+      postAuthorized(accessToken, '/v1/achievements/seen', z.undefined(), { codes }),
+    /** Публичные достижения райдера — только гоночные (без входа); нет или нет согласия — 404. */
+    getRiderAchievements: (publicId: string) =>
+      getPublic(
+        `/v1/riders/${encodeURIComponent(publicId)}/achievements`,
+        PublicRiderAchievementList,
       ),
     /**
      * Удаление своего аккаунта (вход обязателен), подтверждение — текущий пароль; `204` без тела, все сессии отозваны

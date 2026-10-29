@@ -41,6 +41,8 @@ import { routeRides } from './0032_route_rides';
 import { ROUTE_RIDES_COLLECTIONS } from '../../modules/route-rides/route-rides.collection';
 import { RIDER_PROFILE_INDEXES, riderProfile } from './0033_rider_profile';
 import { PROFILE_REPORTS_INDEXES, profileReports } from './0034_profile_reports';
+import { ACHIEVEMENTS_INDEXES, achievements } from './0035_achievements';
+import { ACHIEVEMENTS_COLLECTIONS } from '../../modules/achievements/achievements.collection';
 import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
 import { APPEARANCE_COLLECTIONS } from '../../modules/appearance/appearance.collection';
@@ -146,6 +148,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0032_route_rides',
       '0033_rider_profile',
       '0034_profile_reports',
+      '0035_achievements',
     ]);
   });
 
@@ -1309,9 +1312,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await racesDb.deleteOne({ _id: 'race-0033' });
   });
 
-  it('0034_profile_reports: коллекция profile_reports, индексы «одна открытая», цели и очереди; последняя; повторный up — без изменений', async () => {
+  it('0034_profile_reports: коллекция profile_reports, индексы «одна открытая», цели и очереди; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0034_profile_reports');
     expect(ids.indexOf('0034_profile_reports')).toBe(ids.indexOf('0033_rider_profile') + 1);
 
     const exists = await h.db
@@ -1360,6 +1362,42 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await profileReports.up(h.db);
     expect(await indexesOf(PROFILE_REPORTS_COLLECTIONS.reports)).toEqual(reportIndexes);
     expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toMatchObject(queueIndex);
+  });
+
+  it('0035_achievements: коллекции выдач и маркера, уникальный (userId, code); последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0035_achievements');
+    expect(ids.indexOf('0035_achievements')).toBe(ids.indexOf('0034_profile_reports') + 1);
+
+    for (const name of Object.values(ACHIEVEMENTS_COLLECTIONS)) {
+      expect(await h.db.listCollections({ name }, { nameOnly: true }).toArray()).toHaveLength(1);
+    }
+    const grantIndexes = {
+      [ACHIEVEMENTS_INDEXES.grantsUserCodeUnique.options.name]: {
+        key: { userId: 1, code: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(ACHIEVEMENTS_COLLECTIONS.grants)).toEqual(grantIndexes);
+    expect(await indexesOf(ACHIEVEMENTS_COLLECTIONS.syncs)).toEqual({});
+
+    // одна выдача на (пользователь, код); другой код или пользователь — вставляется
+    const grants = h.db.collection<Record<string, unknown> & { _id: string }>(
+      ACHIEVEMENTS_COLLECTIONS.grants,
+    );
+    await grants.insertOne({ _id: 'g-1', userId: 'u-0035', code: 'race_win' });
+    await expect(
+      grants.insertOne({ _id: 'g-2', userId: 'u-0035', code: 'race_win' }),
+    ).rejects.toThrow(/duplicate key/);
+    await grants.insertOne({ _id: 'g-3', userId: 'u-0035', code: 'race_podium' });
+    await grants.insertOne({ _id: 'g-4', userId: 'v-0035', code: 'race_win' });
+    await grants.deleteMany({ _id: { $in: ['g-1', 'g-3', 'g-4'] } });
+
+    await achievements.up(h.db);
+    await achievements.up(h.db);
+    expect(await indexesOf(ACHIEVEMENTS_COLLECTIONS.grants)).toEqual(grantIndexes);
   });
 
   it('индексы identity: имена, ключи, unique, partialFilterExpression; TTL 30 дней (Q2)', async () => {
