@@ -17,8 +17,6 @@ export interface RoutePublicationNotice {
   status: RoutePublicationDoc['status'];
   decidedAt: Date | null;
   rejectionReason: RouteRejectionReason | null;
-  /** `publication.version` (+1 на каждом переходе): схлопывание заменяет только более новое решение (N7) */
-  version: number;
 }
 
 export interface RouteNotices {

@@ -38,7 +38,7 @@ import {
 import type { NotificationDoc } from './notifications.collection';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
-import { RIDES_PARTICIPANT_JOINED } from '../rides';
+import { RIDES_PARTICIPANT_JOINED, RIDES_RIDE_RESCHEDULED } from '../rides';
 
 /**
  * Приём событий для уведомлений (шаг B, AC1, AC2, AC5 — центр, AC7): каждое событие N3 — нужным получателям с текстом
@@ -144,18 +144,19 @@ describe('райды: получатели, тексты, цели', () => {
     expect(await notificationsOf(h, b.userId)).toEqual([]);
   });
 
-  it('два события райда в одну миллисекунду, у позднего меньший id — побеждает последнее состояние (N7)', async () => {
+  it('два события райда в одну миллисекунду, у позднего меньший id — побеждает позднее по seq (N7)', async () => {
     const ride = await createRide(h, organizer, { title: 'Кофе на море' });
+    const seqOf = async () => (await ridesDb(h).findOne({ _id: ride.id }))!.noticeSeq;
     // uuidv7 внутри миллисекунды не упорядочен: позднее событие может получить меньший id
     const prefix = uuidv7At(h.clock.now()).slice(0, 19);
     const first = `${prefix}bfff-ffffffffffff`;
     const second = `${prefix}8000-000000000000`;
     await join(h, a, ride.id);
-    await appendEvent(h, RIDES_PARTICIPANT_JOINED, { rideId: ride.id }, first);
+    await appendEvent(h, RIDES_PARTICIPANT_JOINED, { rideId: ride.id, seq: await seqOf() }, first);
     expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, first)).toBe('written');
     await notificationsDb(h).notifications.updateMany({}, { $set: { readAt: h.clock.now() } });
     await join(h, b, ride.id);
-    await appendEvent(h, RIDES_PARTICIPANT_JOINED, { rideId: ride.id }, second);
+    await appendEvent(h, RIDES_PARTICIPANT_JOINED, { rideId: ride.id, seq: await seqOf() }, second);
     expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, second)).toBe('written');
     const docs = await notificationsOf(h, organizer.userId);
     expect(docs).toHaveLength(1);
@@ -164,10 +165,30 @@ describe('райды: получатели, тексты, цели', () => {
       readAt: null,
       sourceEventId: second,
     });
-    // повтор обеих задач — тот же снимок состояния, без изменений
+    // повтор обеих задач — без изменений
     expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, first)).toBe('unchanged');
     expect(await runIntake(h, RIDES_PARTICIPANT_JOINED, second)).toBe('unchanged');
     expect(await notificationsOf(h, organizer.userId)).toEqual(docs);
+  });
+
+  it('повтор задачи переноса после «Я иду» — прочитанное уведомление не открывается заново (N7)', async () => {
+    const ride = await rideWithParticipants();
+    await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, {
+      version: 0,
+      startsAt: startsIn(h, 2 * DAY),
+    });
+    const [rescheduled] = await eventsOfType(h, RIDES_RIDE_RESCHEDULED);
+    expect(rescheduled!.payload).toMatchObject({ rideId: ride.id, seq: expect.any(Number) });
+    expect(await runIntake(h, RIDES_RIDE_RESCHEDULED, rescheduled!._id)).toBe('written');
+    await notificationsDb(h).notifications.updateMany({}, { $set: { readAt: h.clock.now() } });
+    const before = [await notificationsOf(h, a.userId), await notificationsOf(h, b.userId)];
+    h.clock.advance(MINUTE);
+    expect((await join(h, stranger, ride.id)).status).toBe(200);
+    // объект изменился, но повтор несёт номер своего события (получатели — на момент приёма, как и раньше)
+    await runIntake(h, RIDES_RIDE_RESCHEDULED, rescheduled!._id);
+    expect([await notificationsOf(h, a.userId), await notificationsOf(h, b.userId)]).toEqual(
+      before,
+    );
   });
 
   it('перенос дважды — один документ с новым временем; старое событие после нового не перетирает', async () => {

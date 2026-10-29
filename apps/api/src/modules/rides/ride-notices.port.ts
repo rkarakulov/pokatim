@@ -16,8 +16,6 @@ export interface RideNotice {
   goingCount: number;
   /** участники «Иду» без организатора */
   participantUserIds: string[];
-  /** счётчик состояния полей уведомления (`rides.noticeSeq`): схлопывание заменяет только более новое (N7) */
-  noticeSeq: number;
 }
 
 export interface RideNotices {

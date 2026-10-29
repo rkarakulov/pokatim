@@ -192,14 +192,7 @@ export class RidesRepository {
     id: string,
   ): Promise<Pick<
     RideDoc,
-    | '_id'
-    | 'title'
-    | 'startsAt'
-    | 'status'
-    | 'organizerUserId'
-    | 'goingCount'
-    | 'participants'
-    | 'noticeSeq'
+    '_id' | 'title' | 'startsAt' | 'status' | 'organizerUserId' | 'goingCount' | 'participants'
   > | null> {
     return this.rides.findOne(
       { _id: id },
@@ -211,7 +204,6 @@ export class RidesRepository {
           organizerUserId: 1,
           goingCount: 1,
           'participants.userId': 1,
-          noticeSeq: 1,
         },
       },
     );
@@ -274,7 +266,7 @@ export class RidesRepository {
       },
       {
         $pull: { participants: { userId } },
-        $inc: { goingCount: -1, noticeSeq: 1 },
+        $inc: { goingCount: -1 },
         $set: { updatedAt: now },
       },
       { returnDocument: 'after' },
@@ -739,7 +731,7 @@ export class RidesRepository {
       },
       {
         $pull: { participants: { userId } },
-        $inc: { goingCount: -1, noticeSeq: 1 },
+        $inc: { goingCount: -1 },
         $set: { updatedAt: now },
       },
     );

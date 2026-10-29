@@ -54,7 +54,7 @@ export interface NotificationDoc {
   target: NotificationTarget | null;
   sourceEventId: string;
   collapseKey?: string;
-  /** счётчик состояния объекта на момент записи (с `collapseKey`); документы до него поля не имеют */
+  /** порядковый номер записанного события в объекте (с `collapseKey`); документы до него поля не имеют */
   collapseSeq?: number;
   createdAt: Date;
   readAt: Date | null;

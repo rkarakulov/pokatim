@@ -47,8 +47,8 @@ export interface NoticeDraft {
   text: NoticeText;
   target: NotificationTarget | null;
   /**
-   * Повтор по объекту заменяет прежнее уведомление (N7): `key` — объект, `seq` — монотонный счётчик его состояния,
-   * прочитанный портом вместе с полями текста (заменяет только более новое состояние).
+   * Повтор по объекту заменяет прежнее уведомление (N7): `key` — объект, `seq` — порядковый номер **события** в объекте
+   * (из payload, монотонен внутри объекта): заменяет только более позднее событие, повтор задачи — тот же номер.
    */
   collapse?: { key: string; seq: number };
   recipients: string[];
@@ -241,7 +241,7 @@ export class NotificationIntake {
       return [
         {
           ...this.participantsDraft(ride, 'ride_rescheduled', target),
-          collapse: { key: `ride:${ride.id}:rescheduled`, seq: ride.noticeSeq },
+          collapse: { key: `ride:${ride.id}:rescheduled`, seq: event.data.seq ?? 0 },
         },
       ];
     }
@@ -249,7 +249,7 @@ export class NotificationIntake {
       {
         text: { kind: 'ride_joined', ride: ride.title, goingCount: ride.goingCount },
         target,
-        collapse: { key: `ride:${ride.id}:joined`, seq: ride.noticeSeq },
+        collapse: { key: `ride:${ride.id}:joined`, seq: event.data.seq ?? 0 },
         recipients: [ride.organizerUserId],
       },
     ];
@@ -308,7 +308,8 @@ export class NotificationIntake {
       {
         text,
         target: { type: 'my-route', routeId: route.id },
-        collapse: { key: `route:${route.id}:publication`, seq: route.version },
+        // решения одного маршрута разделены новой подачей — момент решения монотонен
+        collapse: { key: `route:${route.id}:publication`, seq: Date.parse(decidedAt) },
         recipients: [route.ownerUserId],
       },
     ];
