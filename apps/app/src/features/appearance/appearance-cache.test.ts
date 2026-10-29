@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import * as SecureStore from 'expo-secure-store';
 
-import { readCachedThemeId, saveCachedThemeId } from './appearance-cache';
+import { clearCachedThemeId, readCachedThemeId, saveCachedThemeId } from './appearance-cache';
 
 const store = jest.requireMock<{ __store: Map<string, string> }>('expo-secure-store').__store;
 
@@ -16,6 +16,13 @@ describe('кэш темы приложения (native)', () => {
     await saveCachedThemeId('atlas');
     expect(store.get('pokatim.appTheme')).toBe('"atlas"');
     expect(await readCachedThemeId()).toBe('atlas');
+  });
+
+  it('стирание — ключа нет (выход, «Классика»)', async () => {
+    await saveCachedThemeId('atlas');
+    await clearCachedThemeId();
+    expect(store.has('pokatim.appTheme')).toBe(false);
+    expect(await readCachedThemeId()).toBeNull();
   });
 
   it.each([['"unknown"'], ['not json'], ['42']])(

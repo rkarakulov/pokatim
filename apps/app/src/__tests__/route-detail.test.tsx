@@ -17,7 +17,7 @@ import { shareLink, shareOrigin } from '@/lib/share-link';
 import { PROFILE_PAN_TEST_ID } from '@/features/routes/profile-chart';
 
 import { appRoutes, tabRoutes } from './app-routes';
-import { liveSession } from './auth-fixtures';
+import { liveSession, storeSession, storeSurveyCompleted } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
 import { ridesPage } from './route-rides-fixtures';
 import CatalogRouteRoute from '../app/routes/[id]';
@@ -546,12 +546,29 @@ describe('маршрут райдера на карточке каталога (
   });
 });
 
-describe('карточка маршрута: шапка шторки по теме (app-themes C2)', () => {
-  // тема — из ответа /v1/appearance: не переносить в следующие тесты (clearAllMocks реализацию не сбрасывает)
-  afterEach(() => jest.mocked(api.getAppearance).mockReset());
+/**
+ * Личная тема райдера (user-theme): вошедший с пройденным онбордингом, тема — из профиля. Не переносить в следующие
+ * тесты (clearAllMocks реализацию не сбрасывает).
+ */
+function themedRider(themeId: 'chrono' | 'typography') {
+  storeSession(liveSession);
+  storeSurveyCompleted();
+  jest.mocked(api.getProfile).mockResolvedValue({
+    rideReasons: [],
+    publicName: null,
+    showNameInResults: false,
+    club: null,
+    avatar: null,
+    publicId: null,
+    themeId,
+  });
+  jest.mocked(api.getCatalogRouteViewer).mockResolvedValue({ canReport: true, reported: false });
+}
 
-  const themed = (themeId: 'chrono' | 'typography') =>
-    jest.mocked(api.getAppearance).mockResolvedValue({ themeId });
+describe('карточка маршрута: шапка шторки по теме (app-themes C2)', () => {
+  afterEach(() => jest.mocked(api.getProfile).mockReset());
+
+  const themed = themedRider;
 
   it('Хронометр — плитки цифр в шапке шторки', async () => {
     themed('chrono');
@@ -576,8 +593,7 @@ describe('карточка маршрута: шапка шторки по тем
 });
 
 describe('карточка маршрута: скелетон шапки по теме (app-themes C, ревью pass 1)', () => {
-  // тема — из ответа /v1/appearance: не переносить в следующие тесты (clearAllMocks реализацию не сбрасывает)
-  afterEach(() => jest.mocked(api.getAppearance).mockReset());
+  afterEach(() => jest.mocked(api.getProfile).mockReset());
 
   const hidden = { includeHiddenElements: true };
 
@@ -585,7 +601,7 @@ describe('карточка маршрута: скелетон шапки по т
     ['chrono', 'stat-skeleton-tiles'],
     ['typography', 'stat-skeleton-numeral'],
   ] as const)('%s — первая загрузка: скелетон шапки варианта', async (themeId, testID) => {
-    jest.mocked(api.getAppearance).mockResolvedValue({ themeId });
+    themedRider(themeId);
     getRoute.mockReturnValue(new Promise(() => undefined));
     await open();
     const skeleton = within(await screen.findByTestId('route-detail-skeleton', hidden));

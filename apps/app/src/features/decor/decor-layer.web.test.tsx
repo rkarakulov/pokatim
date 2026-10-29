@@ -30,7 +30,7 @@ afterEach(() => jest.clearAllMocks());
 describe('DecorLayer web (halloween-decor AC4, AC5)', () => {
   it('SSR — без декора даже при известном ответе (гидрация без рассинхрона)', () => {
     const client = createTestQueryClient();
-    client.setQueryData(appearanceKeys.current, { themeId: 'classic', decor: 'halloween' });
+    client.setQueryData(appearanceKeys.current, 'halloween');
     expect(renderToString(tree(<DecorLayer />, client))).toBe('');
   });
 

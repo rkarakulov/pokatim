@@ -12,6 +12,7 @@ import { useSettingsShell } from '@/features/devices/settings-shell';
 import { aboutLinks, appVersion } from '@/features/settings/app-info';
 import { SettingsRow } from '@/features/settings/settings-row';
 import { openExternalUrl } from '@/lib/open-external-url';
+import { useAppTheme } from '@/theme/use-app-theme';
 
 const DOCUMENT_TITLE = `${t('settings.title')} — ${t('app.name')}`;
 
@@ -24,8 +25,9 @@ const ACCOUNT_ROWS: readonly { label: () => string; href: Href }[] = [
 
 /**
  * «Настройки» (settings-hub; вход — иконка верхней панели Главной): аккаунт (профиль, анкета Verified, устройства,
- * уведомления), язык, о приложении (версия, политика, условия, поддержка — из переменных сборки), «Выйти» и внизу
- * «Удалить аккаунт». Темы здесь нет: её выбирает команда в панели (ADR-0016). Гард и оболочка — `useSettingsShell`.
+ * уведомления), тема и язык, о приложении (версия, политика, условия, поддержка — из переменных сборки), «Выйти» и
+ * внизу «Удалить аккаунт». Значение строки «Тема» — активная тема приложения (user-theme, ADR-0021). Гард и оболочка —
+ * `useSettingsShell`.
  */
 export default function SettingsScreen() {
   const shell = useSettingsShell();
@@ -37,6 +39,7 @@ function SettingsContent() {
   const router = useRouter();
   const signOut = useSignOut();
   const locale = useLocale();
+  const { id: themeId } = useAppTheme();
   const [signingOut, setSigningOut] = useState(false);
   const [openFailed, setOpenFailed] = useState(false);
   const { privacy, terms, supportEmail } = aboutLinks();
@@ -79,6 +82,11 @@ function SettingsContent() {
         </Section>
 
         <Section title={t('settings.app')}>
+          <SettingsRow
+            label={t('settings.theme')}
+            value={t(`theme.${themeId}.name`)}
+            onPress={() => router.push('/settings/theme')}
+          />
           <SettingsRow
             label={t('settings.language')}
             value={localeNames[locale] ?? locale}
