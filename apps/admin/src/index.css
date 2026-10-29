@@ -697,18 +697,6 @@ select.field__control option:disabled {
   margin-top: var(--space-s3);
 }
 
-/* ---------- обзор ---------- */
-.api-status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-s3);
-}
-
-.api-status__value {
-  display: inline-block;
-  width: var(--size-skeleton-word);
-}
-
 /* баннер каркаса (ошибка выхода) — над страницей */
 .main > .banner {
   margin-bottom: var(--space-s3);
@@ -1326,136 +1314,41 @@ select.field__control option:disabled {
   margin-top: var(--space-s5);
 }
 
-/* app-themes D1: «Оформление приложения» — карточки тем (`CardRadioGroup`) и мини-макет превью */
+/* «Оформление приложения»: блоки раздела (user-theme — только сезонный декор) */
 .appearance > * + * {
   margin-top: var(--space-s3);
 }
 
-.card-radios {
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.card-radios__grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-s3);
-}
-
-.card-radio {
+/* ---------- вкладки раздела (admin-moderation-hub: «Модерация») ---------- */
+.tabs {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-s2);
-  padding: var(--inset-md);
-  border: var(--stroke-hairline) solid var(--color-border-strong);
-  background: var(--color-surface-default);
-  cursor: pointer;
+  flex-wrap: wrap;
+  gap: var(--space-s5);
+  margin-top: var(--space-s4);
+  border-bottom: var(--stroke-hairline) solid var(--color-border-subtle);
 }
 
-.card-radio--checked {
-  border-color: var(--color-text-primary);
-  box-shadow: inset var(--stroke-indicator) 0 0 var(--color-text-primary);
-}
-
-.card-radio:has(input:focus-visible) {
-  outline: var(--stroke-indicator) solid var(--color-border-focus);
-  outline-offset: var(--stroke-hairline);
-}
-
-.card-radio__head {
-  display: flex;
+.tabs__link {
+  display: inline-flex;
   align-items: center;
   gap: var(--space-s2);
-}
-
-.card-radio__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-s2);
-}
-
-.card-radio__badge {
-  align-self: flex-start;
-  padding: var(--space-s1) var(--inset-caption);
-  background: var(--color-action-primary);
-  color: var(--color-action-on-primary);
-}
-
-.card-radio__skeleton {
-  display: block;
-  aspect-ratio: 4 / 3;
-}
-
-.theme-preview {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-s1);
-  --preview-canvas: var(--color-surface-raised);
-  --preview-card: var(--color-surface-default);
-  --preview-text: var(--color-border-strong);
-  --preview-accent: var(--color-border-strong);
-  --preview-route: var(--color-border-strong);
-  --preview-radius: 0;
-}
-
-.theme-preview__mocks {
-  display: flex;
-  gap: var(--space-s1);
-  aspect-ratio: 2 / 1;
-}
-
-.theme-preview__mock {
-  display: block;
-  flex: 1;
-  min-width: 0;
-  padding: var(--space-s2);
-  background: var(--preview-canvas);
-  border: var(--stroke-hairline) solid var(--color-border-subtle);
-}
-
-.theme-preview__card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-s1);
-  height: 100%;
-  padding: var(--space-s2);
-  border-radius: var(--preview-radius);
-  background: var(--preview-card);
-}
-
-.theme-preview__heading {
-  display: block;
-  width: 50%;
-  height: var(--stroke-indicator);
-  min-height: var(--space-s1);
-  background: var(--preview-text);
-}
-
-.theme-preview__route {
-  display: block;
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-}
-
-.theme-preview__route polyline {
-  fill: none;
-  stroke: var(--preview-route);
-  stroke-width: var(--stroke-indicator);
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.theme-preview__button {
-  display: block;
-  align-self: flex-end;
-  width: 30%;
-  min-height: var(--space-s2);
-  background: var(--preview-accent);
-}
-
-.theme-preview__font {
+  padding: var(--space-s2) 0;
   color: var(--color-text-secondary);
+  text-decoration: none;
+  box-shadow: inset 0 calc(-1 * var(--stroke-indicator)) 0 transparent;
+}
+
+.tabs__link:hover {
+  color: var(--color-text-primary);
+}
+
+.tabs__link[aria-current='page'] {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  box-shadow: inset 0 calc(-1 * var(--stroke-indicator)) 0 var(--color-action-primary);
+}
+
+.tabs__count {
+  padding: 0 var(--space-s2);
+  border: var(--stroke-hairline) solid currentColor;
 }

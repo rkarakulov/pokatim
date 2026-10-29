@@ -6,7 +6,7 @@ import { parseQrPayload, qrHashOf, qrPayload, ticketQrToken } from './ticket-qr'
 const SECRET = 'test-email-secret-test-email-secret-0';
 const ID = '01890a5d-ac96-774b-bcce-b302099a8057';
 
-describe('QR билета (ADR-0021)', () => {
+describe('QR билета (ADR-0023)', () => {
   it('токен детерминирован по id и секрету, 43 символа base64url; другой id или секрет — другой токен', () => {
     const token = ticketQrToken(SECRET, ID);
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);

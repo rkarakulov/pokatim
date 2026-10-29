@@ -22,6 +22,8 @@ import { ProfileRepository } from './profile.repository';
 import { ProfileService } from './profile.service';
 import { RiderNamesService } from './rider-names';
 import { RIDER_NAMES } from './rider-names.port';
+import { RiderThemesService } from './rider-themes';
+import { RIDER_THEMES } from './rider-themes.port';
 import { RiderProfilesModerationController } from './rider-profiles-moderation.controller';
 import { RiderReportsController } from './rider-reports.controller';
 import { RiderProfilesService } from './rider-profiles';
@@ -37,9 +39,10 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
 /**
  * Ядро `profile` для API и worker: единственные писатели `profiles` и анкет Verified, порты
  * `RiderNameDirectory` и `VerifiedProfiles` (race-results-07) для `results` (через `index.ts`), `RiderProfileDirectory`
- * (rider-profile) для `riders`, единственный писатель жалоб на профиль (profile-moderation) и порт стирания
- * `ProfileErasure` (`account`), очередь жалоб для «Обзора» панели (`ProfilesOverview`, admin-overview) — без
- * контроллеров и без импортов. Репозитории объявлены только здесь (один экземпляр).
+ * (rider-profile) для `riders`, `RiderThemes` (user-theme) для `sharing`, единственный писатель жалоб на профиль
+ * (profile-moderation) и порт стирания `ProfileErasure` (`account`), очередь жалоб для «Обзора» панели
+ * (`ProfilesOverview`, admin-overview) — без контроллеров и без импортов. Репозитории объявлены только здесь (один
+ * экземпляр).
  */
 @Module({
   providers: [
@@ -51,6 +54,8 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
     { provide: RIDER_NAMES, useExisting: RiderNamesService },
     RiderProfilesService,
     { provide: RIDER_PROFILES, useExisting: RiderProfilesService },
+    RiderThemesService,
+    { provide: RIDER_THEMES, useExisting: RiderThemesService },
     VerifiedProfilesService,
     { provide: VERIFIED_PROFILES, useExisting: VerifiedProfilesService },
     ProfileErasure,
@@ -63,6 +68,7 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
     ProfileReportsRepository,
     RIDER_NAMES,
     RIDER_PROFILES,
+    RIDER_THEMES,
     VERIFIED_PROFILES,
     ProfileErasure,
     ProfilesOverview,

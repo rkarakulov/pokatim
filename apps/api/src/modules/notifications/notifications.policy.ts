@@ -90,7 +90,7 @@ export function quietUntil(now: Date, quietHours: NotificationSettings['quietHou
 
 /**
  * Доставка нового уведомления (intake): push `pending` с `notBefore` = конец тихих часов или сейчас — при включённой
- * группе и `PUSH_ENABLED`, иначе `skipped` (`disabled` / `push_off`); письмо — только N2 (`EMAIL_KINDS`) по тумблеру
+ * группе и включённом канале push (`pushChannelEnabled`: Expo или Web Push), иначе `skipped` (`disabled` / `push_off`); письмо — только N2 (`EMAIL_KINDS`) по тумблеру
  * группы (`skipped`, если выключен), прочим — `null`. В центр уведомление пишется всегда (N4, RC-13).
  */
 export function initialDelivery(

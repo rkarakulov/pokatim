@@ -9,6 +9,7 @@ import { api } from '../../api';
 import { formatDateTimeLong } from '../../format';
 import { isForbidden } from '../../session/errors';
 import { Button, DataTable, EmptyState, PageHeader, StatusTag, ToggleChip } from '../../ui';
+import { ModerationTabs } from '../moderation/ModerationTabs';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { RIDE_STATUS_TONE, rideStatusLabel, type RidesModerationSearch } from './moderation-format';
 import { RIDES_MODERATION_QUERY_KEY } from './rides-moderation-query';
@@ -112,6 +113,7 @@ export function RidesModerationScreen({
   return (
     <>
       <PageHeader title={t('admin.ridesModeration.title')} meta={t('admin.ridesModeration.lead')} />
+      <ModerationTabs />
       <div className="page-body">
         <DataTable
           caption={t('admin.ridesModeration.title')}

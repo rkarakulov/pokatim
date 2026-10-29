@@ -29,6 +29,7 @@ const profile = {
   club: null,
   avatar: { id: 'a1' },
   publicId: null,
+  themeId: 'classic' as const,
 };
 
 function renderEditor() {

@@ -7,7 +7,7 @@ import { ensureCollection } from './0002_identity';
 type IndexDef = { key: IndexSpecification; options: CreateIndexesOptions & { name: string } };
 
 /**
- * Индексы билетов (event-tickets, ADR-0021): код, хэш QR и регистрация — уникальны (дубль кода — новый код; дубль
+ * Индексы билетов (event-tickets, ADR-0023): код, хэш QR и регистрация — уникальны (дубль кода — новый код; дубль
  * регистрации — параллельная сверка выпустила билет); «мои билеты» — `(userId, createdAt)`; сверка гонки и список
  * участников с курсором — `(kind, eventId, _id)`. Регистрации календаря — одна активная на `(eventId, userId)`
  * (частичный), «мои регистрации» и стирание — `(userId, createdAt)`. Настройки — выборка включённых гонок регламентом.

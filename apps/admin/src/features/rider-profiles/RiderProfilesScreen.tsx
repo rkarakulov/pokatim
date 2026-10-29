@@ -8,6 +8,7 @@ import { api } from '../../api';
 import { formatDateTimeLong } from '../../format';
 import { isForbidden } from '../../session/errors';
 import { Button, DataTable, EmptyState, PageHeader } from '../../ui';
+import { ModerationTabs } from '../moderation/ModerationTabs';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { riderLabel } from '../results/results-format';
 import { profileContentLabel } from './rider-profiles-format';
@@ -78,6 +79,7 @@ export function RiderProfilesScreen() {
   return (
     <>
       <PageHeader title={t('admin.riderProfiles.title')} meta={t('admin.riderProfiles.lead')} />
+      <ModerationTabs />
       <div className="page-body">
         <DataTable
           caption={t('admin.riderProfiles.queue')}

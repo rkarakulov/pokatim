@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { type NotificationSettings, type PushPlatform, UNREAD_COUNT_MAX } from '@pokatim/contracts';
+import { type NotificationSettings, UNREAD_COUNT_MAX } from '@pokatim/contracts';
 import { isDuplicateKey, MONGO_DB, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import {
   type AnyBulkWriteOperation,
@@ -16,6 +16,7 @@ import {
   notificationsCollections,
   type PushTicketDoc,
   type PushTokenDoc,
+  type PushTokenPlatform,
 } from './notifications.collection';
 
 /** Уникальность токена устройства — гонка двух первых регистраций одного токена (`isDuplicateKey`). */
@@ -242,21 +243,22 @@ export class NotificationsRepository {
   /**
    * Регистрация токена устройства: токен глобально уникален — уже известный переходит к этому пользователю (устройство
    * одно), платформа и `updatedAt` обновляются. Гонка двух первых upsert — `isDuplicateKey` и один повтор (второй
-   * найдёт документ). Затем сверх `maxPerUser` вытесняются старейшие по `updatedAt`.
+   * найдёт документ). Затем сверх `maxPerUser` вытесняются старейшие по `updatedAt`. Подписка Web Push (ADR-0022) —
+   * тот же документ: `token` — endpoint, ключи `webPush` обновляются при переподписке.
    */
   async registerToken(
     userId: string,
     sessionId: string,
-    token: string,
-    platform: PushPlatform,
+    device: { token: string; platform: PushTokenPlatform; webPush?: PushTokenDoc['webPush'] },
     now: Date,
     maxPerUser: number,
   ): Promise<void> {
+    const { token, platform, webPush } = device;
     const upsert = () =>
       this.pushTokens.updateOne(
         { token },
         {
-          $set: { userId, sessionId, platform, updatedAt: now },
+          $set: { userId, sessionId, platform, updatedAt: now, ...(webPush ? { webPush } : {}) },
           $setOnInsert: { _id: uuidv7(), token, createdAt: now },
         },
         { upsert: true },
@@ -478,9 +480,11 @@ export class NotificationsRepository {
   }
 
   /** Токены устройств пользователя (для отправки; в логи не попадают). */
-  tokensOf(userId: string): Promise<Pick<PushTokenDoc, '_id' | 'token' | 'sessionId'>[]> {
+  tokensOf(
+    userId: string,
+  ): Promise<Pick<PushTokenDoc, '_id' | 'token' | 'sessionId' | 'platform' | 'webPush'>[]> {
     return this.pushTokens
-      .find({ userId }, { projection: { _id: 1, token: 1, sessionId: 1 } })
+      .find({ userId }, { projection: { _id: 1, token: 1, sessionId: 1, platform: 1, webPush: 1 } })
       .sort({ updatedAt: 1, _id: 1 })
       .toArray();
   }

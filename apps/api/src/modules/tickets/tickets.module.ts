@@ -33,7 +33,7 @@ import { TicketsReadService } from './tickets-read.service';
 import { TicketsRepository } from './tickets.repository';
 
 /**
- * Ядро `tickets` (event-tickets, ADR-0021) для API и worker: репозиторий, факты событий, выпуск, сверка билетов гонок,
+ * Ядро `tickets` (event-tickets, ADR-0023) для API и worker: репозиторий, факты событий, выпуск, сверка билетов гонок,
  * порт стирания. Зависит от `results` (`RESULTS_FOR_TICKETS`; реэкспорт `RacesCoreModule` — `RACE_REGISTRY`),
  * `calendar` (`CALENDAR_EVENTS`), `profile` (`RIDER_NAMES`), `identity` (`IdentityAccounts`) — только через их
  * `index.ts`. Производители о `tickets` не знают; на `tickets` ссылаются `AppModule`, `WorkerModule` и `account`.

@@ -5,7 +5,7 @@ import { sha256 } from '../identity';
 const QR_PREFIX = 'PKT1.';
 
 /**
- * QR-токен билета (ADR-0021): `HMAC-SHA256(EMAIL_TOKEN_SECRET, "ticket-qr:" + ticketId)` base64url, 43 символа. Токен
+ * QR-токен билета (ADR-0023): `HMAC-SHA256(EMAIL_TOKEN_SECRET, "ticket-qr:" + ticketId)` base64url, 43 символа. Токен
  * пересчитывается при чтении владельцем (паттерн ссылок писем, ADR-0002); в БД — только `qrHash`. Ротация секрета
  * инвалидирует все QR (runbook «Деплой»).
  */

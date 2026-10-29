@@ -22,6 +22,7 @@ import {
   useRideReasons,
 } from '@/features/home/queries';
 import { useOwnAvatarId } from '@/features/profile/queries';
+import { InstallBanner } from '@/features/pwa-install/install-banner';
 import { useNextRide } from '@/features/rides/queries';
 import { RideHero } from '@/features/rides/ride-hero';
 import {
@@ -254,6 +255,8 @@ export default function HomeScreen() {
         </ScrollView>
         <DecorLayer />
       </View>
+      {/* «Установить приложение» (только web) — под лентой, над вкладками: декор ленты её не перекрывает */}
+      <InstallBanner />
     </SafeAreaView>
   );
 }

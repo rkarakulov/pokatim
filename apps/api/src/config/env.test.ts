@@ -1,6 +1,23 @@
+import { createECDH } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import { testEnv } from '../../test/test-env';
+import { webPushVapid } from './env';
+
+/** Пара VAPID, созданная тестом (ключей в репозитории нет). */
+function vapidPair() {
+  const ecdh = createECDH('prime256v1');
+  ecdh.generateKeys();
+  return {
+    VAPID_PUBLIC_KEY: ecdh.getPublicKey().toString('base64url'),
+    // приватный ключ — ровно 32 байта (ведущие нули getPrivateKey не отдаёт)
+    VAPID_PRIVATE_KEY: Buffer.from(
+      ecdh.getPrivateKey().toString('hex').padStart(64, '0'),
+      'hex',
+    ).toString('base64url'),
+  };
+}
 
 describe('env', () => {
   it('APP_LINK_BASE: схема приложения или Expo Go, всегда с завершающим слешем', () => {
@@ -185,5 +202,43 @@ describe('env', () => {
     expect(testEnv({ NODE_ENV: 'production' }).EXPO_PUSH_API_URL).toBe(
       'https://exp.host/--/api/v2/push',
     );
+  });
+
+  it('web push: выключен по умолчанию; включён — нужны пара ключей и subject', () => {
+    expect(webPushVapid(testEnv())).toBeNull();
+    const pair = vapidPair();
+    const subject = { VAPID_SUBJECT: 'mailto:dev@pokatim.test' };
+    expect(() => testEnv({ WEB_PUSH_ENABLED: 'true' })).toThrow(/WEB_PUSH_ENABLED=true/);
+    expect(() => testEnv({ WEB_PUSH_ENABLED: 'true', ...pair })).toThrow(/VAPID_SUBJECT/);
+    const value = testEnv({ WEB_PUSH_ENABLED: 'true', ...pair, ...subject });
+    expect(webPushVapid(value)).toEqual({
+      publicKey: pair.VAPID_PUBLIC_KEY,
+      privateKey: pair.VAPID_PRIVATE_KEY,
+      subject: 'mailto:dev@pokatim.test',
+    });
+    // ключи без флага — выключен
+    expect(webPushVapid(testEnv({ ...pair, ...subject }))).toBeNull();
+  });
+
+  it('web push: ключи не пара или не того формата — отказ, приватный в ошибке не печатается', () => {
+    const pair = vapidPair();
+    const other = vapidPair();
+    const base = { WEB_PUSH_ENABLED: 'true', VAPID_SUBJECT: 'https://pokatim.test' };
+    expect(() => testEnv({ ...base, ...pair, VAPID_PUBLIC_KEY: other.VAPID_PUBLIC_KEY })).toThrow(
+      expect.objectContaining({
+        message: expect.not.stringContaining(pair.VAPID_PRIVATE_KEY) as unknown,
+      }),
+    );
+    expect(() => testEnv({ ...base, ...pair, VAPID_PUBLIC_KEY: 'short' })).toThrow();
+    expect(() => testEnv({ ...base, ...pair, VAPID_SUBJECT: 'dev@pokatim.test' })).toThrow();
+  });
+
+  it('web push: тестовый origin push-сервиса — только NODE_ENV=test', () => {
+    expect(testEnv({ WEB_PUSH_TEST_ORIGIN: 'http://127.0.0.1:4011' }).WEB_PUSH_TEST_ORIGIN).toBe(
+      'http://127.0.0.1:4011',
+    );
+    expect(() =>
+      testEnv({ NODE_ENV: 'production', WEB_PUSH_TEST_ORIGIN: 'http://127.0.0.1:4011' }),
+    ).toThrow(/WEB_PUSH_TEST_ORIGIN/);
   });
 });

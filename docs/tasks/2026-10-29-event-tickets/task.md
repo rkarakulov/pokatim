@@ -28,7 +28,7 @@
 
 | PR | Ветка | Содержание |
 |---|---|---|
-| A | `feature/event-tickets-api` | модуль `tickets`: настройки билетов события, регистрация на старт календаря, выпуск/статусы билетов, чтение владельцем, check-in API, письмо «Вы зарегистрированы», миграция, env `APP_WEB_ORIGIN`, право `tickets.checkin`, ADR-0021, `docs/product/tickets.md` |
+| A | `feature/event-tickets-api` | модуль `tickets`: настройки билетов события, регистрация на старт календаря, выпуск/статусы билетов, чтение владельцем, check-in API, письмо «Вы зарегистрированы», миграция, env `APP_WEB_ORIGIN`, право `tickets.checkin`, ADR-0023, `docs/product/tickets.md` |
 | B | `feature/event-tickets-app` | экран билета `/tickets/[code]` (QR, офлайн-копия), «Открыть билет» в «Ваше участие» гонки, регистрация на старт календаря, блок «Ваши билеты» на Главной |
 | C | `feature/event-tickets-panel` | API + панель: блок «Билеты» в гонке и старте календаря, «Материалы» (CRUD, PDF), экран «Check-in» (камера + ввод кода); материалы на билете и в карточке события (приложение) |
 | D | `feature/event-tickets-reminders` | напоминания: настройка у события (панель), регламент worker, уведомление `event_reminder` (центр/push/e-mail), группа «Мероприятия» в настройках приложения |
@@ -352,7 +352,7 @@ PR A (coder, 2026-10-29). Одобрены architect (§8.1):
 
 ## 10. Documentation Impact
 
-ADR-0021 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.md` (право, разделы, журнал);
+ADR-0023 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.md` (право, разделы, журнал);
 `notifications.md` (группа «Мероприятия», событие); runbook: env `APP_WEB_ORIGIN`, Wallet-сертификаты.
 
 
@@ -360,7 +360,7 @@ ADR-0021 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.m
 `RESULTS_FOR_TICKETS`/`CALENDAR_EVENTS`, сверка, очереди, лимиты); `pokatim-db.md` — коллекции и индексы `0037`;
 `pokatim-contracts.md` — `src/tickets/*`; `docs/product/admin-panel.md` — право `tickets.checkin`, действия журнала;
 `docs/runbooks/deploy.md` — `APP_WEB_ORIGIN` (bootstrap), ротация `EMAIL_TOKEN_SECRET` → пересчёт `qrHash`;
-`docs/runbooks/account-deletion.md` — шаг `tickets`; `docs/adr/README.md` — индекс ADR-0021.
+`docs/runbooks/account-deletion.md` — шаг `tickets`; `docs/adr/README.md` — индекс ADR-0023.
 
 ## 11. Implementation Context
 
@@ -503,7 +503,7 @@ ADR-0021 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.m
 5. Панель: настройки, check-in, участники; права organizer.
 6. Worker: письмо, сверка, расписание; `queues.ts`, `worker.module.ts`, `app.module.ts`, env, infra.
 7. `TicketErasure` + шаг `account`.
-8. ADR-0021, `docs/product/tickets.md`, правки rules/docs (§10) → `pnpm check`.
+8. ADR-0023, `docs/product/tickets.md`, правки rules/docs (§10) → `pnpm check`.
 
 **OUT OF SCOPE (PR A)**: UI приложения и панели, материалы, напоминания и `TICKET_NOTICES`, Wallet, новые npm-зависимости,
 подписка на события `results`, денормализация дат календаря.
@@ -524,7 +524,7 @@ ADR-0021 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.m
   `minskDateTime` из `identity`; `consumeUserLimit` вынесен в `src/user-limit.ts` (две копии убраны).
 - Миграция `0037_tickets`, очереди `tickets-email`/`tickets-maintenance`, env `APP_WEB_ORIGIN` (env.ts, `.env.example`,
   `bootstrap.sh`, `env.template`, `docker-compose.yml`), шаг `tickets` в `account`, organizer + `tickets.checkin`.
-- Документы: ADR-0021, `docs/product/tickets.md`, `admin-panel.md`, runbook `deploy.md` (env, ротация секрета → QR,
+- Документы: ADR-0023, `docs/product/tickets.md`, `admin-panel.md`, runbook `deploy.md` (env, ротация секрета → QR,
   миграция), `account-deletion.md`, индексы ADR и продукта, правила `pokatim-{backend,db,contracts}.md`.
 
 Тесты: int `tickets-{race,calendar,read,checkin,email,admin}.int.test.ts` (AC1–AC8, RC-T1…T10), шаг `tickets` в

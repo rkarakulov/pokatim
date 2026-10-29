@@ -130,9 +130,9 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
 - `MAIL_RELAY_RECIPIENTS` (адреса или `*`) — из секрета `DEV_MAIL_RELAY_RECIPIENTS` каждого деплоя (нет — очищается);
   `MAILPIT_RELAY_*` и файл `~/pokatim/mailpit-relay.yml` (600) вычисляет `bootstrap.sh` —
   руками не править.
-- `PUBLIC_HOST`, `WEB_ORIGIN` (`https://<хост>`), `APP_WEB_ORIGIN` (`https://<хост>` — кнопка «Открыть билет» в
-  письме, event-tickets; пусто — письмо без кнопки), `APP_LINK_BASE` (`https://<хост>/`), `POKATIM_TAG` — **всегда**
-  из деплоя (переменная окружения `dev` и тег). Прод — тот же механизм (`APP_WEB_ORIGIN` = origin web-приложения).
+- `PUBLIC_HOST`, `WEB_ORIGIN` (`https://<хост>`), `APP_LINK_BASE` (`https://<хост>/`), `POKATIM_TAG` — **всегда**
+  из деплоя (переменная окружения `dev` и тег). API получает `APP_WEB_ORIGIN` = `WEB_ORIGIN` в `docker-compose.yml`
+  (кнопка «Открыть билет» в письме, event-tickets; вне compose пусто — письмо без кнопки).
 - `CORS_ORIGINS` пусто (web и API — один origin за nginx), `TRUST_PROXY=1` (один прокси — nginx хоста; он
   перезаписывает `X-Forwarded-For` адресом клиента).
 - Треки и устройства (ADR-0011, раздел «Треки и устройства»): `TRACK_STORAGE_MAX_BYTES` (2 GiB),
@@ -141,6 +141,10 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
   руками (как `MAIL_RELAY_*`).
 - Push через Expo (ADR-0017, runbook [`push.md`](push.md)): `PUSH_ENABLED=false` дописывает шаблон (push выключен —
   уведомления только в центре), `EXPO_ACCESS_TOKEN` — необязательный секрет, вписывает владелец руками.
+- Web Push в PWA (ADR-0022, runbook [`push.md`](push.md), раздел «Web Push»): шаблон дописывает
+  `WEB_PUSH_ENABLED=true`, `VAPID_SUBJECT` и пару `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` — её генерирует
+  `bootstrap.sh` на сервере один раз (`@vapid-*`, приватный ключ не печатается и не покидает сервер). Секретов в
+  GitHub не нужно.
 
 Потеря `.env` при живом томе `mongodata`: новый `MONGO_ROOT_PASSWORD` не совпадёт с root в базе — `mongo-init.js`
 упадёт с сообщением «MONGO_ROOT_PASSWORD из .env не подходит к root в томе mongodata».
@@ -465,7 +469,7 @@ TTL 24 ч); память Redis — учитывать при росте числ
 
 ## Билеты на мероприятия
 
-ADR-0021. Письмо «Вы зарегистрированы» — очередь `tickets-email` (кнопка — `APP_WEB_ORIGIN/tickets/<код>`), сверка
+ADR-0023. Письмо «Вы зарегистрированы» — очередь `tickets-email` (кнопка — `APP_WEB_ORIGIN/tickets/<код>`), сверка
 билетов гонок — регламент `tickets.reconcile` раз в минуту (`tickets-maintenance`). Провал письма — лог
 `tickets.email_failed ticket=<id>`, колонка «Письмо» в списке участников панели; провал сверки — лог
 `tickets.reconcile_failed race=<id>`, следующий прогон повторяет.
@@ -497,7 +501,7 @@ check-in; у владельцев QR обновится при следующе�
   `device_connections` (частичный уникальный по живым статусам), `device_link_tickets` (TTL), `device_imports`,
   `device_audit`; expand-only, идемпотентны. `0012_track_source_refs` — маркеры удалённых объектов источника
   (удалённый заезд агрегатора не воскресает); expand-only.
-- `0037_tickets` (event-tickets, ADR-0021) — коллекции `event_ticketing`, `event_registrations` (частичный уникальный
+- `0037_tickets` (event-tickets, ADR-0023) — коллекции `event_ticketing`, `event_registrations` (частичный уникальный
   по активной регистрации), `tickets` (уникальные код, хэш QR, регистрация); expand-only, без бэкфилла (билеты
   выпускает сверка), идемпотентна. Номер сверить с `develop` перед мержем.
 

@@ -1,6 +1,6 @@
 # Билеты на мероприятия
 
-Решения автора T1–T4 (human gate 2026-10-29). Задача: `docs/tasks/2026-10-29-event-tickets/task.md`, ADR-0021.
+Решения автора T1–T4 (human gate 2026-10-29). Задача: `docs/tasks/2026-10-29-event-tickets/task.md`, ADR-0023.
 UX-ориентир — Timepad, дизайн — наша система. PR A — API; приложение (B), панель (C), напоминания (D), Wallet (E) —
 следующие PR.
 

@@ -4,7 +4,7 @@ import { fieldError, tolerantEnum } from '../common.ts';
 import { ENTRY_TIERS, RESULT_GROUP_KEYS } from '../results/results.schema.ts';
 
 /**
- * Билеты на мероприятия (event-tickets, ADR-0021). Событие с билетами — гонка с очным стартом (`race`) или старт
+ * Билеты на мероприятия (event-tickets, ADR-0023). Событие с билетами — гонка с очным стартом (`race`) или старт
  * календаря с регистрацией в «Покатим» (`calendar`). Справочники — только в конец; в ответах приложения —
  * `tolerantEnum`, в запросах и панели — строгий `z.enum`.
  */
