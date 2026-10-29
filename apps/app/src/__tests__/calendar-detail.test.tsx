@@ -183,13 +183,17 @@ describe('карточка старта (AC4)', () => {
     expect(screen.getByRole('button', { name: 'Регистрация у организатора' })).toBeOnTheScreen();
   });
 
-  it('«Назад» без истории: гость — на корень (дальше гард ведёт на регистрацию)', async () => {
+  it('«Назад» без истории: гость — на корень (дальше гард ведёт на лендинг)', async () => {
     const router = await renderRouter(appRoutes, { initialUrl: `/calendar/${ID}` });
     await screen.findByLabelText(heroLabel);
 
     await fireEvent.press(screen.getByRole('button', { name: 'Назад' }));
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
   });
 
   it('«Назад» без истории: вошедший — во вкладку «Календарь»', async () => {
@@ -225,7 +229,7 @@ describe('карточка старта (AC4)', () => {
     expect(await screen.findByText('Старт не найден')).toBeOnTheScreen();
     expect(getCalendarStart).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByRole('button', { name: 'Все старты' }));
-    expect(router.getPathname()).toBe('/register');
+    expect(router.getPathname()).toBe('/welcome');
   });
 
   it('сеть — «Нет соединения» с повтором (AsyncContent)', async () => {

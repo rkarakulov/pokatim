@@ -1,6 +1,6 @@
 import { apiErrorOf } from '@pokatim/api-client';
 import { Uuid, type RaceCard, type SeasonCard, type SeasonList } from '@pokatim/contracts';
-import { size, space, stroke } from '@pokatim/design-tokens';
+import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
   AsyncContent,
@@ -17,7 +17,7 @@ import {
 } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DetailHeader } from '@/components/detail-header';
@@ -27,19 +27,15 @@ import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card'
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { useStandingsRefetch } from '@/features/standings/queries';
 import { SeasonStandings } from '@/features/standings/season-standings';
-import { domainLabel, formatLocalRange, heroDateText, meta } from '@/lib/minsk-format';
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { useSeason, useSeasonRaces, useSeasons } from './queries';
+import { SeasonLinkRow, seasonDates, seasonPhaseLabel as phaseLabel } from './season-row';
 
 export const seasonDocumentTitle = (name: string) => `${name} — ${t('app.name')}`;
 
-/** Даты сезона по Минску — всегда с годом (публичный экран, SSR): «1 апреля–31 октября 2026». */
-export const seasonDates = (season: SeasonCard) =>
-  heroDateText(formatLocalRange(season.startsOn, season.endsOn, null));
-
-const phaseLabel = (season: SeasonCard) => domainLabel('domain.seasonPhase', season.phase);
+export { seasonDates };
 
 const SKELETON_CARDS = [0, 1];
 
@@ -114,27 +110,11 @@ function OtherSeasonRows({
   seasons: SeasonCard[];
   onOpen: (id: string) => void;
 }) {
-  const theme = useTheme();
   return (
     <View>
-      {seasons.map((season) => {
-        const phase = phaseLabel(season);
-        const dates = seasonDates(season);
-        return (
-          <Pressable
-            key={season.id}
-            accessibilityRole="link"
-            accessibilityLabel={[season.name, dates, phase].filter(Boolean).join('. ')}
-            onPress={() => onOpen(season.id)}
-            style={[styles.otherRow, { borderTopColor: theme.border.subtle }]}
-          >
-            <Text style={[textStyle('titleSm'), { color: theme.text.primary }]}>{season.name}</Text>
-            <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
-              {meta([dates, phase])}
-            </Text>
-          </Pressable>
-        );
-      })}
+      {seasons.map((season) => (
+        <SeasonLinkRow key={season.id} season={season} onPress={() => onOpen(season.id)} />
+      ))}
     </View>
   );
 }
@@ -297,5 +277,4 @@ const styles = StyleSheet.create({
   footer: { gap: space.s3 },
   footerError: { gap: space.s3, paddingTop: space.s3 },
   others: { marginTop: size.sectionGap, gap: space.s2 },
-  otherRow: { borderTopWidth: stroke.hairline, paddingVertical: space.s3, gap: space.s1 },
 });

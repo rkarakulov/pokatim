@@ -135,13 +135,17 @@ describe('карточка гонки (AC5)', () => {
     expect(screen.queryByText(/по GPS-треку/)).toBeNull();
   });
 
-  it('«Назад» без истории: гость — на корень (дальше гард ведёт на регистрацию)', async () => {
+  it('«Назад» без истории: гость — на корень (дальше гард ведёт на лендинг)', async () => {
     const router = await renderRouter(appRoutes, { initialUrl: `/races/${ID}` });
     await screen.findByLabelText(heroLabel);
 
     await fireEvent.press(screen.getByRole('button', { name: 'Назад' }));
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
   });
 
   it('«Назад» без истории: вошедший — во вкладку «Гонки»', async () => {
@@ -235,8 +239,12 @@ describe('карточка гонки (AC5)', () => {
     const router = await renderRouter(appRoutes, { initialUrl: '/races/not-a-uuid' });
 
     await fireEvent.press(await screen.findByRole('button', { name: 'Все гонки' }));
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
   });
 
   it('без сети при показанной карточке — баннер «Нет соединения», данные остаются (ревью pass 1)', async () => {
