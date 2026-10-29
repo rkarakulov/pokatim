@@ -1,5 +1,10 @@
-import { Body, Controller, Get, Header, Patch, UseGuards } from '@nestjs/common';
-import { FieldErrorCode, type ProfileView, UpdateProfileRequest } from '@pokatim/contracts';
+import { Body, Controller, Get, Header, HttpCode, Patch, Put, UseGuards } from '@nestjs/common';
+import {
+  FieldErrorCode,
+  type ProfileView,
+  UpdateProfileRequest,
+  UpdateProfileThemeRequest,
+} from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
 import { AuthGuard, type AuthUser, CurrentUser } from '../identity';
@@ -25,5 +30,17 @@ export class ProfileController {
     @Body(new ZodValidationPipe(UpdateProfileRequest, FieldErrorCode)) body: UpdateProfileRequest,
   ): Promise<ProfileView> {
     return this.profile.update(user.userId, body);
+  }
+
+  /** Личная тема приложения (user-theme, ADR-0021): ответ — профиль после записи. */
+  @Put('theme')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  setTheme(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(UpdateProfileThemeRequest, FieldErrorCode))
+    body: UpdateProfileThemeRequest,
+  ): Promise<ProfileView> {
+    return this.profile.setTheme(user.userId, body.themeId);
   }
 }

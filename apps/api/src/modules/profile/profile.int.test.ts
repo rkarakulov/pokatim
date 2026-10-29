@@ -10,9 +10,11 @@ import {
   type ProfileDoc,
 } from './profile.collection';
 import { avatarsDb, fetchAvatar, seedAvatar } from '../../../test/profiles';
+import { ProfileErasure } from './profile-erasure';
 import { PROFILE_POLICY } from './profile.policy';
 import { ProfileRepository } from './profile.repository';
 import { RIDER_NAMES, type RiderNameDirectory } from './rider-names.port';
+import { RIDER_THEMES, type RiderThemes } from './rider-themes.port';
 
 let h: Harness;
 beforeAll(async () => {
@@ -43,6 +45,7 @@ const EMPTY = {
   club: null,
   avatar: null,
   publicId: null,
+  themeId: 'classic',
 };
 const PUBLIC_ID = expect.stringMatching(/^[A-Za-z0-9_-]{43}$/);
 
@@ -479,6 +482,183 @@ describe('PATCH /v1/profile — перевыпуск id фото (profile-modera
     const res = await patch(session, { showNameInResults: false });
     expect((res.body as { avatar: unknown }).avatar).toBeNull();
     expect(await avatarsDb(h).countDocuments({ userId: userIdOf(session) })).toBe(0);
+  });
+});
+
+describe('PUT /v1/profile/theme — личная тема (user-theme, AC2/AC7)', () => {
+  const setTheme = (session: Session, body: unknown) =>
+    call(h, 'PUT', '/v1/profile/theme', body, bearer(session.accessToken));
+
+  it('без access → 401, документ не создан', async () => {
+    const res = await call(h, 'PUT', '/v1/profile/theme', { themeId: 'atlas' });
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(await profiles().countDocuments()).toBe(0);
+  });
+
+  it.each([
+    ['незнакомый id', { themeId: 'neon' }],
+    ['лишний ключ', { themeId: 'atlas', decor: 'none' }],
+    ['оператор', { themeId: { $ne: null } }],
+    ['пусто', {}],
+  ])('%s → 400, документ не создан', async (_n, body) => {
+    const session = await signUpSession(h);
+    const res = await setTheme(session, body);
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(await profiles().countDocuments()).toBe(0);
+  });
+
+  it('без выбора — classic; выбор — 200 с ProfileView, no-store, GET отдаёт выбранную', async () => {
+    const session = await signUpSession(h);
+    expect((await getProfile(session)).body).toEqual(EMPTY);
+
+    const res = await setTheme(session, { themeId: 'atlas' });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.body).toEqual({ ...EMPTY, themeId: 'atlas' });
+    expect((await getProfile(session)).body).toEqual(res.body);
+    expect((await setTheme(session, { themeId: 'classic' })).body).toEqual(EMPTY);
+  });
+
+  it('документа нет — создаётся без ответа опроса; онбординг не пройден, согласий нет', async () => {
+    const session = await signUpSession(h);
+    expect((await setTheme(session, { themeId: 'chrono' })).status).toBe(200);
+    expect(await profiles().findOne({ _id: userIdOf(session) })).toEqual({
+      _id: userIdOf(session),
+      rideReasons: [],
+      surveyCompletedAt: null,
+      publicName: null,
+      showNameInResults: false,
+      club: null,
+      publicId: null,
+      themeId: 'chrono',
+      updatedAt: h.clock.now(),
+    });
+    const onboarding = await call(
+      h,
+      'GET',
+      '/v1/profile/onboarding',
+      undefined,
+      bearer(session.accessToken),
+    );
+    expect(onboarding.body).toEqual({ surveyCompleted: false, devicesStepCompleted: false });
+    expect(await consentEvents().countDocuments()).toBe(0);
+  });
+
+  it('не трогает имя, согласие, клуб, аватар, publicId; журнал согласий не пишется; PATCH тему не стирает', async () => {
+    const session = await signUpSession(h);
+    await submit(session, ['races']);
+    await patch(session, { publicName: 'Анна К.', showNameInResults: true, club: 'Velo' });
+    const avatar = await seedAvatar(h, userIdOf(session));
+    const before = await profiles().findOne({ _id: userIdOf(session) });
+    const events = await consentEvents().countDocuments();
+    h.clock.advance(MINUTE);
+
+    const res = await setTheme(session, { themeId: 'journal' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      rideReasons: ['races'],
+      publicName: 'Анна К.',
+      showNameInResults: true,
+      club: 'Velo',
+      avatar: { id: avatar.id },
+      publicId: PUBLIC_ID,
+      themeId: 'journal',
+    });
+    expect(await profiles().findOne({ _id: userIdOf(session) })).toEqual({
+      ...before,
+      themeId: 'journal',
+      updatedAt: h.clock.now(),
+    });
+    expect(await consentEvents().countDocuments()).toBe(events);
+
+    await patch(session, { club: 'Velo 2' });
+    expect((await getProfile(session)).body).toMatchObject({ club: 'Velo 2', themeId: 'journal' });
+  });
+
+  it('тема одного пользователя не видна другому', async () => {
+    const mine = await signUpSession(h, 'rider@example.com');
+    const other = await signUpSession(h, 'other@example.com');
+    await setTheme(mine, { themeId: 'atlas' });
+    expect((await getProfile(other)).body).toEqual(EMPTY);
+  });
+
+  it('два первых PUT одновременно — оба 200, один документ', async () => {
+    const session = await signUpSession(h);
+    const results = await Promise.all([
+      setTheme(session, { themeId: 'atlas' }),
+      setTheme(session, { themeId: 'chrono' }),
+    ]);
+    expect(results.map((res) => res.status)).toEqual([200, 200]);
+    expect(await profiles().countDocuments()).toBe(1);
+  });
+
+  it('гонка первых upsert (duplicate key на _id) — один повтор, 200', async () => {
+    const session = await signUpSession(h);
+    const repository = h.app.get(ProfileRepository);
+    const doc = {
+      _id: userIdOf(session),
+      rideReasons: [],
+      surveyCompletedAt: null,
+      updatedAt: h.clock.now(),
+    };
+    const spy = vi.spyOn(repository, 'setTheme').mockImplementationOnce(async () => {
+      await profiles().insertOne(doc);
+      await profiles().insertOne(doc);
+      throw new Error('вставка выше бросает duplicate key');
+    });
+
+    const res = await setTheme(session, { themeId: 'planner' });
+
+    expect(res.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(res.body).toEqual({ ...EMPTY, themeId: 'planner' });
+    expect(await profiles().countDocuments()).toBe(1);
+    spy.mockRestore();
+  });
+
+  it('лимит profile-theme: превышение → 429 + retryAfterSec, запись не выполнена; PATCH не лимитирован (RC-3)', async () => {
+    const session = await signUpSession(h);
+    for (let i = 0; i < PROFILE_POLICY.themeUpdateLimit.limit; i++) {
+      const themeId = i % 2 === 0 ? 'atlas' : 'chrono';
+      expect((await setTheme(session, { themeId })).status).toBe(200);
+    }
+    const before = await profiles().findOne({ _id: userIdOf(session) });
+    const limited = await setTheme(session, { themeId: 'journal' });
+    expect(limited.status).toBe(429);
+    expect(limited.headers['retry-after']).toBeDefined();
+    expect(limited.body).toMatchObject({
+      code: 'RATE_LIMITED',
+      details: { retryAfterSec: expect.any(Number) },
+    });
+    expect(await profiles().findOne({ _id: userIdOf(session) })).toEqual(before);
+    expect((await patch(session, { publicName: 'Анна К.' })).status).toBe(200);
+  });
+
+  it('после стирания профиля (ProfileErasure) — classic', async () => {
+    const session = await signUpSession(h);
+    await setTheme(session, { themeId: 'atlas' });
+    await h.app.get(ProfileErasure).erase(userIdOf(session));
+    expect((await getProfile(session)).body).toEqual(EMPTY);
+  });
+});
+
+describe('RIDER_THEMES — тема создателя карточки (user-theme, A5)', () => {
+  const themes = () => h.app.get<RiderThemes>(RIDER_THEMES);
+
+  it('нет документа или поля — classic; выбранная — как есть', async () => {
+    const chosen = await signUpSession(h, 'chosen@example.com');
+    const fresh = await signUpSession(h, 'fresh@example.com');
+    const named = await signUpSession(h, 'named@example.com');
+    await call(h, 'PUT', '/v1/profile/theme', { themeId: 'atlas' }, bearer(chosen.accessToken));
+    await patch(named, { publicName: 'Анна К.' });
+
+    expect(await themes().themeOf(userIdOf(chosen))).toBe('atlas');
+    expect(await themes().themeOf(userIdOf(fresh))).toBe('classic');
+    expect(await themes().themeOf(userIdOf(named))).toBe('classic');
   });
 });
 

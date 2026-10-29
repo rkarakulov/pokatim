@@ -41,4 +41,13 @@ describe('api-client: тема приложения (app-themes)', () => {
     expect(calls[0]?.init?.method).toBe('GET');
     expect(new Headers(calls[0]?.init?.headers).has('authorization')).toBe(false);
   });
+
+  it('ответ сервера user-theme — тема всегда classic, декор как есть', async () => {
+    const fetchImpl = (() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ themeId: 'classic', decor: 'halloween' }), { status: 200 }),
+      )) as unknown as typeof fetch;
+    const api = createApiClient({ baseUrl: 'https://api.test', fetchImpl });
+    await expect(api.getAppearance()).resolves.toEqual({ themeId: 'classic', decor: 'halloween' });
+  });
 });

@@ -131,6 +131,7 @@ describe('гость (AC1)', () => {
       club: null,
       avatar: null,
       publicId: null,
+      themeId: 'classic',
     });
     const router = await renderRouter(appRoutes, { initialUrl: `/races/${RACE_ID}` });
 
