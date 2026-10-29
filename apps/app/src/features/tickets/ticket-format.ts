@@ -2,6 +2,7 @@ import {
   TicketCode,
   type AppTicketCategory,
   type MyTicketRef,
+  type OgCardKind,
   type TicketEventSummary,
   type TicketView,
 } from '@pokatim/contracts';
@@ -113,6 +114,11 @@ export function eventPath(event: Pick<TicketEventSummary, 'kind' | 'id'>): strin
   if (event.kind === 'race') return `/races/${event.id}`;
   if (event.kind === 'calendar') return `/calendar/${event.id}`;
   return null;
+}
+
+/** Вид OG-картинки события («Поделиться» с картинкой файлом); `unknown` — без картинки. */
+export function eventOgKind(kind: TicketEventSummary['kind']): OgCardKind | null {
+  return kind === 'race' || kind === 'calendar' ? kind : null;
 }
 
 /**

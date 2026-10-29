@@ -31,6 +31,7 @@ import { StatBlock } from '@/components/stat-block';
 import { rememberReturnPath } from '@/features/auth/return-path';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { useScrubScrollEnabled } from '@/features/routes/use-scrub-scroll-lock';
+import { useShareImage } from '@/features/sharing/use-share-image';
 import { domainLabel, formatMinskDateTime } from '@/lib/minsk-format';
 import { shareLink, shareOrigin } from '@/lib/share-link';
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
@@ -46,12 +47,17 @@ export const rideDocumentTitle = (title: string) => `${title} — ${t('app.name'
 
 const ridePath = (id: string) => `/rides/${id}`;
 
-/** «Поделиться» ссылкой на web-карточку: share sheet / Web Share / копирование с «Ссылка скопирована». */
+/**
+ * «Поделиться» ссылкой на web-карточку: share sheet / Web Share / копирование с «Ссылка скопирована»; с OG-картинкой
+ * райда файлом, когда она готова и платформа умеет (иначе — ссылка).
+ */
 function ShareAction({ ride }: { ride: RideDetail }) {
   const [notice, setNotice] = useState<'copied' | 'failed' | null>(null);
+  const image = useShareImage('ride', ride.id, true);
   const share = () => {
     setNotice(null);
-    shareLink({ title: ride.title, text: rideShareText(ride), path: ridePath(ride.id) })
+    // синхронно в обработчике нажатия (web: `navigator.share` до любого await)
+    shareLink({ title: ride.title, text: rideShareText(ride), path: ridePath(ride.id), image })
       .then((outcome) => setNotice(outcome === 'copied' ? 'copied' : null))
       .catch(() => setNotice('failed'));
   };

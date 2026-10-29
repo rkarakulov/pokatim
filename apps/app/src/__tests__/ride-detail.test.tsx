@@ -16,6 +16,7 @@ import { router as expoRouter } from 'expo-router';
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
+import { prepareShareImage } from '@/lib/share-image';
 import { shareLink, shareOrigin } from '@/lib/share-link';
 
 import RideRoute from '../app/rides/[id]';
@@ -26,6 +27,10 @@ import { createQueryWrapper } from './query-wrapper';
 
 jest.mock('@/lib/api');
 jest.mock('@/lib/share-link', () => ({ shareLink: jest.fn(), shareOrigin: jest.fn() }));
+jest.mock('@/lib/share-image', () => ({
+  shareImageSupported: () => true,
+  prepareShareImage: jest.fn(),
+}));
 
 const getRide = jest.mocked(api.getRide);
 const getRideForViewer = jest.mocked(api.getRideForViewer);
@@ -311,6 +316,21 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
       path: `/rides/${ID}`,
     });
     expect(await screen.findByText('Ссылка скопирована')).toBeOnTheScreen();
+  });
+
+  it('«Поделиться» с OG-картинкой райда файлом, когда она подготовлена', async () => {
+    jest.mocked(api.getOgCard).mockResolvedValue({ version: '0123456789abcdef' });
+    jest.mocked(api.ogImageUrl).mockReturnValue('https://api.test/og/ride.png');
+    const image = { uri: 'file:///cache/og.png' };
+    jest.mocked(prepareShareImage).mockResolvedValue(image);
+    await openSignedIn();
+    await waitFor(() =>
+      expect(prepareShareImage).toHaveBeenCalledWith('https://api.test/og/ride.png'),
+    );
+    expect(api.getOgCard).toHaveBeenCalledWith('ride', ID);
+    await act(async () => undefined);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ path: `/rides/${ID}`, image }));
   });
 
   it('нет web-origin (dev native) — кнопки «Поделиться» нет', async () => {

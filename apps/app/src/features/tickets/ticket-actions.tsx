@@ -6,12 +6,13 @@ import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { useShareImage } from '@/features/sharing/use-share-image';
 import { openExternalUrl } from '@/lib/open-external-url';
 import { shareLink, shareOrigin } from '@/lib/share-link';
 import { useMounted } from '@/lib/use-minsk-clock';
 
 import { directionsUrl } from './maps-link';
-import { directionsQuery, eventPath, ticketShareInput } from './ticket-format';
+import { directionsQuery, eventOgKind, eventPath, ticketShareInput } from './ticket-format';
 
 type Notice = 'copied' | 'shareFailed' | 'mapsFailed' | null;
 
@@ -27,6 +28,8 @@ export function TicketActions({ event }: { event: TicketEventSummary }) {
   const query = directionsQuery(event);
   const path = eventPath(event);
   const share = mounted && shareOrigin() !== null ? ticketShareInput(event) : null;
+  // OG-картинка события файлом — заранее; не готова — делимся ссылкой
+  const image = useShareImage(eventOgKind(event.kind), event.id, share !== null);
 
   const openMaps = (text: string) => {
     setNotice(null);
@@ -34,7 +37,8 @@ export function TicketActions({ event }: { event: TicketEventSummary }) {
   };
   const shareEvent = (input: NonNullable<typeof share>) => {
     setNotice(null);
-    shareLink(input)
+    // синхронно в обработчике нажатия (web: `navigator.share` до любого await)
+    shareLink({ ...input, image })
       .then((outcome) => setNotice(outcome === 'copied' ? 'copied' : null))
       .catch(() => setNotice('shareFailed'));
   };
