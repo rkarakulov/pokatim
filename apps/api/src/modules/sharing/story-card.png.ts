@@ -84,23 +84,38 @@ export function renderStoryCardSvg(
   return renderCardSvg(storyCardTree(input), fonts);
 }
 
-/** Любое дерево карточки 1080×1920 → SVG (сторис гонки, приглашение райда). */
-export function renderCardSvg(tree: StoryCardNode, fonts: StoryCardFont[]): Promise<string> {
+/** Любое дерево карточки → SVG размера `size` (по умолчанию 1080×1920: сторис гонки, приглашение райда; OG — 1200×630). */
+export function renderCardSvg(
+  tree: StoryCardNode,
+  fonts: StoryCardFont[],
+  size: { width: number; height: number } = storyCard.size,
+): Promise<string> {
   // satori принимает React-подобные узлы `{ type, props }`; React в API не нужен — приведение в одном месте
   const element = tree as unknown as Parameters<typeof satori>[0];
-  return satori(element, { width: storyCard.size.width, height: storyCard.size.height, fonts });
+  return satori(element, { width: size.width, height: size.height, fonts });
 }
 
-/** SVG → PNG 1080×1920 (resvg, без системных шрифтов: текст satori уже в путях); больше `maxPngBytes` — ошибка. */
-export function renderStoryCardPng(svg: string): Buffer {
+/** SVG → PNG шириной `width` (resvg, без системных шрифтов: текст satori уже в путях); больше `maxBytes` — ошибка. */
+export function renderCardPng(
+  svg: string,
+  { width, maxBytes }: { width: number; maxBytes: number },
+): Buffer {
   const png = new Resvg(svg, {
-    fitTo: { mode: 'width', value: storyCard.size.width },
+    fitTo: { mode: 'width', value: width },
     font: { loadSystemFonts: false },
   })
     .render()
     .asPng();
-  if (png.byteLength > STORY_CARD_POLICY.maxPngBytes) {
-    throw new Error(`story card png too large: ${png.byteLength} bytes`);
+  if (png.byteLength > maxBytes) {
+    throw new Error(`card png too large: ${png.byteLength} bytes`);
   }
   return png;
+}
+
+/** SVG → PNG 1080×1920 карточки для сторис и приглашения (предел — `STORY_CARD_POLICY.maxPngBytes`). */
+export function renderStoryCardPng(svg: string): Buffer {
+  return renderCardPng(svg, {
+    width: storyCard.size.width,
+    maxBytes: STORY_CARD_POLICY.maxPngBytes,
+  });
 }
