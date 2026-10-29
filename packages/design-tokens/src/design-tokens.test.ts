@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { appThemes } from './app-themes.ts';
-import { contrastPairs, contrastPairsOf, contrastRatio } from './contrast.ts';
+import { contrastPairs, contrastPairsOf, contrastRatio, QR_CONTRAST } from './contrast.ts';
 import { designSystemCss } from './css.ts';
 import { layout } from './index.ts';
 import { themes, type ThemeName } from './brand.ts';
@@ -125,6 +125,20 @@ describe('контраст WCAG — темы pokatim', () => {
         'map.start / map.route',
       ]),
     );
+  });
+
+  it('QR билета: пара ink/paper ≥ 7:1 во всех темах приложения, «бумага» светлее модулей (RC-B5)', () => {
+    for (const def of Object.values(appThemes)) {
+      for (const scheme of ['light', 'dark'] as const) {
+        const pair = contrastPairsOf(def.schemes[scheme]).find(
+          (p) => p.name === 'ticket.qrInk / ticket.qrPaper',
+        );
+        expect(pair?.min).toBe(QR_CONTRAST);
+        const { qrInk, qrPaper } = def.schemes[scheme].ticket;
+        expect(contrastRatio(qrInk, qrPaper)).toBeGreaterThanOrEqual(QR_CONTRAST);
+        expect(contrastRatio(qrPaper, '#000000')).toBeGreaterThan(contrastRatio(qrInk, '#000000'));
+      }
+    }
   });
 
   it('к парам добавлена линия профиля высоты', () => {

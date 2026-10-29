@@ -79,6 +79,14 @@ export interface PokatimRoleGroups {
     active: string;
     inactive: string;
   };
+  /**
+   * QR билета (event-tickets, RC-B5): тёмные модули на светлой «бумаге» во всех темах — инверсный QR (светлый на
+   * тёмном) читают не все сканеры. Контраст ≥ 7:1 (`contrast.ts`).
+   */
+  ticket: {
+    qrInk: string;
+    qrPaper: string;
+  };
 }
 
 /** Разрешённая схема темы приложения: роли базы + группы pokatim + форма. `useTheme<AppTheme>()`. */
@@ -158,6 +166,7 @@ const light: AppTheme = {
     active: color.neutral900,
     inactive: color.neutral600,
   },
+  ticket: { qrInk: color.black, qrPaper: color.neutral0 },
   shape: defaultShape,
 };
 
@@ -230,6 +239,8 @@ const dark: AppTheme = {
     active: color.neutral50,
     inactive: color.neutral400,
   },
+  // «бумага» QR светлая и в тёмной схеме (RC-B5)
+  ticket: { qrInk: color.black, qrPaper: color.neutral0 },
   shape: defaultShape,
 };
 
