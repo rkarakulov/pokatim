@@ -9,6 +9,7 @@ import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { CredentialsCheck } from './credentials-check';
 import { IdentityAccounts } from './identity-accounts';
+import { ErasureFailures } from './erasure-failures';
 import { IdentityOverview } from './identity-overview';
 import { IdentityRepository } from './identity.repository';
 import { CleanupUnverifiedProcessor } from './jobs/cleanup-unverified.processor';
@@ -32,8 +33,8 @@ import { VerificationService } from './verification.service';
  * «Обзора» панели — `IdentityOverview` (admin-overview).
  */
 @Module({
-  providers: [IdentityRepository, IdentityAccounts, IdentityOverview],
-  exports: [IdentityRepository, IdentityAccounts, IdentityOverview],
+  providers: [IdentityRepository, IdentityAccounts, IdentityOverview, ErasureFailures],
+  exports: [IdentityRepository, IdentityAccounts, IdentityOverview, ErasureFailures],
 })
 export class IdentityAccountsModule {}
 

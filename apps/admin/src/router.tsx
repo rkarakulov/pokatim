@@ -27,6 +27,7 @@ import { OverviewScreen } from './features/overview/OverviewScreen';
 import { NewRaceScreen, RaceScreen } from './features/races/RaceScreen';
 import { RacesScreen, validateRacesSearch } from './features/races/RacesScreen';
 import { RaceResultsScreen } from './features/results/RaceResultsScreen';
+import { AccountErasuresScreen } from './features/account-erasures/AccountErasuresScreen';
 import { RiderProfileScreen } from './features/rider-profiles/RiderProfileScreen';
 import { RiderProfilesScreen } from './features/rider-profiles/RiderProfilesScreen';
 import { validateRiderRoutesSearch } from './features/rider-routes/rider-routes-format';
@@ -377,6 +378,17 @@ const appearanceRoute = createRoute({
   ),
 });
 
+// erasure-failures: зависшие удаления аккаунтов и повтор очистки (только admin); вход — карточка «Обзора»
+const accountErasuresRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'account-erasures',
+  component: () => (
+    <RequirePermission permission="platform.stats">
+      <AccountErasuresScreen />
+    </RequirePermission>
+  ),
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '$',
@@ -408,6 +420,7 @@ const routeTree = rootRoute.addChildren([
     riderRouteRoute,
     riderProfilesRoute,
     riderProfileRoute,
+    accountErasuresRoute,
     notFoundRoute,
   ]),
 ]);

@@ -18,9 +18,18 @@ export type AccountDeletionSweep = z.infer<typeof AccountDeletionSweep>;
 /** Регламент: повторный проход удалённым без завершённой очистки (финальный провал не застревает навсегда). */
 export const ACCOUNT_ERASURE_RESUME_JOB = 'account.erasure-resume';
 
+/**
+ * Повтор очистки из панели (erasure-failures): транзакция журнала `account.erasure_retried` → повторный проход
+ * (`pass: 'sweep'`). jobId — id события outbox: каждый повтор — своя задача, шаги идемпотентны.
+ */
+export const ACCOUNT_ERASURE_RETRY_REQUESTED = 'account.erasure-retry-requested';
+export const AccountErasureRetryRequested = z.object({ userId: z.uuid() });
+export type AccountErasureRetryRequested = z.infer<typeof AccountErasureRetryRequested>;
+
 export const sweepDeduplicationId = (userId: string) => `account-sweep:${userId}`;
 
 /** Маршруты событий account для публикатора outbox (подключает worker.module.ts). */
 export const accountOutboxRoutes = {
   [ACCOUNT_DELETION_REQUESTED]: QUEUE.accountDeletion,
+  [ACCOUNT_ERASURE_RETRY_REQUESTED]: QUEUE.accountDeletion,
 } as const;

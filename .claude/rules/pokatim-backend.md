@@ -211,7 +211,7 @@ paths:
   между `tracks` и `identity`), `AccountErasure` (`IdentityErasureModule`); push-токены — `PushTokens.revokeAllOf(tx)`
   в транзакции удаления. Новый модуль с
   данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник» (A3). Финальный провал шага — лог
-  `account.erasure_failed user=<uid> step=<s>`, failed-набор BullMQ, регламент; экран в панели — follow-up (F13).
+  `account.erasure_failed user=<uid> step=<s>`, failed-набор BullMQ, регламент; экран в панели — «Сбои удаления аккаунтов» (ниже).
 
 ## «Обзор» панели (`overview`, admin-overview)
 
@@ -224,6 +224,19 @@ paths:
   (`countPublicationQueue`), `ProfilesOverview` (`countReportQueue`), `IdentityOverview` (регистрации, зависшие
   удаления — фильтр `pendingSweeps`), `TracksOverview`, `CalendarOverview` (`CalendarCoreModule`). Пределы —
   `overview.policy.ts`. Новый счётчик — метод порта владельца, не чтение чужой коллекции.
+
+## Сбои удаления аккаунтов (erasure-failures)
+
+- Провал шага очистки (`AccountErasureService.step`, каждая попытка) — `AccountErasure.recordFailure`: в `users`
+  удалённого `erasureLastFailure { step, code, at }` и `$inc erasureFailedAttempts`; код — `erasureErrorCode`
+  (строковый `code`, числовой код драйвера или имя класса), текст ошибки не хранится (может нести e-mail). Сбой
+  записи не подменяет исходную ошибку.
+- Панель — `account/account-erasures-admin.*` (`GET /v1/admin/account-erasures`, `POST …/:userId/retry`,
+  `platform.stats`); чтение и захват повтора — порт `ErasureFailures` (identity, `IdentityAccountsModule`), порог
+  `ERASURE_STUCK_MS` — общий с карточкой «Обзора». Повтор — транзакция: `claimRetry` (условный `updateOne`:
+  зависло, не завершено, прошлый повтор старше `ERASURE_RETRY_COOLDOWN_MS` или после него был сбой) → журнал
+  `account.erasure_retried` → outbox `account.erasure-retry-requested` → процессор `account-deletion`, проход
+  `sweep`. Недавний повтор — `{ queued: false }`; нет удалённого — 404; завершено или не зависло — 409.
 
 ## Билеты (`tickets`, event-tickets, ADR-0023 Proposed)
 

@@ -9,6 +9,7 @@ import {
   identityCollections,
   type LinkTokenDoc,
   type SessionRevokedReason,
+  type ErasureFailureDoc,
   type UserDoc,
 } from './identity.collection';
 
@@ -106,6 +107,12 @@ type NewLink = { id: string; userId: string; tokenHash: string; createdAt: Date;
  *   если документ держит транзакция, такая запись ждёт её конца и перепроверяет фильтр.
  * - Значения фильтров — только примитивы после zod (хеши, id, даты), не объекты запроса.
  */
+/** Зависшее удаление для экрана сбоев панели: только служебные поля. */
+export type ErasurePendingDoc = Pick<
+  UserDoc,
+  '_id' | 'erasureFailedAttempts' | 'erasureLastFailure' | 'erasureRetryRequestedAt'
+> & { deletedAt: Date };
+
 /** Удалённые раньше `deletedBefore` без завершённого повторного прохода — `partialFilterExpression` индекса 0023. */
 function pendingSweepFilter(deletedBefore: Date): Filter<UserDoc> {
   return { deletedAt: { $type: 'date', $lt: deletedBefore }, erasureSweptAt: { $eq: null } };
@@ -792,6 +799,84 @@ export class IdentityRepository {
       .limit(limit)
       .toArray();
     return docs.map((doc) => doc._id);
+  }
+
+  /**
+   * Провал шага очистки удалённого аккаунта (erasure-failures): последний сбой и счётчик попыток. Атомарно, вне
+   * транзакции; живой аккаунт не трогается.
+   */
+  async recordErasureFailure(userId: string, failure: ErasureFailureDoc): Promise<void> {
+    await this.c.users.updateOne(
+      { _id: userId, deletedAt: { $type: 'date' } },
+      { $set: { erasureLastFailure: failure }, $inc: { erasureFailedAttempts: 1 } },
+    );
+  }
+
+  /**
+   * Страница зависших удалений (экран сбоев панели): фильтр `pendingSweeps`, порядок `(deletedAt, _id)` — самые давние
+   * первыми, `after` — ключ последней строки прошлой страницы. Только служебные поля, без e-mail.
+   */
+  async pendingSweepPage(
+    deletedBefore: Date,
+    after: { deletedAt: Date; id: string } | null,
+    limit: number,
+  ): Promise<ErasurePendingDoc[]> {
+    const filter: Filter<UserDoc> = after
+      ? {
+          $and: [
+            pendingSweepFilter(deletedBefore),
+            {
+              $or: [
+                { deletedAt: { $gt: after.deletedAt } },
+                { deletedAt: after.deletedAt, _id: { $gt: after.id } },
+              ],
+            },
+          ],
+        }
+      : pendingSweepFilter(deletedBefore);
+    return this.c.users
+      .find(filter, {
+        projection: {
+          deletedAt: 1,
+          erasureFailedAttempts: 1,
+          erasureLastFailure: 1,
+          erasureRetryRequestedAt: 1,
+        },
+      })
+      .sort({ deletedAt: 1, _id: 1 })
+      .limit(limit)
+      .toArray() as Promise<ErasurePendingDoc[]>;
+  }
+
+  /**
+   * Захват повтора очистки из панели (в транзакции действия): только зависшее удаление (`pendingSweeps` с порогом
+   * `deletedBefore`), и если прошлый повтор старше `retryBefore` или после него был сбой. Пишет `version` (R1).
+   */
+  async claimErasureRetry(
+    session: DbSession,
+    userId: string,
+    deletedBefore: Date,
+    retryBefore: Date,
+    now: Date,
+  ): Promise<boolean> {
+    const result = await this.c.users.updateOne(
+      {
+        $and: [
+          { _id: userId },
+          pendingSweepFilter(deletedBefore),
+          {
+            $or: [
+              { erasureRetryRequestedAt: { $eq: null } },
+              { erasureRetryRequestedAt: { $lt: retryBefore } },
+              { $expr: { $gt: ['$erasureLastFailure.at', '$erasureRetryRequestedAt'] } },
+            ],
+          },
+        ],
+      },
+      { $set: { erasureRetryRequestedAt: now }, $inc: { version: 1 } },
+      { session },
+    );
+    return result.modifiedCount === 1;
   }
 
   /** Число таких аккаунтов (admin-overview: зависшие удаления на «Обзоре») — тот же фильтр и индекс. */

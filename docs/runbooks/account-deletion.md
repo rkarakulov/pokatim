@@ -41,8 +41,11 @@ db.users.find(
 - Лог worker `account.erasure_failed user=<uid> step=<шаг>` — какой шаг падает (финальная попытка задачи).
 - Задача в failed-наборе BullMQ (`removeOnFail: false`): очередь `account-deletion`, имя
   `account.deletion-requested` или `account.deletion-sweep`.
-- Повтор: дождаться регламента (раз в час, `account.erasure-resume`) или вручную `retry` failed-задачи (Bull Board /
-  `queue.getJob(id).retry()`). Все шаги идемпотентны — повтор безопасен.
+- Панель: «Обзор» → «Удаления аккаунтов со сбоем» → «Открыть» (только admin) — шаг, код и время последнего сбоя,
+  число неудачных попыток (поля `users.erasureLastFailure`, `erasureFailedAttempts`); «Повторить удаление» с причиной
+  ставит повторный проход (журнал `account.erasure_retried`).
+- Повтор: кнопкой в панели, дождаться регламента (раз в час, `account.erasure-resume`) или вручную `retry`
+  failed-задачи (Bull Board / `queue.getJob(id).retry()`). Все шаги идемпотентны — повтор безопасен.
 - Шаг `identity` не проходит из-за почты: через 24 ч после удаления e-mail стирается без письма (лог
   `account.deletion_email_abandoned`).
 - Регламент берёт за запуск не больше 50 аккаунтов (`resumeBatch`), самые давние первыми. Если больше 50 застряли и

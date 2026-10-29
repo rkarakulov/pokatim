@@ -25,6 +25,9 @@ export const IDENTITY_COLLECTIONS = {
  * (`deletionEmailClaimedAt` — захват отправки, `deletionEmailSentAt` — факт) одной записью заменяет `email` маркером
  * `erased:<HMAC>` (`erasedEmailMarker`), обнуляет `birthDate` и `passwordHash` и ставит `erasedAt`; повторный проход —
  * `erasureSweptAt`. Новые поля необязательны: документы до удаления их не имеют (чтение — `?? null`).
+ *
+ * Сбои очистки (erasure-failures): провал шага — `erasureLastFailure` (шаг, безопасный код, время) и
+ * `erasureFailedAttempts` (`$inc`); повтор из панели — `erasureRetryRequestedAt`. Без текста ошибки и ПДн.
  */
 export interface UserDoc {
   _id: string;
@@ -42,6 +45,16 @@ export interface UserDoc {
   deletionEmailSentAt?: Date | null;
   erasedAt?: Date | null;
   erasureSweptAt?: Date | null;
+  erasureFailedAttempts?: number;
+  erasureLastFailure?: ErasureFailureDoc | null;
+  erasureRetryRequestedAt?: Date | null;
+}
+
+/** Последний провал шага очистки: `code` — только безопасный токен (`erasureErrorCode`). */
+export interface ErasureFailureDoc {
+  step: string;
+  code: string;
+  at: Date;
 }
 
 export const CONSENT_KINDS = ['personal_data', 'agreement'] as const;
