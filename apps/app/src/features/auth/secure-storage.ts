@@ -8,7 +8,9 @@ export type SecureKey =
   | 'pokatim.locationPrompt'
   | 'pokatim.appTheme'
   | 'pokatim.pushToken'
-  | 'pokatim.locale';
+  | 'pokatim.locale'
+  // QR офлайн-копий билетов (event-tickets, plan-B §5): только токены QR и владелец — остальное в файле
+  | 'pokatim.ticketQr';
 
 /**
  * Единственная точка доступа к защищённому хранилищу: экраны и сторы не знают о нативном модуле;

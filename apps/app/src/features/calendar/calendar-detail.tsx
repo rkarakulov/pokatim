@@ -28,6 +28,7 @@ import { domainLabel } from '@/lib/minsk-format';
 import { openExternalUrl } from '@/lib/open-external-url';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
+import { CalendarRegistration } from './calendar-registration';
 import { formatCalendarStartDate, startPlaceLine } from './format';
 import { useCalendarStart } from './queries';
 import { registrationLink } from './registration';
@@ -111,7 +112,8 @@ function CalendarDetailView({ start }: { start: CalendarStartDetail }) {
           }))}
         />
       ) : null}
-      <Registration start={start} />
+      {/* регистрация в «Покатим» (event-tickets) — вместо кнопки сайта организатора, если билеты включены (RC-B7) */}
+      <CalendarRegistration start={start} fallback={<Registration start={start} />} />
       {start.description ? (
         <View style={styles.about}>
           <Text style={[textStyle('label'), { color: theme.text.secondary }]}>

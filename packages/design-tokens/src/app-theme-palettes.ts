@@ -73,6 +73,8 @@ function appScheme(p: Palette, shape: ShapeRoles): AppTheme {
     overlay: { scrim: BLACK },
     control: { track: input, trackOn, thumb: WHITE, thumbOn },
     tabBar: { background: tabBackground, active: tabActive, inactive: secondary },
+    // QR билета — одинаково во всех темах: чёрные модули на белом (RC-B5)
+    ticket: { qrInk: BLACK, qrPaper: WHITE },
     shape,
   };
 }

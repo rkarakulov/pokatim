@@ -68,6 +68,8 @@ beforeEach(() => {
     themeId: 'classic',
   });
   open.mockResolvedValue(undefined);
+  // билеты (event-tickets): у старта не включены — прежняя кнопка сайта организатора
+  jest.mocked(api.getEventTicketing).mockResolvedValue({ enabled: false });
 });
 afterEach(() => {
   jest.clearAllMocks();

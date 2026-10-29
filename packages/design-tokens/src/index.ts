@@ -86,13 +86,15 @@ export { designSystemCss, skeletonCss, typographyCss, type DesignSystemCssOption
  * `contentMaxWidth`, по центру; на телефоне ограничение не срабатывает. `avatarProfile` — аватар шапки профиля
  * (`.phead-name .ava` прототипа, rider-profile). В базе (`size`) готовых значений нет; follow-up — `size.avatarLg` в
  * app-foundation. `badgeGrid` / `badgeHero` — значок достижения «Эмаль» в сетке блока профиля и крупно на вспышке
- * (achievements); follow-up — `size.badge*` в app-foundation.
+ * (achievements); follow-up — `size.badge*` в app-foundation. `ticketQr` — сторона QR билета с рамкой (event-tickets):
+ * крупно, читается сканером с вытянутой руки и помещается в колонку телефона 320 px.
  */
 export const layout = {
   contentMaxWidth: 640,
   avatarProfile: 56,
   badgeGrid: 72,
   badgeHero: 152,
+  ticketQr: 240,
 } as const;
 
 /**
