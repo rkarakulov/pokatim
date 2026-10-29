@@ -45,6 +45,7 @@ describe('блок «Достижения» своего профиля (AC12)',
       club: null,
       avatar: null,
       publicId: null,
+      themeId: 'classic',
     });
     jest.mocked(api.getProfileStats).mockResolvedValue({
       activities: 1,
