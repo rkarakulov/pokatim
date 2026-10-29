@@ -16,6 +16,10 @@ export { SessionCookie } from './session-cookie';
 export { type AccountState, IdentityAccounts } from './identity-accounts';
 /** Порт «Обзора» панели (admin-overview): регистрации за период и зависшие удаления аккаунтов. */
 export { IdentityOverview } from './identity-overview';
+/** Порт экрана сбоев удаления панели (erasure-failures): зависшие удаления и захват повтора. */
+export { type ErasurePending, type ErasureRetryClaim, ErasureFailures } from './erasure-failures';
+/** Порог «удаление зависло» — общий для «Обзора» и экрана сбоев. */
+export { ERASURE_STUCK_MS } from './identity.policy';
 export {
   PanelCredentials,
   type PanelCredentialsResult,

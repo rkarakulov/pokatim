@@ -85,6 +85,7 @@ describe('«Обзор» — блоки по правам', () => {
         .getAttribute('href'),
     ).toContain('/rider-profiles');
     expect(tile('Удаления аккаунтов со сбоем').textContent).toContain('Всё разобрано');
+    expect(within(tile('Удаления аккаунтов со сбоем')).queryByRole('link')).toBeNull();
 
     const race = screen.getByRole('link', { name: 'Минское кольцо' });
     expect(race.getAttribute('href')).toContain(`/races/${RACE_ID}/results`);
@@ -115,6 +116,7 @@ describe('«Обзор» — блоки по правам', () => {
         ...ADMIN_OVERVIEW.attention,
         protocols: { awaiting: 25, checked: 20, ready: 2, blockers: 30 },
         riderRoutes: { pending: 0, reported: 3 },
+        accountDeletions: { stuck: 2 },
       },
     });
     await renderApp('/');
@@ -124,6 +126,12 @@ describe('«Обзор» — блоки по правам', () => {
     );
     const link = within(tile('Маршруты с жалобами')).getByRole('link', { name: 'Открыть' });
     expect(link.getAttribute('href')).toContain('/rider-routes?tab=reported');
+    // erasure-failures: зависшие удаления — ссылка на экран сбоев
+    expect(
+      within(tile('Удаления аккаунтов со сбоем'))
+        .getByRole('link', { name: 'Открыть' })
+        .getAttribute('href'),
+    ).toContain('/account-erasures');
   });
 
   it('организатор: только «Ждут протокола» и «Сейчас идёт» — без модерации и KPI; пустые таблицы', async () => {

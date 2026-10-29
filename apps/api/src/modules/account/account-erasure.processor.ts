@@ -9,7 +9,9 @@ import {
   ACCOUNT_DELETION_REQUESTED,
   ACCOUNT_DELETION_SWEEP_JOB,
   ACCOUNT_ERASURE_RESUME_JOB,
+  ACCOUNT_ERASURE_RETRY_REQUESTED,
   AccountDeletionRequested,
+  AccountErasureRetryRequested,
   AccountDeletionSweep,
 } from './account.events';
 
@@ -18,7 +20,8 @@ const isFinal = (job: Job) => job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 
 /**
  * Единственный процессор очереди `account-deletion`: разбор по имени задачи — событие outbox
- * `account.deletion-requested` (первый проход), `account.deletion-sweep` (повторный проход) и регламент
+ * `account.deletion-requested` (первый проход), `account.deletion-sweep` и событие outbox повтора из панели
+ * `account.erasure-retry-requested` (повторный проход) и регламент
  * `account.erasure-resume`. Незнакомое имя или payload не по схеме — ошибка, а не тихий пропуск.
  */
 @Processor(QUEUE.accountDeletion)
@@ -40,6 +43,13 @@ export class AccountErasureProcessor extends WorkerHost {
       case ACCOUNT_DELETION_SWEEP_JOB: {
         const { userId } = AccountDeletionSweep.parse(job.data);
         return this.erasure.run(userId, { pass: 'sweep', final: isFinal(job) });
+      }
+      case ACCOUNT_ERASURE_RETRY_REQUESTED: {
+        const { outboxEventId } = job.data as OutboxJobData;
+        const event = AccountErasureRetryRequested.parse(
+          await this.reader.payloadOf(outboxEventId),
+        );
+        return this.erasure.run(event.userId, { pass: 'sweep', final: isFinal(job) });
       }
       case ACCOUNT_ERASURE_RESUME_JOB:
         return this.erasure.resume();

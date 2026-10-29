@@ -72,6 +72,15 @@ export class AccountErasure {
     throw new Error(`account erasure did not apply for user ${userId}`);
   }
 
+  /** Провал шага (каждая попытка): шаг, безопасный код ошибки и время; текст ошибки не хранится (может нести e-mail). */
+  recordFailure(userId: string, step: string, error: unknown, now: Date): Promise<void> {
+    return this.repository.recordErasureFailure(userId, {
+      step,
+      code: erasureErrorCode(error),
+      at: now,
+    });
+  }
+
   markSwept(userId: string, now: Date): Promise<void> {
     return this.repository.markErasureSwept(userId, now);
   }
@@ -98,7 +107,11 @@ export class AccountErasure {
       await this.repository.releaseDeletionEmail(userId, now);
       // текст ошибки SMTP содержит адрес получателя, а failedReason и stacktrace задачи BullMQ хранятся в Redis
       // (removeOnFail: false) — наружу только uid и код, без исходного сообщения и cause
-      throw new Error(`account deletion email failed user=${userId} code=${mailErrorCode(error)}`);
+      const code = mailErrorCode(error);
+      // код — и свойством: экран сбоев удаления панели читает его (`erasureErrorCode`), текст не хранится
+      throw Object.assign(new Error(`account deletion email failed user=${userId} code=${code}`), {
+        code,
+      });
     }
     await this.repository.completeDeletionEmail(userId, now, now);
     this.logger.log(`account.deletion_email_sent user=${userId}`);
@@ -109,4 +122,16 @@ export class AccountErasure {
 function mailErrorCode(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === 'string' && /^[A-Z0-9_]{1,32}$/.test(code) ? code : 'unknown';
+}
+
+/**
+ * Код провала шага для панели (erasure-failures): строковый `code` (`ECONNECTION`), числовой код драйвера MongoDB
+ * (`11000`) или имя класса ошибки (`MongoServerError`) — только безопасные токены, иначе `unknown`.
+ */
+export function erasureErrorCode(error: unknown): string {
+  const { code, name } = (error ?? {}) as { code?: unknown; name?: unknown };
+  if (typeof code === 'string' && /^[A-Z0-9_]{1,32}$/.test(code)) return code;
+  if (typeof code === 'number' && Number.isInteger(code)) return String(code);
+  if (typeof name === 'string' && /^[A-Za-z]{1,40}$/.test(name)) return name;
+  return 'unknown';
 }
