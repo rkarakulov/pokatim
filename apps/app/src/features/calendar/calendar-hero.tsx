@@ -19,7 +19,8 @@ export function CalendarStartHero({
   onPress,
 }: {
   start: CalendarStartCard;
-  now: Date;
+  /** `null` — SSR и гидрация публичного экрана (лендинг): дата с годом, без строки «До старта N дней» */
+  now: Date | null;
   kicker?: string;
   onPress?: () => void;
 }) {
@@ -30,7 +31,7 @@ export function CalendarStartHero({
       title={start.title}
       meta={[
         calendarMeta(start),
-        calendarStatusLine(start, now),
+        now ? calendarStatusLine(start, now) : null,
         isRegistrationUrl(start.registrationUrl) ? t('calendar.registration') : null,
       ].filter((line): line is string => !!line)}
       {...(onPress ? { onPress } : {})}

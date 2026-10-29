@@ -441,11 +441,11 @@ describe('гость (RC-14)', () => {
   });
 
   it.each([rivalUrl, formUrl, `/races/dispute-response/${RACE_ID}/${DISPUTE_ID}`])(
-    '%s — под гардом: гостю регистрация',
+    '%s — под гардом: гостю лендинг (guest-landing)',
     async (url) => {
       const router = await renderRouter(appRoutes, { initialUrl: url });
 
-      await waitFor(() => expect(router.getPathname()).toBe('/register'));
+      await waitFor(() => expect(router.getPathname()).toBe('/welcome'));
       expect(getMyRaceDisputes).not.toHaveBeenCalled();
     },
   );

@@ -35,6 +35,9 @@ describe('маршруты web-сервера: первое совпадение
     [`/routes/mine/${ID}`, '/routes/mine/[id]'],
     [`/routes/report/${ID}`, '/routes/report/[id]'],
     [`/races/pick/${ID}`, '/races/pick/[id]'],
+    // guest-landing (RC-1): корневой лендинг, корень — Главная
+    ['/welcome', '/welcome'],
+    ['/', '/(tabs)/index'],
   ])('%s → %s', (url, page) => {
     expect(serverPage(url)).toBe(page);
   });

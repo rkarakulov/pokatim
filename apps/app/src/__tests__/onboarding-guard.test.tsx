@@ -104,10 +104,14 @@ describe('гард онбординга: опрос после входа (AC6)'
     expect(router.getPathname()).toBe('/');
   });
 
-  it('/survey без сессии → регистрация, опрос недоступен', async () => {
+  it('/survey без сессии → лендинг, опрос недоступен', async () => {
     const router = await renderRouter(appRoutes, { initialUrl: '/survey' });
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
   });
 
   it('/survey, пока сессия не прочитана (SSR, запуск), — скелетон оболочки без редиректа', async () => {

@@ -20,19 +20,27 @@ import { appRoutes } from './app-routes';
 jest.mock('@/lib/api');
 
 describe('гард сессии (Stack.Protected)', () => {
-  it('без сессии приложение открывает регистрацию, вкладок нет', async () => {
+  it('без сессии новый гость видит лендинг, вкладок нет (guest-landing)', async () => {
     const router = await renderRouter(appRoutes, { initialUrl: '/' });
 
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
     expect(screen.queryByRole('tab', { name: 'Главная' })).toBeNull();
   });
 
-  it('свой профиль /profile без сессии — регистрация (rider-profile: экран под гардом)', async () => {
+  it('свой профиль /profile без сессии — лендинг (rider-profile: экран под гардом)', async () => {
     const router = await renderRouter(appRoutes, { initialUrl: '/profile' });
 
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
-    expect(router.getPathname()).toBe('/register');
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
     expect(api.getProfileStats).not.toHaveBeenCalled();
   });
 
@@ -44,7 +52,9 @@ describe('гард сессии (Stack.Protected)', () => {
 
     expect(await screen.findByRole('progressbar', { name: 'Загрузка' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/');
-    expect(screen.queryByRole('header', { name: 'Создать аккаунт' })).toBeNull();
+    expect(
+      screen.queryByRole('header', { name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах' }),
+    ).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Главная' })).toBeNull();
   });
 
@@ -59,11 +69,19 @@ describe('гард сессии (Stack.Protected)', () => {
 
       expect(await screen.findByText(title)).toBeOnTheScreen();
       expect(router.getPathname()).toBe('/');
-      expect(screen.queryByRole('header', { name: 'Создать аккаунт' })).toBeNull();
+      expect(
+        screen.queryByRole('header', {
+          name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+        }),
+      ).toBeNull();
 
-      // повтор — снова восстановление (здесь сессии нет → регистрация)
+      // повтор — снова восстановление (здесь сессии нет → лендинг)
       await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
-      expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
+      expect(
+        await screen.findByRole('header', {
+          name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+        }),
+      ).toBeOnTheScreen();
       expect(restore).toHaveBeenCalledTimes(2);
       restore.mockRestore();
     },
@@ -90,7 +108,11 @@ describe('гард сессии (Stack.Protected)', () => {
     storeSession({ ...session, refreshTokenExpiresAt: '2020-01-01T00:00:00.000Z' });
     await renderRouter(appRoutes, { initialUrl: '/' });
 
-    expect(await screen.findByRole('header', { name: 'Создать аккаунт' })).toBeOnTheScreen();
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
   });
 
   it('живая регистрация после перезапуска — сразу «Подтвердите e-mail»', async () => {
