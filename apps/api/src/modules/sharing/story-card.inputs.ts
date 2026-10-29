@@ -3,8 +3,7 @@ import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { AppThemeId, StoryCardTemplate } from '@pokatim/contracts';
 
-import { APP_APPEARANCE, type AppAppearanceSource } from '../appearance';
-import { RIDER_NAMES, type RiderNameDirectory } from '../profile';
+import { RIDER_NAMES, type RiderNameDirectory, RIDER_THEMES, type RiderThemes } from '../profile';
 import { RESULTS_FOR_SHARING, type ResultsForSharing, type StoryCardFacts } from '../results';
 import { STORY_CARD_POLICY } from './sharing.policy';
 
@@ -52,13 +51,13 @@ export function storyCardHash(input: StoryCardInput): string {
 
 /**
  * Входы карточки — одна реализация для HTTP (статус) и worker (сверка «устарело»): факты своего результата (порт
- * `results`; 404/`null`), активная тема (`appearance`), имя с согласием (`profile`).
+ * `results`; 404/`null`), тема владельца заявки и имя с согласием (`profile`, user-theme).
  */
 @Injectable()
 export class StoryCardInputs {
   constructor(
     @Inject(RESULTS_FOR_SHARING) private readonly results: ResultsForSharing,
-    @Inject(APP_APPEARANCE) private readonly appearance: AppAppearanceSource,
+    @Inject(RIDER_THEMES) private readonly themes: RiderThemes,
     @Inject(RIDER_NAMES) private readonly names: RiderNameDirectory,
   ) {}
 
@@ -70,7 +69,7 @@ export class StoryCardInputs {
     const facts = await this.results.storyCardFacts(userId, raceId);
     if (!facts) return null;
     const [themeId, names] = await Promise.all([
-      this.appearance.activeThemeId(),
+      this.themes.themeOf(userId),
       this.names.publicNames([userId]),
     ]);
     const input: StoryCardInput = {

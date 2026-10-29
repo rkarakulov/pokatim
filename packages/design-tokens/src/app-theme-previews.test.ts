@@ -1,13 +1,14 @@
-import { APP_THEME_IDS } from '@pokatim/contracts';
-import { appThemes } from '@pokatim/design-tokens';
 import { describe, expect, it } from 'vitest';
 
-import { previewOf, THEME_PREVIEWS } from './theme-previews';
+import { previewOf, THEME_PREVIEWS } from './app-theme-previews.ts';
+import { appThemes } from './app-themes.ts';
 
-describe('превью тем в панели (app-themes C1, AC8)', () => {
-  it('ключи — APP_THEME_IDS в том же порядке, у каждой темы — цветное превью', () => {
-    expect(Object.keys(THEME_PREVIEWS)).toEqual([...APP_THEME_IDS]);
-    for (const id of APP_THEME_IDS) expect(THEME_PREVIEWS[id]).toEqual(previewOf(appThemes[id]));
+describe('превью тем (app-themes C1; user-theme — общий источник для экрана выбора)', () => {
+  it('ключи — темы реестра в том же порядке, у каждой темы — превью из реестра', () => {
+    expect(Object.keys(THEME_PREVIEWS)).toEqual(Object.keys(appThemes));
+    for (const [id, def] of Object.entries(appThemes)) {
+      expect(THEME_PREVIEWS[id as keyof typeof appThemes]).toEqual(previewOf(def));
+    }
   });
 
   it('превью — роли схем темы из реестра: «по системе» — светлая и тёмная, «всегда тёмная» — одна', () => {
@@ -40,7 +41,7 @@ describe('превью тем в панели (app-themes C1, AC8)', () => {
   });
 
   it('у тем разные превью', () => {
-    const canvases = new Set(Object.values(THEME_PREVIEWS).map((p) => JSON.stringify(p)));
-    expect(canvases.size).toBe(APP_THEME_IDS.length);
+    const previews = new Set(Object.values(THEME_PREVIEWS).map((p) => JSON.stringify(p)));
+    expect(previews.size).toBe(Object.keys(appThemes).length);
   });
 });

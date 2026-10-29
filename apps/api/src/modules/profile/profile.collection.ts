@@ -1,4 +1,4 @@
-import type { RideReason } from '@pokatim/contracts';
+import type { AppThemeId, RideReason } from '@pokatim/contracts';
 import type { Binary } from 'mongodb';
 
 /**
@@ -46,6 +46,11 @@ export interface ProfileDoc {
    * меняется (отзыв согласия его не стирает — наружу он не выдаётся). Уникальный частичный индекс (`0033`).
    */
   publicId?: string | null;
+  /**
+   * Личная тема приложения (user-theme, ADR-0021): id из закрытого списка после zod; `null`/нет поля — «Классика».
+   * Необязательное поле без миграции и индекса (по теме не ищут); пишет только `PUT /v1/profile/theme`.
+   */
+  themeId?: AppThemeId | null;
   /**
    * profile-moderation: число открытых жалоб на профиль (= числу открытых документов жалоб, `resolvedAt: null`;
    * транзакция жалобы и действий модерации — запись профиля первой). Нет поля — 0. Наружу в `ProfileView` и

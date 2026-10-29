@@ -11,6 +11,16 @@ export const ru = {
   'tabs.routes': 'Маршруты',
   'tabs.calendar': 'Календарь',
   'home.title': 'Главная',
+  // установка PWA (web): плашка над вкладками Главной, инструкция для iOS, промо по ссылке `?show-pwa-modal`
+  'pwaInstall.banner': 'Установить приложение',
+  'pwaInstall.close': 'Закрыть',
+  'pwaInstall.ios.title': 'Установите Покатим на iPhone',
+  'pwaInstall.ios.step1': '1. Нажмите «Поделиться» в панели браузера',
+  'pwaInstall.ios.step2': '2. Выберите «На экран „Домой“»',
+  'pwaInstall.promo.title': 'Установите приложение',
+  'pwaInstall.promo.text':
+    'Покатим откроется с экрана «Домой» в один тап — как обычное приложение, без адресной строки.',
+  'pwaInstall.promo.install': 'Установить',
   // гостевой лендинг /welcome (guest-landing, G3): пустые подписи — `home.races.empty`, `home.routes.empty`,
   // `calendar.empty`; знак — `home.wordmark`; описание меты — `app.tagline`
   'landing.title': 'Покатим — гонки, сезон, кофе-райды и маршруты',
@@ -614,7 +624,7 @@ export const ru = {
   'devices.step.continue': 'Продолжить',
   'devices.step.fileHint': 'Загрузить заезды файлом можно в разделе «Устройства».',
   'devices.step.saveFailed': 'Не удалось сохранить. Повторите.',
-  // хаб «Настройки» (settings-hub): разделы аккаунта, язык, о приложении; темы нет — её выбирает команда в панели
+  // хаб «Настройки» (settings-hub): разделы аккаунта, тема (user-theme), язык, о приложении
   'settings.title': 'Настройки',
   'settings.back': 'Назад',
   'settings.account': 'Аккаунт',
@@ -628,6 +638,35 @@ export const ru = {
   'settings.support': 'Поддержка',
   'settings.openFailed': 'Не удалось открыть ссылку. Попробуйте ещё раз.',
   'settings.language.lead': 'Язык интерфейса сохраняется на этом устройстве.',
+  // user-theme: экран «Тема» — личная тема райдера, сохраняется в аккаунте
+  'settings.theme': 'Тема',
+  'settings.theme.lead': 'Тема сохраняется в аккаунте и применяется на всех ваших устройствах.',
+  'settings.theme.saveFailed': 'Не удалось сохранить тему. Попробуйте ещё раз.',
+  // темы приложения (app-themes, user-theme): названия и описания — экран «Тема» и журнал панели
+  'theme.font': 'Шрифт: {name}',
+  'theme.scheme.system': 'Светлая и тёмная — по системе',
+  'theme.scheme.dark': 'Всегда тёмная',
+  'theme.classic.name': 'Классика',
+  'theme.classic.description':
+    'Облик по умолчанию: серифные заголовки, строгие карточки, иконки и полоса над активной вкладкой',
+  'theme.atlas.name': 'Атлас',
+  'theme.atlas.description':
+    'Серые тона, крупные карточки-плитки, оранжевый акцент и герой маршрута с контуром',
+  'theme.chrono.name': 'Хронометр',
+  'theme.chrono.description':
+    'Почти чёрный фон, ярко-оранжевые кнопки и линии, крупные цифры плитками',
+  'theme.planner.name': 'Планировщик',
+  'theme.planner.description':
+    'Тёплые бежево-серые тона, монохромные линии маршрута и профиля, герой маршрута с контуром',
+  'theme.journal.name': 'Журнал',
+  'theme.journal.description':
+    'Зелёные тона — светлые или тёмно-зелёные, зелёные кнопки, контуры, профиль высоты и активная вкладка',
+  'theme.navigation.name': 'Навигация',
+  'theme.navigation.description':
+    'Графитовый фон, синий маршрут, светлая кнопка и крупные цифры плитками',
+  'theme.typography.name': 'Типографика',
+  'theme.typography.description':
+    'Оранжевый диагональный блок, огромные сжатые цифры километров и заглавные подписи кнопок',
   // профиль райдера (profile-rider-name): публичное имя и согласие на показ в таблицах результатов
   'profile.title': 'Профиль',
   'profile.back': 'Назад',
@@ -1887,40 +1926,11 @@ export const ru = {
   'admin.routes.catalog.unpublishConfirm.confirm': 'Снять с публикации',
   'admin.routes.error.ROUTE_INVALID_STATE':
     'Маршрут ещё не готов — опубликовать можно только готовый',
-  // app-themes D1: раздел «Оформление приложения» панели и журнал смены темы
+  // app-themes D1: раздел «Оформление приложения» панели и журнал смены темы; user-theme — в разделе только декор
   'admin.nav.appearance': 'Оформление приложения',
   'admin.appearance.title': 'Оформление приложения',
   'admin.appearance.hint':
-    'Тема меняется у всех райдеров в приложении и на сайте. Панель «Протокол» остаётся в своей теме.',
-  'admin.appearance.legend': 'Тема приложения',
-  'admin.appearance.current': 'Сейчас в приложении',
-  'admin.appearance.save': 'Сохранить',
-  'admin.appearance.saved': 'Тема сохранена. Приложение применит её в течение минуты.',
-  'admin.appearance.saveFailed': 'Не удалось сохранить тему',
-  'admin.appearance.font': 'Шрифт: {name}',
-  'admin.appearance.scheme.system': 'Светлая и тёмная — по системе',
-  'admin.appearance.scheme.dark': 'Всегда тёмная',
-  'admin.appearance.theme.classic.name': 'Классика',
-  'admin.appearance.theme.classic.description':
-    'Нынешний облик: серифные заголовки, строгие карточки, иконки и полоса над активной вкладкой',
-  'admin.appearance.theme.atlas.name': 'Атлас',
-  'admin.appearance.theme.atlas.description':
-    'Серые тона, крупные карточки-плитки, оранжевый акцент и герой маршрута с контуром',
-  'admin.appearance.theme.chrono.name': 'Хронометр',
-  'admin.appearance.theme.chrono.description':
-    'Почти чёрный фон, ярко-оранжевые кнопки и линии, крупные цифры плитками',
-  'admin.appearance.theme.planner.name': 'Планировщик',
-  'admin.appearance.theme.planner.description':
-    'Тёплые бежево-серые тона, монохромные линии маршрута и профиля, герой маршрута с контуром',
-  'admin.appearance.theme.journal.name': 'Журнал',
-  'admin.appearance.theme.journal.description':
-    'Зелёные тона — светлые или тёмно-зелёные, зелёные кнопки, контуры, профиль высоты и активная вкладка',
-  'admin.appearance.theme.navigation.name': 'Навигация',
-  'admin.appearance.theme.navigation.description':
-    'Графитовый фон, синий маршрут, светлая кнопка и крупные цифры плитками',
-  'admin.appearance.theme.typography.name': 'Типографика',
-  'admin.appearance.theme.typography.description':
-    'Оранжевый диагональный блок, огромные сжатые цифры километров и заглавные подписи кнопок',
+    'Сезонный декор — у всех райдеров в приложении и на сайте. Тему каждый райдер выбирает сам в «Настройках».',
   'admin.audit.action.appearance.theme_changed': 'Тема приложения изменена',
   'admin.audit.themeChange': '{from} → {to}',
   'admin.audit.action.appearance.decor_changed': 'Сезонный декор изменён',

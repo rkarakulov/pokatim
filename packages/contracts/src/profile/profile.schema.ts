@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import { fieldError, optionalText } from '../common.ts';
+import {
+  APP_THEME_IDS,
+  AppThemeId,
+  DEFAULT_APP_THEME_ID,
+} from '../appearance/appearance.schema.ts';
+import { fieldError, optionalText, tolerantEnum } from '../common.ts';
 import { RIDE_REASONS, type RideReason } from './onboarding.schema.ts';
 import { AvatarId, RiderPublicId } from './rider-avatar.schema.ts';
 
@@ -48,7 +53,8 @@ export const RiderClub = riderLine(RIDER_CLUB_MIN, RIDER_CLUB_MAX);
  * опроса для порядка разделов Главной, публичное имя и согласие на его показ в таблицах результатов. Неизвестные коды
  * опроса новых версий отбрасываются, а не ломают разбор старыми сборками (R5 блока 02); запрос `PUT …/survey` остаётся
  * строгим. Имя и согласие — с `.default`: ответ старого сервера без них — `null` / `false`. Клуб, аватар и
- * `publicId` (rider-profile) — тоже с `.default(null)`; `publicId` не `null` только при имени и согласии.
+ * `publicId` (rider-profile) — тоже с `.default(null)`; `publicId` не `null` только при имени и согласии. Личная тема
+ * (user-theme): нет поля у старого сервера — «Классика», будущая тема в старой сборке — `'unknown'` (клиент → «Классика»).
  */
 export const ProfileView = z.object({
   rideReasons: z.array(z.string()).transform((codes) => codes.filter(isRideReason)),
@@ -57,8 +63,13 @@ export const ProfileView = z.object({
   club: z.string().nullable().default(null),
   avatar: z.object({ id: AvatarId }).nullable().default(null),
   publicId: RiderPublicId.nullable().default(null),
+  themeId: tolerantEnum(APP_THEME_IDS).default(DEFAULT_APP_THEME_ID),
 });
 export type ProfileView = z.output<typeof ProfileView>;
+
+/** `PUT /v1/profile/theme` (user-theme) — личная тема райдера из закрытого списка; лишние ключи — ошибка. */
+export const UpdateProfileThemeRequest = z.strictObject({ themeId: AppThemeId });
+export type UpdateProfileThemeRequest = z.infer<typeof UpdateProfileThemeRequest>;
 
 /**
  * `PATCH /v1/profile` — частичное обновление: ключа нет — поле не меняется; `publicName: null` или `""` — имя

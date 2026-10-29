@@ -3,7 +3,6 @@ import { Module } from '@nestjs/common';
 
 import { IpRateLimitGuard } from '../../public-read.guard';
 import { QUEUE } from '../../queues';
-import { AppearanceCoreModule } from '../appearance';
 import { IdentityModule } from '../identity';
 import { ProfileCoreModule } from '../profile';
 import { ResultsCoreModule } from '../results';
@@ -22,7 +21,7 @@ import { StoryCardService } from './story-card.service';
 /**
  * Карточки (ADR-0018), HTTP: статус сторис своего результата и приглашения кофе-райда (`AuthGuard`) и PNG по
  * капабилити-токену (IP-лимит). Данные — порты `results` (`RESULTS_FOR_SHARING`), `rides` (`RIDES_FOR_SHARING`),
- * `appearance` (`APP_APPEARANCE`), `profile` (`RIDER_NAMES`) через их `index.ts`; на `sharing` не ссылается никто.
+ * `profile` (`RIDER_NAMES`, `RIDER_THEMES`) через их `index.ts`; на `sharing` не ссылается никто.
  */
 @Module({
   imports: [
@@ -30,7 +29,6 @@ import { StoryCardService } from './story-card.service';
     ResultsCoreModule,
     RidesCoreModule,
     ProfileCoreModule,
-    AppearanceCoreModule,
     BullModule.registerQueue({ name: QUEUE.storyCard }),
   ],
   controllers: [StoryCardController, RideInviteController, StoryCardImageController],
@@ -52,7 +50,6 @@ export class SharingModule {}
     ResultsCoreModule,
     RidesCoreModule,
     ProfileCoreModule,
-    AppearanceCoreModule,
     BullModule.registerQueue({ name: QUEUE.storyCard }),
   ],
   providers: [StoryCardInputs, RideInviteInputs, StoryCardCache, StoryCardProcessor],

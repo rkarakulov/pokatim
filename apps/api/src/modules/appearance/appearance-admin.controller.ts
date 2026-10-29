@@ -5,7 +5,10 @@ import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 import { CurrentPanelUser, PanelGuard, type PanelPrincipal, RequirePermission } from '../panel';
 import { AppearanceService } from './appearance.service';
 
-/** «Оформление приложения» панели (`appearance.manage` — только admin): настройка-синглтон, замена по `version`. */
+/**
+ * «Оформление приложения» панели (`appearance.manage` — только admin): сезонный декор, настройка-синглтон, замена по
+ * `version`. Тема — личная у райдера (user-theme): `themeId` в теле — 400.
+ */
 @Controller('admin/appearance')
 @UseGuards(PanelGuard)
 @RequirePermission('appearance.manage')
