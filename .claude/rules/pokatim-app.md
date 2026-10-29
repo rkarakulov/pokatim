@@ -9,8 +9,8 @@ paths:
 
 ## Рамки MVP (не расширять без ADR)
 
-- Нет записи GPS, нет фоновой геолокации, нет BLE-датчиков, нет web push, нет Strava API, нет биометрического
-  входа. Push на iOS и Android — только через Expo (ADR-0017). Garmin и Wahoo — только импорт велозаездов через
+- Нет записи GPS, нет фоновой геолокации, нет BLE-датчиков, нет Strava API, нет биометрического входа. Push на iOS и
+  Android — только через Expo (ADR-0017), в PWA — Web Push тем же каналом (ADR-0022). Garmin и Wahoo — только импорт велозаездов через
   агрегатор (ADR-0011). Задача требует что-то из этого — стоп: продуктовое решение и ADR, а не реализация.
 - Геолокация — только foreground для «рядом», после pre-permission экрана («Не сейчас»), при отказе — баннер со
   ссылкой в настройки ОС.
@@ -32,11 +32,19 @@ paths:
   Главной (`components/notification-bell.tsx`, «99+»); всё — `features/notifications/` (ключи `['notifications', …]`,
   счётчик — polling `refetchInterval` 60 с, не сокеты; статусы обработки — так же). Переход по цели — только
   `notification-target.ts` (белый список типов с `Uuid`; незнакомое — без перехода, из push — центр). Push — развилка
-  `push(.web).ts` (`expo-notifications` только в native-файле; web — no-op, `pushSupported = false`: в настройках
-  уведомлений только письма — без push-тумблеров, тихих часов и группы без писем): разрешение — только по нажатию строки
+  `push(.web).ts` (`expo-notifications` только в native-файле; web — Web Push, ADR-0022: подписка `PushManager` с
+  VAPID-ключом из `GET /v1/notifications/web-push`, поддержка — SW + Push API + Notification, iOS/iPadOS — только
+  standalone (детект — `features/pwa-install/install-platform.ts`); отправка регистрации и снятия — `sendPushRegistration`
+  / `sendPushRevoke` шва; `usePushSupported()` — `null` до монтирования (SSR), без поддержки в настройках только письма
+  — без push-тумблеров, тихих часов и группы без писем; строка `PushPermissionRow` — реальное состояние web:
+  `missing`/`expired` подписывает тихо, отказ — текст «включите в настройках браузера/системы»; выход — снятие на
+  сервере и `unsubscribe()` в браузере; нажатие на уведомление — сообщение SW `pokatim:open` → `onOpen(target)`): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
   `serverEnded`: токены снял сервер), последний токен — `secureStorage` `pokatim.pushToken`.
+  Service worker (`scripts/service-worker.ts`, ADR-0022): `push` — уведомление по payload сервера и сигнал окнам
+  `pokatim:push`; `notificationclick` — фокус открытого окна и цель приложению или новое окно по пути цели (копия
+  белого списка в SW — паритет с `notification-target.ts` держит тест, песочница — `scripts/service-worker-harness.ts`).
 - Настройки (settings-hub): хаб `settings/index` внутри `Stack.Protected` вкладок (оболочка `useSettingsShell`), вход —
   иконка «Настройки» `TopBar` Главной (иконка «Устройства» — быстрый вход рядом); «Выйти» — только здесь. Строки —
   `features/settings/settings-row.tsx`; «О приложении» — `app-info.ts` (версия `expoConfig.version`, ссылки —
