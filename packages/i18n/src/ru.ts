@@ -829,7 +829,6 @@ export const ru = {
   'status.description': 'Текущее состояние сервиса и его API.',
   // панель «Протокол» (admin-01): название — решение автора Q9
   'admin.title': 'Панель команды платформы',
-  'admin.apiStatus': 'Статус API',
   // вход в панель (тексты прототипа 3a)
   'admin.signIn.title': 'Вход в панель',
   'admin.signIn.lead': 'Тот же e-mail и пароль, что в приложении Покатим.',

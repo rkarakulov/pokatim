@@ -697,18 +697,6 @@ select.field__control option:disabled {
   margin-top: var(--space-s3);
 }
 
-/* ---------- обзор ---------- */
-.api-status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-s3);
-}
-
-.api-status__value {
-  display: inline-block;
-  width: var(--size-skeleton-word);
-}
-
 /* баннер каркаса (ошибка выхода) — над страницей */
 .main > .banner {
   margin-bottom: var(--space-s3);
