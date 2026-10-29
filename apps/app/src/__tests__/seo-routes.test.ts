@@ -4,7 +4,7 @@ import { join, relative, sep } from 'node:path';
 
 import { GET as robotsGet } from '../app/robots.txt+api';
 import { GET as sitemapGet } from '../app/sitemap.xml+api';
-import { robotsTxt, SEO_ALLOW, SEO_DISALLOW, sitemapXml } from '../lib/seo';
+import { robotsTxt, SEO_DISALLOW, sitemapXml } from '../lib/seo';
 import { resetPublicSsrCache } from '../lib/public-ssr';
 
 /**
@@ -35,12 +35,8 @@ afterEach(() => {
   delete process.env.WEB_ORIGIN;
 });
 
-/** Разрешён ли путь правилами robots.txt (самое длинное совпадение; при равенстве — Allow), как у Google. */
-function allowed(path: string): boolean {
-  const match = (rules: readonly string[]) =>
-    Math.max(-1, ...rules.filter((rule) => path.startsWith(rule)).map((rule) => rule.length));
-  return match(SEO_ALLOW) >= match(SEO_DISALLOW);
-}
+/** Разрешён ли путь правилами robots.txt: `Allow: /` и префиксы `Disallow` (длиннее `/` — побеждают). */
+const allowed = (path: string) => !SEO_DISALLOW.some((rule) => path.startsWith(rule));
 
 /** URL экрана по файлу `src/app`: группы `(x)` и `index` убраны, `[param]` → образец. */
 function screenPaths(): string[] {
@@ -85,14 +81,14 @@ const PUBLIC = [
 ];
 
 describe('robots.txt (AC1, AC2)', () => {
-  it('text/plain: Allow /, закрытые префиксы, картинки превью открыты, Sitemap от WEB_ORIGIN', async () => {
+  it('text/plain: Allow /, закрытые префиксы, API открыт, Sitemap от WEB_ORIGIN', async () => {
     const res = robotsGet();
     expect(res.headers.get('Content-Type')).toBe('text/plain; charset=utf-8');
     const body = await res.text();
     expect(body.startsWith('User-agent: *\nAllow: /\n')).toBe(true);
-    for (const rule of ['/settings', '/tickets/', '/auth/', '/admin/', '/v1/'])
+    for (const rule of ['/settings', '/tickets/', '/auth/', '/admin/'])
       expect(body).toContain(`\nDisallow: ${rule}\n`);
-    expect(body).toContain('\nAllow: /v1/og/images/\n');
+    expect(body).not.toContain('/v1');
     expect(body.endsWith(`\nSitemap: ${ORIGIN}/sitemap.xml\n`)).toBe(true);
   });
 
@@ -105,16 +101,11 @@ describe('robots.txt (AC1, AC2)', () => {
     expect(unclassified).toEqual([]);
   });
 
-  it('публичные экраны и картинки превью не закрыты; служебное — закрыто', () => {
+  it('публичные экраны, их данные из API и картинки превью не закрыты; служебное — закрыто', () => {
     for (const path of PUBLIC) expect([path, allowed(path)]).toEqual([path, true]);
-    expect(allowed('/v1/og/images/race/x/0123456789abcdef.png')).toBe(true);
-    for (const path of [
-      '/v1/races',
-      '/admin/',
-      '/tickets/abc',
-      '/auth/verify/t',
-      '/devices/return',
-    ])
+    for (const path of ['/v1/og/images/race/x/0123456789abcdef.png', '/v1/seasons/x/standings'])
+      expect([path, allowed(path)]).toEqual([path, true]);
+    for (const path of ['/admin/', '/tickets/abc', '/auth/verify/t', '/devices/return'])
       expect([path, allowed(path)]).toEqual([path, false]);
   });
 });

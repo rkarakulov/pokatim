@@ -2,8 +2,11 @@ import type { SitemapEntry, SitemapKind } from '@pokatim/contracts';
 
 /*
  * robots.txt и sitemap.xml гостевого веба (landing-seo) — только web-сервер (API-маршруты `src/app/*+api.ts`).
- * Публичные страницы открыты; закрыты экраны только для вошедших, онбординг, ссылки с токеном, билеты, панель и API.
- * Карточки с `noindex` в мета (профиль райдера, кофе-райд) не закрываются: краулер должен увидеть `noindex`.
+ * Публичные страницы открыты; закрыты экраны только для вошедших, онбординг, ссылки с токеном, билеты и панель.
+ * Карточки с `noindex` в мета (профиль райдера, кофе-райд) не закрываются: краулер должен увидеть `noindex`; кроме
+ * ссылок с токеном (`/auth/`, `/tickets/`) — по капабилити-URL краулер не ходит. `/v1/` открыт: JSON API не
+ * индексируется, а Googlebot при рендере соблюдает robots и для fetch — публичные экраны догружают данные из API
+ * (таблица сезона), картинки превью — тоже `/v1/og/images/`.
  * Новый экран в `src/app` — классифицируй здесь (сторож — `__tests__/seo-routes.test.ts`).
  */
 
@@ -41,11 +44,7 @@ export const SEO_DISALLOW = [
   '/tickets/',
   '/ui-kit',
   '/admin/',
-  '/v1/',
 ] as const;
-
-/** Исключения из `Disallow`: картинки превью — краулерам соцсетей (Twitterbot соблюдает robots.txt). */
-export const SEO_ALLOW = ['/', '/v1/og/images/'] as const;
 
 /** `robots.txt`; `origin` (`WEB_ORIGIN`) нет — без строки `Sitemap` (нужен абсолютный адрес). */
 export function robotsTxt(origin: string | null): string {
@@ -53,7 +52,6 @@ export function robotsTxt(origin: string | null): string {
     'User-agent: *',
     'Allow: /',
     ...SEO_DISALLOW.map((path) => `Disallow: ${path}`),
-    ...SEO_ALLOW.filter((path) => path !== '/').map((path) => `Allow: ${path}`),
     ...(origin ? ['', `Sitemap: ${origin}/sitemap.xml`] : []),
   ];
   return `${lines.join('\n')}\n`;

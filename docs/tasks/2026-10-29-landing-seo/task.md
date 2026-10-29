@@ -15,9 +15,9 @@
 
 - **S1. `GET /robots.txt`** — Expo API-маршрут `apps/app/src/app/robots.txt+api.ts` (паттерн
   `manifest.webmanifest+api.ts`). `User-agent: *`, `Allow: /`; `Disallow` — экраны только для вошедших, онбординг и
-  настройка аккаунта, ссылки с токеном (`/auth/`, `/devices/return`), билеты `/tickets/`, `/admin/`, `/v1/`
-  (с `Allow: /v1/og/images/` — картинки превью нужны краулерам соцсетей, Twitterbot соблюдает robots.txt),
-  витрина `/ui-kit`. Карточки с `noindex` в мета (`/riders/<id>`, `/rides/<id>`) **не** закрываются: краулер должен
+  настройка аккаунта, ссылки с токеном (`/auth/`, `/devices/return`), билеты `/tickets/`, `/admin/`, витрина
+  `/ui-kit`. `/v1/` **не** закрыт (ревью pass 1, MEDIUM): Googlebot при рендере соблюдает robots и для fetch —
+  публичные экраны догружают данные из API (гонки и таблица сезона), картинки превью — тоже `/v1/og/images/`. Карточки с `noindex` в мета (`/riders/<id>`, `/rides/<id>`) **не** закрываются: краулер должен
   увидеть `noindex`. `Sitemap: <WEB_ORIGIN>/sitemap.xml` — только при заданном `WEB_ORIGIN`.
 - **S2. `GET /v1/sitemap`** (API, модуль `sharing`, без входа, `PublicReadGuard`, `Cache-Control: public,
   max-age=60`) → `SitemapEntries { items: [{ kind, id, updatedAt }] }`, `kind ∈ race | season | route | calendar`.
@@ -75,6 +75,8 @@
 
 - Таймаут `fetchPublicForSsr` 2 с — на реальных объёмах (сотни объектов) ответ мал. Рост до десятков тысяч —
   follow-up (свой таймаут или sitemap index).
+- Скан идёт по `updatedAt` по возрастанию: при > 10 000 объектов вида в карту попадут старые, свежие выпадут —
+  известное ограничение, решается вместе с sitemap index.
 - Мемо 10 мин на процесс: новая гонка попадёт в sitemap с задержкой до ~11 мин — для поисковика несущественно.
 
 ## 8.1 Requirements Consistency
@@ -97,7 +99,7 @@
 
 ## 9. Acceptance Criteria
 
-- AC1: `/robots.txt` — `text/plain`, `Allow: /`, закрыты служебные префиксы, `/v1/og/images/` открыт, `Sitemap` с
+- AC1: `/robots.txt` — `text/plain`, `Allow: /`, закрыты служебные префиксы, `/v1/` открыт, `Sitemap` с
   `WEB_ORIGIN`; без `WEB_ORIGIN` — без строки `Sitemap`.
 - AC2: каждый маршрут `src/app` либо публичный (список в тесте), либо закрыт `Disallow`; `/riders/<id>`,
   `/rides/<id>`, `/races/<id>`, `/seasons/<id>`, `/calendar/<id>`, `/routes/<id>`, `/welcome` — не закрыты.
@@ -117,10 +119,18 @@
 
 ENTRY POINTS: `apps/app/src/app/{robots.txt,sitemap.xml}+api.ts`, `GET /v1/sitemap`.
 FILES TO MODIFY: contracts `sharing/*`, `index.ts`; api `sharing/{sitemap.*,sharing.module.ts}`,
-`races/races-for-sharing{.port,}.ts`, `races.repository.ts`; app `lib/seo.ts`, два API-маршрута.
-TESTS: `packages/contracts/src/sharing/sitemap.schema.test.ts`, `apps/api/src/modules/sharing/sitemap.int.test.ts`,
-`apps/app/src/lib/seo.test.ts`, `apps/app/src/__tests__/seo-routes.test.ts`.
+`races/races-for-sharing{.port,}.ts` (существующий `listSeasons` репозитория); app `lib/seo.ts`, два API-маршрута.
+TESTS: `packages/contracts/src/sharing/sitemap.schema.test.ts`, `apps/api/src/modules/sharing/sitemap.{service,int}.test.ts`,
+`apps/api/src/modules/races/races-for-sharing.int.test.ts`, `apps/app/src/__tests__/seo-routes.test.ts`, смоук
+`e2e/web.spec.ts`.
 
 ## 12. Outcome
 
-(заполняется после реализации)
+- **Changes:** contracts — `SitemapEntries`; api — `GET /v1/sitemap` (`SitemapController`, `SitemapService` с мемо),
+  `RacesForSharing.sitemapSeasons()`, `SITEMAP_POLICY`; app — `lib/seo.ts`, `robots.txt+api.ts`, `sitemap.xml+api.ts`.
+- **Docs updated:** `docs/product/landing.md`, `.claude/rules/pokatim-app.md`.
+- **Tests:** unit/int по списку выше; `pnpm check` — в `pr.md`.
+- **Ревью:** Codex pass 1 — APPROVE без находок; Claude pass 1 — APPROVE, MEDIUM (`Disallow: /v1/`) и 3 LOW
+  исправлены (`findings.md`).
+- **Open follow-ups:** sitemap index и свежие объекты при > 10 000 на вид; таймаут SSR-чтения карты на больших
+  объёмах.

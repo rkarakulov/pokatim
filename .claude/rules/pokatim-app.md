@@ -123,7 +123,8 @@ paths:
 - `robots.txt` и `sitemap.xml` (landing-seo) — API-маршруты `src/app/{robots.txt,sitemap.xml}+api.ts`, правила —
   `src/lib/seo.ts`. **Новый экран в `src/app`** — классифицируй: только вошедшим, онбординг, токен в URL — префикс в
   `SEO_DISALLOW`; публичный — в `PUBLIC` сторожа `__tests__/seo-routes.test.ts`. Страницу с `noindex` в мета не
-  закрывай (краулер не увидит `noindex`). Новый индексируемый вид объекта — `SITEMAP_KINDS` в contracts и
+  закрывай (краулер не увидит `noindex`), кроме ссылок с токеном. `/v1/` не закрывай: Googlebot при рендере
+  соблюдает robots и для fetch — публичный экран потеряет данные из API. Новый индексируемый вид объекта — `SITEMAP_KINDS` в contracts и
   `GET /v1/sitemap` (`sharing`, порты владельцев).
 - Гостевой лендинг `/welcome` (guest-landing, `docs/product/landing.md`) — корневой `src/app/welcome.tsx` в том же
   `Stack.Protected guard={!signedIn}`, что `(onboarding)` (не в группе: `initialRouteName` группы не трогаем); экран —
