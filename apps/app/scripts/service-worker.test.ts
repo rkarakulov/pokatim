@@ -5,6 +5,7 @@ import {
   precacheList,
   serviceWorkerSource,
 } from './service-worker.ts';
+import { loadServiceWorker, SW_ORIGIN as ORIGIN } from './service-worker-harness.ts';
 
 const ENTRY = '/_expo/static/js/web/entry-872592925b2b7e57d14b37108df0c4d9.js';
 const CSS = '/_expo/static/css/web-91c229a1be935b0bc16fd6878f97066c.css';
@@ -86,5 +87,59 @@ describe('service worker: precache', () => {
     expect(source).not.toContain('/v1');
     expect(source).not.toContain('/_expo/loaders');
     expect(source).not.toContain('#v1');
+  });
+});
+
+const RACE = '0190a6f4-0000-7000-8000-000000000001';
+
+describe('service worker: Web Push (ADR-0021)', () => {
+  it('push — системное уведомление с текстом и целью; открытым окнам — сигнал обновить счётчик', async () => {
+    const sw = loadServiceWorker();
+    sw.windows.push({ url: `${ORIGIN}/`, focused: false });
+    const target = { type: 'race', raceId: RACE };
+    await sw.push({ title: 'Результат засчитан', body: '«Гонка»: 3 место.', target });
+    expect(sw.shown).toEqual([
+      {
+        title: 'Результат засчитан',
+        options: expect.objectContaining({
+          body: '«Гонка»: 3 место.',
+          icon: '/icons/icon-192.png',
+          data: { target },
+        }),
+      },
+    ]);
+    expect(sw.messages).toEqual([{ url: `${ORIGIN}/`, message: { type: 'pokatim:push' } }]);
+  });
+
+  it('битый payload — уведомление «Покатим» без цели (браузер требует показать)', async () => {
+    const sw = loadServiceWorker();
+    await sw.push('garbage');
+    expect(sw.shown).toEqual([
+      { title: 'Покатим', options: expect.objectContaining({ body: '', data: { target: null } }) },
+    ]);
+  });
+
+  it('нажатие при открытом окне — фокус и цель приложению (переход роутером), новое окно не открывается', async () => {
+    const sw = loadServiceWorker();
+    sw.windows.push(
+      { url: 'https://other.test/', focused: false },
+      { url: `${ORIGIN}/races`, focused: false },
+    );
+    const target = { type: 'ride', rideId: RACE };
+    const notification = await sw.click(target);
+    expect(notification.closed).toBe(true);
+    expect(sw.windows.map((item) => item.focused)).toEqual([false, true]);
+    expect(sw.messages).toEqual([
+      { url: `${ORIGIN}/races`, message: { type: 'pokatim:open', target } },
+    ]);
+    expect(sw.opened).toEqual([]);
+  });
+
+  it('нажатие без окна — новое окно по пути цели; незнакомая цель — центр уведомлений', async () => {
+    const sw = loadServiceWorker();
+    await sw.click({ type: 'race', raceId: RACE });
+    await sw.click({ type: 'race', raceId: '../admin' });
+    await sw.click(null);
+    expect(sw.opened).toEqual([`/races/${RACE}`, '/notifications', '/notifications']);
   });
 });

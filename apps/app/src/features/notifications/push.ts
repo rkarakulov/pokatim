@@ -1,4 +1,4 @@
-import type { PushPlatform } from '@pokatim/contracts';
+import type { PushPlatform, RegisterWebPushSubscription } from '@pokatim/contracts';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -6,10 +6,11 @@ import { AndroidImportance } from 'expo-notifications';
 import { Linking, Platform } from 'react-native';
 
 import { secureStorage } from '@/features/auth/secure-storage';
+import { api } from '@/lib/api';
 
 /**
- * Push на native (ADR-0017, `expo-notifications`). Web — `push.web.ts` (web push нет, N1): экраны и хуки импортируют
- * модуль без расширения и не знают платформы.
+ * Push на native (ADR-0017, `expo-notifications`). Web — `push.web.ts` (Web Push в PWA, ADR-0021): экраны и хуки
+ * импортируют модуль без расширения и не знают платформы.
  */
 export type PushPermission = 'granted' | 'denied' | 'undetermined' | 'unavailable';
 
@@ -17,14 +18,23 @@ export interface PushPermissionState {
   status: PushPermission;
   /** системный запрос ещё можно показать; `false` при отказе — строка ведёт в настройки ОС (N5) */
   canAskAgain: boolean;
+  /**
+   * Подписка этого устройства при `granted` — только web (ADR-0021): `active` — есть и принята сервером, `missing` —
+   * нет или не принята, `expired` — истекла или выдана под старым ключом. Native — нет поля (токен — всегда).
+   */
+  subscription?: 'active' | 'missing' | 'expired';
 }
 
-export interface DevicePushToken {
-  token: string;
-  platform: PushPlatform;
-}
+/** Токен Expo (native) или подписка Web Push (`token` — endpoint, по нему подписка снимается при выходе). */
+export type DevicePushToken =
+  | { token: string; platform: PushPlatform }
+  | { token: string; platform: 'web'; keys: RegisterWebPushSubscription['keys'] };
 
-export const pushSupported = true;
+/** Push на этой платформе есть всегда (native); web — после проверки браузера и сервера (`null` — ещё неизвестно). */
+export const usePushSupported = (): boolean | null => true;
+
+/** Отказ навсегда — строка ведёт в настройки приложения в ОС; в web такого перехода нет. */
+export const canOpenPushSettings = true;
 
 /** Канал Android, который указывает сервер (`channelId: 'default'`). */
 const ANDROID_CHANNEL = 'default';
@@ -100,6 +110,19 @@ export async function obtainPushToken(): Promise<DevicePushToken | null> {
   } catch {
     return null;
   }
+}
+
+/** Регистрация токена этого устройства на сервере (`PUT /v1/notifications/push-tokens`). */
+export async function sendPushRegistration(
+  accessToken: string,
+  device: DevicePushToken,
+): Promise<void> {
+  if (device.platform === 'web') return;
+  await api.registerPushToken(accessToken, { token: device.token, platform: device.platform });
+}
+
+export async function sendPushRevoke(accessToken: string, token: string): Promise<void> {
+  await api.revokePushToken(accessToken, { token });
 }
 
 export const storedPushToken = (): Promise<string | null> =>
