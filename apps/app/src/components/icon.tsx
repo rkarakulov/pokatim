@@ -31,6 +31,8 @@ const ICONS = {
   // вход в «Настройки» и выбранный пункт списка (settings-hub)
   settings: { ios: 'gearshape', iosFilled: 'gearshape.fill', material: 'settings' },
   check: { ios: 'checkmark', material: 'check' },
+  // закрыть плашку и шторку установки PWA (pwa-install)
+  close: { ios: 'xmark', material: 'close' },
 } as const satisfies Record<
   string,
   { ios: SFSymbol; iosFilled?: SFSymbol; material: AndroidSymbol }
