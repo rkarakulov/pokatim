@@ -20,17 +20,19 @@ import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { StatBlock } from '@/components/stat-block';
 import { rememberReturnPath } from '@/features/auth/return-path';
-import { useSessionStore, type SessionStatus } from '@/features/auth/session-store';
+import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { HistoryList, RaceHistoryRow } from '@/features/profile/history-rows';
 import { ProfileHead, ProfileHeadSkeleton } from '@/features/profile/profile-head';
 import { publicRaceRow, publicStatItems } from '@/features/profile/profile-format';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
-import { useRider, useRiderRaces, useRiderViewer } from './queries';
-import { riderPath } from './rider-report';
+import { riderPath, useRider, useRiderRaces, useRiderViewer } from './queries';
 
 /** Заголовок документа — нейтральный (D-B2): имени нет ни во вкладке, ни в истории браузера. */
 const DOCUMENT_TITLE = `${t('riders.title')} — ${t('app.name')}`;
+
+/** Зритель для «Пожаловаться»: сессия ещё неизвестна (SSR, восстановление) — `pending`. */
+type RiderSession = 'signedIn' | 'guest' | 'pending';
 
 /**
  * «Пожаловаться» на профиль (profile-report-app). Вошедшему — по `viewer.canReport` сервера (свой профиль — ничего),
@@ -40,16 +42,16 @@ const DOCUMENT_TITLE = `${t('riders.title')} — ${t('app.name')}`;
  */
 function RiderReportAction({
   id,
-  status,
+  session,
   viewer,
 }: {
   id: string;
-  status: SessionStatus;
+  session: RiderSession;
   viewer: ReturnType<typeof useRiderViewer>;
 }) {
   const theme = useTheme();
   const router = useRouter();
-  if (status === 'signedOut') {
+  if (session === 'guest') {
     const signIn = () => {
       rememberReturnPath(riderPath(id));
       router.push('/sign-in');
@@ -60,8 +62,8 @@ function RiderReportAction({
       </View>
     );
   }
-  // 404 `me` — профиль скрыли между запросами: экран это покажет перезапросом профиля, блоку нечего предлагать
-  if (status !== 'signedIn' || apiErrorOf(viewer.error)?.code === 'NOT_FOUND') return null;
+  // 404 `me` — профиль скрыли между запросами: блоку нечего предлагать (профиль уберёт его следующий перезапрос)
+  if (session !== 'signedIn' || apiErrorOf(viewer.error)?.code === 'NOT_FOUND') return null;
   return (
     <AsyncContent
       query={viewer}
@@ -93,12 +95,12 @@ function RiderReportAction({
 function RiderBody({
   rider,
   races,
-  status,
+  session,
   viewer,
 }: {
   rider: PublicRiderProfile;
   races: ReturnType<typeof useRiderRaces>;
-  status: SessionStatus;
+  session: RiderSession;
   viewer: ReturnType<typeof useRiderViewer>;
 }) {
   const theme = useTheme();
@@ -132,7 +134,7 @@ function RiderBody({
             }}
           />
         </View>
-        <RiderReportAction id={rider.publicId} status={status} viewer={viewer} />
+        <RiderReportAction id={rider.publicId} session={session} viewer={viewer} />
       </View>
     </View>
   );
@@ -153,8 +155,10 @@ export function RiderScreen({ id, seed }: { id: string; seed: PublicRiderProfile
   const found = rider.data !== undefined && apiErrorOf(rider.error)?.code !== 'NOT_FOUND';
   const races = useRiderRaces(id, valid && found);
   // состояние зрителя (жалоба) — только вошедшему и только после найденного профиля (без второго 404)
-  const status = useSessionStore((state) => state.status);
-  const viewerEnabled = valid && found && status === 'signedIn';
+  const signedIn = useSessionStore(isSignedIn);
+  const pending = useSessionStore((state) => isSessionPending(state.status));
+  const session: RiderSession = signedIn ? 'signedIn' : pending ? 'pending' : 'guest';
+  const viewerEnabled = valid && found && signedIn;
   const viewer = useRiderViewer(id, viewerEnabled);
   const refetchers = useMemo(
     () => [
@@ -200,7 +204,7 @@ export function RiderScreen({ id, seed }: { id: string; seed: PublicRiderProfile
           </View>
         ) : (
           <AsyncContent query={rider} skeleton={<ProfileHeadSkeleton />}>
-            {(data) => <RiderBody rider={data} races={races} status={status} viewer={viewer} />}
+            {(data) => <RiderBody rider={data} races={races} session={session} viewer={viewer} />}
           </AsyncContent>
         )}
       </ScrollView>

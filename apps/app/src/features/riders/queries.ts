@@ -20,6 +20,9 @@ const PUBLIC_STALE_MS = 60_000;
 /** Гонок на странице публичной истории. */
 const RIDER_RACES_LIMIT = 10;
 
+/** Путь публичного профиля (возврат гостя, «К профилю»). */
+export const riderPath = (id: string) => `/riders/${encodeURIComponent(id)}`;
+
 export const riderKey = (id: string) => ['riders', 'detail', id] as const;
 
 /** Профиль по `publicId`: посев SSR (`initialData`) — только web. */

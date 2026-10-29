@@ -30,9 +30,7 @@ import { DocumentTitle } from '@/components/document-title';
 import { domainLabel } from '@/lib/minsk-format';
 
 import { riderReportErrorMessage } from './error-messages';
-import { useReportRider, useRiderViewer } from './queries';
-
-export const riderPath = (id: string) => `/riders/${encodeURIComponent(id)}`;
+import { riderPath, useReportRider, useRiderViewer } from './queries';
 
 /** Ссылка «К профилю»: назад к профилю в стеке, без истории — заменить на профиль. */
 function BackToRider({ id }: { id: string }) {
