@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PanelRole, TotpSetup } from '@pokatim/contracts';
 import { ENV, RateLimiter } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
@@ -24,6 +24,8 @@ export const invalidTotpCode = () => domainError('TOTP_INVALID_CODE', 400);
  */
 @Injectable()
 export class PanelTotpCodes {
+  private readonly logger = new Logger('PanelTotp');
+
   constructor(
     private readonly box: TotpSecretBox,
     private readonly rateLimiter: RateLimiter,
@@ -61,9 +63,19 @@ export class PanelTotpCodes {
     await consumeUserLimit(this.rateLimiter, `panel-totp-user:${userKey}`, limits.user, now);
   }
 
-  /** Шаг принятого кода или `null` (неверный, вне окна, не больше `lastUsedStep`). */
+  /**
+   * Шаг принятого кода или `null` (неверный, вне окна, не больше `lastUsedStep`). Секрет не расшифровывается
+   * (сменён или повреждён `PANEL_TOTP_KEY`, порча шифротекста) — лог `secret_unreadable` и `503 TOTP_UNAVAILABLE`.
+   */
   matchTotp(doc: PanelTotpDoc, code: string, now: Date): number | null {
-    const secret = this.box.open(doc._id, doc.secretEnc);
+    this.ensureAvailable();
+    let secret: Buffer;
+    try {
+      secret = this.box.open(doc._id, doc.secretEnc);
+    } catch {
+      this.logger.error(`2FA панели: secret_unreadable uid=${doc._id}`);
+      throw domainError('TOTP_UNAVAILABLE', 503);
+    }
     return verifyTotp(secret, code, now, doc.lastUsedStep);
   }
 

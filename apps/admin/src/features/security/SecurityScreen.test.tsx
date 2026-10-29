@@ -139,4 +139,48 @@ describe('«Безопасность» (ADR-0024, D9)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(mocked.disableTotp).not.toHaveBeenCalled();
   });
+
+  it('подключение: confirm успешен, перечитка статуса падает — коды остаются, баннер «Повторить» (ревью pass 1)', async () => {
+    mocked.getTotpStatus.mockResolvedValue(OFF);
+    mocked.startTotpSetup.mockResolvedValue(SETUP);
+    await renderApp('/account/security');
+    fireEvent.click(await screen.findByRole('button', { name: 'Подключить' }));
+    mocked.confirmTotpSetup.mockResolvedValue({ recoveryCodes: CODES });
+    mocked.getTotpStatus.mockRejectedValue(httpError(500, 'INTERNAL'));
+    fireEvent.change(await screen.findByLabelText('Код из приложения'), {
+      target: { value: '123456' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Подключить' }));
+
+    expect(await screen.findByText('Данные могли устареть')).toBeTruthy();
+    expect(screen.getByText(CODES[0]!)).toBeTruthy();
+    expect(screen.getByLabelText('Я сохранил коды')).toBeTruthy();
+
+    mocked.getTotpStatus.mockResolvedValue({ ...ON, recoveryCodesLeft: 10 });
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(screen.queryByText('Данные могли устареть')).toBeNull());
+    expect(screen.getByText(CODES[0]!)).toBeTruthy();
+  });
+
+  it('перевыпуск: успех, перечитка статуса падает — новые коды остаются (ревью pass 1)', async () => {
+    mocked.getTotpStatus.mockResolvedValue(ON);
+    await renderApp('/account/security');
+    mocked.regenerateRecoveryCodes.mockResolvedValue({ recoveryCodes: CODES });
+    mocked.getTotpStatus.mockRejectedValue(httpError(500, 'INTERNAL'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Перевыпустить коды' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Код из приложения'), {
+      target: { value: '111222' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Перевыпустить коды' }));
+    expect(await screen.findByText('Данные могли устареть')).toBeTruthy();
+    expect(screen.getByText(CODES[1]!)).toBeTruthy();
+  });
+
+  it('статус не загрузился (данных нет) — полноэкранная ошибка с повтором', async () => {
+    mocked.getTotpStatus.mockRejectedValue(httpError(500, 'INTERNAL'));
+    await renderApp('/account/security');
+    expect(await screen.findByText('Не удалось загрузить')).toBeTruthy();
+    expect(screen.queryByText('Данные могли устареть')).toBeNull();
+  });
 });

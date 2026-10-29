@@ -4,15 +4,17 @@ import {
   PanelSignInResponse,
   TotpSetup,
 } from '@pokatim/contracts';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, DAY, type Harness, MINUTE } from '../../../test/harness';
 import {
   confirmPasswordReset,
+  gate,
   latestResetToken,
   requestPasswordReset,
 } from '../../../test/identity';
 import {
+  countTotpChecks,
   deviceCookie,
   deviceCookieValue,
   deviceSetCookie,
@@ -21,13 +23,20 @@ import {
   PANEL_TOTP_KEY_TEST,
   panelCall,
   panelCookieValue,
+  panelRepository,
+  panelSession,
+  panelSetCookie,
   panelSignIn,
   panelTotpStep,
+  pauseAfterTotpRead,
   seedTotp,
   totpCode,
 } from '../../../test/panel';
 import { sha256 } from '../identity';
-import { base32Decode, generateTotp, totpStep } from './totp';
+import { PanelTotpCodes } from './panel-totp-codes';
+import { generateRecoveryCodes } from './recovery-codes';
+import { base32Decode, generateTotp, generateTotpSecret, totpStep } from './totp';
+import { sealTotpSecret } from './totp-secret-box';
 
 /** Вход в панель со вторым фактором (ADR-0024, AC test matrix «вход»). */
 const ADMIN = 'olga@example.by';
@@ -305,6 +314,151 @@ describe('вход с 2FA (ключ задан, обязательность в�
     const docs = await panel(h).devices.find({ userId }).toArray();
     expect(docs).toHaveLength(10);
     expect(docs.map((doc) => doc.tokenHash)).not.toContain(sha256(tokens[0] ?? ''));
+  });
+});
+
+describe('гонки и отказы второго шага (ревью pass 1)', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness({ TRUST_PROXY: '1', PANEL_TOTP_KEY: PANEL_TOTP_KEY_TEST });
+  });
+  beforeEach(async () => {
+    await h.reset();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  afterAll(async () => {
+    await h.close();
+  });
+
+  /** Вход с «запомнить устройство» — токен cookie устройства. */
+  async function rememberedDevice(secret: Buffer) {
+    const { challenge } = await challengeOf(h, MODERATOR);
+    const res = await panelTotpStep(h, 'totp', {
+      challenge,
+      code: totpCode(h, secret),
+      rememberDevice: true,
+    });
+    expect(res.status).toBe(200);
+    return deviceCookieValue(res) ?? '';
+  }
+
+  it('гонка: сброс 2FA между проверкой доверенного устройства и сессией — сессии нет, нужен код (CRITICAL-1)', async () => {
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const { secret } = await seedTotp(h, userId);
+    const device = await rememberedDevice(secret);
+    await memberUser(h, ADMIN, 'admin');
+    const adminToken = await panelSession(h, ADMIN);
+
+    const g = gate();
+    const repository = panelRepository(h);
+    const original = repository.findLiveTrustedDevice.bind(repository);
+    vi.spyOn(repository, 'findLiveTrustedDevice').mockImplementationOnce(async (...args) => {
+      const doc = await original(...args);
+      await g.wait();
+      return doc;
+    });
+    const signIn = panelSignIn(h, MODERATOR, undefined, deviceCookie(device));
+    await g.reached;
+    const reset = await panelCall(h, adminToken, 'POST', `/v1/admin/members/${userId}/totp/reset`, {
+      reason: 'потерян телефон',
+    });
+    expect(reset.status).toBe(204);
+    g.open();
+
+    const res = await signIn;
+    expect(PanelSignInResponse.parse(res.body).state).toBe('totpRequired');
+    expect(panelSetCookie(res)).toBeUndefined();
+    expect(await panel(h).sessions.countDocuments({ userId, revokedAt: null })).toBe(0);
+  });
+
+  it('гонка: 2FA подключена заново между чтением и принятием кода TOTP — 400, сессии нет (HIGH-2)', async () => {
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const { secret } = await seedTotp(h, userId);
+    const { challenge } = await challengeOf(h, MODERATOR);
+    const g = pauseAfterTotpRead(h);
+    const step = panelTotpStep(h, 'totp', { challenge, code: totpCode(h, secret) });
+    await g.reached;
+    await panel(h).totp.updateOne({ _id: userId }, { $set: { epoch: 'новая-эпоха' } });
+    g.open();
+
+    const res = await step;
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: 'TOTP_INVALID_CODE' });
+    expect(await panel(h).sessions.countDocuments()).toBe(0);
+    expect(await panel(h).totp.findOne({ _id: userId })).toMatchObject({ lastUsedStep: null });
+  });
+
+  it('гонка: 2FA подключена заново между чтением и гашением кода восстановления — 400, код не погашен (HIGH-2)', async () => {
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const { recoveryCodes } = await seedTotp(h, userId);
+    const { challenge } = await challengeOf(h, MODERATOR);
+    const g = pauseAfterTotpRead(h);
+    const step = panelTotpStep(h, 'totp', { challenge, recoveryCode: recoveryCodes[0] });
+    await g.reached;
+    await panel(h).totp.updateOne({ _id: userId }, { $set: { epoch: 'новая-эпоха' } });
+    g.open();
+
+    const res = await step;
+    expect(res.status).toBe(400);
+    expect(await panel(h).sessions.countDocuments()).toBe(0);
+    const doc = await panel(h).totp.findOne({ _id: userId });
+    expect(doc?.recoveryCodes.every((code) => code.usedAt === null)).toBe(true);
+  });
+
+  it('параллельные неверные коды к одному вызову: проверок не больше 5, остальные — 401 (MEDIUM-4)', async () => {
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const { secret } = await seedTotp(h, userId);
+    const { challenge } = await challengeOf(h, MODERATOR);
+    const wrong = totpCode(h, secret) === '000000' ? '111111' : '000000';
+    const checks = countTotpChecks(h);
+
+    // все попытки держатся после выборки вызова (на лимите попыток) — до проверки кода
+    const g = gate();
+    let held = 0;
+    const codes = h.app.get(PanelTotpCodes, { strict: false });
+    const take = codes.takeAttempt.bind(codes);
+    vi.spyOn(codes, 'takeAttempt').mockImplementation(async (...args) => {
+      held += 1;
+      await g.wait();
+      return take(...args);
+    });
+    let settled = 0;
+    const N = 8;
+    const attempts = Array.from({ length: N }, () =>
+      panelTotpStep(h, 'totp', { challenge, code: wrong }).finally(() => {
+        settled += 1;
+      }),
+    );
+    await vi.waitFor(() => expect(held + settled).toBe(N));
+    g.open();
+
+    const statuses = (await Promise.all(attempts)).map((res) => res.status).sort();
+    expect(checks.mock.calls.length).toBeLessThanOrEqual(5);
+    expect(statuses.filter((status) => status === 400)).toHaveLength(5);
+    expect(statuses.filter((status) => status === 401)).toHaveLength(N - 5);
+    expect(await panel(h).challenges.countDocuments()).toBe(0);
+  });
+
+  it('секрет не расшифровывается (сменён PANEL_TOTP_KEY) — 503 TOTP_UNAVAILABLE, сессии нет (MEDIUM-5)', async () => {
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const secret = generateTotpSecret();
+    await panel(h).totp.insertOne({
+      _id: userId,
+      status: 'active',
+      secretEnc: sealTotpSecret(Buffer.alloc(32, 7), userId, secret),
+      lastUsedStep: null,
+      recoveryCodes: generateRecoveryCodes().map((code) => ({ hash: code, usedAt: null })),
+      enabledAt: h.clock.now(),
+      epoch: 'эпоха',
+      updatedAt: h.clock.now(),
+    });
+    const { challenge } = await challengeOf(h, MODERATOR);
+    const res = await panelTotpStep(h, 'totp', { challenge, code: totpCode(h, secret) });
+    expect(res.status).toBe(503);
+    expect(res.body).toMatchObject({ code: 'TOTP_UNAVAILABLE' });
+    expect(await panel(h).sessions.countDocuments()).toBe(0);
   });
 });
 

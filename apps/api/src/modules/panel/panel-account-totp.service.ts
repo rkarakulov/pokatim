@@ -100,7 +100,12 @@ export class PanelAccountTotpService {
     if (step === null) throw this.rejected(userId, 'перевыпуск');
     const recovery = this.totp.newRecoveryCodes();
     await this.transactions.run(async (tx) => {
-      if (!(await this.repository.acceptTotpStep(userId, step, now, tx))) throw invalidTotpCode();
+      const accepted = await this.repository.acceptTotpStep(tx, userId, {
+        epoch: active.epoch,
+        step,
+        now,
+      });
+      if (!accepted) throw invalidTotpCode();
       await this.repository.replaceRecoveryCodes(tx, userId, recovery.hashes, now);
       await this.audit.append(tx, {
         action: 'panel.totp_recovery_regenerated',
@@ -128,8 +133,12 @@ export class PanelAccountTotpService {
     await this.transactions.run(async (tx) => {
       const accepted =
         step !== null
-          ? await this.repository.acceptTotpStep(userId, step, now, tx)
-          : await this.repository.useRecoveryCode(tx, userId, recoveryHash, now);
+          ? await this.repository.acceptTotpStep(tx, userId, { epoch: active.epoch, step, now })
+          : await this.repository.useRecoveryCode(tx, userId, {
+              epoch: active.epoch,
+              hash: recoveryHash,
+              now,
+            });
       if (!accepted) throw invalidTotpCode();
       await this.repository.deleteTotp(tx, userId, 'active');
       await this.repository.deleteTrustedDevices(tx, userId);

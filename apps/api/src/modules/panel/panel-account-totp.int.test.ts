@@ -1,5 +1,5 @@
 import { TotpRecoveryCodes, TotpSetup, TotpStatus } from '@pokatim/contracts';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness, MINUTE } from '../../../test/harness';
 import {
@@ -12,6 +12,7 @@ import {
   panelSession,
   panelSignIn,
   panelTotpStep,
+  pauseAfterTotpRead,
   seedTotp,
   totpCode,
 } from '../../../test/panel';
@@ -36,6 +37,9 @@ function suite(enforced: boolean) {
   });
   beforeEach(async () => {
     await h.reset();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
   afterAll(async () => {
     await h.close();
@@ -165,6 +169,63 @@ describe('настройки 2FA (обязательность выключен�
     });
     const both = await post(token, '/disable', { code: '123456', recoveryCode: 'abcde-fgh23' });
     expect(both.status).toBe(400);
+  });
+});
+
+describe('настройки 2FA: гонки с повторным подключением (ревью pass 1, HIGH-2)', () => {
+  const harness = suite(false);
+  const post = (token: string, path: string, body?: unknown) =>
+    panelCall(harness(), token, 'POST', `${BASE}${path}`, body, IP);
+
+  /** Сотрудник с сессией и 2FA; запрос ставится на паузу после чтения 2FA, тест меняет эпоху (новое подключение). */
+  async function raced(
+    path: string,
+    body: (seeded: { secret: Buffer; recoveryCodes: string[] }) => unknown,
+  ) {
+    const h = harness();
+    const userId = await memberUser(h, MODERATOR, 'moderator');
+    const token = await panelSession(h, MODERATOR);
+    const seeded = await seedTotp(h, userId);
+    const before = await panel(h).totp.findOne({ _id: userId });
+    const g = pauseAfterTotpRead(h);
+    const pending = post(token, path, body(seeded));
+    await g.reached;
+    await panel(h).totp.updateOne({ _id: userId }, { $set: { epoch: 'новая-эпоха' } });
+    g.open();
+    const res = await pending;
+    return { h, userId, res, before };
+  }
+
+  it('перевыпуск кодов по коду старой эпохи — 400, коды и журнал без изменений', async () => {
+    const { h, userId, res, before } = await raced('/recovery-codes', ({ secret }) => ({
+      code: totpCode(harness(), secret),
+    }));
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: 'TOTP_INVALID_CODE' });
+    const after = await panel(h).totp.findOne({ _id: userId });
+    expect(after?.recoveryCodes).toEqual(before?.recoveryCodes);
+    expect(after?.lastUsedStep).toBeNull();
+    expect(await panel(h).audit.countDocuments({ action: 'panel.totp_recovery_regenerated' })).toBe(
+      0,
+    );
+  });
+
+  it('отключение кодом TOTP старой эпохи — 400, 2FA на месте', async () => {
+    const { h, userId, res } = await raced('/disable', ({ secret }) => ({
+      code: totpCode(harness(), secret),
+    }));
+    expect(res.status).toBe(400);
+    expect(await panel(h).totp.countDocuments({ _id: userId })).toBe(1);
+    expect(await panel(h).audit.countDocuments({ action: 'panel.totp_disabled' })).toBe(0);
+  });
+
+  it('отключение кодом восстановления старой эпохи — 400, код не погашен, 2FA на месте', async () => {
+    const { h, userId, res } = await raced('/disable', ({ recoveryCodes }) => ({
+      recoveryCode: recoveryCodes[0],
+    }));
+    expect(res.status).toBe(400);
+    const doc = await panel(h).totp.findOne({ _id: userId });
+    expect(doc?.recoveryCodes.every((code) => code.usedAt === null)).toBe(true);
   });
 });
 

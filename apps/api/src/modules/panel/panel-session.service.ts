@@ -20,6 +20,7 @@ import type {
   PanelSecondFactor,
   PanelSignInChallengeDoc,
   PanelTotpDoc,
+  PanelTrustedDeviceDoc,
 } from './panel.collection';
 import { DELETED_MEMBER, PANEL_POLICY } from './panel.policy';
 import { PanelRepository } from './panel.repository';
@@ -71,6 +72,7 @@ export class PanelSessionService {
    * `403 PANEL_ACCESS_DENIED` (только после верного пароля) → 2FA (D2, D4, D7): активна — живое доверенное
    * устройство (штамп и эпоха совпали) даёт сессию, иначе вызов `totpRequired`; нет 2FA, admin и обязательность —
    * вызов `totpSetupRequired`; иначе — сессия сразу (+ `panel.signed_in` и отзыв прежней cookie одной транзакцией).
+   * Устройство перепроверяется в транзакции сессии (`openByDevice`): сброс 2FA между проверкой и записью — вызов кода.
    */
   async signIn(
     input: { email: string; password: string },
@@ -88,12 +90,11 @@ export class PanelSessionService {
     const totp = await this.repository.findTotp(verified.userId);
     if (totp?.status === 'active') {
       this.totp.ensureAvailable();
-      if (await this.trustedDevice(deviceToken, subject, totp)) {
-        return this.transactions.run((tx) =>
-          this.openSession(tx, { ...subject, member, totp, secondFactor: 'device' }, previousToken),
-        );
-      }
-      return this.issueChallenge(subject, 'totp');
+      const device = await this.trustedDevice(deviceToken, subject, totp);
+      const opened = device
+        ? await this.openByDevice(device, { ...subject, member, totp }, previousToken)
+        : null;
+      return opened ?? this.issueChallenge(subject, 'totp');
     }
     if (this.totp.required(member.role)) {
       this.totp.ensureAvailable();
@@ -133,8 +134,16 @@ export class PanelSessionService {
     return this.finishChallenge(challenge, 'код', async (tx) => {
       const accepted =
         step !== null
-          ? await this.repository.acceptTotpStep(challenge.userId, step, now, tx)
-          : await this.repository.useRecoveryCode(tx, challenge.userId, recoveryHash ?? '', now);
+          ? await this.repository.acceptTotpStep(tx, challenge.userId, {
+              epoch: totp.epoch,
+              step,
+              now,
+            })
+          : await this.repository.useRecoveryCode(tx, challenge.userId, {
+              epoch: totp.epoch,
+              hash: recoveryHash ?? '',
+              now,
+            });
       if (!accepted) throw new RejectedCode();
       if (secondFactor === 'recovery') {
         await this.audit.append(tx, {
@@ -265,18 +274,49 @@ export class PanelSessionService {
     deviceToken: string | undefined,
     subject: { userId: string; credentialsStamp: string },
     totp: PanelTotpDoc,
-  ): Promise<boolean> {
-    if (!deviceToken) return false;
+  ): Promise<PanelTrustedDeviceDoc | undefined> {
+    if (!deviceToken) return undefined;
     const device = await this.repository.findLiveTrustedDevice(
       sha256(deviceToken),
       subject.userId,
       this.clock.now(),
     );
-    return (
-      device !== undefined &&
-      device.credentialsStamp === subject.credentialsStamp &&
-      device.totpEpoch === totp.epoch
-    );
+    return device?.credentialsStamp === subject.credentialsStamp && device.totpEpoch === totp.epoch
+      ? device
+      : undefined;
+  }
+
+  /**
+   * Сессия по доверенному устройству одной транзакцией с его перепроверкой: условная запись документа устройства
+   * (штамп, эпоха, срок) сериализует вход со сбросом и отключением 2FA, 2FA той же эпохи — в снимке транзакции.
+   * Устройство или 2FA устарели — `null` (вызывающий выдаёт вызов кода).
+   */
+  private openByDevice(
+    device: PanelTrustedDeviceDoc,
+    input: {
+      userId: string;
+      credentialsStamp: string;
+      member: PanelMemberDoc;
+      totp: PanelTotpDoc;
+    },
+    previousToken: string | undefined,
+  ): Promise<OpenedSession | null> {
+    return this.transactions.run(async (tx) => {
+      const touched = await this.repository.touchTrustedDevice(
+        tx,
+        {
+          id: device._id,
+          userId: input.userId,
+          credentialsStamp: input.credentialsStamp,
+          totpEpoch: input.totp.epoch,
+        },
+        this.clock.now(),
+      );
+      if (!touched) return null;
+      const current = await this.repository.findTotp(input.userId, tx);
+      if (current?.status !== 'active' || current.epoch !== input.totp.epoch) return null;
+      return this.openSession(tx, { ...input, secondFactor: 'device' }, previousToken);
+    });
   }
 
   private async issueChallenge(
@@ -303,8 +343,9 @@ export class PanelSessionService {
   }
 
   /**
-   * Живой вызов нужного назначения → (попытка ввода кода — лимиты D8) → аккаунт активен, штамп тот же, член
-   * `active`. Иначе — `401 TOTP_CHALLENGE_EXPIRED` (вход заново с паролем); вызов со сменившимся штампом гасится.
+   * Живой вызов нужного назначения → (попытка ввода кода: атомарно резервируется в вызове, затем лимиты D8) → аккаунт
+   * активен, штамп тот же, член `active`. Иначе — `401 TOTP_CHALLENGE_EXPIRED` (вход заново с паролем); вызов со
+   * сменившимся штампом гасится.
    */
   private async liveChallenge(
     token: string,
@@ -313,11 +354,10 @@ export class PanelSessionService {
     attempt = true,
   ): Promise<{ challenge: PanelSignInChallengeDoc; member: PanelMemberDoc }> {
     const now = this.clock.now();
-    const challenge = await this.repository.findLiveChallenge(
-      sha256(token),
-      now,
-      PANEL_POLICY.challengeMaxAttempts,
-    );
+    const max = PANEL_POLICY.challengeMaxAttempts;
+    const challenge = attempt
+      ? await this.repository.reserveChallengeAttempt(sha256(token), purpose, now, max)
+      : await this.repository.findLiveChallenge(sha256(token), now, max);
     if (challenge?.purpose !== purpose) throw challengeExpired();
     if (attempt) await this.totp.takeAttempt(challenge.userId, ip, now);
     const account = await this.accounts.accountState(challenge.userId);
@@ -334,9 +374,9 @@ export class PanelSessionService {
     return challengeExpired();
   }
 
-  /** Неверный код: попытка вызова списывается; лог — `uid` и причина, без кода. */
+  /** Неверный код (попытка уже списана резервированием): последняя гасит вызов; лог — `uid` и причина, без кода. */
   private async reject(challenge: PanelSignInChallengeDoc, what: string) {
-    await this.repository.failChallenge(challenge._id, PANEL_POLICY.challengeMaxAttempts);
+    await this.repository.dropExhaustedChallenge(challenge._id, PANEL_POLICY.challengeMaxAttempts);
     this.logger.log(`2FA панели: отказ (${what}) uid=${challenge.userId}`);
     return invalidTotpCode();
   }

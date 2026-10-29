@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 import { ENV } from '@rkarakulov/api-kit/core';
@@ -37,36 +37,49 @@ export function openTotpSecret(key: Buffer, userId: string, sealed: string): Buf
   return Buffer.concat([decipher.update(Buffer.from(ct, 'base64url')), decipher.final()]);
 }
 
+/** Подключи (HKDF-SHA256, 32 байта) из `PANEL_TOTP_KEY`: AES-GCM секретов и HMAC кодов восстановления — разные. */
+export interface PanelTotpKeys {
+  enc: Buffer;
+  hmac: Buffer;
+}
+
+export function panelTotpKeys(master: Buffer): PanelTotpKeys {
+  const derive = (info: string) => Buffer.from(hkdfSync('sha256', master, '', info, 32));
+  return { enc: derive('panel-totp-enc'), hmac: derive('panel-recovery-hmac') };
+}
+
 /**
- * Ключ `PANEL_TOTP_KEY` (только env): шифрование секретов и HMAC кодов восстановления. Без ключа — fail closed:
- * любая операция — `503 TOTP_UNAVAILABLE`.
+ * Ключ `PANEL_TOTP_KEY` (только env) → подключи шифрования секретов и HMAC кодов восстановления. Без ключа — fail
+ * closed: любая операция — `503 TOTP_UNAVAILABLE`.
  */
 @Injectable()
 export class TotpSecretBox {
-  private readonly key: Buffer | undefined;
+  private readonly keys: PanelTotpKeys | undefined;
 
   constructor(@Inject(ENV) env: Pick<Env, 'PANEL_TOTP_KEY'>) {
-    this.key = env.PANEL_TOTP_KEY ? Buffer.from(env.PANEL_TOTP_KEY, 'hex') : undefined;
+    this.keys = env.PANEL_TOTP_KEY
+      ? panelTotpKeys(Buffer.from(env.PANEL_TOTP_KEY, 'hex'))
+      : undefined;
   }
 
   get available(): boolean {
-    return this.key !== undefined;
+    return this.keys !== undefined;
   }
 
   seal(userId: string, secret: Buffer): string {
-    return sealTotpSecret(this.requireKey(), userId, secret);
+    return sealTotpSecret(this.requireKeys().enc, userId, secret);
   }
 
   open(userId: string, sealed: string): Buffer {
-    return openTotpSecret(this.requireKey(), userId, sealed);
+    return openTotpSecret(this.requireKeys().enc, userId, sealed);
   }
 
   recoveryHash(code: string): string {
-    return recoveryCodeHash(this.requireKey(), code);
+    return recoveryCodeHash(this.requireKeys().hmac, code);
   }
 
-  private requireKey(): Buffer {
-    if (!this.key) throw domainError('TOTP_UNAVAILABLE', 503);
-    return this.key;
+  private requireKeys(): PanelTotpKeys {
+    if (!this.keys) throw domainError('TOTP_UNAVAILABLE', 503);
+    return this.keys;
   }
 }

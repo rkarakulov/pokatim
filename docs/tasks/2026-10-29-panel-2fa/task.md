@@ -158,7 +158,8 @@
    документах — на 0024.
 2. **Миграция `0040_panel_totp`:** последняя в `origin/develop` — `0038_tickets`, номер `0039` занимает
    `0039_event_materials` параллельного PR #121 (мержится первым). Тест порядка проверяет «последняя и после
-   `0038_tickets`», а не «сразу после»; при слиянии #121 — добавить `0039_event_materials` в список id.
+   `0038_tickets`», а не «сразу после»; при слиянии #121 — добавить `0039_event_materials` в список id. Ревью pass 1:
+   номер `0040_panel_totp` остаётся, порядок слияния — #121 (`0039`) первым (обеспечивает оркестратор).
 3. **Себе сбросить 2FA — `409 PANEL_SELF_ACTION`**, а не `CANNOT_CHANGE_SELF`: spec требует «как у роли», а роль
    использует `PANEL_SELF_ACTION`; нового кода ошибки не вводили.
 4. **Писатель — `PanelRepository`** (не отдельный `PanelTotpRepository`): тест-сторож `panel.repository.test.ts`
@@ -178,9 +179,44 @@
 10. **e2e:** отдельного Playwright-сценария 2FA нет — стенд смоука без `PANEL_TOTP_KEY`, вход в нём прежний; поведение
     покрыто int-тестами API и тестами экранов. Follow-up — сценарий подключения с тестовым ключом в `e2e/project.ts`.
 
+**Фиксы ревью pass 1** (Codex CRITICAL/HIGH, Claude MEDIUM/LOW):
+
+11. **Вход по доверенному устройству — перепроверка в транзакции сессии** (CRITICAL-1): `openByDevice` условно пишет
+    документ устройства (`$inc version` по `_id`, `userId`, штамп, эпоха, срок) и читает 2FA в снимке транзакции;
+    сброс и отключение 2FA удаляют устройства — конфликт записи MongoDB упорядочивает их со входом. Устройство или 2FA
+    устарели — вызов `totpRequired` (как у устаревшего устройства без гонки). Новое поле `panel_trusted_devices.version`
+    (без миграции: на dev 2FA никто не подключал, валидатора схемы нет).
+12. **Эпоха в фильтрах** (HIGH-2): `acceptTotpStep` и `useRecoveryCode` принимают `epoch` прочитанного документа —
+    вход (`completeTotp`), перевыпуск кодов, отключение; несовпадение — отмена транзакции как отклонённый код (`400
+    TOTP_INVALID_CODE`, попытка вызова списана).
+13. **«Безопасность»: ошибка статуса при данных — баннер** (HIGH-3): полноэкранный `ErrorState` — только без данных;
+    иначе `Banner` (`state.staleTitle`, «Повторить») над блоком, показанные коды восстановления остаются.
+14. **Попытка кода резервируется атомарно до проверки** (MEDIUM-4): `reserveChallengeAttempt` —
+    `findOneAndUpdate({tokenHash, purpose, expiresAt > now, attempts < 5}, {$inc: {attempts: 1}})`; неверный код только гасит
+    исчерпанный вызов (`dropExhaustedChallenge`). Старт подключения попытку не тратит (`findLiveChallenge`).
+15. **Нечитаемый секрет** (MEDIUM-5): `matchTotp` ловит ошибку расшифровки → лог `secret_unreadable uid=…` и `503
+    TOTP_UNAVAILABLE`. Код `TOTP_UNAVAILABLE` в контрактах, i18n и `error-messages` уже был — новый не вводили.
+16. **Подключи ключа** (MEDIUM-6): `panelTotpKeys` — HKDF-SHA256 из `PANEL_TOTP_KEY` (salt пустой, info
+    `panel-totp-enc` / `panel-recovery-hmac`, 32 байта) для AES-GCM и HMAC кодов. Миграции нет: данных на проде нет,
+    на dev 2FA не подключали.
+17. **ADR-0024 «Последствия»** (LOW-7): остаточный риск D2 при `PANEL_TOTP_ENFORCED=true` и порядок включения флага;
+    то же — в runbook деплоя.
+
 ## 8.3 Security checklist
 
 См. §4 — выполнено; проверки — §12.
+
+## 10. Documentation Sync
+
+- `docs/adr/0024-panel-totp.md` — новый ADR; ревью pass 1: подключи HKDF, эпоха в принятии кода, резерв попытки,
+  перепроверка устройства в транзакции, нечитаемый секрет — 503, «Последствия» — остаточный риск D2 и порядок
+  включения `PANEL_TOTP_ENFORCED`.
+- `docs/adr/0009-admin-panel-access.md` («Последствия» → ADR-0024), `docs/adr/README.md` (индекс).
+- `docs/product/admin-panel.md` — 2FA сотрудника, «Безопасность», сброс в «Сотрудниках».
+- `docs/runbooks/deploy.md` — `PANEL_TOTP_KEY`, `PANEL_TOTP_ENFORCED`, аварийный `reset-totp`, порядок включения флага.
+- `.claude/rules/pokatim-security.md`, `pokatim-db.md`, `pokatim-backend.md` — инварианты 2FA (ключи, вызов, эпоха,
+  устройство, писатель).
+- `infra/deploy/env.template`, `infra/.env.example`, `docker-compose.yml` — новые переменные.
 
 ## 12. Outcome
 
@@ -215,6 +251,25 @@
 слияния `origin/develop` — зелёный, 15/15 задач turbo: api 196 файлов / 2016 тестов, admin 40 / 396, app 239 / 2256,
 contracts 47 / 426, design-tokens 5 / 604, tracks 22 / 307, api-client 21 / 148, route-view 10 / 51, i18n 2 / 15;
 depcruise — 0 нарушений (2079 модулей).
+
+### Фиксы ревью pass 1
+
+Замечания Codex (CRITICAL-1, HIGH-2, HIGH-3) и Claude (MEDIUM-4…6, LOW-7…9) — §8.2 п. 2, 11–17, §10. Красные тесты до
+правки → зелёные:
+
+- `panel-totp-sign-in.int.test.ts` (+5): сброс 2FA между проверкой устройства и сессией (ворота после
+  `findLiveTrustedDevice`) — `totpRequired`, живых сессий 0; новая эпоха между чтением 2FA и принятием кода TOTP / кода
+  восстановления — 400, сессии нет; 8 параллельных неверных кодов (все держатся на лимите до проверки) — проверок ≤ 5,
+  5 × 400 + 3 × 401; нечитаемый секрет — `503 TOTP_UNAVAILABLE`.
+- `panel-account-totp.int.test.ts` (+3): перевыпуск кодов и отключение (код TOTP / восстановления) по старой эпохе —
+  400, без изменений и журнала.
+- `totp-secret-box.test.ts` (+2): подключи HKDF, секрет не открывается мастер-ключом, HMAC — подключом.
+- `SecurityScreen.test.tsx` (+3): confirm / перевыпуск успешны, перечитка статуса падает — коды остаются, баннер
+  «Повторить»; без данных — полноэкранная ошибка.
+
+`pnpm check` (`TURBO_CONCURRENCY=1`, Mongo DB `pokatim_2fafix_test`, Redis db 11) — зелёный, 15/15 задач turbo: api
+196 файлов / 2034 теста, admin 40 / 399, app 240 / 2266, contracts 47 / 429, design-tokens 5 / 604, tracks 22 / 307,
+api-client 21 / 148, route-view 10 / 51, i18n 2 / 15; depcruise — 0 нарушений (2082 модуля).
 
 ### NOT VERIFIED
 

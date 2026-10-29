@@ -1,16 +1,20 @@
 import { PANEL_DEVICE_COOKIE, PANEL_SESSION_COOKIE, type PanelRole } from '@pokatim/contracts';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
+import { vi } from 'vitest';
 
 import { panelCollections } from '../src/modules/panel/panel.collection';
+import { PanelRepository } from '../src/modules/panel/panel.repository';
+import { PanelTotpCodes } from '../src/modules/panel/panel-totp-codes';
 import { generateRecoveryCodes, recoveryCodeHash } from '../src/modules/panel/recovery-codes';
 import { generateTotp, generateTotpSecret, totpStep } from '../src/modules/panel/totp';
-import { sealTotpSecret } from '../src/modules/panel/totp-secret-box';
+import { panelTotpKeys, sealTotpSecret } from '../src/modules/panel/totp-secret-box';
 import type { Harness } from './harness';
 import {
   activeLinkToken,
   call,
   type CallResult,
   confirm,
+  gate,
   register,
   userIdByEmail,
   validRegistration,
@@ -113,7 +117,7 @@ export const panelCall = (
 
 /** Ключ 2FA панели тестового стенда (`PANEL_TOTP_KEY`, hex 64) — фиктивный. */
 export const PANEL_TOTP_KEY_TEST = 'ab'.repeat(32);
-const TOTP_KEY = Buffer.from(PANEL_TOTP_KEY_TEST, 'hex');
+const TOTP_KEYS = panelTotpKeys(Buffer.from(PANEL_TOTP_KEY_TEST, 'hex'));
 
 /** Активная 2FA сотрудника напрямую в БД (подготовка теста): секрет и коды восстановления — тесту. */
 export async function seedTotp(
@@ -126,10 +130,10 @@ export async function seedTotp(
   await panel(h).totp.insertOne({
     _id: userId,
     status: 'active',
-    secretEnc: sealTotpSecret(TOTP_KEY, userId, secret),
+    secretEnc: sealTotpSecret(TOTP_KEYS.enc, userId, secret),
     lastUsedStep: null,
     recoveryCodes: recoveryCodes.map((code) => ({
-      hash: recoveryCodeHash(TOTP_KEY, code),
+      hash: recoveryCodeHash(TOTP_KEYS.hmac, code),
       usedAt: null,
     })),
     enabledAt: h.clock.now(),
@@ -163,3 +167,28 @@ export const panelTotpStep = (
   ip = '198.51.100.20',
 ) =>
   call(h, 'POST', `/v1/admin/session/sign-in/${path}`, body, { 'x-forwarded-for': ip, ...headers });
+
+/** Репозиторий панели графа API (spy в тестах гонок). */
+export const panelRepository = (h: Harness) => h.app.get(PanelRepository, { strict: false });
+
+/**
+ * Ворота после чтения 2FA (`PanelRepository.findTotp`): следующий вызов читает документ и ждёт, пока тест меняет 2FA
+ * (гонка «проверка кода по прочитанному документу → запись»).
+ */
+export function pauseAfterTotpRead(h: Harness) {
+  const g = gate();
+  const repository = panelRepository(h);
+  const original = repository.findTotp.bind(repository);
+  vi.spyOn(repository, 'findTotp').mockImplementationOnce(async (...args) => {
+    const doc = await original(...args);
+    await g.wait();
+    return doc;
+  });
+  return g;
+}
+
+/** Счётчик проверок кода TOTP (`PanelTotpCodes.matchTotp`) — сколько попыток дошло до проверки. */
+export function countTotpChecks(h: Harness) {
+  const codes = h.app.get(PanelTotpCodes, { strict: false });
+  return vi.spyOn(codes, 'matchTotp');
+}

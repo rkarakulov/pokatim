@@ -4,7 +4,8 @@ import { RECOVERY_CODE_COUNT } from '@pokatim/contracts';
 
 /**
  * Коды восстановления 2FA (ADR-0024, D3): 10 кодов `xxxxx-xxxxx` из base32 без `0 1 8 9` (10 символов × 5 бит = 50
- * бит), показываются один раз; в БД — только `HMAC-SHA256(PANEL_TOTP_KEY, нормализованный код)`.
+ * бит), показываются один раз; в БД — только `HMAC-SHA256` нормализованного кода подключом HMAC из
+ * `PANEL_TOTP_KEY` (HKDF, `panelTotpKeys`).
  */
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';
 const HALF = 5;

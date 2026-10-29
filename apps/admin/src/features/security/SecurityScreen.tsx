@@ -6,7 +6,7 @@ import { useId, useState } from 'react';
 import { api } from '../../api';
 import { formatDateTime } from '../../format';
 import { ME_QUERY_KEY, useMe } from '../../session/me';
-import { Button, Dialog, DisabledReason, ErrorState, PageHeader } from '../../ui';
+import { Banner, Button, Dialog, DisabledReason, ErrorState, PageHeader } from '../../ui';
 import { RecoveryCodesView } from './RecoveryCodesView';
 import { totpErrorText } from './totp-errors';
 import { TotpCodeForm, type TotpCodeInput } from './TotpCodeForm';
@@ -33,6 +33,8 @@ type Flow =
  * «Безопасность» (`/account/security`, любая роль, D9): статус 2FA своего аккаунта, подключение (QR → код → коды
  * восстановления), перевыпуск кодов (с кодом TOTP), отключение (с кодом TOTP или восстановления). При обязательности
  * (admin, `PANEL_TOTP_ENFORCED`) отключение недоступно с пояснением — источник истины сервер (`409 TOTP_REQUIRED`).
+ * Ошибка статуса без данных — полноэкранная; при данных — баннер с повтором поверх, начатый flow (коды) сохраняется
+ * (AGENTS.md §4.12).
  */
 export function SecurityScreen() {
   const me = useMe();
@@ -86,12 +88,27 @@ export function SecurityScreen() {
           <h2 id="totp-title" className="section__title t-label">
             {t('admin.security.totpTitle')}
           </h2>
-          {status.isError ? (
-            <ErrorState error={status.error} onRetry={() => void status.refetch()} />
-          ) : !status.data ? (
-            <div role="progressbar" aria-label={t('state.loading')}>
-              <p className="skeleton t-body"> </p>
-            </div>
+          {status.isError && status.data ? (
+            <Banner
+              tone="warning"
+              title={t('state.staleTitle')}
+              actions={
+                <Button size="sm" busy={status.isFetching} onClick={() => void status.refetch()}>
+                  {t('state.retry')}
+                </Button>
+              }
+            >
+              {t('state.staleMessage')}
+            </Banner>
+          ) : null}
+          {!status.data ? (
+            status.isError ? (
+              <ErrorState error={status.error} onRetry={() => void status.refetch()} />
+            ) : (
+              <div role="progressbar" aria-label={t('state.loading')}>
+                <p className="skeleton t-body"> </p>
+              </div>
+            )
           ) : flow.kind === 'codes' ? (
             <RecoveryCodesView
               codes={flow.codes}

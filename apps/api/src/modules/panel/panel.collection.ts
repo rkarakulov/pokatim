@@ -96,8 +96,8 @@ export interface PanelTotpDoc {
 }
 
 /**
- * Вызов второго шага входа (ADR-0024, D7): токен — только sha256, 5 минут, ≤ 5 неверных кодов; успех удаляет документ
- * атомарно. `purpose: 'setup'` — admin без 2FA при обязательной 2FA.
+ * Вызов второго шага входа (ADR-0024, D7): токен — только sha256, 5 минут, ≤ 5 попыток кода (`attempts`
+ * резервируется до проверки); успех удаляет документ атомарно. `purpose: 'setup'` — admin без 2FA при обязательной 2FA.
  */
 export interface PanelSignInChallengeDoc {
   _id: string;
@@ -122,6 +122,8 @@ export interface PanelTrustedDeviceDoc {
   totpEpoch: string;
   createdAt: Date;
   expiresAt: Date;
+  /** Замок: вход по устройству пишет `$inc version` в своей транзакции — сброс 2FA (удаление) с ним сериализуется. */
+  version: number;
 }
 
 export type AuditActor = { kind: 'user'; userId: string } | { kind: 'cli' };

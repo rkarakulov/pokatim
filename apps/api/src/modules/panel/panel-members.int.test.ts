@@ -319,6 +319,7 @@ describe('сброс 2FA сотрудника (ADR-0024, D10)', () => {
       totpEpoch: 'epoch',
       createdAt: h.clock.now(),
       expiresAt: new Date(h.clock.now().getTime() + 86_400_000),
+      version: 0,
     });
 
     const list = PanelMemberList.parse((await panelCall(h, actor.token, 'GET', MEMBERS)).body);

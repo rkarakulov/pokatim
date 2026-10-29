@@ -13,7 +13,7 @@ export const PANEL_POLICY = {
   touchIntervalMs: 5 * MINUTE_MS,
   /** Список «Сотрудники» — без пагинации до этого предела. */
   memberListCap: PANEL_MEMBER_LIST_CAP,
-  /** 2FA (ADR-0024, D7): вызов второго шага входа — 5 минут, не больше 5 неверных кодов. */
+  /** 2FA (ADR-0024, D7): вызов второго шага входа — 5 минут, не больше 5 попыток кода. */
   challengeTtlMs: 5 * MINUTE_MS,
   challengeMaxAttempts: 5,
   /** D4: «запомнить устройство» — 30 дней, не больше 10 устройств на сотрудника. */

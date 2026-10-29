@@ -313,17 +313,21 @@ export class PanelRepository {
     return result.modifiedCount === 1;
   }
 
-  /** Принять шаг TOTP: только больше записанного (повтор кода — `false`). */
+  /**
+   * Принять шаг TOTP: только больше записанного (повтор кода — `false`) и только для той же эпохи 2FA, по документу
+   * которой код проверен (2FA подключена заново — `false`).
+   */
   async acceptTotpStep(
+    session: DbSession,
     userId: string,
-    step: number,
-    now: Date,
-    session?: DbSession,
+    accepted: { epoch: string; step: number; now: Date },
   ): Promise<boolean> {
+    const { epoch, step, now } = accepted;
     const result = await this.c.totp.updateOne(
       {
         _id: userId,
         status: 'active',
+        epoch,
         $or: [{ lastUsedStep: null }, { lastUsedStep: { $lt: step } }],
       },
       { $set: { lastUsedStep: step, updatedAt: now } },
@@ -332,15 +336,20 @@ export class PanelRepository {
     return result.modifiedCount === 1;
   }
 
-  /** Погасить код восстановления (условный `$set usedAt`): погашенный или чужой — `false`. */
+  /** Погасить код восстановления (условный `$set usedAt`) той же эпохи 2FA: погашенный, чужой, другая эпоха — `false`. */
   async useRecoveryCode(
     session: DbSession,
     userId: string,
-    hash: string,
-    now: Date,
+    used: { epoch: string; hash: string; now: Date },
   ): Promise<boolean> {
+    const { epoch, hash, now } = used;
     const result = await this.c.totp.updateOne(
-      { _id: userId, status: 'active', recoveryCodes: { $elemMatch: { hash, usedAt: null } } },
+      {
+        _id: userId,
+        status: 'active',
+        epoch,
+        recoveryCodes: { $elemMatch: { hash, usedAt: null } },
+      },
       { $set: { 'recoveryCodes.$.usedAt': now, updatedAt: now } },
       { session },
     );
@@ -374,7 +383,7 @@ export class PanelRepository {
     await this.c.challenges.insertOne({ ...doc, attempts: 0 });
   }
 
-  /** Живой вызов: не истёк на `now`, неверных кодов меньше `maxAttempts`. */
+  /** Живой вызов без попытки ввода кода (старт подключения): не истёк на `now`, попыток меньше `maxAttempts`. */
   async findLiveChallenge(
     tokenHash: string,
     now: Date,
@@ -388,14 +397,28 @@ export class PanelRepository {
     return doc ?? undefined;
   }
 
-  /** Неверный код: `attempts + 1`; исчерпанный вызов удаляется. */
-  async failChallenge(id: string, maxAttempts: number): Promise<void> {
+  /**
+   * Попытка ввода кода — атомарно до проверки (`$inc attempts` по условию «живой, того же назначения, попыток меньше
+   * `maxAttempts`»): параллельные попытки не проверят больше `maxAttempts` кодов. Вызова нет, назначение другое или
+   * попытки кончились — `undefined`.
+   */
+  async reserveChallengeAttempt(
+    tokenHash: string,
+    purpose: PanelSignInChallengeDoc['purpose'],
+    now: Date,
+    maxAttempts: number,
+  ): Promise<PanelSignInChallengeDoc | undefined> {
     const doc = await this.c.challenges.findOneAndUpdate(
-      { _id: id },
+      { tokenHash, purpose, expiresAt: { $gt: now }, attempts: { $lt: maxAttempts } },
       { $inc: { attempts: 1 } },
       { returnDocument: 'after' },
     );
-    if (doc && doc.attempts >= maxAttempts) await this.c.challenges.deleteOne({ _id: id });
+    return doc ?? undefined;
+  }
+
+  /** Неверный код: вызов с исчерпанными попытками удаляется (попытка уже списана резервированием). */
+  async dropExhaustedChallenge(id: string, maxAttempts: number): Promise<void> {
+    await this.c.challenges.deleteOne({ _id: id, attempts: { $gte: maxAttempts } });
   }
 
   /** Погасить вызов атомарно (в транзакции входа): уже погашенный — `false`. */
@@ -407,10 +430,10 @@ export class PanelRepository {
   /** Новое доверенное устройство; сверх `max` у сотрудника — старые вытесняются. */
   async insertTrustedDevice(
     session: DbSession,
-    doc: PanelTrustedDeviceDoc,
+    doc: Omit<PanelTrustedDeviceDoc, 'version'>,
     max: number,
   ): Promise<void> {
-    await this.c.devices.insertOne(doc, { session });
+    await this.c.devices.insertOne({ ...doc, version: 0 }, { session });
     const stale = await this.c.devices
       .find({ userId: doc.userId }, { session, projection: { _id: 1 } })
       .sort({ createdAt: -1, _id: -1 })
@@ -429,6 +452,30 @@ export class PanelRepository {
   ): Promise<PanelTrustedDeviceDoc | undefined> {
     const doc = await this.c.devices.findOne({ tokenHash, userId, expiresAt: { $gt: now } });
     return doc ?? undefined;
+  }
+
+  /**
+   * Вход по устройству в транзакции сессии: устройство живо, штамп и эпоха 2FA — те же (условный `$inc version`).
+   * Запись сериализует вход со сбросом и отключением 2FA (они удаляют устройства): конфликт записи MongoDB повторяет
+   * одну из транзакций. Устройства уже нет или оно устарело — `false`.
+   */
+  async touchTrustedDevice(
+    session: DbSession,
+    device: { id: string; userId: string; credentialsStamp: string; totpEpoch: string },
+    now: Date,
+  ): Promise<boolean> {
+    const result = await this.c.devices.updateOne(
+      {
+        _id: device.id,
+        userId: device.userId,
+        credentialsStamp: device.credentialsStamp,
+        totpEpoch: device.totpEpoch,
+        expiresAt: { $gt: now },
+      },
+      { $inc: { version: 1 } },
+      { session },
+    );
+    return result.modifiedCount === 1;
   }
 
   async deleteTrustedDevices(session: DbSession, userId: string): Promise<number> {
