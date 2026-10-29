@@ -44,7 +44,8 @@ import { PROFILE_REPORTS_INDEXES, profileReports } from './0034_profile_reports'
 import { ACHIEVEMENTS_INDEXES, achievements } from './0035_achievements';
 import { ACHIEVEMENTS_COLLECTIONS } from '../../modules/achievements/achievements.collection';
 import { overviewIndexes } from './0036_overview_indexes';
-import { tickets } from './0037_tickets';
+import { OG_SYNC_INDEXES, ogSyncIndexes } from './0037_og_sync_indexes';
+import { tickets } from './0038_tickets';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
 import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
@@ -153,7 +154,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0034_profile_reports',
       '0035_achievements',
       '0036_overview_indexes',
-      '0037_tickets',
+      '0037_og_sync_indexes',
+      '0038_tickets',
     ]);
   });
 
@@ -218,6 +220,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         ...plain({ seasonId: 1, windowEndsAt: 1, _id: 1 }),
         partialFilterExpression: { protocolPublishedAt: { $type: 'date' } },
       },
+      // 0037_og_sync_indexes (og-images): пререндер OG-картинок
+      races_og_sync_idx: plain({ status: 1, updatedAt: 1, _id: 1 }),
     });
     const meta = h.db.collection<{ _id: string; version: number }>(RACES_COLLECTIONS.meta);
     await meta.deleteMany({});
@@ -273,6 +277,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       calendar_starts_public_idx: plain({ status: 1, startsOn: 1, _id: 1 }),
       calendar_starts_city_idx: plain({ status: 1, cityKey: 1, startsOn: 1 }),
       calendar_starts_panel_idx: plain({ startsOn: -1, _id: -1 }),
+      // 0037_og_sync_indexes (og-images): пререндер OG-картинок
+      calendar_starts_og_sync_idx: plain({ status: 1, updatedAt: 1, _id: 1 }),
     };
     expect(await indexesOf(CALENDAR_COLLECTIONS.starts)).toEqual(expected);
     await calendar.up(h.db);
@@ -434,6 +440,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         ...ROUTES_PUBLICATION_QUEUES,
         // 0031_rides_geo (05c): старты маршрутов каталога в круге «Рядом»
         routes_start_2dsphere: index({ start: '2dsphere' }),
+        // 0037_og_sync_indexes (og-images): пререндер OG-картинок
+        routes_og_sync_idx: index({ status: 1, updatedAt: 1, _id: 1 }),
       },
       // 0022_routes_derived (routes-03): выборка бэкфилла производных
       [ROUTES_COLLECTIONS.geometries]: {
@@ -1502,10 +1510,36 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     });
   });
 
-  it('0037_tickets: коллекции и индексы билетов; последняя; уникальности; повторный up — без изменений', async () => {
+  it('0037_og_sync_indexes: (status, updatedAt, _id) на 4 коллекциях; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0037_tickets');
-    expect(ids.indexOf('0037_tickets')).toBe(ids.indexOf('0036_overview_indexes') + 1);
+    expect(ids.indexOf('0037_og_sync_indexes')).toBe(ids.indexOf('0036_overview_indexes') + 1);
+    const ogSync = {
+      key: { status: 1, updatedAt: 1, _id: 1 },
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    };
+    const target = {
+      [RACES_COLLECTIONS.races]: OG_SYNC_INDEXES.races.options.name,
+      [RIDES_COLLECTIONS.rides]: OG_SYNC_INDEXES.rides.options.name,
+      [ROUTES_COLLECTIONS.routes]: OG_SYNC_INDEXES.routes.options.name,
+      [CALENDAR_COLLECTIONS.starts]: OG_SYNC_INDEXES.calendar.options.name,
+    };
+    const check = async () => {
+      for (const [collection, name] of Object.entries(target)) {
+        expect(await indexesOf(collection)).toMatchObject({ [name]: ogSync });
+      }
+    };
+    await check();
+    await ogSyncIndexes.up(h.db);
+    await ogSyncIndexes.up(h.db);
+    await check();
+  });
+
+  it('0038_tickets: коллекции и индексы билетов; последняя; уникальности; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0038_tickets');
+    expect(ids.indexOf('0038_tickets')).toBe(ids.indexOf('0037_og_sync_indexes') + 1);
     const index = (key: Record<string, number>, unique = false, partial?: object) => ({
       key,
       unique,

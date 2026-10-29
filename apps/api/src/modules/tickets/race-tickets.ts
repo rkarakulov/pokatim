@@ -12,6 +12,7 @@ import { TicketIssuer } from './ticket-issuer';
 import { ticketRef } from './ticket-views';
 import type { TicketDoc } from './tickets.collection';
 import {
+  canIssue,
   type EventFacts,
   isPast,
   type PlanEntry,
@@ -176,6 +177,9 @@ export class RaceTickets {
   ): Promise<RaceReconcileRun> {
     const run: RaceReconcileRun = { issued: 0, cancelled: 0, recategorized: 0 };
     for (const entry of plan.issue) {
+      // длинная сверка не выпускает билеты после закрытия окна (ревью Codex pass 4): срок — по текущим часам
+      const issuedAt = this.clock.now();
+      if (!canIssue(event, issuedAt)) break;
       try {
         const ticket = await this.issuer.inTransaction((tx, issue) =>
           issue(tx, {
@@ -184,7 +188,7 @@ export class RaceTickets {
             registrationId: entry.entryId,
             userId: entry.userId,
             category: entry.category,
-            now,
+            now: issuedAt,
           }),
         );
         run.issued += 1;

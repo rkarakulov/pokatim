@@ -19,6 +19,7 @@ import {
 import { type SignInCredentials, useSignIn } from '@/features/auth/queries';
 import { useRegistrationStore } from '@/features/auth/registration-store';
 import { formatCountdown, useSecondsLeft } from '@/lib/countdown';
+import { brandOgImage } from '@/lib/og-image';
 import { publicPageMetadata } from '@/lib/page-metadata';
 
 /** Схема формы — контракт без транспорта (его подмешивает клиент платформы). */
@@ -31,11 +32,12 @@ const FIELDS = ['email', 'password'] as const;
 const momentIn = (sec: number) => Date.now() + sec * 1000;
 
 /** Публичный экран (SSR web): мета и OG без данных формы. */
-export const generateMetadata: GenerateMetadataFunction = () =>
+export const generateMetadata: GenerateMetadataFunction = async () =>
   publicPageMetadata({
     title: t('auth.signIn.title'),
     description: t('app.tagline'),
     path: '/sign-in',
+    image: await brandOgImage(),
   });
 
 /**

@@ -36,7 +36,8 @@ import { riderProfile } from './0033_rider_profile';
 import { profileReports } from './0034_profile_reports';
 import { achievements } from './0035_achievements';
 import { overviewIndexes } from './0036_overview_indexes';
-import { tickets } from './0037_tickets';
+import { ogSyncIndexes } from './0037_og_sync_indexes';
+import { tickets } from './0038_tickets';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -79,5 +80,6 @@ export const migrations: readonly MongoMigration[] = [
   profileReports,
   achievements,
   overviewIndexes,
+  ogSyncIndexes,
   tickets,
 ];

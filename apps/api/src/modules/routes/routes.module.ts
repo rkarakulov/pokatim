@@ -30,6 +30,8 @@ import { RoutesModerationController } from './routes-moderation.controller';
 import { RoutesModerationService } from './routes-moderation.service';
 import { RoutesPublicController } from './routes-public.controller';
 import { RoutesMaintenanceProcessor, RoutesSchedules } from './routes-maintenance.processor';
+import { RoutesForSharingService } from './routes-for-sharing';
+import { ROUTES_FOR_SHARING } from './routes-for-sharing.port';
 import { RoutesOverview } from './routes-overview';
 import { RoutesPublicService } from './routes-public.service';
 import { RoutesRepository } from './routes.repository';
@@ -41,7 +43,7 @@ import { RoutesViewerController } from './routes-viewer.controller';
  * (через `index.ts`), порт стирания `RouteErasure` для `account`, порт `RouteNotices` для `notifications`, порт
  * `RideRoutes` для `rides` (05c, без кэша), порт `RouteRideRoutes` для `route-rides` (route-rides-01, без кэша); удаление
  * маршрута с жалобами (`RouteDeletion`, routes-06) — общее для «Моих» и стирания; очереди модерации для «Обзора»
- * панели (`RoutesOverview`, admin-overview).
+ * панели (`RoutesOverview`, admin-overview); порт OG-картинки `RoutesForSharing` для `sharing` (og-images).
  */
 @Module({
   providers: [
@@ -59,6 +61,8 @@ import { RoutesViewerController } from './routes-viewer.controller';
     RouteRideRoutesService,
     { provide: ROUTE_RIDE_ROUTES, useExisting: RouteRideRoutesService },
     RoutesOverview,
+    RoutesForSharingService,
+    { provide: ROUTES_FOR_SHARING, useExisting: RoutesForSharingService },
   ],
   exports: [
     RoutesRepository,
@@ -71,6 +75,7 @@ import { RoutesViewerController } from './routes-viewer.controller';
     RIDE_ROUTES,
     ROUTE_RIDE_ROUTES,
     RoutesOverview,
+    ROUTES_FOR_SHARING,
   ],
 })
 export class RoutesCoreModule {}

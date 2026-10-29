@@ -3,11 +3,21 @@ import { Module } from '@nestjs/common';
 
 import { IpRateLimitGuard } from '../../public-read.guard';
 import { QUEUE } from '../../queues';
+import { CalendarCoreModule } from '../calendar';
 import { IdentityModule } from '../identity';
 import { ProfileCoreModule } from '../profile';
+import { RacesCoreModule } from '../races';
 import { ResultsCoreModule } from '../results';
 import { RidesCoreModule } from '../rides';
+import { RoutesCoreModule } from '../routes';
 import { CardRequests } from './card-requests';
+import { OgCardCache } from './og-card.cache';
+import { OgCardController } from './og-card.controller';
+import { OgCardInputs } from './og-card.inputs';
+import { OgCardQueue } from './og-card.queue';
+import { OgCardService } from './og-card.service';
+import { OgSync } from './og-sync';
+import { OgSchedules, OgSyncProcessor } from './og-sync.processor';
 import { RideInviteController } from './ride-invite.controller';
 import { RideInviteInputs } from './ride-invite.inputs';
 import { RideInviteService } from './ride-invite.service';
@@ -19,19 +29,29 @@ import { StoryCardProcessor } from './story-card.processor';
 import { StoryCardService } from './story-card.service';
 
 /**
- * Карточки (ADR-0018), HTTP: статус сторис своего результата и приглашения кофе-райда (`AuthGuard`) и PNG по
- * капабилити-токену (IP-лимит). Данные — порты `results` (`RESULTS_FOR_SHARING`), `rides` (`RIDES_FOR_SHARING`),
- * `profile` (`RIDER_NAMES`, `RIDER_THEMES`) через их `index.ts`; на `sharing` не ссылается никто.
+ * Карточки (ADR-0018), HTTP: статус сторис своего результата и приглашения кофе-райда (`AuthGuard`), PNG по
+ * капабилити-токену (IP-лимит) и OG-картинки публичных страниц (og-images: версия и PNG без входа). Данные — порты
+ * `results` (`RESULTS_FOR_SHARING`), `rides` (`RIDES_FOR_SHARING`), `races` (`RACES_FOR_SHARING`), `routes`
+ * (`ROUTES_FOR_SHARING`, `ROUTE_GEOMETRY`), `calendar` (`CALENDAR_FOR_SHARING`), `profile` (`RIDER_NAMES`,
+ * `RIDER_THEMES`) через их `index.ts`; на `sharing` не ссылается никто.
  */
 @Module({
   imports: [
     IdentityModule,
     ResultsCoreModule,
     RidesCoreModule,
+    RacesCoreModule,
+    RoutesCoreModule,
+    CalendarCoreModule,
     ProfileCoreModule,
     BullModule.registerQueue({ name: QUEUE.storyCard }),
   ],
-  controllers: [StoryCardController, RideInviteController, StoryCardImageController],
+  controllers: [
+    StoryCardController,
+    RideInviteController,
+    StoryCardImageController,
+    OgCardController,
+  ],
   providers: [
     CardRequests,
     StoryCardService,
@@ -39,19 +59,40 @@ import { StoryCardService } from './story-card.service';
     RideInviteService,
     RideInviteInputs,
     StoryCardCache,
+    OgCardInputs,
+    OgCardCache,
+    OgCardQueue,
+    OgCardService,
     IpRateLimitGuard,
   ],
 })
 export class SharingModule {}
 
-/** Рендер карточек в worker: очередь `story-card` (сторис и приглашения; satori + resvg). */
+/**
+ * Рендер карточек в worker: очередь `story-card` (сторис, приглашения, OG-картинки; satori + resvg) и пререндер
+ * OG-картинок `og.sync` (очередь `og-sync`, расписание каждую минуту и при старте).
+ */
 @Module({
   imports: [
     ResultsCoreModule,
     RidesCoreModule,
+    RacesCoreModule,
+    RoutesCoreModule,
+    CalendarCoreModule,
     ProfileCoreModule,
-    BullModule.registerQueue({ name: QUEUE.storyCard }),
+    BullModule.registerQueue({ name: QUEUE.storyCard }, { name: QUEUE.ogSync }),
   ],
-  providers: [StoryCardInputs, RideInviteInputs, StoryCardCache, StoryCardProcessor],
+  providers: [
+    StoryCardInputs,
+    RideInviteInputs,
+    StoryCardCache,
+    StoryCardProcessor,
+    OgCardInputs,
+    OgCardCache,
+    OgCardQueue,
+    OgSync,
+    OgSyncProcessor,
+    OgSchedules,
+  ],
 })
 export class SharingWorkerModule {}

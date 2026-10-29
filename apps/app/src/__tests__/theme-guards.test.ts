@@ -85,4 +85,16 @@ describe('темы приложения — сторож кода', () => {
     expect(screens.length).toBeGreaterThan(0);
     expect([...TAB_NAMES].sort()).toEqual([...screens].sort());
   });
+
+  it('React Compiler выключен: textStyle() читает шрифты темы из модуля — кэш компилятора оставил бы прежние (user-theme)', () => {
+    const appJson = JSON.parse(fs.readFileSync(join(SRC, '..', 'app.json'), 'utf8')) as {
+      expo: { experiments?: { reactCompiler?: boolean } };
+    };
+    // Expo включает компилятор по истинности значения — только явный `false`
+    expect(appJson.expo.experiments?.reactCompiler).toBe(false);
+    // и не через `babel-preset-expo` (`'react-compiler'`) или директивы файлов
+    const appDir = fs.readdirSync(join(SRC, '..'), { withFileTypes: true });
+    expect(appDir.filter((entry) => /^babel\.config\./.test(entry.name))).toEqual([]);
+    expect(offenders(/['"]use memo['"]/)).toEqual([]);
+  });
 });

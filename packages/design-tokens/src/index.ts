@@ -78,6 +78,7 @@ export {
   type StoryCardColors,
   type StoryCardText,
 } from './story-card.ts';
+export { OG_CARD_TITLE_STEPS, ogCard } from './og-card.ts';
 export { designSystemCss, skeletonCss, typographyCss, type DesignSystemCssOptions } from './css.ts';
 
 /**

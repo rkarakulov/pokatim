@@ -4,13 +4,14 @@ import { useEffect } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { useSessionStore } from '@/features/auth/session-store';
-import { api } from '@/lib/api';
 
 import { pushTargetPath } from './notification-target';
 import {
   forgetPushToken,
   obtainPushToken,
   rememberPushToken,
+  sendPushRegistration,
+  sendPushRevoke,
   storedPushToken,
   subscribePushResponses,
 } from './push';
@@ -30,8 +31,8 @@ const closing = () => {
 };
 
 /**
- * Регистрация токена этого устройства (вход, запуск с сессией, выданное разрешение). Нет разрешения, `projectId`,
- * устройства или web — ничего не делает. Токен запоминается до запроса: выход, начавшийся во время запроса, снимет
+ * Регистрация токена этого устройства (вход, запуск с сессией, выданное разрешение; web — подписка Web Push). Нет
+ * разрешения, `projectId`, устройства или поддержки браузера — ничего не делает. Токен запоминается до запроса: выход, начавшийся во время запроса, снимет
  * и его. После начала выхода не стартует. Сбой не бросает: следующая попытка — при следующем входе или запуске.
  */
 export function registerDevicePush(): Promise<void> {
@@ -47,7 +48,7 @@ async function registerToken(): Promise<void> {
   await rememberPushToken(device.token);
   if (closing()) return;
   try {
-    await withAccessToken((accessToken) => api.registerPushToken(accessToken, device));
+    await withAccessToken((accessToken) => sendPushRegistration(accessToken, device));
   } catch {
     // сеть, 429, выход во время запроса — без push до следующей попытки
   }
@@ -88,13 +89,13 @@ async function revokeStoredToken(current: () => boolean): Promise<void> {
   if (!current()) return;
   const token = await storedPushToken();
   if (!token || !current()) return;
-  await withAccessToken((accessToken) => api.revokePushToken(accessToken, { token }));
+  await withAccessToken((accessToken) => sendPushRevoke(accessToken, token));
 }
 
 /**
  * Push (ADR-0017; `ready` — вошёл и прошёл онбординг): регистрация токена и нажатия на push → экран цели из белого
- * списка (иначе — центр уведомлений); пришедший push обновляет счётчик колокольчика. Web — no-op. Рендерится рядом с
- * `Stack` корневого layout: эффекты идут после монтирования навигатора (тема и шрифты готовы), так что переход по
+ * списка (иначе — центр уведомлений); пришедший push обновляет счётчик колокольчика (web — сообщения service worker).
+ * Рендерится рядом с `Stack` корневого layout: эффекты идут после монтирования навигатора (тема и шрифты готовы), так что переход по
  * нажатию при холодном старте не опережает навигатор.
  */
 export function PushNotifications({ ready }: { ready: boolean }): null {

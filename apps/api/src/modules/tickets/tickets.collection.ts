@@ -8,7 +8,7 @@ import type { Collection, Db } from 'mongodb';
 
 /**
  * Билеты на мероприятия (event-tickets, ADR-0023): настройки билетов события, регистрации на старты календаря,
- * билеты. Создаёт миграция `0037_tickets`; единственный писатель — `TicketsRepository`.
+ * билеты. Создаёт миграция `0038_tickets`; единственный писатель — `TicketsRepository`.
  */
 export const TICKETS_COLLECTIONS = {
   ticketing: 'event_ticketing',

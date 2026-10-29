@@ -76,13 +76,16 @@ P-256 — подписка снимается (снимок, как `deleteToken
 ### 3.5 Приложение и SW (PR B)
 
 - `push.web.ts`: реальная реализация шва (поддержка D10, разрешение, подписка VAPID, `endpoint` для снятия,
-  нажатия — `message` от SW). Интерфейс шва расширен: `usePushSupport()` (native — `true`; web — после монтирования,
-  SSR — `null`), `pushStatus()` → `unsupported | default | denied | granted-subscribed | granted-unsubscribed |
-  expired`, отправка регистрации/снятия — функциями шва (экраны и `push-registration.ts` о платформе не знают).
+  нажатия — `message` от SW). Интерфейс шва расширен: `usePushSupported()` (native — `true`; web — после монтирования,
+  SSR — `null`), `getPushPermission()` → `status` (`unavailable | undetermined | denied | granted`) и для web при
+  `granted` — `subscription: active | missing | expired`; отправка регистрации/снятия — `sendPushRegistration` /
+  `sendPushRevoke` шва (экраны и `push-registration.ts` о платформе не знают). Сбой `GET web-push` (сеть, 5xx) —
+  как «нет поддержки» до следующего открытия экрана (принято, ревью B LOW-1).
 - `PushPermissionRow`: строки для `default` (включить — запрос), `granted-unsubscribed` (включить на этом устройстве),
   `expired` (обновить подписку), `denied` (web: «разрешите в настройках браузера или системы», без перехода).
 - `/settings/notifications`: тумблеры push и тихие часы — когда поддержка есть (web — тоже).
-- SW (`serviceWorkerSource`): `push` — `showNotification(title, { body, icon, badge, tag, data: { target } })` и
+- SW (`serviceWorkerSource`): `push` — `showNotification(title, { body, icon, data: { target } })` (без `tag`: каждое
+  уведомление видно; без `badge`: монохромной иконки нет) и
   `postMessage({ type: 'pokatim:push' })` открытым окнам; `notificationclick` — окно своего origin есть: `focus()` +
   `postMessage({ type: 'pokatim:open', target })`; нет — `openWindow(путь цели)`; `pushsubscriptionchange` —
   ничего не шлёт (нет access token), синхронизация — при следующем запуске приложения (D8).
@@ -127,4 +130,10 @@ P-256 — подписка снимается (снимок, как `deleteToken
 
 - PR A (API, worker, env, deploy, ADR-0022): independent review pass 1 — APPROVE (2 MEDIUM, 4 LOW,
   `findings-a.md`); исправлены: сбой Expo больше не блокирует Web Push, тесты обоих транспортов, байтовый лимит
-  payload (`encodePayload`), невалидный ключ подписки — `gone`, спека redirect и матрица тестов.
+  payload (`encodePayload`), невалидный ключ подписки — `gone`, спека redirect и матрица тестов. PR #109 смержен.
+- ADR перенумерован в 0022 (0021 занял user-theme, смержен раньше).
+- PR B (приложение, SW): independent review pass 1 — APPROVE (1 MEDIUM, 7 LOW, `findings-b.md`); исправлены: выход не
+  ждёт `serviceWorker.ready` (`getRegistration`), без `badge`, комментарий о цикле импорта, крайние случаи паритета.
+- PR #111 смержен. Живая проверка на dev (Chrome, FCM): подписка, push в SW за ~1 с, снятие при выходе — работает; она
+  же нашла дефект: строка настроек и `PushNotifications` одновременно звали `pushManager.subscribe()` — Chrome выдавал
+  две подписки (на сервере — 2 документа, первый мёртвый). Исправлено single-flight подписки в `push.web.ts` (fix PR).

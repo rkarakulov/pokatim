@@ -1,6 +1,6 @@
 import { minskToday, utcToMinskWallTime } from '@pokatim/contracts';
 
-import { t, type MessageKey } from './core.ts';
+import { i18n, t, type MessageKey } from './core.ts';
 
 /**
  * Общие подписи результата и дат — чистые функции на строках словаря (приложение, панель, карточка для сторис в API).
@@ -81,4 +81,21 @@ export function minskDateTime(iso: string, now: Date | null) {
     date: withYear(dayMonth(date), date.year, now),
     time: wall.slice(11, 16),
   };
+}
+
+/** Число километров: до одного знака после запятой («42», «42,5»). */
+export const formatKm = (value: number) => i18n.formatNumber(value, { maximumFractionDigits: 1 });
+
+/** Склейка элементов по шаблону строки (`{head}` + `{next}`); пусто — `null`. */
+const joinWith = (key: MessageKey, items: readonly string[]): string | null =>
+  items.length === 0 ? null : items.reduce((head, next) => t(key, { head, next }));
+
+/** «100 км», «80 и 120 км», «40, 80 и 120 км»; пусто — `null` (приложение, OG-картинка старта в API). */
+export function formatDistances(distances: readonly number[]): string | null {
+  const values = distances.map(formatKm);
+  const last = values.pop();
+  if (last === undefined) return null;
+  const head = joinWith('format.listComma', values);
+  const list = head === null ? last : t('format.listAnd', { head, last });
+  return t('format.distanceKm', { distance: list });
 }

@@ -11,10 +11,10 @@ import NotificationSettingsScreen from '../app/settings/notifications';
 import { liveSession, signInForTest } from './auth-fixtures';
 
 jest.mock('@/lib/api');
-// платформа без push (web: `push.web.ts`) — та же развилка, что даёт файл платформы
+// платформа без push (web без Web Push: `push.web.ts`) — та же развилка, что даёт файл платформы
 jest.mock('@/features/notifications/push', () => ({
   ...jest.requireActual('@/features/notifications/push'),
-  pushSupported: false,
+  usePushSupported: () => false,
 }));
 
 beforeEach(() => {

@@ -344,6 +344,10 @@ paths:
 - Публичные гонки сезона (`GET /v1/seasons/:id/races`) — индекс `races_season_public_idx { seasonId, windowEndsAt,
   _id }` (`0009`, курсор без `SORT`, int-тест по `system.profile`); старый `races_season_idx` остаётся (снятие — с
   человеком).
+- Пререндер OG-картинок (`og.sync`, og-images): `{ status, updatedAt, _id }` на `races`, `rides`, `routes`,
+  `calendar_starts` (`0037_og_sync_indexes`, expand-only). Выборка «изменилось после» — только `changedForOg`
+  репозиториев (`changed-since.ts`: keyset `(updatedAt, _id)` + сортировка); каждая запись, меняющая публичное поле,
+  обязана ставить `updatedAt`.
 
 ## Кофе-райды (блок 05, ADR-0013 Proposed)
 
@@ -422,7 +426,7 @@ paths:
 ## Билеты (event-tickets, ADR-0023)
 
 - `event_ticketing` (`_id = "<kind>:<eventId>"`), `event_registrations`, `tickets` — единственный писатель
-  `TicketsRepository`; миграция `0037_tickets` (expand-only): `tickets_code_unique`, `tickets_qr_hash_unique`,
+  `TicketsRepository`; миграция `0038_tickets` (expand-only): `tickets_code_unique`, `tickets_qr_hash_unique`,
   `tickets_registration_unique`, `tickets_user_idx { userId, createdAt: -1 }`, `tickets_event_idx { kind, eventId, _id }`
   (сверка и участники с курсором), частичный `event_registrations_active_unique { eventId, userId }`
   (`status: 'active'`), `event_registrations_user_idx`, `event_ticketing_enabled_idx { kind, enabled, startsAt }`

@@ -531,7 +531,7 @@ check-in ищет билет по `sha256` токена из QR). Два сос�
   `device_connections` (частичный уникальный по живым статусам), `device_link_tickets` (TTL), `device_imports`,
   `device_audit`; expand-only, идемпотентны. `0012_track_source_refs` — маркеры удалённых объектов источника
   (удалённый заезд агрегатора не воскресает); expand-only.
-- `0037_tickets` (event-tickets, ADR-0023) — коллекции `event_ticketing`, `event_registrations` (частичный уникальный
+- `0038_tickets` (event-tickets, ADR-0023) — коллекции `event_ticketing`, `event_registrations` (частичный уникальный
   по активной регистрации), `tickets` (уникальные код, хэш QR, регистрация); expand-only, без бэкфилла (билеты
   выпускает сверка), идемпотентна. Номер сверить с `develop` перед мержем.
 

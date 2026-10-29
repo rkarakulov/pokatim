@@ -41,7 +41,7 @@ export const TICKETS_INDEXES = {
  * Expand-only, без транзакции и бэкфилла (билеты выпускает сверка), идемпотентна. После `0036_overview_indexes`.
  */
 export const tickets: MongoMigration = {
-  id: '0037_tickets',
+  id: '0038_tickets',
   async up(db) {
     for (const [name, indexes] of Object.entries(TICKETS_INDEXES)) {
       await ensureCollection(db, name);

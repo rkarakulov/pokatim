@@ -29,5 +29,11 @@ export {
   type RideableRoute,
   type RouteRideRoutes,
 } from './route-ride-routes.port';
+/** Порт OG-картинки маршрута каталога для `sharing` (og-images): факты, линия показа, пререндер. */
+export {
+  type RouteOgFacts,
+  ROUTES_FOR_SHARING,
+  type RoutesForSharing,
+} from './routes-for-sharing.port';
 /** Порт «Обзора» панели (admin-overview): заявки в каталог и маршруты с жалобами. */
 export { RoutesOverview } from './routes-overview';

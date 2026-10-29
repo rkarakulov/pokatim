@@ -72,7 +72,7 @@
 worker раз в минуту (ADR-0020 — прецедент reconcile-on-read). Письмо уходит из той транзакции, что выпустила билет
 (outbox `tickets.issued` → очередь `tickets`).
 
-### 5.2 Данные (миграция `0037_tickets`, номер сверить перед мержем)
+### 5.2 Данные (миграция `0038_tickets`, номер сверить перед мержем)
 
 - `event_ticketing` — настройки билетов события, `_id = "<kind>:<eventId>"`:
   `kind: 'race'|'calendar'`, `eventId`, `enabled`, `startsAt` (race — обязателен, внутри окна; calendar — из старта
@@ -444,7 +444,7 @@ ADR-0023 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.m
 - `apps/api/src/config/env.ts` — `APP_WEB_ORIGIN: optional(z.url({ protocol: /^https$/ }).refine(origin === origin))`
   (как `PUBLIC_API_ORIGIN`); `apps/api/.env.example`; `infra/deploy/bootstrap.sh` (`MANAGED_KEYS` + строка),
   `infra/deploy/env.template` (комментарий) — RC-T13.
-- `apps/api/src/db/migrations/0037_tickets.ts` + `index.ts` + `migrations.int.test.ts`.
+- `apps/api/src/db/migrations/0038_tickets.ts` + `index.ts` + `migrations.int.test.ts`.
 - `apps/api/src/user-limit.ts` (новый, перенос `consumeUserLimit`) ← `results/entries.service.ts`,
   `notifications/notifications.service.ts` (импорт вместо копии).
 - `modules/results`: `results-for-tickets.port.ts`, `results-for-tickets.ts`, `results.module.ts` (provider/export),
@@ -485,7 +485,7 @@ ADR-0023 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.m
   `CalendarEventFacts { id, status, title, startsOn, endsOn, startTime, city, place, distancesKm }`;
   `RaceRegistry.getMany(ids): Promise<Map<string, RaceForResults>>`.
 
-**DATA — `0037_tickets`** (expand-only, без транзакции и бэкфилла, идемпотентна; номер сверить с `origin/develop`
+**DATA — `0038_tickets`** (expand-only, без транзакции и бэкфилла, идемпотентна; номер сверить с `origin/develop`
 перед мержем)
 
 - `tickets`: `tickets_code_unique {code:1}` unique; `tickets_qr_hash_unique {qrHash:1}` unique;
@@ -546,7 +546,7 @@ ADR-0023 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.m
   гонок, чтение владельцем, публичная сводка, настройки и участники в панели, check-in, письмо, регламент, порт
   стирания. Порты `RESULTS_FOR_TICKETS`, `CALENDAR_EVENTS`, `RaceRegistry.getMany`; экспорт `buttonHtml`,
   `minskDateTime` из `identity`; `consumeUserLimit` вынесен в `src/user-limit.ts` (две копии убраны).
-- Миграция `0037_tickets`, очереди `tickets-email`/`tickets-maintenance`, env `APP_WEB_ORIGIN` (env.ts, `.env.example`;
+- Миграция `0038_tickets`, очереди `tickets-email`/`tickets-maintenance`, env `APP_WEB_ORIGIN` (env.ts, `.env.example`;
   на dev — `docker-compose.yml` из `WEB_ORIGIN`), шаг `tickets` в `account`, organizer + `tickets.checkin`.
 - Документы: ADR-0023, `docs/product/tickets.md`, `admin-panel.md`, runbook `deploy.md` (env, ротация секрета → QR,
   миграция), `account-deletion.md`, индексы ADR и продукта, правила `pokatim-{backend,db,contracts}.md`.

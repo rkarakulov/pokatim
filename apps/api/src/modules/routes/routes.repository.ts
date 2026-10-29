@@ -12,6 +12,12 @@ import {
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import { Binary, type Db, type Filter } from 'mongodb';
 
+import {
+  CHANGED_SORT,
+  type ChangedCursor,
+  changedAfter,
+  type ChangedRow,
+} from '../../changed-since';
 import type { DbSession } from '../../db';
 import { ROUTE_DISTANCE_RANGES_M } from './routes.policy';
 import {
@@ -286,6 +292,22 @@ export class RoutesRepository {
     return (
       (await this.c.routes.findOne({ _id: id, status: 'ready', ...PLATFORM_CATALOG })) ?? undefined
     );
+  }
+
+  /**
+   * Маршруты каталога, изменившиеся после курсора (`og.sync`), по `(updatedAt, _id)` — индекс `0037_og_sync_indexes`
+   * (`status`, `updatedAt`, `_id`); условие каталога — `IN_CATALOG`.
+   */
+  async changedForOg(after: ChangedCursor | null, limit: number): Promise<ChangedRow[]> {
+    const docs = await this.c.routes
+      .find(
+        { $and: [{ status: 'ready', ...IN_CATALOG }, changedAfter(after) as Filter<RouteDoc>] },
+        { projection: { _id: 1, updatedAt: 1 } },
+      )
+      .sort(CHANGED_SORT)
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
   }
 
   /**

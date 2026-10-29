@@ -9,8 +9,8 @@ paths:
 
 ## Рамки MVP (не расширять без ADR)
 
-- Нет записи GPS, нет фоновой геолокации, нет BLE-датчиков, нет web push, нет Strava API, нет биометрического
-  входа. Push на iOS и Android — только через Expo (ADR-0017). Garmin и Wahoo — только импорт велозаездов через
+- Нет записи GPS, нет фоновой геолокации, нет BLE-датчиков, нет Strava API, нет биометрического входа. Push на iOS и
+  Android — только через Expo (ADR-0017), в PWA — Web Push тем же каналом (ADR-0022). Garmin и Wahoo — только импорт велозаездов через
   агрегатор (ADR-0011). Задача требует что-то из этого — стоп: продуктовое решение и ADR, а не реализация.
 - Геолокация — только foreground для «рядом», после pre-permission экрана («Не сейчас»), при отказе — баннер со
   ссылкой в настройки ОС.
@@ -32,11 +32,19 @@ paths:
   Главной (`components/notification-bell.tsx`, «99+»); всё — `features/notifications/` (ключи `['notifications', …]`,
   счётчик — polling `refetchInterval` 60 с, не сокеты; статусы обработки — так же). Переход по цели — только
   `notification-target.ts` (белый список типов с `Uuid`; незнакомое — без перехода, из push — центр). Push — развилка
-  `push(.web).ts` (`expo-notifications` только в native-файле; web — no-op, `pushSupported = false`: в настройках
-  уведомлений только письма — без push-тумблеров, тихих часов и группы без писем): разрешение — только по нажатию строки
+  `push(.web).ts` (`expo-notifications` только в native-файле; web — Web Push, ADR-0022: подписка `PushManager` с
+  VAPID-ключом из `GET /v1/notifications/web-push`, поддержка — SW + Push API + Notification, iOS/iPadOS — только
+  standalone (детект — `features/pwa-install/install-platform.ts`); отправка регистрации и снятия — `sendPushRegistration`
+  / `sendPushRevoke` шва; `usePushSupported()` — `null` до монтирования (SSR), без поддержки в настройках только письма
+  — без push-тумблеров, тихих часов и группы без писем; строка `PushPermissionRow` — реальное состояние web:
+  `missing`/`expired` подписывает тихо, отказ — текст «включите в настройках браузера/системы»; выход — снятие на
+  сервере и `unsubscribe()` в браузере; нажатие на уведомление — сообщение SW `pokatim:open` → `onOpen(target)`): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
   `serverEnded`: токены снял сервер), последний токен — `secureStorage` `pokatim.pushToken`.
+  Service worker (`scripts/service-worker.ts`, ADR-0022): `push` — уведомление по payload сервера и сигнал окнам
+  `pokatim:push`; `notificationclick` — фокус открытого окна и цель приложению или новое окно по пути цели (копия
+  белого списка в SW — паритет с `notification-target.ts` держит тест, песочница — `scripts/service-worker-harness.ts`).
 - Настройки (settings-hub): хаб `settings/index` внутри `Stack.Protected` вкладок (оболочка `useSettingsShell`), вход —
   иконка «Настройки» `TopBar` Главной (иконка «Устройства» — быстрый вход рядом); «Выйти» — только здесь. Строки —
   `features/settings/settings-row.tsx`; «О приложении» — `app-info.ts` (версия `expoConfig.version`, ссылки —
@@ -59,7 +67,7 @@ paths:
   (`src/theme/`); компоненты читают `useTheme<AppTheme>()` / `useAppTheme()` (иконки, раскладка, схема). Подложка
   карты — `theme.map.basemap`, профиль высоты — `theme.profile.*`; сравнений с `themes.light|dark` нет. Иконки — только
   `components/icon.tsx` (единственный вход `expo-symbols`), шрифты — только `themeFonts` + `useThemeFonts` (не
-  `useFonts`); сторож — `__tests__/theme-guards.test.ts`. Тема — личная, в профиле райдера (ADR-0021): единственный
+  `useFonts`); React Compiler выключен — `textStyle()` читает шрифты темы из модуля, кэш компилятора их не обновил бы; сторож — `__tests__/theme-guards.test.ts`. Тема — личная, в профиле райдера (ADR-0021): единственный
   источник — `useActiveThemeId` (`features/appearance/`): вошёл — `themeId` профиля (`['profile']`), до ответа или при
   ошибке — последняя известная (native — кэш `pokatim.appTheme`, web — SSR); сессия `signedOut` (любой путь) —
   «Классика» и стирание кэша / cookie (в хуке по статусу сессии, не в `useSignOut`). Web: тема профиля — в cookie
@@ -107,6 +115,11 @@ paths:
 - Мета — `publicPageMetadata` (`src/lib/page-metadata.ts`) в `generateMetadata`: без e-mail и других ПДн; путь с
   токеном (ссылки писем) — без `og:url`; `loader` — только для публичных данных (e-mail в HTML не попадает).
   Образцы — `register`, `auth/verify/[token]`. Новый публичный экран — шаг смоука `e2e/web.spec.ts`.
+- `og:image` (og-images) — `publicPageMetadata({ image })` из `src/lib/og-image.ts`: страница объекта (гонка, райд,
+  маршрут, старт) — `Promise.all([данные, ogCardIfOrigin(kind, id)])` → `pageOgImage` (своя; нет версии или API
+  недоступен — бренд; страница не найдена — без картинки); остальные публичные страницы — `brandOgImage()` /
+  `brandOgImageFor(page)`. Версию картинки считает только API (`/v1/og/cards/...`), адрес — только от `WEB_ORIGIN`;
+  нет `WEB_ORIGIN` — ни запросов, ни картинки. Свой fetch и расчёт версии в приложении — запрещены.
 - Гостевой лендинг `/welcome` (guest-landing, `docs/product/landing.md`) — корневой `src/app/welcome.tsx` в том же
   `Stack.Protected guard={!signedIn}`, что `(onboarding)` (не в группе: `initialRouteName` группы не трогаем); экран —
   `features/landing/`. `loader` — четыре публичных списка (`loadLandingSeed`, части `null`, не бросает; маршруты —

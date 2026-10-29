@@ -7,6 +7,8 @@ import { RaceRegistryService } from './race-registry';
 import { RACE_REGISTRY } from './race-registry.port';
 import { RacesAdminController } from './races-admin.controller';
 import { RacesPublicController } from './races-public.controller';
+import { RacesForSharingService } from './races-for-sharing';
+import { RACES_FOR_SHARING } from './races-for-sharing.port';
 import { RacesOverview } from './races-overview';
 import { RacesPublicService } from './races-public.service';
 import { RacesRepository } from './races.repository';
@@ -18,8 +20,8 @@ import { SeasonsService } from './seasons.service';
 
 /**
  * Ядро `races` для API и worker: репозиторий, порт `RaceRegistry` для модуля `results` и порт `SeasonRaces` для
- * `standings` (race-results-08), `RacesOverview` для «Обзора» панели (admin-overview) — через `index.ts`, без
- * контроллеров.
+ * `standings` (race-results-08), `RacesOverview` для «Обзора» панели (admin-overview), порт OG-картинки
+ * `RACES_FOR_SHARING` для `sharing` (og-images) — через `index.ts`, без контроллеров.
  */
 @Module({
   providers: [
@@ -29,8 +31,10 @@ import { SeasonsService } from './seasons.service';
     SeasonRacesService,
     { provide: SEASON_RACES, useExisting: SeasonRacesService },
     RacesOverview,
+    RacesForSharingService,
+    { provide: RACES_FOR_SHARING, useExisting: RacesForSharingService },
   ],
-  exports: [RacesRepository, RACE_REGISTRY, SEASON_RACES, RacesOverview],
+  exports: [RacesRepository, RACE_REGISTRY, SEASON_RACES, RacesOverview, RACES_FOR_SHARING],
 })
 export class RacesCoreModule {}
 
