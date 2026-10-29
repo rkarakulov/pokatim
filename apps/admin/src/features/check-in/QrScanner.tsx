@@ -90,7 +90,8 @@ export function QrScanner({ paused, onScan }: { paused: boolean; onScan: (raw: s
           canvas.height = size.height;
           context.drawImage(element, 0, 0, size.width, size.height);
           const raw = await decoder(context.getImageData(0, 0, size.width, size.height));
-          if (raw && !cancelled) onScanRef.current(raw);
+          // пауза могла начаться, пока кадр разбирался (ручной поиск, карточка) — поздний результат не отдаём
+          if (raw && !cancelled && !pausedRef.current) onScanRef.current(raw);
         }
       } catch {
         // кадр не разобран — следующий

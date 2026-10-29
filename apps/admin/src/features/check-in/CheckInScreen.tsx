@@ -104,33 +104,43 @@ function ResultCard({
  * объявляется (`role="status"`). Источник истины — сервер (право, окно, повтор).
  */
 export function CheckInScreen() {
-  const [view, setView] = useState<CheckInView>();
+  // карточка вместе с запросом, который её получил: «Отметить» шлёт именно его, а не последний отправленный
+  const [shown, setShown] = useState<{ view: CheckInView; request: CheckInRequest }>();
+  const view = shown?.view;
   const [failure, setFailure] = useState<string>();
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string>();
-  const request = useRef<CheckInRequest | null>(null);
+  // поколение операции: новый поиск и «Следующий» делают ответы прежних запросов устаревшими
+  const generation = useRef(0);
   const dedup = useRef(createDedup());
 
   const lookup = useMutation({
     mutationFn: (body: CheckInRequest) => api.lookupTicket(body),
-    onSuccess: (result) => setView(result),
-    onError: (error) => setFailure(errorText(error)),
   });
   const mark = useMutation({
     mutationFn: (body: CheckInRequest) => api.checkInTicket(body),
-    onSuccess: (result) => setView(result),
-    onError: (error) => setFailure(errorText(error)),
   });
 
+  const handlers = (request: CheckInRequest) => {
+    const current = generation.current;
+    return {
+      onSuccess: (result: CheckInView) => {
+        if (current === generation.current) setShown({ view: result, request });
+      },
+      onError: (error: unknown) => {
+        if (current === generation.current) setFailure(errorText(error));
+      },
+    };
+  };
   const find = (body: CheckInRequest) => {
-    request.current = body;
-    setView(undefined);
+    generation.current += 1;
+    setShown(undefined);
     setFailure(undefined);
-    lookup.mutate(body);
+    lookup.mutate(body, handlers(body));
   };
   const next = () => {
-    request.current = null;
-    setView(undefined);
+    generation.current += 1;
+    setShown(undefined);
     setFailure(undefined);
     setCode('');
   };
@@ -138,7 +148,8 @@ export function CheckInScreen() {
     if (!dedup.current(raw)) return;
     const scan = parseScan(raw);
     if (scan.kind === 'foreign') {
-      setView(undefined);
+      generation.current += 1;
+      setShown(undefined);
       setFailure(t('admin.checkIn.notTicket'));
       return;
     }
@@ -204,15 +215,13 @@ export function CheckInScreen() {
               </div>
             </div>
           ) : null}
-          {view ? (
+          {shown ? (
             <ResultCard
-              view={view}
+              view={shown.view}
               marking={mark.isPending}
               onMark={() => {
-                if (request.current) {
-                  setFailure(undefined);
-                  mark.mutate(request.current);
-                }
+                setFailure(undefined);
+                mark.mutate(shown.request, handlers(shown.request));
               }}
               onNext={next}
             />

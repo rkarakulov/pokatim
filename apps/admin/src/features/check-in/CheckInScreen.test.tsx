@@ -221,6 +221,44 @@ describe('«Check-in» (AC6, RC-C2)', () => {
     expect(camera.stop).toHaveBeenCalled();
   });
 
+  it('кадр распознан после начала ручного поиска — не запускает поиск; «Отметить» — по показанному билету', async () => {
+    fakeCamera(QR);
+    // первый кадр «распознаётся», когда скажет тест; следующие — пусто
+    let decoded: (codes: { rawValue: string }[]) => void = () => undefined;
+    let calls = 0;
+    class SlowDetector {
+      static getSupportedFormats = async () => ['qr_code'];
+      detect = () =>
+        (calls += 1) === 1
+          ? new Promise<{ rawValue: string }[]>((done) => (decoded = done))
+          : Promise.resolve([]);
+    }
+    vi.stubGlobal('BarcodeDetector', SlowDetector);
+    let answerManual: (value: CheckInView) => void = () => undefined;
+    mocked.lookupTicket.mockImplementation((body) =>
+      'code' in body
+        ? new Promise<CheckInView>((done) => (answerManual = done))
+        : new Promise<CheckInView>(() => undefined),
+    );
+    mocked.checkInTicket.mockResolvedValue(
+      view({ outcome: 'checked_in' }, { status: 'checked_in' }),
+    );
+    await renderApp('/check-in');
+    fireEvent.click(screen.getByRole('button', { name: 'Включить камеру' }));
+    await waitFor(() => expect(calls).toBe(1), { timeout: 3000 });
+    enterCode('BBBBBBBBBB');
+    await waitFor(() => expect(mocked.lookupTicket).toHaveBeenCalledWith({ code: 'BBBBBBBBBB' }));
+    await act(async () => decoded([{ rawValue: QR }]));
+    await act(async () =>
+      answerManual(view({}, { code: 'BBBBBBBBBB', participantName: 'Борис Б.' })),
+    );
+    const result = screen.getByRole('status', { name: 'Результат проверки' });
+    expect(await within(result).findByText('Борис Б.')).toBeTruthy();
+    expect(mocked.lookupTicket).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(result).getByRole('button', { name: 'Отметить' }));
+    await waitFor(() => expect(mocked.checkInTicket).toHaveBeenCalledWith({ code: 'BBBBBBBBBB' }));
+  });
+
   /** `getUserMedia`, отвечающий, когда тест скажет: поздний поток устаревшей попытки. */
   function deferredCamera() {
     const camera = fakeCamera(QR);
