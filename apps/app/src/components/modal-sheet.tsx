@@ -57,11 +57,7 @@ export function ModalSheet({ title, onClose, children, testID }: ModalSheetProps
           aria-modal
           role="dialog"
           aria-label={title}
-          style={[
-            sheetSurface(theme),
-            styles.sheet,
-            { paddingBottom: insets.bottom + space.s5 },
-          ]}
+          style={[sheetSurface(theme), styles.sheet, { paddingBottom: insets.bottom + space.s5 }]}
         >
           <ScrollView contentContainerStyle={styles.content}>
             <Text role="heading" style={[textStyle('titleSm'), { color: theme.text.primary }]}>

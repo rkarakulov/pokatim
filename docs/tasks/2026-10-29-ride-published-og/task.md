@@ -46,7 +46,7 @@
 
 - `packages/i18n`: `rides.published.{title,text,textNoLink,link,close}`; удалить `rides.detail.published`.
 - `apps/app`: `components/modal-sheet.tsx` (+ тест), `features/rides/ride-published-sheet.tsx`, правка
-  `ride-detail.tsx` (шит вместо баннера) и `app/rides/[id].tsx` (снятие параметра).
+  `ride-detail.tsx` (шит вместо баннера и снятие параметра `router.setParams`).
 - e2e `web.spec.ts`: после «Опубликовать» — шит, «Закрыть», затем проверки детали.
 - Доки: `docs/product/rides.md`, `.claude/rules/pokatim-app.md` (Кофе-райды).
 

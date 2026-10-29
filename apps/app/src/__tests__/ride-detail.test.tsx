@@ -486,6 +486,13 @@ describe('шит «Райд опубликован»: организатор (ri
     expect(screen.queryByTestId('ride-published-sheet')).toBeNull();
   });
 
+  it('прошедшему — шита нет', async () => {
+    getRideForViewer.mockResolvedValue(organizerView({ phase: 'past' }));
+    await openSignedIn(`/rides/${ID}?published=1`);
+    await screen.findByText('Райд уже прошёл · Воскресенье, 4 октября 2026');
+    expect(screen.queryByTestId('ride-published-sheet')).toBeNull();
+  });
+
   it('отменённому — шита нет', async () => {
     getRideForViewer.mockResolvedValue(organizerView({ phase: 'cancelled' }));
     await openSignedIn(`/rides/${ID}?published=1`);
