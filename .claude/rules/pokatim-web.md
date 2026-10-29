@@ -36,7 +36,13 @@ paths:
   `safeNext`), 403 — «Нет доступа к разделу». Мутация, сама обрабатывающая 401 (вход), — `meta.ownsUnauthorized`.
 - Права в UI — только отображение: `Can` / `useCan(permission)`; раздел с правом — `RequirePermission` в маршруте
   (прямой URL без права — «Нет доступа к разделу» внутри каркаса). Источник истины — `PanelGuard` сервера.
-- Навигация — один файл `src/navigation.ts` (`{ to, labelKey, permission?, group }`).
+- Навигация — один файл `src/navigation.ts` (`{ to, labelKey, permission?, anyPermission?, sections?, group }`):
+  `anyPermission` — пункт виден при любом из прав, `sections` — пути, на которых (и на вложенных) пункт подсвечен.
+- «Модерация» (admin-moderation-hub) — `features/moderation/*`: один пункт сайдбара (группа `bottom`, после «Журнала
+  действий») при любом из `routes.moderate` / `profiles.moderate` / `rides.moderate`; очереди — вкладки
+  `ModerationTabs` под `PageHeader` списков (`MODERATION_TABS`: «Маршруты райдеров», «Профили райдеров», «Кофе-райды»;
+  только с правом, текущая — `aria-current`), число — из `overviewQuery` (загрузка, ошибка, ноль — без числа). Адреса
+  очередей прежние; `/moderation` — `redirect` на первую доступную вкладку, без прав — «Нет доступа к разделу».
 - Новые экраны — только из `src/ui` (`AppShell`, `PageHeader`, `DataTable`, `Dialog`, `ReasonDialog`, поля, `Button`,
   `Banner`, `StatusTag`, `AuthCard`, `EmptyState`, `ErrorState`): без доменных импортов, кандидаты в
   `@rkarakulov/admin-kit` (F6, явное исключение `AGENTS.md` §4.11 до выноса). Размеры раскладки панели, которых нет в
@@ -114,12 +120,12 @@ paths:
   отказ или нет сети — баннер с повтором (рейтинг виден); ошибка обновления шапки или сводки — баннер с повтором
   над прежними данными.
 - «Модерация райдов» (05b) — `features/rides-moderation/*`, маршруты `/rides-moderation` (`?state=hidden` — в URL) и
-  `/rides-moderation/$rideId` под `RequirePermission permission="rides.moderate"`, пункт навигации — группа `bottom`
-  в конце. Действия — `ReasonDialog`; 409 `CONFLICT` и `RIDE_INVALID_STATE` — `ConflictBanner` с перечитыванием
+  `/rides-moderation/$rideId` под `RequirePermission permission="rides.moderate"`, вкладка «Кофе-райды» раздела
+  «Модерация». Действия — `ReasonDialog`; 409 `CONFLICT` и `RIDE_INVALID_STATE` — `ConflictBanner` с перечитыванием
   карточки; «Отклонить жалобы» отправляет `lastReportAt` карточки.
 - «Маршруты райдеров» (routes-06) — `features/rider-routes/*`, маршруты `/rider-routes` (`?tab=reported|hidden` — в
   URL, по умолчанию «На проверке») и `/rider-routes/$routeId` под `RequirePermission permission="routes.moderate"`,
-  пункт навигации — группа `bottom` в конце. Автор — только `Райдер ·<хвост id>` (`riderRouteAuthor`), имени нет (N8);
+  вкладка «Маршруты райдеров» раздела «Модерация». Автор — только `Райдер ·<хвост id>` (`riderRouteAuthor`), имени нет (N8);
   жалобы — без автора. Карта, цифры и профиль — общий `features/routes/RouteReadyView.tsx` (тот же блок, что на
   странице маршрута routes-05; копий нет). «Одобрить» — окно с городом (`SelectField`) и покрытием (`ChipGroup`) из
   заявки, «Отклонить» — справочник причин (`RadioGroup`, подтверждение неактивно до выбора) и комментарий автору
@@ -130,7 +136,7 @@ paths:
   действий, 403 — «Нет доступа», прочее — баннер «Не удалось обновить данные» с повтором поверх последних данных.
 - «Профили райдеров» (profile-moderation) — `features/rider-profiles/*`, маршруты `/rider-profiles` (одна очередь
   открытых жалоб, «Показать ещё» по курсору) и `/rider-profiles/$userId` под `RequirePermission
-  permission="profiles.moderate"`, пункт навигации — группа `bottom` в конце. Подпись — `riderLabel(userId, name)` из
+  permission="profiles.moderate"`, вкладка «Профили райдеров» раздела «Модерация». Подпись — `riderLabel(userId, name)` из
   `features/results/results-format.ts` (имя сервер отдаёт только при согласии, Q2); жалобы — без автора. Фото —
   `<img src={api.riderAvatarUrl(id)}>` (тот же origin, `img-src 'self'` — сторож `csp.test.ts`) в квадрате
   `.avatar-preview` (`--panel-avatar-preview`, `panel-tokens.ts`), без фото — пустой квадрат той же раскладки.
