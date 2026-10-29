@@ -1,5 +1,8 @@
 import type { Permission } from '@pokatim/contracts';
 import type { MessageKey } from '@pokatim/i18n';
+import type { LinkProps } from '@tanstack/react-router';
+
+import { MODERATION_TABS } from './features/moderation/moderation-tabs';
 
 export interface NavItem {
   /** Путь раздела внутри `basepath` (маршруты — `router.tsx`). */
@@ -11,14 +14,16 @@ export interface NavItem {
     | '/seasons'
     | '/members'
     | '/audit'
-    | '/rides-moderation'
+    | '/moderation'
     | '/disputes'
-    | '/appearance'
-    | '/rider-routes'
-    | '/rider-profiles';
+    | '/appearance';
   labelKey: MessageKey;
   /** Без права пункт скрыт (сервер всё равно проверит право на каждом запросе). */
   permission?: Permission;
+  /** Пункт-раздел нескольких очередей: виден при любом из прав (вместо `permission`). */
+  anyPermission?: readonly Permission[];
+  /** Пути, на которых (и на вложенных) пункт подсвечен, — когда сам `to` только перенаправляет. */
+  sections?: readonly NonNullable<LinkProps['to']>[];
   /** `bottom` — служебная группа внизу сайдбара над блоком сотрудника. */
   group: 'main' | 'bottom';
 }
@@ -38,32 +43,27 @@ export const NAVIGATION: readonly NavItem[] = [
   { to: '/seasons', labelKey: 'admin.nav.seasons', permission: 'races.read', group: 'main' },
   { to: '/members', labelKey: 'admin.nav.members', permission: 'members.read', group: 'bottom' },
   { to: '/audit', labelKey: 'admin.nav.audit', permission: 'audit.read', group: 'bottom' },
-  // 05b: в конец массива, группа `bottom` («Сезоны» остаются последними в основной группе, 8.1 A8)
+  // admin-moderation-hub: три очереди модерации — один пункт с вкладками (`features/moderation`), на месте
+  // «Модерации райдов» (05b); вкладки — маршруты райдеров (routes-06), профили (profile-moderation), кофе-райды
   {
-    to: '/rides-moderation',
-    labelKey: 'admin.nav.ridesModeration',
-    permission: 'rides.moderate',
+    to: '/moderation',
+    labelKey: 'admin.nav.moderation',
+    anyPermission: MODERATION_TABS.map((tab) => tab.permission),
+    sections: MODERATION_TABS.map((tab) => tab.to),
     group: 'bottom',
   },
-  // app-themes D1: в конец массива, группа `bottom` (после «Модерации райдов»)
+  // app-themes D1: группа `bottom`, после «Модерации»
   {
     to: '/appearance',
     labelKey: 'admin.nav.appearance',
     permission: 'appearance.manage',
     group: 'bottom',
   },
-  // routes-06: в конец массива, группа `bottom` (после «Оформления приложения»)
-  {
-    to: '/rider-routes',
-    labelKey: 'admin.nav.riderRoutes',
-    permission: 'routes.moderate',
-    group: 'bottom',
-  },
-  // profile-moderation: в конец массива, группа `bottom` (после «Маршрутов райдеров»)
-  {
-    to: '/rider-profiles',
-    labelKey: 'admin.nav.riderProfiles',
-    permission: 'profiles.moderate',
-    group: 'bottom',
-  },
 ];
+
+/** Пункт виден сотруднику (только отображение): нет требований, есть право или любое из прав раздела. */
+export function isNavItemVisible(item: NavItem, permissions: readonly Permission[]): boolean {
+  if (item.permission) return permissions.includes(item.permission);
+  if (item.anyPermission) return item.anyPermission.some((value) => permissions.includes(value));
+  return true;
+}
