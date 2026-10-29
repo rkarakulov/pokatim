@@ -217,6 +217,60 @@ describe('«Журнал действий» (AC12)', () => {
     expect(await screen.findByText('Сезонный декор изменён: Без декора → Хеллоуин')).toBeTruthy();
   });
 
+  it('event-tickets: отметка — код билета; материалы — подписи действий и полей', async () => {
+    const race = { kind: 'race' as const, id: signedIn.id, label: 'Минское кольцо' };
+    mocked.listAudit.mockResolvedValue({
+      items: [
+        {
+          ...signedIn,
+          id: id(71),
+          action: 'tickets.checked_in',
+          subject: race,
+          details: { ticketCode: '7XK2M9PQRT' },
+        },
+        { ...signedIn, id: id(72), action: 'tickets.material_added', subject: race, details: null },
+        {
+          ...signedIn,
+          id: id(73),
+          action: 'tickets.material_updated',
+          subject: race,
+          details: { changedFields: ['title', 'url'] },
+        },
+        {
+          ...signedIn,
+          id: id(74),
+          action: 'tickets.material_removed',
+          subject: race,
+          details: null,
+        },
+        {
+          ...signedIn,
+          id: id(75),
+          action: 'tickets.materials_reordered',
+          subject: race,
+          details: null,
+        },
+        {
+          ...signedIn,
+          id: id(76),
+          action: 'tickets.settings_updated',
+          subject: race,
+          details: { changedFields: ['enabled', 'startsAt'] },
+        },
+      ],
+      nextCursor: null,
+    });
+    await renderApp('/audit');
+    expect(await screen.findByText('Участник отмечен: Билет ·7XK2M-9PQRT')).toBeTruthy();
+    expect(screen.getByRole('cell', { name: 'Добавлен материал события' })).toBeTruthy();
+    expect(screen.getByText('Изменён материал события: Название, Ссылка')).toBeTruthy();
+    expect(screen.getByRole('cell', { name: 'Удалён материал события' })).toBeTruthy();
+    expect(screen.getByRole('cell', { name: 'Изменён порядок материалов' })).toBeTruthy();
+    expect(
+      screen.getByText('Настройки билетов изменены: Выдача билетов, Очный старт'),
+    ).toBeTruthy();
+  });
+
   it('«Показать ещё» — следующая страница по курсору сервера', async () => {
     mocked.listAudit
       .mockResolvedValueOnce({ items: [revoked, granted], nextCursor: granted.id })

@@ -38,6 +38,7 @@ import { achievements } from './0035_achievements';
 import { overviewIndexes } from './0036_overview_indexes';
 import { ogSyncIndexes } from './0037_og_sync_indexes';
 import { tickets } from './0038_tickets';
+import { eventMaterials } from './0039_event_materials';
 import { panelTotp } from './0040_panel_totp';
 
 /**
@@ -83,5 +84,6 @@ export const migrations: readonly MongoMigration[] = [
   overviewIndexes,
   ogSyncIndexes,
   tickets,
+  eventMaterials,
   panelTotp,
 ];

@@ -14,11 +14,12 @@ import { isDuplicateKey } from '@rkarakulov/api-kit/mongo';
 import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { PanelAudit, type PanelPrincipal } from '../panel';
+import { type PanelEvent, PanelEvents } from './panel-events';
 import { ParticipantNames } from './participant-names';
 import { TicketEvents } from './ticket-events';
 import { categoryView } from './ticket-views';
 import { type EventTicketingDoc, ticketingIdOf } from './tickets.collection';
-import { type EventFacts, eventAccess, TICKETS_POLICY, ticketStatus } from './tickets.policy';
+import { type EventFacts, TICKETS_POLICY, ticketStatus } from './tickets.policy';
 import { TicketsRepository } from './tickets.repository';
 
 const invalidState = (reason: TicketingInvalidStateReason) => {
@@ -45,15 +46,6 @@ const same = (a: unknown, b: unknown) =>
 
 const dateOrNull = (value: string | null) => (value === null ? null : new Date(value));
 
-/** Событие панели: факты + доступ проверен. */
-interface PanelEvent {
-  facts: EventFacts;
-  /** окно гонки (проверка очного старта, RC-T3); календарь — `null` */
-  window: { startsAt: Date; closesAt: Date } | null;
-  /** время старта календаря задано (RC-T2) */
-  hasStartTime: boolean;
-}
-
 /**
  * Настройки билетов события и список участников в панели (event-tickets). Право зависит от `kind` (RC-T9): маршрут
  * под `PanelGuard`, проверка — `eventAccess` (нет права — 403, чужая гонка — 404). Правка — транзакция: версия →
@@ -64,6 +56,7 @@ export class TicketingAdminService {
   constructor(
     private readonly repository: TicketsRepository,
     private readonly events: TicketEvents,
+    private readonly panelEvents: PanelEvents,
     private readonly names: ParticipantNames,
     private readonly audit: PanelAudit,
     private readonly transactions: MongoTransactions,
@@ -75,7 +68,7 @@ export class TicketingAdminService {
     kind: TicketEventKind,
     eventId: string,
   ): Promise<EventTicketingSettings> {
-    const event = await this.event(principal, kind, eventId, 'manage');
+    const event = await this.panelEvents.resolve(principal, kind, eventId, 'manage');
     return this.settings(event.facts, event.facts.ticketing);
   }
 
@@ -85,7 +78,7 @@ export class TicketingAdminService {
     eventId: string,
     body: EventTicketingUpdate,
   ): Promise<EventTicketingSettings> {
-    const event = await this.event(principal, kind, eventId, 'manage');
+    const event = await this.panelEvents.resolve(principal, kind, eventId, 'manage');
     const { facts } = event;
     let written: EventTicketingDoc | null = null;
     try {
@@ -139,7 +132,7 @@ export class TicketingAdminService {
     eventId: string,
     query: EventTicketsQuery,
   ): Promise<EventTicketsPage> {
-    const { facts } = await this.event(principal, kind, eventId, 'checkin');
+    const { facts } = await this.panelEvents.resolve(principal, kind, eventId, 'checkin');
     const docs = await this.repository.ticketsOfEvent(
       kind,
       eventId,
@@ -159,33 +152,6 @@ export class TicketingAdminService {
       })),
       nextCursor: docs.length > query.limit ? (page.at(-1)?._id ?? null) : null,
     };
-  }
-
-  /** Событие с проверкой доступа: нет права — 403, нет или чужое — 404. */
-  private async event(
-    principal: PanelPrincipal,
-    kind: TicketEventKind,
-    eventId: string,
-    purpose: 'manage' | 'checkin',
-  ): Promise<PanelEvent> {
-    // право по виду события проверяется до чтения: без права 403 не выдаёт существование события
-    if (eventAccess(principal, kind, purpose, principal.userId) === 'forbidden') {
-      throw domainError('FORBIDDEN', 403);
-    }
-    const facts = await this.events.resolve(kind, eventId);
-    if (!facts || eventAccess(principal, kind, purpose, facts.ownerUserId) !== 'ok') {
-      throw domainError('NOT_FOUND', 404);
-    }
-    if (kind === 'race') {
-      const race = await this.events.race(eventId);
-      return {
-        facts,
-        window: race ? { startsAt: race.windowStartsAt, closesAt: race.closesAt } : null,
-        hasStartTime: true,
-      };
-    }
-    const start = await this.events.calendarStart(eventId);
-    return { facts, window: null, hasStartTime: start?.startTime != null };
   }
 
   /** Новые значения полей с правилами по виду события (RC-T2, RC-T3, RC-T6). */

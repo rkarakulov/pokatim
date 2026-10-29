@@ -45,6 +45,9 @@ function Home() {
 function Story() {
   return <Text>Сторис</Text>;
 }
+function AchievementStory() {
+  return <Text>Карточка достижения</Text>;
+}
 /** `ready` хоста (вошёл и прошёл онбординг) — переключается тестом: выход и вход другим аккаунтом. */
 const readyStore = create<{ ready: boolean }>(() => ({ ready: true }));
 function Layout() {
@@ -65,6 +68,7 @@ const open = (initialUrl = '/', ready = true, client: QueryClient = createTestQu
       index: Home,
       'achievements/flash': AchievementFlashRoute,
       'races/story/[id]': Story,
+      'achievements/story/[code]': AchievementStory,
       other: () => <Text>Другой экран</Text>,
     },
     { initialUrl, wrapper: createQueryWrapper(client) },
@@ -209,7 +213,7 @@ describe('хост вспышки (A5, AC9)', () => {
     expect(screen.queryByText(/из 2/)).toBeNull();
   });
 
-  it('«Поделиться» посреди очереди (1 из 2) → сторис, выход из сторис — вспышка не открывается сразу', async () => {
+  it('«Поделиться» посреди очереди (1 из 2) → карточка, выход из карточки — вспышка не открывается сразу', async () => {
     // от новых к старым: гонка старше — показывается первой
     listAchievements.mockResolvedValue({
       items: [{ ...routeItem, factDate: '2026-06-01' }, item()],
@@ -217,7 +221,7 @@ describe('хост вспышки (A5, AC9)', () => {
     const router = await open();
     expect(await screen.findByText('1 из 2')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Поделиться' }));
-    expect(await screen.findByText('Сторис')).toBeOnTheScreen();
+    expect(await screen.findByText('Карточка достижения')).toBeOnTheScreen();
     await act(() => expoRouter.back());
     expect(await screen.findByText('Главная')).toBeOnTheScreen();
     await act(async () => undefined);
@@ -335,8 +339,8 @@ describe('экран вспышки (AC10, AC11, AC13)', () => {
     expect(screen.getByText('1 из 2')).toBeOnTheScreen();
     expect(screen.getByText('Маршрут «Петля»')).toBeOnTheScreen();
     expect(screen.getByText('1 апреля 2026')).toBeOnTheScreen();
-    // маршрутное — без «Поделиться», не последнее — без «Закрыть»
-    expect(screen.queryByRole('button', { name: 'Поделиться' })).toBeNull();
+    // маршрутное — «Поделиться» карточкой достижения, не последнее — без «Закрыть»
+    expect(screen.getByRole('button', { name: 'Поделиться' })).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Закрыть' })).toBeNull();
     await waitFor(() =>
       expect(markSeen).toHaveBeenCalledWith(liveSession.accessToken, ['route_first']),
@@ -355,22 +359,22 @@ describe('экран вспышки (AC10, AC11, AC13)', () => {
     expect(markSeen).toHaveBeenCalledTimes(2);
   });
 
-  it('гоночное — «Поделиться» открывает сторис результата гонки', async () => {
+  it('«Поделиться» открывает карточку достижения (вместо вспышки)', async () => {
     listAchievements.mockResolvedValue({ items: [item()] });
     const router = await open();
     await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
-    await waitFor(() => expect(router.getPathname()).toBe(`/races/story/${RACE_ID}`));
-    expect(await screen.findByText('Сторис')).toBeOnTheScreen();
+    await waitFor(() => expect(router.getPathname()).toBe('/achievements/story/race_win'));
+    expect(await screen.findByText('Карточка достижения')).toBeOnTheScreen();
     expect(markSeen).toHaveBeenCalledWith(liveSession.accessToken, ['race_win']);
   });
 
-  it('незнакомый вид объекта — без «Поделиться»', async () => {
+  it('незнакомый вид объекта — «Поделиться» карточкой достижения (код известен)', async () => {
     listAchievements.mockResolvedValue({
       items: [item({ object: { kind: 'unknown', id: RACE_ID, title: 'Что-то' } })],
     });
-    await open();
-    expect(await screen.findByRole('header', { name: 'Победа' })).toBeOnTheScreen();
-    expect(screen.queryByRole('button', { name: 'Поделиться' })).toBeNull();
+    const router = await open();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/achievements/story/race_win'));
   });
 
   it('«Уменьшить движение» — значок без анимации', async () => {
@@ -418,23 +422,23 @@ describe('экран своего достижения /achievements/[code] (A6)
       { initialUrl: `/achievements/${code}`, wrapper: createQueryWrapper() },
     );
 
-  it('гоночное: макет вспышки без «Дальше», «Поделиться» → сторис; seen не шлёт', async () => {
+  it('гоночное: макет вспышки без «Дальше», «Сторис результата» → сторис; seen не шлёт', async () => {
     listAchievements.mockResolvedValue({ items: [item({ seen: true })] });
     const router = await openCode('race_win');
     expect(await screen.findByRole('header', { name: 'Победа' })).toBeOnTheScreen();
     expect(screen.getByText('Первое место в своей группе')).toBeOnTheScreen();
     expect(screen.getByText('Гонка «Гонка у озера»')).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Дальше' })).toBeNull();
-    await fireEvent.press(screen.getByRole('button', { name: 'Поделиться' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Сторис результата' }));
     await waitFor(() => expect(router.getPathname()).toBe(`/races/story/${RACE_ID}`));
     expect(markSeen).not.toHaveBeenCalled();
   });
 
-  it('маршрутное — без «Поделиться»', async () => {
+  it('маршрутное — без «Сторис результата»', async () => {
     listAchievements.mockResolvedValue({ items: [{ ...routeItem, seen: true }] });
     await openCode('route_first');
     expect(await screen.findByRole('header', { name: 'Первый маршрут' })).toBeOnTheScreen();
-    expect(screen.queryByRole('button', { name: 'Поделиться' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Сторис результата' })).toBeNull();
   });
 
   it('нет в списке (отозвано, незнакомый адрес) — пустое состояние → профиль', async () => {

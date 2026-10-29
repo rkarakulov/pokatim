@@ -1,6 +1,7 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
+import type { ErasureStep } from '@pokatim/contracts';
 import type { Queue } from 'bullmq';
 
 import { QUEUE } from '../../queues';
@@ -136,7 +137,7 @@ export class AccountErasureService {
 
   private async step(
     userId: string,
-    name: string,
+    name: ErasureStep,
     run: ErasureRun,
     work: () => Promise<string>,
   ): Promise<void> {
@@ -145,6 +146,12 @@ export class AccountErasureService {
       this.logger.log(`account.erasure user=${userId} step=${name} ${summary}`);
     } catch (error) {
       if (run.final) this.logger.error(`account.erasure_failed user=${userId} step=${name}`);
+      // экран сбоев панели (erasure-failures): шаг, код и счётчик; сбой записи не подменяет исходную ошибку
+      await this.identity
+        .recordFailure(userId, name, error, this.clock.now())
+        .catch(() =>
+          this.logger.warn(`account.erasure_failure_not_recorded user=${userId} step=${name}`),
+        );
       throw error;
     }
   }

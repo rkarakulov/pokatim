@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
 import { seedRace } from '../../../test/og';
+import { seedSeason } from '../../../test/standings';
 import { RACES_FOR_SHARING, type RacesForSharing } from './index';
 
 /** Порт OG-картинки гонки (og-images, D7/D9): только опубликованная, без владельца и описания; keyset изменений. */
@@ -63,5 +64,13 @@ describe('ogChanged', () => {
       { id: b, updatedAt: at(2) },
     ]);
     expect(await port().ogChanged({ at: at(2), id: b! }, 10)).toEqual([]);
+  });
+});
+
+describe('sitemapSeasons (landing-seo)', () => {
+  it('все сезоны: id и дата изменения; нет сезонов — пусто', async () => {
+    expect(await port().sitemapSeasons()).toEqual([]);
+    const id = await seedSeason(h);
+    expect(await port().sitemapSeasons()).toEqual([{ id, updatedAt: h.clock.now() }]);
   });
 });

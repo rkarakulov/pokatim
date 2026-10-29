@@ -25,6 +25,7 @@ const host = process.env.HOST ?? '0.0.0.0';
 const app = createWebServer({
   dist,
   render: createRequestHandler({ build: join(dist, 'server') }),
+  apiUrl: process.env.EXPO_PUBLIC_API_URL,
 });
 
 app.listen(port, host, (error) => {

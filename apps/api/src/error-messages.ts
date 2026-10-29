@@ -58,6 +58,8 @@ export const PROJECT_ERROR_MESSAGES = {
   EVENT_FULL: 'Мест больше нет',
   EVENT_REGISTRATION_CLOSED: 'Регистрация на это событие закрыта',
   TICKETING_INVALID_STATE: 'Настройки билетов сейчас нельзя применить',
+  MATERIAL_FILE_UNSUPPORTED: 'Можно загрузить только PDF',
+  MATERIAL_FILE_TOO_LARGE: 'PDF больше 10 МБ',
   TOTP_INVALID_CODE: 'Неверный код',
   TOTP_CHALLENGE_EXPIRED: 'Время на ввод кода истекло — войдите заново',
   TOTP_ALREADY_ENABLED: 'Двухфакторная защита уже подключена',

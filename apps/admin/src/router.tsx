@@ -11,6 +11,7 @@ import {
 import type { ReactNode } from 'react';
 
 import { AuditScreen } from './features/audit/AuditScreen';
+import { CheckInScreen } from './features/check-in/CheckInScreen';
 import { AppearanceScreen } from './features/appearance/AppearanceScreen';
 import { CalendarScreen } from './features/calendar/CalendarScreen';
 import { validateDisputesSearch } from './features/disputes/disputes-format';
@@ -27,6 +28,7 @@ import { OverviewScreen } from './features/overview/OverviewScreen';
 import { NewRaceScreen, RaceScreen } from './features/races/RaceScreen';
 import { RacesScreen, validateRacesSearch } from './features/races/RacesScreen';
 import { RaceResultsScreen } from './features/results/RaceResultsScreen';
+import { AccountErasuresScreen } from './features/account-erasures/AccountErasuresScreen';
 import { RiderProfileScreen } from './features/rider-profiles/RiderProfileScreen';
 import { RiderProfilesScreen } from './features/rider-profiles/RiderProfilesScreen';
 import { validateRiderRoutesSearch } from './features/rider-routes/rider-routes-format';
@@ -38,6 +40,7 @@ import { SeasonScreen } from './features/seasons/SeasonScreen';
 import { SeasonsScreen } from './features/seasons/SeasonsScreen';
 import { SecurityScreen } from './features/security/SecurityScreen';
 import { SignInScreen } from './features/sign-in/SignInScreen';
+import { EventTicketsScreen } from './features/tickets/EventTicketsScreen';
 import { AppLayout, ShellError, ShellSkeleton } from './layout/AppLayout';
 import { Can } from './session/can';
 import { isUnauthorized } from './session/errors';
@@ -88,21 +91,30 @@ const signInRoute = createRoute({
  * — только после 401 при уже открытой сессии (глобальный обработчик `query-client.ts`): первый визит без сессии —
  * просто «Вход в панель».
  */
+/** Сессия до рендера защищённой ветки: 401 — «Вход» с возвратом на исходный путь (общий для каркаса и check-in). */
+async function requireSession({
+  context,
+  location,
+}: {
+  context: RouterContext;
+  location: { href: string };
+}) {
+  try {
+    await context.queryClient.ensureQueryData(meQuery);
+  } catch (error) {
+    if (!isUnauthorized(error)) throw error;
+    const next = safeNext(location.href);
+    throw redirect({
+      to: '/sign-in',
+      search: next && next !== '/' ? { next } : {},
+    });
+  }
+}
+
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'app',
-  beforeLoad: async ({ context, location }) => {
-    try {
-      await context.queryClient.ensureQueryData(meQuery);
-    } catch (error) {
-      if (!isUnauthorized(error)) throw error;
-      const next = safeNext(location.href);
-      throw redirect({
-        to: '/sign-in',
-        search: next && next !== '/' ? { next } : {},
-      });
-    }
-  },
+  beforeLoad: requireSession,
   pendingComponent: ShellSkeleton,
   errorComponent: ShellError,
   component: AppLayout,
@@ -378,6 +390,63 @@ const appearanceRoute = createRoute({
   ),
 });
 
+// event-tickets PR C: «Билеты и материалы» события — право по виду события проверяет сервер (403 — «Нет доступа»)
+const raceTicketsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'races/$raceId/tickets',
+  component: function RaceTicketsRoute() {
+    const { raceId } = raceTicketsRoute.useParams();
+    return <EventTicketsScreen key={raceId} kind="race" eventId={raceId} />;
+  },
+});
+
+const calendarTicketsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'calendar/$startId/tickets',
+  component: function CalendarTicketsRoute() {
+    const { startId } = calendarTicketsRoute.useParams();
+    return <EventTicketsScreen key={startId} kind="calendar" eventId={startId} />;
+  },
+});
+
+/**
+ * Check-in (event-tickets PR C, RC-C2): отдельная защищённая ветка без сайдбара — экран работает с телефона от
+ * 360 px (каркас панели — desktop). Та же проверка сессии, что у каркаса.
+ */
+const checkInLayoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: 'check-in-layout',
+  beforeLoad: requireSession,
+  pendingComponent: ShellSkeleton,
+  errorComponent: ShellError,
+  component: () => (
+    <main className="check-in-layout">
+      <Outlet />
+    </main>
+  ),
+});
+
+const checkInRoute = createRoute({
+  getParentRoute: () => checkInLayoutRoute,
+  path: 'check-in',
+  component: () => (
+    <RequirePermission permission="tickets.checkin">
+      <CheckInScreen />
+    </RequirePermission>
+  ),
+});
+
+// erasure-failures: зависшие удаления аккаунтов и повтор очистки (только admin); вход — карточка «Обзора»
+const accountErasuresRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'account-erasures',
+  component: () => (
+    <RequirePermission permission="platform.stats">
+      <AccountErasuresScreen />
+    </RequirePermission>
+  ),
+});
+
 // panel-2fa (ADR-0024): 2FA своего аккаунта — любая роль, без права
 const securityRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -393,6 +462,7 @@ const notFoundRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   signInRoute,
+  checkInLayoutRoute.addChildren([checkInRoute]),
   appRoute.addChildren([
     overviewRoute,
     racesRoute,
@@ -417,6 +487,9 @@ const routeTree = rootRoute.addChildren([
     riderRouteRoute,
     riderProfilesRoute,
     riderProfileRoute,
+    raceTicketsRoute,
+    calendarTicketsRoute,
+    accountErasuresRoute,
     notFoundRoute,
   ]),
 ]);

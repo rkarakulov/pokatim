@@ -88,12 +88,12 @@ const ATTENTION_CARDS: readonly AttentionCard[] = [
     to: '/rider-profiles',
   },
   {
-    // раздела нет (follow-up F13): без ссылки, подсказка — где искать
     key: 'accountDeletions',
     permission: 'platform.stats',
     label: 'admin.overview.card.accountDeletions',
     value: (a) => a.accountDeletions?.stuck,
     hint: () => t('admin.overview.card.accountDeletionsHint'),
+    to: '/account-erasures',
   },
 ];
 

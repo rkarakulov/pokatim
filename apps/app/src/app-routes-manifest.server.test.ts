@@ -39,6 +39,7 @@ describe('маршруты web-сервера: первое совпадение
     [`/riders/${'r'.repeat(43)}`, '/riders/[id]'],
     ['/achievements/flash', '/achievements/flash'],
     ['/achievements/race_win', '/achievements/[code]'],
+    ['/achievements/story/race_win', '/achievements/story/[code]'],
     // guest-landing (RC-1): корневой лендинг, корень — Главная
     ['/welcome', '/welcome'],
     // event-tickets B: билет по ссылке из письма

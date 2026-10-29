@@ -94,6 +94,9 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'EVENT_FULL',
   'EVENT_REGISTRATION_CLOSED',
   'TICKETING_INVALID_STATE',
+  // event-tickets PR C: материал — не PDF по сигнатуре (415); PDF больше 10 МиБ (413)
+  'MATERIAL_FILE_UNSUPPORTED',
+  'MATERIAL_FILE_TOO_LARGE',
   // panel-2fa (ADR-0024): неверный, повторённый или погашенный код (400, одно сообщение); вызов входа неизвестен,
   // истёк, исчерпан или штамп сменился (401); 2FA уже подключена / не подключена; отключить нельзя — обязательна
   // (409); нет ключа шифрования на сервере (503)

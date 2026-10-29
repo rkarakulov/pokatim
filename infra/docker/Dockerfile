@@ -26,6 +26,8 @@ WORKDIR /repo
 # Новый workspace-пакет — добавить его package.json сюда (иначе frozen-lockfile упадёт).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY scripts/install-git-hooks.mjs scripts/
+# патчи зависимостей (patchedDependencies в pnpm-workspace.yaml): nonce CSP в SSR, ADR-0025
+COPY patches/ patches/
 COPY apps/api/package.json apps/api/
 COPY apps/app/package.json apps/app/
 COPY apps/admin/package.json apps/admin/

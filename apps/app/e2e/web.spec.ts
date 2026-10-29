@@ -207,6 +207,82 @@ test('manifest — всегда «Классика», и при cookie личн�
   });
 });
 
+test('строгий CSP (ADR-0025): nonce свой у ответа, все inline-скрипты SSR — с ним, бандлы — свой origin', async ({
+  request,
+}) => {
+  const nonces = new Set<string>();
+  for (const path of ['/', '/welcome', '/sign-in', '/welcome']) {
+    const response = await request.get(path, {
+      headers: { 'x-pokatim-csp-nonce': 'attacker' },
+    });
+    const csp = response.headers()['content-security-policy'] ?? '';
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).not.toMatch(/unsafe-eval|script-src[^;]*unsafe-inline/);
+    const nonce = /script-src 'self' 'nonce-([A-Za-z0-9+/=]+)'/.exec(csp)?.[1];
+    expect(nonce, path).toBeDefined();
+    nonces.add(nonce!);
+    const html = await response.text();
+    expect(html).not.toContain('attacker');
+    const scripts = [...html.matchAll(/<script\b([^>]*)>/g)].map(([, attrs]) => attrs!);
+    // React-гидрация (патч @expo/router-server), тема и service worker (+html.tsx)
+    expect(scripts.filter((attrs) => !/\bsrc=/.test(attrs)).length).toBeGreaterThanOrEqual(3);
+    for (const attrs of scripts) {
+      if (/\bsrc=/.test(attrs)) expect(attrs).toMatch(/\bsrc="\/_expo\/static\//);
+      else expect(attrs, path).toContain(`nonce="${nonce}"`);
+    }
+  }
+  expect(nonces.size).toBe(4);
+});
+
+test('строгий CSP (ADR-0025): ключевые страницы без нарушений — securitypolicyviolation, в т.ч. без console.error (eval)', async ({
+  page,
+}) => {
+  // часть нарушений (проверка `new Function` в try/catch) не пишет console.error — ловим событие документа
+  await page.addInitScript(() => {
+    (window as unknown as { __cspViolations: string[] }).__cspViolations = [];
+    document.addEventListener('securitypolicyviolation', (event) =>
+      (window as unknown as { __cspViolations: string[] }).__cspViolations.push(
+        `${event.effectiveDirective} ${event.blockedURI} ${event.sourceFile}:${event.lineNumber}`,
+      ),
+    );
+  });
+  for (const path of [
+    '/',
+    '/welcome',
+    '/sign-in',
+    '/status',
+    `/races/${UNKNOWN_RACE_ID}`,
+    `/routes/${UNKNOWN_ROUTE_ID}`,
+    '/tickets/ABCDE12345',
+  ]) {
+    await page.goto(path);
+    await page.waitForLoadState('networkidle');
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __cspViolations: string[] }).__cspViolations,
+      ),
+      path,
+    ).toEqual([]);
+  }
+});
+
+test('robots.txt: служебное закрыто, Sitemap от WEB_ORIGIN; sitemap.xml с API — лендинг (landing-seo)', async ({
+  request,
+}) => {
+  const robots = await request.get('/robots.txt');
+  expect(robots.headers()['content-type']).toContain('text/plain');
+  const body = await robots.text();
+  expect(body).toContain('Disallow: /settings');
+  expect(body).toContain(`Sitemap: ${BASE_URL}/sitemap.xml`);
+  const sitemap = await request.get('/sitemap.xml');
+  if (WITH_API) {
+    expect(sitemap.status()).toBe(200);
+    expect(await sitemap.text()).toContain(`<loc>${BASE_URL}/welcome</loc>`);
+  } else {
+    expect(sitemap.status()).toBe(503);
+  }
+});
+
 test('публичный экран /register: форма, заголовок и OG в HTML до JS', async ({ page, request }) => {
   const html = await (await request.get('/register')).text();
   expect(html).toContain('Создать аккаунт');
@@ -462,13 +538,18 @@ test('свой профиль /profile без сессии (rider-profile): HTML
 });
 
 test.describe('достижения без сессии (achievements): HTML без данных и OG, после гидрации — гард входа', () => {
-  for (const path of ['/achievements/flash', '/achievements/race_win']) {
+  for (const path of [
+    '/achievements/flash',
+    '/achievements/race_win',
+    '/achievements/story/race_win',
+  ]) {
     test(path, async ({ page, request }) => {
       const response = await request.get(path);
       expect(response.status()).toBe(200);
       const html = await response.text();
       // экраны не публичные: без значка, кнопок вспышки и OG
       expect(html).not.toContain('achievement-card');
+      expect(html).not.toContain('story-preview');
       expect(html).not.toContain('og:title');
 
       await page.goto(path);
@@ -1323,7 +1404,7 @@ test.describe('с API', () => {
     const title = `Смоук-райд ${Date.now()}`;
     let rideId: string | undefined;
     try {
-      // A: форма «Новый райд» → карточка с баннером «опубликован»
+      // A: форма «Новый райд» → карточка с шитом «Райд опубликован»
       await signInRider(page, organizer);
       await page.getByRole('tab', { name: 'Райды' }).click();
       await expect(page).toHaveURL(`${BASE_URL}/rides`);
@@ -1343,9 +1424,14 @@ test.describe('с API', () => {
       await page.getByRole('button', { name: 'Опубликовать' }).click();
       await expect(page).toHaveURL(new RegExp(`^${BASE_URL}/rides/[0-9a-f-]{36}\\?published=1$`));
       rideId = new URL(page.url()).pathname.split('/').pop();
-      await expect(
-        card(page).getByText('Райд опубликован. Пригласите друзей ссылкой.'),
-      ).toBeVisible();
+      // шит «Райд опубликован» (ride-published): два пути и «Закрыть»; закрытие снимает ?published
+      const sheet = page.getByRole('dialog', { name: 'Райд опубликован' });
+      await expect(sheet.getByRole('heading', { name: 'Райд опубликован' })).toBeVisible();
+      await expect(sheet.getByRole('button', { name: 'Карточка-приглашение' })).toBeVisible();
+      await expect(sheet.getByRole('button', { name: 'Ссылка' })).toBeVisible();
+      await sheet.getByRole('button', { name: 'Закрыть' }).click();
+      await expect(sheet).toBeHidden();
+      await expect(page).toHaveURL(`${BASE_URL}/rides/${rideId}`);
       await expect(card(page).getByText('Кофе-райд · вы организатор')).toBeVisible();
       await expect(card(page).getByText('идёт 1 из 2 · вы')).toBeVisible();
 

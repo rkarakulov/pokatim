@@ -368,6 +368,80 @@ PR B (coder, 2026-10-29), решения architect `plan-B.md` §1 принят�
 - RC-B8: копия пишется при каждом успешном `getTicket` + предзагрузка ≤ 3 ближайших на Главной (в §5.7 — «последний
   успешный»); native — QR в SecureStore, остальное — файл (а не всё в SecureStore).
 
+PR C (coder, 2026-10-29, ветка `feature/event-tickets-panel`). Решения RC-C1…RC-C9 `plan-C.md` приняты по умолчанию:
+
+- RC-C1 — одна страница «Билеты и материалы» (`/races/:id/tickets`, `/calendar/:id/tickets`: настройки, материалы,
+  участники) + компактный блок «Билеты» на опубликованной гонке (`Can races.manage`) и в rail календаря.
+- RC-C2 — «Check-in» — отдельная защищённая ветка `checkInLayoutRoute` без сайдбара (тот же `requireSession`), от
+  360 px, две колонки от 900 px; пункт сайдбара после «Календаря».
+- RC-C3 — PDF отдаётся `attachment` + `default-src 'none'; sandbox` + `nosniff` + `no-referrer`.
+- RC-C4 — исключение из «файлы — подписанные URL» записано в ADR-0023 п. 10.
+- RC-C5 — тип — тема, содержимое — одно из: ссылка | PDF | только текст; правило — `materialContentIssues` в
+  контрактах (форма, `superRefine` схемы и сервер). Дополнение coder: файл у `link`/`gpx`/`text` — `type: INVALID`.
+- RC-C6 — `POST …/materials/files` создаёт материал вместе с файлом в одной транзакции (сирот нет).
+- RC-C7 — удаление `POST …/materials/:id/delete` (204), порядок `PUT …/materials/order`, правка `PATCH …/:id` —
+  вместо `DELETE` из §5.5.
+- RC-C8 — `tickets.material_added|updated (changedFields)|removed`, `tickets.materials_reordered` (subject — событие);
+  показ `details.ticketCode` («Участник отмечен: Билет ·XXXXX-XXXXX») в «Журнале действий».
+- RC-C9 — публичный список — для гонки `published|cancelled` и опубликованного старта независимо от `enabled`; файл
+  событие не проверяет.
+
+Отклонения и решения coder (PR C):
+
+- Миграция — `0039_event_materials` (в плане `0038`, занят билетами PR A).
+- Индекс `event_materials_event_order_unique { kind, eventId, order }` — **уникальный** (в плане — обычный):
+  параллельные добавления конфликтуют, лимиты 20/10 считаются без гонки; перестановка — через временные отрицательные
+  позиции. Перестановка версию материалов не меняет (диалог правки не получает ложный 409).
+- Кривой id файла `GET /v1/event-files/:id` — тот же 404 (не 400 ZodValidationPipe).
+- Чтение материалов для участников — `MaterialsRead` (`TicketsCoreModule`: публичный список, `TicketView`, письмо);
+  в письме текстовые материалы — «Название: описание».
+- Путь `…/materials/:materialId` — схема `EventMaterialParams` в контрактах.
+- Подписи изменённых полей в журнале для действий `tickets.*` — `admin.tickets.field.*` (а не полей гонки/старта).
+- **§7 плана (приложение `apps/app`) не сделано**: по указанию оркестратора `apps/app/**` в этой ветке не трогать
+  (параллельно PR B). Готово для него: `api.getEventMaterials(kind, id)`, `api.eventFileUrl(fileId)`,
+  `TicketView.materials`. Компонент `event-materials`, блок на карточках гонки и календаря и на экране билета —
+  в PR B или следующем PR (AC9 «на билете и в карточке события» — серверная часть и письмо готовы, UI приложения нет).
+
+Фиксы ревью PR C pass 1 (Codex + Claude, PR #121):
+
+- Сбой перечитывания при загруженных данных (AGENTS.md §4.12) — общий `RefreshFailedBanner` (`ui/ConflictBanner.tsx`,
+  текст `admin.refreshFailed*`, как на других экранах панели): над настройками (`EventTicketsScreen`), над списком
+  материалов (`MaterialsSection`); в `TicketingSummary` — прежняя строка и «Не удалось обновить данные» с «Повторить».
+- `QrScanner`: счётчик попыток в ref — «Выключить», уход и скрытие вкладки во время ожидания `getUserMedia` делают
+  попытку устаревшей; поздний поток — сразу `stop()` всех треков, состояние не меняется. Скрытие вкладки во время
+  «Включаем камеру…» теперь тоже возвращает в «выключено».
+- Загрузка PDF: 400 по полю вне формы (`fileName`) — общий текст ошибки (было — тишина).
+- Удаление материала: 404 (уже удалён) — перечитать список без «Не удалось сохранить».
+- Лимит 20 под параллельными добавлениями: тест 19 + 3 параллельных POST → один 201, два 409 `materials_limit`
+  (стабильно, 5 прогонов) — гонки нет (уникальный порядок + повтор транзакции), сервис не менялся.
+- **Метаданные загрузки в query**: API ходит через nginx хоста (`bootstrap.sh`, `large_client_header_buffers` по
+  умолчанию 8 КБ на строку запроса). При описании до 1000 символов query в худшем UTF-8 (3 байта → 9 знаков `%XX`)
+  ≈ 11 КБ — 414. Решение: описание при загрузке — до 500 (`EVENT_MATERIAL_UPLOAD_DESCRIPTION_MAX`, контракт и
+  `maxLength` диалога; худший случай ≈ 6,8 КБ), длиннее — правкой материала после загрузки (JSON, до 1000).
+  Допущения лимита отдачи 60/ч на IP и `immutable`-кэша — ADR-0023 п. 10.
+
+Фиксы ревью PR C pass 2 (Codex):
+
+- `TicketingSummary` без данных и без сети (`fetchStatus: 'paused'`, не `isError`) — «Нет соединения» с повтором
+  вместо вечного скелетона (тест: висящий запрос → нет сети → сброс запроса → баннер; без фикса красный).
+- Check-in: «Следующий» недоступен, пока идёт отметка, — поздний ответ `checkInTicket` не возвращает сброшенную
+  карточку (тест с отложенным ответом; без фикса красный).
+
+Фикс ревью PR C pass 3 (Codex, HIGH): поздний результат распознавания кадра запускал второй поиск во время ручного,
+и «Отметить» могло уйти по другому билету (`request.current` — последний отправленный запрос). Теперь: `QrScanner`
+перепроверяет паузу после `await decoder`; экран хранит карточку вместе с запросом, который её получил («Отметить»
+шлёт его), ответы устаревшего поколения (новый поиск, «Следующий», чужой QR) игнорируются. Тест: отложенный
+декодер + ручной поиск → один поиск, отметка по показанному билету (без фикса красный).
+
+Фикс ревью PR C pass 4 (Codex, HIGH): лимиты 20 материалов / 10 PDF проверялись чтением, а уникальный `order`
+сериализовал только добавления с одинаковым `max + 1`: перестановка уплотняет позиции, и добавление, прочитавшее
+список до неё, вставляло материал сверх лимита (write skew). Решение — замок материалов события: коллекция
+`event_material_locks` (`_id = "<kind>:<eventId>"`, `version`), `MaterialsRepository.lockEvent` (upsert,
+`$inc version`) — первая операция транзакций добавления (ссылка, загрузка PDF), перестановки и удаления; правка
+содержимого замок не берёт (не меняет счёт и порядок). Документ настроек билетов не подошёл: у события без билетов его
+нет, а материалы доступны и без них. Коллекция — в `0039_event_materials` (ещё не в `develop`), без индексов кроме
+`_id`. ADR-0023 п. 10 и комментарии коллекции/миграции больше не утверждают, что уникальный порядок защищает лимиты.
+
 ## 8.3 Security checklist
 
 Затронуто: токены (QR), публичные URL, файлы (PDF), права панели, письма со ссылками. См. §5.3.
@@ -624,3 +698,91 @@ ADR-0023 «Билеты и check-in»; `docs/product/tickets.md`; `admin-panel.m
 
 Не проверено (NOT VERIFIED): iOS и Android на устройстве/симуляторе (сканер QR, авиарежим, холодный старт native),
 PWA офлайн-старт в реальном браузере, e2e с API (`E2E_API=1`); `pnpm e2e:web` после слияния не запускался.
+
+### PR C — материалы, панель билетов, check-in (coder, 2026-10-29, ветка `feature/event-tickets-panel`)
+
+Сделано (по `plan-C.md`, кроме §7 — см. 8.2):
+
+- Контракты: `src/tickets/materials.schema.ts` (+ тест), `TicketView.materials` (необязательное), коды
+  `MATERIAL_FILE_UNSUPPORTED`/`MATERIAL_FILE_TOO_LARGE`, причины `materials_limit`/`files_limit`, 4 действия журнала;
+  api-client — `getEventMaterials`, `eventFileUrl` (приложение), 7 методов панели (+ тест `event-materials.test.ts`).
+- API (`modules/tickets`): `PanelEvents` (вынос проверки доступа из `TicketingAdminService`), `MaterialsRepository`,
+  `MaterialsAdminService`/контроллер (CRUD, порядок, загрузка PDF), `MaterialsRead` + публичный список,
+  `EventFilesController`, `materials.policy.ts`; материалы в `TicketView` и письме. Миграция `0039_event_materials`.
+- Панель: `features/tickets/*` (страница «Билеты и материалы», `TicketingSettingsForm`, `MaterialsSection`,
+  `MaterialDialogs`, `ParticipantsSection`, `TicketingSummary` на гонке и в rail календаря), `features/check-in/*`
+  (`CheckInScreen`, `QrScanner`, `scanner.ts`), layout без сайдбара, пункт «Check-in», `CheckboxField`, журнал —
+  `ticketCode` и подписи действий/полей, фикстура organizer/admin + `tickets.checkin`; зависимость `jsqr@1.4.0`
+  (отдельный чанк `jsQR-*.js`).
+- Инфраструктура: `Permissions-Policy` в `admin-nginx.conf` (сервер + все `location`) и `vite preview`, сторож
+  `csp.test.ts`.
+- Документы: ADR-0023 п. 10–11, `docs/product/tickets.md`, `admin-panel.md`, правила
+  `pokatim-{backend,db,contracts,security,web}.md`.
+
+Тесты: int `tickets-materials.int.test.ts` (11: права на каждую ручку, чужое событие, CRUD/порядок/версия/журнал,
+RC-C5, лимиты 20/10, загрузка 415/413/429, заголовки файла, 404 файла, публичный список RC-C9), дополнены
+`tickets-read`/`tickets-email.int.test.ts`, `migrations.int.test.ts` (`0039`); unit — `materials.policy.test.ts`,
+`mail/ticket-email.test.ts`; RTL — `EventTicketsScreen.test.tsx` (12), `CheckInScreen.test.tsx` + `scanner.test.ts`
+(10), `CheckboxField.test.tsx`, `AuditScreen`, `AppLayout`, `csp.test.ts`; e2e — `apps/admin/e2e/check-in.spec.ts`.
+
+Отрицательные доказательства (механизм убран временно → красный тест, затем восстановлен): без проверки сигнатуры
+`%PDF-` — тест «не PDF — 415» красный; без `kind, eventId` в фильтрах материала — тест «материал чужого события — 404»
+красный.
+
+Проверки:
+
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_tc_test REDIS_URL_TEST=…/3 pnpm check` → `Tasks: 15 successful, 15
+  total`, `EXIT=0`; api — 193 файла / 1993 теста, admin — 43 / 410, api-client — 149.
+- Миграции дважды (своя БД `pokatim_c_e2e`): первый прогон применил `…0038_tickets, 0039_event_materials`, второй —
+  «новых миграций нет».
+- `ADMIN_BASE=/admin/ pnpm --filter @pokatim/admin build` — собрано, `jsQR` — отдельный чанк.
+- `pnpm e2e:admin` (своя БД `pokatim_c_e2e`, Redis db 8, локальный Mailpit, Chrome) → 3 passed (admin, check-in,
+  races).
+
+Не сделано / открыто:
+
+- UI приложения (§7 плана: `event-materials`, карточки гонки/календаря, экран билета) — не трогали `apps/app` по
+  указанию оркестратора (PR B параллельно; PR B смержен в `develop` уже после — правка возможна следующим PR); API и
+  клиент готовы.
+- Ручная проверка камеры на телефоне (iOS Safari, Android Chrome) и скачивания PDF — не выполнялась.
+- Номер миграции `0039` сверить с `origin/develop` перед мержем.
+
+#### PR C — фиксы ревью pass 1 (coder, 2026-10-29, ветка `fix/tickets-c-review` → `feature/event-tickets-panel`)
+
+Исправлено (решения — 8.2 «Фиксы ревью PR C pass 1»): баннер сбоя перечитывания поверх данных (`RefreshFailedBanner`
+в `ui/` — настройки, материалы; строка с повтором в `TicketingSummary`); `QrScanner` — счётчик попыток, поздний поток
+`getUserMedia` останавливается; загрузка PDF — общий текст при 400 по полю вне формы; удаление 404 — перечитать
+список; описание при загрузке — до 500 (`EVENT_MATERIAL_UPLOAD_DESCRIPTION_MAX`); ADR-0023 п. 10 — допущения.
+
+Тесты (каждый сначала красный): RTL `EventTicketsScreen.test.tsx` +5 (перечитывание настроек/материалов/блока
+«Билеты»: данные + баннер → «Повторить»; 400 `fileName`; удаление 404) и `maxLength` описания загрузки;
+`CheckInScreen.test.tsx` +3 (отложенный `getUserMedia`: «Выключить», уход, скрытие вкладки → все треки позднего
+потока остановлены); контракт `materials.schema.test.ts` +1 (500/501, худший UTF-8 query < 8 КБ); int
+`tickets-materials.int.test.ts` +1 (19 + 3 параллельных POST → 201 + 2×409 `materials_limit`, зелёный сразу и
+5 прогонов подряд — гонки нет).
+
+Проверки: `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_tcfix_test REDIS_URL_TEST=…/10 pnpm check` — format, lint,
+arch, typecheck зелёные; тесты пакетов зелёные, api — 5 падений по таймауту Mongo (`connection <monitor> to
+127.0.0.1:27117 timed out`, load average ≈ 18 от параллельных агентов) в чужих модулях (overview, disputes,
+panel-members, seasons, ride-invite); эти 5 файлов + `modules/tickets` перезапуском → 17 файлов / 143 теста зелёные;
+admin — 43 / 418 зелёные.
+
+#### PR C — фиксы ревью pass 4 (coder, 2026-10-29, ветка `fix/tickets-c-lock` → `feature/event-tickets-panel`)
+
+Исправлено (решение — 8.2 «Фикс ревью PR C pass 4»): замок материалов события `event_material_locks`
+(`lockEvent` первой операцией добавления, загрузки PDF, перестановки, удаления), коллекция в `0039_event_materials`,
+ADR-0023 п. 10.
+
+Тесты: int `tickets-materials.int.test.ts` +2 — ворота `vi.spyOn(MaterialsRepository.listOf)`: добавление A
+останавливается после чтения в транзакции; перестановка B (уплотняет позиции), затем добавление C; A продолжает
+(с замком B и C ждут — A открывается через 2 с). 19 материалов → ровно 20, C — 409 `materials_limit`; 9 PDF из 15 →
+ровно 10 PDF, C — 409 `files_limit`. `migrations.int.test.ts` — коллекция `event_material_locks` без индексов.
+
+Красный → зелёный: до фикса — `expected 21 to be 20` и `expected 11 to be 10` (по результату, за 0,6–1,7 с, не по
+таймауту); отрицательное доказательство — `lockEvent` временно пустой → те же два теста красные с теми же
+сообщениями; с замком — зелёные, 5 прогонов файла подряд (14/14).
+
+Проверки: `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_tclock_test REDIS_URL_TEST=…/10 pnpm check` — format, lint,
+arch, typecheck и тесты пакетов зелёные (admin 43 файла); api — 192 / 193 файла, одно падение по таймауту 20 с в
+чужом `results-my-track.int.test.ts` (load average ≈ 20 от параллельных сессий); перезапуском он + `modules/tickets`
+→ 8 файлов / 74 теста зелёные.

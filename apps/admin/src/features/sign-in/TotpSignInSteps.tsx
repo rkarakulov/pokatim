@@ -22,7 +22,7 @@ interface StepProps {
 /** «Запомнить это устройство на 30 дней» (D4): пропускает только шаг кода. */
 function RememberDevice({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="checkbox t-body">
+    <label className="checkbox checkbox--spaced t-body">
       <input type="checkbox" checked={value} onChange={(event) => onChange(event.target.checked)} />
       {t('admin.totp.remember')}
     </label>

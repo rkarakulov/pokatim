@@ -54,6 +54,8 @@ export interface NotificationDoc {
   target: NotificationTarget | null;
   sourceEventId: string;
   collapseKey?: string;
+  /** порядковый номер записанного события в объекте (с `collapseKey`); документы до него поля не имеют */
+  collapseSeq?: number;
   createdAt: Date;
   readAt: Date | null;
   expireAt: Date;

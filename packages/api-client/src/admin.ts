@@ -1,9 +1,19 @@
 import {
+  AccountErasurePage,
+  type AccountErasureQuery,
+  RetryAccountErasureResult,
+  type RetryAccountErasureRequest,
   ApiError,
   type CheckInRequest,
   CheckInView,
   EventTicketingSettings,
   type EventTicketingUpdate,
+  EventMaterialAdmin,
+  type EventMaterialInput,
+  EventMaterialsAdmin,
+  type EventMaterialUploadQuery,
+  type ReorderEventMaterialsRequest,
+  type UpdateEventMaterialRequest,
   EventTicketsPage,
   type EventTicketsQuery,
   type TicketEventKind,
@@ -126,6 +136,8 @@ export type ModerationRideListParams = Partial<ModerationRideQuery>;
 export type RiderRouteListParams = Partial<RiderRouteModerationQuery>;
 /** Параметры очереди модерации профилей райдеров до схемы (profile-moderation). */
 export type RiderProfileListParams = Partial<RiderProfileModerationQuery>;
+/** Параметры списка сбоев удаления аккаунтов до схемы (erasure-failures). */
+export type AccountErasureListParams = Partial<AccountErasureQuery>;
 /** Параметры списка споров панели до схемы. */
 export type PanelDisputeListParams = Partial<PanelDisputeQuery>;
 /** Таблица рейтинга сезона (race-results-08): класс и группа обязательны, `limit`/`cursor` — по желанию. */
@@ -379,6 +391,16 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       post(`${riderProfile(userId)}/dismiss-reports`, RiderProfileReportsDismissResult, body),
     /** Адрес фото райдера для карточки (тот же origin, без запроса). */
     riderAvatarUrl: (id: string) => `${baseUrl}/v1/avatars/${encodeURIComponent(id)}`,
+    // erasure-failures: зависшие удаления аккаунтов и повтор очистки (platform.stats, только admin)
+    listAccountErasures: (params: AccountErasureListParams = {}) =>
+      get(`/v1/admin/account-erasures${queryString(params)}`, AccountErasurePage),
+    /** Нет удалённого аккаунта — 404; очистка завершена или не зависла — 409 `CONFLICT`. */
+    retryAccountErasure: (userId: string, body: RetryAccountErasureRequest) =>
+      post(
+        `/v1/admin/account-erasures/${encodeURIComponent(userId)}/retry`,
+        RetryAccountErasureResult,
+        body,
+      ),
     // race-results-07: пол и год анкеты Verified (profiles.verified_edit, только admin)
     getVerifiedDemographics: (userId: string) =>
       get(
@@ -415,6 +437,59 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     lookupTicket: (body: CheckInRequest) => post('/v1/admin/tickets/lookup', CheckInView, body),
     /** Отметка участника: исход — `outcome` (повтор — `already_checked_in`). */
     checkInTicket: (body: CheckInRequest) => post('/v1/admin/tickets/check-in', CheckInView, body),
+
+    // --- материалы события (event-tickets PR C): права — как у настроек билетов (по виду события) ---
+    listEventMaterials: (kind: TicketEventKind, eventId: string) =>
+      get(`${adminEvent(kind, eventId)}/materials`, EventMaterialsAdmin),
+    /** Ссылка или текст; лимит — 409 `TICKETING_INVALID_STATE { reason: 'materials_limit' }`. */
+    createEventMaterial: (kind: TicketEventKind, eventId: string, body: EventMaterialInput) =>
+      post(`${adminEvent(kind, eventId)}/materials`, EventMaterialAdmin, body),
+    /**
+     * PDF сырыми байтами (`application/octet-stream`) — материал создаётся вместе с файлом. Не PDF — 415
+     * `MATERIAL_FILE_UNSUPPORTED`, больше 10 МиБ — 413 `MATERIAL_FILE_TOO_LARGE`, лимиты — 409.
+     */
+    uploadEventMaterial: (
+      kind: TicketEventKind,
+      eventId: string,
+      body: Blob | Uint8Array,
+      query: EventMaterialUploadQuery,
+    ) =>
+      request(
+        `${adminEvent(kind, eventId)}/materials/files${queryString(query)}`,
+        EventMaterialAdmin,
+        {
+          method: 'POST',
+          body: body as BodyInit,
+          headers: { 'content-type': 'application/octet-stream' },
+          credentials: 'same-origin',
+        },
+      ),
+    /** Правка (файл не меняется): устаревшая `version` — 409 `CONFLICT`. */
+    updateEventMaterial: (
+      kind: TicketEventKind,
+      eventId: string,
+      id: string,
+      body: UpdateEventMaterialRequest,
+    ) =>
+      patch(
+        `${adminEvent(kind, eventId)}/materials/${encodeURIComponent(id)}`,
+        EventMaterialAdmin,
+        body,
+      ),
+    /** Удаление материала и его PDF: 204. */
+    deleteEventMaterial: (kind: TicketEventKind, eventId: string, id: string) =>
+      post(
+        `${adminEvent(kind, eventId)}/materials/${encodeURIComponent(id)}/delete`,
+        z.undefined(),
+      ),
+    /** Новый порядок — полный набор id (иначе 409 `CONFLICT`). */
+    reorderEventMaterials: (
+      kind: TicketEventKind,
+      eventId: string,
+      body: ReorderEventMaterialsRequest,
+    ) => put(`${adminEvent(kind, eventId)}/materials/order`, EventMaterialsAdmin, body),
+    /** Адрес PDF материала (публичный, скачивание). */
+    eventFileUrl: (fileId: string) => `${baseUrl}/v1/event-files/${encodeURIComponent(fileId)}`,
   };
 }
 

@@ -19,6 +19,7 @@ import { Controller, useForm, useWatch } from 'react-hook-form';
 import { api } from '../../api';
 import { errorCodeOf, fieldErrorText, formFieldOf, serverFieldErrors } from '../../field-errors';
 import { formatDateTimeLong, formatKmFromMeters } from '../../format';
+import { Can } from '../../session/can';
 import { isConflict } from '../../session/errors';
 import {
   Banner,
@@ -37,8 +38,10 @@ import {
   TextField,
 } from '../../ui';
 import { seasonOfDate, seasonRangeText } from '../seasons/season-hints';
+import { TicketingSummary } from '../tickets/TicketingSummary';
 import { seasonsQuery } from '../seasons/seasons-query';
 import { CorridorField } from './CorridorField';
+import { RaceCorridorMap } from './RaceCorridorMap';
 import {
   earliestProtocol,
   emptyRaceForm,
@@ -430,6 +433,11 @@ export function RaceEditor({
         {editReasons.map((reason) => (
           <Banner key={reason}>{t(`admin.races.reason.${reason}`)}</Banner>
         ))}
+        {race && race.status !== 'draft' ? (
+          <Can permission="races.manage">
+            <TicketingSummary kind="race" eventId={race.id} />
+          </Can>
+        ) : null}
         <form
           noValidate
           aria-label={race ? race.title : t('admin.races.new')}
@@ -617,6 +625,13 @@ export function RaceEditor({
             </div>
           ) : null}
         </form>
+        {race?.corridor ? (
+          <RaceCorridorMap
+            key={race.corridor.route.id}
+            corridor={race.corridor}
+            surfaces={race.surfaces}
+          />
+        ) : null}
       </div>
 
       {race ? (

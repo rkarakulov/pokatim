@@ -12,12 +12,9 @@ import { CLOCK, type Clock, RateLimiter, type RateLimitRule } from '@rkarakulov/
 import { domainError } from '../../error-messages';
 import { RIDER_PROFILES, type RiderProfileDirectory } from '../profile';
 import { RIDER_RESULTS, type RiderResults } from '../results';
-import { RIDER_RIDES, type RiderRides } from '../rides';
-import { RIDER_ROUTE_RIDES, type RiderRouteRides } from '../route-rides';
+import { AchievementFactsReader } from './achievement-facts.reader';
 import {
   ACHIEVEMENTS_POLICY,
-  type Earned,
-  earnedAchievements,
   raceAchievements,
   reconcilePlan,
   type ReconcileStep,
@@ -25,12 +22,9 @@ import {
 } from './achievements.policy';
 import { AchievementsRepository } from './achievements.repository';
 
-/** Достижение с названием объекта, готовое к ответу. */
-type Titled = Earned & { code: AchievementCode; title: string };
-
 /**
- * Достижения райдера — композиция портов (ADR-0020 «выдача сверкой при чтении»): факты — `RIDER_RESULTS`,
- * `RIDER_ROUTE_RIDES`, `RIDER_RIDES`; правила и план сверки — чистые функции `achievements.policy`; запись — только
+ * Достижения райдера — композиция портов (ADR-0020 «выдача сверкой при чтении»): факты — `AchievementFactsReader`
+ * (`RIDER_RESULTS`, `RIDER_ROUTE_RIDES`, `RIDER_RIDES`); правила и план сверки — чистые функции `achievements.policy`; запись — только
  * `AchievementsRepository`. Ответы — явным списком полей: без `userId`, id выдачи и времени суток (RC-7). Логи — uid и
  * счётчики, без кодов объектов и названий.
  */
@@ -42,8 +36,7 @@ export class AchievementsService {
     private readonly repository: AchievementsRepository,
     @Inject(RIDER_PROFILES) private readonly profiles: RiderProfileDirectory,
     @Inject(RIDER_RESULTS) private readonly results: RiderResults,
-    @Inject(RIDER_ROUTE_RIDES) private readonly routeRides: RiderRouteRides,
-    @Inject(RIDER_RIDES) private readonly rides: RiderRides,
+    private readonly facts: AchievementFactsReader,
     private readonly rateLimiter: RateLimiter,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -54,14 +47,9 @@ export class AchievementsService {
    */
   async sync(userId: string): Promise<AchievementList> {
     await this.limit(`achievements-read:${userId}`, ACHIEVEMENTS_POLICY.readLimit);
-    const [races, routes, rides] = await Promise.all([
-      this.results.publishedRows(userId),
-      this.routeRides.passedOf(userId),
-      this.rides.pastOf(userId),
-    ]);
-    const earned = earnedAchievements({ races, routes, rides });
+    const earned = await this.facts.earned(userId);
     const [titled, stored, syncedAt] = await Promise.all([
-      this.titled(earned, userId),
+      this.facts.titled(earned, userId),
       this.repository.listOf(userId),
       this.repository.syncedAt(userId),
     ]);
@@ -98,7 +86,7 @@ export class AchievementsService {
     const rider = await this.profiles.findPublic(publicId);
     if (!rider) throw domainError('NOT_FOUND', 404);
     const earned = raceAchievements(await this.results.publishedRows(rider.userId));
-    const titled = await this.titled(earned, rider.userId);
+    const titled = await this.facts.titled(earned, rider.userId);
     return {
       items: sortForList(titled).map((item) => ({
         code: item.code,
@@ -106,23 +94,6 @@ export class AchievementsService {
         factDate: minskToday(item.factAt),
       })),
     };
-  }
-
-  /** Названия объектов: гонки — `racesOf` (≤ 4 id); нет гонки в карте — код не в ответе (запись не трогается). */
-  private async titled(earned: Map<AchievementCode, Earned>, userId: string): Promise<Titled[]> {
-    const raceIds = [...earned.values()]
-      .filter((item) => item.object.kind === 'race')
-      .map((item) => item.object.id);
-    const races = raceIds.length > 0 ? await this.results.racesOf(raceIds) : new Map();
-    const result: Titled[] = [];
-    let missing = false;
-    for (const [code, item] of earned) {
-      const title = item.object.kind === 'race' ? races.get(item.object.id)?.title : item.title;
-      if (title === undefined || title === null) missing = true;
-      else result.push({ ...item, code, title });
-    }
-    if (missing) this.logger.warn(`achievements.race_missing uid=${userId}`);
-    return result;
   }
 
   private async apply(userId: string, step: ReconcileStep, now: Date): Promise<void> {

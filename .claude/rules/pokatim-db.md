@@ -448,6 +448,13 @@ paths:
   отмены регистрации и check-in `tickets` через порт `CALENDAR_EVENTS`; наружу не выходит.
 - Удаление аккаунта — `TicketErasure`: активные регистрации → `cancelled` (с билетом и местом, транзакция на
   регистрацию), активные билеты гонок → `cancelled`; документы псевдонимные.
+- Материалы (PR C) — `event_materials` (`file: { id, name, size } | null` — денормализация, список без байтов) и
+  `event_material_files` (`_id` = `randomToken`, `bytes` — Binary ≤ 10 МиБ); писатель — `MaterialsRepository`;
+  миграция `0039_event_materials`: уникальный `event_materials_event_order_unique { kind, eventId, order }`
+  (одна позиция — один материал; перестановка — через временные отрицательные позиции). Лимиты 20/10 — под замком
+  `event_material_locks` (`_id = "<kind>:<eventId>"`, `lockEvent` — upsert `$inc version` первой операцией
+  добавления, перестановки и удаления; уникальный порядок лимиты не защищает — перестановка уплотняет позиции).
+  Файлы — только чтение по `_id`. ПДн нет (`updatedBy`/`createdBy` — сотрудники) — шага стирания нет.
 
 ## Удаление аккаунта (ADR-0015, `docs/product/account.md`)
 
@@ -488,7 +495,13 @@ paths:
   умолчания), `push_tokens` (`token` уникален, ≤ 10 на пользователя; Web Push — `platform: 'web'`, `token` = endpoint, ключи — `webPush`, ADR-0022), `push_tickets` (TTL 24 ч; `userId` владельца —
   стирание аккаунта по нему, индекс `push_tickets_user_idx` из `0027_push_tickets_user`). Чтения сами проверяют
   `expireAt > now` (TTL — только уборка). Токены при доставке снимаются по снимку `{ _id, userId, sessionId }`, не по
-  одному `_id`.
+  одному `_id`. Регистрация переписывает токен только сессией не старше записанной (`sessionId $lte`, uuidv7 входа):
+  поздняя регистрация прежней сессии устройства после выхода — без записи (`token_stale`).
+- Схлопывание (N7) — по порядковому номеру события в объекте, не по `sourceEventId` (uuidv7 внутри миллисекунды не
+  упорядочен): райд — `seq` payload (`rides.noticeSeq` после записи: `+1` в `join` и `update`, нет поля — `0`, без
+  миграции), маршрут — `decidedAt` события. Уведомление хранит `collapseSeq`, замена — только при `collapseSeq <`
+  номера события (документ без поля и событие без номера — прежнее условие `sourceEventId $lt`); повтор задачи несёт тот же номер — без изменений, даже если объект с тех пор
+  изменился. Новое схлопываемое событие райда — запись с `$inc noticeSeq` и `seq` в payload.
 - Доставка — состояние в документе уведомления (`push`/`email`: захват `claimId`/`claimedUntil`, `sent`, `skipped`,
   `limited`, `failed`); захват — условием состояния в фильтре. Убрать условие — дубль push/письма (**HIGH**).
 - `race_attempts.lastVisibleVerdict` (`0026_attempt_last_verdict`, бэкфилл `counted|rejected`) — прежний видимый

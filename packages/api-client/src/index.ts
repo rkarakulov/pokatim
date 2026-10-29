@@ -121,6 +121,7 @@ import {
   CalendarRegistrationState,
   type CalendarRegistrationRequest,
   EventTicketingPublic,
+  EventMaterialList,
   MyTicketRef,
   MyTickets,
   type TicketEventKind,
@@ -514,6 +515,14 @@ export function createApiClient({
         EventTicketingPublic,
         options.fresh ? { cache: 'no-cache' } : {},
       ),
+    /** PR C: материалы события по порядку (без входа); событие не опубликовано — 404. */
+    getEventMaterials: (kind: TicketEventKind, eventId: string) =>
+      getPublic(
+        `/v1/events/${encodeURIComponent(kind)}/${encodeURIComponent(eventId)}/materials`,
+        EventMaterialList,
+      ),
+    /** Адрес PDF материала (без входа, скачивание; удалён — 404) — для `openExternalUrl`, без запроса. */
+    eventFileUrl: (fileId: string) => `${baseUrl}/v1/event-files/${encodeURIComponent(fileId)}`,
     /**
      * Удаление своего аккаунта (вход обязателен), подтверждение — текущий пароль; `204` без тела, все сессии отозваны
      * (web — cookie сброшена ответом). Отказы — `ApiHttpError`: `403 PASSWORD_INCORRECT`, `409 ACCOUNT_PANEL_MEMBER`,
@@ -826,6 +835,16 @@ export function createApiClient({
     getRideInviteCard: (accessToken: string, rideId: string, query: StoryCardQuery) =>
       request(
         `/v1/rides/${encodeURIComponent(rideId)}/invite-card${queryString(query)}`,
+        StoryCardStatus,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /**
+     * Карточка своего полученного достижения (achievement-story-card): `pending` | `ready` + токен | `failed`; не
+     * получено или отозвано — 409 `STORY_CARD_UNAVAILABLE`. Картинка — тем же `storyCardImageUrl`.
+     */
+    getAchievementCard: (accessToken: string, code: AchievementCode, query: StoryCardQuery) =>
+      request(
+        `/v1/achievements/${encodeURIComponent(code)}/story-card${queryString(query)}`,
         StoryCardStatus,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),

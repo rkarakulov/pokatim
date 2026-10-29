@@ -54,3 +54,12 @@ export const IDENTITY_POLICY = {
 
 export const JWT_ISSUER = 'pokatim';
 export const JWT_AUDIENCE = 'pokatim-app';
+
+/**
+ * Удаление аккаунта «зависло», если очистка не завершилась за сутки: штатно повторный проход — через 15 мин, регламент
+ * resume — каждый час (`ACCOUNT_POLICY`). Один порог на карточку «Обзора» и экран сбоев панели (erasure-failures).
+ */
+export const ERASURE_STUCK_MS = DAY_MS;
+
+/** Повтор очистки из панели не ставится заново раньше этого срока, если после него не было сбоя (идемпотентность). */
+export const ERASURE_RETRY_COOLDOWN_MS = 15 * MINUTE_MS;

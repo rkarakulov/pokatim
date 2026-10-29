@@ -1,7 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
-import { PublicReadGuard } from '../../public-read.guard';
+import { IpRateLimitGuard, PublicReadGuard } from '../../public-read.guard';
 import { QUEUE } from '../../queues';
 import { CalendarCoreModule } from '../calendar';
 import { IdentityAccountsModule, IdentityModule } from '../identity';
@@ -18,6 +18,13 @@ import {
   TicketsMaintenanceProcessor,
   TicketsSchedules,
 } from './jobs/tickets-maintenance.processor';
+import { EventFilesController } from './event-files.controller';
+import { MaterialsAdminController } from './materials-admin.controller';
+import { MaterialsAdminService } from './materials-admin.service';
+import { MaterialsPublicController } from './materials-public.controller';
+import { MaterialsRead } from './materials-read';
+import { MaterialsRepository } from './materials.repository';
+import { PanelEvents } from './panel-events';
 import { ParticipantNames } from './participant-names';
 import { RaceTicketController } from './race-ticket.controller';
 import { RaceTickets } from './race-tickets';
@@ -40,10 +47,20 @@ import { TicketsRepository } from './tickets.repository';
  */
 @Module({
   imports: [ResultsCoreModule, CalendarCoreModule, ProfileCoreModule, IdentityAccountsModule],
-  providers: [TicketsRepository, TicketEvents, TicketIssuer, RaceTickets, TicketErasure],
+  providers: [
+    TicketsRepository,
+    TicketEvents,
+    TicketIssuer,
+    RaceTickets,
+    TicketErasure,
+    MaterialsRepository,
+    MaterialsRead,
+  ],
   exports: [
     TicketsRepository,
     TicketEvents,
+    MaterialsRepository,
+    MaterialsRead,
     TicketIssuer,
     RaceTickets,
     TicketErasure,
@@ -64,15 +81,21 @@ export class TicketsCoreModule {}
     TicketingPublicController,
     TicketingAdminController,
     CheckInController,
+    MaterialsAdminController,
+    MaterialsPublicController,
+    EventFilesController,
   ],
   providers: [
     CalendarRegistrationService,
     TicketsReadService,
     TicketingPublicService,
     TicketingAdminService,
+    PanelEvents,
+    MaterialsAdminService,
     CheckInService,
     ParticipantNames,
     PublicReadGuard,
+    IpRateLimitGuard,
   ],
 })
 export class TicketsModule {}

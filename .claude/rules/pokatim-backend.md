@@ -194,8 +194,8 @@ paths:
   повторный проход `offCorridor`; golden и `CORRIDOR_ENGINE_VERSION` не меняются); `analyzeAttempt(…, line)`
   получает **сохранённую** линию показа активности (порт `ActivitySource.trackLine`) и `trackMapOf` переводит
   интервалы в позиции на ней (дробный индекс вершины): время → путь по исходнику (точки со временем, бинарный поиск;
-  путь — haversine по всем точкам) → отрезок линии. Линия в потоке не пересчитывается: Дуглас — Пекер на дрожании
-  стоянки — O(n²) (71 с на AC14). Точность: поперёк — допуск упрощения (5 м; при удвоении допуска до 1000 точек —
+  путь — haversine по всем точкам) → отрезок линии. Линия в потоке не пересчитывается — позиции по той же линии, что
+  у активности. Точность: поперёк — допуск упрощения (5 м; при удвоении допуска до 1000 точек —
   больше), вдоль — метры (хорды ≠ отрезки линии); стоянки и точки без времени позицию не сдвигают. Подсветка —
   иллюстрация, итог — `offCorridorM`/`maxExcursionM` попытки.
 - `GET /v1/races/:raceId/entry/attempts/:attemptId/track` (`RaceEntryController`, `ResultsReadService.myAttemptTrack`):
@@ -216,7 +216,7 @@ paths:
   между `tracks` и `identity`), `AccountErasure` (`IdentityErasureModule`); push-токены — `PushTokens.revokeAllOf(tx)`
   в транзакции удаления. Новый модуль с
   данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник» (A3). Финальный провал шага — лог
-  `account.erasure_failed user=<uid> step=<s>`, failed-набор BullMQ, регламент; экран в панели — follow-up (F13).
+  `account.erasure_failed user=<uid> step=<s>`, failed-набор BullMQ, регламент; экран в панели — «Сбои удаления аккаунтов» (ниже).
 
 ## «Обзор» панели (`overview`, admin-overview)
 
@@ -229,6 +229,19 @@ paths:
   (`countPublicationQueue`), `ProfilesOverview` (`countReportQueue`), `IdentityOverview` (регистрации, зависшие
   удаления — фильтр `pendingSweeps`), `TracksOverview`, `CalendarOverview` (`CalendarCoreModule`). Пределы —
   `overview.policy.ts`. Новый счётчик — метод порта владельца, не чтение чужой коллекции.
+
+## Сбои удаления аккаунтов (erasure-failures)
+
+- Провал шага очистки (`AccountErasureService.step`, каждая попытка) — `AccountErasure.recordFailure`: в `users`
+  удалённого `erasureLastFailure { step, code, at }` и `$inc erasureFailedAttempts`; код — `erasureErrorCode`
+  (строковый `code`, числовой код драйвера или имя класса), текст ошибки не хранится (может нести e-mail). Сбой
+  записи не подменяет исходную ошибку.
+- Панель — `account/account-erasures-admin.*` (`GET /v1/admin/account-erasures`, `POST …/:userId/retry`,
+  `platform.stats`); чтение и захват повтора — порт `ErasureFailures` (identity, `IdentityAccountsModule`), порог
+  `ERASURE_STUCK_MS` — общий с карточкой «Обзора». Повтор — транзакция: `claimRetry` (условный `updateOne`:
+  зависло, не завершено, прошлый повтор старше `ERASURE_RETRY_COOLDOWN_MS` или после него был сбой) → журнал
+  `account.erasure_retried` → outbox `account.erasure-retry-requested` → процессор `account-deletion`, проход
+  `sweep`. Недавний повтор — `{ queued: false }`; нет удалённого — 404; завершено или не зависло — 409.
 
 ## Билеты (`tickets`, event-tickets, ADR-0023 Proposed)
 
@@ -270,15 +283,27 @@ paths:
 - Письмо — очередь `tickets-email` (`TicketEmailHandler`, захват `email.state`, RC-T11), шаблон
   `mail/ticket-email.ts` (`htmlEmail`/`buttonHtml`/`escapeHtml`/`minskDateTime` из `identity`), кнопка — env
   `APP_WEB_ORIGIN`.
+- Доступ панели к событию — один класс `PanelEvents.resolve(principal, kind, eventId, purpose)` (403 до чтения, нет
+  или чужое — 404); его зовут `TicketingAdminService` и `MaterialsAdminService`, второй проверки нет.
+- Материалы (PR C): `MaterialsRepository` — единственный писатель `event_materials`/`event_material_files`/
+  `event_material_locks`, фильтры всегда с `kind, eventId`; мутации набора — под `lockEvent` (первая операция); `MaterialsAdminService` (CRUD, `PUT …/materials/order`, `POST …/materials/:id/delete`,
+  загрузка `POST …/materials/files` — до тела: доступ → лимит `tickets-material-upload:<uid>` 30/ч → счётчики →
+  `readLimited` 10 МиБ → сигнатура `%PDF-` → транзакция; журнал `tickets.material_*`); `MaterialsRead` (публичный
+  список `events/:kind/:eventId/materials`, `TicketView.materials`, письмо); `EventFilesController`
+  (`event-files/:id`, `PublicReadGuard` + `@IpRateLimit('event-file', 60/ч)`, заголовки после чтения). Правила
+  содержимого — `materialContentIssues` контрактов; политика файла — `materials.policy.ts`.
 
 ## Достижения (`achievements`, ADR-0020 Proposed)
 
 - Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides`
-  только через `index.ts`; на `achievements` ссылаются только `AppModule` (`AchievementsModule`) и
-  `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания). Источники о нём не знают — циклов нет.
+  только через `index.ts`; на `achievements` ссылаются только `AppModule` (`AchievementsModule`),
+  `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания) и `sharing` (`AchievementsReadModule`, порт
+  `ACHIEVEMENTS_FOR_SHARING`). Источники о нём не знают — циклов нет.
   `AchievementsCoreModule` — `AchievementsRepository` + `AchievementErasure` (модулей не импортирует);
-  `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `RidesCoreModule`,
-  `RouteRidesCoreModule`. Worker-модуля, очередей, outbox и регламента нет.
+  `AchievementsReadModule` — `AchievementFactsReader` (факты портов + правила, только чтение) и порт карточки
+  (`ResultsCoreModule`, `RidesCoreModule`, `RouteRidesCoreModule`, `AchievementsCoreModule`);
+  `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `AchievementsReadModule`.
+  Worker-модуля, очередей, outbox и регламента нет.
 - Факты — только порты владельцев: `RIDER_RESULTS` (`publishedRows`, `racesOf` — как у `riders`), `RIDER_ROUTE_RIDES`
   (`route-rides`: `passedOf` — `passed` + `ActivitySource.liveActivities` + `RouteRideRoutes.rideableTitles`, та же
   видимость, что у «Заездов по маршруту»; снятый маршрут — факта нет, RC-4), `RIDER_RIDES` (`rides`: `pastOf` —
@@ -318,6 +343,12 @@ paths:
   постановка) → задача `ride-invite.render` той же очереди → `StoryCardProcessor.buildRideInvite` →
   `rideInviteTree` (`ride-invite.render.ts`, узлы и линия — `story-card.render.ts`/`story-card.png.ts`).
   `SharingModule`/`SharingWorkerModule` импортируют `RidesCoreModule`; `rides` о `sharing` не знает.
+- Карточка достижения: `AchievementCardController` (`GET achievements/:code/story-card`, `AuthGuard`, `no-store`) →
+  `AchievementCardService` → `AchievementCardInputs` (порт `achievements` `ACHIEVEMENTS_FOR_SHARING.cardFacts` — факты
+  ∩ не отозванная выдача, без записи; маршрут — название только из `ROUTES_FOR_SHARING.ogFacts`) → `CardRequests` →
+  задача `achievement-card.render` → `buildAchievementCard` → `achievementCardTree` (значок — глиф Material Symbols,
+  `achievement-card.icons.ts` — зеркало иконок каталога приложения). `SharingModule`/`SharingWorkerModule` импортируют
+  `AchievementsReadModule`.
 - OG-картинки публичных страниц (og-images): `OgCardController` (`og/cards/brand/site`, `og/cards/:kind/:id` →
   `{ version }`, IP-лимит `og-card`; `og/images/brand/site/:file`, `og/images/:kind/:id/:file` — PNG без входа,
   IP-лимит `og-image`, старая версия — `302`, нет PNG — бренд `no-store` + постановка) → `OgCardService` →

@@ -48,7 +48,8 @@ paths:
   `@rkarakulov/admin-kit` (F6, явное исключение `AGENTS.md` §4.11 до выноса). Размеры раскладки панели, которых нет в
   базе, — `src/panel-tokens.ts` (`--panel-*`, временно до токенов базы, Q17).
 - Время — `src/format.ts` (`Intl` ru-RU, Europe/Minsk); тесты admin — `TZ=Europe/Minsk` (`vite.config.ts`).
-- CSP панели — `infra/docker/admin-nginx.conf`: inline-скриптов нет, inline — только `<style>` дизайн-системы.
+- CSP панели — `infra/docker/admin-nginx.conf`: inline-скриптов нет, inline — только `<style>` дизайн-системы. CSP web
+  приложения — отдельный, с nonce (`apps/app/server/web-server.ts`, ADR-0025); origin карт — там же `MAP_ORIGINS`.
 - Ввод даты и времени — `DateTimeField`/`DateField` (`src/ui`): значение — настенное время Europe/Minsk, в запрос —
   `minskWallTimeToUtc` контрактов (не `new Date(value)`); показ — `src/format.ts`.
 - Что можно менять в записи — `editable` сервера (`PanelRace.editable`): зафиксированные поля — с замком, причина
@@ -85,6 +86,14 @@ paths:
   `src/csp.test.ts` (origin стиля из `deploy-dev.yml`). Превью (`RoutePreview`): компактная карта и «Открыть
   маршрут» — из поля коридора новая вкладка (`openLink="new-tab"`), из окна публикации — та же, на странице маршрута —
   без ссылки (`openLink={false}`).
+- Карта гонки (panel-race-map) — `features/races/RaceCorridorMap.tsx`: секция «Карта гонки» под формой `RaceEditor` у
+  сохранённой гонки с коридором (любой статус; несохранённый выбор — только превью поля). Тот же `RouteReadyView`
+  (`corridorWidthM`, подзаголовки `headingLevel={3}`): `RouteMap corridorWidthM` добавляет слой коридора
+  `routeLayers` (±`widthM`, как в приложении; линия — `ROUTE_CATALOG_LINE_WIDTH`), смена допуска пересоздаёт карту;
+  время в пути — по покрытиям гонки; стор скраббинга — на экземпляр блока (`key` — id маршрута). Данные —
+  `routeQuery` (ключ превью поля). Скелетон карты, ошибка без данных — `ErrorState`, ошибка обновления — свой баннер,
+  маршрут не `ready` — секции нет; без env стиля — `LinePreview`, допуск — в подписи и строке «Коридор: ±N м от
+  маршрута · Открыть маршрут» (новая вкладка, `OpenRouteLink`). CSP — та же карта routes-05.
 - 409 `CONFLICT` правки по устаревшей версии — `ConflictBanner` «Запись изменили — обновите страницу» с «Обновить».
 - Раздел «Результаты» гонки (race-results-05) — `features/results/` по маршруту `races/$raceId/results`
   (`races.read`), ссылка «Результаты» из `RaceEditor` опубликованной или отменённой гонки. KPI — `StatTile` (`src/ui`).
@@ -163,6 +172,22 @@ paths:
   `{ decor, version }`, сразу, без «Сохранить»); 409 — `ConflictBanner` с перечитыванием; после переключения —
   инвалидация журнала. Журнал — названия тем истории `appearance.theme_changed` из общих ключей `theme.<id>.name`.
   Панель остаётся в теме `panel`.
+- Билеты (event-tickets C) — `features/tickets/*`: `EventTicketsScreen` (маршруты `races/$raceId/tickets`,
+  `calendar/$startId/tickets`; право — по виду события на сервере, 403 — «Нет доступа», 404 — «не найдено»):
+  `TicketingSettingsForm` (выключение при билетах — `Dialog` с числом), `MaterialsSection` + `MaterialDialogs`,
+  `ParticipantsSection` (`Can tickets.checkin`); блок `TicketingSummary` — на опубликованной гонке (`Can
+  races.manage`) и в rail календаря. `CheckboxField` — `src/ui/fields.tsx`.
+- «Check-in» — `features/check-in/*`: отдельная защищённая ветка `checkInLayoutRoute` (тот же `requireSession`) **без
+  сайдбара** — исключение из desktop 1440 (телефон на старте, от 360 px; две колонки — от 900 px). Камера — только по
+  кнопке; `scanner.ts` — выбор декодера (`BarcodeDetector`, иначе `jsqr` динамическим импортом), `parseScan`,
+  дедупликация 5 с. Камере нужен `Permissions-Policy: camera=(self)` в `admin-nginx.conf` (каждый `location`) и в
+  `vite preview` (`panelHeader` в `vite.config.ts`).
+- «Сбои удаления аккаунтов» (erasure-failures) — `features/account-erasures/AccountErasuresScreen.tsx`, маршрут
+  `/account-erasures` под `RequirePermission permission="platform.stats"`, без пункта навигации — вход ссылкой
+  «Открыть» карточки «Удаления аккаунтов со сбоем» «Обзора». `DataTable` + «Показать ещё» по курсору; аккаунт —
+  `riderLabel(userId)` («Участник ·<id>»), шаг — `admin.accountErasures.step.<step>`. «Повторить удаление» —
+  `ReasonDialog`; итог — баннер над таблицей (поставлен / уже запрошен), 404/409 — баннер «Удаление уже изменилось»
+  без ошибки в окне; затем инвалидация списка, «Обзора» и журнала.
 
 ## Проверка
 

@@ -36,7 +36,8 @@ const SCRUB_REPROJECT_EVENTS = ['resize', 'move'] as const;
  * (`loadMaplibre`, отдельный чанк) после монтирования. Мышь и один палец двигают карту, колесо — зум только с Ctrl/⌘
  * (без модификатора — прокрутка страницы и подсказка, `guardWheelZoom`), вращение и наклон выключены, зум 2–17;
  * кнопки «+», «−», «в рамку» (без анимации при reduce motion). Линия маршрута 5 px, старт и финиш — как в приложении,
- * без коридора; цвета — роли `themes.panel.map.*`. Ошибка до `load` (стиль, первые тайлы) — сообщение поверх карты;
+ * без коридора; с `corridorWidthM` (карта гонки, panel-race-map) — под линией слой коридора ±`widthM` из
+ * `routeLayers`, как в приложении; цвета — роли `themes.panel.map.*`. Ошибка до `load` (стиль, первые тайлы) — сообщение поверх карты;
  * после `load` — без сообщения. `scrub` — маркер скраббинга оверлеем: пиксели линии — `map.project` после `load` и на
  * `resize`/`move` в стор вида (подписан только `ScrubLayer`). `variant`: `page` — страница маршрута, `compact` —
  * окно публикации и поле коридора (пропорция `MAP_ASPECT_RATIO`).
@@ -47,6 +48,7 @@ export function RouteMap({
   label,
   variant,
   scrub,
+  corridorWidthM,
 }: {
   geometry: RouteMapGeometry;
   /** URL стиля из env (`mapStyleUrl`); без него вызывающий показывает `LinePreview` (RC-9) */
@@ -55,6 +57,8 @@ export function RouteMap({
   label: string;
   variant: 'page' | 'compact';
   scrub?: ScrubStore;
+  /** допуск коридора гонки, м; без него — карта маршрута без коридора */
+  corridorWidthM?: number;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const scope = useId();
@@ -114,9 +118,15 @@ export function RouteMap({
         created.on('load', () => {
           loaded = true;
           created.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: routeFeatures(geometry) });
-          const layers = routeLayers(PANEL_MAP_THEME, 0, geometry.bounds, ROUTE_CATALOG_LINE_WIDTH);
+          const layers = routeLayers(
+            PANEL_MAP_THEME,
+            corridorWidthM ?? 0,
+            geometry.bounds,
+            ROUTE_CATALOG_LINE_WIDTH,
+          );
           for (const layer of layers) {
-            if (layer.id !== CORRIDOR_LAYER_ID) created.addLayer(layer);
+            if (corridorWidthM !== undefined || layer.id !== CORRIDOR_LAYER_ID)
+              created.addLayer(layer);
           }
           if (withScrub.current) {
             const reproject = () =>
@@ -145,7 +155,7 @@ export function RouteMap({
       setReady(false);
       view.setState({ points: null });
     };
-  }, [geometry, styleUrl, view]);
+  }, [geometry, styleUrl, corridorWidthM, view]);
 
   return (
     <div

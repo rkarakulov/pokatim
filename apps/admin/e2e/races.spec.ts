@@ -140,6 +140,15 @@ test('сезон → гонка организатора → публикаци�
   await expect(org.getByRole('status', { name: 'Дистанция, км' })).toHaveText(
     /^10,6\s?км — по маршруту$/,
   );
+  // карта гонки (panel-race-map): сохранённый коридор на карте, профиль со скраббингом
+  const raceMap = org.getByRole('region', { name: 'Карта гонки' });
+  await expect(
+    raceMap.getByRole('img', {
+      name: new RegExp(`^Карта гонки: маршрут «Маршрут ${run}».*коридор ±50 м`),
+    }),
+  ).toBeVisible();
+  await expect(raceMap.getByRole('button', { name: 'Приблизить' })).toBeVisible();
+  await expect(raceMap.getByRole('slider', { name: /^Профиль высоты/ })).toBeVisible();
   await org.getByRole('button', { name: 'Опубликовать' }).click();
   await org.getByRole('dialog').getByRole('button', { name: 'Опубликовать' }).click();
   await expect(org.getByText(/^Скоро · протокол по плану/)).toBeVisible();

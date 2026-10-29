@@ -6,7 +6,7 @@ import { AchievementsCoreModule } from '../achievements';
 import { DevicesCoreModule } from '../devices';
 import { IdentityErasureModule, IdentityModule } from '../identity';
 import { NotificationsCoreModule } from '../notifications';
-import { PanelCoreModule } from '../panel';
+import { PanelModule } from '../panel';
 import { ProfileCoreModule } from '../profile';
 import { RidesCoreModule } from '../rides';
 import { RouteRidesCoreModule } from '../route-rides';
@@ -14,6 +14,8 @@ import { RoutesCoreModule } from '../routes';
 import { TicketsCoreModule } from '../tickets';
 import { TracksCoreModule } from '../tracks';
 import { AccountDeletionService } from './account-deletion.service';
+import { AccountErasuresAdminController } from './account-erasures-admin.controller';
+import { AccountErasuresAdminService } from './account-erasures-admin.service';
 import { AccountErasureProcessor } from './account-erasure.processor';
 import { AccountErasureService } from './account-erasure.service';
 import { AccountSchedules } from './account-schedules';
@@ -21,13 +23,14 @@ import { AccountController } from './account.controller';
 
 /**
  * Удаление аккаунта, HTTP-часть (ADR-0015): оркестратор без своих коллекций — identity (`AccountClosure`, `AuthGuard`,
- * `SessionCookie`), panel (`PanelMembership`, `PanelAudit`) и notifications (`PushTokens` — снятие токенов в транзакции)
+ * `SessionCookie`, `ErasureFailures`), panel (`PanelMembership`, `PanelAudit`, `PanelGuard` экрана сбоев удаления)
+ * и notifications (`PushTokens` — снятие токенов в транзакции)
  * только через их `index.ts`. Никто не импортирует `account`.
  */
 @Module({
-  imports: [IdentityModule, PanelCoreModule, NotificationsCoreModule],
-  controllers: [AccountController],
-  providers: [AccountDeletionService],
+  imports: [IdentityModule, PanelModule, NotificationsCoreModule],
+  controllers: [AccountController, AccountErasuresAdminController],
+  providers: [AccountDeletionService, AccountErasuresAdminService],
 })
 export class AccountModule {}
 

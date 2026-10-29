@@ -24,6 +24,7 @@ import {
   StatusTag,
 } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
+import { TicketingSummary } from '../tickets/TicketingSummary';
 import { CALENDAR_QUERY_KEY, CalendarForm } from './CalendarForm';
 
 const PAGE_SIZE = 50;
@@ -175,7 +176,14 @@ export function CalendarScreen() {
           </Banner>
         ) : null}
         <SplitLayout
-          rail={<CalendarForm key={formKey} start={editing} onDone={() => edit(undefined)} />}
+          rail={
+            <>
+              <CalendarForm key={formKey} start={editing} onDone={() => edit(undefined)} />
+              {editing ? (
+                <TicketingSummary key={editing.id} kind="calendar" eventId={editing.id} />
+              ) : null}
+            </>
+          }
         >
           <DataTable
             caption={t('admin.calendar.title')}

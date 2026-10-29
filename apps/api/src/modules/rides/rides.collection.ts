@@ -60,6 +60,12 @@ export interface RideDoc {
   routeId: string | null;
   geo: GeoPoint;
   startPrecise: boolean;
+  /**
+   * Порядковый номер событий райда для схлопывания уведомлений (ADR-0017, N7): `+1` каждой правкой и «Я иду» —
+   * записями, порождающими схлопываемые события; значение после записи уходит в payload события (`seq`). Монотонен
+   * внутри райда, в отличие от `uuidv7` события в одной миллисекунде. Нет поля — `0` (без миграции).
+   */
+  noticeSeq?: number;
 }
 
 /** Поля модерации — не в публичном чтении. */
@@ -67,12 +73,18 @@ export type RideModerationField =
   'hiddenAt' | 'hiddenFromStatus' | 'openReportCount' | 'lastReportAt';
 
 /**
- * Публичное чтение: без организатора, участников, `version`, полей модерации и точки «Рядом» (проекция
+ * Публичное чтение: без организатора, участников, `version`, `noticeSeq`, полей модерации и точки «Рядом» (проекция
  * репозитория).
  */
 export type RidePublicDoc = Omit<
   RideDoc,
-  'organizerUserId' | 'participants' | 'version' | 'geo' | 'startPrecise' | RideModerationField
+  | 'organizerUserId'
+  | 'participants'
+  | 'version'
+  | 'noticeSeq'
+  | 'geo'
+  | 'startPrecise'
+  | RideModerationField
 >;
 
 export function ridesCollections(db: Db): { rides: Collection<RideDoc> } {

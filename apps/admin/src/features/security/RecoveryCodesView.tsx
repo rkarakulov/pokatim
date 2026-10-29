@@ -77,7 +77,7 @@ export function RecoveryCodesView({
           {t('admin.totp.codesCopyFailed')}
         </Banner>
       ) : null}
-      <label className="checkbox t-body">
+      <label className="checkbox checkbox--spaced t-body">
         <input
           type="checkbox"
           checked={saved}

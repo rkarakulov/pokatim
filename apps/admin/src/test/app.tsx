@@ -42,6 +42,7 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
       'profiles.verified_edit',
       'routes.moderate',
       'platform.stats',
+      'tickets.checkin',
     ],
   },
   moderator: {
@@ -70,7 +71,7 @@ export const ME: Record<'admin' | 'moderator' | 'organizer', PanelMe> = {
       role: 'organizer',
       totp: { enabled: true, required: false },
     },
-    permissions: ['races.read', 'races.manage', 'results.manage'],
+    permissions: ['races.read', 'races.manage', 'results.manage', 'tickets.checkin'],
   },
 };
 
