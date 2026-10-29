@@ -5,10 +5,10 @@ import {
   UnreadCount,
 } from '@pokatim/contracts';
 import { MongoTransactions, uuidv7 } from '@rkarakulov/api-kit/mongo';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, DAY, type Harness, MINUTE } from '../../../test/harness';
-import { bearer, call, type CallResult, collections } from '../../../test/identity';
+import { bearer, call, type CallResult, collections, gate } from '../../../test/identity';
 import {
   expoToken,
   NOTIFICATIONS,
@@ -18,6 +18,7 @@ import {
 import { rider, type Rider } from '../../../test/rides';
 import { NotificationErasure } from './notification-erasure';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
+import { NotificationsRepository } from './notifications.repository';
 import { PushTokens } from './push-tokens';
 
 /**
@@ -34,6 +35,9 @@ beforeEach(async () => {
   await h.reset();
   a = await rider(h, 'a@example.by');
   b = await rider(h, 'b@example.by');
+});
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 afterAll(async () => {
   await h.close();
@@ -307,6 +311,36 @@ describe('push-токены', () => {
     await as(a, 'PUT', `${NOTIFICATIONS}/push-tokens`, { token, platform: 'ios' });
     await as(b, 'PUT', `${NOTIFICATIONS}/push-tokens`, { token, platform: 'ios' });
     expect(await tokens()).toEqual([{ token, userId: b.userId, platform: 'ios' }]);
+  });
+
+  it('поздняя регистрация старой сессии (выход, вход другим аккаунтом) не перехватывает токен новой', async () => {
+    const token = expoToken('late');
+    // запрос A прошёл `AuthGuard` и остановлен перед записью
+    const paused = gate();
+    const original = NotificationsRepository.prototype.registerToken;
+    vi.spyOn(NotificationsRepository.prototype, 'registerToken').mockImplementationOnce(
+      async function (this: NotificationsRepository, ...args) {
+        await paused.wait();
+        return original.apply(this, args);
+      },
+    );
+    const late = as(a, 'PUT', `${NOTIFICATIONS}/push-tokens`, { token, platform: 'ios' });
+    await paused.reached;
+    await collections(h).sessions.updateMany(
+      { userId: a.userId },
+      { $set: { revokedAt: h.clock.now(), revokedReason: 'signed_out' } },
+    );
+    // на устройстве вошёл B (его сессия новее) и зарегистрировал тот же токен
+    expect(
+      (await as(b, 'PUT', `${NOTIFICATIONS}/push-tokens`, { token, platform: 'ios' })).status,
+    ).toBe(204);
+    paused.open();
+    expect((await late).status).toBe(204);
+    const session = await collections(h).sessions.findOne({ userId: b.userId });
+    expect(await notificationsDb(h).pushTokens.findOne({ token })).toMatchObject({
+      userId: b.userId,
+      sessionId: session!._id,
+    });
   });
 
   it('параллельная первая регистрация одного токена — один документ', async () => {

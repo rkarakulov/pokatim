@@ -14,6 +14,8 @@ import {
   ROUTES_FOR_SHARING,
   type RoutesForSharing,
 } from '../routes';
+import { AchievementCardInputs } from './achievement-card.inputs';
+import { renderAchievementCard } from './achievement-card.png';
 import { OG_CARD_RENDER_JOB, OgCardCache, OgCardJob } from './og-card.cache';
 import { type OgCardInput, OgCardInputs } from './og-card.inputs';
 import { renderOgCard } from './og-card.png';
@@ -21,6 +23,8 @@ import { OG_CARD_POLICY, ogPrerenderable } from './sharing.policy';
 import { RideInviteInputs } from './ride-invite.inputs';
 import { renderRideInvite } from './ride-invite.png';
 import {
+  ACHIEVEMENT_CARD_RENDER_JOB,
+  AchievementCardJob,
   RIDE_INVITE_RENDER_JOB,
   RideInviteJob,
   STORY_CARD_RENDER_JOB,
@@ -64,7 +68,7 @@ interface OutcomeSink {
 
 /**
  * Рендер карточек очереди `story-card` (ADR-0018): сторис своего результата (`story-card.render`), приглашение
- * кофе-райда (`ride-invite.render`) и OG-картинка публичной страницы (`og-card.render`, og-images; диспетчер — по имени
+ * кофе-райда (`ride-invite.render`), карточка достижения (`achievement-card.render`) и OG-картинка публичной страницы (`og-card.render`, og-images; диспетчер — по имени
  * задачи). Входы перечитываются и сверяются с хэшем задачи (изменились — `skipped`, PNG не
  * пишется) → линия (порт `results`: отрезок между воротами или маршрут; порт `rides`: маршрут каталога) → satori +
  * resvg → PNG в Redis под новым токеном. Сбой — ретрай; на последней попытке — видимый `failed`. Лог — заявка или
@@ -78,6 +82,7 @@ export class StoryCardProcessor extends WorkerHost {
     private readonly cache: StoryCardCache,
     private readonly inputs: StoryCardInputs,
     private readonly invites: RideInviteInputs,
+    private readonly achievementInputs: AchievementCardInputs,
     @Inject(RESULTS_FOR_SHARING) private readonly results: ResultsForSharing,
     @Inject(RIDES_FOR_SHARING) private readonly rides: RidesForSharing,
     private readonly ogCache: OgCardCache,
@@ -115,6 +120,10 @@ export class StoryCardProcessor extends WorkerHost {
         return parsed(StoryCardJob, (data, options) => this.build(data, options));
       case RIDE_INVITE_RENDER_JOB:
         return parsed(RideInviteJob, (data, options) => this.buildRideInvite(data, options));
+      case ACHIEVEMENT_CARD_RENDER_JOB:
+        return parsed(AchievementCardJob, (data, options) =>
+          this.buildAchievementCard(data, options),
+        );
       case OG_CARD_RENDER_JOB:
         return parsed(OgCardJob, (data, options) => this.buildOgCard(data, options));
       default:
@@ -164,6 +173,23 @@ export class StoryCardProcessor extends WorkerHost {
         png: await renderRideInvite(resolved.input, line),
         note: line ? 'route' : 'no line',
       };
+    });
+  }
+
+  /**
+   * Рендер карточки своего достижения — вызывается и тестами напрямую. Достижение больше не получено (факт пропал,
+   * отозвано) или вход изменился — `skipped`. В логе — код и шаблон; причина провала — только тип (разметка содержит
+   * название объекта и имя).
+   */
+  buildAchievementCard(
+    job: AchievementCardJob,
+    options: BuildOptions = {},
+  ): Promise<StoryCardOutcome> {
+    const label = () => `achievement ${job.code} ${job.template}`;
+    return this.run(this.cache, job.hash, label, options, 'name-only', async () => {
+      const resolved = await this.achievementInputs.resolve(job.userId, job.code, job.template);
+      if (!resolved || resolved.hash !== job.hash) return null;
+      return { png: await renderAchievementCard(resolved.input), note: 'badge' };
     });
   }
 

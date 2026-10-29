@@ -19,7 +19,7 @@ interface CatalogEntry {
   icon: IconName;
   /** число на значке («Пять гонок», «Десять кофе-райдов») */
   count?: number;
-  /** «Поделиться» → сторис результата гонки объекта (A6) — только гоночные */
+  /** «Сторис результата» → сторис результата гонки объекта (A6) — только гоночные; карточка достижения — у всех */
   shareable: boolean;
   /** виден в публичном профиле (A7, R9: публично — только протоколы) — только гоночные */
   public: boolean;
@@ -124,7 +124,7 @@ export const publicItems = <T extends PublicRiderAchievement>(
   items: readonly KnownAchievement<T>[],
 ) => items.filter((item) => catalogEntry(item.code).public);
 
-/** Гонка для «Поделиться» (A6): только гоночный код и объект-гонка; незнакомый вид — без кнопки (RC-8). */
+/** Гонка для «Сторис результата» (A6): только гоночный код и объект-гонка; незнакомый вид — без кнопки (RC-8). */
 export const shareRaceId = (item: KnownAchievement<PublicRiderAchievement>): string | null =>
   catalogEntry(item.code).shareable && item.object.kind === 'race' ? item.object.id : null;
 

@@ -189,8 +189,8 @@ paths:
   повторный проход `offCorridor`; golden и `CORRIDOR_ENGINE_VERSION` не меняются); `analyzeAttempt(…, line)`
   получает **сохранённую** линию показа активности (порт `ActivitySource.trackLine`) и `trackMapOf` переводит
   интервалы в позиции на ней (дробный индекс вершины): время → путь по исходнику (точки со временем, бинарный поиск;
-  путь — haversine по всем точкам) → отрезок линии. Линия в потоке не пересчитывается: Дуглас — Пекер на дрожании
-  стоянки — O(n²) (71 с на AC14). Точность: поперёк — допуск упрощения (5 м; при удвоении допуска до 1000 точек —
+  путь — haversine по всем точкам) → отрезок линии. Линия в потоке не пересчитывается — позиции по той же линии, что
+  у активности. Точность: поперёк — допуск упрощения (5 м; при удвоении допуска до 1000 точек —
   больше), вдоль — метры (хорды ≠ отрезки линии); стоянки и точки без времени позицию не сдвигают. Подсветка —
   иллюстрация, итог — `offCorridorM`/`maxExcursionM` попытки.
 - `GET /v1/races/:raceId/entry/attempts/:attemptId/track` (`RaceEntryController`, `ResultsReadService.myAttemptTrack`):
@@ -282,11 +282,14 @@ paths:
 ## Достижения (`achievements`, ADR-0020 Proposed)
 
 - Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides`
-  только через `index.ts`; на `achievements` ссылаются только `AppModule` (`AchievementsModule`) и
-  `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания). Источники о нём не знают — циклов нет.
+  только через `index.ts`; на `achievements` ссылаются только `AppModule` (`AchievementsModule`),
+  `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания) и `sharing` (`AchievementsReadModule`, порт
+  `ACHIEVEMENTS_FOR_SHARING`). Источники о нём не знают — циклов нет.
   `AchievementsCoreModule` — `AchievementsRepository` + `AchievementErasure` (модулей не импортирует);
-  `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `RidesCoreModule`,
-  `RouteRidesCoreModule`. Worker-модуля, очередей, outbox и регламента нет.
+  `AchievementsReadModule` — `AchievementFactsReader` (факты портов + правила, только чтение) и порт карточки
+  (`ResultsCoreModule`, `RidesCoreModule`, `RouteRidesCoreModule`, `AchievementsCoreModule`);
+  `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `AchievementsReadModule`.
+  Worker-модуля, очередей, outbox и регламента нет.
 - Факты — только порты владельцев: `RIDER_RESULTS` (`publishedRows`, `racesOf` — как у `riders`), `RIDER_ROUTE_RIDES`
   (`route-rides`: `passedOf` — `passed` + `ActivitySource.liveActivities` + `RouteRideRoutes.rideableTitles`, та же
   видимость, что у «Заездов по маршруту»; снятый маршрут — факта нет, RC-4), `RIDER_RIDES` (`rides`: `pastOf` —
@@ -326,6 +329,12 @@ paths:
   постановка) → задача `ride-invite.render` той же очереди → `StoryCardProcessor.buildRideInvite` →
   `rideInviteTree` (`ride-invite.render.ts`, узлы и линия — `story-card.render.ts`/`story-card.png.ts`).
   `SharingModule`/`SharingWorkerModule` импортируют `RidesCoreModule`; `rides` о `sharing` не знает.
+- Карточка достижения: `AchievementCardController` (`GET achievements/:code/story-card`, `AuthGuard`, `no-store`) →
+  `AchievementCardService` → `AchievementCardInputs` (порт `achievements` `ACHIEVEMENTS_FOR_SHARING.cardFacts` — факты
+  ∩ не отозванная выдача, без записи; маршрут — название только из `ROUTES_FOR_SHARING.ogFacts`) → `CardRequests` →
+  задача `achievement-card.render` → `buildAchievementCard` → `achievementCardTree` (значок — глиф Material Symbols,
+  `achievement-card.icons.ts` — зеркало иконок каталога приложения). `SharingModule`/`SharingWorkerModule` импортируют
+  `AchievementsReadModule`.
 - OG-картинки публичных страниц (og-images): `OgCardController` (`og/cards/brand/site`, `og/cards/:kind/:id` →
   `{ version }`, IP-лимит `og-card`; `og/images/brand/site/:file`, `og/images/:kind/:id/:file` — PNG без входа,
   IP-лимит `og-image`, старая версия — `302`, нет PNG — бренд `no-store` + постановка) → `OgCardService` →
