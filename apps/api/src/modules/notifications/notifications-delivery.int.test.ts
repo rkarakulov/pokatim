@@ -255,6 +255,45 @@ describe('push', () => {
     expect(expo.delivered.map((entry) => entry.message.title)).toEqual(['Протокол опубликован']);
   });
 
+  it('«Маршруты»: решение по маршруту гасит push.routes, не push.rides; старое route_* в «Райдах» — по push.rides', async () => {
+    await seedPushToken(h, a.userId, 'a1');
+    const route = (title: string, group: 'routes' | 'rides') =>
+      pendingPush(a.userId, {
+        kind: 'route_published',
+        group,
+        title,
+        body: '«Вокруг моря» теперь в каталоге маршрутов.',
+        target: { type: 'my-route', routeId: uuidv7() },
+      });
+    const fresh = await route('Новое решение', 'routes');
+    const old = await route('Старое решение', 'rides');
+    const settings = {
+      push: { races: true, disputes: true, rides: false },
+      email: { disputes: true, rides: true },
+      quietHours: { enabled: false, startHour: 22, endHour: 8 },
+    };
+    expect(
+      (await call(h, 'PUT', '/v1/notifications/settings', settings, bearer(a.token))).status,
+    ).toBe(200);
+    expect(
+      (await call(h, 'PUT', '/v1/notifications/settings/routes', { push: true }, bearer(a.token)))
+        .status,
+    ).toBe(200);
+
+    expect(await runPush(h, a.userId)).toBe('sent');
+    expect((await docOf(fresh._id))?.push.state).toBe('sent');
+    expect((await docOf(old._id))?.push).toMatchObject({ state: 'skipped', reason: 'disabled' });
+
+    const later = await route('Ещё решение', 'routes');
+    expect(
+      (await call(h, 'PUT', '/v1/notifications/settings/routes', { push: false }, bearer(a.token)))
+        .status,
+    ).toBe(200);
+    expect(await runPush(h, a.userId)).toBe('skipped');
+    expect((await docOf(later._id))?.push).toMatchObject({ state: 'skipped', reason: 'disabled' });
+    expect(expo.delivered.map((entry) => entry.message.title)).toEqual(['Новое решение']);
+  });
+
   it('тихие часы: отложено до конца интервала; два отложенных — одна сводка без цели', async () => {
     await seedPushToken(h, a.userId, 'a1');
     h.clock.advance(11 * HOUR); // 23:00 по Минску

@@ -7,6 +7,7 @@ import { type Env, webPushVapid } from '../../config/env';
 import { QUEUE } from '../../queues';
 import { DeliveryJobs } from './delivery-jobs';
 import { EmailDelivery } from './email-delivery';
+import { FanoutJobs, NOTIFICATIONS_FANOUT_PRODUCER } from './fanout-jobs';
 import { ExpoPushSender } from './expo-push.sender';
 import { DisputesCoreModule } from '../disputes';
 import { IdentityAccountsModule, IdentityModule } from '../identity';
@@ -78,7 +79,8 @@ export class NotificationsCoreModule {}
 export class NotificationsModule {}
 
 /**
- * Задачи `notifications` в worker (ADR-0017): приём событий источников (`notifications-intake`), доставка push и писем
+ * Задачи `notifications` в worker (ADR-0017): приём событий источников и пачки получателей большого события
+ * (`notifications-intake`, `notifications.fanout`), доставка push и писем
  * (`notifications-delivery`), регламент квитанций и перепостановки (`notifications-maintenance`). Источники — только
  * порты через их `index.ts`: `RESULTS_NOTICES` и `RACE_REGISTRY` (`ResultsCoreModule` реэкспортирует `RacesCoreModule`),
  * `DISPUTE_NOTICES`, `RIDE_NOTICES`, `ROUTE_NOTICES`, `TICKET_NOTICES` (`TicketsCoreModule`, PR D), `IdentityAccounts`.
@@ -97,6 +99,8 @@ export class NotificationsModule {}
       { name: QUEUE.notificationsDelivery },
       { name: QUEUE.notificationsMaintenance },
     ),
+    // атомарная постановка пачек получателей (`FlowProducer.addBulk` — MULTI), соединение — из `forRootAsync` базы
+    BullModule.registerFlowProducer({ name: NOTIFICATIONS_FANOUT_PRODUCER }),
   ],
   providers: [
     NotificationIntake,
@@ -104,6 +108,7 @@ export class NotificationsModule {}
     pushSenderProvider,
     webPushSenderProvider,
     DeliveryJobs,
+    FanoutJobs,
     PushDelivery,
     EmailDelivery,
     PushReceipts,

@@ -159,7 +159,10 @@ paths:
   `{ type: 'ticket', code: TicketCodeCanonical }`; группа «Мероприятия» — отдельные схемы подресурса
   `EventNotificationSettingsView` / `UpdateEventNotificationSettings` (`strictObject`), `DEFAULT_EVENT_NOTIFICATION_SETTINGS`
   — `NotificationSettings` не расширяется (строгий разбор ответа у старых сборок, RC-D1); api-client —
-  `getEventNotificationSettings`, `updateEventNotificationSettings`.
+  `getEventNotificationSettings`, `updateEventNotificationSettings`. Группа `routes` — в конце `NOTIFICATION_GROUPS`
+  (старые сборки — `unknown`); подресурс «Маршруты» — `RouteNotificationSettingsView` (`{ push }`, терпит ключи),
+  `UpdateRouteNotificationSettings` (`strictObject({ push })`), `DEFAULT_ROUTE_NOTIFICATION_SETTINGS`; api-client —
+  `getRouteNotificationSettings`, `updateRouteNotificationSettings`.
 - Web Push (ADR-0022): там же — `WebPushEndpoint` (https ≤ 2048, хост — push-сервис из белого списка
   `isWebPushEndpoint`: FCM, Mozilla, WNS, Apple; адрес вызывает сервер — SSRF), `RegisterWebPushSubscription`
   (`strictObject`: endpoint + `keys.p256dh` 65 байт `B…`/`keys.auth` 16 байт base64url, без `expirationTime`),

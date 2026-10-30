@@ -2,6 +2,7 @@ import {
   addLocalDays,
   DEFAULT_EVENT_NOTIFICATION_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
+  DEFAULT_ROUTE_NOTIFICATION_SETTINGS,
   minskWallTimeToUtc,
   NOTIFICATION_GROUPS,
   type NotificationGroup,
@@ -33,11 +34,16 @@ export const NOTIFICATIONS_POLICY = {
   receiptsAfterMs: 15 * 60_000,
   receiptsBatch: 1000,
   receiptsMaxBatches: 10,
+  /**
+   * Пачка получателей события (`notifications.fanout`): аудитория больше — intake раскладывает событие на задачи-пачки
+   * (время задачи ограничено пачкой, ретрай — только упавшей). ≤ 200 id в `$in` живости и настроек, ≤ 200 upsert.
+   */
+  fanoutChunk: 200,
 } as const;
 
 // группы — из справочника контракта: строковый литерал группы споров совпал бы с именем коллекции споров (сторож
 // `disputes.repository.test.ts`)
-const [RACES, DISPUTES, RIDES, EVENTS] = NOTIFICATION_GROUPS;
+const [RACES, DISPUTES, RIDES, EVENTS, ROUTES] = NOTIFICATION_GROUPS;
 
 const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   result_counted: RACES,
@@ -54,9 +60,8 @@ const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   ride_rescheduled: RIDES,
   ride_joined: RIDES,
   ride_report_resolved: RIDES,
-  // [ASSUMPTION] решение по заявке маршрута — в группе «Райды» (N4: три группы)
-  route_published: RIDES,
-  route_rejected: RIDES,
+  route_published: ROUTES,
+  route_rejected: ROUTES,
   event_reminder: EVENTS,
   // [ASSUMPTION] сброс поля профиля модератором — в группе «Райды» (N4: три группы; profile-moderation-followups RC-F4)
   profile_name_reset: RIDES,
@@ -78,17 +83,22 @@ export const EMAIL_KINDS: ReadonlySet<NotificationKind> = new Set([
 
 /**
  * Настройки доставки (внутренний тип): основные `NotificationSettings` + тумблеры группы «Мероприятия»
- * (`push.events`, `email.events` — подресурс настроек, RC-D1). Хранятся в одном документе; нет поля — включено.
+ * (`push.events`, `email.events` — подресурс настроек, RC-D1; нет поля — включено) и «Маршруты» (`push.routes`, только
+ * push; нет поля — значение `push.rides`). Хранятся в одном документе.
  */
 export interface DeliverySettings {
   push: Record<NotificationGroup, boolean>;
-  email: Record<Exclude<NotificationGroup, 'races'>, boolean>;
+  email: Record<Exclude<NotificationGroup, 'races' | 'routes'>, boolean>;
   quietHours: NotificationSettings['quietHours'];
 }
 
 /** Нет документа настроек — всё включено (N4), тихие часы 22–8 (N6). */
 export const DEFAULT_DELIVERY_SETTINGS: DeliverySettings = {
-  push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, events: DEFAULT_EVENT_NOTIFICATION_SETTINGS.push },
+  push: {
+    ...DEFAULT_NOTIFICATION_SETTINGS.push,
+    events: DEFAULT_EVENT_NOTIFICATION_SETTINGS.push,
+    routes: DEFAULT_ROUTE_NOTIFICATION_SETTINGS.push,
+  },
   email: {
     ...DEFAULT_NOTIFICATION_SETTINGS.email,
     events: DEFAULT_EVENT_NOTIFICATION_SETTINGS.email,
@@ -137,7 +147,7 @@ export function initialDelivery(
     sentAt: null,
     reason,
   };
-  if (!EMAIL_KINDS.has(kind) || group === RACES) return { push, email: null };
+  if (!EMAIL_KINDS.has(kind) || group === RACES || group === ROUTES) return { push, email: null };
   return {
     push,
     email: {

@@ -1,3 +1,4 @@
+import { NOTIFICATION_KINDS, NotificationTarget } from '@pokatim/contracts';
 import { z } from 'zod';
 
 import { QUEUE } from '../../queues';
@@ -70,3 +71,46 @@ export const pushJobId = (userId: string, notBefore: Date) =>
   `push-${userId}-${notBefore.getTime()}`;
 /** jobId письма — по уведомлению. */
 export const emailJobId = (notificationId: string) => `email-${notificationId}`;
+
+/**
+ * Пачка получателей события (`notifications-intake`, имя задачи — не тип события outbox): то, что intake уже посчитал —
+ * снимок текста, цель, схлопывание, цели и id получателей пачки. Порты источников в пачке не перечитываются. Без ПДн
+ * (N12): id и снимок текста.
+ */
+export const NOTIFICATIONS_FANOUT_JOB = 'notifications.fanout';
+/**
+ * Потолок получателей в данных пачки — не `fanoutChunk`: смена размера пачки не делает нечитаемыми уже поставленные
+ * задачи.
+ */
+export const FANOUT_CHUNK_MAX = 1000;
+
+export const FanoutJobData = z.object({
+  eventId: z.uuid(),
+  /** тип события-источника — только для логов */
+  type: z.string(),
+  kind: z.enum(NOTIFICATION_KINDS),
+  title: z.string(),
+  body: z.string(),
+  target: NotificationTarget.nullable(),
+  targets: z.record(z.uuid(), NotificationTarget).optional(),
+  collapse: z.object({ key: z.string(), seq: z.number().int().optional() }).optional(),
+  userIds: z.array(z.uuid()).min(1).max(FANOUT_CHUNK_MAX),
+});
+export type FanoutJobData = z.infer<typeof FanoutJobData>;
+
+/**
+ * План раскладки события — в данных задачи intake (`job.updateData` до постановки): повтор intake ставит пачки по нему,
+ * порты источников не зовутся (состав зафиксирован), недоставленные пачки дотягиваются.
+ */
+export const FanoutPlan = z
+  .array(z.object({ jobId: z.string().startsWith('fanout-'), data: FanoutJobData }))
+  .min(1);
+export type FanoutPlan = z.infer<typeof FanoutPlan>;
+
+/** Данные задачи intake: событие outbox (`OutboxJobData`) и, после раскладки, её план. */
+export const IntakeJobData = z.object({ outboxEventId: z.uuid(), fanout: FanoutPlan.optional() });
+export type IntakeJobData = z.infer<typeof IntakeJobData>;
+
+/** jobId пачки: событие, номер непустого черновика, номер пачки; без `:` (BullMQ). */
+export const fanoutJobId = (eventId: string, draft: number, chunk: number) =>
+  `fanout-${eventId}-${draft}-${chunk}`;

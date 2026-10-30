@@ -3,6 +3,7 @@ import {
   DEFAULT_NOTIFICATION_SETTINGS,
   type EventNotificationSettingsView,
   type NotificationSettings,
+  type RouteNotificationSettingsView,
   UNREAD_COUNT_MAX,
 } from '@pokatim/contracts';
 import { isDuplicateKey, MONGO_DB, uuidv7 } from '@rkarakulov/api-kit/mongo';
@@ -25,14 +26,37 @@ import {
 } from './notifications.collection';
 import type { DeliverySettings } from './notifications.policy';
 
-/** Документ настроек → настройки доставки: нет тумблеров «Мероприятия» — включены (RC-D1). */
+/**
+ * Документ настроек → настройки доставки: нет тумблеров «Мероприятия» — включены (RC-D1); нет `push.routes` — значение
+ * `push.rides` (райдер, выключивший «Райды», не начинает получать push о решении по маршруту).
+ */
 const deliverySettingsOf = (
   doc: Pick<NotificationSettingsDoc, 'push' | 'email' | 'quietHours'>,
 ): DeliverySettings => ({
-  push: { ...doc.push, events: doc.push.events ?? true },
+  push: {
+    ...doc.push,
+    events: doc.push.events ?? true,
+    routes: doc.push.routes ?? doc.push.rides,
+  },
   email: { ...doc.email, events: doc.email.events ?? true },
   quietHours: doc.quietHours,
 });
+
+/**
+ * Умолчания основных настроек для нового документа подресурса (`$setOnInsert`): пути подресурсов сюда не входят —
+ * конфликт с их `$set`.
+ */
+function settingsOnInsert() {
+  const { push, email, quietHours } = DEFAULT_NOTIFICATION_SETTINGS;
+  return {
+    'push.races': push.races,
+    'push.disputes': push.disputes,
+    'push.rides': push.rides,
+    'email.disputes': email.disputes,
+    'email.rides': email.rides,
+    quietHours: { ...quietHours },
+  };
+}
 
 /** Уникальность токена устройства — гонка двух первых регистраций одного токена (`isDuplicateKey`). */
 export const PUSH_TOKENS_TOKEN_UNIQUE_INDEX = 'push_tokens_token_unique';
@@ -272,20 +296,25 @@ export class NotificationsRepository {
     events: EventNotificationSettingsView,
     now: Date,
   ): Promise<void> {
-    const { push, email, quietHours } = DEFAULT_NOTIFICATION_SETTINGS;
     await this.settings.updateOne(
       { _id: userId },
       {
         $set: { 'push.events': events.push, 'email.events': events.email, updatedAt: now },
-        $setOnInsert: {
-          'push.races': push.races,
-          'push.disputes': push.disputes,
-          'push.rides': push.rides,
-          'email.disputes': email.disputes,
-          'email.rides': email.rides,
-          quietHours: { ...quietHours },
-        },
+        $setOnInsert: settingsOnInsert(),
       },
+      { upsert: true },
+    );
+  }
+
+  /** Тумблер «Маршруты» (подресурс, только push): `$set push.routes`; новый документ — как у «Мероприятий». */
+  async saveRouteSettings(
+    userId: string,
+    routes: RouteNotificationSettingsView,
+    now: Date,
+  ): Promise<void> {
+    await this.settings.updateOne(
+      { _id: userId },
+      { $set: { 'push.routes': routes.push, updatedAt: now }, $setOnInsert: settingsOnInsert() },
       { upsert: true },
     );
   }
@@ -356,12 +385,19 @@ export class NotificationsRepository {
 
   // --- доставка (worker `notifications-delivery`) ---
 
-  /** Уведомления события, ждущие доставки (intake ставит задачи по ним): получатель, push и письмо. */
-  pendingDeliveriesOf(sourceEventId: string): Promise<PendingDelivery[]> {
+  /**
+   * Уведомления события, ждущие доставки (intake ставит задачи по ним): получатель, push и письмо. `userIds` — только
+   * получатели пачки (`notifications.fanout`; индекс `notifications_event_user_unique`).
+   */
+  pendingDeliveriesOf(
+    sourceEventId: string,
+    userIds?: readonly string[],
+  ): Promise<PendingDelivery[]> {
     return this.notifications
       .find(
         {
           sourceEventId,
+          ...(userIds === undefined ? {} : { userId: { $in: [...userIds] } }),
           $or: [{ 'push.state': 'pending' }, { 'email.state': 'pending' }],
         },
         { projection: { userId: 1, push: 1, email: 1 } },
