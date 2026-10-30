@@ -95,7 +95,10 @@ describe('блок «Достижения» своего профиля (AC12)',
     await openProfile();
     const block = within(await screen.findByTestId('own-achievement-progress'));
     expect(block.getByRole('header', { name: 'Следующие цели' })).toBeOnTheScreen();
-    expect(block.getByRole('progressbar', { name: 'Гонщик, золото: 17 из 30' })).toBeOnTheScreen();
+    // первая загрузка — скелетон блока (§4.12), затем полоса
+    expect(
+      await block.findByRole('progressbar', { name: 'Гонщик, золото: 17 из 30' }),
+    ).toBeOnTheScreen();
     expect(
       within(screen.getByTestId('own-achievements')).getByLabelText(
         'Достижение «Гонщик», серебро: Гонка «Гонка у озера», 2 мая 2026',
@@ -111,7 +114,7 @@ describe('блок «Достижения» своего профиля (AC12)',
     });
     await openProfile();
     const block = within(await screen.findByTestId('own-achievement-progress'));
-    expect(block.getByText('2 из 5', { includeHiddenElements: true })).toBeOnTheScreen();
+    expect(await block.findByText('2 из 5', { includeHiddenElements: true })).toBeOnTheScreen();
     expect(screen.queryByTestId('own-achievements')).toBeNull();
   });
 
@@ -119,7 +122,9 @@ describe('блок «Достижения» своего профиля (AC12)',
     listAchievements.mockResolvedValue({ items: [own()], progress: [] });
     await openProfile();
     expect(await screen.findByTestId('own-achievements')).toBeOnTheScreen();
-    expect(screen.queryByTestId('own-achievement-progress')).toBeNull();
+    // скелетон первой загрузки уходит, блок не появляется
+    await waitFor(() => expect(screen.queryByTestId('own-achievement-progress')).toBeNull());
+    expect(screen.getByTestId('own-achievements')).toBeOnTheScreen();
   });
 
   it('ни одного (или только незнакомые) — блока нет', async () => {
