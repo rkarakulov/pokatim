@@ -283,7 +283,9 @@ paths:
   памяти процесса (Redis-слоты между процессами — нет).
 - `readLimited` (все три загрузки, включая панель): тишина между порциями тела дольше 30 с или всё тело дольше 180 с —
   `408 VALIDATION_FAILED` `{ fields: [{ path: 'body', code: 'INVALID' }] }`; остаток тела сливается без хранения,
-  ответ — `Connection: close`. Таймауты — `DEFAULT_BODY_TIMEOUTS` (`raw-body.ts`), в политиках модулей —
+  ответ — `Connection: close`. Закрытие после отказа — lingering close (`lingerOnClose`): FIN после ответа, приём
+  сливается до конца тела, FIN клиента или `LINGER_MS` (5 с), затем `destroy` (иначе хвост тела давал RST, и клиент
+  получал обрыв вместо 413/408). Таймауты — `DEFAULT_BODY_TIMEOUTS` (`raw-body.ts`), в политиках модулей —
   `bodyTimeouts`.
 
 ## Кофе-райды (блок 05, ADR-0013 Proposed)
