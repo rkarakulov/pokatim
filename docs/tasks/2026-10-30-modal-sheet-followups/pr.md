@@ -16,7 +16,7 @@
 
 - `modal-sheet.test.tsx` (native: панель без role, `titleInContent`, `headerAction`, затемнение, `requestClose`),
   новый `modal-sheet.web.test.tsx` (один dialog с именем), `install-banner.web.test.tsx`, `ride-detail.test.tsx`.
-- `TURBO_CONCURRENCY=1 pnpm check` — app, admin, lint, typecheck зелёные; 4 файла API упали по таймаутам под
+- `TURBO_CONCURRENCY=1 pnpm check` (pre-push) — зелёный, 15/15. Первый прогон: 4 файла API упали по таймаутам под
   нагрузкой (код API не менялся), отдельно — 30/30.
 - NOT VERIFIED: ручная проверка в браузере и на симуляторах iOS/Android.
 
