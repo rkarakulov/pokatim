@@ -231,7 +231,9 @@ paths:
   `@IpRateLimit`, `consumeIpLimit` в `src/public-read.guard.ts`; 429 + `Retry-After`), `public, max-age=60`. Файл
   посчитан worker'ом (`routeGpx`: только `trkpt lat lon` и `ele` точек линии сверки — без `time`, датчиков,
   `name`/`desc`, `metadata`, `extensions` исходника; `routeKml` — одна `LineString`; `routeTcx` — курс `Name=Pokatim` с
-  условным временем; в файлах только числа); API экспорт не разбирает. KML/TCX нет у экспорта `derivedVersion` 1 — 404. Заголовки файла — только у 200:
+  условным временем; в файлах только числа); API экспорт не разбирает (route-exports-gzip: хранится gzip —
+  отдаётся с `Content-Encoding: gzip` или распаковывается `gunzip` с `maxOutputLength` = `exportMaxBytes`, лог сбоя —
+  без текста ошибки). KML/TCX нет у экспорта `derivedVersion` 1 — 404. Заголовки файла — только у 200:
   `ROUTE_EXPORT_CONTENT_TYPES` (`application/gpx+xml`, KML, TCX), `Content-Disposition: attachment` с ASCII-fallback и `filename*` RFC 5987
   (`routeFileName`/`routeContentDisposition`: без `\p{Cc}`/`\p{Cf}` — bidi-подмена расширения, без `\/:*?"<>|`, ≤ 80 кодовых точек),
   `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`. Раскрывает то же, что
@@ -372,6 +374,10 @@ paths:
 - Журнал и логи — подпись `Участник ·<id>`, причина модератора и `details.reportCount`; без имени, клуба, id фото,
   комментариев и `userId` цели в логах (D14). Причина — свободный текст (D11): предупреждение в диалоге панели.
 - Сброс фото удаляет документ `profile_avatars` (URL — 404); стирание аккаунта удаляет жалобы **на** пользователя.
+- Запрет загрузки фото (profile-moderation-followups) — проверка в `admit` до слота, лимита и тела (байты не читаются,
+  квота не списывается) и повторно по документу профиля в транзакции замены; все отказы `admit` (запрет, слот, лимит)
+  — с `Connection: close`. «Снять запрет» — `profiles.moderate` + причина, журнал. Событие `profile.field-reset` и
+  текст уведомления — без причины модератора и сброшенного значения; в логах — без даты запрета.
 
 ## Уведомления и push (ADR-0017)
 

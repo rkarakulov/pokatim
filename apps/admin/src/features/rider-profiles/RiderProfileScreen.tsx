@@ -32,8 +32,8 @@ import { RIDER_PROFILES_QUERY_KEY, riderProfileQuery } from './rider-profiles-qu
 const SKELETON_FIELDS = 4;
 const column = createColumnHelper<RiderProfileModerationReport>();
 
-type Action = 'resetAvatar' | 'resetClub' | 'resetName' | 'dismiss';
-type ResetAction = Exclude<Action, 'dismiss'>;
+type Action = 'resetAvatar' | 'resetClub' | 'resetName' | 'dismiss' | 'unblockAvatar';
+type ResetAction = Exclude<Action, 'dismiss' | 'unblockAvatar'>;
 
 const RESETS: readonly ResetAction[] = ['resetAvatar', 'resetClub', 'resetName'];
 
@@ -97,6 +97,17 @@ function Preview({ profile, label }: { profile: RiderProfileModerationDetail; la
           label={t('admin.riderProfiles.field.club')}
           value={profile.club ?? t('admin.riderProfiles.none')}
         />
+        <ReadonlyField
+          label={t('admin.riderProfiles.field.avatarResets')}
+          value={String(profile.avatarResetCount)}
+          help={
+            profile.avatarUploadBlockedUntil
+              ? t('admin.riderProfiles.avatarBlocked', {
+                  date: formatDateTimeLong(profile.avatarUploadBlockedUntil),
+                })
+              : undefined
+          }
+        />
       </div>
     </div>
   );
@@ -107,7 +118,10 @@ function Preview({ profile, label }: { profile: RiderProfileModerationDetail; la
  * подпись (имя — по Q2), клуб, статус публичности, жалобы без автора. «Сбросить фото / клуб / имя» неактивны, когда
  * сбрасывать нечего; «Отклонить жалобы» — при открытых, шлёт `reportRevision`. Каждое действие — `ReasonDialog` с
  * предупреждением не повторять имя и клуб (D11); 409 `CONFLICT` — `ConflictBanner` с перечитыванием карточки; 404
- * (профиль стёрт) — перечитывание и «Профиль не найден». Ошибка перечитывания при показанных данных — баннер с повтором.
+ * (профиль стёрт) — перечитывание и «Профиль не найден». Запрет загрузки фото — счётчик сбросов за 180 дней и строка
+ * «Загрузка фото запрещена до …» (дата и время по Минску); «Снять запрет» — только при запрете, тот же `ReasonDialog`
+ * (`{ unblocked: false }` — запрет уже снят или истёк: просто перечитывание). Ошибка перечитывания при показанных
+ * данных — баннер с повтором.
  */
 export function RiderProfileScreen({ userId }: { userId: string }) {
   const queryClient = useQueryClient();
@@ -178,6 +192,7 @@ export function RiderProfileScreen({ userId }: { userId: string }) {
       if (action === 'resetAvatar') await api.resetRiderAvatar(data.userId, { reason });
       else if (action === 'resetClub') await api.resetRiderClub(data.userId, { reason });
       else if (action === 'resetName') await api.resetRiderName(data.userId, { reason });
+      else if (action === 'unblockAvatar') await api.unblockRiderAvatar(data.userId, { reason });
       else if (action === 'dismiss') {
         await api.dismissRiderProfileReports(data.userId, {
           reason,
@@ -212,6 +227,13 @@ export function RiderProfileScreen({ userId }: { userId: string }) {
         </Button>
       );
     }),
+    ...(data.avatarUploadBlockedUntil
+      ? [
+          <Button key="unblockAvatar" onClick={() => setAction('unblockAvatar')}>
+            {t('admin.riderProfiles.unblockAvatar')}
+          </Button>,
+        ]
+      : []),
     ...(data.openReportCount > 0
       ? [
           <Button key="dismiss" onClick={() => setAction('dismiss')}>
@@ -271,7 +293,7 @@ export function RiderProfileScreen({ userId }: { userId: string }) {
         consequences={action ? t(`admin.riderProfiles.${action}Consequences`) : ''}
         extraFields={<Banner tone="warning">{t('admin.riderProfiles.reasonWarning')}</Banner>}
         confirmLabel={action ? t(`admin.riderProfiles.${action}`) : ''}
-        destructive={action !== undefined && action !== 'dismiss'}
+        destructive={action !== undefined && action !== 'dismiss' && action !== 'unblockAvatar'}
         errorText={actionErrorText}
         onConfirm={run}
         onClose={() => setAction(undefined)}

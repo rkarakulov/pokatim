@@ -1,3 +1,6 @@
+import { promisify } from 'node:util';
+import { gzip } from 'node:zlib';
+
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ROUTE_DERIVED_VERSION, type RouteDerived } from '@pokatim/tracks/parse';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
@@ -7,16 +10,28 @@ import { runParseThread, type ThreadOutcome } from '../../parse-thread';
 import { ROUTE_POLICY } from './routes.policy';
 import { type RouteExportFiles, RoutesRepository } from './routes.repository';
 
-/** Строки экспорта из потока разбора → байты UTF-8 для `route_exports` (разбор и сборка файлов — только в worker). */
-export function exportFilesOf(
+const gzipAsync = promisify(gzip);
+
+/**
+ * Уровень gzip экспорта (route-exports-gzip, RC-6): задан явно — при тех же входе и уровне байты детерминированы
+ * (сравнение пересчитанного экспорта с прежним), смена дефолта zlib их не изменит.
+ */
+const EXPORT_GZIP_LEVEL = 6;
+
+/**
+ * Строки экспорта из потока разбора → сжатые gzip байты UTF-8 для `route_exports` (route-exports-gzip; разбор и
+ * сборка файлов — только в worker). Сжатие — в пуле libuv, не в event loop; вызывать **до** транзакции записи.
+ */
+export async function exportFilesOf(
   derived: Pick<RouteDerived, 'gpx' | 'kml' | 'tcx'>,
-): RouteExportFiles {
-  const encoder = new TextEncoder();
-  return {
-    gpx: encoder.encode(derived.gpx),
-    kml: encoder.encode(derived.kml),
-    tcx: encoder.encode(derived.tcx),
-  };
+): Promise<RouteExportFiles> {
+  const pack = (xml: string) => gzipAsync(xml, { level: EXPORT_GZIP_LEVEL });
+  const [gpx, kml, tcx] = await Promise.all([
+    pack(derived.gpx),
+    pack(derived.kml),
+    pack(derived.tcx),
+  ]);
+  return { gpx, kml, tcx };
 }
 
 /** Итог прогона бэкфилла: посчитано, детерминированный отказ, пропуск (сбой окружения); `more` — пачка полная. */
@@ -88,8 +103,10 @@ export class RouteDerivedBackfill {
       return 'failed';
     }
     const { profile } = outcome.result;
+    // сжатие до транзакции: не удлиняет её и не повторяется при ретрае TransientTransactionError
+    const files = await exportFilesOf(outcome.result);
     const recorded = await this.transactions.run((tx) =>
-      this.repository.recordDerived(tx, id, version, profile, exportFilesOf(outcome.result)),
+      this.repository.recordDerived(tx, id, version, profile, files),
     );
     return recorded ? 'derived' : 'skipped';
   }

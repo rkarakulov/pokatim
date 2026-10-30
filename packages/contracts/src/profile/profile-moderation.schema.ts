@@ -20,9 +20,13 @@ export const PROFILE_REPORT_RESOLUTIONS = ['actioned', 'dismissed'] as const;
 export const MODERATION_PROFILE_REPORTS_MAX = 100;
 export const RIDER_PROFILE_MODERATION_MAX_LIMIT = 50;
 
-/** `GET /v1/admin/rider-profiles?cursor&limit` → `RiderProfileModerationPage`. */
+/**
+ * `GET /v1/admin/rider-profiles?reason&cursor&limit` → `RiderProfileModerationPage`. `reason` — только профили с
+ * открытой жалобой этой причины (profile-moderation-followups); неизвестная причина — 400.
+ */
 export const RiderProfileModerationQuery = z.strictObject({
   ...PageQuery.shape,
+  reason: ProfileReportReason.optional(),
   cursor: PageCursor.optional(),
   limit: z.coerce.number().int().min(1).max(RIDER_PROFILE_MODERATION_MAX_LIMIT).default(20),
 });
@@ -40,6 +44,8 @@ export const RiderProfileModerationRow = z.object({
   lastReportAt: z.iso.datetime().nullable(),
   hasAvatar: z.boolean(),
   hasClub: z.boolean(),
+  /** Причины открытых жалоб профиля, порядок справочника (profile-moderation-followups). */
+  openReasons: z.array(ProfileReportReason).default([]),
 });
 export type RiderProfileModerationRow = z.infer<typeof RiderProfileModerationRow>;
 
@@ -75,6 +81,10 @@ export const RiderProfileModerationDetail = z.object({
   /** Ревизия жалоб: каждая новая жалоба увеличивает её на 1 — маркер «Отклонить жалобы». */
   reportRevision: z.number().int().nonnegative(),
   reports: z.array(RiderProfileModerationReport).max(MODERATION_PROFILE_REPORTS_MAX),
+  /** Загрузка фото запрещена до этого момента (повторные сбросы фото); `null` — запрета нет или истёк. */
+  avatarUploadBlockedUntil: z.iso.datetime().nullable().default(null),
+  /** Сбросов фото модератором за окно правила запрета (180 дней). */
+  avatarResetCount: z.number().int().nonnegative().default(0),
 });
 export type RiderProfileModerationDetail = z.infer<typeof RiderProfileModerationDetail>;
 
@@ -99,3 +109,14 @@ export type DismissRiderProfileReportsRequest = z.infer<typeof DismissRiderProfi
 /** `dismissed: false` — открытых жалоб уже нет (идемпотентный успех без журнала). */
 export const RiderProfileReportsDismissResult = z.object({ dismissed: z.boolean() });
 export type RiderProfileReportsDismissResult = z.infer<typeof RiderProfileReportsDismissResult>;
+
+/**
+ * `POST …/:userId/avatar-unblock` — снять запрет загрузки фото (profile-moderation-followups); тело как у сброса.
+ * История сбросов не очищается.
+ */
+export const UnblockRiderAvatarRequest = ResetRiderNameRequest;
+export type UnblockRiderAvatarRequest = ResetRiderNameRequest;
+
+/** `unblocked: false` — запрета нет или он истёк (идемпотентный успех без журнала). */
+export const RiderAvatarUnblockResult = z.object({ unblocked: z.boolean() });
+export type RiderAvatarUnblockResult = z.infer<typeof RiderAvatarUnblockResult>;

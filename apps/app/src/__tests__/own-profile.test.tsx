@@ -32,6 +32,7 @@ const profile = (overrides: Partial<ProfileView> = {}): ProfileView => ({
   avatar: null,
   publicId: null,
   themeId: 'classic',
+  avatarUploadBlockedUntil: null,
   ...overrides,
 });
 const stats = (overrides: Partial<RiderStats> = {}): RiderStats => ({

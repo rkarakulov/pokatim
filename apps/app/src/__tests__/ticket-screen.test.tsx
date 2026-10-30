@@ -63,6 +63,7 @@ beforeEach(() => {
     avatar: null,
     publicId: null,
     themeId: 'classic',
+    avatarUploadBlockedUntil: null,
   });
   jest.mocked(openExternalUrl).mockResolvedValue(undefined);
   readCopy.mockResolvedValue(null);

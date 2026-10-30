@@ -1,6 +1,8 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
   DismissRiderProfileReportsRequest,
+  type RiderAvatarUnblockResult,
+  UnblockRiderAvatarRequest,
   FieldErrorCode,
   type RiderProfileModerationDetail,
   type RiderProfileModerationPage,
@@ -19,7 +21,7 @@ const userIdPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
 
 /**
  * «Профили райдеров» панели (profile-moderation, `profiles.moderate` — admin и moderator): очередь жалоб, карточка,
- * сброс фото и клуба, «Отклонить жалобы»; сброс имени — `ProfileAdminController`. `no-store` ставит `PanelGuard`.
+ * сброс фото и клуба, «Отклонить жалобы», «Снять запрет» загрузки фото; сброс имени — `ProfileAdminController`. `no-store` ставит `PanelGuard`.
  */
 @Controller('admin/rider-profiles')
 @UseGuards(PanelGuard)
@@ -60,6 +62,17 @@ export class RiderProfilesModerationController {
     body: RiderProfileResetRequest,
   ): Promise<RiderProfileResetResult> {
     return this.moderation.resetClub(actor.userId, userId, body);
+  }
+
+  @Post(':userId/avatar-unblock')
+  @HttpCode(200)
+  unblockAvatar(
+    @CurrentPanelUser() actor: PanelPrincipal,
+    @Param('userId', userIdPipe) userId: string,
+    @Body(new ZodValidationPipe(UnblockRiderAvatarRequest, FieldErrorCode))
+    body: UnblockRiderAvatarRequest,
+  ): Promise<RiderAvatarUnblockResult> {
+    return this.moderation.unblockAvatar(actor.userId, userId, body);
   }
 
   @Post(':userId/dismiss-reports')

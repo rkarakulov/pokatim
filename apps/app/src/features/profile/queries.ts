@@ -19,6 +19,8 @@ import { fetchProfile, PROFILE_QUERY_KEY } from '@/features/home/queries';
 import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
+import { isAvatarBlockedError } from './avatar-errors';
+
 /** Префикс публичных таблиц результатов гонок: после смены имени или согласия — инвалидация. */
 const RACE_RESULTS_KEY = ['races', 'results'] as const;
 
@@ -113,6 +115,11 @@ export function useUploadAvatar() {
       withAccessToken((accessToken) => api.uploadAvatar(accessToken, body, crop)),
     networkMode: 'always',
     onSuccess: (view) => onAvatarChanged(queryClient, view),
+    // запрет включился, пока выбирали фото (гонка со сбросом): перечитать профиль — кнопка станет неактивной
+    onError: (error) => {
+      if (isAvatarBlockedError(error))
+        void queryClient.invalidateQueries({ queryKey: PROFILE_QUERY_KEY });
+    },
   });
 }
 

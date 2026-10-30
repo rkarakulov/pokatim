@@ -70,7 +70,10 @@ function ProfileContent() {
             {(data) => (
               <View style={styles.form}>
                 {/* фото — своя мутация, вне формы имени и клуба */}
-                <AvatarEditor avatarId={data.avatar?.id ?? null} />
+                <AvatarEditor
+                  avatarId={data.avatar?.id ?? null}
+                  blockedUntil={data.avatarUploadBlockedUntil}
+                />
                 <ProfileFormView profile={data} />
               </View>
             )}

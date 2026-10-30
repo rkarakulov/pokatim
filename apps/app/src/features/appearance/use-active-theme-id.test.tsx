@@ -26,6 +26,7 @@ const profile = (themeId: AppThemeId | 'unknown'): ProfileView => ({
   avatar: null,
   publicId: null,
   themeId,
+  avatarUploadBlockedUntil: null,
 });
 
 const signIn = () => useSessionStore.setState({ status: 'signedIn', session: liveSession });

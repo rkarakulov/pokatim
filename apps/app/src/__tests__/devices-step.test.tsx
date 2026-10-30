@@ -43,6 +43,7 @@ beforeEach(() => {
     avatar: null,
     publicId: null,
     themeId: 'classic',
+    avatarUploadBlockedUntil: null,
   });
   jest.mocked(api.listRaces).mockResolvedValue({ items: [], nextCursor: null });
   jest.mocked(api.listCalendar).mockResolvedValue({ items: [], nextCursor: null });

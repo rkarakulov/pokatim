@@ -31,6 +31,7 @@ import { RacesScreen, validateRacesSearch } from './features/races/RacesScreen';
 import { RaceResultsScreen } from './features/results/RaceResultsScreen';
 import { AccountErasuresScreen } from './features/account-erasures/AccountErasuresScreen';
 import { RiderProfileScreen } from './features/rider-profiles/RiderProfileScreen';
+import { validateRiderProfilesSearch } from './features/rider-profiles/rider-profiles-format';
 import { RiderProfilesScreen } from './features/rider-profiles/RiderProfilesScreen';
 import { validateRiderRoutesSearch } from './features/rider-routes/rider-routes-format';
 import { RiderRouteScreen } from './features/rider-routes/RiderRouteScreen';
@@ -367,11 +368,16 @@ const riderRouteRoute = createRoute({
 const riderProfilesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: 'rider-profiles',
-  component: () => (
-    <RequirePermission permission="profiles.moderate">
-      <RiderProfilesScreen />
-    </RequirePermission>
-  ),
+  validateSearch: validateRiderProfilesSearch,
+  component: function RiderProfilesRoute() {
+    const search = riderProfilesRoute.useSearch();
+    const navigate = riderProfilesRoute.useNavigate();
+    return (
+      <RequirePermission permission="profiles.moderate">
+        <RiderProfilesScreen search={search} onSearch={(next) => void navigate({ search: next })} />
+      </RequirePermission>
+    );
+  },
 });
 
 const riderProfileRoute = createRoute({
