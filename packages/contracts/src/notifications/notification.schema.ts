@@ -31,6 +31,10 @@ export const NOTIFICATION_KINDS = [
   'route_rejected',
   // PR D event-tickets: напоминание о событии с билетом (группа `events`)
   'event_reminder',
+  // profile-moderation-followups: модератор сбросил имя, фото или клуб профиля (самому райдеру)
+  'profile_name_reset',
+  'profile_avatar_reset',
+  'profile_club_reset',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -45,6 +49,8 @@ export const NotificationTarget = z.discriminatedUnion('type', [
   z.object({ type: z.literal('my-route'), routeId: Uuid }),
   /** свой билет (`/tickets/<код>`): напоминание о событии (PR D); код не секрет без входа (T2) */
   z.object({ type: z.literal('ticket'), code: TicketCodeCanonical }),
+  /** свой профиль («Редактировать профиль», `/settings/profile`): модератор сбросил имя, фото или клуб */
+  z.object({ type: z.literal('profile-edit') }),
 ]);
 export type NotificationTarget = z.infer<typeof NotificationTarget>;
 

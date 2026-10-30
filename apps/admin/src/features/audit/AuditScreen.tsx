@@ -10,7 +10,7 @@ import { createColumnHelper } from '@tanstack/react-table';
 import { useState } from 'react';
 
 import { api } from '../../api';
-import { formatDateTime } from '../../format';
+import { formatDateTime, formatDateTimeLong } from '../../format';
 import { isForbidden } from '../../session/errors';
 import { Button, DataTable, EmptyState, PageHeader, SelectField } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
@@ -86,7 +86,19 @@ function details(entry: AuditEntry): string {
     return t('admin.audit.details.ticketCode', { code: formatTicketCode(ticketCode) });
   // 05b: модерация райдов — число закрытых действием жалоб
   const reportCount = entry.details?.reportCount;
-  if (reportCount !== undefined) return t('admin.audit.reportCount', { count: reportCount });
+  if (reportCount !== undefined) {
+    const reports = t('admin.audit.reportCount', { count: reportCount });
+    // profile-moderation-followups: сброс фото, включивший запрет загрузки, — до какого момента (по Минску)
+    const blockedUntil = entry.details?.avatarBlockedUntil;
+    return blockedUntil
+      ? t('admin.audit.details.join', {
+          head: reports,
+          next: t('admin.audit.details.avatarBlockedUntil', {
+            date: formatDateTimeLong(blockedUntil),
+          }),
+        })
+      : reports;
+  }
   return entry.details?.changedFields?.map((field) => fieldLabel(entry, field)).join(', ') ?? '';
 }
 

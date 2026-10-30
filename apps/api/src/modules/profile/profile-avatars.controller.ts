@@ -50,7 +50,11 @@ export class ProfileAvatarsController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: HeaderReply,
   ): Promise<ProfileView> {
-    const slot = await this.avatars.admit(user.userId);
+    // отказ до тела (запрет, слот, лимит): тело не читалось — после ответа соединение закрывается
+    const slot = await this.avatars.admit(user.userId).catch((error: unknown) => {
+      reply.header('Connection', 'close');
+      throw error;
+    });
     try {
       const bytes = await readLimited(
         body,

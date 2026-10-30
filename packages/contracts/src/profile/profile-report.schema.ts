@@ -42,7 +42,13 @@ export type CreateProfileReportRequest = z.infer<typeof CreateProfileReportReque
 export const RiderProfileViewer = z.object({ canReport: z.boolean(), reported: z.boolean() });
 export type RiderProfileViewer = z.infer<typeof RiderProfileViewer>;
 
-/** Причина `409 PROFILE_INVALID_STATE` (`details`): жалоба на свой профиль. Только в конец. */
-export const PROFILE_STATE_REASONS = ['own_profile'] as const;
-export const ProfileStateDetails = z.object({ reason: tolerantEnum(PROFILE_STATE_REASONS) });
+/**
+ * Причина `409 PROFILE_INVALID_STATE` (`details`): жалоба на свой профиль; загрузка фото запрещена до `until`
+ * (profile-moderation-followups). Только в конец. `until` — только у `avatar_blocked`, иначе `null`.
+ */
+export const PROFILE_STATE_REASONS = ['own_profile', 'avatar_blocked'] as const;
+export const ProfileStateDetails = z.object({
+  reason: tolerantEnum(PROFILE_STATE_REASONS),
+  until: z.iso.datetime().nullable().default(null),
+});
 export type ProfileStateDetails = z.infer<typeof ProfileStateDetails>;

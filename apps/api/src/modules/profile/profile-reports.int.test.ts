@@ -164,6 +164,34 @@ describe('POST /v1/riders/:publicId/reports (AC1)', () => {
   });
 });
 
+describe('openReasons профиля (profile-moderation-followups, RC-F1)', () => {
+  it('жалоба добавляет причину без дублей; сброс и «Отклонить жалобы» очищают', async () => {
+    const b = await rider(h, 'b@example.by');
+    const c = await rider(h, 'c@example.by');
+    await reportRider(h, a.token, target.publicId, { reason: 'name' });
+    await reportRider(h, b.token, target.publicId, { reason: 'name' });
+    await reportRider(h, c.token, target.publicId, { reason: 'photo' });
+    expect([...((await profileOf(target.userId))?.openReasons ?? [])].sort()).toEqual([
+      'name',
+      'photo',
+    ]);
+
+    const moderator = await staff(h, 'moderator@example.by', 'moderator');
+    await profileModerationCall(h, moderator.token, 'POST', `/${target.userId}/club-reset`, {
+      reason: 'Мат в клубе',
+    });
+    expect((await profileOf(target.userId))?.openReasons).toEqual([]);
+
+    await reportRider(h, a.token, target.publicId, { reason: 'spam' });
+    expect((await profileOf(target.userId))?.openReasons).toEqual(['spam']);
+    await profileModerationCall(h, moderator.token, 'POST', `/${target.userId}/dismiss-reports`, {
+      reason: 'Всё в порядке',
+      reportRevision: 4,
+    });
+    expect((await profileOf(target.userId))?.openReasons).toEqual([]);
+  });
+});
+
 describe('GET /v1/riders/:publicId/me (AC2)', () => {
   it('до и после жалобы; после «Отклонить жалобы» — снова canReport, вторая жалоба принимается (S-1)', async () => {
     expect((await riderViewer(h, a.token, target.publicId)).body).toEqual({

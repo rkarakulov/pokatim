@@ -1,4 +1,6 @@
-import { t } from '@pokatim/i18n';
+import { apiErrorOf } from '@pokatim/api-client';
+import { ProfileStateDetails } from '@pokatim/contracts';
+import { minskDateTime, t } from '@pokatim/i18n';
 
 import { actionErrorMessage, apiErrorCode, retryAfterSec } from '@/features/auth/error-messages';
 import { formatCountdown } from '@/lib/countdown';
@@ -15,13 +17,32 @@ const CODE_MESSAGES = {
 /** Пауза 429 занятой обработки фото на сервере (`profile-avatar.service.ts`, `limited(5)`); часовой лимит — дольше. */
 const BUSY_RETRY_SEC = 5;
 
+/**
+ * «Загрузка фото недоступна до <дата, время> …» — запрет загрузки после сбросов фото модератором (RC-F9: конец
+ * запрета — момент, не полночь; дата всегда с годом — текст не зависит от «сейчас»).
+ */
+export function avatarBlockedText(until: string): string {
+  const { date, time } = minskDateTime(until, null);
+  return t('profile.avatar.blocked', { date: t('format.dateTime', { date, time }) });
+}
+
+/** До какого момента запрещена загрузка — из 409 `PROFILE_INVALID_STATE { reason: 'avatar_blocked', until }`. */
+function blockedUntilOf(error: unknown): string | null {
+  if (apiErrorCode(error) !== 'PROFILE_INVALID_STATE') return null;
+  const details = ProfileStateDetails.safeParse(apiErrorOf(error)?.details);
+  return details.success && details.data.reason === 'avatar_blocked' ? details.data.until : null;
+}
+
+/** Отказ загрузки из-за запрета (гонка со сбросом): профиль нужно перечитать — кнопка заблокируется. */
+export const isAvatarBlockedError = (error: unknown) => blockedUntilOf(error) !== null;
+
 const isKnownCode = (code: string | undefined): code is keyof typeof CODE_MESSAGES =>
   code !== undefined && code in CODE_MESSAGES;
 
 /**
  * Текст баннера блока «Фото» (выбор, загрузка, удаление): старый dev-клиент — «Обновите приложение»; проверка до
  * отправки — тот же текст, что у ответа сервера; 429 загрузки с паузой занятой обработки — «через минуту», иначе — лимит
- * загрузок и когда повторить; удаление, сеть и прочее — `actionErrorMessage`.
+ * загрузок и когда повторить; 409 запрета загрузки — «недоступна до <дата, время>»; удаление, сеть и прочее — `actionErrorMessage`.
  */
 export function avatarErrorMessage(error: unknown, action: 'upload' | 'delete' = 'upload'): string {
   if (error instanceof AvatarPickerUnavailableError) return t('profile.avatar.error.updateApp');
@@ -30,6 +51,8 @@ export function avatarErrorMessage(error: unknown, action: 'upload' | 'delete' =
       ? t('profile.avatar.error.tooSmall')
       : t(CODE_MESSAGES[error.reason]);
   }
+  const blockedUntil = blockedUntilOf(error);
+  if (blockedUntil) return avatarBlockedText(blockedUntil);
   const code = apiErrorCode(error);
   if (isKnownCode(code)) return t(CODE_MESSAGES[code]);
   // удаление — лимит изменений профиля, не загрузок: общий текст действия

@@ -1,4 +1,4 @@
-import type { AppThemeId, RideReason } from '@pokatim/contracts';
+import type { AppThemeId, ProfileReportReason, RideReason } from '@pokatim/contracts';
 import type { Binary } from 'mongodb';
 
 /**
@@ -61,6 +61,21 @@ export interface ProfileDoc {
   reportRevision?: number;
   /** profile-moderation: время последней жалобы (`$max`) — только порядок очереди панели. Нет поля — `null`. */
   lastReportAt?: Date | null;
+  /**
+   * profile-moderation-followups (RC-F1): причины открытых жалоб (`$addToSet` жалобой, `[]` — каждым действием,
+   * закрывающим все открытые). Порядок не держится — сервис упорядочивает по справочнику. Нет поля — `[]` (бэкфилл
+   * `0041`). Частичный индекс `profiles_report_reason_queue_idx`.
+   */
+  openReasons?: ProfileReportReason[];
+  /** profile-moderation-followups (RC-F7): сбросы фото модератором в окне правила запрета; нет поля — `[]`. */
+  avatarResetsAt?: Date[];
+  /** profile-moderation-followups: загрузка фото запрещена до этого момента; нет поля / `null` / прошло — нет запрета. */
+  avatarBlockedUntil?: Date | null;
+  /**
+   * profile-moderation-followups (ревью pass 2): ревизия сбросов модератором — `$inc` условной записью каждого сброса
+   * (имя, фото, клуб), монотонна; номер — `seq` события `profile.field-reset` (порядок уведомлений). Нет поля — 0.
+   */
+  resetSeq?: number;
   /** Время последней записи райдера или модератора (`CLOCK`; жалоба его не трогает). */
   updatedAt: Date;
 }

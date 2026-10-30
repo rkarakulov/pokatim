@@ -34,7 +34,42 @@ export const PROFILE_POLICY = {
   avatarBodyTimeouts: { idleMs: 10_000, totalMs: 60_000 },
   /** profile-moderation: `POST /v1/riders/:publicId/reports`, ключ `profile-report:<uid>` — 20 жалоб в сутки */
   reportLimit: { limit: 20, windowSec: 86_400 },
+  /**
+   * profile-moderation-followups (T-1, `[ASSUMPTION]` исполнителя, пересмотр — product): 3-й сброс фото модератором за
+   * 180 дней закрывает загрузку фото на 30 дней от сброса; каждый следующий сброс в окне — снова 30 дней.
+   */
+  avatarBan: { resets: 3, windowDays: 180, banDays: 30 },
 } as const;
+
+const DAY_MS = 86_400_000;
+
+/** Сбросы фото в окне правила запрета (строго моложе `windowDays`), по возрастанию как пришли. */
+export function resetsInWindow(resets: readonly Date[] | null | undefined, now: Date): Date[] {
+  const from = now.getTime() - PROFILE_POLICY.avatarBan.windowDays * DAY_MS;
+  return (resets ?? []).filter((at) => at.getTime() > from);
+}
+
+/** Действующий запрет загрузки фото: срок позже `now`, иначе `null` (истёкший — нет запрета). */
+export function activeBlock(until: Date | null | undefined, now: Date): Date | null {
+  return until && until.getTime() > now.getTime() ? until : null;
+}
+
+/**
+ * Сброс фото модератором (RC-F7): история сбросов — сбросы в окне + этот; ≥ порога — запрет до `now + banDays`
+ * (`imposed` — запрет включён этим сбросом), иначе прежнее значение срока.
+ */
+export function avatarResetBan(
+  prev: { resets: readonly Date[] | null | undefined; blockedUntil: Date | null | undefined },
+  now: Date,
+): { resets: Date[]; blockedUntil: Date | null; imposed: Date | null } {
+  const rule = PROFILE_POLICY.avatarBan;
+  const resets = [...resetsInWindow(prev.resets, now), now];
+  if (resets.length < rule.resets) {
+    return { resets, blockedUntil: prev.blockedUntil ?? null, imposed: null };
+  }
+  const until = new Date(now.getTime() + rule.banDays * DAY_MS);
+  return { resets, blockedUntil: until, imposed: until };
+}
 
 /**
  * Публичен ли профиль (rider-profile, profile-moderation): имя строкой и согласие на показ. Та же проверка, что в
@@ -49,6 +84,7 @@ export function isPublicProfile(
 /**
  * Ответ `ProfileView` из документа (нет документа — пустой профиль): поля до слайсов могут отсутствовать. `publicId`
  * наружу — только при имени и согласии (R-3: сам id хранится и после отзыва). Темы нет — «Классика» (user-theme).
+ * Запрет загрузки фото — только действующий на `now` (RC-F5: во всех ответах `ProfileView`).
  */
 export function profileViewOf(
   doc: Pick<
@@ -60,7 +96,9 @@ export function profileViewOf(
     | 'avatarId'
     | 'publicId'
     | 'themeId'
+    | 'avatarBlockedUntil'
   > | null,
+  now: Date,
 ): ProfileView {
   const publicName = doc?.publicName ?? null;
   const showNameInResults = doc?.showNameInResults ?? false;
@@ -73,5 +111,6 @@ export function profileViewOf(
     avatar: avatarId ? { id: avatarId } : null,
     publicId: publicName !== null && showNameInResults ? (doc?.publicId ?? null) : null,
     themeId: doc?.themeId ?? DEFAULT_APP_THEME_ID,
+    avatarUploadBlockedUntil: activeBlock(doc?.avatarBlockedUntil, now)?.toISOString() ?? null,
   };
 }
