@@ -33,6 +33,7 @@ export const SEO_DISALLOW = [
   '/riders/report/',
   '/routes/mine/',
   '/routes/report/',
+  '/routes/story/',
   '/routes/pick/',
   '/routes/rides/',
   '/races/pick/',

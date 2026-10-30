@@ -2,11 +2,10 @@ import { Controller, Get, Header, Param, Res, UseGuards } from '@nestjs/common';
 import {
   FieldErrorCode,
   OG_BRAND,
-  OgCardKind,
   type OgCardMeta,
   OgCardParams,
   OgImageFile,
-  Uuid,
+  OgImageParams,
 } from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
@@ -23,20 +22,20 @@ interface ImageReply {
 }
 
 const paramsPipe = new ZodValidationPipe(OgCardParams, FieldErrorCode);
-const kindPipe = new ZodValidationPipe(OgCardKind, FieldErrorCode);
-const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
+const imageParamsPipe = new ZodValidationPipe(OgImageParams, FieldErrorCode);
 const filePipe = new ZodValidationPipe(OgImageFile, FieldErrorCode);
 
 const versionOf = (file: string) => file.slice(0, -'.png'.length);
 const imagePath = (kind: string, id: string, version: string) =>
-  `/v1/og/images/${kind}/${id}/${version}.png`;
+  `/v1/og/images/${kind}/${encodeURIComponent(id)}/${version}.png`;
 
 /**
  * OG-картинки публичных страниц (og-images, ADR-0018) — без входа. `cards` — текущая версия картинки для SSR
  * (`{ version }`, свой IP-лимит `og-card`: web-сервер ходит с одного адреса); `images` — PNG по версии в имени файла
  * (IP-лимит `og-image`): текущая — `200` с публичным кэшем, старая — `302` на текущую (путь без хоста: API свой origin
  * не знает), нет PNG — бренд-PNG `no-store` (рендер поставлен), нет и бренда — `404`. Непубличный объект — `404` JSON
- * до заголовков файла. Статические пути бренда объявлены до параметрических.
+ * до заголовков файла. id — по виду (`OG_CARD_ID`: райдер — `publicId`, остальные — Uuid). Статические пути бренда
+ * объявлены до параметрических.
  */
 @Controller('og')
 export class OgCardController {
@@ -70,9 +69,7 @@ export class OgCardController {
   @UseGuards(IpRateLimitGuard)
   @IpRateLimit('og-image', OG_CARD_POLICY.imageIpLimit)
   async image(
-    @Param('kind', kindPipe) kind: OgCardKind,
-    @Param('id', idPipe) id: string,
-    @Param('file', filePipe) file: string,
+    @Param(imageParamsPipe) { kind, id, file }: OgImageParams,
     @Res() reply: ImageReply,
   ): Promise<void> {
     const image = await this.service.image(kind, id, versionOf(file));

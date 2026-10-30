@@ -40,6 +40,7 @@ import { ogSyncIndexes } from './0037_og_sync_indexes';
 import { tickets } from './0038_tickets';
 import { eventMaterials } from './0039_event_materials';
 import { panelTotp } from './0040_panel_totp';
+import { panelInvitations } from './0041_panel_invitations';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -86,4 +87,5 @@ export const migrations: readonly MongoMigration[] = [
   tickets,
   eventMaterials,
   panelTotp,
+  panelInvitations,
 ];

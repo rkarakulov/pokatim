@@ -43,6 +43,7 @@ import CatalogRouteRoute from '../app/routes/[id]';
 import MyRouteRoute from '../app/routes/mine/[id]';
 import MyRoutePublishRoute from '../app/routes/mine/publish/[id]';
 import ReportRouteRoute from '../app/routes/report/[id]';
+import RouteStoryRoute from '../app/routes/story/[id]';
 import RouteRidePickRoute from '../app/routes/pick/[routeId]';
 import RouteRideRoute from '../app/routes/rides/[routeId]/[rideId]';
 import RacePickRoute from '../app/races/pick/[id]';
@@ -117,6 +118,7 @@ export const appRoutes = {
   'routes/mine/[id]': MyRouteRoute,
   'routes/mine/publish/[id]': MyRoutePublishRoute,
   'routes/report/[id]': ReportRouteRoute,
+  'routes/story/[id]': RouteStoryRoute,
   'riders/report/[id]': ReportRiderRoute,
   'routes/pick/[routeId]': RouteRidePickRoute,
   'routes/rides/[routeId]/[rideId]': RouteRideRoute,

@@ -423,7 +423,7 @@ export class ResultsProtocolService {
     return (await this.repository.currentRevision(raceId, tx)) ?? 1;
   }
 
-  private journal(
+  private async journal(
     tx: DbSession,
     principal: PanelPrincipal,
     race: RaceForResults,
@@ -431,7 +431,7 @@ export class ResultsProtocolService {
     reason: string,
     details: { attemptId?: string; entryId?: string; revision?: number },
   ): Promise<void> {
-    return this.audit.append(tx, {
+    await this.audit.append(tx, {
       action,
       actor: { kind: 'user', userId: principal.userId },
       reason,

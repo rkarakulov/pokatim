@@ -1,10 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { CLOCK, type Clock, MAILER, type Mailer } from '@rkarakulov/api-kit/core';
+import { CLOCK, type Clock, ENV, MAILER, type Mailer } from '@rkarakulov/api-kit/core';
+
+import type { Env } from '../../config/env';
 
 import { IdentityAccounts } from '../identity';
 import { renderNotificationEmail } from './notification-email';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
-import { NotificationsRepository } from './notifications.repository';
+import { type ClaimedEmail, NotificationsRepository } from './notifications.repository';
 
 export type EmailOutcome = 'sent' | 'skipped' | 'failed';
 
@@ -12,7 +14,8 @@ export type EmailOutcome = 'sent' | 'skipped' | 'failed';
  * Письмо уведомления (`notifications.email`, N2), по образцу `link-email.handler.ts`: захват `pending` (или истёкшего
  * `sending`) одним `findOneAndUpdate` → адрес `IdentityAccounts.emailsOf` в момент отправки (удалённый — `skipped`) →
  * `MAILER` → `sent`. Повтор отправленного — пропуск; живой чужой захват — ретрай BullMQ; сбой SMTP снимает захват,
- * последняя попытка — `failed`. Тихие часы письма не задерживают. В логах — id, без адреса.
+ * последняя попытка — `failed`. Тихие часы письма не задерживают. В логах — id, без адреса. Кнопка «Открыть билет»
+ * (`${APP_WEB_ORIGIN}/tickets/<код>`) — только у цели `ticket` и при `APP_WEB_ORIGIN` (PR D, RC-D9).
  */
 @Injectable()
 export class EmailDelivery {
@@ -22,8 +25,14 @@ export class EmailDelivery {
     private readonly repository: NotificationsRepository,
     private readonly identity: IdentityAccounts,
     @Inject(MAILER) private readonly mailer: Mailer,
+    @Inject(ENV) private readonly env: Pick<Env, 'APP_WEB_ORIGIN'>,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
+
+  private linkOf(doc: ClaimedEmail): string | null {
+    const origin = this.env.APP_WEB_ORIGIN;
+    return origin && doc.target?.type === 'ticket' ? `${origin}/tickets/${doc.target.code}` : null;
+  }
 
   async deliver(notificationId: string, { final }: { final: boolean }): Promise<EmailOutcome> {
     const now = this.clock.now();
@@ -40,7 +49,7 @@ export class EmailDelivery {
       return 'skipped';
     }
     try {
-      await this.mailer.send({ to, ...renderNotificationEmail(doc) });
+      await this.mailer.send({ to, ...renderNotificationEmail(doc, this.linkOf(doc)) });
     } catch (error) {
       await this.repository.settleEmail(notificationId, claimedUntil, {
         state: final ? 'failed' : 'pending',

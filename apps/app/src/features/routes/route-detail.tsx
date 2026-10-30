@@ -37,10 +37,11 @@ import { StatBlock, StatBlockSkeleton, type StatVariant } from '@/components/sta
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { useRouteRides } from '@/features/route-rides/queries';
 import { RouteRidesBlock } from '@/features/route-rides/route-rides-block';
+import { useShareChoice } from '@/features/sharing/share-choice-sheet';
 import { useShareImage } from '@/features/sharing/use-share-image';
 import { api } from '@/lib/api';
 import { downloadFile } from '@/lib/download-file';
-import { shareLink, shareOrigin } from '@/lib/share-link';
+import { shareOrigin } from '@/lib/share-link';
 import { useMinskClockAfterMount, useMounted } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 import { useAppTheme } from '@/theme/use-app-theme';
@@ -56,41 +57,56 @@ import {
 } from './format';
 import { useCatalogRoute, useCatalogRouteRaces, useCatalogRouteViewer } from './queries';
 import { RouteDownloadSheet } from './route-download-sheet';
+import { routeStoryPath } from './story/route-story';
 import { useScrubScrollEnabled } from './use-scrub-scroll-lock';
 
 export const routeDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
 export const routePath = (id: string) => `/routes/${encodeURIComponent(id)}`;
 
 /**
- * Действия карточки (routes-04d, RC-11): «Поделиться» (primary; share sheet / Web Share / копирование с «Ссылка
- * скопирована»; с OG-картинкой файлом, когда она готова и платформа умеет; нет origin — кнопки нет, появляется после
- * монтирования) и скачивание (secondary; web скачивает в той же вкладке, native открывает системный браузер; адрес не
- * логируется) — в одну строку поровну, одна кнопка — во всю ширину. Скачивание (routes-formats, RC-8, RC-9): только
- * GPX — прежняя «Скачать GPX»; несколько форматов — «Скачать» → шит выбора (`RouteDownloadSheet`, после
- * монтирования). Уведомления — во всю ширину под строкой; отказ скачивания — с форматом.
+/**
+ * Действия карточки (routes-04d, RC-11): «Поделиться» (primary; route-story-card, R7: вошедшему со ссылкой — шит
+ * «Карточка для сторис / Ссылка», гостю — сразу ссылка (share sheet / Web Share / копирование с «Ссылка
+ * скопирована»; с OG-картинкой файлом, когда она готова и платформа умеет), без origin вошедшему — сразу экран
+ * карточки; нечем делиться — кнопки нет, появляется после монтирования) и скачивание (secondary; web скачивает в той
+ * же вкладке, native открывает системный браузер; адрес не логируется) — в одну строку поровну, одна кнопка — во всю
+ * ширину. Скачивание (routes-formats, RC-8, RC-9): только GPX — прежняя «Скачать GPX»; несколько форматов —
+ * «Скачать» → шит выбора (`RouteDownloadSheet`, после монтирования). Уведомления — во всю ширину под строкой; отказ
+ * скачивания — с форматом.
  */
-function RouteActions({ route, mounted }: { route: CatalogRouteDetail; mounted: boolean }) {
-  const [shareNotice, setShareNotice] = useState<'copied' | 'failed' | null>(null);
+function RouteActions({
+  route,
+  mounted,
+  signedIn,
+}: {
+  route: CatalogRouteDetail;
+  mounted: boolean;
+  signedIn: boolean;
+}) {
+  const router = useRouter();
   const [failedFormat, setFailedFormat] = useState<RouteExportFormat | null>(null);
   const [picking, setPicking] = useState(false);
-  const canShare = mounted && shareOrigin() !== null;
+  const canLink = mounted && shareOrigin() !== null;
+  // маршрут на экране — уже каталог; остальное (снят, скрыт) решает сервер — 404 на экране карточки
+  const canCard = signedIn && mounted;
   // OG-картинка файлом — заранее; не готова — делимся ссылкой
-  const image = useShareImage('route', route.id, canShare);
+  const image = useShareImage('route', route.id, canLink);
+  const share = useShareChoice({
+    title: t('share.choice.title'),
+    cardLabel: t('routeCard.open'),
+    onCard: canCard ? () => router.push(routeStoryPath(route.id)) : null,
+    link: canLink
+      ? {
+          title: route.title,
+          text: routeShareDescription(route),
+          path: routePath(route.id),
+          image,
+        }
+      : null,
+  });
   const formats = availableExportFormats(route);
-  if (!canShare && formats.length === 0) return null;
+  if (!share.available && formats.length === 0) return null;
   const onlyGpx = formats.length === 1 && formats[0] === 'gpx';
-  const share = () => {
-    setShareNotice(null);
-    // синхронно в обработчике нажатия (web: `navigator.share` до любого await)
-    shareLink({
-      title: route.title,
-      text: routeShareDescription(route),
-      path: routePath(route.id),
-      image,
-    })
-      .then((outcome) => setShareNotice(outcome === 'copied' ? 'copied' : null))
-      .catch(() => setShareNotice('failed'));
-  };
   const download = (format: RouteExportFormat) => {
     setFailedFormat(null);
     // синхронно в обработчике нажатия (web: клик по ссылке до любого await)
@@ -103,9 +119,9 @@ function RouteActions({ route, mounted }: { route: CatalogRouteDetail; mounted: 
   return (
     <View style={styles.stack}>
       <View testID="route-actions" style={styles.actions}>
-        {canShare ? (
+        {share.available ? (
           <View style={styles.action}>
-            <Button label={t('routes.detail.share')} variant="primary" onPress={share} />
+            <Button label={t('routes.detail.share')} variant="primary" onPress={share.press} />
           </View>
         ) : null}
         {onlyGpx ? (
@@ -127,10 +143,7 @@ function RouteActions({ route, mounted }: { route: CatalogRouteDetail; mounted: 
           </View>
         ) : null}
       </View>
-      {shareNotice === 'copied' ? <Banner message={t('routes.detail.copied')} /> : null}
-      {shareNotice === 'failed' ? (
-        <Banner tone="warning" message={t('routes.detail.shareFailed')} />
-      ) : null}
+      {share.notice}
       {failedFormat !== null ? (
         <Banner
           tone="warning"
@@ -139,6 +152,7 @@ function RouteActions({ route, mounted }: { route: CatalogRouteDetail; mounted: 
           })}
         />
       ) : null}
+      {share.sheet}
       {mounted && picking ? (
         <RouteDownloadSheet formats={formats} onPick={pick} onClose={() => setPicking(false)} />
       ) : null}
@@ -299,6 +313,7 @@ function RouteSheetBody({
   rides,
   now,
   mounted,
+  signedIn,
   scrub,
 }: {
   route: CatalogRouteDetail;
@@ -309,6 +324,7 @@ function RouteSheetBody({
   rides: ReturnType<typeof useRouteRides> | null;
   now: Date | null;
   mounted: boolean;
+  signedIn: boolean;
   scrub: ScrubStore;
 }) {
   const author = routeAuthorLabel(route);
@@ -330,7 +346,7 @@ function RouteSheetBody({
         gainM={route.elevationGainM}
         scrub={scrub}
       />
-      <RouteActions route={route} mounted={mounted} />
+      <RouteActions route={route} mounted={mounted} signedIn={signedIn} />
       {viewer ? <RouteReportAction id={route.id} viewer={viewer} /> : null}
       <RouteRidesBlock routeId={route.id} mine={false} rides={rides} now={now} />
       <RouteRaces races={races} now={now} />
@@ -512,6 +528,7 @@ export function RouteDetailScreen({
                     rides={ridesEnabled ? rides : null}
                     now={now}
                     mounted={mounted}
+                    signedIn={signedIn}
                     scrub={scrub}
                   />
                 )}

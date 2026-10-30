@@ -6,7 +6,8 @@ import type { Job, Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { seedRace, seedStart, startsDb } from '../../../test/og';
+import { seedOgSeason, seedRace, seedStart, startsDb } from '../../../test/og';
+import { patchProfile, publicRider } from '../../../test/profiles';
 import { routesDb, seedRiderRoute } from '../../../test/routes';
 import {
   createRide,
@@ -116,9 +117,79 @@ describe('cards — версия для SSR (AC1)', () => {
       expect(res.statusCode, `${kind} ${id}`).toBe(404);
       expect(res.json()).toMatchObject({ code: 'NOT_FOUND' });
     }
-    for (const url of ['/og/cards/season/' + draft, '/og/cards/race/site', '/og/cards/race/x']) {
+    for (const url of ['/og/cards/team/' + draft, '/og/cards/race/site', '/og/cards/race/x']) {
       expect((await get(url)).statusCode, url).toBe(400);
     }
+  });
+});
+
+describe('сезон и профиль райдера (og-rider-season-dark, AC1, AC2)', () => {
+  it('сезон: версия → после рендера PNG 200; старая версия → 302; неизвестный → 404; не Uuid → 400', async () => {
+    const season = await seedOgSeason(h);
+    const v = await version('season', season);
+    expect(v).toMatch(/^[0-9a-f]{16}$/);
+    await image('season', season, v);
+    expect(await runJobs()).toContain('ready');
+    const png = await image('season', season, v);
+    expect(png.statusCode).toBe(200);
+    expect(png.headers['content-type']).toBe('image/png');
+
+    // публикация гонки сезона меняет «N гонок» — новая версия, старая → 302
+    await seedRace(h, { seasonId: season });
+    const next = await version('season', season);
+    expect(next).not.toBe(v);
+    const old = await image('season', season, v);
+    expect(old.statusCode).toBe(302);
+    expect(old.headers.location).toBe(`/v1/og/images/season/${season}/${next}.png`);
+
+    expect((await get(`/og/cards/season/${uuidv7()}`)).statusCode).toBe(404);
+    expect((await get(`/og/images/season/${uuidv7()}/${v}.png`)).statusCode).toBe(404);
+    expect((await get(`/og/cards/season/${'a'.repeat(43)}`)).statusCode).toBe(400);
+    expect((await get(`/og/images/season/${'a'.repeat(43)}/${v}.png`)).statusCode).toBe(400);
+  });
+
+  it('райдер: публичный → версия и PNG; отзыв согласия → 404 JSON до PNG; без имени, неизвестный → 404; Uuid → 400', async () => {
+    const anna = await publicRider(h, 'anna@example.by');
+    const v = await version('rider', anna.publicId);
+    await image('rider', anna.publicId, v);
+    expect(await runJobs()).toContain('ready');
+    const png = await image('rider', anna.publicId, v);
+    expect(png.statusCode).toBe(200);
+    expect(png.headers['content-type']).toBe('image/png');
+    expect(JSON.stringify(await jobs())).not.toContain('Анна');
+
+    await patchProfile(h, anna, { showNameInResults: false });
+    for (const res of [
+      await get(`/og/cards/rider/${anna.publicId}`),
+      await image('rider', anna.publicId, v),
+    ]) {
+      expect(res.statusCode).toBe(404);
+      expect(res.headers['content-type']).toContain('application/json');
+      expect(res.json()).toMatchObject({ code: 'NOT_FOUND' });
+    }
+
+    const boris = await publicRider(h, 'boris@example.by', 'Борис');
+    await patchProfile(h, boris, { publicName: null });
+    expect((await get(`/og/cards/rider/${boris.publicId}`)).statusCode).toBe(404);
+    expect((await get(`/og/cards/rider/${'z'.repeat(43)}`)).statusCode).toBe(404);
+    const uuid = await get(`/og/cards/rider/${uuidv7()}`);
+    expect(uuid.statusCode).toBe(400);
+    expect(uuid.json()).toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: { fields: [{ path: 'id', code: 'INVALID' }] },
+    });
+    expect((await get(`/og/images/rider/${uuidv7()}/${v}.png`)).statusCode).toBe(400);
+  });
+
+  it('райдер: лог постановки и рендера — без publicId', async () => {
+    const log = vi.spyOn(Logger.prototype, 'log');
+    const warn = vi.spyOn(Logger.prototype, 'warn');
+    const anna = await publicRider(h, 'anna@example.by');
+    await image('rider', anna.publicId, await version('rider', anna.publicId));
+    await runJobs();
+    const lines = [...log.mock.calls, ...warn.mock.calls].map(([m]) => String(m)).join('\n');
+    expect(lines).toContain('og rider ');
+    expect(lines).not.toContain(anna.publicId);
   });
 });
 
@@ -248,10 +319,20 @@ describe('приватность (AC4)', () => {
     expect(facts).toMatchObject({ routeId: null });
     // версия HTTP — ровно версия тех же фактов без линии (а не с `routeId` документа)
     const noLine = ogCardVersion(
-      ogCardHash({ kind: 'ride', themeId: OG_THEME_ID, facts: { ...facts!, routeId: null } }),
+      ogCardHash({
+        kind: 'ride',
+        themeId: OG_THEME_ID,
+        scheme: OG_CARD_POLICY.scheme.ride,
+        facts: { ...facts!, routeId: null },
+      }),
     );
     const withOwnLine = ogCardVersion(
-      ogCardHash({ kind: 'ride', themeId: OG_THEME_ID, facts: { ...facts!, routeId: own } }),
+      ogCardHash({
+        kind: 'ride',
+        themeId: OG_THEME_ID,
+        scheme: OG_CARD_POLICY.scheme.ride,
+        facts: { ...facts!, routeId: own },
+      }),
     );
     expect(await version('ride', privateRide.id)).toBe(noLine);
     expect(noLine).not.toBe(withOwnLine);

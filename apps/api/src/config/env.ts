@@ -201,6 +201,16 @@ const baseEnv = defineCoreEnv({
       message: 'APP_WEB_ORIGIN: только https-origin, без пути',
     }),
   ),
+  /**
+   * База ссылок писем панели «Протокол» (panel-invitations, ADR-0026): `http(s)://…/` с завершающим слешем — ссылка
+   * приглашения `<база>invite#token=…`, кнопка «Открыть панель» писем о роли. Не задан — `${APP_WEB_ORIGIN}/admin/`
+   * (`panelLinkBase`); нужен, когда панель живёт по другому адресу (`pnpm dev` — админка в корне своего порта).
+   */
+  PANEL_LINK_BASE: optional(
+    z.url({ protocol: /^https?$/ }).refine((base) => base.endsWith('/'), {
+      message: 'PANEL_LINK_BASE: http(s)://…/ — с завершающим слешем',
+    }),
+  ),
   /** Адрес поддержки для писем («Если это были не вы — напишите на …»); не задан — строки в письме нет. */
   SUPPORT_EMAIL: optional(z.email()),
   CORS_ORIGINS: corsOrigins,
@@ -248,10 +258,24 @@ export function envDependencyErrors(value: BaseEnv): string[] {
   if (value.PANEL_TOTP_ENFORCED && !value.PANEL_TOTP_KEY) {
     errors.push('PANEL_TOTP_ENFORCED=true: нужен PANEL_TOTP_KEY');
   }
+  if (production && value.PANEL_LINK_BASE && !value.PANEL_LINK_BASE.startsWith('https://')) {
+    errors.push('PANEL_LINK_BASE: в production только https');
+  }
   if (value.WEB_PUSH_TEST_ORIGIN && value.NODE_ENV !== 'test') {
     errors.push('WEB_PUSH_TEST_ORIGIN — только NODE_ENV=test');
   }
   return errors;
+}
+
+/**
+ * База ссылок писем панели (ADR-0026): `PANEL_LINK_BASE` → `${APP_WEB_ORIGIN}/admin/` → `null` (приглашения — `503
+ * PANEL_INVITATIONS_UNAVAILABLE`, письмо о роли — без кнопки).
+ */
+export function panelLinkBase(
+  value: Pick<Env, 'PANEL_LINK_BASE' | 'APP_WEB_ORIGIN'>,
+): string | null {
+  if (value.PANEL_LINK_BASE) return value.PANEL_LINK_BASE;
+  return value.APP_WEB_ORIGIN ? `${value.APP_WEB_ORIGIN}/admin/` : null;
 }
 
 /**

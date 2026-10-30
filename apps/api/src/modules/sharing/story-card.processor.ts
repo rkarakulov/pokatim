@@ -17,16 +17,20 @@ import {
 import { AchievementCardInputs } from './achievement-card.inputs';
 import { renderAchievementCard } from './achievement-card.png';
 import { OG_CARD_RENDER_JOB, OgCardCache, OgCardJob } from './og-card.cache';
-import { type OgCardInput, OgCardInputs } from './og-card.inputs';
+import { type OgCardInput, OgCardInputs, ogLogId } from './og-card.inputs';
 import { renderOgCard } from './og-card.png';
 import { OG_CARD_POLICY, ogPrerenderable } from './sharing.policy';
 import { RideInviteInputs } from './ride-invite.inputs';
 import { renderRideInvite } from './ride-invite.png';
+import { RouteCardInputs } from './route-card.inputs';
+import { renderRouteCard } from './route-card.png';
 import {
   ACHIEVEMENT_CARD_RENDER_JOB,
   AchievementCardJob,
   RIDE_INVITE_RENDER_JOB,
   RideInviteJob,
+  ROUTE_CARD_RENDER_JOB,
+  RouteCardJob,
   STORY_CARD_RENDER_JOB,
   StoryCardCache,
   StoryCardJob,
@@ -68,7 +72,8 @@ interface OutcomeSink {
 
 /**
  * Рендер карточек очереди `story-card` (ADR-0018): сторис своего результата (`story-card.render`), приглашение
- * кофе-райда (`ride-invite.render`), карточка достижения (`achievement-card.render`) и OG-картинка публичной страницы (`og-card.render`, og-images; диспетчер — по имени
+ * кофе-райда (`ride-invite.render`), карточка достижения (`achievement-card.render`), карточка маршрута каталога
+ * (`route-card.render`) и OG-картинка публичной страницы (`og-card.render`, og-images; диспетчер — по имени
  * задачи). Входы перечитываются и сверяются с хэшем задачи (изменились — `skipped`, PNG не
  * пишется) → линия (порт `results`: отрезок между воротами или маршрут; порт `rides`: маршрут каталога) → satori +
  * resvg → PNG в Redis под новым токеном. Сбой — ретрай; на последней попытке — видимый `failed`. Лог — заявка или
@@ -90,6 +95,7 @@ export class StoryCardProcessor extends WorkerHost {
     @Inject(ROUTE_GEOMETRY) private readonly geometry: RouteGeometry,
     @Inject(ROUTES_FOR_SHARING) private readonly routes: RoutesForSharing,
     @Inject(CLOCK) private readonly clock: Clock,
+    private readonly routeCards: RouteCardInputs,
   ) {
     super();
   }
@@ -124,6 +130,8 @@ export class StoryCardProcessor extends WorkerHost {
         return parsed(AchievementCardJob, (data, options) =>
           this.buildAchievementCard(data, options),
         );
+      case ROUTE_CARD_RENDER_JOB:
+        return parsed(RouteCardJob, (data, options) => this.buildRouteCard(data, options));
       case OG_CARD_RENDER_JOB:
         return parsed(OgCardJob, (data, options) => this.buildOgCard(data, options));
       default:
@@ -194,13 +202,30 @@ export class StoryCardProcessor extends WorkerHost {
   }
 
   /**
+   * Рендер карточки маршрута каталога — вызывается и тестами напрямую. Маршрут вышел из каталога (`ogFacts` → `null`)
+   * или вход изменился — `skipped`; линия — `ogLine` (перепроверка каталога, без кэша): снят между чтениями — тоже
+   * `skipped`. В логе — id маршрута и шаблон; причина провала — только тип (название маршрута райдера — UGC).
+   */
+  buildRouteCard(job: RouteCardJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
+    const label = () => `route ${job.routeId} ${job.template}`;
+    return this.run(this.cache, job.hash, label, options, 'name-only', async () => {
+      const resolved = await this.routeCards.resolve(job.userId, job.routeId, job.template);
+      if (!resolved || resolved.hash !== job.hash) return null;
+      const line = await this.routes.ogLine(job.routeId);
+      if (!line) return null;
+      return { png: await renderRouteCard(resolved.input, line), note: 'route' };
+    });
+  }
+
+  /**
    * Рендер OG-картинки публичной страницы (og-images) — вызывается и тестами напрямую. Входы перечитываются (объект
    * больше не публичный или хэш устарел — `skipped`, PNG не пишется). Линия: гонка — линия показа маршрута коридора
    * (`ROUTE_GEOMETRY`, как на странице), райд — только маршрут каталога (`inviteLine`), маршрут — линия каталога.
-   * Провал на последней попытке — ключ постановки удерживается `failedHoldSec`. В логе — вид и id, без названия.
+   * Сезон и райдер — без линии. Провал на последней попытке — ключ постановки удерживается `failedHoldSec`. В логе —
+   * вид и id, без названия; райдер — префикс хэша вместо `publicId`.
    */
   buildOgCard(job: OgCardJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
-    const label = () => `og ${job.kind} ${job.id}`;
+    const label = () => `og ${job.kind} ${ogLogId(job.kind, job.id, job.hash)}`;
     let ttlSec: number = OG_CARD_POLICY.pngTtlSec;
     const sink: OutcomeSink = {
       release: (hash) => this.ogCache.release(hash),
@@ -234,6 +259,8 @@ export class StoryCardProcessor extends WorkerHost {
       case 'route':
         return this.routes.ogLine(input.facts.routeId);
       case 'calendar':
+      case 'season':
+      case 'rider':
       case 'brand':
         return null;
     }

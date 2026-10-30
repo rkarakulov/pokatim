@@ -1,8 +1,15 @@
 import { PANEL_DEVICE_COOKIE, PANEL_SESSION_COOKIE, type PanelRole } from '@pokatim/contracts';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
+import type { Job } from 'bullmq';
 import { vi } from 'vitest';
 
+import { PanelEmailProcessor } from '../src/modules/panel/jobs/panel-email.processor';
 import { panelCollections } from '../src/modules/panel/panel.collection';
+import {
+  PANEL_INVITATION_EMAIL_REQUESTED,
+  PANEL_ROLE_EMAIL_REQUESTED,
+} from '../src/modules/panel/panel.events';
+import { panelInvitationToken } from '../src/modules/panel/panel-invitation-token';
 import { PanelRepository } from '../src/modules/panel/panel.repository';
 import { PanelTotpCodes } from '../src/modules/panel/panel-totp-codes';
 import { generateRecoveryCodes, recoveryCodeHash } from '../src/modules/panel/recovery-codes';
@@ -15,6 +22,7 @@ import {
   type CallResult,
   confirm,
   gate,
+  outboxEvents,
   register,
   userIdByEmail,
   validRegistration,
@@ -191,4 +199,51 @@ export function pauseAfterTotpRead(h: Harness) {
 export function countTotpChecks(h: Harness) {
   const codes = h.app.get(PanelTotpCodes, { strict: false });
   return vi.spyOn(codes, 'matchTotp');
+}
+
+// --- приглашения в команду (ADR-0026) ---
+
+/** Токен ссылки приглашения (как в письме) — HMAC от id. */
+export const invitationToken = (h: Harness, invitationId: string) =>
+  panelInvitationToken(h.env.EMAIL_TOKEN_SECRET, invitationId);
+
+/** Принять приглашение «с IP клиента» (стенд с `TRUST_PROXY=1`). */
+export const acceptInvitation = (
+  h: Harness,
+  body: { token: string; email: string; password?: string },
+  headers: Record<string, string> = {},
+  ip = '198.51.100.20',
+) =>
+  call(
+    h,
+    'POST',
+    '/v1/admin/invitations/accept',
+    { password: PANEL_PASSWORD, ...body },
+    { 'x-forwarded-for': ip, ...headers },
+  );
+
+/** Обработать письма панели по событиям outbox (как worker); итоги задач по порядку событий. */
+export async function sendPanelEmails(
+  h: Harness,
+  { attemptsMade = 0, type }: { attemptsMade?: number; type?: string } = {},
+): Promise<string[]> {
+  const processor = h.worker.get(PanelEmailProcessor);
+  const results: string[] = [];
+  for (const event of await outboxEvents(h)) {
+    if (
+      event.type !== PANEL_INVITATION_EMAIL_REQUESTED &&
+      event.type !== PANEL_ROLE_EMAIL_REQUESTED
+    ) {
+      continue;
+    }
+    if (type && event.type !== type) continue;
+    const job = {
+      name: event.type,
+      data: { outboxEventId: event._id },
+      attemptsMade,
+      opts: { attempts: 5 },
+    } as unknown as Job;
+    results.push(await processor.process(job));
+  }
+  return results;
 }

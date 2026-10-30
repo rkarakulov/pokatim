@@ -34,6 +34,8 @@ describe('маршруты web-сервера: первое совпадение
     [`/routes/${ID}`, '/routes/[id]'],
     [`/routes/mine/${ID}`, '/routes/mine/[id]'],
     [`/routes/report/${ID}`, '/routes/report/[id]'],
+    // route-story-card: карточка маршрута для сторис — не карточка маршрута `routes/[id]`
+    [`/routes/story/${ID}`, '/routes/story/[id]'],
     [`/races/pick/${ID}`, '/races/pick/[id]'],
     [`/riders/report/${'r'.repeat(43)}`, '/riders/report/[id]'],
     [`/riders/${'r'.repeat(43)}`, '/riders/[id]'],

@@ -20,4 +20,19 @@ describe('renderNotificationEmail', () => {
       expect(body).not.toMatch(/href=|https?:\/\/|pokatim:\/\/|exp:\/\//);
     }
   });
+
+  it('кнопка «Открыть билет» — только при ссылке; адрес и текст экранированы', () => {
+    const body = '«Гонка» — 14 июня, 10:00.\nВозьмите <паспорт>.';
+    const link = 'https://pokatim.test/tickets/7XK2M9PQRT';
+    const mail = renderNotificationEmail({ title: 'Скоро старт', body }, link);
+    expect(mail.subject).toBe('Скоро старт');
+    expect(mail.text).toBe(`Здравствуйте!\n\n${body}\n\nОткрыть билет: ${link}`);
+    expect(mail.html).toContain(`href="${link}"`);
+    expect(mail.html).toContain('Открыть билет');
+    expect(mail.html).toContain('Возьмите &lt;паспорт&gt;.');
+    expect(mail.html).not.toContain(OPEN_APP_LINE);
+    const plain = renderNotificationEmail({ title: 'Скоро старт', body }, null);
+    expect(plain.html).not.toContain('href=');
+    expect(plain.text).toContain(OPEN_APP_LINE);
+  });
 });

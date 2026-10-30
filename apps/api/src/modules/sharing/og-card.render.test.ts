@@ -1,4 +1,4 @@
-import { ogCard } from '@pokatim/design-tokens';
+import { appThemes, ogCard, storyCardColors } from '@pokatim/design-tokens';
 import { describe, expect, it } from 'vitest';
 
 import { OG_FIXTURES, ogFixture } from '../../../test/og-fixtures';
@@ -23,6 +23,40 @@ const nodes = (node: StoryCardNode): StoryCardNode[] =>
 const all = (node: StoryCardNode): StoryCardNode[] => [node, ...nodes(node).flatMap(all)];
 const textsOf = (node: StoryCardNode): string[] =>
   all(node).flatMap((n) => children(n).filter((c): c is string => typeof c === 'string'));
+
+describe('схема OG-картинки (og-rider-season-dark, S4)', () => {
+  const classic = appThemes.classic!;
+  it('гонка, сезон, райдер — тёмная схема темы; райд, маршрут, старт, бренд — светлая', () => {
+    for (const kind of ['race', 'season', 'rider'] as const) {
+      expect(ogCardRenderInput(OG_FIXTURES[kind], null).colors, kind).toEqual(
+        storyCardColors(classic.schemes.dark),
+      );
+      expect(ogCardRenderInput(OG_FIXTURES[kind], null).colors.background).toBe(
+        classic.schemes.dark.surface.default,
+      );
+    }
+    for (const kind of ['ride', 'route', 'calendar'] as const) {
+      expect(ogCardRenderInput(OG_FIXTURES[kind], null).colors, kind).toEqual(
+        storyCardColors(classic.schemes.light),
+      );
+    }
+    expect(ogBrandRenderInput(OG_FIXTURES.brand).colors.background).toBe(
+      classic.schemes.light.surface.default,
+    );
+  });
+
+  it('схема берётся из входа: та же гонка в светлой — светлые цвета', () => {
+    const light = { ...OG_FIXTURES.race, scheme: 'light' as const };
+    expect(ogCardRenderInput(light, null).colors).toEqual(storyCardColors(classic.schemes.light));
+  });
+
+  it('сезон и райдер — без плитки линии (колонка во всю ширину)', () => {
+    for (const kind of ['season', 'rider'] as const) {
+      const [content] = nodes(ogTree(OG_FIXTURES[kind], null));
+      expect(nodes(content!)).toHaveLength(1);
+    }
+  });
+});
 
 describe('ogCardTree (og-images, D2)', () => {
   it('с линией — две колонки: текст и плитка ogCard.tile с svg', () => {

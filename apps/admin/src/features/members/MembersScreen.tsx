@@ -26,7 +26,8 @@ import {
   TextField,
 } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
-import { GrantRoleDialog } from './GrantRoleDialog';
+import { type GrantMode, GrantRoleDialog } from './GrantRoleDialog';
+import { InvitationsSection } from './InvitationsSection';
 import { memberErrorText } from './member-errors';
 import { membersQuery, MEMBERS_QUERY_KEY } from './members-query';
 
@@ -39,7 +40,8 @@ const column = createColumnHelper<PanelMember>();
 
 /**
  * «Сотрудники» (`members.read`; действия — `members.manage`, только admin): плотная таблица (имя, e-mail, роль,
- * статус, выдана), фильтры статуса и роли, поиск; «Выдать роль», «Изменить роль», «Снять роль» и «Сбросить 2FA» (ADR-0024) с причиной. Своя
+ * статус, выдана), фильтры статуса и роли, поиск; «Выдать роль», «Пригласить» и блок «Приглашения» (ADR-0026),
+ * «Изменить роль», «Снять роль» и «Сбросить 2FA» (ADR-0024) с причиной. Своя
  * строка — без действий (сервер всё равно отказал бы `PANEL_SELF_ACTION`).
  */
 export function MembersScreen() {
@@ -51,7 +53,7 @@ export function MembersScreen() {
   const [status, setStatus] = useState<string>(ALL);
   const [role, setRole] = useState<string>(ALL);
   const [search, setSearch] = useState('');
-  const [granting, setGranting] = useState(false);
+  const [granting, setGranting] = useState<GrantMode>();
   const [action, setAction] = useState<Action>();
   const [newRole, setNewRole] = useState<PanelRole>('moderator');
 
@@ -180,9 +182,12 @@ export function MembersScreen() {
         title={t('admin.members.title')}
         actions={
           canManage ? (
-            <Button variant="primary" onClick={() => setGranting(true)}>
-              {t('admin.members.grant')}
-            </Button>
+            <>
+              <Button onClick={() => setGranting('invite')}>{t('admin.members.invite')}</Button>
+              <Button variant="primary" onClick={() => setGranting('grant')}>
+                {t('admin.members.grant')}
+              </Button>
+            </>
           ) : null
         }
       />
@@ -234,9 +239,15 @@ export function MembersScreen() {
             ) : null
           }
         />
+        <InvitationsSection />
       </div>
 
-      <GrantRoleDialog open={granting} onClose={() => setGranting(false)} />
+      <GrantRoleDialog
+        key={granting ?? 'closed'}
+        open={granting !== undefined}
+        mode={granting}
+        onClose={() => setGranting(undefined)}
+      />
       <ReasonDialog
         open={action?.kind === 'change'}
         title={t('admin.members.changeTitle', { name: action?.member.displayName ?? '' })}

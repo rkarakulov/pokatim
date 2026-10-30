@@ -2,6 +2,7 @@ import { DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_KINDS } from '@pokatim/cont
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_DELIVERY_SETTINGS,
   EMAIL_KINDS,
   groupOf,
   initialDelivery,
@@ -37,11 +38,20 @@ describe('groupOf: kind → группа настроек (N4)', () => {
       ride_report_resolved: 'rides',
       route_published: 'rides',
       route_rejected: 'rides',
+      event_reminder: 'events',
     });
   });
 
-  it('e-mail — только N2: «Райд отменён» и «Решение по спору»', () => {
-    expect([...EMAIL_KINDS]).toEqual(['dispute_decided', 'ride_cancelled']);
+  it('e-mail — N2: «Райд отменён», «Решение по спору» и напоминание о событии (PR D)', () => {
+    expect([...EMAIL_KINDS]).toEqual(['dispute_decided', 'ride_cancelled', 'event_reminder']);
+  });
+
+  it('умолчания доставки — основные умолчания контракта + «Мероприятия» включены', () => {
+    expect(DEFAULT_DELIVERY_SETTINGS).toEqual({
+      push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, events: true },
+      email: { ...DEFAULT_NOTIFICATION_SETTINGS.email, events: true },
+      quietHours: DEFAULT_NOTIFICATION_SETTINGS.quietHours,
+    });
   });
 });
 
@@ -98,7 +108,7 @@ describe('NOTIFICATIONS_POLICY', () => {
 describe('initialDelivery: состояние доставки нового уведомления (intake)', () => {
   const day = minsk('2026-10-22T12:00');
   const night = minsk('2026-10-22T23:30');
-  const settings = DEFAULT_NOTIFICATION_SETTINGS;
+  const settings = DEFAULT_DELIVERY_SETTINGS;
   const off = (
     patch: Partial<typeof settings.push>,
     email: Partial<typeof settings.email> = {},
@@ -147,5 +157,23 @@ describe('initialDelivery: состояние доставки нового ув
     );
     expect(initialDelivery('ride_rescheduled', settings, day, true).email).toBeNull();
     expect(initialDelivery('result_counted', settings, day, true).email).toBeNull();
+  });
+
+  it('напоминание о событии: push по push.events, письмо по email.events (RC-D7)', () => {
+    const pending = { state: 'pending', claimedUntil: null, sentAt: null };
+    expect(initialDelivery('event_reminder', settings, day, true)).toMatchObject({
+      push: { state: 'pending' },
+      email: pending,
+    });
+    expect(
+      initialDelivery('event_reminder', off({ events: false }, { events: false }), day, true),
+    ).toMatchObject({
+      push: { state: 'skipped', reason: 'disabled' },
+      email: { state: 'skipped' },
+    });
+    // другие группы тумблеры «Мероприятий» не трогают
+    expect(
+      initialDelivery('ride_cancelled', off({ events: false }, { events: false }), day, true),
+    ).toMatchObject({ push: { state: 'pending' }, email: pending });
   });
 });

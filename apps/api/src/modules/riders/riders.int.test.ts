@@ -16,6 +16,7 @@ import {
   addRevision,
   dqRow,
   placedRow,
+  seedFinisher,
   seedProtocolRace,
   seedSeason,
 } from '../../../test/standings';
@@ -78,47 +79,6 @@ async function seedActivity(
     ...extra,
   });
   return id;
-}
-
-/** Заявка-финишёр без места (START или Verified без пульса) напрямую в БД; `extra` — снятая, DQ по спору. */
-async function seedFinisher(
-  raceId: string,
-  userId: string,
-  {
-    tier = 'start',
-    elapsedSec = 4000,
-    ...extra
-  }: {
-    tier?: 'start' | 'verified';
-    elapsedSec?: number;
-    status?: 'active' | 'withdrawn';
-    disqualified?: { at: Date; disputeId: string } | null;
-  } = {},
-): Promise<void> {
-  const now = h.clock.now();
-  await resultsDb(h).entries.insertOne({
-    _id: uuidv7(),
-    raceId,
-    userId,
-    status: 'active',
-    groupKey: 'overall',
-    tier,
-    requests: [],
-    best: {
-      attemptId: uuidv7(),
-      elapsedSec,
-      startedAt: now,
-      finishedAt: now,
-      ranked: false,
-    },
-    summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
-    createdAt: now,
-    updatedAt: now,
-    withdrawnAt: null,
-    disqualified: null,
-    version: 1,
-    ...extra,
-  });
 }
 
 const FORBIDDEN_KEYS = ['userId', 'distanceM', 'elevationGainM', 'activities', 'rides'];
@@ -227,16 +187,16 @@ describe('GET /v1/profile/stats (AC6)', () => {
     // финиши без места (rider-links-in-tables): START и Verified без пульса после публикации — да; до публикации,
     // снятая заявка, DQ по спору, чужой — нет
     const startRace = await seedProtocolRace(h, season, [], { title: 'START' });
-    await seedFinisher(startRace, userId);
-    await seedFinisher(await seedProtocolRace(h, season, [], { title: 'Без пульса' }), userId, {
+    await seedFinisher(h, startRace, userId);
+    await seedFinisher(h, await seedProtocolRace(h, season, [], { title: 'Без пульса' }), userId, {
       tier: 'verified',
     });
-    await seedFinisher(await seedProtocolRace(h, season, [], { protocol: false }), userId);
-    await seedFinisher(await seedProtocolRace(h, season, []), userId, { status: 'withdrawn' });
-    await seedFinisher(await seedProtocolRace(h, season, []), userId, {
+    await seedFinisher(h, await seedProtocolRace(h, season, [], { protocol: false }), userId);
+    await seedFinisher(h, await seedProtocolRace(h, season, []), userId, { status: 'withdrawn' });
+    await seedFinisher(h, await seedProtocolRace(h, season, []), userId, {
       disqualified: { at: h.clock.now(), disputeId: uuidv7() },
     });
-    await seedFinisher(startRace, userIdOf(other));
+    await seedFinisher(h, startRace, userIdOf(other));
 
     const res = await call(h, 'GET', '/v1/profile/stats', undefined, auth(session));
     expect(res.status).toBe(200);
@@ -341,8 +301,8 @@ describe('финиши без места в публичном профиле (r
     const ranked = await seedProtocolRace(h, season, [placedRow(userId, 2)], { title: 'Место' });
     h.clock.advance(60_000);
     const start = await seedProtocolRace(h, season, [], { title: 'START' });
-    await seedFinisher(start, userId, { elapsedSec: 4200 });
-    await seedFinisher(await seedProtocolRace(h, season, [], { protocol: false }), userId);
+    await seedFinisher(h, start, userId, { elapsedSec: 4200 });
+    await seedFinisher(h, await seedProtocolRace(h, season, [], { protocol: false }), userId);
 
     const profile = PublicRiderProfile.parse((await call(h, 'GET', `/v1/riders/${publicId}`)).body);
     expect(profile.stats).toEqual({ races: 1, podiums: 1, bestPlace: 2, finishes: 2 });

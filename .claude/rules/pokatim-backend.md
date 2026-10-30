@@ -115,7 +115,15 @@ paths:
   функции и ключ; `PanelTotpCodes` — лимиты и проверка кода; `PanelSessionService` — вызов второго шага;
   `PanelAccountTotpController` `admin/account/totp` — `PanelGuard` без `@RequirePermission`, свой аккаунт любой роли;
   сброс — `PanelMembersService.resetTotp`/`resetTotpFromCli`). Новые `@Public()` — только шаги входа с вызовом
-  (`admin-routes.test.ts` перечисляет их явно).
+  и вход паролем по приглашению `POST admin/invitations/accept` (ADR-0026; `admin-routes.test.ts` перечисляет их явно).
+- Приглашения панели (ADR-0026): всё — модуль `panel`. `PanelInvitationsController` (`admin/invitations`: `GET` —
+  `members.read`, `POST` и `:id/revoke` — `members.manage`, `accept` — `@Public` + IP-лимит) → `PanelInvitationsService`
+  / `PanelInvitationAccept` (снимок по токену и сверка с текущим секретом до пароля → `PanelCredentials.verify` →
+  e-mail аккаунта = адрес → транзакция `lockAccountState` → `lockAdmins` → `lockPending` → `lockMember` → журнал →
+  `PanelSessionService.continueAfterCredentials`; второй проверки пароля и копии 2FA нет). Письма — outbox
+  `panel.invitation-email-requested { invitationId }` и `panel.role-email-requested { auditId }` (выдача, смена,
+  снятие роли и CLI `grant-admin` — в транзакции действия) → очередь `panel-email` (`PanelWorkerModule`); база
+  ссылок — `panelLinkBase()` (`PANEL_LINK_BASE` или `${APP_WEB_ORIGIN}/admin/`).
 - Код, нужный ≥2 приложениям (разбор трека для pre-check в приложении и на сервере), — в `packages/tracks`
   (`@pokatim/tracks`): парсинг GPX/TCX/FIT/KML и геометрия; дубли разбора в модулях запрещены.
 
@@ -144,7 +152,8 @@ paths:
   `rides_participant_idx`). Пути `/v1/profile/{avatar,races,rides,stats}` — статические сегменты, у
   `ProfileController` только `GET /`, `PATCH /` и `PUT theme` (user-theme).
 - `riders` — модуль-композиция (образец `standings`, своих коллекций нет): `riders → profile, results, tracks,
-  identity` только через `index.ts`; `riders` не импортирует никто, кроме `AppModule`. Порты: `RIDER_PROFILES`
+  identity` только через `index.ts`; `riders` импортируют только `AppModule` и `sharing` (`RidersCoreModule`, порт
+  `RIDERS_FOR_SHARING` — публичная статистика для OG райдера, та же `summarize`). Порты: `RIDER_PROFILES`
   (`profile`), `RIDER_RESULTS` (`results`: `publishedRows` — строки текущих ревизий, `racesOf`), `ACTIVITY_TOTALS`
   (`tracks`, отдельный порт — `ActivitySource` не расширяется; реэкспорт через `ResultsCoreModule`). HTTP:
   `ProfileStatsController` (`profile/stats`, `AuthGuard`, `no-store`) и `RidersPublicController` (`riders/:publicId`,
@@ -342,7 +351,8 @@ paths:
   `RideInviteService` → `RideInviteInputs` (порт `rides` `RIDES_FOR_SHARING`: `inviteFacts` — скрытый 404, не будущий
   `null`; `inviteLine` — `RideRoutes.catalogLine`, только `IN_CATALOG`) → общий `CardRequests` (лимиты, кэш,
   постановка) → задача `ride-invite.render` той же очереди → `StoryCardProcessor.buildRideInvite` →
-  `rideInviteTree` (`ride-invite.render.ts`, узлы и линия — `story-card.render.ts`/`story-card.png.ts`).
+  `rideInviteTree` (`ride-invite.render.ts`, узлы, `statRow`, `cardTrackView` и линия — `story-card.render.ts`/
+  `story-card.png.ts`).
   `SharingModule`/`SharingWorkerModule` импортируют `RidesCoreModule`; `rides` о `sharing` не знает.
 - Карточка достижения: `AchievementCardController` (`GET achievements/:code/story-card`, `AuthGuard`, `no-store`) →
   `AchievementCardService` → `AchievementCardInputs` (порт `achievements` `ACHIEVEMENTS_FOR_SHARING.cardFacts` — факты
@@ -350,16 +360,26 @@ paths:
   задача `achievement-card.render` → `buildAchievementCard` → `achievementCardTree` (значок — глиф Material Symbols,
   `achievement-card.icons.ts` — зеркало иконок каталога приложения). `SharingModule`/`SharingWorkerModule` импортируют
   `AchievementsReadModule`.
+- Карточка маршрута каталога (route-story-card): `RouteCardController` (`GET routes/:routeId/story-card`, `AuthGuard`,
+  `no-store`) → `RouteCardService` (не в каталоге — 404) → `RouteCardInputs` (`ROUTES_FOR_SHARING.ogFacts`/`ogLine`,
+  только `IN_CATALOG`) → `CardRequests` → задача `route-card.render` → `buildRouteCard` (устарел хэш, снят с каталога,
+  нет линии — `skipped`) → `routeCardTree`.
 - OG-картинки публичных страниц (og-images): `OgCardController` (`og/cards/brand/site`, `og/cards/:kind/:id` →
   `{ version }`, IP-лимит `og-card`; `og/images/brand/site/:file`, `og/images/:kind/:id/:file` — PNG без входа,
   IP-лимит `og-image`, старая версия — `302`, нет PNG — бренд `no-store` + постановка) → `OgCardService` →
   `OgCardInputs` (порты владельцев `RACES_FOR_SHARING`, `RIDES_FOR_SHARING.ogFacts`, `ROUTES_FOR_SHARING`,
-  `CALENDAR_FOR_SHARING`: `ogFacts` — только публичный объект, иначе `null`; `ogChanged` — keyset `changed-since.ts`).
+  `CALENDAR_FOR_SHARING`, `RIDERS_FOR_SHARING`: `ogFacts` — только публичный объект, иначе `null`; `ogChanged` — keyset
+  `changed-since.ts`). Виды: `race, ride, route, calendar, season, rider` (+ бренд); id по виду — `OG_CARD_ID`
+  контракта (`rider` — `RiderPublicId`, остальные `Uuid`). Сезон — `seasonOgFacts` и `liveSeasonIds` порта `races`.
   Рендер — только worker: `og-card.render` очереди `story-card` (`priority`, `StoryCardProcessor.buildOgCard`,
   диспетчер по имени задачи), пререндер — `OgSync` (очередь `og-sync`, `og.sync` каждую минуту и при старте). Ключи
   Redis `og:png:<hash>` (TTL 7 сут., вне окна пререндера — 1 сут.; продление при выдаче), `og:obj:<kind>:<id>` →
   текущий хэш (новая версия удаляет PNG прежней — Lua `storeReady`), `og:pending:<hash>` (NX; после провала —
-  удержание), `og:cursor:<kind>`, `og:sweep`; сбой строки `og.sync` — лог и пропуск. Тема — «Классика» (`OG_THEME_ID`). **Изменил разметку, тексты или токены `ogCard`
+  удержание), `og:cursor:<kind>` (только `OG_CURSOR_KINDS`: гонка, райд, маршрут, старт), `og:sweep`; сезоны — без курсора, каждый
+  прогон все живые (`liveSeasonIds`: число гонок не меняет `seasons.updatedAt`); райдер — без пререндера, только
+  самолечение. Сбой строки `og.sync` — лог и пропуск. Тема — «Классика» (`OG_THEME_ID`); схема по виду —
+  `OG_CARD_POLICY.scheme` (гонка, сезон, райдер — `dark`, остальные — `light`), входит в хэш; смена таблицы без подъёма
+  `renderVersion` полный проход не запускает. **Изменил разметку, тексты или токены `ogCard`
   — подними `OG_CARD_POLICY.renderVersion`** (новые URL, полный проход `og.sync`).
 - Общий код карточки — пакеты: форматтеры `@pokatim/i18n` (`format.ts`), геометрия линии `@pokatim/route-view`
   (`line-geometry.ts`), таблица начертаний `appFontFaces` и токены `storyCard` — `@pokatim/design-tokens`.

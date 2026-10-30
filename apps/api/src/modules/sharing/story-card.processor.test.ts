@@ -1,10 +1,14 @@
+import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { OG_FIXTURES } from '../../../test/og-fixtures';
 import { OG_CARD_RENDER_JOB } from './og-card.cache';
+import { ogCardHash, type OgCardInput } from './og-card.inputs';
 import {
   ACHIEVEMENT_CARD_RENDER_JOB,
   RIDE_INVITE_RENDER_JOB,
+  ROUTE_CARD_RENDER_JOB,
   STORY_CARD_RENDER_JOB,
 } from './story-card.cache';
 import { StoryCardProcessor } from './story-card.processor';
@@ -24,6 +28,12 @@ const story = { userId: 'u', raceId: 'r', template: 'line', hash: 'h' };
 const invite = { userId: 'u', rideId: 'ride', template: 'night', hash: 'h' };
 const achievement = { userId: 'u', code: 'race_win', template: 'line', hash: 'h' };
 const og = { kind: 'ride', id: 'ride', hash: 'a'.repeat(64) };
+const routeCard = {
+  userId: 'u',
+  routeId: '01a1744e-823f-7fc6-b68d-f2d921f7f69b',
+  template: 'line',
+  hash: 'h',
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -80,5 +90,61 @@ describe('StoryCardProcessor.process', () => {
     expect(await p.process(job(ACHIEVEMENT_CARD_RENDER_JOB, invite))).toBe('skipped');
     expect(await p.process(job(RIDE_INVITE_RENDER_JOB, achievement))).toBe('skipped');
     expect(buildAchievementCard).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('StoryCardProcessor.process — карточка маршрута (route-story-card)', () => {
+  it('route-card.render → buildRouteCard; чужая схема — skipped без рендера', async () => {
+    const p = processor();
+    const buildRouteCard = vi.spyOn(p, 'buildRouteCard').mockResolvedValue('ready');
+    expect(await p.process(job(ROUTE_CARD_RENDER_JOB, routeCard, 1))).toBe('ready');
+    expect(buildRouteCard).toHaveBeenCalledWith(routeCard, { finalAttempt: true });
+    expect(await p.process(job(ROUTE_CARD_RENDER_JOB, invite))).toBe('skipped');
+    expect(await p.process(job(ROUTE_CARD_RENDER_JOB, { ...routeCard, template: 'foo' }))).toBe(
+      'skipped',
+    );
+    // данные маршрута под именем приглашения — не приглашение
+    expect(await p.process(job(RIDE_INVITE_RENDER_JOB, routeCard))).toBe('skipped');
+    expect(buildRouteCard).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('StoryCardProcessor.buildOgCard — сезон и райдер (og-rider-season-dark)', () => {
+  /** Процессор с входами OG одного объекта и кэшем-шпионом; остальные зависимости не нужны. */
+  function ogProcessor(input: OgCardInput) {
+    const hash = ogCardHash(input);
+    const storeReady = vi.fn().mockResolvedValue(undefined);
+    const deps = Array.from({ length: 11 }, () => undefined) as unknown[];
+    deps[6] = { storeReady, release: vi.fn(), holdFailed: vi.fn() };
+    deps[7] = { resolve: vi.fn().mockResolvedValue({ input, hash, version: hash.slice(0, 16) }) };
+    deps[10] = { now: () => new Date('2026-10-22T09:00:00Z') };
+    const p = new StoryCardProcessor(
+      ...(deps as unknown as ConstructorParameters<typeof StoryCardProcessor>),
+    );
+    return { p, hash, storeReady };
+  }
+
+  it('без линии; лог райдера — префикс хэша вместо publicId', async () => {
+    const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    const rider = OG_FIXTURES.rider;
+    const { p, hash, storeReady } = ogProcessor(rider);
+    expect(await p.buildOgCard({ kind: 'rider', id: rider.facts.publicId, hash })).toBe('ready');
+    expect(storeReady).toHaveBeenCalledTimes(1);
+    const lines = log.mock.calls.map(([message]) => String(message));
+    expect(lines.join('\n')).not.toContain(rider.facts.publicId);
+    expect(
+      lines.some((line) => line.startsWith(`og rider ${hash.slice(0, 8)}: ready (no line)`)),
+    ).toBe(true);
+  });
+
+  it('сезон — без линии, в логе id сезона', async () => {
+    const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    const season = OG_FIXTURES.season;
+    const { p, hash } = ogProcessor(season);
+    expect(await p.buildOgCard({ kind: 'season', id: season.facts.seasonId, hash })).toBe('ready');
+    const lines = log.mock.calls.map(([message]) => String(message));
+    expect(
+      lines.some((line) => line.startsWith(`og season ${season.facts.seasonId}: ready (no line)`)),
+    ).toBe(true);
   });
 });

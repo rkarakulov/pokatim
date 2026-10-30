@@ -1,5 +1,7 @@
 import { isNetworkError, apiErrorOf } from '@pokatim/api-client';
 import {
+  EVENT_REMINDER_TEXT_MAX,
+  EVENT_REMINDERS_MAX,
   type EventTicketingSettings,
   type EventTicketingUpdate,
   minskWallTimeToUtc,
@@ -9,8 +11,15 @@ import {
 } from '@pokatim/contracts';
 import { type MessageKey, t } from '@pokatim/i18n';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Controller, useForm, useWatch } from 'react-hook-form';
+import { useId, useState } from 'react';
+import {
+  Controller,
+  type Path,
+  type UseFormReturn,
+  useFieldArray,
+  useForm,
+  useWatch,
+} from 'react-hook-form';
 
 import { api } from '../../api';
 import { fieldErrorText, formFieldOf, serverFieldErrors } from '../../field-errors';
@@ -23,7 +32,9 @@ import {
   ConflictBanner,
   DateTimeField,
   Dialog,
+  DisabledReason,
   ReadonlyField,
+  SelectField,
   TextAreaField,
   TextField,
 } from '../../ui';
@@ -37,7 +48,18 @@ interface FormValues {
   address: string;
   instructions: string;
   capacity: string;
+  reminders: ReminderRow[];
 }
+
+/** Строка правила напоминания: `id` — у сохранённого правила (без него сервер создаст новое). */
+interface ReminderRow {
+  id?: string;
+  offsetHours: string;
+  text: string;
+}
+
+/** Варианты «за сколько» (ч); правило с другим offset (API) показывается своим вариантом. */
+const REMINDER_OFFSETS = [1, 2, 3, 6, 12, 24, 48, 72, 168];
 
 /** Окно гонки — подсказка и предупреждение «очный старт вне окна» (RC-T3). */
 export interface RaceWindow {
@@ -57,14 +79,27 @@ function valuesOf(settings: EventTicketingSettings): FormValues {
     address: settings.address ?? '',
     instructions: settings.instructions ?? '',
     capacity: settings.capacity === null ? '' : String(settings.capacity),
+    reminders: settings.reminders.map((rule) => ({
+      id: rule.id,
+      offsetHours: String(rule.offsetHours),
+      text: rule.text,
+    })),
   };
 }
+
+const remindersOf = (rows: ReminderRow[]): NonNullable<EventTicketingUpdate['reminders']> =>
+  rows.map((row) => ({
+    ...(row.id ? { id: row.id } : {}),
+    offsetHours: Number(row.offsetHours),
+    text: row.text,
+  }));
 
 function requestOf(settings: EventTicketingSettings, values: FormValues): EventTicketingUpdate {
   const common = {
     enabled: values.enabled,
     address: values.address,
     instructions: values.instructions,
+    reminders: remindersOf(values.reminders),
     version: settings.version,
   };
   if (settings.kind === 'race') {
@@ -121,7 +156,9 @@ export function TicketingSettingsForm({
       const fields = serverFieldErrors(error);
       if (fields?.length) {
         for (const field of fields) {
-          form.setError(formFieldOf(field.path) as keyof FormValues, {
+          // правила напоминаний — под полем своей строки (`reminders.N.text`)
+          const path = field.path.startsWith('reminders.') ? field.path : formFieldOf(field.path);
+          form.setError(path as Path<FormValues>, {
             type: 'server',
             message: field.code,
           });
@@ -272,6 +309,7 @@ export function TicketingSettingsForm({
         })}
         {...form.register('instructions')}
       />
+      <RemindersFieldset form={form} settings={settings} />
       <div className="form-actions">
         <Button type="submit" variant="primary" busy={save.isPending} disabled={save.isPending}>
           {t('admin.tickets.save')}
@@ -299,5 +337,105 @@ export function TicketingSettingsForm({
         </div>
       </Dialog>
     </form>
+  );
+}
+
+/**
+ * Напоминания участникам (PR D): до 3 правил «за N часов до старта» с текстом; под сохранённым правилом — время
+ * отправки, «Отправлено … · участникам: N» или «прошло» (`late`, RC-D5). Добавление на пределе — `aria-disabled` с
+ * причиной. Сохраняются общей кнопкой формы (`requestOf` шлёт `id` существующих).
+ */
+function RemindersFieldset({
+  form,
+  settings,
+}: {
+  form: UseFormReturn<FormValues>;
+  settings: EventTicketingSettings;
+}) {
+  const { fields, append, remove } = useFieldArray({ control: form.control, name: 'reminders' });
+  const rows = useWatch({ control: form.control, name: 'reminders' });
+  const limitId = useId();
+  const full = fields.length >= EVENT_REMINDERS_MAX;
+  const errors = form.formState.errors.reminders;
+  const optionsFor = (current: string) =>
+    [...new Set([...REMINDER_OFFSETS, Number(current)])]
+      .filter((hours) => Number.isInteger(hours) && hours > 0)
+      .sort((a, b) => a - b)
+      .map((hours) => ({
+        value: String(hours),
+        label: t('admin.tickets.reminders.offsetOption', { hours }),
+      }));
+  const statusOf = (id: string | undefined) => {
+    const rule = id ? settings.reminders.find((item) => item.id === id) : undefined;
+    if (!rule) return undefined;
+    if (rule.sentAt) {
+      return t('admin.tickets.reminders.sent', {
+        date: formatDateTimeLong(rule.sentAt),
+        count: rule.sentCount,
+      });
+    }
+    if (rule.late) return t('admin.tickets.reminders.late');
+    return rule.sendAt
+      ? t('admin.tickets.reminders.sendAt', { date: formatDateTimeLong(rule.sendAt) })
+      : t('admin.tickets.reminders.noStart');
+  };
+
+  return (
+    <fieldset className="form-stack">
+      <legend className="t-label">{t('admin.tickets.reminders.title')}</legend>
+      <p className="t-meta">{t('admin.tickets.reminders.lead')}</p>
+      {fields.map((field, index) => {
+        const row = rows[index];
+        const status = statusOf(row?.id);
+        return (
+          <div
+            key={field.id}
+            role="group"
+            aria-label={t('admin.tickets.reminders.item', { n: index + 1 })}
+            className="form-stack"
+          >
+            <SelectField
+              label={t('admin.tickets.reminders.offset')}
+              options={optionsFor(row?.offsetHours ?? field.offsetHours)}
+              error={fieldErrorText(errors?.[index]?.offsetHours?.message)}
+              help={status}
+              {...form.register(`reminders.${index}.offsetHours`)}
+            />
+            <TextAreaField
+              label={t('admin.tickets.reminders.text')}
+              rows={3}
+              maxLength={EVENT_REMINDER_TEXT_MAX}
+              error={fieldErrorText(errors?.[index]?.text?.message)}
+              help={t('admin.tickets.instructionsCount', {
+                count: row?.text.length ?? 0,
+                max: EVENT_REMINDER_TEXT_MAX,
+              })}
+              {...form.register(`reminders.${index}.text`)}
+            />
+            <div className="form-actions">
+              <Button size="sm" variant="danger" onClick={() => remove(index)}>
+                {t('admin.tickets.reminders.remove')}
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+      <div className="form-actions">
+        <Button
+          aria-disabled={full || undefined}
+          aria-describedby={full ? limitId : undefined}
+          onClick={() => {
+            if (!full) append({ offsetHours: '24', text: '' });
+          }}
+        >
+          {t('admin.tickets.reminders.add')}
+        </Button>
+      </div>
+      {full ? (
+        <DisabledReason id={limitId}>{t('admin.tickets.reminders.limit')}</DisabledReason>
+      ) : null}
+      <p className="t-meta">{t('admin.tickets.reminders.quietHint')}</p>
+      <p className="t-meta">{t('admin.tickets.reminders.recreateHint')}</p>
+    </fieldset>
   );
 }

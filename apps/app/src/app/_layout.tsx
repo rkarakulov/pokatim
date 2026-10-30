@@ -183,6 +183,8 @@ function RootShell() {
                 {/* routes-06: заявка своего маршрута в каталог и жалоба на маршрут райдера — только вошедшим */}
                 <Stack.Screen name="routes/mine/publish/[id]" />
                 <Stack.Screen name="routes/report/[id]" />
+                {/* карточка маршрута каталога для сторис (ADR-0018, route-story-card): только вошедшим */}
+                <Stack.Screen name="routes/story/[id]" />
                 {/* жалоба на публичный профиль райдера (profile-report-app): только вошедшим; гость — «Вход» */}
                 <Stack.Screen name="riders/report/[id]" />
                 {/* заезд по маршруту (route-rides-02): выбор и результат — только вошедшим */}

@@ -1,11 +1,5 @@
 /// <reference types="jest" />
-import {
-  brandOgImage,
-  brandOgImageFor,
-  ogCardForSsr,
-  ogCardIfOrigin,
-  pageOgImage,
-} from './og-image';
+import { brandOgImage, ogCardForSsr, ogCardIfOrigin, ownOgImage, pageOgImage } from './og-image';
 import { resetPublicSsrCache } from './public-ssr';
 
 const ORIGIN = 'https://pokatim.by';
@@ -93,8 +87,41 @@ describe('OG-картинка страницы (og-images, AC5)', () => {
         card: { status: 'notFound' },
       }),
     ).toBeUndefined();
-    expect(await brandOgImageFor({ status: 'notFound' })).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('id по виду: райдер — publicId (Uuid и мусор — без запроса), сезон — Uuid', async () => {
+    const PUBLIC_ID = 'p'.repeat(43);
+    routes({
+      [`${API}/v1/og/cards/rider/${PUBLIC_ID}`]: () => json(200, { version: V }),
+      [`${API}/v1/og/cards/season/${ID}`]: () => json(200, { version: V }),
+    });
+    expect(await ogCardForSsr('rider', '../x')).toEqual({ status: 'notFound' });
+    expect(await ogCardForSsr('rider', ID)).toEqual({ status: 'notFound' });
+    expect(await ogCardForSsr('season', PUBLIC_ID)).toEqual({ status: 'notFound' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await ogCardForSsr('rider', PUBLIC_ID)).toEqual({
+      status: 'found',
+      data: { version: V },
+    });
+    expect(await ogCardForSsr('season', ID)).toEqual({ status: 'found', data: { version: V } });
+  });
+
+  it('ownOgImage: id и alt — из данных страницы (райдер — без имени)', async () => {
+    const PUBLIC_ID = 'p'.repeat(43);
+    routes({ [`${API}/v1/og/cards/rider/${PUBLIC_ID}`]: () => json(200, { version: V }) });
+    const card = await ogCardIfOrigin('rider', PUBLIC_ID);
+    expect(
+      await ownOgImage({
+        kind: 'rider',
+        page: { status: 'found', data: { publicId: PUBLIC_ID, name: 'Анна' } },
+        card,
+        describe: (data) => ({ id: data.publicId, alt: 'Профиль райдера — Покатим' }),
+      }),
+    ).toEqual({
+      url: `${ORIGIN}/v1/og/images/rider/${PUBLIC_ID}/${V}.png`,
+      alt: 'Профиль райдера — Покатим',
+    });
   });
 
   it('кэш 60 с: повторное чтение версии — без второго запроса', async () => {

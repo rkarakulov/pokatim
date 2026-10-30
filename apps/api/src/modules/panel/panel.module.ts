@@ -5,7 +5,11 @@ import { PanelAuditReader } from './panel-audit';
 import { PanelAccountTotpController } from './panel-account-totp.controller';
 import { PanelAccountTotpService } from './panel-account-totp.service';
 import { PanelAuditController } from './panel-audit.controller';
+import { IpRateLimitGuard } from '../../public-read.guard';
 import { PanelCoreModule } from './panel-core.module';
+import { PanelInvitationAccept } from './panel-invitation-accept';
+import { PanelInvitationsController } from './panel-invitations.controller';
+import { PanelInvitationsService } from './panel-invitations.service';
 import { PanelMembersController } from './panel-members.controller';
 import { PanelGuard } from './panel.guard';
 import { PanelSessionCheck } from './panel-session-check';
@@ -27,6 +31,7 @@ import { TotpSecretBox } from './totp-secret-box';
     PanelMembersController,
     PanelAuditController,
     PanelAccountTotpController,
+    PanelInvitationsController,
   ],
   providers: [
     PanelSessionCookie,
@@ -37,6 +42,10 @@ import { TotpSecretBox } from './totp-secret-box';
     TotpSecretBox,
     PanelTotpCodes,
     PanelAccountTotpService,
+    // приглашения (ADR-0026): лимит на сотрудника — `RateLimiter` (Redis), поэтому не в `PanelCoreModule` (CLI)
+    PanelInvitationsService,
+    PanelInvitationAccept,
+    IpRateLimitGuard,
   ],
   // гард создаётся в модуле-потребителе (`@UseGuards`) — ему нужны и зависимости гарда
   exports: [PanelGuard, PanelSessionCookie, PanelSessionCheck, PanelCoreModule, IdentityModule],
