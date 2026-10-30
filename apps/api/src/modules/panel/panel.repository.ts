@@ -503,6 +503,12 @@ export class PanelRepository {
     await this.c.audit.insertOne(doc, { session });
   }
 
+  /** Запись журнала по id (письмо о роли в worker); чтение — `find`, журнал не меняется. */
+  async findAuditById(id: string): Promise<PanelAuditDoc | undefined> {
+    const [doc] = await this.c.audit.find({ _id: id }).limit(1).toArray();
+    return doc;
+  }
+
   /** Страница журнала: `_id` UUID v7 растёт со временем — новые сверху, курсор — `_id < before`. */
   listAudit(filter: AuditFilter, limit: number): Promise<PanelAuditDoc[]> {
     const query: Filter<PanelAuditDoc> = {};

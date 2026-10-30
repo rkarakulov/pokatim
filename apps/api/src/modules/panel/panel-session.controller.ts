@@ -16,7 +16,7 @@ import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 import { CurrentPanelUser, type PanelPrincipal } from './current-panel-user.decorator';
 import { PanelGuard } from './panel.guard';
 import { PanelSessionCookie } from './panel-session-cookie';
-import { type OpenedSession, PanelSessionService } from './panel-session.service';
+import { PanelSessionService } from './panel-session.service';
 import { Public } from './public.decorator';
 
 /**
@@ -48,7 +48,7 @@ export class PanelSessionController {
       this.cookie.readDevice(request),
     );
     if (result.state !== 'signedIn') return result;
-    return this.signedIn(reply, result);
+    return this.cookie.signedIn(reply, result);
   }
 
   /** Второй шаг: код TOTP или код восстановления по вызову (без сессии — `@Public`, вызов проверяет сервис). */
@@ -62,7 +62,7 @@ export class PanelSessionController {
     @Res({ passthrough: true }) reply: unknown,
   ): Promise<PanelSignedIn> {
     const result = await this.sessions.completeTotp(body, ip, this.cookie.read(request).token);
-    return this.signedIn(reply, result);
+    return this.cookie.signedIn(reply, result);
   }
 
   /** Подключение 2FA на экране входа (`totpSetupRequired`): секрет и otpauth — один раз. */
@@ -87,7 +87,7 @@ export class PanelSessionController {
     @Res({ passthrough: true }) reply: unknown,
   ): Promise<PanelSignedInWithRecoveryCodes> {
     const result = await this.sessions.confirmSetup(body, ip, this.cookie.read(request).token);
-    return { ...this.signedIn(reply, result), recoveryCodes: result.recoveryCodes };
+    return { ...this.cookie.signedIn(reply, result), recoveryCodes: result.recoveryCodes };
   }
 
   /** Идемпотентно: 204 и сброс cookie в любом случае — ответ не говорит, была ли сессия. */
@@ -105,11 +105,5 @@ export class PanelSessionController {
   @Get('me')
   me(@CurrentPanelUser() principal: PanelPrincipal): Promise<PanelMe> {
     return this.sessions.me(principal);
-  }
-
-  private signedIn(reply: unknown, result: OpenedSession): PanelSignedIn {
-    this.cookie.set(reply, result.token, result.expiresAt);
-    if (result.device) this.cookie.setDevice(reply, result.device.token, result.device.expiresAt);
-    return { state: 'signedIn', me: result.me };
   }
 }

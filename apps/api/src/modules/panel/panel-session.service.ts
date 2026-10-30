@@ -12,7 +12,13 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import { type DbSession, MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
-import { IdentityAccounts, PanelCredentials, randomToken, sha256 } from '../identity';
+import {
+  IdentityAccounts,
+  PanelCredentials,
+  randomToken,
+  sha256,
+  type VerifiedCredentials,
+} from '../identity';
 import type { PanelPrincipal } from './current-panel-user.decorator';
 import { PanelAudit } from './panel-audit';
 import type {
@@ -88,7 +94,18 @@ export class PanelSessionService {
   ): Promise<PanelSignInResult> {
     const verified = await this.credentials.verify(input, ip);
     if (verified.state === 'verificationRequired') return verified;
+    return this.continueAfterCredentials(verified, previousToken, deviceToken);
+  }
 
+  /**
+   * Продолжение входа после верного пароля (вход и принятие приглашения, ADR-0026): член `active` → ветки 2FA
+   * (ADR-0024) → сессия. Пароль здесь не проверяется — вызывающий уже прошёл `PanelCredentials.verify`.
+   */
+  async continueAfterCredentials(
+    verified: VerifiedCredentials,
+    previousToken: string | undefined,
+    deviceToken: string | undefined,
+  ): Promise<PanelSignInResult> {
     const member = await this.repository.findActiveMember(verified.userId);
     if (!member) throw domainError('PANEL_ACCESS_DENIED', 403);
     const subject = { userId: verified.userId, credentialsStamp: verified.credentialsStamp };

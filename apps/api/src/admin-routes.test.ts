@@ -99,6 +99,7 @@ describe('маршруты /v1/admin/* всех модулей под PanelGuard
         'PanelMembersController',
         'PanelAuditController',
         'PanelAccountTotpController',
+        'PanelInvitationsController',
         'SeasonsAdminController',
         'RacesAdminController',
         'CalendarAdminController',
@@ -118,7 +119,7 @@ describe('маршруты /v1/admin/* всех модулей под PanelGuard
     }
   });
 
-  it('без сессии — только вход (с шагами 2FA по вызову) и выход (явный @Public)', () => {
+  it('без сессии — только вход (с шагами 2FA по вызову), принятие приглашения паролем и выход (явный @Public)', () => {
     const open = routes()
       .filter(
         ({ controller, handler }) =>
@@ -128,6 +129,7 @@ describe('маршруты /v1/admin/* всех модулей под PanelGuard
       .map(({ controller, name }) => `${controller.name}.${name}`)
       .sort();
     expect(open).toEqual([
+      'PanelInvitationsController.accept',
       'PanelSessionController.signIn',
       'PanelSessionController.signInTotp',
       'PanelSessionController.signInTotpSetup',

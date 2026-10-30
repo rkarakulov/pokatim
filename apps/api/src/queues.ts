@@ -89,4 +89,10 @@ export const QUEUE = {
    * outbox (`results.*` маршрутизированы в `results-intake`).
    */
   ticketsMaintenance: 'tickets-maintenance',
+  /**
+   * Письма панели «Протокол» (panel-invitations, ADR-0026): приглашение в команду и письма о выдаче, смене и снятии
+   * роли; jobId = id события outbox, один процессор разбирает задачи по имени. Дубль безвреден (та же ссылка, тот же
+   * текст); провал письма-приглашения виден в блоке «Приглашения» (`emailState`).
+   */
+  panelEmail: 'panel-email',
 } as const;

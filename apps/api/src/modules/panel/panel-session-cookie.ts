@@ -1,6 +1,12 @@
 import { type CookieSerializeOptions, Inject, Injectable } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
-import { OpaqueToken, PANEL_DEVICE_COOKIE, PANEL_SESSION_COOKIE } from '@pokatim/contracts';
+import {
+  OpaqueToken,
+  PANEL_DEVICE_COOKIE,
+  PANEL_SESSION_COOKIE,
+  type PanelMe,
+  type PanelSignedIn,
+} from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 /**
@@ -83,6 +89,24 @@ export class PanelSessionCookie {
       ...DEVICE_ATTRIBUTES,
       maxAge: Math.max(0, Math.floor(remainingMs / 1000)),
     });
+  }
+
+  /**
+   * Ответ успешного входа (вход, второй шаг, принятие приглашения): cookie сессии, при «запомнить устройство» — cookie
+   * устройства; в теле — только `PanelMe` (токены — не в JS).
+   */
+  signedIn(
+    reply: unknown,
+    opened: {
+      me: PanelMe;
+      token: string;
+      expiresAt: Date;
+      device: { token: string; expiresAt: Date } | null;
+    },
+  ): PanelSignedIn {
+    this.set(reply, opened.token, opened.expiresAt);
+    if (opened.device) this.setDevice(reply, opened.device.token, opened.device.expiresAt);
+    return { state: 'signedIn', me: opened.me };
   }
 
   clear(reply: unknown): void {

@@ -48,6 +48,8 @@ function details(entry: AuditEntry): string {
       to: t(`admin.role.${to}`),
     });
   }
+  // panel-invitations: роль приглашения
+  if (to && entry.action.startsWith('panel.invitation_')) return t(`admin.role.${to}`);
   // app-themes: смена темы приложения (история до user-theme) — названия тем словами, общие ключи `theme.*`
   const themeFrom = entry.details?.themeFrom;
   const themeTo = entry.details?.themeTo;

@@ -1,7 +1,12 @@
-import { PANEL_MEMBER_LIST_CAP } from '@pokatim/contracts';
+import {
+  PANEL_INVITATION_LIST_CAP,
+  PANEL_INVITATION_TTL_DAYS,
+  PANEL_MEMBER_LIST_CAP,
+} from '@pokatim/contracts';
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
 
 /** Сроки и пределы панели (task admin-01, решения автора Q6). */
 export const PANEL_POLICY = {
@@ -24,6 +29,14 @@ export const PANEL_POLICY = {
     ip: { limit: 50, windowSec: (15 * MINUTE_MS) / 1000 },
     user: { limit: 10, windowSec: (15 * MINUTE_MS) / 1000 },
   },
+  /** Приглашения (ADR-0026): срок ссылки — 7 суток; документ убирается через 30 суток после закрытия/истечения. */
+  invitationTtlMs: PANEL_INVITATION_TTL_DAYS * DAY_MS,
+  invitationPurgeAfterMs: 30 * DAY_MS,
+  invitationListCap: PANEL_INVITATION_LIST_CAP,
+  /** RC-9: приглашений с одного сотрудника — 30 в час (письма на любые адреса). */
+  invitationsUserLimit: { limit: 30, windowSec: HOUR_MS / 1000 },
+  /** IP-лимит принятия приглашения (до пароля; у пароля — ещё общие `signin-*`). */
+  invitationAcceptIpLimit: { limit: 20, windowSec: (15 * MINUTE_MS) / 1000 },
 } as const;
 
 /** Удалённый аккаунт в ответах панели вместо e-mail и имени. */
