@@ -866,6 +866,7 @@ export const ru = {
   'notifications.settings.group.disputes': 'Споры',
   'notifications.settings.group.rides': 'Райды',
   'notifications.settings.group.events': 'Мероприятия',
+  'notifications.settings.group.routes': 'Маршруты',
   'notifications.settings.push': 'Push-уведомления',
   'notifications.settings.pushBlocked':
     'Не придут на это устройство, пока push не включены в строке выше.',

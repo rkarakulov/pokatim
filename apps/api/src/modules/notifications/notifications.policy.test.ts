@@ -36,8 +36,8 @@ describe('groupOf: kind → группа настроек (N4)', () => {
       ride_rescheduled: 'rides',
       ride_joined: 'rides',
       ride_report_resolved: 'rides',
-      route_published: 'rides',
-      route_rejected: 'rides',
+      route_published: 'routes',
+      route_rejected: 'routes',
       event_reminder: 'events',
       profile_name_reset: 'rides',
       profile_avatar_reset: 'rides',
@@ -49,9 +49,10 @@ describe('groupOf: kind → группа настроек (N4)', () => {
     expect([...EMAIL_KINDS]).toEqual(['dispute_decided', 'ride_cancelled', 'event_reminder']);
   });
 
-  it('умолчания доставки — основные умолчания контракта + «Мероприятия» включены', () => {
+  it('умолчания доставки — основные умолчания контракта + «Мероприятия» и «Маршруты» включены', () => {
+    expect(DEFAULT_DELIVERY_SETTINGS.push.routes).toBe(true);
     expect(DEFAULT_DELIVERY_SETTINGS).toEqual({
-      push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, events: true },
+      push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, events: true, routes: true },
       email: { ...DEFAULT_NOTIFICATION_SETTINGS.email, events: true },
       quietHours: DEFAULT_NOTIFICATION_SETTINGS.quietHours,
     });
@@ -178,5 +179,19 @@ describe('initialDelivery: состояние доставки нового ув
     expect(
       initialDelivery('ride_cancelled', off({ events: false }, { events: false }), day, true),
     ).toMatchObject({ push: { state: 'pending' }, email: pending });
+  });
+
+  it('решение по маршруту: push по push.routes (rides не влияет), письма нет', () => {
+    expect(initialDelivery('route_published', off({ rides: false }), day, true)).toMatchObject({
+      push: { state: 'pending' },
+      email: null,
+    });
+    expect(initialDelivery('route_rejected', off({ routes: false }), day, true)).toMatchObject({
+      push: { state: 'skipped', reason: 'disabled' },
+      email: null,
+    });
+    expect(initialDelivery('ride_cancelled', off({ routes: false }), day, true).push.state).toBe(
+      'pending',
+    );
   });
 });

@@ -1,4 +1,7 @@
+import { Logger } from '@nestjs/common';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
+import { getFlowProducerToken } from '@nestjs/bullmq';
+import type { FlowProducer, Job } from 'bullmq';
 import { Collection } from 'mongodb';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,11 +10,19 @@ import { createHarness, DAY, HOUR, type Harness, MINUTE } from '../../../test/ha
 import { bearer, call, collections } from '../../../test/identity';
 import {
   appendEvent,
+  completeIntakeJobs,
+  deliveryJobs,
+  deliveryQueue,
   eventsOfType,
+  fanoutJobs,
   notificationsDb,
   notificationsIntake,
   notificationsOf,
+  intakeQueue,
+  runFanout,
   runIntake,
+  runQueuedIntake,
+  seedLiveUsers,
   uuidv7At,
 } from '../../../test/notifications';
 import { panelCall } from '../../../test/panel';
@@ -37,7 +48,15 @@ import {
   type Rider,
   startsIn,
 } from '../../../test/rides';
+import { NOTIFICATIONS_FANOUT_PRODUCER } from './fanout-jobs';
+import { type NoticeDraft, NotificationIntake } from './notification-intake';
 import type { NotificationDoc } from './notifications.collection';
+import {
+  type FanoutJobData,
+  IntakeJobData,
+  NOTIFICATIONS_FANOUT_JOB,
+  pushJobId,
+} from './notifications.events';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
 import { RIDES_PARTICIPANT_JOINED, RIDES_RIDE_RESCHEDULED } from '../rides';
@@ -340,7 +359,7 @@ describe('маршруты райдеров: решение по заявке (r
   const reject = (id: string, reason: string, version = 0) =>
     decide(id, 'reject', { version, reason, comment: 'Мост закрыт на ремонт' });
 
-  it('одобрение — автору «Маршрут опубликован», цель — свой маршрут, группа «Райды»; прочим — нет', async () => {
+  it('одобрение — автору «Маршрут опубликован», цель — свой маршрут, группа «Маршруты»; прочим — нет', async () => {
     const id = await submittedRoute();
     await approve(id);
     expect(await notificationsIntake(h).drain()).toEqual(['written']);
@@ -348,7 +367,7 @@ describe('маршруты райдеров: решение по заявке (r
     const [published] = await notificationsOf(h, a.userId);
     expect(published).toMatchObject({
       kind: 'route_published',
-      group: 'rides',
+      group: 'routes',
       title: 'Маршрут опубликован',
       body: `«${ROUTE_TITLE}» теперь в каталоге маршрутов.`,
       target: { type: 'my-route', routeId: id },
@@ -360,6 +379,28 @@ describe('маршруты райдеров: решение по заявке (r
     for (const who of [b, organizer, stranger])
       expect(await notificationsOf(h, who.userId)).toEqual([]);
     expect(await notificationsOf(h, moderator.userId)).toEqual([]);
+  });
+
+  it.each([
+    ['push.routes: false', { routes: false }, 'skipped'],
+    ['push.rides: false без push.routes', { rides: false }, 'skipped'],
+    ['push.routes: true, push.rides: false', { routes: true, rides: false }, 'pending'],
+  ] as const)('тумблер группы «Маршруты» при приёме: %s — push %s', async (_, push, state) => {
+    await notificationsDb(h).settings.insertOne({
+      _id: a.userId,
+      push: { races: true, disputes: true, ...{ rides: true, ...push } },
+      email: { disputes: true, rides: true },
+      quietHours: { enabled: false, startHour: 22, endHour: 8 },
+      updatedAt: h.clock.now(),
+    });
+    const id = await submittedRoute();
+    await approve(id);
+    expect(await notificationsIntake(h).drain()).toEqual(['written']);
+    const [published] = await notificationsOf(h, a.userId);
+    expect(published?.push).toMatchObject({
+      state,
+      reason: state === 'skipped' ? 'disabled' : null,
+    });
   });
 
   it('отклонение — «Маршрут отклонён» с причиной без комментария модератора; новая подача и одобрение заменяют его', async () => {
@@ -829,6 +870,269 @@ describe('настройки при приёме (N4, RC-13)', () => {
     });
     // тихие часы по умолчанию (22–08 Минска): «сейчас» стенда — днём, push не отложен
     expect(forB?.push.notBefore).toEqual(h.clock.now());
+  });
+});
+
+describe('пачки получателей (notifications.fanout)', () => {
+  const PROTOCOL = 'results.protocol-published';
+  /** Порт источника — граница теста (аудитория из `seedLiveUsers`), БД настоящая. */
+  const audience = (recipients: string[]) => {
+    const draft: NoticeDraft = {
+      text: { kind: 'protocol_published', race: RACE_TITLE },
+      target: { type: 'race', raceId: uuidv7() },
+      recipients,
+    };
+    return vi.spyOn(h.worker.get(NotificationIntake), 'drafts').mockResolvedValue([draft]);
+  };
+  const protocolEvent = () => appendEvent(h, PROTOCOL, { raceId: uuidv7(), revision: 1 });
+  const fanoutProducer = () =>
+    h.worker.get<FlowProducer>(getFlowProducerToken(NOTIFICATIONS_FANOUT_PRODUCER), {
+      strict: false,
+    });
+  const notifiedUsers = async () =>
+    (await notificationsDb(h).notifications.find().toArray()).map((doc) => doc.userId).sort();
+  const pushJobsOf = (userIds: readonly string[]) =>
+    userIds.map((userId) => pushJobId(userId, h.clock.now())).sort();
+  const chunkJob = (data: FanoutJobData, attemptsMade = 0) =>
+    ({
+      id: `test-${data.eventId}`,
+      name: NOTIFICATIONS_FANOUT_JOB,
+      data,
+      attemptsMade,
+      opts: { attempts: 5 },
+    }) as unknown as Job;
+
+  it('AC1: аудитория = пачке (200) — одна задача intake, пачек нет', async () => {
+    const users = await seedLiveUsers(h, 200);
+    audience(users);
+    expect(await runQueuedIntake(h, PROTOCOL, await protocolEvent())).toBe('written');
+    expect(await fanoutJobs(h)).toEqual([]);
+    expect(await total()).toBe(200);
+  });
+
+  it('AC2: 450 — три пачки, intake не пишет; после пачек у каждого одно уведомление и доставка', async () => {
+    const users = await seedLiveUsers(h, 450);
+    audience(users);
+    const eventId = await protocolEvent();
+    expect(await runQueuedIntake(h, PROTOCOL, eventId)).toBe('fanned_out');
+    const jobs = await fanoutJobs(h);
+    expect(jobs.map((job) => job.id)).toEqual([0, 1, 2].map((c) => `fanout-${eventId}-0-${c}`));
+    expect(jobs.map((job) => (job.data as FanoutJobData).userIds.length)).toEqual([200, 200, 50]);
+    // опции очереди (FlowProducer их не применяет сам): ретраи, backoff, уборка
+    expect(jobs[0]?.opts).toMatchObject({
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 5_000 },
+      removeOnComplete: 1_000,
+      removeOnFail: false,
+    });
+    expect(await total()).toBe(0);
+
+    expect(await completeIntakeJobs(h)).toEqual(['written', 'written', 'written']);
+    expect(await notifiedUsers()).toEqual([...users].sort());
+    expect(
+      await notificationsDb(h).notifications.countDocuments({
+        sourceEventId: eventId,
+        kind: 'protocol_published',
+        title: 'Протокол опубликован',
+        'push.state': 'pending',
+      }),
+    ).toBe(450);
+    expect((await deliveryJobs(h)).map((job) => job.id)).toEqual(pushJobsOf(users));
+  });
+
+  it('AC3: повтор intake — по плану в данных задачи, порт не вызван; выросшая аудитория и повтор после выполнения — новых нет', async () => {
+    const users = await seedLiveUsers(h, 450);
+    const drafts = audience(users);
+    const eventId = await protocolEvent();
+    expect(await runQueuedIntake(h, PROTOCOL, eventId)).toBe('fanned_out');
+    const plan = IntakeJobData.parse((await intakeQueue(h).getJob(eventId))?.data).fanout;
+    expect(plan?.map((chunk) => chunk.jobId)).toEqual(
+      [0, 1, 2].map((c) => `fanout-${eventId}-0-${c}`),
+    );
+    expect(await runQueuedIntake(h, PROTOCOL, eventId)).toBe('fanned_out');
+    expect(drafts).toHaveBeenCalledTimes(1);
+    expect(await fanoutJobs(h)).toHaveLength(3);
+
+    // порт теперь отдал бы 650 — повтор его не зовёт
+    audience([...users, ...(await seedLiveUsers(h, 200))]);
+    expect(await runQueuedIntake(h, PROTOCOL, eventId)).toBe('fanned_out');
+    expect(drafts).toHaveBeenCalledTimes(1);
+    expect(await fanoutJobs(h)).toHaveLength(3);
+    await completeIntakeJobs(h);
+    expect(await total()).toBe(450);
+
+    expect(await runQueuedIntake(h, PROTOCOL, eventId)).toBe('fanned_out');
+    const jobs = await fanoutJobs(h);
+    expect(jobs).toHaveLength(3);
+    expect(await Promise.all(jobs.map((job) => job.getState()))).toEqual([
+      'completed',
+      'completed',
+      'completed',
+    ]);
+    expect(await completeIntakeJobs(h)).toEqual([]);
+    expect(await total()).toBe(450);
+  });
+
+  it('ворота: addBulk «успешен», но пачки не встали — intake бросает; повтор ставит все по сохранённому плану', async () => {
+    const users = await seedLiveUsers(h, 450);
+    const drafts = audience(users);
+    const eventId = await protocolEvent();
+    // MULTI с ошибками команд (OOM Redis): addBulk не бросает, задач нет
+    const lost = vi.spyOn(fanoutProducer(), 'addBulk').mockResolvedValue([]);
+    await expect(runQueuedIntake(h, PROTOCOL, eventId)).rejects.toThrow(
+      'notifications.fanout_enqueue_failed missing=3 of=3',
+    );
+    expect(lost).toHaveBeenCalledTimes(2);
+    expect(await fanoutJobs(h)).toEqual([]);
+    lost.mockRestore();
+
+    expect(await runQueuedIntake(h, PROTOCOL, eventId)).toBe('fanned_out');
+    expect(drafts).toHaveBeenCalledTimes(1);
+    expect((await fanoutJobs(h)).map((job) => job.id)).toEqual(
+      [0, 1, 2].map((c) => `fanout-${eventId}-0-${c}`),
+    );
+    expect(await completeIntakeJobs(h)).toEqual(['written', 'written', 'written']);
+    expect(await notifiedUsers()).toEqual([...users].sort());
+  });
+
+  it('ворота: частичная постановка (встала 0-0 и ещё одна) — повтор intake дотягивает недостающую, дублей нет', async () => {
+    const users = await seedLiveUsers(h, 450);
+    const drafts = audience(users);
+    const eventId = await protocolEvent();
+    const flow = fanoutProducer();
+    const original = flow.addBulk.bind(flow);
+    // команда пачки -0-2 не проходит ни в первой постановке, ни в повторной
+    const partial = vi
+      .spyOn(flow, 'addBulk')
+      .mockImplementation((flows) =>
+        original(flows.filter((node) => !String(node.opts?.jobId).endsWith('-0-2'))),
+      );
+    await expect(runQueuedIntake(h, PROTOCOL, eventId)).rejects.toThrow(
+      'notifications.fanout_enqueue_failed missing=1 of=3',
+    );
+    expect((await fanoutJobs(h)).map((job) => job.id)).toEqual(
+      [0, 1].map((c) => `fanout-${eventId}-0-${c}`),
+    );
+    partial.mockRestore();
+
+    expect(await runQueuedIntake(h, PROTOCOL, eventId)).toBe('fanned_out');
+    expect(drafts).toHaveBeenCalledTimes(1);
+    expect((await fanoutJobs(h)).map((job) => job.id)).toEqual(
+      [0, 1, 2].map((c) => `fanout-${eventId}-0-${c}`),
+    );
+    expect(await completeIntakeJobs(h)).toEqual(['written', 'written', 'written']);
+    expect(await total()).toBe(450);
+  });
+
+  it('недоставленная пачка ставится повторно в той же задаче intake (второй addBulk)', async () => {
+    const users = await seedLiveUsers(h, 450);
+    audience(users);
+    const eventId = await protocolEvent();
+    const flow = fanoutProducer();
+    const original = flow.addBulk.bind(flow);
+    const once = vi
+      .spyOn(flow, 'addBulk')
+      .mockImplementationOnce((flows) => original(flows.slice(1)));
+    expect(await runQueuedIntake(h, PROTOCOL, eventId)).toBe('fanned_out');
+    expect(once).toHaveBeenCalledTimes(2);
+    expect(once.mock.calls[1]?.[0].map((node) => node.opts?.jobId)).toEqual([
+      `fanout-${eventId}-0-0`,
+    ]);
+    expect(await fanoutJobs(h)).toHaveLength(3);
+  });
+
+  it('AC4: повтор пачки — unchanged, без дублей уведомлений и задач доставки', async () => {
+    const users = await seedLiveUsers(h, 250);
+    audience(users);
+    expect(await runQueuedIntake(h, PROTOCOL, await protocolEvent())).toBe('fanned_out');
+    const [first] = await fanoutJobs(h);
+    expect(await runFanout(h, first!)).toBe('written');
+    const delivery = await deliveryJobs(h);
+    expect(await runFanout(h, first!)).toBe('unchanged');
+    expect(await total()).toBe(200);
+    expect(await deliveryJobs(h)).toEqual(delivery);
+    expect(delivery).toHaveLength(200);
+  });
+
+  it('AC5: сбой записи пачки не мешает остальным; повтор дописывает и доставляет только её получателей', async () => {
+    const users = await seedLiveUsers(h, 450);
+    audience(users);
+    expect(await runQueuedIntake(h, PROTOCOL, await protocolEvent())).toBe('fanned_out');
+    const jobs = await fanoutJobs(h);
+    const repository = h.worker.get(NotificationsRepository);
+    const original = repository.writeNotices.bind(repository);
+    vi.spyOn(repository, 'writeNotices')
+      .mockImplementationOnce(original)
+      .mockRejectedValueOnce(new Error('write failed'));
+
+    expect(await runFanout(h, jobs[0]!)).toBe('written');
+    await expect(runFanout(h, jobs[1]!)).rejects.toThrow('write failed');
+    expect(await runFanout(h, jobs[2]!)).toBe('written');
+    expect(await total()).toBe(250);
+
+    // доставка первых пачек уже поставлена — повтор упавшей ставит только своих
+    await deliveryQueue(h).drain(true);
+    expect(await runFanout(h, jobs[1]!)).toBe('written');
+    expect(await total()).toBe(450);
+    const failedChunk = (jobs[1]!.data as FanoutJobData).userIds;
+    expect((await deliveryJobs(h)).map((job) => job.id)).toEqual(pushJobsOf(failedChunk));
+  });
+
+  it('последняя попытка пачки — лог notifications.fanout_failed без userId и ошибка дальше', async () => {
+    const users = await seedLiveUsers(h, 201);
+    audience(users);
+    const eventId = await protocolEvent();
+    expect(await runQueuedIntake(h, PROTOCOL, eventId)).toBe('fanned_out');
+    const [, last] = await fanoutJobs(h);
+    vi.spyOn(h.worker.get(NotificationsRepository), 'writeNotices').mockRejectedValue(
+      new Error('write failed'),
+    );
+    const errors = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    await expect(runFanout(h, last!)).rejects.toThrow('write failed');
+    expect(errors).not.toHaveBeenCalled();
+    const final = chunkJob(last!.data as FanoutJobData, 4);
+    await expect(runFanout(h, final)).rejects.toThrow('write failed');
+    expect(errors).toHaveBeenCalledTimes(1);
+    const [message] = errors.mock.calls[0] as [string];
+    expect(message).toMatch(/^notifications\.fanout_failed /);
+    expect(message).toContain(`event=${eventId}`);
+    expect(message).toContain('attempts=5');
+    expect(message).not.toContain(users[200]!);
+  });
+
+  it('пачка старше 72 ч — stale без записи; удалённый получатель пачки — без уведомления (RC-4)', async () => {
+    const users = await seedLiveUsers(h, 3);
+    const data = (eventId: string): FanoutJobData => ({
+      eventId,
+      type: PROTOCOL,
+      kind: 'protocol_published',
+      title: 'Протокол опубликован',
+      body: `«${RACE_TITLE}»: итоговый протокол готов.`,
+      target: null,
+      userIds: users,
+    });
+    const now = h.clock.now().getTime();
+    expect(await runFanout(h, chunkJob(data(uuidv7At(new Date(now - 72 * HOUR - 1)))))).toBe(
+      'stale',
+    );
+    expect(await total()).toBe(0);
+
+    await collections(h).users.updateOne({ _id: users[1] }, { $set: { deletedAt: h.clock.now() } });
+    expect(await runFanout(h, chunkJob(data(uuidv7At(new Date(now - 72 * HOUR)))))).toBe('written');
+    expect(await notifiedUsers()).toEqual([users[0]!, users[2]!].sort());
+  });
+
+  it('данные пачки не разбираются — ошибка (баг кода, failed-набор), на последней попытке — лог; без записи', async () => {
+    const errors = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const broken = { eventId: 'не-uuid' } as unknown as FanoutJobData;
+    await expect(runFanout(h, chunkJob(broken))).rejects.toThrow();
+    expect(errors).not.toHaveBeenCalled();
+    await expect(runFanout(h, chunkJob(broken, 4))).rejects.toThrow();
+    expect(errors).toHaveBeenCalledTimes(1);
+    expect(errors.mock.calls[0]?.[0]).toMatch(
+      /^notifications\.fanout_failed event=- job=\S+ attempts=5$/,
+    );
+    expect(await total()).toBe(0);
   });
 });
 

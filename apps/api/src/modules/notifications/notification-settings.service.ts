@@ -2,7 +2,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import type {
   EventNotificationSettingsView,
   NotificationSettings,
+  RouteNotificationSettingsView,
   UpdateEventNotificationSettings,
+  UpdateRouteNotificationSettings,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
 
@@ -12,9 +14,9 @@ import { consumeUserLimit } from '../../user-limit';
 
 /**
  * Настройки уведомлений (N4, N6): нет документа — умолчания; `PUT` — полная замена формы после zod (`start ≠ end`
- * проверяет контракт). Группа «Мероприятия» — отдельный подресурс (RC-D1): ответ `/settings` — ровно прежние ключи,
- * его `PUT` тумблеры «Мероприятий» не стирает. Лимит — общий. Не ретроактивны (RC-13): уже созданные уведомления
- * центра не трогаются.
+ * проверяет контракт). Группы «Мероприятия» и «Маршруты» — отдельные подресурсы (RC-D1): ответ `/settings` — ровно
+ * прежние ключи, его `PUT` их тумблеры не стирает. «Маршруты» без сохранённого тумблера — значение «Райдов». Лимит —
+ * общий. Не ретроактивны (RC-13): уже созданные уведомления центра не трогаются.
  */
 @Injectable()
 export class NotificationSettingsService {
@@ -51,6 +53,20 @@ export class NotificationSettingsService {
     const now = await this.consume(userId);
     await this.repository.saveEventSettings(userId, body, now);
     return { push: body.push, email: body.email };
+  }
+
+  async getRoutes(userId: string): Promise<RouteNotificationSettingsView> {
+    const { push } = await this.current(userId);
+    return { push: push.routes };
+  }
+
+  async putRoutes(
+    userId: string,
+    body: UpdateRouteNotificationSettings,
+  ): Promise<RouteNotificationSettingsView> {
+    const now = await this.consume(userId);
+    await this.repository.saveRouteSettings(userId, body, now);
+    return { push: body.push };
   }
 
   private async current(userId: string) {

@@ -534,12 +534,16 @@ paths:
   (TTL 90 дней по `expireAt`; `notifications_event_user_unique { sourceEventId, userId }`, частичный
   `notifications_collapse_unique { userId, collapseKey }`, список `{ userId, createdAt: -1, _id: -1 }`, частичные
   индексы непрочитанных и сроков доставки push/e-mail), `notification_settings` (`_id` = `userId`; нет документа —
-  умолчания; `push.events`/`email.events` (PR D) — без миграции, нет поля — включено; запись — `$set` по путям, не
-  `replaceOne`), `push_tokens` (`token` уникален, ≤ 10 на пользователя; Web Push — `platform: 'web'`, `token` = endpoint, ключи — `webPush`, ADR-0022), `push_tickets` (TTL 24 ч; `userId` владельца —
+  умолчания; `push.events`/`email.events` (PR D) — без миграции, нет поля — включено; `push.routes` (группа
+  «Маршруты») — без миграции, нет поля — значение `push.rides` (`deliverySettingsOf`, «живое» наследование); запись —
+  `$set` по путям, не `replaceOne`; `$setOnInsert` подресурсов — общий `settingsOnInsert()` без путей подресурсов), `push_tokens` (`token` уникален, ≤ 10 на пользователя; Web Push — `platform: 'web'`, `token` = endpoint, ключи — `webPush`, ADR-0022), `push_tickets` (TTL 24 ч; `userId` владельца —
   стирание аккаунта по нему, индекс `push_tickets_user_idx` из `0027_push_tickets_user`). Чтения сами проверяют
   `expireAt > now` (TTL — только уборка). Токены при доставке снимаются по снимку `{ _id, userId, sessionId }`, не по
   одному `_id`. Регистрация переписывает токен только сессией не старше записанной (`sessionId $lte`, uuidv7 входа):
   поздняя регистрация прежней сессии устройства после выхода — без записи (`token_stale`).
+- `group` уведомления — снимок при записи: `route_*` до группы «Маршруты» остаются `group: 'rides'` (тумблер «Райдов»),
+  без миграции. Доставка пачки получателей (`notifications.fanout`) — `pendingDeliveriesOf(eventId, userIds)`: фильтр
+  `userId $in` по тому же индексу `notifications_event_user_unique`, нового индекса нет.
 - Схлопывание (N7) — по порядковому номеру события в объекте, не по `sourceEventId` (uuidv7 внутри миллисекунды не
   упорядочен): райд — `seq` payload (`rides.noticeSeq` после записи: `+1` в `join` и `update`, нет поля — `0`, без
   миграции), маршрут — `decidedAt` события. Уведомление хранит `collapseSeq`, замена — только при `collapseSeq <`

@@ -29,6 +29,8 @@ const updateSettings = jest.mocked(api.updateNotificationSettings);
 const getProfile = jest.mocked(api.getProfile);
 const getEventSettings = jest.mocked(api.getEventNotificationSettings);
 const updateEventSettings = jest.mocked(api.updateEventNotificationSettings);
+const getRouteSettings = jest.mocked(api.getRouteNotificationSettings);
+const updateRouteSettings = jest.mocked(api.updateRouteNotificationSettings);
 
 const RACE = '0190a6f4-0000-7000-8000-000000000001';
 const never = () => new Promise<never>(() => undefined);
@@ -63,6 +65,8 @@ beforeEach(() => {
   updateSettings.mockImplementation(async (_token, body) => body);
   getEventSettings.mockResolvedValue({ push: true, email: true });
   updateEventSettings.mockImplementation(async (_token, body) => body);
+  getRouteSettings.mockResolvedValue({ push: true });
+  updateRouteSettings.mockImplementation(async (_token, body) => body);
   getProfile.mockResolvedValue({
     rideReasons: [],
     publicName: null,
@@ -270,11 +274,14 @@ describe('«Уведомления»: строка push (N5, native)', () => {
 });
 
 describe('«Настройки уведомлений» (N4, N6)', () => {
-  it('группы × push, e-mail — у «Споры», «Райды» и «Мероприятия»', async () => {
+  it('группы × push, e-mail — у «Споры», «Райды» и «Мероприятия»; «Маршруты» — только push, после «Райдов»', async () => {
     await open('/settings/notifications');
     expect(await screen.findByRole('header', { name: 'Мероприятия' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: 'Маршруты' })).toBeOnTheScreen();
     expect(screen.getByRole('header', { name: 'Гонки и результаты' })).toBeOnTheScreen();
-    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(4);
+    const headers = screen.getAllByRole('header').map((header) => header.props.children);
+    expect(headers.indexOf('Маршруты')).toBe(headers.indexOf('Райды') + 1);
+    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(5);
     expect(screen.getAllByRole('switch', { name: 'Письма на e-mail' })).toHaveLength(3);
     expect(screen.getByText('Только напоминания о событиях с билетом.')).toBeOnTheScreen();
     expect(screen.getByRole('switch', { name: 'Не присылать push ночью' })).toBeChecked();
@@ -337,10 +344,10 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     await waitFor(() =>
       expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })[0]).not.toBeChecked(),
     );
-    // «Мероприятия» — свой подресурс и своё сохранение: блокируются только тумблеры основного объекта
+    // «Маршруты» и «Мероприятия» — свои подресурсы и своё сохранение: блокируются только тумблеры основного объекта
     const switches = screen.getAllByRole('switch');
     const disabled = switches.filter((toggle) => toggle.props.accessibilityState?.disabled);
-    expect(disabled).toHaveLength(switches.length - 2);
+    expect(disabled).toHaveLength(switches.length - 3);
     const [hour] = screen.getAllByRole('button', { name: '23:00' });
     expect(hour).toBeDisabled();
     await fireEvent.press(screen.getAllByRole('switch', { name: 'Письма на e-mail' })[0]!);
@@ -373,7 +380,7 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     await screen.findByRole('header', { name: 'Мероприятия' });
     const pushes = screen.getAllByRole('switch', { name: 'Push-уведомления' });
 
-    await fireEvent.press(pushes[3]!);
+    await fireEvent.press(pushes[4]!);
 
     await waitFor(() =>
       expect(updateEventSettings).toHaveBeenCalledWith(liveSession.accessToken, {
@@ -383,7 +390,7 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     );
     expect(updateSettings).not.toHaveBeenCalled();
     await waitFor(() =>
-      expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })[3]).not.toBeChecked(),
+      expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })[4]).not.toBeChecked(),
     );
   });
 
@@ -395,7 +402,63 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     await screen.findByRole('header', { name: 'Райды' });
     await waitFor(() => expect(getEventSettings).toHaveBeenCalled());
     expect(screen.queryByRole('header', { name: 'Мероприятия' })).toBeNull();
-    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(3);
+    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(4);
+  });
+
+  it('«Маршруты»: тумблер сохраняет подресурс, основные настройки не трогает', async () => {
+    await open('/settings/notifications');
+    await screen.findByRole('header', { name: 'Маршруты' });
+    const pushes = await screen.findAllByRole('switch', { name: 'Push-уведомления' });
+    expect(pushes).toHaveLength(5);
+
+    await fireEvent.press(pushes[3]!);
+
+    await waitFor(() =>
+      expect(updateRouteSettings).toHaveBeenCalledWith(liveSession.accessToken, { push: false }),
+    );
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(updateEventSettings).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })[3]).not.toBeChecked(),
+    );
+  });
+
+  it('«Маршруты»: старый API (404) — блока нет', async () => {
+    getRouteSettings.mockRejectedValueOnce(
+      new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }),
+    );
+    await open('/settings/notifications');
+    await screen.findByRole('header', { name: 'Мероприятия' });
+    await waitFor(() => expect(getRouteSettings).toHaveBeenCalled());
+    expect(screen.queryByRole('header', { name: 'Маршруты' })).toBeNull();
+    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(4);
+  });
+
+  it('«Маршруты»: ошибка сохранения — баннер и прежнее значение', async () => {
+    updateRouteSettings.mockRejectedValue(
+      new ApiNetworkError(new TypeError('Network request failed')),
+    );
+    await open('/settings/notifications');
+    await screen.findByRole('header', { name: 'Маршруты' });
+    await fireEvent.press((await screen.findAllByRole('switch', { name: 'Push-уведомления' }))[3]!);
+    expect(await screen.findByText('Не удалось сохранить настройки. Повторите.')).toBeOnTheScreen();
+    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })[3]).toBeChecked();
+  });
+
+  it('«Маршруты»: после сохранения основных настроек тумблер перечитан (значение «Райдов», RC-F2)', async () => {
+    await open('/settings/notifications');
+    await screen.findByRole('header', { name: 'Маршруты' });
+    await waitFor(() => expect(getRouteSettings).toHaveBeenCalledTimes(1));
+    getRouteSettings.mockResolvedValue({ push: false });
+    const pushes = await screen.findAllByRole('switch', { name: 'Push-уведомления' });
+
+    await fireEvent.press(pushes[2]!);
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getRouteSettings).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })[3]).not.toBeChecked(),
+    );
   });
 
   it('«Мероприятия»: ошибка сохранения — баннер и прежнее значение', async () => {

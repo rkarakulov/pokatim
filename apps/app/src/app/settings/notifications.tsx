@@ -1,4 +1,8 @@
-import type { EventNotificationSettingsView, NotificationSettings } from '@pokatim/contracts';
+import type {
+  EventNotificationSettingsView,
+  NotificationSettings,
+  RouteNotificationSettingsView,
+} from '@pokatim/contracts';
 import { size, space, stroke } from '@pokatim/design-tokens';
 import { t, type MessageKey } from '@pokatim/i18n';
 import {
@@ -25,11 +29,13 @@ import {
   type PushPermissionControl,
 } from '@/features/notifications/push-permission-row';
 import {
-  isEventSettingsMissing,
+  isSettingsResourceMissing,
   useEventNotificationSettings,
   useNotificationSettings,
+  useRouteNotificationSettings,
   useUpdateEventNotificationSettings,
   useUpdateNotificationSettings,
+  useUpdateRouteNotificationSettings,
 } from '@/features/notifications/queries';
 
 const DOCUMENT_TITLE = `${t('notifications.settings.title')} — ${t('app.name')}`;
@@ -64,7 +70,9 @@ const SKELETON = (
  * делят одно состояние разрешения: включение тумблера, пока системный запрос не показывали, сначала вызывает его (в том
  * же нажатии), включённый тумблер без разрешения или подписки подписан «не придут на это устройство». Группа
  * «Мероприятия» (напоминания о событиях с билетом, PR D) — отдельный подресурс со своим сохранением (RC-D1); старый API
- * (404) — группы нет.
+ * (404) — группы нет. «Маршруты» (решения по заявке своего маршрута) — так же, после «Райдов», только push: без push
+ * блока нет и запроса нет; после сохранения основных настроек перечитывается (без своего тумблера сервер отдаёт
+ * значение «Райдов»).
  */
 export default function NotificationSettingsScreen() {
   const shell = useSettingsShell();
@@ -201,6 +209,7 @@ function SettingsForm({
           ) : null}
         </View>
       ))}
+      <RoutesGroup push={push} control={control} />
       <EventsGroup push={push} control={control} />
       {push ? (
         <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
@@ -247,7 +256,7 @@ function EventsGroup({ push, control }: { push: boolean; control?: PushPermissio
   const theme = useTheme();
   const query = useEventNotificationSettings();
   const update = useUpdateEventNotificationSettings();
-  if (isEventSettingsMissing(query.error)) return null;
+  if (isSettingsResourceMissing(query.error)) return null;
   return (
     <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
       <Text
@@ -297,6 +306,57 @@ function EventsGroup({ push, control }: { push: boolean; control?: PushPermissio
               <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
                 {t('notifications.settings.emailHint.events')}
               </Text>
+            </>
+          );
+        }}
+      </AsyncContent>
+    </View>
+  );
+}
+
+/**
+ * «Маршруты»: только push (писем у группы нет). Своё сохранение подресурса, как у «Мероприятий»: пока идёт запрос —
+ * новое значение, тумблер недоступен; ошибка — баннер и прежнее значение; `404` (старый API) и платформа без push —
+ * блока нет (без push и запроса нет).
+ */
+function RoutesGroup({ push, control }: { push: boolean; control?: PushPermissionControl }) {
+  const theme = useTheme();
+  const query = useRouteNotificationSettings({ enabled: push });
+  const update = useUpdateRouteNotificationSettings();
+  if (!push || isSettingsResourceMissing(query.error)) return null;
+  return (
+    <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
+      <Text
+        accessibilityRole="header"
+        style={[textStyle('label'), { color: theme.text.secondary }]}
+      >
+        {t('notifications.settings.group.routes')}
+      </Text>
+      <AsyncContent query={query} skeleton={<SkeletonListRow />}>
+        {(saved) => {
+          const value: RouteNotificationSettingsView =
+            update.isPending && update.variables ? update.variables : saved;
+          const busy = update.isPending;
+          return (
+            <>
+              {update.isError ? (
+                <Banner tone="error" message={t('notifications.settings.saveFailed')} />
+              ) : null}
+              <Toggle
+                label={t('notifications.settings.push')}
+                value={value.push}
+                disabled={busy}
+                onChange={(on) => {
+                  // как у остальных групп: системный запрос — первым, в том же нажатии
+                  if (on && !busy) void control?.enableFromToggle();
+                  if (!busy) update.mutate({ push: on });
+                }}
+              />
+              {value.push && control?.delivers === false ? (
+                <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+                  {t('notifications.settings.pushBlocked')}
+                </Text>
+              ) : null}
             </>
           );
         }}

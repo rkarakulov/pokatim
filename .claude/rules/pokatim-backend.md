@@ -579,7 +579,12 @@ RC-A1, ADR-0019).
   получателя — `liveUserIds`; схлопывание `profile:<uid>:<field>` по `seq`, событие без `seq` — `invalid_payload`.
 - Маршруты объявляет подписчик: `notificationsOutboxRoutes` (14 типов → `notifications-intake`; `tickets.reminder-due` — получателю своя цель `ticket` через `NoticeDraft.targets`). Очереди:
   `notifications-intake` (событие → получатели → настройки → upsert; > 72 ч — skip; уникальность `(sourceEventId,
-  userId)`, схлопывание `collapseKey`), `notifications-delivery` (`notifications.push` по пользователю — захват,
+  userId)`, схлопывание `collapseKey`; аудитория > `NOTIFICATIONS_POLICY.fanoutChunk` (200) — задачи-пачки
+  `notifications.fanout` той же очереди: `planFanout` (`notification-fanout.ts`) → план в данных задачи intake
+  (`job.updateData`, `IntakeJobData.fanout`; есть — порты не зовутся) → `FanoutJobs.enqueue` — `FlowProducer.addBulk`
+  (MULTI; `Queue.addBulk` — pipeline), опции — `defaultJobOptions` очереди явно; MULTI не гарантирует успеха команд —
+  каждый jobId проверяется `getJob`, недостающие — ещё раз, нет — исключение; пачка: 72 ч, общая `writeRecipients`,
+  `scheduleEvent(eventId, userIds)`, последняя попытка — лог `notifications.fanout_failed`), `notifications-delivery` (`notifications.push` по пользователю — захват,
   тумблер, тихие часы, лимит 20/ч, сводка; `notifications.email` — только N2), `notifications-maintenance`
   (`receipts` */15 — `DeviceNotRegistered` снимает токен; `redeliver` */10).
 - Текст — снимок сервера (`notification-texts.ts`, не `@pokatim/i18n`); цель — белый список типов. Expo — порт
@@ -587,6 +592,8 @@ RC-A1, ADR-0019).
   `skipped`.
 - HTTP `/v1/notifications` под `AuthGuard`, только свои (`userId` сессии в фильтре, чужое — 404); лимиты
   `notifications-read` 120/мин, `notifications-settings` 30/ч, `notifications-push-token` 30/ч → `429 RATE_LIMITED`.
+  Группа «Маршруты» (`route_published`/`route_rejected`) — подресурс `GET|PUT settings/routes` (`push.routes`, только
+  push; нет поля — значение `push.rides`).
   Группа «Мероприятия» — подресурс `GET|PUT settings/events` (`push.events`, `email.events`; нет поля — включено):
   `NotificationSettings` ответа строгий, новое поле сломало бы старые сборки (RC-D1); `PUT settings` — `$set`
   известных полей, не `replaceOne` (старые сборки не стирают тумблеры подресурса). Внутренний тип — `DeliverySettings`.
