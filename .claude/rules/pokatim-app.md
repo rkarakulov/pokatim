@@ -37,7 +37,10 @@ paths:
   standalone (детект — `features/pwa-install/install-platform.ts`); отправка регистрации и снятия — `sendPushRegistration`
   / `sendPushRevoke` шва; `usePushSupported()` — `null` до монтирования (SSR), без поддержки в настройках только письма
   — без push-тумблеров, тихих часов и группы без писем; строка `PushPermissionRow` — реальное состояние web:
-  `missing`/`expired` подписывает тихо, отказ — текст «включите в настройках браузера/системы»; выход — снятие на
+  `missing`/`expired` подписывает тихо, отказ — текст «включите в настройках браузера/системы»; на экране настроек
+  строка и push-тумблеры групп делят одно состояние `usePushPermission` (`push-permission-row.tsx`): включение тумблера
+  при `undetermined` — системный запрос первым, в том же нажатии (Safari), затем сохранение; при `missing`/`expired` —
+  тихая подписка; включённый тумблер без доставки (`delivers === false`) — подпись `notifications.settings.pushBlocked`; выход — снятие на
   сервере и `unsubscribe()` в браузере; нажатие на уведомление — сообщение SW `pokatim:open` → `onOpen(target)`): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
@@ -547,6 +550,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 - Шит «Райд опубликован» (ride-published-og): форма создания ведёт на `/rides/<id>?published=1`; шит — только
   организатору (`viewer.role` сервера) будущего райда после монтирования (`components/modal-sheet.tsx` — модальный
   шит `Modal` RN поверх экрана: затемнение, `sheetSurface`, heading, `onRequestClose`; не `BottomSheet` карты).
+  `ModalSheet` — единственное модальное окно приложения (шторка или `placement="dialog"`; окно установки PWA —
+  обёртка с «×» в `headerAction`); имя окна — `aria-label` самого `Modal` (на web он — `role="dialog"`), панель
+  второго dialog не создаёт.
   Действия — «Карточка-приглашение» (`rides/invite/[id]`), «Ссылка» (`shareLink`; нет origin — кнопки нет),
   «Закрыть»; закрытие снимает `published` (`router.setParams`).
 - Жалоба (05b) — экран `rides/report/[id]` (`features/rides/ride-report.tsx`) внутри `Stack.Protected`: причина —
