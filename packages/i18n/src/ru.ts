@@ -1945,6 +1945,8 @@ export const ru = {
   'admin.audit.action.profile.avatar_reset': 'Сброшено фото участника',
   'admin.audit.action.profile.club_reset': 'Сброшен клуб участника',
   'admin.audit.action.profile.reports_dismissed': 'Жалобы на профиль отклонены',
+  // profile-moderation-followups: снят запрет загрузки фото
+  'admin.audit.action.profile.avatar_unblocked': 'Снят запрет загрузки фото',
   'admin.audit.action.tickets.settings_updated': 'Настройки билетов изменены',
   'admin.audit.action.tickets.checked_in': 'Участник отмечен',
   // routes-01: экран «Маршруты» панели и публикация в каталог

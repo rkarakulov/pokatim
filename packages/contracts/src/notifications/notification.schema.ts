@@ -28,6 +28,10 @@ export const NOTIFICATION_KINDS = [
   'ride_report_resolved',
   'route_published',
   'route_rejected',
+  // profile-moderation-followups: модератор сбросил имя, фото или клуб профиля (самому райдеру)
+  'profile_name_reset',
+  'profile_avatar_reset',
+  'profile_club_reset',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -40,6 +44,8 @@ export const NotificationTarget = z.discriminatedUnion('type', [
   z.object({ type: z.literal('dispute-response'), raceId: Uuid, disputeId: Uuid }),
   /** свой маршрут райдера (`/routes/mine/<id>`): решение по заявке в каталог (routes-06 A6) */
   z.object({ type: z.literal('my-route'), routeId: Uuid }),
+  /** свой профиль («Редактировать профиль», `/settings/profile`): модератор сбросил имя, фото или клуб */
+  z.object({ type: z.literal('profile-edit') }),
 ]);
 export type NotificationTarget = z.infer<typeof NotificationTarget>;
 

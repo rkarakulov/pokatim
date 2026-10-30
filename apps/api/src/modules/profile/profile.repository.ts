@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { AppThemeId, RideReason } from '@pokatim/contracts';
+import type { AppThemeId, ProfileReportReason, RideReason } from '@pokatim/contracts';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Collection, Db, Filter } from 'mongodb';
 
@@ -11,10 +11,20 @@ import {
   type ProfileDoc,
 } from './profile.collection';
 
-/** Поля профиля для `ProfileView` (rider-profile: + клуб, аватар, публичный id; user-theme: + тема). */
+/**
+ * Поля профиля для `ProfileView` (rider-profile: + клуб, аватар, публичный id; user-theme: + тема;
+ * profile-moderation-followups: + срок запрета загрузки фото).
+ */
 export type ProfileViewDoc = Pick<
   ProfileDoc,
-  'rideReasons' | 'publicName' | 'showNameInResults' | 'club' | 'avatarId' | 'publicId' | 'themeId'
+  | 'rideReasons'
+  | 'publicName'
+  | 'showNameInResults'
+  | 'club'
+  | 'avatarId'
+  | 'publicId'
+  | 'themeId'
+  | 'avatarBlockedUntil'
 >;
 const VIEW_PROJECTION = {
   _id: 0,
@@ -25,6 +35,7 @@ const VIEW_PROJECTION = {
   avatarId: 1,
   publicId: 1,
   themeId: 1,
+  avatarBlockedUntil: 1,
 } as const;
 
 /** Поля профиля для панели модерации (profile-moderation): подпись Q2, клуб, фото, счётчики жалоб. */
@@ -38,6 +49,9 @@ export type ProfileModerationDoc = Pick<
   | 'openReportCount'
   | 'reportRevision'
   | 'lastReportAt'
+  | 'openReasons'
+  | 'avatarResetsAt'
+  | 'avatarBlockedUntil'
 >;
 const MODERATION_PROJECTION = {
   publicName: 1,
@@ -47,6 +61,9 @@ const MODERATION_PROJECTION = {
   openReportCount: 1,
   reportRevision: 1,
   lastReportAt: 1,
+  openReasons: 1,
+  avatarResetsAt: 1,
+  avatarBlockedUntil: 1,
 } as const;
 
 /** Позиция keyset очереди жалоб: время последней жалобы и `_id` последнего профиля страницы. */
@@ -57,6 +74,9 @@ export interface ReportQueuePosition {
 
 /** Итог условного сброса модератором: сброшено, сбрасывать нечего или профиля нет. */
 export type ResetOutcome = 'reset' | 'empty' | 'not_found';
+
+/** Закрытие всех открытых жалоб профиля той же операцией (profile-moderation, + причины — followups RC-F1). */
+const CLOSE_REPORTS = { openReportCount: 0, openReasons: [] as ProfileReportReason[] };
 
 /**
  * Поля документа при upsert без ответа опроса (как у шага устройств): прежние значения или пустые. `publicId` не
@@ -315,7 +335,7 @@ export class ProfileRepository {
   ): Promise<{ outcome: ResetOutcome; avatarId: string | null; wasPublic: boolean }> {
     const before = await this.profiles.findOneAndUpdate(
       { _id: userId, publicName: { $type: 'string' } },
-      { $set: { publicName: null, openReportCount: 0, updatedAt: now } },
+      { $set: { publicName: null, ...CLOSE_REPORTS, updatedAt: now } },
       { session, returnDocument: 'before', projection: { showNameInResults: 1, avatarId: 1 } },
     );
     if (before) {
@@ -330,27 +350,95 @@ export class ProfileRepository {
 
   /**
    * Сброс фото модератором (profile-moderation) — первая запись транзакции: условие «фото есть», `avatarId: null` и
-   * закрытие счётчика жалоб. Ответ — прежний id фото (для удаления документа) или итог промаха.
+   * закрытие жалоб. Ответ — прежний id фото (для удаления документа), история сбросов и срок запрета
+   * (profile-moderation-followups, RC-F7: новый срок считает `avatarResetBan`, пишет `recordAvatarReset`) или итог
+   * промаха.
    */
   async resetAvatar(
     session: DbSession,
     userId: string,
     now: Date,
-  ): Promise<{ outcome: ResetOutcome; avatarId: string | null }> {
+  ): Promise<{
+    outcome: ResetOutcome;
+    avatarId: string | null;
+    resets: Date[];
+    blockedUntil: Date | null;
+  }> {
     const before = await this.profiles.findOneAndUpdate(
       { _id: userId, avatarId: { $type: 'string' } },
-      { $set: { avatarId: null, openReportCount: 0, updatedAt: now } },
-      { session, returnDocument: 'before', projection: { avatarId: 1 } },
+      { $set: { avatarId: null, ...CLOSE_REPORTS, updatedAt: now } },
+      {
+        session,
+        returnDocument: 'before',
+        projection: { avatarId: 1, avatarResetsAt: 1, avatarBlockedUntil: 1 },
+      },
     );
-    if (before) return { outcome: 'reset', avatarId: before.avatarId ?? null };
-    return { outcome: await this.missOutcome(session, userId), avatarId: null };
+    if (before) {
+      return {
+        outcome: 'reset',
+        avatarId: before.avatarId ?? null,
+        resets: before.avatarResetsAt ?? [],
+        blockedUntil: before.avatarBlockedUntil ?? null,
+      };
+    }
+    return {
+      outcome: await this.missOutcome(session, userId),
+      avatarId: null,
+      resets: [],
+      blockedUntil: null,
+    };
+  }
+
+  /**
+   * История сбросов фото и срок запрета (profile-moderation-followups, RC-F7) — вторая запись транзакции сброса фото,
+   * после `resetAvatar` того же документа (чужая запись между ними невозможна — документ уже записан транзакцией).
+   */
+  async recordAvatarReset(
+    session: DbSession,
+    userId: string,
+    resets: Date[],
+    blockedUntil: Date | null,
+  ): Promise<void> {
+    await this.profiles.updateOne(
+      { _id: userId },
+      { $set: { avatarResetsAt: resets, avatarBlockedUntil: blockedUntil } },
+      { session },
+    );
+  }
+
+  /**
+   * «Снять запрет» (profile-moderation-followups) — первая запись транзакции: условие «запрет действует»
+   * (`avatarBlockedUntil > now`), `avatarBlockedUntil: null`; история сбросов не очищается. `none` — запрета нет или
+   * истёк, `not_found` — профиля нет.
+   */
+  async unblockAvatar(
+    session: DbSession,
+    userId: string,
+    now: Date,
+  ): Promise<'unblocked' | 'none' | 'not_found'> {
+    const before = await this.profiles.findOneAndUpdate(
+      { _id: userId, avatarBlockedUntil: { $gt: now } },
+      { $set: { avatarBlockedUntil: null } },
+      { session, projection: { _id: 1 } },
+    );
+    if (before) return 'unblocked';
+    return (await this.missOutcome(session, userId)) === 'empty' ? 'none' : 'not_found';
+  }
+
+  /** Срок запрета загрузки фото (`ProfileAvatarService.admit`, до слота и тела); нет документа — `null`. */
+  async findAvatarBlock(userId: string): Promise<Date | null> {
+    const doc = await this.profiles.findOne(
+      { _id: userId },
+      { projection: { avatarBlockedUntil: 1 } },
+    );
+    return doc?.avatarBlockedUntil ?? null;
   }
 
   /** Сброс клуба модератором (profile-moderation) — первая запись транзакции: условие «клуб есть», `club: null`. */
   async resetClub(session: DbSession, userId: string, now: Date): Promise<ResetOutcome> {
     const before = await this.profiles.findOneAndUpdate(
       { _id: userId, club: { $type: 'string' } },
-      { $set: { club: null, openReportCount: 0, updatedAt: now } },
+      { $set: { club: null, ...CLOSE_REPORTS, updatedAt: now } },
       { session, projection: { _id: 1 } },
     );
     return before ? 'reset' : this.missOutcome(session, userId);
@@ -373,7 +461,7 @@ export class ProfileRepository {
   async clearReports(session: DbSession, userId: string, reportRevision: number): Promise<boolean> {
     const updated = await this.profiles.findOneAndUpdate(
       { _id: userId, reportRevision, openReportCount: { $gt: 0 } },
-      { $set: { openReportCount: 0 } },
+      { $set: CLOSE_REPORTS },
       { session, projection: { _id: 1 } },
     );
     return updated !== null;
@@ -382,13 +470,14 @@ export class ProfileRepository {
   /**
    * Жалоба (profile-moderation) — **первая** запись транзакции жалобы (конкурирующий сброс пишет тот же документ:
    * write conflict): профиль публичен и не свой → `$inc openReportCount` и `reportRevision` (маркер «Отклонить
-   * жалобы»), `$max lastReportAt` (только порядок очереди); `updatedAt` не трогается. Ответ — `_id` цели; `null` —
-   * условие не выполнено.
+   * жалобы»), `$max lastReportAt` (только порядок очереди), `$addToSet openReasons` (очередь по причине,
+   * followups RC-F1); `updatedAt` не трогается. Ответ — `_id` цели; `null` — условие не выполнено.
    */
   async recordReport(
     session: DbSession,
     publicId: string,
     reporterUserId: string,
+    reason: ProfileReportReason,
     now: Date,
   ): Promise<string | null> {
     const doc = await this.profiles.findOneAndUpdate(
@@ -398,7 +487,11 @@ export class ProfileRepository {
         publicName: { $type: 'string' },
         _id: { $ne: reporterUserId },
       },
-      { $inc: { openReportCount: 1, reportRevision: 1 }, $max: { lastReportAt: now } },
+      {
+        $inc: { openReportCount: 1, reportRevision: 1 },
+        $max: { lastReportAt: now },
+        $addToSet: { openReasons: reason },
+      },
       { session, projection: { _id: 1 } },
     );
     return doc?._id ?? null;
@@ -430,9 +523,15 @@ export class ProfileRepository {
   /**
    * Очередь жалоб панели (profile-moderation): профили с открытыми жалобами, новые жалобы сверху. Запрос содержит
    * условие частичного индекса `profiles_report_queue_idx`, план зафиксирован `hint`; keyset по `(lastReportAt, _id)`.
+   * С причиной (followups RC-F1) — условие `openReasons` и индекс `profiles_report_reason_queue_idx` (тот же порядок).
    */
-  reportQueue(after: ReportQueuePosition | null, limit: number): Promise<ProfileModerationDoc[]> {
+  reportQueue(
+    after: ReportQueuePosition | null,
+    limit: number,
+    reason?: ProfileReportReason,
+  ): Promise<ProfileModerationDoc[]> {
     const and: Filter<ProfileDoc>[] = [{ openReportCount: { $gt: 0 } }];
+    if (reason) and.push({ openReasons: reason });
     if (after) {
       and.push({
         $or: [
@@ -444,7 +543,7 @@ export class ProfileRepository {
     return this.profiles
       .find({ $and: and }, { projection: MODERATION_PROJECTION })
       .sort({ lastReportAt: -1, _id: -1 })
-      .hint('profiles_report_queue_idx')
+      .hint(reason ? 'profiles_report_reason_queue_idx' : 'profiles_report_queue_idx')
       .limit(limit)
       .toArray();
   }

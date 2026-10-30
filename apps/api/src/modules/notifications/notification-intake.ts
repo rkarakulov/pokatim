@@ -39,6 +39,7 @@ import {
   RoutePublicationDecided,
   type RouteNotices,
 } from '../routes';
+import { PROFILE_FIELD_RESET, ProfileFieldReset } from '../profile';
 import type { NoticeText } from './notification-texts';
 import type { NotificationSourceEvent } from './notifications.events';
 
@@ -103,6 +104,8 @@ export class NotificationIntake {
         return this.reportsResolved(payload);
       case ROUTE_PUBLICATION_DECIDED:
         return this.routePublication(payload);
+      case PROFILE_FIELD_RESET:
+        return this.profileFieldReset(payload);
     }
   }
 
@@ -311,6 +314,32 @@ export class NotificationIntake {
         // решения одного маршрута разделены новой подачей — момент решения монотонен
         collapse: { key: `route:${route.id}:publication`, seq: Date.parse(decidedAt) },
         recipients: [route.ownerUserId],
+      },
+    ];
+  }
+
+  /**
+   * Сброс поля профиля модератором (profile-moderation-followups) — самому райдеру. Порта нет (RC-F3): payload
+   * самодостаточен (получатель, поле, время, срок запрета); живость получателя проверяет запись (`liveUserIds`). Новый
+   * сброс того же поля заменяет прежнее уведомление (N7, момент сброса монотонен).
+   */
+  private profileFieldReset(payload: unknown): NoticeDraft[] | IntakeSkip {
+    const event = ProfileFieldReset.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    const { userId, field, resetAt, avatarBlockedUntil } = event.data;
+    const text: NoticeText =
+      field === 'avatar'
+        ? {
+            kind: 'profile_avatar_reset',
+            blockedUntil: avatarBlockedUntil ? new Date(avatarBlockedUntil) : null,
+          }
+        : { kind: field === 'name' ? 'profile_name_reset' : 'profile_club_reset' };
+    return [
+      {
+        text,
+        target: { type: 'profile-edit' },
+        collapse: { key: `profile:${userId}:${field}`, seq: Date.parse(resetAt) },
+        recipients: [userId],
       },
     ];
   }

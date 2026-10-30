@@ -14,6 +14,8 @@ import {
   runIntake,
   uuidv7At,
 } from '../../../test/notifications';
+import { panelCall } from '../../../test/panel';
+import { type PublicRider, publicRider, RIDER_PROFILES, seedAvatar } from '../../../test/profiles';
 import { createSeason, publishedRace, staff } from '../../../test/races';
 import { resultsDb } from '../../../test/results';
 import {
@@ -827,5 +829,120 @@ describe('настройки при приёме (N4, RC-13)', () => {
     });
     // тихие часы по умолчанию (22–08 Минска): «сейчас» стенда — днём, push не отложен
     expect(forB?.push.notBefore).toEqual(h.clock.now());
+  });
+});
+
+describe('сброс поля профиля модератором (profile-moderation-followups, AC3)', () => {
+  const RESET = 'profile.field-reset';
+  let moderator: { userId: string; token: string };
+  let target: PublicRider;
+  beforeEach(async () => {
+    moderator = await staff(h, 'moderator@example.by', 'moderator');
+    target = await publicRider(h, 'target@example.by', 'Анна К.', 'Секретный клуб');
+  });
+  const reset = async (path: string) => {
+    const res = await panelCall(h, moderator.token, 'POST', path, { reason: 'Мат после жалоб' });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    return res.body;
+  };
+  const resetField = (field: 'name' | 'avatar' | 'club') =>
+    field === 'name'
+      ? reset(`/v1/admin/profiles/${target.userId}/name-reset`)
+      : reset(`${RIDER_PROFILES}/${target.userId}/${field}-reset`);
+
+  it('имя, фото, клуб — райдеру по уведомлению, группа «Райды», цель — свой профиль; текст без причины и значений', async () => {
+    await seedAvatar(h, target.userId);
+    for (const field of ['name', 'avatar', 'club'] as const) {
+      expect(await resetField(field)).toEqual({ reset: true });
+    }
+    expect(await notificationsIntake(h).drain()).toEqual(['written', 'written', 'written']);
+    const docs = await notificationsOf(h, target.userId);
+    expect(
+      docs
+        .map((doc) => [doc.kind, doc.group, doc.title, doc.body, doc.target, doc.collapseKey])
+        .sort(),
+    ).toEqual(
+      [
+        [
+          'profile_avatar_reset',
+          'rides',
+          'Фото профиля удалено',
+          'Модератор удалил фото после жалоб. Загрузите другое фото.',
+          { type: 'profile-edit' },
+          `profile:${target.userId}:avatar`,
+        ],
+        [
+          'profile_club_reset',
+          'rides',
+          'Клуб в профиле сброшен',
+          'Модератор сбросил клуб после жалоб. Укажите другой клуб в профиле.',
+          { type: 'profile-edit' },
+          `profile:${target.userId}:club`,
+        ],
+        [
+          'profile_name_reset',
+          'rides',
+          'Имя в профиле сброшено',
+          'Модератор сбросил имя после жалоб. Укажите другое имя в профиле.',
+          { type: 'profile-edit' },
+          `profile:${target.userId}:name`,
+        ],
+      ].sort(),
+    );
+    const json = JSON.stringify(docs);
+    expect(json).not.toContain('Мат после жалоб');
+    expect(json).not.toContain('Секретный клуб');
+    expect(json).not.toContain('Анна К.');
+    for (const who of [a, b, organizer, stranger])
+      expect(await notificationsOf(h, who.userId)).toEqual([]);
+    expect(await notificationsOf(h, moderator.userId)).toEqual([]);
+
+    // повтор задачи — одно уведомление
+    const [event] = await eventsOfType(h, RESET);
+    expect(await runIntake(h, RESET, event!._id)).toBe('unchanged');
+    expect(await notificationsOf(h, target.userId)).toHaveLength(3);
+  });
+
+  it('третий сброс фото — текст с датой и временем окончания запрета (Минск)', async () => {
+    for (let i = 0; i < 3; i += 1) {
+      await seedAvatar(h, target.userId);
+      await resetField('avatar');
+      h.clock.advance(MINUTE);
+    }
+    await notificationsIntake(h).drain();
+    const [doc] = await notificationsOf(h, target.userId);
+    const until = new Date(h.clock.now().getTime() - MINUTE + 30 * DAY);
+    const minsk = new Intl.DateTimeFormat('ru-RU', {
+      timeZone: 'Europe/Minsk',
+      day: 'numeric',
+      month: 'long',
+    }).format(until);
+    const time = new Intl.DateTimeFormat('ru-RU', {
+      timeZone: 'Europe/Minsk',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).format(until);
+    expect(await notificationsOf(h, target.userId)).toHaveLength(1);
+    expect(doc?.body).toBe(
+      `Модератор удалил фото после жалоб. Загрузка фото недоступна до ${minsk}, ${time}.`,
+    );
+  });
+
+  it('reset: false — нет события и уведомления; удалённый к приёму — нет уведомления; битый payload — skipped', async () => {
+    expect(await resetField('avatar')).toEqual({ reset: false });
+    expect(await eventsOfType(h, RESET)).toEqual([]);
+
+    await resetField('club');
+    await collections(h).users.updateOne(
+      { _id: target.userId },
+      { $set: { deletedAt: h.clock.now() } },
+    );
+    await notificationsIntake(h).drain();
+    expect(await notificationsOf(h, target.userId)).toEqual([]);
+
+    const bad = await appendEvent(h, RESET, { userId: target.userId, field: 'theme' });
+    expect(await runIntake(h, RESET, bad)).toBe('skipped');
+    expect(await total()).toBe(0);
   });
 });

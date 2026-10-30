@@ -61,6 +61,9 @@ describe('справочники уведомлений (только в кон�
       'ride_report_resolved',
       'route_published',
       'route_rejected',
+      'profile_name_reset',
+      'profile_avatar_reset',
+      'profile_club_reset',
     ]);
     expect(PUSH_PLATFORMS).toEqual(['ios', 'android']);
   });
@@ -78,6 +81,9 @@ describe('ответы (tolerantEnum, неизвестная цель)', () => {
     expect(NotificationTargetView.parse({ type: 'my-route', routeId: ID })).toEqual({
       type: 'my-route',
       routeId: ID,
+    });
+    expect(NotificationTargetView.parse({ type: 'profile-edit' })).toEqual({
+      type: 'profile-edit',
     });
   });
 

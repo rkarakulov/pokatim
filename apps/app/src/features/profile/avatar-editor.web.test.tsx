@@ -30,6 +30,7 @@ const profile = {
   avatar: { id: 'a1' },
   publicId: null,
   themeId: 'classic' as const,
+  avatarUploadBlockedUntil: null,
 };
 
 function renderEditor() {

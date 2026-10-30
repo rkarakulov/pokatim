@@ -29,6 +29,7 @@ const row = (overrides: Partial<RiderProfileModerationRow> = {}): RiderProfileMo
   lastReportAt: '2026-10-01T10:00:00.000Z',
   hasAvatar: true,
   hasClub: true,
+  openReasons: ['photo'],
   ...overrides,
 });
 

@@ -67,7 +67,7 @@ export class ProfileReportsService {
     let recorded = false;
     try {
       recorded = await this.transactions.run(async (tx) => {
-        const target = await this.profiles.recordReport(tx, publicId, userId, now);
+        const target = await this.profiles.recordReport(tx, publicId, userId, body.reason, now);
         if (!target) return false;
         await this.reports.insert(tx, {
           _id: reportId,
@@ -103,6 +103,7 @@ export class ProfileReportsService {
     if (target._id === userId) {
       throw domainError('PROFILE_INVALID_STATE', 409, {
         reason: 'own_profile',
+        until: null,
       } satisfies ProfileStateDetails);
     }
     return target._id;

@@ -517,6 +517,8 @@ describe('createAdminApiClient: модерация профилей райдер
     lastReportAt: '2026-10-28T10:00:00.000Z',
     reportRevision: 1,
     reports: [],
+    avatarUploadBlockedUntil: null,
+    avatarResetCount: 0,
   };
 
   it('listRiderProfiles — очередь с курсором и лимитом', async () => {
@@ -571,6 +573,29 @@ describe('createAdminApiClient: модерация профилей райдер
       method: 'POST',
       body: { reason: 'Всё в порядке', reportRevision: 2 },
     });
+  });
+
+  it('listRiderProfiles — фильтр по причине жалобы (profile-moderation-followups)', async () => {
+    const { calls, api } = admin(200, { items: [], nextCursor: null });
+    await api.listRiderProfiles({ reason: 'name', cursor: 'c1' });
+    expect(calls[0]).toMatchObject({ url: '/v1/admin/rider-profiles?reason=name&cursor=c1' });
+  });
+
+  it('unblockRiderAvatar — «Снять запрет» загрузки фото', async () => {
+    const one = admin(200, { unblocked: true });
+    await expect(
+      one.api.unblockRiderAvatar(USER_ID, { reason: 'Ошибка модератора' }),
+    ).resolves.toEqual({ unblocked: true });
+    expect(one.calls[0]).toMatchObject({
+      url: `/v1/admin/rider-profiles/${USER_ID}/avatar-unblock`,
+      method: 'POST',
+      credentials: 'same-origin',
+      body: { reason: 'Ошибка модератора' },
+    });
+    const broken = admin(200, { ok: true });
+    await expect(
+      broken.api.unblockRiderAvatar(USER_ID, { reason: 'Ошибка модератора' }),
+    ).rejects.toThrow();
   });
 
   it('riderAvatarUrl — адрес фото без запроса', () => {

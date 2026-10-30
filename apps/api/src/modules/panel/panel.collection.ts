@@ -159,6 +159,8 @@ export interface AuditDetailsDoc {
   rejectionReason?: RouteRejectionReason;
   /** event-tickets: код отмеченного билета (без имени и e-mail участника) */
   ticketCode?: string;
+  /** profile-moderation-followups: сброс фото включил запрет загрузки до этого момента (ISO, как в контракте) */
+  avatarBlockedUntil?: string;
 }
 
 /**

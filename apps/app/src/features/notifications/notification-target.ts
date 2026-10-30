@@ -21,6 +21,8 @@ export function notificationTargetPath(target: unknown): Href | null {
       return `/races/dispute-response/${value.raceId}/${value.disputeId}`;
     case 'my-route':
       return `/routes/mine/${value.routeId}`;
+    case 'profile-edit':
+      return '/settings/profile';
   }
 }
 

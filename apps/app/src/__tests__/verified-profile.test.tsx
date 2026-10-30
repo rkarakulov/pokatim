@@ -43,6 +43,7 @@ beforeEach(() => {
     avatar: null,
     publicId: null,
     themeId: 'classic',
+    avatarUploadBlockedUntil: null,
   });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });

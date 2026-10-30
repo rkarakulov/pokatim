@@ -61,8 +61,22 @@ describe('жалоба на профиль райдера (profile-moderation)',
   });
 
   it('ProfileStateDetails: own_profile; неизвестная причина не ломает разбор (tolerant)', () => {
-    expect(PROFILE_STATE_REASONS).toEqual(['own_profile']);
-    expect(ProfileStateDetails.parse({ reason: 'own_profile' })).toEqual({ reason: 'own_profile' });
+    expect(PROFILE_STATE_REASONS).toEqual(['own_profile', 'avatar_blocked']);
+    expect(ProfileStateDetails.parse({ reason: 'own_profile' })).toEqual({
+      reason: 'own_profile',
+      until: null,
+    });
     expect(ProfileStateDetails.safeParse({ reason: 'future_reason' }).success).toBe(true);
+  });
+
+  it('ProfileStateDetails: avatar_blocked с датой окончания запрета', () => {
+    const until = '2026-11-29T10:00:00.000Z';
+    expect(ProfileStateDetails.parse({ reason: 'avatar_blocked', until })).toEqual({
+      reason: 'avatar_blocked',
+      until,
+    });
+    expect(ProfileStateDetails.safeParse({ reason: 'avatar_blocked', until: 'x' }).success).toBe(
+      false,
+    );
   });
 });

@@ -274,6 +274,12 @@ describe('service worker: Web Push (ADR-0022)', () => {
     await sw.click({ type: 'race', raceId: RACE });
     await sw.click({ type: 'race', raceId: '../admin' });
     await sw.click(null);
-    expect(sw.opened).toEqual([`/races/${RACE}`, '/notifications', '/notifications']);
+    await sw.click({ type: 'profile-edit' });
+    expect(sw.opened).toEqual([
+      `/races/${RACE}`,
+      '/notifications',
+      '/notifications',
+      '/settings/profile',
+    ]);
   });
 });

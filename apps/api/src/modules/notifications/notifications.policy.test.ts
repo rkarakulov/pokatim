@@ -37,6 +37,9 @@ describe('groupOf: kind → группа настроек (N4)', () => {
       ride_report_resolved: 'rides',
       route_published: 'rides',
       route_rejected: 'rides',
+      profile_name_reset: 'rides',
+      profile_avatar_reset: 'rides',
+      profile_club_reset: 'rides',
     });
   });
 

@@ -21,6 +21,7 @@ const profile = {
   avatar: { id: TOKEN },
   publicId: TOKEN,
   themeId: 'classic',
+  avatarUploadBlockedUntil: null,
 };
 
 function client(status: number, response?: unknown) {
@@ -101,6 +102,7 @@ describe('api-client: аватар профиля (rider-profile)', () => {
       avatar: null,
       publicId: null,
       themeId: 'classic',
+      avatarUploadBlockedUntil: null,
     });
   });
 

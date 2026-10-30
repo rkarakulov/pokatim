@@ -172,3 +172,29 @@ describe('renderPushSummary: сводка тихих часов с формам�
     expect(renderPushSummary(count)).toEqual({ title: 'Покатим', body });
   });
 });
+
+describe('сброс поля профиля модератором (profile-moderation-followups): без причины модератора (N12)', () => {
+  it('имя, клуб, фото без запрета', () => {
+    expect(renderNotification({ kind: 'profile_name_reset' })).toEqual({
+      title: 'Имя в профиле сброшено',
+      body: 'Модератор сбросил имя после жалоб. Укажите другое имя в профиле.',
+    });
+    expect(renderNotification({ kind: 'profile_club_reset' })).toEqual({
+      title: 'Клуб в профиле сброшен',
+      body: 'Модератор сбросил клуб после жалоб. Укажите другой клуб в профиле.',
+    });
+    expect(renderNotification({ kind: 'profile_avatar_reset', blockedUntil: null })).toEqual({
+      title: 'Фото профиля удалено',
+      body: 'Модератор удалил фото после жалоб. Загрузите другое фото.',
+    });
+  });
+
+  it('фото с запретом загрузки — дата и время окончания по Минску (RC-F9)', () => {
+    expect(
+      renderNotification({
+        kind: 'profile_avatar_reset',
+        blockedUntil: new Date('2026-11-29T11:05:00.000Z'),
+      }).body,
+    ).toBe('Модератор удалил фото после жалоб. Загрузка фото недоступна до 29 ноября, 14:05.');
+  });
+});

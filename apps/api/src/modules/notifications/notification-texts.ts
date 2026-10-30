@@ -28,7 +28,9 @@ export type NoticeText =
   | { kind: 'ride_joined'; ride: string; goingCount: number }
   | { kind: 'ride_report_resolved'; ride: string }
   | { kind: 'route_published'; route: string }
-  | { kind: 'route_rejected'; route: string; reason: RouteRejectionReason };
+  | { kind: 'route_rejected'; route: string; reason: RouteRejectionReason }
+  | { kind: 'profile_name_reset' | 'profile_club_reset' }
+  | { kind: 'profile_avatar_reset'; blockedUntil: Date | null };
 
 export interface RenderedText {
   title: string;
@@ -86,6 +88,9 @@ const TITLES: Record<NotificationKind, string> = {
   ride_report_resolved: 'Жалоба рассмотрена',
   route_published: 'Маршрут опубликован',
   route_rejected: 'Маршрут отклонён',
+  profile_name_reset: 'Имя в профиле сброшено',
+  profile_avatar_reset: 'Фото профиля удалено',
+  profile_club_reset: 'Клуб в профиле сброшен',
 };
 
 function bodyOf(input: NoticeText): string {
@@ -122,6 +127,14 @@ function bodyOf(input: NoticeText): string {
       return `${quoted(input.route)} теперь в каталоге маршрутов.`;
     case 'route_rejected':
       return `${quoted(input.route)} не опубликован. ${REJECTION[input.reason]}`;
+    case 'profile_name_reset':
+      return 'Модератор сбросил имя после жалоб. Укажите другое имя в профиле.';
+    case 'profile_avatar_reset':
+      return input.blockedUntil
+        ? `Модератор удалил фото после жалоб. Загрузка фото недоступна до ${dayTime(input.blockedUntil)}.`
+        : 'Модератор удалил фото после жалоб. Загрузите другое фото.';
+    case 'profile_club_reset':
+      return 'Модератор сбросил клуб после жалоб. Укажите другой клуб в профиле.';
   }
 }
 

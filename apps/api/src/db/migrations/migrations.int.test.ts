@@ -49,6 +49,10 @@ import { tickets } from './0038_tickets';
 import { eventMaterials } from './0039_event_materials';
 import { MATERIALS_COLLECTIONS } from '../../modules/tickets/materials.collection';
 import { panelTotp, PANEL_TOTP_TTL_GRACE_SECONDS } from './0040_panel_totp';
+import {
+  PROFILE_REPORT_REASONS_INDEXES,
+  profileReportReasons,
+} from './0041_profile_report_reasons';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
 import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
@@ -161,6 +165,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0038_tickets',
       '0039_event_materials',
       '0040_panel_totp',
+      '0041_profile_report_reasons',
     ]);
   });
 
@@ -1242,6 +1247,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       [
         RIDER_PROFILE_INDEXES.profilesPublicId.options.name,
         PROFILE_REPORTS_INDEXES.profilesReportQueue.options.name,
+        PROFILE_REPORT_REASONS_INDEXES.profilesReportReasonQueue.options.name,
       ].sort(),
     );
 
@@ -1250,9 +1256,10 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await profile.up(h.db);
     expect(await exists()).toHaveLength(1);
     expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toEqual({});
-    // индексы publicId (0033) и очереди жалоб (0034) — обратно: следующие файлы стенда работают с той же базой
+    // индексы publicId (0033) и очереди жалоб (0034, 0041) — обратно: следующие файлы стенда работают с той же базой
     await riderProfile.up(h.db);
     await profileReports.up(h.db);
+    await profileReportReasons.up(h.db);
   });
 
   it('0033_rider_profile: бэкфилл publicId (имя + согласие) и raceWindowStartsAt; profile_avatars; индексы; повторный up — без изменений', async () => {
@@ -1648,7 +1655,6 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
 
   it('0040_panel_totp: коллекции 2FA, уникальные хеши токенов, TTL; последняя, повторный up не меняет индексы', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0040_panel_totp');
     expect(ids.indexOf('0040_panel_totp')).toBe(ids.indexOf('0039_event_materials') + 1);
     const index = (key: Record<string, number>, unique = false, ttl?: number) => ({
       key,
@@ -1679,6 +1685,70 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await panelTotp.up(h.db);
     for (const [name, indexes] of Object.entries(expected)) {
       expect(await indexesOf(name)).toEqual(indexes);
+    }
+  });
+
+  it('0041_profile_report_reasons: индекс очереди по причине, бэкфилл openReasons по открытым жалобам; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0041_profile_report_reasons');
+    expect(ids.indexOf('0041_profile_report_reasons')).toBe(ids.indexOf('0040_panel_totp') + 1);
+    const reasonIndex = {
+      profiles_report_reason_queue_idx: {
+        key: { openReasons: 1, lastReportAt: -1, _id: -1 },
+        unique: false,
+        partialFilterExpression: { openReportCount: { $gt: 0 } },
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toMatchObject(reasonIndex);
+
+    const profiles = h.db.collection<Record<string, unknown> & { _id: string }>(
+      PROFILE_COLLECTIONS.profiles,
+    );
+    const reports = h.db.collection<Record<string, unknown> & { _id: string }>(
+      PROFILE_REPORTS_COLLECTIONS.reports,
+    );
+    const at = new Date('2026-10-30T08:00:00.000Z');
+    await profiles.insertMany([
+      { _id: 'p-0041-open', openReportCount: 3, lastReportAt: at },
+      { _id: 'p-0041-closed', openReportCount: 0, lastReportAt: at },
+      { _id: 'p-0041-none' },
+    ]);
+    const report = (id: string, target: string, reason: string, resolvedAt: Date | null) => ({
+      _id: id,
+      targetUserId: target,
+      reporterUserId: `r-${id}`,
+      reason,
+      resolvedAt,
+    });
+    await reports.insertMany([
+      report('rep-0041-1', 'p-0041-open', 'name', null),
+      report('rep-0041-2', 'p-0041-open', 'photo', null),
+      report('rep-0041-3', 'p-0041-open', 'name', null),
+      report('rep-0041-4', 'p-0041-open', 'club', at),
+      report('rep-0041-5', 'p-0041-closed', 'spam', at),
+    ]);
+    try {
+      const reasonsOf = async () =>
+        Object.fromEntries(
+          (await profiles.find({ _id: /^p-0041-/ }).toArray()).map((doc) => [
+            doc._id,
+            Array.isArray(doc.openReasons) ? [...(doc.openReasons as string[])].sort() : null,
+          ]),
+        );
+      await profileReportReasons.up(h.db);
+      const expected = {
+        'p-0041-open': ['name', 'photo'],
+        'p-0041-closed': null,
+        'p-0041-none': null,
+      };
+      expect(await reasonsOf()).toEqual(expected);
+      await profileReportReasons.up(h.db);
+      expect(await reasonsOf()).toEqual(expected);
+      expect(await indexesOf(PROFILE_COLLECTIONS.profiles)).toMatchObject(reasonIndex);
+    } finally {
+      await profiles.deleteMany({ _id: /^p-0041-/ });
+      await reports.deleteMany({ _id: /^rep-0041-/ });
     }
   });
 });

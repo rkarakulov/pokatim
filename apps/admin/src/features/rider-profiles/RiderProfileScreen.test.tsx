@@ -38,6 +38,8 @@ const detail = (
   openReportCount: 1,
   lastReportAt: LAST,
   reportRevision: 4,
+  avatarUploadBlockedUntil: null,
+  avatarResetCount: 0,
   reports: [
     {
       id: REPORT,

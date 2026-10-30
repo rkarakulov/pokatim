@@ -85,3 +85,50 @@ describe('NotificationIntake: решение по заявке маршрута 
     ]);
   });
 });
+
+describe('NotificationIntake: сброс поля профиля (profile-moderation-followups, RC-F3 — без порта)', () => {
+  const RESET = 'profile.field-reset';
+  const USER = '0190a6f4-0000-7000-8000-000000000003';
+  const AT = '2026-10-30T09:00:00.000Z';
+  const payload = (field: string, avatarBlockedUntil: string | null = null) => ({
+    userId: USER,
+    field,
+    resetAt: AT,
+    avatarBlockedUntil,
+  });
+
+  it.each([
+    ['name', { kind: 'profile_name_reset' }],
+    ['club', { kind: 'profile_club_reset' }],
+    ['avatar', { kind: 'profile_avatar_reset', blockedUntil: null }],
+  ] as const)(
+    '%s — самому райдеру, цель — свой профиль, схлопывание по полю',
+    async (field, text) => {
+      expect(await intakeWith(null).drafts(RESET, payload(field))).toEqual([
+        {
+          text,
+          target: { type: 'profile-edit' },
+          collapse: { key: `profile:${USER}:${field}`, seq: Date.parse(AT) },
+          recipients: [USER],
+        },
+      ]);
+    },
+  );
+
+  it('фото с запретом — срок в тексте', async () => {
+    const until = '2026-11-29T09:00:00.000Z';
+    const drafts = await intakeWith(null).drafts(RESET, payload('avatar', until));
+    expect(drafts).toMatchObject([
+      { text: { kind: 'profile_avatar_reset', blockedUntil: new Date(until) } },
+    ]);
+  });
+
+  it.each([
+    ['поле вне справочника', payload('theme')],
+    ['лишний ключ (причина модератора)', { ...payload('name'), reason: 'мат' }],
+    ['нет avatarBlockedUntil', { userId: USER, field: 'name', resetAt: AT }],
+    ['битый userId', { ...payload('name'), userId: 'x' }],
+  ])('%s — invalid_payload', async (_name, bad) => {
+    expect(await intakeWith(null).drafts(RESET, bad)).toBe('invalid_payload');
+  });
+});

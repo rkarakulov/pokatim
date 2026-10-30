@@ -97,6 +97,8 @@ import {
   RiderProfileReportsDismissResult,
   type RiderProfileResetRequest,
   RiderProfileResetResult,
+  RiderAvatarUnblockResult,
+  type UnblockRiderAvatarRequest,
   PanelAppearance,
   type UpdateAppearanceRequest,
   PanelSignedIn,
@@ -389,6 +391,9 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     /** Устаревший `reportRevision` (пришла новая жалоба) — 409 `CONFLICT`. */
     dismissRiderProfileReports: (userId: string, body: DismissRiderProfileReportsRequest) =>
       post(`${riderProfile(userId)}/dismiss-reports`, RiderProfileReportsDismissResult, body),
+    /** «Снять запрет» загрузки фото; запрета нет — `{ unblocked: false }` (profile-moderation-followups). */
+    unblockRiderAvatar: (userId: string, body: UnblockRiderAvatarRequest) =>
+      post(`${riderProfile(userId)}/avatar-unblock`, RiderAvatarUnblockResult, body),
     /** Адрес фото райдера для карточки (тот же origin, без запроса). */
     riderAvatarUrl: (id: string) => `${baseUrl}/v1/avatars/${encodeURIComponent(id)}`,
     // erasure-failures: зависшие удаления аккаунтов и повтор очистки (platform.stats, только admin)

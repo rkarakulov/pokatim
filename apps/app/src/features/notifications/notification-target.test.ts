@@ -16,6 +16,7 @@ describe('notificationTargetPath — белый список целей (N10)', 
       `/races/dispute-response/${RACE}/${DISPUTE}`,
     ],
     [{ type: 'my-route', routeId: ROUTE }, `/routes/mine/${ROUTE}`],
+    [{ type: 'profile-edit' }, '/settings/profile'],
   ])('%j → %s', (target, path) => {
     expect(notificationTargetPath(target)).toBe(path);
   });
@@ -53,6 +54,7 @@ describe('паритет с service worker (Web Push, ADR-0022)', () => {
     { type: 'ride', rideId: RIDE },
     { type: 'dispute-response', raceId: RACE, disputeId: DISPUTE },
     { type: 'my-route', routeId: ROUTE },
+    { type: 'profile-edit' },
     { type: 'race', raceId: '../admin' },
     { type: 'race', raceId: RACE.toUpperCase() },
     { type: 'race', raceId: '00000000-0000-0000-0000-000000000000' },

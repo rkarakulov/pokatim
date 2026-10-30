@@ -149,6 +149,8 @@ function targetPath(target) {
       return id('raceId') && id('disputeId') && '/races/dispute-response/' + id('raceId') + '/' + id('disputeId');
     case 'my-route':
       return id('routeId') && '/routes/mine/' + id('routeId');
+    case 'profile-edit':
+      return '/settings/profile';
     default:
       return null;
   }
