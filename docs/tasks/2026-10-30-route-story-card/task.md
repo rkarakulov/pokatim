@@ -227,7 +227,7 @@ ride-invite.test.tsx}`, `apps/app/e2e/web.spec.ts`, `apps/app/src/components/mod
 - AC7. Приложение, райд: будущий райд, вошедший — шит с «Карточка-приглашение» → `/rides/invite/<id>` и «Ссылка»;
   отдельной кнопки «Карточка-приглашение» нет; гость и не будущий райд — как раньше (ссылка/нет кнопки); шит «Райд
   опубликован» работает как раньше.
-- AC8. Web: `/routes/story/<id>` без сессии — HTML без превью и OG, `noindex`, после гидрации — гард входа.
+- AC8. Web: `/routes/story/<id>` без сессии — HTML без превью и OG, `Disallow` в robots.txt (`SEO_DISALLOW`, как `/rides/invite/` и `/achievements/story/`), после гидрации — гард входа.
 - AC9. `TURBO_CONCURRENCY=1 pnpm check` зелёный; картинки проверены превью-скриптом и на dev.
 
 ## 8.1a Test matrix

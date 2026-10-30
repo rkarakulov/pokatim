@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
-import { AchievementCode, StoryCardTemplate, StoryCardToken } from '@pokatim/contracts';
+import { AchievementCode, StoryCardTemplate, StoryCardToken, Uuid } from '@pokatim/contracts';
 import { REDIS } from '@rkarakulov/api-kit/core';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
@@ -42,7 +42,7 @@ export type AchievementCardJob = z.infer<typeof AchievementCardJob>;
 export const ROUTE_CARD_RENDER_JOB = 'route-card.render';
 export const RouteCardJob = z.object({
   userId: z.string(),
-  routeId: z.string(),
+  routeId: Uuid,
   template: StoryCardTemplate,
   hash: z.string(),
 });

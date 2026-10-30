@@ -28,7 +28,12 @@ const story = { userId: 'u', raceId: 'r', template: 'line', hash: 'h' };
 const invite = { userId: 'u', rideId: 'ride', template: 'night', hash: 'h' };
 const achievement = { userId: 'u', code: 'race_win', template: 'line', hash: 'h' };
 const og = { kind: 'ride', id: 'ride', hash: 'a'.repeat(64) };
-const routeCard = { userId: 'u', routeId: 'route', template: 'line', hash: 'h' };
+const routeCard = {
+  userId: 'u',
+  routeId: '01a1744e-823f-7fc6-b68d-f2d921f7f69b',
+  template: 'line',
+  hash: 'h',
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
