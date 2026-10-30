@@ -54,7 +54,11 @@ paths:
   `routes/:id/{gpx,kml,tcx}` (общий `sendExport`) — `IpRateLimitGuard` +
   `@IpRateLimit('route-gpx', ROUTE_POLICY.exportIpLimit)` после класс-гарда,
   байты `route_exports`, заголовки файла через `HttpAdapterHost` после чтения (Nest пишет `@Header` до обработчика —
-  404 с типом файла не сериализовался бы). Общий IP-лимит метода — `consumeIpLimit`/`IpRateLimitGuard` в
+  404 с типом файла не сериализовался бы). Сжатие (route-exports-gzip): `@Headers('accept-encoding')` →
+  `acceptsGzip` (`routes.policy.ts`) → `RoutesPublicService.exportFile(id, format, acceptGzip)`: хранится gzip и клиент
+  принимает — байты как есть + `Content-Encoding: gzip`; не принимает — `gunzip` ≤ `ROUTE_POLICY.exportMaxBytes`
+  (распаковка своих данных, не разбор и не сборка; сбой — лог `routeId`/формат/класс ошибки, 500); старый несжатый
+  документ — как есть. `Vary: Accept-Encoding` — у каждого 200. Глобального `@fastify/compress` нет. Общий IP-лимит метода — `consumeIpLimit`/`IpRateLimitGuard` в
   `src/public-read.guard.ts` (им же пользуется `PublicReadGuard`).
 - Очередь `routes-maintenance` (routes-03, `RoutesWorkerModule`): `RoutesSchedules` — расписание `routes.maintenance`
   каждые 10 мин + разовая `routes.derive.boot` при старте worker; `RoutesMaintenanceProcessor` → `RouteDerivedBackfill.run`

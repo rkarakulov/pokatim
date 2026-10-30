@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  acceptsGzip,
   canPublish,
   type PublicationAction,
   publicationTransition,
@@ -175,5 +176,28 @@ describe('canPublish (routes-06)', () => {
     expect(ROUTE_POLICY.reportLimit).toEqual({ limit: 20, windowSec: 86_400 });
     expect(ROUTE_POLICY.maxPendingPublications).toBe(3);
     expect(ROUTE_POLICY.maxSubmissionsPerRoute).toBe(3);
+  });
+});
+
+describe('acceptsGzip (route-exports-gzip, AC6)', () => {
+  it.each<[string | undefined, boolean]>([
+    [undefined, false],
+    ['', false],
+    ['gzip', true],
+    ['GZip', true],
+    ['x-gzip', true],
+    ['deflate, gzip', true],
+    ['gzip;q=0.5', true],
+    ['*', true],
+    ['br;q=1, *;q=0.1', true],
+    ['gzip;q=0', false],
+    ['gzip;q=0.000', false],
+    ['gzip;q=0, *', false],
+    ['identity', false],
+    ['br, deflate', false],
+    ['*;q=0', false],
+    ['gzip;q=abc', false],
+  ])('%j → %s', (header, expected) => {
+    expect(acceptsGzip(header)).toBe(expected);
   });
 });

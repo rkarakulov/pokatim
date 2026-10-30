@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 
 import { PanelRoutePage, Session } from '@pokatim/contracts';
 import { parseGpx, ROUTE_DERIVED_VERSION } from '@pokatim/tracks/parse';
@@ -126,8 +127,11 @@ describe('приём и разбор (AC1, AC9, AC10)', () => {
     expect(geometry!.profile![0]![0]).toBe(0);
     expect(geometry!.profile!.at(-1)![0]).toBe(doc!.distanceM);
     const exported = await routesDb(h).exports.findOne({ _id: route.id });
-    expect(exported).toMatchObject({ derivedVersion: ROUTE_DERIVED_VERSION });
-    const gpx = Buffer.from(exported!.gpx.buffer).toString('utf8');
+    // route-exports-gzip: файлы сжаты gzip, sizeBytes — сумма хранимых (сжатых) байт
+    expect(exported).toMatchObject({ derivedVersion: ROUTE_DERIVED_VERSION, encoding: 'gzip' });
+    const gpx = gunzipSync(exported!.gpx.buffer).toString('utf8');
+    expect(gunzipSync(exported!.kml!.buffer).toString('utf8')).toMatch(/^<\?xml/);
+    expect(gunzipSync(exported!.tcx!.buffer).toString('utf8')).toMatch(/^<\?xml/);
     // routes-formats: KML и TCX — в том же документе, sizeBytes — сумма файлов
     expect(exported!.sizeBytes).toBe(
       exported!.gpx.buffer.byteLength +

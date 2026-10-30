@@ -123,14 +123,16 @@ export interface RouteGeometryDoc {
 /**
  * Файлы маршрута для скачивания (`_id` = routeId) — пишутся вместе с `derivedVersion` геометрии одной транзакцией:
  * очищенный GPX (≤ ~1,2 МБ: ≤ 20 000 `trkpt`), KML (≤ ~0,6 МБ) и TCX (≤ ~4,6 МБ) из тех же точек (routes-formats).
- * У документов версии 1 `kml` и `tcx` нет (появятся после бэкфилла версии 2). `sizeBytes` — сумма файлов
- * (диагностика).
+ * У документов версии 1 `kml` и `tcx` нет (появятся после бэкфилла версии 2). `encoding: 'gzip'` (route-exports-gzip) —
+ * все три поля сжаты gzip (новые записи всегда); нет поля — старый документ, UTF-8 как есть (пережмётся при росте
+ * `derivedVersion`). `sizeBytes` — сумма **хранимых** байт файлов (диагностика объёма).
  */
 export interface RouteExportDoc {
   _id: string;
   gpx: Binary;
   kml?: Binary;
   tcx?: Binary;
+  encoding?: 'gzip';
   sizeBytes: number;
   derivedVersion: number;
 }
