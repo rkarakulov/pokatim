@@ -30,6 +30,7 @@ import { SectionHero } from '@/components/section-hero';
 import { StatBlock } from '@/components/stat-block';
 import { rememberReturnPath } from '@/features/auth/return-path';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
+import { PushSoftPrompt } from '@/features/notifications/push-soft-prompt';
 import { useScrubScrollEnabled } from '@/features/routes/use-scrub-scroll-lock';
 import { useShareChoice } from '@/features/sharing/share-choice-sheet';
 import { useShareImage } from '@/features/sharing/use-share-image';
@@ -202,6 +203,7 @@ function RideDetailView({
           onLeave={() => rsvp.mutate('leave')}
         />
       ) : null}
+      <PushSoftPrompt context="ride" id={ride.id} />
       {organizer && viewer?.canManage ? (
         <View style={styles.stack}>
           <Button

@@ -40,6 +40,7 @@ const share = jest.mocked(shareLink);
 
 /** «Сейчас»: 1 октября 2026, 15:00 по Минску. */
 const NOW = new Date('2026-10-01T12:00:00Z');
+const SOFT_PROMPT = 'Узнайте о переносе или отмене райда';
 const ID = '0190a6f4-0000-7000-8000-000000000005';
 
 const detail: RideDetail = {
@@ -277,6 +278,113 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
     await openSignedIn();
     await fireEvent.press(await screen.findByRole('button', { name: 'Я иду' }));
     expect(await screen.findByText('Мест нет — все 12 мест заняты.')).toBeOnTheScreen();
+    // ошибка мутации — подсказки push нет (N5)
+    expect(screen.queryByText(SOFT_PROMPT)).toBeNull();
+  });
+
+  describe('подсказка push после «Я иду» (N5)', () => {
+    // ревью pass 2: экран под карточкой (лента, Главная) скрыт, но смонтирован — показ не его
+    it.each([
+      ['лента «Райды»', '/rides'],
+      ['Главная', '/'],
+    ])(
+      'стек «%s → карточка»: «Я иду» на карточке — подсказка на карточке и одна',
+      async (_name, from) => {
+        jest.mocked(api.listRides).mockResolvedValue({
+          items: [{ ...detail, viewer: viewer('none', { canJoin: true }) }],
+          nextCursor: null,
+        });
+        joinRide.mockResolvedValue(
+          view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+        );
+        // корневой layout со Stack: карточка ложится поверх вкладок, экран под ней остаётся смонтированным
+        await renderRouter(appRoutes, { initialUrl: from, wrapper: createQueryWrapper() });
+        await waitFor(() => expect(api.listRides).toHaveBeenCalled());
+        expect(
+          await screen.findByRole('button', { name: 'Я иду', includeHiddenElements: false }),
+        ).toBeOnTheScreen();
+        await act(() => expoRouter.push(`/rides/${ID}`));
+
+        await waitFor(() =>
+          expect(getRideForViewer).toHaveBeenCalledWith(liveSession.accessToken, ID),
+        );
+        getRideForViewer.mockResolvedValue(
+          view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+        );
+        await waitFor(() =>
+          expect(
+            screen.getAllByRole('button', { name: 'Я иду', includeHiddenElements: false }),
+          ).toHaveLength(1),
+        );
+        await fireEvent.press(
+          screen.getByRole('button', { name: 'Я иду', includeHiddenElements: false }),
+        );
+
+        expect(
+          await screen.findByText(SOFT_PROMPT, { includeHiddenElements: false }),
+        ).toBeOnTheScreen();
+        expect(screen.getAllByText(SOFT_PROMPT, { includeHiddenElements: true })).toHaveLength(1);
+        // именно на карточке, а не на скрытом экране под ней
+        expect(
+          within(screen.getByTestId('ride-detail', { includeHiddenElements: false })).getByText(
+            SOFT_PROMPT,
+          ),
+        ).toBeOnTheScreen();
+      },
+    );
+
+    it('открытие карточки — без подсказки и без системного запроса; успешное «Я иду» — подсказка райда', async () => {
+      const notifications = jest.requireMock<{ requestPermissionsAsync: jest.Mock }>(
+        'expo-notifications',
+      );
+      joinRide.mockResolvedValue(
+        view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+      );
+      await openSignedIn();
+      const join = await screen.findByRole('button', { name: 'Я иду' });
+      expect(screen.queryByText(SOFT_PROMPT)).toBeNull();
+
+      getRideForViewer.mockResolvedValue(
+        view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+      );
+      await fireEvent.press(join);
+      expect(await screen.findByText(SOFT_PROMPT)).toBeOnTheScreen();
+      expect(screen.getByRole('button', { name: 'Включить' })).toBeOnTheScreen();
+      expect(notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    });
+
+    it('«Не иду» после показанной подсказки — подсказка закрыта', async () => {
+      joinRide.mockResolvedValue(
+        view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+      );
+      leaveRide.mockResolvedValue(view({ goingCount: 5 }, viewer('none', { canJoin: true })));
+      await openSignedIn();
+      const join = await screen.findByRole('button', { name: 'Я иду' });
+      getRideForViewer.mockResolvedValue(
+        view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+      );
+      await fireEvent.press(join);
+      expect(await screen.findByText(SOFT_PROMPT)).toBeOnTheScreen();
+
+      getRideForViewer.mockResolvedValue(
+        view({ goingCount: 5 }, viewer('none', { canJoin: true })),
+      );
+      await fireEvent.press(await screen.findByRole('button', { name: 'Не иду' }));
+      expect(await screen.findByRole('button', { name: 'Я иду' })).toBeOnTheScreen();
+      expect(screen.queryByText(SOFT_PROMPT)).toBeNull();
+    });
+
+    it('«Не иду» — подсказки нет', async () => {
+      getRideForViewer.mockResolvedValue(view({}, viewer('participant', { canLeave: true })));
+      leaveRide.mockResolvedValue(view({ goingCount: 4 }, viewer('none', { canJoin: true })));
+      await openSignedIn();
+      getRideForViewer.mockResolvedValue(
+        view({ goingCount: 4 }, viewer('none', { canJoin: true })),
+      );
+      await fireEvent.press(await screen.findByRole('button', { name: 'Не иду' }));
+      expect(await screen.findByRole('button', { name: 'Я иду' })).toBeOnTheScreen();
+      expect(screen.queryByText(SOFT_PROMPT)).toBeNull();
+    });
   });
 
   it('отменённый: баннер с причиной, без «Я иду» и «Поделиться» (AC5)', async () => {

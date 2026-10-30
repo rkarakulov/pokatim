@@ -18,6 +18,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { rememberReturnPath } from '@/features/auth/return-path';
+import { PushSoftPrompt } from '@/features/notifications/push-soft-prompt';
 import { OpenTicketButton } from '@/features/tickets/open-ticket-button';
 
 import {
@@ -171,6 +172,8 @@ export function RaceParticipation({
     <Block>
       <Kicker label={t('races.entry.title')} />
       <EntryResult entry={data} race={race} now={now} />
+      {/* после записи на гонку (N5): «Участвовать» ушло — подсказка под итогом участия */}
+      <PushSoftPrompt context="race" id={race.id} />
       <OpenTicketButton ticket={ticket.data} />
       {data.actions.canShareStory ? <ShareStoryButton raceId={race.id} /> : null}
       <EntryActions entry={data} raceId={race.id} now={now} />
