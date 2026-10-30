@@ -31,9 +31,10 @@ import { StatBlock } from '@/components/stat-block';
 import { rememberReturnPath } from '@/features/auth/return-path';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { useScrubScrollEnabled } from '@/features/routes/use-scrub-scroll-lock';
+import { useShareChoice } from '@/features/sharing/share-choice-sheet';
 import { useShareImage } from '@/features/sharing/use-share-image';
 import { domainLabel, formatMinskDateTime } from '@/lib/minsk-format';
-import { shareLink, shareOrigin } from '@/lib/share-link';
+import { shareOrigin } from '@/lib/share-link';
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
@@ -48,26 +49,29 @@ export const rideDocumentTitle = (title: string) => `${title} — ${t('app.name'
 const ridePath = (id: string) => `/rides/${id}`;
 
 /**
- * «Поделиться» ссылкой на web-карточку: share sheet / Web Share / копирование с «Ссылка скопирована»; с OG-картинкой
- * райда файлом, когда она готова и платформа умеет (иначе — ссылка).
+ * «Поделиться» (route-story-card, R7): вошедшему со ссылкой — шит «Карточка-приглашение / Ссылка»; гостю — сразу
+ * ссылка на web-карточку (share sheet / Web Share / копирование с «Ссылка скопирована»; с OG-картинкой райда файлом,
+ * когда она готова и платформа умеет); без web-origin вошедшему — сразу экран приглашения; нечем — кнопки нет. Только
+ * будущему райду после монтирования (право карточки — сервер: 409 → «Приглашение недоступно»).
  */
-function ShareAction({ ride }: { ride: RideDetail }) {
-  const [notice, setNotice] = useState<'copied' | 'failed' | null>(null);
-  const image = useShareImage('ride', ride.id, true);
-  const share = () => {
-    setNotice(null);
-    // синхронно в обработчике нажатия (web: `navigator.share` до любого await)
-    shareLink({ title: ride.title, text: rideShareText(ride), path: ridePath(ride.id), image })
-      .then((outcome) => setNotice(outcome === 'copied' ? 'copied' : null))
-      .catch(() => setNotice('failed'));
-  };
+function ShareAction({ ride, signedIn }: { ride: RideDetail; signedIn: boolean }) {
+  const router = useRouter();
+  const canLink = shareOrigin() !== null;
+  const image = useShareImage('ride', ride.id, canLink);
+  const share = useShareChoice({
+    title: t('share.choice.title'),
+    cardLabel: t('rideInvite.open'),
+    onCard: signedIn ? () => router.push(rideInvitePath(ride.id)) : null,
+    link: canLink
+      ? { title: ride.title, text: rideShareText(ride), path: ridePath(ride.id), image }
+      : null,
+  });
+  if (!share.available) return null;
   return (
     <View style={styles.stack}>
-      <Button label={t('rides.detail.share')} variant="secondary" onPress={share} />
-      {notice === 'copied' ? <Banner message={t('rides.detail.copied')} /> : null}
-      {notice === 'failed' ? (
-        <Banner tone="warning" message={t('rides.detail.shareFailed')} />
-      ) : null}
+      <Button label={t('rides.detail.share')} variant="secondary" onPress={share.press} />
+      {share.notice}
+      {share.sheet}
     </View>
   );
 }
@@ -104,7 +108,7 @@ function RideDetailView({
   const city = cityLabel(ride.city);
   const organizer = viewer?.role === 'organizer';
   const upcoming = ride.phase === 'upcoming';
-  const canShare = mounted && upcoming && shareOrigin() !== null;
+  const canShare = mounted && upcoming;
   // шит «Райд опубликован» — организатору будущего райда сразу после создания, только после монтирования (не SSR)
   const [sheetOpen, setSheetOpen] = useState(true);
   const showPublished = published && sheetOpen && mounted && upcoming && organizer;
@@ -214,14 +218,7 @@ function RideDetailView({
           </View>
         </View>
       ) : null}
-      {canShare ? <ShareAction ride={ride} /> : null}
-      {signedIn && mounted && upcoming ? (
-        <Button
-          label={t('rideInvite.open')}
-          variant="secondary"
-          onPress={() => router.push(rideInvitePath(ride.id))}
-        />
-      ) : null}
+      {canShare ? <ShareAction ride={ride} signedIn={signedIn} /> : null}
       {ride.phase === 'past' ? (
         <View style={styles.start}>
           <TextAction

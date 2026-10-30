@@ -22,11 +22,15 @@ import { renderOgCard } from './og-card.png';
 import { OG_CARD_POLICY, ogPrerenderable } from './sharing.policy';
 import { RideInviteInputs } from './ride-invite.inputs';
 import { renderRideInvite } from './ride-invite.png';
+import { RouteCardInputs } from './route-card.inputs';
+import { renderRouteCard } from './route-card.png';
 import {
   ACHIEVEMENT_CARD_RENDER_JOB,
   AchievementCardJob,
   RIDE_INVITE_RENDER_JOB,
   RideInviteJob,
+  ROUTE_CARD_RENDER_JOB,
+  RouteCardJob,
   STORY_CARD_RENDER_JOB,
   StoryCardCache,
   StoryCardJob,
@@ -68,7 +72,8 @@ interface OutcomeSink {
 
 /**
  * Рендер карточек очереди `story-card` (ADR-0018): сторис своего результата (`story-card.render`), приглашение
- * кофе-райда (`ride-invite.render`), карточка достижения (`achievement-card.render`) и OG-картинка публичной страницы (`og-card.render`, og-images; диспетчер — по имени
+ * кофе-райда (`ride-invite.render`), карточка достижения (`achievement-card.render`), карточка маршрута каталога
+ * (`route-card.render`) и OG-картинка публичной страницы (`og-card.render`, og-images; диспетчер — по имени
  * задачи). Входы перечитываются и сверяются с хэшем задачи (изменились — `skipped`, PNG не
  * пишется) → линия (порт `results`: отрезок между воротами или маршрут; порт `rides`: маршрут каталога) → satori +
  * resvg → PNG в Redis под новым токеном. Сбой — ретрай; на последней попытке — видимый `failed`. Лог — заявка или
@@ -90,6 +95,7 @@ export class StoryCardProcessor extends WorkerHost {
     @Inject(ROUTE_GEOMETRY) private readonly geometry: RouteGeometry,
     @Inject(ROUTES_FOR_SHARING) private readonly routes: RoutesForSharing,
     @Inject(CLOCK) private readonly clock: Clock,
+    private readonly routeCards: RouteCardInputs,
   ) {
     super();
   }
@@ -124,6 +130,8 @@ export class StoryCardProcessor extends WorkerHost {
         return parsed(AchievementCardJob, (data, options) =>
           this.buildAchievementCard(data, options),
         );
+      case ROUTE_CARD_RENDER_JOB:
+        return parsed(RouteCardJob, (data, options) => this.buildRouteCard(data, options));
       case OG_CARD_RENDER_JOB:
         return parsed(OgCardJob, (data, options) => this.buildOgCard(data, options));
       default:
@@ -190,6 +198,22 @@ export class StoryCardProcessor extends WorkerHost {
       const resolved = await this.achievementInputs.resolve(job.userId, job.code, job.template);
       if (!resolved || resolved.hash !== job.hash) return null;
       return { png: await renderAchievementCard(resolved.input), note: 'badge' };
+    });
+  }
+
+  /**
+   * Рендер карточки маршрута каталога — вызывается и тестами напрямую. Маршрут вышел из каталога (`ogFacts` → `null`)
+   * или вход изменился — `skipped`; линия — `ogLine` (перепроверка каталога, без кэша): снят между чтениями — тоже
+   * `skipped`. В логе — id маршрута и шаблон; причина провала — только тип (название маршрута райдера — UGC).
+   */
+  buildRouteCard(job: RouteCardJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
+    const label = () => `route ${job.routeId} ${job.template}`;
+    return this.run(this.cache, job.hash, label, options, 'name-only', async () => {
+      const resolved = await this.routeCards.resolve(job.userId, job.routeId, job.template);
+      if (!resolved || resolved.hash !== job.hash) return null;
+      const line = await this.routes.ogLine(job.routeId);
+      if (!line) return null;
+      return { png: await renderRouteCard(resolved.input, line), note: 'route' };
     });
   }
 

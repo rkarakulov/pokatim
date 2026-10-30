@@ -1,10 +1,11 @@
 import type { StoryCardTemplate } from '@pokatim/contracts';
 import { storyCard, type StoryCardColors, type StoryCardText } from '@pokatim/design-tokens';
 
-import type { RideInviteStat, RideInviteTexts } from './ride-invite.texts';
+import type { RideInviteTexts } from './ride-invite.texts';
 import {
   box,
   page,
+  statRow,
   type StoryCardChild,
   type StoryCardNode,
   type StoryCardTrack,
@@ -26,41 +27,6 @@ export interface RideInviteRenderInput {
   texts: RideInviteTexts;
   /** линия публичного маршрута; нет — ярус/плитка пусты, старт — текстом */
   track: StoryCardTrack | null;
-}
-
-/**
- * Пара «дистанция · темп»: цифра с единицей в строку, подпись ниже; разделитель — вертикальная линия с полями. Верхняя
- * линия — только у `night` (в 4b над парой — линия яруса 3).
- */
-function stats(
-  texts: RideInviteTexts,
-  colors: StoryCardColors,
-  { padTop, dividerPad, rule }: { padTop: number; dividerPad: number; rule: boolean },
-) {
-  const stat = (item: RideInviteStat, style: Record<string, string | number>) =>
-    box({ flexDirection: 'column', flexBasis: 0, flexGrow: 1, flexShrink: 1, ...style }, [
-      box({ flexDirection: 'row', alignItems: 'baseline' }, [
-        text(storyCard.text.statValue, colors.ink, item.value),
-        text(storyCard.text.statUnit, colors.muted, item.unit, {
-          marginLeft: storyCard.invite.unitGap,
-        }),
-      ]),
-      text(storyCard.text.statLabel, colors.muted, item.label),
-    ]);
-  return box(
-    {
-      flexDirection: 'row',
-      ...(rule && { borderTop: `${storyCard.rule}px solid ${colors.rule}`, paddingTop: padTop }),
-    },
-    [
-      stat(texts.distance, {
-        paddingRight: dividerPad,
-        marginRight: dividerPad,
-        borderRight: `${storyCard.rule}px solid ${colors.rule}`,
-      }),
-      stat(texts.pace, {}),
-    ],
-  );
 }
 
 /** Метка, название, дата, время, старт — общий верх обоих шаблонов. */
@@ -130,7 +96,13 @@ function lineCard(input: RideInviteRenderInput): StoryCardNode {
         borderTop: `${storyCard.rule}px solid ${colors.ink}`,
         paddingTop: g.tier3PadTop,
       },
-      [stats(texts, colors, { padTop: 0, dividerPad: g.statDividerPad, rule: false })],
+      [
+        statRow([texts.distance, texts.pace], colors, {
+          padTop: 0,
+          dividerPad: g.statDividerPad,
+          rule: false,
+        }),
+      ],
     ),
     box(
       {
@@ -176,7 +148,11 @@ function nightCard(input: RideInviteRenderInput): StoryCardNode {
           )
         : null,
       box({ flexDirection: 'column', marginTop: g.tileGap }, [
-        stats(texts, colors, { padTop: g.statPadTop, dividerPad: g.statDividerPad, rule: true }),
+        statRow([texts.distance, texts.pace], colors, {
+          padTop: g.statPadTop,
+          dividerPad: g.statDividerPad,
+          rule: true,
+        }),
       ]),
     ]),
   ]);
@@ -185,20 +161,4 @@ function nightCard(input: RideInviteRenderInput): StoryCardNode {
 /** Дерево карточки-приглашения для satori. */
 export function rideInviteTree(input: RideInviteRenderInput): StoryCardNode {
   return input.template === 'line' ? lineCard(input) : nightCard(input);
-}
-
-/** viewBox линии шаблона: `line` — ярус 2 сторис, `night` — плитка приглашения (ниже плитки сторис). */
-export function rideInviteTrackView(template: StoryCardTemplate): {
-  width: number;
-  height: number;
-  padding: number;
-} {
-  const padding = storyCard.line.startDot;
-  return template === 'line'
-    ? { width: storyCard.line.tier2Width, height: storyCard.line.tier2Height, padding }
-    : {
-        width: storyCard.size.width - 2 * storyCard.insetX,
-        height: storyCard.invite.tileHeight,
-        padding,
-      };
 }

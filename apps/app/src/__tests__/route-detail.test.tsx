@@ -653,3 +653,77 @@ describe('карточка маршрута: скелетон шапки по т
     expect(skeleton.getByTestId('stat-skeleton-compact', hidden)).toBeOnTheScreen();
   });
 });
+
+describe('«Поделиться» вошедшему: карточка для сторис или ссылка (route-story-card, AC6)', () => {
+  const signedInRoutes = {
+    ...tabRoutes,
+    'routes/[id]': CatalogRouteRoute,
+    'routes/story/[id]': () => null,
+  };
+  const openSignedIn = () =>
+    renderRouter(signedInRoutes, { initialUrl: `/routes/${ID}`, wrapper: createQueryWrapper() });
+
+  beforeEach(() => {
+    useSessionStore.setState({ status: 'signedIn', session: liveSession });
+    useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
+    jest.mocked(api.listCatalogRoutes).mockResolvedValue({ items: [], nextCursor: null });
+    jest.mocked(api.listCatalogRouteCities).mockResolvedValue({ cities: [] });
+  });
+
+  it('«Поделиться» открывает шит; «Карточка для сторис» → /routes/story/<id>, шит закрыт', async () => {
+    const router = await openSignedIn();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    const sheet = screen.getByTestId('share-choice-sheet');
+    expect(within(sheet).getByRole('button', { name: 'Ссылка' })).toBeOnTheScreen();
+    expect(within(sheet).getByRole('button', { name: 'Закрыть' })).toBeOnTheScreen();
+    expect(share).not.toHaveBeenCalled();
+    await fireEvent.press(within(sheet).getByRole('button', { name: 'Карточка для сторис' }));
+    expect(router.getPathname()).toBe(`/routes/story/${ID}`);
+  });
+
+  it('«Ссылка» в шите — shareLink синхронно с OG-картинкой; отправлено — шит закрыт', async () => {
+    jest.mocked(api.getOgCard).mockResolvedValue({ version: '0123456789abcdef' });
+    jest.mocked(api.ogImageUrl).mockReturnValue('https://api.test/og/route.png');
+    const image = { uri: 'file:///cache/og.png' };
+    jest.mocked(prepareShareImage).mockResolvedValue(image);
+    await openSignedIn();
+    await waitFor(() => expect(prepareShareImage).toHaveBeenCalled());
+    await act(async () => undefined);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    await fireEvent.press(
+      within(screen.getByTestId('share-choice-sheet')).getByRole('button', { name: 'Ссылка' }),
+    );
+    expect(share).toHaveBeenCalledWith({
+      title: 'Минское кольцо',
+      text: expect.stringContaining('86 км'),
+      path: `/routes/${ID}`,
+      image,
+    });
+    await waitFor(() => expect(screen.queryByTestId('share-choice-sheet')).toBeNull());
+  });
+
+  it('«Закрыть» — шит закрыт без шаринга', async () => {
+    await openSignedIn();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Закрыть' }));
+    expect(screen.queryByTestId('share-choice-sheet')).toBeNull();
+    expect(share).not.toHaveBeenCalled();
+  });
+
+  it('без web-origin — «Поделиться» сразу на экран карточки, без шита', async () => {
+    jest.mocked(shareOrigin).mockReturnValue(null);
+    const router = await openSignedIn();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    expect(screen.queryByTestId('share-choice-sheet')).toBeNull();
+    expect(router.getPathname()).toBe(`/routes/story/${ID}`);
+    expect(share).not.toHaveBeenCalled();
+  });
+
+  it('гость — «Поделиться» сразу ссылкой, шита нет', async () => {
+    useSessionStore.setState({ status: 'signedOut', session: null });
+    await open();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    expect(screen.queryByTestId('share-choice-sheet')).toBeNull();
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ path: `/routes/${ID}` }));
+  });
+});

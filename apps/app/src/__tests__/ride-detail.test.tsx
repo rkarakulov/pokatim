@@ -142,6 +142,14 @@ describe('карточка райда: гость (AC8)', () => {
     }
   });
 
+  it('«Поделиться» гостя — сразу ссылкой, без шита и без «Карточки-приглашения» (AC7)', async () => {
+    await renderRouter(appRoutes, { initialUrl: `/rides/${ID}` });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    expect(screen.queryByTestId('share-choice-sheet')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Карточка-приглашение' })).toBeNull();
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ path: `/rides/${ID}` }));
+  });
+
   it('«Я иду» гостя → «Вход»; после входа — снова карточка райда (возврат, Q13); запись — не автоматически', async () => {
     storeSurveyCompleted();
     jest.mocked(api.signIn).mockResolvedValue({ state: 'signedIn', session });
@@ -306,10 +314,14 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
     expect(screen.queryByText('Райд опубликован')).toBeNull();
   });
 
-  it('«Поделиться» — ссылка на web-карточку; web без Web Share — «Ссылка скопирована»', async () => {
+  it('«Поделиться» — шит выбора: «Ссылка» на web-карточку; web без Web Share — «Ссылка скопирована»', async () => {
     share.mockResolvedValue('copied');
     await openSignedIn();
     await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    const sheet = screen.getByTestId('share-choice-sheet');
+    expect(within(sheet).getByRole('button', { name: 'Карточка-приглашение' })).toBeOnTheScreen();
+    expect(share).not.toHaveBeenCalled();
+    await fireEvent.press(within(sheet).getByRole('button', { name: 'Ссылка' }));
     expect(share).toHaveBeenCalledWith({
       title: detail.title,
       text: 'Кофе-райд на Минское море — Воскресенье, 4 октября 2026, 10:00, Минск',
@@ -330,14 +342,33 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
     expect(api.getOgCard).toHaveBeenCalledWith('ride', ID);
     await act(async () => undefined);
     await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    await fireEvent.press(
+      within(screen.getByTestId('share-choice-sheet')).getByRole('button', { name: 'Ссылка' }),
+    );
     expect(share).toHaveBeenCalledWith(expect.objectContaining({ path: `/rides/${ID}`, image }));
   });
 
-  it('нет web-origin (dev native) — кнопки «Поделиться» нет', async () => {
-    jest.mocked(shareOrigin).mockReturnValue(null);
-    await openSignedIn();
+  it('«Карточка-приглашение» в шите — экран приглашения; отдельной кнопки на карточке нет (AC7)', async () => {
+    const router = await openSignedIn();
     await screen.findByRole('button', { name: 'Я иду' });
-    expect(screen.queryByRole('button', { name: 'Поделиться' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Карточка-приглашение' })).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Поделиться' }));
+    await fireEvent.press(
+      within(screen.getByTestId('share-choice-sheet')).getByRole('button', {
+        name: 'Карточка-приглашение',
+      }),
+    );
+    expect(router.getPathname()).toBe(`/rides/invite/${ID}`);
+    expect(share).not.toHaveBeenCalled();
+  });
+
+  it('нет web-origin (dev native) — «Поделиться» сразу на экран приглашения, без шита', async () => {
+    jest.mocked(shareOrigin).mockReturnValue(null);
+    const router = await openSignedIn();
+    await screen.findByRole('button', { name: 'Я иду' });
+    await fireEvent.press(screen.getByRole('button', { name: 'Поделиться' }));
+    expect(screen.queryByTestId('share-choice-sheet')).toBeNull();
+    expect(router.getPathname()).toBe(`/rides/invite/${ID}`);
   });
 
   it("'unknown' в фазе, роли, городе и причине — нейтрально, без действия, экран не падает (AC-T7)", async () => {

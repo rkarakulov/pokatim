@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { LonLat } from '@pokatim/contracts';
 import { appThemes } from '@pokatim/design-tokens';
 import { describe, expect, it } from 'vitest';
@@ -172,4 +174,17 @@ describe('renderRideInviteSvg — satori со шрифтами темы', () => 
       expect(svg).toMatch(/^<svg[^>]+width="1080"[^>]+height="1920"/);
     },
   );
+});
+
+describe('rideInviteTree — снимок дерева (вынос общих узлов в story-card.render без смены вывода)', () => {
+  // фиксированный вход: дерево обоих шаблонов с линией и без — байт-в-байт прежнее (renderVersion не поднимается)
+  it.each([
+    ['line', true, '4fdcef5fcc432086f73d783ec9e116f02c023950d42eeef7f6b62d143660b0a8'],
+    ['line', false, '20cb2537be53455bc204a8c0a06bc6faf03cb725b069dd45c81b6a931de69dbf'],
+    ['night', true, '4e7fd0f723294de79c9bf326797cb3fee0fca8663b1d1f27ccbe65d6c5a177d9'],
+    ['night', false, '81314300631e7b8659c548cf3f8f974491a1d9f049f2efa038415daaa7baf9e3'],
+  ] as const)('%s, линия: %s', (template, withLine, expected) => {
+    const tree = rideInviteTree(rideInviteRenderInput(input({ template }), withLine ? LINE : null));
+    expect(createHash('sha256').update(JSON.stringify(tree)).digest('hex')).toBe(expected);
+  });
 });

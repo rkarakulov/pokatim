@@ -2,14 +2,11 @@ import type { LonLat } from '@pokatim/contracts';
 import { appThemes, DEFAULT_THEME, storyCardColors } from '@pokatim/design-tokens';
 
 import type { RideInviteInput } from './ride-invite.inputs';
-import {
-  type RideInviteRenderInput,
-  rideInviteTrackView,
-  rideInviteTree,
-} from './ride-invite.render';
+import { type RideInviteRenderInput, rideInviteTree } from './ride-invite.render';
 import { rideInviteTexts } from './ride-invite.texts';
 import { type StoryCardFont, storyCardFonts } from './story-card.fonts';
 import { renderCardSvg, renderStoryCardPng, storyCardTrack } from './story-card.png';
+import { cardTrackView } from './story-card.render';
 
 /**
  * Входы рендера приглашения: тема (незнакомая — по умолчанию), схема по шаблону (`line` — светлая, `night` —
@@ -25,7 +22,7 @@ export function rideInviteRenderInput(
     template: input.template,
     colors: storyCardColors(scheme),
     texts: rideInviteTexts(input),
-    track: line ? storyCardTrack(line, rideInviteTrackView(input.template)) : null,
+    track: line ? storyCardTrack(line, cardTrackView(input.template)) : null,
   };
 }
 

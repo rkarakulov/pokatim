@@ -139,6 +139,52 @@ export function trackSvg(
   );
 }
 
+/** Цифра карточки с единицей и подписью: «42» «км» «Дистанция». */
+export interface CardStat {
+  value: string;
+  unit: string;
+  label: string;
+}
+
+/**
+ * Строка цифр приглашения и маршрута (1–N): цифра с единицей в строку, подпись ниже; между соседними — вертикальная
+ * линия с полями. Верхняя линия (`rule`) — только у `night` (в `line` над строкой — линия яруса 3).
+ */
+export function statRow(
+  items: readonly CardStat[],
+  colors: StoryCardColors,
+  { padTop, dividerPad, rule }: { padTop: number; dividerPad: number; rule: boolean },
+): StoryCardNode {
+  const stat = (item: CardStat, style: Record<string, string | number>) =>
+    box({ flexDirection: 'column', flexBasis: 0, flexGrow: 1, flexShrink: 1, ...style }, [
+      box({ flexDirection: 'row', alignItems: 'baseline' }, [
+        text(storyCard.text.statValue, colors.ink, item.value),
+        text(storyCard.text.statUnit, colors.muted, item.unit, {
+          marginLeft: storyCard.invite.unitGap,
+        }),
+      ]),
+      text(storyCard.text.statLabel, colors.muted, item.label),
+    ]);
+  return box(
+    {
+      flexDirection: 'row',
+      ...(rule && { borderTop: `${storyCard.rule}px solid ${colors.rule}`, paddingTop: padTop }),
+    },
+    items.map((item, index) =>
+      stat(
+        item,
+        index < items.length - 1
+          ? {
+              paddingRight: dividerPad,
+              marginRight: dividerPad,
+              borderRight: `${storyCard.rule}px solid ${colors.rule}`,
+            }
+          : {},
+      ),
+    ),
+  );
+}
+
 /** Пара «место · группа»: без места — только группа; разделитель — вертикальная линия с полями. */
 function stats(
   texts: StoryCardTexts,
@@ -339,6 +385,22 @@ export function storyCardTrackView(template: StoryCardTemplate): {
     : {
         width: storyCard.size.width - 2 * storyCard.insetX,
         height: storyCard.night.tileHeight,
+        padding,
+      };
+}
+
+/** viewBox линии приглашения и маршрута: `line` — ярус 2 сторис, `night` — плитка приглашения (ниже плитки сторис). */
+export function cardTrackView(template: StoryCardTemplate): {
+  width: number;
+  height: number;
+  padding: number;
+} {
+  const padding = storyCard.line.startDot;
+  return template === 'line'
+    ? { width: storyCard.line.tier2Width, height: storyCard.line.tier2Height, padding }
+    : {
+        width: storyCard.size.width - 2 * storyCard.insetX,
+        height: storyCard.invite.tileHeight,
         padding,
       };
 }
