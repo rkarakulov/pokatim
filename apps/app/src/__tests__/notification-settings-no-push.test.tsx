@@ -46,6 +46,9 @@ describe('«Настройки уведомлений» без push (web)', () =
     expect(screen.queryByRole('switch', { name: 'Push-уведомления' })).toBeNull();
     expect(screen.queryByRole('header', { name: 'Гонки и результаты' })).toBeNull();
     expect(screen.queryByRole('header', { name: 'Тихие часы' })).toBeNull();
+    // «Маршруты» — только push: без push блока нет и запроса нет
+    expect(screen.queryByRole('header', { name: 'Маршруты' })).toBeNull();
+    expect(api.getRouteNotificationSettings).not.toHaveBeenCalled();
     expect(screen.queryByText(/push/i)).toBeNull();
     expect(
       screen.getByText('В центре уведомлений видно всё. Здесь — письма на e-mail.'),
