@@ -2,10 +2,11 @@ import type { Job, Queue } from 'bullmq';
 import { describe, expect, it } from 'vitest';
 
 import type { RaceTickets } from '../race-tickets';
+import type { TicketReminders } from '../ticket-reminders';
 import { TicketsMaintenanceProcessor, TicketsSchedules } from './tickets-maintenance.processor';
 
 describe('регламент билетов (tickets-maintenance)', () => {
-  it('сверка каждую минуту по Минску (upsert) и разовый прогон при старте worker', async () => {
+  it('сверка и напоминания каждую минуту по Минску (upsert) и разовые прогоны при старте worker', async () => {
     const calls: unknown[][] = [];
     const queue = {
       upsertJobScheduler: (...args: unknown[]) => {
@@ -28,20 +29,35 @@ describe('регламент билетов (tickets-maintenance)', () => {
         { name: 'tickets.reconcile' },
       ],
       [
+        'upsertJobScheduler',
+        'tickets.reminders',
+        { pattern: '* * * * *', tz: 'Europe/Minsk' },
+        { name: 'tickets.reminders' },
+      ],
+      [
         'add',
         'tickets.reconcile',
         {},
         { jobId: 'tickets.reconcile.boot', removeOnComplete: true, removeOnFail: true },
       ],
+      [
+        'add',
+        'tickets.reminders',
+        {},
+        { jobId: 'tickets.reminders.boot', removeOnComplete: true, removeOnFail: true },
+      ],
     ]);
   });
 
-  it('процессор: незнакомое имя — ошибка; tickets.reconcile — сверка', async () => {
+  it('процессор: незнакомое имя — ошибка; tickets.reconcile — сверка; tickets.reminders — напоминания', async () => {
     const run = { races: 1, issued: 2, failed: 0 };
-    const processor = new TicketsMaintenanceProcessor({
-      reconcileAll: () => Promise.resolve(run),
-    } as unknown as RaceTickets);
+    const reminders = { dispatched: 1, recipients: 3, failed: 0 };
+    const processor = new TicketsMaintenanceProcessor(
+      { reconcileAll: () => Promise.resolve(run) } as unknown as RaceTickets,
+      { dispatchDue: () => Promise.resolve(reminders) } as unknown as TicketReminders,
+    );
     await expect(processor.process({ name: 'other' } as Job)).rejects.toThrow('unknown job other');
     expect(await processor.process({ name: 'tickets.reconcile' } as Job)).toEqual(run);
+    expect(await processor.process({ name: 'tickets.reminders' } as Job)).toEqual(reminders);
   });
 });

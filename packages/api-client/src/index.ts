@@ -33,6 +33,8 @@ import {
   HealthResponse,
   NotificationPage,
   NotificationSettings,
+  EventNotificationSettingsView,
+  type UpdateEventNotificationSettings,
   type RegisterPushToken,
   type RevokePushToken,
   type RegisterWebPushSubscription,
@@ -1022,6 +1024,20 @@ export function createApiClient({
       request(
         '/v1/notifications/settings',
         NotificationSettings,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
+    /** Тумблеры группы «Мероприятия» (подресурс, RC-D1); нет сохранённых — включено. */
+    getEventNotificationSettings: (accessToken: string) =>
+      request(
+        '/v1/notifications/settings/events',
+        EventNotificationSettingsView,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Полная замена тумблеров «Мероприятия»; ответ — сохранённые. */
+    updateEventNotificationSettings: (accessToken: string, body: UpdateEventNotificationSettings) =>
+      request(
+        '/v1/notifications/settings/events',
+        EventNotificationSettingsView,
         authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
       ),
     /** Регистрация или обновление push-токена этого устройства; `204`. */

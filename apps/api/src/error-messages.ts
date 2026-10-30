@@ -66,6 +66,9 @@ export const PROJECT_ERROR_MESSAGES = {
   TOTP_NOT_ENABLED: 'Двухфакторная защита не подключена',
   TOTP_REQUIRED: 'Двухфакторная защита обязательна для администратора',
   TOTP_UNAVAILABLE: 'Двухфакторная защита временно недоступна',
+  PANEL_INVITATION_INVALID: 'Приглашение недействительно',
+  PANEL_INVITATION_EMAIL_MISMATCH: 'Приглашение отправлено на другой адрес',
+  PANEL_INVITATIONS_UNAVAILABLE: 'Приглашения временно недоступны',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

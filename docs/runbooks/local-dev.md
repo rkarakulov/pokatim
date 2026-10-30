@@ -193,6 +193,9 @@ Expo Go не открывает схему `pokatim://`. Для проверки
   `apps/admin/.env.local` (только светлый стиль); без него — SVG-превью линии вместо карты, профиль и цифры есть.
   `vite preview` (смоук) отдаёт CSP панели: другой провайдер стиля — сначала его origin в `connect-src`
   `infra/docker/admin-nginx.conf`.
+- Приглашения и письма о роли (ADR-0026): ссылки писем — от `PANEL_LINK_BASE` (`apps/api/.env`, для `pnpm dev`
+  админки — `http://localhost:5173/`; без него и без `APP_WEB_ORIGIN` «Пригласить» отвечает 503). Письма уходят через
+  worker (`pnpm dev:worker`, очередь `panel-email`) в Mailpit; ссылка — `…/invite#token=…`.
 - Первый администратор локально: зарегистрироваться и подтвердить e-mail (Mailpit), затем
   `pnpm --filter @pokatim/api panel grant-admin --email <e-mail> --name "<Имя>"` (`tsx`, env — `apps/api/.env`).
 - Cookie панели — `__Secure-…` с `Secure`: Chromium и Firefox сохраняют её на `http://localhost`, Safari — может

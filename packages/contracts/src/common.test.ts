@@ -101,6 +101,9 @@ describe('коды ошибок', () => {
       'TOTP_NOT_ENABLED',
       'TOTP_REQUIRED',
       'TOTP_UNAVAILABLE',
+      'PANEL_INVITATION_INVALID',
+      'PANEL_INVITATION_EMAIL_MISMATCH',
+      'PANEL_INVITATIONS_UNAVAILABLE',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

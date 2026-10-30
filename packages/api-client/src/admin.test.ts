@@ -162,6 +162,53 @@ describe('createAdminApiClient: пути, методы, cookie панели', ()
     });
   });
 
+  it('приглашения: список, приглашение, отзыв, принятие — пути и тела', async () => {
+    const invitation = {
+      id: USER_ID,
+      email: 'new@example.by',
+      displayName: 'Ольга',
+      role: 'moderator',
+      invitedBy: 'Админ',
+      createdAt: '2026-10-30T10:00:00.000Z',
+      expiresAt: '2026-11-06T10:00:00.000Z',
+      expired: false,
+      emailState: 'pending',
+    };
+    const list = admin(200, { items: [invitation], truncated: false });
+    await expect(list.api.listInvitations()).resolves.toEqual({
+      items: [invitation],
+      truncated: false,
+    });
+    expect(list.calls[0]).toMatchObject({ url: '/v1/admin/invitations', method: 'GET' });
+
+    const body = { email: 'new@example.by', displayName: 'Ольга', role: 'moderator' as const };
+    const invite = admin(201, invitation);
+    await expect(invite.api.invite(body)).resolves.toEqual(invitation);
+    expect(invite.calls[0]).toMatchObject({ url: '/v1/admin/invitations', method: 'POST', body });
+
+    const revoke = admin(204, null);
+    await revoke.api.revokeInvitation(USER_ID);
+    expect(revoke.calls[0]).toMatchObject({
+      url: `/v1/admin/invitations/${USER_ID}/revoke`,
+      method: 'POST',
+    });
+
+    const accept = admin(200, {
+      state: 'totpRequired',
+      challenge: 'c'.repeat(43),
+      expiresInSec: 300,
+    });
+    const acceptBody = { token: 't'.repeat(43), email: 'new@example.by', password: 'long-enough' };
+    await expect(accept.api.acceptInvitation(acceptBody)).resolves.toMatchObject({
+      state: 'totpRequired',
+    });
+    expect(accept.calls[0]).toMatchObject({
+      url: '/v1/admin/invitations/accept',
+      method: 'POST',
+      body: acceptBody,
+    });
+  });
+
   it('журнал: параметры фильтра и курсора — в query; пустые не уходят', async () => {
     const page = admin(200, { items: [], nextCursor: null });
     await page.api.listAudit({ limit: 50, cursor: USER_ID, action: 'panel.signed_in' });

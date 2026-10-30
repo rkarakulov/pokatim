@@ -1,4 +1,4 @@
-import type { NotificationSettings } from '@pokatim/contracts';
+import type { EventNotificationSettingsView, NotificationSettings } from '@pokatim/contracts';
 import { size, space, stroke } from '@pokatim/design-tokens';
 import { t, type MessageKey } from '@pokatim/i18n';
 import {
@@ -25,7 +25,10 @@ import {
   type PushPermissionControl,
 } from '@/features/notifications/push-permission-row';
 import {
+  isEventSettingsMissing,
+  useEventNotificationSettings,
   useNotificationSettings,
+  useUpdateEventNotificationSettings,
   useUpdateNotificationSettings,
 } from '@/features/notifications/queries';
 
@@ -59,7 +62,9 @@ const SKELETON = (
  * web — Web Push браузера и сервера, ADR-0022; до проверки — скелетон) — только письма: без push-тумблеров, тихих часов
  * (они откладывают только push) и группы без писем; push-значения не меняются. Строка разрешения и push-тумблеры
  * делят одно состояние разрешения: включение тумблера, пока системный запрос не показывали, сначала вызывает его (в том
- * же нажатии), включённый тумблер без разрешения или подписки подписан «не придут на это устройство».
+ * же нажатии), включённый тумблер без разрешения или подписки подписан «не придут на это устройство». Группа
+ * «Мероприятия» (напоминания о событиях с билетом, PR D) — отдельный подресурс со своим сохранением (RC-D1); старый API
+ * (404) — группы нет.
  */
 export default function NotificationSettingsScreen() {
   const shell = useSettingsShell();
@@ -196,6 +201,7 @@ function SettingsForm({
           ) : null}
         </View>
       ))}
+      <EventsGroup push={push} control={control} />
       {push ? (
         <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
           {groupTitle(t('notifications.settings.quiet.title'))}
@@ -228,6 +234,73 @@ function SettingsForm({
           ) : null}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * «Мероприятия»: push (при доступном push) и e-mail напоминаний о событиях с билетом. Своё сохранение подресурса:
+ * пока идёт запрос — новое значение, тумблеры недоступны; ошибка — баннер и прежнее значение. Загрузка — строка-
+ * скелетон, `404` (старый API) — группы нет, прочие ошибки — «Нет соединения» с повтором (`AsyncContent`).
+ */
+function EventsGroup({ push, control }: { push: boolean; control?: PushPermissionControl }) {
+  const theme = useTheme();
+  const query = useEventNotificationSettings();
+  const update = useUpdateEventNotificationSettings();
+  if (isEventSettingsMissing(query.error)) return null;
+  return (
+    <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
+      <Text
+        accessibilityRole="header"
+        style={[textStyle('label'), { color: theme.text.secondary }]}
+      >
+        {t('notifications.settings.group.events')}
+      </Text>
+      <AsyncContent query={query} skeleton={<SkeletonListRow />}>
+        {(saved) => {
+          const value: EventNotificationSettingsView =
+            update.isPending && update.variables ? update.variables : saved;
+          const busy = update.isPending;
+          const save = (next: EventNotificationSettingsView) => {
+            if (!busy) update.mutate(next);
+          };
+          return (
+            <>
+              {update.isError ? (
+                <Banner tone="error" message={t('notifications.settings.saveFailed')} />
+              ) : null}
+              {push ? (
+                <>
+                  <Toggle
+                    label={t('notifications.settings.push')}
+                    value={value.push}
+                    disabled={busy}
+                    onChange={(on) => {
+                      // как у остальных групп: системный запрос — первым, в том же нажатии
+                      if (on && !busy) void control?.enableFromToggle();
+                      save({ ...value, push: on });
+                    }}
+                  />
+                  {value.push && control?.delivers === false ? (
+                    <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+                      {t('notifications.settings.pushBlocked')}
+                    </Text>
+                  ) : null}
+                </>
+              ) : null}
+              <Toggle
+                label={t('notifications.settings.email')}
+                value={value.email}
+                disabled={busy}
+                onChange={(on) => save({ ...value, email: on })}
+              />
+              <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+                {t('notifications.settings.emailHint.events')}
+              </Text>
+            </>
+          );
+        }}
+      </AsyncContent>
     </View>
   );
 }

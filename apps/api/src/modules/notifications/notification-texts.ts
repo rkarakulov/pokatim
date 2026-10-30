@@ -28,7 +28,9 @@ export type NoticeText =
   | { kind: 'ride_joined'; ride: string; goingCount: number }
   | { kind: 'ride_report_resolved'; ride: string }
   | { kind: 'route_published'; route: string }
-  | { kind: 'route_rejected'; route: string; reason: RouteRejectionReason };
+  | { kind: 'route_rejected'; route: string; reason: RouteRejectionReason }
+  /** напоминание о событии с билетом (PR D): текст правила — организатора, не ПДн райдеров */
+  | { kind: 'event_reminder'; event: string; startsAt: Date; place: string | null; text: string };
 
 export interface RenderedText {
   title: string;
@@ -86,6 +88,7 @@ const TITLES: Record<NotificationKind, string> = {
   ride_report_resolved: 'Жалоба рассмотрена',
   route_published: 'Маршрут опубликован',
   route_rejected: 'Маршрут отклонён',
+  event_reminder: 'Скоро старт',
 };
 
 function bodyOf(input: NoticeText): string {
@@ -122,6 +125,10 @@ function bodyOf(input: NoticeText): string {
       return `${quoted(input.route)} теперь в каталоге маршрутов.`;
     case 'route_rejected':
       return `${quoted(input.route)} не опубликован. ${REJECTION[input.reason]}`;
+    case 'event_reminder': {
+      const place = input.place === null ? '' : `, ${input.place.replace(/\s+/g, ' ').trim()}`;
+      return `${quoted(input.event)} — ${dayTime(input.startsAt)}${place}.\n${input.text}`;
+    }
   }
 }
 

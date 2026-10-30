@@ -1,6 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
-import { DEFAULT_NOTIFICATION_SETTINGS } from '@pokatim/contracts';
 import { CLOCK, type Clock, ENV, type OutboxJobData } from '@rkarakulov/api-kit/core';
 import { MongoOutboxReader, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
@@ -14,7 +13,12 @@ import { type NoticeDraft, NotificationIntake } from './notification-intake';
 import { renderNotification } from './notification-texts';
 import type { NotificationDoc } from './notifications.collection';
 import { isNotificationSourceEvent } from './notifications.events';
-import { groupOf, initialDelivery, NOTIFICATIONS_POLICY } from './notifications.policy';
+import {
+  DEFAULT_DELIVERY_SETTINGS,
+  groupOf,
+  initialDelivery,
+  NOTIFICATIONS_POLICY,
+} from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
 
 export type IntakeOutcome = 'written' | 'unchanged' | 'stale' | 'skipped';
@@ -66,7 +70,7 @@ export class NotificationsIntakeProcessor extends WorkerHost {
       this.logger.log(`notifications.event_stale type=${type} event=${eventId}`);
       return 'stale';
     }
-    const drafts = await this.intake.drafts(type, await this.outbox.payloadOf(eventId));
+    const drafts = await this.intake.drafts(type, await this.outbox.payloadOf(eventId), now);
     if (typeof drafts === 'string') {
       this.logger.log(`notifications.event_skipped type=${type} event=${eventId} reason=${drafts}`);
       return 'skipped';
@@ -95,7 +99,7 @@ export class NotificationsIntakeProcessor extends WorkerHost {
       const docs = userIds.map((userId): NotificationDoc => {
         const delivery = initialDelivery(
           kind,
-          settings.get(userId) ?? DEFAULT_NOTIFICATION_SETTINGS,
+          settings.get(userId) ?? DEFAULT_DELIVERY_SETTINGS,
           now,
           pushChannelEnabled(this.env),
         );
@@ -106,7 +110,7 @@ export class NotificationsIntakeProcessor extends WorkerHost {
           group: groupOf(kind),
           title,
           body,
-          target: draft.target,
+          target: draft.targets?.get(userId) ?? draft.target,
           sourceEventId: eventId,
           ...(draft.collapse === undefined
             ? {}

@@ -106,6 +106,11 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'TOTP_NOT_ENABLED',
   'TOTP_REQUIRED',
   'TOTP_UNAVAILABLE',
+  // panel-invitations (ADR-0026): приглашение неизвестно, истекло, отозвано или принято (410, одна ошибка); e-mail
+  // аккаунта не совпадает с адресом приглашения (409); нет адреса панели для ссылки на сервере (503)
+  'PANEL_INVITATION_INVALID',
+  'PANEL_INVITATION_EMAIL_MISMATCH',
+  'PANEL_INVITATIONS_UNAVAILABLE',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

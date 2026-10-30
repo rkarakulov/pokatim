@@ -1,7 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, type Harness } from '../../test/harness';
-import { activeLinkToken, confirm, register, userIdByEmail } from '../../test/identity';
+import {
+  activeLinkToken,
+  confirm,
+  outboxEvents,
+  register,
+  userIdByEmail,
+} from '../../test/identity';
+import { PANEL_ROLE_EMAIL_REQUESTED } from '../modules/panel/panel.events';
 import { panelCollections } from '../modules/panel/panel.collection';
 import { seedMember, seedTotp } from '../../test/panel';
 import { runPanelCli } from './panel-cli';
@@ -61,6 +68,9 @@ describe('CLI grant-admin (AC1)', () => {
       }),
     ]);
     expect(JSON.stringify(entries)).not.toContain('olga@');
+    // письмо о выдаче роли (ADR-0026): событие с id записи журнала, без e-mail
+    const roleEmails = (await outboxEvents(h)).filter((e) => e.type === PANEL_ROLE_EMAIL_REQUESTED);
+    expect(roleEmails.map((e) => e.payload)).toEqual([{ auditId: entries[0]?._id }]);
   });
 
   it('повтор для уже admin — код 0, «уже администратор», без новой записи', async () => {
@@ -73,6 +83,10 @@ describe('CLI grant-admin (AC1)', () => {
     expect(again.code).toBe(0);
     expect(again.stdout).toContain('уже администратор');
     expect(await panel().audit.countDocuments()).toBe(1);
+    // повтор без изменений — без второго письма
+    expect(
+      (await outboxEvents(h)).filter((e) => e.type === PANEL_ROLE_EMAIL_REQUESTED),
+    ).toHaveLength(1);
     expect(await panel().members.findOne({})).toMatchObject({ displayName: 'Ольга' });
   });
 

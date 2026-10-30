@@ -1,4 +1,5 @@
 import type {
+  InvitationEmailState,
   AppDecorId,
   AppThemeId,
   AuditAction,
@@ -22,6 +23,8 @@ export const PANEL_COLLECTIONS = {
   totp: 'panel_totp',
   challenges: 'panel_sign_in_challenges',
   devices: 'panel_trusted_devices',
+  /** Приглашения в команду (ADR-0026, `0041_panel_invitations`); единственный писатель — `PanelInvitationsRepository`. */
+  invitations: 'panel_invitations',
 } as const;
 
 /**
@@ -126,6 +129,34 @@ export interface PanelTrustedDeviceDoc {
   version: number;
 }
 
+export type PanelInvitationStatus = 'pending' | 'accepted' | 'revoked';
+
+/**
+ * Приглашение в команду (ADR-0026): токен ссылки — `HMAC(EMAIL_TOKEN_SECRET, "panel-invitation:" + _id)`, в БД — только
+ * `tokenHash` (sha256). E-mail (нормализованный) хранится только у `pending`; закрытие (принято, отозвано, заменено)
+ * пишет `email: null`. `purgeAt` — TTL-уборка: `pending` — `expiresAt + 30 сут`, закрытые — закрытие + 30 сут. Срок
+ * проверяет сервер по `CLOCK`. `version` — замок принятия/отзыва (`$inc` в транзакции).
+ */
+export interface PanelInvitationDoc {
+  _id: string;
+  email: string | null;
+  role: PanelRole;
+  displayName: string;
+  /** userId пригласившего сотрудника. */
+  invitedBy: string;
+  tokenHash: string;
+  status: PanelInvitationStatus;
+  revokedReason: 'revoked' | 'replaced' | null;
+  emailState: InvitationEmailState;
+  createdAt: Date;
+  expiresAt: Date;
+  acceptedUserId: string | null;
+  acceptedAt: Date | null;
+  revokedAt: Date | null;
+  purgeAt: Date;
+  version: number;
+}
+
 export type AuditActor = { kind: 'user'; userId: string } | { kind: 'cli' };
 
 /** Объект действия доменного модуля: `label` — название на момент действия (снимок, R7 admin-02). */
@@ -194,6 +225,7 @@ export interface PanelCollections {
   totp: Collection<PanelTotpDoc>;
   challenges: Collection<PanelSignInChallengeDoc>;
   devices: Collection<PanelTrustedDeviceDoc>;
+  invitations: Collection<PanelInvitationDoc>;
 }
 
 /** Типизированные коллекции панели — для репозитория, миграции и int-тестов. */
@@ -206,5 +238,6 @@ export function panelCollections(db: Db): PanelCollections {
     totp: db.collection<PanelTotpDoc>(PANEL_COLLECTIONS.totp),
     challenges: db.collection<PanelSignInChallengeDoc>(PANEL_COLLECTIONS.challenges),
     devices: db.collection<PanelTrustedDeviceDoc>(PANEL_COLLECTIONS.devices),
+    invitations: db.collection<PanelInvitationDoc>(PANEL_COLLECTIONS.invitations),
   };
 }

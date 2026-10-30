@@ -21,6 +21,7 @@ beforeEach(() => {
   signInForTest();
   useSessionStore.setState({ session: liveSession });
   jest.mocked(api.getNotificationSettings).mockResolvedValue(DEFAULT_NOTIFICATION_SETTINGS);
+  jest.mocked(api.getEventNotificationSettings).mockResolvedValue({ push: true, email: true });
 });
 afterEach(() => jest.clearAllMocks());
 
@@ -40,7 +41,8 @@ describe('«Настройки уведомлений» без push (web)', () =
     await open();
     expect(await screen.findByRole('header', { name: 'Споры' })).toBeOnTheScreen();
     expect(screen.getByRole('header', { name: 'Райды' })).toBeOnTheScreen();
-    expect(screen.getAllByRole('switch', { name: 'Письма на e-mail' })).toHaveLength(2);
+    expect(await screen.findByRole('header', { name: 'Мероприятия' })).toBeOnTheScreen();
+    expect(screen.getAllByRole('switch', { name: 'Письма на e-mail' })).toHaveLength(3);
     expect(screen.queryByRole('switch', { name: 'Push-уведомления' })).toBeNull();
     expect(screen.queryByRole('header', { name: 'Гонки и результаты' })).toBeNull();
     expect(screen.queryByRole('header', { name: 'Тихие часы' })).toBeNull();

@@ -38,6 +38,36 @@ export interface EventTicketingDoc {
   updatedBy: string;
   /** счётчик-замок транзакций check-in (сериализация с выключением билетов); чтение `?? 0` */
   checkInLock?: number;
+  /** PR D: правила напоминаний (≤ 3) и их отправки; документы до PR D полей не имеют — чтение `?? []` */
+  reminders?: ReminderRuleDoc[];
+  reminderDispatches?: ReminderDispatchDoc[];
+}
+
+/**
+ * Правило напоминания (PR D): `id` стабилен при правке, `armedAt` — время сервера при создании или смене
+ * `offsetHours` (правило, заданное после своего времени отправки, не уходит, RC-D5).
+ */
+export interface ReminderRuleDoc {
+  id: string;
+  offsetHours: number;
+  text: string;
+  armedAt: Date;
+}
+
+/** Отправка правила по времени `dueAt` (пишет только регламент, версию настроек не меняет). */
+export interface ReminderDispatchDoc {
+  reminderId: string;
+  dueAt: Date;
+  dispatchId: string;
+  at: Date;
+  count: number;
+}
+
+/** Метка «напоминание ушло» на билете: один раз на билет и правило (AC10). */
+export interface ReminderSentDoc {
+  reminderId: string;
+  dispatchId: string;
+  at: Date;
 }
 
 export const ticketingIdOf = (kind: TicketEventKind, eventId: string) => `${kind}:${eventId}`;
@@ -83,6 +113,8 @@ export interface TicketDoc {
   email: { state: TicketEmailState; claimedUntil: Date | null; sentAt: Date | null };
   createdAt: Date;
   version: number;
+  /** PR D: отправленные напоминания; чтение `?? []` (RC-T15) */
+  remindersSent?: ReminderSentDoc[];
 }
 
 export interface TicketsCollections {

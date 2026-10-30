@@ -1,13 +1,13 @@
 import { type DynamicModule, Module } from '@nestjs/common';
 import { ClockModule, ENV } from '@rkarakulov/api-kit/core';
-import { MongoModule } from '@rkarakulov/api-kit/mongo';
+import { MongoModule, MongoOutboxModule } from '@rkarakulov/api-kit/mongo';
 
 import type { CliEnv } from '../config/env';
 import { PanelCoreModule } from '../modules/panel';
 
 /**
- * Контекст CLI панели: окружение (MongoDB + ключ HMAC, `cliEnv`), часы, MongoDB и данные панели — без HTTP, Redis,
- * очередей и почты. Окружение передаётся явно (тест — тестовая БД); `ENV` — глобально, как у `ConfigModule`.
+ * Контекст CLI панели: окружение (MongoDB + ключ HMAC, `cliEnv`), часы, MongoDB, outbox и данные панели — без HTTP,
+ * Redis, очередей и почты. Окружение передаётся явно (тест — тестовая БД); `ENV` — глобально, как у `ConfigModule`.
  */
 @Module({})
 export class PanelCliModule {
@@ -15,7 +15,8 @@ export class PanelCliModule {
     return {
       module: PanelCliModule,
       global: true,
-      imports: [ClockModule, MongoModule.forRoot(), PanelCoreModule],
+      // outbox — только MongoDB (без Redis): `grant-admin` ставит письмо о роли (ADR-0026)
+      imports: [ClockModule, MongoModule.forRoot(), MongoOutboxModule, PanelCoreModule],
       providers: [{ provide: ENV, useValue: env }],
       exports: [ENV],
     };
