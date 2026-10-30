@@ -115,7 +115,7 @@ describe('ExpoPushSender.send', () => {
     // таймаут — по команде теста, когда запрос уже удержан фейком (настоящие 50 мс под нагрузкой истекали раньше,
     // чем запрос до него доходил)
     const timeout = new AbortController();
-    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValueOnce(timeout.signal);
     const sending = failure(make({ timeoutMs: 50 }).send([message(1)]));
     await vi.waitFor(() => expect(expo.callsTo('send')).toHaveLength(1));
     expect(timeoutSpy).toHaveBeenCalledWith(50);
@@ -128,7 +128,10 @@ describe('ExpoPushSender.send', () => {
       apiUrl: 'http://127.0.0.1:1/--/api/v2/push',
       accessToken: null,
     });
-    expect((await failure(closed.send([message(1)]))).kind).toBe('unavailable');
+    expect(await failure(closed.send([message(1)]))).toMatchObject({
+      kind: 'unavailable',
+      message: 'push service network',
+    });
   });
 
   it('редирект не следует — ошибка', async () => {
