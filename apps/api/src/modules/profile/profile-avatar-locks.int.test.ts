@@ -13,6 +13,8 @@ import {
 } from '../../../test/profiles';
 import { staff } from '../../../test/races';
 import { heldUpload } from '../../../test/uploads';
+import { eventsOfType, notificationsIntake, notificationsOf } from '../../../test/notifications';
+import { MINUTE } from '../../../test/harness';
 import { ProfileRepository } from './profile.repository';
 
 /**
@@ -105,5 +107,66 @@ describe('гонка загрузки фото и сброса с запрето
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('порядок уведомлений о сбросе фото — ревизия сбросов, не время начала запроса (ревью pass 2)', () => {
+  it('A взял время и стоит до записи → сброс B → новое фото → A (3-й сброс, запрет) — в центре уведомление A', async () => {
+    // beforeEach: два сброса фото в истории и новое фото; B — третий сброс без задержки был бы запретом, поэтому
+    // начинаем с одного сброса: снимаем второй из истории
+    await profilesDb(h).updateOne({ _id: target.userId }, { $pop: { avatarResetsAt: 1 } });
+    await notificationsIntake(h).drain();
+    h.clock.advance(MINUTE);
+
+    const repository = h.app.get(ProfileRepository, { strict: false });
+    const original = repository.resetAvatar.bind(repository);
+    const g = gate();
+    let gated = false;
+    const spy = vi.spyOn(repository, 'resetAvatar').mockImplementation(async (...args) => {
+      if (!gated) {
+        gated = true;
+        await g.wait();
+      }
+      return original(...args);
+    });
+    try {
+      const pendingA = profileModerationCall(
+        h,
+        moderator.token,
+        'POST',
+        `/${target.userId}/avatar-reset`,
+        { reason: 'Недопустимое фото' },
+      );
+      await g.reached;
+      // B — позже по часам, коммитится первым (второй сброс в окне, без запрета)
+      h.clock.advance(MINUTE);
+      expect((await resetAvatar()).body).toEqual({ reset: true });
+      // райдер загрузил новое фото — A сбрасывает уже его: третий сброс в окне, запрет
+      await seedAvatar(h, target.userId);
+      g.open();
+      const resA = await pendingA;
+      expect(resA.status).toBe(200);
+      expect(resA.body).toEqual({ reset: true });
+    } finally {
+      spy.mockRestore();
+    }
+
+    const [b, a] = (await eventsOfType(h, 'profile.field-reset'))
+      .slice(-2)
+      .map(
+        (event) =>
+          event.payload as { seq: number; resetAt: string; avatarBlockedUntil: string | null },
+      );
+    // время A раньше, чем у B, но ревизия сбросов — позже
+    expect(Date.parse(a!.resetAt)).toBeLessThan(Date.parse(b!.resetAt));
+    expect(a!.avatarBlockedUntil).not.toBeNull();
+    expect(a!.seq).toBeGreaterThan(b!.seq);
+
+    await notificationsIntake(h).drain();
+    const docs = await notificationsOf(h, target.userId);
+    expect(docs).toHaveLength(1);
+    expect(docs[0]?.body).toMatch(
+      /^Модератор удалил фото после жалоб\. Загрузка фото недоступна до /,
+    );
   });
 });

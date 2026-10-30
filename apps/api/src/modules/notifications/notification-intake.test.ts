@@ -94,6 +94,7 @@ describe('NotificationIntake: сброс поля профиля (profile-modera
     userId: USER,
     field,
     resetAt: AT,
+    seq: 7,
     avatarBlockedUntil,
   });
 
@@ -108,7 +109,7 @@ describe('NotificationIntake: сброс поля профиля (profile-modera
         {
           text,
           target: { type: 'profile-edit' },
-          collapse: { key: `profile:${USER}:${field}`, seq: Date.parse(AT) },
+          collapse: { key: `profile:${USER}:${field}`, seq: 7 },
           recipients: [USER],
         },
       ]);
@@ -126,7 +127,10 @@ describe('NotificationIntake: сброс поля профиля (profile-modera
   it.each([
     ['поле вне справочника', payload('theme')],
     ['лишний ключ (причина модератора)', { ...payload('name'), reason: 'мат' }],
-    ['нет avatarBlockedUntil', { userId: USER, field: 'name', resetAt: AT }],
+    ['нет avatarBlockedUntil', { userId: USER, field: 'name', resetAt: AT, seq: 7 }],
+    // ревью pass 2: порядок — только ревизия сбросов профиля; событие без неё не схлопывается «по времени»
+    ['нет seq', { userId: USER, field: 'name', resetAt: AT, avatarBlockedUntil: null }],
+    ['seq не положительный', { ...payload('name'), seq: 0 }],
     ['битый userId', { ...payload('name'), userId: 'x' }],
   ])('%s — invalid_payload', async (_name, bad) => {
     expect(await intakeWith(null).drafts(RESET, bad)).toBe('invalid_payload');

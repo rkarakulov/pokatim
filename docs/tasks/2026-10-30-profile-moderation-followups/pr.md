@@ -41,7 +41,8 @@
   наборов в конец.
 
 ### Предложения правок `.claude/rules` (не применены, нужен OK)
-- `pokatim-db.md` — поля профиля `openReasons`, `avatarResetsAt`, `avatarBlockedUntil`; индекс
+- `pokatim-db.md` — поля профиля `openReasons`, `avatarResetsAt`, `avatarBlockedUntil`, `resetSeq` (ревизия сбросов
+  модератором — `seq` события и порядок уведомлений); индекс
   `profiles_report_reason_queue_idx`; порядок записи сброса фото (`resetAvatar` → `recordAvatarReset` → фото →
   `closeOpen` → журнал → outbox) и «Снять запрет» (условная запись профиля первой).
 - `pokatim-backend.md` — событие `profile.field-reset`, ребро `notifications → profile` только файловое (без порта);

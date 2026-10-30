@@ -51,6 +51,8 @@ type ResetKind = ProfileResetField;
 /** Итог записи сброса: исход условной записи и срок запрета, включённого этим сбросом (только фото). */
 interface ResetWrite {
   outcome: ResetOutcome;
+  /** Ревизия сбросов профиля после этой записи (ревью pass 2) — `seq` события; при промахе не читается. */
+  seq: number;
   imposed?: Date | null;
 }
 
@@ -160,7 +162,7 @@ export class ProfileModerationService {
       if (result.outcome === 'reset' && result.wasPublic && result.avatarId) {
         await this.reissue.reissue(tx, userId, result.avatarId, newAvatarId, now);
       }
-      return { outcome: result.outcome };
+      return { outcome: result.outcome, seq: result.seq };
     });
   }
 
@@ -175,11 +177,11 @@ export class ProfileModerationService {
   ): Promise<RiderProfileResetResult> {
     return this.reset(actorUserId, userId, body, 'avatar', async (tx, now) => {
       const result = await this.repository.resetAvatar(tx, userId, now);
-      if (result.outcome !== 'reset') return { outcome: result.outcome };
+      if (result.outcome !== 'reset') return { outcome: result.outcome, seq: result.seq };
       const ban = avatarResetBan(result, now);
       await this.repository.recordAvatarReset(tx, userId, ban.resets, ban.blockedUntil);
       if (result.avatarId) await this.avatars.delete(tx, result.avatarId, userId);
-      return { outcome: result.outcome, imposed: ban.imposed };
+      return { outcome: result.outcome, seq: result.seq, imposed: ban.imposed };
     });
   }
 
@@ -189,9 +191,9 @@ export class ProfileModerationService {
     userId: string,
     body: RiderProfileResetRequest,
   ): Promise<RiderProfileResetResult> {
-    return this.reset(actorUserId, userId, body, 'club', async (tx, now) => ({
-      outcome: await this.repository.resetClub(tx, userId, now),
-    }));
+    return this.reset(actorUserId, userId, body, 'club', (tx, now) =>
+      this.repository.resetClub(tx, userId, now),
+    );
   }
 
   /**
@@ -268,7 +270,7 @@ export class ProfileModerationService {
   ): Promise<RiderProfileResetResult> {
     const now = this.clock.now();
     const reset = await this.transactions.run(async (tx) => {
-      const { outcome, imposed = null } = await write(tx, now);
+      const { outcome, seq, imposed = null } = await write(tx, now);
       if (outcome === 'not_found') throw domainError('NOT_FOUND', 404);
       if (outcome === 'empty') return false;
       const closed = await this.reports.closeOpen(tx, userId, 'actioned', actorUserId, now);
@@ -285,6 +287,7 @@ export class ProfileModerationService {
         userId,
         field: kind,
         resetAt: now.toISOString(),
+        seq,
         avatarBlockedUntil: iso(imposed),
       };
       await this.outbox.append(tx, { type: PROFILE_FIELD_RESET, payload });

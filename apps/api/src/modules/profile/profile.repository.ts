@@ -77,6 +77,9 @@ export type ResetOutcome = 'reset' | 'empty' | 'not_found';
 
 /** Закрытие всех открытых жалоб профиля той же операцией (profile-moderation, + причины — followups RC-F1). */
 const CLOSE_REPORTS = { openReportCount: 0, openReasons: [] as ProfileReportReason[] };
+/** Ревизия сбросов модератором (ревью pass 2) — `$inc` в условной записи сброса; номер этого сброса — прежний + 1. */
+const NEXT_RESET = { resetSeq: 1 } as const;
+const resetSeqAfter = (before: { resetSeq?: number }) => (before.resetSeq ?? 0) + 1;
 
 /**
  * Поля документа при upsert без ответа опроса (как у шага устройств): прежние значения или пустые. `publicId` не
@@ -332,20 +335,35 @@ export class ProfileRepository {
     session: DbSession,
     userId: string,
     now: Date,
-  ): Promise<{ outcome: ResetOutcome; avatarId: string | null; wasPublic: boolean }> {
+  ): Promise<{
+    outcome: ResetOutcome;
+    avatarId: string | null;
+    wasPublic: boolean;
+    seq: number;
+  }> {
     const before = await this.profiles.findOneAndUpdate(
       { _id: userId, publicName: { $type: 'string' } },
-      { $set: { publicName: null, ...CLOSE_REPORTS, updatedAt: now } },
-      { session, returnDocument: 'before', projection: { showNameInResults: 1, avatarId: 1 } },
+      { $set: { publicName: null, ...CLOSE_REPORTS, updatedAt: now }, $inc: NEXT_RESET },
+      {
+        session,
+        returnDocument: 'before',
+        projection: { showNameInResults: 1, avatarId: 1, resetSeq: 1 },
+      },
     );
     if (before) {
       return {
         outcome: 'reset',
         avatarId: before.avatarId ?? null,
         wasPublic: before.showNameInResults === true,
+        seq: resetSeqAfter(before),
       };
     }
-    return { outcome: await this.missOutcome(session, userId), avatarId: null, wasPublic: false };
+    return {
+      outcome: await this.missOutcome(session, userId),
+      avatarId: null,
+      wasPublic: false,
+      seq: 0,
+    };
   }
 
   /**
@@ -363,14 +381,15 @@ export class ProfileRepository {
     avatarId: string | null;
     resets: Date[];
     blockedUntil: Date | null;
+    seq: number;
   }> {
     const before = await this.profiles.findOneAndUpdate(
       { _id: userId, avatarId: { $type: 'string' } },
-      { $set: { avatarId: null, ...CLOSE_REPORTS, updatedAt: now } },
+      { $set: { avatarId: null, ...CLOSE_REPORTS, updatedAt: now }, $inc: NEXT_RESET },
       {
         session,
         returnDocument: 'before',
-        projection: { avatarId: 1, avatarResetsAt: 1, avatarBlockedUntil: 1 },
+        projection: { avatarId: 1, avatarResetsAt: 1, avatarBlockedUntil: 1, resetSeq: 1 },
       },
     );
     if (before) {
@@ -379,6 +398,7 @@ export class ProfileRepository {
         avatarId: before.avatarId ?? null,
         resets: before.avatarResetsAt ?? [],
         blockedUntil: before.avatarBlockedUntil ?? null,
+        seq: resetSeqAfter(before),
       };
     }
     return {
@@ -386,6 +406,7 @@ export class ProfileRepository {
       avatarId: null,
       resets: [],
       blockedUntil: null,
+      seq: 0,
     };
   }
 
@@ -435,13 +456,18 @@ export class ProfileRepository {
   }
 
   /** Сброс клуба модератором (profile-moderation) — первая запись транзакции: условие «клуб есть», `club: null`. */
-  async resetClub(session: DbSession, userId: string, now: Date): Promise<ResetOutcome> {
+  async resetClub(
+    session: DbSession,
+    userId: string,
+    now: Date,
+  ): Promise<{ outcome: ResetOutcome; seq: number }> {
     const before = await this.profiles.findOneAndUpdate(
       { _id: userId, club: { $type: 'string' } },
-      { $set: { club: null, ...CLOSE_REPORTS, updatedAt: now } },
-      { session, projection: { _id: 1 } },
+      { $set: { club: null, ...CLOSE_REPORTS, updatedAt: now }, $inc: NEXT_RESET },
+      { session, returnDocument: 'before', projection: { resetSeq: 1 } },
     );
-    return before ? 'reset' : this.missOutcome(session, userId);
+    if (before) return { outcome: 'reset', seq: resetSeqAfter(before) };
+    return { outcome: await this.missOutcome(session, userId), seq: 0 };
   }
 
   /** Условие сброса не совпало: документа нет — `not_found`, есть (сбрасывать нечего) — `empty` без записи. */

@@ -326,7 +326,7 @@ export class NotificationIntake {
   private profileFieldReset(payload: unknown): NoticeDraft[] | IntakeSkip {
     const event = ProfileFieldReset.safeParse(payload);
     if (!event.success) return 'invalid_payload';
-    const { userId, field, resetAt, avatarBlockedUntil } = event.data;
+    const { userId, field, seq, avatarBlockedUntil } = event.data;
     const text: NoticeText =
       field === 'avatar'
         ? {
@@ -338,7 +338,8 @@ export class NotificationIntake {
       {
         text,
         target: { type: 'profile-edit' },
-        collapse: { key: `profile:${userId}:${field}`, seq: Date.parse(resetAt) },
+        // ревизия сбросов профиля (ревью pass 2): позже записанный сброс заменяет прежний независимо от `resetAt`
+        collapse: { key: `profile:${userId}:${field}`, seq },
         recipients: [userId],
       },
     ];

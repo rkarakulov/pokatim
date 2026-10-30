@@ -71,6 +71,11 @@ export interface ProfileDoc {
   avatarResetsAt?: Date[];
   /** profile-moderation-followups: загрузка фото запрещена до этого момента; нет поля / `null` / прошло — нет запрета. */
   avatarBlockedUntil?: Date | null;
+  /**
+   * profile-moderation-followups (ревью pass 2): ревизия сбросов модератором — `$inc` условной записью каждого сброса
+   * (имя, фото, клуб), монотонна; номер — `seq` события `profile.field-reset` (порядок уведомлений). Нет поля — 0.
+   */
+  resetSeq?: number;
   /** Время последней записи райдера или модератора (`CLOCK`; жалоба его не трогает). */
   updatedAt: Date;
 }

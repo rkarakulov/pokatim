@@ -337,6 +337,21 @@ Status: **CONCERNS** — блокеров нет. RC-F1…RC-F14 — реком�
 - **LOW — explain страницы с курсором.** `rider-profiles-moderation.int.test.ts`: план запроса с фильтром `reason` и
   keyset-условием курсора — `IXSCAN profiles_report_reason_queue_idx`, без `SORT`.
 
+### Исправления ревью, pass 2 (coder, 2026-10-30)
+
+- **MEDIUM (Codex) — порядок уведомлений о сбросе.** `resetAt` берётся до транзакции и не монотонен между
+  конкурирующими сбросами. Теперь условная запись каждого сброса (`resetPublicName`, `resetAvatar`, `resetClub`) делает
+  `$inc profiles.resetSeq` (ревизия сбросов профиля, общая для трёх полей; нет поля — 0, миграция не нужна) и
+  возвращает номер этого сброса (прежний + 1); событие `profile.field-reset` получает обязательное `seq` (целое > 0),
+  intake схлопывает `profile:<uid>:<field>` по нему. Событие без `seq` — `invalid_payload`, без fallback на
+  `Date.parse(resetAt)`: в одном `collapseSeq` миллисекунды времени всегда «новее» ревизии и сломали бы порядок;
+  событие внутреннее, в проде старых нет, на dev необработанные старые события лишь не дадут уведомления.
+- **Тест** — `profile-avatar-locks.int.test.ts`: запрос A взял время и стоит перед записью (ворота на
+  `ProfileRepository.resetAvatar`) → сброс B (позже по часам) → новое фото → A (3-й сброс, запрет); `resetAt` A < B, `seq`
+  A > B; в центре одно уведомление — текст A с запретом. Отрицательное доказательство: intake со `seq:
+  Date.parse(resetAt)` — тест красный по результату (в центре текст B «Загрузите другое фото»). Unit intake — `seq` в
+  схлопывании, без `seq` / `seq: 0` — `invalid_payload`; int модерации — `seq` 1, 2, 3 по трём полям.
+
 ## 9. Acceptance Criteria
 
 1. `GET /v1/admin/rider-profiles?reason=name` — только профили с открытой жалобой «Имя», сортировка и курсор как у

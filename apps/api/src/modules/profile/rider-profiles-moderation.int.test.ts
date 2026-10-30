@@ -466,10 +466,12 @@ describe('событие сброса для уведомления (profile-mod
     });
     const events = await eventsOfType(h, PROFILE_FIELD_RESET);
     expect(events.map((event) => event.payload)).toEqual(
-      ['name', 'avatar', 'club'].map((field) => ({
+      ['name', 'avatar', 'club'].map((field, index) => ({
         userId: target.userId,
         field,
         resetAt: h.clock.now().toISOString(),
+        // ревизия сбросов профиля — монотонна по всем полям (ревью pass 2)
+        seq: index + 1,
         avatarBlockedUntil: null,
       })),
     );
