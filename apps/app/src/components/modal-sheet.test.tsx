@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ModalSheet } from './modal-sheet';
@@ -11,10 +11,13 @@ const METRICS = {
 };
 
 describe('ModalSheet', () => {
-  const renderSheet = async (onClose = jest.fn()) => {
+  const renderSheet = async (
+    onClose = jest.fn(),
+    extra: Partial<Parameters<typeof ModalSheet>[0]> = {},
+  ) => {
     await render(
       <SafeAreaProvider initialMetrics={METRICS}>
-        <ModalSheet title="Райд опубликован" onClose={onClose} testID="sheet">
+        <ModalSheet title="Райд опубликован" onClose={onClose} testID="sheet" {...extra}>
           <Text>Тело шита</Text>
         </ModalSheet>
       </SafeAreaProvider>,
@@ -22,13 +25,24 @@ describe('ModalSheet', () => {
     return onClose;
   };
 
-  it('заголовок — heading, окно — modal dialog с именем заголовка, тело внутри', async () => {
+  it('заголовок — heading, панель — modal для скринридера, тело внутри', async () => {
     await renderSheet();
     expect(screen.getByRole('heading', { name: 'Райд опубликован' })).toBeOnTheScreen();
     const sheet = screen.getByTestId('sheet');
     expect(sheet.props.accessibilityViewIsModal).toBe(true);
-    expect(sheet.props.role).toBe('dialog');
-    expect(sheet.props['aria-label']).toBe('Райд опубликован');
+    // dialog с именем — сам `Modal` (web), панель второго dialog не создаёт
+    expect(sheet.props.role).toBeUndefined();
+    expect(screen.getByText('Тело шита')).toBeOnTheScreen();
+  });
+
+  it('titleInContent — заголовок не рисуется; headerAction — над содержимым', async () => {
+    await renderSheet(jest.fn(), {
+      titleInContent: true,
+      placement: 'dialog',
+      headerAction: <Pressable accessibilityRole="button" accessibilityLabel="Закрыть окно" />,
+    });
+    expect(screen.queryByRole('heading')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Закрыть окно' })).toBeOnTheScreen();
     expect(screen.getByText('Тело шита')).toBeOnTheScreen();
   });
 
@@ -36,7 +50,7 @@ describe('ModalSheet', () => {
     const onClose = await renderSheet();
     await fireEvent.press(screen.getByTestId('sheet-scrim', { includeHiddenElements: true }));
     expect(onClose).toHaveBeenCalledTimes(1);
-    await fireEvent(screen.getByTestId('sheet'), 'requestClose');
+    await fireEvent(screen.getByLabelText('Райд опубликован'), 'requestClose');
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
