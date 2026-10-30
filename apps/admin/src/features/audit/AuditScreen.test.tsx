@@ -145,6 +145,45 @@ describe('«Журнал действий» (AC12)', () => {
     expect(screen.getAllByText('Кофе-райд на море')).toHaveLength(2);
   });
 
+  it('profile-moderation-followups: сброс фото, включивший запрет, — дата окончания запрета; снятие запрета', async () => {
+    mocked.listAudit.mockResolvedValue({
+      items: [
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8065',
+          action: 'profile.avatar_reset',
+          reason: 'Фото с рекламой',
+          subject: null,
+          details: { reportCount: 2, avatarBlockedUntil: '2026-11-29T11:05:00.000Z' },
+        },
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8066',
+          action: 'profile.avatar_reset',
+          reason: 'Фото с рекламой',
+          subject: null,
+          details: { reportCount: 1 },
+        },
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8067',
+          action: 'profile.avatar_unblocked',
+          reason: 'Райдер обжаловал',
+          subject: null,
+        },
+      ],
+      nextCursor: null,
+    });
+    await renderApp('/audit');
+    expect(
+      await screen.findByText(
+        'Сброшено фото участника: Жалоб: 2 · запрет загрузки фото до 29 ноября 2026, 14:05',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Сброшено фото участника: Жалоб: 1')).toBeTruthy();
+    expect(screen.getByRole('cell', { name: 'Снят запрет загрузки фото' })).toBeTruthy();
+  });
+
   it('routes-06: решение по заявке — причина отклонения справочником, поправленные поля подписями', async () => {
     mocked.listAudit.mockResolvedValue({
       items: [

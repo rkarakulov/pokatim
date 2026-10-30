@@ -98,6 +98,19 @@ paths:
   вставка жалобы; сбросы фото/клуба/имени — условная запись профиля (`openReportCount: 0`) → побочное → `closeOpen` →
   журнал; «Отклонить» — `clearReports` по `reportRevision` и `openReportCount > 0` (без `updatedAt`) → `closeOpen` →
   журнал. Параллельные транзакции конфликтуют по документу профиля — `openReportCount` = числу открытых жалоб.
+- `profiles.{openReasons, avatarResetsAt, avatarBlockedUntil, resetSeq}` (profile-moderation-followups) — тоже
+  необязательные (`?? []` / `?? null` / `?? 0`). `openReasons` — причины открытых жалоб: `$addToSet` в `recordReport`,
+  `[]` — в каждой операции, обнуляющей `openReportCount` (сбросы, `clearReports` закрывают все открытые); порядок не
+  держится — сервис упорядочивает по `PROFILE_REPORT_REASONS`. Очередь по причине — частичный индекс
+  `profiles_report_reason_queue_idx` `{ openReasons: 1, lastReportAt: -1, _id: -1 }` (`openReportCount > 0`), запрос —
+  с условием и `hint` (план без `SORT` держит int-тест); миграция `0042_profile_report_reasons` — индекс и бэкфилл по
+  открытым `profile_reports`. `resetSeq` — ревизия сбросов модератором (`$inc` условной записью каждого сброса имени,
+  фото, клуба), номер — `seq` события `profile.field-reset` и порядок уведомлений (не `resetAt`). Сброс фото — две
+  записи профиля в транзакции: `resetAvatar` (`returnDocument: 'before'`) → `avatarResetBan` (`profile.policy.ts`,
+  окно 180 дн.) → `recordAvatarReset` (`avatarResetsAt`, `avatarBlockedUntil`) → удаление фото → `closeOpen` → журнал →
+  outbox. Замена фото проверяет запрет по `before` в своей транзакции (гонка со сбросом — write conflict по документу
+  профиля). «Снять запрет» — первой условная запись `{ _id, avatarBlockedUntil: { $gt: now } }` → `null` → журнал;
+  `avatarResetsAt` не очищается.
 - Перевыпуск id фото (profile-moderation, RC-A2 (b), ADR-0019 п. 6) — в транзакции `PATCH /v1/profile` и сброса
   имени, после записи профиля, при переходе «публичен → нет» (флаг до/после из той же транзакции): копия документа
   `profile_avatars` под новым `randomToken` (выдан до транзакции) → `replaceAvatarId` (условие — прежний id) →
@@ -223,7 +236,10 @@ paths:
 - Производные данные маршрута (routes-03): «готовый маршрут не меняется» — про линии и длину; производные исходника
   — `route_geometries.profile` (`[distanceM, elevationM][]` ≤ 300 | `null` — нет высот), `derivedVersion`,
   `derivedFailure { version, code, at }` и коллекция `route_exports { _id: routeId, gpx: Binary, kml?: Binary,
-  tcx?: Binary, sizeBytes, derivedVersion }` (очищенный экспорт: GPX ≤ ~1,2 МБ, TCX ≤ ~4,6 МБ; `kml`/`tcx` — с версии 2) — пишут только `RoutesRepository.markReady` (разбор) и `recordDerived`
+  tcx?: Binary, encoding?: 'gzip', sizeBytes, derivedVersion }` (очищенный экспорт: GPX ≤ ~1,2 МБ, TCX ≤ ~4,6 МБ до
+  сжатия; `kml`/`tcx` — с версии 2; route-exports-gzip: файлы сжаты gzip worker'ом **до** транзакции —
+  `exportFilesOf`, уровень 6 явно (детерминизм); `encoding: 'gzip'` — у всех новых записей, нет поля — старый несжатый
+  документ, читается как есть, пережмётся при росте версии; откат образа на релиз до route-exports-gzip запрещён — старый API отдал бы gzip без `Content-Encoding`, а документы назад не разожмутся; `sizeBytes` — сумма **хранимых** байт) — пишут только `RoutesRepository.markReady` (разбор) и `recordDerived`
   (бэкфилл), обе — с экспортом в одной транзакции: есть `derivedVersion` ⇒ есть экспорт (`gpxAvailable` и `exportFormats` — `routeExportFormats(derivedVersion)` — без чтения
   `route_exports`). Пересчёт — только регламент `routes-maintenance` по росту `ROUTE_DERIVED_VERSION`
   (`@pokatim/tracks/parse`); детерминированный отказ разбора — метка `derivedFailure` этой версии (не берётся до роста

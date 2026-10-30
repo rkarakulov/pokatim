@@ -22,6 +22,7 @@ const profile = (themeId: AppThemeId): ProfileView => ({
   avatar: null,
   publicId: null,
   themeId,
+  avatarUploadBlockedUntil: null,
 });
 
 function deferred<T>() {

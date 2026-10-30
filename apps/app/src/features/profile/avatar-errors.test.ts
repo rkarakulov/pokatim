@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 
-import { avatarErrorMessage } from './avatar-errors';
+import { avatarBlockedText, avatarErrorMessage, isAvatarBlockedError } from './avatar-errors';
 import { AvatarPickerUnavailableError, AvatarPrecheckError } from './picked-avatar';
 
 const http = (status: number, code: string, details?: unknown) =>
@@ -45,6 +45,34 @@ describe('тексты ошибок фото профиля (AC14)', () => {
     );
     expect(avatarErrorMessage(new AvatarPrecheckError('tooSmall'))).toBe(
       'Фото слишком маленькое — нужно хотя бы 64 × 64 пикселя',
+    );
+  });
+
+  it('409 PROFILE_INVALID_STATE avatar_blocked — запрет с датой и временем по Минску; без даты и прочие причины — общий текст', () => {
+    expect(
+      avatarErrorMessage(
+        http(409, 'PROFILE_INVALID_STATE', {
+          reason: 'avatar_blocked',
+          until: '2026-11-29T11:05:00.000Z',
+        }),
+      ),
+    ).toBe('Загрузка фото недоступна до 29 ноября 2026, 14:05 после нарушений правил');
+    expect(
+      isAvatarBlockedError(
+        http(409, 'PROFILE_INVALID_STATE', {
+          reason: 'avatar_blocked',
+          until: '2026-11-29T11:05:00.000Z',
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isAvatarBlockedError(http(409, 'PROFILE_INVALID_STATE', { reason: 'own_profile' })),
+    ).toBe(false);
+    expect(
+      avatarErrorMessage(http(409, 'PROFILE_INVALID_STATE', { reason: 'own_profile' })),
+    ).not.toContain('Загрузка фото');
+    expect(avatarBlockedText('2026-11-29T11:05:00.000Z')).toBe(
+      'Загрузка фото недоступна до 29 ноября 2026, 14:05 после нарушений правил',
     );
   });
 

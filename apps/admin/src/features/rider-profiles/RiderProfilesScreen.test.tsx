@@ -29,6 +29,7 @@ const row = (overrides: Partial<RiderProfileModerationRow> = {}): RiderProfileMo
   lastReportAt: '2026-10-01T10:00:00.000Z',
   hasAvatar: true,
   hasClub: true,
+  openReasons: ['photo'],
   ...overrides,
 });
 
@@ -98,6 +99,71 @@ describe('«Профили райдеров» — очередь жалоб (pro
     mocked.listRiderProfiles.mockResolvedValue({ items: [], nextCursor: null });
     await renderApp('/rider-profiles');
     expect(await screen.findByText('Жалоб нет')).toBeTruthy();
+  });
+
+  it('несколько причин открытых жалоб — строкой под главной (порядок справочника)', async () => {
+    mocked.listRiderProfiles.mockResolvedValue({
+      items: [row({ openReasons: ['photo', 'name', 'spam'] })],
+      nextCursor: null,
+    });
+    await renderApp('/rider-profiles');
+    const link = await screen.findByRole('link', { name: 'Анна К. ·9a8090' });
+    expect(cellsOf(link)[1]).toBe(
+      '3 · Неприемлемое фотоПричины: Неприемлемое фото, Неприемлемое имя, Спам или реклама',
+    );
+  });
+
+  it('вкладки «Все / Имя / Фото / Клуб» — фильтр в URL и в запросе; пусто — текст вкладки', async () => {
+    const { router } = await renderApp('/rider-profiles');
+    await screen.findByRole('link', { name: 'Анна К. ·9a8090' });
+    const tabs = screen.getByRole('group', { name: 'Причина жалобы' });
+    expect(
+      within(tabs)
+        .getAllByRole('button')
+        .map((item) => item.textContent),
+    ).toEqual(['Все', 'Имя', 'Фото', 'Клуб']);
+    expect(within(tabs).getByRole('button', { name: 'Все' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+
+    mocked.listRiderProfiles.mockResolvedValue({ items: [], nextCursor: null });
+    fireEvent.click(within(tabs).getByRole('button', { name: 'Имя' }));
+    await waitFor(() => expect(currentHref(router)).toBe('/admin/rider-profiles?reason=name'));
+    expect(await screen.findByText('Жалоб на имя нет')).toBeTruthy();
+    expect(mocked.listRiderProfiles).toHaveBeenLastCalledWith({ reason: 'name', limit: 50 });
+    expect(screen.getByRole('button', { name: 'Имя' }).getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Фото' }));
+    expect(await screen.findByText('Жалоб на фото нет')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Клуб' }));
+    expect(await screen.findByText('Жалоб на клуб нет')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Все' }));
+    await waitFor(() => expect(currentHref(router)).toBe('/admin/rider-profiles'));
+    expect(await screen.findByText('Жалоб нет')).toBeTruthy();
+  });
+
+  it('прямой адрес ?reason=photo — вкладка «Фото»; «Показать ещё» сохраняет фильтр', async () => {
+    mocked.listRiderProfiles
+      .mockResolvedValueOnce({ items: [row()], nextCursor: 'next-1' })
+      .mockResolvedValueOnce({ items: [row({ userId: OTHER, name: 'Борис' })], nextCursor: null });
+    await renderApp('/rider-profiles?reason=photo');
+    await screen.findByRole('link', { name: 'Анна К. ·9a8090' });
+    expect(screen.getByRole('button', { name: 'Фото' }).getAttribute('aria-pressed')).toBe('true');
+    expect(mocked.listRiderProfiles).toHaveBeenCalledWith({ reason: 'photo', limit: 50 });
+    fireEvent.click(screen.getByRole('button', { name: 'Показать ещё' }));
+    expect(await screen.findByRole('link', { name: 'Борис ·9a8091' })).toBeTruthy();
+    expect(mocked.listRiderProfiles).toHaveBeenLastCalledWith({
+      reason: 'photo',
+      limit: 50,
+      cursor: 'next-1',
+    });
+  });
+
+  it('причина вне вкладок (?reason=spam) — «Все», без фильтра', async () => {
+    await renderApp('/rider-profiles?reason=spam');
+    await screen.findByRole('link', { name: 'Анна К. ·9a8090' });
+    expect(screen.getByRole('button', { name: 'Все' }).getAttribute('aria-pressed')).toBe('true');
+    expect(mocked.listRiderProfiles).toHaveBeenCalledWith({ limit: 50 });
   });
 
   it('загрузка — скелетон таблицы; ошибка — с повтором', async () => {

@@ -1,4 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { promisify } from 'node:util';
+import { gunzip } from 'node:zlib';
+
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   CatalogRouteAuthor,
   CatalogRouteCard,
@@ -18,13 +21,15 @@ import { displayGeometryOf } from './route-catalog';
 import { elevationOf } from './route-elevation';
 import { ROUTE_GEOMETRY, type RouteGeometry } from './route-geometry.port';
 import type { RouteCatalogDoc, RouteDoc } from './routes.collection';
-import { routeExportFormats } from './routes.policy';
+import { ROUTE_POLICY, routeExportFormats } from './routes.policy';
 import { type RouteDerivedState, RoutesRepository } from './routes.repository';
 
 /** Маршрут каталога: готовый (длина и петля есть) и опубликованный. */
 type CatalogRoute = RouteDoc & { distanceM: number; catalog: RouteCatalogDoc };
 
 const notFound = () => domainError('NOT_FOUND', 404);
+
+const gunzipAsync = promisify(gunzip);
 
 const inCatalog = (route: RouteDoc): route is CatalogRoute =>
   route.distanceM !== null && (route.catalog ?? null) !== null;
@@ -78,9 +83,13 @@ function toCatalogDetail(
   };
 }
 
-/** Файл экспорта маршрута каталога и название (имя файла). */
+/**
+ * Файл экспорта маршрута каталога и название (имя файла); `contentEncoding: 'gzip'` — байты сжаты, ответ с
+ * `Content-Encoding: gzip` (route-exports-gzip), `null` — несжатый файл.
+ */
 export interface CatalogRouteExport {
   bytes: Uint8Array;
+  contentEncoding: 'gzip' | null;
   title: string;
 }
 
@@ -92,6 +101,8 @@ export interface CatalogRouteExport {
  */
 @Injectable()
 export class RoutesPublicService {
+  private readonly logger = new Logger(RoutesPublicService.name);
+
   constructor(
     private readonly repository: RoutesRepository,
     /** `RoutesCatalogService.displayGeometry` (кэш неизменной геометрии) через тот же порт, что у `races`. */
@@ -137,13 +148,35 @@ export class RoutesPublicService {
 
   /**
    * Файл экспорта (GPX — routes-03; KML, TCX — routes-formats) — только маршрута каталога; нет экспорта или поля
-   * формата (экспорт версии 1) — 404. Разбора и сборки файлов в API нет.
+   * формата (экспорт версии 1) — 404. Разбора и сборки файлов в API нет (route-exports-gzip): сжатый gzip файл —
+   * как есть, если клиент принимает gzip (`acceptGzip`), иначе распаковка ≤ `ROUTE_POLICY.exportMaxBytes` (не разбор);
+   * старый несжатый документ — как есть. Сбой распаковки — лог `routeId`, формат и класс ошибки, исключение (500).
    */
-  async exportFile(id: string, format: RouteExportFormat): Promise<CatalogRouteExport> {
+  async exportFile(
+    id: string,
+    format: RouteExportFormat,
+    acceptGzip: boolean,
+  ): Promise<CatalogRouteExport> {
     const route = await this.published(id);
-    const bytes = await this.repository.exportFile(id, format);
-    if (!bytes) throw notFound();
-    return { bytes, title: route.title };
+    const stored = await this.repository.exportFile(id, format);
+    if (!stored) throw notFound();
+    const { title } = route;
+    if (!stored.gzip) return { bytes: stored.bytes, contentEncoding: null, title };
+    if (acceptGzip) return { bytes: stored.bytes, contentEncoding: 'gzip', title };
+    try {
+      const bytes = await gunzipAsync(stored.bytes, {
+        maxOutputLength: ROUTE_POLICY.exportMaxBytes,
+      });
+      return { bytes, contentEncoding: null, title };
+    } catch (error) {
+      // класс ошибки без текста (Z_DATA_ERROR, ERR_BUFFER_TOO_LARGE)
+      const kind =
+        error instanceof Error
+          ? ((error as NodeJS.ErrnoException).code ?? error.name)
+          : typeof error;
+      this.logger.error(`route ${id} export ${format} unreadable (${kind})`);
+      throw error;
+    }
   }
 
   /**

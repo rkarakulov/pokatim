@@ -49,7 +49,19 @@ describe('ProfileView', () => {
       avatar: null,
       publicId: null,
       themeId: 'classic',
+      avatarUploadBlockedUntil: null,
     });
+  });
+
+  it('запрет загрузки фото (profile-moderation-followups): дата ISO как есть, нет — null', () => {
+    const until = '2026-11-29T10:00:00.000Z';
+    expect(
+      ProfileView.parse({ rideReasons: [], avatarUploadBlockedUntil: until })
+        .avatarUploadBlockedUntil,
+    ).toBe(until);
+    expect(
+      ProfileView.safeParse({ rideReasons: [], avatarUploadBlockedUntil: 'завтра' }).success,
+    ).toBe(false);
   });
 
   it('тема (user-theme): известная — как есть, незнакомая будущая — unknown', () => {

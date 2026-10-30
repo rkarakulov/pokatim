@@ -1,3 +1,5 @@
+import { gunzipSync, gzipSync } from 'node:zlib';
+
 import {
   CatalogRouteCard,
   CatalogRouteCities,
@@ -41,8 +43,11 @@ import type { RouteDoc } from './routes.collection';
  * ответа, видимость карточки и карты, `explain` списка. Маршруты — напрямую в БД (подготовка).
  */
 let h: Harness;
+/** origin web из `CORS_ORIGINS`: CORS ставит `Vary: Origin` (route-exports-gzip, Codex pass 1). */
+const WEB_ORIGIN = 'http://127.0.0.1:8081';
+
 beforeAll(async () => {
-  h = await createHarness({ TRUST_PROXY: '1' });
+  h = await createHarness({ TRUST_PROXY: '1', CORS_ORIGINS: WEB_ORIGIN });
 });
 beforeEach(async () => {
   await h.reset();
@@ -364,27 +369,31 @@ describe('GET /v1/routes/:id и /map (AC3)', () => {
   });
 });
 
-/** Публичный GET файла (тело — не JSON) с адреса `ip`. */
-const getRaw = (url: string, ip: string) =>
-  h.app.inject({ method: 'GET', url, headers: { 'x-forwarded-for': ip } });
+/** Публичный GET файла (тело — не JSON) с адреса `ip`; `headers` — дополнительные заголовки запроса. */
+const getRaw = (url: string, ip: string, headers: Record<string, string> = {}) =>
+  h.app.inject({ method: 'GET', url, headers: { 'x-forwarded-for': ip, ...headers } });
 
 /**
  * Производные данные маршрута — напрямую в БД (подготовка): версия 1 (routes-03) — только GPX; с `files` — версия 2
- * (routes-formats) с KML и TCX.
+ * (routes-formats) с KML и TCX. Без `gzip` — старый несжатый документ (без `encoding`); с `gzip` — как пишет worker
+ * (route-exports-gzip).
  */
 async function seedDerived(
   id: string,
   profile: [number, number][] | null,
   gpx: string,
   files?: { kml: string; tcx: string },
+  { gzip = false }: { gzip?: boolean } = {},
 ) {
   const derivedVersion = files ? 2 : 1;
   await routesDb(h).geometries.updateOne({ _id: id }, { $set: { profile, derivedVersion } });
-  const encode = (text: string) => new Binary(new TextEncoder().encode(text));
+  const encode = (text: string) =>
+    new Binary(gzip ? gzipSync(text) : new TextEncoder().encode(text));
   await routesDb(h).exports.insertOne({
     _id: id,
     gpx: encode(gpx),
     ...(files ? { kml: encode(files.kml), tcx: encode(files.tcx) } : {}),
+    ...(gzip ? { encoding: 'gzip' as const } : {}),
     sizeBytes: 0,
     derivedVersion,
   });
@@ -603,6 +612,116 @@ describe('GET /v1/routes/:id/gpx (routes-03, AC4)', () => {
     expect((await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.4')).statusCode).toBe(200);
     // карточка с того же адреса — лимит public-read (300) не исчерпан
     expect((await getRaw(`/v1/routes/${id}`, '198.51.100.3')).statusCode).toBe(200);
+  });
+});
+
+describe('route_exports gzip (route-exports-gzip)', () => {
+  const TEXTS = { gpx: GPX_TEXT, kml: KML_TEXT, tcx: TCX_TEXT } as const;
+  const TYPES = {
+    gpx: 'application/gpx+xml; charset=utf-8',
+    kml: 'application/vnd.google-earth.kml+xml; charset=utf-8',
+    tcx: 'application/vnd.garmin.tcx+xml; charset=utf-8',
+  } as const;
+
+  it.each(['gpx', 'kml', 'tcx'] as const)(
+    '%s: gzip в БД + Accept-Encoding: gzip → Content-Encoding: gzip, Vary, тело распаковывается в файл; прочие заголовки прежние (AC2)',
+    async (format) => {
+      const id = await seedRoute({ title: 'Круг' });
+      await seedDerived(id, null, GPX_TEXT, FILES, { gzip: true });
+      const res = await getRaw(`/v1/routes/${id}/${format}`, '198.51.100.31', {
+        'accept-encoding': 'gzip, deflate, br',
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-encoding']).toBe('gzip');
+      expect(res.headers.vary).toBe('Origin, Accept-Encoding');
+      expect(gunzipSync(res.rawPayload).toString('utf8')).toBe(TEXTS[format]);
+      expect(res.headers['content-type']).toBe(TYPES[format]);
+      expect(res.headers['cache-control']).toBe('public, max-age=60');
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      expect(res.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
+      expect(res.headers['content-disposition']).toBe(
+        `attachment; filename="pokatim-route.${format}"; filename*=UTF-8''${encodeURIComponent('Круг')}.${format}`,
+      );
+    },
+  );
+
+  it('gzip в БД, без Accept-Encoding / gzip;q=0 / identity → без Content-Encoding, тело — несжатый файл, Vary есть (AC3)', async () => {
+    const id = await seedRoute();
+    await seedDerived(id, null, GPX_TEXT, FILES, { gzip: true });
+    for (const headers of [
+      {} as Record<string, string>,
+      { 'accept-encoding': 'gzip;q=0' },
+      { 'accept-encoding': 'identity' },
+    ]) {
+      for (const format of ['gpx', 'kml', 'tcx'] as const) {
+        const res = await getRaw(`/v1/routes/${id}/${format}`, '198.51.100.32', headers);
+        const label = `${format} ${JSON.stringify(headers)}`;
+        expect(res.statusCode, label).toBe(200);
+        expect(res.headers['content-encoding'], label).toBeUndefined();
+        expect(res.headers.vary, label).toBe('Origin, Accept-Encoding');
+        expect(res.body, label).toBe(TEXTS[format]);
+      }
+    }
+  });
+
+  it('запрос web из CORS_ORIGINS: Vary сохраняет Origin от CORS и добавляет Accept-Encoding', async () => {
+    const id = await seedRoute();
+    await seedDerived(id, null, GPX_TEXT, FILES, { gzip: true });
+    const res = await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.36', {
+      'accept-encoding': 'gzip',
+      origin: WEB_ORIGIN,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBe(WEB_ORIGIN);
+    expect(res.headers.vary).toBe('Origin, Accept-Encoding');
+  });
+
+  it('старый документ без encoding: Accept-Encoding: gzip → тело как есть, без Content-Encoding (AC4)', async () => {
+    const id = await seedRoute();
+    await seedDerived(id, null, GPX_TEXT, FILES);
+    for (const format of ['gpx', 'kml', 'tcx'] as const) {
+      const res = await getRaw(`/v1/routes/${id}/${format}`, '198.51.100.33', {
+        'accept-encoding': 'gzip',
+      });
+      expect(res.statusCode, format).toBe(200);
+      expect(res.headers['content-encoding'], format).toBeUndefined();
+      expect(res.body, format).toBe(TEXTS[format]);
+    }
+  });
+
+  it('повреждённый gzip в БД, клиент без gzip → 500 JSON без Content-Disposition', async () => {
+    const id = await seedRoute();
+    await seedDerived(id, null, GPX_TEXT, FILES, { gzip: true });
+    const broken = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0xde, 0xad, 0xbe, 0xef]);
+    await routesDb(h).exports.updateOne({ _id: id }, { $set: { gpx: new Binary(broken) } });
+    const res = await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.34');
+    expect(res.statusCode).toBe(500);
+    expect(res.headers['content-type']).toContain('application/json');
+    expect(res.headers['content-disposition']).toBeUndefined();
+    expect(res.headers['content-encoding']).toBeUndefined();
+  });
+
+  it('новый маршрут после разбора: /gpx с gzip и без — один и тот же XML', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const id = await readyRoute(h, org.token, 'route-trk-no-time.gpx', 'Холмы');
+    expect(
+      (
+        await panelCall(h, org.token, 'POST', `${ROUTES}/${id}/publish`, {
+          city: 'minsk',
+          surfaces: ['asphalt'],
+        })
+      ).status,
+    ).toBe(200);
+    for (const format of ['gpx', 'kml', 'tcx'] as const) {
+      const zipped = await getRaw(`/v1/routes/${id}/${format}`, '198.51.100.35', {
+        'accept-encoding': 'gzip',
+      });
+      const plain = await getRaw(`/v1/routes/${id}/${format}`, '198.51.100.35');
+      expect(zipped.headers['content-encoding'], format).toBe('gzip');
+      expect(plain.headers['content-encoding'], format).toBeUndefined();
+      expect(gunzipSync(zipped.rawPayload).toString('utf8'), format).toBe(plain.body);
+      expect(plain.body, format).toMatch(/^<\?xml/);
+    }
   });
 });
 

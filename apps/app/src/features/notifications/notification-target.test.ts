@@ -17,6 +17,7 @@ describe('notificationTargetPath — белый список целей (N10)', 
     ],
     [{ type: 'my-route', routeId: ROUTE }, `/routes/mine/${ROUTE}`],
     [{ type: 'ticket', code: '7XK2M9PQRT' }, '/tickets/7XK2M9PQRT'],
+    [{ type: 'profile-edit' }, '/settings/profile'],
   ])('%j → %s', (target, path) => {
     expect(notificationTargetPath(target)).toBe(path);
   });
@@ -59,6 +60,7 @@ describe('паритет с service worker (Web Push, ADR-0022)', () => {
     { type: 'ticket', code: '7XK2M9PQRT' },
     { type: 'ticket', code: '7XK2M9PQRU' },
     { type: 'ticket', code: '../admin/x' },
+    { type: 'profile-edit' },
     { type: 'race', raceId: '../admin' },
     { type: 'race', raceId: RACE.toUpperCase() },
     { type: 'race', raceId: '00000000-0000-0000-0000-000000000000' },

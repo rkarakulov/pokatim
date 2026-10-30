@@ -16,6 +16,7 @@ vi.mock('../../api', () => ({
     resetRiderClub: vi.fn(),
     resetRiderName: vi.fn(),
     dismissRiderProfileReports: vi.fn(),
+    unblockRiderAvatar: vi.fn(),
     riderAvatarUrl: vi.fn(),
   },
 }));
@@ -38,6 +39,8 @@ const detail = (
   openReportCount: 1,
   lastReportAt: LAST,
   reportRevision: 4,
+  avatarUploadBlockedUntil: null,
+  avatarResetCount: 0,
   reports: [
     {
       id: REPORT,
@@ -155,6 +158,61 @@ describe('карточка профиля райдера (profile-moderation, AC
         reportRevision: 4,
       }),
     );
+  });
+
+  it('без запрета — счётчик сбросов фото, строки запрета и «Снять запрет» нет', async () => {
+    mocked.getRiderProfile.mockResolvedValue(detail({ avatarResetCount: 2 }));
+    await open();
+    await screen.findByRole('heading', { name: 'Анна К. ·9a8090' });
+    expect(screen.getByText('Сбросов фото за 180 дней')).toBeTruthy();
+    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.queryByText(/Загрузка фото запрещена/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Снять запрет' })).toBeNull();
+  });
+
+  it('запрет загрузки — строка с датой и временем; «Снять запрет» → ReasonDialog → запрос, карточка перечитана', async () => {
+    mocked.getRiderProfile.mockResolvedValue(
+      detail({
+        avatar: null,
+        avatarResetCount: 3,
+        avatarUploadBlockedUntil: '2026-11-29T11:05:00.000Z',
+      }),
+    );
+    mocked.unblockRiderAvatar.mockResolvedValue({ unblocked: true });
+    await open();
+    expect(
+      await screen.findByText('Загрузка фото запрещена до 29 ноября 2026, 14:05'),
+    ).toBeTruthy();
+    expect(screen.getByText('3')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Снять запрет' }));
+    expect(within(dialog()).getByText(/История сбросов сохранится/)).toBeTruthy();
+    mocked.getRiderProfile.mockResolvedValue(detail({ avatar: null, avatarResetCount: 3 }));
+    fireEvent.change(within(dialog()).getByLabelText(/Причина/), {
+      target: { value: 'Райдер обжаловал' },
+    });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Снять запрет' }));
+    await waitFor(() =>
+      expect(mocked.unblockRiderAvatar).toHaveBeenCalledWith(ID, { reason: 'Райдер обжаловал' }),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/Загрузка фото запрещена/)).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Снять запрет' })).toBeNull();
+  });
+
+  it('«Снять запрет» — ошибка сервера в окне; 404 — перечитывание карточки', async () => {
+    mocked.getRiderProfile.mockResolvedValue(
+      detail({ avatarResetCount: 3, avatarUploadBlockedUntil: '2026-11-29T11:05:00.000Z' }),
+    );
+    mocked.unblockRiderAvatar.mockRejectedValue(httpError(500, 'INTERNAL'));
+    await open();
+    await confirmWith('Снять запрет', 'Райдер обжаловал');
+    expect(await within(dialog()).findByRole('alert')).toBeTruthy();
+    fireEvent.click(within(dialog()).getByRole('button', { name: /Отмена/ }));
+
+    mocked.unblockRiderAvatar.mockRejectedValue(httpError(404, 'NOT_FOUND'));
+    mocked.getRiderProfile.mockRejectedValue(httpError(404, 'NOT_FOUND'));
+    await confirmWith('Снять запрет', 'Райдер обжаловал');
+    expect(await screen.findByText('Профиль не найден')).toBeTruthy();
   });
 
   it('409 CONFLICT — «Пришли новые жалобы, обновите карточку», «Обновить» перечитывает', async () => {

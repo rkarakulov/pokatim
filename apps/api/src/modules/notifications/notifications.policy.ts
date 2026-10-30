@@ -58,6 +58,10 @@ const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   route_published: RIDES,
   route_rejected: RIDES,
   event_reminder: EVENTS,
+  // [ASSUMPTION] сброс поля профиля модератором — в группе «Райды» (N4: три группы; profile-moderation-followups RC-F4)
+  profile_name_reset: RIDES,
+  profile_avatar_reset: RIDES,
+  profile_club_reset: RIDES,
 };
 
 /** Группа настроек события (N4). */

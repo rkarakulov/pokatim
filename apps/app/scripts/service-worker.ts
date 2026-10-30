@@ -153,6 +153,8 @@ function targetPath(target) {
       return id('routeId') && '/routes/mine/' + id('routeId');
     case 'ticket':
       return typeof target.code === 'string' && TICKET_CODE.test(target.code) ? '/tickets/' + target.code : null;
+    case 'profile-edit':
+      return '/settings/profile';
     default:
       return null;
   }

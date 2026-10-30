@@ -30,7 +30,9 @@ export type NoticeText =
   | { kind: 'route_published'; route: string }
   | { kind: 'route_rejected'; route: string; reason: RouteRejectionReason }
   /** напоминание о событии с билетом (PR D): текст правила — организатора, не ПДн райдеров */
-  | { kind: 'event_reminder'; event: string; startsAt: Date; place: string | null; text: string };
+  | { kind: 'event_reminder'; event: string; startsAt: Date; place: string | null; text: string }
+  | { kind: 'profile_name_reset' | 'profile_club_reset' }
+  | { kind: 'profile_avatar_reset'; blockedUntil: Date | null };
 
 export interface RenderedText {
   title: string;
@@ -89,6 +91,9 @@ const TITLES: Record<NotificationKind, string> = {
   route_published: 'Маршрут опубликован',
   route_rejected: 'Маршрут отклонён',
   event_reminder: 'Скоро старт',
+  profile_name_reset: 'Имя в профиле сброшено',
+  profile_avatar_reset: 'Фото профиля удалено',
+  profile_club_reset: 'Клуб в профиле сброшен',
 };
 
 function bodyOf(input: NoticeText): string {
@@ -129,6 +134,14 @@ function bodyOf(input: NoticeText): string {
       const place = input.place === null ? '' : `, ${input.place.replace(/\s+/g, ' ').trim()}`;
       return `${quoted(input.event)} — ${dayTime(input.startsAt)}${place}.\n${input.text}`;
     }
+    case 'profile_name_reset':
+      return 'Модератор сбросил имя после жалоб. Укажите другое имя в профиле.';
+    case 'profile_avatar_reset':
+      return input.blockedUntil
+        ? `Модератор удалил фото после жалоб. Загрузка фото недоступна до ${dayTime(input.blockedUntil)}.`
+        : 'Модератор удалил фото после жалоб. Загрузите другое фото.';
+    case 'profile_club_reset':
+      return 'Модератор сбросил клуб после жалоб. Укажите другой клуб в профиле.';
   }
 }
 

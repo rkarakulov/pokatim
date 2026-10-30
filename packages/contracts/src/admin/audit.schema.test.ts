@@ -73,6 +73,7 @@ describe('AuditAction', () => {
       'panel.invitation_sent',
       'panel.invitation_revoked',
       'panel.invitation_accepted',
+      'profile.avatar_unblocked',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',
@@ -313,6 +314,31 @@ describe('AuditEntry — модерация маршрутов райдеров 
     expect(
       AuditPage.safeParse({
         items: [{ ...entry, details: { rejectionReason: 'boring' } }],
+        nextCursor: null,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('AuditEntry — запрет загрузки фото (profile-moderation-followups)', () => {
+  it('details.avatarBlockedUntil — дата ISO, необязательна', () => {
+    const entry = {
+      id: ID,
+      at: '2026-10-30T10:00:00.000Z',
+      action: 'profile.avatar_reset',
+      actor: { kind: 'user', userId: ID, displayName: 'Ольга' },
+      target: null,
+      reason: 'Недопустимое фото',
+      subject: { kind: 'rider', id: ID, label: 'Участник ·000001' },
+      details: { reportCount: 1, avatarBlockedUntil: '2026-11-29T10:00:00.000Z' },
+    };
+    expect(AuditPage.parse({ items: [entry], nextCursor: null }).items[0]?.details).toEqual({
+      reportCount: 1,
+      avatarBlockedUntil: '2026-11-29T10:00:00.000Z',
+    });
+    expect(
+      AuditPage.safeParse({
+        items: [{ ...entry, details: { avatarBlockedUntil: 'завтра' } }],
         nextCursor: null,
       }).success,
     ).toBe(false);

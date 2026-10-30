@@ -10,9 +10,16 @@ import { useUploadAvatar } from './queries';
 /**
  * Фото профиля на iOS и Android (rider-profile, AC14): «Выбрать фото» — системная галерея с обрезкой 1:1, затем
  * загрузка без `crop` (квадрат уже вырезан). Кнопка занята на время выбора и загрузки; отмена — без запроса; ошибки
- * (старый dev-клиент, размер, 413/415/422/429, сеть) — баннер блока.
+ * (старый dev-клиент, размер, 413/415/422/429, 409 запрета, сеть) — баннер блока. Запрет загрузки (`blockedUntil`) —
+ * кнопка неактивна, под ней — до какого момента.
  */
-export function AvatarEditor({ avatarId }: { avatarId: string | null }) {
+export function AvatarEditor({
+  avatarId,
+  blockedUntil,
+}: {
+  avatarId: string | null;
+  blockedUntil: string | null;
+}) {
   const upload = useUploadAvatar();
   const [picking, setPicking] = useState(false);
   const [failure, setFailure] = useState<string>();
@@ -31,10 +38,16 @@ export function AvatarEditor({ avatarId }: { avatarId: string | null }) {
   };
 
   return (
-    <AvatarSection avatarId={avatarId} failure={failure} onFailure={setFailure}>
+    <AvatarSection
+      avatarId={avatarId}
+      blockedUntil={blockedUntil}
+      failure={failure}
+      onFailure={setFailure}
+    >
       <Button
         label={t('profile.avatar.pick')}
         variant="secondary"
+        disabled={blockedUntil !== null}
         loading={picking || upload.isPending}
         onPress={() => void onPick()}
       />

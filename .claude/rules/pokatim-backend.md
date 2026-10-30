@@ -54,7 +54,11 @@ paths:
   `routes/:id/{gpx,kml,tcx}` (общий `sendExport`) — `IpRateLimitGuard` +
   `@IpRateLimit('route-gpx', ROUTE_POLICY.exportIpLimit)` после класс-гарда,
   байты `route_exports`, заголовки файла через `HttpAdapterHost` после чтения (Nest пишет `@Header` до обработчика —
-  404 с типом файла не сериализовался бы). Общий IP-лимит метода — `consumeIpLimit`/`IpRateLimitGuard` в
+  404 с типом файла не сериализовался бы). Сжатие (route-exports-gzip): `@Headers('accept-encoding')` →
+  `acceptsGzip` (`routes.policy.ts`) → `RoutesPublicService.exportFile(id, format, acceptGzip)`: хранится gzip и клиент
+  принимает — байты как есть + `Content-Encoding: gzip`; не принимает — `gunzip` ≤ `ROUTE_POLICY.exportMaxBytes`
+  (распаковка своих данных, не разбор и не сборка; сбой — лог `routeId`/формат/класс ошибки, 500); старый несжатый
+  документ — как есть. `Vary: Accept-Encoding` — у каждого 200. Глобального `@fastify/compress` нет. Общий IP-лимит метода — `consumeIpLimit`/`IpRateLimitGuard` в
   `src/public-read.guard.ts` (им же пользуется `PublicReadGuard`).
 - Очередь `routes-maintenance` (routes-03, `RoutesWorkerModule`): `RoutesSchedules` — расписание `routes.maintenance`
   каждые 10 мин + разовая `routes.derive.boot` при старте worker; `RoutesMaintenanceProcessor` → `RouteDerivedBackfill.run`
@@ -174,6 +178,14 @@ paths:
   `{ reset: false }` без журнала; устаревший `reportRevision` — 409 `CONFLICT` (RC-P1), открытых нет —
   `{ dismissed: false }` (RC-P2). `AvatarReissue` — перевыпуск id фото при переходе «публичен → нет» в транзакциях
   `PATCH /v1/profile` (`ProfileService.writeProfile`) и сброса имени; публичность — `isPublicProfile` (`profile.policy.ts`).
+  Follow-up (profile-moderation-followups): очередь `?reason=` (одна причина), строка — `openReasons`; сброс с
+  `{ reset: true }` пишет в той же транзакции после журнала outbox `profile.field-reset` (`profile.events.ts`, строгая
+  схема `ProfileFieldReset`: `userId`, `field`, `resetAt`, `seq`, `avatarBlockedUntil` — только если запрет включил этот
+  сброс; без причины и значения). Запрет загрузки фото — `PROFILE_POLICY.avatarBan` (3 сброса за 180 дн. → 30 дн.,
+  `[ASSUMPTION]`), `ProfileAvatarService.admit` — `409 PROFILE_INVALID_STATE { reason: 'avatar_blocked', until }`;
+  `POST admin/rider-profiles/:userId/avatar-unblock` — журнал `profile.avatar_unblocked`, нет запрета —
+  `{ unblocked: false }` без журнала и события. `ProfileView.avatarUploadBlockedUntil` — `profileViewOf(doc, now)` во
+  всех ответах профиля.
 
 ## Очереди (worker)
 
@@ -538,7 +550,10 @@ RC-A1, ADR-0019).
   коды) и дают порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`, `RouteNotices`,
   `TicketNotices`; плюс `RaceRegistry`,
   `IdentityAccounts.liveUserIds/emailsOf`. Чужих коллекций `notifications` не читает; источники о нём не знают.
-- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (13 типов → `notifications-intake`; `tickets.reminder-due` — получателю своя цель `ticket` через `NoticeDraft.targets`). Очереди:
+  `profile` — источник без порта: ребро `notifications → profile` только файловое (`PROFILE_FIELD_RESET` и схема
+  `ProfileFieldReset` из `profile/index.ts`, без Nest-импорта `ProfileCoreModule`), payload самодостаточен, живость
+  получателя — `liveUserIds`; схлопывание `profile:<uid>:<field>` по `seq`, событие без `seq` — `invalid_payload`.
+- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (14 типов → `notifications-intake`; `tickets.reminder-due` — получателю своя цель `ticket` через `NoticeDraft.targets`). Очереди:
   `notifications-intake` (событие → получатели → настройки → upsert; > 72 ч — skip; уникальность `(sourceEventId,
   userId)`, схлопывание `collapseKey`), `notifications-delivery` (`notifications.push` по пользователю — захват,
   тумблер, тихие часы, лимит 20/ч, сводка; `notifications.email` — только N2), `notifications-maintenance`

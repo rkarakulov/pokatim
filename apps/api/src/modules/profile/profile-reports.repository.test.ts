@@ -93,6 +93,8 @@ describe('profile_reports — вставка, закрытие и удалени
       .sort();
     expect(users).toEqual([
       'db/migrations/0034_profile_reports.ts',
+      // бэкфилл `profiles.openReasons` — только чтение открытых жалоб (profile-moderation-followups)
+      'db/migrations/0042_profile_report_reasons.ts',
       'modules/profile/profile-reports.collection.ts',
       'modules/profile/profile-reports.repository.ts',
     ]);
