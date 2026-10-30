@@ -630,9 +630,12 @@ for (const [name, path, pickScreen] of [
     const response = await request.get(path);
     expect(response.status()).toBe(200);
     const html = await response.text();
-    // RC-3: SSR отдаёт свой экран (шапка «Выбрать свой заезд» — только у выбора; сторож порядка манифеста — jest)
-    if (pickScreen) expect(html).toContain('Выбрать свой заезд');
-    else expect(html).not.toContain('Выбрать свой заезд');
+    // RC-3: SSR отдаёт свой экран — чанк файла маршрута в preload (`[routeId]` — выбор, `[rideId]` — результат; до
+    // сессии оба — скелетон оболочки, шапок нет; сторож порядка манифеста — jest)
+    const [own, other] = pickScreen ? ['routeId', 'rideId'] : ['rideId', 'routeId'];
+    expect(html).toMatch(new RegExp(`/\\[${own}\\]-[0-9a-f]+\\.js`));
+    expect(html).not.toMatch(new RegExp(`/\\[${other}\\]-[0-9a-f]+\\.js`));
+    expect(html).not.toContain('Выбрать свой заезд');
     // экран не публичный: без данных заездов и без OG
     expect(html).not.toContain('Подходящих заездов нет');
     expect(html).not.toContain('Заезд не найден');

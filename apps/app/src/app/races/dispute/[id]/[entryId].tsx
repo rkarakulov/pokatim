@@ -1,5 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 
+import { useSettingsShell } from '@/features/devices/settings-shell';
 import { DisputeFormScreen } from '@/features/races/disputes/dispute-form';
 import { groupParam } from '@/features/races/disputes/dispute-screen';
 
@@ -10,7 +11,10 @@ export default function FileDisputeRoute() {
     entryId: string;
     group?: string;
   }>();
+  const shell = useSettingsShell();
   return (
-    <DisputeFormScreen raceId={String(id)} entryId={String(entryId)} group={groupParam(group)} />
+    shell ?? (
+      <DisputeFormScreen raceId={String(id)} entryId={String(entryId)} group={groupParam(group)} />
+    )
   );
 }

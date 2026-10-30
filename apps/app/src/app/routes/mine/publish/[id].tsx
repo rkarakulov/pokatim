@@ -1,5 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 
+import { useSettingsShell } from '@/features/devices/settings-shell';
 import { MyRoutePublishScreen } from '@/features/routes/my-route-publish';
 
 /**
@@ -8,5 +9,6 @@ import { MyRoutePublishScreen } from '@/features/routes/my-route-publish';
  */
 export default function MyRoutePublishRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  return <MyRoutePublishScreen id={String(id)} />;
+  const shell = useSettingsShell();
+  return shell ?? <MyRoutePublishScreen id={String(id)} />;
 }
