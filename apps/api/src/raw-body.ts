@@ -1,3 +1,5 @@
+import type { IncomingMessage } from 'node:http';
+import { Socket } from 'node:net';
 import type { Readable } from 'node:stream';
 
 import type { ErrorCode } from '@pokatim/contracts';
@@ -49,6 +51,7 @@ export function readLimited(
       // уходит с `Connection: close`; обрыв клиента во время слива — без необработанной ошибки потока
       body.on('error', () => undefined);
       body.resume();
+      lingerOnClose(body);
       reject(error);
     };
     const timedOut = () => fail(bodyTimedOut());
@@ -84,6 +87,38 @@ export function readLimited(
     body.once('end', onEnd);
     body.once('error', onError);
   });
+}
+
+/** Сколько после ответа ждём конца недочитанного тела, прежде чем закрыть сокет (как `lingering_timeout` nginx). */
+export const LINGER_MS = 5_000;
+
+/**
+ * Закрытие после отказа — «lingering close». Node после ответа с `Connection: close` сразу разрушает сокет
+ * (`destroySoon`: FIN и `destroy` по `finish`); хвост тела, ещё не прочитанный из буфера ядра, превращает закрытие в
+ * RST, ядро клиента выбрасывает уже пришедший ответ, и клиент вместо 413/408 получает обрыв (`EPIPE`/`ECONNRESET` —
+ * чем больше хвост и медленнее сервер, тем чаще). Здесь отправка закрывается так же (FIN после ответа), а приём
+ * сливается до конца тела, FIN клиента или `LINGER_MS` — после этого сокет закрывается без непрочитанных байт.
+ */
+function lingerOnClose(body: Readable): void {
+  const socket = (body as Partial<IncomingMessage>).socket;
+  // `inject` (light-my-request) — не сетевой сокет: закрывать нечего
+  if (!(socket instanceof Socket) || socket.destroyed) return;
+  socket.destroySoon = function lingeringDestroySoon(this: Socket) {
+    const done = { body: body.readableEnded, response: false };
+    const timer = setTimeout(() => this.destroy(), LINGER_MS);
+    timer.unref();
+    const close = () => {
+      if (done.body && done.response) this.destroy();
+    };
+    this.once('close', () => clearTimeout(timer));
+    // FIN клиента — тело больше не придёт
+    this.once('end', () => ((done.body = true), close()));
+    body.once('end', () => ((done.body = true), close()));
+    this.once('finish', () => ((done.response = true), close()));
+    if (this.writable) this.end();
+    else done.response = this.writableFinished;
+    close();
+  };
 }
 
 function isReadable(value: unknown): value is Readable {
