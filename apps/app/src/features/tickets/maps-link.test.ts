@@ -1,17 +1,37 @@
 /// <reference types="jest" />
-import { directionsUrl } from './maps-link';
+import { directionsUrlFor } from './maps-link';
 
-describe('directionsUrl (RC-B3)', () => {
-  it('https-поиск по тексту адреса, текст экранирован', () => {
-    expect(directionsUrl('пр. Победителей, 1, Минск')).toBe(
-      'https://yandex.by/maps/?text=%D0%BF%D1%80.%20%D0%9F%D0%BE%D0%B1%D0%B5%D0%B4%D0%B8%D1%82%D0%B5%D0%BB%D0%B5%D0%B9%2C%201%2C%20%D0%9C%D0%B8%D0%BD%D1%81%D0%BA',
+const ADDRESS = 'пр. Победителей, 1, Минск';
+
+describe('directionsUrlFor (RC-B3): системные карты поиском по адресу', () => {
+  it('Android — geo: (карты по умолчанию или выбор приложения)', () => {
+    expect(directionsUrlFor('android', ADDRESS)).toBe(`geo:0,0?q=${encodeURIComponent(ADDRESS)}`);
+  });
+
+  it('iOS/iPadOS — Apple Maps', () => {
+    expect(directionsUrlFor('ios', ADDRESS)).toBe(
+      `https://maps.apple.com/?q=${encodeURIComponent(ADDRESS)}`,
     );
   });
 
-  it('спецсимволы не ломают запрос и не добавляют параметров', () => {
-    const url = new URL(directionsUrl('a&b=c#d?e'));
-    expect(url.protocol).toBe('https:');
-    expect([...url.searchParams.keys()]).toEqual(['text']);
-    expect(url.searchParams.get('text')).toBe('a&b=c#d?e');
+  it('остальное (десктоп) — Яндекс Карты', () => {
+    expect(directionsUrlFor('other', ADDRESS)).toBe(
+      `https://yandex.by/maps/?text=${encodeURIComponent(ADDRESS)}`,
+    );
+  });
+
+  it.each(['ios', 'other'] as const)(
+    '%s: спецсимволы не ломают запрос и не добавляют параметров',
+    (platform) => {
+      const url = new URL(directionsUrlFor(platform, 'a&b=c#d?e'));
+      expect(url.protocol).toBe('https:');
+      expect([...url.searchParams.values()]).toEqual(['a&b=c#d?e']);
+      expect(url.hash).toBe('');
+    },
+  );
+
+  it('android: спецсимволы экранированы', () => {
+    const url = directionsUrlFor('android', 'a&b=c#d?e');
+    expect(url).toBe('geo:0,0?q=a%26b%3Dc%23d%3Fe');
   });
 });

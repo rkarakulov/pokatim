@@ -33,4 +33,12 @@ describe('openExternalUrl (web)', () => {
     await expect(openExternalUrl('mailto:help@pokatim.by')).resolves.toBeUndefined();
     expect(open).not.toHaveBeenCalled();
   });
+
+  it('geo: (карты на Android) — приложение карт из той же вкладки, без пустой новой вкладки', async () => {
+    const open = jest.spyOn(window, 'open').mockReturnValue(null);
+    await expect(
+      openExternalUrl('geo:0,0?q=%D0%9C%D0%B8%D0%BD%D1%81%D0%BA'),
+    ).resolves.toBeUndefined();
+    expect(open).not.toHaveBeenCalled();
+  });
 });
