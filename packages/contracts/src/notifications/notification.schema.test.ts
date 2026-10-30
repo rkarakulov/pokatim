@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { tolerantEnum } from '../common.ts';
+
 import {
   DEFAULT_EVENT_NOTIFICATION_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
+  DEFAULT_ROUTE_NOTIFICATION_SETTINGS,
   EventNotificationSettingsView,
   ExpoPushToken,
   NOTIFICATION_GROUPS,
@@ -18,8 +21,10 @@ import {
   RegisterWebPushSubscription,
   RevokePushToken,
   RevokeWebPushSubscription,
+  RouteNotificationSettingsView,
   UnreadCount,
   UpdateEventNotificationSettings,
+  UpdateRouteNotificationSettings,
   WebPushConfig,
 } from './notification.schema.ts';
 
@@ -46,7 +51,7 @@ const view = (overrides: Record<string, unknown> = {}) => ({
 
 describe('справочники уведомлений (только в конец)', () => {
   it('порядок значений зафиксирован', () => {
-    expect(NOTIFICATION_GROUPS).toEqual(['races', 'disputes', 'rides', 'events']);
+    expect(NOTIFICATION_GROUPS).toEqual(['races', 'disputes', 'rides', 'events', 'routes']);
     expect(NOTIFICATION_KINDS).toEqual([
       'result_counted',
       'result_rejected',
@@ -111,6 +116,15 @@ describe('ответы (tolerantEnum, неизвестная цель)', () => {
     expect(NotificationView.parse(view({ target: null })).target).toBeNull();
   });
 
+  it('группа routes в сборке без неё — unknown (старый справочник групп)', () => {
+    const OLD_GROUPS = ['races', 'disputes', 'rides', 'events'] as const;
+    const old = NotificationView.extend({ group: tolerantEnum(OLD_GROUPS) });
+    expect(old.parse(view({ kind: 'route_published', group: 'routes' })).group).toBe('unknown');
+    expect(NotificationView.parse(view({ kind: 'route_published', group: 'routes' })).group).toBe(
+      'routes',
+    );
+  });
+
   it('страница и счётчик', () => {
     expect(NotificationPage.parse({ items: [view()], nextCursor: null }).items).toHaveLength(1);
     expect(UnreadCount.parse({ count: 100 })).toEqual({ count: 100 });
@@ -165,6 +179,33 @@ describe('настройки «Мероприятия» (подресурс, RC-
       NotificationSettings.safeParse({
         ...DEFAULT_NOTIFICATION_SETTINGS,
         push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, events: true },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('настройки «Маршруты» (подресурс, только push)', () => {
+  it('умолчания — включено; ответ терпит лишние ключи', () => {
+    expect(DEFAULT_ROUTE_NOTIFICATION_SETTINGS).toEqual({ push: true });
+    expect(RouteNotificationSettingsView.parse({ push: false, email: true })).toEqual({
+      push: false,
+    });
+  });
+
+  it('запрос строгий: push обязателен, лишние ключи и не boolean — ошибка', () => {
+    expect(UpdateRouteNotificationSettings.parse({ push: false })).toEqual({ push: false });
+    expect(codesOf(UpdateRouteNotificationSettings.safeParse({}))).toEqual(['push:REQUIRED']);
+    expect(UpdateRouteNotificationSettings.safeParse({ push: true, email: true }).success).toBe(
+      false,
+    );
+    expect(UpdateRouteNotificationSettings.safeParse({ push: 'yes' }).success).toBe(false);
+  });
+
+  it('основные настройки не меняются: ключ routes — ошибка (старые сборки)', () => {
+    expect(
+      NotificationSettings.safeParse({
+        ...DEFAULT_NOTIFICATION_SETTINGS,
+        push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, routes: true },
       }).success,
     ).toBe(false);
   });

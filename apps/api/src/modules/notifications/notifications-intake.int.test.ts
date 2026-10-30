@@ -338,7 +338,7 @@ describe('маршруты райдеров: решение по заявке (r
   const reject = (id: string, reason: string, version = 0) =>
     decide(id, 'reject', { version, reason, comment: 'Мост закрыт на ремонт' });
 
-  it('одобрение — автору «Маршрут опубликован», цель — свой маршрут, группа «Райды»; прочим — нет', async () => {
+  it('одобрение — автору «Маршрут опубликован», цель — свой маршрут, группа «Маршруты»; прочим — нет', async () => {
     const id = await submittedRoute();
     await approve(id);
     expect(await notificationsIntake(h).drain()).toEqual(['written']);
@@ -346,7 +346,7 @@ describe('маршруты райдеров: решение по заявке (r
     const [published] = await notificationsOf(h, a.userId);
     expect(published).toMatchObject({
       kind: 'route_published',
-      group: 'rides',
+      group: 'routes',
       title: 'Маршрут опубликован',
       body: `«${ROUTE_TITLE}» теперь в каталоге маршрутов.`,
       target: { type: 'my-route', routeId: id },
@@ -358,6 +358,28 @@ describe('маршруты райдеров: решение по заявке (r
     for (const who of [b, organizer, stranger])
       expect(await notificationsOf(h, who.userId)).toEqual([]);
     expect(await notificationsOf(h, moderator.userId)).toEqual([]);
+  });
+
+  it.each([
+    ['push.routes: false', { routes: false, rides: true }, 'skipped'],
+    ['push.rides: false без push.routes', { rides: false }, 'skipped'],
+    ['push.routes: true, push.rides: false', { routes: true, rides: false }, 'pending'],
+  ] as const)('тумблер группы «Маршруты» при приёме: %s — push %s', async (_, push, state) => {
+    await notificationsDb(h).settings.insertOne({
+      _id: a.userId,
+      push: { races: true, disputes: true, rides: true, ...push },
+      email: { disputes: true, rides: true },
+      quietHours: { enabled: false, startHour: 22, endHour: 8 },
+      updatedAt: h.clock.now(),
+    });
+    const id = await submittedRoute();
+    await approve(id);
+    expect(await notificationsIntake(h).drain()).toEqual(['written']);
+    const [published] = await notificationsOf(h, a.userId);
+    expect(published?.push).toMatchObject({
+      state,
+      reason: state === 'skipped' ? 'disabled' : null,
+    });
   });
 
   it('отклонение — «Маршрут отклонён» с причиной без комментария модератора; новая подача и одобрение заменяют его', async () => {

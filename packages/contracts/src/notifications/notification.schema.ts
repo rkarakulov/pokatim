@@ -9,7 +9,7 @@ import { TicketCodeCanonical } from '../tickets/ticket.schema.ts';
  * уведомления. Тексты и цели считает сервер при создании (снимок); клиент присылает только намерение (прочитать,
  * настройки, токен). Справочники — только в конец: ответы приложения разбирают их `tolerantEnum`.
  */
-export const NOTIFICATION_GROUPS = ['races', 'disputes', 'rides', 'events'] as const;
+export const NOTIFICATION_GROUPS = ['races', 'disputes', 'rides', 'events', 'routes'] as const;
 export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number];
 
 export const NOTIFICATION_KINDS = [
@@ -137,6 +137,19 @@ export const DEFAULT_EVENT_NOTIFICATION_SETTINGS: EventNotificationSettingsView 
   push: true,
   email: true,
 };
+
+/**
+ * Группа «Маршруты» (решения по заявке своего маршрута) — подресурс `GET|PUT /v1/notifications/settings/routes`, как
+ * «Мероприятия» (RC-D1); писем у группы нет (N2) — только push. Ответ терпит новые ключи, запрос — строгий.
+ */
+export const RouteNotificationSettingsView = z.object({ push: z.boolean() });
+export type RouteNotificationSettingsView = z.infer<typeof RouteNotificationSettingsView>;
+
+export const UpdateRouteNotificationSettings = z.strictObject({ push: Toggle });
+export type UpdateRouteNotificationSettings = z.infer<typeof UpdateRouteNotificationSettings>;
+
+/** Нет документа настроек — включено (N4); нет сохранённого тумблера — значение «Райдов» (сервер). */
+export const DEFAULT_ROUTE_NOTIFICATION_SETTINGS: RouteNotificationSettingsView = { push: true };
 
 export const PUSH_PLATFORMS = ['ios', 'android'] as const;
 export type PushPlatform = (typeof PUSH_PLATFORMS)[number];

@@ -66,6 +66,8 @@ describe('без сессии', () => {
     ['PUT', `${NOTIFICATIONS}/settings`],
     ['GET', `${NOTIFICATIONS}/settings/events`],
     ['PUT', `${NOTIFICATIONS}/settings/events`],
+    ['GET', `${NOTIFICATIONS}/settings/routes`],
+    ['PUT', `${NOTIFICATIONS}/settings/routes`],
     ['PUT', `${NOTIFICATIONS}/push-tokens`],
     ['POST', `${NOTIFICATIONS}/push-tokens/revoke`],
     ['POST', `${NOTIFICATIONS}/read-all`],
@@ -336,6 +338,85 @@ describe('настройки «Мероприятия» (подресурс, RC-
     }
     expect((await as(a, 'PUT', EVENTS, { push: true, email: true })).status).toBe(200);
     const limited = await as(a, 'PUT', EVENTS, { push: true, email: true });
+    expect(limited.status).toBe(429);
+    expect(limited.body).toMatchObject({ code: 'RATE_LIMITED' });
+  });
+});
+
+describe('настройки «Маршруты» (подресурс, только push)', () => {
+  const ROUTES = `${NOTIFICATIONS}/settings/routes`;
+  const custom: NotificationSettings = {
+    push: { races: false, disputes: true, rides: true },
+    email: { disputes: false, rides: true },
+    quietHours: { enabled: true, startHour: 23, endHour: 7 },
+  };
+
+  it('нет документа — push включён; нет поля push.routes — значение push.rides; no-store', async () => {
+    const initial = await as(a, 'GET', ROUTES);
+    expect(initial.status).toBe(200);
+    expect(initial.headers['cache-control']).toBe('no-store');
+    expect(initial.body).toEqual({ push: true });
+    await as(a, 'PUT', `${NOTIFICATIONS}/settings`, {
+      ...custom,
+      push: { ...custom.push, rides: false },
+    });
+    expect((await as(a, 'GET', ROUTES)).body).toEqual({ push: false });
+    expect((await as(b, 'GET', ROUTES)).body).toEqual({ push: true });
+  });
+
+  it('PUT пишет только push.routes; /settings — прежняя форма и значения; PUT /settings его не стирает', async () => {
+    await as(a, 'PUT', `${NOTIFICATIONS}/settings`, custom);
+    await as(a, 'PUT', `${NOTIFICATIONS}/settings/events`, { push: false, email: true });
+    const saved = await as(a, 'PUT', ROUTES, { push: false });
+    expect(saved.status).toBe(200);
+    expect(saved.body).toEqual({ push: false });
+    expect((await as(a, 'GET', ROUTES)).body).toEqual({ push: false });
+    const read = await as(a, 'GET', `${NOTIFICATIONS}/settings`);
+    expect(NotificationSettings.parse(read.body)).toEqual(custom);
+    expect(read.body).toEqual(custom);
+    expect((await as(a, 'GET', `${NOTIFICATIONS}/settings/events`)).body).toEqual({
+      push: false,
+      email: true,
+    });
+    expect(await notificationsDb(h).settings.findOne({ _id: a.userId })).toEqual({
+      _id: a.userId,
+      push: { ...custom.push, events: false, routes: false },
+      email: { ...custom.email, events: true },
+      quietHours: custom.quietHours,
+      updatedAt: h.clock.now(),
+    });
+    // повторное сохранение основных настроек «Маршруты» не трогает
+    await as(a, 'PUT', `${NOTIFICATIONS}/settings`, {
+      ...custom,
+      push: { ...custom.push, rides: true },
+    });
+    expect((await as(a, 'GET', ROUTES)).body).toEqual({ push: false });
+  });
+
+  it('PUT без документа — умолчания основных настроек ($setOnInsert): /settings — полный объект', async () => {
+    expect((await as(a, 'PUT', ROUTES, { push: true })).status).toBe(200);
+    expect((await as(a, 'GET', `${NOTIFICATIONS}/settings`)).body).toEqual(
+      DEFAULT_NOTIFICATION_SETTINGS,
+    );
+    expect(await notificationsDb(h).settings.findOne({ _id: a.userId })).toMatchObject({
+      push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, routes: true },
+      email: DEFAULT_NOTIFICATION_SETTINGS.email,
+      quietHours: DEFAULT_NOTIFICATION_SETTINGS.quietHours,
+    });
+  });
+
+  it('лишний ключ, пустой объект, не boolean — 400; лимит общий с /settings — 429', async () => {
+    for (const body of [{}, { push: true, email: true }, { push: 1 }]) {
+      const res = await as(a, 'PUT', ROUTES, body);
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+    }
+    expect(await notificationsDb(h).settings.countDocuments()).toBe(0);
+    for (let i = 0; i < NOTIFICATIONS_POLICY.settingsLimit.limit - 1; i++) {
+      expect((await as(a, 'PUT', `${NOTIFICATIONS}/settings`, custom)).status).toBe(200);
+    }
+    expect((await as(a, 'PUT', ROUTES, { push: true })).status).toBe(200);
+    const limited = await as(a, 'PUT', ROUTES, { push: true });
     expect(limited.status).toBe(429);
     expect(limited.body).toMatchObject({ code: 'RATE_LIMITED' });
   });
