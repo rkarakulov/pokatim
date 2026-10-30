@@ -521,7 +521,7 @@ FIT-курс, ссылки, отправку). ADR не нужен (расшир
 
 ### Open follow-ups
 
-- `.claude/rules/*` не правились (запрет задачи): нужно обновить frontmatter `pokatim-security.md`
+- ~~`.claude/rules/*`~~ — обновлены в этом PR по OK пользователя (RC-16): frontmatter `pokatim-security.md`
   (`packages/tracks/src/{gpx,kml,xml,format}.ts` += `tcx`, `kmz`) и строки RC-16 в `pokatim-security.md`,
   `pokatim-backend.md`, `pokatim-app.md`, `pokatim-db.md` (`route_exports` += `kml`, `tcx`), `pokatim-contracts.md`
   (`ROUTE_FILE_EXTENSIONS`, `exportFormats`).

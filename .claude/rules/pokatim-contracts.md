@@ -37,7 +37,8 @@ paths:
   (routes-05) — `CatalogRouteElevation.nullable().default(null)` (решение A4: старый ответ без поля — `null`); собирает
   `elevationOf` API (общая с карточкой каталога).
 - Мои маршруты (routes-02): `src/routes/route.schema.ts` — `ROUTE_ORIGINS` (`platform`, `rider`; только в конец),
-  `ROUTE_FILE_EXTENSIONS` (`gpx`, `kml` = пакет `@pokatim/tracks`), `UploadRouteQuery` — общий для панели и
+  `ROUTE_FILE_EXTENSIONS` (`gpx`, `kml`, `kmz`, `tcx` = пакет `@pokatim/tracks`; `CatalogRouteDetail.exportFormats` —
+  незнакомые коды отбрасываются, дефолт `[]`), `UploadRouteQuery` — общий для панели и
   `POST /v1/routes/mine`; `src/routes/my-route.schema.ts` — ответы приложения `MyRoute` (`status`, `failure` —
   `tolerantEnum`; без `origin`, владельца, sha256, попыток, каталога и линий), `MyRoutePage`, `MyRouteQuery`
   (`strictObject`, limit ≤ 50), `RenameRouteInput` (`RouteTitle` 3–120), `MY_ROUTE_MAX_COUNT` (100); карта —

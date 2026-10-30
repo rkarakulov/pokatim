@@ -22,7 +22,9 @@ Spec и решения: `docs/tasks/2026-10-30-routes-import-export-formats/task
 **Проверки:** полный `pnpm check` (см. комментарий CI); ревью Claude и Codex — APPROVE (pass 2,
 `findings-*-2.md`). e2e Playwright локально не запускались — их гоняет CI.
 
-**Follow-up:** синхронизация `.claude/rules/*` (frontmatter `pokatim-security.md` += `kmz.ts`, `tcx.ts`; RC-16) —
-ждёт OK пользователя; хранение экспорта в gzip; `accessibilityHint` у `Button` (app-foundation).
+**Правила:** `.claude/rules/pokatim-*` синхронизированы (frontmatter `pokatim-security.md` += `kmz.ts`, `tcx.ts`; RC-16)
+по OK пользователя.
+
+**Follow-up:** хранение экспорта в gzip; `accessibilityHint` у `Button` (app-foundation).
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

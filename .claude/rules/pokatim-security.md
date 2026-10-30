@@ -13,7 +13,7 @@ paths:
   - "apps/api/src/modules/devices/**"
   - "apps/app/src/features/devices/**"
   - "packages/tracks/src/parse*"
-  - "packages/tracks/src/{gpx,kml,xml,format}.ts"
+  - "packages/tracks/src/{gpx,kml,kmz,tcx,xml,format}.ts"
   - "apps/api/src/modules/routes/**"
   - "apps/api/src/raw-body.ts"
   - "apps/api/src/upload-slots.ts"
@@ -81,7 +81,7 @@ paths:
 - Файлы пользователей — под непредсказуемыми ключами (`randomToken`), наружу не выдаются (ADR-0011: порт
   `TrackFileStore`, на dev — том, S3 и подписанные URL — до прода/при выдаче). Исключение — перекодированный аватар
   (ADR-0019, раздел «Профиль райдера и аватары»).
-- Парсеры FIT/GPX/KML работают в worker (`worker_threads`) с лимитами по памяти и времени; формат — по сигнатуре,
+- Парсеры FIT/GPX/KML/KMZ/TCX работают в worker (`worker_threads`) с лимитами по памяти и времени; формат — по сигнатуре,
   не по расширению; XML — отказ при `<!DOCTYPE`/`<!ENTITY` до разбора, без сущностей (XXE).
 - Устройства (ADR-0011): подключение активирует только `complete` владельца одноразового тикета (sha256 в БД,
   TTL 30 мин) под `AuthGuard`; callback без входа ничего не меняет; `returnUrl` — только allowlist
@@ -197,8 +197,8 @@ paths:
 
 - `POST /v1/admin/routes` — `PanelGuard` + `races.manage`, лимит 20/ч на сотрудника до чтения тела; тело — только
   `application/octet-stream` (`readLimited`, обрыв на 5 МиБ — `413 ROUTE_TOO_LARGE` + `Connection: close`); формат —
-  по сигнатуре (не GPX/KML, в т. ч. `<!DOCTYPE` до корня и FIT — `415 ROUTE_FORMAT_UNSUPPORTED`; UI панели выбирает
-  `.gpx,.kml`); разбор — только worker через `runParseThread` (отказ на `<!DOCTYPE`/`<!ENTITY`, подсчёт элементов и
+  по сигнатуре (не GPX/KML/KMZ/TCX, в т. ч. `<!DOCTYPE` до корня и FIT — `415 ROUTE_FORMAT_UNSUPPORTED`; UI панели выбирает
+  `.gpx,.kml,.kmz,.tcx`); разбор — только worker через `runParseThread` (отказ на `<!DOCTYPE`/`<!ENTITY`, подсчёт элементов и
   `rtept` до дерева, `XMLValidator`). Слотов приёма у панели нет (сотрудники), таймаут тела — общий (ниже).
 - Чтение — `races.read`; чужой необработанный маршрут — 404. Публично в карточке `GET /v1/races/:id` — только
   `corridor.widthM`: `routeId` и координаты не выходят. Логи — `routeId`, код отказа, id сотрудника; без названий
@@ -220,13 +220,14 @@ paths:
   маршруты команды). Ответы — явный список полей: без
   `ownerUserId`, `sha256`, статуса, `failure`, `attempts` и линии сверки (int-тест на ключи). Снятый маршрут может
   быть виден до минуты из кэша (RC-13).
-- Очищенный GPX каталога (routes-03): `GET /v1/routes/:id/gpx` — только маршрут каталога (`findInCatalog`, иначе
-  один `404 NOT_FOUND`), `PublicReadGuard` + отдельный IP-лимит `route-gpx` 30/мин (`IpRateLimitGuard` +
+- Очищенный экспорт каталога (routes-03, routes-formats): `GET /v1/routes/:id/{gpx,kml,tcx}` — только маршрут каталога (`findInCatalog`, иначе
+  один `404 NOT_FOUND`), `PublicReadGuard` + отдельный IP-лимит `route-gpx` 30/мин — один бюджет на все форматы (`ROUTE_POLICY.exportIpLimit`) (`IpRateLimitGuard` +
   `@IpRateLimit`, `consumeIpLimit` в `src/public-read.guard.ts`; 429 + `Retry-After`), `public, max-age=60`. Файл
   посчитан worker'ом (`routeGpx`: только `trkpt lat lon` и `ele` точек линии сверки — без `time`, датчиков,
-  `name`/`desc`, `metadata`, `extensions` исходника); API GPX не разбирает. Заголовки файла — только у 200:
-  `application/gpx+xml; charset=utf-8`, `Content-Disposition: attachment` с ASCII-fallback и `filename*` RFC 5987
-  (`gpxFileName`: без `\p{Cc}`/`\p{Cf}` — bidi-подмена расширения, без `\/:*?"<>|`, ≤ 80 кодовых точек),
+  `name`/`desc`, `metadata`, `extensions` исходника; `routeKml` — одна `LineString`; `routeTcx` — курс `Name=Pokatim` с
+  условным временем; в файлах только числа); API экспорт не разбирает. KML/TCX нет у экспорта `derivedVersion` 1 — 404. Заголовки файла — только у 200:
+  `ROUTE_EXPORT_CONTENT_TYPES` (`application/gpx+xml`, KML, TCX), `Content-Disposition: attachment` с ASCII-fallback и `filename*` RFC 5987
+  (`routeFileName`/`routeContentDisposition`: без `\p{Cc}`/`\p{Cf}` — bidi-подмена расширения, без `\/:*?"<>|`, ≤ 80 кодовых точек),
   `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`. Раскрывает то же, что
   линия на карте, плюс высоты. Логи бэкфилла — `routeId` и код, без названия и координат.
 
@@ -239,9 +240,13 @@ paths:
   сверка, карта гонки, LRU-кэш) читают только `origin: 'platform'` — отрицательные int-тесты на каждую точку.
 - Загрузка: лимиты `routes-upload-rider:<uid>` 20/ч и `routes-upload-ip:<hmac>` 60/ч и слот приёма (4 на процесс,
   1 на райдера, `UploadSlots`) — **до** чтения тела; тело — `application/octet-stream` (`readLimited`, 5 МиБ → 413 + `Connection: close`); формат — по сигнатуре
-  (`detectRouteFormat`: GPX/KML, `<!DOCTYPE` до корня → 415); квота 100 своих маршрутов — `409 ROUTE_QUOTA_EXCEEDED`
+  (`detectRouteFormat`: GPX/KML/TCX по корню, KMZ — любой zip `PK\x03\x04`, разбор архива — worker; `<!DOCTYPE` до
+  корня → 415); квота 100 своих маршрутов — `409 ROUTE_QUOTA_EXCEEDED`
   (мягкая, после дедупа). KML — те же защиты, что GPX (`xml.ts`: отказ на `<!DOCTYPE`/`<!ENTITY`, подсчёт элементов и
-  `gx:coord` до дерева, `XMLValidator`, обрыв кортежей `coordinates`), разбор — только `runParseThread` в worker.
+  `gx:coord` до дерева, `XMLValidator`, обрыв кортежей `coordinates`); TCX — те же защиты, подсчёт `Trackpoint`; предел
+  элементов маршрута — `ROUTE_XML_MAX_ELEMENTS` (1 млн). KMZ (`kmz.ts`, `node:zlib`): EOCD с проверкой длины
+  комментария, только stored/deflate, CRC, zip64/шифрование → `unreadable`, распаковка ≤ 16 МиБ (`maxOutputLength`),
+  на диск не пишется; разбор — только `runParseThread` в worker.
 - Наружу — `MyRoute` явным списком полей (без `origin`, `ownerUserId`, `sha256`, `attempts`, `catalog`, линии сверки;
   routes-06: `publication` — без счётчиков подач и жалоб и `version`; `canPublish` и `submissionsExhausted` считает
   сервер);
