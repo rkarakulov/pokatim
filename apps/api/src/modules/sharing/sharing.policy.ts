@@ -6,7 +6,7 @@ import { minskToday, OG_BRAND, type OgCardKind } from '@pokatim/contracts';
  * иначе до 24 ч отдаётся старая картинка (ключ кэша — хэш входов с версией).
  */
 export const STORY_CARD_POLICY = {
-  renderVersion: 2,
+  renderVersion: 3,
   /** PNG и ключ хэш → токен, с */
   pngTtlSec: 86_400,
   /** ключ постановки рендера (NX), с */

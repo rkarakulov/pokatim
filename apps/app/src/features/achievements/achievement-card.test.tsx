@@ -10,6 +10,7 @@ const [win] = knownItems([
     code: 'race_win',
     object: { kind: 'race', id: '0190a6f4-0000-7000-8000-000000000201', title: 'Гонка у озера' },
     factDate: '2026-05-02',
+    level: null,
     seen: false,
   },
 ]);
@@ -38,5 +39,18 @@ describe('появление значка вспышки (LOW-1 ревью)', ()
       .mockReturnValue(new Promise(() => undefined));
     await render(<AchievementCard item={win!} />);
     expect(screen.getByTestId('achievement-badge-static')).toBeOnTheScreen();
+  });
+});
+
+describe('метка уровня (L6)', () => {
+  it('счётное — метка текстом и число порога; разовое — без метки', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    const [gold] = knownItems([{ ...win!, code: 'routes_5', level: 'gold' }]);
+    await render(<AchievementCard item={gold!} />);
+    expect(screen.getByText('Золото')).toBeOnTheScreen();
+    expect(screen.getByText('Пройденные заезды по 30 разным маршрутам')).toBeOnTheScreen();
+    expect(screen.getByText('30', { includeHiddenElements: true })).toBeOnTheScreen();
+    await render(<AchievementCard item={win!} />);
+    expect(screen.queryByText('Бронза')).toBeNull();
   });
 });

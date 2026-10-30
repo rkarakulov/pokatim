@@ -34,11 +34,15 @@ function client(status: number, response?: unknown) {
 }
 
 describe('api-client: достижения (achievements)', () => {
-  it('listAchievements — GET с Bearer; незнакомый код — unknown', async () => {
+  it('listAchievements — GET с Bearer; ответ v1 без level/progress; незнакомый код — unknown', async () => {
     const own = { ...item, seen: false };
     const { calls, api } = client(200, { items: [own, { ...own, code: 'season_win' }] });
     await expect(api.listAchievements('access.jwt.x')).resolves.toEqual({
-      items: [own, { ...own, code: 'unknown' }],
+      items: [
+        { ...own, level: null },
+        { ...own, code: 'unknown', level: null },
+      ],
+      progress: [],
     });
     expect(calls).toEqual([
       {
@@ -48,6 +52,13 @@ describe('api-client: достижения (achievements)', () => {
         body: undefined,
       },
     ]);
+  });
+
+  it('listAchievements — уровень и прогресс как есть (L4)', async () => {
+    const own = { ...item, code: 'races_5', level: 'silver', seen: true };
+    const progress = [{ code: 'races_5', level: 'gold', current: 17, target: 30 }];
+    const { api } = client(200, { items: [own], progress });
+    await expect(api.listAchievements('access.jwt.x')).resolves.toEqual({ items: [own], progress });
   });
 
   it('markAchievementsSeen — POST с телом и Bearer; 204 → undefined', async () => {
@@ -66,8 +77,15 @@ describe('api-client: достижения (achievements)', () => {
   });
 
   it('getRiderAchievements — публичный GET без токена', async () => {
-    const { calls, api } = client(200, { items: [item] });
-    await expect(api.getRiderAchievements(PUBLIC_ID)).resolves.toEqual({ items: [item] });
+    const { calls, api } = client(200, {
+      items: [item, { ...item, code: 'races_5', level: 'gold' }],
+    });
+    await expect(api.getRiderAchievements(PUBLIC_ID)).resolves.toEqual({
+      items: [
+        { ...item, level: null },
+        { ...item, code: 'races_5', level: 'gold' },
+      ],
+    });
     expect(calls).toEqual([
       {
         url: `https://api.test/v1/riders/${PUBLIC_ID}/achievements`,

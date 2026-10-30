@@ -21,6 +21,7 @@ const own = (overrides: Partial<Achievement> = {}): Achievement => ({
   code: 'race_win',
   object: { kind: 'race', id: RACE_ID, title: 'Гонка у озера' },
   factDate: '2026-05-02',
+  level: null,
   seen: true,
   ...overrides,
 });
@@ -64,6 +65,7 @@ describe('блок «Достижения» своего профиля (AC12)',
 
   it('все свои в порядке сервера, незнакомый код отброшен; нажатие → экран достижения', async () => {
     listAchievements.mockResolvedValue({
+      progress: [],
       items: [
         own({ code: 'route_first', object: { kind: 'route', id: ROUTE_ID, title: 'Петля' } }),
         own({ code: 'unknown' }),
@@ -84,8 +86,43 @@ describe('блок «Достижения» своего профиля (AC12)',
     await waitFor(() => expect(router.getPathname()).toBe('/achievements/race_win'));
   });
 
+  it('«Следующие цели» под достижениями: полосы и подписи; без достижений — блок есть', async () => {
+    listAchievements.mockResolvedValue({
+      items: [own({ code: 'races_5', level: 'silver' })],
+      progress: [{ code: 'races_5', level: 'gold', current: 17, target: 30 }],
+    });
+    await openProfile();
+    const block = within(await screen.findByTestId('own-achievement-progress'));
+    expect(block.getByRole('header', { name: 'Следующие цели' })).toBeOnTheScreen();
+    expect(block.getByRole('progressbar', { name: 'Гонщик, золото: 17 из 30' })).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('own-achievements')).getByLabelText(
+        'Достижение «Гонщик», серебро: Гонка «Гонка у озера», 2 мая 2026',
+      ),
+    ).toBeOnTheScreen();
+    expect(screen.getByText('15', { includeHiddenElements: true })).toBeOnTheScreen();
+  });
+
+  it('райдер с 2 гонками без достижений — «Следующие цели» «2 из 5», блока «Достижения» нет', async () => {
+    listAchievements.mockResolvedValue({
+      items: [],
+      progress: [{ code: 'races_5', level: 'bronze', current: 2, target: 5 }],
+    });
+    await openProfile();
+    const block = within(await screen.findByTestId('own-achievement-progress'));
+    expect(block.getByText('2 из 5', { includeHiddenElements: true })).toBeOnTheScreen();
+    expect(screen.queryByTestId('own-achievements')).toBeNull();
+  });
+
+  it('прогресса нет — блока «Следующие цели» нет', async () => {
+    listAchievements.mockResolvedValue({ items: [own()], progress: [] });
+    await openProfile();
+    expect(await screen.findByTestId('own-achievements')).toBeOnTheScreen();
+    expect(screen.queryByTestId('own-achievement-progress')).toBeNull();
+  });
+
   it('ни одного (или только незнакомые) — блока нет', async () => {
-    listAchievements.mockResolvedValue({ items: [own({ code: 'unknown' })] });
+    listAchievements.mockResolvedValue({ progress: [], items: [own({ code: 'unknown' })] });
     await openProfile();
     expect(await screen.findByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
     await waitFor(() => expect(listAchievements).toHaveBeenCalled());
@@ -94,7 +131,9 @@ describe('блок «Достижения» своего профиля (AC12)',
   });
 
   it('ошибка — баннер блока с повтором, профиль на месте; повтор показывает значки', async () => {
-    listAchievements.mockRejectedValueOnce(failure()).mockResolvedValue({ items: [own()] });
+    listAchievements
+      .mockRejectedValueOnce(failure())
+      .mockResolvedValue({ progress: [], items: [own()] });
     await openProfile();
     const block = within(await screen.findByTestId('own-achievements'));
     expect(await block.findByText('Не удалось загрузить достижения')).toBeOnTheScreen();
@@ -112,6 +151,7 @@ describe('гоночные достижения публичного профи�
     code: 'race_podium',
     object: { kind: 'race', id: RACE_ID, title: 'Гонка у озера' },
     factDate: '2026-05-02',
+    level: null,
     ...overrides,
   });
   const openRider = () =>

@@ -1,4 +1,4 @@
-import type { AchievementCode, AchievementObjectKind } from '@pokatim/contracts';
+import type { AchievementCode, AchievementLevel, AchievementObjectKind } from '@pokatim/contracts';
 
 /**
  * Порт `achievements` для модуля `sharing` (карточка достижения, ADR-0018, через `modules/achievements/index.ts`):
@@ -6,11 +6,15 @@ import type { AchievementCode, AchievementObjectKind } from '@pokatim/contracts'
  */
 export const ACHIEVEMENTS_FOR_SHARING = Symbol('ACHIEVEMENTS_FOR_SHARING');
 
-/** Факты карточки: объект с названием из фактов владельца и дата факта (день по Минску, RC-7). */
+/**
+ * Факты карточки: объект с названием из фактов владельца, дата факта (день по Минску, RC-7) и текущий уровень (счётные;
+ * разовые — `null`).
+ */
 export interface AchievementCardFacts {
   code: AchievementCode;
   object: { kind: AchievementObjectKind; id: string; title: string };
   factDate: string;
+  level: AchievementLevel | null;
 }
 
 export interface AchievementsForSharing {

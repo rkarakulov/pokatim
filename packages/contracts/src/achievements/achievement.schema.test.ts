@@ -3,17 +3,27 @@ import { describe, expect, it } from 'vitest';
 import {
   Achievement,
   ACHIEVEMENT_CODES,
+  ACHIEVEMENT_LEVEL_TARGETS,
+  ACHIEVEMENT_LEVELS,
   ACHIEVEMENT_OBJECT_KINDS,
   AchievementList,
+  isLeveledCode,
   MarkAchievementsSeenRequest,
   PublicRiderAchievementList,
 } from './achievement.schema.ts';
 
 const ID = '01890a5d-ac96-774b-bcce-b302099a8057';
+const v1 = {
+  code: 'race_win',
+  object: { kind: 'race', id: ID, title: 'Гонка' },
+  factDate: '2026-06-01',
+  seen: false,
+};
 const item = {
   code: 'race_win',
   object: { kind: 'race', id: ID, title: 'Гонка' },
   factDate: '2026-06-01',
+  level: null,
   seen: false,
 };
 
@@ -34,7 +44,10 @@ describe('достижения (achievements)', () => {
   });
 
   it('Achievement: известные значения как есть; незнакомый код и вид — `unknown` (RC-8)', () => {
-    expect(AchievementList.parse({ items: [item] })).toEqual({ items: [item] });
+    expect(AchievementList.parse({ items: [item], progress: [] })).toEqual({
+      items: [item],
+      progress: [],
+    });
     expect(
       Achievement.parse({ ...item, code: 'season_win', object: { ...item.object, kind: 'club' } }),
     ).toEqual({ ...item, code: 'unknown', object: { ...item.object, kind: 'unknown' } });
@@ -46,11 +59,54 @@ describe('достижения (achievements)', () => {
     );
   });
 
-  it('PublicRiderAchievementList: без `seen`', () => {
-    const publicItem = { code: item.code, object: item.object, factDate: item.factDate };
-    expect(PublicRiderAchievementList.parse({ items: [{ ...publicItem, seen: true }] })).toEqual({
-      items: [publicItem],
+  it('уровни (L1): три уровня; пороги — у трёх счётных кодов, только они «счётные»', () => {
+    expect(ACHIEVEMENT_LEVELS).toEqual(['bronze', 'silver', 'gold']);
+    expect(ACHIEVEMENT_LEVEL_TARGETS).toEqual({
+      races_5: [5, 15, 30],
+      routes_5: [5, 15, 30],
+      rides_10: [10, 25, 50],
     });
+    expect(ACHIEVEMENT_CODES.filter(isLeveledCode)).toEqual(['races_5', 'routes_5', 'rides_10']);
+  });
+
+  it('Achievement.level: уровень как есть; без поля — `null` (старый API); незнакомый — `unknown`', () => {
+    expect(Achievement.parse({ ...item, code: 'races_5', level: 'silver' }).level).toBe('silver');
+    expect(Achievement.parse(v1).level).toBeNull();
+    expect(Achievement.parse({ ...item, level: 'platinum' }).level).toBe('unknown');
+  });
+
+  it('AchievementList: ответ v1 без `level`/`progress` разбирается; прогресс — с tolerant кодом и уровнем', () => {
+    expect(AchievementList.parse({ items: [v1] })).toEqual({ items: [item], progress: [] });
+    const progress = [
+      { code: 'races_5', level: 'silver', current: 7, target: 15 },
+      { code: 'season_10', level: 'platinum', current: 1, target: 3 },
+    ];
+    expect(AchievementList.parse({ items: [], progress }).progress).toEqual([
+      progress[0],
+      { code: 'unknown', level: 'unknown', current: 1, target: 3 },
+    ]);
+    for (const bad of [
+      { code: 'races_5', level: 'silver', current: -1, target: 15 },
+      { code: 'races_5', level: 'silver', current: 1, target: 0 },
+      { code: 'races_5', level: 'silver', current: 1.5, target: 15 },
+    ]) {
+      expect(AchievementList.safeParse({ items: [], progress: [bad] }).success).toBe(false);
+    }
+  });
+
+  it('PublicRiderAchievementList: с `level`, без `seen` и без прогресса', () => {
+    const publicItem = {
+      code: item.code,
+      object: item.object,
+      factDate: item.factDate,
+      level: null,
+    };
+    expect(
+      PublicRiderAchievementList.parse({
+        items: [{ ...publicItem, seen: true }],
+        progress: [{ code: 'races_5', level: 'silver', current: 7, target: 15 }],
+      }),
+    ).toEqual({ items: [publicItem] });
   });
 
   it('MarkAchievementsSeenRequest: 1–9 известных кодов без повторов; иначе — ошибка', () => {

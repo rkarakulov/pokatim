@@ -377,25 +377,30 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   60 с; сервер сверяет выдачи на каждом GET — чаще не запрашивать), публичные — `['riders','achievements',id]`
   (`useRiderAchievements`, только клиент — RC-5, только после найденного профиля; 404 — блока нет).
 - Каталог — `achievement-catalog.ts` (`ACHIEVEMENT_CATALOG satisfies Record<AchievementCode, …>`: ключи i18n, иконка,
-  число на значке, `shareable` — «Сторис результата», только `race_*`). Незнакомый код (`'unknown'`, RC-8) — `knownItems`
+  `shareable` — «Сторис результата», только `race_*`). Уровни: пороги — только `ACHIEVEMENT_LEVEL_TARGETS` контрактов
+  (копий нет); `displayLevel` (счётное с `null` — бронза, `'unknown'` — без уровня), `badgeCount`,
+  `achievementCondition(code, level)` (`{count}` — порог; незнакомый уровень — бронзы), `levelLabel`/`itemLevelLabel`
+  (метка текстом, роль `text.secondary` — уровень цветом не кодируется), `isLevelUp` (серебро/золото — «Новый
+  уровень»), `achievementA11y` — с уровнем. Незнакомый код (`'unknown'`, RC-8) — `knownItems`
   отбрасывает везде (список, вспышка, публичный блок); «Поделиться» — карточка достижения у любого известного кода;
   незнакомый вид объекта — без «Сторис результата» (`shareRaceId`). Иконка кода — зеркало в
   `apps/api/.../achievement-card.icons.ts` (сменил — поменяй там). Дата — только
   `factDate` (день по Минску, RC-7), всегда с годом (`factDateText`).
 - Вспышка: хост `AchievementFlashHost` рядом со `Stack` корневого layout с тем же `ready`, что у push; маршрут
   `achievements/flash` (`presentation: 'fullScreenModal'`) и `achievements/[code]` — внутри `Stack.Protected`
-  вкладок. Очередь — `flashQueue` (неувиденные, от старых к новым) минус `hiddenCodes(dataUpdatedAt)`
-  (`flash-session.ts`: показанные в этом запуске — сбой `seen` не зацикливает вспышку; вся очередь вспышки — пока
+  вкладок. Очередь — `flashQueue` (неувиденные, от старых к новым) минус `hiddenKeys(dataUpdatedAt)`
+  (`flash-session.ts`, ключ — `flashKey` `code:level`, RC-L4: показанная бронза не скрывает серебро; показанные в этом запуске — сбой `seen` не зацикливает вспышку; вся очередь вспышки — пока
   экран открыт, всегда (`openPresented`), после ухода — до ответа сервера новее последнего на момент ухода
   (`closePresented`): «назад» или «Поделиться» посреди очереди не открывают её сразу снова);
   снимок — при открытии экрана; правки кэша (`seen`) `dataUpdatedAt` не меняют (`updatedAt` в `setQueryData`).
   Открыта по адресу без данных — `AsyncContent` (скелетон карточки, ошибка/офлайн с повтором) и «Закрыть».
   Маршруты `achievements/*` — за `useSettingsShell` (как `/profile`): до восстановления сессии — скелетон или ошибка
   с повтором `hydrate()`, запроса достижений нет. Смоук без сессии — гард ведёт гостя на `/welcome`.
-  Показанное помечается сразу (`useMarkAchievementsSeen`, оптимистично, откат — только своих кодов). Поверх
+  Показанное помечается сразу (`useMarkAchievementsSeen`, оптимистично `{ ...list, items }` — `progress` не теряется,
+  откат — только своих кодов; `POST seen` — по коду). Поверх
   `/achievements`, `/races/story/`, ссылок писем, `devices/return`, удаления аккаунта — не открывается. Ошибка запроса
   хоста — тишина. «Поделиться» — `replace(achievementStoryPath(code))`.
-- Значок «Эмаль» — `achievement-badge.tsx` (роли `surface.default`, `text.primary`, `text.accent`, `action.*`;
+- Значок «Эмаль» — `achievement-badge.tsx` (проп `level`: число — порог уровня; роли `surface.default`, `text.primary`, `text.accent`, `action.*`;
   диаметр — `layout.badgeGrid` / `layout.badgeHero`, пропорции — `badgeShape` из `@pokatim/design-tokens`; follow-up
   `size.badge*` в базе). Появление на вспышке — `Animated` только при `useReducedMotion() === false`; пока ответ
   неизвестен — значок скрыт (без мигания), последний ответ процесса кэшируется.
@@ -403,6 +408,11 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `publicOnly` — только гоночные, `publicItems`, защита от регресса API): пусто
   без ошибки — блока нет; ошибка — `TabFailure` блока, экран не ломается; pull-to-refresh экранов перезапрашивает
   блок.
+- «Следующие цели» — `AchievementProgressBlock` сразу под `AchievementsBlock` в `/profile`, тот же `useAchievements()`
+  (второго запроса нет): известные `progress` (код и уровень не `'unknown'`); нет данных или прогресса — `null` (ошибку
+  показывает блок «Достижения»); строка «Гонщик · Серебро» и «7 из 15» скрыты от диктора, полоса — общий
+  `components/progress-bar.tsx` (`progressbar`, подпись «Гонщик, серебро: 7 из 15», `accessibilityValue`; он же — в
+  `devices/upload-progress.tsx`; follow-up `ProgressBar` в `@rkarakulov/ui`).
 
 ## Маршруты (routes-01, `docs/product/routes.md`)
 

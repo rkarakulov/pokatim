@@ -9,6 +9,7 @@ import {
   daysAgo,
   pastRide,
   raceAt,
+  racesAt,
   seedRouteRide,
 } from '../../../test/achievements';
 import { createHarness, type Harness } from '../../../test/harness';
@@ -37,12 +38,13 @@ afterAll(async () => {
 
 const repository = () => h.app.get(AchievementsRepository, { strict: false });
 
-async function list(who: Rider) {
+async function fullList(who: Rider) {
   const res = await authed(h, who, 'GET', ACHIEVEMENTS);
   if (res.status !== 200) throw new Error(`достижения: ${res.status} ${JSON.stringify(res.body)}`);
   expect(res.headers['cache-control']).toBe('no-store');
-  return AchievementList.parse(res.body).items;
+  return AchievementList.parse(res.body);
 }
+const list = async (who: Rider) => (await fullList(who)).items;
 const codesOf = (items: { code: string }[]) => items.map((item) => item.code);
 const seenOf = (items: { code: string; seen: boolean }[]) =>
   Object.fromEntries(items.map((item) => [item.code, item.seen]));
@@ -91,27 +93,30 @@ describe('GET /v1/achievements — первая и последующая све
         code: 'ride_first',
         object: { kind: 'ride', id: expect.any(String), title: 'Утренний' },
         factDate: minskToday(daysAgo(h, 5)),
+        level: null,
         seen: true,
       },
       {
         code: 'race_podium',
         object: { kind: 'race', id: race, title: 'Весенняя' },
         factDate: minskToday(daysAgo(h, 10)),
+        level: null,
         seen: true,
       },
       {
         code: 'race_first_finish',
         object: { kind: 'race', id: race, title: 'Весенняя' },
         factDate: minskToday(daysAgo(h, 10)),
+        level: null,
         seen: true,
       },
     ]);
     expect(await achievementsDb(h).syncs.countDocuments({ _id: me.userId })).toBe(1);
 
     const res = await authed(h, me, 'GET', ACHIEVEMENTS);
-    expect(Object.keys(res.body as object)).toEqual(['items']);
+    expect(Object.keys(res.body as object)).toEqual(['items', 'progress']);
     const item = (res.body as { items: Record<string, unknown>[] }).items[0]!;
-    expect(Object.keys(item).sort()).toEqual(['code', 'factDate', 'object', 'seen']);
+    expect(Object.keys(item).sort()).toEqual(['code', 'factDate', 'level', 'object', 'seen']);
     expect(Object.keys(item.object as object).sort()).toEqual(['id', 'kind', 'title']);
     expect(JSON.stringify(res.body)).not.toContain(me.userId);
 
@@ -121,6 +126,7 @@ describe('GET /v1/achievements — первая и последующая све
       code: 'race_win',
       object: { kind: 'race', id: win, title: 'Осенняя' },
       factDate: minskToday(daysAgo(h, 1)),
+      level: null,
       seen: false,
     });
     expect(seenOf(after)).toEqual({
@@ -198,6 +204,7 @@ describe('отзыв и возврат (AC3, A4)', () => {
       code: 'race_podium',
       object: { kind: 'race', id: late, title: 'Поздняя' },
       factDate: minskToday(daysAgo(h, 5)),
+      level: null,
       seen: true,
     });
   });
@@ -215,6 +222,7 @@ describe('отзыв и возврат (AC3, A4)', () => {
         code: 'route_first',
         object: { kind: 'route', id: catalog, title: 'Эталонный коридор' },
         factDate: minskToday(daysAgo(h, 4)),
+        level: null,
         seen: true,
       },
     ]);
@@ -258,7 +266,12 @@ describe('устаревший план параллельной сверки (�
   it('refresh после свежего отзыва не снимает отзыв; restore — только отозванную', async () => {
     const userId = '01a1b2c3-0000-7000-8000-000000000001';
     const t = new Date('2026-10-01T10:00:00Z');
-    const earned = { object: { kind: 'race' as const, id: userId }, factAt: t, title: null };
+    const earned = {
+      object: { kind: 'race' as const, id: userId },
+      factAt: t,
+      title: null,
+      level: null,
+    };
     await repository().insertGrant(userId, 'race_podium', earned, null, t);
     expect(await repository().revoke(userId, 'race_podium', t)).toBe(true);
 
@@ -491,17 +504,19 @@ describe('GET /v1/riders/:publicId/achievements (AC6)', () => {
           code: 'race_podium',
           object: { kind: 'race', id: race, title: 'Кубок' },
           factDate: minskToday(daysAgo(h, 7)),
+          level: null,
         },
         {
           code: 'race_first_finish',
           object: { kind: 'race', id: race, title: 'Кубок' },
           factDate: minskToday(daysAgo(h, 7)),
+          level: null,
         },
       ],
     });
     expect(Object.keys(res.body as object)).toEqual(['items']);
     for (const item of (res.body as { items: Record<string, unknown>[] }).items) {
-      expect(Object.keys(item).sort()).toEqual(['code', 'factDate', 'object']);
+      expect(Object.keys(item).sort()).toEqual(['code', 'factDate', 'level', 'object']);
     }
     expect(JSON.stringify(res.body)).not.toContain(me.userId);
     expect(await achievementsDb(h).grants.countDocuments({})).toBe(0);
@@ -516,5 +531,193 @@ describe('GET /v1/riders/:publicId/achievements (AC6)', () => {
     expect((await call(h, 'GET', '/v1/riders/not-a-token/achievements')).status).toBe(400);
     await call(h, 'PATCH', '/v1/profile', { showNameInResults: false }, bearer(me.token));
     expect((await call(h, 'GET', `/v1/riders/${publicId}/achievements`)).status).toBe(404);
+  });
+});
+
+describe('уровни счётных (L1–L4, AC2–AC5)', () => {
+  const races5 = async (who: Rider) => {
+    const items = await list(who);
+    const item = items.find((one) => one.code === 'races_5');
+    return item ? { level: item.level, seen: item.seen, object: item.object.id } : null;
+  };
+  const grantOf = (userId: string) => achievementsDb(h).grants.findOne({ userId, code: 'races_5' });
+
+  it('AC2: первая сверка на серебре — тихо; золото — вспышка; seen; DQ → серебро тихо; возврат → золото тихо', async () => {
+    const me = await rider(h, 'me@example.com');
+    const season = await seedSeason(h);
+    const ids = await racesAt(h, season, me.userId, 15, 100);
+
+    const first = await fullList(me);
+    expect(first.items.find((item) => item.code === 'races_5')).toMatchObject({
+      level: 'silver',
+      seen: true,
+      object: { id: ids[14] },
+    });
+    expect(first.progress).toEqual([{ code: 'races_5', level: 'gold', current: 15, target: 30 }]);
+
+    const more = await racesAt(h, season, me.userId, 15, 50);
+    expect(await races5(me)).toEqual({ level: 'gold', seen: false, object: more[14] });
+    expect((await fullList(me)).progress).toEqual([]);
+
+    expect((await seen(me, ['races_5'])).status).toBe(204);
+    expect(await races5(me)).toEqual({ level: 'gold', seen: true, object: more[14] });
+    expect(await grantOf(me.userId)).toMatchObject({ level: 3, seenLevel: 3 });
+
+    // DQ первой гонки — 29 в зачёте: серебро, 15-я — первая из второй пачки; тихо (seenLevel 3 ≥ 2)
+    await addRevision(h, ids[0]!, 2, [dqRow(me.userId)]);
+    expect(await races5(me)).toEqual({ level: 'silver', seen: true, object: more[0] });
+    expect(await grantOf(me.userId)).toMatchObject({ level: 2, seenLevel: 3 });
+
+    // возврат строки (ревизия 3 — дата «сейчас»): снова золото, 30-я — вернувшаяся гонка; повторно не вспыхивает
+    await addRevision(h, ids[0]!, 3, [placedRow(me.userId, 5)]);
+    expect(await races5(me)).toEqual({ level: 'gold', seen: true, object: ids[0] });
+    expect(
+      await achievementsDb(h).grants.countDocuments({ userId: me.userId, code: 'races_5' }),
+    ).toBe(1);
+  });
+
+  it('негатив RC-L10: устаревший план записал меньший уровень после seen на большем — следующая сверка тихо (seenLevel монотонен)', async () => {
+    const me = await rider(h, 'me@example.com');
+    const season = await seedSeason(h);
+    await list(me);
+    const ids = await racesAt(h, season, me.userId, 30, 100);
+    expect(await races5(me)).toMatchObject({ level: 'gold', seen: false });
+    expect((await seen(me, ['races_5'])).status).toBe(204);
+
+    const silver = {
+      object: { kind: 'race' as const, id: ids[14]! },
+      factAt: daysAgo(h, 86),
+      title: null,
+      level: 2 as const,
+    };
+    const now = h.clock.now();
+    expect(await repository().restoreOrRefresh(me.userId, 'races_5', silver, false, now)).toBe(
+      true,
+    );
+    expect(await grantOf(me.userId)).toMatchObject({ level: 2, seenLevel: 3 });
+    // повтор POST seen на документе «ниже показанного» — без записи
+    expect(await repository().markSeen(me.userId, ['races_5'], now)).toBe(0);
+
+    expect(await races5(me)).toEqual({ level: 'gold', seen: true, object: ids[29] });
+    expect(await grantOf(me.userId)).toMatchObject({ level: 3, seenLevel: 3 });
+  });
+
+  it('AC3: документ v1 без level/seenLevel — бронза; seen по seenAt; без записей; повышение — одна вспышка (RC-L2)', async () => {
+    const me = await rider(h, 'me@example.com');
+    const season = await seedSeason(h);
+    const ids = await racesAt(h, season, me.userId, 5, 100);
+    await list(me);
+    await achievementsDb(h).grants.deleteMany({
+      userId: me.userId,
+      code: { $in: ['races_5', 'race_first_finish'] },
+    });
+    const at = h.clock.now();
+    const v1 = (
+      code: 'races_5' | 'race_first_finish',
+      race: string,
+      factAt: Date,
+      seenAt: Date | null,
+    ) =>
+      achievementsDb(h).grants.insertOne({
+        _id: `${me.userId}:${code}`,
+        userId: me.userId,
+        code,
+        object: { kind: 'race', id: race },
+        factAt,
+        grantedAt: at,
+        seenAt,
+        revokedAt: null,
+        updatedAt: at,
+      });
+    await v1('races_5', ids[4]!, daysAgo(h, 96), at);
+    await v1('race_first_finish', ids[0]!, daysAgo(h, 100), null);
+    const before = await achievementsDb(h).grants.find({ userId: me.userId }).toArray();
+
+    const items = await list(me);
+    expect(items.find((item) => item.code === 'races_5')).toMatchObject({
+      level: 'bronze',
+      seen: true,
+    });
+    expect(items.find((item) => item.code === 'race_first_finish')).toMatchObject({
+      level: null,
+      seen: false,
+    });
+    expect(await achievementsDb(h).grants.find({ userId: me.userId }).toArray()).toEqual(before);
+
+    // POST seen по v1-документу на бронзе: показанный — без записи
+    expect(await repository().markSeen(me.userId, ['races_5'], at)).toBe(0);
+    expect(await repository().markSeen(me.userId, ['race_first_finish'], at)).toBe(1);
+    expect(await repository().markSeen(me.userId, ['race_first_finish'], at)).toBe(0);
+
+    // +25 гонок — сразу золото, одна вспышка (не каскад)
+    await racesAt(h, season, me.userId, 25, 50);
+    expect(await races5(me)).toMatchObject({ level: 'gold', seen: false });
+    expect(await repository().markSeen(me.userId, ['races_5'], at)).toBe(1);
+    expect(await grantOf(me.userId)).toMatchObject({ level: 3, seenLevel: 3 });
+  });
+
+  it('AC4: прогресс по трём кодам; публичный — уровень races_5, без прогресса (точные ключи)', async () => {
+    const me = await rider(h, 'me@example.com');
+    const other = await rider(h, 'other@example.com');
+    const publicId = await publicIdOf(me);
+    const season = await seedSeason(h);
+    await racesAt(h, season, me.userId, 7, 100);
+    await seedRouteRide(h, me.userId, await catalogCorridorRoute(h, me.userId), daysAgo(h, 3));
+    await pastRide(h, other, [me], 2);
+
+    const res = await authed(h, me, 'GET', ACHIEVEMENTS);
+    expect((res.body as { progress: unknown[] }).progress).toEqual([
+      { code: 'races_5', level: 'silver', current: 7, target: 15 },
+      { code: 'routes_5', level: 'bronze', current: 1, target: 5 },
+      { code: 'rides_10', level: 'bronze', current: 1, target: 10 },
+    ]);
+    for (const step of (res.body as { progress: Record<string, unknown>[] }).progress) {
+      expect(Object.keys(step).sort()).toEqual(['code', 'current', 'level', 'target']);
+    }
+    expect((await list(me)).find((item) => item.code === 'races_5')).toMatchObject({
+      level: 'bronze',
+      seen: true,
+    });
+
+    const pub = await call(h, 'GET', `/v1/riders/${publicId}/achievements`);
+    expect(Object.keys(pub.body as object)).toEqual(['items']);
+    const items = (pub.body as { items: Record<string, unknown>[] }).items;
+    expect(items.find((item) => item.code === 'races_5')).toMatchObject({ level: 'bronze' });
+    expect(items.find((item) => item.code === 'race_first_finish')).toMatchObject({ level: null });
+    for (const item of items) {
+      expect(Object.keys(item).sort()).toEqual(['code', 'factDate', 'level', 'object']);
+    }
+  });
+
+  it('AC5: параллельные GET ×5 при повышении — без 500 и дублей, уровень и seen согласованы', async () => {
+    const me = await rider(h, 'me@example.com');
+    const season = await seedSeason(h);
+    await racesAt(h, season, me.userId, 5, 100);
+    expect(await races5(me)).toMatchObject({ level: 'bronze', seen: true });
+    await racesAt(h, season, me.userId, 10, 50);
+
+    const wait = barrier(5);
+    const original = AchievementsRepository.prototype.syncedAt;
+    vi.spyOn(repository(), 'syncedAt').mockImplementation(async function (
+      this: AchievementsRepository,
+      userId: string,
+    ) {
+      const result = await original.call(this, userId);
+      await wait();
+      return result;
+    });
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () => authed(h, me, 'GET', ACHIEVEMENTS)),
+    );
+    expect(responses.map((res) => res.status)).toEqual(Array(5).fill(200));
+    for (const res of responses) {
+      expect(
+        AchievementList.parse(res.body).items.find((item) => item.code === 'races_5'),
+      ).toMatchObject({ level: 'silver', seen: false });
+    }
+    expect(
+      await achievementsDb(h).grants.countDocuments({ userId: me.userId, code: 'races_5' }),
+    ).toBe(1);
+    expect(await grantOf(me.userId)).toMatchObject({ level: 2, seenLevel: 1 });
   });
 });

@@ -15,6 +15,8 @@ import { RIDER_RESULTS, type RiderResults } from '../results';
 import { AchievementFactsReader } from './achievement-facts.reader';
 import {
   ACHIEVEMENTS_POLICY,
+  isSeen,
+  levelName,
   raceAchievements,
   reconcilePlan,
   type ReconcileStep,
@@ -47,7 +49,7 @@ export class AchievementsService {
    */
   async sync(userId: string): Promise<AchievementList> {
     await this.limit(`achievements-read:${userId}`, ACHIEVEMENTS_POLICY.readLimit);
-    const earned = await this.facts.earned(userId);
+    const { earned, progress } = await this.facts.evaluate(userId);
     const [titled, stored, syncedAt] = await Promise.all([
       this.facts.titled(earned, userId),
       this.repository.listOf(userId),
@@ -60,17 +62,28 @@ export class AchievementsService {
     if (first) await this.repository.markSynced(userId, now);
     if (plan.length > 0) this.logSync(userId, first, plan);
 
-    const seen = new Map(
+    // `seen` — по уровню ответа (фактов этого запроса), а не сохранённому: устаревший параллельный план мог записать
+    // меньший уровень (RC-L10)
+    const granted = new Map(
       (await this.repository.listOf(userId))
         .filter((grant) => grant.revokedAt === null)
-        .map((grant) => [grant.code, grant.seenAt !== null]),
+        .map((grant) => [grant.code, grant]),
     );
     return {
-      items: sortForList(titled.filter((item) => seen.has(item.code))).map((item): Achievement => ({
-        code: item.code,
-        object: { kind: item.object.kind, id: item.object.id, title: item.title },
-        factDate: minskToday(item.factAt),
-        seen: seen.get(item.code) === true,
+      items: sortForList(titled.filter((item) => granted.has(item.code))).map(
+        (item): Achievement => ({
+          code: item.code,
+          object: { kind: item.object.kind, id: item.object.id, title: item.title },
+          factDate: minskToday(item.factAt),
+          level: item.level === null ? null : levelName(item.level),
+          seen: isSeen(granted.get(item.code)!, item.level),
+        }),
+      ),
+      progress: progress.map((step) => ({
+        code: step.code,
+        level: levelName(step.level),
+        current: step.current,
+        target: step.target,
       })),
     };
   }
@@ -81,7 +94,10 @@ export class AchievementsService {
     await this.repository.markSeen(userId, codes, this.clock.now());
   }
 
-  /** Публичные достижения (A7): только гоночные, без записи и `seen`; непубличный и неизвестный — один 404. */
+  /**
+   * Публичные достижения (A7): только гоночные, с уровнем `races_5` (L7), без записи, `seen` и прогресса; непубличный и
+   * неизвестный — один 404.
+   */
   async publicList(publicId: string): Promise<PublicRiderAchievementList> {
     const rider = await this.profiles.findPublic(publicId);
     if (!rider) throw domainError('NOT_FOUND', 404);
@@ -92,6 +108,7 @@ export class AchievementsService {
         code: item.code,
         object: { kind: item.object.kind, id: item.object.id, title: item.title },
         factDate: minskToday(item.factAt),
+        level: item.level === null ? null : levelName(item.level),
       })),
     };
   }
@@ -120,7 +137,7 @@ export class AchievementsService {
   private logSync(userId: string, first: boolean, plan: readonly ReconcileStep[]): void {
     const count = (type: ReconcileStep['type']) => plan.filter((step) => step.type === type).length;
     this.logger.log(
-      `achievements.sync uid=${userId} first=${first} granted=${count('insert')} revoked=${count('revoke')} restored=${count('restore')}`,
+      `achievements.sync uid=${userId} first=${first} granted=${count('insert')} revoked=${count('revoke')} restored=${count('restore')} refreshed=${count('refresh')}`,
     );
   }
 
