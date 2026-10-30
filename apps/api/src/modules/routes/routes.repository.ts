@@ -54,8 +54,17 @@ export interface CatalogPosition {
   id: string;
 }
 
-/** Файлы экспорта маршрута одной версии (routes-03; KML и TCX — routes-formats): байты UTF-8, посчитаны worker'ом. */
+/**
+ * Файлы экспорта маршрута одной версии (routes-03; KML и TCX — routes-formats): сжатые gzip байты UTF-8
+ * (route-exports-gzip), посчитаны и сжаты worker'ом.
+ */
 export type RouteExportFiles = Record<RouteExportFormat, Uint8Array>;
+
+/** Хранимый файл экспорта: байты как в БД и признак сжатия (`false` — старый несжатый документ). */
+export interface StoredExportFile {
+  bytes: Uint8Array;
+  gzip: boolean;
+}
 
 /** Производные данные маршрута (routes-03) для карточки: `null` — не посчитаны или нет высот. */
 export interface RouteDerivedState {
@@ -940,7 +949,10 @@ export class RoutesRepository {
     return true;
   }
 
-  /** Экспорт целиком (`replaceOne`): GPX, KML и TCX одной версии; `sizeBytes` — сумма файлов. */
+  /**
+   * Экспорт целиком (`replaceOne`): сжатые gzip GPX, KML и TCX одной версии, `encoding: 'gzip'`; `sizeBytes` — сумма
+   * хранимых (сжатых) байт.
+   */
   private async writeExport(
     session: DbSession,
     id: string,
@@ -953,6 +965,7 @@ export class RoutesRepository {
         gpx: new Binary(files.gpx),
         kml: new Binary(files.kml),
         tcx: new Binary(files.tcx),
+        encoding: 'gzip',
         sizeBytes: files.gpx.byteLength + files.kml.byteLength + files.tcx.byteLength,
         derivedVersion,
       },
@@ -1021,13 +1034,16 @@ export class RoutesRepository {
   }
 
   /**
-   * Файл экспорта маршрута в формате `format` — проекцией только этого поля; нет документа или поля (экспорт версии 1
-   * без KML/TCX) — `undefined`.
+   * Файл экспорта маршрута в формате `format` — проекцией этого поля и `encoding`; байты как хранятся (`gzip` —
+   * сжаты, route-exports-gzip). Нет документа или поля (экспорт версии 1 без KML/TCX) — `undefined`.
    */
-  async exportFile(id: string, format: RouteExportFormat): Promise<Uint8Array | undefined> {
-    const doc = await this.c.exports.findOne({ _id: id }, { projection: { [format]: 1 } });
+  async exportFile(id: string, format: RouteExportFormat): Promise<StoredExportFile | undefined> {
+    const doc = await this.c.exports.findOne(
+      { _id: id },
+      { projection: { [format]: 1, encoding: 1 } },
+    );
     const file = doc?.[format];
-    return file ? new Uint8Array(file.buffer) : undefined;
+    return file ? { bytes: new Uint8Array(file.buffer), gzip: doc.encoding === 'gzip' } : undefined;
   }
 
   /**
