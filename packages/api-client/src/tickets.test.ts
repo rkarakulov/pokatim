@@ -133,6 +133,7 @@ describe('api-client панели: билеты (event-tickets)', () => {
     registeredCount: 0,
     activeTickets: 3,
     checkedIn: 1,
+    reminders: [],
   };
 
   it('настройки: GET и PUT с cookie панели', async () => {

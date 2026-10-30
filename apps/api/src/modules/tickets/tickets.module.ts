@@ -29,8 +29,11 @@ import { ParticipantNames } from './participant-names';
 import { RaceTicketController } from './race-ticket.controller';
 import { RaceTickets } from './race-tickets';
 import { TicketErasure } from './ticket-erasure';
+import { TicketReminders } from './ticket-reminders';
 import { TicketEvents } from './ticket-events';
 import { TicketIssuer } from './ticket-issuer';
+import { TICKET_NOTICES } from './ticket-notices.port';
+import { TicketNoticesService } from './ticket-notices';
 import { TicketingAdminController } from './ticketing-admin.controller';
 import { TicketingAdminService } from './ticketing-admin.service';
 import { TicketingPublicController } from './ticketing-public.controller';
@@ -43,7 +46,8 @@ import { TicketsRepository } from './tickets.repository';
  * Ядро `tickets` (event-tickets, ADR-0023) для API и worker: репозиторий, факты событий, выпуск, сверка билетов гонок,
  * порт стирания. Зависит от `results` (`RESULTS_FOR_TICKETS`; реэкспорт `RacesCoreModule` — `RACE_REGISTRY`),
  * `calendar` (`CALENDAR_EVENTS`), `profile` (`RIDER_NAMES`), `identity` (`IdentityAccounts`) — только через их
- * `index.ts`. Производители о `tickets` не знают; на `tickets` ссылаются `AppModule`, `WorkerModule` и `account`.
+ * `index.ts`. Производители о `tickets` не знают; на `tickets` ссылаются `AppModule`, `WorkerModule`, `account` и
+ * `notifications` (порт `TICKET_NOTICES` — напоминания, PR D).
  */
 @Module({
   imports: [ResultsCoreModule, CalendarCoreModule, ProfileCoreModule, IdentityAccountsModule],
@@ -55,8 +59,11 @@ import { TicketsRepository } from './tickets.repository';
     TicketErasure,
     MaterialsRepository,
     MaterialsRead,
+    TicketNoticesService,
+    { provide: TICKET_NOTICES, useExisting: TicketNoticesService },
   ],
   exports: [
+    TICKET_NOTICES,
     TicketsRepository,
     TicketEvents,
     MaterialsRepository,
@@ -100,7 +107,7 @@ export class TicketsCoreModule {}
 })
 export class TicketsModule {}
 
-/** Задачи `tickets` в worker: письмо «Вы зарегистрированы» и регламент сверки билетов гонок (RC-T12). */
+/** Задачи `tickets` в worker: письмо «Вы зарегистрированы», регламент сверки билетов гонок (RC-T12) и напоминаний (PR D). */
 @Module({
   imports: [
     TicketsCoreModule,
@@ -109,6 +116,7 @@ export class TicketsModule {}
   providers: [
     TicketEmailHandler,
     TicketsEmailProcessor,
+    TicketReminders,
     TicketsMaintenanceProcessor,
     TicketsSchedules,
   ],

@@ -1,5 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { type NotificationSettings, UNREAD_COUNT_MAX } from '@pokatim/contracts';
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  type EventNotificationSettingsView,
+  type NotificationSettings,
+  UNREAD_COUNT_MAX,
+} from '@pokatim/contracts';
 import { isDuplicateKey, MONGO_DB, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import {
   type AnyBulkWriteOperation,
@@ -18,6 +23,16 @@ import {
   type PushTokenDoc,
   type PushTokenPlatform,
 } from './notifications.collection';
+import type { DeliverySettings } from './notifications.policy';
+
+/** Документ настроек → настройки доставки: нет тумблеров «Мероприятия» — включены (RC-D1). */
+const deliverySettingsOf = (
+  doc: Pick<NotificationSettingsDoc, 'push' | 'email' | 'quietHours'>,
+): DeliverySettings => ({
+  push: { ...doc.push, events: doc.push.events ?? true },
+  email: { ...doc.email, events: doc.email.events ?? true },
+  quietHours: doc.quietHours,
+});
 
 /** Уникальность токена устройства — гонка двух первых регистраций одного токена (`isDuplicateKey`). */
 export const PUSH_TOKENS_TOKEN_UNIQUE_INDEX = 'push_tokens_token_unique';
@@ -39,7 +54,7 @@ export type ClaimedPush = Pick<
   NotificationDoc,
   '_id' | 'group' | 'title' | 'body' | 'target' | 'createdAt'
 > & { push: Pick<NotificationDoc['push'], 'limitCharged'> };
-export type ClaimedEmail = Pick<NotificationDoc, '_id' | 'userId' | 'title' | 'body'>;
+export type ClaimedEmail = Pick<NotificationDoc, '_id' | 'userId' | 'title' | 'body' | 'target'>;
 /** Снимок токена для снятия (`deleteTokens`): `sessionId` — `null` без сессии, без ключа — не сверяется. */
 export interface PushTokenSnapshot {
   _id: string;
@@ -208,38 +223,68 @@ export class NotificationsRepository {
 
   // --- настройки ---
 
-  /** Сохранённые настройки или `null` (тогда — умолчания). */
-  async findSettings(userId: string): Promise<NotificationSettings | null> {
+  /** Сохранённые настройки доставки или `null` (тогда — умолчания). */
+  async findSettings(userId: string): Promise<DeliverySettings | null> {
     const doc = await this.settings.findOne(
       { _id: userId },
       { projection: { _id: 0, push: 1, email: 1, quietHours: 1 } },
     );
-    return doc ?? null;
+    return doc ? deliverySettingsOf(doc) : null;
   }
 
   /** Сохранённые настройки пользователей пачкой (`_id $in`); нет документа — нет в карте (умолчания). */
-  async findSettingsMany(userIds: readonly string[]): Promise<Map<string, NotificationSettings>> {
+  async findSettingsMany(userIds: readonly string[]): Promise<Map<string, DeliverySettings>> {
     if (userIds.length === 0) return new Map();
     const docs = await this.settings
       .find({ _id: { $in: [...userIds] } }, { projection: { push: 1, email: 1, quietHours: 1 } })
       .toArray();
-    return new Map(
-      docs.map((doc) => [
-        doc._id,
-        { push: doc.push, email: doc.email, quietHours: doc.quietHours },
-      ]),
+    return new Map(docs.map((doc) => [doc._id, deliverySettingsOf(doc)]));
+  }
+
+  /**
+   * Основные настройки (`PUT /settings`, полный объект формы): `$set` известных путей, не `replaceOne` — тумблеры
+   * «Мероприятия» (`push.events`, `email.events`) старый клиент не знает и не стирает (RC-D1).
+   */
+  async saveSettings(userId: string, settings: NotificationSettings, now: Date): Promise<void> {
+    await this.settings.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          'push.races': settings.push.races,
+          'push.disputes': settings.push.disputes,
+          'push.rides': settings.push.rides,
+          'email.disputes': settings.email.disputes,
+          'email.rides': settings.email.rides,
+          quietHours: { ...settings.quietHours },
+          updatedAt: now,
+        },
+      },
+      { upsert: true },
     );
   }
 
-  /** Полная замена настроек (один документ, `_id = userId`). */
-  async saveSettings(userId: string, settings: NotificationSettings, now: Date): Promise<void> {
-    await this.settings.replaceOne(
+  /**
+   * Тумблеры «Мероприятия» (подресурс, RC-D1): `$set` своих путей; новый документ получает умолчания основных
+   * настроек (`$setOnInsert`) — `GET /settings` отдаёт полный объект.
+   */
+  async saveEventSettings(
+    userId: string,
+    events: EventNotificationSettingsView,
+    now: Date,
+  ): Promise<void> {
+    const { push, email, quietHours } = DEFAULT_NOTIFICATION_SETTINGS;
+    await this.settings.updateOne(
       { _id: userId },
       {
-        push: { ...settings.push },
-        email: { ...settings.email },
-        quietHours: { ...settings.quietHours },
-        updatedAt: now,
+        $set: { 'push.events': events.push, 'email.events': events.email, updatedAt: now },
+        $setOnInsert: {
+          'push.races': push.races,
+          'push.disputes': push.disputes,
+          'push.rides': push.rides,
+          'email.disputes': email.disputes,
+          'email.rides': email.rides,
+          quietHours: { ...quietHours },
+        },
       },
       { upsert: true },
     );
@@ -423,7 +468,7 @@ export class NotificationsRepository {
         ],
       },
       { $set: { 'email.state': 'sending', 'email.claimedUntil': claimedUntil } },
-      { projection: { userId: 1, title: 1, body: 1 }, returnDocument: 'after' },
+      { projection: { userId: 1, title: 1, body: 1, target: 1 }, returnDocument: 'after' },
     );
     if (doc) return { status: 'claimed', doc };
     const held = await this.notifications.countDocuments({ _id: id, 'email.state': 'sending' });

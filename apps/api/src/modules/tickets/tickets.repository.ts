@@ -7,6 +7,7 @@ import type { DbSession } from '../../db';
 import {
   type EventRegistrationDoc,
   type EventTicketingDoc,
+  type ReminderDispatchDoc,
   type TicketCategoryDoc,
   type TicketDoc,
   type TicketsCollections,
@@ -63,6 +64,7 @@ export class TicketsRepository {
     tx: DbSession,
     doc: EventTicketingDoc,
     expectedVersion: number,
+    withReminders = false,
   ): Promise<boolean> {
     if (expectedVersion === 0) {
       await this.c.ticketing.insertOne(doc, { session: tx });
@@ -80,6 +82,8 @@ export class TicketsRepository {
           address: doc.address,
           instructions: doc.instructions,
           capacity: doc.capacity,
+          // правила — только если пришли в запросе; отправки (`reminderDispatches`) пишет только регламент
+          ...(withReminders ? { reminders: doc.reminders ?? [] } : {}),
           version: doc.version,
           updatedAt: doc.updatedAt,
           updatedBy: doc.updatedBy,
@@ -97,6 +101,101 @@ export class TicketsRepository {
   enabledRaceTicketings(startsAfter: Date): Promise<EventTicketingDoc[]> {
     return this.c.ticketing
       .find({ kind: 'race', enabled: true, startsAt: { $gt: startsAfter } })
+      .toArray();
+  }
+
+  // --- напоминания (PR D) ---
+
+  /**
+   * Включённые настройки с правилами для регламента напоминаний (RC-D11): гонки — старт в `(now, until]`
+   * (`event_ticketing_enabled_idx`), календарь — все с правилами (момент старта — из старта календаря, RC-T2).
+   */
+  reminderTicketings(now: Date, until: Date): Promise<EventTicketingDoc[]> {
+    return this.c.ticketing
+      .find({
+        enabled: true,
+        'reminders.0': { $exists: true },
+        $or: [{ kind: 'race', startsAt: { $gt: now, $lte: until } }, { kind: 'calendar' }],
+      })
+      .toArray();
+  }
+
+  /**
+   * Захват отправки правила — **первая** операция транзакции (RC-D2): условный `$push` в `reminderDispatches`, пока
+   * правило с этим `id` и `offsetHours` есть и записи `(reminderId, dueAt)` нет. Параллельный регламент конфликтует
+   * по документу настроек; `false` — уже отправлено или правило сменилось.
+   */
+  async claimReminderDispatch(
+    tx: DbSession,
+    ticketingId: string,
+    offsetHours: number,
+    dispatch: ReminderDispatchDoc,
+  ): Promise<boolean> {
+    const updated = await this.c.ticketing.updateOne(
+      {
+        _id: ticketingId,
+        enabled: true,
+        reminders: { $elemMatch: { id: dispatch.reminderId, offsetHours } },
+        reminderDispatches: {
+          $not: { $elemMatch: { reminderId: dispatch.reminderId, dueAt: dispatch.dueAt } },
+        },
+      },
+      { $push: { reminderDispatches: dispatch } },
+      { session: tx },
+    );
+    return updated.modifiedCount === 1;
+  }
+
+  /**
+   * Метка «напоминание ушло» активным билетам события, выпущенным не позже `dueAt` и ещё без этого правила (AC10,
+   * RC-D3); число помеченных.
+   */
+  async markReminderSent(
+    tx: DbSession,
+    kind: TicketEventKind,
+    eventId: string,
+    sent: { reminderId: string; dispatchId: string; at: Date },
+    dueAt: Date,
+  ): Promise<number> {
+    const updated = await this.c.tickets.updateMany(
+      {
+        kind,
+        eventId,
+        status: 'active',
+        createdAt: { $lte: dueAt },
+        'remindersSent.reminderId': { $ne: sent.reminderId },
+      },
+      { $push: { remindersSent: sent } },
+      { session: tx },
+    );
+    return updated.modifiedCount;
+  }
+
+  /** Число получателей отправки (сводка панели). */
+  async setReminderDispatchCount(
+    tx: DbSession,
+    ticketingId: string,
+    dispatchId: string,
+    count: number,
+  ): Promise<void> {
+    await this.c.ticketing.updateOne(
+      { _id: ticketingId },
+      { $set: { 'reminderDispatches.$[d].count': count } },
+      { session: tx, arrayFilters: [{ 'd.dispatchId': dispatchId }] },
+    );
+  }
+
+  /** Получатели отправки: активные билеты с меткой `dispatchId` (`tickets_event_idx` по префиксу); id и код. */
+  reminderRecipients(
+    kind: TicketEventKind,
+    eventId: string,
+    dispatchId: string,
+  ): Promise<Pick<TicketDoc, 'userId' | 'code'>[]> {
+    return this.c.tickets
+      .find(
+        { kind, eventId, status: 'active', 'remindersSent.dispatchId': dispatchId },
+        { projection: { _id: 0, userId: 1, code: 1 } },
+      )
       .toArray();
   }
 

@@ -2,7 +2,7 @@
 
 - Статус: Proposed
 - Дата: 2026-10-29
-- Задача: `docs/tasks/2026-10-29-event-tickets` (PR A — API)
+- Задача: `docs/tasks/2026-10-29-event-tickets` (PR A — API; п. 12 — PR D)
 
 ## Контекст
 
@@ -84,6 +84,21 @@
     `Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=()` (nginx `admin-nginx.conf`
     во всех `location` и `vite preview`; сторож `csp.test.ts`); CSP не меняется (MediaStream и canvas её не
     затрагивают). Без камеры — ручной ввод кода.
+12. **Напоминания (PR D)** — до 3 правил «за N часов до старта» (1–168 ч) с текстом организатора (≤ 500) в
+    `event_ticketing.reminders` (`id` стабилен, `armedAt` — время создания или смены offset); правят их тем же
+    `PUT …/ticketing` (нет поля — правила не трогаются). Планирует `tickets`: регламент `tickets.reminders`
+    (`tickets-maintenance`, каждую минуту + при старте) берёт события с правилами (гонки — старт в ближайшие 168 ч,
+    календарь — все с правилами, момент старта — из старта календаря) и шлёт правило, если событие `scheduled` и
+    `armedAt ≤ dueAt ≤ now < startsAt` (`dueAt = startsAt − offset`; простой регламента догоняется до старта; правило,
+    заданное после своего времени, не уходит — панель пишет «прошло»). Отправка — транзакция: условный `$push`
+    `reminderDispatches (reminderId, dueAt)` первой операцией (параллельный регламент конфликтует по документу настроек
+    и после повтора видит запись), затем `updateMany` активных билетов с `createdAt ≤ dueAt` и без метки правила →
+    `remindersSent`, затем outbox `tickets.reminder-due { kind, eventId, reminderId, dispatchId }` — одно событие на
+    отправку, не на билет. Один раз на билет и правило — по `remindersSent`: смена текста повтора не даёт, смена
+    offset или старта — только билетам без метки; удалённое и созданное заново правило — новая отправка. Уведомления
+    пишет `notifications` (порт `TICKET_NOTICES`, получатели — метка `dispatchId`): kind `event_reminder`, группа
+    «Мероприятия», цель `{ type: 'ticket', code }` у каждого своя, письмо — с кнопкой «Открыть билет» на
+    `APP_WEB_ORIGIN`. Тихие часы push не обходит (подсказка организатору). Миграции нет: новые поля читаются `?? []`.
 
 ## Последствия
 

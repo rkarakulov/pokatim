@@ -18,6 +18,44 @@ export const TICKETING_PLACE_MAX = 200;
 export const TICKETING_ADDRESS_MAX = 300;
 export const TICKETING_CAPACITY_MAX = 100_000;
 
+/** Напоминания участникам (PR D): до 3 правил «за N часов до старта», текст организатора. */
+export const EVENT_REMINDERS_MAX = 3;
+export const EVENT_REMINDER_OFFSET_MIN_HOURS = 1;
+export const EVENT_REMINDER_OFFSET_MAX_HOURS = 168;
+export const EVENT_REMINDER_TEXT_MAX = 500;
+
+/** Правило в запросе: `id` — существующего правила (без `id` — новое, id даёт сервер). */
+export const EventReminderInput = z.strictObject({
+  id: z.uuid({ error: 'INVALID' }).optional(),
+  offsetHours: z
+    .number({ error: fieldError('INVALID') })
+    .int({ error: 'INVALID' })
+    .min(EVENT_REMINDER_OFFSET_MIN_HOURS, { error: 'INVALID' })
+    .max(EVENT_REMINDER_OFFSET_MAX_HOURS, { error: 'INVALID' }),
+  text: z
+    .string({ error: fieldError('REQUIRED') })
+    .trim()
+    .min(1, { error: 'REQUIRED', abort: true })
+    .max(EVENT_REMINDER_TEXT_MAX, { error: 'TOO_LONG' })
+    .regex(MULTI_LINE, { error: 'INVALID' }),
+});
+export type EventReminderInput = z.infer<typeof EventReminderInput>;
+
+/**
+ * Правило в ответе панели: `sendAt` — время отправки по текущему старту (`null` — нет старта), `sentAt`/`sentCount` —
+ * отправка по этому времени, `late` — правило задано после своего времени отправки и не уйдёт (RC-D5).
+ */
+export const EventReminder = z.object({
+  id: z.uuid(),
+  offsetHours: z.number().int(),
+  text: z.string(),
+  sendAt: z.iso.datetime().nullable(),
+  sentAt: z.iso.datetime().nullable(),
+  sentCount: z.number().int().nonnegative(),
+  late: z.boolean(),
+});
+export type EventReminder = z.infer<typeof EventReminder>;
+
 /** Путь `/v1/admin/events/:kind/:eventId/*`. */
 export const AdminEventParams = z.strictObject({
   kind: z.enum(TICKET_EVENT_KINDS, { error: fieldError('INVALID') }),
@@ -46,6 +84,8 @@ export const EventTicketingSettings = z.object({
   registeredCount: z.number().int().nonnegative(),
   activeTickets: z.number().int().nonnegative(),
   checkedIn: z.number().int().nonnegative(),
+  /** напоминания участникам (PR D) */
+  reminders: z.array(EventReminder),
 });
 export type EventTicketingSettings = z.infer<typeof EventTicketingSettings>;
 
@@ -67,6 +107,18 @@ export const EventTicketingUpdate = z.strictObject({
     .min(1, { error: 'INVALID' })
     .max(TICKETING_CAPACITY_MAX, { error: 'INVALID' })
     .nullable()
+    .optional(),
+  /** PR D: полный список правил; нет поля — правила не трогаются (RC-T15) */
+  reminders: z
+    .array(EventReminderInput)
+    .max(EVENT_REMINDERS_MAX, { error: 'INVALID' })
+    .superRefine((rules, ctx) => {
+      rules.forEach((rule, index) => {
+        if (rules.findIndex((other) => other.offsetHours === rule.offsetHours) < index) {
+          ctx.addIssue({ code: 'custom', message: 'INVALID', path: [index, 'offsetHours'] });
+        }
+      });
+    })
     .optional(),
   version: Version,
 });

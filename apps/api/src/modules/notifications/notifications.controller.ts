@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  type EventNotificationSettingsView,
   FieldErrorCode,
   NotificationListQuery,
   type NotificationPage,
@@ -20,6 +21,7 @@ import {
   RevokePushToken,
   RevokeWebPushSubscription,
   type UnreadCount,
+  UpdateEventNotificationSettings,
   Uuid,
   type WebPushConfig,
 } from '@pokatim/contracts';
@@ -74,6 +76,23 @@ export class NotificationsController {
     @Body(new ZodValidationPipe(NotificationSettings, FieldErrorCode)) body: NotificationSettings,
   ): Promise<NotificationSettings> {
     return this.settings.put(user.userId, body);
+  }
+
+  /** Группа «Мероприятия» — подресурс (RC-D1): прежний `/settings` не меняет форму. */
+  @Get('settings/events')
+  @Header('Cache-Control', 'no-store')
+  getEventSettings(@CurrentUser() user: AuthUser): Promise<EventNotificationSettingsView> {
+    return this.settings.getEvents(user.userId);
+  }
+
+  @Put('settings/events')
+  @HttpCode(200)
+  putEventSettings(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(UpdateEventNotificationSettings, FieldErrorCode))
+    body: UpdateEventNotificationSettings,
+  ): Promise<EventNotificationSettingsView> {
+    return this.settings.putEvents(user.userId, body);
   }
 
   @Put('push-tokens')

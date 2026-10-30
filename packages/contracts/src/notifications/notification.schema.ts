@@ -2,13 +2,14 @@ import { z } from 'zod';
 
 import { fieldError, tolerantEnum, Uuid } from '../common.ts';
 import { PageCursor } from '../races/race.schema.ts';
+import { TicketCodeCanonical } from '../tickets/ticket.schema.ts';
 
 /**
  * Центр уведомлений (ADR-0017, `docs/product/notifications.md`). Все эндпоинты — под `AuthGuard`, только свои
  * уведомления. Тексты и цели считает сервер при создании (снимок); клиент присылает только намерение (прочитать,
  * настройки, токен). Справочники — только в конец: ответы приложения разбирают их `tolerantEnum`.
  */
-export const NOTIFICATION_GROUPS = ['races', 'disputes', 'rides'] as const;
+export const NOTIFICATION_GROUPS = ['races', 'disputes', 'rides', 'events'] as const;
 export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number];
 
 export const NOTIFICATION_KINDS = [
@@ -28,6 +29,8 @@ export const NOTIFICATION_KINDS = [
   'ride_report_resolved',
   'route_published',
   'route_rejected',
+  // PR D event-tickets: напоминание о событии с билетом (группа `events`)
+  'event_reminder',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -40,6 +43,8 @@ export const NotificationTarget = z.discriminatedUnion('type', [
   z.object({ type: z.literal('dispute-response'), raceId: Uuid, disputeId: Uuid }),
   /** свой маршрут райдера (`/routes/mine/<id>`): решение по заявке в каталог (routes-06 A6) */
   z.object({ type: z.literal('my-route'), routeId: Uuid }),
+  /** свой билет (`/tickets/<код>`): напоминание о событии (PR D); код не секрет без входа (T2) */
+  z.object({ type: z.literal('ticket'), code: TicketCodeCanonical }),
 ]);
 export type NotificationTarget = z.infer<typeof NotificationTarget>;
 
@@ -114,6 +119,23 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   push: { races: true, disputes: true, rides: true },
   email: { disputes: true, rides: true },
   quietHours: { enabled: true, startHour: 22, endHour: 8 },
+};
+
+/**
+ * Группа «Мероприятия» (напоминания о событиях с билетом, PR D) — отдельный подресурс `GET|PUT
+ * /v1/notifications/settings/events` (RC-D1): основные `NotificationSettings` — `strictObject` в ответе уже
+ * установленных сборок, новый ключ сломал бы их экран настроек. Ответ терпит новые ключи, запрос — строгий.
+ */
+export const EventNotificationSettingsView = z.object({ push: z.boolean(), email: z.boolean() });
+export type EventNotificationSettingsView = z.infer<typeof EventNotificationSettingsView>;
+
+export const UpdateEventNotificationSettings = z.strictObject({ push: Toggle, email: Toggle });
+export type UpdateEventNotificationSettings = z.infer<typeof UpdateEventNotificationSettings>;
+
+/** Нет сохранённых тумблеров — включено (N4). */
+export const DEFAULT_EVENT_NOTIFICATION_SETTINGS: EventNotificationSettingsView = {
+  push: true,
+  email: true,
 };
 
 export const PUSH_PLATFORMS = ['ios', 'android'] as const;

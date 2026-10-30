@@ -1,14 +1,20 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { DEFAULT_NOTIFICATION_SETTINGS, type NotificationSettings } from '@pokatim/contracts';
+import type {
+  EventNotificationSettingsView,
+  NotificationSettings,
+  UpdateEventNotificationSettings,
+} from '@pokatim/contracts';
 import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
 
-import { NOTIFICATIONS_POLICY } from './notifications.policy';
+import { DEFAULT_DELIVERY_SETTINGS, NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
 import { consumeUserLimit } from '../../user-limit';
 
 /**
- * Настройки уведомлений (N4, N6): нет документа — умолчания; `PUT` — полная замена после zod (`start ≠ end` проверяет
- * контракт). Не ретроактивны (RC-13): уже созданные уведомления центра не трогаются.
+ * Настройки уведомлений (N4, N6): нет документа — умолчания; `PUT` — полная замена формы после zod (`start ≠ end`
+ * проверяет контракт). Группа «Мероприятия» — отдельный подресурс (RC-D1): ответ `/settings` — ровно прежние ключи,
+ * его `PUT` тумблеры «Мероприятий» не стирает. Лимит — общий. Не ретроактивны (RC-13): уже созданные уведомления
+ * центра не трогаются.
  */
 @Injectable()
 export class NotificationSettingsService {
@@ -19,10 +25,39 @@ export class NotificationSettingsService {
   ) {}
 
   async get(userId: string): Promise<NotificationSettings> {
-    return (await this.repository.findSettings(userId)) ?? DEFAULT_NOTIFICATION_SETTINGS;
+    const { push, email, quietHours } = await this.current(userId);
+    return {
+      push: { races: push.races, disputes: push.disputes, rides: push.rides },
+      email: { disputes: email.disputes, rides: email.rides },
+      quietHours,
+    };
   }
 
   async put(userId: string, settings: NotificationSettings): Promise<NotificationSettings> {
+    const now = await this.consume(userId);
+    await this.repository.saveSettings(userId, settings, now);
+    return settings;
+  }
+
+  async getEvents(userId: string): Promise<EventNotificationSettingsView> {
+    const { push, email } = await this.current(userId);
+    return { push: push.events, email: email.events };
+  }
+
+  async putEvents(
+    userId: string,
+    body: UpdateEventNotificationSettings,
+  ): Promise<EventNotificationSettingsView> {
+    const now = await this.consume(userId);
+    await this.repository.saveEventSettings(userId, body, now);
+    return { push: body.push, email: body.email };
+  }
+
+  private async current(userId: string) {
+    return (await this.repository.findSettings(userId)) ?? DEFAULT_DELIVERY_SETTINGS;
+  }
+
+  private async consume(userId: string): Promise<Date> {
     const now = this.clock.now();
     await consumeUserLimit(
       this.rateLimiter,
@@ -30,7 +65,6 @@ export class NotificationSettingsService {
       NOTIFICATIONS_POLICY.settingsLimit,
       now,
     );
-    await this.repository.saveSettings(userId, settings, now);
-    return settings;
+    return now;
   }
 }
