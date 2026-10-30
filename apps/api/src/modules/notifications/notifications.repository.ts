@@ -385,12 +385,19 @@ export class NotificationsRepository {
 
   // --- доставка (worker `notifications-delivery`) ---
 
-  /** Уведомления события, ждущие доставки (intake ставит задачи по ним): получатель, push и письмо. */
-  pendingDeliveriesOf(sourceEventId: string): Promise<PendingDelivery[]> {
+  /**
+   * Уведомления события, ждущие доставки (intake ставит задачи по ним): получатель, push и письмо. `userIds` — только
+   * получатели пачки (`notifications.fanout`; индекс `notifications_event_user_unique`).
+   */
+  pendingDeliveriesOf(
+    sourceEventId: string,
+    userIds?: readonly string[],
+  ): Promise<PendingDelivery[]> {
     return this.notifications
       .find(
         {
           sourceEventId,
+          ...(userIds === undefined ? {} : { userId: { $in: [...userIds] } }),
           $or: [{ 'push.state': 'pending' }, { 'email.state': 'pending' }],
         },
         { projection: { userId: 1, push: 1, email: 1 } },

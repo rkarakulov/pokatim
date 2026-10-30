@@ -1,3 +1,4 @@
+import { NOTIFICATION_KINDS, NotificationTarget } from '@pokatim/contracts';
 import { z } from 'zod';
 
 import { QUEUE } from '../../queues';
@@ -20,6 +21,7 @@ import {
 } from '../rides';
 import { ROUTE_PUBLICATION_DECIDED } from '../routes';
 import { TICKETS_REMINDER_DUE } from '../tickets';
+import { NOTIFICATIONS_POLICY } from './notifications.policy';
 
 /**
  * Маршруты событий модулей-источников в очередь приёма уведомлений (ADR-0017): объявляет подписчик (как
@@ -68,3 +70,27 @@ export const pushJobId = (userId: string, notBefore: Date) =>
   `push-${userId}-${notBefore.getTime()}`;
 /** jobId письма — по уведомлению. */
 export const emailJobId = (notificationId: string) => `email-${notificationId}`;
+
+/**
+ * Пачка получателей события (`notifications-intake`, имя задачи — не тип события outbox): то, что intake уже посчитал —
+ * снимок текста, цель, схлопывание, цели и id получателей пачки. Порты источников в пачке не перечитываются. Без ПДн
+ * (N12): id и снимок текста.
+ */
+export const NOTIFICATIONS_FANOUT_JOB = 'notifications.fanout';
+export const FanoutJobData = z.object({
+  eventId: z.uuid(),
+  /** тип события-источника — только для логов */
+  type: z.string(),
+  kind: z.enum(NOTIFICATION_KINDS),
+  title: z.string(),
+  body: z.string(),
+  target: NotificationTarget.nullable(),
+  targets: z.record(z.uuid(), NotificationTarget).optional(),
+  collapse: z.object({ key: z.string(), seq: z.number().int().optional() }).optional(),
+  userIds: z.array(z.uuid()).min(1).max(NOTIFICATIONS_POLICY.fanoutChunk),
+});
+export type FanoutJobData = z.infer<typeof FanoutJobData>;
+
+/** jobId пачки: событие, номер непустого черновика, номер пачки; без `:` (BullMQ). Пачка `0-0` — сторож раскладки. */
+export const fanoutJobId = (eventId: string, draft: number, chunk: number) =>
+  `fanout-${eventId}-${draft}-${chunk}`;
