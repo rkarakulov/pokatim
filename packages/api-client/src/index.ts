@@ -28,6 +28,7 @@ import {
   SeasonStandingsTable,
   SeasonList,
   type SeasonRaceListQuery,
+  type SeasonalAchievementRef,
   ConfirmPasswordResetResponse,
   ConfirmVerificationResponse,
   type ErrorCode,
@@ -444,10 +445,21 @@ export function createApiClient({
         AchievementList,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
-    /** Отметить показанные вспышкой (идемпотентно; чужие, незнакомые и отозванные — без ошибки); `204`. */
-    markAchievementsSeen: (accessToken: string, codes: AchievementCode[]) =>
-      postAuthorized(accessToken, '/v1/achievements/seen', z.undefined(), { codes }),
-    /** Публичные достижения райдера — только гоночные (без входа); нет или нет согласия — 404. */
+    /**
+     * Отметить показанные вспышкой (идемпотентно; чужие, незнакомые и отозванные — без ошибки); `204`. `codes` —
+     * несезонные, `seasonal` — сезонные по `(code, seasonId)`; `seasonal` уходит только непустым (старый API его не
+     * знает и ответил бы 400).
+     */
+    markAchievementsSeen: (
+      accessToken: string,
+      codes: AchievementCode[],
+      seasonal: SeasonalAchievementRef[] = [],
+    ) =>
+      postAuthorized(accessToken, '/v1/achievements/seen', z.undefined(), {
+        codes,
+        ...(seasonal.length > 0 ? { seasonal } : {}),
+      }),
+    /** Публичные достижения райдера — гоночные и сезонные (без входа); нет или нет согласия — 404. */
     getRiderAchievements: (publicId: string) =>
       getPublic(
         `/v1/riders/${encodeURIComponent(publicId)}/achievements`,

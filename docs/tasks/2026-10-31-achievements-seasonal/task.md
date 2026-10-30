@@ -68,84 +68,102 @@
 
 ## 5. Architecture Context
 
-Architecture Review (architect, 2026-10-31) — **Status: CONCERNS** (блокеров для кода нет; **HG-S1** — подтверждение
-человека на удаление старого уникального индекса до мержа и деплоя; RC-S1…RC-S3 — уточнения S1/S2 с причинами, на
-подтверждение человеку, по умолчанию берётся рекомендация; остальные RC — обязательные правки реализации).
+Architecture Review (architect, 2026-10-31; пересмотрен по решениям оркестратора) — **Status: CONCERNS** (блокеров нет).
+- RC-S1…RC-S4 и RC-S7 приняты по рекомендации, остальные RC тоже приняты.
+- По HG-S1 выбрана отдельная коллекция сезонных выдач: деструктивных операций нет.
 
-- **Модель ADR-0020 не меняется.** Сезонная выдача — та же проекция фактов, сверка при `GET /v1/achievements`, каждая
-  запись — одна условная операция над одним документом без транзакций, маркер первой сверки — после выдач. Меняется
-  **ключ выдачи**: `(userId, code)` → `(userId, code, seasonId)`. У несезонных `seasonId: null` (у документов v1 поля
-  нет — для фильтра `{ seasonId: null }` и для уникального индекса это одно и то же).
+- **Модель ADR-0020 не меняется.** Выдача — проекция фактов, сверка при `GET /v1/achievements`. Каждая запись — одна
+  условная операция над одним документом без транзакций. Маркер первой сверки (`achievement_syncs`) общий и ставится
+  **после** выдач обеих коллекций.
+- **Сезонные выдачи — отдельная коллекция `achievement_season_grants`.** Один документ на `(userId, code, seasonId)`,
+  уникальный индекс `achievement_season_grants_user_code_season_unique`. Единственный писатель — тот же
+  `AchievementsRepository`.
+  - `achievement_grants`, его индекс `achievement_grants_user_code_unique` и документы v1 не меняются (AC6 —
+    по построению).
+  - Миграция `0043_achievements_seasonal` — только expand. Номер свободен: в `origin/develop` последняя —
+    `0042_profile_report_reasons`. Перед мержем проверить ещё раз.
+  - Удаления индекса и HG нет.
 - **Источник — снимок `standings` через порт, не пересчёт.** `achievements` не читает чужие коллекции
-  (`season_standing_rows`, `season_standings`, `seasons`, `races`). Новый порт **`RIDER_SEASON_STANDINGS`** живёт в
-  модуле-владельце снимка `standings` (`StandingsCoreModule`), сезоны и «ждущие протокола» он берёт у `races` через
-  `SEASON_RACES` (это ребро уже есть). Новое ребро — только `achievements → standings` (через `standings/index.ts`).
-  `standings`, `races`, `results` об `achievements` не знают, поэтому циклов нет. Порт подключается только в
-  `AchievementsModule` (HTTP). `AchievementsReadModule` и `sharing` его не получают: у сезонных карточки нет (S7).
-- **«Завершён» и «актуальный снимок» решает порт, решения о кодах — `achievements`.** Порт отдаёт по каждому нужному
-  завершённому сезону статус `final | pending` и строки райдера (место, ничья, число ячеек «с местом»). Пороги (место 1,
-  1–3, ≥ 3 гонки) — чистые функции `achievements.policy.ts`. Сезон считается `final`, когда выполнены все условия:
-  (1) последний день по Минску прошёл (`endsBefore ≤ now`); (2) у сезона нет опубликованной гонки с коридором и без
-  протокола (RC-S2); (3) заголовок снимка есть, и его `fingerprint` равен отпечатку источника (`StandingsSource`, тот же
-  расчёт, что у регламента и у `sync: pending` панели). Иначе — `pending`, и сезонные выдачи этого сезона сверка не
-  трогает: ни вставки, ни отзыва (S2).
-- **GET остаётся лёгким.** Сколько запросов добавляет порт:
-  1. `seasons.find({ endsBefore ≤ now })` — сезонов десятки. Завершённых нет — выход.
-  2. В одной snapshot-сессии: `season_standing_rows.find({ seasonId: { $in: завершённые }, userId })` (существующий
-     индекс `season_standing_rows_user_idx (seasonId, userId)`, по одному seek на сезон, **новый индекс не нужен**) и
-     заголовки снимков только «нужных» сезонов. Нужные — сезоны строк ∪ сезоны уже сохранённых сезонных выдач:
-     последние нужны для отзыва, если строки райдера пропали. Нужных нет — выход (типичный райдер без сезонных итогов:
-     **2 запроса**).
-  3. Только для нужных: гонки без протокола (`races` по префиксу `seasonId`) и источник (`protocolRaces({ $in })` по
-     `races_protocol_idx` + один `aggregate` `currentRevisions`) — ещё **3 запроса**.
+  (`season_standing_rows`, `season_standings`, `seasons`, `races`).
+  - Новый порт **`RIDER_SEASON_STANDINGS`** — в модуле-владельце снимка `standings` (`StandingsCoreModule`).
+  - Сезоны и «ждущие протокола» порт берёт у `races` через `SEASON_RACES`; это ребро уже есть.
+  - Новое ребро — только `achievements → standings` (через `standings/index.ts`), только в `AchievementsModule`
+    (HTTP). `standings`, `races` и `results` об `achievements` не знают — циклов нет.
+  - `AchievementsReadModule` и `sharing` порт не получают: у сезонных нет карточки (S7).
+- **«Завершён» и «актуальный снимок» определяет порт, решения о кодах — `achievements`.**
+  - Порт отдаёт по каждому нужному завершённому сезону статус `final | pending` и строки райдера: место, ничья, число
+    ячеек «с местом».
+  - Пороги (место 1, места 1–3, ≥ 3 гонки, RC-S1) — чистые функции `achievements.policy.ts`.
+  - Сезон `final`, когда выполнены все три условия:
+    1. последний день по Минску прошёл (`endsBefore ≤ now`);
+    2. у сезона нет опубликованной гонки с коридором без протокола (RC-S2);
+    3. заголовок снимка есть, и его `fingerprint` равен отпечатку источника (`StandingsSource` — тот же расчёт, что у
+       регламента и у `sync: pending` панели).
+  - Иначе сезон `pending`, и сезонные выдачи этого сезона сверка не трогает — ни вставки, ни отзыва (S2).
+- **GET остаётся лёгким.** Шаги порта:
+  1. `seasons.find({ endsBefore ≤ now })` — сезонов десятки. Если их нет — выход.
+  2. В одной snapshot-сессии:
+     - `season_standing_rows.find({ seasonId: { $in: завершённые }, userId })` — существующий индекс
+       `season_standing_rows_user_idx (seasonId, userId)`, по одному seek на сезон, **новый индекс не нужен**;
+     - заголовки снимков только для «нужных» сезонов. Нужные — сезоны строк ∪ сезоны уже сохранённых сезонных выдач
+       (их нужно уметь отозвать, если строки пропали).
+     - Если нужных нет — выход. Типичный райдер без сезонных итогов: **2 запроса**.
+  3. Только для нужных сезонов: «гонки без протокола» (`races` по префиксу `seasonId`) и источник
+     (`protocolRaces({ $in })` по `races_protocol_idx` + один `aggregate` `currentRevisions`) — ещё **3 запроса**.
 
-  Итого +2…5 запросов по индексам, без разбора треков, без пересчёта и без записи у источника. Заголовок и строки
-  читаются в одной snapshot-сессии (их пишет одна транзакция `claimSeason` + `replaceRows`), источник — **после**
-  снимка: пересчёт, случившийся между чтениями, даст расхождение отпечатков, то есть `pending` (безопасная сторона).
-- **Гонки — замки не нужны (подтверждаю).** Каждая запись — одна условная операция над одним документом по
-  `{ userId, code, seasonId, … }`. Параллельная вставка ловится новым уникальным индексом (`isDuplicateKey` → `false`).
-  `restore` и `refresh` идут с условием на `revokedAt`, `revoke` — только видимой выдачи, `markSeen` — `updateMany`
-  pipeline, атомарный на каждый документ. Два GET с разными снимками (до и после пересчёта) могут на мгновение
-  разойтись: устаревший отзовёт, свежий вернёт с прежним `seenAt` — без повторной вспышки (A4/S4). Следующая сверка
-  сводит состояние. Это та же eventual consistency, что принята в ADR-0020. Транзакция или Redis-замок ничего не дадут:
-  исход один.
-- **Миграция:** `0043_achievements_seasonal` (последняя в `origin/develop` — `0042_profile_report_reasons`, PR #150
-  миграций не добавлял; перед мержем проверить, не занял ли 0043 другой PR). Шаги: новый уникальный
-  `achievement_grants_user_code_season_unique { userId, code, seasonId }`, затем удаление старого
-  `achievement_grants_user_code_unique` — **HG-S1** (образец — `0021_routes_rider`, HG-1). Индексы `standings` не
-  меняются. Бэкфилла нет.
-- **Ни очередей, ни outbox, ни регламента, ни append-only.** Регламент `standings.sync` не меняется. Задач BullMQ
-  нет. Push — PR P.
-- **Совместимость.** Старые сборки: новые коды и вид `season` → `'unknown'` (`tolerantEnum`), `knownItems` их
-  отбрасывает (ключи React, вспышка, `seen` старых сборок сезонных не видят). `{ codes }` работает как прежде и
-  относится только к несезонным. Новая сборка со старым API: сезонных в ответе нет, и `seasonal` в запросе не уходит
-  (клиент шлёт поле только непустым). Иначе строгий запрос старого API ответил бы 400.
+  Плюс одно чтение `achievement_season_grants` по `userId` в сверке. Итого +3…6 запросов по индексам, без разбора
+  треков, пересчёта и записи у источника. Заголовок и строки читаются в одной snapshot-сессии: их пишет одна транзакция
+  `claimSeason` + `replaceRows`. Источник читается **после** снимка: пересчёт между чтениями даст расхождение
+  отпечатков → `pending` (безопасная сторона).
+- **Гонки: замки не нужны (подтверждаю).** Каждая запись — одна условная операция над одним документом:
+  - параллельная вставка — уникальный индекс своей коллекции (`isDuplicateKey` → `false`);
+  - `restore` — с условием `revokedAt ≠ null`, `revoke` — только видимой выдачи;
+  - «показано» — по одной `updateMany` на коллекцию, каждая атомарна на свой документ. Межколлекционной атомарности
+    не требуется: каждая выдача помечается независимо.
+
+  Два GET с разными снимками (до и после пересчёта) могут на мгновение разойтись: устаревший отзовёт, свежий вернёт с
+  прежним `seenAt` без повторной вспышки (A4/S4). Следующая сверка сводит состояние — это eventual consistency из
+  ADR-0020. Маркер ставится после выдач обеих коллекций, поэтому тот, кто увидел маркер, видит и тихие выдачи.
+- **Ни очередей, ни outbox, ни регламента, ни append-only.** Регламент `standings.sync` не меняется, задач BullMQ нет.
+  Push — в PR P.
+- **Совместимость.**
+  - Старые сборки: новые коды и вид `season` → `'unknown'` (`tolerantEnum`), `knownItems` их отбрасывает.
+  - `{ codes }` работает как прежде и относится только к `achievement_grants`.
+  - Новая сборка со старым API: сезонных в ответе нет, поэтому `seasonal` в запросе не уходит (клиент шлёт поле только
+    непустым; иначе строгий запрос старого API ответил бы 400).
+  - Выкат: миграция только добавляет. Старый процесс API новую коллекцию не видит и не трогает.
 
 ## 5.1 Placement & Reuse Gate
 
 | Что | Где | Почему / reuse |
 |---|---|---|
-| Коды `season_regular`, `season_podium`, `season_champion` (в конец, порядок — RC-S4), `SEASONAL_ACHIEVEMENT_CODES`, `SeasonalAchievementCode`, `isSeasonalCode`, `SEASON_REGULAR_MIN_RACES = 3`, вид объекта `season`, `SeasonalAchievementRef`, новая схема `MarkAchievementsSeenRequest` | `packages/contracts/src/achievements/achievement.schema.ts` (+ `src/index.ts`) | ≥ 3 потребителя (политика API, приложение, api-client); порог — одна константа (как `ACHIEVEMENT_LEVEL_TARGETS`, RC-L1) |
+| Коды `season_regular`, `season_podium`, `season_champion` (в конец, порядок RC-S4), `SEASONAL_ACHIEVEMENT_CODES`, `SeasonalAchievementCode`, `isSeasonalCode`, `SEASON_REGULAR_MIN_RACES = 3`, вид объекта `season`, `SeasonalAchievementRef`, новая схема `MarkAchievementsSeenRequest` | `packages/contracts/src/achievements/achievement.schema.ts` (+ `src/index.ts`) | ≥ 3 потребителя (политика API, приложение, api-client); порог — одна константа (как `ACHIEVEMENT_LEVEL_TARGETS`, RC-L1) |
 | Порт `RIDER_SEASON_STANDINGS` (тип + символ) | новый `apps/api/src/modules/standings/rider-season-standings.port.ts`, экспорт `standings/index.ts` | владелец снимка — `standings`; `achievements` чужих коллекций не читает |
-| Реализация порта | новый `apps/api/src/modules/standings/rider-season-standings.ts` (`RiderSeasonStandingsService`), провайдер + экспорт `StandingsCoreModule` | reuse: `StandingsRepository.withSnapshot`, `StandingsSource.load` (тот же отпечаток, что регламент и панель), `SEASON_RACES` |
-| Чтения снимка по нескольким сезонам | `standings.repository.ts`: `rowsOfUserIn(seasonIds, userId, session)`, `headersOf(ids, session)` (проекция `_id`, `fingerprint`) | существующий индекс `(seasonId, userId)`; нового индекса нет |
-| Источник по набору сезонов | `standings-source.ts`: `load(seasonIds?: readonly string[])` (вызовы `recalc.sync()` → `load()`, `panelSummary` → `load([id])`) | второго расчёта отпечатка нет |
+| Реализация порта | новый `apps/api/src/modules/standings/rider-season-standings.ts` (`RiderSeasonStandingsService`), провайдер + экспорт `StandingsCoreModule` | reuse: `StandingsRepository.withSnapshot`, `StandingsSource.load` (тот же отпечаток, что у регламента и панели), `SEASON_RACES` |
+| Чтение снимка по нескольким сезонам | `standings.repository.ts`: `rowsOfUserIn(seasonIds, userId, session)`, `headersOf(ids, session)` (проекция `_id`, `fingerprint`) | существующий индекс `(seasonId, userId)`, нового нет |
+| Источник по набору сезонов | `standings-source.ts`: `load(seasonIds?: readonly string[])` (вызовы: `recalc.sync()` → `load()`, `panelSummary` → `load([id])`) | второго расчёта отпечатка нет |
 | Сезоны и «ждущие протокола» | `races/season-races.port.ts` + `season-races.ts`: `finishedSeasons(now)`, `awaitingProtocol(seasonIds)`, `protocolRaces(seasonIds?: readonly string[])`; `races.repository.ts` | `races` — владелец сезонов; порт уже экспортирован для `standings` |
-| Правила сезонных, ключ выдачи, план по ключу | `apps/api/src/modules/achievements/achievements.policy.ts` | чистые функции рядом с `ACHIEVEMENT_RULES`; `reconcilePlan` один для обоих видов |
-| Поле `seasonId`, фильтры по ключу, `markSeen` с адресами | `achievements.collection.ts`, `achievements.repository.ts` | единственный писатель |
+| Правила сезонных и план сезонной сверки | `apps/api/src/modules/achievements/achievements.policy.ts` (`SEASONAL_RULES`, `seasonalAchievements`, `seasonalPlan`) | чистые функции; `reconcilePlan` несезонных — только по `FactAchievementCode` |
+| Коллекция `achievement_season_grants` | `achievements.collection.ts` (`AchievementSeasonGrantDoc`, `ACHIEVEMENTS_COLLECTIONS.seasonGrants`) | данные модуля — его коллекции |
+| Запись и чтение сезонных выдач, «показано», стирание обеих | `achievements.repository.ts` — **единственный писатель** обеих коллекций и маркера | второго репозитория нет |
 | Сверка и публичный список с сезонными | `achievements.service.ts`, `achievements.module.ts` (+ `StandingsCoreModule`), `achievements.controller.ts` (`seen`) | явный список полей |
-| Отказ карточки для сезонных | `achievements-for-sharing.ts` (сезонный код → `null` → 409), `sharing/achievement-card.icons.ts` (`Record<FactAchievementCode, …>`) | `renderVersion` не меняется: вёрстка и тексты прежние |
-| Миграция | новый `apps/api/src/db/migrations/0043_achievements_seasonal.ts` + `index.ts` + `migrations.int.test.ts` | — |
-| Каталог (3 кода, флаги `storyCard`/`seasonal`, иконки `trophy`/`medal`/`calendar`), `achievementKey`, `flashKey`, путь экрана | `apps/app/src/features/achievements/achievement-catalog.ts` | одна функция ключа для React, вспышки, `seen`, экрана |
+| Стирание | `achievement-erasure.ts` (результат + `seasonGrants`) | порт прежний, шаг `achievements` прежний |
+| Отказ карточки для сезонных | `achievements-for-sharing.ts` (сезонный код → `null` → 409), `sharing/achievement-card.icons.ts` (`Record<FactAchievementCode, …>`) | `renderVersion` не меняется |
+| Миграция (expand-only) | новый `apps/api/src/db/migrations/0043_achievements_seasonal.ts` + `index.ts` + `migrations.int.test.ts` | образец — `0035_achievements` |
+| Каталог (3 кода, флаги `storyCard` и `seasonal`, иконки `trophy`/`medal`/`calendar`), `achievementKey`, `flashKey`, путь экрана | `apps/app/src/features/achievements/achievement-catalog.ts` | одна функция ключа для React, вспышки, `seen` и экрана |
 | Пометка по адресам | `queries.ts` (`useMarkAchievementsSeen` — цели `{ code, seasonId }`), `packages/api-client/src/index.ts` | — |
 | Экран и вспышка: «К сезону», без «Поделиться» | `achievement-screen.tsx`, `achievement-flash-screen.tsx`, `src/app/achievements/[code].tsx` (`?season=`) | `/seasons/<id>` уже есть |
 | Ключи плиток и переход | `achievements-block.tsx`, `features/profile/own-profile-screen.tsx` | — |
 | Строки | `packages/i18n/src/ru.ts` | en-словаря нет |
 
-**Запрещённые дубли:** второй расчёт отпечатка источника или мест сезона в `achievements` (только порт → `StandingsSource`,
-снимок); чтение `season_standing_rows` / `season_standings` / `seasons` / `races` из `achievements`; новый индекс
-`season_standing_rows` по `userId` (хватает `$in` по завершённым сезонам); вторая коллекция выдач; копия порога «3 гонки»
-в приложении (только `SEASON_REGULAR_MIN_RACES`); ключи React и `seen` по голому `code` в приложении.
+**Запрещённые дубли:**
+- второй расчёт отпечатка источника или мест сезона в `achievements` — только порт → `StandingsSource` и снимок;
+- чтение `season_standing_rows` / `season_standings` / `seasons` / `races` из `achievements`;
+- новый индекс `season_standing_rows` по `userId`;
+- второй писатель `achievement_season_grants` или второй маркер первой сверки;
+- поле `seasonId` в `achievement_grants`;
+- копия порога «3 гонки» в приложении — только `SEASON_REGULAR_MIN_RACES`;
+- ключи React и `seen` по голому `code` в приложении.
 
 ## 6. Relevant Files
 
@@ -163,11 +181,11 @@ API / контракты:
   `achievements.repository.ts`, `achievements.service.ts`, `achievements.controller.ts`, `achievements.module.ts`,
   `achievements-for-sharing.ts`, `achievements.int.test.ts`; `apps/api/src/modules/sharing/achievement-card.icons.ts`,
   `achievement-card.int.test.ts` (сезонный код → 409).
-- `apps/api/src/db/migrations/0043_achievements_seasonal.ts` (новая), `index.ts`, `migrations.int.test.ts`; образцы —
-  `0035_achievements.ts`, `0021_routes_rider.ts` (новый индекс → удаление старого).
+- `apps/api/src/db/migrations/0043_achievements_seasonal.ts` (новая, только expand), `index.ts`,
+  `migrations.int.test.ts`; образец — `0035_achievements.ts`.
 - Тестовые хелперы: `apps/api/test/standings.ts` (`seedSeason` — добавить даты, `seedProtocolRace`, `addRevision`,
   `syncStandings`), `apps/api/test/achievements.ts`.
-- Стирание: `apps/api/src/modules/achievements/achievement-erasure.ts` (без изменений, тест).
+- Стирание: `apps/api/src/modules/achievements/achievement-erasure.ts` (счётчик `seasonGrants`, тест).
 
 Приложение:
 - `apps/app/src/features/achievements/achievement-catalog.ts`, `.test.ts`, `queries.ts`, `queries.test.tsx`,
@@ -280,8 +298,9 @@ export interface RiderSeasonStandings {
 
 ```ts
 export type FactAchievementCode = Exclude<AchievementCode, SeasonalAchievementCode>;
+export const FACT_ACHIEVEMENT_CODES = ACHIEVEMENT_CODES.filter((c): c is FactAchievementCode => !isSeasonalCode(c));
 export const ACHIEVEMENT_RULES = { … } satisfies Record<FactAchievementCode, (facts: Sorted) => Earned | null>;
-// evaluateAchievements / progressOf обходят только !isSeasonalCode(code)
+// evaluateAchievements, progressOf, reconcilePlan обходят только FACT_ACHIEVEMENT_CODES (RC-S7)
 
 export const SEASONAL_RULES = {
   season_regular: (rows) => rows.some((r) => r.placedRaces >= SEASON_REGULAR_MIN_RACES),
@@ -289,68 +308,104 @@ export const SEASONAL_RULES = {
   season_champion: (rows) => rows.some((r) => r.placedRaces >= 1 && r.place === 1),         // RC-S1
 } satisfies Record<SeasonalAchievementCode, (rows: readonly RiderSeasonRow[]) => boolean>;
 
-export interface GrantKey { code: AchievementCode; seasonId: string | null }
-export const grantKey = (k: GrantKey): string => (k.seasonId === null ? k.code : `${k.code}:${k.seasonId}`);
-export type KeyedEarned = Earned & GrantKey;
+export interface SeasonalKey { code: SeasonalAchievementCode; seasonId: string }
+export const seasonalKey = (k: SeasonalKey) => `${k.code}:${k.seasonId}`;
+export interface SeasonalEarned extends SeasonalKey { factAt: Date; title: string }  // title — название сезона
 
-/** Сезонные (S1–S3): заработанные по `final` сезонам; `settled` — сезоны, где сверка вправе менять выдачи. */
+/** Сезонные (S1–S3): заработанные по `final`-сезонам; `settled` — сезоны, где сверка вправе менять выдачи. */
 export function seasonalAchievements(outcomes: readonly RiderSeasonOutcome[]): {
-  earned: Map<string, KeyedEarned>;   // объект { kind: 'season', id }, title — название, level: null,
-                                      // factAt = endsBefore − 1 мс (minskToday → endsOn; RC-S6)
-  settled: ReadonlySet<string>;       // seasonId со статусом final
-  titles: ReadonlyMap<string, string>;
+  earned: Map<string, SeasonalEarned>;   // factAt = endsBefore − 1 мс (minskToday → endsOn; RC-S6)
+  settled: ReadonlySet<string>;          // seasonId со статусом final
 };
 
-export function reconcilePlan(
-  stored: readonly StoredGrant[],                 // + seasonId?: string | null (≡ null)
-  earned: ReadonlyMap<string, KeyedEarned>,       // несезонные по code + сезонные по code:seasonId
-  settled: (key: GrantKey) => boolean,            // несезонные — true; сезонные — settled.has(seasonId)
+export interface StoredSeasonGrant extends SeasonalKey { factAt: Date; seenAt: Date | null; revokedAt: Date | null }
+export type SeasonalStep =
+  | { type: 'insert'; earned: SeasonalEarned; seenAt: Date | null }   // seenAt = first ? now : null (A3/S5)
+  | { type: 'restore'; key: SeasonalKey }                              // seenAt прежний (S4)
+  | { type: 'revoke'; key: SeasonalKey };
+
+/** План сезонной сверки: только ключи `settled`-сезонов; несеттлированные — ни вставки, ни отзыва (S2). Чистая. */
+export function seasonalPlan(
+  stored: readonly StoredSeasonGrant[],
+  earned: ReadonlyMap<string, SeasonalEarned>,
+  settled: ReadonlySet<string>,
   first: boolean,
   now: Date,
-): ReconcileStep[];                               // шаги несут GrantKey (code + seasonId)
+): SeasonalStep[];
 ```
 
-- План обходит объединение ключей `stored` ∪ `earned` в детерминированном порядке (каталог, затем `seasonId`).
-  Ключ с `!settled(key)` пропускается целиком: ни insert, ни revoke, ни refresh (S2). Остальные ветки — как сейчас
-  (`insert` с `seenAt = first ? now : null`; `restore`; `refresh` при другом объекте, дате или ранге; `revoke`).
-- **Обязательно (RC-S7):** текущий `byCode = new Map(stored.map(g => [g.code, g]))` схлопнет две выдачи
-  `season_podium` разных сезонов, а `ACHIEVEMENT_CODES` в цикле без фильтра отзовёт сезонные (по коду факта нет).
-  Индексировать только по `grantKey`.
-- `sortForList` — без изменений (дата факта ↓, каталог ↓). При порядке кодов из RC-S4 в одном сезоне сначала
-  «Чемпион», потом «Призёр», потом «В зачёте»; во вспышке (обратный порядок) — по нарастающей.
+- Обход — объединение ключей `stored` ∪ `earned` в детерминированном порядке: каталог, затем `seasonId`.
+- `refresh` у сезонных нет. Объект — сам сезон, а дата не меняется: у завершённого сезона даты менять нельзя
+  (`SEASON_FINISHED`), название не хранится.
+- `reconcilePlan` несезонных — прежний, обходит `FACT_ACHIEVEMENT_CODES` (RC-S7: иначе `ACHIEVEMENT_RULES[code]` для
+  сезонного кода — ошибка типов и мусорные шаги).
+- `sortForList` обобщается до `{ code, factAt }` и сортирует общий список. При порядке RC-S4 в одном сезоне первым
+  идёт «Чемпион», во вспышке (обратный порядок) — по нарастающей.
 
 ### 7.4 Коллекция, репозиторий, миграция
 
-- `AchievementGrantDoc.seasonId?: string | null` — у сезонных id сезона, у несезонных новых документов явный `null`, у
-  v1 поля нет. `listOf` — проекция `+ seasonId: 1`; `StoredGrantDoc` — `+ 'seasonId'`. Комментарий «≤ 9» → «≤ 9 +
-  3 × сезонов».
-- Фильтр каждой записи — `{ userId, code, seasonId: key.seasonId, … }` (`insertGrant`, `revoke`, `restoreOrRefresh`).
-  `{ seasonId: null }` совпадает с документами v1.
-- `ACHIEVEMENT_GRANTS_UNIQUE_INDEX = 'achievement_grants_user_code_season_unique'`.
-- `markSeen(userId, codes, seasonal, now)` — **одна** `updateMany` pipeline (как сейчас) с фильтром
-  `{ userId, revokedAt: null, $expr: …, $or: [ { code: { $in: codes }, seasonId: null }, ...seasonal.map(({ code, seasonId }) => ({ code, seasonId })) ] }`.
-  Пустые части в `$or` не попадают. Значения — примитивы после zod (`Uuid`, строгий enum), без объектов из запроса.
-- `deleteAllOf` — без изменений (`deleteMany({ userId })` берёт и сезонные; тест).
-- `0043_achievements_seasonal` (идемпотентна, без транзакции):
-  1. `createIndex({ userId: 1, code: 1, seasonId: 1 }, { name: 'achievement_grants_user_code_season_unique', unique: true })`
-     — у v1 и несезонных `seasonId` в индексе равен `null`, поэтому уникальность `(userId, code)` для них сохраняется.
-     Дублей в данных нет: старый уникальный индекс их не допускал.
-  2. Удалить `achievement_grants_user_code_unique`, если он есть (повторный `up` — без ошибки). **HG-S1.**
-  Порядок деплоя: миграции → API (AGENTS §4.6). До удаления старого индекса вставка второго `season_podium`
-  падала бы E11000 со старым именем, поэтому код без миграции не выкатывать (в `pr.md`).
-- `ACHIEVEMENTS_INDEXES` новой миграции экспортировать для `migrations.int.test.ts` (как в `0035`).
+```ts
+// achievements.collection.ts
+export const ACHIEVEMENTS_COLLECTIONS = {
+  grants: 'achievement_grants',
+  seasonGrants: 'achievement_season_grants',
+  syncs: 'achievement_syncs',
+} as const;
+
+/** Сезонная выдача (S3): один документ на `(userId, code, seasonId)` (уникальный индекс). Не append-only. */
+export interface AchievementSeasonGrantDoc {
+  _id: string;            // uuidv7
+  userId: string;
+  code: SeasonalAchievementCode;
+  seasonId: string;
+  factAt: Date;           // endsBefore − 1 мс
+  grantedAt: Date;
+  seenAt: Date | null;
+  revokedAt: Date | null;
+  updatedAt: Date;
+}
+```
+
+- Названия сезона и мест в документе нет: название берётся из порта при каждом ответе (S3), место не нужно.
+- `AchievementsRepository` — **единственный писатель** `achievement_grants`, `achievement_season_grants`,
+  `achievement_syncs`. Новые методы:
+  - `listSeasonalOf(userId)` — проекция без `_id`/`userId`, индекс по префиксу `userId`;
+  - `insertSeasonal(userId, earned, seenAt, now)` — дубль `achievement_season_grants_user_code_season_unique` → `false`;
+  - `revokeSeasonal(userId, key, now)` — `{ userId, code, seasonId, revokedAt: null }`;
+  - `restoreSeasonal(userId, key, now)` — `{ userId, code, seasonId, revokedAt: { $ne: null } }` → `revokedAt: null`;
+    `seenAt` и `grantedAt` не трогаются.
+  - Прежние методы `achievement_grants` не меняются.
+- `markSeen(userId, codes, seasonal, now)` — две независимые атомарные операции:
+  - `codes` непуст — прежняя pipeline-`updateMany` по `achievement_grants`;
+  - `seasonal` непуст — `updateMany({ userId, revokedAt: null, seenAt: null, $or: seasonal.map(({ code, seasonId }) => ({ code, seasonId })) }, { $set: { seenAt: now, updatedAt: now } })`.
+  - Значения в фильтре — примитивы после zod (`Uuid`, строгий enum). Сезонный код в `codes` совпадений в
+    `achievement_grants` не найдёт — записи нет.
+- `deleteAllOf(userId)` → `{ grants, seasonGrants, syncs }` — `deleteMany({ userId })` обеих коллекций, затем маркер.
+  Повтор даёт нули. `AchievementErasure` логирует новый счётчик.
+- **`0043_achievements_seasonal`** — только expand, идемпотентна, без транзакции, без бэкфилла:
+  `ensureCollection(achievement_season_grants)` + `createIndex({ userId: 1, code: 1, seasonId: 1 }, { name: 'achievement_season_grants_user_code_season_unique', unique: true })`.
+  - Префикс `userId` индекса покрывает список, «показано» и стирание.
+  - `ACHIEVEMENT_SEASON_INDEXES` экспортировать для `migrations.int.test.ts`, как в `0035`.
+  - `achievement_grants` и его индекс не трогаются.
 
 ### 7.5 Сервис
 
-- `sync`: `Promise.all([facts.evaluate, repository.listOf, repository.syncedAt])` →
-  `standings.outcomesOf(userId, seasonIdsOf(stored), now)` → `seasonalAchievements` → общая карта `earned`
-  (несезонные по `code` + сезонные) → `reconcilePlan(stored, earned, settled, first, now)` → шаги → маркер (если
-  `first`) → перечитанные видимые по `grantKey` ∩ `titled` → ответ. `titled` для сезонных — название из `Earned.title`
-  (сезон не гонка, `racesOf` не нужен). `seen` — `isSeen(grant, null)`.
-- `publicList`: к гоночным добавить сезонные по `final` из `outcomesOf(rider.userId, [], now)`, **без записи и без
-  чтения выдач**. Сезоны в `pending` в публичном ответе временно не видны (RC-S5).
-- `markSeen(userId, { codes, seasonal })` — лимит прежний, одна операция.
-- Лог `achievements.sync` — счётчики без кодов и сезонов (как сейчас).
+- `sync`:
+  1. Параллельно: `Promise.all([facts.evaluate, repository.listOf, repository.listSeasonalOf, repository.syncedAt])`.
+  2. `standings.outcomesOf(userId, seasonIdsOf(storedSeasonal), now)` → `seasonalAchievements`.
+  3. `reconcilePlan(...)` и `seasonalPlan(...)`; шаги выполняются по одному.
+  4. **После обеих групп шагов** — маркер, если `first`.
+  5. Перечитать обе коллекции (видимые).
+  6. Ответ: несезонные — как сейчас; сезонные — видимые ∩ заработанные по `final`-сезонам (S2):
+     `{ code, object: { kind: 'season', id: seasonId, title }, factDate: minskToday(factAt), level: null, seen: seenAt !== null }`.
+  7. Общая сортировка — `sortForList`.
+- Видимая сезонная выдача сезона в `pending` в ответе **есть**. Она не отозвана, название берётся из `title`
+  `pending`-исхода порта (порт отдаёт `title` и для `pending`). Иначе она мерцала бы минуту после каждой ревизии.
+- `publicList`: к гоночным добавить сезонные по `final` из `outcomesOf(rider.userId, [], now)` **без записи и без
+  чтения выдач** (RC-S5: сезоны в `pending` в публичном ответе временно не видны).
+- `markSeen(userId, { codes, seasonal })` — лимит прежний.
+- Лог `achievements.sync` — счётчики двух планов, без кодов и сезонов (например, `seasonal_granted`,
+  `seasonal_revoked`, `seasonal_restored`). Пишется, только если хотя бы один план не пуст.
 
 ### 7.6 Приложение
 
@@ -382,10 +437,10 @@ export function reconcilePlan(
 - [ ] `POST seen`: `strictObject`, `seasonal` ≤ 30, `seasonId` — `Uuid`, код — строгий enum сезонных, без повторов.
       В фильтр — только примитивы. Чужие, отозванные и незнакомые адреса — без записи и без ошибки.
 - [ ] Наружу — прежний явный список полей (`code`, `object{kind,id,title}`, `factDate`, `level`, свой — `seen`); id
-      сезона публичен (`/seasons/:id`). Без мест, очков и таблицы в ответе достижений; `userId` и `seasonId` выдачи
-      наружу не выходят иначе как `object.id`.
+      сезона публичен (`/seasons/:id`). Без мест, очков и таблицы в ответе достижений; `userId` и `_id` выдачи
+      наружу не выходят (сезон — только `object.id`).
 - [ ] Публично — только при `findPublic` (имя + согласие), иначе один 404. Сезонные — из протоколов (R9), без записи.
-- [ ] GET пишет ≤ 9 + 3 × сезонов документов (обновить формулировку правила). Логи — `uid` и счётчики; без кодов,
+- [ ] GET пишет ≤ 9 документов `achievement_grants` + ≤ 3 `achievement_season_grants` на завершённый сезон райдера (обновить формулировку правила). Логи — `uid` и счётчики; без кодов,
       сезонов, мест.
 - [ ] Карточка сторис: сезонный код → 409 (порт `null`), без рендера.
 
@@ -393,14 +448,14 @@ export function reconcilePlan(
 
 | Уровень | Что | AC |
 |---|---|---|
-| unit contracts | новые коды в конце; `kind: 'season'`; `'planet'` → `unknown`; `seen`: `{codes}` v1 валиден, `{seasonal}` валиден, `{}`/пустые → 400, лишний ключ → 400, несезонный код в `seasonal` → 400, повтор `(code, seasonId)` → 400, > 30 → 400 | AC6 |
-| unit policy | `SEASONAL_RULES`: место 1 / `=1` (tied) / 3 / 4; 2 vs 3 ячейки с местом; DQ не считаются; **строка только из DQ на месте 2 — не призёр** (RC-S1); «чемпион ⇒ призёр»; `seasonalAchievements`: `pending` → нет `earned`, не `settled`; `factAt` → `minskToday = endsOn`; `reconcilePlan`: две выдачи одного кода разных сезонов (не схлопываются); сезон не `settled` → ни insert, ни revoke; сезон `final` без строк → revoke; несезонные без изменений (регресс-набор прежних тестов зелёный) | AC1 |
-| int standings (реальная Mongo) | `outcomesOf`: незавершённый сезон — нет в ответе; завершённый + актуальный снимок → `final` с `placedRaces`; новая ревизия без пересчёта → `pending`, после `syncStandings` → `final`; гонка с коридором без протокола → `pending` (RC-S2), гонка-анонс (`corridor: null`) и отменённая не мешают; `alsoSeasonIds` без строк → `final`, `rows: []`; райдер без строк → `[]` (и число запросов: нет чтения источника — через шпион `StandingsSource.load`) | AC1, AC3 |
-| int achievements | AC2 целиком (чемпион A + призёр B → 2 × `season_podium`, 1 × `season_champion`; первая сверка тихая; новая после — `seen: false`; `seen` по `(code, seasonId)` помечает только её; `{codes:['season_podium']}` — 0 записей); AC3 (`addRevision` → `syncStandings` → отзыв молча → обратная ревизия → возврат `seen: true`); `pending` между ревизией и пересчётом — выдачи не меняются; AC4 (параллельные GET × 5 при первой выдаче сезонных — без 500 и дублей; `countDocuments` по ключу = 1); AC5 (публичный — сезонные есть, точный список ключей; непубличный — 404); AC6 (документ v1 без `seasonId`, вставленный напрямую, → прежний ответ; `{codes}` помечает его; нет дубля несезонного при параллельных GET после миграции); стирание — сезонные удалены | AC2–AC6 |
+| unit contracts | новые коды в конце (порядок RC-S4); `kind: 'season'`; `'planet'` → `unknown`; `seen`: `{codes}` v1 валиден, `{seasonal}` валиден, `{}` и пустые массивы → 400, лишний ключ → 400, несезонный код в `seasonal` → 400, повтор `(code, seasonId)` → 400, > 30 → 400 | AC6 |
+| unit policy | `SEASONAL_RULES`: место 1 / `=1` (tied) / 3 / 4; 2 vs 3 ячейки с местом; DQ не считаются; **строка только из DQ на месте 2 — не призёр** (RC-S1); чемпион ⇒ призёр. `seasonalAchievements`: `pending` → нет `earned`, сезон не `settled`; `factAt` → `minskToday = endsOn`. `seasonalPlan`: два ключа одного кода разных сезонов; сезон не `settled` → ни insert, ни revoke; `final` без строк → revoke; возврат → restore; первая сверка → insert с `seenAt`. `reconcilePlan` обходит только `FACT_ACHIEVEMENT_CODES` (регресс-набор прежних тестов зелёный) | AC1 |
+| int standings (реальная Mongo) | `outcomesOf`: незавершённый сезон — нет в ответе; завершённый + актуальный снимок → `final` с `placedRaces`; новая ревизия без пересчёта → `pending`, после `syncStandings` → `final`; гонка с коридором без протокола → `pending` (RC-S2), гонка-анонс (`corridor: null`) и отменённая не мешают; `alsoSeasonIds` без строк → `final`, `rows: []`; райдер без строк → `[]`, `StandingsSource.load` не вызывается (шпион) | AC1, AC3 |
+| int achievements | **AC2:** чемпион A + призёр B → 2 документа `season_podium` и 1 `season_champion` в `achievement_season_grants`; первая сверка тихая (маркер общий: тихо и для несезонных, и для сезонных); новая выдача после — `seen: false`; `seen` по `(code, seasonId)` помечает только её; `{codes:['season_podium']}` — 0 записей. **AC3:** `addRevision` → `syncStandings` → отзыв молча → обратная ревизия → возврат `seen: true`. `pending` между ревизией и пересчётом — выдачи не меняются, видимая остаётся в ответе. **AC4:** параллельные GET × 5 при первой выдаче — без 500 и дублей, `countDocuments` по ключу = 1. **AC5:** публичный — сезонные есть, точный список ключей; непубличный — 404. **AC6:** документ v1 `achievement_grants` → прежний ответ, `{codes}` работает, `achievement_grants` не получает сезонных документов. Стирание — обе коллекции и маркер (повтор → нули) | AC2–AC6 |
 | int sharing | `GET /v1/achievements/season_podium/story-card` при выданном → 409 | S7 |
-| int migrations | `0043`: новый уникальный есть, старого нет, повторный `up` без ошибки; v1-документ + вставка того же `(userId, code)` с `seasonId: null` → E11000; два `season_podium` разных сезонов вставляются | AC4, AC6 |
+| int migrations | `0043`: коллекция и уникальный индекс есть; повторный `up` без ошибки; индексы `achievement_grants` не изменились; дубль `(userId, code, seasonId)` → E11000; два `season_podium` разных сезонов вставляются | AC4, AC6 |
 | api-client | `markAchievementsSeen(t, codes)` шлёт `{codes}` без `seasonal`; с сезонными — оба поля; ответ с `kind: 'season'` и без сезонных разбирается | AC6, AC7 |
-| app unit (jest/RTL) | каталог: `achievementKey`/`flashKey` у сезонных с `object.id`; `flashQueue` — два `season_podium` разных сезонов оба в очереди; `flash-session` по новому ключу; `setSeen` по ключу (помечает только свой сезон, сохраняет `progress`); экран `?season=` находит нужный; вспышка/экран сезонного — «К сезону», без «Поделиться»; плитки без дубля ключей; публичный блок с сезонными; старый ответ без сезонных; ответ с незнакомым кодом не ломает | AC7 |
+| app unit (jest/RTL) | каталог: `achievementKey`/`flashKey` у сезонных с `object.id`; `flashQueue` — два `season_podium` разных сезонов оба в очереди; `flash-session` по новому ключу; `setSeen` по ключу (помечает только свой сезон, сохраняет `progress`); экран `?season=` находит нужный; вспышка и экран сезонного — «К сезону», без «Поделиться»; плитки без дубля ключей; публичный блок с сезонными; старый ответ без сезонных; незнакомый код не ломает экран | AC7 |
 | e2e web | не обязателен (существующий смоук `/profile`) | — |
 
 ## 8. Risks / Assumptions / Open Questions
@@ -412,67 +467,68 @@ export function reconcilePlan(
 
 ## 8.1 Requirements Consistency (architect)
 
-Решения S1–S8 сохраняются. RC-S1 и RC-S2 уточняют S1/S2 — причины указаны в пунктах (без уточнения возникают
-вредные исходы). Пункты на подтверждение человеку помечены (?), по умолчанию берётся рекомендация.
+Решения S1–S8 сохраняются. RC-S1 и RC-S2 уточняют S1/S2: без уточнения возникают вредные исходы. **Решения
+оркестратора (2026-10-31): HG-S1 — отдельная коллекция; RC-S1…RC-S4, RC-S7 — по рекомендации; остальные RC —
+приняты.**
 
-- **HG-S1 (?) — удаление старого уникального индекса (деструктивная операция с индексом, AGENTS §4.6 / db.md).**
-  Ключ `(userId, code, seasonId)` не работает, пока жив `achievement_grants_user_code_unique`: вторая выдача
-  `season_podium` упадёт с E11000. Варианты:
-  (a) `0043` создаёт новый индекс и удаляет старый в одном релизе. Данные не теряются, индекс восстановим. Образец —
-  `0021_routes_rider` (HG-1). Окно выката: старый процесс API ловит дубль по старому имени, поэтому параллельная
-  первая сверка в эти секунды может дать 500. Это редко и снимается повтором.
-  (b) Отдельная коллекция `achievement_season_grants` с уникальным `(userId, code, seasonId)` — чистый expand без
-  удаления. Но тогда второй писатель-метод на каждую операцию, два чтения в `listOf`, два `deleteMany`, а `markSeen`
-  перестаёт быть одной операцией.
-  (c) Два релиза (сначала индекс, потом удаление и код) — фича ждёт второго релиза, выигрыша нет.
-  **Рекомендация: (a)** с явным «да» человека в PR (`pr.md`: «миграция удаляет индекс»).
-- **RC-S1 (?) — строка только из DQ получает место (вредный исход S1 «место 1–3 в любой таблице»).** В снимке у
-  райдера, у которого все ячейки DQ, тоже есть `place`: его ставит порядок таблицы, `buildSeasonStandings` включает
-  строки «только DQ». В таблице из двух-трёх человек он станет «Призёром сезона» без единого финиша. Варианты:
-  (a) для «Чемпиона» и «Призёра» нужна хотя бы одна ячейка с местом (`placedRaces ≥ 1`); (b) как написано;
-  (c) `points > 0` — то же, что (a), но через очки (ячейка с местом всегда даёт ≥ 1 очка). **Рекомендация: (a).**
-- **RC-S2 (?) — «завершён» по датам раньше, чем готовы итоги (вредный исход S2).** Протокол — не раньше конца окна
-  + 48 ч (`races-and-seasons.md`), и окно последней гонки может закрыться в последний день сезона. На следующий день
-  после конца сезона снимок уже «актуален» (неопубликованные протоколы не входят в источник), хотя таблица неполная.
-  «Чемпион» вспыхнет и через пару дней молча исчезнет. Варианты:
-  (a) `final` = дата прошла **и** нет опубликованной гонки сезона с коридором без протокола (отменённые и
-  гонки-анонсы без коридора не мешают) — один запрос по `races` и только для нужных сезонов. Забытый протокол держит
-  сезон в `pending`, но это видно в «Обзоре» панели («ждут протокола»).
-  (b) Задержка: `endsBefore + 7 дней`. Число произвольное, `protocolPlannedAt` можно сдвигать позже.
-  (c) Как написано, неверную вспышку принять.
-  **Рекомендация: (a).** Записать в `profile.md` как уточнение S2.
-- **RC-S3 — «в зачёте» в S1 двусмысленно.** В рейтинге сезона «засчитанные» — это `counted` (N из M, сначала DQ). S1
-  уточняет: «ячейки строки с местом, не DQ». Реализация — `cell.outcome === 'placed'` независимо от `counted`, порт
-  отдаёт число `placedRaces`. Название `counted` в коде порта и политики не использовать.
-- **RC-S4 — порядок новых кодов.** `sortForList` при равной дате ставит коды по каталогу ↓. Порядок в
-  `ACHIEVEMENT_CODES`: `season_regular`, `season_podium`, `season_champion`. Тогда в профиле первым идёт «Чемпион», а
-  во вспышке — по нарастающей, как «Подиум» → «Победа» в v1. S1 («в конец») соблюдено.
-- **RC-S5 — публичный профиль в окне `pending`.** Публичный список считается без записи, поэтому сезонные сезона в
-  `pending` (обычно ≤ 1 мин после новой ревизии) на это время пропадают из публичного профиля. Варианты:
-  (a) принять; (b) в `pending` читать сохранённые выдачи — публичный ответ начнёт зависеть от приватного состояния
-  сверки, нужно ещё одно чтение. **Рекомендация: (a).**
-- **RC-S6 — дата факта.** `factAt = endsBefore − 1 мс`, тогда `minskToday` даёт `endsOn` (S3). Сезонные встают после
-  гонок сезона, `sameFact` стабилен. Отдельного поля даты нет.
-- **RC-S7 — обязательная правка плана.** `reconcilePlan` сейчас индексирует выдачи по `code` и обходит все
-  `ACHIEVEMENT_CODES`. С сезонными это схлопнет выдачи разных сезонов и отзовёт сезонные: среди фактов несезонных их
-  нет. Ключ — `grantKey`, плюс фильтр `settled` (7.3). Регресс-тесты прежнего плана должны остаться зелёными.
-- **RC-S8 (?) — «Сезон «Сезон 2026»».** S7 задаёт подпись объекта, но названия сезонов обычно уже содержат слово
-  «Сезон». Варианты: (a) как S7, единообразно с «Гонка «…»»; (b) только название; (c) «Сезон: {title}».
-  **Рекомендация: (a)** (решение автора S7, без новой логики).
-- **RC-S9 (?) — таблица из одного райдера.** Возрастная таблица с одним участником даёт «Чемпиона сезона» за одну
-  гонку. Это последовательно с v1 «Победа» (первое место в своей группе, A1). Варианты: (a) принять; (b) порог
-  «в таблице ≥ 3 райдеров» — новое правило, порт отдаёт `riders` таблицы. **Рекомендация: (a)**, пересмотреть по
-  данным.
-- **RC-S10 — первая сверка при `pending`.** Новый райдер, впервые открывший приложение, пока сезон в `pending`,
-  получит сезонные позже и со вспышкой (A3 нарушается на секунды-минуты). Принимается и фиксируется в ADR.
-- **RC-S11 — стоимость GET.** +2 запроса у райдера без сезонных итогов и +5 у райдера с ними (5). ADR-0020 «≤ ~10» →
-  «≤ ~15». Принимается. Новых индексов на `standings` нет.
-- **RC-S12 — `codes` в `seen` теперь необязателен.** Схема мягче: `{ codes }` старых сборок валиден, `{}` → 400.
-  Сезонный код в `codes` — без записи (как незнакомый), а не «все сезоны кода»: старые сборки сезонных не знают и не
-  шлют, новая адресует точно.
-- **Без находок:** append-only и аудит не задействованы; новых эндпоинтов, кодов ошибок и лимитов нет; outbox и очереди
-  не нужны (регламент `standings` уже пересчитывает снимок, сверка читает его на GET); серверный авторитет соблюдён
-  (клиент шлёт только адрес «показано»).
+- **HG-S1 — ключ выдачи с сезоном → решено: отдельная коллекция `achievement_season_grants`** (уточняет Scope API.3
+  «уникальный индекс расширяется»).
+  - Расширение индекса `achievement_grants` потребовало бы удалить `achievement_grants_user_code_unique` — это
+    деструктивная операция (AGENTS §4.6).
+  - Новая коллекция с уникальным `(userId, code, seasonId)` — чистый expand (`0043`). Документы v1 и индекс не
+    меняются.
+  - Цена — вторые методы репозитория, второе чтение в сверке, две операции в «показано» и `deleteMany` в стирании.
+    Писатель тот же, маркер общий.
+- **RC-S1 — принято: «Чемпион» и «Призёр» требуют финиша с местом** (`placedRaces ≥ 1`). В снимке у строки «только
+  DQ» тоже есть `place` — его ставит порядок таблицы. Без условия в маленькой таблице можно стать «Призёром сезона»
+  без единого финиша.
+- **RC-S2 — принято: `final` = дата прошла и нет опубликованной гонки сезона с коридором без протокола.**
+  Отменённые гонки и гонки-анонсы без коридора не мешают.
+  - Причина: протокол публикуется не раньше конца окна + 48 ч. По одной дате таблица на следующий день после конца
+    сезона была бы неполной — «Чемпион» вспыхнул бы и молча пропал.
+  - Забытый протокол держит сезон в `pending`. Это видно в «Обзоре» панели («ждут протокола»).
+- **RC-S3 — принято: «в зачёте» = ячейки с `outcome: 'placed'`**, независимо от `counted` (N из M). Порт отдаёт
+  `placedRaces`. Имя `counted` в коде порта и политики не использовать.
+- **RC-S4 — принято: порядок кодов `season_regular`, `season_podium`, `season_champion`** (в конец каталога). В
+  профиле первым идёт «Чемпион», во вспышке — по нарастающей.
+- **RC-S5 — принято: публичный профиль в окне `pending`.** Публичный список считается без записи и без чтения
+  выдач. Сезонные сезона в `pending` (обычно ≤ 1 мин после ревизии) на это время не видны публично. В своём списке
+  видимая выдача остаётся (7.5).
+- **RC-S6 — принято: `factAt = endsBefore − 1 мс`** (`minskToday` → `endsOn`, S3). Отдельного поля даты нет.
+- **RC-S7 — принято (обязательная правка): `reconcilePlan` и правила обходят только `FACT_ACHIEVEMENT_CODES`.**
+  Сезонные сверяются отдельным `seasonalPlan` по ключу `(code, seasonId)`. Регресс-тесты прежнего плана остаются
+  зелёными.
+- **RC-S8 — принято: «Сезон «Сезон 2026»»** — так в S7, единообразно с «Гонка «…»».
+- **RC-S9 — принято: таблица из одного райдера даёт «Чемпиона»** — последовательно с «Победой» v1 (первое место в
+  своей группе). Пересмотреть по данным.
+- **RC-S10 — принято: первая сверка при `pending`.** Новый райдер получит сезонные этого сезона позже и со вспышкой
+  (A3 нарушается на секунды-минуты). Фиксируется в ADR.
+- **RC-S11 — принято: стоимость GET** +3…6 запросов по индексам. Бюджет ADR-0020 «≤ ~10» → «≤ ~16». Новых индексов на
+  `standings` нет.
+- **RC-S12 — принято: `codes` в `seen` необязателен.** Схема мягче: `{ codes }` старых сборок валиден, `{}` → 400.
+  Сезонный код в `codes` — без записи, как незнакомый.
+- **Без находок:**
+  - append-only и аудит не задействованы;
+  - новых эндпоинтов, кодов ошибок и лимитов нет;
+  - outbox и очереди не нужны: регламент `standings` уже пересчитывает снимок, сверка читает его на GET;
+  - деструктивных миграций нет;
+  - серверный авторитет соблюдён: клиент шлёт только адрес «показано».
+
+## 8.2 Отклонения при реализации (coder, 2026-10-31)
+
+- **Имя пути экрана:** `achievementItemPath(item)` вместо `achievementPath(item)` (7.6) — имя `achievementPath(code)`
+  уже занято в `story/achievement-story.ts` (возврат «К достижению» карточки). Добавлен помощник `seasonOf(item)`
+  (сезон объекта для «К сезону»).
+- **Типы несезонных:** `AchievementObjectRef.kind` и `AchievementGrantDoc.object.kind` — без `'season'`;
+  `AchievementCardFacts.code` порта `ACHIEVEMENTS_FOR_SHARING` — `FactAchievementCode` (экспорт типа из
+  `achievements/index.ts` для `achievement-card.icons.ts`). Поведение порта прежнее, сезонный код → `null` (409).
+- **`markSeen`:** сезонные коды из `codes` отфильтровываются до pipeline по `achievement_grants` (по типу
+  `FactAchievementCode`); итог тот же — без записи.
+- **`sync`:** `titled` (названия гонок) и `outcomesOf` идут параллельно вторым шагом после `Promise.all` фактов, выдач и
+  маркера (7.5 п. 1–2) — запросов не больше.
+- **Тестовые хелперы:** `seedSeason(h, name, { year })` (2025 и раньше — завершённый для часов стенда),
+  `seedProtocolRace(…, { status, corridor })`.
+- **`pr.md`** (раздел 10, миграция `0043`) — не создан: шаг FINISH оркестратора.
 
 ## 9. Acceptance Criteria
 
@@ -492,58 +548,103 @@ export function reconcilePlan(
 
 ## 10. Documentation Impact
 
-- `docs/product/profile.md` — S1–S8 с уточнениями RC-S1 (нужен финиш с местом), RC-S2 (все гонки с коридором с
-  протоколом), RC-S3 («с местом» ≠ «засчитанные»); «Где в продукте — достижения» (сезонные в профиле и публично,
-  «К сезону», без «Поделиться»); в Out of Scope (~стр. 301) убрать «сезонные достижения».
-- `docs/adr/0020-achievements-reconcile-on-read.md` — «Дополнение: сезонные»: ключ выдачи `(userId, code, seasonId)` и
-  `0043` (новый индекс → удаление старого, HG-S1); факты — порт `standings` `RIDER_SEASON_STANDINGS` (снимок, без
-  пересчёта); `settled`-сезоны (`final`) — только в них сверка меняет сезонные; бюджет запросов ≤ ~15; RC-S10.
+- `docs/product/profile.md`:
+  - S1–S8 с принятыми уточнениями: RC-S1 (нужен финиш с местом), RC-S2 (все гонки с коридором с протоколом), RC-S3
+    («с местом» ≠ «засчитанные»), RC-S5;
+  - «Где в продукте — достижения»: сезонные в профиле и публично, «К сезону», без «Поделиться»;
+  - из Out of Scope (~стр. 301) убрать «сезонные достижения».
+- `docs/adr/0020-achievements-reconcile-on-read.md` — «Дополнение: сезонные»:
+  - отдельная коллекция `achievement_season_grants` (`(userId, code, seasonId)`, `0043`, только expand; почему не
+    расширение индекса — HG-S1);
+  - общий маркер ставится после выдач обеих коллекций;
+  - факты — порт `standings` `RIDER_SEASON_STANDINGS` (снимок, без пересчёта);
+  - только `final`-сезоны меняют выдачи (RC-S2);
+  - бюджет запросов ≤ ~16; RC-S10.
 - `docs/product/races-and-seasons.md` — в разделе рейтинга сезона ссылка: итоговый снимок даёт сезонные достижения.
-- `.claude/rules/pokatim-backend.md` — `achievements → standings` (порт `RIDER_SEASON_STANDINGS`, только
-  `AchievementsModule`); `SEASONAL_RULES`, `grantKey`, `settled`; `SeasonRaces.finishedSeasons/awaitingProtocol`,
-  `protocolRaces(seasonIds?)`, `StandingsSource.load(seasonIds?)`; карточка — сезонный код → 409.
-- `.claude/rules/pokatim-db.md` — `seasonId` выдачи (`null` / нет поля ≡ несезонная), индекс
-  `achievement_grants_user_code_season_unique` (`0043`, старый удалён), `markSeen` с `$or` адресов.
-- `.claude/rules/pokatim-contracts.md` — сезонные коды и порядок, `kind: 'season'`, `SEASON_REGULAR_MIN_RACES`,
-  `MarkAchievementsSeenRequest` `{ codes?, seasonal? }` и правило «`seasonal` клиент шлёт только непустым».
-- `.claude/rules/pokatim-security.md` — `seen` (`seasonal` ≤ 30), «GET пишет ≤ 9 + 3 × сезонов», публичные сезонные.
+- `.claude/rules/pokatim-backend.md`:
+  - ребро `achievements → standings` (порт `RIDER_SEASON_STANDINGS`, только `AchievementsModule`);
+  - `SEASONAL_RULES`, `seasonalAchievements`, `seasonalPlan`, `FACT_ACHIEVEMENT_CODES`;
+  - `SeasonRaces.finishedSeasons/awaitingProtocol`, `protocolRaces(seasonIds?)`, `StandingsSource.load(seasonIds?)`;
+  - карточка: сезонный код → 409.
+- `.claude/rules/pokatim-db.md`:
+  - `achievement_season_grants` (поля, уникальный индекс, `0043`, писатель — `AchievementsRepository`);
+  - `markSeen` — две операции;
+  - стирание — обе коллекции (раздел «Удаление аккаунта», шаг `achievements`).
+- `.claude/rules/pokatim-contracts.md`:
+  - сезонные коды и их порядок, `kind: 'season'`, `SEASON_REGULAR_MIN_RACES`;
+  - `MarkAchievementsSeenRequest` `{ codes?, seasonal? }` и правило «`seasonal` — только непустым».
+- `.claude/rules/pokatim-security.md` — `seen` (`seasonal` ≤ 30); «GET пишет ≤ 9 документов + 3 на завершённый сезон
+  райдера»; публичные сезонные.
 - `.claude/rules/pokatim-app.md` — `achievementKey`/`flashKey` (код + объект для сезонных), `storyCard`, «К сезону»,
   `?season=`.
-- `pr.md` — миграция `0043` (удаляет индекс, HG-S1; деплой: миграции до API).
+- `pr.md` — миграция `0043` (только expand: новая коллекция и индекс; деплой — миграции до API).
 
 ## 11. Implementation Context
 
-ENTRY POINTS: `GET /v1/achievements` (`AchievementsController.list` → `AchievementsService.sync`), `POST
-/v1/achievements/seen`, `GET /v1/riders/:publicId/achievements` (`publicList`), `GET /v1/achievements/:code/story-card`
-(отказ для сезонных), порт `RIDER_SEASON_STANDINGS.outcomesOf`; app `/profile`, `/achievements/flash`,
-`/achievements/<code>?season=`, `/riders/<id>`.
+ENTRY POINTS:
+- API: `GET /v1/achievements` (`AchievementsController.list` → `AchievementsService.sync`), `POST
+  /v1/achievements/seen`, `GET /v1/riders/:publicId/achievements` (`publicList`), `GET
+  /v1/achievements/:code/story-card` (отказ для сезонных), порт `RIDER_SEASON_STANDINGS.outcomesOf`.
+- Приложение: `/profile`, `/achievements/flash`, `/achievements/<code>?season=`, `/riders/<id>`.
 
 FILES TO MODIFY / READ / TYPES & SCHEMAS — разделы 5.1, 6, 7. TESTS — 7.8.
 
-OUT OF SCOPE — раздел 4, а также: регламент `standings.sync` и формула (`STANDINGS_FORMULA_VERSION` не меняется),
-индексы `standings`, `renderVersion` карточек, en-словарь, push, ручная выдача.
+OUT OF SCOPE — раздел 4, а также:
+- `achievement_grants` и его индекс;
+- регламент `standings.sync` и формула (`STANDINGS_FORMULA_VERSION` не меняется), индексы `standings`;
+- `renderVersion` карточек, en-словарь, push, ручная выдача.
 
 Порядок TDD (один PR, коммиты по шагам; в конце `pnpm check` зелёный):
 
 1. **Contracts** — красные тесты схемы (7.1, 7.8) → коды (порядок RC-S4), `SEASONAL_*`, `isSeasonalCode`,
    `SEASON_REGULAR_MIN_RACES`, `kind: 'season'`, `SeasonalAchievementRef`, новый `MarkAchievementsSeenRequest`;
-   `index.ts`. Типовые ошибки в `ACHIEVEMENT_RULES`, `ACHIEVEMENT_BADGE_ICONS`, `ACHIEVEMENT_CATALOG` закрыть на шагах 3,
-   6, 8 (на этом шаге — минимально, чтобы собиралось).
-2. **Races/Standings port** — красный `rider-season-standings.int.test.ts` (7.8) → `SeasonRaces.finishedSeasons`,
+   `index.ts`. Типовые ошибки в `ACHIEVEMENT_RULES`, `ACHIEVEMENT_BADGE_ICONS`, `ACHIEVEMENT_CATALOG` закрываются на
+   шагах 3, 6 и 8 (здесь — минимально, чтобы собиралось).
+2. **Races/Standings port** — красный `rider-season-standings.int.test.ts` → `SeasonRaces.finishedSeasons`,
    `awaitingProtocol`, `protocolRaces(seasonIds?)`; `StandingsRepository.rowsOfUserIn`, `headersOf`;
-   `StandingsSource.load(seasonIds?)` (+ правка вызовов в `standings-recalc.ts`, `standings-read.service.ts`; регресс
+   `StandingsSource.load(seasonIds?)` (+ вызовы в `standings-recalc.ts` и `standings-read.service.ts`; регресс
    `standings-*.int.test.ts` зелёный); порт и реализация в `StandingsCoreModule`, экспорт `index.ts`.
-3. **Policy** — красные тесты (RC-S1, RC-S3, RC-S6, RC-S7) → `FactAchievementCode`, `SEASONAL_RULES`,
-   `seasonalAchievements`, `grantKey`, `reconcilePlan` по ключу с `settled`.
-4. **Migration** — красный тест `0043` → миграция + `index.ts` (HG-S1 в `pr.md`).
-5. **Repository** — `seasonId` в документе и фильтрах, `listOf`, новое имя индекса, `markSeen` с адресами.
-6. **Service/Module/Controller** — `AchievementsModule` + `StandingsCoreModule`; `sync`, `publicList`, `markSeen`;
-   `achievements-for-sharing` (сезонный → `null`), `achievement-card.icons.ts` (`FactAchievementCode`). Int-тесты AC2–AC6,
-   стирание, sharing 409 — сначала красные.
+3. **Policy** — красные тесты (RC-S1, RC-S3, RC-S6, RC-S7) → `FACT_ACHIEVEMENT_CODES`, `SEASONAL_RULES`,
+   `seasonalAchievements`, `seasonalPlan`; `reconcilePlan` и `evaluateAchievements` — только по fact-кодам.
+4. **Migration** — красный тест `0043` → миграция только expand (`achievement_season_grants` + уникальный индекс) и
+   `index.ts`.
+5. **Collection/Repository** — `AchievementSeasonGrantDoc`, `listSeasonalOf`, `insertSeasonal`, `revokeSeasonal`,
+   `restoreSeasonal`, `markSeen` с адресами (две операции), `deleteAllOf` обеих коллекций; `AchievementErasure` — новый
+   счётчик.
+6. **Service/Module/Controller** — `AchievementsModule` + `StandingsCoreModule`; `sync` (маркер после обоих планов),
+   `publicList`, `markSeen`; `achievements-for-sharing` (сезонный код → `null`), `achievement-card.icons.ts`
+   (`FactAchievementCode`). Int-тесты AC2–AC6, стирание и 409 в sharing — сначала красные.
 7. **api-client** — `markAchievementsSeen(t, codes, seasonal = [])` + тест.
-8. **i18n + App каталог/сессия/queries** — тесты `achievement-catalog.test.ts`, `flash-session.test.ts`,
+8. **i18n + каталог, сессия и queries приложения** — тесты `achievement-catalog.test.ts`, `flash-session.test.ts`,
    `queries.test.tsx` → каталог (3 кода, флаги), `achievementKey`, `flashKey`, `achievementPath`, `seenTarget`,
    мутация по целям.
-9. **App UI** — экран (`?season=`, «К сезону»), вспышка (без «Поделиться», «К сезону»), плитки по ключу, профиль
-   (переход), публичный блок; сторис-экран с сезонным кодом — «нет карточки». RTL-тесты (AC7).
+9. **UI приложения** — экран (`?season=`, «К сезону»), вспышка (без «Поделиться», с «К сезону»), плитки по ключу,
+   переход из профиля, публичный блок; экран сторис с сезонным кодом — «нет карточки». RTL-тесты (AC7).
 10. **Документы** — раздел 10; `pnpm check`.
+
+## 12. Outcome
+
+- **Статус:** реализовано по разделам 5–7 и 8.1; отклонения — 8.2. `pnpm check` зелёный (15/15 задач turbo; API —
+  217 файлов, 2404 теста), локальный Mongo/Redis (27117/6479).
+- **Контракты:** коды `season_regular`, `season_podium`, `season_champion` (в конец), `SEASONAL_ACHIEVEMENT_CODES`,
+  `isSeasonalCode`, `SEASON_REGULAR_MIN_RACES`, вид `season`, `SeasonalAchievementRef`, `MarkAchievementsSeenRequest
+  { codes?, seasonal? }`; api-client `markAchievementsSeen(t, codes, seasonal = [])`.
+- **API:** порт `RIDER_SEASON_STANDINGS` (`standings/rider-season-standings*.ts`), `SeasonRaces.finishedSeasons`,
+  `awaitingProtocol`, `protocolRaces(seasonIds?)`, `StandingsSource.load(seasonIds?)`, `StandingsRepository
+  .rowsOfUserIn/headersOf`; политика `FACT_ACHIEVEMENT_CODES`, `SEASONAL_RULES`, `seasonalAchievements`,
+  `seasonalPlan`; коллекция `achievement_season_grants` + миграция `0043_achievements_seasonal` (только expand);
+  репозиторий (сезонные методы, `markSeen` двумя операциями, стирание обеих коллекций); сервис (`sync`, `publicList`,
+  `markSeen`), карточка — сезонный код → 409.
+- **Приложение:** каталог (3 кода, флаги `storyCard`/`seasonal`), `achievementKey`, `flashKey`, `seenTarget`,
+  `achievementItemPath`; мутация `seen` по адресам; экран (`?season=`, «К сезону»), вспышка (без «Поделиться», «К
+  сезону»), плитки по ключу, публичный блок; карточка сезонного по прямому адресу — «Карточки нет» без запроса; i18n.
+- **Тесты:** contracts (схема `seen`, порядок кодов, `season`/`unknown`); policy unit (RC-S1, RC-S3, RC-S6, RC-S7,
+  план); int `rider-season-standings` (final/pending, RC-S2, `alsoSeasonIds`, без чтения источника); int achievements
+  AC1–AC6 (две выдачи `season_podium` + `season_champion`, тихая первая, `seen` по `(code, seasonId)`, отзыв/возврат,
+  `pending` без изменений, параллельные GET ×5, публичный, документ v1); стирание обеих коллекций; sharing 409;
+  миграция `0043`; api-client; app — каталог, flash-session, queries, RTL экрана, вспышки, блоков и карточки.
+- **Отрицательное доказательство AC4:** без перехвата `isDuplicateKey` в `insertSeasonal` параллельный GET ×5 краснеет
+  (500), с перехватом — зелёный.
+- **Документы:** `docs/product/profile.md` (S1–S8, «Где в продукте», Follow-up), ADR-0020 «Дополнение: сезонные»,
+  `docs/product/races-and-seasons.md`, `.claude/rules/pokatim-{backend,db,contracts,security,app}.md`.
+- **Не сделано:** `pr.md` (FINISH); e2e web не запускался (не обязателен).

@@ -178,9 +178,9 @@ paths:
   `TrackMapRun`/`ATTEMPT_TRACK_MARKS` (импорт, не копии); дельты — знаковые целые. Коды `ROUTE_RIDE_NOT_READY`,
   `ROUTE_RIDE_UPLOAD_FAILED`, `ROUTE_RIDE_QUOTA_EXCEEDED` (409) — в конце `ErrorCode`. api-client — `listRouteRides`,
   `listRouteRideCandidates`, `checkRouteRide`, `getRouteRide`, `getRouteRideTrack` (явный access-токен).
-- Достижения (achievements, ADR-0020): `src/achievements/achievement.schema.ts` — `ACHIEVEMENT_CODES` (каталог v1, 9
-  кодов, **только в конец**), `ACHIEVEMENT_OBJECT_KINDS` (`race | route | ride`), запрос `AchievementCode` (строгий
-  `z.enum`) и `MarkAchievementsSeenRequest` (`strictObject`, 1–9 кодов без повторов → `INVALID`); ответы `Achievement`
+- Достижения (achievements, ADR-0020): `src/achievements/achievement.schema.ts` — `ACHIEVEMENT_CODES` (каталог, **только в
+  конец**), `ACHIEVEMENT_OBJECT_KINDS` (`race | route | ride | season`), запрос `AchievementCode` (строгий `z.enum`) и
+  `MarkAchievementsSeenRequest` (`strictObject`, без повторов → `INVALID`); ответы `Achievement`
   / `AchievementList` (`code`, `object.kind` — `tolerantEnum`; `factDate` — `LocalDate`, без времени суток, RC-7) и
   `PublicRiderAchievement(List)` (без `seen`). RC-8: незнакомый код в старой сборке — `'unknown'`; приложение такие
   элементы отбрасывает (пометить `seen` их нельзя). Уровни (achievements-levels): `ACHIEVEMENT_LEVELS`
@@ -188,8 +188,14 @@ paths:
   для API, карточки и приложения; выпущенные не меняются, новый уровень — в конец), `LeveledAchievementCode`,
   `isLeveledCode`; `level` — `tolerantEnum(...).nullable().default(null)` (старый API без поля → `null`),
   `AchievementList.progress` — `AchievementProgress[]` с `.default([])`; в публичной схеме `progress` нет;
-  `MarkAchievementsSeenRequest` не меняется. Новых кодов ошибок нет. api-client — `listAchievements(token)`,
-  `markAchievementsSeen(token, codes)` (204), `getRiderAchievements(publicId)` (публичный).
+  Новых кодов ошибок нет. Сезонные (achievements-seasonal): коды `season_regular`, `season_podium`,
+  `season_champion` — в конец каталога в этом порядке (RC-S4), `SEASONAL_ACHIEVEMENT_CODES`, `SeasonalAchievementCode`,
+  `isSeasonalCode`, `SEASON_REGULAR_MIN_RACES` (3 — одна константа для API и приложения), вид объекта `season` (в конец
+  `ACHIEVEMENT_OBJECT_KINDS`); нового поля в `Achievement` нет — сезон адресуется `object.id`. `MarkAchievementsSeenRequest`
+  — `strictObject { codes?, seasonal? }` (`.default([])`, хотя бы один адрес — иначе `REQUIRED` на `codes`; `seasonal` —
+  `SeasonalAchievementRef[]` ≤ `SEASONAL_SEEN_MAX` (30), без повторов `(code, seasonId)`); `{ codes }` старых сборок
+  валиден. api-client — `listAchievements(token)`, `markAchievementsSeen(token, codes, seasonal = [])` (204; `seasonal`
+  уходит только непустым — старый API ответил бы 400), `getRiderAchievements(publicId)` (публичный).
 - Билеты (event-tickets, ADR-0023): `src/tickets/ticket.schema.ts` — `TICKET_EVENT_KINDS`, `TICKET_STATUSES`
   (`event_cancelled` вычисляет сервер), `EVENT_REGISTRATION_CLOSED_REASONS` — только в конец; `TicketCode` (ввод:
   `normalizeTicketCode` — верхний регистр, без `-`, `I/L→1`, `O→0`; показ — `formatTicketCode`), `TicketQrPayload`

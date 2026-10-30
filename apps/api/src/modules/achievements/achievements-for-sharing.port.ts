@@ -1,5 +1,7 @@
 import type { AchievementCode, AchievementLevel, AchievementObjectKind } from '@pokatim/contracts';
 
+import type { FactAchievementCode } from './achievements.policy';
+
 /**
  * Порт `achievements` для модуля `sharing` (карточка достижения, ADR-0018, через `modules/achievements/index.ts`):
  * своё **полученное** достижение — видимое в своём списке. `sharing` коллекций достижений не читает.
@@ -11,7 +13,8 @@ export const ACHIEVEMENTS_FOR_SHARING = Symbol('ACHIEVEMENTS_FOR_SHARING');
  * разовые — `null`).
  */
 export interface AchievementCardFacts {
-  code: AchievementCode;
+  /** у сезонных карточки нет (S7) */
+  code: FactAchievementCode;
   object: { kind: AchievementObjectKind; id: string; title: string };
   factDate: string;
   level: AchievementLevel | null;
@@ -20,7 +23,7 @@ export interface AchievementCardFacts {
 export interface AchievementsForSharing {
   /**
    * Своё достижение: факт есть сейчас **и** выдача записана и не отозвана (как список `GET /v1/achievements`); иначе
-   * `null`. Только чтение — сверку и выдачу пишет `GET /v1/achievements`.
+   * `null`; сезонный код — всегда `null` (карточки нет, S7). Только чтение — сверку и выдачу пишет `GET /v1/achievements`.
    */
   cardFacts(userId: string, code: AchievementCode): Promise<AchievementCardFacts | null>;
 }

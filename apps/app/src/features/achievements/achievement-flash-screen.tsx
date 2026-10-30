@@ -8,7 +8,15 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DocumentTitle } from '@/components/document-title';
-import { flashKey, flashQueue, isLevelUp, type KnownAchievement } from './achievement-catalog';
+import {
+  catalogEntry,
+  flashKey,
+  flashQueue,
+  isLevelUp,
+  seasonOf,
+  seenTarget,
+  type KnownAchievement,
+} from './achievement-catalog';
 import { AchievementCard, AchievementCardSkeleton } from './achievement-card';
 import { closePresented, hiddenKeys, markShown, openPresented } from './flash-session';
 import { ACHIEVEMENTS_KEY, useAchievements, useMarkAchievementsSeen } from './queries';
@@ -34,8 +42,9 @@ function FlashShell({ children }: { children: ReactNode }) {
  * — снимок при открытии (неувиденные, не показанные в этом запуске, от старых к новым): пометки `seen` и перезапросы
  * её не меняют; весь снимок отмечается в `flash-session` — уход «назад» или через «Поделиться» посреди очереди не
  * открывает вспышку снова до нового ответа сервера. Показанное помечается сразу (`POST seen`). «Дальше» — следующее,
- * на последнем — «Закрыть»; «Поделиться» → карточка достижения для сторис (вместо вспышки). Повышение уровня (серебро,
- * золото) — заголовок «Новый уровень» (L6), ключ сессии — `code:level` (RC-L4).
+ * на последнем — «Закрыть»; «Поделиться» → карточка достижения для сторис (вместо вспышки; у сезонных карточки нет —
+ * кнопки нет, S7); сезонное — «К сезону» → `/seasons/<id>` (вместо вспышки). Повышение уровня (серебро, золото) —
+ * заголовок «Новый уровень» (L6), ключ сессии — `flashKey` (ключ элемента и уровень, RC-L4).
  *
  * Открыта по адресу без данных (обновление страницы web, холодный старт по ссылке): скелетон карточки, ошибка и
  * офлайн — `AsyncContent` с повтором и «Закрыть» сверху (§4.12). Очереди нет — назад или на Главную.
@@ -68,14 +77,16 @@ export function AchievementFlashScreen() {
 
   const queue = snapshot?.queue ?? null;
   const current = queue?.[index];
-  const code = current?.code;
-  // ключ сессии — код и уровень (RC-L4); `POST seen` — по коду
+  // ключ сессии — ключ элемента и уровень (RC-L4); `POST seen` — по адресу (сезонные — код и сезон)
   const key = current ? flashKey(current) : undefined;
+  const target = current ? seenTarget(current) : undefined;
+  const targetCode = target?.code;
+  const targetSeason = target?.seasonId ?? null;
   useEffect(() => {
-    if (!code || !key) return;
+    if (!targetCode || !key) return;
     markShown(key);
-    mutate([code]);
-  }, [code, key, mutate]);
+    mutate([{ code: targetCode, seasonId: targetSeason }]);
+  }, [targetCode, targetSeason, key, mutate]);
 
   const empty = queue !== null && !current;
   useEffect(() => {
@@ -102,6 +113,7 @@ export function AchievementFlashScreen() {
   if (!current) return router.canGoBack() ? null : <Redirect href="/" />;
 
   const last = index === queue.length - 1;
+  const seasonId = seasonOf(current);
 
   return (
     <FlashShell>
@@ -116,11 +128,20 @@ export function AchievementFlashScreen() {
         ) : null}
       </View>
       <AchievementCard key={flashKey(current)} item={current} animated>
-        <Button
-          variant="secondary"
-          label={t('achievements.share')}
-          onPress={() => router.replace(achievementStoryPath(current.code))}
-        />
+        {catalogEntry(current.code).storyCard ? (
+          <Button
+            variant="secondary"
+            label={t('achievements.share')}
+            onPress={() => router.replace(achievementStoryPath(current.code))}
+          />
+        ) : null}
+        {seasonId !== null ? (
+          <Button
+            variant="secondary"
+            label={t('achievements.toSeason')}
+            onPress={() => router.replace(`/seasons/${seasonId}`)}
+          />
+        ) : null}
         {last ? (
           <Button label={t('achievements.close')} onPress={close} />
         ) : (

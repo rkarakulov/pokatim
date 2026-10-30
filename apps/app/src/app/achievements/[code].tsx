@@ -4,11 +4,11 @@ import { AchievementScreen } from '@/features/achievements/achievement-screen';
 import { useSettingsShell } from '@/features/devices/settings-shell';
 
 /**
- * Своё достижение (`/achievements/<code>`, achievements): вход — блок «Достижения» профиля; только вошедшим. Оболочка —
+ * Своё достижение (`/achievements/<code>`, сезонное — `?season=<id>`, achievements): вход — блок «Достижения» профиля; только вошедшим. Оболочка —
  * как у `/profile` (`useSettingsShell`): до восстановления сессии — скелетон или ошибка с повтором, без запроса.
  */
 export default function AchievementRoute() {
-  const { code } = useLocalSearchParams<{ code: string }>();
+  const { code, season } = useLocalSearchParams<{ code: string; season?: string }>();
   const shell = useSettingsShell();
-  return shell ?? <AchievementScreen code={String(code)} />;
+  return shell ?? <AchievementScreen code={String(code)} season={season ? String(season) : null} />;
 }

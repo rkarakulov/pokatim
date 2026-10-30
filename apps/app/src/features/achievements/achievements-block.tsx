@@ -8,6 +8,7 @@ import { loading, TabFailure, type TabQuery } from '@/features/races/results-tab
 
 import {
   achievementA11y,
+  achievementKey,
   achievementTitle,
   knownItems,
   publicItems,
@@ -89,7 +90,7 @@ export function AchievementsBlock({
 }: {
   query: TabQuery & { data: { items: readonly PublicRiderAchievement[] } | undefined };
   onPress?: (item: KnownAchievement<PublicRiderAchievement>) => void;
-  /** публичный профиль: только гоночные (A7) */
+  /** публичный профиль: только гоночные и сезонные (A7, S6) */
   publicOnly?: boolean;
   testID: string;
 }) {
@@ -114,7 +115,7 @@ export function AchievementsBlock({
       ) : (
         <View style={styles.grid}>
           {items.map((item) => (
-            <Tile key={item.code} item={item} {...(onPress ? { onPress } : {})} />
+            <Tile key={achievementKey(item)} item={item} {...(onPress ? { onPress } : {})} />
           ))}
         </View>
       )}

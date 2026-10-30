@@ -6,6 +6,7 @@ import { ProfileCoreModule } from '../profile';
 import { ResultsCoreModule } from '../results';
 import { RidesCoreModule } from '../rides';
 import { RouteRidesCoreModule } from '../route-rides';
+import { StandingsCoreModule } from '../standings';
 import { AchievementErasure } from './achievement-erasure';
 import { AchievementFactsReader } from './achievement-facts.reader';
 import { AchievementsSharing } from './achievements-for-sharing';
@@ -42,7 +43,8 @@ export class AchievementsReadModule {}
 /**
  * Достижения райдера (ADR-0020) — модуль-композиция (образец `riders` + `standings`): факты — только порты через
  * `index.ts` (`results` `RIDER_RESULTS`, `route-rides` `RIDER_ROUTE_RIDES`, `rides` `RIDER_RIDES`, `profile`
- * `RIDER_PROFILES`; факты — `AchievementsReadModule`); своя коллекция выдач. Worker-модуля, очередей и outbox нет (A2). `achievements` импортируют
+ * `RIDER_PROFILES`, `standings` `RIDER_SEASON_STANDINGS` — сезонные; факты — `AchievementsReadModule`); свои коллекции
+ * выдач. Worker-модуля, очередей и outbox нет (A2). `achievements` импортируют
  * только `AppModule` (`AchievementsModule`) и `AccountWorkerModule` (`AchievementsCoreModule`, стирание).
  */
 @Module({
@@ -50,6 +52,7 @@ export class AchievementsReadModule {}
     IdentityModule,
     ProfileCoreModule,
     ResultsCoreModule,
+    StandingsCoreModule,
     AchievementsCoreModule,
     AchievementsReadModule,
   ],

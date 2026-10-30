@@ -16,7 +16,14 @@ import { createHarness, type Harness } from '../../../test/harness';
 import { bearer, call } from '../../../test/identity';
 import { catalogCorridorRoute, ownCorridorRoute } from '../../../test/route-rides';
 import { authed, rider, type Rider } from '../../../test/rides';
-import { addRevision, dqRow, placedRow, seedSeason } from '../../../test/standings';
+import {
+  addRevision,
+  dqRow,
+  placedRow,
+  seedProtocolRace,
+  seedSeason,
+  syncStandings,
+} from '../../../test/standings';
 import { QUEUE } from '../../queues';
 import { ACHIEVEMENTS_FOR_SHARING, type AchievementsForSharing } from '../achievements';
 import { AchievementCardInputs } from './achievement-card.inputs';
@@ -124,6 +131,19 @@ describe('отказы (AC1)', () => {
     await raceAt(h, season, [placedRow(me.userId, 1)], daysAgo(h, 3));
     const res = await authed(h, me, 'GET', cardUrl('race_win'));
     expect(res.status).toBe(409);
+  });
+
+  it('сезонное достижение (выдано) — 409, без задачи (S7: карточки у сезонных нет)', async () => {
+    const season = await seedSeason(h, 'Сезон 2025', { year: 2025 });
+    await seedProtocolRace(h, season, [placedRow(me.userId, 1)]);
+    await syncStandings(h);
+    expect(await sync(me)).toContain('season_podium');
+    for (const code of ['season_podium', 'season_champion']) {
+      const res = await authed(h, me, 'GET', cardUrl(code));
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ code: 'STORY_CARD_UNAVAILABLE' });
+    }
+    expect(await jobs()).toHaveLength(0);
   });
 
   it('отозванное (DQ новой ревизией) — 409', async () => {

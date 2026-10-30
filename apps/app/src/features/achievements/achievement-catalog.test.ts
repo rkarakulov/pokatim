@@ -4,9 +4,12 @@ import type { Achievement } from '@pokatim/contracts';
 import {
   achievementA11y,
   achievementCondition,
+  achievementItemPath,
+  achievementKey,
   achievementObjectText,
   achievementTitle,
   badgeCount,
+  catalogEntry,
   displayLevel,
   factDateText,
   flashKey,
@@ -15,6 +18,7 @@ import {
   knownItems,
   levelLabel,
   publicItems,
+  seenTarget,
   shareRaceId,
 } from './achievement-catalog';
 
@@ -191,5 +195,100 @@ describe('publicItems (A7, LOW-2 ревью)', () => {
       item({ code: 'races_5' }),
     ]);
     expect(publicItems(items).map((a) => a.code)).toEqual(['race_podium', 'races_5']);
+  });
+});
+
+const SEASON_A = '0190a6f4-0000-7000-8000-000000000401';
+const SEASON_B = '0190a6f4-0000-7000-8000-000000000402';
+const seasonal = (
+  code: 'season_regular' | 'season_podium' | 'season_champion',
+  seasonId: string,
+  overrides: Partial<Achievement> = {},
+): Achievement =>
+  item({
+    code,
+    object: { kind: 'season', id: seasonId, title: 'Сезон 2025' },
+    factDate: '2025-10-31',
+    ...overrides,
+  });
+
+describe('сезонные (achievements-seasonal, S1, S3, S7)', () => {
+  it('каталог: три кода — публичные, без «Сторис результата» и карточки, флаг `seasonal`', () => {
+    for (const code of ['season_regular', 'season_podium', 'season_champion'] as const) {
+      expect(catalogEntry(code)).toMatchObject({
+        shareable: false,
+        public: true,
+        storyCard: false,
+        seasonal: true,
+      });
+    }
+    expect(catalogEntry('race_win')).toMatchObject({ storyCard: true, seasonal: false });
+    expect(catalogEntry('season_champion').icon).toBe('trophy');
+    expect(catalogEntry('season_podium').icon).toBe('medal');
+    expect(catalogEntry('season_regular').icon).toBe('calendar');
+  });
+
+  it('названия и условия; «Сезон в зачёте» — порог из контрактов', () => {
+    expect(achievementTitle('season_champion')).toBe('Чемпион сезона');
+    expect(achievementTitle('season_podium')).toBe('Призёр сезона');
+    expect(achievementCondition('season_regular', null)).toBe(
+      'Финиш с местом в 3 гонках одной таблицы сезона',
+    );
+    expect(achievementCondition('season_podium', null)).toBe(
+      'Место с первого по третье в таблице сезона',
+    );
+  });
+
+  it('объект — «Сезон «…»»; подпись a11y', () => {
+    expect(achievementObjectText({ kind: 'season', id: SEASON_A, title: 'Сезон 2025' })).toBe(
+      'Сезон «Сезон 2025»',
+    );
+    const [known] = knownItems([seasonal('season_champion', SEASON_A)]);
+    expect(achievementA11y(known!)).toBe(
+      'Достижение «Чемпион сезона»: Сезон «Сезон 2025», 31 октября 2025',
+    );
+  });
+
+  it('ключи: код + сезон у сезонных, код — у прочих; flashKey — с уровнем', () => {
+    expect(achievementKey(seasonal('season_podium', SEASON_A))).toBe(`season_podium:${SEASON_A}`);
+    expect(achievementKey(item({ code: 'race_win' }))).toBe('race_win');
+    expect(flashKey(seasonal('season_podium', SEASON_A))).toBe(`season_podium:${SEASON_A}:`);
+    expect(flashKey(item({ code: 'races_5', level: 'gold' }))).toBe('races_5:gold');
+  });
+
+  it('flashQueue: два «Призёра» разных сезонов — оба в очереди; показанный сезон не скрывает другой', () => {
+    const items = [
+      seasonal('season_podium', SEASON_B, { seen: false }),
+      seasonal('season_podium', SEASON_A, { seen: false }),
+    ];
+    expect(flashQueue(items).map(achievementKey)).toEqual([
+      `season_podium:${SEASON_A}`,
+      `season_podium:${SEASON_B}`,
+    ]);
+    expect(flashQueue(items, new Set([flashKey(items[1]!)])).map(achievementKey)).toEqual([
+      `season_podium:${SEASON_B}`,
+    ]);
+  });
+
+  it('путь экрана и адрес `seen`: сезонные — с сезоном', () => {
+    expect(achievementItemPath(seasonal('season_podium', SEASON_A))).toBe(
+      `/achievements/season_podium?season=${SEASON_A}`,
+    );
+    expect(achievementItemPath(item({ code: 'race_win' }))).toBe('/achievements/race_win');
+    const [season, race] = knownItems([
+      seasonal('season_podium', SEASON_A),
+      item({ code: 'race_win' }),
+    ]);
+    expect(seenTarget(season!)).toEqual({ code: 'season_podium', seasonId: SEASON_A });
+    expect(seenTarget(race!)).toEqual({ code: 'race_win', seasonId: null });
+  });
+
+  it('публичный профиль — сезонные включены', () => {
+    const items = knownItems([
+      seasonal('season_champion', SEASON_A),
+      item({ code: 'route_first' }),
+      item({ code: 'race_win' }),
+    ]);
+    expect(publicItems(items).map((a) => a.code)).toEqual(['season_champion', 'race_win']);
   });
 });

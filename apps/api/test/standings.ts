@@ -17,17 +17,24 @@ export const standingsRecalc = (h: Harness) => h.worker.get(StandingsRecalc, { s
 /** Прогон регламента `standings.sync`. */
 export const syncStandings = (h: Harness) => standingsRecalc(h).sync();
 
-/** Сезон напрямую в БД (подготовка: сезоны и протоколы проверяют `races`/`results`). */
-export async function seedSeason(h: Harness, name = 'Сезон 2026'): Promise<string> {
+/**
+ * Сезон напрямую в БД (подготовка: сезоны и протоколы проверяют `races`/`results`): 1 апреля — 31 октября года `year`
+ * по Минску. По умолчанию — 2026 (текущий для часов стенда, 2026-10-22); 2025 и раньше — завершённый.
+ */
+export async function seedSeason(
+  h: Harness,
+  name = 'Сезон 2026',
+  { year = 2026 }: { year?: number } = {},
+): Promise<string> {
   const id = uuidv7();
   const now = h.clock.now();
   await racesDb(h).seasons.insertOne({
     _id: id,
     name,
-    startsOn: '2026-04-01',
-    endsOn: '2026-10-31',
-    startsAt: new Date('2026-03-31T21:00:00Z'),
-    endsBefore: new Date('2026-10-31T21:00:00Z'),
+    startsOn: `${year}-04-01`,
+    endsOn: `${year}-10-31`,
+    startsAt: new Date(`${year}-03-31T21:00:00Z`),
+    endsBefore: new Date(`${year}-10-31T21:00:00Z`),
     createdAt: now,
     updatedAt: now,
     version: 0,
@@ -75,6 +82,8 @@ export async function seedProtocolRace(
     revision = 1,
     protocol = true,
     recalculations = true,
+    status = 'published',
+    corridor = null,
   }: {
     bikeClass?: BikeClass;
     groupScheme?: GroupScheme | null;
@@ -84,6 +93,9 @@ export async function seedProtocolRace(
     protocol?: boolean;
     /** `false` — протокол без записей журнала (гонка без ревизии, быть не должно) */
     recalculations?: boolean;
+    status?: 'published' | 'cancelled';
+    /** эталонный коридор; `null` — гонка-анонс */
+    corridor?: { routeId: string; widthM: number; distanceM: number } | null;
   } = {},
 ): Promise<string> {
   const id = uuidv7();
@@ -91,7 +103,7 @@ export async function seedProtocolRace(
   await racesDb(h).races.insertOne({
     _id: id,
     ownerUserId: uuidv7(),
-    status: 'published',
+    status,
     title,
     bikeClass,
     surfaces: ['asphalt'],
@@ -102,11 +114,11 @@ export async function seedProtocolRace(
     protocolPlannedAt: new Date(windowEndsAt.getTime() + 2 * 86_400_000),
     seasonId,
     cancelReason: null,
-    corridor: null,
+    corridor,
     createdAt: now,
     updatedAt: now,
     publishedAt: now,
-    cancelledAt: null,
+    cancelledAt: status === 'cancelled' ? now : null,
     lockedAt: groupScheme === null ? null : now,
     groupScheme,
     protocolPublishedAt: protocol ? now : null,

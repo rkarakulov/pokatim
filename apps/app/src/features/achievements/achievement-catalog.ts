@@ -2,6 +2,7 @@ import {
   ACHIEVEMENT_LEVEL_TARGETS,
   ACHIEVEMENT_LEVELS,
   isLeveledCode,
+  SEASON_REGULAR_MIN_RACES,
   type Achievement,
   type AchievementCode,
   type AchievementLevel,
@@ -21,11 +22,19 @@ interface CatalogEntry {
   title: MessageKey;
   condition: MessageKey;
   icon: IconName;
-  /** «Сторис результата» → сторис результата гонки объекта (A6) — только гоночные; карточка достижения — у всех */
+  /** «Сторис результата» → сторис результата гонки объекта (A6) — только гоночные */
   shareable: boolean;
-  /** виден в публичном профиле (A7, R9: публично — только протоколы) — только гоночные */
+  /** виден в публичном профиле (A7, R9: публично — только протоколы) — гоночные и сезонные (S6) */
   public: boolean;
+  /** «Поделиться» → карточка достижения для сторис; у сезонных карточки нет (S7) */
+  storyCard: boolean;
+  /** выдача — на сезон, объект — сезон (S3): ключ — код + сезон, «К сезону» */
+  seasonal: boolean;
 }
+
+const RACE = { shareable: true, public: true, storyCard: true, seasonal: false } as const;
+const PRIVATE = { shareable: false, public: false, storyCard: true, seasonal: false } as const;
+const SEASON = { shareable: false, public: true, storyCard: false, seasonal: true } as const;
 
 /**
  * Каталог (A1): ключи i18n, значок, шеринг. Исчерпывающий: новый код contracts без строки — ошибка типов. Пороги уровней
@@ -36,64 +45,73 @@ export const ACHIEVEMENT_CATALOG = {
     title: 'achievements.race_first_finish.title',
     condition: 'achievements.race_first_finish.condition',
     icon: 'races',
-    shareable: true,
-    public: true,
+    ...RACE,
   },
   race_podium: {
     title: 'achievements.race_podium.title',
     condition: 'achievements.race_podium.condition',
     icon: 'medal',
-    shareable: true,
-    public: true,
+    ...RACE,
   },
   race_win: {
     title: 'achievements.race_win.title',
     condition: 'achievements.race_win.condition',
     icon: 'trophy',
-    shareable: true,
-    public: true,
+    ...RACE,
   },
   races_5: {
     title: 'achievements.races_5.title',
     condition: 'achievements.races_5.condition',
     icon: 'races',
-    shareable: true,
-    public: true,
+    ...RACE,
   },
   route_first: {
     title: 'achievements.route_first.title',
     condition: 'achievements.route_first.condition',
     icon: 'routes',
-    shareable: false,
-    public: false,
+    ...PRIVATE,
   },
   routes_5: {
     title: 'achievements.routes_5.title',
     condition: 'achievements.routes_5.condition',
     icon: 'routes',
-    shareable: false,
-    public: false,
+    ...PRIVATE,
   },
   ride_first: {
     title: 'achievements.ride_first.title',
     condition: 'achievements.ride_first.condition',
     icon: 'rides',
-    shareable: false,
-    public: false,
+    ...PRIVATE,
   },
   ride_organizer: {
     title: 'achievements.ride_organizer.title',
     condition: 'achievements.ride_organizer.condition',
     icon: 'person',
-    shareable: false,
-    public: false,
+    ...PRIVATE,
   },
   rides_10: {
     title: 'achievements.rides_10.title',
     condition: 'achievements.rides_10.condition',
     icon: 'rides',
-    shareable: false,
-    public: false,
+    ...PRIVATE,
+  },
+  season_regular: {
+    title: 'achievements.season_regular.title',
+    condition: 'achievements.season_regular.condition',
+    icon: 'calendar',
+    ...SEASON,
+  },
+  season_podium: {
+    title: 'achievements.season_podium.title',
+    condition: 'achievements.season_podium.condition',
+    icon: 'medal',
+    ...SEASON,
+  },
+  season_champion: {
+    title: 'achievements.season_champion.title',
+    condition: 'achievements.season_champion.condition',
+    icon: 'trophy',
+    ...SEASON,
   },
 } as const satisfies Record<AchievementCode, CatalogEntry>;
 
@@ -119,8 +137,13 @@ export function badgeCount(code: AchievementCode, level: ResponseLevel): number 
   return ACHIEVEMENT_LEVEL_TARGETS[code][ACHIEVEMENT_LEVELS.indexOf(shown)];
 }
 
-/** Условие (L6): для текущего уровня («Финиш в зачёте 15 разных гонок»); незнакомый уровень — порог бронзы. */
+/**
+ * Условие (L6): для текущего уровня («Финиш в зачёте 15 разных гонок»); незнакомый уровень — порог бронзы. «Сезон в
+ * зачёте» — порог `SEASON_REGULAR_MIN_RACES` контрактов (без копии).
+ */
 export function achievementCondition(code: AchievementCode, level: ResponseLevel): string {
+  if (code === 'season_regular')
+    return t(catalogEntry(code).condition, { count: SEASON_REGULAR_MIN_RACES });
   if (!isLeveledCode(code)) return t(catalogEntry(code).condition);
   const count = badgeCount(code, level) ?? ACHIEVEMENT_LEVEL_TARGETS[code][0];
   return t(catalogEntry(code).condition, { count });
@@ -146,11 +169,38 @@ export const isLevelUp = (item: Pick<Achievement, 'level'>) =>
   item.level === 'silver' || item.level === 'gold';
 
 /**
- * Ключ сессии вспышки (RC-L4): код и уровень — бронза, показанная в этом запуске, не скрывает серебро. `POST seen` —
- * по коду.
+ * Ключ элемента (S3): у сезонных — код и сезон (один код за разные сезоны — разные выдачи), у прочих — код. Ключ React
+ * плиток, поиска на экране и оптимистичной пометки `seen`.
  */
-export const flashKey = (item: Pick<Achievement, 'code' | 'level'>) =>
-  `${item.code}:${item.level ?? ''}`;
+export const achievementKey = (item: Pick<PublicRiderAchievement, 'code' | 'object'>) =>
+  item.object.kind === 'season' ? `${item.code}:${item.object.id}` : item.code;
+
+/**
+ * Ключ сессии вспышки (RC-L4): ключ элемента и уровень — бронза, показанная в этом запуске, не скрывает серебро,
+ * «Призёр» одного сезона — «Призёра» другого. `POST seen` — по `seenTarget`.
+ */
+export const flashKey = (item: Pick<Achievement, 'code' | 'level' | 'object'>) =>
+  `${achievementKey(item)}:${item.level ?? ''}`;
+
+/** Адрес `POST seen`: сезонные — код и сезон, прочие — код (`seasonId: null`). */
+export interface SeenTarget {
+  code: AchievementCode;
+  seasonId: string | null;
+}
+export const seenTarget = (item: KnownAchievement<PublicRiderAchievement>): SeenTarget => ({
+  code: item.code,
+  seasonId: item.object.kind === 'season' ? item.object.id : null,
+});
+
+/** Экран своего достижения: `/achievements/<code>`, у сезонных — `?season=<id>`. */
+export const achievementItemPath = (item: Pick<PublicRiderAchievement, 'code' | 'object'>) =>
+  item.object.kind === 'season'
+    ? `/achievements/${item.code}?season=${encodeURIComponent(item.object.id)}`
+    : `/achievements/${item.code}`;
+
+/** Сезон объекта для «К сезону» (S7); не сезон — `null`. */
+export const seasonOf = (item: Pick<PublicRiderAchievement, 'object'>): string | null =>
+  item.object.kind === 'season' ? item.object.id : null;
 
 /** Только известные коды, порядок сервера (от новых фактов к старым) сохраняется (RC-8). */
 export function knownItems<T extends PublicRiderAchievement>(
@@ -172,7 +222,10 @@ export function flashQueue(
     .reverse();
 }
 
-/** Только достижения публичного профиля (A7): гоночные; прочие — защита от регресса API, сервер их не отдаёт. */
+/**
+ * Только достижения публичного профиля (A7, S6): гоночные и сезонные; прочие — защита от регресса API, сервер их не
+ * отдаёт.
+ */
 export const publicItems = <T extends PublicRiderAchievement>(
   items: readonly KnownAchievement<T>[],
 ) => items.filter((item) => catalogEntry(item.code).public);
@@ -185,9 +238,10 @@ const OBJECT_TEXT = {
   race: 'achievements.object.race',
   route: 'achievements.object.route',
   ride: 'achievements.object.ride',
+  season: 'achievements.object.season',
 } as const satisfies Record<Exclude<AchievementObject['kind'], 'unknown'>, MessageKey>;
 
-/** «Гонка «…»», «Маршрут «…»», «Кофе-райд «…»»; незнакомый вид — только название. */
+/** «Гонка «…»», «Маршрут «…»», «Кофе-райд «…»», «Сезон «…»»; незнакомый вид — только название. */
 export const achievementObjectText = (object: AchievementObject) =>
   object.kind === 'unknown' ? object.title : t(OBJECT_TEXT[object.kind], { title: object.title });
 

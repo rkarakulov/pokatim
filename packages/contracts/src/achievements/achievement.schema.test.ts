@@ -8,8 +8,12 @@ import {
   ACHIEVEMENT_OBJECT_KINDS,
   AchievementList,
   isLeveledCode,
+  isSeasonalCode,
   MarkAchievementsSeenRequest,
   PublicRiderAchievementList,
+  SEASON_REGULAR_MIN_RACES,
+  SEASONAL_ACHIEVEMENT_CODES,
+  SEASONAL_SEEN_MAX,
 } from './achievement.schema.ts';
 
 const ID = '01890a5d-ac96-774b-bcce-b302099a8057';
@@ -28,7 +32,7 @@ const item = {
 };
 
 describe('достижения (achievements)', () => {
-  it('каталог v1 — 9 кодов в установленном порядке (только в конец); виды объекта', () => {
+  it('каталог — коды v1 и сезонные в установленном порядке (только в конец, RC-S4); виды объекта', () => {
     expect(ACHIEVEMENT_CODES).toEqual([
       'race_first_finish',
       'race_podium',
@@ -39,8 +43,31 @@ describe('достижения (achievements)', () => {
       'ride_first',
       'ride_organizer',
       'rides_10',
+      'season_regular',
+      'season_podium',
+      'season_champion',
     ]);
-    expect(ACHIEVEMENT_OBJECT_KINDS).toEqual(['race', 'route', 'ride']);
+    expect(ACHIEVEMENT_OBJECT_KINDS).toEqual(['race', 'route', 'ride', 'season']);
+    expect(SEASONAL_ACHIEVEMENT_CODES).toEqual([
+      'season_regular',
+      'season_podium',
+      'season_champion',
+    ]);
+    expect(ACHIEVEMENT_CODES.filter(isSeasonalCode)).toEqual([...SEASONAL_ACHIEVEMENT_CODES]);
+    expect(SEASON_REGULAR_MIN_RACES).toBe(3);
+  });
+
+  it('Achievement: объект-сезон разбирается; незнакомый вид (`planet`) — `unknown`', () => {
+    const seasonal = {
+      ...item,
+      code: 'season_champion',
+      object: { kind: 'season', id: ID, title: 'Сезон 2026' },
+    };
+    expect(Achievement.parse(seasonal)).toEqual(seasonal);
+    expect(
+      Achievement.parse({ ...seasonal, object: { ...seasonal.object, kind: 'planet' } }).object
+        .kind,
+    ).toBe('unknown');
   });
 
   it('Achievement: известные значения как есть; незнакомый код и вид — `unknown` (RC-8)', () => {
@@ -109,19 +136,38 @@ describe('достижения (achievements)', () => {
     ).toEqual({ items: [publicItem] });
   });
 
-  it('MarkAchievementsSeenRequest: 1–9 известных кодов без повторов; иначе — ошибка', () => {
+  it('MarkAchievementsSeenRequest: `{ codes }` v1 валиден; `seasonal` — по `(code, seasonId)`; иначе — ошибка', () => {
     expect(MarkAchievementsSeenRequest.parse({ codes: ['race_win'] })).toEqual({
       codes: ['race_win'],
+      seasonal: [],
     });
     expect(MarkAchievementsSeenRequest.parse({ codes: [...ACHIEVEMENT_CODES] }).codes).toHaveLength(
-      9,
+      ACHIEVEMENT_CODES.length,
     );
+    const ref = { code: 'season_podium', seasonId: ID };
+    const other = { code: 'season_podium', seasonId: '01890a5d-ac96-774b-bcce-b302099a8058' };
+    expect(MarkAchievementsSeenRequest.parse({ seasonal: [ref, other] })).toEqual({
+      codes: [],
+      seasonal: [ref, other],
+    });
+    const many = Array.from({ length: SEASONAL_SEEN_MAX + 1 }, (_, i) => ({
+      code: 'season_regular',
+      seasonId: `01890a5d-ac96-774b-bcce-${String(i).padStart(12, '0')}`,
+    }));
+    expect(MarkAchievementsSeenRequest.safeParse({ seasonal: many.slice(1) }).success).toBe(true);
     const invalid = [
       { codes: [] },
+      { codes: [], seasonal: [] },
+      { seasonal: [] },
       { codes: [...ACHIEVEMENT_CODES, 'race_win'] },
       { codes: ['race_win', 'race_win'] },
       { codes: ['season_win'] },
       { codes: ['race_win'], extra: 1 },
+      { seasonal: [{ code: 'race_win', seasonId: ID }] },
+      { seasonal: [ref, ref] },
+      { seasonal: [{ ...ref, extra: 1 }] },
+      { seasonal: [{ ...ref, seasonId: 'x' }] },
+      { seasonal: many },
       {},
     ];
     for (const body of invalid) {

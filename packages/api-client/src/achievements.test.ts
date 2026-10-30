@@ -76,6 +76,26 @@ describe('api-client: достижения (achievements)', () => {
     ]);
   });
 
+  it('markAchievementsSeen — с сезонными адресами — оба поля; ответ с объектом-сезоном разбирается', async () => {
+    const { calls, api } = client(204);
+    const seasonal = [{ code: 'season_podium' as const, seasonId: ID }];
+    await expect(api.markAchievementsSeen('access.jwt.x', [], seasonal)).resolves.toBeUndefined();
+    expect(calls[0]!.body).toBe(JSON.stringify({ codes: [], seasonal }));
+
+    const season = {
+      code: 'season_champion',
+      object: { kind: 'season', id: ID, title: 'Сезон 2025' },
+      factDate: '2025-10-31',
+      level: null,
+      seen: false,
+    };
+    const listed = client(200, { items: [season], progress: [] });
+    await expect(listed.api.listAchievements('access.jwt.x')).resolves.toEqual({
+      items: [season],
+      progress: [],
+    });
+  });
+
   it('getRiderAchievements — публичный GET без токена', async () => {
     const { calls, api } = client(200, {
       items: [item, { ...item, code: 'races_5', level: 'gold' }],

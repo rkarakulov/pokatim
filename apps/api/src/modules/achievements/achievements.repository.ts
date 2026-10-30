@@ -1,17 +1,36 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { AchievementCode } from '@pokatim/contracts';
+import {
+  type AchievementCode,
+  isSeasonalCode,
+  type SeasonalAchievementRef,
+} from '@pokatim/contracts';
 import { isDuplicateKey, MONGO_DB, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Db } from 'mongodb';
 
 import {
   type AchievementGrantDoc,
+  type AchievementSeasonGrantDoc,
   type AchievementsCollections,
   achievementsCollections,
 } from './achievements.collection';
-import type { Earned } from './achievements.policy';
+import type {
+  Earned,
+  FactAchievementCode,
+  SeasonalEarned,
+  SeasonalKey,
+} from './achievements.policy';
 
 /** Уникальный индекс выдачи (`0035_achievements`): параллельная вставка — `isDuplicateKey`. */
 export const ACHIEVEMENT_GRANTS_UNIQUE_INDEX = 'achievement_grants_user_code_unique';
+/** Уникальный индекс сезонной выдачи (`0043_achievements_seasonal`). */
+export const ACHIEVEMENT_SEASON_GRANTS_UNIQUE_INDEX =
+  'achievement_season_grants_user_code_season_unique';
+
+/** Сезонная выдача без служебных полей записи. */
+export type StoredSeasonGrantDoc = Pick<
+  AchievementSeasonGrantDoc,
+  'code' | 'seasonId' | 'factAt' | 'seenAt' | 'revokedAt'
+>;
 
 /** Выдача без служебных полей записи. */
 export type StoredGrantDoc = Pick<
@@ -20,7 +39,7 @@ export type StoredGrantDoc = Pick<
 >;
 
 /**
- * Единственный писатель `achievement_grants`, `achievement_syncs` (ADR-0020). Каждый фильтр — с `userId`; каждая
+ * Единственный писатель `achievement_grants`, `achievement_season_grants`, `achievement_syncs` (ADR-0020). Каждый фильтр — с `userId`; каждая
  * запись — одна условная операция над одним документом, без транзакций (RC-2): параллельные сверки одного райдера
  * сходятся к одному состоянию.
  */
@@ -64,7 +83,7 @@ export class AchievementsRepository {
    */
   async insertGrant(
     userId: string,
-    code: AchievementCode,
+    code: FactAchievementCode,
     earned: Earned,
     seenAt: Date | null,
     now: Date,
@@ -91,7 +110,7 @@ export class AchievementsRepository {
   }
 
   /** Отзыв видимой выдачи (A4); уже отозванная — без записи. */
-  async revoke(userId: string, code: AchievementCode, now: Date): Promise<boolean> {
+  async revoke(userId: string, code: FactAchievementCode, now: Date): Promise<boolean> {
     const result = await this.c.grants.updateOne(
       { userId, code, revokedAt: null },
       { $set: { revokedAt: now, updatedAt: now } },
@@ -106,7 +125,7 @@ export class AchievementsRepository {
    */
   async restoreOrRefresh(
     userId: string,
-    code: AchievementCode,
+    code: FactAchievementCode,
     earned: Earned,
     revoked: boolean,
     now: Date,
@@ -126,6 +145,60 @@ export class AchievementsRepository {
     return result.modifiedCount === 1;
   }
 
+  /** Сезонные выдачи пользователя, включая отозванные (префикс `userId` уникального индекса). */
+  listSeasonalOf(userId: string): Promise<StoredSeasonGrantDoc[]> {
+    return this.c.seasonGrants
+      .find<StoredSeasonGrantDoc>(
+        { userId },
+        { projection: { _id: 0, code: 1, seasonId: 1, factAt: 1, seenAt: 1, revokedAt: 1 } },
+      )
+      .toArray();
+  }
+
+  /** Вставка сезонной выдачи (S3); дубль уникального индекса (параллельный GET) — `false`, не ошибка. */
+  async insertSeasonal(
+    userId: string,
+    earned: SeasonalEarned,
+    seenAt: Date | null,
+    now: Date,
+  ): Promise<boolean> {
+    try {
+      await this.c.seasonGrants.insertOne({
+        _id: uuidv7(),
+        userId,
+        code: earned.code,
+        seasonId: earned.seasonId,
+        factAt: earned.factAt,
+        grantedAt: now,
+        seenAt,
+        revokedAt: null,
+        updatedAt: now,
+      });
+      return true;
+    } catch (error) {
+      if (isDuplicateKey(error, ACHIEVEMENT_SEASON_GRANTS_UNIQUE_INDEX)) return false;
+      throw error;
+    }
+  }
+
+  /** Отзыв видимой сезонной выдачи (S4); уже отозванная — без записи. */
+  async revokeSeasonal(userId: string, key: SeasonalKey, now: Date): Promise<boolean> {
+    const result = await this.c.seasonGrants.updateOne(
+      { userId, code: key.code, seasonId: key.seasonId, revokedAt: null },
+      { $set: { revokedAt: now, updatedAt: now } },
+    );
+    return result.modifiedCount === 1;
+  }
+
+  /** Восстановление отозванной сезонной выдачи (S4): `seenAt` и `grantedAt` не трогаются. */
+  async restoreSeasonal(userId: string, key: SeasonalKey, now: Date): Promise<boolean> {
+    const result = await this.c.seasonGrants.updateOne(
+      { userId, code: key.code, seasonId: key.seasonId, revokedAt: { $ne: null } },
+      { $set: { revokedAt: null, updatedAt: now } },
+    );
+    return result.modifiedCount === 1;
+  }
+
   /** Маркер первой сверки — только после её выдач (RC-1); дубль параллельного upsert — не ошибка. */
   async markSynced(userId: string, now: Date): Promise<void> {
     try {
@@ -140,11 +213,40 @@ export class AchievementsRepository {
   }
 
   /**
-   * «Показано»: только свои видимые, у которых не показан текущий уровень; остальные — без записи. Одна условная
-   * операция (update pipeline): `seenLevel` берётся из `level` того же документа в момент записи (клиент уровень не
-   * присылает) и монотонен (`$max`); `seenAt` — первый показ. Поля v1 (`level`/`seenLevel` нет) ≡ 1.
+   * «Показано»: две независимые атомарные операции. `codes` — свои видимые несезонные, у которых не показан текущий
+   * уровень (update pipeline: `seenLevel` берётся из `level` того же документа в момент записи и монотонен (`$max`);
+   * `seenAt` — первый показ; поля v1 ≡ 1); сезонный код здесь совпадений не найдёт. `seasonal` — свои видимые
+   * непоказанные сезонные по `(code, seasonId)`. Остальные адреса — без записи.
    */
-  async markSeen(userId: string, codes: readonly AchievementCode[], now: Date): Promise<number> {
+  async markSeen(
+    userId: string,
+    codes: readonly AchievementCode[],
+    seasonal: readonly SeasonalAchievementRef[],
+    now: Date,
+  ): Promise<number> {
+    let modified = 0;
+    const factCodes = codes.filter((code): code is FactAchievementCode => !isSeasonalCode(code));
+    if (factCodes.length > 0) modified += await this.markSeenGrants(userId, factCodes, now);
+    if (seasonal.length > 0) {
+      const result = await this.c.seasonGrants.updateMany(
+        {
+          userId,
+          revokedAt: null,
+          seenAt: null,
+          $or: seasonal.map(({ code, seasonId }) => ({ code, seasonId })),
+        },
+        { $set: { seenAt: now, updatedAt: now } },
+      );
+      modified += result.modifiedCount;
+    }
+    return modified;
+  }
+
+  private async markSeenGrants(
+    userId: string,
+    codes: readonly FactAchievementCode[],
+    now: Date,
+  ): Promise<number> {
     const result = await this.c.grants.updateMany(
       {
         userId,
@@ -170,10 +272,17 @@ export class AchievementsRepository {
     return result.modifiedCount;
   }
 
-  /** Стирание удалённого аккаунта (ADR-0015): выдачи и маркер; повтор — нули. */
-  async deleteAllOf(userId: string): Promise<{ grants: number; syncs: number }> {
+  /** Стирание удалённого аккаунта (ADR-0015): выдачи обеих коллекций, затем маркер; повтор — нули. */
+  async deleteAllOf(
+    userId: string,
+  ): Promise<{ grants: number; seasonGrants: number; syncs: number }> {
     const grants = await this.c.grants.deleteMany({ userId });
+    const seasonGrants = await this.c.seasonGrants.deleteMany({ userId });
     const syncs = await this.c.syncs.deleteOne({ _id: userId });
-    return { grants: grants.deletedCount, syncs: syncs.deletedCount };
+    return {
+      grants: grants.deletedCount,
+      seasonGrants: seasonGrants.deletedCount,
+      syncs: syncs.deletedCount,
+    };
   }
 }

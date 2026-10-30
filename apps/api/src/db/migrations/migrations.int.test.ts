@@ -54,6 +54,7 @@ import {
   PROFILE_REPORT_REASONS_INDEXES,
   profileReportReasons,
 } from './0042_profile_report_reasons';
+import { ACHIEVEMENT_SEASON_INDEXES, achievementsSeasonal } from './0043_achievements_seasonal';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
 import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
@@ -168,6 +169,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0040_panel_totp',
       '0041_panel_invitations',
       '0042_profile_report_reasons',
+      '0043_achievements_seasonal',
     ]);
   });
 
@@ -1754,7 +1756,6 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
 
   it('0042_profile_report_reasons: индекс очереди по причине, бэкфилл openReasons по открытым жалобам; последняя; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0042_profile_report_reasons');
     expect(ids.indexOf('0042_profile_report_reasons')).toBe(
       ids.indexOf('0041_panel_invitations') + 1,
     );
@@ -1816,5 +1817,60 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       await profiles.deleteMany({ _id: /^p-0041-/ });
       await reports.deleteMany({ _id: /^rep-0041-/ });
     }
+  });
+
+  it('0043_achievements_seasonal: коллекция сезонных выдач, уникальный (userId, code, seasonId); achievement_grants без изменений; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0043_achievements_seasonal');
+    expect(ids.indexOf('0043_achievements_seasonal')).toBe(
+      ids.indexOf('0042_profile_report_reasons') + 1,
+    );
+    const name = ACHIEVEMENTS_COLLECTIONS.seasonGrants;
+    expect(await h.db.listCollections({ name }, { nameOnly: true }).toArray()).toHaveLength(1);
+    const seasonIndexes = {
+      [ACHIEVEMENT_SEASON_INDEXES.userCodeSeasonUnique.options.name]: {
+        key: { userId: 1, code: 1, seasonId: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(name)).toEqual(seasonIndexes);
+    const grantIndexes = {
+      [ACHIEVEMENTS_INDEXES.grantsUserCodeUnique.options.name]: {
+        key: { userId: 1, code: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(ACHIEVEMENTS_COLLECTIONS.grants)).toEqual(grantIndexes);
+
+    // одна выдача на (пользователь, код, сезон); тот же код другого сезона — вставляется
+    const grants = h.db.collection<Record<string, unknown> & { _id: string }>(name);
+    try {
+      await grants.insertOne({
+        _id: 's-1',
+        userId: 'u-0043',
+        code: 'season_podium',
+        seasonId: 'a',
+      });
+      await expect(
+        grants.insertOne({ _id: 's-2', userId: 'u-0043', code: 'season_podium', seasonId: 'a' }),
+      ).rejects.toThrow(/duplicate key/);
+      await grants.insertOne({
+        _id: 's-3',
+        userId: 'u-0043',
+        code: 'season_podium',
+        seasonId: 'b',
+      });
+    } finally {
+      await grants.deleteMany({ userId: 'u-0043' });
+    }
+
+    await achievementsSeasonal.up(h.db);
+    await achievementsSeasonal.up(h.db);
+    expect(await indexesOf(name)).toEqual(seasonIndexes);
+    expect(await indexesOf(ACHIEVEMENTS_COLLECTIONS.grants)).toEqual(grantIndexes);
   });
 });

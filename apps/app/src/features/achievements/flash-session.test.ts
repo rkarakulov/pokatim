@@ -30,3 +30,22 @@ describe('flash-session по ключу `code:level` (RC-L4)', () => {
     expect(flashQueue([item('silver')], hiddenKeys(6)).map(flashKey)).toEqual(['races_5:silver']);
   });
 });
+
+describe('flash-session — сезонные по ключу `code:seasonId` (achievements-seasonal)', () => {
+  const season = (seasonId: string): Achievement => ({
+    code: 'season_podium',
+    object: { kind: 'season', id: seasonId, title: 'Сезон' },
+    factDate: '2025-10-31',
+    level: null,
+    seen: false,
+  });
+  const A = '0190a6f4-0000-7000-8000-000000000401';
+  const B = '0190a6f4-0000-7000-8000-000000000402';
+
+  it('показан «Призёр» сезона A — «Призёр» сезона B всё равно вспыхивает', () => {
+    markShown(flashKey(season(A)));
+    expect(flashQueue([season(A), season(B)], hiddenKeys(1)).map(flashKey)).toEqual([
+      `season_podium:${B}:`,
+    ]);
+  });
+});

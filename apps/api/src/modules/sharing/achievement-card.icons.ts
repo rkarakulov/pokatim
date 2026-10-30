@@ -6,6 +6,8 @@ import {
   isLeveledCode,
 } from '@pokatim/contracts';
 
+import type { FactAchievementCode } from '../achievements';
+
 /** Значок кода на карточке: глиф Material Symbols и число на кольце (порог уровня счётного). */
 export interface AchievementBadgeIcon {
   /** кодовая точка глифа (`expo-symbols/build/android/symbols.json`) */
@@ -21,7 +23,7 @@ const RIDES = 0xe541; // local_cafe
  * Зеркало иконок `ACHIEVEMENT_CATALOG` приложения (`features/achievements/achievement-catalog.ts`, имена Material —
  * `components/icon.tsx`): на Android и web `expo-symbols` рисует тот же шрифт по той же кодовой точке. Изменил
  * иконку кода в приложении — поменяй здесь и подними `STORY_CARD_POLICY.renderVersion`. Пороги уровней (число на
- * значке) — не здесь: `ACHIEVEMENT_LEVEL_TARGETS` в контрактах.
+ * значке) — не здесь: `ACHIEVEMENT_LEVEL_TARGETS` в контрактах. У сезонных карточки нет (S7) — значков тоже.
  */
 export const ACHIEVEMENT_BADGE_ICONS = {
   race_first_finish: { glyph: RACES },
@@ -33,7 +35,7 @@ export const ACHIEVEMENT_BADGE_ICONS = {
   ride_first: { glyph: RIDES },
   ride_organizer: { glyph: 0xe7fd }, // person
   rides_10: { glyph: RIDES },
-} as const satisfies Record<AchievementCode, Pick<AchievementBadgeIcon, 'glyph'>>;
+} as const satisfies Record<FactAchievementCode, Pick<AchievementBadgeIcon, 'glyph'>>;
 
 /**
  * Число на значке (L6): порог текущего уровня счётного из `ACHIEVEMENT_LEVEL_TARGETS` (контракты — одна таблица с
@@ -50,7 +52,7 @@ export function badgeCount(
 
 /** Значок карточки: глиф кода и число уровня. */
 export function achievementBadgeIcon(
-  code: AchievementCode,
+  code: FactAchievementCode,
   level: AchievementLevel | null,
 ): AchievementBadgeIcon {
   const count = badgeCount(code, level);
