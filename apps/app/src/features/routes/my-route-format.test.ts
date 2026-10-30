@@ -72,7 +72,10 @@ describe('статус своего маршрута', () => {
 describe('тексты ошибок загрузки', () => {
   const http = (status: number, code: string) => new ApiHttpError(status, { code, message: 'x' });
   it.each([
-    [http(415, 'ROUTE_FORMAT_UNSUPPORTED'), 'Формат не поддерживается — выберите GPX или KML'],
+    [
+      http(415, 'ROUTE_FORMAT_UNSUPPORTED'),
+      'Формат не поддерживается — выберите GPX, KML, KMZ или TCX',
+    ],
     [http(413, 'ROUTE_TOO_LARGE'), 'Файл слишком большой — до 5 МБ'],
     [http(429, 'RATE_LIMITED'), 'Слишком много загрузок. Попробуйте позже.'],
     [http(409, 'ROUTE_QUOTA_EXCEEDED'), 'Можно хранить до 100 маршрутов — удалите ненужные'],

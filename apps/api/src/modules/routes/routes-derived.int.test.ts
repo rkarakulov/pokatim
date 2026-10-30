@@ -1,4 +1,10 @@
-import { parseGpx, ROUTE_DERIVED_VERSION } from '@pokatim/tracks/parse';
+import {
+  parseGpx,
+  parseKml,
+  parseTcx,
+  ROUTE_DERIVED_VERSION,
+  ROUTE_MAX_POINTS,
+} from '@pokatim/tracks/parse';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
 import { Binary } from 'mongodb';
@@ -77,6 +83,8 @@ const stubDerive = () =>
         [1000, 210],
       ],
       gpx: '<gpx/>',
+      kml: '<kml/>',
+      tcx: '<TrainingCenterDatabase/>',
     },
   });
 
@@ -106,6 +114,39 @@ describe('RouteDerivedBackfill.run (routes-03)', () => {
     expect(
       parseGpx(Buffer.from(exported!.gpx.buffer).toString('utf8')).points.length,
     ).toBeGreaterThan(1);
+
+    expect(await backfill().run()).toEqual({ derived: 0, failed: 0, skipped: 0, more: false });
+  });
+
+  it('маршрут версии 1 (экспорт только GPX) → версия 2: KML и TCX появились, профиль и GPX прежние; повтор — no-op (routes-formats)', async () => {
+    expect(ROUTE_DERIVED_VERSION).toBe(2);
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const id = await readyRoute(h, org.token, 'route-loop.gpx', 'Круг');
+    const before = await routesDb(h).geometries.findOne({ _id: id });
+    const exportBefore = await routesDb(h).exports.findOne({ _id: id });
+    // состояние «до routes-formats»: версия 1, в экспорте только gpx
+    await routesDb(h).geometries.updateOne({ _id: id }, { $set: { derivedVersion: 1 } });
+    await routesDb(h).exports.replaceOne(
+      { _id: id },
+      { gpx: exportBefore!.gpx, sizeBytes: exportBefore!.gpx.buffer.byteLength, derivedVersion: 1 },
+    );
+
+    expect(await backfill().run()).toEqual({ derived: 1, failed: 0, skipped: 0, more: false });
+    const after = await routesDb(h).geometries.findOne({ _id: id });
+    expect(after).toEqual(before);
+    const exported = await routesDb(h).exports.findOne({ _id: id });
+    expect(exported).toEqual(exportBefore);
+    expect(exported?.derivedVersion).toBe(2);
+    const text = (binary: Binary | undefined) => Buffer.from(binary!.buffer).toString('utf8');
+    const options = { maxPoints: ROUTE_MAX_POINTS };
+    const gpxPoints = parseGpx(text(exported!.gpx), { allowRoute: true }).points.length;
+    expect(parseKml(text(exported!.kml), options).points).toHaveLength(gpxPoints);
+    expect(parseTcx(text(exported!.tcx), options).points).toHaveLength(gpxPoints);
+    expect(exported!.sizeBytes).toBe(
+      exported!.gpx.buffer.byteLength +
+        exported!.kml!.buffer.byteLength +
+        exported!.tcx!.buffer.byteLength,
+    );
 
     expect(await backfill().run()).toEqual({ derived: 0, failed: 0, skipped: 0, more: false });
   });

@@ -94,12 +94,13 @@ describe('каталог маршрутов (routes-01): публичные ме
     const cities = app(200, { cities: ['minsk', 'kaunas'] });
     await expect(cities.api.listCatalogRouteCities()).resolves.toEqual({ cities: ['minsk'] });
     const detail = app(200, card);
-    // API до routes-03 — без elevation и gpxAvailable: дефолты (RC-10)
+    // API до routes-03 — без elevation, gpxAvailable и exportFormats: дефолты (RC-10)
     await expect(detail.api.getCatalogRoute('a/b')).resolves.toEqual({
       ...card,
       author: { kind: 'team' },
       elevation: null,
       gpxAvailable: false,
+      exportFormats: [],
     });
     const map = app(200, geometry);
     await expect(map.api.getCatalogRouteMap('a/b')).resolves.toEqual(geometry);
@@ -120,6 +121,20 @@ describe('каталог маршрутов (routes-01): публичные ме
       expect(client.calls[0]?.method).toBe('GET');
       expect(client.calls[0]?.headers.has('authorization')).toBe(false);
     }
+  });
+
+  it('catalogRouteExportUrl — адрес файла формата без запроса, id экранируется (routes-formats)', () => {
+    const client = app(200, {});
+    expect(client.api.catalogRouteExportUrl('a/b', 'kml')).toBe(
+      'https://api.test/v1/routes/a%2Fb/kml',
+    );
+    for (const format of ['gpx', 'kml', 'tcx'] as const) {
+      expect(client.api.catalogRouteExportUrl(ID, format)).toBe(
+        `https://api.test/v1/routes/${ID}/${format}`,
+      );
+    }
+    expect(client.api.catalogRouteGpxUrl(ID)).toBe(client.api.catalogRouteExportUrl(ID, 'gpx'));
+    expect(client.calls).toHaveLength(0);
   });
 
   it('catalogRouteGpxUrl — адрес файла GPX без запроса, id экранируется', () => {

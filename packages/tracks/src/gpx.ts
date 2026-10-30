@@ -77,6 +77,11 @@ export interface ParseGpxOptions {
   allowRoute?: boolean;
   /** Предел точек (`trkpt`, при `allowRoute` — и `rtept`) — подсчётом до разбора; по умолчанию `TRACK_MAX_POINTS`. */
   maxPoints?: number;
+  /**
+   * Предел элементов документа — подсчётом до разбора; по умолчанию `XML_MAX_ELEMENTS` (маршрут —
+   * `ROUTE_XML_MAX_ELEMENTS`).
+   */
+  maxElements?: number;
 }
 
 /**
@@ -89,7 +94,7 @@ export function parseGpx(text: string, options: ParseGpxOptions = {}): ParsedTra
   assertNoForbiddenMarkup(text);
   // размер — до разбора в дерево (память потока worker)
   const maxPoints = options.maxPoints ?? TRACK_MAX_POINTS;
-  assertElementCount(text);
+  assertElementCount(text, options.maxElements);
   if (
     countTags(text, 'trkpt') > maxPoints ||
     (options.allowRoute === true && countTags(text, 'rtept') > maxPoints)

@@ -9,6 +9,7 @@ import {
   RiderProfileViewer,
   CatalogRoutePage,
   type CatalogRouteQuery,
+  type RouteExportFormat,
   type CatalogRouteRacesQuery,
   CalendarCities,
   CalendarMonths,
@@ -601,9 +602,12 @@ export function createApiClient({
     getCatalogRouteMap: (id: string) =>
       getPublic(`/v1/routes/${encodeURIComponent(id)}/map`, RouteMapGeometry),
     /**
-     * Адрес очищенного GPX маршрута каталога (routes-03) — без запроса: файл скачивает браузер или ОС
-     * (`Content-Disposition: attachment`).
+     * Адрес файла маршрута каталога в формате `format` (GPX — routes-03; KML, TCX — routes-formats) — без запроса:
+     * файл скачивает браузер или ОС (`Content-Disposition: attachment`).
      */
+    catalogRouteExportUrl: (id: string, format: RouteExportFormat) =>
+      `${baseUrl}/v1/routes/${encodeURIComponent(id)}/${format}`,
+    /** Адрес очищенного GPX (routes-03) — `catalogRouteExportUrl(id, 'gpx')`. */
     catalogRouteGpxUrl: (id: string) => `${baseUrl}/v1/routes/${encodeURIComponent(id)}/gpx`,
     /** Публичные гонки с коридором по маршруту, новые окна сверху; маршрут не в каталоге — 404. */
     listCatalogRouteRaces: (id: string, params: CatalogRouteRacesParams = {}) =>

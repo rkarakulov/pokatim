@@ -7,7 +7,14 @@ import {
   RouteMapGeometry,
   type Surface,
 } from '@pokatim/contracts';
-import { parseGpx } from '@pokatim/tracks/parse';
+import {
+  parseGpx,
+  parseKml,
+  parseTcx,
+  ROUTE_MAX_POINTS,
+  routeKml,
+  routeTcx,
+} from '@pokatim/tracks/parse';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { Binary } from 'mongodb';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -125,8 +132,8 @@ const CARD_KEYS = [
   'surfaces',
   'title',
 ];
-/** Карточка (routes-03): ключи списка + профиль высоты и признак GPX. */
-const DETAIL_KEYS = [...CARD_KEYS, 'elevation', 'gpxAvailable'].sort();
+/** Карточка (routes-03): ключи списка + профиль высоты, признак GPX и форматы скачивания (routes-formats). */
+const DETAIL_KEYS = [...CARD_KEYS, 'elevation', 'gpxAvailable', 'exportFormats'].sort();
 const HIDDEN =
   /ownerUserId|sha256|"status"|failure|attempts|matchLine|sizeBytes|createdAt|updatedAt/;
 
@@ -301,6 +308,7 @@ describe('GET /v1/routes/:id и /map (AC3)', () => {
       // маршрут до routes-03: производных данных нет
       elevation: null,
       gpxAvailable: false,
+      exportFormats: [],
     });
     expect(JSON.stringify(detail.body)).not.toMatch(HIDDEN);
 
@@ -320,7 +328,7 @@ describe('GET /v1/routes/:id и /map (AC3)', () => {
     const hidden = await seedRoute({ publishedAt: null });
     const processing = await seedRoute({ status: 'processing', publishedAt: null });
     for (const id of [hidden, processing, uuidv7()]) {
-      for (const suffix of ['', '/map', '/gpx']) {
+      for (const suffix of ['', '/map', '/gpx', '/kml', '/tcx']) {
         const res = await get(`/v1/routes/${id}${suffix}`);
         expect(res.status, `${id}${suffix}`).toBe(404);
         expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
@@ -360,17 +368,37 @@ describe('GET /v1/routes/:id и /map (AC3)', () => {
 const getRaw = (url: string, ip: string) =>
   h.app.inject({ method: 'GET', url, headers: { 'x-forwarded-for': ip } });
 
-/** Производные данные маршрута (routes-03) — напрямую в БД (подготовка). */
-async function seedDerived(id: string, profile: [number, number][] | null, gpx: string) {
-  await routesDb(h).geometries.updateOne({ _id: id }, { $set: { profile, derivedVersion: 1 } });
-  const bytes = new TextEncoder().encode(gpx);
+/**
+ * Производные данные маршрута — напрямую в БД (подготовка): версия 1 (routes-03) — только GPX; с `files` — версия 2
+ * (routes-formats) с KML и TCX.
+ */
+async function seedDerived(
+  id: string,
+  profile: [number, number][] | null,
+  gpx: string,
+  files?: { kml: string; tcx: string },
+) {
+  const derivedVersion = files ? 2 : 1;
+  await routesDb(h).geometries.updateOne({ _id: id }, { $set: { profile, derivedVersion } });
+  const encode = (text: string) => new Binary(new TextEncoder().encode(text));
   await routesDb(h).exports.insertOne({
     _id: id,
-    gpx: new Binary(bytes),
-    sizeBytes: bytes.byteLength,
-    derivedVersion: 1,
+    gpx: encode(gpx),
+    ...(files ? { kml: encode(files.kml), tcx: encode(files.tcx) } : {}),
+    sizeBytes: 0,
+    derivedVersion,
   });
 }
+
+const KML_TEXT = routeKml([
+  { lat: 53.9, lon: 27.55, ele: 191 },
+  { lat: 53.91, lon: 27.56, ele: 267 },
+]);
+const TCX_TEXT = routeTcx([
+  { lat: 53.9, lon: 27.55, ele: 191 },
+  { lat: 53.91, lon: 27.56, ele: 267 },
+]);
+const FILES = { kml: KML_TEXT, tcx: TCX_TEXT };
 
 const GPX_TEXT =
   '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Pokatim" xmlns="http://www.topografix.com/GPX/1/1">\n<trk><trkseg>\n<trkpt lat="53.900000" lon="27.550000"><ele>191.0</ele></trkpt>\n<trkpt lat="53.910000" lon="27.560000"><ele>267.0</ele></trkpt>\n</trkseg></trk>\n</gpx>\n';
@@ -381,7 +409,12 @@ describe('карточка: профиль высоты и gpxAvailable (routes-
     await seedDerived(flat, null, GPX_TEXT);
     const flatDetail = await get(`/v1/routes/${flat}`);
     expect(Object.keys(flatDetail.body as object).sort()).toEqual(DETAIL_KEYS);
-    expect(flatDetail.body).toMatchObject({ elevation: null, gpxAvailable: true });
+    // версия 1 (до routes-formats): только GPX
+    expect(flatDetail.body).toMatchObject({
+      elevation: null,
+      gpxAvailable: true,
+      exportFormats: ['gpx'],
+    });
 
     const hilly = await seedRoute();
     const profile: [number, number][] = [
@@ -410,6 +443,7 @@ describe('карточка: профиль высоты и gpxAvailable (routes-
     const detail = CatalogRouteDetail.parse((await get(`/v1/routes/${id}`)).body);
     const elevation = detail.elevation!;
     expect(detail.gpxAvailable).toBe(true);
+    expect(detail.exportFormats).toEqual(['gpx', 'kml', 'tcx']);
     expect(elevation.minM).toBeLessThanOrEqual(elevation.maxM);
     expect(elevation.profile.length).toBeLessThanOrEqual(300);
     expect(elevation.profile[0]![0]).toBe(0);
@@ -426,6 +460,95 @@ describe('карточка: профиль высоты и gpxAvailable (routes-
     const source = fixture('route-trk-no-time.gpx').toString('utf8');
     expect(source).toContain('<metadata><name>Маршрут планировщика</name></metadata>');
     expect(gpx).not.toContain('Маршрут планировщика');
+
+    // routes-formats: KML и TCX из тех же точек, без строк исходника и названия
+    const gpxPoints = parseGpx(gpx).points.map((p) => [p.lon, p.lat]);
+    const options = { maxPoints: ROUTE_MAX_POINTS };
+    for (const [format, parse] of [
+      ['kml', (text: string) => parseKml(text, options).points],
+      ['tcx', (text: string) => parseTcx(text, options).points],
+    ] as const) {
+      const file = await getRaw(`/v1/routes/${id}/${format}`, '198.51.100.7');
+      expect(file.statusCode, format).toBe(200);
+      expect(parse(file.body).map((p) => [p.lon, p.lat])).toEqual(gpxPoints);
+      for (const hidden of ['<name>Маршрут', 'Холмы', 'Маршрут планировщика', '<metadata']) {
+        expect(file.body).not.toContain(hidden);
+      }
+    }
+  });
+});
+
+describe('GET /v1/routes/:id/kml и /tcx (routes-formats, AC7)', () => {
+  it.each([
+    ['kml', 'application/vnd.google-earth.kml+xml; charset=utf-8', () => KML_TEXT],
+    ['tcx', 'application/vnd.garmin.tcx+xml; charset=utf-8', () => TCX_TEXT],
+  ] as const)(
+    '%s: 200 — байты экспорта, Content-Type, имя из названия (bidi удалён), кэш, nosniff, CSP sandbox',
+    async (format, contentType, body) => {
+      const id = await seedRoute({ title: `Круг (Минск) \u202Eexe.${format}` });
+      await seedDerived(id, null, GPX_TEXT, FILES);
+      const res = await getRaw(`/v1/routes/${id}/${format}`, '198.51.100.21');
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toBe(body());
+      expect(res.headers['content-type']).toBe(contentType);
+      expect(res.headers['cache-control']).toBe('public, max-age=60');
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      expect(res.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
+      expect(res.headers['content-disposition']).toBe(
+        `attachment; filename="pokatim-route.${format}"; filename*=UTF-8''${encodeURIComponent('Круг ')}%28${encodeURIComponent('Минск')}%29%20exe.${format}.${format}`,
+      );
+      expect(CatalogRouteDetail.parse((await get(`/v1/routes/${id}`)).body)).toMatchObject({
+        gpxAvailable: true,
+        exportFormats: ['gpx', 'kml', 'tcx'],
+      });
+    },
+  );
+
+  it('экспорт версии 1 (без полей kml/tcx): /kml и /tcx — 404 JSON, /gpx — 200, exportFormats: [gpx]', async () => {
+    const id = await seedRoute();
+    await seedDerived(id, null, GPX_TEXT);
+    for (const format of ['kml', 'tcx']) {
+      const res = await getRaw(`/v1/routes/${id}/${format}`, '198.51.100.22');
+      expect(res.statusCode, format).toBe(404);
+      expect(res.json()).toMatchObject({ code: 'NOT_FOUND' });
+      expect(res.headers['content-disposition']).toBeUndefined();
+      expect(res.headers['content-type']).toContain('application/json');
+    }
+    expect((await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.22')).statusCode).toBe(200);
+    const detail = CatalogRouteDetail.parse((await get(`/v1/routes/${id}`)).body);
+    expect(detail.exportFormats).toEqual(['gpx']);
+    expect(detail.gpxAvailable).toBe(true);
+  });
+
+  it('не в каталоге, без экспорта, неизвестный — 404; не UUID — 400', async () => {
+    const hidden = await seedRoute({ publishedAt: null });
+    await seedDerived(hidden, null, GPX_TEXT, FILES);
+    const noExport = await seedRoute();
+    for (const id of [hidden, noExport, uuidv7()]) {
+      for (const format of ['kml', 'tcx']) {
+        const res = await getRaw(`/v1/routes/${id}/${format}`, '198.51.100.23');
+        expect(res.statusCode, `${id}/${format}`).toBe(404);
+        expect(res.headers['content-disposition']).toBeUndefined();
+      }
+    }
+    expect((await getRaw('/v1/routes/not-a-uuid/kml', '198.51.100.23')).statusCode).toBe(400);
+    expect((await getRaw('/v1/routes/not-a-uuid/tcx', '198.51.100.23')).statusCode).toBe(400);
+  });
+
+  it('IP-лимит общий с GPX: 30 скачиваний GPX+KML+TCX вместе — 31-е любого формата 429', async () => {
+    const id = await seedRoute();
+    await seedDerived(id, null, GPX_TEXT, FILES);
+    const formats = ['gpx', 'kml', 'tcx'] as const;
+    for (let i = 0; i < 30; i += 1) {
+      const res = await getRaw(`/v1/routes/${id}/${formats[i % 3]}`, '198.51.100.24');
+      expect(res.statusCode, String(i)).toBe(200);
+    }
+    for (const format of formats) {
+      const limited = await getRaw(`/v1/routes/${id}/${format}`, '198.51.100.24');
+      expect(limited.statusCode, format).toBe(429);
+      expect(limited.headers['content-disposition']).toBeUndefined();
+    }
+    expect((await getRaw(`/v1/routes/${id}/kml`, '198.51.100.25')).statusCode).toBe(200);
   });
 });
 
@@ -501,7 +624,7 @@ describe('изоляция маршрутов райдера (routes-02, RC-2)',
       'minsk',
     ]);
     for (const id of [rider, plain]) {
-      for (const suffix of ['', '/map', '/gpx']) {
+      for (const suffix of ['', '/map', '/gpx', '/kml', '/tcx']) {
         const res = await get(`/v1/routes/${id}${suffix}`);
         expect(res.status, `${id}${suffix}`).toBe(404);
         expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
@@ -549,7 +672,7 @@ describe('маршруты райдеров в каталоге (routes-06)', ()
       'minsk',
     ]);
     for (const id of [...states, never]) {
-      for (const suffix of ['', '/map', '/gpx', '/races']) {
+      for (const suffix of ['', '/map', '/gpx', '/kml', '/tcx', '/races']) {
         const res = await get(`/v1/routes/${id}${suffix}`);
         expect(res.status, `${id}${suffix}`).toBe(404);
         expect(res.body).toMatchObject({ code: 'NOT_FOUND' });

@@ -22,7 +22,7 @@ paths:
   нажатию (`features/location/current-position(.web).ts`, без `watch`), координаты — только в памяти (стор карты без
   persist; не в TanStack Query, `console.*`, URL, подписях a11y и запросах); отказ — сообщение над картой со ссылкой
   в настройки ОС (`location-settings(.web).ts`; web — текстом).
-- Заезды и маршруты — импорт файла через системный picker (заезд: FIT/GPX, TCX — нет, ADR-0011; маршрут: GPX/KML).
+- Заезды и маршруты — импорт файла через системный picker (заезд: FIT/GPX, TCX — нет, ADR-0011; маршрут: GPX/KML/KMZ/TCX).
 - Треки и устройства (ADR-0011): шаг онбординга `(setup)/devices` после геопозиции (флаг аккаунта на сервере
   `OnboardingStatus.devicesStepCompleted`; поля нет — старый API — шаг пропускается); экран «Устройства»
   `settings/devices` (вход — иконка верхней панели); возврат авторизации `devices/return` — вне гардов. Развилки —
@@ -423,9 +423,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   чистые функции `features/routes/format.ts` (`ROUTE_PACE_KMH`); профиль — `features/routes/elevation-profile.tsx`
   (`ProfileChart`: тонкая линия `profile.line` и заливка-градиент `PROFILE_FILL_OPACITY` `profile.fillTop` → `profile.fillBottom` — web inline
   SVG, native `react-native-svg`, фолбэк — столбики `PROFILE_NATIVE_FILL_OPACITY`; график — `aspectRatio`, разметка
-  зависит только от данных: SSR = первый рендер; routes-04 — см. «Скраббинг» ниже); «Скачать GPX» — только `src/lib/download-file(.web).ts` (native —
-  `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteGpxUrl(id)`, только при
-  `gpxAvailable`.
+  зависит только от данных: SSR = первый рендер; routes-04 — см. «Скраббинг» ниже); «Скачать» (routes-formats: один формат — «Скачать GPX», несколько — `route-download-sheet.tsx` на
+  `ModalSheet`) — только `src/lib/download-file(.web).ts` (native —
+  `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteExportUrl(id, format)`, форматы —
+  `exportFormats` (без поля — по `gpxAvailable`).
 - Скраббинг (routes-04): стор на экземпляр экрана — `createScrubStore` пакета `@pokatim/route-view` (`zustand/vanilla`,
   `{ fraction, active, dragging }`, доля длины линии показа; читают только подписчики `useScrub` (`features/maps/use-scrub.ts`) — карта и экран на
   кадр не перерисовываются; экран: native — `scrollEnabled` при `dragging === null` (`use-scrub-scroll-lock(.web).ts`;

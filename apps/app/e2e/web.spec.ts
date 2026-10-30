@@ -1197,7 +1197,7 @@ test.describe('с API', () => {
     }
   });
 
-  test('Маршруты (routes-01, routes-02, routes-03): карточка маршрута каталога по ссылке без входа (SSR, OG без ПДн, профиль высоты, «Скачать GPX»), вкладка «Маршруты» после входа, «Мои» — пусто', async ({
+  test('Маршруты (routes-01, routes-02, routes-03): карточка маршрута каталога по ссылке без входа (SSR, OG без ПДн, профиль высоты, «Скачать» GPX/KML/TCX), вкладка «Маршруты» после входа, «Мои» — пусто', async ({
     page,
     request,
   }) => {
@@ -1210,12 +1210,13 @@ test.describe('с API', () => {
           async () =>
             (
               (await (await request.get(`${API_URL}/v1/routes/${route.id}`)).json()) as {
-                gpxAvailable?: boolean;
+                exportFormats?: string[];
               }
-            ).gpxAvailable,
+            ).exportFormats,
           { timeout: 60_000 },
         )
-        .toBe(true);
+        // routes-formats: KML и TCX — у маршрута версии 1 после бэкфилла версии 2
+        .toEqual(['gpx', 'kml', 'tcx']);
       // SSR карточки: название и OG до JS, og:url — из WEB_ORIGIN, без e-mail и служебных полей
       const html = await (await request.get(`/routes/${route.id}`)).text();
       expect(html).toContain(`<meta property="og:title" content="${route.title}"`);
@@ -1256,7 +1257,7 @@ test.describe('с API', () => {
       await expect(page).toHaveURL(`${BASE_URL}/routes/${route.id}`);
 
       // routes-04d: шторка — «чёрточка» сворачивает (профиль скрыт) и разворачивает; на 375 px строка цифр — одна
-      // строка, «Поделиться» и «Скачать GPX» — в одном ряду
+      // строка, «Поделиться» и «Скачать» (routes-formats: выбор формата) — в одном ряду
       await page.setViewportSize({ width: 375, height: 812 });
       const collapse = page.getByRole('button', { name: 'Свернуть панель' });
       await expect(collapse).toHaveAttribute('aria-expanded', 'true');
@@ -1271,7 +1272,7 @@ test.describe('с API', () => {
       }
       const [shareBox, gpxBox] = await Promise.all([
         page.getByRole('button', { name: 'Поделиться' }).boundingBox(),
-        page.getByRole('button', { name: 'Скачать GPX' }).boundingBox(),
+        page.getByRole('button', { name: 'Скачать', exact: true }).boundingBox(),
       ]);
       expect(Math.abs((shareBox?.y ?? 0) - (gpxBox?.y ?? -100))).toBeLessThan(2);
       await collapse.click();
@@ -1283,15 +1284,31 @@ test.describe('с API', () => {
       await expect(profile).toBeVisible();
       await page.setViewportSize({ width: 1280, height: 720 });
 
-      // «Скачать GPX»: скачивание файла, страница остаётся
-      const downloaded = page.waitForEvent('download');
-      await page.getByRole('button', { name: 'Скачать GPX' }).click();
-      expect((await downloaded).suggestedFilename()).toMatch(/\.gpx$/);
-      await expect(page).toHaveURL(`${BASE_URL}/routes/${route.id}`);
+      // «Скачать» → шит выбора → GPX, KML, TCX: скачивание файла, страница остаётся, шит закрыт
+      for (const format of ['GPX', 'KML', 'TCX']) {
+        await page.getByRole('button', { name: 'Скачать', exact: true }).click();
+        const sheet = page.getByRole('dialog', { name: 'Скачать маршрут' });
+        await expect(sheet).toBeVisible();
+        const downloaded = page.waitForEvent('download');
+        await sheet.getByRole('button', { name: format, exact: true }).click();
+        expect((await downloaded).suggestedFilename()).toMatch(
+          new RegExp(`\\.${format.toLowerCase()}$`),
+        );
+        await expect(sheet).toBeHidden();
+        await expect(page).toHaveURL(`${BASE_URL}/routes/${route.id}`);
+      }
       const gpx = await request.get(`${API_URL}/v1/routes/${route.id}/gpx`);
       expect(gpx.status()).toBe(200);
       expect(gpx.headers()['content-disposition']).toMatch(/^attachment;/);
       expect(await gpx.text()).not.toMatch(/<time|<metadata|<extensions/);
+      for (const format of ['kml', 'tcx']) {
+        const file = await request.get(`${API_URL}/v1/routes/${route.id}/${format}`);
+        expect(file.status(), format).toBe(200);
+        expect(file.headers()['content-disposition']).toMatch(/^attachment;/);
+        const text = await file.text();
+        expect(text).not.toMatch(/<name>Покат|<metadata|<extensions/);
+        expect(text).not.toContain(route.title);
+      }
 
       // вкладка «Маршруты» после входа: маршрут прогона — в каталоге
       const rider = await registerHomeRider(request);

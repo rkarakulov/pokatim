@@ -144,7 +144,7 @@ describe('routes-02: происхождение и расширения файл
     expect(ROUTE_ORIGINS).toEqual(['platform', 'rider']);
   });
 
-  it('ROUTE_FILE_EXTENSIONS — gpx, kml', () => {
-    expect(ROUTE_FILE_EXTENSIONS).toEqual(['gpx', 'kml']);
+  it('ROUTE_FILE_EXTENSIONS — gpx, kml, kmz, tcx (новые — в конец)', () => {
+    expect(ROUTE_FILE_EXTENSIONS).toEqual(['gpx', 'kml', 'kmz', 'tcx']);
   });
 });

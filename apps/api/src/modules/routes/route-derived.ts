@@ -5,7 +5,19 @@ import { MongoTransactions } from '@rkarakulov/api-kit/mongo';
 
 import { runParseThread, type ThreadOutcome } from '../../parse-thread';
 import { ROUTE_POLICY } from './routes.policy';
-import { RoutesRepository } from './routes.repository';
+import { type RouteExportFiles, RoutesRepository } from './routes.repository';
+
+/** Строки экспорта из потока разбора → байты UTF-8 для `route_exports` (разбор и сборка файлов — только в worker). */
+export function exportFilesOf(
+  derived: Pick<RouteDerived, 'gpx' | 'kml' | 'tcx'>,
+): RouteExportFiles {
+  const encoder = new TextEncoder();
+  return {
+    gpx: encoder.encode(derived.gpx),
+    kml: encoder.encode(derived.kml),
+    tcx: encoder.encode(derived.tcx),
+  };
+}
 
 /** Итог прогона бэкфилла: посчитано, детерминированный отказ, пропуск (сбой окружения); `more` — пачка полная. */
 export interface RouteDerivedRun {
@@ -18,7 +30,7 @@ export interface RouteDerivedRun {
 /**
  * Бэкфилл производных данных готовых маршрутов (routes-03, регламент `routes-maintenance`): маршруты без
  * `derivedVersion` текущей версии — пачкой (`ROUTE_POLICY.deriveBatch`), по одному: исходник из `route_sources` →
- * `deriveRoute` в потоке разбора → транзакция { профиль и версия + экспорт GPX }. Детерминированный отказ потока —
+ * `deriveRoute` в потоке разбора → транзакция { профиль и версия + экспорт GPX, KML, TCX }. Детерминированный отказ потока —
  * метка `derivedFailure` этой версии (маршрут не берётся снова до роста версии, RC-2); сбой окружения (нет исходника,
  * поток, запись) — лог и пропуск без метки, повтор в следующий прогон. Логи — `routeId` и код, без названия и
  * координат. Идемпотентно: запись — только если версия ещё не посчитана.
@@ -75,9 +87,9 @@ export class RouteDerivedBackfill {
       this.logger.warn(`route ${id} derive failed: ${outcome.code}`);
       return 'failed';
     }
-    const { profile, gpx } = outcome.result;
+    const { profile } = outcome.result;
     const recorded = await this.transactions.run((tx) =>
-      this.repository.recordDerived(tx, id, version, profile, new TextEncoder().encode(gpx)),
+      this.repository.recordDerived(tx, id, version, profile, exportFilesOf(outcome.result)),
     );
     return recorded ? 'derived' : 'skipped';
   }

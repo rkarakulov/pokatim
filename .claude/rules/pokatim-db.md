@@ -222,9 +222,9 @@ paths:
   `SORT`.
 - Производные данные маршрута (routes-03): «готовый маршрут не меняется» — про линии и длину; производные исходника
   — `route_geometries.profile` (`[distanceM, elevationM][]` ≤ 300 | `null` — нет высот), `derivedVersion`,
-  `derivedFailure { version, code, at }` и коллекция `route_exports { _id: routeId, gpx: Binary, sizeBytes,
-  derivedVersion }` (очищенный GPX, ≤ ~1,2 МБ) — пишут только `RoutesRepository.markReady` (разбор) и `recordDerived`
-  (бэкфилл), обе — с экспортом в одной транзакции: есть `derivedVersion` ⇒ есть экспорт (`gpxAvailable` без чтения
+  `derivedFailure { version, code, at }` и коллекция `route_exports { _id: routeId, gpx: Binary, kml?: Binary,
+  tcx?: Binary, sizeBytes, derivedVersion }` (очищенный экспорт: GPX ≤ ~1,2 МБ, TCX ≤ ~4,6 МБ; `kml`/`tcx` — с версии 2) — пишут только `RoutesRepository.markReady` (разбор) и `recordDerived`
+  (бэкфилл), обе — с экспортом в одной транзакции: есть `derivedVersion` ⇒ есть экспорт (`gpxAvailable` и `exportFormats` — `routeExportFormats(derivedVersion)` — без чтения
   `route_exports`). Пересчёт — только регламент `routes-maintenance` по росту `ROUTE_DERIVED_VERSION`
   (`@pokatim/tracks/parse`); детерминированный отказ разбора — метка `derivedFailure` этой версии (не берётся до роста
   версии), сбой окружения — без метки. Документы до `0022_routes_derived` полей не имеют — чтение `?? null`, выборка

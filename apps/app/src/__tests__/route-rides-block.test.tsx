@@ -40,6 +40,7 @@ const catalogRoute: CatalogRouteDetail = {
   author: { kind: 'team' },
   elevation: null,
   gpxAvailable: false,
+  exportFormats: [],
 };
 const myRoute = (overrides: Partial<MyRoute> = {}): MyRoute => ({
   id: ROUTE_ID,

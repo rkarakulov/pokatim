@@ -30,7 +30,7 @@ import { ROUTE_POLICY } from './routes.policy';
 import { RoutesRepository } from './routes.repository';
 
 /**
- * Мои маршруты (routes-02, AC1–AC5): приём GPX/KML райдером, лимиты, квота, дедуп, список, карточка, карта,
+ * Мои маршруты (routes-02, AC1–AC5): приём GPX/KML (routes-formats: и KMZ/TCX) райдером, лимиты, квота, дедуп, список, карточка, карта,
  * переименование, удаление (в т. ч. во время обработки), чужие — 404, состав ответа, `no-store`, `explain` списка.
  * Разбор — `processRoute` напрямую (как задача по событию outbox).
  */
@@ -119,15 +119,55 @@ describe('приём и разбор (AC1, AC2)', () => {
     expect(parsedMyRoute(retry)).toMatchObject({ id: empty.id, status: 'processing' });
   });
 
-  it('KMZ, FIT, TCX, XXE — 415; > 5 МиБ — 413 и Connection: close; пусто, без названия, 2 символа — 400', async () => {
+  it('KMZ (Google Earth, без doc.kml) и TCX (курс, активность) → 202 → ready (routes-formats)', async () => {
     const me = await rider();
-    const tcx = Buffer.from(
+    for (const name of [
+      'route-earth.kmz',
+      'route-no-doc.kmz',
+      'route-garmin-course.tcx',
+      'route-garmin-activity.tcx',
+    ]) {
+      const res = await uploadMyRoute(h, me.token, fixture(name), name);
+      expect(res.status, name).toBe(202);
+      const { id } = parsedMyRoute(res);
+      expect(await processRoute(h, id), name).toBe('ready');
+      const ready = parsedMyRoute(await get(me.token, `${MY_ROUTES}/${id}`));
+      expect(Math.abs(ready.distanceM! - expectedFixtures[name]!.distanceM)).toBeLessThan(1);
+      const exported = await routesDb(h).exports.findOne({ _id: id });
+      expect(exported?.kml?.buffer.byteLength, name).toBeGreaterThan(0);
+      expect(exported?.tcx?.buffer.byteLength, name).toBeGreaterThan(0);
+    }
+  });
+
+  it('любой zip и пустой TCX принимаются (202), отказ — worker: zip без KML, битый zip — unreadable, TCX без точек — no_track', async () => {
+    const me = await rider();
+    const emptyTcx = Buffer.from(
       '<?xml version="1.0"?><TrainingCenterDatabase></TrainingCenterDatabase>',
     );
+    for (const [bytes, failure] of [
+      [fixture('route-no-kml.kmz'), 'unreadable'],
+      [fixture('route.kmz'), 'unreadable'],
+      [fixture('route-bomb-lying.kmz'), 'unreadable'],
+      [emptyTcx, 'no_track'],
+    ] as const) {
+      const res = await uploadMyRoute(h, me.token, bytes);
+      expect(res.status).toBe(202);
+      const { id } = parsedMyRoute(res);
+      expect(await processRoute(h, id)).toBe('failed');
+      expect(parsedMyRoute(await get(me.token, `${MY_ROUTES}/${id}`))).toMatchObject({
+        status: 'failed',
+        failure,
+      });
+    }
+  });
+
+  it('FIT, PNG, DTD перед корнем (KML, TCX) — 415; > 5 МиБ — 413 и Connection: close; пусто, без названия, 2 символа — 400', async () => {
+    const me = await rider();
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
     for (const bytes of [
-      fixture('route.kmz'),
       fixture('garmin-edge-ride.fit'),
-      tcx,
+      png,
+      fixture('route-dtd.tcx'),
       fixture('xxe.kml'),
     ]) {
       const res = await uploadMyRoute(h, me.token, bytes);
@@ -460,7 +500,7 @@ describe('upload-limits-kml-panel: слоты приёма и таймаут т�
     const tooLarge = heldUpload(h, url, bearer(me.token));
     await tooLarge.held();
     expect((await tooLarge.finish(Buffer.alloc(5 * 1024 * 1024 + 1, 0x20))).status).toBe(413);
-    expect((await uploadMyRoute(h, me.token, fixture('route.kmz'))).status).toBe(415);
+    expect((await uploadMyRoute(h, me.token, fixture('garmin-edge-ride.fit'))).status).toBe(415);
     expect((await uploadMyRoute(h, me.token, fixture('route-rte.gpx'))).status).toBe(202);
   });
 

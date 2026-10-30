@@ -2,57 +2,82 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canPublish,
-  gpxContentDisposition,
-  gpxFileName,
   type PublicationAction,
   publicationTransition,
+  ROUTE_EXPORT_CONTENT_TYPES,
   ROUTE_POLICY,
+  routeContentDisposition,
+  routeExportFormats,
+  routeFileName,
 } from './routes.policy';
 import type { RoutePublicationDoc } from './routes.collection';
 
-describe('gpxFileName (routes-03, RC-14)', () => {
+describe('routeFileName (routes-03, RC-14; routes-formats — общее для форматов)', () => {
   it('кириллица и пробелы: схлопываются, края обрезаются', () => {
-    expect(gpxFileName('  Минское   кольцо  ')).toBe('Минское кольцо');
+    expect(routeFileName('  Минское   кольцо  ')).toBe('Минское кольцо');
   });
 
   it('управляющие символы, \\/:*?"<>| и bidi U+202E удаляются', () => {
-    expect(gpxFileName('a\u0000b\u0007c\td')).toBe('abcd');
-    expect(gpxFileName('a\\b/c:d*e?f"g<h>i|j')).toBe('abcdefghij');
-    expect(gpxFileName('route‮xpg.exe')).toBe('routexpg.exe');
-    expect(gpxFileName('a​b')).toBe('ab');
+    expect(routeFileName('a\u0000b\u0007c\td')).toBe('abcd');
+    expect(routeFileName('a\\b/c:d*e?f"g<h>i|j')).toBe('abcdefghij');
+    expect(routeFileName('route‮xpg.exe')).toBe('routexpg.exe');
+    expect(routeFileName('a​b')).toBe('ab');
   });
 
   it('точки и пробелы по краям обрезаются', () => {
-    expect(gpxFileName('..Круг..')).toBe('Круг');
-    expect(gpxFileName(' . ')).toBe('pokatim-route');
+    expect(routeFileName('..Круг..')).toBe('Круг');
+    expect(routeFileName(' . ')).toBe('pokatim-route');
   });
 
   it('пусто — pokatim-route', () => {
-    expect(gpxFileName('')).toBe('pokatim-route');
-    expect(gpxFileName('<>|‮')).toBe('pokatim-route');
+    expect(routeFileName('')).toBe('pokatim-route');
+    expect(routeFileName('<>|‮')).toBe('pokatim-route');
   });
 
   it('≤ 80 кодовых точек; эмодзи не режется пополам', () => {
-    expect(Array.from(gpxFileName('я'.repeat(100)))).toHaveLength(80);
-    const name = gpxFileName(`${'a'.repeat(79)}🚴🚴`);
+    expect(Array.from(routeFileName('я'.repeat(100)))).toHaveLength(80);
+    const name = routeFileName(`${'a'.repeat(79)}🚴🚴`);
     expect(name).toBe(`${'a'.repeat(79)}🚴`);
     expect(Array.from(name)).toHaveLength(80);
   });
 });
 
-describe('gpxContentDisposition (routes-03)', () => {
+describe('routeContentDisposition (routes-03; routes-formats)', () => {
   it("attachment, ASCII-fallback и filename* по RFC 5987 (экранированы '(); * удалён из имени)", () => {
-    expect(gpxContentDisposition("Круг (Минск) 'x*'")).toBe(
+    expect(routeContentDisposition("Круг (Минск) 'x*'", 'gpx')).toBe(
       `attachment; filename="pokatim-route.gpx"; filename*=UTF-8''${encodeURIComponent('Круг ')}%28${encodeURIComponent('Минск')}%29%20%27x%27.gpx`,
     );
-    expect(gpxContentDisposition('')).toBe(
+    expect(routeContentDisposition('', 'gpx')).toBe(
       `attachment; filename="pokatim-route.gpx"; filename*=UTF-8''pokatim-route.gpx`,
     );
   });
 
-  it('лимиты: GPX 30 в минуту с IP, пачка бэкфилла 20', () => {
-    expect(ROUTE_POLICY.gpxIpLimit).toEqual({ limit: 30, windowSec: 60 });
+  it.each(['gpx', 'kml', 'tcx'] as const)('расширение %s — в fallback и в имени', (format) => {
+    expect(routeContentDisposition('Кольцо‮', format)).toBe(
+      `attachment; filename="pokatim-route.${format}"; filename*=UTF-8''${encodeURIComponent('Кольцо')}.${format}`,
+    );
+  });
+
+  it('MIME форматов — с charset=utf-8', () => {
+    expect(ROUTE_EXPORT_CONTENT_TYPES).toEqual({
+      gpx: 'application/gpx+xml; charset=utf-8',
+      kml: 'application/vnd.google-earth.kml+xml; charset=utf-8',
+      tcx: 'application/vnd.garmin.tcx+xml; charset=utf-8',
+    });
+  });
+
+  it('лимиты: скачиваний 30 в минуту с IP (один бюджет на форматы), пачка бэкфилла 20', () => {
+    expect(ROUTE_POLICY.exportIpLimit).toEqual({ limit: 30, windowSec: 60 });
     expect(ROUTE_POLICY.deriveBatch).toBe(20);
+  });
+});
+
+describe('routeExportFormats (routes-formats, RC-2): форматы экспорта по версии производных', () => {
+  it('нет версии — нет экспорта; 1 — GPX; ≥ 2 — GPX, KML, TCX', () => {
+    expect(routeExportFormats(null)).toEqual([]);
+    expect(routeExportFormats(1)).toEqual(['gpx']);
+    expect(routeExportFormats(2)).toEqual(['gpx', 'kml', 'tcx']);
+    expect(routeExportFormats(3)).toEqual(['gpx', 'kml', 'tcx']);
   });
 });
 

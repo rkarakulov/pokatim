@@ -59,5 +59,24 @@
     "distanceM": 5954.049682227688,
     "elevationGainM": 0,
     "points": 140
+  },
+  "route-garmin-course.tcx": {
+    "distanceM": 12169.241422752104,
+    "elevationGainM": 30,
+    "points": 300
+  },
+  "route-garmin-activity.tcx": {
+    "distanceM": 9363.621201705857,
+    "elevationGainM": 0,
+    "points": 230
+  },
+  "route-earth.kmz": {
+    "distanceM": 10003.527824941042,
+    "elevationGainM": 40,
+    "points": 400
+  },
+  "route-no-doc.kmz": {
+    "distanceM": 4842.623300610076,
+    "points": 120
   }
 }

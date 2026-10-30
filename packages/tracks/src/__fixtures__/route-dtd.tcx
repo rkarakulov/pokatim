@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE TrainingCenterDatabase [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>
+<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
+  <Courses><Course><Name>&xxe;</Name><Track>
+    <Trackpoint><Position><LatitudeDegrees>53.9006</LatitudeDegrees><LongitudeDegrees>27.559</LongitudeDegrees></Position></Trackpoint>
+    <Trackpoint><Position><LatitudeDegrees>53.9106</LatitudeDegrees><LongitudeDegrees>27.569</LongitudeDegrees></Position></Trackpoint>
+  </Track></Course></Courses>
+</TrainingCenterDatabase>

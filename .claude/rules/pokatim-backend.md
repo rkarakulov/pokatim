@@ -51,7 +51,8 @@ paths:
   курсора.
 - Карточка и GPX каталога (routes-03): `RoutesPublicService.get` — `findPublished` → `RoutesRepository.derivedOf`
   (проекция профиля и версии, без кэша в процессе; порт `RouteGeometry` и `displayCache` не меняются);
-  `routes/:id/gpx` — `IpRateLimitGuard` + `@IpRateLimit('route-gpx', ROUTE_POLICY.gpxIpLimit)` после класс-гарда,
+  `routes/:id/{gpx,kml,tcx}` (общий `sendExport`) — `IpRateLimitGuard` +
+  `@IpRateLimit('route-gpx', ROUTE_POLICY.exportIpLimit)` после класс-гарда,
   байты `route_exports`, заголовки файла через `HttpAdapterHost` после чтения (Nest пишет `@Header` до обработчика —
   404 с типом файла не сериализовался бы). Общий IP-лимит метода — `consumeIpLimit`/`IpRateLimitGuard` в
   `src/public-read.guard.ts` (им же пользуется `PublicReadGuard`).
@@ -65,8 +66,8 @@ paths:
   `RoutesModule.controllers` (статический сегмент до публичного `routes/:id`, иначе pipe `Uuid` → 400) →
   `MyRoutesService` (лимиты и слот приёма `UploadSlots` до тела, квота, список, карточка, карта через
   `displayGeometryOf` — не через порт и кэш, `rename`, `delete` в транзакции). Приём — общий
-  `RoutesService.accept({ userId, origin }, …)`: формат — `detectRouteFormat` (GPX/KML; панель — API и UI,
-  `.gpx,.kml`), журнал панели — только `platform`, outbox `routes.route-received` и worker `route-processing` —
+  `RoutesService.accept({ userId, origin }, …)`: формат — `detectRouteFormat` (GPX/KML/KMZ/TCX; панель — API и UI,
+  `.gpx,.kml,.kmz,.tcx`), журнал панели — только `platform`, outbox `routes.route-received` и worker `route-processing` —
   общие. Порты `RouteCatalog`/`RouteGeometry` и `RoutesCatalogService` видят только `platform`. Мутации «моих» — `POST` с глаголом (`rename`, `delete`).
 - Публикация маршрутов райдеров (routes-06): порядок контроллеров `RoutesModule` — `RoutesMineController`,
   `RoutesViewerController`, `RoutesAdminController`, `RoutesModerationController`, `RoutesPublicController`.
