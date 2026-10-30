@@ -38,6 +38,7 @@ import { emailJobId, pushJobId } from './notifications.events';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
 import { PushTokens } from './push-tokens';
+import { waitUntil } from '../../../test/wait';
 
 /**
  * Доставка уведомлений (шаг C, AC2, AC5, AC6): push через фейковый Expo Push API, письма N2 — `FakeMailer`. Процессоры
@@ -597,7 +598,7 @@ describe('письма N2', () => {
     const release = h.mailer.hold();
 
     const first = runEmail(h, docA!._id);
-    await vi.waitFor(async () => expect((await docOf(docA!._id))?.email?.state).toBe('sending'));
+    await waitUntil(async () => expect((await docOf(docA!._id))?.email?.state).toBe('sending'));
     await expect(runEmail(h, docA!._id)).rejects.toThrow('send in progress');
     release();
     expect(await first).toBe('sent');

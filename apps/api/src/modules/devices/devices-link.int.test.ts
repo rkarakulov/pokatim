@@ -30,6 +30,7 @@ import { DevicesLocks } from './devices-jobs';
 import { DevicesLinkService } from './devices-link.service';
 import { DevicesMaintenanceProcessor } from './devices-maintenance.processor';
 import { DevicesRepository } from './devices.repository';
+import { waitUntil } from '../../../test/wait';
 
 let ow: FakeOw;
 let h: Harness;
@@ -445,7 +446,7 @@ describe('ensureUser под замком devices:account:<userId> (гонка 2)
     await createUser.reached;
     const second = connect(h, alice, 'wahoo');
     // второй либо ждёт замок, либо (без замка) тоже дошёл до OW
-    await vi.waitFor(async () => {
+    await waitUntil(async () => {
       const atOw = ow.callsTo('POST /users').length;
       const waiting = (await h.redis.exists(`devices:account:${alice.userId}`)) === 1;
       if (atOw < 2 && !waiting) throw new Error('второй connect ещё не дошёл до замка');

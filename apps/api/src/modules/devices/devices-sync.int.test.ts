@@ -44,6 +44,7 @@ import {
   WEARABLES_AGGREGATOR,
   type WearablesAggregator,
 } from './wearables-aggregator';
+import { waitUntil } from '../../../test/wait';
 
 let ow: FakeOw;
 let h: Harness;
@@ -401,7 +402,7 @@ describe('отзыв с удалением ↔ pull: заезд не возвр�
     expect((await disconnect(h, alice, 'garmin', true)).status).toBe(200);
     let revokeSettled = false;
     const revoking = runOutbox(h, 'devices.revoke-requested').finally(() => (revokeSettled = true));
-    await vi.waitFor(() => {
+    await waitUntil(() => {
       if (acquire.mock.calls.length === 0 && !revokeSettled)
         throw new Error('отзыв не дошёл до замка');
     });
@@ -534,7 +535,7 @@ describe('отзыв с удалением ↔ pull: заезд не возвр�
     await held.reached;
     let disconnected = false;
     const disconnecting = disconnect(h, alice, 'garmin', true).finally(() => (disconnected = true));
-    await vi.waitFor(() => {
+    await waitUntil(() => {
       if (conflicts.length === 0 && !disconnected) throw new Error('отключение не дошло до записи');
     });
     if (disconnected) {
