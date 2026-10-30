@@ -153,6 +153,12 @@ paths:
   устройства в транзакции сессии (сериализация со сбросом); вход без фактора и активация 2FA — первой операцией
   `lockMember`; каждая мутация 2FA — через `PanelTotpGuard.recheck` (замок аккаунта через порт
   `IdentityAccounts.lockAccountState` и штамп, живость сессии, `lockMember` и роль из-под замка); погашение вызова — с `expiresAt > now`; сброс 2FA — одной транзакцией с отзывом сессий.
+- Приглашения (ADR-0026, `0041_panel_invitations`): `panel_invitations` — единственный писатель
+  `PanelInvitationsRepository`; `tokenHash` (sha256) unique, частичный unique `email` при `status: 'pending'` (одно
+  живое на адрес; повторное приглашение гасит прежнее в той же транзакции), TTL по `purgeAt`. E-mail — только у
+  `pending`: закрытие (принято, отозвано, заменено) пишет `email: null`. Принятие — замок приглашения `lockPending`
+  (`$inc version` при `pending`) после `lockAccountState`/`lockAdmins`, `markAccepted` проверяет `matchedCount`;
+  отзыв и замена — условная запись при `pending` (конфликт с принятием); истечение проверяет сервер по `CLOCK`.
 - **Удаление аккаунта** члену команды с активной ролью запрещено (A11, `409 ACCOUNT_PANEL_MEMBER`, порт
   `PanelMembership.hasActiveRole`) — снимать нечего. Гонка «проверка ↔ выдача роли» принята (R7): гард панели
   удалённому отказывает, «Сотрудники» показывают «Удалённый участник». Журнал — `account.deleted` (actor — сам райдер,

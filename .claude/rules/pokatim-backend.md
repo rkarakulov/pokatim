@@ -114,7 +114,15 @@ paths:
   функции и ключ; `PanelTotpCodes` — лимиты и проверка кода; `PanelSessionService` — вызов второго шага;
   `PanelAccountTotpController` `admin/account/totp` — `PanelGuard` без `@RequirePermission`, свой аккаунт любой роли;
   сброс — `PanelMembersService.resetTotp`/`resetTotpFromCli`). Новые `@Public()` — только шаги входа с вызовом
-  (`admin-routes.test.ts` перечисляет их явно).
+  и вход паролем по приглашению `POST admin/invitations/accept` (ADR-0026; `admin-routes.test.ts` перечисляет их явно).
+- Приглашения панели (ADR-0026): всё — модуль `panel`. `PanelInvitationsController` (`admin/invitations`: `GET` —
+  `members.read`, `POST` и `:id/revoke` — `members.manage`, `accept` — `@Public` + IP-лимит) → `PanelInvitationsService`
+  / `PanelInvitationAccept` (снимок по токену и сверка с текущим секретом до пароля → `PanelCredentials.verify` →
+  e-mail аккаунта = адрес → транзакция `lockAccountState` → `lockAdmins` → `lockPending` → `lockMember` → журнал →
+  `PanelSessionService.continueAfterCredentials`; второй проверки пароля и копии 2FA нет). Письма — outbox
+  `panel.invitation-email-requested { invitationId }` и `panel.role-email-requested { auditId }` (выдача, смена,
+  снятие роли и CLI `grant-admin` — в транзакции действия) → очередь `panel-email` (`PanelWorkerModule`); база
+  ссылок — `panelLinkBase()` (`PANEL_LINK_BASE` или `${APP_WEB_ORIGIN}/admin/`).
 - Код, нужный ≥2 приложениям (разбор трека для pre-check в приложении и на сервере), — в `packages/tracks`
   (`@pokatim/tracks`): парсинг GPX/TCX/FIT/KML и геометрия; дубли разбора в модулях запрещены.
 
