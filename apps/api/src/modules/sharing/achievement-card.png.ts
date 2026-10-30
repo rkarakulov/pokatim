@@ -5,7 +5,7 @@ import {
   storyCardColors,
 } from '@pokatim/design-tokens';
 
-import { ACHIEVEMENT_BADGE_ICONS } from './achievement-card.icons';
+import { achievementBadgeIcon } from './achievement-card.icons';
 import type { AchievementCardInput } from './achievement-card.inputs';
 import { type AchievementCardRenderInput, achievementCardTree } from './achievement-card.render';
 import { achievementCardTexts } from './achievement-card.texts';
@@ -22,7 +22,7 @@ export function achievementCardRenderInput(
     template: input.template,
     colors: storyCardColors(scheme),
     badgeColors: storyCardBadgeColors(scheme),
-    icon: ACHIEVEMENT_BADGE_ICONS[input.facts.code],
+    icon: achievementBadgeIcon(input.facts.code, input.facts.level),
     texts: achievementCardTexts(input),
   };
 }

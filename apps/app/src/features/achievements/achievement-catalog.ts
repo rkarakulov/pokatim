@@ -1,8 +1,12 @@
-import type {
-  Achievement,
-  AchievementCode,
-  AchievementObject,
-  PublicRiderAchievement,
+import {
+  ACHIEVEMENT_LEVEL_TARGETS,
+  ACHIEVEMENT_LEVELS,
+  isLeveledCode,
+  type Achievement,
+  type AchievementCode,
+  type AchievementLevel,
+  type AchievementObject,
+  type PublicRiderAchievement,
 } from '@pokatim/contracts';
 import { heroDateText, t, formatLocalRange, type MessageKey } from '@pokatim/i18n';
 
@@ -17,15 +21,16 @@ interface CatalogEntry {
   title: MessageKey;
   condition: MessageKey;
   icon: IconName;
-  /** число на значке («Пять гонок», «Десять кофе-райдов») */
-  count?: number;
   /** «Сторис результата» → сторис результата гонки объекта (A6) — только гоночные; карточка достижения — у всех */
   shareable: boolean;
   /** виден в публичном профиле (A7, R9: публично — только протоколы) — только гоночные */
   public: boolean;
 }
 
-/** Каталог v1 (A1): ключи i18n, значок, шеринг. Исчерпывающий: новый код contracts без строки — ошибка типов. */
+/**
+ * Каталог (A1): ключи i18n, значок, шеринг. Исчерпывающий: новый код contracts без строки — ошибка типов. Пороги уровней
+ * счётных (число на значке, `{count}` условия) — `ACHIEVEMENT_LEVEL_TARGETS` контрактов, без копии здесь.
+ */
 export const ACHIEVEMENT_CATALOG = {
   race_first_finish: {
     title: 'achievements.race_first_finish.title',
@@ -52,7 +57,6 @@ export const ACHIEVEMENT_CATALOG = {
     title: 'achievements.races_5.title',
     condition: 'achievements.races_5.condition',
     icon: 'races',
-    count: 5,
     shareable: true,
     public: true,
   },
@@ -67,7 +71,6 @@ export const ACHIEVEMENT_CATALOG = {
     title: 'achievements.routes_5.title',
     condition: 'achievements.routes_5.condition',
     icon: 'routes',
-    count: 5,
     shareable: false,
     public: false,
   },
@@ -89,7 +92,6 @@ export const ACHIEVEMENT_CATALOG = {
     title: 'achievements.rides_10.title',
     condition: 'achievements.rides_10.condition',
     icon: 'rides',
-    count: 10,
     shareable: false,
     public: false,
   },
@@ -97,7 +99,58 @@ export const ACHIEVEMENT_CATALOG = {
 
 export const catalogEntry = (code: AchievementCode): CatalogEntry => ACHIEVEMENT_CATALOG[code];
 export const achievementTitle = (code: AchievementCode) => t(catalogEntry(code).title);
-export const achievementCondition = (code: AchievementCode) => t(catalogEntry(code).condition);
+
+/** Уровень из ответа (`Achievement.level`: строка, `'unknown'` или `null`). */
+type ResponseLevel = Achievement['level'];
+
+/**
+ * Показываемый уровень (RC-L8): счётное без уровня (старый API выдавал только бронзу) — бронза; незнакомый уровень —
+ * без уровня; разовое — без уровня.
+ */
+export function displayLevel(code: AchievementCode, level: ResponseLevel): AchievementLevel | null {
+  if (!isLeveledCode(code) || level === 'unknown') return null;
+  return level ?? 'bronze';
+}
+
+/** Число на значке (L6): порог показываемого уровня; незнакомый уровень и разовые — без числа. */
+export function badgeCount(code: AchievementCode, level: ResponseLevel): number | undefined {
+  const shown = displayLevel(code, level);
+  if (shown === null || !isLeveledCode(code)) return undefined;
+  return ACHIEVEMENT_LEVEL_TARGETS[code][ACHIEVEMENT_LEVELS.indexOf(shown)];
+}
+
+/** Условие (L6): для текущего уровня («Финиш в зачёте 15 разных гонок»); незнакомый уровень — порог бронзы. */
+export function achievementCondition(code: AchievementCode, level: ResponseLevel): string {
+  if (!isLeveledCode(code)) return t(catalogEntry(code).condition);
+  const count = badgeCount(code, level) ?? ACHIEVEMENT_LEVEL_TARGETS[code][0];
+  return t(catalogEntry(code).condition, { count });
+}
+
+const LEVEL_TEXT = {
+  bronze: 'achievements.level.bronze',
+  silver: 'achievements.level.silver',
+  gold: 'achievements.level.gold',
+} as const satisfies Record<AchievementLevel, MessageKey>;
+
+/** Метка уровня: «Бронза», «Серебро», «Золото» (уровень текстом, не цветом). */
+export const levelLabel = (level: AchievementLevel) => t(LEVEL_TEXT[level]);
+
+/** Метка показываемого уровня элемента; разовое и незнакомый уровень — `null`. */
+export function itemLevelLabel(item: KnownAchievement<PublicRiderAchievement>): string | null {
+  const shown = displayLevel(item.code, item.level);
+  return shown === null ? null : levelLabel(shown);
+}
+
+/** Вспышка повышения — «Новый уровень» (серебро и золото); бронза, незнакомый и без уровня — «Новое достижение». */
+export const isLevelUp = (item: Pick<Achievement, 'level'>) =>
+  item.level === 'silver' || item.level === 'gold';
+
+/**
+ * Ключ сессии вспышки (RC-L4): код и уровень — бронза, показанная в этом запуске, не скрывает серебро. `POST seen` —
+ * по коду.
+ */
+export const flashKey = (item: Pick<Achievement, 'code' | 'level'>) =>
+  `${item.code}:${item.level ?? ''}`;
 
 /** Только известные коды, порядок сервера (от новых фактов к старым) сохраняется (RC-8). */
 export function knownItems<T extends PublicRiderAchievement>(
@@ -107,15 +160,15 @@ export function knownItems<T extends PublicRiderAchievement>(
 }
 
 /**
- * Очередь вспышки (A5): неувиденные известные — от старых к новым (обратный порядок ответа). `shown` — коды, уже
- * показанные в этом запуске: сбой `seen` вернёт `seen: false` в кэш, но вспышка не зациклится.
+ * Очередь вспышки (A5): неувиденные известные — от старых к новым (обратный порядок ответа). `shown` — ключи
+ * `flashKey`, уже показанные в этом запуске: сбой `seen` вернёт `seen: false` в кэш, но вспышка не зациклится.
  */
 export function flashQueue(
   items: readonly Achievement[],
   shown: ReadonlySet<string> = new Set(),
 ): KnownAchievement[] {
   return knownItems(items)
-    .filter((item) => !item.seen && !shown.has(item.code))
+    .filter((item) => !item.seen && !shown.has(flashKey(item)))
     .reverse();
 }
 
@@ -142,10 +195,18 @@ export const achievementObjectText = (object: AchievementObject) =>
 export const factDateText = (factDate: string) =>
   heroDateText(formatLocalRange(factDate, factDate, null));
 
-/** Подпись a11y значка и экрана: «Достижение «Победа»: Гонка «…», 2 мая 2026». */
-export const achievementA11y = (item: KnownAchievement<PublicRiderAchievement>) =>
-  t('achievements.a11y', {
+/**
+ * Подпись a11y значка и экрана: «Достижение «Победа»: Гонка «…», 2 мая 2026»; счётное — с уровнем («Достижение
+ * «Гонщик», серебро: …»).
+ */
+export function achievementA11y(item: KnownAchievement<PublicRiderAchievement>): string {
+  const params = {
     title: achievementTitle(item.code),
     object: achievementObjectText(item.object),
     date: factDateText(item.factDate),
-  });
+  };
+  const level = itemLevelLabel(item);
+  return level === null
+    ? t('achievements.a11y', params)
+    : t('achievements.a11yLevel', { ...params, level: level.toLocaleLowerCase('ru') });
+}

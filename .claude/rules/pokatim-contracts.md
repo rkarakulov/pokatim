@@ -183,7 +183,12 @@ paths:
   `z.enum`) и `MarkAchievementsSeenRequest` (`strictObject`, 1–9 кодов без повторов → `INVALID`); ответы `Achievement`
   / `AchievementList` (`code`, `object.kind` — `tolerantEnum`; `factDate` — `LocalDate`, без времени суток, RC-7) и
   `PublicRiderAchievement(List)` (без `seen`). RC-8: незнакомый код в старой сборке — `'unknown'`; приложение такие
-  элементы отбрасывает (пометить `seen` их нельзя). Новых кодов ошибок нет. api-client — `listAchievements(token)`,
+  элементы отбрасывает (пометить `seen` их нельзя). Уровни (achievements-levels): `ACHIEVEMENT_LEVELS`
+  (`bronze | silver | gold`, только в конец), `ACHIEVEMENT_LEVEL_TARGETS` (пороги трёх счётных кодов — одна таблица
+  для API, карточки и приложения; выпущенные не меняются, новый уровень — в конец), `LeveledAchievementCode`,
+  `isLeveledCode`; `level` — `tolerantEnum(...).nullable().default(null)` (старый API без поля → `null`),
+  `AchievementList.progress` — `AchievementProgress[]` с `.default([])`; в публичной схеме `progress` нет;
+  `MarkAchievementsSeenRequest` не меняется. Новых кодов ошибок нет. api-client — `listAchievements(token)`,
   `markAchievementsSeen(token, codes)` (204), `getRiderAchievements(publicId)` (публичный).
 - Билеты (event-tickets, ADR-0023): `src/tickets/ticket.schema.ts` — `TICKET_EVENT_KINDS`, `TICKET_STATUSES`
   (`event_cancelled` вычисляет сервер), `EVENT_REGISTRATION_CLOSED_REASONS` — только в конец; `TicketCode` (ввод:

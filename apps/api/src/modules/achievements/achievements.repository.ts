@@ -16,7 +16,7 @@ export const ACHIEVEMENT_GRANTS_UNIQUE_INDEX = 'achievement_grants_user_code_uni
 /** Выдача без служебных полей записи. */
 export type StoredGrantDoc = Pick<
   AchievementGrantDoc,
-  'code' | 'object' | 'factAt' | 'seenAt' | 'revokedAt'
+  'code' | 'object' | 'factAt' | 'seenAt' | 'revokedAt' | 'level' | 'seenLevel'
 >;
 
 /**
@@ -37,7 +37,18 @@ export class AchievementsRepository {
     return this.c.grants
       .find<StoredGrantDoc>(
         { userId },
-        { projection: { _id: 0, code: 1, object: 1, factAt: 1, seenAt: 1, revokedAt: 1 } },
+        {
+          projection: {
+            _id: 0,
+            code: 1,
+            object: 1,
+            factAt: 1,
+            seenAt: 1,
+            revokedAt: 1,
+            level: 1,
+            seenLevel: 1,
+          },
+        },
       )
       .toArray();
   }
@@ -47,7 +58,10 @@ export class AchievementsRepository {
     return (await this.c.syncs.findOne({ _id: userId }))?.firstSyncAt ?? null;
   }
 
-  /** Вставка выдачи; дубль уникального индекса (проигравший параллельный GET) — `false`, не ошибка. */
+  /**
+   * Вставка выдачи с уровнем; просмотренная (первая сверка, A3) — показан и текущий уровень (`seenLevel`). Дубль
+   * уникального индекса (проигравший параллельный GET) — `false`, не ошибка.
+   */
   async insertGrant(
     userId: string,
     code: AchievementCode,
@@ -65,6 +79,8 @@ export class AchievementsRepository {
         grantedAt: now,
         seenAt,
         revokedAt: null,
+        level: earned.level,
+        seenLevel: seenAt === null ? null : earned.level,
         updatedAt: now,
       });
       return true;
@@ -84,9 +100,9 @@ export class AchievementsRepository {
   }
 
   /**
-   * Восстановление отозванной (`restore`) или обновление объекта видимой (`refresh`): `seenAt` и `grantedAt` не
-   * трогаются (A4: «вернулся — `seen` прежний»). Условие на `revokedAt` — устаревший параллельный план не снимает
-   * свежий отзыв (ревью PR A, LOW-1).
+   * Восстановление отозванной (`restore`) или обновление объекта и уровня видимой (`refresh`): `seenAt`, `seenLevel` и
+   * `grantedAt` не трогаются (A4: «вернулся — `seen` прежний»; L3: возврат на показанный уровень не вспыхивает).
+   * Условие на `revokedAt` — устаревший параллельный план не снимает свежий отзыв (ревью PR A, LOW-1).
    */
   async restoreOrRefresh(
     userId: string,
@@ -97,7 +113,15 @@ export class AchievementsRepository {
   ): Promise<boolean> {
     const result = await this.c.grants.updateOne(
       { userId, code, revokedAt: revoked ? { $ne: null } : null },
-      { $set: { object: earned.object, factAt: earned.factAt, revokedAt: null, updatedAt: now } },
+      {
+        $set: {
+          object: earned.object,
+          factAt: earned.factAt,
+          level: earned.level,
+          revokedAt: null,
+          updatedAt: now,
+        },
+      },
     );
     return result.modifiedCount === 1;
   }
@@ -115,11 +139,33 @@ export class AchievementsRepository {
     }
   }
 
-  /** «Показано»: только свои видимые непросмотренные; остальные — без записи. */
+  /**
+   * «Показано»: только свои видимые, у которых не показан текущий уровень; остальные — без записи. Одна условная
+   * операция (update pipeline): `seenLevel` берётся из `level` того же документа в момент записи (клиент уровень не
+   * присылает) и монотонен (`$max`); `seenAt` — первый показ. Поля v1 (`level`/`seenLevel` нет) ≡ 1.
+   */
   async markSeen(userId: string, codes: readonly AchievementCode[], now: Date): Promise<number> {
     const result = await this.c.grants.updateMany(
-      { userId, code: { $in: [...codes] }, revokedAt: null, seenAt: null },
-      { $set: { seenAt: now, updatedAt: now } },
+      {
+        userId,
+        code: { $in: [...codes] },
+        revokedAt: null,
+        $expr: {
+          $or: [
+            { $eq: [{ $ifNull: ['$seenAt', null] }, null] },
+            { $lt: [{ $ifNull: ['$seenLevel', 1] }, { $ifNull: ['$level', 1] }] },
+          ],
+        },
+      },
+      [
+        {
+          $set: {
+            seenAt: { $ifNull: ['$seenAt', now] },
+            seenLevel: { $max: [{ $ifNull: ['$seenLevel', 1] }, { $ifNull: ['$level', 1] }] },
+            updatedAt: now,
+          },
+        },
+      ],
     );
     return result.modifiedCount;
   }

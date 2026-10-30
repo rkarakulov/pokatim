@@ -16,6 +16,7 @@ import {
   achievementObjectText,
   achievementTitle,
   factDateText,
+  itemLevelLabel,
   type KnownAchievement,
 } from './achievement-catalog';
 import { AchievementBadge } from './achievement-badge';
@@ -82,8 +83,9 @@ function BadgeEnter({ animated, children }: { animated: boolean; children: React
 }
 
 /**
- * Общий макет вспышки и экрана достижения (A5, A6): крупный значок, название, условие, объект (гонка, маршрут или
- * райд), дата факта; действия — снизу (`children`). Дата — день по Минску с годом (RC-7, SSR = первый рендер).
+ * Общий макет вспышки и экрана достижения (A5, A6): крупный значок, название, метка уровня счётного (L6, текстом),
+ * условие текущего уровня, объект (гонка, маршрут или райд), дата факта; действия — снизу (`children`). Дата — день по
+ * Минску с годом (RC-7, SSR = первый рендер).
  */
 export function AchievementCard({
   item,
@@ -95,10 +97,11 @@ export function AchievementCard({
   children?: ReactNode;
 }) {
   const theme = useTheme();
+  const level = itemLevelLabel(item);
   return (
     <View testID="achievement-card" style={styles.card}>
       <BadgeEnter animated={animated}>
-        <AchievementBadge code={item.code} size={layout.badgeHero} />
+        <AchievementBadge code={item.code} level={item.level} size={layout.badgeHero} />
       </BadgeEnter>
       <View style={styles.text}>
         <Text
@@ -107,8 +110,13 @@ export function AchievementCard({
         >
           {achievementTitle(item.code)}
         </Text>
+        {level === null ? null : (
+          <Text style={[textStyle('label'), styles.center, { color: theme.text.secondary }]}>
+            {level}
+          </Text>
+        )}
         <Text style={[textStyle('body'), styles.center, { color: theme.text.secondary }]}>
-          {achievementCondition(item.code)}
+          {achievementCondition(item.code, item.level)}
         </Text>
         <Text style={[textStyle('bodyStrong'), styles.center, { color: theme.text.primary }]}>
           {achievementObjectText(item.object)}

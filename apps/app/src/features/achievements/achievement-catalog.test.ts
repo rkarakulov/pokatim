@@ -3,11 +3,17 @@ import type { Achievement } from '@pokatim/contracts';
 
 import {
   achievementA11y,
+  achievementCondition,
   achievementObjectText,
   achievementTitle,
+  badgeCount,
+  displayLevel,
   factDateText,
+  flashKey,
   flashQueue,
+  isLevelUp,
   knownItems,
+  levelLabel,
   publicItems,
   shareRaceId,
 } from './achievement-catalog';
@@ -19,6 +25,7 @@ const item = (overrides: Partial<Achievement> = {}): Achievement => ({
   code: 'race_first_finish',
   object: { kind: 'race', id: RACE, title: 'Гонка у озера' },
   factDate: '2026-05-02',
+  level: null,
   seen: true,
   ...overrides,
 });
@@ -56,7 +63,17 @@ describe('flashQueue (A5)', () => {
       item({ code: 'race_win', seen: false }),
       item({ code: 'ride_first', seen: false }),
     ];
-    expect(flashQueue(items, new Set(['race_win'])).map((a) => a.code)).toEqual(['ride_first']);
+    expect(flashQueue(items, new Set(['race_win:'])).map((a) => a.code)).toEqual(['ride_first']);
+  });
+
+  it('ключ сессии — код и уровень (RC-L4): повышение в том же запуске вспыхивает, тот же уровень — нет', () => {
+    const silver = item({ code: 'races_5', level: 'silver', seen: false });
+    expect(flashKey(silver)).toBe('races_5:silver');
+    expect(flashKey(item({ code: 'race_win' }))).toBe('race_win:');
+    expect(flashQueue([silver], new Set(['races_5:bronze'])).map(flashKey)).toEqual([
+      'races_5:silver',
+    ]);
+    expect(flashQueue([silver], new Set(['races_5:silver']))).toEqual([]);
   });
 
   it('всё просмотрено или пусто — очереди нет', () => {
@@ -107,6 +124,61 @@ describe('подписи', () => {
   it('подпись a11y: название, объект и дата', () => {
     const [known] = knownItems([item({ code: 'race_win' })]);
     expect(achievementA11y(known!)).toBe('Достижение «Победа»: Гонка «Гонка у озера», 2 мая 2026');
+  });
+
+  it('подпись a11y счётного — с уровнем; старый API (без уровня) — бронза', () => {
+    const [silver, v1] = knownItems([
+      item({ code: 'races_5', level: 'silver' }),
+      item({ code: 'races_5', level: null }),
+    ]);
+    expect(achievementA11y(silver!)).toBe(
+      'Достижение «Гонщик», серебро: Гонка «Гонка у озера», 2 мая 2026',
+    );
+    expect(achievementA11y(v1!)).toBe(
+      'Достижение «Гонщик», бронза: Гонка «Гонка у озера», 2 мая 2026',
+    );
+  });
+});
+
+describe('уровни (L6, RC-L8)', () => {
+  it('displayLevel: счётное без уровня (старый API) — бронза; незнакомый — нет; разовое — нет', () => {
+    expect(displayLevel('races_5', 'silver')).toBe('silver');
+    expect(displayLevel('races_5', null)).toBe('bronze');
+    expect(displayLevel('rides_10', 'unknown')).toBeNull();
+    expect(displayLevel('race_win', null)).toBeNull();
+    expect(displayLevel('race_win', 'gold')).toBeNull();
+  });
+
+  it('badgeCount: порог уровня из контрактов; незнакомый уровень и разовые — без числа', () => {
+    expect(badgeCount('races_5', 'bronze')).toBe(5);
+    expect(badgeCount('races_5', 'silver')).toBe(15);
+    expect(badgeCount('routes_5', 'gold')).toBe(30);
+    expect(badgeCount('rides_10', null)).toBe(10);
+    expect(badgeCount('rides_10', 'gold')).toBe(50);
+    expect(badgeCount('rides_10', 'unknown')).toBeUndefined();
+    expect(badgeCount('race_win', null)).toBeUndefined();
+  });
+
+  it('название и условие по уровню; незнакомый уровень — условие бронзы', () => {
+    expect(achievementTitle('races_5')).toBe('Гонщик');
+    expect(achievementTitle('routes_5')).toBe('Путешественник');
+    expect(achievementTitle('rides_10')).toBe('Завсегдатай');
+    expect(achievementCondition('races_5', 'silver')).toBe('Финиш в зачёте 15 разных гонок');
+    expect(achievementCondition('routes_5', 'gold')).toBe(
+      'Пройденные заезды по 30 разным маршрутам',
+    );
+    expect(achievementCondition('rides_10', 'unknown')).toBe('10 прошедших кофе-райдов');
+    expect(achievementCondition('race_win', null)).toBe('Первое место в своей группе');
+  });
+
+  it('метка уровня и «Новый уровень» — только серебро и золото', () => {
+    expect(levelLabel('bronze')).toBe('Бронза');
+    expect(levelLabel('gold')).toBe('Золото');
+    expect(isLevelUp(item({ code: 'races_5', level: 'silver' }))).toBe(true);
+    expect(isLevelUp(item({ code: 'races_5', level: 'gold' }))).toBe(true);
+    expect(isLevelUp(item({ code: 'races_5', level: 'bronze' }))).toBe(false);
+    expect(isLevelUp(item({ code: 'races_5', level: 'unknown' }))).toBe(false);
+    expect(isLevelUp(item({ code: 'races_5', level: null }))).toBe(false);
   });
 });
 

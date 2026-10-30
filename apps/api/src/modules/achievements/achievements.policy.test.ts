@@ -8,6 +8,10 @@ import {
   type AchievementFacts,
   earnedAchievements,
   type Earned,
+  evaluateAchievements,
+  isSeen,
+  type LevelRank,
+  levelName,
   raceAchievements,
   reconcilePlan,
   sortForList,
@@ -54,11 +58,16 @@ const facts = (partial: Partial<AchievementFacts>): AchievementFacts => ({
   ...partial,
 });
 const earned = (partial: Partial<AchievementFacts>) => earnedAchievements(facts(partial));
-const raceEarned = (n: number, at: number): Earned => ({
+const raceEarned = (n: number, at: number, level: LevelRank | null = null): Earned => ({
   object: { kind: 'race', id: id(n) },
   factAt: day(at),
   title: null,
+  level,
 });
+/** n гонок «в зачёте» по одной в день: гонка k — день k. */
+const races = (n: number) => Array.from({ length: n }, (_, k) => row(k + 1, k + 1, 10));
+const routes = (n: number) => Array.from({ length: n }, (_, k) => routeRide(k + 1, k + 1));
+const rides = (n: number) => Array.from({ length: n }, (_, k) => ride(k + 1, k + 1));
 
 describe('earnedAchievements — гонки (AC1)', () => {
   it('первый финиш, подиум, победа — самая ранняя подходящая строка; объект и дата факта', () => {
@@ -90,12 +99,12 @@ describe('earnedAchievements — гонки (AC1)', () => {
     expect(tied.get('race_win')).toEqual(raceEarned(1, 10));
   });
 
-  it('4 гонки — нет «Пять гонок»; 5 — есть, объект — 5-я по дате', () => {
+  it('4 гонки — нет «Гонщика»; 5 — бронза, объект — 5-я по дате', () => {
     const four = [1, 2, 3, 4].map((n) => row(n, 10 + n, 10));
     expect(earned({ races: four }).has('races_5')).toBe(false);
     const five = [...four, row(9, 5, 7), row(5, 20, 8)];
     // по дате: 9 (5.06), 1, 2, 3, 4 (14.06) → 5-я — гонка 4
-    expect(earned({ races: five }).get('races_5')).toEqual(raceEarned(4, 14));
+    expect(earned({ races: five }).get('races_5')).toEqual(raceEarned(4, 14, 1));
   });
 
   it('равные даты — порядок по id гонки (детерминизм: объект не «прыгает» между сверками)', () => {
@@ -113,6 +122,7 @@ describe('earnedAchievements — маршруты (AC1)', () => {
       object: { kind: 'route', id: id(1) },
       factAt: day(10),
       title: 'Маршрут 1',
+      level: null,
     });
   });
 
@@ -122,7 +132,7 @@ describe('earnedAchievements — маршруты (AC1)', () => {
     expect(earned({ routes: repeats }).get('route_first')?.factAt).toEqual(day(11));
   });
 
-  it('4 маршрута — нет «Пять маршрутов»; 5 — 5-й маршрут по дате его первого заезда', () => {
+  it('4 маршрута — нет «Путешественника»; 5 — 5-й маршрут по дате его первого заезда', () => {
     const four = [1, 2, 3, 4].map((n) => routeRide(n, 10 + n));
     expect(earned({ routes: four }).has('routes_5')).toBe(false);
     // маршрут 5 впервые — 20.06, повторно маршрут 1 — 25.06 (не меняет дату маршрута 1)
@@ -131,6 +141,7 @@ describe('earnedAchievements — маршруты (AC1)', () => {
       object: { kind: 'route', id: id(5) },
       factAt: day(20),
       title: 'Маршрут 5',
+      level: 1,
     });
   });
 });
@@ -142,6 +153,7 @@ describe('earnedAchievements — кофе-райды (AC1)', () => {
       object: { kind: 'ride', id: id(1) },
       factAt: day(10),
       title: 'Райд 1',
+      level: null,
     });
     expect(result.has('ride_organizer')).toBe(false);
   });
@@ -168,7 +180,112 @@ describe('earnedAchievements — кофе-райды (AC1)', () => {
       object: { kind: 'ride', id: id(10) },
       factAt: day(20),
       title: 'Райд 10',
+      level: 1,
     });
+  });
+});
+
+describe('уровни счётных (L1, L2, AC1)', () => {
+  const level = (partial: Partial<AchievementFacts>, code: AchievementCode) =>
+    earned(partial).get(code)?.level ?? null;
+
+  it('гонки: 4 → нет, 5 → бронза, 14 → бронза, 15 → серебро, 29 → серебро, 30 → золото', () => {
+    expect([4, 5, 14, 15, 29, 30, 45].map((n) => level({ races: races(n) }, 'races_5'))).toEqual([
+      null,
+      1,
+      1,
+      2,
+      2,
+      3,
+      3,
+    ]);
+  });
+
+  it('объект и дата — факт порога текущего уровня (15-я / 30-я гонка по дате, L2)', () => {
+    expect(earned({ races: races(20) }).get('races_5')).toEqual(raceEarned(15, 15, 2));
+    expect(earned({ races: races(31) }).get('races_5')).toEqual(raceEarned(30, 30, 3));
+  });
+
+  it('DQ не в зачёте: 15 строк, одна DQ — бронза', () => {
+    const rows = races(15).map((r, k) => (k === 3 ? { ...r, status: 'dq' as const } : r));
+    expect(level({ races: rows }, 'races_5')).toBe(1);
+  });
+
+  it('маршруты: 14 → бронза, 15 → серебро (15-й маршрут по первому заезду); повторы не считаются', () => {
+    expect(level({ routes: routes(14) }, 'routes_5')).toBe(1);
+    expect(earned({ routes: routes(15) }).get('routes_5')).toEqual({
+      object: { kind: 'route', id: id(15) },
+      factAt: day(15),
+      title: 'Маршрут 15',
+      level: 2,
+    });
+    const repeats = [...routes(14), routeRide(1, 20), routeRide(2, 21)];
+    expect(level({ routes: repeats }, 'routes_5')).toBe(1);
+    expect(level({ routes: routes(30) }, 'routes_5')).toBe(3);
+  });
+
+  it('кофе-райды: 9/10, 24/25, 49/50', () => {
+    expect([9, 10, 24, 25, 49, 50].map((n) => level({ rides: rides(n) }, 'rides_10'))).toEqual([
+      null,
+      1,
+      1,
+      2,
+      2,
+      3,
+    ]);
+    expect(earned({ rides: rides(25) }).get('rides_10')?.object).toEqual({
+      kind: 'ride',
+      id: id(25),
+    });
+  });
+
+  it('разовые — `level: null`', () => {
+    const all = earned({ races: races(30), routes: routes(30), rides: rides(50) });
+    for (const [code, item] of all) {
+      if (!['races_5', 'routes_5', 'rides_10'].includes(code)) expect(item.level, code).toBeNull();
+    }
+  });
+
+  it('levelName: ранг → строка контракта', () => {
+    expect(([1, 2, 3] as const).map(levelName)).toEqual(['bronze', 'silver', 'gold']);
+  });
+});
+
+describe('evaluateAchievements — прогресс (L4, AC4)', () => {
+  const progress = (partial: Partial<AchievementFacts>) =>
+    evaluateAchievements(facts(partial)).progress;
+
+  it('счёт 0 — нет строки; 2 гонки — бронза 2/5; 7 — серебро 7/15; 29 — золото 29/30; 30 — нет', () => {
+    expect(progress({})).toEqual([]);
+    expect(progress({ races: races(2) })).toEqual([
+      { code: 'races_5', level: 1, current: 2, target: 5 },
+    ]);
+    expect(progress({ races: races(7) })).toEqual([
+      { code: 'races_5', level: 2, current: 7, target: 15 },
+    ]);
+    expect(progress({ races: races(29) })).toEqual([
+      { code: 'races_5', level: 3, current: 29, target: 30 },
+    ]);
+    expect(progress({ races: races(30) })).toEqual([]);
+  });
+
+  it('порядок каталога; счёт — разные маршруты и прошедшие райды', () => {
+    expect(
+      progress({
+        rides: rides(12),
+        routes: [...routes(3), routeRide(1, 30)],
+        races: races(15),
+      }),
+    ).toEqual([
+      { code: 'races_5', level: 3, current: 15, target: 30 },
+      { code: 'routes_5', level: 1, current: 3, target: 5 },
+      { code: 'rides_10', level: 2, current: 12, target: 25 },
+    ]);
+  });
+
+  it('earned — тот же результат, что `earnedAchievements`', () => {
+    const input = facts({ races: races(16), rides: rides(3) });
+    expect(evaluateAchievements(input).earned).toEqual(earnedAchievements(input));
   });
 });
 
@@ -176,6 +293,30 @@ describe('raceAchievements (публичный список)', () => {
   it('только гоночные коды — те же правила', () => {
     const result = raceAchievements([row(1, 10, 1)]);
     expect([...result.keys()].sort()).toEqual(['race_first_finish', 'race_podium', 'race_win']);
+  });
+
+  it('уровень гоночного `races_5` (L7)', () => {
+    expect(raceAchievements(races(16)).get('races_5')?.level).toBe(2);
+  });
+});
+
+describe('isSeen (L3)', () => {
+  it('документ v1 без полей — по `seenAt` (бронза)', () => {
+    expect(isSeen({ seenAt: day(1) }, 1)).toBe(true);
+    expect(isSeen({ seenAt: null }, 1)).toBe(false);
+    expect(isSeen({ seenAt: day(1) }, null)).toBe(true);
+  });
+
+  it('показанный уровень ниже текущего — не показано; выше или равен — показано', () => {
+    expect(isSeen({ seenAt: day(1), seenLevel: 1 }, 2)).toBe(false);
+    expect(isSeen({ seenAt: day(1), seenLevel: 2 }, 2)).toBe(true);
+    expect(isSeen({ seenAt: day(1), seenLevel: 3 }, 2)).toBe(true);
+    expect(isSeen({ seenAt: null, seenLevel: 3 }, 1)).toBe(false);
+  });
+
+  it('null-уровни ≡ 1 (разовые и v1)', () => {
+    expect(isSeen({ seenAt: day(1), seenLevel: null }, null)).toBe(true);
+    expect(isSeen({ seenAt: day(1), seenLevel: null }, 2)).toBe(false);
   });
 });
 
@@ -227,6 +368,41 @@ describe('reconcilePlan (A2–A4)', () => {
     ]);
     expect(reconcilePlan([stored('race_podium')], sameObjectNewDate, false, NOW)).toEqual([
       { type: 'refresh', code: 'race_podium', earned: raceEarned(1, 16) },
+    ]);
+  });
+
+  it('уровень вырос или упал — обновление; документ v1 на бронзе — пустой план', () => {
+    const silver = new Map<AchievementCode, Earned>([['races_5', raceEarned(15, 15, 2)]]);
+    expect(
+      reconcilePlan(
+        [stored('races_5', { object: raceEarned(5, 5).object, factAt: day(5) })],
+        silver,
+        false,
+        NOW,
+      ),
+    ).toEqual([{ type: 'refresh', code: 'races_5', earned: raceEarned(15, 15, 2) }]);
+    const bronze = new Map<AchievementCode, Earned>([['races_5', raceEarned(5, 5, 1)]]);
+    const atSilver = stored('races_5', {
+      object: raceEarned(15, 15).object,
+      factAt: day(15),
+      level: 2,
+    });
+    expect(reconcilePlan([atSilver], bronze, false, NOW)).toEqual([
+      { type: 'refresh', code: 'races_5', earned: raceEarned(5, 5, 1) },
+    ]);
+    const v1 = stored('races_5', { object: raceEarned(5, 5).object, factAt: day(5) });
+    expect(reconcilePlan([v1], bronze, false, NOW)).toEqual([]);
+    // тот же факт, но сохранённый ранг другой (устаревший параллельный план) — обновление
+    const stale = { ...v1, level: 2 as const };
+    expect(reconcilePlan([stale], bronze, false, NOW)).toEqual([
+      { type: 'refresh', code: 'races_5', earned: raceEarned(5, 5, 1) },
+    ]);
+  });
+
+  it('первая сверка — вставка просмотренной на любом уровне (серебро, A3)', () => {
+    const silver = new Map<AchievementCode, Earned>([['races_5', raceEarned(15, 15, 2)]]);
+    expect(reconcilePlan([], silver, true, NOW)).toEqual([
+      { type: 'insert', code: 'races_5', earned: raceEarned(15, 15, 2), seenAt: NOW },
     ]);
   });
 

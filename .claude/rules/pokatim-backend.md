@@ -344,16 +344,22 @@ paths:
   и лог `achievements.{rides,route_rides}_truncated`. Предикат «в зачёте» — общий `isRankedRow` (`results/index.ts`,
   RC-9: им же считает `riders.policy.summarize`). Копий условий и второго расчёта мест в `achievements` нет.
 - Правила и план — чистые функции `achievements.policy.ts`: `ACHIEVEMENT_RULES` (`satisfies Record<AchievementCode,
-  …>` — новый код без правила не скомпилируется), `earnedAchievements` (факты по времени ↑, при равенстве — id ↑),
-  `raceAchievements` (публичный список — те же правила), `reconcilePlan`, `sortForList` (факт ↓, равенство — каталог
-  ↓), `ACHIEVEMENTS_POLICY` (лимиты).
+  …>` — новый код без правила не скомпилируется), `evaluateAchievements` (одна сортировка фактов: по времени ↑, при
+  равенстве — id ↑ → `earned` + `progress`), `earnedAchievements` (= `.earned`), `raceAchievements` (публичный список —
+  те же правила, с уровнем `races_5`), `reconcilePlan`, `sortForList` (факт ↓, равенство — каталог ↓),
+  `ACHIEVEMENTS_POLICY` (лимиты). Уровни: пороги — только `ACHIEVEMENT_LEVEL_TARGETS` из контрактов (своих констант
+  нет); `LEVELED_FACTS` — источник счёта счётного кода для правила и прогресса (второго счёта нет); правило — наибольший
+  ранг, объект и дата — факт порога; `Earned.level` (ранг, разовые — `null`), `levelName` (ранг → строка),
+  `storedRank`, `isSeen(grant, level)` (`seenAt != null && seenLevel >= level`, `null` ≡ 1); `refresh` — и при
+  другом ранге.
 - Сверка — в `GET /v1/achievements` (`AchievementsService.sync`): лимит `achievements-read:<uid>` 60/мин → факты
   параллельно → `reconcilePlan` (insert — первая сверка `seenAt = now`; restore — `seenAt` не трогать; refresh;
   revoke) → по одной условной операции на код без транзакции (вставка — `isDuplicateKey` уникального индекса) →
   **только после выдач** — маркер первой сверки (RC-1) → ответ: перечитанные видимые ∩ заработанные (название и дата —
-  из фактов запроса). Лог `achievements.sync uid first granted revoked restored` — только если план не пуст.
-  `POST /v1/achievements/seen` — лимит `achievements-seen:<uid>` 120/ч, `updateMany` своих видимых непросмотренных,
-  сверку не запускает. Публично — `AchievementsPublicController` (`riders/:publicId/achievements`, `PublicReadGuard`)
+  из фактов запроса; `level` — из фактов запроса, `seen` — `isSeen` по уровню ответа, не сохранённому, RC-L10;
+  `progress` — из той же `Evaluation`). Лог `achievements.sync uid first granted revoked restored refreshed` — только
+  если план не пуст. `POST /v1/achievements/seen` — лимит `achievements-seen:<uid>` 120/ч, `updateMany` pipeline своих
+  видимых с непоказанным уровнем (`seenLevel = max(seenLevel, level)` из документа), сверку не запускает. Публично — `AchievementsPublicController` (`riders/:publicId/achievements`, `PublicReadGuard`)
   → `publicList`: `findPublic` (нет — 404) → `raceAchievements` → без записи.
 
 ## Карточки для сторис (`sharing`, story-cards, ADR-0018)
@@ -381,7 +387,10 @@ paths:
   `AchievementCardService` → `AchievementCardInputs` (порт `achievements` `ACHIEVEMENTS_FOR_SHARING.cardFacts` — факты
   ∩ не отозванная выдача, без записи; маршрут — название только из `ROUTES_FOR_SHARING.ogFacts`) → `CardRequests` →
   задача `achievement-card.render` → `buildAchievementCard` → `achievementCardTree` (значок — глиф Material Symbols,
-  `achievement-card.icons.ts` — зеркало иконок каталога приложения). `SharingModule`/`SharingWorkerModule` импортируют
+  `achievement-card.icons.ts` — зеркало иконок каталога приложения; число — `badgeCount(code, level)` из
+  `ACHIEVEMENT_LEVEL_TARGETS`). Порт отдаёт `level` (строка или `null`); уровень — в `achievementCardHash` явно после
+  кода; тексты — метка уровня в kicker (`achievementCard.kickerLevel`), условие с `{count}` порога; сменил строки или
+  вёрстку — подними `STORY_CARD_POLICY.renderVersion` (сейчас 3). `SharingModule`/`SharingWorkerModule` импортируют
   `AchievementsReadModule`.
 - Карточка маршрута каталога (route-story-card): `RouteCardController` (`GET routes/:routeId/story-card`, `AuthGuard`,
   `no-store`) → `RouteCardService` (не в каталоге — 404) → `RouteCardInputs` (`ROUTES_FOR_SHARING.ogFacts`/`ogLine`,

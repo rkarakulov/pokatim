@@ -4,7 +4,7 @@ import type { AchievementCode } from '@pokatim/contracts';
 import { RIDER_RESULTS, type RiderResults } from '../results';
 import { RIDER_RIDES, type RiderRides } from '../rides';
 import { RIDER_ROUTE_RIDES, type RiderRouteRides } from '../route-rides';
-import { type Earned, earnedAchievements } from './achievements.policy';
+import { type Earned, type Evaluation, evaluateAchievements } from './achievements.policy';
 
 /** Достижение с названием объекта, готовое к ответу. */
 export type Titled = Earned & { code: AchievementCode; title: string };
@@ -24,14 +24,14 @@ export class AchievementFactsReader {
     @Inject(RIDER_RIDES) private readonly rides: RiderRides,
   ) {}
 
-  /** Заработанные сейчас: факты параллельно → правила. */
-  async earned(userId: string): Promise<Map<AchievementCode, Earned>> {
+  /** Заработанные сейчас и прогресс к следующему уровню: факты параллельно → правила (одна сортировка). */
+  async evaluate(userId: string): Promise<Evaluation> {
     const [races, routes, rides] = await Promise.all([
       this.results.publishedRows(userId),
       this.routeRides.passedOf(userId),
       this.rides.pastOf(userId),
     ]);
-    return earnedAchievements({ races, routes, rides });
+    return evaluateAchievements({ races, routes, rides });
   }
 
   /** Названия объектов: гонки — `racesOf` (≤ 4 id); нет гонки в карте — код не в ответе (запись не трогается). */

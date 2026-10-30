@@ -32,7 +32,7 @@ function Tile({
   const theme = useTheme();
   const body = (
     <>
-      <AchievementBadge code={item.code} size={layout.badgeGrid} />
+      <AchievementBadge code={item.code} level={item.level} size={layout.badgeGrid} />
       <Text
         numberOfLines={2}
         style={[textStyle('meta'), styles.caption, { color: theme.text.primary }]}
