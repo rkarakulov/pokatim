@@ -846,6 +846,8 @@ export const ru = {
   'notifications.settings.group.rides': 'Райды',
   'notifications.settings.group.events': 'Мероприятия',
   'notifications.settings.push': 'Push-уведомления',
+  'notifications.settings.pushBlocked':
+    'Не придут на это устройство, пока push не включены в строке выше.',
   'notifications.settings.email': 'Письма на e-mail',
   'notifications.settings.emailHint.disputes': 'Только решение по спору.',
   'notifications.settings.emailHint.rides': 'Только отмена райда.',

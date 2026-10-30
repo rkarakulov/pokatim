@@ -1,5 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 
+import { useSettingsShell } from '@/features/devices/settings-shell';
 import { RouteRideScreen } from '@/features/route-rides/route-ride-detail';
 
 /**
@@ -12,5 +13,10 @@ export default function RouteRideRoute() {
     rideId: string;
     mine?: string;
   }>();
-  return <RouteRideScreen routeId={String(routeId)} rideId={String(rideId)} mine={mine === '1'} />;
+  const shell = useSettingsShell();
+  return (
+    shell ?? (
+      <RouteRideScreen routeId={String(routeId)} rideId={String(rideId)} mine={mine === '1'} />
+    )
+  );
 }

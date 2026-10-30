@@ -1,5 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 
+import { useSettingsShell } from '@/features/devices/settings-shell';
 import { groupParam } from '@/features/races/disputes/dispute-screen';
 import { RivalCardScreen } from '@/features/races/disputes/rival-card';
 
@@ -10,7 +11,10 @@ export default function RivalResultRoute() {
     entryId: string;
     group?: string;
   }>();
+  const shell = useSettingsShell();
   return (
-    <RivalCardScreen raceId={String(id)} entryId={String(entryId)} group={groupParam(group)} />
+    shell ?? (
+      <RivalCardScreen raceId={String(id)} entryId={String(entryId)} group={groupParam(group)} />
+    )
   );
 }

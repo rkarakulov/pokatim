@@ -37,7 +37,10 @@ paths:
   standalone (детект — `features/pwa-install/install-platform.ts`); отправка регистрации и снятия — `sendPushRegistration`
   / `sendPushRevoke` шва; `usePushSupported()` — `null` до монтирования (SSR), без поддержки в настройках только письма
   — без push-тумблеров, тихих часов и группы без писем; строка `PushPermissionRow` — реальное состояние web:
-  `missing`/`expired` подписывает тихо, отказ — текст «включите в настройках браузера/системы»; выход — снятие на
+  `missing`/`expired` подписывает тихо, отказ — текст «включите в настройках браузера/системы»; на экране настроек
+  строка и push-тумблеры групп делят одно состояние `usePushPermission` (`push-permission-row.tsx`): включение тумблера
+  при `undetermined` — системный запрос первым, в том же нажатии (Safari), затем сохранение; при `missing`/`expired` —
+  тихая подписка; включённый тумблер без доставки (`delivers === false`) — подпись `notifications.settings.pushBlocked`; выход — снятие на
   сервере и `unsubscribe()` в браузере; нажатие на уведомление — сообщение SW `pokatim:open` → `onOpen(target)`): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
@@ -178,7 +181,9 @@ paths:
   устройства — локальный выход через `useSignOut` (сервер её уже отозвал).
 - Сторы и `api` не вызываются в рендере и на уровне модуля (на SSR-сервере сторы — общие синглтоны); гидрация — в
   эффектах. Гарды допускают `unknown` и `unavailable`: вкладки — скелетон оболочки или повтор, не редирект (SSR
-  отдаёт HTML).
+  отдаёт HTML). Каждый экран `Stack.Protected` вкладок вне `(tabs)` — за `useSettingsShell` в файле маршрута (иначе
+  без сессии он запросит данные и покажет «Не удалось загрузить» с повтором, который сессию не восстановит); новый —
+  строка в сторож `__tests__/protected-shell.test.tsx`.
 
 ## Главная (блок 02, `docs/product/home.md`)
 
@@ -582,8 +587,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 - QR — `features/tickets/qr-matrix.ts` (ядро `qrcode/lib/core/qrcode`, без рендереров canvas/png) → `path`; native —
   `react-native-svg` лениво (`useSvgLib`), web — inline `<svg>`; сторона — `layout.ticketQr`. Цвета — роли `ticket.qrInk`/`ticket.qrPaper`
   (`@pokatim/design-tokens`, светлая «бумага» во всех темах, контраст ≥ 7:1).
-- «Поделиться» билетом — только ссылка на событие без кода и QR (RC-B2). «Как добраться» — `maps-link.ts` (https-поиск
-  по адресу, `openExternalUrl`).
+- «Поделиться» билетом — только ссылка на событие без кода и QR (RC-B2). «Как добраться» — `maps-link.ts` (поиск по
+  адресу системными картами: Android — `geo:`, iOS/iPadOS — Apple Maps, иначе — Яндекс; платформа — развилка
+  `maps-platform(.web).ts`, web по `navigator`; открытие — `openExternalUrl`, web `geo:` — в той же вкладке).
 - Материалы события (PR C, plan-C §7): представление — `components/event-materials.tsx` (иконка темы, название,
   описание ≤ 2 строк, «PDF · 1,2 МБ» или домен; модель — `features/tickets/materials-format.ts`); ссылка — только после
   `RegistrationUrl.safeParse` → `openExternalUrl`, PDF — `downloadFile(api.eventFileUrl(id))`, текст — раскрытие

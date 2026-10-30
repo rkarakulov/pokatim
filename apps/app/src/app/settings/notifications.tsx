@@ -19,7 +19,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DocumentTitle } from '@/components/document-title';
 import { useSettingsShell } from '@/features/devices/settings-shell';
 import { usePushSupported } from '@/features/notifications/push';
-import { PushPermissionRow } from '@/features/notifications/push-permission-row';
+import {
+  PushPermissionRow,
+  usePushPermission,
+  type PushPermissionControl,
+} from '@/features/notifications/push-permission-row';
 import {
   isEventSettingsMissing,
   useEventNotificationSettings,
@@ -56,8 +60,11 @@ const SKELETON = (
  * сохраняет полный объект (`PUT`); пока идёт запрос, видно новое значение, а тумблеры и часы недоступны (§4.12: два
  * полных `PUT` подряд затёрли бы друг друга); ошибка — баннер и прежнее значение. Платформа без push (`usePushSupported`:
  * web — Web Push браузера и сервера, ADR-0022; до проверки — скелетон) — только письма: без push-тумблеров, тихих часов
- * (они откладывают только push) и группы без писем; push-значения не меняются. Группа «Мероприятия» (напоминания о
- * событиях с билетом, PR D) — отдельный подресурс со своим сохранением (RC-D1); старый API (404) — группы нет.
+ * (они откладывают только push) и группы без писем; push-значения не меняются. Строка разрешения и push-тумблеры
+ * делят одно состояние разрешения: включение тумблера, пока системный запрос не показывали, сначала вызывает его (в том
+ * же нажатии), включённый тумблер без разрешения или подписки подписан «не придут на это устройство». Группа
+ * «Мероприятия» (напоминания о событиях с билетом, PR D) — отдельный подресурс со своим сохранением (RC-D1); старый API
+ * (404) — группы нет.
  */
 export default function NotificationSettingsScreen() {
   const shell = useSettingsShell();
@@ -96,10 +103,13 @@ function SettingsContent() {
                 pushSupported ? 'notifications.settings.lead' : 'notifications.settings.leadEmail',
               )}
             </Text>
-            {pushSupported ? <PushPermissionRow /> : null}
-            <AsyncContent query={settings} skeleton={SKELETON}>
-              {(saved) => <SettingsForm saved={saved} push={pushSupported} />}
-            </AsyncContent>
+            {pushSupported ? (
+              <PushSettings settings={settings} />
+            ) : (
+              <AsyncContent query={settings} skeleton={SKELETON}>
+                {(saved) => <SettingsForm saved={saved} push={false} />}
+              </AsyncContent>
+            )}
           </>
         )}
       </ScrollView>
@@ -107,7 +117,28 @@ function SettingsContent() {
   );
 }
 
-function SettingsForm({ saved, push }: { saved: NotificationSettings; push: boolean }) {
+/** Платформа с push: строка разрешения и форма — с одним состоянием разрешения устройства. */
+function PushSettings({ settings }: { settings: ReturnType<typeof useNotificationSettings> }) {
+  const control = usePushPermission();
+  return (
+    <>
+      <PushPermissionRow control={control} />
+      <AsyncContent query={settings} skeleton={SKELETON}>
+        {(saved) => <SettingsForm saved={saved} push control={control} />}
+      </AsyncContent>
+    </>
+  );
+}
+
+function SettingsForm({
+  saved,
+  push,
+  control,
+}: {
+  saved: NotificationSettings;
+  push: boolean;
+  control?: PushPermissionControl;
+}) {
   const theme = useTheme();
   const update = useUpdateNotificationSettings();
   // пока запрос идёт — новое значение; ошибка — прежнее (кеш) и баннер
@@ -135,12 +166,23 @@ function SettingsForm({ saved, push }: { saved: NotificationSettings; push: bool
         <View key={group.id} style={[styles.group, { borderTopColor: theme.border.subtle }]}>
           {groupTitle(t(`notifications.settings.group.${group.id}` as MessageKey))}
           {push ? (
-            <Toggle
-              label={t('notifications.settings.push')}
-              value={value.push[group.id]}
-              disabled={busy}
-              onChange={(on) => save({ ...value, push: { ...value.push, [group.id]: on } })}
-            />
+            <>
+              <Toggle
+                label={t('notifications.settings.push')}
+                value={value.push[group.id]}
+                disabled={busy}
+                onChange={(on) => {
+                  // системный запрос — первым, в том же нажатии (Safari); сохранение не ждёт ответа
+                  if (on && !busy) void control?.enableFromToggle();
+                  save({ ...value, push: { ...value.push, [group.id]: on } });
+                }}
+              />
+              {value.push[group.id] && control?.delivers === false ? (
+                <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+                  {t('notifications.settings.pushBlocked')}
+                </Text>
+              ) : null}
+            </>
           ) : null}
           {group.email ? (
             <>
@@ -159,7 +201,7 @@ function SettingsForm({ saved, push }: { saved: NotificationSettings; push: bool
           ) : null}
         </View>
       ))}
-      <EventsGroup push={push} />
+      <EventsGroup push={push} control={control} />
       {push ? (
         <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
           {groupTitle(t('notifications.settings.quiet.title'))}
@@ -201,7 +243,7 @@ function SettingsForm({ saved, push }: { saved: NotificationSettings; push: bool
  * пока идёт запрос — новое значение, тумблеры недоступны; ошибка — баннер и прежнее значение. Загрузка — строка-
  * скелетон, `404` (старый API) — группы нет, прочие ошибки — «Нет соединения» с повтором (`AsyncContent`).
  */
-function EventsGroup({ push }: { push: boolean }) {
+function EventsGroup({ push, control }: { push: boolean; control?: PushPermissionControl }) {
   const theme = useTheme();
   const query = useEventNotificationSettings();
   const update = useUpdateEventNotificationSettings();
@@ -228,12 +270,23 @@ function EventsGroup({ push }: { push: boolean }) {
                 <Banner tone="error" message={t('notifications.settings.saveFailed')} />
               ) : null}
               {push ? (
-                <Toggle
-                  label={t('notifications.settings.push')}
-                  value={value.push}
-                  disabled={busy}
-                  onChange={(on) => save({ ...value, push: on })}
-                />
+                <>
+                  <Toggle
+                    label={t('notifications.settings.push')}
+                    value={value.push}
+                    disabled={busy}
+                    onChange={(on) => {
+                      // как у остальных групп: системный запрос — первым, в том же нажатии
+                      if (on && !busy) void control?.enableFromToggle();
+                      save({ ...value, push: on });
+                    }}
+                  />
+                  {value.push && control?.delivers === false ? (
+                    <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+                      {t('notifications.settings.pushBlocked')}
+                    </Text>
+                  ) : null}
+                </>
               ) : null}
               <Toggle
                 label={t('notifications.settings.email')}
