@@ -42,8 +42,10 @@ paths:
   при `undetermined` — системный запрос первым, в том же нажатии (Safari), затем сохранение; при `missing`/`expired` —
   тихая подписка; включённый тумблер без доставки (`delivers === false`) — подпись `notifications.settings.pushBlocked`; группа
   «Мероприятия» (PR D) — свой подресурс (`useEventNotificationSettings`, ключ `['notifications','settings','events']`, своё
-  сохранение и баннер; 404 старого API — группы нет, `isEventSettingsMissing`), её push-тумблер — с тем же
-  `usePushPermission`; цель `ticket` → `/tickets/<код>` (и в SW); выход — снятие на
+  сохранение и баннер; 404 старого API — группы нет, `isSettingsResourceMissing`), её push-тумблер — с тем же
+  `usePushPermission`; группа «Маршруты» — так же (`useRouteNotificationSettings({ enabled: push })`, ключ
+  `['notifications','settings','routes']`), только push, после «Райдов»; без push — блока и запроса нет; после
+  `PUT settings` её запрос инвалидируется (нет своего тумблера — сервер отдаёт значение «Райдов»); цель `ticket` → `/tickets/<код>` (и в SW); выход — снятие на
   сервере и `unsubscribe()` в браузере; нажатие на уведомление — сообщение SW `pokatim:open` → `onOpen(target)`): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
