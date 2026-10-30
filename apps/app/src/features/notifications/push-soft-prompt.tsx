@@ -2,12 +2,20 @@ import { space } from '@pokatim/design-tokens';
 import { t, type MessageKey } from '@pokatim/i18n';
 import { Banner, Button, TextAction } from '@rkarakulov/ui';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { AccessibilityInfo, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { openPushSettings, usePushSupported } from './push';
 import { deniedRow, usePushPermission } from './push-permission-row';
 import { loadSoftPromptSnooze, saveSoftPromptSnooze } from './push-soft-prompt-storage';
-import { anchorOf, closeSoftPrompt, useSoftPromptStore } from './push-soft-prompt-store';
+import {
+  anchorOf,
+  claimSoftPrompt,
+  decideSoftPrompt,
+  finishSoftPrompt,
+  isOffered,
+  releaseSoftPrompt,
+  useSoftPromptStore,
+} from './push-soft-prompt-store';
 import { softPromptVisible, type SoftPromptContext } from './push-soft-prompt-state';
 
 /**
@@ -26,7 +34,11 @@ const TEXTS: Record<SoftPromptContext, { title: MessageKey; message: MessageKey 
   },
 };
 
-/** Место подсказки под действием; пока ей не предложено это место — ничего и без запросов состояния push. */
+/**
+ * Место подсказки под действием. Показ закреплён за первым смонтированным местом этого объекта (герой, строка ленты и
+ * карточка одного райда — одна подсказка); владелец ушёл с экрана — подсказка закрыта до перезапуска. Не владелец —
+ * ничего и без запросов состояния push.
+ */
 export function PushSoftPrompt({
   context,
   id,
@@ -37,8 +49,17 @@ export function PushSoftPrompt({
   /** отступы места (строка ленты); пока подсказки нет — места нет */
   style?: StyleProp<ViewStyle>;
 }) {
-  const offered = useSoftPromptStore((state) => state.offer === anchorOf(context, id));
-  return offered ? <OfferedPrompt context={context} style={style} /> : null;
+  const anchor = anchorOf(context, id);
+  const [token] = useState(() => ({}));
+  const offered = useSoftPromptStore((state) => isOffered(state, anchor));
+  const owner = useSoftPromptStore((state) => state.owner === token);
+
+  useEffect(() => {
+    if (offered) claimSoftPrompt(anchor, token);
+  }, [offered, anchor, token]);
+  useEffect(() => () => releaseSoftPrompt(token), [anchor, token]);
+
+  return owner ? <OfferedPrompt context={context} style={style} /> : null;
 }
 
 function useSnoozedAt(): number | null | undefined {
@@ -58,7 +79,8 @@ function useSnoozedAt(): number | null | undefined {
 /**
  * Решение о показе — один раз, когда известны поддержка, разрешение и отложка (до этого — ничего, без мигания).
  * «Включить» — тот же путь, что строка `PushPermissionRow` (системный запрос из нажатия, выдано — регистрация);
- * отказ — текст отказа строки без повторного запроса. «Не сейчас» — отложка на 30 дней на устройстве.
+ * отказ — текст отказа строки без повторного запроса, озвучивается скринридером (фокус не переносится: пользователь
+ * остаётся у своего действия). «Не сейчас» — отложка на 30 дней на устройстве.
  */
 function OfferedPrompt({
   context,
@@ -70,55 +92,48 @@ function OfferedPrompt({
   const supported = usePushSupported();
   const control = usePushPermission();
   const snoozedAt = useSnoozedAt();
-  // предложение принято (показ этого запуска) — оно и есть «видна»: место смонтировано только у предложенного объекта
-  const visible = useSoftPromptStore((state) => state.shown);
+  const phase = useSoftPromptStore((state) => state.phase);
   const [pending, setPending] = useState(false);
-  const [asked, setAsked] = useState(false);
   const { permission } = control;
 
   useEffect(() => {
-    if (visible || supported === null || !permission || snoozedAt === undefined) return;
-    if (softPromptVisible({ supported, permission, snoozedAt, now: Date.now() })) {
-      useSoftPromptStore.setState({ shown: true });
-    } else {
-      closeSoftPrompt();
-    }
-  }, [visible, supported, permission, snoozedAt]);
+    if (phase !== 'checking' || supported === null || !permission || snoozedAt === undefined)
+      return;
+    decideSoftPrompt(softPromptVisible({ supported, permission, snoozedAt, now: Date.now() }));
+  }, [phase, supported, permission, snoozedAt]);
 
-  // ответ на системный запрос: выдано или запрос закрыт без ответа — подсказка уходит; отказ — остаётся текстом
-  const denied = asked && permission?.status === 'denied';
+  const denied = deniedRow();
   useEffect(() => {
-    if (asked && !denied) closeSoftPrompt();
-  }, [asked, denied]);
+    if (phase === 'denied') AccessibilityInfo.announceForAccessibility(t(denied.message));
+  }, [phase, denied.message]);
 
-  if (!visible) return null;
-
-  if (denied) {
-    const row = deniedRow();
+  if (phase === 'denied') {
     return (
       <View style={style}>
         <Banner
           tone="warning"
           title={t('notifications.push.enable')}
-          message={t(row.message)}
-          onPress={row.action === 'settings' ? () => void openPushSettings() : undefined}
+          message={t(denied.message)}
+          onPress={denied.action === 'settings' ? () => void openPushSettings() : undefined}
         />
       </View>
     );
   }
-  if (asked) return null;
+  if (phase !== 'offer') return null;
 
   const enable = async () => {
     setPending(true);
+    let next: Awaited<ReturnType<typeof control.press>> = null;
     try {
-      await control.press();
+      next = await control.press();
     } finally {
       setPending(false);
     }
-    setAsked(true);
+    // выдано или запрос закрыт без ответа — подсказка уходит; отказ — остаётся текстом отказа
+    finishSoftPrompt(next?.status === 'denied' ? 'denied' : 'closed');
   };
   const later = () => {
-    closeSoftPrompt();
+    finishSoftPrompt('closed');
     void saveSoftPromptSnooze(Date.now());
   };
 

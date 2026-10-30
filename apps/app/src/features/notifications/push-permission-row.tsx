@@ -65,14 +65,17 @@ export interface PushPermissionControl {
    * или push на платформе нет — подсказок «не придут» не показываем.
    */
   delivers: boolean | null;
-  /** Действие строки: системный запрос, подписка или настройки ОС (отказ навсегда). Не бросает. */
-  press: () => Promise<void>;
+  /**
+   * Действие строки: системный запрос, подписка или настройки ОС (отказ навсегда). Возвращает состояние после
+   * запроса или подписки (`null` — ничего не спрашивали: настройки, занято, состояние неизвестно). Не бросает.
+   */
+  press: () => Promise<PushPermissionState | null>;
   /**
    * Включён тумблер группы: разрешение ещё не спрашивали — системный запрос (тот же жест: Safari показывает запрос
    * только из нажатия, поэтому вызывать до сохранения настроек); разрешено без подписки — тихая подписка. Отказ и
    * «отказ навсегда» сами по себе ничего не открывают — объясняет строка. Не бросает.
    */
-  enableFromToggle: () => Promise<void>;
+  enableFromToggle: () => Promise<PushPermissionState | null>;
 }
 
 function deliversOf(permission: PushPermissionState | null): boolean | null {
@@ -96,18 +99,20 @@ export function usePushPermission(): PushPermissionControl {
   }, []);
 
   const run = useCallback(
-    async (action: RowAction) => {
-      if (!permission || !action || busy.current) return;
+    async (action: RowAction): Promise<PushPermissionState | null> => {
+      if (!permission || !action || busy.current) return null;
       busy.current = true;
       try {
         if (action === 'settings') {
           await openPushSettings();
-          return;
+          return null;
         }
         const next = action === 'request' ? await requestPushPermission() : permission;
         if (next.status === 'granted') await registerDevicePush();
         // web сверяет подписку после регистрации; native при выданном разрешении строки больше нет
-        setPermission(next.subscription ? await getPushPermission() : next);
+        const settled = next.subscription ? await getPushPermission() : next;
+        setPermission(settled);
+        return settled;
       } finally {
         busy.current = false;
       }

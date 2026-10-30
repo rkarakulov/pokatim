@@ -239,6 +239,22 @@ describe('вошедший: заявка (AC2, AC3, AC15, AC16)', () => {
     expect(await participation().findByText(SOFT_PROMPT)).toBeOnTheScreen();
   });
 
+  it('форма «Участвовать» размонтирована до конца инвалидаций — подсказка push всё равно есть (ревью pass 1)', async () => {
+    enterRace.mockResolvedValue(myEntry());
+    await openSignedIn();
+    const enter = await screen.findByRole('button', { name: 'Участвовать' });
+    // таблица после записи отвечает не сразу: onSuccess хука ждёт инвалидацию, форма к этому времени уже ушла
+    let release: (value: ReturnType<typeof resultsPage>) => void = () => undefined;
+    getRaceResults.mockReturnValue(new Promise((r) => (release = r)));
+
+    await fireEvent.press(enter);
+    expect(await screen.findByText('Ваше участие')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Участвовать' })).toBeNull();
+    await act(async () => release(resultsPage()));
+
+    expect(await participation().findByText(SOFT_PROMPT)).toBeOnTheScreen();
+  });
+
   it('возврат фокуса сразу после ответа — без повторного запроса участия; через 10 с — с ним (B13)', async () => {
     await openSignedIn();
     expect(await screen.findByRole('button', { name: 'Участвовать' })).toBeOnTheScreen();

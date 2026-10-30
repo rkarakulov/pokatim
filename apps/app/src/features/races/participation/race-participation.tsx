@@ -19,7 +19,6 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { rememberReturnPath } from '@/features/auth/return-path';
 import { PushSoftPrompt } from '@/features/notifications/push-soft-prompt';
-import { offerPushSoftPrompt } from '@/features/notifications/push-soft-prompt-store';
 import { OpenTicketButton } from '@/features/tickets/open-ticket-button';
 
 import {
@@ -69,7 +68,7 @@ function EnterAction({ raceId, signedIn }: { raceId: string; signedIn: boolean }
       router.push('/sign-in');
       return;
     }
-    enter.mutate(undefined, { onSuccess: () => offerPushSoftPrompt('race', raceId) });
+    enter.mutate();
   };
   return (
     <Block>

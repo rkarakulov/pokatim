@@ -7,7 +7,6 @@ import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { apiErrorCode } from '@/features/auth/error-messages';
-import { offerPushSoftPrompt } from '@/features/notifications/push-soft-prompt-store';
 
 import { raceActionErrorText, tierLabel } from '../participation-format';
 import { useEnterRace } from '../queries';
@@ -39,14 +38,13 @@ function TierOption({
 }
 
 /** `VERIFIED_PROFILE_REQUIRED` — анкеты нет (удалена или не дошла до клиента): переход к ней с возвратом к гонке (§11.3). */
-function useVerifiedEnter(raceId: string, onEntered?: () => void) {
+function useVerifiedEnter(raceId: string) {
   const router = useRouter();
   const enter = useEnterRace(raceId);
   const submit = (groupKey: ResultGroupKey) =>
     enter.mutate(
       { tier: 'verified', groupKey },
       {
-        onSuccess: () => onEntered?.(),
         onError: (error) => {
           if (apiErrorCode(error) === 'VERIFIED_PROFILE_REQUIRED') {
             router.push(verifiedProfilePath(raceId));
@@ -64,8 +62,7 @@ function useVerifiedEnter(raceId: string, onEntered?: () => void) {
  */
 export function TierPicker({ entry, raceId }: { entry: MyRaceEntry; raceId: string }) {
   const theme = useTheme();
-  const offerPush = () => offerPushSoftPrompt('race', raceId);
-  const { enter, submit } = useVerifiedEnter(raceId, offerPush);
+  const { enter, submit } = useVerifiedEnter(raceId);
   const pendingTier = enter.isPending ? enter.variables?.tier : undefined;
   return (
     <View style={styles.picker}>
@@ -88,7 +85,7 @@ export function TierPicker({ entry, raceId }: { entry: MyRaceEntry; raceId: stri
           variant="secondary"
           loading={pendingTier === 'start'}
           disabled={enter.isPending}
-          onPress={() => enter.mutate({ tier: 'start' }, { onSuccess: offerPush })}
+          onPress={() => enter.mutate({ tier: 'start' })}
         />
       </TierOption>
       {enter.error ? <Banner tone="error" message={raceActionErrorText(enter.error)} /> : null}

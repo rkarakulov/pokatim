@@ -31,7 +31,6 @@ import { StatBlock } from '@/components/stat-block';
 import { rememberReturnPath } from '@/features/auth/return-path';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { PushSoftPrompt } from '@/features/notifications/push-soft-prompt';
-import { offerPushSoftPrompt } from '@/features/notifications/push-soft-prompt-store';
 import { useScrubScrollEnabled } from '@/features/routes/use-scrub-scroll-lock';
 import { useShareChoice } from '@/features/sharing/share-choice-sheet';
 import { useShareImage } from '@/features/sharing/use-share-image';
@@ -130,7 +129,7 @@ function RideDetailView({
       router.push('/sign-in');
       return;
     }
-    rsvp.mutate('join', { onSuccess: () => offerPushSoftPrompt('ride', ride.id) });
+    rsvp.mutate('join');
   };
 
   return (

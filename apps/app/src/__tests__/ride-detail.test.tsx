@@ -302,6 +302,27 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
       expect(notifications.requestPermissionsAsync).not.toHaveBeenCalled();
     });
 
+    it('«Не иду» после показанной подсказки — подсказка закрыта', async () => {
+      joinRide.mockResolvedValue(
+        view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+      );
+      leaveRide.mockResolvedValue(view({ goingCount: 5 }, viewer('none', { canJoin: true })));
+      await openSignedIn();
+      const join = await screen.findByRole('button', { name: 'Я иду' });
+      getRideForViewer.mockResolvedValue(
+        view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+      );
+      await fireEvent.press(join);
+      expect(await screen.findByText(SOFT_PROMPT)).toBeOnTheScreen();
+
+      getRideForViewer.mockResolvedValue(
+        view({ goingCount: 5 }, viewer('none', { canJoin: true })),
+      );
+      await fireEvent.press(await screen.findByRole('button', { name: 'Не иду' }));
+      expect(await screen.findByRole('button', { name: 'Я иду' })).toBeOnTheScreen();
+      expect(screen.queryByText(SOFT_PROMPT)).toBeNull();
+    });
+
     it('«Не иду» — подсказки нет', async () => {
       getRideForViewer.mockResolvedValue(view({}, viewer('participant', { canLeave: true })));
       leaveRide.mockResolvedValue(view({ goingCount: 4 }, viewer('none', { canJoin: true })));

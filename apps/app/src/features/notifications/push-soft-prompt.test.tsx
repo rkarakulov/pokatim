@@ -1,10 +1,15 @@
 /// <reference types="jest" />
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { AccessibilityInfo } from 'react-native';
 
 import type { PushPermissionState } from './push';
 import { PUSH_SOFT_PROMPT_KEY, PUSH_SOFT_PROMPT_SNOOZE_MS } from './push-soft-prompt-state';
 import { PushSoftPrompt } from './push-soft-prompt';
-import { offerPushSoftPrompt, resetPushSoftPrompt } from './push-soft-prompt-store';
+import {
+  closePushSoftPromptFor,
+  offerPushSoftPrompt,
+  resetPushSoftPrompt,
+} from './push-soft-prompt-store';
 
 const mockPush = {
   supported: true as boolean | null,
@@ -27,10 +32,12 @@ const NOW = new Date('2026-10-30T10:00:00Z');
 const RIDE = 'ride-1';
 const TITLE_RIDE = 'Узнайте о переносе или отмене райда';
 const TITLE_RACE = 'Не пропустите изменения гонки';
+const DENIED = 'Push-уведомления запрещены. Нажмите, чтобы открыть настройки устройства.';
 
 beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
   jest.setSystemTime(NOW);
+  jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => undefined);
   mockPush.supported = true;
   mockPush.getPushPermission.mockResolvedValue({ status: 'undetermined', canAskAgain: true });
   resetPushSoftPrompt();
@@ -38,6 +45,7 @@ beforeEach(() => {
 afterEach(() => {
   jest.useRealTimers();
   jest.clearAllMocks();
+  jest.restoreAllMocks();
 });
 
 const renderOffered = async (context: 'ride' | 'race' = 'ride') => {
@@ -82,10 +90,10 @@ describe('подсказка push в момент пользы', () => {
     mockPush.requestPushPermission.mockResolvedValue({ status: 'denied', canAskAgain: false });
     await renderOffered();
     await fireEvent.press(screen.getByRole('button', { name: 'Включить' }));
-    const denied = await screen.findByText(
-      'Push-уведомления запрещены. Нажмите, чтобы открыть настройки устройства.',
-    );
+    const denied = await screen.findByText(DENIED);
     expect(screen.queryByRole('button', { name: 'Включить' })).toBeNull();
+    // текст отказа озвучивается, фокус не переносится (a11y)
+    expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(DENIED);
     await fireEvent.press(denied);
     await waitFor(() => expect(mockPush.openPushSettings).toHaveBeenCalledTimes(1));
     expect(mockPush.requestPushPermission).toHaveBeenCalledTimes(1);
@@ -165,5 +173,55 @@ describe('подсказка push в момент пользы', () => {
     await act(async () => undefined);
     expect(screen.queryByText(TITLE_RIDE)).toBeNull();
     warn.mockRestore();
+  });
+
+  describe('один владелец показа (ревью pass 1)', () => {
+    it('два места одного райда (герой и лента) — подсказка в одном', async () => {
+      await render(
+        <>
+          <PushSoftPrompt context="ride" id={RIDE} />
+          <PushSoftPrompt context="ride" id={RIDE} />
+        </>,
+      );
+      await act(async () => offerPushSoftPrompt('ride', RIDE));
+      await screen.findByText(TITLE_RIDE);
+      expect(screen.getAllByText(TITLE_RIDE)).toHaveLength(1);
+      expect(screen.getAllByRole('button', { name: 'Включить' })).toHaveLength(1);
+    });
+
+    it('отказ — «Включить» нет ни в одном месте; повторного запроса нет', async () => {
+      mockPush.requestPushPermission.mockResolvedValue({ status: 'denied', canAskAgain: true });
+      await render(
+        <>
+          <PushSoftPrompt context="ride" id={RIDE} />
+          <PushSoftPrompt context="ride" id={RIDE} />
+        </>,
+      );
+      await act(async () => offerPushSoftPrompt('ride', RIDE));
+      await fireEvent.press(await screen.findByRole('button', { name: 'Включить' }));
+      expect(await screen.findByText(DENIED)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Включить' })).toBeNull();
+      expect(mockPush.requestPushPermission).toHaveBeenCalledTimes(1);
+    });
+
+    it('ушли с места показа (герой → карточка) — на новом месте подсказки нет до конца сессии', async () => {
+      const hero = await render(<PushSoftPrompt context="ride" id={RIDE} />);
+      await act(async () => offerPushSoftPrompt('ride', RIDE));
+      await screen.findByText(TITLE_RIDE);
+      await hero.unmount();
+
+      await render(<PushSoftPrompt context="ride" id={RIDE} />);
+      await act(async () => undefined);
+      expect(screen.queryByText(TITLE_RIDE)).toBeNull();
+      await act(async () => offerPushSoftPrompt('race', 'race-1'));
+      await act(async () => undefined);
+      expect(screen.queryByText(TITLE_RACE)).toBeNull();
+    });
+
+    it('«Не иду» после показа — подсказка закрыта', async () => {
+      await renderOffered();
+      await act(async () => closePushSoftPromptFor('ride', RIDE));
+      expect(screen.queryByText(TITLE_RIDE)).toBeNull();
+    });
   });
 });
