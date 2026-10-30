@@ -6,6 +6,7 @@ import {
   type CatalogRoutePage,
   CatalogRouteQuery,
   FieldErrorCode,
+  type RouteExportFormat,
   type RouteMapGeometry,
   Uuid,
 } from '@pokatim/contracts';
@@ -18,13 +19,13 @@ import {
   PublicReadGuard,
 } from '../../public-read.guard';
 import { RoutesPublicService } from './routes-public.service';
-import { gpxContentDisposition, ROUTE_POLICY } from './routes.policy';
+import { ROUTE_EXPORT_CONTENT_TYPES, ROUTE_POLICY, routeContentDisposition } from './routes.policy';
 
 const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
 
 /**
  * Публичный каталог маршрутов (routes-01): без входа, только опубликованные в каталоге, `Cache-Control: public,
- * max-age=60`, IP-лимит `public-read` (GPX — ещё и `route-gpx`, routes-03). Мутаций здесь нет. Гонки маршрута — `races` (`GET /v1/routes/:id/races`).
+ * max-age=60`, IP-лимит `public-read` (файлы GPX/KML/TCX — ещё и общий `route-gpx`, routes-03, routes-formats). Мутаций здесь нет. Гонки маршрута — `races` (`GET /v1/routes/:id/races`).
  */
 @Controller()
 @UseGuards(PublicReadGuard)
@@ -61,23 +62,52 @@ export class RoutesPublicController {
     return this.routes.map(id);
   }
 
-  /**
-   * Очищенный GPX маршрута каталога (routes-03): файл, посчитанный worker'ом (API не разбирает). Заголовки файла
-   * ставятся после чтения: Nest пишет `@Header` до обработчика, и 404 с `Content-Type` файла не сериализовался бы
-   * в JSON ошибки; 404 и 429 — JSON без `Content-Disposition`. `sandbox` — файл не исполняется.
-   */
+  /** Очищенный GPX маршрута каталога (routes-03) — см. `sendExport`. */
   @Get('routes/:id/gpx')
   @UseGuards(IpRateLimitGuard)
-  @IpRateLimit('route-gpx', ROUTE_POLICY.gpxIpLimit)
+  @IpRateLimit('route-gpx', ROUTE_POLICY.exportIpLimit)
   @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
-  async gpx(
+  gpx(
     @Param('id', idPipe) id: string,
     @Res({ passthrough: true }) reply: unknown,
   ): Promise<Buffer> {
-    const { bytes, title } = await this.routes.gpx(id);
+    return this.sendExport(reply, id, 'gpx');
+  }
+
+  /** KML маршрута каталога (routes-formats) — тот же бюджет IP-лимита `route-gpx`, что у GPX. */
+  @Get('routes/:id/kml')
+  @UseGuards(IpRateLimitGuard)
+  @IpRateLimit('route-gpx', ROUTE_POLICY.exportIpLimit)
+  @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
+  kml(
+    @Param('id', idPipe) id: string,
+    @Res({ passthrough: true }) reply: unknown,
+  ): Promise<Buffer> {
+    return this.sendExport(reply, id, 'kml');
+  }
+
+  /** TCX (курс) маршрута каталога (routes-formats) — тот же бюджет IP-лимита `route-gpx`, что у GPX. */
+  @Get('routes/:id/tcx')
+  @UseGuards(IpRateLimitGuard)
+  @IpRateLimit('route-gpx', ROUTE_POLICY.exportIpLimit)
+  @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
+  tcx(
+    @Param('id', idPipe) id: string,
+    @Res({ passthrough: true }) reply: unknown,
+  ): Promise<Buffer> {
+    return this.sendExport(reply, id, 'tcx');
+  }
+
+  /**
+   * Файл экспорта маршрута каталога: посчитан worker'ом (API не разбирает и не собирает). Заголовки файла ставятся
+   * после чтения: Nest пишет `@Header` до обработчика, и 404 с `Content-Type` файла не сериализовался бы в JSON
+   * ошибки; 404 и 429 — JSON без `Content-Disposition`. `sandbox` — файл не исполняется.
+   */
+  private async sendExport(reply: unknown, id: string, format: RouteExportFormat): Promise<Buffer> {
+    const { bytes, title } = await this.routes.exportFile(id, format);
     const adapter = this.adapterHost.httpAdapter;
-    adapter.setHeader(reply, 'Content-Type', 'application/gpx+xml; charset=utf-8');
-    adapter.setHeader(reply, 'Content-Disposition', gpxContentDisposition(title));
+    adapter.setHeader(reply, 'Content-Type', ROUTE_EXPORT_CONTENT_TYPES[format]);
+    adapter.setHeader(reply, 'Content-Disposition', routeContentDisposition(title, format));
     adapter.setHeader(reply, 'X-Content-Type-Options', 'nosniff');
     adapter.setHeader(reply, 'Content-Security-Policy', "default-src 'none'; sandbox");
     return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);

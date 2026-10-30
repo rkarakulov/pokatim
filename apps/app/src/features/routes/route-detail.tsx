@@ -1,5 +1,5 @@
 import { apiErrorOf } from '@pokatim/api-client';
-import { Uuid, type CatalogRouteDetail } from '@pokatim/contracts';
+import { Uuid, type CatalogRouteDetail, type RouteExportFormat } from '@pokatim/contracts';
 import { size, space, type AppTheme, type AppThemeLayout } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { createScrubStore, PROFILE_ASPECT_RATIO, type ScrubStore } from '@pokatim/route-view';
@@ -47,8 +47,15 @@ import { useAppTheme } from '@/theme/use-app-theme';
 
 import { CatalogRouteMap } from './catalog-route-map';
 import { ElevationProfile } from './elevation-profile';
-import { routeAuthorLabel, routeChips, routeShareDescription, routeStatItems } from './format';
+import {
+  availableExportFormats,
+  routeAuthorLabel,
+  routeChips,
+  routeShareDescription,
+  routeStatItems,
+} from './format';
 import { useCatalogRoute, useCatalogRouteRaces, useCatalogRouteViewer } from './queries';
+import { RouteDownloadSheet } from './route-download-sheet';
 import { useScrubScrollEnabled } from './use-scrub-scroll-lock';
 
 export const routeDocumentTitle = (title: string) => `${title} — ${t('app.name')}`;
@@ -57,17 +64,21 @@ export const routePath = (id: string) => `/routes/${encodeURIComponent(id)}`;
 /**
  * Действия карточки (routes-04d, RC-11): «Поделиться» (primary; share sheet / Web Share / копирование с «Ссылка
  * скопирована»; с OG-картинкой файлом, когда она готова и платформа умеет; нет origin — кнопки нет, появляется после
- * монтирования) и «Скачать GPX» (secondary, только при `gpxAvailable`; web скачивает в той же вкладке, native
- * открывает системный браузер; адрес не логируется) — в одну строку поровну, одна кнопка — во всю ширину. Уведомления
- * — во всю ширину под строкой.
+ * монтирования) и скачивание (secondary; web скачивает в той же вкладке, native открывает системный браузер; адрес не
+ * логируется) — в одну строку поровну, одна кнопка — во всю ширину. Скачивание (routes-formats, RC-8, RC-9): только
+ * GPX — прежняя «Скачать GPX»; несколько форматов — «Скачать» → шит выбора (`RouteDownloadSheet`, после
+ * монтирования). Уведомления — во всю ширину под строкой; отказ скачивания — с форматом.
  */
 function RouteActions({ route, mounted }: { route: CatalogRouteDetail; mounted: boolean }) {
   const [shareNotice, setShareNotice] = useState<'copied' | 'failed' | null>(null);
-  const [gpxFailed, setGpxFailed] = useState(false);
+  const [failedFormat, setFailedFormat] = useState<RouteExportFormat | null>(null);
+  const [picking, setPicking] = useState(false);
   const canShare = mounted && shareOrigin() !== null;
   // OG-картинка файлом — заранее; не готова — делимся ссылкой
   const image = useShareImage('route', route.id, canShare);
-  if (!canShare && !route.gpxAvailable) return null;
+  const formats = availableExportFormats(route);
+  if (!canShare && formats.length === 0) return null;
+  const onlyGpx = formats.length === 1 && formats[0] === 'gpx';
   const share = () => {
     setShareNotice(null);
     // синхронно в обработчике нажатия (web: `navigator.share` до любого await)
@@ -80,10 +91,14 @@ function RouteActions({ route, mounted }: { route: CatalogRouteDetail; mounted: 
       .then((outcome) => setShareNotice(outcome === 'copied' ? 'copied' : null))
       .catch(() => setShareNotice('failed'));
   };
-  const download = () => {
-    setGpxFailed(false);
+  const download = (format: RouteExportFormat) => {
+    setFailedFormat(null);
     // синхронно в обработчике нажатия (web: клик по ссылке до любого await)
-    downloadFile(api.catalogRouteGpxUrl(route.id)).catch(() => setGpxFailed(true));
+    downloadFile(api.catalogRouteExportUrl(route.id, format)).catch(() => setFailedFormat(format));
+  };
+  const pick = (format: RouteExportFormat) => {
+    download(format);
+    setPicking(false);
   };
   return (
     <View style={styles.stack}>
@@ -93,9 +108,22 @@ function RouteActions({ route, mounted }: { route: CatalogRouteDetail; mounted: 
             <Button label={t('routes.detail.share')} variant="primary" onPress={share} />
           </View>
         ) : null}
-        {route.gpxAvailable ? (
+        {onlyGpx ? (
           <View style={styles.action}>
-            <Button label={t('routes.detail.gpx')} variant="secondary" onPress={download} />
+            <Button
+              label={t('routes.detail.gpx')}
+              variant="secondary"
+              onPress={() => download('gpx')}
+            />
+          </View>
+        ) : null}
+        {formats.length > 0 && !onlyGpx ? (
+          <View style={styles.action}>
+            <Button
+              label={t('routes.detail.download')}
+              variant="secondary"
+              onPress={() => setPicking(true)}
+            />
           </View>
         ) : null}
       </View>
@@ -103,7 +131,17 @@ function RouteActions({ route, mounted }: { route: CatalogRouteDetail; mounted: 
       {shareNotice === 'failed' ? (
         <Banner tone="warning" message={t('routes.detail.shareFailed')} />
       ) : null}
-      {gpxFailed ? <Banner tone="warning" message={t('routes.detail.gpxFailed')} /> : null}
+      {failedFormat !== null ? (
+        <Banner
+          tone="warning"
+          message={t('routes.detail.downloadFailed', {
+            format: t(`routes.detail.format.${failedFormat}`),
+          })}
+        />
+      ) : null}
+      {mounted && picking ? (
+        <RouteDownloadSheet formats={formats} onPick={pick} onClose={() => setPicking(false)} />
+      ) : null}
     </View>
   );
 }

@@ -32,6 +32,7 @@ const route: CatalogRouteDetail = {
   author: { kind: 'rider', name: null },
   elevation: null,
   gpxAvailable: true,
+  exportFormats: [],
 };
 const http = (status: number, code: string, details?: unknown) =>
   new ApiHttpError(status, { code, message: 'x', ...(details ? { details } : {}) });

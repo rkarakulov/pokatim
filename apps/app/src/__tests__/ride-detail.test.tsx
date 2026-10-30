@@ -616,6 +616,7 @@ describe('карточка райда: маршрут (05c)', () => {
       ],
     },
     gpxAvailable: false,
+    exportFormats: [],
   };
   const geometry: RouteMapGeometry = {
     line: [

@@ -4,6 +4,7 @@ import { RACE_ROUTE_MAX_POINTS, type RaceRouteMap } from '../races/race-route.sc
 import {
   CATALOG_ROUTE_LIST_MAX_LIMIT,
   CATALOG_ROUTE_PROFILE_MAX_POINTS,
+  ROUTE_EXPORT_FORMATS,
   CatalogRouteCard,
   CatalogRouteCities,
   CatalogRouteDetail,
@@ -97,6 +98,7 @@ describe('каталог маршрутов (routes-01)', () => {
       author: { kind: 'team' },
       elevation: null,
       gpxAvailable: false,
+      exportFormats: [],
     });
     expect(CatalogRoutePage.parse({ items: [card], nextCursor: null }).items).toHaveLength(1);
   });
@@ -112,12 +114,17 @@ describe('каталог маршрутов (routes-01)', () => {
     };
     const detail = { ...card, elevation, gpxAvailable: true };
     const team = { kind: 'team' };
-    expect(CatalogRouteDetail.parse(detail)).toEqual({ ...detail, author: team });
+    expect(CatalogRouteDetail.parse(detail)).toEqual({
+      ...detail,
+      author: team,
+      exportFormats: [],
+    });
     expect(CatalogRouteDetail.parse({ ...card, elevation: null, gpxAvailable: true })).toEqual({
       ...card,
       author: team,
       elevation: null,
       gpxAvailable: true,
+      exportFormats: [],
     });
     expect(CATALOG_ROUTE_PROFILE_MAX_POINTS).toBe(300);
     const point = [0, 200];
@@ -146,6 +153,20 @@ describe('каталог маршрутов (routes-01)', () => {
       expect(CatalogRouteDetail.safeParse({ ...card, elevation: broken }).success).toBe(false);
     }
     expect(CatalogRouteDetail.safeParse({ ...card, gpxAvailable: 'yes' }).success).toBe(false);
+  });
+
+  it('CatalogRouteDetail.exportFormats (routes-formats): без поля — [], незнакомый формат отброшен (RC-3)', () => {
+    expect(ROUTE_EXPORT_FORMATS).toEqual(['gpx', 'kml', 'tcx']);
+    expect(CatalogRouteDetail.parse(card).exportFormats).toEqual([]);
+    expect(
+      CatalogRouteDetail.parse({ ...card, exportFormats: ['gpx', 'kml', 'tcx'] }).exportFormats,
+    ).toEqual(['gpx', 'kml', 'tcx']);
+    // новый формат сервера (FIT-курс) не роняет карточку этой сборки
+    expect(
+      CatalogRouteDetail.parse({ ...card, exportFormats: ['gpx', 'fit', 'tcx'] }).exportFormats,
+    ).toEqual(['gpx', 'tcx']);
+    expect(CatalogRouteDetail.safeParse({ ...card, exportFormats: 'gpx' }).success).toBe(false);
+    expect(CatalogRouteDetail.safeParse({ ...card, exportFormats: [1] }).success).toBe(false);
   });
 
   it('CatalogRouteCities: незнакомые коды отбрасываются', () => {

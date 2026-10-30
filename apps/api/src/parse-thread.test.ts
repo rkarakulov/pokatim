@@ -69,6 +69,42 @@ describe('runParseThread', () => {
     ).resolves.toEqual({ ok: false, code: 'unreadable' });
   });
 
+  it('analyzeRoute/deriveRoute KMZ и TCX в потоке (routes-formats): результат с kml и tcx; zip-бомба, DTD — unreadable', async () => {
+    for (const name of [
+      'route-earth.kmz',
+      'route-garmin-course.tcx',
+      'route-garmin-activity.tcx',
+    ]) {
+      const outcome = await runParseThread<RouteAnalysis>(
+        'analyzeRoute',
+        [fixture(name)],
+        DEFAULT_PARSE_LIMITS,
+      );
+      expect(outcome.ok, name).toBe(true);
+      if (outcome.ok) {
+        expect(outcome.result.kml).toContain('<LineString>');
+        expect(outcome.result.tcx).toContain('<Name>Pokatim</Name>');
+      }
+    }
+    const derived = await runParseThread<RouteDerived>(
+      'deriveRoute',
+      [fixture('route-earth.kmz')],
+      DEFAULT_PARSE_LIMITS,
+    );
+    expect(derived.ok && Object.keys(derived.result).sort()).toEqual([
+      'gpx',
+      'kml',
+      'profile',
+      'tcx',
+    ]);
+    for (const name of ['route-bomb.kmz', 'route-bomb-lying.kmz', 'route-dtd.tcx']) {
+      await expect(
+        runParseThread('analyzeRoute', [fixture(name)], DEFAULT_PARSE_LIMITS),
+        name,
+      ).resolves.toEqual({ ok: false, code: 'unreadable' });
+    }
+  });
+
   it('дольше лимита — timeout', async () => {
     await expect(
       runParseThread('analyzeRoute', [fixture('route-loop.gpx')], {

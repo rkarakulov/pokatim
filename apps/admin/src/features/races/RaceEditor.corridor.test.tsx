@@ -251,9 +251,9 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
     await newRace();
     await waitFor(() => expect(corridorSelect().options).toHaveLength(2));
     const picker = document.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(picker.accept).toBe('.gpx,.kml');
+    expect(picker.accept).toBe('.gpx,.kml,.kmz,.tcx');
     expect(
-      screen.getByText('Маршрут GPX или KML. Старт и финиш — начало и конец маршрута.'),
+      screen.getByText('Маршрут GPX, KML, KMZ или TCX. Старт и финиш — начало и конец маршрута.'),
     ).toBeTruthy();
     expect(screen.queryByText(/Только маршрут GPX/)).toBeNull();
 
@@ -289,7 +289,7 @@ describe('поле «Эталонный коридор» (AC3, AC13)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Новый маршрут' });
     // Enter в названии — та же отправка
     fireEvent.keyDown(within(dialog).getByLabelText(/^Название маршрута/), { key: 'Enter' });
-    expect(await within(dialog).findByText('Выберите файл GPX или KML')).toBeTruthy();
+    expect(await within(dialog).findByText('Выберите файл GPX, KML, KMZ или TCX')).toBeTruthy();
 
     const processing = route({ id: NEW_ROUTE_ID, status: 'processing', line: [] });
     mocked.uploadRoute.mockResolvedValue(processing);

@@ -8,6 +8,7 @@ import type { Job } from 'bullmq';
 
 import { type ParseLimits, runParseThread, type ThreadOutcome } from '../../parse-thread';
 import { QUEUE } from '../../queues';
+import { exportFilesOf } from './route-derived';
 import { ROUTE_RECEIVED, RouteReceived } from './routes.events';
 import { ROUTE_POLICY } from './routes.policy';
 import { RoutesRepository } from './routes.repository';
@@ -17,7 +18,7 @@ export type RouteProcessingOutcome = 'ready' | 'failed' | 'skipped';
 /**
  * Разбор маршрута (`route-processing`, jobId = id события outbox): захват по статусу `processing` (терминальный —
  * no-op) → исходник из `route_sources` → `analyzeRoute` в потоке с лимитами → отказ `failed: <код>` или транзакция
- * { геометрия, профиль высоты и очищенный GPX (routes-03) + `processing → ready` }. Сбой окружения (исходник, поток, запись результата) — исключение и ретрай
+ * { геометрия, профиль высоты и экспорт GPX/KML/TCX (routes-03, routes-formats) + `processing → ready` }. Сбой окружения (исходник, поток, запись результата) — исключение и ретрай
  * BullMQ; последняя попытка — `failed: unreadable` (панель показывает причину, маршрут не висит в «Обрабатываем…»;
  * если и эта запись не удалась — повторная загрузка того же файла вернёт маршрут в обработку). Параллелизм — 1.
  * Маршрут райдера, удалённый автором во время обработки (routes-02), — `skipped`: захвата нет, исходника и маршрута
@@ -111,7 +112,7 @@ export class RouteProcessingProcessor extends WorkerHost {
           profile: analysis.profile,
           derivedVersion: ROUTE_DERIVED_VERSION,
         },
-        new TextEncoder().encode(analysis.gpx),
+        exportFilesOf(analysis),
         now,
       ),
     );
