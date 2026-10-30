@@ -17,7 +17,7 @@ import {
 import { AchievementCardInputs } from './achievement-card.inputs';
 import { renderAchievementCard } from './achievement-card.png';
 import { OG_CARD_RENDER_JOB, OgCardCache, OgCardJob } from './og-card.cache';
-import { type OgCardInput, OgCardInputs } from './og-card.inputs';
+import { type OgCardInput, OgCardInputs, ogLogId } from './og-card.inputs';
 import { renderOgCard } from './og-card.png';
 import { OG_CARD_POLICY, ogPrerenderable } from './sharing.policy';
 import { RideInviteInputs } from './ride-invite.inputs';
@@ -197,10 +197,11 @@ export class StoryCardProcessor extends WorkerHost {
    * Рендер OG-картинки публичной страницы (og-images) — вызывается и тестами напрямую. Входы перечитываются (объект
    * больше не публичный или хэш устарел — `skipped`, PNG не пишется). Линия: гонка — линия показа маршрута коридора
    * (`ROUTE_GEOMETRY`, как на странице), райд — только маршрут каталога (`inviteLine`), маршрут — линия каталога.
-   * Провал на последней попытке — ключ постановки удерживается `failedHoldSec`. В логе — вид и id, без названия.
+   * Сезон и райдер — без линии. Провал на последней попытке — ключ постановки удерживается `failedHoldSec`. В логе —
+   * вид и id, без названия; райдер — префикс хэша вместо `publicId`.
    */
   buildOgCard(job: OgCardJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
-    const label = () => `og ${job.kind} ${job.id}`;
+    const label = () => `og ${job.kind} ${ogLogId(job.kind, job.id, job.hash)}`;
     let ttlSec: number = OG_CARD_POLICY.pngTtlSec;
     const sink: OutcomeSink = {
       release: (hash) => this.ogCache.release(hash),
@@ -234,6 +235,8 @@ export class StoryCardProcessor extends WorkerHost {
       case 'route':
         return this.routes.ogLine(input.facts.routeId);
       case 'calendar':
+      case 'season':
+      case 'rider':
       case 'brand':
         return null;
     }

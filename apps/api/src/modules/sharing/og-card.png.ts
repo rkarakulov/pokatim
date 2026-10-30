@@ -16,21 +16,23 @@ import { type StoryCardNode } from './story-card.render';
 import { renderCardPng, renderCardSvg, storyCardTrack } from './story-card.png';
 
 const themeOf = (input: OgCardInput) => appThemes[input.themeId] ?? DEFAULT_THEME;
+/** Цвета схемы входа (`OG_CARD_POLICY.scheme` вида: `light` — «Линия», `dark` — «Ночь»). */
+const colorsOf = (input: OgCardInput) => storyCardColors(themeOf(input).schemes[input.scheme]);
 
-/** Входы рендера объекта: светлая схема темы (незнакомая — по умолчанию), тексты, линия в плитке. */
+/** Входы рендера объекта: схема вида темы (незнакомая тема — по умолчанию), тексты, линия в плитке. */
 export function ogCardRenderInput(
   input: Exclude<OgCardInput, { kind: 'brand' }>,
   line: readonly LonLat[] | null,
 ): OgCardRenderInput {
   return {
-    colors: storyCardColors(themeOf(input).schemes.light),
+    colors: colorsOf(input),
     texts: ogCardTexts(input),
     track: line ? storyCardTrack(line, ogTileView()) : null,
   };
 }
 
 export function ogBrandRenderInput(input: OgCardInput): OgBrandRenderInput {
-  return { colors: storyCardColors(themeOf(input).schemes.light), texts: ogBrandTexts() };
+  return { colors: colorsOf(input), texts: ogBrandTexts() };
 }
 
 /** Дерево картинки по виду (бренд — без линии). */

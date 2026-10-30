@@ -89,17 +89,39 @@ function factsOf(input: OgObjectInput): string[] {
         join([f.city, formatDistances(f.distancesKm)]),
       ];
     }
+    case 'season': {
+      const f = input.facts;
+      return [
+        localRange(f.startsOn, f.endsOn),
+        f.raceCount > 0 ? t('ogCard.seasonRaces', { count: f.raceCount }) : '',
+      ];
+    }
+    case 'rider': {
+      const f = input.facts;
+      if (f.races === 0) return [t('ogCard.noRaces')];
+      return [
+        join([
+          t('ogCard.riderRaces', { count: f.races }),
+          f.podiums > 0 ? t('ogCard.riderPodiums', { count: f.podiums }) : null,
+        ]),
+        f.bestPlace === null ? '' : t('ogCard.bestPlace', { place: f.bestPlace }),
+      ];
+    }
   }
 }
 
+/** Заголовок картинки: название объекта; райдер — «Профиль райдера» (имени на картинке нет, D-B2). */
+const titleOf = (input: OgObjectInput) =>
+  input.kind === 'rider' ? t('riders.title') : input.facts.title;
+
 /**
  * Тексты OG-картинки — общими форматтерами `@pokatim/i18n`, время — по Минску. Только поля фактов: организатора,
- * автора, участников и описания в типах фактов нет (D7). Регистр метки и бренда — `uppercase` токенов `ogCard.text`.
+ * автора, участников и описания в типах фактов нет (D7); у райдера — ни имени, ни клуба (D-B2). Регистр метки и бренда — `uppercase` токенов `ogCard.text`.
  */
 export function ogCardTexts(input: OgObjectInput): OgCardTexts {
   return {
     kicker: t(`ogCard.kicker.${input.kind}`),
-    title: input.facts.title,
+    title: titleOf(input),
     facts: factsOf(input).filter((line) => line !== ''),
     brand: t('storyCard.brand'),
   };
@@ -109,9 +131,14 @@ export function ogBrandTexts(): OgBrandTexts {
   return { title: t('app.name'), tagline: t('app.tagline') };
 }
 
-/** Alt картинки для SSR и превью: «Гонка «…»», бренд — «Покатим — слоган». */
+/** Alt картинки для SSR и превью: «Гонка «…»», райдер — без имени, бренд — «Покатим — слоган». */
 export function ogCardAlt(input: OgCardInput): string {
-  return input.kind === 'brand'
-    ? t('ogCard.alt.brand', { tagline: t('app.tagline') })
-    : t(`ogCard.alt.${input.kind}`, { title: input.facts.title });
+  switch (input.kind) {
+    case 'brand':
+      return t('ogCard.alt.brand', { tagline: t('app.tagline') });
+    case 'rider':
+      return t('ogCard.alt.rider');
+    default:
+      return t(`ogCard.alt.${input.kind}`, { title: input.facts.title });
+  }
 }

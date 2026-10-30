@@ -9,6 +9,7 @@ import { IdentityModule } from '../identity';
 import { ProfileCoreModule } from '../profile';
 import { RacesCoreModule } from '../races';
 import { ResultsCoreModule } from '../results';
+import { RidersCoreModule } from '../riders';
 import { RidesCoreModule } from '../rides';
 import { RoutesCoreModule } from '../routes';
 import { AchievementCardController } from './achievement-card.controller';
@@ -40,7 +41,8 @@ import { StoryCardService } from './story-card.service';
  * входа) и карта сайта (landing-seo: `GET /v1/sitemap` без входа). Данные — порты
  * `results` (`RESULTS_FOR_SHARING`), `rides` (`RIDES_FOR_SHARING`), `races` (`RACES_FOR_SHARING`), `routes`
  * (`ROUTES_FOR_SHARING`, `ROUTE_GEOMETRY`), `calendar` (`CALENDAR_FOR_SHARING`), `profile` (`RIDER_NAMES`,
- * `RIDER_THEMES`), `achievements` (`ACHIEVEMENTS_FOR_SHARING`) через их `index.ts`; на `sharing` не ссылается никто.
+ * `RIDER_THEMES`), `achievements` (`ACHIEVEMENTS_FOR_SHARING`), `riders` (`RIDERS_FOR_SHARING` — OG профиля) через их
+ * `index.ts`; на `sharing` не ссылается никто.
  */
 @Module({
   imports: [
@@ -52,6 +54,7 @@ import { StoryCardService } from './story-card.service';
     CalendarCoreModule,
     ProfileCoreModule,
     AchievementsReadModule,
+    RidersCoreModule,
     BullModule.registerQueue({ name: QUEUE.storyCard }),
   ],
   controllers: [
@@ -95,6 +98,7 @@ export class SharingModule {}
     CalendarCoreModule,
     ProfileCoreModule,
     AchievementsReadModule,
+    RidersCoreModule,
     BullModule.registerQueue({ name: QUEUE.storyCard }, { name: QUEUE.ogSync }),
   ],
   providers: [

@@ -18,6 +18,8 @@ describe('ogCardHash (og-images, D4)', () => {
       OG_FIXTURES.ride,
       OG_FIXTURES.route,
       OG_FIXTURES.calendar,
+      OG_FIXTURES.season,
+      OG_FIXTURES.rider,
     ];
     for (const input of base) {
       const hash = ogCardHash(input);
@@ -39,6 +41,32 @@ describe('ogCardHash (og-images, D4)', () => {
         expect(ogCardHash(next), `${input.kind}.${field}`).not.toBe(hash);
       }
     }
+  });
+
+  it('схема входит в хэш: та же фактура light ↔ dark — разные хэши', () => {
+    for (const input of [OG_FIXTURES.race, OG_FIXTURES.ride, OG_FIXTURES.brand] as OgCardInput[]) {
+      const other = input.scheme === 'dark' ? 'light' : 'dark';
+      expect(ogCardHash({ ...input, scheme: other }), input.kind).not.toBe(ogCardHash(input));
+    }
+  });
+
+  it('райдер: статистика меняет хэш; лучшего места нет — свой хэш; в фактах нет имени, клуба, фото', () => {
+    const hash = ogCardHash(OG_FIXTURES.rider);
+    expect(ogCardHash(ogFixture('rider', { races: 8 }))).not.toBe(hash);
+    expect(ogCardHash(ogFixture('rider', { podiums: 3 }))).not.toBe(hash);
+    expect(ogCardHash(ogFixture('rider', { bestPlace: null }))).not.toBe(hash);
+    // структурно: в фактах только publicId и числа
+    expect(Object.keys(OG_FIXTURES.rider.facts).sort()).toEqual([
+      'bestPlace',
+      'podiums',
+      'publicId',
+      'races',
+    ]);
+    const extra = {
+      ...OG_FIXTURES.rider,
+      facts: { ...OG_FIXTURES.rider.facts, name: 'Анна', club: 'Velo', avatarId: 'x' },
+    } as OgCardInput;
+    expect(ogCardHash(extra)).toBe(hash);
   });
 
   it('routeId → null (маршрут ушёл из каталога) меняет хэш райда и гонки', () => {

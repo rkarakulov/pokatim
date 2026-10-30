@@ -3,10 +3,12 @@ import type { Job, Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, DAY, type Harness } from '../../../test/harness';
-import { seedRace, seedStart, startsDb } from '../../../test/og';
+import { seedOgSeason, seedRace, seedStart, startsDb } from '../../../test/og';
+import { publicRider } from '../../../test/profiles';
 import { createRide, hideInDb, rider, type Rider } from '../../../test/rides';
 import { QUEUE } from '../../queues';
 import { CALENDAR_FOR_SHARING, type CalendarForSharing } from '../calendar';
+import { RACES_FOR_SHARING, type RacesForSharing } from '../races';
 import { OgCardCache, type OgCardJob } from './og-card.cache';
 import { OgSync, ogSweepMark } from './og-sync';
 import { OG_CARD_POLICY } from './sharing.policy';
@@ -163,6 +165,49 @@ describe('og.sync (AC3)', () => {
     expect(run).toMatchObject({ failedKinds: [], scanned: { calendar: 2 } });
     expect(await queued()).toEqual(['brand:site', `calendar:${b}`].sort());
     expect(await cache().cursor('calendar')).toMatchObject({ id: b });
+  });
+
+  it('сезоны (RC-2a): живой без PNG — задача каждый прогон до готовности, без курсора; неживой — нет', async () => {
+    // часы стенда — 22 октября 2026 (Минск): граница «живого» — 22 сентября
+    const live = await seedOgSeason(h, { endsOn: '2026-10-31' });
+    const edge = await seedOgSeason(h, { startsOn: '2026-04-01', endsOn: '2026-09-22' });
+    await seedOgSeason(h, { startsOn: '2025-04-01', endsOn: '2026-09-21' });
+
+    const first = await sync().run();
+    expect(first.scanned.season).toBe(2);
+    expect(await queued()).toEqual(['brand:site', `season:${edge}`, `season:${live}`].sort());
+    expect(await h.redis.exists('og:cursor:season')).toBe(0);
+
+    // задача снята без рендера (ключ постановки истёк) — следующий прогон ставит снова
+    for (const job of await jobs()) {
+      await job.remove();
+      await h.redis.del(`og:pending:${job.data.hash}`);
+    }
+    expect(await sync().run()).toMatchObject({ enqueued: 3 });
+    await renderAll();
+    expect(await sync().run()).toMatchObject({ enqueued: 0, scanned: { season: 2 } });
+
+    // публикация гонки сезона (updatedAt сезона не меняется) — новая версия следующим прогоном
+    const race = await seedRace(h, { seasonId: live });
+    expect(await sync().run()).toMatchObject({ enqueued: 2 });
+    expect(await queued()).toEqual([`race:${race}`, `season:${live}`].sort());
+  });
+
+  it('профиль райдера в og.sync не участвует', async () => {
+    await publicRider(h, 'anna@example.by');
+    expect(await sync().run()).toMatchObject({ enqueued: 1 });
+    expect(await queued()).toEqual(['brand:site']);
+    await renderAll();
+    expect(await sync().run()).toMatchObject({ enqueued: 0 });
+  });
+
+  it('сбой чтения живых сезонов — остальные виды прошли, задача падает', async () => {
+    const race = await seedRace(h);
+    vi.spyOn(h.worker.get<RacesForSharing>(RACES_FOR_SHARING), 'liveSeasonIds').mockRejectedValue(
+      new Error('boom'),
+    );
+    await expect(sync().run()).rejects.toThrow('og.sync failed: season');
+    expect(await queued()).toEqual(['brand:site', `race:${race}`].sort());
   });
 
   it('скрытие после пререндера — картинка 404 (выдача пересчитывает видимость)', async () => {
