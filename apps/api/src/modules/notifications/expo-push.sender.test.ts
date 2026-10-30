@@ -117,6 +117,7 @@ describe('ExpoPushSender.send', () => {
       message: 'push service timeout',
     });
     // удержанный запрос дорабатывает в этом тесте: проснувшись в следующем, он забрал бы его `expo.fail(...)`
+    await vi.waitFor(() => expect(expo.callsTo('send')).toHaveLength(1));
     release();
     await vi.waitFor(() => expect(expo.delivered).toHaveLength(1));
     const closed = new ExpoPushSender({
