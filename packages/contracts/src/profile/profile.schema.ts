@@ -64,6 +64,11 @@ export const ProfileView = z.object({
   avatar: z.object({ id: AvatarId }).nullable().default(null),
   publicId: RiderPublicId.nullable().default(null),
   themeId: tolerantEnum(APP_THEME_IDS).default(DEFAULT_APP_THEME_ID),
+  /**
+   * profile-moderation-followups: загрузка фото запрещена до этого момента (повторные сбросы фото модератором);
+   * `null` — запрета нет или он истёк. Во всех ответах `ProfileView` (приложение кладёт их в кэш целиком).
+   */
+  avatarUploadBlockedUntil: z.iso.datetime().nullable().default(null),
 });
 export type ProfileView = z.output<typeof ProfileView>;
 

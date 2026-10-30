@@ -68,6 +68,7 @@ beforeEach(() => {
     avatar: null,
     publicId: null,
     themeId: 'classic',
+    avatarUploadBlockedUntil: null,
   });
   open.mockResolvedValue(undefined);
   // билеты (event-tickets): у старта не включены — прежняя кнопка сайта организатора

@@ -28,6 +28,7 @@ const profile = (themeId: AppThemeId = 'classic'): ProfileView => ({
   avatar: null,
   publicId: null,
   themeId,
+  avatarUploadBlockedUntil: null,
 });
 
 const nameOf = (id: AppThemeId) => t(`theme.${id}.name`);

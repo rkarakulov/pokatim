@@ -39,7 +39,7 @@ export class ProfileService {
   ) {}
 
   async view(userId: string): Promise<ProfileView> {
-    return viewOf(await this.repository.findProfile(userId));
+    return viewOf(await this.repository.findProfile(userId), this.clock.now());
   }
 
   /**
@@ -68,11 +68,11 @@ export class ProfileService {
     // новый id фото (profile-moderation, RC-A2 (b)) — только при уходе профиля из публичного доступа
     const ids = { publicId: randomToken(), avatarId: randomToken() };
     try {
-      return viewOf(await this.writeProfile(userId, patch, ids, now));
+      return viewOf(await this.writeProfile(userId, patch, ids, now), now);
     } catch (error) {
       // гонка двух первых upsert: документ уже вставлен — повтор всей транзакции его найдёт и обновит
       if (!isDuplicateKey(error, '_id_')) throw error;
-      return viewOf(await this.writeProfile(userId, patch, ids, now));
+      return viewOf(await this.writeProfile(userId, patch, ids, now), now);
     }
   }
 
@@ -92,11 +92,11 @@ export class ProfileService {
       throw domainError('RATE_LIMITED', 429, details);
     }
     try {
-      return viewOf(await this.repository.setTheme(userId, themeId, now));
+      return viewOf(await this.repository.setTheme(userId, themeId, now), now);
     } catch (error) {
       // гонка двух первых upsert: документ уже вставлен — повтор его найдёт и обновит
       if (!isDuplicateKey(error, '_id_')) throw error;
-      return viewOf(await this.repository.setTheme(userId, themeId, now));
+      return viewOf(await this.repository.setTheme(userId, themeId, now), now);
     }
   }
 

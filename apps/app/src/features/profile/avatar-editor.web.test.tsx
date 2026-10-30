@@ -30,14 +30,17 @@ const profile = {
   avatar: { id: 'a1' },
   publicId: null,
   themeId: 'classic' as const,
+  avatarUploadBlockedUntil: null,
 };
 
-function renderEditor() {
+function renderEditor(avatarId: string | null = null, blockedUntil: string | null = null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  const view = render(<AvatarEditor avatarId={null} />, { wrapper });
+  const view = render(<AvatarEditor avatarId={avatarId} blockedUntil={blockedUntil} />, {
+    wrapper,
+  });
   return { view, client };
 }
 
@@ -129,5 +132,39 @@ describe('AvatarEditor (web, rider-profile AC14)', () => {
     expect(await screen.findByText('Выберите фото в формате JPEG, PNG или WebP')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Сохранить фото' })).toBeNull();
     expect(api.uploadAvatar).not.toHaveBeenCalled();
+  });
+
+  it('запрет загрузки — «Выбрать фото» неактивна, подпись с датой; «Удалить фото» доступна', async () => {
+    renderEditor('a1', '2026-11-29T11:05:00.000Z');
+    const pick = screen.getByRole('button', { name: 'Выбрать фото' });
+    expect(pick.getAttribute('aria-disabled')).toBe('true');
+    expect(
+      screen.getByText('Загрузка фото недоступна до 29 ноября 2026, 14:05 после нарушений правил'),
+    ).toBeTruthy();
+    fireEvent.click(pick);
+    expect(getDocumentAsync).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', { name: 'Удалить фото' }).getAttribute('aria-disabled'),
+    ).not.toBe('true');
+  });
+
+  it('409 avatar_blocked на сохранении (гонка со сбросом) — баннер с датой, профиль перечитывается', async () => {
+    jest.mocked(api.uploadAvatar).mockRejectedValue(
+      new ApiHttpError(409, {
+        code: 'PROFILE_INVALID_STATE',
+        message: 'x',
+        details: { reason: 'avatar_blocked', until: '2026-11-29T11:05:00.000Z' },
+      }),
+    );
+    const { view, client } = renderEditor();
+    client.setQueryData(['profile'], profile);
+    await pickAndLoad(view);
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить фото' }));
+    expect(
+      await screen.findByText(
+        'Загрузка фото недоступна до 29 ноября 2026, 14:05 после нарушений правил',
+      ),
+    ).toBeTruthy();
+    await waitFor(() => expect(client.getQueryState(['profile'])?.isInvalidated).toBe(true));
   });
 });

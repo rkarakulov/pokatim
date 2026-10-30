@@ -7,11 +7,16 @@ import { createColumnHelper } from '@tanstack/react-table';
 import { api } from '../../api';
 import { formatDateTimeLong } from '../../format';
 import { isForbidden } from '../../session/errors';
-import { Button, DataTable, EmptyState, PageHeader } from '../../ui';
+import { Button, DataTable, EmptyState, PageHeader, ToggleChip } from '../../ui';
 import { ModerationTabs } from '../moderation/ModerationTabs';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { riderLabel } from '../results/results-format';
-import { profileContentLabel } from './rider-profiles-format';
+import {
+  openReasonsLabel,
+  profileContentLabel,
+  RIDER_PROFILE_QUEUE_REASONS,
+  type RiderProfilesSearch,
+} from './rider-profiles-format';
 import { RIDER_PROFILES_QUERY_KEY } from './rider-profiles-query';
 
 const PAGE_SIZE = 50;
@@ -30,13 +35,22 @@ const columns = [
   column.accessor('openReportCount', {
     header: t('admin.riderProfiles.column.reports'),
     cell: (info) => {
-      const reason = info.row.original.topReason;
-      return reason
+      const { topReason: reason, openReasons } = info.row.original;
+      const reports = reason
         ? t('admin.riderProfiles.reports', {
             count: info.getValue(),
             reason: t(`domain.profileReportReason.${reason}`),
           })
         : String(info.getValue());
+      // во «Все» видно, что среди жалоб есть имя (или другая причина), а не только главная
+      return openReasons.length > 1 ? (
+        <>
+          {reports}
+          <div className="t-meta">{openReasonsLabel(openReasons)}</div>
+        </>
+      ) : (
+        reports
+      );
     },
     enableSorting: false,
   }),
@@ -57,14 +71,26 @@ const columns = [
 
 /**
  * «Профили райдеров» (`profiles.moderate`, profile-moderation): очередь профилей с открытыми жалобами (последняя
- * жалоба сверху), «Показать ещё» по курсору сервера. Подпись — `riderLabel` (имя только при согласии, Q2); строка →
- * карточка с действиями.
+ * жалоба сверху), «Показать ещё» по курсору сервера. Вкладки «Все / Имя / Фото / Клуб» — фильтр сервера по причине
+ * открытой жалобы, в URL (`?reason=`); прочие причины строки — подписью под главной. Подпись — `riderLabel` (имя
+ * только при согласии, Q2); строка → карточка с действиями.
  */
-export function RiderProfilesScreen() {
+export function RiderProfilesScreen({
+  search,
+  onSearch,
+}: {
+  search: RiderProfilesSearch;
+  onSearch: (next: RiderProfilesSearch) => void;
+}) {
+  const { reason } = search;
   const pages = useInfiniteQuery({
-    queryKey: [...RIDER_PROFILES_QUERY_KEY, 'list'],
+    queryKey: [...RIDER_PROFILES_QUERY_KEY, 'list', reason ?? 'all'],
     queryFn: ({ pageParam }) =>
-      api.listRiderProfiles({ limit: PAGE_SIZE, ...(pageParam ? { cursor: pageParam } : {}) }),
+      api.listRiderProfiles({
+        ...(reason ? { reason } : {}),
+        limit: PAGE_SIZE,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
@@ -86,8 +112,21 @@ export function RiderProfilesScreen() {
           columns={columns}
           query={query}
           getRowId={(row) => row.userId}
-          empty={<EmptyState title={t('admin.riderProfiles.empty')} />}
+          empty={<EmptyState title={t(`admin.riderProfiles.empty.${reason ?? 'all'}`)} />}
           renderError={(error) => (isForbidden(error) ? <NoAccessScreen /> : undefined)}
+          toolbar={
+            <div className="chips" role="group" aria-label={t('admin.riderProfiles.filter')}>
+              {([undefined, ...RIDER_PROFILE_QUEUE_REASONS] as const).map((value) => (
+                <ToggleChip
+                  key={value ?? 'all'}
+                  pressed={reason === value}
+                  onToggle={() => onSearch(value ? { reason: value } : {})}
+                >
+                  {t(`admin.riderProfiles.filter.${value ?? 'all'}`)}
+                </ToggleChip>
+              ))}
+            </div>
+          }
           footer={
             pages.hasNextPage ? (
               <div className="table__more">

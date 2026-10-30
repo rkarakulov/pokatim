@@ -20,6 +20,7 @@ import {
 } from '../rides';
 import { ROUTE_PUBLICATION_DECIDED } from '../routes';
 import { TICKETS_REMINDER_DUE } from '../tickets';
+import { PROFILE_FIELD_RESET } from '../profile';
 
 /**
  * Маршруты событий модулей-источников в очередь приёма уведомлений (ADR-0017): объявляет подписчик (как
@@ -41,6 +42,7 @@ export const notificationsOutboxRoutes = {
   [ROUTE_PUBLICATION_DECIDED]: QUEUE.notificationsIntake,
   // PR D event-tickets: напоминание о событии (порт `TICKET_NOTICES`)
   [TICKETS_REMINDER_DUE]: QUEUE.notificationsIntake,
+  [PROFILE_FIELD_RESET]: QUEUE.notificationsIntake,
 } as const;
 
 export type NotificationSourceEvent = keyof typeof notificationsOutboxRoutes;

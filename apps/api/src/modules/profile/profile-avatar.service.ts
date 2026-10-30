@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   AVATAR_SIZE_PX,
   type AvatarCropQuery,
+  type ProfileStateDetails,
   type ProfileView,
   type RateLimitedDetails,
 } from '@pokatim/contracts';
@@ -16,12 +17,18 @@ import { randomToken } from '../identity';
 import { type CropIntent, processAvatar } from './avatar-image';
 import { AvatarProcessing } from './avatar-processing-gate';
 import { ProfileAvatarRepository } from './profile-avatar.repository';
-import { PROFILE_POLICY, profileViewOf } from './profile.policy';
+import { activeBlock, PROFILE_POLICY, profileViewOf } from './profile.policy';
 import { ProfileRepository } from './profile.repository';
 
 const limited = (retryAfterSec: number) => {
   const details: RateLimitedDetails = { retryAfterSec };
   return domainError('RATE_LIMITED', 429, details);
+};
+
+/** Загрузка фото запрещена (profile-moderation-followups): `409 PROFILE_INVALID_STATE { avatar_blocked, until }`. */
+const avatarBlocked = (until: Date) => {
+  const details: ProfileStateDetails = { reason: 'avatar_blocked', until: until.toISOString() };
+  return domainError('PROFILE_INVALID_STATE', 409, details);
 };
 
 /**
@@ -45,10 +52,13 @@ export class ProfileAvatarService {
   ) {}
 
   /**
-   * Слот приёма, затем лимит частоты — до чтения тела; `release` — после ответа. Слот первым (LOW-1 ревью): отказ «слот
-   * занят» не списывает часовую квоту; отказ квоты освобождает слот.
+   * Запрет загрузки (profile-moderation-followups) — первым: 409 до слота, лимита и тела. Затем слот приёма и лимит
+   * частоты — до чтения тела; `release` — после ответа. Слот раньше лимита (LOW-1 ревью): отказ «слот занят» не
+   * списывает часовую квоту; отказ квоты освобождает слот.
    */
   async admit(userId: string): Promise<UploadSlot> {
+    const blocked = activeBlock(await this.profiles.findAvatarBlock(userId), this.clock.now());
+    if (blocked) throw avatarBlocked(blocked);
     const slot = this.slots.tryAcquire(userId);
     if (!slot) throw limited(5);
     try {
@@ -88,9 +98,13 @@ export class ProfileAvatarService {
       bytesLength: result.bytes.byteLength,
       createdAt: now,
     };
+    // запрет — и в транзакции (RC-F6): загрузка, принятая до сброса с запретом, не записывается; сброс пишет тот же
+    // документ профиля — транзакция со старым снимком падает на записи и повторяется, видя запрет
     const write = () =>
       this.transactions.run(async (tx) => {
         const before = await this.profiles.findProfile(userId, tx);
+        const blocked = activeBlock(before?.avatarBlockedUntil, now);
+        if (blocked) throw avatarBlocked(blocked);
         await this.avatars.insert(tx, doc);
         const after = await this.profiles.setAvatar(tx, userId, id, now);
         const previous = before?.avatarId ?? null;
@@ -108,7 +122,7 @@ export class ProfileAvatarService {
     this.logger.log(
       `profile.avatar_replaced uid=${userId} bytes=${bytes.byteLength} format=${result.format} stored=${result.bytes.byteLength}`,
     );
-    return profileViewOf(after);
+    return profileViewOf(after, now);
   }
 
   /** Удалить фото — идемпотентно (нет профиля или фото — текущий вид); лимит — общий `profile-update`. */
@@ -122,7 +136,7 @@ export class ProfileAvatarService {
       return doc;
     });
     if (before?.avatarId) this.logger.log(`profile.avatar_removed uid=${userId}`);
-    return profileViewOf(before ? { ...before, avatarId: null } : null);
+    return profileViewOf(before ? { ...before, avatarId: null } : null, now);
   }
 
   /** Байты аватара для публичной отдачи; нет — 404. */
