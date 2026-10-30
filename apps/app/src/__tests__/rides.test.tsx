@@ -154,6 +154,7 @@ const openRides = () =>
   renderRouter(routes, { initialUrl: '/rides', wrapper: createQueryWrapper() });
 const feed = () => screen.getByTestId('rides-feed');
 const heroLabel = 'Ближайший райд. Минское море. Сб 3 октября, 9:00';
+const SOFT_PROMPT = 'Узнайте о переносе или отмене райда';
 const rowOf = (title: string) =>
   screen.getByRole('link', { name: new RegExp(`^${title}\\. `) }).parent as never;
 
@@ -209,6 +210,8 @@ describe('вкладка «Райды» (S3)', () => {
     await fireEvent.press(within(rowOf('Свободный')).getByRole('button', { name: 'Я иду' }));
     expect(joinRide).toHaveBeenCalledWith(liveSession.accessToken, open.id);
     expect(await screen.findByText('Мест нет.')).toBeOnTheScreen();
+    // отказ мутации — подсказки push нет (N5)
+    expect(screen.queryByText(SOFT_PROMPT)).toBeNull();
 
     joinRide.mockResolvedValueOnce({
       ride: { ...open, goingCount: 8, description: null },
@@ -223,6 +226,10 @@ describe('вкладка «Райды» (S3)', () => {
     });
     await fireEvent.press(within(rowOf('Свободный')).getByRole('button', { name: 'Я иду' }));
     await waitFor(() => expect(listRides).toHaveBeenCalledTimes(2));
+    // успех в строке — подсказка push под строкой на всю ширину, не в узком слоте действия
+    expect(await within(feed()).findByText(SOFT_PROMPT)).toBeOnTheScreen();
+    expect(within(rowOf('Свободный')).queryByText(SOFT_PROMPT)).toBeNull();
+    expect(screen.getAllByText(SOFT_PROMPT)).toHaveLength(1);
   });
 
   it('строка и герой ведут в карточку; «Создать райд» — в форму', async () => {

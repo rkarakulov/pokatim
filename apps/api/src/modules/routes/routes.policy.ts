@@ -40,6 +40,11 @@ export const ROUTE_POLICY = {
    * (ключ `route-gpx` прежний, routes-formats RC-10: счётчики не сбрасываются).
    */
   exportIpLimit: { limit: 30, windowSec: 60 },
+  /**
+   * Предел распаковки файла экспорта при отдаче клиенту без gzip (route-exports-gzip): `gunzip` с `maxOutputLength`;
+   * TCX на 20 000 точек — ≤ ~4,6 МБ.
+   */
+  exportMaxBytes: 8 * 1024 * 1024,
   /** Маршрутов за прогон бэкфилла производных (`routes-maintenance`); полная пачка ставит продолжение. */
   deriveBatch: 20,
   /** routes-06 (U8, 8.1 RC-8): успешных подач в каталог на райдера в сутки — списывается прямо перед записью. */
@@ -185,3 +190,50 @@ export const ROUTE_DISTANCE_RANGES_M: Record<
   '50to100': { $gte: 50_000, $lte: 100_000 },
   gt100: { $gt: 100_000 },
 };
+
+/** q-значение токена `Accept-Encoding`: по умолчанию 1; невалидное (`abc`, вне `[0, 1]`) — 0 (не принимает). */
+function qualityOf(params: string[]): number {
+  const q = params.find((param) => param.trim().toLowerCase().startsWith('q='));
+  if (q === undefined) return 1;
+  const value = q.trim().slice(2);
+  if (!/^(0(\.\d{0,3})?|1(\.0{0,3})?)$/.test(value)) return 0;
+  return Number(value);
+}
+
+/**
+ * Принимает ли клиент ответ `Content-Encoding: gzip` (route-exports-gzip): токены `Accept-Encoding` через запятую,
+ * без учёта регистра; явный `gzip`/`x-gzip` решает по своему q (`gzip;q=0` — нет даже при `*`), иначе — `*` с q > 0.
+ * Нет заголовка — `false`: безопаснее отдать несжатое.
+ */
+export function acceptsGzip(header: string | undefined): boolean {
+  if (!header) return false;
+  let explicit: number | undefined;
+  let wildcard: number | undefined;
+  for (const token of header.split(',')) {
+    const [name = '', ...params] = token.split(';');
+    const coding = name.trim().toLowerCase();
+    if (coding === 'gzip' || coding === 'x-gzip') {
+      explicit = Math.max(explicit ?? 0, qualityOf(params));
+    } else if (coding === '*') {
+      wildcard = qualityOf(params);
+    }
+  }
+  return (explicit ?? wildcard ?? 0) > 0;
+}
+
+/**
+ * Значение `Vary` с токеном `token` поверх уже выставленного (`Vary: Origin` от CORS): `setHeader` заменяет заголовок,
+ * а ответ с `Cache-Control: public` зависит и от `Origin`, и от `Accept-Encoding`. `*` и уже присутствующий токен
+ * (без учёта регистра) — без изменений.
+ */
+export function varyWith(current: string | string[] | number | undefined, token: string): string {
+  const tokens = [current ?? []]
+    .flat()
+    .flatMap((value) => String(value).split(','))
+    .map((value) => value.trim())
+    .filter((value) => value !== '');
+  if (tokens.includes('*') || tokens.some((value) => value.toLowerCase() === token.toLowerCase())) {
+    return tokens.join(', ');
+  }
+  return [...tokens, token].join(', ');
+}

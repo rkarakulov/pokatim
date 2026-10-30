@@ -27,6 +27,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { withAccessToken } from '@/features/auth/authorized';
 import { apiErrorCode } from '@/features/auth/error-messages';
 import { AUTH_MUTATION } from '@/features/auth/queries';
+import { offerPushSoftPrompt } from '@/features/notifications/push-soft-prompt-store';
 import { VERIFIED_PROFILE_KEY } from '@/features/profile/queries';
 import { forgetCancelledTicket } from '@/features/tickets/queries';
 import { api } from '@/lib/api';
@@ -408,6 +409,8 @@ function useEntryMutation<V>(
   id: string,
   call: (token: string, body: V) => Promise<MyRaceEntry>,
   staleAfter?: (body: V) => readonly QueryKey[],
+  /** заявка стала активной (новая запись, не повышение уровня) — до записи в кеш и инвалидаций */
+  onEntered?: () => void,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -416,6 +419,8 @@ function useEntryMutation<V>(
     onMutate: () => queryClient.cancelQueries({ queryKey: raceEntryKey(id) }),
     mutationFn: (body: V) => withAccessToken((token) => call(token, body)),
     onSuccess: async (entry, body) => {
+      const before = queryClient.getQueryData<MyRaceEntry | null>(raceEntryKey(id));
+      if (entry.entry?.status === 'active' && before?.entry?.status !== 'active') onEntered?.();
       await applyEntry(queryClient, entry);
       await Promise.all(
         (staleAfter?.(body) ?? []).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
@@ -439,6 +444,8 @@ export const useEnterRace = (id: string) =>
     (token, body) => (body ? api.enterRace(token, id, body) : api.enterRace(token, id)),
     // Verified-заявка фиксирует пол и год анкеты — кэш анкеты устарел (иначе откроется редактируемой)
     (body) => (body && body.tier === 'verified' ? [VERIFIED_PROFILE_KEY] : []),
+    // новая запись — подсказка push (N5); форма «Участвовать» к ответу уже размонтирована — не из `mutate`
+    () => offerPushSoftPrompt('race', id),
   );
 
 /** «Отменить участие». */

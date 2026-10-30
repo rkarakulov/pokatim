@@ -1,3 +1,5 @@
+import { gunzipSync } from 'node:zlib';
+
 import {
   parseGpx,
   parseKml,
@@ -110,9 +112,9 @@ describe('RouteDerivedBackfill.run (routes-03)', () => {
     expect(oldGeometry?.derivedVersion).toBe(ROUTE_DERIVED_VERSION);
     expect(oldGeometry?.profile?.[0]?.[0]).toBe(0);
     const exported = await routesDb(h).exports.findOne({ _id: old });
-    expect(exported?.derivedVersion).toBe(ROUTE_DERIVED_VERSION);
+    expect(exported).toMatchObject({ derivedVersion: ROUTE_DERIVED_VERSION, encoding: 'gzip' });
     expect(
-      parseGpx(Buffer.from(exported!.gpx.buffer).toString('utf8')).points.length,
+      parseGpx(gunzipSync(exported!.gpx.buffer).toString('utf8')).points.length,
     ).toBeGreaterThan(1);
 
     expect(await backfill().run()).toEqual({ derived: 0, failed: 0, skipped: 0, more: false });
@@ -128,7 +130,12 @@ describe('RouteDerivedBackfill.run (routes-03)', () => {
     await routesDb(h).geometries.updateOne({ _id: id }, { $set: { derivedVersion: 1 } });
     await routesDb(h).exports.replaceOne(
       { _id: id },
-      { gpx: exportBefore!.gpx, sizeBytes: exportBefore!.gpx.buffer.byteLength, derivedVersion: 1 },
+      {
+        gpx: exportBefore!.gpx,
+        encoding: exportBefore!.encoding,
+        sizeBytes: exportBefore!.gpx.buffer.byteLength,
+        derivedVersion: 1,
+      },
     );
 
     expect(await backfill().run()).toEqual({ derived: 1, failed: 0, skipped: 0, more: false });
@@ -136,8 +143,8 @@ describe('RouteDerivedBackfill.run (routes-03)', () => {
     expect(after).toEqual(before);
     const exported = await routesDb(h).exports.findOne({ _id: id });
     expect(exported).toEqual(exportBefore);
-    expect(exported?.derivedVersion).toBe(2);
-    const text = (binary: Binary | undefined) => Buffer.from(binary!.buffer).toString('utf8');
+    expect(exported).toMatchObject({ derivedVersion: 2, encoding: 'gzip' });
+    const text = (binary: Binary | undefined) => gunzipSync(binary!.buffer).toString('utf8');
     const options = { maxPoints: ROUTE_MAX_POINTS };
     const gpxPoints = parseGpx(text(exported!.gpx), { allowRoute: true }).points.length;
     expect(parseKml(text(exported!.kml), options).points).toHaveLength(gpxPoints);
@@ -202,7 +209,7 @@ describe('RouteDerivedBackfill.run (routes-03)', () => {
       backfill().version = ROUTE_DERIVED_VERSION;
     }
     const exported = await routesDb(h).exports.findOne({ _id: id });
-    expect(Buffer.from(exported!.gpx.buffer).toString('utf8')).toBe('<gpx/>');
+    expect(gunzipSync(exported!.gpx.buffer).toString('utf8')).toBe('<gpx/>');
     expect(await routesDb(h).exports.countDocuments()).toBe(1);
   });
 

@@ -8,6 +8,8 @@ export type SecureKey =
   | 'pokatim.locationPrompt'
   | 'pokatim.appTheme'
   | 'pokatim.pushToken'
+  // отложка подсказки push «Не сейчас» (не секрет; другой KV-зависимости нет, как `pokatim.locationPrompt`)
+  | 'pokatim.pushSoftPrompt'
   | 'pokatim.locale'
   // QR офлайн-копий билетов (event-tickets, plan-B §5): только токены QR и владелец — остальное в файле
   | 'pokatim.ticketQr';

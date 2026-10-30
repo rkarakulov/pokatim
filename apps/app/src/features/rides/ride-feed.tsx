@@ -22,6 +22,7 @@ import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { FilterGroup, FilterGroupSkeleton } from '@/components/filter-group';
 import { OfflineBanner } from '@/components/offline-banner';
 import { RideListRow, RideListRowSkeleton } from '@/components/ride-list-row';
+import { PushSoftPrompt } from '@/features/notifications/push-soft-prompt';
 import { useMinskClock } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
@@ -356,13 +357,17 @@ export function RideFeed({
               {rideDayLabel(item.startsAt, now)}
             </Text>
           ) : (
-            <RideListRow
-              ride={item.ride}
-              now={now}
-              distance={distanceLabel(me, item.ride.start)}
-              onPress={() => openRide(item.ride.id)}
-              action={<RideRsvpAction ride={item.ride} variant="row" />}
-            />
+            <>
+              <RideListRow
+                ride={item.ride}
+                now={now}
+                distance={distanceLabel(me, item.ride.start)}
+                onPress={() => openRide(item.ride.id)}
+                action={<RideRsvpAction ride={item.ride} variant="row" />}
+              />
+              {/* строка узкая для подсказки: она — под строкой, на всю ширину */}
+              <PushSoftPrompt context="ride" id={item.ride.id} style={styles.softPrompt} />
+            </>
           )}
         </View>
       )}
@@ -372,6 +377,7 @@ export function RideFeed({
 
 const styles = StyleSheet.create({
   gutter: { paddingHorizontal: size.gutter },
+  softPrompt: { paddingBottom: space.s3 },
   head: { flexDirection: 'row', alignItems: 'flex-end', gap: space.s3 },
   headTitle: { flex: 1, minWidth: 0 },
   filters: { marginTop: space.s2 },
