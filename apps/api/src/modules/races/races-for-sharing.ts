@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import type { ChangedCursor, ChangedRow } from '../../changed-since';
-import type { RaceOgFacts, RacesForSharing } from './races-for-sharing.port';
+import type { RaceOgFacts, RacesForSharing, SeasonOgFacts } from './races-for-sharing.port';
 import { RacesRepository } from './races.repository';
 
 /** Реализация порта `RacesForSharing` (OG-картинка): только `published` — отменённая страница видна, картинки нет. */
@@ -25,6 +25,22 @@ export class RacesForSharingService implements RacesForSharing {
 
   ogChanged(after: ChangedCursor | null, limit: number): Promise<ChangedRow[]> {
     return this.repository.changedForOg(after, limit);
+  }
+
+  async seasonOgFacts(seasonId: string): Promise<SeasonOgFacts | null> {
+    const season = await this.repository.findSeason(seasonId);
+    if (!season) return null;
+    return {
+      seasonId: season._id,
+      title: season.name,
+      startsOn: season.startsOn,
+      endsOn: season.endsOn,
+      raceCount: await this.repository.countPublishedInSeason(season._id),
+    };
+  }
+
+  async liveSeasonIds(sinceLocalDate: string): Promise<string[]> {
+    return (await this.repository.liveSeasons(sinceLocalDate)).map((season) => season._id);
   }
 
   async sitemapSeasons(): Promise<ChangedRow[]> {

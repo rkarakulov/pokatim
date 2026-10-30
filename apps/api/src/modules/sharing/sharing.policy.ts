@@ -1,4 +1,4 @@
-import { minskToday } from '@pokatim/contracts';
+import { minskToday, OG_BRAND, type OgCardKind } from '@pokatim/contracts';
 
 /**
  * Карточка для сторис (story-cards, ADR-0018): Redis-ключи с TTL, лимиты, задача рендера. **Изменил разметку, тексты
@@ -26,14 +26,30 @@ export const STORY_CARD_POLICY = {
 
 const DAY_MS = 86_400_000;
 
+/** Вид картинки: виды объектов и бренд-картинка (`OG_BRAND`). */
+export type OgCardKindOrBrand = OgCardKind | typeof OG_BRAND.kind;
+
+/** Схема темы OG-картинки: `light` — «Линия», `dark` — «Ночь» (как шаблоны сторис). */
+export type OgScheme = 'light' | 'dark';
+
 /**
  * OG-картинки публичных страниц (og-images, ADR-0018; память Redis — вариант A R-A1): PNG в Redis по хэшу входов,
  * пререндер `og.sync`. **Изменил разметку, тексты или токены OG (`ogCard` в `@pokatim/design-tokens`, строки
- * `ogCard.*`) — подними `renderVersion`**: смена версии меняет хэши (новые URL картинок) и запускает полный проход
- * `og.sync`.
+ * `ogCard.*`) или таблицу `scheme` — подними `renderVersion`**: смена версии меняет хэши (новые URL картинок) и
+ * запускает полный проход `og.sync` (смена `scheme` без версии меняет хэши, но полного прохода не даёт).
  */
 export const OG_CARD_POLICY = {
-  renderVersion: 2,
+  renderVersion: 3,
+  /** схема темы по виду: соревновательные (гонка, сезон, райдер) — тёмная, остальные и бренд — светлая */
+  scheme: {
+    race: 'dark',
+    ride: 'light',
+    route: 'light',
+    calendar: 'light',
+    season: 'dark',
+    rider: 'dark',
+    brand: 'light',
+  } satisfies Record<OgCardKindOrBrand, OgScheme>,
   /** PNG, с: 7 суток, продление при каждой выдаче 200 (`GETEX`) — живут только запрашиваемые картинки */
   pngTtlSec: 7 * 86_400,
   /** PNG объекта вне окна пререндера (самолечение по запросу), с: сутки; выдача продлевает до `pngTtlSec` */
@@ -56,24 +72,49 @@ export const OG_CARD_POLICY = {
   jobAttempts: 2,
   jobBackoffMs: 2_000,
   /** пререндер только «живых» объектов, сут.; остальные — самолечением при первом запросе */
-  prerenderWindow: { rideDays: 14, raceDays: 30, calendarDays: 14 },
+  prerenderWindow: { rideDays: 14, raceDays: 30, calendarDays: 14, seasonDays: 30 },
 } as const;
+
+/**
+ * Виды пререндера `og.sync`: райдер не участвует (статистика меняется публикацией протоколов, а не `updatedAt`
+ * профиля — только самолечение по запросу).
+ */
+export const OG_SYNC_KINDS = [
+  'race',
+  'ride',
+  'route',
+  'calendar',
+  'season',
+] as const satisfies readonly OgCardKind[];
+
+/**
+ * Виды с курсором `og:cursor:<kind>` по `(updatedAt, _id)`. Сезоны — без курсора: каждый прогон смотрит все «живые»
+ * (число гонок сезона меняется без `updatedAt` сезона, RC-2a).
+ */
+export const OG_CURSOR_KINDS = [
+  'race',
+  'ride',
+  'route',
+  'calendar',
+] as const satisfies readonly OgCardKind[];
 
 /** Поля фактов, по которым решается «живой» объект (структурно — без импорта портов владельцев). */
 export type OgPrerenderFacts =
   | { kind: 'race'; facts: { windowEndsAt: Date } }
   | { kind: 'ride'; facts: { startsAt: Date } }
   | { kind: 'calendar'; facts: { startsOn: string; endsOn: string | null } }
+  | { kind: 'season'; facts: { endsOn: string } }
+  | { kind: 'rider' }
   | { kind: 'route' }
   | { kind: 'brand' };
 
 /**
  * Пререндерить ли картинку в `og.sync` (вариант A R-A1): райд — старт не раньше 14 сут. назад, гонка — окно
- * закрылось не раньше 30 сут. назад, старт календаря — последний день не раньше 14 сут. назад (даты Минска);
- * маршрут каталога и бренд — всегда.
+ * закрылось не раньше 30 сут. назад, старт календаря — последний день не раньше 14 сут. назад, сезон — последний
+ * день не раньше 30 сут. назад (даты Минска); маршрут каталога и бренд — всегда; райдер — никогда (самолечение).
  */
 export function ogPrerenderable(input: OgPrerenderFacts, now: Date): boolean {
-  const { rideDays, raceDays, calendarDays } = OG_CARD_POLICY.prerenderWindow;
+  const { rideDays, raceDays, calendarDays, seasonDays } = OG_CARD_POLICY.prerenderWindow;
   const since = (days: number) => new Date(now.getTime() - days * DAY_MS);
   switch (input.kind) {
     case 'ride':
@@ -82,6 +123,10 @@ export function ogPrerenderable(input: OgPrerenderFacts, now: Date): boolean {
       return input.facts.windowEndsAt >= since(raceDays);
     case 'calendar':
       return (input.facts.endsOn ?? input.facts.startsOn) >= minskToday(since(calendarDays));
+    case 'season':
+      return input.facts.endsOn >= minskToday(since(seasonDays));
+    case 'rider':
+      return false;
     case 'route':
     case 'brand':
       return true;

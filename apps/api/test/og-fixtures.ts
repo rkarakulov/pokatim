@@ -5,6 +5,7 @@ export const OG_FIXTURES = {
   race: {
     kind: 'race',
     themeId: 'classic',
+    scheme: 'dark',
     facts: {
       raceId: '01890a5d-ac96-774b-bcce-b302099a8001',
       title: 'Минское кольцо',
@@ -18,6 +19,7 @@ export const OG_FIXTURES = {
   ride: {
     kind: 'ride',
     themeId: 'classic',
+    scheme: 'light',
     facts: {
       rideId: '01890a5d-ac96-774b-bcce-b302099a8003',
       title: 'Кофе-райд на Минское море',
@@ -32,6 +34,7 @@ export const OG_FIXTURES = {
   route: {
     kind: 'route',
     themeId: 'classic',
+    scheme: 'light',
     facts: {
       routeId: '01890a5d-ac96-774b-bcce-b302099a8004',
       title: 'Кольцо через Крыжовку',
@@ -44,6 +47,7 @@ export const OG_FIXTURES = {
   calendar: {
     kind: 'calendar',
     themeId: 'classic',
+    scheme: 'light',
     facts: {
       startId: '01890a5d-ac96-774b-bcce-b302099a8005',
       title: 'Гран-фондо Минск',
@@ -53,7 +57,30 @@ export const OG_FIXTURES = {
       distancesKm: [60, 120],
     },
   },
-  brand: { kind: 'brand', themeId: 'classic' },
+  season: {
+    kind: 'season',
+    themeId: 'classic',
+    scheme: 'dark',
+    facts: {
+      seasonId: '01890a5d-ac96-774b-bcce-b302099a8006',
+      title: 'Кубок Минска 2026',
+      startsOn: '2026-04-01',
+      endsOn: '2026-10-31',
+      raceCount: 12,
+    },
+  },
+  rider: {
+    kind: 'rider',
+    themeId: 'classic',
+    scheme: 'dark',
+    facts: {
+      publicId: 'Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7jKl0nOpQ',
+      races: 7,
+      podiums: 2,
+      bestPlace: 1,
+    },
+  },
+  brand: { kind: 'brand', themeId: 'classic', scheme: 'light' },
 } as const satisfies Record<OgCardInput['kind'], OgCardInput>;
 
 type ObjectInput = Exclude<OgCardInput, { kind: 'brand' }>;

@@ -1,4 +1,4 @@
-import { OG_BRAND, type OgCardKind, OgCardMeta } from '@pokatim/contracts';
+import { OG_BRAND, OG_CARD_ID, type OgCardKind, OgCardMeta } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 
 import { fetchPublicForSsr, publicPath, type PublicSsrResult } from './public-ssr';
@@ -21,9 +21,12 @@ export function ogOrigin(): string | null {
   return process.env.WEB_ORIGIN?.replace(/\/$/, '') || null;
 }
 
-/** Версия картинки объекта (кэш процесса 60 с); невалидный id — «не найдено» без запроса. */
+/**
+ * Версия картинки объекта (кэш процесса 60 с); id не своего вида (`OG_CARD_ID`: райдер — `publicId`, остальные —
+ * Uuid) — «не найдено» без запроса.
+ */
 export function ogCardForSsr(kind: OgCardKind, id: unknown): Promise<PublicSsrResult<OgCardMeta>> {
-  const path = publicPath(`/v1/og/cards/${kind}`, id);
+  const path = publicPath(`/v1/og/cards/${kind}`, id, '', OG_CARD_ID[kind]);
   return path ? fetchPublicForSsr(path, OgCardMeta) : Promise.resolve({ status: 'notFound' });
 }
 
@@ -53,30 +56,44 @@ export async function brandOgImage(): Promise<OgImage | undefined> {
     : undefined;
 }
 
-/** Бренд-картинка страницы-бренда с данными: «не найдено» — без картинки; нашлось или API недоступен — бренд. */
-export const brandOgImageFor = (page: PublicSsrResult<unknown>) =>
-  page.status === 'notFound' ? Promise.resolve(undefined) : brandOgImage();
-
 /**
- * Картинка страницы объекта: страница «не найдено» — без картинки; страница и версия нашлись — своя; иначе
- * (картинки нет — объект отменён, или API недоступен) — бренд (запрос бренда — только в этой ветке).
+ * Картинка страницы объекта: страница «не найдено» — без картинки; страница и версия нашлись — своя (`describe` —
+ * id и alt из данных страницы); иначе (картинки нет — объект отменён или профиль скрыт, или API недоступен) — бренд
+ * (запрос бренда — только в этой ветке).
  */
-export async function pageOgImage({
+export async function ownOgImage<T>({
   kind,
   page,
   card,
+  describe,
 }: {
   kind: OgCardKind;
-  page: PublicSsrResult<{ id: string; title: string }>;
+  page: PublicSsrResult<T>;
   card: PublicSsrResult<OgCardMeta> | null;
+  describe: (data: T) => { id: string; alt: string };
 }): Promise<OgImage | undefined> {
   const origin = ogOrigin();
   if (!origin || page.status === 'notFound') return undefined;
   if (page.status === 'found' && card?.status === 'found') {
-    return {
-      url: ogImageUrl(origin, kind, page.data.id, card.data.version),
-      alt: t(`ogCard.alt.${kind}`, { title: page.data.title }),
-    };
+    const { id, alt } = describe(page.data);
+    return { url: ogImageUrl(origin, kind, id, card.data.version), alt };
   }
   return brandOgImage();
 }
+
+/** Картинка страницы объекта с названием (гонка, райд, маршрут, старт): alt — «Гонка «…»». */
+export const pageOgImage = ({
+  kind,
+  page,
+  card,
+}: {
+  kind: Exclude<OgCardKind, 'season' | 'rider'>;
+  page: PublicSsrResult<{ id: string; title: string }>;
+  card: PublicSsrResult<OgCardMeta> | null;
+}): Promise<OgImage | undefined> =>
+  ownOgImage({
+    kind,
+    page,
+    card,
+    describe: (data) => ({ id: data.id, alt: t(`ogCard.alt.${kind}`, { title: data.title }) }),
+  });

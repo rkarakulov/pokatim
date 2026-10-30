@@ -40,7 +40,7 @@ describe('OgSchedules (og-images, DV-1)', () => {
     const run = {
       reset: false,
       brand: false,
-      scanned: { race: 0, ride: 0, route: 0, calendar: 0 },
+      scanned: { race: 0, ride: 0, route: 0, calendar: 0, season: 0 },
       enqueued: 0,
       failedKinds: [],
     };

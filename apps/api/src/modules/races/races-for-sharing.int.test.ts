@@ -2,7 +2,7 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { seedRace } from '../../../test/og';
+import { seedOgSeason, seedRace } from '../../../test/og';
 import { seedSeason } from '../../../test/standings';
 import { RACES_FOR_SHARING, type RacesForSharing } from './index';
 
@@ -72,5 +72,45 @@ describe('sitemapSeasons (landing-seo)', () => {
     expect(await port().sitemapSeasons()).toEqual([]);
     const id = await seedSeason(h);
     expect(await port().sitemapSeasons()).toEqual([{ id, updatedAt: h.clock.now() }]);
+  });
+});
+
+describe('seasonOgFacts (og-rider-season-dark, S2)', () => {
+  it('название, даты Минска и число только опубликованных гонок сезона; неизвестный — null', async () => {
+    const seasonId = await seedOgSeason(h, { name: 'Кубок Минска 2026' });
+    await seedRace(h, { seasonId });
+    await seedRace(h, { seasonId });
+    await seedRace(h, { seasonId, status: 'cancelled' });
+    await seedRace(h, { status: 'draft' });
+    await seedRace(h, {
+      seasonId: await seedOgSeason(h, { startsOn: '2025-04-01', endsOn: '2025-10-31' }),
+    });
+
+    expect(await port().seasonOgFacts(seasonId)).toEqual({
+      seasonId,
+      title: 'Кубок Минска 2026',
+      startsOn: '2026-04-01',
+      endsOn: '2026-10-31',
+      raceCount: 2,
+    });
+    expect(await port().seasonOgFacts(uuidv7())).toBeNull();
+  });
+
+  it('сезон без гонок — raceCount 0', async () => {
+    const seasonId = await seedOgSeason(h);
+    expect(await port().seasonOgFacts(seasonId)).toMatchObject({ raceCount: 0 });
+  });
+});
+
+describe('liveSeasonIds (RC-2a)', () => {
+  it('сезоны с endsOn ≥ границы (включительно), по id', async () => {
+    const [a, b] = [uuidv7(), uuidv7()].sort();
+    await seedOgSeason(h, { _id: b!, startsOn: '2026-04-01', endsOn: '2026-09-22' });
+    await seedOgSeason(h, { _id: a!, startsOn: '2026-10-01', endsOn: '2027-03-31' });
+    await seedOgSeason(h, { startsOn: '2025-04-01', endsOn: '2026-09-21' });
+
+    expect(await port().liveSeasonIds('2026-09-22')).toEqual([a, b]);
+    expect(await port().liveSeasonIds('2026-09-23')).toEqual([a]);
+    expect(await port().liveSeasonIds('2027-04-01')).toEqual([]);
   });
 });

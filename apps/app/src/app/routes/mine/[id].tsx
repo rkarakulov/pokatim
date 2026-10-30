@@ -1,5 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 
+import { useSettingsShell } from '@/features/devices/settings-shell';
 import { MyRouteDetailScreen } from '@/features/routes/my-route-detail';
 
 /**
@@ -8,5 +9,6 @@ import { MyRouteDetailScreen } from '@/features/routes/my-route-detail';
  */
 export default function MyRouteRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  return <MyRouteDetailScreen id={String(id)} />;
+  const shell = useSettingsShell();
+  return shell ?? <MyRouteDetailScreen id={String(id)} />;
 }

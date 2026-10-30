@@ -1,11 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { OG_BRAND, OG_CARD_KINDS, type OgCardKind } from '@pokatim/contracts';
+import { minskToday, OG_BRAND } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 import { OgCardCache } from './og-card.cache';
-import { OG_THEME_ID, OgCardInputs } from './og-card.inputs';
+import { OG_THEME_ID, OgCardInputs, type OgSyncKind } from './og-card.inputs';
 import { OgCardQueue } from './og-card.queue';
-import { OG_CARD_POLICY, ogPrerenderable } from './sharing.policy';
+import { OG_CARD_POLICY, OG_CURSOR_KINDS, ogPrerenderable } from './sharing.policy';
+
+const DAY_MS = 86_400_000;
 
 /** Итог прогона `og.sync`. */
 export interface OgSyncRun {
@@ -13,9 +15,9 @@ export interface OgSyncRun {
   reset: boolean;
   /** бренд-картинка поставлена в рендер */
   brand: boolean;
-  scanned: Record<OgCardKind, number>;
+  scanned: Record<OgSyncKind, number>;
   enqueued: number;
-  failedKinds: OgCardKind[];
+  failedKinds: OgSyncKind[];
 }
 
 /** Отметка полного прохода: тема и версия рендера. */
@@ -27,7 +29,8 @@ export const ogSweepMark = () => `${OG_THEME_ID}:${OG_CARD_POLICY.renderVersion}
  * ограничена (`syncScanLimit` строк вида, `syncRenderLimit` постановок за прогон) — курсор на последней обработанной
  * строке, остаток — следующим прогоном. Смена темы или `renderVersion` — курсоры сброшены, полный проход. Сбой строки —
  * лог и пропуск; сбой чтения вида — курсор вида не двигается, остальные идут, прогон падает (повтор — следующим).
- * Рендера здесь нет.
+ * Сезоны — без курсора: каждый прогон смотрит все «живые» (`endsOn` не раньше `seasonDays` назад, RC-2a), число гонок
+ * сезона меняется без `updatedAt` сезона. Профили райдеров не пререндерятся (самолечение). Рендера здесь нет.
  */
 @Injectable()
 export class OgSync {
@@ -61,12 +64,12 @@ export class OgSync {
       if (brandQueued) enqueued += 1;
     }
 
-    const scanned = { race: 0, ride: 0, route: 0, calendar: 0 } satisfies Record<
-      OgCardKind,
+    const scanned = { race: 0, ride: 0, route: 0, calendar: 0, season: 0 } satisfies Record<
+      OgSyncKind,
       number
     >;
-    const failedKinds: OgCardKind[] = [];
-    for (const kind of OG_CARD_KINDS) {
+    const failedKinds: OgSyncKind[] = [];
+    for (const kind of OG_CURSOR_KINDS) {
       if (enqueued >= OG_CARD_POLICY.syncRenderLimit) break;
       try {
         const rows = await this.inputs.changed(
@@ -89,6 +92,23 @@ export class OgSync {
       }
     }
 
+    if (enqueued < OG_CARD_POLICY.syncRenderLimit) {
+      try {
+        const since = minskToday(
+          new Date(now.getTime() - OG_CARD_POLICY.prerenderWindow.seasonDays * DAY_MS),
+        );
+        for (const id of await this.inputs.liveSeasonIds(since)) {
+          if (enqueued >= OG_CARD_POLICY.syncRenderLimit) break;
+          scanned.season += 1;
+          if (await this.prerender('season', id, now)) enqueued += 1;
+        }
+      } catch (error) {
+        failedKinds.push('season');
+        const reason = error instanceof Error ? error.name : 'unknown';
+        this.logger.warn(`og.sync_failed kind=season (${reason})`);
+      }
+    }
+
     const run: OgSyncRun = { reset, brand: brandQueued, scanned, enqueued, failedKinds };
     if (reset || enqueued > 0) {
       this.logger.log(
@@ -103,7 +123,7 @@ export class OgSync {
    * Пререндер одной строки: `true` — рендер поставлен. Сбой строки — лог без названий и пропуск: «ядовитая» строка не
    * держит курсор вида (ревью F3); картинка объекта догонит самолечением.
    */
-  private async prerender(kind: OgCardKind, id: string, now: Date): Promise<boolean> {
+  private async prerender(kind: OgSyncKind, id: string, now: Date): Promise<boolean> {
     try {
       const resolved = await this.inputs.resolve(kind, id);
       return (

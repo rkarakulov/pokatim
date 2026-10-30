@@ -3,7 +3,12 @@ import { OG_BRAND, type OgCardKind, type OgCardMeta } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 import { domainError } from '../../error-messages';
-import { type OgCardKindOrBrand, OgCardInputs, type ResolvedOgCard } from './og-card.inputs';
+import {
+  type OgCardKindOrBrand,
+  OgCardInputs,
+  ogLogId,
+  type ResolvedOgCard,
+} from './og-card.inputs';
 import { OgCardCache } from './og-card.cache';
 import { OgCardQueue } from './og-card.queue';
 import { OG_CARD_POLICY, ogPrerenderable } from './sharing.policy';
@@ -73,13 +78,13 @@ export class OgCardService {
     return { type: 'fallback', png: brandPng };
   }
 
-  /** Самолечение: сбой очереди не ломает выдачу заглушки (следующий запрос поставит снова). */
+  /** Самолечение: сбой очереди не ломает выдачу заглушки (следующий запрос поставит снова); лог без `publicId`. */
   private async enqueue(kind: OgCardKindOrBrand, id: string, hash: string): Promise<void> {
     try {
       await this.queue.enqueue({ kind, id, hash });
     } catch (error) {
       const reason = error instanceof Error ? error.name : 'unknown';
-      this.logger.warn(`og ${kind} ${id}: enqueue failed (${reason})`);
+      this.logger.warn(`og ${kind} ${ogLogId(kind, id, hash)}: enqueue failed (${reason})`);
     }
   }
 }

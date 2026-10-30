@@ -162,6 +162,19 @@ export class RacesRepository {
     return this.c.races.countDocuments({ seasonId });
   }
 
+  /** Опубликованные гонки сезона (OG-картинка сезона); префикс индекса `races_season_idx`. */
+  countPublishedInSeason(seasonId: string): Promise<number> {
+    return this.c.races.countDocuments({ seasonId, status: 'published' });
+  }
+
+  /** Сезоны с `endsOn ≥ sinceLocalDate` (их десятки — без индекса), только `_id`, по `_id`. */
+  liveSeasons(sinceLocalDate: string): Promise<{ _id: string }[]> {
+    return this.c.seasons
+      .find({ endsOn: { $gte: sinceLocalDate } }, { projection: { _id: 1 } })
+      .sort({ _id: 1 })
+      .toArray();
+  }
+
   // --- гонки ---
 
   async findRace(id: string, session?: DbSession): Promise<RaceDoc | undefined> {

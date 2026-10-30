@@ -18,6 +18,9 @@ const cases: [string, OgCardInput, LonLat[] | null][] = [
   ['маршрут с линией, тема «Ночь»', { ...OG_FIXTURES.route, themeId: 'chrono' }, loop],
   ['старт календаря', OG_FIXTURES.calendar, null],
   ['бренд', OG_FIXTURES.brand, null],
+  ['тёмная гонка с линией, длинное название', ogFixture('race', { title: 'Г'.repeat(90) }), loop],
+  ['тёмный сезон', OG_FIXTURES.season, null],
+  ['тёмный райдер', OG_FIXTURES.rider, null],
 ];
 
 describe('PNG OG-картинки (реальные satori + resvg)', () => {

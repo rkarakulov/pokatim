@@ -494,18 +494,29 @@ describe('мета публичного профиля райдера (SSR, ride
     delete process.env.API_INTERNAL_URL;
   });
 
-  it('найден — посев loader, но мета всегда нейтральная: noindex, без имени, клуба и og:url (D-B2)', async () => {
-    respond(200, rider);
+  it('найден — посев loader, но мета всегда нейтральная: noindex, без имени, клуба, фото и og:url (D-B2)', async () => {
+    respondWithOg(fetchMock, 200, rider, { [`/v1/og/cards/rider/${PUBLIC_ID}`]: OG_VERSION });
     process.env.WEB_ORIGIN = ORIGIN;
 
     expect(await riderLoader(undefined, { id: PUBLIC_ID })).toMatchObject({ name: rider.name });
     expect(pageCalls(fetchMock)[0]).toBe(`http://api.internal:3000/v1/riders/${PUBLIC_ID}`);
     const meta = await riderMetadata(undefined, { id: PUBLIC_ID });
-    expect(meta).toEqual(neutral);
+    const image = `${ORIGIN}/v1/og/images/rider/${PUBLIC_ID}/${OG_VERSION}.png`;
+    expect(meta).toEqual({
+      ...neutral,
+      openGraph: {
+        ...neutral.openGraph,
+        ...ogImageMeta(image, 'Профиль райдера — Покатим'),
+      },
+      twitter: { card: 'summary_large_image' },
+    });
     const text = JSON.stringify(meta);
     expect(text).not.toContain('Анна');
     expect(text).not.toContain('Velo');
-    expect(text).not.toContain(PUBLIC_ID);
+    expect(meta).not.toHaveProperty('openGraph.url');
+    // RC-1: publicId — только в URL картинки (не в title, description и og:url)
+    expect(text.split(PUBLIC_ID)).toHaveLength(2);
+    expect(text.replace(image, '')).not.toContain(PUBLIC_ID);
   });
 
   it('невалидный id — loader без запроса; 404 — null', async () => {
@@ -722,6 +733,71 @@ describe('OG-картинки публичных страниц (og-images, AC5)
     },
   );
 
+  it('сезон: своя картинка с alt названия; версии нет — бренд; не найден — без картинки', async () => {
+    const season = {
+      id: ID,
+      name: 'Сезон 2026',
+      startsOn: '2026-04-01',
+      endsOn: '2026-10-31',
+      phase: 'current',
+    };
+    respondWithOg(fetchMock, 200, season, versions('season'));
+    expect(await seasonMetadata(undefined, { id: ID })).toMatchObject({
+      openGraph: { ...own('season', 'Сезон «Сезон 2026»'), url: `${ORIGIN}/seasons/${ID}` },
+      twitter: { card: 'summary_large_image' },
+    });
+    expect(fetchMock.mock.calls.map(([url]) => url).sort()).toEqual(
+      [`${API}/v1/og/cards/season/${ID}`, `${API}/v1/seasons/${ID}`].sort(),
+    );
+    resetPublicSsrCache();
+    respondWithOg(fetchMock, 200, season, brandOnly);
+    expect(await seasonMetadata(undefined, { id: ID })).toMatchObject({ openGraph: brand });
+    resetPublicSsrCache();
+    respondWithOg(fetchMock, 404, { code: 'NOT_FOUND', message: 'x' }, versions('season'));
+    const missing = await seasonMetadata(undefined, { id: ID });
+    expect(missing).toMatchObject({ robots: 'noindex' });
+    expect(missing).not.toHaveProperty('openGraph.images');
+  });
+
+  it('райдер: своя картинка без ПДн в alt; версии нет — бренд; не найден — без картинки; всегда noindex без og:url', async () => {
+    const PUBLIC_ID = 'p'.repeat(43);
+    const profile = {
+      publicId: PUBLIC_ID,
+      name: 'Анна Ковальчук',
+      club: 'Velo Club Minsk',
+      avatar: null,
+      stats: { races: 4, podiums: 2, bestPlace: 1, finishes: 4 },
+    };
+    const card = { [`/v1/og/cards/rider/${PUBLIC_ID}`]: OG_VERSION, ...brandOnly };
+    respondWithOg(fetchMock, 200, profile, card);
+    const meta = await riderMetadata(undefined, { id: PUBLIC_ID });
+    expect(meta).toMatchObject({
+      openGraph: ogImageMeta(
+        `${ORIGIN}/v1/og/images/rider/${PUBLIC_ID}/${OG_VERSION}.png`,
+        'Профиль райдера — Покатим',
+      ),
+      robots: 'noindex',
+    });
+    expect(meta).not.toHaveProperty('openGraph.url');
+    expect(JSON.stringify(meta)).not.toMatch(/Анна|Velo/);
+
+    resetPublicSsrCache();
+    respondWithOg(fetchMock, 200, profile, brandOnly);
+    expect(await riderMetadata(undefined, { id: PUBLIC_ID })).toMatchObject({
+      openGraph: brand,
+      robots: 'noindex',
+    });
+    resetPublicSsrCache();
+    respondWithOg(fetchMock, 404, { code: 'NOT_FOUND', message: 'x' }, card);
+    expect(await riderMetadata(undefined, { id: PUBLIC_ID })).not.toHaveProperty(
+      'openGraph.images',
+    );
+    // невалидный publicId — без запросов (ни страницы, ни версии)
+    fetchMock.mockClear();
+    expect(await riderMetadata(undefined, { id: '../x' })).not.toHaveProperty('openGraph.images');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('API недоступен — бренд, если доступна его версия', async () => {
     fetchMock.mockImplementation((url) =>
       url.endsWith('/v1/og/cards/brand/site')
@@ -731,24 +807,11 @@ describe('OG-картинки публичных страниц (og-images, AC5)
     expect(await raceMetadata(undefined, { id: ID })).toMatchObject({ openGraph: brand });
   });
 
-  it('страницы-бренды: /welcome, /, вход, регистрация, /status, сезон и профиль райдера', async () => {
+  it('страницы-бренды: /welcome, /, вход, регистрация, /status', async () => {
     fetchMock.mockImplementation((url) =>
       isOgUrl(url)
         ? ogResponse(url, brandOnly)
-        : url.includes('/v1/seasons/')
-          ? Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  id: ID,
-                  name: 'Сезон 2026',
-                  startsOn: '2026-04-01',
-                  endsOn: '2026-10-31',
-                  phase: 'current',
-                }),
-                { status: 200 },
-              ),
-            )
-          : Promise.resolve(new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404 })),
+        : Promise.resolve(new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404 })),
     );
     for (const meta of [
       await welcomeMetadata(undefined, {}),
@@ -756,14 +819,9 @@ describe('OG-картинки публичных страниц (og-images, AC5)
       await signInMetadata(undefined, {}),
       await registerMetadata(undefined, {}),
       await statusMetadata(undefined, {}),
-      await seasonMetadata(undefined, { id: ID }),
     ]) {
       expect(meta).toMatchObject({ openGraph: brand, twitter: { card: 'summary_large_image' } });
     }
-    // профиль райдера не найден — без картинки; невалидный publicId — без запроса
-    expect(await riderMetadata(undefined, { id: 'r'.repeat(43) })).not.toHaveProperty(
-      'openGraph.images',
-    );
   });
 
   it('без WEB_ORIGIN — ни картинки, ни OG-запросов', async () => {
