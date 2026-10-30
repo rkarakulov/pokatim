@@ -63,9 +63,15 @@ export interface NotificationDoc {
   email: EmailDelivery | null;
 }
 
-/** Настройки пользователя: `_id = userId`; нет документа — `DEFAULT_NOTIFICATION_SETTINGS`. */
-export interface NotificationSettingsDoc extends NotificationSettings {
+/**
+ * Настройки пользователя: `_id = userId`; нет документа — `DEFAULT_DELIVERY_SETTINGS`. Тумблеры «Мероприятия»
+ * (`push.events`, `email.events`, PR D) пишет подресурс настроек; документы до него поля не имеют — включено.
+ */
+export interface NotificationSettingsDoc {
   _id: string;
+  push: NotificationSettings['push'] & { events?: boolean };
+  email: NotificationSettings['email'] & { events?: boolean };
+  quietHours: NotificationSettings['quietHours'];
   updatedAt: Date;
 }
 

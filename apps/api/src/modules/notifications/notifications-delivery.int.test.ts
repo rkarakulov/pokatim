@@ -33,6 +33,7 @@ import { authed, createRide, join, RIDES, rider, type Rider } from '../../../tes
 import { RIDES_RIDE_CANCELLED } from '../rides';
 import type { NotificationDoc } from './notifications.collection';
 import { NotificationErasure } from './notification-erasure';
+import { OPEN_APP_LINE } from './notification-email';
 import { emailJobId, pushJobId } from './notifications.events';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
@@ -630,6 +631,24 @@ describe('письма N2', () => {
     const withoutEmail = await pendingPush(b.userId);
     expect(await runEmail(h, withoutEmail._id)).toBe('skipped');
     expect(h.mailer.sent).toHaveLength(0);
+  });
+});
+
+describe('письмо напоминания о событии без APP_WEB_ORIGIN (PR D, RC-D9)', () => {
+  it('цель «билет», но без env — без кнопки, строка «Откройте приложение»', async () => {
+    const doc = await seedNotification(h, a.userId, {
+      kind: 'event_reminder',
+      group: 'events',
+      title: 'Скоро старт',
+      body: '«Гонка» — 24 октября, 10:00.\nПаспорт',
+      target: { type: 'ticket', code: '7XK2M9PQRT' },
+      email: { state: 'pending', claimedUntil: null, sentAt: null },
+    });
+    expect(await runEmail(h, doc._id)).toBe('sent');
+    const mail = h.mailer.sent[0]!;
+    expect(mail.subject).toBe('Скоро старт');
+    expect(mail.html).not.toContain('href=');
+    expect(mail.text).toContain(OPEN_APP_LINE);
   });
 });
 

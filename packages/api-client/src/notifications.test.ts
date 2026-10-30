@@ -103,6 +103,33 @@ describe('api-client: уведомления', () => {
     ]);
   });
 
+  it('настройки «Мероприятия» — подресурс GET и PUT (RC-D1)', async () => {
+    const { calls, api } = client(200, { push: false, email: true });
+    await expect(api.getEventNotificationSettings('t')).resolves.toEqual({
+      push: false,
+      email: true,
+    });
+    await expect(
+      api.updateEventNotificationSettings('t', { push: false, email: true }),
+    ).resolves.toEqual({ push: false, email: true });
+    expect(
+      calls.map(({ url, method, body, authorization }) => ({ url, method, body, authorization })),
+    ).toEqual([
+      {
+        url: 'https://api.test/v1/notifications/settings/events',
+        method: 'GET',
+        body: undefined,
+        authorization: 'Bearer t',
+      },
+      {
+        url: 'https://api.test/v1/notifications/settings/events',
+        method: 'PUT',
+        body: { push: false, email: true },
+        authorization: 'Bearer t',
+      },
+    ]);
+  });
+
   it('push-токены — PUT регистрации и POST снятия, 204', async () => {
     const { calls, api } = client(204, null);
     await api.registerPushToken('t', { token: TOKEN, platform: 'android' });

@@ -134,6 +134,8 @@ self.addEventListener('fetch', (event) => {
 // Web Push (ADR-0022): payload — { title, body, target } от сервера (снимок уведомления, цель — тип и id из белого
 // списка); путь — по цели (копия notificationTargetPath приложения, паритет держит тест), иначе центр уведомлений
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// канонический код билета (Crockford, 10 символов) — как TicketCodeCanonical контрактов
+const TICKET_CODE = /^[0-9A-HJKMNP-TV-Z]{10}$/;
 const NOTIFICATIONS_PATH = '/notifications';
 const ICON = '/icons/icon-192.png';
 
@@ -149,6 +151,8 @@ function targetPath(target) {
       return id('raceId') && id('disputeId') && '/races/dispute-response/' + id('raceId') + '/' + id('disputeId');
     case 'my-route':
       return id('routeId') && '/routes/mine/' + id('routeId');
+    case 'ticket':
+      return typeof target.code === 'string' && TICKET_CODE.test(target.code) ? '/tickets/' + target.code : null;
     default:
       return null;
   }

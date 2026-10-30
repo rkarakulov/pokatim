@@ -40,6 +40,9 @@ export function formatTicketCode(code: string): string {
 
 const CANONICAL_CODE = /^[0-9A-HJKMNP-TV-Z]{10}$/;
 
+/** Код в каноническом виде, без нормализации ввода — цель уведомления `ticket` (PR D, RC-D6). */
+export const TicketCodeCanonical = z.string().regex(CANONICAL_CODE);
+
 /** Код билета в запросе (путь, check-in): `XXXXX-XXXXX` или 10 символов, регистр и `I/L/O` — как ввёл человек. */
 export const TicketCode = z
   .string({ error: fieldError('INVALID') })
