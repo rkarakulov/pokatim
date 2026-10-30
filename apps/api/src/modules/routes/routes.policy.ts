@@ -220,3 +220,20 @@ export function acceptsGzip(header: string | undefined): boolean {
   }
   return (explicit ?? wildcard ?? 0) > 0;
 }
+
+/**
+ * Значение `Vary` с токеном `token` поверх уже выставленного (`Vary: Origin` от CORS): `setHeader` заменяет заголовок,
+ * а ответ с `Cache-Control: public` зависит и от `Origin`, и от `Accept-Encoding`. `*` и уже присутствующий токен
+ * (без учёта регистра) — без изменений.
+ */
+export function varyWith(current: string | string[] | number | undefined, token: string): string {
+  const tokens = [current ?? []]
+    .flat()
+    .flatMap((value) => String(value).split(','))
+    .map((value) => value.trim())
+    .filter((value) => value !== '');
+  if (tokens.includes('*') || tokens.some((value) => value.toLowerCase() === token.toLowerCase())) {
+    return tokens.join(', ');
+  }
+  return [...tokens, token].join(', ');
+}

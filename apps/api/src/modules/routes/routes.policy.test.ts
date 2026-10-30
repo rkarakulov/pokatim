@@ -10,6 +10,7 @@ import {
   routeContentDisposition,
   routeExportFormats,
   routeFileName,
+  varyWith,
 } from './routes.policy';
 import type { RoutePublicationDoc } from './routes.collection';
 
@@ -199,5 +200,18 @@ describe('acceptsGzip (route-exports-gzip, AC6)', () => {
     ['gzip;q=abc', false],
   ])('%j → %s', (header, expected) => {
     expect(acceptsGzip(header)).toBe(expected);
+  });
+});
+
+describe('varyWith (route-exports-gzip: Vary: Origin от CORS не затирается)', () => {
+  it.each<[string | string[] | number | undefined, string]>([
+    [undefined, 'Accept-Encoding'],
+    ['', 'Accept-Encoding'],
+    ['Origin', 'Origin, Accept-Encoding'],
+    [['Origin', 'Cookie'], 'Origin, Cookie, Accept-Encoding'],
+    ['origin, accept-encoding', 'origin, accept-encoding'],
+    ['*', '*'],
+  ])('%j → %s', (current, expected) => {
+    expect(varyWith(current, 'Accept-Encoding')).toBe(expected);
   });
 });

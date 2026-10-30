@@ -43,8 +43,11 @@ import type { RouteDoc } from './routes.collection';
  * ответа, видимость карточки и карты, `explain` списка. Маршруты — напрямую в БД (подготовка).
  */
 let h: Harness;
+/** origin web из `CORS_ORIGINS`: CORS ставит `Vary: Origin` (route-exports-gzip, Codex pass 1). */
+const WEB_ORIGIN = 'http://127.0.0.1:8081';
+
 beforeAll(async () => {
-  h = await createHarness({ TRUST_PROXY: '1' });
+  h = await createHarness({ TRUST_PROXY: '1', CORS_ORIGINS: WEB_ORIGIN });
 });
 beforeEach(async () => {
   await h.reset();
@@ -630,7 +633,7 @@ describe('route_exports gzip (route-exports-gzip)', () => {
       });
       expect(res.statusCode).toBe(200);
       expect(res.headers['content-encoding']).toBe('gzip');
-      expect(res.headers.vary).toBe('Accept-Encoding');
+      expect(res.headers.vary).toBe('Origin, Accept-Encoding');
       expect(gunzipSync(res.rawPayload).toString('utf8')).toBe(TEXTS[format]);
       expect(res.headers['content-type']).toBe(TYPES[format]);
       expect(res.headers['cache-control']).toBe('public, max-age=60');
@@ -655,10 +658,22 @@ describe('route_exports gzip (route-exports-gzip)', () => {
         const label = `${format} ${JSON.stringify(headers)}`;
         expect(res.statusCode, label).toBe(200);
         expect(res.headers['content-encoding'], label).toBeUndefined();
-        expect(res.headers.vary, label).toBe('Accept-Encoding');
+        expect(res.headers.vary, label).toBe('Origin, Accept-Encoding');
         expect(res.body, label).toBe(TEXTS[format]);
       }
     }
+  });
+
+  it('запрос web из CORS_ORIGINS: Vary сохраняет Origin от CORS и добавляет Accept-Encoding', async () => {
+    const id = await seedRoute();
+    await seedDerived(id, null, GPX_TEXT, FILES, { gzip: true });
+    const res = await getRaw(`/v1/routes/${id}/gpx`, '198.51.100.36', {
+      'accept-encoding': 'gzip',
+      origin: WEB_ORIGIN,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBe(WEB_ORIGIN);
+    expect(res.headers.vary).toBe('Origin, Accept-Encoding');
   });
 
   it('старый документ без encoding: Accept-Encoding: gzip → тело как есть, без Content-Encoding (AC4)', async () => {
@@ -674,7 +689,7 @@ describe('route_exports gzip (route-exports-gzip)', () => {
     }
   });
 
-  it('повреждённый gzip в БД → 500 JSON без Content-Disposition; с Accept-Encoding: gzip — байты как есть', async () => {
+  it('повреждённый gzip в БД, клиент без gzip → 500 JSON без Content-Disposition', async () => {
     const id = await seedRoute();
     await seedDerived(id, null, GPX_TEXT, FILES, { gzip: true });
     const broken = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0xde, 0xad, 0xbe, 0xef]);

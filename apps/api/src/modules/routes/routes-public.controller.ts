@@ -24,6 +24,7 @@ import {
   ROUTE_EXPORT_CONTENT_TYPES,
   ROUTE_POLICY,
   routeContentDisposition,
+  varyWith,
 } from './routes.policy';
 
 const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
@@ -111,7 +112,7 @@ export class RoutesPublicController {
    * после чтения: Nest пишет `@Header` до обработчика, и 404 с `Content-Type` файла не сериализовался бы в JSON
    * ошибки; 404 и 429 — JSON без `Content-Disposition`. `sandbox` — файл не исполняется. Хранится gzip
    * (route-exports-gzip): клиенту с gzip в `Accept-Encoding` — сжатые байты и `Content-Encoding: gzip`, иначе сервис
-   * распаковывает; `Vary: Accept-Encoding` — у каждого 200.
+   * распаковывает; `Accept-Encoding` дописывается в `Vary` у каждого 200 (`Vary: Origin` от CORS сохраняется).
    */
   private async sendExport(
     reply: unknown,
@@ -129,7 +130,7 @@ export class RoutesPublicController {
     adapter.setHeader(reply, 'Content-Disposition', routeContentDisposition(title, format));
     adapter.setHeader(reply, 'X-Content-Type-Options', 'nosniff');
     adapter.setHeader(reply, 'Content-Security-Policy', "default-src 'none'; sandbox");
-    adapter.setHeader(reply, 'Vary', 'Accept-Encoding');
+    adapter.setHeader(reply, 'Vary', varyWith(adapter.getHeader(reply, 'Vary'), 'Accept-Encoding'));
     if (contentEncoding) adapter.setHeader(reply, 'Content-Encoding', contentEncoding);
     return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   }

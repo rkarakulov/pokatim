@@ -170,7 +170,10 @@ export class RoutesPublicService {
       return { bytes, contentEncoding: null, title };
     } catch (error) {
       // класс ошибки без текста (Z_DATA_ERROR, ERR_BUFFER_TOO_LARGE)
-      const kind = error instanceof Error ? error.name : typeof error;
+      const kind =
+        error instanceof Error
+          ? ((error as NodeJS.ErrnoException).code ?? error.name)
+          : typeof error;
       this.logger.error(`route ${id} export ${format} unreadable (${kind})`);
       throw error;
     }
