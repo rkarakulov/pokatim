@@ -112,12 +112,16 @@ describe('ExpoPushSender.send', () => {
   it('таймаут и сеть — unavailable', async () => {
     let release!: () => void;
     expo.hold(() => new Promise<void>((resolve) => (release = resolve)));
-    expect(await failure(make({ timeoutMs: 50 }).send([message(1)]))).toMatchObject({
-      kind: 'unavailable',
-      message: 'push service timeout',
-    });
-    // удержанный запрос дорабатывает в этом тесте: проснувшись в следующем, он забрал бы его `expo.fail(...)`
+    // таймаут — по команде теста, когда запрос уже удержан фейком (настоящие 50 мс под нагрузкой истекали раньше,
+    // чем запрос до него доходил)
+    const timeout = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
+    const sending = failure(make({ timeoutMs: 50 }).send([message(1)]));
     await vi.waitFor(() => expect(expo.callsTo('send')).toHaveLength(1));
+    expect(timeoutSpy).toHaveBeenCalledWith(50);
+    timeout.abort(new DOMException('timed out', 'TimeoutError'));
+    expect(await sending).toMatchObject({ kind: 'unavailable', message: 'push service timeout' });
+    // удержанный запрос дорабатывает в этом тесте: проснувшись в следующем, он забрал бы его `expo.fail(...)`
     release();
     await vi.waitFor(() => expect(expo.delivered).toHaveLength(1));
     const closed = new ExpoPushSender({

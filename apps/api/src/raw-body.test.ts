@@ -130,6 +130,8 @@ function rawUpload(port: number, declared: number, sent: number, allowHalfOpen =
   const socket = connect({ port, host: '127.0.0.1', allowHalfOpen });
   const received: Buffer[] = [];
   socket.on('data', (chunk: Buffer) => received.push(chunk));
+  // первая порция ответа — по событию сокета, без `vi.waitFor`: с фейковыми таймерами он сам двигает часы
+  const responded = new Promise<void>((resolve) => socket.once('data', () => resolve()));
   const closed = new Promise<{ error: string | null }>((resolve) => {
     let error: string | null = null;
     socket.on(
@@ -145,6 +147,7 @@ function rawUpload(port: number, declared: number, sent: number, allowHalfOpen =
   return {
     socket,
     response: () => Buffer.concat(received).toString('latin1'),
+    responded,
     closed,
   };
 }
@@ -174,7 +177,8 @@ describe('readLimited: закрытие после отказа (lingering close
     const upload = rawUpload(target.port, 1024 * 1024, 128 * 1024, true);
     let closed = false;
     void target.closed.then(() => (closed = true));
-    await vi.waitFor(() => expect(upload.response()).toMatch(/^HTTP\/1\.1 413 /));
+    await upload.responded;
+    expect(upload.response()).toMatch(/^HTTP\/1\.1 413 /);
     await vi.advanceTimersByTimeAsync(LINGER_MS - 100);
     expect(closed).toBe(false);
     await vi.advanceTimersByTimeAsync(100);
