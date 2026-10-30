@@ -155,12 +155,12 @@ describe('экран билета /tickets/<код> (AC12, §5.7)', () => {
     expect(screen.getByRole('button', { name: 'О событии' })).toBeOnTheScreen();
   });
 
-  it('«Как добраться» — внешние карты по адресу; «О событии» — карточка', async () => {
+  it('«Как добраться» — системные карты по адресу (jest native — iOS: Apple Maps); «О событии» — карточка', async () => {
     getTicket.mockResolvedValue(raceTicket);
     const router = await openSignedIn();
     await fireEvent.press(await screen.findByRole('button', { name: 'Как добраться' }));
     expect(openExternalUrl).toHaveBeenCalledWith(
-      `https://yandex.by/maps/?text=${encodeURIComponent('пр. Победителей, 1, Минск')}`,
+      `https://maps.apple.com/?q=${encodeURIComponent('пр. Победителей, 1, Минск')}`,
     );
     jest.mocked(api.getRace).mockReturnValue(new Promise(() => undefined));
     jest.mocked(api.getMyRaceEntry).mockReturnValue(new Promise(() => undefined));
