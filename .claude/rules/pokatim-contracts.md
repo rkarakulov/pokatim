@@ -149,7 +149,11 @@ paths:
 - Уведомления (ADR-0017): `src/notifications/notification.schema.ts` — `kind`/`group` в ответах — `tolerantEnum`,
   цель — белый список (`NotificationTarget`), незнакомая в ответе — `{ type: 'unknown' }`; запросы (`NotificationSettings`
   с `startHour ≠ endHour`, `RegisterPushToken`, `RevokePushToken`, `NotificationListQuery`) — `strictObject`. api-client —
-  8 методов `/v1/notifications*`.
+  8 методов `/v1/notifications*`. PR D event-tickets — в конец списков: группа `events`, kind `event_reminder`, цель
+  `{ type: 'ticket', code: TicketCodeCanonical }`; группа «Мероприятия» — отдельные схемы подресурса
+  `EventNotificationSettingsView` / `UpdateEventNotificationSettings` (`strictObject`), `DEFAULT_EVENT_NOTIFICATION_SETTINGS`
+  — `NotificationSettings` не расширяется (строгий разбор ответа у старых сборок, RC-D1); api-client —
+  `getEventNotificationSettings`, `updateEventNotificationSettings`.
 - Web Push (ADR-0022): там же — `WebPushEndpoint` (https ≤ 2048, хост — push-сервис из белого списка
   `isWebPushEndpoint`: FCM, Mozilla, WNS, Apple; адрес вызывает сервер — SSRF), `RegisterWebPushSubscription`
   (`strictObject`: endpoint + `keys.p256dh` 65 байт `B…`/`keys.auth` 16 байт base64url, без `expirationTime`),
@@ -195,4 +199,7 @@ paths:
   `getEventTicketing` (публичный); панель — `getEventTicketing`, `updateEventTicketing` (`PUT`), `listEventTickets`,
   `lookupTicket`, `checkInTicket`; материалы — приложение `getEventMaterials`, `eventFileUrl`; панель
   `listEventMaterials`, `createEventMaterial`, `uploadEventMaterial` (octet-stream), `updateEventMaterial` (`PATCH`),
-  `deleteEventMaterial` (`POST …/delete`), `reorderEventMaterials` (`PUT …/order`), `eventFileUrl`.
+  `deleteEventMaterial` (`POST …/delete`), `reorderEventMaterials` (`PUT …/order`), `eventFileUrl`. Напоминания
+  (PR D): `EventTicketingUpdate.reminders?` — `EventReminderInput[]` ≤ 3 (`strictObject`: `id?` — правка своего,
+  `offsetHours` 1–168, `text` 1–500; нет поля — правила не меняются), ответ `EventTicketingSettings.reminders` —
+  `EventReminder` (`sendAt`, `sentAt`, `sentCount`, `late`).

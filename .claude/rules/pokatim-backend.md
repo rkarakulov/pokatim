@@ -259,7 +259,8 @@ paths:
   `CALENDAR_EVENTS` — `get`, `getMany`), `profile` (`RIDER_NAMES.attributionNames`), `identity`
   (`IdentityAccounts.liveUserIds/emailsOf`, `AuthGuard`), `panel` — только через `index.ts`. На `tickets` ссылаются
   только `AppModule` (`TicketsModule`), `WorkerModule` (`TicketsWorkerModule`, `ticketsOutboxRoutes`) и
-  `AccountWorkerModule` (`TicketsCoreModule`, порт `TicketErasure`, шаг `tickets` перед `notifications`).
+  `AccountWorkerModule` (`TicketsCoreModule`, порт `TicketErasure`, шаг `tickets` перед `notifications`) и
+  `NotificationsWorkerModule` (`TicketsCoreModule`, порт `TICKET_NOTICES`, PR D).
 - `TicketsCoreModule` — репозиторий, `TicketEvents` (факты событий: гонка — `RACE_REGISTRY` + настройки, календарь —
   `CALENDAR_EVENTS`, момент старта вычисляется `calendarMoments`, RC-T2), `TicketIssuer` (код, `qrHash`, outbox
   `tickets.issued`; дубль кода — новая транзакция ≤ 3), `RaceTickets` (сверка), `TicketErasure`. Правила —
@@ -292,6 +293,16 @@ paths:
 - Письмо — очередь `tickets-email` (`TicketEmailHandler`, захват `email.state`, RC-T11), шаблон
   `mail/ticket-email.ts` (`htmlEmail`/`buttonHtml`/`escapeHtml`/`minskDateTime` из `identity`), кнопка — env
   `APP_WEB_ORIGIN`.
+- Напоминания (PR D, ADR-0023 п. 12): правила — `event_ticketing.reminders[]` (≤ 3, `id` стабилен, `armedAt`), правка —
+  `PUT …/ticketing` (нет поля `reminders` — не трогать), правила — `reminders.policy.ts` (`dueReminders`,
+  `nextReminders`, `reminderView`). Регламент `tickets.reminders` (`* * * * *` Минск + `tickets.reminders.boot`,
+  очередь `tickets-maintenance`) — `TicketReminders.dispatchDue`: гонке сначала `RaceTickets.reconcileRace` (вне
+  транзакции); на правило — транзакция: календарю первой `CALENDAR_EVENTS.lockForAdmission` и сверка старта, затем
+  захват `claimReminderDispatch` (условный `$push` в `reminderDispatches` по `(reminderId, dueAt)`, гонке — и по
+  `startsAt`; 0 — уже отправлено или старт перенесён), метки `remindersSent` билетам (`status: active`,
+  `createdAt ≤ dueAt`, `$ne reminderId`), outbox `tickets.reminder-due`. Пропущенное уходит, пока событие не
+  началось; правило, заданное после своего времени, — нет. Получателей отдаёт порт `TICKET_NOTICES`
+  (`TicketNoticesService.reminder`: билеты с меткой отправки, гонке — только активные заявки `RESULTS_FOR_TICKETS`).
 - Доступ панели к событию — один класс `PanelEvents.resolve(principal, kind, eventId, purpose)` (403 до чтения, нет
   или чужое — 404); его зовут `TicketingAdminService` и `MaterialsAdminService`, второй проверки нет.
 - Материалы (PR C): `MaterialsRepository` — единственный писатель `event_materials`/`event_material_files`/
@@ -522,10 +533,11 @@ RC-A1, ADR-0019).
 
 ## Уведомления (`notifications`, ADR-0017)
 
-- Источники (`results`, `disputes`, `rides`, `routes`) пишут только outbox в своих транзакциях (payload — id и коды)
-  и дают порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`, `RouteNotices`; плюс `RaceRegistry`,
+- Источники (`results`, `disputes`, `rides`, `routes`, `tickets`) пишут только outbox в своих транзакциях (payload — id и
+  коды) и дают порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`, `RouteNotices`,
+  `TicketNotices`; плюс `RaceRegistry`,
   `IdentityAccounts.liveUserIds/emailsOf`. Чужих коллекций `notifications` не читает; источники о нём не знают.
-- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (12 типов → `notifications-intake`). Очереди:
+- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (13 типов → `notifications-intake`; `tickets.reminder-due` — получателю своя цель `ticket` через `NoticeDraft.targets`). Очереди:
   `notifications-intake` (событие → получатели → настройки → upsert; > 72 ч — skip; уникальность `(sourceEventId,
   userId)`, схлопывание `collapseKey`), `notifications-delivery` (`notifications.push` по пользователю — захват,
   тумблер, тихие часы, лимит 20/ч, сводка; `notifications.email` — только N2), `notifications-maintenance`
@@ -535,6 +547,9 @@ RC-A1, ADR-0019).
   `skipped`.
 - HTTP `/v1/notifications` под `AuthGuard`, только свои (`userId` сессии в фильтре, чужое — 404); лимиты
   `notifications-read` 120/мин, `notifications-settings` 30/ч, `notifications-push-token` 30/ч → `429 RATE_LIMITED`.
+  Группа «Мероприятия» — подресурс `GET|PUT settings/events` (`push.events`, `email.events`; нет поля — включено):
+  `NotificationSettings` ответа строгий, новое поле сломало бы старые сборки (RC-D1); `PUT settings` — `$set`
+  известных полей, не `replaceOne` (старые сборки не стирают тумблеры подресурса). Внутренний тип — `DeliverySettings`.
 - Web Push (ADR-0022) — второй транспорт того же `notifications.push`, не отдельная система: подписка — `push_tokens`
   (`platform: 'web'`), HTTP `GET web-push` (публичный ключ или `null`), `PUT web-push/subscriptions`, `POST
   web-push/subscriptions/revoke` (лимит `notifications-push-token`). Порт `WEB_PUSH_SENDER` (`web-push.sender.ts`,

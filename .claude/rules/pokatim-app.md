@@ -40,7 +40,10 @@ paths:
   `missing`/`expired` подписывает тихо, отказ — текст «включите в настройках браузера/системы»; на экране настроек
   строка и push-тумблеры групп делят одно состояние `usePushPermission` (`push-permission-row.tsx`): включение тумблера
   при `undetermined` — системный запрос первым, в том же нажатии (Safari), затем сохранение; при `missing`/`expired` —
-  тихая подписка; включённый тумблер без доставки (`delivers === false`) — подпись `notifications.settings.pushBlocked`; выход — снятие на
+  тихая подписка; включённый тумблер без доставки (`delivers === false`) — подпись `notifications.settings.pushBlocked`; группа
+  «Мероприятия» (PR D) — свой подресурс (`useEventNotificationSettings`, ключ `['notifications','settings','events']`, своё
+  сохранение и баннер; 404 старого API — группы нет, `isEventSettingsMissing`), её push-тумблер — с тем же
+  `usePushPermission`; цель `ticket` → `/tickets/<код>` (и в SW); выход — снятие на
   сервере и `unsubscribe()` в браузере; нажатие на уведомление — сообщение SW `pokatim:open` → `onOpen(target)`): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
