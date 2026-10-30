@@ -116,7 +116,13 @@ ADR-0017 п. 5 называет fan-out раскладку по очередям
   `removeOnFail: false`): провал виден в failed-наборе BullMQ; панели failed-доставок нет (Out of Scope). Добавляем
   лог `notifications.fanout_failed` на последней попытке (образец `isFinal` из `tickets-email.processor.ts`), без
   `userId`.
-- **RC-F4 — сторож и уборка завершённых.** `removeOnComplete: 1000` (count): если intake повторно получит событие
+- **RC-F1′ (ревью pass 1, 2026-10-31).** Атомарность `MULTI` не гарантирует успеха команд: `FlowProducer.addBulk`
+  пропускает `[err, jobId]` отдельной команды (`flow-producer.js:176–187`) — при OOM Redis intake вернул бы `fanned_out`
+  без пачек, а при частичной постановке сторож `0-0` заблокировал бы восстановление. Решение: план раскладки — в данных
+  задачи intake (`job.updateData`) до постановки; после `addBulk` каждый jobId плана проверяется, недостающие — ещё раз,
+  нет — `throw` (ретрай дотягивает по плану). Сторож `started(0-0)` убран.
+- **RC-F4 — сторож и уборка завершённых.** (После RC-F1′ сторожа нет: повторная публикация события — новая задача
+  intake без плана.) `removeOnComplete: 1000` (count): если intake повторно получит событие
   после того, как пачки ушли из completed-набора (повторная публикация outbox через часы), сторож их не увидит —
   пересчёт и повторная постановка; дублей уведомлений и доставок нет (уникальный индекс, `pendingDeliveriesOf` — только
   `pending`). Принимаем как остаточный.
@@ -357,7 +363,7 @@ push, нет поля — значение «Райдов»); ADR-0017 — до�
 
 - **Реализовано (coder, 2026-10-30):** коммиты `2b8122e5` (группа «Маршруты»: контракт, политика, подресурс),
   `960b428b` (пачки получателей), `dc4302b5` (приложение: блок «Маршруты»), `f1220b13` (документы).
-- Пачки: `notification-fanout.ts` (`renderDraft`, `planFanout`), `fanout-jobs.ts` (`FanoutJobs.started/enqueue`,
+- Пачки: `notification-fanout.ts` (`renderDraft`, `planFanout`), `fanout-jobs.ts` (`FanoutJobs.enqueue`,
   `FlowProducer.addBulk`, `BullModule.registerFlowProducer({ name: 'notifications-fanout' })`), ветка
   `notifications.fanout` в `NotificationsIntakeProcessor`, общая `writeRecipients`, `scheduleEvent(eventId, userIds?)`.
   Помимо test matrix: AC3 проверяет повторную постановку тех же jobId через `FanoutJobs.enqueue` (BullMQ не дублирует);
@@ -366,6 +372,16 @@ push, нет поля — значение «Райдов»); ADR-0017 — до�
   против `addJobs` (`client.pipeline()`), `node_modules/bullmq/dist/esm/classes/redis-queue-backend.js` (BullMQ 6.4.0).
 - `RenderedDraft.targets` — только `ReadonlyMap` (пачка переводит `Record` в `Map`); `isEventSettingsMissing`
   переименован в `isSettingsResourceMissing`. Отклонений от §11 нет.
+- **Фиксы ревью pass 1 (2026-10-31):** RC-F1′ (выше, §8.1) — `IntakeJobData`/`FanoutPlan` в `notifications.events.ts`,
+  план в данных задачи intake до постановки, `FanoutJobs.enqueue` с проверкой `getJob` каждой пачки и одной повторной
+  постановкой, сторож `started` убран. Тесты-ворота (`notifications-intake.int.test.ts`, задача intake — настоящая
+  задача очереди `runQueuedIntake`): `addBulk` «успешен» без постановки → intake бросает, повтор ставит все по плану,
+  порт не вызван второй раз; частичная постановка → повтор дотягивает, дублей нет; недостающая пачка — вторым
+  `addBulk` в той же задаче; AC3 — по сохранённому плану. Отрицательные доказательства: без проверки постановки
+  (`missing` → `[]`) оба теста-ворот красные («resolved 'fanned_out' instead of rejecting»); без чтения плана из данных
+  задачи AC3 и оба теста-ворот красные («drafts called 2 times»). LOW: разбор данных пачки внутри `try` (лог
+  `fanout_failed event=-` на последней попытке), потолок `userIds` — `FANOUT_CHUNK_MAX = 1000` (не `fanoutChunk`),
+  ADR-0017 — строка о смешанных версиях и откате, JSDoc сервиса настроек ≤ 120.
 - **Open follow-ups:** fan-out outbox «тип → несколько очередей» в app-foundation (`OutboxRoutes = Record<string,
   string | readonly string[]>`, jobId = id события в каждой очереди) + релиз `@rkarakulov/api-kit` + каталог pokatim;
   затем подписка `standings`/`route-rides`/`achievements` на события вместо регламентов (ADR-0017 п. 5, ADR-0020).

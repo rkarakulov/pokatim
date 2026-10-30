@@ -21,7 +21,6 @@ import {
 } from '../rides';
 import { ROUTE_PUBLICATION_DECIDED } from '../routes';
 import { TICKETS_REMINDER_DUE } from '../tickets';
-import { NOTIFICATIONS_POLICY } from './notifications.policy';
 
 /**
  * Маршруты событий модулей-источников в очередь приёма уведомлений (ADR-0017): объявляет подписчик (как
@@ -77,6 +76,12 @@ export const emailJobId = (notificationId: string) => `email-${notificationId}`;
  * (N12): id и снимок текста.
  */
 export const NOTIFICATIONS_FANOUT_JOB = 'notifications.fanout';
+/**
+ * Потолок получателей в данных пачки — не `fanoutChunk`: смена размера пачки не делает нечитаемыми уже поставленные
+ * задачи.
+ */
+export const FANOUT_CHUNK_MAX = 1000;
+
 export const FanoutJobData = z.object({
   eventId: z.uuid(),
   /** тип события-источника — только для логов */
@@ -87,10 +92,23 @@ export const FanoutJobData = z.object({
   target: NotificationTarget.nullable(),
   targets: z.record(z.uuid(), NotificationTarget).optional(),
   collapse: z.object({ key: z.string(), seq: z.number().int().optional() }).optional(),
-  userIds: z.array(z.uuid()).min(1).max(NOTIFICATIONS_POLICY.fanoutChunk),
+  userIds: z.array(z.uuid()).min(1).max(FANOUT_CHUNK_MAX),
 });
 export type FanoutJobData = z.infer<typeof FanoutJobData>;
 
-/** jobId пачки: событие, номер непустого черновика, номер пачки; без `:` (BullMQ). Пачка `0-0` — сторож раскладки. */
+/**
+ * План раскладки события — в данных задачи intake (`job.updateData` до постановки): повтор intake ставит пачки по нему,
+ * порты источников не зовутся (состав зафиксирован), недоставленные пачки дотягиваются.
+ */
+export const FanoutPlan = z
+  .array(z.object({ jobId: z.string().startsWith('fanout-'), data: FanoutJobData }))
+  .min(1);
+export type FanoutPlan = z.infer<typeof FanoutPlan>;
+
+/** Данные задачи intake: событие outbox (`OutboxJobData`) и, после раскладки, её план. */
+export const IntakeJobData = z.object({ outboxEventId: z.uuid(), fanout: FanoutPlan.optional() });
+export type IntakeJobData = z.infer<typeof IntakeJobData>;
+
+/** jobId пачки: событие, номер непустого черновика, номер пачки; без `:` (BullMQ). */
 export const fanoutJobId = (eventId: string, draft: number, chunk: number) =>
   `fanout-${eventId}-${draft}-${chunk}`;

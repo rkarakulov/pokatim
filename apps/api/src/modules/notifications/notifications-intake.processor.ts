@@ -1,6 +1,6 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
-import { CLOCK, type Clock, ENV, type OutboxJobData } from '@rkarakulov/api-kit/core';
+import { CLOCK, type Clock, ENV } from '@rkarakulov/api-kit/core';
 import { MongoOutboxReader, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
 
@@ -10,11 +10,17 @@ import { IdentityAccounts } from '../identity';
 import { DeliveryJobs } from './delivery-jobs';
 import { isEventStale } from './event-time';
 import { FanoutJobs } from './fanout-jobs';
-import { planFanout, type RenderedDraft, renderDraft } from './notification-fanout';
+import {
+  type FanoutChunk,
+  planFanout,
+  type RenderedDraft,
+  renderDraft,
+} from './notification-fanout';
 import { NotificationIntake } from './notification-intake';
 import type { NotificationDoc } from './notifications.collection';
 import {
   FanoutJobData,
+  IntakeJobData,
   isNotificationSourceEvent,
   NOTIFICATIONS_FANOUT_JOB,
 } from './notifications.events';
@@ -42,9 +48,10 @@ const isFinal = (job: Job) => job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
  * Текст — снимок на момент приёма, `createdAt` — `CLOCK` приёма (не время события). Затем — задачи доставки по
  * уведомлениям события в `pending` (`DeliveryJobs.scheduleEvent`, детерминированные jobId).
  *
- * Аудитория больше `fanoutChunk` — раскладка на задачи-пачки `notifications.fanout` той же очереди (`planFanout`,
- * атомарная постановка `FanoutJobs.enqueue`): intake сам не пишет, пачка пишет и доставляет только своих получателей.
- * Пачка `0-0` уже поставлена (сторож) — повтор события порты не зовёт: состав зафиксирован.
+ * Аудитория больше `fanoutChunk` — раскладка на задачи-пачки `notifications.fanout` той же очереди (`planFanout`):
+ * план сохраняется в данных задачи intake (`job.updateData`) до постановки, затем `FanoutJobs.enqueue` ставит пачки и
+ * проверяет каждую. Повтор intake с планом в данных порты не зовёт (состав зафиксирован) и дотягивает недоставленные
+ * пачки. Intake сам не пишет, пачка пишет и доставляет только своих получателей.
  */
 @Processor(QUEUE.notificationsIntake, { concurrency: 4 })
 export class NotificationsIntakeProcessor extends WorkerHost {
@@ -77,16 +84,14 @@ export class NotificationsIntakeProcessor extends WorkerHost {
     if (!isNotificationSourceEvent(type)) {
       throw new Error(`unknown job ${type} in queue ${QUEUE.notificationsIntake}`);
     }
-    const eventId = (job.data as OutboxJobData).outboxEventId;
+    const data = IntakeJobData.parse(job.data);
+    const eventId = data.outboxEventId;
     const now = this.clock.now();
     if (isEventStale(eventId, now)) {
       this.logger.log(`notifications.event_stale type=${type} event=${eventId}`);
       return 'stale';
     }
-    if (await this.fanout.started(eventId)) {
-      this.logger.log(`notifications.fanout_exists type=${type} event=${eventId}`);
-      return 'fanned_out';
-    }
+    if (data.fanout) return this.enqueueFanout(type, eventId, data.fanout, true);
     const drafts = await this.intake.drafts(type, await this.outbox.payloadOf(eventId), now);
     if (typeof drafts === 'string') {
       this.logger.log(`notifications.event_skipped type=${type} event=${eventId} reason=${drafts}`);
@@ -94,12 +99,10 @@ export class NotificationsIntakeProcessor extends WorkerHost {
     }
     const chunks = planFanout(eventId, type, drafts, NOTIFICATIONS_POLICY.fanoutChunk);
     if (chunks) {
-      await this.fanout.enqueue(chunks);
-      const recipients = chunks.reduce((sum, chunk) => sum + chunk.data.userIds.length, 0);
-      this.logger.log(
-        `notifications.fanout type=${type} event=${eventId} chunks=${chunks.length} recipients=${recipients}`,
-      );
-      return 'fanned_out';
+      // план — в данные задачи до постановки: повтор (сбой постановки, ретрай) ставит по нему, порты не зовёт
+      const planned: IntakeJobData = { ...data, fanout: chunks };
+      await job.updateData(planned);
+      return this.enqueueFanout(type, eventId, chunks, false);
     }
     let written = 0;
     for (const draft of drafts) {
@@ -113,20 +116,36 @@ export class NotificationsIntakeProcessor extends WorkerHost {
     return written > 0 ? 'written' : 'unchanged';
   }
 
+  private async enqueueFanout(
+    type: string,
+    eventId: string,
+    chunks: FanoutChunk[],
+    repeat: boolean,
+  ): Promise<IntakeOutcome> {
+    await this.fanout.enqueue(chunks);
+    const recipients = chunks.reduce((sum, chunk) => sum + chunk.data.userIds.length, 0);
+    this.logger.log(
+      `notifications.fanout type=${type} event=${eventId} chunks=${chunks.length} recipients=${recipients} repeat=${repeat}`,
+    );
+    return 'fanned_out';
+  }
+
   /**
    * Пачка получателей: та же отсечка 72 ч по id события (застрявшая в ретраях задача не будит вчерашним событием,
    * RC-6), запись — общая `writeRecipients`, доставка — только по получателям пачки. Последняя попытка — лог
    * `notifications.fanout_failed` (без `userId`) и ошибка дальше (failed-набор BullMQ).
    */
   private async processChunk(job: Job): Promise<IntakeOutcome> {
-    const data = FanoutJobData.parse(job.data);
-    const { eventId, type, userIds } = data;
-    const now = this.clock.now();
-    if (isEventStale(eventId, now)) {
-      this.logger.log(`notifications.fanout_stale type=${type} event=${eventId} job=${job.id}`);
-      return 'stale';
-    }
+    let event = '-';
     try {
+      const data = FanoutJobData.parse(job.data);
+      const { eventId, type, userIds } = data;
+      event = eventId;
+      const now = this.clock.now();
+      if (isEventStale(eventId, now)) {
+        this.logger.log(`notifications.fanout_stale type=${type} event=${eventId} job=${job.id}`);
+        return 'stale';
+      }
       const rendered: RenderedDraft = {
         kind: data.kind,
         title: data.title,
@@ -144,7 +163,7 @@ export class NotificationsIntakeProcessor extends WorkerHost {
     } catch (error) {
       if (isFinal(job)) {
         this.logger.error(
-          `notifications.fanout_failed type=${type} event=${eventId} job=${job.id} attempts=${job.attemptsMade + 1}`,
+          `notifications.fanout_failed event=${event} job=${job.id} attempts=${job.attemptsMade + 1}`,
         );
       }
       throw error;

@@ -4,8 +4,11 @@ import { describe, expect, it } from 'vitest';
 import { planFanout } from './notification-fanout';
 import type { NoticeDraft } from './notification-intake';
 import {
+  FANOUT_CHUNK_MAX,
   FanoutJobData,
   fanoutJobId,
+  FanoutPlan,
+  IntakeJobData,
   NOTIFICATIONS_FANOUT_JOB,
   notificationsOutboxRoutes,
 } from './notifications.events';
@@ -103,6 +106,19 @@ describe('planFanout: пачки получателей', () => {
       [recipients[200]!]: targets.get(recipients[200]!),
     });
     expect(chunks?.[1]?.data.target).toBeNull();
+  });
+
+  it('план — данные задачи intake; потолок пачки не зависит от fanoutChunk (смена размера не ломает поставленные)', () => {
+    const chunks = plan([draft(users(450))]);
+    expect(IntakeJobData.parse({ outboxEventId: EVENT, fanout: chunks }).fanout).toEqual(
+      FanoutPlan.parse(chunks),
+    );
+    expect(FANOUT_CHUNK_MAX).toBeGreaterThan(NOTIFICATIONS_POLICY.fanoutChunk);
+    const wide = { ...chunks![0]!.data, userIds: users(FANOUT_CHUNK_MAX) };
+    expect(FanoutJobData.safeParse(wide).success).toBe(true);
+    expect(FanoutJobData.safeParse({ ...wide, userIds: users(FANOUT_CHUNK_MAX + 1) }).success).toBe(
+      false,
+    );
   });
 
   it('имя задачи пачки не совпадает ни с одним типом событий outbox', () => {

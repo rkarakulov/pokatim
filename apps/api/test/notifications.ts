@@ -219,6 +219,22 @@ export async function deliveryJobs(h: Harness) {
 export const intakeQueue = (h: Harness): Queue =>
   h.worker.get(getQueueToken(QUEUE.notificationsIntake), { strict: false });
 
+/**
+ * Задача приёма по событию — настоящая задача очереди (jobId = id события, как у публикатора outbox): данные, записанные
+ * `job.updateData` (план раскладки), видны повтору. Отложена на час — прогон пачек (`completeIntakeJobs`) её не берёт.
+ */
+export async function runQueuedIntake(
+  h: Harness,
+  type: string,
+  eventId: string,
+): Promise<IntakeOutcome> {
+  const queue = intakeQueue(h);
+  const job =
+    (await queue.getJob(eventId)) ??
+    (await queue.add(type, { outboxEventId: eventId }, { jobId: eventId, delay: 3_600_000 }));
+  return h.worker.get(NotificationsIntakeProcessor).process(job);
+}
+
 /** Задачи-пачки в очереди приёма в любом состоянии, по jobId. */
 export async function fanoutJobs(h: Harness): Promise<Job[]> {
   const jobs = await intakeQueue(h).getJobs([

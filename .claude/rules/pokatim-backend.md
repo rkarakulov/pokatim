@@ -541,9 +541,10 @@ RC-A1, ADR-0019).
 - Маршруты объявляет подписчик: `notificationsOutboxRoutes` (13 типов → `notifications-intake`; `tickets.reminder-due` — получателю своя цель `ticket` через `NoticeDraft.targets`). Очереди:
   `notifications-intake` (событие → получатели → настройки → upsert; > 72 ч — skip; уникальность `(sourceEventId,
   userId)`, схлопывание `collapseKey`; аудитория > `NOTIFICATIONS_POLICY.fanoutChunk` (200) — задачи-пачки
-  `notifications.fanout` той же очереди: `planFanout` (`notification-fanout.ts`) → `FanoutJobs.enqueue` —
-  `FlowProducer.addBulk` (MULTI, все или ни одной; `Queue.addBulk` — не атомарен), опции — `defaultJobOptions` очереди
-  явно; сторож — пачка `fanout-<событие>-0-0` (есть — порты не зовутся); пачка: 72 ч, общая `writeRecipients`,
+  `notifications.fanout` той же очереди: `planFanout` (`notification-fanout.ts`) → план в данных задачи intake
+  (`job.updateData`, `IntakeJobData.fanout`; есть — порты не зовутся) → `FanoutJobs.enqueue` — `FlowProducer.addBulk`
+  (MULTI; `Queue.addBulk` — pipeline), опции — `defaultJobOptions` очереди явно; MULTI не гарантирует успеха команд —
+  каждый jobId проверяется `getJob`, недостающие — ещё раз, нет — исключение; пачка: 72 ч, общая `writeRecipients`,
   `scheduleEvent(eventId, userIds)`, последняя попытка — лог `notifications.fanout_failed`), `notifications-delivery` (`notifications.push` по пользователю — захват,
   тумблер, тихие часы, лимит 20/ч, сводка; `notifications.email` — только N2), `notifications-maintenance`
   (`receipts` */15 — `DeviceNotRegistered` снимает токен; `redeliver` */10).
