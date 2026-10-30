@@ -10,6 +10,7 @@ import {
   TICKET_EVENT_KINDS,
   TICKET_STATUSES,
   TicketCode,
+  TicketCodeCanonical,
   TicketQrPayload,
   TicketView,
 } from './ticket.schema.ts';
@@ -17,6 +18,11 @@ import {
   AdminEventParams,
   CheckInRequest,
   CheckInView,
+  EVENT_REMINDER_OFFSET_MAX_HOURS,
+  EVENT_REMINDER_OFFSET_MIN_HOURS,
+  EVENT_REMINDER_TEXT_MAX,
+  EVENT_REMINDERS_MAX,
+  EventReminder,
   EventTicketingUpdate,
   EventTicketsQuery,
 } from './ticketing-admin.schema.ts';
@@ -66,6 +72,13 @@ describe('билеты: код и QR (event-tickets)', () => {
       expect(TicketCode.safeParse(bad).success, bad).toBe(false);
     }
     expect(TicketCode.safeParse({ $ne: null }).success).toBe(false);
+  });
+
+  it('канонический код (цель уведомления): без нормализации', () => {
+    expect(TicketCodeCanonical.parse('7XK2M9PQRT')).toBe('7XK2M9PQRT');
+    for (const code of ['7xk2m9pqrt', '7XK2M-9PQRT', '7XK2M9PQRU', '7XK2M9PQR']) {
+      expect(TicketCodeCanonical.safeParse(code).success).toBe(false);
+    }
   });
 
   it('QR: только PKT1.<43 символа base64url>', () => {
@@ -161,6 +174,56 @@ describe('билеты: панель', () => {
       EventTicketingUpdate.safeParse({ enabled: true, version: 0, instructions: 'я'.repeat(2001) })
         .success,
     ).toBe(false);
+  });
+
+  it('EventTicketingUpdate.reminders (PR D): ≤ 3, 1–168 ч, текст 1–500, без повтора offset, строгие ключи', () => {
+    const base = { enabled: true, version: 0 };
+    const rule = (offsetHours: number, text = 'Возьмите паспорт') => ({ offsetHours, text });
+    expect([
+      EVENT_REMINDERS_MAX,
+      EVENT_REMINDER_OFFSET_MIN_HOURS,
+      EVENT_REMINDER_OFFSET_MAX_HOURS,
+    ]).toEqual([3, 1, 168]);
+    expect(EVENT_REMINDER_TEXT_MAX).toBe(500);
+    expect(EventTicketingUpdate.parse(base)).not.toHaveProperty('reminders');
+    expect(EventTicketingUpdate.parse({ ...base, reminders: [] })).toMatchObject({ reminders: [] });
+    expect(
+      EventTicketingUpdate.parse({
+        ...base,
+        reminders: [{ id: ID, offsetHours: 24, text: '  Возьмите паспорт\nи шлем  ' }, rule(1)],
+      }).reminders,
+    ).toEqual([
+      { id: ID, offsetHours: 24, text: 'Возьмите паспорт\nи шлем' },
+      { offsetHours: 1, text: 'Возьмите паспорт' },
+    ]);
+    const codes = (reminders: unknown) =>
+      (EventTicketingUpdate.safeParse({ ...base, reminders }).error?.issues ?? []).map(
+        (issue) => `${issue.path.join('.')}:${issue.message}`,
+      );
+    expect(codes([rule(1), rule(2), rule(3), rule(4)])).toHaveLength(1);
+    expect(codes([rule(0)])).toEqual(['reminders.0.offsetHours:INVALID']);
+    expect(codes([rule(169)])).toEqual(['reminders.0.offsetHours:INVALID']);
+    expect(codes([rule(1.5)])).toEqual(['reminders.0.offsetHours:INVALID']);
+    expect(codes([rule(24, 'я'.repeat(501))])).toEqual(['reminders.0.text:TOO_LONG']);
+    expect(codes([rule(24, 'я'.repeat(500))])).toEqual([]);
+    expect(codes([rule(24, '   ')])).toEqual(['reminders.0.text:REQUIRED']);
+    expect(codes([rule(24), rule(24)])).toEqual(['reminders.1.offsetHours:INVALID']);
+    expect(codes([{ ...rule(24), sentAt: null }])).toHaveLength(1);
+    expect(codes([{ ...rule(24), id: 'x' }])).toEqual(['reminders.0.id:INVALID']);
+  });
+
+  it('EventReminder (ответ): статус отправки', () => {
+    expect(
+      EventReminder.parse({
+        id: ID,
+        offsetHours: 24,
+        text: 'Возьмите паспорт',
+        sendAt: '2026-10-23T07:00:00.000Z',
+        sentAt: null,
+        sentCount: 0,
+        late: false,
+      }),
+    ).toMatchObject({ offsetHours: 24, late: false });
   });
 
   it('CheckInRequest: ровно одно поле — qr или code', () => {

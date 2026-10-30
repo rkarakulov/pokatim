@@ -249,6 +249,114 @@ describe('календарь (RC-T2, RC-T6)', () => {
   });
 });
 
+describe('напоминания (PR D, RC-D10)', () => {
+  const fieldsOf = (body: unknown) =>
+    (body as { details?: { fields?: { path: string; code: string }[] } }).details?.fields;
+
+  it('права как у настроек: модератор — 403, чужой организатор — 404', async () => {
+    const w = await world();
+    const url = ticketingUrl('race', w.raceId);
+    const body = { ...RACE_BODY, reminders: [{ offsetHours: 24, text: 'Паспорт' }] };
+    expect((await panelCall(h, w.tokens.moderator, 'PUT', url, body)).status).toBe(403);
+    expect((await panelCall(h, w.tokens.other, 'PUT', url, body)).status).toBe(404);
+  });
+
+  it('создание: id сервера, sendAt, late; журнал с reminders; правка текста и без поля — правила на месте', async () => {
+    const w = await world();
+    const url = ticketingUrl('race', w.raceId);
+    const res = await panelCall(h, w.tokens.organizer, 'PUT', url, {
+      ...RACE_BODY,
+      reminders: [
+        { offsetHours: 24, text: ' Возьмите паспорт ' },
+        // 24.10 07:00 − 48 ч = 22.10 07:00 — раньше «сейчас» стенда (22.10 09:00): не уйдёт
+        { offsetHours: 48, text: 'Поздно' },
+      ],
+    });
+    expect(res.status).toBe(200);
+    const settings = EventTicketingSettings.parse(res.body);
+    expect(settings.reminders).toEqual([
+      {
+        id: expect.any(String),
+        offsetHours: 24,
+        text: 'Возьмите паспорт',
+        sendAt: '2026-10-23T07:00:00.000Z',
+        sentAt: null,
+        sentCount: 0,
+        late: false,
+      },
+      expect.objectContaining({ offsetHours: 48, sendAt: '2026-10-22T07:00:00.000Z', late: true }),
+    ]);
+    expect((await settingsAudit())[0]).toMatchObject({
+      details: { changedFields: ['enabled', 'startsAt', 'place', 'reminders'] },
+    });
+    const [first] = settings.reminders;
+    const edited = await panelCall(h, w.tokens.organizer, 'PUT', url, {
+      ...RACE_BODY,
+      version: 1,
+      reminders: [{ id: first!.id, offsetHours: 24, text: 'Новый текст' }],
+    });
+    expect(EventTicketingSettings.parse(edited.body).reminders).toEqual([
+      expect.objectContaining({ id: first!.id, text: 'Новый текст' }),
+    ]);
+    expect(
+      (await settingsAudit()).map(
+        (entry) => (entry.details as { changedFields: string[] }).changedFields,
+      ),
+    ).toEqual(expect.arrayContaining([['reminders']]));
+    // старая панель (без поля) — правила не трогаются, записи нет
+    const without = await panelCall(h, w.tokens.organizer, 'PUT', url, {
+      ...RACE_BODY,
+      version: 2,
+    });
+    expect(EventTicketingSettings.parse(without.body)).toMatchObject({
+      version: 2,
+      reminders: [expect.objectContaining({ id: first!.id, text: 'Новый текст' })],
+    });
+    expect(await settingsAudit()).toHaveLength(2);
+    // GET отдаёт то же
+    const read = EventTicketingSettings.parse(
+      (await panelCall(h, w.tokens.organizer, 'GET', url)).body,
+    );
+    expect(read.reminders).toHaveLength(1);
+  });
+
+  it('4 правила, 169 ч, 501 символ, повтор offset, чужой id — 400 с путём, без записи', async () => {
+    const w = await world();
+    const url = ticketingUrl('race', w.raceId);
+    const put = (reminders: unknown) =>
+      panelCall(h, w.tokens.admin, 'PUT', url, { ...RACE_BODY, reminders });
+    const rule = (offsetHours: number, text = 'Т') => ({ offsetHours, text });
+    const four = await put([rule(1), rule(2), rule(3), rule(4)]);
+    expect(four.status).toBe(400);
+    expect(fieldsOf((await put([rule(169)])).body)).toEqual([
+      { path: 'reminders.0.offsetHours', code: 'INVALID' },
+    ]);
+    expect(fieldsOf((await put([rule(24, 'я'.repeat(501))])).body)).toEqual([
+      { path: 'reminders.0.text', code: 'TOO_LONG' },
+    ]);
+    expect(fieldsOf((await put([rule(24), rule(24)])).body)).toEqual([
+      { path: 'reminders.1.offsetHours', code: 'INVALID' },
+    ]);
+    expect(
+      fieldsOf((await put([{ id: '01890a5d-ac96-774b-bcce-b302099a8057', ...rule(24) }])).body),
+    ).toEqual([{ path: 'reminders.0.id', code: 'INVALID' }]);
+    expect(await settingsAudit()).toHaveLength(0);
+  });
+
+  it('календарь: правила при выключенных билетах; sendAt — от старта календаря', async () => {
+    const w = await world();
+    const res = await panelCall(h, w.tokens.admin, 'PUT', ticketingUrl('calendar', w.calendarId), {
+      enabled: false,
+      reminders: [{ offsetHours: 2, text: 'Через два часа' }],
+      version: 0,
+    });
+    expect(res.status).toBe(200);
+    expect(EventTicketingSettings.parse(res.body).reminders).toEqual([
+      expect.objectContaining({ sendAt: '2026-11-01T05:00:00.000Z', late: false }),
+    ]);
+  });
+});
+
 describe('публичная сводка (RC-T7)', () => {
   it('без настроек и для неизвестного события — { enabled: false }; гонка — без мест и регистрации', async () => {
     const w = await world();

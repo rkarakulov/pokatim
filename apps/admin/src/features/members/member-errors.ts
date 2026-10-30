@@ -10,9 +10,10 @@ const MEMBER_ERROR_KEYS: Partial<Record<string, MessageKey>> = {
   PANEL_LAST_ADMIN: 'admin.members.error.PANEL_LAST_ADMIN',
   PANEL_SELF_ACTION: 'admin.members.error.PANEL_SELF_ACTION',
   TOTP_NOT_ENABLED: 'admin.members.error.TOTP_NOT_ENABLED',
+  PANEL_INVITATIONS_UNAVAILABLE: 'admin.members.error.PANEL_INVITATIONS_UNAVAILABLE',
 };
 
-/** Коды выдачи роли, которые относятся к полю e-mail (ошибка — под полем). */
+/** Коды выдачи роли и приглашения, которые относятся к полю e-mail (ошибка — под полем). */
 export const EMAIL_FIELD_CODES = new Set([
   'NOT_FOUND',
   'PANEL_USER_UNVERIFIED',

@@ -18,6 +18,7 @@ import { identityOutboxRoutes, IdentityWorkerModule } from './modules/identity';
 import { devicesOutboxRoutes, DevicesWorkerModule } from './modules/devices';
 import { DisputesCoreModule, DisputesWorkerModule } from './modules/disputes';
 import { notificationsOutboxRoutes, NotificationsWorkerModule } from './modules/notifications';
+import { panelOutboxRoutes, PanelWorkerModule } from './modules/panel';
 import { resultsOutboxRoutes, ResultsWorkerModule } from './modules/results';
 import { routeRidesOutboxRoutes, RouteRidesWorkerModule } from './modules/route-rides';
 import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
@@ -48,6 +49,7 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
         ...routeRidesOutboxRoutes,
         ...accountOutboxRoutes,
         ...ticketsOutboxRoutes,
+        ...panelOutboxRoutes,
         // подписчик чужих типов (results, disputes, rides, routes) — ADR-0017
         ...notificationsOutboxRoutes,
       },
@@ -73,6 +75,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     RouteRidesWorkerModule,
     // письмо «Вы зарегистрированы» и сверка билетов гонок (event-tickets)
     TicketsWorkerModule,
+    // письма панели: приглашение в команду и письма о роли (panel-invitations, ADR-0026)
+    PanelWorkerModule,
   ],
 })
 export class WorkerModule {}

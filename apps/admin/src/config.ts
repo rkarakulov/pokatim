@@ -6,3 +6,6 @@ const appWebUrl = (import.meta.env.VITE_APP_WEB_URL ?? '').replace(/\/+$/, '');
 
 /** «Забыли пароль?» — экран запроса ссылки сброса в web приложения. */
 export const FORGOT_PASSWORD_URL = `${appWebUrl}/forgot-password`;
+
+/** «Зарегистрироваться» на экране приглашения (ADR-0026): регистрация — только в приложении (один аккаунт). */
+export const REGISTER_URL = `${appWebUrl}/register`;

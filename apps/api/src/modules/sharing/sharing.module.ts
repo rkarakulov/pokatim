@@ -28,6 +28,9 @@ import { SitemapService } from './sitemap.service';
 import { RideInviteController } from './ride-invite.controller';
 import { RideInviteInputs } from './ride-invite.inputs';
 import { RideInviteService } from './ride-invite.service';
+import { RouteCardController } from './route-card.controller';
+import { RouteCardInputs } from './route-card.inputs';
+import { RouteCardService } from './route-card.service';
 import { StoryCardImageController } from './story-card-image.controller';
 import { StoryCardCache } from './story-card.cache';
 import { StoryCardController } from './story-card.controller';
@@ -36,8 +39,8 @@ import { StoryCardProcessor } from './story-card.processor';
 import { StoryCardService } from './story-card.service';
 
 /**
- * Карточки (ADR-0018), HTTP: статус сторис своего результата, приглашения кофе-райда и своего достижения
- * (`AuthGuard`), PNG по капабилити-токену (IP-лимит), OG-картинки публичных страниц (og-images: версия и PNG без
+ * Карточки (ADR-0018), HTTP: статус сторис своего результата, приглашения кофе-райда, своего достижения и маршрута
+ * каталога (`AuthGuard`), PNG по капабилити-токену (IP-лимит), OG-картинки публичных страниц (og-images: версия и PNG без
  * входа) и карта сайта (landing-seo: `GET /v1/sitemap` без входа). Данные — порты
  * `results` (`RESULTS_FOR_SHARING`), `rides` (`RIDES_FOR_SHARING`), `races` (`RACES_FOR_SHARING`), `routes`
  * (`ROUTES_FOR_SHARING`, `ROUTE_GEOMETRY`), `calendar` (`CALENDAR_FOR_SHARING`), `profile` (`RIDER_NAMES`,
@@ -61,6 +64,7 @@ import { StoryCardService } from './story-card.service';
     StoryCardController,
     RideInviteController,
     AchievementCardController,
+    RouteCardController,
     StoryCardImageController,
     OgCardController,
     SitemapController,
@@ -73,6 +77,8 @@ import { StoryCardService } from './story-card.service';
     RideInviteInputs,
     AchievementCardService,
     AchievementCardInputs,
+    RouteCardService,
+    RouteCardInputs,
     StoryCardCache,
     OgCardInputs,
     OgCardCache,
@@ -86,7 +92,7 @@ import { StoryCardService } from './story-card.service';
 export class SharingModule {}
 
 /**
- * Рендер карточек в worker: очередь `story-card` (сторис, приглашения, достижения, OG-картинки; satori + resvg) и пререндер
+ * Рендер карточек в worker: очередь `story-card` (сторис, приглашения, достижения, маршруты каталога, OG-картинки; satori + resvg) и пререндер
  * OG-картинок `og.sync` (очередь `og-sync`, расписание каждую минуту и при старте).
  */
 @Module({
@@ -105,6 +111,7 @@ export class SharingModule {}
     StoryCardInputs,
     RideInviteInputs,
     AchievementCardInputs,
+    RouteCardInputs,
     StoryCardCache,
     StoryCardProcessor,
     OgCardInputs,

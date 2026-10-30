@@ -346,4 +346,32 @@ describe('«Журнал действий» (AC12)', () => {
     await renderApp('/audit');
     expect(await screen.findByText('Записей пока нет')).toBeTruthy();
   });
+
+  it('приглашения (ADR-0026): подписи трёх действий с ролью, объект — «Приглашение ·<id>»', async () => {
+    const invitation = (n: number, action: AuditEntry['action']): AuditEntry => ({
+      id: id(n),
+      at: '2026-10-30T10:00:00.000Z',
+      action,
+      actor: { kind: 'user', userId: USER_ID, displayName: 'Ольга' },
+      target:
+        action === 'panel.invitation_accepted' ? { userId: MARIA, displayName: 'Мария' } : null,
+      reason: null,
+      subject: { kind: 'invitation', id: id(9), label: 'Приглашение ·000009' },
+      details: { roleTo: 'moderator' },
+    });
+    mocked.listAudit.mockResolvedValue({
+      items: [
+        invitation(13, 'panel.invitation_accepted'),
+        invitation(12, 'panel.invitation_revoked'),
+        invitation(11, 'panel.invitation_sent'),
+      ],
+      nextCursor: null,
+    });
+    await renderApp('/audit');
+
+    expect(await screen.findByText('Принято приглашение: Модератор')).toBeTruthy();
+    expect(screen.getByText('Отозвано приглашение: Модератор')).toBeTruthy();
+    expect(screen.getByText('Отправлено приглашение: Модератор')).toBeTruthy();
+    expect(screen.getAllByText('Приглашение ·000009')).toHaveLength(3);
+  });
 });

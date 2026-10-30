@@ -3,7 +3,7 @@ import { createECDH } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { testEnv } from '../../test/test-env';
-import { webPushVapid } from './env';
+import { panelLinkBase, webPushVapid } from './env';
 
 /** Пара VAPID, созданная тестом (ключей в репозитории нет). */
 function vapidPair() {
@@ -166,6 +166,40 @@ describe('env', () => {
     for (const bad of ['http://pokatim.example', 'https://pokatim.example/app', 'pokatim://']) {
       expect(() => testEnv({ APP_WEB_ORIGIN: bad }), bad).toThrow();
     }
+  });
+
+  it('PANEL_LINK_BASE (panel-invitations): http(s) с завершающим слешем; иначе APP_WEB_ORIGIN/admin/; иначе null', () => {
+    expect(panelLinkBase(testEnv())).toBeNull();
+    expect(panelLinkBase(testEnv({ APP_WEB_ORIGIN: 'https://pokatim.example' }))).toBe(
+      'https://pokatim.example/admin/',
+    );
+    expect(
+      panelLinkBase(
+        testEnv({
+          APP_WEB_ORIGIN: 'https://pokatim.example',
+          PANEL_LINK_BASE: 'http://localhost:5173/',
+        }),
+      ),
+    ).toBe('http://localhost:5173/');
+    expect(testEnv({ PANEL_LINK_BASE: '' }).PANEL_LINK_BASE).toBeUndefined();
+    for (const bad of ['http://localhost:5173', 'ftp://host/', 'admin/']) {
+      expect(() => testEnv({ PANEL_LINK_BASE: bad }), bad).toThrow();
+    }
+    // prod-стенд — только https; dev-стенд (DEPLOY_STAGE=dev) — и http
+    expect(() =>
+      testEnv({ NODE_ENV: 'production', PANEL_LINK_BASE: 'http://panel.example/' }),
+    ).toThrow(/PANEL_LINK_BASE/);
+    expect(
+      testEnv({
+        NODE_ENV: 'production',
+        DEPLOY_STAGE: 'dev',
+        PANEL_LINK_BASE: 'http://panel.example/',
+      }).PANEL_LINK_BASE,
+    ).toBe('http://panel.example/');
+    expect(
+      testEnv({ NODE_ENV: 'production', PANEL_LINK_BASE: 'https://panel.example/admin/' })
+        .PANEL_LINK_BASE,
+    ).toBe('https://panel.example/admin/');
   });
 
   it('уведомления: push выключен по умолчанию, ключа Expo нет, адрес — exp.host', () => {

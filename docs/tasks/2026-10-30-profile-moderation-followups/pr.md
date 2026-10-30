@@ -26,7 +26,7 @@
   баннером и перечитывание профиля (native и web).
 
 ### Миграция
-- `0041_profile_report_reasons` — expand-only: частичный индекс `profiles_report_reason_queue_idx { openReasons: 1,
+- `0042_profile_report_reasons` — expand-only: частичный индекс `profiles_report_reason_queue_idx { openReasons: 1,
   lastReportAt: -1, _id: -1 }` (`openReportCount > 0`) и бэкфилл `openReasons` по открытым `profile_reports`.
   Идемпотентна, без транзакции. Полей запрета не трогает (нет поля — нет запрета).
 
@@ -42,7 +42,7 @@
 
 ### Правки `.claude/rules` (применены)
 - `pokatim-db.md` — поля `openReasons`, `avatarResetsAt`, `avatarBlockedUntil`, `resetSeq`; индекс
-  `profiles_report_reason_queue_idx`, миграция `0041`; порядок записи сброса фото и «Снять запрет».
+  `profiles_report_reason_queue_idx`, миграция `0042`; порядок записи сброса фото и «Снять запрет».
 - `pokatim-backend.md` — follow-up модерации профиля (очередь `?reason=`, `profile.field-reset`, запрет, «Снять
   запрет»); `notifications → profile` только файловое, без порта; outbox-типов 13.
 - `pokatim-contracts.md` — `avatar_blocked` + `until`, `reason`/`openReasons` очереди, поля карточки,

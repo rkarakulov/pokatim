@@ -39,6 +39,12 @@ import {
   RoutePublicationDecided,
   type RouteNotices,
 } from '../routes';
+import {
+  TICKET_NOTICES,
+  type TicketNotices,
+  TICKETS_REMINDER_DUE,
+  TicketsReminderDue,
+} from '../tickets';
 import { PROFILE_FIELD_RESET, ProfileFieldReset } from '../profile';
 import type { NoticeText } from './notification-texts';
 import type { NotificationSourceEvent } from './notifications.events';
@@ -47,6 +53,8 @@ import type { NotificationSourceEvent } from './notifications.events';
 export interface NoticeDraft {
   text: NoticeText;
   target: NotificationTarget | null;
+  /** Цель получателя поверх `target` (PR D: свой билет у каждого, RC-D6). */
+  targets?: ReadonlyMap<string, NotificationTarget>;
   /**
    * Повтор по объекту заменяет прежнее уведомление (N7): `key` — объект, `seq` — порядковый номер **события** в объекте
    * (из payload, монотонен внутри объекта): заменяет только более позднее событие, повтор задачи — тот же номер.
@@ -66,7 +74,7 @@ const REVISION_KINDS = {
 
 /**
  * Разбор события источника → черновики уведомлений через порты модулей (`ResultsNotices`, `DisputeNotices`,
- * `RideNotices`, `RouteNotices`, `RaceRegistry`): получатели и поля текста считает сервер, payload — только id и коды (RC-1).
+ * `RideNotices`, `RouteNotices`, `RaceRegistry`, `TicketNotices`): получатели и поля текста считает сервер, payload — только id и коды (RC-1).
  * Правила получателей — task §7: споры — стороны, райды — участники «Иду» без организатора, «Новый участник» —
  * организатору; райд не в ожидаемом статусе (`cancelled` для отмены, `published` для переноса и участника) — skip.
  */
@@ -78,11 +86,13 @@ export class NotificationIntake {
     @Inject(RIDE_NOTICES) private readonly rides: RideNotices,
     @Inject(ROUTE_NOTICES) private readonly routes: RouteNotices,
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
+    @Inject(TICKET_NOTICES) private readonly tickets: TicketNotices,
   ) {}
 
   async drafts(
     type: NotificationSourceEvent,
     payload: unknown,
+    now: Date,
   ): Promise<NoticeDraft[] | IntakeSkip> {
     switch (type) {
       case RESULTS_ATTEMPT_VERDICT_CHANGED:
@@ -104,9 +114,38 @@ export class NotificationIntake {
         return this.reportsResolved(payload);
       case ROUTE_PUBLICATION_DECIDED:
         return this.routePublication(payload);
+      case TICKETS_REMINDER_DUE:
+        return this.eventReminder(payload, now);
       case PROFILE_FIELD_RESET:
         return this.profileFieldReset(payload);
     }
+  }
+
+  /**
+   * Напоминание о событии (PR D, RC-D2): получатели — билеты с меткой отправки (порт `TICKET_NOTICES`); событие не
+   * `scheduled` или уже началось — `state`, правило или событие удалены — `gone`. Один черновик, цель — свой билет.
+   */
+  private async eventReminder(payload: unknown, now: Date): Promise<NoticeDraft[] | IntakeSkip> {
+    const event = TicketsReminderDue.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    const notice = await this.tickets.reminder(event.data, now);
+    if (typeof notice === 'string') return notice;
+    return [
+      {
+        text: {
+          kind: 'event_reminder',
+          event: notice.event.title,
+          startsAt: notice.event.startsAt,
+          place: notice.event.place,
+          text: notice.text,
+        },
+        target: null,
+        targets: new Map(
+          notice.recipients.map(({ userId, code }) => [userId, { type: 'ticket', code }] as const),
+        ),
+        recipients: notice.recipients.map(({ userId }) => userId),
+      },
+    ];
   }
 
   private async raceTitle(raceId: string): Promise<string | null> {

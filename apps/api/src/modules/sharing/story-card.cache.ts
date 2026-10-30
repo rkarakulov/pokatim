@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
-import { AchievementCode, StoryCardTemplate, StoryCardToken } from '@pokatim/contracts';
+import { AchievementCode, StoryCardTemplate, StoryCardToken, Uuid } from '@pokatim/contracts';
 import { REDIS } from '@rkarakulov/api-kit/core';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
@@ -38,13 +38,23 @@ export const AchievementCardJob = z.object({
 });
 export type AchievementCardJob = z.infer<typeof AchievementCardJob>;
 
+/** Задача карточки маршрута каталога: id маршрута и запрашивающего (тема), хэш входов. */
+export const ROUTE_CARD_RENDER_JOB = 'route-card.render';
+export const RouteCardJob = z.object({
+  userId: z.string(),
+  routeId: Uuid,
+  template: StoryCardTemplate,
+  hash: z.string(),
+});
+export type RouteCardJob = z.infer<typeof RouteCardJob>;
+
 const tokenKey = (hash: string) => `story-card:token:${hash}`;
 const pngKey = (token: string) => `story-card:png:${token}`;
 const pendingKey = (hash: string) => `story-card:pending:${hash}`;
 const failedKey = (hash: string) => `story-card:failed:${hash}`;
 
 /**
- * Кэш карточек (сторис гонки, приглашение райда, достижение — ADR-0018; хэш входов включает вид карточки): PNG по капабилити-токену и ключ «хэш входов → токен» — Redis с TTL 24 ч, не
+ * Кэш карточек (сторис гонки, приглашение райда, достижение, маршрут каталога — ADR-0018; хэш входов включает вид карточки): PNG по капабилити-токену и ключ «хэш входов → токен» — Redis с TTL 24 ч, не
  * MongoDB; ключ постановки рендера (NX) и отметка провала. Ключи — хэш и токен, без `userId` и имени.
  */
 @Injectable()

@@ -381,7 +381,7 @@ Status: **CONCERNS** — блокеров нет. RC-F1…RC-F14 — реком�
   запретом).
 - `docs/product/admin-panel.md` — вкладки очереди «Профили райдеров», строка запрета и счётчик, «Снять запрет»,
   действие журнала `profile.avatar_unblocked`.
-- `pr.md` — миграция `0041_profile_report_reasons` (expand + бэкфилл, RC-F11), предложения правок правил (не
+- `pr.md` — миграция `0042_profile_report_reasons` (expand + бэкфилл, RC-F11), предложения правок правил (не
   применять без OK): `pokatim-db.md` (поля `openReasons`, `avatarResetsAt`, `avatarBlockedUntil`, индекс, порядок
   записи сброса фото и «Снять запрет»), `pokatim-backend.md` (событие `profile.field-reset`, `notifications → profile`
   без порта, «12 типов» → 13), `pokatim-contracts.md` (`avatar_blocked` + `until`, `profile-edit`,
@@ -397,7 +397,7 @@ Status: **CONCERNS** — блокеров нет. RC-F1…RC-F14 — реком�
 | Фильтр очереди, `openReasons`, запрет, «Снять запрет», событие | `apps/api/src/modules/profile` (единственный писатель `profiles`) |
 | Тип события и схема payload | `profile/profile.events.ts` (новый) → экспорт из `profile/index.ts` |
 | Подписка и тексты | `notifications/{notifications.events,notification-intake,notification-texts,notifications.policy}.ts` — только добавления **в конец** списков/`switch` |
-| Миграция | `apps/api/src/db/migrations/0041_profile_report_reasons.ts` (номер — следующий свободный на мерже) |
+| Миграция | `apps/api/src/db/migrations/0042_profile_report_reasons.ts` (номер — следующий свободный на мерже) |
 | Контракты | `packages/contracts/src/{profile,notifications,admin}/` |
 | Панель | `apps/admin/src/features/rider-profiles/*`, `router.tsx` |
 | Приложение | `apps/app/src/features/profile/*`, `features/notifications/notification-target.ts`, `scripts/service-worker.ts` |
@@ -510,7 +510,7 @@ Status: **CONCERNS** — блокеров нет. RC-F1…RC-F14 — реком�
   `apps/app/src/app/settings/profile.tsx`,
   `apps/app/scripts/service-worker.ts`.
 - **FILES TO CREATE:** `apps/api/src/modules/profile/profile.events.ts`,
-  `apps/api/src/db/migrations/0041_profile_report_reasons.ts`, `profile-avatar-locks.int.test.ts`,
+  `apps/api/src/db/migrations/0042_profile_report_reasons.ts`, `profile-avatar-locks.int.test.ts`,
   `apps/app/src/features/profile/avatar-editor.test.tsx` (если нет native-теста).
 - **FILES TO READ:** `routes/routes.events.ts`, `routes/routes-moderation.service.ts` (outbox в транзакции),
   `notifications/notification-intake.ts#routePublication` (collapse `seq`), `test/{uploads,identity,notifications,
@@ -531,7 +531,7 @@ Status: **CONCERNS** — блокеров нет. RC-F1…RC-F14 — реком�
   `PROFILE_STATE_REASONS` + `avatar_blocked`, `ProfileStateDetails.until`, `NOTIFICATION_KINDS` + 3, цель
   `profile-edit`, `AUDIT_ACTIONS` + `profile.avatar_unblocked`, `details.avatarBlockedUntil`. api-client —
   `listRiderProfiles({ reason })`, `unblockRiderAvatar`.
-- **API:** миграция `0041_profile_report_reasons`; `profile.events.ts` (`profile.field-reset`); очередь по причине,
+- **API:** миграция `0042_profile_report_reasons`; `profile.events.ts` (`profile.field-reset`); очередь по причине,
   запрет загрузки фото (`admit` — до слота, `write()` — по `before`), «Снять запрет», outbox в транзакции сброса;
   `notifications` — маршрут, разбор payload, тексты, группа «Райды».
 - **Приложение (цель):** `notificationTargetPath` и `targetPath` service worker — `profile-edit` → `/settings/profile`.

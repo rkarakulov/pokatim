@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 
 import { AuditScreen } from './features/audit/AuditScreen';
 import { CheckInScreen } from './features/check-in/CheckInScreen';
+import { InviteScreen } from './features/invite/InviteScreen';
 import { AppearanceScreen } from './features/appearance/AppearanceScreen';
 import { CalendarScreen } from './features/calendar/CalendarScreen';
 import { validateDisputesSearch } from './features/disputes/disputes-format';
@@ -85,6 +86,13 @@ const signInRoute = createRoute({
     next: safeNext(search.next),
   }),
   component: SignInScreen,
+});
+
+// panel-invitations (ADR-0026): принятие приглашения — вне каркаса, без сессии (токен — во фрагменте адреса)
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'invite',
+  component: InviteScreen,
 });
 
 /**
@@ -468,6 +476,7 @@ const notFoundRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   signInRoute,
+  inviteRoute,
   checkInLayoutRoute.addChildren([checkInRoute]),
   appRoute.addChildren([
     overviewRoute,

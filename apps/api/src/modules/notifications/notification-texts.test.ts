@@ -112,6 +112,18 @@ const TABLE: [string, NoticeText, string, string][] = [
     'Маршрут отклонён',
     `«${ROUTE}» не опубликован. Причина — непроезжий или неточный.`,
   ],
+  [
+    'Напоминание о событии',
+    {
+      kind: 'event_reminder',
+      event: RACE,
+      startsAt: AT,
+      place: 'Парк Победы',
+      text: 'Возьмите паспорт.\nСтарт у фонтана.',
+    },
+    'Скоро старт',
+    `«${RACE}» — 14 июня, 10:00, Парк Победы.\nВозьмите паспорт.\nСтарт у фонтана.`,
+  ],
 ];
 
 describe('renderNotification: таблица «Тексты v1»', () => {
@@ -120,7 +132,7 @@ describe('renderNotification: таблица «Тексты v1»', () => {
   });
 
   it('каждый kind контракта покрыт строкой таблицы', () => {
-    expect(new Set(TABLE.map(([, input]) => input.kind)).size).toBe(16);
+    expect(new Set(TABLE.map(([, input]) => input.kind)).size).toBe(17);
   });
 
   it('даты — по Минску, не по поясу процесса: 23:30 UTC — уже следующий день', () => {
@@ -131,6 +143,18 @@ describe('renderNotification: таблица «Тексты v1»', () => {
     expect(renderNotification({ kind: 'ride_cancelled', ride: 'Р', startsAt: lateUtc }).body).toBe(
       '«Р» 23 октября, 02:30 отменён.',
     );
+  });
+
+  it('напоминание без места — без запятой после времени', () => {
+    expect(
+      renderNotification({
+        kind: 'event_reminder',
+        event: 'Э',
+        startsAt: AT,
+        place: null,
+        text: 'Т',
+      }).body,
+    ).toBe('«Э» — 14 июня, 10:00.\nТ');
   });
 
   it('пробелы и переводы строк в названии схлопываются (снимок — одна строка)', () => {

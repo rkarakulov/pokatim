@@ -16,6 +16,7 @@ describe('notificationTargetPath — белый список целей (N10)', 
       `/races/dispute-response/${RACE}/${DISPUTE}`,
     ],
     [{ type: 'my-route', routeId: ROUTE }, `/routes/mine/${ROUTE}`],
+    [{ type: 'ticket', code: '7XK2M9PQRT' }, '/tickets/7XK2M9PQRT'],
     [{ type: 'profile-edit' }, '/settings/profile'],
   ])('%j → %s', (target, path) => {
     expect(notificationTargetPath(target)).toBe(path);
@@ -30,6 +31,8 @@ describe('notificationTargetPath — белый список целей (N10)', 
     ['путь строкой', `/races/${RACE}`],
     ['лишний адрес в цели', { type: 'ride', rideId: 'https://evil.example' }],
     ['маршрут не Uuid', { type: 'my-route', routeId: '../publish/x' }],
+    ['код билета не канонический', { type: 'ticket', code: '7xk2m-9pqrt' }],
+    ['код билета — путь', { type: 'ticket', code: '../../settings' }],
   ])('%s — без перехода', (_case, target) => {
     expect(notificationTargetPath(target)).toBeNull();
   });
@@ -54,6 +57,9 @@ describe('паритет с service worker (Web Push, ADR-0022)', () => {
     { type: 'ride', rideId: RIDE },
     { type: 'dispute-response', raceId: RACE, disputeId: DISPUTE },
     { type: 'my-route', routeId: ROUTE },
+    { type: 'ticket', code: '7XK2M9PQRT' },
+    { type: 'ticket', code: '7XK2M9PQRU' },
+    { type: 'ticket', code: '../admin/x' },
     { type: 'profile-edit' },
     { type: 'race', raceId: '../admin' },
     { type: 'race', raceId: RACE.toUpperCase() },

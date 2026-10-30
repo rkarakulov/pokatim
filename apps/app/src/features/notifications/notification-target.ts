@@ -5,7 +5,7 @@ import type { Href } from 'expo-router';
 export const NOTIFICATIONS_PATH = '/notifications' as const;
 
 /**
- * Путь экрана по цели уведомления (N10) — только из белого списка типов с `Uuid` (схема контрактов): адресов из
+ * Путь экрана по цели уведомления (N10) — только из белого списка типов с `Uuid` или каноническим кодом билета (схема контрактов): адресов из
  * ответа или push не принимаем. Незнакомое, битое, `unknown`, `null` — `null` (перехода нет).
  */
 export function notificationTargetPath(target: unknown): Href | null {
@@ -21,6 +21,8 @@ export function notificationTargetPath(target: unknown): Href | null {
       return `/races/dispute-response/${value.raceId}/${value.disputeId}`;
     case 'my-route':
       return `/routes/mine/${value.routeId}`;
+    case 'ticket':
+      return `/tickets/${value.code}`;
     case 'profile-edit':
       return '/settings/profile';
   }

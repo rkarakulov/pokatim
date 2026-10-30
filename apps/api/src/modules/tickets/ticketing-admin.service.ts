@@ -9,16 +9,17 @@ import type {
   TicketingInvalidStateReason,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
-import { isDuplicateKey } from '@rkarakulov/api-kit/mongo';
+import { isDuplicateKey, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { PanelAudit, type PanelPrincipal } from '../panel';
 import { type PanelEvent, PanelEvents } from './panel-events';
 import { ParticipantNames } from './participant-names';
+import { nextReminders, reminderView, sameReminders } from './reminders.policy';
 import { TicketEvents } from './ticket-events';
 import { categoryView } from './ticket-views';
-import { type EventTicketingDoc, ticketingIdOf } from './tickets.collection';
+import { type EventTicketingDoc, type ReminderRuleDoc, ticketingIdOf } from './tickets.collection';
 import { type EventFacts, TICKETS_POLICY, ticketStatus } from './tickets.policy';
 import { TicketsRepository } from './tickets.repository';
 
@@ -28,6 +29,7 @@ const invalidState = (reason: TicketingInvalidStateReason) => {
 };
 
 type FieldIssue = { path: string; code: 'REQUIRED' | 'INVALID' | 'DATE_ORDER' };
+type ChangedField = (typeof SETTINGS_FIELDS)[number] | 'reminders';
 const fieldsError = (fields: FieldIssue[]) => domainError('VALIDATION_FAILED', 400, { fields });
 
 const SETTINGS_FIELDS = [
@@ -85,23 +87,36 @@ export class TicketingAdminService {
       written = await this.transactions.run(async (tx) => {
         const current = (await this.repository.findTicketing(kind, eventId, tx)) ?? null;
         if ((current?.version ?? 0) !== body.version) throw domainError('CONFLICT', 409);
+        const now = this.clock.now();
         const next = this.next(event, current, body);
-        const changed = SETTINGS_FIELDS.filter(
+        const reminders = this.nextRules(current, body, now);
+        const changed: ChangedField[] = SETTINGS_FIELDS.filter(
           (field) => !same(current?.[field] ?? (field === 'enabled' ? false : null), next[field]),
         );
+        // PR D: нет поля `reminders` (старая панель) — правила не трогаются (RC-T15)
+        if (reminders !== null && !sameReminders(current?.reminders ?? [], reminders)) {
+          changed.push('reminders');
+        }
         if (changed.length === 0) return current;
-        const now = this.clock.now();
         const doc: EventTicketingDoc = {
           _id: ticketingIdOf(kind, eventId),
           kind,
           eventId,
           ...next,
+          ...(reminders === null
+            ? current?.reminders === undefined
+              ? {}
+              : { reminders: current.reminders }
+            : { reminders }),
+          ...(current?.reminderDispatches === undefined
+            ? {}
+            : { reminderDispatches: current.reminderDispatches }),
           registeredCount: current?.registeredCount ?? 0,
           version: body.version + 1,
           updatedAt: now,
           updatedBy: principal.userId,
         };
-        if (!(await this.repository.upsertTicketing(tx, doc, body.version))) {
+        if (!(await this.repository.upsertTicketing(tx, doc, body.version, reminders !== null))) {
           throw domainError('CONFLICT', 409);
         }
         await this.audit.append(tx, {
@@ -152,6 +167,18 @@ export class TicketingAdminService {
       })),
       nextCursor: docs.length > query.limit ? (page.at(-1)?._id ?? null) : null,
     };
+  }
+
+  /** Новые правила напоминаний (RC-D10); нет поля — `null`; чужой или повторный `id` — 400 по пути. */
+  private nextRules(
+    current: EventTicketingDoc | null,
+    body: EventTicketingUpdate,
+    now: Date,
+  ): ReminderRuleDoc[] | null {
+    if (body.reminders === undefined) return null;
+    const result = nextReminders(current?.reminders ?? [], body.reminders, now, uuidv7);
+    if ('issues' in result) throw fieldsError(result.issues);
+    return result.rules;
   }
 
   /** Новые значения полей с правилами по виду события (RC-T2, RC-T3, RC-T6). */
@@ -220,6 +247,7 @@ export class TicketingAdminService {
     const counts = await this.repository.countsOfEvent(facts.kind, facts.id);
     const race = facts.kind === 'race';
     const startsAt = race ? (doc?.startsAt ?? null) : facts.startsAt;
+    const dispatches = doc?.reminderDispatches ?? [];
     const endsAt = race ? (doc?.endsAt ?? null) : facts.endsAt;
     return {
       kind: facts.kind,
@@ -236,6 +264,7 @@ export class TicketingAdminService {
       registeredCount: doc?.registeredCount ?? 0,
       activeTickets: counts.active,
       checkedIn: counts.checkedIn,
+      reminders: (doc?.reminders ?? []).map((rule) => reminderView(rule, startsAt, dispatches)),
     };
   }
 }

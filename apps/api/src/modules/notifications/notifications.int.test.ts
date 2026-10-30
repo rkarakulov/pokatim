@@ -64,6 +64,8 @@ describe('без сессии', () => {
     ['GET', `${NOTIFICATIONS}/unread-count`],
     ['GET', `${NOTIFICATIONS}/settings`],
     ['PUT', `${NOTIFICATIONS}/settings`],
+    ['GET', `${NOTIFICATIONS}/settings/events`],
+    ['PUT', `${NOTIFICATIONS}/settings/events`],
     ['PUT', `${NOTIFICATIONS}/push-tokens`],
     ['POST', `${NOTIFICATIONS}/push-tokens/revoke`],
     ['POST', `${NOTIFICATIONS}/read-all`],
@@ -271,6 +273,69 @@ describe('настройки', () => {
       expect((await as(a, 'PUT', `${NOTIFICATIONS}/settings`, custom)).status).toBe(200);
     }
     const limited = await as(a, 'PUT', `${NOTIFICATIONS}/settings`, custom);
+    expect(limited.status).toBe(429);
+    expect(limited.body).toMatchObject({ code: 'RATE_LIMITED' });
+  });
+});
+
+describe('настройки «Мероприятия» (подресурс, RC-D1)', () => {
+  const EVENTS = `${NOTIFICATIONS}/settings/events`;
+  const custom: NotificationSettings = {
+    push: { races: false, disputes: true, rides: true },
+    email: { disputes: false, rides: true },
+    quietHours: { enabled: true, startHour: 23, endHour: 7 },
+  };
+
+  it('умолчания — всё включено; PUT сохраняет в документ настроек; у другого — свои умолчания; no-store', async () => {
+    const initial = await as(a, 'GET', EVENTS);
+    expect(initial.status).toBe(200);
+    expect(initial.headers['cache-control']).toBe('no-store');
+    expect(initial.body).toEqual({ push: true, email: true });
+    const saved = await as(a, 'PUT', EVENTS, { push: false, email: true });
+    expect(saved.status).toBe(200);
+    expect(saved.body).toEqual({ push: false, email: true });
+    expect((await as(a, 'GET', EVENTS)).body).toEqual({ push: false, email: true });
+    expect((await as(b, 'GET', EVENTS)).body).toEqual({ push: true, email: true });
+    // основные настройки при этом — умолчания и прежней формы
+    expect((await as(a, 'GET', `${NOTIFICATIONS}/settings`)).body).toEqual(
+      DEFAULT_NOTIFICATION_SETTINGS,
+    );
+    expect(await notificationsDb(h).settings.findOne({ _id: a.userId })).toMatchObject({
+      push: { events: false },
+      email: { events: true },
+    });
+  });
+
+  it('старый PUT /settings не стирает «Мероприятия»; ответ /settings — ровно прежние ключи (старые сборки)', async () => {
+    await as(a, 'PUT', EVENTS, { push: false, email: false });
+    const saved = await as(a, 'PUT', `${NOTIFICATIONS}/settings`, custom);
+    expect(saved.status).toBe(200);
+    expect(saved.body).toEqual(custom);
+    const read = await as(a, 'GET', `${NOTIFICATIONS}/settings`);
+    // строгая схема уже установленных сборок разбирает ответ
+    expect(NotificationSettings.parse(read.body)).toEqual(custom);
+    expect((await as(a, 'GET', EVENTS)).body).toEqual({ push: false, email: false });
+    // и обратно: PUT подресурса не трогает основные тумблеры
+    await as(a, 'PUT', EVENTS, { push: true, email: false });
+    expect((await as(a, 'GET', `${NOTIFICATIONS}/settings`)).body).toEqual(custom);
+  });
+
+  it('лишний ключ, неполный объект, не boolean — 400; лимит общий с /settings — 429', async () => {
+    for (const body of [
+      { push: true },
+      { push: true, email: true, sms: true },
+      { push: 1, email: true },
+    ]) {
+      const res = await as(a, 'PUT', EVENTS, body);
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+    }
+    expect(await notificationsDb(h).settings.countDocuments()).toBe(0);
+    for (let i = 0; i < NOTIFICATIONS_POLICY.settingsLimit.limit - 1; i++) {
+      expect((await as(a, 'PUT', `${NOTIFICATIONS}/settings`, custom)).status).toBe(200);
+    }
+    expect((await as(a, 'PUT', EVENTS, { push: true, email: true })).status).toBe(200);
+    const limited = await as(a, 'PUT', EVENTS, { push: true, email: true });
     expect(limited.status).toBe(429);
     expect(limited.body).toMatchObject({ code: 'RATE_LIMITED' });
   });

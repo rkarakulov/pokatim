@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_EVENT_NOTIFICATION_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
+  EventNotificationSettingsView,
   ExpoPushToken,
   NOTIFICATION_GROUPS,
   NOTIFICATION_KINDS,
@@ -17,6 +19,7 @@ import {
   RevokePushToken,
   RevokeWebPushSubscription,
   UnreadCount,
+  UpdateEventNotificationSettings,
   WebPushConfig,
 } from './notification.schema.ts';
 
@@ -43,7 +46,7 @@ const view = (overrides: Record<string, unknown> = {}) => ({
 
 describe('справочники уведомлений (только в конец)', () => {
   it('порядок значений зафиксирован', () => {
-    expect(NOTIFICATION_GROUPS).toEqual(['races', 'disputes', 'rides']);
+    expect(NOTIFICATION_GROUPS).toEqual(['races', 'disputes', 'rides', 'events']);
     expect(NOTIFICATION_KINDS).toEqual([
       'result_counted',
       'result_rejected',
@@ -61,6 +64,7 @@ describe('справочники уведомлений (только в кон�
       'ride_report_resolved',
       'route_published',
       'route_rejected',
+      'event_reminder',
       'profile_name_reset',
       'profile_avatar_reset',
       'profile_club_reset',
@@ -85,6 +89,16 @@ describe('ответы (tolerantEnum, неизвестная цель)', () => {
     expect(NotificationTargetView.parse({ type: 'profile-edit' })).toEqual({
       type: 'profile-edit',
     });
+  });
+
+  it('цель ticket: канонический код билета; битый код — unknown (PR D, RC-D6)', () => {
+    expect(NotificationTargetView.parse({ type: 'ticket', code: '7XK2M9PQRT' })).toEqual({
+      type: 'ticket',
+      code: '7XK2M9PQRT',
+    });
+    for (const code of ['7xk2m-9pqrt', '7XK2M9PQR', '7XK2M9PQRU', '../../x']) {
+      expect(NotificationTargetView.parse({ type: 'ticket', code })).toEqual({ type: 'unknown' });
+    }
   });
 
   it('незнакомый тип цели или битый id — unknown, ответ не падает', () => {
@@ -124,6 +138,41 @@ describe('запрос списка', () => {
 
   it('лишние ключи — ошибка', () => {
     expect(NotificationListQuery.safeParse({ userId: ID }).success).toBe(false);
+  });
+});
+
+describe('настройки «Мероприятия» (подресурс, RC-D1)', () => {
+  it('умолчания — всё включено; ответ терпит лишние ключи', () => {
+    expect(DEFAULT_EVENT_NOTIFICATION_SETTINGS).toEqual({ push: true, email: true });
+    expect(EventNotificationSettingsView.parse({ push: false, email: true, sms: true })).toEqual({
+      push: false,
+      email: true,
+    });
+  });
+
+  it('запрос строгий: оба тумблера обязательны, лишние ключи и не boolean — ошибка', () => {
+    expect(UpdateEventNotificationSettings.parse({ push: false, email: true })).toEqual({
+      push: false,
+      email: true,
+    });
+    expect(codesOf(UpdateEventNotificationSettings.safeParse({ push: true }))).toEqual([
+      'email:REQUIRED',
+    ]);
+    expect(
+      UpdateEventNotificationSettings.safeParse({ push: true, email: true, sms: true }).success,
+    ).toBe(false);
+    expect(UpdateEventNotificationSettings.safeParse({ push: 'yes', email: true }).success).toBe(
+      false,
+    );
+  });
+
+  it('основные настройки не меняются: ключ events — ошибка (старые сборки)', () => {
+    expect(
+      NotificationSettings.safeParse({
+        ...DEFAULT_NOTIFICATION_SETTINGS,
+        push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, events: true },
+      }).success,
+    ).toBe(false);
   });
 });
 

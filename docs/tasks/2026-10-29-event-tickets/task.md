@@ -442,6 +442,53 @@ PR C (coder, 2026-10-29, ветка `feature/event-tickets-panel`). Решени
 нет, а материалы доступны и без них. Коллекция — в `0039_event_materials` (ещё не в `develop`), без индексов кроме
 `_id`. ADR-0023 п. 10 и комментарии коллекции/миграции больше не утверждают, что уникальный порядок защищает лимиты.
 
+PR D (coder, 2026-10-30, ветка `feature/event-tickets-reminders`). Решения RC-D1…RC-D12 `plan-D.md` приняты по
+умолчанию:
+
+- **Настройки «Мероприятия» — подресурс** `GET|PUT /v1/notifications/settings/events` (RC-D1, отклонение от T3 «новая
+  группа в настройках» по форме API): ответ `/settings` — ровно прежние ключи, его `PUT` — `$set` известных путей
+  (тумблеры `push.events`/`email.events` не стираются); первый `PUT` подресурса создаёт документ с умолчаниями основных
+  настроек (`$setOnInsert`). Лимит — общий `notifications-settings:<uid>`.
+- **Web Push** (RC-T14) — уже в `develop` (ADR-0022): напоминание идёт обычным `notifications.push` (Expo + Web Push).
+- Внутренний тип `DeliverySettings` (`notifications.policy.ts`) — основные настройки + `events`; `findSettings*`
+  отдают его, `initialDelivery`/`PushDelivery` читают тумблеры группы `events`.
+- `NoticeDraft.targets` — цель на получателя (RC-D6): `target` документа = `targets.get(userId) ?? target`.
+- `NotificationIntake.drafts(type, payload, now)` — третий параметр `now` (CLOCK приёма), нужен проверке «событие уже
+  началось» порта `TICKET_NOTICES`.
+- `renderNotificationEmail(notice, link)` — второй параметр; кнопка только для цели `ticket` при `APP_WEB_ORIGIN`
+  (`EmailDelivery` читает `ENV`), тело письма — абзацы по строкам.
+- Тело уведомления: `«{событие}» — {день, время}{, место}.` + перевод строки + текст организатора (без схлопывания:
+  текст многострочный).
+- Коды ошибок правил: длина текста — `TOO_LONG` (как у остальных полей панели), пустой — `REQUIRED`, offset/дубль
+  offset/чужой или повторный `id` — `INVALID`; путь `reminders.N.<поле>`.
+- `reminderView.late` — правило без отправки по текущему `dueAt` и `armedAt > dueAt`.
+- Регламент — одна выборка `reminderTicketings` (`$or` гонка со стартом в `(now, now+168 ч]` | календарь), задача
+  `tickets.reminders` в той же очереди `tickets-maintenance` + разовая `tickets.reminders.boot`; `TicketReminders` — в
+  `TicketsWorkerModule`, `TicketNoticesService` (`TICKET_NOTICES`) — в `TicketsCoreModule`.
+- Int-тесты приёма и письма с кнопкой — в `tickets-reminders.int.test.ts` (сквозной сценарий регламент → intake →
+  письмо, стенд с `PUSH_ENABLED` и `APP_WEB_ORIGIN`), а не в `notifications-intake.int.test.ts`; письмо без
+  `APP_WEB_ORIGIN` — в `notifications-delivery.int.test.ts`.
+- Изоляция БД проверок: `pokatim_reminders_test` вместо `pokatim_reminders` — стенд `@rkarakulov/test-kit` требует
+  имя `*_test`.
+
+Фиксы ревью PR D pass 1 (Codex HIGH ×2, Claude MEDIUM/LOW; `findings-D-codex-1.md`, `findings-D-claude-1.md`):
+
+- **Снятая заявка без сверки (HIGH-1).** Два рубежа: (1) регламент перед метками события гонки зовёт
+  `RaceTickets.reconcileRace` — билеты снятых заявок → `cancelled`, метки им не ставятся; (2) порт `TICKET_NOTICES`
+  у гонки оставляет только билеты активных заявок (`RESULTS_FOR_TICKETS.entriesPage`, пачки по 500) — участие,
+  снятое между меткой и приёмом, уведомления не даёт (метка остаётся, уведомления нет).
+- **Перенос старта между чтением и захватом (HIGH-2).** Гонка — `startsAt` прочитанных фактов в фильтре
+  `claimReminderDispatch` (тот же документ настроек: правка конфликтует, после повтора захват не проходит). Календарь —
+  первой операцией транзакции `TicketEvents.lockCalendarStart` (запись-замок старта, как регистрация и check-in) и
+  сверка `calendarMoments(start).startsAt` и публикации с прочитанными; расхождение — `null` без меток, следующий
+  прогон считает новое время.
+- **Перенос после отправки (LOW, RC-D4):** int-тест «старт позже — уже получившим не повторяется, новому билету — в
+  новое время». Сценарий «ближе» в int не добавлен: на стенде у правила `armedAt` = время создания, а новый
+  `dueAt` для давнего правила требует билета, выпущенного до него и без метки — покрыт unit `dueReminders`
+  (догоняние, `armedAt ≤ dueAt`).
+- **i18n (LOW):** неиспользуемый `notifications.settings.hint.events` удалён.
+- Правки `.claude/rules/**` (MEDIUM обоих ревьюеров) — по-прежнему нужен OK пользователя.
+
 ## 8.3 Security checklist
 
 Затронуто: токены (QR), публичные URL, файлы (PDF), права панели, письма со ссылками. См. §5.3.
@@ -786,3 +833,105 @@ ADR-0023 п. 10.
 arch, typecheck и тесты пакетов зелёные (admin 43 файла); api — 192 / 193 файла, одно падение по таймауту 20 с в
 чужом `results-my-track.int.test.ts` (load average ≈ 20 от параллельных сессий); перезапуском он + `modules/tickets`
 → 8 файлов / 74 теста зелёные.
+
+### PR D — напоминания (coder, 2026-10-30, ветка `feature/event-tickets-reminders`, не закоммичено)
+
+Сделано (по `plan-D.md`, RC-D1…RC-D12 приняты; решения — 8.2 «PR D»):
+
+- Контракты: `NOTIFICATION_GROUPS` + `events`, `NOTIFICATION_KINDS` + `event_reminder`, цель `{ type: 'ticket',
+  code }` (`TicketCodeCanonical`), `EventNotificationSettingsView` / `UpdateEventNotificationSettings` /
+  `DEFAULT_EVENT_NOTIFICATION_SETTINGS`; `EVENT_REMINDER*` константы, `EventReminderInput`, `EventReminder`,
+  `EventTicketingUpdate.reminders` (≤ 3, без повтора offset), `EventTicketingSettings.reminders`. api-client —
+  `getEventNotificationSettings`, `updateEventNotificationSettings`.
+- API `notifications`: подресурс `GET|PUT /v1/notifications/settings/events`; `saveSettings` — `$set` путей вместо
+  `replaceOne`; `DeliverySettings`; kind/группа/`EMAIL_KINDS`; текст «Скоро старт»; `NoticeDraft.targets`; письмо с
+  кнопкой «Открыть билет» (цель `ticket` + `APP_WEB_ORIGIN`); маршрут `tickets.reminder-due` →
+  `notifications-intake`; `NotificationsWorkerModule` импортирует `TicketsCoreModule`.
+- API `tickets`: `reminders.policy.ts` (`reminderDueAt`, `dueReminders`, `nextReminders`, `reminderView`); правила в
+  `PUT/GET …/ticketing` (журнал `changedFields` + `reminders`); `TicketReminders.dispatchDue` (транзакция: условный
+  `$push reminderDispatches` → `updateMany remindersSent` → число → outbox); задача `tickets.reminders` (+ boot) в
+  `tickets-maintenance`; порт `TICKET_NOTICES` (`TicketNoticesService`). Миграции нет.
+- Панель: секция «Напоминания участникам» в `TicketingSettingsForm` (до 3 строк, «Добавить» `aria-disabled` +
+  `DisabledReason`, статусы «Отправка / Отправлено · N / прошло», подсказки тихих часов и повтора, 400
+  `reminders.N.*` — под полем строки); i18n `admin.tickets.reminders.*`, `admin.tickets.field.reminders`.
+- Приложение: группа «Мероприятия» в «Настройках уведомлений» (свой запрос и сохранение, 404 — группы нет, без push —
+  только e-mail); цель `ticket` → `/tickets/<код>` в `notificationTargetPath` и в SW; i18n
+  `notifications.settings.group.events`, `emailHint.events`.
+- Документы: ADR-0023 п. 12, ADR-0017 (строка «Дополнено ADR-0023 п. 12»), `docs/product/{notifications,tickets,
+  admin-panel}.md`.
+
+Тесты (каждый сначала красный): int `tickets-reminders.int.test.ts` (9: AC10 — до времени ничего, в `dueAt` одно
+событие, метки активным, отменённому и отмеченному — нет, повтор — без отправки, панель видит `sentAt/sentCount`; два
+параллельных `dispatchDue` — одна отправка; догоняние + билет после `dueAt` — нет; отменена / выключено / началось —
+нет; `armedAt > dueAt` — нет; смена текста — без повтора, смена offset — только новому, удалённое — нет; календарь;
+сквозной приём — своя цель-билет у каждого, тумблеры «Мероприятия», письмо с кнопкой, повтор задачи — `unchanged`,
+центр отдаёт цель; удалённый аккаунт, `gone`, `state`); `tickets-admin.int.test.ts` +4 (права, создание/правка/без
+поля, 400 с путём, календарь); `notifications.int.test.ts` +5 (401, подресурс, старый PUT не стирает `events`, 400,
+общий лимит 429); `notifications-delivery.int.test.ts` +1 (без `APP_WEB_ORIGIN` — без кнопки). Unit:
+`reminders.policy.test.ts` (9), `notifications.policy.test.ts`, `notification-texts.test.ts`,
+`notification-email.test.ts`, `notification-intake.test.ts`, `tickets-maintenance.processor.test.ts`; контракты,
+api-client; RTL панели `EventTicketsScreen.test.tsx` +3; приложение `notifications.test.tsx` +3,
+`notification-settings-no-push.test.tsx`, `notification-target.test.ts` (+ паритет с SW).
+
+Отрицательные доказательства (механизм убран временно → красный по результату → восстановлен → зелёный):
+
+- без условия `(reminderId, dueAt)` в `$push` и без `$ne` в `updateMany` — «два параллельных прогона» и «смена
+  offset» красные: `expected [ … ] to have a length of 1 but got 2` (два события / две метки);
+- без `createdAt ≤ dueAt` — «билет, выпущенный после времени отправки» красный: `expected [ { …(3) } ] to deeply
+  equal []`;
+- `replaceOne` вместо `$set` в `saveSettings` — «старый PUT /settings не стирает „Мероприятия“» красный: `expected {
+  push: true, email: true } to deeply equal { push: false, email: false }`.
+
+Проверки (БД `pokatim_reminders_test`, Redis db 3):
+
+- `TURBO_CONCURRENCY=1 MONGO_URL_TEST=…/pokatim_reminders_test REDIS_URL_TEST=…/3 pnpm check` — format, lint, arch,
+  typecheck (`Tasks: 9 successful, 9 total`) зелёные; тесты: contracts 449, api-client 158, tracks 314, design-tokens
+  606, i18n 15, route-view 51 — зелёные; api — `Test Files 3 failed | 203 passed (206)`, `Tests 6 failed | 2146
+  passed (2152)`: 5 × `Test timed out in 20000ms` + 1 каскадный `E11000 … panel_members` после таймаута в чужих файлах
+  (`rides-route`, `story-card`, `tickets-checkin`; load average ≈ 25 от параллельных сессий). Перезапуск этих трёх
+  файлов отдельно: `Test Files 3 passed (3)`, `Tests 58 passed (58)`. Turbo после падения api — `Tasks: 12
+  successful, 15 total`, поэтому admin и app прогнаны отдельно: admin `Test Files 47 passed`, `Tests 464 passed`; app
+  `Test Suites: 251 passed`, `Tests: 2368 passed`.
+- `tickets-reminders.int.test.ts` — ещё 2 прогона подряд: 9/9.
+- `pnpm --filter @pokatim/api build` → `Successfully compiled: 742 files with swc`.
+
+Не сделано / NOT VERIFIED:
+
+- **Правки `.claude/rules/**` — не сделаны, нужен OK пользователя** (plan-D §12): `pokatim-backend.md` — порт
+  `TICKET_NOTICES`, ребро `notifications → tickets` (`NotificationsWorkerModule → TicketsCoreModule`), задача
+  `tickets.reminders`, 13 типов в `notificationsOutboxRoutes`; `pokatim-db.md` — новые поля без миграции
+  (`event_ticketing.reminders/reminderDispatches`, `tickets.remindersSent`, `notification_settings.push|email.events`),
+  шаг стирания не нужен; `pokatim-contracts.md` — группа `events`, kind `event_reminder`, цель `ticket`, подресурс
+  настроек, `reminders`; `pokatim-app.md` — группа «Мероприятия», цель `ticket` (и SW).
+- `pnpm build:web`, e2e, ручная проверка push/Web Push и письма на устройстве — не запускались.
+- Полный `pnpm check` одним зелёным прогоном — нет (флейки api по таймауту под нагрузкой, перезапущены зелёными).
+
+#### PR D — фиксы ревью pass 1 (coder, 2026-10-30, поверх b29cb0ab + fb36e530, не закоммичено)
+
+Исправлено (решения — 8.2 «Фиксы ревью PR D pass 1»): `ticket-reminders.ts` (сверка гонки перед метками,
+`lockCalendarStart` + сверка момента календаря), `tickets.repository.ts` (`startsAt` в фильтре захвата гонки,
+`registrationId` в получателях), `ticket-notices.ts` (фильтр активных заявок гонки через `RESULTS_FOR_TICKETS`),
+`packages/i18n/src/ru.ts` (удалён `notifications.settings.hint.events`).
+
+Тесты (`tickets-reminders.int.test.ts`, 9 → 13; новые/изменённые сначала красные — 4 падения до фикса): в AC10-тесте
+убран маскирующий `raceTicket` после `withdraw`; «участие снято после отметки, до приёма — уведомления нет»; «гонка:
+старт перенесён позже между чтением и захватом» и «календарь: …» (`vi.spyOn(TicketEvents.resolveMany)` — перенос
+после чтения фактов); «после отправки: старт позже — уже получившим не повторяется, новому билету — в новое время»
+(сразу зелёный — покрытие RC-D4).
+
+Отрицательные доказательства (механизм убран → красный по результату → восстановлен, 13/13):
+
+- A: без фильтра заявок в порте — «участие снято после отметки» `expected [ { …(13) } ] to have a length of +0 but got 1`;
+- B: без `reconcileRace` перед метками — AC10-тест `expected [ { …(3) } ] to deeply equal []` (снятому поставлена метка);
+- C: без `startsAt` в фильтре захвата — «гонка: старт перенесён» `expected [ … ] to have a length of +0 but got 1`;
+- D: без сверки старта календаря — «календарь: старт перенесён» — то же сообщение.
+
+Проверки (БД `pokatim_reminders_test`, Redis db 3):
+
+- `TURBO_CONCURRENCY=1 … pnpm check` — format, lint, arch, typecheck (`Tasks: 9 successful, 9 total`) зелёные; api
+  `Test Files 206 passed (206)`, `Tests 2156 passed (2156)`; contracts 449, api-client 158, tracks 314, design-tokens
+  606, i18n 15, route-view 51 — зелёные; admin — `1 failed | 463 passed`: `SignInScreen.test.tsx` «429 — …» `Test
+  timed out in 5000ms` (не затронут этим фиксом); перезапуск файла дважды — `Tests 24 passed (24)`. Turbo — `Tasks:
+  13 successful, 15 total`, app прогнан отдельно: `Test Suites: 252 passed`, `Tests: 2370 passed`.
+
+Не сделано: правки `.claude/rules/**` — нужен OK пользователя (список — §12 «PR D»).

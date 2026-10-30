@@ -1,13 +1,10 @@
 import { i18n, type MessageKey, minskDateTime, t } from '@pokatim/i18n';
 
 import type { RideInviteInput } from './ride-invite.inputs';
+import type { CardStat } from './story-card.render';
 
 /** Цифра пары с единицей и подписью: «42» «км» «Дистанция». */
-export interface RideInviteStat {
-  value: string;
-  unit: string;
-  label: string;
-}
+export type RideInviteStat = CardStat;
 
 /** Тексты приглашения (регистр — `uppercase` токенов `storyCard.text`, не строки словаря). */
 export interface RideInviteTexts {

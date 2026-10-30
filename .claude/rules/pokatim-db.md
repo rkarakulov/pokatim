@@ -103,7 +103,7 @@ paths:
   `[]` — в каждой операции, обнуляющей `openReportCount` (сбросы, `clearReports` закрывают все открытые); порядок не
   держится — сервис упорядочивает по `PROFILE_REPORT_REASONS`. Очередь по причине — частичный индекс
   `profiles_report_reason_queue_idx` `{ openReasons: 1, lastReportAt: -1, _id: -1 }` (`openReportCount > 0`), запрос —
-  с условием и `hint` (план без `SORT` держит int-тест); миграция `0041_profile_report_reasons` — индекс и бэкфилл по
+  с условием и `hint` (план без `SORT` держит int-тест); миграция `0042_profile_report_reasons` — индекс и бэкфилл по
   открытым `profile_reports`. `resetSeq` — ревизия сбросов модератором (`$inc` условной записью каждого сброса имени,
   фото, клуба), номер — `seq` события `profile.field-reset` и порядок уведомлений (не `resetAt`). Сброс фото — две
   записи профиля в транзакции: `resetAvatar` (`returnDocument: 'before'`) → `avatarResetBan` (`profile.policy.ts`,
@@ -166,6 +166,12 @@ paths:
   устройства в транзакции сессии (сериализация со сбросом); вход без фактора и активация 2FA — первой операцией
   `lockMember`; каждая мутация 2FA — через `PanelTotpGuard.recheck` (замок аккаунта через порт
   `IdentityAccounts.lockAccountState` и штамп, живость сессии, `lockMember` и роль из-под замка); погашение вызова — с `expiresAt > now`; сброс 2FA — одной транзакцией с отзывом сессий.
+- Приглашения (ADR-0026, `0041_panel_invitations`): `panel_invitations` — единственный писатель
+  `PanelInvitationsRepository`; `tokenHash` (sha256) unique, частичный unique `email` при `status: 'pending'` (одно
+  живое на адрес; повторное приглашение гасит прежнее в той же транзакции), TTL по `purgeAt`. E-mail — только у
+  `pending`: закрытие (принято, отозвано, заменено) пишет `email: null`. Принятие — замок приглашения `lockPending`
+  (`$inc version` при `pending`) после `lockAccountState`/`lockAdmins`, `markAccepted` проверяет `matchedCount`;
+  отзыв и замена — условная запись при `pending` (конфликт с принятием); истечение проверяет сервер по `CLOCK`.
 - **Удаление аккаунта** члену команды с активной ролью запрещено (A11, `409 ACCOUNT_PANEL_MEMBER`, порт
   `PanelMembership.hasActiveRole`) — снимать нечего. Гонка «проверка ↔ выдача роли» принята (R7): гард панели
   удалённому отказывает, «Сотрудники» показывают «Удалённый участник». Журнал — `account.deleted` (actor — сам райдер,

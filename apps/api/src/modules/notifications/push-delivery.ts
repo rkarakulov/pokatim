@@ -1,5 +1,4 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { DEFAULT_NOTIFICATION_SETTINGS } from '@pokatim/contracts';
 import { CLOCK, type Clock, ENV, RateLimiter } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 
@@ -7,7 +6,11 @@ import type { Env } from '../../config/env';
 import { IdentityAccounts } from '../identity';
 import { DeliveryJobs } from './delivery-jobs';
 import { renderPushSummary } from './notification-texts';
-import { NOTIFICATIONS_POLICY, quietUntil } from './notifications.policy';
+import {
+  DEFAULT_DELIVERY_SETTINGS,
+  NOTIFICATIONS_POLICY,
+  quietUntil,
+} from './notifications.policy';
 import {
   type ClaimedPush,
   NotificationsRepository,
@@ -75,7 +78,7 @@ export class PushDelivery {
       await skip('deleted');
       return 'skipped';
     }
-    const settings = (await this.repository.findSettings(userId)) ?? DEFAULT_NOTIFICATION_SETTINGS;
+    const settings = (await this.repository.findSettings(userId)) ?? DEFAULT_DELIVERY_SETTINGS;
     const disabled = claimed.filter((doc) => !settings.push[doc.group]).map((doc) => doc._id);
     if (disabled.length > 0) await skip('disabled', disabled);
     const due = claimed.filter((doc) => settings.push[doc.group]);

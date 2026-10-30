@@ -1,4 +1,9 @@
-import type { NotificationPage, NotificationSettings } from '@pokatim/contracts';
+import { ApiHttpError } from '@pokatim/api-client';
+import type {
+  EventNotificationSettingsView,
+  NotificationPage,
+  NotificationSettings,
+} from '@pokatim/contracts';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { withAccessToken } from '@/features/auth/authorized';
@@ -20,6 +25,7 @@ export const notificationsKey = ['notifications'] as const;
 export const unreadCountKey = ['notifications', 'unread'] as const;
 const listKey = ['notifications', 'list', 'pages'] as const;
 const settingsKey = ['notifications', 'settings'] as const;
+const eventSettingsKey = ['notifications', 'settings', 'events'] as const;
 
 /** Счётчик колокольчика: только у вошедшего, опрос 60 с и при возврате фокуса. */
 export function useUnreadCount() {
@@ -96,5 +102,30 @@ export function useUpdateNotificationSettings() {
       withAccessToken((accessToken) => api.updateNotificationSettings(accessToken, settings)),
     networkMode: 'always',
     onSuccess: (saved) => queryClient.setQueryData(settingsKey, saved),
+  });
+}
+
+/** Старый API без подресурса «Мероприятия» — `404`: группу не показываем. */
+export const isEventSettingsMissing = (error: unknown) =>
+  error instanceof ApiHttpError && error.status === 404;
+
+/** Тумблеры «Мероприятия» — подресурс (RC-D1); нет сохранённых — включено. */
+export function useEventNotificationSettings() {
+  return useQuery({
+    queryKey: eventSettingsKey,
+    queryFn: () => withAccessToken((accessToken) => api.getEventNotificationSettings(accessToken)),
+    staleTime: DEFAULT_STALE_MS,
+    retry: (count, error) => !isEventSettingsMissing(error) && count < 2,
+  });
+}
+
+/** Сохранение тумблеров «Мероприятия»; ответ сервера — в кеш. */
+export function useUpdateEventNotificationSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: EventNotificationSettingsView) =>
+      withAccessToken((accessToken) => api.updateEventNotificationSettings(accessToken, settings)),
+    networkMode: 'always',
+    onSuccess: (saved) => queryClient.setQueryData(eventSettingsKey, saved),
   });
 }

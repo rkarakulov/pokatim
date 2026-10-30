@@ -31,7 +31,7 @@ export const PROFILE_REPORT_REASONS_INDEXES = {
  * принято. После `0040_panel_totp`.
  */
 export const profileReportReasons: MongoMigration = {
-  id: '0041_profile_report_reasons',
+  id: '0042_profile_report_reasons',
   async up(db) {
     const profiles = db.collection<ProfileDoc>(PROFILE_COLLECTIONS.profiles);
     for (const { key, options } of Object.values(PROFILE_REPORT_REASONS_INDEXES)) {

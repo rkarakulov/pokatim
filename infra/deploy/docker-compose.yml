@@ -33,6 +33,8 @@ x-api-env: &api-env
   SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
   # ссылки писем на web-приложение (event-tickets: «Открыть билет») — тот же origin, что web
   APP_WEB_ORIGIN: ${WEB_ORIGIN:?}
+  # база ссылок писем панели (приглашения, письма о роли; ADR-0026); пусто — `${APP_WEB_ORIGIN}/admin/`
+  PANEL_LINK_BASE: ${PANEL_LINK_BASE:-}
   # web и API — один origin за прокси: CORS выключен
   CORS_ORIGINS: ''
   # треки (ADR-0011): исходники заездов — том trackfiles (api пишет, worker читает и убирает); квота и минимум

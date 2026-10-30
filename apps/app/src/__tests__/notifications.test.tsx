@@ -27,6 +27,8 @@ const markAll = jest.mocked(api.markAllNotificationsRead);
 const getSettings = jest.mocked(api.getNotificationSettings);
 const updateSettings = jest.mocked(api.updateNotificationSettings);
 const getProfile = jest.mocked(api.getProfile);
+const getEventSettings = jest.mocked(api.getEventNotificationSettings);
+const updateEventSettings = jest.mocked(api.updateEventNotificationSettings);
 
 const RACE = '0190a6f4-0000-7000-8000-000000000001';
 const never = () => new Promise<never>(() => undefined);
@@ -59,6 +61,8 @@ beforeEach(() => {
   markAll.mockResolvedValue(undefined);
   getSettings.mockResolvedValue(DEFAULT_NOTIFICATION_SETTINGS);
   updateSettings.mockImplementation(async (_token, body) => body);
+  getEventSettings.mockResolvedValue({ push: true, email: true });
+  updateEventSettings.mockImplementation(async (_token, body) => body);
   getProfile.mockResolvedValue({
     rideReasons: [],
     publicName: null,
@@ -266,11 +270,13 @@ describe('«Уведомления»: строка push (N5, native)', () => {
 });
 
 describe('«Настройки уведомлений» (N4, N6)', () => {
-  it('группы × push, e-mail — только у «Споры» и «Райды»', async () => {
+  it('группы × push, e-mail — у «Споры», «Райды» и «Мероприятия»', async () => {
     await open('/settings/notifications');
-    expect(await screen.findByRole('header', { name: 'Гонки и результаты' })).toBeOnTheScreen();
-    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(3);
-    expect(screen.getAllByRole('switch', { name: 'Письма на e-mail' })).toHaveLength(2);
+    expect(await screen.findByRole('header', { name: 'Мероприятия' })).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'Гонки и результаты' })).toBeOnTheScreen();
+    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(4);
+    expect(screen.getAllByRole('switch', { name: 'Письма на e-mail' })).toHaveLength(3);
+    expect(screen.getByText('Только напоминания о событиях с билетом.')).toBeOnTheScreen();
     expect(screen.getByRole('switch', { name: 'Не присылать push ночью' })).toBeChecked();
   });
 
@@ -331,7 +337,10 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     await waitFor(() =>
       expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })[0]).not.toBeChecked(),
     );
-    for (const toggle of screen.getAllByRole('switch')) expect(toggle).toBeDisabled();
+    // «Мероприятия» — свой подресурс и своё сохранение: блокируются только тумблеры основного объекта
+    const switches = screen.getAllByRole('switch');
+    const disabled = switches.filter((toggle) => toggle.props.accessibilityState?.disabled);
+    expect(disabled).toHaveLength(switches.length - 2);
     const [hour] = screen.getAllByRole('button', { name: '23:00' });
     expect(hour).toBeDisabled();
     await fireEvent.press(screen.getAllByRole('switch', { name: 'Письма на e-mail' })[0]!);
@@ -351,11 +360,53 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
   });
 
   it('ошибка загрузки — «Нет соединения» с повтором', async () => {
+    getEventSettings.mockImplementation(never);
     getSettings.mockRejectedValueOnce(new ApiNetworkError(new TypeError('Network request failed')));
     await open('/settings/notifications');
     expect(await screen.findByText('Нет соединения')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
     expect(await screen.findByRole('header', { name: 'Споры' })).toBeOnTheScreen();
+  });
+
+  it('«Мероприятия»: тумблер сохраняет подресурс, основные настройки не трогает (RC-D1)', async () => {
+    await open('/settings/notifications');
+    await screen.findByRole('header', { name: 'Мероприятия' });
+    const pushes = screen.getAllByRole('switch', { name: 'Push-уведомления' });
+
+    await fireEvent.press(pushes[3]!);
+
+    await waitFor(() =>
+      expect(updateEventSettings).toHaveBeenCalledWith(liveSession.accessToken, {
+        push: false,
+        email: true,
+      }),
+    );
+    expect(updateSettings).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })[3]).not.toBeChecked(),
+    );
+  });
+
+  it('«Мероприятия»: старый API (404) — группы нет', async () => {
+    getEventSettings.mockRejectedValueOnce(
+      new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }),
+    );
+    await open('/settings/notifications');
+    await screen.findByRole('header', { name: 'Райды' });
+    await waitFor(() => expect(getEventSettings).toHaveBeenCalled());
+    expect(screen.queryByRole('header', { name: 'Мероприятия' })).toBeNull();
+    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(3);
+  });
+
+  it('«Мероприятия»: ошибка сохранения — баннер и прежнее значение', async () => {
+    updateEventSettings.mockRejectedValue(
+      new ApiNetworkError(new TypeError('Network request failed')),
+    );
+    await open('/settings/notifications');
+    await screen.findByRole('header', { name: 'Мероприятия' });
+    await fireEvent.press(screen.getAllByRole('switch', { name: 'Письма на e-mail' })[2]!);
+    expect(await screen.findByText('Не удалось сохранить настройки. Повторите.')).toBeOnTheScreen();
+    expect(screen.getAllByRole('switch', { name: 'Письма на e-mail' })[2]).toBeChecked();
   });
 
   it('вход из «Профиля»', async () => {

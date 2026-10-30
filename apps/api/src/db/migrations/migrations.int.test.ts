@@ -49,10 +49,11 @@ import { tickets } from './0038_tickets';
 import { eventMaterials } from './0039_event_materials';
 import { MATERIALS_COLLECTIONS } from '../../modules/tickets/materials.collection';
 import { panelTotp, PANEL_TOTP_TTL_GRACE_SECONDS } from './0040_panel_totp';
+import { panelInvitations } from './0041_panel_invitations';
 import {
   PROFILE_REPORT_REASONS_INDEXES,
   profileReportReasons,
-} from './0041_profile_report_reasons';
+} from './0042_profile_report_reasons';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
 import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
@@ -165,7 +166,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0038_tickets',
       '0039_event_materials',
       '0040_panel_totp',
-      '0041_profile_report_reasons',
+      '0041_panel_invitations',
+      '0042_profile_report_reasons',
     ]);
   });
 
@@ -1653,7 +1655,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(MATERIALS_COLLECTIONS.materials)).toEqual(expected);
   });
 
-  it('0040_panel_totp: коллекции 2FA, уникальные хеши токенов, TTL; последняя, повторный up не меняет индексы', async () => {
+  it('0040_panel_totp: коллекции 2FA, уникальные хеши токенов, TTL; повторный up не меняет индексы', async () => {
     const ids = migrations.map((migration) => migration.id);
     expect(ids.indexOf('0040_panel_totp')).toBe(ids.indexOf('0039_event_materials') + 1);
     const index = (key: Record<string, number>, unique = false, ttl?: number) => ({
@@ -1688,10 +1690,74 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     }
   });
 
-  it('0041_profile_report_reasons: индекс очереди по причине, бэкфилл openReasons по открытым жалобам; последняя; повторный up — без изменений', async () => {
+  it('0041_panel_invitations: уникальный хеш токена, одно pending на адрес, список, TTL уборки; последняя, повторный up не меняет индексы', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0041_profile_report_reasons');
-    expect(ids.indexOf('0041_profile_report_reasons')).toBe(ids.indexOf('0040_panel_totp') + 1);
+    expect(ids).toContain('0041_panel_invitations');
+    expect(ids.indexOf('0041_panel_invitations')).toBe(ids.indexOf('0040_panel_totp') + 1);
+    const expected = {
+      panel_invitations_token_hash_unique: {
+        key: { tokenHash: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+      panel_invitations_pending_email_unique: {
+        key: { email: 1 },
+        unique: true,
+        partialFilterExpression: { status: 'pending' },
+        expireAfterSeconds: undefined,
+      },
+      panel_invitations_status_created_idx: {
+        key: { status: 1, createdAt: -1, _id: -1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+      panel_invitations_purge_ttl: {
+        key: { purgeAt: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: 0,
+      },
+    };
+    expect(await indexesOf(PANEL_COLLECTIONS.invitations)).toEqual(expected);
+
+    // одно pending на адрес; закрытые (email: null) и другие статусы — не мешают
+    const invitations = h.db.collection<{
+      _id: string;
+      email: string | null;
+      status: string;
+      tokenHash: string;
+    }>(PANEL_COLLECTIONS.invitations);
+    await invitations.insertOne({
+      _id: 'i-1',
+      email: 'a@example.by',
+      status: 'pending',
+      tokenHash: 'h1',
+    });
+    await expect(
+      invitations.insertOne({
+        _id: 'i-2',
+        email: 'a@example.by',
+        status: 'pending',
+        tokenHash: 'h2',
+      }),
+    ).rejects.toThrow(/duplicate key/);
+    await invitations.insertOne({ _id: 'i-3', email: null, status: 'revoked', tokenHash: 'h3' });
+    await invitations.insertOne({ _id: 'i-4', email: null, status: 'accepted', tokenHash: 'h4' });
+    await invitations.deleteMany({ _id: { $in: ['i-1', 'i-3', 'i-4'] } });
+
+    await panelInvitations.up(h.db);
+    await panelInvitations.up(h.db);
+    expect(await indexesOf(PANEL_COLLECTIONS.invitations)).toEqual(expected);
+  });
+
+  it('0042_profile_report_reasons: индекс очереди по причине, бэкфилл openReasons по открытым жалобам; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0042_profile_report_reasons');
+    expect(ids.indexOf('0042_profile_report_reasons')).toBe(
+      ids.indexOf('0041_panel_invitations') + 1,
+    );
     const reasonIndex = {
       profiles_report_reason_queue_idx: {
         key: { openReasons: 1, lastReportAt: -1, _id: -1 },

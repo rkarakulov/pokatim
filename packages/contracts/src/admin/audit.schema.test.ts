@@ -70,6 +70,9 @@ describe('AuditAction', () => {
       'panel.totp_reset',
       'panel.totp_recovery_regenerated',
       'panel.totp_recovery_used',
+      'panel.invitation_sent',
+      'panel.invitation_revoked',
+      'panel.invitation_accepted',
       'profile.avatar_unblocked',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
@@ -80,6 +83,7 @@ describe('AuditAction', () => {
       'ride',
       'rider',
       'platform',
+      'invitation',
     ]);
     expect(AuditAction.safeParse('panel.deleted').success).toBe(false);
   });

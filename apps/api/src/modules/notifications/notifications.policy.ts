@@ -1,5 +1,7 @@
 import {
   addLocalDays,
+  DEFAULT_EVENT_NOTIFICATION_SETTINGS,
+  DEFAULT_NOTIFICATION_SETTINGS,
   minskWallTimeToUtc,
   NOTIFICATION_GROUPS,
   type NotificationGroup,
@@ -35,7 +37,7 @@ export const NOTIFICATIONS_POLICY = {
 
 // группы — из справочника контракта: строковый литерал группы споров совпал бы с именем коллекции споров (сторож
 // `disputes.repository.test.ts`)
-const [RACES, DISPUTES, RIDES] = NOTIFICATION_GROUPS;
+const [RACES, DISPUTES, RIDES, EVENTS] = NOTIFICATION_GROUPS;
 
 const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   result_counted: RACES,
@@ -55,6 +57,7 @@ const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   // [ASSUMPTION] решение по заявке маршрута — в группе «Райды» (N4: три группы)
   route_published: RIDES,
   route_rejected: RIDES,
+  event_reminder: EVENTS,
   // [ASSUMPTION] сброс поля профиля модератором — в группе «Райды» (N4: три группы; profile-moderation-followups RC-F4)
   profile_name_reset: RIDES,
   profile_avatar_reset: RIDES,
@@ -66,11 +69,32 @@ export function groupOf(kind: NotificationKind): NotificationGroup {
   return KIND_GROUPS[kind];
 }
 
-/** События с письмом (N2): «Решение по спору» и «Райд отменён». */
+/** События с письмом (N2): «Решение по спору», «Райд отменён», напоминание о событии (PR D). */
 export const EMAIL_KINDS: ReadonlySet<NotificationKind> = new Set([
   'dispute_decided',
   'ride_cancelled',
+  'event_reminder',
 ]);
+
+/**
+ * Настройки доставки (внутренний тип): основные `NotificationSettings` + тумблеры группы «Мероприятия»
+ * (`push.events`, `email.events` — подресурс настроек, RC-D1). Хранятся в одном документе; нет поля — включено.
+ */
+export interface DeliverySettings {
+  push: Record<NotificationGroup, boolean>;
+  email: Record<Exclude<NotificationGroup, 'races'>, boolean>;
+  quietHours: NotificationSettings['quietHours'];
+}
+
+/** Нет документа настроек — всё включено (N4), тихие часы 22–8 (N6). */
+export const DEFAULT_DELIVERY_SETTINGS: DeliverySettings = {
+  push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, events: DEFAULT_EVENT_NOTIFICATION_SETTINGS.push },
+  email: {
+    ...DEFAULT_NOTIFICATION_SETTINGS.email,
+    events: DEFAULT_EVENT_NOTIFICATION_SETTINGS.email,
+  },
+  quietHours: DEFAULT_NOTIFICATION_SETTINGS.quietHours,
+};
 
 const pad = (hour: number) => String(hour).padStart(2, '0');
 
@@ -79,7 +103,7 @@ const pad = (hour: number) => String(hour).padStart(2, '0');
  * `time.ts`); интервал может переходить через полночь; начало включительно, конец — нет. Push откладывается до
  * результата (`notBefore = quietUntil ?? now`), письма тихие часы не задерживают.
  */
-export function quietUntil(now: Date, quietHours: NotificationSettings['quietHours']): Date | null {
+export function quietUntil(now: Date, quietHours: DeliverySettings['quietHours']): Date | null {
   const { enabled, startHour, endHour } = quietHours;
   if (!enabled || startHour === endHour) return null;
   const wall = utcToMinskWallTime(now.toISOString());
@@ -99,7 +123,7 @@ export function quietUntil(now: Date, quietHours: NotificationSettings['quietHou
  */
 export function initialDelivery(
   kind: NotificationKind,
-  settings: NotificationSettings,
+  settings: DeliverySettings,
   now: Date,
   pushEnabled: boolean,
 ): { push: PushDelivery; email: EmailDelivery | null } {

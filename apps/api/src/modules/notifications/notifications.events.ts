@@ -19,6 +19,7 @@ import {
   RIDES_RIDE_RESCHEDULED,
 } from '../rides';
 import { ROUTE_PUBLICATION_DECIDED } from '../routes';
+import { TICKETS_REMINDER_DUE } from '../tickets';
 import { PROFILE_FIELD_RESET } from '../profile';
 
 /**
@@ -39,6 +40,8 @@ export const notificationsOutboxRoutes = {
   [RIDES_PARTICIPANT_JOINED]: QUEUE.notificationsIntake,
   [RIDES_REPORTS_RESOLVED]: QUEUE.notificationsIntake,
   [ROUTE_PUBLICATION_DECIDED]: QUEUE.notificationsIntake,
+  // PR D event-tickets: напоминание о событии (порт `TICKET_NOTICES`)
+  [TICKETS_REMINDER_DUE]: QUEUE.notificationsIntake,
   [PROFILE_FIELD_RESET]: QUEUE.notificationsIntake,
 } as const;
 

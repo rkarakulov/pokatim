@@ -30,9 +30,11 @@ export class PanelAudit {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  async append(tx: DbSession, record: AuditRecord): Promise<void> {
+  /** Возвращает id записи (письмо о роли ссылается на неё: `panel.role-email-requested { auditId }`). */
+  async append(tx: DbSession, record: AuditRecord): Promise<string> {
+    const id = uuidv7();
     await this.repository.insertAudit(tx, {
-      _id: uuidv7(),
+      _id: id,
       at: this.clock.now(),
       action: record.action,
       actor: record.actor,
@@ -41,6 +43,7 @@ export class PanelAudit {
       subject: record.subject ?? null,
       details: record.details ?? null,
     });
+    return id;
   }
 }
 

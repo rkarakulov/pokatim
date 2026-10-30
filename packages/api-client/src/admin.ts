@@ -1,4 +1,8 @@
 import {
+  type InvitationAcceptRequest,
+  type InviteRequest,
+  PanelInvitation,
+  PanelInvitationList,
   AccountErasurePage,
   type AccountErasureQuery,
   RetryAccountErasureResult,
@@ -229,6 +233,18 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     /** Сброс 2FA сотрудника (`members.manage`, причина обязательна): 204. */
     resetMemberTotp: (userId: string, body: TotpResetRequest) =>
       post(`${member(userId)}/totp/reset`, z.undefined(), body),
+
+    // --- приглашения в команду (ADR-0026) ---
+    /** Живые приглашения (`members.read`): `pending`, в т. ч. истёкшие (`expired` — от сервера). */
+    listInvitations: () => get('/v1/admin/invitations', PanelInvitationList),
+    /** Пригласить адрес (`members.manage`); повтор на тот же адрес заменяет прежнее — «Отправить повторно». */
+    invite: (body: InviteRequest) => post('/v1/admin/invitations', PanelInvitation, body),
+    /** Отозвать приглашение (`members.manage`): 204. */
+    revokeInvitation: (id: string) =>
+      post(`/v1/admin/invitations/${encodeURIComponent(id)}/revoke`, z.undefined()),
+    /** Принять приглашение паролем (без сессии): ответ — как у входа (cookie панели, шаги 2FA). */
+    acceptInvitation: (body: InvitationAcceptRequest) =>
+      post('/v1/admin/invitations/accept', PanelSignInResponse, body),
 
     // --- 2FA своего аккаунта (любая роль, ADR-0024) ---
     getTotpStatus: () => get('/v1/admin/account/totp', TotpStatus),

@@ -85,6 +85,23 @@ const settings = (overrides: Partial<EventTicketingSettings> = {}): EventTicketi
   registeredCount: 0,
   activeTickets: 0,
   checkedIn: 0,
+  reminders: [],
+  ...overrides,
+});
+
+const R1 = '01890a5d-ac96-774b-bcce-b302099a8201';
+const R2 = '01890a5d-ac96-774b-bcce-b302099a8202';
+const reminder = (
+  id: string,
+  overrides: Partial<EventTicketingSettings['reminders'][number]> = {},
+): EventTicketingSettings['reminders'][number] => ({
+  id,
+  offsetHours: 24,
+  text: 'Возьмите паспорт',
+  sendAt: '2026-10-23T07:00:00.000Z',
+  sentAt: null,
+  sentCount: 0,
+  late: false,
   ...overrides,
 });
 
@@ -132,6 +149,7 @@ describe('«Билеты и материалы»: настройки (RC-T3, RC-
         place: 'Парк',
         address: '',
         instructions: '',
+        reminders: [],
         version: 0,
       }),
     );
@@ -229,6 +247,101 @@ describe('«Билеты и материалы»: настройки (RC-T3, RC-
     await renderApp(`/races/${RACE_ID}/tickets`);
     fireEvent.click(await screen.findByRole('button', { name: 'Повторить' }));
     expect(await screen.findByRole('form', { name: 'Билеты' })).toBeTruthy();
+  });
+});
+
+describe('«Напоминания участникам» (PR D)', () => {
+  const remindersOf = async () => screen.findByRole('group', { name: 'Напоминания участникам' });
+
+  it('статусы правил: время отправки, «Отправлено», «прошло»; подсказки тихих часов и повтора', async () => {
+    mocked.getEventTicketing.mockResolvedValue(
+      settings({
+        enabled: true,
+        startsAt: '2026-10-24T07:00:00.000Z',
+        place: 'Парк',
+        version: 2,
+        reminders: [
+          reminder(R1, { sentAt: '2026-10-23T07:00:00.000Z', sentCount: 12 }),
+          reminder(R2, {
+            offsetHours: 48,
+            text: 'Поздно',
+            sendAt: '2026-10-22T07:00:00.000Z',
+            late: true,
+          }),
+        ],
+      }),
+    );
+    await renderApp(`/races/${RACE_ID}/tickets`);
+    const section = await remindersOf();
+    expect(
+      within(section).getByText('Отправлено 23 октября 2026, 10:00 · участникам: 12'),
+    ).toBeTruthy();
+    expect(within(section).getByText('Время отправки прошло — не будет отправлено')).toBeTruthy();
+    expect(within(section).getByText(/Push в тихие часы райдера/)).toBeTruthy();
+    expect(within(section).getByText(/уйдёт ещё раз/)).toBeTruthy();
+    expect((within(section).getAllByLabelText('Когда')[1] as HTMLSelectElement).value).toBe('48');
+  });
+
+  it('добавить и удалить: запрос с id существующих и новым без id; на 3 — кнопка aria-disabled с причиной', async () => {
+    mocked.getEventTicketing.mockResolvedValue(
+      settings({
+        enabled: true,
+        startsAt: '2026-10-24T07:00:00.000Z',
+        place: 'Парк',
+        version: 2,
+        reminders: [reminder(R1), reminder(R2, { offsetHours: 2, text: 'Скоро' })],
+      }),
+    );
+    mocked.updateEventTicketing.mockResolvedValue(settings({ version: 3 }));
+    await renderApp(`/races/${RACE_ID}/tickets`);
+    const section = await remindersOf();
+    const add = within(section).getByRole('button', { name: 'Добавить напоминание' });
+    fireEvent.click(add);
+    expect(add.getAttribute('aria-disabled')).toBe('true');
+    expect(within(section).getByText('Не больше 3 напоминаний.')).toBeTruthy();
+    fireEvent.click(add);
+    expect(within(section).getAllByLabelText('Текст')).toHaveLength(3);
+    const texts = within(section).getAllByLabelText('Текст');
+    fireEvent.change(texts[2]!, { target: { value: 'За час' } });
+    fireEvent.change(within(section).getAllByLabelText('Когда')[2]!, { target: { value: '1' } });
+    fireEvent.click(within(section).getAllByRole('button', { name: 'Удалить напоминание' })[1]!);
+    expect(add.getAttribute('aria-disabled')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(mocked.updateEventTicketing).toHaveBeenCalledWith(
+        'race',
+        RACE_ID,
+        expect.objectContaining({
+          version: 2,
+          reminders: [
+            { id: R1, offsetHours: 24, text: 'Возьмите паспорт' },
+            { offsetHours: 1, text: 'За час' },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it('400 по reminders.N.text — ошибка под полем этой строки', async () => {
+    mocked.getEventTicketing.mockResolvedValue(
+      settings({
+        enabled: true,
+        startsAt: '2026-10-24T07:00:00.000Z',
+        place: 'Парк',
+        reminders: [reminder(R1), reminder(R2, { offsetHours: 2 })],
+      }),
+    );
+    mocked.updateEventTicketing.mockRejectedValue(
+      httpError(400, 'VALIDATION_FAILED', {
+        fields: [{ path: 'reminders.1.text', code: 'TOO_LONG' }],
+      }),
+    );
+    await renderApp(`/races/${RACE_ID}/tickets`);
+    const section = await remindersOf();
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+    const texts = within(section).getAllByLabelText('Текст');
+    await waitFor(() => expect(texts[1]!.getAttribute('aria-invalid')).toBe('true'));
+    expect(texts[0]!.getAttribute('aria-invalid')).toBeNull();
   });
 });
 

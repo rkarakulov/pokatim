@@ -29,6 +29,8 @@ export type NoticeText =
   | { kind: 'ride_report_resolved'; ride: string }
   | { kind: 'route_published'; route: string }
   | { kind: 'route_rejected'; route: string; reason: RouteRejectionReason }
+  /** напоминание о событии с билетом (PR D): текст правила — организатора, не ПДн райдеров */
+  | { kind: 'event_reminder'; event: string; startsAt: Date; place: string | null; text: string }
   | { kind: 'profile_name_reset' | 'profile_club_reset' }
   | { kind: 'profile_avatar_reset'; blockedUntil: Date | null };
 
@@ -88,6 +90,7 @@ const TITLES: Record<NotificationKind, string> = {
   ride_report_resolved: 'Жалоба рассмотрена',
   route_published: 'Маршрут опубликован',
   route_rejected: 'Маршрут отклонён',
+  event_reminder: 'Скоро старт',
   profile_name_reset: 'Имя в профиле сброшено',
   profile_avatar_reset: 'Фото профиля удалено',
   profile_club_reset: 'Клуб в профиле сброшен',
@@ -127,6 +130,10 @@ function bodyOf(input: NoticeText): string {
       return `${quoted(input.route)} теперь в каталоге маршрутов.`;
     case 'route_rejected':
       return `${quoted(input.route)} не опубликован. ${REJECTION[input.reason]}`;
+    case 'event_reminder': {
+      const place = input.place === null ? '' : `, ${input.place.replace(/\s+/g, ' ').trim()}`;
+      return `${quoted(input.event)} — ${dayTime(input.startsAt)}${place}.\n${input.text}`;
+    }
     case 'profile_name_reset':
       return 'Модератор сбросил имя после жалоб. Укажите другое имя в профиле.';
     case 'profile_avatar_reset':
