@@ -1,18 +1,12 @@
-import { shapeOf, size, space, stroke, type AppTheme } from '@pokatim/design-tokens';
-import { textStyle, useReducedMotion, useTheme } from '@rkarakulov/ui';
+import type { AppTheme } from '@pokatim/design-tokens';
+import { textStyle, useTheme } from '@rkarakulov/ui';
 import type { ReactNode } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image, StyleSheet, Text, View } from 'react-native';
 
-import { sheetSurface } from '@/components/bottom-sheet-props';
+import { ModalSheet } from '@/components/modal-sheet';
 
 import { InstallCloseButton } from './install-close-button';
 import type { InstallImage } from './install-images';
-
-/** Затемнение под окном (доля непрозрачности `overlay.scrim`). */
-const SCRIM_OPACITY = 0.4;
-/** Окно не выше доли экрана: содержимое прокручивается. */
-const MAX_HEIGHT = '90%';
 
 /** Окно открыто, пока смонтировано (закрытый RN-web `Modal` всё равно рендерит портал — на SSR нельзя). */
 export interface InstallModalProps {
@@ -26,58 +20,21 @@ export interface InstallModalProps {
 }
 
 /**
- * Окно установки PWA поверх экрана (только web): затемнение закрывает, «×» сверху справа, содержимое по центру и
- * прокручивается. Шторка — поверхность и верхние углы шторки темы (`sheetSurface`), без жеста: закрытие — «×»,
- * затемнение и Esc. Reduce motion — без анимации появления.
+ * Окно установки PWA поверх экрана (только web) — общий `ModalSheet`: «×» сверху справа, заголовок рисует
+ * содержимое (`InstallTitle` после картинки-шапки).
  */
 export function InstallModal({ placement, title, onClose, children, testID }: InstallModalProps) {
-  const theme = useTheme<AppTheme>();
-  const reducedMotion = useReducedMotion();
-  const insets = useSafeAreaInsets();
-  const sheet = placement === 'sheet';
   return (
-    <Modal
-      visible
-      transparent
-      animationType={reducedMotion ? 'none' : sheet ? 'slide' : 'fade'}
-      onRequestClose={onClose}
+    <ModalSheet
+      placement={placement}
+      title={title}
+      titleInContent
+      onClose={onClose}
+      headerAction={<InstallCloseButton onPress={onClose} testID="pwa-install-modal-close" />}
+      testID={testID}
     >
-      <View style={[styles.root, sheet ? styles.rootSheet : styles.rootDialog]}>
-        {/* затемнение закрывает касанием; для скринридера и Tab — только «×» и Esc */}
-        <Pressable
-          accessible={false}
-          importantForAccessibility="no"
-          tabIndex={-1}
-          onPress={onClose}
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: theme.overlay.scrim, opacity: SCRIM_OPACITY },
-          ]}
-        />
-        <View
-          testID={testID}
-          accessibilityViewIsModal
-          aria-modal
-          role="dialog"
-          aria-label={title}
-          style={[
-            styles.panel,
-            sheet
-              ? [sheetSurface(theme), styles.sheet, { paddingBottom: insets.bottom + space.s5 }]
-              : {
-                  backgroundColor: theme.surface.sheet,
-                  borderRadius: shapeOf(theme).sheet,
-                  paddingBottom: space.s5,
-                },
-          ]}
-        >
-          <View style={styles.close}>
-            <InstallCloseButton onPress={onClose} testID="pwa-install-modal-close" />
-          </View>
-          <ScrollView contentContainerStyle={styles.content}>{children}</ScrollView>
-        </View>
-      </View>
-    </Modal>
+      {children}
+    </ModalSheet>
   );
 }
 
@@ -120,13 +77,6 @@ export function InstallText({ children }: { children: string }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  rootSheet: { justifyContent: 'flex-end' },
-  rootDialog: { justifyContent: 'center', padding: size.gutter },
-  panel: { maxHeight: MAX_HEIGHT, paddingTop: space.s2 },
-  sheet: { borderTopWidth: stroke.hairline },
-  close: { alignItems: 'flex-end', paddingHorizontal: space.s2 },
-  content: { paddingHorizontal: size.gutter, gap: space.s4, alignItems: 'stretch' },
   center: { textAlign: 'center' },
   picture: { width: '100%' },
   fill: { width: '100%', height: '100%' },
