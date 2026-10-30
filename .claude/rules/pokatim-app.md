@@ -545,6 +545,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 - Шит «Райд опубликован» (ride-published-og): форма создания ведёт на `/rides/<id>?published=1`; шит — только
   организатору (`viewer.role` сервера) будущего райда после монтирования (`components/modal-sheet.tsx` — модальный
   шит `Modal` RN поверх экрана: затемнение, `sheetSurface`, heading, `onRequestClose`; не `BottomSheet` карты).
+  `ModalSheet` — единственное модальное окно приложения (шторка или `placement="dialog"`; окно установки PWA —
+  обёртка с «×» в `headerAction`); имя окна — `aria-label` самого `Modal` (на web он — `role="dialog"`), панель
+  второго dialog не создаёт.
   Действия — «Карточка-приглашение» (`rides/invite/[id]`), «Ссылка» (`shareLink`; нет origin — кнопки нет),
   «Закрыть»; закрытие снимает `published` (`router.setParams`).
 - Жалоба (05b) — экран `rides/report/[id]` (`features/rides/ride-report.tsx`) внутри `Stack.Protected`: причина —
