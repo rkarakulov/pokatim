@@ -282,6 +282,55 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
   });
 
   describe('подсказка push после «Я иду» (N5)', () => {
+    // ревью pass 2: экран под карточкой (лента, Главная) скрыт, но смонтирован — показ не его
+    it.each([
+      ['лента «Райды»', '/rides'],
+      ['Главная', '/'],
+    ])(
+      'стек «%s → карточка»: «Я иду» на карточке — подсказка на карточке и одна',
+      async (_name, from) => {
+        jest.mocked(api.listRides).mockResolvedValue({
+          items: [{ ...detail, viewer: viewer('none', { canJoin: true }) }],
+          nextCursor: null,
+        });
+        joinRide.mockResolvedValue(
+          view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+        );
+        await openSignedIn(from);
+        await waitFor(() => expect(api.listRides).toHaveBeenCalled());
+        expect(
+          await screen.findByRole('button', { name: 'Я иду', includeHiddenElements: false }),
+        ).toBeOnTheScreen();
+        await act(() => expoRouter.push(`/rides/${ID}`));
+
+        await waitFor(() =>
+          expect(getRideForViewer).toHaveBeenCalledWith(liveSession.accessToken, ID),
+        );
+        getRideForViewer.mockResolvedValue(
+          view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+        );
+        await waitFor(() =>
+          expect(
+            screen.getAllByRole('button', { name: 'Я иду', includeHiddenElements: false }),
+          ).toHaveLength(1),
+        );
+        await fireEvent.press(
+          screen.getByRole('button', { name: 'Я иду', includeHiddenElements: false }),
+        );
+
+        expect(
+          await screen.findByText(SOFT_PROMPT, { includeHiddenElements: false }),
+        ).toBeOnTheScreen();
+        expect(screen.getAllByText(SOFT_PROMPT, { includeHiddenElements: true })).toHaveLength(1);
+        // именно на карточке, а не на скрытом экране под ней
+        expect(
+          within(screen.getByTestId('ride-detail', { includeHiddenElements: false })).getByText(
+            SOFT_PROMPT,
+          ),
+        ).toBeOnTheScreen();
+      },
+    );
+
     it('открытие карточки — без подсказки и без системного запроса; успешное «Я иду» — подсказка райда', async () => {
       const notifications = jest.requireMock<{ requestPermissionsAsync: jest.Mock }>(
         'expo-notifications',

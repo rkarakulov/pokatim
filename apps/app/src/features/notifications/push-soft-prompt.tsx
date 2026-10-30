@@ -1,6 +1,7 @@
 import { space } from '@pokatim/design-tokens';
 import { t, type MessageKey } from '@pokatim/i18n';
 import { Banner, Button, TextAction } from '@rkarakulov/ui';
+import { useIsFocused } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -35,9 +36,10 @@ const TEXTS: Record<SoftPromptContext, { title: MessageKey; message: MessageKey 
 };
 
 /**
- * Место подсказки под действием. Показ закреплён за первым смонтированным местом этого объекта (герой, строка ленты и
- * карточка одного райда — одна подсказка); владелец ушёл с экрана — подсказка закрыта до перезапуска. Не владелец —
- * ничего и без запросов состояния push.
+ * Место подсказки под действием. Показ закреплён за первым местом этого объекта на сфокусированном экране (герой,
+ * строка ленты и карточка одного райда — одна подсказка; лента под открытой карточкой её не забирает); владелец
+ * размонтирован или его экран потерял фокус — подсказка закрыта до перезапуска. Не владелец — ничего и без запросов
+ * состояния push.
  */
 export function PushSoftPrompt({
   context,
@@ -53,10 +55,12 @@ export function PushSoftPrompt({
   const [token] = useState(() => ({}));
   const offered = useSoftPromptStore((state) => isOffered(state, anchor));
   const owner = useSoftPromptStore((state) => state.owner === token);
+  const focused = useIsFocused();
 
   useEffect(() => {
-    if (offered) claimSoftPrompt(anchor, token);
-  }, [offered, anchor, token]);
+    if (offered && focused) claimSoftPrompt(anchor, token);
+    if (!focused) releaseSoftPrompt(token);
+  }, [offered, focused, anchor, token]);
   useEffect(() => () => releaseSoftPrompt(token), [anchor, token]);
 
   return owner ? <OfferedPrompt context={context} style={style} /> : null;
@@ -129,8 +133,9 @@ function OfferedPrompt({
     } finally {
       setPending(false);
     }
-    // выдано или запрос закрыт без ответа — подсказка уходит; отказ — остаётся текстом отказа
-    finishSoftPrompt(next?.status === 'denied' ? 'denied' : 'closed');
+    // запроса не было (строка занята) — подсказка остаётся; выдано или запрос закрыт без ответа — уходит; отказ —
+    // остаётся текстом отказа
+    if (next) finishSoftPrompt(next.status === 'denied' ? 'denied' : 'closed');
   };
   const later = () => {
     finishSoftPrompt('closed');

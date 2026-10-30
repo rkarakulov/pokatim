@@ -49,8 +49,10 @@ paths:
   `offerPushSoftPrompt(context, id)` (`push-soft-prompt-store.ts`) только из `onSuccess` хуков мутаций (`useRideRsvp`
   «Я иду», `useEnterRace` — новая активная заявка, не повышение), не из `mutate(…, { onSuccess })`: форма к ответу
   размонтирована; «Не иду» — `closePushSoftPromptFor`. Место — `<PushSoftPrompt>` с тем же id под действием; показ
-  закреплён за первым смонтированным местом, фазы (`checking`/`offer`/`denied`/`closed`) — в сторе, владелец ушёл —
-  закрыта до перезапуска. «Включить» — `usePushPermission().press` строки, отказ — `deniedRow()` +
+  закреплён за первым местом на сфокусированном экране (`useIsFocused` expo-router: лента и Главная под карточкой
+  показ не забирают), фазы (`checking`/`offer`/`denied`/`closed`) — в сторе; владелец размонтирован или потерял фокус
+  — закрыта до перезапуска (до решения — как не предлагали); предложение без захвата за `SOFT_PROMPT_CLAIM_MS` (3 с)
+  снимается — показ не потрачен, открытие объекта позже её не покажет. «Включить» — `usePushPermission().press` строки, отказ — `deniedRow()` +
   `announceForAccessibility`; показ — чистая `softPromptVisible` (`push-soft-prompt-state.ts`), «Не сейчас» —
   `pokatim.pushSoftPrompt` на 30 дней (`push-soft-prompt-storage(.web).ts`: SecureStore / `localStorage`).
   Service worker (`scripts/service-worker.ts`, ADR-0022): `push` — уведомление по payload сервера и сигнал окнам

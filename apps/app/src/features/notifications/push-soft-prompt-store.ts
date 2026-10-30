@@ -9,7 +9,11 @@ import type { SoftPromptContext } from './push-soft-prompt-state';
  *
  * Фазы: `idle` — в этом запуске не показывали (предложение принимается); `checking` — предложено, владелец читает
  * поддержку, разрешение и отложку; `offer` — показана («Включить» / «Не сейчас»); `denied` — текст отказа;
- * `closed` — показ был и закончился (выдано, «Не сейчас», «Не иду», владелец размонтирован) — до перезапуска больше нет.
+ * `closed` — показ был и закончился (выдано, «Не сейчас», «Не иду», владелец ушёл с экрана) — до перезапуска больше нет.
+ *
+ * Владелец — первое место этого объекта на сфокусированном экране (скрытая лента под карточкой показ не забирает).
+ * Предложение, которое никто не забрал за `SOFT_PROMPT_CLAIM_MS` (ушли с экрана до ответа мутации), снимается:
+ * показ не потрачен, а открытие объекта позже подсказку не покажет (AC1).
  */
 export type SoftPromptPhase = 'idle' | 'checking' | 'offer' | 'denied' | 'closed';
 
@@ -23,6 +27,9 @@ interface SoftPromptStore {
    */
   owner: object | null;
 }
+
+/** Срок, за который место на экране должно забрать предложение (смена блока на том же экране — миллисекунды). */
+export const SOFT_PROMPT_CLAIM_MS = 3_000;
 
 const initial: SoftPromptStore = { anchor: null, phase: 'idle', owner: null };
 export const useSoftPromptStore = create<SoftPromptStore>(() => initial);
@@ -38,6 +45,12 @@ export const isOffered = (state: SoftPromptStore, anchor: string): boolean =>
 export function offerPushSoftPrompt(context: SoftPromptContext, id: string): void {
   if (useSoftPromptStore.getState().phase !== 'idle') return;
   useSoftPromptStore.setState({ anchor: anchorOf(context, id), phase: 'checking', owner: null });
+  const offered = useSoftPromptStore.getState();
+  setTimeout(() => {
+    // то же предложение (не новое после сброса) и его никто не забрал
+    const state = useSoftPromptStore.getState();
+    if (state === offered) useSoftPromptStore.setState(initial);
+  }, SOFT_PROMPT_CLAIM_MS);
 }
 
 /** «Не иду»: подсказка этого райда закрывается (ещё не показана — как не предлагали). */
@@ -49,13 +62,16 @@ export function closePushSoftPromptFor(context: SoftPromptContext, id: string): 
   );
 }
 
-/** Место с этим объектом смонтировано: показ закрепляется за первым. */
+/** Место с этим объектом на сфокусированном экране: показ закрепляется за первым. */
 export function claimSoftPrompt(anchor: string, owner: object): void {
   const state = useSoftPromptStore.getState();
   if (state.owner === null && isOffered(state, anchor)) useSoftPromptStore.setState({ owner });
 }
 
-/** Владелец размонтирован: показанная подсказка закрыта до перезапуска; не успели показать — как не предлагали. */
+/**
+ * Владелец размонтирован или его экран потерял фокус: показанная подсказка закрыта до перезапуска; не успели
+ * показать — как не предлагали.
+ */
 export function releaseSoftPrompt(owner: object): void {
   const state = useSoftPromptStore.getState();
   if (state.owner !== owner) return;

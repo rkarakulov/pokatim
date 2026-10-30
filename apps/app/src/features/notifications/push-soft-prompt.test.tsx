@@ -1,6 +1,8 @@
 /// <reference types="jest" />
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { AccessibilityInfo } from 'react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { AccessibilityInfo, View } from 'react-native';
+
+import type * as ReactModule from 'react';
 
 import type { PushPermissionState } from './push';
 import { PUSH_SOFT_PROMPT_KEY, PUSH_SOFT_PROMPT_SNOOZE_MS } from './push-soft-prompt-state';
@@ -9,6 +11,7 @@ import {
   closePushSoftPromptFor,
   offerPushSoftPrompt,
   resetPushSoftPrompt,
+  SOFT_PROMPT_CLAIM_MS,
 } from './push-soft-prompt-store';
 
 const mockPush = {
@@ -24,6 +27,15 @@ jest.mock('./push', () => ({
   getPushPermission: () => mockPush.getPushPermission(),
   requestPushPermission: () => mockPush.requestPushPermission(),
 }));
+// фокус экрана места: по умолчанию сфокусирован; тест оборачивает место в провайдер `false` (скрытый экран под карточкой)
+jest.mock('expo-router', () => {
+  const React = jest.requireActual<typeof ReactModule>('react');
+  const FocusContext = React.createContext(true);
+  return { __FocusContext: FocusContext, useIsFocused: () => React.useContext(FocusContext) };
+});
+const Focus = jest.requireMock<{ __FocusContext: ReactModule.Context<boolean> }>(
+  'expo-router',
+).__FocusContext;
 const mockRegister = jest.fn(async () => undefined);
 jest.mock('./push-registration', () => ({ registerDevicePush: () => mockRegister() }));
 
@@ -222,6 +234,75 @@ describe('подсказка push в момент пользы', () => {
       await renderOffered();
       await act(async () => closePushSoftPromptFor('ride', RIDE));
       expect(screen.queryByText(TITLE_RIDE)).toBeNull();
+    });
+  });
+
+  describe('фокус экрана и срок захвата (ревью pass 2)', () => {
+    it('место на скрытом экране (лента под карточкой) не забирает показ — он у сфокусированного', async () => {
+      await render(
+        <>
+          <Focus.Provider value={false}>
+            <PushSoftPrompt context="ride" id={RIDE} />
+          </Focus.Provider>
+          <View testID="card">
+            <PushSoftPrompt context="ride" id={RIDE} />
+          </View>
+        </>,
+      );
+      await act(async () => offerPushSoftPrompt('ride', RIDE));
+      expect(await within(screen.getByTestId('card')).findByText(TITLE_RIDE)).toBeTruthy();
+      expect(screen.getAllByText(TITLE_RIDE)).toHaveLength(1);
+    });
+
+    it('владелец потерял фокус после показа — закрыта; вернулся — нет', async () => {
+      const place = (focused: boolean) => (
+        <Focus.Provider value={focused}>
+          <PushSoftPrompt context="ride" id={RIDE} />
+        </Focus.Provider>
+      );
+      const view = await render(place(true));
+      await act(async () => offerPushSoftPrompt('ride', RIDE));
+      await screen.findByText(TITLE_RIDE);
+      await view.rerender(place(false));
+      await view.rerender(place(true));
+      await act(async () => undefined);
+      expect(screen.queryByText(TITLE_RIDE)).toBeNull();
+    });
+
+    it('владелец потерял фокус до решения — показ не потрачен: следующее предложение показывается', async () => {
+      let resolve: (state: PushPermissionState) => void = () => undefined;
+      mockPush.getPushPermission.mockReturnValueOnce(new Promise((r) => (resolve = r)));
+      const place = (focused: boolean) => (
+        <Focus.Provider value={focused}>
+          <PushSoftPrompt context="ride" id={RIDE} />
+        </Focus.Provider>
+      );
+      const view = await render(place(true));
+      await act(async () => offerPushSoftPrompt('ride', RIDE));
+      await waitFor(() => expect(mockPush.getPushPermission).toHaveBeenCalled());
+      await view.rerender(place(false));
+      await act(async () => resolve({ status: 'undetermined', canAskAgain: true }));
+
+      await view.rerender(place(true));
+      await act(async () => offerPushSoftPrompt('ride', RIDE));
+      expect(await screen.findByText(TITLE_RIDE)).toBeTruthy();
+    });
+
+    it('ушли до ответа мутации: никто не забрал за срок — показ не потрачен, открытие объекта — без подсказки', async () => {
+      // «Я иду» ответил, когда карточки уже нет на экране
+      await act(async () => offerPushSoftPrompt('ride', RIDE));
+      await act(async () => jest.advanceTimersByTime(SOFT_PROMPT_CLAIM_MS));
+
+      // повторное открытие первого райда — подсказки нет (AC1)
+      const first = await render(<PushSoftPrompt context="ride" id={RIDE} />);
+      await act(async () => undefined);
+      expect(screen.queryByText(TITLE_RIDE)).toBeNull();
+      await first.unmount();
+
+      // «Я иду» на другом райде — подсказка есть
+      await render(<PushSoftPrompt context="ride" id="ride-2" />);
+      await act(async () => offerPushSoftPrompt('ride', 'ride-2'));
+      expect(await screen.findByText(TITLE_RIDE)).toBeTruthy();
     });
   });
 });
