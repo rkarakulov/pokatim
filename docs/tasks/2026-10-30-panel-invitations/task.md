@@ -589,3 +589,12 @@ unit: `panel-invitation-token`, `mail/panel-emails`, `config/env`, `admin-routes
 - Перезапуск упавших файлов отдельно: `results-tiers.int.test.ts` 17/17, `routes-derived.int.test.ts` 10/10,
   `tickets-materials.int.test.ts` 14/14 — зелёные. Файлы задачи (`panel-invitations*`, `panel-email`, `panel-cli`,
   `migrations`) в полном прогоне — зелёные.
+
+**Проверки после ревью pass 1** (коммит `c206160f`; Mongo RS `127.0.0.1:27117`, Redis `:6479/8` — подняты локально
+заново после перезапуска сессии, БД `pokatim_invites_test`):
+
+- 1-й прогон `TURBO_CONCURRENCY=1 pnpm check` — `@pokatim/api` `Test Files 1 failed | 208 passed (209)`: таймаут 5 с
+  unit `parse-thread.test.ts` (вне задачи, под нагрузкой); отдельно — 8/8.
+- 2-й прогон `TURBO_CONCURRENCY=1 pnpm check` — **зелёный**, `exit=0`: format ✓, lint ✓, arch ✓, typecheck 9/9;
+  api `Test Files 209 passed (209)`, `Tests 2168 passed`; admin 48/48 (478); contracts 51/51; api-client 22/22;
+  `Tasks: 15 successful, 15 total`.
