@@ -1,10 +1,11 @@
 import type { AchievementList, AchievementProgress } from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { textStyle, useTheme } from '@rkarakulov/ui';
+import { SkeletonGroup, SkeletonText, textStyle, useTheme } from '@rkarakulov/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ProgressBar } from '@/components/progress-bar';
+import { loading, type TabQuery } from '@/features/races/results-table';
 
 import { achievementTitle, levelLabel } from './achievement-catalog';
 
@@ -52,17 +53,19 @@ function ProgressRow({ step }: { step: KnownProgress }) {
 
 /**
  * Блок «Следующие цели» своего профиля (L5): по счётному коду — следующий уровень, полоса и «7 из 15» (данные — тот же
- * `useAchievements()`, второго запроса нет). Прогресса нет, загрузка или ошибка без данных — блока нет (ошибку
- * показывает блок «Достижения», двух баннеров нет). Показывается и без единого достижения.
+ * `useAchievements()`, второго запроса нет). Первая загрузка — заголовок и скелетон строки (§4.12); прогресса нет,
+ * ошибка или офлайн без данных — блока нет (ошибку показывает блок «Достижения», двух баннеров нет). Показывается и
+ * без единого достижения.
  */
 export function AchievementProgressBlock({
   query,
 }: {
-  query: { data: AchievementList | undefined };
+  query: TabQuery & { data: AchievementList | undefined };
 }) {
   const theme = useTheme();
+  const pending = query.data === undefined && loading(query);
   const progress = query.data?.progress.filter(isKnown) ?? [];
-  if (progress.length === 0) return null;
+  if (!pending && progress.length === 0) return null;
   return (
     <View testID="own-achievement-progress" style={styles.block}>
       <Text
@@ -71,9 +74,16 @@ export function AchievementProgressBlock({
       >
         {t('achievements.progress.title')}
       </Text>
-      {progress.map((step) => (
-        <ProgressRow key={step.code} step={step} />
-      ))}
+      {pending ? (
+        <SkeletonGroup>
+          <View testID="own-achievement-progress-skeleton" style={styles.row}>
+            <SkeletonText variant="bodyStrong" lines={1} lastLineWidth="60%" />
+            <SkeletonText variant="meta" lines={1} />
+          </View>
+        </SkeletonGroup>
+      ) : (
+        progress.map((step) => <ProgressRow key={step.code} step={step} />)
+      )}
     </View>
   );
 }

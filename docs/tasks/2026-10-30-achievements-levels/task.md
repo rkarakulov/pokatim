@@ -509,3 +509,10 @@ FILES TO MODIFY / READ / TYPES — разделы 5.1, 6, 7. OUT OF SCOPE — р
   seen` повтор, параллельные GET ×5, негатив монотонности), sharing unit/int (AC6), app (каталог, `flash-session`,
   `setSeen`, карточка, вспышка, блок прогресса, `ProgressBar`, профиль).
 - **Follow-up:** `ProgressBar` в `@rkarakulov/ui` (app-foundation).
+
+### Фиксы ревью pass 1 (оркестратор)
+
+- Codex HIGH (§4.12): «Следующие цели» при первой загрузке — заголовок и скелетон строки; ошибка/офлайн без данных —
+  блока нет (баннер у «Достижений»). Тест загрузки добавлен.
+- Claude LOW-1: обратное окно `seenLevel` записано в ADR-0020; LOW-2: A1 в `profile.md` ссылается на уровни L1.
+- Claude LOW-3: follow-up `ProgressBar` в `@rkarakulov/ui` — в Outcome, issue не заводится (вне репозитория).
