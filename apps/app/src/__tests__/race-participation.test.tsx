@@ -53,6 +53,7 @@ const pick = jest.mocked(getDocumentAsync);
 /** «Сейчас»: 8 октября 2026, 21:00 по Минску — окно гонки открыто. */
 const NOW = new Date('2026-10-08T18:00:00Z');
 const TOKEN = liveSession.accessToken;
+const SOFT_PROMPT = 'Не пропустите изменения гонки';
 const never = () => new Promise<never>(() => undefined);
 const conflict = (code: string) => new ApiHttpError(409, { code, message: 'x' });
 
@@ -217,6 +218,8 @@ describe('вошедший: заявка (AC2, AC3, AC15, AC16)', () => {
     let resolve: (value: ReturnType<typeof myEntry>) => void = () => undefined;
     enterRace.mockReturnValue(new Promise((r) => (resolve = r)));
     await openSignedIn();
+    // открытие карточки — подсказки push нет (N5)
+    expect(screen.queryByText(SOFT_PROMPT)).toBeNull();
 
     await fireEvent.press(await screen.findByRole('button', { name: 'Участвовать' }));
     expect(enterRace).toHaveBeenCalledWith(TOKEN, RACE_ID);
@@ -232,6 +235,8 @@ describe('вошедший: заявка (AC2, AC3, AC15, AC16)', () => {
     ).toBeOnTheScreen();
     expect(participation().getByRole('button', { name: 'Отменить участие' })).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Участвовать' })).toBeNull();
+    // запись прошла — подсказка push с контекстом гонки в «Вашем участии»
+    expect(await participation().findByText(SOFT_PROMPT)).toBeOnTheScreen();
   });
 
   it('возврат фокуса сразу после ответа — без повторного запроса участия; через 10 с — с ним (B13)', async () => {
@@ -287,6 +292,7 @@ describe('вошедший: заявка (AC2, AC3, AC15, AC16)', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'Участвовать' }));
     expect(await screen.findByText('Приём заявок на гонку закрыт')).toBeOnTheScreen();
     await waitFor(() => expect(getMyRaceEntry).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(SOFT_PROMPT)).toBeNull();
   });
 
   it('ошибка участия — карточка видна, баннер и «Повторить»', async () => {

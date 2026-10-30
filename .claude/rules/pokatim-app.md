@@ -45,6 +45,11 @@ paths:
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
   `serverEnded`: токены снял сервер), последний токен — `secureStorage` `pokatim.pushToken`.
+  Подсказка в момент пользы (N5, 2026-10-30) — `PushSoftPrompt` (`push-soft-prompt.tsx`): предложение —
+  `offerPushSoftPrompt(context, id)` (`push-soft-prompt-store.ts`) только из `onSuccess` «Я иду» / записи на гонку, место — `<PushSoftPrompt>` с тем
+  же id под действием; «Включить» — `usePushPermission().press` строки, отказ — `deniedRow()`; показ — чистая
+  `softPromptVisible` (`push-soft-prompt-state.ts`), один за запуск (стор в памяти), «Не сейчас» — `pokatim.pushSoftPrompt`
+  на 30 дней (`push-soft-prompt-storage(.web).ts`: SecureStore / `localStorage`).
   Service worker (`scripts/service-worker.ts`, ADR-0022): `push` — уведомление по payload сервера и сигнал окнам
   `pokatim:push`; `notificationclick` — фокус открытого окна и цель приложению или новое окно по пути цели (копия
   белого списка в SW — паритет с `notification-target.ts` держит тест, песочница — `scripts/service-worker-harness.ts`).

@@ -7,6 +7,8 @@ import { GoingStack } from '@/components/going-stack';
 import { SectionHero } from '@/components/section-hero';
 
 import { goingCaption, rideHeroDate, rideHeroMeta } from './format';
+import { PushSoftPrompt } from '@/features/notifications/push-soft-prompt';
+
 import { RideRsvpAction } from './going-action';
 
 /**
@@ -41,6 +43,7 @@ export function RideHero({
       <View style={styles.action}>
         <RideRsvpAction ride={ride} variant="hero" />
       </View>
+      <PushSoftPrompt context="ride" id={ride.id} />
     </View>
   );
 }

@@ -1,12 +1,14 @@
 import type { RideCard } from '@pokatim/contracts';
 
 import { RideGoingAction, type RideGoingActionProps } from '@/components/ride-going-action';
+import { offerPushSoftPrompt } from '@/features/notifications/push-soft-prompt-store';
 
 import { rideActionErrorText, useRideRsvp } from './queries';
 
 /**
  * `RideGoingAction` ленты, героя и Главной с мутацией «Я иду» / «Не иду» своего райда: кнопка выключена на время
- * запроса, отказ — текстом у действия; ответ сервера обновляет кеш и инвалидирует `['rides']`.
+ * запроса, отказ — текстом у действия; ответ сервера обновляет кеш и инвалидирует `['rides']`. Успешное «Я иду» предлагает
+ * подсказку push (`PushSoftPrompt` с id райда ставит экран: под строкой ленты, под действием героя).
  */
 export function RideRsvpAction({
   ride,
@@ -23,7 +25,7 @@ export function RideRsvpAction({
       variant={variant}
       pending={rsvp.isPending}
       {...(rsvp.error ? { error: rideActionErrorText(rsvp.error, ride.limit) } : {})}
-      onJoin={() => rsvp.mutate('join')}
+      onJoin={() => rsvp.mutate('join', { onSuccess: () => offerPushSoftPrompt('ride', ride.id) })}
       onLeave={() => rsvp.mutate('leave')}
     />
   );

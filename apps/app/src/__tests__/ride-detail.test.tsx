@@ -40,6 +40,7 @@ const share = jest.mocked(shareLink);
 
 /** «Сейчас»: 1 октября 2026, 15:00 по Минску. */
 const NOW = new Date('2026-10-01T12:00:00Z');
+const SOFT_PROMPT = 'Узнайте о переносе или отмене райда';
 const ID = '0190a6f4-0000-7000-8000-000000000005';
 
 const detail: RideDetail = {
@@ -276,6 +277,42 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
     await openSignedIn();
     await fireEvent.press(await screen.findByRole('button', { name: 'Я иду' }));
     expect(await screen.findByText('Мест нет — все 12 мест заняты.')).toBeOnTheScreen();
+    // ошибка мутации — подсказки push нет (N5)
+    expect(screen.queryByText(SOFT_PROMPT)).toBeNull();
+  });
+
+  describe('подсказка push после «Я иду» (N5)', () => {
+    it('открытие карточки — без подсказки и без системного запроса; успешное «Я иду» — подсказка райда', async () => {
+      const notifications = jest.requireMock<{ requestPermissionsAsync: jest.Mock }>(
+        'expo-notifications',
+      );
+      joinRide.mockResolvedValue(
+        view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+      );
+      await openSignedIn();
+      const join = await screen.findByRole('button', { name: 'Я иду' });
+      expect(screen.queryByText(SOFT_PROMPT)).toBeNull();
+
+      getRideForViewer.mockResolvedValue(
+        view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
+      );
+      await fireEvent.press(join);
+      expect(await screen.findByText(SOFT_PROMPT)).toBeOnTheScreen();
+      expect(screen.getByRole('button', { name: 'Включить' })).toBeOnTheScreen();
+      expect(notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    });
+
+    it('«Не иду» — подсказки нет', async () => {
+      getRideForViewer.mockResolvedValue(view({}, viewer('participant', { canLeave: true })));
+      leaveRide.mockResolvedValue(view({ goingCount: 4 }, viewer('none', { canJoin: true })));
+      await openSignedIn();
+      getRideForViewer.mockResolvedValue(
+        view({ goingCount: 4 }, viewer('none', { canJoin: true })),
+      );
+      await fireEvent.press(await screen.findByRole('button', { name: 'Не иду' }));
+      expect(await screen.findByRole('button', { name: 'Я иду' })).toBeOnTheScreen();
+      expect(screen.queryByText(SOFT_PROMPT)).toBeNull();
+    });
   });
 
   it('отменённый: баннер с причиной, без «Я иду» и «Поделиться» (AC5)', async () => {

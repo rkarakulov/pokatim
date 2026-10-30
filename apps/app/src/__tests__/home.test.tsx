@@ -538,6 +538,8 @@ describe('Главная: раздел «Кофе-райды» (блок 05, S6)
 
     expect(joinRide).toHaveBeenCalledWith(liveSession.accessToken, ride.id);
     await waitFor(() => expect(listRides).toHaveBeenCalledTimes(2));
+    // успешное «Я иду» героя — подсказка push под действием (N5)
+    expect(await screen.findByText('Узнайте о переносе или отмене райда')).toBeOnTheScreen();
   });
 
   it('пусто — «Пока нет кофе-райдов» + «Создать райд» → форма; «Все райды» → вкладка «Райды»', async () => {

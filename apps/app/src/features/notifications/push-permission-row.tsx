@@ -26,6 +26,16 @@ async function currentPermission(): Promise<PushPermissionState> {
 
 type RowAction = 'request' | 'subscribe' | 'settings' | null;
 
+/**
+ * Текст отказа без повторного запроса — общий для строки и подсказки (`push-soft-prompt.tsx`): native ведёт в
+ * настройки ОС, web объясняет, где включить (браузер или система).
+ */
+export function deniedRow(): { message: MessageKey; warning: true; action: 'settings' | null } {
+  return canOpenPushSettings
+    ? { message: 'notifications.push.denied', warning: true, action: 'settings' }
+    : { message: 'notifications.push.deniedBrowser', warning: true, action: null };
+}
+
 /** Текст строки по состоянию; `null` — строки нет (нет поддержки или push уже работает). */
 function rowOf(permission: PushPermissionState): {
   message: MessageKey;
@@ -42,11 +52,7 @@ function rowOf(permission: PushPermissionState): {
     }
     return null;
   }
-  if (status === 'denied' && !canAskAgain) {
-    return canOpenPushSettings
-      ? { message: 'notifications.push.denied', warning: true, action: 'settings' }
-      : { message: 'notifications.push.deniedBrowser', warning: true, action: null };
-  }
+  if (status === 'denied' && !canAskAgain) return deniedRow();
   return { message: 'notifications.push.enableHint', action: 'request' };
 }
 

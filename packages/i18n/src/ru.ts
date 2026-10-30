@@ -834,6 +834,14 @@ export const ru = {
     'Уведомления разрешены, но этот браузер не подписан. Нажмите, чтобы подписаться.',
   'notifications.push.expired':
     'Подписка на push в этом браузере истекла. Нажмите, чтобы обновить.',
+  'notifications.softPrompt.rideTitle': 'Узнайте о переносе или отмене райда',
+  'notifications.softPrompt.rideMessage':
+    'Включите push-уведомления — сообщим, если организатор перенесёт или отменит райд.',
+  'notifications.softPrompt.raceTitle': 'Не пропустите изменения гонки',
+  'notifications.softPrompt.raceMessage':
+    'Включите push-уведомления — напомним о сроках и сообщим об изменениях гонки и результатах.',
+  'notifications.softPrompt.enable': 'Включить',
+  'notifications.softPrompt.later': 'Не сейчас',
   'notifications.settings.title': 'Настройки уведомлений',
   'notifications.settings.lead': 'В центре уведомлений видно всё. Здесь — push и письма.',
   'notifications.settings.leadEmail': 'В центре уведомлений видно всё. Здесь — письма на e-mail.',

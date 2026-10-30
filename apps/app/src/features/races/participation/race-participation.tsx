@@ -18,6 +18,8 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { rememberReturnPath } from '@/features/auth/return-path';
+import { PushSoftPrompt } from '@/features/notifications/push-soft-prompt';
+import { offerPushSoftPrompt } from '@/features/notifications/push-soft-prompt-store';
 import { OpenTicketButton } from '@/features/tickets/open-ticket-button';
 
 import {
@@ -67,7 +69,7 @@ function EnterAction({ raceId, signedIn }: { raceId: string; signedIn: boolean }
       router.push('/sign-in');
       return;
     }
-    enter.mutate();
+    enter.mutate(undefined, { onSuccess: () => offerPushSoftPrompt('race', raceId) });
   };
   return (
     <Block>
@@ -171,6 +173,8 @@ export function RaceParticipation({
     <Block>
       <Kicker label={t('races.entry.title')} />
       <EntryResult entry={data} race={race} now={now} />
+      {/* после записи на гонку (N5): «Участвовать» ушло — подсказка под итогом участия */}
+      <PushSoftPrompt context="race" id={race.id} />
       <OpenTicketButton ticket={ticket.data} />
       {data.actions.canShareStory ? <ShareStoryButton raceId={race.id} /> : null}
       <EntryActions entry={data} raceId={race.id} now={now} />
