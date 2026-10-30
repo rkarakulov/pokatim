@@ -9,7 +9,7 @@ import type {
   TotpResetRequest,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
-import { isDuplicateKey } from '@rkarakulov/api-kit/mongo';
+import { isDuplicateKey, MongoOutboxWriter } from '@rkarakulov/api-kit/mongo';
 
 import { type DbSession, MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
@@ -17,6 +17,7 @@ import { IdentityAccounts } from '../identity';
 import type { PanelPrincipal } from './current-panel-user.decorator';
 import { PanelAudit } from './panel-audit';
 import type { AuditActor, PanelMemberDoc } from './panel.collection';
+import { PANEL_ROLE_EMAIL_REQUESTED, type PanelRoleEmailRequested } from './panel.events';
 import { DELETED_MEMBER, PANEL_POLICY } from './panel.policy';
 import { PanelRepository } from './panel.repository';
 import { PanelTotpGuard } from './panel-totp-guard';
@@ -37,8 +38,27 @@ export type CliTotpResetResult =
 export const CLI_TOTP_RESET_REASON = 'Аварийный сброс 2FA (CLI)';
 
 /**
+ * Транзакция с одним повтором после дубля ключа `index`: две первые вставки (выдачи одному пользователю — `_id_`,
+ * приглашения одному адресу — частичный уникальный индекс) — проигравшая получает duplicate key (не transient,
+ * `MongoTransactions` не повторяет) и выполняется заново, уже видя документ победившей.
+ */
+export async function runWithInsertRetry<T>(
+  transactions: MongoTransactions,
+  index: string,
+  work: (tx: DbSession) => Promise<T>,
+): Promise<T> {
+  try {
+    return await transactions.run(work);
+  } catch (error) {
+    if (!isDuplicateKey(error, index)) throw error;
+    return transactions.run(work);
+  }
+}
+
+/**
  * Члены команды панели: выдача, смена и снятие роли (ADR-0009). Транзакции меняют только документы `panel_*`:
- * `lockAdmins` (если затронут набор активных администраторов) → `lockMember` → изменение → запись журнала.
+ * `lockAdmins` (если затронут набор активных администраторов) → `lockMember` → изменение → запись журнала → outbox
+ * письма сотруднику (`panel.role-email-requested { auditId }`, ADR-0026).
  */
 @Injectable()
 export class PanelMembersService {
@@ -48,8 +68,15 @@ export class PanelMembersService {
     private readonly accounts: IdentityAccounts,
     private readonly transactions: MongoTransactions,
     private readonly totpGuard: PanelTotpGuard,
+    private readonly outbox: MongoOutboxWriter,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
+
+  /** Письмо сотруднику о роли — событие в транзакции действия (адрес worker берёт в момент отправки). */
+  private async requestRoleEmail(tx: DbSession, auditId: string): Promise<void> {
+    const payload: PanelRoleEmailRequested = { auditId };
+    await this.outbox.append(tx, { type: PANEL_ROLE_EMAIL_REQUESTED, payload });
+  }
 
   /** Список «Сотрудники» (до `memberListCap`, все статусы) + e-mail одним запросом `$in`. */
   async list(): Promise<PanelMemberList> {
@@ -78,22 +105,23 @@ export class PanelMembersService {
     if (!account.verified) throw domainError('PANEL_USER_UNVERIFIED', 409);
     const { userId } = account;
 
-    await this.runWithInsertRetry(async (tx) => {
+    await runWithInsertRetry(this.transactions, '_id_', async (tx) => {
       // выдача admin расширяет набор администраторов — тот же замок, что у понижения и снятия (R7)
       if (input.role === 'admin') await this.repository.lockAdmins(tx);
       const current = await this.repository.lockMember(tx, userId);
       if (current?.status === 'active') throw domainError('PANEL_ALREADY_MEMBER', 409);
-      await this.activate(tx, current, {
+      await this.activateIn(tx, current, {
         userId,
         role: input.role,
         displayName: input.displayName,
       });
-      await this.audit.append(tx, {
+      const auditId = await this.audit.append(tx, {
         action: 'panel.role_granted',
         actor: { kind: 'user', userId: actorUserId },
         targetUserId: userId,
         details: { roleTo: input.role },
       });
+      await this.requestRoleEmail(tx, auditId);
     });
     return this.member(userId);
   }
@@ -114,13 +142,14 @@ export class PanelMembersService {
       if (current.role === input.role) return;
       await this.ensureAdminRemains(tx, current.role === 'admin' && input.role !== 'admin');
       await this.repository.setRole(tx, userId, input.role);
-      await this.audit.append(tx, {
+      const auditId = await this.audit.append(tx, {
         action: 'panel.role_changed',
         actor: { kind: 'user', userId: actorUserId },
         targetUserId: userId,
         reason: input.reason,
         details: { roleFrom: current.role, roleTo: input.role },
       });
+      await this.requestRoleEmail(tx, auditId);
     });
     return this.member(userId);
   }
@@ -141,13 +170,14 @@ export class PanelMembersService {
       const now = this.clock.now();
       await this.repository.revokeMember(tx, userId, now);
       await this.repository.revokeAllSessions(tx, userId, now, 'role_revoked');
-      await this.audit.append(tx, {
+      const auditId = await this.audit.append(tx, {
         action: 'panel.role_revoked',
         actor: { kind: 'user', userId: actorUserId },
         targetUserId: userId,
         reason: input.reason,
         details: { roleFrom: current.role },
       });
+      await this.requestRoleEmail(tx, auditId);
     });
     return this.member(userId);
   }
@@ -260,12 +290,12 @@ export class PanelMembersService {
     const { userId } = account;
     const actor: AuditActor = { kind: 'cli' };
 
-    const changed = await this.runWithInsertRetry(async (tx) => {
+    const changed = await runWithInsertRetry(this.transactions, '_id_', async (tx) => {
       await this.repository.lockAdmins(tx);
       const current = await this.repository.lockMember(tx, userId);
       if (current?.status === 'active' && current.role === 'admin') return false;
-      await this.activate(tx, current, { userId, role: 'admin', displayName });
-      await this.audit.append(tx, {
+      await this.activateIn(tx, current, { userId, role: 'admin', displayName });
+      const auditId = await this.audit.append(tx, {
         action: 'panel.role_granted',
         actor,
         targetUserId: userId,
@@ -274,15 +304,17 @@ export class PanelMembersService {
             ? { roleFrom: current.role, roleTo: 'admin' }
             : { roleTo: 'admin' },
       });
+      await this.requestRoleEmail(tx, auditId);
       return true;
     });
     return changed ? { state: 'granted', userId } : { state: 'alreadyAdmin', userId };
   }
 
   /**
-   * Новый документ, повторная активация снятого или смена роли активного (CLI) — под `lockMember` вызывающего.
+   * Новый документ, повторная активация снятого или смена роли активного (CLI) — под `lockMember` вызывающего
+   * (выдача роли, CLI, принятие приглашения).
    */
-  private async activate(
+  async activateIn(
     tx: DbSession,
     current: PanelMemberDoc | undefined,
     member: { userId: string; role: PanelRole; displayName: string },
@@ -294,19 +326,6 @@ export class PanelMembersService {
       await this.repository.reactivateMember(tx, { ...member, grantedAt });
     } else {
       await this.repository.setRole(tx, member.userId, member.role);
-    }
-  }
-
-  /**
-   * Транзакция с повтором после `_id_`: две первые выдачи одному пользователю — проигравшая получает duplicate key
-   * (не transient, `MongoTransactions` не повторяет) и выполняется заново, уже видя документ победившей.
-   */
-  private async runWithInsertRetry<T>(work: (tx: DbSession) => Promise<T>): Promise<T> {
-    try {
-      return await this.transactions.run(work);
-    } catch (error) {
-      if (!isDuplicateKey(error, '_id_')) throw error;
-      return this.transactions.run(work);
     }
   }
 }

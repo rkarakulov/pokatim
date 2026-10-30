@@ -132,7 +132,10 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
   руками не править.
 - `PUBLIC_HOST`, `WEB_ORIGIN` (`https://<хост>`), `APP_LINK_BASE` (`https://<хост>/`), `POKATIM_TAG` — **всегда**
   из деплоя (переменная окружения `dev` и тег). API получает `APP_WEB_ORIGIN` = `WEB_ORIGIN` в `docker-compose.yml`
-  (кнопка «Открыть билет» в письме, event-tickets; вне compose пусто — письмо без кнопки).
+  (кнопка «Открыть билет» в письме, event-tickets; вне compose пусто — письмо без кнопки). Ссылки писем панели
+  (приглашение в команду, «Открыть панель» — ADR-0026) — от него же: `${APP_WEB_ORIGIN}/admin/`; `PANEL_LINK_BASE`
+  (`https://…/`, на prod-стенде только https) — только если панель живёт по другому адресу. Нет ни того, ни другого —
+  «Пригласить» отвечает `503 PANEL_INVITATIONS_UNAVAILABLE`.
 - `CORS_ORIGINS` пусто (web и API — один origin за nginx), `TRUST_PROXY=1` (один прокси — nginx хоста; он
   перезаписывает `X-Forwarded-For` адресом клиента).
 - Треки и устройства (ADR-0011, раздел «Треки и устройства»): `TRACK_STORAGE_MAX_BYTES` (2 GiB),

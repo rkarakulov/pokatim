@@ -85,6 +85,11 @@ export const AUDIT_ACTIONS = [
   'panel.totp_reset',
   'panel.totp_recovery_regenerated',
   'panel.totp_recovery_used',
+  // panel-invitations (ADR-0026): приглашение отправлено, отозвано (subject `invitation`, `details.roleTo`, без e-mail)
+  // и принято (actor и target — принявший)
+  'panel.invitation_sent',
+  'panel.invitation_revoked',
+  'panel.invitation_accepted',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -114,6 +119,8 @@ export const AUDIT_SUBJECT_KINDS = [
   'rider',
   // app-themes: настройка платформы (`id` — фиксированный nil UUID, `label` — название настройки)
   'platform',
+  // panel-invitations: приглашение в команду (`id` — id приглашения, `label` — «Приглашение ·<id>», без имени и e-mail)
+  'invitation',
 ] as const;
 export const AuditSubjectKind = z.enum(AUDIT_SUBJECT_KINDS);
 export type AuditSubjectKind = z.infer<typeof AuditSubjectKind>;

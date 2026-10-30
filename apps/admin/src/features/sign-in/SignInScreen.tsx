@@ -1,11 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { apiErrorOf, isNetworkError } from '@pokatim/api-client';
-import {
-  type PanelMe,
-  PanelSignInRequest,
-  type PanelSignInResponse,
-  RateLimitedDetails,
-} from '@pokatim/contracts';
+import { type PanelMe, PanelSignInRequest, RateLimitedDetails } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRouteApi, useRouter } from '@tanstack/react-router';
@@ -19,15 +14,14 @@ import { ME_QUERY_KEY } from '../../session/me';
 import { AuthCard, Banner, Button, TextField } from '../../ui';
 import { useNow } from '../../use-now';
 import { TotpSetupStep, TotpStep } from './TotpSignInSteps';
+import { UnverifiedCard, type UnverifiedState, unverifiedState } from './UnverifiedCard';
 
 const route = getRouteApi('/sign-in');
-
-type Pending = Extract<PanelSignInResponse, { state: 'verificationRequired' }>;
 
 type View =
   | { kind: 'form' }
   | { kind: 'denied'; email: string }
-  | { kind: 'unverified'; email: string; registrationToken: string; resendAt: number }
+  | ({ kind: 'unverified' } & UnverifiedState)
   | { kind: 'totp' | 'totpSetup'; email: string; challenge: string };
 
 type FormBanner = 'invalid' | 'network' | 'unknown' | 'totpExpired' | 'totpUnavailable' | undefined;
@@ -72,7 +66,7 @@ export function SignInScreen() {
     meta: { ownsUnauthorized: true },
     onSuccess: async (result, body) => {
       if (result.state === 'verificationRequired') {
-        setView(unverifiedView(result, body.email, syncNow()));
+        setView({ kind: 'unverified', ...unverifiedState(result, body.email, syncNow()) });
         return;
       }
       if (result.state === 'totpRequired' || result.state === 'totpSetupRequired') {
@@ -227,80 +221,6 @@ export function SignInScreen() {
         </Button>
       </form>
       <p className="auth__note t-meta">{t('admin.signIn.note')}</p>
-    </AuthCard>
-  );
-}
-
-function unverifiedView(result: Pending, enteredEmail: string, at: number): View {
-  return {
-    kind: 'unverified',
-    email: result.email || enteredEmail.trim(),
-    registrationToken: result.registrationToken,
-    resendAt: at + result.resendAvailableInSec * 1000,
-  };
-}
-
-/** «E-mail не подтверждён»: повтор письма (лимиты identity), пауза — с отсчётом. */
-function UnverifiedCard({
-  view,
-  now,
-  onResent,
-  onBack,
-}: {
-  view: Extract<View, { kind: 'unverified' }>;
-  now: number;
-  /** Пауза до следующего повтора, секунды. */
-  onResent: (seconds: number) => void;
-  onBack: () => void;
-}) {
-  const [sent, setSent] = useState(false);
-  const resend = useMutation({
-    mutationFn: () => api.resendVerification({ registrationToken: view.registrationToken }),
-    meta: { ownsUnauthorized: true },
-    onSuccess: (result) => {
-      if ('state' in result) {
-        onBack();
-        return;
-      }
-      setSent(true);
-      onResent(result.resendAvailableInSec);
-    },
-    onError: (error) => {
-      const details = RateLimitedDetails.safeParse(apiErrorOf(error)?.details);
-      if (details.success) onResent(details.data.retryAfterSec);
-    },
-  });
-  const waitSec = Math.max(0, Math.ceil((view.resendAt - now) / 1000));
-  return (
-    <AuthCard title={t('admin.signIn.unverifiedTitle')}>
-      <p className="auth__lead t-body">{t('admin.signIn.unverifiedMessage')}</p>
-      {sent ? <Banner>{t('admin.signIn.resent')}</Banner> : null}
-      {resend.isError &&
-      !RateLimitedDetails.safeParse(apiErrorOf(resend.error)?.details).success ? (
-        <Banner tone="error" role="alert">
-          {t(isNetworkError(resend.error) ? 'error.network' : 'error.unknown')}
-        </Banner>
-      ) : null}
-      <div className="auth__actions">
-        <Button
-          variant="primary"
-          full
-          disabled={waitSec > 0}
-          busy={resend.isPending}
-          aria-describedby={waitSec > 0 ? 'resend-wait' : undefined}
-          onClick={() => resend.mutate()}
-        >
-          {t('admin.signIn.resend')}
-        </Button>
-        {waitSec > 0 ? (
-          <p id="resend-wait" className="muted t-meta">
-            {t('admin.signIn.resendIn', { seconds: waitSec })}
-          </p>
-        ) : null}
-        <Button full onClick={onBack}>
-          {t('admin.signIn.back')}
-        </Button>
-      </div>
     </AuthCard>
   );
 }

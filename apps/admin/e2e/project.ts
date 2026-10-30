@@ -29,6 +29,8 @@ const api = {
   PORT: String(API_PORT),
   APP_LINK_BASE: 'pokatim://',
   CORS_ORIGINS: '',
+  // ссылки писем панели (приглашение, ADR-0026) — на `vite preview` смоука под `/admin/`
+  PANEL_LINK_BASE: PANEL_URL,
 };
 
 /** Окружение процесса API — для CLI `grant-admin` из теста. */
