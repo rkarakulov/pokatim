@@ -322,6 +322,21 @@ Status: **CONCERNS** — блокеров нет. RC-F1…RC-F14 — реком�
 - **Native-тест** — в `src/__tests__/profile-screen.test.tsx` (экран целиком), отдельный `avatar-editor.test.tsx` не
   создавали.
 
+### Исправления ревью, pass 1 (coder, 2026-10-30)
+
+- **MEDIUM (Claude, Codex) — запрет истёк при открытом экране.** `useAvatarBlockExpiry` (`features/profile/
+  avatar-block-expiry.ts`, вызов в `AvatarSection` — native и web): при ненулевом `avatarUploadBlockedUntil` таймер на
+  момент окончания → `invalidateQueries(['profile'])`; кнопку разблокирует только ответ сервера. Задержка — не больше
+  2^31-1 мс (дальше — цепочкой); смена срока и размонтирование отменяют таймер; сервер ответил тем же сроком (часы
+  устройства впереди) — повтор через 30 с. Тест — `avatar-block-expiry.test.tsx` (фейковые таймеры, 7 случаев);
+  отрицательное доказательство — без ограничения задержки 2 теста красные.
+- **MEDIUM (Claude) — журнал.** `AuditScreen.details()`: у записи с `details.avatarBlockedUntil` (сброс фото, включивший
+  запрет) — «Жалоб: N · запрет загрузки фото до <дата, время>» (`formatDateTimeLong`, Минск); ключи
+  `admin.audit.details.avatarBlockedUntil`, `admin.audit.details.join`; тест экрана журнала. Совпадает с
+  `admin-panel.md` (журнал: «дата окончания запрета, если его включил этот сброс»).
+- **LOW — explain страницы с курсором.** `rider-profiles-moderation.int.test.ts`: план запроса с фильтром `reason` и
+  keyset-условием курсора — `IXSCAN profiles_report_reason_queue_idx`, без `SORT`.
+
 ## 9. Acceptance Criteria
 
 1. `GET /v1/admin/rider-profiles?reason=name` — только профили с открытой жалобой «Имя», сортировка и курсор как у

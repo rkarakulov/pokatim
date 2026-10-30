@@ -1669,6 +1669,8 @@ export const ru = {
   'admin.audit.action.ride.restored': 'Возвращён кофе-райд',
   'admin.audit.action.ride.reports_dismissed': 'Отклонены жалобы на кофе-райд',
   'admin.audit.reportCount': 'Жалоб: {count}',
+  'admin.audit.details.avatarBlockedUntil': 'запрет загрузки фото до {date}',
+  'admin.audit.details.join': '{head} · {next}',
   'admin.ridesModeration.title': 'Модерация райдов',
   'admin.ridesModeration.lead':
     'Кофе-райды с жалобами райдеров. Каждое решение — с причиной в журнале.',

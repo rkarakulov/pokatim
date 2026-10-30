@@ -6,6 +6,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { RiderAvatar } from '@/components/rider-avatar';
 
+import { useAvatarBlockExpiry } from './avatar-block-expiry';
 import { avatarBlockedText, avatarErrorMessage } from './avatar-errors';
 import { useDeleteAvatar } from './queries';
 
@@ -64,7 +65,7 @@ function DeleteAvatar({ onFailure }: { onFailure: (message: string | undefined) 
  * Блок «Фото» формы «Редактировать профиль» (rider-profile, AC14) — общий для native и web: заголовок, аватар 56,
  * подсказка про геометки, действия платформы (`children`), «Удалить фото» при фото, ошибка — баннер под кнопками.
  * Запрет загрузки (`blockedUntil`) — подпись «Загрузка фото недоступна до …» сразу под кнопкой выбора (кнопку
- * выключает платформа); «Удалить фото» остаётся доступной.
+ * выключает платформа); «Удалить фото» остаётся доступной. Срок истёк при открытом экране — перечитывание профиля.
  */
 export function AvatarSection({
   avatarId,
@@ -80,6 +81,7 @@ export function AvatarSection({
   children: ReactNode;
 }) {
   const theme = useTheme();
+  useAvatarBlockExpiry(blockedUntil);
   return (
     <View testID="avatar-editor" style={styles.stack}>
       <Text

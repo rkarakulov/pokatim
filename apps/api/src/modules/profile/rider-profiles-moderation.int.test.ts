@@ -428,6 +428,30 @@ describe('очередь по причине (profile-moderation-followups, AC1)
     expect(json).toContain('IXSCAN');
     expect(json).not.toContain('"stage":"SORT"');
   });
+
+  it('план страницы с курсором и фильтром reason — тот же индекс, без стадии SORT (ревью pass 1, LOW)', async () => {
+    await reportsOn(target, ['name']);
+    // форма фильтра — как у `ProfileRepository.reportQueue` с `after` (keyset по lastReportAt, _id)
+    const at = new Date('2026-10-30T10:00:00.000Z');
+    const plan = await profilesDb(h)
+      .find({
+        $and: [
+          { openReportCount: { $gt: 0 } },
+          { openReasons: 'name' },
+          {
+            $or: [{ lastReportAt: { $lt: at } }, { lastReportAt: at, _id: { $lt: target.userId } }],
+          },
+        ],
+      })
+      .sort({ lastReportAt: -1, _id: -1 })
+      .hint('profiles_report_reason_queue_idx')
+      .limit(21)
+      .explain('queryPlanner');
+    const json = JSON.stringify(plan.queryPlanner.winningPlan);
+    expect(json).toContain('profiles_report_reason_queue_idx');
+    expect(json).toContain('IXSCAN');
+    expect(json).not.toContain('"stage":"SORT"');
+  });
 });
 
 describe('событие сброса для уведомления (profile-moderation-followups, AC3)', () => {
