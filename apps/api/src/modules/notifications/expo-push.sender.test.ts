@@ -110,11 +110,15 @@ describe('ExpoPushSender.send', () => {
   });
 
   it('таймаут и сеть — unavailable', async () => {
-    expo.hold(() => new Promise((resolve) => setTimeout(resolve, 300)));
+    let release!: () => void;
+    expo.hold(() => new Promise<void>((resolve) => (release = resolve)));
     expect(await failure(make({ timeoutMs: 50 }).send([message(1)]))).toMatchObject({
       kind: 'unavailable',
       message: 'push service timeout',
     });
+    // удержанный запрос дорабатывает в этом тесте: проснувшись в следующем, он забрал бы его `expo.fail(...)`
+    release();
+    await vi.waitFor(() => expect(expo.delivered).toHaveLength(1));
     const closed = new ExpoPushSender({
       apiUrl: 'http://127.0.0.1:1/--/api/v2/push',
       accessToken: null,
