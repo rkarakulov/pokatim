@@ -72,7 +72,7 @@ export class AchievementsService {
     const seasonIds = [...new Set(storedSeasonal.map((grant) => grant.seasonId))];
     const [titled, outcomes] = await Promise.all([
       this.facts.titled(earned, userId),
-      this.standings.outcomesOf(userId, seasonIds, now),
+      this.seasonOutcomes(userId, seasonIds, now),
     ]);
     const seasonal = seasonalAchievements(outcomes);
     const first = syncedAt === null;
@@ -150,7 +150,7 @@ export class AchievementsService {
     if (!rider) throw domainError('NOT_FOUND', 404);
     const [rows, outcomes] = await Promise.all([
       this.results.publishedRows(rider.userId),
-      this.standings.outcomesOf(rider.userId, [], this.clock.now()),
+      this.seasonOutcomes(rider.userId, [], this.clock.now()),
     ]);
     const titled = await this.facts.titled(raceAchievements(rows), rider.userId);
     const items = [
@@ -177,6 +177,25 @@ export class AchievementsService {
    * Видимая сезонная выдача в своём списке (S2): сезон `final` — только заработанная сейчас; сезон `pending` —
    * остаётся (не мерцает между ревизией и пересчётом), название — из исхода порта; сезон пропал из ответа порта — нет.
    */
+  /**
+   * Итоги сезонов; сбой порта — как «ни одного сезона» (ревью pass 1, MEDIUM): `settled` пуст — сезонные выдачи не
+   * трогаются, в ответе их нет до следующего запроса; несезонные и прогресс отдаются. Лог — uid, без текста ошибки.
+   */
+  private async seasonOutcomes(
+    userId: string,
+    alsoSeasonIds: readonly string[],
+    now: Date,
+  ): Promise<RiderSeasonOutcome[]> {
+    try {
+      return await this.standings.outcomesOf(userId, alsoSeasonIds, now);
+    } catch (error) {
+      this.logger.warn(
+        `achievements.seasons_unavailable uid=${userId} error=${error instanceof Error ? error.name : 'unknown'}`,
+      );
+      return [];
+    }
+  }
+
   private visibleSeasonal(
     grant: { code: SeasonalEarned['code']; seasonId: string; factAt: Date },
     earned: ReadonlyMap<string, SeasonalEarned>,

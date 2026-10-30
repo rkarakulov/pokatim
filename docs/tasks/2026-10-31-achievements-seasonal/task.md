@@ -648,3 +648,13 @@ OUT OF SCOPE — раздел 4, а также:
 - **Документы:** `docs/product/profile.md` (S1–S8, «Где в продукте», Follow-up), ADR-0020 «Дополнение: сезонные»,
   `docs/product/races-and-seasons.md`, `.claude/rules/pokatim-{backend,db,contracts,security,app}.md`.
 - **Не сделано:** `pr.md` (FINISH); e2e web не запускался (не обязателен).
+
+### Фиксы ревью pass 1 (оркестратор)
+
+- Claude MEDIUM: сбой порта `RIDER_SEASON_STANDINGS` больше не роняет `GET /v1/achievements` и публичный список —
+  `seasonOutcomes` ловит, логирует `achievements.seasons_unavailable` (uid, имя класса ошибки) и ведёт себя как «нет
+  сезонов» (`settled` пуст — выдачи не трогаются). Int-тест: 500 до правки, 200 после; несезонные на месте, сезонные
+  выдачи не отозваны, после восстановления порта — снова в ответе.
+- LOW: текст «Сезон в зачёте» — «не меньше чем в {count} гонках»; `pokatim-backend.md` — `FactAchievementCode`,
+  `StandingsCoreModule` в импортах. Вечный `pending` при `version_conflict` (LOW) — принят: регламент standings
+  сам логирует конфликт, сезонные в окне не отзываются (безопасная сторона).

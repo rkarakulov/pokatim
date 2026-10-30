@@ -336,7 +336,8 @@ paths:
   `AchievementsCoreModule` — `AchievementsRepository` + `AchievementErasure` (модулей не импортирует);
   `AchievementsReadModule` — `AchievementFactsReader` (факты портов + правила, только чтение) и порт карточки
   (`ResultsCoreModule`, `RidesCoreModule`, `RouteRidesCoreModule`, `AchievementsCoreModule`);
-  `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `AchievementsReadModule`.
+  `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `StandingsCoreModule`,
+  `AchievementsReadModule`.
   Worker-модуля, очередей, outbox и регламента нет.
 - Факты — только порты владельцев: `RIDER_RESULTS` (`publishedRows`, `racesOf` — как у `riders`), `RIDER_ROUTE_RIDES`
   (`route-rides`: `passedOf` — `passed` + `ActivitySource.liveActivities` + `RouteRideRoutes.rideableTitles`, та же
@@ -344,8 +345,8 @@ paths:
   условия R8 в `RidesRepository.pastFactsOf`, порядок ↑), `RIDER_PROFILES` (публичность). Пределы портов — 2000 строк
   и лог `achievements.{rides,route_rides}_truncated`. Предикат «в зачёте» — общий `isRankedRow` (`results/index.ts`,
   RC-9: им же считает `riders.policy.summarize`). Копий условий и второго расчёта мест в `achievements` нет.
-- Правила и план — чистые функции `achievements.policy.ts`: `ACHIEVEMENT_RULES` (`satisfies Record<AchievementCode,
-  …>` — новый код без правила не скомпилируется), `evaluateAchievements` (одна сортировка фактов: по времени ↑, при
+- Правила и план — чистые функции `achievements.policy.ts`: `ACHIEVEMENT_RULES` (`satisfies Record<FactAchievementCode,
+  …>` — новый несезонный код без правила не скомпилируется; сезонные — `SEASONAL_RULES`), `evaluateAchievements` (одна сортировка фактов: по времени ↑, при
   равенстве — id ↑ → `earned` + `progress`), `earnedAchievements` (= `.earned`), `raceAchievements` (публичный список —
   те же правила, с уровнем `races_5`), `reconcilePlan`, `sortForList` (факт ↓, равенство — каталог ↓),
   `ACHIEVEMENTS_POLICY` (лимиты). Уровни: пороги — только `ACHIEVEMENT_LEVEL_TARGETS` из контрактов (своих констант
@@ -374,7 +375,8 @@ paths:
   `code:seasonId`, `factAt = endsBefore − 1 мс`; `settled` — `final`-сезоны), `seasonalPlan` (insert/restore/revoke
   только по `settled`; `refresh` нет). `sync`: оба плана → маркер после обоих → ответ: сезонные — видимые ∩
   заработанные (`final`), в `pending` — видимая остаётся с названием из исхода. Лог — счётчики `seasonal_*`. Карточка:
-  сезонный код → `cardFacts` `null` (409), `ACHIEVEMENT_BADGE_ICONS` — `Record<FactAchievementCode, …>`.
+  сезонный код → `cardFacts` `null` (409), `ACHIEVEMENT_BADGE_ICONS` — `Record<FactAchievementCode, …>`. Сбой порта сезонов — `seasonOutcomes` → `[]`
+  (лог `achievements.seasons_unavailable`): сезонные не трогаются и не отдаются, остальной список — как обычно.
 
 ## Карточки для сторис (`sharing`, story-cards, ADR-0018)
 

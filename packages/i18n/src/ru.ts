@@ -774,7 +774,8 @@ export const ru = {
   'achievements.rides_10.title': 'Завсегдатай',
   'achievements.rides_10.condition': '{count} прошедших кофе-райдов',
   'achievements.season_regular.title': 'Сезон в зачёте',
-  'achievements.season_regular.condition': 'Финиш с местом в {count} гонках одной таблицы сезона',
+  'achievements.season_regular.condition':
+    'Финиш с местом не меньше чем в {count} гонках одной таблицы сезона',
   'achievements.season_podium.title': 'Призёр сезона',
   'achievements.season_podium.condition': 'Место с первого по третье в таблице сезона',
   'achievements.season_champion.title': 'Чемпион сезона',

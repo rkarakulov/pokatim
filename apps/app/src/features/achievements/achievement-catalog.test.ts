@@ -232,7 +232,7 @@ describe('сезонные (achievements-seasonal, S1, S3, S7)', () => {
     expect(achievementTitle('season_champion')).toBe('Чемпион сезона');
     expect(achievementTitle('season_podium')).toBe('Призёр сезона');
     expect(achievementCondition('season_regular', null)).toBe(
-      'Финиш с местом в 3 гонках одной таблицы сезона',
+      'Финиш с местом не меньше чем в 3 гонках одной таблицы сезона',
     );
     expect(achievementCondition('season_podium', null)).toBe(
       'Место с первого по третье в таблице сезона',

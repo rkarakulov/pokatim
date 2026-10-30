@@ -32,6 +32,7 @@ import {
   syncStandings,
 } from '../../../test/standings';
 import { tracks } from '../../../test/tracks';
+import { RIDER_SEASON_STANDINGS, type RiderSeasonStandings } from '../standings';
 import { ACHIEVEMENTS_POLICY } from './achievements.policy';
 import { AchievementsRepository } from './achievements.repository';
 
@@ -959,6 +960,30 @@ describe('сезонные достижения (achievements-seasonal, AC2–AC
 
     await call(h, 'PATCH', '/v1/profile', { showNameInResults: false }, bearer(me.token));
     expect((await call(h, 'GET', `/v1/riders/${publicId}/achievements`)).status).toBe(404);
+  });
+
+  it('сбой порта сезонов — несезонные и прогресс отдаются, сезонные выдачи не трогаются (ревью pass 1, MEDIUM)', async () => {
+    const me = await rider(h, 'me@example.com');
+    const season = await seedSeason(h, 'Сезон 2025', { year: 2025 });
+    await seedProtocolRace(h, season, [placedRow(me.userId, 1)]);
+    await syncStandings(h);
+    expect(seasonalOf(await list(me))).toHaveLength(2);
+
+    const port = h.app.get<RiderSeasonStandings>(RIDER_SEASON_STANDINGS, { strict: false });
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(port, 'outcomesOf').mockRejectedValue(new Error('standings down'));
+    const res = await authed(h, me, 'GET', ACHIEVEMENTS);
+    expect(res.status).toBe(200);
+    const items = AchievementList.parse(res.body).items;
+    expect(codesOf(items)).toContain('race_win');
+    expect(seasonalOf(items)).toEqual([]);
+    expect(
+      await achievementsDb(h).seasonGrants.countDocuments({ userId: me.userId, revokedAt: null }),
+    ).toBe(2);
+    const publicId = await publicIdOf(me);
+    expect((await call(h, 'GET', `/v1/riders/${publicId}/achievements`)).status).toBe(200);
+    vi.mocked(port.outcomesOf).mockRestore();
+    expect(seasonalOf(await list(me))).toHaveLength(2);
   });
 
   it('AC6: документ v1 в achievement_grants — прежний ответ рядом с сезонными', async () => {
