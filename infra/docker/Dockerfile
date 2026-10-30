@@ -16,10 +16,15 @@ ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d8
 
 # ---------- установка зависимостей монорепо (общая для всех целей) ----------
 FROM ${NODE_IMAGE} AS deps
+# pnpm_config_verify_deps_before_run=false: pnpm 11 по умолчанию (`install`) перед `pnpm run` сверяет node_modules с
+# манифестами по времени изменения и сам запускает install. После `COPY . .` свежий checkout новее слоя установки из
+# кэша → install без токена (secret есть только у RUN установки) → «supply-chain policy check» и 401, а неудачный install
+# стирает node_modules/.bin. Зависимости здесь уже стоят по frozen-lockfile этого же образа — сверка не нужна.
 ENV CI=1 \
     TURBO_TELEMETRY_DISABLED=1 \
     EXPO_NO_TELEMETRY=1 \
-    npm_config_update_notifier=false
+    npm_config_update_notifier=false \
+    pnpm_config_verify_deps_before_run=false
 RUN npm install --global --no-audit --no-fund pnpm@11.18.0
 WORKDIR /repo
 # только манифесты: слой установки пересобирается лишь при смене зависимостей.

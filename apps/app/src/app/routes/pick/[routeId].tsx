@@ -1,5 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 
+import { useSettingsShell } from '@/features/devices/settings-shell';
 import { RouteRidePickScreen } from '@/features/route-rides/route-ride-pick';
 
 /**
@@ -8,5 +9,6 @@ import { RouteRidePickScreen } from '@/features/route-rides/route-ride-pick';
  */
 export default function RouteRidePickRoute() {
   const { routeId, mine } = useLocalSearchParams<{ routeId: string; mine?: string }>();
-  return <RouteRidePickScreen routeId={String(routeId)} mine={mine === '1'} />;
+  const shell = useSettingsShell();
+  return shell ?? <RouteRidePickScreen routeId={String(routeId)} mine={mine === '1'} />;
 }

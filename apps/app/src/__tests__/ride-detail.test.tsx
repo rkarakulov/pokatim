@@ -421,8 +421,7 @@ describe('шит «Райд опубликован»: организатор (ri
     ).toBeOnTheScreen();
     const sheet = screen.getByTestId('ride-published-sheet');
     expect(sheet.props.accessibilityViewIsModal).toBe(true);
-    expect(sheet.props.role).toBe('dialog');
-    expect(sheet.props['aria-label']).toBe('Райд опубликован');
+    expect(screen.getByRole('heading', { name: 'Райд опубликован' })).toBeOnTheScreen();
     expect(screen.getAllByRole('button', { name: 'Карточка-приглашение' })).not.toHaveLength(0);
     expect(screen.getByRole('button', { name: 'Ссылка' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Закрыть' })).toBeOnTheScreen();
@@ -488,7 +487,7 @@ describe('шит «Райд опубликован»: организатор (ri
   it('«Назад» Android / Esc (onRequestClose) закрывает шит', async () => {
     await openPublished();
     // событие поднимается от шита к `Modal` (обработчик `onRequestClose`)
-    await fireEvent(screen.getByTestId('ride-published-sheet'), 'requestClose');
+    await fireEvent(screen.getByLabelText('Райд опубликован'), 'requestClose');
     expect(screen.queryByTestId('ride-published-sheet')).toBeNull();
   });
 
