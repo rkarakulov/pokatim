@@ -585,8 +585,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 - QR — `features/tickets/qr-matrix.ts` (ядро `qrcode/lib/core/qrcode`, без рендереров canvas/png) → `path`; native —
   `react-native-svg` лениво (`useSvgLib`), web — inline `<svg>`; сторона — `layout.ticketQr`. Цвета — роли `ticket.qrInk`/`ticket.qrPaper`
   (`@pokatim/design-tokens`, светлая «бумага» во всех темах, контраст ≥ 7:1).
-- «Поделиться» билетом — только ссылка на событие без кода и QR (RC-B2). «Как добраться» — `maps-link.ts` (https-поиск
-  по адресу, `openExternalUrl`).
+- «Поделиться» билетом — только ссылка на событие без кода и QR (RC-B2). «Как добраться» — `maps-link.ts` (поиск по
+  адресу системными картами: Android — `geo:`, iOS/iPadOS — Apple Maps, иначе — Яндекс; платформа — развилка
+  `maps-platform(.web).ts`, web по `navigator`; открытие — `openExternalUrl`, web `geo:` — в той же вкладке).
 - Материалы события (PR C, plan-C §7): представление — `components/event-materials.tsx` (иконка темы, название,
   описание ≤ 2 строк, «PDF · 1,2 МБ» или домен; модель — `features/tickets/materials-format.ts`); ссылка — только после
   `RegistrationUrl.safeParse` → `openExternalUrl`, PDF — `downloadFile(api.eventFileUrl(id))`, текст — раскрытие
