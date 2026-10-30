@@ -1,8 +1,8 @@
 /// <reference types="jest" />
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 
 import type { PushPermissionState } from './push';
-import { PushPermissionRow } from './push-permission-row';
+import { PushPermissionRow, usePushPermission } from './push-permission-row';
 
 const mockPush = {
   getPushPermission: jest.fn<Promise<PushPermissionState>, []>(),
@@ -91,5 +91,39 @@ describe('строка push в web (ADR-0022): реальное состояни
     render(<PushPermissionRow />);
     await waitFor(() => expect(mockPush.getPushPermission).toHaveBeenCalled());
     expect(screen.queryByText('Включить push-уведомления')).toBeNull();
+  });
+});
+
+describe('тумблер группы включает push браузера (web)', () => {
+  it('разрешено, а браузер не подписан — включение тумблера подписывает без запроса', async () => {
+    mockPush.getPushPermission.mockResolvedValue(granted('missing'));
+    const { result } = renderHook(() => usePushPermission());
+    await waitFor(() => expect(result.current.delivers).toBe(false));
+    mockRegister.mockClear();
+    mockPush.getPushPermission.mockResolvedValue(granted('active'));
+
+    await act(() => result.current.enableFromToggle());
+
+    expect(mockPush.requestPushPermission).not.toHaveBeenCalled();
+    expect(mockRegister).toHaveBeenCalledTimes(1);
+    expect(result.current.delivers).toBe(true);
+  });
+
+  it('запрещено в браузере — включение тумблера ничего не делает (объясняет строка)', async () => {
+    mockPush.getPushPermission.mockResolvedValue({ status: 'denied', canAskAgain: false });
+    const { result } = renderHook(() => usePushPermission());
+    await waitFor(() => expect(result.current.delivers).toBe(false));
+
+    await act(() => result.current.enableFromToggle());
+
+    expect(mockPush.requestPushPermission).not.toHaveBeenCalled();
+    expect(mockRegister).not.toHaveBeenCalled();
+  });
+
+  it('нет Web Push — состояние неизвестно, подсказок «не придут» нет', async () => {
+    mockPush.getPushPermission.mockResolvedValue({ status: 'unavailable', canAskAgain: false });
+    const { result } = renderHook(() => usePushPermission());
+    await waitFor(() => expect(result.current.permission?.status).toBe('unavailable'));
+    expect(result.current.delivers).toBeNull();
   });
 });
