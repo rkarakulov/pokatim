@@ -120,9 +120,10 @@ paths:
   Образцы — `register`, `auth/verify/[token]`. Новый публичный экран — шаг смоука `e2e/web.spec.ts`.
 - `og:image` (og-images) — `publicPageMetadata({ image })` из `src/lib/og-image.ts`: страница объекта (гонка, райд,
   маршрут, старт) — `Promise.all([данные, ogCardIfOrigin(kind, id)])` → `pageOgImage` (своя; нет версии или API
-  недоступен — бренд; страница не найдена — без картинки); остальные публичные страницы — `brandOgImage()` /
-  `brandOgImageFor(page)`. Версию картинки считает только API (`/v1/og/cards/...`), адрес — только от `WEB_ORIGIN`;
-  нет `WEB_ORIGIN` — ни запросов, ни картинки. Свой fetch и расчёт версии в приложении — запрещены.
+  недоступен — бренд; страница не найдена — без картинки); остальные публичные страницы —
+  `brandOgImage()`. Версию картинки считает только API (`/v1/og/cards/...`), адрес — только от `WEB_ORIGIN`;
+  нет `WEB_ORIGIN` — ни запросов, ни картинки. Сезон и профиль райдера — своя картинка через `ownOgImage` (схема id
+  по виду — `OG_CARD_ID`); мета райдера — без ПДн, `publicId` только в URL `og:image`. Свой fetch и расчёт версии в приложении — запрещены.
 - `robots.txt` и `sitemap.xml` (landing-seo) — API-маршруты `src/app/{robots.txt,sitemap.xml}+api.ts`, правила —
   `src/lib/seo.ts`. **Новый экран в `src/app`** — классифицируй: только вошедшим, онбординг, токен в URL — префикс в
   `SEO_DISALLOW`; публичный — в `PUBLIC` сторожа `__tests__/seo-routes.test.ts`. Страницу с `noindex` в мета не
@@ -326,8 +327,12 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 - Общая часть экранов карточек — `features/sharing/` (`card-status.ts`: `useCardStatus` по `CardSource` — ключ и
   запрос статуса, `useCardFile`; `card-panel.tsx`: `CardPanel` — чипы, превью, «Поделиться», пустое состояние на
   409/404). Приглашение кофе-райда — `features/rides/invite/*`, экран `rides/invite/[id]` внутри `Stack.Protected`
-  (ключ `['rides','invite',rideId,template]`); кнопка «Карточка-приглашение» на детали — вошедшему, `phase ===
-  'upcoming'` (право — сервер: 409 → «Приглашение недоступно»). Карточка достижения — `features/achievements/story/*`,
+  (ключ `['rides','invite',rideId,template]`); вход — «Поделиться» на детали (шит «Карточка / Ссылка»), карточка —
+  вошедшему, `phase === 'upcoming'` (право — сервер: 409 → «Приглашение недоступно»). Карточка маршрута —
+  `features/routes/story/*`, экран `routes/story/[id]` внутри `Stack.Protected` (ключ
+  `['routes','story',routeId,template]`, 404 — «Карточка недоступна» и «К маршруту»). Выбор «Карточка / Ссылка» —
+  общий `ShareChoiceSheet` + `useShareChoice` (`features/sharing/share-choice-sheet.tsx`): оба пути — шит; гость —
+  сразу ссылка; нет origin — сразу карточка; `shareLink` — синхронно в обработчике. Карточка достижения — `features/achievements/story/*`,
   экран `achievements/story/[code]` внутри `Stack.Protected` (ключ `['achievements','story',code,template]`; 409 и
   незнакомый код — «Карточки нет» и «К достижению»).
 
@@ -553,8 +558,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `ModalSheet` — единственное модальное окно приложения (шторка или `placement="dialog"`; окно установки PWA —
   обёртка с «×» в `headerAction`); имя окна — `aria-label` самого `Modal` (на web он — `role="dialog"`), панель
   второго dialog не создаёт.
-  Действия — «Карточка-приглашение» (`rides/invite/[id]`), «Ссылка» (`shareLink`; нет origin — кнопки нет),
-  «Закрыть»; закрытие снимает `published` (`router.setParams`).
+  Действия — общий `ShareChoiceSheet`: «Карточка-приглашение» (`rides/invite/[id]`), «Ссылка» (`shareLink`; нет
+  origin — пункта нет), «Закрыть»; закрытие снимает `published` (`router.setParams`).
 - Жалоба (05b) — экран `rides/report/[id]` (`features/rides/ride-report.tsx`) внутри `Stack.Protected`: причина —
   `Chip` из `RIDE_REPORT_REASONS`, комментарий — однострочный `TextField` (фолбэк до многострочного поля базы), успех —
   баннер на месте формы. Кнопка «Пожаловаться» и строка «Вы пожаловались…» — только по `viewer.canReport` /
