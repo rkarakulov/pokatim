@@ -112,6 +112,8 @@ describe('заявка: выбор уровня (07c)', () => {
     expect(await screen.findByText('Ваше участие')).toBeOnTheScreen();
     expect(participation().getByText('Verified · Мужчины до 40')).toBeOnTheScreen();
     expect(screen.queryByText('Уровень участия')).toBeNull();
+    // запись с выбором уровня — тоже подсказка push (N5)
+    expect(await participation().findByText('Не пропустите изменения гонки')).toBeOnTheScreen();
   });
 
   it('START — сразу, без анкеты и группы', async () => {
@@ -121,6 +123,7 @@ describe('заявка: выбор уровня (07c)', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'Участвовать в START' }));
     expect(enterRace).toHaveBeenCalledWith(TOKEN, RACE_ID, { tier: 'start' });
     expect(await participation().findByText('START')).toBeOnTheScreen();
+    expect(await participation().findByText('Не пропустите изменения гонки')).toBeOnTheScreen();
   });
 
   it('Verified без анкеты — «Заполнить анкету» ведёт на анкету с возвратом к гонке', async () => {

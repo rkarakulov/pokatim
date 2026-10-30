@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { GoingStack } from '@/components/going-stack';
 import { SectionHero } from '@/components/section-hero';
+import { PushSoftPrompt } from '@/features/notifications/push-soft-prompt';
 
 import { goingCaption, rideHeroDate, rideHeroMeta } from './format';
 import { RideRsvpAction } from './going-action';
@@ -41,6 +42,7 @@ export function RideHero({
       <View style={styles.action}>
         <RideRsvpAction ride={ride} variant="hero" />
       </View>
+      <PushSoftPrompt context="ride" id={ride.id} />
     </View>
   );
 }

@@ -21,6 +21,10 @@ import { useEffect } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { retryAfterSec } from '@/features/auth/error-messages';
+import {
+  closePushSoftPromptFor,
+  offerPushSoftPrompt,
+} from '@/features/notifications/push-soft-prompt-store';
 import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
@@ -181,7 +185,10 @@ async function applyRideView(queryClient: QueryClient, view: RideView): Promise<
   await queryClient.invalidateQueries({ queryKey: ridesKey });
 }
 
-/** «Я иду» / «Не иду» одного райда: кнопка выключена на время запроса, ошибка — текст у действия. */
+/**
+ * «Я иду» / «Не иду» одного райда: кнопка выключена на время запроса, ошибка — текст у действия. Успех «Я иду» —
+ * подсказка push (N5), «Не иду» — её закрытие; здесь, а не в `mutate`: место кнопки может размонтироваться до ответа.
+ */
 export function useRideRsvp(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -190,7 +197,11 @@ export function useRideRsvp(id: string) {
         action === 'join' ? api.joinRide(accessToken, id) : api.leaveRide(accessToken, id),
       ),
     networkMode: 'always',
-    onSuccess: (view) => applyRideView(queryClient, view),
+    onSuccess: (view, action) => {
+      if (action === 'join') offerPushSoftPrompt('ride', id);
+      else closePushSoftPromptFor('ride', id);
+      return applyRideView(queryClient, view);
+    },
   });
 }
 
