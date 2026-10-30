@@ -21,8 +21,11 @@ export const ROUTE_FILE_MAX_BYTES = 5 * 1024 * 1024;
 export const ROUTE_ORIGINS = ['platform', 'rider'] as const;
 export type RouteOrigin = (typeof ROUTE_ORIGINS)[number];
 
-/** Расширения файла маршрута (routes-02): совпадают с `ROUTE_FILE_EXTENSIONS` пакета `@pokatim/tracks`. */
-export const ROUTE_FILE_EXTENSIONS = ['gpx', 'kml'] as const;
+/**
+ * Расширения файла маршрута (routes-02; KMZ и TCX — routes-formats): совпадают с `ROUTE_FILE_EXTENSIONS` пакета
+ * `@pokatim/tracks`. Только в конец.
+ */
+export const ROUTE_FILE_EXTENSIONS = ['gpx', 'kml', 'kmz', 'tcx'] as const;
 
 export const ROUTE_STATUSES = ['processing', 'ready', 'failed'] as const;
 export type RouteStatus = (typeof ROUTE_STATUSES)[number];
@@ -43,7 +46,7 @@ export const RouteTitle = RaceTitle;
 
 /**
  * `POST /v1/admin/routes?title=…` (`races.manage`) и `POST /v1/routes/mine?title=…` (вход, routes-02); тело — байты
- * GPX или KML (`application/octet-stream`).
+ * GPX, KML, KMZ или TCX (`application/octet-stream`; формат — по содержимому, routes-formats).
  */
 export const UploadRouteQuery = z.strictObject({ title: RouteTitle });
 export type UploadRouteQuery = z.infer<typeof UploadRouteQuery>;

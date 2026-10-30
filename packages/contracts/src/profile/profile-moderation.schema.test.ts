@@ -11,6 +11,8 @@ import {
   RiderProfileReportsDismissResult,
   RiderProfileResetRequest,
   RiderProfileResetResult,
+  RiderAvatarUnblockResult,
+  UnblockRiderAvatarRequest,
 } from './profile-moderation.schema.ts';
 
 const ID = '0192f3a0-0000-7000-8000-000000000001';
@@ -56,6 +58,14 @@ describe('модерация профилей райдеров (profile-moderati
     expect(RiderProfileModerationQuery.safeParse({ state: 'x' }).success).toBe(false);
   });
 
+  it('RiderProfileModerationQuery: reason — строгий enum причины жалобы', () => {
+    expect(RiderProfileModerationQuery.parse({ reason: 'name' })).toEqual({
+      limit: 20,
+      reason: 'name',
+    });
+    expect(RiderProfileModerationQuery.safeParse({ reason: 'bad' }).success).toBe(false);
+  });
+
   it('RiderProfileModerationPage: строка очереди, причина — строгий enum', () => {
     const row = {
       userId: ID,
@@ -67,8 +77,14 @@ describe('модерация профилей райдеров (profile-moderati
       hasClub: false,
     };
     expect(RiderProfileModerationPage.parse({ items: [row], nextCursor: null }).items).toEqual([
-      row,
+      { ...row, openReasons: [] },
     ]);
+    expect(
+      RiderProfileModerationPage.parse({
+        items: [{ ...row, openReasons: ['photo', 'name'] }],
+        nextCursor: null,
+      }).items[0]?.openReasons,
+    ).toEqual(['photo', 'name']);
     expect(
       RiderProfileModerationPage.safeParse({
         items: [{ ...row, topReason: 'future' }],
@@ -96,6 +112,32 @@ describe('модерация профилей райдеров (profile-moderati
       false,
     );
     expect(RiderProfileModerationDetail.safeParse({ ...detail, avatar: null }).success).toBe(true);
+  });
+
+  it('RiderProfileModerationDetail: запрет загрузки фото и счётчик сбросов — умолчания', () => {
+    expect(RiderProfileModerationDetail.parse(detail)).toMatchObject({
+      avatarUploadBlockedUntil: null,
+      avatarResetCount: 0,
+    });
+    expect(
+      RiderProfileModerationDetail.parse({
+        ...detail,
+        avatarUploadBlockedUntil: AT,
+        avatarResetCount: 3,
+      }),
+    ).toMatchObject({ avatarUploadBlockedUntil: AT, avatarResetCount: 3 });
+    expect(
+      RiderProfileModerationDetail.safeParse({ ...detail, avatarResetCount: -1 }).success,
+    ).toBe(false);
+  });
+
+  it('«Снять запрет»: тело — причина, ответ — { unblocked }', () => {
+    expect(UnblockRiderAvatarRequest.parse({ reason: 'Ошибка модератора' })).toEqual({
+      reason: 'Ошибка модератора',
+    });
+    expect(UnblockRiderAvatarRequest.safeParse({ reason: 'abc', extra: 1 }).success).toBe(false);
+    expect(RiderAvatarUnblockResult.parse({ unblocked: false })).toEqual({ unblocked: false });
+    expect(RiderAvatarUnblockResult.safeParse({}).success).toBe(false);
   });
 
   it('тела действий: причина 3–500; «Отклонить жалобы» — с reportRevision', () => {

@@ -46,6 +46,7 @@ const EMPTY = {
   avatar: null,
   publicId: null,
   themeId: 'classic',
+  avatarUploadBlockedUntil: null,
 };
 const PUBLIC_ID = expect.stringMatching(/^[A-Za-z0-9_-]{43}$/);
 

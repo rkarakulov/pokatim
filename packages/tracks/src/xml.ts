@@ -1,6 +1,6 @@
 import { XMLValidator, type XMLParser } from 'fast-xml-parser';
 
-import { TRACK_MAX_POINTS, TrackParseError } from './track.ts';
+import { ROUTE_MAX_POINTS, TRACK_MAX_POINTS, TrackParseError } from './track.ts';
 
 /**
  * Общие защиты разбора XML (GPX, KML): DTD и сущности не нужны ни одному формату; их наличие — XXE / «миллиард
@@ -13,6 +13,16 @@ export const FORBIDDEN_MARKUP = /<!DOCTYPE|<!ENTITY/i;
  * Враждебный документ с миллионами элементов отвергается подсчётом, а не разбором в дерево (память потока worker).
  */
 export const XML_MAX_ELEMENTS = TRACK_MAX_POINTS * 20;
+
+/**
+ * Предел элементов документа маршрута (GPX маршрута, KML — в т. ч. из KMZ, TCX; routes-formats): тот же множитель от
+ * `ROUTE_MAX_POINTS` — 1 млн. Самая «тяжёлая» законная точка — `Trackpoint` активности TCX (Time, Position, широта,
+ * долгота, высота, дистанция, пульс/значение, Extensions/TPX/скорость/мощность — 13 элементов) и `gx:Track` KML (`when` +
+ * `gx:coord` — 2): 50 000 × 13 ≈ 650 000 + обёртка — с запасом ×1,5 до 1 млн. Предел треков (4 млн) для маршрута
+ * слишком велик: распакованный KML из KMZ (до 16 МиБ) с миллионами пустых элементов уронил бы поток разбора по памяти,
+ * а не отказом `too_many_points` подсчётом.
+ */
+export const ROUTE_XML_MAX_ELEMENTS = ROUTE_MAX_POINTS * 20;
 
 /** Число совпадений глобального регулярного выражения без сборки массива. */
 export function countMatches(text: string, pattern: RegExp): number {

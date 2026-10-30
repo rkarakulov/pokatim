@@ -1,5 +1,5 @@
-// Вход для worker API (`@pokatim/tracks/parse`): разбор FIT/GPX (@garmin/fitsdk, fast-xml-parser) и потока
-// агрегатора (node:zlib). Грузится Node напрямую (type stripping, `--conditions=@pokatim/source`) — только
+// Вход для worker API (`@pokatim/tracks/parse`): разбор FIT/GPX/KML/TCX (@garmin/fitsdk, fast-xml-parser), KMZ и
+// потока агрегатора (node:zlib). Грузится Node напрямую (type stripping, `--conditions=@pokatim/source`) — только
 // стираемый синтаксис TS.
 import { gzipSync, gunzipSync } from 'node:zlib';
 
@@ -8,6 +8,7 @@ import { parseFit } from './fit.ts';
 import { haversineMeters, trackLengthMeters } from './geo.ts';
 import { parseGpx } from './gpx.ts';
 import { parseKml } from './kml.ts';
+import { kmlFromKmz } from './kmz.ts';
 import { matchCorridorDetailed } from './corridor/match.ts';
 import { prepareCorridor } from './corridor/prepare.ts';
 import { trackMapOf, type TrackMap } from './corridor/track-map.ts';
@@ -23,8 +24,12 @@ import {
   type SensorFlag,
 } from './sensor-flags.ts';
 import { routeGpx } from './route-gpx.ts';
+import { routeKml } from './route-kml.ts';
+import { routeTcx } from './route-tcx.ts';
 import { elevationProfile } from './route-profile.ts';
 import { parseStream, type TrackStreamV1 } from './stream.ts';
+import { parseTcx } from './tcx.ts';
+import { ROUTE_XML_MAX_ELEMENTS } from './xml.ts';
 import { elevationGainM, summarizeTrack } from './summary.ts';
 import {
   ROUTE_MAX_LENGTH_M,
@@ -43,6 +48,9 @@ import {
 export { parseFit } from './fit.ts';
 export { parseGpx } from './gpx.ts';
 export { parseKml } from './kml.ts';
+export { kmlFromKmz, ROUTE_KMZ_MAX_KML_BYTES } from './kmz.ts';
+export { ROUTE_XML_MAX_ELEMENTS } from './xml.ts';
+export { parseTcx } from './tcx.ts';
 export { parseStream, TrackStreamV1 } from './stream.ts';
 export {
   matchCorridor,
@@ -73,6 +81,8 @@ export {
 export { CORRIDOR_ENGINE_VERSION, CORRIDOR_POLICY } from './corridor/policy.ts';
 export { ROUTE_PROFILE_MAX_POINTS, elevationProfile } from './route-profile.ts';
 export { routeGpx } from './route-gpx.ts';
+export { routeKml } from './route-kml.ts';
+export { ROUTE_TCX_PACE_KMH, ROUTE_TCX_START, routeTcx } from './route-tcx.ts';
 export { CorridorError, prepareCorridor } from './corridor/prepare.ts';
 export {
   CORRIDOR_REJECTIONS,
@@ -204,10 +214,11 @@ export function analyzeTrack(bytes: Uint8Array, format: TrackFormat, now: Date):
 }
 
 /**
- * Версия производных данных маршрута (профиль высоты и очищенный GPX, routes-03). +1 при смене
- * `elevationProfile`/`routeGpx`/допуска точек экспорта — регламент `routes-maintenance` пересчитает готовые маршруты.
+ * Версия производных данных маршрута (профиль высоты и экспорт, routes-03). +1 при смене
+ * `elevationProfile`/`routeGpx`/`routeKml`/`routeTcx`/допуска точек экспорта — регламент `routes-maintenance`
+ * пересчитает готовые маршруты. 2 — экспорт KML и TCX (routes-formats).
  */
-export const ROUTE_DERIVED_VERSION = 1;
+export const ROUTE_DERIVED_VERSION = 2;
 
 /** Производные данные маршрута (routes-03): только сериализуемые значения (structured clone). */
 export interface RouteDerived {
@@ -215,6 +226,10 @@ export interface RouteDerived {
   profile: [number, number][] | null;
   /** очищенный GPX 1.1: только точки линии сверки с высотами */
   gpx: string;
+  /** KML 2.2 из тех же точек (routes-formats) */
+  kml: string;
+  /** TCX v2 (курс) из тех же точек, синтетическое время (routes-formats) */
+  tcx: string;
 }
 
 /** Итог разбора маршрута для worker: только сериализуемые значения (structured clone). Координаты — [lon, lat]. */
@@ -236,24 +251,34 @@ export interface RouteAnalysis extends RouteDerived {
 const lonLat = (point: { lon: number; lat: number }): [number, number] => [point.lon, point.lat];
 
 /**
- * Общий шаг разбора маршрута: сигнатура GPX или KML (`LineString`/`gx:Track`, routes-02) → разбор (GPX — `trk`
- * или, без `trkpt`, `rte`) с пределом точек → очистка → ≥ 2 точек → пределы длины. Время в точках не нужно. Отказ —
- * `TrackParseError` с `RouteFailureCode`. Новые форматы маршрута добавляются сюда — их разбирают и `analyzeRoute`, и
- * бэкфилл `deriveRoute` (RC-12).
+ * Общий шаг разбора маршрута: сигнатура GPX, KML (`LineString`/`gx:Track`, routes-02), KMZ или TCX (routes-formats)
+ * → разбор (GPX — `trk` или, без `trkpt`, `rte`; KMZ — KML из архива, `kmlFromKmz`, с той же проверкой сигнатуры
+ * KML; TCX — `Trackpoint` всех `Track`) с пределом точек → очистка → ≥ 2 точек → пределы длины. Время в точках не
+ * нужно. Отказ — `TrackParseError` с `RouteFailureCode`. Новые форматы маршрута добавляются сюда — их разбирают и
+ * `analyzeRoute`, и бэкфилл `deriveRoute` (RC-12).
  */
 function loadRoutePoints(bytes: Uint8Array): {
   points: ParsedPoint[];
   sourcePointCount: number;
   lengthM: number;
 } {
-  const format = detectRouteFormat(bytes);
+  let format = detectRouteFormat(bytes);
+  let source = bytes;
+  if (format === 'kmz') {
+    source = kmlFromKmz(bytes);
+    // внутри — только KML (тот же сканер пролога: `<!DOCTYPE` до корня — отказ)
+    format = detectRouteFormat(source) === 'kml' ? 'kml' : null;
+  }
   if (format === null) throw new TrackParseError('unreadable');
-  const text = new TextDecoder('utf-8').decode(bytes);
-  // предел точек маршрута — подсчётом до разбора XML (память потока worker)
+  const text = new TextDecoder('utf-8').decode(source);
+  // предел точек и элементов маршрута — подсчётом до разбора XML (память потока worker)
+  const options = { maxPoints: ROUTE_MAX_POINTS };
   const track =
     format === 'gpx'
-      ? parseGpx(text, { allowRoute: true, maxPoints: ROUTE_MAX_POINTS })
-      : parseKml(text, { maxPoints: ROUTE_MAX_POINTS });
+      ? parseGpx(text, { allowRoute: true, maxElements: ROUTE_XML_MAX_ELEMENTS, ...options })
+      : format === 'tcx'
+        ? parseTcx(text, options)
+        : parseKml(text, options);
   const points = sanitizePoints(track.points);
   if (points.length < 2) throw new TrackParseError('no_track');
   const lengthM = trackLengthMeters(points);
@@ -262,13 +287,20 @@ function loadRoutePoints(bytes: Uint8Array): {
   return { points, sourcePointCount: track.points.length, lengthM };
 }
 
-/** Точки линии сверки (одно вычисление — и `matchLine`, и точки экспорта GPX). */
+/** Точки линии сверки (одно вычисление — и `matchLine`, и точки экспорта GPX/KML/TCX). */
 const matchPointsOf = (points: readonly ParsedPoint[]) =>
   simplifyTrack(points, MATCH_LINE_TOLERANCE_M, MATCH_LINE_MAX_POINTS);
 
+/** Файлы экспорта из точек линии сверки — одни точки для всех форматов. */
+const exportsOf = (matchPoints: readonly ParsedPoint[]) => ({
+  gpx: routeGpx(matchPoints),
+  kml: routeKml(matchPoints),
+  tcx: routeTcx(matchPoints),
+});
+
 /**
- * Маршрут одним вызовом для worker: `loadRoutePoints` → длина → линии показа и сверки → профиль высоты и очищенный
- * GPX. Отказ — `TrackParseError` с `RouteFailureCode`.
+ * Маршрут одним вызовом для worker: `loadRoutePoints` → длина → линии показа и сверки → профиль высоты и экспорт
+ * (GPX, KML, TCX). Отказ — `TrackParseError` с `RouteFailureCode`.
  */
 export function analyzeRoute(bytes: Uint8Array): RouteAnalysis {
   const { points, sourcePointCount, lengthM } = loadRoutePoints(bytes);
@@ -286,17 +318,17 @@ export function analyzeRoute(bytes: Uint8Array): RouteAnalysis {
     matchLine: matchPoints.map(lonLat),
     sourcePointCount,
     profile: elevationProfile(points),
-    gpx: routeGpx(matchPoints),
+    ...exportsOf(matchPoints),
   };
 }
 
 /**
  * Производные данные готового маршрута для бэкфилла (регламент `routes-maintenance`, поток разбора worker): тот же
- * разбор исходника, что `analyzeRoute`, только `profile` и `gpx`. Отказ — `TrackParseError` с тем же кодом.
+ * разбор исходника, что `analyzeRoute`, только `profile` и экспорт. Отказ — `TrackParseError` с тем же кодом.
  */
 export function deriveRoute(bytes: Uint8Array): RouteDerived {
   const { points } = loadRoutePoints(bytes);
-  return { profile: elevationProfile(points), gpx: routeGpx(matchPointsOf(points)) };
+  return { profile: elevationProfile(points), ...exportsOf(matchPointsOf(points)) };
 }
 
 /**

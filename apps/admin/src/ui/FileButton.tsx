@@ -5,7 +5,7 @@ import { Button, type ButtonProps } from './Button';
 export interface FileButtonProps extends Omit<ButtonProps, 'onClick' | 'children'> {
   /** Доступное имя и текст кнопки («Загрузить маршрут»). */
   label: string;
-  /** Фильтр системного окна выбора (`.gpx,.kml`); формат проверяет сервер по содержимому. */
+  /** Фильтр системного окна выбора (`.gpx,.kml,.kmz,.tcx`); формат проверяет сервер по содержимому. */
   accept: string;
   onFile: (file: File) => void;
 }

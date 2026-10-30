@@ -93,16 +93,49 @@ describe('detectRouteFormat', () => {
     expect(detectRouteFormat(bytes('<gpx version="1.1">'))).toBe('gpx');
   });
 
-  it('не маршрут: DOCTYPE до корня, `<kmlfoo>`, KMZ, FIT, пусто, текст', () => {
+  it('KMZ — по сигнатуре zip `PK\\x03\\x04` (любой zip; содержимое проверяет разбор)', () => {
+    expect(detectRouteFormat(fixture('route-earth.kmz'))).toBe('kmz');
+    expect(detectRouteFormat(fixture('route-no-kml.kmz'))).toBe('kmz');
+    // битый zip без central directory — тоже kmz по сигнатуре, отказ — при разборе
+    expect(detectRouteFormat(fixture('route.kmz'))).toBe('kmz');
+    expect(detectRouteFormat(Uint8Array.of(0x50, 0x4b, 0x05, 0x06))).toBeNull();
+    expect(detectRouteFormat(Uint8Array.of(0x50, 0x4b, 0x03))).toBeNull();
+  });
+
+  it('TCX: курс и активность Garmin, BOM, декларация, комментарий, без декларации', () => {
+    expect(detectRouteFormat(fixture('route-garmin-course.tcx'))).toBe('tcx');
+    expect(detectRouteFormat(fixture('route-garmin-activity.tcx'))).toBe('tcx');
+    expect(
+      detectRouteFormat(
+        Uint8Array.of(
+          0xef,
+          0xbb,
+          0xbf,
+          ...bytes('<?xml version="1.0"?>\n<TrainingCenterDatabase>'),
+        ),
+      ),
+    ).toBe('tcx');
+    expect(detectRouteFormat(bytes('<!-- garmin --><TrainingCenterDatabase\n xmlns="x">'))).toBe(
+      'tcx',
+    );
+    expect(detectRouteFormat(bytes('<TrainingCenterDatabase/>'))).toBe('tcx');
+  });
+
+  it('не маршрут: DOCTYPE до корня, `<kmlfoo>`, FIT, пусто, текст', () => {
     expect(detectRouteFormat(fixture('xxe.kml'))).toBeNull();
     expect(detectRouteFormat(fixture('billion-laughs.kml'))).toBeNull();
     expect(detectRouteFormat(fixture('xxe.gpx'))).toBeNull();
+    expect(detectRouteFormat(fixture('route-dtd.tcx'))).toBeNull();
     expect(detectRouteFormat(bytes('<kmlfoo>'))).toBeNull();
-    expect(detectRouteFormat(fixture('route.kmz'))).toBeNull();
+    expect(detectRouteFormat(bytes('<TrainingCenterDatabaseX>'))).toBeNull();
     expect(detectRouteFormat(fixture('garmin-edge-ride.fit'))).toBeNull();
     expect(detectRouteFormat(new Uint8Array())).toBeNull();
     expect(detectRouteFormat(bytes('hello world'))).toBeNull();
-    expect(detectRouteFormat(bytes('<TrainingCenterDatabase>'))).toBeNull();
+  });
+
+  it('detectTrackFormat не знает TCX и KMZ (треки заездов — FIT/GPX)', () => {
+    expect(detectTrackFormat(fixture('route-garmin-activity.tcx'))).toBeNull();
+    expect(detectTrackFormat(fixture('route-earth.kmz'))).toBeNull();
   });
 
   it('detectTrackFormat не знает KML', () => {
@@ -111,12 +144,13 @@ describe('detectRouteFormat', () => {
 });
 
 describe('precheckRouteFile', () => {
-  it('GPX и KML без учёта регистра; KMZ, FIT, TCX — extension', () => {
+  it('GPX, KML, KMZ и TCX без учёта регистра; FIT, ZIP — extension', () => {
     expect(precheckRouteFile({ name: 'route.gpx', size: 10 })).toBe('ok');
     expect(precheckRouteFile({ name: 'Кольцо.KML', size: 10 })).toBe('ok');
-    expect(precheckRouteFile({ name: 'route.kmz', size: 10 })).toBe('extension');
+    expect(precheckRouteFile({ name: 'route.kmz', size: 10 })).toBe('ok');
+    expect(precheckRouteFile({ name: 'course.TCX', size: 10 })).toBe('ok');
     expect(precheckRouteFile({ name: 'course.fit', size: 10 })).toBe('extension');
-    expect(precheckRouteFile({ name: 'route.tcx', size: 10 })).toBe('extension');
+    expect(precheckRouteFile({ name: 'route.zip', size: 10 })).toBe('extension');
     expect(precheckRouteFile({ name: 'kml', size: 10 })).toBe('extension');
   });
 

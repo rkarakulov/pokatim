@@ -22,7 +22,7 @@ paths:
   нажатию (`features/location/current-position(.web).ts`, без `watch`), координаты — только в памяти (стор карты без
   persist; не в TanStack Query, `console.*`, URL, подписях a11y и запросах); отказ — сообщение над картой со ссылкой
   в настройки ОС (`location-settings(.web).ts`; web — текстом).
-- Заезды и маршруты — импорт файла через системный picker (заезд: FIT/GPX, TCX — нет, ADR-0011; маршрут: GPX/KML).
+- Заезды и маршруты — импорт файла через системный picker (заезд: FIT/GPX, TCX — нет, ADR-0011; маршрут: GPX/KML/KMZ/TCX).
 - Треки и устройства (ADR-0011): шаг онбординга `(setup)/devices` после геопозиции (флаг аккаунта на сервере
   `OnboardingStatus.devicesStepCompleted`; поля нет — старый API — шаг пропускается); экран «Устройства»
   `settings/devices` (вход — иконка верхней панели); возврат авторизации `devices/return` — вне гардов. Развилки —
@@ -40,7 +40,10 @@ paths:
   `missing`/`expired` подписывает тихо, отказ — текст «включите в настройках браузера/системы»; на экране настроек
   строка и push-тумблеры групп делят одно состояние `usePushPermission` (`push-permission-row.tsx`): включение тумблера
   при `undetermined` — системный запрос первым, в том же нажатии (Safari), затем сохранение; при `missing`/`expired` —
-  тихая подписка; включённый тумблер без доставки (`delivers === false`) — подпись `notifications.settings.pushBlocked`; выход — снятие на
+  тихая подписка; включённый тумблер без доставки (`delivers === false`) — подпись `notifications.settings.pushBlocked`; группа
+  «Мероприятия» (PR D) — свой подресурс (`useEventNotificationSettings`, ключ `['notifications','settings','events']`, своё
+  сохранение и баннер; 404 старого API — группы нет, `isEventSettingsMissing`), её push-тумблер — с тем же
+  `usePushPermission`; цель `ticket` → `/tickets/<код>` (и в SW); выход — снятие на
   сервере и `unsubscribe()` в браузере; нажатие на уведомление — сообщение SW `pokatim:open` → `onOpen(target)`): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
@@ -130,9 +133,10 @@ paths:
   Образцы — `register`, `auth/verify/[token]`. Новый публичный экран — шаг смоука `e2e/web.spec.ts`.
 - `og:image` (og-images) — `publicPageMetadata({ image })` из `src/lib/og-image.ts`: страница объекта (гонка, райд,
   маршрут, старт) — `Promise.all([данные, ogCardIfOrigin(kind, id)])` → `pageOgImage` (своя; нет версии или API
-  недоступен — бренд; страница не найдена — без картинки); остальные публичные страницы — `brandOgImage()` /
-  `brandOgImageFor(page)`. Версию картинки считает только API (`/v1/og/cards/...`), адрес — только от `WEB_ORIGIN`;
-  нет `WEB_ORIGIN` — ни запросов, ни картинки. Свой fetch и расчёт версии в приложении — запрещены.
+  недоступен — бренд; страница не найдена — без картинки); остальные публичные страницы —
+  `brandOgImage()`. Версию картинки считает только API (`/v1/og/cards/...`), адрес — только от `WEB_ORIGIN`;
+  нет `WEB_ORIGIN` — ни запросов, ни картинки. Сезон и профиль райдера — своя картинка через `ownOgImage` (схема id
+  по виду — `OG_CARD_ID`); мета райдера — без ПДн, `publicId` только в URL `og:image`. Свой fetch и расчёт версии в приложении — запрещены.
 - `robots.txt` и `sitemap.xml` (landing-seo) — API-маршруты `src/app/{robots.txt,sitemap.xml}+api.ts`, правила —
   `src/lib/seo.ts`. **Новый экран в `src/app`** — классифицируй: только вошедшим, онбординг, токен в URL — префикс в
   `SEO_DISALLOW`; публичный — в `PUBLIC` сторожа `__tests__/seo-routes.test.ts`. Страницу с `noindex` в мета не
@@ -336,8 +340,12 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 - Общая часть экранов карточек — `features/sharing/` (`card-status.ts`: `useCardStatus` по `CardSource` — ключ и
   запрос статуса, `useCardFile`; `card-panel.tsx`: `CardPanel` — чипы, превью, «Поделиться», пустое состояние на
   409/404). Приглашение кофе-райда — `features/rides/invite/*`, экран `rides/invite/[id]` внутри `Stack.Protected`
-  (ключ `['rides','invite',rideId,template]`); кнопка «Карточка-приглашение» на детали — вошедшему, `phase ===
-  'upcoming'` (право — сервер: 409 → «Приглашение недоступно»). Карточка достижения — `features/achievements/story/*`,
+  (ключ `['rides','invite',rideId,template]`); вход — «Поделиться» на детали (шит «Карточка / Ссылка»), карточка —
+  вошедшему, `phase === 'upcoming'` (право — сервер: 409 → «Приглашение недоступно»). Карточка маршрута —
+  `features/routes/story/*`, экран `routes/story/[id]` внутри `Stack.Protected` (ключ
+  `['routes','story',routeId,template]`, 404 — «Карточка недоступна» и «К маршруту»). Выбор «Карточка / Ссылка» —
+  общий `ShareChoiceSheet` + `useShareChoice` (`features/sharing/share-choice-sheet.tsx`): оба пути — шит; гость —
+  сразу ссылка; нет origin — сразу карточка; `shareLink` — синхронно в обработчике. Карточка достижения — `features/achievements/story/*`,
   экран `achievements/story/[code]` внутри `Stack.Protected` (ключ `['achievements','story',code,template]`; 409 и
   незнакомый код — «Карточки нет» и «К достижению»).
 
@@ -367,6 +375,13 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   прогресса; тексты 413/415/422/429 — `avatar-errors.ts` (429 загрузки с паузой занятой обработки, 5 с, — «через
   минуту»; удаление — общий текст; файл, который браузер не декодировал, — текст 422). Исходник не перекодируется и не
   уменьшается (JPEG/WebP до 100 Мп, PNG до 25 Мп — решает сервер, ADR-0019): EXIF/GPS стирает сервер.
+- Запрет загрузки фото (profile-moderation-followups) — по `ProfileView.avatarUploadBlockedUntil`: «Выбрать фото»
+  `disabled`, сразу под ней «Загрузка фото недоступна до <дата, время> после нарушений правил» (с годом — не зависит от
+  «сейчас», SSR), «Удалить фото» доступна. 409 `avatar_blocked` на загрузке — тот же текст баннером и
+  `invalidateQueries(['profile'])` (`useUploadAvatar.onError`). Срок истёк при открытом экране —
+  `useAvatarBlockExpiry` (`avatar-block-expiry.ts`): таймер на момент окончания → перечитывание `['profile']`, кнопку
+  разблокирует только ответ сервера (задержка ≤ 2^31-1 мс цепочкой; тот же срок в ответе — повтор через 30 с).
+  Уведомления о сбросе — цель `profile-edit` → `/settings/profile` (`notification-target.ts` и копия в service worker).
 - Жалоба на профиль (profile-report-app): `RiderReportAction` в конце `/riders/[id]` — вошедшему по
   `canReport`/`reported` сервера (`['riders','viewer',id]`, `GET /v1/riders/:publicId/me`, только после найденного
   профиля), гостю (`signedOut`) — вход с возвратом (allowlist — `/riders/<RiderPublicId>`), сессия неизвестна — ничего.
@@ -425,9 +440,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   чистые функции `features/routes/format.ts` (`ROUTE_PACE_KMH`); профиль — `features/routes/elevation-profile.tsx`
   (`ProfileChart`: тонкая линия `profile.line` и заливка-градиент `PROFILE_FILL_OPACITY` `profile.fillTop` → `profile.fillBottom` — web inline
   SVG, native `react-native-svg`, фолбэк — столбики `PROFILE_NATIVE_FILL_OPACITY`; график — `aspectRatio`, разметка
-  зависит только от данных: SSR = первый рендер; routes-04 — см. «Скраббинг» ниже); «Скачать GPX» — только `src/lib/download-file(.web).ts` (native —
-  `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteGpxUrl(id)`, только при
-  `gpxAvailable`.
+  зависит только от данных: SSR = первый рендер; routes-04 — см. «Скраббинг» ниже); «Скачать» (routes-formats: один формат — «Скачать GPX», несколько — `route-download-sheet.tsx` на
+  `ModalSheet`) — только `src/lib/download-file(.web).ts` (native —
+  `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteExportUrl(id, format)`, форматы —
+  `exportFormats` (без поля — по `gpxAvailable`).
 - Скраббинг (routes-04): стор на экземпляр экрана — `createScrubStore` пакета `@pokatim/route-view` (`zustand/vanilla`,
   `{ fraction, active, dragging }`, доля длины линии показа; читают только подписчики `useScrub` (`features/maps/use-scrub.ts`) — карта и экран на
   кадр не перерисовываются; экран: native — `scrollEnabled` при `dragging === null` (`use-scrub-scroll-lock(.web).ts`;
@@ -563,8 +579,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `ModalSheet` — единственное модальное окно приложения (шторка или `placement="dialog"`; окно установки PWA —
   обёртка с «×» в `headerAction`); имя окна — `aria-label` самого `Modal` (на web он — `role="dialog"`), панель
   второго dialog не создаёт.
-  Действия — «Карточка-приглашение» (`rides/invite/[id]`), «Ссылка» (`shareLink`; нет origin — кнопки нет),
-  «Закрыть»; закрытие снимает `published` (`router.setParams`).
+  Действия — общий `ShareChoiceSheet`: «Карточка-приглашение» (`rides/invite/[id]`), «Ссылка» (`shareLink`; нет
+  origin — пункта нет), «Закрыть»; закрытие снимает `published` (`router.setParams`).
 - Жалоба (05b) — экран `rides/report/[id]` (`features/rides/ride-report.tsx`) внутри `Stack.Protected`: причина —
   `Chip` из `RIDE_REPORT_REASONS`, комментарий — однострочный `TextField` (фолбэк до многострочного поля базы), успех —
   баннер на месте формы. Кнопка «Пожаловаться» и строка «Вы пожаловались…» — только по `viewer.canReport` /

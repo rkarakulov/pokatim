@@ -6,6 +6,7 @@ import type {
   CatalogRouteDetail,
   CatalogRoutePage,
   CatalogRouteQuery,
+  RouteExportFormat,
   RouteMapGeometry,
 } from '@pokatim/contracts';
 import { z } from 'zod';
@@ -17,6 +18,7 @@ import { displayGeometryOf } from './route-catalog';
 import { elevationOf } from './route-elevation';
 import { ROUTE_GEOMETRY, type RouteGeometry } from './route-geometry.port';
 import type { RouteCatalogDoc, RouteDoc } from './routes.collection';
+import { routeExportFormats } from './routes.policy';
 import { type RouteDerivedState, RoutesRepository } from './routes.repository';
 
 /** Маршрут каталога: готовый (длина и петля есть) и опубликованный. */
@@ -59,8 +61,9 @@ function toCatalogCard(route: CatalogRoute, names: ReadonlyMap<string, string>):
 }
 
 /**
- * Карточка (routes-03): + профиль высоты (мин./макс. — по профилю) и признак экспорта GPX. Есть `derivedVersion` ⇒
- * есть экспорт (одна транзакция, RC-1) — без запроса к `route_exports`.
+ * Карточка (routes-03): + профиль высоты (мин./макс. — по профилю), признак экспорта GPX и форматы скачивания
+ * (routes-formats). Есть `derivedVersion` ⇒ есть экспорт этой версии (одна транзакция, RC-1) — форматы по версии
+ * (`routeExportFormats`), без запроса к `route_exports`; `gpxAvailable` ⇔ `'gpx' ∈ exportFormats`.
  */
 function toCatalogDetail(
   route: CatalogRoute,
@@ -71,18 +74,19 @@ function toCatalogDetail(
     ...toCatalogCard(route, names),
     elevation: elevationOf(derived?.profile ?? null),
     gpxAvailable: (derived?.derivedVersion ?? null) !== null,
+    exportFormats: routeExportFormats(derived?.derivedVersion ?? null),
   };
 }
 
-/** Очищенный GPX маршрута каталога и название (имя файла). */
-export interface CatalogRouteGpx {
+/** Файл экспорта маршрута каталога и название (имя файла). */
+export interface CatalogRouteExport {
   bytes: Uint8Array;
   title: string;
 }
 
 /**
  * Публичный каталог маршрутов (routes-01; routes-06 — и одобренные маршруты райдеров): список с фильтрами и курсором
- * `(publishedAt, _id)`, города, карточка, карта и GPX. Видимость — `RoutesRepository.listCatalog`/`findInCatalog`
+ * `(publishedAt, _id)`, города, карточка, карта и файлы экспорта. Видимость — `RoutesRepository.listCatalog`/`findInCatalog`
  * (условие `IN_CATALOG`, без кэша: каталог изменяем). Кэшируется только неизменная геометрия маршрутов **команды**
  * (порт `ROUTE_GEOMETRY`); линия маршрута райдера (удаляемого) читается без кэша.
  */
@@ -131,10 +135,13 @@ export class RoutesPublicService {
     return toCatalogDetail(route, await this.repository.derivedOf(id), names);
   }
 
-  /** Очищенный GPX (routes-03) — только маршрута каталога; нет экспорта — 404. Разбора в API нет. */
-  async gpx(id: string): Promise<CatalogRouteGpx> {
+  /**
+   * Файл экспорта (GPX — routes-03; KML, TCX — routes-formats) — только маршрута каталога; нет экспорта или поля
+   * формата (экспорт версии 1) — 404. Разбора и сборки файлов в API нет.
+   */
+  async exportFile(id: string, format: RouteExportFormat): Promise<CatalogRouteExport> {
     const route = await this.published(id);
-    const bytes = await this.repository.exportGpx(id);
+    const bytes = await this.repository.exportFile(id, format);
     if (!bytes) throw notFound();
     return { bytes, title: route.title };
   }

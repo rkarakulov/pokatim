@@ -110,6 +110,7 @@ beforeEach(() => {
     avatar: null,
     publicId: null,
     themeId: 'classic',
+    avatarUploadBlockedUntil: null,
   });
 });
 afterEach(() => {
@@ -754,6 +755,7 @@ describe('карточка райда: маршрут (05c)', () => {
       ],
     },
     gpxAvailable: false,
+    exportFormats: [],
   };
   const geometry: RouteMapGeometry = {
     line: [

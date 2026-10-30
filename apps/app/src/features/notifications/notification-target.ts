@@ -23,6 +23,8 @@ export function notificationTargetPath(target: unknown): Href | null {
       return `/routes/mine/${value.routeId}`;
     case 'ticket':
       return `/tickets/${value.code}`;
+    case 'profile-edit':
+      return '/settings/profile';
   }
 }
 

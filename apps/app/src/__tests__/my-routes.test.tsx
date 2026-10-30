@@ -207,8 +207,9 @@ describe('лента «Мои маршруты»', () => {
 
 describe('загрузка своего маршрута (AC1, AC2)', () => {
   it.each([
-    ['route.kmz', 1024, 'Формат не поддерживается — выберите GPX или KML'],
-    ['course.fit', 1024, 'Формат не поддерживается — выберите GPX или KML'],
+    // routes-formats: KMZ и TCX проходят pre-check; zip и FIT — нет
+    ['route.zip', 1024, 'Формат не поддерживается — выберите GPX, KML, KMZ или TCX'],
+    ['course.fit', 1024, 'Формат не поддерживается — выберите GPX, KML, KMZ или TCX'],
     ['big.gpx', 5 * 1024 * 1024 + 1, 'Файл слишком большой — до 5 МБ'],
   ])('pre-check: %s — «%s» без запроса', async (name, size, message) => {
     picked(name, size);
@@ -247,7 +248,7 @@ describe('загрузка своего маршрута (AC1, AC2)', () => {
   });
 
   it.each([
-    [415, 'ROUTE_FORMAT_UNSUPPORTED', 'Формат не поддерживается — выберите GPX или KML'],
+    [415, 'ROUTE_FORMAT_UNSUPPORTED', 'Формат не поддерживается — выберите GPX, KML, KMZ или TCX'],
     [413, 'ROUTE_TOO_LARGE', 'Файл слишком большой — до 5 МБ'],
     [429, 'RATE_LIMITED', 'Слишком много загрузок. Попробуйте позже.'],
     [409, 'ROUTE_QUOTA_EXCEEDED', 'Можно хранить до 100 маршрутов — удалите ненужные'],

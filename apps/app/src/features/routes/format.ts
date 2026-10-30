@@ -2,6 +2,7 @@ import type {
   CatalogRouteCard,
   CatalogRouteDetail,
   CatalogRouteElevation,
+  RouteExportFormat,
 } from '@pokatim/contracts';
 import { i18n, t } from '@pokatim/i18n';
 import { profileTickValues, routeDurationMin, routePaceKmh } from '@pokatim/route-view';
@@ -210,4 +211,15 @@ export function profileSummary(
   return gainM === null
     ? t('routes.detail.profile.summaryNoGain', range)
     : t('routes.detail.profile.summary', { ...range, gain: i18n.formatNumber(gainM) });
+}
+
+/**
+ * Форматы скачивания маршрута каталога (routes-formats, RC-9): `exportFormats` сервера; пусто (API до
+ * routes-formats — дефолт контракта) — по `gpxAvailable`.
+ */
+export function availableExportFormats(
+  route: Pick<CatalogRouteDetail, 'exportFormats' | 'gpxAvailable'>,
+): RouteExportFormat[] {
+  if (route.exportFormats.length > 0) return route.exportFormats;
+  return route.gpxAvailable ? ['gpx'] : [];
 }

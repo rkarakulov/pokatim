@@ -71,6 +71,7 @@ beforeEach(() => {
     avatar: null,
     publicId: null,
     themeId: 'classic',
+    avatarUploadBlockedUntil: null,
   });
 });
 afterEach(() => jest.clearAllMocks());

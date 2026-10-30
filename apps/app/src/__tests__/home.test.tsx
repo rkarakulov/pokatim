@@ -124,6 +124,7 @@ beforeEach(() => {
     avatar: null,
     publicId: null,
     themeId: 'classic',
+    avatarUploadBlockedUntil: null,
   });
   listRaces.mockResolvedValue(racePage(race));
   listCalendar.mockResolvedValue(calendarPage(start));
@@ -146,6 +147,7 @@ const profile = (rideReasons: ProfileView['rideReasons']) =>
     avatar: null,
     publicId: null,
     themeId: 'classic',
+    avatarUploadBlockedUntil: null,
   });
 
 async function openHome() {
@@ -396,6 +398,7 @@ describe('Главная: разделы (S4)', () => {
       avatar: { id: AVATAR_ID },
       publicId: null,
       themeId: 'classic',
+      avatarUploadBlockedUntil: null,
     });
     jest.mocked(api.avatarUrl).mockImplementation((id) => `https://api.test/v1/avatars/${id}`);
     const router = await renderRouter(

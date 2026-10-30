@@ -3,6 +3,7 @@ import type { CatalogRouteCard, CatalogRouteDetail } from '@pokatim/contracts';
 import { ROUTE_PACE_KMH, routeDurationMin, routePaceKmh } from '@pokatim/route-view';
 
 import {
+  availableExportFormats,
   profileBarHeights,
   profilePoints,
   profileBars,
@@ -80,7 +81,21 @@ const detail = (overrides: Partial<CatalogRouteDetail> = {}): CatalogRouteDetail
     ],
   },
   gpxAvailable: true,
+  exportFormats: [],
   ...overrides,
+});
+
+describe('availableExportFormats (routes-formats, RC-9)', () => {
+  it('exportFormats сервера; пусто — по gpxAvailable (API до routes-formats)', () => {
+    expect(availableExportFormats(detail({ exportFormats: ['gpx', 'kml', 'tcx'] }))).toEqual([
+      'gpx',
+      'kml',
+      'tcx',
+    ]);
+    expect(availableExportFormats(detail({ exportFormats: ['gpx'] }))).toEqual(['gpx']);
+    expect(availableExportFormats(detail())).toEqual(['gpx']);
+    expect(availableExportFormats(detail({ gpxAvailable: false }))).toEqual([]);
+  });
 });
 
 describe('время в пути (routes-03, P3)', () => {

@@ -2,7 +2,7 @@
   "name": "@pokatim/tracks",
   "version": "0.0.0",
   "private": true,
-  "description": "Разбор FIT/GPX и геометрия треков",
+  "description": "Разбор FIT/GPX (треки) и GPX/KML/KMZ/TCX (маршруты), экспорт маршрута, геометрия треков",
   "type": "module",
   "exports": {
     ".": {

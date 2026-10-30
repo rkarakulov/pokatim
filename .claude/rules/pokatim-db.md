@@ -98,6 +98,19 @@ paths:
   вставка жалобы; сбросы фото/клуба/имени — условная запись профиля (`openReportCount: 0`) → побочное → `closeOpen` →
   журнал; «Отклонить» — `clearReports` по `reportRevision` и `openReportCount > 0` (без `updatedAt`) → `closeOpen` →
   журнал. Параллельные транзакции конфликтуют по документу профиля — `openReportCount` = числу открытых жалоб.
+- `profiles.{openReasons, avatarResetsAt, avatarBlockedUntil, resetSeq}` (profile-moderation-followups) — тоже
+  необязательные (`?? []` / `?? null` / `?? 0`). `openReasons` — причины открытых жалоб: `$addToSet` в `recordReport`,
+  `[]` — в каждой операции, обнуляющей `openReportCount` (сбросы, `clearReports` закрывают все открытые); порядок не
+  держится — сервис упорядочивает по `PROFILE_REPORT_REASONS`. Очередь по причине — частичный индекс
+  `profiles_report_reason_queue_idx` `{ openReasons: 1, lastReportAt: -1, _id: -1 }` (`openReportCount > 0`), запрос —
+  с условием и `hint` (план без `SORT` держит int-тест); миграция `0042_profile_report_reasons` — индекс и бэкфилл по
+  открытым `profile_reports`. `resetSeq` — ревизия сбросов модератором (`$inc` условной записью каждого сброса имени,
+  фото, клуба), номер — `seq` события `profile.field-reset` и порядок уведомлений (не `resetAt`). Сброс фото — две
+  записи профиля в транзакции: `resetAvatar` (`returnDocument: 'before'`) → `avatarResetBan` (`profile.policy.ts`,
+  окно 180 дн.) → `recordAvatarReset` (`avatarResetsAt`, `avatarBlockedUntil`) → удаление фото → `closeOpen` → журнал →
+  outbox. Замена фото проверяет запрет по `before` в своей транзакции (гонка со сбросом — write conflict по документу
+  профиля). «Снять запрет» — первой условная запись `{ _id, avatarBlockedUntil: { $gt: now } }` → `null` → журнал;
+  `avatarResetsAt` не очищается.
 - Перевыпуск id фото (profile-moderation, RC-A2 (b), ADR-0019 п. 6) — в транзакции `PATCH /v1/profile` и сброса
   имени, после записи профиля, при переходе «публичен → нет» (флаг до/после из той же транзакции): копия документа
   `profile_avatars` под новым `randomToken` (выдан до транзакции) → `replaceAvatarId` (условие — прежний id) →
@@ -222,9 +235,9 @@ paths:
   `SORT`.
 - Производные данные маршрута (routes-03): «готовый маршрут не меняется» — про линии и длину; производные исходника
   — `route_geometries.profile` (`[distanceM, elevationM][]` ≤ 300 | `null` — нет высот), `derivedVersion`,
-  `derivedFailure { version, code, at }` и коллекция `route_exports { _id: routeId, gpx: Binary, sizeBytes,
-  derivedVersion }` (очищенный GPX, ≤ ~1,2 МБ) — пишут только `RoutesRepository.markReady` (разбор) и `recordDerived`
-  (бэкфилл), обе — с экспортом в одной транзакции: есть `derivedVersion` ⇒ есть экспорт (`gpxAvailable` без чтения
+  `derivedFailure { version, code, at }` и коллекция `route_exports { _id: routeId, gpx: Binary, kml?: Binary,
+  tcx?: Binary, sizeBytes, derivedVersion }` (очищенный экспорт: GPX ≤ ~1,2 МБ, TCX ≤ ~4,6 МБ; `kml`/`tcx` — с версии 2) — пишут только `RoutesRepository.markReady` (разбор) и `recordDerived`
+  (бэкфилл), обе — с экспортом в одной транзакции: есть `derivedVersion` ⇒ есть экспорт (`gpxAvailable` и `exportFormats` — `routeExportFormats(derivedVersion)` — без чтения
   `route_exports`). Пересчёт — только регламент `routes-maintenance` по росту `ROUTE_DERIVED_VERSION`
   (`@pokatim/tracks/parse`); детерминированный отказ разбора — метка `derivedFailure` этой версии (не берётся до роста
   версии), сбой окружения — без метки. Документы до `0022_routes_derived` полей не имеют — чтение `?? null`, выборка
@@ -454,6 +467,11 @@ paths:
   отмены регистрации и check-in `tickets` через порт `CALENDAR_EVENTS`; наружу не выходит.
 - Удаление аккаунта — `TicketErasure`: активные регистрации → `cancelled` (с билетом и местом, транзакция на
   регистрацию), активные билеты гонок → `cancelled`; документы псевдонимные.
+- Напоминания (PR D) — без миграции и новых индексов (чтение `?? []`): `event_ticketing.reminders[]`
+  (`{ id, offsetHours, text, armedAt }`, пишет `PUT` настроек с `version`) и `reminderDispatches[]` (`{ reminderId,
+  dueAt, dispatchId, at, count }`, пишет только регламент условным `$push` без смены `version` — захват отправки);
+  `tickets.remindersSent[]` (`{ reminderId, dispatchId, at }`, `$push` с `$ne reminderId` — один раз на билет и
+  правило). Шаг стирания не нужен: метки псевдонимны, как билет.
 - Материалы (PR C) — `event_materials` (`file: { id, name, size } | null` — денормализация, список без байтов) и
   `event_material_files` (`_id` = `randomToken`, `bytes` — Binary ≤ 10 МиБ); писатель — `MaterialsRepository`;
   миграция `0039_event_materials`: уникальный `event_materials_event_order_unique { kind, eventId, order }`
@@ -498,7 +516,8 @@ paths:
   (TTL 90 дней по `expireAt`; `notifications_event_user_unique { sourceEventId, userId }`, частичный
   `notifications_collapse_unique { userId, collapseKey }`, список `{ userId, createdAt: -1, _id: -1 }`, частичные
   индексы непрочитанных и сроков доставки push/e-mail), `notification_settings` (`_id` = `userId`; нет документа —
-  умолчания), `push_tokens` (`token` уникален, ≤ 10 на пользователя; Web Push — `platform: 'web'`, `token` = endpoint, ключи — `webPush`, ADR-0022), `push_tickets` (TTL 24 ч; `userId` владельца —
+  умолчания; `push.events`/`email.events` (PR D) — без миграции, нет поля — включено; запись — `$set` по путям, не
+  `replaceOne`), `push_tokens` (`token` уникален, ≤ 10 на пользователя; Web Push — `platform: 'web'`, `token` = endpoint, ключи — `webPush`, ADR-0022), `push_tickets` (TTL 24 ч; `userId` владельца —
   стирание аккаунта по нему, индекс `push_tickets_user_idx` из `0027_push_tickets_user`). Чтения сами проверяют
   `expireAt > now` (TTL — только уборка). Токены при доставке снимаются по снимку `{ _id, userId, sessionId }`, не по
   одному `_id`. Регистрация переписывает токен только сессией не старше записанной (`sessionId $lte`, uuidv7 входа):

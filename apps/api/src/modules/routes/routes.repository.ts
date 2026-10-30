@@ -4,6 +4,7 @@ import {
   isCityCode,
   type RouteAuthorKind,
   type RouteDistanceBucket,
+  type RouteExportFormat,
   type RouteFailureCode,
   type RouteOrigin,
   type RouteRejectionReason,
@@ -52,6 +53,9 @@ export interface CatalogPosition {
   publishedAt: Date;
   id: string;
 }
+
+/** Файлы экспорта маршрута одной версии (routes-03; KML и TCX — routes-formats): байты UTF-8, посчитаны worker'ом. */
+export type RouteExportFiles = Record<RouteExportFormat, Uint8Array>;
 
 /** Производные данные маршрута (routes-03) для карточки: `null` — не посчитаны или нет высот. */
 export interface RouteDerivedState {
@@ -142,7 +146,8 @@ export type PublishedRiderRoute = RouteDoc & { publication: RoutePublicationDoc 
  * - `catalog` маршрута райдера заполнен ⇔ `publication.status = 'approved'` (пишут одобрение и «Вернуть», снимают
  *   скрытие, отклонение, отзыв и снятие — одной записью с переходом);
  * - производные данные (`profile`, `derivedVersion`, `route_exports`, routes-03) пишут только `markReady` и
- *   `recordDerived` — обе с экспортом GPX в одной транзакции (инвариант «есть `derivedVersion` ⇒ есть экспорт»);
+ *   `recordDerived` — обе с экспортом (GPX, KML, TCX — routes-formats) в одной транзакции (инвариант «есть
+ *   `derivedVersion` ⇒ есть экспорт этой версии»: форматы карточки — по версии, `routeExportFormats`);
  * - значения фильтров — только примитивы после zod (id, статус).
  */
 /** Очереди модерации маршрутов райдеров (routes-06): условие частичного индекса, ключ сортировки, индекс. */
@@ -910,7 +915,7 @@ export class RoutesRepository {
     id: string,
     fields: RouteReadyFields,
     geometry: Omit<RouteGeometryDoc, '_id' | 'derivedFailure'> & { derivedVersion: number },
-    gpx: Uint8Array,
+    files: RouteExportFiles,
     now: Date,
   ): Promise<boolean> {
     const result = await this.c.routes.updateOne(
@@ -931,19 +936,26 @@ export class RoutesRepository {
     );
     if (result.modifiedCount !== 1) return false;
     await this.c.geometries.replaceOne({ _id: id }, geometry, { session, upsert: true });
-    await this.writeExport(session, id, gpx, geometry.derivedVersion);
+    await this.writeExport(session, id, files, geometry.derivedVersion);
     return true;
   }
 
+  /** Экспорт целиком (`replaceOne`): GPX, KML и TCX одной версии; `sizeBytes` — сумма файлов. */
   private async writeExport(
     session: DbSession,
     id: string,
-    gpx: Uint8Array,
+    files: RouteExportFiles,
     derivedVersion: number,
   ): Promise<void> {
     await this.c.exports.replaceOne(
       { _id: id },
-      { gpx: new Binary(gpx), sizeBytes: gpx.byteLength, derivedVersion },
+      {
+        gpx: new Binary(files.gpx),
+        kml: new Binary(files.kml),
+        tcx: new Binary(files.tcx),
+        sizeBytes: files.gpx.byteLength + files.kml.byteLength + files.tcx.byteLength,
+        derivedVersion,
+      },
       { session, upsert: true },
     );
   }
@@ -975,7 +987,7 @@ export class RoutesRepository {
     id: string,
     version: number,
     profile: [number, number][] | null,
-    gpx: Uint8Array,
+    files: RouteExportFiles,
   ): Promise<boolean> {
     const result = await this.c.geometries.updateOne(
       {
@@ -986,7 +998,7 @@ export class RoutesRepository {
       { session },
     );
     if (result.matchedCount === 0) return false;
-    await this.writeExport(session, id, gpx, version);
+    await this.writeExport(session, id, files, version);
     return true;
   }
 
@@ -1008,10 +1020,14 @@ export class RoutesRepository {
     return { profile: doc.profile ?? null, derivedVersion: doc.derivedVersion ?? null };
   }
 
-  /** Очищенный GPX маршрута; нет экспорта — `undefined`. */
-  async exportGpx(id: string): Promise<Uint8Array | undefined> {
-    const doc = await this.c.exports.findOne({ _id: id }, { projection: { gpx: 1 } });
-    return doc ? new Uint8Array(doc.gpx.buffer) : undefined;
+  /**
+   * Файл экспорта маршрута в формате `format` — проекцией только этого поля; нет документа или поля (экспорт версии 1
+   * без KML/TCX) — `undefined`.
+   */
+  async exportFile(id: string, format: RouteExportFormat): Promise<Uint8Array | undefined> {
+    const doc = await this.c.exports.findOne({ _id: id }, { projection: { [format]: 1 } });
+    const file = doc?.[format];
+    return file ? new Uint8Array(file.buffer) : undefined;
   }
 
   /**

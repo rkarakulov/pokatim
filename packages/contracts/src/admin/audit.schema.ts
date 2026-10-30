@@ -90,6 +90,8 @@ export const AUDIT_ACTIONS = [
   'panel.invitation_sent',
   'panel.invitation_revoked',
   'panel.invitation_accepted',
+  // profile-moderation-followups: модератор снял запрет загрузки фото райдера (subject `rider`, без имени)
+  'profile.avatar_unblocked',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -166,6 +168,8 @@ export const AuditEntry = z.object({
       rejectionReason: RouteRejectionReason.optional(),
       /** event-tickets: код отмеченного билета */
       ticketCode: z.string().optional(),
+      /** profile-moderation-followups: сброс фото включил запрет загрузки до этого момента */
+      avatarBlockedUntil: z.iso.datetime().optional(),
     })
     .nullable(),
 });

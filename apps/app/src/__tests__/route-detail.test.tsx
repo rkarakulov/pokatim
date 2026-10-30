@@ -36,7 +36,7 @@ const getMap = jest.mocked(api.getCatalogRouteMap);
 const listRaces = jest.mocked(api.listCatalogRouteRaces);
 const share = jest.mocked(shareLink);
 const download = jest.mocked(downloadFile);
-const gpxUrl = jest.mocked(api.catalogRouteGpxUrl);
+const exportUrl = jest.mocked(api.catalogRouteExportUrl);
 
 const NOW = new Date('2026-10-01T12:00:00Z');
 const ID = '0190a6f4-0000-7000-8000-000000000001';
@@ -62,6 +62,8 @@ const route: CatalogRouteDetail = {
     ],
   },
   gpxAvailable: true,
+  // ответ до routes-formats (без поля) — дефолт контракта; форматы — по gpxAvailable (RC-9)
+  exportFormats: [],
 };
 const geometry: RouteMapGeometry = {
   line: [
@@ -104,7 +106,7 @@ beforeEach(() => {
   jest.mocked(shareOrigin).mockReturnValue('https://pokatim.by');
   share.mockResolvedValue('shared');
   download.mockResolvedValue(undefined);
-  gpxUrl.mockImplementation((id) => `https://api.test/v1/routes/${id}/gpx`);
+  exportUrl.mockImplementation((id, format) => `https://api.test/v1/routes/${id}/${format}`);
 });
 afterEach(() => {
   delete process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT;
@@ -255,9 +257,11 @@ describe('карточка маршрута каталога: гость по с
     });
     expect(gpx).toHaveStyle({ backgroundColor: 'transparent' });
     await fireEvent.press(gpx);
-    expect(gpxUrl).toHaveBeenCalledWith(ID);
+    expect(exportUrl).toHaveBeenCalledWith(ID, 'gpx');
     expect(download).toHaveBeenCalledWith(`https://api.test/v1/routes/${ID}/gpx`);
     expect(screen.queryByText('Не удалось открыть файл GPX.')).toBeNull();
+    // один формат — без шита выбора
+    expect(screen.queryByTestId('route-download-sheet')).toBeNull();
   });
 
   it('«Скачать GPX»: отказ (нет браузера) — баннер под кнопкой', async () => {
@@ -265,6 +269,85 @@ describe('карточка маршрута каталога: гость по с
     await open();
     await fireEvent.press(await screen.findByRole('button', { name: 'Скачать GPX' }));
     expect(await screen.findByText('Не удалось открыть файл GPX.')).toBeOnTheScreen();
+  });
+
+  it('exportFormats: [gpx] (маршрут до бэкфилла) — прежняя «Скачать GPX» без шита', async () => {
+    getRoute.mockResolvedValue({ ...route, exportFormats: ['gpx'] });
+    await open();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Скачать GPX' }));
+    expect(download).toHaveBeenCalledWith(`https://api.test/v1/routes/${ID}/gpx`);
+    expect(screen.queryByRole('button', { name: 'Скачать' })).toBeNull();
+    expect(screen.queryByTestId('route-download-sheet')).toBeNull();
+  });
+
+  it('три формата (routes-formats): «Скачать» в строке с «Поделиться» → шит → формат: downloadFile(адрес формата) синхронно, шит закрыт', async () => {
+    getRoute.mockResolvedValue({ ...route, exportFormats: ['gpx', 'kml', 'tcx'] });
+    await open();
+    const row = await screen.findByTestId('route-actions');
+    const button = await within(row).findByRole('button', { name: 'Скачать' });
+    expect(within(row).getByRole('button', { name: 'Поделиться' })).toBeOnTheScreen();
+    expect(within(row).getAllByRole('button')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Скачать GPX' })).toBeNull();
+    expect(button).toHaveStyle({ backgroundColor: 'transparent' });
+
+    await fireEvent.press(button);
+    const sheet = await screen.findByTestId('route-download-sheet');
+    expect(within(sheet).getByRole('heading', { name: 'Скачать маршрут' })).toBeOnTheScreen();
+    for (const name of ['GPX', 'KML', 'TCX']) {
+      expect(within(sheet).getByRole('button', { name })).toBeOnTheScreen();
+    }
+    expect(within(sheet).getByText('Google Earth и Google Мои карты')).toBeOnTheScreen();
+    // подпись формата связана с кнопкой: группа «формат: для чего» (у Button UI-кита нет accessibilityHint)
+    const option = within(sheet).getByTestId('route-download-option-kml');
+    expect(option.props.role).toBe('group');
+    expect(option.props['aria-label']).toBe('KML: Google Earth и Google Мои карты');
+    expect(within(option).getByRole('button', { name: 'KML' })).toBeOnTheScreen();
+    expect(download).not.toHaveBeenCalled();
+
+    // нажатие формата: downloadFile вызван в том же обработчике (до await), шит закрыт
+    const pressed = fireEvent.press(within(sheet).getByRole('button', { name: 'KML' }));
+    expect(download).toHaveBeenCalledWith(`https://api.test/v1/routes/${ID}/kml`);
+    await pressed;
+    expect(exportUrl).toHaveBeenCalledWith(ID, 'kml');
+    await waitFor(() => expect(screen.queryByTestId('route-download-sheet')).toBeNull());
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Скачать' }));
+    await fireEvent.press(
+      within(await screen.findByTestId('route-download-sheet')).getByRole('button', {
+        name: 'TCX',
+      }),
+    );
+    expect(download).toHaveBeenLastCalledWith(`https://api.test/v1/routes/${ID}/tcx`);
+  });
+
+  it('шит: «Закрыть» — без скачивания; отказ скачивания — баннер с форматом', async () => {
+    getRoute.mockResolvedValue({ ...route, exportFormats: ['gpx', 'kml', 'tcx'] });
+    await open();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Скачать' }));
+    await fireEvent.press(
+      within(await screen.findByTestId('route-download-sheet')).getByRole('button', {
+        name: 'Закрыть',
+      }),
+    );
+    await waitFor(() => expect(screen.queryByTestId('route-download-sheet')).toBeNull());
+    expect(download).not.toHaveBeenCalled();
+
+    download.mockRejectedValue(new Error('no browser'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Скачать' }));
+    await fireEvent.press(
+      within(await screen.findByTestId('route-download-sheet')).getByRole('button', {
+        name: 'TCX',
+      }),
+    );
+    expect(await screen.findByText('Не удалось открыть файл TCX.')).toBeOnTheScreen();
+  });
+
+  it('exportFormats пусто и gpxAvailable: false — кнопки скачивания нет', async () => {
+    getRoute.mockResolvedValue({ ...route, gpxAvailable: false, exportFormats: [] });
+    await open();
+    await screen.findByLabelText(heroLabel);
+    expect(screen.queryByRole('button', { name: 'Скачать' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Скачать GPX' })).toBeNull();
   });
 
   it('первая загрузка — скелетон той же раскладки (место карты, шторка-скелетон)', async () => {
@@ -599,6 +682,7 @@ function themedRider(themeId: 'chrono' | 'typography') {
     avatar: null,
     publicId: null,
     themeId,
+    avatarUploadBlockedUntil: null,
   });
   jest.mocked(api.getCatalogRouteViewer).mockResolvedValue({ canReport: true, reported: false });
 }

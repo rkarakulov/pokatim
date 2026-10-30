@@ -51,7 +51,8 @@ paths:
   курсора.
 - Карточка и GPX каталога (routes-03): `RoutesPublicService.get` — `findPublished` → `RoutesRepository.derivedOf`
   (проекция профиля и версии, без кэша в процессе; порт `RouteGeometry` и `displayCache` не меняются);
-  `routes/:id/gpx` — `IpRateLimitGuard` + `@IpRateLimit('route-gpx', ROUTE_POLICY.gpxIpLimit)` после класс-гарда,
+  `routes/:id/{gpx,kml,tcx}` (общий `sendExport`) — `IpRateLimitGuard` +
+  `@IpRateLimit('route-gpx', ROUTE_POLICY.exportIpLimit)` после класс-гарда,
   байты `route_exports`, заголовки файла через `HttpAdapterHost` после чтения (Nest пишет `@Header` до обработчика —
   404 с типом файла не сериализовался бы). Общий IP-лимит метода — `consumeIpLimit`/`IpRateLimitGuard` в
   `src/public-read.guard.ts` (им же пользуется `PublicReadGuard`).
@@ -65,8 +66,8 @@ paths:
   `RoutesModule.controllers` (статический сегмент до публичного `routes/:id`, иначе pipe `Uuid` → 400) →
   `MyRoutesService` (лимиты и слот приёма `UploadSlots` до тела, квота, список, карточка, карта через
   `displayGeometryOf` — не через порт и кэш, `rename`, `delete` в транзакции). Приём — общий
-  `RoutesService.accept({ userId, origin }, …)`: формат — `detectRouteFormat` (GPX/KML; панель — API и UI,
-  `.gpx,.kml`), журнал панели — только `platform`, outbox `routes.route-received` и worker `route-processing` —
+  `RoutesService.accept({ userId, origin }, …)`: формат — `detectRouteFormat` (GPX/KML/KMZ/TCX; панель — API и UI,
+  `.gpx,.kml,.kmz,.tcx`), журнал панели — только `platform`, outbox `routes.route-received` и worker `route-processing` —
   общие. Порты `RouteCatalog`/`RouteGeometry` и `RoutesCatalogService` видят только `platform`. Мутации «моих» — `POST` с глаголом (`rename`, `delete`).
 - Публикация маршрутов райдеров (routes-06): порядок контроллеров `RoutesModule` — `RoutesMineController`,
   `RoutesViewerController`, `RoutesAdminController`, `RoutesModerationController`, `RoutesPublicController`.
@@ -151,7 +152,8 @@ paths:
   `rides_participant_idx`). Пути `/v1/profile/{avatar,races,rides,stats}` — статические сегменты, у
   `ProfileController` только `GET /`, `PATCH /` и `PUT theme` (user-theme).
 - `riders` — модуль-композиция (образец `standings`, своих коллекций нет): `riders → profile, results, tracks,
-  identity` только через `index.ts`; `riders` не импортирует никто, кроме `AppModule`. Порты: `RIDER_PROFILES`
+  identity` только через `index.ts`; `riders` импортируют только `AppModule` и `sharing` (`RidersCoreModule`, порт
+  `RIDERS_FOR_SHARING` — публичная статистика для OG райдера, та же `summarize`). Порты: `RIDER_PROFILES`
   (`profile`), `RIDER_RESULTS` (`results`: `publishedRows` — строки текущих ревизий, `racesOf`), `ACTIVITY_TOTALS`
   (`tracks`, отдельный порт — `ActivitySource` не расширяется; реэкспорт через `ResultsCoreModule`). HTTP:
   `ProfileStatsController` (`profile/stats`, `AuthGuard`, `no-store`) и `RidersPublicController` (`riders/:publicId`,
@@ -172,6 +174,14 @@ paths:
   `{ reset: false }` без журнала; устаревший `reportRevision` — 409 `CONFLICT` (RC-P1), открытых нет —
   `{ dismissed: false }` (RC-P2). `AvatarReissue` — перевыпуск id фото при переходе «публичен → нет» в транзакциях
   `PATCH /v1/profile` (`ProfileService.writeProfile`) и сброса имени; публичность — `isPublicProfile` (`profile.policy.ts`).
+  Follow-up (profile-moderation-followups): очередь `?reason=` (одна причина), строка — `openReasons`; сброс с
+  `{ reset: true }` пишет в той же транзакции после журнала outbox `profile.field-reset` (`profile.events.ts`, строгая
+  схема `ProfileFieldReset`: `userId`, `field`, `resetAt`, `seq`, `avatarBlockedUntil` — только если запрет включил этот
+  сброс; без причины и значения). Запрет загрузки фото — `PROFILE_POLICY.avatarBan` (3 сброса за 180 дн. → 30 дн.,
+  `[ASSUMPTION]`), `ProfileAvatarService.admit` — `409 PROFILE_INVALID_STATE { reason: 'avatar_blocked', until }`;
+  `POST admin/rider-profiles/:userId/avatar-unblock` — журнал `profile.avatar_unblocked`, нет запрета —
+  `{ unblocked: false }` без журнала и события. `ProfileView.avatarUploadBlockedUntil` — `profileViewOf(doc, now)` во
+  всех ответах профиля.
 
 ## Очереди (worker)
 
@@ -258,7 +268,8 @@ paths:
   `CALENDAR_EVENTS` — `get`, `getMany`), `profile` (`RIDER_NAMES.attributionNames`), `identity`
   (`IdentityAccounts.liveUserIds/emailsOf`, `AuthGuard`), `panel` — только через `index.ts`. На `tickets` ссылаются
   только `AppModule` (`TicketsModule`), `WorkerModule` (`TicketsWorkerModule`, `ticketsOutboxRoutes`) и
-  `AccountWorkerModule` (`TicketsCoreModule`, порт `TicketErasure`, шаг `tickets` перед `notifications`).
+  `AccountWorkerModule` (`TicketsCoreModule`, порт `TicketErasure`, шаг `tickets` перед `notifications`) и
+  `NotificationsWorkerModule` (`TicketsCoreModule`, порт `TICKET_NOTICES`, PR D).
 - `TicketsCoreModule` — репозиторий, `TicketEvents` (факты событий: гонка — `RACE_REGISTRY` + настройки, календарь —
   `CALENDAR_EVENTS`, момент старта вычисляется `calendarMoments`, RC-T2), `TicketIssuer` (код, `qrHash`, outbox
   `tickets.issued`; дубль кода — новая транзакция ≤ 3), `RaceTickets` (сверка), `TicketErasure`. Правила —
@@ -291,6 +302,16 @@ paths:
 - Письмо — очередь `tickets-email` (`TicketEmailHandler`, захват `email.state`, RC-T11), шаблон
   `mail/ticket-email.ts` (`htmlEmail`/`buttonHtml`/`escapeHtml`/`minskDateTime` из `identity`), кнопка — env
   `APP_WEB_ORIGIN`.
+- Напоминания (PR D, ADR-0023 п. 12): правила — `event_ticketing.reminders[]` (≤ 3, `id` стабилен, `armedAt`), правка —
+  `PUT …/ticketing` (нет поля `reminders` — не трогать), правила — `reminders.policy.ts` (`dueReminders`,
+  `nextReminders`, `reminderView`). Регламент `tickets.reminders` (`* * * * *` Минск + `tickets.reminders.boot`,
+  очередь `tickets-maintenance`) — `TicketReminders.dispatchDue`: гонке сначала `RaceTickets.reconcileRace` (вне
+  транзакции); на правило — транзакция: календарю первой `CALENDAR_EVENTS.lockForAdmission` и сверка старта, затем
+  захват `claimReminderDispatch` (условный `$push` в `reminderDispatches` по `(reminderId, dueAt)`, гонке — и по
+  `startsAt`; 0 — уже отправлено или старт перенесён), метки `remindersSent` билетам (`status: active`,
+  `createdAt ≤ dueAt`, `$ne reminderId`), outbox `tickets.reminder-due`. Пропущенное уходит, пока событие не
+  началось; правило, заданное после своего времени, — нет. Получателей отдаёт порт `TICKET_NOTICES`
+  (`TicketNoticesService.reminder`: билеты с меткой отправки, гонке — только активные заявки `RESULTS_FOR_TICKETS`).
 - Доступ панели к событию — один класс `PanelEvents.resolve(principal, kind, eventId, purpose)` (403 до чтения, нет
   или чужое — 404); его зовут `TicketingAdminService` и `MaterialsAdminService`, второй проверки нет.
 - Материалы (PR C): `MaterialsRepository` — единственный писатель `event_materials`/`event_material_files`/
@@ -349,7 +370,8 @@ paths:
   `RideInviteService` → `RideInviteInputs` (порт `rides` `RIDES_FOR_SHARING`: `inviteFacts` — скрытый 404, не будущий
   `null`; `inviteLine` — `RideRoutes.catalogLine`, только `IN_CATALOG`) → общий `CardRequests` (лимиты, кэш,
   постановка) → задача `ride-invite.render` той же очереди → `StoryCardProcessor.buildRideInvite` →
-  `rideInviteTree` (`ride-invite.render.ts`, узлы и линия — `story-card.render.ts`/`story-card.png.ts`).
+  `rideInviteTree` (`ride-invite.render.ts`, узлы, `statRow`, `cardTrackView` и линия — `story-card.render.ts`/
+  `story-card.png.ts`).
   `SharingModule`/`SharingWorkerModule` импортируют `RidesCoreModule`; `rides` о `sharing` не знает.
 - Карточка достижения: `AchievementCardController` (`GET achievements/:code/story-card`, `AuthGuard`, `no-store`) →
   `AchievementCardService` → `AchievementCardInputs` (порт `achievements` `ACHIEVEMENTS_FOR_SHARING.cardFacts` — факты
@@ -357,16 +379,26 @@ paths:
   задача `achievement-card.render` → `buildAchievementCard` → `achievementCardTree` (значок — глиф Material Symbols,
   `achievement-card.icons.ts` — зеркало иконок каталога приложения). `SharingModule`/`SharingWorkerModule` импортируют
   `AchievementsReadModule`.
+- Карточка маршрута каталога (route-story-card): `RouteCardController` (`GET routes/:routeId/story-card`, `AuthGuard`,
+  `no-store`) → `RouteCardService` (не в каталоге — 404) → `RouteCardInputs` (`ROUTES_FOR_SHARING.ogFacts`/`ogLine`,
+  только `IN_CATALOG`) → `CardRequests` → задача `route-card.render` → `buildRouteCard` (устарел хэш, снят с каталога,
+  нет линии — `skipped`) → `routeCardTree`.
 - OG-картинки публичных страниц (og-images): `OgCardController` (`og/cards/brand/site`, `og/cards/:kind/:id` →
   `{ version }`, IP-лимит `og-card`; `og/images/brand/site/:file`, `og/images/:kind/:id/:file` — PNG без входа,
   IP-лимит `og-image`, старая версия — `302`, нет PNG — бренд `no-store` + постановка) → `OgCardService` →
   `OgCardInputs` (порты владельцев `RACES_FOR_SHARING`, `RIDES_FOR_SHARING.ogFacts`, `ROUTES_FOR_SHARING`,
-  `CALENDAR_FOR_SHARING`: `ogFacts` — только публичный объект, иначе `null`; `ogChanged` — keyset `changed-since.ts`).
+  `CALENDAR_FOR_SHARING`, `RIDERS_FOR_SHARING`: `ogFacts` — только публичный объект, иначе `null`; `ogChanged` — keyset
+  `changed-since.ts`). Виды: `race, ride, route, calendar, season, rider` (+ бренд); id по виду — `OG_CARD_ID`
+  контракта (`rider` — `RiderPublicId`, остальные `Uuid`). Сезон — `seasonOgFacts` и `liveSeasonIds` порта `races`.
   Рендер — только worker: `og-card.render` очереди `story-card` (`priority`, `StoryCardProcessor.buildOgCard`,
   диспетчер по имени задачи), пререндер — `OgSync` (очередь `og-sync`, `og.sync` каждую минуту и при старте). Ключи
   Redis `og:png:<hash>` (TTL 7 сут., вне окна пререндера — 1 сут.; продление при выдаче), `og:obj:<kind>:<id>` →
   текущий хэш (новая версия удаляет PNG прежней — Lua `storeReady`), `og:pending:<hash>` (NX; после провала —
-  удержание), `og:cursor:<kind>`, `og:sweep`; сбой строки `og.sync` — лог и пропуск. Тема — «Классика» (`OG_THEME_ID`). **Изменил разметку, тексты или токены `ogCard`
+  удержание), `og:cursor:<kind>` (только `OG_CURSOR_KINDS`: гонка, райд, маршрут, старт), `og:sweep`; сезоны — без курсора, каждый
+  прогон все живые (`liveSeasonIds`: число гонок не меняет `seasons.updatedAt`); райдер — без пререндера, только
+  самолечение. Сбой строки `og.sync` — лог и пропуск. Тема — «Классика» (`OG_THEME_ID`); схема по виду —
+  `OG_CARD_POLICY.scheme` (гонка, сезон, райдер — `dark`, остальные — `light`), входит в хэш; смена таблицы без подъёма
+  `renderVersion` полный проход не запускает. **Изменил разметку, тексты или токены `ogCard`
   — подними `OG_CARD_POLICY.renderVersion`** (новые URL, полный проход `og.sync`).
 - Общий код карточки — пакеты: форматтеры `@pokatim/i18n` (`format.ts`), геометрия линии `@pokatim/route-view`
   (`line-geometry.ts`), таблица начертаний `appFontFaces` и токены `storyCard` — `@pokatim/design-tokens`.
@@ -510,10 +542,14 @@ RC-A1, ADR-0019).
 
 ## Уведомления (`notifications`, ADR-0017)
 
-- Источники (`results`, `disputes`, `rides`, `routes`) пишут только outbox в своих транзакциях (payload — id и коды)
-  и дают порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`, `RouteNotices`; плюс `RaceRegistry`,
+- Источники (`results`, `disputes`, `rides`, `routes`, `tickets`) пишут только outbox в своих транзакциях (payload — id и
+  коды) и дают порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`, `RouteNotices`,
+  `TicketNotices`; плюс `RaceRegistry`,
   `IdentityAccounts.liveUserIds/emailsOf`. Чужих коллекций `notifications` не читает; источники о нём не знают.
-- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (12 типов → `notifications-intake`). Очереди:
+  `profile` — источник без порта: ребро `notifications → profile` только файловое (`PROFILE_FIELD_RESET` и схема
+  `ProfileFieldReset` из `profile/index.ts`, без Nest-импорта `ProfileCoreModule`), payload самодостаточен, живость
+  получателя — `liveUserIds`; схлопывание `profile:<uid>:<field>` по `seq`, событие без `seq` — `invalid_payload`.
+- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (14 типов → `notifications-intake`; `tickets.reminder-due` — получателю своя цель `ticket` через `NoticeDraft.targets`). Очереди:
   `notifications-intake` (событие → получатели → настройки → upsert; > 72 ч — skip; уникальность `(sourceEventId,
   userId)`, схлопывание `collapseKey`), `notifications-delivery` (`notifications.push` по пользователю — захват,
   тумблер, тихие часы, лимит 20/ч, сводка; `notifications.email` — только N2), `notifications-maintenance`
@@ -523,6 +559,9 @@ RC-A1, ADR-0019).
   `skipped`.
 - HTTP `/v1/notifications` под `AuthGuard`, только свои (`userId` сессии в фильтре, чужое — 404); лимиты
   `notifications-read` 120/мин, `notifications-settings` 30/ч, `notifications-push-token` 30/ч → `429 RATE_LIMITED`.
+  Группа «Мероприятия» — подресурс `GET|PUT settings/events` (`push.events`, `email.events`; нет поля — включено):
+  `NotificationSettings` ответа строгий, новое поле сломало бы старые сборки (RC-D1); `PUT settings` — `$set`
+  известных полей, не `replaceOne` (старые сборки не стирают тумблеры подресурса). Внутренний тип — `DeliverySettings`.
 - Web Push (ADR-0022) — второй транспорт того же `notifications.push`, не отдельная система: подписка — `push_tokens`
   (`platform: 'web'`), HTTP `GET web-push` (публичный ключ или `null`), `PUT web-push/subscriptions`, `POST
   web-push/subscriptions/revoke` (лимит `notifications-push-token`). Порт `WEB_PUSH_SENDER` (`web-push.sender.ts`,
