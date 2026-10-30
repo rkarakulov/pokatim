@@ -388,10 +388,8 @@ describe('проверки принятия (AC4, AC5, RC-2, RC-3, RC-11, RC-17)
     });
   });
 
-  it('аккаунт удалён между проверкой пароля и принятием — 401, роли нет (RC-3)', async () => {
-    const actor = await admin();
-    const { id, token } = await invited(actor.token);
-    const userId = await verifiedUser(h, INVITEE);
+  /** Принятие остановлено после верного пароля (до транзакции): тест меняет аккаунт. */
+  function pauseAfterVerify() {
     const g = gate();
     const credentials = h.app.get(PanelCredentials, { strict: false });
     const verify = credentials.verify.bind(credentials);
@@ -400,6 +398,14 @@ describe('проверки принятия (AC4, AC5, RC-2, RC-3, RC-11, RC-17)
       await g.wait();
       return result;
     });
+    return g;
+  }
+
+  it('аккаунт удалён между проверкой пароля и принятием — 401, роли нет (RC-3)', async () => {
+    const actor = await admin();
+    const { id, token } = await invited(actor.token);
+    const userId = await verifiedUser(h, INVITEE);
+    const g = pauseAfterVerify();
 
     const accepting = acceptInvitation(h, { token, email: INVITEE });
     await g.reached;
@@ -413,6 +419,52 @@ describe('проверки принятия (AC4, AC5, RC-2, RC-3, RC-11, RC-17)
     expect(res.status).toBe(401);
     expect(await panel(h).members.countDocuments({ _id: userId })).toBe(0);
     expect(await invitationDoc(id)).toMatchObject({ status: 'pending' });
+  });
+
+  it('пароль сменён между проверкой и принятием — 401, роли нет (RC-3, штамп учётных данных)', async () => {
+    const actor = await admin();
+    const { id, token } = await invited(actor.token);
+    const userId = await verifiedUser(h, INVITEE);
+    const g = pauseAfterVerify();
+
+    const accepting = acceptInvitation(h, { token, email: INVITEE });
+    await g.reached;
+    // сброс пароля: другой хеш — другой штамп учётных данных
+    await collections(h).users.updateOne(
+      { _id: userId },
+      {
+        $set: { passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHQ$changed' },
+        $inc: { version: 1 },
+      },
+    );
+    g.open();
+
+    const res = await accepting;
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    expect(await panel(h).members.countDocuments({ _id: userId })).toBe(0);
+    expect(await invitationDoc(id)).toMatchObject({ status: 'pending' });
+  });
+
+  it('ротация EMAIL_TOKEN_SECRET гасит выданные ссылки: принятие 410; письмо не уходит, «Письмо не отправлено»', async () => {
+    const actor = await admin();
+    const { id, token } = await invited(actor.token);
+    await verifiedUser(h, INVITEE);
+    const secret = h.env.EMAIL_TOKEN_SECRET;
+    h.env.EMAIL_TOKEN_SECRET = `${secret}-rotated`;
+    try {
+      const res = await acceptInvitation(h, { token, email: INVITEE });
+      expect(res.status).toBe(410);
+      expect(res.body).toMatchObject({ code: 'PANEL_INVITATION_INVALID' });
+
+      // письмо по приглашению прежнего секрета: новая ссылка не совпала бы с хешем — пропуск, не «отправлено»
+      expect(await sendPanelEmails(h)).toEqual(['skipped']);
+      expect(h.mailer.sent.filter((mail) => mail.to === INVITEE)).toHaveLength(0);
+      expect(await invitationDoc(id)).toMatchObject({ status: 'pending', emailState: 'failed' });
+    } finally {
+      h.env.EMAIL_TOKEN_SECRET = secret;
+    }
+    expect(await panel(h).members.countDocuments()).toBe(1);
   });
 });
 

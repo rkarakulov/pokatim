@@ -2,7 +2,7 @@ import { PanelInvitation } from '@pokatim/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
-import { gate } from '../../../test/identity';
+import { gate, retried, untilBlocked, writeWaiting } from '../../../test/identity';
 import {
   acceptInvitation,
   invitationToken,
@@ -15,9 +15,11 @@ import {
 import { PanelInvitationsRepository } from './panel-invitations.repository';
 
 /**
- * Гонки приглашений (AC7, §7, RC-15): ворота — `findLiveByTokenHash` (снимок до пароля) ждёт, пока другая операция
- * завершится целиком. Отрицательное доказательство — `lockPending` подменён чтением без условия и записи: обе
- * операции коммитятся.
+ * Гонки приглашений (AC7, §7, RC-15). Два вида ворот:
+ * - после снимка (до транзакции): другая операция завершается целиком; держит перепроверка статуса в транзакции
+ *   (`lockPending` с условием и `markAccepted` с условием) — без обеих проверок обе операции коммитятся;
+ * - внутри транзакции после `lockPending`: запись-замок (`$inc version`) заставляет отзыв ждать принятия; условное
+ *   чтение без записи — отзыв проходит посреди принятия (порядок решает уже конфликт записи `markAccepted`).
  */
 let h: Harness;
 beforeAll(async () => {
@@ -65,10 +67,33 @@ function pauseAfterSnapshot() {
   return g;
 }
 
-/** «Принятие без замка»: `lockPending` — чтение документа без условия статуса и без записи. */
-function lockPendingAsRead() {
+/** Перепроверки статуса в транзакции нет: `lockPending` — чтение без условия, `markAccepted` — без записи. */
+function withoutStatusRecheck() {
   const repo = repository();
   vi.spyOn(repo, 'lockPending').mockImplementation((tx, id) => repo.findById(id, tx));
+  vi.spyOn(repo, 'markAccepted').mockResolvedValue(true);
+}
+
+/** `lockPending` без записи: то же условие (`pending`, не истекло), но чтением — без `$inc version`. */
+function lockPendingAsConditionalRead() {
+  const repo = repository();
+  vi.spyOn(repo, 'lockPending').mockImplementation(async (tx, id, now) => {
+    const doc = await repo.findById(id, tx);
+    return doc?.status === 'pending' && doc.expiresAt > now ? doc : undefined;
+  });
+}
+
+/** Принятие остановлено внутри транзакции сразу после `lockPending` (снимок транзакции уже взят). */
+function pauseAfterLockPending() {
+  const g = gate();
+  const repo = repository();
+  const lock = repo.lockPending.bind(repo);
+  vi.spyOn(repo, 'lockPending').mockImplementationOnce(async (...args) => {
+    const doc = await lock(...args);
+    await g.wait();
+    return doc;
+  });
+  return g;
 }
 
 const acceptedCount = () => panel(h).audit.countDocuments({ action: 'panel.invitation_accepted' });
@@ -91,9 +116,9 @@ describe('принятие ↔ отзыв', () => {
     expect(await acceptedCount()).toBe(0);
   });
 
-  it('отрицательное доказательство: без lockPending обе коммитятся — сотрудник активен, приглашение отозвано', async () => {
+  it('отрицательное доказательство: без перепроверки статуса в транзакции обе коммитятся — сотрудник активен, приглашение отозвано', async () => {
     const s = await setup();
-    lockPendingAsRead();
+    withoutStatusRecheck();
     const g = pauseAfterSnapshot();
     const accepting = acceptInvitation(h, { token: s.token, email: INVITEE });
     await g.reached;
@@ -107,6 +132,47 @@ describe('принятие ↔ отзыв', () => {
     expect(await panel(h).invitations.findOne({ _id: s.id })).toMatchObject({ status: 'revoked' });
     expect(await panel(h).audit.countDocuments({ action: 'panel.invitation_revoked' })).toBe(1);
     expect(await acceptedCount()).toBe(1);
+  });
+});
+
+describe('принятие ↔ отзыв внутри транзакции принятия (замок lockPending)', () => {
+  const revoke = (s: { adminToken: string; id: string }) =>
+    panelCall(h, s.adminToken, 'POST', `${INVITATIONS}/${s.id}/revoke`);
+
+  it('lockPending записью: отзыв ждёт транзакцию принятия — принято (200), отзыв 404', async () => {
+    const s = await setup();
+    const g = pauseAfterLockPending();
+    const revokeSpy = vi.spyOn(repository(), 'revokePending');
+    const accepting = acceptInvitation(h, { token: s.token, email: INVITEE });
+    await g.reached;
+    const revoking = revoke(s);
+    await untilBlocked(
+      revoking,
+      async () => (await retried(revokeSpy)()) || (await writeWaiting(h, 'panel_invitations')()),
+    );
+    g.open();
+
+    expect((await accepting).status).toBe(200);
+    expect((await revoking).status).toBe(404);
+    expect(await panel(h).invitations.findOne({ _id: s.id })).toMatchObject({ status: 'accepted' });
+    expect(await panel(h).audit.countDocuments({ action: 'panel.invitation_revoked' })).toBe(0);
+    expect(await acceptedCount()).toBe(1);
+  });
+
+  it('отрицательное доказательство: lockPending чтением без $inc — отзыв проходит посреди принятия (204), принятие — 410', async () => {
+    const s = await setup();
+    lockPendingAsConditionalRead();
+    const g = pauseAfterLockPending();
+    const accepting = acceptInvitation(h, { token: s.token, email: INVITEE });
+    await g.reached;
+    // без записи-замка отзыв не ждёт: коммитится, пока транзакция принятия открыта
+    expect((await revoke(s)).status).toBe(204);
+    g.open();
+
+    // инвариант «принято XOR отозвано» держит конфликт записи markAccepted (повтор видит revoked)
+    expect((await accepting).status).toBe(410);
+    expect(await panel(h).members.countDocuments({ _id: s.userId })).toBe(0);
+    expect(await acceptedCount()).toBe(0);
   });
 });
 
@@ -133,9 +199,9 @@ describe('принятие ↔ повторное приглашение', () =>
     expect(await acceptedCount()).toBe(0);
   });
 
-  it('отрицательное доказательство: без lockPending сотрудник активен по заменённой ссылке', async () => {
+  it('отрицательное доказательство: без перепроверки статуса сотрудник активен по заменённой ссылке', async () => {
     const s = await setup();
-    lockPendingAsRead();
+    withoutStatusRecheck();
     const g = pauseAfterSnapshot();
     const accepting = acceptInvitation(h, { token: s.token, email: INVITEE });
     await g.reached;

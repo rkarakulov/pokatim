@@ -170,7 +170,15 @@ export function InviteScreen() {
       ) : banner === 'invalid' ? (
         <Banner tone="error" role="alert" title={t('admin.signIn.invalid')} />
       ) : banner === 'alreadyMember' ? (
-        <Banner tone="warning" role="alert">
+        <Banner
+          tone="warning"
+          role="alert"
+          actions={
+            <Button size="sm" onClick={() => void router.navigate({ to: '/sign-in' })}>
+              {t('admin.invite.signIn')}
+            </Button>
+          }
+        >
           {t('admin.invite.error.PANEL_ALREADY_MEMBER')}
         </Banner>
       ) : banner ? (

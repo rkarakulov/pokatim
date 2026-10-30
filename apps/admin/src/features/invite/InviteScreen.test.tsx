@@ -140,4 +140,13 @@ describe('«Приглашение в команду» (/invite, ADR-0026)', () 
     expect(await screen.findByText('Слишком много попыток')).toBeTruthy();
     expect(email()).toHaveProperty('disabled', true);
   });
+
+  it('уже в команде (409) — баннер с кнопкой «Войти»', async () => {
+    mocked.acceptInvitation.mockRejectedValue(httpError(409, 'PANEL_ALREADY_MEMBER'));
+    const { router } = await openLink();
+    await acceptAs();
+    expect(await screen.findByText('Вы уже в команде платформы — просто войдите.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Войти' }));
+    await waitFor(() => expect(currentHref(router)).toBe('/admin/sign-in'));
+  });
 });

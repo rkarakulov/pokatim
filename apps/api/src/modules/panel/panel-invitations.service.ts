@@ -161,7 +161,10 @@ export class PanelInvitationsService {
         role: invitation.role,
         displayName: invitation.displayName,
       });
-      await this.invitations.markAccepted(tx, invitation._id, userId, now);
+      // защита в глубину: не `pending` под замком — откат всей транзакции (активации нет)
+      if (!(await this.invitations.markAccepted(tx, invitation._id, userId, now))) {
+        throw invitationInvalid();
+      }
       await this.audit.append(tx, {
         action: 'panel.invitation_accepted',
         actor: { kind: 'user', userId },

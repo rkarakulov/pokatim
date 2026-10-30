@@ -1039,7 +1039,8 @@ export const ru = {
   'admin.members.displayName': 'Имя в панели',
   'admin.members.role': 'Роль',
   'admin.members.grantSubmit': 'Выдать роль',
-  'admin.members.error.NOT_FOUND': 'Аккаунта нет — отправьте приглашение.',
+  'admin.members.error.NOT_FOUND':
+    'Пользователь с таким e-mail не найден — попросите зарегистрироваться в приложении.',
   'admin.members.error.PANEL_USER_UNVERIFIED':
     'E-mail пользователя не подтверждён — попросите открыть ссылку из письма регистрации.',
   'admin.members.error.PANEL_ALREADY_MEMBER': 'Этот пользователь уже в команде платформы.',
@@ -2984,10 +2985,12 @@ export const ru = {
   'admin.members.invite': 'Пригласить',
   'admin.members.inviteTitle': 'Пригласить в команду',
   'admin.members.inviteLead':
-    'Письмо со ссылкой уйдёт на этот адрес. Ссылка действует 7 дней. Аккаунта в приложении может ещё не быть — приглашённый зарегистрируется на этот адрес и примет приглашение своим паролем.',
+    'Письмо со ссылкой уйдёт на этот адрес. Ссылка действует {days} дней. Аккаунта в приложении может ещё не быть — приглашённый зарегистрируется на этот адрес и примет приглашение своим паролем.',
   'admin.members.inviteEmail': 'E-mail',
   'admin.members.inviteSubmit': 'Отправить приглашение',
   'admin.members.sendInvite': 'Отправить приглашение',
+  'admin.members.error.grantNotFound': 'Аккаунта нет — отправьте приглашение.',
+  'admin.invitations.error.NOT_FOUND': 'Приглашение уже принято или отозвано.',
   'admin.members.error.PANEL_INVITATIONS_UNAVAILABLE':
     'Приглашения временно недоступны: на сервере не настроен адрес панели.',
   'admin.invitations.title': 'Приглашения',

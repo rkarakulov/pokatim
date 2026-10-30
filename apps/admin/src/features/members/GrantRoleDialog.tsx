@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { apiErrorOf } from '@pokatim/api-client';
-import { GrantRoleRequest, PANEL_ROLES } from '@pokatim/contracts';
+import { GrantRoleRequest, PANEL_INVITATION_TTL_DAYS, PANEL_ROLES } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -49,8 +49,13 @@ export function GrantRoleDialog({
   const onError = (error: unknown) => {
     const code = apiErrorOf(error)?.code ?? '';
     if (EMAIL_FIELD_CODES.has(code)) {
-      form.setError('email', { type: 'server', message: memberErrorText(error) });
-      setNoAccount(mode === 'grant' && code === 'NOT_FOUND');
+      const noAccountHere = mode === 'grant' && code === 'NOT_FOUND';
+      // подсказка «пригласите» — только в «Выдать роль» по e-mail; в остальных окнах NOT_FOUND — нейтральный текст
+      const message = noAccountHere
+        ? t('admin.members.error.grantNotFound')
+        : memberErrorText(error);
+      form.setError('email', { type: 'server', message });
+      setNoAccount(noAccountHere);
     } else {
       setFailure(memberErrorText(error));
     }
@@ -83,7 +88,9 @@ export function GrantRoleDialog({
       onClose={close}
     >
       <p className="dialog__consequences t-body">
-        {t(inviting ? 'admin.members.inviteLead' : 'admin.members.grantLead')}
+        {inviting
+          ? t('admin.members.inviteLead', { days: PANEL_INVITATION_TTL_DAYS })
+          : t('admin.members.grantLead')}
       </p>
       <form
         noValidate

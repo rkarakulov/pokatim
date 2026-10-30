@@ -100,13 +100,14 @@ export class PanelInvitationsRepository {
     return doc ?? undefined;
   }
 
-  /** Принято — под `lockPending` той же транзакции. */
-  async markAccepted(tx: DbSession, id: string, userId: string, now: Date): Promise<void> {
-    await this.c.invitations.updateOne(
+  /** Принято — под `lockPending` той же транзакции; не `pending` (замок обойдён) — `false`, вызывающий откатывает. */
+  async markAccepted(tx: DbSession, id: string, userId: string, now: Date): Promise<boolean> {
+    const result = await this.c.invitations.updateOne(
       { _id: id, status: 'pending' },
       { $set: { status: 'accepted', acceptedUserId: userId, acceptedAt: now, ...closed(now) } },
       { session: tx },
     );
+    return result.matchedCount === 1;
   }
 
   /** Итог письма — одна условная запись (только у `pending`: закрытое приглашение не меняется). */

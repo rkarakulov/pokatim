@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { sha256 } from '../identity';
 
@@ -15,3 +15,20 @@ export function panelInvitationToken(secret: string, invitationId: string): stri
 
 /** Поисковый хеш токена приглашения в БД. */
 export const invitationTokenHash = (token: string) => sha256(token);
+
+/**
+ * Хеш приглашения выведен из **текущего** секрета (ADR-0026 п. 2): после ротации `EMAIL_TOKEN_SECRET` прежние ссылки
+ * не принимаются, а письмо не уходит со ссылкой, которой нет в БД. Сравнение — `timingSafeEqual`.
+ */
+export function invitationTokenMatches(
+  secret: string,
+  invitationId: string,
+  tokenHash: string,
+): boolean {
+  const expected = Buffer.from(
+    invitationTokenHash(panelInvitationToken(secret, invitationId)),
+    'hex',
+  );
+  const stored = Buffer.from(tokenHash, 'hex');
+  return expected.length === stored.length && timingSafeEqual(expected, stored);
+}

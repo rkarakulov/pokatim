@@ -3,7 +3,11 @@ import { createHmac } from 'node:crypto';
 import { OpaqueToken } from '@pokatim/contracts';
 import { describe, expect, it } from 'vitest';
 
-import { invitationTokenHash, panelInvitationToken } from './panel-invitation-token';
+import {
+  invitationTokenHash,
+  invitationTokenMatches,
+  panelInvitationToken,
+} from './panel-invitation-token';
 
 const SECRET = 'test-email-secret-test-email-secret-0';
 const ID = '01890a5d-ac96-774b-bcce-b302099a8057';
@@ -31,5 +35,13 @@ describe('panelInvitationToken', () => {
     const hash = invitationTokenHash(token);
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
     expect(hash).not.toContain(token);
+  });
+
+  it('сверка хеша с текущим секретом: тот же секрет и id — да; другой секрет, другой id, мусор — нет', () => {
+    const hash = invitationTokenHash(panelInvitationToken(SECRET, ID));
+    expect(invitationTokenMatches(SECRET, ID, hash)).toBe(true);
+    expect(invitationTokenMatches(`${SECRET}-rotated`, ID, hash)).toBe(false);
+    expect(invitationTokenMatches(SECRET, OTHER_ID, hash)).toBe(false);
+    expect(invitationTokenMatches(SECRET, ID, 'abc')).toBe(false);
   });
 });

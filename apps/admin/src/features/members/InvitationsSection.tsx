@@ -6,6 +6,7 @@ import {
 import { t } from '@pokatim/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createColumnHelper } from '@tanstack/react-table';
+import { apiErrorOf } from '@pokatim/api-client';
 import { useMemo, useState } from 'react';
 
 import { api } from '../../api';
@@ -53,14 +54,28 @@ export function InvitationsSection() {
     },
     onError: (error) => setNotice({ tone: 'error', text: memberErrorText(error) }),
   });
+  const [revokeError, setRevokeError] = useState<string>();
+  const closeRevoke = () => {
+    setRevoking(undefined);
+    setRevokeError(undefined);
+  };
+  // окно отзыва держится до ответа: подтверждение busy, ошибка — в окне (404 — приглашение уже закрыто)
   const revoke = useMutation({
     mutationFn: (id: string) => api.revokeInvitation(id),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      closeRevoke();
+      await refresh();
+    },
     onError: async (error) => {
-      setNotice({ tone: 'error', text: memberErrorText(error) });
+      setRevokeError(
+        apiErrorOf(error)?.code === 'NOT_FOUND'
+          ? t('admin.invitations.error.NOT_FOUND')
+          : memberErrorText(error),
+      );
       await refresh();
     },
   });
+  const busy = resend.isPending || revoke.isPending;
 
   const columns = useMemo(
     () => [
@@ -107,7 +122,7 @@ export function InvitationsSection() {
                 size="sm"
                 aria-label={`${t('admin.invitations.resend')}: ${invitation.email}`}
                 busy={resend.isPending && resend.variables.id === invitation.id}
-                disabled={resend.isPending}
+                disabled={busy}
                 onClick={() => {
                   setNotice(undefined);
                   resend.mutate(invitation);
@@ -119,6 +134,7 @@ export function InvitationsSection() {
                 size="sm"
                 variant="danger"
                 aria-label={`${t('admin.invitations.revoke')}: ${invitation.email}`}
+                disabled={busy}
                 onClick={() => {
                   setNotice(undefined);
                   setRevoking(invitation);
@@ -131,7 +147,7 @@ export function InvitationsSection() {
         },
       }),
     ],
-    [canManage, resend],
+    [canManage, resend, busy],
   );
 
   return (
@@ -160,18 +176,27 @@ export function InvitationsSection() {
       <Dialog
         open={revoking !== undefined}
         title={t('admin.invitations.revokeTitle', { email: revoking?.email ?? '' })}
-        onClose={() => setRevoking(undefined)}
+        onClose={() => {
+          if (!revoke.isPending) closeRevoke();
+        }}
       >
         <p className="dialog__consequences t-body">{t('admin.invitations.revokeConsequences')}</p>
+        {revokeError ? (
+          <Banner tone="error" role="alert">
+            {revokeError}
+          </Banner>
+        ) : null}
         <div className="dialog__actions">
-          <Button onClick={() => setRevoking(undefined)}>
+          <Button onClick={closeRevoke} disabled={revoke.isPending}>
             {t('admin.dialog.cancel')} <kbd className="kbd t-meta-xs">{t('admin.dialog.esc')}</kbd>
           </Button>
           <Button
             variant="danger"
+            busy={revoke.isPending}
             onClick={() => {
-              if (revoking) revoke.mutate(revoking.id);
-              setRevoking(undefined);
+              if (!revoking) return;
+              setRevokeError(undefined);
+              revoke.mutate(revoking.id);
             }}
           >
             {t('admin.invitations.revoke')}

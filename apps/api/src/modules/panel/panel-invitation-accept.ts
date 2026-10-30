@@ -1,10 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { type InvitationAcceptRequest, normalizeEmail } from '@pokatim/contracts';
-import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
+import { CLOCK, type Clock, ENV } from '@rkarakulov/api-kit/core';
 
+import type { Env } from '../../config/env';
 import { domainError } from '../../error-messages';
 import { PanelCredentials } from '../identity';
-import { invitationTokenHash } from './panel-invitation-token';
+import { invitationTokenHash, invitationTokenMatches } from './panel-invitation-token';
 import { PanelInvitationsRepository } from './panel-invitations.repository';
 import { invitationInvalid, PanelInvitationsService } from './panel-invitations.service';
 import { type PanelSignInResult, PanelSessionService } from './panel-session.service';
@@ -23,6 +24,7 @@ export class PanelInvitationAccept {
     private readonly service: PanelInvitationsService,
     private readonly credentials: PanelCredentials,
     private readonly sessions: PanelSessionService,
+    @Inject(ENV) private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET'>,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -35,7 +37,13 @@ export class PanelInvitationAccept {
       invitationTokenHash(input.token),
       this.clock.now(),
     );
-    if (!snapshot) throw invitationInvalid();
+    // ссылка, выданная до ротации секрета, не принимается (хеш не выводится из текущего секрета)
+    if (
+      !snapshot ||
+      !invitationTokenMatches(this.env.EMAIL_TOKEN_SECRET, snapshot._id, snapshot.tokenHash)
+    ) {
+      throw invitationInvalid();
+    }
     const verified = await this.credentials.verify(
       { email: input.email, password: input.password },
       ip,

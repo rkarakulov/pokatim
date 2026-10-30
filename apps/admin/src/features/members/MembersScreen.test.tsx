@@ -444,4 +444,64 @@ describe('«Сотрудники» — приглашения (ADR-0026)', () =>
     expect(await dialog.findByRole('alert')).toBeTruthy();
     expect(dialog.getByText(/Приглашения временно недоступны/)).toBeTruthy();
   });
+
+  it('«Отозвать»: окно открыто до ответа, подтверждение busy, действия строки заблокированы; 404 — свой текст в окне', async () => {
+    mocked.listInvitations.mockResolvedValue({ items: [invitation({})], truncated: false });
+    let finish!: (value: undefined) => void;
+    mocked.revokeInvitation.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    await renderApp('/members');
+    await invitations().findByText('new@example.by');
+
+    fireEvent.click(invitations().getByRole('button', { name: 'Отозвать: new@example.by' }));
+    const dialog = within(screen.getByRole('dialog'));
+    const confirm = dialog.getByRole('button', { name: 'Отозвать' });
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(confirm.getAttribute('aria-busy')).toBe('true'));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    fireEvent.click(confirm);
+    expect(mocked.revokeInvitation).toHaveBeenCalledTimes(1);
+    expect(
+      invitations().getByRole('button', { name: 'Отправить повторно: new@example.by' }),
+    ).toHaveProperty('disabled', true);
+    expect(invitations().getByRole('button', { name: 'Отозвать: new@example.by' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+
+    finish(undefined);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // повтор на уже закрытое приглашение — 404: текст про приглашение, не про аккаунт
+    mocked.revokeInvitation.mockRejectedValueOnce(httpError(404, 'NOT_FOUND'));
+    fireEvent.click(invitations().getByRole('button', { name: 'Отозвать: new@example.by' }));
+    const again = within(screen.getByRole('dialog'));
+    fireEvent.click(again.getByRole('button', { name: 'Отозвать' }));
+    expect(await again.findByText('Приглашение уже принято или отозвано.')).toBeTruthy();
+    expect(screen.queryByText('Аккаунта нет — отправьте приглашение.')).toBeNull();
+  });
+
+  it('NOT_FOUND вне «Выдать роль» (смена роли) — прежний нейтральный текст, без совета пригласить', async () => {
+    mocked.changeRole.mockRejectedValueOnce(httpError(404, 'NOT_FOUND'));
+    await renderApp('/members');
+    await screen.findByText('maria@example.by');
+    fireEvent.click(screen.getByRole('button', { name: 'Изменить роль: Мария' }));
+    const dialog = within(screen.getByRole('dialog'));
+    fireEvent.change(dialog.getByLabelText('Причина (обязательно)'), {
+      target: { value: 'смена задач' },
+    });
+    fireEvent.click(dialog.getByRole('button', { name: 'Изменить роль' }));
+    expect(
+      await dialog.findByText(
+        'Пользователь с таким e-mail не найден — попросите зарегистрироваться в приложении.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('окно приглашения: срок ссылки — из контракта', async () => {
+    await renderApp('/members');
+    await screen.findByText('maria@example.by');
+    fireEvent.click(screen.getByRole('button', { name: 'Пригласить' }));
+    expect(within(screen.getByRole('dialog')).getByText(/Ссылка действует 7 дней/)).toBeTruthy();
+  });
 });
