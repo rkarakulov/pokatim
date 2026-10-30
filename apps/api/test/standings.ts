@@ -181,3 +181,45 @@ export async function seedProfile(
     updatedAt: h.clock.now(),
   });
 }
+
+/** Заявка-финишёр без места (START или Verified без пульса) напрямую в БД; `extra` — снятая, DQ по спору. */
+export async function seedFinisher(
+  h: Harness,
+  raceId: string,
+  userId: string,
+  {
+    tier = 'start',
+    elapsedSec = 4000,
+    ...extra
+  }: {
+    tier?: 'start' | 'verified';
+    elapsedSec?: number;
+    status?: 'active' | 'withdrawn';
+    disqualified?: { at: Date; disputeId: string } | null;
+  } = {},
+): Promise<void> {
+  const now = h.clock.now();
+  await resultsDb(h).entries.insertOne({
+    _id: uuidv7(),
+    raceId,
+    userId,
+    status: 'active',
+    groupKey: 'overall',
+    tier,
+    requests: [],
+    best: {
+      attemptId: uuidv7(),
+      elapsedSec,
+      startedAt: now,
+      finishedAt: now,
+      ranked: false,
+    },
+    summary: { total: 1, pending: 0, counted: 1, rejectedShown: 0, failed: 0, excluded: 0 },
+    createdAt: now,
+    updatedAt: now,
+    withdrawnAt: null,
+    disqualified: null,
+    version: 1,
+    ...extra,
+  });
+}

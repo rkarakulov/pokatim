@@ -5,7 +5,7 @@ import type { GenerateMetadataFunction, LoaderFunction } from 'expo-router/serve
 
 import { SeasonDetailScreen, seasonDates } from '@/features/races/season-detail';
 import { useLoaderSeed } from '@/lib/loader-seed';
-import { brandOgImageFor } from '@/lib/og-image';
+import { ogCardIfOrigin, ownOgImage } from '@/lib/og-image';
 import { publicPageMetadata } from '@/lib/page-metadata';
 import { fetchPublicForSsr, publicPath, ssrData, type PublicSsrResult } from '@/lib/public-ssr';
 
@@ -25,12 +25,23 @@ export const loader: LoaderFunction<SeasonCard | null> = async (_request, params
   ssrData(await seasonForSsr(params));
 
 /**
- * Мета без ПДн; не найден — нейтральная мета и `noindex`, API недоступен — нейтральная без `robots`. `og:image` —
- * бренд-картинка (своя у сезона — следующий слайс og-images); не найден — без картинки.
+ * Мета без ПДн; не найден — нейтральная мета и `noindex`, API недоступен — нейтральная без `robots`. `og:image`
+ * (og-rider-season-dark): своя картинка сезона; версии нет или API недоступен — бренд; не найден — без картинки.
  */
 export const generateMetadata: GenerateMetadataFunction = async (_request, params) => {
-  const result = await seasonForSsr(params);
-  const image = await brandOgImageFor(result);
+  const [result, card] = await Promise.all([
+    seasonForSsr(params),
+    ogCardIfOrigin('season', params.id),
+  ]);
+  const image = await ownOgImage({
+    kind: 'season',
+    page: result,
+    card,
+    describe: (season) => ({
+      id: season.id,
+      alt: t('ogCard.alt.season', { title: season.name }),
+    }),
+  });
   if (result.status !== 'found') {
     const neutral = publicPageMetadata({
       title: t('season.title'),

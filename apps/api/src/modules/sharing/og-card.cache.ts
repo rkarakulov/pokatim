@@ -1,10 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { OG_CARD_KINDS, type OgCardKind } from '@pokatim/contracts';
+import { OG_CARD_KINDS } from '@pokatim/contracts';
 import { REDIS } from '@rkarakulov/api-kit/core';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
-import { OG_CARD_POLICY } from './sharing.policy';
+import type { OgCursorKind } from './og-card.inputs';
+import { OG_CARD_POLICY, OG_CURSOR_KINDS } from './sharing.policy';
 
 /** Задача очереди `story-card`: вид, id объекта (бренд — `site`) и хэш входов — данные worker перечитывает сам. */
 export const OG_CARD_RENDER_JOB = 'og-card.render';
@@ -33,15 +34,15 @@ if old and old ~= ARGV[3] then redis.call('DEL', ARGV[5] .. old) end
 return 1
 `;
 const pendingKey = (hash: string) => `og:pending:${hash}`;
-const cursorKey = (kind: OgCardKind) => `og:cursor:${kind}`;
+const cursorKey = (kind: OgCursorKind) => `og:cursor:${kind}`;
 const SWEEP_KEY = 'og:sweep';
 
 const Cursor = z.object({ at: z.iso.datetime(), id: z.string() });
 
 /**
  * Кэш OG-картинок (og-images, ADR-0018) — Redis, не MongoDB: PNG по хэшу входов (адрес публичный по смыслу — не
- * капабилити), TTL с продлением при выдаче, ключ объекта → текущий хэш (одна версия PNG на объект); ключ постановки рендера (NX); курсоры `og.sync` по видам и
- * отметка полного прохода (тема + версия рендера). Ключи — хэш и вид, без названий.
+ * капабилити), TTL с продлением при выдаче, ключ объекта → текущий хэш (одна версия PNG на объект); ключ постановки рендера (NX); курсоры `og.sync` по видам (только
+ * `OG_CURSOR_KINDS`: сезоны — без курсора) и отметка полного прохода (тема + версия рендера). Ключи — хэш и вид, без названий.
  */
 @Injectable()
 export class OgCardCache {
@@ -111,7 +112,7 @@ export class OgCardCache {
   }
 
   /** Курсор вида `og.sync`; мусор — `null` (проход с начала). */
-  async cursor(kind: OgCardKind): Promise<{ at: Date; id: string } | null> {
+  async cursor(kind: OgCursorKind): Promise<{ at: Date; id: string } | null> {
     const raw = await this.redis.get(cursorKey(kind));
     if (!raw) return null;
     try {
@@ -122,7 +123,7 @@ export class OgCardCache {
     }
   }
 
-  async setCursor(kind: OgCardKind, cursor: { at: Date; id: string }): Promise<void> {
+  async setCursor(kind: OgCursorKind, cursor: { at: Date; id: string }): Promise<void> {
     await this.redis.set(
       cursorKey(kind),
       JSON.stringify({ at: cursor.at.toISOString(), id: cursor.id }),
@@ -130,7 +131,7 @@ export class OgCardCache {
   }
 
   async resetCursors(): Promise<void> {
-    await this.redis.del(...OG_CARD_KINDS.map(cursorKey));
+    await this.redis.del(...OG_CURSOR_KINDS.map(cursorKey));
   }
 
   sweep(): Promise<string | null> {

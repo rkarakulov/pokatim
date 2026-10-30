@@ -5,7 +5,7 @@ import type { GenerateMetadataFunction, LoaderFunction } from 'expo-router/serve
 
 import { RiderScreen } from '@/features/riders/rider-screen';
 import { useLoaderSeed } from '@/lib/loader-seed';
-import { brandOgImageFor, ogOrigin } from '@/lib/og-image';
+import { ogCardIfOrigin, ownOgImage } from '@/lib/og-image';
 import { publicPageMetadata } from '@/lib/page-metadata';
 import { fetchPublicForSsr, publicPath, ssrData, type PublicSsrResult } from '@/lib/public-ssr';
 
@@ -14,6 +14,7 @@ import { fetchPublicForSsr, publicPath, ssrData, type PublicSsrResult } from '@/
  * layout — ссылка «Как вас видят другие» открывается без входа. Web — SSR: `loader` сеет запрос. Мета — всегда
  * нейтральная и `noindex`, без `og:url` (D-B2): имя, клуб и фото в мета не попадают ни при каком статусе — согласие
  * можно отозвать, а превью мессенджеров кэшируются навсегда; `publicId` в пути — отзываемая ссылка, как токен письма.
+ * `publicId` попадает в мету только в URL `og:image` (RC-1): её видит лишь открывший страницу по тому же `publicId`.
  */
 
 const riderForSsr = (
@@ -30,17 +31,26 @@ export const loader: LoaderFunction<PublicRiderProfile | null> = async (_request
   ssrData(await riderForSsr(params));
 
 /**
- * Мета: «Профиль райдера» и слоган, `noindex`; без ПДн и без `og:url` при любом ответе API. `og:image` — только
- * бренд-картинка (og-images; ответ API — из кэша `loader`): профиль не найден — без картинки.
+ * Мета: «Профиль райдера» и слоган, `noindex`; без ПДн и без `og:url` при любом ответе API. `og:image`
+ * (og-rider-season-dark): своя картинка профиля — статистика без имени, клуба и фото, alt без имени; версии нет или
+ * API недоступен — бренд; профиль не найден (нет согласия) — без картинки. Ответ API профиля — из кэша `loader`.
  */
-export const generateMetadata: GenerateMetadataFunction = async (_request, params) => ({
-  ...publicPageMetadata({
-    title: t('riders.title'),
-    description: t('app.tagline'),
-    image: ogOrigin() ? await brandOgImageFor(await riderForSsr(params)) : undefined,
-  }),
-  robots: 'noindex',
-});
+export const generateMetadata: GenerateMetadataFunction = async (_request, params) => {
+  const [result, card] = await Promise.all([
+    riderForSsr(params),
+    ogCardIfOrigin('rider', params.id),
+  ]);
+  const image = await ownOgImage({
+    kind: 'rider',
+    page: result,
+    card,
+    describe: (profile) => ({ id: profile.publicId, alt: t('ogCard.alt.rider') }),
+  });
+  return {
+    ...publicPageMetadata({ title: t('riders.title'), description: t('app.tagline'), image }),
+    robots: 'noindex',
+  };
+};
 
 export default function RiderRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();

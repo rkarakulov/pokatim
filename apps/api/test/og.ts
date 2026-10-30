@@ -4,7 +4,8 @@ import {
   calendarCollections,
   type CalendarStartDoc,
 } from '../src/modules/calendar/calendar.collection';
-import type { RaceDoc } from '../src/modules/races/races.collection';
+import type { RaceDoc, SeasonDoc } from '../src/modules/races/races.collection';
+import { seasonRange } from '../src/modules/races/seasons.service';
 import type { Harness } from './harness';
 import { racesDb } from './races';
 
@@ -42,6 +43,28 @@ export async function seedRace(h: Harness, overrides: Partial<RaceDoc> = {}): Pr
     disputeFilingClosedAt: null,
     version: 1,
     ...overrides,
+  });
+  return id;
+}
+
+/** Сезон прямой вставкой (og-images: факты и «живые» сезоны); по умолчанию 1 апреля – 31 октября 2026. */
+export async function seedOgSeason(
+  h: Harness,
+  overrides: Partial<Pick<SeasonDoc, '_id' | 'name' | 'startsOn' | 'endsOn' | 'updatedAt'>> = {},
+): Promise<string> {
+  const id = overrides._id ?? uuidv7();
+  const now = h.clock.now();
+  const startsOn = overrides.startsOn ?? '2026-04-01';
+  const endsOn = overrides.endsOn ?? '2026-10-31';
+  await racesDb(h).seasons.insertOne({
+    _id: id,
+    name: overrides.name ?? 'Сезон 2026',
+    startsOn,
+    endsOn,
+    ...seasonRange(startsOn, endsOn),
+    createdAt: now,
+    updatedAt: overrides.updatedAt ?? now,
+    version: 0,
   });
   return id;
 }

@@ -1,6 +1,7 @@
 /**
  * Превью карточек для сторис (story-cards), приглашений кофе-райда (все темы × оба шаблона) и OG-картинок публичных
- * страниц (og-images: 4 вида с линией/без, длинные тексты, бренд — тема OG) на синтетических данных → PNG в каталог.
+ * страниц (og-images: 6 видов с линией/без, длинные тексты, бренд — тема OG, схема — из фикстуры вида: гонка, сезон,
+ * райдер — тёмная) на синтетических данных → PNG в каталог.
  * Запуск: `pnpm --filter @pokatim/api preview:story-cards <каталог> [og]` (`og` — только OG-картинки; файлы не
  * коммитятся — артефакты ревью вёрстки).
  */
@@ -128,7 +129,7 @@ const achievementCases: {
   },
 ];
 
-/** OG-картинки: вид × линия × длина текстов (тема — `OG_THEME_ID`, как у выдачи). */
+/** OG-картинки: вид × линия × длина текстов (тема — `OG_THEME_ID`, как у выдачи; схема — `scheme` фикстуры). */
 const ogCases: { name: string; input: OgCardInput; line: boolean }[] = [
   { name: 'race-line', input: OG_FIXTURES.race, line: true },
   {
@@ -178,6 +179,29 @@ const ogCases: { name: string; input: OgCardInput; line: boolean }[] = [
       city: 'Каменец (Беловежская пуща)',
       distancesKm: [40, 80, 120, 160],
     }),
+    line: false,
+  },
+  { name: 'season', input: OG_FIXTURES.season, line: false },
+  { name: 'season-empty', input: ogFixture('season', { raceCount: 0 }), line: false },
+  {
+    name: 'season-long',
+    input: ogFixture('season', {
+      title: 'Открытый кубок Беларуси по гравийным гонкам и марафонам — сезон 2026/2027',
+      startsOn: '2026-10-01',
+      endsOn: '2027-03-31',
+      raceCount: 1,
+    }),
+    line: false,
+  },
+  { name: 'rider', input: OG_FIXTURES.rider, line: false },
+  {
+    name: 'rider-new',
+    input: ogFixture('rider', { races: 0, podiums: 0, bestPlace: null }),
+    line: false,
+  },
+  {
+    name: 'rider-noplace',
+    input: ogFixture('rider', { races: 3, podiums: 0, bestPlace: null }),
     line: false,
   },
   { name: 'brand', input: OG_FIXTURES.brand, line: false },
