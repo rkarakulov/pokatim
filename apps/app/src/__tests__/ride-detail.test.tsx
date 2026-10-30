@@ -296,7 +296,8 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
         joinRide.mockResolvedValue(
           view({ goingCount: 6 }, viewer('participant', { canLeave: true })),
         );
-        await openSignedIn(from);
+        // корневой layout со Stack: карточка ложится поверх вкладок, экран под ней остаётся смонтированным
+        await renderRouter(appRoutes, { initialUrl: from, wrapper: createQueryWrapper() });
         await waitFor(() => expect(api.listRides).toHaveBeenCalled());
         expect(
           await screen.findByRole('button', { name: 'Я иду', includeHiddenElements: false }),
