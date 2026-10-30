@@ -6,7 +6,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { RiderAvatar } from '@/components/rider-avatar';
 
-import { avatarErrorMessage } from './avatar-errors';
+import { avatarBlockedText, avatarErrorMessage } from './avatar-errors';
 import { useDeleteAvatar } from './queries';
 
 /**
@@ -63,14 +63,18 @@ function DeleteAvatar({ onFailure }: { onFailure: (message: string | undefined) 
 /**
  * Блок «Фото» формы «Редактировать профиль» (rider-profile, AC14) — общий для native и web: заголовок, аватар 56,
  * подсказка про геометки, действия платформы (`children`), «Удалить фото» при фото, ошибка — баннер под кнопками.
+ * Запрет загрузки (`blockedUntil`) — подпись «Загрузка фото недоступна до …» сразу под кнопкой выбора (кнопку
+ * выключает платформа); «Удалить фото» остаётся доступной.
  */
 export function AvatarSection({
   avatarId,
+  blockedUntil,
   failure,
   onFailure,
   children,
 }: {
   avatarId: string | null;
+  blockedUntil: string | null;
   failure: string | undefined;
   onFailure: (message: string | undefined) => void;
   children: ReactNode;
@@ -91,6 +95,11 @@ export function AvatarSection({
         {t('profile.avatar.hint')}
       </Text>
       {children}
+      {blockedUntil ? (
+        <Text testID="avatar-blocked" style={[textStyle('meta'), { color: theme.text.secondary }]}>
+          {avatarBlockedText(blockedUntil)}
+        </Text>
+      ) : null}
       {avatarId !== null ? <DeleteAvatar onFailure={onFailure} /> : null}
       {failure ? <Banner tone="error" message={failure} /> : null}
     </View>

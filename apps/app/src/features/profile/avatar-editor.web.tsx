@@ -13,8 +13,15 @@ import { useUploadAvatar } from './queries';
  * Фото профиля в браузере (rider-profile, AC14): «Выбрать фото» — файл JPEG/PNG/WebP (проверка формата и размера до
  * обрезки), затем инлайн-панель обрезки на месте кнопки (не модалка: работает и в SSR-разметке, без порталов).
  * «Сохранить фото» — исходник и доли квадрата; ошибка — баннер, панель остаётся для повтора; «Отмена» — без запроса.
+ * Запрет загрузки (`blockedUntil`) — кнопка неактивна, под ней — до какого момента; 409 запрета — тот же текст баннером.
  */
-export function AvatarEditor({ avatarId }: { avatarId: string | null }) {
+export function AvatarEditor({
+  avatarId,
+  blockedUntil,
+}: {
+  avatarId: string | null;
+  blockedUntil: string | null;
+}) {
   const upload = useUploadAvatar();
   const [file, setFile] = useState<File>();
   const [failure, setFailure] = useState<string>();
@@ -30,7 +37,12 @@ export function AvatarEditor({ avatarId }: { avatarId: string | null }) {
   };
 
   return (
-    <AvatarSection avatarId={avatarId} failure={failure} onFailure={setFailure}>
+    <AvatarSection
+      avatarId={avatarId}
+      blockedUntil={blockedUntil}
+      failure={failure}
+      onFailure={setFailure}
+    >
       {file ? (
         <AvatarCrop
           file={file}
@@ -59,6 +71,7 @@ export function AvatarEditor({ avatarId }: { avatarId: string | null }) {
         <Button
           label={t('profile.avatar.pick')}
           variant="secondary"
+          disabled={blockedUntil !== null}
           onPress={() => void onPick()}
         />
       )}

@@ -325,6 +325,44 @@ describe('«Редактировать профиль»: фото на iOS и An
     expect(await screen.findByText(text)).toBeOnTheScreen();
   });
 
+  it('запрет загрузки — «Выбрать фото» неактивна, подпись с датой; «Удалить фото» доступна', async () => {
+    getProfile.mockResolvedValue(
+      profile({ avatar: { id: AVATAR_ID }, avatarUploadBlockedUntil: '2026-11-29T11:05:00.000Z' }),
+    );
+    await openProfile();
+    expect(
+      await screen.findByText(
+        'Загрузка фото недоступна до 29 ноября 2026, 14:05 после нарушений правил',
+      ),
+    ).toBeOnTheScreen();
+    expect(pickButton()).toBeDisabled();
+    await fireEvent.press(pickButton());
+    expect(launch).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Удалить фото' })).not.toBeDisabled();
+  });
+
+  it('409 avatar_blocked на загрузке (гонка со сбросом) — тот же текст баннером, профиль перечитан', async () => {
+    jest.mocked(api.uploadAvatar).mockRejectedValue(
+      new ApiHttpError(409, {
+        code: 'PROFILE_INVALID_STATE',
+        message: 'x',
+        details: { reason: 'avatar_blocked', until: '2026-11-29T11:05:00.000Z' },
+      }),
+    );
+    await openProfile();
+    getProfile.mockResolvedValue(profile({ avatarUploadBlockedUntil: '2026-11-29T11:05:00.000Z' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Выбрать фото' }));
+    expect(
+      (
+        await screen.findAllByText(
+          'Загрузка фото недоступна до 29 ноября 2026, 14:05 после нарушений правил',
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+    await waitFor(() => expect(getProfile).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(pickButton()).toBeDisabled());
+  });
+
   it('удаление — с подтверждением: «Оставить» без запроса, «Удалить» — запрос и пустой квадрат', async () => {
     getProfile.mockResolvedValue(profile({ avatar: { id: AVATAR_ID } }));
     jest.mocked(api.deleteAvatar).mockResolvedValue(profile());
