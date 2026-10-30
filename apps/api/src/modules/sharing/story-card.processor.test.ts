@@ -8,6 +8,7 @@ import { ogCardHash, type OgCardInput } from './og-card.inputs';
 import {
   ACHIEVEMENT_CARD_RENDER_JOB,
   RIDE_INVITE_RENDER_JOB,
+  ROUTE_CARD_RENDER_JOB,
   STORY_CARD_RENDER_JOB,
 } from './story-card.cache';
 import { StoryCardProcessor } from './story-card.processor';
@@ -27,6 +28,12 @@ const story = { userId: 'u', raceId: 'r', template: 'line', hash: 'h' };
 const invite = { userId: 'u', rideId: 'ride', template: 'night', hash: 'h' };
 const achievement = { userId: 'u', code: 'race_win', template: 'line', hash: 'h' };
 const og = { kind: 'ride', id: 'ride', hash: 'a'.repeat(64) };
+const routeCard = {
+  userId: 'u',
+  routeId: '01a1744e-823f-7fc6-b68d-f2d921f7f69b',
+  template: 'line',
+  hash: 'h',
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -83,6 +90,22 @@ describe('StoryCardProcessor.process', () => {
     expect(await p.process(job(ACHIEVEMENT_CARD_RENDER_JOB, invite))).toBe('skipped');
     expect(await p.process(job(RIDE_INVITE_RENDER_JOB, achievement))).toBe('skipped');
     expect(buildAchievementCard).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('StoryCardProcessor.process — карточка маршрута (route-story-card)', () => {
+  it('route-card.render → buildRouteCard; чужая схема — skipped без рендера', async () => {
+    const p = processor();
+    const buildRouteCard = vi.spyOn(p, 'buildRouteCard').mockResolvedValue('ready');
+    expect(await p.process(job(ROUTE_CARD_RENDER_JOB, routeCard, 1))).toBe('ready');
+    expect(buildRouteCard).toHaveBeenCalledWith(routeCard, { finalAttempt: true });
+    expect(await p.process(job(ROUTE_CARD_RENDER_JOB, invite))).toBe('skipped');
+    expect(await p.process(job(ROUTE_CARD_RENDER_JOB, { ...routeCard, template: 'foo' }))).toBe(
+      'skipped',
+    );
+    // данные маршрута под именем приглашения — не приглашение
+    expect(await p.process(job(RIDE_INVITE_RENDER_JOB, routeCard))).toBe('skipped');
+    expect(buildRouteCard).toHaveBeenCalledTimes(1);
   });
 });
 

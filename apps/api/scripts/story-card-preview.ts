@@ -1,5 +1,6 @@
 /**
- * Превью карточек для сторис (story-cards), приглашений кофе-райда (все темы × оба шаблона) и OG-картинок публичных
+ * Превью карточек для сторис (story-cards), приглашений кофе-райда, карточек маршрута каталога (все темы × оба шаблона)
+ * и OG-картинок публичных
  * страниц (og-images: 6 видов с линией/без, длинные тексты, бренд — тема OG, схема — из фикстуры вида: гонка, сезон,
  * райдер — тёмная) на синтетических данных → PNG в каталог.
  * Запуск: `pnpm --filter @pokatim/api preview:story-cards <каталог> [og]` (`og` — только OG-картинки; файлы не
@@ -17,6 +18,8 @@ import { OG_THEME_ID, type OgCardInput } from '../src/modules/sharing/og-card.in
 import { renderOgCard } from '../src/modules/sharing/og-card.png';
 import type { RideInviteInput } from '../src/modules/sharing/ride-invite.inputs';
 import { renderRideInvite } from '../src/modules/sharing/ride-invite.png';
+import type { RouteCardInput } from '../src/modules/sharing/route-card.inputs';
+import { renderRouteCard } from '../src/modules/sharing/route-card.png';
 import type { StoryCardInput } from '../src/modules/sharing/story-card.inputs';
 import { renderStoryCard } from '../src/modules/sharing/story-card.png';
 
@@ -83,6 +86,33 @@ const inviteCases: { name: string; facts: Partial<RideInviteInput['facts']>; lin
       routeId: null,
     },
     line: false,
+  },
+];
+
+/** Карточка маршрута каталога: кольцо с набором; длинное название в одну сторону без набора. */
+const routeCases: { name: string; facts: RouteCardInput['facts'] }[] = [
+  {
+    name: 'base',
+    facts: {
+      routeId: 'preview',
+      title: 'Минское кольцо',
+      distanceM: 68_400,
+      elevationGainM: 620,
+      isLoop: true,
+      city: 'minsk',
+    },
+  },
+  {
+    name: 'long-nogain',
+    facts: {
+      routeId: 'preview',
+      title:
+        'Большое гравийное кольцо Нарочанского края с подъёмами на Голубые горы и обратно к озеру',
+      distanceM: 162_500,
+      elevationGainM: null,
+      isLoop: false,
+      city: 'molodechno',
+    },
   },
 ];
 
@@ -258,6 +288,12 @@ async function main() {
       for (const c of achievementCases) {
         const png = await renderAchievementCard({ template, themeId, ...c.input });
         const file = join(dir, `${themeId}-${template}-achievement-${c.name}.png`);
+        await writeFile(file, png);
+        process.stdout.write(`${file} ${png.byteLength} B\n`);
+      }
+      for (const c of routeCases) {
+        const png = await renderRouteCard({ template, themeId, facts: c.facts }, syntheticLine());
+        const file = join(dir, `${themeId}-${template}-route-${c.name}.png`);
         await writeFile(file, png);
         process.stdout.write(`${file} ${png.byteLength} B\n`);
       }

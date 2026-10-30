@@ -852,6 +852,16 @@ export function createApiClient({
         StoryCardStatus,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
+    /**
+     * Карточка маршрута каталога для сторис (route-story-card): `pending` | `ready` + токен | `failed`; маршрут не в
+     * каталоге (заявка, снят, скрыт, личный, неизвестный) — 404 `NOT_FOUND`. Картинка — тем же `storyCardImageUrl`.
+     */
+    getRouteStoryCard: (accessToken: string, routeId: string, query: StoryCardQuery) =>
+      request(
+        `/v1/routes/${encodeURIComponent(routeId)}/story-card${queryString(query)}`,
+        StoryCardStatus,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
     /** Адрес PNG карточки по токену (капабилити-ссылка без входа, живёт ≤ 24 ч); без запроса. */
     storyCardImageUrl: (token: string) =>
       `${baseUrl}/v1/story-cards/${encodeURIComponent(token)}.png`,

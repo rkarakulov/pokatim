@@ -91,20 +91,22 @@ afterEach(() => {
 });
 
 describe('вход с карточки райда', () => {
-  it('будущий райд, вошедший — кнопка ведёт на экран приглашения', async () => {
+  it('будущий райд, вошедший, без web-origin — «Поделиться» ведёт на экран приглашения', async () => {
     getRideInviteCard.mockResolvedValue({ status: 'pending' });
     const router = await open(`/rides/${ID}`);
-    await fireEvent.press(await screen.findByRole('button', { name: INVITE }));
+    expect(screen.queryByRole('button', { name: INVITE })).toBeNull();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
     expect(router.getPathname()).toBe(`/rides/invite/${ID}`);
   });
 
-  it('прошедший райд — кнопки нет', async () => {
+  it('прошедший райд — ни «Поделиться», ни приглашения', async () => {
     getRide.mockResolvedValue({ ...detail, phase: 'past' });
     getRideForViewer.mockResolvedValue(view({ phase: 'past' }));
     await open(`/rides/${ID}`);
     expect(await screen.findAllByText('Кофе-райд на Минское море')).not.toHaveLength(0);
     await waitFor(() => expect(getRideForViewer).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: INVITE })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Поделиться' })).toBeNull();
   });
 });
 

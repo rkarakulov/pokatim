@@ -71,6 +71,19 @@ describe('карточка достижения', () => {
   });
 });
 
+describe('карточка маршрута', () => {
+  it('статус — GET карточки маршрута каталога с шаблоном и токеном доступа', async () => {
+    const { api, calls } = client(200, { status: 'ready', token: 'AbCdEfGhIjKlMnOpQrSt_-' });
+    await expect(api.getRouteStoryCard('jwt', ID, { template: 'night' })).resolves.toEqual({
+      status: 'ready',
+      token: 'AbCdEfGhIjKlMnOpQrSt_-',
+    });
+    expect(calls[0]!.url).toBe(`https://api.test/v1/routes/${ID}/story-card?template=night`);
+    expect(calls[0]!.method).toBe('GET');
+    expect(calls[0]!.headers.get('authorization')).toBe('Bearer jwt');
+  });
+});
+
 describe('OG-картинка объекта', () => {
   it('версия — публичный GET без токена', async () => {
     const { api, calls } = client(200, { version: '0123456789abcdef' });

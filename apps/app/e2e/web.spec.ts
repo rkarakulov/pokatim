@@ -600,6 +600,25 @@ test('карточка-приглашение /rides/invite/<id> без сесс
   }
 });
 
+test('карточка маршрута /routes/story/<id> без сессии (route-story-card): HTML без превью и OG, после гидрации — гард входа', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get(`/routes/story/${UNKNOWN_ROUTE_ID}`);
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  // экран не публичный: без превью карточки и без OG; `noindex` — префикс `/routes/story/` в robots
+  expect(html).not.toContain('story-preview');
+  expect(html).not.toContain('og:title');
+
+  await page.goto(`/routes/story/${UNKNOWN_ROUTE_ID}`);
+  if (WITH_API) {
+    await expect(page).toHaveURL(`${BASE_URL}/welcome`);
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+});
+
 test('выбор маршрута райда /rides/route-pick без сессии (05c): HTML без списка и OG, после гидрации — гард входа', async ({
   page,
   request,
