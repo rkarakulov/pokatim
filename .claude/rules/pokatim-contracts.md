@@ -37,7 +37,8 @@ paths:
   (routes-05) — `CatalogRouteElevation.nullable().default(null)` (решение A4: старый ответ без поля — `null`); собирает
   `elevationOf` API (общая с карточкой каталога).
 - Мои маршруты (routes-02): `src/routes/route.schema.ts` — `ROUTE_ORIGINS` (`platform`, `rider`; только в конец),
-  `ROUTE_FILE_EXTENSIONS` (`gpx`, `kml` = пакет `@pokatim/tracks`), `UploadRouteQuery` — общий для панели и
+  `ROUTE_FILE_EXTENSIONS` (`gpx`, `kml`, `kmz`, `tcx` = пакет `@pokatim/tracks`; `CatalogRouteDetail.exportFormats` —
+  незнакомые коды отбрасываются, дефолт `[]`), `UploadRouteQuery` — общий для панели и
   `POST /v1/routes/mine`; `src/routes/my-route.schema.ts` — ответы приложения `MyRoute` (`status`, `failure` —
   `tolerantEnum`; без `origin`, владельца, sha256, попыток, каталога и линий), `MyRoutePage`, `MyRouteQuery`
   (`strictObject`, limit ≤ 50), `RenameRouteInput` (`RouteTitle` 3–120), `MY_ROUTE_MAX_COUNT` (100); карта —
@@ -154,7 +155,11 @@ paths:
   цель — белый список (`NotificationTarget`; `profile-edit` без id — свой профиль), незнакомая в ответе —
   `{ type: 'unknown' }`; новые `kind` и цели — только в конец; запросы (`NotificationSettings`
   с `startHour ≠ endHour`, `RegisterPushToken`, `RevokePushToken`, `NotificationListQuery`) — `strictObject`. api-client —
-  8 методов `/v1/notifications*`.
+  8 методов `/v1/notifications*`. PR D event-tickets — в конец списков: группа `events`, kind `event_reminder`, цель
+  `{ type: 'ticket', code: TicketCodeCanonical }`; группа «Мероприятия» — отдельные схемы подресурса
+  `EventNotificationSettingsView` / `UpdateEventNotificationSettings` (`strictObject`), `DEFAULT_EVENT_NOTIFICATION_SETTINGS`
+  — `NotificationSettings` не расширяется (строгий разбор ответа у старых сборок, RC-D1); api-client —
+  `getEventNotificationSettings`, `updateEventNotificationSettings`.
 - Web Push (ADR-0022): там же — `WebPushEndpoint` (https ≤ 2048, хост — push-сервис из белого списка
   `isWebPushEndpoint`: FCM, Mozilla, WNS, Apple; адрес вызывает сервер — SSRF), `RegisterWebPushSubscription`
   (`strictObject`: endpoint + `keys.p256dh` 65 байт `B…`/`keys.auth` 16 байт base64url, без `expirationTime`),
@@ -200,4 +205,7 @@ paths:
   `getEventTicketing` (публичный); панель — `getEventTicketing`, `updateEventTicketing` (`PUT`), `listEventTickets`,
   `lookupTicket`, `checkInTicket`; материалы — приложение `getEventMaterials`, `eventFileUrl`; панель
   `listEventMaterials`, `createEventMaterial`, `uploadEventMaterial` (octet-stream), `updateEventMaterial` (`PATCH`),
-  `deleteEventMaterial` (`POST …/delete`), `reorderEventMaterials` (`PUT …/order`), `eventFileUrl`.
+  `deleteEventMaterial` (`POST …/delete`), `reorderEventMaterials` (`PUT …/order`), `eventFileUrl`. Напоминания
+  (PR D): `EventTicketingUpdate.reminders?` — `EventReminderInput[]` ≤ 3 (`strictObject`: `id?` — правка своего,
+  `offsetHours` 1–168, `text` 1–500; нет поля — правила не меняются), ответ `EventTicketingSettings.reminders` —
+  `EventReminder` (`sendAt`, `sentAt`, `sentCount`, `late`).

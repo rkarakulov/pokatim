@@ -1,10 +1,13 @@
 import type { TrackFormat } from './track.ts';
 
-/** Сколько байт начала файла смотрим в поисках корня XML (`<gpx`, `<kml`). */
+/** Сколько байт начала файла смотрим в поисках корня XML (`<gpx`, `<kml`, `<TrainingCenterDatabase`). */
 const XML_SNIFF_BYTES = 4096;
 
-/** Формат файла маршрута по содержимому (routes-02): GPX или KML; `detectTrackFormat` KML не знает. */
-export type RouteFileFormat = 'gpx' | 'kml';
+/**
+ * Формат файла маршрута по содержимому (routes-02; routes-formats — KMZ и TCX): `detectTrackFormat` их не знает (TCX
+ * заездов не поддерживается, ADR-0011).
+ */
+export type RouteFileFormat = 'gpx' | 'kml' | 'kmz' | 'tcx';
 
 /**
  * Формат по содержимому (не по расширению).
@@ -20,13 +23,21 @@ export function detectTrackFormat(bytes: Uint8Array): Exclude<TrackFormat, 'stre
 }
 
 /**
- * Формат маршрута по содержимому (не по расширению): тот же сканер пролога, что у GPX, корень `<gpx` или `<kml`
- * в первых 4 КБ. `<!DOCTYPE` перед корнем, KMZ (zip), FIT, TCX — `null`.
+ * Формат маршрута по содержимому (не по расширению): KMZ — сигнатура zip `PK\x03\x04` (любой zip; что внутри,
+ * проверяет разбор worker'а); GPX, KML, TCX — тот же сканер пролога, корень `<gpx`, `<kml` или
+ * `<TrainingCenterDatabase` в первых 4 КБ. `<!DOCTYPE` перед корнем, FIT-курс и прочее — `null`.
  */
 export function detectRouteFormat(bytes: Uint8Array): RouteFileFormat | null {
+  if (isZipHeader(bytes)) return 'kmz';
   if (xmlRootAfterProlog(bytes, 'gpx')) return 'gpx';
   if (xmlRootAfterProlog(bytes, 'kml')) return 'kml';
+  if (xmlRootAfterProlog(bytes, 'TrainingCenterDatabase')) return 'tcx';
   return null;
+}
+
+/** Локальный заголовок записи zip: `50 4B 03 04`. */
+function isZipHeader(bytes: Uint8Array): boolean {
+  return bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
 }
 
 function isFitHeader(bytes: Uint8Array): boolean {

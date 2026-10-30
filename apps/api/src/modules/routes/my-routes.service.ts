@@ -73,7 +73,7 @@ export function renameRefusal(route: RouteDoc): RouteStateDetails | null {
 }
 
 /**
- * Мои маршруты (routes-02): приём GPX/KML райдером — общий `RoutesService.accept` (`origin: 'rider'`, квота), список,
+ * Мои маршруты (routes-02): приём GPX/KML/KMZ/TCX райдером — общий `RoutesService.accept` (`origin: 'rider'`, квота), список,
  * карточка, карта, переименование, удаление. Видимость — только фильтр `{ ownerUserId, origin: 'rider' }` в
  * репозитории; чужой и неизвестный — один `404`. Журнал панели не пишется; логи — id и коды, без названий и координат.
  */

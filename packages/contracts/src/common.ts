@@ -38,7 +38,8 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'DEVICE_PROVIDER_UNAVAILABLE',
   'DEVICE_LINK_INVALID',
   'DEVICE_PROVIDER_ERROR',
-  // маршруты (race-results-01): формат не GPX (routes-02: и не KML) по содержимому; файл больше 5 МиБ
+  // маршруты (race-results-01): формат не GPX, KML (routes-02), KMZ или TCX (routes-formats) по содержимому; файл
+  // больше 5 МиБ
   'ROUTE_FORMAT_UNSUPPORTED',
   'ROUTE_TOO_LARGE',
   // кофе-райды (app-05): мест нет; райд начался или отменён; квота будущих райдов или отметок

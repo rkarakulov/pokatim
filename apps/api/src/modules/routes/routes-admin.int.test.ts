@@ -128,7 +128,12 @@ describe('приём и разбор (AC1, AC9, AC10)', () => {
     const exported = await routesDb(h).exports.findOne({ _id: route.id });
     expect(exported).toMatchObject({ derivedVersion: ROUTE_DERIVED_VERSION });
     const gpx = Buffer.from(exported!.gpx.buffer).toString('utf8');
-    expect(exported!.sizeBytes).toBe(exported!.gpx.buffer.byteLength);
+    // routes-formats: KML и TCX — в том же документе, sizeBytes — сумма файлов
+    expect(exported!.sizeBytes).toBe(
+      exported!.gpx.buffer.byteLength +
+        exported!.kml!.buffer.byteLength +
+        exported!.tcx!.buffer.byteLength,
+    );
     expect(parseGpx(gpx).points).toHaveLength(geometry!.matchLine.length);
 
     const read = await panelCall(h, org.token, 'GET', `${ROUTES}/${route.id}`);
@@ -202,7 +207,19 @@ describe('отказы (AC2, AC10)', () => {
     expect(await routesDb(h).geometries.countDocuments()).toBe(0);
   });
 
-  it('не GPX (PNG, FIT, DOCTYPE/XXE до корня) — 415; 0 байт — 400; > 5 МиБ — 413; JSON — 415; без названия — 400', async () => {
+  it('KMZ и TCX (routes-formats) — 202 → ready', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    for (const name of ['route-earth.kmz', 'route-garmin-course.tcx']) {
+      const res = await uploadRoute(h, org.token, fixture(name), { title: name });
+      expect(res.status, name).toBe(202);
+      const route = parsedRoute(res);
+      expect(await processRoute(h, route.id), name).toBe('ready');
+      const doc = await routeDoc(route.id);
+      expect(Math.abs(doc!.distanceM! - expectedFixtures[name]!.distanceM)).toBeLessThan(1);
+    }
+  });
+
+  it('не маршрут (PNG, FIT, DOCTYPE/XXE до корня) — 415; 0 байт — 400; > 5 МиБ — 413; JSON — 415; без названия — 400', async () => {
     const org = await staff(h, 'org@example.by', 'organizer');
     const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
     for (const bytes of [

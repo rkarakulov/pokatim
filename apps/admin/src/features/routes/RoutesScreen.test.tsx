@@ -245,7 +245,7 @@ describe('«Маршруты» панели (routes-01)', () => {
     await rowOf('Минское кольцо');
     expect(screen.getByRole('button', { name: 'Загрузить маршрут' })).toBeTruthy();
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(input.accept).toBe('.gpx,.kml');
+    expect(input.accept).toBe('.gpx,.kml,.kmz,.tcx');
     const file = new File(['<kml/>'], 'Озеро.kml', {
       type: 'application/vnd.google-earth.kml+xml',
     });

@@ -74,7 +74,10 @@ export class PublicReadGuard implements CanActivate {
 
 const IP_RATE_LIMIT = 'pokatim:ip-rate-limit';
 
-/** Отдельный IP-лимит метода (routes-03: `route-gpx`) — вместе с `@UseGuards(IpRateLimitGuard)`. */
+/**
+ * Отдельный IP-лимит метода (routes-03: `route-gpx` — общий бюджет скачивания файлов маршрута GPX/KML/TCX,
+ * routes-formats) — вместе с `@UseGuards(IpRateLimitGuard)`.
+ */
 export const IpRateLimit = (name: string, limit: IpLimit) =>
   SetMetadata(IP_RATE_LIMIT, { name, limit });
 

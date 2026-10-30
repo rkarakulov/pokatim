@@ -1,7 +1,13 @@
 import { XMLParser } from 'fast-xml-parser';
 
 import { TrackParseError, type ParsedPoint } from './track.ts';
-import { assertElementCount, assertNoForbiddenMarkup, countTags, parseValidXml } from './xml.ts';
+import {
+  assertElementCount,
+  assertNoForbiddenMarkup,
+  countTags,
+  parseValidXml,
+  ROUTE_XML_MAX_ELEMENTS,
+} from './xml.ts';
 
 /**
  * Дерево с сохранением порядка (`preserveOrder`): линии склеиваются в порядке документа, даже если `LineString`
@@ -36,7 +42,8 @@ export interface ParseKmlOptions {
  */
 export function parseKml(text: string, options: ParseKmlOptions): { points: ParsedPoint[] } {
   assertNoForbiddenMarkup(text);
-  assertElementCount(text);
+  // KML — только маршруты: предел элементов маршрута (в т. ч. KML из KMZ до 16 МиБ)
+  assertElementCount(text, ROUTE_XML_MAX_ELEMENTS);
   if (countTags(text, 'coord') > options.maxPoints) throw new TrackParseError('too_many_points');
   const document = parseValidXml(text, parser);
   const roots = asList(document);

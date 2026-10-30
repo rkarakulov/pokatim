@@ -5,7 +5,7 @@ import type { PickedTrackFile } from './picked-track-file';
 
 /**
  * Системный выбор файла (web, `<input type="file">`): фильтр по расширениям (заезды — `.fit`/`.gpx`, маршруты —
- * `.gpx`/`.kml`), без чтения в base64 — отправляется сам `File`. Отмена — `null`.
+ * `ROUTE_FILE_EXTENSIONS`: `.gpx`/`.kml`/`.kmz`/`.tcx`), без чтения в base64 — отправляется сам `File`. Отмена — `null`.
  */
 export async function pickTrackFile(
   extensions: readonly string[] = TRACK_FILE_EXTENSIONS,

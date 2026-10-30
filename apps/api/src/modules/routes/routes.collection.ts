@@ -17,7 +17,7 @@ export const ROUTES_COLLECTIONS = {
   routes: 'routes',
   geometries: 'route_geometries',
   sources: 'route_sources',
-  /** очищенный GPX маршрута для скачивания (routes-03) */
+  /** файлы маршрута для скачивания: очищенный GPX (routes-03), KML и TCX (routes-formats) */
   exports: 'route_exports',
 } as const;
 
@@ -120,16 +120,23 @@ export interface RouteGeometryDoc {
   derivedFailure?: RouteDerivedFailure;
 }
 
-/** Очищенный GPX маршрута (`_id` = routeId, ≤ ~1,2 МБ: ≤ 20 000 `trkpt`) — пишется вместе с `derivedVersion`. */
+/**
+ * Файлы маршрута для скачивания (`_id` = routeId) — пишутся вместе с `derivedVersion` геометрии одной транзакцией:
+ * очищенный GPX (≤ ~1,2 МБ: ≤ 20 000 `trkpt`), KML (≤ ~0,6 МБ) и TCX (≤ ~4,6 МБ) из тех же точек (routes-formats).
+ * У документов версии 1 `kml` и `tcx` нет (появятся после бэкфилла версии 2). `sizeBytes` — сумма файлов
+ * (диагностика).
+ */
 export interface RouteExportDoc {
   _id: string;
   gpx: Binary;
+  kml?: Binary;
+  tcx?: Binary;
   sizeBytes: number;
   derivedVersion: number;
 }
 
 /**
- * Исходник GPX/KML (`_id` = routeId, ≤ 5 МиБ) — в БД, не в `TrackFileStore`: уборка `tracks-maintenance` удаляет файлы
+ * Исходник GPX/KML/KMZ/TCX (`_id` = routeId, ≤ 5 МиБ) — в БД, не в `TrackFileStore`: уборка `tracks-maintenance` удаляет файлы
  * без документа `track_uploads`. Хранится для пересчёта линии сверки новой версией движка.
  */
 export interface RouteSourceDoc {

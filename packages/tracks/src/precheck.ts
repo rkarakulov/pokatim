@@ -25,7 +25,7 @@ export function precheckTrackFile(file: { name: string; size: number }): TrackPr
   return precheckFile(file, TRACK_FILE_EXTENSIONS, TRACK_FILE_MAX_BYTES);
 }
 
-/** То же для файла маршрута (GPX/KML до 5 МиБ, routes-02). */
+/** То же для файла маршрута (GPX/KML/KMZ/TCX до 5 МиБ, routes-02, routes-formats). */
 export function precheckRouteFile(file: { name: string; size: number }): TrackPrecheckResult {
   return precheckFile(file, ROUTE_FILE_EXTENSIONS, ROUTE_FILE_MAX_BYTES);
 }

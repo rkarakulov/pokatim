@@ -25,15 +25,18 @@ export type RouteFailureCode =
 
 export const TRACK_FILE_MAX_BYTES = 16 * 1024 * 1024;
 export const TRACK_FILE_EXTENSIONS = ['fit', 'gpx'] as const;
-/** Файл маршрута (routes-02): совпадает с `ROUTE_FILE_EXTENSIONS` и `ROUTE_FILE_MAX_BYTES` контракта. */
-export const ROUTE_FILE_EXTENSIONS = ['gpx', 'kml'] as const;
+/**
+ * Файл маршрута (routes-02; KMZ и TCX — routes-formats): совпадает с `ROUTE_FILE_EXTENSIONS` и `ROUTE_FILE_MAX_BYTES`
+ * контракта. Новые — только в конец.
+ */
+export const ROUTE_FILE_EXTENSIONS = ['gpx', 'kml', 'kmz', 'tcx'] as const;
 export const ROUTE_FILE_MAX_BYTES = 5 * 1024 * 1024;
 /** Больше точек в файле FIT/GPX — `too_many_points` (≈ 55 ч записи раз в секунду). */
 export const TRACK_MAX_POINTS = 200_000;
 /** Больше точек в потоке агрегатора — `too_many_points`. */
 export const TRACK_STREAM_MAX_POINTS = 300_000;
 
-/** Больше точек в GPX маршрута — `too_many_points`. */
+/** Больше точек в файле маршрута (GPX, KML, TCX) — `too_many_points`. */
 export const ROUTE_MAX_POINTS = 50_000;
 /** Пределы длины маршрута, м: короче — `too_short`, длиннее — `too_long`. */
 export const ROUTE_MIN_LENGTH_M = 1000;

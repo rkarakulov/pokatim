@@ -71,7 +71,7 @@ function catalogOf(route: RouteDoc): PanelRouteSummary['catalog'] {
 }
 
 /**
- * Маршруты команды платформы (race-results-01): приём GPX/KML (лимит частоты, формат по сигнатуре, дедуп по sha256 в
+ * Маршруты команды платформы (race-results-01): приём GPX/KML/KMZ/TCX (лимит частоты, формат по сигнатуре, дедуп по sha256 в
  * пределах владельца и происхождения, транзакция «маршрут + исходник + журнал + outbox»), список и чтение. Приём —
  * общий и для маршрутов райдера (`MyRoutesService`, routes-02). Разбор — только worker. Видимость (Q2): готовые —
  * всем с `races.read`; необработанные — только автору (чужой — 404); маршрут райдера — никому.
@@ -104,7 +104,7 @@ export class RoutesService {
   }
 
   /**
-   * Приём файла маршрута (GPX/KML) для владельца `owner` — сотрудника (`platform`, панель) или райдера (`rider`,
+   * Приём файла маршрута (GPX/KML/KMZ/TCX) для владельца `owner` — сотрудника (`platform`, панель) или райдера (`rider`,
    * routes-02): `created` — маршрут поставлен в обработку (`202`: новый или повтор отказа), иначе тот же (`200`).
    * Порядок: пусто → размер → формат по сигнатуре → дедуп в пределах `(origin, userId)` → квота (`maxRoutes`, только
    * после дедупа: тот же файл при полной квоте — `200`) → транзакция «маршрут + исходник (+ журнал панели для
@@ -120,7 +120,8 @@ export class RoutesService {
       throw domainError('VALIDATION_FAILED', 400, { fields: [{ path: 'body', code: 'INVALID' }] });
     }
     if (bytes.byteLength > ROUTE_POLICY.maxFileBytes) throw domainError('ROUTE_TOO_LARGE', 413);
-    // KMZ, FIT-курс, TCX и прочее — 415 (GPX и KML — по содержимому, routes-02)
+    // GPX, KML (routes-02), KMZ (любой zip: не KMZ внутри — `failed/unreadable` worker'ом) и TCX (routes-formats) —
+    // по содержимому; FIT-курс и прочее — 415. Разбора архива в API нет.
     if (detectRouteFormat(bytes) === null) throw domainError('ROUTE_FORMAT_UNSUPPORTED', 415);
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     const existing = await this.repository.findByOwnerSha(owner.origin, owner.userId, sha256);

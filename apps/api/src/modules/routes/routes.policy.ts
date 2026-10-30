@@ -2,8 +2,10 @@ import {
   MY_ROUTE_MAX_COUNT,
   ROUTE_FILE_MAX_BYTES,
   ROUTE_PUBLICATION_MAX_PENDING,
+  ROUTE_EXPORT_FORMATS,
   ROUTE_PUBLICATION_MAX_SUBMISSIONS,
   type RouteDistanceBucket,
+  type RouteExportFormat,
 } from '@pokatim/contracts';
 
 import { DEFAULT_PARSE_LIMITS } from '../../parse-thread';
@@ -33,8 +35,11 @@ export const ROUTE_POLICY = {
   stuckAfterMs: 15 * 60 * 1000,
   /** Разбор: память потока и время — общие лимиты `src/parse-thread.ts`. */
   parseLimits: DEFAULT_PARSE_LIMITS,
-  /** Скачиваний очищенного GPX каталога с IP в минуту (`[ASSUMPTION]` A2 routes-03). */
-  gpxIpLimit: { limit: 30, windowSec: 60 },
+  /**
+   * Скачиваний файла маршрута каталога с IP в минуту (`[ASSUMPTION]` A2 routes-03) — один бюджет на все форматы
+   * (ключ `route-gpx` прежний, routes-formats RC-10: счётчики не сбрасываются).
+   */
+  exportIpLimit: { limit: 30, windowSec: 60 },
   /** Маршрутов за прогон бэкфилла производных (`routes-maintenance`); полная пачка ставит продолжение. */
   deriveBatch: 20,
   /** routes-06 (U8, 8.1 RC-8): успешных подач в каталог на райдера в сутки — списывается прямо перед записью. */
@@ -112,28 +117,28 @@ export function canPublish(
   );
 }
 
-/** Предел имени файла GPX, кодовых точек (без `.gpx`). */
-const GPX_FILE_NAME_MAX = 80;
+/** Предел имени файла маршрута, кодовых точек (без расширения). */
+const ROUTE_FILE_NAME_MAX = 80;
 /** Имя файла по умолчанию (пустое название) и ASCII-fallback `filename=`. */
-const GPX_FILE_NAME_FALLBACK = 'pokatim-route';
+const ROUTE_FILE_NAME_FALLBACK = 'pokatim-route';
 
 /**
- * Безопасное имя файла GPX из названия маршрута (routes-03 §7, RC-14), без `.gpx`: удаляются управляющие и
+ * Безопасное имя файла маршрута из названия (routes-03 §7, RC-14; любой формат экспорта), без расширения: удаляются управляющие и
  * форматирующие символы (`\p{Cc}`, `\p{Cf}` — в т. ч. bidi `U+202E`, подмена расширения) и `\/:*?"<>|`, пробелы
  * схлопываются, точки и пробелы по краям обрезаются, ≤ 80 кодовых точек (суррогатная пара не режется); пусто —
  * `pokatim-route`.
  */
-export function gpxFileName(title: string): string {
+export function routeFileName(title: string): string {
   const cleaned = title
     .replace(/[\p{Cc}\p{Cf}]/gu, '')
     .replace(/[\\/:*?"<>|]/g, '')
     .replace(/\s+/gu, ' ')
     .replace(/^[\s.]+|[\s.]+$/gu, '');
   const name = Array.from(cleaned)
-    .slice(0, GPX_FILE_NAME_MAX)
+    .slice(0, ROUTE_FILE_NAME_MAX)
     .join('')
     .replace(/[\s.]+$/u, '');
-  return name === '' ? GPX_FILE_NAME_FALLBACK : name;
+  return name === '' ? ROUTE_FILE_NAME_FALLBACK : name;
 }
 
 /** RFC 5987: `encodeURIComponent` + `'()*` → `%XX`. */
@@ -143,9 +148,29 @@ const rfc5987 = (value: string) =>
     (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 
-/** `Content-Disposition` скачивания GPX: ASCII-fallback и имя из названия (RFC 5987). */
-export function gpxContentDisposition(title: string): string {
-  return `attachment; filename="${GPX_FILE_NAME_FALLBACK}.gpx"; filename*=UTF-8''${rfc5987(`${gpxFileName(title)}.gpx`)}`;
+/** `Content-Disposition` файла маршрута с расширением `extension`: ASCII-fallback и имя из названия (RFC 5987). */
+export function routeContentDisposition(title: string, extension: RouteExportFormat): string {
+  return `attachment; filename="${ROUTE_FILE_NAME_FALLBACK}.${extension}"; filename*=UTF-8''${rfc5987(`${routeFileName(title)}.${extension}`)}`;
+}
+
+/** `Content-Type` файлов экспорта маршрута (routes-03, routes-formats). */
+export const ROUTE_EXPORT_CONTENT_TYPES: Record<RouteExportFormat, string> = {
+  gpx: 'application/gpx+xml; charset=utf-8',
+  kml: 'application/vnd.google-earth.kml+xml; charset=utf-8',
+  tcx: 'application/vnd.garmin.tcx+xml; charset=utf-8',
+};
+
+/** Версия производных, с которой формат есть в `route_exports` (GPX — routes-03, KML и TCX — routes-formats). */
+const EXPORT_FORMAT_SINCE: Record<RouteExportFormat, number> = { gpx: 1, kml: 2, tcx: 2 };
+
+/**
+ * Форматы экспорта маршрута по версии производных геометрии (routes-formats RC-2): геометрия и экспорт одной версии
+ * пишутся одной транзакцией (`markReady`/`recordDerived`), поэтому `route_exports` не читается. `null` — не
+ * посчитаны (экспорта нет).
+ */
+export function routeExportFormats(derivedVersion: number | null): RouteExportFormat[] {
+  if (derivedVersion === null) return [];
+  return ROUTE_EXPORT_FORMATS.filter((format) => derivedVersion >= EXPORT_FORMAT_SINCE[format]);
 }
 
 /**

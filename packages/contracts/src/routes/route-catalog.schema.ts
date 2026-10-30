@@ -83,13 +83,29 @@ export const CatalogRouteElevation = z.object({
 export type CatalogRouteElevation = z.infer<typeof CatalogRouteElevation>;
 
 /**
- * `GET /v1/routes/:id` — поля списка + профиль высоты (`null` — нет высот или ещё не посчитан) и признак очищенного
- * GPX (`GET /v1/routes/:id/gpx` — файл `application/gpx+xml`, не JSON, схемы нет). Не опубликован или неизвестен —
- * 404. Дефолты новых полей — новый клиент против API до routes-03 (RC-10).
+ * Форматы скачивания маршрута каталога (routes-formats): `GET /v1/routes/:id/<формат>` — файл, не JSON. Только в
+ * конец (FIT-курс — позже).
+ */
+export const ROUTE_EXPORT_FORMATS = ['gpx', 'kml', 'tcx'] as const;
+export type RouteExportFormat = (typeof ROUTE_EXPORT_FORMATS)[number];
+
+const isRouteExportFormat = (code: string): code is RouteExportFormat =>
+  (ROUTE_EXPORT_FORMATS as readonly string[]).includes(code);
+
+/**
+ * `GET /v1/routes/:id` — поля списка + профиль высоты (`null` — нет высот или ещё не посчитан), признак очищенного
+ * GPX (`GET /v1/routes/:id/gpx`; старые приложения) и доступные форматы скачивания `exportFormats` (routes-formats:
+ * `/gpx`, `/kml`, `/tcx` — файлы, не JSON, схем нет; незнакомые коды новых форматов этой сборкой отбрасываются).
+ * Не опубликован или неизвестен — 404. Дефолты новых полей — новый клиент против старого API (RC-10): без
+ * `exportFormats` — `[]`, клиент берёт `gpxAvailable`.
  */
 export const CatalogRouteDetail = CatalogRouteCard.extend({
   elevation: CatalogRouteElevation.nullable().default(null),
   gpxAvailable: z.boolean().default(false),
+  exportFormats: z
+    .array(z.string())
+    .transform((codes) => codes.filter(isRouteExportFormat))
+    .default([]),
 });
 export type CatalogRouteDetail = z.infer<typeof CatalogRouteDetail>;
 

@@ -22,7 +22,7 @@ paths:
   нажатию (`features/location/current-position(.web).ts`, без `watch`), координаты — только в памяти (стор карты без
   persist; не в TanStack Query, `console.*`, URL, подписях a11y и запросах); отказ — сообщение над картой со ссылкой
   в настройки ОС (`location-settings(.web).ts`; web — текстом).
-- Заезды и маршруты — импорт файла через системный picker (заезд: FIT/GPX, TCX — нет, ADR-0011; маршрут: GPX/KML).
+- Заезды и маршруты — импорт файла через системный picker (заезд: FIT/GPX, TCX — нет, ADR-0011; маршрут: GPX/KML/KMZ/TCX).
 - Треки и устройства (ADR-0011): шаг онбординга `(setup)/devices` после геопозиции (флаг аккаунта на сервере
   `OnboardingStatus.devicesStepCompleted`; поля нет — старый API — шаг пропускается); экран «Устройства»
   `settings/devices` (вход — иконка верхней панели); возврат авторизации `devices/return` — вне гардов. Развилки —
@@ -40,7 +40,10 @@ paths:
   `missing`/`expired` подписывает тихо, отказ — текст «включите в настройках браузера/системы»; на экране настроек
   строка и push-тумблеры групп делят одно состояние `usePushPermission` (`push-permission-row.tsx`): включение тумблера
   при `undetermined` — системный запрос первым, в том же нажатии (Safari), затем сохранение; при `missing`/`expired` —
-  тихая подписка; включённый тумблер без доставки (`delivers === false`) — подпись `notifications.settings.pushBlocked`; выход — снятие на
+  тихая подписка; включённый тумблер без доставки (`delivers === false`) — подпись `notifications.settings.pushBlocked`; группа
+  «Мероприятия» (PR D) — свой подресурс (`useEventNotificationSettings`, ключ `['notifications','settings','events']`, своё
+  сохранение и баннер; 404 старого API — группы нет, `isEventSettingsMissing`), её push-тумблер — с тем же
+  `usePushPermission`; цель `ticket` → `/tickets/<код>` (и в SW); выход — снятие на
   сервере и `unsubscribe()` в браузере; нажатие на уведомление — сообщение SW `pokatim:open` → `onOpen(target)`): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
@@ -427,9 +430,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   чистые функции `features/routes/format.ts` (`ROUTE_PACE_KMH`); профиль — `features/routes/elevation-profile.tsx`
   (`ProfileChart`: тонкая линия `profile.line` и заливка-градиент `PROFILE_FILL_OPACITY` `profile.fillTop` → `profile.fillBottom` — web inline
   SVG, native `react-native-svg`, фолбэк — столбики `PROFILE_NATIVE_FILL_OPACITY`; график — `aspectRatio`, разметка
-  зависит только от данных: SSR = первый рендер; routes-04 — см. «Скраббинг» ниже); «Скачать GPX» — только `src/lib/download-file(.web).ts` (native —
-  `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteGpxUrl(id)`, только при
-  `gpxAvailable`.
+  зависит только от данных: SSR = первый рендер; routes-04 — см. «Скраббинг» ниже); «Скачать» (routes-formats: один формат — «Скачать GPX», несколько — `route-download-sheet.tsx` на
+  `ModalSheet`) — только `src/lib/download-file(.web).ts` (native —
+  `openExternalUrl`, web — `<a download>` синхронно в обработчике) по `api.catalogRouteExportUrl(id, format)`, форматы —
+  `exportFormats` (без поля — по `gpxAvailable`).
 - Скраббинг (routes-04): стор на экземпляр экрана — `createScrubStore` пакета `@pokatim/route-view` (`zustand/vanilla`,
   `{ fraction, active, dragging }`, доля длины линии показа; читают только подписчики `useScrub` (`features/maps/use-scrub.ts`) — карта и экран на
   кадр не перерисовываются; экран: native — `scrollEnabled` при `dragging === null` (`use-scrub-scroll-lock(.web).ts`;

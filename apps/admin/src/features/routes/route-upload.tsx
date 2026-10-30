@@ -24,7 +24,7 @@ function uploadErrorText(error: unknown): string {
   return key ? t(key) : t('admin.saveFailed');
 }
 
-/** Фильтр окна выбора файла маршрута (`.gpx,.kml`); формат проверяет сервер по содержимому. */
+/** Фильтр окна выбора файла маршрута (`.gpx,.kml,.kmz,.tcx`); формат проверяет сервер по содержимому. */
 export const ROUTE_FILE_ACCEPT = ROUTE_FILE_EXTENSIONS.map((extension) => `.${extension}`).join(
   ',',
 );
@@ -57,7 +57,7 @@ export interface RouteUpload {
 }
 
 /**
- * Загрузка маршрута GPX или KML в панели (RC-15): окно «Новый маршрут» → `POST /v1/admin/routes` → опрос статуса каждые 2 с, пока
+ * Загрузка маршрута GPX, KML, KMZ или TCX в панели (RC-15): окно «Новый маршрут» → `POST /v1/admin/routes` → опрос статуса каждые 2 с, пока
  * `processing`, не дольше 5 мин по часам — и при сплошных ошибках запросов. Готов — `onReady` один раз на загрузку;
  * готов или отказ — списки маршрутов (`ROUTES_QUERY_KEY`) обновляются. Используют «Эталонный коридор» гонки и экран
  * «Маршруты».
