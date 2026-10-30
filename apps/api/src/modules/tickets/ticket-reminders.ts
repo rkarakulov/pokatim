@@ -2,9 +2,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import { MongoOutboxWriter, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
-import { MongoTransactions } from '../../db';
+import { type DbSession, MongoTransactions } from '../../db';
+import { RaceTickets } from './race-tickets';
 import { dueReminders } from './reminders.policy';
-import { TicketEvents } from './ticket-events';
+import { calendarMoments, TicketEvents } from './ticket-events';
 import { type ReminderRuleDoc, ticketingIdOf } from './tickets.collection';
 import { TICKETS_REMINDER_DUE, type TicketsReminderDue } from './tickets.events';
 import type { EventFacts } from './tickets.policy';
@@ -34,6 +35,7 @@ export class TicketReminders {
   constructor(
     private readonly repository: TicketsRepository,
     private readonly events: TicketEvents,
+    private readonly raceTickets: RaceTickets,
     private readonly transactions: MongoTransactions,
     private readonly outbox: MongoOutboxWriter,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -60,6 +62,8 @@ export class TicketReminders {
           ticketing.reminderDispatches ?? [],
           now,
         );
+        // гонка: снятые заявки → `cancelled` до меток (фоновая сверка могла ещё не пройти, ревью pass 1)
+        if (due.length > 0 && event.kind === 'race') await this.raceTickets.reconcileRace(event.id);
         for (const { rule, dueAt } of due) {
           const count = await this.dispatch(event, rule, dueAt, now);
           if (count === null) continue;
@@ -78,7 +82,21 @@ export class TicketReminders {
     return run;
   }
 
-  /** Отправка правила по `dueAt`; `null` — захват не удался (уже отправлено или правило сменилось). */
+  /**
+   * Старт события на снимке транзакции совпадает с прочитанным до неё (ревью pass 1): гонка — условием захвата по
+   * `startsAt` настроек; календарь — захватом старта (`lockCalendarStart`, конфликт с правкой) и сверкой момента и
+   * публикации. Перенос — без меток, следующий прогон посчитает новое время.
+   */
+  private async calendarUnchanged(tx: DbSession, event: EventFacts): Promise<boolean> {
+    const start = await this.events.lockCalendarStart(tx, event.id);
+    return (
+      start !== null &&
+      start.status === 'published' &&
+      calendarMoments(start).startsAt.getTime() === event.startsAt.getTime()
+    );
+  }
+
+  /** Отправка правила по `dueAt`; `null` — захват не удался (уже отправлено, правило или старт сменились). */
   private dispatch(
     event: EventFacts,
     rule: ReminderRuleDoc,
@@ -88,17 +106,14 @@ export class TicketReminders {
     const ticketingId = ticketingIdOf(event.kind, event.id);
     return this.transactions.run(async (tx) => {
       const dispatchId = uuidv7();
+      const race = event.kind === 'race';
+      if (!race && !(await this.calendarUnchanged(tx, event))) return null;
       const claimed = await this.repository.claimReminderDispatch(
         tx,
         ticketingId,
         rule.offsetHours,
-        {
-          reminderId: rule.id,
-          dueAt,
-          dispatchId,
-          at: now,
-          count: 0,
-        },
+        { reminderId: rule.id, dueAt, dispatchId, at: now, count: 0 },
+        race ? event.startsAt : null,
       );
       if (!claimed) return null;
       const count = await this.repository.markReminderSent(

@@ -471,6 +471,24 @@ PR D (coder, 2026-10-30, ветка `feature/event-tickets-reminders`). Реше
 - Изоляция БД проверок: `pokatim_reminders_test` вместо `pokatim_reminders` — стенд `@rkarakulov/test-kit` требует
   имя `*_test`.
 
+Фиксы ревью PR D pass 1 (Codex HIGH ×2, Claude MEDIUM/LOW; `findings-D-codex-1.md`, `findings-D-claude-1.md`):
+
+- **Снятая заявка без сверки (HIGH-1).** Два рубежа: (1) регламент перед метками события гонки зовёт
+  `RaceTickets.reconcileRace` — билеты снятых заявок → `cancelled`, метки им не ставятся; (2) порт `TICKET_NOTICES`
+  у гонки оставляет только билеты активных заявок (`RESULTS_FOR_TICKETS.entriesPage`, пачки по 500) — участие,
+  снятое между меткой и приёмом, уведомления не даёт (метка остаётся, уведомления нет).
+- **Перенос старта между чтением и захватом (HIGH-2).** Гонка — `startsAt` прочитанных фактов в фильтре
+  `claimReminderDispatch` (тот же документ настроек: правка конфликтует, после повтора захват не проходит). Календарь —
+  первой операцией транзакции `TicketEvents.lockCalendarStart` (запись-замок старта, как регистрация и check-in) и
+  сверка `calendarMoments(start).startsAt` и публикации с прочитанными; расхождение — `null` без меток, следующий
+  прогон считает новое время.
+- **Перенос после отправки (LOW, RC-D4):** int-тест «старт позже — уже получившим не повторяется, новому билету — в
+  новое время». Сценарий «ближе» в int не добавлен: на стенде у правила `armedAt` = время создания, а новый
+  `dueAt` для давнего правила требует билета, выпущенного до него и без метки — покрыт unit `dueReminders`
+  (догоняние, `armedAt ≤ dueAt`).
+- **i18n (LOW):** неиспользуемый `notifications.settings.hint.events` удалён.
+- Правки `.claude/rules/**` (MEDIUM обоих ревьюеров) — по-прежнему нужен OK пользователя.
+
 ## 8.3 Security checklist
 
 Затронуто: токены (QR), публичные URL, файлы (PDF), права панели, письма со ссылками. См. §5.3.
@@ -887,3 +905,33 @@ api-client; RTL панели `EventTicketsScreen.test.tsx` +3; приложен�
   настроек, `reminders`; `pokatim-app.md` — группа «Мероприятия», цель `ticket` (и SW).
 - `pnpm build:web`, e2e, ручная проверка push/Web Push и письма на устройстве — не запускались.
 - Полный `pnpm check` одним зелёным прогоном — нет (флейки api по таймауту под нагрузкой, перезапущены зелёными).
+
+#### PR D — фиксы ревью pass 1 (coder, 2026-10-30, поверх b29cb0ab + fb36e530, не закоммичено)
+
+Исправлено (решения — 8.2 «Фиксы ревью PR D pass 1»): `ticket-reminders.ts` (сверка гонки перед метками,
+`lockCalendarStart` + сверка момента календаря), `tickets.repository.ts` (`startsAt` в фильтре захвата гонки,
+`registrationId` в получателях), `ticket-notices.ts` (фильтр активных заявок гонки через `RESULTS_FOR_TICKETS`),
+`packages/i18n/src/ru.ts` (удалён `notifications.settings.hint.events`).
+
+Тесты (`tickets-reminders.int.test.ts`, 9 → 13; новые/изменённые сначала красные — 4 падения до фикса): в AC10-тесте
+убран маскирующий `raceTicket` после `withdraw`; «участие снято после отметки, до приёма — уведомления нет»; «гонка:
+старт перенесён позже между чтением и захватом» и «календарь: …» (`vi.spyOn(TicketEvents.resolveMany)` — перенос
+после чтения фактов); «после отправки: старт позже — уже получившим не повторяется, новому билету — в новое время»
+(сразу зелёный — покрытие RC-D4).
+
+Отрицательные доказательства (механизм убран → красный по результату → восстановлен, 13/13):
+
+- A: без фильтра заявок в порте — «участие снято после отметки» `expected [ { …(13) } ] to have a length of +0 but got 1`;
+- B: без `reconcileRace` перед метками — AC10-тест `expected [ { …(3) } ] to deeply equal []` (снятому поставлена метка);
+- C: без `startsAt` в фильтре захвата — «гонка: старт перенесён» `expected [ … ] to have a length of +0 but got 1`;
+- D: без сверки старта календаря — «календарь: старт перенесён» — то же сообщение.
+
+Проверки (БД `pokatim_reminders_test`, Redis db 3):
+
+- `TURBO_CONCURRENCY=1 … pnpm check` — format, lint, arch, typecheck (`Tasks: 9 successful, 9 total`) зелёные; api
+  `Test Files 206 passed (206)`, `Tests 2156 passed (2156)`; contracts 449, api-client 158, tracks 314, design-tokens
+  606, i18n 15, route-view 51 — зелёные; admin — `1 failed | 463 passed`: `SignInScreen.test.tsx` «429 — …» `Test
+  timed out in 5000ms` (не затронут этим фиксом); перезапуск файла дважды — `Tests 24 passed (24)`. Turbo — `Tasks:
+  13 successful, 15 total`, app прогнан отдельно: `Test Suites: 252 passed`, `Tests: 2370 passed`.
+
+Не сделано: правки `.claude/rules/**` — нужен OK пользователя (список — §12 «PR D»).

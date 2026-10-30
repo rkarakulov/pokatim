@@ -130,11 +130,14 @@ export class TicketsRepository {
     ticketingId: string,
     offsetHours: number,
     dispatch: ReminderDispatchDoc,
+    /** гонка: старт, по которому посчитан `dueAt` (перенос после чтения фактов — захват не проходит); календарь — `null` */
+    raceStartsAt: Date | null,
   ): Promise<boolean> {
     const updated = await this.c.ticketing.updateOne(
       {
         _id: ticketingId,
         enabled: true,
+        ...(raceStartsAt === null ? {} : { startsAt: raceStartsAt }),
         reminders: { $elemMatch: { id: dispatch.reminderId, offsetHours } },
         reminderDispatches: {
           $not: { $elemMatch: { reminderId: dispatch.reminderId, dueAt: dispatch.dueAt } },
@@ -185,16 +188,16 @@ export class TicketsRepository {
     );
   }
 
-  /** Получатели отправки: активные билеты с меткой `dispatchId` (`tickets_event_idx` по префиксу); id и код. */
+  /** Получатели отправки: активные билеты с меткой `dispatchId` (`tickets_event_idx` по префиксу); id, код, заявка. */
   reminderRecipients(
     kind: TicketEventKind,
     eventId: string,
     dispatchId: string,
-  ): Promise<Pick<TicketDoc, 'userId' | 'code'>[]> {
+  ): Promise<Pick<TicketDoc, 'userId' | 'code' | 'registrationId'>[]> {
     return this.c.tickets
       .find(
         { kind, eventId, status: 'active', 'remindersSent.dispatchId': dispatchId },
-        { projection: { _id: 0, userId: 1, code: 1 } },
+        { projection: { _id: 0, userId: 1, code: 1, registrationId: 1 } },
       )
       .toArray();
   }

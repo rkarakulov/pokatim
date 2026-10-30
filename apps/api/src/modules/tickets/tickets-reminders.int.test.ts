@@ -27,6 +27,7 @@ import {
   ticketingUrl,
   ticketsDb,
 } from '../../../test/tickets';
+import { TicketEvents } from './ticket-events';
 import { TicketReminders } from './ticket-reminders';
 import { TICKETS_REMINDER_DUE } from './tickets.events';
 
@@ -108,8 +109,8 @@ describe('отправка один раз на билет и правило (AC
       'd@example.com',
     ]);
     const [a, b, c, d] = riders;
+    // снятая заявка без чтения билета и без сверки: билет ещё `active` (ревью pass 1, HIGH-1)
     expect((await withdraw(h, c!.auth, raceId)).status).toBe(200);
-    expect((await raceTicket(h, c!.auth, raceId)).status).toBe(200);
     await ticketsDb(h).tickets.updateOne(
       { userId: d!.userId },
       { $set: { status: 'checked_in', checkedInAt: h.clock.now() } },
@@ -234,6 +235,89 @@ describe('правка правил после отправки (RC-D4)', () => 
   });
 });
 
+describe('перенос старта (ревью pass 1: HIGH-2, LOW RC-D4)', () => {
+  /** `resolveMany` регламента прочитал факты, затем (до захвата) выполняется `change`. */
+  function changeAfterResolve(change: () => Promise<unknown>) {
+    const events = h.worker.get(TicketEvents);
+    const original = events.resolveMany.bind(events);
+    vi.spyOn(events, 'resolveMany').mockImplementationOnce(async (refs) => {
+      const facts = await original(refs);
+      await change();
+      return facts;
+    });
+  }
+
+  it('гонка: старт перенесён позже между чтением и захватом — в старое время не уходит, в новое — уходит', async () => {
+    const { raceId, riders } = await raceWithReminders(['a@example.com']);
+    const later = new Date(START.getTime() + 12 * HOUR);
+    travelTo(h, DUE_24);
+    changeAfterResolve(() =>
+      ticketsDb(h).ticketing.updateOne({ eventId: raceId }, { $set: { startsAt: later } }),
+    );
+    await dispatchDue();
+    expect(await reminderEvents()).toHaveLength(0);
+    expect(await sentOf(riders[0]!.userId)).toEqual([]);
+    travelTo(h, new Date(later.getTime() - 24 * HOUR));
+    await dispatchDue();
+    expect(await reminderEvents()).toHaveLength(1);
+    expect(await sentOf(riders[0]!.userId)).toHaveLength(1);
+  });
+
+  it('календарь: старт перенесён между чтением и захватом — без отправки по старому времени', async () => {
+    const { admin } = await raceWorld(h);
+    const id = await calendarStart(h, admin.token);
+    await enableCalendarTickets(h, admin.token, id, {
+      reminders: [{ offsetHours: 2, text: 'Через два часа' }],
+    });
+    const a = await rider(h, 'a@example.com');
+    expect((await registerFor(h, a.auth, id)).status).toBe(201);
+    travelTo(h, new Date('2026-11-01T05:00:00Z'));
+    // 10:00 → 14:00 по Минску: новое время отправки — 12:00 (09:00 UTC)
+    changeAfterResolve(() =>
+      h.db
+        .collection('calendar_starts')
+        .updateOne({ _id: id as never }, { $set: { startTime: '14:00' } }),
+    );
+    await dispatchDue();
+    expect(await reminderEvents()).toHaveLength(0);
+    expect(await sentOf(a.userId)).toEqual([]);
+    travelTo(h, new Date('2026-11-01T09:00:00Z'));
+    await dispatchDue();
+    expect(await reminderEvents()).toHaveLength(1);
+  });
+
+  it('после отправки: старт позже — уже получившим не повторяется, новому билету — в новое время', async () => {
+    const { raceId, riders } = await raceWithReminders(['a@example.com']);
+    const [a] = riders;
+    travelTo(h, DUE_24);
+    await dispatchDue();
+    expect(await reminderEvents()).toHaveLength(1);
+
+    const move = async (startsAt: Date) => {
+      const token = await adminToken();
+      const current = EventTicketingSettings.parse(
+        (await panelCall(h, token, 'GET', ticketingUrl('race', raceId))).body,
+      );
+      const res = await panelCall(h, token, 'PUT', ticketingUrl('race', raceId), {
+        enabled: true,
+        startsAt: startsAt.toISOString(),
+        version: current.version,
+      });
+      expect(res.status).toBe(200);
+    };
+    const later = new Date(START.getTime() + 12 * HOUR);
+    await move(later);
+    const b = await rider(h, 'b@example.com');
+    await enter(h, b.auth, raceId);
+    expect((await raceTicket(h, b.auth, raceId)).status).toBe(200);
+    travelTo(h, new Date(later.getTime() - 24 * HOUR));
+    await dispatchDue();
+    expect(await reminderEvents()).toHaveLength(2);
+    expect(await sentOf(a!.userId)).toHaveLength(1);
+    expect(await sentOf(b.userId)).toHaveLength(1);
+  });
+});
+
 describe('старт календаря', () => {
   it('регистрация → напоминание за 2 ч от старта календаря', async () => {
     const { admin } = await raceWorld(h);
@@ -308,6 +392,16 @@ describe('приём уведомлений: центр, push, e-mail (RC-D6, RC
       type: 'ticket',
       code: await codeOf(a!.userId),
     });
+  });
+
+  it('участие снято после отметки, до приёма (сверки не было) — уведомления нет (ревью pass 1, HIGH-1)', async () => {
+    const { raceId, riders } = await raceWithReminders(['a@example.com', 'b@example.com']);
+    travelTo(h, DUE_24);
+    await dispatchDue();
+    expect((await withdraw(h, await signIn(h, riders[1]!.email), raceId)).status).toBe(200);
+    expect(await notificationsIntake(h).drain()).toEqual(['written']);
+    expect(await notificationsOf(h, riders[0]!.userId)).toHaveLength(1);
+    expect(await notificationsOf(h, riders[1]!.userId)).toHaveLength(0);
   });
 
   it('удалённый аккаунт — без уведомления; правило удалено до приёма — gone; событие началось — state', async () => {

@@ -850,7 +850,6 @@ export const ru = {
   'notifications.settings.emailHint.disputes': 'Только решение по спору.',
   'notifications.settings.emailHint.rides': 'Только отмена райда.',
   'notifications.settings.emailHint.events': 'Только напоминания о событиях с билетом.',
-  'notifications.settings.hint.events': 'Напоминания о событиях, на которые у вас есть билет.',
   'notifications.settings.quiet.title': 'Тихие часы',
   'notifications.settings.quiet.toggle': 'Не присылать push ночью',
   'notifications.settings.quiet.hint':
