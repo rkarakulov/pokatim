@@ -108,7 +108,11 @@
 # 5. Проверка
 
 - Целевые файлы — циклами под нагрузкой (до/после — в разделах выше).
-- `MONGO_URL_TEST=… REDIS_URL_TEST=… TURBO_CONCURRENCY=1 pnpm check` — 2–3 раза подряд зелёный.
+- `MONGO_URL_TEST=… REDIS_URL_TEST=…/12 TURBO_CONCURRENCY=1 pnpm check` — зелёный 3 раза подряд: №1 (до слияния
+  develop) 1115 с; №2 на HEAD с develop 1076 с (api 2354/2354, app 2459/2459, admin 489/489); №3 с `TURBO_FORCE=true`
+  (без кэша turbo) 918 с — то же. Load во время прогонов — 5–26 (параллельные сессии).
+- Ревью: Claude independent-reviewer pass 1 — APPROVE (1 MEDIUM, 3 LOW — исправлены); Codex pass 1 — APPROVE
+  (2 MEDIUM — исправлены), pass 2 — APPROVE без находок.
 
 # 6. Security checklist (только `raw-body.ts`)
 
