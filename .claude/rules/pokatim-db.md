@@ -98,6 +98,19 @@ paths:
   вставка жалобы; сбросы фото/клуба/имени — условная запись профиля (`openReportCount: 0`) → побочное → `closeOpen` →
   журнал; «Отклонить» — `clearReports` по `reportRevision` и `openReportCount > 0` (без `updatedAt`) → `closeOpen` →
   журнал. Параллельные транзакции конфликтуют по документу профиля — `openReportCount` = числу открытых жалоб.
+- `profiles.{openReasons, avatarResetsAt, avatarBlockedUntil, resetSeq}` (profile-moderation-followups) — тоже
+  необязательные (`?? []` / `?? null` / `?? 0`). `openReasons` — причины открытых жалоб: `$addToSet` в `recordReport`,
+  `[]` — в каждой операции, обнуляющей `openReportCount` (сбросы, `clearReports` закрывают все открытые); порядок не
+  держится — сервис упорядочивает по `PROFILE_REPORT_REASONS`. Очередь по причине — частичный индекс
+  `profiles_report_reason_queue_idx` `{ openReasons: 1, lastReportAt: -1, _id: -1 }` (`openReportCount > 0`), запрос —
+  с условием и `hint` (план без `SORT` держит int-тест); миграция `0041_profile_report_reasons` — индекс и бэкфилл по
+  открытым `profile_reports`. `resetSeq` — ревизия сбросов модератором (`$inc` условной записью каждого сброса имени,
+  фото, клуба), номер — `seq` события `profile.field-reset` и порядок уведомлений (не `resetAt`). Сброс фото — две
+  записи профиля в транзакции: `resetAvatar` (`returnDocument: 'before'`) → `avatarResetBan` (`profile.policy.ts`,
+  окно 180 дн.) → `recordAvatarReset` (`avatarResetsAt`, `avatarBlockedUntil`) → удаление фото → `closeOpen` → журнал →
+  outbox. Замена фото проверяет запрет по `before` в своей транзакции (гонка со сбросом — write conflict по документу
+  профиля). «Снять запрет» — первой условная запись `{ _id, avatarBlockedUntil: { $gt: now } }` → `null` → журнал;
+  `avatarResetsAt` не очищается.
 - Перевыпуск id фото (profile-moderation, RC-A2 (b), ADR-0019 п. 6) — в транзакции `PATCH /v1/profile` и сброса
   имени, после записи профиля, при переходе «публичен → нет» (флаг до/после из той же транзакции): копия документа
   `profile_avatars` под новым `randomToken` (выдан до транзакции) → `replaceAvatarId` (условие — прежний id) →

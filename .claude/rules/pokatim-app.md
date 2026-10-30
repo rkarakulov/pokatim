@@ -357,6 +357,13 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   прогресса; тексты 413/415/422/429 — `avatar-errors.ts` (429 загрузки с паузой занятой обработки, 5 с, — «через
   минуту»; удаление — общий текст; файл, который браузер не декодировал, — текст 422). Исходник не перекодируется и не
   уменьшается (JPEG/WebP до 100 Мп, PNG до 25 Мп — решает сервер, ADR-0019): EXIF/GPS стирает сервер.
+- Запрет загрузки фото (profile-moderation-followups) — по `ProfileView.avatarUploadBlockedUntil`: «Выбрать фото»
+  `disabled`, сразу под ней «Загрузка фото недоступна до <дата, время> после нарушений правил» (с годом — не зависит от
+  «сейчас», SSR), «Удалить фото» доступна. 409 `avatar_blocked` на загрузке — тот же текст баннером и
+  `invalidateQueries(['profile'])` (`useUploadAvatar.onError`). Срок истёк при открытом экране —
+  `useAvatarBlockExpiry` (`avatar-block-expiry.ts`): таймер на момент окончания → перечитывание `['profile']`, кнопку
+  разблокирует только ответ сервера (задержка ≤ 2^31-1 мс цепочкой; тот же срок в ответе — повтор через 30 с).
+  Уведомления о сбросе — цель `profile-edit` → `/settings/profile` (`notification-target.ts` и копия в service worker).
 - Жалоба на профиль (profile-report-app): `RiderReportAction` в конце `/riders/[id]` — вошедшему по
   `canReport`/`reported` сервера (`['riders','viewer',id]`, `GET /v1/riders/:publicId/me`, только после найденного
   профиля), гостю (`signedOut`) — вход с возвратом (allowlist — `/riders/<RiderPublicId>`), сессия неизвестна — ничего.

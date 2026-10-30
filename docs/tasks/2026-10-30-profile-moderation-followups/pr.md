@@ -40,22 +40,17 @@
 - Конфликт с параллельной сессией «билеты-напоминания» в общих списках уведомлений — разрешается добавлением обоих
   наборов в конец.
 
-### Предложения правок `.claude/rules` (не применены, нужен OK)
-- `pokatim-db.md` — поля профиля `openReasons`, `avatarResetsAt`, `avatarBlockedUntil`, `resetSeq` (ревизия сбросов
-  модератором — `seq` события и порядок уведомлений); индекс
-  `profiles_report_reason_queue_idx`; порядок записи сброса фото (`resetAvatar` → `recordAvatarReset` → фото →
-  `closeOpen` → журнал → outbox) и «Снять запрет» (условная запись профиля первой).
-- `pokatim-backend.md` — событие `profile.field-reset`, ребро `notifications → profile` только файловое (без порта);
-  счёт типов событий outbox «12» → 13.
-- `pokatim-contracts.md` — `PROFILE_STATE_REASONS` + `avatar_blocked` с `until` (правило «details — только
-  `own_profile`» устарело), цель `profile-edit`, `ProfileView.avatarUploadBlockedUntil`, `reason` очереди и
-  `openReasons` строки.
-- `pokatim-tests.md` — ворота гонки «загрузка фото ↔ сброс с запретом» (RC-F14).
-- `pokatim-security.md` — запрет загрузки проверяется до слота, лимита и тела (`Connection: close` на отказах `admit`).
-- `pokatim-web.md` — «Профили райдеров»: вместо «одна очередь открытых жалоб» — вкладки `?reason=name|photo|club`
-  (валидатор поиска возвращает ключ всегда), строка причин, счётчик сбросов, строка запрета и «Снять запрет».
-- `pokatim-app.md` — «Редактировать профиль»: запрет загрузки фото (кнопка неактивна, подпись с датой, 409 — баннер и
-  перечитывание `['profile']`).
+### Правки `.claude/rules` (применены)
+- `pokatim-db.md` — поля `openReasons`, `avatarResetsAt`, `avatarBlockedUntil`, `resetSeq`; индекс
+  `profiles_report_reason_queue_idx`, миграция `0041`; порядок записи сброса фото и «Снять запрет».
+- `pokatim-backend.md` — follow-up модерации профиля (очередь `?reason=`, `profile.field-reset`, запрет, «Снять
+  запрет»); `notifications → profile` только файловое, без порта; outbox-типов 13.
+- `pokatim-contracts.md` — `avatar_blocked` + `until`, `reason`/`openReasons` очереди, поля карточки,
+  `avatarUploadBlockedUntil`, `profile.avatar_unblocked`, цель `profile-edit`.
+- `pokatim-tests.md` — ворота гонки «загрузка фото ↔ сброс с запретом» (RC-F14) и порядка уведомлений по `seq`.
+- `pokatim-security.md` — запрет загрузки до слота, лимита и тела; `Connection: close` на отказах `admit`.
+- `pokatim-web.md` — вкладки `?reason=`, строка причин, счётчик сбросов, строка запрета, «Снять запрет».
+- `pokatim-app.md` — «Редактировать профиль»: запрет загрузки фото, 409 — баннер и перечитывание, таймер окончания.
 
 ### Документы
 `docs/product/profile.md` (T1–T8, S7, Follow-up, экран «Редактировать профиль»), `docs/product/notifications.md`

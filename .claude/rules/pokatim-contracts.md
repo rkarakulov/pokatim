@@ -113,15 +113,19 @@ paths:
 - Модерация профиля (profile-moderation): `src/profile/profile-report.schema.ts` — `PROFILE_REPORT_REASONS` (только в
   конец; подписи `domain.profileReportReason.*`), `CreateProfileReportRequest` (`strictObject`, комментарий —
   `optionalText(500, MULTI_LINE)`), `RiderProfileViewer` (`z.object`, будущие поля — `.default`),
-  `PROFILE_STATE_REASONS` / `ProfileStateDetails` (`tolerantEnum`, `details` у `409 PROFILE_INVALID_STATE` — только
-  `own_profile`, RC-P1); `src/profile/profile-moderation.schema.ts` — панель, строгие `z.enum`: очередь
-  (`RiderProfileModerationQuery` limit ≤ 50, строка с `name` по Q2), карточка (жалобы ≤ 100 без автора,
-  `reportRevision`), `RiderProfileResetRequest`/`RiderProfileResetResult` — алиасы схем сброса имени (не копии),
+  `PROFILE_STATE_REASONS` / `ProfileStateDetails` (`tolerantEnum`, `details` у `409 PROFILE_INVALID_STATE`:
+  `own_profile` (RC-P1) и `avatar_blocked` с `until` — `z.iso.datetime().nullable().default(null)`, у прочих `null`;
+  новые причины — только в конец); `src/profile/profile-moderation.schema.ts` — панель, строгие `z.enum`: очередь
+  (`RiderProfileModerationQuery` limit ≤ 50, `reason?: ProfileReportReason` — одна причина; строка с `name` по Q2 и
+  `openReasons` `.default([])`), карточка (жалобы ≤ 100 без автора, `reportRevision`, `avatarUploadBlockedUntil`,
+  `avatarResetCount` — с `.default`), `RiderProfileResetRequest`/`RiderProfileResetResult` — алиасы схем сброса имени (не копии),
   `DismissRiderProfileReportsRequest` (`reportRevision`; устаревшая — базовый `409 CONFLICT`),
-  `RiderProfileReportsDismissResult`. Код `PROFILE_INVALID_STATE` и действия журнала `profile.avatar_reset`,
-  `profile.club_reset`, `profile.reports_dismissed` — в конце списков. api-client: `getRiderViewer`, `reportRider`;
-  панель — `listRiderProfiles`, `getRiderProfile`, `resetRiderAvatar`, `resetRiderClub`, `dismissRiderProfileReports`,
-  `riderAvatarUrl`.
+  `RiderProfileReportsDismissResult`, `UnblockRiderAvatarRequest` (алиас) / `RiderAvatarUnblockResult`. Код
+  `PROFILE_INVALID_STATE` и действия журнала `profile.avatar_reset`, `profile.club_reset`, `profile.reports_dismissed`,
+  `profile.avatar_unblocked` — в конце списков; `AuditEntry.details.avatarBlockedUntil` — необязательная дата ISO.
+  `ProfileView.avatarUploadBlockedUntil` — `.nullable().default(null)`. api-client: `getRiderViewer`, `reportRider`;
+  панель — `listRiderProfiles({ reason })`, `getRiderProfile`, `resetRiderAvatar`, `resetRiderClub`,
+  `dismissRiderProfileReports`, `unblockRiderAvatar`, `riderAvatarUrl`.
 - Согласие на показ имени (profile-02): `PUBLIC_NAME_CONSENT_VERSION` (`src/profile/profile.schema.ts`) — версия
   текста `profile.show.label` + `profile.show.hint` (i18n). Сменили формулировку — **подняли версию** (дата), иначе
   журнал согласий ссылается на чужой текст. Версию в событие пишет сервер. Сброс имени —
@@ -147,7 +151,8 @@ paths:
   `ACCOUNT_PANEL_MEMBER` (409) в конце `ErrorCode`; `AUDIT_ACTIONS` + `account.deleted` (admin i18n
   `admin.audit.action.account.deleted`). api-client — `deleteAccount(accessToken, body)`.
 - Уведомления (ADR-0017): `src/notifications/notification.schema.ts` — `kind`/`group` в ответах — `tolerantEnum`,
-  цель — белый список (`NotificationTarget`), незнакомая в ответе — `{ type: 'unknown' }`; запросы (`NotificationSettings`
+  цель — белый список (`NotificationTarget`; `profile-edit` без id — свой профиль), незнакомая в ответе —
+  `{ type: 'unknown' }`; новые `kind` и цели — только в конец; запросы (`NotificationSettings`
   с `startHour ≠ endHour`, `RegisterPushToken`, `RevokePushToken`, `NotificationListQuery`) — `strictObject`. api-client —
   8 методов `/v1/notifications*`.
 - Web Push (ADR-0022): там же — `WebPushEndpoint` (https ≤ 2048, хост — push-сервис из белого списка
