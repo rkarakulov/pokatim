@@ -151,7 +151,12 @@ describe('вход в панель — без сессии (AC9)', () => {
     expect(password()).toHaveProperty('disabled', true);
     expect(submit()).toHaveProperty('disabled', true);
 
-    await vi.advanceTimersByTimeAsync(901_000);
+    // часы — к концу паузы прыжком: прокрутка 900 с гоняла 900 секундных тиков `useNow` с перерисовкой (> 5 с под
+    // нагрузкой); за 2 с до конца — ещё закрыто, после — открыто
+    vi.setSystemTime(Date.now() + 898_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(submit()).toHaveProperty('disabled', true);
+    await vi.advanceTimersByTimeAsync(2_000);
     await waitFor(() => expect(screen.queryByText('Слишком много попыток')).toBeNull());
     expect(email()).toHaveProperty('disabled', false);
   });
