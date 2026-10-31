@@ -69,6 +69,11 @@ export interface NoticeDraft {
   recipients: string[];
   /** в центр без push (`reason: 'in_app'`): райдер сейчас в приложении (achievements-push, P1) */
   inApp?: boolean;
+  /**
+   * действующее лицо «Своих» (social-p1, ADR-0027 п. 6): повтор в окне `collapse.key` копит лиц в `actors` одного
+   * уведомления, а не заменяет его; черновик собирает `socialNoticeDraft`
+   */
+  actor?: string;
 }
 
 /** Почему событие не даёт уведомлений: payload не читается, объекта нет, объект не в ожидаемом статусе. */

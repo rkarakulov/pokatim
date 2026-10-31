@@ -4,6 +4,7 @@ import type {
   CreateRideRequest,
   FieldErrorCode,
   RateLimitedDetails,
+  RideJoinSource,
   RideQuotaDetails,
   RideView,
   UpdateRideRequest,
@@ -14,6 +15,7 @@ import { MongoOutboxWriter, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import { type DbSession, MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
+import { PRODUCT_EVENTS, type ProductEvents } from '../product-events';
 import { RIDE_ROUTES, type RideRouteRef, type RideRoutes } from '../routes';
 import { RideReportsRepository } from './ride-reports.repository';
 import { lookupRoutes, rideViewOf } from './rides-feed.service';
@@ -75,6 +77,7 @@ export class RidesService {
     private readonly transactions: MongoTransactions,
     private readonly outbox: MongoOutboxWriter,
     @Inject(RIDE_ROUTES) private readonly rideRoutes: RideRoutes,
+    @Inject(PRODUCT_EVENTS) private readonly events: ProductEvents,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -228,7 +231,11 @@ export class RidesService {
     throw domainError('RIDE_INVALID_STATE', 409);
   }
 
-  async join(userId: string, id: string): Promise<RideView> {
+  /**
+   * «Я иду». `source` (K12) — откуда нажато: только новая запись пишет `ride-joined` после коммита (RC-6); повтор,
+   * квотная ветка и запись без `source` — без события.
+   */
+  async join(userId: string, id: string, source?: RideJoinSource): Promise<RideView> {
     await this.limit('rides-rsvp', userId, RIDES_POLICY.rsvpLimit);
     const now = this.clock.now();
     if (
@@ -243,7 +250,10 @@ export class RidesService {
     const joined = await this.writeWithEvent(RIDES_PARTICIPANT_JOINED, (tx) =>
       this.repository.join(id, userId, now, tx),
     );
-    if (joined) return this.viewOf(joined, userId, now);
+    if (joined) {
+      if (source) await this.recordJoined(userId, id, source);
+      return this.viewOf(joined, userId, now);
+    }
     const doc = await this.repository.findForViewer(id, userId);
     if (!doc) throw domainError('NOT_FOUND', 404);
     this.assertVisible(doc, userId);
@@ -251,6 +261,18 @@ export class RidesService {
     if (doc.participants?.length) return this.viewOf(doc, userId, now);
     if (ridePhase(doc, now) !== 'upcoming') throw domainError('RIDE_INVALID_STATE', 409);
     throw domainError('RIDE_FULL', 409);
+  }
+
+  /** Журнал метрик вне транзакции «Я иду»: сбой не отменяет запись (K12, §11 эпика). */
+  private async recordJoined(userId: string, id: string, source: RideJoinSource): Promise<void> {
+    try {
+      await this.events.record({ type: 'ride-joined', userId, props: { source } });
+    } catch (error) {
+      const kind = error instanceof Error ? error.constructor.name : typeof error;
+      this.logger.warn(
+        `product_events.record_failed type=ride-joined ride=${id} uid=${userId} error=${kind}`,
+      );
+    }
   }
 
   async leave(userId: string, id: string): Promise<RideView> {

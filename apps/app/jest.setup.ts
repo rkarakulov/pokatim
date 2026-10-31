@@ -12,6 +12,7 @@ import type * as RegistrationStore from './src/features/auth/registration-store'
 import type * as OnboardingStore from './src/features/onboarding/onboarding-store';
 import type * as SessionStore from './src/features/auth/session-store';
 import type * as PushSoftPromptStore from './src/features/notifications/push-soft-prompt-store';
+import type * as NameConsentStore from './src/features/profile/name-consent-store';
 
 // в jest нет Keychain: in-memory хранилище; тесты читают его через jest.requireMock('expo-secure-store').__store
 jest.mock('expo-secure-store', () => {
@@ -256,4 +257,8 @@ beforeEach(() => {
       './src/features/notifications/push-soft-prompt-store',
     )
     .resetPushSoftPrompt();
+  // шит имени после записи на гонку — одно предложение за запуск
+  jest
+    .requireActual<typeof NameConsentStore>('./src/features/profile/name-consent-store')
+    .resetNameConsent();
 });

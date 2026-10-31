@@ -19,6 +19,7 @@ function input(
   return {
     template: 'line',
     themeId: 'classic',
+    address: null,
     ...overrides,
     facts: {
       rideId: 'ride',

@@ -59,6 +59,7 @@ import { ROUTE_RIDES_PASSED_INDEX, routeRidesPassedIdx } from './0044_route_ride
 import { social } from './0045_social';
 import { routeRideAutoPlans } from './0046_route_ride_auto_plans';
 import { ridePhotos } from './0047_ride_photos';
+import { raceEntryNumbers } from './0048_race_entry_numbers';
 import { RIDE_PHOTOS_COLLECTIONS } from '../../modules/rides/ride-photos.collection';
 import { SOCIAL_COLLECTIONS } from '../../modules/social/social.collection';
 import { PRODUCT_EVENTS_COLLECTIONS } from '../../modules/product-events/product-events.collection';
@@ -181,6 +182,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0045_social',
       '0046_route_ride_auto_plans',
       '0047_ride_photos',
+      '0048_race_entry_numbers',
     ]);
   });
 
@@ -2010,9 +2012,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.autoPlans)).toEqual(expected);
   });
 
-  it('0047_ride_photos: коллекция и индексы фото райда; последняя; одно фото на райд; повторный up — без изменений', async () => {
+  it('0047_ride_photos: коллекция и индексы фото райда; одно фото на райд; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0047_ride_photos');
     expect(ids.indexOf('0047_ride_photos')).toBe(ids.indexOf('0046_route_ride_auto_plans') + 1);
     const expected = {
       ride_photos_ride_unique: {
@@ -2043,5 +2044,53 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await ridePhotos.up(h.db);
     await ridePhotos.up(h.db);
     expect(await indexesOf(RIDE_PHOTOS_COLLECTIONS.photos)).toEqual(expected);
+  });
+
+  it('0048_race_entry_numbers: номера заявок по порядку записи, счётчик гонки, недостающие — после выданных; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0048_race_entry_numbers');
+    expect(ids.indexOf('0048_race_entry_numbers')).toBe(ids.indexOf('0047_ride_photos') + 1);
+    const entries = h.db.collection<Record<string, unknown> & { _id: string }>(
+      RESULTS_COLLECTIONS.entries,
+    );
+    const races = h.db.collection<Record<string, unknown> & { _id: string }>(
+      RACES_COLLECTIONS.races,
+    );
+    const at = (minute: number) => new Date(Date.UTC(2026, 9, 1, 10, minute));
+    try {
+      await races.insertMany([
+        { _id: 'race-0048-a', entryAdmissions: 5 },
+        { _id: 'race-0048-b', entryAdmissions: 7 },
+      ]);
+      await entries.insertMany([
+        { _id: 'e-0048-a3', userId: 'u3', raceId: 'race-0048-a', createdAt: at(3) },
+        { _id: 'e-0048-a1', userId: 'u1', raceId: 'race-0048-a', createdAt: at(1) },
+        { _id: 'e-0048-a2', userId: 'u2', raceId: 'race-0048-a', createdAt: at(2) },
+        { _id: 'e-0048-b1', userId: 'u1', raceId: 'race-0048-b', createdAt: at(1), entryNo: 5 },
+        { _id: 'e-0048-b2', userId: 'u2', raceId: 'race-0048-b', createdAt: at(2) },
+      ]);
+      await raceEntryNumbers.up(h.db);
+      await raceEntryNumbers.up(h.db);
+      const numbers = Object.fromEntries(
+        (await entries.find({ _id: /^e-0048-/ }).toArray()).map((doc) => [doc._id, doc.entryNo]),
+      );
+      expect(numbers).toEqual({
+        'e-0048-a1': 1,
+        'e-0048-a2': 2,
+        'e-0048-a3': 3,
+        'e-0048-b1': 5,
+        'e-0048-b2': 8,
+      });
+      const counters = Object.fromEntries(
+        (await races.find({ _id: /^race-0048-/ }).toArray()).map((doc) => [
+          doc._id,
+          doc.entryAdmissions,
+        ]),
+      );
+      expect(counters).toEqual({ 'race-0048-a': 5, 'race-0048-b': 8 });
+    } finally {
+      await entries.deleteMany({ _id: /^e-0048-/ });
+      await races.deleteMany({ _id: /^race-0048-/ });
+    }
   });
 });

@@ -22,8 +22,9 @@
 
 1. **Модуль `social` — потребитель.** `social → rides, results, routes, tracks, profile, identity` только через
    `index.ts` и порты `*_FOR_SOCIAL` (по образцу `RESULTS_FOR_TICKETS`). На `social` ссылаются `notifications`
-   (порт аудитории и имён для группы «Свои»), `account` (порт стирания), `AppModule`, `WorkerModule`. Производители
-   о `social` не знают.
+   (порт аудитории и имён для группы «Свои»), `account` (порт стирания), `sharing` (порт `InviteCodes` — адрес
+   приглашения `<домен>/i/<код>` на карточках для сторис, P6; только HTTP-модуль, worker берёт адрес из задачи),
+   `AppModule`, `WorkerModule`. Производители о `social` не знают; цикла нет — `social` не знает `sharing`.
 2. **Коллекции** (миграция `0045_social`, только expand; после `0043_achievements_seasonal` и
    `0044_route_rides_passed_idx` из develop):
    - `rider_connections` — направленная связь `ownerId → otherId`, уникальный `{ownerId, otherId}`; источники
@@ -43,23 +44,38 @@
 3. **Данные зрителя — отдельные эндпоинты `social` под `AuthGuard`, `no-store`:** `GET rides/:id/participants`
    (участники с публичным профилем и явка), `GET riders/:publicId/social` («вместе ехали», «Идёт», состояние
    «В свои»), `GET social/connections`, `GET social/home`. Контроллеры с префиксом чужого ресурса — прецедент
-   `riders/:publicId/me` в `profile`. Публичные кэшируемые ответы не меняются.
+   `riders/:publicId/me` в `profile`. Публичные кэшируемые ответы не меняются. P2: `RideParticipantsController` —
+   `GET rides/:id/participants`, `POST rides/:id/attendance` («Я был на райде»), `POST rides/:id/attendance/decline`
+   («Меня не было»; без тела, ответ — тот же `RideParticipants`); скрытый райд не организатору и неизвестный — `404`
+   до вызова сервиса явки.
 4. **Автоявка — второе событие `tracks`.** После обработки заезда `tracks` в той же транзакции пишет
    `tracks.activity-recorded {activityId, userId}` → очередь `social-intake`. `social` читает старт заезда портом
    `ACTIVITY_STARTS` и точный старт райда портом `RIDES_FOR_SOCIAL` (только при маршруте каталога). `activity-ready`
    и `results-intake` не меняются. Регламент `social-maintenance` раз в 30 минут шлёт «Как прошёл райд?» через 4 ч
    после старта.
 5. **Атрибуция приглашения — в `identity`.** `RegisterRequest.invite` (необязательное поле, старые сборки
-   совместимы) сохраняется на `users`; при подтверждении e-mail `identity` пишет `identity.account-confirmed
-   {userId, invite?}` → `social-intake`, `social` разрешает код в пригласившего и создаёт связь `invite`. `identity`
-   о `social` не знает.
+   совместимы; неверный формат отбрасывается, не 400) сохраняется на `users.invite`; при **первом** подтверждении
+   e-mail аккаунта **с кодом** — по ссылке из письма или сбросом пароля (общий шаг `AccountConfirmation`, условная
+   запись `emailVerifiedAt: null`) — `identity` в той же транзакции пишет `identity.account-confirmed {userId,
+   invite}` (`invite` обязателен; аккаунт без кода события не порождает). Маршрут `→ social-intake` объявляет
+   подписчик (`socialOutboxRoutes`), `social` разрешает код в пригласившего (`InviteCodes.ownerOf`), проверяет живость
+   обоих портом `IdentityAccounts.liveUserIds` и создаёт связь `invite` (`linkInvite`; `invite-registered` — при
+   первом `inviteAt` стороны пригласившего). `identity` о `social` не знает. Уточнено в P6 (2026-10-31).
 6. **Уведомления группы «Свои» — имена при чтении** (поправка к ADR-0017 «текст — снимок» и N12). `NotificationDoc`
    получает `actors: userId[]` и `params`; для группы `social` `title/body` собираются при чтении списка и при
    отправке push из текущих публичных имён (`RIDER_NAMES.publicRiders`), нет имени — «Райдер». Схлопывание копит
-   `actors` (`$addToSet`) вместо замены документа. Остальные группы не меняются. События `social.*` → очередь
+   `actors` вместо замены документа. Остальные группы не меняются. События `social.*` → очередь
    `notifications-intake`; «Свои идут» строится из `rides.participant-joined` портом аудитории `social`.
+   **Уточнение (social-p1):** накопление — условный upsert по окну `(userId, collapseKey)` с `$push` лица при «его ещё
+   нет» и «потолок 100 не достигнут» (`$addToSet` без условия снова делал бы прочитанное непрочитанным при повторе
+   того же лица); дубль уникального ключа — один повтор без upsert. Создающее событие и доставка — только при вставке:
+   push — при создании уведомления, повтор в окне — строка снова непрочитана и наверху, без push. Окно «в сутки» —
+   день события outbox по Минску (время uuidv7), не время приёма. Цель `rider` («Вас добавили», «По ссылке») в
+   документе не хранится — выводится при чтении из того же лица, чьё имя показано (`publicId` отзываем). В документе
+   — запасной текст с «Райдер» (если рендер с именами не смог).
 7. **Журнал продуктовых событий — листовой модуль `product-events`** без зависимостей, порт `PRODUCT_EVENTS.record`.
-   Пишут `social`, `rides` (источник «Иду» — необязательный параметр `join`), `identity` (активный день, дедуп в
+   Пишут `social`, `rides` (источник «Иду» — необязательное тело `join` `{ source }`: событие `ride-joined` — только
+   новой записи, после коммита транзакции `join`, сбой — лог без отказа), `identity` (активный день, дедуп в
    Redis на сутки по Минску). Журнал append-only; единственное исключение — удаление записей райдера шагом стирания
    аккаунта (K13). Наружу не уходит, выгрузка — скрипт. Справочник событий и их `props` — zod внутри API
    (`product-events.types.ts`), не в contracts (RC-11); в `props` — только поля-справочники, без id пользователей:
@@ -73,7 +89,8 @@
 ## Последствия
 
 - Новые очереди `social-intake`, `social-maintenance`; новые outbox-события в `tracks` и `identity`.
-- `notifications` получает Nest-импорт `social` и `profile` (правило «текст — снимок» в `pokatim-backend.md` и
-  `pokatim-db.md` дополняется исключением для группы «Свои»).
+- `notifications` получает Nest-импорт `profile` (`ProfileCoreModule`, порт `RIDER_NAMES`) в P1 и `social` (порт
+  аудитории) — в P7, когда появится потребитель (правило «текст — снимок» в `pokatim-backend.md` и `pokatim-db.md`
+  дополняется исключением для группы «Свои»).
 - Имя в тексте push остаётся на устройстве после удаления аккаунта — принятый риск (решение автора 2026-10-31).
 - Явка — первый факт «был на райде» (R8); километры райдов в статистику по-прежнему не входят.

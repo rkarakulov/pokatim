@@ -9,6 +9,7 @@ const RACE = '0190a6f4-0000-7000-8000-000000000001';
 const RIDE = '0190a6f4-0000-7000-8000-000000000002';
 const DISPUTE = '0190a6f4-0000-7000-8000-000000000003';
 const ROUTE = '0190a6f4-0000-7000-8000-000000000004';
+const RIDER = 'Ab_-'.repeat(10) + 'xyz';
 
 describe('notificationTargetPath — белый список целей (N10)', () => {
   it.each([
@@ -26,6 +27,7 @@ describe('notificationTargetPath — белый список целей (N10)', 
       { type: 'achievement', code: 'season_champion', seasonId: RACE },
       `/achievements/season_champion?season=${RACE}`,
     ],
+    [{ type: 'rider', publicId: RIDER }, `/riders/${RIDER}`],
   ])('%j → %s', (target, path) => {
     expect(notificationTargetPath(target)).toBe(path);
   });
@@ -44,6 +46,9 @@ describe('notificationTargetPath — белый список целей (N10)', 
     ['незнакомый код достижения', { type: 'achievement', code: 'future_code' }],
     ['код достижения — путь', { type: 'achievement', code: '../settings' }],
     ['сезон не Uuid', { type: 'achievement', code: 'season_podium', seasonId: '../x' }],
+    ['publicId райдера короткий', { type: 'rider', publicId: RIDER.slice(1) }],
+    ['publicId райдера — путь', { type: 'rider', publicId: `${RIDER.slice(3)}/..` }],
+    ['райдер без publicId', { type: 'rider' }],
   ])('%s — без перехода', (_case, target) => {
     expect(notificationTargetPath(target)).toBeNull();
   });
@@ -77,6 +82,10 @@ describe('паритет с service worker (Web Push, ADR-0022)', () => {
     { type: 'achievement', code: 'future_code' },
     { type: 'achievement', code: 'season_podium', seasonId: '../x' },
     { type: 'achievement' },
+    { type: 'rider', publicId: RIDER },
+    { type: 'rider', publicId: RIDER.slice(1) },
+    { type: 'rider', publicId: `${RIDER.slice(1)}/` },
+    { type: 'rider', publicId: 42 },
     { type: 'race', raceId: '../admin' },
     { type: 'race', raceId: RACE.toUpperCase() },
     { type: 'race', raceId: '00000000-0000-0000-0000-000000000000' },

@@ -7,7 +7,8 @@ import { minskToday, OG_BRAND, type OgCardKind } from '@pokatim/contracts';
  */
 export const STORY_CARD_POLICY = {
   // 4 — ride-photo: 4a с фото организатора под затемнением (ADR-0028)
-  renderVersion: 4,
+  // 5 — invites: адрес /i/<code> рядом с брендом (P6); карточки райда и маршрута стали личными (RC-P6-5)
+  renderVersion: 5,
   /** PNG и ключ хэш → токен, с */
   pngTtlSec: 86_400,
   /** ключ постановки рендера (NX), с */

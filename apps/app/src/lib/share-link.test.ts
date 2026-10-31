@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 import { Share } from 'react-native';
 
+import { setShareInvite } from './share-invite';
 import { shareLink, shareOrigin } from './share-link';
 
 const input = {
@@ -34,6 +35,21 @@ describe('shareLink (native)', () => {
     });
     sheet.mockResolvedValue({ action: Share.dismissedAction, activityType: undefined });
     await expect(shareLink(input)).resolves.toBe('dismissed');
+  });
+
+  it('вошедший — ссылка с ?invite=<код> (P6, AC2)', async () => {
+    process.env.EXPO_PUBLIC_WEB_ORIGIN = 'https://pokatim.by';
+    setShareInvite('K7M2PQX');
+    const sheet = jest
+      .spyOn(Share, 'share')
+      .mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
+    await shareLink(input);
+    setShareInvite(null);
+    expect(sheet).toHaveBeenCalledWith({
+      title: 'Райд',
+      message: `${input.text}\nhttps://pokatim.by/rides/x?invite=K7M2PQX`,
+      url: 'https://pokatim.by/rides/x?invite=K7M2PQX',
+    });
   });
 
   it('без origin — ошибка (кнопки на экране нет)', async () => {

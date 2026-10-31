@@ -5,6 +5,7 @@ import type {
   NotificationPage,
   NotificationSettings,
   RouteNotificationSettingsView,
+  SocialNotificationSettingsView,
 } from '@pokatim/contracts';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -30,6 +31,7 @@ const settingsKey = ['notifications', 'settings'] as const;
 const eventSettingsKey = ['notifications', 'settings', 'events'] as const;
 const routeSettingsKey = ['notifications', 'settings', 'routes'] as const;
 const achievementSettingsKey = ['notifications', 'settings', 'achievements'] as const;
+const socialSettingsKey = ['notifications', 'settings', 'social'] as const;
 
 /** Счётчик колокольчика: только у вошедшего, опрос 60 с и при возврате фокуса. */
 export function useUnreadCount() {
@@ -184,5 +186,27 @@ export function useUpdateAchievementNotificationSettings() {
       ),
     networkMode: 'always',
     onSuccess: (saved) => queryClient.setQueryData(achievementSettingsKey, saved),
+  });
+}
+
+/** Тумблер группы «Свои» (social-p1, подресурс, только push); `404` старого API — блока нет. */
+export function useSocialNotificationSettings({ enabled }: { enabled: boolean }) {
+  return useQuery({
+    queryKey: socialSettingsKey,
+    queryFn: () => withAccessToken((accessToken) => api.getSocialNotificationSettings(accessToken)),
+    staleTime: DEFAULT_STALE_MS,
+    enabled,
+    retry: (count, error) => !isSettingsResourceMissing(error) && count < 2,
+  });
+}
+
+/** Сохранение тумблера «Свои»; ответ сервера — в кеш. */
+export function useUpdateSocialNotificationSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: SocialNotificationSettingsView) =>
+      withAccessToken((accessToken) => api.updateSocialNotificationSettings(accessToken, settings)),
+    networkMode: 'always',
+    onSuccess: (saved) => queryClient.setQueryData(socialSettingsKey, saved),
   });
 }

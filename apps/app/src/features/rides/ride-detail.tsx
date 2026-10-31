@@ -43,6 +43,8 @@ import { cityLabel, goingCaption, organizerLine, paceRange, rideShareText } from
 import { rideActionErrorText, useRide, useRideForViewer, useRideRsvp } from './queries';
 import { RidePhotoDelete } from './ride-photo-delete';
 import { rideInvitePath } from './invite/ride-invite';
+import { useRideAttendance, useRideParticipants } from './participants-queries';
+import { RideParticipantsBlock } from './ride-participants-block';
 import { RidePublishedSheet } from './ride-published-sheet';
 import { RideRouteBlock } from './ride-route-block';
 
@@ -81,7 +83,8 @@ function ShareAction({ ride, signedIn }: { ride: RideDetail; signedIn: boolean }
 /**
  * Поля и действия карточки (§3): метка «Кофе-райд» / «… · вы организатор», подпись организатора (D2), типографская
  * шапка (дата всегда с годом), «Старт: город, место», `StatBlock` дистанции и темпа, стопка, действия по `viewer`
- * сервера, баннеры отмены / прошедшего / переноса, «Об этом райде» как текст. Имён и фото нет (§4). 05c: маршрут,
+ * сервера, баннеры отмены / прошедшего / переноса, «Об этом райде» как текст. Гостю имён и фото нет (§4); вошедшему —
+ * участники и явка («Свои» P2, `RideParticipantsBlock`), «Я иду» — с источником `ride_card` (K12). 05c: маршрут,
  * видимый зрителю, — карта и профиль под шапкой (`RideRouteBlock`), «Набор» в `StatBlock`.
  * 05b: «Пожаловаться» — по `viewer.canReport`, строка «Вы пожаловались…» — по `viewer.reported`; скрытый
  * (`phase: 'hidden'`, видит только организатор) — баннер, действий нет (права сервера выключены).
@@ -93,8 +96,11 @@ function RideDetailView({
   published,
   mounted,
   scrub,
+  participants,
 }: {
   ride: RideDetail;
+  /** «Свои» P2: участники и явка — только вошедшему после `me` (гостю — `null`, только число) */
+  participants: ReturnType<typeof useRideParticipants> | null;
   /** 05c: стор скраббинга профиля и карты маршрута — на экземпляр экрана */
   scrub: ScrubStore;
   /** `null` — гость; `undefined` — вошедший, состояние ещё грузится (без действия). */
@@ -105,7 +111,8 @@ function RideDetailView({
 }) {
   const theme = useTheme();
   const router = useRouter();
-  const rsvp = useRideRsvp(ride.id);
+  const rsvp = useRideRsvp(ride.id, 'ride_card');
+  const attendance = useRideAttendance(ride.id);
   const when = formatMinskDateTime(ride.startsAt, null);
   const city = cityLabel(ride.city);
   const organizer = viewer?.role === 'organizer';
@@ -191,7 +198,16 @@ function RideDetailView({
             : []),
         ]}
       />
-      <GoingStack count={ride.goingCount} caption={goingCaption(ride, viewer)} />
+      <GoingStack
+        count={ride.goingCount}
+        caption={goingCaption(ride, viewer)}
+        {...(participants?.data
+          ? { avatarIds: participants.data.riders.map((row) => row.avatar?.id ?? null) }
+          : {})}
+      />
+      {participants ? (
+        <RideParticipantsBlock ride={ride} query={participants} attendance={attendance} />
+      ) : null}
       {viewer !== undefined ? (
         <RideGoingAction
           ride={ride}
@@ -288,10 +304,11 @@ export function RideDetailScreen({
   const signedIn = useSessionStore(isSignedIn);
   const pub = useRide(id, seed, valid);
   const me = useRideForViewer(id, valid && signedIn);
+  const participants = useRideParticipants(id, valid && signedIn && me.data !== undefined);
   const mounted = useMinskClockAfterMount([pub.dataUpdatedAt, me.dataUpdatedAt]) !== null;
   const refetchers = useMemo(
-    () => (signedIn ? [pub.refetch, me.refetch] : [pub.refetch]),
-    [signedIn, pub.refetch, me.refetch],
+    () => (signedIn ? [pub.refetch, me.refetch, participants.refetch] : [pub.refetch]),
+    [signedIn, pub.refetch, me.refetch, participants.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   // 05c: скраббинг профиля и карты маршрута — стор на экземпляр экрана; native — жест выключает прокрутку
@@ -374,6 +391,7 @@ export function RideDetailScreen({
                   published={published}
                   mounted={mounted}
                   scrub={scrub}
+                  participants={signedIn && viewer !== undefined ? participants : null}
                 />
               ) : null
             }

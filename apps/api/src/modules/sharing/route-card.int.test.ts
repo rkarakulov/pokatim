@@ -126,6 +126,8 @@ describe('pending → ready → PNG (AC2)', () => {
       const queued = await jobs();
       expect(queued).toHaveLength(1);
       expect(queued[0]!.id).toMatch(/^route-card-[0-9a-f]{64}$/);
+      // без APP_WEB_ORIGIN — без адреса приглашения (P6, RC-P6-6): картинка общая для зрителей
+      expect((queued[0]!.data as RouteCardJob).address).toBeNull();
 
       expect(await runJob()).toBe('ready');
       const token = await readyToken(viewer, routeId);

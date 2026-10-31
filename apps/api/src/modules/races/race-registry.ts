@@ -3,7 +3,7 @@ import type { RacePhase } from '@pokatim/contracts';
 
 import type { DbSession } from '../../db';
 import type { PanelPrincipal } from '../panel';
-import type { RaceForResults, RaceRegistry } from './race-registry.port';
+import type { AdmittedRace, RaceForResults, RaceRegistry } from './race-registry.port';
 import type { RaceDoc } from './races.collection';
 import { RACE_POLICY, racePhase, raceVisible } from './races.policy';
 import { RacesRepository } from './races.repository';
@@ -30,9 +30,9 @@ export const toRace = (doc: RaceDoc): RaceForResults => ({
 export class RaceRegistryService implements RaceRegistry {
   constructor(private readonly repository: RacesRepository) {}
 
-  async admitEntry(tx: DbSession, raceId: string, now: Date): Promise<RaceForResults | null> {
+  async admitEntry(tx: DbSession, raceId: string, now: Date): Promise<AdmittedRace | null> {
     const doc = await this.repository.admitEntry(tx, raceId, now);
-    return doc ? toRace(doc) : null;
+    return doc ? { ...toRace(doc), entryAdmissions: doc.entryAdmissions ?? 1 } : null;
   }
 
   async lockResults(tx: DbSession, raceId: string): Promise<RaceForResults | null> {

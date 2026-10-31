@@ -10,9 +10,13 @@ export type SecureKey =
   | 'pokatim.pushToken'
   // отложка подсказки push «Не сейчас» (не секрет; другой KV-зависимости нет, как `pokatim.locationPrompt`)
   | 'pokatim.pushSoftPrompt'
+  // пауза шита «Как вас показывать в результатах?» (name-consent-prompt, N3; не секрет)
+  | 'pokatim.nameConsentPrompt'
   | 'pokatim.locale'
   // QR офлайн-копий билетов (event-tickets, plan-B §5): только токены QR и владелец — остальное в файле
-  | 'pokatim.ticketQr';
+  | 'pokatim.ticketQr'
+  // код приглашения до регистрации (P6, K9; не секрет, как `pokatim.pushSoftPrompt`)
+  | 'pokatim.invite';
 
 /**
  * Единственная точка доступа к защищённому хранилищу: экраны и сторы не знают о нативном модуле;

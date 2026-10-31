@@ -8,6 +8,12 @@ import { z } from 'zod';
 
 import { STORY_CARD_POLICY } from './sharing.policy';
 
+/**
+ * Адрес приглашения на карточке (P6): считает HTTP, worker берёт из задачи — хэш совпадает детерминированно (RC-P6-5).
+ * Задачи до выката — без поля → `null`.
+ */
+const InviteAddressField = z.string().max(80).nullable().default(null);
+
 /** Задачи очереди `story-card`: только id и хэш входов — данные карточки worker перечитывает сам. */
 export const STORY_CARD_RENDER_JOB = 'story-card.render';
 export const StoryCardJob = z.object({
@@ -15,6 +21,7 @@ export const StoryCardJob = z.object({
   raceId: z.string(),
   template: StoryCardTemplate,
   hash: z.string(),
+  address: InviteAddressField,
 });
 export type StoryCardJob = z.infer<typeof StoryCardJob>;
 
@@ -25,6 +32,7 @@ export const RideInviteJob = z.object({
   rideId: z.string(),
   template: StoryCardTemplate,
   hash: z.string(),
+  address: InviteAddressField,
 });
 export type RideInviteJob = z.infer<typeof RideInviteJob>;
 
@@ -39,6 +47,7 @@ export const AchievementCardJob = z.object({
   seasonId: Uuid.nullable().default(null),
   template: StoryCardTemplate,
   hash: z.string(),
+  address: InviteAddressField,
 });
 export type AchievementCardJob = z.infer<typeof AchievementCardJob>;
 
@@ -49,6 +58,7 @@ export const RouteCardJob = z.object({
   routeId: Uuid,
   template: StoryCardTemplate,
   hash: z.string(),
+  address: InviteAddressField,
 });
 export type RouteCardJob = z.infer<typeof RouteCardJob>;
 

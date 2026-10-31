@@ -73,7 +73,7 @@ describe('подписи кофе-райда', () => {
     expect(goingCaption({ goingCount: 5, limit: 12, phase: 'upcoming' })).toBe('идут 5 из 12');
     expect(goingCaption({ goingCount: 21, limit: 30, phase: 'upcoming' })).toBe('идёт 21 из 30');
     expect(goingCaption({ goingCount: 7, limit: null, phase: 'upcoming' })).toBe('идут 7');
-    expect(goingCaption({ goingCount: 9, limit: 12, phase: 'past' })).toBe('ехали 9');
+    expect(goingCaption({ goingCount: 9, limit: 12, phase: 'past' })).toBe('записались 9');
     expect(
       goingCaption({ goingCount: 1, limit: 12, phase: 'upcoming' }, { role: 'organizer' }),
     ).toBe('идёт 1 из 12 · вы');
@@ -81,7 +81,7 @@ describe('подписи кофе-райда', () => {
       goingCaption({ goingCount: 5, limit: 12, phase: 'upcoming' }, { role: 'participant' }),
     ).toBe('идут 5 из 12 · вы в списке');
     expect(goingCaption({ goingCount: 9, limit: 12, phase: 'past' }, { role: 'participant' })).toBe(
-      'ехали 9 · вы в списке',
+      'записались 9 · вы в списке',
     );
     expect(goingCaption({ goingCount: 5, limit: 12, phase: 'upcoming' }, { role: 'unknown' })).toBe(
       'идут 5 из 12',

@@ -12,6 +12,8 @@ export interface RideInviteInput {
   template: StoryCardTemplate;
   themeId: AppThemeId;
   facts: RideInviteFacts;
+  /** короткая ссылка приглашения владельца карточки (`InviteAddress`, P6); считает HTTP, worker берёт из задачи */
+  address: string | null;
 }
 
 /**
@@ -25,6 +27,7 @@ export function rideInviteHash(input: RideInviteInput): string {
     'ride-invite',
     STORY_CARD_POLICY.renderVersion,
     input.template,
+    input.address,
     input.themeId,
     facts.rideId,
     facts.title,
@@ -55,6 +58,7 @@ export class RideInviteInputs {
     userId: string,
     rideId: string,
     template: StoryCardTemplate,
+    address: string | null,
   ): Promise<{ input: RideInviteInput; hash: string } | null> {
     const facts = await this.rides.inviteFacts(userId, rideId);
     if (!facts) return null;
@@ -62,6 +66,7 @@ export class RideInviteInputs {
       template,
       themeId: await this.themes.themeOf(userId),
       facts,
+      address,
     };
     return { input, hash: rideInviteHash(input) };
   }

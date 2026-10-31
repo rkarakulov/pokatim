@@ -1,4 +1,8 @@
-export { identityOutboxRoutes } from './identity.events';
+export {
+  IDENTITY_ACCOUNT_CONFIRMED,
+  IdentityAccountConfirmed,
+  identityOutboxRoutes,
+} from './identity.events';
 export {
   IdentityAccountsModule,
   IdentityErasureModule,

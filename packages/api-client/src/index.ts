@@ -1,5 +1,6 @@
 import {
   AchievementList,
+  InviteCodeResponse,
   type AchievementCode,
   type AchievementStoryCardQuery,
   AppAppearance,
@@ -42,6 +43,8 @@ import {
   type UpdateRouteNotificationSettings,
   AchievementNotificationSettingsView,
   type UpdateAchievementNotificationSettings,
+  SocialNotificationSettingsView,
+  type UpdateSocialNotificationSettings,
   type RegisterPushToken,
   type RevokePushToken,
   type RegisterWebPushSubscription,
@@ -137,6 +140,8 @@ import {
   MyTickets,
   type TicketEventKind,
   TicketView,
+  type RideJoinSource,
+  RideParticipants,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -682,9 +687,14 @@ export function createApiClient({
       postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}`, RideView, body),
     cancelRide: (accessToken: string, id: string, body: CancelRideRequest) =>
       postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}/cancel`, RideView, body),
-    /** «Я иду» (идемпотентно); мест нет — 409 `RIDE_FULL`. */
-    joinRide: (accessToken: string, id: string) =>
-      postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}/join`, RideView, {}),
+    /** «Я иду» (идемпотентно); мест нет — 409 `RIDE_FULL`. `source` — откуда нажато (K12), без него — `{}`. */
+    joinRide: (accessToken: string, id: string, source?: RideJoinSource) =>
+      postAuthorized(
+        accessToken,
+        `/v1/rides/${encodeURIComponent(id)}/join`,
+        RideView,
+        source ? { source } : {},
+      ),
     /** «Не иду» (идемпотентно); организатор — 409 `RIDE_INVALID_STATE`. */
     leaveRide: (accessToken: string, id: string) =>
       postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}/leave`, RideView, {}),
@@ -1121,6 +1131,23 @@ export function createApiClient({
         AchievementNotificationSettingsView,
         authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
       ),
+    /** Тумблер группы «Свои» (подресурс, только push); нет сохранённого — включено. */
+    getSocialNotificationSettings: (accessToken: string) =>
+      request(
+        '/v1/notifications/settings/social',
+        SocialNotificationSettingsView,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Замена тумблера «Свои»; ответ — сохранённый. */
+    updateSocialNotificationSettings: (
+      accessToken: string,
+      body: UpdateSocialNotificationSettings,
+    ) =>
+      request(
+        '/v1/notifications/settings/social',
+        SocialNotificationSettingsView,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
     /** Регистрация или обновление push-токена этого устройства; `204`. */
     registerPushToken: (accessToken: string, body: RegisterPushToken) =>
       request(
@@ -1181,6 +1208,37 @@ export function createApiClient({
         '/v1/profile/onboarding/devices',
         OnboardingStatus,
         authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
+    /** Участники райда (вошедшему, `no-store`): публичные — карточкой, остальные числом; явка зрителя. */
+    rideParticipants: (accessToken: string, id: string) =>
+      request(
+        `/v1/rides/${encodeURIComponent(id)}/participants`,
+        RideParticipants,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** «Я был на райде» (идемпотентно); отказ — 409 `SOCIAL_ACTION_BLOCKED { reason }`, 404, 429. */
+    markRideAttended: (accessToken: string, id: string) =>
+      postAuthorized(
+        accessToken,
+        `/v1/rides/${encodeURIComponent(id)}/attendance`,
+        RideParticipants,
+        {},
+      ),
+    /** «Меня не было» (идемпотентно); отказы — как у `markRideAttended`. */
+    declineRideAttendance: (accessToken: string, id: string) =>
+      postAuthorized(
+        accessToken,
+        `/v1/rides/${encodeURIComponent(id)}/attendance/decline`,
+        RideParticipants,
+        {},
+      ),
+    // --- «Свои»: приглашения (P6, K9) ---
+    /** Личный код приглашения (`no-store`; выдаётся при первом запросе, дальше — тот же). */
+    getInviteCode: (accessToken: string) =>
+      request(
+        '/v1/social/invite-code',
+        InviteCodeResponse,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
   };
 }

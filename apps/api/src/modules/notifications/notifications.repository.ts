@@ -5,6 +5,7 @@ import {
   type EventNotificationSettingsView,
   type NotificationSettings,
   type RouteNotificationSettingsView,
+  type SocialNotificationSettingsView,
   UNREAD_COUNT_MAX,
 } from '@pokatim/contracts';
 import { isDuplicateKey, MONGO_DB, uuidv7 } from '@rkarakulov/api-kit/mongo';
@@ -26,11 +27,12 @@ import {
   type PushTokenPlatform,
 } from './notifications.collection';
 import type { DeliverySettings } from './notifications.policy';
+import { SOCIAL_ACTORS_MAX } from './social-notices';
 
 /**
  * Документ настроек → настройки доставки: нет тумблеров «Мероприятия» — включены (RC-D1); нет `push.routes` — значение
  * `push.rides` (райдер, выключивший «Райды», не начинает получать push о решении по маршруту); нет `push.achievements`
- * — включено (P4).
+ * — включено (P4); нет `push.social` — включено (social-p1).
  */
 const deliverySettingsOf = (
   doc: Pick<NotificationSettingsDoc, 'push' | 'email' | 'quietHours'>,
@@ -40,6 +42,7 @@ const deliverySettingsOf = (
     events: doc.push.events ?? true,
     routes: doc.push.routes ?? doc.push.rides,
     achievements: doc.push.achievements ?? true,
+    social: doc.push.social ?? true,
   },
   email: { ...doc.email, events: doc.email.events ?? true },
   quietHours: doc.quietHours,
@@ -79,7 +82,7 @@ const TICKET_TTL_MS = 24 * 3_600_000;
 export type PendingDelivery = Pick<NotificationDoc, '_id' | 'userId' | 'push' | 'email'>;
 export type ClaimedPush = Pick<
   NotificationDoc,
-  '_id' | 'group' | 'title' | 'body' | 'target' | 'createdAt'
+  '_id' | 'kind' | 'group' | 'title' | 'body' | 'target' | 'createdAt' | 'actors' | 'params'
 > & { push: Pick<NotificationDoc['push'], 'limitCharged'> };
 export type ClaimedEmail = Pick<NotificationDoc, '_id' | 'userId' | 'title' | 'body' | 'target'>;
 /** Снимок токена для снятия (`deleteTokens`): `sessionId` — `null` без сессии, без ключа — не сверяется. */
@@ -142,6 +145,8 @@ export class NotificationsRepository {
           target: 1,
           createdAt: 1,
           readAt: 1,
+          actors: 1,
+          params: 1,
         },
       })
       .sort({ createdAt: -1, _id: -1 })
@@ -159,16 +164,64 @@ export class NotificationsRepository {
    * события, без изменений. Дубль ключа на вставке — повтор или устаревшее событие, не ошибка; дубль по `collapseKey`
    * бывает и у более нового события, проигравшего гонку первой вставки старшему, — для него условная замена
    * повторяется без upsert. Возвращает число вставленных и заменённых.
+   *
+   * Накопление «Своих» (документ с `actors` — одно новое лицо, social-p1, ADR-0027 п. 6, RC-1a): условный upsert по
+   * окну `(userId, collapseKey)` при «лица ещё нет» и «потолок `SOCIAL_ACTORS_MAX` не достигнут» — `$push` лица, снова
+   * непрочитано и наверху (`createdAt`), запасной текст и `params` — новые; `_id`, создающее событие, вид, цель и
+   * доставка — только при вставке (`$setOnInsert`): повтор в окне push не ставит. Лицо уже есть или потолок — фильтр
+   * не находит документ, upsert упирается в уникальный ключ окна; этот дубль (и гонка первой вставки, и повтор задачи
+   * — `notifications_event_user_unique`) — один повтор без upsert: добавит лицо в документ победителя или ничего.
    */
   async writeNotices(docs: readonly NotificationDoc[]): Promise<number> {
     if (docs.length === 0) return 0;
-    // условная замена по объекту — по позиции операции; без upsert повторяется после гонки первой вставки
-    const collapses = new Map<
+    // условная запись по объекту — по позиции операции; без upsert повторяется после гонки первой вставки
+    const retries = new Map<
       number,
-      { filter: Filter<NotificationDoc>; set: Partial<NotificationDoc> }
+      {
+        filter: Filter<NotificationDoc>;
+        update: { $set: Partial<NotificationDoc>; $push?: { actors: string } };
+        onAnyDuplicate: boolean;
+      }
     >();
     const operations = docs.map((doc, index): AnyBulkWriteOperation<NotificationDoc> => {
       const { _id, userId, sourceEventId, collapseKey, collapseSeq, ...fields } = doc;
+      const actor = doc.actors?.[0];
+      if (collapseKey !== undefined && actor !== undefined) {
+        const {
+          createdAt,
+          readAt,
+          expireAt,
+          params,
+          title,
+          body,
+          kind,
+          group,
+          target,
+          push,
+          email,
+        } = doc;
+        const filter: Filter<NotificationDoc> = {
+          userId,
+          collapseKey,
+          actors: { $ne: actor },
+          [`actors.${SOCIAL_ACTORS_MAX - 1}`]: { $exists: false },
+        };
+        const update = {
+          $push: { actors: actor },
+          $set: { createdAt, readAt, expireAt, params: params ?? {}, title, body },
+        };
+        retries.set(index, { filter, update, onAnyDuplicate: true });
+        return {
+          updateOne: {
+            filter,
+            update: {
+              ...update,
+              $setOnInsert: { _id, sourceEventId, kind, group, target, push, email },
+            },
+            upsert: true,
+          },
+        };
+      }
       if (collapseKey === undefined) {
         return {
           updateOne: {
@@ -187,7 +240,11 @@ export class NotificationsRepository {
             : { userId, collapseKey, $or: [{ collapseSeq: { $lt: collapseSeq } }, legacy] },
         set: { sourceEventId, ...(collapseSeq === undefined ? {} : { collapseSeq }), ...fields },
       };
-      collapses.set(index, collapse);
+      retries.set(index, {
+        filter: collapse.filter,
+        update: { $set: collapse.set },
+        onAnyDuplicate: false,
+      });
       return {
         updateOne: {
           filter: collapse.filter,
@@ -207,10 +264,15 @@ export class NotificationsRepository {
       if (writeErrors.length === 0 || !writeErrors.every(isRepeatOrStale)) throw error;
       let written = error.result.upsertedCount + error.result.modifiedCount;
       for (const writeError of writeErrors) {
-        const collapse = collapses.get(writeError.index);
-        if (!collapse || !isDuplicateKey(writeError, NOTIFICATIONS_COLLAPSE_UNIQUE_INDEX)) continue;
+        const collapse = retries.get(writeError.index);
+        if (!collapse) continue;
+        if (
+          !collapse.onAnyDuplicate &&
+          !isDuplicateKey(writeError, NOTIFICATIONS_COLLAPSE_UNIQUE_INDEX)
+        )
+          continue;
         try {
-          const retry = await this.notifications.updateOne(collapse.filter, { $set: collapse.set });
+          const retry = await this.notifications.updateOne(collapse.filter, collapse.update);
           written += retry.modifiedCount;
         } catch (retryError) {
           if (!isRepeatOrStale(retryError)) throw retryError;
@@ -338,6 +400,19 @@ export class NotificationsRepository {
     );
   }
 
+  /** Тумблер «Свои» (подресурс, только push, social-p1): `$set push.social`; новый документ — как у «Мероприятий». */
+  async saveSocialSettings(
+    userId: string,
+    social: SocialNotificationSettingsView,
+    now: Date,
+  ): Promise<void> {
+    await this.settings.updateOne(
+      { _id: userId },
+      { $set: { 'push.social': social.push, updatedAt: now }, $setOnInsert: settingsOnInsert() },
+      { upsert: true },
+    );
+  }
+
   // --- push-токены ---
 
   /**
@@ -457,11 +532,14 @@ export class NotificationsRepository {
         { userId, 'push.state': 'sending', 'push.claimId': claimId },
         {
           projection: {
+            kind: 1,
             group: 1,
             title: 1,
             body: 1,
             target: 1,
             createdAt: 1,
+            actors: 1,
+            params: 1,
             'push.limitCharged': 1,
           },
         },

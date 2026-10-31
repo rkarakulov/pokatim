@@ -29,6 +29,8 @@ export function notificationTargetPath(target: unknown): Href | null {
       return '/settings/profile';
     case 'achievement':
       return achievementPath(value.code, value.seasonId ?? null) as Href;
+    case 'rider':
+      return `/riders/${value.publicId}`;
   }
 }
 

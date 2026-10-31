@@ -1,3 +1,4 @@
+import { InviteCode } from '@pokatim/contracts';
 import { describe, expect, it } from 'vitest';
 
 import type { SocialRideFacts } from '../rides';
@@ -5,6 +6,7 @@ import type { ConnectionDoc } from './social.collection';
 import {
   attendanceCheck,
   connectionSources,
+  generateInviteCode,
   rideConnectionDiff,
   SOCIAL_POLICY,
 } from './social.policy';
@@ -26,6 +28,7 @@ const facts = (overrides: Partial<SocialRideFacts> = {}): SocialRideFacts => ({
 describe('SOCIAL_POLICY (K2, K11)', () => {
   it('лимит ручного «В свои» — 30 за 24 ч; окно явки — 7 дней; пороги автоявки', () => {
     expect(SOCIAL_POLICY.manualLimit).toEqual({ limit: 30, windowSec: 86_400 });
+    expect(SOCIAL_POLICY.attendanceLimit).toEqual({ limit: 60, windowSec: 3600 });
     expect(SOCIAL_POLICY.attendanceWindowMs).toBe(7 * DAY);
     expect(SOCIAL_POLICY.autoAttendance).toEqual({
       beforeMs: 30 * 60_000,
@@ -118,5 +121,20 @@ describe('connectionSources', () => {
       ),
     ).toEqual(['ride', 'invite', 'manual']);
     expect(connectionSources(doc({ manualAt: START }))).toEqual(['manual']);
+  });
+});
+
+describe('generateInviteCode (K9, P6)', () => {
+  it('7 символов алфавита без похожих — проходит InviteCode', () => {
+    for (let index = 0; index < 200; index += 1) {
+      const code = generateInviteCode();
+      expect(code).toMatch(/^[2-9A-HJKMNP-Z]{7}$/);
+      expect(InviteCode.parse(code)).toBe(code);
+    }
+  });
+
+  it('символ — по индексу случайного числа в алфавите', () => {
+    expect(generateInviteCode(() => 0)).toBe('2222222');
+    expect(generateInviteCode((max) => max - 1)).toBe('ZZZZZZZ');
   });
 });
