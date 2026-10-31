@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   analyzeAttempt,
+  analyzeSections,
   encodeTrackStream,
   TrackParseError,
   type TrackStreamV1,
@@ -31,6 +32,11 @@ const TIME_LIMIT_MS = 3000 * CI_BUDGET_FACTOR;
  * таймаута потока разбора (30 с), а не бюджет обычного трека. На CI машина в ~8–10 раз медленнее локальной.
  */
 const ADVERSARIAL_TIME_LIMIT_MS = 8000 * CI_BUDGET_FACTOR;
+/**
+ * Участки маршрута (route-rides-05): 20 прогонов движка по всему треку 50 000 точек на маршруте 200 км. Замер
+ * локально ≈ 400 мс; бюджет — 2 × замера (спека: ≤ 2 × замера и < 15 с, до таймаута потока 30 с — запас).
+ */
+const SECTIONS_TIME_LIMIT_MS = 800 * CI_BUDGET_FACTOR;
 const MEMORY_LIMIT_BYTES = 64 * 1024 * 1024 * CI_BUDGET_FACTOR;
 
 /** Маршрут 200 км «змейкой»: 20 × (9,5 км на восток/запад + 0,5 км на север); вершины линии — раз в 100 м. */
@@ -326,5 +332,34 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     expect(match.segment!.offCorridorM).toBe(0);
     expect(elapsedMs).toBeLessThanOrEqual(ADVERSARIAL_TIME_LIMIT_MS);
     process.stdout.write(`стоянка у края коридора: ${Math.round(elapsedMs)} мс\n`);
+  }, 60_000);
+
+  it(`analyzeSections: маршрут 200 км (20 участков) × 50 000 точек ≤ ${SECTIONS_TIME_LIMIT_MS} мс`, () => {
+    const total = polylineLength(route);
+    const sectionPoints = 50_000;
+    const bytes = encodeTrackStream({
+      v: 1,
+      provider: 'garmin',
+      sport: 'road_cycling',
+      hasHeartRate: false,
+      hasPower: false,
+      points: Array.from({ length: sectionPoints }, (_, k) => {
+        const [lon, lat] = at(pointAt(route, (k * total) / (sectionPoints - 1)));
+        return [T0 + k * 1000, lat, lon, null];
+      }),
+    });
+    const startedAt = performance.now();
+    const result = analyzeSections(
+      bytes,
+      'stream',
+      geometry,
+      window,
+      new Date(T0 + 3 * 86_400_000),
+    );
+    const elapsedMs = performance.now() - startedAt;
+    expect(result.items).toHaveLength(20);
+    expect(result.items.every((item) => item.verdict === 'counted')).toBe(true);
+    expect(elapsedMs).toBeLessThanOrEqual(SECTIONS_TIME_LIMIT_MS);
+    process.stdout.write(`analyzeSections 200 км × 50k: ${Math.round(elapsedMs)} мс\n`);
   }, 60_000);
 });

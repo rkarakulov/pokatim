@@ -176,6 +176,11 @@ describe('входы пакета', () => {
       'CORRIDOR_POLICY',
       'CORRIDOR_ENGINE_VERSION',
       'CORRIDOR_REJECTIONS',
+      'analyzeSections',
+      'routeSections',
+      'sectionLine',
+      'ROUTE_SECTIONS_VERSION',
+      'ROUTE_SECTION_POLICY',
     ]) {
       expect(lightEntry, name).not.toHaveProperty(name);
     }
