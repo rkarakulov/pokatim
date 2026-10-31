@@ -1,9 +1,11 @@
+import { createServer, type Server } from 'node:http';
+import { connect, type AddressInfo, type Socket } from 'node:net';
 import { PassThrough } from 'node:stream';
 
 import { DomainError } from '@rkarakulov/api-kit/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { readLimited } from './raw-body';
+import { LINGER_MS, readLimited } from './raw-body';
 
 const ERRORS = { unsupported: 'ROUTE_FORMAT_UNSUPPORTED', tooLarge: 'ROUTE_TOO_LARGE' } as const;
 const TIMEOUTS = { idleMs: 30_000, totalMs: 180_000 };
@@ -102,5 +104,85 @@ describe('readLimited', () => {
     broken.destroy(new Error('aborted'));
     expect(await failed).toBeInstanceOf(Error);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+/** HTTP-сервер: тело — `readLimited` с лимитом 64 КиБ, отказ — 413 с `Connection: close` (как обработчики загрузок). */
+async function limitedServer(): Promise<{ server: Server; port: number; closed: Promise<void> }> {
+  let serverSocketClosed!: () => void;
+  const closed = new Promise<void>((resolve) => (serverSocketClosed = resolve));
+  const server = createServer((request, response) => {
+    readLimited(request, 64 * 1024, ERRORS, TIMEOUTS).then(
+      () => response.writeHead(202).end(),
+      () => response.writeHead(413, { connection: 'close' }).end('{"code":"ROUTE_TOO_LARGE"}'),
+    );
+  });
+  server.once('connection', (socket: Socket) => socket.once('close', serverSocketClosed));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return { server, port: (server.address() as AddressInfo).port, closed };
+}
+
+/**
+ * Клиент на голом сокете: заголовки с `Content-Length`, затем `sent` байт тела; ответ и исход соединения.
+ * `allowHalfOpen` — клиент не закрывается на FIN сервера (молчит, держит соединение).
+ */
+function rawUpload(port: number, declared: number, sent: number, allowHalfOpen = false) {
+  const socket = connect({ port, host: '127.0.0.1', allowHalfOpen });
+  const received: Buffer[] = [];
+  socket.on('data', (chunk: Buffer) => received.push(chunk));
+  // первая порция ответа — по событию сокета, без `vi.waitFor`: с фейковыми таймерами он сам двигает часы
+  const responded = new Promise<void>((resolve) => socket.once('data', () => resolve()));
+  const closed = new Promise<{ error: string | null }>((resolve) => {
+    let error: string | null = null;
+    socket.on(
+      'error',
+      (failure: NodeJS.ErrnoException) => (error = failure.code ?? failure.message),
+    );
+    socket.on('close', () => resolve({ error }));
+  });
+  socket.write(
+    `POST /upload HTTP/1.1\r\nHost: x\r\nContent-Type: application/octet-stream\r\nContent-Length: ${declared}\r\n\r\n`,
+  );
+  socket.write(Buffer.alloc(sent, 0x20));
+  return {
+    socket,
+    response: () => Buffer.concat(received).toString('latin1'),
+    responded,
+    closed,
+  };
+}
+
+describe('readLimited: закрытие после отказа (lingering close)', () => {
+  let target: Awaited<ReturnType<typeof limitedServer>>;
+  beforeEach(async () => {
+    target = await limitedServer();
+  });
+  afterEach(async () => {
+    vi.useRealTimers();
+    target.server.closeAllConnections();
+    await new Promise<void>((resolve) => target.server.close(() => resolve()));
+  });
+
+  it('хвост тела ещё идёт после 413 — клиент получает ответ целиком, сокет закрыт без RST', async () => {
+    const size = 64 * 1024 * 1024;
+    const upload = rawUpload(target.port, size, size);
+    expect(await upload.closed).toEqual({ error: null });
+    expect(upload.response()).toMatch(/^HTTP\/1\.1 413 /);
+    expect(upload.response()).toMatch(/\r\nconnection: close\r\n/i);
+    expect(upload.response()).toContain('ROUTE_TOO_LARGE');
+  });
+
+  it('клиент не дослал тело и молчит — сервер закрывает сокет через LINGER_MS, не раньше', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const upload = rawUpload(target.port, 1024 * 1024, 128 * 1024, true);
+    let closed = false;
+    void target.closed.then(() => (closed = true));
+    await upload.responded;
+    expect(upload.response()).toMatch(/^HTTP\/1\.1 413 /);
+    await vi.advanceTimersByTimeAsync(LINGER_MS - 100);
+    expect(closed).toBe(false);
+    await vi.advanceTimersByTimeAsync(100);
+    await target.closed;
+    upload.socket.destroy();
   });
 });

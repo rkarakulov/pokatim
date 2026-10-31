@@ -13,6 +13,7 @@ import {
   verifiedUser,
 } from '../../../test/panel';
 import { PanelInvitationsRepository } from './panel-invitations.repository';
+import { waitUntil } from '../../../test/wait';
 
 /**
  * Гонки приглашений (AC7, §7, RC-15). Два вида ворот:
@@ -235,7 +236,7 @@ describe('параллельные операции', () => {
       acceptInvitation(h, { token: s.token, email: INVITEE }),
       acceptInvitation(h, { token: s.token, email: INVITEE }),
     ]);
-    await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    await waitUntil(() => expect(spy).toHaveBeenCalledTimes(2));
     g.open();
 
     const statuses = (await both).map((res) => res.status).sort();
@@ -262,7 +263,7 @@ describe('параллельные операции', () => {
       panelCall(h, adminToken, 'POST', INVITATIONS, body),
       panelCall(h, adminToken, 'POST', INVITATIONS, body),
     ]);
-    await vi.waitFor(() => expect(closeSpy).toHaveBeenCalledTimes(2));
+    await waitUntil(() => expect(closeSpy).toHaveBeenCalledTimes(2));
     g.open();
 
     expect((await both).map((res) => res.status)).toEqual([201, 201]);
