@@ -29,6 +29,6 @@ export class AchievementsController {
     @Body(new ZodValidationPipe(MarkAchievementsSeenRequest, FieldErrorCode))
     body: MarkAchievementsSeenRequest,
   ): Promise<void> {
-    await this.achievements.markSeen(user.userId, body.codes);
+    await this.achievements.markSeen(user.userId, body);
   }
 }

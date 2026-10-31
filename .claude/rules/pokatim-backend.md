@@ -328,14 +328,16 @@ paths:
 
 ## Достижения (`achievements`, ADR-0020 Proposed)
 
-- Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides`
-  только через `index.ts`; на `achievements` ссылаются только `AppModule` (`AchievementsModule`),
+- Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides,
+  standings` только через `index.ts` (`standings` — порт `RIDER_SEASON_STANDINGS`, `StandingsCoreModule` импортирует
+  только `AchievementsModule`; `AchievementsReadModule` и `sharing` его не получают); на `achievements` ссылаются только `AppModule` (`AchievementsModule`),
   `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания) и `sharing` (`AchievementsReadModule`, порт
   `ACHIEVEMENTS_FOR_SHARING`). Источники о нём не знают — циклов нет.
   `AchievementsCoreModule` — `AchievementsRepository` + `AchievementErasure` (модулей не импортирует);
   `AchievementsReadModule` — `AchievementFactsReader` (факты портов + правила, только чтение) и порт карточки
   (`ResultsCoreModule`, `RidesCoreModule`, `RouteRidesCoreModule`, `AchievementsCoreModule`);
-  `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `AchievementsReadModule`.
+  `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `StandingsCoreModule`,
+  `AchievementsReadModule`.
   Worker-модуля, очередей, outbox и регламента нет.
 - Факты — только порты владельцев: `RIDER_RESULTS` (`publishedRows`, `racesOf` — как у `riders`), `RIDER_ROUTE_RIDES`
   (`route-rides`: `passedOf` — `passed` + `ActivitySource.liveActivities` + `RouteRideRoutes.rideableTitles`, та же
@@ -343,8 +345,8 @@ paths:
   условия R8 в `RidesRepository.pastFactsOf`, порядок ↑), `RIDER_PROFILES` (публичность). Пределы портов — 2000 строк
   и лог `achievements.{rides,route_rides}_truncated`. Предикат «в зачёте» — общий `isRankedRow` (`results/index.ts`,
   RC-9: им же считает `riders.policy.summarize`). Копий условий и второго расчёта мест в `achievements` нет.
-- Правила и план — чистые функции `achievements.policy.ts`: `ACHIEVEMENT_RULES` (`satisfies Record<AchievementCode,
-  …>` — новый код без правила не скомпилируется), `evaluateAchievements` (одна сортировка фактов: по времени ↑, при
+- Правила и план — чистые функции `achievements.policy.ts`: `ACHIEVEMENT_RULES` (`satisfies Record<FactAchievementCode,
+  …>` — новый несезонный код без правила не скомпилируется; сезонные — `SEASONAL_RULES`), `evaluateAchievements` (одна сортировка фактов: по времени ↑, при
   равенстве — id ↑ → `earned` + `progress`), `earnedAchievements` (= `.earned`), `raceAchievements` (публичный список —
   те же правила, с уровнем `races_5`), `reconcilePlan`, `sortForList` (факт ↓, равенство — каталог ↓),
   `ACHIEVEMENTS_POLICY` (лимиты). Уровни: пороги — только `ACHIEVEMENT_LEVEL_TARGETS` из контрактов (своих констант
@@ -360,7 +362,21 @@ paths:
   `progress` — из той же `Evaluation`). Лог `achievements.sync uid first granted revoked restored refreshed` — только
   если план не пуст. `POST /v1/achievements/seen` — лимит `achievements-seen:<uid>` 120/ч, `updateMany` pipeline своих
   видимых с непоказанным уровнем (`seenLevel = max(seenLevel, level)` из документа), сверку не запускает. Публично — `AchievementsPublicController` (`riders/:publicId/achievements`, `PublicReadGuard`)
-  → `publicList`: `findPublic` (нет — 404) → `raceAchievements` → без записи.
+  → `publicList`: `findPublic` (нет — 404) → `raceAchievements` + сезонные по `final` → без записи.
+- Сезонные (achievements-seasonal, ADR-0020 «Дополнение: сезонные»): факты — порт `RIDER_SEASON_STANDINGS.outcomesOf
+  (userId, alsoSeasonIds, now)` (`standings/rider-season-standings.ts`, `StandingsCoreModule`): `SEASON_RACES
+  .finishedSeasons(now)` → одна snapshot-сессия `rowsOfUserIn` + `headersOf` (нужные сезоны — строк ∪ сохранённых
+  выдач) → `SEASON_RACES.awaitingProtocol` и `StandingsSource.load(seasonIds)`; `final` ⇔ нет гонки с коридором без
+  протокола (RC-S2) и отпечаток снимка = источнику, иначе `pending`. `SeasonRaces.protocolRaces(seasonIds?)` и
+  `StandingsSource.load(seasonIds?)` принимают набор сезонов (регламент — без аргумента, сводка панели — `[id]`).
+  Политика: `FACT_ACHIEVEMENT_CODES`/`FactAchievementCode` (несезонные — `ACHIEVEMENT_RULES`, `evaluateAchievements`,
+  `reconcilePlan` обходят только их, RC-S7), `SEASONAL_RULES` (`placedRaces ≥ 1` у «Чемпиона» и «Призёра», RC-S1;
+  `≥ SEASON_REGULAR_MIN_RACES` ячеек `placed` в одной таблице, RC-S3), `seasonalAchievements` (`earned` по ключу
+  `code:seasonId`, `factAt = endsBefore − 1 мс`; `settled` — `final`-сезоны), `seasonalPlan` (insert/restore/revoke
+  только по `settled`; `refresh` нет). `sync`: оба плана → маркер после обоих → ответ: сезонные — видимые ∩
+  заработанные (`final`), в `pending` — видимая остаётся с названием из исхода. Лог — счётчики `seasonal_*`. Карточка:
+  сезонный код → `cardFacts` `null` (409), `ACHIEVEMENT_BADGE_ICONS` — `Record<FactAchievementCode, …>`. Сбой порта сезонов — `seasonOutcomes` → `[]`
+  (лог `achievements.seasons_unavailable`): сезонные не трогаются и не отдаются, остальной список — как обычно.
 
 ## Карточки для сторис (`sharing`, story-cards, ADR-0018)
 
@@ -463,7 +479,8 @@ RC-A1, ADR-0019).
 - Модуль `standings` (`results ──► standings`): `StandingsCoreModule` (репозиторий снимка, `StandingsSource`,
   `StandingsRecalc`; imports `RacesCoreModule`, `ResultsCoreModule`), `StandingsModule` (API: + `IdentityModule`,
   `PanelModule`, `ProfileCoreModule`), `StandingsWorkerModule` (`WorkerModule`). Порты — только через `index.ts`:
-  `SEASON_RACES` (`races`: гонки с протоколом, `seasonExists`, `seesAllRaces`), `RESULTS_FOR_STANDINGS` (`results`:
+  `SEASON_RACES` (`races`: гонки с протоколом, `seasonExists`, `seesAllRaces`, `finishedSeasons`, `awaitingProtocol`),
+  `RESULTS_FOR_STANDINGS` (`results`:
   `currentRevisions` одним `aggregate`, `protocolRows` ревизии), `RIDER_NAMES` (`profile`). `races`/`results` о
   `standings` не знают.
 - Правила зачёта — чистые функции `standings.policy.ts` (`pointsForPlace`, `racesCounted`, `selectCounted`,

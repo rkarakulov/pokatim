@@ -11,19 +11,20 @@ import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { CardPanel } from '@/features/sharing/card-panel';
 
-import { achievementTitle } from '../achievement-catalog';
+import { achievementTitle, catalogEntry } from '../achievement-catalog';
 import { achievementPath, achievementStorySource } from './achievement-story';
 
 /**
  * Карточка своего достижения для сторис (`/achievements/story/<code>`, внутри `Stack.Protected`): общая панель
  * карточки (`CardPanel`, рендер сервера ADR-0018). Не получено, отозвано (409) и незнакомый код — «Карточки нет» и «К
- * достижению». Права — только сервер.
+ * достижению». Сезонный код по прямому адресу — «Карточки нет» без запроса, переход — в профиль (S7). Права — только сервер.
  */
 export function AchievementStoryScreen({ code }: { code: string }) {
   const theme = useTheme();
   const router = useRouter();
   const parsed = AchievementCode.safeParse(code);
-  const valid = parsed.success ? parsed.data : null;
+  // сезонные — без карточки (S7): без запроса, назад — в профиль
+  const valid = parsed.success && catalogEntry(parsed.data).storyCard ? parsed.data : null;
   const source = useMemo(() => (valid ? achievementStorySource(valid) : null), [valid]);
   // «К достижению» — к экрану этого достижения в стеке (как «К райду»); незнакомый код — в профиль
   const back = () =>

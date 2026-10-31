@@ -402,7 +402,14 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   (метка текстом, роль `text.secondary` — уровень цветом не кодируется), `isLevelUp` (серебро/золото — «Новый
   уровень»), `achievementA11y` — с уровнем. Незнакомый код (`'unknown'`, RC-8) — `knownItems`
   отбрасывает везде (список, вспышка, публичный блок); «Поделиться» — карточка достижения у любого известного кода;
-  незнакомый вид объекта — без «Сторис результата» (`shareRaceId`). Иконка кода — зеркало в
+  незнакомый вид объекта — без «Сторис результата» (`shareRaceId`). Сезонные (achievements-seasonal): флаги каталога
+  `storyCard` (карточка для сторис; у сезонных `false` — «Поделиться» нет, прямой адрес карточки — «Карточки нет» без
+  запроса) и `seasonal`; `public: true`; условие «Сезон в зачёте» — `{count}` из `SEASON_REGULAR_MIN_RACES` (копии
+  нет). Ключ элемента — `achievementKey` (`code:seasonId` у `object.kind === 'season'`, иначе `code`): ключи React,
+  поиск на экране, оптимистичная пометка; `flashKey` = `achievementKey:level`; адрес `seen` — `seenTarget`
+  (`{ code, seasonId | null }`); путь экрана — `achievementItemPath` (`/achievements/<code>`, у сезонных
+  `?season=<id>`; `[code].tsx` читает `season`). Объект — «Сезон «…»», кнопка «К сезону» (`achievements.toSeason`) →
+  `/seasons/<id>`: на экране `push`, во вспышке `replace`. Голый `code` в ключах и `seen` — запрещён. Иконка кода — зеркало в
   `apps/api/.../achievement-card.icons.ts` (сменил — поменяй там). Дата — только
   `factDate` (день по Минску, RC-7), всегда с годом (`factDateText`).
 - Вспышка: хост `AchievementFlashHost` рядом со `Stack` корневого layout с тем же `ready`, что у push; маршрут
@@ -416,15 +423,15 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   Маршруты `achievements/*` — за `useSettingsShell` (как `/profile`): до восстановления сессии — скелетон или ошибка
   с повтором `hydrate()`, запроса достижений нет. Смоук без сессии — гард ведёт гостя на `/welcome`.
   Показанное помечается сразу (`useMarkAchievementsSeen`, оптимистично `{ ...list, items }` — `progress` не теряется,
-  откат — только своих кодов; `POST seen` — по коду). Поверх
+  откат — только своих адресов; `POST seen` — по `seenTarget`: несезонные — `codes`, сезонные — `seasonal`). Поверх
   `/achievements`, `/races/story/`, ссылок писем, `devices/return`, удаления аккаунта — не открывается. Ошибка запроса
   хоста — тишина. «Поделиться» — `replace(achievementStoryPath(code))`.
 - Значок «Эмаль» — `achievement-badge.tsx` (проп `level`: число — порог уровня; роли `surface.default`, `text.primary`, `text.accent`, `action.*`;
   диаметр — `layout.badgeGrid` / `layout.badgeHero`, пропорции — `badgeShape` из `@pokatim/design-tokens`; follow-up
   `size.badge*` в базе). Появление на вспышке — `Animated` только при `useReducedMotion() === false`; пока ответ
   неизвестен — значок скрыт (без мигания), последний ответ процесса кэшируется.
-- Блок `AchievementsBlock` — `/profile` (все, нажатие → `/achievements/<code>`) и `/riders/[id]` (без перехода,
-  `publicOnly` — только гоночные, `publicItems`, защита от регресса API): пусто
+- Блок `AchievementsBlock` — `/profile` (все, нажатие → `achievementItemPath`) и `/riders/[id]` (без перехода,
+  `publicOnly` — гоночные и сезонные, `publicItems`, защита от регресса API): пусто
   без ошибки — блока нет; ошибка — `TabFailure` блока, экран не ломается; pull-to-refresh экранов перезапрашивает
   блок.
 - «Следующие цели» — `AchievementProgressBlock` сразу под `AchievementsBlock` в `/profile`, тот же `useAchievements()`

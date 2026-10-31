@@ -1,13 +1,16 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { AchievementCode } from '@pokatim/contracts';
-
 import { RIDER_RESULTS, type RiderResults } from '../results';
 import { RIDER_RIDES, type RiderRides } from '../rides';
 import { RIDER_ROUTE_RIDES, type RiderRouteRides } from '../route-rides';
-import { type Earned, type Evaluation, evaluateAchievements } from './achievements.policy';
+import {
+  type Earned,
+  type Evaluation,
+  evaluateAchievements,
+  type FactAchievementCode,
+} from './achievements.policy';
 
 /** Достижение с названием объекта, готовое к ответу. */
-export type Titled = Earned & { code: AchievementCode; title: string };
+export type Titled = Earned & { code: FactAchievementCode; title: string };
 
 /**
  * Факты достижений райдера — порты владельцев (`RIDER_RESULTS`, `RIDER_ROUTE_RIDES`, `RIDER_RIDES`) и правила
@@ -35,7 +38,7 @@ export class AchievementFactsReader {
   }
 
   /** Названия объектов: гонки — `racesOf` (≤ 4 id); нет гонки в карте — код не в ответе (запись не трогается). */
-  async titled(earned: Map<AchievementCode, Earned>, userId: string): Promise<Titled[]> {
+  async titled(earned: Map<FactAchievementCode, Earned>, userId: string): Promise<Titled[]> {
     const raceIds = [...earned.values()]
       .filter((item) => item.object.kind === 'race')
       .map((item) => item.object.id);

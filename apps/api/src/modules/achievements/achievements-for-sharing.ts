@@ -1,12 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { type AchievementCode, minskToday } from '@pokatim/contracts';
+import { type AchievementCode, isSeasonalCode, minskToday } from '@pokatim/contracts';
 
 import { AchievementFactsReader } from './achievement-facts.reader';
 import { levelName } from './achievements.policy';
 import type { AchievementCardFacts, AchievementsForSharing } from './achievements-for-sharing.port';
 import { AchievementsRepository } from './achievements.repository';
 
-/** Реализация `ACHIEVEMENTS_FOR_SHARING`: факты читателя ∩ не отозванная выдача; без записей. */
+/**
+ * Реализация `ACHIEVEMENTS_FOR_SHARING`: факты читателя ∩ не отозванная выдача; без записей. У сезонных карточки нет
+ * (S7) — `null` (409).
+ */
 @Injectable()
 export class AchievementsSharing implements AchievementsForSharing {
   constructor(
@@ -15,6 +18,7 @@ export class AchievementsSharing implements AchievementsForSharing {
   ) {}
 
   async cardFacts(userId: string, code: AchievementCode): Promise<AchievementCardFacts | null> {
+    if (isSeasonalCode(code)) return null;
     const [{ earned }, grants] = await Promise.all([
       this.facts.evaluate(userId),
       this.repository.listOf(userId),

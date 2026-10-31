@@ -6,12 +6,23 @@ import {
   type AchievementLevel,
   type AchievementObjectKind,
   isLeveledCode,
+  isSeasonalCode,
   type LeveledAchievementCode,
+  SEASON_REGULAR_MIN_RACES,
+  SEASONAL_ACHIEVEMENT_CODES,
+  type SeasonalAchievementCode,
 } from '@pokatim/contracts';
 
 import { isRankedRow, type RiderProtocolRow } from '../results';
 import type { RiderRideFact } from '../rides';
 import type { RiderRouteRideFact } from '../route-rides';
+import type { RiderSeasonOutcome, RiderSeasonRow } from '../standings';
+
+/** Несезонные коды — по фактам райдера (RC-S7); сезонные сверяет `seasonalPlan` по `(code, seasonId)`. */
+export type FactAchievementCode = Exclude<AchievementCode, SeasonalAchievementCode>;
+export const FACT_ACHIEVEMENT_CODES = ACHIEVEMENT_CODES.filter(
+  (code): code is FactAchievementCode => !isSeasonalCode(code),
+);
 
 /** Лимиты частоты (RC-12): сверка на чтении и отметка «показано». */
 export const ACHIEVEMENTS_POLICY = {
@@ -27,7 +38,7 @@ export interface AchievementFacts {
 }
 
 export interface AchievementObjectRef {
-  kind: AchievementObjectKind;
+  kind: Exclude<AchievementObjectKind, 'season'>;
   id: string;
 }
 
@@ -55,7 +66,7 @@ export interface ProgressItem {
 
 /** Результат правил над фактами: заработанные (порядок каталога) и прогресс (порядок каталога). */
 export interface Evaluation {
-  earned: Map<AchievementCode, Earned>;
+  earned: Map<FactAchievementCode, Earned>;
   progress: ProgressItem[];
 }
 
@@ -168,7 +179,7 @@ function leveled<T>(
   };
 }
 
-/** Каталог правил (A1): исчерпывающий — новый код без правила — ошибка типов. */
+/** Каталог правил (A1): исчерпывающий по несезонным — новый код без правила — ошибка типов. */
 export const ACHIEVEMENT_RULES = {
   race_first_finish: (f) => raceEarned(f.races[0]),
   race_podium: (f) => raceEarned(f.races.find((row) => row.place <= PODIUM_MAX)),
@@ -180,12 +191,12 @@ export const ACHIEVEMENT_RULES = {
   ride_organizer: (f) =>
     rideEarned(f.rides.find((ride) => ride.organizer && ride.goingCount >= ORGANIZER_MIN_GOING)),
   rides_10: leveled('rides_10', LEVELED_FACTS.rides_10, rideEarned),
-} satisfies Record<AchievementCode, (facts: Sorted) => Earned | null>;
+} satisfies Record<FactAchievementCode, (facts: Sorted) => Earned | null>;
 
 /** Прогресс к следующему уровню (L4): счёт 0 и золото — без строки; порядок каталога. */
 function progressOf(sorted: Sorted): ProgressItem[] {
   const progress: ProgressItem[] = [];
-  for (const code of ACHIEVEMENT_CODES) {
+  for (const code of FACT_ACHIEVEMENT_CODES) {
     if (!isLeveledCode(code)) continue;
     const current = LEVELED_FACTS[code](sorted).length;
     const targets = ACHIEVEMENT_LEVEL_TARGETS[code];
@@ -199,8 +210,8 @@ function progressOf(sorted: Sorted): ProgressItem[] {
 /** Заработанные достижения и прогресс — над одной сортировкой фактов. Чистая функция. */
 export function evaluateAchievements(facts: AchievementFacts): Evaluation {
   const sorted = sortFacts(facts);
-  const earned = new Map<AchievementCode, Earned>();
-  for (const code of ACHIEVEMENT_CODES) {
+  const earned = new Map<FactAchievementCode, Earned>();
+  for (const code of FACT_ACHIEVEMENT_CODES) {
     const result = ACHIEVEMENT_RULES[code](sorted);
     if (result) earned.set(code, result);
   }
@@ -208,12 +219,14 @@ export function evaluateAchievements(facts: AchievementFacts): Evaluation {
 }
 
 /** Заработанные достижения райдера (порядок ключей — порядок каталога). Чистая функция. */
-export function earnedAchievements(facts: AchievementFacts): Map<AchievementCode, Earned> {
+export function earnedAchievements(facts: AchievementFacts): Map<FactAchievementCode, Earned> {
   return evaluateAchievements(facts).earned;
 }
 
 /** Публичный список (A7): те же правила, только гоночные. */
-export function raceAchievements(rows: readonly RiderProtocolRow[]): Map<AchievementCode, Earned> {
+export function raceAchievements(
+  rows: readonly RiderProtocolRow[],
+): Map<FactAchievementCode, Earned> {
   const earned = earnedAchievements({ races: rows, routes: [], rides: [] });
   for (const [code, item] of earned) if (item.object.kind !== 'race') earned.delete(code);
   return earned;
@@ -221,7 +234,7 @@ export function raceAchievements(rows: readonly RiderProtocolRow[]): Map<Achieve
 
 /** Сохранённая выдача (поля сверки); `level`/`seenLevel` нет у документов v1 — ≡ 1. */
 export interface StoredGrant {
-  code: AchievementCode;
+  code: FactAchievementCode;
   object: AchievementObjectRef;
   factAt: Date;
   seenAt: Date | null;
@@ -242,10 +255,10 @@ export function isSeen(
 }
 
 export type ReconcileStep =
-  | { type: 'insert'; code: AchievementCode; earned: Earned; seenAt: Date | null }
-  | { type: 'restore'; code: AchievementCode; earned: Earned }
-  | { type: 'refresh'; code: AchievementCode; earned: Earned }
-  | { type: 'revoke'; code: AchievementCode };
+  | { type: 'insert'; code: FactAchievementCode; earned: Earned; seenAt: Date | null }
+  | { type: 'restore'; code: FactAchievementCode; earned: Earned }
+  | { type: 'refresh'; code: FactAchievementCode; earned: Earned }
+  | { type: 'revoke'; code: FactAchievementCode };
 
 const sameFact = (grant: StoredGrant, earned: Earned) =>
   grant.object.kind === earned.object.kind &&
@@ -259,13 +272,13 @@ const sameFact = (grant: StoredGrant, earned: Earned) =>
  */
 export function reconcilePlan(
   stored: readonly StoredGrant[],
-  earned: ReadonlyMap<AchievementCode, Earned>,
+  earned: ReadonlyMap<FactAchievementCode, Earned>,
   first: boolean,
   now: Date,
 ): ReconcileStep[] {
   const byCode = new Map(stored.map((grant) => [grant.code, grant]));
   const plan: ReconcileStep[] = [];
-  for (const code of ACHIEVEMENT_CODES) {
+  for (const code of FACT_ACHIEVEMENT_CODES) {
     const grant = byCode.get(code);
     const fact = earned.get(code);
     if (fact && !grant)
@@ -274,6 +287,95 @@ export function reconcilePlan(
     else if (fact && grant && (!sameFact(grant, fact) || storedRank(grant) !== (fact.level ?? 1)))
       plan.push({ type: 'refresh', code, earned: fact });
     else if (!fact && grant && grant.revokedAt === null) plan.push({ type: 'revoke', code });
+  }
+  return plan;
+}
+
+/** Правила сезонных (S1): по строкам райдера одного `final`-сезона; «Чемпион» и «Призёр» — с финишем (RC-S1). */
+export const SEASONAL_RULES = {
+  season_regular: (rows) => rows.some((row) => row.placedRaces >= SEASON_REGULAR_MIN_RACES),
+  season_podium: (rows) => rows.some((row) => row.placedRaces >= 1 && row.place <= PODIUM_MAX),
+  season_champion: (rows) => rows.some((row) => row.placedRaces >= 1 && row.place === 1),
+} satisfies Record<SeasonalAchievementCode, (rows: readonly RiderSeasonRow[]) => boolean>;
+
+/** Ключ сезонной выдачи (S3): код + сезон. */
+export interface SeasonalKey {
+  code: SeasonalAchievementCode;
+  seasonId: string;
+}
+export const seasonalKey = (key: SeasonalKey) => `${key.code}:${key.seasonId}`;
+
+/** Заработанное сезонное: дата факта — последний миг сезона (`endsBefore − 1 мс`, RC-S6), название — сезона. */
+export interface SeasonalEarned extends SeasonalKey {
+  factAt: Date;
+  title: string;
+}
+
+/**
+ * Сезонные (S1–S3): заработанные по `final`-сезонам (порядок — сезоны порта, внутри — каталог); `settled` — сезоны, где
+ * сверка вправе менять выдачи (`final`). Чистая функция.
+ */
+export function seasonalAchievements(outcomes: readonly RiderSeasonOutcome[]): {
+  earned: Map<string, SeasonalEarned>;
+  settled: ReadonlySet<string>;
+} {
+  const earned = new Map<string, SeasonalEarned>();
+  const settled = new Set<string>();
+  for (const outcome of outcomes) {
+    if (outcome.status !== 'final') continue;
+    settled.add(outcome.seasonId);
+    const factAt = new Date(outcome.endsBefore.getTime() - 1);
+    for (const code of SEASONAL_ACHIEVEMENT_CODES) {
+      if (!SEASONAL_RULES[code](outcome.rows)) continue;
+      const item = { code, seasonId: outcome.seasonId, factAt, title: outcome.title };
+      earned.set(seasonalKey(item), item);
+    }
+  }
+  return { earned, settled };
+}
+
+/** Сохранённая сезонная выдача (поля сверки). */
+export interface StoredSeasonGrant extends SeasonalKey {
+  factAt: Date;
+  seenAt: Date | null;
+  revokedAt: Date | null;
+}
+
+export type SeasonalStep =
+  | { type: 'insert'; earned: SeasonalEarned; seenAt: Date | null }
+  | { type: 'restore'; key: SeasonalKey }
+  | { type: 'revoke'; key: SeasonalKey };
+
+const keyOrder = (a: SeasonalKey, b: SeasonalKey) =>
+  SEASONAL_ACHIEVEMENT_CODES.indexOf(a.code) - SEASONAL_ACHIEVEMENT_CODES.indexOf(b.code) ||
+  (a.seasonId < b.seasonId ? -1 : a.seasonId > b.seasonId ? 1 : 0);
+
+/**
+ * План сезонной сверки (S2–S5): только ключи `settled`-сезонов — новое — вставка (первая сверка — просмотренной, A3),
+ * вернувшееся — восстановление (`seenAt` прежний, S4), пропавшее — отзыв видимой; сезоны в `pending` — ни вставки, ни
+ * отзыва. `refresh` нет: объект — сам сезон, дата завершённого сезона не меняется. Порядок — каталог, затем сезон.
+ * Чистая функция.
+ */
+export function seasonalPlan(
+  stored: readonly StoredSeasonGrant[],
+  earned: ReadonlyMap<string, SeasonalEarned>,
+  settled: ReadonlySet<string>,
+  first: boolean,
+  now: Date,
+): SeasonalStep[] {
+  const byKey = new Map(stored.map((grant) => [seasonalKey(grant), grant]));
+  const keys = new Map<string, SeasonalKey>();
+  for (const item of [...stored, ...earned.values()]) {
+    if (settled.has(item.seasonId))
+      keys.set(seasonalKey(item), { code: item.code, seasonId: item.seasonId });
+  }
+  const plan: SeasonalStep[] = [];
+  for (const [id, key] of [...keys].sort(([, a], [, b]) => keyOrder(a, b))) {
+    const grant = byKey.get(id);
+    const fact = earned.get(id);
+    if (fact && !grant) plan.push({ type: 'insert', earned: fact, seenAt: first ? now : null });
+    else if (fact && grant?.revokedAt) plan.push({ type: 'restore', key });
+    else if (!fact && grant && grant.revokedAt === null) plan.push({ type: 'revoke', key });
   }
   return plan;
 }

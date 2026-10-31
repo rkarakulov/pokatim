@@ -4,7 +4,7 @@ import type { PanelPrincipal } from '../panel';
 
 /**
  * Порт `races` для модуля `standings` (race-results-08, через `modules/races/index.ts`): сезоны и гонки сезона с
- * опубликованным протоколом, видимость гонок сотруднику. `standings` коллекций `races` не читает.
+ * опубликованным протоколом, завершённые сезоны и «ждут протокола» (achievements-seasonal), видимость гонок сотруднику. `standings` коллекций `races` не читает.
  */
 export const SEASON_RACES = Symbol('SEASON_RACES');
 
@@ -21,12 +21,27 @@ export interface SeasonRaceForStandings {
   windowEndsAt: Date;
 }
 
+/** Завершённый сезон (последний день по Минску прошёл: `endsBefore ≤ now`). */
+export interface FinishedSeason {
+  id: string;
+  name: string;
+  endsOn: string;
+  endsBefore: Date;
+}
+
 export interface SeasonRaces {
   /**
-   * Опубликованные гонки с протоколом (`protocolPublishedAt` — дата) сезона `seasonId`, без него — всех сезонов
+   * Опубликованные гонки с протоколом (`protocolPublishedAt` — дата) сезонов `seasonIds`, без них — всех сезонов
    * (индекс `races_protocol_idx`); порядок `(seasonId, windowEndsAt, _id)`.
    */
-  protocolRaces(seasonId?: string): Promise<SeasonRaceForStandings[]>;
+  protocolRaces(seasonIds?: readonly string[]): Promise<SeasonRaceForStandings[]>;
+  /** Завершённые к `now` сезоны (`endsBefore ≤ now`; их десятки). */
+  finishedSeasons(now: Date): Promise<FinishedSeason[]>;
+  /**
+   * Сезоны из `seasonIds`, где есть опубликованная гонка с коридором без протокола (итог сезона ещё не полон, RC-S2);
+   * отменённые и анонсы (`corridor: null`) не считаются.
+   */
+  awaitingProtocol(seasonIds: readonly string[]): Promise<Set<string>>;
   /** Сезон существует (видимость — как `GET /v1/seasons/:id`, RC-7). */
   seasonExists(seasonId: string): Promise<boolean>;
   /** Сотрудник видит все гонки (не `ownScope` организатора, RC-8). */

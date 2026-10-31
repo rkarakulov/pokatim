@@ -456,6 +456,16 @@ paths:
   необязательные: у документов v1 нет — ≡ 1 (без миграции и бэкфилла, индексы прежние). «Показано» — `updateMany`
   update pipeline одной условной операцией: фильтр `$expr` (`seenAt` нет или `seenLevel < level`, `$ifNull` → 1),
   `$set` `seenAt: $ifNull(seenAt, now)`, `seenLevel: $max(seenLevel, level)` — уровень из документа, монотонно.
+- Сезонные (achievements-seasonal, HG-S1): `achievement_season_grants { _id (uuidv7), userId, code, seasonId, factAt
+  (endsBefore − 1 мс), grantedAt, seenAt, revokedAt, updatedAt }` — единственный писатель тот же
+  `AchievementsRepository`; миграция `0043_achievements_seasonal` (только expand): уникальный
+  `achievement_season_grants_user_code_season_unique { userId, code, seasonId }` (префикс — список, «показано»,
+  стирание). Названия сезона и места нет. `achievement_grants` и его индекс не меняются, поля `seasonId` в нём нет.
+  Вставка (дубль — `isDuplicateKey`), отзыв (`revokedAt: null`), восстановление (`revokedAt: { $ne: null }`, `seenAt`
+  не трогается). «Показано» — две независимые операции: pipeline по `achievement_grants` (`codes`) и `updateMany
+  { userId, revokedAt: null, seenAt: null, $or: [{ code, seasonId }] }` (`seasonal`). Маркер `achievement_syncs` общий,
+  ставится после выдач обеих коллекций. Стирание (шаг `achievements`) — `deleteMany({ userId })` обеих коллекций, затем
+  маркер; счётчик `seasonGrants`.
 
 ## Билеты (event-tickets, ADR-0023)
 

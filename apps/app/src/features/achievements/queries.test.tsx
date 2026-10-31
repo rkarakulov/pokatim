@@ -43,8 +43,9 @@ describe('useMarkAchievementsSeen — оптимистичная пометка 
     const { client, wrapper } = setup();
     const { result } = await renderHook(() => useMarkAchievementsSeen(), { wrapper });
     await act(async () => {
-      await result.current.mutateAsync(['races_5']);
+      await result.current.mutateAsync([{ code: 'races_5', seasonId: null }]);
     });
+    expect(api.markAchievementsSeen).toHaveBeenCalledWith(expect.any(String), ['races_5'], []);
     expect(client.getQueryData(ACHIEVEMENTS_KEY)).toEqual({
       items: [{ ...list.items[0], seen: true }],
       progress: list.progress,
@@ -56,8 +57,58 @@ describe('useMarkAchievementsSeen — оптимистичная пометка 
     const { client, wrapper } = setup();
     const { result } = await renderHook(() => useMarkAchievementsSeen(), { wrapper });
     await act(async () => {
-      await result.current.mutateAsync(['races_5']).catch(() => undefined);
+      await result.current
+        .mutateAsync([{ code: 'races_5', seasonId: null }])
+        .catch(() => undefined);
     });
     expect(client.getQueryData(ACHIEVEMENTS_KEY)).toEqual(list);
+  });
+});
+
+describe('useMarkAchievementsSeen — сезонные по адресу (achievements-seasonal)', () => {
+  const A = '0190a6f4-0000-7000-8000-000000000401';
+  const B = '0190a6f4-0000-7000-8000-000000000402';
+  const season = (seasonId: string) => ({
+    code: 'season_podium' as const,
+    object: { kind: 'season' as const, id: seasonId, title: 'Сезон' },
+    factDate: '2025-10-31',
+    level: null,
+    seen: false,
+  });
+
+  it('помечает только свой сезон; запрос — `seasonal` с сезоном; прогресс сохраняется', async () => {
+    jest.mocked(api.markAchievementsSeen).mockResolvedValue(undefined);
+    const { client, wrapper } = setup();
+    client.setQueryData(ACHIEVEMENTS_KEY, { ...list, items: [season(A), season(B)] });
+    const { result } = await renderHook(() => useMarkAchievementsSeen(), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync([{ code: 'season_podium', seasonId: A }]);
+    });
+    expect(api.markAchievementsSeen).toHaveBeenCalledWith(
+      expect.any(String),
+      [],
+      [{ code: 'season_podium', seasonId: A }],
+    );
+    expect(client.getQueryData(ACHIEVEMENTS_KEY)).toEqual({
+      items: [{ ...season(A), seen: true }, season(B)],
+      progress: list.progress,
+    });
+  });
+
+  it('ошибка — откат только своего сезона', async () => {
+    jest.mocked(api.markAchievementsSeen).mockRejectedValue(new Error('offline'));
+    const { client, wrapper } = setup();
+    const items = [season(A), { ...season(B), seen: true }];
+    client.setQueryData(ACHIEVEMENTS_KEY, { ...list, items });
+    const { result } = await renderHook(() => useMarkAchievementsSeen(), { wrapper });
+    await act(async () => {
+      await result.current
+        .mutateAsync([
+          { code: 'season_podium', seasonId: A },
+          { code: 'season_podium', seasonId: B },
+        ])
+        .catch(() => undefined);
+    });
+    expect(client.getQueryData(ACHIEVEMENTS_KEY)).toEqual({ ...list, items });
   });
 });

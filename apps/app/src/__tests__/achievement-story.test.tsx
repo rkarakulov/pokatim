@@ -143,6 +143,14 @@ describe('экран карточки достижения', () => {
     expect(await screen.findByTestId('story-preview')).toBeOnTheScreen();
   });
 
+  it('сезонный код по прямому адресу — без запроса, «Карточки нет» → профиль (S7)', async () => {
+    const router = await open('/achievements/story/season_champion');
+    expect(await screen.findByText('Карточки нет')).toBeOnTheScreen();
+    expect(getAchievementCard).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByRole('button', { name: 'К достижению' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/profile'));
+  });
+
   it('незнакомый код — без запроса, «Карточки нет» → профиль', async () => {
     const router = await open('/achievements/story/unknown_code');
     expect(await screen.findByText('Карточки нет')).toBeOnTheScreen();
