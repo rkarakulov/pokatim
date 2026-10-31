@@ -27,6 +27,9 @@ export const ROUTE_RIDE_STATUSES = [
   'failed',
 ] as const;
 export type RouteRideStatus = (typeof ROUTE_RIDE_STATUSES)[number];
+/** Происхождение заезда (route-rides-03): ручная проверка / автопроверка новой активности. Только в конец. */
+export const ROUTE_RIDE_ORIGINS = ['manual', 'auto'] as const;
+export type RouteRideOrigin = (typeof ROUTE_RIDE_ORIGINS)[number];
 /** Квота заездов райдера на маршрут (и предел строк списка). */
 export const ROUTE_RIDE_MAX_PER_ROUTE = 100;
 /** Предел кандидатов «выбрать свой заезд». */
@@ -100,11 +103,14 @@ export type RouteRideCandidates = z.infer<typeof RouteRideCandidates>;
 
 /**
  * Заезд по маршруту: статус, вердикт, время и сравнение со своими пройденными заездами (дельты — знаковые целые,
- * отрицательная — быстрее; только у `passed`).
+ * отрицательная — быстрее; только у `passed`). `activityId` — своя основная активность группы сейчас («Проверить
+ * снова»; старый API — `null`), `origin` — происхождение (route-rides-03; старый API — `manual`).
  */
 export const RouteRideDetail = z.object({
   id: Uuid,
   route: RouteRideRouteRef,
+  activityId: Uuid.nullable().default(null),
+  origin: tolerantEnum(ROUTE_RIDE_ORIGINS).default('manual'),
   status: tolerantEnum(ROUTE_RIDE_STATUSES),
   /** первая причина; только `not_passed` */
   reason: tolerantEnum(ATTEMPT_REJECTIONS).nullable(),
