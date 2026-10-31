@@ -171,7 +171,8 @@ paths:
   `/races` — `PublicReadGuard`, `PUBLIC_READ_CACHE_CONTROL`, 404 профиля до разбора курсора). Правила —
   `riders.policy.ts` (`summarize`, `pageRows`). `profile` не импортирует `results`: цикл `results → profile`.
   `riders/:publicId` и `/races` — публичное чтение `riders`; `riders/:publicId/{me,reports}` — модуль `profile`
-  (RC-P6 profile-moderation): пути различаются статическим сегментом, guard — на классе своего контроллера.
+  (RC-P6 profile-moderation), `riders/:publicId/social*` — модуль `social` (P3): пути различаются статическим
+  сегментом, guard — на классе своего контроллера.
 - **Модерация профиля (profile-moderation)** — всё в `profile` (единственный писатель `profiles`, `profile_avatars`,
   `profile_reports`), новых рёбер графа нет. `RiderReportsController` (`@Controller('riders')`, `AuthGuard`, `no-store`:
   `GET :publicId/me`, `POST :publicId/reports`) → `ProfileReportsService` (лимит `profile-report:<uid>` 20/сут до
@@ -735,13 +736,15 @@ RC-A1, ADR-0019).
 ## «Свои» (`social`, `product-events`, ADR-0027 Proposed, `docs/product/social.md`)
 
 - Модуль `social` — потребитель: `social → rides, profile, product-events, identity` (P0; `identity` — `AuthGuard`
-  контроллеров с P2; далее `results`, `routes`, `tracks` — в своих PR) только через `index.ts` и порты: `RIDES_FOR_SOCIAL` (`rides-for-social.port.ts`, `rideFacts`:
-  фаза — `ridePhase` внутри `rides`, участники «Иду» с организатором первым, точная точка старта при `startPrecise`),
+  контроллеров с P2; далее `results`, `routes`, `tracks` — в своих PR) только через `index.ts` и порты: `RIDES_FOR_SOCIAL`
+  (`rides-for-social.port.ts`, `rideFacts`: фаза — `ridePhase` внутри `rides`, участники «Иду» с организатором первым,
+  точная точка старта при `startPrecise`; `nextRideCard` (P3, «Идёт») — ближайший опубликованный будущий райд райдера
+  (`RidesRepository.nextOfRider`, `rides_participant_idx`) карточкой ленты `rideCardOf` с этим зрителем),
   `RIDER_NAMES.publicRiders` (публичность — при чтении, K3; ручное добавление — только к публичному). Коллекции
   `rides`, `profiles`, `activities` `social` не читает. На `social` ссылаются только `notifications`, `account`,
   `sharing` (порт `InviteCodes`, P6), `AppModule`, `WorkerModule` (dependency-cruiser `social-consumers-only`).
 - Композиция (RC-13): `SocialCoreModule` (репозитории, `SocialConnectionsService`, `SocialAttendanceService`,
-  `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры: P2 — `RideParticipantsController`; далее P3, P4, P7),
+  `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры: P2 — `RideParticipantsController`; P3 — `RiderSocialController`, `SocialConnectionsController`; далее P4, P7),
   `SocialWorkerModule` (`WorkerModule`, процессоры `social-intake` / `social-maintenance` — P5, P7). Дальше правки —
   только в `social/*`.
 - Правила — `social.policy.ts` (`SOCIAL_POLICY`: лимит ручного «В свои» `social-manual:<uid>` 30/24 ч, окно ручной
@@ -763,6 +766,16 @@ RC-A1, ADR-0019).
 - Явка (RC-2a) — транзакция: условная запись документа явки райда → явившиеся → `rideConnectionDiff` с парами райда
   → `bulkWrite` связей → удаление пар без источников (надгробие `removedAt` остаётся, RC-6) → события. Повтор — no-op
   без событий. «Меня не было» ставит `declinedAt` (RC-3a), явка по треку его не перекрывает.
+- Профиль (P3): `RiderSocialController` (`@Controller('riders')`, `AuthGuard`, `no-store`: `GET :publicId/social`,
+  `PUT :publicId/social/connection` `{ connected }` — один идемпотентный глагол, DELETE в CORS нет) и
+  `SocialConnectionsController` (`social/connections`) → `RiderSocialService`: `publicId` → райдер только
+  `RIDER_PROFILES.findPublic` (неизвестный и непубличный — один `404`) → себе — `409 self` (и для `false`) →
+  `addManual` / `remove`; ответ — свежий `RiderSocial`; «Идёт» — только при связи райдер → зритель
+  (`SocialConnectionsService.pairState`); список — `listOf` без строк без `publicId`, `count = items.length`, без
+  `userId`.
+- Дубль пары в транзакции (RC-P3-2): параллельные upsert одной пары в транзакциях (`addManual`, `linkInvite`, пересчёт
+  явки) приходят как `112 WriteConflict` и повторяются `withTransaction`; повторов по `isDuplicateKey` в транзакционных
+  путях нет (дубль ловит только `remove` вне транзакции). Доказательство — ворота в `social-connections.int.test.ts`.
 - Реакции: `thank` — только между явившимися, повтор — no-op (RC-4); `toggleRespect` — на разрешённой вызывающим цели
   (порты целей — P4), дубль уникального ключа — перечитать состояние.
 - Участники и явка райда (P2): `RideParticipantsController` (`SocialModule` + `IdentityModule`, `@Controller('rides')`,

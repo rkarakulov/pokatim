@@ -408,6 +408,16 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   Экран `riders/report/[id]` (`rider-report.tsx`, образец — жалоба на маршрут) — внутри `Stack.Protected`, без имени,
   клуба и фото; ответ жалобы — в кеш зрителя.
 
+- «Свои» (P3, `docs/product/social.md` K3, K6) — `features/social/`: ключи `['social','rider',publicId]` (только
+  вошедшему и после найденного профиля, как `['riders','viewer',id]`), `['social','connections']`; блок K6
+  `rider-social-block.tsx` под шапкой `/riders/[id]` («Я иду» строки «Идёт» — `useRideRsvp` + перезапрос
+  `['social','rider',id]`; гость — «В свои» → вход с возвратом); «Свои · N» в `/profile` → экран `/social`
+  (`app/social.tsx` за `useSettingsShell`, `SEO_DISALLOW`): убранная строка остаётся с «В свои» (состояние экрана),
+  уход (`useFocusEffect` cleanup) — `invalidateQueries(['social'])`. Подсказка K3 — `name-hint.tsx` (`NameHint`;
+  условие — `publicId === null` из `['profile']`, `useNameMissing`): в `/profile` вместо прежней строки, на Главной —
+  в слоте `socialSlotIndex` (`home/sections.ts`, слот P7) с «Не сейчас» на 14 дней (`pokatim.nameHint`,
+  `name-hint-storage(.web).ts`: SecureStore / `localStorage`; видимость — `nameHintVisible`).
+
 ## Достижения (achievements, `docs/product/profile.md` A1–A8, ADR-0020)
 
 - Всё — `features/achievements/`. Ключи: свои — `['achievements']` (`useAchievements`, `withAccessToken`, `staleTime`

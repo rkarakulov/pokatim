@@ -47,7 +47,8 @@
    `riders/:publicId/me` в `profile`. Публичные кэшируемые ответы не меняются. P2: `RideParticipantsController` —
    `GET rides/:id/participants`, `POST rides/:id/attendance` («Я был на райде»), `POST rides/:id/attendance/decline`
    («Меня не было»; без тела, ответ — тот же `RideParticipants`); скрытый райд не организатору и неизвестный — `404`
-   до вызова сервиса явки.
+   до вызова сервиса явки. «В свои» / «Убрать» (P3) — один
+   идемпотентный `PUT riders/:publicId/social/connection { connected }` вместо пары глаголов (DELETE в CORS нет).
 4. **Автоявка — второе событие `tracks`.** После обработки заезда `tracks` в той же транзакции пишет
    `tracks.activity-recorded {activityId, userId}` → очередь `social-intake`. `social` читает старт заезда портом
    `ACTIVITY_STARTS` и точный старт райда портом `RIDES_FOR_SOCIAL` (только при маршруте каталога). `activity-ready`

@@ -9,6 +9,9 @@ import {
   CatalogRouteDetail,
   CatalogRouteViewer,
   RiderProfileViewer,
+  RiderSocial,
+  type SetRiderConnectionRequest,
+  SocialConnections,
   CatalogRoutePage,
   type CatalogRouteQuery,
   type RouteExportFormat,
@@ -1238,6 +1241,27 @@ export function createApiClient({
       request(
         '/v1/social/invite-code',
         InviteCodeResponse,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** «Свои» на чужом профиле (P3, K6): «вместе ехали», «Идёт», «В своих»; непубличный — 404. */
+    getRiderSocial: (accessToken: string, publicId: string) =>
+      request(
+        `/v1/riders/${encodeURIComponent(publicId)}/social`,
+        RiderSocial,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** «В свои» / «Убрать из своих» (идемпотентно); себе — 409, лимит — 429. Ответ — свежий `RiderSocial`. */
+    setRiderConnection: (accessToken: string, publicId: string, body: SetRiderConnectionRequest) =>
+      request(
+        `/v1/riders/${encodeURIComponent(publicId)}/social/connection`,
+        RiderSocial,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
+    /** «Свои» вошедшего (K6): только публичные; `count` — «Свои · N». */
+    listSocialConnections: (accessToken: string) =>
+      request(
+        '/v1/social/connections',
+        SocialConnections,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
   };

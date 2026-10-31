@@ -1,4 +1,9 @@
-import { AVAILABLE_HOME_SECTIONS, HOME_SECTION_ORDER, orderHomeSections } from './sections';
+import {
+  AVAILABLE_HOME_SECTIONS,
+  HOME_SECTION_ORDER,
+  orderHomeSections,
+  socialSlotIndex,
+} from './sections';
 
 const base = [
   { id: 'races', chosen: false },
@@ -75,5 +80,29 @@ describe('orderHomeSections (R4, AC4)', () => {
 
   it('доступные разделы — в базовом порядке, даже если переданы иначе', () => {
     expect(orderHomeSections(['calendar', 'routes', 'rides', 'races'], undefined)).toEqual(base);
+  });
+});
+
+describe('socialSlotIndex (K7, RC-P3-7)', () => {
+  const slot = (reasons: Parameters<typeof orderHomeSections>[1]) =>
+    socialSlotIndex(orderHomeSections(AVAILABLE_HOME_SECTIONS, reasons), reasons);
+
+  it('«Кофе-райды» в опросе — первым слотом, над всеми разделами', () => {
+    expect(slot(['group_rides'])).toBe(0);
+    expect(slot(['races', 'group_rides', 'routes'])).toBe(0);
+  });
+
+  it('иначе — после выбранных в опросе разделов, до остальных', () => {
+    expect(slot(['races', 'routes'])).toBe(2);
+    expect(slot(['calendar'])).toBe(1);
+  });
+
+  it('ничего не выбрано (и «Пока просто смотрю») — 0', () => {
+    expect(slot([])).toBe(0);
+    expect(slot(['exploring'])).toBe(0);
+  });
+
+  it('профиль не пришёл (reasons undefined) — слота нет', () => {
+    expect(slot(undefined)).toBeNull();
   });
 });

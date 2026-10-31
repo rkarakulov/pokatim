@@ -263,6 +263,10 @@ paths:
   `0 O 1 I L`), `INVITE_CODE_LENGTH` (7), `InviteCode` (`trim().toUpperCase()` + regex), `InviteCodeResponse`;
   `RegisterRequest.invite` — `InviteCode.optional().catch(undefined)` (старые сборки; мусор — `undefined`, не 400).
   api-client — `getInviteCode(accessToken)`.
+  Профиль (P3) — `src/social/rider-social.schema.ts`: `RiderTogether`, `RiderSocial` (`going: RideCard.nullable()
+  .default(null)`), запрос `SetRiderConnectionRequest` (`strictObject({ connected })`), `SocialConnectionRow` (без
+  `userId`, `sources` — `tolerantEnum(CONNECTION_SOURCES)`), `SocialConnections` (`items`, `count`). api-client —
+  `getRiderSocial`, `setRiderConnection` (`PUT`), `listSocialConnections`.
 - Фото организатора райда (ride-photo, ADR-0028): `src/rides/ride.schema.ts` — `RIDE_PHOTO_MAX_BYTES` (10 МиБ),
   `RIDE_PHOTO_MAX_EDGE_PX` (1600), `RIDE_PHOTO_MIN_SHORT_PX` (400), `RidePhotoId` (= `OpaqueToken` из
   `auth/verification.schema.ts`), `RidePhotoRef` (`{ id }`), `RideSummary.photo` (`.nullable().default(null)` — старый

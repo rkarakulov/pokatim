@@ -1,6 +1,11 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
-import type { PublicRiderProfile, PublicRiderRace } from '@pokatim/contracts';
+import type {
+  PublicRiderProfile,
+  PublicRiderRace,
+  RideCard,
+  RiderSocial,
+} from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
 import { Text, type RefreshControlProps } from 'react-native';
@@ -38,6 +43,12 @@ const race = (id = RACE_ID, title = 'Гонка у озера'): PublicRiderRace
   unranked: null,
 });
 const notFound = () => new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' });
+const noSocial: RiderSocial = {
+  self: false,
+  connected: false,
+  together: { rideCount: 0, lastRideAt: null },
+  going: null,
+};
 
 const getRider = jest.mocked(api.getRider);
 const listRaces = jest.mocked(api.listRiderRaces);
@@ -56,6 +67,8 @@ beforeEach(() => {
   listRaces.mockResolvedValue({ items: [race()], nextCursor: null });
   // блок достижений — пусто, блока нет (сам блок — `achievements-blocks.test.tsx`)
   jest.mocked(api.getRiderAchievements).mockResolvedValue({ items: [] });
+  // «Свои» (P3) — пустое состояние: только «В свои»
+  jest.mocked(api.getRiderSocial).mockResolvedValue(noSocial);
 });
 afterEach(() => {
   jest.clearAllMocks();
@@ -277,5 +290,180 @@ describe('«Пожаловаться» на публичном профиле (p
     expect(await screen.findByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Пожаловаться' })).toBeNull();
     expect(getViewer).not.toHaveBeenCalled();
+  });
+});
+
+describe('«Свои» на чужом профиле (P3, K6)', () => {
+  const RIDE_ID = '0190a6f4-0000-7000-8000-000000000501';
+  const getSocial = jest.mocked(api.getRiderSocial);
+  const setConnection = jest.mocked(api.setRiderConnection);
+  const joinRide = jest.mocked(api.joinRide);
+  const ride: RideCard = {
+    id: RIDE_ID,
+    title: 'Кофе на Минском море',
+    organizerName: null,
+    startsAt: '2026-11-07T07:00:00Z',
+    city: 'minsk',
+    place: 'Парк Победы',
+    distanceKm: 42,
+    paceMinKmh: 22,
+    paceMaxKmh: 24,
+    limit: 12,
+    goingCount: 5,
+    full: false,
+    phase: 'upcoming',
+    cancelReason: null,
+    rescheduledAt: null,
+    route: null,
+    start: null,
+    photo: null,
+    viewer: {
+      role: 'none',
+      canJoin: true,
+      canLeave: false,
+      canManage: false,
+      reported: false,
+      canReport: true,
+    },
+  };
+  const together = { rideCount: 3, lastRideAt: '2026-10-10T07:00:00Z' };
+  const openSocial = () =>
+    renderRouter(
+      {
+        'riders/[id]': RiderRoute,
+        'rides/[id]': () => <Text>Райд</Text>,
+        'sign-in': () => <Text>Вход</Text>,
+        index: stub,
+      },
+      { initialUrl: `/riders/${PUBLIC_ID}`, wrapper: createQueryWrapper() },
+    );
+  const signIn = () => useSessionStore.setState({ status: 'signedIn', session: liveSession });
+
+  beforeEach(() => {
+    jest.mocked(api.getRiderViewer).mockResolvedValue({ canReport: true, reported: false });
+    takeReturnPath();
+    jest.useFakeTimers({
+      now: new Date('2026-10-31T10:00:00Z'),
+      doNotFake: ['nextTick', 'setImmediate'],
+    });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('«Вместе ехали 3 раза · последний — 10 октября» при N > 0; при 0 — строки нет', async () => {
+    signIn();
+    getSocial.mockResolvedValue({ ...noSocial, together });
+    await openSocial();
+    expect(
+      await screen.findByText('Вместе ехали 3 раза · последний — 10 октября'),
+    ).toBeOnTheScreen();
+    expect(getSocial).toHaveBeenCalledWith(liveSession.accessToken, PUBLIC_ID);
+  });
+
+  it('N = 0 — строки «Вместе ехали» нет, есть «В свои»', async () => {
+    signIn();
+    await openSocial();
+    expect(await screen.findByRole('button', { name: 'В свои' })).toBeOnTheScreen();
+    expect(screen.queryByText(/Вместе ехали/)).toBeNull();
+  });
+
+  it('«Идёт»: строка райда ведёт на райд; «Я иду» → POST join, затем «Вы идёте» (перезапрос social)', async () => {
+    signIn();
+    getSocial.mockResolvedValue({ ...noSocial, connected: true, together, going: ride });
+    const router = await openSocial();
+    const going = within(await screen.findByTestId('rider-social-going'));
+    expect(going.getByText('Идёт')).toBeOnTheScreen();
+    expect(going.getByText('Кофе на Минском море')).toBeOnTheScreen();
+
+    joinRide.mockResolvedValue({
+      ride: { ...ride, goingCount: 6, description: null },
+      viewer: { ...ride.viewer, role: 'participant', canJoin: false, canLeave: true },
+    });
+    getSocial.mockResolvedValue({
+      ...noSocial,
+      connected: true,
+      together,
+      going: {
+        ...ride,
+        goingCount: 6,
+        viewer: { ...ride.viewer, role: 'participant', canJoin: false, canLeave: true },
+      },
+    });
+    await fireEvent.press(going.getByRole('button', { name: 'Я иду' }));
+    expect(joinRide).toHaveBeenCalledWith(liveSession.accessToken, RIDE_ID, 'profile');
+    expect(await screen.findByText('Вы идёте')).toBeOnTheScreen();
+    expect(getSocial).toHaveBeenCalledTimes(2);
+
+    await fireEvent.press(screen.getByRole('link', { name: /Кофе на Минском море/ }));
+    await waitFor(() => expect(router.getPathname()).toBe(`/rides/${RIDE_ID}`));
+  });
+
+  it('«В свои» → PUT connected:true → «В своих»; повтор → connected:false', async () => {
+    signIn();
+    setConnection.mockResolvedValueOnce({ ...noSocial, connected: true });
+    await openSocial();
+    await fireEvent.press(await screen.findByRole('button', { name: 'В свои' }));
+    expect(setConnection).toHaveBeenCalledWith(liveSession.accessToken, PUBLIC_ID, {
+      connected: true,
+    });
+    expect(await screen.findByRole('button', { name: 'В своих' })).toBeOnTheScreen();
+
+    setConnection.mockResolvedValueOnce(noSocial);
+    await fireEvent.press(screen.getByRole('button', { name: 'В своих' }));
+    expect(setConnection).toHaveBeenLastCalledWith(liveSession.accessToken, PUBLIC_ID, {
+      connected: false,
+    });
+    expect(await screen.findByRole('button', { name: 'В свои' })).toBeOnTheScreen();
+  });
+
+  it('429 — текст у кнопки, состояние не меняется', async () => {
+    signIn();
+    setConnection.mockRejectedValueOnce(
+      new ApiHttpError(429, { code: 'RATE_LIMITED', message: 'x', details: { retryAfterSec: 60 } }),
+    );
+    await openSocial();
+    await fireEvent.press(await screen.findByRole('button', { name: 'В свои' }));
+    expect(await screen.findByText('Слишком много действий, попробуйте позже')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'В свои' })).toBeOnTheScreen();
+  });
+
+  it('свой профиль (self) — блока нет', async () => {
+    signIn();
+    getSocial.mockResolvedValue({ ...noSocial, self: true });
+    await openSocial();
+    expect(await screen.findByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
+    await waitFor(() => expect(getSocial).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'В свои' })).toBeNull();
+    expect(screen.queryByTestId('rider-social')).toBeNull();
+  });
+
+  it('гость — только «В свои» → «Вход» с возвратом на профиль; запроса social нет', async () => {
+    const router = await openSocial();
+    await fireEvent.press(await screen.findByRole('button', { name: 'В свои' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/sign-in'));
+    expect(takeReturnPath()).toBe(`/riders/${PUBLIC_ID}`);
+    expect(getSocial).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Вместе ехали/)).toBeNull();
+  });
+
+  it('первая загрузка — скелетон на месте блока', async () => {
+    signIn();
+    getSocial.mockReturnValue(new Promise(() => undefined));
+    await openSocial();
+    expect(
+      await screen.findByTestId('rider-social-skeleton', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
+  });
+
+  it('ошибка блока — «Не удалось загрузить» с повтором, профиль виден', async () => {
+    signIn();
+    getSocial.mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await openSocial();
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Повторить'));
+    expect(await screen.findByRole('button', { name: 'В свои' })).toBeOnTheScreen();
   });
 });

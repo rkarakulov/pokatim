@@ -592,6 +592,18 @@ export class RidesRepository {
   }
 
   /**
+   * «Идёт» (порт `RIDES_FOR_SOCIAL.nextRideCard`, K6): ближайший опубликованный райд со стартом позже `now`, где
+   * `riderId` — участник «Иду» (организатор — первый участник), `startsAt ↑, _id ↑` (`rides_participant_idx`);
+   * проекция зрителя `viewerId` (в участниках — только он).
+   */
+  nextOfRider(riderId: string, viewerId: string, now: Date): Promise<RideDoc | null> {
+    return this.rides.findOne(
+      { 'participants.userId': riderId, status: 'published', startsAt: { $gt: now } },
+      { projection: viewerProjection(viewerId), sort: { startsAt: 1, _id: 1 } },
+    );
+  }
+
+  /**
    * Райды из `ids`, «прошедшие» по условию `pastFactsOf` (опубликован, старт до `now`) без участия — объект ручной выдачи
    * достижения (порт `RIDER_RIDES.ridesOf`, achievements-panel). Скрытый и отменённый — нет.
    */

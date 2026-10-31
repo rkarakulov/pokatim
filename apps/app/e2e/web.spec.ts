@@ -537,6 +537,26 @@ test('свой профиль /profile без сессии (rider-profile): HTML
   }
 });
 
+test('«Свои» /social без сессии (P3): HTML без данных и OG, после гидрации — гард входа', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get('/social');
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  // экран не публичный: без списка и без OG
+  expect(html).not.toContain('social-row-');
+  expect(html).not.toContain('Пока никого');
+  expect(html).not.toContain('og:title');
+
+  await page.goto('/social');
+  if (WITH_API) {
+    await expect(page).toHaveURL(`${BASE_URL}/welcome`);
+  } else {
+    await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
+  }
+});
+
 test.describe('достижения без сессии (achievements): HTML без данных и OG, после гидрации — гард входа', () => {
   for (const path of [
     '/achievements/flash',

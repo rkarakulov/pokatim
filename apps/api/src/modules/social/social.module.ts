@@ -18,6 +18,9 @@ import { ReactionsRepository } from './reactions.repository';
 import { RideParticipantsController } from './ride-participants.controller';
 import { SocialRideParticipantsService } from './ride-participants.service';
 import { SocialReactionsService } from './reactions.service';
+import { RiderSocialController } from './rider-social.controller';
+import { RiderSocialService } from './rider-social.service';
+import { SocialConnectionsController } from './social-connections.controller';
 import { SocialErasure } from './social-erasure';
 import { SocialIntakeProcessor } from './social-intake.processor';
 
@@ -52,10 +55,19 @@ import { SocialIntakeProcessor } from './social-intake.processor';
 })
 export class SocialCoreModule {}
 
-/** HTTP «Свои» (якорь композиции `AppModule`, RC-13): участники и явка райда — P2, код приглашения — P6; далее P3, P4, P7. */
+/**
+ * HTTP «Свои» (якорь композиции `AppModule`, RC-13): участники и явка райда (P2), профиль райдера и список «Свои» (P3),
+ * код приглашения (P6); P4, P7 — свои контроллеры. Порты `RIDER_PROFILES` и `RIDES_FOR_SOCIAL` — из ядер владельцев.
+ */
 @Module({
-  imports: [SocialCoreModule, IdentityModule],
-  controllers: [RideParticipantsController, InviteCodeController],
+  imports: [SocialCoreModule, IdentityModule, ProfileCoreModule, RidesCoreModule],
+  controllers: [
+    RideParticipantsController,
+    InviteCodeController,
+    RiderSocialController,
+    SocialConnectionsController,
+  ],
+  providers: [RiderSocialService],
 })
 export class SocialModule {}
 

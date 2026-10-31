@@ -1,10 +1,10 @@
 import type { ProfileView } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { AsyncContent, TextAction, textStyle, useTheme } from '@rkarakulov/ui';
+import { AsyncContent, SkeletonText, TextAction, useTheme } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DetailHeader } from '@/components/detail-header';
@@ -15,6 +15,8 @@ import { AchievementsBlock } from '@/features/achievements/achievements-block';
 import { useAchievements } from '@/features/achievements/queries';
 import { InviteFriendsAction } from '@/features/invites/invite-friends-action';
 import { useHeaderSeasonState } from '@/features/races/queries';
+import { NameHint } from '@/features/social/name-hint';
+import { useSocialConnections } from '@/features/social/queries';
 import { ProfileSeasonBlock } from '@/features/standings/profile-season-block';
 import { useStandingsRefetch } from '@/features/standings/queries';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
@@ -26,9 +28,11 @@ import { useProfile, useProfileRaces, useProfileRides, useProfileStats } from '.
 
 const DOCUMENT_TITLE = `${t('profile.title')} — ${t('app.name')}`;
 
-/** «Редактировать профиль», «Как вас видят другие» (или подсказка, пока ссылки нет) и «Позвать друзей». */
+/**
+ * «Редактировать профиль», «Как вас видят другие» и «Позвать друзей»; пока публичной ссылки нет — подсказка K3
+ * «Добавьте имя — свои увидят вас» (P3, RC-P3-6: вместо прежней строки; в профиле — без «Не сейчас»).
+ */
 function ProfileActions({ profile }: { profile: ProfileView }) {
-  const theme = useTheme();
   const router = useRouter();
   const publicId = profile.publicId;
   return (
@@ -40,9 +44,7 @@ function ProfileActions({ profile }: { profile: ProfileView }) {
           onPress={() => router.push(`/riders/${encodeURIComponent(publicId)}`)}
         />
       ) : (
-        <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
-          {t('profile.publicHint')}
-        </Text>
+        <NameHint />
       )}
       {/* «Позвать друзей» (P6, K9) — последним элементом */}
       <InviteFriendsAction publicId={publicId} />
@@ -50,9 +52,33 @@ function ProfileActions({ profile }: { profile: ProfileView }) {
   );
 }
 
+/** «Свои · N» (P3, K6): видна и при N = 0, ведёт на экран «Свои»; N — `count` сервера. */
+function SocialCount({ query }: { query: ReturnType<typeof useSocialConnections> }) {
+  const router = useRouter();
+  return (
+    <AsyncContent
+      query={query}
+      skeleton={
+        <View testID="social-count-skeleton">
+          <SkeletonText variant="body" lines={1} lastLineWidth="30%" />
+        </View>
+      }
+    >
+      {(data) => (
+        <View style={styles.actions}>
+          <TextAction
+            label={t('social.count', { count: data.count })}
+            onPress={() => router.push('/social')}
+          />
+        </View>
+      )}
+    </AsyncContent>
+  );
+}
+
 /**
  * Свой профиль (`/profile`, rider-profile, AC12–AC13; вход — аватар верхней панели Главной): шапка с аватаром, именем
- * и клубом, «Редактировать профиль», «Как вас видят другие», статистика, блок «Сезон», «История». Каждый блок —
+ * и клубом, «Редактировать профиль», «Как вас видят другие», «Свои · N», статистика, блок «Сезон», «История». Каждый блок —
  * свои состояния §4.12; заголовок и навигация — сразу. Обновление — pull-to-refresh и фокус (`focusManager`).
  */
 export function OwnProfileScreen() {
@@ -61,6 +87,7 @@ export function OwnProfileScreen() {
   const profile = useProfile();
   const stats = useProfileStats();
   const achievements = useAchievements();
+  const social = useSocialConnections();
   const [tab, setTab] = useState<HistoryTab>('races');
   // запрос — только у выбранной вкладки: «Райды» — с первого переключения, загруженное остаётся в кэше
   const races = useProfileRaces(tab === 'races');
@@ -73,6 +100,7 @@ export function OwnProfileScreen() {
       profile.refetch,
       stats.refetch,
       achievements.refetch,
+      social.refetch,
       tab === 'races' ? races.refetch : rides.refetch,
       ...(hasSeason ? [refetchStandings] : []),
     ],
@@ -80,6 +108,7 @@ export function OwnProfileScreen() {
       profile.refetch,
       stats.refetch,
       achievements.refetch,
+      social.refetch,
       tab,
       races.refetch,
       rides.refetch,
@@ -124,6 +153,7 @@ export function OwnProfileScreen() {
           )}
         </AsyncContent>
         <View style={[styles.padded, styles.sections]}>
+          <SocialCount query={social} />
           <ProfileStats query={stats} />
           {/* блок «Сезон» (race-results-08c): своих строк нет — блока нет */}
           <ProfileSeasonBlock />

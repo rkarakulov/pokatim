@@ -703,8 +703,6 @@ export const ru = {
   'profile.edit.title': 'Редактировать профиль',
   'profile.noName': 'Имя не указано',
   'profile.publicLink': 'Как вас видят другие',
-  'profile.publicHint':
-    'Другие увидят профиль, когда вы укажете имя и включите показ в результатах',
   'profile.club.label': 'Клуб',
   'profile.club.hint': 'Например, Velo Club Minsk. Виден в публичном профиле вместе с именем',
   'profile.avatar.title': 'Фото',
@@ -3301,4 +3299,29 @@ export const ru = {
   'invites.friends.shareText': 'Катайтесь со мной в «Покатим» — гонки, кофе-райды и маршруты',
   'invites.friends.copied': 'Ссылка-приглашение скопирована',
   'invites.friends.failed': 'Не удалось поделиться ссылкой-приглашением.',
+  // «Свои», P3: профиль райдера, «Свои · N», экран «Свои» (K6, RC-P3-5)
+  'social.together': {
+    one: 'Вместе ехали {count} раз · последний — {date}',
+    few: 'Вместе ехали {count} раза · последний — {date}',
+    many: 'Вместе ехали {count} раз · последний — {date}',
+    other: 'Вместе ехали {count} раза · последний — {date}',
+  },
+  'social.row.together': {
+    one: 'Вместе {count} раз · последний — {date}',
+    few: 'Вместе {count} раза · последний — {date}',
+    many: 'Вместе {count} раз · последний — {date}',
+    other: 'Вместе {count} раза · последний — {date}',
+  },
+  'social.going.kicker': 'Идёт',
+  'social.connect': 'В свои',
+  'social.connected': 'В своих',
+  'social.count': 'Свои · {count}',
+  'social.title': 'Свои',
+  'social.row.manual': 'Добавлены вами',
+  'social.row.invite': 'По приглашению',
+  'social.empty.title': 'Пока никого',
+  'social.empty.message':
+    'Свои появятся после совместного райда или когда вы добавите кого-то из профиля',
+  'social.error.RATE_LIMITED': 'Слишком много действий, попробуйте позже',
+  'social.error.unknown': 'Не получилось. Попробуйте ещё раз.',
 } as const;
