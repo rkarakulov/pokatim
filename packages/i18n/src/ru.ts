@@ -3293,6 +3293,12 @@ export const ru = {
   'social.nameHint.title': 'Добавьте имя — свои увидят вас',
   'social.nameHint.action': 'Добавить имя',
   'social.nameHint.later': 'Не сейчас',
+  // «Свои», приглашения (P6, K9): «Позвать друзей» в своём профиле — ссылка с личным кодом
+  'invites.friends.action': 'Позвать друзей',
+  'invites.friends.shareTitle': 'Покатим',
+  'invites.friends.shareText': 'Катайтесь со мной в «Покатим» — гонки, кофе-райды и маршруты',
+  'invites.friends.copied': 'Ссылка-приглашение скопирована',
+  'invites.friends.failed': 'Не удалось поделиться ссылкой-приглашением.',
   // «Свои», P3: профиль райдера, «Свои · N», экран «Свои» (K6, RC-P3-5)
   'social.together': {
     one: 'Вместе ехали {count} раз · последний — {date}',

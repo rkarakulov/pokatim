@@ -1,6 +1,7 @@
 import { Share } from 'react-native';
 
 import type { ShareImage } from './share-image';
+import { withInvite } from './share-invite';
 
 /** Итог «Поделиться»: отправлено, ссылка скопирована (web без Web Share), закрыто без отправки. */
 export type ShareOutcome = 'shared' | 'copied' | 'dismissed';
@@ -39,7 +40,8 @@ export async function shareLink({
 }: ShareLinkInput): Promise<ShareOutcome> {
   const origin = shareOrigin();
   if (!origin) throw new Error('share origin is not configured');
-  const url = `${origin}${path}`;
+  // код приглашения вошедшего (P6): одно место для всех ссылок «Поделиться»
+  const url = `${origin}${withInvite(path)}`;
   const result = await Share.share({ title, message: `${text}\n${url}`, url: image?.uri ?? url });
   return result.action === Share.dismissedAction ? 'dismissed' : 'shared';
 }

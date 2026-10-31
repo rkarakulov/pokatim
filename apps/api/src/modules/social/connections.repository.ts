@@ -13,6 +13,9 @@ import { type ConnectionDoc, socialCollections } from './social.collection';
  */
 export const CONNECTIONS_UNIQUE_INDEX = 'rider_connections_owner_other_unique';
 
+/** Итог `upsertInvite` для одной стороны пары. */
+export type InviteUpsert = 'inserted' | 'invited' | 'unchanged';
+
 /** Поля нового документа связи без райдов (`$setOnInsert`); источники и `removedAt` задаёт операция явно. */
 const fresh = (now: Date) => ({
   _id: uuidv7(),
@@ -79,10 +82,10 @@ export class ConnectionsRepository {
   }
 
   /**
-   * Связь `invite` (K9): upsert пары; `inviteAt` ставится, если его не было; `removedAt` не трогается. `true` —
-   * документ создан.
+   * Связь `invite` (K9): upsert пары; `inviteAt` ставится, если его не было; `removedAt` не трогается. `inserted` —
+   * документ создан, `invited` — у существующего `inviteAt` впервые стал не-`null` (RC-P6-8), `unchanged` — уже был.
    */
-  async upsertInvite(tx: DbSession, pair: ConnectionPair, now: Date): Promise<boolean> {
+  async upsertInvite(tx: DbSession, pair: ConnectionPair, now: Date): Promise<InviteUpsert> {
     const result = await this.connections.updateOne(
       pair,
       {
@@ -96,13 +99,13 @@ export class ConnectionsRepository {
       },
       { upsert: true, session: tx },
     );
-    if (result.upsertedCount > 0) return true;
-    await this.connections.updateOne(
+    if (result.upsertedCount > 0) return 'inserted';
+    const invited = await this.connections.updateOne(
       { ...pair, inviteAt: null },
       { $set: { inviteAt: now, updatedAt: now } },
       { session: tx },
     );
-    return false;
+    return invited.modifiedCount > 0 ? 'invited' : 'unchanged';
   }
 
   /** Пары, у которых райд уже среди общих (`rider_connections_ride_idx`). */

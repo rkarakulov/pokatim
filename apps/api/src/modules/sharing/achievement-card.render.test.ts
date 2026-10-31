@@ -26,6 +26,7 @@ function input(
     themeId: 'classic',
     objectTitle: 'Минская сотка',
     riderName: null,
+    address: null,
     ...overrides,
     facts: {
       code: 'race_win',
@@ -202,16 +203,16 @@ describe('ключ кэша', () => {
     );
   });
 
-  it('ключ несезонного входа стабилен (RC-7; эталон пересчитан при renderVersion 4 — ride-photo)', () => {
+  it('ключ несезонного входа стабилен (RC-7; эталон пересчитан при renderVersion 5 — invites, адрес во входе)', () => {
     expect(achievementCardHash(input())).toBe(
-      '017a7c5574603fac79338f96583eb7060bba31da29a7f6e8d1384a862725e800',
+      'e0a6801ea78b20a5cd8b6590ac508d5d2b744c2fa81f24e0cb5d7af4a7c41102',
     );
   });
 
-  it('версия рендера 4 (ride-photo; 3 — уровни) входит в ключ', () => {
-    expect(STORY_CARD_POLICY.renderVersion).toBe(4);
+  it('версия рендера 5 (invites; 4 — ride-photo) входит в ключ', () => {
+    expect(STORY_CARD_POLICY.renderVersion).toBe(5);
     const before = achievementCardHash(input());
-    const spy = vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(5 as 4);
+    const spy = vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(6 as 5);
     expect(achievementCardHash(input())).not.toBe(before);
     spy.mockRestore();
   });

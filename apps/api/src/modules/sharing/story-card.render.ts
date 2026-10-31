@@ -38,6 +38,8 @@ export interface StoryCardRenderInput {
   colors: StoryCardColors;
   texts: StoryCardTexts;
   track: StoryCardTrack | null;
+  /** короткая ссылка приглашения `<домен>/i/<код>` справа от бренда (P6); нет кода или домена — `null` */
+  address: string | null;
 }
 
 export const node = (
@@ -136,6 +138,35 @@ export function trackSvg(
       viewBox: `0 0 ${track.view.width} ${track.view.height}`,
       preserveAspectRatio: 'xMidYMid meet',
     },
+  );
+}
+
+/**
+ * Строка бренда (колонтитул «Линии», мастхед «Ночи»): бренд слева, короткая ссылка приглашения справа (P6, K9). Высота
+ * строки адреса = высоте бренда (токен `address`): геометрия ярусов не меняется; без адреса — прежний узел бренда.
+ */
+export function brandRow(
+  token: StoryCardText,
+  colors: StoryCardColors,
+  brand: string,
+  address: string | null,
+): StoryCardNode {
+  if (address === null) return text(token, colors.ink, brand);
+  // `flexGrow` — строка на всю ширину колонки и в строчном контейнере колонтитула/мастхеда
+  return box(
+    { flexDirection: 'row', flexGrow: 1, justifyContent: 'space-between', alignItems: 'center' },
+    [
+      text(token, colors.ink, brand, { flexShrink: 0 }),
+      text(storyCard.text.address, colors.ink, address, {
+        display: 'block',
+        flexShrink: 1,
+        minWidth: 0,
+        marginLeft: storyCard.invite.unitGap,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }),
+    ],
   );
 }
 
@@ -322,7 +353,7 @@ function lineCard(input: StoryCardRenderInput): StoryCardNode {
         paddingTop: g.colophonPadTop,
         borderTop: `${storyCard.rule}px solid ${colors.rule}`,
       },
-      [text(storyCard.text.colophon, colors.ink, texts.brand)],
+      [brandRow(storyCard.text.colophon, colors, texts.brand, input.address)],
     ),
   ]);
 }
@@ -339,7 +370,7 @@ function nightCard(input: StoryCardRenderInput): StoryCardNode {
         paddingBottom: g.mastheadPadBottom,
         borderBottom: `${storyCard.rule}px solid ${colors.rule}`,
       },
-      [text(storyCard.text.masthead, colors.ink, texts.brand)],
+      [brandRow(storyCard.text.masthead, colors, texts.brand, input.address)],
     ),
     box({ flexGrow: 1, flexShrink: 1, minHeight: 0 }),
     box({ flexDirection: 'column', flexShrink: 0, marginBottom: g.copyBottom }, [

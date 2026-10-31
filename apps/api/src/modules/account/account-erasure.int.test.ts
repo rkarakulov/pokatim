@@ -751,6 +751,11 @@ describe('шаги social и product-events («Свои», ADR-0027 п. 8, K13)'
       { _id: w.a.userId, code: 'code-a', createdAt: h.clock.now() },
       { _id: w.b.userId, code: 'code-b', createdAt: h.clock.now() },
     ]);
+    // код пригласившего из регистрации (P6, AC9) — на users, стирается вместе с аккаунтом
+    await collections(h).users.updateMany(
+      { _id: { $in: [w.a.userId, w.b.userId] } },
+      { $set: { invite: 'K7M2PQX' } },
+    );
     const pairBC = () =>
       db.connections
         .find({
@@ -774,6 +779,8 @@ describe('шаги social и product-events («Свои», ADR-0027 п. 8, K13)'
       0,
     );
     expect(await db.inviteCodes.countDocuments({ _id: a })).toBe(0);
+    expect((await collections(h).users.findOne({ _id: a }))?.invite).toBeNull();
+    expect((await collections(h).users.findOne({ _id: w.b.userId }))?.invite).toBe('K7M2PQX');
     expect(await db.events.countDocuments({ userId: a })).toBe(0);
     // остальные целы: связь B↔C, явки B и C, «спасибо» C → B, код и события B
     expect(await pairBC()).toEqual(bcBefore);

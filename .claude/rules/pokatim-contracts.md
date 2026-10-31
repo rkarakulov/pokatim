@@ -259,6 +259,10 @@ paths:
   `RideRiderRow`, `RideRiderGroup`, `RideAttendance`, `RideParticipants` (новые поля ответа — `.default`);
   `src/rides/ride.schema.ts` — `JoinRideRequest` (`strictObject`, `source?`). api-client — `rideParticipants`,
   `markRideAttended`, `declineRideAttendance`, `joinRide(token, id, source?)` (без `source` — тело `{}`).
+  Приглашения (P6, K9) — `src/social/invite.schema.ts` (отдельный файл): `INVITE_CODE_ALPHABET` (31 символ без
+  `0 O 1 I L`), `INVITE_CODE_LENGTH` (7), `InviteCode` (`trim().toUpperCase()` + regex), `InviteCodeResponse`;
+  `RegisterRequest.invite` — `InviteCode.optional().catch(undefined)` (старые сборки; мусор — `undefined`, не 400).
+  api-client — `getInviteCode(accessToken)`.
   Профиль (P3) — `src/social/rider-social.schema.ts`: `RiderTogether`, `RiderSocial` (`going: RideCard.nullable()
   .default(null)`), запрос `SetRiderConnectionRequest` (`strictObject({ connected })`), `SocialConnectionRow` (без
   `userId`, `sources` — `tolerantEnum(CONNECTION_SOURCES)`), `SocialConnections` (`items`, `count`). api-client —

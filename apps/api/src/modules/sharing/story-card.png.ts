@@ -60,6 +60,7 @@ export function storyCardRenderInput(
     colors: storyCardColors(scheme),
     texts: storyCardTexts(input),
     track: line ? storyCardTrack(line, storyCardTrackView(input.template)) : null,
+    address: input.address,
   };
 }
 

@@ -10,6 +10,7 @@ import type { AchievementBadgeIcon } from './achievement-card.icons';
 import type { AchievementCardTexts } from './achievement-card.texts';
 import {
   box,
+  brandRow,
   node,
   page,
   type StoryCardChild,
@@ -30,6 +31,8 @@ export interface AchievementCardRenderInput {
   badgeColors: StoryCardBadgeColors;
   icon: AchievementBadgeIcon;
   texts: AchievementCardTexts;
+  /** короткая ссылка приглашения `<домен>/i/<код>` справа от бренда (P6); нет кода или домена — `null` */
+  address: string | null;
 }
 
 /** Значок: круг фона с контуром текста, кольцо акцента, диск с глифом иконки; у счётных — число на кольце снизу. */
@@ -177,7 +180,7 @@ function lineCard(input: AchievementCardRenderInput): StoryCardNode {
         paddingTop: g.colophonPadTop,
         borderTop: `${storyCard.rule}px solid ${colors.rule}`,
       },
-      [text(storyCard.text.colophon, colors.ink, texts.brand)],
+      [brandRow(storyCard.text.colophon, colors, texts.brand, input.address)],
     ),
   ]);
 }
@@ -194,7 +197,7 @@ function nightCard(input: AchievementCardRenderInput): StoryCardNode {
         paddingBottom: g.mastheadPadBottom,
         borderBottom: `${storyCard.rule}px solid ${colors.rule}`,
       },
-      [text(storyCard.text.masthead, colors.ink, texts.brand)],
+      [brandRow(storyCard.text.masthead, colors, texts.brand, input.address)],
     ),
     box({ flexGrow: 1, flexShrink: 1, minHeight: 0 }),
     box({ flexDirection: 'column', flexShrink: 0, marginBottom: g.copyBottom }, [

@@ -596,7 +596,14 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `invalidateQueries(['rides'])`.
 - «Поделиться» — только `src/lib/share-link(.web).ts` (native — `Share`, origin — `EXPO_PUBLIC_WEB_ORIGIN`, не задан —
   кнопки нет; web — `navigator.share`, иначе буфер и «Ссылка скопирована»); `Share` / `navigator.share` / `Clipboard`
-  в экранах — нет.
+  в экранах — нет. Код приглашения вошедшего (P6, K9) добавляет сам `shareLink` — `withInvite(path)`
+  (`src/lib/share-invite.ts`, модульное значение: `navigator.share` до любого `await`); ставит `InviteShareSync` корня.
+- Приглашения (P6, K9) — `src/features/invites/*` (не `features/social`): `invite-storage(.web).ts` — последний код и
+  время перехода (native — `secureStorage` ключ `pokatim.invite`, web — `localStorage`), старше 7 дней — стирается;
+  `InviteCapture` (корень) сохраняет `?invite=` любой страницы, кроме статуса `signedIn` (RC-P6-7); маршрут `/i/[code]`
+  — сохранить и `replace('/')` (`Disallow: /i/`); `register.tsx` передаёт `takeInvite` в `RegisterRequest.invite` и
+  стирает после успеха; «Позвать друзей» (`InviteFriendsAction`, последним в `ProfileActions`) — только при origin
+  шеринга и полученном коде (`useOwnInviteCode`, `['social', 'invite-code']`).
 - Возврат гостя к объекту после входа — `features/auth/return-path(.web).ts` (память; web — ещё `sessionStorage`
   вкладки): ставит карточка при «Я иду» / «Участвовать» гостя; корневой layout забирает путь сразу после входа, он же —
   `redirectTo` гарда шагов онбординга (иначе редирект на Главную перебивает возврат), переход — один раз при `step === 'done'`;

@@ -17,6 +17,7 @@ function input(
   return {
     template: 'line',
     themeId: 'classic',
+    address: null,
     ...overrides,
     facts: {
       routeId: 'route',
@@ -102,7 +103,8 @@ describe('routeCardHash', () => {
   });
 
   it('вид карточки в ключе: тот же вход другого вида не совпадает с приглашением; зрителя во входе нет', () => {
-    expect(Object.keys(input()).sort()).toEqual(['facts', 'template', 'themeId']);
+    // адрес приглашения — запрашивающего (P6, RC-P6-5): карточка с адресом личная
+    expect(Object.keys(input()).sort()).toEqual(['address', 'facts', 'template', 'themeId']);
     expect(routeCardHash(input())).toMatch(/^[0-9a-f]{64}$/);
   });
 });

@@ -13,6 +13,7 @@ import { AchievementProgressBlock } from '@/features/achievements/achievement-pr
 import { achievementItemPath } from '@/features/achievements/achievement-catalog';
 import { AchievementsBlock } from '@/features/achievements/achievements-block';
 import { useAchievements } from '@/features/achievements/queries';
+import { InviteFriendsAction } from '@/features/invites/invite-friends-action';
 import { useHeaderSeasonState } from '@/features/races/queries';
 import { NameHint } from '@/features/social/name-hint';
 import { useSocialConnections } from '@/features/social/queries';
@@ -28,8 +29,8 @@ import { useProfile, useProfileRaces, useProfileRides, useProfileStats } from '.
 const DOCUMENT_TITLE = `${t('profile.title')} — ${t('app.name')}`;
 
 /**
- * «Редактировать профиль» и «Как вас видят другие»; пока публичной ссылки нет — подсказка K3 «Добавьте имя — свои
- * увидят вас» (P3, RC-P3-6: вместо прежней строки; в профиле — без «Не сейчас»).
+ * «Редактировать профиль», «Как вас видят другие» и «Позвать друзей»; пока публичной ссылки нет — подсказка K3
+ * «Добавьте имя — свои увидят вас» (P3, RC-P3-6: вместо прежней строки; в профиле — без «Не сейчас»).
  */
 function ProfileActions({ profile }: { profile: ProfileView }) {
   const router = useRouter();
@@ -45,6 +46,8 @@ function ProfileActions({ profile }: { profile: ProfileView }) {
       ) : (
         <NameHint />
       )}
+      {/* «Позвать друзей» (P6, K9) — последним элементом */}
+      <InviteFriendsAction publicId={publicId} />
     </View>
   );
 }

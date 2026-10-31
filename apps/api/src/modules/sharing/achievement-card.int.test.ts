@@ -105,7 +105,7 @@ async function winRace(who: Rider, title = 'Весенняя'): Promise<string> 
 
 /** Входы, которые worker отдал бы рендеру (то же, что на картинке). */
 const inputsOf = (who: Rider, code: 'race_win' | 'route_first' | 'ride_first') =>
-  h.worker.get(AchievementCardInputs).resolve(who.userId, { code, seasonId: null }, 'line');
+  h.worker.get(AchievementCardInputs).resolve(who.userId, { code, seasonId: null }, 'line', null);
 
 describe('отказы (AC1)', () => {
   it('гость — 401; незнакомый код, кривой шаблон, лишний ключ — 400', async () => {
@@ -282,7 +282,7 @@ describe('уровни (AC6)', () => {
     expect(await sync(me)).toContain('races_5');
     const silver = await h.worker
       .get(AchievementCardInputs)
-      .resolve(me.userId, { code: 'races_5', seasonId: null }, 'line');
+      .resolve(me.userId, { code: 'races_5', seasonId: null }, 'line', null);
     expect(silver?.input.facts.level).toBe('silver');
     expect(await status(me, 'races_5')).toEqual({ status: 'pending' });
     expect(await runJob()).toBe('ready');
@@ -292,7 +292,7 @@ describe('уровни (AC6)', () => {
     expect(await sync(me)).toContain('races_5');
     const gold = await h.worker
       .get(AchievementCardInputs)
-      .resolve(me.userId, { code: 'races_5', seasonId: null }, 'line');
+      .resolve(me.userId, { code: 'races_5', seasonId: null }, 'line', null);
     expect(gold?.input.facts.level).toBe('gold');
     expect(gold?.hash).not.toBe(silver?.hash);
     expect(await status(me, 'races_5')).toEqual({ status: 'pending' });
@@ -345,7 +345,7 @@ describe('сезонные (achievement-season-story-card, C2–C5)', () => {
 
     const resolved = await h.worker
       .get(AchievementCardInputs)
-      .resolve(me.userId, { code: 'season_champion', seasonId: season }, 'line');
+      .resolve(me.userId, { code: 'season_champion', seasonId: season }, 'line', null);
     expect(resolved?.input).toMatchObject({
       facts: {
         code: 'season_champion',
@@ -443,7 +443,7 @@ describe('сезонные (achievement-season-story-card, C2–C5)', () => {
     });
     const resolved = await h.worker
       .get(AchievementCardInputs)
-      .resolve(me.userId, { code: 'season_regular', seasonId: other2024 }, 'line');
+      .resolve(me.userId, { code: 'season_regular', seasonId: other2024 }, 'line', null);
     expect(resolved?.input.facts).toEqual({
       code: 'season_regular',
       object: { kind: 'season', id: other2024, title: 'Сезон 2024' },

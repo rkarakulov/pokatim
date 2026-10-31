@@ -15,6 +15,8 @@ export type SecureKey =
   | 'pokatim.locale'
   // QR офлайн-копий билетов (event-tickets, plan-B §5): только токены QR и владелец — остальное в файле
   | 'pokatim.ticketQr'
+  // код приглашения до регистрации (P6, K9; не секрет, как `pokatim.pushSoftPrompt`)
+  | 'pokatim.invite'
   // отложка подсказки имени «Не сейчас» на Главной («Свои», K3; не секрет, как `pokatim.pushSoftPrompt`)
   | 'pokatim.nameHint';
 

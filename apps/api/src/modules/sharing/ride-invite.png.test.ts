@@ -8,6 +8,7 @@ import { STORY_CARD_POLICY } from './sharing.policy';
 const input = (template: 'line' | 'night'): RideInviteInput => ({
   template,
   themeId: 'classic',
+  address: null,
   facts: {
     rideId: 'ride',
     title: 'Кофе-райд на Минское море',

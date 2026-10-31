@@ -18,6 +18,7 @@ function input(
     template: 'line',
     themeId: 'classic',
     riderName: null,
+    address: null,
     ...overrides,
     facts: {
       entryId: 'entry',

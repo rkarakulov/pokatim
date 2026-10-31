@@ -70,6 +70,8 @@ export class RegistrationService {
           passwordHash,
           birthDate: input.birthDate,
           createdAt: now,
+          // код пригласившего (P6): ответ от него не зависит — оракула проверки кода нет
+          invite: input.invite ?? null,
         });
         const version = this.env.AGREEMENT_VERSION;
         await this.repository.insertConsents(

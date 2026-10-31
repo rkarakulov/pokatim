@@ -12,6 +12,8 @@ export interface RouteCardInput {
   template: StoryCardTemplate;
   themeId: AppThemeId;
   facts: RouteOgFacts;
+  /** короткая ссылка приглашения владельца карточки (`InviteAddress`, P6); считает HTTP, worker берёт из задачи */
+  address: string | null;
 }
 
 /**
@@ -25,6 +27,7 @@ export function routeCardHash(input: RouteCardInput): string {
     'route-card',
     STORY_CARD_POLICY.renderVersion,
     input.template,
+    input.address,
     input.themeId,
     facts.routeId,
     facts.title,
@@ -51,6 +54,7 @@ export class RouteCardInputs {
     userId: string,
     routeId: string,
     template: StoryCardTemplate,
+    address: string | null,
   ): Promise<{ input: RouteCardInput; hash: string } | null> {
     const facts = await this.routes.ogFacts(routeId);
     if (!facts) return null;
@@ -58,6 +62,7 @@ export class RouteCardInputs {
       template,
       themeId: await this.themes.themeOf(userId),
       facts,
+      address,
     };
     return { input, hash: routeCardHash(input) };
   }

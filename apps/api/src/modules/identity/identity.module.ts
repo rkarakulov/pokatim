@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { QUEUE } from '../../queues';
 import { AccessTokenVerifier } from './access-token';
 import { AccountClosure } from './account-closure';
+import { AccountConfirmation } from './account-confirmation';
 import { AccountErasure } from './account-erasure';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
@@ -51,6 +52,7 @@ export class IdentityAccountsModule {}
     PasswordHasher,
     SessionService,
     SessionCookie,
+    AccountConfirmation,
     VerificationService,
     RegistrationService,
     CredentialsCheck,

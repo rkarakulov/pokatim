@@ -11,6 +11,7 @@ import { domainError } from '../../error-messages';
 import { cardRef } from '../achievements';
 import { AchievementCardInputs } from './achievement-card.inputs';
 import { CardRequests } from './card-requests';
+import { InviteAddress } from './invite-address';
 import { ACHIEVEMENT_CARD_RENDER_JOB, type AchievementCardJob } from './story-card.cache';
 
 /**
@@ -23,6 +24,7 @@ export class AchievementCardService {
   constructor(
     private readonly inputs: AchievementCardInputs,
     private readonly requests: CardRequests,
+    private readonly addresses: InviteAddress,
   ) {}
 
   async status(
@@ -39,7 +41,8 @@ export class AchievementCardService {
       throw domainError('VALIDATION_FAILED', 400, details);
     }
     await this.requests.consumeRead(userId);
-    const resolved = await this.inputs.resolve(userId, ref, template);
+    const address = await this.addresses.of(userId);
+    const resolved = await this.inputs.resolve(userId, ref, template, address);
     if (!resolved) throw domainError('STORY_CARD_UNAVAILABLE', 409);
     const data: AchievementCardJob = {
       userId,
@@ -47,6 +50,7 @@ export class AchievementCardService {
       seasonId: ref.seasonId,
       template,
       hash: resolved.hash,
+      address,
     };
     return this.requests.status(userId, {
       name: ACHIEVEMENT_CARD_RENDER_JOB,

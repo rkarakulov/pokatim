@@ -14,6 +14,7 @@ import { MongoOutboxWriter, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Env } from '../../config/env';
 import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
+import { AccountConfirmation } from './account-confirmation';
 import {
   PASSWORD_CHANGED_EMAIL_REQUESTED,
   PASSWORD_RESET_EMAIL_REQUESTED,
@@ -50,6 +51,7 @@ export class PasswordResetService {
     private readonly transactions: MongoTransactions,
     private readonly hasher: PasswordHasher,
     private readonly outbox: MongoOutboxWriter,
+    private readonly confirmation: AccountConfirmation,
     private readonly rateLimiter: RateLimiter,
     @Inject(ENV) private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET'>,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -133,7 +135,8 @@ export class PasswordResetService {
       await this.repository.markPasswordResetUsed(tx, current.token.id, at);
       const revoked = await this.repository.revokeAllSessions(tx, user.id, at, 'password_reset');
       await this.repository.revokeRegistrationToken(tx, user.id, at);
-      if (!user.emailVerifiedAt) await this.repository.markEmailVerified(tx, user.id, at);
+      // первое подтверждение (Q4) — общий шаг с событием приглашения (RC-P6-1); подтверждённому — без записи
+      if (!user.emailVerifiedAt) await this.confirmation.confirmEmail(tx, user.id, at);
       const payload: PasswordChangedEmailRequested = { passwordResetTokenId: current.token.id };
       await this.outbox.append(tx, { type: PASSWORD_CHANGED_EMAIL_REQUESTED, payload });
       return { userId: user.id, email: user.email, revoked };

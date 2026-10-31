@@ -83,22 +83,34 @@ export class SocialConnectionsService {
     await this.connections.remove({ ownerId, otherId }, this.clock.now());
   }
 
-  /** Связь `invite` в обе стороны (K9): событие `connection-created` — по созданным документам. */
-  async linkInvite(inviterId: string, inviteeId: string): Promise<void> {
-    if (inviterId === inviteeId) return;
+  /**
+   * Связь `invite` в обе стороны (K9): событие `connection-created` — по созданным документам; `invite-registered`
+   * (K12, `userId` пригласившего) — когда у стороны `inviter → invitee` `inviteAt` впервые стал не-`null` (RC-P6-8).
+   * Возвращает этот признак (P7); повтор — `false`, без дублей. Гонка первых upsert пары — повтор `withTransaction`.
+   */
+  async linkInvite(inviterId: string, inviteeId: string): Promise<boolean> {
+    if (inviterId === inviteeId) return false;
     const now = this.clock.now();
-    await this.transactions.run(async (tx) => {
+    // конфликт пары повторяет `withTransaction` (WriteConflict, RC-P3-2)
+    return this.transactions.run(async (tx) => {
+      let registered = false;
       for (const [ownerId, otherId] of [
         [inviterId, inviteeId],
         [inviteeId, inviterId],
       ] as const) {
-        if (await this.connections.upsertInvite(tx, { ownerId, otherId }, now)) {
+        const outcome = await this.connections.upsertInvite(tx, { ownerId, otherId }, now);
+        if (outcome === 'inserted') {
           await this.events.record(
             { type: 'connection-created', userId: ownerId, props: { source: 'invite' } },
             tx,
           );
         }
+        if (ownerId === inviterId && outcome !== 'unchanged') registered = true;
       }
+      if (registered) {
+        await this.events.record({ type: 'invite-registered', userId: inviterId, props: {} }, tx);
+      }
+      return registered;
     });
   }
 

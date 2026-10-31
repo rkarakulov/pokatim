@@ -7,8 +7,10 @@ import {
   call,
   collections,
   confirm,
+  outboxEvents,
   register,
   resend,
+  userIdByEmail,
 } from '../../../test/identity';
 import { randomToken } from './tokens';
 
@@ -220,5 +222,37 @@ describe('POST /v1/auth/verification/resend', () => {
     );
     expect((await describeLink(link)).status).toBe(404);
     expect((await confirm(h, link)).status).toBe(404);
+  });
+});
+
+describe('событие identity.account-confirmed (P6, AC8)', () => {
+  const confirmedEvents = async () =>
+    (await outboxEvents(h)).filter((event) => event.type === 'identity.account-confirmed');
+
+  it('первое подтверждение аккаунта с кодом — ровно одно событие {userId, invite}; повтор — без второго', async () => {
+    await register(h, { invite: 'K7M2PQX' });
+    const link = await activeLinkToken(h);
+    expect(await confirmedEvents()).toEqual([]);
+
+    expect((await confirm(h, link)).status).toBe(200);
+    expect((await confirm(h, link)).status).toBe(200);
+
+    const events = await confirmedEvents();
+    expect(events.map((event) => event.payload)).toEqual([
+      { userId: await userIdByEmail(h), invite: 'K7M2PQX' },
+    ]);
+  });
+
+  it('аккаунт без кода — события нет', async () => {
+    await register(h);
+    expect((await confirm(h, await activeLinkToken(h))).status).toBe(200);
+    expect(await confirmedEvents()).toEqual([]);
+  });
+
+  it('неподтверждённый аккаунт с кодом — события нет (AC8)', async () => {
+    await register(h, { invite: 'K7M2PQX' });
+    h.clock.advance(DAY);
+    await resend(h, { linkToken: await activeLinkToken(h) });
+    expect(await confirmedEvents()).toEqual([]);
   });
 });

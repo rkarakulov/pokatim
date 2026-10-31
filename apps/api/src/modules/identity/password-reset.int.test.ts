@@ -395,6 +395,34 @@ describe('неподтверждённый аккаунт (AC6, Q4, R5)', () => 
   });
 });
 
+describe('сброс пароля и приглашение (P6, RC-P6-1)', () => {
+  const confirmedEvents = async () =>
+    (await outboxEvents(h)).filter((event) => event.type === 'identity.account-confirmed');
+
+  it('сброс неподтверждённого аккаунта с кодом — событие identity.account-confirmed', async () => {
+    await register(h, { invite: 'K7M2PQX' });
+    await requestPasswordReset(h, EMAIL);
+    h.clock.advance(MINUTE);
+    expect((await confirmPasswordReset(h, await latestResetToken(h), NEW_PASSWORD)).status).toBe(
+      200,
+    );
+    expect((await confirmedEvents()).map((event) => event.payload)).toEqual([
+      { userId: await userIdByEmail(h), invite: 'K7M2PQX' },
+    ]);
+  });
+
+  it('сброс подтверждённого аккаунта — второго события нет', async () => {
+    await register(h, { invite: 'K7M2PQX' });
+    await confirm(h, await activeLinkToken(h));
+    await requestPasswordReset(h, EMAIL);
+    h.clock.advance(MINUTE);
+    expect((await confirmPasswordReset(h, await latestResetToken(h), NEW_PASSWORD)).status).toBe(
+      200,
+    );
+    expect(await confirmedEvents()).toHaveLength(1);
+  });
+});
+
 /**
  * Гонки без блокировок строк (R9): «удерживаемая транзакция» — другая транзакция аккаунта открыта и уже записала
  * `users` (`$inc version`), но не закоммичена: проверяемая транзакция получает конфликт записи и повторяется

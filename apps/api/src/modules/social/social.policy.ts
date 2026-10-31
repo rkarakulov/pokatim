@@ -1,8 +1,12 @@
-import type {
-  AttendanceVia,
-  ConnectionSource,
-  SocialActionBlockedDetails,
-  SocialBlockReason,
+import { randomInt } from 'node:crypto';
+
+import {
+  type AttendanceVia,
+  type ConnectionSource,
+  INVITE_CODE_ALPHABET,
+  INVITE_CODE_LENGTH,
+  type SocialActionBlockedDetails,
+  type SocialBlockReason,
 } from '@pokatim/contracts';
 
 import { domainError } from '../../error-messages';
@@ -91,3 +95,12 @@ export function rideConnectionDiff(
 /** Отказ домена «Свои»: `409 SOCIAL_ACTION_BLOCKED { reason }`. */
 export const socialBlocked = (reason: SocialBlockReason) =>
   domainError('SOCIAL_ACTION_BLOCKED', 409, { reason } satisfies SocialActionBlockedDetails);
+
+/** Случайный код приглашения (K9): `INVITE_CODE_LENGTH` символов алфавита без похожих, `crypto.randomInt`. */
+export function generateInviteCode(random: (max: number) => number = randomInt): string {
+  let code = '';
+  for (let index = 0; index < INVITE_CODE_LENGTH; index += 1) {
+    code += INVITE_CODE_ALPHABET[random(INVITE_CODE_ALPHABET.length)];
+  }
+  return code;
+}
