@@ -75,6 +75,8 @@ paths:
   `tolerantEnum`; `ATTEMPT_REJECTIONS` = коды движка (`CORRIDOR_REJECTIONS`) + `implausible`, совпадение держит
   сторож в `apps/api`; публичная строка — `entryId`, место, ничья, время сегмента (без `userId`, активности, времени
   суток, координат) и `riderName` — только при согласии райдера (profile-rider-name), `.nullable().default(null)`.
+  `riderNo` строки таблицы и финишёров (name-consent-prompt, N7) — номер заявки в гонке, `int().positive()
+  .nullable().default(null)`, не `null` только без имени.
   `ProfileView.publicName` / `showNameInResults` — новые поля ответа с `.default` (`null` / `false`): новая сборка со
   старым API разбирает ответ. `src/results/results-admin.schema.ts` — панель, строгие `z.enum`;
   `PanelStandingRow.riderName` / `PanelRaceAttempt.riderName` — обязательные `nullable` (панель деплоится с API).
@@ -129,7 +131,8 @@ paths:
   `dismissRiderProfileReports`, `unblockRiderAvatar`, `riderAvatarUrl`.
 - Согласие на показ имени (profile-02): `PUBLIC_NAME_CONSENT_VERSION` (`src/profile/profile.schema.ts`) — версия
   текста `profile.show.label` + `profile.show.hint` (i18n). Сменили формулировку — **подняли версию** (дата), иначе
-  журнал согласий ссылается на чужой текст. Версию в событие пишет сервер. Сброс имени —
+  журнал согласий ссылается на чужой текст. Версию в событие пишет сервер. Шит согласия приложения (name-consent-prompt) показывает те же ключи —
+  одна версия на оба места. `riderLine` запрещает и заглушку «Райдер», «Райдер #N», «Райдер №N» (N8). Сброс имени —
   `src/profile/profile-admin.schema.ts` (`ResetRiderNameRequest` с `ActionReason`, `RiderNameResetResult`).
 - Треки и устройства (ADR-0011): `src/tracks/track-upload.schema.ts`, `src/devices/device.schema.ts` — статусы,
   причины, источники, провайдеры, проблемы подключения в ответах — `tolerantEnum`; путь `:provider` и запросы —
@@ -167,7 +170,11 @@ paths:
   (строгий код — незнакомый у старой сборки → `unknown`); подресурс «Достижения» —
   `AchievementNotificationSettingsView`, `UpdateAchievementNotificationSettings`,
   `DEFAULT_ACHIEVEMENT_NOTIFICATION_SETTINGS` (`{ push: true }`); api-client — `getAchievementNotificationSettings`,
-  `updateAchievementNotificationSettings`.
+  `updateAchievementNotificationSettings`. social-p1 — в конец: группа `social`, шесть видов `social_riders_going`,
+  `social_thanks`, `social_added`, `social_respect`, `social_invite_registered`, `social_ride_ask`, цель
+  `{ type: 'rider', publicId: RiderPublicId }` (битый токен у старой сборки → `unknown`); подресурс «Свои» —
+  `SocialNotificationSettingsView`, `UpdateSocialNotificationSettings`, `DEFAULT_SOCIAL_NOTIFICATION_SETTINGS`
+  (`{ push: true }`); api-client — `getSocialNotificationSettings`, `updateSocialNotificationSettings`.
 - Web Push (ADR-0022): там же — `WebPushEndpoint` (https ≤ 2048, хост — push-сервис из белого списка
   `isWebPushEndpoint`: FCM, Mozilla, WNS, Apple; адрес вызывает сервер — SSRF), `RegisterWebPushSubscription`
   (`strictObject`: endpoint + `keys.p256dh` 65 байт `B…`/`keys.auth` 16 байт base64url, без `expirationTime`),

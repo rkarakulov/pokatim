@@ -272,3 +272,32 @@ describe('новое достижение (achievements-push, P5, RC-P2, RC-P5):
     );
   });
 });
+
+describe('«Свои» (social-p1, RC-3): запасной текст без имён — «Райдер» без «и ещё N»', () => {
+  it('шесть видов по таблице v1', () => {
+    expect(renderNotification({ kind: 'social_riders_going', object: RIDE })).toEqual({
+      title: 'Свои идут',
+      body: `Райдер · «${RIDE}»`,
+    });
+    expect(renderNotification({ kind: 'social_thanks', object: RIDE })).toEqual({
+      title: 'Спасибо за компанию',
+      body: `Райдер · «${RIDE}»`,
+    });
+    expect(renderNotification({ kind: 'social_added' })).toEqual({
+      title: 'Вас добавили в свои',
+      body: 'Райдер',
+    });
+    expect(renderNotification({ kind: 'social_respect', object: ROUTE })).toEqual({
+      title: 'Респект',
+      body: `Райдер · «${ROUTE}»`,
+    });
+    expect(renderNotification({ kind: 'social_invite_registered' })).toEqual({
+      title: 'По вашей ссылке зарегистрировались',
+      body: 'Райдер',
+    });
+    expect(renderNotification({ kind: 'social_ride_ask', object: '  Утренний\n райд ' })).toEqual({
+      title: 'Как прошёл райд?',
+      body: '«Утренний райд»: отметьте, что были.',
+    });
+  });
+});

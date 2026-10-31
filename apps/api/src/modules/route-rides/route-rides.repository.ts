@@ -16,7 +16,7 @@ import type { GroupRide, RiddenRoute, RouteRideFacts } from './route-rides.polic
 
 /** Индекс дедупликации заезда группы (`0032_route_rides`): параллельный POST — `isDuplicateKey`. */
 export const ROUTE_RIDES_UNIQUE_INDEX = 'route_rides_user_route_activity_unique';
-/** Индекс таблицы «Другие» (`0048_route_rides_leaderboard_idx`) — `hint` агрегата `leaderboardTop`. */
+/** Индекс таблицы «Другие» (`0049_route_rides_leaderboard_idx`) — `hint` агрегата `leaderboardTop`. */
 export const ROUTE_RIDES_LEADERBOARD_INDEX = 'route_rides_leaderboard_idx';
 
 /** Сброс итога при новой ревизии проверки. */

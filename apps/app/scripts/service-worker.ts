@@ -155,6 +155,8 @@ self.addEventListener('fetch', (event) => {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // канонический код билета (Crockford, 10 символов) — как TicketCodeCanonical контрактов
 const TICKET_CODE = /^[0-9A-HJKMNP-TV-Z]{10}$/;
+// публичный id райдера (43 символа base64url) — как RiderPublicId (OpaqueToken) контрактов
+const RIDER_PUBLIC_ID = /^[A-Za-z0-9_-]{43}$/;
 const ACHIEVEMENT_CODES = new Set(${JSON.stringify(SW_ACHIEVEMENT_CODES)});
 const NOTIFICATIONS_PATH = '/notifications';
 const ICON = '/icons/icon-192.png';
@@ -180,6 +182,10 @@ function targetPath(target) {
       if (target.seasonId === undefined) return '/achievements/' + target.code;
       return id('seasonId') && '/achievements/' + target.code + '?season=' + id('seasonId');
     }
+    case 'rider':
+      return typeof target.publicId === 'string' && RIDER_PUBLIC_ID.test(target.publicId)
+        ? '/riders/' + target.publicId
+        : null;
     default:
       return null;
   }

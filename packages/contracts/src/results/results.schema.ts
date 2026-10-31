@@ -303,8 +303,14 @@ export const RaceResultsQuery = z.strictObject({
 export type RaceResultsQuery = z.infer<typeof RaceResultsQuery>;
 
 /**
+ * Номер заявки в гонке (name-consent-prompt, N7): порядок записи, уникален в гонке, в другой гонке у райдера — другой.
+ * Только у строки без имени — приложение показывает «Райдер #N»; старый сервер и заявка без номера — `null` («Участник»).
+ */
+const RiderNo = z.number().int().positive().nullable().default(null);
+
+/**
  * Строка таблицы; своя строка — по `entryId` из «моего участия». Имя — только при явном согласии райдера (P1,
- * profile-rider-name); иначе `null`, приложение — «Участник».
+ * profile-rider-name); иначе `null` и номер заявки `riderNo` («Райдер #N»).
  */
 export const RaceResultRow = z.object({
   entryId: Uuid,
@@ -314,6 +320,7 @@ export const RaceResultRow = z.object({
   elapsedSec: z.number().int(),
   /** публичное имя из профиля; старый сервер поля не знает — `null` */
   riderName: z.string().nullable().default(null),
+  riderNo: RiderNo,
   ...RiderRowLink,
 });
 export type RaceResultRow = z.infer<typeof RaceResultRow>;
@@ -349,6 +356,7 @@ export const RaceFinisherRow = z.object({
   entryId: Uuid,
   elapsedSec: z.number().int(),
   riderName: z.string().nullable().default(null),
+  riderNo: RiderNo,
   ...RiderRowLink,
   unranked: tolerantEnum(RESULT_UNRANKED_REASONS),
 });

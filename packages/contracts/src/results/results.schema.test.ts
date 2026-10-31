@@ -141,6 +141,17 @@ describe('участие и результаты: приложение', () => {
     expect(RaceResultRow.parse({ ...row, riderName: null }).riderName).toBeNull();
   });
 
+  it('строка таблицы и финишёров: номер заявки в гонке; старый сервер без поля — null (N7)', () => {
+    const row = { entryId: ID, place: 1, tied: false, elapsedSec: 3600 };
+    expect(RaceResultRow.parse(row).riderNo).toBeNull();
+    expect(RaceResultRow.parse({ ...row, riderNo: 482 }).riderNo).toBe(482);
+    expect(RaceResultRow.safeParse({ ...row, riderNo: 0 }).success).toBe(false);
+    expect(RaceResultRow.safeParse({ ...row, riderNo: 1.5 }).success).toBe(false);
+    const finisher = { entryId: ID, elapsedSec: 3600, unranked: 'start' };
+    expect(RaceFinisherRow.parse(finisher).riderNo).toBeNull();
+    expect(RaceFinisherRow.parse({ ...finisher, riderNo: 7 }).riderNo).toBe(7);
+  });
+
   it('строка таблицы и финишёров: ссылка на профиль и фото — с согласием; старый сервер — null', () => {
     const token = 'A'.repeat(43);
     const row = { entryId: ID, place: 1, tied: false, elapsedSec: 3600 };

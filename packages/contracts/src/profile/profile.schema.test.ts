@@ -162,6 +162,24 @@ describe('RiderPublicName', () => {
     }
     expect(RiderPublicName.parse('Участник 7')).toBe('Участник 7');
   });
+
+  it('заглушка таблицы «Райдер #N» — INVALID в любом написании (name-consent-prompt, N8)', () => {
+    for (const reserved of [
+      'Райдер',
+      'райдер',
+      'Райдер #5',
+      'РАЙДЕР#482',
+      'райдер №12',
+      'Райдер № 7',
+      'Райдер 31',
+      ' Райдер # 9 ',
+    ]) {
+      expect(codesOf(RiderPublicName.safeParse(reserved))).toEqual(['INVALID']);
+      expect(codesOf(RiderClub.safeParse(reserved))).toEqual(['INVALID']);
+    }
+    expect(RiderPublicName.parse('Райдер из Минска')).toBe('Райдер из Минска');
+    expect(RiderPublicName.parse('Райдеры #1')).toBe('Райдеры #1');
+  });
 });
 
 describe('UpdateProfileRequest', () => {

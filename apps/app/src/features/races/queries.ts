@@ -28,6 +28,7 @@ import { withAccessToken } from '@/features/auth/authorized';
 import { apiErrorCode } from '@/features/auth/error-messages';
 import { AUTH_MUTATION } from '@/features/auth/queries';
 import { offerPushSoftPrompt } from '@/features/notifications/push-soft-prompt-store';
+import { offerNameConsent } from '@/features/profile/name-consent-store';
 import { VERIFIED_PROFILE_KEY } from '@/features/profile/queries';
 import { forgetCancelledTicket } from '@/features/tickets/queries';
 import { api } from '@/lib/api';
@@ -444,8 +445,12 @@ export const useEnterRace = (id: string) =>
     (token, body) => (body ? api.enterRace(token, id, body) : api.enterRace(token, id)),
     // Verified-заявка фиксирует пол и год анкеты — кэш анкеты устарел (иначе откроется редактируемой)
     (body) => (body && body.tier === 'verified' ? [VERIFIED_PROFILE_KEY] : []),
-    // новая запись — подсказка push (N5); форма «Участвовать» к ответу уже размонтирована — не из `mutate`
-    () => offerPushSoftPrompt('race', id),
+    // новая запись — подсказка push (N5) и шит имени (name-consent-prompt N1); форма «Участвовать» к ответу уже
+    // размонтирована — не из `mutate`
+    () => {
+      offerPushSoftPrompt('race', id);
+      offerNameConsent(id);
+    },
   );
 
 /** «Отменить участие». */

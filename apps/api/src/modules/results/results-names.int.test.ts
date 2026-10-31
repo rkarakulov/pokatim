@@ -57,7 +57,7 @@ async function namedRace() {
 const namesOf = (body: RaceResultsPage) => body.items.map((row) => [row.entryId, row.riderName]);
 
 describe('имя в публичной таблице (AC5–AC7)', () => {
-  it('предварительная: имя только с именем и согласием; строка — 5 ключей, без userId (AC5)', async () => {
+  it('предварительная: имя только с именем и согласием; строка — явные ключи, без userId (AC5)', async () => {
     const { raceId, riders } = await namedRace();
     const { raw, body } = await table(raceId);
     expect(body.status).toBe('provisional');
@@ -74,10 +74,28 @@ describe('имя в публичной таблице (AC5–AC7)', () => {
         'place',
         'riderAvatar',
         'riderName',
+        'riderNo',
         'riderPublicId',
         'tied',
       ]);
     }
+  });
+
+  it('номер заявки «Райдер #N»: порядок записи в гонке, только без имени; протокол и отзыв согласия (N7)', async () => {
+    const { raceId, riders, token } = await namedRace();
+    const numbersOf = (body: RaceResultsPage) => body.items.map((row) => row.riderNo);
+    const stored = await resultsDb(h)
+      .entries.find({ raceId }, { projection: { _id: 1, entryNo: 1 } })
+      .toArray();
+    const entryNo = new Map(stored.map((doc) => [doc._id, doc.entryNo]));
+    // заявки подавались по порядку райдеров — номера 1…4, уникальны в гонке
+    expect(riders.map((rider) => entryNo.get(rider.entryId))).toEqual([1, 2, 3, 4]);
+    expect(numbersOf((await table(raceId)).body)).toEqual([null, 2, 3, 4]);
+
+    expect((await protocolAction(h, token, raceId, '/protocol')).status).toBe(200);
+    expect(numbersOf((await table(raceId)).body)).toEqual([null, 2, 3, 4]);
+    await updateProfile(riders[0]!.email, { showNameInResults: false });
+    expect(numbersOf((await table(raceId)).body)).toEqual([1, 2, 3, 4]);
   });
 
   it('протокол: имя из профиля при чтении, смена после публикации видна; снимок без имени (AC6)', async () => {

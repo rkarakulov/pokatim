@@ -98,6 +98,7 @@ describe('предварительная таблица (AC18, AC21)', () => {
         'place',
         'riderAvatar',
         'riderName',
+        'riderNo',
         'riderPublicId',
         'tied',
       ]);

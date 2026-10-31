@@ -114,6 +114,12 @@ export interface RaceEntryDoc {
    * чтение — поле может отсутствовать.
    */
   raceWindowStartsAt?: Date;
+  /**
+   * Номер заявки в гонке (name-consent-prompt, N7): `races.entryAdmissions` после `admitEntry` в транзакции вставки —
+   * уникален в гонке, не меняется. Наружу — только `riderNo` публичной строки без имени («Райдер #N»). Пишет
+   * `EntriesService.enter`; заявки до `0048` — бэкфилл миграции, чтение — поле может отсутствовать (`?? null`).
+   */
+  entryNo?: number;
   version: number;
 }
 

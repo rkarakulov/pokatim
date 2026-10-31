@@ -39,6 +39,8 @@ import {
   useUpdateNotificationSettings,
   useUpdateAchievementNotificationSettings,
   useUpdateRouteNotificationSettings,
+  useSocialNotificationSettings,
+  useUpdateSocialNotificationSettings,
 } from '@/features/notifications/queries';
 
 const DOCUMENT_TITLE = `${t('notifications.settings.title')} — ${t('app.name')}`;
@@ -217,6 +219,7 @@ function SettingsForm({
       <RoutesGroup push={push} control={control} />
       <EventsGroup push={push} control={control} />
       <AchievementsGroup push={push} control={control} />
+      <SocialGroup push={push} control={control} />
       {push ? (
         <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
           {groupTitle(t('notifications.settings.quiet.title'))}
@@ -354,7 +357,22 @@ function AchievementsGroup({ push, control }: { push: boolean; control?: PushPer
   );
 }
 
-/** Группа подресурса только с push-тумблером («Маршруты», «Достижения»). */
+/** «Свои» (social-p1, K10): только push, последней среди групп; как «Достижения». */
+function SocialGroup({ push, control }: { push: boolean; control?: PushPermissionControl }) {
+  const query = useSocialNotificationSettings({ enabled: push });
+  const update = useUpdateSocialNotificationSettings();
+  return (
+    <PushOnlyGroup
+      title={t('notifications.settings.group.social')}
+      push={push}
+      control={control}
+      query={query}
+      update={update}
+    />
+  );
+}
+
+/** Группа подресурса только с push-тумблером («Маршруты», «Достижения», «Свои»). */
 function PushOnlyGroup({
   title,
   push,

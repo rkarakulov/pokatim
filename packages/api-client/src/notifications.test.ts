@@ -178,6 +178,30 @@ describe('api-client: уведомления', () => {
     ]);
   });
 
+  it('настройки «Свои» — подресурс GET и PUT, только push', async () => {
+    const { calls, api } = client(200, { push: false, email: true });
+    await expect(api.getSocialNotificationSettings('t')).resolves.toEqual({ push: false });
+    await expect(api.updateSocialNotificationSettings('t', { push: false })).resolves.toEqual({
+      push: false,
+    });
+    expect(
+      calls.map(({ url, method, body, authorization }) => ({ url, method, body, authorization })),
+    ).toEqual([
+      {
+        url: 'https://api.test/v1/notifications/settings/social',
+        method: 'GET',
+        body: undefined,
+        authorization: 'Bearer t',
+      },
+      {
+        url: 'https://api.test/v1/notifications/settings/social',
+        method: 'PUT',
+        body: { push: false },
+        authorization: 'Bearer t',
+      },
+    ]);
+  });
+
   it('push-токены — PUT регистрации и POST снятия, 204', async () => {
     const { calls, api } = client(204, null);
     await api.registerPushToken('t', { token: TOKEN, platform: 'android' });

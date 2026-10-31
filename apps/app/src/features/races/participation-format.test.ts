@@ -31,6 +31,7 @@ import {
   resultBanner,
   resultElapsed,
   resultPill,
+  raceRowWho,
   resultRow,
   resultSignature,
   showsResultsTable,
@@ -378,6 +379,20 @@ describe('строка таблицы', () => {
       time: '1:02:05',
       a11y: '3, Участник, 1:02:05',
       profileA11y: null,
+    });
+  });
+
+  it('без имени — номер заявки «Райдер #N» и в a11y; с именем номер не нужен; своя — «Вы» (N7)', () => {
+    expect(resultRow(row({ place: 3, elapsedSec: 3725, riderNo: 482 }), false)).toMatchObject({
+      who: 'Райдер #482',
+      a11y: '3, Райдер #482, 1:02:05',
+    });
+    expect(resultRow(row({ riderNo: 482 }), true).who).toBe('Вы');
+    expect(raceRowWho({ riderName: 'Анна К.', riderNo: null }, false)).toBe('Анна К.');
+    expect(raceRowWho({ riderName: null, riderNo: null }, false)).toBe('Участник');
+    expect(finisherRow(finisher({ riderNo: 7 }), false)).toMatchObject({
+      who: 'Райдер #7',
+      a11y: 'Райдер #7, 2:00:00, Финишёр',
     });
   });
 

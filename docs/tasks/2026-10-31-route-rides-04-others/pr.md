@@ -21,7 +21,7 @@
 
 ## Миграции / env / конфиги
 
-- **Миграция `0048_route_rides_leaderboard_idx`** (expand-only, без бэкфилла): частичный индекс `route_rides`
+- **Миграция `0049_route_rides_leaderboard_idx`** (expand-only, без бэкфилла): частичный индекс `route_rides`
   `{ routeId, segment.elapsedSec, activity.startedAt, _id }` по `status: 'passed'`. env и конфиги не менялись.
 
 ## Проверки

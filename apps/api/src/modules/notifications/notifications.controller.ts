@@ -22,10 +22,12 @@ import {
   RevokePushToken,
   RevokeWebPushSubscription,
   type RouteNotificationSettingsView,
+  type SocialNotificationSettingsView,
   type UnreadCount,
   UpdateAchievementNotificationSettings,
   UpdateEventNotificationSettings,
   UpdateRouteNotificationSettings,
+  UpdateSocialNotificationSettings,
   Uuid,
   type WebPushConfig,
 } from '@pokatim/contracts';
@@ -133,6 +135,23 @@ export class NotificationsController {
     body: UpdateAchievementNotificationSettings,
   ): Promise<AchievementNotificationSettingsView> {
     return this.settings.putAchievements(user.userId, body);
+  }
+
+  /** Группа «Свои» — подресурс, только push (social-p1, K10). */
+  @Get('settings/social')
+  @Header('Cache-Control', 'no-store')
+  getSocialSettings(@CurrentUser() user: AuthUser): Promise<SocialNotificationSettingsView> {
+    return this.settings.getSocial(user.userId);
+  }
+
+  @Put('settings/social')
+  @HttpCode(200)
+  putSocialSettings(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(UpdateSocialNotificationSettings, FieldErrorCode))
+    body: UpdateSocialNotificationSettings,
+  ): Promise<SocialNotificationSettingsView> {
+    return this.settings.putSocial(user.userId, body);
   }
 
   @Put('push-tokens')

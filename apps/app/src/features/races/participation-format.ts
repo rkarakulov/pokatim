@@ -308,16 +308,30 @@ export const profileWho = (
 ): string | null => (row.riderPublicId === null ? null : (row.riderName ?? who));
 
 /**
- * Строка таблицы: место («=2» при ничьей), кто — своя «Вы», чужая — имя (только с согласием райдера,
- * profile-rider-name) или «Участник», время, подпись для скринридера; `profileA11y` — метка строки-ссылки на публичный
- * профиль (только у публичного райдера, иначе `null`).
+ * Кто в строке таблицы гонки: своя — «Вы», чужая — имя (только с согласием, profile-rider-name), без имени — номер
+ * заявки в гонке «Райдер #N» (name-consent-prompt N7), нет номера (старый сервер) — «Участник».
+ */
+export function raceRowWho(
+  row: { riderName: string | null; riderNo: number | null },
+  own: boolean,
+): string {
+  if (own) return t('races.results.you');
+  if (row.riderName !== null) return row.riderName;
+  return row.riderNo === null
+    ? t('races.results.rider')
+    : t('races.results.riderNo', { no: row.riderNo });
+}
+
+/**
+ * Строка таблицы: место («=2» при ничьей), кто (`raceRowWho`), время, подпись для скринридера; `profileA11y` — метка
+ * строки-ссылки на публичный профиль (только у публичного райдера, иначе `null`).
  */
 export function resultRow(
   row: RaceResultRow,
   own: boolean,
 ): { place: string; who: string; time: string; a11y: string; profileA11y: string | null } {
   const place = formatPlace(row.place, row.tied);
-  const who = own ? t('races.results.you') : (row.riderName ?? t('races.results.rider'));
+  const who = raceRowWho(row, own);
   const time = formatElapsed(row.elapsedSec);
   const spoken = row.tied ? t('races.results.tiedA11y', { place: row.place }) : String(row.place);
   const named = profileWho(row, who);
@@ -336,7 +350,7 @@ export function finisherRow(
   row: RaceFinisherRow,
   own: boolean,
 ): { who: string; time: string; note: string; a11y: string; profileA11y: string | null } {
-  const who = own ? t('races.results.you') : (row.riderName ?? t('races.results.rider'));
+  const who = raceRowWho(row, own);
   const time = formatElapsed(row.elapsedSec);
   const note = t(`results.unranked.${row.unranked}`);
   const named = profileWho(row, who);

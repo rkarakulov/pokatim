@@ -8,11 +8,21 @@ import {
   type RouteRejectionReason,
 } from '@pokatim/contracts';
 
+import {
+  oneLine,
+  quoted,
+  type SocialNoticeKind,
+  type SocialNoticeText,
+  socialFallbackText,
+} from './social-notices';
+
 /**
  * Словарь текстов уведомлений (RC-9, «Тексты v1» `docs/product/notifications.md`). Строки сервера живут в модуле, как
  * письма identity и `error-messages.ts`; исключение (achievements-push, RC-P5) — имена достижений, уровней и объектов
  * берутся из каталога `@pokatim/i18n` (`achievements.*`, как карточка достижения `sharing`), второго каталога нет.
  * Текст рендерится при создании и хранится снимком. Только название гонки, райда или маршрута, дата, число, код причины — без имён и текстов других райдеров (N12). Даты — по Минску.
+ * Группа «Свои» (social-p1) — снимок здесь только запасной («Райдер»); текст с именами собирает `social-notices.ts` при
+ * чтении и отправке push (ADR-0027 п. 6).
  */
 export type NoticeText =
   | { kind: 'result_counted' | 'result_rejected'; race: string; activityAt: Date }
@@ -44,7 +54,9 @@ export type NoticeText =
       level: 1 | 2 | 3 | null;
       objectKind: AchievementObjectKind;
       objectTitle: string;
-    };
+    }
+  /** «Свои» (social-p1): название объекта; имена действующих лиц — не здесь */
+  | SocialNoticeText;
 
 export interface RenderedText {
   title: string;
@@ -67,11 +79,6 @@ const hourMinute = new Intl.DateTimeFormat('ru-RU', {
 const day = (at: Date) => dayMonth.format(at);
 /** «14 июня, 10:00». */
 const dayTime = (at: Date) => `${dayMonth.format(at)}, ${hourMinute.format(at)}`;
-/** Название в кавычках «…»: снимок — одна строка. */
-const quoted = (name: string) => `«${name.replace(/\s+/g, ' ').trim()}»`;
-
-/** Одна строка: пробелы и переводы строк схлопываются. */
-const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim();
 const LEVEL_KEYS = ['bronze', 'silver', 'gold'] as const;
 
 /**
@@ -102,7 +109,10 @@ const REJECTION: Record<RouteRejectionReason, string> = {
   other: 'Подробности — в карточке маршрута.',
 };
 
-const TITLES: Record<Exclude<NotificationKind, 'achievement_granted'>, string> = {
+const TITLES: Record<
+  Exclude<NotificationKind, 'achievement_granted' | SocialNoticeKind>,
+  string
+> = {
   result_counted: 'Результат засчитан',
   result_rejected: 'Результат не засчитан',
   protocol_published: 'Протокол опубликован',
@@ -125,7 +135,7 @@ const TITLES: Record<Exclude<NotificationKind, 'achievement_granted'>, string> =
   profile_club_reset: 'Клуб в профиле сброшен',
 };
 
-function bodyOf(input: NoticeText): string {
+function bodyOf(input: Exclude<NoticeText, SocialNoticeText>): string {
   switch (input.kind) {
     case 'result_counted':
       return `${quoted(input.race)}: заезд ${day(input.activityAt)} засчитан.`;
@@ -180,9 +190,13 @@ function bodyOf(input: NoticeText): string {
 
 /** Заголовок и текст уведомления по таблице продукта. */
 export function renderNotification(input: NoticeText): RenderedText {
+  if (isSocialText(input)) return socialFallbackText(input);
   const title = input.kind === 'achievement_granted' ? achievementTitle(input) : TITLES[input.kind];
   return { title, body: bodyOf(input) };
 }
+
+const isSocialText = (input: NoticeText): input is SocialNoticeText =>
+  input.kind.startsWith('social_');
 
 /** Русская форма числа: `one` (1, 21, 101), `few` (2–4, 22–24), `many` (0, 5–20, 11–14, 25…). */
 function ruPlural(count: number, one: string, few: string, many: string): string {
