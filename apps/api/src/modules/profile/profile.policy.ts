@@ -97,6 +97,7 @@ export function profileViewOf(
     | 'publicId'
     | 'themeId'
     | 'avatarBlockedUntil'
+    | 'showRouteRides'
   > | null,
   now: Date,
 ): ProfileView {
@@ -112,5 +113,6 @@ export function profileViewOf(
     publicId: publicName !== null && showNameInResults ? (doc?.publicId ?? null) : null,
     themeId: doc?.themeId ?? DEFAULT_APP_THEME_ID,
     avatarUploadBlockedUntil: activeBlock(doc?.avatarBlockedUntil, now)?.toISOString() ?? null,
+    showRouteRides: doc?.showRouteRides ?? false,
   };
 }

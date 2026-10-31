@@ -4,7 +4,8 @@ import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Collection, Db, Filter } from 'mongodb';
 
 import type { DbSession } from '../../db';
-import type { PublicRiderCard } from './rider-names.port';
+import { isPublicProfile } from './profile.policy';
+import type { PublicRiderCard, RouteRideRiders } from './rider-names.port';
 import {
   PROFILE_COLLECTIONS,
   type ProfileConsentEventDoc,
@@ -25,6 +26,7 @@ export type ProfileViewDoc = Pick<
   | 'publicId'
   | 'themeId'
   | 'avatarBlockedUntil'
+  | 'showRouteRides'
 >;
 const VIEW_PROJECTION = {
   _id: 0,
@@ -36,6 +38,7 @@ const VIEW_PROJECTION = {
   publicId: 1,
   themeId: 1,
   avatarBlockedUntil: 1,
+  showRouteRides: 1,
 } as const;
 
 /** Поля профиля для панели модерации (profile-moderation): подпись Q2, клуб, фото, счётчики жалоб. */
@@ -92,6 +95,7 @@ const KEEP_PROFILE_FIELDS = {
   showNameInResults: { $ifNull: ['$showNameInResults', false] },
   club: { $ifNull: ['$club', null] },
   publicId: { $ifNull: ['$publicId', null] },
+  showRouteRides: { $ifNull: ['$showRouteRides', false] },
 } as const;
 
 /**
@@ -184,7 +188,12 @@ export class ProfileRepository {
   async updatePublicName(
     session: DbSession,
     userId: string,
-    patch: { publicName?: string | null; showNameInResults?: boolean; club?: string | null },
+    patch: {
+      publicName?: string | null;
+      showNameInResults?: boolean;
+      club?: string | null;
+      showRouteRides?: boolean;
+    },
     publicIdCandidate: string,
     now: Date,
   ): Promise<ProfileDoc> {
@@ -203,6 +212,10 @@ export class ProfileRepository {
                 ? KEEP_PROFILE_FIELDS.showNameInResults
                 : { $literal: patch.showNameInResults },
             club: patch.club === undefined ? KEEP_PROFILE_FIELDS.club : { $literal: patch.club },
+            showRouteRides:
+              patch.showRouteRides === undefined
+                ? KEEP_PROFILE_FIELDS.showRouteRides
+                : { $literal: patch.showRouteRides },
             updatedAt: { $literal: now },
           },
         },
@@ -617,6 +630,30 @@ export class ProfileRepository {
         },
       ]),
     );
+  }
+
+  /**
+   * Райдеры с согласием на показ заездов в таблицах маршрутов (route-rides-04, порт `RIDER_NAMES.routeRideRiders`):
+   * согласие — в фильтре запроса, без кэша. Карточка (имя, ссылка, фото) — только у публичных (`isPublicProfile`,
+   * P1/R4), как у `findPublicRiders`.
+   */
+  async findRouteRideRiders(userIds: readonly string[]): Promise<RouteRideRiders> {
+    const docs = await this.profiles
+      .find(
+        { _id: { $in: [...userIds] }, showRouteRides: true },
+        { projection: { publicName: 1, showNameInResults: 1, publicId: 1, avatarId: 1 } },
+      )
+      .toArray();
+    const cards = new Map<string, PublicRiderCard>();
+    for (const doc of docs) {
+      if (!isPublicProfile(doc)) continue;
+      cards.set(doc._id, {
+        name: doc.publicName as string,
+        publicId: doc.publicId ?? null,
+        avatarId: doc.avatarId ?? null,
+      });
+    }
+    return { shares: new Set(docs.map((doc) => doc._id)), cards };
   }
 
   /**

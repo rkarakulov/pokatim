@@ -1,6 +1,7 @@
 /**
  * Порт `profile` (через `modules/profile/index.ts`): `results` — публичные имена только с согласием (P1); `routes`
- * (routes-06) — имя автора маршрута каталога, согласие — галочка заявки маршрута.
+ * (routes-06) — имя автора маршрута каталога, согласие — галочка заявки маршрута; `route-rides` (route-rides-04) —
+ * райдеры с согласием на показ заездов и их карточки.
  */
 export const RIDER_NAMES = Symbol('RIDER_NAMES');
 
@@ -28,6 +29,15 @@ export function riderRowFields(card: PublicRiderCard | undefined): {
   };
 }
 
+/**
+ * Райдеры с согласием на показ заездов в таблицах маршрутов (route-rides-04): `shares` — у кого `showRouteRides`
+ * сейчас; `cards` — из них публичные (имя + `showNameInResults`, как `publicRiders`).
+ */
+export interface RouteRideRiders {
+  shares: Set<string>;
+  cards: Map<string, PublicRiderCard>;
+}
+
 export interface RiderNameDirectory {
   /** Только `publicName !== null && showNameInResults === true`; пустой вход — пустая карта без запроса. */
   publicNames(userIds: readonly string[]): Promise<Map<string, string>>;
@@ -41,4 +51,9 @@ export interface RiderNameDirectory {
    * `publication.showAuthorName` заявки); пустой вход — пустая карта без запроса. Читается на каждом запросе каталога.
    */
   attributionNames(userIds: readonly string[]): Promise<Map<string, string>>;
+  /**
+   * Таблица «Другие» маршрута (route-rides-04): одним запросом, согласие — в фильтре, без кэша; дедуп входа; пустой
+   * вход — пустые без запроса.
+   */
+  routeRideRiders(userIds: readonly string[]): Promise<RouteRideRiders>;
 }

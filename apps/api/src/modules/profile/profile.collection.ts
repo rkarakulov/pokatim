@@ -39,6 +39,11 @@ export interface ProfileDoc {
   showNameInResults?: boolean;
   /** Клуб (rider-profile): 2–60 символов после zod; `null`/нет поля — не задан. */
   club?: string | null;
+  /**
+   * Согласие на показ своих заездов в таблицах маршрутов каталога (route-rides-04, O1, opt-in); нет поля — `false`
+   * (материализуется при следующей записи профиля, бэкфилла нет). Не влияет на публичность профиля (`isPublicProfile`).
+   */
+  showRouteRides?: boolean;
   /** Текущий аватар (rider-profile) — `_id` документа `profile_avatars`; `null`/нет поля — нет фото. */
   avatarId?: string | null;
   /**
@@ -80,8 +85,11 @@ export interface ProfileDoc {
   updatedAt: Date;
 }
 
-/** Виды согласий журнала (profile-02): пока только показ публичного имени в таблицах результатов. */
-export const PROFILE_CONSENT_KINDS = ['public_name'] as const;
+/**
+ * Виды согласий журнала: показ публичного имени в таблицах результатов (profile-02), показ своих заездов в таблицах
+ * маршрутов (route-rides-04). Только в конец.
+ */
+export const PROFILE_CONSENT_KINDS = ['public_name', 'route_rides'] as const;
 /** Действие события согласия: включение или отзыв. */
 export const PROFILE_CONSENT_ACTIONS = ['granted', 'revoked'] as const;
 
@@ -95,7 +103,10 @@ export interface ProfileConsentEventDoc {
   userId: string;
   kind: (typeof PROFILE_CONSENT_KINDS)[number];
   action: (typeof PROFILE_CONSENT_ACTIONS)[number];
-  /** `PUBLIC_NAME_CONSENT_VERSION` контракта на момент события. */
+  /**
+   * Версия текста согласия этого вида на момент события: `PUBLIC_NAME_CONSENT_VERSION` (`public_name`) или
+   * `ROUTE_RIDES_CONSENT_VERSION` (`route_rides`) контракта.
+   */
   version: string;
   /** Время события (`CLOCK`). */
   at: Date;

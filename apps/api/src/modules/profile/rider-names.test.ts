@@ -5,15 +5,25 @@ import { ProfileRepository } from './profile.repository';
 import { RiderNamesService } from './rider-names';
 
 /** Коллекция-заглушка: запоминает фильтры `find` и отдаёт заданные документы. */
-function fakeDb(docs: { _id: string; publicName: string; publicId?: string; avatarId?: string }[]) {
+function fakeDb(
+  docs: {
+    _id: string;
+    publicName?: string | null;
+    showNameInResults?: boolean;
+    publicId?: string;
+    avatarId?: string;
+  }[],
+) {
   const filters: unknown[] = [];
+  const projections: unknown[] = [];
   const collection = {
-    find: (filter: unknown) => {
+    find: (filter: unknown, options?: { projection?: unknown }) => {
       filters.push(filter);
+      projections.push(options?.projection);
       return { toArray: () => Promise.resolve(docs) };
     },
   };
-  return { db: { collection: () => collection } as unknown as Db, filters };
+  return { db: { collection: () => collection } as unknown as Db, filters, projections };
 }
 
 describe('RIDER_NAMES.attributionNames (routes-06, U3, 8.1 RC-2)', () => {
@@ -65,6 +75,42 @@ describe('RIDER_NAMES.attributionNames (routes-06, U3, 8.1 RC-2)', () => {
     expect(await new RiderNamesService(new ProfileRepository(db)).publicRiders([])).toEqual(
       new Map(),
     );
+    expect(filters).toEqual([]);
+  });
+});
+
+describe('RIDER_NAMES.routeRideRiders (route-rides-04, O1/O3)', () => {
+  it('согласие на показ заездов — в фильтре; карточка — только при имени и showNameInResults', async () => {
+    const { db, filters, projections } = fakeDb([
+      { _id: 'u1', publicName: 'Аня', showNameInResults: true, publicId: 'p1', avatarId: 'a1' },
+      { _id: 'u2', publicName: 'Боря', showNameInResults: false, publicId: 'p2' },
+      { _id: 'u3', publicName: null, showNameInResults: true },
+      { _id: 'u4' },
+    ]);
+    const riders = await new RiderNamesService(new ProfileRepository(db)).routeRideRiders([
+      'u1',
+      'u2',
+      'u1',
+      'u3',
+      'u4',
+      'u5',
+    ]);
+    expect(riders.shares).toEqual(new Set(['u1', 'u2', 'u3', 'u4']));
+    expect(riders.cards).toEqual(
+      new Map([['u1', { name: 'Аня', publicId: 'p1', avatarId: 'a1' }]]),
+    );
+    expect(filters).toEqual([
+      { _id: { $in: ['u1', 'u2', 'u3', 'u4', 'u5'] }, showRouteRides: true },
+    ]);
+    expect(projections).toEqual([
+      { publicName: 1, showNameInResults: 1, publicId: 1, avatarId: 1 },
+    ]);
+  });
+
+  it('пустой вход — пустые без запроса', async () => {
+    const { db, filters } = fakeDb([]);
+    const riders = await new RiderNamesService(new ProfileRepository(db)).routeRideRiders([]);
+    expect(riders).toEqual({ shares: new Set(), cards: new Map() });
     expect(filters).toEqual([]);
   });
 });

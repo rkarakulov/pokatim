@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { ProfileRepository } from './profile.repository';
-import type { PublicRiderCard, RiderNameDirectory } from './rider-names.port';
+import type { PublicRiderCard, RiderNameDirectory, RouteRideRiders } from './rider-names.port';
 
 /** Реализация порта `RiderNameDirectory`: читает `profiles` только через `ProfileRepository`. Имена не логирует. */
 @Injectable()
@@ -24,5 +24,11 @@ export class RiderNamesService implements RiderNameDirectory {
     const unique = [...new Set(userIds)];
     if (unique.length === 0) return new Map();
     return this.repository.findAttributionNames(unique);
+  }
+
+  async routeRideRiders(userIds: readonly string[]): Promise<RouteRideRiders> {
+    const unique = [...new Set(userIds)];
+    if (unique.length === 0) return { shares: new Set(), cards: new Map() };
+    return this.repository.findRouteRideRiders(unique);
   }
 }
