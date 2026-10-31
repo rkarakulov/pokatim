@@ -2139,7 +2139,6 @@ export const ru = {
   'routes.detail.formatHint.gpx': 'Велокомпьютеры и приложения: Garmin, Wahoo, Komoot, Strava',
   'routes.detail.formatHint.kml': 'Google Earth и Google Мои карты',
   'routes.detail.formatHint.tcx': 'Курс для Garmin Connect и TrainingPeaks',
-  'routes.detail.formatOption': '{format}: {hint}',
   'routes.detail.downloadClose': 'Закрыть',
   // routes-04d: шторка карточки поверх карты — «чёрточка» сворачивает и разворачивает
   'routes.detail.sheet.collapse': 'Свернуть панель',
