@@ -7,6 +7,7 @@ import { OG_CARD_RENDER_JOB } from './og-card.cache';
 import { ogCardHash, type OgCardInput } from './og-card.inputs';
 import {
   ACHIEVEMENT_CARD_RENDER_JOB,
+  type AchievementCardJob,
   RIDE_INVITE_RENDER_JOB,
   ROUTE_CARD_RENDER_JOB,
   STORY_CARD_RENDER_JOB,
@@ -83,13 +84,63 @@ describe('StoryCardProcessor.process', () => {
     const p = processor();
     const buildAchievementCard = vi.spyOn(p, 'buildAchievementCard').mockResolvedValue('ready');
     expect(await p.process(job(ACHIEVEMENT_CARD_RENDER_JOB, achievement, 1))).toBe('ready');
-    expect(buildAchievementCard).toHaveBeenCalledWith(achievement, { finalAttempt: true });
+    // задача до выката (без `seasonId`) — `seasonId: null`
+    expect(buildAchievementCard).toHaveBeenCalledWith(
+      { ...achievement, seasonId: null },
+      { finalAttempt: true },
+    );
     expect(
       await p.process(job(ACHIEVEMENT_CARD_RENDER_JOB, { ...achievement, code: 'nope' })),
     ).toBe('skipped');
     expect(await p.process(job(ACHIEVEMENT_CARD_RENDER_JOB, invite))).toBe('skipped');
     expect(await p.process(job(RIDE_INVITE_RENDER_JOB, achievement))).toBe('skipped');
     expect(buildAchievementCard).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('StoryCardProcessor.buildAchievementCard — сезонное (achievement-season-story-card)', () => {
+  const SEASON = '0190a6f4-0000-7000-8000-000000000301';
+  const withInputs = () => {
+    const resolve = vi.fn().mockResolvedValue(null);
+    const release = vi.fn().mockResolvedValue(undefined);
+    const args = Array.from({ length: 11 }, () => undefined) as unknown[];
+    args[0] = { release };
+    args[3] = { resolve };
+    vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    const p = new StoryCardProcessor(
+      ...(args as unknown as ConstructorParameters<typeof StoryCardProcessor>),
+    );
+    return { p, resolve };
+  };
+
+  it('сезонная задача передаёт адрес с сезоном во входы; не получено — skipped', async () => {
+    const { p, resolve } = withInputs();
+    const data: AchievementCardJob = {
+      userId: 'u',
+      code: 'season_champion',
+      seasonId: SEASON,
+      template: 'line',
+      hash: 'h',
+    };
+    expect(await p.buildAchievementCard(data)).toBe('skipped');
+    expect(resolve).toHaveBeenCalledWith(
+      'u',
+      { code: 'season_champion', seasonId: SEASON },
+      'line',
+    );
+  });
+
+  it('код и сезон не сходятся — skipped без чтения входов', async () => {
+    const { p, resolve } = withInputs();
+    const data: AchievementCardJob = {
+      userId: 'u',
+      code: 'race_win',
+      seasonId: SEASON,
+      template: 'line',
+      hash: 'h',
+    };
+    expect(await p.buildAchievementCard(data)).toBe('skipped');
+    expect(resolve).not.toHaveBeenCalled();
   });
 });
 

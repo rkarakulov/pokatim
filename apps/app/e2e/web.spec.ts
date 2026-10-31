@@ -542,6 +542,7 @@ test.describe('достижения без сессии (achievements): HTML б�
     '/achievements/flash',
     '/achievements/race_win',
     '/achievements/story/race_win',
+    '/achievements/story/season_champion?season=0190a6f4-0000-7000-8000-000000000401',
   ]) {
     test(path, async ({ page, request }) => {
       const response = await request.get(path);

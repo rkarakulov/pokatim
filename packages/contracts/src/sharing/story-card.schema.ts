@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { fieldError } from '../common.ts';
+import { fieldError, Uuid } from '../common.ts';
 
 /**
  * Карточка для сторис (story-cards, ADR-0018). Шаблоны — только в конец: `line` — светлая схема темы,
@@ -13,6 +13,17 @@ export type StoryCardTemplate = z.infer<typeof StoryCardTemplate>;
 /** `GET /v1/races/:raceId/entry/story-card` — query; лишние ключи и незнакомый шаблон — 400. */
 export const StoryCardQuery = z.strictObject({ template: StoryCardTemplate });
 export type StoryCardQuery = z.infer<typeof StoryCardQuery>;
+
+/**
+ * `GET /v1/achievements/:code/story-card` — query: `seasonId` обязателен у сезонного кода и запрещён у остальных (сверка
+ * с кодом пути — сервер, 400 `VALIDATION_FAILED`); лишние ключи — 400. Старые сборки шлют только `template`.
+ * `StoryCardQuery` гонки, райда и маршрута не расширяется — там `seasonId` недопустим.
+ */
+export const AchievementStoryCardQuery = z.strictObject({
+  template: StoryCardTemplate,
+  seasonId: Uuid.optional(),
+});
+export type AchievementStoryCardQuery = z.infer<typeof AchievementStoryCardQuery>;
 
 /** Капабилити-токен картинки: 128 бит, base64url без `=`. */
 export const StoryCardToken = z.string().regex(/^[A-Za-z0-9_-]{22}$/);

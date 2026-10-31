@@ -1,8 +1,12 @@
-import { ACHIEVEMENT_CODES, isSeasonalCode } from '@pokatim/contracts';
+import { ACHIEVEMENT_CODES } from '@pokatim/contracts';
 import { appThemes } from '@pokatim/design-tokens';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ACHIEVEMENT_BADGE_ICONS, badgeCount } from './achievement-card.icons';
+import {
+  ACHIEVEMENT_BADGE_ICONS,
+  achievementBadgeIcon,
+  badgeCount,
+} from './achievement-card.icons';
 import { type AchievementCardInput, achievementCardHash } from './achievement-card.inputs';
 import { achievementCardRenderInput, renderAchievementCardSvg } from './achievement-card.png';
 import { achievementCardTree } from './achievement-card.render';
@@ -47,6 +51,20 @@ function strings(node: StoryCardNode | string | null | undefined, into: string[]
 
 const tree = (value: AchievementCardInput) =>
   achievementCardTree(achievementCardRenderInput(value));
+
+const SEASON = '0190a6f4-0000-7000-8000-000000000301';
+const OTHER_SEASON = '0190a6f4-0000-7000-8000-000000000302';
+
+/** Сезонное (C3): «Чемпион сезона» сезона «Сезон 2025», дата — последний день сезона. */
+const seasonal = (
+  code: 'season_regular' | 'season_podium' | 'season_champion' = 'season_champion',
+  seasonId = SEASON,
+  title = 'Сезон 2025',
+) =>
+  input(
+    { objectTitle: title },
+    { code, object: { kind: 'season', id: seasonId, title }, factDate: '2025-10-31', level: null },
+  );
 
 describe('тексты карточки достижения', () => {
   it('метка, название и условие каталога, объект, дата с годом, бренд', () => {
@@ -110,6 +128,43 @@ describe('тексты карточки достижения', () => {
   });
 });
 
+describe('сезонные (C3, RC-3)', () => {
+  it('kicker «Достижение», название и условие каталога, «Сезон «…»», последний день сезона', () => {
+    expect(achievementCardTexts(seasonal())).toEqual({
+      kicker: 'Достижение',
+      title: 'Чемпион сезона',
+      condition: expect.any(String),
+      object: 'Сезон «Сезон 2025»',
+      riderName: null,
+      date: '31 октября 2025',
+      brand: expect.any(String),
+    });
+  });
+
+  it('«Сезон в зачёте» — условие с порогом, без сырого `{count}`', () => {
+    const { condition, title } = achievementCardTexts(seasonal('season_regular'));
+    expect(title).toBe('Сезон в зачёте');
+    expect(condition).toContain('3');
+    expect(condition).not.toContain('{');
+  });
+
+  it('значок — глиф каталога приложения, без числа', () => {
+    expect(achievementBadgeIcon('season_regular', null)).toEqual({ glyph: 0xebcc });
+    expect(achievementBadgeIcon('season_podium', null)).toEqual({ glyph: 0xea3f });
+    expect(achievementBadgeIcon('season_champion', null)).toEqual({ glyph: 0xea23 });
+  });
+
+  it('на картинке — название сезона и дата, без id сезона', () => {
+    for (const template of ['line', 'night'] as const) {
+      const texts = strings(tree({ ...seasonal(), template }));
+      expect(texts).toContain('Сезон «Сезон 2025»');
+      expect(texts).toContain('31 октября 2025');
+      expect(texts).toContain(String.fromCodePoint(0xea23));
+      expect(texts.join('\n')).not.toContain(SEASON);
+    }
+  });
+});
+
 describe('число на значке', () => {
   it('порог текущего уровня у счётных; у разовых — нет; счётное без уровня — бронза', () => {
     expect(badgeCount('races_5', 'bronze')).toBe(5);
@@ -137,6 +192,20 @@ describe('ключ кэша', () => {
     const hashes = new Set(variants.map(achievementCardHash));
     expect(hashes.size).toBe(variants.length);
     expect(hashes.has(base)).toBe(false);
+  });
+
+  it('сезонное: два сезона и переименование сезона — разные ключи', () => {
+    const base = achievementCardHash(seasonal());
+    expect(achievementCardHash(seasonal('season_champion', OTHER_SEASON))).not.toBe(base);
+    expect(achievementCardHash(seasonal('season_champion', SEASON, 'Сезон 2025 (лето)'))).not.toBe(
+      base,
+    );
+  });
+
+  it('ключ несезонного входа не изменился (без перерендера существующих карточек, RC-7)', () => {
+    expect(achievementCardHash(input())).toBe(
+      'dab42deedac3f4f808610618e87966b33f30ae259feac943d8cd55455240bc7a',
+    );
   });
 
   it('версия рендера 3 (уровни) входит в ключ', () => {
@@ -210,10 +279,10 @@ describe('разметка', () => {
 });
 
 describe('иконки значка', () => {
-  it('у каждого несезонного кода каталога есть глиф в шрифте Material Symbols', async () => {
+  it('у каждого кода каталога есть глиф в шрифте Material Symbols', async () => {
     const symbols = await symbolsFont();
+    expect(Object.keys(ACHIEVEMENT_BADGE_ICONS).sort()).toEqual([...ACHIEVEMENT_CODES].sort());
     for (const code of ACHIEVEMENT_CODES) {
-      if (isSeasonalCode(code)) continue;
       const glyph = String.fromCodePoint(ACHIEVEMENT_BADGE_ICONS[code].glyph);
       const svg = await renderCardSvg(
         node('div', { display: 'flex', fontFamily: 'symbols', fontSize: 100 }, glyph),

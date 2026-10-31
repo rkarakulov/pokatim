@@ -6,8 +6,6 @@ import {
   isLeveledCode,
 } from '@pokatim/contracts';
 
-import type { FactAchievementCode } from '../achievements';
-
 /** Значок кода на карточке: глиф Material Symbols и число на кольце (порог уровня счётного). */
 export interface AchievementBadgeIcon {
   /** кодовая точка глифа (`expo-symbols/build/android/symbols.json`) */
@@ -18,24 +16,30 @@ export interface AchievementBadgeIcon {
 const RACES = 0xf06e; // sports_score
 const ROUTES = 0xe55b; // map
 const RIDES = 0xe541; // local_cafe
+const PODIUM = 0xea3f; // military_tech
+const TROPHY = 0xea23; // emoji_events
 
 /**
  * Зеркало иконок `ACHIEVEMENT_CATALOG` приложения (`features/achievements/achievement-catalog.ts`, имена Material —
  * `components/icon.tsx`): на Android и web `expo-symbols` рисует тот же шрифт по той же кодовой точке. Изменил
  * иконку кода в приложении — поменяй здесь и подними `STORY_CARD_POLICY.renderVersion`. Пороги уровней (число на
- * значке) — не здесь: `ACHIEVEMENT_LEVEL_TARGETS` в контрактах. У сезонных карточки нет (S7) — значков тоже.
+ * значке) — не здесь: `ACHIEVEMENT_LEVEL_TARGETS` в контрактах. Сезонные — тот же каталог (`calendar`, `medal`,
+ * `trophy`), без числа.
  */
 export const ACHIEVEMENT_BADGE_ICONS = {
   race_first_finish: { glyph: RACES },
-  race_podium: { glyph: 0xea3f }, // military_tech
-  race_win: { glyph: 0xea23 }, // emoji_events
+  race_podium: { glyph: PODIUM },
+  race_win: { glyph: TROPHY },
   races_5: { glyph: RACES },
   route_first: { glyph: ROUTES },
   routes_5: { glyph: ROUTES },
   ride_first: { glyph: RIDES },
   ride_organizer: { glyph: 0xe7fd }, // person
   rides_10: { glyph: RIDES },
-} as const satisfies Record<FactAchievementCode, Pick<AchievementBadgeIcon, 'glyph'>>;
+  season_regular: { glyph: 0xebcc }, // calendar_month
+  season_podium: { glyph: PODIUM },
+  season_champion: { glyph: TROPHY },
+} as const satisfies Record<AchievementCode, Pick<AchievementBadgeIcon, 'glyph'>>;
 
 /**
  * Число на значке (L6): порог текущего уровня счётного из `ACHIEVEMENT_LEVEL_TARGETS` (контракты — одна таблица с
@@ -52,7 +56,7 @@ export function badgeCount(
 
 /** Значок карточки: глиф кода и число уровня. */
 export function achievementBadgeIcon(
-  code: FactAchievementCode,
+  code: AchievementCode,
   level: AchievementLevel | null,
 ): AchievementBadgeIcon {
   const count = badgeCount(code, level);

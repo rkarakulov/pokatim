@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import {
   ACHIEVEMENTS,
   daysAgo,
+  panelAchievement,
   pastRide,
   raceAt,
   racesAt,
@@ -14,6 +15,7 @@ import {
 } from '../../../test/achievements';
 import { createHarness, type Harness } from '../../../test/harness';
 import { bearer, call } from '../../../test/identity';
+import { staff } from '../../../test/races';
 import { catalogCorridorRoute, ownCorridorRoute } from '../../../test/route-rides';
 import { authed, rider, type Rider } from '../../../test/rides';
 import {
@@ -26,7 +28,9 @@ import {
 } from '../../../test/standings';
 import { QUEUE } from '../../queues';
 import { ACHIEVEMENTS_FOR_SHARING, type AchievementsForSharing } from '../achievements';
+import { RIDER_SEASON_STANDINGS, type RiderSeasonStandings } from '../standings';
 import { AchievementCardInputs } from './achievement-card.inputs';
+import { CardRequests } from './card-requests';
 import { ACHIEVEMENT_CARD_RENDER_JOB, type AchievementCardJob } from './story-card.cache';
 import { StoryCardProcessor } from './story-card.processor';
 
@@ -101,7 +105,7 @@ async function winRace(who: Rider, title = 'Весенняя'): Promise<string> 
 
 /** Входы, которые worker отдал бы рендеру (то же, что на картинке). */
 const inputsOf = (who: Rider, code: 'race_win' | 'route_first' | 'ride_first') =>
-  h.worker.get(AchievementCardInputs).resolve(who.userId, code, 'line');
+  h.worker.get(AchievementCardInputs).resolve(who.userId, { code, seasonId: null }, 'line');
 
 describe('отказы (AC1)', () => {
   it('гость — 401; незнакомый код, кривой шаблон, лишний ключ — 400', async () => {
@@ -131,19 +135,6 @@ describe('отказы (AC1)', () => {
     await raceAt(h, season, [placedRow(me.userId, 1)], daysAgo(h, 3));
     const res = await authed(h, me, 'GET', cardUrl('race_win'));
     expect(res.status).toBe(409);
-  });
-
-  it('сезонное достижение (выдано) — 409, без задачи (S7: карточки у сезонных нет)', async () => {
-    const season = await seedSeason(h, 'Сезон 2025', { year: 2025 });
-    await seedProtocolRace(h, season, [placedRow(me.userId, 1)]);
-    await syncStandings(h);
-    expect(await sync(me)).toContain('season_podium');
-    for (const code of ['season_podium', 'season_champion']) {
-      const res = await authed(h, me, 'GET', cardUrl(code));
-      expect(res.status).toBe(409);
-      expect(res.body).toMatchObject({ code: 'STORY_CARD_UNAVAILABLE' });
-    }
-    expect(await jobs()).toHaveLength(0);
   });
 
   it('отозванное (DQ новой ревизией) — 409', async () => {
@@ -289,7 +280,9 @@ describe('уровни (AC6)', () => {
     const season = await seedSeason(h);
     await racesAt(h, season, me.userId, 15, 100);
     expect(await sync(me)).toContain('races_5');
-    const silver = await h.worker.get(AchievementCardInputs).resolve(me.userId, 'races_5', 'line');
+    const silver = await h.worker
+      .get(AchievementCardInputs)
+      .resolve(me.userId, { code: 'races_5', seasonId: null }, 'line');
     expect(silver?.input.facts.level).toBe('silver');
     expect(await status(me, 'races_5')).toEqual({ status: 'pending' });
     expect(await runJob()).toBe('ready');
@@ -297,11 +290,196 @@ describe('уровни (AC6)', () => {
 
     await racesAt(h, season, me.userId, 15, 50);
     expect(await sync(me)).toContain('races_5');
-    const gold = await h.worker.get(AchievementCardInputs).resolve(me.userId, 'races_5', 'line');
+    const gold = await h.worker
+      .get(AchievementCardInputs)
+      .resolve(me.userId, { code: 'races_5', seasonId: null }, 'line');
     expect(gold?.input.facts.level).toBe('gold');
     expect(gold?.hash).not.toBe(silver?.hash);
     expect(await status(me, 'races_5')).toEqual({ status: 'pending' });
     expect(await runJob()).toBe('ready');
     expect(await readyToken(me, 'races_5')).not.toBe(silverToken);
+  });
+});
+
+describe('сезонные (achievement-season-story-card, C2–C5)', () => {
+  const seasonQuery = (seasonId: string, template = 'line') =>
+    `?template=${template}&seasonId=${seasonId}`;
+  const fieldsOf = (body: unknown) =>
+    (body as { details?: { fields?: { path: string; code: string }[] } }).details?.fields;
+
+  /** «Сезон 2025»: я — 1-й (чемпион и призёр), other — 2-й (призёр); снимок пересчитан, выдачи записаны сверкой. */
+  async function championSeason(title = 'Сезон 2025', year = 2025) {
+    const season = await seedSeason(h, title, { year });
+    const race = await seedProtocolRace(h, season, [
+      placedRow(me.userId, 1),
+      placedRow(other.userId, 2),
+    ]);
+    await syncStandings(h);
+    expect(await sync(me)).toContain('season_champion');
+    expect(await sync(other)).toContain('season_podium');
+    return { season, race };
+  }
+
+  it('своё `final` — pending → ready → PNG; повтор — тот же токен; другой сезон — своя задача и токен; на картинке — сезон', async () => {
+    const { season } = await championSeason();
+    const { season: older } = await championSeason('Сезон 2024', 2024);
+    expect(await status(me, 'season_champion', seasonQuery(season))).toEqual({ status: 'pending' });
+    expect(await jobs()).toHaveLength(1);
+    const job = await takeJob();
+    expect(job.data).toMatchObject({ code: 'season_champion', seasonId: season });
+    const logs: string[] = [];
+    vi.spyOn(Logger.prototype, 'log').mockImplementation((message: unknown) => {
+      logs.push(String(message));
+    });
+    expect(await processor().buildAchievementCard(job.data)).toBe('ready');
+    vi.restoreAllMocks();
+    const token = await readyToken(me, 'season_champion', seasonQuery(season));
+    expect(await readyToken(me, 'season_champion', seasonQuery(season))).toBe(token);
+    const res = await image(`${token}.png`);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe('image/png');
+    const text = logs.join('\n');
+    expect(text).toContain('achievement season_champion line: ready (badge)');
+    for (const secret of [me.userId, season, 'Сезон 2025', token])
+      expect(text).not.toContain(secret);
+
+    const resolved = await h.worker
+      .get(AchievementCardInputs)
+      .resolve(me.userId, { code: 'season_champion', seasonId: season }, 'line');
+    expect(resolved?.input).toMatchObject({
+      facts: {
+        code: 'season_champion',
+        object: { kind: 'season', id: season, title: 'Сезон 2025' },
+        factDate: '2025-10-31',
+        level: null,
+      },
+      objectTitle: 'Сезон 2025',
+    });
+
+    expect(await status(me, 'season_champion', seasonQuery(older))).toEqual({ status: 'pending' });
+    expect(await runJob()).toBe('ready');
+    expect(await readyToken(me, 'season_champion', seasonQuery(older))).not.toBe(token);
+  });
+
+  it('400 до лимита: сезонный без `seasonId` — REQUIRED; `seasonId` у несезонного и кривой UUID — INVALID', async () => {
+    const { season } = await championSeason();
+    await winRace(me);
+    const consume = vi.spyOn(h.app.get(CardRequests, { strict: false }), 'consumeRead');
+    for (const [url, field] of [
+      [cardUrl('season_champion'), 'REQUIRED'],
+      [cardUrl('race_win', seasonQuery(season)), 'INVALID'],
+      [cardUrl('season_champion', seasonQuery('not-a-uuid')), 'INVALID'],
+    ] as const) {
+      const res = await authed(h, me, 'GET', url);
+      expect(res.status, url).toBe(400);
+      expect(res.body, url).toMatchObject({ code: 'VALIDATION_FAILED' });
+      expect(fieldsOf(res.body), url).toEqual([{ path: 'seasonId', code: field }]);
+    }
+    expect(consume).not.toHaveBeenCalled();
+    expect(await jobs()).toHaveLength(0);
+  });
+
+  it('409: не полученное, чужой сезон (выдача у другого), незнакомый сезон — одинаково, без задачи', async () => {
+    const { season } = await championSeason();
+    const foreign = await seedSeason(h, 'Сезон 2023', { year: 2023 });
+    await seedProtocolRace(h, foreign, [placedRow(other.userId, 1)]);
+    await syncStandings(h);
+    expect(await sync(other)).toContain('season_champion');
+    for (const [code, seasonId] of [
+      ['season_regular', season], // не заработано
+      ['season_champion', foreign], // выдача у другого райдера
+      ['season_champion', '0190a6f4-0000-7000-8000-00000000ffff'], // сезона нет
+    ] as const) {
+      const res = await authed(h, me, 'GET', cardUrl(code, seasonQuery(seasonId)));
+      expect(res.status, `${code} ${seasonId}`).toBe(409);
+      expect(res.body).toMatchObject({ code: 'STORY_CARD_UNAVAILABLE' });
+    }
+    // у другого райдера «Чемпиона» этого сезона нет
+    expect(
+      (await authed(h, other, 'GET', cardUrl('season_champion', seasonQuery(season)))).status,
+    ).toBe(409);
+    expect(await jobs()).toHaveLength(0);
+  });
+
+  it('409: авто-выдача, сезон стал `pending` (ревизия без пересчёта, RC-2); отозванная сверкой', async () => {
+    const { season, race } = await championSeason();
+    await addRevision(h, race, 2, [placedRow(other.userId, 1), placedRow(me.userId, 2)]);
+    // список выдачу ещё показывает (не мерцает), карточки — нет
+    expect(await sync(me)).toContain('season_champion');
+    expect(
+      (await authed(h, me, 'GET', cardUrl('season_champion', seasonQuery(season)))).status,
+    ).toBe(409);
+
+    await syncStandings(h);
+    expect(await sync(me)).not.toContain('season_champion');
+    expect(
+      (await authed(h, me, 'GET', cardUrl('season_champion', seasonQuery(season)))).status,
+    ).toBe(409);
+    // «Призёр» остался — карточка есть
+    expect(await status(me, 'season_podium', seasonQuery(season))).toEqual({ status: 'pending' });
+  });
+
+  it('ручная выдача — карточка, в т. ч. в сезоне `pending`; ручной отзыв — 409', async () => {
+    const token = (await staff(h, 'admin@example.com', 'admin')).token;
+    const { season } = await championSeason();
+    const other2024 = await seedSeason(h, 'Сезон 2024', { year: 2024 });
+    const race = await seedProtocolRace(h, other2024, [placedRow(other.userId, 1)]);
+    await syncStandings(h);
+    await addRevision(h, race, 2, [placedRow(other.userId, 1)]);
+    // сезон действительно `pending` (ревизия без пересчёта снимка) — ревью pass 1, LOW-1
+    const port = h.app.get<RiderSeasonStandings>(RIDER_SEASON_STANDINGS, { strict: false });
+    const outcomes = await port.outcomesOf(me.userId, [other2024], h.clock.now());
+    expect(outcomes.find((item) => item.seasonId === other2024)?.status).toBe('pending');
+    expect(
+      (
+        await panelAchievement(h, token, me.userId, 'grant', {
+          code: 'season_regular',
+          objectId: other2024,
+        })
+      ).status,
+    ).toBe(204);
+    expect(await status(me, 'season_regular', seasonQuery(other2024))).toEqual({
+      status: 'pending',
+    });
+    const resolved = await h.worker
+      .get(AchievementCardInputs)
+      .resolve(me.userId, { code: 'season_regular', seasonId: other2024 }, 'line');
+    expect(resolved?.input.facts).toEqual({
+      code: 'season_regular',
+      object: { kind: 'season', id: other2024, title: 'Сезон 2024' },
+      factDate: '2024-10-31',
+      level: null,
+    });
+
+    expect(
+      (
+        await panelAchievement(h, token, me.userId, 'revoke', {
+          code: 'season_champion',
+          seasonId: season,
+        })
+      ).status,
+    ).toBe(204);
+    expect(
+      (await authed(h, me, 'GET', cardUrl('season_champion', seasonQuery(season)))).status,
+    ).toBe(409);
+  });
+
+  it('worker: место сместилось между постановкой и рендером — skipped без PNG', async () => {
+    const { season, race } = await championSeason();
+    await status(me, 'season_champion', seasonQuery(season));
+    const job = await takeJob();
+    await addRevision(h, race, 2, [placedRow(other.userId, 1), placedRow(me.userId, 2)]);
+    await syncStandings(h);
+    expect(await processor().buildAchievementCard(job.data)).toBe('skipped');
+  });
+
+  it('сбой порта сезонов — не 409 (ошибка сервера, RC-5)', async () => {
+    const { season } = await championSeason();
+    const port = h.app.get<RiderSeasonStandings>(RIDER_SEASON_STANDINGS, { strict: false });
+    vi.spyOn(port, 'outcomesOf').mockRejectedValue(new Error('standings down'));
+    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const res = await authed(h, me, 'GET', cardUrl('season_champion', seasonQuery(season)));
+    expect(res.status).toBe(500);
+    expect(await jobs()).toHaveLength(0);
   });
 });

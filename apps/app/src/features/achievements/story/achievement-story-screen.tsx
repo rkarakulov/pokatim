@@ -1,4 +1,4 @@
-import { AchievementCode } from '@pokatim/contracts';
+import { AchievementCode, Uuid } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { EmptyState, useTheme } from '@rkarakulov/ui';
@@ -11,24 +11,32 @@ import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { CardPanel } from '@/features/sharing/card-panel';
 
-import { achievementTitle, catalogEntry } from '../achievement-catalog';
-import { achievementPath, achievementStorySource } from './achievement-story';
+import { achievementPath, achievementTitle, catalogEntry } from '../achievement-catalog';
+import { achievementStorySource } from './achievement-story';
 
 /**
- * Карточка своего достижения для сторис (`/achievements/story/<code>`, внутри `Stack.Protected`): общая панель
- * карточки (`CardPanel`, рендер сервера ADR-0018). Не получено, отозвано (409) и незнакомый код — «Карточки нет» и «К
- * достижению». Сезонный код по прямому адресу — «Карточки нет» без запроса, переход — в профиль (S7). Права — только сервер.
+ * Карточка своего достижения для сторис (`/achievements/story/<code>`, сезонное — `?season=<id>`, внутри
+ * `Stack.Protected`): общая панель карточки (`CardPanel`, рендер сервера ADR-0018). Не получено, отозвано (409) и
+ * незнакомый код — «Карточки нет» и «К достижению». Сезонный код без валидного `season` — «Карточки нет» без запроса,
+ * переход — в профиль; у несезонного `season` игнорируется (RC-8). Права — только сервер.
  */
-export function AchievementStoryScreen({ code }: { code: string }) {
+export function AchievementStoryScreen({ code, season }: { code: string; season?: string | null }) {
   const theme = useTheme();
   const router = useRouter();
   const parsed = AchievementCode.safeParse(code);
-  // сезонные — без карточки (S7): без запроса, назад — в профиль
-  const valid = parsed.success && catalogEntry(parsed.data).storyCard ? parsed.data : null;
-  const source = useMemo(() => (valid ? achievementStorySource(valid) : null), [valid]);
+  const entry = parsed.success ? catalogEntry(parsed.data) : null;
+  const seasonId = entry?.seasonal ? (Uuid.safeParse(season).data ?? null) : null;
+  const valid =
+    parsed.success && entry?.storyCard && (!entry.seasonal || seasonId !== null)
+      ? parsed.data
+      : null;
+  const source = useMemo(
+    () => (valid ? achievementStorySource(valid, seasonId) : null),
+    [valid, seasonId],
+  );
   // «К достижению» — к экрану этого достижения в стеке (как «К райду»); незнакомый код — в профиль
   const back = () =>
-    valid ? router.dismissTo(achievementPath(valid)) : router.navigate('/profile');
+    valid ? router.dismissTo(achievementPath(valid, seasonId)) : router.navigate('/profile');
   const empty = (
     <EmptyState
       title={t('achievementCard.empty.title')}
@@ -45,7 +53,7 @@ export function AchievementStoryScreen({ code }: { code: string }) {
       <DocumentTitle title={`${t('achievementCard.title')} — ${t('app.name')}`} />
       <DetailHeader
         title={t('achievementCard.title')}
-        fallback={valid ? achievementPath(valid) : '/profile'}
+        fallback={valid ? achievementPath(valid, seasonId) : '/profile'}
       />
       <ScrollView testID="achievement-story" contentContainerStyle={styles.content}>
         {valid && source ? (
