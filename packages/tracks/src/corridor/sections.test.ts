@@ -88,39 +88,46 @@ describe('routeSections: разбиение через каждые 10 км', ()
     for (const { fromM, toM } of sections) expect(endsGap(loop, fromM, toM)).toBeGreaterThan(150);
   });
 
-  it('«туда-обратно» 2 × 15 км: участок с совпадающими концами (разворот) слит со следующим', () => {
+  it('«туда-обратно» 2 × 15 км по одной дороге: слитый участок с разворотом проходит свои ворота — участков нет', () => {
     const outback = path([
       [0, 0],
       [0, 15_000],
       [0, 0],
     ]);
-    const sections = routeSections(outback, 50);
-    expect(sections.map(({ fromM, toM }) => [fromM, toM])).toEqual([
-      [0, 10_000],
-      [10_000, 30_000],
-    ]);
-    for (const { fromM, toM } of sections)
-      expect(endsGap(outback, fromM, toM)).toBeGreaterThan(150);
+    expect(routeSections(outback, 50)).toEqual([]);
   });
 
-  it.each([
-    [15_070, 50, true],
-    [15_080, 50, false],
-    [15_100, 50, false],
-    [15_100, 100, true],
-  ])(
-    '«туда-обратно» до %i м, ширина %i — концы ≤ 2R + запас сливаются: %s',
-    (turnM, widthM, merged) => {
+  it.each([15_070, 15_080, 15_100])(
+    '«туда-обратно» по одной дороге до %i м: участок с разворотом проходит у своих ворот — участков нет',
+    (turnM) => {
       const outback = path([
         [0, 0],
         [0, turnM],
         [0, 0],
       ]);
-      const sections = routeSections(outback, widthM);
-      expect(sections.length).toBe(merged ? 2 : 3);
+      expect(routeSections(outback, 50)).toEqual([]);
+    },
+  );
+
+  it.each([
+    [100, 50, 0],
+    [200, 50, 2],
+    [200, 100, 0],
+  ])(
+    'линия участка возвращается к его началу на %i м (концы далеко), ширина %i → %i участков',
+    (offsetM, widthM, count) => {
+      const hairpin = path([
+        [0, 0],
+        [0, 4000],
+        [offsetM, 4000],
+        [offsetM, -4000],
+        [offsetM + 8000, -4000],
+      ]);
+      const sections = routeSections(hairpin, widthM);
+      expect(sections).toHaveLength(count);
       const threshold = 2 * Math.max(widthM, 30) + ROUTE_SECTION_POLICY.gateMarginM;
       for (const { fromM, toM } of sections) {
-        expect(endsGap(outback, fromM, toM)).toBeGreaterThan(threshold);
+        expect(endsGap(hairpin, fromM, toM)).toBeGreaterThan(threshold);
       }
     },
   );
