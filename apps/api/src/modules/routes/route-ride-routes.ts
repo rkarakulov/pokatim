@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { boundsOf } from '@pokatim/tracks';
+import { type Bounds, boundsOf } from '@pokatim/tracks';
 
 import type { RouteMatchGeometry } from './route-geometry.port';
 import type { RideableRoute, RouteRideRoutes } from './route-ride-routes.port';
 import { RoutesRepository } from './routes.repository';
+
+/** Предел `rideableBounds` за вызов (линии показа ≤ 1000 точек каждая). */
+const BOUNDS_BATCH_MAX = 25;
 
 /**
  * Реализация порта `RouteRideRoutes` (route-rides-01): видимость — только запрос `RoutesRepository.findRideable`
@@ -42,5 +45,26 @@ export class RouteRideRoutesService implements RouteRideRoutes {
     if (ids.length === 0) return new Map();
     const routes = await this.repository.findRideableTitles(userId, ids);
     return new Map(routes.map((route) => [route._id, route.title]));
+  }
+
+  ownReadyIds(userId: string, limit: number): Promise<string[]> {
+    return this.repository.ownReadyIds(userId, limit);
+  }
+
+  async rideableBounds(routeIds: readonly string[], userId: string): Promise<Map<string, Bounds>> {
+    const ids = [...new Set(routeIds)];
+    if (ids.length === 0) return new Map();
+    if (ids.length > BOUNDS_BATCH_MAX) {
+      throw new Error(`rideableBounds: ${ids.length} ids > ${BOUNDS_BATCH_MAX}`);
+    }
+    const visible = await this.repository.findRideableTitles(userId, ids);
+    const lines = await this.repository.displayLines(visible.map((route) => route._id));
+    const result = new Map<string, Bounds>();
+    for (const route of visible) {
+      const line = lines.get(route._id);
+      const bounds = line ? boundsOf(line) : null;
+      if (bounds) result.set(route._id, bounds);
+    }
+    return result;
   }
 }

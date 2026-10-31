@@ -13,6 +13,7 @@ import {
   routeCardPath,
   routeRideComparisonLines,
   routeRideFailureText,
+  routeRideOriginText,
   routeRidePath,
   routeRidePickPath,
   routeRideReasonText,
@@ -216,5 +217,13 @@ describe('адреса (A5)', () => {
     );
     expect(routeCardPath(ROUTE_ID, false)).toBe(`/routes/${ROUTE_ID}`);
     expect(routeCardPath(ROUTE_ID, true)).toBe(`/routes/mine/${ROUTE_ID}`);
+  });
+});
+
+describe('происхождение заезда (route-rides-03)', () => {
+  it('auto — «Проверен автоматически»; manual и незнакомое — без строки', () => {
+    expect(routeRideOriginText('auto')).toBe('Проверен автоматически');
+    expect(routeRideOriginText('manual')).toBeNull();
+    expect(routeRideOriginText('unknown')).toBeNull();
   });
 });

@@ -44,6 +44,13 @@ describe('workerOutboxRoutes', () => {
     }
   });
 
+  it('tracks.activity-removed — в results-intake и route-rides-intake (fan-out)', () => {
+    expect(queuesOf(workerOutboxRoutes['tracks.activity-removed'])).toEqual([
+      'results-intake',
+      'route-rides-intake',
+    ]);
+  });
+
   it('события протокола results — и уведомлениям, и рейтингу сезона (standings-outbox-events, AC1)', () => {
     for (const type of ['results.protocol-published', 'results.result-revised']) {
       expect(queuesOf(workerOutboxRoutes[type])).toEqual([
@@ -51,6 +58,13 @@ describe('workerOutboxRoutes', () => {
         'standings-recalc',
       ]);
     }
+  });
+
+  it('активность: activity-ready — только results-intake, activity-group-created — только route-ride-auto (route-rides-03, AC4)', () => {
+    expect(queuesOf(workerOutboxRoutes['tracks.activity-ready'])).toEqual(['results-intake']);
+    expect(queuesOf(workerOutboxRoutes['tracks.activity-group-created'])).toEqual([
+      'route-ride-auto',
+    ]);
   });
 
   it('у каждого типа есть очередь', () => {

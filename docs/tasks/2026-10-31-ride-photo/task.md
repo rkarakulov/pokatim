@@ -196,7 +196,7 @@ RGB) + 3 буфера 1080×1920 RGBA (~25 МБ) — в пределах; `sharp
 - `apps/api/src/modules/rides/{ride-photos.collection.ts (или в rides.collection.ts), ride-photos.repository.ts,
   ride-photos.service.ts, ride-photos.controller.ts, ride-photos-public.controller.ts}`, int-тесты
   `ride-photos.int.test.ts`, `ride-photos-moderation.int.test.ts` (или кейсы в `rides-moderation.int.test.ts`).
-- `apps/api/src/db/migrations/0046_ride_photos.ts` (номер сверить с `origin/develop` перед PR, 8.1 R8).
+- `apps/api/src/db/migrations/0047_ride_photos.ts` (номер сверить с `origin/develop` перед PR, 8.1 R8).
 - `docs/adr/0028-image-pipeline-and-ride-photos.md`.
 
 **PR A — изменить.**
@@ -276,7 +276,7 @@ RGB) + 3 буфера 1080×1920 RGBA (~25 МБ) — в пределах; `sharp
   проверить. Решение: токен в `@pokatim/design-tokens` (градиент на `overlay.scrim`: зоны текста и середина), текст — роль
   `onPhoto`; unit-тест токена: контраст `onPhoto` к скриму над **белым** фото в зонах текста ≥ 4.5:1 (WCAG). Один токен
   для 4a (PR A) и героя (PR B). Значения — сверить с прототипом в PR B (вопрос человеку, если разойдутся).
-- **R8. Номера.** `0046_ride_photos` и ADR-0028 свободны на `origin/develop` (c8a4f4e3), но идут параллельные сессии —
+- **R8. Номера.** `0047_ride_photos` и ADR-0028 свободны на `origin/develop` (c8a4f4e3), но идут параллельные сессии —
   сверить перед PR; при коллизии — следующий номер (миграция ссылается на имя, не на номер).
 - **R9. Коды ошибок.** Варианты: (a) переиспользовать `AVATAR_*` — неверная семантика в контракте, (b) `RIDE_PHOTO_*`
   — по тройке кодов на каждый будущий вид фото, (c) **общие `IMAGE_FORMAT_UNSUPPORTED` (415) / `IMAGE_TOO_LARGE` (413) /
@@ -319,7 +319,7 @@ RGB) + 3 буфера 1080×1920 RGBA (~25 МБ) — в пределах; `sharp
   фактов меняет ключ» пропущено `ride.photoId` (OG фото не рисует, P4) + явный кейс «`photoId` ключ OG не меняет»;
   `achievement-card.render.test.ts` — эталон хэша и `renderVersion` 4 (подъём версии по §5); `story-card.inputs.test.ts`
   — тип мока версии; `rides-route.int.test.ts` — ключ `photo` в явном списке полей публичной карточки;
-  `migrations.int.test.ts` — «последняя» перенесено с `0045_social` на `0046_ride_photos`.
+  `migrations.int.test.ts` — «последняя» перенесено с `0045_social` на `0047_ride_photos`.
 - **D4. Минимальные правки PR B/C для сборки:** фикстуры тестов приложения (8 файлов) и панели
   (`RideModerationScreen.test.tsx`) — `photo: null` (выход схем `RideSummary`/`ModerationRideDetail` требует поле);
   `admin.audit.action.ride.photo_reset` в `packages/i18n`.
@@ -416,7 +416,7 @@ ADR-0028 (+ строка в `docs/adr/README.md`), `docs/product/rides.md` (ра
 - `RIDES_POLICY.photoUploadLimit = { limit: 20, windowSec: 3600 }` (ключ `ride-photo:<uid>`), `photoBodyTimeouts = {
   idleMs: 10_000, totalMs: 60_000 }`.
 
-**Data & migrations.** `0046_ride_photos` (expand-only, идемпотентна, без транзакции): `ensureCollection(ride_photos)`,
+**Data & migrations.** `0047_ride_photos` (expand-only, идемпотентна, без транзакции): `ensureCollection(ride_photos)`,
 индексы `ride_photos_ride_unique` `{ rideId: 1 }` unique (одно фото на райд; транзакция «удалить → вставить») и
 `ride_photos_organizer_idx` `{ organizerUserId: 1 }` (стирание). `rides.photoId` — без бэкфилла (чтение `?? null`),
 индекс по нему не нужен (поиск только по `_id`). Документ: `{ _id: randomToken, rideId, organizerUserId, bytes: Binary,
@@ -465,7 +465,7 @@ id генерирует сервер; `version` не принимается.
 `docs/adr/README.md`; ADR-0018 (4a с фото, `renderVersion` 4, PNG palette); ADR-0019 (гейт и слоты переехали в
 `media`, бюджет общий); ADR-0015 (шаг `rides` стирает фото); ADR-0011 (второе исключение); `docs/product/rides.md`
 (раздел «Фото организатора», строка «Скрыто» → «сделано (API — PR A)»); `docs/product/admin-panel.md` («Удалить фото»
-— API); `pokatim-security.md`, `pokatim-db.md`; `pr.md` — миграция `0046_ride_photos`, без env.
+— API); `pokatim-security.md`, `pokatim-db.md`; `pr.md` — миграция `0047_ride_photos`, без env.
 
 ### PR B — приложение (заметки)
 
@@ -495,7 +495,7 @@ id генерирует сервер; `version` не принимается.
 **Сделано** (ветка `feature/organizer-photo`, коммиты по шагам §11): контракты и api-client (`RidePhotoRef`,
 `RIDE_PHOTO_*`, `ImageInvalidDetails`, `IMAGE_*`, `ResetRidePhotoRequest`, `ride.photo_reset`) → `modules/media`
 (вынос конвейера, гейта, слотов и отдачи JPEG из профиля; аватар без изменения поведения) → миграция
-`0046_ride_photos` → фото райда в `rides` (загрузка, удаление, отдача, view, сброс модератором, стирание, порт
+`0047_ride_photos` → фото райда в `rides` (загрузка, удаление, отдача, view, сброс модератором, стирание, порт
 `invitePhoto`) → токен `photoScrim` и 4a с фото в `sharing` (`renderVersion` 4) → доки (ADR-0028, дополнения
 ADR-0011/0015/0018/0019, `rides.md`, `admin-panel.md`, `pokatim-security/db/backend.md`). Номера `0046` и ADR-0028
 свободны на `origin/develop` (`ceb9fa70`, проверено `git ls-tree` перед коммитом доков). Отклонения — 8.2 (D1–D6).

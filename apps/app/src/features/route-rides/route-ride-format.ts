@@ -52,6 +52,10 @@ export const routeRideReasonText = (reason: Reason): string | null =>
 export const routeRideFailureText = (failure: Failure): string =>
   t(`routes.rides.failure.${failure ?? 'unknown'}`);
 
+/** Строка происхождения (route-rides-03, V5): `auto` — «Проверен автоматически»; ручной и незнакомый — `null`. */
+export const routeRideOriginText = (origin: RouteRideDetail['origin']): string | null =>
+  origin === 'auto' ? t('routes.rides.result.autoChecked') : null;
+
 /** Источник заезда; незнакомый — «Файл». */
 export const routeRideSourceLabel = (source: Source): string =>
   t(`tracks.source.${source === 'unknown' ? 'upload' : source}`);

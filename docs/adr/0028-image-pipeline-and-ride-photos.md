@@ -27,7 +27,7 @@
    сохраняется. В worker `MediaModule` не импортируется: рендеру карточек хватает чистых функций.
 3. **Аватар — поверх ядра, без изменения поведения.** `processAvatar`/`cropRect`/`scaleRect` остаются в
    `profile/avatar-image.ts`, `detectImageFormat` реэкспортируется; коды `AVATAR_*`, заголовки и кэш на год — прежние.
-4. **Фото райда — модуль `rides`.** Коллекция `ride_photos` (миграция `0046_ride_photos`, единственный писатель —
+4. **Фото райда — модуль `rides`.** Коллекция `ride_photos` (миграция `0047_ride_photos`, единственный писатель —
    `RidePhotosRepository`): `{ _id: randomToken, rideId (unique), organizerUserId, bytes, contentType, width, height,
    bytesLength, createdAt }`; ссылка — `rides.photoId` (без бэкфилла, `version` не меняется). Одно фото на райд;
    замена — новый id. Хранится только перекодированный JPEG без метаданных (исходник не хранится).

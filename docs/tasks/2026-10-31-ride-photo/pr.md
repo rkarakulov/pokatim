@@ -9,7 +9,7 @@ PR B (приложение) и PR C (панель) — отдельно.
   настройки sharp процесса, `processCover` (поворот по EXIF, вписать в 1600 px, короткая сторона результата ≥ 400),
   один гейт обработки `ImageProcessing` и общие слоты приёма `ImageUploadSlots` для аватара и фото райда, `replyJpeg`.
   Аватар переведён на ядро без изменения поведения (тесты профиля — только импорты и имена).
-- **Фото райда (`rides`)**: коллекция `ride_photos` (миграция `0046_ride_photos`), `PUT /v1/rides/:id/photo`,
+- **Фото райда (`rides`)**: коллекция `ride_photos` (миграция `0047_ride_photos`), `PUT /v1/rides/:id/photo`,
   `POST /v1/rides/:id/photo/delete`, `GET /v1/ride-photos/:id` (только текущее фото нескрытого райда,
   `public, max-age=86400, immutable`), `photo` во view райда (лента, `me`, публичная карточка; скрытый — `null`).
 - **Модерация**: `POST /v1/admin/rides/:id/photo-reset` (`rides.moderate`, `{ photoId, reason }`, журнал
@@ -27,7 +27,7 @@ PR B (приложение) и PR C (панель) — отдельно.
 
 ## Деплой
 
-- Миграция **`0046_ride_photos`** (expand-only, идемпотентна): коллекция `ride_photos`, индексы
+- Миграция **`0047_ride_photos`** (expand-only, идемпотентна): коллекция `ride_photos`, индексы
   `ride_photos_ride_unique`, `ride_photos_organizer_idx`. Новых env нет.
 - `STORY_CARD_POLICY.renderVersion` 3 → 4: карточки сторис перерисуются по запросу (кэш 24 ч).
 

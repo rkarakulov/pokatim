@@ -5,9 +5,15 @@ import type {
   RouteRideRef,
 } from '@pokatim/contracts';
 import { boundsNear, type Bounds } from '@pokatim/tracks';
+import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 
-import type { ActivityRef } from '../tracks';
-import type { RouteRideDoc, RouteRideStatus } from './route-rides.collection';
+import type { ActivityRef, ActivitySource } from '../tracks';
+import type {
+  RouteRideDoc,
+  RouteRideOrigin,
+  RouteRideResult,
+  RouteRideStatus,
+} from './route-rides.collection';
 
 /**
  * Правила заезда по маршруту (route-rides-01, `[ASSUMPTION]` §8): коридор и окно сверки, кандидаты, квота, лимит,
@@ -25,6 +31,122 @@ export const ROUTE_RIDE_POLICY = {
   stuckQueuedMs: 2 * 3_600_000,
   stuckCheckingMs: 15 * 60_000,
 } as const;
+
+/**
+ * Автопроверка новой активности (route-rides-03, `[ASSUMPTION]` V1/V2/8.1 AC-4): только `cycling`/`unknown`, старт не
+ * раньше 7 сут до приёма файла, ≤ 20 прогонов движка; скан «уже ездил» — ≤ 200 маршрутов, рамки — пачками по 25.
+ */
+export const ROUTE_RIDE_AUTO_POLICY = {
+  recentDays: 7,
+  maxRoutes: 20,
+  riddenRoutesScan: 200,
+  boundsBatch: 25,
+  /** хранение плана события (TTL) — дольше ретраев и повторов outbox */
+  planTtlDays: 30,
+  /**
+   * срок обработки события от приёма файла: без сохранённого плана позже — задача без плана и сверок (повтор после
+   * TTL плана не строит новый, ревью pass 4); строго меньше `planTtlDays` (unit-тест)
+   */
+  processDeadlineMs: 7 * 86_400_000,
+  sports: ['cycling', 'unknown'],
+} as const;
+
+const DAY_MS = 86_400_000;
+
+/** Активность годится для автопроверки (V1, 8.1 AC-3): спорт и старт `≥ uploadCreatedAt − 7 сут`. */
+export function autoEligible(
+  activity: Pick<ActivityRef, 'sport' | 'startedAt' | 'uploadCreatedAt'>,
+): boolean {
+  const sports: readonly string[] = ROUTE_RIDE_AUTO_POLICY.sports;
+  return (
+    sports.includes(activity.sport) &&
+    activity.startedAt.getTime() >=
+      activity.uploadCreatedAt.getTime() - ROUTE_RIDE_AUTO_POLICY.recentDays * DAY_MS
+  );
+}
+
+/** Маршрут со своими заездами райдера (`RouteRidesRepository.ridesByRoute`, без заездов группы события). */
+export interface RiddenRoute {
+  routeId: string;
+  rides: { activityId: string; startedAt: Date }[];
+}
+
+/** Заезд группы события по маршруту (`RouteRidesRepository.groupRides`); нет `origin` — ручной. */
+export interface GroupRide {
+  routeId: string;
+  origin?: RouteRideOrigin;
+}
+
+/**
+ * План автопроверки (V2, V4, 8.1 AC-4; ревью pass 1–2): `done` — маршруты с автозаездом группы (резервируют слоты
+ * первыми, без прогона); `candidates` до видимости и рамки — (а) маршруты со своими живыми заездами по дате последнего
+ * живого заезда ↓, затем (б) свои готовые маршруты в данном порядке (новые → старые) без повторов (а). Пропуск —
+ * ручной заезд группы или живых заездов ≥ квоты. Заезды группы в `ridden` не входят (исключены до скана), поэтому
+ * автозаезды не сдвигают порядок и окно скана: повтор события получает тот же план.
+ */
+export function autoPlan(input: {
+  heads: ReadonlyMap<string, unknown>;
+  ridden: readonly RiddenRoute[];
+  own: readonly string[];
+  group: readonly GroupRide[];
+}): { done: string[]; candidates: string[] } {
+  const manual = new Set(
+    input.group.filter((ride) => (ride.origin ?? 'manual') !== 'auto').map((ride) => ride.routeId),
+  );
+  const done = [
+    ...new Set(
+      input.group
+        .filter((ride) => ride.origin === 'auto' && !manual.has(ride.routeId))
+        .map((ride) => ride.routeId),
+    ),
+  ].sort();
+  const skip = new Set([...manual, ...done]);
+  const ridden: { routeId: string; lastStartedAt: number }[] = [];
+  for (const route of input.ridden) {
+    const alive = route.rides.filter((ride) => input.heads.has(ride.activityId));
+    if (alive.length >= ROUTE_RIDE_POLICY.maxPerRoute) skip.add(route.routeId);
+    if (alive.length === 0 || skip.has(route.routeId)) continue;
+    const lastStartedAt = Math.max(...alive.map((ride) => ride.startedAt.getTime()));
+    ridden.push({ routeId: route.routeId, lastStartedAt });
+  }
+  ridden.sort((a, b) => b.lastStartedAt - a.lastStartedAt);
+  const inRidden = new Set(ridden.map((route) => route.routeId));
+  const own = [...new Set(input.own)].filter(
+    (routeId) => !inRidden.has(routeId) && !skip.has(routeId),
+  );
+  return { done, candidates: [...ridden.map((route) => route.routeId), ...own] };
+}
+
+/** Первые `room` маршрутов по порядку, видимых (есть рамка) и с рамкой у рамки активности (600 м). */
+export function nearRoutes(
+  ordered: readonly string[],
+  bounds: ReadonlyMap<string, Bounds>,
+  activityBounds: Bounds,
+  room: number,
+): string[] {
+  return ordered
+    .filter((routeId) => {
+      const routeBounds = bounds.get(routeId);
+      return (
+        routeBounds !== undefined &&
+        boundsNear(activityBounds, routeBounds, ROUTE_RIDE_POLICY.boundsMarginM)
+      );
+    })
+    .slice(0, Math.max(0, room));
+}
+
+/**
+ * Основная активность группы сейчас (RC-7): основная — она сама, дубль — его основная; основную успели удалить или
+ * сменить между чтениями — `null` (как неизвестная). Общая для ручного POST и автопроверки.
+ */
+export async function primaryOfGroup(
+  activities: Pick<ActivitySource, 'activity'>,
+  userId: string,
+  activity: ActivityRef,
+): Promise<ActivityRef | null> {
+  if (activity.isPrimary) return activity;
+  return activities.activity(userId, activity.primaryId);
+}
 
 /** Поля заезда, нужные правилам (список читается без `trackMap`). */
 export type RouteRideFacts = Omit<RouteRideDoc, 'trackMap'>;
@@ -175,4 +297,48 @@ export function candidateRows(
       distanceM: Math.round(activity.distanceM),
       rideId: findExisting(rides, heads, activity.id)?._id ?? null,
     }));
+}
+
+/**
+ * Документ нового заезда (общий для ручного `queued` и автопроверки `passed`, route-rides-03): снимок сводки
+ * активности, коридор политики. Без `result` — `queued` (ручной POST, ревизия 1, попыток 0); с `result` — готовый
+ * итог (автопроверка: ревизия 1, одна попытка).
+ */
+export function newRideDoc(input: {
+  userId: string;
+  routeId: string;
+  activity: ActivityRef;
+  origin: RouteRideOrigin;
+  now: Date;
+  result?: RouteRideResult;
+}): RouteRideDoc {
+  const { activity, now, result } = input;
+  return {
+    _id: uuidv7(),
+    userId: input.userId,
+    routeId: input.routeId,
+    activityId: activity.id,
+    activity: {
+      startedAt: activity.startedAt,
+      endedAt: activity.endedAt,
+      source: activity.source,
+      elapsedSec: activity.elapsedSec,
+      distanceM: activity.distanceM,
+    },
+    origin: input.origin,
+    corridorWidthM: ROUTE_RIDE_POLICY.corridorWidthM,
+    checkRevision: 1,
+    checkAttempts: result ? 1 : 0,
+    status: 'queued',
+    reasons: [],
+    failure: null,
+    segment: null,
+    touchedCorridor: null,
+    engineVersion: null,
+    trackMap: null,
+    checkedAt: null,
+    ...result,
+    createdAt: now,
+    updatedAt: now,
+  };
 }

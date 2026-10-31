@@ -17,8 +17,6 @@ import {
   ACTIVITY_ID,
   BEST_ID,
   PREVIOUS_ID,
-  rideCandidate,
-  rideCandidates,
   rideDetail,
   RIDE_ID,
   ROUTE_ID,
@@ -181,40 +179,46 @@ describe('«Заезд по маршруту» (route-rides-02, A4)', () => {
     expect(screen.queryByText('Дистанция по маршруту')).toBeNull();
   });
 
-  it('сбой — текст кода и «Проверить снова»: кандидат найден → POST { activityId }', async () => {
+  it('сбой — текст кода и «Проверить снова»: POST { activityId } детали, без запроса кандидатов', async () => {
     signedIn();
     getRide.mockResolvedValue(failed());
-    listCandidates.mockResolvedValue(rideCandidates(rideCandidate({ rideId: RIDE_ID })));
     checkRide.mockResolvedValue(queued());
     await open();
     expect(await screen.findByText('Проверка не уложилась во время')).toBeOnTheScreen();
     expect(screen.getByText('Не удалось проверить')).toBeOnTheScreen();
-    expect(listCandidates).not.toHaveBeenCalled();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Проверить снова' }));
     await waitFor(() =>
       expect(checkRide).toHaveBeenCalledWith(TOKEN, ROUTE_ID, { activityId: ACTIVITY_ID }),
     );
+    expect(listCandidates).not.toHaveBeenCalled();
     // ответ — в кеш: экран остаётся и показывает проверку
     expect(await screen.findByText('Проверяем заезд…')).toBeOnTheScreen();
   });
 
-  it('«Проверить снова» без кандидата — подсказка загрузить файл, без POST', async () => {
+  it('«Проверить снова» — 404 (активности больше нет): подсказка загрузить файл', async () => {
     signedIn();
     getRide.mockResolvedValue(failed());
-    listCandidates.mockResolvedValue(rideCandidates(rideCandidate({ rideId: null })));
+    checkRide.mockRejectedValue(notFound());
     await open();
     await fireEvent.press(await screen.findByRole('button', { name: 'Проверить снова' }));
     expect(
       await screen.findByText('Заезда нет среди доступных — загрузите файл заезда ещё раз'),
     ).toBeOnTheScreen();
-    expect(checkRide).not.toHaveBeenCalled();
+    expect(listCandidates).not.toHaveBeenCalled();
+  });
+
+  it('«Проверить снова» — без activityId (старый API) кнопки нет', async () => {
+    signedIn();
+    getRide.mockResolvedValue({ ...failed(), activityId: null });
+    await open();
+    expect(await screen.findByText('Проверка не уложилась во время')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Проверить снова' })).toBeNull();
   });
 
   it('«Проверить снова» — ошибка POST (429) текстом ошибок заезда', async () => {
     signedIn();
     getRide.mockResolvedValue(failed());
-    listCandidates.mockResolvedValue(rideCandidates(rideCandidate({ rideId: RIDE_ID })));
     checkRide.mockRejectedValue(
       new ApiHttpError(429, { code: 'RATE_LIMITED', message: 'x', details: { retryAfterSec: 30 } }),
     );
@@ -223,6 +227,20 @@ describe('«Заезд по маршруту» (route-rides-02, A4)', () => {
     expect(
       await screen.findByText('Слишком много проверок за час. Попробуйте через 1 мин.'),
     ).toBeOnTheScreen();
+  });
+
+  it('автопроверка (route-rides-03) — «Проверен автоматически»', async () => {
+    signedIn();
+    getRide.mockResolvedValue(rideDetail({ origin: 'auto' }));
+    await open();
+    expect(await screen.findByText('Проверен автоматически')).toBeOnTheScreen();
+  });
+
+  it('ручная проверка — без строки «Проверен автоматически»', async () => {
+    signedIn();
+    await open();
+    expect(await screen.findByText('2:04:37')).toBeOnTheScreen();
+    expect(screen.queryByText('Проверен автоматически')).toBeNull();
   });
 
   it('pull-to-refresh — деталь перезапрашивается (ревью pass 1)', async () => {

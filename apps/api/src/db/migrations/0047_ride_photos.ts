@@ -20,7 +20,7 @@ export const RIDE_PHOTOS_INDEXES = {
  * `_id` райда). Expand-only, без транзакции, идемпотентна. После `0045_social`.
  */
 export const ridePhotos: MongoMigration = {
-  id: '0046_ride_photos',
+  id: '0047_ride_photos',
   async up(db) {
     await ensureCollection(db, RIDE_PHOTOS_COLLECTIONS.photos);
     for (const { key, options } of Object.values(RIDE_PHOTOS_INDEXES)) {

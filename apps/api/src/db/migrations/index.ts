@@ -45,7 +45,8 @@ import { profileReportReasons } from './0042_profile_report_reasons';
 import { achievementsSeasonal } from './0043_achievements_seasonal';
 import { routeRidesPassedIdx } from './0044_route_rides_passed_idx';
 import { social } from './0045_social';
-import { ridePhotos } from './0046_ride_photos';
+import { routeRideAutoPlans } from './0046_route_ride_auto_plans';
+import { ridePhotos } from './0047_ride_photos';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -97,5 +98,6 @@ export const migrations: readonly MongoMigration[] = [
   achievementsSeasonal,
   routeRidesPassedIdx,
   social,
+  routeRideAutoPlans,
   ridePhotos,
 ];

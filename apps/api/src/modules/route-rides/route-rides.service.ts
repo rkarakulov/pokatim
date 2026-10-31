@@ -1,21 +1,17 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { RateLimitedDetails, RouteRideDetail, RouteRideRequest } from '@pokatim/contracts';
 import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
-import {
-  isDuplicateKey,
-  MongoOutboxWriter,
-  MongoTransactions,
-  uuidv7,
-} from '@rkarakulov/api-kit/mongo';
+import { isDuplicateKey, MongoOutboxWriter, MongoTransactions } from '@rkarakulov/api-kit/mongo';
 
 import type { DbSession } from '../../db';
 import { domainError } from '../../error-messages';
 import { ACTIVITY_SOURCE, type ActivityRef, type ActivitySource } from '../tracks';
-import type { RouteRideDoc } from './route-rides.collection';
 import { ROUTE_RIDES_CHECK_REQUESTED, type RouteRidesCheckRequested } from './route-rides.events';
 import {
   effectiveStatus,
   findExisting,
+  newRideDoc,
+  primaryOfGroup,
   ROUTE_RIDE_POLICY,
   stuckBounds,
 } from './route-rides.policy';
@@ -105,9 +101,8 @@ export class RouteRidesService {
       activity = upload.activity;
       if (!activity) throw notReady();
     }
-    if (activity.isPrimary) return activity;
     // основная группы сменилась или удалена между чтениями — как неизвестная
-    const primary = await this.activities.activity(userId, activity.primaryId);
+    const primary = await primaryOfGroup(this.activities, userId, activity);
     if (!primary) throw notFound();
     return primary;
   }
@@ -128,32 +123,7 @@ export class RouteRidesService {
     orphans: readonly string[],
     now: Date,
   ): Promise<{ id: string; outcome: RouteRideCheckOutcome }> {
-    const doc: RouteRideDoc = {
-      _id: uuidv7(),
-      userId,
-      routeId,
-      activityId: activity.id,
-      activity: {
-        startedAt: activity.startedAt,
-        endedAt: activity.endedAt,
-        source: activity.source,
-        elapsedSec: activity.elapsedSec,
-        distanceM: activity.distanceM,
-      },
-      corridorWidthM: ROUTE_RIDE_POLICY.corridorWidthM,
-      status: 'queued',
-      checkRevision: 1,
-      checkAttempts: 0,
-      reasons: [],
-      failure: null,
-      segment: null,
-      touchedCorridor: null,
-      engineVersion: null,
-      trackMap: null,
-      createdAt: now,
-      updatedAt: now,
-      checkedAt: null,
-    };
+    const doc = newRideDoc({ userId, routeId, activity, origin: 'manual', now });
     try {
       await this.transactions.run(async (tx) => {
         await this.repository.deleteOrphans(tx, userId, routeId, orphans);

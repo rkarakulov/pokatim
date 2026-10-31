@@ -57,7 +57,8 @@ import {
 import { ACHIEVEMENT_SEASON_INDEXES, achievementsSeasonal } from './0043_achievements_seasonal';
 import { ROUTE_RIDES_PASSED_INDEX, routeRidesPassedIdx } from './0044_route_rides_passed_idx';
 import { social } from './0045_social';
-import { ridePhotos } from './0046_ride_photos';
+import { routeRideAutoPlans } from './0046_route_ride_auto_plans';
+import { ridePhotos } from './0047_ride_photos';
 import { RIDE_PHOTOS_COLLECTIONS } from '../../modules/rides/ride-photos.collection';
 import { SOCIAL_COLLECTIONS } from '../../modules/social/social.collection';
 import { PRODUCT_EVENTS_COLLECTIONS } from '../../modules/product-events/product-events.collection';
@@ -178,7 +179,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0043_achievements_seasonal',
       '0044_route_rides_passed_idx',
       '0045_social',
-      '0046_ride_photos',
+      '0046_route_ride_auto_plans',
+      '0047_ride_photos',
     ]);
   });
 
@@ -1985,10 +1987,33 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     }
   });
 
-  it('0046_ride_photos: коллекция и индексы фото райда; последняя; одно фото на райд; повторный up — без изменений', async () => {
+  it('0046_route_ride_auto_plans: планы автопроверки — TTL по expiresAt и стирание по userId; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0046_ride_photos');
-    expect(ids.indexOf('0046_ride_photos')).toBe(ids.indexOf('0045_social') + 1);
+    expect(ids.indexOf('0046_route_ride_auto_plans')).toBe(ids.indexOf('0045_social') + 1);
+    const expected = {
+      route_ride_auto_plans_expires_ttl: {
+        key: { expiresAt: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: 0,
+      },
+      route_ride_auto_plans_user_idx: {
+        key: { userId: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.autoPlans)).toEqual(expected);
+    await routeRideAutoPlans.up(h.db);
+    await routeRideAutoPlans.up(h.db);
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.autoPlans)).toEqual(expected);
+  });
+
+  it('0047_ride_photos: коллекция и индексы фото райда; последняя; одно фото на райд; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0047_ride_photos');
+    expect(ids.indexOf('0047_ride_photos')).toBe(ids.indexOf('0046_route_ride_auto_plans') + 1);
     const expected = {
       ride_photos_ride_unique: {
         key: { rideId: 1 },
@@ -2008,12 +2033,12 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       RIDE_PHOTOS_COLLECTIONS.photos,
     );
     try {
-      await photos.insertOne({ _id: 'p-0046-1', rideId: 'ride-0046', organizerUserId: 'u-a' });
+      await photos.insertOne({ _id: 'p-0047-1', rideId: 'ride-0047', organizerUserId: 'u-a' });
       await expect(
-        photos.insertOne({ _id: 'p-0046-2', rideId: 'ride-0046', organizerUserId: 'u-a' }),
+        photos.insertOne({ _id: 'p-0047-2', rideId: 'ride-0047', organizerUserId: 'u-a' }),
       ).rejects.toThrow(/duplicate key/);
     } finally {
-      await photos.deleteMany({ _id: /^p-0046-/ });
+      await photos.deleteMany({ _id: /^p-0047-/ });
     }
     await ridePhotos.up(h.db);
     await ridePhotos.up(h.db);

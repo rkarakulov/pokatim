@@ -210,9 +210,7 @@ describe('«Check-in» (AC6, RC-C2)', () => {
         audio: false,
       }),
     );
-    expect(
-      await screen.findByText('Билет действителен', undefined, { timeout: 3000 }),
-    ).toBeTruthy();
+    expect(await screen.findByText('Билет действителен')).toBeTruthy();
     expect(mocked.lookupTicket).toHaveBeenCalledWith({ qr: QR });
     // карточка на экране — кадры не разбираются; тот же QR — без нового запроса
     await act(() => new Promise((resolve) => setTimeout(resolve, 600)));
@@ -245,7 +243,7 @@ describe('«Check-in» (AC6, RC-C2)', () => {
     );
     await renderApp('/check-in');
     fireEvent.click(screen.getByRole('button', { name: 'Включить камеру' }));
-    await waitFor(() => expect(calls).toBe(1), { timeout: 3000 });
+    await waitFor(() => expect(calls).toBe(1));
     enterCode('BBBBBBBBBB');
     await waitFor(() => expect(mocked.lookupTicket).toHaveBeenCalledWith({ code: 'BBBBBBBBBB' }));
     await act(async () => decoded([{ rawValue: QR }]));
@@ -313,9 +311,7 @@ describe('«Check-in» (AC6, RC-C2)', () => {
     fakeCamera('https://example.com/promo');
     await renderApp('/check-in');
     fireEvent.click(screen.getByRole('button', { name: 'Включить камеру' }));
-    expect(
-      await screen.findByText('Это не билет «Покатим»', undefined, { timeout: 3000 }),
-    ).toBeTruthy();
+    expect(await screen.findByText('Это не билет «Покатим»')).toBeTruthy();
     expect(mocked.lookupTicket).not.toHaveBeenCalled();
   });
 

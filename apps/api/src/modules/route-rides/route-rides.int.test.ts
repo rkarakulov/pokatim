@@ -5,10 +5,11 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, DAY, type Harness } from '../../../test/harness';
-import { call } from '../../../test/identity';
+import { call, outboxEvents } from '../../../test/identity';
 import {
   checkEvents,
   catalogCorridorRoute,
+  outboxJob,
   ownCorridorRoute,
   ridesUrl,
   routeRidesDb,
@@ -18,7 +19,9 @@ import { corridorExpected, importRide, rideGpx, rider, uploadRide } from '../../
 import { publicationDoc, routesDb } from '../../../test/routes';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
 import { fixture, parsedUpload, tracks, uploadTrack } from '../../../test/tracks';
+import { TRACK_ACTIVITY_REMOVED } from '../tracks';
 import { RouteRideCheckProcessor } from './route-ride-check.processor';
+import { RouteRidesIntakeProcessor } from './route-rides-intake.processor';
 import type { RouteRideDoc } from './route-rides.collection';
 
 /**
@@ -267,6 +270,14 @@ describe('AC5: повтор и дубли группы — тот же заез�
       expect(RouteRideDetail.parse(res.body).id).toBe(first.rideId);
     }
     expect(await checkEvents(h)).toHaveLength(1);
+    // route-rides-03: activityId детали — основная группы сейчас (поздний Garmin с мощностью перехватил основную)
+    const head = await detail(r.auth, routeId, first.rideId);
+    expect(head).toMatchObject({ origin: 'manual' });
+    expect(head.activityId).toBe(imported.activityId);
+    expect(head.activityId).not.toBe(first.activityId);
+    // старый документ без origin — manual
+    await routeRidesDb(h).rides.updateOne({ _id: first.rideId }, { $unset: { origin: '' } });
+    expect((await detail(r.auth, routeId, first.rideId)).origin).toBe('manual');
 
     await routeRidesDb(h).rides.updateOne(
       { _id: first.rideId },
@@ -397,6 +408,47 @@ describe('AC7: удалённая активность и недоступный
     expect((await get(r.auth, ridesUrl(routeId, `/${ride.rideId}/track`))).status).toBe(404);
   });
 
+  it('событие tracks.activity-removed → заезды активности удалены по всем маршрутам; чужие не тронуты; повтор — 0', async () => {
+    const r = await rider(h);
+    const other = await rider(h, 'other@example.com');
+    const first = await catalogCorridorRoute(h, OTHER);
+    const second = await catalogCorridorRoute(h, OTHER);
+    const removed = await checked(r.auth, first, rideGpx('clean.gpx', dayAt(0)));
+    expect((await post(r.auth, second, { activityId: removed.activityId })).status).toBe(201);
+    const kept = await checked(r.auth, first, rideGpx('clean.gpx', dayAt(1)));
+    const foreign = await checked(other.auth, first, rideGpx('clean.gpx', dayAt(0)));
+    const worker = routeRidesWorker(h);
+    await worker.drain();
+
+    expect(
+      (await call(h, 'POST', `/v1/tracks/uploads/${removed.uploadId}/delete`, {}, r.auth)).status,
+    ).toBe(204);
+    const [event] = (await outboxEvents(h)).filter(
+      (e) => e.type === TRACK_ACTIVITY_REMOVED && !worker.handled.has(e._id),
+    );
+    expect(event).toBeDefined();
+    // до события заезды на месте: удаляет подписка, а не транзакция удаления загрузки
+    expect(await routeRidesDb(h).rides.countDocuments({ activityId: removed.activityId! })).toBe(2);
+    expect(await worker.drain()).toBe(1);
+    expect(await routeRidesDb(h).rides.countDocuments({ activityId: removed.activityId! })).toBe(0);
+    const left = await routeRidesDb(h)
+      .rides.find({}, { projection: { _id: 1 } })
+      .toArray();
+    expect(left.map((ride) => ride._id).sort()).toEqual([kept.rideId, foreign.rideId].sort());
+
+    // повтор задачи (ретрай BullMQ) — без ошибки и без удалений
+    const intake = h.worker.get(RouteRidesIntakeProcessor);
+    expect(await intake.process(outboxJob(TRACK_ACTIVITY_REMOVED, event!._id))).toBe(0);
+  });
+
+  it('activity-removed без валидного payload — пропуск; неизвестная задача — ошибка', async () => {
+    const intake = h.worker.get(RouteRidesIntakeProcessor);
+    expect(await intake.process(outboxJob(TRACK_ACTIVITY_REMOVED, uuidv7()))).toBe('skipped');
+    await expect(intake.process(outboxJob('tracks.activity-ready', uuidv7()))).rejects.toThrow(
+      /unknown job/,
+    );
+  });
+
   it('свой маршрут удалён или маршрут каталога снят — 404; снова опубликован — заезды видны', async () => {
     const r = await rider(h);
     const own = await ownCorridorRoute(h, r.userId);
@@ -439,12 +491,14 @@ describe('AC9: ответы — явный список полей, no-store, Au
     }
     const detailKeys = [
       'activity',
+      'activityId',
       'checkedAt',
       'comparison',
       'createdAt',
       'elapsedSec',
       'failure',
       'id',
+      'origin',
       'reason',
       'route',
       'routeDistanceM',
@@ -492,8 +546,13 @@ describe('AC9: ответы — явный список полей, no-store, Au
     const text = JSON.stringify([created.body, list.body, candidates.body, one.body]);
     expect(text).not.toMatch(/userId|sha256|trackMap|engineVersion|sensors|flags|\[\s*-?\d+\.\d+,/);
     expect(text).not.toContain(r.userId);
-    // id активности — только у кандидатов
-    expect(JSON.stringify([created.body, list.body, one.body])).not.toContain(ride.activityId!);
+    // id активности — только у кандидатов и своя основная в детали (route-rides-03)
+    expect(JSON.stringify(list.body)).not.toContain(ride.activityId!);
+    for (const body of [created.body, one.body]) {
+      const { activityId, ...rest } = body as RouteRideDetail;
+      expect(activityId).toBe(ride.activityId);
+      expect(JSON.stringify(rest)).not.toContain(ride.activityId!);
+    }
 
     for (const url of [
       ridesUrl(routeId),

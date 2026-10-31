@@ -12,6 +12,7 @@ import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
 import { trackFileStore, tracks } from '../../../test/tracks';
 import { DEFAULT_PARSE_LIMITS } from '../../parse-thread';
 import { RouteRideCheckProcessor } from './route-ride-check.processor';
+import { RouteRideEvaluator } from './route-ride-evaluator';
 
 /**
  * Worker сверки заезда по маршруту (route-rides-01, §7 шаг 8): эталон в потоке разбора, сбои потока и окружения,
@@ -27,7 +28,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
-  processor().parseLimits = DEFAULT_PARSE_LIMITS;
+  evaluator().parseLimits = DEFAULT_PARSE_LIMITS;
 });
 afterAll(async () => {
   await h.close();
@@ -37,6 +38,8 @@ afterAll(async () => {
 const OTHER = '01890a5d-ac96-774b-bcce-b30209900002';
 const RIDE_AT = new Date('2026-10-15T06:00:00Z');
 const processor = () => h.worker.get(RouteRideCheckProcessor);
+/** Сверка (общая с автопроверкой, route-rides-03) — точка подмены потока и лимитов. */
+const evaluator = () => h.worker.get(RouteRideEvaluator, { strict: false });
 
 /** Райдер, маршрут каталога и заезд `clean.gpx` в очереди (ревизия 1). */
 async function queuedRide() {
@@ -83,7 +86,7 @@ describe('сверка заезда (worker)', () => {
 
   it('крошечный таймаут потока → failed: timeout; implausible → not_passed', async () => {
     const w = await queuedRide();
-    processor().parseLimits = { ...DEFAULT_PARSE_LIMITS, timeoutMs: 1 };
+    evaluator().parseLimits = { ...DEFAULT_PARSE_LIMITS, timeoutMs: 1 };
     expect(await processor().check(w.rideId, 1)).toBe('failed');
     expect(await docOf(w.rideId)).toMatchObject({ status: 'failed', failure: 'timeout' });
 
@@ -95,8 +98,8 @@ describe('сверка заезда (worker)', () => {
       w.auth,
     );
     expect(again.status).toBe(200);
-    processor().parseLimits = DEFAULT_PARSE_LIMITS;
-    vi.spyOn(processor(), 'analyze').mockResolvedValueOnce({ ok: false, code: 'implausible' });
+    evaluator().parseLimits = DEFAULT_PARSE_LIMITS;
+    vi.spyOn(evaluator(), 'analyze').mockResolvedValueOnce({ ok: false, code: 'implausible' });
     expect(await processor().check(w.rideId, 2)).toBe('not_passed');
     expect(await docOf(w.rideId)).toMatchObject({
       status: 'not_passed',
@@ -108,7 +111,7 @@ describe('сверка заезда (worker)', () => {
 
   it('сбой окружения: не финальная попытка — проброс (ретрай), финальная — failed: error', async () => {
     const w = await queuedRide();
-    vi.spyOn(processor(), 'analyze').mockRejectedValue(new Error('loader crashed'));
+    vi.spyOn(evaluator(), 'analyze').mockRejectedValue(new Error('loader crashed'));
     await expect(processor().check(w.rideId, 1)).rejects.toThrow('loader crashed');
     expect(await docOf(w.rideId)).toMatchObject({ status: 'checking' });
     expect(await processor().check(w.rideId, 1, { finalAttempt: true })).toBe('failed');
@@ -131,7 +134,7 @@ describe('сверка заезда (worker)', () => {
     const w = await queuedRide();
     const catalog = (await routesDb(h).routes.findOne({ _id: w.routeId }))!.catalog;
     await routesDb(h).routes.updateOne({ _id: w.routeId }, { $set: { catalog: null } });
-    const analyze = vi.spyOn(processor(), 'analyze');
+    const analyze = vi.spyOn(evaluator(), 'analyze');
     expect(await processor().check(w.rideId, 1)).toBe('failed');
     expect(analyze).not.toHaveBeenCalled();
     expect(await docOf(w.rideId)).toMatchObject({ failure: 'corridor_invalid' });

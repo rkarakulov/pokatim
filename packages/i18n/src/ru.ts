@@ -2317,6 +2317,7 @@ export const ru = {
   'routes.rides.result.distance': 'Дистанция',
   'routes.rides.result.elapsed': 'Время',
   'routes.rides.result.recheck': 'Проверить снова',
+  'routes.rides.result.autoChecked': 'Проверен автоматически',
   'routes.rides.result.recheckMissing':
     'Заезда нет среди доступных — загрузите файл заезда ещё раз',
   'routes.rides.track.unavailable': 'Разметка участков для этого заезда недоступна',

@@ -400,7 +400,7 @@ paths:
   `hiddenFromStatus: 'cancelled'` (статус `hidden` не меняется, F6); «Не иду» в чужих будущих `published`/`hidden`
   (`$pull` + `$inc goingCount −1`); `organizerName: null` во всех своих райдах (A6); фото организатора — ниже. Прошедшие чужие — без изменений;
   жалобы (`ride_reports`) хранятся (A6).
-- Фото организатора (ride-photo, ADR-0028, миграция `0046_ride_photos`) — `ride_photos`: `{ _id: randomToken, rideId,
+- Фото организатора (ride-photo, ADR-0028, миграция `0047_ride_photos`) — `ride_photos`: `{ _id: randomToken, rideId,
   organizerUserId, bytes: Binary JPEG ≤ 1600 px, contentType, width, height, bytesLength, createdAt }`, индексы
   `ride_photos_ride_unique` `{ rideId }` (одно фото на райд) и `ride_photos_organizer_idx` `{ organizerUserId }`
   (стирание); единственный писатель — `RidePhotosRepository` (`RidesCoreModule`); `bytes` читает только `findBytes`
@@ -448,9 +448,22 @@ paths:
   фильтре), без транзакции; `requeue` — `$inc checkRevision` только из `failed` или зависшего статуса прежней ревизии
   (условие в фильтре) + outbox в транзакции. `trackMap` — позиции на линии `activity_tracks`, без координат;
   датчиков, флагов и диагностики нет.
+- route-rides-03: `origin?: 'manual' | 'auto'` — необязательное поле (нет поля — `manual` на чтении, бэкфилла и
+  миграции нет); ручной POST пишет `manual`. Автопроверка вставляет готовый `passed` одной записью (`insertChecked`,
+  `checkRevision 1`, `checkAttempts 1`, `updatedAt` = момент вставки — его читает `passedWithin`), без транзакции и
+  outbox; дубль уникального индекса — пропуск. Агрегат «маршруты со своими заездами» (`ridesByRoute`) — `$match
+  { userId, activityId: { $nin: группа события } }` по префиксу уникального индекса (автозаезды не сдвигают окно скана);
+  заезды группы — `groupRides` (`{ userId, activityId: { $in } }`); нового индекса нет.
+- `route_ride_auto_plans` (route-rides-03, миграция `0046_route_ride_auto_plans`, expand-only): план автопроверки
+  события — `{ _id: id события outbox, userId, routeIds ≤ 20, createdAt, expiresAt }`; писатель —
+  `RouteRidesRepository` (`saveAutoPlan`: `insertOne`, дубль `_id_` — план победителя; документ не меняется). Индексы —
+  TTL `route_ride_auto_plans_expires_ttl` (`expiresAt`, 30 сут — только уборка) и `route_ride_auto_plans_user_idx`
+  (стирание: `RouteRideErasure` удаляет планы и заезды по `userId`).
 - Сироты (RC-1, RC-8): удалённая активность и недоступный маршрут — заезды не видны (фильтр на чтении по
-  `ActivitySource.liveActivities` и `RouteRideRoutes`); заезды с удалёнными активностями удаляются в транзакции
-  следующего нового заезда по маршруту. Не append-only.
+  `ActivitySource.liveActivities` и `RouteRideRoutes`). Заезды удалённой активности удаляет `RouteRidesIntakeProcessor`
+  по `tracks.activity-removed` (fan-out, очередь `route-rides-intake`, `deleteOfActivity`); фильтр и удаление сирот в
+  транзакции следующего нового заезда по маршруту — страховка (POST без замка активностей может вставить заезд после
+  обработки события). Не append-only.
 
 ## Достижения (achievements, ADR-0020 Proposed)
 
@@ -533,7 +546,7 @@ paths:
   Поля необязательные (`?? null`); `passwordHash: null` — «учётных данных нет» (вход, порт панели — как неизвестный).
   `users_email_unique` не меняется: регистрация ищет адрес и маркер (`findUserForRegistration`, D-07).
 - Порядок шагов worker (`account-deletion`): профиль → райды → «Мои маршруты» → устройства → заезды → заезды по
-  маршрутам (`RouteRideErasure`, `deleteMany({ userId })`) → достижения (`AchievementErasure`: выдачи
+  маршрутам (`RouteRideErasure`, `deleteMany({ userId })` заездов и планов автопроверки) → достижения (`AchievementErasure`: выдачи
   `deleteMany({ userId })` + маркер `deleteOne({ _id })`) → билеты (`TicketErasure`: регистрации и билеты →
   `cancelled`) → свои (`SocialErasure`: явки `$pull` первыми, связи в обе стороны, свои и полученные реакции, код
   приглашения) → события метрик (`ProductEventErasure`, `deleteMany({ userId })`) → уведомления → identity. Push-токены (`push_tokens`) снимаются раньше — в транзакции удаления (`PushTokens.revokeAllOf`). Каждый
