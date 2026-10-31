@@ -5,7 +5,7 @@
 `feature/route-rides-others-api`, PR #171, task — `docs/tasks/2026-10-31-route-rides-04-others/task.md`.
 Этот PR — **B**, ветка `feature/route-rides-others-app` от `develop` **после слияния и выкладки PR A на dev**
 (RC-1 PR A: `UpdateProfileRequest` — `strictObject`, форма профиля шлёт все поля — до API каждое сохранение 400).
-Файл задачи в репозитории — `docs/tasks/2026-10-31-route-rides-04-others-app/task.md`.
+Файл задачи в репозитории — `docs/tasks/2026-10-31-route-rides-04-others/task-b.md`.
 
 ## 1. Title
 
@@ -256,7 +256,7 @@ Contracts-first уже выполнен (PR A). TDD; отдельный комм
   `['route-rides', id, 'leaderboard', limit]`, 404 → нет блока, инвалидация после `PATCH` профиля и проверки), экран
   `routes/others/[routeId]` в `Stack.Protected` + строка сторожа манифеста; строки — `TableRow`/`RiderWho`;
   «Профиль райдера»: переключатель `showRouteRides` (текст = версия согласия).
-- `docs/tasks/2026-10-31-route-rides-04-others-app/pr.md`.
+- `docs/tasks/2026-10-31-route-rides-04-others/pr-b.md`.
 
 ## 11. Implementation Context (заполняет architect)
 
@@ -422,3 +422,17 @@ route-ride-others.tsx}`, `app/routes/others/[routeId].tsx`, `features/routes/rou
 - TDD: тесты форматтеров, инвалидаций, блока и формы профиля падали до реализации (красный → зелёный).
 - NOT VERIFIED: полный `pnpm check` (решение пользователя; CI — полный), e2e `pnpm e2e:web` (нужны сборка web и API),
   ручная проверка на iOS/Android/web, AC7 «CI зелёный» — после push.
+
+Исправления ревью (2026-11-01, `findings-b.md`; коммит `a84a650a`):
+- M1 — `useBestRideChange` получает `undefined` (список не загружен) / `null` (лучшего нет или 404) / `id`; переходы
+  `null → id`, `id → null`, `id → id'` инвалидируют `leaderboardAll`, первая загрузка — нет.
+- Фокус — `useRouteRideLeaderboard`: `subscribed: useIsFocused()`, как у `useRouteRides`.
+- L2 — `othersShown` (строки + своя вне `rows`) — число сноски и основа `othersTruncated`.
+- L1 — пути task/pr в шапке и §10.
+- Тесты (`route-ride-others.test.tsx` +4, `route-ride-format.test.ts` +1): опрос `best: null → {id}` перезапрашивает
+  таблицу `limit 5`; первая загрузка — без перезапроса; возврат на экран после `DEFAULT_STALE_MS` — перезапрос
+  (без `subscribed` — красный, проверено); сноска 101 из 240 со своей строкой и 100 из 240 без неё. До исправления
+  красные: опрос, сноска, фокус.
+- Проверки: `pnpm --filter @pokatim/app typecheck` — 0; jest `route-ride-others`, `route-detail`, `profile-screen`,
+  `route-rides-block`, `route-ride`, `features/route-rides` — 7 наборов, 171 тест, зелёные; eslint и prettier
+  изменённых файлов — чисто.
