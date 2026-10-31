@@ -58,6 +58,9 @@
    объединяет маршруты подписчиков (pokatim — `src/outbox-routes.ts`). Регламенты `standings.sync`, `achievements` и
    сверка `route-rides` пока не заменены: подписка каждого на события — отдельная задача (бэкфилл уже опубликованных
    событий не нужен — регламент остаётся страховкой или убирается с ней).
+   **Отметка (standings-outbox-events, 2026-10-31):** `standings` подписан на `results.protocol-published` и
+   `results.result-revised` (`standingsOutboxRoutes` → `standings-recalc`); регламент `standings.sync` — страховка раз
+   в 15 мин и при старте worker (бэкфилл не нужен).
    **Дополнение (notifications-fanout, 2026-10-30) — пачки получателей.** Не путать с fan-out outbox выше (тип → несколько
    очередей, api-kit 0.6.0): это раскладка **одного** события по получателям внутри `notifications`. Аудитория
    события (сумма уникальных получателей непустых черновиков) больше `NOTIFICATIONS_POLICY.fanoutChunk` (200) — intake

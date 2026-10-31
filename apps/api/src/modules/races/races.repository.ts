@@ -504,6 +504,20 @@ export class RacesRepository {
       .toArray();
   }
 
+  /** Сезон гонки с протоколом (то же условие, что `listProtocolRaces`); иначе `undefined`. */
+  async protocolRaceSeason(raceId: string): Promise<string | undefined> {
+    const doc = await this.c.races.findOne(
+      {
+        _id: raceId,
+        protocolPublishedAt: { $type: 'date' },
+        status: 'published',
+        seasonId: { $type: 'string' },
+      },
+      { projection: { seasonId: 1 } },
+    );
+    return doc?.seasonId ?? undefined;
+  }
+
   /** Страница панели: новые окна сверху (`windowStartsAt desc, _id desc`), `limit + 1` — признак продолжения. */
   listPanel(
     filter: PanelRaceFilter,

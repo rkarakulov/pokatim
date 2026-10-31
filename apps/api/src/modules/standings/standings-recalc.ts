@@ -4,6 +4,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import { isDuplicateKey, MongoTransactions, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
+import { SEASON_RACES, type SeasonRaces } from '../races';
 import { RESULTS_FOR_STANDINGS, type ResultsForStandings } from '../results';
 import type { SeasonStandingRowDoc, SeasonStandingsDoc } from './standings.collection';
 import { buildSeasonStandings, STANDINGS_FORMULA_VERSION } from './standings.policy';
@@ -19,8 +20,12 @@ export interface StandingsSyncRun {
   failed: number;
 }
 
+/** Итог задачи по событию гонки: сезон пересчитан, снимок уже актуален, гонка без протокола или сезона. */
+export type RaceSyncOutcome = 'recomputed' | 'unchanged' | 'stale' | 'conflict' | 'skipped';
+
 /**
- * Пересчёт рейтинга сезонов (race-results-08, DV-1): регламент сверяет отпечаток источника сезона с отпечатком
+ * Пересчёт рейтинга сезонов (race-results-08; standings-outbox-events): событие гонки (`syncRace`) и регламент-страховка
+ * (`sync`) сверяют отпечаток источника сезона с отпечатком
  * снимка и пересчитывает изменившиеся сезоны полностью. Идемпотентен: без изменений — без записи; параллельные
  * пересчёты одного сезона снимок не откатывают (RC-5).
  */
@@ -33,12 +38,30 @@ export class StandingsRecalc {
     private readonly repository: StandingsRepository,
     private readonly transactions: MongoTransactions,
     @Inject(RESULTS_FOR_STANDINGS) private readonly results: ResultsForStandings,
+    @Inject(SEASON_RACES) private readonly races: SeasonRaces,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  /** Один проход регламента; отказ сезона не останавливает остальные, после прохода при отказах — исключение. */
-  async sync(): Promise<StandingsSyncRun> {
-    const sources = await this.source.load();
+  /**
+   * Событие `results` по гонке: сверка сезона гонки (как регламент, одним сезоном). Гонка без протокола или сезона —
+   * `skipped`; отказ пересчёта — исключение (ретрай задачи).
+   */
+  async syncRace(raceId: string): Promise<RaceSyncOutcome> {
+    const seasonId = await this.races.protocolRaceSeason(raceId);
+    if (seasonId === undefined) return 'skipped';
+    const run = await this.sync([seasonId]);
+    if (run.recomputed > 0) return 'recomputed';
+    if (run.stale > 0) return 'stale';
+    if (run.conflicts > 0) return 'conflict';
+    return run.seasons > 0 ? 'unchanged' : 'skipped';
+  }
+
+  /**
+   * Проход сверки по сезонам `seasonIds` (без них — все, регламент); отказ сезона не останавливает остальные, после
+   * прохода при отказах — исключение.
+   */
+  async sync(seasonIds?: readonly string[]): Promise<StandingsSyncRun> {
+    const sources = await this.source.load(seasonIds);
     const states = await this.repository.snapshotStates([...sources.keys()]);
     const run: StandingsSyncRun = {
       seasons: sources.size,
@@ -50,7 +73,7 @@ export class StandingsRecalc {
     for (const [seasonId, source] of sources) {
       const state = states.get(seasonId);
       if (state?.fingerprint === source.fingerprint) continue;
-      // запись всё равно была бы `stale` (RC-5): без пропуска регламент пересчитывал бы сезон каждую минуту
+      // запись всё равно была бы `stale` (RC-5): без пропуска сезон пересчитывался бы на каждом прогоне и событии
       if (state && !isOlder(state, source.sourceVersion)) {
         run.conflicts += 1;
         this.logger.warn(

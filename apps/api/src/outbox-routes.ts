@@ -8,6 +8,7 @@ import { panelOutboxRoutes } from './modules/panel';
 import { resultsOutboxRoutes } from './modules/results';
 import { routeRidesOutboxRoutes } from './modules/route-rides';
 import { routesOutboxRoutes } from './modules/routes';
+import { standingsOutboxRoutes } from './modules/standings';
 import { ticketsOutboxRoutes } from './modules/tickets';
 import { tracksOutboxRoutes } from './modules/tracks';
 
@@ -26,6 +27,8 @@ export const subscriberOutboxRoutes: readonly OutboxRoutes[] = [
   panelOutboxRoutes,
   // подписчик чужих типов (results, disputes, rides, routes, tickets, profile, achievements) — ADR-0017
   notificationsOutboxRoutes,
+  // results.protocol-published / result-revised — вторым подписчиком после notifications (fan-out)
+  standingsOutboxRoutes,
 ];
 
 /**

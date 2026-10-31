@@ -1,10 +1,13 @@
 import type { BikeClass, GroupScheme, ProtocolRowStatus, ResultGroupKey } from '@pokatim/contracts';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
+import type { Job } from 'bullmq';
 
 import { PROFILE_COLLECTIONS, type ProfileDoc } from '../src/modules/profile/profile.collection';
 import { StandingsRecalc } from '../src/modules/standings/standings-recalc';
+import { StandingsSyncProcessor } from '../src/modules/standings/standings-sync.processor';
 import { standingsCollections } from '../src/modules/standings/standings.collection';
 import type { Harness } from './harness';
+import { outboxEvents } from './identity';
 import { racesDb } from './races';
 import { resultsDb } from './results';
 
@@ -16,6 +19,29 @@ export const standingsRecalc = (h: Harness) => h.worker.get(StandingsRecalc, { s
 
 /** Прогон регламента `standings.sync`. */
 export const syncStandings = (h: Harness) => standingsRecalc(h).sync();
+
+/** Типы событий `results`, на которые подписан `standings` (`standingsOutboxRoutes`). */
+const STANDINGS_EVENT_TYPES = new Set(['results.protocol-published', 'results.result-revised']);
+
+/**
+ * Обработать события outbox `results` процессором `standings-recalc` (по порядку записи, как отдал бы worker: имя
+ * задачи = тип, данные — id события); `after` — пропустить уже обработанные (id события не больше). Результаты задач.
+ */
+export async function runStandingsEvents(h: Harness, after = ''): Promise<unknown[]> {
+  const processor = h.worker.get(StandingsSyncProcessor, { strict: false });
+  const results: unknown[] = [];
+  for (const event of await outboxEvents(h)) {
+    if (!STANDINGS_EVENT_TYPES.has(event.type) || event._id <= after) continue;
+    const job = {
+      name: event.type,
+      data: { outboxEventId: event._id },
+      attemptsMade: 0,
+      opts: { attempts: 5 },
+    };
+    results.push(await processor.process(job as unknown as Job));
+  }
+  return results;
+}
 
 /**
  * Сезон напрямую в БД (подготовка: сезоны и протоколы проверяют `races`/`results`): 1 апреля — 31 октября года `year`
