@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { onlineManager } from '@tanstack/react-query';
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
@@ -92,7 +92,7 @@ describe('«Обзор» — блоки по правам', () => {
     await renderApp('/');
 
     expect(await screen.findByRole('heading', { name: 'Требует внимания' })).toBeTruthy();
-    await vi.waitFor(() => expect(tile('Открытые споры').textContent).toContain('2'));
+    await waitFor(() => expect(tile('Открытые споры').textContent).toContain('2'));
     expect(within(tile('Открытые споры')).getByRole('link', { name: 'Открыть' })).toBeTruthy();
     expect(tile('Ждут протокола').textContent).toContain('Готовы к публикации: 0 · блокеров: 3');
     expect(tile('Кофе-райды с жалобами').textContent).toContain('Всё разобрано');
@@ -139,7 +139,7 @@ describe('«Обзор» — блоки по правам', () => {
       },
     });
     await renderApp('/');
-    await vi.waitFor(() => expect(tile('Ждут протокола').textContent).toContain('25'));
+    await waitFor(() => expect(tile('Ждут протокола').textContent).toContain('25'));
     expect(tile('Ждут протокола').textContent).toContain(
       'По 20 последним: готовы к публикации — 2 · блокеров: 30',
     );
@@ -155,7 +155,7 @@ describe('«Обзор» — блоки по правам', () => {
 
   it('организатор: только «Ждут протокола» и «Сейчас идёт» — без модерации и KPI; пустые таблицы', async () => {
     await renderApp('/');
-    await vi.waitFor(() => expect(tile('Ждут протокола').textContent).toContain('Всё разобрано'));
+    await waitFor(() => expect(tile('Ждут протокола').textContent).toContain('Всё разобрано'));
     expect(screen.queryByRole('group', { name: 'Открытые споры' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Платформа' })).toBeNull();
     expect(screen.getByText('Открытых окон нет')).toBeTruthy();
@@ -180,7 +180,7 @@ describe('«Обзор» — блоки по правам', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('Сервис временно недоступен');
     fireEvent.click(within(alert).getByRole('button', { name: 'Повторить' }));
-    await vi.waitFor(() => expect(tile('Ждут протокола').textContent).toContain('Всё разобрано'));
+    await waitFor(() => expect(tile('Ждут протокола').textContent).toContain('Всё разобрано'));
   });
 
   it('ошибка обновления: данные остаются, баннер с повтором', async () => {
@@ -189,12 +189,12 @@ describe('«Обзор» — блоки по правам', () => {
       .mockRejectedValueOnce(networkError())
       .mockResolvedValueOnce(ORGANIZER_OVERVIEW);
     const { queryClient } = await renderApp('/');
-    await vi.waitFor(() => expect(tile('Ждут протокола').textContent).toContain('Всё разобрано'));
+    await waitFor(() => expect(tile('Ждут протокола').textContent).toContain('Всё разобрано'));
 
     await queryClient.refetchQueries({ queryKey: ['admin', 'overview'] }).catch(() => undefined);
     expect(await screen.findByText('Не удалось обновить обзор')).toBeTruthy();
     expect(tile('Ждут протокола').textContent).toContain('Всё разобрано');
     fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
-    await vi.waitFor(() => expect(mocked.overview).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(mocked.overview).toHaveBeenCalledTimes(3));
   });
 });

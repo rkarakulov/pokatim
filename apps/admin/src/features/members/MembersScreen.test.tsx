@@ -205,7 +205,7 @@ describe('«Сотрудники» (AC11)', () => {
   it('ошибка без данных — «Нет соединения»/«Не удалось загрузить» с повтором; 403 — «Нет доступа к разделу»', async () => {
     mocked.listMembers.mockRejectedValue(httpError(500, 'INTERNAL'));
     await renderApp('/members');
-    expect(await screen.findByText('Не удалось загрузить', {}, { timeout: 4000 })).toBeTruthy();
+    expect(await screen.findByText('Не удалось загрузить')).toBeTruthy();
     cleanup();
 
     mocked.listMembers.mockRejectedValue(httpError(403, 'FORBIDDEN'));
@@ -416,9 +416,7 @@ describe('«Сотрудники» — приглашения (ADR-0026)', () =>
 
     mocked.listInvitations.mockRejectedValue(httpError(500, 'INTERNAL'));
     await renderApp('/members');
-    expect(
-      await invitations().findByText('Не удалось загрузить', {}, { timeout: 4000 }),
-    ).toBeTruthy();
+    expect(await invitations().findByText('Не удалось загрузить')).toBeTruthy();
     expect(invitations().getByRole('button', { name: 'Повторить' })).toBeTruthy();
     cleanup();
 

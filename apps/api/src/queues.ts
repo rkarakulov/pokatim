@@ -81,6 +81,11 @@ export const QUEUE = {
    */
   routeRideCheck: 'route-ride-check',
   /**
+   * Приём событий `route-rides` (fan-out outbox, ADR-0017 п. 5): `tracks.activity-removed` → удаление заездов активности
+   * по всем маршрутам; jobId = id события outbox, повтор удаляет 0. Отдельно от `route-ride-check` — не ждёт сверок.
+   */
+  routeRidesIntake: 'route-rides-intake',
+  /**
    * Автопроверка новой активности по маршрутам (route-rides-03): событие outbox `tracks.activity-group-created`
    * (маршрут объявляет `route-rides`), jobId = id события; одна задача на активность — до 20 прогонов движка
    * последовательно, параллелизм 1, отдельно от `route-ride-check` (ручная проверка не ждёт за автопроверкой).

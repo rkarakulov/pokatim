@@ -9,7 +9,7 @@ import { call } from '../../../test/identity';
 import {
   autoEvents,
   catalogCorridorRoute,
-  job,
+  outboxJob,
   ownCorridorRoute,
   ridesUrl,
   routeRidesDb,
@@ -160,15 +160,18 @@ describe('AC1: новая активность → passed по маршрута�
       (item) => (item.payload as { activityId: string }).activityId === fresh,
     );
     expect(event).toBeDefined();
-    expect(await auto().process(job(event!.type, event!._id))).toEqual({ planned: 1, passed: 1 });
-    expect(await auto().process(job(event!.type, event!._id, 1))).toEqual({
+    expect(await auto().process(outboxJob(event!.type, event!._id))).toEqual({
+      planned: 1,
+      passed: 1,
+    });
+    expect(await auto().process(outboxJob(event!.type, event!._id, 1))).toEqual({
       planned: 1,
       passed: 0,
     });
     expect(await rides().countDocuments({ routeId: own })).toBe(1);
-    await expect(auto().process(job('route-rides.check-requested', event!._id))).rejects.toThrow(
-      'unknown job',
-    );
+    await expect(
+      auto().process(outboxJob('route-rides.check-requested', event!._id)),
+    ).rejects.toThrow('unknown job');
 
     // тестовый воркер: автопроверка — только с { auto: true }
     expect(await routeRidesWorker(h).drain()).toBe(0);
@@ -361,7 +364,9 @@ describe('AC3: план события детерминирован (ревью 
       if (calls === 3) throw new Error('loader crashed');
       return verdict(true);
     });
-    await expect(auto().process(job(event!.type, event!._id))).rejects.toThrow('loader crashed');
+    await expect(auto().process(outboxJob(event!.type, event!._id))).rejects.toThrow(
+      'loader crashed',
+    );
     expect(await routeRidesDb(h).autoPlans.findOne({ _id: event!._id })).toMatchObject({
       userId: r.userId,
       routeIds: expect.any(Array),
@@ -370,7 +375,7 @@ describe('AC3: план события детерминирован (ревью 
     // между попытками — новый свой маршрут (встал бы первым в (б))
     const newer = await ownCorridorRoute(h, r.userId);
     evaluate.mockClear();
-    expect(await auto().process(job(event!.type, event!._id, 1))).toEqual({
+    expect(await auto().process(outboxJob(event!.type, event!._id, 1))).toEqual({
       planned: 20,
       passed: 18,
     });
@@ -390,14 +395,14 @@ describe('AC3: план события детерминирован (ревью 
     const evaluate = vi
       .spyOn(evaluator(), 'evaluate')
       .mockImplementation(async (doc) => verdict(doc.routeId !== failing));
-    expect(await auto().process(job(event!.type, event!._id))).toEqual({
+    expect(await auto().process(outboxJob(event!.type, event!._id))).toEqual({
       planned: 20,
       passed: 19,
     });
     const newer = await ownCorridorRoute(h, r.userId);
     evaluate.mockClear();
     // новая задача того же события (прежняя удалена из BullMQ)
-    expect(await auto().process(job(event!.type, event!._id))).toEqual({
+    expect(await auto().process(outboxJob(event!.type, event!._id))).toEqual({
       planned: 20,
       passed: 0,
     });
@@ -414,13 +419,16 @@ describe('AC3: план события детерминирован (ревью 
       (item) => (item.payload as { activityId: string }).activityId === fresh,
     );
     const evaluate = vi.spyOn(evaluator(), 'evaluate').mockResolvedValue(verdict(false));
-    expect(await auto().process(job(event!.type, event!._id))).toEqual({ planned: 1, passed: 0 });
+    expect(await auto().process(outboxJob(event!.type, event!._id))).toEqual({
+      planned: 1,
+      passed: 0,
+    });
     // план убран TTL, прошёл месяц, появился новый свой маршрут
     await routeRidesDb(h).autoPlans.deleteMany({});
     h.clock.advance(31 * DAY);
     await ownCorridorRoute(h, r.userId);
     evaluate.mockClear();
-    expect(await auto().process(job(event!.type, event!._id))).toBe('skipped');
+    expect(await auto().process(outboxJob(event!.type, event!._id))).toBe('skipped');
     expect(evaluate).not.toHaveBeenCalled();
     expect(await routeRidesDb(h).autoPlans.countDocuments({})).toBe(0);
     expect(await rides().countDocuments({ activityId: fresh })).toBe(0);
