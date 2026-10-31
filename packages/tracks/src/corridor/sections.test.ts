@@ -109,6 +109,29 @@ describe('routeSections: разбиение через каждые 10 км', ()
     },
   );
 
+  it('«туда-обратно» 2 × 20 км: разворот ровно на границе участка — 4 участка, ни один не проходит у своих ворот', () => {
+    const outback = path([
+      [0, 0],
+      [0, 20_000],
+      [0, 0],
+    ]);
+    const sections = routeSections(outback, 50);
+    expect(sections.map(({ fromM, toM }) => [fromM, toM])).toEqual([
+      [0, 10_000],
+      [10_000, 20_000],
+      [20_000, 30_000],
+      [30_000, 40_000],
+    ]);
+    for (const { fromM, toM } of sections) {
+      const sub = sectionLine(outback, fromM, toM).map(lonLat);
+      // от каждых ворот по линии: после выхода из радиуса 150 м линия к ним не возвращается
+      for (const walk of [sub, [...sub].reverse()]) {
+        const far = walk.map((point) => haversineMeters(point, walk[0]!) > 150);
+        expect(far.slice(far.indexOf(true))).not.toContain(false);
+      }
+    }
+  });
+
   it.each([
     [100, 50, 0],
     [200, 50, 2],
