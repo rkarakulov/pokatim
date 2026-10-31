@@ -26,7 +26,7 @@ function GoingRow({ ride, publicId, now }: { ride: RideCard; publicId: string; n
   const theme = useTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const rsvp = useRideRsvp(ride.id);
+  const rsvp = useRideRsvp(ride.id, 'profile');
   return (
     <View testID="rider-social-going">
       <Text style={[textStyle('metaXs'), { color: theme.text.secondary }]}>

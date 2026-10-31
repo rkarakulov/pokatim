@@ -255,6 +255,10 @@ paths:
   `SocialActionBlockedDetails` (`409 SOCIAL_ACTION_BLOCKED`, код — в конце `ErrorCode`). Справочник продуктовых
   событий — не здесь (журнал наружу не уходит, RC-11): `apps/api/src/modules/product-events/product-events.types.ts`.
   `ERASURE_STEPS` — в порядке исполнения (`…, 'tickets', 'social', 'product-events', 'notifications', 'identity'`).
+  P2: `src/social/ride-participants.schema.ts` — `RIDE_ATTENDANCE_STATES` (только в конец, `tolerantEnum`),
+  `RideRiderRow`, `RideRiderGroup`, `RideAttendance`, `RideParticipants` (новые поля ответа — `.default`);
+  `src/rides/ride.schema.ts` — `JoinRideRequest` (`strictObject`, `source?`). api-client — `rideParticipants`,
+  `markRideAttended`, `declineRideAttendance`, `joinRide(token, id, source?)` (без `source` — тело `{}`).
   Профиль (P3) — `src/social/rider-social.schema.ts`: `RiderTogether`, `RiderSocial` (`going: RideCard.nullable()
   .default(null)`), запрос `SetRiderConnectionRequest` (`strictObject({ connected })`), `SocialConnectionRow` (без
   `userId`, `sources` — `tolerantEnum(CONNECTION_SOURCES)`), `SocialConnections` (`items`, `count`). api-client —

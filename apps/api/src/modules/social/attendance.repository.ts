@@ -89,6 +89,15 @@ export class AttendanceRepository {
       .map((entry) => entry.userId);
   }
 
+  /** Записи явки райда (P2, ответ участников): без сессии; документа нет — `[]`. */
+  async entriesOf(rideId: string): Promise<AttendanceEntry[]> {
+    const doc = await this.attendance.findOne({ _id: rideId });
+    return (doc?.entries ?? []).map((entry) => ({
+      ...entry,
+      declinedAt: entry.declinedAt ?? null,
+    }));
+  }
+
   /** Стирание (K13): записи райдера во всех райдах — без пересчёта связей других (RC-7). */
   async pullUser(userId: string): Promise<number> {
     const result = await this.attendance.updateMany(

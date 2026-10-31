@@ -529,3 +529,9 @@ FINISH).
 
 **Наблюдение:** `auth-guard.test.tsx` «без сессии новый гость видит лендинг» один раз упал при параллельном прогоне
 восьми наборов (нагрузка), два повторных одиночных прогона — 15/15; код теста P3 не трогает.
+
+**FINISH (оркестратор, 2026-10-31):** влит develop с P1 (#172) и P2 (#175); конфликты — только добавления (порт
+`RIDES_FOR_SOCIAL`, `SocialModule.controllers`, contracts/api-client index, `ru.ts`, правила, ADR п. 3). Дубль ключей
+`social.nameHint.*` убран (остались ключи P2 с теми же текстами). RC-P3-4 закрыт: «Я иду» из строки «Идёт» —
+`useRideRsvp(ride.id, 'profile')`, jest проверяет `joinRide(token, id, 'profile')`. Ревью pass 2 — APPROVE
+(`findings.md`).

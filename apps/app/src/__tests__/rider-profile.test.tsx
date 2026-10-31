@@ -391,7 +391,7 @@ describe('«Свои» на чужом профиле (P3, K6)', () => {
       },
     });
     await fireEvent.press(going.getByRole('button', { name: 'Я иду' }));
-    expect(joinRide).toHaveBeenCalledWith(liveSession.accessToken, RIDE_ID);
+    expect(joinRide).toHaveBeenCalledWith(liveSession.accessToken, RIDE_ID, 'profile');
     expect(await screen.findByText('Вы идёте')).toBeOnTheScreen();
     expect(getSocial).toHaveBeenCalledTimes(2);
 

@@ -10,7 +10,7 @@
 - Миграций нет. Контракты — только добавления (`rider-social.schema.ts`).
 
 ### Совместимость с параллельными PR
-- P2: ключи `social.nameHint.{title,action,later}` общие — кто сливается вторым, убирает дубль; `RIDES_FOR_SOCIAL` и `SocialModule.controllers` — конфликты добавлений, оставить оба. Источник «Иду» `profile` в `join` — после P2 (follow-up в эпике §3.2).
+- P2: ключи `social.nameHint.{title,action,later}` общие — кто сливается вторым, убирает дубль; `RIDES_FOR_SOCIAL` и `SocialModule.controllers` — конфликты добавлений, оставить оба. P2 уже в develop: ключи P2 оставлены, «Я иду» из строки «Идёт» передаёт `source: 'profile'`.
 
 ### Проверки
 - `TURBO_CONCURRENCY=4 pnpm check` (изолированные Mongo `pokatim_social_p3_test` и Redis db 10) — см. комментарий PR.

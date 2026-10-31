@@ -3,20 +3,30 @@ import { textStyle, useTheme } from '@rkarakulov/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from './icon';
+import { RiderAvatar } from './rider-avatar';
 
 /** Квадратов в стопке не больше: остальное — в подписи («идут 8 из 12»). */
 const MAX_AVATARS = 4;
 
 /**
  * Стопка идущих на райд (`.avstack` прототипа, как `AvatarStack` базы): квадраты 24 px внахлёст с кольцом цвета фона
- * и подпись. Имён и фото у идущих нет (Q4 блока 05) — в квадрате нейтральная иконка человека, а не пустое место,
+ * и подпись. `avatarIds` («Свои» P2, карточка вошедшему) — аватары публичных участников в первых квадратах
+ * (`RiderAvatar`, `null` — иконка); без пропа (лента, Главная, гость) — нейтральная иконка человека, а не пустое место,
  * похожее на незагруженную картинку (B10 смоука dev). Заглушка без фото — кандидат в `AvatarStack` базы
  * (`@rkarakulov/ui`). Для скринридера — один элемент с подписью.
  */
-export function GoingStack({ count, caption }: { count: number; caption: string }) {
+export function GoingStack({
+  count,
+  caption,
+  avatarIds,
+}: {
+  count: number;
+  caption: string;
+  avatarIds?: readonly (string | null)[];
+}) {
   const theme = useTheme();
   return (
-    <View style={styles.stack} accessible accessibilityLabel={caption}>
+    <View testID="going-stack" style={styles.stack} accessible accessibilityLabel={caption}>
       {Array.from({ length: Math.min(count, MAX_AVATARS) }, (_, index) => (
         <View
           key={index}
@@ -26,20 +36,28 @@ export function GoingStack({ count, caption }: { count: number; caption: string 
             { backgroundColor: theme.surface.default },
           ]}
         >
-          <View
-            style={[
-              styles.avatar,
-              { borderColor: theme.text.primary, backgroundColor: theme.surface.raised },
-            ]}
-          >
-            <Icon
-              testID="going-avatar-icon"
-              name="person"
-              size={size.iconSm}
-              color={theme.text.secondary}
-              filled
+          {avatarIds && index < avatarIds.length ? (
+            <RiderAvatar
+              avatarId={avatarIds[index] ?? null}
+              dimension={size.avatarStack}
+              decorative
             />
-          </View>
+          ) : (
+            <View
+              style={[
+                styles.avatar,
+                { borderColor: theme.text.primary, backgroundColor: theme.surface.raised },
+              ]}
+            >
+              <Icon
+                testID="going-avatar-icon"
+                name="person"
+                size={size.iconSm}
+                color={theme.text.secondary}
+                filled
+              />
+            </View>
+          )}
         </View>
       ))}
       <Text style={[textStyle('meta'), styles.caption, { color: theme.text.secondary }]}>
