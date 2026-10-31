@@ -592,3 +592,10 @@ PR N2
   расписание, проверки.
 - Документы: ADR-0020 («Дополнение: серверная сверка» — аренда, `updatedAt`, отмена гонки, один запрос получателей),
   `.claude/rules/pokatim-backend.md`, `.claude/rules/pokatim-db.md`, раздел 5.D и 10 этого файла.
+
+### Фиксы ревью N2 pass 2 (оркестратор)
+
+- Codex MEDIUM: в серверной сверке (`origin: 'server'`) сбой `RIDER_SEASON_STANDINGS.outcomesOf` больше не глотается —
+  исключение уходит в ретрай задачи `achievements.rider` (3 попытки, финальный лог); GET и публичный список — прежний
+  мягкий отказ. Int-тест: однократный отказ → `reconcile('server')` бросает, выдач нет → повтор → сезонные выданы.
+- Codex LOW: команда миграции в `pr.md` — `pnpm --filter @pokatim/api db:migrate`.

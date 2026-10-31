@@ -989,6 +989,26 @@ describe('сезонные достижения (achievements-seasonal, AC2–AC
     expect(seasonalOf(await list(me))).toHaveLength(2);
   });
 
+  it('сбой порта сезонов в серверной сверке — исключение (ретрай задачи), не тихий успех (ревью N2 pass 2, MEDIUM)', async () => {
+    const me = await rider(h, 'me@example.com');
+    await list(me);
+    const season = await seedSeason(h, 'Сезон 2025', { year: 2025 });
+    await seedProtocolRace(h, season, [placedRow(me.userId, 1)]);
+    await syncStandings(h);
+
+    const reconciler = h.app.get(AchievementsReconciler, { strict: false });
+    const port = h.app.get<RiderSeasonStandings>(RIDER_SEASON_STANDINGS, { strict: false });
+    vi.spyOn(port, 'outcomesOf').mockRejectedValueOnce(new Error('standings down'));
+    await expect(reconciler.reconcile(me.userId, 'server')).rejects.toThrow('standings down');
+    expect(await achievementsDb(h).seasonGrants.countDocuments({ userId: me.userId })).toBe(0);
+
+    // повтор задачи — сезонные выданы непросмотренными
+    await reconciler.reconcile(me.userId, 'server');
+    expect(
+      await achievementsDb(h).seasonGrants.countDocuments({ userId: me.userId, seenAt: null }),
+    ).toBe(2);
+  });
+
   it('AC6: документ v1 в achievement_grants — прежний ответ рядом с сезонными', async () => {
     const me = await rider(h, 'me@example.com');
     const season = await seedSeason(h, 'Сезон 2025', { year: 2025 });

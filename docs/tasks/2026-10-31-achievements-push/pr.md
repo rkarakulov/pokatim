@@ -5,7 +5,7 @@ Task: `docs/tasks/2026-10-31-achievements-push/task.md` (решения P1–P6,
 находит новые выдачи и шлёт push (AC3, AC5).
 
 ### Деплой
-1. **Миграция `0044_route_rides_passed_idx`** — `pnpm db:migrate` **до** выката API/worker. Только expand:
+1. **Миграция `0044_route_rides_passed_idx`** — `pnpm --filter @pokatim/api db:migrate` **до** выката API/worker. Только expand:
    частичный индекс `route_rides_passed_updated_idx { updatedAt, _id }` по `status: 'passed'`, идемпотентный
    `createIndex`, без бэкфилла и транзакции.
 2. Выкат API и worker. Новая очередь BullMQ **`achievements-sync`** создаётся сама; расписание

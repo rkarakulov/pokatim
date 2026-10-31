@@ -405,7 +405,8 @@ paths:
   только по `settled`; `refresh` нет). `sync`: оба плана → маркер после обоих → ответ: сезонные — видимые ∩
   заработанные (`final`), в `pending` — видимая остаётся с названием из исхода. Лог — счётчики `seasonal_*`. Карточка:
   сезонный код → `cardFacts` `null` (409), `ACHIEVEMENT_BADGE_ICONS` — `Record<FactAchievementCode, …>`. Сбой порта сезонов — `seasonOutcomes` → `[]`
-  (лог `achievements.seasons_unavailable`): сезонные не трогаются и не отдаются, остальной список — как обычно.
+  (лог `achievements.seasons_unavailable`): сезонные не трогаются и не отдаются, остальной список — как обычно;
+  серверная сверка (`origin: 'server'`) зовёт порт напрямую — сбой уходит в ретрай задачи.
 
 ## Карточки для сторис (`sharing`, story-cards, ADR-0018)
 
