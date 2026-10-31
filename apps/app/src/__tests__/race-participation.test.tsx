@@ -146,6 +146,7 @@ describe('гость (AC1)', () => {
       publicId: null,
       themeId: 'classic',
       avatarUploadBlockedUntil: null,
+      showRouteRides: false,
     });
     const router = await renderRouter(appRoutes, { initialUrl: `/races/${RACE_ID}` });
 

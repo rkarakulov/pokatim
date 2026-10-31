@@ -39,6 +39,7 @@ beforeEach(() => {
     publicId: null,
     themeId: 'classic',
     avatarUploadBlockedUntil: null,
+    showRouteRides: false,
   });
   // статистика и история своего профиля (rider-profile) — свои тесты в `own-profile.test.tsx`
   jest.mocked(api.getProfileStats).mockReturnValue(new Promise(() => undefined));

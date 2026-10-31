@@ -32,6 +32,7 @@ const profile = (overrides: Partial<ProfileView> = {}): ProfileView => ({
   publicId: null,
   themeId: 'classic',
   avatarUploadBlockedUntil: null,
+  showRouteRides: false,
   ...overrides,
 });
 const RESULTS_KEY = ['races', 'results', 'race-1', 'page'];

@@ -44,6 +44,7 @@ beforeEach(() => {
     publicId: null,
     themeId: 'classic',
     avatarUploadBlockedUntil: null,
+    showRouteRides: false,
   });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
