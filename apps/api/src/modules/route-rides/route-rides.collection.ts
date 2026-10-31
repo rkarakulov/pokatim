@@ -10,6 +10,8 @@ import type { Collection, Db } from 'mongodb';
 export const ROUTE_RIDES_COLLECTIONS = { rides: 'route_rides' } as const;
 
 export type RouteRideStatus = 'queued' | 'checking' | 'passed' | 'not_passed' | 'failed';
+/** Происхождение заезда (route-rides-03): ручная проверка (POST) / автопроверка новой активности (worker). */
+export type RouteRideOrigin = 'manual' | 'auto';
 
 /** Снимок сводки активности на момент POST (неизменяема после разбора): окно сверки и строки истории. */
 export interface RouteRideActivityDoc {
@@ -43,6 +45,8 @@ export interface RouteRideDoc {
   routeId: string;
   activityId: string;
   activity: RouteRideActivityDoc;
+  /** происхождение; нет поля (документы до route-rides-03) — `manual`, бэкфилла нет */
+  origin?: RouteRideOrigin;
   /** ширина коридора на момент создания (смена политики не переписывает старые вердикты молча, RC-15) */
   corridorWidthM: number;
   status: RouteRideStatus;

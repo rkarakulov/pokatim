@@ -5,9 +5,11 @@ import type {
   RouteRideRef,
 } from '@pokatim/contracts';
 import { boundsNear, type Bounds } from '@pokatim/tracks';
+import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import type { ActivityRef } from '../tracks';
-import type { RouteRideDoc, RouteRideStatus } from './route-rides.collection';
+import type { RouteRideDoc, RouteRideOrigin, RouteRideStatus } from './route-rides.collection';
+import type { RouteRideResult } from './route-rides.repository';
 
 /**
  * Правила заезда по маршруту (route-rides-01, `[ASSUMPTION]` §8): коридор и окно сверки, кандидаты, квота, лимит,
@@ -175,4 +177,48 @@ export function candidateRows(
       distanceM: Math.round(activity.distanceM),
       rideId: findExisting(rides, heads, activity.id)?._id ?? null,
     }));
+}
+
+/**
+ * Документ нового заезда (общий для ручного `queued` и автопроверки `passed`, route-rides-03): снимок сводки
+ * активности, коридор политики. Без `result` — `queued` (ручной POST, ревизия 1, попыток 0); с `result` — готовый
+ * итог (автопроверка: ревизия 1, одна попытка).
+ */
+export function newRideDoc(input: {
+  userId: string;
+  routeId: string;
+  activity: ActivityRef;
+  origin: RouteRideOrigin;
+  now: Date;
+  result?: RouteRideResult;
+}): RouteRideDoc {
+  const { activity, now, result } = input;
+  return {
+    _id: uuidv7(),
+    userId: input.userId,
+    routeId: input.routeId,
+    activityId: activity.id,
+    activity: {
+      startedAt: activity.startedAt,
+      endedAt: activity.endedAt,
+      source: activity.source,
+      elapsedSec: activity.elapsedSec,
+      distanceM: activity.distanceM,
+    },
+    origin: input.origin,
+    corridorWidthM: ROUTE_RIDE_POLICY.corridorWidthM,
+    checkRevision: 1,
+    checkAttempts: result ? 1 : 0,
+    status: 'queued',
+    reasons: [],
+    failure: null,
+    segment: null,
+    touchedCorridor: null,
+    engineVersion: null,
+    trackMap: null,
+    checkedAt: null,
+    ...result,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
