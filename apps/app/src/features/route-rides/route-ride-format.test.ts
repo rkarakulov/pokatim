@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 import {
   BEST_ID,
+  leaderboard,
   leaderboardMe,
   leaderboardRow,
   PREVIOUS_ID,
@@ -16,6 +17,7 @@ import {
   leaderboardMeView,
   leaderboardRowView,
   OTHERS_CARD_ROWS,
+  othersTruncated,
   ownInRows,
   rideDayText,
   routeCardPath,
@@ -308,5 +310,16 @@ describe('строки таблицы «Другие на маршруте» (ro
   it('своя в списке — по `rideId` (RC-B1)', () => {
     expect(ownInRows([leaderboardRow(), leaderboardRow({ place: 2 })])).toBe(false);
     expect(ownInRows([leaderboardRow(), leaderboardRow({ place: 2, rideId: RIDE_ID })])).toBe(true);
+  });
+
+  it('скрыты строки — только кроме своей, показанной отдельно (RC-B2)', () => {
+    const rows = [leaderboardRow(), leaderboardRow({ place: 2 })];
+    expect(othersTruncated(leaderboard(rows))).toBe(false);
+    expect(othersTruncated(leaderboard(rows, { total: 3 }))).toBe(true);
+    expect(othersTruncated(leaderboard(rows, { total: 3, me: leaderboardMe() }))).toBe(false);
+    expect(othersTruncated(leaderboard(rows, { total: 4, me: leaderboardMe() }))).toBe(true);
+    expect(othersTruncated(leaderboard([], { total: 1, me: leaderboardMe() }))).toBe(false);
+    const own = [leaderboardRow(), leaderboardRow({ place: 2, rideId: RIDE_ID })];
+    expect(othersTruncated(leaderboard(own, { total: 3, me: leaderboardMe() }))).toBe(true);
   });
 });

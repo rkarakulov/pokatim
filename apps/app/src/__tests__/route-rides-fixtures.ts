@@ -114,8 +114,8 @@ export const trackUpload = (overrides: Partial<TrackUpload> = {}): TrackUpload =
   ...overrides,
 });
 
-/** Публичный id райдера с карточкой (rider-links-in-tables). */
-export const RIDER_PUBLIC_ID = 'r7Kx2mQ9pL4v';
+/** Публичный id райдера с карточкой (`OpaqueToken`, 43 символа; rider-links-in-tables). */
+export const RIDER_PUBLIC_ID = 'p'.repeat(43);
 
 /** Строка таблицы «Другие» (route-rides-04): по умолчанию — чужая, «Участник» (без имени и карточки). */
 export const leaderboardRow = (

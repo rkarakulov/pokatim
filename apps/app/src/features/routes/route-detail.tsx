@@ -15,8 +15,9 @@ import {
   textStyle,
   useTheme,
 } from '@rkarakulov/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -35,7 +36,13 @@ import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
 import { StatBlock, StatBlockSkeleton, type StatVariant } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
-import { useRouteRides } from '@/features/route-rides/queries';
+import {
+  routeRidesKeys,
+  useRouteRideLeaderboard,
+  useRouteRides,
+} from '@/features/route-rides/queries';
+import { OTHERS_CARD_ROWS } from '@/features/route-rides/route-ride-format';
+import { RouteRideOthersBlock } from '@/features/route-rides/route-ride-others-block';
 import { RouteRidesBlock } from '@/features/route-rides/route-rides-block';
 import { useShareChoice } from '@/features/sharing/share-choice-sheet';
 import { useShareImage } from '@/features/sharing/use-share-image';
@@ -304,13 +311,14 @@ function RouteSheetHeader({ route }: { route: CatalogRouteDetail }) {
  * Тело шторки карточки маршрута (routes-03, P1; routes-04d, L3): без названия (оно в шапке экрана), бейдж автора
  * маршрута райдера (routes-06), чипы (покрытия, форма, город; `'unknown'` — без чипа), профиль высоты без заголовка
  * со скраббингом, действия в строку, «Пожаловаться» (маршрут райдера), «Мои заезды» (вошедшему, route-rides-02),
- * «Гонки на маршруте».
+ * «Другие на маршруте» (вошедшему, route-rides-04), «Гонки на маршруте».
  */
 function RouteSheetBody({
   route,
   races,
   viewer,
   rides,
+  others,
   now,
   mounted,
   signedIn,
@@ -322,6 +330,8 @@ function RouteSheetBody({
   viewer: ReturnType<typeof useCatalogRouteViewer> | null;
   /** «Мои заезды» (route-rides-02) — только вошедшему на клиенте; иначе `null` (блока нет) */
   rides: ReturnType<typeof useRouteRides> | null;
+  /** «Другие на маршруте» (route-rides-04) — только вошедшему на клиенте; иначе `null` (блока нет) */
+  others: ReturnType<typeof useRouteRideLeaderboard> | null;
   now: Date | null;
   mounted: boolean;
   signedIn: boolean;
@@ -349,9 +359,26 @@ function RouteSheetBody({
       <RouteActions route={route} mounted={mounted} signedIn={signedIn} />
       {viewer ? <RouteReportAction id={route.id} viewer={viewer} /> : null}
       <RouteRidesBlock routeId={route.id} mine={false} rides={rides} now={now} />
+      <RouteRideOthersBlock routeId={route.id} board={others} now={now} />
       <RouteRaces races={races} now={now} />
     </View>
   );
+}
+
+/**
+ * Лучший свой заезд сменился (опрос «Моих заездов» на карточке довёл проверку до финала без экрана результата) — своя
+ * строка таблицы «Другие» устарела (route-rides-04, RC-B6). Первое значение — не смена.
+ */
+function useBestRideChange(routeId: string, bestId: string | undefined) {
+  const queryClient = useQueryClient();
+  const previous = useRef(bestId);
+  useEffect(() => {
+    const was = previous.current;
+    previous.current = bestId;
+    if (was !== undefined && bestId !== was) {
+      void queryClient.invalidateQueries({ queryKey: routeRidesKeys.leaderboardAll(routeId) });
+    }
+  }, [bestId, queryClient, routeId]);
 }
 
 /** Прокрутка состояния без карты (404, ошибка без данных) — с pull-to-refresh, как прежде. */
@@ -429,19 +456,32 @@ export function RouteDetailScreen({
   // route-rides-02: «Мои заезды» — только вошедшему и только клиент (SSR: сессия `unknown`), после карточки
   const ridesEnabled = valid && signedIn && hasRoute;
   const rides = useRouteRides(id, ridesEnabled);
+  // route-rides-04: «Другие на маршруте» — те же условия, что у «Моих заездов»
+  const others = useRouteRideLeaderboard(id, OTHERS_CARD_ROWS, ridesEnabled);
+  useBestRideChange(id, rides.data?.summary.best?.id);
   const now = useMinskClockAfterMount([
     route.dataUpdatedAt,
     races.dataUpdatedAt,
     rides.dataUpdatedAt,
+    others.dataUpdatedAt,
   ]);
   const refetchers = useMemo(
     () => [
       route.refetch,
       ...(hasRoute && authorKind === 'team' ? [races.refetch] : []),
       ...(hasRoute && signedIn && authorKind === 'rider' ? [viewer.refetch] : []),
-      ...(hasRoute && signedIn ? [rides.refetch] : []),
+      ...(hasRoute && signedIn ? [rides.refetch, others.refetch] : []),
     ],
-    [route.refetch, hasRoute, authorKind, signedIn, races.refetch, viewer.refetch, rides.refetch],
+    [
+      route.refetch,
+      hasRoute,
+      authorKind,
+      signedIn,
+      races.refetch,
+      viewer.refetch,
+      rides.refetch,
+      others.refetch,
+    ],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   const notFound =
@@ -526,6 +566,7 @@ export function RouteDetailScreen({
                     races={races}
                     viewer={viewerEnabled ? viewer : null}
                     rides={ridesEnabled ? rides : null}
+                    others={ridesEnabled ? others : null}
                     now={now}
                     mounted={mounted}
                     signedIn={signedIn}

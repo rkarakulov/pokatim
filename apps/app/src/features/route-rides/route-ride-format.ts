@@ -1,5 +1,6 @@
 import type {
   RouteRideDetail,
+  RouteRideLeaderboard,
   RouteRideLeaderboardMe,
   RouteRideLeaderboardRow,
   RouteRidePage,
@@ -249,3 +250,10 @@ export const leaderboardMeView = (me: RouteRideLeaderboardMe, now: Date | null):
 /** Своя строка уже в списке (RC-B1): отдельная строка `me` не нужна. */
 export const ownInRows = (rows: readonly RouteRideLeaderboardRow[]) =>
   rows.some((row) => row.rideId !== null);
+
+/**
+ * Сервер отдал не все строки (RC-B2): `total` включает зрителя — своя строка, показанная отдельно (`me` вне `rows`),
+ * тоже видна, поэтому «Все (N)» и сноска — только если скрыт кто-то ещё.
+ */
+export const othersTruncated = (board: RouteRideLeaderboard) =>
+  board.total > board.rows.length + (board.me !== null && !ownInRows(board.rows) ? 1 : 0);
