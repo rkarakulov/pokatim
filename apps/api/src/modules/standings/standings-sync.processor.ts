@@ -1,9 +1,17 @@
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Injectable, type OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
+import type { OutboxJobData } from '@rkarakulov/api-kit/core';
+import { MongoOutboxReader } from '@rkarakulov/api-kit/mongo';
 import type { Job, Queue } from 'bullmq';
 
 import { QUEUE } from '../../queues';
-import { StandingsRecalc, type StandingsSyncRun } from './standings-recalc';
+import {
+  RESULTS_PROTOCOL_PUBLISHED,
+  RESULTS_RESULT_REVISED,
+  ResultsProtocolPublished,
+  ResultsResultRevised,
+} from '../results';
+import { type RaceSyncOutcome, StandingsRecalc, type StandingsSyncRun } from './standings-recalc';
 
 export const STANDINGS_SYNC_JOB = 'sync';
 
@@ -11,31 +19,51 @@ export const STANDINGS_SYNC_JOB = 'sync';
 const ONE_SHOT = { removeOnComplete: true, removeOnFail: true } as const;
 export const STANDINGS_SYNC_BOOT_JOB_ID = 'standings.sync.boot';
 
-/** Расписание сверки рейтинга сезонов; upsert идемпотентен — несколько worker не плодят дубли. */
+/**
+ * Расписание сверки рейтинга сезонов — страховка к событиям (standings-outbox-events, S1): задача события, исчерпавшая
+ * ретраи, лечится за ≤ 15 мин. upsert идемпотентен — несколько worker не плодят дубли.
+ */
 export const STANDINGS_SCHEDULES = [
   {
     id: 'standings.sync',
-    repeat: { pattern: '* * * * *', tz: 'Europe/Minsk' },
+    repeat: { pattern: '*/15 * * * *', tz: 'Europe/Minsk' },
     job: { name: STANDINGS_SYNC_JOB },
   },
 ] as const;
 
+/** Схемы событий `results`, на которые подписан рейтинг (`standingsOutboxRoutes`). */
+const RACE_EVENTS: Record<string, typeof ResultsProtocolPublished | typeof ResultsResultRevised> = {
+  [RESULTS_PROTOCOL_PUBLISHED]: ResultsProtocolPublished,
+  [RESULTS_RESULT_REVISED]: ResultsResultRevised,
+};
+
 /**
- * Регламент рейтинга сезона (`standings-recalc`, race-results-08, DV-1): каждую минуту и при старте worker — сверка
- * отпечатков источника и пересчёт изменившихся сезонов. Отказ сезона — задача падает (failed-набор BullMQ), следующий
- * прогон повторяет.
+ * Очередь рейтинга сезона (`standings-recalc`): события `results` (имя задачи = тип, jobId = id события outbox) —
+ * сверка сезона гонки (`StandingsRecalc.syncRace`); `sync` — регламент-страховка каждые 15 мин и при старте worker.
+ * Отказ — задача падает (ретраи BullMQ, failed-набор), регламент повторяет. Невалидный payload — пропуск с логом.
  */
 @Processor(QUEUE.standingsRecalc)
 export class StandingsSyncProcessor extends WorkerHost {
-  constructor(private readonly recalc: StandingsRecalc) {
+  private readonly logger = new Logger(StandingsSyncProcessor.name);
+
+  constructor(
+    private readonly recalc: StandingsRecalc,
+    private readonly outbox: MongoOutboxReader,
+  ) {
     super();
   }
 
-  async process(job: Job): Promise<StandingsSyncRun> {
-    if (job.name !== STANDINGS_SYNC_JOB) {
-      throw new Error(`unknown job ${job.name} in queue ${QUEUE.standingsRecalc}`);
+  async process(job: Job): Promise<StandingsSyncRun | RaceSyncOutcome> {
+    if (job.name === STANDINGS_SYNC_JOB) return this.recalc.sync();
+    const schema = Object.hasOwn(RACE_EVENTS, job.name) ? RACE_EVENTS[job.name] : undefined;
+    if (!schema) throw new Error(`unknown job ${job.name} in queue ${QUEUE.standingsRecalc}`);
+    const { outboxEventId } = job.data as OutboxJobData;
+    const event = schema.safeParse(await this.outbox.payloadOf(outboxEventId));
+    if (!event.success) {
+      this.logger.warn(`standings.event_skipped type=${job.name} event=${outboxEventId}`);
+      return 'skipped';
     }
-    return this.recalc.sync();
+    return this.recalc.syncRace(event.data.raceId);
   }
 }
 

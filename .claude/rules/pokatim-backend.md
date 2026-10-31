@@ -196,7 +196,7 @@ paths:
   повтор публикации после частичного сбоя ставит задачу в очереди, где её ещё нет.
 
 - Брокер — BullMQ на Redis; RabbitMQ не используем (переход — только через ADR; outbox оставляет к нему путь).
-- Регламенты «по курсору» без событий (DV-1): `standings-recalc`, `og-sync`, `tickets-maintenance`,
+- Регламенты «по курсору» без событий: `og-sync`, `tickets-maintenance`,
   `achievements-sync` (achievements-push N2: `achievements.sweep` → `achievements.rider`); новый источник курсора —
   метод порта владельца с keyset `changed-since.ts`, не чтение чужой коллекции.
 - Тяжёлая работа — только в worker: разбор трека, геопересчёт (коридор), рендер Skia/ffmpeg, OG-картинки,
@@ -531,8 +531,8 @@ RC-A1, ADR-0019).
   `lockEntry`, идемпотентно по `checkedAt < requestedAt`). Пока есть незавершённые проверки — публикация и
   «Применить пересчёт» отвечают 409.
 - `results.protocol-published` / `results.result-revised` / `results.attempt-verdict-changed` — маршрут в
-  `notifications-intake` (объявляет подписчик, ADR-0017). Рейтинг сезона (08) событий не слушает — регламент сверки
-  (DV-1); fan-out outbox есть (api-kit 0.6.0), подписка рейтинга на события — follow-up.
+  `notifications-intake` (объявляет подписчик, ADR-0017); `protocol-published` и `result-revised` — ещё и в
+  `standings-recalc` (`standingsOutboxRoutes`, fan-out).
 - Отказы состояния — `409 RESULTS_ACTION_BLOCKED { reason, count? }`, `409 RESULTS_PUBLISH_BLOCKED { blockedBy,
   checklist }`.
 
@@ -541,15 +541,18 @@ RC-A1, ADR-0019).
 - Модуль `standings` (`results ──► standings`): `StandingsCoreModule` (репозиторий снимка, `StandingsSource`,
   `StandingsRecalc`; imports `RacesCoreModule`, `ResultsCoreModule`), `StandingsModule` (API: + `IdentityModule`,
   `PanelModule`, `ProfileCoreModule`), `StandingsWorkerModule` (`WorkerModule`). Порты — только через `index.ts`:
-  `SEASON_RACES` (`races`: гонки с протоколом, `seasonExists`, `seesAllRaces`, `finishedSeasons`, `awaitingProtocol`),
+  `SEASON_RACES` (`races`: гонки с протоколом, `protocolRaceSeason`, `seasonExists`, `seesAllRaces`, `finishedSeasons`, `awaitingProtocol`),
   `RESULTS_FOR_STANDINGS` (`results`:
   `currentRevisions` одним `aggregate`, `protocolRows` ревизии), `RIDER_NAMES` (`profile`). `races`/`results` о
   `standings` не знают.
 - Правила зачёта — чистые функции `standings.policy.ts` (`pointsForPlace`, `racesCounted`, `selectCounted`,
   `compareRiders`, `buildSeasonStandings`, `sourceFingerprint`), версия `STANDINGS_FORMULA_VERSION` в снимке: смена —
   полный пересчёт всех сезонов. Клиент ничего не считает.
-- Пересчёт — **регламент** вместо событий (DV-1): очередь `standings-recalc`, `StandingsSchedules` — `standings.sync`
-  каждую минуту (Минск) + разовая `standings.sync.boot` при старте worker; `StandingsRecalc.sync` сверяет отпечаток
+- Пересчёт — **события** `results.protocol-published` / `results.result-revised` (`standingsOutboxRoutes` →
+  `standings-recalc`, standings-outbox-events) + регламент-страховка: `StandingsSchedules` — `standings.sync` каждые
+  15 мин (Минск) + разовая `standings.sync.boot` при старте worker (смена формулы, события до выката). Задача события →
+  `StandingsRecalc.syncRace` (сезон — `SEASON_RACES.protocolRaceSeason`; нет — `skipped`) → `sync([seasonId])`;
+  невалидный payload — лог `standings.event_skipped`. `StandingsRecalc.sync(seasonIds?)` сверяет отпечаток
   источника сезона (гонки, ревизии, класс, схема, формула) с отпечатком снимка и пересчитывает изменившиеся сезоны
   целиком. Отказ сезона — лог `standings.recompute_failed`, остальные идут; после прохода — исключение
   (`standings.sync_failed`, failed-набор BullMQ), следующий прогон повторяет. Гонка с протоколом без ревизии —
