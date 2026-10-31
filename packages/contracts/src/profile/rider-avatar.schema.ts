@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { OpaqueToken } from '../auth/verification.schema.ts';
 import { fieldError } from '../common.ts';
 
 /** Предел тела `PUT /v1/profile/avatar` (rider-profile): 10 МиБ, больше — `413 AVATAR_TOO_LARGE`. */
@@ -16,11 +17,6 @@ export const AVATAR_MAX_INPUT_PIXELS = 100_000_000;
 export const AVATAR_MAX_PNG_PIXELS = 25_000_000;
 /** Минимальная сторона обрезки в пикселях исходника; меньше — `422 AVATAR_INVALID`. */
 export const AVATAR_MIN_CROP_PX = 64;
-
-/** Непрозрачный случайный токен: 32 байта base64url без дополнения (43 символа). */
-const OpaqueToken = z
-  .string({ error: fieldError('INVALID') })
-  .regex(/^[A-Za-z0-9_-]{43}$/, { error: 'INVALID' });
 
 /** Id аватара (`GET /v1/avatars/:id`): случайный токен, не `userId`; новый при каждой замене фото. */
 export const AvatarId = OpaqueToken;

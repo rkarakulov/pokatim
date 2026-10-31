@@ -48,6 +48,14 @@ module.exports = {
       to: { path: '^apps/api/src/modules/(?!product-events/)' },
     },
     {
+      name: 'media-leaf',
+      comment:
+        'media — инфраструктура изображений, модуль-лист (ADR-0028): другие модули API не импортирует',
+      severity: 'error',
+      from: { path: '^apps/api/src/modules/media/' },
+      to: { path: '^apps/api/src/modules/(?!media/)' },
+    },
+    {
       name: 'social-consumers-only',
       comment:
         'Производители не знают о social (ADR-0027 п. 1): ссылаются только notifications и account',

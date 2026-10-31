@@ -102,6 +102,8 @@ export const AUDIT_ACTIONS = [
   'achievement.granted_manually',
   'achievement.revoked_manually',
   'achievement.override_cleared',
+  // ride-photo (ADR-0028): модератор удалил фото организатора райда (subject `ride`, label — название, без id фото)
+  'ride.photo_reset',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;

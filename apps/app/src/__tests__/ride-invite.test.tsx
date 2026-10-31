@@ -52,6 +52,7 @@ const detail: RideDetail = {
   rescheduledAt: null,
   route: null,
   start: null,
+  photo: null,
   description: null,
 };
 const view = (ride: Partial<RideDetail> = {}): RideView => ({

@@ -58,6 +58,7 @@ const ride = (overrides: Partial<RideCard> = {}): RideCard => ({
   rescheduledAt: null,
   route: null,
   start: null,
+  photo: null,
   viewer: none,
   ...overrides,
 });

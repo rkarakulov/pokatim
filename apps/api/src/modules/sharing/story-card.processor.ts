@@ -164,7 +164,8 @@ export class StoryCardProcessor extends WorkerHost {
 
   /**
    * Рендер приглашения кофе-райда — вызывается и тестами напрямую. Райд скрыт/удалён — 404 порта: тоже `skipped`
-   * (картинка не нужна, ретраить нечего). Линия — только пока маршрут в каталоге (`inviteLine` перепроверяет).
+   * (картинка не нужна, ретраить нечего). Линия — только пока маршрут в каталоге (`inviteLine` перепроверяет); фото
+   * 4a — только текущее фото нескрытого райда (`invitePhoto` перепроверяет, иначе `skipped`).
    */
   buildRideInvite(job: RideInviteJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
     const label = () => `ride ${job.rideId} ${job.template}`;
@@ -176,11 +177,17 @@ export class StoryCardProcessor extends WorkerHost {
           throw error;
         });
       if (!resolved || resolved.hash !== job.hash) return null;
-      const routeId = resolved.input.facts.routeId;
+      const { routeId, photoId } = resolved.input.facts;
+      // фото рисует только 4a; снято или заменено между постановкой и рендером — вход устарел, ретраить нечего
+      const photo =
+        resolved.input.template === 'night' && photoId
+          ? await this.rides.invitePhoto(job.rideId, photoId)
+          : null;
+      if (resolved.input.template === 'night' && photoId && !photo) return null;
       const line = routeId ? await this.rides.inviteLine(routeId) : null;
       return {
-        png: await renderRideInvite(resolved.input, line),
-        note: line ? 'route' : 'no line',
+        png: await renderRideInvite(resolved.input, line, photo),
+        note: `${line ? 'route' : 'no line'}${photo ? ' photo' : ''}`,
       };
     });
   }

@@ -13,8 +13,13 @@ import {
   RIDE_VIEWER_ROLES,
   RideCard,
   RideCities,
+  ImageInvalidDetails,
+  RIDE_PHOTO_MAX_BYTES,
+  RIDE_PHOTO_MAX_EDGE_PX,
+  RIDE_PHOTO_MIN_SHORT_PX,
   RideDetail,
   RideListQuery,
+  RidePhotoId,
   RideMap,
   RideMapQuery,
   RideQuotaDetails,
@@ -373,6 +378,19 @@ describe('ответы (tolerantEnum, без служебных полей)', ()
     expect(RideMap.safeParse({ items: [{ ...point, start: [200, 0] }] }).success).toBe(false);
   });
 
+  it('ride-photo: старый ответ без photo — null; лишние поля фото отбрасываются', () => {
+    const token = 'Ab0_-'.repeat(8) + 'xyz';
+    expect(RideCard.parse({ ...summary, viewer }).photo).toBeNull();
+    const card = RideCard.parse({
+      ...summary,
+      viewer,
+      photo: { id: token, organizerUserId: ID, bytesLength: 10 },
+    });
+    expect(card.photo).toEqual({ id: token });
+    expect(RideDetail.parse({ ...summary, description: null, photo: null }).photo).toBeNull();
+    expect(RideCard.safeParse({ ...summary, viewer, photo: { id: 'x' } }).success).toBe(false);
+  });
+
   it('квота: вид и размер', () => {
     expect(RideQuotaDetails.parse({ quota: 'organized', limit: 5 })).toEqual({
       quota: 'organized',
@@ -437,5 +455,25 @@ describe('«Рядом» (05c): near и radiusKm', () => {
     expect(RideMapQuery.safeParse({ limit: '20' }).success).toBe(false);
     expect(RideMapQuery.safeParse({ cursor: 'c' }).success).toBe(false);
     expect(RideMapQuery.safeParse({ radiusKm: '10' }).success).toBe(false);
+  });
+});
+
+describe('фото райда (ride-photo)', () => {
+  it('пределы: 10 МиБ, 1600 px по длинной стороне, короткая ≥ 400', () => {
+    expect(RIDE_PHOTO_MAX_BYTES).toBe(10 * 1024 * 1024);
+    expect(RIDE_PHOTO_MAX_EDGE_PX).toBe(1600);
+    expect(RIDE_PHOTO_MIN_SHORT_PX).toBe(400);
+  });
+
+  it('RidePhotoId — непрозрачный токен', () => {
+    const token = 'Ab0_-'.repeat(8) + 'xyz';
+    expect(RidePhotoId.parse(token)).toBe(token);
+    expect(RidePhotoId.safeParse(ID).success).toBe(false);
+  });
+
+  it('ImageInvalidDetails: незнакомая причина — unknown', () => {
+    expect(ImageInvalidDetails.parse({ reason: 'too_small' })).toEqual({ reason: 'too_small' });
+    expect(ImageInvalidDetails.parse({ reason: 'unreadable' })).toEqual({ reason: 'unreadable' });
+    expect(ImageInvalidDetails.parse({ reason: 'cursed' })).toEqual({ reason: 'unknown' });
   });
 });

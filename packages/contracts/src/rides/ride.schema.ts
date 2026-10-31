@@ -11,6 +11,7 @@ import {
   queryArray,
   Version,
 } from '../common.ts';
+import { OpaqueToken } from '../auth/verification.schema.ts';
 import { CITY_CODES, CityCode, isCityCode } from '../geo/city.schema.ts';
 import { LonLat } from '../races/race-route.schema.ts';
 import { PageCursor } from '../races/race.schema.ts';
@@ -284,6 +285,26 @@ export const RideRoute = z.object({
 });
 export type RideRoute = z.infer<typeof RideRoute>;
 
+/** Предел тела `PUT /v1/rides/:id/photo` (ride-photo, ADR-0028): 10 МиБ, больше — `413 IMAGE_TOO_LARGE`. */
+export const RIDE_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+/** Длинная сторона сохранённого фото райда: сервер вписывает в 1600 px (`fit: inside`, без увеличения). */
+export const RIDE_PHOTO_MAX_EDGE_PX = 1600;
+/** Короткая сторона фото **после вписывания** — не меньше 400 px; иначе `422 IMAGE_INVALID { reason: too_small }`. */
+export const RIDE_PHOTO_MIN_SHORT_PX = 400;
+
+/** Id фото райда (`GET /v1/ride-photos/:id`): случайный токен; новый при каждой замене. */
+export const RidePhotoId = OpaqueToken;
+export type RidePhotoId = z.infer<typeof RidePhotoId>;
+
+/** Ссылка на фото организатора райда — только id (без размеров, автора и времени). */
+export const RidePhotoRef = z.object({ id: RidePhotoId });
+export type RidePhotoRef = z.infer<typeof RidePhotoRef>;
+
+/** Причины `422 IMAGE_INVALID` (ride-photo): мелкое после вписывания; не декодируется или больше предела пикселей. */
+export const IMAGE_INVALID_REASONS = ['too_small', 'unreadable'] as const;
+export const ImageInvalidDetails = z.object({ reason: tolerantEnum(IMAGE_INVALID_REASONS) });
+export type ImageInvalidDetails = z.infer<typeof ImageInvalidDetails>;
+
 /**
  * Общие поля ответа: без организатора (кроме введённой им подписи), участников, `version`, `createdAt`. `route` и
  * `start` (старт видимого маршрута, `[lon, lat]`) — 05c; старый API без них — `null`.
@@ -306,6 +327,8 @@ const RideSummary = z.object({
   rescheduledAt: z.iso.datetime().nullable(),
   route: RideRoute.nullable().default(null),
   start: LonLat.nullable().default(null),
+  /** фото организатора (ride-photo); скрытый райд и старый сервер — `null` */
+  photo: RidePhotoRef.nullable().default(null),
 });
 
 /** Райд в ленте — с ролью зрителя. */

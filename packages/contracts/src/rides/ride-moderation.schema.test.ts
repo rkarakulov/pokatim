@@ -6,6 +6,7 @@ import {
   ModerationRideDetail,
   ModerationRidePage,
   ModerationRideQuery,
+  ResetRidePhotoRequest,
   RestoreRideRequest,
   RIDE_MODERATION_STATES,
 } from './ride-moderation.schema.ts';
@@ -119,5 +120,30 @@ describe('ответы модерации', () => {
     expect(detail).not.toHaveProperty('organizerUserId');
     expect(detail.reports[0]).not.toHaveProperty('reporterUserId');
     expect(detail.reports[0]?.resolution).toBe('hidden');
+    // ride-photo: старый сервер без поля — null
+    expect(detail.photo).toBeNull();
+    const withPhoto = ModerationRideDetail.parse({
+      ...detail,
+      photo: { id: TOKEN, bytesLength: 1 },
+    });
+    expect(withPhoto.photo).toEqual({ id: TOKEN });
+  });
+});
+
+const TOKEN = 'Ab0_-'.repeat(8) + 'xyz';
+
+describe('ResetRidePhotoRequest (ride-photo)', () => {
+  it('photoId — токен, причина 3–500; строгий', () => {
+    expect(ResetRidePhotoRequest.parse({ photoId: TOKEN, reason: ' Чужое фото ' })).toEqual({
+      photoId: TOKEN,
+      reason: 'Чужое фото',
+    });
+    expect(ResetRidePhotoRequest.safeParse({ photoId: 'x', reason: 'Чужое фото' }).success).toBe(
+      false,
+    );
+    expect(ResetRidePhotoRequest.safeParse({ photoId: TOKEN }).success).toBe(false);
+    expect(
+      ResetRidePhotoRequest.safeParse({ photoId: TOKEN, reason: 'Чужое фото', version: 1 }).success,
+    ).toBe(false);
   });
 });

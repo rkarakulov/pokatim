@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
-import { PROFILE_POLICY } from './profile.policy';
+import { UploadSlots } from '../../upload-slots';
+import { MEDIA_POLICY } from './media.policy';
 
 /** Занятое место обработки; `release` идемпотентен. */
 export interface ProcessingPermit {
@@ -15,11 +16,11 @@ export interface ProcessingGateLimits {
 }
 
 /**
- * Семафор обработки аватара (ревью PR A, MEDIUM-B): чтение тела держит только слот приёма (`UploadSlots`), а память
- * libvips — это место. Свободно — сразу; занято — ожидание в очереди до `waitMs`, затем `null`. Память процесса, не
- * Redis.
+ * Семафор обработки изображений (ревью rider-profile PR A, MEDIUM-B): чтение тела держит только слот приёма
+ * (`UploadSlots`), а память libvips — это место. Свободно — сразу; занято — ожидание в очереди до `waitMs`, затем
+ * `null`. Память процесса, не Redis.
  */
-export class AvatarProcessingGate {
+export class ImageProcessingGate {
   private active = 0;
   private readonly queue: (() => void)[] = [];
 
@@ -56,10 +57,21 @@ export class AvatarProcessingGate {
   }
 }
 
-/** Экземпляр процесса API (провайдер `ProfileModule`): лимиты — `PROFILE_POLICY.avatarProcessing`. */
+/**
+ * Экземпляр процесса API (провайдер **только** `MediaModule`): одна обработка на все фото — аватар и фото райда
+ * (ADR-0028); лимиты — `MEDIA_POLICY.processing`.
+ */
 @Injectable()
-export class AvatarProcessing extends AvatarProcessingGate {
+export class ImageProcessing extends ImageProcessingGate {
   constructor() {
-    super(PROFILE_POLICY.avatarProcessing);
+    super(MEDIA_POLICY.processing);
+  }
+}
+
+/** Слоты чтения тела фото процесса API — общие для аватара и фото райда (провайдер `MediaModule`, ADR-0028). */
+@Injectable()
+export class ImageUploadSlots extends UploadSlots {
+  constructor() {
+    super(MEDIA_POLICY.uploadSlots);
   }
 }

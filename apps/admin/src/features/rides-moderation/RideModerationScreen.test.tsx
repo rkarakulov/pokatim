@@ -54,6 +54,7 @@ const detail = (overrides: Partial<ModerationRideDetail> = {}): ModerationRideDe
       resolvedAt: null,
     },
   ],
+  photo: null,
   ...overrides,
 });
 

@@ -29,6 +29,7 @@ export const OG_FIXTURES = {
       paceMinKmh: 22,
       paceMaxKmh: 24,
       routeId: null,
+      photoId: null,
     },
   },
   route: {

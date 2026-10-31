@@ -71,6 +71,9 @@ export const PROJECT_ERROR_MESSAGES = {
   PANEL_INVITATIONS_UNAVAILABLE: 'Приглашения временно недоступны',
   ACHIEVEMENT_INVALID_STATE: 'Состояние выдачи достижения изменилось',
   SOCIAL_ACTION_BLOCKED: 'Действие сейчас недоступно',
+  IMAGE_FORMAT_UNSUPPORTED: 'Выберите фото JPEG, PNG или WebP',
+  IMAGE_TOO_LARGE: 'Фото больше 10 МБ',
+  IMAGE_INVALID: 'Не удалось обработать фото',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */

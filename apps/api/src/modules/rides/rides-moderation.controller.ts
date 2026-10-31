@@ -6,6 +6,7 @@ import {
   type ModerationRideDetail,
   type ModerationRidePage,
   ModerationRideQuery,
+  ResetRidePhotoRequest,
   RestoreRideRequest,
   Uuid,
 } from '@pokatim/contracts';
@@ -64,5 +65,16 @@ export class RidesModerationController {
     body: DismissRideReportsRequest,
   ): Promise<ModerationRideDetail> {
     return this.moderation.dismiss(actor.userId, id, body);
+  }
+
+  /** «Удалить фото» организатора (ride-photo): `photoId` из карточки, причина — в журнал. */
+  @Post(':id/photo-reset')
+  @HttpCode(200)
+  resetPhoto(
+    @CurrentPanelUser() actor: PanelPrincipal,
+    @Param('id', idPipe) id: string,
+    @Body(new ZodValidationPipe(ResetRidePhotoRequest, FieldErrorCode)) body: ResetRidePhotoRequest,
+  ): Promise<ModerationRideDetail> {
+    return this.moderation.resetPhoto(actor.userId, id, body);
   }
 }

@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 
 import { IdentityAccountsModule, IdentityModule } from '../identity';
+import { MediaModule } from '../media';
 import { PanelModule } from '../panel';
 import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
 import { PublicReadGuard } from '../../public-read.guard';
-import { AvatarProcessing } from './avatar-processing-gate';
 import { AvatarReissue } from './avatar-reissue';
 import { AvatarsPublicController } from './avatars-public.controller';
 import { ProfileAdminController } from './profile-admin.controller';
@@ -84,7 +84,7 @@ export class ProfileCoreModule {}
  * `profiles.moderate`, пол и год анкеты — `profiles.verified_edit`.
  */
 @Module({
-  imports: [IdentityModule, IdentityAccountsModule, PanelModule, ProfileCoreModule],
+  imports: [IdentityModule, IdentityAccountsModule, MediaModule, PanelModule, ProfileCoreModule],
   controllers: [
     OnboardingController,
     ProfileController,
@@ -103,7 +103,6 @@ export class ProfileCoreModule {}
     VerifiedProfileService,
     ProfileVerifiedAdminService,
     ProfileAvatarService,
-    AvatarProcessing,
     AvatarReissue,
     ProfileReportsService,
     PublicReadGuard,

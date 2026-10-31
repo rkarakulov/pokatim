@@ -83,6 +83,7 @@ const ride: RideCard = {
   rescheduledAt: null,
   route: null,
   start: null,
+  photo: null,
   viewer: {
     role: 'none',
     canJoin: true,

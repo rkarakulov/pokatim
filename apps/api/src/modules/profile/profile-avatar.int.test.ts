@@ -14,7 +14,7 @@ import { createHarness, type Harness } from '../../../test/harness';
 import { bearer, call, signUpSession } from '../../../test/identity';
 import { heldUpload } from '../../../test/uploads';
 import { PROFILE_COLLECTIONS } from './profile.collection';
-import { AvatarProcessing } from './avatar-processing-gate';
+import { ImageProcessing, MEDIA_POLICY } from '../media';
 import { PROFILE_POLICY } from './profile.policy';
 
 let h: Harness;
@@ -208,18 +208,18 @@ describe('ошибки загрузки (AC2)', () => {
   });
 
   it('MEDIUM-B ревью: обработка занята дольше ожидания — 429 retryAfterSec 5; освободилась — 200', async () => {
-    expect(PROFILE_POLICY.avatarProcessing).toEqual({ concurrency: 1, waitMs: 5_000 });
-    const saved = { ...PROFILE_POLICY.avatarProcessing };
-    Object.assign(PROFILE_POLICY.avatarProcessing, { waitMs: 100 });
+    expect(MEDIA_POLICY.processing).toEqual({ concurrency: 1, waitMs: 5_000 });
+    const saved = { ...MEDIA_POLICY.processing };
+    Object.assign(MEDIA_POLICY.processing, { waitMs: 100 });
     const session = await signUpSession(h);
-    const permit = await h.app.get(AvatarProcessing, { strict: false }).acquire();
+    const permit = await h.app.get(ImageProcessing, { strict: false }).acquire();
     try {
       const busy = await upload(session, await twoToneImage('png'));
       expect(busy.status).toBe(429);
       expect(busy.body).toMatchObject({ code: 'RATE_LIMITED', details: { retryAfterSec: 5 } });
     } finally {
       permit?.release();
-      Object.assign(PROFILE_POLICY.avatarProcessing, saved);
+      Object.assign(MEDIA_POLICY.processing, saved);
     }
     expect((await upload(session, await twoToneImage('png'))).status).toBe(200);
   });

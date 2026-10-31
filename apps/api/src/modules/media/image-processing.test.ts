@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AvatarProcessingGate } from './avatar-processing-gate';
+import { ImageProcessingGate } from './image-processing';
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('AvatarProcessingGate — одна обработка на процесс, короткое ожидание', () => {
+describe('ImageProcessingGate — одна обработка на процесс, короткое ожидание', () => {
   it('свободно — сразу; занято — ждёт освобождения в пределах waitMs', async () => {
-    const gate = new AvatarProcessingGate({ concurrency: 1, waitMs: 5000 });
+    const gate = new ImageProcessingGate({ concurrency: 1, waitMs: 5000 });
     const first = await gate.acquire();
     expect(first).not.toBeNull();
     let second: { release(): void } | null | undefined;
@@ -26,7 +26,7 @@ describe('AvatarProcessingGate — одна обработка на процес
 
   it('занято дольше waitMs — null; очередь не держит место после таймаута', async () => {
     vi.useFakeTimers();
-    const gate = new AvatarProcessingGate({ concurrency: 1, waitMs: 5000 });
+    const gate = new ImageProcessingGate({ concurrency: 1, waitMs: 5000 });
     const first = await gate.acquire();
     const late = gate.acquire();
     await vi.advanceTimersByTimeAsync(5001);
@@ -37,7 +37,7 @@ describe('AvatarProcessingGate — одна обработка на процес
   });
 
   it('release идемпотентен — повтор не освобождает чужое место', async () => {
-    const gate = new AvatarProcessingGate({ concurrency: 1, waitMs: 0 });
+    const gate = new ImageProcessingGate({ concurrency: 1, waitMs: 0 });
     const first = await gate.acquire();
     first?.release();
     first?.release();

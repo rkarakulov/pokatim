@@ -9,6 +9,8 @@ import {
   RIDE_LIST_MAX_LIMIT,
   RIDE_PHASES,
   RIDE_STATUSES,
+  RidePhotoRef,
+  RidePhotoId,
 } from './ride.schema.ts';
 import { RideReportReason } from './ride-report.schema.ts';
 
@@ -96,6 +98,8 @@ export const ModerationRideDetail = z.object({
   lastReportAt: z.iso.datetime().nullable(),
   version: Version,
   reports: z.array(ModerationRideReport).max(MODERATION_RIDE_REPORTS_MAX),
+  /** фото организатора (ride-photo) — и у скрытого райда (для «Удалить фото»); старый сервер — `null` */
+  photo: RidePhotoRef.nullable().default(null),
 });
 export type ModerationRideDetail = z.infer<typeof ModerationRideDetail>;
 
@@ -117,3 +121,10 @@ export const DismissRideReportsRequest = z.strictObject({
   lastReportAt: z.iso.datetime(),
 });
 export type DismissRideReportsRequest = z.infer<typeof DismissRideReportsRequest>;
+
+/**
+ * `POST /v1/admin/rides/:id/photo-reset` (ride-photo) — удалить фото организатора. `photoId` — из карточки: фото уже
+ * другое — `409 CONFLICT` (модератор не удалит фото, которого не видел); фото нет — успех без записи журнала.
+ */
+export const ResetRidePhotoRequest = z.strictObject({ photoId: RidePhotoId, reason: ActionReason });
+export type ResetRidePhotoRequest = z.infer<typeof ResetRidePhotoRequest>;

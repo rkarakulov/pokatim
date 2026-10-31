@@ -12,10 +12,10 @@ import { Binary } from 'mongodb';
 
 import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
-import { type UploadSlot, UploadSlots } from '../../upload-slots';
+import type { UploadSlot } from '../../upload-slots';
 import { randomToken } from '../identity';
+import { ImageProcessing, ImageUploadSlots } from '../media';
 import { type CropIntent, processAvatar } from './avatar-image';
-import { AvatarProcessing } from './avatar-processing-gate';
 import { ProfileAvatarRepository } from './profile-avatar.repository';
 import { activeBlock, PROFILE_POLICY, profileViewOf } from './profile.policy';
 import { ProfileRepository } from './profile.repository';
@@ -32,22 +32,23 @@ const avatarBlocked = (until: Date) => {
 };
 
 /**
- * Аватар своего профиля (rider-profile, ADR-0019): слот чтения тела (4 на процесс, 1 на пользователя) и лимит
- * `profile-avatar:<uid>` 20/ч — до тела; место обработки sharp (1 на процесс, ожидание до 5 с) — после тела; перекодирование `processAvatar`; замена — транзакция «новый документ → профиль → прежний
+ * Аватар своего профиля (rider-profile, ADR-0019): слот чтения тела (общий с фото райда `ImageUploadSlots`: 4 на
+ * процесс, 1 на пользователя, ADR-0028) и лимит
+ * `profile-avatar:<uid>` 20/ч — до тела; место обработки sharp (`ImageProcessing`: 1 на процесс на все фото, ожидание до 5 с) — после тела; перекодирование `processAvatar`; замена — транзакция «новый документ → профиль → прежний
  * удалён»; удаление — транзакция «профиль → прежний удалён». В логах — `uid`, размер, формат и исход (без имени,
  * клуба и сообщений libvips).
  */
 @Injectable()
 export class ProfileAvatarService {
   private readonly logger = new Logger(ProfileAvatarService.name);
-  private readonly slots = new UploadSlots(PROFILE_POLICY.avatarSlots);
 
   constructor(
     private readonly profiles: ProfileRepository,
     private readonly avatars: ProfileAvatarRepository,
     private readonly transactions: MongoTransactions,
     private readonly rateLimiter: RateLimiter,
-    private readonly processing: AvatarProcessing,
+    private readonly processing: ImageProcessing,
+    private readonly slots: ImageUploadSlots,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 

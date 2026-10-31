@@ -8,11 +8,20 @@ import { RIDE_ROUTES, type RideRoutes } from '../routes';
 import type { RideInviteFacts, RidesForSharing } from './rides-for-sharing.port';
 import { ridePhase } from './rides.policy';
 import type { RideDoc } from './rides.collection';
+import { RidePhotosRepository } from './ride-photos.repository';
 import { RidesRepository } from './rides.repository';
 
 type RideFactsDoc = Pick<
   RideDoc,
-  '_id' | 'title' | 'startsAt' | 'place' | 'distanceKm' | 'paceMinKmh' | 'paceMaxKmh' | 'routeId'
+  | '_id'
+  | 'title'
+  | 'startsAt'
+  | 'place'
+  | 'distanceKm'
+  | 'paceMinKmh'
+  | 'paceMaxKmh'
+  | 'routeId'
+  | 'photoId'
 >;
 
 /**
@@ -25,6 +34,7 @@ type RideFactsDoc = Pick<
 export class RidesForSharingService implements RidesForSharing {
   constructor(
     private readonly repository: RidesRepository,
+    private readonly photos: RidePhotosRepository,
     @Inject(RIDE_ROUTES) private readonly routes: RideRoutes,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -59,7 +69,15 @@ export class RidesForSharingService implements RidesForSharing {
       paceMinKmh: doc.paceMinKmh,
       paceMaxKmh: doc.paceMaxKmh,
       routeId: routeId && visible?.get(routeId)?.access === 'public' ? routeId : null,
+      photoId: doc.photoId ?? null,
     };
+  }
+
+  async invitePhoto(rideId: string, photoId: string): Promise<Uint8Array | null> {
+    const doc = await this.photos.findBytes(photoId);
+    if (!doc || doc.rideId !== rideId) return null;
+    if (!(await this.repository.isCurrentPhoto(rideId, photoId))) return null;
+    return doc.bytes.buffer;
   }
 
   inviteLine(routeId: string): Promise<LonLat[] | null> {

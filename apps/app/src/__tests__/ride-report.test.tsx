@@ -39,6 +39,7 @@ const ride: RideDetail = {
   rescheduledAt: null,
   route: null,
   start: null,
+  photo: null,
   description: null,
 };
 const viewer = { role: 'none', canJoin: true, canLeave: false, canManage: false } as const;

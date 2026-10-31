@@ -1,11 +1,16 @@
 import { Module } from '@nestjs/common';
 
 import { IdentityModule } from '../identity';
+import { MediaModule } from '../media';
 import { PanelModule } from '../panel';
 import { RoutesCoreModule } from '../routes';
 import { PublicReadGuard } from '../../public-read.guard';
 import { ProfileRidesController } from './profile-rides.controller';
 import { RideErasure } from './ride-erasure';
+import { RidePhotosPublicController } from './ride-photos-public.controller';
+import { RidePhotosController } from './ride-photos.controller';
+import { RidePhotosRepository } from './ride-photos.repository';
+import { RidePhotosService } from './ride-photos.service';
 import { RiderRidesService } from './rider-rides';
 import { RIDER_RIDES } from './rider-rides.port';
 import { RideNoticesService } from './ride-notices';
@@ -27,7 +32,7 @@ import { RidesRepository } from './rides.repository';
 import { RidesService } from './rides.service';
 
 /**
- * Ядро `rides` без HTTP: единственные писатели райдов и жалоб, порт стирания `RideErasure` (модуль
+ * Ядро `rides` без HTTP: единственные писатели райдов, жалоб и фото организатора (`ride_photos`, ADR-0028), порт стирания `RideErasure` (модуль
  * `account`, worker), порт получателей уведомлений `RIDE_NOTICES` (`notifications`, ADR-0017) и порт карточки-приглашения
  * `RIDES_FOR_SHARING` (`sharing`, ADR-0018), порт прошедших райдов райдера `RIDER_RIDES` (`achievements`), счётчики
  * «Обзора» панели `RidesOverview` (`overview`), порт фактов явки `RIDES_FOR_SOCIAL` (`social`, ADR-0027). Импортирует и
@@ -39,6 +44,7 @@ import { RidesService } from './rides.service';
   providers: [
     RidesRepository,
     RideReportsRepository,
+    RidePhotosRepository,
     RideErasure,
     RideNoticesService,
     { provide: RIDE_NOTICES, useExisting: RideNoticesService },
@@ -53,6 +59,7 @@ import { RidesService } from './rides.service';
   exports: [
     RidesRepository,
     RideReportsRepository,
+    RidePhotosRepository,
     RideErasure,
     RIDE_NOTICES,
     RIDES_FOR_SHARING,
@@ -67,13 +74,17 @@ export class RidesCoreModule {}
 /**
  * Кофе-райды (блок 05, ADR-0013 Proposed): райдер создаёт райд, другие отмечаются «Я иду». Авторизованная часть —
  * `AuthGuard` identity (контроллер — первым); публичная карточка — `PublicReadGuard`. Модерация (05b) — панель
- * `/v1/admin/rides` под `PanelGuard` (`panel` — только через `modules/panel/index.ts`, ADR-0013 п. 1).
+ * `/v1/admin/rides` под `PanelGuard` (`panel` — только через `modules/panel/index.ts`, ADR-0013 п. 1). Фото организатора
+ * (ride-photo, ADR-0028) — `rides/:id/photo` (`AuthGuard`) и `ride-photos/:id` (`PublicReadGuard`); гейт обработки и
+ * слоты приёма — общие с аватаром (`MediaModule`).
  */
 @Module({
-  imports: [IdentityModule, PanelModule, RidesCoreModule],
+  imports: [IdentityModule, MediaModule, PanelModule, RidesCoreModule],
   controllers: [
     RidesController,
+    RidePhotosController,
     RidesPublicController,
+    RidePhotosPublicController,
     RidesModerationController,
     ProfileRidesController,
   ],
@@ -83,6 +94,7 @@ export class RidesCoreModule {}
     RidesFeedService,
     RidesHistoryService,
     RidesModerationService,
+    RidePhotosService,
     PublicReadGuard,
   ],
 })
