@@ -617,7 +617,7 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `useUploadRidePhoto`/`useDeleteRidePhoto` (ответ → `applyRideView`: кеш `me` + инвалидация `['rides']`, в т. ч. статус
   карточек `['rides','invite',…]`); тексты — `ride-photo-errors.ts`. Герой — `SectionHero photo` (`RideHero`:
   `api.ridePhotoUrl`): `expo-image` `cover` декоративно (`accessible={false}`, пустой alt) под `components/photo-scrim.tsx`
-  (полосы `View` по профилю `photoScrimHero` — монотонный, зона текста — нижние 80 %; у 4a — свой `photoScrim`; цвет
+  (полосы `View` по профилю `photoScrimHero` — без провала, порог контраста на всей высоте; у 4a — свой `photoScrim`; цвет
   `overlay.scrim`, `aria-hidden`), текст и линия — `text.onPhoto`; ошибка картинки — типографский герой. Свой градиент
   или значения затемнения — только через профили `photoScrim*` `@pokatim/design-tokens` (тест контраста зон текста).
 - Шит «Райд опубликован» (ride-published-og): форма создания ведёт на `/rides/<id>?published=1`; шит — только

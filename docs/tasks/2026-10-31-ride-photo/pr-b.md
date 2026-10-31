@@ -25,7 +25,7 @@
   `load-image-picker.ts` и `image-picker-support.ts` перенесены в `features/media`.
 - **Герой ленты «Кофе-райды» и Главной**: `SectionHero` с необязательным `photo` — `expo-image` `cover` по центру,
   декоративное (без озвучивания, на web пустой `alt`), под `PhotoScrim` (новый токен `photoScrimHero` в
-  `@pokatim/design-tokens` — монотонный, зона текста нижние 80 %, тест контраста; цвет `overlay.scrim`, полосами `View`
+  `@pokatim/design-tokens` — без провала: порог контраста на всей высоте, тест; цвет `overlay.scrim`, полосами `View`
   — одинаково на iOS, Android и web), текст и линия — `text.onPhoto`; без фото или при ошибке картинки —
   прежний типографский герой.
 - **Строки** `rideInvite.photo.*`, `rides.detail.photo*` в `packages/i18n` (`[ASSUMPTION]` — копи по прототипу).
