@@ -44,6 +44,13 @@ describe('workerOutboxRoutes', () => {
     }
   });
 
+  it('tracks.activity-removed — в results-intake и route-rides-intake (fan-out)', () => {
+    expect(queuesOf(workerOutboxRoutes['tracks.activity-removed'])).toEqual([
+      'results-intake',
+      'route-rides-intake',
+    ]);
+  });
+
   it('события протокола results — и уведомлениям, и рейтингу сезона (standings-outbox-events, AC1)', () => {
     for (const type of ['results.protocol-published', 'results.result-revised']) {
       expect(queuesOf(workerOutboxRoutes[type])).toEqual([

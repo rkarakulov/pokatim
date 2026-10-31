@@ -81,6 +81,11 @@ export const QUEUE = {
    */
   routeRideCheck: 'route-ride-check',
   /**
+   * Приём событий `route-rides` (fan-out outbox, ADR-0017 п. 5): `tracks.activity-removed` → удаление заездов активности
+   * по всем маршрутам; jobId = id события outbox, повтор удаляет 0. Отдельно от `route-ride-check` — не ждёт сверок.
+   */
+  routeRidesIntake: 'route-rides-intake',
+  /**
    * Письмо «Вы зарегистрированы» (event-tickets): событие outbox `tickets.issued` (jobId = id события); одно письмо на
    * билет — захват состояния письма в документе билета (RC-T11).
    */
