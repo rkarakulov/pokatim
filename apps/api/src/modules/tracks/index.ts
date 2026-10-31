@@ -1,7 +1,9 @@
 export { TracksCoreModule, TracksModule, TracksWorkerModule } from './tracks.module';
 export {
+  TRACK_ACTIVITY_GROUP_CREATED,
   TRACK_ACTIVITY_READY,
   TRACK_ACTIVITY_REMOVED,
+  TrackActivityGroupCreated,
   TrackActivityReady,
   TrackActivityRemoved,
   tracksOutboxRoutes,

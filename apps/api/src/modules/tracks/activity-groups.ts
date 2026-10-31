@@ -6,7 +6,8 @@ import type { TracksRepository } from './tracks.repository';
 /**
  * Вставка активности с группировкой дублей (R7) — внутри транзакции, **после** `lockUserActivities`: кандидаты со
  * стартом ±180 с и длительностью ±5 % (другой источник), их группы сливаются, основная — по приоритету
- * `pickPrimary`; статусы загрузок группы — `ready`/`duplicate`. Возвращает id основной.
+ * `pickPrimary`; статусы загрузок группы — `ready`/`duplicate`. Возвращает id основной и `newGroup` — активность
+ * образовала новую группу (кандидатов-дублей нет; route-rides-03, 8.1 AC-2).
  */
 export async function insertGrouped(
   repository: TracksRepository,
@@ -14,7 +15,7 @@ export async function insertGrouped(
   activity: ActivityDoc,
   track: ActivityTrackDoc | null,
   now: Date,
-): Promise<string> {
+): Promise<{ primaryId: string; newGroup: boolean }> {
   const candidates = (
     await repository.dedupCandidates(session, activity.userId, activity.startedAt)
   )
@@ -31,7 +32,7 @@ export async function insertGrouped(
     track,
   );
   await repository.applyGroup(session, group, primary._id, now);
-  return primary._id;
+  return { primaryId: primary._id, newGroup: candidates.length === 0 };
 }
 
 /**
