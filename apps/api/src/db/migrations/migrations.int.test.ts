@@ -54,6 +54,9 @@ import {
   PROFILE_REPORT_REASONS_INDEXES,
   profileReportReasons,
 } from './0042_profile_report_reasons';
+import { social } from './0043_social';
+import { SOCIAL_COLLECTIONS } from '../../modules/social/social.collection';
+import { PRODUCT_EVENTS_COLLECTIONS } from '../../modules/product-events/product-events.collection';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
 import { PROFILE_REPORTS_COLLECTIONS } from '../../modules/profile/profile-reports.collection';
 import { ROUTE_REPORTS_COLLECTIONS } from '../../modules/routes/route-reports.collection';
@@ -168,6 +171,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0040_panel_totp',
       '0041_panel_invitations',
       '0042_profile_report_reasons',
+      '0043_social',
     ]);
   });
 
@@ -1752,9 +1756,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(PANEL_COLLECTIONS.invitations)).toEqual(expected);
   });
 
-  it('0042_profile_report_reasons: индекс очереди по причине, бэкфилл openReasons по открытым жалобам; последняя; повторный up — без изменений', async () => {
+  it('0042_profile_report_reasons: индекс очереди по причине, бэкфилл openReasons по открытым жалобам; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0042_profile_report_reasons');
     expect(ids.indexOf('0042_profile_report_reasons')).toBe(
       ids.indexOf('0041_panel_invitations') + 1,
     );
@@ -1815,6 +1818,82 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     } finally {
       await profiles.deleteMany({ _id: /^p-0041-/ });
       await reports.deleteMany({ _id: /^rep-0041-/ });
+    }
+  });
+  it('0043_social: коллекции и индексы «Свои» и журнала метрик; последняя; уникальности; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0043_social');
+    expect(ids.indexOf('0043_social')).toBe(ids.indexOf('0042_profile_report_reasons') + 1);
+    const index = (key: Record<string, number>, unique = false) => ({
+      key,
+      unique,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    });
+    const expected = {
+      [SOCIAL_COLLECTIONS.connections]: {
+        rider_connections_owner_other_unique: index({ ownerId: 1, otherId: 1 }, true),
+        rider_connections_other_idx: index({ otherId: 1, ownerId: 1 }),
+        rider_connections_ride_idx: index({ 'rides.rideId': 1 }),
+      },
+      [SOCIAL_COLLECTIONS.attendance]: {
+        ride_attendance_user_idx: index({ 'entries.userId': 1 }),
+      },
+      [SOCIAL_COLLECTIONS.reactions]: {
+        social_reactions_unique: index(
+          { actorId: 1, kind: 1, targetType: 1, targetId: 1, recipientId: 1 },
+          true,
+        ),
+        social_reactions_target_idx: index({ targetType: 1, targetId: 1, kind: 1 }),
+        social_reactions_recipient_idx: index({ recipientId: 1, kind: 1, createdAt: -1 }),
+      },
+      [SOCIAL_COLLECTIONS.inviteCodes]: {
+        invite_codes_code_unique: index({ code: 1 }, true),
+      },
+      [PRODUCT_EVENTS_COLLECTIONS.events]: {
+        product_events_user_idx: index({ userId: 1 }),
+        product_events_type_at_idx: index({ type: 1, at: 1 }),
+      },
+    };
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
+    }
+
+    const connections = h.db.collection<Record<string, unknown> & { _id: string }>(
+      SOCIAL_COLLECTIONS.connections,
+    );
+    const reactions = h.db.collection<Record<string, unknown> & { _id: string }>(
+      SOCIAL_COLLECTIONS.reactions,
+    );
+    try {
+      // одна связь на направленную пару; обратная — отдельный документ
+      await connections.insertOne({ _id: 'c-0043-1', ownerId: 'u-a', otherId: 'u-b' });
+      await expect(
+        connections.insertOne({ _id: 'c-0043-2', ownerId: 'u-a', otherId: 'u-b' }),
+      ).rejects.toThrow(/duplicate key/);
+      await connections.insertOne({ _id: 'c-0043-3', ownerId: 'u-b', otherId: 'u-a' });
+
+      // реакция уникальна с получателем (RC-1): «спасибо» разным получателям в одном райде — можно
+      const thanks = (id: string, recipientId: string) => ({
+        _id: id,
+        kind: 'thanks',
+        actorId: 'u-a',
+        targetType: 'ride_rider',
+        targetId: 'ride-0043',
+        recipientId,
+      });
+      await reactions.insertOne(thanks('r-0043-1', 'u-b'));
+      await reactions.insertOne(thanks('r-0043-2', 'u-c'));
+      await expect(reactions.insertOne(thanks('r-0043-3', 'u-b'))).rejects.toThrow(/duplicate key/);
+    } finally {
+      await connections.deleteMany({ _id: /^c-0043-/ });
+      await reactions.deleteMany({ _id: /^r-0043-/ });
+    }
+
+    await social.up(h.db);
+    await social.up(h.db);
+    for (const [name, indexes] of Object.entries(expected)) {
+      expect(await indexesOf(name)).toEqual(indexes);
     }
   });
 });

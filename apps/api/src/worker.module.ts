@@ -23,6 +23,7 @@ import { resultsOutboxRoutes, ResultsWorkerModule } from './modules/results';
 import { routeRidesOutboxRoutes, RouteRidesWorkerModule } from './modules/route-rides';
 import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
 import { SharingWorkerModule } from './modules/sharing';
+import { SocialWorkerModule } from './modules/social';
 import { StandingsWorkerModule } from './modules/standings';
 import { ticketsOutboxRoutes, TicketsWorkerModule } from './modules/tickets';
 import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
@@ -77,6 +78,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     TicketsWorkerModule,
     // письма панели: приглашение в команду и письма о роли (panel-invitations, ADR-0026)
     PanelWorkerModule,
+    // «Свои» (ADR-0027): якорь процессоров social-intake и social-maintenance (P5, P7)
+    SocialWorkerModule,
   ],
 })
 export class WorkerModule {}

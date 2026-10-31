@@ -95,4 +95,11 @@ export const QUEUE = {
    * текст); провал письма-приглашения виден в блоке «Приглашения» (`emailState`).
    */
   panelEmail: 'panel-email',
+  /**
+   * Приём событий «Свои» (ADR-0027, P5–P7): `tracks.activity-recorded` → автоявка, `identity.account-confirmed` → связь
+   * `invite`; jobId = id события outbox, повтор идемпотентен (явка и связи — условные записи).
+   */
+  socialIntake: 'social-intake',
+  /** Регламент «Свои» (P7): «Как прошёл райд?» через 4 ч после старта; без событий outbox. */
+  socialMaintenance: 'social-maintenance',
 } as const;

@@ -112,6 +112,9 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'PANEL_INVITATION_INVALID',
   'PANEL_INVITATION_EMAIL_MISMATCH',
   'PANEL_INVITATIONS_UNAVAILABLE',
+  // «Свои» (ADR-0027): действие со связью, явкой или реакцией недоступно (409, `details.reason` —
+  // `SocialActionBlockedDetails`)
+  'SOCIAL_ACTION_BLOCKED',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

@@ -56,3 +56,4 @@ export * from './achievements/achievement.schema.ts';
 export * from './tickets/ticket.schema.ts';
 export * from './tickets/ticketing-admin.schema.ts';
 export * from './tickets/materials.schema.ts';
+export * from './social/social.schema.ts';

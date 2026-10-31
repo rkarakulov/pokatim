@@ -54,6 +54,7 @@ import {
   createRide,
   hideInDb,
   join,
+  rider,
   ridesDb,
   seedApprovedRoute,
   startsIn,
@@ -77,6 +78,7 @@ import {
   registerFor,
   ticketsDb,
 } from '../../../test/tickets';
+import { socialDb, socialServices } from '../../../test/social';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
 import { storeUpload, trackFileStore, tracks } from '../../../test/tracks';
 import { QUEUE } from '../../queues';
@@ -86,6 +88,8 @@ import { ProfileErasure } from '../profile';
 import { RideErasure } from '../rides';
 import { RouteRideErasure } from '../route-rides';
 import { RouteErasure } from '../routes';
+import { SocialErasure } from '../social';
+import { ProductEventErasure } from '../product-events';
 import { TicketErasure } from '../tickets';
 import { TrackErasure } from '../tracks';
 import { AccountErasure } from '../identity';
@@ -524,6 +528,8 @@ describe('первый проход очистки (AC2, AC5, A9, N4)', () => {
       'route-rides',
       'achievements',
       'tickets',
+      'social',
+      'product-events',
       'notifications',
       'identity',
     ]) {
@@ -695,6 +701,84 @@ describe('шаг tickets (event-tickets, RC-T1)', () => {
       registrations: 0,
       tickets: 0,
     });
+  });
+});
+
+describe('шаги social и product-events («Свои», ADR-0027 п. 8, K13)', () => {
+  it('данные A в пяти коллекциях стёрты в обе стороны; связь B↔C не изменилась; респект цели B уменьшился; повтор — нули', async () => {
+    const w = await world();
+    const c = await rider(h, 'c@example.com');
+    const rb = { token: w.b.accessToken, userId: w.b.userId };
+    const ride = await createRide(h, rb, { limit: null });
+    for (const who of [{ token: w.a.accessToken, userId: w.a.userId }, c]) {
+      expect((await join(h, who, ride.id)).status).toBe(200);
+    }
+    // прошедший райд — прямой записью (часы не двигаются: токен A нужен для удаления)
+    await ridesDb(h).updateOne(
+      { _id: ride.id },
+      { $set: { startsAt: new Date(h.clock.now().getTime() - HOUR) } },
+    );
+    const social = socialServices(h);
+    for (const userId of [w.a.userId, w.b.userId, c.userId]) {
+      await social.attendance.markManual(userId, ride.id);
+    }
+    await social.reactions.thank(w.b.userId, ride.id, w.a.userId);
+    await social.reactions.thank(w.a.userId, ride.id, w.b.userId);
+    await social.reactions.thank(c.userId, ride.id, w.b.userId);
+    const resultOfB = {
+      targetType: 'race_entry' as const,
+      targetId: uuidv7(),
+      recipientId: w.b.userId,
+    };
+    await social.reactions.toggleRespect(w.a.userId, resultOfB);
+    await social.reactions.toggleRespect(c.userId, resultOfB);
+    await social.connections.addManual(c.userId, w.b.userId);
+    const db = socialDb(h);
+    await db.inviteCodes.insertMany([
+      { _id: w.a.userId, code: 'code-a', createdAt: h.clock.now() },
+      { _id: w.b.userId, code: 'code-b', createdAt: h.clock.now() },
+    ]);
+    const pairBC = () =>
+      db.connections
+        .find({
+          ownerId: { $in: [w.b.userId, c.userId] },
+          otherId: { $in: [w.b.userId, c.userId] },
+        })
+        .sort({ _id: 1 })
+        .toArray();
+    const bcBefore = await pairBC();
+    expect(bcBefore).toHaveLength(2);
+    const bEvents = await db.events.countDocuments({ userId: w.b.userId });
+    expect(await db.events.countDocuments({ userId: w.a.userId })).toBeGreaterThan(0);
+
+    await deleteAccount(w.a.accessToken);
+    expect(await firstPass(w.a.userId)).toBe('erased');
+
+    const a = w.a.userId;
+    expect(await db.connections.countDocuments({ $or: [{ ownerId: a }, { otherId: a }] })).toBe(0);
+    expect(await db.attendance.countDocuments({ 'entries.userId': a })).toBe(0);
+    expect(await db.reactions.countDocuments({ $or: [{ actorId: a }, { recipientId: a }] })).toBe(
+      0,
+    );
+    expect(await db.inviteCodes.countDocuments({ _id: a })).toBe(0);
+    expect(await db.events.countDocuments({ userId: a })).toBe(0);
+    // остальные целы: связь B↔C, явки B и C, «спасибо» C → B, код и события B
+    expect(await pairBC()).toEqual(bcBefore);
+    expect(
+      (await db.attendance.findOne({ _id: ride.id }))?.entries.map((entry) => entry.userId),
+    ).toEqual([w.b.userId, c.userId]);
+    expect(await social.reactions.countFor('ride_rider', ride.id, 'thanks')).toBe(1);
+    expect(await social.reactions.countFor('race_entry', resultOfB.targetId, 'respect')).toBe(1);
+    expect(await db.inviteCodes.countDocuments({ _id: w.b.userId })).toBe(1);
+    expect(await db.events.countDocuments({ userId: w.b.userId })).toBe(bEvents);
+
+    expect(await h.worker.get(SocialErasure).erase(a)).toEqual({
+      connections: 0,
+      attendance: 0,
+      reactions: 0,
+      codes: 0,
+    });
+    expect(await h.worker.get(ProductEventErasure).erase(a)).toBe(0);
   });
 });
 

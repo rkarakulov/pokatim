@@ -69,6 +69,7 @@ export const PROJECT_ERROR_MESSAGES = {
   PANEL_INVITATION_INVALID: 'Приглашение недействительно',
   PANEL_INVITATION_EMAIL_MISMATCH: 'Приглашение отправлено на другой адрес',
   PANEL_INVITATIONS_UNAVAILABLE: 'Приглашения временно недоступны',
+  SOCIAL_ACTION_BLOCKED: 'Действие сейчас недоступно',
 } as const satisfies Record<Exclude<ErrorCode, BaseErrorCode>, string>;
 
 /** Ожидаемый отказ бизнес-логики с кодом из контракта: опечатка в коде — ошибка компиляции. */
