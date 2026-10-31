@@ -89,7 +89,7 @@ export function GrantRoleDialog({
     >
       <p className="dialog__consequences t-body">
         {inviting
-          ? t('admin.members.inviteLead', { days: PANEL_INVITATION_TTL_DAYS })
+          ? t('admin.members.inviteLead', { count: PANEL_INVITATION_TTL_DAYS })
           : t('admin.members.grantLead')}
       </p>
       <form

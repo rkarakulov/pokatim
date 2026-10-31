@@ -21,6 +21,14 @@ describe('t', () => {
   it('плейсхолдеры подставляются, как раньше', () => {
     expect(t('auth.field.TOO_SHORT', { min: 8 })).toBe('Не короче 8 символов.');
   });
+
+  it('срок приглашения в команду склоняется по числу дней', () => {
+    const lead = (count: number) => t('admin.members.inviteLead', { count });
+    expect(lead(1)).toContain('Ссылка действует 1 день.');
+    expect(lead(3)).toContain('Ссылка действует 3 дня.');
+    expect(lead(7)).toContain('Ссылка действует 7 дней.');
+    expect(lead(21)).toContain('Ссылка действует 21 день.');
+  });
 });
 
 describe('словарь pokatim', () => {

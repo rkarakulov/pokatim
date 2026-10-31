@@ -146,8 +146,9 @@ paths:
   по виду — `OG_CARD_ID`); мета райдера — без ПДн, `publicId` только в URL `og:image`. Свой fetch и расчёт версии в приложении — запрещены.
 - `robots.txt` и `sitemap.xml` (landing-seo) — API-маршруты `src/app/{robots.txt,sitemap.xml}+api.ts`, правила —
   `src/lib/seo.ts`. **Новый экран в `src/app`** — классифицируй: только вошедшим, онбординг, токен в URL — префикс в
-  `SEO_DISALLOW`; публичный — в `PUBLIC` сторожа `__tests__/seo-routes.test.ts`. Страницу с `noindex` в мета не
-  закрывай (краулер не увидит `noindex`), кроме ссылок с токеном. `/v1/` не закрывай: Googlebot при рендере
+  `SEO_DISALLOW`; публичный — в `PUBLIC` сторожа `__tests__/seo-routes.test.ts`. Публичную страницу с `noindex` в мета
+  не закрывай (краулер не увидит `noindex`); исключения — ссылки с токеном и экраны только для вошедших (карточки для
+  сторис, приглашение райда: `Disallow` + `noindexPageMetadata` как защита в глубину). `/v1/` не закрывай: Googlebot при рендере
   соблюдает robots и для fetch — публичный экран потеряет данные из API. Новый индексируемый вид объекта — `SITEMAP_KINDS` в contracts и
   `GET /v1/sitemap` (`sharing`, порты владельцев).
 - Гостевой лендинг `/welcome` (guest-landing, `docs/product/landing.md`) — корневой `src/app/welcome.tsx` в том же
@@ -340,23 +341,24 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `Stack.Protected` (рядом с `races/result/[id]/[entryId]`; в `app/_layout.tsx` и `__tests__/app-routes.ts`). Входы —
   `ShareStoryButton` только по `actions.canShareStory` сервера: «Ваше участие» и своя строка таблицы
   (`ownRowAction` → `rivalPath` своей заявки: «Ваш результат», без подачи спора). Статус — `useCardStatus` (`raceStorySource`)
-  (`['races','story',raceId,template]`, опрос 1 с, не дольше 30 с от первого `pending`, `failed`/таймаут — ошибка с
+  (`['races','story',raceId,template,themeId]`, опрос 1 с, не дольше 30 с от первого `pending`, `failed`/таймаут — ошибка с
   повтором, 409 — «Карточки пока нет»); PNG — `useCardFile` заранее (RC-13). Шаринг — только
   `src/lib/share-story(.web).ts`: native — `expo-file-system` (кэш) + `expo-sharing` лениво (`load-expo-sharing.ts`;
   нет `ExpoSharing` — «Скачать PNG» через `downloadFile`), web — `navigator.share({ files })`, иначе `<a download>`.
 - Общая часть экранов карточек — `features/sharing/` (`card-status.ts`: `useCardStatus` по `CardSource` — ключ и
-  запрос статуса, `useCardFile`; `card-panel.tsx`: `CardPanel` — чипы, превью, «Поделиться», пустое состояние на
+  запрос статуса, `useCardFile`; к ключу источника `useCardStatus` добавляет `useAppTheme().id` — сервер рисует в теме
+  запрашивающего, смена темы — новый запрос; экраны карточек — `generateMetadata` `noindexPageMetadata` и `useSettingsShell`; `card-panel.tsx`: `CardPanel` — чипы, превью, «Поделиться», пустое состояние на
   409/404). Приглашение кофе-райда — `features/rides/invite/*`, экран `rides/invite/[id]` внутри `Stack.Protected`
-  (ключ `['rides','invite',rideId,template]`); вход — «Поделиться» на детали (шит «Карточка / Ссылка»), карточка —
+  (ключ `['rides','invite',rideId,template,themeId]`); вход — «Поделиться» на детали (шит «Карточка / Ссылка»), карточка —
   вошедшему, `phase === 'upcoming'` (право — сервер: 409 → «Приглашение недоступно»). Карточка маршрута —
   `features/routes/story/*`, экран `routes/story/[id]` внутри `Stack.Protected` (ключ
-  `['routes','story',routeId,template]`, 404 — «Карточка недоступна» и «К маршруту»). Выбор «Карточка / Ссылка» —
+  `['routes','story',routeId,template,themeId]`, 404 — «Карточка недоступна» и «К маршруту»). Выбор «Карточка / Ссылка» —
   общий `ShareChoiceSheet` + `useShareChoice` (`features/sharing/share-choice-sheet.tsx`): оба пути — шит; гость —
   сразу ссылка; нет origin — сразу карточка; `shareLink` — синхронно в обработчике. Карточка достижения — `features/achievements/story/*`,
   экран `achievements/story/[code]` внутри `Stack.Protected` (сезонное — `?season=<id>`; ключ
-  `['achievements','story',code,seasonId,template]`, `seasonId` в запросе — только у сезонного; сезонный без валидного
-  `Uuid` в `season` — «Карточки нет» без запроса, у несезонного `season` игнорируется; 409 и незнакомый код — «Карточки
-  нет» и «К достижению» → `achievementPath(code, seasonId)` каталога).
+  `['achievements','story',code,seasonId,template,themeId]`, `seasonId` в запросе — только у сезонного; сезонный без
+  валидного `Uuid` в `season` — «Карточки нет» без запроса, у несезонного `season` игнорируется; 409 и незнакомый код —
+  «Карточки нет» и «К достижению» → `achievementPath(code, seasonId)` каталога).
 
 ## Профиль райдера (rider-profile, `docs/product/profile.md`)
 

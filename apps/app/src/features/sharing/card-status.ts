@@ -4,7 +4,7 @@ import {
   type StoryCardTemplate,
 } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
-import { useQuery } from '@tanstack/react-query';
+import { type Query, type QueryClient, useQuery } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
@@ -12,6 +12,7 @@ import { apiErrorCode } from '@/features/auth/error-messages';
 import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS, shouldRetry } from '@/lib/query-client';
 import { prepareStory } from '@/lib/share-story';
+import { useAppTheme } from '@/theme/use-app-theme';
 
 /*
  * Карточки сервера (ADR-0018: сторис результата гонки, приглашение кофе-райда): статус — только вошедшему
@@ -44,25 +45,45 @@ export interface CardSource {
   fetch: (accessToken: string, template: StoryCardTemplate) => Promise<StoryCardStatus>;
 }
 
+/** Метка запросов статуса карточек: по ней их находит инвалидация после смены темы. */
+const CARD_STATUS_META = { cardStatus: true } as const;
+
+const isCardStatus = (query: Query) => query.meta?.cardStatus === true;
+
+/**
+ * Тема сохранена на сервере (`useSetTheme`): статусы карточек — перезапросить. Ключ уже с новой темой (оптимистично), но
+ * ответ, полученный или начатый до сохранения, — карточка прежней темы. Первый запрос без данных инвалидация не
+ * отменяет (TanStack переиспользует его) — сначала явная отмена, затем инвалидация.
+ */
+export async function invalidateCardStatuses(queryClient: QueryClient): Promise<void> {
+  await queryClient.cancelQueries({ predicate: isCardStatus });
+  await queryClient.invalidateQueries({ predicate: isCardStatus });
+}
+
 /** Повтор — как у проекта (`shouldRetry`: без 4xx, в т.ч. 409 и 429); не готова / провал — без повторов. */
 const retryable = (count: number, error: unknown) =>
   !(error instanceof StoryCardNotReady) && shouldRetry(count, error);
 
 /** Готовая карточка (`ready` с токеном); `pending` — `isPending` до готовности, ошибки — без данных (повтор). */
 export function useCardStatus(source: CardSource, template: StoryCardTemplate, enabled: boolean) {
-  // начало ожидания по шаблону: смена чипа не сбрасывает отсчёт другого шаблона
-  const started = useRef(new Map<StoryCardTemplate, number>());
+  // сервер рисует карточку в теме запрашивающего (хэш с `themeId`): смена темы — другой ключ, а не старая картинка
+  // из кэша на `staleTime`
+  const themeId = useAppTheme().id;
+  // начало ожидания по шаблону и теме (как ключ запроса): смена чипа или темы не наследует чужой отсчёт
+  const started = useRef(new Map<string, number>());
+  const pollKey = `${template}:${themeId}`;
   const query = useQuery({
-    queryKey: source.key(template),
+    queryKey: [...source.key(template), themeId],
+    meta: CARD_STATUS_META,
     queryFn: async (): Promise<StoryCardStatus> => {
       const status = await withAccessToken((token) => source.fetch(token, template));
       if (status.status === 'pending') {
-        const since = started.current.get(template) ?? Date.now();
-        started.current.set(template, since);
+        const since = started.current.get(pollKey) ?? Date.now();
+        started.current.set(pollKey, since);
         if (Date.now() - since >= STORY_POLL_LIMIT_MS) throw new StoryCardNotReady('timeout');
         return status;
       }
-      started.current.delete(template);
+      started.current.delete(pollKey);
       if (status.status === 'failed') throw new StoryCardNotReady('failed');
       return status;
     },
@@ -74,9 +95,9 @@ export function useCardStatus(source: CardSource, template: StoryCardTemplate, e
   });
   const { refetch } = query;
   const retry = useCallback(() => {
-    started.current.delete(template);
+    started.current.delete(pollKey);
     return refetch();
-  }, [refetch, template]);
+  }, [refetch, pollKey]);
   // готовая карточка остаётся при ошибке обновления (AGENTS §4.12: данные + баннер с повтором) — TanStack при броске
   // из `queryFn` хранит прежние `data`. Ответ `pending`/`failed` нового хэша приходит успешным ответом `pending`,
   // который заменяет `data`; 409 (и 404 — по выбору экрана) показывают пустое состояние до `AsyncContent`

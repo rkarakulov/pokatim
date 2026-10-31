@@ -4,6 +4,7 @@ import { useRef } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { PROFILE_QUERY_KEY } from '@/features/home/queries';
+import { invalidateCardStatuses } from '@/features/sharing/card-status';
 import { api } from '@/lib/api';
 
 /** Смены темы идут по очереди (TanStack Query: мутации одного scope последовательны). */
@@ -24,7 +25,7 @@ const withTheme = (themeId: ProfileView['themeId']) => (profile: ProfileView | u
 /**
  * Смена личной темы (user-theme A10, `PUT /v1/profile/theme`): сразу — в кэш профиля (корень перекрашивается
  * оптимистично), ответ — полный профиль в `['profile']` без префиксной инвалидации. Ошибка — откат к теме, которую
- * последней подтвердил сервер (экран показывает баннер). Быстрые повторные выборы: запросы идут по очереди, итог —
+ * последней подтвердил сервер (экран показывает баннер). Успех перезапрашивает статусы карточек для сторис. Быстрые повторные выборы: запросы идут по очереди, итог —
  * последнего выбора; ответ или ошибка ранней смены, пока поздняя в полёте, отметку не перекрашивают.
  */
 export function useSetTheme() {
@@ -47,6 +48,8 @@ export function useSetTheme() {
     },
     onSuccess: (view) => {
       confirmed.current = view.themeId;
+      // карточки сервер рисует в теме профиля: запрошенные до сохранения — прежней темы
+      void invalidateCardStatuses(queryClient);
       // ответ пришёл после выхода (`queryClient.clear()`): профиль прошлого аккаунта в кэш не возвращаем
       if (!queryClient.getQueryData(PROFILE_QUERY_KEY)) return;
       if (pendingThemeChanges(queryClient) > 1) {

@@ -25,6 +25,7 @@ import {
   panelSession,
   panelSignIn,
   seedMember,
+  seedTotp,
   sendPanelEmails,
   verifiedUser,
 } from '../../../test/panel';
@@ -612,5 +613,27 @@ describe('обязательная 2FA: принятие admin-приглаше�
       role: 'admin',
       status: 'active',
     });
+  });
+
+  it('снятый сотрудник с прежней 2FA — принятие без шага старого кода: signedIn, 2FA удалена', async () => {
+    await t.reset();
+    const actorId = await verifiedUser(t, ADMIN);
+    await seedMember(t, actorId, 'admin');
+    const userId = await verifiedUser(t, INVITEE);
+    await seedMember(t, userId, 'moderator', { status: 'revoked' });
+    await seedTotp(t, userId);
+    const service = t.app.get(PanelInvitationsService, { strict: false });
+    const created = await service.invite(
+      { userId: actorId, sessionId: UNKNOWN_ID, role: 'admin', permissions: [] },
+      { email: INVITEE, displayName: 'Вернулась', role: 'moderator' },
+    );
+
+    const res = await acceptInvitation(t, {
+      token: invitationToken(t, created.id),
+      email: INVITEE,
+    });
+    expect(res.status).toBe(200);
+    expect(PanelSignInResponse.parse(res.body).state).toBe('signedIn');
+    expect(await panel(t).totp.countDocuments({ _id: userId })).toBe(0);
   });
 });
