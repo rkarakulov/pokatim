@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { brokenJpeg, GIF_BYTES, hasGpsIfd, hugePng, twoToneImage } from '../../../test/avatars';
 import { createHarness, DAY, type Harness } from '../../../test/harness';
-import { bearer, call, gate } from '../../../test/identity';
+import { bearer, call, gate, retried, untilBlocked } from '../../../test/identity';
 import { panel, panelCall } from '../../../test/panel';
 import { staff } from '../../../test/races';
 import {
@@ -434,23 +434,26 @@ describe('сброс модератором (AC3, R10)', () => {
 });
 
 describe('гонка: замена параллельно со сбросом модератором', () => {
-  it('итог — не больше одного документа на райд, photoId указывает на существующий', async () => {
+  it('замена записала райд и не закоммитила → сброс упирается (конфликт, повтор) → 409; один согласованный документ', async () => {
     const moderator = await staff(h, 'moderator@example.by', 'moderator');
     const ride = await createRide(h, organizer);
     const first = photoIdOf(await upload(organizer, ride.id, await photo()));
-    // замена взяла слот и прочитала тело, запись райда — под воротами; сброс коммитится раньше
+    // замена: запись райда прошла внутри транзакции, коммита ещё нет — ворота после `setPhoto`
     const paused = gate();
     const original = RidesRepository.prototype.setPhoto;
     vi.spyOn(RidesRepository.prototype, 'setPhoto').mockImplementationOnce(async function (
       this: RidesRepository,
       ...args: Parameters<RidesRepository['setPhoto']>
     ) {
+      const result = await original.apply(this, args);
       await paused.wait();
-      return original.apply(this, args);
+      return result;
     });
+    const resetSpy = vi.spyOn(RidesRepository.prototype, 'resetPhoto');
     const replacing = upload(organizer, ride.id, await photo());
     await paused.reached;
-    const reset = await panelCall(
+    // сброс по прежнему фото: запись того же документа райда — конфликт с незакоммиченной заменой, повтор транзакции
+    const resetting = panelCall(
       h,
       moderator.token,
       'POST',
@@ -460,16 +463,21 @@ describe('гонка: замена параллельно со сбросом м
         reason: 'Чужое фото',
       },
     );
+    await untilBlocked(resetting, retried(resetSpy));
     paused.open();
-    const replaced = await replacing;
+    const [replaced, reset] = await Promise.all([replacing, resetting]);
     vi.restoreAllMocks();
-    expect(reset.status).toBe(200);
     expect(replaced.status).toBe(200);
+    const fresh = photoIdOf(replaced);
+    // повтор сброса видит новое фото: модератор его не видел — 409, журнала нет
+    expect(reset.status).toBe(409);
+    expect(reset.body).toMatchObject({ code: 'CONFLICT' });
+    expect(await panel(h).audit.countDocuments({ action: 'ride.photo_reset' })).toBe(0);
     const docs = await photosDb().find({ rideId: ride.id }).toArray();
-    expect(docs.length).toBeLessThanOrEqual(1);
-    const current = (await ridesDb(h).findOne({ _id: ride.id }))?.photoId ?? null;
-    expect(docs.map((doc) => doc._id)).toEqual(current === null ? [] : [current]);
-    expect(current).not.toBe(first);
+    expect(docs.map((doc) => doc._id)).toEqual([fresh]);
+    expect((await ridesDb(h).findOne({ _id: ride.id }))?.photoId).toBe(fresh);
+    expect((await fetchPhoto(fresh)).status).toBe(200);
+    expect((await fetchPhoto(first)).status).toBe(404);
   });
 });
 

@@ -2,7 +2,7 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
 import type { RideInviteInput } from './ride-invite.inputs';
-import { renderRideInvite } from './ride-invite.png';
+import { encodePhotoCard, renderRideInvite } from './ride-invite.png';
 import { STORY_CARD_POLICY } from './sharing.policy';
 
 const input = (template: 'line' | 'night'): RideInviteInput => ({
@@ -67,5 +67,28 @@ describe('renderRideInvite — 4a с фото под затемнением (rid
     const line = await renderRideInvite(input('line'), null, photo);
     const lineWithout = await renderRideInvite(input('line'), null, null);
     expect(line.equals(lineWithout)).toBe(true);
+  }, 60_000);
+});
+
+describe('encodePhotoCard — предел PNG с одной попыткой меньшей палитры (ревью PR A)', () => {
+  const frame = async () => {
+    const { data, info } = await sharp(await noisyPhoto(540, 960))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    return { data, info: { width: info.width, height: info.height, channels: info.channels } };
+  };
+
+  it('256 цветов не влезли — палитра 16 цветов в пределе; не влезло ничего — ошибка', async () => {
+    const raw = await frame();
+    const full = await encodePhotoCard(raw, Number.MAX_SAFE_INTEGER);
+    const smaller = await encodePhotoCard(raw, full.byteLength - 1);
+    expect(smaller.byteLength).toBeLessThan(full.byteLength);
+    expect(await sharp(smaller).metadata()).toMatchObject({
+      format: 'png',
+      width: 540,
+      height: 960,
+    });
+    await expect(encodePhotoCard(raw, 1)).rejects.toThrow(/card png too large/);
   }, 60_000);
 });
