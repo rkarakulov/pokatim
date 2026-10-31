@@ -11,10 +11,13 @@ import {
   type RouteRidesCollections,
   routeRidesCollections,
 } from './route-rides.collection';
+import type { TopRide } from './route-ride-leaderboard';
 import type { GroupRide, RiddenRoute, RouteRideFacts } from './route-rides.policy';
 
 /** Индекс дедупликации заезда группы (`0032_route_rides`): параллельный POST — `isDuplicateKey`. */
 export const ROUTE_RIDES_UNIQUE_INDEX = 'route_rides_user_route_activity_unique';
+/** Индекс таблицы «Другие» (`0049_route_rides_leaderboard_idx`) — `hint` агрегата `leaderboardTop`. */
+export const ROUTE_RIDES_LEADERBOARD_INDEX = 'route_rides_leaderboard_idx';
 
 /** Сброс итога при новой ревизии проверки. */
 const cleared = (): RouteRideResult => ({
@@ -103,6 +106,48 @@ export class RouteRidesRepository {
         { $limit: limit },
         { $project: { _id: 0, routeId: '$_id', rides: 1 } },
       ])
+      .toArray();
+  }
+
+  /**
+   * Таблица «Другие» (route-rides-04, RC-4): пройденные заезды маршрута **всех** райдеров (индекс
+   * `route_rides_leaderboard_idx`), по райдеру — до `topPerRider` лучших в порядке `compareRides`; райдеры — по лучшему
+   * из них, не больше `scanRiders`. Согласие, живость активностей и видимость маршрута — у вызывающего; наружу из
+   * модуля `userId` не выходит.
+   */
+  leaderboardTop(
+    routeId: string,
+    scanRiders: number,
+    topPerRider: number,
+  ): Promise<{ userId: string; top: TopRide[] }[]> {
+    return this.c.rides
+      .aggregate<{ userId: string; top: TopRide[] }>(
+        [
+          { $match: { routeId, status: 'passed' } },
+          {
+            $group: {
+              _id: '$userId',
+              top: {
+                $topN: {
+                  n: topPerRider,
+                  sortBy: { 'segment.elapsedSec': 1, 'activity.startedAt': 1, _id: 1 },
+                  output: {
+                    id: '$_id',
+                    activityId: '$activityId',
+                    elapsedSec: '$segment.elapsedSec',
+                    startedAt: '$activity.startedAt',
+                  },
+                },
+              },
+            },
+          },
+          { $set: { best: { $first: '$top' } } },
+          { $sort: { 'best.elapsedSec': 1, 'best.startedAt': 1, 'best.id': 1 } },
+          { $limit: scanRiders },
+          { $project: { _id: 0, userId: '$_id', top: 1 } },
+        ],
+        { hint: ROUTE_RIDES_LEADERBOARD_INDEX },
+      )
       .toArray();
   }
 

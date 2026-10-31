@@ -31,6 +31,7 @@ const profile = {
   publicId: null,
   themeId: 'classic' as const,
   avatarUploadBlockedUntil: null,
+  showRouteRides: false,
 };
 
 function renderEditor(avatarId: string | null = null, blockedUntil: string | null = null) {

@@ -1,4 +1,8 @@
-import { PUBLIC_NAME_CONSENT_VERSION, type Session } from '@pokatim/contracts';
+import {
+  PUBLIC_NAME_CONSENT_VERSION,
+  ROUTE_RIDES_CONSENT_VERSION,
+  type Session,
+} from '@pokatim/contracts';
 import { decodeJwt } from 'jose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -47,6 +51,7 @@ const EMPTY = {
   publicId: null,
   themeId: 'classic',
   avatarUploadBlockedUntil: null,
+  showRouteRides: false,
 };
 const PUBLIC_ID = expect.stringMatching(/^[A-Za-z0-9_-]{43}$/);
 
@@ -124,6 +129,7 @@ describe('PATCH /v1/profile — имя и согласие (AC2–AC4)', () => {
       showNameInResults: false,
       club: null,
       publicId: null,
+      showRouteRides: false,
       updatedAt: h.clock.now(),
     });
     const onboarding = await call(
@@ -149,6 +155,7 @@ describe('PATCH /v1/profile — имя и согласие (AC2–AC4)', () => {
       showNameInResults: true,
       club: null,
       publicId: null,
+      showRouteRides: false,
       updatedAt: h.clock.now(),
     });
     const onboarding = await call(
@@ -422,6 +429,107 @@ describe('PATCH /v1/profile — журнал согласий (profile-02, AC1/A
   });
 });
 
+describe('PATCH /v1/profile — показ заездов в таблицах маршрутов (route-rides-04, O1)', () => {
+  const routeRidesEvents = () => consentEvents().find({ kind: 'route_rides' }, { sort: { at: 1 } });
+
+  it('включение — granted с версией и временем сервера; повтор — без событий; выключение — revoked', async () => {
+    const session = await signUpSession(h);
+    const userId = userIdOf(session);
+    expect((await getProfile(session)).body).toMatchObject({ showRouteRides: false });
+
+    const on = await patch(session, { showRouteRides: true });
+    expect(on.status).toBe(200);
+    expect(on.body).toMatchObject({ showRouteRides: true, showNameInResults: false });
+    expect(await consentEvents().find().toArray()).toEqual([
+      {
+        _id: expect.any(String),
+        userId,
+        kind: 'route_rides',
+        action: 'granted',
+        version: ROUTE_RIDES_CONSENT_VERSION,
+        at: h.clock.now(),
+      },
+    ]);
+
+    h.clock.advance(MINUTE);
+    expect((await patch(session, { showRouteRides: true })).status).toBe(200);
+    expect(await consentEvents().countDocuments()).toBe(1);
+
+    h.clock.advance(MINUTE);
+    const off = await patch(session, { showRouteRides: false });
+    expect(off.body).toMatchObject({ showRouteRides: false });
+    const events = await routeRidesEvents().toArray();
+    expect(events.map(({ action, at }) => ({ action, at }))).toEqual([
+      { action: 'granted', at: expect.any(Date) },
+      { action: 'revoked', at: h.clock.now() },
+    ]);
+    expect((await getProfile(session)).body).toMatchObject({ showRouteRides: false });
+  });
+
+  it('оба флага одним PATCH — два события (public_name, route_rides) в одной транзакции', async () => {
+    const session = await signUpSession(h);
+    const res = await patch(session, { showNameInResults: true, showRouteRides: true });
+    expect(res.body).toMatchObject({ showNameInResults: true, showRouteRides: true });
+    const events = await consentEvents().find().toArray();
+    expect(events.map(({ kind, action, version }) => ({ kind, action, version }))).toEqual([
+      { kind: 'public_name', action: 'granted', version: PUBLIC_NAME_CONSENT_VERSION },
+      { kind: 'route_rides', action: 'granted', version: ROUTE_RIDES_CONSENT_VERSION },
+    ]);
+
+    // сбой второго события откатывает и первое, и оба флага
+    const before = await profiles().findOne({ _id: userIdOf(session) });
+    const insert = h.app
+      .get(ProfileRepository)
+      .insertConsentEvent.bind(h.app.get(ProfileRepository));
+    const spy = vi
+      .spyOn(h.app.get(ProfileRepository), 'insertConsentEvent')
+      .mockImplementationOnce(insert)
+      .mockRejectedValueOnce(new Error('сбой записи журнала'));
+    const failed = await patch(session, { showNameInResults: false, showRouteRides: false });
+    expect(failed.status).toBe(500);
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(await profiles().findOne({ _id: userIdOf(session) })).toEqual(before);
+    expect(await consentEvents().countDocuments()).toBe(2);
+    spy.mockRestore();
+  });
+
+  it('PATCH без ключа (старый клиент) — флаг сохранён; опрос и тема не стирают его', async () => {
+    const session = await signUpSession(h);
+    await patch(session, { showRouteRides: true });
+    expect((await patch(session, { publicName: 'Анна К.' })).body).toMatchObject({
+      publicName: 'Анна К.',
+      showRouteRides: true,
+    });
+    await submit(session, ['routes']);
+    const theme = await call(
+      h,
+      'PUT',
+      '/v1/profile/theme',
+      { themeId: 'atlas' },
+      bearer(session.accessToken),
+    );
+    expect(theme.body).toMatchObject({ showRouteRides: true });
+    expect(await consentEvents().countDocuments({ kind: 'route_rides' })).toBe(1);
+  });
+
+  it('старый документ без поля — false; не-boolean — 400 INVALID, события нет', async () => {
+    const session = await signUpSession(h);
+    await patch(session, { publicName: 'Анна К.' });
+    await profiles().updateOne({ _id: userIdOf(session) }, { $unset: { showRouteRides: '' } });
+    expect((await getProfile(session)).body).toMatchObject({ showRouteRides: false });
+    const bad = await patch(session, { showRouteRides: 'yes' });
+    expect(bad.status).toBe(400);
+    expect(await consentEvents().countDocuments()).toBe(0);
+  });
+
+  it('показ заездов не делает профиль публичным: publicId не выдаётся', async () => {
+    const session = await signUpSession(h);
+    const res = await patch(session, { publicName: 'Анна К.', showRouteRides: true });
+    expect(res.body).toMatchObject({ publicId: null, showNameInResults: false });
+    expect((await profiles().findOne({ _id: userIdOf(session) }))?.publicId).toBeNull();
+  });
+});
+
 describe('PATCH /v1/profile — перевыпуск id фото (profile-moderation, RC-A2 (b), AC8)', () => {
   /** Публичный профиль с фото: сессия, userId и посеянное фото. */
   async function publicWithAvatar() {
@@ -534,6 +642,7 @@ describe('PUT /v1/profile/theme — личная тема (user-theme, AC2/AC7)'
       showNameInResults: false,
       club: null,
       publicId: null,
+      showRouteRides: false,
       themeId: 'chrono',
       updatedAt: h.clock.now(),
     });

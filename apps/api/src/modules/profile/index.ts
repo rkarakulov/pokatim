@@ -1,10 +1,14 @@
 export { ProfileCoreModule, ProfileModule } from './profile.module';
-/** Порт для модуля `results`: публичные имена райдеров только с согласием (P1). */
+/**
+ * Порт для модулей `results`, `routes`, `route-rides`: публичные имена райдеров только с согласием (P1); райдеры с
+ * согласием на показ заездов (route-rides-04).
+ */
 export {
   type PublicRiderCard,
   RIDER_NAMES,
   type RiderNameDirectory,
   riderRowFields,
+  type RouteRideRiders,
 } from './rider-names.port';
 /** Порт для модуля `results` (race-results-07): пол и год анкеты Verified, фиксация в транзакции заявки. */
 export {

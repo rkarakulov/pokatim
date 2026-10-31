@@ -11,6 +11,7 @@ const profile = (overrides: Partial<ProfileView> = {}): ProfileView => ({
   rideReasons: [],
   publicName: null,
   showNameInResults: false,
+  showRouteRides: false,
   club: null,
   avatar: null,
   publicId: null,

@@ -12,7 +12,8 @@ import type { DbSession } from '../../db';
 /**
  * Порт `tracks` для модуля `results` (через `modules/tracks/index.ts`, race-results-03): заезды пользователя как
  * источник попыток гонки. Владение — по `userId` вызывающего сервера (из access, не из запроса клиента); чужое и
- * неизвестное — `null` без различия. `results` коллекции `tracks` не читает.
+ * неизвестное — `null` без различия; исключение — `liveActivityIds` (только набор живых id, route-rides-04). `results`
+ * коллекции `tracks` не читает.
  */
 export const ACTIVITY_SOURCE = Symbol('ACTIVITY_SOURCE');
 
@@ -87,6 +88,12 @@ export interface ActivitySource {
     userId: string,
     ids: readonly string[],
   ): Promise<Map<string, { primaryId: string }>>;
+  /**
+   * Какие из активностей (**любых** пользователей) живы сейчас (route-rides-04, RC-5: таблица «Другие» маршрута).
+   * Единственный метод порта без `userId`: наружу — только подмножество входных id (ни `userId`, ни сводок);
+   * ≤ 1000 id за вызов (больше — `Error`), пустой вход — пустое множество без запроса.
+   */
+  liveActivityIds(ids: readonly string[]): Promise<Set<string>>;
   /** Исходник активности для worker; активности, файла или ключа нет — `null`. Сбой хранилища — исключение. */
   readSource(activityId: string): Promise<{ bytes: Uint8Array; format: TrackFormat } | null>;
 }

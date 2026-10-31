@@ -4,6 +4,7 @@ import {
   PUBLIC_NAME_CONSENT_VERSION,
   type ProfileView,
   type RateLimitedDetails,
+  ROUTE_RIDES_CONSENT_VERSION,
   type UpdateProfileRequest,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
@@ -21,6 +22,7 @@ type ProfilePatch = {
   publicName?: string | null;
   showNameInResults?: boolean;
   club?: string | null;
+  showRouteRides?: boolean;
 };
 
 /**
@@ -63,6 +65,7 @@ export class ProfileService {
       publicName: body.publicName,
       showNameInResults: body.showNameInResults,
       club: body.club,
+      showRouteRides: body.showRouteRides,
     };
     // кандидат id публичного профиля — до транзакции (rider-profile, R-3): пригодится только при первом «имя + согласие»;
     // новый id фото (profile-moderation, RC-A2 (b)) — только при уходе профиля из публичного доступа
@@ -101,7 +104,7 @@ export class ProfileService {
   }
 
   /**
-   * Транзакция `PATCH`: прежний профиль → запись профиля (первая запись) → событие согласия → перевыпуск id фото, если
+   * Транзакция `PATCH`: прежний профиль → запись профиля (первая запись) → события согласий (имя, затем заезды) → перевыпуск id фото, если
    * профиль был публичен и перестал (отзыв согласия или очистка имени; profile-moderation, RC-A2 (b)).
    */
   private writeProfile(
@@ -122,6 +125,20 @@ export class ProfileService {
           kind: 'public_name',
           action: shown ? 'granted' : 'revoked',
           version: PUBLIC_NAME_CONSENT_VERSION,
+          at: now,
+        });
+      }
+      // route-rides-04 (O1, RC-7): показ заездов в таблицах маршрутов — свой вид журнала; на публичность профиля и
+      // перевыпуск фото не влияет
+      const wasSharing = before?.showRouteRides ?? false;
+      const sharing = after.showRouteRides ?? false;
+      if (sharing !== wasSharing) {
+        await this.repository.insertConsentEvent(tx, {
+          _id: uuidv7(),
+          userId,
+          kind: 'route_rides',
+          action: sharing ? 'granted' : 'revoked',
+          version: ROUTE_RIDES_CONSENT_VERSION,
           at: now,
         });
       }

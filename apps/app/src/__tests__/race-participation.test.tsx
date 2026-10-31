@@ -147,6 +147,7 @@ describe('гость (AC1)', () => {
       publicId: null,
       themeId: 'classic',
       avatarUploadBlockedUntil: null,
+      showRouteRides: false,
     });
     const router = await renderRouter(appRoutes, { initialUrl: `/races/${RACE_ID}` });
 
@@ -359,6 +360,7 @@ describe('шит «Как вас показывать в результатах?
     rideReasons: [],
     publicName: null,
     showNameInResults: false,
+    showRouteRides: false,
     club: null,
     avatar: null,
     publicId: null,

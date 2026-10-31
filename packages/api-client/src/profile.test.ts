@@ -95,6 +95,11 @@ describe('api-client: онбординг профиля (Bearer — только
         body: { publicName: 'Анна К.', showNameInResults: true },
       },
     ]);
+    const shared = client(200, { rideReasons: [], showRouteRides: true });
+    await expect(shared.api.updateProfile('t', { showRouteRides: true })).resolves.toMatchObject({
+      showRouteRides: true,
+    });
+    expect(shared.calls[0]?.body).toEqual({ showRouteRides: true });
     await expect(
       client(200, { rideReasons: [], showNameInResults: 'yes' }).api.updateProfile('t', {
         showNameInResults: true,

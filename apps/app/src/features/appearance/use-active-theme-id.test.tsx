@@ -27,6 +27,7 @@ const profile = (themeId: AppThemeId | 'unknown'): ProfileView => ({
   publicId: null,
   themeId,
   avatarUploadBlockedUntil: null,
+  showRouteRides: false,
 });
 
 const signIn = () => useSessionStore.setState({ status: 'signedIn', session: liveSession });

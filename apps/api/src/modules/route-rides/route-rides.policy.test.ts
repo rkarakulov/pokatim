@@ -9,6 +9,7 @@ import {
   bestOf,
   candidateRows,
   comparisonOf,
+  compareRides,
   effectiveStatus,
   findExisting,
   matchWindowOf,
@@ -132,6 +133,31 @@ describe('route-rides.policy', () => {
     expect(bestOf([twinA, twinB])?._id).toBe(id(1));
     expect(bestOf([failed])).toBeNull();
     expect(bestOf([])).toBeNull();
+  });
+
+  it('compareRides (route-rides-04) — тот же порядок, что bestOf: время ↑, дата заезда ↑, id ↑ (регрессия)', () => {
+    const key = (r: RouteRideDoc) => ({
+      elapsedSec: r.segment!.elapsedSec,
+      startedAt: r.activity.startedAt,
+      id: r._id,
+    });
+    const rides = [
+      ride({ elapsed: 900, day: 0 }),
+      ride({ elapsed: 800, day: 5 }),
+      ride({ elapsed: 800, day: 2 }),
+      { ...ride({ elapsed: 800, day: 2 }), _id: id(2) },
+      ride({ elapsed: 700, day: 9 }),
+    ];
+    const sorted = [...rides].sort((a, b) => compareRides(key(a), key(b)));
+    expect(sorted.map((r) => r._id)).toEqual([
+      rides[4]!._id,
+      id(2),
+      rides[2]!._id,
+      rides[1]!._id,
+      rides[0]!._id,
+    ]);
+    expect(bestOf(rides)?._id).toBe(sorted[0]?._id);
+    expect(compareRides(key(rides[0]!), key(rides[0]!))).toBe(0);
   });
 
   it('previousOf — последний passed строго раньше по дате заезда; ничья по времени — меньший _id', () => {

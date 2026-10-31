@@ -7,6 +7,7 @@ import {
   RIDER_PUBLIC_NAME_MAX,
   RiderClub,
   RiderPublicName,
+  ROUTE_RIDES_CONSENT_VERSION,
   UpdateProfileRequest,
   UpdateProfileThemeRequest,
 } from './profile.schema.ts';
@@ -50,7 +51,13 @@ describe('ProfileView', () => {
       publicId: null,
       themeId: 'classic',
       avatarUploadBlockedUntil: null,
+      showRouteRides: false,
     });
+  });
+
+  it('показ заездов в таблицах маршрутов (route-rides-04): как есть, у старого сервера — false', () => {
+    expect(ProfileView.parse({ rideReasons: [], showRouteRides: true }).showRouteRides).toBe(true);
+    expect(ProfileView.parse({ rideReasons: [] }).showRouteRides).toBe(false);
   });
 
   it('запрет загрузки фото (profile-moderation-followups): дата ISO как есть, нет — null', () => {
@@ -215,6 +222,29 @@ describe('UpdateProfileRequest', () => {
     expect(codesOf(UpdateProfileRequest.safeParse({ publicName: { $ne: null } }))).toEqual([
       'INVALID',
     ]);
+  });
+});
+
+describe('UpdateProfileRequest: showRouteRides (route-rides-04)', () => {
+  it('только флаг — допустимо; не-boolean — INVALID', () => {
+    expect(UpdateProfileRequest.parse({ showRouteRides: true })).toEqual({ showRouteRides: true });
+    expect(UpdateProfileRequest.parse({ showRouteRides: false })).toEqual({
+      showRouteRides: false,
+    });
+    expect(codesOf(UpdateProfileRequest.safeParse({ showRouteRides: 'yes' }))).toEqual(['INVALID']);
+  });
+
+  it('пустое тело — по-прежнему REQUIRED, лишний ключ рядом с флагом — ошибка', () => {
+    expect(codesOf(UpdateProfileRequest.safeParse({}))).toEqual(['REQUIRED']);
+    expect(
+      UpdateProfileRequest.safeParse({ showRouteRides: true, version: '2026-10-31' }).success,
+    ).toBe(false);
+  });
+});
+
+describe('ROUTE_RIDES_CONSENT_VERSION (route-rides-04)', () => {
+  it('версия текста согласия — дата ГГГГ-ММ-ДД', () => {
+    expect(ROUTE_RIDES_CONSENT_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
 

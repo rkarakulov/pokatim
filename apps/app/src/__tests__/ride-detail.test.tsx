@@ -122,6 +122,7 @@ beforeEach(() => {
     publicId: null,
     themeId: 'classic',
     avatarUploadBlockedUntil: null,
+    showRouteRides: false,
   });
 });
 afterEach(() => {
@@ -1144,6 +1145,7 @@ describe('участники и явка (P2, K4, K5)', () => {
       publicId: PUB(9),
       themeId: 'classic',
       avatarUploadBlockedUntil: null,
+      showRouteRides: false,
     });
     await openSignedIn();
     expect(await screen.findByText('Райд прошёл')).toBeOnTheScreen();

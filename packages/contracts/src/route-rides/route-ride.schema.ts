@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { tolerantEnum, Uuid } from '../common.ts';
+import { RiderRowLink } from '../profile/rider-avatar.schema.ts';
 import { LonLat } from '../races/race-route.schema.ts';
 import {
   ATTEMPT_FAILURES,
@@ -10,6 +11,7 @@ import {
   MY_ATTEMPT_TRACK_MAX_RUNS,
   TrackMapRun,
 } from '../results/results.schema.ts';
+import { LocalDate } from '../time.ts';
 import { TRACK_SOURCES } from '../tracks/track-upload.schema.ts';
 
 /*
@@ -144,3 +146,54 @@ export const RouteRideTrack = z.object({
   marks: tolerantEnum(ATTEMPT_TRACK_MARKS),
 });
 export type RouteRideTrack = z.infer<typeof RouteRideTrack>;
+
+/** Строк таблицы «Другие» за запрос (route-rides-04): по умолчанию 10, не больше 100; курсора нет. */
+export const ROUTE_RIDE_LEADERBOARD_DEFAULT = 10;
+export const ROUTE_RIDE_LEADERBOARD_MAX = 100;
+
+/** `GET /v1/routes/:routeId/rides/leaderboard` — лишние ключи — 400. */
+export const RouteRideLeaderboardQuery = z.strictObject({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(ROUTE_RIDE_LEADERBOARD_MAX)
+    .default(ROUTE_RIDE_LEADERBOARD_DEFAULT),
+});
+export type RouteRideLeaderboardQuery = z.infer<typeof RouteRideLeaderboardQuery>;
+
+/**
+ * Строка таблицы «Другие» (O3): лучший живой пройденный заезд райдера с согласием; места уникальные (1…), без «=N».
+ * Имя, ссылка и фото — по P1/R4 (иначе `null` → «Участник»). `rideId` — только у своей строки («Вы»).
+ */
+export const RouteRideLeaderboardRow = z.object({
+  place: int,
+  elapsedSec: int,
+  /** день заезда по Минску, без времени суток */
+  rideDate: LocalDate,
+  riderName: z.string().nullable().default(null),
+  ...RiderRowLink,
+  rideId: Uuid.nullable().default(null),
+});
+export type RouteRideLeaderboardRow = z.infer<typeof RouteRideLeaderboardRow>;
+
+/** Своя строка (O4): видна себе всегда, пока есть живой пройденный заезд; место — среди строк таблицы и себя. */
+export const RouteRideLeaderboardMe = z.object({
+  place: int,
+  elapsedSec: int,
+  rideDate: LocalDate,
+  rideId: Uuid,
+});
+export type RouteRideLeaderboardMe = z.infer<typeof RouteRideLeaderboardMe>;
+
+/**
+ * Таблица «Другие» маршрута каталога (route-rides-04, `no-store`): первые `limit` строк, `total` — всего строк
+ * (райдеры с согласием + вы), `me` — своя строка или `null`, `shared` — включён ли у вас показ заездов.
+ */
+export const RouteRideLeaderboard = z.object({
+  rows: z.array(RouteRideLeaderboardRow).max(ROUTE_RIDE_LEADERBOARD_MAX),
+  total: int,
+  me: RouteRideLeaderboardMe.nullable(),
+  shared: z.boolean(),
+});
+export type RouteRideLeaderboard = z.infer<typeof RouteRideLeaderboard>;

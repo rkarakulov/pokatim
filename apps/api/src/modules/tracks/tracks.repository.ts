@@ -305,6 +305,16 @@ export class TracksRepository {
       .toArray();
   }
 
+  /**
+   * Живые активности любых пользователей по id — только `_id` (route-rides-04, порт `ActivitySource.liveActivityIds`).
+   */
+  async liveActivityIds(ids: readonly string[]): Promise<string[]> {
+    const docs = await this.c.activities
+      .find<Pick<ActivityDoc, '_id'>>({ _id: { $in: [...ids] } }, { projection: { _id: 1 } })
+      .toArray();
+    return docs.map((doc) => doc._id);
+  }
+
   /** Линии показа активностей по id (рамка для предфильтра попыток гонки). */
   async trackLines(
     ids: readonly string[],

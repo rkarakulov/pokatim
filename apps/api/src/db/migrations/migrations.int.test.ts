@@ -61,6 +61,10 @@ import { routeRideAutoPlans } from './0046_route_ride_auto_plans';
 import { ridePhotos } from './0047_ride_photos';
 import { raceEntryNumbers } from './0048_race_entry_numbers';
 import { RIDE_PHOTOS_COLLECTIONS } from '../../modules/rides/ride-photos.collection';
+import {
+  ROUTE_RIDES_LEADERBOARD_INDEX,
+  routeRidesLeaderboardIdx,
+} from './0049_route_rides_leaderboard_idx';
 import { SOCIAL_COLLECTIONS } from '../../modules/social/social.collection';
 import { PRODUCT_EVENTS_COLLECTIONS } from '../../modules/product-events/product-events.collection';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
@@ -183,6 +187,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0046_route_ride_auto_plans',
       '0047_ride_photos',
       '0048_race_entry_numbers',
+      '0049_route_rides_leaderboard_idx',
     ]);
   });
 
@@ -1905,6 +1910,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         partialFilterExpression: { status: 'passed' },
         expireAfterSeconds: undefined,
       },
+      // 0047_route_rides_leaderboard_idx (route-rides-04, RC-9) — его проверяет свой тест
+      [ROUTE_RIDES_LEADERBOARD_INDEX.options.name]: expect.anything(),
     };
     expect(ROUTE_RIDES_PASSED_INDEX.options.name).toBe('route_rides_passed_updated_idx');
     expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
@@ -2046,9 +2053,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(RIDE_PHOTOS_COLLECTIONS.photos)).toEqual(expected);
   });
 
-  it('0048_race_entry_numbers: номера заявок по порядку записи, счётчик гонки, недостающие — после выданных; последняя; повторный up — без изменений', async () => {
+  it('0048_race_entry_numbers: номера заявок по порядку записи, счётчик гонки, недостающие — после выданных; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0048_race_entry_numbers');
     expect(ids.indexOf('0048_race_entry_numbers')).toBe(ids.indexOf('0047_ride_photos') + 1);
     const entries = h.db.collection<Record<string, unknown> & { _id: string }>(
       RESULTS_COLLECTIONS.entries,
@@ -2092,5 +2098,35 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       await entries.deleteMany({ _id: /^e-0048-/ });
       await races.deleteMany({ _id: /^race-0048-/ });
     }
+  });
+
+  it('0049_route_rides_leaderboard_idx: частичный (routeId, время, дата, _id) по passed; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0049_route_rides_leaderboard_idx');
+    expect(ids.indexOf('0049_route_rides_leaderboard_idx')).toBe(
+      ids.indexOf('0048_race_entry_numbers') + 1,
+    );
+    const leaderboard = {
+      route_rides_leaderboard_idx: {
+        key: { routeId: 1, 'segment.elapsedSec': 1, 'activity.startedAt': 1, _id: 1 },
+        unique: false,
+        partialFilterExpression: { status: 'passed' },
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(ROUTE_RIDES_LEADERBOARD_INDEX.options.name).toBe('route_rides_leaderboard_idx');
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toMatchObject(leaderboard);
+    const before = await indexesOf(ROUTE_RIDES_COLLECTIONS.rides);
+    expect(Object.keys(before)).toHaveLength(3);
+    // порядок полей ключа = порядок сортировки агрегата таблицы
+    expect(Object.keys(before.route_rides_leaderboard_idx?.key ?? {})).toEqual([
+      'routeId',
+      'segment.elapsedSec',
+      'activity.startedAt',
+      '_id',
+    ]);
+    await routeRidesLeaderboardIdx.up(h.db);
+    await routeRidesLeaderboardIdx.up(h.db);
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(before);
   });
 });

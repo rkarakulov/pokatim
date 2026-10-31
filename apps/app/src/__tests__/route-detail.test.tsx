@@ -687,6 +687,7 @@ function themedRider(themeId: 'chrono' | 'typography') {
     publicId: null,
     themeId,
     avatarUploadBlockedUntil: null,
+    showRouteRides: false,
   });
   jest.mocked(api.getCatalogRouteViewer).mockResolvedValue({ canReport: true, reported: false });
 }
