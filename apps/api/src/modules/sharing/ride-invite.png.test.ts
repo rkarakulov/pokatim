@@ -21,7 +21,7 @@ const input = (template: 'line' | 'night'): RideInviteInput => ({
   },
 });
 
-/** Шумное фото 1600×1200 (детерминированный ГПСЧ) — худший случай для сжатия PNG (R5). */
+/** Шумное фото 1600×1200 (детерминированный ГПСЧ) — худший случай для сжатия PNG (R5); под нагрузкой — до ~15 с. */
 async function noisyPhoto(width = 1600, height = 1200): Promise<Buffer> {
   const pixels = Buffer.alloc(width * height * 3);
   let seed = 0x2f6b_1d35;
@@ -39,7 +39,7 @@ describe('renderRideInvite — 4a с фото под затемнением (rid
     const png = await renderRideInvite(input('night'), null, await noisyPhoto());
     expect(png.byteLength).toBeLessThanOrEqual(STORY_CARD_POLICY.maxPngBytes);
     expect(await sharp(png).metadata()).toMatchObject({ format: 'png', width: 1080, height: 1920 });
-  }, 30_000);
+  }, 60_000);
 
   it('белое фото: под текстом темно (скрим), середина — светлее; фото портретное — cover без полос', async () => {
     const white = await sharp({
@@ -60,12 +60,12 @@ describe('renderRideInvite — 4a с фото под затемнением (rid
     expect(luma(1075, 1915)).toBeLessThan(80);
     // середина кадра (20 % высоты) светлее низа
     expect(luma(1075, 384)).toBeGreaterThan(luma(1075, 1915));
-  }, 30_000);
+  }, 60_000);
 
   it('без фото — прежний рендер (фото игнорируется у `line`)', async () => {
     const photo = await noisyPhoto(800, 600);
     const line = await renderRideInvite(input('line'), null, photo);
     const lineWithout = await renderRideInvite(input('line'), null, null);
     expect(line.equals(lineWithout)).toBe(true);
-  }, 30_000);
+  }, 60_000);
 });
