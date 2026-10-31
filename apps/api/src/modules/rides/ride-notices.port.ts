@@ -14,8 +14,8 @@ export interface RideNotice {
   status: RideStatus;
   organizerUserId: string;
   goingCount: number;
-  /** участники «Иду» без организатора */
-  participantUserIds: string[];
+  /** участники «Иду» без организатора и момент их входа */
+  participants: { userId: string; joinedAt: Date }[];
 }
 
 export interface RideNotices {

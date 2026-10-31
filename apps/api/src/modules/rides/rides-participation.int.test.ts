@@ -210,7 +210,9 @@ describe('событие rides.participant-joined (notifications, ADR-0017)', ()
     expect((await join(h, b, ride.id)).status).toBe(409);
     expect((await leave(h, a, ride.id)).status).toBe(200);
     const events = await eventsOfType(h, 'rides.participant-joined');
-    expect(events.map((event) => event.payload)).toEqual([{ rideId: ride.id, seq: 1 }]);
+    expect(events.map((event) => event.payload)).toEqual([
+      { rideId: ride.id, seq: 1, at: h.clock.now().toISOString() },
+    ]);
   });
 
   it('параллельные «Я иду» на последнее место — одно событие на одну успешную запись', async () => {

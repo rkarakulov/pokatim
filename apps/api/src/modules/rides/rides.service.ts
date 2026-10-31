@@ -100,7 +100,11 @@ export class RidesService {
     return this.transactions.run(async (tx) => {
       const doc = await write(tx);
       if (doc && emit(doc)) {
-        const payload: RideEventPayload = { rideId: doc._id, seq: doc.noticeSeq ?? 0 };
+        const payload: RideEventPayload = {
+          rideId: doc._id,
+          seq: doc.noticeSeq ?? 0,
+          at: doc.updatedAt.toISOString(),
+        };
         await this.outbox.append(tx, { type, payload });
       }
       return doc;

@@ -322,13 +322,13 @@ export class NotificationIntake {
     const target: NotificationTarget = { type: 'ride', rideId: ride.id };
     if (type === RIDES_RIDE_CANCELLED) {
       if (ride.status !== 'cancelled') return 'state';
-      return [this.participantsDraft(ride, 'ride_cancelled', target)];
+      return [this.participantsDraft(ride, 'ride_cancelled', target, event.data.at)];
     }
     if (ride.status !== 'published') return 'state';
     if (type === RIDES_RIDE_RESCHEDULED) {
       return [
         {
-          ...this.participantsDraft(ride, 'ride_rescheduled', target),
+          ...this.participantsDraft(ride, 'ride_rescheduled', target, event.data.at),
           collapse: { key: `ride:${ride.id}:rescheduled`, seq: event.data.seq },
         },
       ];
@@ -343,15 +343,23 @@ export class NotificationIntake {
     ];
   }
 
+  /**
+   * Получатели — участники «Иду», вошедшие не позже момента события (`at`): вошедший после переноса о нём не узнаёт и
+   * при позднем приёме или повторе задачи. Событие без `at` (до поля) — все текущие участники.
+   */
   private participantsDraft(
     ride: RideNotice,
     kind: 'ride_cancelled' | 'ride_rescheduled',
     target: NotificationTarget,
+    at: string | undefined,
   ): NoticeDraft {
+    const until = at === undefined ? Number.POSITIVE_INFINITY : Date.parse(at);
     return {
       text: { kind, ride: ride.title, startsAt: ride.startsAt },
       target,
-      recipients: ride.participantUserIds,
+      recipients: ride.participants
+        .filter((participant) => participant.joinedAt.getTime() <= until)
+        .map((participant) => participant.userId),
     };
   }
 

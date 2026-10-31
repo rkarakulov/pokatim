@@ -206,6 +206,7 @@ export class RidesRepository {
           organizerUserId: 1,
           goingCount: 1,
           'participants.userId': 1,
+          'participants.joinedAt': 1,
         },
       },
     );

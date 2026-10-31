@@ -6,12 +6,13 @@ import { z } from 'zod';
  */
 
 /**
- * `seq` — `noticeSeq` райда после записи события (порядок схлопывания уведомлений, N7); у событий до него и у отмены
- * поля нет.
+ * `seq` — `noticeSeq` райда после записи события (порядок схлопывания уведомлений, N7); `at` — момент записи
+ * (`updatedAt`): получатели — участники, вошедшие не позже него. У событий до этих полей и у отмены при стирании их нет.
  */
 export const RideEventPayload = z.object({
   rideId: z.uuid(),
   seq: z.number().int().nonnegative().optional(),
+  at: z.iso.datetime().optional(),
 });
 export type RideEventPayload = z.infer<typeof RideEventPayload>;
 

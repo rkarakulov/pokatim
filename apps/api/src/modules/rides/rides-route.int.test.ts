@@ -245,7 +245,7 @@ describe('точка старта и перенос (RC-3, RC-4)', () => {
     expect(view.rescheduledAt).toBe(h.clock.now().toISOString());
     expect(await stored(ride.id)).toMatchObject({ geo: point([27.7, 53.92]), startPrecise: true });
     expect((await eventsOfType(h, 'rides.ride-rescheduled')).map((e) => e.payload)).toEqual([
-      { rideId: ride.id, seq: expect.any(Number) },
+      { rideId: ride.id, seq: expect.any(Number), at: expect.any(String) },
     ]);
   });
 

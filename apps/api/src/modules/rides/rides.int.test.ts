@@ -416,7 +416,7 @@ describe('события для уведомлений (notifications, ADR-0017)
     await authed(h, organizer, 'POST', `${RIDES}/${ride.id}/cancel`, { reason: 'weather' });
     await authed(h, organizer, 'POST', `${RIDES}/${ride.id}/cancel`, { reason: 'other' });
     expect(await payloads('rides.ride-cancelled')).toEqual([
-      { rideId: ride.id, seq: expect.any(Number) },
+      { rideId: ride.id, seq: expect.any(Number), at: expect.any(String) },
     ]);
   });
 
@@ -435,7 +435,7 @@ describe('события для уведомлений (notifications, ADR-0017)
     // правка названия после переноса в тот же момент часов стенда — не перенос
     await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, { version: 1, title: 'Новое' });
     expect(await payloads('rides.ride-rescheduled')).toEqual([
-      { rideId: ride.id, seq: expect.any(Number) },
+      { rideId: ride.id, seq: expect.any(Number), at: expect.any(String) },
     ]);
   });
 
