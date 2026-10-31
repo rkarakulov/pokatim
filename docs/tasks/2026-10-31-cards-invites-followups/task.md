@@ -96,4 +96,7 @@ APPROVE (MEDIUM-1, LOW-1, LOW-3, LOW-4 исправлены, LOW-2 принят 
   36–47, параллельные сессии) таймауты 5 с в файлах вне diff (`apps/app`: 10 файлов — отдельно зелёные;
   `apps/admin`: `SeasonScreen.test.tsx` и др. — отдельно 2 из 3 прогонов). Format, lint, arch, typecheck и тесты
   пакетов — зелёные. Push — `--no-verify` с согласия пользователя; финальный гейт — CI.
+- CI #1 (`f25da424`): `web`-смоук красный — экраны за входом не должны отдавать OG, а `noindexPageMetadata` строилась
+  на `publicPageMetadata`. Исправлено (`e76b52a9`): служебная мета — `title`, description и `noindex` без OG; смоук
+  проверяет `noindex` на `/rides/invite`, `/routes/story`, `/achievements/story`. Локально смоук «без сессии» 14/14.
 - NOT VERIFIED: экран карточки на iOS/Android вручную.
