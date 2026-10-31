@@ -13,20 +13,21 @@ import {
 } from '@rkarakulov/api-kit/mongo';
 
 import { env } from './config/env';
-import { accountOutboxRoutes, AccountWorkerModule } from './modules/account';
+import { workerOutboxRoutes } from './outbox-routes';
+import { AccountWorkerModule } from './modules/account';
 import { AchievementsWorkerModule } from './modules/achievements';
-import { identityOutboxRoutes, IdentityWorkerModule } from './modules/identity';
-import { devicesOutboxRoutes, DevicesWorkerModule } from './modules/devices';
+import { IdentityWorkerModule } from './modules/identity';
+import { DevicesWorkerModule } from './modules/devices';
 import { DisputesCoreModule, DisputesWorkerModule } from './modules/disputes';
-import { notificationsOutboxRoutes, NotificationsWorkerModule } from './modules/notifications';
-import { panelOutboxRoutes, PanelWorkerModule } from './modules/panel';
-import { resultsOutboxRoutes, ResultsWorkerModule } from './modules/results';
-import { routeRidesOutboxRoutes, RouteRidesWorkerModule } from './modules/route-rides';
-import { routesOutboxRoutes, RoutesWorkerModule } from './modules/routes';
+import { NotificationsWorkerModule } from './modules/notifications';
+import { PanelWorkerModule } from './modules/panel';
+import { ResultsWorkerModule } from './modules/results';
+import { RouteRidesWorkerModule } from './modules/route-rides';
+import { RoutesWorkerModule } from './modules/routes';
 import { SharingWorkerModule } from './modules/sharing';
 import { StandingsWorkerModule } from './modules/standings';
-import { ticketsOutboxRoutes, TicketsWorkerModule } from './modules/tickets';
-import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
+import { TicketsWorkerModule } from './modules/tickets';
+import { TracksWorkerModule } from './modules/tracks';
 
 /** Отдельный процесс: задачи очередей (письма, тяжёлая обработка) не блокируют API. */
 @Module({
@@ -39,22 +40,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     RedisModule,
     MailModule,
     MongoOutboxModule,
-    // composition root: какие события outbox в какие очереди (`{ ...<модуль>OutboxRoutes }`)
-    MongoOutboxPublisherModule.forRoot({
-      routes: {
-        ...identityOutboxRoutes,
-        ...tracksOutboxRoutes,
-        ...devicesOutboxRoutes,
-        ...routesOutboxRoutes,
-        ...resultsOutboxRoutes,
-        ...routeRidesOutboxRoutes,
-        ...accountOutboxRoutes,
-        ...ticketsOutboxRoutes,
-        ...panelOutboxRoutes,
-        // подписчик чужих типов (results, disputes, rides, routes) — ADR-0017
-        ...notificationsOutboxRoutes,
-      },
-    }),
+    // composition root: маршруты подписчиков outbox — `mergeOutboxRoutes` (fan-out), `src/outbox-routes.ts`
+    MongoOutboxPublisherModule.forRoot({ routes: workerOutboxRoutes }),
     TracksWorkerModule,
     IdentityWorkerModule,
     DevicesWorkerModule,
