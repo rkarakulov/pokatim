@@ -170,4 +170,5 @@
 - Байты фото worker берёт через порт `RIDES_FOR_SHARING.invitePhoto(rideId, photoId)` — только текущее фото нескрытого
   райда, иначе `null` → задача `skipped` без ретрая. Композиция — в sharp (настройки процесса — `media/image-pipeline.ts`),
   итог — `png({ palette: true, quality: 80, effort: 7, dither: 1 })`: фотографический truecolor PNG превысил бы
-  `maxPngBytes`; предел 2 МБ прежний (шумная фикстура ≈ 1,73 МБ, тест `ride-invite.png.test.ts`).
+  `maxPngBytes`; предел 2 МБ прежний (шумная фикстура ≈ 1,73 МБ, тест `ride-invite.png.test.ts`); не влез — одна
+  попытка палитрой 16 цветов, затем ошибка.

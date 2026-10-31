@@ -475,7 +475,7 @@ paths:
   `ACHIEVEMENT_LEVEL_TARGETS`; условие «Сезона в зачёте» — `{count}` = `SEASON_REGULAR_MIN_RACES`, смена константы —
   подъём `renderVersion`). Сезон в хэше — `object.id` и название (отдельный `seasonId` не добавлять, RC-7). Порт отдаёт `level` (строка или `null`); уровень — в `achievementCardHash` явно после
   кода; тексты — метка уровня в kicker (`achievementCard.kickerLevel`), условие с `{count}` порога; сменил строки или
-  вёрстку — подними `STORY_CARD_POLICY.renderVersion` (сейчас 3). `SharingModule`/`SharingWorkerModule` импортируют
+  вёрстку — подними `STORY_CARD_POLICY.renderVersion` (сейчас 4 — ride-photo). `SharingModule`/`SharingWorkerModule` импортируют
   `AchievementsReadModule`.
 - Карточка маршрута каталога (route-story-card): `RouteCardController` (`GET routes/:routeId/story-card`, `AuthGuard`,
   `no-store`) → `RouteCardService` (не в каталоге — 404) → `RouteCardInputs` (`ROUTES_FOR_SHARING.ogFacts`/`ogLine`,
