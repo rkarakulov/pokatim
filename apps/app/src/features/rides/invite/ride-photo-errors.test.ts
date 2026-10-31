@@ -17,9 +17,9 @@ describe('тексты ошибок фото райда (ride-photo, AC7)', () =
     expect(ridePhotoErrorMessage(http(status, code))).toBe(text);
   });
 
-  it('422 too_small — «слишком маленькое, 400 px»; unreadable и незнакомая причина — «не удалось обработать»', () => {
+  it('422 too_small — «слишком маленькое или вытянутое»; unreadable и незнакомая причина — «не удалось обработать»', () => {
     expect(ridePhotoErrorMessage(http(422, 'IMAGE_INVALID', { reason: 'too_small' }))).toBe(
-      'Фото слишком маленькое — нужно хотя бы 400 пикселей по короткой стороне',
+      'Фото слишком маленькое или слишком вытянутое — выберите другое',
     );
     expect(ridePhotoErrorMessage(http(422, 'IMAGE_INVALID', { reason: 'unreadable' }))).toBe(
       'Не удалось обработать фото — выберите другое',

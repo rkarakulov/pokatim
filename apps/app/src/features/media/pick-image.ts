@@ -3,16 +3,20 @@ import { loadImagePicker } from './load-image-picker';
 import {
   ImagePickerUnavailableError,
   ImagePrecheckError,
-  isAcceptedImageType,
   type PickedImage,
   type PickImageOptions,
 } from './picked-image';
+
+/** native: пока открыта системная галерея, кнопка занята — экран модальный и сам сообщает об отмене (`null`). */
+export const PICK_IMAGE_BUSY_WHILE_OPEN = true;
 
 /**
  * Выбор фото на iOS и Android (аватар, фото райда): системная галерея (PHPicker / Android Photo Picker — без разрешения
  * на всю медиатеку). `square` — системная обрезка 1:1 (аватар); иначе — фото как есть, iOS отдаёт совместимое
  * представление (HEIC → JPEG), вписывает сервер. Модуля нет (старый dev-клиент) — `ImagePickerUnavailableError`;
- * отмена — `null`; больше `maxBytes` или не JPEG/PNG/WebP — ошибка до отправки. EXIF и геометки стирает сервер.
+ * отмена — `null`; больше `maxBytes` — ошибка до отправки. Формат здесь не проверяется: `asset.mimeType` — MIME
+ * исходника, а при `quality < 1` пакет уже перекодировал файл в JPEG (Android HEIC); сигнатуру проверяет сервер (415 —
+ * тот же текст). EXIF и геометки стирает сервер.
  */
 export async function pickImage({
   maxBytes,
@@ -38,9 +42,6 @@ export async function pickImage({
   if (!asset) return null;
   if (asset.fileSize !== undefined && asset.fileSize > maxBytes) {
     throw new ImagePrecheckError('tooLarge');
-  }
-  if (asset.mimeType && !isAcceptedImageType(asset.mimeType)) {
-    throw new ImagePrecheckError('formatUnsupported');
   }
   // локальный file:// → Blob (как трек заезда): fetch RN читает файл без base64 в JS
   const body = await (await fetch(asset.uri)).blob();

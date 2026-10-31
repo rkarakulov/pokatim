@@ -338,6 +338,9 @@ export const ru = {
   'rides.detail.going': 'Вы идёте · {date}, {time}',
   'rides.detail.edit': 'Изменить',
   'rides.detail.cancel': 'Отменить райд',
+  // ride-photo PR B: удаление своего фото у прошедшего и отменённого райда ([ASSUMPTION] — копи)
+  'rides.detail.photoHint': 'К райду прикреплено ваше фото',
+  'rides.detail.photoDelete': 'Удалить фото',
   'rides.detail.share': 'Поделиться',
   'rides.detail.cancelled': 'Райд отменён. Причина: {reason}.',
   'rides.detail.cancelledNoReason': 'Райд отменён.',
@@ -2783,7 +2786,7 @@ export const ru = {
   'rideInvite.photo.error.IMAGE_TOO_LARGE': 'Фото больше 10 МБ — выберите фото поменьше',
   'rideInvite.photo.error.IMAGE_INVALID': 'Не удалось обработать фото — выберите другое',
   'rideInvite.photo.error.tooSmall':
-    'Фото слишком маленькое — нужно хотя бы 400 пикселей по короткой стороне',
+    'Фото слишком маленькое или слишком вытянутое — выберите другое',
   'rideInvite.photo.error.rateLimited': 'Слишком много загрузок фото. Повторите через {time}',
   'rideInvite.photo.error.busy': 'Фото сейчас обрабатываются. Подождите несколько секунд',
   'rideInvite.photo.error.invalidState': 'Фото можно добавить только к будущему райду',

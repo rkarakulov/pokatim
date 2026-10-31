@@ -1,13 +1,23 @@
-import { RIDE_PHOTO_MAX_BYTES, type RidePhotoRef } from '@pokatim/contracts';
+import { apiErrorOf } from '@pokatim/api-client';
+import { RIDE_PHOTO_MAX_BYTES, type RidePhotoRef, type RideView } from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
-import { Banner, Button, TextAction, textStyle, useTheme } from '@rkarakulov/ui';
+import {
+  AsyncContent,
+  Banner,
+  Button,
+  SkeletonGroup,
+  SkeletonText,
+  TextAction,
+  textStyle,
+  useTheme,
+} from '@rkarakulov/ui';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { pickImage } from '@/features/media/pick-image';
+import { PICK_IMAGE_BUSY_WHILE_OPEN, pickImage } from '@/features/media/pick-image';
 
-import { useDeleteRidePhoto, useUploadRidePhoto } from '../queries';
+import { useDeleteRidePhoto, useRideForViewer, useUploadRidePhoto } from '../queries';
 import { ridePhotoErrorMessage } from './ride-photo-errors';
 
 /**
@@ -29,7 +39,8 @@ export function RidePhotoSection({
   const remove = useDeleteRidePhoto(rideId);
   const [picking, setPicking] = useState(false);
   const [failure, setFailure] = useState<string>();
-  const uploading = picking || upload.isPending;
+  // web: диалог файла кнопку не занимает (`PICK_IMAGE_BUSY_WHILE_OPEN`) — без `cancel` она залипла бы
+  const uploading = (PICK_IMAGE_BUSY_WHILE_OPEN && picking) || upload.isPending;
 
   const onPick = async () => {
     setFailure(undefined);
@@ -81,6 +92,33 @@ export function RidePhotoSection({
       ) : null}
       {failure ? <Banner tone="error" message={failure} /> : null}
     </View>
+  );
+}
+
+/** Загрузка фото — организатору с правом правки (решает сервер: `canManage`). */
+const managesPhoto = ({ viewer }: RideView) => viewer.role === 'organizer' && viewer.canManage;
+
+/**
+ * Блок «Своё фото» на экране приглашения по состоянию зрителя `me` (§4.12): первая загрузка — скелетон блока, ошибка без
+ * данных — «Нет соединения» / «Не удалось загрузить» с повтором, ошибка обновления — блок остаётся с баннером
+ * (`AsyncContent`). После ответа — только организатору с правом правки (`canManage`: будущий опубликованный, не скрытый);
+ * остальным и при 404 (скрытый, неизвестный — карточка уже показывает «Приглашение недоступно») — ничего.
+ */
+export function RidePhotoBlock({ rideId }: { rideId: string }) {
+  const me = useRideForViewer(rideId, true);
+  if (apiErrorOf(me.error)?.code === 'NOT_FOUND') return null;
+  if (me.data && !managesPhoto(me.data)) return null;
+  return (
+    <AsyncContent
+      query={me}
+      skeleton={
+        <SkeletonGroup>
+          <SkeletonText variant="body" lines={3} lastLineWidth="60%" />
+        </SkeletonGroup>
+      }
+    >
+      {(view) => <RidePhotoSection rideId={rideId} photo={view.ride.photo} />}
+    </AsyncContent>
   );
 }
 

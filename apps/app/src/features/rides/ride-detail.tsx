@@ -41,6 +41,7 @@ import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { cityLabel, goingCaption, organizerLine, paceRange, rideShareText } from './format';
 import { rideActionErrorText, useRide, useRideForViewer, useRideRsvp } from './queries';
+import { RidePhotoDelete } from './ride-photo-delete';
 import { rideInvitePath } from './invite/ride-invite';
 import { RidePublishedSheet } from './ride-published-sheet';
 import { RideRouteBlock } from './ride-route-block';
@@ -220,6 +221,7 @@ function RideDetailView({
           </View>
         </View>
       ) : null}
+      {organizer && !viewer?.canManage && ride.photo ? <RidePhotoDelete rideId={ride.id} /> : null}
       {canShare ? <ShareAction ride={ride} signedIn={signedIn} /> : null}
       {ride.phase === 'past' ? (
         <View style={styles.start}>

@@ -80,12 +80,9 @@ describe('pickImage (native)', () => {
     });
   });
 
-  it('HEIF с Android — отказ формата до отправки', async () => {
-    asset({ fileSize: 500, mimeType: 'image/heif' });
-    await expect(pickImage({ maxBytes: MAX, square: false })).rejects.toMatchObject({
-      reason: 'formatUnsupported',
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
+  it('Android HEIC при quality < 1: mimeType — исходника, файл уже JPEG — не отклоняется (формат проверяет сервер)', async () => {
+    asset({ fileSize: 500, mimeType: 'image/heic' });
+    await expect(pickImage({ maxBytes: MAX, square: false })).resolves.toEqual({ body: blob });
   });
 
   it('старый dev-клиент без модуля — «обновите приложение», пакет не загружается', async () => {

@@ -216,6 +216,44 @@ describe('фото организатора на экране приглашен
     await waitFor(() => expect(getRideInviteCard.mock.calls.length).toBeGreaterThan(cardCalls));
   });
 
+  it('/me не загрузился — «Не удалось загрузить» с повтором в месте блока; повтор — блок организатора', async () => {
+    getRideForViewer.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await open(`/rides/invite/${ID}`);
+    await screen.findByTestId('story-preview');
+    expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Добавить своё фото' })).toBeNull();
+
+    getRideForViewer.mockResolvedValue(view({}, organizer));
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('button', { name: 'Добавить своё фото' })).toBeOnTheScreen();
+    expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+  });
+
+  it('/me 404 (скрытый райд) — без блока и без ошибки', async () => {
+    getRideForViewer.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+    await open(`/rides/invite/${ID}`);
+    await screen.findByTestId('story-preview');
+    await waitFor(() => expect(getRideForViewer).toHaveBeenCalled());
+    expect(screen.queryByText('Не удалось загрузить')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Добавить своё фото' })).toBeNull();
+  });
+
+  it('ошибка обновления /me после загрузки — блок остаётся (с фото), баннер с повтором', async () => {
+    getRideForViewer.mockResolvedValue(view({}, organizer));
+    pick.mockResolvedValue({ body: blob });
+    upload.mockResolvedValue(view({ photo: PHOTO }, organizer));
+    await open(`/rides/invite/${ID}`);
+    const add = await screen.findByRole('button', { name: 'Добавить своё фото' });
+    // инвалидация `['rides']` после загрузки перезапрашивает `me` — и он падает
+    getRideForViewer.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+
+    await fireEvent.press(add);
+
+    expect(await screen.findByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Заменить фото' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Удалить фото' })).toBeOnTheScreen();
+  });
+
   it('отмена выбора — без запроса и без ошибки', async () => {
     getRideForViewer.mockResolvedValue(view({}, organizer));
     pick.mockResolvedValue(null);
@@ -233,7 +271,7 @@ describe('фото организатора на экране приглашен
         message: 'x',
         details: { reason: 'too_small' },
       }),
-      'Фото слишком маленькое — нужно хотя бы 400 пикселей по короткой стороне',
+      'Фото слишком маленькое или слишком вытянутое — выберите другое',
     ],
     [
       new ApiHttpError(409, { code: 'RIDE_INVALID_STATE', message: 'x' }),

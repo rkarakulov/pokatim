@@ -869,3 +869,67 @@ describe('карточка райда: маршрут (05c)', () => {
     expect(router.getPathname()).toBe(`/routes/mine/${ROUTE_ID}`);
   });
 });
+
+describe('карточка райда: удаление своего фото после старта и отмены (ride-photo P2)', () => {
+  const remove = jest.mocked(api.deleteRidePhoto);
+  const PHOTO = { id: 'PhOtOiDpHoToIdPhOtOiD_' };
+  beforeEach(signedIn);
+
+  it.each([
+    ['отменённый', { phase: 'cancelled' as const, cancelReason: null }],
+    ['прошедший', { phase: 'past' as const }],
+  ])(
+    '%s райд с фото — «Удалить фото» организатору: кнопка занята на время запроса, после — блока нет',
+    async (_, phase) => {
+      getRideForViewer.mockResolvedValue(view({ ...phase, photo: PHOTO }, viewer('organizer')));
+      let resolve!: (value: RideView) => void;
+      remove.mockReturnValue(new Promise((r) => (resolve = r)));
+      await openSignedIn();
+
+      expect(await screen.findByText('К райду прикреплено ваше фото')).toBeOnTheScreen();
+      expect(screen.queryByRole('button', { name: 'Изменить' })).toBeNull();
+      await fireEvent.press(screen.getByRole('button', { name: 'Удалить фото' }));
+      expect(remove).toHaveBeenCalledWith(liveSession.accessToken, ID);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Удалить фото' })).toBeDisabled(),
+      );
+
+      getRideForViewer.mockResolvedValue(view({ ...phase, photo: null }, viewer('organizer')));
+      resolve(view({ ...phase, photo: null }, viewer('organizer')));
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: 'Удалить фото' })).toBeNull(),
+      );
+    },
+  );
+
+  it('отказ удаления — текст баннером, кнопка снова доступна', async () => {
+    getRideForViewer.mockResolvedValue(view({ phase: 'past', photo: PHOTO }, viewer('organizer')));
+    remove.mockRejectedValue(
+      new ApiHttpError(429, { code: 'RATE_LIMITED', message: 'x', details: { retryAfterSec: 30 } }),
+    );
+    await openSignedIn();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Удалить фото' }));
+    expect(await screen.findByText('Слишком часто. Повторите через 30 с.')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Удалить фото' })).not.toBeDisabled();
+  });
+
+  it('будущий райд (canManage) — в карточке «Удалить фото» нет: оно на экране приглашения', async () => {
+    getRideForViewer.mockResolvedValue(
+      view({ photo: PHOTO }, viewer('organizer', { canManage: true })),
+    );
+    await openSignedIn();
+    expect(await screen.findByRole('button', { name: 'Изменить' })).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Удалить фото' })).toBeNull();
+  });
+
+  it.each([
+    ['не организатор, прошедший с фото', view({ phase: 'past', photo: PHOTO }, viewer('none'))],
+    ['организатор, прошедший без фото', view({ phase: 'past', photo: null }, viewer('organizer'))],
+  ])('%s — без «Удалить фото»', async (_, me) => {
+    getRideForViewer.mockResolvedValue(me);
+    await openSignedIn();
+    await screen.findAllByText('Кофе-райд на Минское море');
+    await waitFor(() => expect(getRideForViewer).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Удалить фото' })).toBeNull();
+  });
+});
