@@ -155,8 +155,9 @@ export class PanelMembersService {
   }
 
   /**
-   * Снять роль (причина обязательна): все сессии панели сотрудника отзываются в той же транзакции; сессия
-   * приложения не трогается.
+   * Снять роль (причина обязательна): в той же транзакции отзываются все сессии панели сотрудника и удаляются его 2FA и
+   * доверенные устройства (2FA — свойство члена команды, ADR-0024; снятому она не нужна, а при повторной активации
+   * старый аутентификатор потребовался бы на входе); сессия приложения не трогается.
    */
   async revoke(
     actorUserId: string,
@@ -170,6 +171,7 @@ export class PanelMembersService {
       const now = this.clock.now();
       await this.repository.revokeMember(tx, userId, now);
       await this.repository.revokeAllSessions(tx, userId, now, 'role_revoked');
+      await this.forgetSecondFactor(tx, userId);
       const auditId = await this.audit.append(tx, {
         action: 'panel.role_revoked',
         actor: { kind: 'user', userId: actorUserId },
@@ -310,9 +312,16 @@ export class PanelMembersService {
     return changed ? { state: 'granted', userId } : { state: 'alreadyAdmin', userId };
   }
 
+  /** 2FA и доверенные устройства сотрудника — под `lockMember` вызывающего (снятие роли, повторная активация). */
+  private async forgetSecondFactor(tx: DbSession, userId: string): Promise<void> {
+    await this.repository.deleteTotp(tx, userId);
+    await this.repository.deleteTrustedDevices(tx, userId);
+  }
+
   /**
    * Новый документ, повторная активация снятого или смена роли активного (CLI) — под `lockMember` вызывающего
-   * (выдача роли, CLI, принятие приглашения).
+   * (выдача роли, CLI, принятие приглашения). Повторная активация начинает 2FA с нуля: снятые до того, как снятие
+   * роли стало удалять 2FA, хранят прежнюю.
    */
   async activateIn(
     tx: DbSession,
@@ -323,6 +332,7 @@ export class PanelMembersService {
     if (!current) {
       await this.repository.insertMember(tx, { ...member, grantedAt });
     } else if (current.status === 'revoked') {
+      await this.forgetSecondFactor(tx, member.userId);
       await this.repository.reactivateMember(tx, { ...member, grantedAt });
     } else {
       await this.repository.setRole(tx, member.userId, member.role);

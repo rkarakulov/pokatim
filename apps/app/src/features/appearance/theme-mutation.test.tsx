@@ -75,6 +75,22 @@ describe('useSetTheme (user-theme A10)', () => {
     );
   });
 
+  it('успех — статусы карточек для сторис инвалидированы (сервер рисует в теме профиля)', async () => {
+    setProfileTheme.mockResolvedValue(profile('atlas'));
+    const { hook, client } = await setup();
+    const cardKey = ['rides', 'invite', 'id', 'line', 'atlas'];
+    // запрос статуса карточки — с меткой `useCardStatus`
+    client.getQueryCache().build(client, { queryKey: cardKey, meta: { cardStatus: true } });
+    client.setQueryData(cardKey, { status: 'ready', token: 'old' });
+    const otherKey = ['rides', 'detail', 'id'];
+    client.setQueryData(otherKey, {});
+
+    await act(async () => hook.result.current.mutate('atlas'));
+    await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+    expect(client.getQueryState(cardKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(otherKey)?.isInvalidated).toBe(false);
+  });
+
   it('ответ после выхода (кэш очищен) — профиль прошлого аккаунта в кэш не возвращается', async () => {
     const response = deferred<ProfileView>();
     setProfileTheme.mockReturnValue(response.promise);

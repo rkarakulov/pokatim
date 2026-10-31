@@ -48,6 +48,19 @@ async function admin() {
   return { userId, token: await panelSession(h, ADMIN) };
 }
 
+/** Доверенное устройство сотрудника напрямую в БД (подготовка теста). */
+const seedDevice = (userId: string) =>
+  panel(h).devices.insertOne({
+    _id: `device-${userId}`,
+    tokenHash: `hash-${userId}`,
+    userId,
+    credentialsStamp: 'stamp',
+    totpEpoch: 'epoch',
+    createdAt: h.clock.now(),
+    expiresAt: new Date(h.clock.now().getTime() + 86_400_000),
+    version: 0,
+  });
+
 describe('права ролей (AC5)', () => {
   it('organizer: members, audit и мутации — 403; moderator: audit — 200, members — 403; admin — 200', async () => {
     const target = await memberUser(h, 'target@example.by', 'organizer');
@@ -171,6 +184,25 @@ describe('выдача роли (AC6)', () => {
     });
   });
 
+  it('повторная выдача снятому с прежней 2FA (снят до удаления 2FA при снятии) — 2FA и устройства удалены', async () => {
+    const actor = await admin();
+    const userId = await verifiedUser(h, 'back@example.by');
+    await seedMember(h, userId, 'moderator', { status: 'revoked' });
+    await seedTotp(h, userId);
+    await seedDevice(userId);
+
+    const res = await grant(actor.token, {
+      email: 'back@example.by',
+      displayName: 'Стало',
+      role: 'organizer',
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ status: 'active', totpEnabled: false });
+    expect(await panel(h).totp.countDocuments({ _id: userId })).toBe(0);
+    expect(await panel(h).devices.countDocuments({ userId })).toBe(0);
+  });
+
   it('тело с оператором, лишним ключом, неизвестной ролью — 400 без изменений', async () => {
     const actor = await admin();
     await verifiedUser(h, 'x@example.by');
@@ -235,6 +267,23 @@ describe('смена и снятие роли (AC7)', () => {
       reason: 'ушла из команды',
       details: { roleFrom: 'moderator' },
     });
+  });
+
+  it('снятие удаляет 2FA и доверенные устройства сотрудника в той же транзакции; чужие — на месте', async () => {
+    const actor = await admin();
+    const userId = await memberUser(h, 'mod@example.by', 'moderator');
+    const other = await memberUser(h, 'other@example.by', 'moderator');
+    for (const id of [userId, other]) {
+      await seedTotp(h, id);
+      await seedDevice(id);
+    }
+
+    expect((await revoke(actor.token, userId, { reason: 'ушла из команды' })).status).toBe(200);
+
+    expect(await panel(h).totp.countDocuments({ _id: userId })).toBe(0);
+    expect(await panel(h).devices.countDocuments({ userId })).toBe(0);
+    expect(await panel(h).totp.countDocuments({ _id: other })).toBe(1);
+    expect(await panel(h).devices.countDocuments({ userId: other })).toBe(1);
   });
 
   it('себе — 409 PANEL_SELF_ACTION (смена и снятие), без изменений', async () => {

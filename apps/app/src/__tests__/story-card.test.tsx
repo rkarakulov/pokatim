@@ -182,7 +182,10 @@ describe('экран карточки: ошибки при показанных 
     await screen.findByTestId('story-preview');
     getStoryCard.mockRejectedValue(new ApiNetworkError(new TypeError('offline')));
     await act(async () => {
-      void client.refetchQueries({ queryKey: ['races', 'story', RACE_ID, 'line'], exact: true });
+      void client.refetchQueries({
+        queryKey: ['races', 'story', RACE_ID, 'line', 'classic'],
+        exact: true,
+      });
       // сетевая ошибка повторяется с паузами (ретраи TanStack), затем — ошибка обновления
       await jest.advanceTimersByTimeAsync(10_000);
     });
@@ -255,7 +258,10 @@ describe('превью: сеть и смена шаблона (ревью pass 3
 
   it('ready из кэша, файла нет, сети нет — «Нет соединения» с повтором; сеть вернулась — превью', async () => {
     const client = createTestQueryClient();
-    client.setQueryData(['races', 'story', RACE_ID, 'line'], { status: 'ready', token: TOKEN });
+    client.setQueryData(['races', 'story', RACE_ID, 'line', 'classic'], {
+      status: 'ready',
+      token: TOKEN,
+    });
     onlineManager.setOnline(false);
     await open(storyUrl, client);
     expect(await screen.findByText('Нет соединения')).toBeOnTheScreen();
@@ -274,8 +280,14 @@ describe('превью: сеть и смена шаблона (ревью pass 3
       Promise.resolve({ status: 'ready', token: template === 'night' ? OTHER : TOKEN }),
     );
     const client = createTestQueryClient();
-    client.setQueryData(['races', 'story', RACE_ID, 'line'], { status: 'ready', token: TOKEN });
-    client.setQueryData(['races', 'story', RACE_ID, 'night'], { status: 'ready', token: OTHER });
+    client.setQueryData(['races', 'story', RACE_ID, 'line', 'classic'], {
+      status: 'ready',
+      token: TOKEN,
+    });
+    client.setQueryData(['races', 'story', RACE_ID, 'night', 'classic'], {
+      status: 'ready',
+      token: OTHER,
+    });
     await open(storyUrl, client);
     const preview = await screen.findByTestId('story-preview');
     await act(async () => {
