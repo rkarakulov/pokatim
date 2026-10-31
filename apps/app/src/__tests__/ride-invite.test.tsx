@@ -8,7 +8,7 @@ import { useSessionStore } from '@/features/auth/session-store';
 import { pickImage } from '@/features/media/pick-image';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
-import { shareStory } from '@/lib/share-story';
+import { prepareStory, shareStory } from '@/lib/share-story';
 
 import RideRoute from '../app/rides/[id]';
 import RideInviteRoute from '../app/rides/invite/[id]';
@@ -252,6 +252,30 @@ describe('фото организатора на экране приглашен
     expect(await screen.findByRole('button', { name: 'Повторить' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Заменить фото' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Удалить фото' })).toBeOnTheScreen();
+  });
+
+  it('первый запрос статуса в полёте при смене фото — отменён и повторён: карточка с новым фото, старый токен не побеждает', async () => {
+    getRideForViewer.mockResolvedValue(view({}, organizer));
+    pick.mockResolvedValue({ body: blob });
+    upload.mockResolvedValue(view({ photo: PHOTO }, organizer));
+    let resolveOld!: (value: { status: 'ready'; token: string }) => void;
+    const NEW_TOKEN = 'NeWtOkEnNeWtOkEnNeW_-x';
+    getRideInviteCard.mockReset();
+    getRideInviteCard
+      .mockReturnValueOnce(new Promise((resolve) => (resolveOld = resolve)))
+      .mockResolvedValue({ status: 'ready', token: NEW_TOKEN });
+    await open(`/rides/invite/${ID}`);
+    await waitFor(() => expect(getRideInviteCard).toHaveBeenCalledTimes(1));
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Добавить своё фото' }));
+    await waitFor(() => expect(getRideInviteCard).toHaveBeenCalledTimes(2));
+    resolveOld({ status: 'ready', token: TOKEN });
+
+    await screen.findByTestId('story-preview');
+    await waitFor(() =>
+      expect(prepareStory).toHaveBeenCalledWith(`https://api.test/v1/story-cards/${NEW_TOKEN}.png`),
+    );
+    expect(prepareStory).not.toHaveBeenCalledWith(`https://api.test/v1/story-cards/${TOKEN}.png`);
   });
 
   it('отмена выбора — без запроса и без ошибки', async () => {

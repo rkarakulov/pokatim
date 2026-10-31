@@ -64,7 +64,7 @@ describe('photoScrim — затемнение фото под текстом (ri
 });
 
 describe('photoScrimHero — затемнение героя ленты и Главной (ride-photo PR B)', () => {
-  it('прозрачность монотонно нарастает к низу (без провала профиля 4a), верх светлее — фото видно', () => {
+  it('без провала: прозрачность монотонно нарастает к низу (верх светлее — фото видно)', () => {
     const ats = photoScrimHero.stops.map((stop) => stop.at);
     expect(ats[0]).toBe(0);
     expect(ats.at(-1)).toBe(1);
@@ -76,13 +76,11 @@ describe('photoScrimHero — затемнение героя ленты и Гл�
     expect(photoScrimAlpha(0, photoScrimHero)).toBeLessThan(photoScrimAlpha(1, photoScrimHero));
   });
 
-  it('зона текста — нижние 80 % блока и больше', () => {
-    const [zone] = photoScrimHero.textZones;
-    expect(zone?.from).toBeLessThanOrEqual(0.2);
-    expect(zone?.to).toBe(1);
+  it('зона текста — вся высота блока (кикер у верха при длинном названии и крупном шрифте)', () => {
+    expect(photoScrimHero.textZones).toEqual([{ from: 0, to: 1 }]);
   });
 
-  it('в зоне текста onPhoto поверх белого фото — не ниже 4.5:1 (все темы и схемы)', () => {
+  it('на всей высоте onPhoto поверх белого фото — не ниже 4.5:1 (все темы и схемы)', () => {
     expectTextZonesReadable(photoScrimHero);
   });
 });

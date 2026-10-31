@@ -25,6 +25,7 @@ import {
   closePushSoftPromptFor,
   offerPushSoftPrompt,
 } from '@/features/notifications/push-soft-prompt-store';
+import { cancelCardStatuses } from '@/features/sharing/card-status';
 import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
@@ -236,9 +237,19 @@ export function useCancelRide(id: string) {
 }
 
 /**
+ * Ответ мутации фото: кеш `me`, отмена запросов статуса приглашения этого райда (первый запрос в полёте TanStack иначе
+ * переиспользует, и токен карточки до смены фото стал бы свежим), затем инвалидация `['rides']` — лента, Главная,
+ * деталь и статус карточек (`night` с новым фото — новый токен сервера).
+ */
+async function applyRidePhotoView(queryClient: QueryClient, view: RideView): Promise<void> {
+  queryClient.setQueryData(rideViewerKey(view.ride.id), view);
+  await cancelCardStatuses(queryClient, ['rides', 'invite', view.ride.id]);
+  await queryClient.invalidateQueries({ queryKey: ridesKey });
+}
+
+/**
  * Фото организатора (ride-photo, ADR-0028): `PUT /v1/rides/:id/photo` сырыми байтами (как аватар — `fetch` с Blob на
- * всех платформах). Ответ `RideView` → кеш `me` и инвалидация `['rides']`: лента, Главная, деталь и статус карточек
- * приглашения (`['rides','invite',…]` — новый токен `night` с фото).
+ * всех платформах); ответ — `applyRidePhotoView`.
  */
 export function useUploadRidePhoto(id: string) {
   const queryClient = useQueryClient();
@@ -246,7 +257,7 @@ export function useUploadRidePhoto(id: string) {
     mutationFn: (body: Blob) =>
       withAccessToken((accessToken) => api.uploadRidePhoto(accessToken, id, body)),
     networkMode: 'always',
-    onSuccess: (view) => applyRideView(queryClient, view),
+    onSuccess: (view) => applyRidePhotoView(queryClient, view),
   });
 }
 
@@ -256,7 +267,7 @@ export function useDeleteRidePhoto(id: string) {
   return useMutation({
     mutationFn: () => withAccessToken((accessToken) => api.deleteRidePhoto(accessToken, id)),
     networkMode: 'always',
-    onSuccess: (view) => applyRideView(queryClient, view),
+    onSuccess: (view) => applyRidePhotoView(queryClient, view),
   });
 }
 
