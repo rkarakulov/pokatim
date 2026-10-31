@@ -1,7 +1,10 @@
 /// <reference types="jest" />
 import {
   BEST_ID,
+  leaderboardMe,
+  leaderboardRow,
   PREVIOUS_ID,
+  RIDER_PUBLIC_ID,
   rideDetail,
   rideRow,
   ROUTE_ID,
@@ -10,11 +13,17 @@ import {
 import {
   formatDeltaSec,
   isPendingCheck,
+  leaderboardMeView,
+  leaderboardRowView,
+  OTHERS_CARD_ROWS,
+  ownInRows,
+  rideDayText,
   routeCardPath,
   routeRideComparisonLines,
   routeRideFailureText,
   routeRideOriginText,
   routeRidePath,
+  routeRideOthersPath,
   routeRidePickPath,
   routeRideReasonText,
   routeRideRowView,
@@ -218,6 +227,11 @@ describe('адреса (A5)', () => {
     expect(routeCardPath(ROUTE_ID, false)).toBe(`/routes/${ROUTE_ID}`);
     expect(routeCardPath(ROUTE_ID, true)).toBe(`/routes/mine/${ROUTE_ID}`);
   });
+
+  it('полный список «Другие» (route-rides-04) — id кодируется', () => {
+    expect(routeRideOthersPath(ROUTE_ID)).toBe(`/routes/others/${ROUTE_ID}`);
+    expect(routeRideOthersPath('a b/c')).toBe('/routes/others/a%20b%2Fc');
+  });
 });
 
 describe('происхождение заезда (route-rides-03)', () => {
@@ -225,5 +239,74 @@ describe('происхождение заезда (route-rides-03)', () => {
     expect(routeRideOriginText('auto')).toBe('Проверен автоматически');
     expect(routeRideOriginText('manual')).toBeNull();
     expect(routeRideOriginText('unknown')).toBeNull();
+  });
+});
+
+describe('строки таблицы «Другие на маршруте» (route-rides-04)', () => {
+  it('блок карточки — 5 строк', () => {
+    expect(OTHERS_CARD_ROWS).toBe(5);
+  });
+
+  it('день заезда — без времени суток; не текущий год и до монтирования — с годом', () => {
+    expect(rideDayText('2026-10-04', NOW)).toBe('4 октября');
+    expect(rideDayText('2025-10-04', NOW)).toBe('4 октября 2025');
+    expect(rideDayText('2026-10-04', null)).toBe('4 октября 2026');
+  });
+
+  it('чужая без карточки — «Участник», без ссылки на профиль', () => {
+    expect(leaderboardRowView(leaderboardRow({ place: 3 }), NOW)).toEqual({
+      own: false,
+      place: '3',
+      who: 'Участник',
+      time: '2:04:37',
+      day: '4 октября',
+      a11y: '3, Участник, 2:04:37, 4 октября',
+      profileA11y: null,
+      ownA11y: null,
+    });
+  });
+
+  it('чужая публичная — имя и метка ссылки на профиль', () => {
+    const view = leaderboardRowView(
+      leaderboardRow({ place: 2, riderName: 'Анна К.', riderPublicId: RIDER_PUBLIC_ID }),
+      NOW,
+    );
+    expect(view.who).toBe('Анна К.');
+    expect(view.profileA11y).toBe('Профиль райдера, Анна К., 2, 2:04:37, 4 октября');
+    expect(view.ownA11y).toBeNull();
+  });
+
+  it('своя (`rideId`) — «Вы», переход к своему заезду; ссылка на профиль — по имени', () => {
+    const view = leaderboardRowView(
+      leaderboardRow({
+        place: 1,
+        rideId: RIDE_ID,
+        riderName: 'Анна К.',
+        riderPublicId: RIDER_PUBLIC_ID,
+      }),
+      NOW,
+    );
+    expect(view.own).toBe(true);
+    expect(view.who).toBe('Вы');
+    expect(view.ownA11y).toBe('Ваш заезд, 1, 2:04:37, 4 октября');
+    expect(view.profileA11y).toBe('Профиль райдера, Анна К., 1, 2:04:37, 4 октября');
+  });
+
+  it('своя строка вне списка (`me`) — «Вы» со своим местом', () => {
+    expect(leaderboardMeView(leaderboardMe(), NOW)).toEqual({
+      own: true,
+      place: '7',
+      who: 'Вы',
+      time: '2:15:00',
+      day: '12 октября',
+      a11y: '7, Вы, 2:15:00, 12 октября',
+      profileA11y: null,
+      ownA11y: 'Ваш заезд, 7, 2:15:00, 12 октября',
+    });
+  });
+
+  it('своя в списке — по `rideId` (RC-B1)', () => {
+    expect(ownInRows([leaderboardRow(), leaderboardRow({ place: 2 })])).toBe(false);
+    expect(ownInRows([leaderboardRow(), leaderboardRow({ place: 2, rideId: RIDE_ID })])).toBe(true);
   });
 });

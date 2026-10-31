@@ -678,6 +678,11 @@ export const ru = {
   'profile.show.label': 'Показывать имя в таблицах результатов',
   'profile.show.hint':
     'Имя увидят все в таблицах результатов гонок. Выключите — вместо имени будет номер, например «Райдер #12».',
+  // route-rides-04: сменили текст `profile.routeRides.label`/`profile.routeRides.hint` — поднять
+  // `ROUTE_RIDES_CONSENT_VERSION` (contracts)
+  'profile.routeRides.label': 'Показывать мои заезды в таблицах маршрутов',
+  'profile.routeRides.hint':
+    'Другие райдеры увидят ваше время и день заезда на маршрутах каталога. Имя и фото — только если включён показ имени.',
   // name-consent-prompt: шит после записи на гонку (N4); переключатель и пояснение — `profile.show.*` (одна версия)
   'profile.consent.title': 'Как вас показывать в результатах?',
   'profile.consent.lead': 'Добавьте имя — соперники и друзья увидят вас в таблице гонки.',
@@ -2294,6 +2299,18 @@ export const ru = {
   'routes.report.reported': 'Вы пожаловались на этот маршрут',
   'routes.report.failed': 'Не удалось отправить жалобу',
   'routes.report.rateLimited': 'Слишком много жалоб за сутки. Попробуйте завтра.',
+  // route-rides-04: таблица «Другие на маршруте» — блок карточки и полный список
+  'routes.others.kicker': 'Другие на маршруте',
+  'routes.others.title': 'Другие на маршруте',
+  'routes.others.empty': 'Пока никто не поделился заездами на этом маршруте',
+  'routes.others.failed': 'Не удалось загрузить таблицу',
+  'routes.others.all': 'Все ({count})',
+  'routes.others.onlyYou': 'Видно только вам',
+  'routes.others.enable': 'Включить показ',
+  'routes.others.truncated': 'Показаны лучшие {shown} из {count}',
+  'routes.others.rowA11y': '{place}, {who}, {time}, {date}',
+  'routes.others.profileA11y': 'Профиль райдера, {who}, {place}, {time}, {date}',
+  'routes.others.ownA11y': 'Ваш заезд, {place}, {time}, {date}',
   // route-rides-02: заезд по маршруту — блок «Мои заезды», выбор и результат
   'routes.rides.kicker': 'Мои заезды',
   'routes.rides.summary': 'Заездов: {count} · лучший {time}',

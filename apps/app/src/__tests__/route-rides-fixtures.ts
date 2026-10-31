@@ -2,6 +2,9 @@ import type {
   RouteRideCandidate,
   RouteRideCandidates,
   RouteRideDetail,
+  RouteRideLeaderboard,
+  RouteRideLeaderboardMe,
+  RouteRideLeaderboardRow,
   RouteRidePage,
   RouteRideRow,
   RouteRideTrack,
@@ -108,5 +111,43 @@ export const trackUpload = (overrides: Partial<TrackUpload> = {}): TrackUpload =
   failure: null,
   activity: null,
   createdAt: AT,
+  ...overrides,
+});
+
+/** Публичный id райдера с карточкой (rider-links-in-tables). */
+export const RIDER_PUBLIC_ID = 'r7Kx2mQ9pL4v';
+
+/** Строка таблицы «Другие» (route-rides-04): по умолчанию — чужая, «Участник» (без имени и карточки). */
+export const leaderboardRow = (
+  overrides: Partial<RouteRideLeaderboardRow> = {},
+): RouteRideLeaderboardRow => ({
+  place: 1,
+  elapsedSec: 7_477,
+  rideDate: '2026-10-04',
+  riderName: null,
+  riderPublicId: null,
+  riderAvatar: null,
+  rideId: null,
+  ...overrides,
+});
+
+export const leaderboardMe = (
+  overrides: Partial<RouteRideLeaderboardMe> = {},
+): RouteRideLeaderboardMe => ({
+  place: 7,
+  elapsedSec: 8_100,
+  rideDate: '2026-10-12',
+  rideId: RIDE_ID,
+  ...overrides,
+});
+
+export const leaderboard = (
+  rows: RouteRideLeaderboardRow[] = [],
+  overrides: Partial<RouteRideLeaderboard> = {},
+): RouteRideLeaderboard => ({
+  rows,
+  total: rows.length,
+  me: null,
+  shared: true,
   ...overrides,
 });
