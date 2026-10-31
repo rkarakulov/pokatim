@@ -16,7 +16,9 @@ const fixture = (name: string) =>
     readFileSync(new URL(`../../../packages/tracks/src/__fixtures__/${name}`, import.meta.url)),
   );
 
-describe('runParseThread', () => {
+// Таймаут: каждый тест — настоящие `worker_threads` с холодным стартом графа модулей `@pokatim/tracks/parse` (по
+// потоку на вызов, до семи подряд); при load ≈ 40 (параллельные прогоны веток) — до 6,4 с при 5 с по умолчанию
+describe('runParseThread', { timeout: 20_000 }, () => {
   it('функция вне белого списка — исключение до запуска потока', async () => {
     for (const fn of ['constructor', 'parseGpx', '__proto__', 'eval']) {
       await expect(runParseThread(fn as ParseFunction, [], DEFAULT_PARSE_LIMITS)).rejects.toThrow(

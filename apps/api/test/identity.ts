@@ -11,6 +11,7 @@ import {
   erasedEmailMarker,
 } from '../src/modules/identity/tokens';
 import type { Harness } from './harness';
+import { CONDITION_WAIT } from './wait';
 
 /** Коллекции identity тестовой БД стенда. */
 export const collections = (h: Harness) => identityCollections(h.db);
@@ -185,12 +186,9 @@ export async function untilBlocked(operation: Promise<unknown>, blocked: () => P
     () => (settled = true),
     () => (settled = true),
   );
-  await vi.waitFor(
-    async () => {
-      if (!settled && !(await blocked())) throw new Error('операция ещё не упёрлась в транзакцию');
-    },
-    { timeout: 5_000, interval: 5 },
-  );
+  await vi.waitFor(async () => {
+    if (!settled && !(await blocked())) throw new Error('операция ещё не упёрлась в транзакцию');
+  }, CONDITION_WAIT);
 }
 
 /** Транзакция под spy повторилась (конфликт записи). */

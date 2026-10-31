@@ -39,6 +39,7 @@ import { PanelTotpCodes } from './panel-totp-codes';
 import { generateRecoveryCodes } from './recovery-codes';
 import { base32Decode, generateTotp, generateTotpSecret, totpStep } from './totp';
 import { sealTotpSecret } from './totp-secret-box';
+import { waitUntil } from '../../../test/wait';
 
 /** Вход в панель со вторым фактором (ADR-0024, AC test matrix «вход»). */
 const ADMIN = 'olga@example.by';
@@ -434,7 +435,7 @@ describe('гонки и отказы второго шага (ревью pass 1)
         settled += 1;
       }),
     );
-    await vi.waitFor(() => expect(held + settled).toBe(N));
+    await waitUntil(() => expect(held + settled).toBe(N));
     g.open();
 
     const statuses = (await Promise.all(attempts)).map((res) => res.status).sort();
