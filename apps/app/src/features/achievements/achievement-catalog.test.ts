@@ -213,12 +213,12 @@ const seasonal = (
   });
 
 describe('сезонные (achievements-seasonal, S1, S3, S7)', () => {
-  it('каталог: три кода — публичные, без «Сторис результата» и карточки, флаг `seasonal`', () => {
+  it('каталог: три кода — публичные, без «Сторис результата», с карточкой (C1), флаг `seasonal`', () => {
     for (const code of ['season_regular', 'season_podium', 'season_champion'] as const) {
       expect(catalogEntry(code)).toMatchObject({
         shareable: false,
         public: true,
-        storyCard: false,
+        storyCard: true,
         seasonal: true,
       });
     }

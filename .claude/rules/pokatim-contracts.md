@@ -174,10 +174,12 @@ paths:
   `RevokeWebPushSubscription`, ответ `WebPushConfig` (`publicKey` или `null`). `PUSH_PLATFORMS` не меняется (Expo).
   api-client — `getWebPushConfig`, `registerWebPushSubscription`, `revokeWebPushSubscription`.
 - Карточка для сторис (story-cards, ADR-0018): `src/sharing/story-card.schema.ts` — `STORY_CARD_TEMPLATES`
-  (`line | night`, только в конец), запрос `StoryCardQuery` (`strictObject`), ответ `StoryCardStatus` —
+  (`line | night`, только в конец), запрос `StoryCardQuery` (`strictObject`; гонка, райд, маршрут — не расширять),
+  `AchievementStoryCardQuery` (`template` + `seasonId?: Uuid`, `strictObject`; сверка с кодом — сервер), ответ `StoryCardStatus` —
   `discriminatedUnion` `pending | ready (token) | failed` (незнакомый статус — ошибка разбора), `StoryCardToken`
   (22 символа base64url). `MyRaceEntry.actions.canShareStory` — `.default(false)` (старый сервер — кнопки нет). Код
-  `STORY_CARD_UNAVAILABLE` (409) в конце `ErrorCode`. api-client — `getStoryCard`, `storyCardImageUrl(token)` (адрес
+  `STORY_CARD_UNAVAILABLE` (409) в конце `ErrorCode`. api-client — `getStoryCard`, `getAchievementCard(token, code, AchievementStoryCardQuery)`,
+  `storyCardImageUrl(token)` (адрес
   без запроса: сервер свой публичный origin не знает).
 - Заезд по маршруту (route-rides-01): `src/route-rides/route-ride.schema.ts` — `ROUTE_RIDE_STATUSES` (только в конец),
   `ROUTE_RIDE_MAX_PER_ROUTE` (100), `ROUTE_RIDE_CANDIDATES_MAX` (30); запрос `RouteRideRequest` (ровно одно поле

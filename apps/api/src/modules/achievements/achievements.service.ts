@@ -24,6 +24,7 @@ import {
   type FactAchievementCode,
   isSeen,
   levelName,
+  manuallyGranted,
   progressBeyondManual,
   raceAchievements,
   seasonalAchievements,
@@ -32,12 +33,6 @@ import {
   sortForList,
 } from './achievements.policy';
 import { AchievementsRepository, type StoredGrantDoc } from './achievements.repository';
-
-/** Видимая ручная выдача (achievements-panel): решение `granted`, не отозвана. */
-const manuallyGranted = (grant: {
-  revokedAt: Date | null;
-  override?: AchievementOverride | null;
-}) => grant.revokedAt === null && grant.override?.decision === 'granted';
 
 /**
  * Достижения райдера — HTTP-обёртка (ADR-0020 «выдача сверкой при чтении»): сверка — `AchievementsReconciler` (одна для

@@ -26,8 +26,8 @@ const DOCUMENT_TITLE = `${t('achievements.title')} — ${t('app.name')}`;
 
 /**
  * Экран своего достижения (`/achievements/<code>`, сезонное — `?season=<id>`; A5–A6, S7): тот же макет, что вспышка,
- * без «Дальше»; вход — плитка блока «Достижения» в `/profile`. «Поделиться» — карточка достижения (кроме сезонных), у
- * гоночных ещё «Сторис результата», у сезонных — «К сезону». Данные — тот же кэш `['achievements']`, поиск — по
+ * без «Дальше»; вход — плитка блока «Достижения» в `/profile`. «Поделиться» — карточка достижения (у сезонных — с
+ * сезоном, C1), у гоночных ещё «Сторис результата», у сезонных — «К сезону». Данные — тот же кэш `['achievements']`, поиск — по
  * `achievementKey`. Нет в списке (отозвано, незнакомый адрес) — пустое состояние с переходом в профиль. Экран `seen` не
  * шлёт: вспышку показывает только хост.
  */
@@ -84,7 +84,7 @@ export function AchievementScreen({ code, season }: { code: string; season?: str
                 {catalogEntry(item.code).storyCard ? (
                   <Button
                     label={t('achievements.share')}
-                    onPress={() => router.push(achievementStoryPath(item.code))}
+                    onPress={() => router.push(achievementStoryPath(item.code, seasonId))}
                   />
                 ) : null}
                 {seasonId !== null ? (

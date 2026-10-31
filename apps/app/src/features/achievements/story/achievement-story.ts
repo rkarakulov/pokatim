@@ -3,17 +3,28 @@ import type { AchievementCode, StoryCardTemplate } from '@pokatim/contracts';
 import type { CardSource } from '@/features/sharing/card-status';
 import { api } from '@/lib/api';
 
-/** Экран своего достижения (`/achievements/<code>`). */
-export const achievementPath = (code: string) => `/achievements/${code}`;
+/**
+ * Экран карточки достижения для сторис (внутри `Stack.Protected`): `/achievements/story/<code>`, у сезонных —
+ * `?season=<id>` (C2).
+ */
+export const achievementStoryPath = (code: string, seasonId: string | null) =>
+  seasonId === null
+    ? `/achievements/story/${code}`
+    : `/achievements/story/${code}?season=${encodeURIComponent(seasonId)}`;
 
-/** Экран карточки достижения для сторис (внутри `Stack.Protected`). */
-export const achievementStoryPath = (code: string) => `/achievements/story/${code}`;
+/** Ключ статуса: сезон в ключе — иначе карточки двух сезонов делят кэш. */
+export const achievementStoryKey = (
+  code: AchievementCode,
+  seasonId: string | null,
+  template: StoryCardTemplate,
+) => ['achievements', 'story', code, seasonId, template] as const;
 
-export const achievementStoryKey = (code: AchievementCode, template: StoryCardTemplate) =>
-  ['achievements', 'story', code, template] as const;
-
-/** Статус карточки своего достижения — общий поток `features/sharing` (ADR-0018). */
-export const achievementStorySource = (code: AchievementCode): CardSource => ({
-  key: (template) => achievementStoryKey(code, template),
-  fetch: (token, template) => api.getAchievementCard(token, code, { template }),
+/** Статус карточки своего достижения — общий поток `features/sharing` (ADR-0018); `seasonId` — только у сезонных. */
+export const achievementStorySource = (
+  code: AchievementCode,
+  seasonId: string | null,
+): CardSource => ({
+  key: (template) => achievementStoryKey(code, seasonId, template),
+  fetch: (token, template) =>
+    api.getAchievementCard(token, code, seasonId ? { template, seasonId } : { template }),
 });

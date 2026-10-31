@@ -662,16 +662,18 @@ describe('публичный список и карточка (RC-1)', () => {
       'season_champion:Сезон 2025',
     ]);
 
-    expect(await sharing().cardFacts(me.userId, 'races_5')).toEqual({
+    expect(await sharing().cardFacts(me.userId, { code: 'races_5', seasonId: null })).toEqual({
       code: 'races_5',
       object: { kind: 'race', id: foreign, title: 'Чужая' },
       factDate: expect.any(String),
       level: 'bronze',
     });
-    expect(await sharing().cardFacts(me.userId, 'route_first')).toMatchObject({
+    expect(
+      await sharing().cardFacts(me.userId, { code: 'route_first', seasonId: null }),
+    ).toMatchObject({
       object: { kind: 'route', id: route, title: 'Эталонный коридор' },
     });
-    expect(await sharing().cardFacts(me.userId, 'race_win')).toBeNull();
+    expect(await sharing().cardFacts(me.userId, { code: 'race_win', seasonId: null })).toBeNull();
   });
 });
 
