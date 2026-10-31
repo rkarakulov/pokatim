@@ -5,6 +5,7 @@ import {
   type CreateRideReportRequest,
   type CreateRideRequest,
   type RideDetail,
+  type RideJoinSource,
   type RidePage,
   type RideView,
   type UpdateRideRequest,
@@ -186,16 +187,18 @@ async function applyRideView(queryClient: QueryClient, view: RideView): Promise<
 }
 
 /**
- * «Я иду» / «Не иду» одного райда: кнопка выключена на время запроса, ошибка — текст у действия. Успех «Я иду» —
+ * «Я иду» / «Не иду» одного райда (`source` — откуда нажато «Я иду», K12): кнопка выключена на время запроса, ошибка — текст у действия. Успех «Я иду» —
  * подсказка push (N5), «Не иду» — её закрытие; здесь, а не в `mutate`: место кнопки может размонтироваться до ответа.
  */
-export function useRideRsvp(id: string) {
+export function useRideRsvp(id: string, source?: RideJoinSource) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (action: 'join' | 'leave') =>
-      withAccessToken((accessToken) =>
-        action === 'join' ? api.joinRide(accessToken, id) : api.leaveRide(accessToken, id),
-      ),
+      withAccessToken((accessToken) => {
+        if (action === 'leave') return api.leaveRide(accessToken, id);
+        // источник «Я иду» (K12) — только карточка райда; лента и Главная — без него
+        return source ? api.joinRide(accessToken, id, source) : api.joinRide(accessToken, id);
+      }),
     networkMode: 'always',
     onSuccess: (view, action) => {
       if (action === 'join') offerPushSoftPrompt('ride', id);
