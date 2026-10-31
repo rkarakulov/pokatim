@@ -206,7 +206,16 @@ Contracts-first, TDD. Int-тесты — своя БД Mongo (`*_test`-суфф�
 - **AC-2, AC-6** — приняты рекомендации architect: событие только для новой группы дублей; одна задача на активность.
 - `RouteRideResult` перенесён из `route-rides.repository.ts` в `route-rides.collection.ts` (иначе цикл
   `policy ↔ repository` на `newRideDoc`, `arch:check`); поведение не меняется.
-- `ridesByRoute` отдаёт `{ routeId, lastStartedAt, activityIds }` (плоский список id вместо `rides: [{ activityId }]`).
+- **AC-1 после merge develop (PR #160, fan-out outbox, api-kit 0.6.0):** аргумент «тип события → одна очередь» больше не
+  действует — `mergeOutboxRoutes` раздаёт тип всем подписчикам. Отдельное событие `tracks.activity-group-created`
+  оставлено по второй причине AC-2: «новая группа дублей» известна только в транзакции записи под
+  `lockUserActivities`; подписчик `tracks.activity-ready`, читающий группу «сейчас», её не восстановит (вариант (c) —
+  потеря заезда). Маршрут `route-ride-auto` подключён через `routeRidesOutboxRoutes` в `subscriberOutboxRoutes`.
+- **Ревью pass 1 (CRITICAL):** план события детерминирован — маршрут с автозаездом этой группы остаётся в плане на своём
+  месте (`done`, без прогона), не освобождает слот; заезды группы не влияют на порядок (а) и квоту плана. Ручной заезд
+  группы — по-прежнему пропуск до отсечения 20 (V4). `RouteRideAutoOutcome.planned` считает и `done`.
+- **Ревью pass 1 (MEDIUM):** порядок (а) — по последнему **живому** заезду (`ridesByRoute` отдаёт `rides[]` с датой и
+  `origin`); свой маршрут с одними сиротами — в (б).
 - Порт `rideableBounds` при > 25 id бросает исключение (защита предела), а не режет молча.
 
 ## 8.3 Security checklist
@@ -450,3 +459,15 @@ ADR-0012, ADR-0015.
 **Риски.** Нагрузка: до 20 прогонов движка на новую активность в отдельной очереди с параллелизмом 1 и общим семафором
 потоков; ретрай всей задачи при сбое окружения повторяет отказные прогоны. Остаточное окно «две основные одной
 группы» (RC-3) — как у ручной проверки.
+
+**Ревью pass 1 и merge develop (2026-10-31).** Коммиты `64cff2dc` (детерминированный план: маршрут с автозаездом
+группы — `done` на своём месте; (а) по живым заездам без заездов группы; свой маршрут с сиротами — в (б); JSDoc
+`displayLine`), `7aa82a30` (merge `origin/develop`: fan-out outbox PR #160 — конфликт только в `pokatim-backend.md`),
+затем фиксы после merge (JSDoc событий, §8.2, сторож итоговой карты в `src/outbox-routes.test.ts`). TDD: unit
+`autoPlan`/`nearRoutes` — 6 красных до правки; int «21 маршрут: ретрай после частичного успеха и повтор — те же 20» —
+отрицательное доказательство: со старым правилом (заезд группы блокирует маршрут) ретрай даёт `{ planned: 16, passed: 16 }`
+и 21 заезд. Проверки после merge (`pnpm install`, api-kit из lockfile): api `tsc` ок; int `route-rides, routes, tracks,
+results, account` — 40 файлов, 541/542 (упал `results-read` RC-5 под параллельной нагрузкой, `Z_BUF_ERROR`; отдельно —
+10/10); `outbox-routes.test.ts` + политика — 24/24; eslint `apps/api/src`, `apps/api/test` — чисто; typecheck
+contracts и app — ок; `format:check`, `arch:check` — ок. Будущий конфликт: PR #164 (`route-rides` слушает
+`tracks.activity-removed`) — те же `route-rides.events.ts` и раздел правил.

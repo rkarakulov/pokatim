@@ -53,6 +53,13 @@ describe('workerOutboxRoutes', () => {
     }
   });
 
+  it('активность: activity-ready — только results-intake, activity-group-created — только route-ride-auto (route-rides-03, AC4)', () => {
+    expect(queuesOf(workerOutboxRoutes['tracks.activity-ready'])).toEqual(['results-intake']);
+    expect(queuesOf(workerOutboxRoutes['tracks.activity-group-created'])).toEqual([
+      'route-ride-auto',
+    ]);
+  });
+
   it('у каждого типа есть очередь', () => {
     for (const route of Object.values(workerOutboxRoutes)) {
       expect(queuesOf(route).length).toBeGreaterThan(0);

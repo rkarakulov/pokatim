@@ -12,10 +12,10 @@ export const RouteRidesCheckRequested = z.object({
 export type RouteRidesCheckRequested = z.infer<typeof RouteRidesCheckRequested>;
 
 /**
- * Маршруты событий `route-rides` (подключает worker.module.ts). Outbox базы отправляет тип события в одну очередь:
- * `tracks.activity-ready/-removed` слушает `results` (RC-1), поэтому автопроверка подписана на свой тип владельца
- * `tracks.activity-group-created` (route-rides-03, 8.1 AC-1); второму подписчику этого типа — снова своё событие или
- * fan-out базы. Удалённая активность скрывается фильтром на чтении.
+ * Маршруты событий `route-rides` (объединяет `src/outbox-routes.ts`, `mergeOutboxRoutes` — fan-out). Автопроверка
+ * подписана на тип владельца `tracks.activity-group-created` (route-rides-03, 8.1 AC-1/AC-2): «новая группа дублей»
+ * решается только в транзакции записи активности, подписчик `tracks.activity-ready` её не восстановит. Удалённая
+ * активность скрывается фильтром на чтении.
  */
 export const routeRidesOutboxRoutes = {
   [ROUTE_RIDES_CHECK_REQUESTED]: QUEUE.routeRideCheck,

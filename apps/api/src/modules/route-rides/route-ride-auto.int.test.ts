@@ -27,16 +27,13 @@ import {
 import { routesDb } from '../../../test/routes';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
 import { tracks } from '../../../test/tracks';
-import { QUEUE } from '../../queues';
-import { resultsOutboxRoutes } from '../results';
 import { ACTIVITY_SOURCE, type ActivitySource } from '../tracks';
 import { RouteRideAutoProcessor } from './route-ride-auto.processor';
 import { RouteRideEvaluator } from './route-ride-evaluator';
-import { routeRidesOutboxRoutes } from './route-rides.events';
 import { newRideDoc, ROUTE_RIDE_POLICY } from './route-rides.policy';
 
 /**
- * Автопроверка новой активности (route-rides-03, AC1–AC4): `RouteRideAutoProcessor.run`/`process` напрямую, сверка —
+ * Автопроверка новой активности (route-rides-03, AC1–AC3; AC4 — `src/outbox-routes.test.ts`): `RouteRideAutoProcessor.run`/`process` напрямую, сверка —
  * настоящий поток разбора; маршруты — линия эталона (`clean.gpx`), заезды — фикстуры коридора со сдвигом времени.
  */
 let h: Harness;
@@ -433,16 +430,5 @@ describe('AC3: гонки и сбои', () => {
     });
     expect(await auto().run(second.activityId!, r.userId)).toEqual({ planned: 1, passed: 0 });
     expect(await rides().countDocuments({ routeId: own })).toBe(0);
-  });
-});
-
-describe('AC4: гонки получают tracks.activity-ready как прежде', () => {
-  it('маршруты публикатора: activity-ready → results-intake, activity-group-created → route-ride-auto, типы не пересекаются', () => {
-    expect(resultsOutboxRoutes['tracks.activity-ready']).toBe(QUEUE.resultsIntake);
-    expect(routeRidesOutboxRoutes['tracks.activity-group-created']).toBe(QUEUE.routeRideAuto);
-    const shared = Object.keys(resultsOutboxRoutes).filter(
-      (type) => type in routeRidesOutboxRoutes,
-    );
-    expect(shared).toEqual([]);
   });
 });
