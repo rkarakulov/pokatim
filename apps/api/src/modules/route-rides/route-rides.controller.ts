@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Header, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import {
   FieldErrorCode,
   type RouteRideCandidates,
   type RouteRideDetail,
+  type RouteRideLeaderboard,
+  RouteRideLeaderboardQuery,
   type RouteRidePage,
   RouteRideRequest,
   type RouteRideTrack,
@@ -11,6 +13,7 @@ import {
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
 import { AuthGuard, type AuthUser, CurrentUser } from '../identity';
+import { RouteRideLeaderboardService } from './route-ride-leaderboard.service';
 import { RouteRidesReadService } from './route-rides-read.service';
 import { RouteRidesService } from './route-rides.service';
 
@@ -23,8 +26,9 @@ const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
 
 /**
  * Заезд по маршруту (route-rides-01) — только вошедшие, `no-store`, только свои заезды; пользователь — из access
- * (`@CurrentUser`). Маршрут, не видимый райдеру сейчас, — один `404 NOT_FOUND` на всех ручках. `candidates` объявлен
- * до `:rideId` (статический сегмент не уходит в pipe `Uuid`).
+ * (`@CurrentUser`). Маршрут, не видимый райдеру сейчас, — один `404 NOT_FOUND` на всех ручках. `candidates` и
+ * `leaderboard` (route-rides-04: чужие заезды только с согласием, маршрут только каталога) объявлены до `:rideId`
+ * (статический сегмент не уходит в pipe `Uuid`).
  */
 @Controller('routes/:routeId/rides')
 @UseGuards(AuthGuard)
@@ -32,6 +36,7 @@ export class RouteRidesController {
   constructor(
     private readonly rides: RouteRidesService,
     private readonly read: RouteRidesReadService,
+    private readonly leaderboards: RouteRideLeaderboardService,
   ) {}
 
   @Get()
@@ -50,6 +55,18 @@ export class RouteRidesController {
     @Param('routeId', idPipe) routeId: string,
   ): Promise<RouteRideCandidates> {
     return this.read.candidates(user.userId, routeId);
+  }
+
+  /** Таблица «Другие» маршрута каталога (route-rides-04): райдеры с согласием и своя строка. */
+  @Get('leaderboard')
+  @Header('Cache-Control', 'no-store')
+  leaderboard(
+    @CurrentUser() user: AuthUser,
+    @Param('routeId', idPipe) routeId: string,
+    @Query(new ZodValidationPipe(RouteRideLeaderboardQuery, FieldErrorCode))
+    query: RouteRideLeaderboardQuery,
+  ): Promise<RouteRideLeaderboard> {
+    return this.leaderboards.table(user.userId, routeId, query);
   }
 
   @Post()

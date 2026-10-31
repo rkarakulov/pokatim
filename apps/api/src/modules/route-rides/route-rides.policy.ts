@@ -51,6 +51,18 @@ export const ROUTE_RIDE_AUTO_POLICY = {
   sports: ['cycling', 'unknown'],
 } as const;
 
+/**
+ * Таблица «Другие» маршрута каталога (route-rides-04, `[ASSUMPTION]` §8): скан — не больше 5000 райдеров маршрута,
+ * до 3 лучших пройденных заездов райдера (удалён лучший — строка по следующему живому), живость активностей —
+ * пачками по 1000 id (`ActivitySource.liveActivityIds`), лимит запросов — 300/ч на пользователя.
+ */
+export const ROUTE_RIDE_LEADERBOARD_POLICY = {
+  scanRiders: 5000,
+  topPerRider: 3,
+  liveBatch: 1000,
+  userLimit: { limit: 300, windowSec: 3600 },
+} as const;
+
 const DAY_MS = 86_400_000;
 
 /** Активность годится для автопроверки (V1, 8.1 AC-3): спорт и старт `≥ uploadCreatedAt − 7 сут`. */
@@ -197,15 +209,35 @@ const isPassed = (ride: RouteRideFacts): ride is Passed =>
 const byIdAsc = (a: RouteRideFacts, b: RouteRideFacts) =>
   a._id < b._id ? -1 : a._id > b._id ? 1 : 0;
 
-/** Лучший пройденный: минимум времени; ничья — раньше заезд, затем меньший `_id`. */
+/** Ключ ранжирования пройденного заезда: время сегмента, дата заезда, id заезда. */
+export interface RideRankKey {
+  elapsedSec: number;
+  startedAt: Date;
+  id: string;
+}
+
+/**
+ * Порядок пройденных заездов (единственный компаратор): минимум времени; ничья — раньше заезд, затем меньший id.
+ * Общий для «Моих заездов» (`bestOf`) и таблицы «Другие» (route-rides-04); тот же порядок у индекса `0047`.
+ */
+export function compareRides(a: RideRankKey, b: RideRankKey): number {
+  return (
+    a.elapsedSec - b.elapsedSec ||
+    a.startedAt.getTime() - b.startedAt.getTime() ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
+}
+
+const rankKeyOf = (ride: Passed): RideRankKey => ({
+  elapsedSec: ride.segment.elapsedSec,
+  startedAt: ride.activity.startedAt,
+  id: ride._id,
+});
+
+/** Лучший пройденный: минимум времени; ничья — раньше заезд, затем меньший `_id` (`compareRides`). */
 export function bestOf<T extends RouteRideFacts>(rides: readonly T[]): (T & Passed) | null {
   const passed = rides.filter(isPassed) as (T & Passed)[];
-  passed.sort(
-    (a, b) =>
-      a.segment.elapsedSec - b.segment.elapsedSec ||
-      a.activity.startedAt.getTime() - b.activity.startedAt.getTime() ||
-      byIdAsc(a, b),
-  );
+  passed.sort((a, b) => compareRides(rankKeyOf(a), rankKeyOf(b)));
   return passed[0] ?? null;
 }
 

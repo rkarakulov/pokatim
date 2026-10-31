@@ -14,7 +14,8 @@ import { RouteRidesRepository } from './route-rides.repository';
 const ACTIVITIES_CHUNK = 200;
 const ROUTES_CHUNK = 500;
 
-const chunks = <T>(items: readonly T[], size: number): T[][] => {
+/** Пачки по `size` (порядок сохраняется). */
+export const chunks = <T>(items: readonly T[], size: number): T[][] => {
   const result: T[][] = [];
   for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size));
   return result;

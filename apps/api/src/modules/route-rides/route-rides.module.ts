@@ -3,11 +3,13 @@ import { Module } from '@nestjs/common';
 
 import { QUEUE } from '../../queues';
 import { IdentityModule } from '../identity';
+import { ProfileCoreModule } from '../profile';
 import { RoutesCoreModule } from '../routes';
 import { TracksCoreModule } from '../tracks';
 import { RouteRideAutoProcessor } from './route-ride-auto.processor';
 import { RouteRideCheckProcessor } from './route-ride-check.processor';
 import { RouteRideEvaluator } from './route-ride-evaluator';
+import { RouteRideLeaderboardService } from './route-ride-leaderboard.service';
 import { RiderRouteRidesService } from './rider-route-rides';
 import { RIDER_ROUTE_RIDES } from './rider-route-rides.port';
 import { RouteRideErasure } from './route-ride-erasure';
@@ -41,11 +43,14 @@ import { RouteRidesService } from './route-rides.service';
 })
 export class RouteRidesCoreModule {}
 
-/** HTTP: заезды по маршруту (`AuthGuard`). */
+/**
+ * HTTP: заезды по маршруту (`AuthGuard`). Таблица «Другие» (route-rides-04) — порт `profile` `RIDER_NAMES` через
+ * `ProfileCoreModule` (только здесь: ядро, worker, `account` и `achievements` о `profile` не знают).
+ */
 @Module({
-  imports: [IdentityModule, RouteRidesCoreModule],
+  imports: [IdentityModule, ProfileCoreModule, RouteRidesCoreModule],
   controllers: [RouteRidesController],
-  providers: [RouteRidesService, RouteRidesReadService],
+  providers: [RouteRidesService, RouteRidesReadService, RouteRideLeaderboardService],
 })
 export class RouteRidesModule {}
 
