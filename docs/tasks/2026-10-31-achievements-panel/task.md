@@ -425,6 +425,27 @@ M1–M8 не меняются; ниже — уточнения и недоопр
   список; мутации — 404.
 - **D4 — `progressBeyondManual`** — имя чистой функции фильтра `progress` (RC-9) в `achievements.policy.ts`.
 
+## 8.2 Отклонения при реализации (PR B, coder)
+
+- **B1 — тоны статусов.** У `StatusTag` нет тонов `info`/`warning` (есть `success`, `neutral`, `error`, `ink`); новых
+  тонов и токенов не вводим: «выдано» — `success`, «выдано вручную» — `ink` (вместо `info`), «отозвано сверкой» —
+  `neutral`, «отозвано вручную» — `error` (вместо `warning`).
+- **B2 — `SelectField` с недоступным вариантом.** `options[].disabled` (необязательное, `src/ui/fields.tsx`): выданный
+  несезонный код виден в списке «Достижение» с подписью «— уже выдано» и подсказкой поля «Уже выданное достижение
+  сначала отзовите»; по умолчанию выбран первый свободный код. Сезонные коды доступны всегда (выдача — на сезон).
+- **B3 — 400 `objectId` под полем.** Ошибка поля id объекта — под полем («Объект не найден или не подходит этому
+  достижению», `aria-invalid`), в окне — «Проверьте поля» (как прочие 400 по полям); 7.4 называл только `errorText`.
+- **B4 — форма выдачи на `useState`.** Поля над причиной `ReasonDialog` (`extraFields`) — `useState`, как у смены роли
+  (`MembersScreen`): тело — тип `GrantRiderAchievementRequest`, `level` — только у `isLeveledCode`, `confirmDisabled` —
+  `Uuid.safeParse`; остальное проверяет сервер. Исключение записано в `pokatim-web.md`.
+- **B5 — детали журнала.** Два ключа: `admin.audit.details.achievement` («Первый маршрут, Маршрут ·<хвост id>») и
+  `admin.audit.details.achievementLevel` («Гонщик · Бронза, Гонка ·<хвост id>»); хвост id — 6 символов, как
+  `riderLabel` (`shortObjectId`). Названия объектов журнал не хранит (M6).
+- **B6 — колонка «Действия»** — отдельная колонка таблицы с кнопками строки (7.4 не называл заголовок).
+- **B7 — `pnpm e2e:admin` локально не прогнан:** смоуку нужен mailpit (SMTP и HTTP API писем) и собранный API с
+  миграциями — mailpit локально не запущен. Смоук блок «Достижения» не затрагивает (карточку райдера не открывает) —
+  проверит CI.
+
 ## 9. Acceptance Criteria
 
 - AC1. Без `achievements.manage` — 403 (сторож `admin-routes.test.ts`); moderator — блока нет.
@@ -522,3 +543,24 @@ OUT OF SCOPE — статистика достижений, массовые о�
   `RATE_LIMITED`, ни выдачи, ни журнала; другой сотрудник тому же райдеру — 204 (ключ — сотрудник, не райдер).
 - Claude LOW (связка логов `achievements.manual … by=<сотрудник>` и `achievements.sync uid=<райдер>` после снятия) —
   принято: оба лога — псевдонимные id без имён и причин, журнал панели и так связывает сотрудника с райдером.
+
+### PR B (экраны панели) — 2026-10-31
+
+- **Панель:** `RiderAchievementsSection` в `RiderProfileScreen` под жалобами — только при `useCan('achievements.manage')`
+  (без права — ни блока, ни запроса; 403 — блок скрыт, карточка остаётся); свой запрос `riderAchievementsQuery`;
+  `DataTable` (достижение и уровень, объект / «Объект недоступен ·<id>», дата факта, статус, решение, «По фактам»,
+  действия строки с `aria-label`); состояния — скелетон, `ErrorState` с повтором, `RefreshFailedBanner`, «Достижений
+  нет», «Сезонные достижения временно недоступны»; `GrantAchievementDialog` (код, id объекта с подписью по виду и
+  подсказкой, уровень счётного — бронза, `confirmDisabled` до UUID); «Отозвать» (деструктивный) и «Вернуть автоматике»
+  — `ReasonDialog`; во всех трёх — «Причина видна команде»; ошибки 400 (поле `objectId` — под полем), 404, 409
+  (перечитывание блока), 429, сеть — `achievementActionErrorText`; `reconciled: false` — баннер; после действия —
+  инвалидация блока и журнала. `ReasonDialog.confirmDisabled`, `SelectField` `options[].disabled`. Журнал — подписи
+  деталей `achievement.*`. Тексты — `admin.riderAchievements.*`, `admin.audit.details.achievement*` (ru).
+- **Тесты (RTL):** `RiderAchievementsSection.test.tsx` (16: без права — ни блока, ни запроса; таблица и действия строк;
+  скелетон; ошибка с повтором; пусто и сезоны недоступны; 403; выдача — подпись поля по виду, уровень только у
+  счётного, бронза, UUID и причина, инвалидация журнала; разовый без уровня; ошибки 409/404/429/400; 400 `objectId`
+  под полем; отзыв сезонного с `seasonId` и баннер ошибки обновления; 409 `not_granted`; снятие и `reconciled: false`),
+  `ReasonDialog.test.tsx` (+1 `confirmDisabled`), `AuditScreen.test.tsx` (+1 детали `achievement.*`).
+- **Проверки:** `MONGO_URL_TEST=… REDIS_URL_TEST=… TURBO_CONCURRENCY=1 pnpm check` — exit 0, `Tasks: 15 successful, 15
+  total` (admin 49 файлов / 507 тестов, api 224 / 2535); `pnpm e2e:admin` — не прогнан локально (B7).
+- **Отклонения:** 8.2 (PR B) B1–B7.

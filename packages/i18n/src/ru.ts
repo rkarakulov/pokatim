@@ -1978,10 +1978,13 @@ export const ru = {
   'admin.audit.action.profile.reports_dismissed': 'Жалобы на профиль отклонены',
   // profile-moderation-followups: снят запрет загрузки фото
   'admin.audit.action.profile.avatar_unblocked': 'Снят запрет загрузки фото',
-  // achievements-panel: ручные решения по достижениям (подписи деталей — PR B)
+  // achievements-panel: ручные решения по достижениям
   'admin.audit.action.achievement.granted_manually': 'Достижение выдано вручную',
   'admin.audit.action.achievement.revoked_manually': 'Достижение отозвано вручную',
   'admin.audit.action.achievement.override_cleared': 'Ручное решение по достижению снято',
+  // achievements-panel PR B: детали — код и уровень, вид и короткий id объекта (без названий)
+  'admin.audit.details.achievement': '{name}, {kind} ·{id}',
+  'admin.audit.details.achievementLevel': '{name} · {level}, {kind} ·{id}',
   'admin.audit.action.tickets.settings_updated': 'Настройки билетов изменены',
   'admin.audit.action.tickets.checked_in': 'Участник отмечен',
   // routes-01: экран «Маршруты» панели и публикация в каталог
@@ -2674,6 +2677,77 @@ export const ru = {
   'admin.riderProfiles.conflict': 'Пришли новые жалобы, обновите карточку',
   'admin.riderProfiles.conflictMessage':
     'Пока вы смотрели, на профиль пожаловались снова — проверьте новые жалобы перед решением.',
+  // achievements-panel PR B: блок «Достижения» карточки райдера (`achievements.manage`)
+  'admin.riderAchievements.title': 'Достижения',
+  'admin.riderAchievements.grant': 'Выдать вручную',
+  'admin.riderAchievements.empty': 'Достижений нет',
+  'admin.riderAchievements.seasonsUnavailable': 'Сезонные достижения временно недоступны',
+  'admin.riderAchievements.seasonsUnavailableMessage':
+    'Итоги сезонов не загрузились: названия сезонов и «По фактам» для них не показаны.',
+  'admin.riderAchievements.column.achievement': 'Достижение',
+  'admin.riderAchievements.column.object': 'Объект',
+  'admin.riderAchievements.column.factDate': 'Дата факта',
+  'admin.riderAchievements.column.status': 'Статус',
+  'admin.riderAchievements.column.decision': 'Решение',
+  'admin.riderAchievements.column.byFacts': 'По фактам',
+  'admin.riderAchievements.column.actions': 'Действия',
+  'admin.riderAchievements.nameLevel': '{name} · {level}',
+  'admin.riderAchievements.object': '{kind} · {title}',
+  'admin.riderAchievements.objectMissing': 'Объект недоступен ·{id}',
+  'admin.riderAchievements.kind.race': 'Гонка',
+  'admin.riderAchievements.kind.route': 'Маршрут',
+  'admin.riderAchievements.kind.ride': 'Кофе-райд',
+  'admin.riderAchievements.kind.season': 'Сезон',
+  'admin.riderAchievements.status.granted': 'Выдано',
+  'admin.riderAchievements.status.granted_manually': 'Выдано вручную',
+  'admin.riderAchievements.status.revoked': 'Отозвано сверкой',
+  'admin.riderAchievements.status.revoked_manually': 'Отозвано вручную',
+  'admin.riderAchievements.decision': '{name} · {date}',
+  'admin.riderAchievements.none': '—',
+  'admin.riderAchievements.byFacts.earned': 'Заработано',
+  'admin.riderAchievements.byFacts.earnedLevel': 'Заработано · {level}',
+  'admin.riderAchievements.byFacts.not_earned': 'Не заработано',
+  'admin.riderAchievements.byFacts.unknown': 'Неизвестно',
+  'admin.riderAchievements.revoke': 'Отозвать',
+  'admin.riderAchievements.clear': 'Вернуть автоматике',
+  'admin.riderAchievements.rowAction': '{action}: {name}, {object}',
+  'admin.riderAchievements.revokeTitle': 'Отозвать «{name}»',
+  'admin.riderAchievements.revokeConsequences':
+    'Достижение пропадёт у райдера без уведомления. Автоматика не вернёт его, пока решение не снимут.',
+  'admin.riderAchievements.clearTitle': 'Вернуть автоматике «{name}»',
+  'admin.riderAchievements.clearConsequences':
+    'Решение снимется, выдачу пересчитают по фактам сразу.',
+  'admin.riderAchievements.notReconciled':
+    'Пересчёт по фактам выполнится при следующем входе райдера.',
+  'admin.riderAchievements.grantTitle': 'Выдать достижение вручную',
+  'admin.riderAchievements.grantConfirm': 'Выдать',
+  'admin.riderAchievements.grantConsequences':
+    'Райдер увидит достижение и получит уведомление. Автоматика не отзовёт его, пока решение не снимут.',
+  'admin.riderAchievements.reasonWarning':
+    'Причина видна команде: она навсегда остаётся в журнале действий.',
+  'admin.riderAchievements.field.code': 'Достижение',
+  'admin.riderAchievements.field.codeGranted': '{name} — уже выдано',
+  'admin.riderAchievements.field.codeHelp': 'Уже выданное достижение сначала отзовите.',
+  'admin.riderAchievements.field.level': 'Уровень',
+  'admin.riderAchievements.field.object.race': 'ID гонки',
+  'admin.riderAchievements.field.object.route': 'ID маршрута',
+  'admin.riderAchievements.field.object.ride': 'ID кофе-райда',
+  'admin.riderAchievements.field.object.season': 'ID сезона',
+  'admin.riderAchievements.field.objectHelp.race':
+    'Есть в адресе страницы гонки в панели: /races/<id>',
+  'admin.riderAchievements.field.objectHelp.route':
+    'Есть в адресе страницы маршрута в панели: /routes/<id> или /rider-routes/<id>',
+  'admin.riderAchievements.field.objectHelp.ride':
+    'Есть в адресе карточки райда в панели: /rides-moderation/<id>',
+  'admin.riderAchievements.field.objectHelp.season':
+    'Есть в адресе страницы сезона в панели: /seasons/<id>',
+  'admin.riderAchievements.error.already_granted':
+    'У райдера уже есть это достижение — список обновлён.',
+  'admin.riderAchievements.error.not_granted': 'Достижение уже отозвано — список обновлён.',
+  'admin.riderAchievements.error.object': 'Объект не найден или не подходит этому достижению',
+  'admin.riderAchievements.error.fields': 'Проверьте поля',
+  'admin.riderAchievements.error.notFound': 'Райдер не найден',
+  'admin.riderAchievements.error.rateLimited': 'Слишком много действий — попробуйте позже',
   'domain.profileReportReason.photo': 'Неприемлемое фото',
   'domain.profileReportReason.club': 'Неприемлемый клуб',
   'domain.profileReportReason.name': 'Неприемлемое имя',

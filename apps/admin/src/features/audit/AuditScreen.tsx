@@ -14,6 +14,7 @@ import { formatDateTime, formatDateTimeLong } from '../../format';
 import { isForbidden } from '../../session/errors';
 import { Button, DataTable, EmptyState, PageHeader, SelectField } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
+import { shortObjectId } from '../rider-profiles/rider-achievements-format';
 
 const PAGE_SIZE = 50;
 const ALL = 'all';
@@ -67,6 +68,24 @@ function details(entry: AuditEntry): string {
       from: t(`admin.appearance.decor.name.${decorFrom}`),
       to: t(`admin.appearance.decor.name.${decorTo}`),
     });
+  }
+  // achievements-panel: ручное решение — код (и уровень счётного), вид и короткий id объекта; без названий
+  const achievementCode = entry.details?.achievementCode;
+  const objectKind = entry.details?.objectKind;
+  const objectId = entry.details?.objectId;
+  if (achievementCode && objectKind && objectId) {
+    const level = entry.details?.achievementLevel;
+    const params = {
+      name: t(`achievements.${achievementCode}.title`),
+      kind: t(`admin.riderAchievements.kind.${objectKind}`),
+      id: shortObjectId(objectId),
+    };
+    return level
+      ? t('admin.audit.details.achievementLevel', {
+          ...params,
+          level: t(`achievements.level.${level}`),
+        })
+      : t('admin.audit.details.achievement', params);
   }
   const role = to ?? from;
   if (role) return t(`admin.role.${role}`);
