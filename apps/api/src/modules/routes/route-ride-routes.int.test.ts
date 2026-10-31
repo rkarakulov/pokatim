@@ -144,3 +144,49 @@ describe('RouteRideRoutes.rideableTitles (achievements, RC-3)', () => {
     expect((await port().rideableTitles([platform], ME)).has(platform)).toBe(false);
   });
 });
+
+describe('RouteRideRoutes.ownReadyIds и rideableBounds (route-rides-03, автопроверка)', () => {
+  it('ownReadyIds — только свои готовые маршруты райдера, новые → старые, предел', async () => {
+    const first = await seedRiderRoute(h, ME);
+    await seedRiderRoute(h, ME, { status: 'processing' });
+    await seedRiderRoute(h, ME, { status: 'failed' });
+    await seedRiderRoute(h, OTHER);
+    await corridorRoute(h, ME);
+    const second = await seedApprovedRiderRoute(h, ME);
+    const third = await seedRiderRoute(h, ME);
+
+    expect(await port().ownReadyIds(ME, 10)).toEqual([third, second, first]);
+    expect(await port().ownReadyIds(ME, 2)).toEqual([third, second]);
+    expect(await port().ownReadyIds(UNKNOWN, 10)).toEqual([]);
+  });
+
+  it('rideableBounds — каталог и свой готовый с рамкой линии показа; чужой непубличный, не готовый, без линии — нет', async () => {
+    const platform = await corridorRoute(h, OTHER);
+    await inCatalog(platform);
+    const approved = await seedApprovedRiderRoute(h, OTHER);
+    const own = await seedRiderRoute(h, ME);
+    const noLine = await seedRiderRoute(h, ME);
+    await routesDb(h).geometries.deleteOne({ _id: noLine });
+    const hidden = [
+      await corridorRoute(h, ME),
+      await seedRiderRoute(h, OTHER),
+      await seedRiderRoute(h, ME, { status: 'processing' }),
+      await seedRiderRoute(h, OTHER, { publication: publicationDoc(h, 'hidden') }),
+      noLine,
+      UNKNOWN,
+    ];
+
+    const bounds = await port().rideableBounds([platform, approved, own, ...hidden], ME);
+    expect([...bounds.keys()].sort()).toEqual([platform, approved, own].sort());
+    expect(bounds.get(own)).toEqual([
+      RIDER_LINE[0]![0],
+      RIDER_LINE[0]![1],
+      RIDER_LINE[2]![0],
+      RIDER_LINE[2]![1],
+    ]);
+    expect(bounds.get(platform)).toEqual((await port().rideable(platform, ME))?.bounds);
+    // свой маршрут другому райдеру не виден
+    expect((await port().rideableBounds([own], OTHER)).size).toBe(0);
+    expect(await port().rideableBounds([], ME)).toEqual(new Map());
+  });
+});

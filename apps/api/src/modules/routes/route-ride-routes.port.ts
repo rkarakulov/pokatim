@@ -31,4 +31,15 @@ export interface RouteRideRoutes {
    * одним запросом, ≤ 500 id; невидимых нет в карте. Пустой вход — пустая карта без запроса.
    */
   rideableTitles(routeIds: readonly string[], userId: string): Promise<Map<string, string>>;
+  /**
+   * Свои готовые маршруты райдера (`ownRider`, `ready`, длина есть), новые → старые (`_id` убыв.), не больше `limit`
+   * (route-rides-03: план автопроверки, «Мои маршруты»).
+   */
+  ownReadyIds(userId: string, limit: number): Promise<string[]>;
+  /**
+   * Рамки линий показа видимых райдеру маршрутов (условие `rideable`), ≤ 25 id одним запросом маршрутов и одним —
+   * линий (route-rides-03: фильтр `boundsNear` плана автопроверки); невидимых и без линии нет в карте. Пустой вход —
+   * пустая карта без запроса.
+   */
+  rideableBounds(routeIds: readonly string[], userId: string): Promise<Map<string, Bounds>>;
 }
