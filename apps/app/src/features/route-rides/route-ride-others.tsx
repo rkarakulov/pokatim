@@ -14,7 +14,7 @@ import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { useRouteRideLeaderboard } from './queries';
-import { othersTruncated, routeCardPath } from './route-ride-format';
+import { othersShown, othersTruncated, routeCardPath } from './route-ride-format';
 import { OthersRows } from './route-ride-others-rows';
 
 /**
@@ -80,7 +80,7 @@ export function RouteRideOthersScreen({ routeId }: { routeId: string }) {
                   {othersTruncated(data) ? (
                     <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
                       {t('routes.others.truncated', {
-                        shown: data.rows.length,
+                        shown: othersShown(data),
                         count: data.total,
                       })}
                     </Text>

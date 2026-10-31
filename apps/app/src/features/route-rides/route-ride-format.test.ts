@@ -17,6 +17,7 @@ import {
   leaderboardMeView,
   leaderboardRowView,
   OTHERS_CARD_ROWS,
+  othersShown,
   othersTruncated,
   ownInRows,
   rideDayText,
@@ -321,5 +322,13 @@ describe('строки таблицы «Другие на маршруте» (ro
     expect(othersTruncated(leaderboard([], { total: 1, me: leaderboardMe() }))).toBe(false);
     const own = [leaderboardRow(), leaderboardRow({ place: 2, rideId: RIDE_ID })];
     expect(othersTruncated(leaderboard(own, { total: 3, me: leaderboardMe() }))).toBe(true);
+  });
+
+  it('показано строк — `rows` и своя вне `rows` (сноска «Показаны лучшие N из M»)', () => {
+    const rows = [leaderboardRow(), leaderboardRow({ place: 2 })];
+    expect(othersShown(leaderboard(rows))).toBe(2);
+    expect(othersShown(leaderboard(rows, { me: leaderboardMe() }))).toBe(3);
+    const own = [leaderboardRow(), leaderboardRow({ place: 2, rideId: RIDE_ID })];
+    expect(othersShown(leaderboard(own, { me: leaderboardMe() }))).toBe(2);
   });
 });

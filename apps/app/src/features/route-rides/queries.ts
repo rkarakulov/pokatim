@@ -102,9 +102,11 @@ export function useRouteRides(routeId: string, enabled: boolean) {
 /**
  * Таблица «Другие на маршруте» (route-rides-04, O3): лучшие заезды райдеров с согласием и своя строка — только с
  * сервера (места, `me`, `shared`, имена). 404 (маршрут не каталога, стал невидим, без длины) — `null` (блока нет, RC-B3).
- * Опроса нет: обновление — фокус, pull-to-refresh и инвалидации (профиль, проверка заезда).
+ * Опроса нет: обновление — возврат на экран после `staleTime` (наблюдатель подписан только в фокусе, как у
+ * `useRouteRides`), pull-to-refresh и инвалидации (профиль, проверка заезда).
  */
 export function useRouteRideLeaderboard(routeId: string, limit: number, enabled: boolean) {
+  const focused = useIsFocused();
   return useQuery({
     queryKey: routeRidesKeys.leaderboard(routeId, limit),
     queryFn: async (): Promise<RouteRideLeaderboard | null> => {
@@ -118,6 +120,8 @@ export function useRouteRideLeaderboard(routeId: string, limit: number, enabled:
       }
     },
     staleTime: DEFAULT_STALE_MS,
+    // экран не в фокусе — наблюдатель отписан; возврат после `staleTime` — перезапрос
+    subscribed: focused,
     enabled,
   });
 }

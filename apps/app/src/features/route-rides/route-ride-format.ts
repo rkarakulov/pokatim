@@ -251,9 +251,12 @@ export const leaderboardMeView = (me: RouteRideLeaderboardMe, now: Date | null):
 export const ownInRows = (rows: readonly RouteRideLeaderboardRow[]) =>
   rows.some((row) => row.rideId !== null);
 
+/** Показано строк: `rows` и своя, показанная отдельно (`me` вне `rows`) — число «Показаны лучшие N из M». */
+export const othersShown = (board: RouteRideLeaderboard) =>
+  board.rows.length + (board.me !== null && !ownInRows(board.rows) ? 1 : 0);
+
 /**
- * Сервер отдал не все строки (RC-B2): `total` включает зрителя — своя строка, показанная отдельно (`me` вне `rows`),
- * тоже видна, поэтому «Все (N)» и сноска — только если скрыт кто-то ещё.
+ * Сервер отдал не все строки (RC-B2): `total` включает зрителя — своя строка, показанная отдельно, тоже видна, поэтому
+ * «Все (N)» и сноска — только если скрыт кто-то ещё.
  */
-export const othersTruncated = (board: RouteRideLeaderboard) =>
-  board.total > board.rows.length + (board.me !== null && !ownInRows(board.rows) ? 1 : 0);
+export const othersTruncated = (board: RouteRideLeaderboard) => board.total > othersShown(board);

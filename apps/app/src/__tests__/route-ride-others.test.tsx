@@ -2,6 +2,7 @@
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { CatalogRouteDetail, RaceCard, RouteMapGeometry } from '@pokatim/contracts';
 import { onlineManager } from '@tanstack/react-query';
+import { router as expoRouter } from 'expo-router';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
 import type { RefreshControlProps } from 'react-native';
@@ -9,6 +10,7 @@ import type { RefreshControlProps } from 'react-native';
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
+import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
 import CatalogRouteRoute from '../app/routes/[id]';
 import RouteRideOthersRoute from '../app/routes/others/[routeId]';
@@ -17,11 +19,13 @@ import { appRoutes, tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
 import {
+  BEST_ID,
   leaderboard,
   leaderboardMe,
   leaderboardRow,
   RIDE_ID,
   RIDER_PUBLIC_ID,
+  rideRow,
   ridesPage,
   ROUTE_ID,
 } from './route-rides-fixtures';
@@ -98,6 +102,7 @@ const pullToRefresh = async (testID: string) => {
   });
 };
 const block = () => screen.findByTestId('route-ride-others');
+const advance = (ms: number) => act(() => jest.advanceTimersByTimeAsync(ms));
 
 /** Пять чужих строк: «Анна К.» — публичная, остальные — «Участник». */
 const fiveRows = () => [
@@ -330,6 +335,40 @@ describe('«Другие на маршруте» на карточке марш�
     expect(router.getPathname()).toBe(`/riders/${RIDER_PUBLIC_ID}`);
   });
 
+  it('опрос «Моих заездов» нашёл первый лучший заезд — таблица перезапрошена (RC-B6)', async () => {
+    signIn();
+    const best = rideRow({ id: BEST_ID, isBest: true });
+    jest
+      .mocked(api.listRouteRides)
+      .mockResolvedValueOnce(ridesPage([rideRow({ status: 'queued', elapsedSec: null })]))
+      .mockResolvedValue(
+        ridesPage([best], {
+          passedCount: 1,
+          best: { id: BEST_ID, elapsedSec: 7_477, rideStartedAt: '2026-10-12T06:30:00.000Z' },
+        }),
+      );
+    await openCatalog();
+    expect(await screen.findByText('Анна К.')).toBeOnTheScreen();
+    expect(getBoard).toHaveBeenCalledTimes(1);
+    await advance(3000);
+    await waitFor(() => expect(getBoard).toHaveBeenCalledTimes(2));
+    expect(getBoard).toHaveBeenLastCalledWith(TOKEN, ROUTE_ID, { limit: 5 });
+  });
+
+  it('первая загрузка «Моих заездов» с лучшим — без лишнего перезапроса таблицы', async () => {
+    signIn();
+    jest.mocked(api.listRouteRides).mockResolvedValue(
+      ridesPage([rideRow({ id: BEST_ID, isBest: true })], {
+        passedCount: 1,
+        best: { id: BEST_ID, elapsedSec: 7_477, rideStartedAt: '2026-10-12T06:30:00.000Z' },
+      }),
+    );
+    await openCatalog();
+    expect(await screen.findByText('Анна К.')).toBeOnTheScreen();
+    await advance(DEFAULT_STALE_MS);
+    expect(getBoard).toHaveBeenCalledTimes(1);
+  });
+
   it('«Все (12)» → полный список', async () => {
     signIn();
     const router = await openCatalog();
@@ -361,7 +400,7 @@ describe('полный список «Другие на маршруте» (`/ro
     expect(getBoard).toHaveBeenCalledWith(TOKEN, ROUTE_ID, { limit: 100 });
   });
 
-  it('скелетон → строки; своя вне 100 — отдельно; сноска «Показаны лучшие 100 из 240»', async () => {
+  it('скелетон → строки; своя вне 100 — отдельно; сноска «Показаны лучшие 101 из 240»', async () => {
     signIn();
     let release: () => void = () => undefined;
     getBoard.mockReturnValueOnce(
@@ -376,11 +415,36 @@ describe('полный список «Другие на маршруте» (`/ro
       await screen.findByTestId('route-ride-others-skeleton', { includeHiddenElements: true }),
     ).toBeOnTheScreen();
     await act(async () => release());
-    expect(await screen.findByText('Показаны лучшие 100 из 240')).toBeOnTheScreen();
+    // своя строка, показанная отдельно, входит в число показанных (как в `othersTruncated`)
+    expect(await screen.findByText('Показаны лучшие 101 из 240')).toBeOnTheScreen();
     expect(screen.getAllByText('Участник')).toHaveLength(100);
     expect(
       screen.getByRole('button', { name: 'Ваш заезд, 180, 2:15:00, 12 октября' }),
     ).toBeOnTheScreen();
+  });
+
+  it('без своей строки — сноска «Показаны лучшие 100 из 240»', async () => {
+    signIn();
+    getBoard.mockResolvedValue(leaderboard(hundred(), { total: 240 }));
+    await openOthers();
+    expect(await screen.findByText('Показаны лучшие 100 из 240')).toBeOnTheScreen();
+  });
+
+  it('возврат на экран после `staleTime` перезапрашивает таблицу', async () => {
+    signIn();
+    getBoard.mockResolvedValue(
+      leaderboard([
+        leaderboardRow({ place: 1, riderName: 'Анна К.', riderPublicId: RIDER_PUBLIC_ID }),
+      ]),
+    );
+    const router = await renderRouter(appRoutes, { initialUrl: `/routes/others/${ROUTE_ID}` });
+    await fireEvent.press(await screen.findByRole('link', { name: annaLink }));
+    await waitFor(() => expect(router.getPathname()).toBe(`/riders/${RIDER_PUBLIC_ID}`));
+    await advance(DEFAULT_STALE_MS + 1000);
+    expect(getBoard).toHaveBeenCalledTimes(1);
+    await act(() => expoRouter.back());
+    await waitFor(() => expect(router.getPathname()).toBe(`/routes/others/${ROUTE_ID}`));
+    await waitFor(() => expect(getBoard).toHaveBeenCalledTimes(2));
   });
 
   it('все строки показаны — без сноски', async () => {

@@ -367,15 +367,16 @@ function RouteSheetBody({
 
 /**
  * Лучший свой заезд сменился (опрос «Моих заездов» на карточке довёл проверку до финала без экрана результата) — своя
- * строка таблицы «Другие» устарела (route-rides-04, RC-B6). Первое значение — не смена.
+ * строка таблицы «Другие» устарела (route-rides-04, RC-B6). `bestId`: `undefined` — список не загружен, `null` — лучшего
+ * нет (или 404); смена — `null → id`, `id → null`, `id → id'`; первая загрузка (`undefined → …`) — не смена.
  */
-function useBestRideChange(routeId: string, bestId: string | undefined) {
+function useBestRideChange(routeId: string, bestId: string | null | undefined) {
   const queryClient = useQueryClient();
   const previous = useRef(bestId);
   useEffect(() => {
     const was = previous.current;
     previous.current = bestId;
-    if (was !== undefined && bestId !== was) {
+    if (was !== undefined && bestId !== undefined && bestId !== was) {
       void queryClient.invalidateQueries({ queryKey: routeRidesKeys.leaderboardAll(routeId) });
     }
   }, [bestId, queryClient, routeId]);
@@ -458,7 +459,10 @@ export function RouteDetailScreen({
   const rides = useRouteRides(id, ridesEnabled);
   // route-rides-04: «Другие на маршруте» — те же условия, что у «Моих заездов»
   const others = useRouteRideLeaderboard(id, OTHERS_CARD_ROWS, ridesEnabled);
-  useBestRideChange(id, rides.data?.summary.best?.id);
+  useBestRideChange(
+    id,
+    rides.data === undefined ? undefined : (rides.data?.summary.best?.id ?? null),
+  );
   const now = useMinskClockAfterMount([
     route.dataUpdatedAt,
     races.dataUpdatedAt,
