@@ -188,6 +188,20 @@ describe('вкладка «Райды» (S3)', () => {
     expect(listRides).toHaveBeenCalledWith(liveSession.accessToken, { city: [], limit: 20 });
   });
 
+  it('фото организатора (ride-photo P4) — герой ленты с фото под затемнением', async () => {
+    listRides.mockResolvedValue(page([{ ...hero, photo: { id: 'PhOtOiDpHoToIdPhOtOiD_' } }]));
+    jest
+      .mocked(api.ridePhotoUrl)
+      .mockImplementation((id) => `https://api.test/v1/ride-photos/${id}`);
+    await openRides();
+
+    expect(await screen.findByRole('link', { name: heroLabel })).toBeOnTheScreen();
+    expect(screen.getByTestId('section-hero-photo', { includeHiddenElements: true })).toHaveProp(
+      'source',
+      { uri: 'https://api.test/v1/ride-photos/PhOtOiDpHoToIdPhOtOiD_' },
+    );
+  });
+
   it('действия строк по viewer сервера: «Вы идёте», «Вы организатор», «Мест нет», «Райд отменён», «Я иду»', async () => {
     await openRides();
     await screen.findByRole('link', { name: heroLabel });

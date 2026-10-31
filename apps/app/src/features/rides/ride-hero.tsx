@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { GoingStack } from '@/components/going-stack';
 import { SectionHero } from '@/components/section-hero';
 import { PushSoftPrompt } from '@/features/notifications/push-soft-prompt';
+import { api } from '@/lib/api';
 
 import { goingCaption, rideHeroDate, rideHeroMeta } from './format';
 import { RideRsvpAction } from './going-action';
@@ -13,7 +14,8 @@ import { RideRsvpAction } from './going-action';
 /**
  * Герой «Ближайший райд» (вкладка «Райды» и Главная): типографский `SectionHero` — кикер, дата «Сб 3 октября, 9:00»,
  * название, мета «104 км · темп 25–27 км/ч · Минск, место»; под ним стопка участников и одна кнопка участия.
- * Фото организатора нет (`media`, §4). Нажатие на героя — карточка райда.
+ * Фото организатора (`ride.photo`, ride-photo P4) — под затемнением в блоке героя, без фото — типографский. Нажатие
+ * на героя — карточка райда.
  */
 export function RideHero({
   ride,
@@ -37,6 +39,7 @@ export function RideHero({
         title={ride.title}
         meta={distance ? [rideHeroMeta(ride), distance] : [rideHeroMeta(ride)]}
         onPress={onPress}
+        photo={ride.photo ? api.ridePhotoUrl(ride.photo.id) : null}
       />
       <GoingStack count={ride.goingCount} caption={goingCaption(ride, ride.viewer)} />
       <View style={styles.action}>

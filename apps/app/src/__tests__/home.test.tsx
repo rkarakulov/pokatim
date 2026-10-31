@@ -525,6 +525,21 @@ describe('Главная: раздел «Кофе-райды» (блок 05, S6)
     expect(router.getPathname()).toBe(`/rides/${ride.id}`);
   });
 
+  it('фото организатора (ride-photo P4) — герой с фото под затемнением, метка героя та же', async () => {
+    listRides.mockResolvedValue(ridePage({ ...ride, photo: { id: 'PhOtOiDpHoToIdPhOtOiD_' } }));
+    jest
+      .mocked(api.ridePhotoUrl)
+      .mockImplementation((id) => `https://api.test/v1/ride-photos/${id}`);
+    await openHome();
+
+    expect(await screen.findByLabelText(rideHero)).toBeOnTheScreen();
+    expect(screen.getByTestId('section-hero-photo', { includeHiddenElements: true })).toHaveProp(
+      'source',
+      { uri: 'https://api.test/v1/ride-photos/PhOtOiDpHoToIdPhOtOiD_' },
+    );
+    expect(screen.getByTestId('photo-scrim', { includeHiddenElements: true })).toBeTruthy();
+  });
+
   it('«Я иду» с Главной — запрос с Bearer, после ответа раздел перезапрошен', async () => {
     joinRide.mockResolvedValue({
       ride: { ...ride, goingCount: 6, description: null },

@@ -1,6 +1,10 @@
 import { size, space, stroke } from '@pokatim/design-tokens';
 import { textStyle, useTheme } from '@rkarakulov/ui';
+import { Image } from 'expo-image';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { PhotoScrim } from './photo-scrim';
 
 export interface SectionHeroProps {
   /** Кикер героя («Окно гонки», «Ближайший старт»); `null` — без строки кикера. */
@@ -12,16 +16,22 @@ export interface SectionHeroProps {
   meta?: readonly string[];
   /** Переход в карточку объекта (блок 03): блок героя — ссылка, метка для скринридера та же. */
   onPress?: () => void;
+  /** Адрес фото героя (фото организатора райда, ride-photo P4): под затемнением, текст — `onPhoto`; нет — типографский. */
+  photo?: string | null;
 }
 
 /**
- * Типографский герой раздела Главной (`.hero.fb-type` прототипа): кикер → дата → название → линия 1 px, под ним —
- * мета. Обложек нет (нет `media`), поэтому всегда типографский; вариант с фото и скримом — кандидат `HeroCard` в
- * `@rkarakulov/ui` (R8 блока 02). Ставится в колонку с полями `gutter`: блок героя выходит во всю ширину экрана.
- * Для скринридера — один элемент «кикер. название. даты»; с `onPress` — ссылка (роль `link`), без него не нажимается.
+ * Герой раздела Главной (`.hero.fb-type` прототипа): кикер → дата → название → линия 1 px, под ним — мета. Без фото —
+ * типографский; с `photo` (фото организатора райда) — фото `cover` по центру под затемнением `PhotoScrim`, текст и
+ * линия — роль `text.onPhoto`; фото не загрузилось — типографский (вариант с фото — кандидат `HeroCard` в
+ * `@rkarakulov/ui`, R8 блока 02). Ставится в колонку с полями `gutter`: блок героя выходит во всю ширину экрана.
+ * Для скринридера — один элемент «кикер. название. даты» (фото декоративное); с `onPress` — ссылка (роль `link`).
  */
-export function SectionHero({ kicker, date, title, meta = [], onPress }: SectionHeroProps) {
+export function SectionHero({ kicker, date, title, meta = [], onPress, photo }: SectionHeroProps) {
   const theme = useTheme();
+  const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
+  const shownPhoto = photo && photo !== failedPhoto ? photo : null;
+  const ink = shownPhoto ? theme.text.onPhoto : theme.text.primary;
   const dateText = date.unit ? `${date.value} ${date.unit}` : date.value;
   const Block = onPress ? Pressable : View;
 
@@ -33,24 +43,39 @@ export function SectionHero({ kicker, date, title, meta = [], onPress }: Section
         {...(onPress ? { accessibilityRole: 'link' as const, onPress } : {})}
         style={[styles.hero, { backgroundColor: theme.surface.raised }]}
       >
-        {kicker ? (
-          <Text style={[textStyle('label'), { color: theme.text.primary }]}>{kicker}</Text>
+        {shownPhoto ? (
+          <>
+            <Image
+              testID="section-hero-photo"
+              source={{ uri: shownPhoto }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              contentPosition="center"
+              cachePolicy="memory-disk"
+              accessible={false}
+              accessibilityLabel=""
+              accessibilityIgnoresInvertColors
+              onError={() => setFailedPhoto(shownPhoto)}
+            />
+            <PhotoScrim />
+          </>
         ) : null}
+        {kicker ? <Text style={[textStyle('label'), { color: ink }]}>{kicker}</Text> : null}
         <View style={styles.dateRow}>
-          <Text style={[textStyle('displayNumeralDate'), { color: theme.text.primary }]}>
-            {date.value}
-          </Text>
+          <Text style={[textStyle('displayNumeralDate'), { color: ink }]}>{date.value}</Text>
           {date.unit ? (
-            <Text style={[textStyle('titleSm'), { color: theme.text.secondary }]}>{date.unit}</Text>
+            <Text
+              style={[
+                textStyle('titleSm'),
+                { color: shownPhoto ? theme.text.onPhoto : theme.text.secondary },
+              ]}
+            >
+              {date.unit}
+            </Text>
           ) : null}
         </View>
-        <Text style={[textStyle('displaySm'), styles.title, { color: theme.text.primary }]}>
-          {title}
-        </Text>
-        <View
-          testID="section-hero-rule"
-          style={[styles.rule, { backgroundColor: theme.text.primary }]}
-        />
+        <Text style={[textStyle('displaySm'), styles.title, { color: ink }]}>{title}</Text>
+        <View testID="section-hero-rule" style={[styles.rule, { backgroundColor: ink }]} />
       </Block>
       {meta.length > 0 ? (
         <View style={styles.meta}>
@@ -72,6 +97,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -size.gutter,
     paddingHorizontal: size.gutter,
     paddingVertical: space.s5,
+    overflow: 'hidden',
   },
   dateRow: {
     flexDirection: 'row',
