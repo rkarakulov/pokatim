@@ -398,8 +398,16 @@ paths:
   будущие `published` свои — `cancelled` (`organizer_unavailable`) по одному райду в транзакции с событием
   `rides.ride-cancelled` (ADR-0017); скрытые будущие свои из `published` —
   `hiddenFromStatus: 'cancelled'` (статус `hidden` не меняется, F6); «Не иду» в чужих будущих `published`/`hidden`
-  (`$pull` + `$inc goingCount −1`); `organizerName: null` во всех своих райдах (A6). Прошедшие чужие — без изменений;
+  (`$pull` + `$inc goingCount −1`); `organizerName: null` во всех своих райдах (A6); фото организатора — ниже. Прошедшие чужие — без изменений;
   жалобы (`ride_reports`) хранятся (A6).
+- Фото организатора (ride-photo, ADR-0028, миграция `0046_ride_photos`) — `ride_photos`: `{ _id: randomToken, rideId,
+  organizerUserId, bytes: Binary JPEG ≤ 1600 px, contentType, width, height, bytesLength, createdAt }`, индексы
+  `ride_photos_ride_unique` `{ rideId }` (одно фото на райд) и `ride_photos_organizer_idx` `{ organizerUserId }`
+  (стирание); единственный писатель — `RidePhotosRepository` (`RidesCoreModule`); `bytes` читает только `findBytes`
+  (отдача и рендер 4a). Ссылка — `rides.photoId` (без бэкфилла, `?? null`, без индекса; `version` не меняет). Замена,
+  удаление и сброс модератором — транзакции, **первой записью пишут документ райда** (`setPhoto` / `clearPhoto` /
+  `resetPhoto` с условием в фильтре), затем «прежнее удалено → новое вставлено» (порядок обязателен: уникальный
+  `rideId`). Стирание — `clearPhotosOf` (ссылки) → `deleteAllOf` (документы).
 - Жалобы (05b): `ride_reports` — единственный писатель `RideReportsRepository`; **исключение из append-only
   модерации**: содержание жалобы неизменно, единственный переход — закрытие `resolvedAt: null → дата` (`updateMany`
   с `resolvedAt: null` в фильтре, `$set` только `resolvedAt/resolution/resolvedBy`), удалений нет; решения и причины —
