@@ -695,7 +695,8 @@ RC-A1, ADR-0019).
 - Участки маршрута (route-rides-05, `docs/product/routes.md` U1–U4): разбиение — `routeSections(line, widthM)`
   (`packages/tracks/src/corridor/sections.ts`, чистая, только серверный вход): границы через 10 км по chainage
   `matchLine`, хвост < 5 км — к последнему, < 15 км или > 30 участков — `[]`, концы участка ≤ `2·corridorGateRadiusM +
-  50` м — слияние с соседним. Сверка — `analyzeSections` (белый список `PARSE_FUNCTIONS`): неизменённые
+  50` м или линия, снова подходящая к своему началу/концу ближе этого (`returnsTo`, Q1: движок завершает попытку на
+  повторном входе в ворота; «туда-обратно» по одной дороге — без участков), — слияние с соседним. Сверка — `analyzeSections` (белый список `PARSE_FUNCTIONS`): неизменённые
   `prepareCorridor`/`matchCorridor` на подлиниях (`sectionLine`, `isLoop: false`), файл разбирается один раз; версия —
   `ROUTE_SECTIONS_VERSION`, отдельно от `CORRIDOR_ENGINE_VERSION` (движок и golden не меняются). В `RouteRideEvaluator`
   — второй вызов потока **после** итога движка: `evaluate(ride, { sections })`, ручная проверка — `always`,
