@@ -1,6 +1,6 @@
 import type { Binary, Collection, Db } from 'mongodb';
 
-/** Фото организатора райда (ride-photo, ADR-0028). Создаёт миграция `0046_ride_photos`; писатель — `RidePhotosRepository`. */
+/** Фото организатора райда (ride-photo, ADR-0028). Создаёт миграция `0047_ride_photos`; писатель — `RidePhotosRepository`. */
 export const RIDE_PHOTOS_COLLECTIONS = { photos: 'ride_photos' } as const;
 
 /**
