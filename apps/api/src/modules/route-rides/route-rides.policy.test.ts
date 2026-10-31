@@ -1,8 +1,10 @@
+import { ROUTE_RIDE_SECTIONS_MAX } from '@pokatim/contracts';
 import type { Bounds } from '@pokatim/tracks';
+import { ROUTE_SECTION_POLICY } from '@pokatim/tracks/parse';
 import { describe, expect, it } from 'vitest';
 
 import type { ActivityRef } from '../tracks';
-import type { RouteRideDoc } from './route-rides.collection';
+import type { RouteRideDoc, RouteRideSectionDoc } from './route-rides.collection';
 import {
   autoEligible,
   autoPlan,
@@ -17,6 +19,7 @@ import {
   previousOf,
   ROUTE_RIDE_AUTO_POLICY,
   ROUTE_RIDE_POLICY,
+  sectionsOf,
   sortRides,
   summaryOf,
   verdictOf,
@@ -420,5 +423,114 @@ describe('автопроверка (route-rides-03)', () => {
     expect(picked.at(-1)).toBe(route(21));
     expect(nearRoutes(ordered, bounds, near, 2)).toEqual([route(0), route(3)]);
     expect(nearRoutes(ordered, bounds, near, 0)).toEqual([]);
+  });
+});
+
+describe('участки (route-rides-05): sectionsOf', () => {
+  const A: [number, number] = [0, 10_000];
+  const B: [number, number] = [10_000, 20_000];
+  const item = (
+    [fromM, toM]: [number, number],
+    elapsedSec: number | null,
+  ): RouteRideSectionDoc => ({
+    fromM,
+    toM,
+    status: elapsedSec === null ? 'not_passed' : 'passed',
+    elapsedSec,
+  });
+  const withSections = (
+    items: RouteRideSectionDoc[],
+    overrides: Parameters<typeof ride>[0] = {},
+    version = 1,
+  ) => ride({ ...overrides, sections: { version, failure: null, items } });
+
+  it('предел участков разбиения = предел контракта', () => {
+    expect(ROUTE_SECTION_POLICY.maxSections).toBe(ROUTE_RIDE_SECTIONS_MAX);
+  });
+
+  it('нет поля, null, отказ — участков нет', () => {
+    const old = ride();
+    expect(sectionsOf([old], old)).toEqual([]);
+    const cleared = ride({ sections: null });
+    expect(sectionsOf([cleared], cleared)).toEqual([]);
+    const failed = ride({ sections: { version: 1, failure: 'timeout', items: [] } });
+    expect(sectionsOf([failed], failed)).toEqual([]);
+  });
+
+  it('один заезд — пройденный участок лучший, дельта 0; непройденный — без времени и лучшего', () => {
+    const only = withSections([item(A, 1200), item(B, null)]);
+    expect(sectionsOf([only], only)).toEqual([
+      {
+        fromM: 0,
+        toM: 10_000,
+        status: 'passed',
+        elapsedSec: 1200,
+        isBest: true,
+        bestElapsedSec: 1200,
+        deltaToBestSec: 0,
+      },
+      {
+        fromM: 10_000,
+        toM: 20_000,
+        status: 'not_passed',
+        elapsedSec: null,
+        isBest: false,
+        bestElapsedSec: null,
+        deltaToBestSec: null,
+      },
+    ]);
+  });
+
+  it('лучший у другого заезда — дельта > 0 и лучшее время; у непройденного — лучшее время есть', () => {
+    const fast = withSections([item(A, 1100), item(B, 1300)], { day: -1 });
+    const slow = withSections([item(A, 1250), item(B, null)]);
+    expect(sectionsOf([fast, slow], slow)).toMatchObject([
+      { isBest: false, bestElapsedSec: 1100, deltaToBestSec: 150 },
+      {
+        status: 'not_passed',
+        elapsedSec: null,
+        isBest: false,
+        bestElapsedSec: 1300,
+        deltaToBestSec: null,
+      },
+    ]);
+    expect(sectionsOf([fast, slow], fast)[0]).toMatchObject({ isBest: true, deltaToBestSec: 0 });
+  });
+
+  it('ничья по времени — раньше заезд, затем меньший _id (compareRides)', () => {
+    const later = withSections([item(A, 1200)], { day: 1 });
+    const earlier = withSections([item(A, 1200)], { day: 0 });
+    expect(sectionsOf([later, earlier], earlier)[0]!.isBest).toBe(true);
+    expect(sectionsOf([later, earlier], later)[0]!.isBest).toBe(false);
+    const first = withSections([item(A, 1200)]);
+    const second = withSections([item(A, 1200)]);
+    expect(first._id < second._id).toBe(true);
+    expect(sectionsOf([second, first], first)[0]!.isBest).toBe(true);
+    expect(sectionsOf([second, first], second)[0]).toMatchObject({
+      isBest: false,
+      deltaToBestSec: 0,
+    });
+  });
+
+  it('другая версия или другие границы — не сравниваются', () => {
+    const otherVersion = withSections([item(A, 900)], {}, 2);
+    const otherBounds = withSections([item([0, 10_001], 900)]);
+    const own = withSections([item(A, 1200)]);
+    expect(sectionsOf([otherVersion, otherBounds, own], own)[0]).toMatchObject({
+      isBest: true,
+      bestElapsedSec: 1200,
+      deltaToBestSec: 0,
+    });
+  });
+
+  it('участок, пройденный в заезде с маршрутом «Не пройден», участвует в лучшем', () => {
+    const notPassedRoute = withSections([item(A, 1000), item(B, null)], { day: -1 });
+    expect(notPassedRoute.status).toBe('not_passed');
+    const passedRoute = withSections([item(A, 1200), item(B, 1300)], { elapsed: 2600 });
+    expect(sectionsOf([notPassedRoute, passedRoute], passedRoute)[0]).toMatchObject({
+      isBest: false,
+      bestElapsedSec: 1000,
+      deltaToBestSec: 200,
+    });
   });
 });

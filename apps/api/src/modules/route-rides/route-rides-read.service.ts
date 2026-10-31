@@ -19,6 +19,7 @@ import {
   effectiveStatus,
   ROUTE_RIDE_POLICY,
   type RouteRideFacts,
+  sectionsOf,
   sortRides,
   summaryOf,
 } from './route-rides.policy';
@@ -113,7 +114,9 @@ export class RouteRidesReadService {
       comparison: comparisonOf(rides, ride),
       createdAt: ride.createdAt.toISOString(),
       checkedAt: ride.checkedAt?.toISOString() ?? null,
-      sections: [],
+      // участки — только у итога движка; у очереди, проверки и провала (в т. ч. зависших) — нет
+      sections:
+        fields.status === 'passed' || fields.status === 'not_passed' ? sectionsOf(rides, ride) : [],
     };
   }
 

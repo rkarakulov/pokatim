@@ -627,3 +627,96 @@ describe('кандидаты', () => {
     ).toHaveLength(30);
   });
 });
+
+describe('участки (route-rides-05): деталь — сравнение только со своими видимыми заездами', () => {
+  const sections = (elapsedSec: number) => ({
+    version: 1,
+    failure: null,
+    items: [
+      { fromM: 0, toM: 10_000, status: 'passed' as const, elapsedSec },
+      { fromM: 10_000, toM: 20_000, status: 'not_passed' as const, elapsedSec: null },
+    ],
+  });
+  const setSections = (rideId: string, value: ReturnType<typeof sections>) =>
+    routeRidesDb(h).rides.updateOne({ _id: rideId }, { $set: { sections: value } });
+
+  it('ключи участка; лучший и дельта среди своих; удалённая активность и чужой заезд не влияют; без поля и не итог — []', async () => {
+    const r = await rider(h);
+    const other = await rider(h, 'other@example.com');
+    const routeId = await catalogCorridorRoute(h, OTHER);
+    const fast = await checked(r.auth, routeId, rideGpx('clean.gpx', dayAt(0)));
+    const slow = await checked(r.auth, routeId, rideGpx('clean.gpx', dayAt(1)));
+    const removed = await checked(r.auth, routeId, rideGpx('clean.gpx', dayAt(2)));
+    const foreign = await checked(other.auth, routeId, rideGpx('clean.gpx', dayAt(0)));
+    await routeRidesWorker(h).drain();
+    // маршрут 8 км — участков нет
+    expect((await detail(r.auth, routeId, fast.rideId)).sections).toEqual([]);
+
+    await setSections(fast.rideId, sections(1100));
+    await setSections(slow.rideId, sections(1250));
+    await setSections(removed.rideId, sections(900));
+    await setSections(foreign.rideId, sections(500));
+    expect(
+      (await call(h, 'POST', `/v1/tracks/uploads/${removed.uploadId}/delete`, {}, r.auth)).status,
+    ).toBe(204);
+
+    const res = await get(r.auth, ridesUrl(routeId, `/${slow.rideId}`));
+    const body = res.body as { sections: object[] };
+    for (const section of body.sections) {
+      expect(Object.keys(section).sort()).toEqual([
+        'bestElapsedSec',
+        'deltaToBestSec',
+        'elapsedSec',
+        'fromM',
+        'isBest',
+        'status',
+        'toM',
+      ]);
+    }
+    expect(RouteRideDetail.parse(body).sections).toEqual([
+      {
+        fromM: 0,
+        toM: 10_000,
+        status: 'passed',
+        elapsedSec: 1250,
+        isBest: false,
+        bestElapsedSec: 1100,
+        deltaToBestSec: 150,
+      },
+      {
+        fromM: 10_000,
+        toM: 20_000,
+        status: 'not_passed',
+        elapsedSec: null,
+        isBest: false,
+        bestElapsedSec: null,
+        deltaToBestSec: null,
+      },
+    ]);
+    expect((await detail(r.auth, routeId, fast.rideId)).sections[0]).toMatchObject({
+      isBest: true,
+      deltaToBestSec: 0,
+    });
+    // чужой заезд видит своё сравнение — без моих заездов
+    expect((await detail(other.auth, routeId, foreign.rideId)).sections[0]).toMatchObject({
+      isBest: true,
+      bestElapsedSec: 500,
+    });
+
+    // старый документ (до 05) — без поля
+    await routeRidesDb(h).rides.updateOne({ _id: fast.rideId }, { $unset: { sections: '' } });
+    expect((await detail(r.auth, routeId, fast.rideId)).sections).toEqual([]);
+    expect((await detail(r.auth, routeId, slow.rideId)).sections[0]).toMatchObject({
+      isBest: true,
+      bestElapsedSec: 1250,
+    });
+    // не итог движка — участков нет
+    for (const status of ['queued', 'failed'] as const) {
+      await routeRidesDb(h).rides.updateOne(
+        { _id: slow.rideId },
+        { $set: { status, updatedAt: h.clock.now() } },
+      );
+      expect((await detail(r.auth, routeId, slow.rideId)).sections).toEqual([]);
+    }
+  });
+});
