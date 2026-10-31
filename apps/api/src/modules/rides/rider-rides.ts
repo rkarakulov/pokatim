@@ -2,10 +2,17 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
 import type { ChangedCursor, RiderChanges } from '../../changed-since';
-import { RIDER_RIDES_MAX_ROWS, type RiderRideFact, type RiderRides } from './rider-rides.port';
+import {
+  RIDER_RIDES_MAX_ROWS,
+  type RiderRideFact,
+  type RiderRideInfo,
+  type RiderRides,
+} from './rider-rides.port';
 import { RidesRepository } from './rides.repository';
 
-/** Реализация порта `RiderRides` (achievements): условия R8 — только в `RidesRepository.pastFactsOf`. */
+/**
+ * Реализация порта `RiderRides` (achievements): условия R8 — только в `RidesRepository.pastFactsOf` / `pastByIds`.
+ */
 @Injectable()
 export class RiderRidesService implements RiderRides {
   private readonly logger = new Logger(RiderRidesService.name);
@@ -40,5 +47,11 @@ export class RiderRidesService implements RiderRides {
       userIds: [...new Set(docs.flatMap((doc) => doc.participants.map((p) => p.userId)))],
       next: last ? { at: last.startsAt, id: last._id } : null,
     };
+  }
+
+  async ridesOf(rideIds: readonly string[]): Promise<Map<string, RiderRideInfo>> {
+    if (rideIds.length === 0) return new Map();
+    const docs = await this.repository.pastByIds([...new Set(rideIds)], this.clock.now());
+    return new Map(docs.map((doc) => [doc._id, { title: doc.title, startsAt: doc.startsAt }]));
   }
 }

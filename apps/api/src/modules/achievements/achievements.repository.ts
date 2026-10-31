@@ -15,8 +15,11 @@ import {
   achievementsCollections,
 } from './achievements.collection';
 import type {
+  AchievementObjectRef,
+  AchievementOverride,
   Earned,
   FactAchievementCode,
+  LevelRank,
   SeasonalEarned,
   SeasonalKey,
 } from './achievements.policy';
@@ -30,13 +33,21 @@ export const ACHIEVEMENT_SEASON_GRANTS_UNIQUE_INDEX =
 /** Сезонная выдача без служебных полей записи. */
 export type StoredSeasonGrantDoc = Pick<
   AchievementSeasonGrantDoc,
-  'code' | 'seasonId' | 'factAt' | 'seenAt' | 'revokedAt'
+  'code' | 'seasonId' | 'factAt' | 'seenAt' | 'revokedAt' | 'override'
 >;
 
 /** Выдача без служебных полей записи. */
 export type StoredGrantDoc = Pick<
   AchievementGrantDoc,
-  'code' | 'object' | 'factAt' | 'seenAt' | 'revokedAt' | 'level' | 'seenLevel' | 'notifiedLevel'
+  | 'code'
+  | 'object'
+  | 'factAt'
+  | 'seenAt'
+  | 'revokedAt'
+  | 'level'
+  | 'seenLevel'
+  | 'notifiedLevel'
+  | 'override'
 >;
 
 /** Документ выдачи до записи `refresh`/`restore` — по нему решается, нужно ли уведомление (`noticeDue`). */
@@ -47,17 +58,59 @@ export type GrantBefore = Pick<
 
 /** Выдача по id для порта уведомлений (`ACHIEVEMENT_NOTICES`): несезонная или сезонная. */
 export type NoticeGrant =
-  | ({ grant: 'fact' } & Pick<AchievementGrantDoc, 'userId' | 'code' | 'revokedAt' | 'level'>)
+  | ({ grant: 'fact' } & Pick<
+      AchievementGrantDoc,
+      'userId' | 'code' | 'revokedAt' | 'level' | 'object' | 'override'
+    >)
   | ({ grant: 'season' } & Pick<
       AchievementSeasonGrantDoc,
-      'userId' | 'code' | 'seasonId' | 'revokedAt'
+      'userId' | 'code' | 'seasonId' | 'revokedAt' | 'override'
     >);
+
+/** Ручная выдача несезонного (achievements-panel, 5.A): объект и дата — из порта владельца, уровень — из формы. */
+export interface ManualGrant {
+  object: AchievementObjectRef;
+  factAt: Date;
+  level: LevelRank | null;
+}
+
+/** Документ выдачи до ручного отзыва или снятия решения — значения деталей журнала. */
+export type ManualBefore = Pick<AchievementGrantDoc, '_id' | 'object' | 'level' | 'override'>;
+export type ManualSeasonBefore = Pick<AchievementSeasonGrantDoc, '_id' | 'seasonId' | 'override'>;
+
+/** Выдачи райдера для панели (все, включая отозванные). */
+export type PanelGrantDoc = Pick<
+  AchievementGrantDoc,
+  'code' | 'object' | 'factAt' | 'grantedAt' | 'revokedAt' | 'level' | 'override'
+>;
+export type PanelSeasonGrantDoc = Pick<
+  AchievementSeasonGrantDoc,
+  'code' | 'seasonId' | 'factAt' | 'grantedAt' | 'revokedAt' | 'override'
+>;
+
+/** Ручные решения райдера (публичный список, RC-1): только документы с `override`. */
+export type OverrideGrantDoc = Pick<
+  AchievementGrantDoc,
+  'code' | 'object' | 'factAt' | 'revokedAt' | 'level'
+> & { override: AchievementOverride };
+export type OverrideSeasonGrantDoc = Pick<
+  AchievementSeasonGrantDoc,
+  'code' | 'seasonId' | 'factAt' | 'revokedAt'
+> & { override: AchievementOverride };
+
+/** Фильтр записи сверки: документ без ручного решения (нет поля — тоже, achievements-panel, 5.B). */
+const AUTOMATIC = { override: null } as const;
 
 /**
  * Единственный писатель `achievement_grants`, `achievement_season_grants`, `achievement_syncs` (ADR-0020). Каждый фильтр
  * — с `userId` или `_id` своей коллекции; каждая запись — одна условная операция над одним документом (RC-2):
  * параллельные сверки одного райдера сходятся к одному состоянию. Шаги, которые могут дать уведомление
  * (achievements-push), сверка выполняет в транзакции с outbox — методы с `session` (`*InTx`, `restoreOrRefresh`).
+ * Ручные решения панели (achievements-panel, поле `override`): каждая запись сверки (`revoke`, `restoreOrRefresh`,
+ * `revokeSeasonal`, `restoreSeasonal`) — с условием `override: null` (устаревший план не перезапишет ручное решение);
+ * вставки сверки защищает уникальный индекс. Ручные операции (`manual*InTx`, `insertManual*InTx`, `clear*InTx`) —
+ * первая операция транзакции панели (замок выдачи). Стирание аккаунта (`deleteAllOf`) уносит и решения; поздняя ручная
+ * выдача после проверки живости и до стирания оставит документ — повторный проход стирания его уберёт (принято, 7.2).
  */
 @Injectable()
 export class AchievementsRepository {
@@ -83,6 +136,7 @@ export class AchievementsRepository {
             level: 1,
             seenLevel: 1,
             notifiedLevel: 1,
+            override: 1,
           },
         },
       )
@@ -131,10 +185,10 @@ export class AchievementsRepository {
     await this.c.grants.insertOne(grantDoc(id, userId, code, earned, null, now), { session: tx });
   }
 
-  /** Отзыв видимой выдачи (A4); уже отозванная — без записи. */
+  /** Отзыв видимой выдачи (A4); уже отозванная или с ручным решением — без записи. */
   async revoke(userId: string, code: FactAchievementCode, now: Date): Promise<boolean> {
     const result = await this.c.grants.updateOne(
-      { userId, code, revokedAt: null },
+      { userId, code, revokedAt: null, ...AUTOMATIC },
       { $set: { revokedAt: now, updatedAt: now } },
     );
     return result.modifiedCount === 1;
@@ -158,7 +212,7 @@ export class AchievementsRepository {
   ): Promise<GrantBefore | null> {
     const rank = earned.level ?? 1;
     return this.c.grants.findOneAndUpdate(
-      { userId, code, revokedAt: revoked ? { $ne: null } : null },
+      { userId, code, revokedAt: revoked ? { $ne: null } : null, ...AUTOMATIC },
       [
         {
           $set: {
@@ -186,7 +240,17 @@ export class AchievementsRepository {
     return this.c.seasonGrants
       .find<StoredSeasonGrantDoc>(
         { userId },
-        { projection: { _id: 0, code: 1, seasonId: 1, factAt: 1, seenAt: 1, revokedAt: 1 } },
+        {
+          projection: {
+            _id: 0,
+            code: 1,
+            seasonId: 1,
+            factAt: 1,
+            seenAt: 1,
+            revokedAt: 1,
+            override: 1,
+          },
+        },
       )
       .toArray();
   }
@@ -225,30 +289,40 @@ export class AchievementsRepository {
     if (kind === 'fact') {
       const doc = await this.c.grants.findOne(
         { _id: id },
-        { projection: { _id: 0, userId: 1, code: 1, revokedAt: 1, level: 1 } },
+        {
+          projection: {
+            _id: 0,
+            userId: 1,
+            code: 1,
+            revokedAt: 1,
+            level: 1,
+            object: 1,
+            override: 1,
+          },
+        },
       );
       return doc && { grant: 'fact', ...doc };
     }
     const doc = await this.c.seasonGrants.findOne(
       { _id: id },
-      { projection: { _id: 0, userId: 1, code: 1, seasonId: 1, revokedAt: 1 } },
+      { projection: { _id: 0, userId: 1, code: 1, seasonId: 1, revokedAt: 1, override: 1 } },
     );
     return doc && { grant: 'season', ...doc };
   }
 
-  /** Отзыв видимой сезонной выдачи (S4); уже отозванная — без записи. */
+  /** Отзыв видимой сезонной выдачи (S4); уже отозванная или с ручным решением — без записи. */
   async revokeSeasonal(userId: string, key: SeasonalKey, now: Date): Promise<boolean> {
     const result = await this.c.seasonGrants.updateOne(
-      { userId, code: key.code, seasonId: key.seasonId, revokedAt: null },
+      { userId, code: key.code, seasonId: key.seasonId, revokedAt: null, ...AUTOMATIC },
       { $set: { revokedAt: now, updatedAt: now } },
     );
     return result.modifiedCount === 1;
   }
 
-  /** Восстановление отозванной сезонной выдачи (S4): `seenAt` и `grantedAt` не трогаются. */
+  /** Восстановление отозванной сезонной выдачи (S4) без ручного решения: `seenAt` и `grantedAt` не трогаются. */
   async restoreSeasonal(userId: string, key: SeasonalKey, now: Date): Promise<boolean> {
     const result = await this.c.seasonGrants.updateOne(
-      { userId, code: key.code, seasonId: key.seasonId, revokedAt: { $ne: null } },
+      { userId, code: key.code, seasonId: key.seasonId, revokedAt: { $ne: null }, ...AUTOMATIC },
       { $set: { revokedAt: null, updatedAt: now } },
     );
     return result.modifiedCount === 1;
@@ -339,6 +413,239 @@ export class AchievementsRepository {
     return result.modifiedCount;
   }
 
+  // --- ручные решения панели (achievements-panel, 5.A): первая операция транзакции действия ---
+
+  /** Все выдачи райдера обеих коллекций, включая отозванные, — блок «Достижения» панели. */
+  async listForPanel(
+    userId: string,
+  ): Promise<{ grants: PanelGrantDoc[]; seasonGrants: PanelSeasonGrantDoc[] }> {
+    const [grants, seasonGrants] = await Promise.all([
+      this.c.grants
+        .find<PanelGrantDoc>(
+          { userId },
+          {
+            projection: {
+              _id: 0,
+              code: 1,
+              object: 1,
+              factAt: 1,
+              grantedAt: 1,
+              revokedAt: 1,
+              level: 1,
+              override: 1,
+            },
+          },
+        )
+        .toArray(),
+      this.c.seasonGrants
+        .find<PanelSeasonGrantDoc>(
+          { userId },
+          {
+            projection: {
+              _id: 0,
+              code: 1,
+              seasonId: 1,
+              factAt: 1,
+              grantedAt: 1,
+              revokedAt: 1,
+              override: 1,
+            },
+          },
+        )
+        .toArray(),
+    ]);
+    return { grants, seasonGrants };
+  }
+
+  /** Ручные решения райдера обеих коллекций (`override` есть) — публичный список (RC-1), без записи. */
+  async overridesOf(
+    userId: string,
+  ): Promise<{ grants: OverrideGrantDoc[]; seasonGrants: OverrideSeasonGrantDoc[] }> {
+    const manual = { userId, override: { $ne: null } };
+    const [grants, seasonGrants] = await Promise.all([
+      this.c.grants
+        .find<OverrideGrantDoc>(manual, {
+          projection: {
+            _id: 0,
+            code: 1,
+            object: 1,
+            factAt: 1,
+            revokedAt: 1,
+            level: 1,
+            override: 1,
+          },
+        })
+        .toArray(),
+      this.c.seasonGrants
+        .find<OverrideSeasonGrantDoc>(manual, {
+          projection: { _id: 0, code: 1, seasonId: 1, factAt: 1, revokedAt: 1, override: 1 },
+        })
+        .toArray(),
+    ]);
+    return { grants, seasonGrants };
+  }
+
+  /**
+   * Ручная выдача поверх отозванного документа (сверкой или вручную): объект, дата, уровень, решение; `seenAt`/`seenLevel`
+   * сброшены (новое решение вспыхивает, RC-13), `notifiedLevel = max(прежний, ранг)`, `_id` и `grantedAt` прежние.
+   * Возвращает `_id` документа или `null` — отозванного нет (тогда — `insertManualGrantInTx`).
+   */
+  async manualGrantInTx(
+    tx: DbSession,
+    userId: string,
+    code: FactAchievementCode,
+    manual: ManualGrant,
+    override: AchievementOverride,
+    now: Date,
+  ): Promise<string | null> {
+    const doc = await this.c.grants.findOneAndUpdate(
+      { userId, code, revokedAt: { $ne: null } },
+      [
+        {
+          $set: {
+            object: { $literal: manual.object },
+            factAt: { $literal: manual.factAt },
+            level: { $literal: manual.level },
+            revokedAt: null,
+            seenAt: null,
+            seenLevel: null,
+            notifiedLevel: {
+              $max: [
+                { $ifNull: ['$notifiedLevel', { $ifNull: ['$level', 1] }] },
+                manual.level ?? 1,
+              ],
+            },
+            override: { $literal: override },
+            updatedAt: { $literal: now },
+          },
+        },
+      ],
+      { session: tx, returnDocument: 'before', projection: { _id: 1 } },
+    );
+    return doc?._id ?? null;
+  }
+
+  /**
+   * Ручная выдача без документа. Видимая выдача уже есть — дубль уникального индекса обрывает транзакцию: панель ловит
+   * `isDuplicateKey(…, ACHIEVEMENT_GRANTS_UNIQUE_INDEX)` снаружи `MongoTransactions.run` (409).
+   */
+  async insertManualGrantInTx(
+    tx: DbSession,
+    id: string,
+    userId: string,
+    code: FactAchievementCode,
+    manual: ManualGrant,
+    override: AchievementOverride,
+    now: Date,
+  ): Promise<void> {
+    await this.c.grants.insertOne(
+      {
+        ...grantDoc(id, userId, code, manual, null, now),
+        override,
+      },
+      { session: tx },
+    );
+  }
+
+  /** Ручной отзыв видимой выдачи: `revokedAt`, решение; объект, уровень и `seenAt` не трогаются. Нет видимой — `null`. */
+  manualRevokeInTx(
+    tx: DbSession,
+    userId: string,
+    code: FactAchievementCode,
+    override: AchievementOverride,
+    now: Date,
+  ): Promise<ManualBefore | null> {
+    return this.c.grants.findOneAndUpdate(
+      { userId, code, revokedAt: null },
+      { $set: { revokedAt: now, override, updatedAt: now } },
+      {
+        session: tx,
+        returnDocument: 'before',
+        projection: { _id: 1, object: 1, level: 1, override: 1 },
+      },
+    );
+  }
+
+  /** Снятие ручного решения («Вернуть автоматике»): `override: null`. Решения нет — `null` (без записи). */
+  clearOverrideInTx(
+    tx: DbSession,
+    userId: string,
+    code: FactAchievementCode,
+    now: Date,
+  ): Promise<ManualBefore | null> {
+    return this.c.grants.findOneAndUpdate(
+      { userId, code, override: { $ne: null } },
+      { $set: { override: null, updatedAt: now } },
+      {
+        session: tx,
+        returnDocument: 'before',
+        projection: { _id: 1, object: 1, level: 1, override: 1 },
+      },
+    );
+  }
+
+  /** Ручная выдача сезонного поверх отозванного документа (как `manualGrantInTx`); нет отозванного — `null`. */
+  async manualGrantSeasonalInTx(
+    tx: DbSession,
+    userId: string,
+    key: SeasonalKey,
+    factAt: Date,
+    override: AchievementOverride,
+    now: Date,
+  ): Promise<string | null> {
+    const doc = await this.c.seasonGrants.findOneAndUpdate(
+      { userId, code: key.code, seasonId: key.seasonId, revokedAt: { $ne: null } },
+      { $set: { factAt, revokedAt: null, seenAt: null, override, updatedAt: now } },
+      { session: tx, returnDocument: 'before', projection: { _id: 1 } },
+    );
+    return doc?._id ?? null;
+  }
+
+  /** Ручная выдача сезонного без документа; дубль (видимая есть) ловит панель снаружи транзакции. */
+  async insertManualSeasonalInTx(
+    tx: DbSession,
+    id: string,
+    userId: string,
+    key: SeasonalKey,
+    factAt: Date,
+    override: AchievementOverride,
+    now: Date,
+  ): Promise<void> {
+    await this.c.seasonGrants.insertOne(
+      { ...seasonGrantDoc(id, userId, { ...key, factAt }, null, now), override },
+      { session: tx },
+    );
+  }
+
+  /** Ручной отзыв видимой сезонной выдачи; нет видимой — `null`. */
+  manualRevokeSeasonalInTx(
+    tx: DbSession,
+    userId: string,
+    key: SeasonalKey,
+    override: AchievementOverride,
+    now: Date,
+  ): Promise<ManualSeasonBefore | null> {
+    return this.c.seasonGrants.findOneAndUpdate(
+      { userId, code: key.code, seasonId: key.seasonId, revokedAt: null },
+      { $set: { revokedAt: now, override, updatedAt: now } },
+      { session: tx, returnDocument: 'before', projection: { _id: 1, seasonId: 1, override: 1 } },
+    );
+  }
+
+  /** Снятие ручного решения сезонной выдачи; решения нет — `null`. */
+  clearSeasonalOverrideInTx(
+    tx: DbSession,
+    userId: string,
+    key: SeasonalKey,
+    now: Date,
+  ): Promise<ManualSeasonBefore | null> {
+    return this.c.seasonGrants.findOneAndUpdate(
+      { userId, code: key.code, seasonId: key.seasonId, override: { $ne: null } },
+      { $set: { override: null, updatedAt: now } },
+      { session: tx, returnDocument: 'before', projection: { _id: 1, seasonId: 1, override: 1 } },
+    );
+  }
+
   /** Стирание удалённого аккаунта (ADR-0015): выдачи обеих коллекций, затем маркер; повтор — нули. */
   async deleteAllOf(
     userId: string,
@@ -358,7 +665,7 @@ function grantDoc(
   id: string,
   userId: string,
   code: FactAchievementCode,
-  earned: Earned,
+  earned: Omit<Earned, 'title'>,
   seenAt: Date | null,
   now: Date,
 ): AchievementGrantDoc {
@@ -374,6 +681,7 @@ function grantDoc(
     level: earned.level,
     seenLevel: seenAt === null ? null : earned.level,
     notifiedLevel: earned.level,
+    override: null,
     updatedAt: now,
   };
 }
@@ -381,7 +689,7 @@ function grantDoc(
 function seasonGrantDoc(
   id: string,
   userId: string,
-  earned: SeasonalEarned,
+  earned: Pick<SeasonalEarned, 'code' | 'seasonId' | 'factAt'>,
   seenAt: Date | null,
   now: Date,
 ): AchievementSeasonGrantDoc {
@@ -394,6 +702,7 @@ function seasonGrantDoc(
     grantedAt: now,
     seenAt,
     revokedAt: null,
+    override: null,
     updatedAt: now,
   };
 }

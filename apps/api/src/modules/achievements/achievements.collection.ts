@@ -1,7 +1,13 @@
 import type { AchievementObjectKind, SeasonalAchievementCode } from '@pokatim/contracts';
 import type { Collection, Db } from 'mongodb';
 
-import type { FactAchievementCode, LevelRank } from './achievements.policy';
+import type { AchievementOverride, FactAchievementCode, LevelRank } from './achievements.policy';
+
+/**
+ * Ручное решение команды на документе выдачи (achievements-panel, 5.A): новые документы пишут явный `null`, у старых
+ * поля нет — фильтр `{ override: null }` совпадает с обоими. Миграции нет (индексы прежние).
+ */
+export type AchievementOverrideDoc = AchievementOverride;
 
 /**
  * Коллекции модуля `achievements` — выдачи достижений, производная проекция фактов (`results`, `route-rides`,
@@ -40,6 +46,8 @@ export interface AchievementGrantDoc {
    * (ретро-уведомлений нет)
    */
   notifiedLevel?: LevelRank | null;
+  /** ручное решение (achievements-panel): сверка документ не пишет, пока не снимут; нет поля — ≡ `null` */
+  override?: AchievementOverrideDoc | null;
   updatedAt: Date;
 }
 
@@ -61,6 +69,8 @@ export interface AchievementSeasonGrantDoc {
   seenAt: Date | null;
   /** итог сезона изменился — скрыто (S4) */
   revokedAt: Date | null;
+  /** ручное решение (achievements-panel); нет поля — ≡ `null` */
+  override?: AchievementOverrideDoc | null;
   updatedAt: Date;
 }
 

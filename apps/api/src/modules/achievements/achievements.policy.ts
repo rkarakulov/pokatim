@@ -8,6 +8,7 @@ import {
   isLeveledCode,
   isSeasonalCode,
   type LeveledAchievementCode,
+  type RiderAchievementAdminStatus,
   SEASON_REGULAR_MIN_RACES,
   SEASONAL_ACHIEVEMENT_CODES,
   type SeasonalAchievementCode,
@@ -252,6 +253,17 @@ export function raceAchievements(
   return earned;
 }
 
+/**
+ * Ручное решение команды (achievements-panel, 5.A): поле `override` документа выдачи обеих коллекций. `null` или нет
+ * поля — выдача подчиняется сверке; иначе сверка документ не трогает (план пропускает, фильтры записи — `override:
+ * null`), пока решение не снимут.
+ */
+export interface AchievementOverride {
+  decision: 'granted' | 'revoked';
+  at: Date;
+  byUserId: string;
+}
+
 /** Сохранённая выдача (поля сверки); `level`/`seenLevel` нет у документов v1 — ≡ 1. */
 export interface StoredGrant {
   code: FactAchievementCode;
@@ -263,6 +275,8 @@ export interface StoredGrant {
   seenLevel?: LevelRank | null;
   /** наибольший объявленный ранг (achievements-push); нет у документов до выката — ≡ `storedRank` */
   notifiedLevel?: LevelRank | null;
+  /** ручное решение (achievements-panel); нет у документов до выката — ≡ `null` */
+  override?: AchievementOverride | null;
 }
 
 /** Сохранённый ранг (документ v1 и разовые — 1). */
@@ -304,7 +318,8 @@ const sameFact = (grant: StoredGrant, earned: Earned) =>
 /**
  * План сверки (7.2, A2–A4, L3): новое — вставка (первая сверка — сразу просмотренной на любом уровне, A3); отозванное,
  * вернувшееся — восстановление (`seenAt`/`seenLevel` прежние); видимое с другим объектом, датой или уровнем —
- * обновление; пропавшее — отзыв. Устойчивое состояние — пустой план. Чистая функция.
+ * обновление; пропавшее — отзыв; код с ручным решением (`override`) — пропуск целиком. Устойчивое состояние — пустой
+ * план. Чистая функция.
  */
 export function reconcilePlan(
   stored: readonly StoredGrant[],
@@ -316,6 +331,8 @@ export function reconcilePlan(
   const plan: ReconcileStep[] = [];
   for (const code of FACT_ACHIEVEMENT_CODES) {
     const grant = byCode.get(code);
+    // ручное решение — сверка код не трогает (achievements-panel, 5.B; второй рубеж — фильтр записи)
+    if (grant?.override) continue;
     const fact = earned.get(code);
     if (fact && !grant)
       plan.push({ type: 'insert', code, earned: fact, seenAt: first ? now : null });
@@ -375,6 +392,8 @@ export interface StoredSeasonGrant extends SeasonalKey {
   factAt: Date;
   seenAt: Date | null;
   revokedAt: Date | null;
+  /** ручное решение (achievements-panel); нет — ≡ `null` */
+  override?: AchievementOverride | null;
 }
 
 export type SeasonalStep =
@@ -389,7 +408,8 @@ const keyOrder = (a: SeasonalKey, b: SeasonalKey) =>
 /**
  * План сезонной сверки (S2–S5): только ключи `settled`-сезонов — новое — вставка (первая сверка — просмотренной, A3),
  * вернувшееся — восстановление (`seenAt` прежний, S4), пропавшее — отзыв видимой; сезоны в `pending` — ни вставки, ни
- * отзыва. `refresh` нет: объект — сам сезон, дата завершённого сезона не меняется. Порядок — каталог, затем сезон.
+ * отзыва; ключ с ручным решением — пропуск. `refresh` нет: объект — сам сезон, дата завершённого сезона не меняется.
+ * Порядок — каталог, затем сезон.
  * Чистая функция.
  */
 export function seasonalPlan(
@@ -402,6 +422,7 @@ export function seasonalPlan(
   const byKey = new Map(stored.map((grant) => [seasonalKey(grant), grant]));
   const keys = new Map<string, SeasonalKey>();
   for (const item of [...stored, ...earned.values()]) {
+    if (byKey.get(seasonalKey(item))?.override) continue;
     if (settled.has(item.seasonId))
       keys.set(seasonalKey(item), { code: item.code, seasonId: item.seasonId });
   }
@@ -426,4 +447,30 @@ export function sortForList<T extends { code: AchievementCode; factAt: Date }>(
     (a, b) =>
       b.factAt.getTime() - a.factAt.getTime() || catalogIndex(b.code) - catalogIndex(a.code),
   );
+}
+
+/** Статус выдачи в панели (achievements-panel, 5.G): видимая = не отозвана (RC-12), ручная — по `override`. */
+export function adminStatus(doc: {
+  revokedAt: Date | null;
+  override?: AchievementOverride | null;
+}): RiderAchievementAdminStatus {
+  if (doc.revokedAt === null)
+    return doc.override?.decision === 'granted' ? 'granted_manually' : 'granted';
+  return doc.override?.decision === 'revoked' ? 'revoked_manually' : 'revoked';
+}
+
+/**
+ * Прогресс без противоречия ручному уровню (RC-9): строка счётного кода, у которого видимая ручная выдача ранга ≥ уровня
+ * строки, выкидывается («Серебро 7/15» при ручном золоте). Остальные — по фактам. Чистая функция.
+ */
+export function progressBeyondManual(
+  progress: readonly ProgressItem[],
+  grants: readonly Pick<StoredGrant, 'code' | 'revokedAt' | 'level' | 'override'>[],
+): ProgressItem[] {
+  const manual = new Map(
+    grants
+      .filter((grant) => grant.revokedAt === null && grant.override?.decision === 'granted')
+      .map((grant) => [grant.code, storedRank(grant)]),
+  );
+  return progress.filter((step) => (manual.get(step.code) ?? 0) < step.level);
 }

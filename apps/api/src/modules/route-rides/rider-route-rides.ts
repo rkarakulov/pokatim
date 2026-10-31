@@ -72,4 +72,13 @@ export class RiderRouteRidesService implements RiderRouteRides {
       next: last ? { at: last.updatedAt, id: last._id } : null,
     };
   }
+
+  async routeTitles(userId: string, routeIds: readonly string[]): Promise<Map<string, string>> {
+    const titles = new Map<string, string>();
+    for (const ids of chunks([...new Set(routeIds)], ROUTES_CHUNK)) {
+      for (const [id, title] of await this.routes.rideableTitles(ids, userId))
+        titles.set(id, title);
+    }
+    return titles;
+  }
 }

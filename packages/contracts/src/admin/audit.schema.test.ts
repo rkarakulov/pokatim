@@ -74,6 +74,9 @@ describe('AuditAction', () => {
       'panel.invitation_revoked',
       'panel.invitation_accepted',
       'profile.avatar_unblocked',
+      'achievement.granted_manually',
+      'achievement.revoked_manually',
+      'achievement.override_cleared',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',
@@ -342,5 +345,39 @@ describe('AuditEntry — запрет загрузки фото (profile-moderat
         nextCursor: null,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('AuditEntry — ручные решения по достижениям (achievements-panel)', () => {
+  it('details: код, вид и id объекта, уровень — необязательны и строгие', () => {
+    const entry = {
+      id: ID,
+      at: '2026-10-31T10:00:00.000Z',
+      action: 'achievement.granted_manually',
+      actor: { kind: 'user', userId: ID, displayName: 'Ольга' },
+      target: null,
+      reason: 'Заезд не засчитался',
+      subject: { kind: 'rider', id: ID, label: 'Участник ·000001' },
+      details: {
+        achievementCode: 'races_5',
+        objectKind: 'race',
+        objectId: ID,
+        achievementLevel: 'silver',
+      },
+    };
+    expect(AuditPage.parse({ items: [entry], nextCursor: null }).items[0]?.details).toEqual(
+      entry.details,
+    );
+    for (const details of [
+      { achievementCode: 'race_lose' },
+      { objectKind: 'planet' },
+      { objectId: 'x' },
+      { achievementLevel: 'platinum' },
+    ]) {
+      expect(
+        AuditPage.safeParse({ items: [{ ...entry, details }], nextCursor: null }).success,
+        JSON.stringify(details),
+      ).toBe(false);
+    }
   });
 });

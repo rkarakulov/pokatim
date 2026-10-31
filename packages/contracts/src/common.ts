@@ -112,6 +112,8 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'PANEL_INVITATION_INVALID',
   'PANEL_INVITATION_EMAIL_MISMATCH',
   'PANEL_INVITATIONS_UNAVAILABLE',
+  // achievements-panel: видимая выдача уже есть / видимой нет (409, details.reason)
+  'ACHIEVEMENT_INVALID_STATE',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;

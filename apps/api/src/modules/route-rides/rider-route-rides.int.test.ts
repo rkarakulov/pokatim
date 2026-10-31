@@ -89,3 +89,21 @@ describe('RiderRouteRides.passedOf (achievements)', () => {
     );
   });
 });
+
+describe('RiderRouteRides.routeTitles (achievements-panel, ручная выдача)', () => {
+  it('каталог и свой готовый — название; чужой приватный, снятый с каталога, неизвестный — нет', async () => {
+    const catalog = await catalogCorridorRoute(h, OTHER);
+    const own = await ownCorridorRoute(h, ME);
+    const foreign = await ownCorridorRoute(h, OTHER);
+    const removed = await catalogCorridorRoute(h, OTHER);
+    await routesDb(h).routes.updateOne({ _id: removed }, { $set: { catalog: null } });
+    const unknown = '01890a5d-ac96-774b-bcce-b302099a8057';
+
+    const titles = await port().routeTitles(ME, [catalog, own, foreign, removed, unknown, own]);
+    expect(Object.fromEntries(titles)).toEqual({
+      [catalog]: 'Эталонный коридор',
+      [own]: 'Мой коридор',
+    });
+    expect(await port().routeTitles(ME, [])).toEqual(new Map());
+  });
+});

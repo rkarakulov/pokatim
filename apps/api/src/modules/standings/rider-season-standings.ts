@@ -55,7 +55,12 @@ export class RiderSeasonStandingsService implements RiderSeasonStandings {
         fingerprint !== undefined &&
         sources.get(season.id)?.fingerprint === fingerprint;
       if (!final) {
-        outcomes.push({ seasonId: season.id, status: 'pending', title: season.name });
+        outcomes.push({
+          seasonId: season.id,
+          status: 'pending',
+          title: season.name,
+          endsBefore: season.endsBefore,
+        });
         continue;
       }
       outcomes.push({

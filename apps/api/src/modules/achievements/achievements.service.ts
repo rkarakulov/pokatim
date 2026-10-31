@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   type Achievement,
   type AchievementCode,
@@ -15,33 +15,48 @@ import { RIDER_PROFILES, type RiderProfileDirectory } from '../profile';
 import { RIDER_RESULTS, type RiderResults } from '../results';
 import type { RiderSeasonOutcome } from '../standings';
 import { AchievementFactsReader } from './achievement-facts.reader';
+import { AchievementObjects, objectKey } from './achievement-objects';
 import { AchievementsReconciler } from './achievements-reconciler';
 import {
   ACHIEVEMENTS_POLICY,
+  type AchievementOverride,
+  type Earned,
+  type FactAchievementCode,
   isSeen,
   levelName,
+  progressBeyondManual,
   raceAchievements,
   seasonalAchievements,
   type SeasonalEarned,
   seasonalKey,
   sortForList,
 } from './achievements.policy';
-import { AchievementsRepository } from './achievements.repository';
+import { AchievementsRepository, type StoredGrantDoc } from './achievements.repository';
+
+/** Видимая ручная выдача (achievements-panel): решение `granted`, не отозвана. */
+const manuallyGranted = (grant: {
+  revokedAt: Date | null;
+  override?: AchievementOverride | null;
+}) => grant.revokedAt === null && grant.override?.decision === 'granted';
 
 /**
  * Достижения райдера — HTTP-обёртка (ADR-0020 «выдача сверкой при чтении»): сверка — `AchievementsReconciler` (одна для
  * GET и серверной сверки), публичный список — факты `AchievementFactsReader` и итоги сезонов без записи; запись — только
  * `AchievementsRepository`. Ответы — явным списком полей: без `userId`, id выдачи и времени суток (RC-7). Логи — uid и
- * счётчики, без кодов объектов и названий.
+ * счётчики, без кодов объектов и названий. Ручные решения команды (achievements-panel, M7) в ответах неотличимы:
+ * ручная выдача — объект, дата и уровень из документа, название — `AchievementObjects`; ручной отзыв — как отзыв сверкой.
  */
 @Injectable()
 export class AchievementsService {
+  private readonly logger = new Logger(AchievementsService.name);
+
   constructor(
     private readonly repository: AchievementsRepository,
     @Inject(RIDER_PROFILES) private readonly profiles: RiderProfileDirectory,
     @Inject(RIDER_RESULTS) private readonly results: RiderResults,
     private readonly reconciler: AchievementsReconciler,
     private readonly facts: AchievementFactsReader,
+    private readonly objects: AchievementObjects,
     private readonly rateLimiter: RateLimiter,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -63,8 +78,11 @@ export class AchievementsService {
       this.repository.listOf(userId),
       this.repository.listSeasonalOf(userId),
     ]);
+    // фактовые видимые — «титулованные факты ∩ видимые»; ручные — из документа (факт этого кода в ответ не идёт)
     const granted = new Map(
-      grants.filter((grant) => grant.revokedAt === null).map((grant) => [grant.code, grant]),
+      grants
+        .filter((grant) => grant.revokedAt === null && !grant.override)
+        .map((grant) => [grant.code, grant]),
     );
     const items: { code: AchievementCode; factAt: Date; achievement: Achievement }[] = titled
       .filter((item) => granted.has(item.code))
@@ -79,6 +97,7 @@ export class AchievementsService {
           seen: isSeen(granted.get(item.code)!, item.level),
         },
       }));
+    items.push(...(await this.manualItems(userId, grants.filter(manuallyGranted))));
     for (const grant of seasonGrants) {
       if (grant.revokedAt !== null) continue;
       const item = this.visibleSeasonal(grant, seasonal, outcomes);
@@ -87,7 +106,7 @@ export class AchievementsService {
     }
     return {
       items: sortForList(items).map((item) => item.achievement),
-      progress: progress.map((step) => ({
+      progress: progressBeyondManual(progress, grants).map((step) => ({
         code: step.code,
         level: levelName(step.level),
         current: step.current,
@@ -109,17 +128,52 @@ export class AchievementsService {
   }
 
   /**
-   * Публичные достижения (A7, S6): гоночные (с уровнем `races_5`, L7) и сезонные по `final`-сезонам (без чтения выдач,
-   * RC-S5); без записи, `seen` и прогресса; непубличный и неизвестный — один 404.
+   * Публичные достижения (A7, S6): гоночные (с уровнем `races_5`, L7) и сезонные по `final`-сезонам; без записи, `seen`
+   * и прогресса; непубличный и неизвестный — один 404. Выдачи не читаются (RC-S5), кроме ручных решений (RC-1,
+   * achievements-panel): отозванный вручную гоночный код / сезонный ключ убирается, выданный вручную `race_*` / `season_*`
+   * добавляется (название — `racesOf` / исход сезона). Маршруты и райды — нет (A7).
    */
   async publicList(publicId: string): Promise<PublicRiderAchievementList> {
     const rider = await this.profiles.findPublic(publicId);
     if (!rider) throw domainError('NOT_FOUND', 404);
+    const overrides = await this.repository.overridesOf(rider.userId);
+    const manualSeasons = overrides.seasonGrants.filter(manuallyGranted);
     const [rows, outcomes] = await Promise.all([
       this.results.publishedRows(rider.userId),
-      this.reconciler.seasonOutcomes(rider.userId, [], this.clock.now()),
+      this.reconciler.seasonOutcomes(
+        rider.userId,
+        [...new Set(manualSeasons.map((grant) => grant.seasonId))],
+        this.clock.now(),
+      ),
     ]);
-    const titled = await this.facts.titled(raceAchievements(rows), rider.userId);
+    const races = raceAchievements(rows);
+    for (const grant of overrides.grants) {
+      if (grant.override.decision === 'revoked') races.delete(grant.code);
+      else if (manuallyGranted(grant) && grant.object.kind === 'race')
+        races.set(grant.code, {
+          object: grant.object,
+          factAt: grant.factAt,
+          title: null,
+          level: grant.level ?? null,
+        } satisfies Earned);
+    }
+    const seasonal = new Map(seasonalAchievements(outcomes).earned);
+    for (const grant of overrides.seasonGrants) {
+      const key = seasonalKey(grant);
+      if (grant.override.decision === 'revoked') {
+        seasonal.delete(key);
+        continue;
+      }
+      const outcome = outcomes.find((item) => item.seasonId === grant.seasonId);
+      if (manuallyGranted(grant) && outcome)
+        seasonal.set(key, {
+          code: grant.code,
+          seasonId: grant.seasonId,
+          factAt: grant.factAt,
+          title: outcome.title,
+        });
+    }
+    const titled = await this.facts.titled(races, rider.userId);
     const items = [
       ...titled.map((item) => ({
         code: item.code,
@@ -131,7 +185,7 @@ export class AchievementsService {
           level: item.level === null ? null : levelName(item.level),
         },
       })),
-      ...[...seasonalAchievements(outcomes).earned.values()].map((item) => ({
+      ...[...seasonal.values()].map((item) => ({
         code: item.code,
         factAt: item.factAt,
         achievement: seasonalAchievement(item, item.title),
@@ -145,18 +199,65 @@ export class AchievementsService {
    * остаётся (не мерцает между ревизией и пересчётом), название — из исхода порта; сезон пропал из ответа порта — нет.
    */
   private visibleSeasonal(
-    grant: { code: SeasonalEarned['code']; seasonId: string; factAt: Date },
+    grant: {
+      code: SeasonalEarned['code'];
+      seasonId: string;
+      factAt: Date;
+      revokedAt: Date | null;
+      override?: AchievementOverride | null;
+    },
     earned: ReadonlyMap<string, SeasonalEarned>,
     outcomes: readonly RiderSeasonOutcome[],
   ) {
     const outcome = outcomes.find((item) => item.seasonId === grant.seasonId);
     if (!outcome) return null;
-    if (outcome.status === 'final' && !earned.has(seasonalKey(grant))) return null;
+    // ручная — при любом исходе сезона, независимо от «заработано» (achievements-panel)
+    if (outcome.status === 'final' && !manuallyGranted(grant) && !earned.has(seasonalKey(grant)))
+      return null;
     return {
       code: grant.code,
       factAt: grant.factAt,
       achievement: seasonalAchievement(grant, outcome.title),
     };
+  }
+
+  /**
+   * Ручные выдачи в своём списке: объект, дата и уровень — из документа, название — `AchievementObjects` (одна пачка);
+   * объект недоступен — элемента нет (лог без id объекта).
+   */
+  private async manualItems(
+    userId: string,
+    grants: readonly StoredGrantDoc[],
+  ): Promise<{ code: FactAchievementCode; factAt: Date; achievement: Achievement }[]> {
+    if (grants.length === 0) return [];
+    const titles = await this.objects.titles(
+      userId,
+      grants.map((grant) => grant.object),
+    );
+    let missing = false;
+    const items = grants.flatMap((grant) => {
+      const title = titles.get(objectKey(grant.object));
+      if (title === undefined) {
+        missing = true;
+        return [];
+      }
+      const level = grant.level ?? null;
+      return [
+        {
+          code: grant.code,
+          factAt: grant.factAt,
+          achievement: {
+            code: grant.code,
+            object: { kind: grant.object.kind, id: grant.object.id, title },
+            factDate: minskToday(grant.factAt),
+            level: level === null ? null : levelName(level),
+            seen: isSeen(grant, level),
+          },
+        },
+      ];
+    });
+    if (missing) this.logger.warn(`achievements.manual_object_missing uid=${userId}`);
+    return items;
   }
 
   private async limit(key: string, rule: RateLimitRule): Promise<void> {

@@ -1978,6 +1978,10 @@ export const ru = {
   'admin.audit.action.profile.reports_dismissed': 'Жалобы на профиль отклонены',
   // profile-moderation-followups: снят запрет загрузки фото
   'admin.audit.action.profile.avatar_unblocked': 'Снят запрет загрузки фото',
+  // achievements-panel: ручные решения по достижениям (подписи деталей — PR B)
+  'admin.audit.action.achievement.granted_manually': 'Достижение выдано вручную',
+  'admin.audit.action.achievement.revoked_manually': 'Достижение отозвано вручную',
+  'admin.audit.action.achievement.override_cleared': 'Ручное решение по достижению снято',
   'admin.audit.action.tickets.settings_updated': 'Настройки билетов изменены',
   'admin.audit.action.tickets.checked_in': 'Участник отмечен',
   // routes-01: экран «Маршруты» панели и публикация в каталог

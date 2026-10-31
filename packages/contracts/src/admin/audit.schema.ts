@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+import {
+  ACHIEVEMENT_LEVELS,
+  ACHIEVEMENT_OBJECT_KINDS,
+  AchievementCode,
+} from '../achievements/achievement.schema.ts';
 import { AppDecorId, AppThemeId } from '../appearance/appearance.schema.ts';
 import { PageQuery, Uuid } from '../common.ts';
 import { RaceCancelReason } from '../races/race.schema.ts';
@@ -92,6 +97,11 @@ export const AUDIT_ACTIONS = [
   'panel.invitation_accepted',
   // profile-moderation-followups: модератор снял запрет загрузки фото райдера (subject `rider`, без имени)
   'profile.avatar_unblocked',
+  // achievements-panel: ручная выдача, ручной отзыв и снятие ручного решения (subject `rider`, details — код, вид и id
+  // объекта, уровень; без имён и названий)
+  'achievement.granted_manually',
+  'achievement.revoked_manually',
+  'achievement.override_cleared',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -170,6 +180,11 @@ export const AuditEntry = z.object({
       ticketCode: z.string().optional(),
       /** profile-moderation-followups: сброс фото включил запрет загрузки до этого момента */
       avatarBlockedUntil: z.iso.datetime().optional(),
+      /** achievements-panel: код достижения, вид и id объекта (сезонной — сезон), уровень счётного */
+      achievementCode: AchievementCode.optional(),
+      objectKind: z.enum(ACHIEVEMENT_OBJECT_KINDS).optional(),
+      objectId: Uuid.optional(),
+      achievementLevel: z.enum(ACHIEVEMENT_LEVELS).optional(),
     })
     .nullable(),
 });

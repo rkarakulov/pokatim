@@ -726,3 +726,78 @@ describe('createAdminApiClient: оформление приложения (то�
     await expect(broken.api.updateAppearance({ decor: 'none', version: 1 })).rejects.toThrow();
   });
 });
+
+describe('достижения райдера в панели (achievements-panel)', () => {
+  const REASON = 'Заезд не засчитался';
+  const list = {
+    items: [
+      {
+        code: 'race_win',
+        object: { kind: 'race', id: USER_ID, title: 'Гонка' },
+        level: null,
+        factDate: '2026-10-01',
+        status: 'granted_manually',
+        grantedAt: '2026-10-31T10:00:00.000Z',
+        revokedAt: null,
+        override: {
+          decision: 'granted',
+          at: '2026-10-31T10:00:00.000Z',
+          by: { userId: USER_ID, displayName: 'Ольга' },
+        },
+        byFacts: { state: 'not_earned', level: null },
+      },
+    ],
+    seasonsAvailable: true,
+  };
+
+  it('getRiderAchievements — путь и разбор; чужой статус — ошибка разбора', async () => {
+    const one = admin(200, list);
+    await expect(one.api.getRiderAchievements(USER_ID)).resolves.toEqual(list);
+    expect(one.calls[0]).toMatchObject({
+      url: `/v1/admin/rider-achievements/${USER_ID}`,
+      method: 'GET',
+      credentials: 'same-origin',
+    });
+    const broken = admin(200, { ...list, items: [{ ...list.items[0], status: 'lost' }] });
+    await expect(broken.api.getRiderAchievements(USER_ID)).rejects.toThrow();
+  });
+
+  it('grant / revoke — 204 с телом; clear — итог', async () => {
+    const grant = admin(204, null);
+    await expect(
+      grant.api.grantRiderAchievement(USER_ID, {
+        code: 'races_5',
+        objectId: USER_ID,
+        level: 'silver',
+        reason: REASON,
+      }),
+    ).resolves.toBeUndefined();
+    expect(grant.calls[0]).toMatchObject({
+      url: `/v1/admin/rider-achievements/${USER_ID}/grant`,
+      method: 'POST',
+      credentials: 'same-origin',
+      body: { code: 'races_5', objectId: USER_ID, level: 'silver', reason: REASON },
+    });
+
+    const revoke = admin(204, null);
+    await revoke.api.revokeRiderAchievement(USER_ID, {
+      code: 'season_podium',
+      seasonId: USER_ID,
+      reason: REASON,
+    });
+    expect(revoke.calls[0]).toMatchObject({
+      url: `/v1/admin/rider-achievements/${USER_ID}/revoke`,
+      body: { code: 'season_podium', seasonId: USER_ID, reason: REASON },
+    });
+
+    const clear = admin(200, { cleared: true, reconciled: false });
+    await expect(
+      clear.api.clearRiderAchievementOverride(USER_ID, { code: 'race_win', reason: REASON }),
+    ).resolves.toEqual({ cleared: true, reconciled: false });
+    expect(clear.calls[0]).toMatchObject({
+      url: `/v1/admin/rider-achievements/${USER_ID}/clear`,
+      method: 'POST',
+      body: { code: 'race_win', reason: REASON },
+    });
+  });
+});

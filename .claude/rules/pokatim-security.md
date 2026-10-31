@@ -373,6 +373,16 @@ paths:
   id выдачи, `grantedAt`, `revokedAt`, `seenLevel`. Клиент на уровень не влияет: `POST seen` — только коды, уровень —
   из документа в атомарной операции. Названия маршрутов — только видимых райдеру (RC-4). Логи — `uid`, флаг `first` и счётчики; без кодов
   объектов, названий, уровней, сезонов, мест и `publicId` (сезонные — только счётчики `seasonal_*`).
+- Панель (achievements-panel): `admin/rider-achievements/*` — `PanelGuard` + `@RequirePermission('achievements.manage')`
+  на классе (только admin; сторож `admin-routes.test.ts`, `permissions.test.ts`), актор — `@CurrentPanelUser()`,
+  `:userId` — `Uuid`; тела — `strictObject` (`code` — строгий enum, `objectId`/`seasonId` — `Uuid`, `level` — только у
+  счётного, `ActionReason`). Вид объекта выводит сервер из кода, годность и дату — порт владельца; клиент не влияет на
+  `factAt`, `seenAt`, `notifiedLevel`. Лимит мутаций `achievements-panel:<actorUid>` 60/ч, удалённый райдер — 404.
+  Ответ панели — явный список полей (без e-mail и имени райдера, `seenAt`, `seenLevel`, `notifiedLevel`, `_id`
+  выдачи); имя сотрудника — `PanelDirectory`. Журнал `achievement.*` в транзакции действия (subject `rider`, details —
+  код, вид и id объекта, уровень; без имён и названий). Логи — `achievements.manual action by outcome` (без `userId`
+  райдера, id объекта и причины). Ответы приложения не раскрывают ручной характер выдачи (M7); событие outbox —
+  прежний payload с `origin: 'server'`.
 
 ## Модерация профиля (profile-moderation)
 

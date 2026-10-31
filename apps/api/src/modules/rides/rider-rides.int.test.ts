@@ -82,3 +82,21 @@ describe('RiderRides.pastOf (achievements)', () => {
     );
   });
 });
+
+describe('RiderRides.ridesOf (achievements-panel, ручная выдача)', () => {
+  it('опубликованный со стартом в прошлом — название и старт; скрытый, отменённый, будущий, неизвестный — нет', async () => {
+    const me = await rider(h, 'me@example.com');
+    const other = await rider(h, 'other@example.com');
+    const past = await pastRide(h, other, [], 4, 'Утренний');
+    const hidden = await pastRide(h, other, [], 3);
+    await hideInDb(h, hidden);
+    const cancelled = await pastRide(h, other, [], 2);
+    await ridesDb(h).updateOne({ _id: cancelled }, { $set: { status: 'cancelled' } });
+    const future = await createRide(h, me);
+    const unknown = '01890a5d-ac96-774b-bcce-b302099a8057';
+
+    const result = await port().ridesOf([past, hidden, cancelled, future.id, unknown, past]);
+    expect([...result]).toEqual([[past, { title: 'Утренний', startsAt: daysAgo(h, 4) }]]);
+    expect(await port().ridesOf([])).toEqual(new Map());
+  });
+});

@@ -474,6 +474,16 @@ paths:
   { userId, revokedAt: null, seenAt: null, $or: [{ code, seasonId }] }` (`seasonal`). Маркер `achievement_syncs` общий,
   ставится после выдач обеих коллекций. Стирание (шаг `achievements`) — `deleteMany({ userId })` обеих коллекций, затем
   маркер; счётчик `seasonGrants`.
+- Ручные решения (achievements-panel): поле `override { decision: 'granted' | 'revoked', at, byUserId } | null` на
+  документах **обеих** коллекций (новые — явный `null`, старые без поля — фильтр `{ override: null }` совпадает с обоими);
+  миграции нет, индексы прежние. Каждая запись сверки (`revoke`, `restoreOrRefresh`, `revokeSeasonal`,
+  `restoreSeasonal`) — с условием `override: null`; вставки сверки защищает уникальный индекс; `markSeen` — без
+  условия. Ручные операции — первая операция транзакции панели (замок выдачи): выдача поверх отозванного —
+  `findOneAndUpdate` pipeline (`$literal`; `seenAt`/`seenLevel` → `null`, `notifiedLevel = $max`, `_id` и `grantedAt`
+  прежние), без документа — `insertOne` (дубль видимой — `isDuplicateKey` снаружи `run` → 409), отзыв
+  (`revokedAt: null`) и снятие (`override: { $ne: null }`) — `findOneAndUpdate`, `returnDocument: 'before'` (детали
+  журнала). Чтения панели и публичного списка — `listForPanel`, `overridesOf` (префикс `userId`). Стирание уносит
+  решения вместе с документами; поздняя ручная выдача между проверкой живости и стиранием — повторный проход стирания.
 
 ## Билеты (event-tickets, ADR-0023)
 

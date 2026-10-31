@@ -42,6 +42,25 @@ export const SEASON_REGULAR_MIN_RACES = 3;
 export const ACHIEVEMENT_OBJECT_KINDS = ['race', 'route', 'ride', 'season'] as const;
 export type AchievementObjectKind = (typeof ACHIEVEMENT_OBJECT_KINDS)[number];
 
+/**
+ * Вид объекта каждого кода (achievements-panel, 5.C): ручную выдачу сервер проверяет портом владельца этого вида, панель
+ * подписывает поле id объекта. Новый код без вида не скомпилируется.
+ */
+export const ACHIEVEMENT_OBJECT_KIND_BY_CODE = {
+  race_first_finish: 'race',
+  race_podium: 'race',
+  race_win: 'race',
+  races_5: 'race',
+  route_first: 'route',
+  routes_5: 'route',
+  ride_first: 'ride',
+  ride_organizer: 'ride',
+  rides_10: 'ride',
+  season_regular: 'season',
+  season_podium: 'season',
+  season_champion: 'season',
+} as const satisfies Record<AchievementCode, AchievementObjectKind>;
+
 /** Объект достижения: гонка, маршрут, райд или сезон, на котором выполнено условие; название — текущее. */
 export const AchievementObject = z.object({
   kind: tolerantEnum(ACHIEVEMENT_OBJECT_KINDS),

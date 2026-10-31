@@ -204,6 +204,16 @@ paths:
   `SeasonalAchievementRef[]` ≤ `SEASONAL_SEEN_MAX` (30), без повторов `(code, seasonId)`); `{ codes }` старых сборок
   валиден. api-client — `listAchievements(token)`, `markAchievementsSeen(token, codes, seasonal = [])` (204; `seasonal`
   уходит только непустым — старый API ответил бы 400), `getRiderAchievements(publicId)` (публичный).
+  Панель (achievements-panel): `ACHIEVEMENT_OBJECT_KIND_BY_CODE` (`satisfies Record<AchievementCode,
+  AchievementObjectKind>` — одна карта «код → вид» для API и панели), `src/achievements/achievement-admin.schema.ts` —
+  строгие `GrantRiderAchievementRequest` (`level` только у счётного → `INVALID` на `level`),
+  `RevokeRiderAchievementRequest` / `ClearRiderAchievementOverrideRequest` (`seasonId` ⇔ сезонный код → `REQUIRED` /
+  `INVALID`), `ClearRiderAchievementOverrideResult`, `RiderAchievementsAdmin` (`RIDER_ACHIEVEMENT_ADMIN_STATUSES`,
+  `byFacts`), `AchievementInvalidStateDetails`; право `achievements.manage`, действия `achievement.granted_manually` /
+  `revoked_manually` / `override_cleared`, детали `achievementCode`, `objectKind`, `objectId`, `achievementLevel`, код
+  `ACHIEVEMENT_INVALID_STATE` (409) — в конце списков. Ответы приложения не меняются. api-client панели —
+  `getRiderAchievements(userId)`, `grantRiderAchievement`, `revokeRiderAchievement` (204),
+  `clearRiderAchievementOverride`.
 - Билеты (event-tickets, ADR-0023): `src/tickets/ticket.schema.ts` — `TICKET_EVENT_KINDS`, `TICKET_STATUSES`
   (`event_cancelled` вычисляет сервер), `EVENT_REGISTRATION_CLOSED_REASONS` — только в конец; `TicketCode` (ввод:
   `normalizeTicketCode` — верхний регистр, без `-`, `I/L→1`, `O→0`; показ — `formatTicketCode`), `TicketQrPayload`

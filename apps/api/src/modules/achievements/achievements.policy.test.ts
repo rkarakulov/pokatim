@@ -1,4 +1,4 @@
-import { minskToday } from '@pokatim/contracts';
+import { ACHIEVEMENT_OBJECT_KIND_BY_CODE, minskToday } from '@pokatim/contracts';
 import { describe, expect, it } from 'vitest';
 
 import type { RiderProtocolRow } from '../results';
@@ -6,7 +6,9 @@ import type { RiderRideFact } from '../rides';
 import type { RiderRouteRideFact } from '../route-rides';
 import type { RiderSeasonOutcome, RiderSeasonRow } from '../standings';
 import {
+  ACHIEVEMENT_RULES,
   type AchievementFacts,
+  adminStatus,
   earnedAchievements,
   type Earned,
   evaluateAchievements,
@@ -16,6 +18,7 @@ import {
   type LevelRank,
   levelName,
   noticeDue,
+  progressBeyondManual,
   raceAchievements,
   reconcilePlan,
   SEASONAL_RULES,
@@ -586,7 +589,7 @@ describe('seasonalAchievements (S2, S3, RC-S6)', () => {
 
   it('`pending` — нет заработанных, сезон не `settled`', () => {
     const { earned, settled } = seasonalAchievements([
-      { seasonId: SEASON_A, status: 'pending', title: 'Сезон' },
+      { seasonId: SEASON_A, status: 'pending', title: 'Сезон', endsBefore: ENDS_BEFORE },
     ]);
     expect(earned.size).toBe(0);
     expect(settled.size).toBe(0);
@@ -676,5 +679,117 @@ describe('seasonalPlan (S2–S5, AC1)', () => {
       seasonalKey({ code: 'season_podium', seasonId: SEASON_B }),
       seasonalKey({ code: 'season_champion', seasonId: SEASON_A }),
     ]);
+  });
+});
+
+describe('ручные решения (achievements-panel, 5.B)', () => {
+  const MANUAL_GRANT = { decision: 'granted' as const, at: day(20), byUserId: id(900) };
+  const MANUAL_REVOKE = { decision: 'revoked' as const, at: day(20), byUserId: id(900) };
+
+  it('reconcilePlan пропускает код с ручным решением целиком: ни отзыва, ни refresh, ни restore', () => {
+    const won = new Map<FactAchievementCode, Earned>([['race_win', raceEarned(2, 12)]]);
+    // выдан вручную без факта — не отзывается
+    expect(
+      reconcilePlan([stored('race_win', { override: MANUAL_GRANT })], new Map(), false, NOW),
+    ).toEqual([]);
+    // выдан вручную, факт с другим объектом — объект не меняется
+    expect(
+      reconcilePlan([stored('race_win', { override: MANUAL_GRANT })], won, false, NOW),
+    ).toEqual([]);
+    // отозван вручную, факт есть — не восстанавливается
+    expect(
+      reconcilePlan(
+        [stored('race_win', { revokedAt: day(20), override: MANUAL_REVOKE })],
+        won,
+        false,
+        NOW,
+      ),
+    ).toEqual([]);
+    // снятое решение (`null`) — прежняя сверка
+    expect(reconcilePlan([stored('race_win', { override: null })], new Map(), false, NOW)).toEqual([
+      { type: 'revoke', code: 'race_win' },
+    ]);
+  });
+
+  it('seasonalPlan пропускает ключ с ручным решением', () => {
+    const seasonal = (partial: Partial<StoredSeasonGrant>): StoredSeasonGrant => ({
+      code: 'season_podium',
+      seasonId: SEASON_A,
+      factAt: new Date(ENDS_BEFORE.getTime() - 1),
+      seenAt: day(1),
+      revokedAt: null,
+      ...partial,
+    });
+    const earnedA = new Map([
+      [
+        seasonalKey({ code: 'season_podium', seasonId: SEASON_A }),
+        {
+          code: 'season_podium' as const,
+          seasonId: SEASON_A,
+          factAt: new Date(ENDS_BEFORE.getTime() - 1),
+          title: 'Сезон',
+        },
+      ],
+    ]);
+    const settled = new Set([SEASON_A]);
+    expect(
+      seasonalPlan([seasonal({ override: MANUAL_GRANT })], new Map(), settled, false, NOW),
+    ).toEqual([]);
+    expect(
+      seasonalPlan(
+        [seasonal({ revokedAt: day(20), override: MANUAL_REVOKE })],
+        earnedA,
+        settled,
+        false,
+        NOW,
+      ),
+    ).toEqual([]);
+    expect(seasonalPlan([seasonal({ override: null })], new Map(), settled, false, NOW)).toEqual([
+      { type: 'revoke', key: { code: 'season_podium', seasonId: SEASON_A } },
+    ]);
+  });
+
+  it('adminStatus — по документу и решению', () => {
+    expect(adminStatus({ revokedAt: null })).toBe('granted');
+    expect(adminStatus({ revokedAt: null, override: null })).toBe('granted');
+    expect(adminStatus({ revokedAt: null, override: MANUAL_GRANT })).toBe('granted_manually');
+    expect(adminStatus({ revokedAt: day(3) })).toBe('revoked');
+    expect(adminStatus({ revokedAt: day(3), override: MANUAL_REVOKE })).toBe('revoked_manually');
+  });
+
+  it('progressBeyondManual: строка счётного с видимой ручной выдачей ранга ≥ уровня строки выкидывается (RC-9)', () => {
+    const progress = [
+      { code: 'races_5' as const, level: 2 as LevelRank, current: 7, target: 15 },
+      { code: 'rides_10' as const, level: 1 as LevelRank, current: 3, target: 10 },
+      { code: 'routes_5' as const, level: 3 as LevelRank, current: 20, target: 30 },
+    ];
+    const grants = [
+      stored('races_5', { level: 3, override: MANUAL_GRANT }),
+      stored('rides_10', { level: 1, override: null }),
+      stored('routes_5', { level: 2, override: MANUAL_GRANT }),
+    ];
+    expect(progressBeyondManual(progress, grants).map((step) => step.code)).toEqual([
+      'rides_10',
+      'routes_5',
+    ]);
+    // отозванная ручная (ручной отзыв) — прогресс по фактам
+    expect(
+      progressBeyondManual(progress, [
+        stored('races_5', { level: 3, revokedAt: day(2), override: MANUAL_REVOKE }),
+      ]),
+    ).toEqual(progress);
+  });
+
+  it('вид объекта каждого правила = таблица видов контракта', () => {
+    const full = facts({
+      races: [row(1, 1, 1), ...races(30)],
+      routes: routes(30),
+      rides: [ride(900, 1, { organizer: true }), ...rides(50)],
+    });
+    const result = evaluateAchievements(full).earned;
+    for (const code of FACT_ACHIEVEMENT_CODES) {
+      expect(result.get(code)?.object.kind, code).toBe(ACHIEVEMENT_OBJECT_KIND_BY_CODE[code]);
+    }
+    expect(Object.keys(ACHIEVEMENT_RULES)).toEqual([...FACT_ACHIEVEMENT_CODES]);
   });
 });
