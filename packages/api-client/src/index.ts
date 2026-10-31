@@ -120,6 +120,8 @@ import {
   MyRoutePage,
   RouteRideCandidates,
   RouteRideDetail,
+  RouteRideLeaderboard,
+  type RouteRideLeaderboardQuery,
   RouteRidePage,
   type RouteRideRequest,
   RouteRideTrack,
@@ -226,6 +228,9 @@ export interface AvatarCrop {
   y: number;
   size: number;
 }
+
+/** Параметры таблицы «Другие» по маршруту (`RouteRideLeaderboardQuery`, route-rides-04). */
+export type RouteRideLeaderboardParams = Partial<Pick<RouteRideLeaderboardQuery, 'limit'>>;
 
 /** Параметры историй профиля (`RiderHistoryQuery`). */
 export type RiderHistoryParams = Partial<Pick<RiderHistoryQuery, 'cursor' | 'limit'>>;
@@ -976,6 +981,20 @@ export function createApiClient({
       request(
         `/v1/routes/${encodeURIComponent(routeId)}/rides/${encodeURIComponent(rideId)}/track`,
         RouteRideTrack,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /**
+     * Таблица «Другие» маршрута каталога (route-rides-04): лучшие пройденные заезды райдеров с согласием и своя
+     * строка; маршрут не каталога — `404`.
+     */
+    getRouteRideLeaderboard: (
+      accessToken: string,
+      routeId: string,
+      params: RouteRideLeaderboardParams = {},
+    ) =>
+      request(
+        `/v1/routes/${encodeURIComponent(routeId)}/rides/leaderboard${queryString(params)}`,
+        RouteRideLeaderboard,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
 

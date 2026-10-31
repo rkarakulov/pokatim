@@ -115,3 +115,35 @@ describe('приложение: заезд по маршруту (route-rides-01
     ).rejects.toMatchObject({ status: 409 });
   });
 });
+
+describe('приложение: таблица «Другие» (route-rides-04)', () => {
+  const table = {
+    rows: [{ place: 1, elapsedSec: 780, rideDate: '2026-10-27', riderName: 'Анна К.' }],
+    total: 1,
+    me: null,
+    shared: false,
+  };
+
+  it('GET …/rides/leaderboard с Bearer; limit — в query, без params — без query', async () => {
+    const withLimit = app(200, table);
+    await expect(
+      withLimit.api.getRouteRideLeaderboard('access', ROUTE, { limit: 5 }),
+    ).resolves.toEqual({
+      ...table,
+      rows: [{ ...table.rows[0], riderPublicId: null, riderAvatar: null, rideId: null }],
+    });
+    const plain = app(200, table);
+    await plain.api.getRouteRideLeaderboard('access', ROUTE);
+    const calls = [withLimit, plain].map((client) => client.calls[0]!);
+    expect(calls.map(({ url, method }) => ({ url, method }))).toEqual([
+      { url: `https://api.test/v1/routes/${ROUTE}/rides/leaderboard?limit=5`, method: 'GET' },
+      { url: `https://api.test/v1/routes/${ROUTE}/rides/leaderboard`, method: 'GET' },
+    ]);
+    for (const call of calls) expect(call.headers.get('authorization')).toBe('Bearer access');
+  });
+
+  it('ответ не по схеме (дата с временем суток) — ошибка', async () => {
+    const bad = app(200, { ...table, rows: [{ ...table.rows[0], rideDate: AT }] });
+    await expect(bad.api.getRouteRideLeaderboard('access', ROUTE)).rejects.toThrow();
+  });
+});
