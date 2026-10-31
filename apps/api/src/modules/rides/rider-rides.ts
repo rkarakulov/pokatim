@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
+import type { ChangedCursor, RiderChanges } from '../../changed-since';
 import { RIDER_RIDES_MAX_ROWS, type RiderRideFact, type RiderRides } from './rider-rides.port';
 import { RidesRepository } from './rides.repository';
 
@@ -26,5 +27,19 @@ export class RiderRidesService implements RiderRides {
       organizer: doc.organizerUserId === userId,
       goingCount: doc.goingCount,
     }));
+  }
+
+  async startedRidersAfter(
+    after: ChangedCursor,
+    until: Date,
+    limit: number,
+  ): Promise<RiderChanges> {
+    const docs = await this.repository.startedWithin(after, until, limit);
+    const last = docs.at(-1);
+    return {
+      userIds: [...new Set(docs.flatMap((doc) => doc.participants.map((p) => p.userId)))],
+      next: last ? { at: last.startsAt, id: last._id } : null,
+      full: docs.length === limit,
+    };
   }
 }

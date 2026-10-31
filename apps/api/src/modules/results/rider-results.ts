@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
+import { type ChangedCursor, type RiderChanges, uuidv7Floor } from '../../changed-since';
 import { RACE_REGISTRY, type RaceRegistry } from '../races';
 import { unrankedOf } from './results.policy';
 import {
@@ -76,5 +77,29 @@ export class RiderResultsService implements RiderResults {
       if (race) found.set(id, { title: race.title, windowStartsAt: race.windowStartsAt });
     }
     return found;
+  }
+
+  async revisedRidersAfter(
+    after: ChangedCursor,
+    until: Date,
+    limit: number,
+  ): Promise<RiderChanges> {
+    const revisions = await this.repository.revisionsWithin(
+      after.id === '' ? { $gte: uuidv7Floor(after.at) } : { $gt: after.id },
+      uuidv7Floor(new Date(until.getTime() + 1)),
+      limit,
+    );
+    const userIds = new Set<string>();
+    for (const { raceId, revision } of revisions) {
+      for (const userId of await this.repository.protocolRowUserIds(raceId, revision)) {
+        userIds.add(userId);
+      }
+    }
+    const last = revisions.at(-1);
+    return {
+      userIds: [...userIds],
+      next: last ? { at: last.at, id: last._id } : null,
+      full: revisions.length === limit,
+    };
   }
 }

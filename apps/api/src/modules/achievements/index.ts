@@ -4,6 +4,7 @@ export {
   AchievementsModule,
   AchievementsReadModule,
   AchievementsSyncModule,
+  AchievementsWorkerModule,
 } from './achievements.module';
 /** Событие о выдаче для уведомлений (achievements-push) и порт полей уведомления для `notifications`. */
 export {

@@ -1,5 +1,7 @@
 import type { BikeClass, ResultGroupKey } from '@pokatim/contracts';
 
+import type { ChangedCursor, RiderChanges } from '../../changed-since';
+
 /**
  * Порт `standings` для модуля `achievements` (achievements-seasonal, через `modules/standings/index.ts`): итоги райдера
  * по завершённым сезонам из снимка рейтинга, без пересчёта. `achievements` коллекций `standings`/`races` не читает.
@@ -40,4 +42,12 @@ export interface RiderSeasonStandings {
     alsoSeasonIds: readonly string[],
     now: Date,
   ): Promise<RiderSeasonOutcome[]>;
+  /**
+   * Райдеры строк снимков сезонов, итог которых мог измениться в окне `(after, until]` (серверная сверка достижений,
+   * achievements-push): сезон завершён к `until`, у него есть снимок, и момент `max(computedAt, endsBefore)` — пересчёт
+   * снимка завершённого сезона или конец сезона после пересчёта — попал в окно. Порядок — `(момент, seasonId)`, внутри
+   * сезона — `userId` ↑ (индекс `season_standing_rows_user_idx`); предел — `limit` строк. Курсор: `id` —
+   * `<seasonId>` (сезон пройден) или `<seasonId>|<userId>` (продолжение внутри сезона). Только чтение.
+   */
+  settledRidersAfter(after: ChangedCursor, until: Date, limit: number): Promise<RiderChanges>;
 }

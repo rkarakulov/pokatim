@@ -30,6 +30,26 @@ export const ACHIEVEMENTS_POLICY = {
   seenLimit: { limit: 120, windowSec: 3600 },
 } as const;
 
+/**
+ * Серверная сверка (achievements-push N2, 5.D): регламент `achievements.sweep` по курсорам источников. `pageRows` —
+ * предел строк источника за прогон (остаток — следующим); `settleMs` — строки не новее `now − settleMs` (запас на коммит
+ * транзакции); `rideSettleMs` — райд «прошёл» для push через 3 ч после старта (RC-P1 (b)); `lostCursorMs` — нет
+ * курсора (первый запуск или потеря Redis) — окно с `until − lostCursorMs` (RC-P9); `recipientsBatch` — пачка фильтров
+ * `liveUserIds`/`syncedAmong`; задача райдера — `riderAttempts` попыток, экспоненциальная пауза от `riderBackoffMs`;
+ * `lockTtlMs` — замок одного прогона за раз.
+ */
+export const ACHIEVEMENTS_SERVER_SYNC = {
+  pageRows: 500,
+  settleMs: 2 * 60_000,
+  rideSettleMs: 3 * 3_600_000,
+  lostCursorMs: 10 * 60_000,
+  recipientsBatch: 500,
+  riderAttempts: 3,
+  riderBackoffMs: 5_000,
+  riderConcurrency: 4,
+  lockTtlMs: 5 * 60_000,
+} as const;
+
 /** Факты райдера из портов владельцев (`results`, `route-rides`, `rides`). */
 export interface AchievementFacts {
   races: readonly RiderProtocolRow[];

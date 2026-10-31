@@ -1207,6 +1207,31 @@ export class ResultsRepository {
     return new Map(rows.map((row) => [row._id, row.revision]));
   }
 
+  /**
+   * Записи журнала с ревизией (не `recheck_started`) в окне по `_id` (uuidv7 = время записи; индекс `_id_`): нижняя граница —
+   * условие `after`, верхняя — `_id < beforeId`; по `_id` ↑, не больше `limit` (серверная сверка достижений).
+   */
+  async revisionsWithin(
+    after: { $gt: string } | { $gte: string },
+    beforeId: string,
+    limit: number,
+  ): Promise<{ _id: string; raceId: string; revision: number; at: Date }[]> {
+    const docs = await this.c.recalculations
+      .find(
+        { _id: { ...after, $lt: beforeId }, revision: { $ne: null } },
+        { projection: { _id: 1, raceId: 1, revision: 1, at: 1 } },
+      )
+      .sort({ _id: 1 })
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({
+      _id: doc._id,
+      raceId: doc.raceId,
+      revision: doc.revision ?? 0,
+      at: doc.at,
+    }));
+  }
+
   /** Моменты последнего запуска и последнего применения перепроверки гонки. */
   async lastRecheck(
     raceId: string,

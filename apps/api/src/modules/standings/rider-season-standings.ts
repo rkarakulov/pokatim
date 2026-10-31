@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { ChangedCursor, RiderChanges } from '../../changed-since';
 import { SEASON_RACES, type SeasonRaces } from '../races';
 import type {
   RiderSeasonOutcome,
@@ -75,5 +76,50 @@ export class RiderSeasonStandingsService implements RiderSeasonStandings {
       });
     }
     return outcomes;
+  }
+
+  async settledRidersAfter(
+    after: ChangedCursor,
+    until: Date,
+    limit: number,
+  ): Promise<RiderChanges> {
+    const [afterSeason = '', afterUser] = after.id.split('|');
+    const finished = await this.seasons.finishedSeasons(until);
+    const computed = await this.repository.computedAtOf(finished.map((season) => season.id));
+    const events = finished
+      .flatMap((season) => {
+        const computedAt = computed.get(season.id);
+        if (!computedAt) return [];
+        const at = new Date(Math.max(computedAt.getTime(), season.endsBefore.getTime()));
+        return at <= until ? [{ id: season.id, at }] : [];
+      })
+      .filter(({ id, at }) => {
+        const t = at.getTime() - after.at.getTime();
+        // сезон курсора — снова, только если он пройден не до конца
+        return (
+          t > 0 ||
+          (t === 0 && (id > afterSeason || (id === afterSeason && afterUser !== undefined)))
+        );
+      })
+      .sort((a, b) => a.at.getTime() - b.at.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+    const userIds = new Set<string>();
+    let next: ChangedCursor | null = null;
+    let rows = 0;
+    for (const event of events) {
+      const from =
+        event.id === afterSeason && event.at.getTime() === after.at.getTime()
+          ? afterUser
+          : undefined;
+      const page = await this.repository.rowUserIdsAfter(event.id, from ?? null, limit - rows);
+      for (const userId of page) userIds.add(userId);
+      rows += page.length;
+      if (rows >= limit) {
+        next = { at: event.at, id: `${event.id}|${page.at(-1) ?? from ?? ''}` };
+        return { userIds: [...userIds], next, full: true };
+      }
+      next = { at: event.at, id: event.id };
+    }
+    return { userIds: [...userIds], next, full: false };
   }
 }
