@@ -167,7 +167,11 @@ paths:
   (строгий код — незнакомый у старой сборки → `unknown`); подресурс «Достижения» —
   `AchievementNotificationSettingsView`, `UpdateAchievementNotificationSettings`,
   `DEFAULT_ACHIEVEMENT_NOTIFICATION_SETTINGS` (`{ push: true }`); api-client — `getAchievementNotificationSettings`,
-  `updateAchievementNotificationSettings`.
+  `updateAchievementNotificationSettings`. social-p1 — в конец: группа `social`, шесть видов `social_riders_going`,
+  `social_thanks`, `social_added`, `social_respect`, `social_invite_registered`, `social_ride_ask`, цель
+  `{ type: 'rider', publicId: RiderPublicId }` (битый токен у старой сборки → `unknown`); подресурс «Свои» —
+  `SocialNotificationSettingsView`, `UpdateSocialNotificationSettings`, `DEFAULT_SOCIAL_NOTIFICATION_SETTINGS`
+  (`{ push: true }`); api-client — `getSocialNotificationSettings`, `updateSocialNotificationSettings`.
 - Web Push (ADR-0022): там же — `WebPushEndpoint` (https ≤ 2048, хост — push-сервис из белого списка
   `isWebPushEndpoint`: FCM, Mozilla, WNS, Apple; адрес вызывает сервер — SSRF), `RegisterWebPushSubscription`
   (`strictObject`: endpoint + `keys.p256dh` 65 байт `B…`/`keys.auth` 16 байт base64url, без `expirationTime`),

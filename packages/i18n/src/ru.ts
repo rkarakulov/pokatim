@@ -3253,6 +3253,8 @@ export const ru = {
   'admin.invite.error.PANEL_INVITATION_EMAIL_MISMATCH':
     'Приглашение отправлено на другой адрес — войдите тем аккаунтом, на который пришло письмо.',
   'admin.invite.error.PANEL_ALREADY_MEMBER': 'Вы уже в команде платформы — просто войдите.',
+  // social-p1: группа уведомлений «Свои» (K10)
+  'notifications.settings.group.social': 'Свои',
   // «Свои», приглашения (P6, K9): «Позвать друзей» в своём профиле — ссылка с личным кодом
   'invites.friends.action': 'Позвать друзей',
   'invites.friends.shareTitle': 'Покатим',

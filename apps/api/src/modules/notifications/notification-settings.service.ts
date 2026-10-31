@@ -4,9 +4,11 @@ import type {
   EventNotificationSettingsView,
   NotificationSettings,
   RouteNotificationSettingsView,
+  SocialNotificationSettingsView,
   UpdateAchievementNotificationSettings,
   UpdateEventNotificationSettings,
   UpdateRouteNotificationSettings,
+  UpdateSocialNotificationSettings,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
 
@@ -16,7 +18,7 @@ import { consumeUserLimit } from '../../user-limit';
 
 /**
  * Настройки уведомлений (N4, N6): нет документа — умолчания; `PUT` — полная замена формы после zod (`start ≠ end`
- * проверяет контракт). Группы «Мероприятия», «Маршруты» и «Достижения» — отдельные подресурсы (RC-D1): ответ `/settings` — ровно
+ * проверяет контракт). Группы «Мероприятия», «Маршруты», «Достижения» и «Свои» — отдельные подресурсы (RC-D1): ответ `/settings` — ровно
  * прежние ключи, его `PUT` их тумблеры не стирает. «Маршруты» без сохранённого тумблера — значение «Райдов». Лимит —
  * общий. Не ретроактивны (RC-13): уже созданные уведомления центра не трогаются.
  */
@@ -82,6 +84,20 @@ export class NotificationSettingsService {
   ): Promise<AchievementNotificationSettingsView> {
     const now = await this.consume(userId);
     await this.repository.saveAchievementSettings(userId, body, now);
+    return { push: body.push };
+  }
+
+  async getSocial(userId: string): Promise<SocialNotificationSettingsView> {
+    const { push } = await this.current(userId);
+    return { push: push.social };
+  }
+
+  async putSocial(
+    userId: string,
+    body: UpdateSocialNotificationSettings,
+  ): Promise<SocialNotificationSettingsView> {
+    const now = await this.consume(userId);
+    await this.repository.saveSocialSettings(userId, body, now);
     return { push: body.push };
   }
 

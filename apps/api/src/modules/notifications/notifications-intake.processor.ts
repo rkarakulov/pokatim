@@ -154,6 +154,7 @@ export class NotificationsIntakeProcessor extends WorkerHost {
         ...(data.targets === undefined ? {} : { targets: new Map(Object.entries(data.targets)) }),
         ...(data.collapse === undefined ? {} : { collapse: data.collapse }),
         ...(data.inApp ? { inApp: true } : {}),
+        ...(data.social === undefined ? {} : { social: data.social }),
       };
       const written = await this.writeRecipients(eventId, rendered, userIds, now);
       const scheduled = await this.jobs.scheduleEvent(eventId, userIds);
@@ -171,7 +172,10 @@ export class NotificationsIntakeProcessor extends WorkerHost {
     }
   }
 
-  /** Запись уведомлений получателям (прямой путь и пачка): живые → настройки пачкой → `writeNotices`. */
+  /**
+   * Запись уведомлений получателям (прямой путь и пачка): живые → настройки пачкой → `writeNotices`. «Свои»
+   * (`rendered.social`) — документ с одним действующим лицом и `params`, без `collapseSeq`: накопление в окне.
+   */
   private async writeRecipients(
     eventId: string,
     rendered: RenderedDraft,
@@ -206,10 +210,13 @@ export class NotificationsIntakeProcessor extends WorkerHost {
             ? {}
             : {
                 collapseKey: rendered.collapse.key,
-                ...(rendered.collapse.seq === undefined
+                ...(rendered.collapse.seq === undefined || rendered.social !== undefined
                   ? {}
                   : { collapseSeq: rendered.collapse.seq }),
               }),
+          ...(rendered.social === undefined
+            ? {}
+            : { actors: [rendered.social.actor], params: rendered.social.params }),
           createdAt: now,
           readAt: null,
           expireAt: new Date(now.getTime() + NOTIFICATIONS_POLICY.ttlDays * DAY_MS),

@@ -21,6 +21,9 @@ import {
   NotificationView,
   PUSH_PLATFORMS,
   isWebPushEndpoint,
+  DEFAULT_SOCIAL_NOTIFICATION_SETTINGS,
+  SocialNotificationSettingsView,
+  UpdateSocialNotificationSettings,
   RegisterPushToken,
   RegisterWebPushSubscription,
   RevokePushToken,
@@ -63,6 +66,7 @@ describe('справочники уведомлений (только в кон�
       'events',
       'routes',
       'achievements',
+      'social',
     ]);
     expect(NOTIFICATION_KINDS).toEqual([
       'result_counted',
@@ -86,6 +90,12 @@ describe('справочники уведомлений (только в кон�
       'profile_avatar_reset',
       'profile_club_reset',
       'achievement_granted',
+      'social_riders_going',
+      'social_thanks',
+      'social_added',
+      'social_respect',
+      'social_invite_registered',
+      'social_ride_ask',
     ]);
     expect(PUSH_PLATFORMS).toEqual(['ios', 'android']);
   });
@@ -199,6 +209,53 @@ describe('ответы (tolerantEnum, неизвестная цель)', () => {
     });
   });
 
+  it('цель rider: 43-символьный publicId; короткий или с `/` — unknown (P1 «Свои»)', () => {
+    const PUBLIC_ID = 'A'.repeat(43);
+    expect(NotificationTargetView.parse({ type: 'rider', publicId: PUBLIC_ID })).toEqual({
+      type: 'rider',
+      publicId: PUBLIC_ID,
+    });
+    for (const publicId of ['A'.repeat(42), `${'A'.repeat(42)}/`, '../../x', ID]) {
+      expect(NotificationTargetView.parse({ type: 'rider', publicId })).toEqual({
+        type: 'unknown',
+      });
+    }
+  });
+
+  it('группа social, её виды и цель rider в сборке без них — unknown', () => {
+    const OLD_GROUPS = NOTIFICATION_GROUPS.filter((group) => group !== 'social');
+    const [firstGroup, ...restGroups] = OLD_GROUPS;
+    const [first, ...rest] = NOTIFICATION_KINDS.filter((kind) => !kind.startsWith('social_'));
+    const [firstTarget, ...restTargets] = NotificationTarget.options.filter(
+      (option) => option.shape.type.value !== 'rider',
+    );
+    const OLD_TARGETS = z.union([
+      z.discriminatedUnion('type', [firstTarget!, ...restTargets]),
+      z.object({ type: z.string() }).transform(() => ({ type: 'unknown' as const })),
+    ]);
+    const old = NotificationView.extend({
+      group: tolerantEnum([firstGroup!, ...restGroups] as const),
+      kind: tolerantEnum([first!, ...rest] as const),
+      target: OLD_TARGETS.nullable(),
+    });
+    const item = view({
+      kind: 'social_added',
+      group: 'social',
+      title: 'Вас добавили в свои',
+      body: 'Катя Л. и ещё 2',
+      target: { type: 'rider', publicId: 'A'.repeat(43) },
+    });
+    const parsed = old.parse(item);
+    expect(parsed.group).toBe('unknown');
+    expect(parsed.kind).toBe('unknown');
+    expect(parsed.title).toBe('Вас добавили в свои');
+    expect(parsed.body).toBe('Катя Л. и ещё 2');
+    expect(parsed.target).toEqual({ type: 'unknown' });
+    expect(NotificationView.parse(item).group).toBe('social');
+    expect(NotificationView.parse(item).kind).toBe('social_added');
+    expect(NotificationView.parse(item).target).toEqual(item.target);
+  });
+
   it('страница и счётчик', () => {
     expect(NotificationPage.parse({ items: [view()], nextCursor: null }).items).toHaveLength(1);
     expect(UnreadCount.parse({ count: 100 })).toEqual({ count: 100 });
@@ -307,6 +364,33 @@ describe('настройки «Достижения» (подресурс, то�
       NotificationSettings.safeParse({
         ...DEFAULT_NOTIFICATION_SETTINGS,
         push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, achievements: true },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('настройки «Свои» (подресурс, только push)', () => {
+  it('умолчания — включено; ответ терпит лишние ключи', () => {
+    expect(DEFAULT_SOCIAL_NOTIFICATION_SETTINGS).toEqual({ push: true });
+    expect(SocialNotificationSettingsView.parse({ push: false, email: true })).toEqual({
+      push: false,
+    });
+  });
+
+  it('запрос строгий: push обязателен, лишние ключи и не boolean — ошибка', () => {
+    expect(UpdateSocialNotificationSettings.parse({ push: false })).toEqual({ push: false });
+    expect(codesOf(UpdateSocialNotificationSettings.safeParse({}))).toEqual(['push:REQUIRED']);
+    expect(UpdateSocialNotificationSettings.safeParse({ push: true, email: true }).success).toBe(
+      false,
+    );
+    expect(UpdateSocialNotificationSettings.safeParse({ push: 'yes' }).success).toBe(false);
+  });
+
+  it('основные настройки не меняются: ключ social — ошибка (старые сборки)', () => {
+    expect(
+      NotificationSettings.safeParse({
+        ...DEFAULT_NOTIFICATION_SETTINGS,
+        push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, social: true },
       }).success,
     ).toBe(false);
   });
