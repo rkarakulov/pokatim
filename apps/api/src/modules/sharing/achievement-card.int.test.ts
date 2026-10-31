@@ -426,6 +426,10 @@ describe('сезонные (achievement-season-story-card, C2–C5)', () => {
     const race = await seedProtocolRace(h, other2024, [placedRow(other.userId, 1)]);
     await syncStandings(h);
     await addRevision(h, race, 2, [placedRow(other.userId, 1)]);
+    // сезон действительно `pending` (ревизия без пересчёта снимка) — ревью pass 1, LOW-1
+    const port = h.app.get<RiderSeasonStandings>(RIDER_SEASON_STANDINGS, { strict: false });
+    const outcomes = await port.outcomesOf(me.userId, [other2024], h.clock.now());
+    expect(outcomes.find((item) => item.seasonId === other2024)?.status).toBe('pending');
     expect(
       (
         await panelAchievement(h, token, me.userId, 'grant', {
