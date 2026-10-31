@@ -31,6 +31,8 @@ describe('маршруты web-сервера: первое совпадение
   it.each([
     [`/routes/pick/${ID}`, '/routes/pick/[routeId]'],
     [`/routes/rides/${ID}/${RIDE}`, '/routes/rides/[routeId]/[rideId]'],
+    // route-rides-04 (RC-B5): полный список «Другие» — не карточка `routes/[id]` и не выбор
+    [`/routes/others/${ID}`, '/routes/others/[routeId]'],
     [`/routes/${ID}`, '/routes/[id]'],
     [`/routes/mine/${ID}`, '/routes/mine/[id]'],
     [`/routes/report/${ID}`, '/routes/report/[id]'],

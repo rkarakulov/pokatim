@@ -11,8 +11,9 @@ import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
 
 import CatalogRouteRoute from '../app/routes/[id]';
+import RouteRideOthersRoute from '../app/routes/others/[routeId]';
 import RouteRideRoute from '../app/routes/rides/[routeId]/[rideId]';
-import { tabRoutes } from './app-routes';
+import { appRoutes, tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
 import {
@@ -79,12 +80,14 @@ const routes = {
   // цели переходов из строк: проверяется только адрес
   'settings/profile': () => null,
   'riders/[id]': () => null,
-  'routes/others/[routeId]': () => null,
+  'routes/others/[routeId]': RouteRideOthersRoute,
 };
 const signIn = () => {
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
   useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
 };
+const openOthers = (id = ROUTE_ID) =>
+  renderRouter(routes, { initialUrl: `/routes/others/${id}`, wrapper: createQueryWrapper() });
 const openCatalog = () =>
   renderRouter(routes, { initialUrl: `/routes/${ROUTE_ID}`, wrapper: createQueryWrapper() });
 const pullToRefresh = async (testID: string) => {
@@ -332,5 +335,92 @@ describe('«Другие на маршруте» на карточке марш�
     const router = await openCatalog();
     await fireEvent.press(await within(await block()).findByRole('button', { name: 'Все (12)' }));
     expect(router.getPathname()).toBe(`/routes/others/${ROUTE_ID}`);
+  });
+});
+
+describe('полный список «Другие на маршруте» (`/routes/others/<id>`, route-rides-04)', () => {
+  const hundred = () =>
+    Array.from({ length: 100 }, (_, index) => leaderboardRow({ place: index + 1 }));
+
+  it('гость по прямой ссылке — гард ведёт на лендинг, без запроса', async () => {
+    const router = await renderRouter(appRoutes, { initialUrl: `/routes/others/${ROUTE_ID}` });
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
+    expect(getBoard).not.toHaveBeenCalled();
+  });
+
+  it('в полном приложении — экран списка (не карточка маршрута); запрос limit 100', async () => {
+    signIn();
+    await renderRouter(appRoutes, { initialUrl: `/routes/others/${ROUTE_ID}` });
+    expect(await screen.findByRole('header', { name: 'Другие на маршруте' })).toBeOnTheScreen();
+    expect(await screen.findByText('Анна К.')).toBeOnTheScreen();
+    expect(getBoard).toHaveBeenCalledWith(TOKEN, ROUTE_ID, { limit: 100 });
+  });
+
+  it('скелетон → строки; своя вне 100 — отдельно; сноска «Показаны лучшие 100 из 240»', async () => {
+    signIn();
+    let release: () => void = () => undefined;
+    getBoard.mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = () =>
+          resolve(leaderboard(hundred(), { total: 240, me: leaderboardMe({ place: 180 }) }));
+      }),
+    );
+    await openOthers();
+    // скелетон `AsyncContent` скрыт от скринридера (`SkeletonGroup`)
+    expect(
+      await screen.findByTestId('route-ride-others-skeleton', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    await act(async () => release());
+    expect(await screen.findByText('Показаны лучшие 100 из 240')).toBeOnTheScreen();
+    expect(screen.getAllByText('Участник')).toHaveLength(100);
+    expect(
+      screen.getByRole('button', { name: 'Ваш заезд, 180, 2:15:00, 12 октября' }),
+    ).toBeOnTheScreen();
+  });
+
+  it('все строки показаны — без сноски', async () => {
+    signIn();
+    getBoard.mockResolvedValue(leaderboard(fiveRows()));
+    await openOthers();
+    expect(await screen.findByText('Анна К.')).toBeOnTheScreen();
+    expect(screen.queryByText(/^Показаны лучшие/)).toBeNull();
+  });
+
+  it('невалидный id — «Маршрут недоступен» без запроса; «Все маршруты» → вкладка', async () => {
+    signIn();
+    const router = await openOthers('not-a-uuid');
+    expect(await screen.findByText('Маршрут недоступен')).toBeOnTheScreen();
+    expect(getBoard).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByRole('button', { name: 'Все маршруты' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/routes'));
+  });
+
+  it('404 — «Маршрут недоступен»', async () => {
+    signIn();
+    getBoard.mockRejectedValue(notFound());
+    await openOthers();
+    expect(await screen.findByText('Маршрут недоступен')).toBeOnTheScreen();
+  });
+
+  it('ошибка — «Не удалось загрузить» с повтором', async () => {
+    signIn();
+    getBoard.mockRejectedValueOnce(serverError());
+    await openOthers();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByText('Анна К.')).toBeOnTheScreen();
+    expect(getBoard).toHaveBeenCalledTimes(2);
+  });
+
+  it('pull-to-refresh перезапрашивает', async () => {
+    signIn();
+    await openOthers();
+    expect(await screen.findByText('Анна К.')).toBeOnTheScreen();
+    await pullToRefresh('route-ride-others-screen');
+    expect(getBoard).toHaveBeenCalledTimes(2);
   });
 });
