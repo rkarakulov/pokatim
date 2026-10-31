@@ -10,6 +10,7 @@ import { useId, useState } from 'react';
 
 import { api } from '../../api';
 import { formatDateTimeLong } from '../../format';
+import { useCan } from '../../session/can';
 import { httpStatus, isConflict, isForbidden } from '../../session/errors';
 import {
   Banner,
@@ -26,6 +27,7 @@ import {
 } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { riderLabel } from '../results/results-format';
+import { RiderAchievementsSection } from './RiderAchievementsSection';
 import { actionErrorText } from './rider-profiles-format';
 import { RIDER_PROFILES_QUERY_KEY, riderProfileQuery } from './rider-profiles-query';
 
@@ -121,11 +123,13 @@ function Preview({ profile, label }: { profile: RiderProfileModerationDetail; la
  * (профиль стёрт) — перечитывание и «Профиль не найден». Запрет загрузки фото — счётчик сбросов за 180 дней и строка
  * «Загрузка фото запрещена до …» (дата и время по Минску); «Снять запрет» — только при запрете, тот же `ReasonDialog`
  * (`{ unblocked: false }` — запрет уже снят или истёк: просто перечитывание). Ошибка перечитывания при показанных
- * данных — баннер с повтором.
+ * данных — баннер с повтором. Под жалобами — блок «Достижения» (`RiderAchievementsSection`), только с
+ * `achievements.manage` (achievements-panel; без права — ни блока, ни запроса).
  */
 export function RiderProfileScreen({ userId }: { userId: string }) {
   const queryClient = useQueryClient();
   const profile = useQuery(riderProfileQuery(userId));
+  const canManageAchievements = useCan('achievements.manage');
   const [action, setAction] = useState<Action>();
   const [stale, setStale] = useState(false);
   const reasonId = useId();
@@ -286,6 +290,7 @@ export function RiderProfileScreen({ userId }: { userId: string }) {
           getRowId={(report) => report.id}
           empty={<EmptyState title={t('admin.riderProfiles.noReports')} />}
         />
+        {canManageAchievements ? <RiderAchievementsSection userId={data.userId} /> : null}
       </div>
       <ReasonDialog
         open={action !== undefined}

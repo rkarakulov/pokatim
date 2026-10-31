@@ -184,6 +184,63 @@ describe('«Журнал действий» (AC12)', () => {
     expect(screen.getByRole('cell', { name: 'Снят запрет загрузки фото' })).toBeTruthy();
   });
 
+  it('achievements-panel: ручные решения — код и уровень, вид и короткий id объекта; объект — участник', async () => {
+    const rider = { kind: 'rider' as const, id: MARIA, label: 'Участник ·8a8058' };
+    mocked.listAudit.mockResolvedValue({
+      items: [
+        {
+          ...signedIn,
+          id: id(70),
+          action: 'achievement.granted_manually',
+          reason: 'заезд не засчитался',
+          subject: rider,
+          details: {
+            achievementCode: 'races_5',
+            objectKind: 'race',
+            objectId: '01890a5d-ac96-774b-bcce-b302099a8101',
+            achievementLevel: 'bronze',
+          },
+        },
+        {
+          ...signedIn,
+          id: id(71),
+          action: 'achievement.revoked_manually',
+          reason: 'нечестный результат',
+          subject: rider,
+          details: {
+            achievementCode: 'season_podium',
+            objectKind: 'season',
+            objectId: '01890a5d-ac96-774b-bcce-b302099a8103',
+          },
+        },
+        {
+          ...signedIn,
+          id: id(72),
+          action: 'achievement.override_cleared',
+          reason: 'сбой исправлен',
+          subject: rider,
+          details: {
+            achievementCode: 'route_first',
+            objectKind: 'route',
+            objectId: '01890a5d-ac96-774b-bcce-b302099a8102',
+          },
+        },
+      ],
+      nextCursor: null,
+    });
+    await renderApp('/audit');
+    expect(
+      await screen.findByText('Достижение выдано вручную: Гонщик · Бронза, Гонка ·9a8101'),
+    ).toBeTruthy();
+    expect(
+      screen.getByText('Достижение отозвано вручную: Призёр сезона, Сезон ·9a8103'),
+    ).toBeTruthy();
+    expect(
+      screen.getByText('Ручное решение по достижению снято: Первый маршрут, Маршрут ·9a8102'),
+    ).toBeTruthy();
+    expect(screen.getAllByRole('cell', { name: 'Участник ·8a8058' })).toHaveLength(3);
+  });
+
   it('routes-06: решение по заявке — причина отклонения справочником, поправленные поля подписями', async () => {
     mocked.listAudit.mockResolvedValue({
       items: [
