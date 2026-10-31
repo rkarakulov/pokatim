@@ -611,6 +611,11 @@ RC-A1, ADR-0019).
   `rides/cities` — статический путь, в pipe `Uuid` не уходит (int-тест).
 - Фаза и права зрителя — `rides.policy.ts` (`ridePhase`, `rideViewer`, `validateStartsAt`, `RIDES_POLICY`); ответы
   собирает `rides-feed.service.ts` из явного списка полей.
+- `join` — необязательное тело `JoinRideRequest` (`{ source? }`, K12; `ZodValidationPipe(JoinRideRequest.optional())`):
+  новая запись с `source` → `PRODUCT_EVENTS.record({ type: 'ride-joined' })` после коммита (`RidesService.recordJoined`,
+  сбой — лог `product_events.record_failed type=ride-joined` без отказа); повтор, квотная ветка и без `source` — без
+  события. `RidesModule` импортирует `ProductEventsCoreModule` (`rides → identity, routes, media, panel,
+  product-events`).
 - Лимиты частоты (`RateLimiter` базы, ключ — `uid`): `rides-create`, `rides-manage` (правка и отмена), `rides-rsvp`
   (join и leave); квоты — `409 RIDE_QUOTA_EXCEEDED` с `RideQuotaDetails`. Аудита в 05a нет. События (ADR-0017) — `rides.events.ts`:
   `update`/`cancel`/`join`, отмена при стирании и `act` модерации — та же одна условная операция над документом, но
@@ -729,14 +734,14 @@ RC-A1, ADR-0019).
 
 ## «Свои» (`social`, `product-events`, ADR-0027 Proposed, `docs/product/social.md`)
 
-- Модуль `social` — потребитель: `social → rides, profile, product-events` (P0; далее `results`, `routes`, `tracks`,
-  `identity` — в своих PR) только через `index.ts` и порты: `RIDES_FOR_SOCIAL` (`rides-for-social.port.ts`, `rideFacts`:
+- Модуль `social` — потребитель: `social → rides, profile, product-events, identity` (P0; `identity` — `AuthGuard`
+  контроллеров с P2; далее `results`, `routes`, `tracks` — в своих PR) только через `index.ts` и порты: `RIDES_FOR_SOCIAL` (`rides-for-social.port.ts`, `rideFacts`:
   фаза — `ridePhase` внутри `rides`, участники «Иду» с организатором первым, точная точка старта при `startPrecise`),
   `RIDER_NAMES.publicRiders` (публичность — при чтении, K3; ручное добавление — только к публичному). Коллекции
   `rides`, `profiles`, `activities` `social` не читает. На `social` ссылаются только `notifications`, `account`,
   `sharing` (порт `InviteCodes`, P6), `AppModule`, `WorkerModule` (dependency-cruiser `social-consumers-only`).
 - Композиция (RC-13): `SocialCoreModule` (репозитории, `SocialConnectionsService`, `SocialAttendanceService`,
-  `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры — P2–P4, P7),
+  `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры: P2 — `RideParticipantsController`; далее P3, P4, P7),
   `SocialWorkerModule` (`WorkerModule`, процессоры `social-intake` / `social-maintenance` — P5, P7). Дальше правки —
   только в `social/*`.
 - Правила — `social.policy.ts` (`SOCIAL_POLICY`: лимит ручного «В свои» `social-manual:<uid>` 30/24 ч, окно ручной
@@ -760,6 +765,13 @@ RC-A1, ADR-0019).
   без событий. «Меня не было» ставит `declinedAt` (RC-3a), явка по треку его не перекрывает.
 - Реакции: `thank` — только между явившимися, повтор — no-op (RC-4); `toggleRespect` — на разрешённой вызывающим цели
   (порты целей — P4), дубль уникального ключа — перечитать состояние.
+- Участники и явка райда (P2): `RideParticipantsController` (`SocialModule` + `IdentityModule`, `@Controller('rides')`,
+  `AuthGuard`, `no-store`: `GET :id/participants`, `POST :id/attendance`, `POST :id/attendance/decline`) →
+  `SocialRideParticipantsService` (`SocialCoreModule`, export — P4): лимит `social-attendance:<uid>` 60/ч
+  (`SOCIAL_POLICY.attendanceLimit`, общий на оба POST, первым) → `rideFacts` и видимость (нет или скрытый не
+  организатору — 404, RC-1) → `markManual`/`unmark` P0 → свежий `view`. Ответ — чистая `rideParticipantsView`
+  (`ride-participants.view.ts`): строки из `RIDER_NAMES.publicRiders` явным списком полей, флаги — `attendanceCheck`.
+  Порт `RIDES_FOR_SOCIAL` не расширялся.
 - Модуль `product-events` — листовой (dependency-cruiser `product-events-leaf`): порт `PRODUCT_EVENTS.record(event,
   session?)`, справочник и `props` — `product-events.types.ts` (zod, `strictObject`, без id пользователей, RC-11, RC-12).
   `social` пишет события в своей транзакции; вызывающий вне транзакции — после основной записи, сбой — лог

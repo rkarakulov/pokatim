@@ -15,6 +15,7 @@ import { OpaqueToken } from '../auth/verification.schema.ts';
 import { CITY_CODES, CityCode, isCityCode } from '../geo/city.schema.ts';
 import { LonLat } from '../races/race-route.schema.ts';
 import { PageCursor } from '../races/race.schema.ts';
+import { RideJoinSource } from '../social/social.schema.ts';
 import { LocalDate, LocalTime, UtcMinute } from '../time.ts';
 
 /*
@@ -162,6 +163,10 @@ export type UpdateRideRequest = z.infer<typeof UpdateRideRequest>;
 /** `POST /v1/rides/:id/cancel` — причина обязательна. */
 export const CancelRideRequest = z.strictObject({ reason: RideCancelReason });
 export type CancelRideRequest = z.infer<typeof CancelRideRequest>;
+
+/** Тело `POST /v1/rides/:id/join` (K12): откуда нажато «Я иду»; старые сборки шлют `{}`. Запрос — строгий. */
+export const JoinRideRequest = z.strictObject({ source: RideJoinSource.optional() });
+export type JoinRideRequest = z.infer<typeof JoinRideRequest>;
 
 /**
  * Строка поля формы → число схемы. Пустая — `undefined`: `fieldError` схемы даёт `REQUIRED` (тип — `number`, чтобы

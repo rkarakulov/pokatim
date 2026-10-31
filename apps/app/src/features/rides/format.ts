@@ -77,7 +77,7 @@ const listed = (viewer: Pick<RideViewer, 'role'> | null | undefined) =>
   viewer?.role === 'organizer' || viewer?.role === 'participant';
 
 /**
- * Подпись стопки: «идут 5 из 12», «идут 7» (без лимита), прошедший — «ехали 9»; зритель в списке — «· вы» (один
+ * Подпись стопки: «идут 5 из 12», «идут 7» (без лимита), прошедший — «записались 9» (Q2 «Свои» P2: «ехали» — только подтвердившие явку); зритель в списке — «· вы» (один
  * идущий — он сам) или «· вы в списке».
  */
 export function goingCaption(
@@ -87,7 +87,7 @@ export function goingCaption(
   const count = ride.goingCount;
   const caption =
     ride.phase === 'past'
-      ? t('rides.going.past', { count })
+      ? t('rides.going.pastJoined', { count })
       : ride.limit === null
         ? t('rides.going.open', { count })
         : t('rides.going.limited', { count, limit: ride.limit });

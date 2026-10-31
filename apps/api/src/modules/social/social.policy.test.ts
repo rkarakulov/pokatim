@@ -28,6 +28,7 @@ const facts = (overrides: Partial<SocialRideFacts> = {}): SocialRideFacts => ({
 describe('SOCIAL_POLICY (K2, K11)', () => {
   it('лимит ручного «В свои» — 30 за 24 ч; окно явки — 7 дней; пороги автоявки', () => {
     expect(SOCIAL_POLICY.manualLimit).toEqual({ limit: 30, windowSec: 86_400 });
+    expect(SOCIAL_POLICY.attendanceLimit).toEqual({ limit: 60, windowSec: 3600 });
     expect(SOCIAL_POLICY.attendanceWindowMs).toBe(7 * DAY);
     expect(SOCIAL_POLICY.autoAttendance).toEqual({
       beforeMs: 30 * 60_000,

@@ -628,6 +628,12 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   второго dialog не создаёт.
   Действия — общий `ShareChoiceSheet`: «Карточка-приглашение» (`rides/invite/[id]`), «Ссылка» (`shareLink`; нет
   origin — пункта нет), «Закрыть»; закрытие снимает `published` (`router.setParams`).
+- Участники и явка («Свои» P2, `features/rides/participants-queries.ts`, `ride-participants-block.tsx`,
+  `ride-rider-list.tsx`): ключ `['rides','detail',id,'participants']` — только вошедшему после `me`, только клиент
+  (гость — только число, без запроса); мутации явки — `setQueryData` ответа без инвалидации `['rides']`, 409/404 —
+  перечитать участников (RC-9). Блок явки — только `phase === 'past'` и по флагам сервера `canMark`/`canDecline`
+  (RC-10), окно и фазу клиент не считает. Подпись стопки прошедшего — `rides.going.pastJoined`. «Я иду» с карточки —
+  `useRideRsvp(id, 'ride_card')`, лента и Главная — без `source`. Подсказка имени — ключи `social.nameHint.*` (общие с P3).
 - Жалоба (05b) — экран `rides/report/[id]` (`features/rides/ride-report.tsx`) внутри `Stack.Protected`: причина —
   `Chip` из `RIDE_REPORT_REASONS`, комментарий — однострочный `TextField` (фолбэк до многострочного поля базы), успех —
   баннер на месте формы. Кнопка «Пожаловаться» и строка «Вы пожаловались…» — только по `viewer.canReport` /
@@ -680,7 +686,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 - `staleTime` по умолчанию — `DEFAULT_STALE_MS` (10 с, `src/lib/query-client.ts`): возврат фокуса сразу после ответа
   не повторяет запрос. Данные зрителя без `max-age` (участие, кандидаты, споры, `me` райда) — `DEFAULT_STALE_MS` явно,
   не 0; `staleTime: 0` — только когда свежесть нужна на каждом фокусе (список устройств после окна авторизации).
-- Стопка идущих на райд — `GoingStack` (`src/components/going-stack.tsx`): квадраты с иконкой человека, имён нет.
+- Стопка идущих на райд — `GoingStack` (`src/components/going-stack.tsx`): квадраты с иконкой человека; на карточке
+  вошедшему — аватары публичных участников (`avatarIds`, «Свои» P2).
 
 ## Проверка
 

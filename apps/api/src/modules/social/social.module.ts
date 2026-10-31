@@ -15,6 +15,8 @@ import { InviteCodesRepository } from './invite-codes.repository';
 import { InviteCodes } from './invite-codes.service';
 import { InviteIntake } from './invite-intake';
 import { ReactionsRepository } from './reactions.repository';
+import { RideParticipantsController } from './ride-participants.controller';
+import { SocialRideParticipantsService } from './ride-participants.service';
 import { SocialReactionsService } from './reactions.service';
 import { SocialErasure } from './social-erasure';
 import { SocialIntakeProcessor } from './social-intake.processor';
@@ -35,6 +37,7 @@ import { SocialIntakeProcessor } from './social-intake.processor';
     SocialAttendanceService,
     SocialReactionsService,
     SocialErasure,
+    SocialRideParticipantsService,
     InviteCodes,
   ],
   exports: [
@@ -42,14 +45,18 @@ import { SocialIntakeProcessor } from './social-intake.processor';
     SocialAttendanceService,
     SocialReactionsService,
     SocialErasure,
+    SocialRideParticipantsService,
     // порт кодов приглашений: адрес на карточке `sharing` (RC-P6-4) и intake приглашений (P6)
     InviteCodes,
   ],
 })
 export class SocialCoreModule {}
 
-/** HTTP «Свои»: контроллеры — в P2–P4, P6, P7 (якорь композиции `AppModule`, RC-13). `IdentityModule` — `AuthGuard`. */
-@Module({ imports: [SocialCoreModule, IdentityModule], controllers: [InviteCodeController] })
+/** HTTP «Свои» (якорь композиции `AppModule`, RC-13): участники и явка райда — P2, код приглашения — P6; далее P3, P4, P7. */
+@Module({
+  imports: [SocialCoreModule, IdentityModule],
+  controllers: [RideParticipantsController, InviteCodeController],
+})
 export class SocialModule {}
 
 /**
