@@ -556,3 +556,39 @@ ADR-0011/0015/0018/0019, `rides.md`, `admin-panel.md`, `pokatim-security/db/back
 - **LOW — правила:** `pokatim-contracts.md` (строка ride-photo), `pokatim-backend.md` (`renderVersion` 4).
 - **LOW (claude) — квота `rides-manage` тратится на no-op удаление фото** — без изменений (как удаление аватара);
   учесть в PR B: кнопка «Удалить фото» видна только при `ride.photo`, блокируется на время запроса.
+
+### PR B — приложение (coder, 2026-10-31)
+
+**Сделано** (ветка `feature/organizer-photo-app` поверх PR A): `f9bf17ad` — блок «Своё фото» на экране
+карточки-приглашения (`ride-photo-section.tsx`: только `viewer.role === 'organizer' && canManage`; «Добавить своё фото»
+/ «Заменить фото», «Удалить фото» только при фото, кнопки заняты на время выбора и запроса), хуки
+`useUploadRidePhoto`/`useDeleteRidePhoto` (`applyRideView`: кеш `me` + инвалидация `['rides']` → лента, Главная,
+деталь, статус карточек приглашения), тексты `ride-photo-errors.ts` и `rideInvite.photo.*`, общий выбор фото
+`features/media/pick-image(.web).ts` (аватар — обёртка); `c230b3e8` — `SectionHero photo` + `PhotoScrim` (токен
+`photoScrim`, текст `onPhoto`, фото декоративное, ошибка картинки — типографский герой), `RideHero` →
+`api.ridePhotoUrl`; `87474c49` — `rides.md`, `pokatim-app.md`; `bb893596` — 8.2 D8–D11, `pr-b.md`.
+
+**AC7.** `ride-invite.test.tsx` (не организатор и организатор без права — блока нет; добавление: `pickImage({ maxBytes:
+RIDE_PHOTO_MAX_BYTES, square: false })` → `uploadRidePhoto(token, id, blob)` → «Заменить фото», «Удалить фото», статус
+карточки перезапрошен; отмена выбора — без запроса; 422 `too_small` и 409 — текст баннером; удаление — кнопки заняты,
+затем «Добавить своё фото»), `ride-photo-errors.test.ts` (415/413/422/429/409, проверка до отправки, старый
+dev-клиент, удаление, сеть), `pick-image(.web).test.ts`, `photo-scrim.test.tsx`, `section-hero(.web).test.tsx` (фото
+`cover` с пустым alt, скрим `aria-hidden`, onPhoto, ошибка картинки), `home.test.tsx` и `rides.test.tsx` (герой с
+фото). Профиль — тесты аватара без правок ожиданий (только пути моков). CSP `img-src` с origin API — существующий
+`web-server.test.ts` (название кейса дополнено).
+
+**Проверки.**
+- Полный `pnpm check` (`MONGO_URL_TEST=…/ridephotoapp_test?replicaSet=rs0&directConnection=true`,
+  `REDIS_URL_TEST=redis://127.0.0.1:6479/12`, `TURBO_CONCURRENCY=4`) на **HEAD `bb893596`** — `EXIT=0`: prettier — «All
+  matched files use Prettier code style!»; depcruise — «no dependency violations found (2387 modules, 9512
+  dependencies cruised)»; typecheck — 9/9; тесты — 15/15 задач: app 272 набора / 2598 тестов, api 240 / 2676, admin
+  49 / 511, contracts 494, design-tokens 609, api-client 175, tracks 374, route-view 51, i18n 15.
+- Первый прогон (HEAD `87474c49`, load average ~40 от параллельных сессий) — `EXIT=1` только по таймаутам под
+  нагрузкой в нетронутых файлах (app: `route-detail`, `race-disputes`, `race-participation`, `ride-detail`,
+  `ticket-screen`, `devices-step`; api: `parse-thread`, `ride-invite.png`); отдельно — 6/6 наборов (223 теста) и 2/2
+  файла (13 тестов) зелёные; второй полный прогон — зелёный (выше).
+- После `bb893596` — только этот раздел (prettier — ok).
+- Визуальная проверка web-превью героя и ручная проверка на симуляторе/устройстве — **NOT VERIFIED**.
+
+**Риски / follow-up.** Значения скрима — `[ASSUMPTION]` (прототипов нет, D10); автопереключение шаблона на «Ночь» после
+загрузки не делалось (D11); ручной смоук загрузки HEIC с iPhone (`compatible` → JPEG) — на dev-сборке.
