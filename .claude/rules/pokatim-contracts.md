@@ -191,6 +191,14 @@ paths:
   route-rides-03: `ROUTE_RIDE_ORIGINS` (`manual | auto`, только в конец); в `RouteRideDetail` аддитивно
   `activityId: Uuid.nullable().default(null)` и `origin: tolerantEnum(ROUTE_RIDE_ORIGINS).default('manual')` — новая
   сборка со старым API получает `null`/`manual`; `RouteRideRow` без `origin`.
+  route-rides-04 (таблица «Другие»): `ROUTE_RIDE_LEADERBOARD_DEFAULT`/`MAX` (10/100), запрос
+  `RouteRideLeaderboardQuery` (`strictObject`, `limit` — `coerce`, без курсора), ответ `RouteRideLeaderboard` (`rows`
+  ≤ 100, `total`, `me` — `RouteRideLeaderboardMe` или `null`, `shared`); строка `RouteRideLeaderboardRow` — `place`,
+  `elapsedSec`, `rideDate: LocalDate` (без времени суток), `riderName` + `...RiderRowLink` и `rideId` —
+  `.nullable().default(null)`. Профиль: `ROUTE_RIDES_CONSENT_VERSION` (версия текста согласия — поднимать при смене),
+  `ProfileView.showRouteRides` (`.default(false)`), `UpdateProfileRequest.showRouteRides` (`optional`, в условии
+  `REQUIRED`; старый API — 400, поэтому приложение — после выката API). api-client — `getRouteRideLeaderboard(token,
+  routeId, { limit })`.
 - Достижения (achievements, ADR-0020): `src/achievements/achievement.schema.ts` — `ACHIEVEMENT_CODES` (каталог, **только в
   конец**), `ACHIEVEMENT_OBJECT_KINDS` (`race | route | ride | season`), запрос `AchievementCode` (строгий `z.enum`) и
   `MarkAchievementsSeenRequest` (`strictObject`, без повторов → `INVALID`); ответы `Achievement`

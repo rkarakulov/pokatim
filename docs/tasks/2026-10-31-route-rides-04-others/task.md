@@ -172,6 +172,18 @@ Contracts-first, TDD. Своя БД Mongo `*_test` и свой Redis db.
 
 ## 8.2 Deviations from spec
 
+Coder, 2026-10-31 (уточнения реализации, решения §3 не меняются):
+
+- `rankLeaderboard` получает и `shared` (иначе сервис дописывал бы поле в ответ после чистой функции);
+  `leaderboardTop(routeId, scanRiders, topPerRider)` — `n` параметром из политики.
+- Имя индекса для `hint` — константа `ROUTE_RIDES_LEADERBOARD_INDEX` в `route-rides.repository.ts` (модуль не
+  импортирует миграции; совпадение держит int-тест плана `IXSCAN route_rides_leaderboard_idx`).
+- `chunks` экспортирован из `rider-route-rides.ts` (переиспользование пачек, без копии).
+- Своя строка в `rows` получает карточку из того же `routeRideRiders` — значит имя/фото у неё есть, только если у
+  зрителя включены и показ заездов, и показ имени; без согласия — `null` (приложение всё равно подписывает «Вы», RC-3).
+- `ProfileView.showRouteRides` обязателен в выходном типе — фикстуры `ProfileView` в 22 тестах `apps/app` дополнены
+  `showRouteRides: false` (только тесты, отдельный коммит), иначе `typecheck @pokatim/app` красный.
+
 ## 8.3 Security checklist
 
 Зона — `pokatim-security.md` («Заезд по маршруту», профиль/согласия): чек-лист обязателен.
@@ -519,3 +531,22 @@ PR B (`feature/route-rides-others-app`): блок «Другие на маршр
 «Протоколе»).
 
 ## 12. Outcome (заполняет coder)
+
+Coder, 2026-10-31. PR A реализован по §11, 7 шагов TDD — отдельные коммиты (+ коммит фикстур приложения).
+
+- **Контракты:** `ROUTE_RIDES_CONSENT_VERSION`, `ProfileView.showRouteRides`, `UpdateProfileRequest.showRouteRides`;
+  `ROUTE_RIDE_LEADERBOARD_DEFAULT/MAX`, `RouteRideLeaderboardQuery/Row/Me`, `RouteRideLeaderboard`.
+- **api-client:** `RouteRideLeaderboardParams`, `getRouteRideLeaderboard`.
+- **API:** профиль (флаг, журнал `route_rides`, `findRouteRideRiders`, порт `routeRideRiders`); `catalogRoute`;
+  `liveActivityIds`; `compareRides`, `ROUTE_RIDE_LEADERBOARD_POLICY`, `route-ride-leaderboard.ts`, `leaderboardTop`,
+  `RouteRideLeaderboardService`, ручка `leaderboard`; миграция `0047` (+ ожидание `0044`, RC-9; `0046` больше не
+  последняя).
+- **Проверки (MONGO `pokatim_rr04_test`, Redis db 7):** contracts — 496 тестов, typecheck 0 ошибок; api-client — 172
+  теста, typecheck 0; api — unit 941 тест (100 файлов), int+unit модулей route-rides, profile, routes, tracks,
+  account, migrations, `test/harness.int.test.ts` — 642 теста (46 файлов); typecheck api и app — 0 ошибок; jest
+  изменённых тестов app — 441 (22 набора); eslint затронутых путей — чисто; `pnpm format:check` — чисто; `pnpm
+  arch:check` — 0 нарушений. Полный `pnpm check` не запускался (решение пользователя) — перед PR.
+- **Отрицательные доказательства** (временная правка сервиса, откачено): без фильтра согласия `shares.has` — 3 int-теста
+  таблицы красные; своя строка без фильтра живых активностей — 1 красный.
+- Доки: `docs/product/routes.md`, `docs/product/profile.md`, правила `pokatim-{backend,contracts,db,security}.md`,
+  `pr.md`.

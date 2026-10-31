@@ -65,7 +65,10 @@ paths:
   его из профиля при каждом запросе через порт `RIDER_NAMES`, согласие — в фильтре запроса.
 - Журнал согласий `profile_consent_events` (profile-02, миграция `0019_profile_consents`, индекс `{ userId, at }`) —
   append-only: только `insertOne` в `ProfileRepository` (сторож `profile.repository.test.ts`), событие — только при
-  фактической смене `showNameInResults`, в транзакции `PATCH`; версия текста и время — сервер; имени нет. **Удаление
+  фактической смене флага, в транзакции `PATCH`; версия текста и время — сервер; имени нет. Виды
+  (`PROFILE_CONSENT_KINDS`, только в конец): `public_name` (`showNameInResults`, `PUBLIC_NAME_CONSENT_VERSION`),
+  `route_rides` (`showRouteRides`, `ROUTE_RIDES_CONSENT_VERSION`, route-rides-04). `profiles.showRouteRides?` — нет
+  поля — `false` (материализуется при следующей записи профиля, бэкфилла нет). **Удаление
   аккаунта журнал не удаляет** (доказательство согласия, только псевдонимный `userId`; правомерность — проверить
   юристом до прода, `docs/product/profile.md`).
 - Сброс имени модератором (profile-02) — транзакция: **первой** — условная запись профиля (`publicName` — строка),
@@ -456,6 +459,11 @@ paths:
   по `tracks.activity-removed` (fan-out, очередь `route-rides-intake`, `deleteOfActivity`); фильтр и удаление сирот в
   транзакции следующего нового заезда по маршруту — страховка (POST без замка активностей может вставить заезд после
   обработки события). Не append-only.
+- Таблица «Другие» (route-rides-04, миграция `0047_route_rides_leaderboard_idx`, expand-only, без бэкфилла):
+  частичный `route_rides_leaderboard_idx { routeId, 'segment.elapsedSec', 'activity.startedAt', _id }` по `status:
+  'passed'` — агрегат `leaderboardTop` (`$match` → `$group` с `$topN` 3 → `$sort` по лучшему → `$limit` 5000, `hint`
+  индекса; план — `IXSCAN`, int-тест). Порядок ключа = `compareRides` (единственный компаратор, им же `bestOf`).
+  Согласие и живость активностей — порты `profile`/`tracks` после агрегата (`$lookup` в чужие коллекции нет).
 
 ## Достижения (achievements, ADR-0020 Proposed)
 

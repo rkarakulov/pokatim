@@ -327,8 +327,8 @@ paths:
   кэшируют маршрут райдера.
 - Наружу — явный список полей (int-тест ключей): без `userId`, id активности (кроме кандидатов — свои — и
   `activityId` своей основной группы в детали, route-rides-03), `sha256`,
-  `trackMap`, `engineVersion`, датчиков и координат; линия — только своя в `/track`. Сравнение — только со своими
-  заездами (R2).
+  `trackMap`, `engineVersion`, датчиков и координат; линия — только своя в `/track`. Сравнение со своими заездами
+  (R2) — `GET …/rides*`; чужие — только таблица «Другие» (ниже, R2 снят route-rides-04).
 - Злоупотребления: лимит `route-rides-user:<uid>` 30/ч (считает и 404), квота 100 заездов на маршрут (мягкая, RC-11),
   кандидаты ≤ 30. Логи — id заезда, маршрута, пользователя, статусы и коды; без названий и координат.
 - Автопроверка (route-rides-03, worker): `userId` — только из payload события `tracks`, записанного сервером;
@@ -336,6 +336,19 @@ paths:
   повторно `matchGeometry` перед сверкой); клиент на план и вердикт не влияет, `origin` ставит сервер. Триггер — только
   новая группа дублей, `cycling|unknown`, старт ≤ 7 сут до приёма файла; ≤ 20 прогонов на активность, квота 100,
   параллелизм 1; лимит `route-rides-user` не тратится. Логи — id и счётчики.
+- Таблица «Другие» (route-rides-04, `GET …/rides/leaderboard`): `AuthGuard`, `no-store`, query
+  `RouteRideLeaderboardQuery` (`strictObject`, `limit` 1–100). Лимит `route-rides-leaderboard:<uid>` 300/ч **до**
+  любых чтений (считает и 404) → маршрут — `RouteRideRoutes.catalogRoute` (только `ready` + `IN_CATALOG` + длина, без
+  кэша; иначе один `404`). Чужие строки — только при `showRouteRides: true` **сейчас** (фильтр запроса
+  `RIDER_NAMES.routeRideRiders`, без кэша); имя, ссылка и фото — только «имя + `showNameInResults`»
+  (`isPublicProfile`). Строка — явный литерал: `place`, `elapsedSec`, `rideDate` (`LocalDate`, без времени суток),
+  `riderName`/`riderPublicId`/`riderAvatar`, `rideId` — только своя; без `userId`, `activityId`, `routeId`, источника,
+  трека и сегмента (int-тест ключей). Скан ≤ 5000 райдеров, лог `route_rides.leaderboard_truncated route=<id>` — без
+  имён, дат и чужих `userId`.
+- **`ActivitySource.liveActivityIds(ids)`** (route-rides-04, RC-5) — единственный метод порта без `userId`
+  (кросс-пользовательский): наружу только подмножество входных id (ни владельца, ни сводок), ≤ 1000 id за вызов
+  (больше — `Error`); id берутся только из заездов маршрута у сервера, не из запроса клиента. Остальные методы
+  `ActivitySource` — по-прежнему только свои активности.
 
 ## Профиль райдера и аватары (rider-profile, ADR-0019)
 
