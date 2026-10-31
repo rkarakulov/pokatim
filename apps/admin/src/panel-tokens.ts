@@ -15,6 +15,8 @@ export const PANEL_LAYOUT_TOKENS = {
   'rail-width': 330,
   /** Фото райдера в карточке модерации профиля (profile-moderation, RC-P4). */
   'avatar-preview': 128,
+  /** Фото организатора в карточке модерации райда (ride-photo PR C): ширина, высота — по пропорциям. */
+  'ride-photo-preview': 320,
   /** QR-код подключения 2FA (panel-2fa): сторона квадрата. */
   'qr-size': 200,
 } as const;
