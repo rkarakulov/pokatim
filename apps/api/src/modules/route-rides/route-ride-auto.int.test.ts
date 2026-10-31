@@ -347,7 +347,7 @@ describe('AC3: план события детерминирован (ревью 
     expect(await rides().countDocuments({ activityId: fresh })).toBe(10);
   });
 
-  it('ретрай задачи берёт план из данных задачи: новый свой маршрут между попытками не проверяется', async () => {
+  it('ретрай задачи берёт сохранённый план события: новый свой маршрут между попытками не проверяется', async () => {
     const r = await rider(h);
     const own: string[] = [];
     for (let i = 0; i < 20; i += 1) own.push(await ownCorridorRoute(h, r.userId));
@@ -361,17 +361,91 @@ describe('AC3: план события детерминирован (ревью 
       if (calls === 3) throw new Error('loader crashed');
       return verdict(true);
     });
-    const task = job(event!.type, event!._id);
-    await expect(auto().process(task)).rejects.toThrow('loader crashed');
-    expect((task.data as { plan?: string[] }).plan).toHaveLength(20);
+    await expect(auto().process(job(event!.type, event!._id))).rejects.toThrow('loader crashed');
+    expect(await routeRidesDb(h).autoPlans.findOne({ _id: event!._id })).toMatchObject({
+      userId: r.userId,
+      routeIds: expect.any(Array),
+    });
 
     // между попытками — новый свой маршрут (встал бы первым в (б))
     const newer = await ownCorridorRoute(h, r.userId);
     evaluate.mockClear();
-    (task as { attemptsMade: number }).attemptsMade = 1;
-    expect(await auto().process(task)).toEqual({ planned: 20, passed: 18 });
+    expect(await auto().process(job(event!.type, event!._id, 1))).toEqual({
+      planned: 20,
+      passed: 18,
+    });
     expect(evaluate.mock.calls.map(([doc]) => doc.routeId)).not.toContain(newer);
     expect(await rides().countDocuments({ activityId: fresh })).toBe(20);
+  });
+
+  it('повтор события после удаления задачи (pass 3, Codex): маршрут с not_passed не замещается новым — тот же план', async () => {
+    const r = await rider(h);
+    const own: string[] = [];
+    for (let i = 0; i < 20; i += 1) own.push(await ownCorridorRoute(h, r.userId));
+    const fresh = await ride(r.auth, rideGpx('clean.gpx', at(0)));
+    const [event] = (await autoEvents(h)).filter(
+      (item) => (item.payload as { activityId: string }).activityId === fresh,
+    );
+    const failing = own[19]!;
+    const evaluate = vi
+      .spyOn(evaluator(), 'evaluate')
+      .mockImplementation(async (doc) => verdict(doc.routeId !== failing));
+    expect(await auto().process(job(event!.type, event!._id))).toEqual({
+      planned: 20,
+      passed: 19,
+    });
+    const newer = await ownCorridorRoute(h, r.userId);
+    evaluate.mockClear();
+    // новая задача того же события (прежняя удалена из BullMQ)
+    expect(await auto().process(job(event!.type, event!._id))).toEqual({
+      planned: 20,
+      passed: 0,
+    });
+    expect(evaluate.mock.calls.map(([doc]) => doc.routeId)).toEqual([failing]);
+    expect(await rides().countDocuments({ activityId: fresh })).toBe(19);
+    expect(await rides().countDocuments({ routeId: newer })).toBe(0);
+  });
+
+  it('квота своего маршрута вне скана истории — до отсечения 20 (pass 3, Codex MEDIUM)', async () => {
+    const r = await rider(h);
+    const earlier = await ride(r.auth, rideGpx('clean.gpx', at(-24)));
+    // 200 более свежих маршрутов истории — невидимы (скан исчерпан)
+    for (let i = 0; i < 200; i += 1) {
+      const id = await catalogCorridorRoute(h, OTHER);
+      await routesDb(h).routes.updateOne({ _id: id }, { $set: { catalog: null } });
+      await seedRide(r.userId, id, earlier);
+    }
+    const ok: string[] = [];
+    for (let i = 0; i < 20; i += 1) ok.push(await ownCorridorRoute(h, r.userId));
+    // заполненный свой маршрут — новее всех в (б); 100 живых заездов со старыми датами — вне скана истории
+    const full = await ownCorridorRoute(h, r.userId);
+    const proto = await tracks(h).activities.findOne({ _id: earlier });
+    const fillers = Array.from({ length: ROUTE_RIDE_POLICY.maxPerRoute }, () => uuidv7());
+    await tracks(h).activities.insertMany(
+      fillers.map((id, i) => ({
+        ...proto!,
+        _id: id,
+        uploadId: uuidv7(),
+        startedAt: new Date(proto!.startedAt.getTime() - (i + 1) * 86_400_000),
+      })),
+    );
+    const snapshot = (await source().activity(r.userId, earlier))!;
+    for (const id of fillers) {
+      const doc = newRideDoc({
+        userId: r.userId,
+        routeId: full,
+        activity: { ...snapshot, id, startedAt: new Date('2026-01-01T00:00:00Z') },
+        origin: 'manual',
+        now: h.clock.now(),
+      });
+      await rides().insertOne({ ...doc, status: 'not_passed' });
+    }
+    const evaluate = vi.spyOn(evaluator(), 'evaluate').mockResolvedValue(verdict(false));
+    expect(await auto().run(await ride(r.auth, rideGpx('clean.gpx', at(0))), r.userId)).toEqual({
+      planned: 20,
+      passed: 0,
+    });
+    expect(evaluate.mock.calls.map(([doc]) => doc.routeId).sort()).toEqual([...ok].sort());
   });
 
   it('свой маршрут с автозаездом группы резервирует слот раньше нового маршрута (повтор после удаления задачи)', async () => {

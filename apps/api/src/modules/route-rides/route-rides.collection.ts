@@ -7,7 +7,10 @@ import type { Collection, Db } from 'mongodb';
  * Создаёт миграция `0032_route_rides`; единственный писатель — `RouteRidesRepository`. Не append-only: удаляются с
  * аккаунтом и сиротами (активность удалена) при следующем POST по маршруту (8.1 RC-1).
  */
-export const ROUTE_RIDES_COLLECTIONS = { rides: 'route_rides' } as const;
+export const ROUTE_RIDES_COLLECTIONS = {
+  rides: 'route_rides',
+  autoPlans: 'route_ride_auto_plans',
+} as const;
 
 export type RouteRideStatus = 'queued' | 'checking' | 'passed' | 'not_passed' | 'failed';
 /** Происхождение заезда (route-rides-03): ручная проверка (POST) / автопроверка новой активности (worker). */
@@ -79,10 +82,27 @@ export type RouteRideResult = Pick<
   | 'checkedAt'
 >;
 
+/**
+ * План автопроверки события (route-rides-03, ревью pass 3): `_id` — id события outbox `tracks.activity-group-created`,
+ * маршруты (≤ 20) — фиксируются первой попыткой (`insertOne`, дубль `_id_` — план победителя); любой ретрай и повтор
+ * события проверяет только их. `expiresAt` — уборка TTL (`0046_route_ride_auto_plans`); стирание — по `userId`.
+ */
+export interface RouteRideAutoPlanDoc {
+  _id: string;
+  userId: string;
+  routeIds: string[];
+  createdAt: Date;
+  expiresAt: Date;
+}
+
 export interface RouteRidesCollections {
   rides: Collection<RouteRideDoc>;
+  autoPlans: Collection<RouteRideAutoPlanDoc>;
 }
 
 export function routeRidesCollections(db: Db): RouteRidesCollections {
-  return { rides: db.collection<RouteRideDoc>(ROUTE_RIDES_COLLECTIONS.rides) };
+  return {
+    rides: db.collection<RouteRideDoc>(ROUTE_RIDES_COLLECTIONS.rides),
+    autoPlans: db.collection<RouteRideAutoPlanDoc>(ROUTE_RIDES_COLLECTIONS.autoPlans),
+  };
 }

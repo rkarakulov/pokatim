@@ -41,6 +41,8 @@ export const ROUTE_RIDE_AUTO_POLICY = {
   maxRoutes: 20,
   riddenRoutesScan: 200,
   boundsBatch: 25,
+  /** хранение плана события (TTL) — дольше ретраев и повторов outbox */
+  planTtlDays: 30,
   sports: ['cycling', 'unknown'],
 } as const;
 

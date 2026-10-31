@@ -6,6 +6,7 @@ import { type ChangedCursor, changedSort, changedWithin } from '../../changed-si
 import type { DbSession } from '../../db';
 import {
   type RouteRideDoc,
+  type RouteRideAutoPlanDoc,
   type RouteRideResult,
   type RouteRidesCollections,
   routeRidesCollections,
@@ -221,8 +222,28 @@ export class RouteRidesRepository {
       .toArray();
   }
 
-  /** Стирание заездов удалённого аккаунта (ADR-0015). */
+  /** План автопроверки события (route-rides-03); нет — `null`. */
+  async autoPlanOf(eventId: string): Promise<string[] | null> {
+    const doc = await this.c.autoPlans.findOne({ _id: eventId }, { projection: { routeIds: 1 } });
+    return doc?.routeIds ?? null;
+  }
+
+  /** Фиксация плана события: первая запись побеждает (дубль `_id_` — план, сохранённый раньше). */
+  async saveAutoPlan(doc: RouteRideAutoPlanDoc): Promise<string[]> {
+    try {
+      await this.c.autoPlans.insertOne(doc);
+      return doc.routeIds;
+    } catch (error) {
+      if (!isDuplicateKey(error, '_id_')) throw error;
+      const saved = await this.autoPlanOf(doc._id);
+      if (!saved) throw error;
+      return saved;
+    }
+  }
+
+  /** Стирание заездов и планов автопроверки удалённого аккаунта (ADR-0015); число — стёртых заездов. */
   async deleteAllOf(userId: string): Promise<number> {
+    await this.c.autoPlans.deleteMany({ userId });
     return (await this.c.rides.deleteMany({ userId })).deletedCount;
   }
 }

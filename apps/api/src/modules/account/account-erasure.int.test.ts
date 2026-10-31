@@ -665,11 +665,24 @@ describe('шаг route-rides (route-rides-01)', () => {
     await seedRouteRide(w.a.userId);
     await seedRouteRide(w.a.userId);
     await seedRouteRide(w.b.userId);
+    // планы автопроверки (route-rides-03) — тоже по userId
+    const now = h.clock.now();
+    for (const userId of [w.a.userId, w.b.userId]) {
+      await routeRidesDb(h).autoPlans.insertOne({
+        _id: uuidv7(),
+        userId,
+        routeIds: [uuidv7()],
+        createdAt: now,
+        expiresAt: now,
+      });
+    }
     await deleteAccount(w.a.accessToken);
     expect(await firstPass(w.a.userId)).toBe('erased');
 
     expect(await routeRidesDb(h).rides.countDocuments({ userId: w.a.userId })).toBe(0);
     expect(await routeRidesDb(h).rides.countDocuments({ userId: w.b.userId })).toBe(1);
+    expect(await routeRidesDb(h).autoPlans.countDocuments({ userId: w.a.userId })).toBe(0);
+    expect(await routeRidesDb(h).autoPlans.countDocuments({ userId: w.b.userId })).toBe(1);
     expect(await h.worker.get(RouteRideErasure).erase(w.a.userId)).toBe(0);
   });
 });
