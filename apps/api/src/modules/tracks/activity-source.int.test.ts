@@ -267,6 +267,44 @@ describe('liveActivities (route-rides-01, RC-2)', () => {
   });
 });
 
+describe('liveActivityIds (route-rides-04, RC-5)', () => {
+  it('живые активности любых пользователей — только подмножество входных id; удалённые и неизвестные — нет', async () => {
+    const { streamed, fileActivity, streamActivity } = await fileAndStream();
+    const other = bearer((await signUpSession(h, 'other@example.com')).accessToken);
+    const otherUpload = parsedUpload(await uploadTrack(h, other, fixture('komoot.gpx')));
+    expect(await processUpload(h, otherUpload.id)).toBe('ready');
+    const otherActivity = await tracks(h).activities.findOne({ uploadId: otherUpload.id });
+    const unknown = '01890a5d-ac96-774b-bcce-b302099a8057';
+    const ids = [
+      fileActivity._id,
+      streamActivity._id,
+      otherActivity!._id,
+      unknown,
+      fileActivity._id,
+    ];
+
+    expect(await source().liveActivityIds(ids)).toEqual(
+      new Set([fileActivity._id, streamActivity._id, otherActivity!._id]),
+    );
+    expect(
+      (await call(h, 'POST', `/v1/tracks/uploads/${streamed.uploadId}/delete`, {}, auth)).status,
+    ).toBe(204);
+    expect(await source().liveActivityIds(ids)).toEqual(
+      new Set([fileActivity._id, otherActivity!._id]),
+    );
+  });
+
+  it('пустой вход — без запроса; больше 1000 id за вызов — Error', async () => {
+    const repo = vi.spyOn(h.worker.get(TracksRepository), 'liveActivityIds');
+    expect(await source().liveActivityIds([])).toEqual(new Set());
+    expect(repo).not.toHaveBeenCalled();
+    const many = Array.from({ length: 1001 }, (_, i) => `id-${i}`);
+    await expect(source().liveActivityIds(many)).rejects.toThrow(Error);
+    expect(repo).not.toHaveBeenCalled();
+    repo.mockRestore();
+  });
+});
+
 describe('countUnprocessed (race-results-05: строка чек-листа «необработанные треки»)', () => {
   it('загрузки пользователей в queued|processing, принятые в [from, before); прочие статусы и чужие — нет', async () => {
     const queued = parsedUpload(await uploadTrack(h, auth, fixture('komoot.gpx')));

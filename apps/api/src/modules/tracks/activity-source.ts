@@ -9,6 +9,9 @@ import type { ActivityDoc } from './tracks.collection';
 import { byPrimaryPriority } from './tracks.policy';
 import { TracksRepository } from './tracks.repository';
 
+/** Предел `liveActivityIds` за вызов (route-rides-04, RC-5). */
+const LIVE_IDS_MAX = 1000;
+
 /** Реализация порта `ActivitySource`: читает только через `TracksRepository`, файл — через `TrackFileStore`. */
 @Injectable()
 export class ActivitySourceService implements ActivitySource {
@@ -85,6 +88,15 @@ export class ActivitySourceService implements ActivitySource {
     if (unique.length === 0) return new Map();
     const heads = await this.repository.ownActivityHeads(userId, unique);
     return new Map(heads.map((head) => [head._id, { primaryId: head.duplicateOf ?? head._id }]));
+  }
+
+  async liveActivityIds(ids: readonly string[]): Promise<Set<string>> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return new Set();
+    if (unique.length > LIVE_IDS_MAX) {
+      throw new Error(`liveActivityIds: ${unique.length} ids > ${LIVE_IDS_MAX}`);
+    }
+    return new Set(await this.repository.liveActivityIds(unique));
   }
 
   async readSource(activityId: string): Promise<{ bytes: Uint8Array; format: TrackFormat } | null> {

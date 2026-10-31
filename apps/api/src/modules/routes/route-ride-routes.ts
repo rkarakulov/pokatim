@@ -51,6 +51,12 @@ export class RouteRideRoutesService implements RouteRideRoutes {
     return this.repository.ownReadyIds(userId, limit);
   }
 
+  async catalogRoute(routeId: string): Promise<{ id: string; title: string } | null> {
+    const [route] = await this.repository.inCatalogByIds([routeId]);
+    if (!route || route.distanceM === null) return null;
+    return { id: route._id, title: route.title };
+  }
+
   async rideableBounds(routeIds: readonly string[], userId: string): Promise<Map<string, Bounds>> {
     const ids = [...new Set(routeIds)];
     if (ids.length === 0) return new Map();

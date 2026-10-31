@@ -190,3 +190,48 @@ describe('RouteRideRoutes.ownReadyIds и rideableBounds (route-rides-03, авт�
     expect(await port().rideableBounds([], ME)).toEqual(new Map());
   });
 });
+
+describe('RouteRideRoutes.catalogRoute (route-rides-04, O2, RC-6)', () => {
+  it('маршрут платформы в каталоге и одобренный маршрут райдера (и у автора) — { id, title }', async () => {
+    const platform = await corridorRoute(h, OTHER);
+    await inCatalog(platform);
+    const approved = await seedApprovedRiderRoute(h, ME);
+    expect(await port().catalogRoute(platform)).toEqual({
+      id: platform,
+      title: 'Эталонный коридор',
+    });
+    expect(await port().catalogRoute(approved)).toEqual({
+      id: approved,
+      title: expect.any(String),
+    });
+  });
+
+  it('свой неопубликованный, pending/hidden/withdrawn, не готовый, вне каталога, без длины, неизвестный — null', async () => {
+    const lengthless = await corridorRoute(h, OTHER);
+    await inCatalog(lengthless);
+    await routesDb(h).routes.updateOne({ _id: lengthless }, { $set: { distanceM: null } });
+    const notReady = await corridorRoute(h, OTHER);
+    await inCatalog(notReady);
+    await routesDb(h).routes.updateOne({ _id: notReady }, { $set: { status: 'processing' } });
+    const hidden = [
+      await corridorRoute(h, OTHER),
+      await seedRiderRoute(h, ME),
+      await seedRiderRoute(h, OTHER, { publication: publicationDoc(h, 'pending') }),
+      await seedRiderRoute(h, OTHER, { publication: publicationDoc(h, 'hidden') }),
+      await seedRiderRoute(h, OTHER, { publication: publicationDoc(h, 'withdrawn') }),
+      await seedRiderRoute(h, OTHER, { catalog: catalogDoc() }),
+      lengthless,
+      notReady,
+      UNKNOWN,
+    ];
+    for (const id of hidden) expect(await port().catalogRoute(id), id).toBeNull();
+  });
+
+  it('без кэша: снятие с каталога видно следующим вызовом', async () => {
+    const platform = await corridorRoute(h, OTHER);
+    await inCatalog(platform);
+    expect(await port().catalogRoute(platform)).not.toBeNull();
+    await routesDb(h).routes.updateOne({ _id: platform }, { $set: { catalog: null } });
+    expect(await port().catalogRoute(platform)).toBeNull();
+  });
+});

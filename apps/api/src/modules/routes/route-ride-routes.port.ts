@@ -42,4 +42,9 @@ export interface RouteRideRoutes {
    * пустая карта без запроса.
    */
   rideableBounds(routeIds: readonly string[], userId: string): Promise<Map<string, Bounds>>;
+  /**
+   * Маршрут каталога (`ready` + `IN_CATALOG`, длина есть) без кэша — таблица «Другие» (route-rides-04, O2, RC-6): не по
+   * доступу райдера (автор одобренного маршрута тоже получает таблицу); иначе — `null`.
+   */
+  catalogRoute(routeId: string): Promise<{ id: string; title: string } | null>;
 }
