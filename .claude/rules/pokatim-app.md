@@ -47,8 +47,10 @@ paths:
   `['notifications','settings','routes']`), только push, после «Райдов»; без push — блока и запроса нет; после
   `PUT settings` её запрос инвалидируется (нет своего тумблера — сервер отдаёт значение «Райдов»); группа «Достижения»
   (achievements-push) — так же (`useAchievementNotificationSettings({ enabled: push })`, ключ
-  `['notifications','settings','achievements']`), только push, последней среди групп; общая разметка групп только с push
-  — `PushOnlyGroup` экрана; цель `ticket` → `/tickets/<код>` (и в SW); цель `achievement` → `achievementPath(code,
+  `['notifications','settings','achievements']`), только push; группа «Свои» (social-p1) — так же
+  (`useSocialNotificationSettings({ enabled: push })`, ключ `['notifications','settings','social']`), только push,
+  последней среди групп; общая разметка групп только с push — `PushOnlyGroup` экрана; цель `rider` → `/riders/<publicId>`
+  (в SW — копия проверки `OpaqueToken`, 43 символа base64url); цель `ticket` → `/tickets/<код>` (и в SW); цель `achievement` → `achievementPath(code,
   seasonId)` (`features/achievements/achievement-catalog.ts`, им же собирается `achievementItemPath`; в SW — копия
   кодов `SW_ACHIEVEMENT_CODES`, равенство с `ACHIEVEMENT_CODES` держит тест); выход — снятие на
   сервере и `unsubscribe()` в браузере; нажатие на уведомление — сообщение SW `pokatim:open` → `onOpen(target)`): разрешение — только по нажатию строки

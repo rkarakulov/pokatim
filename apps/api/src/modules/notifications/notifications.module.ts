@@ -16,6 +16,7 @@ import { RidesCoreModule } from '../rides';
 import { RoutesCoreModule } from '../routes';
 import { TicketsCoreModule } from '../tickets';
 import { AchievementsSyncModule } from '../achievements';
+import { ProfileCoreModule } from '../profile';
 import { NotificationIntake } from './notification-intake';
 import { NotificationErasure } from './notification-erasure';
 import { NotificationSettingsService } from './notification-settings.service';
@@ -71,9 +72,12 @@ const webPushSenderProvider: Provider = {
 })
 export class NotificationsCoreModule {}
 
-/** Центр уведомлений (ADR-0017): HTTP `/v1/notifications` под `AuthGuard` identity. */
+/**
+ * Центр уведомлений (ADR-0017): HTTP `/v1/notifications` под `AuthGuard` identity; имена «Своих» при чтении —
+ * `RIDER_NAMES` (`ProfileCoreModule`, social-p1).
+ */
 @Module({
-  imports: [IdentityModule, NotificationsCoreModule],
+  imports: [IdentityModule, NotificationsCoreModule, ProfileCoreModule],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationSettingsService, PushTokensService],
 })
@@ -85,7 +89,8 @@ export class NotificationsModule {}
  * (`notifications-delivery`), регламент квитанций и перепостановки (`notifications-maintenance`). Источники — только
  * порты через их `index.ts`: `RESULTS_NOTICES` и `RACE_REGISTRY` (`ResultsCoreModule` реэкспортирует `RacesCoreModule`),
  * `DISPUTE_NOTICES`, `RIDE_NOTICES`, `ROUTE_NOTICES`, `TICKET_NOTICES` (`TicketsCoreModule`, PR D),
- * `ACHIEVEMENT_NOTICES` (`AchievementsSyncModule`, achievements-push), `IdentityAccounts`.
+ * `ACHIEVEMENT_NOTICES` (`AchievementsSyncModule`, achievements-push), `IdentityAccounts`; имена «Своих» в push —
+ * `RIDER_NAMES` (`ProfileCoreModule`, social-p1).
  */
 @Module({
   imports: [
@@ -97,6 +102,7 @@ export class NotificationsModule {}
     TicketsCoreModule,
     AchievementsSyncModule,
     IdentityAccountsModule,
+    ProfileCoreModule,
     BullModule.registerQueue(
       { name: QUEUE.notificationsIntake },
       { name: QUEUE.notificationsDelivery },

@@ -11,26 +11,43 @@ import { z } from 'zod';
 import { domainError } from '../../error-messages';
 import { consumeUserLimit } from '../../user-limit';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
+import { type PublicRiderCard, RIDER_NAMES, type RiderNameDirectory } from '../profile';
 import type { NotificationDoc } from './notifications.collection';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
+import { renderSocialNotice, socialActorIds } from './social-notices';
 
 type ListedDoc = Pick<
   NotificationDoc,
-  '_id' | 'kind' | 'group' | 'title' | 'body' | 'target' | 'createdAt' | 'readAt'
+  | '_id'
+  | 'kind'
+  | 'group'
+  | 'title'
+  | 'body'
+  | 'target'
+  | 'createdAt'
+  | 'readAt'
+  | 'actors'
+  | 'params'
 >;
 
-/** Ответ — явный список полей: без `userId`, источника, состояния доставки. */
-function viewOf(doc: ListedDoc): NotificationView {
+/**
+ * Ответ — явный список полей: без `userId`, источника, состояния доставки и `actors`. «Свои» — текст и цель с текущими
+ * публичными именами (`renderSocialNotice`, ADR-0027 п. 6).
+ */
+function viewOf(doc: ListedDoc, cards: ReadonlyMap<string, PublicRiderCard>): NotificationView {
+  const stored = { title: doc.title, body: doc.body, target: doc.target ?? null };
+  const { title, body, target } =
+    doc.group === 'social' ? renderSocialNotice({ ...doc, ...stored }, cards) : stored;
   return {
     id: doc._id,
     kind: doc.kind,
     group: doc.group,
-    title: doc.title,
-    body: doc.body,
+    title,
+    body,
     createdAt: doc.createdAt.toISOString(),
     read: (doc.readAt ?? null) !== null,
-    target: doc.target ?? null,
+    target,
   };
 }
 
@@ -43,6 +60,7 @@ export class NotificationsService {
   constructor(
     private readonly repository: NotificationsRepository,
     private readonly rateLimiter: RateLimiter,
+    @Inject(RIDER_NAMES) private readonly names: RiderNameDirectory,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -57,8 +75,11 @@ export class NotificationsService {
     );
     const page = docs.slice(0, query.limit);
     const last = page.at(-1);
+    // имена «Своих» — один запрос на страницу; нет действующих лиц — без запроса
+    const actors = socialActorIds(page);
+    const cards = actors.length > 0 ? await this.names.publicRiders(actors) : new Map();
     return {
-      items: page.map(viewOf),
+      items: page.map((doc) => viewOf(doc, cards)),
       nextCursor:
         docs.length > query.limit && last
           ? encodeCursor(last.createdAt.toISOString(), last._id)

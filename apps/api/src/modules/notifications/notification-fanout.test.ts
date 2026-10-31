@@ -137,6 +137,45 @@ describe('planFanout: пачки получателей', () => {
     }
   });
 
+  it('«Свои»: действующее лицо и params — в каждой пачке (social-p1); без лица — ключа нет', () => {
+    const actor = uuidv7();
+    const chunks = plan([
+      draft(users(201), {
+        text: { kind: 'social_riders_going', object: 'Кофе-райд' },
+        target: { type: 'ride', rideId: EVENT },
+        collapse: { key: `social:going:${EVENT}` },
+        actor,
+      }),
+    ]);
+    expect(chunks?.map((chunk) => chunk.data.social)).toEqual([
+      { actor, params: { object: 'Кофе-райд' } },
+      { actor, params: { object: 'Кофе-райд' } },
+    ]);
+    expect(chunks?.[0]?.data).toMatchObject({ title: 'Свои идут', body: 'Райдер · «Кофе-райд»' });
+    for (const chunk of chunks ?? []) {
+      expect(FanoutJobData.parse(chunk.data).social).toEqual({
+        actor,
+        params: { object: 'Кофе-райд' },
+      });
+    }
+    for (const chunk of plan([draft(users(201))]) ?? []) {
+      expect('social' in chunk.data).toBe(false);
+    }
+  });
+
+  it('пачка с битым лицом или длинным названием не разбирается', () => {
+    const [chunk] = plan([draft(users(201))]) ?? [];
+    expect(
+      FanoutJobData.safeParse({ ...chunk!.data, social: { actor: 'x', params: {} } }).success,
+    ).toBe(false);
+    expect(
+      FanoutJobData.safeParse({
+        ...chunk!.data,
+        social: { actor: uuidv7(), params: { object: 'x'.repeat(201) } },
+      }).success,
+    ).toBe(false);
+  });
+
   it('имя задачи пачки не совпадает ни с одним типом событий outbox', () => {
     expect(NOTIFICATIONS_FANOUT_JOB).toBe('notifications.fanout');
     expect(Object.keys(notificationsOutboxRoutes)).not.toContain(NOTIFICATIONS_FANOUT_JOB);

@@ -7,6 +7,8 @@ import type {
 } from '@pokatim/contracts';
 import type { Collection, Db } from 'mongodb';
 
+import type { SocialNoticeParams } from './social-notices';
+
 /**
  * Коллекции центра уведомлений (ADR-0017). Создаёт миграция `0025_notifications`; единственный писатель — модуль
  * `notifications`. TTL-индексы — только уборка: истечение проверяет сервер по `CLOCK`.
@@ -43,6 +45,8 @@ export interface EmailDelivery {
 /**
  * Уведомление: текст — снимок на момент создания (без чужих ПДн, N12), цель — тип + id из белого списка. Одно на
  * `(sourceEventId, userId)`; повтор по объекту схлопывается по `collapseKey` (N7). `expireAt = createdAt + 90 дней`.
+ * Группа «Свои» (social-p1, ADR-0027 п. 6): `title`/`body` — запасной текст без имён, `actors` и `params` — данные
+ * текста при чтении; повтор в окне копит `actors` (условный `$push`), создающее событие и доставка не меняются.
  */
 export interface NotificationDoc {
   _id: string;
@@ -56,6 +60,10 @@ export interface NotificationDoc {
   collapseKey?: string;
   /** порядковый номер записанного события в объекте (с `collapseKey`); документы до него поля не имеют */
   collapseSeq?: number;
+  /** «Свои»: id действующих лиц в порядке записи (≤ `SOCIAL_ACTORS_MAX`); документы других групп поля не имеют */
+  actors?: string[];
+  /** «Свои»: название объекта без имён (`SocialNoticeParams`); чтение терпит отсутствие и битое */
+  params?: SocialNoticeParams;
   createdAt: Date;
   readAt: Date | null;
   expireAt: Date;
@@ -67,7 +75,8 @@ export interface NotificationDoc {
  * Настройки пользователя: `_id = userId`; нет документа — `DEFAULT_DELIVERY_SETTINGS`. Тумблеры «Мероприятия»
  * (`push.events`, `email.events`, PR D) и «Маршруты» (`push.routes`) пишут подресурсы настроек; документы до них поля
  * не имеют: «Мероприятия» — включено, «Маршруты» — значение `push.rides` (раньше решения по маршруту были в «Райдах»),
- * «Достижения» (`push.achievements`, achievements-push) — включено (P4, без наследования).
+ * «Достижения» (`push.achievements`, achievements-push) и «Свои» (`push.social`, social-p1) — включено (без
+ * наследования).
  */
 export interface NotificationSettingsDoc {
   _id: string;
@@ -75,6 +84,8 @@ export interface NotificationSettingsDoc {
     events?: boolean;
     routes?: boolean;
     achievements?: boolean;
+    /** «Свои» (social-p1): нет поля — включено */
+    social?: boolean;
   };
   email: NotificationSettings['email'] & { events?: boolean };
   quietHours: NotificationSettings['quietHours'];
