@@ -40,6 +40,7 @@ import {
 import {
   authed,
   createRide,
+  heldRideWrite,
   join,
   report,
   RIDES,
@@ -59,7 +60,7 @@ import {
 } from './notifications.events';
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
-import { RIDES_PARTICIPANT_JOINED, RIDES_RIDE_RESCHEDULED } from '../rides';
+import { RIDES_PARTICIPANT_JOINED, RIDES_RIDE_CANCELLED, RIDES_RIDE_RESCHEDULED } from '../rides';
 import { ACHIEVEMENTS_GRANT_NOTICED } from '../achievements';
 import { ACHIEVEMENTS, achievementsDb, daysAgo, raceAt } from '../../../test/achievements';
 import { placedRow, seedSeason } from '../../../test/standings';
@@ -257,11 +258,72 @@ describe('райды: получатели, тексты, цели', () => {
     const before = [await notificationsOf(h, a.userId), await notificationsOf(h, b.userId)];
     h.clock.advance(MINUTE);
     expect((await join(h, stranger, ride.id)).status).toBe(200);
-    // объект изменился, но повтор несёт номер своего события (получатели — на момент приёма, как и раньше)
-    await runIntake(h, RIDES_RIDE_RESCHEDULED, rescheduled!._id);
+    // объект изменился, но повтор несёт номер и момент своего события
+    expect(await runIntake(h, RIDES_RIDE_RESCHEDULED, rescheduled!._id)).toBe('unchanged');
     expect([await notificationsOf(h, a.userId), await notificationsOf(h, b.userId)]).toEqual(
       before,
     );
+    // вошедший после переноса о нём не узнаёт
+    expect(await notificationsOf(h, stranger.userId)).toEqual([]);
+  });
+
+  it('перенос обработан после «Я иду» — получатели только те, кто шёл к моменту переноса', async () => {
+    const ride = await rideWithParticipants();
+    await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, {
+      version: 0,
+      startsAt: startsIn(h, 2 * DAY),
+    });
+    h.clock.advance(MINUTE);
+    expect((await join(h, stranger, ride.id)).status).toBe(200);
+    const [rescheduled] = await eventsOfType(h, RIDES_RIDE_RESCHEDULED);
+    expect(await runIntake(h, RIDES_RIDE_RESCHEDULED, rescheduled!._id)).toBe('written');
+    expect((await notificationsOf(h, a.userId)).map((doc) => doc.kind)).toContain(
+      'ride_rescheduled',
+    );
+    expect((await notificationsOf(h, b.userId)).map((doc) => doc.kind)).toContain(
+      'ride_rescheduled',
+    );
+    expect(await notificationsOf(h, stranger.userId)).toEqual([]);
+  });
+
+  it('отмена начата раньше «Я иду», а записана позже — вошедший получает отмену (порядок записей, не время)', async () => {
+    const ride = await rideWithParticipants();
+    const paused = heldRideWrite('cancel');
+    const cancel = authed(h, organizer, 'POST', `${RIDES}/${ride.id}/cancel`, {
+      reason: 'weather',
+    });
+    await paused.reached;
+    h.clock.advance(MINUTE);
+    expect((await join(h, stranger, ride.id)).status).toBe(200);
+    paused.open();
+    expect((await cancel).status).toBe(200);
+    const [cancelled] = await eventsOfType(h, RIDES_RIDE_CANCELLED);
+    expect(await runIntake(h, RIDES_RIDE_CANCELLED, cancelled!._id)).toBe('written');
+    for (const who of [a, b, stranger]) {
+      expect((await notificationsOf(h, who.userId)).map((doc) => doc.kind)).toContain(
+        'ride_cancelled',
+      );
+    }
+  });
+
+  it('«Я иду» начат раньше переноса, а записан позже — о переносе не узнаёт', async () => {
+    const ride = await rideWithParticipants();
+    const paused = heldRideWrite('join');
+    const joining = join(h, stranger, ride.id);
+    await paused.reached;
+    h.clock.advance(MINUTE);
+    await authed(h, organizer, 'POST', `${RIDES}/${ride.id}`, {
+      version: 0,
+      startsAt: startsIn(h, 2 * DAY),
+    });
+    paused.open();
+    expect((await joining).status).toBe(200);
+    const [rescheduled] = await eventsOfType(h, RIDES_RIDE_RESCHEDULED);
+    expect(await runIntake(h, RIDES_RIDE_RESCHEDULED, rescheduled!._id)).toBe('written');
+    expect((await notificationsOf(h, a.userId)).map((doc) => doc.kind)).toContain(
+      'ride_rescheduled',
+    );
+    expect(await notificationsOf(h, stranger.userId)).toEqual([]);
   });
 
   it('перенос дважды — один документ с новым временем; старое событие после нового не перетирает', async () => {

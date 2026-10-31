@@ -16,6 +16,11 @@ export interface GeoPoint {
 export interface RideParticipant {
   userId: string;
   joinedAt: Date;
+  /**
+   * `noticeSeq` райда после записи этого участника (той же операцией «Я иду»): получатели события райда — участники с
+   * `seq ≤ seq` события, порядок атомарных записей документа, не время запроса. Нет поля (до него, организатор) — `0`.
+   */
+  seq?: number;
 }
 
 /**

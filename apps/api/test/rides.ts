@@ -1,11 +1,30 @@
 import { type CreateRideRequest, RideView } from '@pokatim/contracts';
+import { vi } from 'vitest';
 
 import { ridesCollections } from '../src/modules/rides/rides.collection';
+import { RidesRepository } from '../src/modules/rides/rides.repository';
 import { DAY, type Harness } from './harness';
-import { bearer, call, type CallResult, signUpSession, userIdByEmail } from './identity';
+import { bearer, call, type CallResult, gate, signUpSession, userIdByEmail } from './identity';
 import { routesDb, seedApprovedRiderRoute, seedRiderRoute } from './routes';
 
 export const RIDES = '/v1/rides';
+
+/**
+ * Запись райда под воротами (гонки, `pokatim-tests.md`): следующий вызов `method` репозитория ждёт `open()` — запрос
+ * уже взял `now` и прошёл проверки. Снимается `vi.restoreAllMocks()`.
+ */
+export function heldRideWrite(method: 'cancel' | 'join') {
+  const paused = gate();
+  const original = RidesRepository.prototype[method] as (...args: unknown[]) => unknown;
+  vi.spyOn(RidesRepository.prototype, method).mockImplementationOnce(async function (
+    this: RidesRepository,
+    ...args: unknown[]
+  ) {
+    await paused.wait();
+    return original.apply(this, args);
+  } as never);
+  return paused;
+}
 
 /** Коллекция `rides` тестовой БД. */
 export const ridesDb = (h: Harness) => ridesCollections(h.db).rides;

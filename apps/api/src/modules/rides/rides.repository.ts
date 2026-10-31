@@ -206,6 +206,7 @@ export class RidesRepository {
           organizerUserId: 1,
           goingCount: 1,
           'participants.userId': 1,
+          'participants.seq': 1,
         },
       },
     );
@@ -247,11 +248,26 @@ export class RidesRepository {
         'participants.userId': { $ne: userId },
         $expr: { $lt: ['$goingCount', { $ifNull: ['$limit', RIDE_MAX_PARTICIPANTS] }] },
       },
-      {
-        $push: { participants: { userId, joinedAt: now } },
-        $inc: { goingCount: 1, noticeSeq: 1 },
-        $set: { updatedAt: now },
-      },
+      [
+        {
+          $set: {
+            goingCount: { $add: ['$goingCount', 1] },
+            noticeSeq: { $add: [{ $ifNull: ['$noticeSeq', 0] }, 1] },
+            updatedAt: { $literal: now },
+          },
+        },
+        // номер входа — `noticeSeq` после этой записи (предыдущая стадия уже подняла его)
+        {
+          $set: {
+            participants: {
+              $concatArrays: [
+                '$participants',
+                [{ userId: { $literal: userId }, joinedAt: { $literal: now }, seq: '$noticeSeq' }],
+              ],
+            },
+          },
+        },
+      ],
       { session, returnDocument: 'after' },
     );
   }

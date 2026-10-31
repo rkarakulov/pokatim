@@ -22,9 +22,9 @@ export class RideNoticesService implements RideNotices {
       status: doc.status,
       organizerUserId: doc.organizerUserId,
       goingCount: doc.goingCount,
-      participantUserIds: doc.participants
-        .map((participant) => participant.userId)
-        .filter((userId) => userId !== doc.organizerUserId),
+      participants: doc.participants
+        .filter((participant) => participant.userId !== doc.organizerUserId)
+        .map(({ userId, seq }) => ({ userId, seq: seq ?? 0 })),
     };
   }
 
