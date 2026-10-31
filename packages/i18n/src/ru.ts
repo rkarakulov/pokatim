@@ -698,8 +698,6 @@ export const ru = {
   'profile.edit.title': 'Редактировать профиль',
   'profile.noName': 'Имя не указано',
   'profile.publicLink': 'Как вас видят другие',
-  'profile.publicHint':
-    'Другие увидят профиль, когда вы укажете имя и включите показ в результатах',
   'profile.club.label': 'Клуб',
   'profile.club.hint': 'Например, Velo Club Minsk. Виден в публичном профиле вместе с именем',
   'profile.avatar.title': 'Фото',
@@ -3236,4 +3234,33 @@ export const ru = {
   'admin.invite.error.PANEL_INVITATION_EMAIL_MISMATCH':
     'Приглашение отправлено на другой адрес — войдите тем аккаунтом, на который пришло письмо.',
   'admin.invite.error.PANEL_ALREADY_MEMBER': 'Вы уже в команде платформы — просто войдите.',
+  // «Свои», P3 (social): подсказка имени K3 — общие с P2 ключи (RC-P3-12)
+  'social.nameHint.title': 'Добавьте имя — свои увидят вас',
+  'social.nameHint.action': 'Добавить имя',
+  'social.nameHint.later': 'Не сейчас',
+  // «Свои», P3: профиль райдера, «Свои · N», экран «Свои» (K6, RC-P3-5)
+  'social.together': {
+    one: 'Вместе ехали {count} раз · последний — {date}',
+    few: 'Вместе ехали {count} раза · последний — {date}',
+    many: 'Вместе ехали {count} раз · последний — {date}',
+    other: 'Вместе ехали {count} раза · последний — {date}',
+  },
+  'social.row.together': {
+    one: 'Вместе {count} раз · последний — {date}',
+    few: 'Вместе {count} раза · последний — {date}',
+    many: 'Вместе {count} раз · последний — {date}',
+    other: 'Вместе {count} раза · последний — {date}',
+  },
+  'social.going.kicker': 'Идёт',
+  'social.connect': 'В свои',
+  'social.connected': 'В своих',
+  'social.count': 'Свои · {count}',
+  'social.title': 'Свои',
+  'social.row.manual': 'Добавлены вами',
+  'social.row.invite': 'По приглашению',
+  'social.empty.title': 'Пока никого',
+  'social.empty.message':
+    'Свои появятся после совместного райда или когда вы добавите кого-то из профиля',
+  'social.error.RATE_LIMITED': 'Слишком много действий, попробуйте позже',
+  'social.error.unknown': 'Не получилось. Попробуйте ещё раз.',
 } as const;

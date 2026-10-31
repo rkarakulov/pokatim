@@ -1,7 +1,7 @@
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { createHarness, DAY, type Harness } from '../../../test/harness';
+import { createHarness, DAY, HOUR, type Harness } from '../../../test/harness';
 import {
   createRide,
   hideInDb,
@@ -9,8 +9,10 @@ import {
   rider,
   ridesDb,
   seedTeamRoute,
+  startsIn,
   type Rider,
 } from '../../../test/rides';
+import { seedRiderRoute } from '../../../test/routes';
 import { RIDES_FOR_SOCIAL, type RidesForSocial } from './index';
 
 /**
@@ -70,5 +72,78 @@ describe('RidesForSocial.rideFacts', () => {
 
   it('неизвестный райд — null', async () => {
     expect(await port().rideFacts(uuidv7(), h.clock.now())).toBeNull();
+  });
+});
+
+describe('RidesForSocial.nextRideCard («Идёт», P3)', () => {
+  it('ранний будущий из участия и организации; отменённый, скрытый, прошедший пропущены; карточка без участников', async () => {
+    const target = await rider(h, 'target@example.by');
+    const viewer = await rider(h, 'viewer@example.by');
+    // раньше всех: отменённый и скрытый (райдер — участник), и прошедший
+    const cancelled = await createRide(h, organizer, { startsAt: startsIn(h, 2 * HOUR) });
+    const hidden = await createRide(h, organizer, { startsAt: startsIn(h, 3 * HOUR) });
+    const past = await createRide(h, organizer, { startsAt: startsIn(h, HOUR) });
+    for (const ride of [cancelled, hidden, past]) {
+      expect((await join(h, target, ride.id)).status).toBe(200);
+    }
+    await ridesDb(h).updateOne({ _id: cancelled.id }, { $set: { status: 'cancelled' } });
+    await hideInDb(h, hidden.id);
+    const early = await createRide(h, organizer, { startsAt: startsIn(h, DAY) });
+    expect((await join(h, target, early.id)).status).toBe(200);
+    const own = await createRide(h, target, { startsAt: startsIn(h, 2 * DAY) });
+    const now = new Date(h.clock.now().getTime() + 90 * 60_000);
+
+    const card = await port().nextRideCard(target.userId, viewer.userId, now);
+    expect(card).toMatchObject({
+      id: early.id,
+      phase: 'upcoming',
+      goingCount: 2,
+      viewer: { role: 'none', canJoin: true, canLeave: false, canManage: false },
+    });
+    expect(card).not.toHaveProperty('participants');
+    expect(card).not.toHaveProperty('organizerUserId');
+
+    // после раннего — свой (организатор — первый участник)
+    const later = new Date(new Date(early.startsAt).getTime() + 1);
+    expect((await port().nextRideCard(target.userId, viewer.userId, later))?.id).toBe(own.id);
+  });
+
+  it('роль зрителя: none / participant / organizer', async () => {
+    const target = await rider(h, 'target@example.by');
+    const viewer = await rider(h, 'viewer@example.by');
+    const ride = await createRide(h, organizer);
+    expect((await join(h, target, ride.id)).status).toBe(200);
+    const now = h.clock.now();
+    expect((await port().nextRideCard(target.userId, viewer.userId, now))?.viewer.role).toBe(
+      'none',
+    );
+    expect((await join(h, viewer, ride.id)).status).toBe(200);
+    expect(await port().nextRideCard(target.userId, viewer.userId, now)).toMatchObject({
+      viewer: { role: 'participant', canJoin: false, canLeave: true },
+    });
+    expect((await port().nextRideCard(target.userId, organizer.userId, now))?.viewer.role).toBe(
+      'organizer',
+    );
+  });
+
+  it('чужой непубличный маршрут — route: null; организатору — свой маршрут', async () => {
+    const target = await rider(h, 'target@example.by');
+    const viewer = await rider(h, 'viewer@example.by');
+    const routeId = await seedRiderRoute(h, target.userId);
+    await createRide(h, target, { routeId });
+    const now = h.clock.now();
+    expect(await port().nextRideCard(target.userId, viewer.userId, now)).toMatchObject({
+      route: null,
+      start: null,
+    });
+    expect((await port().nextRideCard(target.userId, target.userId, now))?.route).toMatchObject({
+      id: routeId,
+      access: 'private',
+    });
+  });
+
+  it('нет будущих райдов — null', async () => {
+    const target = await rider(h, 'target@example.by');
+    expect(await port().nextRideCard(target.userId, organizer.userId, h.clock.now())).toBeNull();
   });
 });

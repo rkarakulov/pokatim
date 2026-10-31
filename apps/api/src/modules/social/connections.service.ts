@@ -1,14 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ConnectionSource } from '@pokatim/contracts';
 import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
-import { isDuplicateKey } from '@rkarakulov/api-kit/mongo';
 
 import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
 import { consumeUserLimit } from '../../user-limit';
 import { PRODUCT_EVENTS, type ProductEvents } from '../product-events';
 import { type PublicRiderCard, RIDER_NAMES, type RiderNameDirectory } from '../profile';
-import { CONNECTIONS_UNIQUE_INDEX, ConnectionsRepository } from './connections.repository';
+import { ConnectionsRepository } from './connections.repository';
 import { connectionSources, SOCIAL_POLICY, socialBlocked } from './social.policy';
 
 /** Строка списка «своих» владельца (K6): только публичные профили. */
@@ -24,6 +23,13 @@ export interface ConnectionView {
 export interface Together {
   rideCount: number;
   lastRideAt: Date | null;
+}
+
+/** Состояние пары для профиля другого (K6). */
+export interface PairState {
+  connected: boolean;
+  together: Together;
+  inTheirs: boolean;
 }
 
 /**
@@ -59,24 +65,17 @@ export class SocialConnectionsService {
       throw domainError('NOT_FOUND', 404);
     }
     const pair = { ownerId, otherId };
-    const once = () =>
-      this.transactions.run(async (tx) => {
-        const created = await this.connections.upsertManual(tx, pair, now);
-        if (created) {
-          await this.events.record(
-            { type: 'connection-created', userId: ownerId, props: { source: 'manual' } },
-            tx,
-          );
-        }
-        return created;
-      });
-    try {
-      return await once();
-    } catch (error) {
-      // гонка первых upsert одной пары: второй видит созданный документ
-      if (!isDuplicateKey(error, CONNECTIONS_UNIQUE_INDEX)) throw error;
-      return once();
-    }
+    // гонка первых upsert одной пары (и с пересчётом явки) — `WriteConflict`, повтор `withTransaction` (RC-P3-2)
+    return this.transactions.run(async (tx) => {
+      const created = await this.connections.upsertManual(tx, pair, now);
+      if (created) {
+        await this.events.record(
+          { type: 'connection-created', userId: ownerId, props: { source: 'manual' } },
+          tx,
+        );
+      }
+      return created;
+    });
   }
 
   /** «Убрать из своих» (K1): тихо, документ остаётся надгробием (RC-6). */
@@ -120,6 +119,22 @@ export class SocialConnectionsService {
         },
       ];
     });
+  }
+
+  /**
+   * Пара на профиле (K6, P3): `connected` — смотрящий держит связь к другому, `inTheirs` — смотрящий у другого в
+   * «своих» (обе — документ есть и не убран); `together` — как `togetherOf`.
+   */
+  async pairState(viewerId: string, otherId: string): Promise<PairState> {
+    const [mine, theirs] = await Promise.all([
+      this.connections.findPair({ ownerId: viewerId, otherId }),
+      this.connections.findPair({ ownerId: otherId, otherId: viewerId }),
+    ]);
+    return {
+      connected: mine !== null && mine.removedAt === null,
+      inTheirs: theirs !== null && theirs.removedAt === null,
+      together: { rideCount: mine?.rideCount ?? 0, lastRideAt: mine?.lastRideAt ?? null },
+    };
   }
 
   /** «Вместе ехали N раз · последний — дата» относительно смотрящего: факт совместных райдов (и после «Убрать»). */

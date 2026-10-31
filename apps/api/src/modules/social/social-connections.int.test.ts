@@ -1,10 +1,12 @@
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, type Harness } from '../../../test/harness';
+import { gate, retried, untilBlocked } from '../../../test/identity';
 import { patchProfile, publicRider } from '../../../test/profiles';
 import { rider } from '../../../test/rides';
 import { pastRide, ridesAhead, socialDb, socialServices, travelPast } from '../../../test/social';
+import { ConnectionsRepository } from './connections.repository';
 
 /**
  * Связи «Свои» (K1, K3, K9, K11, AC2): ручное «В свои» с лимитом 30/24 ч, нельзя себя и непубличного, тихое
@@ -16,6 +18,9 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await h.reset();
+});
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 afterAll(async () => {
   await h.close();
@@ -184,5 +189,83 @@ describe('приглашение, публичность при чтении, «
       rideCount: 1,
       lastRideAt: ride.startsAt,
     });
+  });
+});
+
+/**
+ * Дубль пары в транзакции (RC-P3-2): параллельные upsert одной пары приходят как `112 WriteConflict` (не `E11000`) и
+ * повторяются `withTransaction` — одно поведение для пересчёта явки и `addManual`, повтора по `isDuplicateKey` нет.
+ */
+describe('дубль пары в транзакции (RC-P3-2)', () => {
+  const connectionEvents = (source: string) =>
+    socialDb(h).events.countDocuments({ type: 'connection-created', props: { source } });
+
+  it('пересчёт явки стоит после чтения пар, addManual(A, B) коммитит пару — явка повторяется и сливает поля', async () => {
+    const a = await publicRider(h, 'a@example.by', 'Анна К.');
+    const b = await publicRider(h, 'b@example.by', 'Борис Л.');
+    const ride = await pastRide(h, a, [b]);
+    await attendance().markManual(a.userId, ride.id);
+    const repository = h.worker.get(ConnectionsRepository);
+    const original = repository.applyRideDiff.bind(repository);
+    const hold = gate();
+    let held = false;
+    const diffs = vi.spyOn(repository, 'applyRideDiff').mockImplementation(async (...args) => {
+      if (!held) {
+        held = true;
+        await hold.wait();
+      }
+      return original(...args);
+    });
+
+    const markB = attendance().markManual(b.userId, ride.id);
+    await hold.reached;
+    expect(await svc().addManual(a.userId, b.userId)).toBe(true);
+    hold.open();
+    expect(await markB).toBe(true);
+
+    expect(diffs.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const ab = await socialDb(h)
+      .connections.find({ ownerId: a.userId, otherId: b.userId })
+      .toArray();
+    expect(ab).toHaveLength(1);
+    expect(ab[0]).toMatchObject({
+      manualAt: expect.any(Date),
+      rideCount: 1,
+      rides: [{ rideId: ride.id, at: ride.startsAt }],
+    });
+    expect(
+      await socialDb(h).connections.findOne({ ownerId: b.userId, otherId: a.userId }),
+    ).toMatchObject({ rideCount: 1 });
+    expect(await connectionEvents('manual')).toBe(1);
+    expect(await connectionEvents('ride')).toBe(1);
+  });
+
+  it('два addManual одной пары: второй упирается в незакоммиченную запись первого и повторяется', async () => {
+    const a = await rider(h, 'a@example.by');
+    const b = await publicRider(h, 'b@example.by', 'Борис Л.');
+    const repository = h.worker.get(ConnectionsRepository);
+    const original = repository.upsertManual.bind(repository);
+    const hold = gate();
+    let held = false;
+    const writes = vi.spyOn(repository, 'upsertManual').mockImplementation(async (...args) => {
+      const created = await original(...args);
+      if (!held) {
+        held = true;
+        await hold.wait();
+      }
+      return created;
+    });
+
+    const first = svc().addManual(a.userId, b.userId);
+    await hold.reached;
+    const second = svc().addManual(a.userId, b.userId);
+    await untilBlocked(second, () => retried({ mock: { calls: writes.mock.calls.slice(1) } })());
+    hold.open();
+    expect(await Promise.all([first, second])).toEqual([true, false]);
+
+    expect(
+      await socialDb(h).connections.countDocuments({ ownerId: a.userId, otherId: b.userId }),
+    ).toBe(1);
+    expect(await connectionEvents('manual')).toBe(1);
   });
 });

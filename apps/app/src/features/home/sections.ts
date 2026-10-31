@@ -54,3 +54,17 @@ export function orderHomeSections<Id extends HomeSectionId>(
   }));
   return [...sections.filter((s) => s.chosen), ...sections.filter((s) => !s.chosen)];
 }
+
+/**
+ * Слот секции «Свои» на Главной (K7, RC-P3-7; сейчас — подсказка имени K3, P7 — секция): «Кофе-райды» в опросе —
+ * первым (индекс 0), иначе — после разделов, выбранных в опросе, и до остальных. `reasons === undefined` (профиль не
+ * пришёл) — слота нет (`null`).
+ */
+export function socialSlotIndex(
+  sections: readonly OrderedHomeSection[],
+  reasons: readonly RideReason[] | undefined,
+): number | null {
+  if (reasons === undefined) return null;
+  if (reasons.includes('group_rides')) return 0;
+  return sections.filter((section) => section.chosen).length;
+}

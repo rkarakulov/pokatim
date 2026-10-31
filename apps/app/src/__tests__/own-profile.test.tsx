@@ -86,6 +86,7 @@ const openProfile = () =>
     {
       profile: OwnProfileRoute,
       'settings/profile': stub,
+      social: stub,
       'riders/[id]': stub,
       'races/[id]': stub,
       'rides/[id]': stub,
@@ -108,6 +109,8 @@ beforeEach(() => {
   jest.mocked(api.listSeasons).mockResolvedValue({ items: [] });
   // блок «Достижения» — пусто, блока нет (сам блок — `achievements-blocks.test.tsx`)
   jest.mocked(api.listAchievements).mockResolvedValue({ items: [], progress: [] });
+  // «Свои · N» (P3) — пусто
+  jest.mocked(api.listSocialConnections).mockResolvedValue({ items: [], count: 0 });
 });
 afterEach(() => {
   jest.clearAllMocks();
@@ -139,16 +142,32 @@ describe('свой профиль /profile: шапка (rider-profile, AC12)', (
     expect(await screen.findByText('Имя не указано')).toBeOnTheScreen();
   });
 
-  it('без имени — «Имя не указано», личная линия без текста; без publicId — подсказка вместо ссылки', async () => {
-    await openProfile();
+  it('без имени — «Имя не указано», личная линия без текста; без publicId — подсказка K3 вместо ссылки', async () => {
+    const router = await openProfile();
     expect(await screen.findByRole('header', { name: 'Имя не указано' })).toBeOnTheScreen();
     expect(within(screen.getByTestId('profile-rule')).queryByText(/.+/)).toBeNull();
-    expect(
-      screen.getByText(
-        'Другие увидят профиль, когда вы укажете имя и включите показ в результатах',
-      ),
-    ).toBeOnTheScreen();
+    const hint = within(screen.getByTestId('name-hint'));
+    expect(hint.getByText('Добавьте имя — свои увидят вас')).toBeOnTheScreen();
+    // в профиле подсказка не скрывается (без «Не сейчас»); прежней строки RC-P3-6 нет
+    expect(hint.queryByRole('button', { name: 'Не сейчас' })).toBeNull();
+    expect(screen.queryByText(/Другие увидят профиль/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Как вас видят другие' })).toBeNull();
+    await fireEvent.press(hint.getByRole('button', { name: 'Добавить имя' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/settings/profile'));
+  });
+
+  it('публичному — подсказки K3 нет', async () => {
+    getProfile.mockResolvedValue(
+      profile({ publicName: 'Анна К.', showNameInResults: true, publicId: PUBLIC_ID }),
+    );
+    await openProfile();
+    expect(await screen.findByRole('button', { name: 'Как вас видят другие' })).toBeOnTheScreen();
+    expect(screen.queryByTestId('name-hint')).toBeNull();
+  });
+
+  it('без имени — фото не выбрано', async () => {
+    await openProfile();
+    expect(await screen.findByRole('header', { name: 'Имя не указано' })).toBeOnTheScreen();
     expect(screen.getByRole('image', { name: 'Фото не выбрано' })).toBeOnTheScreen();
   });
 
@@ -179,6 +198,34 @@ describe('свой профиль /profile: шапка (rider-profile, AC12)', (
     const router = await openProfile();
     await fireEvent.press(await screen.findByRole('button', { name: 'Редактировать профиль' }));
     await waitFor(() => expect(router.getPathname()).toBe('/settings/profile'));
+  });
+});
+
+describe('свой профиль /profile: «Свои · N» (P3, K6)', () => {
+  it('«Свои · 0» видна и ведёт на /social', async () => {
+    const router = await openProfile();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Свои · 0' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/social'));
+    expect(jest.mocked(api.listSocialConnections)).toHaveBeenCalledWith(liveSession.accessToken);
+  });
+
+  it('«Свои · 2» — count сервера', async () => {
+    const row = {
+      name: 'Анна К.',
+      avatar: null,
+      rideCount: 0,
+      lastRideAt: null,
+      sources: ['manual' as const],
+    };
+    jest.mocked(api.listSocialConnections).mockResolvedValue({
+      items: [
+        { ...row, publicId: 'a'.repeat(43) },
+        { ...row, publicId: 'b'.repeat(43) },
+      ],
+      count: 2,
+    });
+    await openProfile();
+    expect(await screen.findByRole('button', { name: 'Свои · 2' })).toBeOnTheScreen();
   });
 });
 

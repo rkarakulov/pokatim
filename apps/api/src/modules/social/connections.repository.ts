@@ -6,7 +6,11 @@ import type { DbSession } from '../../db';
 import type { ConnectionPair } from './social.policy';
 import { type ConnectionDoc, socialCollections } from './social.collection';
 
-/** Уникальная пара связи (`0045_social`): параллельные upsert одной пары — `isDuplicateKey`, один повтор. */
+/**
+ * Уникальная пара связи (`0045_social`). Параллельные upsert одной пары в транзакциях (`addManual`, `linkInvite`,
+ * пересчёт явки) приходят как `112 WriteConflict` и повторяются `withTransaction` (RC-P3-2); `isDuplicateKey` — только у
+ * `remove` вне транзакции («уже убран»).
+ */
 export const CONNECTIONS_UNIQUE_INDEX = 'rider_connections_owner_other_unique';
 
 /** Поля нового документа связи без райдов (`$setOnInsert`); источники и `removedAt` задаёт операция явно. */

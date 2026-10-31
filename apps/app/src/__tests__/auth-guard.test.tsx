@@ -44,6 +44,18 @@ describe('гард сессии (Stack.Protected)', () => {
     expect(api.getProfileStats).not.toHaveBeenCalled();
   });
 
+  it('«Свои» /social без сессии — лендинг (P3: экран под гардом), список не запрашивается', async () => {
+    const router = await renderRouter(appRoutes, { initialUrl: '/social' });
+
+    expect(
+      await screen.findByRole('header', {
+        name: 'Катайтесь вместе и соревнуйтесь на своих маршрутах',
+      }),
+    ).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/welcome');
+    expect(api.listSocialConnections).not.toHaveBeenCalled();
+  });
+
   it('пока сессия не прочитана — на месте вкладок скелетон оболочки, без редиректа (SSR, R2)', async () => {
     // и сессия, и регистрация ещё читаются из хранилища
     const never = new Promise<string | null>(() => undefined);

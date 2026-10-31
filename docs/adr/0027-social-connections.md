@@ -43,7 +43,8 @@
 3. **Данные зрителя — отдельные эндпоинты `social` под `AuthGuard`, `no-store`:** `GET rides/:id/participants`
    (участники с публичным профилем и явка), `GET riders/:publicId/social` («вместе ехали», «Идёт», состояние
    «В свои»), `GET social/connections`, `GET social/home`. Контроллеры с префиксом чужого ресурса — прецедент
-   `riders/:publicId/me` в `profile`. Публичные кэшируемые ответы не меняются.
+   `riders/:publicId/me` в `profile`. Публичные кэшируемые ответы не меняются. «В свои» / «Убрать» (P3) — один
+   идемпотентный `PUT riders/:publicId/social/connection { connected }` вместо пары глаголов (DELETE в CORS нет).
 4. **Автоявка — второе событие `tracks`.** После обработки заезда `tracks` в той же транзакции пишет
    `tracks.activity-recorded {activityId, userId}` → очередь `social-intake`. `social` читает старт заезда портом
    `ACTIVITY_STARTS` и точный старт райда портом `RIDES_FOR_SOCIAL` (только при маршруте каталога). `activity-ready`

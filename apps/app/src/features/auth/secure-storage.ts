@@ -12,7 +12,9 @@ export type SecureKey =
   | 'pokatim.pushSoftPrompt'
   | 'pokatim.locale'
   // QR офлайн-копий билетов (event-tickets, plan-B §5): только токены QR и владелец — остальное в файле
-  | 'pokatim.ticketQr';
+  | 'pokatim.ticketQr'
+  // отложка подсказки имени «Не сейчас» на Главной («Свои», K3; не секрет, как `pokatim.pushSoftPrompt`)
+  | 'pokatim.nameHint';
 
 /**
  * Единственная точка доступа к защищённому хранилищу: экраны и сторы не знают о нативном модуле;

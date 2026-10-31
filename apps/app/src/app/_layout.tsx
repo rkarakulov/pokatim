@@ -164,6 +164,8 @@ function RootShell() {
                 {/* профиль райдера (rider-profile): вход — аватар верхней панели Главной; гард и оболочка — как у
                 «Настроек» */}
                 <Stack.Screen name="profile" />
+                {/* «Свои» (P3): вход — «Свои · N» своего профиля; гард и оболочка — как у «Профиля» */}
+                <Stack.Screen name="social" />
                 {/* центр и настройки уведомлений (notifications): тот же гард и оболочка, что у «Профиля» */}
                 <Stack.Screen name="notifications" />
                 <Stack.Screen name="settings/notifications" />

@@ -52,7 +52,7 @@
 | P0 | Каркас (п. 3.1) | — | — |
 | P1 | Уведомления: группа `social`, `settings/social`, `actors` + имена при чтении (список и push), схлопывание с `$addToSet`, новые `kind` и цели в конец, экран настроек, копия целей в service worker | P0 | P2, P3, P6 |
 | P2 | Райд: `GET rides/:id/participants`, «Я был / Меня не было», карточка прошедшего райда (K4, K5 без «спасибо»), источник «Иду» в `join` → `product_events` | P0 | P1, P3, P6 |
-| P3 | Профиль: `GET riders/:publicId/social`, «В свои» / «В своих», экран «Свои», строка «Свои · N» в своём профиле, подсказка имени K3 (профиль, Главная) | P0 | P1, P2, P6 |
+| P3 | Профиль: `GET riders/:publicId/social`, «В свои» / «В своих», экран «Свои», строка «Свои · N» в своём профиле, подсказка имени K3 (профиль, Главная). Реализовано (`docs/tasks/2026-10-31-social-p3-profile/`); follow-up — `source: 'profile'` у «Я иду» из строки «Идёт» (RC-P3-4, решение на FINISH) | P0 | P1, P2, P6 |
 | P4 | Реакции: «Спасибо за компанию» на карточке райда, «Респект» на экране соперника и после «Маршрут пройден» (`RESULTS_FOR_SOCIAL`, `ROUTES_FOR_SOCIAL`) | P0, P2 | P5, P6 |
 | P5 | Автоявка: `tracks.activity-recorded` → `social-intake`, порт `ACTIVITY_STARTS`, сверка K2; регламент «Как прошёл райд?» | P0, P2 | P4, P6 |
 | P6 | Приглашения: личный код, параметр в ссылках шеринга, хранение 7 дней на клиенте, `RegisterRequest.invite`, `identity.account-confirmed` → связь `invite` | P0 | P1–P5 |
@@ -232,6 +232,9 @@ architect, кроме RC-8: номер миграции — **`0045_social`** (�
 - Известное допущение (ревью pass 1, LOW): `addManual` повторяет операцию при `isDuplicateKey` пары, upsert пары в
   пересчёте явки — нет (в транзакции конфликт ожидается как `WriteConflict`). Проверка воротами — в P3, вместе с
   эндпоинтом «В свои».
+  **Закрыто в P3 (RC-P3-2a, `docs/tasks/2026-10-31-social-p3-profile/task.md`):** дубль пары в транзакции приходит
+  как `112 WriteConflict` и повторяется `withTransaction`; повтор по `isDuplicateKey` из `addManual` убран, оба пути
+  (`addManual`, пересчёт явки) доказаны int-тестами воротами с отрицательным доказательством.
 
 ## 8.3 Security checklist
 

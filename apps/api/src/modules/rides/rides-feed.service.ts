@@ -122,6 +122,23 @@ const viewerOf = (doc: RideDoc, userId: string, now: Date, reported: boolean) =>
   rideViewer(doc, { userId, participant: isParticipant(doc, userId) }, now, reported);
 
 /**
+ * Карточка ленты со зрителем (`RideCard`): поля — `summaryOf`, маршрут — `routeOf` (`routes` — `lookupRoutes` с этим
+ * зрителем), состояние — `rideViewer`. Её же отдаёт порт `RIDES_FOR_SOCIAL.nextRideCard` («Идёт», K6).
+ */
+export function rideCardOf(
+  doc: RideDoc,
+  userId: string,
+  now: Date,
+  routes: RouteLookup,
+  reported: boolean,
+): RideCard {
+  return {
+    ...summaryOf(doc, now, routeOf(doc, routes, userId)),
+    viewer: viewerOf(doc, userId, now, reported),
+  };
+}
+
+/**
  * Карточка + зритель; организатору — `version` для формы правки. `reported` — зритель уже жаловался (05b): у
  * организатора — всегда `false`. `routes` — `lookupRoutes` с этим зрителем.
  */
@@ -250,10 +267,7 @@ export class RidesFeedService {
       page.map((doc) => doc._id),
     );
     return {
-      items: page.map((doc): RideCard => ({
-        ...summaryOf(doc, now, routeOf(doc, routes, userId)),
-        viewer: viewerOf(doc, userId, now, reported.has(doc._id)),
-      })),
+      items: page.map((doc) => rideCardOf(doc, userId, now, routes, reported.has(doc._id))),
       nextCursor: next ? encodeCursor(next.startsAt.toISOString(), next.id) : null,
     };
   }

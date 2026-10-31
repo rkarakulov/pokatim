@@ -11,6 +11,7 @@ import AchievementFlashRoute from '../app/achievements/flash';
 import AchievementStoryRoute from '../app/achievements/story/[code]';
 import NotificationsScreen from '../app/notifications';
 import OwnProfileRoute from '../app/profile';
+import SocialRoute from '../app/social';
 import DisputeResponseRoute from '../app/races/dispute-response/[id]/[disputeId]';
 import FileDisputeRoute from '../app/races/dispute/[id]/[entryId]';
 import RacePickRoute from '../app/races/pick/[id]';
@@ -60,6 +61,7 @@ const PROTECTED: [string, ComponentType, string][] = [
   ['settings/theme', ThemeScreen, '/settings/theme'],
   ['settings/profile', ProfileScreen, '/settings/profile'],
   ['profile', OwnProfileRoute, '/profile'],
+  ['social', SocialRoute, '/social'],
   ['notifications', NotificationsScreen, '/notifications'],
   ['settings/notifications', NotificationSettingsScreen, '/settings/notifications'],
   ['settings/verified', VerifiedProfileScreen, '/settings/verified'],

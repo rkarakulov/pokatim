@@ -16,6 +16,7 @@ import type { ReactElement } from 'react';
 import { StyleSheet, type RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
+import { NAME_HINT_KEY } from '@/features/social/name-hint-state';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { api } from '@/lib/api';
 
@@ -747,5 +748,114 @@ describe('Главная: герой «Маршрутов» по теме (app-t
     listRoutes.mockReturnValue(never());
     await openThemed(themeId);
     expect(await screen.findByTestId(testID, hidden)).toBeOnTheScreen();
+  });
+});
+
+describe('Главная: подсказка имени K3 (P3, RC-P3-7)', () => {
+  const HINT = 'Добавьте имя — свои увидят вас';
+  const TITLES = new Set([
+    'Ближайшие гонки',
+    'Ближайшие кофе-райды',
+    'Маршруты команды',
+    'Ближайшие старты',
+    HINT,
+  ]);
+  const secureStore = () =>
+    jest.requireMock<{ __store: Map<string, string> }>('expo-secure-store').__store;
+  /** Заголовки разделов и подсказка в порядке ленты. */
+  const feedOrder = () => {
+    const order: string[] = [];
+    const walk = (node: ReturnType<typeof screen.getByTestId> | string) => {
+      if (typeof node === 'string') {
+        if (TITLES.has(node)) order.push(node);
+        return;
+      }
+      node.children.forEach(walk);
+    };
+    walk(screen.getByTestId('home-feed'));
+    return order.filter((title, index) => order.indexOf(title) === index);
+  };
+
+  it('«Кофе-райды» в опросе — подсказка до первого раздела', async () => {
+    profile(['group_rides']);
+    await openHome();
+    expect(await screen.findByText(HINT)).toBeOnTheScreen();
+    expect(feedOrder()).toEqual([
+      HINT,
+      'Ближайшие кофе-райды',
+      'Ближайшие гонки',
+      'Маршруты команды',
+      'Ближайшие старты',
+    ]);
+  });
+
+  it('«Гонки» в опросе — после «Гонок», до остальных', async () => {
+    profile(['races']);
+    await openHome();
+    expect(await screen.findByText(HINT)).toBeOnTheScreen();
+    expect(feedOrder()).toEqual([
+      'Ближайшие гонки',
+      HINT,
+      'Ближайшие кофе-райды',
+      'Маршруты команды',
+      'Ближайшие старты',
+    ]);
+  });
+
+  it('публичному — подсказки нет', async () => {
+    getProfile.mockResolvedValue({
+      rideReasons: [],
+      publicName: 'Анна К.',
+      showNameInResults: true,
+      club: null,
+      avatar: null,
+      publicId: 'r'.repeat(43),
+      themeId: 'classic',
+      avatarUploadBlockedUntil: null,
+    });
+    await openHome();
+    await waitFor(() => expect(getProfile).toHaveBeenCalled());
+    expect(await screen.findByText('Кофе-райд на Минское море')).toBeOnTheScreen();
+    expect(screen.queryByText(HINT)).toBeNull();
+  });
+
+  it('гость — подсказки нет, профиль не запрашивается', async () => {
+    useSessionStore.setState({ status: 'signedOut', session: null });
+    await openHome();
+    expect(screen.queryByText(HINT)).toBeNull();
+  });
+
+  it('«Добавить имя» → /settings/profile', async () => {
+    const router = await renderRouter(
+      { ...tabRoutes, 'settings/profile': () => null },
+      { initialUrl: '/', wrapper: createQueryWrapper() },
+    );
+    await fireEvent.press(await screen.findByRole('button', { name: 'Добавить имя' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/settings/profile'));
+  });
+
+  it('«Не сейчас» скрывает и пишет отложку на устройстве', async () => {
+    await openHome();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Не сейчас' }));
+    expect(screen.queryByText(HINT)).toBeNull();
+    await waitFor(() =>
+      expect(JSON.parse(secureStore().get(NAME_HINT_KEY) ?? '{}')).toEqual({
+        snoozedAt: NOW.getTime(),
+      }),
+    );
+  });
+
+  it.each([
+    [13, false],
+    [15, true],
+  ])('отложка %i дней назад — видна: %s', async (days, visible) => {
+    secureStore().set(
+      NAME_HINT_KEY,
+      JSON.stringify({ snoozedAt: NOW.getTime() - days * 24 * 60 * 60 * 1000 }),
+    );
+    await openHome();
+    expect(await screen.findByText('Кофе-райд на Минское море')).toBeOnTheScreen();
+    if (visible) expect(await screen.findByText(HINT)).toBeOnTheScreen();
+    else expect(screen.queryByText(HINT)).toBeNull();
   });
 });

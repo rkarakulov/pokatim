@@ -2,7 +2,7 @@ import { size, space } from '@pokatim/design-tokens';
 import { t, type MessageKey } from '@pokatim/i18n';
 import { EmptyState, TextAction, useTheme } from '@rkarakulov/ui';
 import { useRouter, type Href } from 'expo-router';
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,6 +22,7 @@ import {
   useRideReasons,
 } from '@/features/home/queries';
 import { useOwnAvatarId } from '@/features/profile/queries';
+import { NameHint, useHomeNameHint } from '@/features/social/name-hint';
 import { InstallBanner } from '@/features/pwa-install/install-banner';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { HomeTickets } from '@/features/tickets/home-tickets';
@@ -31,6 +32,7 @@ import { RideHero } from '@/features/rides/ride-hero';
 import {
   AVAILABLE_HOME_SECTIONS,
   orderHomeSections,
+  socialSlotIndex,
   type AvailableHomeSectionId,
 } from '@/features/home/sections';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
@@ -95,6 +97,15 @@ export default function HomeScreen() {
   // аватар верхней панели (rider-profile): тот же кэш `['profile']`, что порядок разделов — без второго запроса
   const avatarId = useOwnAvatarId();
   const sections = orderHomeSections(AVAILABLE_HOME_SECTIONS, profile.reasons);
+  // подсказка имени K3 — на месте будущей секции «Свои» (K7, RC-P3-7): без слота (профиль не пришёл) — нет
+  const nameHint = useHomeNameHint(signedIn);
+  const hintSlot = nameHint.visible ? socialSlotIndex(sections, profile.reasons) : null;
+  const hint =
+    hintSlot === null ? null : (
+      <View style={styles.hint}>
+        <NameHint onLater={nameHint.later} />
+      </View>
+    );
   // «сейчас» подписей — на клиенте (Главная без SSR-данных, R6): новые данные, фокус, полночь по Минску
   const now = useMinskClock([
     races.dataUpdatedAt,
@@ -159,6 +170,7 @@ export default function HomeScreen() {
           <OfflineBanner hasData={hasData} style={styles.banner} />
           <HomeTickets query={tickets} />
           {sections.map(({ id, chosen }, index) => {
+            const before = index === hintSlot ? hint : null;
             const copy = SECTION_COPY[id];
             const frame = {
               kicker: t(copy.kicker),
@@ -167,106 +179,114 @@ export default function HomeScreen() {
               first: index === 0,
               all: { label: t(copy.all), onPress: () => router.navigate(copy.href) },
             };
-            return id === 'races' ? (
-              <HomeSection
-                key={id}
-                {...frame}
-                query={races}
-                empty={{
-                  when: (page) => page.items.length === 0,
-                  render: () => (
-                    <EmptyState
-                      title={t('home.races.empty')}
-                      action={{
-                        label: t('home.races.emptyAction'),
-                        onPress: () => router.navigate('/calendar'),
-                      }}
-                    />
-                  ),
-                }}
-              >
-                {(page) => {
-                  const race = page.items[0];
-                  return race ? (
-                    <RaceHero
-                      race={race}
-                      now={now}
-                      onPress={() => router.push(`/races/${race.id}`)}
-                    />
-                  ) : null;
-                }}
-              </HomeSection>
-            ) : id === 'rides' ? (
-              <HomeSection
-                key={id}
-                {...frame}
-                query={rides}
-                empty={{
-                  when: (page) => page.items.length === 0,
-                  render: () => (
-                    <EmptyState
-                      title={t('home.rides.empty')}
-                      action={{
-                        label: t('home.rides.emptyAction'),
-                        onPress: () => router.push('/rides/new'),
-                      }}
-                    />
-                  ),
-                }}
-              >
-                {(page) => {
-                  const ride = page.items[0];
-                  return ride ? (
-                    <RideHero
-                      ride={ride}
-                      now={now}
-                      onPress={() => router.push(`/rides/${ride.id}`)}
-                    />
-                  ) : null;
-                }}
-              </HomeSection>
-            ) : id === 'routes' ? (
-              // RC-8: пустой каталог — пустой герой раздела, без скрытия (правило Главной)
-              <HomeSection
-                key={id}
-                {...frame}
-                query={routes}
-                skeleton={<RouteHeroSkeleton />}
-                empty={{
-                  when: (page) => page.items.length === 0,
-                  render: () => <EmptyState title={t('home.routes.empty')} />,
-                }}
-              >
-                {(page) => {
-                  const route = page.items[0];
-                  return route ? (
-                    <RouteHero route={route} onPress={() => router.push(`/routes/${route.id}`)} />
-                  ) : null;
-                }}
-              </HomeSection>
-            ) : (
-              <HomeSection
-                key={id}
-                {...frame}
-                query={calendar}
-                empty={{
-                  when: (page) => page.items.length === 0,
-                  render: () => <EmptyState title={t('calendar.empty')} />,
-                }}
-              >
-                {(page) => {
-                  const start = page.items[0];
-                  return start ? (
-                    <CalendarStartHero
-                      start={start}
-                      now={now}
-                      onPress={() => router.push(`/calendar/${start.id}`)}
-                    />
-                  ) : null;
-                }}
-              </HomeSection>
+            const section =
+              id === 'races' ? (
+                <HomeSection
+                  key={id}
+                  {...frame}
+                  query={races}
+                  empty={{
+                    when: (page) => page.items.length === 0,
+                    render: () => (
+                      <EmptyState
+                        title={t('home.races.empty')}
+                        action={{
+                          label: t('home.races.emptyAction'),
+                          onPress: () => router.navigate('/calendar'),
+                        }}
+                      />
+                    ),
+                  }}
+                >
+                  {(page) => {
+                    const race = page.items[0];
+                    return race ? (
+                      <RaceHero
+                        race={race}
+                        now={now}
+                        onPress={() => router.push(`/races/${race.id}`)}
+                      />
+                    ) : null;
+                  }}
+                </HomeSection>
+              ) : id === 'rides' ? (
+                <HomeSection
+                  key={id}
+                  {...frame}
+                  query={rides}
+                  empty={{
+                    when: (page) => page.items.length === 0,
+                    render: () => (
+                      <EmptyState
+                        title={t('home.rides.empty')}
+                        action={{
+                          label: t('home.rides.emptyAction'),
+                          onPress: () => router.push('/rides/new'),
+                        }}
+                      />
+                    ),
+                  }}
+                >
+                  {(page) => {
+                    const ride = page.items[0];
+                    return ride ? (
+                      <RideHero
+                        ride={ride}
+                        now={now}
+                        onPress={() => router.push(`/rides/${ride.id}`)}
+                      />
+                    ) : null;
+                  }}
+                </HomeSection>
+              ) : id === 'routes' ? (
+                // RC-8: пустой каталог — пустой герой раздела, без скрытия (правило Главной)
+                <HomeSection
+                  key={id}
+                  {...frame}
+                  query={routes}
+                  skeleton={<RouteHeroSkeleton />}
+                  empty={{
+                    when: (page) => page.items.length === 0,
+                    render: () => <EmptyState title={t('home.routes.empty')} />,
+                  }}
+                >
+                  {(page) => {
+                    const route = page.items[0];
+                    return route ? (
+                      <RouteHero route={route} onPress={() => router.push(`/routes/${route.id}`)} />
+                    ) : null;
+                  }}
+                </HomeSection>
+              ) : (
+                <HomeSection
+                  key={id}
+                  {...frame}
+                  query={calendar}
+                  empty={{
+                    when: (page) => page.items.length === 0,
+                    render: () => <EmptyState title={t('calendar.empty')} />,
+                  }}
+                >
+                  {(page) => {
+                    const start = page.items[0];
+                    return start ? (
+                      <CalendarStartHero
+                        start={start}
+                        now={now}
+                        onPress={() => router.push(`/calendar/${start.id}`)}
+                      />
+                    ) : null;
+                  }}
+                </HomeSection>
+              );
+            return (
+              <Fragment key={id}>
+                {before}
+                {section}
+              </Fragment>
             );
           })}
+          {hintSlot !== null && hintSlot >= sections.length ? hint : null}
           {/* витрина компонентов — только в dev; «Выйти» — в «Настройках» (settings-hub) */}
           {__DEV__ ? (
             <View style={styles.footer}>
@@ -286,6 +306,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   feed: { flex: 1 },
   banner: { paddingHorizontal: size.gutter, paddingBottom: space.s3 },
+  hint: { paddingHorizontal: size.gutter, paddingVertical: space.s3 },
   footer: {
     paddingHorizontal: size.gutter,
     paddingVertical: space.s5,

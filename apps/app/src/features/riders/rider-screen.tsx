@@ -26,6 +26,8 @@ import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/s
 import { HistoryList, RaceHistoryRow } from '@/features/profile/history-rows';
 import { ProfileHead, ProfileHeadSkeleton } from '@/features/profile/profile-head';
 import { publicRaceRow, publicStatItems } from '@/features/profile/profile-format';
+import { useRiderSocial } from '@/features/social/queries';
+import { RiderSocialBlock } from '@/features/social/rider-social-block';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { riderPath, useRider, useRiderRaces, useRiderViewer } from './queries';
@@ -93,19 +95,21 @@ function RiderReportAction({
   );
 }
 
-/** Тело найденного профиля: шапка, публичная статистика, «Гонки» с «Показать ещё», «Пожаловаться». */
+/** Тело найденного профиля: шапка, «Свои», публичная статистика, «Гонки» с «Показать ещё», «Пожаловаться». */
 function RiderBody({
   rider,
   races,
   achievements,
   session,
   viewer,
+  social,
 }: {
   rider: PublicRiderProfile;
   races: ReturnType<typeof useRiderRaces>;
   achievements: ReturnType<typeof useRiderAchievements>;
   session: RiderSession;
   viewer: ReturnType<typeof useRiderViewer>;
+  social: ReturnType<typeof useRiderSocial>;
 }) {
   const theme = useTheme();
   const router = useRouter();
@@ -113,6 +117,8 @@ function RiderBody({
     <View style={styles.stack}>
       <ProfileHead name={rider.name} club={rider.club} avatarId={rider.avatar?.id ?? null} />
       <View style={[styles.padded, styles.sections]}>
+        {/* «Свои» (P3, K6): «Вместе ехали», «Идёт», «В свои» — под шапкой, над статистикой */}
+        <RiderSocialBlock id={rider.publicId} session={session} query={social} />
         <StatBlock items={publicStatItems(rider.stats)} />
         {/* гоночные достижения (achievements, A7): без перехода и без «Поделиться»; пусто — блока нет */}
         <AchievementsBlock testID="rider-achievements" query={achievements} publicOnly />
@@ -168,13 +174,23 @@ export function RiderScreen({ id, seed }: { id: string; seed: PublicRiderProfile
   const session: RiderSession = signedIn ? 'signedIn' : pending ? 'pending' : 'guest';
   const viewerEnabled = valid && found && signedIn;
   const viewer = useRiderViewer(id, viewerEnabled);
+  // «Свои» зрителя (P3) — с тем же условием, что жалоба
+  const social = useRiderSocial(id, viewerEnabled);
   const refetchers = useMemo(
     () => [
       rider.refetch,
       ...(found ? [races.refetch, achievements.refetch] : []),
-      ...(viewerEnabled ? [viewer.refetch] : []),
+      ...(viewerEnabled ? [viewer.refetch, social.refetch] : []),
     ],
-    [rider.refetch, found, races.refetch, achievements.refetch, viewerEnabled, viewer.refetch],
+    [
+      rider.refetch,
+      found,
+      races.refetch,
+      achievements.refetch,
+      viewerEnabled,
+      viewer.refetch,
+      social.refetch,
+    ],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
   // 404 — «райдер скрыл профиль», а не сбой обновления: показанные данные убираются (отзыв согласия, R-3)
@@ -219,6 +235,7 @@ export function RiderScreen({ id, seed }: { id: string; seed: PublicRiderProfile
                 achievements={achievements}
                 session={session}
                 viewer={viewer}
+                social={social}
               />
             )}
           </AsyncContent>

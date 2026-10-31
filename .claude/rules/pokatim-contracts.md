@@ -248,6 +248,10 @@ paths:
   `SocialActionBlockedDetails` (`409 SOCIAL_ACTION_BLOCKED`, код — в конце `ErrorCode`). Справочник продуктовых
   событий — не здесь (журнал наружу не уходит, RC-11): `apps/api/src/modules/product-events/product-events.types.ts`.
   `ERASURE_STEPS` — в порядке исполнения (`…, 'tickets', 'social', 'product-events', 'notifications', 'identity'`).
+  Профиль (P3) — `src/social/rider-social.schema.ts`: `RiderTogether`, `RiderSocial` (`going: RideCard.nullable()
+  .default(null)`), запрос `SetRiderConnectionRequest` (`strictObject({ connected })`), `SocialConnectionRow` (без
+  `userId`, `sources` — `tolerantEnum(CONNECTION_SOURCES)`), `SocialConnections` (`items`, `count`). api-client —
+  `getRiderSocial`, `setRiderConnection` (`PUT`), `listSocialConnections`.
 - Фото организатора райда (ride-photo, ADR-0028): `src/rides/ride.schema.ts` — `RIDE_PHOTO_MAX_BYTES` (10 МиБ),
   `RIDE_PHOTO_MAX_EDGE_PX` (1600), `RIDE_PHOTO_MIN_SHORT_PX` (400), `RidePhotoId` (= `OpaqueToken` из
   `auth/verification.schema.ts`), `RidePhotoRef` (`{ id }`), `RideSummary.photo` (`.nullable().default(null)` — старый

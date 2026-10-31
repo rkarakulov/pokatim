@@ -20,6 +20,7 @@ import DeleteAccountScreen from '../app/settings/account/delete';
 import TicketRoute from '../app/tickets/[code]';
 import ProfileScreen from '../app/settings/profile';
 import OwnProfileRoute from '../app/profile';
+import SocialRoute from '../app/social';
 import RiderRoute from '../app/riders/[id]';
 import ReportRiderRoute from '../app/riders/report/[id]';
 import SettingsScreen from '../app/settings/index';
@@ -94,6 +95,7 @@ export const appRoutes = {
   'settings/theme': ThemeScreen,
   'settings/profile': ProfileScreen,
   profile: OwnProfileRoute,
+  social: SocialRoute,
   notifications: NotificationsScreen,
   'settings/notifications': NotificationSettingsScreen,
   'settings/verified': VerifiedProfileScreen,

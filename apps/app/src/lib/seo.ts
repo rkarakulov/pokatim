@@ -24,6 +24,7 @@ export const SEO_DISALLOW = [
   // только вошедшим
   '/settings',
   '/profile',
+  '/social',
   '/notifications',
   '/achievements/',
   '/rides/new',
