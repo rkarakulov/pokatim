@@ -1,9 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
-import { subscriberOutboxRoutes, workerOutboxRoutes } from './outbox-routes';
+import { buildOutboxRoutes, subscriberOutboxRoutes, workerOutboxRoutes } from './outbox-routes';
 
 const queuesOf = (route: string | readonly string[] | undefined): readonly string[] =>
   route === undefined ? [] : typeof route === 'string' ? [route] : route;
+
+describe('buildOutboxRoutes', () => {
+  it('тип у двух подписчиков — обе очереди (fan-out), а не последний подписчик, как у spread', () => {
+    const routes = buildOutboxRoutes([
+      {
+        'results.protocol-published': 'notifications-intake',
+        'tracks.activity-ready': 'results-intake',
+      },
+      { 'results.protocol-published': 'standings-recalc' },
+    ]);
+    expect(routes['results.protocol-published']).toEqual([
+      'notifications-intake',
+      'standings-recalc',
+    ]);
+    expect(queuesOf(routes['tracks.activity-ready'])).toEqual(['results-intake']);
+  });
+});
 
 describe('workerOutboxRoutes', () => {
   it('каждый подписчик каждого типа получает задачу: маршрут не затёрт другим подписчиком', () => {

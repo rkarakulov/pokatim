@@ -46,3 +46,6 @@ Outbox базы вёл тип события в одну очередь: рей�
 - **Open follow-ups:** подписка `standings` на `results.protocol-published`/`result-revised` (вместо или поверх
   `standings.sync`); `achievements` — на события источников (вместо `achievements.sweep`); `route-rides` — на
   `tracks.activity-removed`.
+- **Review:** Codex pass 1 — APPROVE, MEDIUM: сторож не отличал spread от `mergeOutboxRoutes` (типы подписчиков сейчас не
+  пересекаются) → `buildOutboxRoutes` и тест на пересекающихся картах; отрицательное доказательство — с
+  `Object.assign` вместо `mergeOutboxRoutes` тест красный.

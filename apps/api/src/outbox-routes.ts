@@ -32,4 +32,7 @@ export const subscriberOutboxRoutes: readonly OutboxRoutes[] = [
  * Composition root outbox (`worker.module.ts`): `mergeOutboxRoutes` — тип у нескольких подписчиков получает задачу в
  * каждой их очереди (fan-out, api-kit ≥ 0.6.0, ADR-0017 п. 5); spread оставил бы только последнего подписчика типа.
  */
-export const workerOutboxRoutes: OutboxRoutes = mergeOutboxRoutes(...subscriberOutboxRoutes);
+export const buildOutboxRoutes = (subscribers: readonly OutboxRoutes[]): OutboxRoutes =>
+  mergeOutboxRoutes(...subscribers);
+
+export const workerOutboxRoutes: OutboxRoutes = buildOutboxRoutes(subscriberOutboxRoutes);
