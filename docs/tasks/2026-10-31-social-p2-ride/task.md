@@ -600,3 +600,13 @@ P2 или ребейзить (сигнатура `joinRide`, ключи `social.
 
 **Ревью (2026-10-31):** `independent-reviewer` pass 1 — **APPROVE** (CRITICAL/HIGH нет); MEDIUM и LOW исправлены
 оркестратором (`findings.md`, раздел «Исправления оркестратора»).
+
+**Полный прогон (оркестратор, 2026-10-31, HEAD `fe5d90fd` — develop с #170 влит):**
+- `TURBO_CONCURRENCY=4 pnpm check` (Mongo `pokatim_social_p2_test`, Redis db 15): format, lint, arch, typecheck — зелёные.
+  Первый прогон на Redis db 9 падал на 429-тестах: ту же db одновременно использовала другая сессия (47 клиентов) —
+  перенесено на свободную db 15.
+- `turbo run test --continue` при load average 40–60: admin `520 passed`, api `2700 passed`, 1 failed
+  (`0026_attempt_last_verdict`), app — таймауты, tracks — бюджеты бенчмарков. Перезапуск по пакетам:
+  tracks `374 passed`, `migrations.int.test.ts` `47 passed`, app — 20 упавших под нагрузкой файлов
+  `jest --maxWorkers=3` → `20 passed / 511 passed`. Сводный зелёный `pnpm check` одним прогоном получить не удалось
+  из-за нагрузки от параллельных сессий; CI — полный.
