@@ -776,6 +776,23 @@ export class ResultsRepository {
     return docs.map((doc) => doc.userId);
   }
 
+  /**
+   * Райдеры строк протоколов ревизий `pairs` одним запросом (серверная сверка достижений: страница журнала): `$or` по
+   * `(raceId, revision)` — префикс `race_protocol_rows_unique`; без повторов.
+   */
+  async protocolRowUserIdsOf(
+    pairs: readonly { raceId: string; revision: number }[],
+  ): Promise<string[]> {
+    if (pairs.length === 0) return [];
+    const docs = await this.c.protocolRows
+      .find(
+        { $or: pairs.map(({ raceId, revision }) => ({ raceId, revision })) },
+        { projection: { _id: 0, userId: 1 } },
+      )
+      .toArray();
+    return [...new Set(docs.map((doc) => doc.userId))];
+  }
+
   /** Владелец заявки. */
   async entryUserId(entryId: string): Promise<string | null> {
     const doc = await this.c.entries.findOne(
@@ -1205,6 +1222,31 @@ export class ResultsRepository {
       ])
       .toArray();
     return new Map(rows.map((row) => [row._id, row.revision]));
+  }
+
+  /**
+   * Записи журнала с ревизией (не `recheck_started`) в окне по `_id` (uuidv7 = время записи; индекс `_id_`): нижняя граница —
+   * условие `after`, верхняя — `_id < beforeId`; по `_id` ↑, не больше `limit` (серверная сверка достижений).
+   */
+  async revisionsWithin(
+    after: { $gt: string } | { $gte: string },
+    beforeId: string,
+    limit: number,
+  ): Promise<{ _id: string; raceId: string; revision: number; at: Date }[]> {
+    const docs = await this.c.recalculations
+      .find(
+        { _id: { ...after, $lt: beforeId }, revision: { $ne: null } },
+        { projection: { _id: 1, raceId: 1, revision: 1, at: 1 } },
+      )
+      .sort({ _id: 1 })
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({
+      _id: doc._id,
+      raceId: doc.raceId,
+      revision: doc.revision ?? 0,
+      at: doc.at,
+    }));
   }
 
   /** Моменты последнего запуска и последнего применения перепроверки гонки. */

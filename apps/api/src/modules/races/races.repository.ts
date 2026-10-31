@@ -199,6 +199,27 @@ export class RacesRepository {
     }) as Promise<string[]>;
   }
 
+  /**
+   * Последняя отмена гонки с коридором по сезонам из `seasonIds` (префикс индекса `races_season_idx`; гонок сезона —
+   * десятки); анонсы (`corridor: null`) итог сезона не держали — не считаются.
+   */
+  async lastCancelledAt(seasonIds: readonly string[]): Promise<Map<string, Date>> {
+    const rows = await this.c.races
+      .aggregate<{ _id: string; at: Date }>([
+        {
+          $match: {
+            seasonId: { $in: [...seasonIds] },
+            status: 'cancelled',
+            cancelledAt: { $ne: null },
+            corridor: { $ne: null },
+          },
+        },
+        { $group: { _id: '$seasonId', at: { $max: '$cancelledAt' } } },
+      ])
+      .toArray();
+    return new Map(rows.map((row) => [row._id, row.at]));
+  }
+
   // --- гонки ---
 
   async findRace(id: string, session?: DbSession): Promise<RaceDoc | undefined> {

@@ -1,3 +1,5 @@
+import type { ChangedCursor, RiderChanges } from '../../changed-since';
+
 /**
  * Порт `route-rides` для модуля `achievements` (через `modules/route-rides/index.ts`): пройденные заезды райдера,
  * видимые ему сейчас (как «Заезды по маршруту»): статус `passed`, активность жива, маршрут виден райдеру (в каталоге
@@ -19,4 +21,10 @@ export interface RiderRouteRideFact {
 export interface RiderRouteRides {
   /** Пройденные видимые заезды райдера (повторы одного маршрута — отдельными фактами). Порядок не задан. */
   passedOf(userId: string): Promise<RiderRouteRideFact[]>;
+  /**
+   * Райдеры заездов `passed`, записанных в окне `(after, until]` по `(updatedAt, _id)` — момент записи итога (серверная
+   * сверка достижений, achievements-push; видимость проверит сверка через `passedOf`). Предел — `limit` заездов;
+   * курсор — последний прочитанный заезд.
+   */
+  passedRidersAfter(after: ChangedCursor, until: Date, limit: number): Promise<RiderChanges>;
 }

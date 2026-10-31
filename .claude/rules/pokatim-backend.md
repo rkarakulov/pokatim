@@ -190,6 +190,9 @@ paths:
 ## Очереди (worker)
 
 - Брокер — BullMQ на Redis; RabbitMQ не используем (переход — только через ADR; outbox оставляет к нему путь).
+- Регламенты «по курсору» без событий (DV-1): `standings-recalc`, `og-sync`, `tickets-maintenance`,
+  `achievements-sync` (achievements-push N2: `achievements.sweep` → `achievements.rider`); новый источник курсора —
+  метод порта владельца с keyset `changed-since.ts`, не чтение чужой коллекции.
 - Тяжёлая работа — только в worker: разбор трека, геопересчёт (коридор), рендер Skia/ffmpeg, OG-картинки,
   бейджи, уведомления, пересчёт сезона. HTTP-обработчик ставит задачу.
 - Лимиты времени и памяти — для разбора файлов и рендеринга (Skia, ffmpeg).
@@ -330,7 +333,7 @@ paths:
 
 - Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides,
   standings` только через `index.ts` (`standings` — порт `RIDER_SEASON_STANDINGS`, `StandingsCoreModule` импортирует
-  только `AchievementsSyncModule`; `AchievementsReadModule` и `sharing` его не получают); на `achievements` ссылаются только `AppModule` (`AchievementsModule`),
+  только `AchievementsSyncModule` и `AchievementsWorkerModule`; `AchievementsReadModule` и `sharing` его не получают); на `achievements` ссылаются только `AppModule` (`AchievementsModule`), `WorkerModule` (`AchievementsWorkerModule`, N2),
   `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания), `sharing` (`AchievementsReadModule`, порт
   `ACHIEVEMENTS_FOR_SHARING`) и `NotificationsWorkerModule` (`AchievementsSyncModule`, порт `ACHIEVEMENT_NOTICES`,
   achievements-push). Источники и `notifications` о нём не знают в обратную сторону — циклов нет.
@@ -340,7 +343,21 @@ paths:
   `AchievementsSyncModule` (achievements-push) — `AchievementsReconciler` и порт `ACHIEVEMENT_NOTICES`
   (`AchievementsCoreModule`, `AchievementsReadModule`, `StandingsCoreModule`; транзакции и outbox — глобальные модули
   базы); `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `AchievementsReadModule`,
-  `AchievementsSyncModule`. Worker-модуля, очередей и регламента в N1 нет (серверная сверка — PR N2).
+  `AchievementsSyncModule`. `AchievementsWorkerModule` (`WorkerModule`, achievements-push N2) — серверная сверка:
+  очередь `achievements-sync`, `AchievementsSchedules` (`achievements.sweep` `* * * * *` Минск +
+  `achievements.sweep.boot`), `AchievementsSweep` (курсоры Redis `achievements:cursor:<source>` и замок-аренда прогона —
+  `AchievementsSyncState`: `extend` своим токеном перед каждым шагом, `setCursors` — проверка токена и запись одним
+  Lua, потеря аренды — `achievements.sweep_lease_lost` без записи курсоров; источники — по одному методу портов
+  владельцев: `RIDER_RESULTS.revisedRidersAfter` (получатели страницы — один запрос `$or` по `(raceId, revision)`),
+  `RIDER_RIDES.startedRidersAfter` (`until = now − rideSettleMs`), `RIDER_ROUTE_RIDES.passedRidersAfter` (по
+  `updatedAt` — моменту записи итога), `RIDER_SEASON_STANDINGS.settledRidersAfter` (событие — `max(computedAt,
+  endsBefore, SEASON_RACES.lastCancelledAt)`); окно и страница — `changed-since.ts` (`changedWithin`, `RiderChanges`),
+  пределы — `ACHIEVEMENTS_SERVER_SYNC`; только `IdentityAccounts.liveUserIds` ∩ `syncedAmong`; курсоры — после
+  постановки; сбой источника — лог `achievements.sweep_source_failed`, курсор стоит, прогон падает) →
+  `achievements.rider` (`AchievementsSyncProcessor`, `concurrency: 4`, 3 попытки, последняя — лог
+  `achievements.server_sync_failed`) → `reconcile(uid, 'server')`. Imports: `AchievementsSyncModule`,
+  `AchievementsCoreModule`, `IdentityAccountsModule`, `ResultsCoreModule`, `RidesCoreModule`, `RouteRidesCoreModule`,
+  `StandingsCoreModule`. Условия «прошёл»/«засчитан» — только в репозиториях владельцев (рядом с `pastFactsOf`/`passedOf`).
 - Факты — только порты владельцев: `RIDER_RESULTS` (`publishedRows`, `racesOf` — как у `riders`), `RIDER_ROUTE_RIDES`
   (`route-rides`: `passedOf` — `passed` + `ActivitySource.liveActivities` + `RouteRideRoutes.rideableTitles`, та же
   видимость, что у «Заездов по маршруту»; снятый маршрут — факта нет, RC-4), `RIDER_RIDES` (`rides`: `pastOf` —
@@ -388,7 +405,8 @@ paths:
   только по `settled`; `refresh` нет). `sync`: оба плана → маркер после обоих → ответ: сезонные — видимые ∩
   заработанные (`final`), в `pending` — видимая остаётся с названием из исхода. Лог — счётчики `seasonal_*`. Карточка:
   сезонный код → `cardFacts` `null` (409), `ACHIEVEMENT_BADGE_ICONS` — `Record<FactAchievementCode, …>`. Сбой порта сезонов — `seasonOutcomes` → `[]`
-  (лог `achievements.seasons_unavailable`): сезонные не трогаются и не отдаются, остальной список — как обычно.
+  (лог `achievements.seasons_unavailable`): сезонные не трогаются и не отдаются, остальной список — как обычно;
+  серверная сверка (`origin: 'server'`) зовёт порт напрямую — сбой уходит в ретрай задачи.
 
 ## Карточки для сторис (`sharing`, story-cards, ADR-0018)
 

@@ -254,6 +254,18 @@ export class AchievementsRepository {
     return result.modifiedCount === 1;
   }
 
+  /**
+   * Райдеры из `userIds` с маркером первой сверки (`achievement_syncs { _id: $in }`): только их сверяет серверная
+   * сверка (achievements-push N2, P2) — у остальных первая сверка остаётся тихой при открытии приложения.
+   */
+  async syncedAmong(userIds: readonly string[]): Promise<Set<string>> {
+    if (userIds.length === 0) return new Set();
+    const docs = await this.c.syncs
+      .find({ _id: { $in: [...userIds] } }, { projection: { _id: 1 } })
+      .toArray();
+    return new Set(docs.map((doc) => doc._id));
+  }
+
   /** Маркер первой сверки — только после её выдач (RC-1); дубль параллельного upsert — не ошибка. */
   async markSynced(userId: string, now: Date): Promise<void> {
     try {

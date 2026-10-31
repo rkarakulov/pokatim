@@ -95,4 +95,11 @@ export const QUEUE = {
    * текст); провал письма-приглашения виден в блоке «Приглашения» (`emailState`).
    */
   panelEmail: 'panel-email',
+  /**
+   * Серверная сверка достижений (achievements-push N2, ADR-0020): регламент `achievements.sweep` каждую минуту и при
+   * старте worker, без событий outbox — райдеры изменившихся фактов по курсорам портов владельцев (Redis
+   * `achievements:cursor:<source>`) → задачи `achievements.rider` (jobId `ach-rider-<uid>-<прогонMs>`, 3 попытки) →
+   * `AchievementsReconciler.reconcile(uid, 'server')`; прогоны — по одному (замок-аренда Redis, курсоры пишет владелец).
+   */
+  achievementsSync: 'achievements-sync',
 } as const;

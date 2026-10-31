@@ -432,7 +432,10 @@ paths:
 - `route_rides` — единственный писатель `RouteRidesRepository`; миграция `0032_route_rides` (expand-only): уникальный
   `route_rides_user_route_activity_unique { userId, routeId, activityId }` (дедуп параллельного POST группы; префикс —
   список, квота и стирание). `activityId` — основная группы на момент POST, `activity` — снимок сводки,
-  `corridorWidthM` — ширина на момент создания (RC-15).
+  `corridorWidthM` — ширина на момент создания (RC-15). `0044_route_rides_passed_idx` (achievements-push N2, expand):
+  частичный `route_rides_passed_updated_idx { updatedAt, _id }` по `status: 'passed'` — источник серверной сверки
+  достижений (`passedWithin`, keyset `changed-since.ts`). Окно — по моменту записи итога (`record` ставит
+  `updatedAt`), не по `checkedAt`: тот берётся до ожидания семафора разбора и отстаёт от коммита больше `settleMs`.
 - Итог пишет только своя ревизия: `claim` (`checkRevision`, `queued|checking` в фильтре), `record` (`checking` в
   фильтре), без транзакции; `requeue` — `$inc checkRevision` только из `failed` или зависшего статуса прежней ревизии
   (условие в фильтре) + outbox в транзакции. `trackMap` — позиции на линии `activity_tracks`, без координат;

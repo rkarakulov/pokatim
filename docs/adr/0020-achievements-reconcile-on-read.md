@@ -106,7 +106,7 @@
 ## Дополнение: push (achievements-push N1, 2026-10-31)
 
 Задача — `docs/tasks/2026-10-31-achievements-push` (PR N1 — уведомление из сверки при чтении; серверная сверка в
-worker — PR N2, дополнится здесь же).
+worker — PR N2, «Дополнение: серверная сверка» ниже).
 
 - **Сверка одна:** `AchievementsReconciler.reconcile(userId, origin)` (`AchievementsSyncModule`) — факты → планы →
   запись → маркер → итог для ответа; `AchievementsService.sync` — лимит `achievements-read:<uid>` и сборка ответа
@@ -131,3 +131,31 @@ worker — PR N2, дополнится здесь же).
   название — факты `AchievementFactsReader` или итог `RIDER_SEASON_STANDINGS.outcomesOf`). Вторая линия идемпотентности — схлопывание `achievement:<grantId>` по рангу.
 - **Канал:** `origin: 'read'` — запись в центре без push (райдер видит вспышку; уведомление непрочитано, RC-P6);
   `'server'` — центр и push по группе «Достижения» (ADR-0017). Вспышка push-ем не отменяется (A5).
+
+## Дополнение: серверная сверка (achievements-push N2, 2026-10-31)
+
+- **Зачем:** push без открытия приложения (P2). Сверка та же — `reconcile(userId, 'server')` в worker (центр + push).
+- **Регламент по курсорам, не события:** fan-out outbox нет (ADR-0017 п. 5), `results.*`/`rides.*` уже заняты
+  `notifications-intake`, у «заезд засчитан» и «сезон подведён» событий нет. Очередь `achievements-sync`
+  (`AchievementsWorkerModule`): `achievements.sweep` каждую минуту (Минск) + `achievements.sweep.boot`, один прогон за
+  раз (замок-аренда Redis `achievements:sweep:lock`: продление своим токеном перед каждым шагом, курсоры пишет только
+  владелец — проверка токена и запись одним Lua; аренда потеряна — прогон прекращается без записи курсоров,
+  `achievements.sweep_lease_lost`); задачи `achievements.rider` (`ach-rider-<uid>-<прогонMs>`, 3 попытки,
+  экспоненциальная пауза; последняя — лог `achievements.server_sync_failed`, failed-набор).
+- **Источники — по одному методу портов владельцев**, окно `(курсор, until]` по keyset (`changed-since.ts`), ≤ 500
+  строк за прогон, `until = now − 2 мин` (запас на коммит): ревизии протоколов (`RIDER_RESULTS.revisedRidersAfter` —
+  журнал по uuidv7 `_id`, получатели страницы — один запрос по парам `(raceId, revision)`), прошедшие райды
+  (`RIDER_RIDES.startedRidersAfter`, `until = now − 3 ч` — push после поездки, RC-P1), засчитанные заезды
+  (`RIDER_ROUTE_RIDES.passedRidersAfter` — по моменту записи итога `updatedAt`, а не `checkedAt`: тот берётся до
+  ожидания семафора разбора; индекс `0044_route_rides_passed_idx`), итоги сезонов
+  (`RIDER_SEASON_STANDINGS.settledRidersAfter` — момент `max(computedAt, endsBefore, последняя отмена гонки с
+  коридором)` завершённого сезона: отмена гонки, ждавшей протокола, делает итог полным без пересчёта снимка —
+  `SEASON_RACES.lastCancelledAt`; строки снимка по `userId`). Полного скана райдеров нет.
+- **Кого сверять:** живые аккаунты (`liveUserIds`, RC-P7) ∩ с маркером первой сверки (`syncedAmong`) — первая сверка
+  остаётся тихой при открытии приложения. Курсоры (`achievements:cursor:<source>`) двигаются после постановки задач;
+  сбой источника — его курсор стоит, прогон падает после остальных.
+- **Push — «не больше одного» (RC-P9):** коммит факта позже `settleMs`, задача не поставилась, потерян курсор — push
+  нет, запись в центре появится при следующем GET (`origin: 'read'`). Нет курсора (первый запуск и потеря Redis
+  неразличимы) — окно с `until − 10 мин`. Одно уведомление на выдачу гарантируют транзакция и схлопывание.
+- **RC-P7:** задача, начатая до закрытия аккаунта, может записать выдачу после шага стирания `achievements` —
+  осиротевшие выдачи без ПДн (кроме `userId`); уведомления не будет (`liveUserIds` в intake). Принято.

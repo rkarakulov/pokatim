@@ -1,7 +1,9 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
 import { PublicReadGuard } from '../../public-read.guard';
-import { IdentityModule } from '../identity';
+import { QUEUE } from '../../queues';
+import { IdentityAccountsModule, IdentityModule } from '../identity';
 import { ProfileCoreModule } from '../profile';
 import { ResultsCoreModule } from '../results';
 import { RidesCoreModule } from '../rides';
@@ -12,6 +14,9 @@ import { AchievementFactsReader } from './achievement-facts.reader';
 import { AchievementNoticesService } from './achievement-notices';
 import { ACHIEVEMENT_NOTICES } from './achievement-notices.port';
 import { AchievementsReconciler } from './achievements-reconciler';
+import { AchievementsSweep } from './achievements-sweep';
+import { AchievementsSchedules, AchievementsSyncProcessor } from './achievements-sync.processor';
+import { AchievementsSyncState } from './achievements-sync.state';
 import { AchievementsSharing } from './achievements-for-sharing';
 import { ACHIEVEMENTS_FOR_SHARING } from './achievements-for-sharing.port';
 import { AchievementsPublicController } from './achievements-public.controller';
@@ -79,3 +84,29 @@ export class AchievementsSyncModule {}
   providers: [AchievementsService, PublicReadGuard],
 })
 export class AchievementsModule {}
+
+/**
+ * Серверная сверка в worker (achievements-push N2): очередь `achievements-sync`, регламент `achievements.sweep`
+ * (`AchievementsSweep`, курсоры и замок — `AchievementsSyncState`, Redis) и задачи `achievements.rider` →
+ * `AchievementsReconciler` (`AchievementsSyncModule`). Источники — по одному методу портов владельцев (`RIDER_RESULTS`,
+ * `RIDER_RIDES`, `RIDER_ROUTE_RIDES`, `RIDER_SEASON_STANDINGS`), живость — `IdentityAccounts`. Маршрутов outbox нет.
+ */
+@Module({
+  imports: [
+    AchievementsSyncModule,
+    AchievementsCoreModule,
+    IdentityAccountsModule,
+    ResultsCoreModule,
+    RidesCoreModule,
+    RouteRidesCoreModule,
+    StandingsCoreModule,
+    BullModule.registerQueue({ name: QUEUE.achievementsSync }),
+  ],
+  providers: [
+    AchievementsSyncState,
+    AchievementsSweep,
+    AchievementsSyncProcessor,
+    AchievementsSchedules,
+  ],
+})
+export class AchievementsWorkerModule {}

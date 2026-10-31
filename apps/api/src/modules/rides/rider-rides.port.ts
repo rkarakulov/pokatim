@@ -1,3 +1,5 @@
+import type { ChangedCursor, RiderChanges } from '../../changed-since';
+
 /**
  * Порт `rides` для модуля `achievements` (через `modules/rides/index.ts`): прошедшие райды райдера по условиям истории
  * профиля (R8) — опубликованный (не отменён, не скрыт), старт в прошлом, райдер «Иду» или организатор. `achievements`
@@ -21,4 +23,10 @@ export interface RiderRideFact {
 export interface RiderRides {
   /** Прошедшие райды райдера: `startsAt ↑`, при равенстве `rideId ↑`. */
   pastOf(userId: string): Promise<RiderRideFact[]>;
+  /**
+   * Участники (включая организатора) опубликованных райдов со стартом в окне `(after, until]` по `(startsAt, _id)` —
+   * райд «прошёл» (R8) в окне (серверная сверка достижений, achievements-push). Предел — `limit` райдов; курсор —
+   * последний прочитанный райд.
+   */
+  startedRidersAfter(after: ChangedCursor, until: Date, limit: number): Promise<RiderChanges>;
 }

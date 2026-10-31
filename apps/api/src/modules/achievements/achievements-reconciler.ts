@@ -71,7 +71,10 @@ export class AchievementsReconciler {
     const seasonIds = [...new Set(storedSeasonal.map((grant) => grant.seasonId))];
     const [titled, outcomes] = await Promise.all([
       this.facts.titled(earned, userId),
-      this.seasonOutcomes(userId, seasonIds, now),
+      // серверная сверка (worker) сбой порта не глотает — задача повторится (ревью N2 pass 2); GET — мягко
+      origin === 'server'
+        ? this.standings.outcomesOf(userId, seasonIds, now)
+        : this.seasonOutcomes(userId, seasonIds, now),
     ]);
     const seasonal = seasonalAchievements(outcomes);
     const first = syncedAt === null;
@@ -97,8 +100,9 @@ export class AchievementsReconciler {
   }
 
   /**
-   * Итоги сезонов; сбой порта — как «ни одного сезона» (ревью pass 1, MEDIUM): `settled` пуст — сезонные выдачи не
-   * трогаются, в ответе их нет до следующего запроса; несезонные и прогресс отдаются. Лог — uid, без текста ошибки.
+   * Итоги сезонов для чтения (GET, публичный список); сбой порта — как «ни одного сезона» (ревью pass 1, MEDIUM):
+   * `settled` пуст — сезонные выдачи не трогаются, в ответе их нет до следующего запроса; несезонные и прогресс
+   * отдаются. Лог — uid, без текста ошибки. Серверная сверка зовёт порт напрямую — сбой уходит в ретрай задачи.
    */
   async seasonOutcomes(
     userId: string,

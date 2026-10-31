@@ -42,6 +42,12 @@ export interface SeasonRaces {
    * отменённые и анонсы (`corridor: null`) не считаются.
    */
   awaitingProtocol(seasonIds: readonly string[]): Promise<Set<string>>;
+  /**
+   * Момент последней отмены гонки с коридором по сезонам из `seasonIds` (нет отмен — сезона нет в ответе): отмена
+   * последней гонки, ждущей протокола, делает итог сезона полным без пересчёта снимка (`pending → final`,
+   * achievements-push — событие серверной сверки).
+   */
+  lastCancelledAt(seasonIds: readonly string[]): Promise<Map<string, Date>>;
   /** Сезон существует (видимость — как `GET /v1/seasons/:id`, RC-7). */
   seasonExists(seasonId: string): Promise<boolean>;
   /** Сотрудник видит все гонки (не `ownScope` организатора, RC-8). */

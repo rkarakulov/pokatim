@@ -1,8 +1,8 @@
 # Достижения: push о новом достижении
 
 
-> **Этот PR — часть N1** (RC-P10): уведомление из сверки `GET`, событие, порт, группа, приложение. Серверная сверка в
-> worker, порты источников и миграция `0044` — часть N2, следующим PR (AC3, AC5 — там).
+> **N1 — PR #154** (уведомление из сверки `GET`, событие, порт, группа, приложение). **Этот PR — часть N2**:
+> серверная сверка в worker (регламент по курсорам), методы портов источников, миграция `0044`, AC3/AC5.
 Уровень: task3 (worker/регламент, outbox, уведомления, контракты). Follow-up 3/4 серии
 (`docs/tasks/2026-10-30-achievements-levels` — уровни, `docs/tasks/2026-10-31-achievements-seasonal` — сезонные).
 Out of Scope v1: «Push-уведомление о новом достижении». Следом — PR M: ручная выдача/отзыв в панели.
@@ -156,8 +156,8 @@ Architecture Review (architect, 2026-10-31) — **Status: CONCERNS** (блоке
   |---|---|---|---|
   | протокол опубликован/пересчитан | `RIDER_RESULTS.revisedRidersAfter(cursor, until, limit)` | `race_recalculations` с `revision ≠ null` по `_id` (uuidv7 = время) → `race_protocol_rows` этой `(raceId, revision)` → `userId` | `_id_`; строки — существующий по `(raceId, revision, …)` (проверить) |
   | райд прошёл (R8: `startsAt < now`) | `RIDER_RIDES.startedRidersAfter(cursor, until, limit)` | `rides { status: 'published', startsAt ∈ (cursor, until] }` → `participants.userId` (организатор — первый участник) | `rides_feed_idx (startsAt, _id)` |
-  | заезд по маршруту засчитан | `RIDER_ROUTE_RIDES.passedRidersAfter(cursor, until, limit)` | `route_rides { status: 'passed', checkedAt > cursor }` | **новый** `route_rides_passed_checked_idx (checkedAt, _id)`, partial `status: 'passed'` |
-  | снимок сезона пересчитан / сезон завершился | `RIDER_SEASON_STANDINGS.settledRidersAfter(cursor, until, limit)` | заголовки `computedAt ∈ окно` ∪ `finishedSeasons` с `endsBefore ∈ окно` → строки сезона (keyset по `_id` строк) | `season_standing_rows_user_idx (seasonId, userId)` |
+  | заезд по маршруту засчитан | `RIDER_ROUTE_RIDES.passedRidersAfter(cursor, until, limit)` | `route_rides { status: 'passed', updatedAt > cursor }` (момент записи итога; фикс ревью N2) | **новый** `route_rides_passed_updated_idx (updatedAt, _id)`, partial `status: 'passed'` |
+  | снимок сезона пересчитан / сезон завершился / отменена гонка, ждавшая протокола | `RIDER_SEASON_STANDINGS.settledRidersAfter(cursor, until, limit)` | заголовки `computedAt ∈ окно` ∪ `finishedSeasons` с `endsBefore ∈ окно` ∪ `SEASON_RACES.lastCancelledAt ∈ окно` (фикс ревью N2) → строки сезона (keyset по `userId`) | `season_standing_rows_user_idx (seasonId, userId)` |
 
   Ключ сортировки общий — расширить `src/changed-since.ts` полем времени (сейчас жёстко `updatedAt`), а не копировать.
 - Курсоры — Redis `achievements:cursor:<source>` (как `og:cursor:<kind>`), JSON `{ at, id }`. Нет ключа (первый
@@ -387,6 +387,32 @@ RC-P8, RC-P9 (a), RC-P10 — два PR).
 - `push.test.ts` приложения не менялся: путь нажатия push — `pushTargetPath` (unit + паритет SW в
   `notification-target.test.ts`).
 
+Отклонения N2 (coder, 2026-10-31):
+
+- **Нет курсора — окно с `until − 10 мин` и при первом запуске** (5.D: «первый запуск — `now`»): в Redis первый запуск и
+  потеря курсора неразличимы (оба — нет ключа), отдельного долговечного признака нет (курсоры в Mongo — отклонённый
+  RC-P9 (b)). Отсчёт — от `until` своего источника (у райдов `until = now − 3 ч`: от `now` факты между `now − 3 ч` и
+  `now` выпали бы). 10 минут — не ретро (Out of Scope соблюдён).
+- **Сезоны — один момент события на сезон `max(computedAt, endsBefore)`** вместо объединения «заголовки с `computedAt`
+  в окне ∪ сезоны с `endsBefore` в окне»: пересчёт после конца сезона даёт `computedAt`, пересчёт до конца — момент
+  конца; сезон не попадает в страницу дважды. Строки снимка внутри сезона — keyset по `userId` (индекс
+  `season_standing_rows_user_idx` покрывает сортировку), а не по `_id` строк (сортировка по `_id` — в памяти); курсор —
+  `<seasonId>` / `<seasonId>|<userId>`. Заголовки читаются только завершённых к `until` сезонов (`finishedSeasons`) по
+  `_id` — коллекция из десятков документов, индекса по `computedAt` не нужно.
+- **Ревизии — фильтр `revision: { $ne: null }`** (как `currentRevision`), не `$type: 'number'`: типизация драйвера не
+  принимает `$type` на этом поле; смысл тот же (`recheck_started` без ревизии не читается).
+- **Окно по keyset — новый `changedWithin(after, until, field)`** (диапазон поля ограничен с двух сторон, скан индекса
+  только по окну), `changedAfter` получил поле времени (перегрузка, у `og.sync` без изменений), `uuidv7Floor` — граница
+  окна по `_id` журнала ревизий; общий тип страницы `RiderChanges` — там же (`changed-since.ts`).
+- **Один прогон за раз — замок Redis** `achievements:sweep:lock` (`SET NX PX` 5 мин, снятие своим токеном), а не
+  `concurrency: 1`: у очереди один процессор с `concurrency: 4` (задачи райдеров), прогоны (расписание + boot, несколько
+  worker) иначе пересекались бы. Занято — итог `busy`, без чтения.
+- **Хранение задач:** прогон — 1 попытка, `removeOnFail: { count: 100 }` (видимость без задачи в минуту навсегда);
+  задача райдера — `removeOnComplete: true`, `removeOnFail: { count: 1000 }`.
+- **Тесты источников** — одним файлом через порты (`achievements-sync-sources.int.test.ts`), а не в каждом модуле-
+  владельце. В int-тестах ревизии вставляются с `_id = uuidv7At(...)`: uuidv7 базы берёт `Date.now()`, а не часы стенда
+  (как в `notifications`-тестах).
+
 ## 9. Acceptance Criteria
 
 - AC1. Новая выдача после первой сверки (GET или worker) → одно уведомление в центре + push; повторная сверка и
@@ -413,7 +439,7 @@ RC-P8, RC-P9 (a), RC-P10 — два PR).
 - **`.claude/rules/pokatim-backend.md`** — «Достижения» (модули `AchievementsSyncModule`, `AchievementsWorkerModule`,
   убрать «Worker-модуля, очередей, outbox и регламента нет», ребро `StandingsCoreModule`), «Уведомления» (15 типов,
   группа, `in_app`), «Очереди» — `achievements-sync`.
-- **`.claude/rules/pokatim-db.md`** — `notifiedLevel`, индекс `route_rides_passed_checked_idx`.
+- **`.claude/rules/pokatim-db.md`** — `notifiedLevel`, индекс `route_rides_passed_updated_idx`.
 - **`.claude/rules/pokatim-contracts.md`**, **`pokatim-app.md`** — группа, цель, секция настроек.
 - `apps/api/src/queues.ts` (комментарий очереди), `pr.md` — миграция `0044` (N2), новая очередь и расписание.
 
@@ -507,3 +533,69 @@ PR N2
 - **LOW — `pokatim-security.md` («Достижения»):** GET пишет и события outbox `achievements.grant-noticed` (payload —
   id и коды, без `userId` и ПДн; получатель — из выдачи через порт). Также `pokatim-backend.md` и ADR-0020 — сезонная
   перепроверка вместо `seasonTitles`.
+
+### N2 — серверная сверка в worker (2026-10-31)
+
+Сделано:
+
+- `changed-since.ts`: поле времени у `changedAfter`, `changedWithin` (окно `(курсор, until]`), `changedSort`,
+  `uuidv7Floor`, тип `RiderChanges` (+ unit).
+- Методы портов владельцев (условия — в их репозиториях): `RIDER_RESULTS.revisedRidersAfter` (журнал по uuidv7 `_id`
+  → `protocolRowUserIds`), `RIDER_RIDES.startedRidersAfter` (`rides_feed_idx`, `status: 'published'`),
+  `RIDER_ROUTE_RIDES.passedRidersAfter` (новый частичный индекс), `RIDER_SEASON_STANDINGS.settledRidersAfter`.
+  Миграция `0044_route_rides_passed_idx` (expand-only; в `origin/develop` последняя — `0043`).
+- `achievements`: `ACHIEVEMENTS_SERVER_SYNC` (политика), `AchievementsRepository.syncedAmong`, `AchievementsSyncState`
+  (курсоры, замок), `AchievementsSweep`, `AchievementsSyncProcessor` + `AchievementsSchedules`,
+  `AchievementsWorkerModule` в `worker.module.ts`; очередь `QUEUE.achievementsSync`.
+- Тесты: `changed-since.test.ts`; `achievements-sync-sources.int.test.ts` (каждый источник: окно, страница,
+  продолжение, «не тот факт» не читается); `achievements-sync.int.test.ts` — AC5 (без маркера, закрытый аккаунт, до
+  курсора, новее `settleMs`, райды через 3 ч — не ставятся; счёт задач = ожидаемому), сбой источника (его курсор стоит,
+  остальные двигаются, прогон падает с логом), замок; AC3 — протокол опубликован → `achievements.sweep` из очереди →
+  `achievements.rider` из очереди → событие `origin: 'server'` → уведомление → push в фейковом Expo; райдер без маркера
+  — без задачи и выдачи. `achievements-sync.processor.test.ts` — расписание, диспетчер, лог последней попытки.
+  `migrations.int.test.ts` — `0044` (тест `0032` — `toMatchObject`: на коллекции теперь два индекса).
+- Документы: ADR-0020 («Дополнение: серверная сверка»), `profile.md` (push за райд через 3 ч, только открывавшие
+  достижения, «не больше одного»), `.claude/rules/pokatim-backend.md` (`AchievementsWorkerModule`, регламенты по
+  курсору), `.claude/rules/pokatim-db.md` (индекс), `queues.ts`. `notifications.md` уже описывает канал `server`.
+
+### Фиксы ревью N2 (2026-10-31; `findings-claude-n2.md`, `findings-codex-n2.md`)
+
+Каждый фикс — TDD: тест красный до правки, зелёный после.
+
+- **MEDIUM (Claude) — `route_rides` по моменту записи итога.** `checkedAt` берётся до ожидания семафора разбора
+  (`PARSE_THREADS_MAX = 1`) и отстаёт от коммита `record` больше `settleMs` — строка выпадала из окна. Источник
+  `passedWithin` — окно по `updatedAt` (`record` ставит его в момент записи); `checkedAt` не трогаем (семантика ответа
+  клиенту прежняя). Прочие обновления `passed` дают только повтор (сверка идемпотентна). Миграция `0044` (не выкачена)
+  — частичный `route_rides_passed_updated_idx { updatedAt, _id }` по `passed`. Int: «итог записан позже `checkedAt`
+  больше чем на `settleMs` — читается по моменту записи» (`record` с `checkedAt = −10 мин`, запись `−3 мин`, курсор
+  `−5 мин`).
+- **MEDIUM (Codex) + LOW (Claude) — сезон `pending → final` отменой гонки.** Новый метод порта
+  `SEASON_RACES.lastCancelledAt(seasonIds)` (`RacesRepository` — `$max cancelledAt` отменённых гонок с коридором,
+  префикс `races_season_idx`; `standings` чужих коллекций не читает). Момент события сезона —
+  `max(computedAt, endsBefore, отмена ≤ until)`. Int: источник (отмена после пройденного курсора — событие в момент
+  отмены; отменённый анонс — нет; отмена позже `until` — нет) и сценарий «конец сезона → GET (маркер) → прогон, сезон
+  `pending`, выдачи нет → отмена → прогон → сезонные выдачи `origin: 'server'` → уведомление `season_champion` → push
+  в фейковом Expo» (`achievements-sync.int.test.ts`; мутация «без отмены» — красный).
+- **MEDIUM (Codex) + LOW (Claude) — N+1 в `revisedRidersAfter`.** `ResultsRepository.protocolRowUserIdsOf(pairs)` —
+  один `find({ $or: [(raceId, revision)…] })` с проекцией `userId` и снятием повторов (префикс `race_protocol_rows_unique`). Int «бюджет
+  запросов»: 4 ревизии → 2 чтения (spy `Collection.prototype` find/findOne/aggregate/distinct/countDocuments), до
+  правки — 5.
+- **MEDIUM (Codex) — аренда замка прогона.** `AchievementsSyncState.extend(token)` (Lua: `PEXPIRE` только своим
+  токеном) перед каждым источником и перед постановкой; `setCursors(token, cursors)` — проверка токена и запись всех
+  курсоров одним Lua (`setCursor` удалён). Аренда потеряна — лог `achievements.sweep_lease_lost`, исключение, курсоры
+  не пишутся (окно повторит следующий прогон — дубли, не пропуски). Int: продление и отказ чужому токену; «аренда
+  истекла посреди прогона, второй прогон захватил» — первый не ставит задачи, курсор второго не откачен, чужой замок
+  не снят.
+- **LOW — лишняя общность `changed-since.ts`.** Удалены перегрузка `changedAfter(after, field)` и поле
+  `RiderChanges.full` (продакшен-код их не читал; продолжение — следующим прогоном).
+- **LOW — `pr.md`** переписан под N2: миграция `0044` — шаг деплоя до API/worker, очередь `achievements-sync`,
+  расписание, проверки.
+- Документы: ADR-0020 («Дополнение: серверная сверка» — аренда, `updatedAt`, отмена гонки, один запрос получателей),
+  `.claude/rules/pokatim-backend.md`, `.claude/rules/pokatim-db.md`, раздел 5.D и 10 этого файла.
+
+### Фиксы ревью N2 pass 2 (оркестратор)
+
+- Codex MEDIUM: в серверной сверке (`origin: 'server'`) сбой `RIDER_SEASON_STANDINGS.outcomesOf` больше не глотается —
+  исключение уходит в ретрай задачи `achievements.rider` (3 попытки, финальный лог); GET и публичный список — прежний
+  мягкий отказ. Int-тест: однократный отказ → `reconcile('server')` бросает, выдач нет → повтор → сезонные выданы.
+- Codex LOW: команда миграции в `pr.md` — `pnpm --filter @pokatim/api db:migrate`.
