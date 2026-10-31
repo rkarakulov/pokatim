@@ -6,6 +6,7 @@ import {
   PublicRiderAchievementList,
   RiderAchievementsAdmin,
 } from '@pokatim/contracts';
+import { RateLimiter } from '@rkarakulov/api-kit/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -38,6 +39,7 @@ import {
   ACHIEVEMENTS_FOR_SHARING,
   type AchievementsForSharing,
 } from './achievements-for-sharing.port';
+import { ACHIEVEMENTS_PANEL_LIMIT } from './achievements-panel.service';
 import { AchievementsReconciler } from './achievements-reconciler';
 import { ACHIEVEMENTS_GRANT_NOTICED, AchievementsGrantNoticed } from './achievements.events';
 
@@ -218,6 +220,39 @@ describe('проверка запроса и объекта (AC2)', () => {
     expect((await panelAchievement(h, token, race, 'revoke', { code: 'race_win' })).status).toBe(
       404,
     );
+  });
+
+  it('429 — лимит мутаций по сотруднику (ключ — сотрудник, не райдер): журнала и записи нет (ревью pass 1)', async () => {
+    const me = await rider(h, 'me@example.com');
+    const actor = await staff(h, 'admin@example.com', 'admin');
+    const second = await staff(h, 'admin2@example.com', 'admin');
+    const season = await seedSeason(h);
+    const race = await raceAt(h, season, [placedRow(me.userId, 1)], daysAgo(h, 5));
+    const limiter = h.app.get(RateLimiter);
+    for (let i = 0; i < ACHIEVEMENTS_PANEL_LIMIT.limit; i += 1)
+      await limiter.consume(
+        `achievements-panel:${actor.userId}`,
+        ACHIEVEMENTS_PANEL_LIMIT,
+        h.clock.now(),
+      );
+
+    const limited = await panelAchievement(h, actor.token, me.userId, 'grant', {
+      code: 'race_win',
+      objectId: race,
+    });
+    expect([limited.status, (limited.body as { code: string }).code]).toEqual([
+      429,
+      'RATE_LIMITED',
+    ]);
+    expect(await grants().countDocuments({ userId: me.userId })).toBe(0);
+    expect(await auditOf(actor.token)).toEqual([]);
+
+    // другой сотрудник тому же райдеру — не ограничен
+    const ok = await panelAchievement(h, second.token, me.userId, 'grant', {
+      code: 'race_win',
+      objectId: race,
+    });
+    expect(ok.status).toBe(204);
   });
 });
 

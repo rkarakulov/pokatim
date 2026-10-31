@@ -515,3 +515,10 @@ OUT OF SCOPE — статистика достижений, массовые о�
 - **Проверки:** `MONGO_URL_TEST=… REDIS_URL_TEST=… TURBO_CONCURRENCY=1 pnpm check` — exit 0, `Tasks: 15 successful, 15
   total` (api 224 файла / 2534 теста, admin 489, contracts 482, api-client 169).
 - **Отклонения:** 8.2 D1–D4.
+
+### Фиксы ревью PR A pass 1 (оркестратор)
+
+- Claude MEDIUM: лимит мутаций панели покрыт int-тестом — исчерпан `achievements-panel:<сотрудник>` → 429
+  `RATE_LIMITED`, ни выдачи, ни журнала; другой сотрудник тому же райдеру — 204 (ключ — сотрудник, не райдер).
+- Claude LOW (связка логов `achievements.manual … by=<сотрудник>` и `achievements.sync uid=<райдер>` после снятия) —
+  принято: оба лога — псевдонимные id без имён и причин, журнал панели и так связывает сотрудника с райдером.
