@@ -14,8 +14,8 @@ export interface RideNotice {
   status: RideStatus;
   organizerUserId: string;
   goingCount: number;
-  /** участники «Иду» без организатора и момент их входа */
-  participants: { userId: string; joinedAt: Date }[];
+  /** участники «Иду» без организатора и номер их входа (`noticeSeq` после записи «Я иду»; до поля — `0`) */
+  participants: { userId: string; seq: number }[];
 }
 
 export interface RideNotices {

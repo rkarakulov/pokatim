@@ -322,13 +322,13 @@ export class NotificationIntake {
     const target: NotificationTarget = { type: 'ride', rideId: ride.id };
     if (type === RIDES_RIDE_CANCELLED) {
       if (ride.status !== 'cancelled') return 'state';
-      return [this.participantsDraft(ride, 'ride_cancelled', target, event.data.at)];
+      return [this.participantsDraft(ride, 'ride_cancelled', target, event.data.seq)];
     }
     if (ride.status !== 'published') return 'state';
     if (type === RIDES_RIDE_RESCHEDULED) {
       return [
         {
-          ...this.participantsDraft(ride, 'ride_rescheduled', target, event.data.at),
+          ...this.participantsDraft(ride, 'ride_rescheduled', target, event.data.seq),
           collapse: { key: `ride:${ride.id}:rescheduled`, seq: event.data.seq },
         },
       ];
@@ -344,21 +344,22 @@ export class NotificationIntake {
   }
 
   /**
-   * Получатели — участники «Иду», вошедшие не позже момента события (`at`): вошедший после переноса о нём не узнаёт и
-   * при позднем приёме или повторе задачи. Событие без `at` (до поля) — все текущие участники.
+   * Получатели — участники «Иду», записанные не позже события: номер входа участника ≤ `seq` события (порядок
+   * атомарных записей райда). Вошедший после переноса о нём не узнаёт и при позднем приёме или повторе задачи; вошедший
+   * до отмены — узнаёт. Событие без `seq` (до поля) — все текущие участники.
    */
   private participantsDraft(
     ride: RideNotice,
     kind: 'ride_cancelled' | 'ride_rescheduled',
     target: NotificationTarget,
-    at: string | undefined,
+    seq: number | undefined,
   ): NoticeDraft {
-    const until = at === undefined ? Number.POSITIVE_INFINITY : Date.parse(at);
+    const until = seq ?? Number.POSITIVE_INFINITY;
     return {
       text: { kind, ride: ride.title, startsAt: ride.startsAt },
       target,
       recipients: ride.participants
-        .filter((participant) => participant.joinedAt.getTime() <= until)
+        .filter((participant) => participant.seq <= until)
         .map((participant) => participant.userId),
     };
   }

@@ -24,7 +24,7 @@ export class RideNoticesService implements RideNotices {
       goingCount: doc.goingCount,
       participants: doc.participants
         .filter((participant) => participant.userId !== doc.organizerUserId)
-        .map(({ userId, joinedAt }) => ({ userId, joinedAt })),
+        .map(({ userId, seq }) => ({ userId, seq: seq ?? 0 })),
     };
   }
 
