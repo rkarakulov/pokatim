@@ -33,16 +33,16 @@ const TIME_LIMIT_MS = 3000 * CI_BUDGET_FACTOR;
  */
 const ADVERSARIAL_TIME_LIMIT_MS = 8000 * CI_BUDGET_FACTOR;
 /**
- * Участки маршрута (route-rides-05): 20 прогонов движка по всему треку 50 000 точек на маршруте 200 км. Замер
- * локально ≈ 400 мс; бюджет — 2 × замера (спека: ≤ 2 × замера и < 15 с, до таймаута потока 30 с — запас).
+ * Участки маршрута (route-rides-05): 30 прогонов движка (предел участков) по всему треку 50 000 точек на маршруте
+ * 300 км. Замер локально ≈ 530–550 мс; бюджет — 2 × замера (спека: ≤ 2 × замера и < 15 с, до таймаута потока 30 с).
  */
-const SECTIONS_TIME_LIMIT_MS = 800 * CI_BUDGET_FACTOR;
+const SECTIONS_TIME_LIMIT_MS = 1100 * CI_BUDGET_FACTOR;
 const MEMORY_LIMIT_BYTES = 64 * 1024 * 1024 * CI_BUDGET_FACTOR;
 
-/** Маршрут 200 км «змейкой»: 20 × (9,5 км на восток/запад + 0,5 км на север); вершины линии — раз в 100 м. */
-function longRoute(): Xy[] {
+/** Маршрут `legs × 10` км «змейкой»: legs × (9,5 км на восток/запад + 0,5 км на север); вершины — раз в 100 м. */
+function longRoute(legs = 20): Xy[] {
   const corners: Xy[] = [[0, 0]];
-  for (let i = 0; i < 20; i += 1) {
+  for (let i = 0; i < legs; i += 1) {
     const [x, y] = corners[corners.length - 1]!;
     const east = i % 2 === 0 ? 9500 : -9500;
     corners.push([x + east, y], [x + east, y + 500]);
@@ -334,8 +334,9 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     process.stdout.write(`стоянка у края коридора: ${Math.round(elapsedMs)} мс\n`);
   }, 60_000);
 
-  it(`analyzeSections: маршрут 200 км (20 участков) × 50 000 точек ≤ ${SECTIONS_TIME_LIMIT_MS} мс`, () => {
-    const total = polylineLength(route);
+  it(`analyzeSections: маршрут 300 км (30 участков — предел) × 50 000 точек ≤ ${SECTIONS_TIME_LIMIT_MS} мс`, () => {
+    const route300 = longRoute(30);
+    const total = polylineLength(route300);
     const sectionPoints = 50_000;
     const bytes = encodeTrackStream({
       v: 1,
@@ -344,7 +345,7 @@ describe('AC14: длинный трек — 200 000 точек на маршру
       hasHeartRate: false,
       hasPower: false,
       points: Array.from({ length: sectionPoints }, (_, k) => {
-        const [lon, lat] = at(pointAt(route, (k * total) / (sectionPoints - 1)));
+        const [lon, lat] = at(pointAt(route300, (k * total) / (sectionPoints - 1)));
         return [T0 + k * 1000, lat, lon, null];
       }),
     });
@@ -352,14 +353,14 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     const result = analyzeSections(
       bytes,
       'stream',
-      geometry,
+      corridorOf(route300),
       window,
       new Date(T0 + 3 * 86_400_000),
     );
     const elapsedMs = performance.now() - startedAt;
-    expect(result.items).toHaveLength(20);
+    expect(result.items).toHaveLength(30);
     expect(result.items.every((item) => item.verdict === 'counted')).toBe(true);
     expect(elapsedMs).toBeLessThanOrEqual(SECTIONS_TIME_LIMIT_MS);
-    process.stdout.write(`analyzeSections 200 км × 50k: ${Math.round(elapsedMs)} мс\n`);
+    process.stdout.write(`analyzeSections 300 км × 50k: ${Math.round(elapsedMs)} мс\n`);
   }, 60_000);
 });
