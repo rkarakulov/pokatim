@@ -62,6 +62,16 @@ describe('RegisterRequest', () => {
     expect(RegisterRequest.safeParse(valid).success).toBe(true);
   });
 
+  it('invite (P6): необязателен, валидный — в верхнем регистре, мусор — undefined, а не ошибка', () => {
+    expect(RegisterRequest.parse(valid).invite).toBeUndefined();
+    expect(RegisterRequest.parse({ ...valid, invite: 'k7m2pqx' }).invite).toBe('K7M2PQX');
+    for (const junk of ['K7M2PQ0', 'x', 42, null, { code: 'K7M2PQX' }]) {
+      const parsed = RegisterRequest.safeParse({ ...valid, invite: junk });
+      expect(parsed.success).toBe(true);
+      expect(parsed.data?.invite).toBeUndefined();
+    }
+  });
+
   it('срезает пробелы вокруг e-mail', () => {
     expect(RegisterRequest.parse({ ...valid, email: ' Rider@Example.com ' }).email).toBe(
       'Rider@Example.com',

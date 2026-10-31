@@ -46,9 +46,13 @@ describe('StoryCardProcessor.process', () => {
     const build = vi.spyOn(p, 'build').mockResolvedValue('ready');
     const buildRideInvite = vi.spyOn(p, 'buildRideInvite').mockResolvedValue('ready');
     expect(await p.process(job(STORY_CARD_RENDER_JOB, story))).toBe('ready');
-    expect(build).toHaveBeenCalledWith(story, { finalAttempt: false });
+    // задача до выката P6 (без `address`) — `address: null`
+    expect(build).toHaveBeenCalledWith({ ...story, address: null }, { finalAttempt: false });
     expect(await p.process(job(RIDE_INVITE_RENDER_JOB, invite, 1))).toBe('ready');
-    expect(buildRideInvite).toHaveBeenCalledWith(invite, { finalAttempt: true });
+    expect(buildRideInvite).toHaveBeenCalledWith(
+      { ...invite, address: null },
+      { finalAttempt: true },
+    );
     expect(build).toHaveBeenCalledTimes(1);
     expect(buildRideInvite).toHaveBeenCalledTimes(1);
   });
@@ -86,7 +90,7 @@ describe('StoryCardProcessor.process', () => {
     expect(await p.process(job(ACHIEVEMENT_CARD_RENDER_JOB, achievement, 1))).toBe('ready');
     // задача до выката (без `seasonId`) — `seasonId: null`
     expect(buildAchievementCard).toHaveBeenCalledWith(
-      { ...achievement, seasonId: null },
+      { ...achievement, seasonId: null, address: null },
       { finalAttempt: true },
     );
     expect(
@@ -121,12 +125,14 @@ describe('StoryCardProcessor.buildAchievementCard — сезонное (achievem
       seasonId: SEASON,
       template: 'line',
       hash: 'h',
+      address: null,
     };
     expect(await p.buildAchievementCard(data)).toBe('skipped');
     expect(resolve).toHaveBeenCalledWith(
       'u',
       { code: 'season_champion', seasonId: SEASON },
       'line',
+      null,
     );
   });
 
@@ -138,6 +144,7 @@ describe('StoryCardProcessor.buildAchievementCard — сезонное (achievem
       seasonId: SEASON,
       template: 'line',
       hash: 'h',
+      address: null,
     };
     expect(await p.buildAchievementCard(data)).toBe('skipped');
     expect(resolve).not.toHaveBeenCalled();
@@ -149,7 +156,10 @@ describe('StoryCardProcessor.process — карточка маршрута (rout
     const p = processor();
     const buildRouteCard = vi.spyOn(p, 'buildRouteCard').mockResolvedValue('ready');
     expect(await p.process(job(ROUTE_CARD_RENDER_JOB, routeCard, 1))).toBe('ready');
-    expect(buildRouteCard).toHaveBeenCalledWith(routeCard, { finalAttempt: true });
+    expect(buildRouteCard).toHaveBeenCalledWith(
+      { ...routeCard, address: null },
+      { finalAttempt: true },
+    );
     expect(await p.process(job(ROUTE_CARD_RENDER_JOB, invite))).toBe('skipped');
     expect(await p.process(job(ROUTE_CARD_RENDER_JOB, { ...routeCard, template: 'foo' }))).toBe(
       'skipped',

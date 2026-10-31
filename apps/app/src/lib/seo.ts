@@ -47,6 +47,8 @@ export const SEO_DISALLOW = [
   '/tickets/',
   '/ui-kit',
   '/admin/',
+  // короткая ссылка приглашения (P6): код райдера в URL, сама страница — переход на главную
+  '/i/',
 ] as const;
 
 /** `robots.txt`; `origin` (`WEB_ORIGIN`) нет — без строки `Sitemap` (нужен абсолютный адрес). */

@@ -1,8 +1,12 @@
-import type {
-  AttendanceVia,
-  ConnectionSource,
-  SocialActionBlockedDetails,
-  SocialBlockReason,
+import { randomInt } from 'node:crypto';
+
+import {
+  type AttendanceVia,
+  type ConnectionSource,
+  INVITE_CODE_ALPHABET,
+  INVITE_CODE_LENGTH,
+  type SocialActionBlockedDetails,
+  type SocialBlockReason,
 } from '@pokatim/contracts';
 
 import { domainError } from '../../error-messages';
@@ -15,11 +19,13 @@ const DAY_MS = 24 * HOUR_MS;
 
 /**
  * Правила «Свои» (`docs/product/social.md`): лимит ручного «В свои» (K11, `consumeUserLimit` `social-manual:<uid>`),
- * окно ручной явки (K2), пороги автоявки (K2 `[ASSUMPTION]`, P5), «Как прошёл райд?» и повтор уведомления о ручном
+ * лимит ручных отметок явки (`social-attendance:<uid>`), окно ручной явки (K2), пороги автоявки (K2 `[ASSUMPTION]`, P5), «Как прошёл райд?» и повтор уведомления о ручном
  * добавлении (K10, K11 — P7), пачка `bulkWrite` пересчёта связей.
  */
 export const SOCIAL_POLICY = {
   manualLimit: { limit: 30, windowSec: 86_400 },
+  /** «Я был на райде» и «Меня не было» (P2): общий ключ `social-attendance:<uid>`, на каждую попытку */
+  attendanceLimit: { limit: 60, windowSec: 3600 },
   attendanceWindowMs: 7 * DAY_MS,
   autoAttendance: { beforeMs: 30 * MINUTE_MS, afterMs: 2 * HOUR_MS, radiusM: 500 },
   askAfterMs: 4 * HOUR_MS,
@@ -89,3 +95,12 @@ export function rideConnectionDiff(
 /** Отказ домена «Свои»: `409 SOCIAL_ACTION_BLOCKED { reason }`. */
 export const socialBlocked = (reason: SocialBlockReason) =>
   domainError('SOCIAL_ACTION_BLOCKED', 409, { reason } satisfies SocialActionBlockedDetails);
+
+/** Случайный код приглашения (K9): `INVITE_CODE_LENGTH` символов алфавита без похожих, `crypto.randomInt`. */
+export function generateInviteCode(random: (max: number) => number = randomInt): string {
+  let code = '';
+  for (let index = 0; index < INVITE_CODE_LENGTH; index += 1) {
+    code += INVITE_CODE_ALPHABET[random(INVITE_CODE_ALPHABET.length)];
+  }
+  return code;
+}

@@ -13,6 +13,7 @@ import { MongoOutboxWriter, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Env } from '../../config/env';
 import { type DbSession, MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
+import { AccountConfirmation } from './account-confirmation';
 import { VERIFICATION_EMAIL_REQUESTED, type VerificationEmailRequested } from './identity.events';
 import { IDENTITY_POLICY } from './identity.policy';
 import {
@@ -37,6 +38,7 @@ export class VerificationService {
     private readonly repository: IdentityRepository,
     private readonly transactions: MongoTransactions,
     private readonly outbox: MongoOutboxWriter,
+    private readonly confirmation: AccountConfirmation,
     private readonly rateLimiter: RateLimiter,
     @Inject(ENV) private readonly env: Env,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -99,7 +101,7 @@ export class VerificationService {
         const details: LinkExpiredDetails = { email: user.email };
         throw domainError('LINK_EXPIRED', 410, details);
       }
-      await this.repository.markEmailVerified(tx, user.id, now);
+      await this.confirmation.confirmEmail(tx, user.id, now);
       await this.repository.markVerificationUsed(tx, current.token.id, now);
       return { state: 'verified', email: user.email };
     });

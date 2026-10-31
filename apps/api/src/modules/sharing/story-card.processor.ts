@@ -150,7 +150,12 @@ export class StoryCardProcessor extends WorkerHost {
       options,
       'clipped',
       async () => {
-        const resolved = await this.inputs.resolve(job.userId, job.raceId, job.template);
+        const resolved = await this.inputs.resolve(
+          job.userId,
+          job.raceId,
+          job.template,
+          job.address,
+        );
         label = `entry ${resolved?.input.facts.entryId ?? '-'}`;
         if (!resolved || resolved.hash !== job.hash) return null;
         const line = await this.results.storyCardLine(job.userId, resolved.input.facts);
@@ -171,7 +176,7 @@ export class StoryCardProcessor extends WorkerHost {
     const label = () => `ride ${job.rideId} ${job.template}`;
     return this.run(this.cache, job.hash, label, options, 'name-only', async () => {
       const resolved = await this.invites
-        .resolve(job.userId, job.rideId, job.template)
+        .resolve(job.userId, job.rideId, job.template, job.address)
         .catch((error: unknown) => {
           if (isNotFound(error)) return null;
           throw error;
@@ -206,7 +211,12 @@ export class StoryCardProcessor extends WorkerHost {
       // задачу ставил `AchievementCardService` по тому же `cardRef` — несоответствие не бывает, но не рендерим
       const ref = cardRef(job.code, job.seasonId);
       if (!ref) return null;
-      const resolved = await this.achievementInputs.resolve(job.userId, ref, job.template);
+      const resolved = await this.achievementInputs.resolve(
+        job.userId,
+        ref,
+        job.template,
+        job.address,
+      );
       if (!resolved || resolved.hash !== job.hash) return null;
       return { png: await renderAchievementCard(resolved.input), note: 'badge' };
     });
@@ -220,7 +230,12 @@ export class StoryCardProcessor extends WorkerHost {
   buildRouteCard(job: RouteCardJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
     const label = () => `route ${job.routeId} ${job.template}`;
     return this.run(this.cache, job.hash, label, options, 'name-only', async () => {
-      const resolved = await this.routeCards.resolve(job.userId, job.routeId, job.template);
+      const resolved = await this.routeCards.resolve(
+        job.userId,
+        job.routeId,
+        job.template,
+        job.address,
+      );
       if (!resolved || resolved.hash !== job.hash) return null;
       const line = await this.routes.ogLine(job.routeId);
       if (!line) return null;

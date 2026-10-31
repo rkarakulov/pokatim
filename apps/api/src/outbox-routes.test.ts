@@ -72,4 +72,8 @@ describe('workerOutboxRoutes', () => {
       expect(queuesOf(route).length).toBeGreaterThan(0);
     }
   });
+
+  it('identity.account-confirmed — в social-intake (приглашения, P6)', () => {
+    expect(queuesOf(workerOutboxRoutes['identity.account-confirmed'])).toEqual(['social-intake']);
+  });
 });

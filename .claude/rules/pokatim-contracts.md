@@ -263,6 +263,14 @@ paths:
   `SocialActionBlockedDetails` (`409 SOCIAL_ACTION_BLOCKED`, код — в конце `ErrorCode`). Справочник продуктовых
   событий — не здесь (журнал наружу не уходит, RC-11): `apps/api/src/modules/product-events/product-events.types.ts`.
   `ERASURE_STEPS` — в порядке исполнения (`…, 'tickets', 'social', 'product-events', 'notifications', 'identity'`).
+  P2: `src/social/ride-participants.schema.ts` — `RIDE_ATTENDANCE_STATES` (только в конец, `tolerantEnum`),
+  `RideRiderRow`, `RideRiderGroup`, `RideAttendance`, `RideParticipants` (новые поля ответа — `.default`);
+  `src/rides/ride.schema.ts` — `JoinRideRequest` (`strictObject`, `source?`). api-client — `rideParticipants`,
+  `markRideAttended`, `declineRideAttendance`, `joinRide(token, id, source?)` (без `source` — тело `{}`).
+  Приглашения (P6, K9) — `src/social/invite.schema.ts` (отдельный файл): `INVITE_CODE_ALPHABET` (31 символ без
+  `0 O 1 I L`), `INVITE_CODE_LENGTH` (7), `InviteCode` (`trim().toUpperCase()` + regex), `InviteCodeResponse`;
+  `RegisterRequest.invite` — `InviteCode.optional().catch(undefined)` (старые сборки; мусор — `undefined`, не 400).
+  api-client — `getInviteCode(accessToken)`.
 - Фото организатора райда (ride-photo, ADR-0028): `src/rides/ride.schema.ts` — `RIDE_PHOTO_MAX_BYTES` (10 МиБ),
   `RIDE_PHOTO_MAX_EDGE_PX` (1600), `RIDE_PHOTO_MIN_SHORT_PX` (400), `RidePhotoId` (= `OpaqueToken` из
   `auth/verification.schema.ts`), `RidePhotoRef` (`{ id }`), `RideSummary.photo` (`.nullable().default(null)` — старый

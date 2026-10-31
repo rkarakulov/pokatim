@@ -451,6 +451,12 @@ paths:
   `trackMap.segment` или линия маршрута), `profile` (`RIDER_NAMES`; `RIDER_THEMES` — тема запрашивающего карточку,
   user-theme: владелец заявки для сторис, зритель для приглашения), `races`, `routes`, `calendar` (OG-картинки),
   `identity` — только `index.ts`; на `sharing` не ссылается никто.
+- Адрес приглашения (P6, K9): `InviteAddress.of(userId)` (только `SharingModule`, порт `social` `InviteCodes.ensureOf`)
+  — `<host APP_WEB_ORIGIN>/i/<код>`; нет env или сбой — `null` (лог `sharing.invite_address_failed`). HTTP-сервисы
+  четырёх карточек считают его после `consumeRead`, передают в `*Inputs.resolve(…, template, address)` и в данные
+  задачи (`address`, `.nullable().default(null)` — задачи в полёте); worker берёт адрес из задачи, хэш включает его —
+  карточки райда и маршрута стали личными (RC-P6-5, `renderVersion` 5). Рендер — `brandRow` (`story-card.render.ts`):
+  бренд слева, адрес справа (токен `storyCard.text.address`, высота строки — бренда); без адреса — прежний узел.
 - Входы — `StoryCardInputs.resolve` (одна реализация для HTTP и worker), ключ — `storyCardHash`; кэш — Redis
   (`StoryCardCache`: `token:<hash>`, `png:<token>`, `pending:<hash>` NX, `failed:<hash>` `GETDEL`). Worker сверяет
   хэш (не совпал — `skipped`). Рендер — чистые `storyCardTree` (satori-узлы, только flex) → `renderStoryCardSvg`
@@ -475,7 +481,7 @@ paths:
   `ACHIEVEMENT_LEVEL_TARGETS`; условие «Сезона в зачёте» — `{count}` = `SEASON_REGULAR_MIN_RACES`, смена константы —
   подъём `renderVersion`). Сезон в хэше — `object.id` и название (отдельный `seasonId` не добавлять, RC-7). Порт отдаёт `level` (строка или `null`); уровень — в `achievementCardHash` явно после
   кода; тексты — метка уровня в kicker (`achievementCard.kickerLevel`), условие с `{count}` порога; сменил строки или
-  вёрстку — подними `STORY_CARD_POLICY.renderVersion` (сейчас 4 — ride-photo). `SharingModule`/`SharingWorkerModule` импортируют
+  вёрстку — подними `STORY_CARD_POLICY.renderVersion` (сейчас 5 — invites). `SharingModule`/`SharingWorkerModule` импортируют
   `AchievementsReadModule`.
 - Карточка маршрута каталога (route-story-card): `RouteCardController` (`GET routes/:routeId/story-card`, `AuthGuard`,
   `no-store`) → `RouteCardService` (не в каталоге — 404) → `RouteCardInputs` (`ROUTES_FOR_SHARING.ogFacts`/`ogLine`,
@@ -605,6 +611,11 @@ RC-A1, ADR-0019).
   `rides/cities` — статический путь, в pipe `Uuid` не уходит (int-тест).
 - Фаза и права зрителя — `rides.policy.ts` (`ridePhase`, `rideViewer`, `validateStartsAt`, `RIDES_POLICY`); ответы
   собирает `rides-feed.service.ts` из явного списка полей.
+- `join` — необязательное тело `JoinRideRequest` (`{ source? }`, K12; `ZodValidationPipe(JoinRideRequest.optional())`):
+  новая запись с `source` → `PRODUCT_EVENTS.record({ type: 'ride-joined' })` после коммита (`RidesService.recordJoined`,
+  сбой — лог `product_events.record_failed type=ride-joined` без отказа); повтор, квотная ветка и без `source` — без
+  события. `RidesModule` импортирует `ProductEventsCoreModule` (`rides → identity, routes, media, panel,
+  product-events`).
 - Лимиты частоты (`RateLimiter` базы, ключ — `uid`): `rides-create`, `rides-manage` (правка и отмена), `rides-rsvp`
   (join и leave); квоты — `409 RIDE_QUOTA_EXCEEDED` с `RideQuotaDetails`. Аудита в 05a нет. События (ADR-0017) — `rides.events.ts`:
   `update`/`cancel`/`join`, отмена при стирании и `act` модерации — та же одна условная операция над документом, но
@@ -733,25 +744,44 @@ RC-A1, ADR-0019).
 
 ## «Свои» (`social`, `product-events`, ADR-0027 Proposed, `docs/product/social.md`)
 
-- Модуль `social` — потребитель: `social → rides, profile, product-events` (P0; далее `results`, `routes`, `tracks`,
-  `identity` — в своих PR) только через `index.ts` и порты: `RIDES_FOR_SOCIAL` (`rides-for-social.port.ts`, `rideFacts`:
+- Модуль `social` — потребитель: `social → rides, profile, product-events, identity` (P0; `identity` — `AuthGuard`
+  контроллеров с P2; далее `results`, `routes`, `tracks` — в своих PR) только через `index.ts` и порты: `RIDES_FOR_SOCIAL` (`rides-for-social.port.ts`, `rideFacts`:
   фаза — `ridePhase` внутри `rides`, участники «Иду» с организатором первым, точная точка старта при `startPrecise`),
   `RIDER_NAMES.publicRiders` (публичность — при чтении, K3; ручное добавление — только к публичному). Коллекции
   `rides`, `profiles`, `activities` `social` не читает. На `social` ссылаются только `notifications`, `account`,
-  `AppModule`, `WorkerModule` (dependency-cruiser `social-consumers-only`).
+  `sharing` (порт `InviteCodes`, P6), `AppModule`, `WorkerModule` (dependency-cruiser `social-consumers-only`).
 - Композиция (RC-13): `SocialCoreModule` (репозитории, `SocialConnectionsService`, `SocialAttendanceService`,
-  `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры — P2–P4, P7),
+  `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры: P2 — `RideParticipantsController`; далее P3, P4, P7),
   `SocialWorkerModule` (`WorkerModule`, процессоры `social-intake` / `social-maintenance` — P5, P7). Дальше правки —
   только в `social/*`.
 - Правила — `social.policy.ts` (`SOCIAL_POLICY`: лимит ручного «В свои» `social-manual:<uid>` 30/24 ч, окно ручной
   явки 7 дн, пороги автоявки, `bulkBatch`; `attendanceCheck`, `rideConnectionDiff`, `connectionSources`). Отказы —
   `409 SOCIAL_ACTION_BLOCKED { reason }` (`socialBlocked`), райда нет и непубличный профиль — `404 NOT_FOUND`, лимит —
   `429 RATE_LIMITED` (проверяется первым, на каждую попытку).
+- Приглашения (P6, K9, ADR-0027 п. 5): код — `InviteCodes` (`invite-codes.service.ts`, экспорт `SocialCoreModule` и
+  `index.ts`): `ensureOf` — выдача лениво (`_id` = userId, дубль `_id_` — перечитать, дубль `invite_codes_code_unique` —
+  новый код, ≤ 5 попыток; генератор `generateInviteCode` внедряемый `INVITE_CODE_GENERATOR`), `ownerOf`.
+  `GET /v1/social/invite-code` (`InviteCodeController`, `AuthGuard`, `no-store`). Событие `identity.account-confirmed
+  {userId, invite}` пишет `identity` (`AccountConfirmation.confirmEmail` — общий шаг подтверждения по ссылке и сбросом
+  пароля, только при первом подтверждении аккаунта с кодом); маршрут → `social-intake` объявляет `socialOutboxRoutes`
+  (`social.events.ts`, новые типы — в конец). `SocialIntakeProcessor` — таблица `тип → { схема, обработчик }` (P5
+  дописывает строку): неизвестное имя — бросок, payload не по схеме — `skipped`. `InviteIntake.handle`: код → владелец
+  (`unknown_code`), свой (`self`), живость обоих — `IdentityAccounts.liveUserIds` (`inviter_deleted` /
+  `invitee_deleted`), `linkInvite` (`linked` / `already_linked`); точка уведомления P7 — после `linkInvite`. Логи — id
+  события и итог, без кода. `linkInvite` → `boolean`: `invite-registered` (`userId` пригласившего) — когда у стороны
+  пригласившего `inviteAt` впервые стал не-`null` (`upsertInvite` → `inserted | invited | unchanged`, RC-P6-8).
 - Явка (RC-2a) — транзакция: условная запись документа явки райда → явившиеся → `rideConnectionDiff` с парами райда
   → `bulkWrite` связей → удаление пар без источников (надгробие `removedAt` остаётся, RC-6) → события. Повтор — no-op
   без событий. «Меня не было» ставит `declinedAt` (RC-3a), явка по треку его не перекрывает.
 - Реакции: `thank` — только между явившимися, повтор — no-op (RC-4); `toggleRespect` — на разрешённой вызывающим цели
   (порты целей — P4), дубль уникального ключа — перечитать состояние.
+- Участники и явка райда (P2): `RideParticipantsController` (`SocialModule` + `IdentityModule`, `@Controller('rides')`,
+  `AuthGuard`, `no-store`: `GET :id/participants`, `POST :id/attendance`, `POST :id/attendance/decline`) →
+  `SocialRideParticipantsService` (`SocialCoreModule`, export — P4): лимит `social-attendance:<uid>` 60/ч
+  (`SOCIAL_POLICY.attendanceLimit`, общий на оба POST, первым) → `rideFacts` и видимость (нет или скрытый не
+  организатору — 404, RC-1) → `markManual`/`unmark` P0 → свежий `view`. Ответ — чистая `rideParticipantsView`
+  (`ride-participants.view.ts`): строки из `RIDER_NAMES.publicRiders` явным списком полей, флаги — `attendanceCheck`.
+  Порт `RIDES_FOR_SOCIAL` не расширялся.
 - Модуль `product-events` — листовой (dependency-cruiser `product-events-leaf`): порт `PRODUCT_EVENTS.record(event,
   session?)`, справочник и `props` — `product-events.types.ts` (zod, `strictObject`, без id пользователей, RC-11, RC-12).
   `social` пишет события в своей транзакции; вызывающий вне транзакции — после основной записи, сбой — лог

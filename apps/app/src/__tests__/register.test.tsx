@@ -4,6 +4,8 @@ import type { RegisterResponse } from '@pokatim/contracts';
 import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 import * as SecureStore from 'expo-secure-store';
 
+import { INVITE_TTL_MS } from '@/features/invites/invite-state';
+import { rememberInvite } from '@/features/invites/invite-storage';
 import { api } from '@/lib/api';
 
 import { EMAIL, REGISTRATION_TOKEN, registerResponse, storedValue } from './auth-fixtures';
@@ -12,6 +14,10 @@ import { appRoutes } from './app-routes';
 jest.mock('@/lib/api');
 
 const register = jest.mocked(api.register);
+const inviteStored = () =>
+  jest
+    .requireMock<{ __store: Map<string, string> }>('expo-secure-store')
+    .__store.has('pokatim.invite');
 const submitButton = () => screen.getByRole('button', { name: 'Зарегистрироваться' });
 
 beforeEach(() => jest.mocked(api.pollRegistration).mockResolvedValue({ state: 'pending' }));
@@ -121,6 +127,34 @@ describe('«Создать аккаунт»', () => {
       registrationToken: REGISTRATION_TOKEN,
       email: EMAIL,
     });
+  });
+
+  it('код приглашения (P6, AC5): сохранённый — в запросе, после успеха стёрт; ошибка — код остаётся', async () => {
+    await rememberInvite('K7M2PQX', Date.now());
+    register.mockRejectedValueOnce(apiError(409, 'EMAIL_TAKEN'));
+    await openRegister();
+    await fillValidForm();
+    await fireEvent.press(submitButton());
+    expect(await screen.findByText('Этот e-mail уже зарегистрирован.')).toBeOnTheScreen();
+    expect(register).toHaveBeenLastCalledWith(expect.objectContaining({ invite: 'K7M2PQX' }));
+    expect(inviteStored()).toBe(true);
+
+    register.mockResolvedValue(registerResponse);
+    await fireEvent.changeText(screen.getByLabelText('E-mail'), 'other@mail.by');
+    await fireEvent.press(submitButton());
+    expect(await screen.findByRole('header', { name: 'Подтвердите e-mail' })).toBeOnTheScreen();
+    expect(register).toHaveBeenLastCalledWith(expect.objectContaining({ invite: 'K7M2PQX' }));
+    expect(inviteStored()).toBe(false);
+  });
+
+  it('код старше 7 дней — в запросе нет invite (AC5)', async () => {
+    await rememberInvite('K7M2PQX', Date.now() - INVITE_TTL_MS - 60_000);
+    register.mockResolvedValue(registerResponse);
+    await openRegister();
+    await fillValidForm();
+    await fireEvent.press(submitButton());
+    expect(await screen.findByRole('header', { name: 'Подтвердите e-mail' })).toBeOnTheScreen();
+    expect(register.mock.lastCall?.[0]).not.toHaveProperty('invite', expect.anything());
   });
 
   it('EMAIL_TAKEN — текст у поля и «Войти» рядом; кнопка выключена, пока адрес не изменён', async () => {

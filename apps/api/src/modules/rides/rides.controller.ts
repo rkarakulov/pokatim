@@ -14,6 +14,7 @@ import {
   CreateRideReportRequest,
   CreateRideRequest,
   FieldErrorCode,
+  JoinRideRequest,
   type RideCities,
   RideListQuery,
   type RideMap,
@@ -33,7 +34,8 @@ import { RidesService } from './rides.service';
 const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
 
 /**
- * «Я иду» / «Не иду» — без тела (как `devices/:provider/sync`): действие задаёт путь, пользователь — access.
+ * «Я иду» — необязательное тело `{ source }` (K12, старые сборки шлют `{}` или ничего); «Не иду» — без тела (как
+ * `devices/:provider/sync`): действие задаёт путь, пользователь — access.
  *
  * Кофе-райды вошедшего райдера (ADR-0008): лента, города, состояние зрителя и все мутации. Пользователь — только
  * `@CurrentUser()`. Регистрируется до публичного контроллера; `rides/cities` и `rides/map` — статические пути и не
@@ -110,8 +112,13 @@ export class RidesController {
 
   @Post(':id/join')
   @HttpCode(200)
-  join(@CurrentUser() user: AuthUser, @Param('id', idPipe) id: string): Promise<RideView> {
-    return this.rides.join(user.userId, id);
+  join(
+    @CurrentUser() user: AuthUser,
+    @Param('id', idPipe) id: string,
+    @Body(new ZodValidationPipe(JoinRideRequest.optional(), FieldErrorCode))
+    body: JoinRideRequest | undefined,
+  ): Promise<RideView> {
+    return this.rides.join(user.userId, id, body?.source);
   }
 
   @Post(':id/leave')

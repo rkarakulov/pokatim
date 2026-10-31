@@ -23,6 +23,7 @@ export function routeCardRenderInput(
     colors: storyCardColors(scheme),
     texts: routeCardTexts(input),
     track: storyCardTrack(line, cardTrackView(input.template)),
+    address: input.address,
   };
 }
 

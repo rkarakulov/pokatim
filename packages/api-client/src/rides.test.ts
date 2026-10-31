@@ -106,12 +106,14 @@ describe('api-client: кофе-райды', () => {
     const { calls, api } = client(200, view);
     await api.getRideForViewer('t', ID);
     await api.joinRide('t', ID);
+    await api.joinRide('t', ID, 'ride_card');
     await api.leaveRide('t', ID);
     await api.cancelRide('t', ID, { reason: 'weather' });
     await api.updateRide('t', ID, { version: 1, title: 'Новый' });
     expect(calls.map(({ url, method, body }) => [method, url, body])).toEqual([
       ['GET', `https://api.test/v1/rides/${ID}/me`, undefined],
       ['POST', `https://api.test/v1/rides/${ID}/join`, {}],
+      ['POST', `https://api.test/v1/rides/${ID}/join`, { source: 'ride_card' }],
       ['POST', `https://api.test/v1/rides/${ID}/leave`, {}],
       ['POST', `https://api.test/v1/rides/${ID}/cancel`, { reason: 'weather' }],
       ['POST', `https://api.test/v1/rides/${ID}`, { version: 1, title: 'Новый' }],
@@ -157,5 +159,38 @@ describe('api-client: кофе-райды', () => {
     const error = await full.api.joinRide('t', ID).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(ApiHttpError);
     expect(apiErrorOf(error)?.code).toBe('RIDE_FULL');
+  });
+});
+
+describe('участники райда и явка (P2)', () => {
+  const participants = {
+    riders: [{ name: 'Аня', publicId: 'p'.repeat(43), avatar: null }],
+    hiddenCount: 2,
+    attendance: { state: 'attended', canMark: false, canDecline: true, attended: null },
+  };
+
+  it('rideParticipants — GET, Bearer; mark/decline — POST с `{}`; ответ — RideParticipants', async () => {
+    const { calls, api } = client(200, participants);
+    const viewed = await api.rideParticipants('t', ID);
+    await api.markRideAttended('t', ID);
+    const declined = await api.declineRideAttendance('t', ID);
+    expect(calls.map(({ url, method, body }) => [method, url, body])).toEqual([
+      ['GET', `https://api.test/v1/rides/${ID}/participants`, undefined],
+      ['POST', `https://api.test/v1/rides/${ID}/attendance`, {}],
+      ['POST', `https://api.test/v1/rides/${ID}/attendance/decline`, {}],
+    ]);
+    expect(new Set(calls.map((call) => call.authorization))).toEqual(new Set(['Bearer t']));
+    expect(viewed).toEqual(participants);
+    expect(declined.attendance?.state).toBe('attended');
+  });
+
+  it('отказ явки — ApiHttpError с кодом SOCIAL_ACTION_BLOCKED', async () => {
+    const { api } = client(409, {
+      code: 'SOCIAL_ACTION_BLOCKED',
+      message: 'x',
+      details: { reason: 'attendance_window' },
+    });
+    const error = await api.markRideAttended('t', ID).catch((caught: unknown) => caught);
+    expect(apiErrorOf(error)?.code).toBe('SOCIAL_ACTION_BLOCKED');
   });
 });

@@ -1,3 +1,4 @@
+import { InviteCode } from '@pokatim/contracts';
 import { z } from 'zod';
 
 import { QUEUE } from '../../queues';
@@ -19,6 +20,15 @@ export type PasswordResetEmailRequested = z.infer<typeof PasswordResetEmailReque
 
 export const PasswordChangedEmailRequested = z.object({ passwordResetTokenId: z.uuid() });
 export type PasswordChangedEmailRequested = z.infer<typeof PasswordChangedEmailRequested>;
+
+/**
+ * Первое подтверждение e-mail аккаунта, зарегистрированного с кодом приглашения (P6, ADR-0027 п. 5): по ссылке или
+ * сбросом пароля. Аккаунт без кода события не порождает. Маршрут объявляет подписчик (`socialOutboxRoutes`).
+ */
+export const IDENTITY_ACCOUNT_CONFIRMED = 'identity.account-confirmed';
+
+export const IdentityAccountConfirmed = z.object({ userId: z.uuid(), invite: InviteCode });
+export type IdentityAccountConfirmed = z.infer<typeof IdentityAccountConfirmed>;
 
 /** Маршруты событий identity для публикатора outbox (подключает worker.module.ts). */
 export const identityOutboxRoutes = {

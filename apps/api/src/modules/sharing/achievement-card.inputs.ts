@@ -22,6 +22,8 @@ export interface AchievementCardInput {
   objectTitle: string | null;
   /** имя только с согласием (`RIDER_NAMES.publicNames`); нет — `null` */
   riderName: string | null;
+  /** короткая ссылка приглашения владельца карточки (`InviteAddress`, P6); считает HTTP, worker берёт из задачи */
+  address: string | null;
 }
 
 /**
@@ -35,6 +37,7 @@ export function achievementCardHash(input: AchievementCardInput): string {
     'achievement',
     STORY_CARD_POLICY.renderVersion,
     input.template,
+    input.address,
     input.themeId,
     facts.code,
     facts.level,
@@ -65,6 +68,7 @@ export class AchievementCardInputs {
     userId: string,
     ref: AchievementCardRef,
     template: StoryCardTemplate,
+    address: string | null,
   ): Promise<{ input: AchievementCardInput; hash: string } | null> {
     const facts = await this.achievements.cardFacts(userId, ref);
     if (!facts) return null;
@@ -79,6 +83,7 @@ export class AchievementCardInputs {
       facts,
       objectTitle,
       riderName: names.get(userId) ?? null,
+      address,
     };
     return { input, hash: achievementCardHash(input) };
   }

@@ -24,6 +24,7 @@ export function achievementCardRenderInput(
     badgeColors: storyCardBadgeColors(scheme),
     icon: achievementBadgeIcon(input.facts.code, input.facts.level),
     texts: achievementCardTexts(input),
+    address: input.address,
   };
 }
 

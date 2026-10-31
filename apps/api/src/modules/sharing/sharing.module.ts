@@ -12,10 +12,12 @@ import { ResultsCoreModule } from '../results';
 import { RidersCoreModule } from '../riders';
 import { RidesCoreModule } from '../rides';
 import { RoutesCoreModule } from '../routes';
+import { SocialCoreModule } from '../social';
 import { AchievementCardController } from './achievement-card.controller';
 import { AchievementCardInputs } from './achievement-card.inputs';
 import { AchievementCardService } from './achievement-card.service';
 import { CardRequests } from './card-requests';
+import { InviteAddress } from './invite-address';
 import { OgCardCache } from './og-card.cache';
 import { OgCardController } from './og-card.controller';
 import { OgCardInputs } from './og-card.inputs';
@@ -45,7 +47,7 @@ import { StoryCardService } from './story-card.service';
  * `results` (`RESULTS_FOR_SHARING`), `rides` (`RIDES_FOR_SHARING`), `races` (`RACES_FOR_SHARING`), `routes`
  * (`ROUTES_FOR_SHARING`, `ROUTE_GEOMETRY`), `calendar` (`CALENDAR_FOR_SHARING`), `profile` (`RIDER_NAMES`,
  * `RIDER_THEMES`), `achievements` (`ACHIEVEMENTS_FOR_SHARING`), `riders` (`RIDERS_FOR_SHARING` — OG профиля) через их
- * `index.ts`; на `sharing` не ссылается никто.
+ * `index.ts`, `social` (`InviteCodes` — адрес приглашения на карточке, P6); на `sharing` не ссылается никто.
  */
 @Module({
   imports: [
@@ -59,6 +61,8 @@ import { StoryCardService } from './story-card.service';
     AchievementsReadModule,
     RidersCoreModule,
     BullModule.registerQueue({ name: QUEUE.storyCard }),
+    // код приглашения владельца карточки — адрес `/i/<код>` (P6, RC-P6-4); worker адрес берёт из задачи
+    SocialCoreModule,
   ],
   controllers: [
     StoryCardController,
@@ -87,6 +91,7 @@ import { StoryCardService } from './story-card.service';
     SitemapService,
     IpRateLimitGuard,
     PublicReadGuard,
+    InviteAddress,
   ],
 })
 export class SharingModule {}

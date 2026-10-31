@@ -718,6 +718,45 @@ test('билет /tickets/<код> без сессии (event-tickets T2): HTML 
   }
 });
 
+test('короткая ссылка /i/<код> (social P6, AC4–AC5): HTML без кода и noindex; код сохранён, уход с /i/; регистрация передаёт invite', async ({
+  page,
+  request,
+}) => {
+  const code = 'K7M2PQX';
+  const response = await request.get(`/i/${code}`);
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(html).toMatch(/<meta name="robots" content="noindex"/);
+  expect(html.replace(/<script[^>]*src=[^>]*>/g, '')).not.toContain(code);
+
+  await page.goto(`/i/${code}`);
+  await expect(page).not.toHaveURL(/\/i\//);
+  const stored = await page.evaluate(() => localStorage.getItem('pokatim.invite'));
+  expect(JSON.parse(stored ?? '{}')).toMatchObject({ code });
+
+  // запрос регистрации перехвачен: тело — с кодом (без API ответ подставлен)
+  let body: Record<string, unknown> | null = null;
+  await page.route(`${API_URL}/v1/auth/register`, async (route) => {
+    body = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        registrationToken: 'r'.repeat(43),
+        email: 'e2e@pokatim.test',
+        resendAvailableInSec: 60,
+      }),
+    });
+  });
+  await page.goto('/register');
+  await page.getByLabel('E-mail').fill('e2e@pokatim.test');
+  await page.getByLabel('Пароль').fill('e2e-пароль-pokatim');
+  await page.getByLabel('Дата рождения').fill('1990-05-15');
+  await page.getByRole('checkbox').click();
+  await page.getByRole('button', { name: 'Зарегистрироваться' }).click();
+  await expect.poll(() => body?.['invite']).toBe(code);
+});
+
 test('неизвестный адрес, /_sitemap и витрина /ui-kit в production — «Страница не найдена»', async ({
   page,
 }) => {

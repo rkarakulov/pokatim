@@ -33,6 +33,9 @@ function syntheticLine(): LonLat[] {
   return line;
 }
 
+/** Короткая ссылка приглашения на всех карточках превью (P6): самая длинная строка адреса прода. */
+const ADDRESS = 'pokatim.by/i/K7M2PQX';
+
 const cases: { name: string; facts: Partial<StoryCardInput['facts']>; riderName: string | null }[] =
   [
     { name: 'base', facts: {}, riderName: 'Анна Ковалёва' },
@@ -119,7 +122,7 @@ const routeCases: { name: string; facts: RouteCardInput['facts'] }[] = [
 /** Карточка достижения: обычная, счётная с длинным объектом и именем, без публичного объекта, три сезонных. */
 const achievementCases: {
   name: string;
-  input: Omit<AchievementCardInput, 'template' | 'themeId'>;
+  input: Omit<AchievementCardInput, 'template' | 'themeId' | 'address'>;
 }[] = [
   {
     name: 'win',
@@ -277,6 +280,7 @@ async function main() {
           template,
           themeId,
           riderName: c.riderName,
+          address: ADDRESS,
           facts: {
             entryId: 'preview',
             race: {
@@ -302,19 +306,32 @@ async function main() {
         process.stdout.write(`${file} ${png.byteLength} B ${Date.now() - started} ms\n`);
       }
       for (const c of achievementCases) {
-        const png = await renderAchievementCard({ template, themeId, ...c.input });
+        const png = await renderAchievementCard({
+          template,
+          themeId,
+          address: ADDRESS,
+          ...c.input,
+        });
         const file = join(dir, `${themeId}-${template}-achievement-${c.name}.png`);
         await writeFile(file, png);
         process.stdout.write(`${file} ${png.byteLength} B\n`);
       }
       for (const c of routeCases) {
-        const png = await renderRouteCard({ template, themeId, facts: c.facts }, syntheticLine());
+        const png = await renderRouteCard(
+          { template, themeId, address: ADDRESS, facts: c.facts },
+          syntheticLine(),
+        );
         const file = join(dir, `${themeId}-${template}-route-${c.name}.png`);
         await writeFile(file, png);
         process.stdout.write(`${file} ${png.byteLength} B\n`);
       }
       for (const c of inviteCases) {
-        const input: RideInviteInput = { template, themeId, facts: { ...inviteFacts, ...c.facts } };
+        const input: RideInviteInput = {
+          template,
+          themeId,
+          address: ADDRESS,
+          facts: { ...inviteFacts, ...c.facts },
+        };
         const png = await renderRideInvite(input, c.line ? syntheticLine() : null);
         const file = join(dir, `${themeId}-${template}-invite-${c.name}.png`);
         await writeFile(file, png);

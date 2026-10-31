@@ -26,6 +26,7 @@ import {
 import { useRegister } from '@/features/auth/queries';
 import { useRegistrationStore } from '@/features/auth/registration-store';
 import { useSessionStore } from '@/features/auth/session-store';
+import { forgetInvite, takeInvite } from '@/features/invites/invite-storage';
 import { brandOgImage } from '@/lib/og-image';
 import { publicPageMetadata } from '@/lib/page-metadata';
 
@@ -103,7 +104,9 @@ export default function RegisterScreen() {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      const response = await register.mutateAsync(values);
+      // код приглашения (P6, K9): сохранённый переход по ссылке не старше 7 дней; после регистрации — стирается
+      const invite = await takeInvite();
+      const response = await register.mutateAsync(invite ? { ...values, invite } : values);
       const store = useRegistrationStore.getState();
       store.saveDraft({
         email: values.email,
@@ -111,6 +114,7 @@ export default function RegisterScreen() {
         personalDataConsent: true,
       });
       await store.start(response);
+      await forgetInvite();
       // «Вернуться к регистрации» сохраняет форму, кроме пароля
       setValue('password', '');
       router.push('/check-email');

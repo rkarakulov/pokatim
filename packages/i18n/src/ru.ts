@@ -3261,4 +3261,44 @@ export const ru = {
   'admin.invite.error.PANEL_ALREADY_MEMBER': 'Вы уже в команде платформы — просто войдите.',
   // social-p1: группа уведомлений «Свои» (K10)
   'notifications.settings.group.social': 'Свои',
+  // «Свои» P2: участники райда (K4), явка на прошедшем райде (K5), подпись стопки прошедшего (Q2)
+  'rides.participants.more': {
+    one: 'и ещё {count}',
+    few: 'и ещё {count}',
+    many: 'и ещё {count}',
+    other: 'и ещё {count}',
+  },
+  'rides.participants.showAll': 'Показать всех',
+  'rides.participants.failed': 'Не удалось загрузить участников',
+  'rides.participants.profileA11y': '{name}, профиль райдера',
+  'rides.attendance.pastTitle': 'Райд прошёл',
+  'rides.attendance.mark': 'Я был на райде',
+  'rides.attendance.decline': 'Меня не было',
+  'rides.attendance.declined': 'Вы отметили, что не были на райде',
+  'rides.attendance.rode': {
+    one: 'Ехал {count}',
+    few: 'Ехали {count}',
+    many: 'Ехали {count}',
+    other: 'Ехали {count}',
+  },
+  'rides.attendance.error.not_participant': 'Отметить явку могут только участники райда',
+  'rides.attendance.error.attendance_window': 'Отметить явку можно с начала райда и 7 дней после',
+  'rides.attendance.error.ride_unavailable': 'Райд отменён или скрыт — отметка недоступна',
+  'rides.attendance.error.unknown': 'Не удалось сохранить отметку',
+  'rides.going.pastJoined': {
+    one: 'записался {count}',
+    few: 'записались {count}',
+    many: 'записались {count}',
+    other: 'записались {count}',
+  },
+  // подсказка имени K3 — общий набор с P3 (Главная, профиль; «Не сейчас» — только Главная)
+  'social.nameHint.title': 'Добавьте имя — свои увидят вас',
+  'social.nameHint.action': 'Добавить имя',
+  'social.nameHint.later': 'Не сейчас',
+  // «Свои», приглашения (P6, K9): «Позвать друзей» в своём профиле — ссылка с личным кодом
+  'invites.friends.action': 'Позвать друзей',
+  'invites.friends.shareTitle': 'Покатим',
+  'invites.friends.shareText': 'Катайтесь со мной в «Покатим» — гонки, кофе-райды и маршруты',
+  'invites.friends.copied': 'Ссылка-приглашение скопирована',
+  'invites.friends.failed': 'Не удалось поделиться ссылкой-приглашением.',
 } as const;

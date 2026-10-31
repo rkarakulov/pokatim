@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { fieldError } from '../common.ts';
+import { InviteCode } from '../social/invite.schema.ts';
 import { minskToday } from '../time.ts';
 import { AnySession, SessionTransport } from './session.schema.ts';
 import { OpaqueToken } from './verification.schema.ts';
@@ -45,12 +46,16 @@ export const BirthDate = z.iso
   })
   .refine((value) => ageInYears(value, minskToday()) >= MIN_AGE_YEARS, { error: 'AGE_BELOW_18' });
 
-/** `POST /v1/auth/register`. Согласие — одно на обработку данных и соглашение текущей версии. */
+/**
+ * `POST /v1/auth/register`. Согласие — одно на обработку данных и соглашение текущей версии. `invite` — код
+ * пригласившего (K9, P6): необязателен (старые сборки), неверный формат отбрасывается, а не даёт 400.
+ */
 export const RegisterRequest = z.object({
   email: Email,
   password: Password,
   birthDate: BirthDate,
   personalDataConsent: z.literal(true, { error: 'CONSENT_REQUIRED' }),
+  invite: InviteCode.optional().catch(undefined),
 });
 export type RegisterRequest = z.infer<typeof RegisterRequest>;
 

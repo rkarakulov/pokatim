@@ -3,6 +3,7 @@ import { ApiHttpError } from '@pokatim/api-client';
 import type {
   CatalogRouteDetail,
   RideDetail,
+  RideParticipants,
   RideRoute as RideRouteRef,
   RideView,
   RideViewer,
@@ -36,6 +37,9 @@ const getRide = jest.mocked(api.getRide);
 const getRideForViewer = jest.mocked(api.getRideForViewer);
 const joinRide = jest.mocked(api.joinRide);
 const leaveRide = jest.mocked(api.leaveRide);
+const rideParticipants = jest.mocked(api.rideParticipants);
+const markRideAttended = jest.mocked(api.markRideAttended);
+const declineRideAttendance = jest.mocked(api.declineRideAttendance);
 const share = jest.mocked(shareLink);
 
 /** «Сейчас»: 1 октября 2026, 15:00 по Минску. */
@@ -97,6 +101,12 @@ beforeEach(() => {
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   getRide.mockResolvedValue(detail);
   getRideForViewer.mockResolvedValue(view({}, viewer('none', { canJoin: true })));
+  // «Свои» P2: по умолчанию — участники без публичных профилей (только число), зритель не участник
+  rideParticipants.mockResolvedValue({
+    riders: [],
+    hiddenCount: detail.goingCount,
+    attendance: null,
+  });
   jest.mocked(shareOrigin).mockReturnValue('https://pokatim.by');
   share.mockResolvedValue('shared');
   jest.mocked(api.listRides).mockResolvedValue({ items: [], nextCursor: null });
@@ -230,7 +240,7 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
     );
     await fireEvent.press(join);
     expect(getRideForViewer).toHaveBeenCalledWith(liveSession.accessToken, ID);
-    expect(joinRide).toHaveBeenCalledWith(liveSession.accessToken, ID);
+    expect(joinRide).toHaveBeenCalledWith(liveSession.accessToken, ID, 'ride_card');
     expect(
       await screen.findByText('Вы идёте · Воскресенье, 4 октября 2026, 10:00'),
     ).toBeOnTheScreen();
@@ -399,7 +409,7 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
     expect(screen.queryByRole('button', { name: 'Поделиться' })).toBeNull();
   });
 
-  it('прошедший: «Райд уже прошёл · …», «ехали N · вы в списке», «Все райды» вместо действий (AC6)', async () => {
+  it('прошедший: «Райд уже прошёл · …», «записались N · вы в списке», «Все райды» вместо действий (AC6)', async () => {
     getRideForViewer.mockResolvedValue(
       view({ phase: 'past', goingCount: 9 }, viewer('participant')),
     );
@@ -407,7 +417,7 @@ describe('карточка райда: вошедший (AC1–AC6)', () => {
     expect(
       await screen.findByText('Райд уже прошёл · Воскресенье, 4 октября 2026'),
     ).toBeOnTheScreen();
-    expect(screen.getByText('ехали 9 · вы в списке')).toBeOnTheScreen();
+    expect(screen.getByText('записались 9 · вы в списке')).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Не иду' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Поделиться' })).toBeNull();
     await fireEvent.press(screen.getAllByText('Все райды')[0]!);
@@ -868,5 +878,276 @@ describe('карточка райда: маршрут (05c)', () => {
 
     await fireEvent.press(screen.getByRole('button', { name: 'Маршрут райда' }));
     expect(router.getPathname()).toBe(`/routes/mine/${ROUTE_ID}`);
+  });
+});
+
+describe('участники и явка (P2, K4, K5)', () => {
+  beforeEach(signedIn);
+
+  const PUB = (n: number) => `${'p'.repeat(42)}${n}`;
+  const AV = (n: number) => `${'a'.repeat(42)}${n}`;
+  const rows = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      name: `Райдер ${index + 1}`,
+      publicId: index === 1 ? null : PUB(index),
+      avatar: index === 0 ? { id: AV(index) } : null,
+    }));
+  const attendance = (
+    state: 'none' | 'attended' | 'declined',
+    flags: { canMark: boolean; canDecline: boolean },
+    attended: RideParticipants['attendance'] extends infer A
+      ? A extends { attended: infer G }
+        ? G
+        : never
+      : never = null,
+  ) => ({ state, ...flags, attended });
+  const participants = (over: Partial<RideParticipants> = {}): RideParticipants => ({
+    riders: rows(2),
+    hiddenCount: 1,
+    attendance: null,
+    ...over,
+  });
+  const past = () =>
+    getRideForViewer.mockResolvedValue(
+      view({ phase: 'past', goingCount: 3 }, viewer('participant')),
+    );
+  const OPEN = { canMark: true, canDecline: true };
+  const withRiders = () =>
+    renderRouter(
+      { ...signedInRoutes, 'riders/[id]': () => null, 'settings/profile': () => null },
+      { initialUrl: `/rides/${ID}`, wrapper: createQueryWrapper() },
+    );
+
+  it('стопка с фото публичных, 5 строк, «и ещё N», «Показать всех» раскрывает и пропадает; ссылка на профиль', async () => {
+    rideParticipants.mockResolvedValue(participants({ riders: rows(7), hiddenCount: 2 }));
+    const router = await withRiders();
+    expect(await screen.findByText('Райдер 1')).toBeOnTheScreen();
+    expect(rideParticipants).toHaveBeenCalledWith(liveSession.accessToken, ID);
+    // фото — в самой стопке (`avatarIds`), не только в строках списка
+    expect(
+      within(screen.getByTestId('going-stack')).getAllByTestId('rider-avatar-photo').length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Райдер 5')).toBeOnTheScreen();
+    expect(screen.queryByText('Райдер 6')).toBeNull();
+    expect(screen.getByText('и ещё 2')).toBeOnTheScreen();
+    // строка без publicId — не ссылка
+    expect(screen.queryByRole('link', { name: 'Райдер 2, профиль райдера' })).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Показать всех' }));
+    expect(screen.getByText('Райдер 7')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Показать всех' })).toBeNull();
+    expect(screen.getByText('и ещё 2')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('link', { name: 'Райдер 3, профиль райдера' }));
+    expect(router.getPathname()).toBe(`/riders/${PUB(2)}`);
+  });
+
+  it('гость — без запроса участников, только число', async () => {
+    useSessionStore.setState({ status: 'signedOut', session: null });
+    await renderRouter(appRoutes, { initialUrl: `/rides/${ID}` });
+    expect(await screen.findByText('идут 5 из 12')).toBeOnTheScreen();
+    expect(rideParticipants).not.toHaveBeenCalled();
+  });
+
+  it('скелетон, пока участники грузятся; карточка видна', async () => {
+    rideParticipants.mockReturnValue(new Promise(() => undefined));
+    await openSignedIn();
+    expect(
+      await screen.findByTestId('ride-participants-skeleton', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(screen.getByLabelText(heroLabel)).toBeOnTheScreen();
+  });
+
+  it('ошибка — баннер с «Повторить», название и «Поделиться» видны; повтор перезапрашивает', async () => {
+    rideParticipants.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    await openSignedIn();
+    expect(await screen.findByText('Не удалось загрузить участников')).toBeOnTheScreen();
+    expect(screen.getByLabelText(heroLabel)).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Поделиться' })).toBeOnTheScreen();
+    rideParticipants.mockResolvedValue(participants());
+    const calls = rideParticipants.mock.calls.length;
+    await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByText('Райдер 1')).toBeOnTheScreen();
+    expect(rideParticipants.mock.calls.length).toBeGreaterThan(calls);
+  });
+
+  it('прошедший, нет отметки — «Райд прошёл», «Я был на райде», «Меня не было»; подпись стопки «записались N»', async () => {
+    past();
+    rideParticipants.mockResolvedValue(participants({ attendance: attendance('none', OPEN) }));
+    await openSignedIn();
+    expect(await screen.findByText('Райд прошёл')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Я был на райде' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Меня не было' })).toBeOnTheScreen();
+    expect(screen.getByText('записались 3 · вы в списке')).toBeOnTheScreen();
+    expect(screen.getByText('Райдер 1')).toBeOnTheScreen();
+  });
+
+  it('явка есть — «Ехали N» вместо списка и «Меня не было»', async () => {
+    past();
+    rideParticipants.mockResolvedValue(
+      participants({
+        attendance: attendance(
+          'attended',
+          { canMark: false, canDecline: true },
+          { riders: rows(1), hiddenCount: 2 },
+        ),
+      }),
+    );
+    await openSignedIn();
+    expect(await screen.findByText('Ехали 3')).toBeOnTheScreen();
+    expect(screen.queryByText('Райдер 2')).toBeNull();
+    expect(screen.getByText('Райдер 1')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Меня не было' })).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Я был на райде' })).toBeNull();
+    expect(screen.queryByText('Райд прошёл')).toBeNull();
+  });
+
+  it('«не был» — строка и «Я был на райде»', async () => {
+    past();
+    rideParticipants.mockResolvedValue(
+      participants({ attendance: attendance('declined', { canMark: true, canDecline: false }) }),
+    );
+    await openSignedIn();
+    expect(await screen.findByText('Вы отметили, что не были на райде')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Я был на райде' })).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Меня не было' })).toBeNull();
+  });
+
+  it('после окна: явка — «Ехали N» без кнопок', async () => {
+    past();
+    const closed = { canMark: false, canDecline: false };
+    rideParticipants.mockResolvedValue(
+      participants({
+        attendance: attendance('attended', closed, { riders: rows(2), hiddenCount: 0 }),
+      }),
+    );
+    await openSignedIn();
+    expect(await screen.findByText('Ехали 2')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Меня не было' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Я был на райде' })).toBeNull();
+  });
+
+  it('после окна без отметки — как раньше, без блока явки', async () => {
+    past();
+    const closed = { canMark: false, canDecline: false };
+    rideParticipants.mockResolvedValue(participants({ attendance: attendance('none', closed) }));
+    await openSignedIn();
+    expect(await screen.findByText('Райдер 1')).toBeOnTheScreen();
+    expect(screen.queryByText('Райд прошёл')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Я был на райде' })).toBeNull();
+  });
+
+  it.each(['hidden', 'cancelled'] as const)(
+    '%s — без блока явки, список участников есть',
+    async (phase) => {
+      getRideForViewer.mockResolvedValue(view({ phase }, viewer('organizer')));
+      rideParticipants.mockResolvedValue(
+        participants({
+          attendance: attendance(
+            'attended',
+            { canMark: false, canDecline: false },
+            {
+              riders: rows(1),
+              hiddenCount: 0,
+            },
+          ),
+        }),
+      );
+      await openSignedIn();
+      expect(await screen.findByText('Райдер 2')).toBeOnTheScreen();
+      expect(screen.queryByText(/^Ехали/)).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Я был на райде' })).toBeNull();
+    },
+  );
+
+  it('«Я был на райде»: кнопка в ожидании, ответ — новый вид без повторного GET', async () => {
+    past();
+    rideParticipants.mockResolvedValue(participants({ attendance: attendance('none', OPEN) }));
+    let resolve: (value: RideParticipants) => void = () => undefined;
+    markRideAttended.mockReturnValue(new Promise((done) => (resolve = done)));
+    await openSignedIn();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Я был на райде' }));
+    expect(markRideAttended).toHaveBeenCalledWith(liveSession.accessToken, ID);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Я был на райде' })).toBeDisabled(),
+    );
+    const calls = rideParticipants.mock.calls.length;
+    await act(async () => {
+      resolve(
+        participants({
+          attendance: attendance(
+            'attended',
+            { canMark: false, canDecline: true },
+            {
+              riders: rows(1),
+              hiddenCount: 0,
+            },
+          ),
+        }),
+      );
+    });
+    expect(await screen.findByText('Ехал 1')).toBeOnTheScreen();
+    expect(rideParticipants.mock.calls.length).toBe(calls);
+  });
+
+  it('«Меня не было» → «не был»; 409 attendance_window — текст и перезапрос; 429 — текст лимита', async () => {
+    past();
+    rideParticipants.mockResolvedValue(participants({ attendance: attendance('none', OPEN) }));
+    declineRideAttendance.mockResolvedValueOnce(
+      participants({ attendance: attendance('declined', { canMark: true, canDecline: false }) }),
+    );
+    await openSignedIn();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Меня не было' }));
+    expect(await screen.findByText('Вы отметили, что не были на райде')).toBeOnTheScreen();
+
+    markRideAttended.mockRejectedValueOnce(
+      new ApiHttpError(429, { code: 'RATE_LIMITED', message: 'x', details: { retryAfterSec: 30 } }),
+    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Я был на райде' }));
+    expect(await screen.findByText('Слишком часто. Повторите через 30 с.')).toBeOnTheScreen();
+
+    // окно закрылось, пока карточка открыта: перечитанные флаги убирают кнопку, причина отказа остаётся
+    markRideAttended.mockRejectedValueOnce(
+      new ApiHttpError(409, {
+        code: 'SOCIAL_ACTION_BLOCKED',
+        message: 'x',
+        details: { reason: 'attendance_window' },
+      }),
+    );
+    rideParticipants.mockResolvedValue(
+      participants({ attendance: attendance('declined', { canMark: false, canDecline: false }) }),
+    );
+    const calls = rideParticipants.mock.calls.length;
+    await fireEvent.press(screen.getByRole('button', { name: 'Я был на райде' }));
+    await waitFor(() => expect(rideParticipants.mock.calls.length).toBeGreaterThan(calls));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Я был на райде' })).toBeNull(),
+    );
+    expect(screen.getByText('Отметить явку можно с начала райда и 7 дней после')).toBeOnTheScreen();
+  });
+
+  it('подсказка имени (K3): непубличный профиль с блоком явки — «Добавить имя» → редактирование; публичный — нет', async () => {
+    past();
+    rideParticipants.mockResolvedValue(participants({ attendance: attendance('none', OPEN) }));
+    const router = await withRiders();
+    expect(await screen.findByText('Добавьте имя — свои увидят вас')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Добавить имя' }));
+    expect(router.getPathname()).toBe('/settings/profile');
+  });
+
+  it('подсказки имени нет, если профиль публичный', async () => {
+    past();
+    rideParticipants.mockResolvedValue(participants({ attendance: attendance('none', OPEN) }));
+    jest.mocked(api.getProfile).mockResolvedValue({
+      rideReasons: [],
+      publicName: 'Аня',
+      showNameInResults: true,
+      club: null,
+      avatar: null,
+      publicId: PUB(9),
+      themeId: 'classic',
+      avatarUploadBlockedUntil: null,
+    });
+    await openSignedIn();
+    expect(await screen.findByText('Райд прошёл')).toBeOnTheScreen();
+    expect(screen.queryByText('Добавьте имя — свои увидят вас')).toBeNull();
   });
 });
