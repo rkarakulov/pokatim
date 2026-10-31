@@ -66,6 +66,19 @@ export interface RouteRideDoc {
   checkedAt: Date | null;
 }
 
+/** Итог проверки своей ревизией (`RouteRidesRepository.record`, автопроверка — `insertChecked`). */
+export type RouteRideResult = Pick<
+  RouteRideDoc,
+  | 'status'
+  | 'reasons'
+  | 'failure'
+  | 'segment'
+  | 'touchedCorridor'
+  | 'engineVersion'
+  | 'trackMap'
+  | 'checkedAt'
+>;
+
 export interface RouteRidesCollections {
   rides: Collection<RouteRideDoc>;
 }

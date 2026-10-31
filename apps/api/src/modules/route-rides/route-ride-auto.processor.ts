@@ -25,7 +25,8 @@ import {
   ROUTE_RIDE_AUTO_POLICY,
   ROUTE_RIDE_POLICY,
 } from './route-rides.policy';
-import { type RouteRideResult, RouteRidesRepository } from './route-rides.repository';
+import type { RouteRideResult } from './route-rides.collection';
+import { RouteRidesRepository } from './route-rides.repository';
 
 /** Итог задачи: `skipped` — активность не годится или пропала; иначе — число прогонов движка и созданных заездов. */
 export type RouteRideAutoOutcome = 'skipped' | { planned: number; passed: number };

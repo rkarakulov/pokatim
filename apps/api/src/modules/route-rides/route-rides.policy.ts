@@ -8,8 +8,12 @@ import { boundsNear, type Bounds } from '@pokatim/tracks';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import type { ActivityRef, ActivitySource } from '../tracks';
-import type { RouteRideDoc, RouteRideOrigin, RouteRideStatus } from './route-rides.collection';
-import type { RouteRideResult } from './route-rides.repository';
+import type {
+  RouteRideDoc,
+  RouteRideOrigin,
+  RouteRideResult,
+  RouteRideStatus,
+} from './route-rides.collection';
 
 /**
  * Правила заезда по маршруту (route-rides-01, `[ASSUMPTION]` §8): коридор и окно сверки, кандидаты, квота, лимит,

@@ -16,9 +16,8 @@ import {
 } from '../../parse-thread';
 import { ROUTE_RIDE_ROUTES, type RouteRideRoutes } from '../routes';
 import { ACTIVITY_SOURCE, type ActivitySource } from '../tracks';
-import type { RouteRideDoc } from './route-rides.collection';
+import type { RouteRideDoc, RouteRideResult } from './route-rides.collection';
 import { matchWindowOf, verdictOf } from './route-rides.policy';
-import type { RouteRideResult } from './route-rides.repository';
 
 /** Коды потока, которые становятся провалом проверки без ретрая (повтор даст то же). */
 const THREAD_FAILURES: readonly string[] = ['timeout', 'unreadable', 'corridor_invalid'];

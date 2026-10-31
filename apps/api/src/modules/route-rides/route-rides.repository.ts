@@ -6,6 +6,7 @@ import { type ChangedCursor, changedSort, changedWithin } from '../../changed-si
 import type { DbSession } from '../../db';
 import {
   type RouteRideDoc,
+  type RouteRideResult,
   type RouteRidesCollections,
   routeRidesCollections,
 } from './route-rides.collection';
@@ -13,19 +14,6 @@ import type { RiddenRoute, RouteRideFacts } from './route-rides.policy';
 
 /** Индекс дедупликации заезда группы (`0032_route_rides`): параллельный POST — `isDuplicateKey`. */
 export const ROUTE_RIDES_UNIQUE_INDEX = 'route_rides_user_route_activity_unique';
-
-/** Итог проверки своей ревизией (`record`). */
-export type RouteRideResult = Pick<
-  RouteRideDoc,
-  | 'status'
-  | 'reasons'
-  | 'failure'
-  | 'segment'
-  | 'touchedCorridor'
-  | 'engineVersion'
-  | 'trackMap'
-  | 'checkedAt'
->;
 
 /** Сброс итога при новой ревизии проверки. */
 const cleared = (): RouteRideResult => ({

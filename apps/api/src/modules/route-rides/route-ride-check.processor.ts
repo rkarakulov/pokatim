@@ -7,7 +7,8 @@ import type { Job } from 'bullmq';
 import { QUEUE } from '../../queues';
 import { failedResult, RouteRideEvaluator } from './route-ride-evaluator';
 import { ROUTE_RIDES_CHECK_REQUESTED, RouteRidesCheckRequested } from './route-rides.events';
-import { type RouteRideResult, RouteRidesRepository } from './route-rides.repository';
+import type { RouteRideResult } from './route-rides.collection';
+import { RouteRidesRepository } from './route-rides.repository';
 
 export type RouteRideCheckOutcome = 'passed' | 'not_passed' | 'failed' | 'skipped';
 
