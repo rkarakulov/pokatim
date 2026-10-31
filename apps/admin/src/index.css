@@ -921,6 +921,21 @@ select.field__control option:disabled {
   background: var(--color-surface-disabled);
 }
 
+/* фото организатора в карточке модерации райда (ride-photo PR C): ширина --panel-ride-photo-preview, высота — по
+   пропорциям фото; скрытый райд — плашка той же ширины вместо картинки (отдача 404) */
+.ride-photo-preview {
+  display: block;
+  width: var(--panel-ride-photo-preview);
+  max-width: 100%;
+  height: auto;
+  border: var(--stroke-hairline) solid var(--color-border-strong);
+  background: var(--color-surface-disabled);
+}
+
+.ride-photo-preview--hidden {
+  padding: var(--space-s3);
+}
+
 /* форма одной колонкой с группами */
 .form-column {
   width: var(--panel-form-width);

@@ -1750,6 +1750,20 @@ export const ru = {
   'admin.ridesModeration.dismissTitle': 'Отклонить жалобы на «{title}»?',
   'admin.ridesModeration.dismissConsequences':
     'Открытые жалобы закроются, райд останется видимым. Повторно эти райдеры пожаловаться не смогут.',
+  // ride-photo PR C: фото организатора в карточке и «Удалить фото»
+  'admin.ridesModeration.field.photo': 'Фото организатора',
+  'admin.ridesModeration.noPhoto': 'Нет фото',
+  'admin.ridesModeration.photoAlt': 'Фото организатора «{title}»',
+  'admin.ridesModeration.photoHidden': 'Фото скрыто вместе с райдом',
+  'admin.ridesModeration.resetPhoto': 'Удалить фото',
+  'admin.ridesModeration.resetPhotoTitle': 'Удалить фото райда «{title}»?',
+  'admin.ridesModeration.resetPhotoConsequences':
+    'Фото пропадёт из ленты, с Главной и с карточки-приглашения, старая ссылка на него перестанет открываться. Жалобы останутся открытыми, организатор уведомления не получит и сможет загрузить другое фото, пока райд не начался.',
+  'admin.ridesModeration.reasonWarning':
+    'Причина видна команде: она навсегда остаётся в журнале действий.',
+  'admin.ridesModeration.photoConflict': 'Фото уже изменилось — обновите карточку',
+  'admin.ridesModeration.photoConflictMessage':
+    'Пока вы смотрели, организатор заменил или удалил фото — проверьте новое перед решением.',
   'admin.ridesModeration.report.reason': 'Причина',
   'admin.ridesModeration.report.comment': 'Комментарий',
   'admin.ridesModeration.report.createdAt': 'Когда',

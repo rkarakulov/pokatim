@@ -10,6 +10,7 @@ import { api } from '../../api';
 import { formatDateTimeLong } from '../../format';
 import { httpStatus, isConflict, isForbidden } from '../../session/errors';
 import {
+  Banner,
   Button,
   ConflictBanner,
   DataTable,
@@ -27,13 +28,18 @@ import { moderationRideQuery, RIDES_MODERATION_QUERY_KEY } from './rides-moderat
 const SKELETON_FIELDS = 8;
 const column = createColumnHelper<ModerationRideReport>();
 
-type Action = 'hide' | 'restore' | 'dismiss';
+type Action = 'hide' | 'restore' | 'dismiss' | 'resetPhoto';
+/** Чем вызван баннер конфликта: версия/жалобы райда или фото, которое уже сменилось (ride-photo, R10). */
+type Stale = 'ride' | 'photo';
 
 const ACTION_LABEL = {
   hide: 'admin.ridesModeration.hide',
   restore: 'admin.ridesModeration.restore',
   dismiss: 'admin.ridesModeration.dismiss',
+  resetPhoto: 'admin.ridesModeration.resetPhoto',
 } as const;
+
+const DESTRUCTIVE: readonly Action[] = ['hide', 'resetPhoto'];
 
 const reportColumns = [
   column.accessor('reason', {
@@ -68,6 +74,28 @@ const actionErrorText = (error: unknown) => {
 const isStale = (error: unknown) =>
   isConflict(error) ||
   (httpStatus(error) === 409 && apiErrorOf(error)?.code === 'RIDE_INVALID_STATE');
+
+/**
+ * Фото организатора (ride-photo): у скрытого райда публичная отдача — 404 (P6), поэтому вместо картинки плашка (R11);
+ * id фото в карточке есть, «Удалить фото» доступна.
+ */
+function RidePhoto({ ride }: { ride: ModerationRideDetail }) {
+  if (!ride.photo) return t('admin.ridesModeration.noPhoto');
+  if (ride.status === 'hidden') {
+    return (
+      <span className="ride-photo-preview ride-photo-preview--hidden t-meta">
+        {t('admin.ridesModeration.photoHidden')}
+      </span>
+    );
+  }
+  return (
+    <img
+      className="ride-photo-preview"
+      src={api.ridePhotoUrl(ride.photo.id)}
+      alt={t('admin.ridesModeration.photoAlt', { title: ride.title })}
+    />
+  );
+}
 
 function Preview({ ride }: { ride: ModerationRideDetail }) {
   const none = t('admin.ridesModeration.none');
@@ -131,6 +159,10 @@ function Preview({ ride }: { ride: ModerationRideDetail }) {
           value={ride.description ?? none}
           multiline
         />
+        <ReadonlyField
+          label={t('admin.ridesModeration.field.photo')}
+          value={<RidePhoto ride={ride} />}
+        />
       </div>
     </div>
   );
@@ -139,13 +171,14 @@ function Preview({ ride }: { ride: ModerationRideDetail }) {
 /**
  * Карточка модерации райда (`rides.moderate`, 05b): превью полей, жалобы (без автора), действия по статусу —
  * `published|cancelled` → «Скрыть» (+ «Отклонить жалобы» при открытых), `hidden` → «Вернуть». Каждое — `ReasonDialog`
- * (причина в журнал); 409 — `ConflictBanner` с перечитыванием карточки.
+ * (причина в журнал); 409 — `ConflictBanner` с перечитыванием карточки. Есть фото организатора — «Удалить фото»
+ * при любом статусе (ride-photo, P7): тело несёт `photoId` карточки, фото уже другое — 409 и свой текст баннера (R10).
  */
 export function RideModerationScreen({ rideId }: { rideId: string }) {
   const queryClient = useQueryClient();
   const ride = useQuery(moderationRideQuery(rideId));
   const [action, setAction] = useState<Action>();
-  const [stale, setStale] = useState(false);
+  const [stale, setStale] = useState<Stale>();
 
   const crumb = (
     <Link className="link" to="/rides-moderation">
@@ -190,11 +223,12 @@ export function RideModerationScreen({ rideId }: { rideId: string }) {
 
   const data = ride.data;
   const hidden = data.status === 'hidden';
-  const actions: Action[] = hidden
+  const statusActions: Action[] = hidden
     ? ['restore']
     : data.openReportCount > 0
       ? ['hide', 'dismiss']
       : ['hide'];
+  const actions: Action[] = data.photo ? [...statusActions, 'resetPhoto'] : statusActions;
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: RIDES_MODERATION_QUERY_KEY });
@@ -202,19 +236,21 @@ export function RideModerationScreen({ rideId }: { rideId: string }) {
   };
   const reload = async () => {
     await ride.refetch();
-    setStale(false);
+    setStale(undefined);
   };
   const run = async (reason: string) => {
     const body = { version: data.version, reason };
     try {
-      if (action === 'hide') await api.hideRide(data.id, body);
+      if (action === 'resetPhoto' && data.photo) {
+        await api.resetRidePhoto(data.id, { photoId: data.photo.id, reason });
+      } else if (action === 'hide') await api.hideRide(data.id, body);
       else if (action === 'restore') await api.restoreRide(data.id, body);
       else if (action === 'dismiss' && data.lastReportAt) {
         await api.dismissRideReports(data.id, { ...body, lastReportAt: data.lastReportAt });
       }
     } catch (error) {
       if (!isStale(error)) throw error;
-      setStale(true);
+      setStale(action === 'resetPhoto' ? 'photo' : 'ride');
       return;
     }
     await refresh();
@@ -228,7 +264,7 @@ export function RideModerationScreen({ rideId }: { rideId: string }) {
         actions={actions.map((value) => (
           <Button
             key={value}
-            variant={value === 'hide' ? 'danger' : 'secondary'}
+            variant={DESTRUCTIVE.includes(value) ? 'danger' : 'secondary'}
             onClick={() => setAction(value)}
           >
             {t(ACTION_LABEL[value])}
@@ -236,7 +272,16 @@ export function RideModerationScreen({ rideId }: { rideId: string }) {
         ))}
       />
       <div className="page-body">
-        {stale ? <ConflictBanner busy={ride.isFetching} onReload={() => void reload()} /> : null}
+        {stale === 'photo' ? (
+          <ConflictBanner
+            busy={ride.isFetching}
+            title={t('admin.ridesModeration.photoConflict')}
+            message={t('admin.ridesModeration.photoConflictMessage')}
+            onReload={() => void reload()}
+          />
+        ) : stale ? (
+          <ConflictBanner busy={ride.isFetching} onReload={() => void reload()} />
+        ) : null}
         <Preview ride={data} />
         <h2 className="form-group__title t-label">{t('admin.ridesModeration.reportsTitle')}</h2>
         <DataTable
@@ -251,8 +296,13 @@ export function RideModerationScreen({ rideId }: { rideId: string }) {
         open={action !== undefined}
         title={action ? t(`admin.ridesModeration.${action}Title`, { title: data.title }) : ''}
         consequences={action ? t(`admin.ridesModeration.${action}Consequences`) : ''}
+        extraFields={
+          action === 'resetPhoto' ? (
+            <Banner tone="warning">{t('admin.ridesModeration.reasonWarning')}</Banner>
+          ) : undefined
+        }
         confirmLabel={action ? t(ACTION_LABEL[action]) : ''}
-        destructive={action === 'hide'}
+        destructive={action !== undefined && DESTRUCTIVE.includes(action)}
         errorText={actionErrorText}
         onConfirm={run}
         onClose={() => setAction(undefined)}
