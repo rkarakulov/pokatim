@@ -10,7 +10,10 @@ import { ActionReason } from './members.schema.ts';
  * удалённого: только id, время, шаг, код ошибки и счётчик попыток.
  */
 
-/** Шаги фоновой очистки по порядку (`AccountErasureService`, ADR-0015). Новый шаг — в конец, до `identity` по смыслу. */
+/**
+ * Шаги фоновой очистки в порядке исполнения (`AccountErasureService`, ADR-0015): новый шаг — на своё место в порядке,
+ * до `notifications` и `identity` по смыслу (строгий `z.enum`: панель деплоится вместе с API).
+ */
 export const ERASURE_STEPS = [
   'profile',
   'rides',
@@ -21,6 +24,8 @@ export const ERASURE_STEPS = [
   'route-rides',
   'achievements',
   'tickets',
+  'social',
+  'product-events',
   'notifications',
   'identity',
 ] as const;

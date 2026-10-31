@@ -28,11 +28,15 @@ export const RideInviteJob = z.object({
 });
 export type RideInviteJob = z.infer<typeof RideInviteJob>;
 
-/** Задача карточки достижения: код и владелец (своё полученное), хэш входов. */
+/**
+ * Задача карточки достижения: код, сезон сезонного (задачи до выката — без поля → `null`) и владелец (своё
+ * полученное), хэш входов.
+ */
 export const ACHIEVEMENT_CARD_RENDER_JOB = 'achievement-card.render';
 export const AchievementCardJob = z.object({
   userId: z.string(),
   code: AchievementCode,
+  seasonId: Uuid.nullable().default(null),
   template: StoryCardTemplate,
   hash: z.string(),
 });

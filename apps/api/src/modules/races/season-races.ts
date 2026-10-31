@@ -28,6 +28,10 @@ export class SeasonRacesService implements SeasonRaces {
     );
   }
 
+  async protocolRaceSeason(raceId: string): Promise<string | undefined> {
+    return this.repository.protocolRaceSeason(raceId);
+  }
+
   async finishedSeasons(now: Date): Promise<FinishedSeason[]> {
     const docs = await this.repository.seasonsEndedBy(now);
     return docs.map((doc) => ({

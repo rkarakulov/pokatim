@@ -59,8 +59,9 @@ export const QUEUE = {
   /** Регламент уведомлений: квитанции Expo (`DeviceNotRegistered` снимает токен), перепостановка зависших доставок. */
   notificationsMaintenance: 'notifications-maintenance',
   /**
-   * Регламент рейтинга сезона (race-results-08, DV-1): сверка отпечатков источника сезонов каждую минуту и при старте
-   * worker, без событий outbox; пересчёт изменившихся сезонов целиком (запись снимка под условием версии).
+   * Рейтинг сезона (race-results-08, standings-outbox-events): события `results.protocol-published`/`result-revised`
+   * (сезон гонки) и регламент-страховка сверки отпечатков каждые 15 мин и при старте worker; пересчёт изменившихся
+   * сезонов целиком (запись снимка под условием версии).
    */
   standingsRecalc: 'standings-recalc',
   /**
@@ -109,4 +110,11 @@ export const QUEUE = {
    * `AchievementsReconciler.reconcile(uid, 'server')`; прогоны — по одному (замок-аренда Redis, курсоры пишет владелец).
    */
   achievementsSync: 'achievements-sync',
+  /**
+   * Приём событий «Свои» (ADR-0027, P5–P7): `tracks.activity-recorded` → автоявка, `identity.account-confirmed` → связь
+   * `invite`; jobId = id события outbox, повтор идемпотентен (явка и связи — условные записи).
+   */
+  socialIntake: 'social-intake',
+  /** Регламент «Свои» (P7): «Как прошёл райд?» через 4 ч после старта; без событий outbox. */
+  socialMaintenance: 'social-maintenance',
 } as const;

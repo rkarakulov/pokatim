@@ -189,8 +189,14 @@ paths:
 
 ## Очереди (worker)
 
+- **Outbox: маршруты** (api-kit ≥ 0.6.0, fan-out): подписчик объявляет `<модуль>OutboxRoutes` (тип → очередь), composition
+  root `worker.module.ts` объединяет их **только** `mergeOutboxRoutes(...)` (`@rkarakulov/api-kit/core`, сборка —
+  `src/outbox-routes.ts`): тип у нескольких подписчиков — задача в каждой очереди, jobId = id события в каждой. Spread
+  `{ ...a, ...b }` молча оставил бы последнего подписчика (сторож — `outbox-routes.test.ts`). Обработчик идемпотентен:
+  повтор публикации после частичного сбоя ставит задачу в очереди, где её ещё нет.
+
 - Брокер — BullMQ на Redis; RabbitMQ не используем (переход — только через ADR; outbox оставляет к нему путь).
-- Регламенты «по курсору» без событий (DV-1): `standings-recalc`, `og-sync`, `tickets-maintenance`,
+- Регламенты «по курсору» без событий: `og-sync`, `tickets-maintenance`,
   `achievements-sync` (achievements-push N2: `achievements.sweep` → `achievements.rider`); новый источник курсора —
   метод порта владельца с keyset `changed-since.ts`, не чтение чужой коллекции.
 - Тяжёлая работа — только в worker: разбор трека, геопересчёт (коридор), рендер Skia/ffmpeg, OG-картинки,
@@ -208,8 +214,8 @@ paths:
 - `results` (race-results-03): заявки и попытки; другие модули — только порты через `index.ts`: `RaceRegistry`
   (`races`: гонка, окно, `admitEntry` — фиксация V-12 в транзакции заявки, видимость в панели), `RouteGeometry`
   (`routes`: линия сверки и рамка, кэш в процессе; `races` — линия показа для карты), `ActivitySource` (`tracks`: группа дублей, свои активности и
-  загрузки, исходник для worker). События `tracks.activity-ready/-removed` — свои типы подписчика: outbox базы
-  отправляет тип в одну очередь. Сверка — `runParseThread('analyzeAttempt')` в worker; потоки разбора на процесс
+  загрузки, исходник для worker). События `tracks.activity-ready/-removed` — свои типы подписчика (до api-kit 0.6.0
+  outbox вёл тип в одну очередь; теперь — fan-out, раздел «Outbox: маршруты»). Сверка — `runParseThread('analyzeAttempt')` в worker; потоки разбора на процесс
   ограничены семафором `PARSE_THREADS_MAX` (`src/parse-thread.ts`).
 - Сверка заезда с коридором гонки — `matchCorridor` / `analyzeAttempt` из `@pokatim/tracks/parse` (ADR-0012 п. 5):
   только worker (`worker_threads`), по исходнику без прореживания; `engineVersion` пишется в попытку, смена версии
@@ -232,11 +238,12 @@ paths:
   транзакция `AccountClosure.close` + `PanelAudit` `account.deleted` + outbox `account.deletion-requested`) и
   `AccountWorkerModule` (очередь `account-deletion`, `AccountErasureProcessor` по имени задачи: событие, sweep,
   регламент `account.erasure-resume`). Зависимости: `account → identity, panel, profile, rides, routes, route-rides, achievements,
-  tickets, tracks, devices, notifications` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
+  tickets, tracks, devices, notifications, social, product-events` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
   (`ProfileCoreModule`), `RideErasure` (`RidesCoreModule`), `RouteErasure` (`RoutesCoreModule`), `DeviceErasure`
   (`DevicesCoreModule`), `TrackErasure` (`TracksCoreModule`), `RouteRideErasure` (`RouteRidesCoreModule`, шаг `route-rides` после `tracks`), `AchievementErasure`
   (`AchievementsCoreModule`, шаг `achievements` после `route-rides`), `TicketErasure` (`TicketsCoreModule`, шаг
-  `tickets` после `achievements`, перед `notifications`),
+  `tickets` после `achievements`), `SocialErasure` (`SocialCoreModule`, шаг `social` после `tickets`),
+  `ProductEventErasure` (`ProductEventsCoreModule`, шаг `product-events` после `social`, перед `notifications`),
   `NotificationErasure` (`NotificationsCoreModule`, шаг
   между `tracks` и `identity`), `AccountErasure` (`IdentityErasureModule`); push-токены — `PushTokens.revokeAllOf(tx)`
   в транзакции удаления. Новый модуль с
@@ -332,14 +339,15 @@ paths:
 ## Достижения (`achievements`, ADR-0020 Proposed)
 
 - Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides,
-  standings, panel` только через `index.ts` (`panel` — achievements-panel, `panel` об `achievements` не знает) (`standings` — порт `RIDER_SEASON_STANDINGS`, `StandingsCoreModule` импортирует
-  только `AchievementsSyncModule` и `AchievementsWorkerModule`; `AchievementsReadModule` и `sharing` его не получают); на `achievements` ссылаются только `AppModule` (`AchievementsModule`), `WorkerModule` (`AchievementsWorkerModule`, N2),
+  standings, panel` только через `index.ts` (`panel` — achievements-panel, `panel` об `achievements` не знает) (`standings` — порт `RIDER_SEASON_STANDINGS`, `StandingsCoreModule` импортируют
+  `AchievementsReadModule` (право и название сезонной карточки, achievement-season-story-card), `AchievementsSyncModule`
+  и `AchievementsWorkerModule`; `sharing` его напрямую не получает — только через `AchievementsReadModule`); на `achievements` ссылаются только `AppModule` (`AchievementsModule`), `WorkerModule` (`AchievementsWorkerModule`, N2),
   `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания), `sharing` (`AchievementsReadModule`, порт
   `ACHIEVEMENTS_FOR_SHARING`) и `NotificationsWorkerModule` (`AchievementsSyncModule`, порт `ACHIEVEMENT_NOTICES`,
   achievements-push). Источники и `notifications` о нём не знают в обратную сторону — циклов нет.
   `AchievementsCoreModule` — `AchievementsRepository` + `AchievementErasure` (модулей не импортирует);
   `AchievementsReadModule` — `AchievementFactsReader` (факты портов + правила, только чтение) и порт карточки
-  (`ResultsCoreModule`, `RidesCoreModule`, `RouteRidesCoreModule`, `AchievementsCoreModule`);
+  (`ResultsCoreModule`, `RidesCoreModule`, `RouteRidesCoreModule`, `StandingsCoreModule`, `AchievementsCoreModule`);
   `AchievementsSyncModule` (achievements-push) — `AchievementsReconciler` и порт `ACHIEVEMENT_NOTICES`
   (`AchievementsCoreModule`, `AchievementsReadModule`, `StandingsCoreModule`; транзакции и outbox — глобальные модули
   базы); `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `AchievementsReadModule`,
@@ -418,8 +426,12 @@ paths:
   `≥ SEASON_REGULAR_MIN_RACES` ячеек `placed` в одной таблице, RC-S3), `seasonalAchievements` (`earned` по ключу
   `code:seasonId`, `factAt = endsBefore − 1 мс`; `settled` — `final`-сезоны), `seasonalPlan` (insert/restore/revoke
   только по `settled`; `refresh` нет). `sync`: оба плана → маркер после обоих → ответ: сезонные — видимые ∩
-  заработанные (`final`), в `pending` — видимая остаётся с названием из исхода. Лог — счётчики `seasonal_*`. Карточка:
-  сезонный код → `cardFacts` `null` (409), `ACHIEVEMENT_BADGE_ICONS` — `Record<FactAchievementCode, …>`. Сбой порта сезонов — `seasonOutcomes` → `[]`
+  заработанные (`final`), в `pending` — видимая остаётся с названием из исхода. Лог — счётчики `seasonal_*`. Карточка
+  (achievement-season-story-card): `cardFacts(userId, { code, seasonId })` — выдача `listSeasonalOf` не отозвана, исход —
+  `RIDER_SEASON_STANDINGS.outcomesOf(userId, [seasonId])` **напрямую** (сбой — исключение: HTTP 500, worker — ретрай;
+  не 409, RC-5); ручная (`manuallyGranted`, `achievements.policy.ts` — одна для списка, публичного и карточки) — при
+  любом исходе, иначе только `final` и `seasonalAchievements([outcome]).earned`; `pending` без ручной — `null` (409,
+  RC-2; список её показывает). Ответ — как сезонный элемент списка (дата `grant.factAt`). Сбой порта сезонов в списке — `seasonOutcomes` → `[]`
   (лог `achievements.seasons_unavailable`): сезонные не трогаются и не отдаются, остальной список — как обычно;
   серверная сверка (`origin: 'server'`) зовёт порт напрямую — сбой уходит в ретрай задачи.
 
@@ -444,12 +456,17 @@ paths:
   `rideInviteTree` (`ride-invite.render.ts`, узлы, `statRow`, `cardTrackView` и линия — `story-card.render.ts`/
   `story-card.png.ts`).
   `SharingModule`/`SharingWorkerModule` импортируют `RidesCoreModule`; `rides` о `sharing` не знает.
-- Карточка достижения: `AchievementCardController` (`GET achievements/:code/story-card`, `AuthGuard`, `no-store`) →
-  `AchievementCardService` → `AchievementCardInputs` (порт `achievements` `ACHIEVEMENTS_FOR_SHARING.cardFacts` — факты
-  ∩ не отозванная выдача, без записи; маршрут — название только из `ROUTES_FOR_SHARING.ogFacts`) → `CardRequests` →
-  задача `achievement-card.render` → `buildAchievementCard` → `achievementCardTree` (значок — глиф Material Symbols,
-  `achievement-card.icons.ts` — зеркало иконок каталога приложения; число — `badgeCount(code, level)` из
-  `ACHIEVEMENT_LEVEL_TARGETS`). Порт отдаёт `level` (строка или `null`); уровень — в `achievementCardHash` явно после
+- Карточка достижения: `AchievementCardController` (`GET achievements/:code/story-card`, query
+  `AchievementStoryCardQuery`, `AuthGuard`, `no-store`) → `AchievementCardService` (адрес `cardRef(code, seasonId)` —
+  `AchievementCardRef`; сезонный без `seasonId` — 400 `seasonId:REQUIRED`, несезонный с ним — `seasonId:INVALID`, **до**
+  `consumeRead`) → `AchievementCardInputs.resolve(userId, ref, template)` (порт `achievements`
+  `ACHIEVEMENTS_FOR_SHARING.cardFacts` — факты ∩ не отозванная выдача, без записи; маршрут — название только из
+  `ROUTES_FOR_SHARING.ogFacts`; сезон — название из фактов) → `CardRequests` → задача `achievement-card.render`
+  (`AchievementCardJob.seasonId` — `Uuid.nullable().default(null)`; worker собирает тот же `cardRef`, лог без сезона) →
+  `buildAchievementCard` → `achievementCardTree` (значок — глиф Material Symbols, `achievement-card.icons.ts` — зеркало
+  иконок каталога приложения, `Record<AchievementCode, …>`, сезонные — без числа; число — `badgeCount(code, level)` из
+  `ACHIEVEMENT_LEVEL_TARGETS`; условие «Сезона в зачёте» — `{count}` = `SEASON_REGULAR_MIN_RACES`, смена константы —
+  подъём `renderVersion`). Сезон в хэше — `object.id` и название (отдельный `seasonId` не добавлять, RC-7). Порт отдаёт `level` (строка или `null`); уровень — в `achievementCardHash` явно после
   кода; тексты — метка уровня в kicker (`achievementCard.kickerLevel`), условие с `{count}` порога; сменил строки или
   вёрстку — подними `STORY_CARD_POLICY.renderVersion` (сейчас 3). `SharingModule`/`SharingWorkerModule` импортируют
   `AchievementsReadModule`.
@@ -514,8 +531,8 @@ RC-A1, ADR-0019).
   `lockEntry`, идемпотентно по `checkedAt < requestedAt`). Пока есть незавершённые проверки — публикация и
   «Применить пересчёт» отвечают 409.
 - `results.protocol-published` / `results.result-revised` / `results.attempt-verdict-changed` — маршрут в
-  `notifications-intake` (объявляет подписчик, ADR-0017). Рейтинг сезона (08) событий не слушает — регламент сверки
-  (DV-1); fan-out outbox в app-foundation — follow-up.
+  `notifications-intake` (объявляет подписчик, ADR-0017); `protocol-published` и `result-revised` — ещё и в
+  `standings-recalc` (`standingsOutboxRoutes`, fan-out).
 - Отказы состояния — `409 RESULTS_ACTION_BLOCKED { reason, count? }`, `409 RESULTS_PUBLISH_BLOCKED { blockedBy,
   checklist }`.
 
@@ -524,15 +541,18 @@ RC-A1, ADR-0019).
 - Модуль `standings` (`results ──► standings`): `StandingsCoreModule` (репозиторий снимка, `StandingsSource`,
   `StandingsRecalc`; imports `RacesCoreModule`, `ResultsCoreModule`), `StandingsModule` (API: + `IdentityModule`,
   `PanelModule`, `ProfileCoreModule`), `StandingsWorkerModule` (`WorkerModule`). Порты — только через `index.ts`:
-  `SEASON_RACES` (`races`: гонки с протоколом, `seasonExists`, `seesAllRaces`, `finishedSeasons`, `awaitingProtocol`),
+  `SEASON_RACES` (`races`: гонки с протоколом, `protocolRaceSeason`, `seasonExists`, `seesAllRaces`, `finishedSeasons`, `awaitingProtocol`),
   `RESULTS_FOR_STANDINGS` (`results`:
   `currentRevisions` одним `aggregate`, `protocolRows` ревизии), `RIDER_NAMES` (`profile`). `races`/`results` о
   `standings` не знают.
 - Правила зачёта — чистые функции `standings.policy.ts` (`pointsForPlace`, `racesCounted`, `selectCounted`,
   `compareRiders`, `buildSeasonStandings`, `sourceFingerprint`), версия `STANDINGS_FORMULA_VERSION` в снимке: смена —
   полный пересчёт всех сезонов. Клиент ничего не считает.
-- Пересчёт — **регламент** вместо событий (DV-1): очередь `standings-recalc`, `StandingsSchedules` — `standings.sync`
-  каждую минуту (Минск) + разовая `standings.sync.boot` при старте worker; `StandingsRecalc.sync` сверяет отпечаток
+- Пересчёт — **события** `results.protocol-published` / `results.result-revised` (`standingsOutboxRoutes` →
+  `standings-recalc`, standings-outbox-events) + регламент-страховка: `StandingsSchedules` — `standings.sync` каждые
+  15 мин (Минск) + разовая `standings.sync.boot` при старте worker (смена формулы, события до выката). Задача события →
+  `StandingsRecalc.syncRace` (сезон — `SEASON_RACES.protocolRaceSeason`; нет — `skipped`) → `sync([seasonId])`;
+  невалидный payload — лог `standings.event_skipped`. `StandingsRecalc.sync(seasonIds?)` сверяет отпечаток
   источника сезона (гонки, ревизии, класс, схема, формула) с отпечатком снимка и пересчитывает изменившиеся сезоны
   целиком. Отказ сезона — лог `standings.recompute_failed`, остальные идут; после прохода — исключение
   (`standings.sync_failed`, failed-набор BullMQ), следующий прогон повторяет. Гонка с протоколом без ревизии —
@@ -613,20 +633,24 @@ RC-A1, ADR-0019).
   `ROUTE_RIDE_POLICY.corridorWidthM` (пишется в документ), окно — время заезда ± 1 мин; итог — одна запись своей
   ревизией без транзакции и событий. Финальная попытка — `failed: error`; dead-letter в панель неприменим (личные
   данные, организатора нет): зависшие (`queued` > 2 ч, `checking` > 15 мин) — «ленивый» `failed: error` при чтении,
-  POST перепоставляет (RC-5). Подписки на `tracks.activity-ready/-removed` нет (outbox — тип в одну очередь, RC-1).
+  POST перепоставляет (RC-5). Подписки на `tracks.activity-ready/-removed` нет (RC-1: решение до fan-out outbox;
+  подписка на `-removed` — follow-up).
 - Автопроверка (route-rides-03, `docs/product/routes.md` V1–V5): сверка — общий `RouteRideEvaluator`
   (`route-ride-evaluator.ts`: `analyze`, `parseLimits`, `evaluate` — без записи; им же пользуется
   `RouteRideCheckProcessor`, копий `evaluate`/`THREAD_FAILURES` нет). Триггер — событие владельца
   `tracks.activity-group-created` (только **новая** группа дублей, в транзакции записи активности под
   `lockUserActivities`; дубль, перехват основной поздним источником и `regroupAfterDelete` его не дают) → маршрут у
-  подписчика `routeRidesOutboxRoutes` → очередь `route-ride-auto` (параллелизм 1, отдельно от `route-ride-check`) →
+  подписчика `routeRidesOutboxRoutes` (`mergeOutboxRoutes`, `src/outbox-routes.ts`) → очередь `route-ride-auto` (параллелизм 1, отдельно от `route-ride-check`) →
   `RouteRideAutoProcessor`: основная группы сейчас (`primaryOfGroup`) → `autoEligible` → план `autoPlan` (свои
   заезды `ridesByRoute` ≤ 200 маршрутов по последнему заезду ↓, затем `RouteRideRoutes.ownReadyIds`; пропуски — заезд
   группы, квота 100) → `RouteRideRoutes.rideableBounds` пачками по 25 + `nearRoutes` (`boundsNear` 600 м) → ≤ 20
   прогонов → только `passed`: повторно активность, `findExisting`, квота → `insertChecked` (`origin: 'auto'`).
   Одна задача на активность: сбой окружения — ретрай всей задачи, на последней попытке маршрут пропускается с логом.
-  Правила — `ROUTE_RIDE_AUTO_POLICY` (`route-rides.policy.ts`). Ограничение «тип → одна очередь» действует и для
-  `tracks.activity-group-created`: второму подписчику — своё событие владельца или fan-out базы.
+  Правила — `ROUTE_RIDE_AUTO_POLICY` (`route-rides.policy.ts`). Отдельный тип нужен и при fan-out: «новая группа»
+  решается только в транзакции записи под замком активностей — подписчик `tracks.activity-ready`, читающий группу
+  «сейчас», её не восстановит (поздний дубль уже перехватил основную, 8.1 AC-2). Маршруты в плане с автозаездом
+  группы занимают свой слот (`done`, без прогона) — повтор события и ретрай после частичного успеха дают тот же
+  набор ≤ 20.
 
 ## Уведомления (`notifications`, ADR-0017)
 
@@ -652,7 +676,8 @@ RC-A1, ADR-0019).
   (`receipts` */15 — `DeviceNotRegistered` снимает токен; `redeliver` */10).
 - Текст — снимок сервера (`notification-texts.ts`, не `@pokatim/i18n`; исключение RC-P5 — имена достижений, уровней и
   объектов из каталога `@pokatim/i18n` `achievements.*`, заголовок `achievement_granted` — функция `achievementTitle`);
-  цель — белый список типов. Expo — порт
+  цель — белый список типов. Второе исключение — группа «Свои» (ADR-0027 п. 6, P1): `actors` + `params`, имена — при
+  чтении списка и отправке push через `RIDER_NAMES.publicRiders` (нет публичного — «Райдер»). Expo — порт
   `PUSH_SENDER` (`expo-push.sender.ts`, адрес из env, в production — только `exp.host`); `PUSH_ENABLED=false` — push
   `skipped`.
 - HTTP `/v1/notifications` под `AuthGuard`, только свои (`userId` сессии в фильтре, чужое — 404); лимиты
@@ -670,3 +695,29 @@ RC-A1, ADR-0019).
   endpoint — только хосты `isWebPushEndpoint` контракта (SSRF), повторно в адаптере. 404/410 снимают подписку; канал
   выключен (`push_off`), только если выключены оба транспорта (`pushChannelEnabled`). Тесты — фейковый push-сервис
   `test/fake-web-push.ts` (`WEB_PUSH_TEST_ORIGIN`, только `NODE_ENV=test`), тело расшифровывается ключом подписки.
+
+## «Свои» (`social`, `product-events`, ADR-0027 Proposed, `docs/product/social.md`)
+
+- Модуль `social` — потребитель: `social → rides, profile, product-events` (P0; далее `results`, `routes`, `tracks`,
+  `identity` — в своих PR) только через `index.ts` и порты: `RIDES_FOR_SOCIAL` (`rides-for-social.port.ts`, `rideFacts`:
+  фаза — `ridePhase` внутри `rides`, участники «Иду» с организатором первым, точная точка старта при `startPrecise`),
+  `RIDER_NAMES.publicRiders` (публичность — при чтении, K3; ручное добавление — только к публичному). Коллекции
+  `rides`, `profiles`, `activities` `social` не читает. На `social` ссылаются только `notifications`, `account`,
+  `AppModule`, `WorkerModule` (dependency-cruiser `social-consumers-only`).
+- Композиция (RC-13): `SocialCoreModule` (репозитории, `SocialConnectionsService`, `SocialAttendanceService`,
+  `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры — P2–P4, P7),
+  `SocialWorkerModule` (`WorkerModule`, процессоры `social-intake` / `social-maintenance` — P5, P7). Дальше правки —
+  только в `social/*`.
+- Правила — `social.policy.ts` (`SOCIAL_POLICY`: лимит ручного «В свои» `social-manual:<uid>` 30/24 ч, окно ручной
+  явки 7 дн, пороги автоявки, `bulkBatch`; `attendanceCheck`, `rideConnectionDiff`, `connectionSources`). Отказы —
+  `409 SOCIAL_ACTION_BLOCKED { reason }` (`socialBlocked`), райда нет и непубличный профиль — `404 NOT_FOUND`, лимит —
+  `429 RATE_LIMITED` (проверяется первым, на каждую попытку).
+- Явка (RC-2a) — транзакция: условная запись документа явки райда → явившиеся → `rideConnectionDiff` с парами райда
+  → `bulkWrite` связей → удаление пар без источников (надгробие `removedAt` остаётся, RC-6) → события. Повтор — no-op
+  без событий. «Меня не было» ставит `declinedAt` (RC-3a), явка по треку его не перекрывает.
+- Реакции: `thank` — только между явившимися, повтор — no-op (RC-4); `toggleRespect` — на разрешённой вызывающим цели
+  (порты целей — P4), дубль уникального ключа — перечитать состояние.
+- Модуль `product-events` — листовой (dependency-cruiser `product-events-leaf`): порт `PRODUCT_EVENTS.record(event,
+  session?)`, справочник и `props` — `product-events.types.ts` (zod, `strictObject`, без id пользователей, RC-11, RC-12).
+  `social` пишет события в своей транзакции; вызывающий вне транзакции — после основной записи, сбой — лог
+  `product_events.record_failed type=<t>` без отказа. Коллекцию `product_events` пишет только модуль.

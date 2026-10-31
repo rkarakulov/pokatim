@@ -53,7 +53,10 @@ export class StandingsCoreModule {}
 })
 export class StandingsModule {}
 
-/** Регламент `standings-recalc` в worker: сверка отпечатков каждую минуту и при старте; маршрутов outbox нет (DV-1). */
+/**
+ * Очередь `standings-recalc` в worker: события протокола `results` (`standingsOutboxRoutes`) и регламент-страховка
+ * сверки отпечатков каждые 15 мин и при старте (standings-outbox-events).
+ */
 @Module({
   imports: [StandingsCoreModule, BullModule.registerQueue({ name: QUEUE.standingsRecalc })],
   providers: [StandingsSyncProcessor, StandingsSchedules],

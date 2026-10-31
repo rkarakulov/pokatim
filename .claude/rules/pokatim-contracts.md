@@ -174,10 +174,12 @@ paths:
   `RevokeWebPushSubscription`, ответ `WebPushConfig` (`publicKey` или `null`). `PUSH_PLATFORMS` не меняется (Expo).
   api-client — `getWebPushConfig`, `registerWebPushSubscription`, `revokeWebPushSubscription`.
 - Карточка для сторис (story-cards, ADR-0018): `src/sharing/story-card.schema.ts` — `STORY_CARD_TEMPLATES`
-  (`line | night`, только в конец), запрос `StoryCardQuery` (`strictObject`), ответ `StoryCardStatus` —
+  (`line | night`, только в конец), запрос `StoryCardQuery` (`strictObject`; гонка, райд, маршрут — не расширять),
+  `AchievementStoryCardQuery` (`template` + `seasonId?: Uuid`, `strictObject`; сверка с кодом — сервер), ответ `StoryCardStatus` —
   `discriminatedUnion` `pending | ready (token) | failed` (незнакомый статус — ошибка разбора), `StoryCardToken`
   (22 символа base64url). `MyRaceEntry.actions.canShareStory` — `.default(false)` (старый сервер — кнопки нет). Код
-  `STORY_CARD_UNAVAILABLE` (409) в конце `ErrorCode`. api-client — `getStoryCard`, `storyCardImageUrl(token)` (адрес
+  `STORY_CARD_UNAVAILABLE` (409) в конце `ErrorCode`. api-client — `getStoryCard`, `getAchievementCard(token, code, AchievementStoryCardQuery)`,
+  `storyCardImageUrl(token)` (адрес
   без запроса: сервер свой публичный origin не знает).
 - Заезд по маршруту (route-rides-01): `src/route-rides/route-ride.schema.ts` — `ROUTE_RIDE_STATUSES` (только в конец),
   `ROUTE_RIDE_MAX_PER_ROUTE` (100), `ROUTE_RIDE_CANDIDATES_MAX` (30); запрос `RouteRideRequest` (ровно одно поле
@@ -241,3 +243,8 @@ paths:
   (PR D): `EventTicketingUpdate.reminders?` — `EventReminderInput[]` ≤ 3 (`strictObject`: `id?` — правка своего,
   `offsetHours` 1–168, `text` 1–500; нет поля — правила не меняются), ответ `EventTicketingSettings.reminders` —
   `EventReminder` (`sendAt`, `sentAt`, `sentCount`, `late`).
+- «Свои» (ADR-0027): `src/social/social.schema.ts` — `CONNECTION_SOURCES`, `REACTION_KINDS`, `REACTION_TARGET_TYPES`,
+  `ATTENDANCE_VIA`, `RIDE_JOIN_SOURCES`, `SOCIAL_BLOCK_REASONS` (только в конец; в ответах P2–P7 — `tolerantEnum`),
+  `SocialActionBlockedDetails` (`409 SOCIAL_ACTION_BLOCKED`, код — в конце `ErrorCode`). Справочник продуктовых
+  событий — не здесь (журнал наружу не уходит, RC-11): `apps/api/src/modules/product-events/product-events.types.ts`.
+  `ERASURE_STEPS` — в порядке исполнения (`…, 'tickets', 'social', 'product-events', 'notifications', 'identity'`).

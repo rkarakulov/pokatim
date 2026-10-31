@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { MyRaceEntry } from '../results/results.schema.ts';
-import { StoryCardQuery, StoryCardStatus } from './story-card.schema.ts';
+import { AchievementStoryCardQuery, StoryCardQuery, StoryCardStatus } from './story-card.schema.ts';
 
 const TOKEN = 'AbCdEfGhIjKlMnOpQrSt_-';
+const SEASON = '0190a6f4-0000-7000-8000-000000000301';
 
 describe('StoryCardQuery', () => {
   it('шаблон line / night', () => {
@@ -15,6 +16,31 @@ describe('StoryCardQuery', () => {
     expect(StoryCardQuery.safeParse({}).success).toBe(false);
     expect(StoryCardQuery.safeParse({ template: 'foo' }).success).toBe(false);
     expect(StoryCardQuery.safeParse({ template: 'line', theme: 'chrono' }).success).toBe(false);
+  });
+
+  it('`seasonId` — только у карточки достижения', () => {
+    expect(StoryCardQuery.safeParse({ template: 'line', seasonId: SEASON }).success).toBe(false);
+  });
+});
+
+describe('AchievementStoryCardQuery', () => {
+  it('шаблон; шаблон и сезон', () => {
+    expect(AchievementStoryCardQuery.parse({ template: 'night' })).toEqual({ template: 'night' });
+    expect(AchievementStoryCardQuery.parse({ template: 'line', seasonId: SEASON })).toEqual({
+      template: 'line',
+      seasonId: SEASON,
+    });
+  });
+
+  it('кривой UUID, лишний ключ, без шаблона — ошибка', () => {
+    expect(AchievementStoryCardQuery.safeParse({ template: 'line', seasonId: 'x' }).success).toBe(
+      false,
+    );
+    expect(
+      AchievementStoryCardQuery.safeParse({ template: 'line', seasonId: SEASON, userId: 'x' })
+        .success,
+    ).toBe(false);
+    expect(AchievementStoryCardQuery.safeParse({ seasonId: SEASON }).success).toBe(false);
   });
 });
 

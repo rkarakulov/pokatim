@@ -463,7 +463,7 @@ describe('экран вспышки (AC10, AC11, AC13)', () => {
       expect(screen.queryByText(label)).toBeNull();
   });
 
-  it('сезонные: два «Призёра» разных сезонов — оба по очереди, seen по (code, seasonId); без «Поделиться»; «К сезону» → сезон', async () => {
+  it('сезонные: два «Призёра» разных сезонов — оба по очереди, seen по (code, seasonId); «Поделиться» и «К сезону» → сезон', async () => {
     listAchievements.mockResolvedValue({
       progress: [],
       items: [seasonItem(SEASON_B), seasonItem(SEASON_A)],
@@ -473,7 +473,7 @@ describe('экран вспышки (AC10, AC11, AC13)', () => {
     expect(screen.getByText('1 из 2')).toBeOnTheScreen();
     expect(screen.getByText('Сезон «Сезон 2024»')).toBeOnTheScreen();
     expect(screen.getByText('Место с первого по третье в таблице сезона')).toBeOnTheScreen();
-    expect(screen.queryByRole('button', { name: 'Поделиться' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Поделиться' })).toBeOnTheScreen();
     await waitFor(() =>
       expect(markSeen).toHaveBeenCalledWith(
         liveSession.accessToken,
@@ -494,6 +494,15 @@ describe('экран вспышки (AC10, AC11, AC13)', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'К сезону' }));
     await waitFor(() => expect(router.getPathname()).toBe(`/seasons/${SEASON_B}`));
     expect(await screen.findByText('Сезон')).toBeOnTheScreen();
+  });
+
+  it('сезонное: «Поделиться» → карточка достижения с сезоном (C1)', async () => {
+    listAchievements.mockResolvedValue({ progress: [], items: [seasonItem(SEASON_A)] });
+    const router = await open();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
+    await waitFor(() => expect(router.getPathname()).toBe('/achievements/story/season_podium'));
+    expect(router.getSearchParams()).toMatchObject({ season: SEASON_A });
+    expect(await screen.findByText('Карточка достижения')).toBeOnTheScreen();
   });
 
   it('открыт напрямую без новых — на Главную', async () => {
@@ -535,7 +544,7 @@ describe('экран своего достижения /achievements/[code] (A6)
     expect(screen.queryByRole('button', { name: 'Сторис результата' })).toBeNull();
   });
 
-  it('сезонное `?season=` — нужный сезон; без «Поделиться»; «К сезону» → сезон', async () => {
+  it('сезонное `?season=` — нужный сезон; «Поделиться» есть; «К сезону» → сезон', async () => {
     listAchievements.mockResolvedValue({
       progress: [],
       items: [seasonItem(SEASON_B, { seen: true }), seasonItem(SEASON_A, { seen: true })],
@@ -544,7 +553,7 @@ describe('экран своего достижения /achievements/[code] (A6)
     expect(await screen.findByRole('header', { name: 'Призёр сезона' })).toBeOnTheScreen();
     expect(screen.getByText('Сезон «Сезон 2024»')).toBeOnTheScreen();
     expect(screen.queryByText('Сезон «Сезон 2025»')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Поделиться' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Поделиться' })).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Сторис результата' })).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: 'К сезону' }));
     await waitFor(() => expect(router.getPathname()).toBe(`/seasons/${SEASON_A}`));

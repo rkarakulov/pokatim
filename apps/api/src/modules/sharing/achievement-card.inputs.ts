@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
-import type { AchievementCode, AppThemeId, StoryCardTemplate } from '@pokatim/contracts';
+import type { AppThemeId, StoryCardTemplate } from '@pokatim/contracts';
 
 import {
   type AchievementCardFacts,
+  type AchievementCardRef,
   ACHIEVEMENTS_FOR_SHARING,
   type AchievementsForSharing,
 } from '../achievements';
@@ -17,7 +18,7 @@ export interface AchievementCardInput {
   template: StoryCardTemplate;
   themeId: AppThemeId;
   facts: AchievementCardFacts;
-  /** название объекта на картинке: гонка и райд — всегда, маршрут — только из каталога; иначе `null` (R5) */
+  /** название объекта на картинке: гонка, райд и сезон — всегда, маршрут — только из каталога; иначе `null` (R5) */
   objectTitle: string | null;
   /** имя только с согласием (`RIDER_NAMES.publicNames`); нет — `null` */
   riderName: string | null;
@@ -26,6 +27,7 @@ export interface AchievementCardInput {
 /**
  * Ключ кэша: sha256 hex канонического JSON (вид карточки — ключи кэша общие со сторис гонки и приглашением, версия
  * рендера, шаблон, тема, код, уровень, объект и его публичное название, дата факта, имя). Смена любого — новая картинка.
+ * Сезон сезонного — `object.id` и название (C5, RC-7): отдельный `seasonId` не добавлять — сменились бы ключи всех карточек.
  */
 export function achievementCardHash(input: AchievementCardInput): string {
   const { facts } = input;
@@ -61,10 +63,10 @@ export class AchievementCardInputs {
 
   async resolve(
     userId: string,
-    code: AchievementCode,
+    ref: AchievementCardRef,
     template: StoryCardTemplate,
   ): Promise<{ input: AchievementCardInput; hash: string } | null> {
-    const facts = await this.achievements.cardFacts(userId, code);
+    const facts = await this.achievements.cardFacts(userId, ref);
     if (!facts) return null;
     const [objectTitle, themeId, names] = await Promise.all([
       this.publicTitle(facts.object),
@@ -81,7 +83,10 @@ export class AchievementCardInputs {
     return { input, hash: achievementCardHash(input) };
   }
 
-  /** Свой приватный маршрут (и снятый с каталога) на картинку не попадает — картинка уходит наружу. */
+  /**
+   * Свой приватный маршрут (и снятый с каталога) на картинку не попадает — картинка уходит наружу. Гонка, райд и сезон
+   * (сезоны публичны) — название из фактов.
+   */
   private async publicTitle(object: AchievementCardFacts['object']): Promise<string | null> {
     if (object.kind !== 'route') return object.title;
     return (await this.routes.ogFacts(object.id))?.title ?? null;

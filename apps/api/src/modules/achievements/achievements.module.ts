@@ -41,10 +41,16 @@ export class AchievementsCoreModule {}
 /**
  * Чтение фактов без HTTP: `AchievementFactsReader` (сверка `AchievementsModule`), `AchievementObjects` (объекты и названия
  * ручных выдач, achievements-panel) и порт карточки `ACHIEVEMENTS_FOR_SHARING` (`sharing`, HTTP и worker). Только
- * core-модули источников.
+ * core-модули источников; `StandingsCoreModule` — порт `RIDER_SEASON_STANDINGS` (право и название сезонной карточки).
  */
 @Module({
-  imports: [ResultsCoreModule, RidesCoreModule, RouteRidesCoreModule, AchievementsCoreModule],
+  imports: [
+    ResultsCoreModule,
+    RidesCoreModule,
+    RouteRidesCoreModule,
+    StandingsCoreModule,
+    AchievementsCoreModule,
+  ],
   providers: [
     AchievementFactsReader,
     AchievementObjects,
