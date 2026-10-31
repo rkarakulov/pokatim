@@ -4,6 +4,7 @@ import { ErrorCode } from '../common.ts';
 import {
   ROUTE_RIDE_CANDIDATES_MAX,
   ROUTE_RIDE_MAX_PER_ROUTE,
+  ROUTE_RIDE_ORIGINS,
   ROUTE_RIDE_STATUSES,
   RouteRideCandidates,
   RouteRideDetail,
@@ -94,6 +95,18 @@ describe('заезд по маршруту (route-rides-01): контракты'
     expect(
       RouteRideCandidates.parse({ items: [{ ...candidate, source: 'x' }] }).items[0]?.source,
     ).toBe('unknown');
+  });
+
+  it('деталь (route-rides-03): activityId и origin — аддитивно, старый ответ → null/manual', () => {
+    expect(ROUTE_RIDE_ORIGINS).toEqual(['manual', 'auto']);
+    const old = RouteRideDetail.parse(detail);
+    expect(old.activityId).toBeNull();
+    expect(old.origin).toBe('manual');
+    const fresh = RouteRideDetail.parse({ ...detail, activityId: ID, origin: 'auto' });
+    expect(fresh.activityId).toBe(ID);
+    expect(fresh.origin).toBe('auto');
+    expect(RouteRideDetail.parse({ ...detail, origin: 'x' }).origin).toBe('unknown');
+    expect(RouteRideDetail.safeParse({ ...detail, activityId: 'nope' }).success).toBe(false);
   });
 
   it('запрос — ровно одно поле: activityId или uploadId (UUID)', () => {

@@ -14,7 +14,13 @@ import { insertGrouped } from './activity-groups';
 import { analyzeInThread, type ParseLimits, type ParseOutcome } from './track-parse.thread';
 import { TRACK_FILE_STORE, type TrackFileStore } from './track-file-store';
 import type { ActivityDoc, TrackUploadDoc } from './tracks.collection';
-import { TRACK_ACTIVITY_READY, TRACK_UPLOAD_RECEIVED, TrackUploadReceived } from './tracks.events';
+import {
+  TRACK_ACTIVITY_GROUP_CREATED,
+  TRACK_ACTIVITY_READY,
+  TRACK_UPLOAD_RECEIVED,
+  type TrackActivityGroupCreated,
+  TrackUploadReceived,
+} from './tracks.events';
 import { TRACKS_POLICY } from './tracks.policy';
 import { TracksRepository } from './tracks.repository';
 
@@ -146,13 +152,18 @@ export class TrackProcessingProcessor extends WorkerHost {
       if (!(await this.repository.attachActivity(session, upload._id, activity._id, now))) {
         return null;
       }
-      const primary = await insertGrouped(this.repository, session, activity, track, now);
+      const grouped = await insertGrouped(this.repository, session, activity, track, now);
+      const payload = { activityId: activity._id, uploadId: upload._id, userId: upload.userId };
       // и для дубля: состав группы мог смениться (новая основная — подписчик читает группу сам)
-      await this.outboxWriter.append(session, {
-        type: TRACK_ACTIVITY_READY,
-        payload: { activityId: activity._id, uploadId: upload._id, userId: upload.userId },
-      });
-      return primary;
+      await this.outboxWriter.append(session, { type: TRACK_ACTIVITY_READY, payload });
+      // новый заезд (не дубль, не перехват основной) — под тем же замком активностей (8.1 AC-2)
+      if (grouped.newGroup) {
+        await this.outboxWriter.append(session, {
+          type: TRACK_ACTIVITY_GROUP_CREATED,
+          payload: payload satisfies TrackActivityGroupCreated,
+        });
+      }
+      return grouped.primaryId;
     });
     if (primaryId === null) return 'skipped';
     const status = primaryId === activity._id ? 'ready' : 'duplicate';

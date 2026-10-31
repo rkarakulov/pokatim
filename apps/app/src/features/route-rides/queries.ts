@@ -88,7 +88,7 @@ export function useRouteRides(routeId: string, enabled: boolean) {
   });
 }
 
-/** Кандидаты «Выбрать свой заезд» — и для `useQuery`, и для `fetchQuery` («Проверить снова», RC-2). */
+/** Кандидаты «Выбрать свой заезд» («Проверить снова» шлёт `activityId` детали, route-rides-03). */
 export const routeRideCandidatesOptions = (routeId: string) =>
   queryOptions({
     queryKey: routeRidesKeys.candidates(routeId),

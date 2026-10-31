@@ -299,6 +299,22 @@ export class RoutesRepository {
   }
 
   /**
+   * Свои готовые маршруты райдера (route-rides-03, порт `RouteRideRoutes.ownReadyIds`): `ownRider`, `ready`, длина
+   * есть; `_id` убыв. (индекс `routes_owner_origin_idx`).
+   */
+  async ownReadyIds(ownerUserId: string, limit: number): Promise<string[]> {
+    const docs = await this.c.routes
+      .find<Pick<RouteDoc, '_id'>>(
+        { ...ownRider(ownerUserId), status: 'ready', distanceM: { $ne: null } },
+        { projection: { _id: 1 } },
+      )
+      .sort({ _id: -1 })
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => doc._id);
+  }
+
+  /**
    * Опубликованный маршрут **команды** (routes-01) — порт `RouteCatalog.inCatalog` («Гонки на маршруте»): маршрут
    * райдера — `undefined` (U7, 8.1 RC-1). Без кэша: каталог изменяем.
    */
@@ -853,6 +869,15 @@ export class RoutesRepository {
 
   async geometry(id: string): Promise<RouteGeometryDoc | undefined> {
     return (await this.c.geometries.findOne({ _id: id })) ?? undefined;
+  }
+
+  /** Линии показа маршрутов по id одним `$in` с проекцией `line` (route-rides-03, ≤ 25 у вызывающего). */
+  async displayLines(ids: readonly string[]): Promise<Map<string, [number, number][]>> {
+    if (ids.length === 0) return new Map();
+    const docs = await this.c.geometries
+      .find({ _id: { $in: [...ids] } }, { projection: { line: 1 } })
+      .toArray();
+    return new Map(docs.map((doc) => [doc._id, doc.line.coordinates]));
   }
 
   /** Только линия показа (проекция без `matchLine` ≤ 20 000 точек). */

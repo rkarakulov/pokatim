@@ -270,6 +270,14 @@ describe('AC5: повтор и дубли группы — тот же заез�
       expect(RouteRideDetail.parse(res.body).id).toBe(first.rideId);
     }
     expect(await checkEvents(h)).toHaveLength(1);
+    // route-rides-03: activityId детали — основная группы сейчас (поздний Garmin с мощностью перехватил основную)
+    const head = await detail(r.auth, routeId, first.rideId);
+    expect(head).toMatchObject({ origin: 'manual' });
+    expect(head.activityId).toBe(imported.activityId);
+    expect(head.activityId).not.toBe(first.activityId);
+    // старый документ без origin — manual
+    await routeRidesDb(h).rides.updateOne({ _id: first.rideId }, { $unset: { origin: '' } });
+    expect((await detail(r.auth, routeId, first.rideId)).origin).toBe('manual');
 
     await routeRidesDb(h).rides.updateOne(
       { _id: first.rideId },
@@ -483,12 +491,14 @@ describe('AC9: ответы — явный список полей, no-store, Au
     }
     const detailKeys = [
       'activity',
+      'activityId',
       'checkedAt',
       'comparison',
       'createdAt',
       'elapsedSec',
       'failure',
       'id',
+      'origin',
       'reason',
       'route',
       'routeDistanceM',
@@ -536,8 +546,13 @@ describe('AC9: ответы — явный список полей, no-store, Au
     const text = JSON.stringify([created.body, list.body, candidates.body, one.body]);
     expect(text).not.toMatch(/userId|sha256|trackMap|engineVersion|sensors|flags|\[\s*-?\d+\.\d+,/);
     expect(text).not.toContain(r.userId);
-    // id активности — только у кандидатов
-    expect(JSON.stringify([created.body, list.body, one.body])).not.toContain(ride.activityId!);
+    // id активности — только у кандидатов и своя основная в детали (route-rides-03)
+    expect(JSON.stringify(list.body)).not.toContain(ride.activityId!);
+    for (const body of [created.body, one.body]) {
+      const { activityId, ...rest } = body as RouteRideDetail;
+      expect(activityId).toBe(ride.activityId);
+      expect(JSON.stringify(rest)).not.toContain(ride.activityId!);
+    }
 
     for (const url of [
       ridesUrl(routeId),

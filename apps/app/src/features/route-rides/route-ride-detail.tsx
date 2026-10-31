@@ -30,63 +30,56 @@ import { useMinskClock } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { routeRideErrorMessage } from './error-messages';
-import {
-  routeRideCandidatesOptions,
-  routeRidesKeys,
-  useCheckRouteRide,
-  useRouteRide,
-} from './queries';
+import { routeRidesKeys, useCheckRouteRide, useRouteRide } from './queries';
 import { RouteRideMap } from './route-ride-map';
 import {
   isPendingCheck,
   routeCardPath,
   routeRideComparisonLines,
   routeRideFailureText,
+  routeRideOriginText,
   routeRideReasonText,
   routeRideSourceLabel,
   routeRideStatusPill,
 } from './route-ride-format';
 
 /**
- * «Проверить снова» у `failed` (RC-2): в детали нет `activityId` — ищем заезд среди кандидатов (запрос — только по
- * нажатию) и проверяем его снова; нет строки — подсказка загрузить файл. Ответ — в кеш, экран остаётся (опрос).
+ * «Проверить снова» у `failed` (route-rides-03): `POST { activityId }` своей основной из детали (без запроса
+ * кандидатов); `404` — активности больше нет, подсказка загрузить файл. Старый API без `activityId` — кнопки нет.
+ * Ответ — в кеш, экран остаётся (опрос).
  */
-function RecheckAction({ ride, routeId }: { ride: RouteRideDetail; routeId: string }) {
-  const queryClient = useQueryClient();
+function RecheckAction({ activityId, routeId }: { activityId: string; routeId: string }) {
   const check = useCheckRouteRide(routeId);
-  const [finding, setFinding] = useState(false);
-  const [missing, setMissing] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const recheck = async () => {
-    setMissing(false);
     setError(null);
-    setFinding(true);
     try {
-      const candidates = await queryClient.fetchQuery(routeRideCandidatesOptions(routeId));
-      const candidate = candidates.items.find((item) => item.rideId === ride.id);
-      if (!candidate) {
-        setMissing(true);
-        return;
-      }
-      await check.mutateAsync({ activityId: candidate.activityId });
+      await check.mutateAsync({ activityId });
     } catch (caught) {
       setError(caught);
-    } finally {
-      setFinding(false);
     }
   };
+  const missing = apiErrorOf(error)?.code === 'NOT_FOUND';
   return (
     <View style={styles.stack}>
       <Button
         label={t('routes.rides.result.recheck')}
         variant="secondary"
-        loading={finding}
+        loading={check.isPending}
         onPress={() => void recheck()}
       />
       {missing ? <Banner tone="warning" message={t('routes.rides.result.recheckMissing')} /> : null}
-      {error ? <Banner tone="error" message={routeRideErrorMessage(error)} /> : null}
+      {error && !missing ? <Banner tone="error" message={routeRideErrorMessage(error)} /> : null}
     </View>
   );
+}
+
+/** «Проверен автоматически» у заезда автопроверки (V5); ручной — ничего. */
+function OriginNote({ ride }: { ride: RouteRideDetail }) {
+  const theme = useTheme();
+  const text = routeRideOriginText(ride.origin);
+  if (!text) return null;
+  return <Text style={[textStyle('body'), { color: theme.text.secondary }]}>{text}</Text>;
 }
 
 /** Шапка результата по статусу: проверка идёт, пройден (время), не пройден (причина), сбой, незнакомый. */
@@ -137,7 +130,9 @@ function RideVerdict({ ride, routeId }: { ride: RouteRideDetail; routeId: string
       <View style={styles.stack}>
         <View style={styles.pills}>{statusPill}</View>
         <Text style={[textStyle('body'), primary]}>{routeRideFailureText(ride.failure)}</Text>
-        <RecheckAction ride={ride} routeId={routeId} />
+        {ride.activityId !== null ? (
+          <RecheckAction activityId={ride.activityId} routeId={routeId} />
+        ) : null}
       </View>
     );
   }
@@ -160,6 +155,7 @@ function RideView({
     <View style={styles.detail}>
       <Kicker label={t('routes.rides.result.title')} />
       <RideVerdict ride={ride} routeId={routeId} />
+      <OriginNote ride={ride} />
       {routeRideComparisonLines(ride, now).map((line) => (
         <Text key={line} style={[textStyle('body'), { color: theme.text.primary }]}>
           {line}

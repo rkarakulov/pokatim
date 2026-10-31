@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { createHarness, type Harness } from '../../../test/harness';
 import { bearer, call, outboxEvents, signUpSession, userIdByEmail } from '../../../test/identity';
+import { rideGpx } from '../../../test/results';
 import { TRACK_STORAGE_DIR_TEST } from '../../../test/test-env';
 import { fixture, parsedUpload, processUpload, tracks, uploadTrack } from '../../../test/tracks';
 import { ACTIVITY_SOURCE, type ActivitySource } from './activity-source.port';
@@ -96,6 +97,47 @@ describe('события outbox', () => {
         primaryActivityId: fileActivity._id,
       },
       { activityId: fileActivity._id, uploadId: file.id, userId, primaryActivityId: null },
+    ]);
+  });
+});
+
+describe('activity-group-created (route-rides-03, 8.1 AC-2)', () => {
+  it('только новая группа дублей: дубль и поздний источник, перехвативший основную, — без события; удаление основной и повтор задачи — без события', async () => {
+    const { file, streamed, fileActivity, streamActivity } = await fileAndStream();
+    // поток агрегатора с мощностью перехватил основную — не новая группа
+    expect(streamActivity.duplicateOf).toBeNull();
+    expect((await tracks(h).activities.findOne({ _id: fileActivity._id }))?.duplicateOf).toBe(
+      streamActivity._id,
+    );
+    expect(await eventsOf('tracks.activity-group-created')).toEqual([
+      { activityId: fileActivity._id, uploadId: file.id, userId },
+    ]);
+    // дубль без перехвата основной (тот же заезд вторым потоком без мощности)
+    const plain = await h.worker.get<TrackIngest>(TRACK_INGEST).ingestProviderStream({
+      userId,
+      source: 'wahoo',
+      via: 'open_wearables',
+      sourceRef: '0b0e0c2a-1d1d-4d4d-8e8e-0000000000bb',
+      stream: owStream(),
+    });
+    expect(await processUpload(h, plain.uploadId)).toBe('duplicate');
+    // удаление основной — дубль становится основным, это не новый заезд
+    expect(
+      (await call(h, 'POST', `/v1/tracks/uploads/${streamed.uploadId}/delete`, {}, auth)).status,
+    ).toBe(204);
+    expect(await processUpload(h, file.id)).toBe('skipped');
+    expect(await eventsOf('tracks.activity-ready')).toHaveLength(3);
+    expect(await eventsOf('tracks.activity-group-created')).toHaveLength(1);
+
+    // другой заезд — своя новая группа
+    const other = parsedUpload(
+      await uploadTrack(h, auth, rideGpx('clean.gpx', new Date('2026-10-15T06:00:00Z'))),
+    );
+    expect(await processUpload(h, other.id)).toBe('ready');
+    expect(await processUpload(h, other.id)).toBe('skipped');
+    const otherActivity = await tracks(h).activities.findOne({ uploadId: other.id });
+    expect((await eventsOf('tracks.activity-group-created')).slice(1)).toEqual([
+      { activityId: otherActivity!._id, uploadId: other.id, userId },
     ]);
   });
 });

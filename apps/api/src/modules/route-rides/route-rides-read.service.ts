@@ -31,6 +31,8 @@ const DAY_MS = 86_400_000;
 interface Visible {
   route: RideableRoute;
   rides: RouteRideFacts[];
+  /** живые активности заездов → основная группы сейчас */
+  heads: Map<string, { primaryId: string }>;
 }
 
 const routeRef = (route: RideableRoute) => ({
@@ -49,8 +51,8 @@ const activityOf = (ride: RouteRideFacts) => ({
 /**
  * Чтения заездов по маршруту (route-rides-01): каждое — видимость маршрута (`RouteRideRoutes.rideable`, без кэша;
  * не виден — `404`), свои заезды маршрута → только с живыми активностями (`ActivitySource.liveActivities`, 8.1 RC-1)
- * → правила `route-rides.policy`. Ответы — явным списком полей: без `userId`, id активности (кроме кандидатов),
- * `trackMap`, `engineVersion`, координат вне `/track`.
+ * → правила `route-rides.policy`. Ответы — явным списком полей: без `userId`, id активности (кроме кандидатов и
+ * своей основной в детали), `trackMap`, `engineVersion`, координат вне `/track`.
  */
 @Injectable()
 export class RouteRidesReadService {
@@ -92,13 +94,16 @@ export class RouteRidesReadService {
   }
 
   async detail(userId: string, routeId: string, rideId: string): Promise<RouteRideDetail> {
-    const { route, rides } = await this.visible(userId, routeId);
+    const { route, rides, heads } = await this.visible(userId, routeId);
     const ride = rides.find((item) => item._id === rideId);
     if (!ride) throw notFound();
     const fields = this.verdict(ride);
     return {
       id: ride._id,
       route: routeRef(route),
+      // основная своей группы сейчас (мог стать дублем после позднего импорта), не хранимый id (8.1 AC-11)
+      activityId: heads.get(ride.activityId)?.primaryId ?? ride.activityId,
+      origin: ride.origin ?? 'manual',
       status: fields.status,
       reason: fields.reason,
       failure: fields.failure,
@@ -164,7 +169,7 @@ export class RouteRidesReadService {
     const rides = own
       .filter((ride) => heads.has(ride.activityId))
       .map((ride) => ({ ...ride, ...effectiveStatus(ride, now) }));
-    return { route, rides };
+    return { route, rides, heads };
   }
 
   /** Вердикт наружу: причина — только `not_passed`, провал — только `failed`, время — только `passed`. */

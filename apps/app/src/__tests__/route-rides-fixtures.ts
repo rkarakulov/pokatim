@@ -54,6 +54,8 @@ export const ridesPage = (
 export const rideDetail = (overrides: Partial<RouteRideDetail> = {}): RouteRideDetail => ({
   id: RIDE_ID,
   route: routeRef,
+  activityId: ACTIVITY_ID,
+  origin: 'manual',
   status: 'passed',
   reason: null,
   failure: null,

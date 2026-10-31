@@ -57,6 +57,7 @@ import {
 import { ACHIEVEMENT_SEASON_INDEXES, achievementsSeasonal } from './0043_achievements_seasonal';
 import { ROUTE_RIDES_PASSED_INDEX, routeRidesPassedIdx } from './0044_route_rides_passed_idx';
 import { social } from './0045_social';
+import { routeRideAutoPlans } from './0046_route_ride_auto_plans';
 import { SOCIAL_COLLECTIONS } from '../../modules/social/social.collection';
 import { PRODUCT_EVENTS_COLLECTIONS } from '../../modules/product-events/product-events.collection';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
@@ -176,6 +177,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0043_achievements_seasonal',
       '0044_route_rides_passed_idx',
       '0045_social',
+      '0046_route_ride_auto_plans',
     ]);
   });
 
@@ -1908,7 +1910,6 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
 
   it('0045_social: коллекции и индексы «Свои» и журнала метрик; последняя; уникальности; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0045_social');
     expect(ids.indexOf('0045_social')).toBe(ids.indexOf('0044_route_rides_passed_idx') + 1);
     const index = (key: Record<string, number>, unique = false) => ({
       key,
@@ -1981,5 +1982,29 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     for (const [name, indexes] of Object.entries(expected)) {
       expect(await indexesOf(name)).toEqual(indexes);
     }
+  });
+
+  it('0046_route_ride_auto_plans: планы автопроверки — TTL по expiresAt и стирание по userId; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0046_route_ride_auto_plans');
+    expect(ids.indexOf('0046_route_ride_auto_plans')).toBe(ids.indexOf('0045_social') + 1);
+    const expected = {
+      route_ride_auto_plans_expires_ttl: {
+        key: { expiresAt: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: 0,
+      },
+      route_ride_auto_plans_user_idx: {
+        key: { userId: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.autoPlans)).toEqual(expected);
+    await routeRideAutoPlans.up(h.db);
+    await routeRideAutoPlans.up(h.db);
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.autoPlans)).toEqual(expected);
   });
 });

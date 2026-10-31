@@ -188,6 +188,9 @@ paths:
   `TrackMapRun`/`ATTEMPT_TRACK_MARKS` (импорт, не копии); дельты — знаковые целые. Коды `ROUTE_RIDE_NOT_READY`,
   `ROUTE_RIDE_UPLOAD_FAILED`, `ROUTE_RIDE_QUOTA_EXCEEDED` (409) — в конце `ErrorCode`. api-client — `listRouteRides`,
   `listRouteRideCandidates`, `checkRouteRide`, `getRouteRide`, `getRouteRideTrack` (явный access-токен).
+  route-rides-03: `ROUTE_RIDE_ORIGINS` (`manual | auto`, только в конец); в `RouteRideDetail` аддитивно
+  `activityId: Uuid.nullable().default(null)` и `origin: tolerantEnum(ROUTE_RIDE_ORIGINS).default('manual')` — новая
+  сборка со старым API получает `null`/`manual`; `RouteRideRow` без `origin`.
 - Достижения (achievements, ADR-0020): `src/achievements/achievement.schema.ts` — `ACHIEVEMENT_CODES` (каталог, **только в
   конец**), `ACHIEVEMENT_OBJECT_KINDS` (`race | route | ride | season`), запрос `AchievementCode` (строгий `z.enum`) и
   `MarkAchievementsSeenRequest` (`strictObject`, без повторов → `INVALID`); ответы `Achievement`

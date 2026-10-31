@@ -636,7 +636,27 @@ RC-A1, ADR-0019).
   POST перепоставляет (RC-5).
 - `tracks.activity-removed` — fan-out в `route-rides-intake`: `RouteRidesIntakeProcessor` удаляет заезды активности по
   всем маршрутам; фильтр на чтении по живым активностям и сироты в транзакции POST — страховка (RC-1). Финальный провал
-  задачи — без dead-letter: сироты скрыты фильтром и убираются `deleteOrphans`.
+  задачи — без dead-letter: сироты скрыты фильтром и убираются `deleteOrphans`. Планы автопроверки при удалении
+  активности не чистятся (TTL).
+- Автопроверка (route-rides-03, `docs/product/routes.md` V1–V5): сверка — общий `RouteRideEvaluator`
+  (`route-ride-evaluator.ts`: `analyze`, `parseLimits`, `evaluate` — без записи; им же пользуется
+  `RouteRideCheckProcessor`, копий `evaluate`/`THREAD_FAILURES` нет). Триггер — событие владельца
+  `tracks.activity-group-created` (только **новая** группа дублей, в транзакции записи активности под
+  `lockUserActivities`; дубль, перехват основной поздним источником и `regroupAfterDelete` его не дают) → маршрут у
+  подписчика `routeRidesOutboxRoutes` (`mergeOutboxRoutes`, `src/outbox-routes.ts`) → очередь `route-ride-auto` (параллелизм 1, отдельно от `route-ride-check`) →
+  `RouteRideAutoProcessor`: основная группы сейчас (`primaryOfGroup`) → `autoEligible` → план `autoPlan`:
+  маршруты с автозаездом группы (`groupRides`) резервируют слоты первыми; кандидаты — свои заезды `ridesByRoute`
+  **без заездов группы** (≤ 200 маршрутов) по последнему живому заезду ↓, затем `RouteRideRoutes.ownReadyIds`;
+  пропуск — ручной заезд группы, квота 100 (у своих маршрутов вне скана — проверкой живых заездов до отсечения) →
+  `RouteRideRoutes.rideableBounds` пачками по 25 + `nearRoutes` (`boundsNear` 600 м) → ≤ 20 маршрутов. План события —
+  в `route_ride_auto_plans` (`_id` = id события outbox, первая запись побеждает) до сверок: ретрай и повтор события,
+  в том числе после удаления задачи BullMQ, проверяют только его; плана нет и с приёма файла прошло больше
+  `processDeadlineMs` (7 сут < TTL плана 30 сут, unit-тест) — задача без плана и сверок (поздний повтор после TTL). По маршруту: заезд группы уже есть — пропуск без прогона; иначе сверка → только `passed`:
+  повторно активность, `findExisting`, квота → `insertChecked` (`origin: 'auto'`). Одна задача на активность: сбой
+  окружения — ретрай всей задачи, на последней попытке маршрут пропускается с логом.
+  Правила — `ROUTE_RIDE_AUTO_POLICY` (`route-rides.policy.ts`). Отдельный тип нужен и при fan-out: «новая группа»
+  решается только в транзакции записи под замком активностей — подписчик `tracks.activity-ready`, читающий группу
+  «сейчас», её не восстановит (поздний дубль уже перехватил основную, 8.1 AC-2).
 
 ## Уведомления (`notifications`, ADR-0017)
 
