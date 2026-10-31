@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import { MY_ROUTE_MAX_COUNT } from '@pokatim/contracts';
-import { CLOCK, type Clock, type OutboxJobData } from '@rkarakulov/api-kit/core';
+import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 import { MongoOutboxReader } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
 
@@ -15,8 +15,8 @@ import {
   TrackActivityGroupCreated,
 } from '../tracks';
 import { RouteRideEvaluator } from './route-ride-evaluator';
+import { RouteRideAutoJobData } from './route-rides.events';
 import {
-  type AutoPlanItem,
   autoEligible,
   autoPlan,
   findExisting,
@@ -59,38 +59,53 @@ export class RouteRideAutoProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<OutboxJobData>): Promise<RouteRideAutoOutcome> {
+  async process(job: Job<RouteRideAutoJobData>): Promise<RouteRideAutoOutcome> {
     if (job.name !== TRACK_ACTIVITY_GROUP_CREATED) {
       throw new Error(`unknown job ${job.name} in queue ${QUEUE.routeRideAuto}`);
     }
+    const data = RouteRideAutoJobData.parse(job.data);
     const payload = TrackActivityGroupCreated.safeParse(
-      await this.outbox.payloadOf(job.data.outboxEventId),
+      await this.outbox.payloadOf(data.outboxEventId),
     );
     if (!payload.success) {
-      this.logger.warn(`event ${job.data.outboxEventId}: no valid payload, skipped`);
+      this.logger.warn(`event ${data.outboxEventId}: no valid payload, skipped`);
       return 'skipped';
     }
     const finalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-    return this.run(payload.data.activityId, payload.data.userId, { finalAttempt });
+    return this.run(payload.data.activityId, payload.data.userId, {
+      finalAttempt,
+      plan: data.plan,
+      // план — в данные задачи до сверок: ретрай проверяет тот же набор (ревью pass 2)
+      savePlan: (plan) => job.updateData({ ...data, plan }),
+    });
   }
 
   /** Автопроверка одной активности (вызывается и тестами напрямую). */
   async run(
     activityId: string,
     userId: string,
-    { finalAttempt = false }: { finalAttempt?: boolean } = {},
+    options: {
+      finalAttempt?: boolean;
+      /** план первой попытки (ретрай задачи) */
+      plan?: readonly string[];
+      savePlan?: (plan: string[]) => Promise<void>;
+    } = {},
   ): Promise<RouteRideAutoOutcome> {
     const started = Date.now();
     const activity = await this.activities.activity(userId, activityId);
     const primary = activity ? await primaryOfGroup(this.activities, userId, activity) : null;
     if (!primary || !autoEligible(primary)) return 'skipped';
 
-    const planned = await this.plan(userId, primary);
+    let planned = options.plan ? [...options.plan] : null;
+    if (!planned) {
+      planned = await this.plan(userId, primary);
+      await options.savePlan?.(planned);
+    }
     let passed = 0;
-    for (const { routeId, done } of planned) {
-      // уже создан этой автопроверкой (повтор, ретрай после частичного успеха) — слот занят, прогона нет
-      if (done) continue;
-      if (await this.checkRoute(userId, routeId, primary, finalAttempt)) passed += 1;
+    for (const routeId of planned) {
+      if (await this.checkRoute(userId, routeId, primary, options.finalAttempt ?? false)) {
+        passed += 1;
+      }
     }
     this.logger.log(
       `route-ride-auto activity ${primary.id} user ${userId}: planned ${planned.length}, passed ${passed},` +
@@ -100,28 +115,30 @@ export class RouteRideAutoProcessor extends WorkerHost {
   }
 
   /**
-   * План события (V2, V4, 8.1 AC-4): пропуски, видимость и рамка — до отсечения 20; маршруты с автозаездом группы
-   * занимают свои слоты (`done`) — повтор и ретрай получают тот же набор.
+   * План события (V2, V4, 8.1 AC-4): маршруты с автозаездом группы резервируют слоты первыми; остальные — пропуски,
+   * видимость и рамка до отсечения 20. Заезды группы исключены из скана истории — повтор события получает тот же план.
    */
-  private async plan(userId: string, primary: ActivityRef): Promise<AutoPlanItem[]> {
+  private async plan(userId: string, primary: ActivityRef): Promise<string[]> {
+    const group = await this.activities.group(primary.id);
+    const members = group?.userId === userId ? group.members.map((member) => member.id) : [];
+    const memberIds = members.includes(primary.id) ? members : [...members, primary.id];
     const ridden = await this.repository.ridesByRoute(
       userId,
       ROUTE_RIDE_AUTO_POLICY.riddenRoutesScan,
+      memberIds,
     );
     const heads = await this.liveHeads(
       userId,
       ridden.flatMap((route) => route.rides.map((ride) => ride.activityId)),
     );
     const own = await this.routes.ownReadyIds(userId, MY_ROUTE_MAX_COUNT);
-    const ordered = autoPlan({ primaryId: primary.id, heads, ridden, own });
-    const picked: AutoPlanItem[] = [];
+    const groupRides = await this.repository.groupRides(userId, memberIds);
+    const { done, candidates } = autoPlan({ heads, ridden, own, group: groupRides });
     const { boundsBatch, maxRoutes } = ROUTE_RIDE_AUTO_POLICY;
-    for (let i = 0; i < ordered.length && picked.length < maxRoutes; i += boundsBatch) {
-      const batch = ordered.slice(i, i + boundsBatch);
-      const bounds = await this.routes.rideableBounds(
-        batch.map((item) => item.routeId),
-        userId,
-      );
+    const picked = done.slice(0, maxRoutes);
+    for (let i = 0; i < candidates.length && picked.length < maxRoutes; i += boundsBatch) {
+      const batch = candidates.slice(i, i + boundsBatch);
+      const bounds = await this.routes.rideableBounds(batch, userId);
       picked.push(...nearRoutes(batch, bounds, primary.bounds, maxRoutes - picked.length));
     }
     return picked;
@@ -134,6 +151,8 @@ export class RouteRideAutoProcessor extends WorkerHost {
     primary: ActivityRef,
     finalAttempt: boolean,
   ): Promise<boolean> {
+    // заезд группы уже есть (автозаезд прошлой попытки, ручной POST) — слот занят, прогона нет
+    if (await this.groupRideExists(userId, routeId, primary.id)) return false;
     const draft = newRideDoc({
       userId,
       routeId,
@@ -159,11 +178,7 @@ export class RouteRideAutoProcessor extends WorkerHost {
     const current = await this.activities.activity(userId, primary.id);
     const head = current ? await primaryOfGroup(this.activities, userId, current) : null;
     if (!head) return false;
-    const rides = await this.repository.listOwn(userId, routeId);
-    const live = await this.activities.liveActivities(
-      userId,
-      rides.map((ride) => ride.activityId),
-    );
+    const { rides, live } = await this.routeRides(userId, routeId);
     if (findExisting(rides, live, head.id)) return false;
     if (rides.filter((ride) => live.has(ride.activityId)).length >= ROUTE_RIDE_POLICY.maxPerRoute) {
       return false;
@@ -176,6 +191,21 @@ export class RouteRideAutoProcessor extends WorkerHost {
     if (!(await this.repository.insertChecked(doc))) return false;
     this.logger.log(`route-ride ${doc._id} auto passed`);
     return true;
+  }
+
+  /** Свои заезды маршрута и живые из них (основная группы сейчас). */
+  private async routeRides(userId: string, routeId: string) {
+    const rides = await this.repository.listOwn(userId, routeId);
+    const live = await this.activities.liveActivities(
+      userId,
+      rides.map((ride) => ride.activityId),
+    );
+    return { rides, live };
+  }
+
+  private async groupRideExists(userId: string, routeId: string, primaryId: string) {
+    const { rides, live } = await this.routeRides(userId, routeId);
+    return findExisting(rides, live, primaryId) !== undefined;
   }
 
   /** Живые активности и основная их групп — пачками по пределу порта. */

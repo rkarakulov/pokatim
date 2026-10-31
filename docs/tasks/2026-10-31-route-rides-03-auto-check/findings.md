@@ -56,3 +56,65 @@ src/modules/tracks/activity-source.int.test.ts` (Mongo `pokatim_rr03r_test`, Red
 состояния данных (кнопка — `isPending`, ошибки баннером), платформы (общий компонент, без нативных развилок), Documentation
 Sync (§10: routes.md, pokatim-backend/db/security/contracts/app.md, JSDoc очереди и события — есть; `pr.md` — NOT VERIFIED,
 файла в diff нет, он создаётся на finish).
+
+# Claude review pass 2
+
+# Findings — route-rides-03-auto-check — pass 2 — reviewer: claude
+base: origin/develop   commits: 3d5b7335..49f940b2 (working tree clean; origin/develop без новых коммитов поверх 7aa82a30)
+verdict: APPROVE
+
+Закрытие находок pass 1 (коммит `64cff2dc`):
+- **Codex CRITICAL (повтор/ретрай расширял план сверх 20) — закрыто.** `autoPlan` больше не блокирует маршрут автозаездом
+  группы: такой маршрут остаётся на своём месте (`done: true`), заезды группы исключены из порядка (а) (`others`) и из
+  квоты; `nearRoutes` считает `done` в `room`; `run` пропускает `done` без прогона. Блокирует только ручной (или без
+  `origin`) заезд группы и квота — как до отсечения 20 (AC-4). Int «21 подходящий маршрут: ретрай после частичного
+  успеха и повтор — те же 20» (сбой на 6-м прогоне → 5 заездов → ретрай `{20, 15}` → повтор `{20, 0}`, 20 заездов,
+  `own[0]` не проверен) — честный, не тавтология.
+- **MEDIUM (свой маршрут с одними сиротами выпадал из (б)) — закрыто.** `seen` заменён на `inRidden` (только маршруты с
+  живыми заездами вне группы) и `blocked`; unit «свой маршрут … только заезды удалённых активностей — в (б)».
+- **Codex MEDIUM (lastStartedAt по удалённым) — закрыто для итогового порядка.** `ridesByRoute` отдаёт `rides[]` с
+  `startedAt`/`origin`, `autoPlan` сортирует по максимуму живых заездов вне группы; unit «удалённый свежий заезд не
+  поднимает маршрут». Окно скана 200 по-прежнему сортируется по всем заездам — задокументировано («порядок скана»),
+  влияет только при > 200 маршрутах.
+- LOW JSDoc `displayLine` — закрыто; LOW AC-4 статически — закрыто сторожем итоговой карты `src/outbox-routes.test.ts`
+  (`workerOutboxRoutes`: `activity-ready` → только `results-intake`, `activity-group-created` → только `route-ride-auto`).
+
+Merge develop (`7aa82a30`, `49f940b2`): `routeRidesOutboxRoutes` подключён в `subscriberOutboxRoutes` (`mergeOutboxRoutes`),
+очередь зарегистрирована в `RouteRidesWorkerModule`; `tracks.activity-ready` по-прежнему уходит только в `results`;
+JSDoc события/маршрутов и §8.2 обоснование отдельного типа при fan-out — согласованы с кодом. Регрессий не найдено.
+
+Прогон ревьюера: `vitest run src/modules/route-rides src/modules/routes/route-ride-routes.int.test.ts
+src/modules/tracks/activity-source.int.test.ts src/outbox-routes.test.ts` (Mongo `pokatim_rr03r_test`, Redis db 8) —
+8 files, 78 passed; `tsc --noEmit` (apps/api) — 0 ошибок; `eslint` route-rides/tracks/routes.repository/outbox-routes.test —
+чисто. Полный `pnpm check`, jest приложения — NOT VERIFIED ревьюером.
+
+### [LOW] Слот `done` может быть вытеснен изменением внешнего состояния между попытками — тогда ≤ 20 автозаездов не гарантировано
+- **file:** apps/api/src/modules/route-rides/route-ride-auto.processor.ts
+- **location:** `plan` (строки 106–127) + `autoPlan` (порядок (б) `ownReadyIds` новые → старые)
+- **problem:** детерминизм держится, пока между попытками не меняются входы плана. Если райдер между попытками создал
+  новый готовый свой маршрут рядом (он встаёт первым в (б)), стал видимым каталожный маршрут выше по порядку, или
+  при > 200 маршрутах сдвинулось окно скана, то при ≥ 20 подходящих последний `done`-маршрут уходит за отсечение, а
+  новый маршрут прогоняется: повтор завершённого события (stalled) даёт 21 автозаезд группы.
+- **why_it_matters:** V2 «не больше 20» — граница нагрузки и результата; окно узкое (ретрай в пределах backoff,
+  повтор завершённого — только stalled), поэтому LOW.
+- **evidence:** `nearRoutes(batch, bounds, …, maxRoutes - picked.length)` отсекает по позиции; `done` не имеет приоритета
+  над новыми не-`done` кандидатами, стоящими раньше.
+- **recommended_fix:** по желанию — резервировать слоты `done` первыми: `room` для не-`done` = 20 − число `done`
+  (видимых и рядом), порядок прогона прежний; unit: 20 `done` + новый свой маршрут первым в (б) → план без прогонов.
+
+### [LOW] Правило `pokatim-backend.md` про план автопроверки неточно в двух словах
+- **file:** .claude/rules/pokatim-backend.md
+- **location:** раздел «Автопроверка (route-rides-03 …)»
+- **problem:** «по последнему заезду ↓» и «пропуски — заезд группы, квота 100», тогда как код: порядок — по последнему
+  **живому** заезду вне группы, пропуск — **ручной** заезд группы (автозаезд — `done`, слот занят; это сказано
+  последним предложением абзаца, но противоречит перечню пропусков выше).
+- **why_it_matters:** правило — канон для следующих задач (PR #164 трогает тот же раздел); противоречие внутри абзаца.
+- **evidence:** `autoPlan`: `group.some((ride) => (ride.origin ?? 'manual') !== 'auto')` → `blocked`; `others` для `lastStartedAt`.
+- **recommended_fix:** «(а) по последнему живому заезду вне группы ↓ … пропуски — ручной заезд группы, квота 100
+  (без заездов группы)».
+
+Измерения без находок: correctness (кроме LOW выше), регрессии/call sites (`ridesByRoute`/`RiddenRoute` — единственный
+вызывающий процессор), безопасность и приватность (без изменений с pass 1), placement/`arch:check` (по Outcome), контракты,
+серверный авторитет, миграции (нет), идемпотентность BullMQ (V4 + уникальный индекс + `done`), обработка ошибок, тесты
+(unit на каждую находку pass 1 + int 21 маршрута), acceptance AC-4/AC-6, i18n/дизайн-система/платформы (diff приложения
+не менялся после pass 1), Documentation Sync (§8.2, Outcome, JSDoc — соответствуют; см. LOW).

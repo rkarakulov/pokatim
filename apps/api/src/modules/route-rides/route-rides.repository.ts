@@ -10,7 +10,7 @@ import {
   type RouteRidesCollections,
   routeRidesCollections,
 } from './route-rides.collection';
-import type { RiddenRoute, RouteRideFacts } from './route-rides.policy';
+import type { GroupRide, RiddenRoute, RouteRideFacts } from './route-rides.policy';
 
 /** Индекс дедупликации заезда группы (`0032_route_rides`): параллельный POST — `isDuplicateKey`. */
 export const ROUTE_RIDES_UNIQUE_INDEX = 'route_rides_user_route_activity_unique';
@@ -78,32 +78,40 @@ export class RouteRidesRepository {
   }
 
   /**
-   * Свои заезды по маршрутам (route-rides-03, план автопроверки): `$match { userId }` — префикс уникального индекса,
-   * группировка по маршруту (активность, дата заезда и происхождение каждого заезда), маршруты с поздним последним
-   * заездом первыми (порядок скана; итоговый — по живым заездам в `autoPlan`), не больше `limit`. Видимость и живость
-   * активностей — у вызывающего.
+   * Свои заезды по маршрутам (route-rides-03, план автопроверки): `$match { userId }` — префикс уникального индекса —
+   * **без заездов группы события** (`exceptActivityIds`: автозаезды не сдвигают окно скана, ревью pass 2), группировка
+   * по маршруту (активность и дата заезда), маршруты с поздним последним заездом первыми (порядок скана; итоговый — по
+   * живым заездам в `autoPlan`), не больше `limit`. Видимость и живость активностей — у вызывающего.
    */
-  ridesByRoute(userId: string, limit: number): Promise<RiddenRoute[]> {
+  ridesByRoute(
+    userId: string,
+    limit: number,
+    exceptActivityIds: readonly string[],
+  ): Promise<RiddenRoute[]> {
     return this.c.rides
       .aggregate<RiddenRoute>([
-        { $match: { userId } },
+        { $match: { userId, activityId: { $nin: [...exceptActivityIds] } } },
         {
           $group: {
             _id: '$routeId',
             lastStartedAt: { $max: '$activity.startedAt' },
-            rides: {
-              $push: {
-                activityId: '$activityId',
-                startedAt: '$activity.startedAt',
-                origin: '$origin',
-              },
-            },
+            rides: { $push: { activityId: '$activityId', startedAt: '$activity.startedAt' } },
           },
         },
         { $sort: { lastStartedAt: -1, _id: 1 } },
         { $limit: limit },
         { $project: { _id: 0, routeId: '$_id', rides: 1 } },
       ])
+      .toArray();
+  }
+
+  /** Заезды группы события по всем маршрутам (route-rides-03): маршрут и происхождение; активностей ≤ размера группы. */
+  groupRides(userId: string, activityIds: readonly string[]): Promise<GroupRide[]> {
+    return this.c.rides
+      .find<GroupRide>(
+        { userId, activityId: { $in: [...activityIds] } },
+        { projection: { _id: 0, routeId: 1, origin: 1 } },
+      )
       .toArray();
   }
 

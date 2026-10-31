@@ -58,73 +58,68 @@ export function autoEligible(
   );
 }
 
-/** Маршрут со своими заездами райдера (`RouteRidesRepository.ridesByRoute`): активность, дата заезда, происхождение. */
+/** Маршрут со своими заездами райдера (`RouteRidesRepository.ridesByRoute`, без заездов группы события). */
 export interface RiddenRoute {
   routeId: string;
-  rides: { activityId: string; startedAt: Date; origin?: RouteRideOrigin }[];
+  rides: { activityId: string; startedAt: Date }[];
 }
 
-/** Маршрут плана автопроверки; `done` — заезд группы уже создан автопроверкой (слот занят, прогона нет). */
-export interface AutoPlanItem {
+/** Заезд группы события по маршруту (`RouteRidesRepository.groupRides`); нет `origin` — ручной. */
+export interface GroupRide {
   routeId: string;
-  done: boolean;
+  origin?: RouteRideOrigin;
 }
 
 /**
- * Порядок кандидатов автопроверки (V2, V4, 8.1 AC-4), до видимости и рамки: (а) маршруты со своими живыми заездами
- * (кроме заездов группы `primaryId`) по дате последнего такого заезда ↓, затем (б) свои готовые маршруты в данном
- * порядке (новые → старые) без повторов (а). Пропуск — ручной заезд группы или живых заездов (кроме группы) ≥ квоты.
- * Автозаезд группы маршрут не пропускает и не сдвигает: план события детерминирован — повтор и ретрай после частичного
- * успеха получают тот же набор (ревью pass 1, CRITICAL), такой маршрут — `done`.
+ * План автопроверки (V2, V4, 8.1 AC-4; ревью pass 1–2): `done` — маршруты с автозаездом группы (резервируют слоты
+ * первыми, без прогона); `candidates` до видимости и рамки — (а) маршруты со своими живыми заездами по дате последнего
+ * живого заезда ↓, затем (б) свои готовые маршруты в данном порядке (новые → старые) без повторов (а). Пропуск —
+ * ручной заезд группы или живых заездов ≥ квоты. Заезды группы в `ridden` не входят (исключены до скана), поэтому
+ * автозаезды не сдвигают порядок и окно скана: повтор события получает тот же план.
  */
 export function autoPlan(input: {
-  primaryId: string;
-  heads: ReadonlyMap<string, { primaryId: string }>;
+  heads: ReadonlyMap<string, unknown>;
   ridden: readonly RiddenRoute[];
   own: readonly string[];
-}): AutoPlanItem[] {
-  const { heads, primaryId } = input;
-  const blocked = new Set<string>();
-  const done = new Set<string>();
+  group: readonly GroupRide[];
+}): { done: string[]; candidates: string[] } {
+  const manual = new Set(
+    input.group.filter((ride) => (ride.origin ?? 'manual') !== 'auto').map((ride) => ride.routeId),
+  );
+  const done = [
+    ...new Set(
+      input.group
+        .filter((ride) => ride.origin === 'auto' && !manual.has(ride.routeId))
+        .map((ride) => ride.routeId),
+    ),
+  ].sort();
+  const skip = new Set([...manual, ...done]);
   const ridden: { routeId: string; lastStartedAt: number }[] = [];
   for (const route of input.ridden) {
-    const alive = route.rides.filter((ride) => heads.has(ride.activityId));
-    const group = alive.filter((ride) => heads.get(ride.activityId)?.primaryId === primaryId);
-    const others = alive.filter((ride) => !group.includes(ride));
-    if (
-      group.some((ride) => (ride.origin ?? 'manual') !== 'auto') ||
-      others.length >= ROUTE_RIDE_POLICY.maxPerRoute
-    ) {
-      blocked.add(route.routeId);
-      continue;
-    }
-    if (group.length > 0) done.add(route.routeId);
-    if (others.length > 0) {
-      const lastStartedAt = Math.max(...others.map((ride) => ride.startedAt.getTime()));
-      ridden.push({ routeId: route.routeId, lastStartedAt });
-    }
+    const alive = route.rides.filter((ride) => input.heads.has(ride.activityId));
+    if (alive.length >= ROUTE_RIDE_POLICY.maxPerRoute) skip.add(route.routeId);
+    if (alive.length === 0 || skip.has(route.routeId)) continue;
+    const lastStartedAt = Math.max(...alive.map((ride) => ride.startedAt.getTime()));
+    ridden.push({ routeId: route.routeId, lastStartedAt });
   }
   ridden.sort((a, b) => b.lastStartedAt - a.lastStartedAt);
   const inRidden = new Set(ridden.map((route) => route.routeId));
   const own = [...new Set(input.own)].filter(
-    (routeId) => !inRidden.has(routeId) && !blocked.has(routeId),
+    (routeId) => !inRidden.has(routeId) && !skip.has(routeId),
   );
-  return [...ridden.map((route) => route.routeId), ...own].map((routeId) => ({
-    routeId,
-    done: done.has(routeId),
-  }));
+  return { done, candidates: [...ridden.map((route) => route.routeId), ...own] };
 }
 
 /** Первые `room` маршрутов по порядку, видимых (есть рамка) и с рамкой у рамки активности (600 м). */
-export function nearRoutes<T extends { routeId: string }>(
-  ordered: readonly T[],
+export function nearRoutes(
+  ordered: readonly string[],
   bounds: ReadonlyMap<string, Bounds>,
   activityBounds: Bounds,
   room: number,
-): T[] {
+): string[] {
   return ordered
-    .filter((item) => {
-      const routeBounds = bounds.get(item.routeId);
+    .filter((routeId) => {
+      const routeBounds = bounds.get(routeId);
       return (
         routeBounds !== undefined &&
         boundsNear(activityBounds, routeBounds, ROUTE_RIDE_POLICY.boundsMarginM)

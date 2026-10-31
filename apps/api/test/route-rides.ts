@@ -87,13 +87,22 @@ export async function ownCorridorRoute(
   return id;
 }
 
-export const job = (name: string, outboxEventId: string, attemptsMade = 0) =>
-  ({
+/**
+ * Задача outbox в тесте (как BullMQ): `updateData` заменяет данные этого объекта — ретрай той же задачи видит
+ * сохранённое (план автопроверки, route-rides-03).
+ */
+export const job = (name: string, outboxEventId: string, attemptsMade = 0) => {
+  const fake = {
     name,
-    data: { outboxEventId },
+    data: { outboxEventId } as OutboxJobData,
     attemptsMade,
     opts: { attempts: 5 },
-  }) as unknown as Job<OutboxJobData>;
+    updateData: async (data: OutboxJobData) => {
+      fake.data = data;
+    },
+  };
+  return fake as unknown as Job<OutboxJobData>;
+};
 
 const GROUP_CREATED = 'tracks.activity-group-created';
 

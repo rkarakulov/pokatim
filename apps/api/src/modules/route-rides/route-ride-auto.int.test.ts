@@ -290,7 +290,104 @@ describe('AC2: что не триггерит', () => {
   });
 });
 
-describe('AC3: план события детерминирован (ревью pass 1, CRITICAL)', () => {
+/** Итог сверки без движка: `passed` (сегмент как у эталона) или `not_passed`. */
+const verdict = (passed: boolean) => ({
+  status: passed ? ('passed' as const) : ('not_passed' as const),
+  reasons: passed ? [] : (['no_finish'] as const).slice(),
+  failure: null,
+  segment: passed
+    ? {
+        startedAt: RECENT,
+        finishedAt: at(1),
+        elapsedSec: 3600,
+        distanceM: 8000,
+        offCorridorM: 0,
+        offCorridorShare: 0,
+        maxExcursionM: 0,
+        coverage: 1,
+      }
+    : null,
+  touchedCorridor: true,
+  engineVersion: 1,
+  trackMap: null,
+  checkedAt: RECENT,
+});
+
+describe('AC3: план события детерминирован (ревью pass 1–2, CRITICAL)', () => {
+  it('200 маршрутов истории (190 невидимы) + 21 свой: повтор события проверяет только маршруты первого плана', async () => {
+    const r = await rider(h);
+    const earlier = await ride(r.auth, rideGpx('clean.gpx', at(-24)));
+    const catalog: string[] = [];
+    for (let i = 0; i < 200; i += 1) {
+      const id = await catalogCorridorRoute(h, OTHER);
+      if (i < 190) await routesDb(h).routes.updateOne({ _id: id }, { $set: { catalog: null } });
+      await seedRide(r.userId, id, earlier);
+      catalog.push(id);
+    }
+    const own: string[] = [];
+    for (let i = 0; i < 21; i += 1) own.push(await ownCorridorRoute(h, r.userId));
+    const ownSet = new Set(own);
+    const evaluate = vi
+      .spyOn(evaluator(), 'evaluate')
+      .mockImplementation(async (doc) => verdict(ownSet.has(doc.routeId)));
+    const fresh = await ride(r.auth, rideGpx('clean.gpx', at(0)));
+
+    expect(await auto().run(fresh, r.userId)).toEqual({ planned: 20, passed: 10 });
+    const first = new Set(evaluate.mock.calls.map(([doc]) => doc.routeId));
+    expect([...first].filter((id) => catalog.includes(id)).sort()).toEqual(
+      catalog.slice(190).sort(),
+    );
+
+    // повтор события (задача удалена — плана в данных нет): автозаезды не сдвигают скан истории
+    evaluate.mockClear();
+    expect(await auto().run(fresh, r.userId)).toEqual({ planned: 20, passed: 0 });
+    const again = evaluate.mock.calls.map(([doc]) => doc.routeId);
+    expect(again.every((id) => first.has(id))).toBe(true);
+    expect(again.sort()).toEqual(catalog.slice(190).sort());
+    expect(await rides().countDocuments({ activityId: fresh })).toBe(10);
+  });
+
+  it('ретрай задачи берёт план из данных задачи: новый свой маршрут между попытками не проверяется', async () => {
+    const r = await rider(h);
+    const own: string[] = [];
+    for (let i = 0; i < 20; i += 1) own.push(await ownCorridorRoute(h, r.userId));
+    const fresh = await ride(r.auth, rideGpx('clean.gpx', at(0)));
+    const [event] = (await autoEvents(h)).filter(
+      (item) => (item.payload as { activityId: string }).activityId === fresh,
+    );
+    let calls = 0;
+    const evaluate = vi.spyOn(evaluator(), 'evaluate').mockImplementation(async () => {
+      calls += 1;
+      if (calls === 3) throw new Error('loader crashed');
+      return verdict(true);
+    });
+    const task = job(event!.type, event!._id);
+    await expect(auto().process(task)).rejects.toThrow('loader crashed');
+    expect((task.data as { plan?: string[] }).plan).toHaveLength(20);
+
+    // между попытками — новый свой маршрут (встал бы первым в (б))
+    const newer = await ownCorridorRoute(h, r.userId);
+    evaluate.mockClear();
+    (task as { attemptsMade: number }).attemptsMade = 1;
+    expect(await auto().process(task)).toEqual({ planned: 20, passed: 18 });
+    expect(evaluate.mock.calls.map(([doc]) => doc.routeId)).not.toContain(newer);
+    expect(await rides().countDocuments({ activityId: fresh })).toBe(20);
+  });
+
+  it('свой маршрут с автозаездом группы резервирует слот раньше нового маршрута (повтор после удаления задачи)', async () => {
+    const r = await rider(h);
+    const own: string[] = [];
+    for (let i = 0; i < 20; i += 1) own.push(await ownCorridorRoute(h, r.userId));
+    const fresh = await ride(r.auth, rideGpx('clean.gpx', at(0)));
+    const evaluate = vi.spyOn(evaluator(), 'evaluate').mockResolvedValue(verdict(true));
+    expect(await auto().run(fresh, r.userId)).toEqual({ planned: 20, passed: 20 });
+    await ownCorridorRoute(h, r.userId);
+    evaluate.mockClear();
+    expect(await auto().run(fresh, r.userId)).toEqual({ planned: 20, passed: 0 });
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(await rides().countDocuments({ activityId: fresh })).toBe(20);
+  });
+
   it('21 подходящий маршрут: ретрай после частичного успеха и повтор события — те же 20, 21-й не проверяется', async () => {
     const r = await rider(h);
     const own: string[] = [];

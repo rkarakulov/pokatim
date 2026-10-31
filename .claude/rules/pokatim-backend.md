@@ -641,16 +641,17 @@ RC-A1, ADR-0019).
   `tracks.activity-group-created` (только **новая** группа дублей, в транзакции записи активности под
   `lockUserActivities`; дубль, перехват основной поздним источником и `regroupAfterDelete` его не дают) → маршрут у
   подписчика `routeRidesOutboxRoutes` (`mergeOutboxRoutes`, `src/outbox-routes.ts`) → очередь `route-ride-auto` (параллелизм 1, отдельно от `route-ride-check`) →
-  `RouteRideAutoProcessor`: основная группы сейчас (`primaryOfGroup`) → `autoEligible` → план `autoPlan` (свои
-  заезды `ridesByRoute` ≤ 200 маршрутов по последнему заезду ↓, затем `RouteRideRoutes.ownReadyIds`; пропуски — заезд
-  группы, квота 100) → `RouteRideRoutes.rideableBounds` пачками по 25 + `nearRoutes` (`boundsNear` 600 м) → ≤ 20
-  прогонов → только `passed`: повторно активность, `findExisting`, квота → `insertChecked` (`origin: 'auto'`).
-  Одна задача на активность: сбой окружения — ретрай всей задачи, на последней попытке маршрут пропускается с логом.
+  `RouteRideAutoProcessor`: основная группы сейчас (`primaryOfGroup`) → `autoEligible` → план `autoPlan`:
+  маршруты с автозаездом группы (`groupRides`) резервируют слоты первыми; кандидаты — свои заезды `ridesByRoute`
+  **без заездов группы** (≤ 200 маршрутов) по последнему живому заезду ↓, затем `RouteRideRoutes.ownReadyIds`;
+  пропуск — ручной заезд группы, квота 100 → `RouteRideRoutes.rideableBounds` пачками по 25 + `nearRoutes` (`boundsNear`
+  600 м) → ≤ 20 маршрутов. План — в данные задачи (`job.updateData`, `RouteRideAutoJobData.plan`) до сверок: ретрай
+  проверяет только его. По маршруту: заезд группы уже есть — пропуск без прогона; иначе сверка → только `passed`:
+  повторно активность, `findExisting`, квота → `insertChecked` (`origin: 'auto'`). Одна задача на активность: сбой
+  окружения — ретрай всей задачи, на последней попытке маршрут пропускается с логом.
   Правила — `ROUTE_RIDE_AUTO_POLICY` (`route-rides.policy.ts`). Отдельный тип нужен и при fan-out: «новая группа»
   решается только в транзакции записи под замком активностей — подписчик `tracks.activity-ready`, читающий группу
-  «сейчас», её не восстановит (поздний дубль уже перехватил основную, 8.1 AC-2). Маршруты в плане с автозаездом
-  группы занимают свой слот (`done`, без прогона) — повтор события и ретрай после частичного успеха дают тот же
-  набор ≤ 20.
+  «сейчас», её не восстановит (поздний дубль уже перехватил основную, 8.1 AC-2).
 
 ## Уведомления (`notifications`, ADR-0017)
 
