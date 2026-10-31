@@ -28,6 +28,7 @@ import MyRoutePublishRoute from '../app/routes/mine/publish/[id]';
 import RouteRidePickRoute from '../app/routes/pick/[routeId]';
 import ReportRouteRoute from '../app/routes/report/[id]';
 import RouteRideRoute from '../app/routes/rides/[routeId]/[rideId]';
+import RouteStoryRoute from '../app/routes/story/[id]';
 import DevicesScreen from '../app/settings/devices';
 import SettingsScreen from '../app/settings/index';
 import LanguageScreen from '../app/settings/language';
@@ -74,6 +75,7 @@ const PROTECTED: [string, ComponentType, string][] = [
   ['riders/report/[id]', ReportRiderRoute, `/riders/report/${RIDER}`],
   ['routes/pick/[routeId]', RouteRidePickRoute, `/routes/pick/${ID}`],
   ['routes/rides/[routeId]/[rideId]', RouteRideRoute, `/routes/rides/${ID}/${ID}`],
+  ['routes/story/[id]', RouteStoryRoute, `/routes/story/${ID}`],
   ['races/pick/[id]', RacePickRoute, `/races/pick/${ID}`],
   ['races/result/[id]/[entryId]', RivalResultRoute, `/races/result/${ID}/${ID}`],
   ['races/story/[id]', StoryCardRoute, `/races/story/${ID}`],

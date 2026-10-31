@@ -340,20 +340,21 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `Stack.Protected` (рядом с `races/result/[id]/[entryId]`; в `app/_layout.tsx` и `__tests__/app-routes.ts`). Входы —
   `ShareStoryButton` только по `actions.canShareStory` сервера: «Ваше участие» и своя строка таблицы
   (`ownRowAction` → `rivalPath` своей заявки: «Ваш результат», без подачи спора). Статус — `useCardStatus` (`raceStorySource`)
-  (`['races','story',raceId,template]`, опрос 1 с, не дольше 30 с от первого `pending`, `failed`/таймаут — ошибка с
+  (`['races','story',raceId,template,themeId]`, опрос 1 с, не дольше 30 с от первого `pending`, `failed`/таймаут — ошибка с
   повтором, 409 — «Карточки пока нет»); PNG — `useCardFile` заранее (RC-13). Шаринг — только
   `src/lib/share-story(.web).ts`: native — `expo-file-system` (кэш) + `expo-sharing` лениво (`load-expo-sharing.ts`;
   нет `ExpoSharing` — «Скачать PNG» через `downloadFile`), web — `navigator.share({ files })`, иначе `<a download>`.
 - Общая часть экранов карточек — `features/sharing/` (`card-status.ts`: `useCardStatus` по `CardSource` — ключ и
-  запрос статуса, `useCardFile`; `card-panel.tsx`: `CardPanel` — чипы, превью, «Поделиться», пустое состояние на
+  запрос статуса, `useCardFile`; к ключу источника `useCardStatus` добавляет `useAppTheme().id` — сервер рисует в теме
+  запрашивающего, смена темы — новый запрос; экраны карточек — `generateMetadata` `noindexPageMetadata` и `useSettingsShell`; `card-panel.tsx`: `CardPanel` — чипы, превью, «Поделиться», пустое состояние на
   409/404). Приглашение кофе-райда — `features/rides/invite/*`, экран `rides/invite/[id]` внутри `Stack.Protected`
-  (ключ `['rides','invite',rideId,template]`); вход — «Поделиться» на детали (шит «Карточка / Ссылка»), карточка —
+  (ключ `['rides','invite',rideId,template,themeId]`); вход — «Поделиться» на детали (шит «Карточка / Ссылка»), карточка —
   вошедшему, `phase === 'upcoming'` (право — сервер: 409 → «Приглашение недоступно»). Карточка маршрута —
   `features/routes/story/*`, экран `routes/story/[id]` внутри `Stack.Protected` (ключ
-  `['routes','story',routeId,template]`, 404 — «Карточка недоступна» и «К маршруту»). Выбор «Карточка / Ссылка» —
+  `['routes','story',routeId,template,themeId]`, 404 — «Карточка недоступна» и «К маршруту»). Выбор «Карточка / Ссылка» —
   общий `ShareChoiceSheet` + `useShareChoice` (`features/sharing/share-choice-sheet.tsx`): оба пути — шит; гость —
   сразу ссылка; нет origin — сразу карточка; `shareLink` — синхронно в обработчике. Карточка достижения — `features/achievements/story/*`,
-  экран `achievements/story/[code]` внутри `Stack.Protected` (ключ `['achievements','story',code,template]`; 409 и
+  экран `achievements/story/[code]` внутри `Stack.Protected` (ключ `['achievements','story',code,template,themeId]`; 409 и
   незнакомый код — «Карточки нет» и «К достижению»).
 
 ## Профиль райдера (rider-profile, `docs/product/profile.md`)

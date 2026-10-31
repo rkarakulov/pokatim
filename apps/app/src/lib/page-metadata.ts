@@ -52,3 +52,12 @@ export function publicPageMetadata({
     ...(image ? { twitter: { card: 'summary_large_image' as const } } : {}),
   };
 }
+
+/**
+ * Служебный экран только вошедшим (карточки для сторис и приглашения): нейтральная мета без данных объекта и
+ * `noindex`. Адреса закрыты и в `robots.txt` (`SEO_DISALLOW`) — `noindex` страхует, если краулер всё же получит HTML.
+ */
+export const noindexPageMetadata = (title: string): Metadata => ({
+  ...publicPageMetadata({ title, description: t('app.tagline') }),
+  robots: 'noindex',
+});

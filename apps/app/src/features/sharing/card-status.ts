@@ -12,6 +12,7 @@ import { apiErrorCode } from '@/features/auth/error-messages';
 import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS, shouldRetry } from '@/lib/query-client';
 import { prepareStory } from '@/lib/share-story';
+import { useAppTheme } from '@/theme/use-app-theme';
 
 /*
  * Карточки сервера (ADR-0018: сторис результата гонки, приглашение кофе-райда): статус — только вошедшему
@@ -52,8 +53,11 @@ const retryable = (count: number, error: unknown) =>
 export function useCardStatus(source: CardSource, template: StoryCardTemplate, enabled: boolean) {
   // начало ожидания по шаблону: смена чипа не сбрасывает отсчёт другого шаблона
   const started = useRef(new Map<StoryCardTemplate, number>());
+  // сервер рисует карточку в теме запрашивающего (хэш с `themeId`): смена темы — другой ключ, а не старая картинка
+  // из кэша на `staleTime`
+  const themeId = useAppTheme().id;
   const query = useQuery({
-    queryKey: source.key(template),
+    queryKey: [...source.key(template), themeId],
     queryFn: async (): Promise<StoryCardStatus> => {
       const status = await withAccessToken((token) => source.fetch(token, template));
       if (status.status === 'pending') {
