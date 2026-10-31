@@ -620,7 +620,10 @@ RC-A1, ADR-0019).
   `ROUTE_RIDE_POLICY.corridorWidthM` (пишется в документ), окно — время заезда ± 1 мин; итог — одна запись своей
   ревизией без транзакции и событий. Финальная попытка — `failed: error`; dead-letter в панель неприменим (личные
   данные, организатора нет): зависшие (`queued` > 2 ч, `checking` > 15 мин) — «ленивый» `failed: error` при чтении,
-  POST перепоставляет (RC-5). Подписки на `tracks.*` нет (RC-1: решение до fan-out outbox; подписка — follow-up).
+  POST перепоставляет (RC-5).
+- `tracks.activity-removed` — fan-out в `route-rides-intake`: `RouteRidesIntakeProcessor` удаляет заезды активности по
+  всем маршрутам; фильтр на чтении по живым активностям и сироты в транзакции POST — страховка (RC-1). Финальный провал
+  задачи — без dead-letter: сироты скрыты фильтром и убираются `deleteOrphans`.
 
 ## Уведомления (`notifications`, ADR-0017)
 

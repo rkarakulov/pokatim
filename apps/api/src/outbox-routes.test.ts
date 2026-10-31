@@ -44,6 +44,13 @@ describe('workerOutboxRoutes', () => {
     }
   });
 
+  it('tracks.activity-removed — в results-intake и route-rides-intake (fan-out)', () => {
+    expect(queuesOf(workerOutboxRoutes['tracks.activity-removed'])).toEqual([
+      'results-intake',
+      'route-rides-intake',
+    ]);
+  });
+
   it('у каждого типа есть очередь', () => {
     for (const route of Object.values(workerOutboxRoutes)) {
       expect(queuesOf(route).length).toBeGreaterThan(0);

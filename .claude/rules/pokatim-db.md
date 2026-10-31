@@ -441,8 +441,10 @@ paths:
   (условие в фильтре) + outbox в транзакции. `trackMap` — позиции на линии `activity_tracks`, без координат;
   датчиков, флагов и диагностики нет.
 - Сироты (RC-1, RC-8): удалённая активность и недоступный маршрут — заезды не видны (фильтр на чтении по
-  `ActivitySource.liveActivities` и `RouteRideRoutes`); заезды с удалёнными активностями удаляются в транзакции
-  следующего нового заезда по маршруту. Не append-only.
+  `ActivitySource.liveActivities` и `RouteRideRoutes`). Заезды удалённой активности удаляет `RouteRidesIntakeProcessor`
+  по `tracks.activity-removed` (fan-out, очередь `route-rides-intake`, `deleteOfActivity`); фильтр и удаление сирот в
+  транзакции следующего нового заезда по маршруту — страховка (POST без замка активностей может вставить заезд после
+  обработки события). Не append-only.
 
 ## Достижения (achievements, ADR-0020 Proposed)
 

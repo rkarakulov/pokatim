@@ -4,9 +4,11 @@ import type { Job } from 'bullmq';
 import { Binary } from 'mongodb';
 
 import { RouteRideCheckProcessor } from '../src/modules/route-rides/route-ride-check.processor';
+import { RouteRidesIntakeProcessor } from '../src/modules/route-rides/route-rides-intake.processor';
 import { routeRidesCollections } from '../src/modules/route-rides/route-rides.collection';
 import { routeRidesOutboxRoutes } from '../src/modules/route-rides/route-rides.events';
 import { RouteRidesRepository } from '../src/modules/route-rides/route-rides.repository';
+import { QUEUE } from '../src/queues';
 import type { RoutePublicationDoc } from '../src/modules/routes/routes.collection';
 import type { Harness } from './harness';
 import { outboxEvents } from './identity';
@@ -86,7 +88,8 @@ export async function ownCorridorRoute(
   return id;
 }
 
-const job = (name: string, outboxEventId: string, attemptsMade = 0) =>
+/** Задача outbox для прямого вызова процессора `route-rides`. */
+export const outboxJob = (name: string, outboxEventId: string, attemptsMade = 0) =>
   ({
     name,
     data: { outboxEventId },
@@ -95,7 +98,8 @@ const job = (name: string, outboxEventId: string, attemptsMade = 0) =>
   }) as unknown as Job<OutboxJobData>;
 
 /**
- * Обработчик событий outbox `route-rides` в тесте (как публикатор + worker): проверки заездов по порядку записи, каждое
+ * Обработчик событий outbox `route-rides` в тесте (как публикатор + worker): события маршрутов модуля по порядку записи
+ * в процессор своей очереди (сверка — `route-ride-check`, `tracks.activity-removed` — `route-rides-intake`), каждое
  * событие — один раз. События гонок не трогает.
  */
 export function routeRidesWorker(h: Harness) {
@@ -113,7 +117,12 @@ export function routeRidesWorker(h: Harness) {
         for (const event of events) {
           handled.add(event._id);
           processed += 1;
-          await h.worker.get(RouteRideCheckProcessor).process(job(event.type, event._id));
+          const queue = (routeRidesOutboxRoutes as Record<string, string>)[event.type];
+          const processor =
+            queue === QUEUE.routeRidesIntake
+              ? h.worker.get(RouteRidesIntakeProcessor)
+              : h.worker.get(RouteRideCheckProcessor);
+          await processor.process(outboxJob(event.type, event._id));
         }
       }
     },
