@@ -55,5 +55,9 @@ export default defineConfig({
     setupFiles: ['src/test/setup.ts'],
     // время панели — Europe/Minsk (AGENTS.md §4.7): тесты не зависят от пояса машины
     env: { TZ: 'Europe/Minsk' },
+    // бюджет теста под нагрузкой `pnpm check` (до 7,7 с при 0,3–2,2 с в простое); выше срока ожидания
+    // условия `findBy*`/`waitFor` (15 с, src/test/setup.ts)
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 });
